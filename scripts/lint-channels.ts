@@ -93,6 +93,7 @@ const KNOWN_DEBT: { reason: string; files: string[] }[] = [
       // união deixar de ter nome de transporte nas colunas.
       "lib/automation/actions/notify-group.test.ts",
       "lib/avisos/destino-do-aviso.test.ts",
+      "lib/avisos/aviso-da-passagem.test.ts",
       "app/api/v1/channel-sessions/[id]/route.ts",
       "app/api/v1/channel-sessions/route.ts",
       "app/api/v1/health/route.ts",

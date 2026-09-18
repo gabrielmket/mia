@@ -176,6 +176,8 @@ export const AUDIT_ACTIONS = [
   // quantos e a que preço é a primeira pergunta quando a fatura é contestada.
   "platform.numero_de_avisos_alterado",
   "platform.modelo_de_ia_alterado",
+  "platform.cadastro_incorporado_alterado",
+  "platform.cadastro_incorporado_amarrado",
   "platform.grupo_de_avisos_alterado",
   "broadcast.criado",
   "broadcast.editado",

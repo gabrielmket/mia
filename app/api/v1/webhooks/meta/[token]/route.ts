@@ -27,6 +27,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { fail } from "@/lib/api/wrappers";
 import { lerEnvelopeMeta } from "@/lib/channels/meta/envelope";
+import { guardarChegada, lerChegada } from "@/lib/channels/meta/chegada-do-cadastro";
 import { parseMetaWebhook, verificationChallenge, verifyMetaSignature } from "@/lib/channels/meta/webhook";
 import { aplicarDesfechoNaCampanha } from "@/lib/broadcast/desfecho-da-campanha";
 import { ingestMetaInbound } from "@/lib/channels/meta/ingest";
@@ -118,6 +119,40 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
 
   const eventos = parseMetaWebhook(leitura.envelope);
   const admin = createAdminClient();
+
+  /**
+   * A CONTA QUE CHEGOU PELO CADASTRO INCORPORADO.
+   *
+   * Vem pelo MESMO endereço das mensagens — é o desenho do cadastro embutido:
+   * cada cliente liga a WABA dele ao nosso app e todas apontam para esta URL.
+   * `parseMetaWebhook` ignora estes campos de propósito (ele trata mensagem,
+   * status e template), então a leitura acontece aqui, sobre o envelope cru.
+   *
+   * Só GUARDA. O aviso não diz de qual cliente NOSSO ele é — o link é da
+   * instalação, não do tenant —, e amarrar sozinho erraria no dia em que dois
+   * clientes entrassem na mesma tarde: a conversa de um sairia pelo número do
+   * outro. A amarração é ato humano, no painel.
+   *
+   * Sem `await` que possa derrubar a rota: falha aqui vira log, nunca erro
+   * HTTP. A Meta re-entrega tudo que não recebe 2xx, em backoff, por horas — e
+   * pelo mesmo endpoint chegam as MENSAGENS dos clientes.
+   */
+  for (const entry of leitura.envelope.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      const chegada = lerChegada(
+        String(change.field ?? ""),
+        String(entry.id ?? ""),
+        (change.value ?? {}) as Record<string, unknown>,
+      );
+      if (!chegada) continue;
+      const guardou = await guardarChegada(admin, chegada);
+      logger.info("[meta.webhook] cadastro incorporado", {
+        request_id: requestId,
+        waba_id: chegada.wabaId,
+        guardou,
+      });
+    }
+  }
   const now = new Date().toISOString();
   /**
    * Desfecho de cada ingestão. Existe porque a versão anterior fazia

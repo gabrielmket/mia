@@ -25302,4 +25302,66 @@ alter table public.platform_ia enable row level security;
 revoke all on public.platform_ia from anon, authenticated;
 grant select, insert, update on public.platform_ia to service_role;
 
+
+-- ---- cadastro incorporado da Meta (migration 0257) ----
+--
+-- A conta que chega pelo login do cliente. O webhook NAO adivinha o dono: o
+-- link e da instalacao, e dois clientes podem entrar na mesma tarde — amarrar
+-- errado faria a conversa de um sair pelo numero do outro. Guarda o fato;
+-- amarrar e ato humano no painel. A porta manual continua existindo ao lado.
+
+create table if not exists public.meta_onboardings (
+  id uuid primary key default gen_random_uuid(),
+  waba_id text not null,
+  business_name text,
+  phone_number_id text,
+  phone_number text,
+  /**
+   * O evento CRU, como veio.
+   *
+   * A Meta muda o formato destes avisos sem aviso, e o que hoje é ruído pode
+   * ser o único lugar onde está o dado que faltou. Guardar o payload inteiro é
+   * o que permite consertar depois sem pedir ao cliente que refaça o cadastro.
+   */
+  payload jsonb not null default '{}'::jsonb,
+  organization_id uuid references public.organizations(id) on delete set null,
+  channel_session_id uuid references public.channel_sessions(id) on delete set null,
+  bound_at timestamptz,
+  bound_by uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.meta_onboardings is
+  'O que chegou pelo cadastro incorporado da Meta, antes de alguem amarrar a um cliente. O webhook NAO adivinha o dono: o link e da instalacao, e dois clientes podem entrar na mesma tarde. Amarrar e ato humano no /admin.';
+
+create unique index if not exists uq_meta_onboardings_waba
+  on public.meta_onboardings (waba_id);
+
+create index if not exists idx_meta_onboardings_pendentes
+  on public.meta_onboardings (created_at desc)
+  where organization_id is null;
+
+alter table public.meta_onboardings enable row level security;
+
+revoke all on public.meta_onboardings from anon, authenticated;
+grant select, insert, update on public.meta_onboardings to service_role;
+
+
+create table if not exists public.platform_meta (
+  id                    smallint primary key default 1,
+  embedded_signup_url   text,
+  updated_at            timestamptz not null default now(),
+  updated_by            uuid,
+  constraint platform_meta_singleton check (id = 1)
+);
+
+comment on table public.platform_meta is
+  'Configuracao da INSTALACAO para o canal oficial da Meta — hoje so o link do cadastro incorporado. Linha unica id=1, no mesmo formato de platform_branding e platform_ia. Sem link, a tela do cliente mostra so a porta manual: ausencia esconde a porta, nunca mostra uma porta quebrada.';
+
+alter table public.platform_meta enable row level security;
+
+revoke all on public.platform_meta from anon, authenticated;
+grant select, insert, update on public.platform_meta to service_role;
+
 notify pgrst, 'reload schema';

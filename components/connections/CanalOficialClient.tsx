@@ -161,9 +161,43 @@ export function CanalOficialClient() {
         </Card>
       ) : null}
 
+      {/*
+        AS DUAS PORTAS, lado a lado.
+
+        A de cima só aparece quando a plataforma configurou o link do cadastro
+        incorporado; sem ele, a tela é exatamente a de antes. Ausência esconde a
+        porta — um botão "Conectar com o Facebook" que leva a lugar nenhum custa
+        mais confiança do que a sua falta.
+
+        A manual NUNCA some, mesmo com a porta do login disponível: o cadastro
+        incorporado depende da análise do app na Meta e de a conta do cliente
+        estar em ordem, e quando ele travar — e vai travar em algum cliente — a
+        porta manual é o que evita "volto semana que vem".
+      */}
+      {!estado?.connected && estado?.embedded_signup_url ? (
+        <Card className="p-4">
+          <h2 className="font-medium">{t("Conectar com o Facebook")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t(
+              "O jeito rápido: você entra com a conta do Facebook da sua empresa e escolhe o número por lá. Nada para copiar e colar.",
+            )}
+          </p>
+          <Button className="mt-3" onClick={() => window.open(estado.embedded_signup_url ?? "", "_blank", "noopener")}>
+            {t("Entrar com o Facebook")}
+          </Button>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t("Quando terminar, avise a gente: o número aparece aqui depois que a Meta confirmar.")}
+          </p>
+        </Card>
+      ) : null}
+
       <Card className="p-4">
         <h2 className="font-medium">
-          {estado?.connected ? t("Trocar credencial") : t("Conectar canal oficial")}
+          {estado?.connected
+            ? t("Trocar credencial")
+            : estado?.embedded_signup_url
+              ? t("Ou configurar manualmente")
+              : t("Conectar canal oficial")}
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {t("Os três valores vêm do seu app na Meta (")}

@@ -89,8 +89,35 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   );
 
   const base = publicBase(req);
+
+  /**
+   * A PORTA DO LOGIN, quando a plataforma tiver configurado uma.
+   *
+   * Nulo = a tela mostra só o caminho manual. Ausência ESCONDE a porta; ela
+   * nunca mostra uma porta que não abre — um botão "Conectar com o Facebook"
+   * que leva a lugar nenhum custa mais confiança do que a sua falta.
+   *
+   * Leitura com service role porque `platform_meta` é configuração da
+   * instalação e não tem policy para tenant: o link em si não é segredo (ele
+   * vai para o cliente), mas quem o DEFINE é quem opera a plataforma.
+   */
+  let linkDoCadastro: string | null = null;
+  try {
+    const { data: conf } = await admin
+      .from("platform_meta")
+      .select("embedded_signup_url")
+      .eq("id", 1)
+      .maybeSingle();
+    linkDoCadastro = (conf as { embedded_signup_url?: string | null } | null)?.embedded_signup_url ?? null;
+  } catch {
+    // Migration ainda não aplicada, leitura fora do ar: a tela cai para a porta
+    // manual, que é o comportamento de sempre. Nunca derruba a tela inteira.
+    linkDoCadastro = null;
+  }
+
   return ok({
     connected: Boolean(data),
+    embedded_signup_url: linkDoCadastro,
     channel_session_id: data?.id ?? null,
     // `hasToken` em vez do token: uma vez gravado, a tela mostra que EXISTE, nunca
     // qual é. Devolver o segredo para preencher o campo seria vazá-lo a cada render.

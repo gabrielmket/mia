@@ -7,6 +7,13 @@ import { apiClient } from "@/lib/api/client";
 export interface OfficialChannelState {
   channel_session_id?: string | null;
   connected: boolean;
+  /**
+   * O link do cadastro incorporado, quando a plataforma configurou um.
+   *
+   * Nulo = só a porta manual. Ausência ESCONDE a porta; nunca mostra uma que
+   * não abre.
+   */
+  embedded_signup_url?: string | null;
   /** Existe token gravado? O token em si NUNCA volta — ver a rota. */
   hasToken: boolean;
   phoneNumberId: string | null;

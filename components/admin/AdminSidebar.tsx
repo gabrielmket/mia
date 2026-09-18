@@ -15,6 +15,7 @@ import {
   CalendarBlank,
   Megaphone,
   Palette,
+  PlugsConnected,
   ArrowRight,
 } from "@/lib/ui/icons";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
@@ -55,6 +56,10 @@ const NAV_ITEMS: NavItem[] = [
   // O cérebro padrão da instalação. Configuração NOSSA, como a chave de IA:
   // o cliente não escolhe modelo, nem deveria precisar saber que existe um.
   { href: "/admin/modelo-de-ia", label: "Modelo de IA", icon: Brain },
+  // A porta em que o cliente entra com o Facebook dele. Configuração da
+  // INSTALAÇÃO: o link é um só, e as contas que chegam ainda não são de
+  // ninguém até alguém amarrar.
+  { href: "/admin/cadastro-incorporado", label: "Cadastro incorporado", icon: PlugsConnected },
 ];
 
 interface AdminSidebarProps {
