@@ -49,6 +49,27 @@ const ROTULO_DO_STATUS: Record<Campanha["status"], string> = {
   cancelada: "Cancelada",
 };
 
+/**
+ * Como o slot se apresenta a quem preenche.
+ *
+ * `{{2}}` diz tudo sobre uma variável de texto e nada sobre um cabeçalho de
+ * mídia — ali o operador precisa saber que se espera um ARQUIVO, não uma
+ * palavra. Um campo pedindo "{{1}}" para uma imagem é a forma mais curta de
+ * receber o nome do contato onde deveria ir uma foto.
+ */
+function rotuloDoSlot(slot: { chave: string; key: string; expects: string }): string {
+  switch (slot.expects) {
+    case "image":
+      return "Imagem";
+    case "video":
+      return "Vídeo";
+    case "document":
+      return "Documento";
+    default:
+      return `{{${slot.key}}}`;
+  }
+}
+
 const MOTIVO: Record<string, string> = {
   sem_preco_acordado: "Ainda não há preço por mensagem acordado para esta empresa.",
   saldo_insuficiente: "O crédito não cobre a lista inteira.",
@@ -93,8 +114,14 @@ export function MiaBroadcast() {
    * destinatário); as demais são iguais para a lista toda, então o operador
    * digita uma vez.
    */
-  const slotsManuais = (escolhido?.slots ?? []).filter((s) => s.key !== "1");
-  const faltamValores = slotsManuais.filter((s) => !(valores[s.key] ?? "").trim());
+  /**
+   * Só a variável `1` DO CORPO é automática (o nome de cada contato). Todo o
+   * resto vira campo — inclusive o cabeçalho de mídia, que nasce com a mesma
+   * chave crua `1` e por isso era descartado aqui: a tela nunca perguntava a
+   * imagem e o disparo saía sem ela.
+   */
+  const slotsManuais = (escolhido?.slots ?? []).filter((s) => s.chave !== "1");
+  const faltamValores = slotsManuais.filter((s) => !(valores[s.chave] ?? "").trim());
 
   function montar() {
     if (!nome.trim() || !escolhido) {
@@ -106,7 +133,7 @@ export function MiaBroadcast() {
     // destinatário, depois de gasto.
     if (faltamValores.length > 0) {
       toast.error(
-        `${t("Preencha as variáveis do template:")} ${faltamValores.map((s) => `{{${s.key}}}`).join(", ")}`,
+        `${t("Preencha as variáveis do template:")} ${faltamValores.map((s) => rotuloDoSlot(s)).join(", ")}`,
       );
       return;
     }
@@ -116,7 +143,8 @@ export function MiaBroadcast() {
         template_name: escolhido.name,
         template_language: escolhido.language,
         valores_padrao: Object.fromEntries(
-          slotsManuais.map((s) => [s.key, (valores[s.key] ?? "").trim()]),
+          // A chave QUALIFICADA: é por ela que `buildComponents` procura o valor.
+          slotsManuais.map((s) => [s.chave, (valores[s.chave] ?? "").trim()]),
         ),
         tags,
         variavel_do_nome: "1",
@@ -206,18 +234,22 @@ export function MiaBroadcast() {
             </p>
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               {slotsManuais.map((slot) => (
-                <div key={slot.key} className="space-y-1">
-                  <Label htmlFor={`bc-var-${slot.key}`}>
-                    {`{{${slot.key}}}`}{" "}
+                <div key={slot.chave} className="space-y-1">
+                  <Label htmlFor={`bc-var-${slot.chave}`}>
+                    {rotuloDoSlot(slot)}{" "}
                     <span className="font-normal text-muted-foreground">({t(slot.onde)})</span>
                   </Label>
                   <Input
-                    id={`bc-var-${slot.key}`}
-                    value={valores[slot.key] ?? ""}
+                    id={`bc-var-${slot.chave}`}
+                    value={valores[slot.chave] ?? ""}
                     onChange={(e) =>
-                      setValores((v) => ({ ...v, [slot.key]: e.target.value }))
+                      setValores((v) => ({ ...v, [slot.chave]: e.target.value }))
                     }
-                    placeholder={t("o mesmo texto para todos")}
+                    placeholder={
+                      slot.expects === "text"
+                        ? t("o mesmo texto para todos")
+                        : t("endereço público do arquivo (https://…)")
+                    }
                   />
                 </div>
               ))}

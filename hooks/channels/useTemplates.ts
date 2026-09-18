@@ -5,7 +5,10 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { apiClient } from "@/lib/api/client";
 
 export interface TemplateSlotView {
+  /** A chave como a Meta a escreve (`1`) — ambígua entre corpo e cabeçalho. */
   key: string;
+  /** A chave QUALIFICADA (`1`, `header:1`) — é esta que vale para montar. */
+  chave: string;
   expects: string;
   /** Rótulo humano do endereço: "corpo", "cabeçalho", "card 2 › cabeçalho". */
   onde: string;

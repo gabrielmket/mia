@@ -18,6 +18,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { metaSessionForOrg } from "@/lib/channels/meta/session";
 import { normalizeRejectedReason } from "@/lib/channels/meta/webhook";
 import { deriveTemplateContract, describeAddress } from "@/lib/channels/meta/template-contract";
+import { slotKey } from "@/lib/channels/meta/build-components";
 import { credenciaisDaOrg } from "@/lib/channels/meta/credenciais-da-org";
 import { syncTemplates } from "@/lib/channels/meta/template-sync";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -123,6 +124,18 @@ export async function GET(): Promise<NextResponse> {
       syncedAt: row.synced_at,
       slots: contrato.slots.map((s) => ({
         key: s.key,
+        /**
+         * A chave QUALIFICADA — `1` no corpo, `header:1` no cabeçalho.
+         *
+         * A crua não distingue os dois: um cabeçalho de mídia nasce com
+         * `key: "1"`, igual à primeira variável do corpo. Quem monta a campanha
+         * precisa da qualificada por dois motivos: para saber QUAL slot é o
+         * nome do contato (só o do corpo) e para chavear o valor do jeito que
+         * `buildComponents` vai procurar. Sem ela, a tela pulava o cabeçalho de
+         * imagem achando que era a variável do nome — e o disparo saía sem a
+         * imagem.
+         */
+        chave: slotKey(s.address, s.key),
         expects: s.expects,
         onde: describeAddress(s.address),
       })),
