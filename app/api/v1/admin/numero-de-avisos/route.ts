@@ -91,6 +91,18 @@ export async function GET(): Promise<Response> {
   const linhas = (sessoes ?? []) as unknown as LinhaDeSessao[];
   const marcada = linhas.find((s) => s.e_numero_de_avisos) ?? null;
 
+  /**
+   * A configuração do report INTERNO vem junto porque é a mesma tela: o mesmo
+   * número, a mesma lista de grupos. Uma segunda chamada só para isto faria a
+   * tela abrir com o grupo do report vazio por um instante — e "vazio" aqui
+   * significa "desligado", que é uma mentira visível.
+   */
+  const { data: report } = await admin
+    .from("platform_avisos")
+    .select("grupo_id, grupo_nome, limite_saldo_usd, resumo_diario")
+    .eq("id", 1)
+    .maybeSingle();
+
   const { data: orgs } = await admin
     .from("organizations")
     .select("id, display_name, settings")
@@ -154,6 +166,18 @@ export async function GET(): Promise<Response> {
       grupos: grupos ?? [],
       grupos_indisponiveis: marcada !== null && grupos === null,
       empresas,
+      report: {
+        grupo: (report as { grupo_id?: string | null; grupo_nome?: string | null } | null)?.grupo_id
+          ? {
+              id: (report as { grupo_id: string }).grupo_id,
+              nome: (report as { grupo_nome?: string | null }).grupo_nome ?? "",
+            }
+          : null,
+        limite_saldo_usd: Number(
+          (report as { limite_saldo_usd?: unknown } | null)?.limite_saldo_usd ?? 20,
+        ),
+        resumo_diario: (report as { resumo_diario?: boolean } | null)?.resumo_diario !== false,
+      },
     },
     { requestId },
   );

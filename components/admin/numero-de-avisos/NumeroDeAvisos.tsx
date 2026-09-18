@@ -12,7 +12,7 @@
  * da instalação inteira. Se cair, NINGUÉM recebe aviso. Enterrar o estado num
  * rodapé é o que transforma uma queda de dez minutos numa semana sem aviso.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,10 +25,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   useDefinirGrupoDaEmpresa,
   useMarcarNumeroDeAvisos,
+  useConectarNumeroDeAvisos,
   useNumeroDeAvisos,
+  useSalvarReport,
+  type ConfiguracaoDoReport,
   type EmpresaComGrupo,
   type GrupoDeAvisos,
 } from "@/hooks/useNumeroDeAvisos";
@@ -90,6 +95,176 @@ function LinhaDaEmpresa({
   );
 }
 
+/**
+ * O grupo INTERNO, o limite do saldo e a chave do resumo.
+ *
+ * Os três juntos num cartão só porque são uma decisão só: "quero ser avisado, e
+ * a partir de quanto". Separar o limite numa tela de configuração faria o
+ * operador ligar o report e descobrir o número padrão no dia em que ele
+ * disparasse — cedo ou tarde demais.
+ */
+function CartaoDoReport({
+  report,
+  grupos,
+  podeEscolher,
+}: {
+  report: ConfiguracaoDoReport;
+  grupos: GrupoDeAvisos[];
+  podeEscolher: boolean;
+}) {
+  const t = useT();
+  const salvar = useSalvarReport();
+  const [limite, setLimite] = useState<string | null>(null);
+
+  const opcoes =
+    report.grupo && !grupos.some((g) => g.id === report.grupo?.id)
+      ? [report.grupo, ...grupos]
+      : grupos;
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <Label htmlFor="grupo-do-report">{t("Grupo que recebe")}</Label>
+        <Select
+          value={report.grupo?.id ?? SEM_GRUPO}
+          disabled={!podeEscolher || salvar.isPending}
+          onValueChange={(v) =>
+            salvar.mutate({
+              grupo: v === SEM_GRUPO ? null : (opcoes.find((g) => g.id === v) ?? null),
+            })
+          }
+        >
+          <SelectTrigger id="grupo-do-report" className="sm:w-80">
+            <SelectValue placeholder={t("Sem aviso")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={SEM_GRUPO}>{t("Sem aviso")}</SelectItem>
+            {opcoes.map((g) => (
+              <SelectItem key={g.id} value={g.id}>
+                {g.nome}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor="limite-do-saldo">{t("Avisar quando o crédito de IA cair abaixo de (US$)")}</Label>
+        <div className="flex gap-2">
+          <Input
+            id="limite-do-saldo"
+            className="sm:w-40"
+            value={limite ?? String(report.limite_saldo_usd)}
+            onChange={(e) => setLimite(e.target.value)}
+          />
+          <Button
+            variant="secondary"
+            disabled={salvar.isPending || limite === null}
+            onClick={() =>
+              salvar.mutate(
+                { grupo: report.grupo, limite_saldo_usd: Number(limite) },
+                { onSuccess: () => setLimite(null) },
+              )
+            }
+          >
+            {t("Salvar")}
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Switch
+          id="resumo-diario"
+          checked={report.resumo_diario}
+          disabled={salvar.isPending}
+          onCheckedChange={(v) => salvar.mutate({ grupo: report.grupo, resumo_diario: v })}
+        />
+        <Label htmlFor="resumo-diario">{t("Mandar o resumo do dia, às 8h")}</Label>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * PAREAR UM NÚMERO NOVO, aqui mesmo.
+ *
+ * Antes era preciso conectar dentro da tela de Conexões de algum cliente e só
+ * então voltar para marcar — dois passos onde a cabeça de quem implanta enxerga
+ * um, e o primeiro no lugar errado.
+ *
+ * O QR se atualiza sozinho a cada 3 segundos porque ele EXPIRA em segundos do
+ * lado do WhatsApp. Um código parado na tela é recusado pelo celular sem dizer
+ * por quê, e a pessoa conclui que o sistema está quebrado.
+ */
+function PareamentoDeNumero({ empresas }: { empresas: EmpresaComGrupo[] }) {
+  const t = useT();
+  const conectar = useConectarNumeroDeAvisos();
+  const [org, setOrg] = useState<string | null>(null);
+  const [pareando, setPareando] = useState(false);
+  const [tique, setTique] = useState(0);
+
+  useEffect(() => {
+    if (!pareando) return;
+    const id = setInterval(() => setTique((n) => n + 1), 3000);
+    return () => clearInterval(id);
+  }, [pareando]);
+
+  return (
+    <div className="space-y-3 rounded-md border border-border p-4">
+      <p className="font-medium">{t("Conectar um número novo")}</p>
+      <p className="text-sm text-text-muted">
+        {t(
+          "O número precisa morar em uma das organizações (normalmente a sua) — é assim que ele entra no vigia de saúde e na reconexão. O papel de número de avisos é da plataforma; a organização é só o endereço dele.",
+        )}
+      </p>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Select value={org ?? ""} onValueChange={setOrg}>
+          <SelectTrigger className="sm:w-80" aria-label={t("Organização do número")}>
+            <SelectValue placeholder={t("Em qual organização ele fica?")} />
+          </SelectTrigger>
+          <SelectContent>
+            {empresas.map((e) => (
+              <SelectItem key={e.id} value={e.id}>
+                {e.display_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          disabled={!org || conectar.isPending}
+          onClick={() =>
+            org &&
+            conectar.mutate(
+              { organization_id: org },
+              { onSuccess: () => setPareando(true) },
+            )
+          }
+        >
+          {t("Conectar e mostrar o QR")}
+        </Button>
+      </div>
+
+      {pareando && (
+        <div className="space-y-2">
+          <p className="text-sm">
+            {t("Abra o WhatsApp do número, vá em Aparelhos conectados e leia o código:")}
+          </p>
+          {/* A chave NÃO entra no <img>: trocar a chave remonta o elemento e o
+              navegador pisca um vazio a cada 3 segundos. Só a URL muda. */}
+          <img
+            src={`/api/v1/admin/numero-de-avisos/qr?t=${tique}`}
+            alt={t("Código QR")}
+            className="h-64 w-64 rounded-md bg-white p-2"
+          />
+          <p className="text-xs text-text-muted">
+            {t("Assim que o celular ler, recarregue esta página: o número aparece marcado acima.")}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function NumeroDeAvisos() {
   const t = useT();
   const { data, isLoading, error } = useNumeroDeAvisos();
@@ -145,10 +320,12 @@ export function NumeroDeAvisos() {
             </p>
           )}
 
+          <PareamentoDeNumero empresas={data.empresas} />
+
           {candidatas.length > 0 && (
             <div className="space-y-2">
               <Label htmlFor="numero-de-avisos-candidata">
-                {data.sessao ? t("Trocar pelo número") : t("Usar este número")}
+                {data.sessao ? t("Trocar pelo número") : t("Ou usar um número já conectado")}
               </Label>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Select value={escolhida ?? ""} onValueChange={setEscolhida}>
@@ -181,6 +358,26 @@ export function NumeroDeAvisos() {
           )}
         </CardContent>
       </Card>
+
+      {data.sessao && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("Report interno (o nosso grupo)")}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-text-muted">
+              {t(
+                "O mesmo número, falando com a gente: crédito de IA acabando, número fora do ar e um resumo por dia. Cada aviso sai no máximo uma vez por dia enquanto o problema durar.",
+              )}
+            </p>
+            <CartaoDoReport
+              report={data.report}
+              grupos={data.grupos}
+              podeEscolher={!data.grupos_indisponiveis}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

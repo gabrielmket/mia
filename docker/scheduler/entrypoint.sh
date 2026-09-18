@@ -101,6 +101,13 @@ CRONS="
 # antes em avisar entre 30 e 45 minutos antes. Barato: só olha compromisso
 # confirmado, futuro e ainda não avisado.
 */5 * * * *|45|api/v1/cron/agenda-reminder
+# O REPORT DA PLATAFORMA, no grupo interno: crédito de IA acabando, número
+# caído, resumo do dia. A cada 10 minutos, e não a cada minuto, porque as três
+# perguntas são ESTADOS (o saldo continua baixo; o número continua fora) e a
+# trava anti-ruído já limita cada aviso a um por dia — rodar mais rápido só
+# gastaria varredura de llm_calls sem antecipar nada. A janela do resumo é a
+# hora cheia, e 10 minutos cabem nela com folga.
+*/10 * * * *|60|api/v1/cron/report-da-plataforma
 */15 * * * *|60|api/v1/cron/risk-watcher
 */30 * * * *|60|api/v1/cron/contact-phones
 17 * * * *|60|api/v1/cron/contact-proposals-watcher

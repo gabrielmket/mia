@@ -32,6 +32,14 @@ export interface EmpresaComGrupo {
   grupo: GrupoDeAvisos | null;
 }
 
+export interface ConfiguracaoDoReport {
+  /** `null` = report desligado: nada é enviado ao grupo interno. */
+  grupo: GrupoDeAvisos | null;
+  /** Abaixo disto, avisa que o crédito de IA está acabando. Em dólares. */
+  limite_saldo_usd: number;
+  resumo_diario: boolean;
+}
+
 export interface NumeroDeAvisos {
   sessao: SessaoDeAvisos | null;
   candidatas: SessaoDeAvisos[];
@@ -39,6 +47,7 @@ export interface NumeroDeAvisos {
   /** `true` = não deu para perguntar ao WhatsApp. Diferente de "não há grupos". */
   grupos_indisponiveis: boolean;
   empresas: EmpresaComGrupo[];
+  report: ConfiguracaoDoReport;
 }
 
 const CHAVE = ["admin", "numero-de-avisos"];
@@ -62,6 +71,45 @@ export function useMarcarNumeroDeAvisos() {
     },
     onError: (e: unknown) => {
       toast.error(e instanceof Error ? e.message : "Falha ao definir o número de avisos.");
+    },
+  });
+}
+
+/** O grupo INTERNO — o que recebe crédito acabando, número caído e o resumo. */
+export function useSalvarReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (v: {
+      grupo: GrupoDeAvisos | null;
+      limite_saldo_usd?: number;
+      resumo_diario?: boolean;
+    }) => apiClient.put("/api/v1/admin/numero-de-avisos/report", v),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: CHAVE });
+    },
+    onError: (e: unknown) => {
+      toast.error(e instanceof Error ? e.message : "Falha ao salvar o report.");
+    },
+  });
+}
+
+/**
+ * Pareia um número NOVO e já o marca como o de avisos.
+ *
+ * A organização vai no corpo porque a sessão precisa de uma (a coluna é NOT
+ * NULL e toda a máquina de conexão se apoia nela) — e porque o admin pode estar
+ * com outra organização ativa na hora em que conecta o número da plataforma.
+ */
+export function useConectarNumeroDeAvisos() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (v: { organization_id: string; display_name?: string }) =>
+      apiClient.post("/api/v1/admin/numero-de-avisos/conectar", v),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: CHAVE });
+    },
+    onError: (e: unknown) => {
+      toast.error(e instanceof Error ? e.message : "Falha ao conectar o número.");
     },
   });
 }

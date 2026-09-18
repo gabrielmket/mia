@@ -25364,4 +25364,47 @@ alter table public.platform_meta enable row level security;
 revoke all on public.platform_meta from anon, authenticated;
 grant select, insert, update on public.platform_meta to service_role;
 
+
+-- ---- report da plataforma no grupo interno (migration 0258) ----
+--
+-- O numero de avisos fala com o grupo de cada CLIENTE; este e o outro lado do
+-- mesmo numero: o grupo NOSSO. A Central e por organizacao e serve a quem esta
+-- com a tela aberta — um credito que acaba as 2h de sabado derruba TODOS os
+-- clientes ate alguem abrir o navegador por acaso.
+--
+-- A segunda tabela e a trava anti-ruido: grupo que recebe demais e ignorado em
+-- uma semana, e ai o aviso que importa chega junto com o lixo.
+
+create table if not exists public.platform_avisos (
+  id                    smallint primary key default 1,
+  grupo_id              text,
+  grupo_nome            text,
+  limite_saldo_usd      numeric(12,2) not null default 20,
+  resumo_diario         boolean not null default true,
+  updated_at            timestamptz not null default now(),
+  updated_by            uuid,
+  constraint platform_avisos_singleton check (id = 1),
+  constraint platform_avisos_grupo_par check ((grupo_id is null) = (grupo_nome is null))
+);
+
+comment on table public.platform_avisos is
+  'O grupo INTERNO que recebe o que e da plataforma: credito de IA acabando, numero caido, fila travada, resumo diario. Linha unica id=1, no formato de platform_branding/platform_ia/platform_meta. Sem grupo escolhido, nada e enviado — ausencia cala, nunca manda para o lugar errado.';
+
+create table if not exists public.platform_avisos_enviados (
+  chave       text primary key,
+  enviado_em  timestamptz not null default now(),
+  detalhe     jsonb not null default '{}'::jsonb
+);
+
+comment on table public.platform_avisos_enviados is
+  'Trava anti-ruido do report da plataforma: quando cada aviso saiu pela ultima vez. Grupo que recebe demais e ignorado em uma semana, e ai o aviso que importa chega junto com o lixo.';
+
+alter table public.platform_avisos enable row level security;
+alter table public.platform_avisos_enviados enable row level security;
+
+revoke all on public.platform_avisos from anon, authenticated;
+revoke all on public.platform_avisos_enviados from anon, authenticated;
+grant select, insert, update on public.platform_avisos to service_role;
+grant select, insert, update, delete on public.platform_avisos_enviados to service_role;
+
 notify pgrst, 'reload schema';
