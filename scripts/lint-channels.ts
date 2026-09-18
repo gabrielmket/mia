@@ -94,8 +94,14 @@ const KNOWN_DEBT: { reason: string; files: string[] }[] = [
       "lib/automation/actions/notify-group.test.ts",
       "lib/avisos/destino-do-aviso.test.ts",
       "lib/avisos/aviso-da-passagem.test.ts",
+      "lib/avisos/report-da-plataforma.test.ts",
       "app/api/v1/channel-sessions/[id]/route.ts",
       "app/api/v1/channel-sessions/route.ts",
+      // As irmãs de PLATAFORMA das duas de cima: parear o número de avisos e
+      // mostrar o QR dele. Mesma natureza — control plane de sessão do provider
+      // legado, não feature perguntando identidade. Saem no mesmo passo.
+      "app/api/v1/admin/numero-de-avisos/conectar/route.ts",
+      "app/api/v1/admin/numero-de-avisos/qr/route.ts",
       "app/api/v1/health/route.ts",
       "app/api/v1/messages/[id]/media/route.ts",
       "app/api/v1/onboarding/whatsapp/qr/route.ts",
