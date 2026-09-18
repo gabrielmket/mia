@@ -27,6 +27,15 @@ import { ToolPicker } from "./ToolPicker";
 import type { Provider } from "@/hooks/ai/useCredentials";
 
 interface Props {
+  /**
+   * Mesma regra da chave de IA e do modelo que conversa: quem escolhe cérebro é
+   * quem paga a conta do token — nós. Sem isto, a aba Operação era a porta dos
+   * fundos por onde o cliente trocava de modelo.
+   *
+   * O bloco some, mas o VALOR continua no formulário e vai no save normalmente:
+   * esconder o controle não é zerar o campo.
+   */
+  podeEscolherIa?: boolean;
   enabled: boolean;
   onEnabledChange: (v: boolean) => void;
   /** "" = herda o modelo do Conversador. */
@@ -164,6 +173,7 @@ export function PainelDoOperador(props: Props) {
 
       {props.enabled ? (
         <>
+          {props.podeEscolherIa ? (
           <Card className="space-y-2 p-4">
             <h3 className="text-sm font-medium">{t("A inteligência que ele usa para organizar")}</h3>
             <p className="text-xs text-muted-foreground">
@@ -202,6 +212,7 @@ export function PainelDoOperador(props: Props) {
               </button>
             ) : null}
           </Card>
+          ) : null}
 
           <Card className="space-y-2 p-4">
             <h3 className="text-sm font-medium">{t("O que ele pode mexer no sistema")}</h3>

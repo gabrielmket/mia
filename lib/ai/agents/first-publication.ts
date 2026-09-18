@@ -1,6 +1,8 @@
 import { listSelectableChannels, type SelectableChannel } from "@/lib/channels/selectable";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { capacidadesPadraoDoOnboarding } from "./capacidades-padrao";
+import { modeloDaPlataforma } from "@/lib/ai/modelo-da-plataforma";
+
 import { escolherModeloDoProvedor } from "./escolher-modelo";
 import { chaveDePlataforma } from "@/lib/ai/runtime/agent";
 import { publishAgentVersion } from "./publish";
@@ -109,7 +111,20 @@ export async function publishFirstVersion(
     .maybeSingle();
   if (orgErr) return { published: false, reason: "failed", message: orgErr.message };
 
-  const provider = selection?.provider ?? provedorDaInstalacao(org?.settings);
+  /**
+   * O que a PLATAFORMA escolheu vence tudo.
+   *
+   * Mesma doutrina da chave de IA: o cérebro é engrenagem nossa, e quem comprou
+   * atendimento não deveria estar comparando modelos. Vence inclusive a
+   * `selection` da tela — que é justamente o campo que sai da vista do cliente
+   * quando existe um padrão definido no painel.
+   *
+   * `null` = ninguém decidiu ainda no /admin, e aí continua valendo, sem
+   * mudança nenhuma, o caminho de antes: provedor da instalação + escolha
+   * automática. Ausência faz cair para trás; nunca trava a publicação.
+   */
+  const daPlataforma = await modeloDaPlataforma(admin);
+  const provider = daPlataforma?.provider ?? selection?.provider ?? provedorDaInstalacao(org?.settings);
 
   // O modelo daquele provedor. Não existe fallback literal: um id de outro
   // provedor (ou inventado) produz o pior desfecho do produto — o agente
@@ -134,8 +149,18 @@ export async function publishFirstVersion(
   if (!escolha.escolhido) {
     return { published: false, reason: "no_model", provider, motivo: escolha.motivo };
   }
-  const modelId = selection?.model ?? escolha.modelId;
-  if (selection && !(modelos ?? []).some((m) => m.model_id === modelId && m.supports_tools))
+  const modelId = daPlataforma?.modelId ?? selection?.model ?? escolha.modelId;
+  /**
+   * A conferência de "existe e chama ferramenta" vale para o modelo da
+   * plataforma também, e não só para o que veio da tela.
+   *
+   * Um id escolhido no painel e depois retirado do catálogo (o cron sincroniza
+   * todo dia; provedor descontinua modelo) produziria o pior desfecho do
+   * produto: o agente responde texto plausível e nada chega ao funil. Falhar a
+   * publicação com `model_not_found` é ruim; publicar um agente que conversa e
+   * não trabalha é pior, porque ninguém percebe por semanas.
+   */
+  if ((selection || daPlataforma) && !(modelos ?? []).some((m) => m.model_id === modelId && m.supports_tools))
     return { published: false, reason: "failed", message: "model_not_found" };
 
   // "Em que negócios ele pode mexer". Toda organização nasce com um funil de

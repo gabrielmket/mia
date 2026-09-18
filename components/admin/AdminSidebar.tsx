@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import {
   Gauge,
   ChatsCircle,
+  Brain,
   Buildings,
   ClipboardText,
   Scales,
@@ -51,6 +52,9 @@ const NAV_ITEMS: NavItem[] = [
   // duas de cima: é configuração da INSTALAÇÃO, não de um tenant — o número é
   // um só para todos, e quem o conecta é quem opera.
   { href: "/admin/numero-de-avisos", label: "Avisos no grupo", icon: Megaphone },
+  // O cérebro padrão da instalação. Configuração NOSSA, como a chave de IA:
+  // o cliente não escolhe modelo, nem deveria precisar saber que existe um.
+  { href: "/admin/modelo-de-ia", label: "Modelo de IA", icon: Brain },
 ];
 
 interface AdminSidebarProps {

@@ -8761,6 +8761,15 @@ export const DICIONARIO: Traducoes = {
   "Empresa": { es: "Empresa" },
   "Sem empresa": { es: "Sin empresa" },
   "Empresa vinculada": { es: "Empresa vinculada" },
+
+  // ---- modelo de IA da plataforma ----
+  "Não consegui carregar o catálogo de modelos agora.": { es: "No pude cargar el catálogo de modelos ahora." },
+  "Modelo de IA da plataforma": { es: "Modelo de IA de la plataforma" },
+  "Vale para todo cliente novo. Quem contrata não escolhe o modelo — assim como não escolhe a chave de IA: é engrenagem nossa, e a conta também.": { es: "Vale para todo cliente nuevo. Quien contrata no elige el modelo — igual que no elige la clave de IA: es engranaje nuestro, y la cuenta también." },
+  "Automático (o sistema escolhe pelo catálogo)": { es: "Automático (el sistema elige por el catálogo)" },
+  "A lista traz só os modelos que sabem usar ferramentas — é o que o agente precisa para mexer no funil.": { es: "La lista trae solo los modelos que saben usar herramientas — es lo que el agente necesita para mover el embudo." },
+  "Agentes já publicados continuam com o modelo que tinham — a troca vale para os próximos.": { es: "Los agentes ya publicados siguen con el modelo que tenían — el cambio vale para los próximos." },
+  "Modelo de IA": { es: "Modelo de IA" },
   "Vincular a uma empresa": { es: "Vincular a una empresa" },
   "Usar o número e o grupo do painel": { es: "Usar el número y el grupo del panel" },
   "O aviso sai pelo número da plataforma, no grupo escolhido para este cliente no painel administrativo.": { es: "El aviso sale por el número de la plataforma, al grupo elegido para este cliente en el panel administrativo." },

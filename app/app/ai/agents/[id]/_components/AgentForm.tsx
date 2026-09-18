@@ -620,6 +620,11 @@ export function AgentForm(props: Props) {
 
       {papel === "operacao" ? (
         <PainelDoOperador
+          // O MESMO predicado do bloco "A inteligência que ele usa". Aqui ele
+          // faltava, e o buraco era inteiro: o cliente não escolhia o cérebro
+          // que CONVERSA e escolhia o que ORGANIZA — que gasta token pela mesma
+          // conta, a nossa.
+          podeEscolherIa={props.podeEscolherIa}
           enabled={form.operator_enabled}
           onEnabledChange={(v) => patch({ operator_enabled: v })}
           model={form.operator_model}
