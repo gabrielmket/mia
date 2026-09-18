@@ -1,7 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
 const enviados = vi.hoisted(() => [] as Array<Record<string, unknown>>);
-vi.mock("@/lib/channels", () => ({
+/**
+ * Dublê SÓ do envio. O resto do módulo é o de verdade — `entregaEmGrupo`
+ * inclusive, que é a pergunta que decide se este canal serve para grupo.
+ *
+ * Dublar a capability junto faria o teste provar a resposta que ele mesmo
+ * escreveu: a matriz poderia dizer que a API oficial entrega em grupo e a prova
+ * continuaria verde.
+ */
+vi.mock("@/lib/channels", async (real) => ({
+  ...((await real()) as Record<string, unknown>),
   getAdapter: () => ({
     send: async (envelope: Record<string, unknown>) => {
       enviados.push(envelope);
@@ -13,6 +22,10 @@ vi.mock("@/lib/channels", () => ({
 import { getAction } from "@/lib/automation/actions";
 import "@/lib/automation/actions/notify-group";
 import type { ActionCtx } from "@/lib/automation/types";
+import {
+  CHANNEL_PROVIDER_META,
+  CHANNEL_PROVIDER_WAHA,
+} from "@/lib/channels/capabilities";
 
 /**
  * O AVISO INTERNO NÃO PODE SAIR PARA UM CLIENTE.
@@ -56,7 +69,7 @@ function ctxCom(sessao: Record<string, unknown> | null): ActionCtx {
   };
 }
 
-const wahaOk = { provider: "waha", waha_session_name: "org_abc", meta_phone_number_id: null, zernio_account_id: null };
+const wahaOk = { provider: CHANNEL_PROVIDER_WAHA, waha_session_name: "org_abc", meta_phone_number_id: null, zernio_account_id: null };
 
 describe("o aviso no grupo", () => {
   it("sai pelo canal do QR Code, com o texto renderizado", async () => {
@@ -93,7 +106,7 @@ describe("o aviso no grupo", () => {
 
   it("RECUSA canal da API oficial — a Meta não entrega em grupo", async () => {
     enviados.length = 0;
-    const meta = { provider: "meta_cloud", waha_session_name: null, meta_phone_number_id: "123", zernio_account_id: null };
+    const meta = { provider: CHANNEL_PROVIDER_META, waha_session_name: null, meta_phone_number_id: "123", zernio_account_id: null };
     const r = await getAction("notify_group")!.execute(ctxCom(meta), {
       channel_session_id: CANAL,
       chat_id: GRUPO,
@@ -117,5 +130,85 @@ describe("o aviso no grupo", () => {
     });
     expect(r.status).toBe("failed");
     expect(r.error).toBe("canal_nao_encontrado");
+  });
+});
+
+/**
+ * O CAMINHO PADRÃO: número da plataforma, grupo do cliente.
+ *
+ * É o que uma régua montada hoje usa — a ação salva só com o texto, sem canal
+ * nem id de grupo. Se este caminho quebrar, o sintoma é o mesmo de "ninguém
+ * qualificou lead hoje": silêncio. Por isso ele tem prova própria, e não só a
+ * do caminho explícito que quase ninguém mais configura.
+ */
+function ctxDaPlataforma(sessao: Record<string, unknown> | null, settings: unknown): ActionCtx {
+  const admin = {
+    from: (tabela: string) => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: async () => ({
+            data: tabela === "channel_sessions" ? sessao : { settings },
+            error: null,
+          }),
+          // O caminho EXPLÍCITO encadeia um segundo `eq` (o da organização).
+          // Ele mora aqui para que uma configuração pela metade não caia em
+          // `undefined is not a function` e passe por "falhou por outro motivo".
+          eq: () => ({ maybeSingle: async () => ({ data: sessao, error: null }) }),
+        }),
+      }),
+    }),
+  };
+  return {
+    admin: admin as unknown as ActionCtx["admin"],
+    organizationId: ORG,
+    ruleId: "rule-1",
+    ruleName: "Lead qualificado → avisa o grupo",
+    event: {} as ActionCtx["event"],
+    context: { contact: { display_name: "Joana" } },
+    requestId: "req-1",
+  };
+}
+
+describe("o aviso sem canal nem grupo na regra", () => {
+  it("sai pelo número da plataforma, no grupo daquele cliente", async () => {
+    enviados.length = 0;
+    const r = await getAction("notify_group")!.execute(
+      ctxDaPlataforma(wahaOk, { grupo_de_avisos: { id: GRUPO, nome: "Comercial" } }),
+      { template: "Lead qualificado: {{contact.display_name}}" },
+    );
+
+    expect(r.status, "a régua montada pelo caminho padrão não avisa ninguém").toBe("success");
+    expect(enviados[0]!.to, "o aviso não foi para o grupo configurado no painel").toBe(GRUPO);
+    expect(enviados[0]!.body).toBe("Lead qualificado: Joana");
+  });
+
+  it("devolve o motivo CERTO quando o cliente não tem grupo", async () => {
+    enviados.length = 0;
+    const r = await getAction("notify_group")!.execute(ctxDaPlataforma(wahaOk, {}), {
+      template: "oi",
+    });
+
+    expect(r.status).toBe("failed");
+    expect(
+      r.error,
+      "um motivo genérico faria quem lê procurar defeito no número da plataforma — que está de pé, avisando todos os outros clientes",
+    ).toBe("sem_grupo_no_cliente");
+    expect(enviados, "mandou mesmo sem saber para onde").toHaveLength(0);
+  });
+
+  it("devolve o motivo CERTO quando não há número de avisos marcado", async () => {
+    const r = await getAction("notify_group")!.execute(
+      ctxDaPlataforma(null, { grupo_de_avisos: { id: GRUPO, nome: "Comercial" } }),
+      { template: "oi" },
+    );
+
+    expect(r.status).toBe("failed");
+    expect(r.error).toBe("sem_numero_de_avisos");
+  });
+
+  it("ainda RECUSA sem template — o aviso vazio é pior que aviso nenhum", async () => {
+    const r = await getAction("notify_group")!.execute(ctxDaPlataforma(wahaOk, {}), {});
+    expect(r.status).toBe("failed");
+    expect(r.error).toBe("missing_config");
   });
 });

@@ -25161,4 +25161,30 @@ create unique index if not exists idx_sales_targets_unica_nn
 
 drop index if exists public.idx_sales_targets_unica;
 
+
+-- ---- número de avisos da plataforma (migration 0254) ----
+--
+-- O número que avisa o TIME no grupo de WhatsApp quando um lead é qualificado.
+-- É da PLATAFORMA, não do cliente: um só, conectado uma vez por quem opera e
+-- adicionado aos grupos de todos. Exigir um por cliente transformaria cada
+-- implantação numa conexão a mais, e é encanamento nosso.
+--
+-- ⚠️ Ponto único de falha assumido: se ele cair, NENHUM cliente recebe aviso.
+-- A contrapartida é avisar quem opera quando isso acontecer.
+--
+-- Coluna e não tabela: é uma sessão de canal como outra qualquer (conecta por
+-- QR, tem status, tem saúde) — o que muda é o PAPEL. Tabela própria duplicaria
+-- conexão e monitoramento, e o primeiro defeito seria o número caindo sem
+-- ninguém ver porque o vigia olha a outra tabela.
+--
+-- Índice único PARCIAL: só UMA na instalação inteira. Sem a trava, marcar a
+-- segunda deixaria duas e "qual envia" viraria sorteio do `order by`.
+
+alter table public.channel_sessions
+  add column if not exists e_numero_de_avisos boolean not null default false;
+
+create unique index if not exists uq_channel_sessions_numero_de_avisos
+  on public.channel_sessions ((true))
+  where e_numero_de_avisos;
+
 notify pgrst, 'reload schema';

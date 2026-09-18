@@ -12,6 +12,7 @@ import {
   Users,
   ShieldCheck,
   CalendarBlank,
+  Megaphone,
   Palette,
   ArrowRight,
 } from "@/lib/ui/icons";
@@ -46,6 +47,10 @@ const NAV_ITEMS: NavItem[] = [
   // A porta da tela do app OAuth do Google — mesma razão da de cima: é
   // configuração da INSTALAÇÃO, e /admin tem navegação própria.
   { href: "/admin/google", label: "Google Agenda", icon: CalendarBlank },
+  // O número da plataforma que avisa os grupos dos clientes. Mesma razão das
+  // duas de cima: é configuração da INSTALAÇÃO, não de um tenant — o número é
+  // um só para todos, e quem o conecta é quem opera.
+  { href: "/admin/numero-de-avisos", label: "Avisos no grupo", icon: Megaphone },
 ];
 
 interface AdminSidebarProps {

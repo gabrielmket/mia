@@ -202,6 +202,28 @@ export interface ChannelAdapter {
   }): Promise<string | null>;
 
   /**
+   * Os GRUPOS de que este número participa, pelo nome.
+   *
+   * Serve a uma escolha de OPERADOR, não a um caminho de mensagem: no painel
+   * administrativo ele escolhe qual grupo recebe o aviso de cada cliente. A
+   * alternativa era pedir o identificador cru (`120363…@g.us`), que só se
+   * obtém exportando conversa do celular — e um campo assim é preenchido errado
+   * uma vez em cada três.
+   *
+   * OPCIONAL como os demais: canal cuja capability `groups` não é `"full"`
+   * não implementa, e quem chama testa a presença do método em vez de perguntar
+   * QUAL provider é.
+   *
+   * ⚠️ `null` é FALHA (canal fora do ar, sessão caída) e `[]` é "não está em
+   * grupo nenhum". Juntar os dois faria a tela dizer "nenhum grupo" quando o
+   * problema é que ninguém respondeu — e o operador iria adicionar o número a um
+   * grupo onde ele já está.
+   */
+  listGroups?(
+    input: ChannelTenantScope & { sessionRef: string },
+  ): Promise<Array<{ id: string; nome: string }> | null>;
+
+  /**
    * Todas as formas sob as quais ESTE canal pode ter registrado a MESMA mensagem
    * que acabou de ser enviada — para reconhecer o eco do próprio envio quando ele
    * volta pelo webhook.

@@ -8722,6 +8722,28 @@ export const DICIONARIO: Traducoes = {
   },
   "Convite reenviado.": { es: "Invitación reenviada." },
   "Convite revogado.": { es: "Invitación revocada." },
+
+  // ---- número de avisos da plataforma (o aviso de bastão no grupo) ----
+  "Avisos no grupo": { es: "Avisos en el grupo" },
+  "Não consegui carregar o número de avisos agora.": { es: "No pude cargar el número de avisos ahora." },
+  "Número que avisa os grupos": { es: "Número que avisa a los grupos" },
+  "Um número só para toda a plataforma. Conecte-o como um canal comum e adicione-o aos grupos dos clientes; é por ele que sai o aviso de lead qualificado.": { es: "Un único número para toda la plataforma. Conéctalo como un canal común y agrégalo a los grupos de los clientes; es por él que sale el aviso de lead calificado." },
+  "Conectado.": { es: "Conectado." },
+  "FORA DO AR — enquanto estiver assim, nenhum cliente recebe aviso.": { es: "FUERA DE SERVICIO — mientras siga así, ningún cliente recibe aviso." },
+  "Desmarcar": { es: "Desmarcar" },
+  "Nenhum número marcado — nenhum cliente recebe aviso no grupo.": { es: "Ningún número marcado — ningún cliente recibe aviso en el grupo." },
+  "Trocar pelo número": { es: "Cambiar por el número" },
+  "Usar este número": { es: "Usar este número" },
+  "Escolha um número conectado": { es: "Elige un número conectado" },
+  "Quem recebe em cada cliente": { es: "Quién recibe en cada cliente" },
+  "Marque o número acima para escolher os grupos.": { es: "Marca el número de arriba para elegir los grupos." },
+  "Não consegui perguntar ao WhatsApp quais são os grupos. O que já estava escolhido continua valendo.": { es: "No pude preguntarle a WhatsApp cuáles son los grupos. Lo que ya estaba elegido sigue valiendo." },
+  "Este número ainda não está em nenhum grupo. Adicione-o pelo WhatsApp e recarregue.": { es: "Este número todavía no está en ningún grupo. Agrégalo por WhatsApp y recarga." },
+  "Grupo que recebe o aviso": { es: "Grupo que recibe el aviso" },
+  "endereço público do arquivo (https://…)": { es: "dirección pública del archivo (https://…)" },
+  "Sem aviso": { es: "Sin aviso" },
+  "Usar o número e o grupo do painel": { es: "Usar el número y el grupo del panel" },
+  "O aviso sai pelo número da plataforma, no grupo escolhido para este cliente no painel administrativo.": { es: "El aviso sale por el número de la plataforma, al grupo elegido para este cliente en el panel administrativo." },
 };
 
 /**

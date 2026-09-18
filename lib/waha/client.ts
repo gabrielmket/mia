@@ -419,6 +419,52 @@ export class WahaClient {
    * instalação real). Quem chama baixa e persiste; guardar a URL faz a foto
    * sumir sozinha depois.
    */
+  /**
+   * Os GRUPOS de que este número participa.
+   *
+   * Serve a uma escolha de operador, não a um caminho de mensagem: no painel
+   * administrativo ele escolhe, PELO NOME, qual grupo recebe o aviso de cada
+   * cliente. A alternativa era pedir o identificador cru (`120363…@g.us`), que
+   * só se obtém exportando conversa do celular — e um campo assim é preenchido
+   * errado uma vez em cada três.
+   *
+   * ⚠️ Lista vazia NÃO é erro, e a diferença importa para quem lê a tela: um
+   * número recém-conectado ainda não foi adicionado a grupo nenhum. A tela
+   * precisa dizer "adicione o número ao grupo primeiro", e não "falhou".
+   * Por isso o retorno é `null` para FALHA e `[]` para "nenhum" — juntar os
+   * dois faria a tela acusar defeito onde falta um convite.
+   */
+  async listGroups(session: string): Promise<Array<{ id: string; nome: string }> | null> {
+    try {
+      const res = await this.fetchComTeto(
+        `${this.baseUrl}/api/${encodeURIComponent(session)}/groups`,
+        { headers: { "X-Api-Key": this.apiKey } },
+      );
+      if (!res.ok) return null;
+      const corpo = (await res.json()) as unknown;
+      if (!Array.isArray(corpo)) return null;
+      return corpo
+        .map((g) => {
+          const item = g as { id?: unknown; name?: unknown; subject?: unknown };
+          // O id vem ora como string, ora como objeto `{_serialized}` — o WAHA
+          // varia conforme o motor por trás. Aceitar as duas formas aqui evita
+          // que a tela fique vazia num motor e cheia no outro.
+          const id =
+            typeof item.id === "string"
+              ? item.id
+              : ((item.id as { _serialized?: string } | null)?._serialized ?? "");
+          const nome =
+            (typeof item.name === "string" && item.name) ||
+            (typeof item.subject === "string" && item.subject) ||
+            "";
+          return { id, nome: nome || id };
+        })
+        .filter((g) => /@g\.us$/i.test(g.id));
+    } catch {
+      return null;
+    }
+  }
+
   async getProfilePictureUrl(session: string, chatId: string): Promise<string | null> {
     try {
       const res = await this.fetchComTeto(

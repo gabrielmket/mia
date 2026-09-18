@@ -68,16 +68,32 @@ export const actionSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("notify_group"),
     config: z.object({
-      channel_session_id: z.string().uuid(),
       /**
-       * O id do grupo no WhatsApp (`...@g.us`). É digitado, e não escolhido de
-       * uma lista, porque o sistema não guarda catálogo de grupos: ele só
-       * conhece os que já lhe mandaram mensagem, e o grupo do comercial pode
-       * ser mais antigo que a conexão.
+       * Canal e grupo são OPCIONAIS — e essa é a mudança que faz a régua ser
+       * montável por quem implanta.
+       *
+       * Sem os dois, o aviso sai pelo número da PLATAFORMA e cai no grupo que
+       * o operador escolheu para este cliente no painel administrativo
+       * (`lib/avisos/destino-do-aviso.ts`). Quem monta a régua só liga a chave.
+       *
+       * Com os dois, vale o que está escrito: canal da própria organização e id
+       * digitado. Continua aceito porque as regras salvas antes desta mudança
+       * têm os dois campos, e apagá-los mudaria calado para onde vai um aviso
+       * que já estava no ar.
+       *
+       * O que NÃO se aceita é meio par: canal sem grupo (ou o contrário) é
+       * quase sempre um formulário salvo pela metade, e adivinhar a metade que
+       * falta é justamente como um aviso interno vai parar no lugar errado.
        */
-      chat_id: z.string().min(6).max(120),
+      channel_session_id: z.string().uuid().optional(),
+      /** O id do grupo no WhatsApp (`...@g.us`). */
+      chat_id: z.string().min(6).max(120).optional(),
       template: z.string().min(1).max(2000),
-    }),
+    })
+      .refine((c) => Boolean(c.channel_session_id) === Boolean(c.chat_id), {
+        message: "Informe canal e grupo juntos, ou nenhum dos dois.",
+        path: ["chat_id"],
+      }),
   }),
 ]);
 

@@ -26,6 +26,7 @@ import type pg from 'pg';
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { ehOptOutProvavel } from '@/lib/opt-out/deteccao';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
+import { avisarGrupoDaPassagemPg } from '@/lib/avisos/aviso-da-passagem';
 
 import type { Logger } from '../obs/logger';
 import { cancelPendingCronsForLead } from '../cron/scheduler';
@@ -171,13 +172,18 @@ export async function performHumanHandoff(
   // (d) inbox de escalação com o resumo da conversa. Dedup por episódio ABERTO (mesmo padrão
   // do escalateJailbreakPromise): 2× no mesmo handoff aberto → 1 item.
   await guardServiceEffect();
-  await db.query(
+  // `returning` para saber se o item é NOVO: é o que decide se o grupo do time
+  // recebe recado. Sem ele, um segundo gatilho na mesma passagem (o dedup faz o
+  // insert não escrever nada) mandaria um aviso a mais para o grupo — e aviso
+  // repetido é o caminho mais curto para o time começar a ignorar o grupo.
+  const itemDeCentral = await db.query(
     `insert into agent_inbox_items (organization_id, kind, severity, title, body, ref_kind, ref_id)
      select $1, 'handoff', 'critical', $2, $3, 'contact', $4
      where not exists (
        select 1 from agent_inbox_items
        where organization_id = $1 and kind = 'handoff' and ref_kind = 'contact' and ref_id = $4 and status = 'open'
-     )`,
+     )
+     returning id`,
     [
       ids.tenantId,
       opts.inboxTitle ?? 'Handoff humano solicitado — assumir a conversa',
@@ -185,6 +191,29 @@ export async function performHumanHandoff(
       ids.leadId,
     ],
   );
+
+  // (d.2) O MESMO aviso, no grupo de WhatsApp onde o time comercial trabalha.
+  //
+  // A Central serve a quem está com a tela aberta; o time do cliente não está.
+  // Só quando o item é novo (ver acima), e sem derrubar a passagem se falhar —
+  // `avisarGrupoDaPassagemPg` nunca lança.
+  if ((itemDeCentral.rowCount ?? 0) > 0) {
+    const { rows: contatos } = await db.query<{
+      display_name: string | null;
+      phone_number: string | null;
+    }>(`select display_name, phone_number from contacts where organization_id = $1 and id = $2`, [
+      ids.tenantId,
+      ids.leadId,
+    ]);
+    await avisarGrupoDaPassagemPg(db, {
+      organizationId: ids.tenantId,
+      conversationId: ids.conversationId,
+      nome: contatos[0]?.display_name ?? null,
+      telefone: contatos[0]?.phone_number ?? null,
+      motivo: opts.reason,
+      resumo: opts.conversationSummary,
+    });
+  }
 
   // (e) A IDA na linha do tempo do NEGÓCIO. `triggerHandoff` (o caminho do CRM)
   // já gravava `handoff_triggered`; este caminho — o do harness e o do "Assumir

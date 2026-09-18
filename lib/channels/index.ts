@@ -29,6 +29,8 @@ export function getAdapter(provider: ChannelProvider): ChannelAdapter {
 
 export {
   capabilitiesOf,
+  entregaEmGrupo,
+  PROVIDERS_QUE_ENTREGAM_EM_GRUPO,
   CHANNEL_CAPABILITIES,
   DEFAULT_CHANNEL_PROVIDER,
   PROVIDERS_DE_MENSAGEM,

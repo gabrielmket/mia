@@ -171,6 +171,34 @@ export function canalConhecidoSemMensagem(provider: string | null | undefined): 
   return (PROVIDERS_SEM_MENSAGEM as readonly string[]).includes(provider ?? "");
 }
 
+/**
+ * `true` quando dá para mandar recado num GRUPO por este canal.
+ *
+ * Existia a coluna `groups` na matriz e nenhum consumidor: quem precisava da
+ * resposta escrevia `provider !== "waha"` na própria feature — o literal que o
+ * invariante 1 proíbe, e que fica errado sozinho no dia em que um canal novo
+ * entregar em grupo.
+ *
+ * `"limited"` responde `false` de propósito. Na Meta e no BSP existe API de
+ * grupo, mas só em plano de uso e só para número fora de coexistência: é o que
+ * a instalação MÉDIA não tem. Prometer aqui faria o aviso interno morrer num
+ * 4xx do provider, e ninguém liga uma coisa à outra.
+ */
+export function entregaEmGrupo(provider: ChannelProvider): boolean {
+  return CHANNEL_CAPABILITIES[provider as ProviderDeMensagem]?.groups === "full";
+}
+
+/**
+ * Os providers que entregam em grupo — DERIVADO da matriz, nunca digitado.
+ *
+ * Serve a quem precisa FILTRAR antes de ter uma sessão em mãos (um `where` de
+ * banco, um seletor de tela). Um canal novo entra ou fica de fora pela linha
+ * dele na matriz, e não por alguém lembrar desta lista.
+ */
+export const PROVIDERS_QUE_ENTREGAM_EM_GRUPO = (
+  Object.keys(CHANNEL_CAPABILITIES) as ProviderDeMensagem[]
+).filter((p) => CHANNEL_CAPABILITIES[p].groups === "full");
+
 export function capabilitiesOf(provider: ChannelProvider): ChannelCapabilities {
   const caps = CHANNEL_CAPABILITIES[provider as ProviderDeMensagem];
   // Fail-closed: provider fora da matriz não herda o default do WAHA. O tipo

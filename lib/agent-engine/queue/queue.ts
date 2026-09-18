@@ -41,7 +41,7 @@ export type JobStatus = 'pending' | 'running' | 'done' | 'failed' | 'dead';
  *                           `PUT /api/v1/ai/pacing` reprograma.
  *  • `horario_do_agente` .. depende da versão publicada do agente. Trazer junto
  *                           com a janela o adiaria de novo no mesmo segundo.
- *  • `canal_fora` ......... depende de a sessão WAHA voltar. Idem.
+ *  • `canal_fora` ......... depende de a sessão do canal voltar. Idem.
  *
  * Antes da 0251 o motivo só existia dentro da frase de `last_error`. Filtrar por
  * texto de mensagem funcionaria hoje e quebraria CALADO no dia em que alguém

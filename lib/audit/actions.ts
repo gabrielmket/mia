@@ -174,6 +174,8 @@ export const AUDIT_ACTIONS = [
   "channels.template_criado",
   // MIA Broadcast: cada disparo gasta dinheiro do cliente. Quem mandou, para
   // quantos e a que preço é a primeira pergunta quando a fatura é contestada.
+  "platform.numero_de_avisos_alterado",
+  "platform.grupo_de_avisos_alterado",
   "broadcast.criado",
   "broadcast.editado",
   "broadcast.excluido",

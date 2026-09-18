@@ -95,7 +95,7 @@ export function MessageBubble({
   // agora do lado do disparo.
   //
   // O efeito colateral que segurava isto era o dedup de eco, e ele NÃO alcança
-  // este caminho: `ehEcoDeEnvioNosso` vive em `lib/waha/ingest.ts` (outro
+  // este caminho: `ehEcoDeEnvioNosso` vive na ingestão do transporte (outro
   // canal) e exige `external_id` nulo com status `queued|sending`. A linha do
   // disparo nasce com o `wamid` da Meta e status `sent` — não casa por três
   // motivos independentes.

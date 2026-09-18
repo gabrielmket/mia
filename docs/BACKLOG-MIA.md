@@ -6,14 +6,20 @@ Atualizado em 18/09/2026. Ordenado por bloco; dentro de cada bloco, por valor.
 
 ---
 
-## Fechado e no ar (`v1.21.0-mia.21`)
+## Fechado e no ar (`v1.21.0-mia.26`)
 
 Fatura da OpenAI (cron provado rodando sozinho) · metas e relatório de vendas ·
 reunião marcada e no-show · liberação por módulo · MIA Broadcast fases 1 e 2
 (carteira, motor, margem, templates pela plataforma) · webhook multi-WABA ·
 credencial do canal por service role · disparo virando mensagem na conversa ·
 ver destinatários com erro por linha · QR sem piscar · chave de IA fora da vista
-do cliente.
+do cliente · seletor de tags com contagem · editar e excluir campanha · agendar
+campanha · cabeçalho com imagem no template · meta do mês voltando a gravar.
+
+**Na próxima imagem** (ainda não cortada): o **aviso no grupo** na passagem de
+bastão — número da plataforma no painel administrativo, grupo escolhido pelo
+nome em cada cliente, e o recado saindo dos dois motores de handoff com dedup
+compartilhado. Ver o Bloco G.
 
 ---
 
@@ -154,3 +160,29 @@ Sobre o E6, pedido do Gabriel em 18/09. O que já se sabe do desenho:
   custo da Meta é do cliente, não nosso
 - **Virar Tech Provider** da Meta — destrava D2 e D3
 - **Conferir a fatura da Meta** depois dos testes, para saber o valor unitário real
+
+---
+
+## Bloco G — Aviso no grupo (entregue; o que sobra é operação)
+
+O time comercial do cliente não vive na tela do CRM: ele trabalha num grupo de
+WhatsApp. A passagem de bastão já registrava (Central, fila, timeline) e não
+**chamava** ninguém. Agora chama.
+
+**Como ficou.** O número é da PLATAFORMA — um só, marcado em
+`/admin/numero-de-avisos`, e é lá também que se escolhe, **pelo nome**, o grupo
+de cada empresa (guardado em `organizations.settings.grupo_de_avisos`). O recado
+sai colado ao item de Central do handoff, e só quando ele é recém-aberto: os
+dois motores (`performHumanHandoff` e `triggerHandoff`) deduplicam um contra o
+outro, então uma conversa escalada duas vezes rende um recado, não dois.
+
+⚠️ **Ponto único de falha assumido.** Se esse número cair, NENHUM cliente recebe
+aviso. A contrapartida já está de pé: ele é uma sessão como as outras, entra no
+vigia de `channel-health` e a tela do admin mostra a saúde dele em destaque.
+
+| # | o que falta | tamanho | por quê |
+|---|---|---|---|
+| G1 | **Conectar o número pela própria tela do admin** (QR ali dentro) | médio | hoje conecta-se em Conexões, no tenant de quem opera, e só depois marca no painel — dois passos onde a cabeça de quem implanta enxerga um |
+| G2 | **Aviso quando o número de avisos cai** chegando a quem OPERA | pequeno | o vigia abre o item na Central da organização dona do número; se ninguém abrir aquela Central, a queda continua invisível |
+| G3 | **Grupo por agente**, e não só por empresa | médio | cliente com dois times (venda e suporte) quer bastão em grupos diferentes — só aparece quando acontecer |
+| G4 | **Tirar o número de avisos do seletor de atendimento** | pequeno | ele continua listado em Conexões da org que o conectou (e precisa continuar: é por ali que se lê o QR e se reconecta), mas nada impede alguém de amarrar um agente nele por engano |

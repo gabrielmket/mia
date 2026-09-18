@@ -85,6 +85,14 @@ const KNOWN_DEBT: { reason: string; files: string[] }[] = [
       "app/api/v1/channel-sessions/[id]/qr/route.ts",
       "app/api/v1/channel-sessions/[id]/reconnect/route.ts",
       "app/api/v1/channel-sessions/[id]/route.test.ts",
+      // Mesma porta que a linha acima, do outro lado do sistema: para provar
+      // que o aviso de grupo RECUSA um canal que não entrega em grupo, o teste
+      // precisa montar a linha de `channel_sessions` com a coluna do provider
+      // preenchida — é o formato do banco, não uma feature perguntando quem é o
+      // canal. As duas saem quando `lib/waha/` for absorvido na Fase 3 e a
+      // união deixar de ter nome de transporte nas colunas.
+      "lib/automation/actions/notify-group.test.ts",
+      "lib/avisos/destino-do-aviso.test.ts",
       "app/api/v1/channel-sessions/[id]/route.ts",
       "app/api/v1/channel-sessions/route.ts",
       "app/api/v1/health/route.ts",

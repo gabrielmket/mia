@@ -5,6 +5,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -42,7 +43,9 @@ export type ActionItem =
   | { type: "start_message_flow"; config: { flow_pointer_id: string } }
   | {
       type: "notify_group";
-      config: { channel_session_id: string; chat_id: string; template: string };
+      // Opcionais: vazios, o aviso sai pelo número da PLATAFORMA e cai no grupo
+      // que o operador escolheu para este cliente no painel administrativo.
+      config: { channel_session_id?: string; chat_id?: string; template: string };
     };
 
 export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
@@ -62,7 +65,9 @@ export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
     case "start_message_flow":
       return { type, config: { flow_pointer_id: "" } };
     case "notify_group":
-      return { type, config: { channel_session_id: "", chat_id: "", template: "" } };
+      // Sem canal nem grupo de propósito: quem monta a régua não deveria
+      // precisar saber que existe um `120363…@g.us` no mundo.
+      return { type, config: { template: "" } };
   }
 }
 
@@ -478,20 +483,34 @@ const VARS_DO_AVISO = [
 /**
  * "Avisar o time num grupo do WhatsApp".
  *
- * O id do grupo é DIGITADO e não escolhido: o sistema não mantém catálogo de
- * grupos (ele só conhece os que já lhe mandaram mensagem), e o grupo do
- * comercial costuma ser mais antigo que a conexão. A tela diz onde achar o id
- * em vez de fingir uma lista que ficaria vazia justamente para quem mais
- * precisa dela.
+ * O caminho normal é a CHAVE LIGADA: o aviso sai pelo número da plataforma e
+ * cai no grupo que o operador escolheu para este cliente no painel
+ * administrativo — lá os grupos aparecem pelo nome, porque é de lá que o número
+ * está dentro deles. Quem monta a régua não precisa saber que existe um
+ * `120363…@g.us` no mundo.
+ *
+ * Desligar a chave revela os campos de antes, e eles continuam existindo por
+ * dois motivos: as regras salvas antes desta mudança têm canal e grupo
+ * preenchidos, e um cliente com número próprio dentro do grupo dele é caso
+ * legítimo. O id segue DIGITADO nesse caminho — o sistema não mantém catálogo
+ * dos grupos de um número que não é o dele.
  */
 function NotifyGroupForm({
   config,
   onChange,
-}: FormProps<{ channel_session_id: string; chat_id: string; template: string }>) {
+}: FormProps<{ channel_session_id?: string; chat_id?: string; template: string }>) {
   const t = useT();
   const { data: sessions } = useChannelSessions();
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-  const grupoSuspeito = config.chat_id.trim().length > 0 && !/@g\.us$/i.test(config.chat_id.trim());
+  const chatId = config.chat_id ?? "";
+  const grupoSuspeito = chatId.trim().length > 0 && !/@g\.us$/i.test(chatId.trim());
+  /**
+   * Sem canal E sem grupo = caminho da plataforma. É derivado do config, e não
+   * um estado à parte, porque a regra salva é a única fonte: um `useState`
+   * começaria ligado numa regra antiga que tem os dois campos preenchidos, e a
+   * primeira interação apagaria em silêncio para onde aquele aviso ia.
+   */
+  const usarPadrao = !config.channel_session_id && !chatId;
 
   const insertVar = (token: string) => {
     const el = textareaRef.current;
@@ -508,10 +527,30 @@ function NotifyGroupForm({
 
   return (
     <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Switch
+          id="notify-group-padrao"
+          checked={usarPadrao}
+          onCheckedChange={(v) =>
+            onChange(
+              v
+                ? { template: config.template }
+                : { ...config, channel_session_id: "", chat_id: "" },
+            )
+          }
+        />
+        <Label htmlFor="notify-group-padrao">{t("Usar o número e o grupo do painel")}</Label>
+      </div>
+      {usarPadrao ? (
+        <p className="text-xs text-muted-foreground">
+          {t("O aviso sai pelo número da plataforma, no grupo escolhido para este cliente no painel administrativo.")}
+        </p>
+      ) : (
+      <>
       <div className="space-y-1">
         <Label>{t("Número de WhatsApp")}</Label>
         <Select
-          value={config.channel_session_id}
+          value={config.channel_session_id ?? ""}
           onValueChange={(v) => onChange({ ...config, channel_session_id: v })}
         >
           <SelectTrigger>
@@ -532,7 +571,7 @@ function NotifyGroupForm({
       <div className="space-y-1">
         <Label>{t("Id do grupo")}</Label>
         <Input
-          value={config.chat_id}
+          value={chatId}
           onChange={(e) => onChange({ ...config, chat_id: e.target.value })}
           placeholder="1203634...@g.us"
         />
@@ -549,6 +588,8 @@ function NotifyGroupForm({
           </p>
         )}
       </div>
+      </>
+      )}
       <div className="space-y-1">
         <Label>{t("Aviso")}</Label>
         <div className="flex flex-wrap gap-1">

@@ -32,6 +32,8 @@ import { moverLeadParaEtapaDeHandoff } from "@/lib/leads/handoff-stage-move";
 import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
 import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
 
+import { avisarGrupoDaPassagem } from "@/lib/avisos/aviso-da-passagem";
+
 import { avisarLeadDoCrm } from "./aviso-ao-lead";
 
 export type HandoffReason =
@@ -341,6 +343,36 @@ export async function triggerHandoff(
             logger.warn("[handoff-orchestrator] inbox item insert failed", {
               conversation_id: input.conversationId,
               error: inboxErr.message,
+            });
+          }
+
+          // Step 7 — o mesmo aviso, no GRUPO onde o time comercial trabalha.
+          //
+          // Dentro do `if (!aberto)` e SÓ quando o item entrou de verdade: o
+          // aviso sai junto do item RECÉM-ABERTO, e assim herda o dedup que os
+          // dois motores já compartilham — uma conversa escalada por sentimento
+          // e depois por pedido explícito rende um recado no grupo, não dois.
+          // O `inboxErr` mais comum é a corrida (o outro motor inseriu entre a
+          // leitura e a escrita), e nela quem inseriu já avisou o grupo.
+          //
+          // Sem `await` na conta do chamador? Não: com. O envio é rápido e o
+          // `avisarGrupoDaPassagem` nunca lança — soltar a promessa aqui faria
+          // a falha aparecer como unhandled rejection num worker, longe deste
+          // arquivo, que é o jeito mais caro de descobrir que o grupo não
+          // recebeu.
+          if (!inboxErr) {
+            const { data: contato } = await admin
+              .from("contacts")
+              .select("display_name, phone_number")
+              .eq("organization_id", input.organizationId)
+              .eq("id", contactId)
+              .maybeSingle();
+            await avisarGrupoDaPassagem(admin, {
+              organizationId: input.organizationId,
+              conversationId: input.conversationId,
+              nome: (contato as { display_name?: string | null } | null)?.display_name ?? null,
+              telefone: (contato as { phone_number?: string | null } | null)?.phone_number ?? null,
+              motivo: input.reason,
             });
           }
         }

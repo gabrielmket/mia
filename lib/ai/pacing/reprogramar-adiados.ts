@@ -32,7 +32,7 @@
  * ## Por que SÓ `janela_anti_ban`
  *
  * Os outros motivos de adiamento dependem de outra condição — `horario_do_agente`
- * da versão publicada do agente, `canal_fora` de a sessão WAHA voltar. Trazê-los
+ * da versão publicada do agente, `canal_fora` de a sessão do canal voltar. Trazê-los
  * junto os faria voltar cedo demais, para serem adiados de novo no mesmo segundo.
  * O motivo vem da COLUNA `deferred_reason` (migration 0251), nunca de comparar o
  * texto de `last_error`: filtrar por frase quebra calado no dia em que alguém

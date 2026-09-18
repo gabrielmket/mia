@@ -89,6 +89,17 @@ export const wahaAdapter: ChannelAdapter = {
     return client.getProfilePictureUrl(input.sessionRef, input.recipient);
   },
 
+  async listGroups(input: {
+    sessionRef: string;
+  }): Promise<Array<{ id: string; nome: string }> | null> {
+    const client = getWahaClient();
+    // Sem transporte configurado NÃO é "nenhum grupo": é "não deu para
+    // perguntar". Devolver `[]` aqui faria a tela do admin dizer que o número
+    // não está em grupo nenhum quando o que caiu foi o contêiner.
+    if (!client) return null;
+    return client.listGroups(input.sessionRef);
+  },
+
   /**
    * `lid:123…` → `+5959…`, quando a tabela de tradução do canal já souber.
    *
