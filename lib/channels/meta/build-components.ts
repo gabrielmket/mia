@@ -20,13 +20,22 @@ import type {
   TemplateContract,
 } from "./template-contract";
 import { describeAddress } from "./template-contract";
+import { idDeMidia, separarNomeDoArquivo } from "./midia-por-id";
+
+/**
+ * Como a mídia é endereçada: por URL pública (`link`) ou por arquivo já subido
+ * para a conta (`id`). A Meta aceita as duas; o produto só sabia a primeira, e
+ * ela obrigava o operador a publicar a imagem em algum lugar da internet antes
+ * de conseguir mandar uma campanha. Ver `midia-por-id.ts`.
+ */
+export type MetaMidia = { link: string } | { id: string };
 
 /** Um parâmetro do payload. `parameter_name` só existe em template NAMED. */
 export type MetaSendParameter =
   | { type: "text"; text: string; parameter_name?: string }
-  | { type: "image"; image: { link: string } }
-  | { type: "video"; video: { link: string } }
-  | { type: "document"; document: { link: string } }
+  | { type: "image"; image: MetaMidia }
+  | { type: "video"; video: MetaMidia }
+  | { type: "document"; document: MetaMidia & { filename?: string } }
   | { type: "coupon_code"; coupon_code: string };
 
 export type MetaSendComponent =
@@ -73,12 +82,33 @@ function parameterFor(slot: ParamSlot, value: string, named: boolean): MetaSendP
       return named && expects === "text"
         ? { type: "text", parameter_name: slot.key, text: value }
         : { type: "text", text: value };
-    case "image":
-      return { type: "image", image: { link: value } };
-    case "video":
-      return { type: "video", video: { link: value } };
-    case "document":
-      return { type: "document", document: { link: value } };
+    /**
+     * `meta-media:<id>` vira `{id}`; qualquer outra coisa segue como `{link}`.
+     *
+     * A ordem importa: tentar o id PRIMEIRO é o que permite a URL continuar
+     * funcionando sem nenhuma mudança para quem já monta campanha assim — e
+     * `meta-media:` nunca é uma URL válida, então não há ambiguidade.
+     */
+    case "image": {
+      const id = idDeMidia(value);
+      return { type: "image", image: id ? { id } : { link: value } };
+    }
+    case "video": {
+      const id = idDeMidia(value);
+      return { type: "video", video: id ? { id } : { link: value } };
+    }
+    case "document": {
+      // O nome do arquivo vem grudado (`…|proposta.pdf`) porque o slot é uma
+      // string só. Sem ele, um PDF chega ao cliente como "file" — e anexo sem
+      // nome é anexo que ninguém abre.
+      const { valor, filename } = separarNomeDoArquivo(value);
+      const id = idDeMidia(valor);
+      const midia = id ? { id } : { link: valor };
+      return {
+        type: "document",
+        document: filename ? { ...midia, filename } : midia,
+      };
+    }
     case "coupon_code":
       return { type: "coupon_code", coupon_code: value };
     default:

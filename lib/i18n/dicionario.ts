@@ -8815,6 +8815,11 @@ export const DICIONARIO: Traducoes = {
   "parados": { es: "detenidos" },
   "Sem motivo registrado.": { es: "Sin motivo registrado." },
   "Parado desde": { es: "Detenido desde" },
+
+  // ---- arquivo da campanha, sem hospedagem ----
+  "Arquivo enviado.": { es: "Archivo enviado." },
+  "Enviando o arquivo…": { es: "Enviando el archivo…" },
+  "escolha o arquivo abaixo, ou cole um endereço público": { es: "elige el archivo abajo, o pega una dirección pública" },
   "O mesmo número, falando com a gente: crédito de IA acabando, número fora do ar e um resumo por dia. Cada aviso sai no máximo uma vez por dia enquanto o problema durar.": { es: "El mismo número, hablando con nosotros: crédito de IA acabándose, número fuera del aire y un resumen por día. Cada aviso sale como máximo una vez al día mientras el problema dure." },
   "Vincular a uma empresa": { es: "Vincular a una empresa" },
   "Usar o número e o grupo do painel": { es: "Usar el número y el grupo del panel" },

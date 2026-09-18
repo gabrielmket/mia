@@ -26,7 +26,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/hooks/i18n/useT";
-import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useTemplates } from "@/hooks/channels/useTemplates";
 import { useCarteira } from "@/hooks/useCarteira";
 import {
@@ -80,9 +79,57 @@ const MOTIVO: Record<string, string> = {
   saldo_acabou: "O crédito acabou no meio do disparo.",
 };
 
+/**
+ * Sobe o arquivo direto para a conta do WhatsApp e devolve o valor pronto para
+ * o campo (`meta-media:<id>`, com o nome grudado quando é PDF).
+ *
+ * Estado local e não global: cada slot de mídia tem o seu, e um estado
+ * compartilhado faria o "enviando…" de um piscar no outro.
+ */
+function SeletorDeArquivo({ onEnviado }: { onEnviado: (valor: string) => void }) {
+  const t = useT();
+  const [enviando, setEnviando] = useState(false);
+
+  return (
+    <div className="space-y-1">
+      <input
+        type="file"
+        accept="image/jpeg,image/png,video/mp4,application/pdf"
+        disabled={enviando}
+        className="block w-full text-xs file:mr-2 file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1"
+        onChange={async (e) => {
+          const arquivo = e.target.files?.[0];
+          if (!arquivo) return;
+          setEnviando(true);
+          try {
+            const corpo = new FormData();
+            corpo.append("file", arquivo);
+            const r = await fetch("/api/v1/broadcasts/midia", { method: "POST", body: corpo });
+            const json = (await r.json()) as {
+              data?: { valor?: string };
+              error?: { message?: string };
+            };
+            if (!r.ok || !json.data?.valor) {
+              toast.error(json.error?.message ?? t("Não consegui enviar o arquivo."));
+              return;
+            }
+            onEnviado(json.data.valor);
+            toast.success(t("Arquivo enviado."));
+          } finally {
+            setEnviando(false);
+            // Limpa o input para o MESMO arquivo poder ser escolhido de novo
+            // depois de um erro — sem isto, o segundo clique não dispara evento.
+            e.target.value = "";
+          }
+        }}
+      />
+      {enviando && <p className="text-xs text-muted-foreground">{t("Enviando o arquivo…")}</p>}
+    </div>
+  );
+}
+
 export function MiaBroadcast() {
   const t = useT();
-  const tag = useTagDeIdioma();
   const { data: campanhas, isLoading } = useBroadcasts();
   const { data: templatesRes } = useTemplates();
   const { data: carteira } = useCarteira();
@@ -248,9 +295,25 @@ export function MiaBroadcast() {
                     placeholder={
                       slot.expects === "text"
                         ? t("o mesmo texto para todos")
-                        : t("endereço público do arquivo (https://…)")
+                        : t("escolha o arquivo abaixo, ou cole um endereço público")
                     }
                   />
+                  {/*
+                    O ARQUIVO, sem hospedar arquivo.
+
+                    O campo de texto continua aceitando URL — quem já monta
+                    campanha assim não perde nada. O que muda é deixar de ser a
+                    ÚNICA saída: publicar a imagem em algum lugar público da
+                    internet era um pedágio que não tinha nada a ver com mandar
+                    a campanha, e a URL do Drive (o atalho de todo mundo) devolve
+                    HTML em vez da imagem — erro que só aparecia depois do
+                    disparo, com o crédito já gasto.
+                  */}
+                  {slot.expects !== "text" && (
+                    <SeletorDeArquivo
+                      onEnviado={(valor) => setValores((v) => ({ ...v, [slot.chave]: valor }))}
+                    />
+                  )}
                 </div>
               ))}
             </div>
