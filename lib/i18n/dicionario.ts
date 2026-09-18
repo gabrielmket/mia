@@ -8804,6 +8804,17 @@ export const DICIONARIO: Traducoes = {
   "Código QR": { es: "Código QR" },
   "Assim que o celular ler, recarregue esta página: o número aparece marcado acima.": { es: "En cuanto el celular lo lea, recarga esta página: el número aparece marcado arriba." },
   "Ou usar um número já conectado": { es: "O usar un número ya conectado" },
+
+  // ---- fila morta (trabalho parado) ----
+  "Não consegui carregar a fila agora.": { es: "No pude cargar la cola ahora." },
+  "Trabalho parado": { es: "Trabajo detenido" },
+  "Nada parado. Todo trabalho que entrou foi processado.": { es: "Nada detenido. Todo el trabajo que entró fue procesado." },
+  "Cada um destes é um atendimento que não aconteceu. Agrupados pelo motivo da falha.": { es: "Cada uno de estos es una atención que no ocurrió. Agrupados por el motivo de la falla." },
+  "A lista foi cortada — há mais do que cabe nesta tela.": { es: "La lista fue cortada — hay más de lo que cabe en esta pantalla." },
+  "parado": { es: "detenido" },
+  "parados": { es: "detenidos" },
+  "Sem motivo registrado.": { es: "Sin motivo registrado." },
+  "Parado desde": { es: "Detenido desde" },
   "O mesmo número, falando com a gente: crédito de IA acabando, número fora do ar e um resumo por dia. Cada aviso sai no máximo uma vez por dia enquanto o problema durar.": { es: "El mismo número, hablando con nosotros: crédito de IA acabándose, número fuera del aire y un resumen por día. Cada aviso sale como máximo una vez al día mientras el problema dure." },
   "Vincular a uma empresa": { es: "Vincular a una empresa" },
   "Usar o número e o grupo do painel": { es: "Usar el número y el grupo del panel" },

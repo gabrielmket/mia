@@ -60,6 +60,10 @@ const NAV_ITEMS: NavItem[] = [
   // INSTALAÇÃO: o link é um só, e as contas que chegam ainda não são de
   // ninguém até alguém amarrar.
   { href: "/admin/cadastro-incorporado", label: "Cadastro incorporado", icon: PlugsConnected },
+  // Cada linha desta tela é um lead que escreveu e não foi respondido. Fica no
+  // painel da plataforma porque a causa é quase sempre uma só para vários
+  // clientes — rate limit, chave expirada, número caído.
+  { href: "/admin/fila-morta", label: "Trabalho parado", icon: Warning },
 ];
 
 interface AdminSidebarProps {
