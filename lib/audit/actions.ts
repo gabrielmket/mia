@@ -180,6 +180,7 @@ export const AUDIT_ACTIONS = [
   "platform.cadastro_incorporado_amarrado",
   "platform.report_alterado",
   "platform.fila_morta_reprocessada",
+  "platform.precos_da_meta_alterados",
   "platform.grupo_de_avisos_alterado",
   "broadcast.criado",
   "broadcast.editado",

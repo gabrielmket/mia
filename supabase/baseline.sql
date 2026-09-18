@@ -25407,4 +25407,42 @@ revoke all on public.platform_avisos_enviados from anon, authenticated;
 grant select, insert, update on public.platform_avisos to service_role;
 grant select, insert, update, delete on public.platform_avisos_enviados to service_role;
 
+
+-- ---- custo da Meta por mensagem (migration 0259) ----
+--
+-- A Meta manda `pricing` em todo status e a gente descartava. Ela traz
+-- `billable` e `category`, NUNCA valor — cobra por tabela, que muda por país.
+-- Por isso a mensagem guarda o FATO e o preço mora numa tabela nossa: gravar
+-- valor calculado congelaria o preço do dia no histórico.
+
+alter table public.messages
+  add column if not exists meta_pricing_category text,
+  add column if not exists meta_billable boolean;
+
+comment on column public.messages.meta_pricing_category is
+  'A categoria que a META cobrou (marketing, utility, authentication, service), como veio no `pricing` do status de entrega. NAO e o que pedimos: e o que ela decidiu cobrar — os dois divergem, e e a decisao dela que vira fatura.';
+
+comment on column public.messages.meta_billable is
+  'Se a Meta cobrou por esta mensagem. Ha mensagem gratuita (janela de servico, ponto de entrada de anuncio) e conta-la como paga inflaria o custo do cliente.';
+
+create index if not exists idx_messages_custo_meta
+  on public.messages (organization_id, created_at, meta_pricing_category)
+  where meta_billable is true;
+
+
+create table if not exists public.platform_precos_meta (
+  categoria text primary key,
+  centavos_brl integer not null check (centavos_brl >= 0),
+  atualizado_em timestamptz not null default now(),
+  atualizado_por uuid
+);
+
+comment on table public.platform_precos_meta is
+  'Quanto custa cada categoria de mensagem da Meta, em centavos de REAL. A Meta nao manda valor no webhook — so a categoria —, entao o dinheiro sai daqui. Vazia = o relatorio mostra a CONTAGEM e diz que o preco nao foi informado, nunca zero (que se leria como "de graca").';
+
+alter table public.platform_precos_meta enable row level security;
+
+revoke all on public.platform_precos_meta from anon, authenticated;
+grant select, insert, update, delete on public.platform_precos_meta to service_role;
+
 notify pgrst, 'reload schema';

@@ -128,6 +128,19 @@ export interface InboundMessageEvent {
 /** Status de entrega de uma mensagem que ENVIAMOS (sent/delivered/read/failed). */
 export interface MessageStatusEvent {
   kind: "message_status";
+  /**
+   * O que a META decidiu cobrar por esta mensagem.
+   *
+   * Chega em todo status e era descartado. Não traz VALOR — a Meta cobra por
+   * tabela, que varia por país — mas traz o que nenhuma outra fonte responde:
+   * se a mensagem foi cobrada, e em qual categoria. É o que separa "mandei 800
+   * mensagens" de "800 mensagens custaram X".
+   *
+   * `null` quando o status não trouxe pricing (acontece em `read`, e em
+   * mensagem gratuita de alguns fluxos): não é "não cobrou", é "este evento não
+   * fala de dinheiro" — sobrescrever o que já foi gravado apagaria o fato.
+   */
+  pricing: { billable: boolean; category: string | null } | null;
   wabaId: string;
   externalId: string;
   status: string;
@@ -157,6 +170,26 @@ export type { MetaWebhookEnvelope } from "./envelope";
 export function normalizeRejectedReason(v: unknown): string | null {
   const s = typeof v === "string" && v.length > 0 ? v : null;
   return s === null || s.toUpperCase() === "NONE" ? null : s;
+}
+
+/**
+ * O `pricing` do status, quando ele vem.
+ *
+ * Defensivo porque a Meta já mudou a forma deste objeto duas vezes (entrou
+ * `type`, mudou o vocabulário de categoria) e porque o campo é opcional: um
+ * `read` costuma chegar sem ele. Ausência devolve `null`, que o chamador trata
+ * como "este evento não fala de dinheiro" — diferente de "não cobrou".
+ */
+function lerPricing(v: unknown): { billable: boolean; category: string | null } | null {
+  if (!v || typeof v !== "object") return null;
+  const p = v as { billable?: unknown; category?: unknown };
+  // `billable` ausente com categoria presente = cobrada: é o formato antigo, em
+  // que só as gratuitas traziam o campo. Assumir `false` aqui zeraria o custo
+  // de uma instalação inteira sem ninguém notar.
+  const billable = typeof p.billable === "boolean" ? p.billable : true;
+  const category = typeof p.category === "string" && p.category.length > 0 ? p.category : null;
+  if (!category && typeof p.billable !== "boolean") return null;
+  return { billable, category };
 }
 
 function str(v: unknown): string | null {
@@ -254,6 +287,7 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
             recipient: str(raw.recipient_id),
             errorCode: typeof first.code === "number" ? first.code : null,
             errorTitle: str(first.title),
+            pricing: lerPricing(raw.pricing),
           });
         }
       }

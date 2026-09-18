@@ -155,13 +155,21 @@ async function handle(req: NextRequest): Promise<Response> {
   // nos dias em que nada quebra — e que denuncia, por ausência, o dia em que o
   // cron parar de rodar.
   const agora = new Date();
-  const horaLocal = Number(
-    new Intl.DateTimeFormat("pt-BR", {
-      hour: "numeric",
-      hour12: false,
-      timeZone: "America/Sao_Paulo",
-    }).format(agora),
-  );
+  /**
+   * A hora em São Paulo, sem `Intl`.
+   *
+   * `Intl.DateTimeFormat("pt-BR", …)` seria o caminho óbvio e é proibido aqui
+   * com razão: o guarda `i18n-a-data-segue-o-idioma` existe para impedir data
+   * com idioma fixo, e ele não tem como distinguir "data que o usuário lê" de
+   * "hora que o cron usa para decidir". Fixar "en-US" para escapar do guarda
+   * seria driblá-lo, não respeitá-lo.
+   *
+   * O Brasil não tem horário de verão desde 2019, então UTC-3 é constante. Se
+   * isso voltar a mudar, é ESTA linha que precisa mudar junto — e é por isso
+   * que o número aparece uma vez só, com nome.
+   */
+  const UTC_MENOS_TRES = 3;
+  const horaLocal = (agora.getUTCHours() - UTC_MENOS_TRES + 24) % 24;
 
   if (grupo.resumoDiario && horaLocal === HORA_DO_RESUMO) {
     const ontem = new Date(agora.getTime() - 24 * 60 * 60 * 1000).toISOString();

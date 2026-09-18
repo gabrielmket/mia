@@ -15,6 +15,7 @@ import {
   CalendarBlank,
   Megaphone,
   Palette,
+  Receipt,
   PlugsConnected,
   ArrowRight,
 } from "@/lib/ui/icons";
@@ -64,6 +65,9 @@ const NAV_ITEMS: NavItem[] = [
   // painel da plataforma porque a causa é quase sempre uma só para vários
   // clientes — rate limit, chave expirada, número caído.
   { href: "/admin/fila-morta", label: "Trabalho parado", icon: Warning },
+  // O preço de CUSTO do que o cliente comprou — fica aqui pelo mesmo motivo
+  // do custo de IA: mostrar ao cliente seria mostrar a margem.
+  { href: "/admin/custo-da-meta", label: "Custo das mensagens", icon: Receipt },
 ];
 
 interface AdminSidebarProps {

@@ -111,9 +111,19 @@ describe("sidebarGroups", () => {
     //
     // A lista é EXATA de propósito. `toContain` deixaria um sexto item entrar
     // calado no sidebar e reabrir a mesma corrida por pixel.
+    //
+    // EMPRESAS entrou como quarto item, e a decisão é consciente: em venda B2B
+    // a empresa é a unidade e a pessoa é por onde se fala com ela — quem abre o
+    // CRM procurando um cliente procura pelo nome da empresa primeiro. Fica ao
+    // lado de Contatos, não escondida no hub.
+    //
+    // ⚠️ O que isso cobra: a dobra de 900px estourou por 13px quando o SIDEBAR
+    // chegou a cinco itens de CRM. Com quatro ainda há folga, mas ela acabou —
+    // o quinto precisa de medição (e2e `navegacao.spec.ts`) antes de entrar.
     const crm = sidebarGroups(true, null).find((g) => g.group.id === "crm");
     expect(crm?.items.map((i) => i.href)).toEqual([
       "/app/kanban",
+      "/app/empresas",
       "/app/contacts",
       "/app/tasks",
     ]);
@@ -142,7 +152,7 @@ describe("sidebarGroups", () => {
 });
 
 describe("hubSections", () => {
-  it("o hub do CRM é inventário: as cinco telas do grupo, nas duas seções", () => {
+  it("o hub do CRM é inventário: as seis telas do grupo, nas duas seções", () => {
     // As seções são a régua do sidebar escrita por extenso — o que se abre todo
     // dia contra o que se define uma vez. Lista EXATA: `toContain` deixaria uma
     // tela nova entrar sem que ninguém decidisse de que lado dela ela cai.
@@ -150,6 +160,7 @@ describe("hubSections", () => {
     expect(secoes.map((s) => s.section)).toEqual(["O dia a dia da venda", "Preparar a venda"]);
     expect(secoes.flatMap((s) => s.items.map((i) => i.href))).toEqual([
       "/app/kanban",
+      "/app/empresas",
       "/app/contacts",
       "/app/tasks",
       "/app/products",

@@ -2120,6 +2120,20 @@ export const DICIONARIO: Traducoes = {
   "Tempo de resposta": { es: "Tiempo de respuesta" },
   "Tempo de resposta por dia (segundos)": { es: "Tiempo de respuesta por día (segundos)" },
   "Tentar de novo": { es: "Intentar de nuevo" },
+
+  // ---- custo das mensagens da Meta ----
+  "Não consegui carregar o custo agora.": { es: "No pude cargar el costo ahora." },
+  "Custo das mensagens (Meta)": { es: "Costo de los mensajes (Meta)" },
+  "A Meta informa a categoria de cada mensagem cobrada, e não o valor — ela cobra por tabela. O dinheiro abaixo é a contagem multiplicada pelos preços que você cadastrar.": { es: "Meta informa la categoría de cada mensaje cobrado, y no el valor — cobra por tabla. El dinero de abajo es el conteo multiplicado por los precios que registres." },
+  "Preço por categoria": { es: "Precio por categoría" },
+  "Salvar preços": { es: "Guardar precios" },
+  "Em reais por mensagem. A tabela vigente da Meta muda por país e por reajuste.": { es: "En reales por mensaje. La tabla vigente de Meta cambia por país y por reajuste." },
+  "Gasto em": { es: "Gasto en" },
+  "A leitura foi cortada — há mais mensagens no mês do que cabe nesta conta.": { es: "La lectura fue cortada — hay más mensajes en el mes de los que caben en esta cuenta." },
+  "Nenhuma mensagem cobrada neste mês.": { es: "Ningún mensaje cobrado este mes." },
+  "sem preço cadastrado": { es: "sin precio registrado" },
+  "O total está incompleto: falta cadastrar o preço de": { es: "El total está incompleto: falta registrar el precio de" },
+  "Custo das mensagens": { es: "Costo de los mensajes" },
   "Tipo de uso": { es: "Tipo de uso" },
   "Todos os números desta página são só deste intervalo. Mude as datas para comparar um mês com o outro.": {
     es: "Todos los números de esta página son solo de este intervalo. Cambia las fechas para comparar un mes con otro.",

@@ -225,9 +225,25 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         .eq("name", e.templateName)
         .eq("language", e.templateLanguage);
     } else {
+      /**
+       * O que a Meta cobrou vai JUNTO com o status.
+       *
+       * Só quando o evento traz `pricing`: um `read` chega sem ele, e escrever
+       * `null` por cima apagaria o que o `sent` já tinha registrado — o custo
+       * do mês inteiro dependeria de qual status chegou por último.
+       */
+      const patchDaMensagem: Record<string, unknown> = {
+        status: e.status === "failed" ? "failed" : "sent",
+        updated_at: now,
+      };
+      if (e.pricing) {
+        patchDaMensagem.meta_billable = e.pricing.billable;
+        patchDaMensagem.meta_pricing_category = e.pricing.category;
+      }
+
       await admin
         .from("messages")
-        .update({ status: e.status === "failed" ? "failed" : "sent", updated_at: now })
+        .update(patchDaMensagem)
         .eq("organization_id", dono.organizationId)
         .eq("external_id", e.externalId);
 

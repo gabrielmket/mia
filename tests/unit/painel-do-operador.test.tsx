@@ -41,6 +41,11 @@ function renderPainel(overrides: Partial<React.ComponentProps<typeof PainelDoOpe
   const props: React.ComponentProps<typeof PainelDoOperador> = {
     enabled: false,
     onEnabledChange: vi.fn(),
+    // O bloco do MODELO só existe para quem opera a plataforma — o cliente não
+    // escolhe cérebro, nem aqui nem na aba do agente (mesma regra da chave de
+    // IA). Sem isto, as provas do seletor testariam uma tela que o cliente vê e
+    // que, para ele, não tem seletor nenhum.
+    podeEscolherIa: true,
     model: "",
     onModelChange: vi.fn(),
     provider: "anthropic",
@@ -112,6 +117,14 @@ describe("painel do Operador — disciplina de informação", () => {
     const voltar = screen.getByTestId("operador-modelo-herdar");
     await userEvent.click(voltar);
     expect(props.onModelChange).toHaveBeenCalledWith("");
+  });
+
+  it("o CLIENTE não vê seletor de modelo — a aba Operação era a porta dos fundos", () => {
+    // O bloco "A inteligência que ele usa" já era invisível para o cliente; esta
+    // aba não era, e ali ele trocava o cérebro que ORGANIZA — que gasta token
+    // pela mesma conta, a nossa.
+    renderPainel({ enabled: true, model: "claude-haiku-4-5-20251001", podeEscolherIa: false });
+    expect(screen.queryByTestId("operador-modelo-herdar")).toBeNull();
   });
 
   it("sem modelo escolhido, não oferece o botão de voltar — não há para onde voltar", () => {
