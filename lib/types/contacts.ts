@@ -23,6 +23,8 @@ export interface Contact {
   source: string;
   source_metadata: Record<string, unknown>;
   custom_fields: Record<string, unknown>;
+  /** De qual EMPRESA essa pessoa é (migration 0255). `null` = autônomo/sem vínculo. */
+  empresa_id: string | null;
   created_at: string;
   updated_at: string;
   last_activity_at: string | null;

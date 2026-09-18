@@ -180,6 +180,18 @@ export const NAV_CATALOG = [
     sidebar: true,
   },
   {
+    // Empresas fica ANTES de Contatos porque em venda B2B a empresa é a
+    // unidade: a pessoa é por onde se fala com ela. Quem abre o CRM procurando
+    // um cliente procura pelo nome da empresa primeiro.
+    href: "/app/empresas",
+    label: "Empresas",
+    description: "Os clientes que são empresa — cada uma com suas pessoas e seus negócios.",
+    icon: "Buildings",
+    group: "crm",
+    section: "O dia a dia da venda",
+    sidebar: true,
+  },
+  {
     href: "/app/contacts",
     label: "Contatos",
     description: "As pessoas do outro lado da conversa e seu histórico.",

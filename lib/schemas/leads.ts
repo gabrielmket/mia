@@ -65,6 +65,15 @@ export const createLeadSchema = z.object({
   title: z.string().min(2).max(200),
   description: z.string().max(2000).nullable().optional(),
   contact_id: z.string().uuid().nullable().optional(),
+  /**
+   * De qual EMPRESA é este negócio (migration 0255).
+   *
+   * Independente do `contact_id` de propósito: o negócio pode ser com uma
+   * empresa enquanto quem fala é o contato de outra (o contador, o sócio que
+   * indicou), e a pessoa pode trocar de emprego sem que a negociação antiga
+   * mude de dono.
+   */
+  empresa_id: z.string().uuid().nullable().optional(),
   value_cents: z.coerce.number().int().nonnegative().nullable().optional(),
   currency: z.string().length(3).default("BRL"),
   owner_user_id: z.string().uuid().nullable().optional(),
@@ -88,6 +97,15 @@ export const updateLeadSchema = z.object({
   title: z.string().min(2).max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
   contact_id: z.string().uuid().nullable().optional(),
+  /**
+   * De qual EMPRESA é este negócio (migration 0255).
+   *
+   * Independente do `contact_id` de propósito: o negócio pode ser com uma
+   * empresa enquanto quem fala é o contato de outra (o contador, o sócio que
+   * indicou), e a pessoa pode trocar de emprego sem que a negociação antiga
+   * mude de dono.
+   */
+  empresa_id: z.string().uuid().nullable().optional(),
   value_cents: z.coerce.number().int().nonnegative().nullable().optional(),
   currency: z.string().length(3).optional(),
   owner_user_id: z.string().uuid().nullable().optional(),

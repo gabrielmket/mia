@@ -303,6 +303,7 @@ export async function createLeadHandler(
       title: input.title,
       description: input.description ?? null,
       contact_id: input.contact_id ?? null,
+      empresa_id: input.empresa_id ?? null,
       value_cents: input.value_cents ?? null,
       currency: input.currency ?? "BRL",
       ...ownerPatch,
@@ -411,6 +412,8 @@ export async function updateLeadHandler(
   if (input.title !== undefined) patch.title = input.title;
   if (input.description !== undefined) patch.description = input.description;
   if (input.contact_id !== undefined) patch.contact_id = input.contact_id;
+  // Independente do contato: o negócio é DA EMPRESA, e quem fala pode mudar.
+  if (input.empresa_id !== undefined) patch.empresa_id = input.empresa_id;
   if (input.value_cents !== undefined) patch.value_cents = input.value_cents;
   if (input.currency !== undefined) patch.currency = input.currency;
   // Dono do negócio (0070): regra em lib/leads/owner-patch.ts, compartilhada

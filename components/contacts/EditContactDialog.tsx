@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SeletorDeEmpresa } from "@/components/empresas/SeletorDeEmpresa";
 import { contactPatchSchema, type ContactPatch } from "@/lib/schemas/contacts";
 import { useUpdateContact } from "@/hooks/contacts/useUpdateContact";
 import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
@@ -25,6 +26,8 @@ interface FormShape {
   email?: string;
   phone_number?: string;
   tagsRaw?: string;
+  /** `null` = sem empresa. Ver `SeletorDeEmpresa`. */
+  empresa_id?: string | null;
   custom_fields?: Record<string, unknown>;
 }
 
@@ -47,6 +50,7 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
       email: contact.email ?? "",
       phone_number: contact.phone_number ? phoneForDisplay(contact.phone_number) : "",
       tagsRaw: contact.tags.join(", "),
+      empresa_id: contact.empresa_id ?? null,
       custom_fields: contact.custom_fields ?? {},
     },
   });
@@ -60,6 +64,7 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
         email: contact.email ?? "",
         phone_number: contact.phone_number ? phoneForDisplay(contact.phone_number) : "",
         tagsRaw: contact.tags.join(", "),
+        empresa_id: contact.empresa_id ?? null,
         custom_fields: contact.custom_fields ?? {},
       });
     }
@@ -80,6 +85,10 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
     // Sempre no payload, mesmo vazio: o PATCH SUBSTITUI, e é assim que apagar um
     // campo pela tela chega ao banco.
     payload.custom_fields = values.custom_fields ?? {};
+    // Sempre no payload, inclusive `null`: desvincular da empresa é o que
+    // acontece quando a pessoa troca de emprego, e omitir o campo faria a tela
+    // aceitar o clique e não mudar nada.
+    payload.empresa_id = values.empresa_id ?? null;
 
     const parsed = contactPatchSchema.safeParse(payload);
     if (!parsed.success) {
@@ -114,6 +123,14 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
           <div className="space-y-2">
             <Label htmlFor="ec-phone">{t("Telefone (E.164)")}</Label>
             <Input id="ec-phone" {...form.register("phone_number")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ec-empresa">{t("Empresa")}</Label>
+            <SeletorDeEmpresa
+              id="ec-empresa"
+              valor={form.watch("empresa_id") ?? null}
+              aoMudar={(v) => form.setValue("empresa_id", v, { shouldDirty: true })}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="ec-tags">Tags</Label>

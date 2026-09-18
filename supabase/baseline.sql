@@ -25187,4 +25187,87 @@ create unique index if not exists uq_channel_sessions_numero_de_avisos
   on public.channel_sessions ((true))
   where e_numero_de_avisos;
 
+
+-- ---- empresas: o cliente que é uma organização (migration 0255) ----
+--
+-- O CRM só conhecia PESSOA. Em venda B2B quem compra é a empresa: três contatos
+-- do mesmo cliente viravam três fichas sem parentesco. Tabela própria e não
+-- campo de texto porque texto digitado de novo a cada contato não responde
+-- "quanto vendemos para eles".
+--
+-- O vínculo está em contacts E em crm_leads de propósito: o negócio pode ser
+-- com uma empresa enquanto quem fala é o contato de outra, e a pessoa pode
+-- trocar de emprego sem que a negociação antiga mude de dono.
+--
+-- `on delete set null` nos dois: apagar empresa não pode apagar contato nem
+-- histórico de negócio.
+
+create table if not exists public.crm_empresas (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  nome text not null,
+  -- Documento SEM máscara e SEM validação de dígito: quem cadastra está com o
+  -- cliente na linha, e recusar um CNPJ digitado com um dígito trocado pararia
+  -- o cadastro inteiro por causa do campo menos urgente da ficha.
+  cnpj text,
+  site text,
+  telefone text,
+  email text,
+  endereco text,
+  -- O que não cabe em campo nenhum. Toda ficha de CRM tem esse canto, e sem ele
+  -- a informação vai para o nome da empresa ("Padaria do Zé - só fala manhã").
+  observacoes text,
+  tags text[] not null default '{}'::text[],
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  created_by_user_id uuid references auth.users(id) on delete set null,
+  constraint crm_empresas_nome_nao_vazio check (length(btrim(nome)) > 0)
+);
+
+comment on table public.crm_empresas is
+  'A empresa como cliente (venda B2B): agrupa contatos e negocios sob um CNPJ so. Apagar uma empresa NAO apaga contato nem negocio — o vinculo vira null.';
+
+create index if not exists idx_crm_empresas_org_nome
+  on public.crm_empresas (organization_id, lower(nome));
+
+create unique index if not exists uq_crm_empresas_org_cnpj
+  on public.crm_empresas (organization_id, cnpj)
+  where cnpj is not null and btrim(cnpj) <> '';
+
+alter table public.contacts
+  add column if not exists empresa_id uuid references public.crm_empresas(id) on delete set null;
+
+alter table public.crm_leads
+  add column if not exists empresa_id uuid references public.crm_empresas(id) on delete set null;
+
+create index if not exists idx_contacts_empresa
+  on public.contacts (organization_id, empresa_id)
+  where empresa_id is not null;
+
+create index if not exists idx_crm_leads_empresa
+  on public.crm_leads (organization_id, empresa_id)
+  where empresa_id is not null;
+
+alter table public.crm_empresas enable row level security;
+
+drop policy if exists "crm_empresas_select" on public.crm_empresas;
+drop policy if exists "crm_empresas_escrita" on public.crm_empresas;
+
+create policy "crm_empresas_select" on public.crm_empresas
+  for select using (
+    public.fn_is_platform_admin()
+    or (organization_id in (select public.fn_user_org_ids()))
+  );
+
+create policy "crm_empresas_escrita" on public.crm_empresas
+  for all using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent'))
+  ) with check (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent'))
+  );
+
 notify pgrst, 'reload schema';

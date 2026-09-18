@@ -31,7 +31,7 @@ import { contactListQuerySchema } from "@/lib/schemas";
 type SB = SupabaseClient;
 
 const SELECT_COLS =
-  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, custom_fields, created_at, updated_at, last_activity_at";
+  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, custom_fields, empresa_id, created_at, updated_at, last_activity_at";
 
 interface CursorPayload {
   sort: string | null;
@@ -384,6 +384,7 @@ export async function createContactHandler(
     source: input.source,
     source_metadata: input.source_metadata ?? {},
     custom_fields: input.custom_fields ?? {},
+    empresa_id: input.empresa_id ?? null,
     consent: input.consent ?? {},
   };
 
@@ -517,6 +518,9 @@ export async function patchContactHandler(
   // aqui tornaria IMPOSSÍVEL apagar um campo pela tela, porque a chave removida
   // voltaria do estado anterior a cada gravação.
   if (input.custom_fields !== undefined) patch.custom_fields = input.custom_fields;
+  // `null` é valor, não ausência: desvincular da empresa é o que acontece
+  // quando a pessoa troca de emprego.
+  if (input.empresa_id !== undefined) patch.empresa_id = input.empresa_id;
   if (input.consent !== undefined) {
     // MERGE por finalidade, nunca substituição.
     //

@@ -63,6 +63,14 @@ export const contactCreateSchema = z.object({
   source_metadata: z.record(z.string(), z.unknown()).optional(),
   consent: z.record(z.string(), z.unknown()).optional(),
   custom_fields: customFieldsSchema.optional(),
+  /**
+   * De qual EMPRESA essa pessoa é (migration 0255).
+   *
+   * `null` desvincula — e é caso de uso, não ausência: alguém trocou de
+   * emprego. Por isso `nullish` e não `optional`: "não mandei o campo" e
+   * "mandei vazio de propósito" são coisas diferentes no PATCH.
+   */
+  empresa_id: z.string().uuid().nullish(),
 });
 export type ContactCreate = z.infer<typeof contactCreateSchema>;
 

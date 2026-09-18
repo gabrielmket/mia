@@ -1,7 +1,7 @@
 "use client";
 
 import { useT } from "@/hooks/i18n/useT";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import {
@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SeletorDeEmpresa } from "@/components/empresas/SeletorDeEmpresa";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -66,6 +67,13 @@ export function NewLeadDialog({
   const create = useCreateLead(pipelineId);
   const initialStage = useMemo(() => defaultStageId(stages), [stages]);
 
+  /**
+   * Estado à parte do formulário porque o vínculo não é texto digitado: é uma
+   * escolha numa lista, e `null` (sem empresa) é um valor legítimo que o
+   * `register` do formulário trataria como campo vazio.
+   */
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
+
   const form = useForm<FormShape>({
     defaultValues: {
       title: "",
@@ -109,6 +117,9 @@ export function NewLeadDialog({
       tags,
     };
     if (contactId) payload.contact_id = contactId;
+    // Independente do contato: o negócio é DA EMPRESA, e quem fala por ela pode
+    // ser o contato de outra (o contador, o sócio que indicou).
+    if (empresaId) payload.empresa_id = empresaId;
     if (values.description.trim()) payload.description = values.description.trim();
     if (valueCents !== null) payload.value_cents = valueCents;
     if (values.expected_close_date) payload.expected_close_date = values.expected_close_date;
@@ -214,6 +225,11 @@ export function NewLeadDialog({
                 {...form.register("expected_close_date")}
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="lead-empresa">{t("Empresa")}</Label>
+            <SeletorDeEmpresa id="lead-empresa" valor={empresaId} aoMudar={setEmpresaId} />
           </div>
 
           <div className="space-y-2">
