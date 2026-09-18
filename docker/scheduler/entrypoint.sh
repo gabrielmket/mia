@@ -108,6 +108,11 @@ CRONS="
 # gastaria varredura de llm_calls sem antecipar nada. A janela do resumo é a
 # hora cheia, e 10 minutos cabem nela com folga.
 */10 * * * *|60|api/v1/cron/report-da-plataforma
+# A VARREDURA DA CENTRAL: fecha o aviso que deixou de valer. De hora em hora
+# porque as condições que ela repergunta (conversa assumida, job de volta à
+# fila) mudam em minutos mas não são urgentes — um aviso que sobrevive 40
+# minutos ao conserto não estraga a tela; um que sobrevive uma semana, sim.
+0 * * * *|90|api/v1/cron/varredura-de-avisos
 */15 * * * *|60|api/v1/cron/risk-watcher
 */30 * * * *|60|api/v1/cron/contact-phones
 17 * * * *|60|api/v1/cron/contact-proposals-watcher
