@@ -2143,6 +2143,12 @@ export const DICIONARIO: Traducoes = {
   "Este template está aprovado. Ao editar, ele volta para análise da Meta e não pode ser disparado até ser aprovado de novo.": { es: "Esta plantilla está aprobada. Al editarla, vuelve al análisis de Meta y no puede dispararse hasta ser aprobada de nuevo." },
   "As variáveis continuam sendo {{1}}, {{2}}… Mudar quantas existem faz a Meta pedir exemplos novos.": { es: "Las variables siguen siendo {{1}}, {{2}}… Cambiar cuántas existen hace que Meta pida ejemplos nuevos." },
   "Salvar na Meta": { es: "Guardar en Meta" },
+
+  // ---- tela da campanha: os estados do destinatário ----
+  "Não consegui carregar a campanha agora.": { es: "No pude cargar la campaña ahora." },
+  "Ver todos": { es: "Ver todos" },
+  "Abrir a campanha": { es: "Abrir la campaña" },
+  "Nenhum destinatário neste estado.": { es: "Ningún destinatario en este estado." },
   "Excluir este template na Meta? Todos os idiomas dele serão apagados.": { es: "¿Eliminar esta plantilla en Meta? Todos sus idiomas serán borrados." },
   "Só quem tem negócio ABERTO nesta etapa. Ganhos e perdidos ficam de fora.": { es: "Solo quien tiene negocio ABIERTO en esta etapa. Ganados y perdidos quedan fuera." },
   "Tipo de uso": { es: "Tipo de uso" },

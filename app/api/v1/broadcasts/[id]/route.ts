@@ -133,13 +133,46 @@ export async function GET(
   const limite = Math.min(Number(url.searchParams.get("limite") ?? 200) || 200, 500);
   const inicio = Math.max(Number(url.searchParams.get("inicio") ?? 0) || 0, 0);
 
-  const { data: linhas, count } = await db
+  /**
+   * O FILTRO por estado é o que torna a tela usável em lista grande.
+   *
+   * Com 3.000 destinatários, "quem falhou?" sem filtro é paginar 15 vezes
+   * procurando linhas vermelhas no meio de verdes. E é sempre essa a pergunta:
+   * ninguém abre a lista de uma campanha para ver quem recebeu.
+   */
+  const estado = url.searchParams.get("status");
+
+  let consulta = db
     .from("broadcast_recipients")
     .select("id, contact_id, phone_e164, status, erro, enviado_em", { count: "exact" })
     .eq("organization_id", authz.org.orgId)
-    .eq("broadcast_id", id)
+    .eq("broadcast_id", id);
+  if (estado) consulta = consulta.eq("status", estado);
+
+  const { data: linhas, count } = await consulta
     .order("created_at", { ascending: true })
     .range(inicio, inicio + limite - 1);
+
+  /**
+   * O RESUMO por estado, com `head: true` — conta no banco, não traz linha.
+   *
+   * Sem ele, a tela só saberia dizer quantos há na PÁGINA atual, e a pergunta
+   * que importa ("quantos falharam?") exigiria baixar a lista inteira para
+   * contar no navegador — que é justamente o que esta tela existe para evitar.
+   */
+  const ESTADOS = ["pendente", "enviada", "entregue", "lida", "falhou", "estornada"] as const;
+  const contagens = await Promise.all(
+    ESTADOS.map(async (e) => {
+      const { count: n } = await db
+        .from("broadcast_recipients")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", authz.org.orgId)
+        .eq("broadcast_id", id)
+        .eq("status", e);
+      return [e, n ?? 0] as const;
+    }),
+  );
+  const resumo = Object.fromEntries(contagens) as Record<string, number>;
 
   /**
    * O NOME vem numa segunda consulta, e não por join.
@@ -164,6 +197,9 @@ export async function GET(
     {
       total: count ?? 0,
       inicio,
+      limite,
+      filtro: estado,
+      resumo,
       destinatarios: (linhas ?? []).map((l) => ({
         id: l.id,
         nome: (l.contact_id ? nomes.get(l.contact_id as string) : "") || null,

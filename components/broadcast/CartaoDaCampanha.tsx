@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -128,6 +129,14 @@ export function CartaoDaCampanha({
       <div className="mt-2 flex flex-wrap gap-2">
         <Button size="sm" variant="outline" onClick={() => setAberta((v) => !v)}>
           {aberta ? t("Ocultar destinatários") : t("Ver destinatários")}
+        </Button>
+        {/*
+          A TELA CHEIA. A prévia inline continua servindo para conferir três
+          linhas de olho; com três mil ela empurra o resto da página para fora
+          e obriga a rolar até o fim para saber se sobrou alguém sem receber.
+        */}
+        <Button variant="secondary" asChild>
+          <Link href={`/app/broadcast/${c.id}`}>{t("Abrir a campanha")}</Link>
         </Button>
 
         {podeDisparar ? (
