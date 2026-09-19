@@ -25,6 +25,9 @@ export interface Contact {
   custom_fields: Record<string, unknown>;
   /** De qual EMPRESA essa pessoa é (migration 0255). `null` = autônomo/sem vínculo. */
   empresa_id: string | null;
+  /** O cargo desta pessoa na empresa dela, e o setor. */
+  cargo: string | null;
+  setor: string | null;
   created_at: string;
   updated_at: string;
   last_activity_at: string | null;

@@ -24,7 +24,7 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 export const COLUNAS_DA_EMPRESA =
-  "id, nome, cnpj, site, telefone, email, endereco, observacoes, tags, created_at, updated_at";
+  "id, nome, cnpj, site, telefone, email, endereco, observacoes, tags, custom_fields, created_at, updated_at";
 
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
@@ -94,6 +94,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       endereco: parsed.data.endereco || null,
       observacoes: parsed.data.observacoes || null,
       tags: parsed.data.tags ?? [],
+      custom_fields: parsed.data.custom_fields ?? {},
       created_by_user_id: authz.user.id,
     })
     .select(COLUNAS_DA_EMPRESA)

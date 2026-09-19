@@ -42,7 +42,18 @@ interface Props {
   fields: CustomFieldDef[];
   value: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
-  mode: "lead" | "contact";
+  /**
+   * ⚠️ NÃO É LIDA por este componente — confira a desestruturação abaixo.
+   *
+   * Nasceu para diferenciar o editor de lead do de contato e a diferença nunca
+   * chegou a existir. Fica OPCIONAL porque prop obrigatória que ninguém lê é
+   * armadilha: o próximo chamador (a ficha da EMPRESA foi o terceiro) inventa
+   * um valor, o compilador aceita, e o valor não faz nada.
+   *
+   * Se um dia a diferença aparecer, ela volta a ser obrigatória junto com o
+   * código que a usa — e não antes.
+   */
+  mode?: "lead" | "contact";
   disabled?: boolean;
   className?: string;
 }

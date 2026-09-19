@@ -2148,6 +2148,8 @@ export const DICIONARIO: Traducoes = {
   "Não consegui carregar a campanha agora.": { es: "No pude cargar la campaña ahora." },
   "Ver todos": { es: "Ver todos" },
   "Abrir a campanha": { es: "Abrir la campaña" },
+  "Cargo": { es: "Cargo" },
+  "Setor": { es: "Sector" },
   "Nenhum destinatário neste estado.": { es: "Ningún destinatario en este estado." },
   "Excluir este template na Meta? Todos os idiomas dele serão apagados.": { es: "¿Eliminar esta plantilla en Meta? Todos sus idiomas serán borrados." },
   "Só quem tem negócio ABERTO nesta etapa. Ganhos e perdidos ficam de fora.": { es: "Solo quien tiene negocio ABIERTO en esta etapa. Ganados y perdidos quedan fuera." },

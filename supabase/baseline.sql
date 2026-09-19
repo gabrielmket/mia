@@ -25472,4 +25472,32 @@ create index if not exists idx_meta_templates_meta_id
   on public.meta_templates (organization_id, meta_template_id)
   where meta_template_id is not null;
 
+
+-- ---- cargo e setor na pessoa, campos adicionais na empresa (migration 0262) ----
+--
+-- Cargo fica no CONTATO e nao na empresa: tres contatos da mesma empresa tem
+-- tres cargos, e um deles pode ser o contador, que nem trabalha la. E e a
+-- informacao que decide COM QUEM falar numa lista de cinco pessoas.
+--
+-- Campos adicionais em jsonb, com as DEFINICOES em crm_pipelines.settings.fields
+-- — o mesmo lugar do contato e do lead. Um segundo registro faria o operador
+-- cadastrar o mesmo campo duas vezes e as duas divergirem.
+
+alter table public.contacts
+  add column if not exists cargo text,
+  add column if not exists setor text;
+
+comment on column public.contacts.cargo is
+  'O cargo desta PESSOA na empresa dela (crm_empresas). Fica no contato e nao na empresa porque tres contatos da mesma empresa tem tres cargos — e um deles pode ser o contador, que nem trabalha la.';
+
+alter table public.crm_empresas
+  add column if not exists custom_fields jsonb not null default '{}'::jsonb;
+
+comment on column public.crm_empresas.custom_fields is
+  'Campos adicionais da empresa. As DEFINICOES moram em crm_pipelines.settings.fields, o mesmo lugar do contato e do lead — um segundo registro de definicoes faria o operador cadastrar o mesmo campo duas vezes e as duas divergirem.';
+
+create index if not exists idx_contacts_empresa_cargo
+  on public.contacts (organization_id, empresa_id, cargo)
+  where empresa_id is not null and cargo is not null;
+
 notify pgrst, 'reload schema';

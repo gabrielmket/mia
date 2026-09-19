@@ -105,6 +105,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
     // Campo de texto apagado pelo usuário vira `null`, não `''` — é a mesma
     // razão do POST: `''` colide no índice único do CNPJ, e "vazio" e "nunca
     // preenchido" devem ser a mesma coisa para quem lê a ficha.
+    // Objeto vazio é valor legítimo em `custom_fields` ("apaguei todos os
+    // campos"), e a regra de string vazia não o alcança — ela é para texto.
     patch[campo] = typeof valor === "string" && valor.trim() === "" ? null : valor;
   }
 

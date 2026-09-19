@@ -21,7 +21,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 import { useT } from "@/hooks/i18n/useT";
+import { usePipelines } from "@/hooks/webhooks/useWebhookSources";
+import { camposDoFunil } from "@/lib/leads/campos-do-funil";
 import {
   useEmpresa,
   useEmpresas,
@@ -46,10 +49,17 @@ function FormularioDaEmpresa({
   empresa,
   aberto,
   aoFechar,
+  camposExtras,
 }: {
   empresa: Empresa | null;
   aberto: boolean;
   aoFechar: () => void;
+  /**
+   * As DEFINIÇÕES vêm de `crm_pipelines.settings.fields`, o mesmo registro que
+   * o contato e o lead usam. Lista vazia = a seção some — e some inteira, em
+   * vez de virar um título com nada embaixo.
+   */
+  camposExtras: CustomFieldDef[];
 }) {
   const t = useT();
   const salvar = useSalvarEmpresa();
@@ -99,6 +109,16 @@ function FormularioDaEmpresa({
           {campo("site", t("Site"))}
           {campo("endereco", t("Endereço"))}
         </div>
+        {camposExtras.length > 0 && (
+          <div className="space-y-2 rounded-md border border-border p-3">
+            <h3 className="text-sm font-medium">{t("Campos personalizados")}</h3>
+            <CustomFieldsEditor
+              fields={camposExtras}
+              value={(dados.custom_fields ?? empresa?.custom_fields ?? {}) as Record<string, unknown>}
+              onChange={(v) => setDados((d) => ({ ...d, custom_fields: v }))}
+            />
+          </div>
+        )}
         <div className="space-y-1">
           <Label htmlFor="empresa-observacoes">{t("Observações")}</Label>
           <Textarea
@@ -209,6 +229,14 @@ export function EmpresasClient() {
   const [editando, setEditando] = useState<Empresa | null>(null);
   const [criando, setCriando] = useState(false);
   const [fichaAberta, setFichaAberta] = useState<string | null>(null);
+  /**
+   * As definições de campo extra vêm dos FUNIS — o mesmo registro que o contato
+   * e o lead usam (`crm_pipelines.settings.fields`). Um segundo registro só para
+   * empresa faria o operador cadastrar o mesmo campo duas vezes, e as duas
+   * cópias divergirem na primeira renomeação.
+   */
+  const funis = usePipelines();
+  const camposExtras = (funis.data?.data ?? []).flatMap((p) => camposDoFunil(p.settings));
 
   const empresas = data?.data ?? [];
 
@@ -286,6 +314,7 @@ export function EmpresasClient() {
       {(criando || editando) && (
         <FormularioDaEmpresa
           empresa={editando}
+          camposExtras={camposExtras}
           aberto
           aoFechar={() => {
             setCriando(false);

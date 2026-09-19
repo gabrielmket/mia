@@ -28,6 +28,8 @@ interface FormShape {
   tagsRaw?: string;
   /** `null` = sem empresa. Ver `SeletorDeEmpresa`. */
   empresa_id?: string | null;
+  cargo?: string;
+  setor?: string;
   custom_fields?: Record<string, unknown>;
 }
 
@@ -51,6 +53,8 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
       phone_number: contact.phone_number ? phoneForDisplay(contact.phone_number) : "",
       tagsRaw: contact.tags.join(", "),
       empresa_id: contact.empresa_id ?? null,
+      cargo: contact.cargo ?? "",
+      setor: contact.setor ?? "",
       custom_fields: contact.custom_fields ?? {},
     },
   });
@@ -65,6 +69,8 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
         phone_number: contact.phone_number ? phoneForDisplay(contact.phone_number) : "",
         tagsRaw: contact.tags.join(", "),
         empresa_id: contact.empresa_id ?? null,
+      cargo: contact.cargo ?? "",
+      setor: contact.setor ?? "",
         custom_fields: contact.custom_fields ?? {},
       });
     }
@@ -89,6 +95,10 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
     // acontece quando a pessoa troca de emprego, e omitir o campo faria a tela
     // aceitar o clique e não mudar nada.
     payload.empresa_id = values.empresa_id ?? null;
+    // Também sempre: apagar o cargo pela tela precisa chegar ao banco, e um
+    // campo omitido faria o valor antigo sobreviver a um campo esvaziado.
+    payload.cargo = values.cargo?.trim() || null;
+    payload.setor = values.setor?.trim() || null;
 
     const parsed = contactPatchSchema.safeParse(payload);
     if (!parsed.success) {
@@ -131,6 +141,16 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
               valor={form.watch("empresa_id") ?? null}
               aoMudar={(v) => form.setValue("empresa_id", v, { shouldDirty: true })}
             />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="ec-cargo">{t("Cargo")}</Label>
+              <Input id="ec-cargo" {...form.register("cargo")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ec-setor">{t("Setor")}</Label>
+              <Input id="ec-setor" {...form.register("setor")} />
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="ec-tags">Tags</Label>

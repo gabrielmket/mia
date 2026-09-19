@@ -71,6 +71,14 @@ export const contactCreateSchema = z.object({
    * "mandei vazio de propósito" são coisas diferentes no PATCH.
    */
   empresa_id: z.string().uuid().nullish(),
+  /**
+   * O cargo desta PESSOA na empresa dela, e o setor.
+   *
+   * Ficam no contato e não na empresa porque três contatos da mesma empresa têm
+   * três cargos — e um deles pode ser o contador, que nem trabalha lá.
+   */
+  cargo: z.string().trim().max(120).nullish(),
+  setor: z.string().trim().max(120).nullish(),
 });
 export type ContactCreate = z.infer<typeof contactCreateSchema>;
 

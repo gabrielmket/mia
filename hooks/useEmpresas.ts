@@ -15,6 +15,8 @@ export interface Empresa {
   endereco: string | null;
   observacoes: string | null;
   tags: string[];
+  /** Campos adicionais. As definições vêm dos funis — ver a tela. */
+  custom_fields: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }

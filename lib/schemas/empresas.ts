@@ -38,6 +38,11 @@ export const empresaCreateSchema = z.object({
   endereco: z.string().trim().max(400).optional(),
   observacoes: z.string().trim().max(4000).optional(),
   tags: z.array(z.string().trim().min(1).max(60)).max(30).optional(),
+  /**
+   * Campos adicionais. As DEFINIÇÕES (quais existem, com que rótulo) moram em
+   * `crm_pipelines.settings.fields` — o mesmo lugar do contato e do lead.
+   */
+  custom_fields: z.record(z.string(), z.unknown()).optional(),
 });
 
 /** No PATCH todo campo é opcional — inclusive o nome, que só não pode virar vazio. */
