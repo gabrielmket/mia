@@ -81,6 +81,18 @@ const ESCRITA_QUE_E_TRABALHO_DE_ATENDENTE: ReadonlyArray<string> = [
   // `app/api/v1/ai/cases/[id]/reply/` — POST exige `agent`. Registrar no chamado
   // é o trabalho de quem atende (paridade medida na integração do papel novo).
   "crm_add_case_note",
+  // DUAS rotas, e as duas exigem `agent`:
+  //   `app/api/v1/contacts/[id]/` — PATCH, para escrever `empresa_id` e `cargo`.
+  //   `app/api/v1/empresas/`      — POST, para criar a empresa quando não existe.
+  //
+  // A paridade é exata, e é o que justifica o nome aqui: vincular um cliente a
+  // uma empresa — e cadastrar a empresa se for a primeira vez — é o que quem
+  // atende faz pela tela, na mesma conversa em que o cliente diz de onde é.
+  //
+  // O poder concedido tem um teto que a rota não tem: a tool NÃO TROCA a
+  // empresa de um contato que já tem uma. Um cliente que cita a empresa do
+  // sócio ou do concorrente não muda o próprio vínculo por causa de uma frase.
+  "crm_registrar_empresa_do_contato",
   // `app/api/v1/contacts/[id]/proposals/` — POST exige `agent`, e a paridade é
   // com o PATCH de contato (`app/api/v1/contacts/[id]/`), que também exige
   // `agent`: editar a ficha de um cliente é trabalho de quem atende.

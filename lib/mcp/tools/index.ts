@@ -9,6 +9,7 @@
 import type { McpToolDefinition } from "../types";
 import { TOOL_CATALOG, VALID_TOOL_IDS } from "./catalog";
 import { crmSearchContacts, crmGetContact, crmProposeContactField } from "./contacts";
+import { crmRegistrarEmpresaDoContato } from "./empresa-do-contato";
 import {
   crmListConversations,
   crmGetConversation,
@@ -95,6 +96,7 @@ export const allTools: ReadonlyArray<McpToolDefinition> = [
   crmSearchContacts,
   crmGetContact,
   crmProposeContactField,
+  crmRegistrarEmpresaDoContato,
   crmListConversations,
   crmGetConversation,
   crmGetConversationHistory,

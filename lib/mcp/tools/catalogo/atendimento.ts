@@ -75,6 +75,34 @@ export const TOOLS_ATENDIMENTO = declararTools([
     pacotes: ["vender"],
   },
   {
+    name: "crm_registrar_empresa_do_contato",
+    category: "write",
+    rotulo: "Anotar a empresa do cliente",
+    explicacao:
+      "Quando o cliente diz de qual empresa ele é, guarda isso na ficha dele. Se a empresa já " +
+      "estiver cadastrada, o cliente é ligado a ela; se não, ela é criada.",
+    oQueToca: "Cadastro de clientes",
+    /**
+     * `atencao` e não `critico`: nada sai para o cliente, e o pior caso é um
+     * vínculo errado que qualquer pessoa desfaz na ficha, com o histórico
+     * inteiro preservado. `critico` faria a tela pedir cerimônia para uma
+     * anotação — e a cerimônia é o que faz a capacidade não ser ligada.
+     *
+     * Não é `seguro` porque ela CRIA ficha: uma empresa nova aparece na lista
+     * de clientes sem ninguém ter digitado nada, e quem administra precisa
+     * saber disso antes de ligar.
+     */
+    risco: "atencao",
+    /**
+     * Em "vender", junto de `crm_propose_contact_field`, e pela mesma razão
+     * escrita ali: o pacote "Atender" está no tamanho em que o teto por agente
+     * começa a apertar, e esta capacidade serve à venda B2B — é ela que faz a
+     * pergunta "de qual empresa você é?" virar agrupamento no funil em vez de
+     * uma frase que se perde no histórico.
+     */
+    pacotes: ["vender"],
+  },
+  {
     name: "crm_list_conversations",
     category: "read",
     rotulo: "Listar conversas",

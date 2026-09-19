@@ -118,6 +118,15 @@ export const ALVO_DE_FUNIL: Record<string, AlvoDeFunil> = {
   crm_resume_ai_attendance: "sem_funil",
   crm_save_org_memory: "sem_funil",
   crm_propose_contact_field: "sem_funil",
+  /**
+   * Vincular o cliente a uma EMPRESA não toca funil nenhum: escreve na ficha
+   * do contato e, quando é a primeira vez, cria a empresa. O negócio dele
+   * continua onde estava, no funil em que estava.
+   *
+   * `sem_funil` DECLARADO, e não esquecido — é a declaração que mantém esta
+   * tabela viva: a próxima escrita que nascer sem classificação reprova.
+   */
+  crm_registrar_empresa_do_contato: "sem_funil",
   // Configuração da casa. Já não é alcançável pelo agente (papel acima do dele);
   // entram aqui para o teste de vacuidade não as acusar, e com a nota de que a
   // barreira delas é OUTRA.
