@@ -24476,6 +24476,119 @@ update public.contacts
    );
 
 
+-- ─── 0266 · as tres tabelas com contact_id que nada alcancava ────────
+--
+-- Achadas cruzando TODA tabela com `contact_id` contra TODO caminho que
+-- anonimiza. Quinze tem a coluna; onze eram cobertas; `lgpd_requests` e excecao
+-- declarada (e o REGISTRO do pedido, a prova de que o direito foi exercido).
+--
+--   ai_agent_runs         `tool_calls` guarda args, results e ate 4.000
+--                         caracteres da prosa do modelo
+--   demandas              `assunto` e `proximo_passo` sao texto livre sobre
+--                         a pessoa — mesma classe que a 0184 ja declarou
+--                         pessoal em `calendar_appointments.notes`
+--   broadcast_recipients  o telefone COPIADO, que no WhatsApp e tambem o
+--                         endereco; recebe o ROTULO como `voice_calls` na 0235
+--
+-- Vigiado por `tests/unit/lgpd-exporta-o-que-redige.test.ts`, que obriga a
+-- outra ponta: o que se apaga a pedido do titular se entrega a pedido dele.
+create or replace function public.fn_redigir_o_que_sobrou_do_contato_anonimizado()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rotulo text := 'Contato anonimizado';
+begin
+  -- 1 · ai_agent_runs — o rastro da IA sobre esta pessoa.
+  update public.ai_agent_runs
+     set tool_calls    = '[]'::jsonb,
+         error_message = null
+   where organization_id = new.organization_id
+     and (
+       contact_id = new.id
+       or conversation_id in (
+         select id from public.conversations
+          where organization_id = new.organization_id
+            and contact_id = new.id
+       )
+     )
+     and (tool_calls <> '[]'::jsonb or error_message is not null);
+
+  -- 2 · demandas — o problema dela, escrito à mão.
+  update public.demandas
+     set assunto       = null,
+         proximo_passo = null
+   where organization_id = new.organization_id
+     and contact_id = new.id
+     and (assunto is not null or proximo_passo is not null);
+
+  -- 3 · broadcast_recipients — rótulo, não `null`: a coluna é `not null` e a
+  --     linha precisa continuar contável para o relatório do disparo.
+  update public.broadcast_recipients
+     set phone_e164 = v_rotulo,
+         valores    = '{}'::jsonb
+   where organization_id = new.organization_id
+     and contact_id = new.id
+     and (phone_e164 <> v_rotulo or valores <> '{}'::jsonb);
+
+  return new;
+end$$;
+
+comment on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() is
+  'Redige as tres tabelas com contact_id que nenhum outro caminho de anonimizacao alcancava: ai_agent_runs (tool_calls guarda args, results e a prosa do modelo), demandas (assunto e proximo_passo sao texto livre sobre a pessoa) e broadcast_recipients (o telefone copiado, que no WhatsApp e tambem o endereco).';
+
+-- As DUAS origens de EXECUTE (item 9 do CLAUDE.md).
+revoke all on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from public;
+revoke execute on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from anon;
+revoke execute on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from authenticated;
+
+drop trigger if exists trg_redigir_o_que_sobrou_ao_anonimizar on public.contacts;
+create trigger trg_redigir_o_que_sobrou_ao_anonimizar
+  after update of is_anonymized on public.contacts
+  for each row
+  when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
+  execute function public.fn_redigir_o_que_sobrou_do_contato_anonimizado();
+
+-- ── E quem JÁ foi anonimizado ─────────────────────────────────────────────
+--
+-- Mesma razão da 0265: o gatilho dispara na TRANSIÇÃO, e para quem exerceu o
+-- direito antes desta migration ela já passou. Sem isto, o rastro da IA e o
+-- telefone deles ficam no banco para sempre — e são exatamente as pessoas que
+-- já pediram para sair.
+
+update public.ai_agent_runs r
+   set tool_calls = '[]'::jsonb, error_message = null
+  from public.contacts c
+ where c.is_anonymized = true
+   and c.organization_id = r.organization_id
+   and (
+     r.contact_id = c.id
+     or r.conversation_id in (
+       select id from public.conversations
+        where organization_id = c.organization_id and contact_id = c.id
+     )
+   )
+   and (r.tool_calls <> '[]'::jsonb or r.error_message is not null);
+
+update public.demandas d
+   set assunto = null, proximo_passo = null
+  from public.contacts c
+ where c.is_anonymized = true
+   and c.organization_id = d.organization_id
+   and d.contact_id = c.id
+   and (d.assunto is not null or d.proximo_passo is not null);
+
+update public.broadcast_recipients b
+   set phone_e164 = 'Contato anonimizado', valores = '{}'::jsonb
+  from public.contacts c
+ where c.is_anonymized = true
+   and c.organization_id = b.organization_id
+   and b.contact_id = c.id
+   and (b.phone_e164 <> 'Contato anonimizado' or b.valores <> '{}'::jsonb);
+
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

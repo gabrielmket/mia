@@ -240,6 +240,47 @@ export interface VoiceCallRow {
   duration_ms: number | null;
 }
 
+/**
+ * Um atendimento da IA. Sem `tool_calls`: a 0266 o apaga na anonimização, e
+ * antes dela o rastro interno traria também buscas e nomes de terceiros.
+ */
+export interface AiRunRow {
+  id: string;
+  status: string;
+  abort_reason: string | null;
+  steps_count: number;
+  started_at: string;
+  completed_at: string | null;
+}
+
+/** Uma demanda aberta em nome da pessoa. */
+export interface DemandaRow {
+  id: string;
+  origem: string;
+  assunto: string | null;
+  estado: string;
+  proximo_passo: string | null;
+  desfecho: string | null;
+  aberta_em: string;
+}
+
+/**
+ * Um disparo que chegou a esta pessoa.
+ *
+ * `phone_e164` vem junto de propósito: depois da anonimização ele é o RÓTULO
+ * (a 0266 o substitui, como a 0235 fez em `voice_calls.peer_phone`), e ver o
+ * rótulo no próprio relatório é como o titular confere que a exclusão pegou.
+ */
+export interface BroadcastRecipientRow {
+  id: string;
+  broadcast_id: string;
+  phone_e164: string;
+  status: string;
+  erro: string | null;
+  enviado_em: string | null;
+  created_at: string;
+}
+
 export interface ExportPayload {
   request_id: string;
   organization_id: string;
@@ -268,6 +309,12 @@ export interface ExportPayload {
   webhook_captures: CaptureRow[];
   audit_log_extract: AuditRow[];
   meeting_deliveries: MeetingDeliveryRow[];
+  /** Atendimentos da IA (0266). O rastro interno fica de fora — ver `AiRunRow`. */
+  ai_runs: AiRunRow[];
+  /** Demandas abertas em nome da pessoa (0266). */
+  demandas: DemandaRow[];
+  /** Disparos que chegaram a ela (0266). */
+  broadcasts_recebidos: BroadcastRecipientRow[];
   appointment_notices: AppointmentNoticeRow[];
   /**
    * Chamadas de voz (migration 0232).
@@ -674,6 +721,92 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // ── As três que a migration 0266 achou, e o gate obrigou a trazer ────────
+  //
+  // O cruzamento que as encontrou: toda tabela com `contact_id` contra todo
+  // caminho que anonimiza. Quinze tinham a coluna, onze eram cobertas, uma
+  // (`lgpd_requests`) é exceção declarada — e estas três não eram alcançadas
+  // por nada. Passaram a ser redigidas, e neste repositório redigir e exportar
+  // andam juntos.
+
+  // Atendimentos da IA — o direito de saber que um robô atendeu você.
+  //
+  // É Art. 20 antes de ser Art. 18 II: decisão automatizada dá direito a saber
+  // que houve, quando, e o que ela decidiu fazer. O que NÃO vai é o `tool_calls`
+  // — a prosa do modelo e os argumentos de cada ferramenta. Não por ser segredo,
+  // mas porque a 0266 o APAGA: depois da anonimização não há o que devolver, e
+  // antes dela devolver o rastro interno inteiro entregaria também o nome de
+  // quem operou e o conteúdo de outras buscas que o passo tenha feito.
+  //
+  // Alcança pela conversa além do `contact_id` porque metade das linhas nasce
+  // antes de o contato ser resolvido — são justamente as do primeiro contato.
+  let ai_runs: AiRunRow[] = [];
+  if (contactId) {
+    const idsDeConversa = conversations.map((c) => c.id);
+    let q = admin
+      .from("ai_agent_runs")
+      .select("id, status, abort_reason, steps_count, started_at, completed_at")
+      .eq("organization_id", organizationId)
+      .order("started_at", { ascending: false })
+      .limit(500);
+    q =
+      idsDeConversa.length > 0
+        ? q.or(
+            `contact_id.eq.${contactId},conversation_id.in.(${idsDeConversa.join(",")})`,
+          )
+        : q.eq("contact_id", contactId);
+    const { data, error } = await q;
+    if (error) {
+      logger.warn("[lgpd-export-worker] ai runs load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      ai_runs = data as AiRunRow[];
+    }
+  }
+
+  // Demandas — o que a pessoa pediu para resolver.
+  let demandas: DemandaRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("demandas")
+      .select("id, origem, assunto, estado, proximo_passo, desfecho, aberta_em")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("aberta_em", { ascending: false })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] demandas load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      demandas = data as DemandaRow[];
+    }
+  }
+
+  // Disparos recebidos — "que campanhas vocês me mandaram" é pergunta de
+  // acesso legítima, e no Brasil é a pergunta de quem quer sair de uma lista.
+  let broadcasts_recebidos: BroadcastRecipientRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("broadcast_recipients")
+      .select("id, broadcast_id, phone_e164, status, erro, enviado_em, created_at")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] broadcast recipients load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      broadcasts_recebidos = data as BroadcastRecipientRow[];
+    }
+  }
+
   // Captação por webhook — a MESMA classe do bloco acima, achada pelo gate.
   let webhook_captures: CaptureRow[] = [];
   if (contactId) {
@@ -847,6 +980,9 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     audit_log_extract,
     reply_drafts,
     meeting_deliveries,
+    ai_runs,
+    demandas,
+    broadcasts_recebidos,
     appointment_notices,
     voice_calls,
   };
@@ -878,6 +1014,9 @@ function emptyPayload(
     webhook_captures: [],
     audit_log_extract: [],
     meeting_deliveries: [],
+    ai_runs: [],
+    demandas: [],
+    broadcasts_recebidos: [],
     appointment_notices: [],
     voice_calls: [],
   };

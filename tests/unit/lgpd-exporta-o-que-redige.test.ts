@@ -105,3 +105,163 @@ describe("LGPD: o export alcança tudo que a redação alcança", () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * ─── A DIREÇÃO QUE FALTAVA: quem TEM `contact_id` e ninguém redige ─────────
+ *
+ * O bloco acima mede redigido → exportado. Ele nunca perguntou o contrário: uma
+ * tabela que guarda `contact_id` e que NENHUM caminho de anonimização alcança
+ * não aparece em nenhuma das duas varreduras, e some das duas.
+ *
+ * Varrendo à mão em 19/09/2026, três estavam assim, todas com dado pessoal:
+ *
+ *   ai_agent_runs         `tool_calls` guarda os `args` de cada ferramenta, o
+ *                         `result` de cada uma e até 4.000 caracteres da prosa
+ *                         do modelo. Uma chamada de `crm_propose_contact_field`
+ *                         grava `{campo:"email", valor:"joao@x.com"}` literal.
+ *   demandas              `assunto` e `proximo_passo`: texto livre, escrito por
+ *                         humano, sobre o problema de uma pessoa identificada.
+ *   broadcast_recipients  `phone_e164`, COPIADO de propósito — e no WhatsApp o
+ *                         telefone não é só identificador, é o endereço.
+ *
+ * Corrigidas pela migration 0266. Este bloco existe para que a quarta não
+ * precise de outra varredura manual.
+ */
+describe("LGPD: nenhuma tabela com contact_id fica fora da anonimização", () => {
+  /**
+   * Tabelas que guardam `contact_id` e que NÃO devem ser redigidas.
+   *
+   * Cada uma custa uma frase. A lista é curta de propósito: ela é a única porta
+   * de saída deste gate, e uma porta de saída sem motivo escrito é como a
+   * primeira lista à mão começou.
+   *
+   * `contacts` não entra aqui: a tabela do titular tem `id`, não `contact_id`,
+   * então nunca aparece nesta varredura. Ela é medida coluna a coluna por
+   * `tests/unit/lgpd-as-duas-pontas.test.ts`.
+   */
+  const NAO_SE_REDIGE: Record<string, string> = {
+    lgpd_requests:
+      "É o REGISTRO do pedido — a prova de que o direito foi exercido, e o que " +
+      "responde ao prazo legal. Apagá-la apagaria o recibo da própria exclusão.",
+  };
+
+  /** Tabelas do baseline que têm uma coluna `contact_id`. */
+  function tabelasComContactId(): string[] {
+    const alvos = new Set<string>();
+
+    for (const m of BASELINE.matchAll(
+      /CREATE TABLE IF NOT EXISTS "public"\."([a-z_]+)" \(([\s\S]*?)\n\);/g,
+    )) {
+      if (m[1] && m[2] && /"contact_id"/.test(m[2])) alvos.add(m[1]);
+    }
+    for (const m of BASELINE.matchAll(
+      /create table if not exists public\.([a-z_]+)\s*\(([\s\S]*?)\n\);/gi,
+    )) {
+      if (m[1] && m[2] && /\bcontact_id\b/.test(m[2])) alvos.add(m[1]);
+    }
+    for (const m of BASELINE.matchAll(
+      /alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?public\.([a-z_]+)\b([\s\S]*?);/gi,
+    )) {
+      if (
+        m[1] &&
+        m[2] &&
+        /add\s+column\s+(?:if\s+not\s+exists\s+)?contact_id\b/i.test(m[2])
+      ) {
+        alvos.add(m[1]);
+      }
+    }
+
+    return [...alvos].sort();
+  }
+
+  /**
+   * Tudo que QUALQUER caminho de anonimização escreve.
+   *
+   * Mais largo que `tabelasRedigidas()` de propósito: aquele deriva do NOME da
+   * função (`redact`/`redigir`), e há funções legítimas que não seguem o padrão
+   * — `fn_apaga_propostas_de_contato_anonimizado` é uma. Aqui a fonte é o
+   * GATILHO: toda função pendurada em `is_anonymized` de `contacts`, venha o
+   * nome que vier, mais as duas funções de anonimização e o TypeScript.
+   */
+  function tabelasAlcancadas(): Set<string> {
+    const alvos = new Set<string>();
+
+    const corpoDe = (nome: string): string => {
+      const i = Math.max(
+        BASELINE.lastIndexOf(`create or replace function public.${nome}(`),
+        BASELINE.lastIndexOf(`CREATE OR REPLACE FUNCTION "public"."${nome}"`),
+      );
+      if (i < 0) return "";
+      const fim = BASELINE.indexOf("$;", i);
+      return fim < 0 ? "" : BASELINE.slice(i, fim);
+    };
+
+    const colher = (corpo: string) => {
+      for (const u of corpo.matchAll(
+        /(?:update|delete\s+from)\s+(?:public\.)?"?([a-z_]+)"?/gi,
+      )) {
+        if (u[1]) alvos.add(u[1]);
+      }
+    };
+
+    for (const m of BASELINE.matchAll(
+      /create trigger\s+[a-z_]+[\s\S]{0,200}?on public\.contacts[\s\S]{0,300}?execute function public\.([a-z_]+)\(\)/gi,
+    )) {
+      if (m[1]) colher(corpoDe(m[1]));
+    }
+    colher(corpoDe("fn_lgpd_cascade_redact_contact"));
+    colher(corpoDe("fn_lgpd_anonymize_contact"));
+
+    for (const arq of ["lib/lgpd/redact-cascade.ts", "lib/lgpd/cascata.ts"]) {
+      const caminho = path.join(RAIZ, arq);
+      if (!fs.existsSync(caminho)) continue;
+      const src = fs.readFileSync(caminho, "utf8");
+      for (const m of src.matchAll(/\.from\("([a-z_]+)"\)/g)) {
+        if (m[1]) alvos.add(m[1]);
+      }
+    }
+
+    return alvos;
+  }
+
+  it("CONTROLE: a varredura acha tabela com contact_id, e acha caminho", () => {
+    // O modo de falha caro: um regex que deixa de casar devolve conjunto vazio,
+    // a subtração dá vazio, e o gate fica verde exatamente quando parou de medir.
+    expect(tabelasComContactId().length).toBeGreaterThan(10);
+    expect(tabelasAlcancadas().size).toBeGreaterThan(8);
+  });
+
+  it("CONTROLE: enxerga as três que a 0266 acrescentou", () => {
+    // Se a sonda deixar de ver o gatilho da 0266, estas três voltam a aparecer
+    // como descobertas — e a mensagem mandaria alguém consertar o que já está
+    // consertado. É o controle positivo do controle positivo.
+    const alcancadas = tabelasAlcancadas();
+    for (const t of ["ai_agent_runs", "demandas", "broadcast_recipients"]) {
+      expect(alcancadas.has(t), `a sonda perdeu \`${t}\``).toBe(true);
+    }
+  });
+
+  it("toda tabela com contact_id é redigida — ou tem exceção com motivo", () => {
+    const alcancadas = tabelasAlcancadas();
+    const descobertas = tabelasComContactId().filter(
+      (t) => !alcancadas.has(t) && !NAO_SE_REDIGE[t],
+    );
+    expect(
+      descobertas,
+      "Estas tabelas guardam `contact_id` e NENHUM caminho de anonimização as " +
+        "alcança: a pessoa pede para ser esquecida e o dado fica. Pendure um " +
+        "`update` no gatilho `trg_redigir_o_que_sobrou_ao_anonimizar` (é onde " +
+        "moram as três da 0266) — ou declare a exceção em `NAO_SE_REDIGE` com " +
+        "o motivo por escrito:\n" +
+        descobertas.map((d) => `  ${d}`).join("\n"),
+    ).toEqual([]);
+  });
+
+  it("a lista de exceções não descreve tabela que não existe", () => {
+    const comContato = new Set(tabelasComContactId());
+    const fantasmas = Object.keys(NAO_SE_REDIGE)
+      .filter((t) => !comContato.has(t))
+      .sort();
+    expect(fantasmas, "exceção declarada para tabela sem `contact_id`").toEqual([]);
+  });
+});

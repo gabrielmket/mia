@@ -45,6 +45,10 @@ function payload(): ExportPayload {
       },
     ],
     voice_calls: [],
+    // Vazias de proposito: estes casos medem o PDF, nao a coleta (0266).
+    ai_runs: [],
+    demandas: [],
+    broadcasts_recebidos: [],
   appointment_notices: [
       {
         id: "aviso-aberto",
