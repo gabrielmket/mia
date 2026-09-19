@@ -16,10 +16,35 @@ SET row_security = off;
 CREATE SCHEMA IF NOT EXISTS "public";
 
 
-ALTER SCHEMA "public" OWNER TO "pg_database_owner";
+-- ⚠️ ENVOLVIDO NUM BLOCO, e a linha crua vinha do dump original.
+--
+-- Num Supabase HOSPEDADO o papel que conecta (`postgres`) não é superusuário e
+-- não é dono do schema `public` — a plataforma já o entrega pertencendo a
+-- `pg_database_owner`. O comando então falha com `must be owner of schema
+-- public`, e falhava em TODO deploy desde sempre: uma linha de ERROR no log do
+-- bootstrap, num contêiner efêmero, que ninguém lia.
+--
+-- Só passou a incomodar quando a 0269 começou a CONTAR esses erros: a produção
+-- respondeu `erros: 1` e o número não descia. Um contador que nunca chega a
+-- zero é um alarme que se aprende a ignorar — e aí ele para de servir para o
+-- erro seguinte, que é o que importa.
+--
+-- O comando continua valendo para quem instala num Postgres próprio, onde ele
+-- de fato tem efeito. `exception when insufficient_privilege` é o mínimo: não
+-- engole erro de outra natureza.
+DO $$ BEGIN
+  ALTER SCHEMA "public" OWNER TO "pg_database_owner";
+EXCEPTION WHEN insufficient_privilege THEN
+  NULL;
+END $$;
 
 
-COMMENT ON SCHEMA "public" IS 'DeskcommCRM v0.1 - Migration 0001 platform_base applied 2026-04-28';
+DO $$ BEGIN
+  COMMENT ON SCHEMA "public" IS 'DeskcommCRM v0.1 - Migration 0001 platform_base applied 2026-04-28';
+EXCEPTION WHEN insufficient_privilege THEN
+  -- Mesma história: comentar o schema também exige ser dono dele.
+  NULL;
+END $$;
 
 
 

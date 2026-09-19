@@ -19,7 +19,14 @@ log() { printf '[bootstrap] %s\n' "$*"; }
 falha() { printf '[bootstrap] ERRO: %s\n' "$*" >&2; exit 1; }
 
 BASELINE=/deskcomm/baseline.sql
-BENIGNOS='already exists|multiple primary keys|multiple default values|is already a member|already a partition'
+# ⚠️ `is already member of publication` NÃO tem o "a". A linha antiga escrevia
+# `is already a member`, que é o português do erro e não o inglês do Postgres
+# (`errmsg("relation \"%s\" is already member of publication \"%s\"")`). Nenhum
+# `alter publication ... add table` do baseline está desguardado hoje, então o
+# padrão nunca casou nada — e no dia em que um entrasse sem guarda, ele viraria
+# alarme permanente. Os dois ficam: o certo, e o antigo por compatibilidade com
+# instalação que já tenha o log de ontem.
+BENIGNOS='already exists|multiple primary keys|multiple default values|is already a member|is already member of publication|already a partition'
 
 for var in NEXT_PUBLIC_SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY SUPABASE_DB_URL NUVEMSHOP_OAUTH_ENCRYPTION_KEY; do
   eval "valor=\${$var:-}"

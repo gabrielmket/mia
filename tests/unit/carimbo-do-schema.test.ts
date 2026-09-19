@@ -247,3 +247,56 @@ describe("o alerta de schema no grupo interno", () => {
     expect(a!.corpo.length).toBeLessThan(1_200);
   });
 });
+
+/**
+ * ─── O CONTADOR SÓ SERVE SE CHEGAR A ZERO ─────────────────────────────────
+ *
+ * A 0269 pôs um contador de erros do baseline na saúde. Ele só vale enquanto
+ * "zero" for alcançável: um comando que falha em TODO deploy o trava em 1 para
+ * sempre, e um alarme que nunca apaga é um alarme que se aprende a ignorar —
+ * aí ele para de servir para o erro seguinte, que é o que importa.
+ *
+ * Foi o que a produção mostrou: `erros: 1` que não descia. A causa era
+ * `ALTER SCHEMA "public" OWNER TO ...`, crua no topo do dump — num Supabase
+ * hospedado o papel que conecta não é dono do schema, e o comando falha com
+ * `must be owner of schema public` desde sempre.
+ */
+describe("o baseline não emite comando que sempre falha", () => {
+  it("nenhum `ALTER SCHEMA ... OWNER` solto", () => {
+    // Solto = fora de um bloco que trate `insufficient_privilege`. A regra é
+    // simples: a linha pode existir (serve ao self-host com Postgres próprio),
+    // mas não pode DERRUBAR o contador de quem roda hospedado.
+    const linhas = BASELINE.split("\n");
+    const soltos = linhas
+      .map((linha, i) => ({ linha: linha.trim(), n: i + 1 }))
+      .filter(({ linha }) => /^ALTER SCHEMA .* OWNER TO/i.test(linha))
+      .filter(({ n }) => {
+        // Olha as 6 linhas acima: um `DO $$ BEGIN` perto significa guardado.
+        const antes = linhas.slice(Math.max(0, n - 7), n - 1).join("\n");
+        return !/DO \$\$ BEGIN/i.test(antes);
+      })
+      .map(({ n }) => n);
+
+    expect(
+      soltos,
+      "`ALTER SCHEMA ... OWNER` fora de um bloco com `exception when " +
+        "insufficient_privilege`. Num Supabase hospedado ele falha em todo " +
+        "deploy e trava o contador de erros do schema em 1 para sempre.",
+    ).toEqual([]);
+  });
+
+  it("o filtro de erros benignos conhece a frase REAL do Postgres", () => {
+    // O padrão antigo era `is already a member` — o português do erro, não o
+    // inglês do Postgres (`is already member of publication`). Nunca casou
+    // nada, e no dia em que um `alter publication ... add table` entrasse sem
+    // guarda viraria alarme permanente.
+    const bootstrap = fs.readFileSync(path.join(RAIZ, "easypanel/bootstrap.sh"), "utf8");
+    const m = bootstrap.match(/^BENIGNOS='([^']+)'$/m);
+    expect(m?.[1], "a linha BENIGNOS sumiu do bootstrap").toBeDefined();
+    expect(
+      m![1],
+      "o filtro precisa casar `is already member of publication`, que é como o " +
+        "Postgres escreve — sem o 'a'",
+    ).toContain("is already member of publication");
+  });
+});
