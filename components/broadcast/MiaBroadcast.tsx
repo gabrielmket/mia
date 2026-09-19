@@ -37,6 +37,7 @@ import {
 } from "@/hooks/useBroadcasts";
 import { formatCentsBRL } from "@/lib/money";
 import { CartaoDaCampanha } from "./CartaoDaCampanha";
+import { SeletorDeEtapas } from "./SeletorDeEtapas";
 import { SeletorDeTags } from "./SeletorDeTags";
 
 const ROTULO_DO_STATUS: Record<Campanha["status"], string> = {
@@ -139,6 +140,10 @@ export function MiaBroadcast() {
   const [nome, setNome] = useState("");
   const [template, setTemplate] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  // Funil e etapa: o filtro que responde "onde a negociação está", ao lado do
+  // de tag, que responde "quem a pessoa é". Os dois se somam como E.
+  const [funil, setFunil] = useState<string | null>(null);
+  const [etapas, setEtapas] = useState<string[]>([]);
   const [valores, setValores] = useState<Record<string, string>>({});
   const [recemCriada, setRecemCriada] = useState<CampanhaCriada | null>(null);
 
@@ -194,6 +199,7 @@ export function MiaBroadcast() {
           slotsManuais.map((s) => [s.chave, (valores[s.chave] ?? "").trim()]),
         ),
         tags,
+        etapas,
         variavel_do_nome: "1",
       },
       {
@@ -254,6 +260,13 @@ export function MiaBroadcast() {
             ) : null}
           </div>
           <SeletorDeTags selecionadas={tags} onChange={setTags} disabled={criar.isPending} />
+          <SeletorDeEtapas
+            funil={funil}
+            aoMudarFunil={setFunil}
+            etapas={etapas}
+            aoMudarEtapas={setEtapas}
+            disabled={criar.isPending}
+          />
         </div>
 
         {/*

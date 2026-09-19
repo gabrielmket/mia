@@ -60,6 +60,8 @@ export function useCriarCampanha() {
       template_language: string;
       valores_padrao: Record<string, string>;
       tags: string[];
+      /** Etapas do funil cujos negócios ABERTOS entram. Vazio = não filtra. */
+      etapas?: string[];
       variavel_do_nome: string | null;
     }) => apiClient.post<{ data: CampanhaCriada }>("/api/v1/broadcasts", input),
     onSuccess: () => {

@@ -20,6 +20,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { peneirar, podeComecar, type ContatoParaDisparo } from "@/lib/broadcast/plano";
 import { derivarSaldo, type LancamentoDaCarteira } from "@/lib/carteira/saldo";
+import { quemEntraNaLista } from "@/lib/broadcast/quem-entra-na-lista";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { moduloLiberado } from "@/lib/modulos/liberacao";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -35,6 +36,19 @@ const criarSchema = z.object({
   valores_padrao: z.record(z.string(), z.string().max(500)).default({}),
   /** Quem recebe: por tag do contato. Vazio = todos os contatos com telefone. */
   tags: z.array(z.string().min(1).max(60)).max(10).default([]),
+  /**
+   * As ETAPAS do funil cujos negócios abertos entram na lista.
+   *
+   * Tag do contato responde "quem é essa pessoa"; etapa responde "onde essa
+   * negociação está" — e é a segunda que se quer segmentar numa campanha
+   * ("todo mundo que pediu orçamento e não fechou"). A primeira exige que
+   * alguém tenha marcado a tag à mão, o que quase nunca acontece.
+   *
+   * Vazio = não filtra por etapa. Combinado com `tags`, os dois se somam como
+   * E: contato COM a tag E COM negócio aberto naquela etapa. É o que a tela
+   * mostra, e o que responde "os que pediram orçamento E são VIP".
+   */
+  etapas: z.array(z.string().uuid()).max(20).default([]),
   /**
    * A variável que recebe o nome do contato. `null` = nenhuma.
    * É a única personalização por pessoa da primeira versão — e é a que importa.
@@ -133,16 +147,12 @@ export async function POST(req: NextRequest): Promise<Response> {
     .maybeSingle();
 
   // ---- a lista -------------------------------------------------------------
-  let q = db
-    .from("contacts")
-    // A MESMA régua de consentimento da automação (guarda-do-contato.ts):
-    // recusa REGISTRADA, não ausência de consentimento.
-    .select("id, phone_number, display_name, is_blocked, consent")
-    .eq("organization_id", authz.org.orgId)
-    .limit(50_000);
-  if (dados.tags.length > 0) q = q.overlaps("tags", dados.tags);
-  const { data: contatos, error: erroContatos } = await q;
-  if (erroContatos) return fail("query_failed", erroContatos.message, 500, { requestId });
+  const lista = await quemEntraNaLista(db, authz.org.orgId, {
+    tags: dados.tags,
+    etapas: dados.etapas,
+  });
+  if (!lista.ok) return fail("query_failed", lista.erro, 500, { requestId });
+  const contatos = lista.contatos;
 
   const peneira = peneirar((contatos ?? []) as ContatoParaDisparo[], (c) =>
     dados.variavel_do_nome

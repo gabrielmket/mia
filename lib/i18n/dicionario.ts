@@ -2134,6 +2134,11 @@ export const DICIONARIO: Traducoes = {
   "sem preço cadastrado": { es: "sin precio registrado" },
   "O total está incompleto: falta cadastrar o preço de": { es: "El total está incompleto: falta registrar el precio de" },
   "Custo das mensagens": { es: "Costo de los mensajes" },
+
+  // ---- segmentar campanha por etapa do funil ----
+  "Todos os contatos": { es: "Todos los contactos" },
+  "Qualquer etapa": { es: "Cualquier etapa" },
+  "Só quem tem negócio ABERTO nesta etapa. Ganhos e perdidos ficam de fora.": { es: "Solo quien tiene negocio ABIERTO en esta etapa. Ganados y perdidos quedan fuera." },
   "Tipo de uso": { es: "Tipo de uso" },
   "Todos os números desta página são só deste intervalo. Mude as datas para comparar um mês com o outro.": {
     es: "Todos los números de esta página son solo de este intervalo. Cambia las fechas para comparar un mes con otro.",

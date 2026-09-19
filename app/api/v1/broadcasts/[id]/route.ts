@@ -25,6 +25,7 @@
  * a resposta devolve a peneira nova para quem está olhando conferir de novo.
  */
 import { randomUUID } from "node:crypto";
+import { quemEntraNaLista } from "@/lib/broadcast/quem-entra-na-lista";
 
 import { type NextRequest } from "next/server";
 import { z } from "zod";
@@ -47,6 +48,14 @@ const edicaoSchema = z
     template_language: z.string().min(2).max(10).optional(),
     /** Presente = remontar a lista com este filtro. Lista vazia = todos. */
     tags: z.array(z.string().min(1).max(60)).max(20).optional(),
+    /**
+     * As etapas do funil. Presente = remontar com este filtro.
+     *
+     * Precisa existir aqui, e não só na criação: sem isto, editar uma campanha
+     * segmentada por etapa remontaria a lista IGNORANDO a etapa, em silêncio —
+     * e a mensagem sairia para quem não deveria recebê-la.
+     */
+    etapas: z.array(z.string().uuid()).max(20).optional(),
     variavel_do_nome: z.string().min(1).max(10).nullish(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Nada para mudar." })
@@ -248,15 +257,16 @@ export async function PATCH(
     semConsentimento: number;
   } | null = null;
 
-  if (dados.tags !== undefined) {
-    let q = db
-      .from("contacts")
-      .select("id, phone_number, display_name, is_blocked, consent")
-      .eq("organization_id", authz.org.orgId)
-      .limit(50_000);
-    if (dados.tags.length > 0) q = q.overlaps("tags", dados.tags);
-    const { data: contatos, error: erroContatos } = await q;
-    if (erroContatos) return fail("query_failed", erroContatos.message, 500, { requestId });
+  // Qualquer um dos dois filtros remonta a lista — e os dois vão juntos para o
+  // mesmo lugar que a criação usa, para não existir uma segunda regra sobre
+  // quem entra na campanha.
+  if (dados.tags !== undefined || dados.etapas !== undefined) {
+    const lista = await quemEntraNaLista(db, authz.org.orgId, {
+      tags: dados.tags ?? [],
+      etapas: dados.etapas ?? [],
+    });
+    if (!lista.ok) return fail("query_failed", lista.erro, 500, { requestId });
+    const contatos = lista.contatos;
 
     const variavel =
       dados.variavel_do_nome === undefined
