@@ -33,7 +33,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { CARIMBO_DO_SCHEMA, compararCarimbo } from "@/lib/schema/carimbo";
+import { alertaDoSchema, CARIMBO_DO_SCHEMA, compararCarimbo } from "@/lib/schema/carimbo";
 
 const RAIZ = path.resolve(__dirname, "../..");
 const DIR_MIGRATIONS = path.join(RAIZ, "supabase/migrations");
@@ -183,5 +183,67 @@ describe("o carimbo conta os erros do baseline", () => {
       trecho.includes("|| true"),
       "a escrita do contador precisa tolerar falha (`|| true`)",
     ).toBe(true);
+  });
+});
+
+/**
+ * ─── O ALERTA NO GRUPO INTERNO ────────────────────────────────────────────
+ *
+ * `/api/v1/health` e o painel de admin respondem a quem PERGUNTA. Nenhum dos
+ * dois avisa — e ninguém abre a saúde depois de um deploy que subiu verde. O
+ * cron do report leva a pergunta ao grupo interno; estes casos medem a regra
+ * que decide se há o que dizer.
+ */
+describe("o alerta de schema no grupo interno", () => {
+  const limpo = {
+    migration_mais_nova: CARIMBO_DO_SCHEMA,
+    erros_inesperados: 0,
+    erros_amostra: null,
+  };
+
+  it("cala quando está tudo em dia", () => {
+    expect(alertaDoSchema(limpo)).toBeNull();
+  });
+
+  it("cala quando o banco NUNCA foi carimbado", () => {
+    // Instalação anterior à 0268. Acusar ali faria toda instalação antiga tocar
+    // o alarme na primeira rodada, e alarme que toca sempre ninguém escuta.
+    expect(alertaDoSchema({ ...limpo, migration_mais_nova: null })).toBeNull();
+    expect(alertaDoSchema({ ...limpo, migration_mais_nova: "  " })).toBeNull();
+  });
+
+  it("fala quando o banco está numa entrega diferente", () => {
+    const a = alertaDoSchema({ ...limpo, migration_mais_nova: "20260101000000_0001_x" });
+    expect(a).not.toBeNull();
+    expect(a!.corpo, "quem lê precisa dos DOIS lados para saber qual está velho").toContain(
+      "20260101000000_0001_x",
+    );
+    expect(a!.corpo).toContain(CARIMBO_DO_SCHEMA);
+  });
+
+  it("fala quando o carimbo bate mas houve erro no meio", () => {
+    const a = alertaDoSchema({ ...limpo, erros_inesperados: 2, erros_amostra: "ERROR: x" });
+    expect(a).not.toBeNull();
+    expect(a!.corpo).toContain("ERROR: x");
+  });
+
+  it("a chave carrega o ESTADO, para problema NOVO render recado novo", () => {
+    // A trava anti-ruído é por chave. Com uma chave fixa, consertar um problema
+    // e cair noutro deixaria o grupo calado até o dia seguinte.
+    const um = alertaDoSchema({ ...limpo, erros_inesperados: 1, erros_amostra: "a" });
+    const outro = alertaDoSchema({ ...limpo, erros_inesperados: 3, erros_amostra: "b" });
+    expect(um!.chave).not.toBe(outro!.chave);
+
+    const mesmo = alertaDoSchema({ ...limpo, erros_inesperados: 1, erros_amostra: "a" });
+    expect(mesmo!.chave, "o MESMO problema tem de render a mesma chave").toBe(um!.chave);
+  });
+
+  it("a amostra é cortada — o recado é um aviso, não um despejo de log", () => {
+    const a = alertaDoSchema({
+      ...limpo,
+      erros_inesperados: 1,
+      erros_amostra: "E".repeat(5_000),
+    });
+    expect(a!.corpo.length).toBeLessThan(1_200);
   });
 });

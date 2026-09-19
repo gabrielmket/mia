@@ -89,3 +89,48 @@ export function compararCarimbo(
     em_dia: noBanco === CARIMBO_DO_SCHEMA && erros === 0,
   };
 }
+
+/**
+ * O grupo interno precisa ser avisado sobre o schema? E com que texto?
+ *
+ * ── Por que uma função pura, e não um `if` dentro do cron ─────────────────
+ *
+ * Porque a decisão tem quatro estados e três deles são "não avisar" — e os três
+ * pelo motivo certo. Enterrada no meio de uma rota que precisa de Supabase,
+ * segredo de cron e adaptador de WhatsApp para rodar, ela seria a parte não
+ * medida do alerta que existe justamente para ser confiável.
+ *
+ * ── A chave carrega o ESTADO, não o momento ───────────────────────────────
+ *
+ * A trava anti-ruído de `reportar()` é por chave. Com `"schema_fora_de_dia"`
+ * fixa, consertar um problema e cair noutro deixaria o grupo calado até o dia
+ * seguinte. Com o estado dentro dela, problema NOVO é recado novo, e o mesmo
+ * problema de ontem continua rendendo um por dia.
+ */
+export function alertaDoSchema(linha: {
+  migration_mais_nova: string | null;
+  erros_inesperados: number | null;
+  erros_amostra: string | null;
+}): { chave: string; corpo: string } | null {
+  // Ausência de carimbo NÃO é alarme: um banco anterior à 0268 nunca foi
+  // carimbado, e acusar ali faria toda instalação antiga tocar o alarme na
+  // primeira rodada — alarme que toca sempre ninguém escuta.
+  const noBanco = linha.migration_mais_nova?.trim() || null;
+  if (!noBanco) return null;
+
+  const erros = linha.erros_inesperados ?? 0;
+  const bate = noBanco === CARIMBO_DO_SCHEMA;
+  if (bate && erros === 0) return null;
+
+  const corpo = !bate
+    ? `*O banco recebeu:* ${noBanco}\n` +
+      `*Esta versão espera:* ${CARIMBO_DO_SCHEMA}\n\n` +
+      `Ou o baseline não passou no último deploy, ou a imagem no ar é outra.`
+    : `*Erros ao aplicar o baseline:* ${erros}\n` +
+      `*Primeiras linhas:*\n${(linha.erros_amostra ?? "(sem amostra)").slice(0, 600)}\n\n` +
+      `O baseline chegou ao fim e o Postgres recusou pelo menos um comando pelo ` +
+      `caminho. Num banco que já existe isso não derruba o sistema — e é por ` +
+      `isso que passa despercebido.`;
+
+  return { chave: `schema_fora_de_dia:${noBanco}:${erros}`, corpo };
+}

@@ -1,11 +1,16 @@
 /**
  * report-da-plataforma — o vigia que fala no grupo INTERNO.
  *
- * Três perguntas, uma rodada:
+ * Quatro perguntas, uma rodada:
  *
  *   1. O crédito de IA está acabando? (o que derruba TODOS os clientes de uma vez)
  *   2. Algum número caiu? (o que derruba um — e o de avisos derruba todos)
- *   3. É hora do resumo do dia?
+ *   3. O schema veio junto com o código no último deploy?
+ *   4. É hora do resumo do dia?
+ *
+ * A 3 é a única que fala do SISTEMA e não de um cliente, e por isso vem antes
+ * do resumo: com o schema atrasado, tudo o que o resumo conta está medido sobre
+ * um banco que não é o que o código espera.
  *
  * ─── Por que um cron, e não um gancho em cada lugar ────────────────────────
  *
@@ -33,6 +38,7 @@ import type { NextRequest } from "next/server";
 import { fail, ok } from "@/lib/api/wrappers";
 import { saldoDaPlataforma } from "@/lib/ai/custo/saldo-da-plataforma";
 import { grupoDeReport, reportar } from "@/lib/avisos/report-da-plataforma";
+import { alertaDoSchema, CARIMBO_DO_SCHEMA, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 import { env } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -149,7 +155,56 @@ async function handle(req: NextRequest): Promise<Response> {
     if (saiu) enviados.push(`canal_caiu:${linha.id}`);
   }
 
-  // ── 3. O resumo do dia ────────────────────────────────────────────────────
+  // ── 3. O SCHEMA não veio junto com o código ───────────────────────────────
+  //
+  // `easypanel/bootstrap.sh` aplica o baseline com `|| true` num banco que já
+  // existe — que é TODO deploy depois do primeiro. Se um comando falha, ele
+  // escreve `AVISO: ... (o app sobe mesmo assim)` e segue. O produto sobe
+  // saudável, com o código novo e o schema de ontem, e as duas coisas são
+  // verdade. O único registro é o stdout de um contêiner efêmero, e a agregação
+  // de logs da VPS está desligada (item E4).
+  //
+  // As migrations 0268/0269 puseram a resposta no banco e em `/api/v1/health`;
+  // a 0269 acrescentou o contador de erros. O que faltava era ALGUÉM CONTAR:
+  // um campo que só existe na rota depende de alguém lembrar de olhar, e
+  // ninguém olha saúde depois de um deploy que subiu verde.
+  //
+  // ⚠️ É o único alerta daqui que fala do SISTEMA e não de um cliente, e é por
+  // isso que ele vem antes do resumo: quando o schema está atrasado, tudo o que
+  // o resumo conta está medido sobre um banco que não é o que o código espera.
+  {
+    const { data: carimbo } = await admin
+      .from(TABELA_DO_CARIMBO)
+      .select("migration_mais_nova, erros_inesperados, erros_amostra")
+      .eq("id", 1)
+      .maybeSingle();
+
+    // A REGRA mora em `lib/schema/carimbo.ts` e é pura: quatro estados, três
+    // deles "não avisar" — e cada um pelo motivo certo. Aqui fica só o I/O.
+    const alerta = carimbo
+      ? alertaDoSchema(
+          carimbo as {
+            migration_mais_nova: string | null;
+            erros_inesperados: number | null;
+            erros_amostra: string | null;
+          },
+        )
+      : null;
+
+    if (alerta) {
+      const saiu = await reportar(admin, {
+        chave: alerta.chave,
+        horas: UM_DIA,
+        texto:
+          `🧱 *O schema não está em dia*\n\n${alerta.corpo}\n\n` +
+          `Detalhe em Admin › Painel › Estado do schema.`,
+        detalhe: { esperado: CARIMBO_DO_SCHEMA },
+      });
+      if (saiu) enviados.push(alerta.chave);
+    }
+  }
+
+  // ── 4. O resumo do dia ────────────────────────────────────────────────────
   //
   // Não é alarme: é o "está tudo de pé" que faz o grupo continuar sendo lido
   // nos dias em que nada quebra — e que denuncia, por ausência, o dia em que o
