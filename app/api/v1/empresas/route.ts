@@ -42,6 +42,9 @@ export async function GET(req: NextRequest): Promise<Response> {
     .from("crm_empresas")
     .select(COLUNAS_DA_EMPRESA, { count: "exact" })
     .eq("organization_id", authz.org.orgId)
+    // Lápide de fusão não aparece: ela existe para responder "para onde foi"
+    // a quem conferir um negócio antigo, não para ser escolhida de novo.
+    .is("mesclada_em", null)
     .order("nome", { ascending: true })
     .range(offset, offset + limit - 1);
 

@@ -29,6 +29,7 @@ import {
   useEmpresa,
   useEmpresas,
   useExcluirEmpresa,
+  useMesclarEmpresas,
   useSalvarEmpresa,
   type Empresa,
   type EmpresaEntrada,
@@ -226,6 +227,15 @@ export function EmpresasClient() {
   const [busca, setBusca] = useState("");
   const { data, isLoading } = useEmpresas(busca);
   const excluir = useExcluirEmpresa();
+  const mesclar = useMesclarEmpresas();
+  /**
+   * A primeira selecionada é a VENCEDORA — a que fica.
+   *
+   * A ordem importa e a tela diz qual é: quem escolheu a vencedora escolheu os
+   * dados dela, e inverter isso troca telefone e endereço de uma empresa pelos
+   * da outra sem ninguém pedir.
+   */
+  const [juntando, setJuntando] = useState<string[]>([]);
   const [editando, setEditando] = useState<Empresa | null>(null);
   const [criando, setCriando] = useState(false);
   const [fichaAberta, setFichaAberta] = useState<string | null>(null);
@@ -258,6 +268,32 @@ export function EmpresasClient() {
         placeholder={t("Buscar por nome ou CNPJ")}
         className="sm:max-w-sm"
       />
+
+      {juntando.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-border p-3">
+          <span className="text-sm">
+            {juntando.length === 1
+              ? t("Agora escolha a ficha duplicada, que será juntada a esta.")
+              : t("Juntar as duas? A primeira fica; a segunda vira histórico.")}
+          </span>
+          {juntando.length === 2 && (
+            <Button
+              disabled={mesclar.isPending}
+              onClick={() =>
+                mesclar.mutate(
+                  { vencedora: juntando[0]!, perdedora: juntando[1]! },
+                  { onSuccess: () => setJuntando([]) },
+                )
+              }
+            >
+              {t("Juntar")}
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => setJuntando([])}>
+            {t("Cancelar")}
+          </Button>
+        </div>
+      )}
 
       {isLoading ? (
         <p className="text-sm text-text-muted">{t("Carregando…")}</p>
@@ -295,6 +331,13 @@ export function EmpresasClient() {
                   <TableCell className="space-x-2 text-right">
                     <Button variant="secondary" onClick={() => setEditando(e)}>
                       {t("Editar")}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      disabled={juntando.includes(e.id) || juntando.length >= 2}
+                      onClick={() => setJuntando((j) => [...j, e.id])}
+                    >
+                      {juntando.length === 0 ? t("Juntar com…") : t("Esta")}
                     </Button>
                     <Button
                       variant="secondary"

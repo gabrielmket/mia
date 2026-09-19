@@ -94,3 +94,25 @@ export function useExcluirEmpresa() {
     },
   });
 }
+
+/**
+ * Juntar duas fichas da MESMA empresa.
+ *
+ * A VENCEDORA é a que fica, e os dados dela nunca são sobrescritos — ela só
+ * herda o que não tinha. A perdedora vira lápide: some das listas e continua
+ * respondendo "para onde foi" a quem conferir um negócio antigo.
+ */
+export function useMesclarEmpresas() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (v: { vencedora: string; perdedora: string }) =>
+      apiClient.post("/api/v1/empresas/mesclar", v),
+    onSuccess: () => {
+      toast.success("Empresas juntadas.");
+      void qc.invalidateQueries({ queryKey: CHAVE });
+    },
+    onError: (e: unknown) => {
+      toast.error(e instanceof Error ? e.message : "Falha ao juntar as empresas.");
+    },
+  });
+}

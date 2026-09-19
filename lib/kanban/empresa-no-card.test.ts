@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { buildCardInput } from "./card-state";
-import type { Lead } from "@/lib/types/leads";
 
 /**
  * A EMPRESA NO CARD NÃO PODE CUSTAR NADA A QUEM NÃO A USA.

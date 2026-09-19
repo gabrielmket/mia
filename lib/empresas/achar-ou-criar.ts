@@ -90,6 +90,9 @@ export async function acharOuCriarEmpresa(
       .from("crm_empresas")
       .select("id, nome")
       .eq("organization_id", organizationId)
+      // Lápide fora: casar com uma ficha já fundida devolveria o contato para a
+      // empresa que alguém acabou de aposentar.
+      .is("mesclada_em", null)
       .limit(5_000);
     if (error) return { ok: false, motivo: "erro", detalhe: error.message };
 

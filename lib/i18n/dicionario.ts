@@ -2150,6 +2150,12 @@ export const DICIONARIO: Traducoes = {
   "Abrir a campanha": { es: "Abrir la campaña" },
   "Cargo": { es: "Cargo" },
   "Setor": { es: "Sector" },
+
+  // ---- juntar empresas duplicadas ----
+  "Agora escolha a ficha duplicada, que será juntada a esta.": { es: "Ahora elige la ficha duplicada, que será unida a esta." },
+  "Juntar as duas? A primeira fica; a segunda vira histórico.": { es: "¿Unir las dos? La primera queda; la segunda pasa a ser histórico." },
+  "Juntar com…": { es: "Unir con…" },
+  "Esta": { es: "Esta" },
   "Nenhum destinatário neste estado.": { es: "Ningún destinatario en este estado." },
   "Excluir este template na Meta? Todos os idiomas dele serão apagados.": { es: "¿Eliminar esta plantilla en Meta? Todos sus idiomas serán borrados." },
   "Só quem tem negócio ABERTO nesta etapa. Ganhos e perdidos ficam de fora.": { es: "Solo quien tiene negocio ABIERTO en esta etapa. Ganados y perdidos quedan fuera." },

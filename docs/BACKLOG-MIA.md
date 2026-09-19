@@ -128,10 +128,10 @@ Dois casos merecem nota própria:
 |---|---|---|
 | C1 | ~~Entidade **empresa** + vínculo do contato~~ · **falta cargo e setor** | pequeno (o que sobrou) |
 | C2 | **Modo B2B/B2C por organização** — cliente B2C nunca vê que empresa existe | incluído em C1 |
-| C3 | Adaptar **cartão do funil** e **painel do atendimento** | incluído em C1 |
-| C4 | **Fusão de empresas duplicadas** (contato já tem; empresa vai precisar) | incluído em C1 |
-| C5 | **A Rafa perguntar o nome da empresa** — sem isso o campo nasce vazio | pequeno, depende de C1 |
-| C6 | **Campos adicionais** por organização, em EMPRESA e em LEAD | médio, junto de C1 |
+| ~~C3~~ | ~~Adaptar **cartão do funil**~~ · falta o painel do atendimento | pequeno (o que sobrou) |
+| ~~C4~~ | ~~**Fusão de empresas duplicadas**~~ | — | `fn_mesclar_empresas` (0263): FKs de `pg_constraint`, vencedora herda só o que não tem, tags somam, perdedora vira lápide |
+| ~~C5~~ | ~~**A Rafa perguntar o nome da empresa**~~ | — | capacidade `crm_registrar_empresa_do_contato`: a IA anota, casando grafias para não criar a quinta ficha do mesmo cliente |
+| ~~C6~~ | ~~**Campos adicionais** em EMPRESA e em LEAD~~ | — | as definições saem do mesmo registro do contato e do lead (`crm_pipelines.settings.fields`) |
 
 Sobre o C6, pedido do Gabriel em 18/09: o cadastro precisa de campo livre além
 do núcleo. É o terceiro nível do desenho — **núcleo** (o que o sistema usa),

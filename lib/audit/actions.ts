@@ -183,6 +183,7 @@ export const AUDIT_ACTIONS = [
   "platform.report_alterado",
   "platform.fila_morta_reprocessada",
   "platform.precos_da_meta_alterados",
+  "empresas.mescladas",
   "platform.grupo_de_avisos_alterado",
   "broadcast.criado",
   "broadcast.editado",
