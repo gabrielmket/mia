@@ -356,6 +356,13 @@ export const AUDIT_ACTIONS = [
   // veem, e a pergunta "quem repintou isto?" só tem resposta aqui: não há
   // event_log (nenhum handler consumiria o tipo — ver register-handlers.ts).
   "platform_branding.updated",
+  // Quem RESPONDE LEGALMENTE pela instalação, declarado em `platform_branding`
+  // (migration 0267). Linha própria e não `platform_branding.updated`: aquela
+  // é a fachada, esta é o texto jurídico público que nomeia uma empresa real
+  // como controladora dos dados. "Quem declarou isto, e quando?" é a pergunta
+  // que se faz depois de uma notificação da ANPD, e ela precisa de resposta
+  // sem depender de adivinhar quais campos um `fields_changed` genérico trazia.
+  "platform_branding.responsavel_legal_updated",
   "platform_google_oauth.updated",
   // A conexão da ORGANIZAÇÃO com a conta de anúncios (migration 0213).
   // Auditável porque o token gravado aqui escreve conversões na conta de

@@ -8880,6 +8880,48 @@ export const DICIONARIO: Traducoes = {
   "Vincular a uma empresa": { es: "Vincular a una empresa" },
   "Usar o número e o grupo do painel": { es: "Usar el número y el grupo del panel" },
   "O aviso sai pelo número da plataforma, no grupo escolhido para este cliente no painel administrativo.": { es: "El aviso sale por el número de la plataforma, al grupo elegido para este cliente en el panel administrativo." },
+  "O e-mail do encarregado não parece um e-mail.": {
+    es: "El correo del encargado no parece un correo.",
+  },
+  "O endereço da política precisa começar com https://": {
+    es: "La dirección de la política debe empezar con https://",
+  },
+  "Confira os campos do responsável legal.": {
+    es: "Revise los campos del responsable legal.",
+  },
+  "Responsável legal salvo.": {
+    es: "Responsable legal guardado.",
+  },
+  "Não deu para salvar o responsável legal.": {
+    es: "No se pudo guardar el responsable legal.",
+  },
+  "Responsável legal desta instalação": {
+    es: "Responsable legal de esta instalación",
+  },
+  "As páginas de Política de Privacidade e Termos de Uso precisam dizer QUEM responde pelos dados tratados aqui. Preenchendo a razão social abaixo, elas passam a nomear esta empresa para qualquer pessoa que as abrir. Deixando em branco, elas nomeiam a empresa que estiver selecionada na sessão de quem está lendo — o que só faz sentido quando a instalação inteira é de uma empresa só.": {
+    es: "Las páginas de Política de Privacidad y Términos de Uso deben decir QUIÉN responde por los datos tratados aquí. Al completar la razón social de abajo, pasan a nombrar a esta empresa para cualquier persona que las abra. Dejándola en blanco, nombran a la empresa que esté seleccionada en la sesión de quien lee — lo que solo tiene sentido cuando la instalación entera es de una sola empresa.",
+  },
+  "Nome da empresa no CNPJ": {
+    es: "Nombre de la empresa en el registro fiscal",
+  },
+  "Em vigor: os documentos legais nomeiam esta empresa, para todo mundo que os abrir.": {
+    es: "En vigor: los documentos legales nombran a esta empresa, para todos los que los abran.",
+  },
+  "Em branco: os documentos legais nomeiam a empresa selecionada na sessão de quem lê.": {
+    es: "En blanco: los documentos legales nombran a la empresa seleccionada en la sesión de quien lee.",
+  },
+  "E-mail do encarregado de dados": {
+    es: "Correo del encargado de datos",
+  },
+  "Endereço da política própria": {
+    es: "Dirección de la política propia",
+  },
+  "Se a empresa já publica a política dela em outro endereço, ponha aqui: a página do sistema passa a levar para lá em vez de mostrar o texto padrão.": {
+    es: "Si la empresa ya publica su política en otra dirección, póngala aquí: la página del sistema pasa a llevar allí en lugar de mostrar el texto estándar.",
+  },
+  "Salvar responsável legal": {
+    es: "Guardar responsable legal",
+  },
 };
 
 /**

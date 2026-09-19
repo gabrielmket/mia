@@ -24589,6 +24589,41 @@ update public.broadcast_recipients b
    and (b.phone_e164 <> 'Contato anonimizado' or b.valores <> '{}'::jsonb);
 
 
+-- ─── 0267 · quem responde legalmente pela INSTALACAO (E7) ─────────
+--
+-- `/legal/privacy` diz "o controlador e <X>, quem instalou e opera este
+-- sistema", e `<X>` vinha da ORGANIZACAO ATIVA DA SESSAO. Num self-host esta
+-- certo. Numa instalacao GERENCIADA, abrir a pagina com um cliente selecionado
+-- fazia o documento declarar que aquele cliente opera o servidor e controla os
+-- dados de todos os tenants — e TROCAR de nome conforme quem estava logado.
+--
+-- `operador_razao_social` e o INTERRUPTOR entre os dois modos: nula = self-host
+-- (segue da sessao), preenchida = gerenciado (vale para todo leitor). Estado
+-- impossivel nao existe, porque quem declara o operador E o operador.
+--
+-- Vigiado por `tests/unit/legal-operador-da-instalacao.test.ts`.
+alter table public.platform_branding
+  -- A razão social, não o nome fantasia: é o documento legal que a nomeia.
+  add column if not exists operador_razao_social text,
+  add column if not exists operador_cnpj text,
+  -- Encarregado (DPO) da PLATAFORMA. Continua havendo o do tenant
+  -- (`organizations.dpo_email`), e eles respondem por coisas diferentes: o do
+  -- tenant atende os contatos DELE, o daqui atende quem usa a instalação.
+  add column if not exists operador_dpo_email text,
+  -- A política publicada pelo operador. Quando existe, `/legal/privacy`
+  -- redireciona para ela em vez de renderizar o texto do produto.
+  add column if not exists operador_politica_url text;
+
+comment on column public.platform_branding.operador_razao_social is
+  'Razao social de quem opera ESTA instalacao. NULA = self-host, e ai o operador sai da organizacao da sessao (desenho original). PREENCHIDA = modelo gerenciado, e ai ela vale para todo leitor: a organizacao da sessao deixa de ter voz no documento legal. E o interruptor entre os dois modos.';
+
+comment on column public.platform_branding.operador_dpo_email is
+  'Encarregado (DPO) da PLATAFORMA. Nao substitui organizations.dpo_email: aquele atende os contatos DO TENANT, este atende quem usa a instalacao.';
+
+comment on column public.platform_branding.operador_politica_url is
+  'Politica de privacidade publicada pelo operador da instalacao. Quando presente, /legal/privacy redireciona para ela. Validada na SAIDA por urlDePoliticaSegura (http/https apenas) — o schema do formulario aceita javascript: e a rota e publica.';
+
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

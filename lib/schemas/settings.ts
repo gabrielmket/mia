@@ -240,3 +240,29 @@ export const agendaSettingsWriteSchema = z.strictObject({
   unknown_protection_minutes: z.number().int().min(1).max(10080),
 }).refine(v => v.unknown_protection_minutes >= v.confirmation_delay_minutes, {message:"O prazo de proteção deve ser maior que o prazo de confirmação."});
 export const agendaSettingsSchema = agendaSettingsWriteSchema.catch({confirmation_delay_minutes:10,unknown_protection_minutes:1440});
+
+/**
+ * O RESPONSÁVEL LEGAL da instalação (migration 0267).
+ *
+ * Separado de `platformBrandingSchema` de propósito, ainda que as colunas
+ * morem na mesma tabela: são decisões de naturezas diferentes. Trocar a cor do
+ * produto é reversível e não obriga ninguém; declarar quem responde pelos dados
+ * muda o que um documento jurídico público afirma. Formulários separados
+ * significam salvamentos separados — ninguém publica uma razão social sem
+ * querer ao ajustar um logo.
+ *
+ * Tudo aceita vazio, e vazio vira `null`: apagar a razão social é a maneira
+ * legítima de devolver a instalação ao modo self-host.
+ *
+ * ⚠️ `operador_politica_url` usa `.url()`, que ACEITA `javascript:alert(1)` —
+ * é esquema de URL válido para o Zod. A guarda que vale é a da SAÍDA
+ * (`urlDePoliticaSegura`, em `lib/legal/operador.ts`), porque `/legal/*` é rota
+ * pública e porque ela também cobre o que já está gravado no banco.
+ */
+export const responsavelLegalSchema = z.object({
+  operador_razao_social: z.string().trim().max(200).nullable(),
+  operador_cnpj: z.string().trim().max(32).nullable(),
+  operador_dpo_email: z.string().trim().email().max(320).nullable(),
+  operador_politica_url: z.string().trim().url().max(2048).nullable(),
+});
+export type ResponsavelLegalInput = z.infer<typeof responsavelLegalSchema>;

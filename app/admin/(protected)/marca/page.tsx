@@ -9,7 +9,10 @@ import { tagDeIdioma } from "@/lib/i18n/datas";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
 
+import { responsavelLegalGravado } from "@/lib/legal/operador";
+
 import { FormularioDaMarca } from "./_form";
+import { ResponsavelLegal } from "./_responsavel-legal";
 
 export const metadata = { title: "Marca da instalação" };
 export const dynamic = "force-dynamic";
@@ -60,6 +63,10 @@ export default async function Page() {
   const idioma = normalizarIdioma(usuario.locale);
 
   const linha = await marcaDaInstalacao();
+  // Leitura separada, e não um campo a mais em `marcaDaInstalacao()`: aquela
+  // alimenta um memo com TTL lido a cada render de toda tela, e identidade
+  // jurídica não deve viajar num cache de cor e logo.
+  const legal = await responsavelLegalGravado();
   // A MESMA pilha do `app/layout.tsx` — banco acima, arquivo de instalação
   // embaixo. Montar outra aqui faria a tela relatar uma precedência que o
   // produto não usa, que é a pior mentira possível numa tela de diagnóstico.
@@ -109,6 +116,15 @@ export default async function Page() {
         definidoNestaTela={linha !== null && !linha.seeded_from_env}
         fallbackEm={instanteLegivel(linha?.fallback_at ?? null, tagDeIdioma(idioma))}
         fallbackMotivo={linha?.fallback_reason ?? null}
+      />
+
+      <ResponsavelLegal
+        gravado={{
+          operador_razao_social: legal?.operador_razao_social ?? null,
+          operador_cnpj: legal?.operador_cnpj ?? null,
+          operador_dpo_email: legal?.operador_dpo_email ?? null,
+          operador_politica_url: legal?.operador_politica_url ?? null,
+        }}
       />
     </div>
   );
