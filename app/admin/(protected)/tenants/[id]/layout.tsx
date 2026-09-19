@@ -53,7 +53,9 @@ const TABS: TabItem[] = [
   // o que se confere primeiro quando o cliente diz "ninguém está vendo as
   // conversas" — e ficou `disabled` tempo demais prometendo essa resposta.
   { label: "Equipe", href: "/team", disabled: false },
-  { label: "Uso", href: "/usage", disabled: true },
+  // O que ESTE cliente consumiu, e quanto custa para servir — os dois lados
+  // (IA e mensagem) na mesma tela. É a conversa de renovação e de reajuste.
+  { label: "Uso", href: "/usage", disabled: false },
 ];
 
 // ---------------------------------------------------------------------------

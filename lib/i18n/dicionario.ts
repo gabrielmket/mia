@@ -2156,6 +2156,14 @@ export const DICIONARIO: Traducoes = {
   "Juntar as duas? A primeira fica; a segunda vira histórico.": { es: "¿Unir las dos? La primera queda; la segunda pasa a ser histórico." },
   "Juntar com…": { es: "Unir con…" },
 
+  // ---- uso de um cliente, no painel ----
+  "Não consegui carregar o uso agora.": { es: "No pude cargar el uso ahora." },
+  "Movimento": { es: "Movimiento" },
+  "Custo de IA": { es: "Costo de IA" },
+  "chamadas": { es: "llamadas" },
+  "A leitura foi cortada — o custo real é maior.": { es: "La lectura fue cortada — el costo real es mayor." },
+  "cobradas": { es: "cobradas" },
+
   // ---- equipe do cliente, no painel da plataforma ----
   "Não consegui carregar a equipe agora.": { es: "No pude cargar el equipo ahora." },
   "Ninguém tem acesso a esta conta ainda.": { es: "Nadie tiene acceso a esta cuenta todavía." },
