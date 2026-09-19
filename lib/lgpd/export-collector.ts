@@ -28,8 +28,38 @@ export interface ContactSnapshot {
   tags: string[];
   source: string | null;
   source_metadata: Record<string, unknown> | null;
+  // O jsonb LIVRE. Ele JÁ estava no `select` e era descartado no mapeamento —
+  // selecionado por alguém que sabia que era dado pessoal, e perdido antes de
+  // chegar ao relatório. É o campo onde o operador escreve o que a ficha não
+  // previu, e portanto o com maior chance de ser o mais sensível de todos:
+  // deixá-lo de fora responde "não temos mais nada sobre você" a quem exerce
+  // direito de acesso, e a resposta é falsa.
+  custom_fields: Record<string, unknown> | null;
+  // Dado pessoal profissional (migration 0262).
+  cargo: string | null;
+  setor: string | null;
+  // A EMPRESA vai pelo NOME, não pelo id. O titular tem direito de saber a que
+  // empresa foi vinculado; um uuid não responde isso a ninguém.
+  empresa_nome: string | null;
   created_at: string;
   last_activity_at: string | null;
+}
+
+/**
+ * O nome da empresa vinculada, vindo do embed do PostgREST.
+ *
+ * O embed chega como objeto (`{nome}`) quando o PostgREST vê a relação como
+ * um-para-um e como array de um elemento quando não vê. Qual dos dois depende
+ * de como a FK foi declarada e de qual versão está no ar — descobrir isso errado
+ * custa um campo em branco no relatório de um titular, que é o lugar mais caro
+ * possível para um `undefined` silencioso. Aceitar as duas formas custa três
+ * linhas.
+ */
+function nomeDaEmpresaEmbutida(embed: unknown): string | null {
+  const registro = Array.isArray(embed) ? embed[0] : embed;
+  if (!registro || typeof registro !== "object") return null;
+  const nome = (registro as { nome?: unknown }).nome;
+  return typeof nome === "string" && nome.trim().length > 0 ? nome : null;
 }
 
 export interface ConsentRow {
@@ -346,12 +376,18 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
 
   // Contact snapshot (PII intentionally retained — this report is the data
   // owner's right of access; only logs/metadata stay sanitized).
+  //
+  // ⚠️ Quem acrescentar coluna de dado pessoal em `contacts` tem DOIS lugares a
+  // mexer, e nenhum dos dois reclama sozinho: esta lista (direito de acesso) e
+  // `fn_lgpd_cascade_redact_contact` (direito ao esquecimento). O `select`
+  // daqui já trouxe `custom_fields` por anos sem que ele chegasse ao relatório,
+  // e a função de anonimização nunca o limpou (consertado na migration 0264).
   let contact: ContactSnapshot | null = null;
   if (contactId) {
     const { data, error } = await admin
       .from("contacts")
       .select(
-        "id, name, display_name, email, phone_number, cpf_encrypted, birthdate, is_blocked, is_anonymized, consent, tags, source, source_metadata, custom_fields, created_at, last_activity_at",
+        "id, name, display_name, email, phone_number, cpf_encrypted, birthdate, is_blocked, is_anonymized, consent, tags, source, source_metadata, custom_fields, cargo, setor, empresa:crm_empresas(nome), created_at, last_activity_at",
       )
       .eq("organization_id", organizationId)
       .eq("id", contactId)
@@ -377,6 +413,12 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         tags: Array.isArray(data.tags) ? (data.tags as string[]) : [],
         source: data.source ?? null,
         source_metadata: (data.source_metadata as Record<string, unknown> | null) ?? null,
+        custom_fields: (data.custom_fields as Record<string, unknown> | null) ?? null,
+        cargo: data.cargo ?? null,
+        setor: data.setor ?? null,
+        // O embed vem objeto ou array conforme a cardinalidade que o PostgREST
+        // enxerga; tratar os dois é mais barato que descobrir errado em produção.
+        empresa_nome: nomeDaEmpresaEmbutida(data.empresa),
         created_at: data.created_at,
         last_activity_at: data.last_activity_at ?? null,
       };

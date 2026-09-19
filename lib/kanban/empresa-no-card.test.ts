@@ -32,11 +32,17 @@ const base = {
   created_at: "2026-09-01T10:00:00Z",
 } as unknown as Parameters<typeof buildCardInput>[0];
 
+// O segundo argumento de `buildCardInput`. `ownerNames` e chave obrigatoria
+// (aceita `undefined`, mas nao aceita ausencia), e estes casos nao falam de
+// dono — falam da empresa. Uma constante evita repetir o ruido cinco vezes.
+const ETAPA = { stageName: "Proposta", ownerNames: undefined };
+
 describe("a empresa no card", () => {
   it("chega ao card quando o negócio tem uma", () => {
-    const card = buildCardInput({ ...base, empresa_nome: "Padaria do Zé" } as typeof base, {
-      stageName: "Proposta",
-    });
+    const card = buildCardInput(
+      { ...base, empresa_nome: "Padaria do Zé" } as typeof base,
+      ETAPA,
+    );
     expect(
       card.empresa,
       "em venda B2B a empresa identifica mais que o título: 'Orçamento 300 pães' não diz de quem é",
@@ -44,7 +50,7 @@ describe("a empresa no card", () => {
   });
 
   it("é NULO quando não há — e nulo é o caso comum", () => {
-    const card = buildCardInput(base, { stageName: "Proposta" });
+    const card = buildCardInput(base, ETAPA);
     expect(
       card.empresa,
       "undefined e null se comportam igual aqui, mas só null diz 'perguntei e não tem'",
@@ -55,17 +61,13 @@ describe("a empresa no card", () => {
     // A rota devolve `null` quando o id não resolve (empresa excluída). Um "" aqui
     // renderizaria um parágrafo vazio no card — exatamente a linha morta que o §5
     // proíbe, e a mais difícil de notar porque não tem o que ler.
-    const card = buildCardInput({ ...base, empresa_nome: null } as typeof base, {
-      stageName: "Proposta",
-    });
+    const card = buildCardInput({ ...base, empresa_nome: null } as typeof base, ETAPA);
     expect(card.empresa).toBeNull();
   });
 
   it("não mexe em mais nada do card", () => {
-    const semEmpresa = buildCardInput(base, { stageName: "Proposta" });
-    const comEmpresa = buildCardInput({ ...base, empresa_nome: "ACME" } as typeof base, {
-      stageName: "Proposta",
-    });
+    const semEmpresa = buildCardInput(base, ETAPA);
+    const comEmpresa = buildCardInput({ ...base, empresa_nome: "ACME" } as typeof base, ETAPA);
     const { empresa: _a, ...restoSem } = semEmpresa;
     const { empresa: _b, ...restoCom } = comEmpresa;
     expect(
