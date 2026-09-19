@@ -24624,6 +24624,57 @@ comment on column public.platform_branding.operador_politica_url is
   'Politica de privacidade publicada pelo operador da instalacao. Quando presente, /legal/privacy redireciona para ela. Validada na SAIDA por urlDePoliticaSegura (http/https apenas) — o schema do formulario aceita javascript: e a rota e publica.';
 
 
+-- ─── 0268 · o carimbo do schema ────────────────────────────
+--
+-- `easypanel/bootstrap.sh` aplica este arquivo com `|| true` num banco que ja
+-- existe — que e TODO deploy depois do primeiro. Se uma migration tropeca, ele
+-- escreve `AVISO: ... (o app sobe mesmo assim)` e segue: o produto sobe
+-- saudavel, com o codigo novo e o schema de ontem, e as duas coisas sao
+-- verdade. O unico registro e o stdout de um conteiner efemero, e a agregacao
+-- de logs da VPS esta desligada (E4).
+--
+-- O bloco abaixo carimba. `/api/v1/health` compara com a constante compilada na
+-- imagem (`lib/schema/carimbo.ts`) e responde `schema.em_dia`. Assim "o banco
+-- veio junto?" passa a ter resposta de fora, com um curl.
+--
+-- ⚠️ A LINHA DO `insert` TEM DE CASAR com `CARIMBO_DO_SCHEMA` e com a migration
+-- mais nova de `supabase/migrations/`. Tres lugares, uma verdade, conferidos por
+-- `tests/unit/carimbo-do-schema.test.ts` — que e o que impede este carimbo de
+-- virar mais uma lista mantida a mao que envelhece em silencio.
+create table if not exists public.schema_baseline (
+  id smallint primary key default 1,
+  -- O NOME do arquivo, sem extensão: `20260920030000_0268_carimbo_do_schema`.
+  -- Nome e não só o timestamp porque quem lê a saúde de madrugada quer saber o
+  -- QUE entrou, e "0268_carimbo_do_schema" responde; "20260920030000" não.
+  migration_mais_nova text not null,
+  aplicado_em timestamptz not null default now(),
+  constraint schema_baseline_singleton check (id = 1),
+  constraint schema_baseline_nao_vazia check (length(btrim(migration_mais_nova)) > 0)
+);
+
+comment on table public.schema_baseline is
+  'Qual baseline este banco recebeu. Gravada pelo proprio baseline perto do fim; comparada em /api/v1/health com a constante compilada na imagem (lib/schema/carimbo.ts). Existe porque o bootstrap aplica o baseline com || true num banco existente: o schema pode falhar e o app sobe igual, saudavel, com o banco de ontem.';
+
+comment on column public.schema_baseline.aplicado_em is
+  'Quando o carimbo foi gravado. "Em dia" e "em dia desde quando" sao perguntas diferentes: esta responde se o deploy de agora carimbou, ou se o carimbo e de tres deploys atras e o baseline vem falhando calado.';
+
+alter table public.schema_baseline enable row level security;
+
+-- Sem policies de propósito: ninguém lê isto por sessão. A rota de saúde usa o
+-- `service_role`, que é `bypassrls`.
+revoke all on table public.schema_baseline from anon, authenticated;
+grant select, insert, update on table public.schema_baseline to service_role;
+
+-- O carimbo desta migration. O BASELINE tem o bloco equivalente perto do fim, e
+-- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
+-- migrations uma a uma.
+insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
+values (1, '20260920030000_0268_carimbo_do_schema', now())
+on conflict (id) do update
+  set migration_mais_nova = excluded.migration_mais_nova,
+      aplicado_em = now();
+
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

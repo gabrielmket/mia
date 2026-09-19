@@ -27,6 +27,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { env } from "@/lib/env";
 import { alvoDe, classificarFalhaDeAlcance, type FalhaDeAlcance } from "@/lib/net/alcance";
 import { validarConfigRedisRest } from "@/lib/redis-config";
+import { compararCarimbo, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -261,11 +262,66 @@ function semAlvo(check: Check): Check {
   return error === undefined ? resto : { ...resto, error: "erro_ao_consultar" };
 }
 
+/**
+ * O banco recebeu o mesmo baseline que esta imagem espera?
+ *
+ * ── Por que esta pergunta precisa de resposta pública ─────────────────────
+ *
+ * `easypanel/bootstrap.sh` aplica o baseline com `|| true` num banco existente
+ * — que é todo deploy depois do primeiro. Se uma migration tropeça, ele escreve
+ * `AVISO: ... (o app sobe mesmo assim)` e segue. O produto então sobe saudável,
+ * com o código novo e o schema de ontem, e as duas afirmações são verdadeiras.
+ * O único registro é o stdout de um contêiner efêmero, e a agregação de logs da
+ * VPS está desligada (item E4).
+ *
+ * ── `em_dia: false` NÃO derruba a saúde ───────────────────────────────────
+ *
+ * Um schema atrasado não impede o produto de atender — impede a feature NOVA de
+ * funcionar. Devolver 503 tiraria do ar um sistema que está servindo, e o monitor
+ * externo chamaria alguém de madrugada para um problema que espera o expediente.
+ * O campo fica visível e o alerta é escolha de quem monitora.
+ *
+ * Falha de leitura vira `no_banco: null` → `em_dia: false`. Não sabemos e não
+ * fingimos que sim: é exatamente o caso em que o baseline pode não ter passado.
+ */
+/**
+ * ⚠️ `fetch` cru no PostgREST, e NÃO o client do Supabase — o mesmo caminho que
+ * `checkSupabase` acima. A primeira versão usava `createAdminClient()` e custou
+ * um teste: com um host que não resolve, as checagens por `fetch` morrem no DNS
+ * em milissegundos e o client JS ficava pendurado até os 3s do `withTimeout`.
+ * Numa rota que um monitor externo consulta de minuto em minuto, isso é três
+ * segundos de parede a cada batida, exatamente quando o banco está fora do ar.
+ * Pego por `tests/unit/health-separa-env-errado-de-servico-caido.test.ts`, que
+ * mede a AUSÊNCIA de ida à rede — e estava medindo a minha.
+ */
+async function lerCarimboDoSchema(): Promise<string | null> {
+  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  const chave = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !chave) return null;
+  try {
+    const res = await withTimeout(
+      fetch(
+        `${url}/rest/v1/${TABELA_DO_CARIMBO}?select=migration_mais_nova&id=eq.1&limit=1`,
+        {
+          headers: { apikey: chave, Authorization: `Bearer ${chave}` },
+          cache: "no-store",
+        },
+      ),
+    );
+    if (!res.ok) return null;
+    const linhas = (await res.json()) as Array<{ migration_mais_nova?: string | null }>;
+    return Array.isArray(linhas) ? (linhas[0]?.migration_mais_nova ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: NextRequest) {
-  const [supabase, redis, waha] = await Promise.all([
+  const [supabase, redis, waha, carimbo] = await Promise.all([
     checkSupabase(),
     checkRedis(),
     checkWaha(),
+    lerCarimboDoSchema(),
   ]);
 
   const verboso = req.nextUrl.searchParams.get("verbose") === "1" && segredoInternoConfere(req);
@@ -296,6 +352,13 @@ export async function GET(req: NextRequest) {
         // um campo ausente — ele desliga a pergunta em vez de deixá-la aberta.
         // Por isso o fallback agora é "desconhecido", e não um número plausível.
         version: process.env.APP_VERSION || "desconhecido",
+        // O NOME da migration só sai autenticado, pela mesma razão que o
+        // endereço do Redis: ele conta a um scanner quando o schema mudou e o
+        // que entrou. `em_dia` é o que um monitor externo precisa, e sozinho não
+        // entrega nada — é um booleano sobre a coerência da própria instalação.
+        schema: verboso
+          ? compararCarimbo(carimbo)
+          : { em_dia: compararCarimbo(carimbo).em_dia },
         timestamp: new Date().toISOString(),
         checks,
       },
