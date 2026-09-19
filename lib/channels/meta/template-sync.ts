@@ -55,6 +55,14 @@ export interface MetaTemplateRow {
   components: unknown;
   contract_hash: string;
   parameter_format: string;
+  /**
+   * O id do template do lado da META (migration 0261).
+   *
+   * É o que permite EDITAR daqui (`POST /{template-id}`). Sem ele, editar
+   * exigiria uma busca a mais na Meta a cada clique, só para redescobrir o que
+   * ela já disse nesta sincronização.
+   */
+  meta_template_id: string | null;
 }
 
 /** O que já existe no banco, na projeção mínima que o plano precisa. */
@@ -83,6 +91,8 @@ export interface SyncPlan {
 }
 
 interface GraphTemplate {
+  /** O id do template do lado da Meta — pedido em FIELDS desde a 0261. */
+  id?: string;
   name?: unknown;
   language?: unknown;
   status?: unknown;
@@ -160,6 +170,7 @@ export function templatesToRows(
       // sob formatos diferentes exigem payloads diferentes, logo hashes diferentes.
       contract_hash: hashContract(components, parameterFormat),
       parameter_format: parameterFormat,
+      meta_template_id: str(raw.id),
     };
   });
 }
@@ -212,7 +223,7 @@ export interface SyncInput {
 }
 
 const FIELDS =
-  "name,language,status,category,parameter_format,rejected_reason,quality_score,components";
+  "id,name,language,status,category,parameter_format,rejected_reason,quality_score,components";
 
 /**
  * Busca TODAS as páginas. Não é zelo: a WABA de teste, com 5 templates e `limit=3`,

@@ -25457,4 +25457,19 @@ create or replace trigger trg_channel_knobs_updated_at
   before update on public.channel_knobs
   for each row execute function public.fn_set_updated_at();
 
+
+-- ---- id do template na Meta (migration 0261) ----
+--
+-- Editar template e POST /{template-id}, e o id nunca foi guardado: a
+-- sincronizacao nao pedia `id` em FIELDS. Sem ele, editar exigiria uma busca a
+-- mais na Meta a cada clique. NULO nas linhas anteriores — elas o ganham na
+-- proxima sincronizacao, e quem edita trata ausencia como "sincronize antes".
+
+alter table public.meta_templates
+  add column if not exists meta_template_id text;
+
+create index if not exists idx_meta_templates_meta_id
+  on public.meta_templates (organization_id, meta_template_id)
+  where meta_template_id is not null;
+
 notify pgrst, 'reload schema';

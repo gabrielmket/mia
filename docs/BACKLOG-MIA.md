@@ -42,7 +42,24 @@ compartilhado. Ver o Bloco G.
 
 | # | o que | tamanho | por quê |
 |---|---|---|---|
-| B1 | **A despedida de 6 segundos** | médio | o contato escreveu num canal e a régua se despediu no outro: o cancelamento é por conversa, não por contato |
+| ~~B1~~ | ~~**A despedida de 6 segundos**~~ | — | **corrigido**, e o diagnóstico que estava aqui era FALSO. Não era "olha a conversa errada": a detecção sempre foi por CONTATO. A resposta do lead FOI vista, acordou a espera e empurrou a régua para o passo seguinte — que era a despedida. `cancel_on_reply` passou a valer também para a espera ativa (`lib/followup/reactivity.ts`) |
+| B1-a | **Decidir o PADRÃO da régua** (ver abaixo) | decisão | o conserto vale para quem ligou `cancel_on_reply`. Quem não ligou continua tendo a própria resposta usada para empurrar a régua adiante — e isso é escolha de produto, não bug |
+
+### B1-a, em português
+
+Um lead está numa régua de follow-up, parado num nó de espera. **Ele responde.**
+O que a régua deve fazer, por padrão, para quem não configurou nada?
+
+1. **Seguir em frente** (hoje) — a resposta acorda a espera e o motor vai para o
+   próximo passo. Se o próximo passo for a despedida, ele se despede de alguém
+   que acabou de falar com a gente.
+2. **Encerrar a régua** — respondeu, então a régua cumpriu o papel e sai de cena;
+   a conversa segue com o agente ou com uma pessoa.
+3. **Sair por uma porta própria** — o autor da régua desenha o que acontece
+   quando alguém responde, e a régua só segue por ali.
+
+A 2 é o que quase todo mundo espera ao ler "follow-up". A 3 é a mais correta e a
+mais trabalhosa. A 1 é a que está no ar.
 
 ---
 
