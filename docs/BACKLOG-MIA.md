@@ -34,14 +34,14 @@ compartilhado. Ver o Bloco G.
 
 | # | o que | tamanho | por quê |
 |---|---|---|---|
-| A1 | **Seletor de tags** em vez de texto livre | pequeno | errar o nome devolve lista vazia sem dizer por quê — o mesmo tropeço da tag no lead |
-| A2 | **Editar campanha** completo (trocar template, remontar lista) | pequeno | a rota já aceita; a tela só oferece renomear |
-| A3 | **Agendar campanha** | pequeno | o worker já trata `status: agendada` e `agendado_para`, e nada na tela consegue criar uma |
-| A4 | **Gravar o custo que vem no webhook** e mostrar a quem paga | pequeno | o `pricing` da Meta chega em todo status e é descartado; hoje o cartão é do cliente, então o número é dele — ver `mia-modelo-de-cobranca` |
-| A5 | **Tela própria por campanha** | médio | inline funciona com 3 destinatários, não com 3.000 |
-| A6 | **Filtrar por tag do lead e etapa do funil** | médio | o que se quer segmentar mora no funil, não no contato |
-| A7 | **Editar/excluir template** | médio | a Meta permite os dois; a tela só cria e sincroniza |
-| A8 | **Cabeçalho com imagem/vídeo** e botões de link/telefone | grande | exige upload reencaminhável à Meta antes de submeter o template |
+| ~~A1~~ | ~~**Seletor de tags** em vez de texto livre~~ | — | seletor de tags com contagem, na tela da campanha |
+| ~~A2~~ | ~~**Editar campanha** completo (trocar template, remontar lista)~~ | — | trocar template, renomear e remontar a lista |
+| ~~A3~~ | ~~**Agendar campanha**~~ | — | agendar campanha pela tela — o worker já sabia, faltava quem criasse |
+| ~~A4~~ | ~~**Gravar o custo que vem no webhook** e mostrar a quem paga~~ | — | `/admin/custo-da-meta`: categoria e cobrança por mensagem + tabela de preços nossa |
+| ~~A5~~ | ~~**Tela própria por campanha**~~ | — | `/app/broadcast/[id]` com resumo clicável por estado, filtro e paginação |
+| ~~A6~~ | ~~**Filtrar por tag do lead e etapa do funil**~~ | — | Funil + Etapa ao lado das tags; só negócio ABERTO, e a mesma regra vale ao editar |
+| ~~A7~~ | ~~**Editar/excluir template**~~ | — | editar e excluir na tela, com o aviso de que editar aprovado volta para análise |
+| ~~A8~~ | ~~**Cabeçalho com imagem/vídeo** e botões de link/telefone~~ | — | cabeçalho com imagem, e o arquivo sobe direto sem precisar de hospedagem pública |
 
 ---
 
@@ -126,7 +126,7 @@ Dois casos merecem nota própria:
 
 | # | o que | tamanho |
 |---|---|---|
-| C1 | Entidade **empresa** + vínculo do contato, com **cargo e setor** opcionais | maior |
+| C1 | ~~Entidade **empresa** + vínculo do contato~~ · **falta cargo e setor** | pequeno (o que sobrou) |
 | C2 | **Modo B2B/B2C por organização** — cliente B2C nunca vê que empresa existe | incluído em C1 |
 | C3 | Adaptar **cartão do funil** e **painel do atendimento** | incluído em C1 |
 | C4 | **Fusão de empresas duplicadas** (contato já tem; empresa vai precisar) | incluído em C1 |
@@ -159,8 +159,8 @@ inbox, janela de 24h e agente intocados.
 
 | # | o que | tamanho | por quê |
 |---|---|---|---|
-| E1 | **Aba "Uso"** do admin — custo por cliente | médio | é o bloco de otimização de custo; hoje se levanta na mão por SQL |
-| E2 | **Tela de modelo padrão da plataforma** | pequeno | hoje o padrão vem do `.env` e o modelo é escolhido agente a agente — não há como trocar o padrão de todos |
+| E1 | **Aba "Uso"** do admin — custo de **IA** por cliente | médio | o custo de MENSAGEM já tem tela (`/admin/custo-da-meta`); o de IA por tenant ainda se levanta na mão por SQL |
+| ~~E2~~ | ~~**Tela de modelo padrão da plataforma**~~ | — | `/admin/modelo-de-ia`: vale para todo cliente novo, e a aba Operação deixou de ser a porta dos fundos |
 | E3 | **Aba "Equipe"** do admin | médio | placeholder declarado na navegação e nunca construído |
 | E4 | **Ligar agregação de logs** na VPS | pequeno | Loki está zerado; sem log do servidor, defeito em produção é diagnosticado por eliminação |
 | E5 | ~~Desligar o workflow `release`~~ | — | feito em 18/09 |
