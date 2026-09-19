@@ -49,7 +49,10 @@ const TABS: TabItem[] = [
   // O que este cliente comprou. Vizinha da Carteira de propósito: liberar um
   // módulo e acertar o preço dele são a mesma conversa.
   { label: "Módulos", href: "/modulos", disabled: false },
-  { label: "Equipe", href: "/team", disabled: true },
+  // Quem tem acesso a esta conta, com que papel, e se o convite foi aceito. É
+  // o que se confere primeiro quando o cliente diz "ninguém está vendo as
+  // conversas" — e ficou `disabled` tempo demais prometendo essa resposta.
+  { label: "Equipe", href: "/team", disabled: false },
   { label: "Uso", href: "/usage", disabled: true },
 ];
 

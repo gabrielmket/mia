@@ -161,7 +161,7 @@ inbox, janela de 24h e agente intocados.
 |---|---|---|---|
 | ~~E1~~ | ~~**Aba "Uso"** do admin~~ | — | já existia: `/admin/usage` traz `ai_cost_cents` por tenant, com exportação. Com `/admin/custo-da-meta` ao lado, o custo dos DOIS lados (IA e mensagem) está na tela |
 | ~~E2~~ | ~~**Tela de modelo padrão da plataforma**~~ | — | `/admin/modelo-de-ia`: vale para todo cliente novo, e a aba Operação deixou de ser a porta dos fundos |
-| E3 | **Aba "Equipe"** do admin | médio | placeholder declarado na navegação e nunca construído |
+| ~~E3~~ | ~~**Aba "Equipe"** do admin~~ | — | construída: quem tem acesso ao cliente, com papel, situação do convite e último acesso. `convidado` e `nunca entrou` com destaque próprio — são as duas respostas de "ninguém está vendo as conversas" |
 | E4 | **Ligar agregação de logs** na VPS | pequeno | Loki está zerado; sem log do servidor, defeito em produção é diagnosticado por eliminação |
 | E5 | ~~Desligar o workflow `release`~~ | — | feito em 18/09 |
 | E7 | **A página legal nomeia o CLIENTE como controlador** | pequeno | `lib/legal/operador.ts` lê a organização ATIVA da sessão. Num self-host (uma instalação, um operador) está certo; no modelo gerenciado as organizações são CLIENTES, e o operador é sempre a Time Company. Aberta com a Academia Reativa selecionada, `/legal/privacy` declara que a Reativa controla os dados da instalação. Mesma família do custo de IA e da chave: a suposição de operador único não vale aqui. O operador deveria vir de `platform_branding`, não da sessão. |

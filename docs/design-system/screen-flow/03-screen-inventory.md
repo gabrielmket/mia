@@ -179,7 +179,7 @@ date: 2026-04-28
 | 77 | `/admin/tenants/new` | P2 | default, cnpj-conflict, success | `<NewTenantWizard>` | — | P0 |
 | 78 | `/admin/tenants/[id]` | P2 | default | `<TenantOverview>`, `<ImpersonateButton>` | sim | P0 |
 | 79 | `/admin/tenants/[id]/health` | P2 | all-healthy, waha-down, nuvemshop-token-expired, ai-budget-exhausted, audit-lag | `<HealthGrid>`, `<HealthCard>` | sim | P0 |
-| 80 | `/admin/tenants/[id]/team` | P2 | default | `<TeamPresence cross-tenant>` | sim | P1 |
+| 80 | `/admin/tenants/[id]/team` | P2 | default, convite-nao-aceito, nunca-entrou, revogado | `<EquipeDoTenant>` | — | P1 |
 | 81 | `/admin/tenants/[id]/usage` | P2 | default, near-platform-cap | `<TenantUsageDashboard>` | — | P1 |
 | 82 | `/admin/audit` | P2 | default, cross-tenant-filter | `<AuditTable cross-tenant>` | — | P0 |
 | 83 | `/admin/lgpd/requests` | P2 | default, sla-at-risk (D+5/D+10) | `<LGPDRequestList cross-tenant>` | sim | P0 |
@@ -212,7 +212,7 @@ por `scripts/inventario-de-telas.ts` e vigiados por `tests/unit/inventario-de-te
 - **P1** (semana 5–8): 46 telas
 - **P2** (Fase 1.5+): 6 telas
 - **Entregues** fora da escala de prioridade (marcadas `**entregue**`): 2 telas
-- **Realtime obrigatório**: 27 telas
+- **Realtime obrigatório**: 26 telas
 - **Cross-tenant (super-admin)**: 18 telas
 
 ## Reconciliação com o disco
@@ -272,7 +272,6 @@ não.
 - `/app/settings/security/mfa` (#66)
 - `/app/settings/security/sessions` (#67)
 - `/app/settings/tenant/vocabulary` (#69)
-- `/admin/tenants/[id]/team` (#80)
 - `/admin/tenants/[id]/usage` (#81)
 - `/admin/lgpd/requests` (#83) — só o detalhe existe (`/admin/lgpd/requests/[id]`), alcançado de `/admin/lgpd`
 - `/maintenance` (#95)

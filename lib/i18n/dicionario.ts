@@ -2155,6 +2155,15 @@ export const DICIONARIO: Traducoes = {
   "Agora escolha a ficha duplicada, que será juntada a esta.": { es: "Ahora elige la ficha duplicada, que será unida a esta." },
   "Juntar as duas? A primeira fica; a segunda vira histórico.": { es: "¿Unir las dos? La primera queda; la segunda pasa a ser histórico." },
   "Juntar com…": { es: "Unir con…" },
+
+  // ---- equipe do cliente, no painel da plataforma ----
+  "Não consegui carregar a equipe agora.": { es: "No pude cargar el equipo ahora." },
+  "Ninguém tem acesso a esta conta ainda.": { es: "Nadie tiene acceso a esta cuenta todavía." },
+  "Pessoa": { es: "Persona" },
+  "Papel": { es: "Rol" },
+  "nunca entrou": { es: "nunca entró" },
+  "convidado": { es: "invitado" },
+  "revogado": { es: "revocado" },
   "Esta": { es: "Esta" },
   "Nenhum destinatário neste estado.": { es: "Ningún destinatario en este estado." },
   "Excluir este template na Meta? Todos os idiomas dele serão apagados.": { es: "¿Eliminar esta plantilla en Meta? Todos sus idiomas serán borrados." },
