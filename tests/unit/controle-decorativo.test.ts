@@ -134,16 +134,63 @@ export function ehMudo(tagDoBotao: string, anterior: string): boolean {
   return true;
 }
 
+/** Onde cada `<Button` começa no arquivo. */
+function aberturasDeBotao(fonte: string): number[] {
+  const out: number[] = [];
+  for (const m of fonte.matchAll(/<Button\b/g)) out.push(m.index ?? 0);
+  return out;
+}
+
+/**
+ * A tag INTEIRA, do `<Button` ao `>` que a fecha de verdade.
+ *
+ * ⚠️ Por que não é uma regex. A versão anterior era `/<Button\b(?:[^>]|\n)*?>/`,
+ * não-gulosa, e parava no PRIMEIRO `>` do texto — que em JSX quase nunca é o
+ * fim da tag:
+ *
+ *     <Button disabled={fim >= total} onClick={...}>
+ *                           ^ parava aqui
+ *
+ * O efeito visível foi um falso positivo (botão ligado acusado de mudo). O
+ * invisível é pior e é o que justifica consertar em vez de contornar: um botão
+ * REALMENTE mudo cuja tag contenha `>` ou `=>` antes do fim passaria batido, e
+ * o gate ficaria verde afirmando que não há botão morto na casa.
+ *
+ * O scanner ignora `>` dentro de `{...}` e dentro de aspas — que é onde eles
+ * aparecem em JSX (comparação, arrow function, genérico).
+ */
+function tagInteira(fonte: string, inicio: number): string {
+  let chaves = 0;
+  let aspas: string | null = null;
+  for (let i = inicio; i < fonte.length; i++) {
+    const c = fonte[i]!;
+    if (aspas) {
+      if (c === aspas) aspas = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      aspas = c;
+      continue;
+    }
+    if (c === "{") chaves++;
+    else if (c === "}") chaves--;
+    else if (c === ">" && chaves === 0) return fonte.slice(inicio, i + 1);
+  }
+  // Sem fechamento (arquivo truncado): devolve o que há, e o `ehMudo` decide.
+  return fonte.slice(inicio);
+}
+
 function botoesMudos(): Array<{ onde: string }> {
   const out: Array<{ onde: string }> = [];
   for (const arquivo of arquivos(path.join(RAIZ, "components"), /\.tsx$/)) {
     const fonte = fs.readFileSync(arquivo, "utf8");
     const linhas = fonte.split("\n");
     const rel = path.relative(RAIZ, arquivo);
-    for (const m of fonte.matchAll(/<Button\b(?:[^>]|\n)*?>/g)) {
-      const n = fonte.slice(0, m.index ?? 0).split("\n").length;
+    for (const inicio of aberturasDeBotao(fonte)) {
+      const tag = tagInteira(fonte, inicio);
+      const n = fonte.slice(0, inicio).split("\n").length;
       const anterior = linhas.slice(Math.max(0, n - 3), n - 1).join("\n");
-      if (ehMudo(m[0], anterior)) out.push({ onde: `${rel}:${n}` });
+      if (ehMudo(tag, anterior)) out.push({ onde: `${rel}:${n}` });
     }
   }
   return out;
@@ -199,6 +246,9 @@ describe("nenhum botão fica cinza por falta de fiação", () => {
     expect(ehMudo('<Button onClick={x}>Ver</Button>', "")).toBe(false);
     expect(ehMudo('<Button asChild><Link href="/x">Ver</Link></Button>', "")).toBe(false);
     expect(ehMudo('<Button type="submit">Salvar</Button>', "")).toBe(false);
+    // O caso que a regex antiga errava: `>` dentro de atributo fechava a tag
+    // cedo, e a fiação depois dele sumia da leitura.
+    expect(ehMudo("<Button disabled={a >= b} onClick={x}>Ver</Button>", "")).toBe(false);
     // `disabled` com o motivo à vista é o padrão CORRETO — o controle diz por
     // que não pode, em vez de fingir que pode.
     expect(ehMudo('<Button disabled title="ainda não implementado">X</Button>', "")).toBe(false);
