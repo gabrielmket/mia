@@ -53,10 +53,18 @@ Detalhe e evidências em `docs/audits/2026-09-18-pacing-janela-adiada-e-alertas-
 | # | o que | tamanho | por quê |
 |---|---|---|---|
 | B2-1 | **Alargar a janela reprograma turno adiado** (+ motivo do adiamento em coluna própria) | médio | é o único que deixa o produto sem saída pela tela; consertá-lo também fecha o alerta de janela |
-| B2-2 | **Gatilho de `updated_at` em `channel_knobs`** | minúsculo | hoje o campo mente com cara de verdade e faz a próxima investigação recomeçar enganada |
+| ~~B2-2~~ | ~~**Gatilho de `updated_at` em `channel_knobs`**~~ | — | feito (migration 0260): gatilho, não conserto do upsert — pega SQL direto e rota futura também |
 | B2-3 | ~~Resolver `conhecimento_nao_indexado`~~ + ~~varredura dos `kind`~~ | — | feito em 18/09 — resultado abaixo |
 
-### O resultado da varredura (18/09): 19 de 26 alertas não têm quem os feche
+### ~~O resultado da varredura (18/09): 19 de 26 alertas não têm quem os feche~~ — RESOLVIDO
+
+> Fechado por `lib/inbox-do-agente/como-cada-aviso-fecha.ts` + o cron
+> `varredura-de-avisos`: todo `kind` agora é OBRIGADO pelo compilador a
+> declarar como deixa de valer (condição, idade ou decisão humana), e o vigia
+> aplica. Os que só uma pessoa fecha estão declarados como tal, com o motivo —
+> isso não é dívida, é a resposta certa escrita.
+
+#### O diagnóstico original
 
 Auditados todos os `kind` de `agent_inbox_items`. **Só 7 são resolvidos por
 algum caminho automático.** Os outros 19 ficam abertos até alguém fechar à mão —
@@ -160,6 +168,23 @@ Sobre o E6, pedido do Gabriel em 18/09. O que já se sabe do desenho:
   custo da Meta é do cliente, não nosso
 - **Virar Tech Provider** da Meta — destrava D2 e D3
 - **Conferir a fatura da Meta** depois dos testes, para saber o valor unitário real
+
+---
+
+## Entregue entre a .29 e a .32
+
+| o quê | onde |
+|---|---|
+| Modelo de IA escolhido pela plataforma (e a aba Operação deixou de ser a porta dos fundos) | `/admin/modelo-de-ia` |
+| Cadastro incorporado da Meta, ao lado da conexão manual | `/admin/cadastro-incorporado` + Conexões |
+| Report interno no grupo: crédito acabando, número caído, resumo diário | `/admin/numero-de-avisos` |
+| Parear o número de avisos na própria tela, com QR | `/admin/numero-de-avisos` |
+| Empresas: o cliente que é organização, com contatos e negócios | `/app/empresas` |
+| Trabalho parado: fila morta agrupada pela causa, com volta | `/admin/fila-morta` |
+| Arquivo na campanha sem hospedagem pública (+ nome no PDF) | tela da campanha |
+| Custo das mensagens da Meta por cliente | `/admin/custo-da-meta` |
+| Todo aviso da Central declara como fecha, e um vigia aplica | Central |
+| Segmentar campanha pela etapa do funil | tela da campanha |
 
 ---
 

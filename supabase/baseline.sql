@@ -25445,4 +25445,16 @@ alter table public.platform_precos_meta enable row level security;
 revoke all on public.platform_precos_meta from anon, authenticated;
 grant select, insert, update, delete on public.platform_precos_meta to service_role;
 
+
+-- ---- channel_knobs.updated_at para de mentir (migration 0260) ----
+--
+-- Auditoria de 18/09: a linha tinha created_at == updated_at mesmo tendo sido
+-- alterada horas depois. O campo nao ficava em branco — ficava MENTINDO com
+-- cara de verdade, e transformou comportamento correto em suspeita de bug.
+-- Gatilho e nao conserto do upsert: pega SQL direto e rota futura tambem.
+
+create or replace trigger trg_channel_knobs_updated_at
+  before update on public.channel_knobs
+  for each row execute function public.fn_set_updated_at();
+
 notify pgrst, 'reload schema';
