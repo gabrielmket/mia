@@ -24371,6 +24371,111 @@ $$;
 revoke all on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) from public,anon,authenticated;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) to service_role;
 
+-- ─── 0265 · o gatilho limpa o que a ROTA DIRETA esquece ──────────────────
+--
+-- Ha DOIS caminhos que anonimizam um contato: `fn_lgpd_cascade_redact_contact`
+-- (a cascata) e `fn_lgpd_anonymize_contact` (a rota direta, o botao da ficha).
+-- A rota direta limpa nome, e-mail, telefone, CPF e nascimento e PARA AI —
+-- nunca limpou `consent`, `tags` nem `source_metadata`, de onde saem as colunas
+-- geradas `wa_identity` e `wa_lid` (a identidade da pessoa no WhatsApp).
+--
+-- Por isso a lista mora no GATILHO e nao nas funcoes: pendurada no FATO
+-- (`is_anonymized` virou true), ela cobre os dois caminhos, o terceiro que
+-- alguem escrever, e o DBA que fizer a mao. Espalhar a lista por tres funcoes
+-- foi como o produto chegou aqui.
+--
+-- Vigiado por `tests/unit/lgpd-as-duas-pontas.test.ts`.
+create or replace function public.fn_contato_anonimizado_limpa_campos_personalizados()
+  returns trigger
+  language plpgsql
+as $$
+begin
+  -- Anonimização é irreversível (L-04): não há o que preservar aqui.
+  --
+  -- A lista abaixo é a das colunas de `contacts` declaradas PESSOAIS em
+  -- `tests/unit/lgpd-as-duas-pontas.test.ts` e que nenhum caminho de
+  -- anonimização limpa de forma confiável. O teste cobra a coerência: coluna
+  -- pessoal nova que não apareça aqui (nem nas duas funções) reprova.
+  new.custom_fields := '{}'::jsonb;
+
+  -- Dado pessoal profissional (0262): o que a pessoa faz e onde. Numa lista de
+  -- cinco contatos da mesma empresa, "Diretor Financeiro" reidentifica sozinho.
+  new.cargo := null;
+  new.setor := null;
+
+  -- O vínculo é sobre a PESSOA apagada. `crm_empresas` continua INTEIRA: a
+  -- empresa é pessoa jurídica e não é titular deste pedido.
+  new.empresa_id := null;
+
+  -- ── as três que a ROTA DIRETA nunca limpou ──────────────────────────────
+  --
+  -- `source_metadata` é a mais grave: dela derivam `wa_identity` e `wa_lid`
+  -- (`generated always as`), a identidade da pessoa no WhatsApp. Zerar aqui
+  -- mata as duas junto, sem precisar tocá-las — que é exatamente por que elas
+  -- foram feitas geradas.
+  new.source_metadata := '{}'::jsonb;
+
+  -- Tags são segmentação escrita por humano sobre a pessoa ("gestante",
+  -- "inadimplente", "amigo do dono"). O cascade já limpava; a rota, não.
+  new.tags := '{}'::text[];
+
+  -- Consentimento diz o que a pessoa autorizou, quando e por onde. É registro
+  -- SOBRE ela, e depois da exclusão não há mais a que consentir.
+  new.consent := '{}'::jsonb;
+
+  return new;
+end$$;
+
+comment on function public.fn_contato_anonimizado_limpa_campos_personalizados() is
+  'Limpa as colunas pessoais de contacts que os caminhos de anonimizacao nao cobrem de forma confiavel. Pendurado no FATO (is_anonymized) e nao no chamador: ha mais de um caminho que anonimiza (fn_lgpd_cascade_redact_contact e fn_lgpd_anonymize_contact) e a rota direta nunca limpou consent/tags/source_metadata.';
+
+-- As DUAS origens de EXECUTE (item 9 do CLAUDE.md). Função de gatilho não é
+-- alcançável pela REST, mas o `ALTER DEFAULT PRIVILEGES ... TO anon` do baseline
+-- vale para toda função criada depois dele, e `revoke from public` não remove um
+-- grant nominal a `anon`.
+revoke all on function public.fn_contato_anonimizado_limpa_campos_personalizados() from public;
+revoke execute on function public.fn_contato_anonimizado_limpa_campos_personalizados() from anon;
+revoke execute on function public.fn_contato_anonimizado_limpa_campos_personalizados() from authenticated;
+
+-- O gatilho já existe e continua igual — só a função por trás dele mudou. A
+-- recriação é para o clone que ainda não o tinha (o `update.sh` roda o baseline
+-- inteiro, e `create or replace function` sozinho não cria gatilho nenhum).
+drop trigger if exists trg_contacts_anonimizado_limpa_custom_fields on public.contacts;
+create trigger trg_contacts_anonimizado_limpa_custom_fields
+  before update of is_anonymized on public.contacts
+  for each row
+  when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
+  execute function public.fn_contato_anonimizado_limpa_campos_personalizados();
+
+-- ── E os contatos JÁ anonimizados antes desta migration ───────────────────
+--
+-- Sem isto, quem exerceu o direito ontem pelo botão da tela continua com o
+-- `waha_lid`, as tags e o consentimento no banco para sempre — o gatilho só
+-- dispara na TRANSIÇÃO, e para eles ela já passou. É o mesmo raciocínio da
+-- varredura que completa cascatas interrompidas: um direito exercido não pode
+-- depender de alguém lembrar de reexecutar.
+--
+-- `is_anonymized` não é tocado, então o gatilho não redispara.
+update public.contacts
+   set custom_fields   = '{}'::jsonb,
+       cargo           = null,
+       setor           = null,
+       empresa_id      = null,
+       source_metadata = '{}'::jsonb,
+       tags            = '{}'::text[],
+       consent         = '{}'::jsonb
+ where is_anonymized = true
+   and (
+        custom_fields   <> '{}'::jsonb
+     or cargo           is not null
+     or setor           is not null
+     or empresa_id      is not null
+     or source_metadata <> '{}'::jsonb
+     or tags            <> '{}'::text[]
+     or consent         <> '{}'::jsonb
+   );
+
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

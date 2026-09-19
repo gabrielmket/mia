@@ -5,24 +5,35 @@
  *
  * `contacts.custom_fields` — o jsonb LIVRE, onde o operador escreve o que a
  * ficha não previu ("CPF do responsável", "endereço da obra", "nome da esposa")
- * — falhava nas duas ao mesmo tempo, e por anos:
+ * — estava no `select` de `lib/lgpd/export-collector.ts` e era DESCARTADO no
+ * mapeamento. Selecionado por alguém que sabia ser dado pessoal, e perdido
+ * antes de chegar ao relatório. O titular pedia acesso e recebia um documento
+ * que dizia "é tudo que temos sobre você", sem o campo mais livre de todos.
+ * Corrigido na migration 0264.
  *
- *   · ACESSO: estava no `select` de `lib/lgpd/export-collector.ts` e era
- *     DESCARTADO no mapeamento. Selecionado por alguém que sabia ser dado
- *     pessoal, e perdido antes de chegar ao relatório do titular.
- *   · ESQUECIMENTO: `fn_lgpd_cascade_redact_contact` zerava nome, e-mail,
- *     telefone, CPF, consentimento, `source_metadata` e tags — e não tocava
- *     nele.
+ * ── E o achado maior, que só apareceu procurando a outra ponta ────────────
  *
- * Quem pedia acesso não via o campo; quem pedia exclusão ficava com ele no
- * banco. O mesmo silêncio servindo aos dois lados, e nenhuma das pontas
- * reclamando da outra. Corrigido na migration 0264.
+ * Procurando se a anonimização também esquecia `custom_fields`, a resposta foi
+ * NÃO — um gatilho `before update of is_anonymized` já cuidava dele. Mas o
+ * mesmo gatilho trazia escrito, no comentário, que **há mais de um caminho que
+ * anonimiza** e que a rota direta "nem sequer limpa `consent`/`tags`/
+ * `source_metadata`". Estava documentado e não consertado:
  *
- * O defeito não foi descuido de uma pessoa: são TRÊS listas escritas à mão em
- * arquivos diferentes (o `create table`, o `select` do exportador, o `update`
- * da função) e nada as obrigava a concordar. `cargo`, `setor` e `empresa_id`
- * repetiram o passo semanas depois — a prova de que a armadilha continuava
- * armada.
+ *   fn_lgpd_cascade_redact_contact   a cascata (Central, cron) — lista longa
+ *   fn_lgpd_anonymize_contact        a ROTA DIRETA, o botão da ficha — limpa
+ *                                    nome, e-mail, telefone, CPF, nascimento,
+ *                                    e PARA AÍ
+ *
+ * De `source_metadata` derivam `wa_identity` e `wa_lid`: quem clicasse no botão
+ * ficava com a identidade da pessoa no WhatsApp intacta depois de atender um
+ * pedido de exclusão. A 0265 move a lista para o GATILHO, que está pendurado no
+ * FATO e vale para os dois caminhos e para o terceiro que alguém escrever.
+ *
+ * O defeito nunca foi descuido de uma pessoa: são QUATRO listas escritas à mão
+ * em arquivos diferentes — o `create table`, o `select` do exportador, o
+ * `update` da cascata e o `update` da rota direta — e nada as obrigava a
+ * concordar. `cargo`, `setor` e `empresa_id` repetiram o passo semanas depois,
+ * e a própria 0264 repetiu de novo ao consertar um caminho só.
  *
  * ── O que este teste faz ───────────────────────────────────────────────────
  *
@@ -205,18 +216,62 @@ function colunasDeContacts(sql: string): Set<string> {
   return colunas;
 }
 
-/** O `update contacts set` da ÚLTIMA definição da função — a que vale. */
-function colunasQueAAnonimizacaoLimpa(sql: string): Set<string> {
+/**
+ * O que o CASCADE (`fn_lgpd_cascade_redact_contact`) limpa em `contacts`.
+ *
+ * É o caminho da Central e do cron. NÃO é o único: ver `oQueOGatilhoLimpa`.
+ */
+function colunasQueOCascadeLimpa(sql: string): Set<string> {
   const f = sql.lastIndexOf(
     'CREATE OR REPLACE FUNCTION "public"."fn_lgpd_cascade_redact_contact"',
   );
-  expect(f, "a função de anonimização sumiu do baseline").toBeGreaterThan(-1);
+  expect(f, "a função de cascata sumiu do baseline").toBeGreaterThan(-1);
   const corpo = sql.slice(f, sql.indexOf("\nend;\n$$;\n", f));
   const ini = corpo.indexOf("update contacts set");
-  expect(ini, "o `update contacts set` sumiu da função").toBeGreaterThan(-1);
+  expect(ini, "o `update contacts set` sumiu da cascata").toBeGreaterThan(-1);
   const bloco = corpo.slice(ini, corpo.indexOf("  where id = p_contact_id", ini));
 
   return new Set(capturas(bloco, /^ {4}([a-z_]+)\s*=/gm));
+}
+
+/**
+ * O que a ROTA DIRETA (`fn_lgpd_anonymize_contact`) limpa em `contacts`.
+ *
+ * É o botão "Anonimizar contato" da ficha. Tem lista PRÓPRIA, mais curta que a
+ * da cascata — e foi assim que `consent`, `tags` e `source_metadata` ficaram
+ * anos vazando por um caminho e não pelo outro. O corpo dela vem do dump com as
+ * atribuições coladas numa linha só (`name=null,display_name=...`), então o
+ * regex aqui não pode assumir uma por linha.
+ */
+function colunasQueARotaDiretaLimpa(sql: string): Set<string> {
+  // Ancorado no `create`: o nome dela aparece em grants e em comentários de
+  // outras migrations, e `lastIndexOf` do nome solto cai num deles.
+  const f = sql.lastIndexOf(
+    "create or replace function public.fn_lgpd_anonymize_contact",
+  );
+  expect(f, "a função da rota direta sumiu do baseline").toBeGreaterThan(-1);
+  const corpo = sql.slice(f, sql.indexOf("$$;", f));
+  const ini = corpo.indexOf("update public.contacts set");
+  expect(ini, "o `update public.contacts set` sumiu da rota direta").toBeGreaterThan(-1);
+  const bloco = corpo.slice(ini, corpo.indexOf("where organization_id", ini));
+
+  return new Set(capturas(bloco, /(?:^|[\s,])([a-z_]+)\s*=/gm));
+}
+
+/**
+ * O que o GATILHO limpa — e ele é o único que vale para TODO caminho.
+ *
+ * `trg_contacts_anonimizado_limpa_custom_fields` é `before update of
+ * is_anonymized`: pendurado no FATO, não no chamador. Coluna limpa aqui está
+ * limpa pela cascata, pela rota direta, e pelo UPDATE que um DBA fizer à mão.
+ */
+function oQueOGatilhoLimpa(sql: string): Set<string> {
+  const f = sql.lastIndexOf(
+    "create or replace function public.fn_contato_anonimizado_limpa_campos_personalizados",
+  );
+  expect(f, "o gatilho de limpeza sumiu do baseline").toBeGreaterThan(-1);
+  const corpo = sql.slice(f, sql.indexOf("end$$;", f));
+  return new Set(capturas(corpo, /new\.([a-z_]+)\s*:=/g));
 }
 
 /** A lista de colunas que o relatório de acesso pede ao banco. */
@@ -227,8 +282,23 @@ function selectDaExportacao(fonte: string): string {
 }
 
 const COLUNAS = colunasDeContacts(BASELINE);
-const LIMPAS = colunasQueAAnonimizacaoLimpa(BASELINE);
+const CASCADE = colunasQueOCascadeLimpa(BASELINE);
+const ROTA_DIRETA = colunasQueARotaDiretaLimpa(BASELINE);
+const GATILHO = oQueOGatilhoLimpa(BASELINE);
 const SELECT = selectDaExportacao(EXPORTADOR);
+
+/**
+ * Uma coluna está de fato apagada quando o GATILHO a apaga (e aí vale para todo
+ * caminho) ou quando os DOIS caminhos a apagam por conta própria.
+ *
+ * "O cascade limpa" não basta, e essa foi a lição que custou a 0265: a 0264
+ * acrescentou quatro colunas só à cascata, e o botão da ficha — que chama a
+ * rota direta — continuou deixando as mesmas quatro no banco.
+ */
+function estaApagada(coluna: string): boolean {
+  if (GATILHO.has(coluna)) return true;
+  return CASCADE.has(coluna) && ROTA_DIRETA.has(coluna);
+}
 
 describe("LGPD: acesso e esquecimento conferidos na mesma leitura", () => {
   it("a leitura do schema não saiu vazia nem quase", () => {
@@ -239,7 +309,9 @@ describe("LGPD: acesso e esquecimento conferidos na mesma leitura", () => {
       COLUNAS.size,
       "achei colunas de menos em `contacts` — o parser quebrou, não a tabela encolheu",
     ).toBeGreaterThan(30);
-    expect(LIMPAS.size, "o `update contacts set` foi lido vazio").toBeGreaterThan(10);
+    expect(CASCADE.size, "o `update contacts set` da cascata foi lido vazio").toBeGreaterThan(10);
+    expect(ROTA_DIRETA.size, "o update da rota direta foi lido vazio").toBeGreaterThan(5);
+    expect(GATILHO.size, "o corpo do gatilho foi lido vazio").toBeGreaterThan(3);
     expect(SELECT.length, "o `select` do exportador foi lido curto demais").toBeGreaterThan(200);
   });
 
@@ -263,14 +335,30 @@ describe("LGPD: acesso e esquecimento conferidos na mesma leitura", () => {
     expect(fantasmas, "classificação de coluna que não existe mais em `contacts`").toEqual([]);
   });
 
-  it("todo dado pessoal é APAGADO pela anonimização", () => {
+  it("todo dado pessoal é APAGADO — por TODOS os caminhos que anonimizam", () => {
     const sobrevivem = [...COLUNAS]
-      .filter((c) => CLASSIFICACAO[c]?.tipo === "pessoal" && !LIMPAS.has(c))
+      .filter((c) => CLASSIFICACAO[c]?.tipo === "pessoal" && !estaApagada(c))
       .sort();
     expect(
       sobrevivem,
-      "coluna declarada pessoal que `fn_lgpd_cascade_redact_contact` não toca: " +
-        "o titular pediu para ser esquecido e o dado ficou no banco",
+      "coluna declarada pessoal que sobrevive a pelo menos um caminho de " +
+        "anonimização. Ponha no GATILHO (fn_contato_anonimizado_limpa_campos_" +
+        "personalizados), que está pendurado no FATO e cobre os dois — pôr só " +
+        "na cascata deixa o botão da ficha vazando, que foi o defeito da 0264",
+    ).toEqual([]);
+  });
+
+  it("o gatilho cobre tudo que a rota direta esquece e a cascata lembra", () => {
+    // O modo de falha que a 0265 fechou: a cascata cresce, a rota direta fica
+    // parada, e o mesmo contato termina diferente conforme quem clicou onde.
+    const soNaCascata = [...CASCADE]
+      .filter((c) => CLASSIFICACAO[c]?.tipo === "pessoal")
+      .filter((c) => !ROTA_DIRETA.has(c) && !GATILHO.has(c))
+      .sort();
+    expect(
+      soNaCascata,
+      "a cascata apaga e a rota direta não — e o gatilho não cobre a diferença: " +
+        "o resultado da anonimização passa a depender de por onde ela foi pedida",
     ).toEqual([]);
   });
 
@@ -326,7 +414,7 @@ describe("LGPD: acesso e esquecimento conferidos na mesma leitura", () => {
 
       for (const origem of cl.de) {
         expect(
-          LIMPAS.has(origem),
+          estaApagada(origem),
           `\`${coluna}\` deriva de \`${origem}\`, e \`${origem}\` não é apagada — ` +
             "então a derivada sobrevive junto, que é o mesmo dado por outro nome",
         ).toBe(true);
