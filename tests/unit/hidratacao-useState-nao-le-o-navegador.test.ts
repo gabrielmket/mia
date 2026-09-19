@@ -273,7 +273,24 @@ describe("o inicializador de useState não lê o navegador", () => {
     expect(fontes.has("lib/notifications/prefs.ts")).toBe(true);
   });
 
-  it("nenhum arquivo de `app|components|lib|hooks` tem inicializador que lê o navegador", () => {
+  /**
+ * TETO DE 60s, DECLARADO — e o número tem motivo.
+ *
+ * Este caso NÃO é lento por acidente: ele lê e analisa TODO `.ts/.tsx` de
+ * `app`, `components`, `lib` e `hooks`, que é o que faz dele um gate de
+ * verdade em vez de uma amostra. Medido nesta máquina: 8s sozinho, e acima dos
+ * 15s padrão quando a suíte inteira disputa CPU.
+ *
+ * Deixar no padrão produzia vermelho INTERMITENTE — o pior estado para um
+ * gate, porque some ao rodar o arquivo sozinho e ensina a ignorar a falha. O
+ * teto maior é a escolha honesta: o trabalho é grande e conhecido, e "demorou"
+ * não é a mesma notícia que "achou um inicializador que lê o navegador".
+ *
+ * ⚠️ Se um dia ele estourar 60s, a resposta NÃO é subir de novo o número: é que
+ * a varredura passou a fazer mais do que precisa, e é isso que precisa ser
+ * olhado.
+ */
+it("nenhum arquivo de `app|components|lib|hooks` tem inicializador que lê o navegador", () => {
     const violacoes: string[] = [];
     for (const [rel, fonte] of fontes) {
       for (const linha of inicializadoresQueLeemONavegador(fonte, rel, fontes)) {
@@ -287,7 +304,7 @@ describe("o inicializador de useState não lê o navegador", () => {
         "o servidor mandou. Use `useSyncExternalStore` com um " +
         "`getServerSnapshot` determinístico — ver `lib/theme.tsx`.",
     ).toEqual([]);
-  });
+  }, 60_000);
 
   it("CONTROLE POSITIVO: a sonda reprova o padrão do defeito, inclusive através de um import", () => {
     // `lerPrefs()` mora em outro módulo e só lá dentro toca `window`. Se a

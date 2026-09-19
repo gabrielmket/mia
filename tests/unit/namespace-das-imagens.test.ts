@@ -296,6 +296,23 @@ describe("catraca: ninguém mais repete o namespace", () => {
       // árvores do repo, com o gate delas próprio.
       "evidence",
       ".claude",
+      /**
+       * O CACHE DE PACOTES do pnpm, e ele é o maior de todos.
+       *
+       * Não estava aqui, e é por ele que este gate piscava: `.pnpm-store` fica
+       * na RAIZ do repositório em qualquer máquina que rode `pnpm` com store
+       * local, e tem gigabytes. Medido: um `du -sh` nele não terminou em 120
+       * segundos — e a varredura inteira tem 15 para rodar.
+       *
+       * O sintoma era o pior possível para um gate: vermelho INTERMITENTE, que
+       * some quando se roda o arquivo sozinho. Gate que pisca é gate que alguém
+       * desliga — e este existe para impedir que o namespace de imagem do
+       * upstream volte a aparecer no código.
+       *
+       * Cache de pacote nunca monta referência de imagem: é conteúdo de
+       * terceiro, baixado, e o que ele contém é problema de quem o publicou.
+       */
+      ".pnpm-store",
     ].map((d) => `--exclude-dir=${d}`);
     // `.bak`/`.orig`/`.rej`/`~` são sobra de editor e de `sed -i.bak`. Sem isto,
     // uma sabotagem local deixa o gate vermelho pelo motivo errado.

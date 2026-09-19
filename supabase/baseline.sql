@@ -24025,6 +24025,121 @@ revoke all on function public.fn_contact_tags(uuid) from public;
 grant execute on function public.fn_contact_tags(uuid) to authenticated, service_role;
 
 
+-- ---- mesclar empresas duplicadas (migration 0263) ----
+--
+-- A empresa ganhou duas portas de criacao: a tela e o agente. A segunda cria
+-- ficha do que o cliente DITOU, e duas grafias distantes nascem separadas.
+-- Sem fusao, o conserto seria apagar — e apagar leva junto o vinculo dos
+-- contatos e negocios. FUNCAO e nao updates na rota: fusao nao tem desfazer.
+-- FKs vem de pg_constraint, nao de lista a mao. LAPIDE e nao DELETE: apagar
+-- responderia "essa empresa nunca existiu" a quem for conferir.
+
+alter table public.crm_empresas
+  add column if not exists mesclada_em timestamptz,
+  add column if not exists mesclada_com uuid references public.crm_empresas(id) on delete set null;
+
+comment on column public.crm_empresas.mesclada_com is
+  'A empresa que VENCEU a fusao. Preenchida = esta ficha e lapide: some das listas e do seletor, mas responde "para onde foi" a quem conferir um negocio antigo.';
+
+create index if not exists idx_crm_empresas_vivas
+  on public.crm_empresas (organization_id, lower(nome))
+  where mesclada_em is null;
+
+create or replace function public.fn_mesclar_empresas(
+  p_organization_id uuid,
+  p_vencedora uuid,
+  p_perdedora uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_vencedora public.crm_empresas%rowtype;
+  v_perdedora public.crm_empresas%rowtype;
+  v_alvo record;
+  v_movidas integer;
+  v_repontado jsonb := '{}'::jsonb;
+begin
+  if auth.uid() is not null
+     and not public.fn_role_at_least(p_organization_id, 'manager') then
+    raise exception using errcode = '42501', message = 'insufficient_role';
+  end if;
+
+  if p_vencedora is null or p_perdedora is null or p_vencedora = p_perdedora then
+    raise exception using errcode = '22023', message = 'selecao_de_mesclagem_invalida';
+  end if;
+
+  select * into v_vencedora from public.crm_empresas
+   where organization_id = p_organization_id and id = least(p_vencedora, p_perdedora)
+   for update;
+  select * into v_perdedora from public.crm_empresas
+   where organization_id = p_organization_id and id = greatest(p_vencedora, p_perdedora)
+   for update;
+
+  if v_vencedora.id <> p_vencedora then
+    select * into v_vencedora from public.crm_empresas
+     where organization_id = p_organization_id and id = p_vencedora;
+    select * into v_perdedora from public.crm_empresas
+     where organization_id = p_organization_id and id = p_perdedora;
+  end if;
+
+  if v_vencedora.id is null or v_perdedora.id is null then
+    raise exception using errcode = '22023', message = 'empresa_nao_encontrada';
+  end if;
+  if v_perdedora.mesclada_em is not null then
+    raise exception using errcode = '22023', message = 'empresa_ja_mesclada';
+  end if;
+
+  for v_alvo in
+    select n.nspname as esquema, c.relname as tabela, a.attname as coluna
+      from pg_catalog.pg_constraint co
+      join pg_catalog.pg_class c on c.oid = co.conrelid
+      join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+      join pg_catalog.pg_attribute a on a.attrelid = co.conrelid and a.attnum = co.conkey[1]
+     where co.contype = 'f'
+       and co.confrelid = 'public.crm_empresas'::regclass
+       and co.conrelid <> 'public.crm_empresas'::regclass
+       and array_length(co.conkey, 1) = 1
+       and c.relkind = 'r'
+       and n.nspname = 'public'
+     order by 2, 3
+  loop
+    execute format(
+      'update %I.%I set %I = $1 where %I = $2',
+      v_alvo.esquema, v_alvo.tabela, v_alvo.coluna, v_alvo.coluna
+    ) using p_vencedora, p_perdedora;
+    get diagnostics v_movidas = row_count;
+    v_repontado := v_repontado || jsonb_build_object(v_alvo.tabela, v_movidas);
+  end loop;
+
+  update public.crm_empresas set
+    cnpj        = coalesce(cnpj, v_perdedora.cnpj),
+    site        = coalesce(site, v_perdedora.site),
+    telefone    = coalesce(telefone, v_perdedora.telefone),
+    email       = coalesce(email, v_perdedora.email),
+    endereco    = coalesce(endereco, v_perdedora.endereco),
+    observacoes = coalesce(observacoes, v_perdedora.observacoes),
+    tags          = (select array(select distinct unnest(tags || v_perdedora.tags))),
+    custom_fields = v_perdedora.custom_fields || custom_fields,
+    updated_at  = now()
+   where organization_id = p_organization_id and id = p_vencedora;
+
+  update public.crm_empresas
+     set mesclada_em = now(), mesclada_com = p_vencedora, updated_at = now()
+   where organization_id = p_organization_id and id = p_perdedora;
+
+  return jsonb_build_object(
+    'vencedora', p_vencedora,
+    'perdedora', p_perdedora,
+    'repontado', v_repontado
+  );
+end; $$;
+
+revoke all on function public.fn_mesclar_empresas(uuid,uuid,uuid) from public, anon;
+grant execute on function public.fn_mesclar_empresas(uuid,uuid,uuid) to authenticated, service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
@@ -25500,120 +25615,5 @@ create index if not exists idx_contacts_empresa_cargo
   on public.contacts (organization_id, empresa_id, cargo)
   where empresa_id is not null and cargo is not null;
 
-
--- ---- mesclar empresas duplicadas (migration 0263) ----
---
--- A empresa ganhou duas portas de criacao: a tela e o agente. A segunda cria
--- ficha do que o cliente DITOU, e duas grafias distantes nascem separadas.
--- Sem fusao, o conserto seria apagar — e apagar leva junto o vinculo dos
--- contatos e negocios. FUNCAO e nao updates na rota: fusao nao tem desfazer.
--- FKs vem de pg_constraint, nao de lista a mao. LAPIDE e nao DELETE: apagar
--- responderia "essa empresa nunca existiu" a quem for conferir.
-
-alter table public.crm_empresas
-  add column if not exists mesclada_em timestamptz,
-  add column if not exists mesclada_com uuid references public.crm_empresas(id) on delete set null;
-
-comment on column public.crm_empresas.mesclada_com is
-  'A empresa que VENCEU a fusao. Preenchida = esta ficha e lapide: some das listas e do seletor, mas responde "para onde foi" a quem conferir um negocio antigo.';
-
-create index if not exists idx_crm_empresas_vivas
-  on public.crm_empresas (organization_id, lower(nome))
-  where mesclada_em is null;
-
-create or replace function public.fn_mesclar_empresas(
-  p_organization_id uuid,
-  p_vencedora uuid,
-  p_perdedora uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  v_vencedora public.crm_empresas%rowtype;
-  v_perdedora public.crm_empresas%rowtype;
-  v_alvo record;
-  v_movidas integer;
-  v_repontado jsonb := '{}'::jsonb;
-begin
-  if auth.uid() is not null
-     and not public.fn_role_at_least(p_organization_id, 'manager') then
-    raise exception using errcode = '42501', message = 'insufficient_role';
-  end if;
-
-  if p_vencedora is null or p_perdedora is null or p_vencedora = p_perdedora then
-    raise exception using errcode = '22023', message = 'selecao_de_mesclagem_invalida';
-  end if;
-
-  select * into v_vencedora from public.crm_empresas
-   where organization_id = p_organization_id and id = least(p_vencedora, p_perdedora)
-   for update;
-  select * into v_perdedora from public.crm_empresas
-   where organization_id = p_organization_id and id = greatest(p_vencedora, p_perdedora)
-   for update;
-
-  if v_vencedora.id <> p_vencedora then
-    select * into v_vencedora from public.crm_empresas
-     where organization_id = p_organization_id and id = p_vencedora;
-    select * into v_perdedora from public.crm_empresas
-     where organization_id = p_organization_id and id = p_perdedora;
-  end if;
-
-  if v_vencedora.id is null or v_perdedora.id is null then
-    raise exception using errcode = '22023', message = 'empresa_nao_encontrada';
-  end if;
-  if v_perdedora.mesclada_em is not null then
-    raise exception using errcode = '22023', message = 'empresa_ja_mesclada';
-  end if;
-
-  for v_alvo in
-    select n.nspname as esquema, c.relname as tabela, a.attname as coluna
-      from pg_catalog.pg_constraint co
-      join pg_catalog.pg_class c on c.oid = co.conrelid
-      join pg_catalog.pg_namespace n on n.oid = c.relnamespace
-      join pg_catalog.pg_attribute a on a.attrelid = co.conrelid and a.attnum = co.conkey[1]
-     where co.contype = 'f'
-       and co.confrelid = 'public.crm_empresas'::regclass
-       and co.conrelid <> 'public.crm_empresas'::regclass
-       and array_length(co.conkey, 1) = 1
-       and c.relkind = 'r'
-       and n.nspname = 'public'
-     order by 2, 3
-  loop
-    execute format(
-      'update %I.%I set %I = $1 where %I = $2',
-      v_alvo.esquema, v_alvo.tabela, v_alvo.coluna, v_alvo.coluna
-    ) using p_vencedora, p_perdedora;
-    get diagnostics v_movidas = row_count;
-    v_repontado := v_repontado || jsonb_build_object(v_alvo.tabela, v_movidas);
-  end loop;
-
-  update public.crm_empresas set
-    cnpj        = coalesce(cnpj, v_perdedora.cnpj),
-    site        = coalesce(site, v_perdedora.site),
-    telefone    = coalesce(telefone, v_perdedora.telefone),
-    email       = coalesce(email, v_perdedora.email),
-    endereco    = coalesce(endereco, v_perdedora.endereco),
-    observacoes = coalesce(observacoes, v_perdedora.observacoes),
-    tags          = (select array(select distinct unnest(tags || v_perdedora.tags))),
-    custom_fields = v_perdedora.custom_fields || custom_fields,
-    updated_at  = now()
-   where organization_id = p_organization_id and id = p_vencedora;
-
-  update public.crm_empresas
-     set mesclada_em = now(), mesclada_com = p_vencedora, updated_at = now()
-   where organization_id = p_organization_id and id = p_perdedora;
-
-  return jsonb_build_object(
-    'vencedora', p_vencedora,
-    'perdedora', p_perdedora,
-    'repontado', v_repontado
-  );
-end; $$;
-
-revoke all on function public.fn_mesclar_empresas(uuid,uuid,uuid) from public, anon;
-grant execute on function public.fn_mesclar_empresas(uuid,uuid,uuid) to authenticated, service_role;
 
 notify pgrst, 'reload schema';
