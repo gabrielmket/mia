@@ -159,7 +159,7 @@ inbox, janela de 24h e agente intocados.
 
 | # | o que | tamanho | por quê |
 |---|---|---|---|
-| E1 | **Aba "Uso"** do admin — custo de **IA** por cliente | médio | o custo de MENSAGEM já tem tela (`/admin/custo-da-meta`); o de IA por tenant ainda se levanta na mão por SQL |
+| ~~E1~~ | ~~**Aba "Uso"** do admin~~ | — | já existia: `/admin/usage` traz `ai_cost_cents` por tenant, com exportação. Com `/admin/custo-da-meta` ao lado, o custo dos DOIS lados (IA e mensagem) está na tela |
 | ~~E2~~ | ~~**Tela de modelo padrão da plataforma**~~ | — | `/admin/modelo-de-ia`: vale para todo cliente novo, e a aba Operação deixou de ser a porta dos fundos |
 | E3 | **Aba "Equipe"** do admin | médio | placeholder declarado na navegação e nunca construído |
 | E4 | **Ligar agregação de logs** na VPS | pequeno | Loki está zerado; sem log do servidor, defeito em produção é diagnosticado por eliminação |

@@ -47,6 +47,44 @@ interface RouteCtx {
  * `organization_id` é filtrado explicitamente — vem do pipeline já validado pela
  * RLS do caller, nunca do body.
  */
+/**
+ * O NOME da empresa de cada negócio.
+ *
+ * Mesmo desenho de `withOwnerAgents`: uma consulta só, e nenhuma quando não há
+ * negócio com empresa — o tenant B2C não paga por uma feature que não usa.
+ *
+ * Resolver aqui e não no card é o que impede o quadro de disparar uma
+ * requisição por negócio aberto; num funil com 200 cards isso é a diferença
+ * entre uma consulta e duzentas.
+ */
+async function withEmpresas(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  leads: Lead[],
+): Promise<{ leads: Lead[]; error: string | null }> {
+  const ids = [
+    ...new Set(leads.map((l) => l.empresa_id).filter(Boolean) as string[]),
+  ];
+  if (ids.length === 0) return { leads, error: null };
+
+  const { data, error } = await supabase
+    .from("crm_empresas")
+    .select("id, nome")
+    .eq("organization_id", organizationId)
+    .in("id", ids);
+  if (error) return { leads, error: error.message };
+
+  const nome = new Map(
+    (data ?? []).map((e) => [(e as { id: string }).id, (e as { nome: string }).nome]),
+  );
+  return {
+    // Empresa apagada depois do vínculo devolve `null` — e `null` some do card,
+    // em vez de virar um rótulo vazio ocupando linha.
+    leads: leads.map((l) => ({ ...l, empresa_nome: l.empresa_id ? (nome.get(l.empresa_id) ?? null) : null })),
+    error: null,
+  };
+}
+
 async function withOwnerAgents(
   supabase: Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
@@ -393,6 +431,16 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   if (leadsWithOwner.error) {
     return fail("internal_error", leadsWithOwner.error, 500, { requestId });
   }
+
+  const leadsComEmpresa = await withEmpresas(
+    supabase,
+    (pipeline as Pipeline).organization_id,
+    leadsWithOwner.leads,
+  );
+  if (leadsComEmpresa.error) {
+    return fail("internal_error", leadsComEmpresa.error, 500, { requestId });
+  }
+  leadsWithOwner.leads = leadsComEmpresa.leads;
 
   const { data: pipelinePadrao } = await supabase
     .from("crm_pipelines")

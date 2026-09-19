@@ -55,6 +55,15 @@ export interface CardInput {
   /** Até três, e só as que existem: cota se preenche, e lastro inventado passa na constraint. */
   scoreFactors?: Array<{ pontos: number; frase: string; ancora?: { kind: string; id: string } }>;
   scoreReason?: string | null;
+  /**
+   * A EMPRESA do negócio, quando há.
+   *
+   * Ganha espaço no card por uma razão só: em venda B2B ela é a unidade, e o
+   * título ("Orçamento 300 pães") identifica menos que "Padaria do Zé". Em
+   * tenant B2C o campo é sempre nulo e o card fica EXATAMENTE como era — é o
+   * que impede isto de virar linha vazia, que o §5 proíbe.
+   */
+  empresa?: string | null;
   /** Uma tag canônica do pipeline vira ponto ao lado do título; o resto sai do card. */
   canonicalTag?: string | null;
   /** Todas as tags — fora do card, acessíveis no hover. */
@@ -80,6 +89,8 @@ export function buildCardInput(
     | "owner_user_id"
     | "owner_agent_id"
     | "owner_agent"
+    // O NOME resolvido pela rota do quadro, não uma coluna do lead.
+    | "empresa_nome"
     | "next_action"
     | "score"
   >,
@@ -126,6 +137,7 @@ export function buildCardInput(
     // "não tem" como estado normal, e um label em branco produziria o slot vazio
     // que o §5 proíbe (dado sem propósito ocupando linha).
     nextAction: lead.next_action ? { label: lead.next_action.label } : null,
+    empresa: lead.empresa_nome ?? null,
     canonicalTag: (opts.canonicalTags ?? []).find((t) => lead.tags.includes(t)) ?? null,
     tags: lead.tags,
   };

@@ -109,4 +109,13 @@ export interface Lead {
   created_at: string;
   updated_at: string;
   created_by_user_id: string | null;
+  /** De qual EMPRESA é este negócio (migration 0255). */
+  empresa_id?: string | null;
+  /**
+   * O NOME da empresa, resolvido pela rota do quadro — não é coluna.
+   *
+   * Vem junto porque o card mostra nome, e não id: uma segunda consulta por
+   * card faria o quadro disparar uma requisição por negócio aberto.
+   */
+  empresa_nome?: string | null;
 }

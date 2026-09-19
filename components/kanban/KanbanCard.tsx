@@ -241,6 +241,21 @@ export function KanbanCard({
             <KanbanCardActions lead={lead} pipelineId={pipelineId} />
           </div>
 
+          {/*
+            A EMPRESA, quando há.
+
+            Sem altura reservada, ao contrário do valor: este campo é sempre
+            nulo em tenant B2C, e reservar linha faria TODO card de TODO
+            cliente sem empresa carregar um vazio — que é o dado sem propósito
+            que o §5 proíbe. Onde ele existe, é a unidade da venda; onde não
+            existe, não deixa rastro.
+          */}
+          {card.empresa ? (
+            <p className="mt-0.5 truncate text-xs text-text-muted" title={card.empresa}>
+              {card.empresa}
+            </p>
+          ) : null}
+
           {/* ② valor — altura reservada mesmo sem valor, senão o card encolhe. */}
           <p
             className={cn(
