@@ -42,6 +42,11 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/usage", label: "Usage", icon: ChartBar },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/platform-admins", label: "Platform Admins", icon: ShieldCheck },
+  // Onde se emite a credencial que administra a instalacao inteira pelo MCP
+  // (item E6). Fica ao lado de Platform Admins de proposito: sao as duas
+  // portas por onde alguem passa a poder mexer em TODOS os clientes, e quem
+  // audita acesso de plataforma precisa achar as duas no mesmo lugar.
+  { href: "/admin/tokens-de-plataforma", label: "Tokens de plataforma", icon: ShieldCheck },
   // A porta da tela de marca. Ela NÃO entra em `lib/navigation/registry.ts`:
   // aquele registro descreve a navegação do tenant (`app/app/**`) e o teste de
   // completude que o vigia varre só aquela raiz. O admin de plataforma tem

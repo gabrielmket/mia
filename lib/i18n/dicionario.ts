@@ -8976,6 +8976,78 @@ export const DICIONARIO: Traducoes = {
   "(sem amostra gravada)": {
     es: "(sin muestra registrada)",
   },
+  "A validade precisa ser um número de dias, ou ficar em branco.": {
+    es: "La validez debe ser un número de días, o quedar en blanco.",
+  },
+  "Por que está revogando este token?": {
+    es: "¿Por qué está revocando este token?",
+  },
+  "Token revogado:": {
+    es: "Token revocado:",
+  },
+  "Copie agora — isto não aparece de novo": {
+    es: "Cópielo ahora — esto no aparece de nuevo",
+  },
+  "Só o resumo criptográfico fica gravado. Se perder, a saída é revogar este e emitir outro.": {
+    es: "Solo el resumen criptográfico queda guardado. Si lo pierde, la salida es revocar este y emitir otro.",
+  },
+  "Já copiei": {
+    es: "Ya lo copié",
+  },
+  "Emitir um token": {
+    es: "Emitir un token",
+  },
+  "ex: implantação de clientes": {
+    es: "ej: implantación de clientes",
+  },
+  "Validade em dias": {
+    es: "Validez en días",
+  },
+  "em branco = não expira": {
+    es: "en blanco = no expira",
+  },
+  "Por que este token existe": {
+    es: "Por qué existe este token",
+  },
+  "quem vai usar, e para quê": {
+    es: "quién lo va a usar, y para qué",
+  },
+  "Quem for auditar daqui a seis meses lê esta frase, não o nome.": {
+    es: "Quien audite dentro de seis meses lee esta frase, no el nombre.",
+  },
+  "O que este token pode ESCREVER": {
+    es: "Lo que este token puede ESCRIBIR",
+  },
+  "Nenhuma marcada = o token só lê, e ler é livre. Cada caixinha diz o que acontece se ele vazar.": {
+    es: "Ninguna marcada = el token solo lee, y leer es libre. Cada casilla dice qué pasa si se filtra.",
+  },
+  "Emitindo...": {
+    es: "Emitiendo...",
+  },
+  "Emitir token": {
+    es: "Emitir token",
+  },
+  "Tokens emitidos": {
+    es: "Tokens emitidos",
+  },
+  "Nenhum token emitido ainda.": {
+    es: "Ningún token emitido todavía.",
+  },
+  "só leitura": {
+    es: "solo lectura",
+  },
+  "escreve:": {
+    es: "escribe:",
+  },
+  "Motivo da revogação:": {
+    es: "Motivo de la revocación:",
+  },
+  "Tokens de plataforma": {
+    es: "Tokens de plataforma",
+  },
+  "Credenciais que administram a instalação inteira por conversa, pelo MCP. Um token de cliente erra dentro daquele cliente; um destes erra em todos — por isso cada escrita é liberada uma a uma, e um token sem nenhuma marcada só lê.": {
+    es: "Credenciales que administran la instalación entera por conversación, por el MCP. Un token de cliente se equivoca dentro de aquel cliente; uno de estos se equivoca en todos — por eso cada escritura se libera una a una, y un token sin ninguna marcada solo lee.",
+  },
 };
 
 /**

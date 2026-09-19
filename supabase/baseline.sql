@@ -24699,7 +24699,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20260920070000_0270_regua_nova_encerra_ao_responder', now())
+values (1, '20260920090000_0271_token_de_plataforma', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -24742,6 +24742,75 @@ comment on column public.schema_baseline.erros_amostra is
 alter table public.followup_flows
   alter column trigger_config
   set default '{"kind":"manual","cancel_on_reply":true}'::jsonb;
+-- ─── 0271 · o token que administra a PLATAFORMA (E6) ────────────
+--
+-- Tabela PROPRIA e nao um escopo em `api_tokens`: aquela tem
+-- `organization_id` NOT NULL, e e essa coluna que garante que todo token
+-- pertence a UM cliente — afrouxa-la para caber um token de plataforma
+-- tiraria a garantia de TODOS.
+--
+-- `operacoes` e lista BRANCA e comeca VAZIA: leitura e livre, escrita e
+-- nomeada uma a uma. Nao existe coluna "pode tudo", e a ausencia dela e a
+-- feature — ela seria o que todo mundo marca no primeiro token.
+--
+-- Vigiado por `tests/unit/mcp-de-plataforma-escopo.test.ts`.
+create table if not exists public.platform_api_tokens (
+  id uuid primary key default gen_random_uuid(),
+  -- Como quem criou reconhece o token na lista. Sem ele, revogar vira loteria.
+  name text not null,
+  -- Os 8 primeiros caracteres, para a tela poder mostrar QUAL token sem
+  -- guardar nada que sirva para autenticar.
+  prefix text not null,
+  -- SHA-256 do plaintext, como `api_tokens`. O plaintext existe uma vez, na
+  -- resposta da criação, e nunca é gravado.
+  token_hash bytea not null,
+
+  -- ⚠️ A LISTA BRANCA. Vazia = só leitura, e é o default de propósito: o token
+  -- criado sem pensar não escreve nada.
+  operacoes text[] not null default '{}'::text[],
+
+  created_by uuid not null references auth.users(id) on delete restrict,
+  created_at timestamptz not null default now(),
+  -- Motivo por escrito, como em `platform_admins.reason`: quem concede acesso
+  -- de plataforma explica por quê, e quem audita seis meses depois lê.
+  reason text not null,
+
+  last_used_at timestamptz,
+  last_used_ip inet,
+  expires_at timestamptz,
+
+  revoked_at timestamptz,
+  revoked_by uuid references auth.users(id) on delete set null,
+  revoke_reason text,
+
+  constraint platform_api_tokens_nome_nao_vazio check (length(btrim(name)) > 0),
+  constraint platform_api_tokens_motivo_nao_vazio check (length(btrim(reason)) > 0),
+  -- Revogar é um ato com autor e motivo: os três andam juntos ou nenhum existe.
+  constraint platform_api_tokens_revogacao_completa check (
+    (revoked_at is null and revoked_by is null and revoke_reason is null)
+    or (revoked_at is not null and revoked_by is not null)
+  )
+);
+
+comment on table public.platform_api_tokens is
+  'Token de administracao da PLATAFORMA (MCP admin, item E6). Tabela propria e nao um escopo em api_tokens porque aquela tem organization_id NOT NULL — e e essa coluna que garante que todo token pertence a UM cliente. `operacoes` e lista branca e comeca VAZIA: leitura e livre, escrita e nomeada uma a uma. Nao existe coluna "pode tudo", e a ausencia dela e a feature.';
+
+comment on column public.platform_api_tokens.operacoes is
+  'Lista branca das escritas permitidas (ex.: criar_cliente, liberar_modulo, lancar_credito). VAZIA = so leitura. O catalogo de operacoes vive no codigo (lib/mcp-plataforma/), nao aqui: o que uma operacao faz muda junto com o codigo que a executa, e uma tabela de catalogo envelheceria em silencio.';
+
+-- A busca do token é sempre por hash exato, e é o caminho quente de toda
+-- chamada MCP.
+create unique index if not exists uniq_platform_api_tokens_hash
+  on public.platform_api_tokens (token_hash);
+
+-- RLS ligada e ZERO policies: esta tabela é server-side only, lida e escrita
+-- pelo `service_role` (que é `bypassrls`). Uma policy aqui seria uma porta a
+-- mais para uma tabela cujo conteúdo autentica quem administra tudo.
+alter table public.platform_api_tokens enable row level security;
+revoke all on table public.platform_api_tokens from anon, authenticated;
+grant select, insert, update on table public.platform_api_tokens to service_role;
+
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

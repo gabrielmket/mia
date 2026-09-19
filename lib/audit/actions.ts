@@ -363,6 +363,18 @@ export const AUDIT_ACTIONS = [
   // que se faz depois de uma notificação da ANPD, e ela precisa de resposta
   // sem depender de adivinhar quais campos um `fields_changed` genérico trazia.
   "platform_branding.responsavel_legal_updated",
+  // O MCP de PLATAFORMA (item E6). DUAS linhas, e a separacao e o ponto:
+  // `executado` conta o que foi feito em nome de quem; `recusado` conta o que
+  // o escopo barrou. Sem a segunda, um token pedindo a mesma escrita todo dia
+  // — porque quem o configurou acha que ela deveria funcionar — nao aparece em
+  // lugar nenhum, e a conversa sobre "por que isso nao funciona" comeca sem
+  // dado. A recusa e informacao sobre o DESENHO, nao so sobre a tentativa.
+  "plataforma.mcp_executado",
+  "plataforma.mcp_recusado",
+  // Token de plataforma criado e revogado. Nao e `api_token.*`: aquele nasce
+  // dentro de um cliente e erra dentro dele; este administra todos.
+  "plataforma.token_criado",
+  "plataforma.token_revogado",
   "platform_google_oauth.updated",
   // A conexão da ORGANIZAÇÃO com a conta de anúncios (migration 0213).
   // Auditável porque o token gravado aqui escreve conversões na conta de
