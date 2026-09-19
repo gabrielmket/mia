@@ -9048,6 +9048,48 @@ export const DICIONARIO: Traducoes = {
   "Credenciais que administram a instalação inteira por conversa, pelo MCP. Um token de cliente erra dentro daquele cliente; um destes erra em todos — por isso cada escrita é liberada uma a uma, e um token sem nenhuma marcada só lê.": {
     es: "Credenciales que administran la instalación entera por conversación, por el MCP. Un token de cliente se equivoca dentro de aquel cliente; uno de estos se equivoca en todos — por eso cada escritura se libera una a una, y un token sin ninguna marcada solo lee.",
   },
+  "O catálogo não tem nenhum modelo que saiba usar ferramentas. Enquanto estiver assim, não dá para fixar modelo — e o automático escolhe da mesma lista vazia.": {
+    es: "El catálogo no tiene ningún modelo que sepa usar herramientas. Mientras siga así, no se puede fijar un modelo — y el automático elige de esa misma lista vacía.",
+  },
+  "Operadora de IA": {
+    es: "Proveedor de IA",
+  },
+  "Todas as operadoras": {
+    es: "Todos los proveedores",
+  },
+  "sem chave nesta instalação": {
+    es: "sin clave en esta instalación",
+  },
+  "Filtra a lista abaixo. Não é a escolha — quem decide é o modelo.": {
+    es: "Filtra la lista de abajo. No es la elección — quien decide es el modelo.",
+  },
+  "Buscar modelo": {
+    es: "Buscar modelo",
+  },
+  "nome ou identificador (ex: sonnet, gpt-4.1)": {
+    es: "nombre o identificador (ej: sonnet, gpt-4.1)",
+  },
+  "modelos no catálogo": {
+    es: "modelos en el catálogo",
+  },
+  "modelos": {
+    es: "modelos",
+  },
+  "fora do catálogo": {
+    es: "fuera del catálogo",
+  },
+  "fora do filtro": {
+    es: "fuera del filtro",
+  },
+  "Nenhum modelo passa por esse filtro. Continuam na lista o Automático e o que está valendo agora.": {
+    es: "Ningún modelo pasa por ese filtro. Siguen en la lista el Automático y el que está vigente ahora.",
+  },
+  "O modelo fixado saiu do catálogo (obsoleto, ou deixou de usar ferramentas). Enquanto ele estiver aqui, NENHUM cliente novo consegue publicar agente. Escolha outro e salve.": {
+    es: "El modelo fijado salió del catálogo (obsoleto, o dejó de usar herramientas). Mientras siga aquí, NINGÚN cliente nuevo logra publicar agente. Elija otro y guarde.",
+  },
+  "Esta instalação não tem chave desta operadora. Cliente novo não tem credencial própria, então ele não vai conseguir publicar agente com este modelo — cadastre a chave antes de salvar.": {
+    es: "Esta instalación no tiene clave de este proveedor. El cliente nuevo no tiene credencial propia, así que no va a lograr publicar agente con este modelo — registre la clave antes de guardar.",
+  },
 };
 
 /**

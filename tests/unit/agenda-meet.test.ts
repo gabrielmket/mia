@@ -15,9 +15,15 @@ import { localProjection } from "@/lib/agenda/google/sync-model";
  * módulos na primeira vez. Prender relógio não resolveria — só um teto que não
  * cronometre a lentidão da máquina como se fosse asserção.
  *
+ * ⚠️ Os DOIS tetos, e o segundo foi o que faltou na primeira tentativa: o
+ * custo pesado costuma estar no `beforeEach` (é ele que faz o `await
+ * import()`), e `testTimeout` não alcança hook — o vitest cobra `hookTimeout`
+ * à parte, com um padrão PRÓPRIO de 10s. O sintoma era "Hook timed out in
+ * 10000ms" num arquivo que já declarava 45s para os testes.
+ *
  * ⚠️ Se este arquivo passar de 45s, o problema é o import e não este número.
  */
-vi.setConfig({ testTimeout: 45_000 });
+vi.setConfig({ testTimeout: 45_000, hookTimeout: 45_000 });
 
 describe("recibo da conferência", () => {
   const req = "6222ae88-2a55-4ae4-908f-7d30c50a845e";

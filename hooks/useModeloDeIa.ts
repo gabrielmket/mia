@@ -21,13 +21,28 @@ export interface EscolhaDeModelo {
   updated_at: string;
 }
 
+/**
+ * Quais operadoras a INSTALAÇÃO sabe executar sozinha.
+ *
+ * `false` não é "não dá para usar": uma organização pode ter credencial
+ * própria validada. É "cliente NOVO não publica com esta operadora" — e é
+ * disso que esta tela trata, porque ela vale para todo cliente novo.
+ */
+export type ChaveDaInstalacao = Record<string, boolean>;
+
 const CHAVE = ["admin", "modelo-de-ia"];
 
 export function useModeloDeIa() {
   return useQuery({
     queryKey: CHAVE,
     queryFn: async () =>
-      apiClient.get<{ data: { escolha: EscolhaDeModelo | null; modelos: ModeloDoCatalogo[] } }>(
+      apiClient.get<{
+        data: {
+          escolha: EscolhaDeModelo | null;
+          chave_da_instalacao: Record<string, boolean>;
+          modelos: ModeloDoCatalogo[];
+        };
+      }>(
         "/api/v1/admin/modelo-de-ia",
       ),
     select: (r) => r.data,
