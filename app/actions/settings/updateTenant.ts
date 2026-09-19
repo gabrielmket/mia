@@ -67,6 +67,9 @@ export async function updateTenant(input: TenantInput): Promise<UpdateTenantResu
   const nextSettings = {
     ...currentSettings,
     lost_reasons_extra: parsed.data.lost_reasons_extra,
+    // Item C2. Decide se a entidade empresa aparece — aba, campo no cadastro e
+    // a capacidade que faz a IA perguntar de qual empresa o cliente e.
+    modo_de_venda: parsed.data.modo_de_venda,
   };
 
   const { error } = await supabase

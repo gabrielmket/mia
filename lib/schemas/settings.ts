@@ -109,6 +109,15 @@ export const tenantSchema = z.object({
     .optional()
     .or(z.literal("").transform(() => null)),
   lost_reasons_extra: z.array(z.string().min(1).max(80)).max(50).default([]),
+  /**
+   * B2B ou B2C (item C2). Mora em `organizations.settings`, como
+   * `lost_reasons_extra` logo acima, e pelo mesmo motivo: e preferencia de como
+   * a organizacao usa o produto, nao fato do dominio.
+   *
+   * `default("b2b")` e o que nao tira nada de ninguem — ver
+   * `lib/empresas/modo-de-venda.ts`.
+   */
+  modo_de_venda: z.enum(["b2b", "b2c"]).default("b2b"),
 });
 export type TenantInput = z.infer<typeof tenantSchema>;
 

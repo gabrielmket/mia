@@ -187,6 +187,41 @@ export function TenantForm({ initial }: Props) {
           </p>
         </div>
 
+        {/*
+          Item C2 — B2B ou B2C.
+
+          É uma escolha de CADASTRO e mora aqui, ao lado da razão social, e não
+          numa tela de aparência: o que ela decide não é estética, é se o
+          produto vai pedir dado de empresa a quem vende para pessoa. E o item
+          mais caro não é a aba nem o campo — é a capacidade que faz a IA
+          perguntar "de qual empresa você é?" a alguém que quer marcar uma aula
+          experimental.
+
+          Os dois textos dizem o EFEITO, não o rótulo: "B2B" e "B2C" não
+          explicam a ninguém o que some da tela.
+        */}
+        <div className="space-y-2">
+          <Label htmlFor="modo_de_venda">{t("Para quem esta empresa vende")}</Label>
+          <select
+            id="modo_de_venda"
+            className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
+            value={form.modo_de_venda}
+            onChange={(e) => set("modo_de_venda", e.target.value as TenantInput["modo_de_venda"])}
+          >
+            <option value="b2b">{t("Para outras empresas")}</option>
+            <option value="b2c">{t("Direto para pessoas")}</option>
+          </select>
+          <p className="text-xs text-muted-foreground">
+            {form.modo_de_venda === "b2c"
+              ? t(
+                  "A aba Empresas some do menu, o cadastro deixa de pedir empresa, cargo e setor, e a IA não oferece mais a capacidade de anotar a empresa do cliente. Os dados já cadastrados continuam no banco.",
+                )
+              : t(
+                  "O sistema agrupa contatos e negócios por empresa: a aba Empresas fica no menu, o cadastro pede empresa, cargo e setor, e a IA pode anotar de qual empresa o cliente é.",
+                )}
+          </p>
+        </div>
+
         <div className="flex sm:justify-end">
           <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
             {isPending ? t("Salvando…") : t("Salvar")}

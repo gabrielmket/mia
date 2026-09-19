@@ -1,4 +1,5 @@
 import type { InterfaceSettings } from "@/lib/navigation/interface";
+import type { ModoDeVenda } from "@/lib/empresas/modo-de-venda";
 import type { Idioma } from "@/lib/i18n/idiomas";
 
 /**
@@ -157,6 +158,15 @@ export interface ActiveOrg {
    * tiraria a tela de quem pagou toda vez que o campo não fosse carregado.
    */
   modulos?: string[];
+  /**
+   * B2B ou B2C (item C2). Preenchido no layout de `/app`, de
+   * `organizations.settings.modo_de_venda`.
+   *
+   * ⚠️ Insumo de INTERFACE, como `modulos` — nunca de autorização. Ausente
+   * significa "mostra tudo": esconder por não saber tiraria a tela de quem a
+   * usa, e "sumiu" é a mudança que ninguém reporta.
+   */
+  modo_de_venda?: ModoDeVenda;
   /**
    * O que ESTA organização definiu para si — CAMPO A CAMPO, e só o que ela
    * mesma definiu.

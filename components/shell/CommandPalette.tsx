@@ -61,11 +61,13 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
         activeOrg?.role ?? null,
         activeOrg?.interface_settings,
         activeOrg?.modulos,
+        activeOrg?.modo_de_venda,
       ),
     [
       user.is_platform_admin,
       user.support,
       activeOrg?.role,
+      activeOrg?.modo_de_venda,
       activeOrg?.interface_settings,
       activeOrg?.modulos,
     ],

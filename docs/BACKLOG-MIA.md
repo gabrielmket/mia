@@ -127,7 +127,7 @@ Dois casos merecem nota própria:
 | # | o que | tamanho |
 |---|---|---|
 | C1 | ~~Entidade **empresa** + vínculo do contato~~ · **falta cargo e setor** | pequeno (o que sobrou) |
-| C2 | **Modo B2B/B2C por organização** — cliente B2C nunca vê que empresa existe | incluído em C1 |
+| ~~C2~~ | ~~**Modo B2B/B2C por organização**~~ | — | feito na `.44`. Em **Configurações › Organização › Para quem esta empresa vende**. Em B2C somem: a aba Empresas do menu e do hub, os campos empresa/cargo/setor do cadastro de contato, o campo empresa do negócio novo, e a capacidade `crm_registrar_empresa_do_contato` deixa de ser OFERECIDA ao agente. Não revoga o que já está ligado nem apaga dado — esconde a porta, não tranca. Padrão `b2b`: é o que não tira nada de ninguém, então cada cliente B2C precisa ser marcado. |
 | ~~C3~~ | ~~Adaptar **cartão do funil** e **painel do atendimento**~~ | — | a empresa aparece no card (sem reservar linha para quem não a usa) e no painel do inbox, com o cargo ao lado |
 | ~~C4~~ | ~~**Fusão de empresas duplicadas**~~ | — | `fn_mesclar_empresas` (0263): FKs de `pg_constraint`, vencedora herda só o que não tem, tags somam, perdedora vira lápide |
 | ~~C5~~ | ~~**A Rafa perguntar o nome da empresa**~~ | — | capacidade `crm_registrar_empresa_do_contato`: a IA anota, casando grafias para não criar a quinta ficha do mesmo cliente |

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { NavHub } from "@/components/shell/NavHub";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { modulosDaOrganizacao } from "@/lib/modulos/liberacao";
+import { modoDeVendaDaOrganizacao } from "@/lib/empresas/modo-de-venda";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
@@ -35,6 +36,11 @@ export default async function AnaliseHubPage() {
   const modulos = activeOrg
     ? [...(await modulosDaOrganizacao(await createClient(), activeOrg.orgId))]
     : undefined;
+  // O mesmo critério do menu (item C2): quem vende para pessoa não vê a
+  // entidade empresa nem no inventário.
+  const modoDeVenda = activeOrg
+    ? await modoDeVendaDaOrganizacao(await createClient(), activeOrg.orgId)
+    : undefined;
   const idioma = user.idioma;
 
   return (
@@ -44,6 +50,7 @@ export default async function AnaliseHubPage() {
       role={activeOrg?.role ?? null}
       interfaceSettings={activeOrg?.interface_settings}
       modulos={modulos}
+      modoDeVenda={modoDeVenda}
       title={traduzir("Análise", idioma)}
       subtitle={traduzir(
         "Como o negócio foi no período — e o histórico para quando alguém perguntar por quê.",

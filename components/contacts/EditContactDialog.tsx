@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SeletorDeEmpresa } from "@/components/empresas/SeletorDeEmpresa";
+import { useMostraEmpresas } from "@/hooks/useMostraEmpresas";
 import { contactPatchSchema, type ContactPatch } from "@/lib/schemas/contacts";
 import { useUpdateContact } from "@/hooks/contacts/useUpdateContact";
 import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
@@ -43,6 +44,7 @@ interface Props {
 
 export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs = [] }: Props) {
   const t = useT();
+  const mostraEmpresa = useMostraEmpresas();
   const update = useUpdateContact(contact.id);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -134,24 +136,33 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
             <Label htmlFor="ec-phone">{t("Telefone (E.164)")}</Label>
             <Input id="ec-phone" {...form.register("phone_number")} />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="ec-empresa">{t("Empresa")}</Label>
-            <SeletorDeEmpresa
-              id="ec-empresa"
-              valor={form.watch("empresa_id") ?? null}
-              aoMudar={(v) => form.setValue("empresa_id", v, { shouldDirty: true })}
-            />
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+          {/* Item C2: quem vende para PESSOA nao vê empresa, cargo nem setor.
+              Os tres saem juntos porque sao a mesma historia — a migration 0262
+              chamou cargo e setor de "as duas pontas que sobraram da entidade
+              empresa". Numa academia, "Diretor Financeiro" nao e informacao
+              sobre a aluna; e um campo em branco em todo cadastro. */}
+          {mostraEmpresa ? (
             <div className="space-y-2">
-              <Label htmlFor="ec-cargo">{t("Cargo")}</Label>
-              <Input id="ec-cargo" {...form.register("cargo")} />
+              <Label htmlFor="ec-empresa">{t("Empresa")}</Label>
+              <SeletorDeEmpresa
+                id="ec-empresa"
+                valor={form.watch("empresa_id") ?? null}
+                aoMudar={(v) => form.setValue("empresa_id", v, { shouldDirty: true })}
+              />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="ec-setor">{t("Setor")}</Label>
-              <Input id="ec-setor" {...form.register("setor")} />
+          ) : null}
+          {mostraEmpresa ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="ec-cargo">{t("Cargo")}</Label>
+                <Input id="ec-cargo" {...form.register("cargo")} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ec-setor">{t("Setor")}</Label>
+                <Input id="ec-setor" {...form.register("setor")} />
+              </div>
             </div>
-          </div>
+          ) : null}
           <div className="space-y-2">
             <Label htmlFor="ec-tags">Tags</Label>
             <Input id="ec-tags" {...form.register("tagsRaw")} />

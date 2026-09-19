@@ -6,11 +6,14 @@ import type { Role } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { IDIOMA_PADRAO, type Idioma } from "@/lib/i18n/idiomas";
 import { hubSections, type NavGroupId } from "@/lib/navigation/registry";
+import type { ModoDeVenda } from "@/lib/empresas/modo-de-venda";
 
 interface NavHubProps {
   interfaceSettings?: InterfaceSettings;
   /** O que a organização contratou — ver lib/modulos/catalogo.ts. */
   modulos?: string[];
+  /** B2B ou B2C — ver lib/empresas/modo-de-venda.ts (item C2). */
+  modoDeVenda?: ModoDeVenda;
   group: NavGroupId;
   isPlatformAdmin: boolean;
   role: Role | null;
@@ -59,9 +62,17 @@ export function NavHub({
   subtitle,
   interfaceSettings,
   modulos,
+  modoDeVenda,
   locale = IDIOMA_PADRAO,
 }: NavHubProps) {
-  const secoes = hubSections(group, isPlatformAdmin, role, interfaceSettings, modulos);
+  const secoes = hubSections(
+    group,
+    isPlatformAdmin,
+    role,
+    interfaceSettings,
+    modulos,
+    modoDeVenda,
+  );
 
   return (
     <div className="flex h-full flex-col gap-8 p-6">

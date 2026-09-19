@@ -8922,6 +8922,21 @@ export const DICIONARIO: Traducoes = {
   "Salvar responsável legal": {
     es: "Guardar responsable legal",
   },
+  "Para quem esta empresa vende": {
+    es: "A quién le vende esta empresa",
+  },
+  "Para outras empresas": {
+    es: "A otras empresas",
+  },
+  "Direto para pessoas": {
+    es: "Directo a personas",
+  },
+  "A aba Empresas some do menu, o cadastro deixa de pedir empresa, cargo e setor, e a IA não oferece mais a capacidade de anotar a empresa do cliente. Os dados já cadastrados continuam no banco.": {
+    es: "La pestaña Empresas desaparece del menú, el registro deja de pedir empresa, cargo y sector, y la IA ya no ofrece la capacidad de anotar la empresa del cliente. Los datos ya registrados siguen en la base.",
+  },
+  "O sistema agrupa contatos e negócios por empresa: a aba Empresas fica no menu, o cadastro pede empresa, cargo e setor, e a IA pode anotar de qual empresa o cliente é.": {
+    es: "El sistema agrupa contactos y negocios por empresa: la pestaña Empresas queda en el menú, el registro pide empresa, cargo y sector, y la IA puede anotar de qué empresa es el cliente.",
+  },
 };
 
 /**

@@ -6,6 +6,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { moedaServidaOu } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import { ZonaDePerigoDaOrganizacao } from "./_danger-zone";
+import { lerModoDeVenda } from "@/lib/empresas/modo-de-venda";
 import { TenantForm } from "./_form";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +71,7 @@ export default async function TenantSettingsPage() {
             dpo_email: row.dpo_email,
             privacy_policy_url: row.privacy_policy_url,
             lost_reasons_extra: lostReasonsExtra,
+            modo_de_venda: lerModoDeVenda(row.settings),
           }}
         />
       )}

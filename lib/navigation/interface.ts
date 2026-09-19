@@ -3,6 +3,11 @@ import { z } from "zod";
 import { ROLE_RANK, type Role } from "@/lib/auth/types";
 import { NAV_CATALOG, type NavMetadata, type NavDestinationId } from "./catalogo";
 import { moduloDaTela } from "@/lib/modulos/catalogo";
+import {
+  mostraEmpresas,
+  TELA_DE_EMPRESAS,
+  type ModoDeVenda,
+} from "@/lib/empresas/modo-de-venda";
 
 const ids = NAV_CATALOG.map((d) => d.href);
 export const interfaceSettingsSchema = z
@@ -84,13 +89,30 @@ export function destinosDaInterface(
    * ter carregado uma lista seria trocar um erro visível por um invisível.
    */
   modulos?: string[],
+  /**
+   * B2B ou B2C (item C2). `undefined` = não se sabe, e aí NADA some — mesma
+   * regra dos módulos, pelo mesmo motivo: esconder por não ter carregado o
+   * valor tiraria uma tela em uso, e "sumiu" é a mudança que o usuário não
+   * reporta, ele só deixa de achar.
+   *
+   * ⚠️ Insumo de MENU, nunca de autorização: as rotas de `/api/v1/empresas`
+   * continuam atendendo uma organização B2C que as chame. O modo esconde a
+   * porta, não tranca — tratar preferência de tela como permissão é o que
+   * transforma "não uso isso" em "perdi meus dados".
+   */
+  modoDeVenda?: ModoDeVenda,
 ): NavMetadata[] {
   const { settings } = lerInterface(raw);
   const allowed = permitidos(platform, role);
   const chosen =
     settings.destinos ?? (settings.preset === "simplificada" ? SIMPLIFICADA : undefined);
   const contratados = modulos ? new Set(modulos) : null;
+  const semEmpresas = modoDeVenda !== undefined && !mostraEmpresas(modoDeVenda);
   return allowed.filter((d) => {
+    // Admin de plataforma continua vendo: é ele quem configura o modo, e
+    // precisa achar a tela para conferir o que o cliente vê — a mesma regra
+    // que os módulos já aplicam logo abaixo.
+    if (semEmpresas && d.href === TELA_DE_EMPRESAS && !platform) return false;
     if (contratados) {
       const exigido = moduloDaTela(d.href);
       // Admin de plataforma enxerga tudo: é ele quem libera, e precisa achar a

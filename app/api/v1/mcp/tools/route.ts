@@ -22,6 +22,12 @@ import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { allTools } from "@/lib/mcp/tools";
 import { TOOL_CATALOG } from "@/lib/mcp/tools/catalog";
 import { juntarCatalogoComHandlers } from "@/lib/mcp/tools/catalogo-servido";
+import {
+  CAPACIDADES_DE_EMPRESA,
+  modoDeVendaDaOrganizacao,
+  mostraEmpresas,
+} from "@/lib/empresas/modo-de-venda";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -46,8 +52,20 @@ export async function GET(_req: NextRequest): Promise<Response> {
     );
   }
 
+  // Item C2: numa organização que vende para PESSOA, a capacidade de anotar a
+  // empresa do cliente não é oferecida. É aqui e não na tela porque esta rota é
+  // a única fonte do seletor — filtrar no componente deixaria o valor padrão, o
+  // pacote e qualquer tela futura servindo-se da lista completa.
+  //
+  // Filtra o que se OFERECE, não o que existe: agente que já tenha a capacidade
+  // ligada continua com ela. Ver `CAPACIDADES_DE_EMPRESA`.
+  const modo = await modoDeVendaDaOrganizacao(createAdminClient(), activeOrg.orgId);
+  const oferecidas = mostraEmpresas(modo)
+    ? servidas
+    : servidas.filter((c) => !CAPACIDADES_DE_EMPRESA.includes(c.id));
+
   const schemaPorNome = new Map(allTools.map((t) => [t.name, t.inputSchema]));
-  const tools = servidas.map((capacidade) => ({
+  const tools = oferecidas.map((capacidade) => ({
     ...capacidade,
     input_schema: z.toJSONSchema(z.object(schemaPorNome.get(capacidade.id) ?? {}), {
       target: "openapi-3.0",

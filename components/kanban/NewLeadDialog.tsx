@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SeletorDeEmpresa } from "@/components/empresas/SeletorDeEmpresa";
+import { useMostraEmpresas } from "@/hooks/useMostraEmpresas";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -64,6 +65,7 @@ export function NewLeadDialog({
   onCreated,
 }: Props) {
   const t = useT();
+  const mostraEmpresa = useMostraEmpresas();
   const create = useCreateLead(pipelineId);
   const initialStage = useMemo(() => defaultStageId(stages), [stages]);
 
@@ -227,10 +229,13 @@ export function NewLeadDialog({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="lead-empresa">{t("Empresa")}</Label>
-            <SeletorDeEmpresa id="lead-empresa" valor={empresaId} aoMudar={setEmpresaId} />
-          </div>
+          {/* Item C2 — ver o comentario em EditContactDialog. */}
+          {mostraEmpresa ? (
+            <div className="space-y-2">
+              <Label htmlFor="lead-empresa">{t("Empresa")}</Label>
+              <SeletorDeEmpresa id="lead-empresa" valor={empresaId} aoMudar={setEmpresaId} />
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label htmlFor="tagsRaw">{t("Tags (separadas por vírgula)")}</Label>

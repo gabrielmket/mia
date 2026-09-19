@@ -11,6 +11,7 @@ import { cssDaMarca, ESCOPO_DA_ORGANIZACAO } from "@/lib/branding/css";
 import { marcaDaInstalacao } from "@/lib/branding/instalacao";
 import { resolverMarcaDaOrganizacao } from "@/lib/branding/organizacao";
 import { modulosDaOrganizacao } from "@/lib/modulos/liberacao";
+import { lerModoDeVenda } from "@/lib/empresas/modo-de-venda";
 import { env } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -73,10 +74,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // consulta por tela transformaria a barra lateral em N idas ao banco.
     // ⚠️ Insumo de MENU. Quem recusa de verdade é a rota (lib/modulos/liberacao.ts).
     const modulos = [...(await modulosDaOrganizacao(admin, activeOrg.orgId))];
+    // B2B ou B2C (item C2). Sai do MESMO `settings` que o `visibility_mode`
+    // acima — nenhuma ida a mais ao banco por uma preferência de menu.
+    const modoDeVenda = lerModoDeVenda(orgRow?.settings);
     activeOrg = {
       ...activeOrg,
       visibility_mode: mode ?? DEFAULT_VISIBILITY_MODE,
       modulos,
+      modo_de_venda: modoDeVenda,
     };
 
     // `marcaDaInstalacao()` é memoizada por TTL no PROCESSO (`lib/branding/
