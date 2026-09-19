@@ -417,6 +417,16 @@ export function CRMSidePanel({ conversation }: Props) {
 
 
   const [leads, setLeads] = useState<LeadRow[] | null>(null);
+  /**
+   * A empresa do contato. Estado próprio e não derivado de `leads`: ela vem do
+   * mesmo resumo, mas responde outra pergunta — com QUEM estou falando, e não
+   * quais negócios existem.
+   */
+  const [empresa, setEmpresa] = useState<{
+    id: string;
+    nome: string;
+    cargo: string | null;
+  } | null>(null);
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
   const [activities, setActivities] = useState<ActivityRow[] | null>(null);
   const [demandas, setDemandas] = useState<DemandaRow[] | null>(null);
@@ -471,11 +481,14 @@ export function CRMSidePanel({ conversation }: Props) {
             demandas: DemandaRow[];
             fatos?: Array<{ id: string; headline: string; body: string }>;
             historico?: Array<{ id: string; desfecho: string; fechada_em: string }>;
+            /** `null` em tenant que vende para pessoa — a seção some. */
+            empresa?: { id: string; nome: string; cargo: string | null } | null;
           };
         }>(`/api/v1/contacts/${contactId}/crm-summary`);
         if (cancelled) return;
         setSummaryContactId(contactId);
         setLeads(r.data.leads);
+        setEmpresa(r.data.empresa ?? null);
         setOrders(r.data.orders);
         setActivities(r.data.activities);
         // `?? []` e não `?? null`: aqui a leitura DEU CERTO. Cair em `null`
@@ -555,6 +568,20 @@ export function CRMSidePanel({ conversation }: Props) {
           <div className="font-medium">{displayName}</div>
           {contact?.phone_number && (
             <div className="text-xs text-muted-foreground">{phoneForDisplay(contact.phone_number)}</div>
+          )}
+          {/*
+            A EMPRESA, e o cargo quando houver.
+
+            Quem atende precisa saber que fala com a Padaria do Zé — e com QUEM
+            lá dentro — antes de escrever a primeira frase. Sem linha reservada:
+            em tenant B2C isto é sempre nulo, e reservar espaço faria toda
+            conversa de toda clínica carregar um vazio.
+          */}
+          {empresa && (
+            <div className="text-xs text-muted-foreground">
+              {empresa.nome}
+              {empresa.cargo ? ` · ${empresa.cargo}` : ""}
+            </div>
           )}
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1">

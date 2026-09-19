@@ -82,7 +82,7 @@ export async function GET(
   }
 
   const { data: contactScope, error: scopeError } = await supabase.from("contacts")
-    .select("organization_id").eq("id", contactId).maybeSingle();
+    .select("organization_id, empresa_id, cargo").eq("id", contactId).maybeSingle();
   if (scopeError) return fail("internal_error", scopeError.message, 500, { requestId });
   if (!contactScope) return fail("not_found", "Contato não encontrado.", 404, { requestId });
   const [leads, orders, activities, demandas, fatos, historico] = await Promise.all([
@@ -140,6 +140,28 @@ export async function GET(
   }>;
   const nomes = await nomesDosAtendentes(linhas.map((a) => a.performed_by_user_id ?? null));
 
+  /**
+   * Uma consulta a mais SÓ quando o contato tem empresa. O tenant que vende
+   * para pessoa não paga por uma feature que não usa — e é a maioria.
+   */
+  const contatoRow = contactScope as { empresa_id?: string | null; cargo?: string | null };
+  let empresa: { id: string; nome: string; cargo: string | null } | null = null;
+  if (contatoRow.empresa_id) {
+    const { data: e } = await supabase
+      .from("crm_empresas")
+      .select("id, nome")
+      .eq("organization_id", contactScope.organization_id)
+      .eq("id", contatoRow.empresa_id)
+      .maybeSingle();
+    if (e) {
+      empresa = {
+        id: (e as { id: string }).id,
+        nome: (e as { nome: string }).nome,
+        cargo: contatoRow.cargo ?? null,
+      };
+    }
+  }
+
   return ok(
     {
       leads: (leads.data ?? []).map((row) => comCamposDoFunil(row as Record<string, unknown>)),
@@ -150,6 +172,15 @@ export async function GET(
           ? (nomes.get(a.performed_by_user_id) ?? null)
           : null,
       })),
+      /**
+       * A EMPRESA de quem está do outro lado.
+       *
+       * Quem atende precisa saber que fala com a Padaria do Zé antes de
+       * responder — e hoje essa informação existia na ficha e não chegava ao
+       * painel, que é onde a conversa acontece. `null` quando não há: em
+       * tenant B2C é sempre nulo, e a seção some inteira.
+       */
+      empresa,
       demandas: demandas.data ?? [],
       fatos: fatos.data ?? [], historico: historico.data ?? [],
     },
