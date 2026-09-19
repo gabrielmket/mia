@@ -44,7 +44,7 @@
  * Três lugares, uma verdade, conferidos por máquina — que é o oposto do modo
  * como este repositório acumulou as listas que esta semana passou consertando.
  */
-export const CARIMBO_DO_SCHEMA = "20260920030000_0268_carimbo_do_schema";
+export const CARIMBO_DO_SCHEMA = "20260920050000_0269_o_carimbo_conta_os_erros";
 
 /** Onde o baseline grava, e de onde a saúde lê. Singleton, como a marca. */
 export const TABELA_DO_CARIMBO = "schema_baseline";
@@ -55,18 +55,37 @@ export interface CarimboLido {
   /** O que esta imagem esperava encontrar. */
   esperado: string;
   /**
-   * `true` só quando os dois batem. Ausência de carimbo é `false`, nunca
-   * `true`: um banco que nunca foi carimbado é exatamente o caso em que o
-   * baseline pode não ter passado, e responder "em dia" ali desligaria a
-   * pergunta em vez de deixá-la aberta.
+   * Erros NÃO benignos ao aplicar o baseline, contados pelo bootstrap
+   * (migration 0269). `0` = passou limpo.
+   */
+  erros: number;
+  /** As primeiras linhas do erro. NUNCA sai na resposta pública. */
+  amostra: string | null;
+  /**
+   * `true` só quando o carimbo bate E o baseline passou sem erro.
+   *
+   * As DUAS metades importam, e a segunda foi o conserto da 0269: num banco
+   * existente o `psql` roda sem `ON_ERROR_STOP`, então um comando que falha
+   * não impede o arquivo de chegar ao fim — e de carimbar. Só o carimbo provava
+   * "o baseline foi lido inteiro", nunca "cada comando passou".
+   *
+   * Ausência de carimbo é `false`, nunca `true`: um banco que nunca foi
+   * carimbado é exatamente o caso em que o baseline pode não ter passado, e
+   * responder "em dia" ali desligaria a pergunta em vez de deixá-la aberta.
    */
   em_dia: boolean;
 }
 
-export function compararCarimbo(noBanco: string | null): CarimboLido {
+export function compararCarimbo(
+  noBanco: string | null,
+  erros = 0,
+  amostra: string | null = null,
+): CarimboLido {
   return {
     no_banco: noBanco,
     esperado: CARIMBO_DO_SCHEMA,
-    em_dia: noBanco === CARIMBO_DO_SCHEMA,
+    erros,
+    amostra,
+    em_dia: noBanco === CARIMBO_DO_SCHEMA && erros === 0,
   };
 }

@@ -123,3 +123,65 @@ describe("o carimbo do schema", () => {
     expect(compararCarimbo(CARIMBO_DO_SCHEMA).em_dia).toBe(true);
   });
 });
+
+/**
+ * ─── A SEGUNDA METADE: erro no meio do baseline (migration 0269) ──────────
+ *
+ * O carimbo sozinho provava que o arquivo foi lido até o fim, e não que cada
+ * comando passou: num banco existente o `psql` roda sem `ON_ERROR_STOP`, então
+ * um `alter table` que falha vira uma linha de ERROR e a execução continua —
+ * inclusive até o bloco que carimba.
+ *
+ * O bootstrap já contava esses erros e os deixava morrer no stdout.
+ */
+describe("o carimbo conta os erros do baseline", () => {
+  it("carimbo certo E zero erros = em dia", () => {
+    expect(compararCarimbo(CARIMBO_DO_SCHEMA, 0).em_dia).toBe(true);
+  });
+
+  it("carimbo certo e erro no meio NÃO é em dia", () => {
+    // O caso exato: a migration nova falhou, o baseline seguiu até o fim e
+    // carimbou com o nome dela. Sem esta metade, a saúde diria que está tudo
+    // bem sobre um banco que não tem o que o carimbo afirma ter.
+    const lido = compararCarimbo(CARIMBO_DO_SCHEMA, 3, 'ERROR: column "x" does not exist');
+    expect(lido.em_dia).toBe(false);
+    expect(lido.erros).toBe(3);
+  });
+
+  it("o padrão de erros é 0 — banco anterior à 0269 não vira alarme", () => {
+    // A coluna não existia antes desta migration. Tratar ausência como
+    // "desconhecido, logo suspeito" faria toda instalação correta acusar
+    // problema na primeira leitura, e um alarme que toca sempre ninguém escuta.
+    expect(compararCarimbo(CARIMBO_DO_SCHEMA).em_dia).toBe(true);
+  });
+
+  it("a amostra do erro viaja junto, para o diagnóstico começar em algum lugar", () => {
+    // Um contador sozinho responde "deu errado" e não "o quê".
+    const lido = compararCarimbo(CARIMBO_DO_SCHEMA, 1, "ERROR: permission denied");
+    expect(lido.amostra).toBe("ERROR: permission denied");
+  });
+
+  it("o bootstrap grava o contador DEPOIS de aplicar o baseline", () => {
+    // Antes, a tabela e as colunas ainda não existem — a escrita cairia, e o
+    // `|| true` a engoliria em silêncio, deixando o contador eternamente zerado
+    // (que é o valor que diz "está tudo bem").
+    const bootstrap = fs.readFileSync(path.join(RAIZ, "easypanel/bootstrap.sh"), "utf8");
+    const aplica = bootstrap.indexOf('psql "$DB" -q -f "$BASELINE"');
+    const grava = bootstrap.indexOf("update public.schema_baseline");
+    expect(aplica, "o passo que aplica o baseline sumiu do bootstrap").toBeGreaterThan(-1);
+    expect(grava, "o bootstrap parou de gravar o contador de erros").toBeGreaterThan(-1);
+    expect(grava).toBeGreaterThan(aplica);
+  });
+
+  it("o bootstrap não deixa a escrita do relatório derrubar a instalação", () => {
+    // Nenhum deploy pode falhar por causa do relatório sobre ele mesmo — e num
+    // banco anterior à 0269 as colunas não existem.
+    const bootstrap = fs.readFileSync(path.join(RAIZ, "easypanel/bootstrap.sh"), "utf8");
+    const grava = bootstrap.indexOf("update public.schema_baseline");
+    const trecho = bootstrap.slice(Math.max(0, grava - 600), grava);
+    expect(
+      trecho.includes("|| true"),
+      "a escrita do contador precisa tolerar falha (`|| true`)",
+    ).toBe(true);
+  });
+});

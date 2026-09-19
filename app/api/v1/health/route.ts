@@ -294,25 +294,46 @@ function semAlvo(check: Check): Check {
  * Pego por `tests/unit/health-separa-env-errado-de-servico-caido.test.ts`, que
  * mede a AUSÊNCIA de ida à rede — e estava medindo a minha.
  */
-async function lerCarimboDoSchema(): Promise<string | null> {
+interface LinhaDoCarimbo {
+  migration: string | null;
+  erros: number;
+  amostra: string | null;
+}
+
+async function lerCarimboDoSchema(): Promise<LinhaDoCarimbo> {
+  const vazio: LinhaDoCarimbo = { migration: null, erros: 0, amostra: null };
   const url = env.NEXT_PUBLIC_SUPABASE_URL;
   const chave = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !chave) return null;
+  if (!url || !chave) return vazio;
   try {
     const res = await withTimeout(
       fetch(
-        `${url}/rest/v1/${TABELA_DO_CARIMBO}?select=migration_mais_nova&id=eq.1&limit=1`,
+        `${url}/rest/v1/${TABELA_DO_CARIMBO}?select=migration_mais_nova,erros_inesperados,erros_amostra&id=eq.1&limit=1`,
         {
           headers: { apikey: chave, Authorization: `Bearer ${chave}` },
           cache: "no-store",
         },
       ),
     );
-    if (!res.ok) return null;
-    const linhas = (await res.json()) as Array<{ migration_mais_nova?: string | null }>;
-    return Array.isArray(linhas) ? (linhas[0]?.migration_mais_nova ?? null) : null;
+    if (!res.ok) return vazio;
+    const linhas = (await res.json()) as Array<{
+      migration_mais_nova?: string | null;
+      erros_inesperados?: number | null;
+      erros_amostra?: string | null;
+    }>;
+    const linha = Array.isArray(linhas) ? linhas[0] : undefined;
+    if (!linha) return vazio;
+    return {
+      migration: linha.migration_mais_nova ?? null,
+      // Ausente vira 0 e não "desconhecido": um banco anterior à 0269 não tem a
+      // coluna, e transformar isso em alarme faria toda instalação correta
+      // acusar problema na primeira leitura. O que ela AINDA tem é o carimbo,
+      // que continua respondendo a metade principal da pergunta.
+      erros: typeof linha.erros_inesperados === "number" ? linha.erros_inesperados : 0,
+      amostra: linha.erros_amostra ?? null,
+    };
   } catch {
-    return null;
+    return vazio;
   }
 }
 
@@ -356,9 +377,17 @@ export async function GET(req: NextRequest) {
         // endereço do Redis: ele conta a um scanner quando o schema mudou e o
         // que entrou. `em_dia` é o que um monitor externo precisa, e sozinho não
         // entrega nada — é um booleano sobre a coerência da própria instalação.
-        schema: verboso
-          ? compararCarimbo(carimbo)
-          : { em_dia: compararCarimbo(carimbo).em_dia },
+        schema: (() => {
+          const lido = compararCarimbo(carimbo.migration, carimbo.erros, carimbo.amostra);
+          // A AMOSTRA nunca sai sem o segredo: mensagem de erro de Postgres
+          // carrega nome de tabela, de coluna e às vezes o valor que violou a
+          // constraint. O CONTADOR sai — é um número sobre a coerência da
+          // própria instalação, e sem ele `em_dia: false` não diz se o banco
+          // está atrasado ou se o baseline tropeçou.
+          return verboso
+            ? lido
+            : { em_dia: lido.em_dia, erros: lido.erros };
+        })(),
         timestamp: new Date().toISOString(),
         checks,
       },

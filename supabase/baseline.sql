@@ -24669,10 +24669,37 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20260920030000_0268_carimbo_do_schema', now())
+values (1, '20260920050000_0269_o_carimbo_conta_os_erros', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
+
+
+-- ─── 0269 · o carimbo conta os erros, nao so a chegada ───────────
+--
+-- Num banco existente o `psql` roda SEM `ON_ERROR_STOP`: um comando que falha
+-- vira uma linha de ERROR e a execucao CONTINUA ate o fim — inclusive ate o
+-- bloco que carimba. O carimbo da 0268 provava "o baseline foi lido inteiro",
+-- nunca "cada comando passou", e a saude respondia `em_dia: true` sobre um
+-- banco em que a migration nova podia ter falhado.
+--
+-- `easypanel/bootstrap.sh` JA calculava os erros nao benignos e os imprimia
+-- como AVISO, no stdout de um conteiner efemero. Agora ele os grava aqui, e
+-- `em_dia` exige carimbo certo E zero erros.
+alter table public.schema_baseline
+  -- Quantos erros NÃO benignos o `psql` cuspiu ao aplicar o baseline.
+  -- `0` = passou limpo. Default 0 e não null: uma linha carimbada por uma
+  -- versão anterior desta migration não pode parecer "nunca conferida" e
+  -- derrubar a saúde de uma instalação correta no primeiro deploy.
+  add column if not exists erros_inesperados integer not null default 0,
+  -- As primeiras linhas, para o diagnóstico começar em algum lugar.
+  add column if not exists erros_amostra text;
+
+comment on column public.schema_baseline.erros_inesperados is
+  'Erros NAO benignos ao aplicar o baseline (o bootstrap ja filtra "already exists" e afins). 0 = passou limpo. Num banco existente o psql roda sem ON_ERROR_STOP: o baseline chega ao fim e carimba mesmo tendo falhado no meio, e sem esta coluna a saude responderia em_dia:true sobre um banco que nao tem o que o carimbo diz ter.';
+
+comment on column public.schema_baseline.erros_amostra is
+  'Primeiras linhas do erro, para diagnosticar sem acesso ao conteiner. NUNCA sai na resposta publica da saude: mensagem de erro de Postgres carrega nome de tabela, de coluna e as vezes o valor que violou a constraint.';
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----

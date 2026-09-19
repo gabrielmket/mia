@@ -86,6 +86,30 @@ if [ "${existentes:-0}" -gt 0 ]; then
   else
     log "schema atualizado"
   fi
+
+  # ── O contador vai para o BANCO, e não só para este log (migration 0269) ──
+  #
+  # Aqui o psql roda SEM ON_ERROR_STOP: um comando que falha vira uma linha de
+  # ERROR e a execução continua até o fim — inclusive até o bloco que carimba
+  # `schema_baseline`. Sem esta escrita, a saúde responderia `em_dia: true`
+  # sobre um banco em que a migration nova falhou, porque o carimbo prova que o
+  # arquivo chegou ao fim e não que cada comando passou.
+  #
+  # Este valor já era calculado e morria neste stdout, num contêiner efêmero,
+  # com a agregação de logs da VPS desligada.
+  #
+  # Roda DEPOIS do baseline de propósito: é ele que cria a tabela e as colunas.
+  # `|| true` porque nenhuma instalação pode deixar de subir por causa do
+  # relatório sobre ela mesma — e um banco antigo, antes da 0269, não tem as
+  # colunas. O sintoma nesse caso é o valor ficar velho, nunca o app parar.
+  n_erros="$(printf '%s' "$inesperados" | grep -c . || true)"
+  amostra="$(printf '%s\n' "$inesperados" | head -3 | cut -c1-500)"
+  psql "$DB" -q -v ON_ERROR_STOP=1 -v n="${n_erros:-0}" -v amostra="$amostra" <<'SQL' >/dev/null 2>&1 || true
+update public.schema_baseline
+   set erros_inesperados = :'n'::integer,
+       erros_amostra     = nullif(:'amostra', '')
+ where id = 1;
+SQL
 else
   log "banco novo: aplicando o schema completo (leva alguns minutos)"
   if ! psql "$DB" -v ON_ERROR_STOP=1 -q -f "$BASELINE" > /tmp/baseline.log 2>&1; then
