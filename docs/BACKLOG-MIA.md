@@ -23,7 +23,14 @@ compartilhado. Ver o Bloco G.
 
 ---
 
-## Bloco A — Disparador: fechar o que ficou pela metade
+## ~~Bloco A — Disparador~~ — FECHADO
+
+> Os oito itens entregues. O disparador tem tags com contagem, etapa do funil,
+> edição e exclusão de campanha, agendamento, custo por cliente, tela própria
+> por campanha, edição e exclusão de template, e cabeçalho com imagem sem
+> precisar hospedar arquivo.
+
+### O que era
 
 | # | o que | tamanho | por quê |
 |---|---|---|---|
@@ -69,7 +76,7 @@ Detalhe e evidências em `docs/audits/2026-09-18-pacing-janela-adiada-e-alertas-
 
 | # | o que | tamanho | por quê |
 |---|---|---|---|
-| B2-1 | **Alargar a janela reprograma turno adiado** (+ motivo do adiamento em coluna própria) | médio | é o único que deixa o produto sem saída pela tela; consertá-lo também fecha o alerta de janela |
+| ~~B2-1~~ | ~~**Alargar a janela reprograma turno adiado**~~ | — | feito: `job_queue.motivo` em coluna própria (não string livre), `rescheduleJob` grava sempre, e o `PUT /api/v1/ai/pacing` chama `reprogramarTurnosAdiadosPelaJanela` quando um campo de JANELA muda — só janela, porque cap diário e horário do agente dependem de outra condição e voltariam cedo demais |
 | ~~B2-2~~ | ~~**Gatilho de `updated_at` em `channel_knobs`**~~ | — | feito (migration 0260): gatilho, não conserto do upsert — pega SQL direto e rota futura também |
 | B2-3 | ~~Resolver `conhecimento_nao_indexado`~~ + ~~varredura dos `kind`~~ | — | feito em 18/09 — resultado abaixo |
 
