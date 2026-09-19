@@ -2,17 +2,84 @@
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
+
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import {
+  useEditarTemplate,
+  useExcluirTemplate,
   useSyncTemplates,
   useTemplates,
   type TemplatePreview,
+  type TemplateView,
 } from "@/hooks/channels/useTemplates";
 import { useT } from "@/hooks/i18n/useT";
 import { CriarTemplate } from "./CriarTemplate";
 
 /** Só APPROVED pode ser disparado — o resto é informação, não opção. */
+/**
+ * EDITAR O TEXTO DE UM TEMPLATE.
+ *
+ * Só o corpo: nome, idioma e categoria são identidade do lado da Meta e não
+ * mudam — quem quer outro nome está criando outro template.
+ *
+ * ⚠️ O aviso de que um APROVADO volta para análise aparece ANTES do clique, e
+ * não depois. Depois é tarde: a campanha agendada para amanhã de manhã já não
+ * vai sair, e ninguém vai ligar uma coisa à outra.
+ */
+function EditarTemplate({
+  tpl,
+  aoFechar,
+}: {
+  tpl: { id: string; name: string; status: string; previews: Array<{ onde: string; text: string }> };
+  aoFechar: () => void;
+}) {
+  const t = useT();
+  const editar = useEditarTemplate();
+  const corpoAtual = tpl.previews.find((p) => p.onde === "corpo")?.text ?? "";
+  const [body, setBody] = useState(corpoAtual);
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && aoFechar()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>
+            {t("Editar")} {tpl.name}
+          </DialogTitle>
+        </DialogHeader>
+        {tpl.status === "APPROVED" && (
+          <p className="text-sm text-warning-fg">
+            {t(
+              "Este template está aprovado. Ao editar, ele volta para análise da Meta e não pode ser disparado até ser aprovado de novo.",
+            )}
+          </p>
+        )}
+        <Textarea rows={6} value={body} onChange={(e) => setBody(e.target.value)} />
+        <p className="text-xs text-muted-foreground">
+          {t("As variáveis continuam sendo {{1}}, {{2}}… Mudar quantas existem faz a Meta pedir exemplos novos.")}
+        </p>
+        <DialogFooter>
+          <Button
+            disabled={editar.isPending || !body.trim() || body === corpoAtual}
+            onClick={() => editar.mutate({ id: tpl.id, body }, { onSuccess: aoFechar })}
+          >
+            {t("Salvar na Meta")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function statusTone(status: string): "default" | "secondary" | "destructive" | "outline" {
   if (status === "APPROVED") return "default";
   if (status === "REJECTED" || status === "DISABLED") return "destructive";
@@ -58,6 +125,8 @@ function Preview({ preview }: { preview: TemplatePreview }) {
 }
 
 export function TemplatesClient() {
+  const [editando, setEditando] = useState<TemplateView | null>(null);
+  const excluir = useExcluirTemplate();
   const t = useT();
   const { data, isPending } = useTemplates();
   const sync = useSyncTemplates();
@@ -116,6 +185,12 @@ export function TemplatesClient() {
         </Card>
       ) : (
         <div className="flex flex-col gap-3">
+          {editando && (
+            <EditarTemplate
+              tpl={editando}
+              aoFechar={() => setEditando(null)}
+            />
+          )}
           {templates.map((tpl) => (
             <Card key={`${tpl.name}:${tpl.language}`} className="p-4" data-testid="template-card">
               <div className="flex flex-wrap items-center gap-2">
@@ -129,7 +204,31 @@ export function TemplatesClient() {
                     {tpl.category}
                   </Badge>
                 ) : null}
-                <span className="ml-auto text-xs text-muted-foreground">
+                <span className="ml-auto flex items-center gap-2">
+                  <Button variant="secondary" onClick={() => setEditando(tpl)}>
+                    {t("Editar")}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={excluir.isPending}
+                    onClick={() => {
+                      // O aviso vai ANTES, porque a Meta apaga TODOS os idiomas
+                      // daquele nome — ela não oferece apagar um só, e quem
+                      // clicar esperando perder só o português perde o espanhol
+                      // junto.
+                      if (
+                        window.confirm(
+                          t("Excluir este template na Meta? Todos os idiomas dele serão apagados."),
+                        )
+                      ) {
+                        excluir.mutate(tpl.id);
+                      }
+                    }}
+                  >
+                    {t("Excluir")}
+                  </Button>
+                </span>
+                <span className="text-xs text-muted-foreground">
                   {tpl.slots.length === 0
                     ? t("sem parâmetros")
                     : `${tpl.slots.length} ${t("parâmetro(s)")}`}

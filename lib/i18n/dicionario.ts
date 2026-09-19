@@ -2138,6 +2138,12 @@ export const DICIONARIO: Traducoes = {
   // ---- segmentar campanha por etapa do funil ----
   "Todos os contatos": { es: "Todos los contactos" },
   "Qualquer etapa": { es: "Cualquier etapa" },
+
+  // ---- editar e excluir template na Meta ----
+  "Este template está aprovado. Ao editar, ele volta para análise da Meta e não pode ser disparado até ser aprovado de novo.": { es: "Esta plantilla está aprobada. Al editarla, vuelve al análisis de Meta y no puede dispararse hasta ser aprobada de nuevo." },
+  "As variáveis continuam sendo {{1}}, {{2}}… Mudar quantas existem faz a Meta pedir exemplos novos.": { es: "Las variables siguen siendo {{1}}, {{2}}… Cambiar cuántas existen hace que Meta pida ejemplos nuevos." },
+  "Salvar na Meta": { es: "Guardar en Meta" },
+  "Excluir este template na Meta? Todos os idiomas dele serão apagados.": { es: "¿Eliminar esta plantilla en Meta? Todos sus idiomas serán borrados." },
   "Só quem tem negócio ABERTO nesta etapa. Ganhos e perdidos ficam de fora.": { es: "Solo quien tiene negocio ABIERTO en esta etapa. Ganados y perdidos quedan fuera." },
   "Tipo de uso": { es: "Tipo de uso" },
   "Todos os números desta página são só deste intervalo. Mude as datas para comparar um mês com o outro.": {

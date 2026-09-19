@@ -95,7 +95,7 @@ export async function GET(): Promise<NextResponse> {
   const { data, error } = await admin
     .from("meta_templates")
     .select(
-      "name, language, status, category, rejected_reason, quality_score, parameter_format, contract_hash, components, synced_at",
+      "id, name, language, status, category, rejected_reason, quality_score, parameter_format, contract_hash, components, synced_at",
     )
     .eq("organization_id", r.orgId)
     .order("status")
@@ -111,6 +111,10 @@ export async function GET(): Promise<NextResponse> {
       components: row.components as never,
     });
     return {
+      // O id da NOSSA linha: é por ele que a tela edita e exclui. O id da META
+      // fica no servidor — a tela não precisa dele, e expô-lo só aumentaria a
+      // superfície de quem pode mandar um identificador de fora.
+      id: row.id,
       name: row.name,
       language: row.language,
       status: row.status,

@@ -1,5 +1,6 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { apiClient } from "@/lib/api/client";
@@ -21,6 +22,8 @@ export interface TemplatePreview {
 }
 
 export interface TemplateView {
+  /** O id da NOSSA linha — é com ele que a tela edita e exclui. */
+  id: string;
   name: string;
   language: string;
   status: string;
@@ -102,6 +105,63 @@ export function useCriarTemplate() {
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["channel-templates"] });
+    },
+  });
+}
+
+/**
+ * Editar o texto de um template NA META.
+ *
+ * ⚠️ Um template APROVADO volta para análise e para de poder ser disparado até
+ * a nova aprovação. A resposta traz `voltou_para_analise` para a tela avisar —
+ * uma campanha agendada para amanhã morreria calada sem esse aviso.
+ */
+export function useEditarTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (v: {
+      id: string;
+      body: string;
+      header_texto?: string;
+      footer?: string;
+      exemplos?: string[];
+    }) => {
+      const { id, ...corpo } = v;
+      return apiClient.patch<{ data: { voltou_para_analise: boolean } }>(
+        `/api/v1/channels/templates/${id}`,
+        corpo,
+      );
+    },
+    onSuccess: (r) => {
+      if (r.data?.voltou_para_analise) {
+        toast.warning(
+          "Editado. Como ele estava aprovado, voltou para análise da Meta e não pode ser disparado até ser aprovado de novo.",
+        );
+      } else {
+        toast.success("Template editado.");
+      }
+      void qc.invalidateQueries({ queryKey: ["templates"] });
+    },
+    onError: (e: unknown) => {
+      toast.error(e instanceof Error ? e.message : "Falha ao editar o template.");
+    },
+  });
+}
+
+/**
+ * Excluir. A Meta apaga TODOS os idiomas daquele nome — ela não oferece apagar
+ * um só, e a tela precisa dizer isso antes do clique.
+ */
+export function useExcluirTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => apiClient.delete(`/api/v1/channels/templates/${id}`),
+    onSuccess: () => {
+      toast.success("Template excluído na Meta.");
+      void qc.invalidateQueries({ queryKey: ["templates"] });
+    },
+    onError: (e: unknown) => {
+      toast.error(e instanceof Error ? e.message : "Falha ao excluir o template.");
     },
   });
 }
