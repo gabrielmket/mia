@@ -7328,7 +7328,12 @@ create table if not exists followup_flow_pointers (
   active_version_id uuid references followup_flow_versions(id),
   draft_graph jsonb,
   handoff_policy text not null default 'pause' check (handoff_policy in ('pause','cancel','allow')),
-  trigger_config jsonb not null default '{"kind":"manual"}',
+  -- `cancel_on_reply` no default desde a 0270 (item B1-a): regua NOVA
+  -- encerra quando o lead responde, em vez de avancar para o passo seguinte
+  -- — que podia ser a despedida, mandada a quem acabou de falar. Reguas
+  -- criadas antes NAO foram tocadas: mudar comportamento de regua viva e
+  -- decisao de quem opera, e a chave esta na tela.
+  trigger_config jsonb not null default '{"kind":"manual","cancel_on_reply":true}',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (organization_id, name)
@@ -24669,7 +24674,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20260920050000_0269_o_carimbo_conta_os_erros', now())
+values (1, '20260920070000_0270_regua_nova_encerra_ao_responder', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -24702,6 +24707,16 @@ comment on column public.schema_baseline.erros_amostra is
   'Primeiras linhas do erro, para diagnosticar sem acesso ao conteiner. NUNCA sai na resposta publica da saude: mensagem de erro de Postgres carrega nome de tabela, de coluna e as vezes o valor que violou a constraint.';
 
 
+-- ─── 0270 · regua NOVA encerra ao responder (B1-a) ─────────────
+--
+-- Troca so o DEFAULT DA COLUNA: vale para a proxima regua criada e para mais
+-- nada. Nenhuma linha existente e tocada, e isso e a decisao, nao um detalhe —
+-- um `update` em massa mudaria o que as reguas dos clientes fazem numa conversa
+-- em andamento, sem ninguem ter pedido, com o sintoma aparecendo dias depois.
+
+alter table public.followup_flows
+  alter column trigger_config
+  set default '{"kind":"manual","cancel_on_reply":true}'::jsonb;
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

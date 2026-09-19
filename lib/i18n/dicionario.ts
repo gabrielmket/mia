@@ -8937,6 +8937,12 @@ export const DICIONARIO: Traducoes = {
   "O sistema agrupa contatos e negócios por empresa: a aba Empresas fica no menu, o cadastro pede empresa, cargo e setor, e a IA pode anotar de qual empresa o cliente é.": {
     es: "El sistema agrupa contactos y negocios por empresa: la pestaña Empresas queda en el menú, el registro pide empresa, cargo y sector, y la IA puede anotar de qué empresa es el cliente.",
   },
+  "O lead respondeu: a régua sai de cena e a conversa segue com o agente ou com uma pessoa.": {
+    es: "El lead respondió: la secuencia sale de escena y la conversación sigue con el agente o con una persona.",
+  },
+  "O lead respondeu: a régua avança para o passo seguinte — e se o passo seguinte for a despedida, ela se despede de quem acabou de falar com você.": {
+    es: "El lead respondió: la secuencia avanza al paso siguiente — y si el paso siguiente es la despedida, se despide de quien acaba de hablar contigo.",
+  },
 };
 
 /**

@@ -50,7 +50,7 @@ compartilhado. Ver o Bloco G.
 | # | o que | tamanho | por quê |
 |---|---|---|---|
 | ~~B1~~ | ~~**A despedida de 6 segundos**~~ | — | **corrigido**, e o diagnóstico que estava aqui era FALSO. Não era "olha a conversa errada": a detecção sempre foi por CONTATO. A resposta do lead FOI vista, acordou a espera e empurrou a régua para o passo seguinte — que era a despedida. `cancel_on_reply` passou a valer também para a espera ativa (`lib/followup/reactivity.ts`) |
-| B1-a | **Decidir o PADRÃO da régua** (ver abaixo) | decisão | o conserto vale para quem ligou `cancel_on_reply`. Quem não ligou continua tendo a própria resposta usada para empurrar a régua adiante — e isso é escolha de produto, não bug |
+| ~~B1-a~~ | ~~**Decidir o PADRÃO da régua**~~ | — | decidido na `.46` pela opção **2 (encerrar)**, e só para régua NOVA (migration 0270 troca o default da coluna). Nenhuma régua existente foi tocada: mudar o comportamento de uma régua viva daria o sintoma dias depois, num lead que deixou de receber o follow-up que recebia. Para as antigas, a chave está em **IA › Follow-ups › Gatilho › "Cancelar se o lead responder"** — e a tela agora explica os DOIS lados dela, que é o que faltava para a escolha ser informada. A opção 3 (porta própria) segue aberta: pede nó de saída no editor, é desenho, não default. |
 
 ### B1-a, em português
 

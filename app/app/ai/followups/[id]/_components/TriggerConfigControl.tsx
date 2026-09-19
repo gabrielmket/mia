@@ -354,14 +354,38 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
             </>
           )}
 
-          <div className="flex items-center justify-between gap-2">
-            <Label htmlFor="trigger-cancel-on-reply">{t("Cancelar se o lead responder")}</Label>
-            <Switch
-              id="trigger-cancel-on-reply"
-              checked={form.kind === "appointment_no_show" || form.cancelOnReply}
-              disabled={form.kind === "appointment_no_show"}
-              onCheckedChange={(checked) => setForm((f) => ({ ...f, cancelOnReply: checked }))}
-            />
+          {/*
+            Item B1-a. O rótulo sozinho não bastava: ele dizia o que acontece
+            LIGADO e deixava o outro lado invisível. Desligado, a resposta do
+            lead ACORDA a espera e a régua vai para o passo seguinte — que pode
+            ser a despedida, mandada a quem acabou de falar com a gente. Esse
+            defeito já foi medido aqui, e quem lia "Cancelar se o lead
+            responder" não tinha como saber que era isso que a chave decidia.
+
+            Desde a migration 0270 a régua NOVA nasce com esta chave ligada.
+            As que já existiam continuam como estavam: mudar o comportamento de
+            uma régua viva é decisão de quem a opera, e é para isso que a chave
+            está aqui.
+          */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="trigger-cancel-on-reply">{t("Cancelar se o lead responder")}</Label>
+              <Switch
+                id="trigger-cancel-on-reply"
+                checked={form.kind === "appointment_no_show" || form.cancelOnReply}
+                disabled={form.kind === "appointment_no_show"}
+                onCheckedChange={(checked) => setForm((f) => ({ ...f, cancelOnReply: checked }))}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {form.kind === "appointment_no_show" || form.cancelOnReply
+                ? t(
+                    "O lead respondeu: a régua sai de cena e a conversa segue com o agente ou com uma pessoa.",
+                  )
+                : t(
+                    "O lead respondeu: a régua avança para o passo seguinte — e se o passo seguinte for a despedida, ela se despede de quem acabou de falar com você.",
+                  )}
+            </p>
           </div>
 
           <Button
