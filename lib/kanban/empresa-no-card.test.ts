@@ -35,7 +35,18 @@ const base = {
 // O segundo argumento de `buildCardInput`. `ownerNames` e chave obrigatoria
 // (aceita `undefined`, mas nao aceita ausencia), e estes casos nao falam de
 // dono — falam da empresa. Uma constante evita repetir o ruido cinco vezes.
-const ETAPA = { stageName: "Proposta", ownerNames: undefined };
+//
+// ⚠️ `now` FIXO, e nao por gosto: `hoursInStage` sai de `now ?? new Date()` e e
+// um float em horas. O caso "nao mexe em mais nada do card" constroi DOIS cards
+// e compara o resto — com o relogio solto, os dois nascem em instantes
+// diferentes e o campo diverge na casa dos milissegundos. Passava isolado e
+// reprovava na suite cheia, onde a maquina esta disputada: o pior tipo de
+// teste, o que falha por carga e nao por defeito.
+const ETAPA = {
+  stageName: "Proposta",
+  ownerNames: undefined,
+  now: new Date("2026-09-19T12:00:00Z"),
+};
 
 describe("a empresa no card", () => {
   it("chega ao card quando o negócio tem uma", () => {

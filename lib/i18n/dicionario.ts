@@ -8943,6 +8943,39 @@ export const DICIONARIO: Traducoes = {
   "O lead respondeu: a régua avança para o passo seguinte — e se o passo seguinte for a despedida, ela se despede de quem acabou de falar com você.": {
     es: "El lead respondió: la secuencia avanza al paso siguiente — y si el paso siguiente es la despedida, se despide de quien acaba de hablar contigo.",
   },
+  "Estado do schema": {
+    es: "Estado del esquema",
+  },
+  "Não consegui ler o carimbo do schema. Num banco que ainda não recebeu a migration 0268 isso é esperado; em qualquer outro caso, é sinal de que o baseline não chegou ao fim.": {
+    es: "No pude leer el sello del esquema. En una base que todavía no recibió la migración 0268 esto es esperado; en cualquier otro caso, es señal de que el baseline no llegó al final.",
+  },
+  "em dia": {
+    es: "al día",
+  },
+  "precisa de atenção": {
+    es: "necesita atención",
+  },
+  "O banco recebeu": {
+    es: "La base recibió",
+  },
+  "Esta versão espera": {
+    es: "Esta versión espera",
+  },
+  "Carimbado em": {
+    es: "Sellado el",
+  },
+  "Erros ao aplicar": {
+    es: "Errores al aplicar",
+  },
+  "O banco está numa entrega diferente da desta versão do sistema. Ou o baseline não passou no último deploy, ou a imagem no ar é outra — as duas linhas acima dizem qual das duas.": {
+    es: "La base está en una entrega diferente de la de esta versión del sistema. O el baseline no pasó en el último despliegue, o la imagen en el aire es otra — las dos líneas de arriba dicen cuál de las dos.",
+  },
+  "O baseline chegou ao fim, mas o Postgres recusou pelo menos um comando pelo caminho. Num banco que já existe isso não derruba o sistema — e é por isso que passava despercebido. As primeiras linhas:": {
+    es: "El baseline llegó al final, pero Postgres rechazó al menos un comando en el camino. En una base que ya existe eso no tumba el sistema — y por eso pasaba desapercibido. Las primeras líneas:",
+  },
+  "(sem amostra gravada)": {
+    es: "(sin muestra registrada)",
+  },
 };
 
 /**
