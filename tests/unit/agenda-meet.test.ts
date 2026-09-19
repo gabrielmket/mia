@@ -1,6 +1,24 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { meetVideoUrl, observeMeeting } from "@/lib/agenda/google/meet";
 import { localProjection } from "@/lib/agenda/google/sync-model";
+
+/**
+ * O TEMPO DESTE ARQUIVO é declarado, e o motivo está medido.
+ *
+ * Isolado ele roda em ~6,9s; o teto da suíte é 15s (ver `vitest.config.ts`,
+ * que já conta três rodadas perdidas para lentidão). Numa rodada com a máquina
+ * disputada — medido em 19/09: 774s e 813s contra ~390s normais — ele passa de
+ * 15s e reprova com `Test timed out`, apontando para o teste em vez de para a
+ * carga.
+ *
+ * O custo NÃO é relógio esperando: é o `await import()` compilando o grafo de
+ * módulos na primeira vez. Prender relógio não resolveria — só um teto que não
+ * cronometre a lentidão da máquina como se fosse asserção.
+ *
+ * ⚠️ Se este arquivo passar de 45s, o problema é o import e não este número.
+ */
+vi.setConfig({ testTimeout: 45_000 });
+
 describe("recibo da conferência", () => {
   const req = "6222ae88-2a55-4ae4-908f-7d30c50a845e";
   const event = (status: string) => ({

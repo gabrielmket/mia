@@ -58,20 +58,42 @@ function importaSobTsx(modulo: string): { ok: boolean; saida: string } {
   }
 }
 
+/**
+ * O MESMO teto do processo filho (`importaSobTsx` passa `timeout: 60_000`).
+ *
+ * Com o padrão de 15s da suíte, o vitest matava o caso ANTES de o `tsx` ter a
+ * chance que o próprio código lhe deu — e a mensagem ("Test timed out in
+ * 15000ms") aponta para o teste, não para a conta entre os dois números.
+ * Resolver o grafo de módulos do `register-handlers` sob `tsx`, com a máquina
+ * disputada, passa de 15s com folga: foi medido reprovando em rodada de 774s e
+ * passando isolado em 6s.
+ *
+ * Se passar de 60s, o problema é o import — não este número.
+ */
+const TEMPO_DO_FILHO = 60_000;
+
 describe("o laço rápido do event_log carrega as dependências sob tsx", () => {
   it("CONTROLE: o tsx está no disco — sem isto, os casos abaixo passariam por não medir nada", () => {
     expect(existsSync(TSX)).toBe(true);
   });
 
   for (const modulo of MODULOS) {
-    it(`${modulo} resolve sob tsx`, () => {
-      const r = importaSobTsx(modulo);
-      expect(r.ok, `não resolveu sob tsx:\n${r.saida}`).toBe(true);
-    });
+    it(
+      `${modulo} resolve sob tsx`,
+      () => {
+        const r = importaSobTsx(modulo);
+        expect(r.ok, `não resolveu sob tsx:\n${r.saida}`).toBe(true);
+      },
+      TEMPO_DO_FILHO,
+    );
   }
 
-  it(`${MODULO_TARDIO} resolve sob tsx (o import tardio do worker de LGPD)`, () => {
-    const r = importaSobTsx(MODULO_TARDIO);
-    expect(r.ok, `não resolveu sob tsx:\n${r.saida}`).toBe(true);
-  });
+  it(
+    `${MODULO_TARDIO} resolve sob tsx (o import tardio do worker de LGPD)`,
+    () => {
+      const r = importaSobTsx(MODULO_TARDIO);
+      expect(r.ok, `não resolveu sob tsx:\n${r.saida}`).toBe(true);
+    },
+    TEMPO_DO_FILHO,
+  );
 });

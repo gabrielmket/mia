@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * A conexão caiu — e alguém precisa SABER.
@@ -21,11 +21,28 @@ import { beforeEach, describe, expect, it } from "vitest";
  * filtrar por organização parece certo até haver dois números ligados.
  */
 import {
+
   DETALHE_CREDENCIAL_RECUSADA,
   STATUS_QUE_AVISAM,
   avisoDaConexao,
   sincronizarSaudeDaConexao,
 } from "@/lib/channels/health";
+/**
+ * O TEMPO DESTE ARQUIVO é declarado, e o motivo está medido.
+ *
+ * Isolado ele roda em ~4,1s; o teto da suíte é 15s (ver `vitest.config.ts`,
+ * que já conta três rodadas perdidas para lentidão). Numa rodada com a máquina
+ * disputada — medido em 19/09: 774s e 813s contra ~390s normais — ele passa de
+ * 15s e reprova com `Test timed out`, apontando para o teste em vez de para a
+ * carga.
+ *
+ * O custo NÃO é relógio esperando: é o `await import()` compilando o grafo de
+ * módulos na primeira vez. Prender relógio não resolveria — só um teto que não
+ * cronometre a lentidão da máquina como se fosse asserção.
+ *
+ * ⚠️ Se este arquivo passar de 45s, o problema é o import e não este número.
+ */
+vi.setConfig({ testTimeout: 45_000 });
 
 const viva = { reachable: true, status: "WORKING", detail: null };
 

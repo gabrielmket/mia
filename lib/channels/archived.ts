@@ -75,3 +75,20 @@ export async function queryTolerantToMissingArchived<R extends { error: DbErrorL
   const fallback = await withoutArchived();
   return { ...fallback, schemaOutdated: true };
 }
+
+/**
+ * "Esta coluna não existe neste banco" — para QUALQUER coluna.
+ *
+ * `isArchivedColumnMissing` é o caso particular que veio primeiro (migration
+ * 0106). A mesma pergunta apareceu para `e_numero_de_avisos` (item G4), e
+ * copiar a função trocando a string seria a segunda cópia de uma regra que já
+ * é sutil: o que mantém a detecção estreita é a mensagem NOMEAR a coluna, não
+ * o código do erro.
+ */
+export function isColumnMissing(
+  error: DbErrorLike | null | undefined,
+  coluna: string,
+): boolean {
+  if (!error) return false;
+  return COLUNA_AUSENTE.has(error.code ?? "") && (error.message ?? "").includes(coluna);
+}

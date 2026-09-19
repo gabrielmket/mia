@@ -14,6 +14,24 @@ vi.mock("@/lib/agenda/google/sync-store", () => ({ googleRpc: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
 import { POST as retry } from "@/app/api/v1/agenda/agendamentos/[id]/google/meet/retry/route";
 import { POST as deliver } from "@/app/api/v1/agenda/agendamentos/[id]/google/meet/deliver/route";
+
+/**
+ * O TEMPO DESTE ARQUIVO é declarado, e o motivo está medido.
+ *
+ * Isolado ele roda em ~4,6s; o teto da suíte é 15s (ver `vitest.config.ts`,
+ * que já conta três rodadas perdidas para lentidão). Numa rodada com a máquina
+ * disputada — medido em 19/09: 774s e 813s contra ~390s normais — ele passa de
+ * 15s e reprova com `Test timed out`, apontando para o teste em vez de para a
+ * carga.
+ *
+ * O custo NÃO é relógio esperando: é o `await import()` compilando o grafo de
+ * módulos na primeira vez. Prender relógio não resolveria — só um teto que não
+ * cronometre a lentidão da máquina como se fosse asserção.
+ *
+ * ⚠️ Se este arquivo passar de 45s, o problema é o import e não este número.
+ */
+vi.setConfig({ testTimeout: 45_000 });
+
 const org = "aaaaaaaa-0000-4000-8000-000000000001",
   user = "aaaaaaaa-0000-4000-8000-000000000002",
   id = "aaaaaaaa-0000-4000-8000-000000000003";
