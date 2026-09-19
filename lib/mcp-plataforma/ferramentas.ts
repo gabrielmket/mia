@@ -31,6 +31,9 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { MODULOS } from "@/lib/modulos/catalogo";
+import { STATUS_SAUDAVEL } from "@/lib/channels/health";
+import { saldoDaPlataforma } from "@/lib/ai/custo/saldo-da-plataforma";
+import { CARIMBO_DO_SCHEMA, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
 
 export interface ContextoDaFerramenta {
   admin: SupabaseClient;
@@ -151,6 +154,80 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
         telas: m.telas,
       })),
     }),
+  },
+
+  {
+    name: "plataforma_ver_saude",
+    description:
+      "O estado da INSTALAÇÃO numa resposta: o schema veio junto com o código " +
+      "no último deploy, quais números estão fora do ar e quanto resta de " +
+      "crédito de IA. É a primeira pergunta depois de implantar.",
+    inputSchema: {},
+    operacao: null,
+    handler: async ({ admin }) => {
+      const [carimbo, caidos, saldo] = await Promise.all([
+        admin
+          .from(TABELA_DO_CARIMBO)
+          .select("migration_mais_nova, aplicado_em, erros_inesperados, erros_amostra")
+          .eq("id", 1)
+          .maybeSingle(),
+        admin
+          .from("channel_sessions")
+          .select("id, organization_id, display_name, phone_number, status, e_numero_de_avisos")
+          .is("archived_at", null)
+          .neq("status", STATUS_SAUDAVEL)
+          .limit(50),
+        saldoDaPlataforma(admin),
+      ]);
+
+      const linha = carimbo.data as {
+        migration_mais_nova: string | null;
+        aplicado_em: string | null;
+        erros_inesperados: number | null;
+        erros_amostra: string | null;
+      } | null;
+
+      return {
+        schema: {
+          no_banco: linha?.migration_mais_nova ?? null,
+          esperado: CARIMBO_DO_SCHEMA,
+          aplicado_em: linha?.aplicado_em ?? null,
+          erros: linha?.erros_inesperados ?? 0,
+          // ⚠️ A AMOSTRA SAI AQUI, e não sai em `/api/v1/health` sem segredo.
+          // A diferença é quem pergunta: a saúde é pública (um monitor externo
+          // bate nela), e mensagem de erro de Postgres carrega nome de tabela,
+          // de coluna e às vezes o valor que violou a constraint. Quem chega
+          // por aqui já apresentou um token de plataforma.
+          amostra_do_erro: linha?.erros_amostra ?? null,
+          em_dia: linha?.migration_mais_nova === CARIMBO_DO_SCHEMA
+            && (linha?.erros_inesperados ?? 0) === 0,
+        },
+        // O número de AVISOS caído é outro tamanho de problema: enquanto ele
+        // estiver fora, NENHUM cliente recebe aviso de bastão. Marcá-lo aqui
+        // evita que ele se esconda numa lista de canais caídos.
+        canais_fora_do_ar: (caidos.data ?? []).map((c) => {
+          const s = c as {
+            id: string;
+            organization_id: string;
+            display_name: string | null;
+            phone_number: string | null;
+            status: string | null;
+            e_numero_de_avisos: boolean | null;
+          };
+          return {
+            id: s.id,
+            organization_id: s.organization_id,
+            nome: s.display_name ?? s.phone_number ?? s.id,
+            status: s.status,
+            e_o_numero_de_avisos: s.e_numero_de_avisos === true,
+          };
+        }),
+        credito_de_ia: {
+          saldo_usd: saldo.saldoUsd,
+          dias_restantes: saldo.diasRestantes,
+        },
+      };
+    },
   },
 
   // ── ESCRITA ─────────────────────────────────────────────────────────────
