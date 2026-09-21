@@ -16,7 +16,7 @@
  * um — a mesma escada que o canal manual usa. Pedir um token ao cliente aqui
  * anularia a única vantagem do cadastro incorporado: ele não digita nada.
  */
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import { type NextRequest } from "next/server";
 import { z } from "zod";
@@ -27,7 +27,6 @@ import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { CHANNEL_PROVIDER_META } from "@/lib/channels/capabilities";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 export const dynamic = "force-dynamic";
 
@@ -157,37 +156,6 @@ export async function POST(req: NextRequest): Promise<Response> {
     return fail("conflict", "Essa conta já está amarrada a um cliente.", 409, { requestId });
   }
 
-  /**
-   * O SEGREDO DE WEBHOOK DO CANAL — a coluna que fazia este botão nunca funcionar.
-   *
-   * `channel_sessions.webhook_secret_encrypted` é `bytea NOT NULL` e não tem
-   * default. Este insert não a preenchia, então TODO clique em "Amarrar"
-   * estourava no Postgres e voltava como a mensagem crua da constraint. Não era
-   * um caso de borda: era sempre, desde que a tela existe — e ninguém percebeu
-   * porque a conta só chega aqui quando um cliente real completa o cadastro, e
-   * isso só aconteceu pela primeira vez em 21/09/2026.
-   *
-   * O valor é um segredo NOVO e aleatório, não o token da Meta. O canal criado
-   * por aqui não tem token próprio de propósito (é o token de sistema da
-   * plataforma que endereça a WABA do cliente — está no cabeçalho deste
-   * arquivo), mas o segredo de webhook é outra coisa: ele pertence ao CANAL,
-   * não ao provedor, e é o que o resto do repo espera encontrar cifrado aqui.
-   *
-   * Falha de cifra recusa ANTES de criar o canal, e a mensagem diz o que falta.
-   * Criar o canal sem segredo seria repetir o defeito num degrau acima: um
-   * canal que existe na tela e quebra na primeira entrega.
-   */
-  const segredoDoCanal = randomBytes(32).toString("hex");
-  const segredoCifrado = await encryptWebhookSecret(admin, segredoDoCanal);
-  if (!segredoCifrado) {
-    return fail(
-      "invalid_request",
-      "Cifra indisponível nesta instalação (GUC app.nuvemshop_oauth_key ausente) — o canal não foi criado.",
-      422,
-      { requestId },
-    );
-  }
-
   const agora = new Date().toISOString();
   const { data: sessao, error: erroSessao } = await admin
     .from("channel_sessions")
@@ -196,7 +164,6 @@ export async function POST(req: NextRequest): Promise<Response> {
       provider: CHANNEL_PROVIDER_META,
       meta_waba_id: waba_id,
       meta_phone_number_id: phone_number_id,
-      webhook_secret_encrypted: segredoCifrado,
       display_name:
         (chegada as { business_name?: string | null }).business_name ?? "WhatsApp Oficial",
       phone_number: (chegada as { phone_number?: string | null }).phone_number ?? null,

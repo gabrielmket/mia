@@ -26,9 +26,6 @@ export interface ChegadaDoCadastro {
   businessName: string | null;
   phoneNumberId: string | null;
   phoneNumber: string | null;
-  /** O portfólio empresarial DO CLIENTE. É a única pista de "de quem é isto"
-   *  que o `partner_added` traz, e a que permite conferir a amarração à mão. */
-  ownerBusinessId: string | null;
   payload: Record<string, unknown>;
 }
 
@@ -50,26 +47,7 @@ export function lerChegada(
 ): ChegadaDoCadastro | null {
   if (!(CAMPOS_DE_CHEGADA as readonly string[]).includes(field)) return null;
 
-  /**
-   * DE ONDE sai o id da WABA — e por que a ordem é esta.
-   *
-   * Medido na primeira chegada real, em 21/09/2026. O `partner_added` veio
-   * assim, e só assim:
-   *
-   *   { "event": "PARTNER_ADDED",
-   *     "waba_info": { "waba_id": "…", "owner_business_id": "…" } }
-   *
-   * `value.waba_id` NÃO existe nesse formato. A leitura anterior procurava só
-   * por ele e caía no `entry.id` do envelope — que no `partner_added` não é a
-   * conta do cliente. A linha foi gravada com um id que não corresponde a nada
-   * na Meta, sem número e sem nome, e o operador ficou olhando uma conta
-   * "esperando" que ele não conseguia amarrar nem conferir.
-   *
-   * `waba_info` vem primeiro por ser o mais específico. `entry.id` fica por
-   * último de propósito: no `account_update` ele É a WABA, e ali continua certo.
-   */
-  const info = (value.waba_info ?? {}) as Record<string, unknown>;
-  const wabaId = texto(info.waba_id) ?? texto(value.waba_id) ?? texto(wabaIdDaEntry);
+  const wabaId = texto(value.waba_id) ?? texto(wabaIdDaEntry);
   // Sem WABA não há o que guardar: é a chave natural da linha, e uma linha sem
   // ela seria um registro que o operador vê e não consegue amarrar a nada.
   if (!wabaId) return null;
@@ -87,14 +65,6 @@ export function lerChegada(
       null,
     phoneNumberId: texto(value.phone_number_id) ?? texto(primeiro.id) ?? null,
     phoneNumber: texto(value.display_phone_number) ?? texto(primeiro.display_phone_number) ?? null,
-    // O `partner_added` não traz número NENHUM — ele avisa que uma empresa
-    // adicionou nosso app, e os números vêm depois (ou são buscados na Graph
-    // com este mesmo id). Guardar o portfólio dela é o que permite conferir,
-    // a olho, que a conta que chegou é do cliente que se espera.
-    ownerBusinessId:
-      texto(info.owner_business_id) ??
-      texto((value.business as Record<string, unknown> | undefined)?.id) ??
-      null,
     payload: value,
   };
 }
@@ -124,7 +94,6 @@ export async function guardarChegada(
       business_name: chegada.businessName,
       phone_number_id: chegada.phoneNumberId,
       phone_number: chegada.phoneNumber,
-      owner_business_id: chegada.ownerBusinessId,
       payload: chegada.payload,
       updated_at: new Date().toISOString(),
     };
