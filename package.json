@@ -33,6 +33,7 @@
     "release:cortar": "tsx scripts/cortar-release.ts --escrever",
     "implantar:conferir": "tsx scripts/apontar-compose.ts",
     "implantar:apontar": "tsx scripts/apontar-compose.ts --escrever",
+    "meta:numeros": "tsx scripts/meta-descobrir-numeros.ts",
     "gov:verify": "pnpm typecheck && pnpm lint && pnpm lint:channels && pnpm lint:role-rank && pnpm test:unit",
     "worker": "tsx --env-file=.env --env-file=.env.local workers/agent-worker/main.ts",
     "dev:crons": "tsx --env-file=.env --env-file=.env.local scripts/dev-crons.ts",
