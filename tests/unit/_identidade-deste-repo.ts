@@ -46,7 +46,15 @@
  * reprova lá. Não remova essa derivação pensando que é redundante — ela é o que
  * torna a âncora não-falsificável de dentro do diff.
  */
-export const NAMESPACE_DESTE_REPO = "ghcr.io/melgarafael";
+// ⚠️ TROCADO NA FUSAO COM O UPSTREAM (23/09/2026).
+//
+// Este arquivo e NOVO do upstream: ele fatorou o literal para fora do teste e
+// o trouxe com o namespace DELE. Arquivo novo nao gera conflito — entrou
+// inteiro, calado, e a catraca passou a defender a identidade do upstream
+// contra a nossa. O compose e o hostgator-setup-kit continuam em
+// ghcr.io/gabrielmket, entao a producao nunca correu risco de baixar a imagem
+// errada; o que quebrava era a ancora, que e justamente quem deveria avisar.
+export const NAMESPACE_DESTE_REPO = "ghcr.io/gabrielmket";
 
 /**
  * O dono de uma referência `<registry>/<dono>`.
