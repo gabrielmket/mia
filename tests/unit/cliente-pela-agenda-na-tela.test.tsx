@@ -79,6 +79,10 @@ const CONTATO = {
   source: "whatsapp",
   source_metadata: {},
   custom_fields: {},
+  // Vinculo com a EMPRESA (migration 0255): contato de teste e pessoa avulsa.
+  empresa_id: null,
+  cargo: null,
+  setor: null,
   created_at: "2026-01-01T10:00:00.000Z",
   updated_at: "2026-01-01T10:00:00.000Z",
   last_activity_at: null,

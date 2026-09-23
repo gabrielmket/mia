@@ -98,15 +98,6 @@ const CONTACT_FIELDS: CuratedField[] = [
   { value: "contact.tags", label: "Tags do contato", op: "contains", lista: true },
   { value: "contact.name", label: "Nome do contato", op: "contains" },
 ];
-/**
- * O tipo do compromisso é o filtro que importa aqui: uma casa que usa a agenda
- * para reunião comercial E para retorno de atendimento não quer o mesmo aviso
- * para os dois.
- */
-const AGENDAMENTO_FIELDS: CuratedField[] = [
-  { value: "event.nome_do_tipo", label: "Tipo de compromisso", op: "eq" },
-  { value: "contact.tags", label: "Tags do contato", op: "contains" },
-];
 const TAG_ADDED_FIELD: CuratedField = {
   value: "event.added_tags",
   label: "Tag adicionada",
@@ -125,6 +116,22 @@ const AGENDAMENTO_FIELDS: CuratedField[] = [
   { value: "contact.tags", label: "Tags do contato", op: "contains", lista: true },
 ];
 
+/**
+ * OUTRO NOME PARA A MESMA COISA, e é o payload que manda.
+ *
+ * `appointment.booked` é o gatilho antigo desta linhagem, e o emissor dele
+ * (`agendamentos/_handler.ts`) publica o tipo em `nome_do_tipo`; os quatro
+ * gatilhos do ciclo de vida publicam em `event_type_name`. Oferecer as duas
+ * chaves em toda regra de agenda daria ao operador, no evento errado, um campo
+ * que NUNCA chega no payload: a condição aparece na tela, ele a salva, e ela
+ * não casa nunca. Controle decorativo é pior que controle ausente — então cada
+ * gatilho oferece a chave que o payload dele carrega.
+ */
+const AGENDAMENTO_FIELDS_LEGADO: CuratedField[] = [
+  { value: "event.nome_do_tipo", label: "Tipo de compromisso", op: "eq" },
+  { value: "contact.tags", label: "Tags do contato", op: "contains", lista: true },
+];
+
 // ponytail: etapa de destino usa o funil default (cobre o caso comum de 1
 // funil); se o produto ganhar múltiplos funis relevantes aqui, trocar por um
 // seletor de funil antes do de etapa.
@@ -139,10 +146,11 @@ const CURATED_FIELDS: Record<TriggerEvent, CuratedField[]> = {
   "appointment.rescheduled": AGENDAMENTO_FIELDS,
   "appointment.cancelled": AGENDAMENTO_FIELDS,
   // O nome antigo de "horário marcado", que só chega aqui pela regra JÁ salva
-  // (o seletor não o oferece). Mesmos campos do de cima porque é o mesmo
-  // evento: abrir uma automação antiga tem de mostrar as condições dela, e não
-  // uma lista vazia que convida o operador a apagar o que funcionava.
-  "appointment.booked": AGENDAMENTO_FIELDS,
+  // (o seletor não o oferece): abrir uma automação antiga tem de mostrar as
+  // condições dela, e não uma lista vazia que convida o operador a apagar o que
+  // funcionava. Lista própria porque o payload dele é próprio — ver
+  // AGENDAMENTO_FIELDS_LEGADO.
+  "appointment.booked": AGENDAMENTO_FIELDS_LEGADO,
   // O aniversário não tem campo próprio para filtrar: o que a organização quer
   // decidir é sobre QUEM faz aniversário, e não sobre a data. Por isso os campos
   // são os do contato — "só quem tem a tag cliente", tipicamente.

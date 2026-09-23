@@ -14,6 +14,10 @@ function evento(over: Partial<MessageStatusEvent>): MessageStatusEvent {
     recipient: "5571992894634",
     errorCode: null,
     errorTitle: null,
+    // `null` = este evento nao fala de dinheiro. O campo e obrigatorio no tipo
+    // para que todo produtor de status DECIDA (ver `pricing` em `./webhook`);
+    // estes casos sao sobre carimbo e erro, nao sobre cobranca.
+    pricing: null,
     ...over,
   };
 }

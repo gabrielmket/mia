@@ -109,8 +109,11 @@ export async function buildContext(admin: SupabaseClient, row: EventRow): Promis
     // no meio do caminho chegaria errado no texto da mensagem. O payload fica
     // como segunda opção porque a leitura acima pode voltar vazia (compromisso
     // apagado, RLS), e sem ela o aviso perderia até o nome de quem marcou.
+    // Um `??` por termo. A fusão encaixou a leitura nova na frente da antiga e
+    // deixou o `(… ?? null)` do meio: `(x ?? null) ?? y` é `x ?? y` escrito duas
+    // vezes, e é o que o TS2871 aponta.
     const contactId =
-      ((agendamento as { contact_id?: string | null } | null)?.contact_id ?? null) ??
+      (agendamento as { contact_id?: string | null } | null)?.contact_id ??
       (row.payload.contact_id as string | null) ??
       null;
     if (contactId) {

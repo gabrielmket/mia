@@ -135,6 +135,79 @@ export const COMO_FECHA = {
     quando: "uma pessoa assumiu a conversa (ela saiu de 'pending')",
     tetoEmDias: 30,
   },
+  // O caso está em `awaiting_human` há mais de um dia: a IA travou esperando
+  // alguém da equipe e há um cliente do outro lado. Deixa de ser verdade quando
+  // o caso SAI desse estado — foi concluído, devolvido ao cliente
+  // (`awaiting_lead`), escalado ou cancelado. Não é `idade`: quem espera no dia
+  // 8 espera tanto quanto no dia 2, e fechar por tempo devolveria o defeito
+  // medido que criou este vigia (22 pedidos parados, o mais antigo há 17,6 dias,
+  // e nada no sistema os trazia de volta).
+  // O teto é a mesma rede de `handoff`, e com o mesmo prazo de propósito: os
+  // dois são "tem gente esperando" pendurados numa linha que pode sumir (caso
+  // apagado, contato anonimizado pela cascata de LGPD). Depois de 30 dias parado
+  // não há mais cliente esperando resposta — há um caso morto, e o lugar dele é
+  // a tela de Casos, não o sino.
+  case_stale: {
+    modo: "condicao",
+    quando: "o caso saiu de 'awaiting_human' — alguém concluiu, devolveu ao cliente, escalou ou cancelou",
+    tetoEmDias: 30,
+  },
+  // O canal está ligado, em modo de teste e sem nenhum número autorizado: as
+  // mensagens chegam normalmente e a IA não responde ninguém. O próprio vigia
+  // (`app/api/v1/cron/canal-mudo-watcher`) já fecha o aviso nos quatro
+  // desfechos, e é ele quem manda aqui.
+  // `tetoEmDias: null` não é omissão. Esse cron lê os avisos ABERTOS antes das
+  // conexões e resolve os que sobraram sem canal, então a condição nunca fica
+  // inavaliável — não há o que a rede pegaria. E um teto seria o pior dos dois
+  // erros possíveis: no dia 31 o canal segue mudo, o aviso some, e a instalação
+  // volta a falhar exatamente do jeito silencioso que este kind existe para
+  // acabar — "as mensagens chegam, ninguém é respondido, e o dono conclui que o
+  // produto está quebrado".
+  canal_mudo_sem_numero: {
+    modo: "condicao",
+    quando: "o canal ganhou número autorizado, saiu do modo de teste, foi arquivado ou apagado",
+    tetoEmDias: null,
+  },
+  // O aviso daquele caso não chegou ao WhatsApp da equipe, em definitivo (a
+  // entrega venceu as 24h de `VALIDADE_DA_ENTREGA_MS`). A falha de entrega em si
+  // nunca "deixa de ser verdade" — mas ela não é o assunto: o aviso nasce com
+  // `ref_kind='agent_case'` de propósito, porque o que importa é o caso sobre o
+  // qual NINGUÉM foi avisado. Some quando esse caso para de esperar.
+  // Não é `idade`: enquanto o caso está aberto e o aviso não saiu, este item é o
+  // único lugar do produto que sabe disso, e vencê-lo por tempo apagaria o
+  // sinal com o problema de pé.
+  // Fechar por condição não perde o histórico da falha: a fonte da verdade é
+  // `entregas_de_aviso_de_caso` (a migration 0292 escreve isso com todas as
+  // letras, justamente porque qualquer membro apaga um item da Central pelo
+  // PostgREST). E se a conexão de avisos continuar quebrada, o próximo caso
+  // aberto abre outro item — o sintoma volta sozinho enquanto a causa existir.
+  // Teto de 30 pelo mesmo motivo de `case_stale`: o caso pode ser apagado ou
+  // anonimizado, e aí a pergunta fica sem quem a responda.
+  aviso_de_caso_nao_entregue: {
+    modo: "condicao",
+    quando: "o caso referido saiu dos estados abertos ('awaiting_human'/'awaiting_lead') — alguém o atendeu apesar de o aviso não ter chegado",
+    tetoEmDias: 30,
+  },
+  // O fluxo de follow-up está publicado, o gatilho pede IA e nenhum agente
+  // publicado arma o ponteiro: ele aparece `active` na tela e não inscreve
+  // ninguém, sem erro e sem log. Deixa de ser verdade quando o vínculo aparece
+  // (ou quando o grafo publicado passa a ser só texto fixo, que não precisa de
+  // agente), e quem fecha é o MESMO cron que abre — ele já reconcilia os dois
+  // lados por rodada.
+  // Não é `decisao`, embora só uma pessoa possa consertar: existe estado no
+  // banco que responde pela pergunta ("o ponteiro está na lista do agente
+  // publicado?"), e declarar decisão aqui obrigaria quem já consertou a voltar
+  // para fechar o aviso à mão — aviso que pede algo já feito é o começo de
+  // aprender a ignorar a Central.
+  // O teto é a rede para o buraco do vigia: ele só varre ponteiros `active`, e
+  // um fluxo pausado ou apagado sai da varredura deixando o aviso aberto para
+  // sempre. Fechar cedo demais custa quase nada justamente aqui — se o fluxo
+  // seguir publicado e desarmado, a rodada seguinte abre outro aviso.
+  followup_sem_agente: {
+    modo: "condicao",
+    quando: "um agente publicado passou a armar o fluxo, ou o grafo publicado deixou de pedir agente",
+    tetoEmDias: 30,
+  },
 
   // ── Fecham por idade: o fato não muda, a utilidade sim ────────────────────
   midia_nao_lida: {

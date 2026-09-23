@@ -15,11 +15,20 @@ export interface OrgMemoryVersionMeta {
   created_at: string;
 }
 /**
- * Quem escreveu o aprendizado. Espelha `org_memory_entries_source_check` (0385):
- * `agent` é o que a ferramenta MCP `crm_save_org_memory` grava. Par cobrado por
- * tests/unit/memoria-da-org-origem-cabe-no-check.test.ts.
+ * Quem escreveu o aprendizado — `manual`, `flywheel` ou `agent`.
+ *
+ * A LISTA NÃO MORA MAIS AQUI: ela é `ORIGENS_DA_MEMORIA`, em
+ * `lib/ai/org-memory-source.ts`, e é de lá que ela é cobrada contra o CHECK de
+ * `org_memory_entries.source` (tests/invariants/vocabulario-banco-x-typescript).
+ * As duas linhagens consertaram o mesmo 23514 ao mesmo tempo, cada uma escreveu
+ * a sua cópia do vocabulário, e a fusão trouxe as duas — que é exatamente o
+ * modo de falha que uma constante compartilhada existe para fechar: a próxima
+ * origem entraria numa das cópias e não na outra.
+ *
+ * Reexportado porque a tela (`app/app/ai/memory/_client.tsx`) pede o tipo a
+ * este hook, junto com os outros que ela já importa daqui.
  */
-export type OrigemDaMemoria = "manual" | "flywheel" | "agent";
+export type { OrigemDaMemoria };
 
 export interface OrgMemoryEntryRow {
   id: string;
