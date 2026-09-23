@@ -46,6 +46,7 @@ export interface ChannelSummary {
    * que a doutrina proíbe, e ele mora atrás do seam.
    */
   provider: string | null;
+  social_platform?: string | null;
 }
 
 export type ConversationWithContact = Conversation & {
@@ -86,6 +87,11 @@ export interface ConversationsFilters {
    */
   comando?: readonly ComandoDoBanco[];
   search?: string;
+  /**
+   * Só as que têm mensagem não lida para o dono. Vai ao BANCO — migration nenhuma,
+   * a coluna `unread_count_for_assignee` já existe.
+   */
+  unread?: boolean;
   channel_session_id?: string;
   tag?: string;
 }
@@ -122,6 +128,7 @@ export function useConversationsRealtime(
       if (filters.exclude_finished) qs.set("exclude_finished", "true");
       if (filters.assigned_to) qs.set("assigned_to", filters.assigned_to);
       if (filters.search) qs.set("search", filters.search);
+      if (filters.unread) qs.set("unread", "true");
       if (filters.channel_session_id) qs.set("channel_session_id", filters.channel_session_id);
       if (filters.tag) qs.set("tag", filters.tag);
       if (pageParam) qs.set("cursor", pageParam);

@@ -19,7 +19,7 @@ import { env } from "@/lib/env";
 
 /** Endpoint da OpenRouter. Compatível com a API da OpenAI, então o provider
  *  `@ai-sdk/openai` fala com ela sem dependência nova. */
-export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+export const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1";
 
 export type ModelId =
   | "anthropic/claude-sonnet-5"
@@ -75,7 +75,7 @@ export function resolveLanguageModel(model: ModelId): LanguageModel | null {
     return createOpenAI({
       apiKey: env.OPENROUTER_API_KEY,
       baseURL: env.OPENROUTER_BASE_URL || OPENROUTER_BASE_URL,
-    })(id);
+    }).chat(id); // chat/completions, como o registry do worker (providers.ts)
   }
 
   if (id.startsWith("anthropic/") && env.ANTHROPIC_API_KEY) {

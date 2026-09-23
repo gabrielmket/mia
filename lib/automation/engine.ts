@@ -20,18 +20,24 @@ import { evaluateConditions, type RuleCondition } from "@/lib/automation/conditi
 import { getAction } from "@/lib/automation/actions";
 import type { ActionResultDetail } from "@/lib/automation/types";
 import { audit } from "@/lib/audit";
+import { regraDoEvento } from "@/lib/automation/gatilho-de-data-do-funil";
+import { ENTIDADE_ESPERADA_POR_GATILHO } from "@/lib/schemas/webhooks";
 import { logger } from "@/lib/logger";
 
 export const AUTOMATION_CONSUMER_KEY = "automation-rules";
 
-const EXPECTED_ENTITY_KIND: Record<string, string> = {
-  "lead.created": "crm_lead",
-  "lead.stage_changed": "crm_lead",
-  "lead.tag_added": "crm_lead",
-  "contact.tag_added": "contact",
-  "message.received": "message",
-  "appointment.booked": "calendar_appointment",
-};
+/**
+ * FONTE ÚNICA (upstream): o mapa saiu daqui e virou
+ * `ENTIDADE_ESPERADA_POR_GATILHO`, em `lib/schemas/webhooks.ts`.
+ *
+ * O mapa embutido que este fork mantinha listava `appointment.booked` — nada se
+ * perde: aquele gatilho continua declarado lá, ao lado dos quatro nomes novos do
+ * ciclo de vida do compromisso. Manter as duas listas era o defeito que a
+ * mudança consertou: acrescentar um gatilho exigia lembrar de três lugares, e
+ * esquecer um deles faz a regra aparecer na tela, o operador salvá-la, o evento
+ * acontecer — e nada rodar, sem erro, sem log, sem run.
+ */
+const EXPECTED_ENTITY_KIND: Record<string, string> = ENTIDADE_ESPERADA_POR_GATILHO;
 
 interface RuleRow {
   id: string;
@@ -84,8 +90,29 @@ export async function buildContext(admin: SupabaseClient, row: EventRow): Promis
       .eq("id", row.entity_id)
       .eq("organization_id", org)
       .maybeSingle();
-    if (agendamento) context.agendamento = agendamento;
-    const contactId = (row.payload.contact_id as string | null) ?? null;
+    if (agendamento) {
+      // DOIS NOMES PARA A MESMA LINHA, e é de propósito.
+      //
+      // Este fork hidrata `agendamento` (é o token que a tela oferece em
+      // `ActionConfigForm`: {{agendamento.starts_at}}, {{agendamento.notes}}) e o
+      // upstream hidrata `appointment`. Regra JÁ SALVA não se reescreve sozinha:
+      // ficar com um nome só deixaria mudo, em produção, todo aviso escrito na
+      // outra linhagem — o template renderiza string vazia e ninguém vê erro.
+      // Publicar a mesma linha sob os dois nomes custa uma referência e nenhuma
+      // consulta a mais. Quando as regras antigas tiverem sido migradas, o
+      // `appointment` fica e o `agendamento` sai (nesta ordem, nunca na outra).
+      context.agendamento = agendamento;
+      context.appointment = agendamento;
+    }
+    // O CONTATO sai do COMPROMISSO primeiro (upstream): a linha do banco é a
+    // versão de AGORA, e o payload é a de quando o evento nasceu — nome trocado
+    // no meio do caminho chegaria errado no texto da mensagem. O payload fica
+    // como segunda opção porque a leitura acima pode voltar vazia (compromisso
+    // apagado, RLS), e sem ela o aviso perderia até o nome de quem marcou.
+    const contactId =
+      ((agendamento as { contact_id?: string | null } | null)?.contact_id ?? null) ??
+      (row.payload.contact_id as string | null) ??
+      null;
     if (contactId) {
       const { data: contact } = await admin
         .from("contacts")
@@ -196,7 +223,25 @@ export async function runAutomationForEvent(
   if (error) {
     return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "error", detail: error.message };
   }
-  const matched = (rules ?? []) as unknown as RuleRow[];
+  const todas = (rules ?? []) as unknown as RuleRow[];
+  if (!todas.length) {
+    return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "ok", detail: "no_rules" };
+  }
+
+  // ═══ EVENTO DIRIGIDO: A REGRA QUE O RELÓGIO APONTOU ═══
+  //
+  // O gatilho de data do funil (`lead.date_field_due`) não nasce de uma ação de
+  // ninguém: quem o emite é a varredura `cron/lead-date-field-due`, e ela sabe
+  // PARA QUAL REGRA — o payload traz `rule_id`. Sem este recorte, duas regras do
+  // mesmo gatilho com `dias` diferentes (240 dias antes do casamento e 60
+  // depois dele) rodariam as duas no mesmo evento, porque aqui só se casa
+  // `event_type`: a confirmação de entrega sairia junto com o aviso de 240 dias.
+  //
+  // Todo outro gatilho emite payload sem `rule_id`, então `regraDoEvento`
+  // devolve `null` e a seleção segue exatamente como sempre foi: todas as
+  // regras ativas daquele tipo.
+  const regraApontada = regraDoEvento(row.payload);
+  const matched = regraApontada ? todas.filter((r) => r.id === regraApontada) : todas;
   if (!matched.length) {
     return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "ok", detail: "no_rules" };
   }

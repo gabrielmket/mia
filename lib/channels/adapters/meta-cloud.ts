@@ -19,6 +19,7 @@
  *    da bolha de voz. E a Meta **não converte** — quem manda mp3 com `voice:true` erra;
  *    o outro canal converte por nós, este não.
  */
+import { graphVersion } from "@/lib/graph-version";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { metaContactsPayload } from "@/lib/channels/meta/contact-card";
 import { resolveMetaCreds } from "../meta/credentials";
@@ -31,7 +32,7 @@ import type {
 } from "../types";
 
 /** Só dígitos. `+55 (31) 99896-6398` → `5531998966398`. */
-function toE164Digits(raw: string): string {
+export function toE164Digits(raw: string): string {
   return raw.replace(/\D/g, "");
 }
 
@@ -46,8 +47,13 @@ function toE164Digits(raw: string): string {
 import { metaCredsFromEnv } from "../meta/credentials";
 export { metaCredsFromEnv as getMetaCreds };
 
-/** `kind: "contact"` → objeto `contacts` da Cloud API. */
-function contactPayload(env: OutboundEnvelope): Record<string, unknown> | null {
+/**
+ * `kind: "contact"` → objeto `contacts` da Cloud API.
+ *
+ * Exportada (e a de mídia também) porque o canal Datafy fala o MESMO dialeto:
+ * duas cópias garantiriam que a primeira correção de mídia faltasse num lado.
+ */
+export function contactPayload(env: OutboundEnvelope): Record<string, unknown> | null {
   if (env.kind !== "contact" || !env.contact) return null;
   return {
     type: "contacts",
@@ -56,7 +62,7 @@ function contactPayload(env: OutboundEnvelope): Record<string, unknown> | null {
 }
 
 /** `kind` do envelope → objeto de mídia da Cloud API. */
-function mediaPayload(env: OutboundEnvelope): Record<string, unknown> | null {
+export function mediaPayload(env: OutboundEnvelope): Record<string, unknown> | null {
   if (!env.media) return null;
   const link = env.media.url;
   const caption = env.media.caption ?? undefined;
@@ -147,7 +153,7 @@ export const metaCloudAdapter: ChannelAdapter = {
     });
     if (!creds) return { reachable: false, status: null, detail: "sem_credencial_para_a_sessao" };
 
-    const version = process.env.META_GRAPH_VERSION ?? "v22.0";
+    const version = graphVersion();
     try {
       const res = await fetch(
         `https://graph.facebook.com/${version}/${input.sessionRef}?fields=display_phone_number,quality_rating`,

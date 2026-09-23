@@ -5,6 +5,8 @@ import { modulosDaOrganizacao } from "@/lib/modulos/liberacao";
 import { modoDeVendaDaOrganizacao } from "@/lib/empresas/modo-de-venda";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { modulosLigados } from "@/lib/instalacao/modulos";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Configurações" };
@@ -49,6 +51,8 @@ export default async function SettingsHubPage() {
       interfaceSettings={activeOrg?.interface_settings}
       modulos={modulos}
       modoDeVenda={modoDeVenda}
+      // A porta do banco externo mora neste hub, e só existe com o módulo ligado.
+      modulosLigados={await modulosLigados(createAdminClient())}
       title={traduzir("Configurações", idioma)}
       subtitle={traduzir("Sua conta, os dados da empresa e quem tem acesso ao quê.", idioma)}
       locale={idioma}

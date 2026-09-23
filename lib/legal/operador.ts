@@ -29,6 +29,7 @@
  *               sem, e a organização da sessão não tem voz no documento.
  */
 import { env } from "@/lib/env";
+import { valorDaInstalacao } from "@/lib/instalacao/config";
 import { branding } from "@/lib/branding";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -80,12 +81,18 @@ export function urlDePoliticaSegura(valor: unknown): string | null {
   }
 }
 
-const SEM_SESSAO = (): Operador => ({
+/**
+ * Virou `async` porque o contato do encarregado passou a vir do banco (migration
+ * 0341), com o arquivo de instalação como piso. As três chamadas vivem dentro de
+ * `resolverOperador`, que já era assíncrona — o alcance foi medido antes de
+ * mudar a assinatura.
+ */
+const SEM_SESSAO = async (): Promise<Operador> => ({
   sistema: branding().name,
   nome: null,
   razaoSocial: null,
   cnpj: null,
-  dpoEmail: env.LGPD_DPO_EMAIL.trim() || null,
+  dpoEmail: (await valorDaInstalacao("LGPD_DPO_EMAIL")).valor?.trim() || null,
   politicaPropria: null,
   resolvido: false,
 });
@@ -173,10 +180,10 @@ export async function resolverOperador(): Promise<Operador> {
   if (declarado) return declarado;
 
   const user = await loadAuthUser();
-  if (!user) return SEM_SESSAO();
+  if (!user) return await SEM_SESSAO();
 
   const activeOrg = await resolveActiveOrg(user);
-  if (!activeOrg) return SEM_SESSAO();
+  if (!activeOrg) return await SEM_SESSAO();
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -187,7 +194,7 @@ export async function resolverOperador(): Promise<Operador> {
 
   // Falha de leitura não pode apagar o documento da tela: o texto do produto
   // vale para todo mundo, e o que se perde é só a personalização.
-  if (error || !data) return { ...SEM_SESSAO(), sistema: branding().name };
+  if (error || !data) return { ...(await SEM_SESSAO()), sistema: branding().name };
 
   const org = data as {
     display_name: string | null;
@@ -203,7 +210,10 @@ export async function resolverOperador(): Promise<Operador> {
     razaoSocial: org.legal_name?.trim() || null,
     cnpj: org.cnpj?.trim() || null,
     // Mesmo fallback que o resto do produto já usa para o encarregado.
-    dpoEmail: org.dpo_email?.trim() || env.LGPD_DPO_EMAIL.trim() || null,
+    dpoEmail:
+      org.dpo_email?.trim() ||
+      (await valorDaInstalacao("LGPD_DPO_EMAIL")).valor?.trim() ||
+      null,
     politicaPropria: urlDePoliticaSegura(org.privacy_policy_url),
     resolvido: true,
   };

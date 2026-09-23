@@ -73,6 +73,7 @@ SEGREDO_SEGURO="$(printf '%s' "$SEGREDO_DO_CRON" | sed "s/'/'\\\\''/g")"
 # comentário, seria DADO — e crase em prosa dentro de aspas duplas o shell
 # EXECUTA. Foi o que quebrou o entrypoint na primeira tentativa desta linha.
 CRONS="
+* * * * *|240|api/v1/cron/prospecting
 * * * * *|25|api/v1/cron/agent-dispatcher
 * * * * *|25|api/v1/cron/followup-flow-worker
 * * * * *|45|api/v1/cron/event-log-drain
@@ -80,7 +81,16 @@ CRONS="
 * * * * *|25|api/v1/cron/recover-stuck-messages
 */5 * * * *|25|api/v1/cron/storage-redaction?limit=50
 */5 * * * *|25|api/v1/cron/snooze-watcher
-*/5 * * * *|25|api/v1/cron/attendant-heartbeat
+# ⚠️ O `attendant-heartbeat` saiu DESTA lista de propósito, e não por descuido da
+# fusão: a rota `app/api/v1/cron/attendant-heartbeat` foi removida junto com o
+# conserto de "o plantão se desliga sozinho" (o cron marcava offline quem não
+# pingasse em 15 min). Agendar o que não existe mais é curl 404 a cada 5 minutos
+# e cron-routes-scheduled vermelho — a lista aqui é conferida contra o diretório.
+*/5 * * * *|60|api/v1/cron/handoff-devolucao
+# A CAMPANHA. Minuto a minuto, e a rodada manda no máximo uma mensagem por
+# número: é o cron que dá a cadência base, e o ritmo da campanha e do canal
+# (channel_knobs + pacing_ledger) só sabem torná-la mais lenta.
+* * * * *|45|api/v1/cron/campaign-worker
 # O MOTOR DO MIA BROADCAST. A cada minuto porque o estado mora todo no banco
 # (uma linha por destinatário) e a rodada é curta de propósito: 50 mensagens e
 # volta. Rodada longa seguraria o processo e atrasaria a reconferência de saldo,
@@ -113,9 +123,29 @@ CRONS="
 # fila) mudam em minutos mas não são urgentes — um aviso que sobrevive 40
 # minutos ao conserto não estraga a tela; um que sobrevive uma semana, sim.
 0 * * * *|90|api/v1/cron/varredura-de-avisos
+*/15 * * * *|45|api/v1/cron/agenda-expira-pendentes
 */15 * * * *|60|api/v1/cron/risk-watcher
+# O CASO PARADO. De hora em hora, e não a cada 5 minutos: o prazo é de 24h, e
+# uma varredura mais frequente só gastaria consulta para descobrir o mesmo nada.
+7 * * * *|60|api/v1/cron/case-stale-watcher
 */30 * * * *|60|api/v1/cron/contact-phones
 17 * * * *|60|api/v1/cron/contact-proposals-watcher
+23 * * * *|60|api/v1/cron/followup-sem-agente
+# O ANIVERSÁRIO. De hora em hora, e não uma vez ao dia, porque quem decide o
+# momento é o relógio de parede de CADA organização: a rodada só age naquela
+# cujo fuso marca a hora de parabenizar. Uma varredura diária em UTC felicitaria
+# no dia errado metade do mundo e de madrugada boa parte do resto. Barato: quem
+# não configurou a automação não chega a ser varrido.
+7 * * * *|60|api/v1/cron/contact-birthdays
+# A DATA DO FUNIL (#989). Mesma cadência e mesmo motivo do aniversário: de hora
+# em hora, e quem decide o momento é o relógio de parede de CADA organização —
+# a rodada só age naquela que marca a hora da varredura. Minuto diferente do
+# aniversário para as duas não disputarem a mesma batida num self-host pequeno.
+23 * * * *|60|api/v1/cron/lead-date-field-due
+# O canal mudo (doc 11, decisão B): varredura de banco, sem rede, com régua em
+# DIAS. Diária e de madrugada porque o estado que ela lê muda em dias — de 5 em
+# 5 minutos seriam 288 varreduras para nada, e o aviso chegaria na mesma hora.
+50 5 * * *|60|api/v1/cron/canal-mudo-watcher
 0 12 * * *|60|api/v1/cron/lgpd-sla-watcher
 30 3 * * *|120|api/v1/cron/kb-conversations-batch
 15 4 * * *|60|api/v1/cron/sync-model-catalog
@@ -131,6 +161,10 @@ CRONS="
 # responde 200 dizendo que não há chave, e nada acontece.
 40 5 * * *|60|api/v1/cron/gasto-openai
 40 4 * * *|120|api/v1/cron/data-retention
+# AS RECORRÊNCIAS. Uma vez ao dia é o bastante: o que ela gera é uma conta a
+# pagar, e a diferença entre nascer às 5h ou às 17h não muda nada para quem paga.
+# Barato: uma consulta por instalação, e quem não tem molde nenhum sai na hora.
+50 5 * * *|60|api/v1/cron/recurring-entries
 "
 
 # CRONTAB_PATH é ponto de injeção do teste (tests/shell/scheduler-entrypoint.test.sh).

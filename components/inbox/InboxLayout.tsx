@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/auth/AuthProvider";
+import { fonteDeTemplates } from "@/lib/channels/templates-fonte";
 import { estadoDaJanela, formatarDecorrido } from "@/lib/channels/janela";
 import { JanelaFechadaAviso } from "@/components/inbox/JanelaFechadaAviso";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
@@ -32,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
+import { buscaValeConsulta } from "@/lib/inbox/termo-de-busca";
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
 
 /**
@@ -88,6 +90,15 @@ export function tabToFilter(
       return { assigned_to: "me", exclude_finished: true };
     case "closed":
       return { status: "closed" };
+    case "archived":
+      // O ARQUIVO É UM ESTADO SÓ ELE, não `in(terminais)`.
+      //
+      // `CONVERSATION_TERMINAL_STATUSES` responde outra pergunta ("o que sai do
+      // fluxo vivo", usada pelo `exclude_finished` de Minhas). Reaproveitá-la
+      // aqui faria a aba Arquivadas listar também as fechadas — duas abas com a
+      // mesma lista e badges diferentes, que é a mentira de tela que o mapa
+      // abaixo existe para impedir.
+      return { status: "archived" };
     case "ai":
       // `ai_handling` é escrito por UM caminho só em produção (a volta pelo botão
       // "Devolver ao automático"), então a aba vivia mostrando 2 enquanto o robô
@@ -99,7 +110,7 @@ export function tabToFilter(
   }
 }
 
-const FILTER_TABS: InboxTab[] = ["unassigned", "mine", "all", "closed", "ai"];
+const FILTER_TABS: InboxTab[] = ["unassigned", "mine", "all", "closed", "archived", "ai"];
 
 /**
  * Lê ?filter= (G4-02, deep-link). ?filter=all é HONRADO mesmo para agent — a
@@ -143,6 +154,12 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
     [tab, searchParams, router, pathname],
   );
 
+  // Desliga só os AUXILIARES e mantém a aba: a aba é onde a pessoa está, e
+  // limpá-la junto a tiraria do lugar sem ela ter pedido.
+  const limparFiltrosAuxiliares = useCallback(() => {
+    setFilterValue({ tab, search: "", onlyUnread: false });
+  }, [tab, setFilterValue]);
+
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -172,9 +189,16 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   const filters: ConversationsFilters = useMemo(
     () => ({
       ...tabToFilter(filterValue.tab, automaticoDaOrg),
-      search: filterValue.search || undefined,
+      // A tela NÃO pede o que a rota recusa: o hook trata falha com
+      // `showApiError`, então digitar a primeira letra de qualquer busca faria
+      // piscar um erro na cara de quem digita. A regra é a MESMA que o schema
+      // usa (`lib/inbox/termo-de-busca.ts`) — nunca repetida aqui.
+      search: buscaValeConsulta(filterValue.search)
+        ? filterValue.search
+        : undefined,
       channel_session_id: filterValue.channel_session_id,
       tag: filterValue.tag,
+      unread: filterValue.onlyUnread || undefined,
     }),
     [
       filterValue.tab,
@@ -182,16 +206,10 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       filterValue.search,
       filterValue.channel_session_id,
       filterValue.tag,
+      filterValue.onlyUnread,
     ],
   );
 
-  const clientFilter = useMemo(
-    () =>
-      filterValue.onlyUnread
-        ? (c: ConversationWithContact) => (c.unread_count_for_assignee ?? 0) > 0
-        : undefined,
-    [filterValue.onlyUnread],
-  );
 
   // We need the selected conversation object for header / composer / side panel.
   // Source it from the same query the list uses to avoid an extra request.
@@ -303,7 +321,9 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   );
   const motivoDaJanela =
     janela.tipo === "fechada"
-      ? janela.fechadaHaMs === null
+      ? fonteDeTemplates(selectedConversation?.channel_sessions?.provider) === null
+        ? t("Aguarde uma nova mensagem do cliente para reabrir o atendimento nesta rede.")
+        : janela.fechadaHaMs === null
         ? t("O cliente ainda não escreveu — a janela de 24h nunca abriu. Só um modelo aprovado sai daqui.")
         : `${t("A janela de 24h fechou há")} ${formatarDecorrido(janela.fechadaHaMs)}. ${t("Só um modelo aprovado sai daqui — texto livre é recusado pela plataforma.")}`
       : null;
@@ -357,7 +377,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   return (
     <OpenConversationProvider conversationId={selectedId}>
     <div
-      className="grid h-[calc(100dvh-3.5rem-2*var(--space-6))] w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[272px_1fr_296px] 2xl:grid-cols-[300px_1fr_320px]"
+      className="grid h-[calc(100dvh-3.5rem-var(--space-6)-max(var(--space-6),var(--rodape-ocupado,0px)))] w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[272px_1fr_296px] 2xl:grid-cols-[300px_1fr_320px]"
       /*
        * O ESTADO DO TEMPO REAL, LEGÍVEL DE FORA — mesmo par que o dossiê do lead
        * já publica (`LeadDossier`), e pela mesma razão: quando a entrega morre,
@@ -407,8 +427,8 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
             filters={filters}
             selectedId={selectedId}
             onSelect={handleSelect}
-            clientFilter={clientFilter}
             onVisibleChange={handleVisibleChange}
+            onLimparFiltros={limparFiltrosAuxiliares}
           />
         </div>
       </div>
@@ -467,9 +487,23 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
         )}
         {selectedConversation ? (
           <>
-            <ConversationHeader conversation={selectedConversation} />
+            {/* `key`: trocar de conversa desmonta a confirmação de Fechar/Arquivar
+                aberta — senão o clique de dentro agiria sobre a conversa nova. */}
+            <ConversationHeader key={selectedConversation.id} conversation={selectedConversation} />
             <div className="min-h-0 flex-1 overflow-hidden">
-              <ChatThread conversationId={selectedConversation.id} onResponder={setRespondendo} />
+              <ChatThread
+                conversationId={selectedConversation.id}
+                onResponder={setRespondendo}
+                // O cartão da passagem escolhe o gesto a partir de quem é o dono
+                // da conversa: sem dono convida a assumir, com outro dono diz
+                // quem atende. Sem estes dois campos ele cairia no estado mais
+                // conservador e ficaria mudo justamente para quem mais precisa.
+                dono={{
+                  userId: selectedConversation.assigned_to_user_id ?? null,
+                  nome: selectedConversation.assigned_to_user_name ?? null,
+                }}
+                contatoId={selectedConversation.contacts?.id ?? null}
+              />
             </div>
             <RetentionNotice conversationId={selectedConversation.id} />
             {motivoDaJanela && (

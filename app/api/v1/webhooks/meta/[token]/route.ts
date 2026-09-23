@@ -21,15 +21,27 @@
  * Isso não é deixar o payload escolher tenant: a WABA só é lida DEPOIS do HMAC
  * provar que quem falou foi a Meta, e a tradução WABA → organização vem da nossa
  * tabela, nunca do corpo.
+ *
+ * ─── De onde vêm as duas credenciais (issue #850, migration 0257) ─────────────
+ *
+ * Do BANCO (`platform_meta_app`), não do ambiente: as duas são da INSTALAÇÃO
+ * inteira, não da organização — é isto que faz o 2º número conectar sem ninguém
+ * voltar na VPS para editar `.env` e reiniciar. O `.env` continua sendo o PISO
+ * (rollback, e clone que ainda não aplicou a migration) e as duas fontes NÃO se
+ * misturam: segredo de um lado com verify token do outro é um app que não existe,
+ * e a falha é um 401 calado que ninguém liga a configuração. A precedência, o TTL
+ * e esse motivo estão escritos em `lib/channels/meta/app.ts`.
  */
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { fail } from "@/lib/api/wrappers";
+import { appDaMeta } from "@/lib/channels/meta/app";
 import { lerEnvelopeMeta } from "@/lib/channels/meta/envelope";
 import { guardarChegada, lerChegada } from "@/lib/channels/meta/chegada-do-cadastro";
 import { parseMetaWebhook, verificationChallenge, verifyMetaSignature } from "@/lib/channels/meta/webhook";
 import { aplicarDesfechoNaCampanha } from "@/lib/broadcast/desfecho-da-campanha";
+import { statusUpdate } from "@/lib/channels/meta/status-update";
 import { ingestMetaInbound } from "@/lib/channels/meta/ingest";
 import { donoDoEvento } from "@/lib/channels/meta/dono-do-evento";
 import { metaSessionByWabaId, metaSessionByWebhookToken } from "@/lib/channels/meta/session";
@@ -48,10 +60,12 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<NextResponse
   const session = await metaSessionByWebhookToken(token);
   if (!session) return new NextResponse("not found", { status: 404 });
 
-  const challenge = verificationChallenge(
-    req.nextUrl.searchParams,
-    process.env.META_WEBHOOK_VERIFY_TOKEN ?? "",
-  );
+  // Do BANCO (platform_meta_app, migration 0257), com o `.env` como piso: é a
+  // credencial da INSTALAÇÃO inteira, não da organização — e um clone que ainda
+  // não aplicou a migration continua verificado pelo ambiente. Não lança nunca;
+  // a precedência e o porquê estão em `lib/channels/meta/app.ts`.
+  const { verifyToken } = await appDaMeta();
+  const challenge = verificationChallenge(req.nextUrl.searchParams, verifyToken ?? "");
   if (challenge === null) return new NextResponse("forbidden", { status: 403 });
 
   // Texto puro, sem wrapper — ver o cabeçalho.
@@ -80,8 +94,11 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
    * quem é", e deixou de ser a única.
    */
   const rawBody = await req.text();
-  const appSecret = process.env.META_APP_SECRET ?? "";
-  if (!verifyMetaSignature(rawBody, req.headers.get("x-hub-signature-256"), appSecret)) {
+  // Do mesmo lugar que o handshake: BANCO primeiro, `.env` como piso (0257). Sem
+  // segredo nenhum configurado a verificação devolve `false` e a entrega morre em
+  // 401 — que é o desfecho de hoje, e não um 500.
+  const { appSecret } = await appDaMeta();
+  if (!verifyMetaSignature(rawBody, req.headers.get("x-hub-signature-256"), appSecret ?? "")) {
     return fail("unauthorized", "invalid_signature", 401, { requestId });
   }
 
@@ -225,17 +242,20 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         .eq("name", e.templateName)
         .eq("language", e.templateLanguage);
     } else {
+      // O evento inteiro vira colunas, não só `status`: quando a Meta ACEITA o
+      // template e reprova a entrega depois, o motivo só existe aqui (131026,
+      // 131047, 131049, 132015). Ver `lib/channels/meta/status-update.ts`.
+      const patchDaMensagem = statusUpdate(e, now);
+
       /**
        * O que a Meta cobrou vai JUNTO com o status.
        *
        * Só quando o evento traz `pricing`: um `read` chega sem ele, e escrever
        * `null` por cima apagaria o que o `sent` já tinha registrado — o custo
-       * do mês inteiro dependeria de qual status chegou por último.
+       * do mês inteiro dependeria de qual status chegou por último. Fica AQUI e
+       * não dentro de `statusUpdate` porque lá todo campo é escrito sempre, e
+       * este é justamente o que só pode ser escrito quando existe.
        */
-      const patchDaMensagem: Record<string, unknown> = {
-        status: e.status === "failed" ? "failed" : "sent",
-        updated_at: now,
-      };
       if (e.pricing) {
         patchDaMensagem.meta_billable = e.pricing.billable;
         patchDaMensagem.meta_pricing_category = e.pricing.category;
@@ -244,6 +264,10 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       await admin
         .from("messages")
         .update(patchDaMensagem)
+        // `dono.organizationId`, e não `session.organizationId`: `session` pode
+        // ser `null` aqui (token órfão ou de outro canal) desde que quem decide
+        // o tenant passou a ser `donoDoEvento`. Ler `session` direto voltaria a
+        // derrubar a rota justamente na instalação com duas contas.
         .eq("organization_id", dono.organizationId)
         .eq("external_id", e.externalId);
 

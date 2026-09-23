@@ -20,7 +20,8 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { allTools } from "@/lib/mcp/tools";
-import { TOOL_CATALOG } from "@/lib/mcp/tools/catalog";
+import { TOOL_CATALOG, deModuloDesligado } from "@/lib/mcp/tools/catalog";
+import { modulosLigados } from "@/lib/instalacao/modulos";
 import { juntarCatalogoComHandlers } from "@/lib/mcp/tools/catalogo-servido";
 import {
   CAPACIDADES_DE_EMPRESA,
@@ -52,17 +53,33 @@ export async function GET(_req: NextRequest): Promise<Response> {
     );
   }
 
-  // Item C2: numa organização que vende para PESSOA, a capacidade de anotar a
-  // empresa do cliente não é oferecida. É aqui e não na tela porque esta rota é
-  // a única fonte do seletor — filtrar no componente deixaria o valor padrão, o
-  // pacote e qualquer tela futura servindo-se da lista completa.
+  // Um client admin só, para os DOIS recortes abaixo. Duas chamadas devolveriam
+  // dois clients equivalentes e uma conexão a mais no caminho quente da tela.
+  const admin = createAdminClient();
+
+  // São DOIS recortes independentes, e a ordem entre eles não importa porque
+  // nenhum depende do outro — o que importa é que nenhum foi esquecido:
   //
-  // Filtra o que se OFERECE, não o que existe: agente que já tenha a capacidade
-  // ligada continua com ela. Ver `CAPACIDADES_DE_EMPRESA`.
-  const modo = await modoDeVendaDaOrganizacao(createAdminClient(), activeOrg.orgId);
-  const oferecidas = mostraEmpresas(modo)
-    ? servidas
-    : servidas.filter((c) => !CAPACIDADES_DE_EMPRESA.includes(c.id));
+  //   1. MÓDULO OPCIONAL DESLIGADO na instalação (doc 37): a capacidade não
+  //      existe aqui, e a tela não a oferece para marcar.
+  //   2. Item C2 — organização que vende para PESSOA não vê a capacidade de
+  //      anotar a EMPRESA do cliente.
+  //
+  // Os dois são aqui e não na tela porque esta rota é a única fonte do
+  // seletor — filtrar no componente deixaria o valor padrão, o pacote e
+  // qualquer tela futura servindo-se da lista completa.
+  //
+  // Ambos filtram o que se OFERECE, não o que existe: agente que já tenha a
+  // capacidade ligada continua com ela. Ver `CAPACIDADES_DE_EMPRESA`.
+  const ligados = await modulosLigados(admin);
+  const modo = await modoDeVendaDaOrganizacao(admin, activeOrg.orgId);
+  const mostrarEmpresas = mostraEmpresas(modo);
+
+  const oferecidas = servidas.filter(
+    (c) =>
+      !deModuloDesligado(c.id, ligados) &&
+      (mostrarEmpresas || !CAPACIDADES_DE_EMPRESA.includes(c.id)),
+  );
 
   const schemaPorNome = new Map(allTools.map((t) => [t.name, t.inputSchema]));
   const tools = oferecidas.map((capacidade) => ({

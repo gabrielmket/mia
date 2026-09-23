@@ -48,6 +48,24 @@ function AckIndicator({ status, t }: { status: string; t: (texto: string) => str
   return null;
 }
 
+/**
+ * A linha veio de um DISPARO EM LISTA (MIA Broadcast) ou da régua de automação?
+ *
+ * As duas gravam `sent_via = 'automation'` — a régua por `origemDaMensagem`
+ * (`app/api/v1/messages/_handler.ts`) e o disparo por
+ * `lib/broadcast/registro-na-conversa.ts`, que é o ÚNICO dos dois a carimbar
+ * `broadcast_id` no metadata. Sem esta pergunta o balão chamaria o disparo de
+ * "Automação": o dono leria uma campanha como se a régua tivesse falado com
+ * aquela pessoa, e decidiria ligar (ou não ligar) pelo motivo errado.
+ *
+ * Só a PRESENÇA da chave importa; o valor não vai para a tela. Pôr o id da
+ * campanha num rótulo exporia identificador que a tela não usa para nada.
+ */
+function ehDisparoEmLista(metadata: Record<string, unknown> | null | undefined): boolean {
+  if (!metadata || typeof metadata !== "object") return false;
+  return typeof (metadata as { broadcast_id?: unknown }).broadcast_id === "string";
+}
+
 export function MessageBubble({
   message,
   debugCitations,
@@ -80,35 +98,55 @@ export function MessageBubble({
   // sem nome: o dono lia a conversa como se tudo tivesse sido digitado no CRM.
   // Os rótulos passam por t() no render (ver dicionario.ts para o espanhol).
   //
-  // NÃO HÁ RAMO PARA `'automation'`. O CHECK do banco aceita o valor e o union
-  // de `Message` o declara, mas nenhuma linha de app/, lib/ ou workers/ o
-  // grava: as ações de automação chamam `sendMessageHandler` com
-  // `actor.type === "webhook_source"`, e `_handler.ts` carimba `'ai'` em tudo
-  // que não é `"user"`.
+  // `'automation'` é a categoria de quem não é pessoa nem IA. HOJE ELA TEM DOIS
+  // EMISSORES, e por isso o ramo abaixo ainda pergunta mais uma coisa antes de
+  // decidir o rótulo:
   //
-  // ── `automation` GANHOU EMISSOR (18/09/2026) ───────────────────────────────
+  //  1. UPSTREAM (#652, decidida pelo mantenedor em 16/09) — regra de automação,
+  //     texto fixo de follow-up e lembrete de agenda. O carimbo vive em
+  //     `origemDaMensagem` (`app/api/v1/messages/_handler.ts`), que devolve
+  //     `'automation'` para ator `webhook_source` sem texto escrito pela IA.
+  //     Antes disso tudo que não era pessoa saía `'ai'`, e um template fixo de
+  //     regra aparecia para o dono como se o agente tivesse escrito.
   //
-  // O MIA Broadcast grava `sent_via: 'automation'` em
-  // `lib/broadcast/registro-na-conversa.ts`: o disparo por template passou a
-  // existir na conversa, e sem um rótulo próprio ele apareceria como se o
-  // agente de IA tivesse escrito — que é exatamente a confusão descrita acima,
-  // agora do lado do disparo.
+  //  2. NOSSO FORK (18/09/2026) — o MIA Broadcast, em
+  //     `lib/broadcast/registro-na-conversa.ts`: o disparo por template passou a
+  //     existir na conversa e grava a mesma coluna, com `metadata.broadcast_id`.
   //
-  // O efeito colateral que segurava isto era o dedup de eco, e ele NÃO alcança
-  // este caminho: `ehEcoDeEnvioNosso` vive na ingestão do transporte (outro
-  // canal) e exige `external_id` nulo com status `queued|sending`. A linha do
-  // disparo nasce com o `wamid` da Meta e status `sent` — não casa por três
-  // motivos independentes.
+  // Os dois no mesmo valor de coluna, um rótulo só, seria mentira para um dos
+  // dois lados: quem lê precisa distinguir "a régua falou" de "isto saiu de um
+  // disparo em lista", e é a diferença entre ligar para o cliente e não ligar.
+  // Como só o disparo carrega `broadcast_id` no metadata, é ele quem responde —
+  // sem coluna nova e sem mexer no CHECK do banco. (O `sent_via` continua
+  // `'automation'` nos dois: separar no banco é migração, não conserto de merge.)
   //
-  // Vigiado nas duas direções por tests/unit/rotulo-de-origem-tem-emissor.
+  // O dedup de eco NÃO alcança o caminho do disparo: `ehEcoDeEnvioNosso` vive na
+  // ingestão do transporte e exige `external_id` nulo com status
+  // `queued|sending`; a linha do disparo nasce com o `wamid` da Meta e status
+  // `sent` — não casa por três motivos independentes.
+  //
+  // O par rótulo↔emissor é vigiado nas duas direções por
+  // tests/unit/rotulo-de-origem-tem-emissor.
   const senderLabel = (() => {
     if (!isOutbound) return null;
     if (message.sent_via === "ai") return "IA";
+    // A REGRA falou, e não a IA: texto fixo de automação, follow-up ou lembrete
+    // de agenda (#652). O ramo passou a existir porque o valor passou a ser
+    // gravado — antes dele, um rótulo aqui seria promessa sem dado atrás.
+    //
+    // "Campanha" e não "Automação" quando a linha tem `broadcast_id`: o que o
+    // dono precisa distinguir é que aquela mensagem saiu de um DISPARO EM LISTA,
+    // não da régua falando com ele. O nome da coluna é vocabulário do banco; o
+    // rótulo é do leitor. Os dois emissores gravam `automation`, e sem esta
+    // pergunta um dos dois lados apareceria com o nome do outro.
+    if (message.sent_via === "automation") {
+      return ehDisparoEmLista(message.metadata) ? "Campanha" : "Automação";
+    }
+    // A integração falou, a IA não. Sem este ramo a bolha omite a autoria e o
+    // dono lê a conversa como se tudo tivesse saído do CRM — que é o defeito do
+    // #866 visto de dentro da tela.
+    if (message.sent_via === "system") return "Sistema";
     if (message.sent_via === "external_device") return "Celular";
-    // "Campanha" e não "Automação": o que o dono precisa distinguir é que
-    // aquela mensagem saiu de um disparo em lista, não de alguém falando com
-    // ele. O nome da coluna é vocabulário do banco; o rótulo é do leitor.
-    if (message.sent_via === "automation") return "Campanha";
     if (message.sent_via === "user" || message.sent_via === "crm") {
       // "Você" exige as DUAS pontas: saber quem lê e saber quem enviou. Falta
       // qualquer uma, o rótulo cai para "Atendente" — que continua dizendo o
@@ -164,6 +202,11 @@ export function MessageBubble({
         </button>
       )}
       <div
+        // Identidade, não aparência. O e2e de citação contava bolhas por
+        // `[class*='rounded-2xl']`, e qualquer componente novo com a mesma
+        // classe utilitária entrava na conta — foi assim que o painel flutuante
+        // fez a spec achar que havia mensagem onde não havia (issue #1318).
+        data-testid="message-bubble"
         className={cn(
           "max-w-[75%] text-sm",
           isBareSticker

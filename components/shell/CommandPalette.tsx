@@ -62,6 +62,9 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
         activeOrg?.interface_settings,
         activeOrg?.modulos,
         activeOrg?.modo_de_venda,
+        // `?? []` só neste: módulo de instalação sem lista é DESLIGADO, e a
+        // busca não pode levar a uma tela que o servidor não ligou.
+        activeOrg?.modulos_ligados ?? [],
       ),
     [
       user.is_platform_admin,
@@ -70,6 +73,10 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
       activeOrg?.modo_de_venda,
       activeOrg?.interface_settings,
       activeOrg?.modulos,
+      // Cada entrada de `searchable` tem de estar aqui: a que faltasse deixaria
+      // a paleta servindo a lista antiga depois de o valor mudar — sem erro,
+      // só com a tela certa sumida (ou uma proibida à mão).
+      activeOrg?.modulos_ligados,
     ],
   );
 

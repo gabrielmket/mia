@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SeletorDeEmpresa } from "@/components/empresas/SeletorDeEmpresa";
 import { useMostraEmpresas } from "@/hooks/useMostraEmpresas";
+import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { contactPatchSchema, type ContactPatch } from "@/lib/schemas/contacts";
 import { useUpdateContact } from "@/hooks/contacts/useUpdateContact";
 import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
@@ -71,8 +72,8 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
         phone_number: contact.phone_number ? phoneForDisplay(contact.phone_number) : "",
         tagsRaw: contact.tags.join(", "),
         empresa_id: contact.empresa_id ?? null,
-      cargo: contact.cargo ?? "",
-      setor: contact.setor ?? "",
+        cargo: contact.cargo ?? "",
+        setor: contact.setor ?? "",
         custom_fields: contact.custom_fields ?? {},
       });
     }
@@ -80,10 +81,9 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
 
   async function onSubmit(values: FormShape) {
     setServerError(null);
-    const tags = (values.tagsRaw ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    // A MESMA normalização da API (lib/contacts/tag-normalizada): o que a ficha
+    // grava é o que o filtro `?tag=` casa (issue #1224).
+    const tags = normalizarTags((values.tagsRaw ?? "").split(","));
 
     const payload: Record<string, unknown> = {};
     if (values.name?.trim()) payload.name = values.name.trim();

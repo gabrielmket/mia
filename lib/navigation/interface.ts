@@ -1,6 +1,7 @@
 /** Apresentação por vínculo. Nunca é autorização de página, API ou ação. */
 import { z } from "zod";
 import { ROLE_RANK, type Role } from "@/lib/auth/types";
+import type { ModuloOpcional } from "@/lib/instalacao/modulos";
 import { NAV_CATALOG, type NavMetadata, type NavDestinationId } from "./catalogo";
 import { moduloDaTela } from "@/lib/modulos/catalogo";
 import {
@@ -32,18 +33,35 @@ const SIMPLIFICADA: readonly NavDestinationId[] = [
   "/app/connections",
 ];
 /** Portas pessoais e recuperação administrativa não são removíveis. Atualização
- * e administração de plataforma têm consumidores próprios com seus gates atuais. */
+ * e administração de plataforma têm consumidores próprios com seus gates atuais.
+ *
+ * `/app/settings/tenant` está aqui porque é a tela que HOSPEDA esta escolha. Sem
+ * ela na lista, uma organização que a ocultasse se trancava do lado de fora: a
+ * porta que desfaz a decisão desaparece junto com as outras, e não há caminho de
+ * volta pela tela — só por banco. Quem administra tem de poder desfazer o que
+ * escolheu, sempre.
+ */
 export const PORTAS_ESSENCIAIS = [
   "/app/settings/profile",
   "/app/settings/security",
   "/app/team",
+  "/app/settings/tenant",
 ] as const;
+
+/**
+ * As essenciais que só valem para quem administra — as outras são pessoais e
+ * valem para todo vínculo. `canSee` continua decidindo depois, pelo `minRole`:
+ * estar aqui impede a organização de ESCONDER, nunca concede acesso a quem o
+ * papel não dá.
+ */
+const ESSENCIAIS_DE_ADMIN: readonly string[] = ["/app/team", "/app/settings/tenant"];
+
 export function essencial(d: NavMetadata, role: Role | null, platform = false): boolean {
-  return (
-    d.href === PORTAS_ESSENCIAIS[0] ||
-    d.href === PORTAS_ESSENCIAIS[1] ||
-    (d.href === PORTAS_ESSENCIAIS[2] && (platform || role === "admin"))
-  );
+  // Por PERTENCIMENTO à lista, nunca por índice: a versão anterior enumerava
+  // `[0]`, `[1]` e `[2]`, então acrescentar uma quarta porta não teria efeito
+  // nenhum e a lista passaria a mentir sobre o que ela garante.
+  if (!(PORTAS_ESSENCIAIS as readonly string[]).includes(d.href)) return false;
+  return ESSENCIAIS_DE_ADMIN.includes(d.href) ? platform || role === "admin" : true;
 }
 export function canSee(
   d: Pick<NavMetadata, "href" | "minRole" | "somentePlataforma">,
@@ -55,8 +73,19 @@ export function canSee(
   if (d.somentePlataforma) return platform;
   return platform || (!!role && ROLE_RANK[role] >= ROLE_RANK[d.minRole ?? "viewer"]);
 }
-export function permitidos(platform: boolean, role: Role | null): NavMetadata[] {
-  return NAV_CATALOG.filter((d) => canSee(d, platform, role));
+/**
+ * `modulos` são os módulos opcionais LIGADOS na instalação. Ausente = não filtra
+ * por módulo: quem desenha menu (sidebar, hub, ⌘K) passa a lista; quem só
+ * pergunta "sobra alguma porta?" não precisa.
+ */
+export function permitidos(
+  platform: boolean,
+  role: Role | null,
+  modulos?: readonly ModuloOpcional[],
+): NavMetadata[] {
+  return (NAV_CATALOG as readonly NavMetadata[]).filter(
+    (d) => canSee(d, platform, role) && (!modulos || !d.modulo || modulos.includes(d.modulo)),
+  );
 }
 /** Leitura tolera versões antigas/removidas sem lançar no layout. */
 export function lerInterface(raw: unknown): {
@@ -84,9 +113,10 @@ export function destinosDaInterface(
   platform: boolean,
   role: Role | null,
   /**
-   * O que a organização CONTRATOU. `undefined` = não se sabe, e aí nada é
-   * escondido: a rota é que recusa, e sumir com a tela de quem pagou por não
-   * ter carregado uma lista seria trocar um erro visível por um invisível.
+   * O que a organização CONTRATOU — os módulos VENDÁVEIS (lib/modulos/catalogo.ts).
+   * `undefined` = não se sabe, e aí nada é escondido: a rota é que recusa, e
+   * sumir com a tela de quem pagou por não ter carregado uma lista seria trocar
+   * um erro visível por um invisível.
    */
   modulos?: string[],
   /**
@@ -101,9 +131,31 @@ export function destinosDaInterface(
    * transforma "não uso isso" em "perdi meus dados".
    */
   modoDeVenda?: ModoDeVenda,
+  /**
+   * Os módulos OPCIONAIS DA INSTALAÇÃO que estão ligados (lib/instalacao/
+   * modulos.ts) — outra coisa, apesar do nome parecido com `modulos` acima.
+   *
+   * São dois eixos que NÃO podem virar um parâmetro só, e por isso viajam
+   * separados até aqui: `modulos` é o que ESTA ORGANIZAÇÃO comprou (chave
+   * `disparador`, por exemplo) e `modulosLigados` é o que O DONO DO SERVIDOR
+   * habilitou para a instalação inteira (`banco_externo`). Fundir os dois numa
+   * lista faria cada valor ser comparado contra o catálogo errado: nenhuma
+   * chave bateria, e telas pagas sumiriam do menu sem ninguém ter desligado
+   * nada — a falha silenciosa clássica.
+   *
+   * Aqui NÃO há escape para admin de plataforma (ao contrário dos dois filtros
+   * abaixo): módulo desligado é recurso que não existe nesta instalação, e
+   * mostrar a porta levaria a uma tela quebrada, não a uma tela de outro
+   * cliente.
+   */
+  modulosLigados?: readonly ModuloOpcional[],
 ): NavMetadata[] {
   const { settings } = lerInterface(raw);
-  const allowed = permitidos(platform, role);
+  // Os LIGADOS na instalação, nunca os CONTRATADOS pela organização: é o
+  // parâmetro que `permitidos` compara com `d.modulo` do catálogo. Passar a
+  // lista errada aqui não daria erro em tempo de execução — só esconderia, em
+  // silêncio, toda tela marcada com módulo de instalação.
+  const allowed = permitidos(platform, role, modulosLigados);
   const chosen =
     settings.destinos ?? (settings.preset === "simplificada" ? SIMPLIFICADA : undefined);
   const contratados = modulos ? new Set(modulos) : null;
@@ -136,4 +188,52 @@ export function homeDaInterface(raw: unknown, platform: boolean, role: Role | nu
     visible.find((d) => !essencial(d, role, platform))?.href ??
     "/app/settings/profile"
   );
+}
+
+/**
+ * O conjunto de portas que uma escolha REALMENTE significa.
+ *
+ * `destinos` e `preset: simplificada` são duas formas de dizer a mesma coisa —
+ * uma lista explícita e um punhado fixo. Tratar as duas como conjuntos é o que
+ * permite combinar escolhas sem uma tabela de casos.
+ */
+function conjuntoEscolhido(s: InterfaceSettings): readonly NavDestinationId[] | undefined {
+  return s.destinos ?? (s.preset === "simplificada" ? SIMPLIFICADA : undefined);
+}
+
+/** Portas essenciais que o catálogo conhece — o que sobra quando não há interseção. */
+const SO_O_ESSENCIAL: readonly NavDestinationId[] = ids.filter((id) =>
+  (PORTAS_ESSENCIAIS as readonly string[]).includes(id),
+);
+
+/**
+ * As portas da EMPRESA ∩ as portas do VÍNCULO (migration 0367).
+ *
+ * A empresa escolhe o universo de portas da instalação; o vínculo escolhe menos
+ * dentro dele — nunca mais. A ordem importa: quem administra a organização não
+ * pode abrir para alguém uma porta que esse alguém já tinha dispensado, e quem
+ * escolhe a própria interface não pode furar a escolha da empresa. Por isso a
+ * combinação é INTERSEÇÃO nos dois eixos, e `simplificada` — que também é um
+ * limite, não um enfeite — sobrevive vindo de qualquer um dos lados.
+ *
+ * Isto é APRESENTAÇÃO, como as duas entradas: o resultado alimenta sidebar, hub,
+ * ⌘K e as telas. Autorização continua sendo `canSee` sobre o papel, aplicada
+ * depois, sobre o conjunto já estreitado. Nenhuma escolha da empresa nega
+ * página, API ou ação.
+ *
+ * E não abre por acidente: sem escolha de nenhum dos lados o resultado é a
+ * interface completa e o papel decide. Com escolha de pelo menos um lado, o
+ * resultado é sempre subconjunto — inclusive no caso sem interseção, onde
+ * sobram só as portas essenciais. Devolver `destinos: []` seria recusado pelo
+ * schema, e `lerInterface` converte valor recusado em interface COMPLETA: uma
+ * falha ABERTA, exatamente o oposto do pretendido aqui.
+ */
+export function combinarInterfaces(daEmpresa: unknown, doVinculo: unknown): InterfaceSettings {
+  const empresa = conjuntoEscolhido(lerInterface(daEmpresa).settings);
+  const vinculo = conjuntoEscolhido(lerInterface(doVinculo).settings);
+  if (!empresa && !vinculo) return INTERFACE_COMPLETA;
+  const soUm = empresa ?? vinculo;
+  if (!empresa || !vinculo) return { preset: "completa", destinos: [...(soUm as readonly NavDestinationId[])] };
+  const comuns = empresa.filter((id) => vinculo.includes(id));
+  return { preset: "completa", destinos: [...(comuns.length > 0 ? comuns : SO_O_ESSENCIAL)] };
 }
