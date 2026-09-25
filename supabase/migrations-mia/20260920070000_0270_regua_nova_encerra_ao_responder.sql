@@ -1,3 +1,7 @@
+-- ⚠️ 25/09/2026 — CORRIGIDA. Mirava public.followup_flows, que NUNCA existiu: errava em todo deploy desde a .46 e era o erros:1 da saude. A tabela certa e followup_flow_pointers, e e ela que baseline-mia.sql altera.
+-- A regra do fork: estender, nunca redefinir (scripts/separar-baseline-mia.mjs).
+-- A versao original desta migration continua no historico do git.
+
 -- 0270 — régua NOVA encerra quando o lead responde (item B1-a)
 --
 -- ── A pergunta, em português ──────────────────────────────────────────────

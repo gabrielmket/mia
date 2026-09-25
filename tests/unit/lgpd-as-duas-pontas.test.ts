@@ -53,7 +53,12 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const RAIZ = path.resolve(__dirname, "../..");
-const BASELINE = fs.readFileSync(path.join(RAIZ, "supabase/baseline.sql"), "utf8");
+// O schema como o banco o recebe: o do upstream e, por cima, o da MIA — na
+// ordem de easypanel/bootstrap.sh. "Última definição vence" continua valendo.
+const BASELINE = [
+    fs.readFileSync(path.join(RAIZ, "supabase/baseline.sql"), "utf8"),
+    fs.readFileSync(path.join(RAIZ, "supabase/baseline-mia.sql"), "utf8"),
+  ].join("\n");
 const EXPORTADOR = fs.readFileSync(
   path.join(RAIZ, "lib/lgpd/export-collector.ts"),
   "utf8",
@@ -184,6 +189,34 @@ const CLASSIFICACAO: Record<string, Classificacao> = {
     porque:
       "quando a foto foi buscada pela última vez; o arquivo e o caminho são apagados, e a data sozinha não mostra rosto nenhum",
   },
+
+  // ── Colunas que o upstream acrescentou, classificadas na fusão de 25/09/2026 ──
+  //
+  // Esta catraca é do fork e o upstream não a tem: foi ela que perguntou, coluna
+  // por coluna, "isto é dado pessoal?" — e achou `social_identity` sobrevivendo a
+  // todo caminho de anonimização, dois dias depois de a coluna nascer.
+
+  // GERADA a partir de `birthdate` (`generated always as ... stored`). A cascata
+  // zera `birthdate`, e esta zera junto — sem ninguém escrever nela.
+  birthday_md: { tipo: "derivada", de: ["birthdate"] },
+  // A chave da pessoa numa rede social. Identifica sozinha. Nenhum caminho do
+  // upstream a zerava; agora o gatilho da MIA zera.
+  social_identity: { tipo: "pessoal" },
+  first_service_at: {
+    tipo: "nao_pessoal",
+    porque:
+      "a data do primeiro atendimento; é fato da operação sobre a relação, não identifica ninguém sem o resto da ficha, que é apagado",
+  },
+  client_recognized_at: {
+    tipo: "nao_pessoal",
+    porque:
+      "quando o sistema reconheceu o contato como cliente pela agenda; data de evento operacional, como created_at, sem dado da pessoa",
+  },
+  client_tag_by_system: {
+    tipo: "nao_pessoal",
+    porque:
+      "contabilidade da etiqueta 'cliente' ('added' | 'removed' | null) — diz quem mexeu na etiqueta, sistema ou equipe, e nada sobre a pessoa",
+  },
 };
 
 /** Nomes capturados pelo primeiro grupo de um regex, já sem os `undefined`. */
@@ -259,19 +292,37 @@ function colunasQueARotaDiretaLimpa(sql: string): Set<string> {
 }
 
 /**
- * O que o GATILHO limpa — e ele é o único que vale para TODO caminho.
+ * O que os GATILHOS limpam — e são os únicos que valem para TODO caminho.
  *
- * `trg_contacts_anonimizado_limpa_custom_fields` é `before update of
- * is_anonymized`: pendurado no FATO, não no chamador. Coluna limpa aqui está
- * limpa pela cascata, pela rota direta, e pelo UPDATE que um DBA fizer à mão.
+ * Todo gatilho `before update of is_anonymized on public.contacts` está
+ * pendurado no FATO, não no chamador: coluna limpa por um deles está limpa pela
+ * cascata, pela rota direta e pelo UPDATE que um DBA fizer à mão.
+ *
+ * São DOIS desde 25/09/2026, e é o desenho, não acidente: o do upstream
+ * (`trg_contacts_anonimizado_limpa_custom_fields`) e o da MIA
+ * (`trg_contacts_anonimizado_limpa_mia`), pendurado AO LADO — a regra do fork é
+ * estender, nunca redefinir. Por isso esta leitura não procura um nome fixo:
+ * acha todo gatilho no fato e soma o que cada um limpa. Um terceiro, amanhã,
+ * entra na conta sem ninguém precisar lembrar de editar este arquivo.
  */
 function oQueOGatilhoLimpa(sql: string): Set<string> {
-  const f = sql.lastIndexOf(
-    "create or replace function public.fn_contato_anonimizado_limpa_campos_personalizados",
+  const funcoes = new Set(
+    capturas(
+      sql,
+      /create\s+trigger\s+[a-z0-9_]+\s+before\s+update\s+of\s+is_anonymized\s+on\s+public\.contacts[\s\S]*?execute\s+function\s+(?:public\.)?([a-z0-9_]+)\s*\(/gi,
+    ),
   );
-  expect(f, "o gatilho de limpeza sumiu do baseline").toBeGreaterThan(-1);
-  const corpo = sql.slice(f, sql.indexOf("end$$;", f));
-  return new Set(capturas(corpo, /new\.([a-z_]+)\s*:=/g));
+  expect(funcoes.size, "nenhum gatilho de anonimização pendurado em is_anonymized").toBeGreaterThan(0);
+
+  const limpa = new Set<string>();
+  for (const fn of funcoes) {
+    // A ÚLTIMA definição é a que vale no banco — `create or replace` substitui.
+    const f = sql.lastIndexOf(`create or replace function public.${fn}(`);
+    expect(f, `a função do gatilho ${fn} sumiu do schema`).toBeGreaterThan(-1);
+    const corpo = sql.slice(f, sql.indexOf("end$$;", f));
+    for (const coluna of capturas(corpo, /new\.([a-z_]+)\s*:=/g)) limpa.add(coluna);
+  }
+  return limpa;
 }
 
 /** A lista de colunas que o relatório de acesso pede ao banco. */
@@ -342,9 +393,11 @@ describe("LGPD: acesso e esquecimento conferidos na mesma leitura", () => {
     expect(
       sobrevivem,
       "coluna declarada pessoal que sobrevive a pelo menos um caminho de " +
-        "anonimização. Ponha no GATILHO (fn_contato_anonimizado_limpa_campos_" +
-        "personalizados), que está pendurado no FATO e cobre os dois — pôr só " +
-        "na cascata deixa o botão da ficha vazando, que foi o defeito da 0264",
+        "anonimização. Ponha no GATILHO DA MIA (fn_mia_contato_anonimizado_limpa, " +
+        "gerado por scripts/separar-baseline-mia.mjs), que está pendurado no FATO " +
+        "e cobre todo caminho — pôr só na cascata deixa o botão da ficha vazando, " +
+        "que foi o defeito da 0264. NÃO edite o gatilho do upstream: redefinir " +
+        "objeto dele é a mina que a regra do fork proíbe",
     ).toEqual([]);
   });
 
@@ -405,9 +458,16 @@ describe("LGPD: acesso e esquecimento conferidos na mesma leitura", () => {
   it("coluna derivada é mesmo gerada, e a origem dela é apagada", () => {
     for (const [coluna, cl] of Object.entries(CLASSIFICACAO)) {
       if (cl.tipo !== "derivada") continue;
+      // O TIPO não entra na conta: a primeira versão só aceitava `text`, e a
+      // `birthday_md` do upstream é `integer` — reprovava pelo tipo uma coluna
+      // que é gerada de verdade. O que importa é o `generated always as`.
+      const gerada = new RegExp(
+        `(add column if not exists ${coluna}\\s+[a-z"]+(?:\\s*\\([^)]*\\))?\\s+generated always as` +
+          `|"${coluna}"\\s+"?[a-z]+"?\\s+GENERATED ALWAYS AS)`,
+        "i",
+      );
       expect(
-        BASELINE.includes(`add column if not exists ${coluna} text\n  generated always as`) ||
-          BASELINE.includes(`"${coluna}" "text" GENERATED ALWAYS AS`),
+        gerada.test(BASELINE),
         `\`${coluna}\` foi classificada como derivada mas não é \`generated always as\` — ` +
           "se virou coluna comum, passou a guardar dado que ninguém apaga",
       ).toBe(true);

@@ -1,3 +1,7 @@
+-- ⚠️ 25/09/2026 — CONVERTIDA. Esta migration REDEFINIA a funcao e o gatilho de anonimizacao do upstream. Agora a MIA pendura um gatilho PROPRIO ao lado do dele (fn_mia_contato_anonimizado_limpa / trg_contacts_anonimizado_limpa_mia). O SQL abaixo e historia; o que vale e o bloco 0265 de baseline-mia.sql.
+-- A regra do fork: estender, nunca redefinir (scripts/separar-baseline-mia.mjs).
+-- A versao original desta migration continua no historico do git.
+
 -- 0265 — o gatilho passa a limpar o que a ROTA DIRETA esquece
 --
 -- ── A correção de rumo da 0264, e a leitura que faltava ───────────────────

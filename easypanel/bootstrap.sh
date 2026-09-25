@@ -4,8 +4,10 @@
 # Faz, dentro da VPS e sem terminal, o que o hostgator-setup-kit/install.sh faz
 # nas etapas 7, 8 e 11:
 #   1. extensões que o schema usa (vector, citext, pg_trgm)
-#   2. o schema (supabase/baseline.sql): banco novo com ON_ERROR_STOP; banco que
-#      já tem schema em modo update, ignorando os "já existe" esperados
+#   2. o schema, em DOIS arquivos e nesta ordem: supabase/baseline.sql (o do
+#      upstream, intacto) e supabase/baseline-mia.sql (o da MIA, por cima).
+#      Banco novo com ON_ERROR_STOP; banco que já tem schema em modo update,
+#      ignorando os "já existe" esperados
 #   3. a chave de cifra dos segredos em private.app_secrets
 #   4. o dono: cria no Auth e promove a admin da organização e da plataforma
 #      (só quando OWNER_EMAIL e OWNER_PASSWORD estão preenchidos)
@@ -19,6 +21,14 @@ log() { printf '[bootstrap] %s\n' "$*"; }
 falha() { printf '[bootstrap] ERRO: %s\n' "$*" >&2; exit 1; }
 
 BASELINE=/deskcomm/baseline.sql
+# O schema da MIA mora num arquivo PRÓPRIO, aplicado depois do do upstream.
+#
+# Até 25/09/2026 os dois eram um arquivo só, e cada sincronização com o upstream
+# virava conflito dentro dele (11 blocos, 15 mil linhas na de 23/09). Separados,
+# o `baseline.sql` entra da sincronização exatamente como o upstream o escreveu,
+# e o nosso nunca é tocado por ela. A ordem importa: o nosso estende tabelas que
+# o dele cria, e a varredura `anon` no fim do nosso cura as funções dos dois.
+BASELINE_MIA=/deskcomm/baseline-mia.sql
 # ⚠️ `is already member of publication` NÃO tem o "a". A linha antiga escrevia
 # `is already a member`, que é o português do erro e não o inglês do Postgres
 # (`errmsg("relation \"%s\" is already member of publication \"%s\"")`). Nenhum
@@ -33,6 +43,10 @@ for var in NEXT_PUBLIC_SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY SUPABASE_DB_URL NU
   [ -n "$valor" ] || falha "falta $var no Environment do EasyPanel"
 done
 [ -s "$BASELINE" ] || falha "supabase/baseline.sql não chegou ao contêiner (Build Path precisa ser /)"
+# Sem o nosso, o banco sobe como DeskcommCRM puro: sem empresas, sem token de
+# plataforma, sem o carimbo — e a saúde diria "em dia" sobre um schema pela
+# metade. Faltar este arquivo é defeito de deploy, nunca estado aceitável.
+[ -s "$BASELINE_MIA" ] || falha "supabase/baseline-mia.sql não chegou ao contêiner (confira o volume no docker-compose.easypanel.yml)"
 
 # Supabase próprio: a string do app pode ser uma role menor; o schema exige o dono.
 DB="${SUPABASE_DB_ADMIN_URL:-$SUPABASE_DB_URL}"
@@ -86,6 +100,9 @@ existentes="$(printf '%s' "$existentes" | tr -d '[:space:]')"
 if [ "${existentes:-0}" -gt 0 ]; then
   log "banco já tem ${existentes} tabelas: re-aplicando o schema em modo update"
   psql "$DB" -q -f "$BASELINE" > /tmp/baseline.log 2>&1 || true
+  # O da MIA vai para o MESMO log: o contador abaixo tem de ver os erros dos dois
+  # arquivos, senão uma migration nossa que falhe fica fora da saúde.
+  psql "$DB" -q -f "$BASELINE_MIA" >> /tmp/baseline.log 2>&1 || true
   inesperados="$(grep -iE 'ERROR|FATAL' /tmp/baseline.log | grep -viE "$BENIGNOS" || true)"
   if [ -n "$inesperados" ]; then
     log "AVISO: erros que não são os esperados (o app sobe mesmo assim):"
@@ -122,6 +139,10 @@ else
   if ! psql "$DB" -v ON_ERROR_STOP=1 -q -f "$BASELINE" > /tmp/baseline.log 2>&1; then
     tail -15 /tmp/baseline.log >&2
     falha "o schema falhou num banco novo (ficaria sem RLS)"
+  fi
+  if ! psql "$DB" -v ON_ERROR_STOP=1 -q -f "$BASELINE_MIA" >> /tmp/baseline.log 2>&1; then
+    tail -15 /tmp/baseline.log >&2
+    falha "o schema da MIA falhou num banco novo (o do upstream passou; o nosso, não)"
   fi
   log "schema aplicado"
 fi

@@ -36,8 +36,16 @@ import { describe, expect, it } from "vitest";
 import { alertaDoSchema, CARIMBO_DO_SCHEMA, compararCarimbo } from "@/lib/schema/carimbo";
 
 const RAIZ = path.resolve(__dirname, "../..");
-const DIR_MIGRATIONS = path.join(RAIZ, "supabase/migrations");
-const BASELINE = fs.readFileSync(path.join(RAIZ, "supabase/baseline.sql"), "utf8");
+// A pasta da MIA, e não `supabase/migrations/`: aquela é do upstream (vai além
+// da 0390 e cresce), e o carimbo diz "o schema DA MIA chegou", que é o que só o
+// fork sabe responder. O do upstream entra intacto e não carrega carimbo nosso.
+const DIR_MIGRATIONS = path.join(RAIZ, "supabase/migrations-mia");
+// O schema como o banco o recebe: o do upstream e, por cima, o da MIA — na
+// ordem de easypanel/bootstrap.sh. "Última definição vence" continua valendo.
+const BASELINE = [
+    fs.readFileSync(path.join(RAIZ, "supabase/baseline.sql"), "utf8"),
+    fs.readFileSync(path.join(RAIZ, "supabase/baseline-mia.sql"), "utf8"),
+  ].join("\n");
 
 /** O nome (sem `.sql`) da migration com o maior prefixo de timestamp. */
 function migrationMaisNova(): string {
@@ -90,8 +98,13 @@ describe("o carimbo do schema", () => {
     // O bloco da varredura é, de propósito, o último do arquivo. Um apêndice
     // depois dele desarma a cura para tudo que vier em seguida — a mesma regra
     // que `varredura-anon-e-o-ultimo-bloco.test.ts` guarda para funções.
-    const carimbo = BASELINE.lastIndexOf("insert into public.schema_baseline");
-    const varredura = BASELINE.indexOf("-- ---- VARREDURA anon:");
+    // Medido no baseline-mia.sql, e não no schema inteiro: o carimbo e a
+    // varredura que fecha o schema são os dois NOSSOS. O baseline do upstream
+    // tem a varredura dele no meio do arquivo, e no schema concatenado o
+    // `indexOf` a acharia primeiro — comparando o carimbo com a coisa errada.
+    const mia = fs.readFileSync(path.join(RAIZ, "supabase/baseline-mia.sql"), "utf8");
+    const carimbo = mia.lastIndexOf("insert into public.schema_baseline");
+    const varredura = mia.lastIndexOf("-- ---- VARREDURA anon:");
     expect(carimbo).toBeGreaterThan(-1);
     expect(varredura).toBeGreaterThan(-1);
     expect(
@@ -171,6 +184,14 @@ describe("o carimbo conta os erros do baseline", () => {
     expect(aplica, "o passo que aplica o baseline sumiu do bootstrap").toBeGreaterThan(-1);
     expect(grava, "o bootstrap parou de gravar o contador de erros").toBeGreaterThan(-1);
     expect(grava).toBeGreaterThan(aplica);
+
+    // O schema da MIA é aplicado DEPOIS do do upstream e ANTES do contador. Sem
+    // ele o banco sobe como DeskcommCRM puro — e, como é o nosso arquivo que
+    // carimba, a saúde ficaria presa num carimbo velho em vez de acusar a falta.
+    const aplicaMia = bootstrap.indexOf('psql "$DB" -q -f "$BASELINE_MIA"');
+    expect(aplicaMia, "o bootstrap parou de aplicar o schema da MIA").toBeGreaterThan(-1);
+    expect(aplicaMia, "o schema da MIA tem de vir depois do do upstream").toBeGreaterThan(aplica);
+    expect(grava, "o contador tem de ver os erros dos DOIS arquivos").toBeGreaterThan(aplicaMia);
   });
 
   it("o bootstrap não deixa a escrita do relatório derrubar a instalação", () => {
@@ -256,35 +277,20 @@ describe("o alerta de schema no grupo interno", () => {
  * sempre, e um alarme que nunca apaga é um alarme que se aprende a ignorar —
  * aí ele para de servir para o erro seguinte, que é o que importa.
  *
- * Foi o que a produção mostrou: `erros: 1` que não descia. A causa era
- * `ALTER SCHEMA "public" OWNER TO ...`, crua no topo do dump — num Supabase
- * hospedado o papel que conecta não é dono do schema, e o comando falha com
- * `must be owner of schema public` desde sempre.
+ * Foi o que a produção mostrou: `erros: 1` que não descia desde a .46.
+ *
+ * ⚠️ CORREÇÃO DO REGISTRO (25/09/2026). Este comentário afirmava que a causa
+ * era o `ALTER SCHEMA "public" OWNER TO ...` cru no topo do dump, e um teste
+ * aqui exigia que ele fosse envolvido num bloco com `insufficient_privilege`.
+ * A hipótese estava ERRADA: o envelope foi implantado e o contador não desceu.
+ * A causa real apareceu quando o carimbo passou a guardar a AMOSTRA — era a
+ * 0270 alterando `public.followup_flows`, uma tabela que nunca existiu.
+ *
+ * O teste do `ALTER SCHEMA` saiu junto com a hipótese. Além de errado, ele
+ * agora exigiria editar o `baseline.sql`, que é do upstream byte a byte — e a
+ * regra do fork é que esse arquivo nunca é tocado aqui.
  */
 describe("o baseline não emite comando que sempre falha", () => {
-  it("nenhum `ALTER SCHEMA ... OWNER` solto", () => {
-    // Solto = fora de um bloco que trate `insufficient_privilege`. A regra é
-    // simples: a linha pode existir (serve ao self-host com Postgres próprio),
-    // mas não pode DERRUBAR o contador de quem roda hospedado.
-    const linhas = BASELINE.split("\n");
-    const soltos = linhas
-      .map((linha, i) => ({ linha: linha.trim(), n: i + 1 }))
-      .filter(({ linha }) => /^ALTER SCHEMA .* OWNER TO/i.test(linha))
-      .filter(({ n }) => {
-        // Olha as 6 linhas acima: um `DO $$ BEGIN` perto significa guardado.
-        const antes = linhas.slice(Math.max(0, n - 7), n - 1).join("\n");
-        return !/DO \$\$ BEGIN/i.test(antes);
-      })
-      .map(({ n }) => n);
-
-    expect(
-      soltos,
-      "`ALTER SCHEMA ... OWNER` fora de um bloco com `exception when " +
-        "insufficient_privilege`. Num Supabase hospedado ele falha em todo " +
-        "deploy e trava o contador de erros do schema em 1 para sempre.",
-    ).toEqual([]);
-  });
-
   it("o filtro de erros benignos conhece a frase REAL do Postgres", () => {
     // O padrão antigo era `is already a member` — o português do erro, não o
     // inglês do Postgres (`is already member of publication`). Nunca casou

@@ -1,0 +1,2165 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- baseline-mia.sql — O SCHEMA DA PLATAFORMA MIA
+--
+-- Aplicado por easypanel/bootstrap.sh DEPOIS de supabase/baseline.sql, que é o
+-- do upstream (melgarafael/DeskcommCRM) byte a byte e NUNCA é editado aqui.
+--
+-- AS DUAS REGRAS DESTE ARQUIVO:
+--
+--   1. Estender, nunca redefinir. Nada aqui pode fazer `create or replace` de
+--      função, gatilho ou view que já exista em baseline.sql. Quando a MIA
+--      precisa de mais, pendura o seu ao lado (gatilho próprio, tabela nova,
+--      função com nome nosso). Vigiado por scripts/redefinicoes-do-upstream.mjs.
+--
+--   2. A varredura `anon` é o ÚLTIMO bloco deste arquivo — e portanto do schema
+--      inteiro. Ela é auto-curativa e cura as funções dos DOIS arquivos, mas só
+--      as que já existem quando ela roda.
+--
+-- Gerado por scripts/separar-baseline-mia.mjs em 25/09/2026.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+
+-- ---- tags dos contatos (migration 0249) ----
+--
+-- 0249 — as tags que os contatos REALMENTE têm, com quantos em cada.
+--
+-- O filtro do disparador era texto livre, e nome errado devolvia lista vazia
+-- sem dizer por quê. A contagem é o que responde antes de custar: `vip (0)`
+-- diz na hora que aquela tag não rende campanha.
+--
+-- SECURITY INVOKER: a RLS de `contacts` decide o alcance, e `p_org` é filtro,
+-- não defesa. Anonimizado e fundido ficam de fora — o primeiro por dever legal,
+-- o segundo porque já virou outra linha.
+
+create or replace function public.fn_contact_tags(p_org uuid)
+returns table (tag text, quantos bigint)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select t as tag, count(*)::bigint as quantos
+    from public.contacts c
+    cross join lateral unnest(c.tags) as t
+   where c.organization_id = p_org
+     and c.is_anonymized = false
+     and c.is_merged_into is null
+   group by t
+   order by count(*) desc, t asc
+$$;
+
+revoke all on function public.fn_contact_tags(uuid) from public;
+grant execute on function public.fn_contact_tags(uuid) to authenticated, service_role;
+
+
+-- ---- mesclar empresas duplicadas (migration 0263) ----
+--
+-- A empresa ganhou duas portas de criacao: a tela e o agente. A segunda cria
+-- ficha do que o cliente DITOU, e duas grafias distantes nascem separadas.
+-- Sem fusao, o conserto seria apagar — e apagar leva junto o vinculo dos
+-- contatos e negocios. FUNCAO e nao updates na rota: fusao nao tem desfazer.
+-- FKs vem de pg_constraint, nao de lista a mao. LAPIDE e nao DELETE: apagar
+-- responderia "essa empresa nunca existiu" a quem for conferir.
+
+alter table public.crm_empresas
+  add column if not exists mesclada_em timestamptz,
+  add column if not exists mesclada_com uuid references public.crm_empresas(id) on delete set null;
+
+comment on column public.crm_empresas.mesclada_com is
+  'A empresa que VENCEU a fusao. Preenchida = esta ficha e lapide: some das listas e do seletor, mas responde "para onde foi" a quem conferir um negocio antigo.';
+
+create index if not exists idx_crm_empresas_vivas
+  on public.crm_empresas (organization_id, lower(nome))
+  where mesclada_em is null;
+
+create or replace function public.fn_mesclar_empresas(
+  p_organization_id uuid,
+  p_vencedora uuid,
+  p_perdedora uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_vencedora public.crm_empresas%rowtype;
+  v_perdedora public.crm_empresas%rowtype;
+  v_alvo record;
+  v_movidas integer;
+  v_repontado jsonb := '{}'::jsonb;
+begin
+  if auth.uid() is not null
+     and not public.fn_role_at_least(p_organization_id, 'manager') then
+    raise exception using errcode = '42501', message = 'insufficient_role';
+  end if;
+
+  if p_vencedora is null or p_perdedora is null or p_vencedora = p_perdedora then
+    raise exception using errcode = '22023', message = 'selecao_de_mesclagem_invalida';
+  end if;
+
+  select * into v_vencedora from public.crm_empresas
+   where organization_id = p_organization_id and id = least(p_vencedora, p_perdedora)
+   for update;
+  select * into v_perdedora from public.crm_empresas
+   where organization_id = p_organization_id and id = greatest(p_vencedora, p_perdedora)
+   for update;
+
+  if v_vencedora.id <> p_vencedora then
+    select * into v_vencedora from public.crm_empresas
+     where organization_id = p_organization_id and id = p_vencedora;
+    select * into v_perdedora from public.crm_empresas
+     where organization_id = p_organization_id and id = p_perdedora;
+  end if;
+
+  if v_vencedora.id is null or v_perdedora.id is null then
+    raise exception using errcode = '22023', message = 'empresa_nao_encontrada';
+  end if;
+  if v_perdedora.mesclada_em is not null then
+    raise exception using errcode = '22023', message = 'empresa_ja_mesclada';
+  end if;
+
+  for v_alvo in
+    select n.nspname as esquema, c.relname as tabela, a.attname as coluna
+      from pg_catalog.pg_constraint co
+      join pg_catalog.pg_class c on c.oid = co.conrelid
+      join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+      join pg_catalog.pg_attribute a on a.attrelid = co.conrelid and a.attnum = co.conkey[1]
+     where co.contype = 'f'
+       and co.confrelid = 'public.crm_empresas'::regclass
+       and co.conrelid <> 'public.crm_empresas'::regclass
+       and array_length(co.conkey, 1) = 1
+       and c.relkind = 'r'
+       and n.nspname = 'public'
+     order by 2, 3
+  loop
+    execute format(
+      'update %I.%I set %I = $1 where %I = $2',
+      v_alvo.esquema, v_alvo.tabela, v_alvo.coluna, v_alvo.coluna
+    ) using p_vencedora, p_perdedora;
+    get diagnostics v_movidas = row_count;
+    v_repontado := v_repontado || jsonb_build_object(v_alvo.tabela, v_movidas);
+  end loop;
+
+  update public.crm_empresas set
+    cnpj        = coalesce(cnpj, v_perdedora.cnpj),
+    site        = coalesce(site, v_perdedora.site),
+    telefone    = coalesce(telefone, v_perdedora.telefone),
+    email       = coalesce(email, v_perdedora.email),
+    endereco    = coalesce(endereco, v_perdedora.endereco),
+    observacoes = coalesce(observacoes, v_perdedora.observacoes),
+    tags          = (select array(select distinct unnest(tags || v_perdedora.tags))),
+    custom_fields = v_perdedora.custom_fields || custom_fields,
+    updated_at  = now()
+   where organization_id = p_organization_id and id = p_vencedora;
+
+  update public.crm_empresas
+     set mesclada_em = now(), mesclada_com = p_vencedora, updated_at = now()
+   where organization_id = p_organization_id and id = p_perdedora;
+
+  return jsonb_build_object(
+    'vencedora', p_vencedora,
+    'perdedora', p_perdedora,
+    'repontado', v_repontado
+  );
+end; $$;
+
+revoke all on function public.fn_mesclar_empresas(uuid,uuid,uuid) from public, anon;
+grant execute on function public.fn_mesclar_empresas(uuid,uuid,uuid) to authenticated, service_role;
+
+-- ─── 0264 · a anonimizacao alcanca custom_fields, cargo e setor ──────────
+--
+-- `contacts.custom_fields` — o jsonb livre — falhava nas DUAS pontas da LGPD:
+-- sobrevivia a anonimizacao, e na exportacao estava no `select` e era
+-- descartado antes do relatorio. Acesso negado por omissao e esquecimento
+-- negado por omissao, no mesmo campo. `cargo` e `setor` (0262) e `empresa_id`
+-- (0255) entraram depois e tambem ficaram de fora.
+-- `crm_empresas` e `crm_leads.empresa_id` NAO sao tocados: ali o vinculo e com
+-- a pessoa juridica, que nao e titular deste pedido.
+
+-- (Aqui ficava uma REDEFINIÇÃO de fn_lgpd_cascade_redact_contact, a cascata do
+-- upstream. Removida em 25/09/2026 pela regra do fork: estender, nunca
+-- redefinir. O que ela acrescentava — zerar cargo, setor e empresa_id — é
+-- feito pelo gatilho `trg_contacts_anonimizado_limpa_mia`, no bloco 0265.
+-- A cascata que vale é a do upstream, intacta, com as tabelas dele todas.)
+
+
+-- ─── 0265 · o gatilho limpa o que a ROTA DIRETA esquece ──────────────────
+--
+-- Ha DOIS caminhos que anonimizam um contato: `fn_lgpd_cascade_redact_contact`
+-- (a cascata) e `fn_lgpd_anonymize_contact` (a rota direta, o botao da ficha).
+-- A rota direta limpa nome, e-mail, telefone, CPF e nascimento e PARA AI —
+-- nunca limpou `consent`, `tags` nem `source_metadata`, de onde saem as colunas
+-- geradas `wa_identity` e `wa_lid` (a identidade da pessoa no WhatsApp).
+--
+-- Por isso a lista mora no GATILHO e nao nas funcoes: pendurada no FATO
+-- (`is_anonymized` virou true), ela cobre os dois caminhos, o terceiro que
+-- alguem escrever, e o DBA que fizer a mao. Espalhar a lista por tres funcoes
+-- foi como o produto chegou aqui.
+--
+-- Vigiado por `tests/unit/lgpd-as-duas-pontas.test.ts`.
+-- ── A MIA pendura o SEU gatilho ao lado do dele, nunca por cima ─────────
+--
+-- Até 25/09/2026 este bloco REDEFINIA a função do gatilho do upstream
+-- (`fn_contato_anonimizado_limpa_campos_personalizados`) para acrescentar
+-- colunas. Funcionava — até o dia em que o upstream mexesse na função dele: a
+-- mudança entraria na sincronização e seria desfeita pela nossa cópia, que roda
+-- depois. É o mesmo defeito que quase apagou doze tabelas da cascata em 23/09.
+--
+-- Agora são DOIS gatilhos no mesmo fato. O dele zera `custom_fields`, como
+-- sempre. O nosso zera o resto. Nenhum escreve coluna do outro, então a ordem
+-- em que o Postgres os dispara não importa.
+--
+-- As colunas daqui são de dois tipos, e o motivo de cada um é diferente:
+--   · cargo, setor, empresa_id — só existem na MIA (0262, 0255). Nenhum código
+--     do upstream as conhece, então só um gatilho nosso pode alcançá-las.
+--   · source_metadata, tags, consent — são do upstream, e a CASCATA dele as zera.
+--     Mas a rota DIRETA (`fn_lgpd_anonymize_contact`) não: ela para no nome, no
+--     e-mail e no telefone. Pendurar no fato `is_anonymized`, e não numa rota,
+--     é o que cobre as duas. (Candidato a PR no upstream: é defeito dele, não
+--     particularidade nossa.)
+--   · social_identity — do upstream (redes sociais nativas, 0368 dele), e
+--     NENHUM caminho a zera: nem a cascata, nem a rota direta, nem o gatilho
+--     dele. É a chave da pessoa numa rede social; quem pede exclusão continuaria
+--     identificável por ela. Achado pela catraca lgpd-as-duas-pontas em
+--     25/09/2026, dois dias depois de a coluna nascer. (Também candidato a PR.)
+create or replace function public.fn_mia_contato_anonimizado_limpa()
+  returns trigger
+  language plpgsql
+as $$
+begin
+  new.cargo := null;
+  new.setor := null;
+  new.empresa_id := null;
+  new.source_metadata := '{}'::jsonb;
+  new.tags := '{}'::text[];
+  new.consent := '{}'::jsonb;
+  new.social_identity := null;
+  return new;
+end$$;
+
+comment on function public.fn_mia_contato_anonimizado_limpa() is
+  'Gatilho da MIA: zera cargo, setor, empresa_id, source_metadata, tags, consent e social_identity quando o contato é anonimizado. Ao lado de trg_contacts_anonimizado_limpa_custom_fields (do upstream), nunca por cima.';
+
+revoke all on function public.fn_mia_contato_anonimizado_limpa() from public;
+revoke execute on function public.fn_mia_contato_anonimizado_limpa() from anon;
+revoke execute on function public.fn_mia_contato_anonimizado_limpa() from authenticated;
+
+drop trigger if exists trg_contacts_anonimizado_limpa_mia on public.contacts;
+create trigger trg_contacts_anonimizado_limpa_mia
+  before update of is_anonymized on public.contacts
+  for each row
+  when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
+  execute function public.fn_mia_contato_anonimizado_limpa();
+
+-- ── E os contatos JÁ anonimizados antes desta migration ───────────────────
+--
+-- Sem isto, quem exerceu o direito ontem pelo botão da tela continua com o
+-- `waha_lid`, as tags e o consentimento no banco para sempre — o gatilho só
+-- dispara na TRANSIÇÃO, e para eles ela já passou. É o mesmo raciocínio da
+-- varredura que completa cascatas interrompidas: um direito exercido não pode
+-- depender de alguém lembrar de reexecutar.
+--
+-- `is_anonymized` não é tocado, então o gatilho não redispara.
+update public.contacts
+   set custom_fields   = '{}'::jsonb,
+       cargo           = null,
+       setor           = null,
+       empresa_id      = null,
+       source_metadata = '{}'::jsonb,
+       tags            = '{}'::text[],
+       consent         = '{}'::jsonb
+ where is_anonymized = true
+   and (
+        custom_fields   <> '{}'::jsonb
+     or cargo           is not null
+     or setor           is not null
+     or empresa_id      is not null
+     or source_metadata <> '{}'::jsonb
+     or tags            <> '{}'::text[]
+     or consent         <> '{}'::jsonb
+   );
+
+
+-- ─── 0266 · as tres tabelas com contact_id que nada alcancava ────────
+--
+-- Achadas cruzando TODA tabela com `contact_id` contra TODO caminho que
+-- anonimiza. Quinze tem a coluna; onze eram cobertas; `lgpd_requests` e excecao
+-- declarada (e o REGISTRO do pedido, a prova de que o direito foi exercido).
+--
+--   ai_agent_runs         `tool_calls` guarda args, results e ate 4.000
+--                         caracteres da prosa do modelo
+--   demandas              `assunto` e `proximo_passo` sao texto livre sobre
+--                         a pessoa — mesma classe que a 0184 ja declarou
+--                         pessoal em `calendar_appointments.notes`
+--   broadcast_recipients  o telefone COPIADO, que no WhatsApp e tambem o
+--                         endereco; recebe o ROTULO como `voice_calls` na 0235
+--
+-- Vigiado por `tests/unit/lgpd-exporta-o-que-redige.test.ts`, que obriga a
+-- outra ponta: o que se apaga a pedido do titular se entrega a pedido dele.
+create or replace function public.fn_redigir_o_que_sobrou_do_contato_anonimizado()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rotulo text := 'Contato anonimizado';
+begin
+  -- 1 · ai_agent_runs — o rastro da IA sobre esta pessoa.
+  update public.ai_agent_runs
+     set tool_calls    = '[]'::jsonb,
+         error_message = null
+   where organization_id = new.organization_id
+     and (
+       contact_id = new.id
+       or conversation_id in (
+         select id from public.conversations
+          where organization_id = new.organization_id
+            and contact_id = new.id
+       )
+     )
+     and (tool_calls <> '[]'::jsonb or error_message is not null);
+
+  -- 2 · demandas — o problema dela, escrito à mão.
+  update public.demandas
+     set assunto       = null,
+         proximo_passo = null
+   where organization_id = new.organization_id
+     and contact_id = new.id
+     and (assunto is not null or proximo_passo is not null);
+
+  -- 3 · broadcast_recipients — rótulo, não `null`: a coluna é `not null` e a
+  --     linha precisa continuar contável para o relatório do disparo.
+  update public.broadcast_recipients
+     set phone_e164 = v_rotulo,
+         valores    = '{}'::jsonb
+   where organization_id = new.organization_id
+     and contact_id = new.id
+     and (phone_e164 <> v_rotulo or valores <> '{}'::jsonb);
+
+  -- 4 · google_ads_click_refs e meta_ads_click_refs — do upstream (0306 dele).
+  --     O perigo é `query_raw`: a query string CRUA da landing page, e página
+  --     de anúncio costuma carregar e-mail e nome na URL. A atribuição de
+  --     campanha (gclid, utm) continua servindo ao relatório; o elo com a
+  --     pessoa, não. `contact_id` já é `on delete set null`, então nulo é um
+  --     estado que a tabela aceita e o resto do código já trata.
+  update public.google_ads_click_refs
+     set query_raw  = '{}'::jsonb,
+         contact_id = null
+   where organization_id = new.organization_id
+     and contact_id = new.id;
+
+  update public.meta_ads_click_refs
+     set query_raw  = '{}'::jsonb,
+         contact_id = null
+   where organization_id = new.organization_id
+     and contact_id = new.id;
+
+  return new;
+end$;
+
+comment on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() is
+  'Redige as tres tabelas com contact_id que nenhum outro caminho de anonimizacao alcancava: ai_agent_runs (tool_calls guarda args, results e a prosa do modelo), demandas (assunto e proximo_passo sao texto livre sobre a pessoa) e broadcast_recipients (o telefone copiado, que no WhatsApp e tambem o endereco).';
+
+-- As DUAS origens de EXECUTE (item 9 do CLAUDE.md).
+revoke all on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from public;
+revoke execute on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from anon;
+revoke execute on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from authenticated;
+
+drop trigger if exists trg_redigir_o_que_sobrou_ao_anonimizar on public.contacts;
+create trigger trg_redigir_o_que_sobrou_ao_anonimizar
+  after update of is_anonymized on public.contacts
+  for each row
+  when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
+  execute function public.fn_redigir_o_que_sobrou_do_contato_anonimizado();
+
+-- ── E quem JÁ foi anonimizado ─────────────────────────────────────────────
+--
+-- Mesma razão da 0265: o gatilho dispara na TRANSIÇÃO, e para quem exerceu o
+-- direito antes desta migration ela já passou. Sem isto, o rastro da IA e o
+-- telefone deles ficam no banco para sempre — e são exatamente as pessoas que
+-- já pediram para sair.
+
+update public.ai_agent_runs r
+   set tool_calls = '[]'::jsonb, error_message = null
+  from public.contacts c
+ where c.is_anonymized = true
+   and c.organization_id = r.organization_id
+   and (
+     r.contact_id = c.id
+     or r.conversation_id in (
+       select id from public.conversations
+        where organization_id = c.organization_id and contact_id = c.id
+     )
+   )
+   and (r.tool_calls <> '[]'::jsonb or r.error_message is not null);
+
+update public.demandas d
+   set assunto = null, proximo_passo = null
+  from public.contacts c
+ where c.is_anonymized = true
+   and c.organization_id = d.organization_id
+   and d.contact_id = c.id
+   and (d.assunto is not null or d.proximo_passo is not null);
+
+update public.broadcast_recipients b
+   set phone_e164 = 'Contato anonimizado', valores = '{}'::jsonb
+  from public.contacts c
+ where c.is_anonymized = true
+   and c.organization_id = b.organization_id
+   and b.contact_id = c.id
+   and (b.phone_e164 <> 'Contato anonimizado' or b.valores <> '{}'::jsonb);
+
+
+-- ─── 0267 · quem responde legalmente pela INSTALACAO (E7) ─────────
+--
+-- `/legal/privacy` diz "o controlador e <X>, quem instalou e opera este
+-- sistema", e `<X>` vinha da ORGANIZACAO ATIVA DA SESSAO. Num self-host esta
+-- certo. Numa instalacao GERENCIADA, abrir a pagina com um cliente selecionado
+-- fazia o documento declarar que aquele cliente opera o servidor e controla os
+-- dados de todos os tenants — e TROCAR de nome conforme quem estava logado.
+--
+-- `operador_razao_social` e o INTERRUPTOR entre os dois modos: nula = self-host
+-- (segue da sessao), preenchida = gerenciado (vale para todo leitor). Estado
+-- impossivel nao existe, porque quem declara o operador E o operador.
+--
+-- Vigiado por `tests/unit/legal-operador-da-instalacao.test.ts`.
+alter table public.platform_branding
+  -- A razão social, não o nome fantasia: é o documento legal que a nomeia.
+  add column if not exists operador_razao_social text,
+  add column if not exists operador_cnpj text,
+  -- Encarregado (DPO) da PLATAFORMA. Continua havendo o do tenant
+  -- (`organizations.dpo_email`), e eles respondem por coisas diferentes: o do
+  -- tenant atende os contatos DELE, o daqui atende quem usa a instalação.
+  add column if not exists operador_dpo_email text,
+  -- A política publicada pelo operador. Quando existe, `/legal/privacy`
+  -- redireciona para ela em vez de renderizar o texto do produto.
+  add column if not exists operador_politica_url text;
+
+comment on column public.platform_branding.operador_razao_social is
+  'Razao social de quem opera ESTA instalacao. NULA = self-host, e ai o operador sai da organizacao da sessao (desenho original). PREENCHIDA = modelo gerenciado, e ai ela vale para todo leitor: a organizacao da sessao deixa de ter voz no documento legal. E o interruptor entre os dois modos.';
+
+comment on column public.platform_branding.operador_dpo_email is
+  'Encarregado (DPO) da PLATAFORMA. Nao substitui organizations.dpo_email: aquele atende os contatos DO TENANT, este atende quem usa a instalacao.';
+
+comment on column public.platform_branding.operador_politica_url is
+  'Politica de privacidade publicada pelo operador da instalacao. Quando presente, /legal/privacy redireciona para ela. Validada na SAIDA por urlDePoliticaSegura (http/https apenas) — o schema do formulario aceita javascript: e a rota e publica.';
+
+
+-- ─── 0268 · o carimbo do schema ────────────────────────────
+--
+-- `easypanel/bootstrap.sh` aplica este arquivo com `|| true` num banco que ja
+-- existe — que e TODO deploy depois do primeiro. Se uma migration tropeca, ele
+-- escreve `AVISO: ... (o app sobe mesmo assim)` e segue: o produto sobe
+-- saudavel, com o codigo novo e o schema de ontem, e as duas coisas sao
+-- verdade. O unico registro e o stdout de um conteiner efemero, e a agregacao
+-- de logs da VPS esta desligada (E4).
+--
+-- O bloco abaixo carimba. `/api/v1/health` compara com a constante compilada na
+-- imagem (`lib/schema/carimbo.ts`) e responde `schema.em_dia`. Assim "o banco
+-- veio junto?" passa a ter resposta de fora, com um curl.
+--
+-- ⚠️ A LINHA DO `insert` TEM DE CASAR com `CARIMBO_DO_SCHEMA` e com a migration
+-- mais nova de `supabase/migrations/`. Tres lugares, uma verdade, conferidos por
+-- `tests/unit/carimbo-do-schema.test.ts` — que e o que impede este carimbo de
+-- virar mais uma lista mantida a mao que envelhece em silencio.
+create table if not exists public.schema_baseline (
+  id smallint primary key default 1,
+  -- O NOME do arquivo, sem extensão: `20260920030000_0268_carimbo_do_schema`.
+  -- Nome e não só o timestamp porque quem lê a saúde de madrugada quer saber o
+  -- QUE entrou, e "0268_carimbo_do_schema" responde; "20260920030000" não.
+  migration_mais_nova text not null,
+  aplicado_em timestamptz not null default now(),
+  constraint schema_baseline_singleton check (id = 1),
+  constraint schema_baseline_nao_vazia check (length(btrim(migration_mais_nova)) > 0)
+);
+
+comment on table public.schema_baseline is
+  'Qual baseline este banco recebeu. Gravada pelo proprio baseline perto do fim; comparada em /api/v1/health com a constante compilada na imagem (lib/schema/carimbo.ts). Existe porque o bootstrap aplica o baseline com || true num banco existente: o schema pode falhar e o app sobe igual, saudavel, com o banco de ontem.';
+
+comment on column public.schema_baseline.aplicado_em is
+  'Quando o carimbo foi gravado. "Em dia" e "em dia desde quando" sao perguntas diferentes: esta responde se o deploy de agora carimbou, ou se o carimbo e de tres deploys atras e o baseline vem falhando calado.';
+
+alter table public.schema_baseline enable row level security;
+
+-- Sem policies de propósito: ninguém lê isto por sessão. A rota de saúde usa o
+-- `service_role`, que é `bypassrls`.
+revoke all on table public.schema_baseline from anon, authenticated;
+grant select, insert, update on table public.schema_baseline to service_role;
+
+-- O carimbo desta migration. O BASELINE tem o bloco equivalente perto do fim, e
+-- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
+-- migrations uma a uma.
+insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
+values (1, '20260921200000_0272_a_chegada_guardou_o_id_errado', now())
+on conflict (id) do update
+  set migration_mais_nova = excluded.migration_mais_nova,
+      aplicado_em = now();
+
+
+-- ─── 0269 · o carimbo conta os erros, nao so a chegada ───────────
+--
+-- Num banco existente o `psql` roda SEM `ON_ERROR_STOP`: um comando que falha
+-- vira uma linha de ERROR e a execucao CONTINUA ate o fim — inclusive ate o
+-- bloco que carimba. O carimbo da 0268 provava "o baseline foi lido inteiro",
+-- nunca "cada comando passou", e a saude respondia `em_dia: true` sobre um
+-- banco em que a migration nova podia ter falhado.
+--
+-- `easypanel/bootstrap.sh` JA calculava os erros nao benignos e os imprimia
+-- como AVISO, no stdout de um conteiner efemero. Agora ele os grava aqui, e
+-- `em_dia` exige carimbo certo E zero erros.
+alter table public.schema_baseline
+  -- Quantos erros NÃO benignos o `psql` cuspiu ao aplicar o baseline.
+  -- `0` = passou limpo. Default 0 e não null: uma linha carimbada por uma
+  -- versão anterior desta migration não pode parecer "nunca conferida" e
+  -- derrubar a saúde de uma instalação correta no primeiro deploy.
+  add column if not exists erros_inesperados integer not null default 0,
+  -- As primeiras linhas, para o diagnóstico começar em algum lugar.
+  add column if not exists erros_amostra text;
+
+comment on column public.schema_baseline.erros_inesperados is
+  'Erros NAO benignos ao aplicar o baseline (o bootstrap ja filtra "already exists" e afins). 0 = passou limpo. Num banco existente o psql roda sem ON_ERROR_STOP: o baseline chega ao fim e carimba mesmo tendo falhado no meio, e sem esta coluna a saude responderia em_dia:true sobre um banco que nao tem o que o carimbo diz ter.';
+
+comment on column public.schema_baseline.erros_amostra is
+  'Primeiras linhas do erro, para diagnosticar sem acesso ao conteiner. NUNCA sai na resposta publica da saude: mensagem de erro de Postgres carrega nome de tabela, de coluna e as vezes o valor que violou a constraint.';
+
+
+-- ─── 0270 · regua NOVA encerra ao responder (B1-a) ─────────────
+--
+-- Troca so o DEFAULT DA COLUNA: vale para a proxima regua criada e para mais
+-- nada. Nenhuma linha existente e tocada, e isso e a decisao, nao um detalhe —
+-- um `update` em massa mudaria o que as reguas dos clientes fazem numa conversa
+-- em andamento, sem ninguem ter pedido, com o sintoma aparecendo dias depois.
+
+-- ⚠️ Era `public.followup_flows`, que NUNCA existiu: a 0270 errou em todo deploy
+-- desde a .46 e era o `erros: 1` da saúde. Corrigido em 25/09/2026.
+alter table public.followup_flow_pointers
+  alter column trigger_config
+  set default '{"kind":"manual","cancel_on_reply":true}'::jsonb;
+-- ─── 0271 · o token que administra a PLATAFORMA (E6) ────────────
+--
+-- Tabela PROPRIA e nao um escopo em `api_tokens`: aquela tem
+-- `organization_id` NOT NULL, e e essa coluna que garante que todo token
+-- pertence a UM cliente — afrouxa-la para caber um token de plataforma
+-- tiraria a garantia de TODOS.
+--
+-- `operacoes` e lista BRANCA e comeca VAZIA: leitura e livre, escrita e
+-- nomeada uma a uma. Nao existe coluna "pode tudo", e a ausencia dela e a
+-- feature — ela seria o que todo mundo marca no primeiro token.
+--
+-- Vigiado por `tests/unit/mcp-de-plataforma-escopo.test.ts`.
+create table if not exists public.platform_api_tokens (
+  id uuid primary key default gen_random_uuid(),
+  -- Como quem criou reconhece o token na lista. Sem ele, revogar vira loteria.
+  name text not null,
+  -- Os 8 primeiros caracteres, para a tela poder mostrar QUAL token sem
+  -- guardar nada que sirva para autenticar.
+  prefix text not null,
+  -- SHA-256 do plaintext, como `api_tokens`. O plaintext existe uma vez, na
+  -- resposta da criação, e nunca é gravado.
+  token_hash bytea not null,
+
+  -- ⚠️ A LISTA BRANCA. Vazia = só leitura, e é o default de propósito: o token
+  -- criado sem pensar não escreve nada.
+  operacoes text[] not null default '{}'::text[],
+
+  created_by uuid not null references auth.users(id) on delete restrict,
+  created_at timestamptz not null default now(),
+  -- Motivo por escrito, como em `platform_admins.reason`: quem concede acesso
+  -- de plataforma explica por quê, e quem audita seis meses depois lê.
+  reason text not null,
+
+  last_used_at timestamptz,
+  last_used_ip inet,
+  expires_at timestamptz,
+
+  revoked_at timestamptz,
+  revoked_by uuid references auth.users(id) on delete set null,
+  revoke_reason text,
+
+  constraint platform_api_tokens_nome_nao_vazio check (length(btrim(name)) > 0),
+  constraint platform_api_tokens_motivo_nao_vazio check (length(btrim(reason)) > 0),
+  -- Revogar é um ato com autor e motivo: os três andam juntos ou nenhum existe.
+  constraint platform_api_tokens_revogacao_completa check (
+    (revoked_at is null and revoked_by is null and revoke_reason is null)
+    or (revoked_at is not null and revoked_by is not null)
+  )
+);
+
+comment on table public.platform_api_tokens is
+  'Token de administracao da PLATAFORMA (MCP admin, item E6). Tabela propria e nao um escopo em api_tokens porque aquela tem organization_id NOT NULL — e e essa coluna que garante que todo token pertence a UM cliente. `operacoes` e lista branca e comeca VAZIA: leitura e livre, escrita e nomeada uma a uma. Nao existe coluna "pode tudo", e a ausencia dela e a feature.';
+
+comment on column public.platform_api_tokens.operacoes is
+  'Lista branca das escritas permitidas (ex.: criar_cliente, liberar_modulo, lancar_credito). VAZIA = so leitura. O catalogo de operacoes vive no codigo (lib/mcp-plataforma/), nao aqui: o que uma operacao faz muda junto com o codigo que a executa, e uma tabela de catalogo envelheceria em silencio.';
+
+-- A busca do token é sempre por hash exato, e é o caminho quente de toda
+-- chamada MCP.
+create unique index if not exists uniq_platform_api_tokens_hash
+  on public.platform_api_tokens (token_hash);
+
+-- RLS ligada e ZERO policies: esta tabela é server-side only, lida e escrita
+-- pelo `service_role` (que é `bypassrls`). Uma policy aqui seria uma porta a
+-- mais para uma tabela cujo conteúdo autentica quem administra tudo.
+alter table public.platform_api_tokens enable row level security;
+revoke all on table public.platform_api_tokens from anon, authenticated;
+grant select, insert, update on table public.platform_api_tokens to service_role;
+
+
+
+-- ============================================================
+-- APENDICE 0272 — 20260921200000_0272_a_chegada_guardou_o_id_errado
+-- ============================================================
+
+-- 0272 — a chegada do cadastro incorporado guardou o id errado
+--
+-- ── O defeito, medido na primeira chegada real ───────────────────────────────
+--
+-- Em 21/09/2026, às 16:02, a primeira conta chegou de verdade pelo cadastro
+-- incorporado. O webhook recebeu, a assinatura conferiu, a linha foi gravada —
+-- e o `waba_id` gravado não existe na Meta.
+--
+-- O payload veio assim, e só assim:
+--
+--   { "event": "PARTNER_ADDED",
+--     "waba_info": { "waba_id": "…", "owner_business_id": "…" } }
+--
+-- `lerChegada` procurava `value.waba_id`, que nesse formato não existe, e caía
+-- no `entry.id` do envelope. No `account_update` esse fallback está certo (ali
+-- o `entry.id` É a conta); no `partner_added`, não é.
+--
+-- O estrago não é o campo errado: é o que ele faz com a tela. O operador abriu
+-- `/admin/cadastro-incorporado`, viu uma conta esperando, e não tinha como
+-- amarrá-la nem conferi-la — porque o id que ele estava vendo não correspondia
+-- a nada do lado da Meta. "Chegou e não dá para fazer nada" é pior que não ter
+-- chegado: no segundo caso você vai procurar o problema na Meta, no primeiro
+-- você acha que já está resolvido.
+--
+-- ── Por que a correção é aqui e não só no código ─────────────────────────────
+--
+-- O conserto do parser vale para a PRÓXIMA chegada. A linha que já está no
+-- banco continuaria errada para sempre, e ela é justamente a do cliente que
+-- está esperando agora. O payload cru foi guardado inteiro de propósito (o
+-- comentário da 0257 diz por quê: "o que hoje é ruído pode ser o único lugar
+-- onde está o dado que faltou") — e hoje é o dia em que isso paga.
+--
+-- ── owner_business_id ────────────────────────────────────────────────────────
+--
+-- O `partner_added` não traz número nenhum: ele avisa que uma empresa adicionou
+-- nosso app, e os números vêm depois. Sem número e sem nome, a única pista de
+-- "de quem é esta conta" é o portfólio empresarial do cliente. É o que permite
+-- ao operador conferir, a olho, que a conta que chegou é do cliente que ele
+-- espera — antes de amarrar. Guardar essa pista é o que impede a amarração no
+-- palpite, que é o desfecho que o cadastro incorporado inteiro existe para
+-- evitar.
+
+alter table public.meta_onboardings
+  add column if not exists owner_business_id text;
+
+comment on column public.meta_onboardings.owner_business_id is
+  'Portfólio empresarial DO CLIENTE, lido de payload->waba_info->owner_business_id. A única pista de dono que o partner_added traz, e o que permite conferir a amarração antes de fazê-la.';
+
+-- ── O reparo das linhas já gravadas ──────────────────────────────────────────
+--
+-- Só toca linha em que as TRÊS coisas são verdade:
+--   · o payload tem `waba_info.waba_id` (é do formato que o parser lia errado);
+--   · ele difere do `waba_id` gravado (senão não há o que consertar);
+--   · a linha ainda NÃO foi amarrada a cliente nenhum.
+--
+-- A terceira condição é a que importa. `waba_id` é a chave por onde a
+-- amarração encontra a linha e por onde `guardarChegada` decide não mexer no
+-- que já tem dono. Trocar o id de uma linha JÁ amarrada desligaria em silêncio
+-- a conta de um canal que pode estar conversando — exatamente o estrago que
+-- esta migration existe para evitar, invertido.
+--
+-- E o `not exists` guarda o índice único: se o id correto já estiver na tabela
+-- (uma segunda chegada da mesma conta, dessa vez lida certo), a linha velha
+-- fica como está em vez de derrubar a migration inteira num 23505. Sobra uma
+-- linha órfã que o operador vê e ignora; o alternativo é o baseline parar.
+update public.meta_onboardings as m
+   set waba_id           = m.payload -> 'waba_info' ->> 'waba_id',
+       owner_business_id = coalesce(
+                             m.owner_business_id,
+                             m.payload -> 'waba_info' ->> 'owner_business_id'
+                           ),
+       updated_at        = now()
+ where m.payload -> 'waba_info' ->> 'waba_id' is not null
+   and m.payload -> 'waba_info' ->> 'waba_id' <> m.waba_id
+   and m.organization_id is null
+   and not exists (
+         select 1
+           from public.meta_onboardings as outra
+          where outra.waba_id = m.payload -> 'waba_info' ->> 'waba_id'
+       );
+
+-- Linhas do formato certo que só não tinham a coluna: preenche sem mexer no id.
+update public.meta_onboardings as m
+   set owner_business_id = m.payload -> 'waba_info' ->> 'owner_business_id'
+ where m.owner_business_id is null
+   and m.payload -> 'waba_info' ->> 'owner_business_id' is not null;
+
+-- ---- custo de IA deixa de nascer nulo (migration 0239) ----
+--
+-- `pricing.ts` conhece três modelos Claude e devolve NULL para qualquer outro.
+-- O catálogo que a tela oferece (`ai_models`, 0104) tem dezesseis, e o padrão de
+-- OpenAI — `gpt-5.6-terra` — é um deles. Quem escolheu um modelo do catálogo
+-- ficava assim, medido na instalação da Time Company em 15/09/2026:
+--
+--   • toda linha de `llm_calls` com `cost_cents` nulo;
+--   • 2,8 milhões de tokens no painel da plataforma ao lado de "Custo AI
+--     US$ 0,00" — que qualquer pessoa lê como "não custou nada";
+--   • `fn_gasto_de_ia_do_mes` somando `coalesce(cost_cents, 0)`, então o TETO
+--     mensal e o alarme de 80% nunca disparavam. A proteção contra a fatura
+--     surpreender o dono estava desarmada exatamente para o caminho padrão.
+--
+-- O motor passou a consultar o catálogo (`lib/agent-engine/edge/llm/preco-do-catalogo.ts`).
+-- Esta migration faz o mesmo com o que JÁ FOI GRAVADO: os tokens estão todos lá,
+-- só o preço faltava. Recalcula apenas onde `cost_cents` é nulo — linha com
+-- custo escrito por qualquer um dos três caminhos de cálculo não é tocada.
+--
+-- Tarifa de cache: `ai_pricing` só tem entrada e saída. O token lido do cache
+-- entra a 10% da entrada (o mesmo fator que `pricing.ts` usa nos Claude) e o
+-- token escrito no cache entra a preço de entrada — a OpenAI não cobra a escrita
+-- à parte, e cobrar a mais seria pior num número que decide bloqueio.
+--
+-- Idempotente: rodar de novo não casa nada (não há mais nulo a preencher) e o
+-- reconciliar do contador recalcula em vez de somar.
+
+-- ---- 1. o preço vigente de cada modelo, com o catálogo como segunda fonte ----
+--
+-- `ai_pricing` é a fonte (versionada por vigência); `ai_models` cobre o modelo
+-- que foi habilitado só pela tela do catálogo e nunca chegou à tabela de preço.
+with precos as (
+  select distinct on (modelo) modelo, entrada, saida from (
+    select p.model as modelo,
+           p.prompt_cents_per_million_tokens as entrada,
+           p.completion_cents_per_million_tokens as saida,
+           1 as prioridade
+      from public.ai_pricing p
+     where p.effective_from <= now()
+       and p.superseded_at is null
+       and p.prompt_cents_per_million_tokens is not null
+       and p.completion_cents_per_million_tokens is not null
+    union all
+    select m.model_id,
+           m.input_price_per_million_cents::numeric,
+           m.output_price_per_million_cents::numeric,
+           2
+      from public.ai_models m
+     where m.deprecated_at is null
+       and m.input_price_per_million_cents is not null
+       and m.output_price_per_million_cents is not null
+  ) fontes
+  order by modelo, prioridade
+)
+update public.llm_calls c
+   set cost_cents =
+         (greatest(0, c.input_tokens - c.cache_read_tokens) * p.entrada
+          + c.cache_read_tokens * p.entrada * 0.1
+          + c.output_tokens * p.saida) / 1000000.0
+  from precos p
+ where p.modelo = c.model
+   and c.cost_cents is null
+   and (c.input_tokens > 0 or c.output_tokens > 0);
+
+-- ---- 2. o contador materializado do orçamento volta a bater com a fonte ----
+--
+-- `fn_update_budget_consumption` só roda no INSERT, então o recálculo acima não
+-- chega nele sozinho. Mesmo reconciliar da 0095: recalcula o mês corrente a
+-- partir das duas telemetrias, em vez de somar por cima do que já estava lá.
+insert into public.ai_budgets (organization_id, current_month_consumed_cents)
+select o.id,
+       coalesce((select sum(cost_cents) from public.llm_calls c
+                  where c.organization_id = o.id and c.created_at >= date_trunc('month', now())), 0)
+     + coalesce((select sum(cost_cents) from public.ai_invocations i
+                  where i.organization_id = o.id and i.created_at >= date_trunc('month', now())), 0)
+  from public.organizations o
+on conflict (organization_id) do update
+   set current_month_consumed_cents = excluded.current_month_consumed_cents,
+       updated_at = now();
+
+
+-- ---- saldo e recarga do provedor de IA (migration 0240) ----
+--
+-- O painel da plataforma respondia "quanto foi consumido" e não respondia a
+-- pergunta que acorda alguém de madrugada: "quanto ainda tem na conta do
+-- provedor, e até quando dura?". Sem isso a operação inteira para quando o
+-- crédito acaba — a chave continua válida, a chamada volta 429/insufficient
+-- quota, e o sintoma chega como "a IA parou de responder", sem dizer por quê.
+--
+-- Duas tabelas, as duas de PLATAFORMA (nunca de tenant): quem paga o provedor é
+-- quem opera a instalação.
+--
+-- ── Por que LANÇAMENTOS, e não um campo "saldo" ──────────────────────────────
+--
+-- Saldo escrito à mão envelhece no instante seguinte e ninguém sabe de quando
+-- ele é. Aqui o saldo é DERIVADO, e por isso se mantém sozinho:
+--
+--   saldo = última LEITURA + RECARGAS depois dela − consumo desde a leitura
+--
+-- `leitura` é "fui na conta do provedor e o saldo era este, neste instante" —
+-- ela reancora a conta e absorve toda diferença acumulada (uso fora do CRM,
+-- arredondamento, a aproximação da tarifa de cache). `recarga` é dinheiro
+-- colocado. O consumo sai de `llm_calls`, a mesma fonte das telas.
+--
+-- Efeito colateral bom: a diferença entre o saldo que o painel calculava e o
+-- que a leitura encontrou é a medida de quanto a nossa medição erra.
+
+create table if not exists public.platform_ai_ledger (
+  id           uuid primary key default gen_random_uuid(),
+  tipo         text        not null,
+  amount_usd   numeric(12,4) not null,
+  occurred_at  timestamptz not null default now(),
+  note         text,
+  created_by   uuid,
+  created_at   timestamptz not null default now(),
+  constraint platform_ai_ledger_tipo_check check (tipo in ('recarga', 'leitura')),
+  -- Valor negativo aqui viraria saldo inventado para cima ou para baixo sem
+  -- rastro; estorno se registra como uma leitura nova, que é o fato observado.
+  constraint platform_ai_ledger_valor_check check (amount_usd >= 0)
+);
+
+comment on table public.platform_ai_ledger is
+  'Lançamentos que explicam o saldo do provedor de IA da INSTALAÇÃO. tipo=leitura: saldo conferido na conta do provedor naquele instante (reancora a conta). tipo=recarga: crédito adicionado. O saldo nunca é gravado: é derivado da última leitura + recargas posteriores − consumo de llm_calls no mesmo intervalo. Lida e escrita só server-side (service_role), pelo admin de plataforma.';
+
+comment on column public.platform_ai_ledger.occurred_at is
+  'QUANDO o fato aconteceu na conta do provedor — não quando foi digitado. Recarga lançada dois dias depois conta a partir do dia certo, senão o saldo do intervalo sai errado.';
+
+create index if not exists idx_platform_ai_ledger_quando
+  on public.platform_ai_ledger (occurred_at desc);
+
+alter table public.platform_ai_ledger enable row level security;
+
+-- ZERO POLICIES, de propósito: mesma doutrina de `platform_branding`. Não há
+-- leitura por cookie de tenant; quem lê é o handler de /admin com service role,
+-- depois de `requirePlatformAdmin`.
+revoke all on public.platform_ai_ledger from anon, authenticated;
+grant select, insert, delete on public.platform_ai_ledger to service_role;
+
+-- ---- a cotação, para o painel falar em real sem inventar câmbio ------------
+--
+-- O provedor cobra em DÓLAR e a decisão de preço é em REAL. Converter por uma
+-- cotação buscada na hora faria o custo de um mês fechado mudar sozinho a cada
+-- abertura da tela. Aqui a cotação é declarada, com a data em que foi lida — a
+-- tela mostra as duas coisas, e quem decide margem sabe sobre qual câmbio.
+create table if not exists public.platform_ai_custo (
+  id          smallint primary key default 1,
+  usd_brl     numeric(10,4),
+  cotado_em   timestamptz,
+  updated_at  timestamptz not null default now(),
+  updated_by  uuid,
+  constraint platform_ai_custo_singleton check (id = 1),
+  constraint platform_ai_custo_valor check (usd_brl is null or (usd_brl > 0 and usd_brl < 1000))
+);
+
+comment on table public.platform_ai_custo is
+  'Linha única (id=1) com a cotação do dólar que o painel de custo usa para exibir reais, e a data em que ela foi lida. Nula = o painel mostra só dólar, em vez de inventar câmbio.';
+
+alter table public.platform_ai_custo enable row level security;
+revoke all on public.platform_ai_custo from anon, authenticated;
+grant select, insert, update on public.platform_ai_custo to service_role;
+
+drop trigger if exists trg_platform_ai_custo_touch on public.platform_ai_custo;
+create trigger trg_platform_ai_custo_touch
+  before update on public.platform_ai_custo
+  for each row execute function public.fn_touch_updated_at();
+
+notify pgrst, 'reload schema';
+
+
+-- ---- cotacao do dolar por dia (migration 0241) ----
+--
+-- A 0240 guardou uma cotação única em `platform_ai_custo`. Serve para hoje e
+-- mente sobre ontem: o provedor cobra em dólar, e converter um mês inteiro pela
+-- cotação de hoje faz o custo de agosto MUDAR quando o câmbio mexe em setembro.
+-- Quem decide margem olhando esse número decide sobre areia.
+--
+-- Aqui cada dia guarda a cotação DELE. O custo de um dia fechado é convertido
+-- pela cotação daquele dia e para de se mexer — e o painel continua automático,
+-- porque quem preenche é o cron (`api/v1/cron/cotacao-do-dolar`), não uma pessoa.
+--
+-- `platform_ai_custo` continua existindo e passa a ser o ESPELHO da cotação mais
+-- recente: é o que a tela lê para dizer "convertido a R$ X, de tal dia", e é o
+-- que uma pessoa pode sobrescrever à mão se a origem estiver fora do ar.
+
+create table if not exists public.platform_fx_rates (
+  dia           date        primary key,
+  usd_brl       numeric(10,4) not null,
+  fonte         text        not null default 'awesomeapi',
+  capturado_em  timestamptz not null default now(),
+  -- Piso e teto de sanidade: um soluço da origem devolvendo 0 ou 9999 viraria
+  -- custo zerado ou pânico na tela. O intervalo é largo de propósito — protege
+  -- contra resposta quebrada, não contra variação real do câmbio.
+  constraint platform_fx_rates_valor_check check (usd_brl > 0.5 and usd_brl < 100)
+);
+
+comment on table public.platform_fx_rates is
+  'Cotação USD→BRL de cada dia, preenchida pelo cron cotacao-do-dolar. O custo de IA de um dia é convertido pela cotação DAQUELE dia: sem isto, o custo de um mês fechado mudaria sozinho a cada oscilação do câmbio. Tabela de plataforma: lida e escrita só server-side (service_role).';
+
+comment on column public.platform_fx_rates.fonte is
+  'De onde veio o número. Existe para o dia em que a origem mudar: um valor lançado à mão e um vindo da API não valem o mesmo na hora de conferir uma diferença.';
+
+alter table public.platform_fx_rates enable row level security;
+
+-- ZERO POLICIES, de propósito — mesma doutrina de `platform_branding` e da 0240.
+revoke all on public.platform_fx_rates from anon, authenticated;
+grant select, insert, update on public.platform_fx_rates to service_role;
+
+-- ---- o dólar que VOCÊ pagou, que não é o do mercado -----------------------
+--
+-- Recarga feita com cartão brasileiro sai por mais do que a cotação: tem o
+-- spread do banco e o IOF. Calcular isso por percentual seria inventar precisão
+-- — a taxa do banco muda por operação e o IOF muda por decreto.
+--
+-- Então a recarga passa a poder registrar QUANTO SAIU EM REAIS. Com os dois
+-- números (dólares que entraram na conta do provedor e reais que saíram do
+-- cartão), a taxa efetiva é uma divisão, já com IOF e spread dentro, medida em
+-- vez de estimada. É ela que vale para decidir margem; a de mercado serve para
+-- mostrar quanto custou comprar o dólar.
+--
+-- Nulo é um estado legítimo: recarga antiga, ou paga por outro meio, fica sem
+-- o valor em reais e simplesmente não entra na média da taxa efetiva.
+alter table public.platform_ai_ledger
+  add column if not exists amount_brl numeric(12,2);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'platform_ai_ledger_brl_check'
+  ) then
+    alter table public.platform_ai_ledger
+      add constraint platform_ai_ledger_brl_check
+      check (amount_brl is null or amount_brl >= 0);
+  end if;
+end $$;
+
+comment on column public.platform_ai_ledger.amount_brl is
+  'Quanto saiu em REAIS nesta recarga (cartão, Pix, o que for). Com o amount_usd dá a taxa efetiva paga — IOF e spread do banco inclusos, medidos e não estimados. NULL = não informado; a linha fica fora da média.';
+
+notify pgrst, 'reload schema';
+
+
+-- ---- gasto real da conta OpenAI (migration 0242) ----
+--
+-- O CRM soma token × preço de tabela. É boa medida, sustenta teto e preço por
+-- conversa — mas é MEDIÇÃO, e medição tem erro: modelo sem preço no catálogo,
+-- desconto de cache que a tarifa não descreve, uso da mesma chave fora daqui.
+--
+-- A API de organização da OpenAI responde a pergunta definitiva: quanto foi
+-- COBRADO. Guardando dia a dia, a diferença entre as duas deixa de ser suspeita
+-- e vira número — é ela que diz se dá para confiar no custo por conversa na
+-- hora de fechar preço com um cliente.
+--
+-- Só dias FECHADOS entram: o dia corrente não existe na fatura até virar a
+-- meia-noite UTC, e inventar o dia aberto seria repetir o defeito que esta
+-- tabela veio medir.
+
+create table if not exists public.platform_openai_spend (
+  dia           date        primary key,
+  usd           numeric(12,4) not null,
+  capturado_em  timestamptz not null default now(),
+  constraint platform_openai_spend_valor_check check (usd >= 0)
+);
+
+comment on table public.platform_openai_spend is
+  'Gasto diário COBRADO pela OpenAI (API de organização, /v1/organization/costs), preenchido pelo cron gasto-openai quando existe OPENAI_ADMIN_KEY. Existe para comparar com o custo que o sistema mede a partir de llm_calls: a diferença entre os dois é a margem de erro da nossa medição. Só dias fechados — o dia corrente não existe na fatura.';
+
+alter table public.platform_openai_spend enable row level security;
+
+-- ZERO POLICIES, de propósito — mesma doutrina de `platform_branding`, 0240 e 0241.
+revoke all on public.platform_openai_spend from anon, authenticated;
+grant select, insert, update on public.platform_openai_spend to service_role;
+
+notify pgrst, 'reload schema';
+
+
+-- ---- metas comerciais (migration 0243) ----
+--
+-- O CRM sabia QUANTO uma oportunidade vale e QUEM é o dono dela. Faltavam três
+-- coisas para fechar o mês sem planilha à parte:
+--
+--  1. QUEM ORIGINOU. O card tem um dono (quem fecha). Quando o SDR marca a
+--     reunião e o closer fecha, o crédito da venda fica inteiro com o closer, e
+--     a participação do SDR vira planilha paralela — que é exatamente o que
+--     este CRM existe para matar.
+--  2. QUE TIPO DE RECEITA É. Mensalidade e projeto avulso somam igual num total
+--     que decide comissão e projeção, e não deveriam: R$ 10 mil recorrentes e
+--     R$ 10 mil de setup valem coisas diferentes para o negócio.
+--  3. O ALVO. Sem meta gravada, "quanto falta" é conta de cabeça, e acompanhar
+--     progresso exige alguém montando o número toda segunda-feira.
+--
+-- As três entram aqui. O cálculo do progresso NÃO: ele é derivado das mesmas
+-- linhas de `crm_leads` que já existem (doutrina DIRC — o que se calcula não se
+-- guarda), e vive em `lib/crm/metas/`.
+
+-- ---- 1. o card ganha origem e natureza da receita ---------------------------
+
+alter table public.crm_leads
+  add column if not exists originated_by_user_id uuid references auth.users(id) on delete set null;
+
+comment on column public.crm_leads.originated_by_user_id is
+  'Quem ORIGINOU a oportunidade (o SDR que marcou a reunião), quando não é a mesma pessoa que fecha (owner_user_id). NULL = originada pelo próprio dono, ou origem não registrada. Existe para a meta de participação do SDR sair do mesmo lugar onde a venda é registrada, em vez de uma planilha paralela.';
+
+alter table public.crm_leads
+  add column if not exists revenue_kind text;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'crm_leads_revenue_kind_enum') then
+    alter table public.crm_leads
+      add constraint crm_leads_revenue_kind_enum
+      check (revenue_kind is null or revenue_kind in ('recorrente', 'avulso'));
+  end if;
+end $$;
+
+comment on column public.crm_leads.revenue_kind is
+  'recorrente = mensalidade/assinatura; avulso = projeto, setup, venda única. NULL = não classificada, e a tela DIZ isso em vez de escolher um lado — somar uma venda não classificada como avulsa inventaria a divisão que o relatório existe para mostrar.';
+
+alter table public.crm_leads
+  add column if not exists recurring_months integer;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'crm_leads_recurring_months_check') then
+    alter table public.crm_leads
+      add constraint crm_leads_recurring_months_check
+      check (recurring_months is null or (recurring_months > 0 and recurring_months <= 120));
+  end if;
+end $$;
+
+comment on column public.crm_leads.recurring_months is
+  'Duração do contrato em meses, para receita recorrente. Com ela, `value_cents` (a mensalidade) vira valor de contrato e receita anual sem ninguém multiplicar na mão. NULL em receita avulsa, e em recorrente sem prazo definido.';
+
+create index if not exists idx_crm_leads_originado_por
+  on public.crm_leads (organization_id, originated_by_user_id, closed_at)
+  where originated_by_user_id is not null;
+
+-- ---- 2. a meta do mês -------------------------------------------------------
+--
+-- Uma linha por (organização, mês, métrica, quem). "Quem" é a organização
+-- inteira (user_id e agent_id nulos), uma PESSOA, ou um AGENTE de IA — porque a
+-- meta de reunião marcada vale tanto para o SDR quanto para a Mia.
+
+create table if not exists public.sales_targets (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  -- Sempre o dia 1: mês é a unidade de meta comercial, e guardar o dia exato
+  -- criaria duas metas "de setembro" que não se encontram.
+  periodo          date not null,
+  metrica          text not null,
+  alvo_cents       bigint,
+  alvo_quantidade  integer,
+  user_id          uuid references auth.users(id) on delete cascade,
+  agent_id         uuid,
+  created_by       uuid,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  constraint sales_targets_metrica_enum check (metrica in (
+    'reunioes',            -- atividade: reuniões marcadas no mês
+    'receita_total',       -- tudo que foi ganho
+    'receita_recorrente',  -- só mensalidade
+    'receita_avulsa',      -- só projeto/setup
+    'receita_originada'    -- a participação de quem ORIGINOU (a meta do SDR)
+  )),
+  -- Meta de dinheiro tem alvo em centavos; meta de atividade, em quantidade.
+  -- Uma linha com os dois (ou com nenhum) não tem como ser exibida nem cobrada.
+  constraint sales_targets_alvo_coerente check (
+    (metrica = 'reunioes' and alvo_quantidade is not null and alvo_cents is null)
+    or (metrica <> 'reunioes' and alvo_cents is not null and alvo_quantidade is null)
+  ),
+  constraint sales_targets_alvo_positivo check (
+    coalesce(alvo_cents, 1) > 0 and coalesce(alvo_quantidade, 1) > 0
+  ),
+  -- Pessoa OU agente, nunca os dois: a meta é de um responsável só.
+  constraint sales_targets_um_responsavel check (user_id is null or agent_id is null),
+  constraint sales_targets_periodo_no_dia_1 check (extract(day from periodo) = 1)
+);
+
+comment on table public.sales_targets is
+  'A meta de cada mês, por métrica e por responsável (organização inteira, uma pessoa, ou um agente de IA). O PROGRESSO não mora aqui: é derivado de crm_leads e de agendamentos, na leitura — o que se calcula não se guarda, senão a meta e a realidade divergem em silêncio.';
+
+-- Índice único com as colunas nuláveis normalizadas: sem o coalesce, o Postgres
+-- trata cada NULL como distinto e a mesma meta pode ser cadastrada duas vezes.
+-- ⚠️ NULLS NOT DISTINCT, e a forma importa (migration 0253).
+--
+-- Este índice já foi de EXPRESSÃO (`coalesce(user_id, …)`), com a intenção certa
+-- — NULL tem de casar com NULL — e a forma errada: o `ON CONFLICT` da rota de
+-- metas lista COLUNAS, e o Postgres infere o índice no PLANEJAMENTO. Lista de
+-- colunas não casa com índice de expressão, então TODA gravação de meta morria
+-- em `42P10`, inclusive a primeira numa tabela vazia.
+--
+-- A rota engolia `error.code` e devolvia um toast genérico, então um erro em
+-- 100% das gravações sobreviveu em produção sem aparecer em log nenhum.
+create unique index if not exists idx_sales_targets_unica_nn
+  on public.sales_targets (organization_id, periodo, metrica, user_id, agent_id)
+  nulls not distinct;
+
+-- O nome antigo sai do caminho em bancos que já o têm (o bloco 0253, no fim
+-- deste arquivo, faz o mesmo ao reaplicar).
+drop index if exists public.idx_sales_targets_unica;
+
+create index if not exists idx_sales_targets_org_periodo
+  on public.sales_targets (organization_id, periodo desc);
+
+alter table public.sales_targets enable row level security;
+
+drop policy if exists "sales_targets_select" on public.sales_targets;
+create policy "sales_targets_select" on public.sales_targets
+  for select using (organization_id in (select fn_user_org_ids()));
+
+-- Escrever meta é decisão de gestão: manager+ define, o time acompanha.
+drop policy if exists "sales_targets_write" on public.sales_targets;
+create policy "sales_targets_write" on public.sales_targets
+  for all using (
+    organization_id in (select fn_user_org_ids())
+    and fn_role_at_least(organization_id, 'manager')
+  )
+  with check (
+    organization_id in (select fn_user_org_ids())
+    and fn_role_at_least(organization_id, 'manager')
+  );
+
+revoke all on public.sales_targets from anon;
+grant select, insert, update, delete on public.sales_targets to authenticated, service_role;
+
+drop trigger if exists trg_sales_targets_touch on public.sales_targets;
+create trigger trg_sales_targets_touch
+  before update on public.sales_targets
+  for each row execute function public.fn_set_updated_at();
+
+
+-- ---- carteira do cliente (migration 0244) ----
+--
+-- Espelho EXATO da migration. Idempotente, como todo o apêndice.
+
+-- 0244 — a carteira do cliente: crédito, extrato e trava de saldo
+--
+-- Primeira peça do disparador. Antes de o motor de envio existir, é preciso
+-- responder três perguntas que ninguém consegue responder DEPOIS que a primeira
+-- mensagem saiu: quanto o cliente tem, quanto cada envio custou a ELE, e o que
+-- acontece quando o crédito acaba no meio de uma lista de 4.000 contatos.
+--
+-- ── Por que LANÇAMENTOS, e não um campo `saldo` ─────────────────────────────
+--
+-- Mesma doutrina da 0240 (saldo do provedor de IA), com uma diferença que muda
+-- o desenho: lá o dinheiro está numa conta de TERCEIRO, e por isso existe o
+-- lançamento `leitura`, que reancora a conta e absorve o que aconteceu fora do
+-- nosso alcance. Aqui a conta é NOSSA. Não há movimento fora dela — todo
+-- crédito entrou por um lançamento e todo débito saiu por outro —, então o
+-- saldo é a soma exata, sem reancoragem e sem erro acumulado.
+--
+-- Um campo `saldo_cents` atualizado a cada envio seria mais rápido de ler e
+-- erraria no primeiro envio concorrente: duas mensagens debitando ao mesmo
+-- tempo leem o mesmo saldo e gravam o mesmo resultado, e uma delas sai de
+-- graça. A soma não tem esse buraco.
+--
+-- ── A idempotência é do BANCO, não do código ────────────────────────────────
+--
+-- Disparador é a funcionalidade que MAIS vai ter retentativa: o provedor
+-- devolve tempo esgotado depois de já ter aceitado, o worker morre entre o
+-- envio e o débito, a fila reentrega. Um índice único sobre (origem,
+-- referência) é o que garante que a mesma mensagem não seja cobrada duas vezes
+-- — e é a única garantia que sobrevive a um `catch` mal escrito seis meses
+-- depois.
+--
+-- ── Cobrança é do TENANT, custo é da PLATAFORMA ─────────────────────────────
+--
+-- Esta tabela é o que o CLIENTE vê: o que ele comprou e o que gastou. O que a
+-- operação PAGA pela mesma mensagem não entra aqui e não tem policy que o
+-- exponha — isso é `lib/ai/custo-e-da-plataforma.ts`, e a separação é
+-- deliberada.
+
+create table if not exists public.tenant_wallet_ledger (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  -- `credito`: dinheiro que entrou (pacote comprado, cortesia, ajuste a favor).
+  -- `debito`: consumo (uma mensagem enviada e aceita pelo provedor).
+  -- `estorno`: devolução de um débito que não virou entrega.
+  tipo             text not null,
+  -- SEMPRE positivo. O sinal vem do `tipo`, e não do número: valor negativo com
+  -- tipo `credito` viraria débito escondido num extrato que diz "crédito".
+  amount_cents     bigint not null,
+  currency         text not null default 'BRL',
+  occurred_at      timestamptz not null default now(),
+  -- De onde veio o lançamento, para o extrato explicar cada linha e para a
+  -- idempotência ter sobre o que se apoiar. `ref_kind` = 'broadcast_message',
+  -- 'recarga_manual', 'ajuste'; `ref_id` = o id daquilo.
+  ref_kind         text,
+  ref_id           text,
+  note             text,
+  created_by       uuid references auth.users(id) on delete set null,
+  created_at       timestamptz not null default now(),
+  constraint tenant_wallet_ledger_tipo_check
+    check (tipo in ('credito', 'debito', 'estorno')),
+  constraint tenant_wallet_ledger_valor_check
+    check (amount_cents > 0)
+);
+
+comment on table public.tenant_wallet_ledger is
+  'Carteira do CLIENTE (o que ele comprou e o que gastou), em centavos da moeda dele. O saldo NUNCA é gravado: e a soma de creditos + estornos menos debitos, porque a conta e nossa e nao ha movimento fora do nosso alcance. NAO guarda o CUSTO da operacao - isso e de plataforma e fica noutro lugar, de proposito.';
+
+comment on column public.tenant_wallet_ledger.amount_cents is
+  'Sempre POSITIVO. O sinal do lancamento vem de tipo - um negativo aqui viraria debito disfarcado de credito num extrato que a pessoa le para conferir a conta dela.';
+
+comment on column public.tenant_wallet_ledger.occurred_at is
+  'QUANDO o fato aconteceu, nao quando a linha foi digitada. Recarga confirmada no banco as 23h e lancada no dia seguinte conta no dia certo.';
+
+-- A idempotência do débito. Índice PARCIAL porque `ref_id` nulo é legítimo
+-- (ajuste manual sem referência), e um único global recusaria o segundo ajuste.
+create unique index if not exists uq_tenant_wallet_ledger_ref
+  on public.tenant_wallet_ledger (organization_id, ref_kind, ref_id)
+  where ref_kind is not null and ref_id is not null;
+
+create index if not exists idx_tenant_wallet_ledger_extrato
+  on public.tenant_wallet_ledger (organization_id, occurred_at desc);
+
+alter table public.tenant_wallet_ledger enable row level security;
+
+-- O cliente LÊ a própria carteira (é o dinheiro dele, e extrato que não se lê
+-- não é extrato) e não ESCREVE nela por caminho nenhum: crédito entra por
+-- decisão comercial, débito entra pelo motor de envio. Os dois são service_role.
+drop policy if exists tenant_wallet_ledger_select on public.tenant_wallet_ledger;
+create policy tenant_wallet_ledger_select on public.tenant_wallet_ledger
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+revoke all on public.tenant_wallet_ledger from anon;
+grant select on public.tenant_wallet_ledger to authenticated;
+grant select, insert on public.tenant_wallet_ledger to service_role;
+-- Sem `update` e sem `delete` NEM para service_role: extrato que se edita não é
+-- extrato. Lançamento errado se corrige com outro lançamento, que é o que um
+-- contador faria e o que deixa a correção visível para o cliente.
+
+-- ---- o preço que ESTE cliente paga por mensagem -----------------------------
+--
+-- A trava de saldo precisa de um limiar, e o limiar é o preço. Uma tabela por
+-- organização, e não um catálogo de planos: o produto ainda não tem plano, e
+-- inventar o catálogo agora fixaria um desenho antes de existir o primeiro
+-- contrato para descrevê-lo.
+--
+-- Linha ausente ou preço NULL = esta organização não tem preço acordado, e o
+-- disparador RECUSA em vez de supor. Zero seria "de graça", que é uma decisão
+-- comercial e precisa ser digitada como tal.
+create table if not exists public.tenant_broadcast_pricing (
+  organization_id          uuid primary key references public.organizations(id) on delete cascade,
+  preco_por_mensagem_cents integer,
+  -- Piso de aviso: abaixo disto a tela avisa que o crédito está acabando, em
+  -- vez de o cliente descobrir na mensagem 3.200 de 4.000.
+  alerta_saldo_cents       bigint,
+  updated_at               timestamptz not null default now(),
+  updated_by               uuid references auth.users(id) on delete set null,
+  constraint tenant_broadcast_pricing_preco_check
+    check (preco_por_mensagem_cents is null or preco_por_mensagem_cents >= 0),
+  constraint tenant_broadcast_pricing_alerta_check
+    check (alerta_saldo_cents is null or alerta_saldo_cents >= 0)
+);
+
+comment on table public.tenant_broadcast_pricing is
+  'O preco por mensagem disparada acordado com ESTA organizacao, e o piso de saldo em que ela deve ser avisada. Linha ausente ou preco NULL = sem preco acordado, e o disparador RECUSA em vez de supor - zero e decisao comercial e precisa ser digitada como tal.';
+
+alter table public.tenant_broadcast_pricing enable row level security;
+
+-- O cliente lê o próprio preço (ele o contratou); só a plataforma escreve.
+drop policy if exists tenant_broadcast_pricing_select on public.tenant_broadcast_pricing;
+create policy tenant_broadcast_pricing_select on public.tenant_broadcast_pricing
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+revoke all on public.tenant_broadcast_pricing from anon;
+grant select on public.tenant_broadcast_pricing to authenticated;
+grant select, insert, update on public.tenant_broadcast_pricing to service_role;
+
+
+-- ---- liberação por módulo (migration 0245) ----
+--
+-- Espelho EXATO da migration. Idempotente, como todo o apêndice.
+
+-- 0245 — cada cliente com o que comprou
+--
+-- O sistema passou a ter peça VENDÁVEL SEPARADA (o disparador é a primeira), e
+-- até aqui "quem tem acesso a quê" só existia em duas réguas: papel dentro da
+-- organização e admin de plataforma. Nenhuma das duas responde "esta empresa
+-- contratou este módulo" — e sem a resposta, ligar um módulo para um cliente
+-- significa ligá-lo para todos.
+--
+-- ── Ausência de linha = NÃO contratado, e só para módulo DECLARADO ──────────
+--
+-- A tentação é gravar uma linha por módulo por organização no dia da criação, e
+-- ela envelhece mal: módulo novo nasce invisível para todo cliente antigo, e
+-- alguém tem de lembrar de um backfill a cada lançamento.
+--
+-- Aqui o catálogo dos módulos vive no CÓDIGO (`lib/modulos/catalogo.ts`) e só o
+-- que o cliente COMPROU vira linha. O que a tabela responde é uma pergunta só:
+-- "existe liberação viva deste módulo para esta organização?". Tudo que o
+-- catálogo não declara continua valendo para todo mundo, como hoje — esta
+-- migration não tira NADA de ninguém.
+--
+-- ── Por que `revoked_at` e não `delete` ─────────────────────────────────────
+--
+-- Cancelamento é fato comercial: quem cancelou, quando, e por quê. Apagar a
+-- linha responde "nunca teve", que é outra história — e é a história errada na
+-- conversa em que alguém pergunta por que a tela sumiu.
+
+create table if not exists public.organization_modules (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  -- A chave do catálogo em `lib/modulos/catalogo.ts`. Texto livre de propósito:
+  -- um CHECK com a lista obrigaria uma migration a cada módulo novo, e a lista
+  -- de verdade (com rótulo, descrição e o que cada um destrava) já mora no
+  -- código, onde ela é lida.
+  modulo           text not null,
+  granted_at       timestamptz not null default now(),
+  granted_by       uuid references auth.users(id) on delete set null,
+  -- Cancelamento. Linha com `revoked_at` preenchido NÃO libera nada, e continua
+  -- contando a história: quem liberou, quando, quem cancelou, quando.
+  revoked_at       timestamptz,
+  revoked_by       uuid references auth.users(id) on delete set null,
+  note             text,
+  created_at       timestamptz not null default now()
+);
+
+comment on table public.organization_modules is
+  'Modulos VENDAVEIS que cada organizacao contratou. Ausencia de linha (ou linha revogada) = nao contratado. O catalogo dos modulos vive no codigo (lib/modulos/catalogo.ts); o que o catalogo nao declara continua liberado para todos, como sempre foi.';
+
+comment on column public.organization_modules.revoked_at is
+  'Cancelamento. Preenchido = nao libera mais. A linha FICA, porque apagar responderia "nunca teve", que e outra historia - e a errada na conversa em que alguem pergunta por que a tela sumiu.';
+
+-- Uma liberação VIVA por módulo por organização. Revogadas podem se repetir
+-- (contratou, cancelou, contratou de novo é histórico legítimo), e por isso o
+-- índice é parcial.
+create unique index if not exists uq_organization_modules_vivo
+  on public.organization_modules (organization_id, modulo)
+  where revoked_at is null;
+
+create index if not exists idx_organization_modules_org
+  on public.organization_modules (organization_id, modulo, revoked_at);
+
+alter table public.organization_modules enable row level security;
+
+-- A organização LÊ o que ela contratou (a tela precisa saber o que mostrar);
+-- quem libera e cancela é a plataforma, e só ela.
+drop policy if exists organization_modules_select on public.organization_modules;
+create policy organization_modules_select on public.organization_modules
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or (organization_id in (select public.fn_user_org_ids()))
+  );
+
+revoke all on public.organization_modules from anon;
+grant select on public.organization_modules to authenticated;
+grant select, insert, update on public.organization_modules to service_role;
+-- Sem `delete`: revogar é `update` em `revoked_at`, e o histórico fica.
+
+
+-- ---- meta de reunião realizada (migration 0246) ----
+--
+-- Espelho EXATO da migration. Idempotente, como todo o apêndice.
+
+-- 0246 — marcar não é comparecer: a métrica de reunião REALIZADA
+--
+-- A 0243 deu ao SDR a meta de `reunioes`, que conta o que ele MARCOU. É a
+-- medida certa da atividade dele — marcar é o que ele controla. Só que ela
+-- sozinha esconde os dois comportamentos opostos que importam:
+--
+--   • o SDR que marca bem e leva faltas do cliente (fora do controle dele);
+--   • o SDR que marca com qualquer um para bater número, e a agenda do closer
+--     vira sala vazia.
+--
+-- Com as duas métricas lado a lado, os dois aparecem. Sem a segunda, nenhum.
+--
+-- ⚠️ A falta NÃO é descontada de `reunioes`, e isso é decisão, não esquecimento:
+-- descontar puniria o SDR pelo cliente que não apareceu. `reunioes` continua
+-- sendo "quantas ficaram de pé"; `reunioes_realizadas` é "quantas aconteceram".
+--
+-- O dado já existia inteiro (`calendar_appointments.status` tem `completed` e
+-- `no_show` desde sempre, com tela e ferramenta de agente para registrar). O que
+-- faltava era alguém poder pôr um ALVO em cima dele.
+
+do $$
+begin
+  -- `if not exists` nas duas pontas: a migration roda de novo em toda
+  -- reimplantação (o bootstrap reaplica o baseline em modo update).
+  if exists (select 1 from pg_constraint where conname = 'sales_targets_metrica_enum') then
+    alter table public.sales_targets drop constraint sales_targets_metrica_enum;
+  end if;
+
+  alter table public.sales_targets
+    add constraint sales_targets_metrica_enum check (metrica in (
+      'reunioes',             -- atividade: reuniões que ficaram de pé no mês
+      'reunioes_realizadas',  -- comparecimento: as que de fato aconteceram
+      'receita_total',        -- tudo que foi ganho
+      'receita_recorrente',   -- só mensalidade
+      'receita_avulsa',       -- só projeto/setup
+      'receita_originada'     -- a participação de quem ORIGINOU (a meta do SDR)
+    ));
+end $$;
+
+-- A coerência do alvo acompanha: reunião realizada também se conta em unidades,
+-- não em centavos. Sem isto, uma meta de comparecimento exigiria valor em
+-- dinheiro e o CHECK recusaria uma linha perfeitamente válida.
+do $$
+begin
+  if exists (select 1 from pg_constraint where conname = 'sales_targets_alvo_coerente') then
+    alter table public.sales_targets drop constraint sales_targets_alvo_coerente;
+  end if;
+
+  alter table public.sales_targets
+    add constraint sales_targets_alvo_coerente check (
+      (metrica in ('reunioes', 'reunioes_realizadas')
+        and alvo_quantidade is not null and alvo_cents is null)
+      or (metrica not in ('reunioes', 'reunioes_realizadas')
+        and alvo_cents is not null and alvo_quantidade is null)
+    );
+end $$;
+
+
+-- ---- MIA Broadcast (migration 0247) ----
+--
+-- Espelho EXATO da migration. Idempotente, como todo o apêndice.
+
+-- 0247 — MIA Broadcast: a campanha e cada mensagem dela
+--
+-- A 0244 deu a carteira (crédito, preço, trava de saldo). Isto é o que gasta
+-- esse crédito: uma CAMPANHA (o que vai ser enviado, para quem, por qual
+-- número) e uma linha POR DESTINATÁRIO, que é onde mora a verdade.
+--
+-- ── Por que uma linha por destinatário, e não um contador ───────────────────
+--
+-- Um campo `enviadas: 1832` responde "quantas" e não responde a pergunta que
+-- aparece no dia seguinte: "o fulano recebeu?". Sem a linha, também não há onde
+-- pendurar o id que a Meta devolveu — e sem esse id o webhook de entrega não
+-- tem em que casar o "entregue"/"lido"/"falhou" que chega depois.
+--
+-- A linha é ainda o que torna a COBRANÇA auditável: cada débito na carteira
+-- aponta para uma destas linhas (`ref_kind='broadcast_message'`), e o índice
+-- único da 0244 usa esse id. Contador não tem id.
+--
+-- ── O estado é do ENVIO, não da campanha ────────────────────────────────────
+--
+--   pendente  → ainda não saiu
+--   enviada   → a Meta ACEITOU (é quando se cobra: é o que ela fatura)
+--   entregue  → chegou no aparelho (webhook)
+--   lida      → foi aberta (webhook)
+--   falhou    → a Meta recusou, ou o envio estourou
+--   estornada → falhou DEPOIS de cobrada, e o crédito voltou
+--
+-- ⚠️ `enviada` é o marco da cobrança, e não `entregue`. A Meta cobra o que
+-- aceita; esperar a entrega para debitar deixaria o cliente com saldo que ele
+-- não tem mais, e o débito dependendo de um webhook que pode não vir.
+--
+-- ── Cobrar em cima de QUAL preço ────────────────────────────────────────────
+--
+-- O preço vai gravado na linha (`preco_cents`), e não lido da tabela de preço
+-- na hora de somar. Preço acordado muda; um relatório que multiplica o volume
+-- de junho pelo preço de hoje reescreve o passado, e a conversa sobre a fatura
+-- de junho vira discussão sobre o que estava combinado naquele mês.
+
+create table if not exists public.broadcasts (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  nome             text not null,
+  -- Por onde sai. É a sessão do canal oficial: o número, a WABA e a credencial.
+  channel_session_id uuid references public.channel_sessions(id) on delete set null,
+  -- O template APROVADO, pelo par que a Meta usa para identificá-lo.
+  template_name    text not null,
+  template_language text not null,
+  /**
+   * Os valores das variáveis, por POSIÇÃO, quando são iguais para todo mundo.
+   * O que muda por pessoa (o nome, por exemplo) sai do contato na hora do
+   * envio — ver `broadcast_recipients.valores`.
+   */
+  valores_padrao   jsonb not null default '{}'::jsonb,
+  status           text not null default 'rascunho',
+  -- O preço acordado no momento em que a campanha foi DISPARADA. Ver o cabeçalho.
+  preco_cents      integer,
+  agendado_para    timestamptz,
+  iniciado_em      timestamptz,
+  concluido_em     timestamptz,
+  /** Por que parou, quando parou sozinha (saldo, qualidade do número). */
+  motivo_da_parada text,
+  created_by       uuid references auth.users(id) on delete set null,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  constraint broadcasts_status_check check (status in (
+    'rascunho',   -- sendo montada, ainda não cobra nada
+    'agendada',   -- vai começar na hora marcada
+    'enviando',
+    'pausada',    -- parou e PODE continuar (saldo acabou, qualidade caiu)
+    'concluida',
+    'cancelada'
+  )),
+  constraint broadcasts_preco_check check (preco_cents is null or preco_cents >= 0)
+);
+
+comment on table public.broadcasts is
+  'Campanha do MIA Broadcast: o que sera enviado, por qual numero, com qual template. O preco vai GRAVADO na campanha (preco_cents) porque preco acordado muda, e relatorio que multiplica volume antigo por preco de hoje reescreve o passado.';
+
+comment on column public.broadcasts.status is
+  'rascunho | agendada | enviando | pausada | concluida | cancelada. PAUSADA e diferente de cancelada: ela para e pode continuar (saldo acabou, qualidade do numero caiu), e motivo_da_parada diz qual dos dois.';
+
+create index if not exists idx_broadcasts_org
+  on public.broadcasts (organization_id, created_at desc);
+
+-- Fila de quem está para enviar: é por este índice que o motor pega o próximo
+-- lote sem varrer campanha concluída.
+create index if not exists idx_broadcasts_na_fila
+  on public.broadcasts (status, agendado_para)
+  where status in ('agendada', 'enviando');
+
+alter table public.broadcasts enable row level security;
+
+drop policy if exists broadcasts_select on public.broadcasts;
+create policy broadcasts_select on public.broadcasts
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent'))
+  );
+
+-- Criar e disparar campanha é decisão de gestão: cada mensagem custa dinheiro
+-- do cliente, e quem atende não decide gastar.
+drop policy if exists broadcasts_write on public.broadcasts;
+create policy broadcasts_write on public.broadcasts
+  for all to authenticated
+  using (
+    (organization_id in (select public.fn_user_org_ids()))
+    and public.fn_role_at_least(organization_id, 'manager')
+  )
+  with check (
+    (organization_id in (select public.fn_user_org_ids()))
+    and public.fn_role_at_least(organization_id, 'manager')
+  );
+
+revoke all on public.broadcasts from anon;
+grant select, insert, update, delete on public.broadcasts to authenticated;
+grant select, insert, update on public.broadcasts to service_role;
+
+-- ---- uma linha por destinatário -------------------------------------------
+
+create table if not exists public.broadcast_recipients (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  broadcast_id     uuid not null references public.broadcasts(id) on delete cascade,
+  contact_id       uuid references public.contacts(id) on delete set null,
+  -- O telefone vai COPIADO, e não só referenciado: o contato pode ser anonimizado
+  -- (LGPD) ou apagado, e o relatório de um disparo que já aconteceu não pode
+  -- virar uma lista de linhas sem destinatário.
+  phone_e164       text not null,
+  /** O que muda por pessoa, por posição: {"1": "Gabriel"}. */
+  valores          jsonb not null default '{}'::jsonb,
+  status           text not null default 'pendente',
+  /** O id da Meta. É por ele que o webhook casa entrega, leitura e falha. */
+  external_id      text,
+  erro             text,
+  /** Quanto ESTA mensagem custou ao cliente. Nulo enquanto não foi cobrada. */
+  preco_cents      integer,
+  enviado_em       timestamptz,
+  atualizado_em    timestamptz,
+  created_at       timestamptz not null default now(),
+  constraint broadcast_recipients_status_check check (status in (
+    'pendente', 'enviada', 'entregue', 'lida', 'falhou', 'estornada'
+  ))
+);
+
+comment on table public.broadcast_recipients is
+  'Uma linha por destinatario. Um contador nao responde "o fulano recebeu?", nao tem onde pendurar o id da Meta (sem o qual o webhook de entrega nao casa com nada) e nao da id para o debito da carteira apontar.';
+
+comment on column public.broadcast_recipients.phone_e164 is
+  'COPIADO do contato de proposito: o contato pode ser anonimizado pela LGPD ou apagado, e o relatorio de um disparo que ja aconteceu nao pode virar lista de linhas sem destinatario.';
+
+comment on column public.broadcast_recipients.preco_cents is
+  'O que ESTA mensagem custou. Nulo = ainda nao cobrada. O debito na carteira aponta para esta linha por ref_id, e o indice unico da 0244 e o que impede cobrar duas vezes na retentativa.';
+
+-- O MESMO contato não entra duas vezes na MESMA campanha. Sem isto, montar a
+-- lista duas vezes (ou um clique duplo) cobraria o cliente duas vezes e mandaria
+-- a mesma mensagem para a mesma pessoa — que é o que faz bloquear.
+create unique index if not exists uq_broadcast_recipients_sem_repetido
+  on public.broadcast_recipients (broadcast_id, phone_e164);
+
+create index if not exists idx_broadcast_recipients_fila
+  on public.broadcast_recipients (broadcast_id, status);
+
+-- O webhook chega com o id da Meta e precisa achar a linha por ele.
+create index if not exists idx_broadcast_recipients_external
+  on public.broadcast_recipients (organization_id, external_id)
+  where external_id is not null;
+
+alter table public.broadcast_recipients enable row level security;
+
+drop policy if exists broadcast_recipients_select on public.broadcast_recipients;
+create policy broadcast_recipients_select on public.broadcast_recipients
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent'))
+  );
+
+revoke all on public.broadcast_recipients from anon;
+grant select on public.broadcast_recipients to authenticated;
+-- A escrita é do MOTOR (service_role): quem monta a lista é a rota, quem marca
+-- enviada/falhou é o worker. Nenhum dos dois é o navegador do cliente.
+grant select, insert, update on public.broadcast_recipients to service_role;
+
+
+-- ---- custo da Meta por mensagem (migration 0248) ----
+--
+-- Espelho EXATO da migration. Idempotente, como todo o apêndice.
+
+-- 0248 — o que a META cobra por mensagem, ao lado do que NÓS cobramos
+--
+-- A 0244 guarda o preço que o CLIENTE paga. Faltava o outro lado: quanto a
+-- conversa custa para a operação. Sem os dois, "margem" é chute — e foi
+-- exatamente esse chute que a fatura da OpenAI (0242) veio matar do lado da IA.
+--
+-- ── Por que uma tabela de TARIFA, e não um campo de custo por mensagem ──────
+--
+-- A Meta não cobra um valor único: cobra por CATEGORIA (marketing, utilidade,
+-- autenticação, serviço) e por PAÍS de destino. Um campo só forçaria a média —
+-- e a média esconde justamente o caso caro, que é marketing para o Brasil.
+--
+-- ⚠️ E as categorias não são iguais no gratuito. O free tier da Meta é de
+-- conversas de SERVIÇO (as que o cliente inicia). Mensagem de template de
+-- MARKETING — que é o que um disparador manda — é cobrada desde a primeira.
+-- Confundir as duas faz vender abaixo do custo e só descobrir na fatura; por
+-- isso `gratuitas_por_mes` é POR CATEGORIA e nasce zero.
+--
+-- ── Declarada, não adivinhada ───────────────────────────────────────────────
+--
+-- A Graph API não expõe a tabela de preços de forma estável, e raspar página de
+-- preço é a receita de um número errado que ninguém confere. Aqui alguém DIGITA
+-- o que a Meta cobra, com a data em que aquilo valia — e a tela mostra a data,
+-- para quem lê saber se o número é de hoje ou de março.
+
+create table if not exists public.platform_meta_pricing (
+  id            uuid primary key default gen_random_uuid(),
+  -- 'marketing' | 'utility' | 'authentication' | 'service'
+  categoria     text not null,
+  -- ISO-2 do destino ('BR'). País importa: a mesma categoria custa diferente.
+  pais          text not null default 'BR',
+  -- Em CENTAVOS da moeda declarada, para não arrastar float por todo o cálculo.
+  preco_cents   integer not null,
+  moeda         text not null default 'BRL',
+  /**
+   * Quantas a Meta dá de graça por mês NESTA categoria. Nasce ZERO: supor o
+   * gratuito de serviço para marketing é o erro que faz vender no prejuízo.
+   */
+  gratuitas_por_mes integer not null default 0,
+  /** Desde quando esta tarifa vale. A tela mostra, e é o que evita usar preço velho. */
+  vigente_desde date not null default current_date,
+  note          text,
+  created_by    uuid references auth.users(id) on delete set null,
+  created_at    timestamptz not null default now(),
+  constraint platform_meta_pricing_categoria_check
+    check (categoria in ('marketing', 'utility', 'authentication', 'service')),
+  constraint platform_meta_pricing_preco_check check (preco_cents >= 0),
+  constraint platform_meta_pricing_gratuitas_check check (gratuitas_por_mes >= 0)
+);
+
+comment on table public.platform_meta_pricing is
+  'O que a META cobra por mensagem, por categoria e pais, DECLARADO por quem opera a instalacao (a Graph API nao expoe isso de forma estavel). E o outro lado de tenant_broadcast_pricing: um e o que o cliente paga, outro e o que a operacao paga. Sem os dois, margem e chute.';
+
+comment on column public.platform_meta_pricing.gratuitas_por_mes is
+  'Nasce ZERO de proposito. O gratuito da Meta e de conversa de SERVICO (iniciada pelo cliente); template de MARKETING e cobrado desde a primeira. Supor o gratuito de servico para marketing faz vender abaixo do custo e so descobrir na fatura.';
+
+-- Uma tarifa viva por (categoria, país, data): trocar o preço é inserir outra
+-- linha com `vigente_desde` novo, e o histórico fica. Preço de disparo antigo
+-- continua explicável pelo preço que valia naquele dia.
+create unique index if not exists uq_platform_meta_pricing_vigencia
+  on public.platform_meta_pricing (categoria, pais, vigente_desde);
+
+alter table public.platform_meta_pricing enable row level security;
+
+-- ZERO POLICIES: é custo da PLATAFORMA, e o cliente nunca vê o que pagamos —
+-- mesma doutrina de `platform_ai_ledger` e de `lib/ai/custo-e-da-plataforma.ts`.
+revoke all on public.platform_meta_pricing from anon, authenticated;
+grant select, insert, delete on public.platform_meta_pricing to service_role;
+
+
+-- ---- channel_knobs.updated_at para de mentir (migration 0250) ----
+-- A coluna tinha `default now()` e nada a atualizava: a ficha de anti-ban
+-- alterada às 04:36 continuava dizendo 03:18, e uma investigação de produção
+-- concluiu por isso que a janela já estava aberta quando o turno foi adiado.
+-- GATILHO e não conserto do upsert: o gatilho pega `psql` direto e qualquer rota
+-- futura. `fn_set_updated_at()` já existe no corpo deste arquivo — nada é criado
+-- aqui, e por isso este bloco não tem nada a ver com a varredura de anon.
+drop trigger if exists trg_channel_knobs_updated_at on public.channel_knobs;
+create trigger trg_channel_knobs_updated_at
+  before update on public.channel_knobs
+  for each row execute function public.fn_set_updated_at();
+
+comment on column public.channel_knobs.updated_at is
+  'Carimbado pelo gatilho trg_channel_knobs_updated_at (migration 0250), nunca pelo chamador.';
+
+
+-- ---- motivo do adiamento do job em coluna própria (migration 0251) ----
+-- O motivo vivia numa frase de `last_error`, escrita para gente ler. Filtrar
+-- jobs por texto de mensagem quebra calado no dia em que alguém melhorar a
+-- frase — e é dessa filtragem que depende reprogramar turno adiado quando o
+-- operador alarga a janela anti-ban. Vocabulário FECHADO porque cada valor é uma
+-- condição diferente: só `janela_anti_ban` fica obsoleto quando o knob do canal
+-- muda. Toda linha existente fica NULL, então não há backfill a fazer.
+alter table public.job_queue
+  add column if not exists deferred_reason text;
+
+alter table public.job_queue
+  drop constraint if exists job_queue_deferred_reason_check;
+alter table public.job_queue
+  add constraint job_queue_deferred_reason_check
+  check (
+    deferred_reason is null
+    or deferred_reason in ('janela_anti_ban', 'horario_do_agente', 'canal_fora')
+  );
+
+create index if not exists idx_job_queue_adiado_por_motivo
+  on public.job_queue (organization_id, deferred_reason, run_after)
+  where status = 'pending' and deferred_reason is not null;
+
+comment on column public.job_queue.deferred_reason is
+  'POR QUE este job esta com run_after no futuro, em vocabulario fechado. O texto legivel continua em last_error; esta coluna existe para ser FILTRADA. Par em lib/agent-engine/queue/queue.ts (MOTIVOS_DE_ADIAMENTO), cobrado por tests/invariants/vocabulario-banco-x-typescript.test.ts.';
+
+
+-- ---- memória da org aceita origem 'agent' (migration 0252) ----
+--
+-- (ABSORVIDA pela 0385 do upstream, que faz exatamente o mesmo `CHECK`.
+-- Removida daqui em 25/09/2026: repeti-la seria redefinir a constraint dele,
+-- e a próxima origem que ele acrescentasse seria desfeita pela nossa cópia.)
+
+-- ---- meta do mês volta a gravar (migration 0253) ----
+--
+-- Para o banco que JÁ EXISTE. O bloco da 0243, acima, já nasce certo — este aqui
+-- é o que conserta quem foi instalado antes. Índice novo primeiro, o antigo
+-- depois: em ordem inversa a tabela ficaria um instante sem trava de duplicidade.
+create unique index if not exists idx_sales_targets_unica_nn
+  on public.sales_targets (organization_id, periodo, metrica, user_id, agent_id)
+  nulls not distinct;
+
+drop index if exists public.idx_sales_targets_unica;
+
+
+-- ---- número de avisos da plataforma (migration 0254) ----
+--
+-- O número que avisa o TIME no grupo de WhatsApp quando um lead é qualificado.
+-- É da PLATAFORMA, não do cliente: um só, conectado uma vez por quem opera e
+-- adicionado aos grupos de todos. Exigir um por cliente transformaria cada
+-- implantação numa conexão a mais, e é encanamento nosso.
+--
+-- ⚠️ Ponto único de falha assumido: se ele cair, NENHUM cliente recebe aviso.
+-- A contrapartida é avisar quem opera quando isso acontecer.
+--
+-- Coluna e não tabela: é uma sessão de canal como outra qualquer (conecta por
+-- QR, tem status, tem saúde) — o que muda é o PAPEL. Tabela própria duplicaria
+-- conexão e monitoramento, e o primeiro defeito seria o número caindo sem
+-- ninguém ver porque o vigia olha a outra tabela.
+--
+-- Índice único PARCIAL: só UMA na instalação inteira. Sem a trava, marcar a
+-- segunda deixaria duas e "qual envia" viraria sorteio do `order by`.
+
+alter table public.channel_sessions
+  add column if not exists e_numero_de_avisos boolean not null default false;
+
+create unique index if not exists uq_channel_sessions_numero_de_avisos
+  on public.channel_sessions ((true))
+  where e_numero_de_avisos;
+
+
+-- ---- empresas: o cliente que é uma organização (migration 0255) ----
+--
+-- O CRM só conhecia PESSOA. Em venda B2B quem compra é a empresa: três contatos
+-- do mesmo cliente viravam três fichas sem parentesco. Tabela própria e não
+-- campo de texto porque texto digitado de novo a cada contato não responde
+-- "quanto vendemos para eles".
+--
+-- O vínculo está em contacts E em crm_leads de propósito: o negócio pode ser
+-- com uma empresa enquanto quem fala é o contato de outra, e a pessoa pode
+-- trocar de emprego sem que a negociação antiga mude de dono.
+--
+-- `on delete set null` nos dois: apagar empresa não pode apagar contato nem
+-- histórico de negócio.
+
+create table if not exists public.crm_empresas (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  nome text not null,
+  -- Documento SEM máscara e SEM validação de dígito: quem cadastra está com o
+  -- cliente na linha, e recusar um CNPJ digitado com um dígito trocado pararia
+  -- o cadastro inteiro por causa do campo menos urgente da ficha.
+  cnpj text,
+  site text,
+  telefone text,
+  email text,
+  endereco text,
+  -- O que não cabe em campo nenhum. Toda ficha de CRM tem esse canto, e sem ele
+  -- a informação vai para o nome da empresa ("Padaria do Zé - só fala manhã").
+  observacoes text,
+  tags text[] not null default '{}'::text[],
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  created_by_user_id uuid references auth.users(id) on delete set null,
+  constraint crm_empresas_nome_nao_vazio check (length(btrim(nome)) > 0)
+);
+
+comment on table public.crm_empresas is
+  'A empresa como cliente (venda B2B): agrupa contatos e negocios sob um CNPJ so. Apagar uma empresa NAO apaga contato nem negocio — o vinculo vira null.';
+
+create index if not exists idx_crm_empresas_org_nome
+  on public.crm_empresas (organization_id, lower(nome));
+
+create unique index if not exists uq_crm_empresas_org_cnpj
+  on public.crm_empresas (organization_id, cnpj)
+  where cnpj is not null and btrim(cnpj) <> '';
+
+alter table public.contacts
+  add column if not exists empresa_id uuid references public.crm_empresas(id) on delete set null;
+
+alter table public.crm_leads
+  add column if not exists empresa_id uuid references public.crm_empresas(id) on delete set null;
+
+create index if not exists idx_contacts_empresa
+  on public.contacts (organization_id, empresa_id)
+  where empresa_id is not null;
+
+create index if not exists idx_crm_leads_empresa
+  on public.crm_leads (organization_id, empresa_id)
+  where empresa_id is not null;
+
+alter table public.crm_empresas enable row level security;
+
+drop policy if exists "crm_empresas_select" on public.crm_empresas;
+drop policy if exists "crm_empresas_escrita" on public.crm_empresas;
+
+create policy "crm_empresas_select" on public.crm_empresas
+  for select using (
+    public.fn_is_platform_admin()
+    or (organization_id in (select public.fn_user_org_ids()))
+  );
+
+create policy "crm_empresas_escrita" on public.crm_empresas
+  for all using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent'))
+  ) with check (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent'))
+  );
+
+
+-- ---- modelo de IA da plataforma (migration 0256) ----
+--
+-- Mesma doutrina da chave de IA: o cérebro é engrenagem nossa, e a conta
+-- também. Linha única como platform_branding, RLS ligada e ZERO policies (só
+-- service_role). Nulo = ninguém decidiu, e aí vale a escolha automática de
+-- escolherModeloDoProvedor — ausência faz cair para trás, nunca trava.
+
+create table if not exists public.platform_ia (
+  id          smallint primary key default 1,
+  -- Nulos = "ninguém decidiu ainda", e nesse caso vale a escolha automática de
+  -- antes. AUSÊNCIA faz cair para trás; nunca uma escolha errada.
+  provider    text,
+  model_id    text,
+  updated_at  timestamptz not null default now(),
+  updated_by  uuid,
+  constraint platform_ia_singleton check (id = 1),
+  -- Os dois juntos ou nenhum: um `model_id` sem provedor não endereça nada, e
+  -- um provedor sem modelo faria a publicação voltar à escolha automática sem
+  -- dizer por quê.
+  constraint platform_ia_par_completo check ((provider is null) = (model_id is null))
+);
+
+comment on table public.platform_ia is
+  'O modelo de IA padrao da INSTALACAO (linha unica id=1). Quem escolhe e quem opera a plataforma, no /admin — o cliente nao ve e nao troca, mesma doutrina da chave de IA. Nulo = ninguem decidiu, e ai vale a escolha automatica de escolherModeloDoProvedor. Lida/escrita so server-side (service_role).';
+
+alter table public.platform_ia enable row level security;
+
+
+revoke all on public.platform_ia from anon, authenticated;
+grant select, insert, update on public.platform_ia to service_role;
+
+
+-- ---- cadastro incorporado da Meta (migration 0257) ----
+--
+-- A conta que chega pelo login do cliente. O webhook NAO adivinha o dono: o
+-- link e da instalacao, e dois clientes podem entrar na mesma tarde — amarrar
+-- errado faria a conversa de um sair pelo numero do outro. Guarda o fato;
+-- amarrar e ato humano no painel. A porta manual continua existindo ao lado.
+
+create table if not exists public.meta_onboardings (
+  id uuid primary key default gen_random_uuid(),
+  waba_id text not null,
+  business_name text,
+  phone_number_id text,
+  phone_number text,
+  /**
+   * O evento CRU, como veio.
+   *
+   * A Meta muda o formato destes avisos sem aviso, e o que hoje é ruído pode
+   * ser o único lugar onde está o dado que faltou. Guardar o payload inteiro é
+   * o que permite consertar depois sem pedir ao cliente que refaça o cadastro.
+   */
+  payload jsonb not null default '{}'::jsonb,
+  organization_id uuid references public.organizations(id) on delete set null,
+  channel_session_id uuid references public.channel_sessions(id) on delete set null,
+  bound_at timestamptz,
+  bound_by uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.meta_onboardings is
+  'O que chegou pelo cadastro incorporado da Meta, antes de alguem amarrar a um cliente. O webhook NAO adivinha o dono: o link e da instalacao, e dois clientes podem entrar na mesma tarde. Amarrar e ato humano no /admin.';
+
+create unique index if not exists uq_meta_onboardings_waba
+  on public.meta_onboardings (waba_id);
+
+create index if not exists idx_meta_onboardings_pendentes
+  on public.meta_onboardings (created_at desc)
+  where organization_id is null;
+
+alter table public.meta_onboardings enable row level security;
+
+revoke all on public.meta_onboardings from anon, authenticated;
+grant select, insert, update on public.meta_onboardings to service_role;
+
+
+create table if not exists public.platform_meta (
+  id                    smallint primary key default 1,
+  embedded_signup_url   text,
+  updated_at            timestamptz not null default now(),
+  updated_by            uuid,
+  constraint platform_meta_singleton check (id = 1)
+);
+
+comment on table public.platform_meta is
+  'Configuracao da INSTALACAO para o canal oficial da Meta — hoje so o link do cadastro incorporado. Linha unica id=1, no mesmo formato de platform_branding e platform_ia. Sem link, a tela do cliente mostra so a porta manual: ausencia esconde a porta, nunca mostra uma porta quebrada.';
+
+alter table public.platform_meta enable row level security;
+
+revoke all on public.platform_meta from anon, authenticated;
+grant select, insert, update on public.platform_meta to service_role;
+
+
+-- ---- report da plataforma no grupo interno (migration 0258) ----
+--
+-- O numero de avisos fala com o grupo de cada CLIENTE; este e o outro lado do
+-- mesmo numero: o grupo NOSSO. A Central e por organizacao e serve a quem esta
+-- com a tela aberta — um credito que acaba as 2h de sabado derruba TODOS os
+-- clientes ate alguem abrir o navegador por acaso.
+--
+-- A segunda tabela e a trava anti-ruido: grupo que recebe demais e ignorado em
+-- uma semana, e ai o aviso que importa chega junto com o lixo.
+
+create table if not exists public.platform_avisos (
+  id                    smallint primary key default 1,
+  grupo_id              text,
+  grupo_nome            text,
+  limite_saldo_usd      numeric(12,2) not null default 20,
+  resumo_diario         boolean not null default true,
+  updated_at            timestamptz not null default now(),
+  updated_by            uuid,
+  constraint platform_avisos_singleton check (id = 1),
+  constraint platform_avisos_grupo_par check ((grupo_id is null) = (grupo_nome is null))
+);
+
+comment on table public.platform_avisos is
+  'O grupo INTERNO que recebe o que e da plataforma: credito de IA acabando, numero caido, fila travada, resumo diario. Linha unica id=1, no formato de platform_branding/platform_ia/platform_meta. Sem grupo escolhido, nada e enviado — ausencia cala, nunca manda para o lugar errado.';
+
+create table if not exists public.platform_avisos_enviados (
+  chave       text primary key,
+  enviado_em  timestamptz not null default now(),
+  detalhe     jsonb not null default '{}'::jsonb
+);
+
+comment on table public.platform_avisos_enviados is
+  'Trava anti-ruido do report da plataforma: quando cada aviso saiu pela ultima vez. Grupo que recebe demais e ignorado em uma semana, e ai o aviso que importa chega junto com o lixo.';
+
+alter table public.platform_avisos enable row level security;
+alter table public.platform_avisos_enviados enable row level security;
+
+revoke all on public.platform_avisos from anon, authenticated;
+revoke all on public.platform_avisos_enviados from anon, authenticated;
+grant select, insert, update on public.platform_avisos to service_role;
+grant select, insert, update, delete on public.platform_avisos_enviados to service_role;
+
+
+-- ---- custo da Meta por mensagem (migration 0259) ----
+--
+-- A Meta manda `pricing` em todo status e a gente descartava. Ela traz
+-- `billable` e `category`, NUNCA valor — cobra por tabela, que muda por país.
+-- Por isso a mensagem guarda o FATO e o preço mora numa tabela nossa: gravar
+-- valor calculado congelaria o preço do dia no histórico.
+
+alter table public.messages
+  add column if not exists meta_pricing_category text,
+  add column if not exists meta_billable boolean;
+
+comment on column public.messages.meta_pricing_category is
+  'A categoria que a META cobrou (marketing, utility, authentication, service), como veio no `pricing` do status de entrega. NAO e o que pedimos: e o que ela decidiu cobrar — os dois divergem, e e a decisao dela que vira fatura.';
+
+comment on column public.messages.meta_billable is
+  'Se a Meta cobrou por esta mensagem. Ha mensagem gratuita (janela de servico, ponto de entrada de anuncio) e conta-la como paga inflaria o custo do cliente.';
+
+create index if not exists idx_messages_custo_meta
+  on public.messages (organization_id, created_at, meta_pricing_category)
+  where meta_billable is true;
+
+
+create table if not exists public.platform_precos_meta (
+  categoria text primary key,
+  centavos_brl integer not null check (centavos_brl >= 0),
+  atualizado_em timestamptz not null default now(),
+  atualizado_por uuid
+);
+
+comment on table public.platform_precos_meta is
+  'Quanto custa cada categoria de mensagem da Meta, em centavos de REAL. A Meta nao manda valor no webhook — so a categoria —, entao o dinheiro sai daqui. Vazia = o relatorio mostra a CONTAGEM e diz que o preco nao foi informado, nunca zero (que se leria como "de graca").';
+
+alter table public.platform_precos_meta enable row level security;
+
+revoke all on public.platform_precos_meta from anon, authenticated;
+grant select, insert, update, delete on public.platform_precos_meta to service_role;
+
+
+-- ---- channel_knobs.updated_at para de mentir (migration 0260) ----
+--
+-- Auditoria de 18/09: a linha tinha created_at == updated_at mesmo tendo sido
+-- alterada horas depois. O campo nao ficava em branco — ficava MENTINDO com
+-- cara de verdade, e transformou comportamento correto em suspeita de bug.
+-- Gatilho e nao conserto do upsert: pega SQL direto e rota futura tambem.
+
+create or replace trigger trg_channel_knobs_updated_at
+  before update on public.channel_knobs
+  for each row execute function public.fn_set_updated_at();
+
+
+-- ---- id do template na Meta (migration 0261) ----
+--
+-- Editar template e POST /{template-id}, e o id nunca foi guardado: a
+-- sincronizacao nao pedia `id` em FIELDS. Sem ele, editar exigiria uma busca a
+-- mais na Meta a cada clique. NULO nas linhas anteriores — elas o ganham na
+-- proxima sincronizacao, e quem edita trata ausencia como "sincronize antes".
+
+alter table public.meta_templates
+  add column if not exists meta_template_id text;
+
+create index if not exists idx_meta_templates_meta_id
+  on public.meta_templates (organization_id, meta_template_id)
+  where meta_template_id is not null;
+
+
+-- ---- cargo e setor na pessoa, campos adicionais na empresa (migration 0262) ----
+--
+-- Cargo fica no CONTATO e nao na empresa: tres contatos da mesma empresa tem
+-- tres cargos, e um deles pode ser o contador, que nem trabalha la. E e a
+-- informacao que decide COM QUEM falar numa lista de cinco pessoas.
+--
+-- Campos adicionais em jsonb, com as DEFINICOES em crm_pipelines.settings.fields
+-- — o mesmo lugar do contato e do lead. Um segundo registro faria o operador
+-- cadastrar o mesmo campo duas vezes e as duas divergirem.
+
+alter table public.contacts
+  add column if not exists cargo text,
+  add column if not exists setor text;
+
+comment on column public.contacts.cargo is
+  'O cargo desta PESSOA na empresa dela (crm_empresas). Fica no contato e nao na empresa porque tres contatos da mesma empresa tem tres cargos — e um deles pode ser o contador, que nem trabalha la.';
+
+alter table public.crm_empresas
+  add column if not exists custom_fields jsonb not null default '{}'::jsonb;
+
+comment on column public.crm_empresas.custom_fields is
+  'Campos adicionais da empresa. As DEFINICOES moram em crm_pipelines.settings.fields, o mesmo lugar do contato e do lead — um segundo registro de definicoes faria o operador cadastrar o mesmo campo duas vezes e as duas divergirem.';
+
+create index if not exists idx_contacts_empresa_cargo
+  on public.contacts (organization_id, empresa_id, cargo)
+  where empresa_id is not null and cargo is not null;
+
+
+notify pgrst, 'reload schema';
+
+
+-- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
+--
+-- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
+
+-- dele — quem o empurrar para o meio desarma a cura para tudo que vier depois.
+-- Vigiado por `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`.
+--
+-- A 0108 revogou anon numa LISTA de 8 funções, medida num banco instalado do
+-- ZERO. Quem ATUALIZA tem outro estado: o `ALTER DEFAULT PRIVILEGES ... GRANT
+-- ALL ON FUNCTIONS TO anon` do corpo deste arquivo grava uma entrada em
+-- `pg_default_acl` que fica no catálogo PARA SEMPRE, e a partir daí toda função
+-- criada em `public` nasce com EXECUTE para anon — inclusive as deste apêndice.
+--
+-- Medido numa VPS real (2026-08-07), comparando com o que um install fresco
+-- produz: 6 definer expostas a anon e 5 a authenticated, entre elas
+-- `fn_decrypt_oauth` — alcançável pela anon key, que vai para o browser.
+--
+-- Lista conserta o estoque e reabre no próximo `create function`. Esta varredura
+-- é auto-curativa e roda DEPOIS de tudo que cria função, então cura no mesmo run
+-- em que o defeito nasceria. Desfazer o ALTER DEFAULT PRIVILEGES não serve: ele
+-- vem do `pg_dump` do Supabase e é reescrito a cada re-aplicação.
+--
+-- As duas origens de EXECUTE (a mesma lição da 0108): grant DIRETO a anon, que
+-- `revoke from public` não remove; e grant a PUBLIC, do qual anon HERDA, que
+-- `revoke from anon` não remove. O privilégio EFETIVO de authenticated e
+-- service_role é medido ANTES e devolvido depois — tira anon sem tirar leitura.
+do $$
+declare
+  f record;
+  tinha_auth boolean;
+  tinha_service boolean;
+begin
+  if to_regrole('anon') is null then
+    return;
+  end if;
+
+  for f in
+    select p.oid, p.oid::regprocedure as assinatura
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.prosecdef
+  loop
+    tinha_auth := to_regrole('authenticated') is not null
+                  and has_function_privilege('authenticated', f.oid, 'EXECUTE');
+    tinha_service := to_regrole('service_role') is not null
+                     and has_function_privilege('service_role', f.oid, 'EXECUTE');
+
+    execute format('revoke execute on function %s from public, anon', f.assinatura);
+
+    if tinha_auth then
+      execute format('grant execute on function %s to authenticated', f.assinatura);
+    end if;
+    if tinha_service then
+      execute format('grant execute on function %s to service_role', f.assinatura);
+    end if;
+  end loop;
+end $$;
+
+-- regra 2 (authenticated): as 5 que o update abriu e o install não abre. Aqui não
+-- cabe varredura — `authenticated` PRECISA de EXECUTE nos helpers de RLS e em
+-- `retrieve_top_k_chunks` (num install fresco ele tem). É julgamento por função,
+-- e o alvo de cada linha é o valor que um install fresco produz, medido.
+revoke execute on function public.fn_audit_log_row() from authenticated;
+revoke execute on function public.fn_decrypt_oauth(bytea) from authenticated;
+revoke execute on function public.fn_encrypt_oauth(text) from authenticated;
+revoke execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) from authenticated;
+revoke execute on function public.fn_update_budget_consumption() from authenticated;
+
+grant execute on function public.fn_audit_log_row() to service_role;
+grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
+grant execute on function public.fn_encrypt_oauth(text) to service_role;
+grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
+grant execute on function public.fn_update_budget_consumption() to service_role;

@@ -1,3 +1,7 @@
+-- ⚠️ 25/09/2026 — CONVERTIDA. Esta migration REDEFINIA fn_lgpd_cascade_redact_contact, a cascata do upstream, e quase apagou doze tabelas da anonimizacao na fusao de 23/09. O que ela fazia (zerar cargo, setor, empresa_id) passou para o gatilho trg_contacts_anonimizado_limpa_mia (ver 0265). O SQL abaixo NAO e aplicado.
+-- A regra do fork: estender, nunca redefinir (scripts/separar-baseline-mia.mjs).
+-- A versao original desta migration continua no historico do git.
+
 -- 0264 — a anonimizacao passa a alcancar `custom_fields`, `cargo` e `setor`
 --
 -- ── O achado, e ele e ANTERIOR a esta serie ────────────────────────────────

@@ -1,3 +1,7 @@
+-- ⚠️ 25/09/2026 — ABSORVIDA pela 0385 do upstream, que faz o mesmo CHECK. NAO e aplicada por baseline-mia.sql: repeti-la redefiniria a constraint dele.
+-- A regra do fork: estender, nunca redefinir (scripts/separar-baseline-mia.mjs).
+-- A versao original desta migration continua no historico do git.
+
 -- 0252 — `crm_save_org_memory` passa a funcionar: a origem 'agent' existe
 --
 -- A ferramenta MCP `crm_save_org_memory` (`lib/mcp/tools/evolucao.ts`) grava

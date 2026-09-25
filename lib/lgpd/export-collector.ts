@@ -43,6 +43,14 @@ export interface ContactSnapshot {
   // A EMPRESA vai pelo NOME, não pelo id. O titular tem direito de saber a que
   // empresa foi vinculado; um uuid não responde isso a ninguém.
   empresa_nome: string | null;
+  /**
+   * A chave da pessoa numa rede social (redes sociais nativas, 0368 do upstream).
+   * Identifica sozinha, então é dado pessoal — e ficava fora deste relatório,
+   * que responde "é tudo que temos sobre você". Achada pela catraca
+   * lgpd-as-duas-pontas na fusão de 25/09/2026, junto com o outro lado do mesmo
+   * buraco: nenhum caminho de anonimização a zerava (o gatilho da MIA zera).
+   */
+  social_identity: string | null;
   created_at: string;
   last_activity_at: string | null;
   /** Primeiro atendimento marcado. Sobrevive à anonimização: é registro de operação. */
@@ -430,6 +438,26 @@ export interface BroadcastRecipientRow {
   created_at: string;
 }
 
+/**
+ * O clique no anúncio que trouxe esta pessoa (`google_ads_click_refs` e
+ * `meta_ads_click_refs`, 0306 do upstream).
+ *
+ * Entra porque a anonimização APAGA: o gatilho da MIA (0266) zera `query_raw` e
+ * desliga o contato — e o que se apaga a pedido do titular é o que se entrega a
+ * pedido dele. `query_raw` vai inteiro: é a query string crua da landing page, e
+ * pode ter o e-mail e o nome da pessoa. Esconder justamente o campo que pode ser
+ * dado pessoal seria o relatório mentir no ponto em que mais importa.
+ */
+export interface AdClickRow {
+  rede: "google" | "meta";
+  id: string;
+  /** O que identifica a campanha: o gclid (Google) ou as chaves de UTM (Meta). */
+  campanha: string | Record<string, unknown>;
+  query_raw: Record<string, unknown>;
+  created_at: string;
+  matched_at: string | null;
+}
+
 /** Pesquisa e resultado da abordagem ligados ao titular (redação: migration 0370). */
 export interface ProspectingCandidateRow {
   id: string;
@@ -527,6 +555,8 @@ export interface ExportPayload {
   ai_runs: AiRunRow[];
   /** Disparos que chegaram a ela (0266). */
   broadcasts_recebidos: BroadcastRecipientRow[];
+  /** Por qual anúncio ela chegou — ver `AdClickRow`. */
+  cliques_de_anuncio: AdClickRow[];
   appointment_notices: AppointmentNoticeRow[];
   /**
    * Chamadas de voz (migration 0232).
@@ -736,7 +766,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         // anonimização. Deixar qualquer um de fora responde "não temos mais
         // nada sobre você" a quem exerce direito de acesso, e a resposta é
         // falsa.
-        "id, name, display_name, email, phone_number, cpf_encrypted, birthdate, is_blocked, is_anonymized, consent, tags, source, source_metadata, custom_fields, cargo, setor, empresa:crm_empresas(nome), created_at, last_activity_at, first_service_at",
+        "id, name, display_name, email, phone_number, cpf_encrypted, birthdate, is_blocked, is_anonymized, consent, tags, source, source_metadata, custom_fields, cargo, setor, empresa:crm_empresas(nome), social_identity, created_at, last_activity_at, first_service_at",
       )
       .eq("organization_id", organizationId)
       .eq("id", contactId)
@@ -768,6 +798,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         // O embed vem objeto ou array conforme a cardinalidade que o PostgREST
         // enxerga; tratar os dois é mais barato que descobrir errado em produção.
         empresa_nome: nomeDaEmpresaEmbutida(data.empresa),
+        social_identity: data.social_identity ?? null,
         created_at: data.created_at,
         last_activity_at: data.last_activity_at ?? null,
         first_service_at: data.first_service_at ?? null,
@@ -1120,6 +1151,76 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       });
     } else if (data) {
       broadcasts_recebidos = data as BroadcastRecipientRow[];
+    }
+  }
+
+  // Cliques em anúncio — a pergunta do outro lado do disparo: não "o que vocês
+  // me mandaram", mas "por qual anúncio vocês me acharam, e o que guardaram".
+  // Dois blocos e não um laço: a catraca lgpd-exporta-o-que-redige reconhece a
+  // tabela pelo `.from("nome")` literal, e um nome em variável ficaria invisível.
+  const cliques_de_anuncio: AdClickRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("google_ads_click_refs")
+      .select("id, gclid, query_raw, created_at, matched_at")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] google ads click refs load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      for (const r of data as Array<{
+        id: string;
+        gclid: string;
+        query_raw: Record<string, unknown> | null;
+        created_at: string;
+        matched_at: string | null;
+      }>) {
+        cliques_de_anuncio.push({
+          rede: "google",
+          id: r.id,
+          campanha: r.gclid,
+          query_raw: r.query_raw ?? {},
+          created_at: r.created_at,
+          matched_at: r.matched_at,
+        });
+      }
+    }
+  }
+  if (contactId) {
+    const { data, error } = await admin
+      .from("meta_ads_click_refs")
+      .select("id, utm, query_raw, created_at, matched_at")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] meta ads click refs load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      for (const r of data as Array<{
+        id: string;
+        utm: Record<string, unknown>;
+        query_raw: Record<string, unknown> | null;
+        created_at: string;
+        matched_at: string | null;
+      }>) {
+        cliques_de_anuncio.push({
+          rede: "meta",
+          id: r.id,
+          campanha: r.utm,
+          query_raw: r.query_raw ?? {},
+          created_at: r.created_at,
+          matched_at: r.matched_at,
+        });
+      }
     }
   }
 
@@ -1549,6 +1650,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     meeting_deliveries,
     ai_runs,
     broadcasts_recebidos,
+    cliques_de_anuncio,
     appointment_notices,
     voice_calls,
     prospecting_candidates,
@@ -1594,6 +1696,7 @@ function emptyPayload(
     meeting_deliveries: [],
     ai_runs: [],
     broadcasts_recebidos: [],
+    cliques_de_anuncio: [],
     appointment_notices: [],
     voice_calls: [],
     prospecting_candidates: [],

@@ -40,7 +40,12 @@ import { describe, expect, it } from "vitest";
  */
 
 const RAIZ = path.resolve(__dirname, "../..");
-const BASELINE = fs.readFileSync(path.join(RAIZ, "supabase/baseline.sql"), "utf8");
+// O schema como o banco o recebe: o do upstream e, por cima, o da MIA — na
+// ordem de easypanel/bootstrap.sh. "Última definição vence" continua valendo.
+const BASELINE = [
+    fs.readFileSync(path.join(RAIZ, "supabase/baseline.sql"), "utf8"),
+    fs.readFileSync(path.join(RAIZ, "supabase/baseline-mia.sql"), "utf8"),
+  ].join("\n");
 const COLETOR = fs.readFileSync(path.join(RAIZ, "lib/lgpd/export-collector.ts"), "utf8");
 
 /** Corpos de função cujo NOME anuncia redação — no dump vêm com identificador entre aspas. */
@@ -143,6 +148,13 @@ describe("LGPD: nenhuma tabela com contact_id fica fora da anonimização", () =
     lgpd_requests:
       "É o REGISTRO do pedido — a prova de que o direito foi exercido, e o que " +
       "responde ao prazo legal. Apagá-la apagaria o recibo da própria exclusão.",
+    // Do upstream (financeiro/comanda, 0355 dele), declarada na fusão de 25/09/2026.
+    loyalty_ledger:
+      "É livro-razão CONTÁBIL: o saldo de fidelidade é sum(points), e cada linha " +
+      "está presa a uma venda (sale_id) que tem retenção fiscal. Apagar linhas " +
+      "mudaria a contabilidade. E não sobra dado da pessoa: o contact_id aponta " +
+      "para a ficha já anonimizada, e `reason` só recebe dois valores fixos do " +
+      "sistema ('Comanda finalizada', 'Estorno da comanda'), nunca texto livre.",
   };
 
   /** Tabelas do baseline que têm uma coluna `contact_id`. */

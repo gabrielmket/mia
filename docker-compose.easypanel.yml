@@ -35,6 +35,8 @@ services:
     entrypoint: ["sh", "/deskcomm/bootstrap.sh"]
     volumes:
       - ./supabase/baseline.sql:/deskcomm/baseline.sql:ro
+      # O schema da MIA, aplicado depois do do upstream (easypanel/bootstrap.sh).
+      - ./supabase/baseline-mia.sql:/deskcomm/baseline-mia.sql:ro
       - ./easypanel/bootstrap.sh:/deskcomm/bootstrap.sh:ro
     logging: *default-logging
 
