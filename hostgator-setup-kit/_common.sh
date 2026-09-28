@@ -1440,7 +1440,10 @@ completar_pin_ausente() {  # completar_pin_ausente [envfile]
   # e o `.env` original chega intacto do outro lado, com as customizações.
   [ -w "$envfile" ] || return 0
 
-  for par in "WORKER_IMAGE:worker:deskcomm-worker" "SCHEDULER_IMAGE:scheduler:deskcomm-scheduler"; do
+  # FORK MIA: o repositório vem de IMG_WORKER/IMG_SCHEDULER (lá em cima), e não de
+  # um literal: com deskcomm-worker escrito à mão, uma instalação do fork pinava o
+  # worker numa imagem que o GHCR dele não tem, e o contêiner não subia.
+  for par in "WORKER_IMAGE:worker:${IMG_WORKER##*/}" "SCHEDULER_IMAGE:scheduler:${IMG_SCHEDULER##*/}"; do
     chave="${par%%:*}"; svc="$(printf '%s' "$par" | cut -d: -f2)"; repo="${par##*:}"
 
     # LACUNA apenas. Valor explícito (mesmo em canal móvel) é intocável.

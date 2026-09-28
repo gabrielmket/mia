@@ -1933,7 +1933,8 @@ STUB
   # sobrevive aos dois caminhos, com rede e sem.
   img_app="$(valor_no_env "$VPS_PROJ/.env" APP_IMAGE)"
   tag_app="${img_app##*:}"
-  for par in "WORKER_IMAGE:deskcomm-worker" "SCHEDULER_IMAGE:deskcomm-scheduler"; do
+  # FORK MIA: os nomes vêm de IMG_* do _common.sh, não de literal do upstream.
+  for par in "WORKER_IMAGE:${IMG_WORKER##*/}" "SCHEDULER_IMAGE:${IMG_SCHEDULER##*/}"; do
     chave="${par%%:*}"; repo="${par##*:}"
     if [ "$(valor_no_env "$VPS_PROJ/.env" "$chave")" != "${IMG_NS}/${repo}:${tag_app}" ]; then
       printf '  ✗ %s não acompanha a versão do app (%s): %s\n' "$chave" "$tag_app" \
@@ -2115,7 +2116,8 @@ STUB
   rodar install.sh --yes >/dev/null
   unset REPO_URL
 
-  for par in "APP_IMAGE:deskcommcrm" "WORKER_IMAGE:deskcomm-worker" "SCHEDULER_IMAGE:deskcomm-scheduler"; do
+  # FORK MIA: os nomes vêm de IMG_* do _common.sh, não de literal do upstream.
+  for par in "APP_IMAGE:${IMG_APP##*/}" "WORKER_IMAGE:${IMG_WORKER##*/}" "SCHEDULER_IMAGE:${IMG_SCHEDULER##*/}"; do
     chave="${par%%:*}"; repo="${par##*:}"
     if [ "$(valor_no_env "$VPS_PROJ/.env" "$chave")" != "${IMG_NS}/${repo}:1.10.0" ]; then
       printf '  ✗ %s não foi pinado na versão resolvida (1.10.0): %s\n' "$chave" \
