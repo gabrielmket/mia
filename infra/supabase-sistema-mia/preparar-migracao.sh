@@ -43,7 +43,9 @@ pg 'psql "$NUVEM" -tAc "select coalesce(json_agg(x), '"'"'[]'"'"'::json) from au
     psql "$NUVEM" -tAc "select coalesce(json_agg(x), '"'"'[]'"'"'::json) from auth.identities x" > /out/auth_identities.json
     psql "$NUVEM" -tAc "select coalesce(json_agg(x), '"'"'[]'"'"'::json) from storage.buckets x" > /out/storage_buckets.json'
 log "contagem linha a linha da nuvem…"
-pg 'psql "$NUVEM" -tAF"|" -c "
+# statement_timeout 0: com a nuvem restringida, o count(*) de api_tokens passou do
+# limite padrao da sessao e a contagem inteira caiu (28/09/2026).
+pg 'psql "$NUVEM" -q -tAF"|" -c "set statement_timeout = 0" -c "
   select table_schema || '"'"'.'"'"' || table_name,
          (xpath('"'"'/row/c/text()'"'"', query_to_xml(format('"'"'select count(*) as c from %I.%I'"'"', table_schema, table_name), false, true, '"'"''"'"')))[1]::text
     from information_schema.tables
