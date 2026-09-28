@@ -215,6 +215,20 @@ const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
       "Mesmo desenho de fn_conversation_assign, acima.",
   },
   {
+    fn: "fn_mesclar_empresas(uuid,uuid,uuid)",
+    razao:
+      "Fork MIA (migration 0263 da MIA). POST app/api/v1/empresas/mesclar/route.ts " +
+      "chama com createClient da sessão, de propósito e pelo mesmo motivo de " +
+      "fn_mesclar_contatos, acima: é `auth.uid()` que faz a função reconferir " +
+      "`fn_role_at_least(p_organization_id, 'manager')` antes de travar as duas " +
+      "fichas. Sessão de suporte somente-leitura cai em `viewer` por " +
+      "fn_user_role_in_org e é recusada ali. Definer porque reponta TODA FK " +
+      "derivada de pg_constraint e escreve a lápide numa transação só. As duas " +
+      "fichas são lidas FOR UPDATE fechadas por organization_id antes de qualquer " +
+      "escrita (ficha de outra organização = `empresa_nao_encontrada`), e o " +
+      "repontamento só alcança linhas que apontam para a perdedora já conferida.",
+  },
+  {
     fn: "fn_log_event(uuid,text,jsonb)",
     razao:
       "Chamada de dentro dos triggers de domínio; o grant a authenticated foi " +
