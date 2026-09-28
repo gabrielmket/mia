@@ -232,6 +232,11 @@ const DECISOES: Record<string, Decisao> = {
     caminho: "gatilho",
     razao: "0391: resumo corrido, compromissos, objeções, próxima ação e declaração do turno são texto de modelo sobre a pessoa — redigidos pela virada, que é o caminho que os DOIS compartilham.",
   },
+  broadcast_recipients: {
+    decidida: "redigir",
+    caminho: "gatilho",
+    razao: "Fork MIA, 0266 da MIA: phone_e164 (o telefone COPIADO do destinatário, que no WhatsApp é também o endereço) vira o rótulo 'Contato anonimizado' e `valores` é zerado pela virada de is_anonymized (fn_redigir_o_que_sobrou_do_contato_anonimizado). A LINHA fica, porque o relatório do disparo e o débito da carteira apontam para ela. Gatilho, e não cascata, porque a cascata é do upstream e o fork estende sem redefinir.",
+  },
   webhook_lead_captures: {
     decidida: "redigir",
     caminho: "gatilho",

@@ -73,6 +73,16 @@ const DIVIDA_LGPD_CONHECIDA: Record<string, string> = {
     "captured_name, captured_email e captured_phone — o payload cru de captação. " +
     "A própria migration 0174 escreveu que 'o cascade de anonimização precisa alcançar esta tabela' " +
     "e o passo nunca foi acrescentado. Sai quando for.",
+  broadcast_recipients:
+    "Fork MIA (migration 0266 da MIA, supabase/baseline-mia.sql). Guarda phone_e164, o telefone " +
+    "COPIADO de cada destinatário do disparo. ⚠️ ELA JÁ ESTÁ PROTEGIDA, pelo mesmo desenho de " +
+    "crm_tasks: o gatilho `trg_redigir_o_que_sobrou_ao_anonimizar` troca o telefone pelo rótulo e " +
+    "zera `valores` na transição is_anonymized false → true, e " +
+    "`tests/invariants/lgpd-disparo-redigido-na-virada.test.ts` prova o efeito pelo comportamento. " +
+    "A entrada existe porque este instrumento lê UMA função e o fork NÃO pode pôr o passo nela: " +
+    "`fn_lgpd_cascade_redact_contact` é do upstream, e redefini-la no baseline-mia.sql desfaria em " +
+    "silêncio toda melhoria futura dele (docs/FORK-MIA.md, regra 3). Sai no dia em que " +
+    "`tabelasNaCascata()` passar a ler os gatilhos de `contacts`.",
 };
 
 /** Tabelas no escopo: FK para contacts E coluna de conteúdo pessoal. */
