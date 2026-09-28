@@ -21,13 +21,13 @@ import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
+import { autorizaCron } from "@/lib/auth/cron-auth";
 import { rodarCampanha, type CampanhaEmCurso } from "@/lib/broadcast/motor";
 import { credenciaisDaOrg } from "@/lib/channels/meta/credenciais-da-org";
 import { qualidadeDoNumero } from "@/lib/channels/meta/qualidade-do-numero";
 import { renderTemplateBody } from "@/lib/channels/meta/render-template";
 import { registrarNaConversa } from "@/lib/broadcast/registro-na-conversa";
 import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-session";
-import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -36,15 +36,9 @@ export const dynamic = "force-dynamic";
 /** Quantas mensagens por rodada. O cron volta em um minuto. */
 const POR_RODADA = 50;
 
-function autorizado(req: NextRequest): boolean {
-  const esperado = env.INTERNAL_CRON_SECRET || env.INTERNAL_SECRET;
-  if (!esperado) return false; // fail-closed
-  return req.headers.get("authorization") === `Bearer ${esperado}`;
-}
-
 async function handler(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
-  if (!autorizado(req)) {
+  if (!autorizaCron(req)) {
     return fail("unauthorized", "cron secret ausente ou inválido", 401, { requestId });
   }
 
