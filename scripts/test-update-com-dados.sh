@@ -146,6 +146,9 @@ echo "    ✓ prelude ok ($(wc -l <<<"$prelude" | tr -d ' ') linhas, extraídas 
 
 echo "==> INSTALL: baseline.sql com ON_ERROR_STOP=1"
 psql_stop < "$BASELINE" >/dev/null
+# FORK MIA: o schema do produto é o do upstream MAIS o nosso, na ordem do bootstrap
+# (ver o comentário em aplicar_baseline, scripts/test-db.sh).
+psql_stop < "$ROOT/supabase/baseline-mia.sql" >/dev/null
 echo "    ✓ install ok"
 
 echo "==> SEMEANDO DADOS — é isto que o test:db não faz"
@@ -278,6 +281,7 @@ oid_antes=$(oid_da_view)
   exit 1
 }
 psql_stop < "$BASELINE" >/dev/null
+psql_stop < "$ROOT/supabase/baseline-mia.sql" >/dev/null
 echo "    ✓ update ok — nenhuma constraint quebrou sobre dado existente"
 
 echo "==> a view de ocupação não pode ser derrubada nem recriada pelo update (issue #1086)"

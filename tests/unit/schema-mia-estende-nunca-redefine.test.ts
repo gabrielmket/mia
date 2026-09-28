@@ -172,6 +172,38 @@ describe("as migrations da MIA moram na pasta delas, com MANIFEST próprio", () 
   });
 });
 
+describe("o baseline-mia.sql instala num banco NOVO, não só atualiza o de produção", () => {
+  // Numa atualização o banco já tem tudo, e a ordem dos blocos não aparece. Num
+  // banco novo aparece: em 28/09 o bloco da 0263 (`alter table crm_empresas`)
+  // vinha antes do da 0255, que cria a tabela, e a instalação morria na linha 66.
+  // A prova de verdade é o gate de banco (scripts/test-db.sh e
+  // test-update-com-dados.sh aplicam este arquivo com ON_ERROR_STOP); estas duas
+  // são a versão barata, que roda em todo PR.
+  it("os blocos seguem a ordem das migrations, com a varredura por último", () => {
+    const linhas = BASELINE_MIA.split("\n");
+    const numeros: number[] = [];
+    for (let i = 0; i < linhas.length; i += 1) {
+      const m =
+        linhas[i].match(/^-- ---- .*\(migration (\d{4})\) ----$/) ??
+        linhas[i].match(/^-- ─── (\d{4}) · /) ??
+        (/^-- =+$/.test(linhas[i]) ? (linhas[i + 1] ?? "").match(/^-- APENDICE (\d{4})/) : null);
+      if (m) numeros.push(Number(m[1]));
+    }
+    const semVarredura = numeros.slice(0, -1);
+    expect(numeros.length, "nenhum bloco reconhecido: o instrumento ficou cego").toBeGreaterThan(30);
+    expect(numeros.at(-1), "o último bloco tem de ser a varredura anon (0116)").toBe(116);
+    expect(semVarredura, "bloco fora da ordem das migrations").toEqual([...semVarredura].sort((a, b) => a - b));
+  });
+
+  it("todo `$$` aberto é fechado", () => {
+    // `end$;` no lugar de `end $$;` deixou uma string aberta: o psql desalinhou o
+    // resto do arquivo e 26 comandos, o carimbo entre eles, não rodavam no deploy.
+    const dolares = semComentario(BASELINE_MIA).match(/\$\$/g) ?? [];
+    expect(dolares.length % 2, "número ímpar de `$$`: alguma função ficou sem fechar").toBe(0);
+    expect(semComentario(BASELINE_MIA), "`end$` fecha com UM cifrão: é `end $$`").not.toMatch(/\bend\$(?!\$)/i);
+  });
+});
+
 describe("a tabela que nunca existiu não volta", () => {
   it("baseline-mia.sql não altera public.followup_flows", () => {
     // A 0270 mirou essa tabela e errou em TODO deploy desde a .46 — era o

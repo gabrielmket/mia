@@ -19,685 +19,6 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 
 
--- ---- tags dos contatos (migration 0249) ----
---
--- 0249 — as tags que os contatos REALMENTE têm, com quantos em cada.
---
--- O filtro do disparador era texto livre, e nome errado devolvia lista vazia
--- sem dizer por quê. A contagem é o que responde antes de custar: `vip (0)`
--- diz na hora que aquela tag não rende campanha.
---
--- SECURITY INVOKER: a RLS de `contacts` decide o alcance, e `p_org` é filtro,
--- não defesa. Anonimizado e fundido ficam de fora — o primeiro por dever legal,
--- o segundo porque já virou outra linha.
-
-create or replace function public.fn_contact_tags(p_org uuid)
-returns table (tag text, quantos bigint)
-language sql
-stable
-security invoker
-set search_path = public
-as $$
-  select t as tag, count(*)::bigint as quantos
-    from public.contacts c
-    cross join lateral unnest(c.tags) as t
-   where c.organization_id = p_org
-     and c.is_anonymized = false
-     and c.is_merged_into is null
-   group by t
-   order by count(*) desc, t asc
-$$;
-
-revoke all on function public.fn_contact_tags(uuid) from public;
-grant execute on function public.fn_contact_tags(uuid) to authenticated, service_role;
-
-
--- ---- mesclar empresas duplicadas (migration 0263) ----
---
--- A empresa ganhou duas portas de criacao: a tela e o agente. A segunda cria
--- ficha do que o cliente DITOU, e duas grafias distantes nascem separadas.
--- Sem fusao, o conserto seria apagar — e apagar leva junto o vinculo dos
--- contatos e negocios. FUNCAO e nao updates na rota: fusao nao tem desfazer.
--- FKs vem de pg_constraint, nao de lista a mao. LAPIDE e nao DELETE: apagar
--- responderia "essa empresa nunca existiu" a quem for conferir.
-
-alter table public.crm_empresas
-  add column if not exists mesclada_em timestamptz,
-  add column if not exists mesclada_com uuid references public.crm_empresas(id) on delete set null;
-
-comment on column public.crm_empresas.mesclada_com is
-  'A empresa que VENCEU a fusao. Preenchida = esta ficha e lapide: some das listas e do seletor, mas responde "para onde foi" a quem conferir um negocio antigo.';
-
-create index if not exists idx_crm_empresas_vivas
-  on public.crm_empresas (organization_id, lower(nome))
-  where mesclada_em is null;
-
-create or replace function public.fn_mesclar_empresas(
-  p_organization_id uuid,
-  p_vencedora uuid,
-  p_perdedora uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  v_vencedora public.crm_empresas%rowtype;
-  v_perdedora public.crm_empresas%rowtype;
-  v_alvo record;
-  v_movidas integer;
-  v_repontado jsonb := '{}'::jsonb;
-begin
-  if auth.uid() is not null
-     and not public.fn_role_at_least(p_organization_id, 'manager') then
-    raise exception using errcode = '42501', message = 'insufficient_role';
-  end if;
-
-  if p_vencedora is null or p_perdedora is null or p_vencedora = p_perdedora then
-    raise exception using errcode = '22023', message = 'selecao_de_mesclagem_invalida';
-  end if;
-
-  select * into v_vencedora from public.crm_empresas
-   where organization_id = p_organization_id and id = least(p_vencedora, p_perdedora)
-   for update;
-  select * into v_perdedora from public.crm_empresas
-   where organization_id = p_organization_id and id = greatest(p_vencedora, p_perdedora)
-   for update;
-
-  if v_vencedora.id <> p_vencedora then
-    select * into v_vencedora from public.crm_empresas
-     where organization_id = p_organization_id and id = p_vencedora;
-    select * into v_perdedora from public.crm_empresas
-     where organization_id = p_organization_id and id = p_perdedora;
-  end if;
-
-  if v_vencedora.id is null or v_perdedora.id is null then
-    raise exception using errcode = '22023', message = 'empresa_nao_encontrada';
-  end if;
-  if v_perdedora.mesclada_em is not null then
-    raise exception using errcode = '22023', message = 'empresa_ja_mesclada';
-  end if;
-
-  for v_alvo in
-    select n.nspname as esquema, c.relname as tabela, a.attname as coluna
-      from pg_catalog.pg_constraint co
-      join pg_catalog.pg_class c on c.oid = co.conrelid
-      join pg_catalog.pg_namespace n on n.oid = c.relnamespace
-      join pg_catalog.pg_attribute a on a.attrelid = co.conrelid and a.attnum = co.conkey[1]
-     where co.contype = 'f'
-       and co.confrelid = 'public.crm_empresas'::regclass
-       and co.conrelid <> 'public.crm_empresas'::regclass
-       and array_length(co.conkey, 1) = 1
-       and c.relkind = 'r'
-       and n.nspname = 'public'
-     order by 2, 3
-  loop
-    execute format(
-      'update %I.%I set %I = $1 where %I = $2',
-      v_alvo.esquema, v_alvo.tabela, v_alvo.coluna, v_alvo.coluna
-    ) using p_vencedora, p_perdedora;
-    get diagnostics v_movidas = row_count;
-    v_repontado := v_repontado || jsonb_build_object(v_alvo.tabela, v_movidas);
-  end loop;
-
-  update public.crm_empresas set
-    cnpj        = coalesce(cnpj, v_perdedora.cnpj),
-    site        = coalesce(site, v_perdedora.site),
-    telefone    = coalesce(telefone, v_perdedora.telefone),
-    email       = coalesce(email, v_perdedora.email),
-    endereco    = coalesce(endereco, v_perdedora.endereco),
-    observacoes = coalesce(observacoes, v_perdedora.observacoes),
-    tags          = (select array(select distinct unnest(tags || v_perdedora.tags))),
-    custom_fields = v_perdedora.custom_fields || custom_fields,
-    updated_at  = now()
-   where organization_id = p_organization_id and id = p_vencedora;
-
-  update public.crm_empresas
-     set mesclada_em = now(), mesclada_com = p_vencedora, updated_at = now()
-   where organization_id = p_organization_id and id = p_perdedora;
-
-  return jsonb_build_object(
-    'vencedora', p_vencedora,
-    'perdedora', p_perdedora,
-    'repontado', v_repontado
-  );
-end; $$;
-
-revoke all on function public.fn_mesclar_empresas(uuid,uuid,uuid) from public, anon;
-grant execute on function public.fn_mesclar_empresas(uuid,uuid,uuid) to authenticated, service_role;
-
--- ─── 0264 · a anonimizacao alcanca custom_fields, cargo e setor ──────────
---
--- `contacts.custom_fields` — o jsonb livre — falhava nas DUAS pontas da LGPD:
--- sobrevivia a anonimizacao, e na exportacao estava no `select` e era
--- descartado antes do relatorio. Acesso negado por omissao e esquecimento
--- negado por omissao, no mesmo campo. `cargo` e `setor` (0262) e `empresa_id`
--- (0255) entraram depois e tambem ficaram de fora.
--- `crm_empresas` e `crm_leads.empresa_id` NAO sao tocados: ali o vinculo e com
--- a pessoa juridica, que nao e titular deste pedido.
-
--- (Aqui ficava uma REDEFINIÇÃO de fn_lgpd_cascade_redact_contact, a cascata do
--- upstream. Removida em 25/09/2026 pela regra do fork: estender, nunca
--- redefinir. O que ela acrescentava — zerar cargo, setor e empresa_id — é
--- feito pelo gatilho `trg_contacts_anonimizado_limpa_mia`, no bloco 0265.
--- A cascata que vale é a do upstream, intacta, com as tabelas dele todas.)
-
-
--- ─── 0265 · o gatilho limpa o que a ROTA DIRETA esquece ──────────────────
---
--- Ha DOIS caminhos que anonimizam um contato: `fn_lgpd_cascade_redact_contact`
--- (a cascata) e `fn_lgpd_anonymize_contact` (a rota direta, o botao da ficha).
--- A rota direta limpa nome, e-mail, telefone, CPF e nascimento e PARA AI —
--- nunca limpou `consent`, `tags` nem `source_metadata`, de onde saem as colunas
--- geradas `wa_identity` e `wa_lid` (a identidade da pessoa no WhatsApp).
---
--- Por isso a lista mora no GATILHO e nao nas funcoes: pendurada no FATO
--- (`is_anonymized` virou true), ela cobre os dois caminhos, o terceiro que
--- alguem escrever, e o DBA que fizer a mao. Espalhar a lista por tres funcoes
--- foi como o produto chegou aqui.
---
--- Vigiado por `tests/unit/lgpd-as-duas-pontas.test.ts`.
--- ── A MIA pendura o SEU gatilho ao lado do dele, nunca por cima ─────────
---
--- Até 25/09/2026 este bloco REDEFINIA a função do gatilho do upstream
--- (`fn_contato_anonimizado_limpa_campos_personalizados`) para acrescentar
--- colunas. Funcionava — até o dia em que o upstream mexesse na função dele: a
--- mudança entraria na sincronização e seria desfeita pela nossa cópia, que roda
--- depois. É o mesmo defeito que quase apagou doze tabelas da cascata em 23/09.
---
--- Agora são DOIS gatilhos no mesmo fato. O dele zera `custom_fields`, como
--- sempre. O nosso zera o resto. Nenhum escreve coluna do outro, então a ordem
--- em que o Postgres os dispara não importa.
---
--- As colunas daqui são de dois tipos, e o motivo de cada um é diferente:
---   · cargo, setor, empresa_id — só existem na MIA (0262, 0255). Nenhum código
---     do upstream as conhece, então só um gatilho nosso pode alcançá-las.
---   · source_metadata, tags, consent — são do upstream, e a CASCATA dele as zera.
---     Mas a rota DIRETA (`fn_lgpd_anonymize_contact`) não: ela para no nome, no
---     e-mail e no telefone. Pendurar no fato `is_anonymized`, e não numa rota,
---     é o que cobre as duas. (Candidato a PR no upstream: é defeito dele, não
---     particularidade nossa.)
---   · social_identity — do upstream (redes sociais nativas, 0368 dele), e
---     NENHUM caminho a zera: nem a cascata, nem a rota direta, nem o gatilho
---     dele. É a chave da pessoa numa rede social; quem pede exclusão continuaria
---     identificável por ela. Achado pela catraca lgpd-as-duas-pontas em
---     25/09/2026, dois dias depois de a coluna nascer. (Também candidato a PR.)
-create or replace function public.fn_mia_contato_anonimizado_limpa()
-  returns trigger
-  language plpgsql
-as $$
-begin
-  new.cargo := null;
-  new.setor := null;
-  new.empresa_id := null;
-  new.source_metadata := '{}'::jsonb;
-  new.tags := '{}'::text[];
-  new.consent := '{}'::jsonb;
-  new.social_identity := null;
-  return new;
-end$$;
-
-comment on function public.fn_mia_contato_anonimizado_limpa() is
-  'Gatilho da MIA: zera cargo, setor, empresa_id, source_metadata, tags, consent e social_identity quando o contato é anonimizado. Ao lado de trg_contacts_anonimizado_limpa_custom_fields (do upstream), nunca por cima.';
-
-revoke all on function public.fn_mia_contato_anonimizado_limpa() from public;
-revoke execute on function public.fn_mia_contato_anonimizado_limpa() from anon;
-revoke execute on function public.fn_mia_contato_anonimizado_limpa() from authenticated;
-
-drop trigger if exists trg_contacts_anonimizado_limpa_mia on public.contacts;
-create trigger trg_contacts_anonimizado_limpa_mia
-  before update of is_anonymized on public.contacts
-  for each row
-  when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
-  execute function public.fn_mia_contato_anonimizado_limpa();
-
--- ── E os contatos JÁ anonimizados antes desta migration ───────────────────
---
--- Sem isto, quem exerceu o direito ontem pelo botão da tela continua com o
--- `waha_lid`, as tags e o consentimento no banco para sempre — o gatilho só
--- dispara na TRANSIÇÃO, e para eles ela já passou. É o mesmo raciocínio da
--- varredura que completa cascatas interrompidas: um direito exercido não pode
--- depender de alguém lembrar de reexecutar.
---
--- `is_anonymized` não é tocado, então o gatilho não redispara.
-update public.contacts
-   set custom_fields   = '{}'::jsonb,
-       cargo           = null,
-       setor           = null,
-       empresa_id      = null,
-       source_metadata = '{}'::jsonb,
-       tags            = '{}'::text[],
-       consent         = '{}'::jsonb
- where is_anonymized = true
-   and (
-        custom_fields   <> '{}'::jsonb
-     or cargo           is not null
-     or setor           is not null
-     or empresa_id      is not null
-     or source_metadata <> '{}'::jsonb
-     or tags            <> '{}'::text[]
-     or consent         <> '{}'::jsonb
-   );
-
-
--- ─── 0266 · as tres tabelas com contact_id que nada alcancava ────────
---
--- Achadas cruzando TODA tabela com `contact_id` contra TODO caminho que
--- anonimiza. Quinze tem a coluna; onze eram cobertas; `lgpd_requests` e excecao
--- declarada (e o REGISTRO do pedido, a prova de que o direito foi exercido).
---
---   ai_agent_runs         `tool_calls` guarda args, results e ate 4.000
---                         caracteres da prosa do modelo
---   demandas              `assunto` e `proximo_passo` sao texto livre sobre
---                         a pessoa — mesma classe que a 0184 ja declarou
---                         pessoal em `calendar_appointments.notes`
---   broadcast_recipients  o telefone COPIADO, que no WhatsApp e tambem o
---                         endereco; recebe o ROTULO como `voice_calls` na 0235
---
--- Vigiado por `tests/unit/lgpd-exporta-o-que-redige.test.ts`, que obriga a
--- outra ponta: o que se apaga a pedido do titular se entrega a pedido dele.
-create or replace function public.fn_redigir_o_que_sobrou_do_contato_anonimizado()
-returns trigger
-language plpgsql
-security definer
-set search_path = public, pg_temp
-as $$
-declare
-  v_rotulo text := 'Contato anonimizado';
-begin
-  -- 1 · ai_agent_runs — o rastro da IA sobre esta pessoa.
-  update public.ai_agent_runs
-     set tool_calls    = '[]'::jsonb,
-         error_message = null
-   where organization_id = new.organization_id
-     and (
-       contact_id = new.id
-       or conversation_id in (
-         select id from public.conversations
-          where organization_id = new.organization_id
-            and contact_id = new.id
-       )
-     )
-     and (tool_calls <> '[]'::jsonb or error_message is not null);
-
-  -- 2 · demandas — o problema dela, escrito à mão.
-  update public.demandas
-     set assunto       = null,
-         proximo_passo = null
-   where organization_id = new.organization_id
-     and contact_id = new.id
-     and (assunto is not null or proximo_passo is not null);
-
-  -- 3 · broadcast_recipients — rótulo, não `null`: a coluna é `not null` e a
-  --     linha precisa continuar contável para o relatório do disparo.
-  update public.broadcast_recipients
-     set phone_e164 = v_rotulo,
-         valores    = '{}'::jsonb
-   where organization_id = new.organization_id
-     and contact_id = new.id
-     and (phone_e164 <> v_rotulo or valores <> '{}'::jsonb);
-
-  -- 4 · google_ads_click_refs e meta_ads_click_refs — do upstream (0306 dele).
-  --     O perigo é `query_raw`: a query string CRUA da landing page, e página
-  --     de anúncio costuma carregar e-mail e nome na URL. A atribuição de
-  --     campanha (gclid, utm) continua servindo ao relatório; o elo com a
-  --     pessoa, não. `contact_id` já é `on delete set null`, então nulo é um
-  --     estado que a tabela aceita e o resto do código já trata.
-  update public.google_ads_click_refs
-     set query_raw  = '{}'::jsonb,
-         contact_id = null
-   where organization_id = new.organization_id
-     and contact_id = new.id;
-
-  update public.meta_ads_click_refs
-     set query_raw  = '{}'::jsonb,
-         contact_id = null
-   where organization_id = new.organization_id
-     and contact_id = new.id;
-
-  return new;
-end$;
-
-comment on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() is
-  'Redige as tres tabelas com contact_id que nenhum outro caminho de anonimizacao alcancava: ai_agent_runs (tool_calls guarda args, results e a prosa do modelo), demandas (assunto e proximo_passo sao texto livre sobre a pessoa) e broadcast_recipients (o telefone copiado, que no WhatsApp e tambem o endereco).';
-
--- As DUAS origens de EXECUTE (item 9 do CLAUDE.md).
-revoke all on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from public;
-revoke execute on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from anon;
-revoke execute on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from authenticated;
-
-drop trigger if exists trg_redigir_o_que_sobrou_ao_anonimizar on public.contacts;
-create trigger trg_redigir_o_que_sobrou_ao_anonimizar
-  after update of is_anonymized on public.contacts
-  for each row
-  when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
-  execute function public.fn_redigir_o_que_sobrou_do_contato_anonimizado();
-
--- ── E quem JÁ foi anonimizado ─────────────────────────────────────────────
---
--- Mesma razão da 0265: o gatilho dispara na TRANSIÇÃO, e para quem exerceu o
--- direito antes desta migration ela já passou. Sem isto, o rastro da IA e o
--- telefone deles ficam no banco para sempre — e são exatamente as pessoas que
--- já pediram para sair.
-
-update public.ai_agent_runs r
-   set tool_calls = '[]'::jsonb, error_message = null
-  from public.contacts c
- where c.is_anonymized = true
-   and c.organization_id = r.organization_id
-   and (
-     r.contact_id = c.id
-     or r.conversation_id in (
-       select id from public.conversations
-        where organization_id = c.organization_id and contact_id = c.id
-     )
-   )
-   and (r.tool_calls <> '[]'::jsonb or r.error_message is not null);
-
-update public.demandas d
-   set assunto = null, proximo_passo = null
-  from public.contacts c
- where c.is_anonymized = true
-   and c.organization_id = d.organization_id
-   and d.contact_id = c.id
-   and (d.assunto is not null or d.proximo_passo is not null);
-
-update public.broadcast_recipients b
-   set phone_e164 = 'Contato anonimizado', valores = '{}'::jsonb
-  from public.contacts c
- where c.is_anonymized = true
-   and c.organization_id = b.organization_id
-   and b.contact_id = c.id
-   and (b.phone_e164 <> 'Contato anonimizado' or b.valores <> '{}'::jsonb);
-
-
--- ─── 0267 · quem responde legalmente pela INSTALACAO (E7) ─────────
---
--- `/legal/privacy` diz "o controlador e <X>, quem instalou e opera este
--- sistema", e `<X>` vinha da ORGANIZACAO ATIVA DA SESSAO. Num self-host esta
--- certo. Numa instalacao GERENCIADA, abrir a pagina com um cliente selecionado
--- fazia o documento declarar que aquele cliente opera o servidor e controla os
--- dados de todos os tenants — e TROCAR de nome conforme quem estava logado.
---
--- `operador_razao_social` e o INTERRUPTOR entre os dois modos: nula = self-host
--- (segue da sessao), preenchida = gerenciado (vale para todo leitor). Estado
--- impossivel nao existe, porque quem declara o operador E o operador.
---
--- Vigiado por `tests/unit/legal-operador-da-instalacao.test.ts`.
-alter table public.platform_branding
-  -- A razão social, não o nome fantasia: é o documento legal que a nomeia.
-  add column if not exists operador_razao_social text,
-  add column if not exists operador_cnpj text,
-  -- Encarregado (DPO) da PLATAFORMA. Continua havendo o do tenant
-  -- (`organizations.dpo_email`), e eles respondem por coisas diferentes: o do
-  -- tenant atende os contatos DELE, o daqui atende quem usa a instalação.
-  add column if not exists operador_dpo_email text,
-  -- A política publicada pelo operador. Quando existe, `/legal/privacy`
-  -- redireciona para ela em vez de renderizar o texto do produto.
-  add column if not exists operador_politica_url text;
-
-comment on column public.platform_branding.operador_razao_social is
-  'Razao social de quem opera ESTA instalacao. NULA = self-host, e ai o operador sai da organizacao da sessao (desenho original). PREENCHIDA = modelo gerenciado, e ai ela vale para todo leitor: a organizacao da sessao deixa de ter voz no documento legal. E o interruptor entre os dois modos.';
-
-comment on column public.platform_branding.operador_dpo_email is
-  'Encarregado (DPO) da PLATAFORMA. Nao substitui organizations.dpo_email: aquele atende os contatos DO TENANT, este atende quem usa a instalacao.';
-
-comment on column public.platform_branding.operador_politica_url is
-  'Politica de privacidade publicada pelo operador da instalacao. Quando presente, /legal/privacy redireciona para ela. Validada na SAIDA por urlDePoliticaSegura (http/https apenas) — o schema do formulario aceita javascript: e a rota e publica.';
-
-
--- ─── 0268 · o carimbo do schema ────────────────────────────
---
--- `easypanel/bootstrap.sh` aplica este arquivo com `|| true` num banco que ja
--- existe — que e TODO deploy depois do primeiro. Se uma migration tropeca, ele
--- escreve `AVISO: ... (o app sobe mesmo assim)` e segue: o produto sobe
--- saudavel, com o codigo novo e o schema de ontem, e as duas coisas sao
--- verdade. O unico registro e o stdout de um conteiner efemero, e a agregacao
--- de logs da VPS esta desligada (E4).
---
--- O bloco abaixo carimba. `/api/v1/health` compara com a constante compilada na
--- imagem (`lib/schema/carimbo.ts`) e responde `schema.em_dia`. Assim "o banco
--- veio junto?" passa a ter resposta de fora, com um curl.
---
--- ⚠️ A LINHA DO `insert` TEM DE CASAR com `CARIMBO_DO_SCHEMA` e com a migration
--- mais nova de `supabase/migrations/`. Tres lugares, uma verdade, conferidos por
--- `tests/unit/carimbo-do-schema.test.ts` — que e o que impede este carimbo de
--- virar mais uma lista mantida a mao que envelhece em silencio.
-create table if not exists public.schema_baseline (
-  id smallint primary key default 1,
-  -- O NOME do arquivo, sem extensão: `20260920030000_0268_carimbo_do_schema`.
-  -- Nome e não só o timestamp porque quem lê a saúde de madrugada quer saber o
-  -- QUE entrou, e "0268_carimbo_do_schema" responde; "20260920030000" não.
-  migration_mais_nova text not null,
-  aplicado_em timestamptz not null default now(),
-  constraint schema_baseline_singleton check (id = 1),
-  constraint schema_baseline_nao_vazia check (length(btrim(migration_mais_nova)) > 0)
-);
-
-comment on table public.schema_baseline is
-  'Qual baseline este banco recebeu. Gravada pelo proprio baseline perto do fim; comparada em /api/v1/health com a constante compilada na imagem (lib/schema/carimbo.ts). Existe porque o bootstrap aplica o baseline com || true num banco existente: o schema pode falhar e o app sobe igual, saudavel, com o banco de ontem.';
-
-comment on column public.schema_baseline.aplicado_em is
-  'Quando o carimbo foi gravado. "Em dia" e "em dia desde quando" sao perguntas diferentes: esta responde se o deploy de agora carimbou, ou se o carimbo e de tres deploys atras e o baseline vem falhando calado.';
-
-alter table public.schema_baseline enable row level security;
-
--- Sem policies de propósito: ninguém lê isto por sessão. A rota de saúde usa o
--- `service_role`, que é `bypassrls`.
-revoke all on table public.schema_baseline from anon, authenticated;
-grant select, insert, update on table public.schema_baseline to service_role;
-
--- O carimbo desta migration. O BASELINE tem o bloco equivalente perto do fim, e
--- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
--- migrations uma a uma.
-insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20260921200000_0272_a_chegada_guardou_o_id_errado', now())
-on conflict (id) do update
-  set migration_mais_nova = excluded.migration_mais_nova,
-      aplicado_em = now();
-
-
--- ─── 0269 · o carimbo conta os erros, nao so a chegada ───────────
---
--- Num banco existente o `psql` roda SEM `ON_ERROR_STOP`: um comando que falha
--- vira uma linha de ERROR e a execucao CONTINUA ate o fim — inclusive ate o
--- bloco que carimba. O carimbo da 0268 provava "o baseline foi lido inteiro",
--- nunca "cada comando passou", e a saude respondia `em_dia: true` sobre um
--- banco em que a migration nova podia ter falhado.
---
--- `easypanel/bootstrap.sh` JA calculava os erros nao benignos e os imprimia
--- como AVISO, no stdout de um conteiner efemero. Agora ele os grava aqui, e
--- `em_dia` exige carimbo certo E zero erros.
-alter table public.schema_baseline
-  -- Quantos erros NÃO benignos o `psql` cuspiu ao aplicar o baseline.
-  -- `0` = passou limpo. Default 0 e não null: uma linha carimbada por uma
-  -- versão anterior desta migration não pode parecer "nunca conferida" e
-  -- derrubar a saúde de uma instalação correta no primeiro deploy.
-  add column if not exists erros_inesperados integer not null default 0,
-  -- As primeiras linhas, para o diagnóstico começar em algum lugar.
-  add column if not exists erros_amostra text;
-
-comment on column public.schema_baseline.erros_inesperados is
-  'Erros NAO benignos ao aplicar o baseline (o bootstrap ja filtra "already exists" e afins). 0 = passou limpo. Num banco existente o psql roda sem ON_ERROR_STOP: o baseline chega ao fim e carimba mesmo tendo falhado no meio, e sem esta coluna a saude responderia em_dia:true sobre um banco que nao tem o que o carimbo diz ter.';
-
-comment on column public.schema_baseline.erros_amostra is
-  'Primeiras linhas do erro, para diagnosticar sem acesso ao conteiner. NUNCA sai na resposta publica da saude: mensagem de erro de Postgres carrega nome de tabela, de coluna e as vezes o valor que violou a constraint.';
-
-
--- ─── 0270 · regua NOVA encerra ao responder (B1-a) ─────────────
---
--- Troca so o DEFAULT DA COLUNA: vale para a proxima regua criada e para mais
--- nada. Nenhuma linha existente e tocada, e isso e a decisao, nao um detalhe —
--- um `update` em massa mudaria o que as reguas dos clientes fazem numa conversa
--- em andamento, sem ninguem ter pedido, com o sintoma aparecendo dias depois.
-
--- ⚠️ Era `public.followup_flows`, que NUNCA existiu: a 0270 errou em todo deploy
--- desde a .46 e era o `erros: 1` da saúde. Corrigido em 25/09/2026.
-alter table public.followup_flow_pointers
-  alter column trigger_config
-  set default '{"kind":"manual","cancel_on_reply":true}'::jsonb;
--- ─── 0271 · o token que administra a PLATAFORMA (E6) ────────────
---
--- Tabela PROPRIA e nao um escopo em `api_tokens`: aquela tem
--- `organization_id` NOT NULL, e e essa coluna que garante que todo token
--- pertence a UM cliente — afrouxa-la para caber um token de plataforma
--- tiraria a garantia de TODOS.
---
--- `operacoes` e lista BRANCA e comeca VAZIA: leitura e livre, escrita e
--- nomeada uma a uma. Nao existe coluna "pode tudo", e a ausencia dela e a
--- feature — ela seria o que todo mundo marca no primeiro token.
---
--- Vigiado por `tests/unit/mcp-de-plataforma-escopo.test.ts`.
-create table if not exists public.platform_api_tokens (
-  id uuid primary key default gen_random_uuid(),
-  -- Como quem criou reconhece o token na lista. Sem ele, revogar vira loteria.
-  name text not null,
-  -- Os 8 primeiros caracteres, para a tela poder mostrar QUAL token sem
-  -- guardar nada que sirva para autenticar.
-  prefix text not null,
-  -- SHA-256 do plaintext, como `api_tokens`. O plaintext existe uma vez, na
-  -- resposta da criação, e nunca é gravado.
-  token_hash bytea not null,
-
-  -- ⚠️ A LISTA BRANCA. Vazia = só leitura, e é o default de propósito: o token
-  -- criado sem pensar não escreve nada.
-  operacoes text[] not null default '{}'::text[],
-
-  created_by uuid not null references auth.users(id) on delete restrict,
-  created_at timestamptz not null default now(),
-  -- Motivo por escrito, como em `platform_admins.reason`: quem concede acesso
-  -- de plataforma explica por quê, e quem audita seis meses depois lê.
-  reason text not null,
-
-  last_used_at timestamptz,
-  last_used_ip inet,
-  expires_at timestamptz,
-
-  revoked_at timestamptz,
-  revoked_by uuid references auth.users(id) on delete set null,
-  revoke_reason text,
-
-  constraint platform_api_tokens_nome_nao_vazio check (length(btrim(name)) > 0),
-  constraint platform_api_tokens_motivo_nao_vazio check (length(btrim(reason)) > 0),
-  -- Revogar é um ato com autor e motivo: os três andam juntos ou nenhum existe.
-  constraint platform_api_tokens_revogacao_completa check (
-    (revoked_at is null and revoked_by is null and revoke_reason is null)
-    or (revoked_at is not null and revoked_by is not null)
-  )
-);
-
-comment on table public.platform_api_tokens is
-  'Token de administracao da PLATAFORMA (MCP admin, item E6). Tabela propria e nao um escopo em api_tokens porque aquela tem organization_id NOT NULL — e e essa coluna que garante que todo token pertence a UM cliente. `operacoes` e lista branca e comeca VAZIA: leitura e livre, escrita e nomeada uma a uma. Nao existe coluna "pode tudo", e a ausencia dela e a feature.';
-
-comment on column public.platform_api_tokens.operacoes is
-  'Lista branca das escritas permitidas (ex.: criar_cliente, liberar_modulo, lancar_credito). VAZIA = so leitura. O catalogo de operacoes vive no codigo (lib/mcp-plataforma/), nao aqui: o que uma operacao faz muda junto com o codigo que a executa, e uma tabela de catalogo envelheceria em silencio.';
-
--- A busca do token é sempre por hash exato, e é o caminho quente de toda
--- chamada MCP.
-create unique index if not exists uniq_platform_api_tokens_hash
-  on public.platform_api_tokens (token_hash);
-
--- RLS ligada e ZERO policies: esta tabela é server-side only, lida e escrita
--- pelo `service_role` (que é `bypassrls`). Uma policy aqui seria uma porta a
--- mais para uma tabela cujo conteúdo autentica quem administra tudo.
-alter table public.platform_api_tokens enable row level security;
-revoke all on table public.platform_api_tokens from anon, authenticated;
-grant select, insert, update on table public.platform_api_tokens to service_role;
-
-
-
--- ============================================================
--- APENDICE 0272 — 20260921200000_0272_a_chegada_guardou_o_id_errado
--- ============================================================
-
--- 0272 — a chegada do cadastro incorporado guardou o id errado
---
--- ── O defeito, medido na primeira chegada real ───────────────────────────────
---
--- Em 21/09/2026, às 16:02, a primeira conta chegou de verdade pelo cadastro
--- incorporado. O webhook recebeu, a assinatura conferiu, a linha foi gravada —
--- e o `waba_id` gravado não existe na Meta.
---
--- O payload veio assim, e só assim:
---
---   { "event": "PARTNER_ADDED",
---     "waba_info": { "waba_id": "…", "owner_business_id": "…" } }
---
--- `lerChegada` procurava `value.waba_id`, que nesse formato não existe, e caía
--- no `entry.id` do envelope. No `account_update` esse fallback está certo (ali
--- o `entry.id` É a conta); no `partner_added`, não é.
---
--- O estrago não é o campo errado: é o que ele faz com a tela. O operador abriu
--- `/admin/cadastro-incorporado`, viu uma conta esperando, e não tinha como
--- amarrá-la nem conferi-la — porque o id que ele estava vendo não correspondia
--- a nada do lado da Meta. "Chegou e não dá para fazer nada" é pior que não ter
--- chegado: no segundo caso você vai procurar o problema na Meta, no primeiro
--- você acha que já está resolvido.
---
--- ── Por que a correção é aqui e não só no código ─────────────────────────────
---
--- O conserto do parser vale para a PRÓXIMA chegada. A linha que já está no
--- banco continuaria errada para sempre, e ela é justamente a do cliente que
--- está esperando agora. O payload cru foi guardado inteiro de propósito (o
--- comentário da 0257 diz por quê: "o que hoje é ruído pode ser o único lugar
--- onde está o dado que faltou") — e hoje é o dia em que isso paga.
---
--- ── owner_business_id ────────────────────────────────────────────────────────
---
--- O `partner_added` não traz número nenhum: ele avisa que uma empresa adicionou
--- nosso app, e os números vêm depois. Sem número e sem nome, a única pista de
--- "de quem é esta conta" é o portfólio empresarial do cliente. É o que permite
--- ao operador conferir, a olho, que a conta que chegou é do cliente que ele
--- espera — antes de amarrar. Guardar essa pista é o que impede a amarração no
--- palpite, que é o desfecho que o cadastro incorporado inteiro existe para
--- evitar.
-
-alter table public.meta_onboardings
-  add column if not exists owner_business_id text;
-
-comment on column public.meta_onboardings.owner_business_id is
-  'Portfólio empresarial DO CLIENTE, lido de payload->waba_info->owner_business_id. A única pista de dono que o partner_added traz, e o que permite conferir a amarração antes de fazê-la.';
-
--- ── O reparo das linhas já gravadas ──────────────────────────────────────────
---
--- Só toca linha em que as TRÊS coisas são verdade:
---   · o payload tem `waba_info.waba_id` (é do formato que o parser lia errado);
---   · ele difere do `waba_id` gravado (senão não há o que consertar);
---   · a linha ainda NÃO foi amarrada a cliente nenhum.
---
--- A terceira condição é a que importa. `waba_id` é a chave por onde a
--- amarração encontra a linha e por onde `guardarChegada` decide não mexer no
--- que já tem dono. Trocar o id de uma linha JÁ amarrada desligaria em silêncio
--- a conta de um canal que pode estar conversando — exatamente o estrago que
--- esta migration existe para evitar, invertido.
---
--- E o `not exists` guarda o índice único: se o id correto já estiver na tabela
--- (uma segunda chegada da mesma conta, dessa vez lida certo), a linha velha
--- fica como está em vez de derrubar a migration inteira num 23505. Sobra uma
--- linha órfã que o operador vê e ignora; o alternativo é o baseline parar.
-update public.meta_onboardings as m
-   set waba_id           = m.payload -> 'waba_info' ->> 'waba_id',
-       owner_business_id = coalesce(
-                             m.owner_business_id,
-                             m.payload -> 'waba_info' ->> 'owner_business_id'
-                           ),
-       updated_at        = now()
- where m.payload -> 'waba_info' ->> 'waba_id' is not null
-   and m.payload -> 'waba_info' ->> 'waba_id' <> m.waba_id
-   and m.organization_id is null
-   and not exists (
-         select 1
-           from public.meta_onboardings as outra
-          where outra.waba_id = m.payload -> 'waba_info' ->> 'waba_id'
-       );
-
--- Linhas do formato certo que só não tinham a coluna: preenche sem mexer no id.
-update public.meta_onboardings as m
-   set owner_business_id = m.payload -> 'waba_info' ->> 'owner_business_id'
- where m.owner_business_id is null
-   and m.payload -> 'waba_info' ->> 'owner_business_id' is not null;
-
 -- ---- custo de IA deixa de nascer nulo (migration 0239) ----
 --
 -- `pricing.ts` conhece três modelos Claude e devolve NULL para qualquer outro.
@@ -1686,6 +1007,39 @@ revoke all on public.platform_meta_pricing from anon, authenticated;
 grant select, insert, delete on public.platform_meta_pricing to service_role;
 
 
+-- ---- tags dos contatos (migration 0249) ----
+--
+-- 0249 — as tags que os contatos REALMENTE têm, com quantos em cada.
+--
+-- O filtro do disparador era texto livre, e nome errado devolvia lista vazia
+-- sem dizer por quê. A contagem é o que responde antes de custar: `vip (0)`
+-- diz na hora que aquela tag não rende campanha.
+--
+-- SECURITY INVOKER: a RLS de `contacts` decide o alcance, e `p_org` é filtro,
+-- não defesa. Anonimizado e fundido ficam de fora — o primeiro por dever legal,
+-- o segundo porque já virou outra linha.
+
+create or replace function public.fn_contact_tags(p_org uuid)
+returns table (tag text, quantos bigint)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select t as tag, count(*)::bigint as quantos
+    from public.contacts c
+    cross join lateral unnest(c.tags) as t
+   where c.organization_id = p_org
+     and c.is_anonymized = false
+     and c.is_merged_into is null
+   group by t
+   order by count(*) desc, t asc
+$$;
+
+revoke all on function public.fn_contact_tags(uuid) from public;
+grant execute on function public.fn_contact_tags(uuid) to authenticated, service_role;
+
+
 -- ---- channel_knobs.updated_at para de mentir (migration 0250) ----
 -- A coluna tinha `default now()` e nada a atualizava: a ficha de anti-ban
 -- alterada às 04:36 continuava dizendo 03:18, e uma investigação de produção
@@ -2088,6 +1442,652 @@ create index if not exists idx_contacts_empresa_cargo
 
 notify pgrst, 'reload schema';
 
+
+-- ---- mesclar empresas duplicadas (migration 0263) ----
+--
+-- A empresa ganhou duas portas de criacao: a tela e o agente. A segunda cria
+-- ficha do que o cliente DITOU, e duas grafias distantes nascem separadas.
+-- Sem fusao, o conserto seria apagar — e apagar leva junto o vinculo dos
+-- contatos e negocios. FUNCAO e nao updates na rota: fusao nao tem desfazer.
+-- FKs vem de pg_constraint, nao de lista a mao. LAPIDE e nao DELETE: apagar
+-- responderia "essa empresa nunca existiu" a quem for conferir.
+
+alter table public.crm_empresas
+  add column if not exists mesclada_em timestamptz,
+  add column if not exists mesclada_com uuid references public.crm_empresas(id) on delete set null;
+
+comment on column public.crm_empresas.mesclada_com is
+  'A empresa que VENCEU a fusao. Preenchida = esta ficha e lapide: some das listas e do seletor, mas responde "para onde foi" a quem conferir um negocio antigo.';
+
+create index if not exists idx_crm_empresas_vivas
+  on public.crm_empresas (organization_id, lower(nome))
+  where mesclada_em is null;
+
+create or replace function public.fn_mesclar_empresas(
+  p_organization_id uuid,
+  p_vencedora uuid,
+  p_perdedora uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_vencedora public.crm_empresas%rowtype;
+  v_perdedora public.crm_empresas%rowtype;
+  v_alvo record;
+  v_movidas integer;
+  v_repontado jsonb := '{}'::jsonb;
+begin
+  if auth.uid() is not null
+     and not public.fn_role_at_least(p_organization_id, 'manager') then
+    raise exception using errcode = '42501', message = 'insufficient_role';
+  end if;
+
+  if p_vencedora is null or p_perdedora is null or p_vencedora = p_perdedora then
+    raise exception using errcode = '22023', message = 'selecao_de_mesclagem_invalida';
+  end if;
+
+  select * into v_vencedora from public.crm_empresas
+   where organization_id = p_organization_id and id = least(p_vencedora, p_perdedora)
+   for update;
+  select * into v_perdedora from public.crm_empresas
+   where organization_id = p_organization_id and id = greatest(p_vencedora, p_perdedora)
+   for update;
+
+  if v_vencedora.id <> p_vencedora then
+    select * into v_vencedora from public.crm_empresas
+     where organization_id = p_organization_id and id = p_vencedora;
+    select * into v_perdedora from public.crm_empresas
+     where organization_id = p_organization_id and id = p_perdedora;
+  end if;
+
+  if v_vencedora.id is null or v_perdedora.id is null then
+    raise exception using errcode = '22023', message = 'empresa_nao_encontrada';
+  end if;
+  if v_perdedora.mesclada_em is not null then
+    raise exception using errcode = '22023', message = 'empresa_ja_mesclada';
+  end if;
+
+  for v_alvo in
+    select n.nspname as esquema, c.relname as tabela, a.attname as coluna
+      from pg_catalog.pg_constraint co
+      join pg_catalog.pg_class c on c.oid = co.conrelid
+      join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+      join pg_catalog.pg_attribute a on a.attrelid = co.conrelid and a.attnum = co.conkey[1]
+     where co.contype = 'f'
+       and co.confrelid = 'public.crm_empresas'::regclass
+       and co.conrelid <> 'public.crm_empresas'::regclass
+       and array_length(co.conkey, 1) = 1
+       and c.relkind = 'r'
+       and n.nspname = 'public'
+     order by 2, 3
+  loop
+    execute format(
+      'update %I.%I set %I = $1 where %I = $2',
+      v_alvo.esquema, v_alvo.tabela, v_alvo.coluna, v_alvo.coluna
+    ) using p_vencedora, p_perdedora;
+    get diagnostics v_movidas = row_count;
+    v_repontado := v_repontado || jsonb_build_object(v_alvo.tabela, v_movidas);
+  end loop;
+
+  update public.crm_empresas set
+    cnpj        = coalesce(cnpj, v_perdedora.cnpj),
+    site        = coalesce(site, v_perdedora.site),
+    telefone    = coalesce(telefone, v_perdedora.telefone),
+    email       = coalesce(email, v_perdedora.email),
+    endereco    = coalesce(endereco, v_perdedora.endereco),
+    observacoes = coalesce(observacoes, v_perdedora.observacoes),
+    tags          = (select array(select distinct unnest(tags || v_perdedora.tags))),
+    custom_fields = v_perdedora.custom_fields || custom_fields,
+    updated_at  = now()
+   where organization_id = p_organization_id and id = p_vencedora;
+
+  update public.crm_empresas
+     set mesclada_em = now(), mesclada_com = p_vencedora, updated_at = now()
+   where organization_id = p_organization_id and id = p_perdedora;
+
+  return jsonb_build_object(
+    'vencedora', p_vencedora,
+    'perdedora', p_perdedora,
+    'repontado', v_repontado
+  );
+end; $$;
+
+revoke all on function public.fn_mesclar_empresas(uuid,uuid,uuid) from public, anon;
+grant execute on function public.fn_mesclar_empresas(uuid,uuid,uuid) to authenticated, service_role;
+
+-- ─── 0264 · a anonimizacao alcanca custom_fields, cargo e setor ──────────
+--
+-- `contacts.custom_fields` — o jsonb livre — falhava nas DUAS pontas da LGPD:
+-- sobrevivia a anonimizacao, e na exportacao estava no `select` e era
+-- descartado antes do relatorio. Acesso negado por omissao e esquecimento
+-- negado por omissao, no mesmo campo. `cargo` e `setor` (0262) e `empresa_id`
+-- (0255) entraram depois e tambem ficaram de fora.
+-- `crm_empresas` e `crm_leads.empresa_id` NAO sao tocados: ali o vinculo e com
+-- a pessoa juridica, que nao e titular deste pedido.
+
+-- (Aqui ficava uma REDEFINIÇÃO de fn_lgpd_cascade_redact_contact, a cascata do
+-- upstream. Removida em 25/09/2026 pela regra do fork: estender, nunca
+-- redefinir. O que ela acrescentava — zerar cargo, setor e empresa_id — é
+-- feito pelo gatilho `trg_contacts_anonimizado_limpa_mia`, no bloco 0265.
+-- A cascata que vale é a do upstream, intacta, com as tabelas dele todas.)
+
+
+-- ─── 0265 · o gatilho limpa o que a ROTA DIRETA esquece ──────────────────
+--
+-- Ha DOIS caminhos que anonimizam um contato: `fn_lgpd_cascade_redact_contact`
+-- (a cascata) e `fn_lgpd_anonymize_contact` (a rota direta, o botao da ficha).
+-- A rota direta limpa nome, e-mail, telefone, CPF e nascimento e PARA AI —
+-- nunca limpou `consent`, `tags` nem `source_metadata`, de onde saem as colunas
+-- geradas `wa_identity` e `wa_lid` (a identidade da pessoa no WhatsApp).
+--
+-- Por isso a lista mora no GATILHO e nao nas funcoes: pendurada no FATO
+-- (`is_anonymized` virou true), ela cobre os dois caminhos, o terceiro que
+-- alguem escrever, e o DBA que fizer a mao. Espalhar a lista por tres funcoes
+-- foi como o produto chegou aqui.
+--
+-- Vigiado por `tests/unit/lgpd-as-duas-pontas.test.ts`.
+-- ── A MIA pendura o SEU gatilho ao lado do dele, nunca por cima ─────────
+--
+-- Até 25/09/2026 este bloco REDEFINIA a função do gatilho do upstream
+-- (`fn_contato_anonimizado_limpa_campos_personalizados`) para acrescentar
+-- colunas. Funcionava — até o dia em que o upstream mexesse na função dele: a
+-- mudança entraria na sincronização e seria desfeita pela nossa cópia, que roda
+-- depois. É o mesmo defeito que quase apagou doze tabelas da cascata em 23/09.
+--
+-- Agora são DOIS gatilhos no mesmo fato. O dele zera `custom_fields`, como
+-- sempre. O nosso zera o resto. Nenhum escreve coluna do outro, então a ordem
+-- em que o Postgres os dispara não importa.
+--
+-- As colunas daqui são de dois tipos, e o motivo de cada um é diferente:
+--   · cargo, setor, empresa_id — só existem na MIA (0262, 0255). Nenhum código
+--     do upstream as conhece, então só um gatilho nosso pode alcançá-las.
+--   · source_metadata, tags, consent — são do upstream, e a CASCATA dele as zera.
+--     Mas a rota DIRETA (`fn_lgpd_anonymize_contact`) não: ela para no nome, no
+--     e-mail e no telefone. Pendurar no fato `is_anonymized`, e não numa rota,
+--     é o que cobre as duas. (Candidato a PR no upstream: é defeito dele, não
+--     particularidade nossa.)
+--   · social_identity — do upstream (redes sociais nativas, 0368 dele), e
+--     NENHUM caminho a zera: nem a cascata, nem a rota direta, nem o gatilho
+--     dele. É a chave da pessoa numa rede social; quem pede exclusão continuaria
+--     identificável por ela. Achado pela catraca lgpd-as-duas-pontas em
+--     25/09/2026, dois dias depois de a coluna nascer. (Também candidato a PR.)
+create or replace function public.fn_mia_contato_anonimizado_limpa()
+  returns trigger
+  language plpgsql
+as $$
+begin
+  new.cargo := null;
+  new.setor := null;
+  new.empresa_id := null;
+  new.source_metadata := '{}'::jsonb;
+  new.tags := '{}'::text[];
+  new.consent := '{}'::jsonb;
+  new.social_identity := null;
+  return new;
+end$$;
+
+comment on function public.fn_mia_contato_anonimizado_limpa() is
+  'Gatilho da MIA: zera cargo, setor, empresa_id, source_metadata, tags, consent e social_identity quando o contato é anonimizado. Ao lado de trg_contacts_anonimizado_limpa_custom_fields (do upstream), nunca por cima.';
+
+revoke all on function public.fn_mia_contato_anonimizado_limpa() from public;
+revoke execute on function public.fn_mia_contato_anonimizado_limpa() from anon;
+revoke execute on function public.fn_mia_contato_anonimizado_limpa() from authenticated;
+
+drop trigger if exists trg_contacts_anonimizado_limpa_mia on public.contacts;
+create trigger trg_contacts_anonimizado_limpa_mia
+  before update of is_anonymized on public.contacts
+  for each row
+  when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
+  execute function public.fn_mia_contato_anonimizado_limpa();
+
+-- ── E os contatos JÁ anonimizados antes desta migration ───────────────────
+--
+-- Sem isto, quem exerceu o direito ontem pelo botão da tela continua com o
+-- `waha_lid`, as tags e o consentimento no banco para sempre — o gatilho só
+-- dispara na TRANSIÇÃO, e para eles ela já passou. É o mesmo raciocínio da
+-- varredura que completa cascatas interrompidas: um direito exercido não pode
+-- depender de alguém lembrar de reexecutar.
+--
+-- `is_anonymized` não é tocado, então o gatilho não redispara.
+update public.contacts
+   set custom_fields   = '{}'::jsonb,
+       cargo           = null,
+       setor           = null,
+       empresa_id      = null,
+       source_metadata = '{}'::jsonb,
+       tags            = '{}'::text[],
+       consent         = '{}'::jsonb
+ where is_anonymized = true
+   and (
+        custom_fields   <> '{}'::jsonb
+     or cargo           is not null
+     or setor           is not null
+     or empresa_id      is not null
+     or source_metadata <> '{}'::jsonb
+     or tags            <> '{}'::text[]
+     or consent         <> '{}'::jsonb
+   );
+
+
+-- ─── 0266 · as tres tabelas com contact_id que nada alcancava ────────
+--
+-- Achadas cruzando TODA tabela com `contact_id` contra TODO caminho que
+-- anonimiza. Quinze tem a coluna; onze eram cobertas; `lgpd_requests` e excecao
+-- declarada (e o REGISTRO do pedido, a prova de que o direito foi exercido).
+--
+--   ai_agent_runs         `tool_calls` guarda args, results e ate 4.000
+--                         caracteres da prosa do modelo
+--   demandas              `assunto` e `proximo_passo` sao texto livre sobre
+--                         a pessoa — mesma classe que a 0184 ja declarou
+--                         pessoal em `calendar_appointments.notes`
+--   broadcast_recipients  o telefone COPIADO, que no WhatsApp e tambem o
+--                         endereco; recebe o ROTULO como `voice_calls` na 0235
+--
+-- Vigiado por `tests/unit/lgpd-exporta-o-que-redige.test.ts`, que obriga a
+-- outra ponta: o que se apaga a pedido do titular se entrega a pedido dele.
+create or replace function public.fn_redigir_o_que_sobrou_do_contato_anonimizado()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rotulo text := 'Contato anonimizado';
+begin
+  -- 1 · ai_agent_runs — o rastro da IA sobre esta pessoa.
+  update public.ai_agent_runs
+     set tool_calls    = '[]'::jsonb,
+         error_message = null
+   where organization_id = new.organization_id
+     and (
+       contact_id = new.id
+       or conversation_id in (
+         select id from public.conversations
+          where organization_id = new.organization_id
+            and contact_id = new.id
+       )
+     )
+     and (tool_calls <> '[]'::jsonb or error_message is not null);
+
+  -- 2 · demandas — o problema dela, escrito à mão.
+  update public.demandas
+     set assunto       = null,
+         proximo_passo = null
+   where organization_id = new.organization_id
+     and contact_id = new.id
+     and (assunto is not null or proximo_passo is not null);
+
+  -- 3 · broadcast_recipients — rótulo, não `null`: a coluna é `not null` e a
+  --     linha precisa continuar contável para o relatório do disparo.
+  update public.broadcast_recipients
+     set phone_e164 = v_rotulo,
+         valores    = '{}'::jsonb
+   where organization_id = new.organization_id
+     and contact_id = new.id
+     and (phone_e164 <> v_rotulo or valores <> '{}'::jsonb);
+
+  -- 4 · google_ads_click_refs e meta_ads_click_refs — do upstream (0306 dele).
+  --     O perigo é `query_raw`: a query string CRUA da landing page, e página
+  --     de anúncio costuma carregar e-mail e nome na URL. A atribuição de
+  --     campanha (gclid, utm) continua servindo ao relatório; o elo com a
+  --     pessoa, não. `contact_id` já é `on delete set null`, então nulo é um
+  --     estado que a tabela aceita e o resto do código já trata.
+  update public.google_ads_click_refs
+     set query_raw  = '{}'::jsonb,
+         contact_id = null
+   where organization_id = new.organization_id
+     and contact_id = new.id;
+
+  update public.meta_ads_click_refs
+     set query_raw  = '{}'::jsonb,
+         contact_id = null
+   where organization_id = new.organization_id
+     and contact_id = new.id;
+
+  return new;
+end $$;
+
+comment on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() is
+  'Redige as tres tabelas com contact_id que nenhum outro caminho de anonimizacao alcancava: ai_agent_runs (tool_calls guarda args, results e a prosa do modelo), demandas (assunto e proximo_passo sao texto livre sobre a pessoa) e broadcast_recipients (o telefone copiado, que no WhatsApp e tambem o endereco).';
+
+-- As DUAS origens de EXECUTE (item 9 do CLAUDE.md).
+revoke all on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from public;
+revoke execute on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from anon;
+revoke execute on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from authenticated;
+
+drop trigger if exists trg_redigir_o_que_sobrou_ao_anonimizar on public.contacts;
+create trigger trg_redigir_o_que_sobrou_ao_anonimizar
+  after update of is_anonymized on public.contacts
+  for each row
+  when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
+  execute function public.fn_redigir_o_que_sobrou_do_contato_anonimizado();
+
+-- ── E quem JÁ foi anonimizado ─────────────────────────────────────────────
+--
+-- Mesma razão da 0265: o gatilho dispara na TRANSIÇÃO, e para quem exerceu o
+-- direito antes desta migration ela já passou. Sem isto, o rastro da IA e o
+-- telefone deles ficam no banco para sempre — e são exatamente as pessoas que
+-- já pediram para sair.
+
+update public.ai_agent_runs r
+   set tool_calls = '[]'::jsonb, error_message = null
+  from public.contacts c
+ where c.is_anonymized = true
+   and c.organization_id = r.organization_id
+   and (
+     r.contact_id = c.id
+     or r.conversation_id in (
+       select id from public.conversations
+        where organization_id = c.organization_id and contact_id = c.id
+     )
+   )
+   and (r.tool_calls <> '[]'::jsonb or r.error_message is not null);
+
+update public.demandas d
+   set assunto = null, proximo_passo = null
+  from public.contacts c
+ where c.is_anonymized = true
+   and c.organization_id = d.organization_id
+   and d.contact_id = c.id
+   and (d.assunto is not null or d.proximo_passo is not null);
+
+update public.broadcast_recipients b
+   set phone_e164 = 'Contato anonimizado', valores = '{}'::jsonb
+  from public.contacts c
+ where c.is_anonymized = true
+   and c.organization_id = b.organization_id
+   and b.contact_id = c.id
+   and (b.phone_e164 <> 'Contato anonimizado' or b.valores <> '{}'::jsonb);
+
+
+-- ─── 0267 · quem responde legalmente pela INSTALACAO (E7) ─────────
+--
+-- `/legal/privacy` diz "o controlador e <X>, quem instalou e opera este
+-- sistema", e `<X>` vinha da ORGANIZACAO ATIVA DA SESSAO. Num self-host esta
+-- certo. Numa instalacao GERENCIADA, abrir a pagina com um cliente selecionado
+-- fazia o documento declarar que aquele cliente opera o servidor e controla os
+-- dados de todos os tenants — e TROCAR de nome conforme quem estava logado.
+--
+-- `operador_razao_social` e o INTERRUPTOR entre os dois modos: nula = self-host
+-- (segue da sessao), preenchida = gerenciado (vale para todo leitor). Estado
+-- impossivel nao existe, porque quem declara o operador E o operador.
+--
+-- Vigiado por `tests/unit/legal-operador-da-instalacao.test.ts`.
+alter table public.platform_branding
+  -- A razão social, não o nome fantasia: é o documento legal que a nomeia.
+  add column if not exists operador_razao_social text,
+  add column if not exists operador_cnpj text,
+  -- Encarregado (DPO) da PLATAFORMA. Continua havendo o do tenant
+  -- (`organizations.dpo_email`), e eles respondem por coisas diferentes: o do
+  -- tenant atende os contatos DELE, o daqui atende quem usa a instalação.
+  add column if not exists operador_dpo_email text,
+  -- A política publicada pelo operador. Quando existe, `/legal/privacy`
+  -- redireciona para ela em vez de renderizar o texto do produto.
+  add column if not exists operador_politica_url text;
+
+comment on column public.platform_branding.operador_razao_social is
+  'Razao social de quem opera ESTA instalacao. NULA = self-host, e ai o operador sai da organizacao da sessao (desenho original). PREENCHIDA = modelo gerenciado, e ai ela vale para todo leitor: a organizacao da sessao deixa de ter voz no documento legal. E o interruptor entre os dois modos.';
+
+comment on column public.platform_branding.operador_dpo_email is
+  'Encarregado (DPO) da PLATAFORMA. Nao substitui organizations.dpo_email: aquele atende os contatos DO TENANT, este atende quem usa a instalacao.';
+
+comment on column public.platform_branding.operador_politica_url is
+  'Politica de privacidade publicada pelo operador da instalacao. Quando presente, /legal/privacy redireciona para ela. Validada na SAIDA por urlDePoliticaSegura (http/https apenas) — o schema do formulario aceita javascript: e a rota e publica.';
+
+
+-- ─── 0268 · o carimbo do schema ────────────────────────────
+--
+-- `easypanel/bootstrap.sh` aplica este arquivo com `|| true` num banco que ja
+-- existe — que e TODO deploy depois do primeiro. Se uma migration tropeca, ele
+-- escreve `AVISO: ... (o app sobe mesmo assim)` e segue: o produto sobe
+-- saudavel, com o codigo novo e o schema de ontem, e as duas coisas sao
+-- verdade. O unico registro e o stdout de um conteiner efemero, e a agregacao
+-- de logs da VPS esta desligada (E4).
+--
+-- O bloco abaixo carimba. `/api/v1/health` compara com a constante compilada na
+-- imagem (`lib/schema/carimbo.ts`) e responde `schema.em_dia`. Assim "o banco
+-- veio junto?" passa a ter resposta de fora, com um curl.
+--
+-- ⚠️ A LINHA DO `insert` TEM DE CASAR com `CARIMBO_DO_SCHEMA` e com a migration
+-- mais nova de `supabase/migrations/`. Tres lugares, uma verdade, conferidos por
+-- `tests/unit/carimbo-do-schema.test.ts` — que e o que impede este carimbo de
+-- virar mais uma lista mantida a mao que envelhece em silencio.
+create table if not exists public.schema_baseline (
+  id smallint primary key default 1,
+  -- O NOME do arquivo, sem extensão: `20260920030000_0268_carimbo_do_schema`.
+  -- Nome e não só o timestamp porque quem lê a saúde de madrugada quer saber o
+  -- QUE entrou, e "0268_carimbo_do_schema" responde; "20260920030000" não.
+  migration_mais_nova text not null,
+  aplicado_em timestamptz not null default now(),
+  constraint schema_baseline_singleton check (id = 1),
+  constraint schema_baseline_nao_vazia check (length(btrim(migration_mais_nova)) > 0)
+);
+
+comment on table public.schema_baseline is
+  'Qual baseline este banco recebeu. Gravada pelo proprio baseline perto do fim; comparada em /api/v1/health com a constante compilada na imagem (lib/schema/carimbo.ts). Existe porque o bootstrap aplica o baseline com || true num banco existente: o schema pode falhar e o app sobe igual, saudavel, com o banco de ontem.';
+
+comment on column public.schema_baseline.aplicado_em is
+  'Quando o carimbo foi gravado. "Em dia" e "em dia desde quando" sao perguntas diferentes: esta responde se o deploy de agora carimbou, ou se o carimbo e de tres deploys atras e o baseline vem falhando calado.';
+
+alter table public.schema_baseline enable row level security;
+
+-- Sem policies de propósito: ninguém lê isto por sessão. A rota de saúde usa o
+-- `service_role`, que é `bypassrls`.
+revoke all on table public.schema_baseline from anon, authenticated;
+grant select, insert, update on table public.schema_baseline to service_role;
+
+-- O carimbo desta migration. O BASELINE tem o bloco equivalente perto do fim, e
+-- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
+-- migrations uma a uma.
+insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
+values (1, '20260921200000_0272_a_chegada_guardou_o_id_errado', now())
+on conflict (id) do update
+  set migration_mais_nova = excluded.migration_mais_nova,
+      aplicado_em = now();
+
+
+-- ─── 0269 · o carimbo conta os erros, nao so a chegada ───────────
+--
+-- Num banco existente o `psql` roda SEM `ON_ERROR_STOP`: um comando que falha
+-- vira uma linha de ERROR e a execucao CONTINUA ate o fim — inclusive ate o
+-- bloco que carimba. O carimbo da 0268 provava "o baseline foi lido inteiro",
+-- nunca "cada comando passou", e a saude respondia `em_dia: true` sobre um
+-- banco em que a migration nova podia ter falhado.
+--
+-- `easypanel/bootstrap.sh` JA calculava os erros nao benignos e os imprimia
+-- como AVISO, no stdout de um conteiner efemero. Agora ele os grava aqui, e
+-- `em_dia` exige carimbo certo E zero erros.
+alter table public.schema_baseline
+  -- Quantos erros NÃO benignos o `psql` cuspiu ao aplicar o baseline.
+  -- `0` = passou limpo. Default 0 e não null: uma linha carimbada por uma
+  -- versão anterior desta migration não pode parecer "nunca conferida" e
+  -- derrubar a saúde de uma instalação correta no primeiro deploy.
+  add column if not exists erros_inesperados integer not null default 0,
+  -- As primeiras linhas, para o diagnóstico começar em algum lugar.
+  add column if not exists erros_amostra text;
+
+comment on column public.schema_baseline.erros_inesperados is
+  'Erros NAO benignos ao aplicar o baseline (o bootstrap ja filtra "already exists" e afins). 0 = passou limpo. Num banco existente o psql roda sem ON_ERROR_STOP: o baseline chega ao fim e carimba mesmo tendo falhado no meio, e sem esta coluna a saude responderia em_dia:true sobre um banco que nao tem o que o carimbo diz ter.';
+
+comment on column public.schema_baseline.erros_amostra is
+  'Primeiras linhas do erro, para diagnosticar sem acesso ao conteiner. NUNCA sai na resposta publica da saude: mensagem de erro de Postgres carrega nome de tabela, de coluna e as vezes o valor que violou a constraint.';
+
+
+-- ─── 0270 · regua NOVA encerra ao responder (B1-a) ─────────────
+--
+-- Troca so o DEFAULT DA COLUNA: vale para a proxima regua criada e para mais
+-- nada. Nenhuma linha existente e tocada, e isso e a decisao, nao um detalhe —
+-- um `update` em massa mudaria o que as reguas dos clientes fazem numa conversa
+-- em andamento, sem ninguem ter pedido, com o sintoma aparecendo dias depois.
+
+-- ⚠️ Era `public.followup_flows`, que NUNCA existiu: a 0270 errou em todo deploy
+-- desde a .46 e era o `erros: 1` da saúde. Corrigido em 25/09/2026.
+alter table public.followup_flow_pointers
+  alter column trigger_config
+  set default '{"kind":"manual","cancel_on_reply":true}'::jsonb;
+-- ─── 0271 · o token que administra a PLATAFORMA (E6) ────────────
+--
+-- Tabela PROPRIA e nao um escopo em `api_tokens`: aquela tem
+-- `organization_id` NOT NULL, e e essa coluna que garante que todo token
+-- pertence a UM cliente — afrouxa-la para caber um token de plataforma
+-- tiraria a garantia de TODOS.
+--
+-- `operacoes` e lista BRANCA e comeca VAZIA: leitura e livre, escrita e
+-- nomeada uma a uma. Nao existe coluna "pode tudo", e a ausencia dela e a
+-- feature — ela seria o que todo mundo marca no primeiro token.
+--
+-- Vigiado por `tests/unit/mcp-de-plataforma-escopo.test.ts`.
+create table if not exists public.platform_api_tokens (
+  id uuid primary key default gen_random_uuid(),
+  -- Como quem criou reconhece o token na lista. Sem ele, revogar vira loteria.
+  name text not null,
+  -- Os 8 primeiros caracteres, para a tela poder mostrar QUAL token sem
+  -- guardar nada que sirva para autenticar.
+  prefix text not null,
+  -- SHA-256 do plaintext, como `api_tokens`. O plaintext existe uma vez, na
+  -- resposta da criação, e nunca é gravado.
+  token_hash bytea not null,
+
+  -- ⚠️ A LISTA BRANCA. Vazia = só leitura, e é o default de propósito: o token
+  -- criado sem pensar não escreve nada.
+  operacoes text[] not null default '{}'::text[],
+
+  created_by uuid not null references auth.users(id) on delete restrict,
+  created_at timestamptz not null default now(),
+  -- Motivo por escrito, como em `platform_admins.reason`: quem concede acesso
+  -- de plataforma explica por quê, e quem audita seis meses depois lê.
+  reason text not null,
+
+  last_used_at timestamptz,
+  last_used_ip inet,
+  expires_at timestamptz,
+
+  revoked_at timestamptz,
+  revoked_by uuid references auth.users(id) on delete set null,
+  revoke_reason text,
+
+  constraint platform_api_tokens_nome_nao_vazio check (length(btrim(name)) > 0),
+  constraint platform_api_tokens_motivo_nao_vazio check (length(btrim(reason)) > 0),
+  -- Revogar é um ato com autor e motivo: os três andam juntos ou nenhum existe.
+  constraint platform_api_tokens_revogacao_completa check (
+    (revoked_at is null and revoked_by is null and revoke_reason is null)
+    or (revoked_at is not null and revoked_by is not null)
+  )
+);
+
+comment on table public.platform_api_tokens is
+  'Token de administracao da PLATAFORMA (MCP admin, item E6). Tabela propria e nao um escopo em api_tokens porque aquela tem organization_id NOT NULL — e e essa coluna que garante que todo token pertence a UM cliente. `operacoes` e lista branca e comeca VAZIA: leitura e livre, escrita e nomeada uma a uma. Nao existe coluna "pode tudo", e a ausencia dela e a feature.';
+
+comment on column public.platform_api_tokens.operacoes is
+  'Lista branca das escritas permitidas (ex.: criar_cliente, liberar_modulo, lancar_credito). VAZIA = so leitura. O catalogo de operacoes vive no codigo (lib/mcp-plataforma/), nao aqui: o que uma operacao faz muda junto com o codigo que a executa, e uma tabela de catalogo envelheceria em silencio.';
+
+-- A busca do token é sempre por hash exato, e é o caminho quente de toda
+-- chamada MCP.
+create unique index if not exists uniq_platform_api_tokens_hash
+  on public.platform_api_tokens (token_hash);
+
+-- RLS ligada e ZERO policies: esta tabela é server-side only, lida e escrita
+-- pelo `service_role` (que é `bypassrls`). Uma policy aqui seria uma porta a
+-- mais para uma tabela cujo conteúdo autentica quem administra tudo.
+alter table public.platform_api_tokens enable row level security;
+revoke all on table public.platform_api_tokens from anon, authenticated;
+grant select, insert, update on table public.platform_api_tokens to service_role;
+
+
+
+-- ============================================================
+-- APENDICE 0272 — 20260921200000_0272_a_chegada_guardou_o_id_errado
+-- ============================================================
+
+-- 0272 — a chegada do cadastro incorporado guardou o id errado
+--
+-- ── O defeito, medido na primeira chegada real ───────────────────────────────
+--
+-- Em 21/09/2026, às 16:02, a primeira conta chegou de verdade pelo cadastro
+-- incorporado. O webhook recebeu, a assinatura conferiu, a linha foi gravada —
+-- e o `waba_id` gravado não existe na Meta.
+--
+-- O payload veio assim, e só assim:
+--
+--   { "event": "PARTNER_ADDED",
+--     "waba_info": { "waba_id": "…", "owner_business_id": "…" } }
+--
+-- `lerChegada` procurava `value.waba_id`, que nesse formato não existe, e caía
+-- no `entry.id` do envelope. No `account_update` esse fallback está certo (ali
+-- o `entry.id` É a conta); no `partner_added`, não é.
+--
+-- O estrago não é o campo errado: é o que ele faz com a tela. O operador abriu
+-- `/admin/cadastro-incorporado`, viu uma conta esperando, e não tinha como
+-- amarrá-la nem conferi-la — porque o id que ele estava vendo não correspondia
+-- a nada do lado da Meta. "Chegou e não dá para fazer nada" é pior que não ter
+-- chegado: no segundo caso você vai procurar o problema na Meta, no primeiro
+-- você acha que já está resolvido.
+--
+-- ── Por que a correção é aqui e não só no código ─────────────────────────────
+--
+-- O conserto do parser vale para a PRÓXIMA chegada. A linha que já está no
+-- banco continuaria errada para sempre, e ela é justamente a do cliente que
+-- está esperando agora. O payload cru foi guardado inteiro de propósito (o
+-- comentário da 0257 diz por quê: "o que hoje é ruído pode ser o único lugar
+-- onde está o dado que faltou") — e hoje é o dia em que isso paga.
+--
+-- ── owner_business_id ────────────────────────────────────────────────────────
+--
+-- O `partner_added` não traz número nenhum: ele avisa que uma empresa adicionou
+-- nosso app, e os números vêm depois. Sem número e sem nome, a única pista de
+-- "de quem é esta conta" é o portfólio empresarial do cliente. É o que permite
+-- ao operador conferir, a olho, que a conta que chegou é do cliente que ele
+-- espera — antes de amarrar. Guardar essa pista é o que impede a amarração no
+-- palpite, que é o desfecho que o cadastro incorporado inteiro existe para
+-- evitar.
+
+alter table public.meta_onboardings
+  add column if not exists owner_business_id text;
+
+comment on column public.meta_onboardings.owner_business_id is
+  'Portfólio empresarial DO CLIENTE, lido de payload->waba_info->owner_business_id. A única pista de dono que o partner_added traz, e o que permite conferir a amarração antes de fazê-la.';
+
+-- ── O reparo das linhas já gravadas ──────────────────────────────────────────
+--
+-- Só toca linha em que as TRÊS coisas são verdade:
+--   · o payload tem `waba_info.waba_id` (é do formato que o parser lia errado);
+--   · ele difere do `waba_id` gravado (senão não há o que consertar);
+--   · a linha ainda NÃO foi amarrada a cliente nenhum.
+--
+-- A terceira condição é a que importa. `waba_id` é a chave por onde a
+-- amarração encontra a linha e por onde `guardarChegada` decide não mexer no
+-- que já tem dono. Trocar o id de uma linha JÁ amarrada desligaria em silêncio
+-- a conta de um canal que pode estar conversando — exatamente o estrago que
+-- esta migration existe para evitar, invertido.
+--
+-- E o `not exists` guarda o índice único: se o id correto já estiver na tabela
+-- (uma segunda chegada da mesma conta, dessa vez lida certo), a linha velha
+-- fica como está em vez de derrubar a migration inteira num 23505. Sobra uma
+-- linha órfã que o operador vê e ignora; o alternativo é o baseline parar.
+update public.meta_onboardings as m
+   set waba_id           = m.payload -> 'waba_info' ->> 'waba_id',
+       owner_business_id = coalesce(
+                             m.owner_business_id,
+                             m.payload -> 'waba_info' ->> 'owner_business_id'
+                           ),
+       updated_at        = now()
+ where m.payload -> 'waba_info' ->> 'waba_id' is not null
+   and m.payload -> 'waba_info' ->> 'waba_id' <> m.waba_id
+   and m.organization_id is null
+   and not exists (
+         select 1
+           from public.meta_onboardings as outra
+          where outra.waba_id = m.payload -> 'waba_info' ->> 'waba_id'
+       );
+
+-- Linhas do formato certo que só não tinham a coluna: preenche sem mexer no id.
+update public.meta_onboardings as m
+   set owner_business_id = m.payload -> 'waba_info' ->> 'owner_business_id'
+ where m.owner_business_id is null
+   and m.payload -> 'waba_info' ->> 'owner_business_id' is not null;
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
