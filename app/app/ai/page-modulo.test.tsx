@@ -15,6 +15,19 @@ vi.mock("@/lib/auth/server", () => ({
 }));
 vi.mock("@/lib/instalacao/modulos", () => ({ modulosLigados: modulosLigadosMock }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
+// Fork MIA: o hub também recorta pelo que a ORGANIZAÇÃO contratou e pelo modo
+// de venda (B2B/B2C), lidos com o client da sessão. Fora de uma requisição não
+// há cookie; o dublê devolve "nada contratado" e B2B, e nenhuma porta de IA
+// depende de módulo contratado — o eixo medido aqui continua sendo só o
+// `modulosLigados` da instalação.
+vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn().mockResolvedValue({}) }));
+vi.mock("@/lib/modulos/liberacao", () => ({
+  modulosDaOrganizacao: vi.fn().mockResolvedValue(new Set<string>()),
+}));
+vi.mock("@/lib/empresas/modo-de-venda", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/empresas/modo-de-venda")>()),
+  modoDeVendaDaOrganizacao: vi.fn().mockResolvedValue("b2b"),
+}));
 
 import AiHubPage from "./page";
 

@@ -41,6 +41,11 @@ vi.mock("@/hooks/channels/useTemplates", () => ({
   }),
   useSyncTemplates: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSaveTemplateValues: () => ({ mutateAsync, isPending: false }),
+  // Fork MIA: a mesma tela cria, edita e exclui o template na Meta. O dublê
+  // precisa das três portas para a tela desenhar; nenhum caso daqui as aciona.
+  useCriarTemplate: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useEditarTemplate: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useExcluirTemplate: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));

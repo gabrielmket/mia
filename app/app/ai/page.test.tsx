@@ -13,6 +13,15 @@ vi.mock("@/lib/auth/server", () => ({
 
 vi.mock("@/lib/instalacao/modulos", () => ({ modulosLigados: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
+// Fork MIA: o hub também lê o que a organização contratou e o modo de venda
+// com o client da sessão, que fora de uma requisição não tem cookie.
+vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn().mockResolvedValue({}) }));
+vi.mock("@/lib/modulos/liberacao", () => ({
+  modulosDaOrganizacao: vi.fn().mockResolvedValue(new Set<string>()),
+}));
+vi.mock("@/lib/empresas/modo-de-venda", () => ({
+  modoDeVendaDaOrganizacao: vi.fn().mockResolvedValue("b2b"),
+}));
 
 vi.mock("@/components/shell/NavHub", () => ({
   NavHub: ({ locale }: { locale?: string }) => <div data-testid="ai-hub" data-locale={locale} />,
