@@ -27,14 +27,15 @@ BALDE="migracao-da-nuvem"
 log() { printf '[preparar %s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
 pg() { # roda pg_dump/psql da imagem, com /out montado em $DIR
-  MSYS_NO_PATHCONV=1 docker run --rm -e NUVEM="$NUVEM_DB_URL" -v "$DIR:/out" "$IMG" bash -c "$1"
+  MSYS_NO_PATHCONV=1 docker run --rm -e NUVEM="$NUVEM_DB_URL" -e DUMP_JOBS="${DUMP_JOBS:-1}" -v "$DIR:/out" "$IMG" bash -c "$1"
 }
 
-# Formato DIRETÓRIO com 4 conexões, empacotado num tar para viajar como um
-# arquivo só: com a nuvem restringida, um pg_dump de uma conexão levava ~1 h para
-# 22 MB (medido em 28/09/2026); em paralelo, cada tabela grande vem pela sua.
-log "dump do app (public, private) com donos e permissões, 4 conexões…"
-pg 'pg_dump "$NUVEM" -Fd -j 4 -n public -n private -f /out/app.dir &&
+# Formato DIRETÓRIO, empacotado num tar para viajar como um arquivo só.
+# DUMP_JOBS (padrão 1) abre conexões em paralelo — MAS o pooler da nuvem, em modo
+# sessão, só as entrega se houver vaga: com o app e o worker ligados, -j 4 morreu
+# com ECHECKOUTTIMEOUT (28/09/2026). Paralelo só na virada, com o deskcomm parado.
+log "dump do app (public, private) com donos e permissões, ${DUMP_JOBS:-1} conexão(ões)…"
+pg 'pg_dump "$NUVEM" -Fd -j "${DUMP_JOBS:-1}" -n public -n private -f /out/app.dir &&
     pg_restore --list /out/app.dir > /dev/null &&
     tar -C /out -cf /out/app.dir.tar app.dir && rm -rf /out/app.dir'
 log "login e baldes (JSON)…"
