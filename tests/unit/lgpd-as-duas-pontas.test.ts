@@ -104,8 +104,10 @@ const CLASSIFICACAO: Record<string, Classificacao> = {
   cargo: { tipo: "pessoal" },
   setor: { tipo: "pessoal" },
   // Vai ao relatório pelo NOME da empresa: um uuid não responde "a que empresa
-  // vocês me vincularam" a ninguém.
-  empresa_id: { tipo: "pessoal", exportadaComo: "crm_empresas(nome)" },
+  // vocês me vincularam" a ninguém. O `select` traz o id e uma leitura plana de
+  // `crm_empresas` resolve o nome (o embed derrubava o coletor em cliente que só
+  // entende coluna simples — tests/invariants/agenda-meet-export).
+  empresa_id: { tipo: "pessoal" },
 
   // ── derivadas: limpam-se sozinhas quando a origem é limpa ────────────────
   email_normalized: { tipo: "derivada", de: ["email"] },

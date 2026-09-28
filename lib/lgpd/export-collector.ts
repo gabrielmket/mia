@@ -62,19 +62,33 @@ export interface ContactSnapshot {
 }
 
 /**
- * O nome da empresa vinculada, vindo do embed do PostgREST.
+ * O nome da empresa vinculada ao contato, numa leitura PLANA.
  *
- * O embed chega como objeto (`{nome}`) quando o PostgREST vê a relação como
- * um-para-um e como array de um elemento quando não vê. Qual dos dois depende
- * de como a FK foi declarada e de qual versão está no ar — descobrir isso errado
- * custa um campo em branco no relatório de um titular, que é o lugar mais caro
- * possível para um `undefined` silencioso. Aceitar as duas formas custa três
- * linhas.
+ * Já foi um embed (`empresa:crm_empresas(nome)`), e o embed tinha dois defeitos:
+ * chega como objeto ou como array conforme a cardinalidade que o PostgREST
+ * enxerga, e o coletor também roda sobre clientes que só entendem coluna simples
+ * (tests/invariants/agenda-meet-export) — lá o embed derrubava o relatório
+ * INTEIRO do titular, não só o campo da empresa. Uma leitura a mais, fechada por
+ * organização, não tem nenhum dos dois.
  */
-function nomeDaEmpresaEmbutida(embed: unknown): string | null {
-  const registro = Array.isArray(embed) ? embed[0] : embed;
-  if (!registro || typeof registro !== "object") return null;
-  const nome = (registro as { nome?: unknown }).nome;
+async function nomeDaEmpresa(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  empresaId: unknown,
+  requestId: string,
+): Promise<string | null> {
+  if (typeof empresaId !== "string" || empresaId === "") return null;
+  const { data, error } = await admin
+    .from("crm_empresas")
+    .select("nome")
+    .eq("organization_id", organizationId)
+    .eq("id", empresaId)
+    .maybeSingle();
+  if (error) {
+    logger.warn("[lgpd-export-worker] empresa load failed", { request_id: requestId, error: error.message });
+    return null;
+  }
+  const nome = (data as { nome?: unknown } | null)?.nome;
   return typeof nome === "string" && nome.trim().length > 0 ? nome : null;
 }
 
@@ -841,7 +855,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         // anonimização. Deixar qualquer um de fora responde "não temos mais
         // nada sobre você" a quem exerce direito de acesso, e a resposta é
         // falsa.
-        "id, name, display_name, email, phone_number, cpf_encrypted, birthdate, is_blocked, is_anonymized, consent, tags, source, source_metadata, custom_fields, cargo, setor, empresa:crm_empresas(nome), social_identity, created_at, last_activity_at, first_service_at",
+        "id, name, display_name, email, phone_number, cpf_encrypted, birthdate, is_blocked, is_anonymized, consent, tags, source, source_metadata, custom_fields, cargo, setor, empresa_id, social_identity, created_at, last_activity_at, first_service_at",
       )
       .eq("organization_id", organizationId)
       .eq("id", contactId)
@@ -906,9 +920,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         source_metadata: (data.source_metadata as Record<string, unknown> | null) ?? null,
         cargo: data.cargo ?? null,
         setor: data.setor ?? null,
-        // O embed vem objeto ou array conforme a cardinalidade que o PostgREST
-        // enxerga; tratar os dois é mais barato que descobrir errado em produção.
-        empresa_nome: nomeDaEmpresaEmbutida(data.empresa),
+        empresa_nome: await nomeDaEmpresa(admin, organizationId, data.empresa_id, requestId),
         social_identity: data.social_identity ?? null,
         created_at: data.created_at,
         last_activity_at: data.last_activity_at ?? null,
