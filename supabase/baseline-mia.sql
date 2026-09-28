@@ -548,7 +548,10 @@ create policy tenant_wallet_ledger_select on public.tenant_wallet_ledger
         and public.fn_role_at_least(organization_id, 'manager'))
   );
 
-revoke all on public.tenant_wallet_ledger from anon;
+-- `authenticated` sai do revoke junto com anon (migration 9001): o default ACL do
+-- Supabase dá ALL a toda tabela nova, e o `grant select` abaixo sozinho deixava
+-- insert/update/delete concedidos a quem a policy diz que só lê.
+revoke all on public.tenant_wallet_ledger from anon, authenticated;
 grant select on public.tenant_wallet_ledger to authenticated;
 grant select, insert on public.tenant_wallet_ledger to service_role;
 -- Sem `update` e sem `delete` NEM para service_role: extrato que se edita não é
@@ -594,7 +597,8 @@ create policy tenant_broadcast_pricing_select on public.tenant_broadcast_pricing
         and public.fn_role_at_least(organization_id, 'manager'))
   );
 
-revoke all on public.tenant_broadcast_pricing from anon;
+-- `authenticated` sai do revoke junto com anon (migration 9001) — ver a carteira, acima.
+revoke all on public.tenant_broadcast_pricing from anon, authenticated;
 grant select on public.tenant_broadcast_pricing to authenticated;
 grant select, insert, update on public.tenant_broadcast_pricing to service_role;
 
@@ -675,7 +679,8 @@ create policy organization_modules_select on public.organization_modules
     or (organization_id in (select public.fn_user_org_ids()))
   );
 
-revoke all on public.organization_modules from anon;
+-- `authenticated` sai do revoke junto com anon (migration 9001) — ver a carteira, acima.
+revoke all on public.organization_modules from anon, authenticated;
 grant select on public.organization_modules to authenticated;
 grant select, insert, update on public.organization_modules to service_role;
 -- Sem `delete`: revogar é `update` em `revoked_at`, e o histórico fica.
@@ -926,7 +931,8 @@ create policy broadcast_recipients_select on public.broadcast_recipients
         and public.fn_role_at_least(organization_id, 'agent'))
   );
 
-revoke all on public.broadcast_recipients from anon;
+-- `authenticated` sai do revoke junto com anon (migration 9001) — ver a carteira, acima.
+revoke all on public.broadcast_recipients from anon, authenticated;
 grant select on public.broadcast_recipients to authenticated;
 -- A escrita é do MOTOR (service_role): quem monta a lista é a rota, quem marca
 -- enviada/falhou é o worker. Nenhum dos dois é o navegador do cliente.
@@ -1883,7 +1889,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20260921200000_0272_a_chegada_guardou_o_id_errado', now())
+values (1, '20260928230000_9001_travas_de_suporte_nas_tabelas_da_mia', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -2088,6 +2094,28 @@ update public.meta_onboardings as m
    set owner_business_id = m.payload -> 'waba_info' ->> 'owner_business_id'
  where m.owner_business_id is null
    and m.payload -> 'waba_info' ->> 'owner_business_id' is not null;
+
+-- ─── 9001 · as tabelas da MIA entram nas travas do modo somente leitura do suporte ───
+--
+-- O upstream planta as restritivas `support_write_{insert,update,delete}` por
+-- `public.fn_aplicar_travas_de_suporte()` (migration 0274 dele), chamada no ÚLTIMO
+-- bloco do baseline.sql — depois de toda tabela DELE. As nossas nascem depois, aqui,
+-- e numa instalação nova ficavam sem trava nenhuma: `broadcasts`, `crm_empresas` e
+-- `sales_targets` aceitavam escrita de um operador em suporte SOMENTE LEITURA. Numa
+-- atualização a segunda passada do baseline.sql as alcançava, e é por isso que o
+-- buraco só apareceu quando o gate de banco passou a aplicar este arquivo (28/09):
+-- tests/invariants/travas-de-suporte-cobrem-toda-tabela-na-instalacao.test.ts.
+--
+-- Chamar a função DELE, e não copiar o laço: a regra de seleção é dele e continua
+-- dele (extensão, nunca redefinição — docs/FORK-MIA.md, regra 3). Vai aqui, antes
+-- da varredura anon, porque daqui para baixo nada cria tabela.
+--
+-- A outra metade da 9001 mora nos blocos das tabelas: carteira, preço, módulos e
+-- destinatários passam a revogar `authenticated` junto com anon. A função trata
+-- tabela gravável por `authenticated` como da sessão e planta as três travas; nas
+-- que só a plataforma escreve, o grant de escrita herdado do default ACL era mentira
+-- sobre o contrato e faria a trava nascer onde não há escrita a travar.
+do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

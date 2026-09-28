@@ -309,6 +309,34 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "`describe.each`. Guarda as UTMs de cada clique no botão da landing " +
       "page e o ref curto que as liga à mensagem do WhatsApp.",
   },
+  // ── Fork MIA (docs/FORK-MIA.md): as tabelas do `baseline-mia.sql`. A prova é
+  // um arquivo NOSSO, e não linhas em `TABLES`, porque `rls-isolation.test.ts`
+  // é do upstream e entra da sincronização como ele o escreveu.
+  ...[
+    "sales_targets",
+    "tenant_wallet_ledger",
+    "tenant_broadcast_pricing",
+    "organization_modules",
+    "broadcasts",
+    "broadcast_recipients",
+    "crm_empresas",
+  ].map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/rls-tabelas-da-mia.test.ts — dois tenants reais por JWT " +
+      "(manager): leitura positiva local e ZERO do vizinho nas duas direções, a " +
+      "tabela inteira sem filtro igual à própria; escrita no vizinho recusada " +
+      "(insert) ou sem alcance (update/delete), e nas que só a plataforma grava, " +
+      "authenticated sem privilégio de escrita nem na própria organização.",
+  })),
+  {
+    tabela: "meta_onboardings",
+    razao:
+      "tests/invariants/rls-tabelas-da-mia.test.ts — o que chega pelo cadastro " +
+      "incorporado da Meta, exclusivo do servidor: SELECT com JWT authenticated " +
+      "recusado por `permission denied` mesmo na linha amarrada à própria " +
+      "organização (a amarração é ato humano no /admin, pelo service_role).",
+  },
 ];
 
 /**
