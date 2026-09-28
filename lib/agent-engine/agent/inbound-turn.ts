@@ -1651,25 +1651,6 @@ export function inboundsNaoRespondidos(messages: readonly LeadContextMessage[]):
 }
 
 /**
- * Existe alguma inbound depois da nossa última resposta? A pergunta é do MESMO
- * corte de `inboundsNaoRespondidos`, e mesmo assim precisa de função própria:
- * aquela devolve TEXTO, e descarta corpo vazio de propósito (quem consome roda
- * detector de palavra). Áudio cuja transcrição falhou é exatamente uma inbound de
- * corpo vazio — e é um turno que PRECISA acontecer, porque é ele que responde
- * "recebi seu áudio, mas não consigo ouvi-lo". Perguntar "a lista está vazia?"
- * calaria justamente esse caso.
- */
-export function haInboundNaoRespondido(messages: readonly LeadContextMessage[]): boolean {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const m = messages[i];
-    if (m === undefined) continue;
-    if (m.direction === 'outbound') return false;
-    return true;
-  }
-  return false;
-}
-
-/**
  * Parâmetros do run que DIFEREM entre inbound (F2-09) e follow-up (F3-03): os ids
  * de envio (de fonte confiável — payload do drain no inbound, row do lead no
  * follow-up, nunca do payload do modelo) e a montagem da mensagem de abertura,
@@ -2616,29 +2597,6 @@ async function executarTurnoDoAgente(
     currentInboundText ?? latestInboundSignal(openingContext.context.messages);
   const inboundsPendentes = inboundsNaoRespondidos(openingContext.context.messages);
 
-  // NADA A RESPONDER: o turno morre aqui, ANTES do modelo.
-  //
-  // É o cinto do conserto da coalescência (`edge/crm/drain.ts`). Antes dele, toda
-  // mensagem que chegava com a janela anti-ban fechada entrava de carona num job
-  // adiado; agora ela ganha job próprio — e N mensagens numa noite viram N jobs,
-  // todos soltos na abertura da janela. O primeiro responde ao que o cliente
-  // disse (o turno lê o histórico INTEIRO, não só a mensagem pinada); os
-  // seguintes chegariam com a conversa já respondida e mandariam o modelo falar
-  // de novo, em cima da própria resposta. Uma mensagem atrasada é o preço da
-  // janela; três mensagens repetidas às 7h da manhã são um defeito pior que o
-  // que se veio consertar.
-  //
-  // A regra vale sozinha, fora dessa composição: um `inbound_turn` cuja conversa
-  // não tem NENHUMA inbound depois da última saída nossa não tem o que dizer — e
-  // "a última saída nossa" inclui a resposta de um HUMANO, que é o caso em que
-  // falar por cima é pior ainda.
-  if (!preview && liveJob().kind === 'inbound_turn' && !haInboundNaoRespondido(openingContext.context.messages)) {
-    runLog.info('turno encerrado sem chamar o modelo — nada do cliente esperando resposta', {
-      job_id: liveJob().id,
-      conversation_id: input.conversationId,
-    });
-    return;
-  }
   if (
     !preview &&
     inboundsPendentes.some(
