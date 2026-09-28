@@ -23,6 +23,13 @@ export type EnrollmentStatus =
    */
   | "dormente"
   | "paused_handoff"
+  /**
+   * Roteiro de atendimento em andamento (0394). Conduzido pelo TURNO, não pelo
+   * relógio: o motor de follow-up nunca o reclama (o claim filtra
+   * `active|waiting_reply`). Está aqui porque o opt-out o alcança
+   * (`reactivity.ts`) e o cancelamento pela fila o encerra.
+   */
+  | "coletando"
   | "completed"
   | "cancelled"
   | "dead";
@@ -763,6 +770,24 @@ export function processNode(input: {
       };
     }
 
+    case "collect": {
+      // Nó de COLETA do fluxo de atendimento (surface=atendimento). Perguntar e
+      // gravar é responsabilidade do executor in-turn; no relógio do follow-up
+      // ele é passagem (segue pela aresta única). Um fluxo de retomada não
+      // deveria usar este nó — o publish é quem recorta isso.
+      const edge = selectEdge(edges, node.id, { type: "always" });
+      if (!edge) return { kind: "fail", error: `collect node "${node.id}" has no outbound edge` };
+      return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
+    }
+
+    case "skill": {
+      // Puxa uma skill instalada em paralelo ao passo; a ativação é do executor
+      // in-turn (união com o `matchSkills`). No relógio, é passagem.
+      const edge = selectEdge(edges, node.id, { type: "always" });
+      if (!edge) return { kind: "fail", error: `skill node "${node.id}" has no outbound edge` };
+      return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
+    }
+
     case "action": {
       // At-most-once send: enqueue the turn EXACTLY ONCE per occupancy. First entry
       // (no prior occupancy event) enqueues; a recheck fired while the turn is still in
@@ -803,6 +828,18 @@ export function processNode(input: {
         kind: "recheck",
         next_eval_at: new Date(clock().getTime() + atrasoDoRecheck(actionRecheckCount ?? 0)),
       };
+    }
+
+    case "internal_task": {
+      // Lembrete interno (#1540): este nó NÃO enfileira turno de envio — é a
+      // diferença inteira da feature. Ele avança, e quem grava a tarefa é o
+      // engine ao aplicar o `advance` (`criarTarefaInterna`), guardado pelo
+      // MESMO idempotency_key do evento do passo: replay do tick não cria a
+      // segunda tarefa, e um fluxo "somente interno" não tem mensagem nenhuma
+      // para sair.
+      const edge = selectEdge(edges, node.id, { type: "always" });
+      if (!edge) return { kind: "fail", error: `internal_task node "${node.id}" has no outbound edge` };
+      return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
     }
 
     case "end": {

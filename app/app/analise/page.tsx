@@ -5,6 +5,8 @@ import { modulosDaOrganizacao } from "@/lib/modulos/liberacao";
 import { modoDeVendaDaOrganizacao } from "@/lib/empresas/modo-de-venda";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { modulosLigados } from "@/lib/instalacao/modulos";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Análise" };
@@ -51,6 +53,7 @@ export default async function AnaliseHubPage() {
       interfaceSettings={activeOrg?.interface_settings}
       modulos={modulos}
       modoDeVenda={modoDeVenda}
+      modulosLigados={await modulosLigados(createAdminClient())}
       title={traduzir("Análise", idioma)}
       subtitle={traduzir(
         "Como o negócio foi no período — e o histórico para quando alguém perguntar por quê.",

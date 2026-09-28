@@ -20,7 +20,8 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { allTools } from "@/lib/mcp/tools";
-import { TOOL_CATALOG, deModuloDesligado } from "@/lib/mcp/tools/catalog";
+import { TOOL_CATALOG, deCapacidadeDesligada, deModuloDesligado } from "@/lib/mcp/tools/catalog";
+import { capacidadesDaOrganizacao } from "@/lib/organizacao/capacidades";
 import { modulosLigados } from "@/lib/instalacao/modulos";
 import { juntarCatalogoComHandlers } from "@/lib/mcp/tools/catalogo-servido";
 import {
@@ -53,31 +54,38 @@ export async function GET(_req: NextRequest): Promise<Response> {
     );
   }
 
-  // Um client admin só, para os DOIS recortes abaixo. Duas chamadas devolveriam
-  // dois clients equivalentes e uma conexão a mais no caminho quente da tela.
+  // Um client admin só, para os TRÊS recortes abaixo. Chamadas separadas
+  // devolveriam clients equivalentes e uma conexão a mais no caminho quente da tela.
   const admin = createAdminClient();
 
-  // São DOIS recortes independentes, e a ordem entre eles não importa porque
+  // São TRÊS recortes independentes, e a ordem entre eles não importa porque
   // nenhum depende do outro — o que importa é que nenhum foi esquecido:
   //
   //   1. MÓDULO OPCIONAL DESLIGADO na instalação (doc 37): a capacidade não
   //      existe aqui, e a tela não a oferece para marcar.
-  //   2. Item C2 — organização que vende para PESSOA não vê a capacidade de
-  //      anotar a EMPRESA do cliente.
+  //   2. CAPACIDADE DESLIGADA PELA ORGANIZAÇÃO (do upstream, ex.: Propostas):
+  //      existe, mas esta organização não a usa agora — e volta a valer ao
+  //      ligar, por isso também sai em `desligadas_pela_organizacao`.
+  //   3. Item C2 (da MIA) — organização que vende para PESSOA não vê a
+  //      capacidade de anotar a EMPRESA do cliente.
   //
-  // Os dois são aqui e não na tela porque esta rota é a única fonte do
+  // Os três são aqui e não na tela porque esta rota é a única fonte do
   // seletor — filtrar no componente deixaria o valor padrão, o pacote e
   // qualquer tela futura servindo-se da lista completa.
   //
-  // Ambos filtram o que se OFERECE, não o que existe: agente que já tenha a
-  // capacidade ligada continua com ela. Ver `CAPACIDADES_DE_EMPRESA`.
+  // O 3 filtra só o que se OFERECE, não o que existe: agente que já tenha a
+  // capacidade ligada continua com ela (ver `CAPACIDADES_DE_EMPRESA`). Por isso
+  // ele NÃO entra em `desligadas_pela_organizacao`: aquela lista diz à tela
+  // "está parada até alguém ligar", e a de empresa não parou de funcionar.
   const ligados = await modulosLigados(admin);
+  const capacidades = await capacidadesDaOrganizacao(admin, activeOrg.orgId);
   const modo = await modoDeVendaDaOrganizacao(admin, activeOrg.orgId);
   const mostrarEmpresas = mostraEmpresas(modo);
 
   const oferecidas = servidas.filter(
     (c) =>
       !deModuloDesligado(c.id, ligados) &&
+      !deCapacidadeDesligada(c.id, capacidades) &&
       (mostrarEmpresas || !CAPACIDADES_DE_EMPRESA.includes(c.id)),
   );
 
@@ -89,5 +97,12 @@ export async function GET(_req: NextRequest): Promise<Response> {
     }),
   }));
 
-  return ok({ tools }, { requestId });
+  // Desligada pela ORGANIZAÇÃO não é o mesmo que "não existe mais": a tela
+  // precisa distinguir, senão toda instalação nova (Propostas nasce desligada,
+  // o primeiro agente nasce com o pacote `vender`) vê um aviso falso.
+  const desligadas_pela_organizacao = servidas
+    .filter((c) => !deModuloDesligado(c.id, ligados) && deCapacidadeDesligada(c.id, capacidades))
+    .map((c) => c.id);
+
+  return ok({ tools, desligadas_pela_organizacao }, { requestId });
 }

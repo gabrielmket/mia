@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { salvarChaveDaIa } from "@/app/actions/onboarding/chaveDaIa";
 import { PROVEDORES } from "@/lib/ai/pontos/provedores";
+import { explicacaoParaQuemInstala } from "@/lib/instalacao/explicacao-da-falha";
 
 /**
  * "O CÉREBRO DELE" — a chave, medida e testada onde ela passa a importar.
@@ -43,7 +44,7 @@ export interface EstadoDaChave {
 type Prova =
   | { estado: "conferindo" }
   | { estado: "ok" }
-  | { estado: "problema"; mensagem: string }
+  | { estado: "problema"; codigo: string }
   | { estado: "nao_deu" };
 
 export function InteligenciaDele({
@@ -74,7 +75,7 @@ export function InteligenciaDele({
         const corpo = r.ok ? await r.json() : null;
         if (!vivo) return;
         const p = corpo?.data?.prova as
-          | { feita: boolean; ok?: boolean; mensagem?: string; aindaVerificando?: boolean }
+          | { feita: boolean; ok?: boolean; codigo?: string; aindaVerificando?: boolean }
           | undefined;
 
         // A chave recém-colada ainda está sendo validada em segundo plano, e
@@ -93,7 +94,7 @@ export function InteligenciaDele({
         // colapsar as duas mandaria a pessoa trocar uma chave que está certa.
         if (!p || !p.feita) return setProva({ estado: "nao_deu" });
         if (p.ok) return setProva({ estado: "ok" });
-        setProva({ estado: "problema", mensagem: p.mensagem ?? "" });
+        setProva({ estado: "problema", codigo: p.codigo ?? "" });
       } catch {
         if (vivo) setProva({ estado: "nao_deu" });
       }
@@ -238,10 +239,9 @@ export function InteligenciaDele({
         {prova?.estado === "problema" && (
           <>
             {t("A chave foi aceita, mas o teste não passou:")}{" "}
-            <span className="text-amber-700 dark:text-amber-500">{prova.mensagem}</span>.{" "}
-            {t(
-              "Se for falta de crédito, adicione saldo na conta da empresa de IA — sem isso ele não responde a nenhum cliente.",
-            )}
+            <span className="text-amber-700 dark:text-amber-500">
+              {t(explicacaoParaQuemInstala(prova.codigo))}
+            </span>
           </>
         )}
         {prova?.estado === "nao_deu" &&

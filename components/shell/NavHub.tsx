@@ -1,4 +1,5 @@
 import type { ModuloOpcional } from "@/lib/instalacao/modulos";
+import type { CapacidadeDaOrganizacao } from "@/lib/organizacao/capacidades";
 import type { InterfaceSettings } from "@/lib/navigation/interface";
 import Link from "next/link";
 
@@ -21,11 +22,22 @@ interface NavHubProps {
   /** B2B ou B2C — ver lib/empresas/modo-de-venda.ts (item C2). */
   modoDeVenda?: ModoDeVenda;
   /**
-   * Módulos opcionais ligados na instalação. Ausente = o hub não filtra por
-   * módulo. Não é o mesmo que `modulos` acima: aquilo é o que a organização
-   * comprou, isto é o que o dono do servidor ligou para todo mundo.
+   * Módulos opcionais ligados na instalação. OBRIGATÓRIO (upstream, revisão do
+   * #1573, B1): quando era opcional, ausente queria dizer "não filtra", e o hub
+   * de IA mostrava a porta de um módulo desligado — o clique dava 404. Sendo
+   * obrigatório, o compilador cobra a lista de todo hub.
+   *
+   * Não é o mesmo que `modulos` acima: aquilo é o que a organização comprou
+   * (e ausente lá continua querendo dizer "não se sabe, nada some"); isto é o
+   * que o dono do servidor ligou para todo mundo.
    */
-  modulosLigados?: readonly ModuloOpcional[];
+  modulosLigados: readonly ModuloOpcional[];
+  /**
+   * Capacidades que a organização ligou (lib/organizacao/capacidades.ts).
+   * Ausente = o hub não filtra por capacidade. Quarto eixo, distinto dos três
+   * acima — ver `destinosDaInterface`.
+   */
+  capacidadesLigadas?: readonly CapacidadeDaOrganizacao[];
   group: NavGroupId;
   isPlatformAdmin: boolean;
   role: Role | null;
@@ -84,6 +96,7 @@ export function NavHub({
   modulos,
   modoDeVenda,
   modulosLigados,
+  capacidadesLigadas,
   locale = IDIOMA_PADRAO,
   extensionGuides = [],
   extensionsUnavailable = false,
@@ -96,6 +109,7 @@ export function NavHub({
     modulos,
     modoDeVenda,
     modulosLigados,
+    capacidadesLigadas,
   );
 
   return (

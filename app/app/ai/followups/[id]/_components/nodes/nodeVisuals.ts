@@ -1,8 +1,9 @@
 import type { ComponentType } from "react";
 
-import { Play, Clock, GitBranch, Brain, ChatCircle, ArrowsClockwise, PaperPlaneTilt, Flag } from "@/lib/ui/icons";
+import { Bell, Play, Clock, GitBranch, Brain, ChatCircle, ArrowsClockwise, PaperPlaneTilt, Flag, Question, PuzzlePiece } from "@/lib/ui/icons";
 import type { FlowNode, NodeType } from "@/lib/followup/graph-schema";
 import { RESULTADOS_DO_FIM } from "@/lib/followup/vocabulario";
+import { NOS_DA_SUPERFICIE } from "@/lib/followup/validate-publish";
 
 /**
  * Visual identity per node type — shared by the palette (Task 6.2 increment 2)
@@ -123,6 +124,24 @@ export const NODE_VISUALS: Record<NodeType, NodeVisual> = {
     defaultLabel: "Repetir pela resposta",
     defaultConfig: () => ({ max_count: 12 }),
   },
+  collect: {
+    type: "collect",
+    paletteLabel: "Pergunta",
+    icon: Question,
+    chipClassName: "bg-info-bg text-info-fg",
+    borderClassName: "border-l-info",
+    defaultLabel: "Nova pergunta",
+    defaultConfig: () => ({ key: "novo_campo", label: "Nova pergunta", type: "text", required: true, permite_correcao: true }),
+  },
+  skill: {
+    type: "skill",
+    paletteLabel: "Skill",
+    icon: PuzzlePiece,
+    chipClassName: "bg-accent-soft text-accent",
+    borderClassName: "border-l-accent-500",
+    defaultLabel: "Puxar skill",
+    defaultConfig: () => ({ skill_name: "nome-da-skill" }),
+  },
   action: {
     type: "action",
     paletteLabel: "Ação",
@@ -131,6 +150,20 @@ export const NODE_VISUALS: Record<NodeType, NodeVisual> = {
     borderClassName: "border-l-success",
     defaultLabel: "Enviar mensagem",
     defaultConfig: () => configPadraoDaAcao(),
+  },
+  internal_task: {
+    type: "internal_task",
+    paletteLabel: "Lembrete interno",
+    icon: Bell,
+    chipClassName: "bg-warning-bg text-warning-fg",
+    borderClassName: "border-l-warning",
+    defaultLabel: "Criar tarefa (só interno)",
+    defaultConfig: () => ({
+      titulo: "Ligar para {{contact.name}}",
+      vence_em_dias: 1,
+      atribuir_a: "dono_do_lead",
+      prioridade: "medium",
+    }),
   },
   end: {
     type: "end",
@@ -143,7 +176,13 @@ export const NODE_VISUALS: Record<NodeType, NodeVisual> = {
   },
 };
 
-export const NODE_VISUAL_LIST = Object.values(NODE_VISUALS);
+/**
+ * A paleta do editor de follow-up: só o que o motor do RELÓGIO executa. Pergunta
+ * e Skill são do roteiro de atendimento (#1130) e ficam fora — a mesma lista
+ * que o publish cobra (`NOS_DA_SUPERFICIE`), para a tela não oferecer caixa que
+ * o publish recusa.
+ */
+export const NODE_VISUAL_LIST = NOS_DA_SUPERFICIE.followup.map((tipo) => NODE_VISUALS[tipo]);
 
 type ConfigOf<T extends NodeType> = Extract<FlowNode, { type: T }>["config"];
 
@@ -203,11 +242,24 @@ export function describeNodeConfig(
       const c = config as ConfigOf<"repeat">;
       return `${t("até")} ${c.max_count} ${c.max_count === 1 ? t("volta") : t("voltas")}`;
     }
+    case "collect": {
+      const c = config as ConfigOf<"collect">;
+      return `${c.label} · ${c.required ? t("obrigatória") : t("opcional")}`;
+    }
+    case "skill": {
+      const c = config as ConfigOf<"skill">;
+      return c.skill_name;
+    }
     case "action": {
       const c = config as ConfigOf<"action">;
       if (c.mode === "ai_message") return c.prompt_hint;
       if (c.mode === "text") return c.body;
       return t("Template fixo");
+    }
+    case "internal_task": {
+      const c = config as ConfigOf<"internal_task">;
+      const prazo = c.vence_em_dias === 0 ? t("hoje") : `+${c.vence_em_dias}d`;
+      return `${c.titulo} · ${prazo} · ${t("sem mensagem ao cliente")}`;
     }
     case "end": {
       const c = config as ConfigOf<"end">;

@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { ROLE_RANK, type Role } from "@/lib/auth/types";
 import type { ModuloOpcional } from "@/lib/instalacao/modulos";
+import type { CapacidadeDaOrganizacao } from "@/lib/organizacao/capacidades";
 import { NAV_CATALOG, type NavMetadata, type NavDestinationId } from "./catalogo";
 import { moduloDaTela } from "@/lib/modulos/catalogo";
 import {
@@ -82,9 +83,13 @@ export function permitidos(
   platform: boolean,
   role: Role | null,
   modulos?: readonly ModuloOpcional[],
+  capacidades?: readonly CapacidadeDaOrganizacao[],
 ): NavMetadata[] {
   return (NAV_CATALOG as readonly NavMetadata[]).filter(
-    (d) => canSee(d, platform, role) && (!modulos || !d.modulo || modulos.includes(d.modulo)),
+    (d) =>
+      canSee(d, platform, role) &&
+      (!modulos || !d.modulo || modulos.includes(d.modulo)) &&
+      (!capacidades || !d.capacidade || capacidades.includes(d.capacidade)),
   );
 }
 /** Leitura tolera versões antigas/removidas sem lançar no layout. */
@@ -149,13 +154,30 @@ export function destinosDaInterface(
    * cliente.
    */
   modulosLigados?: readonly ModuloOpcional[],
+  /**
+   * As CAPACIDADES que a ORGANIZAÇÃO ligou para si (lib/organizacao/
+   * capacidades.ts, do upstream — hoje só `propostas`). Um quarto eixo, e de
+   * novo NÃO é nenhum dos três acima: capacidade é chave que o administrador
+   * da empresa liga nas configurações dela, já cruzada com o módulo da
+   * instalação que ela exige.
+   *
+   * Vem por ÚLTIMO de propósito. No upstream ela é o 5º parâmetro, logo depois
+   * de `modulos` (lá, os da instalação). Encaixá-la ali empurraria
+   * `modoDeVenda` e `modulosLigados` uma casa para a direita, e toda chamada
+   * nossa passaria a entregar cada lista no eixo vizinho — a mesma troca de
+   * eixo que o comentário de `modulosLigados` descreve. No fim, quem não a
+   * conhece continua certo, e quem a passar na posição do upstream cai em
+   * `modoDeVenda`, que é outro tipo: o `tsc` recusa em vez de esconder telas
+   * em silêncio.
+   */
+  capacidades?: readonly CapacidadeDaOrganizacao[],
 ): NavMetadata[] {
   const { settings } = lerInterface(raw);
   // Os LIGADOS na instalação, nunca os CONTRATADOS pela organização: é o
   // parâmetro que `permitidos` compara com `d.modulo` do catálogo. Passar a
   // lista errada aqui não daria erro em tempo de execução — só esconderia, em
   // silêncio, toda tela marcada com módulo de instalação.
-  const allowed = permitidos(platform, role, modulosLigados);
+  const allowed = permitidos(platform, role, modulosLigados, capacidades);
   const chosen =
     settings.destinos ?? (settings.preset === "simplificada" ? SIMPLIFICADA : undefined);
   const contratados = modulos ? new Set(modulos) : null;

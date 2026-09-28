@@ -38,6 +38,7 @@
  * próprio schema (Zod) e dos tipos de `node-handlers.ts` — nenhuma cópia à mão.
  */
 import type { z } from "zod";
+import type { PrioridadeDaTarefa } from "@/lib/tarefas/tipos";
 
 import type { TriggerConfig } from "./api-schemas";
 import { conditionLabel } from "./edge-condition-options";
@@ -52,6 +53,7 @@ import {
   type actionConfigSchema,
   type aiClassifyConfigSchema,
   type conditionConfigSchema,
+  type contactFlowFieldTypeSchema,
   type endConfigSchema,
   type waitConfigSchema,
 } from "./graph-schema";
@@ -69,6 +71,7 @@ export type AlvoDaClassificacao = z.infer<typeof aiClassifyConfigSchema>["target
 export type ResultadoDoFim = z.infer<typeof endConfigSchema>["outcome"];
 export type ModoDeEspera = z.infer<typeof waitConfigSchema>["mode"];
 export type ModoDaAcao = z.infer<typeof actionConfigSchema>["mode"];
+export type TipoDeCampo = z.infer<typeof contactFlowFieldTypeSchema>;
 export type TipoDeGatilho = TriggerConfig["kind"];
 
 /** `{ valor, rotulo }` na ordem de declaração do mapa — pronto para um `<Select>`. */
@@ -511,6 +514,28 @@ export const MODOS_DA_ACAO: Record<ModoDaAcao, string> = {
   template: "Modelo de mensagem pronto",
 };
 
+// ─── prioridade da tarefa (ação create_task, #1540) ────────────────────────
+
+/** Wire de prioridade da tarefa — rótulos do formulário e do card. */
+export const PRIORIDADES_DA_TAREFA: Record<PrioridadeDaTarefa, string> = {
+  low: "Baixa",
+  medium: "Média",
+  high: "Alta",
+  urgent: "Urgente",
+};
+
+// ─── pergunta do fluxo de atendimento (nó collect) ───────────────────────
+
+/** Tipo do valor que uma pergunta espera — rótulos do formulário e do card. */
+export const TIPOS_DE_CAMPO: Record<TipoDeCampo, string> = {
+  text: "Texto livre",
+  number: "Número",
+  date: "Data",
+  boolean: "Sim ou não",
+  select: "Escolha numa lista",
+  cpf: "CPF (confere o dígito)",
+};
+
 // ─── nó final ────────────────────────────────────────────────────────────
 
 /**
@@ -539,6 +564,7 @@ export const SITUACOES_DO_ACOMPANHAMENTO: Record<EnrollmentStatus, string> = {
   // precisa saber que este acompanhamento está vivo e só não fala agora.
   dormente: "Aguardando a data do retorno",
   paused_handoff: "Pausado — um humano assumiu",
+  coletando: "Coletando respostas do roteiro",
   completed: "Concluído",
   cancelled: "Cancelado",
   dead: "Parou por falha",

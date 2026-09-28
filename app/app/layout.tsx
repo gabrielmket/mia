@@ -17,6 +17,7 @@ import { lerModoDeVenda } from "@/lib/empresas/modo-de-venda";
 import { env } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { modulosLigados } from "@/lib/instalacao/modulos";
+import { capacidadesLigadas } from "@/lib/organizacao/capacidades";
 import {
   ImpersonateBanner,
 } from "@/components/app/ImpersonateBanner";
@@ -140,6 +141,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       modulos,
       modo_de_venda: modoDeVenda,
       modulos_ligados: ligadosNaInstalacao,
+      // Mesma linha de `settings` já lida acima — nenhuma consulta a mais.
+      // ⚠️ `ligadosNaInstalacao`, e não `modulos`: no upstream a variável da
+      // INSTALAÇÃO se chama `modulos`, aqui ela é `ligadosNaInstalacao` e
+      // `modulos` é o que a organização CONTRATOU. A capacidade só liga se o
+      // módulo da instalação que ela exige estiver ligado — cruzá-la com a
+      // lista da organização desligaria Propostas para todo mundo.
+      capacidades_ligadas: capacidadesLigadas(orgRow?.settings, ligadosNaInstalacao),
     };
 
     // `marcaDaInstalacao()` é memoizada por TTL no PROCESSO (`lib/branding/
@@ -184,6 +192,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // do produtor existir, de propósito — foi o que fez o upload por organização
     // ser só a camada, sem mais uma passada pela casca inteira.
     const marcaDoTenant = {
+      logoDarkUrl: marca.logoDarkUrl ?? null,
       ...(marca.origens.nome === "organizacao" ? { nome: marca.name } : {}),
       ...(marca.origens.logoUrl === "organizacao" && marca.logoUrl !== null
         ? { logoUrl: marca.logoUrl }

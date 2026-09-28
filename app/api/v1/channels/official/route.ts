@@ -41,7 +41,7 @@ import { reactivateChannelSession } from "@/lib/channels/reactivate";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { metadataInicialDoCanal } from "@/lib/ai/elegibilidade/pre-go-live";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
-import { basePublicaDaInstalacao } from "@/lib/webhooks/url-publica";
+import { basePublicaDoWebhookMeta } from "@/lib/webhooks/url-publica";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -140,10 +140,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     () => consultar().maybeSingle(),
   );
 
-  // `basePublicaDaInstalacao` e não o antigo `publicBase`: é a mesma função com
-  // o nome de hoje. Ficar no nome velho não compila — e compilar é o que separa
-  // "a tela mostra a URL errada" de "a tela não abre".
-  const base = basePublicaDaInstalacao(req);
+  // `basePublicaDoWebhookMeta` e não `basePublicaDaInstalacao`: desde a v1.60 o
+  // upstream separou a base do callback da Meta (`META_WEBHOOK_BASE_URL`, #1426), e
+  // sem a variável ela cai na base da instalação — a mesma URL de antes. A escolha
+  // tem que ser a MESMA do POST lá embaixo, que registra o override com ela: a tela
+  // mostrando uma URL e o registro apontando outra é o "duas telas, dois webhooks"
+  // que o módulo `url-publica` existe para impedir.
+  const base = basePublicaDoWebhookMeta(req);
   const desfecho = data?.id ? await lerDesfechoDoWebhook(admin, data.id) : null;
   // O par em vigor (banco da 0257 primeiro, `.env` como piso) com os NOMES das
   // variáveis de ambiente — é o que `metaPodeReceber` sabe ler. Ver `podeReceber`
@@ -221,7 +224,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           // link de `/admin/google` na Agenda. Para o admin de um tenant qualquer
           // o link seria um 404; a tela diz a ele quem procurar.
           configurarEm: authz.user.is_platform_admin && !authz.user.support ? "/admin/meta" : null,
-          fields: ["messages", "message_template_status_update"],
+          // `smb_message_echoes`: o que a empresa manda pelo app WhatsApp Business
+          // num número em coexistência. Sem coexistência a Meta não o envia, então
+          // assinar é inofensivo para quem não usa.
+          fields: ["messages", "message_template_status_update", "smb_message_echoes"],
         }
       : null,
     /**
@@ -396,7 +402,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           wabaId: waba_id,
           tokenCifrado: cifrado,
           webhookPathToken,
-          base: basePublicaDaInstalacao(req),
+          base: basePublicaDoWebhookMeta(req),
           requestId,
         })
       : null;

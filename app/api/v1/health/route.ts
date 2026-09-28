@@ -28,6 +28,7 @@ import { env } from "@/lib/env";
 import { alvoDe, classificarFalhaDeAlcance, type FalhaDeAlcance } from "@/lib/net/alcance";
 import { validarConfigRedisRest } from "@/lib/redis-config";
 import { compararCarimbo, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
+import { urlDoSupabaseNoServidor } from "@/lib/supabase/url-do-servidor";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -69,7 +70,11 @@ function motivoDoStatusHttp(status: number): MotivoDeFalha {
 
 async function checkSupabase(): Promise<Check> {
   const t0 = Date.now();
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  // A sonda pergunta ao MESMO endereço que o app usa para falar com o banco, e
+  // não ao público: com `SUPABASE_SERVER_URL` (#1082) preenchida, uma instalação
+  // com Kong privado não tem REST publicado — a URL pública daria `down` com o
+  // CRM inteiro funcionando ao lado. Sem a variável, é a pública, como sempre.
+  const url = urlDoSupabaseNoServidor(env.SUPABASE_SERVER_URL, env.NEXT_PUBLIC_SUPABASE_URL);
   try {
     // Ping leve via REST com anon key — não precisa de service_role pra health check.
     // Se chegar 200/401/empty body, conexão e API key estão OK.
@@ -316,6 +321,13 @@ function semAlvo(check: Check): Check {
  * segundos de parede a cada batida, exatamente quando o banco está fora do ar.
  * Pego por `tests/unit/health-separa-env-errado-de-servico-caido.test.ts`, que
  * mede a AUSÊNCIA de ida à rede — e estava medindo a minha.
+ *
+ * O endereço também é o do `checkSupabase`: `urlDoSupabaseNoServidor` (#1082 do
+ * upstream). Com `SUPABASE_SERVER_URL` preenchida, a instalação pode ter o Kong
+ * privado e o REST não publicado; o carimbo lido pela URL pública voltaria vazio
+ * e o health responderia `em_dia: false` com o banco em dia ao lado. Pego por
+ * `tests/unit/supabase-server-url-opcional.test.ts`, que exige que NADA desta
+ * rota vá à URL pública quando a do servidor existe.
  */
 interface LinhaDoCarimbo {
   migration: string | null;
@@ -325,7 +337,7 @@ interface LinhaDoCarimbo {
 
 async function lerCarimboDoSchema(): Promise<LinhaDoCarimbo> {
   const vazio: LinhaDoCarimbo = { migration: null, erros: 0, amostra: null };
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  const url = urlDoSupabaseNoServidor(env.SUPABASE_SERVER_URL, env.NEXT_PUBLIC_SUPABASE_URL);
   const chave = env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !chave) return vazio;
   try {

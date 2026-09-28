@@ -111,7 +111,9 @@ export const crmGetContact: McpToolDefinition<typeof getInputShape> = {
 
 const propostaShape = {
   contact_id: z.string().uuid(),
-  campo: z.enum(CAMPOS_PROPONIVEIS).describe("Qual informação: email, name ou phone_number."),
+  campo: z
+    .enum(CAMPOS_PROPONIVEIS)
+    .describe("Qual informação: email, name, phone_number ou birthdate (AAAA-MM-DD)."),
   valor: z.string().min(1).max(200).describe("O valor exatamente como a pessoa informou."),
   trecho: z
     .string()
@@ -135,11 +137,16 @@ const propostaShape = {
 export const crmProposeContactField: McpToolDefinition<typeof propostaShape> = {
   name: "crm_propose_contact_field",
   description:
+    // Duas decisões convivem nesta frase: EMAIL gravado direto é da MIA (o porquê
+    // em `email-do-contato.ts`); DATA DE NASCIMENTO como campo proponível é do
+    // upstream (4409839f1). O modelo precisa ouvir as duas, senão ou promete
+    // cadastro atualizado quando não está, ou nunca propõe o aniversário.
     "Registra uma informação que o cliente forneceu. EMAIL é gravado direto no cadastro (a " +
-    "resposta traz `gravado: true`). NOME e TELEFONE viram PROPOSTA para uma pessoa confirmar: " +
-    "nada é gravado por conta desta chamada, e a proposta vence sozinha se ninguém decidir. Nunca " +
-    "diga ao cliente que o cadastro foi atualizado. Recusa se já houver proposta do mesmo campo " +
-    "aguardando decisão, se o valor for igual ao que já está gravado, ou se o contato foi anonimizado.",
+    "resposta traz `gravado: true`). NOME, TELEFONE e DATA DE NASCIMENTO viram PROPOSTA para uma " +
+    "pessoa confirmar: nada é gravado por conta desta chamada, e a proposta vence sozinha se " +
+    "ninguém decidir. Nunca diga ao cliente que o cadastro foi atualizado. Recusa se já houver " +
+    "proposta do mesmo campo aguardando decisão, se o valor for igual ao que já está gravado, ou " +
+    "se o contato foi anonimizado.",
   inputSchema: propostaShape,
   category: "write",
   requiresRole: "agent",
@@ -169,7 +176,8 @@ export const crmProposeContactField: McpToolDefinition<typeof propostaShape> = {
         contato_nao_encontrado: "não encontrei esse contato nesta conta.",
         contato_anonimizado:
           "esse contato exerceu o direito de exclusão de dados; não é possível registrar informações dele.",
-        valor_invalido: "o valor não tem forma de email/telefone/nome válido — confirme com a pessoa.",
+        valor_invalido:
+          "o valor não tem forma de email/telefone/nome/data de nascimento válidos — confirme com a pessoa.",
         valor_igual_ao_atual: "essa informação já está no cadastro; não há o que confirmar.",
         ja_existe_proposta:
           "já existe uma proposta desse mesmo campo aguardando decisão de uma pessoa — não crie outra.",

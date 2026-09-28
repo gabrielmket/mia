@@ -103,6 +103,7 @@ beforeAll(() => {
       v_version uuid;
       v_case uuid;
       v_boundary jsonb;
+      v_proposta uuid;
       v_attendant uuid;
       v_account uuid;
       v_method uuid;
@@ -131,6 +132,17 @@ beforeAll(() => {
         if not exists (select 1 from public.messages where organization_id = v_org) then
           insert into public.messages (organization_id, conversation_id, channel_session_id, contact_id, type, direction, body)
             values (v_org, v_conv, v_sess, v_contact, 'text', 'inbound', 'rls invariant probe');
+        end if;
+
+        -- migration 0419 — o rascunho sugerido por integração (#1611): o TEXTO
+        -- que outro sistema escreveu para esta pessoa, guardado ANTES de alguém
+        -- clicar em enviar. Vazar a linha entregaria ao vizinho a mensagem que a
+        -- empresa ainda não mandou — e a leitura da inbox é pela sessão do
+        -- atendente, por isso a policy precisa valer nos dois sentidos.
+        if not exists (select 1 from public.conversation_drafts where organization_id = v_org) then
+          insert into public.conversation_drafts
+            (organization_id, conversation_id, body, source, expires_at)
+          values (v_org, v_conv, 'RLS invariant rascunho sugerido', 'erp', now() + interval '24 hours');
         end if;
 
         -- 0227: sugestões contêm texto privado da conversa. Os dois tenants
@@ -224,6 +236,32 @@ beforeAll(() => {
         if not exists (select 1 from public.crm_leads where organization_id = v_org) then
           insert into public.crm_leads (organization_id, pipeline_id, stage_id, title)
             values (v_org, v_pipe, v_stage, 'RLS invariant lead');
+        end if;
+
+        -- crm_proposals/crm_proposal_items (migration 0464): a proposta comercial.
+        -- crm_proposal_items tem organization_id próprio, com trigger de
+        -- consistência contra crm_proposals.organization_id
+        -- (fn_verificar_org_do_item_da_proposta) — o insert abaixo usa v_org nos
+        -- dois lados de propósito, para não bater na trava. Select-then-if-null-
+        -- insert, mesmo padrão de v_pipe/v_stage acima: precisa de v_proposta
+        -- preenchido em toda passada do loop (o seed roda 2x, uma por org), não
+        -- só na primeira.
+        select id into v_proposta from public.crm_proposals
+          where organization_id = v_org and titulo = 'RLS invariant proposal';
+        if v_proposta is null then
+          insert into public.crm_proposals
+            (organization_id, lead_id, contact_id, titulo, total_cents)
+          select v_org, id, v_contact, 'RLS invariant proposal', 1000
+          from public.crm_leads where organization_id = v_org limit 1
+          returning id into v_proposta;
+        end if;
+
+        if not exists (
+          select 1 from public.crm_proposal_items where proposal_id = v_proposta
+        ) then
+          insert into public.crm_proposal_items
+            (proposal_id, organization_id, descricao, quantidade, preco_unitario_cents, position)
+          values (v_proposta, v_org, 'RLS invariant item', 1, 1000, 1000);
         end if;
 
         if not exists (select 1 from public.org_guardrail_layers where organization_id = v_org) then
@@ -537,6 +575,14 @@ export const TABLES = [
   // controle positivo passaria por acerto. Quem mede a escrita é a rota, em
   // `tests/unit/tarefas-rota-nao-tem-porta-dos-fundos.test.ts`.
   "crm_tasks",
+  // migration 0464 — a proposta comercial. Read/write org-scoped sem gate de
+  // papel além de fn_role_at_least('agent'); o gate de ENVIO (manager) é
+  // medido na rota, não aqui (mesmo eixo separado de catalog_products acima).
+  "crm_proposals",
+  // crm_proposal_items tem organization_id próprio, com trigger de
+  // consistência contra crm_proposals.organization_id. Confirmado com o
+  // insert do seed acima, que usa a mesma org nos dois lados.
+  "crm_proposal_items",
   // 0227 — texto de sugestões: org + visibilidade da conversa por authenticated.
   "ai_reply_drafts",
   // migration 0349 — credenciais do trunk SIP por organizacao. Leitura e
@@ -630,6 +676,13 @@ export const TABLES = [
   "campaigns",
   "campaign_templates",
   "campaign_channel_sessions",
+  // migration 0419 (issue #1611) — o rascunho sugerido por integração. Guarda o
+  // TEXTO que um outro sistema escreveu sobre uma pessoa da conversa, antes de
+  // alguém clicar em enviar: vazar a linha entregaria ao vizinho a mensagem que
+  // a empresa ainda não mandou. A leitura é da SESSÃO do atendente (a caixa de
+  // entrada abre por `?rascunho=`), então o `agent` semeado aqui é controle
+  // positivo legítimo e a policy `for all` cobre também o UPDATE do consumo.
+  "conversation_drafts",
 ] as const;
 
 describe("RLS tenant isolation (fn_user_org_ids pattern)", () => {

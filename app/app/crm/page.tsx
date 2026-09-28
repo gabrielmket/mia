@@ -8,6 +8,9 @@ import { loadCrmExtensions } from "@/lib/extensions/service";
 import { logger } from "@/lib/logger";
 import type { ExtensionGuideView } from "@/lib/extensions/view";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { modulosLigados } from "@/lib/instalacao/modulos";
+import { capacidadesDaOrganizacao } from "@/lib/organizacao/capacidades";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "CRM" };
@@ -61,14 +64,20 @@ export default async function CrmHubPage() {
     }
   }
 
+  const capacidadesLigadas = activeOrg
+    ? await capacidadesDaOrganizacao(createAdminClient(), activeOrg.orgId)
+    : [];
+
   return (
     <NavHub
       group="crm"
+      capacidadesLigadas={capacidadesLigadas}
       isPlatformAdmin={user.is_platform_admin && !user.support}
       role={activeOrg?.role ?? null}
       interfaceSettings={activeOrg?.interface_settings}
       modulos={modulos}
       modoDeVenda={modoDeVenda}
+      modulosLigados={await modulosLigados(createAdminClient())}
       title={traduzir("CRM", idioma)}
       subtitle={traduzir(
         "Onde a venda acontece — e o que você define uma vez para ela funcionar.",

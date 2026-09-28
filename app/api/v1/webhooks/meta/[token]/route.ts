@@ -42,10 +42,15 @@ import { guardarChegada, lerChegada } from "@/lib/channels/meta/chegada-do-cadas
 import { parseMetaWebhook, verificationChallenge, verifyMetaSignature } from "@/lib/channels/meta/webhook";
 import { aplicarDesfechoNaCampanha } from "@/lib/broadcast/desfecho-da-campanha";
 import { statusUpdate } from "@/lib/channels/meta/status-update";
-import { ingestMetaInbound } from "@/lib/channels/meta/ingest";
+import { ingestMetaEcho, ingestMetaInbound } from "@/lib/channels/meta/ingest";
 import { donoDoEvento } from "@/lib/channels/meta/dono-do-evento";
 import { metaSessionByWabaId, metaSessionByWebhookToken } from "@/lib/channels/meta/session";
 import { logger } from "@/lib/logger";
+import {
+  emitirFalhaDeEntrega,
+  telefoneDoEmbed,
+  type EmbedDoContato,
+} from "@/lib/messaging/falha-de-entrega";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -233,6 +238,28 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       continue;
     }
 
+    if (e.kind === "outbound_echo") {
+      // Coexistência: resposta dada pelo app WhatsApp Business. Entra na conversa
+      // como saída de humano e pausa a IA — ver `ingestMetaEcho`. Mesma política
+      // de falha da recebida: 2xx sempre, falha no log e no corpo.
+      //
+      // `dono.organizationId`, e não `session.organizationId` como veio do
+      // upstream: aqui `session` pode ser `null` (token órfão, ou evento de
+      // outra WABA pela mesma URL), e quem decide o tenant é `donoDoEvento`.
+      const r = await ingestMetaEcho(admin, e, { organizationId: dono.organizationId });
+      desfechos.push(`eco:${r.status}`);
+      if (r.status === "failed" || r.status === "no_session") {
+        logger.error("[meta.ingest] eco do app não ingerido", {
+          request_id: requestId,
+          status: r.status,
+          reason: r.status === "failed" ? r.reason : undefined,
+          external_id: e.externalId,
+          phone_number_id: e.phoneNumberId,
+        });
+      }
+      continue;
+    }
+
     if (e.kind === "template_status") {
       await admin
         .from("meta_templates")
@@ -241,26 +268,84 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         .eq("waba_id", e.wabaId)
         .eq("name", e.templateName)
         .eq("language", e.templateLanguage);
-    } else {
-      // O evento inteiro vira colunas, não só `status`: quando a Meta ACEITA o
-      // template e reprova a entrega depois, o motivo só existe aqui (131026,
-      // 131047, 131049, 132015). Ver `lib/channels/meta/status-update.ts`.
-      const patchDaMensagem = statusUpdate(e, now);
+      continue;
+    }
 
-      /**
-       * O que a Meta cobrou vai JUNTO com o status.
-       *
-       * Só quando o evento traz `pricing`: um `read` chega sem ele, e escrever
-       * `null` por cima apagaria o que o `sent` já tinha registrado — o custo
-       * do mês inteiro dependeria de qual status chegou por último. Fica AQUI e
-       * não dentro de `statusUpdate` porque lá todo campo é escrito sempre, e
-       * este é justamente o que só pode ser escrito quando existe.
-       */
-      if (e.pricing) {
-        patchDaMensagem.meta_billable = e.pricing.billable;
-        patchDaMensagem.meta_pricing_category = e.pricing.category;
+    // O evento inteiro vira colunas, não só `status`: quando a Meta ACEITA o
+    // template e reprova a entrega depois, o motivo só existe aqui (131026,
+    // 131047, 131049, 132015). Ver `lib/channels/meta/status-update.ts`.
+    const patchDaMensagem = statusUpdate(e, now);
+
+    /**
+     * O que a Meta cobrou vai JUNTO com o status.
+     *
+     * Só quando o evento traz `pricing`: um `read` chega sem ele, e escrever
+     * `null` por cima apagaria o que o `sent` já tinha registrado — o custo
+     * do mês inteiro dependeria de qual status chegou por último. Fica AQUI e
+     * não dentro de `statusUpdate` porque lá todo campo é escrito sempre, e
+     * este é justamente o que só pode ser escrito quando existe.
+     *
+     * Montado ANTES de separar `failed` do resto: o ramo de falha do upstream
+     * (#1614) usava `statusUpdate` puro, e a falha que viesse com `pricing`
+     * perderia o que a Meta disse cobrar.
+     */
+    if (e.pricing) {
+      patchDaMensagem.meta_billable = e.pricing.billable;
+      patchDaMensagem.meta_pricing_category = e.pricing.category;
+    }
+
+    if (e.status === "failed") {
+      // A recusa da plataforma chega DEPOIS do 200 (131047 fora da janela,
+      // 131026 número não registrado, 132015 template pausado). O evento inteiro
+      // vira colunas como no ramo de baixo — e a falha emite `message.failed`
+      // para quem integra (#1614), que até aqui não tinha gatilho nenhum.
+      //
+      // `.neq("status", "failed")` é o "uma vez": a Meta reentrega o mesmo
+      // status enquanto não recebe 2xx, e cada reentegra seria mais um aviso
+      // para o sistema do integrador sobre a MESMA falha. Só a primeira
+      // atualiza uma linha, e só a primeira devolve linha — `linha` é o gatilho
+      // da emissão, então 0 linhas = 0 eventos.
+      //
+      // `dono.organizationId` nos dois lugares, e não `session.organizationId`
+      // como veio do upstream: aqui `session` pode ser `null` (token órfão, ou
+      // evento de outra WABA pela mesma URL) — ver `donoDoEvento`.
+      const { data: linha } = await admin
+        .from("messages")
+        .update(patchDaMensagem)
+        .eq("organization_id", dono.organizationId)
+        .eq("external_id", e.externalId)
+        .neq("status", "failed")
+        .select(
+          "id, conversation_id, contact_id, sent_via, error_code, error_message, contacts:contact_id(phone_number)",
+        )
+        .maybeSingle();
+      if (linha) {
+        const falha = linha as {
+          id: string;
+          conversation_id: string | null;
+          contact_id: string | null;
+          sent_via: string | null;
+          error_code: string | null;
+          error_message: string | null;
+          // FK de N para 1: o PostgREST devolve OBJETO em tempo de execução,
+          // embora a tipagem gerada diga lista. `telefoneDoEmbed` aceita os dois.
+          contacts: EmbedDoContato;
+        };
+        await emitirFalhaDeEntrega(admin, {
+          organizationId: dono.organizationId,
+          source: "meta-status-webhook",
+          requestId,
+          falha: {
+            message_id: falha.id,
+            conversation_id: falha.conversation_id,
+            contact_id: falha.contact_id,
+            contact: telefoneDoEmbed(falha.contacts),
+            sent_via: falha.sent_via,
+            erro: { codigo: falha.error_code ?? "", titulo: falha.error_message },
+          },
+        });
       }
-
+    } else {
       await admin
         .from("messages")
         .update(patchDaMensagem)
@@ -270,23 +355,30 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         // derrubar a rota justamente na instalação com duas contas.
         .eq("organization_id", dono.organizationId)
         .eq("external_id", e.externalId);
-
-      /**
-       * E a MESMA notícia chega à campanha do MIA Broadcast.
-       *
-       * Sem esta linha `broadcast_recipients` parava em `enviada` para sempre:
-       * a tela mostrava a campanha inteira como enviada e nunca como entregue,
-       * e o estorno — que só pode acontecer quando a Meta admite a falha —
-       * ficava sem quem o chamasse. A mensagem que não é de campanha passa
-       * reto; este caminho é um a mais, não o único.
-       */
-      const naCampanha = await aplicarDesfechoNaCampanha(admin, {
-        organizationId: dono.organizationId,
-        externalId: e.externalId,
-        statusDaMeta: e.status,
-      });
-      if (naCampanha !== "nao_e_disparo") desfechos.push(`broadcast:${naCampanha}`);
     }
+
+    /**
+     * E a MESMA notícia chega à campanha do MIA Broadcast — INCLUSIVE a falha.
+     *
+     * Sem esta linha `broadcast_recipients` parava em `enviada` para sempre:
+     * a tela mostrava a campanha inteira como enviada e nunca como entregue,
+     * e o estorno — que só pode acontecer quando a Meta admite a falha —
+     * ficava sem quem o chamasse. A mensagem que não é de campanha passa
+     * reto; este caminho é um a mais, não o único.
+     *
+     * Fica FORA do `if/else` de propósito. O ramo de `failed` do upstream
+     * (#1614) entrou como `else if` antes do nosso `else`, e do jeito que a
+     * fusão juntou os dois o `failed` nunca chegava aqui: justamente o status
+     * que devolve o dinheiro ao cliente deixava de estornar, sem erro nenhum.
+     * A reentrega do mesmo `failed` não estorna duas vezes — `proximoDesfecho`
+     * não sai de `falhou`/`estornada`.
+     */
+    const naCampanha = await aplicarDesfechoNaCampanha(admin, {
+      organizationId: dono.organizationId,
+      externalId: e.externalId,
+      statusDaMeta: e.status,
+    });
+    if (naCampanha !== "nao_e_disparo") desfechos.push(`broadcast:${naCampanha}`);
   }
 
   // 200 SEMPRE que a assinatura confere, inclusive para evento que não nos

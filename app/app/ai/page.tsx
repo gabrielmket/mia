@@ -5,6 +5,8 @@ import { modulosDaOrganizacao } from "@/lib/modulos/liberacao";
 import { modoDeVendaDaOrganizacao } from "@/lib/empresas/modo-de-venda";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { modulosLigados } from "@/lib/instalacao/modulos";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Agente MIA" };
@@ -43,10 +45,15 @@ export default async function AiHubPage() {
       interfaceSettings={activeOrg?.interface_settings}
       modulos={modulos}
       modoDeVenda={modoDeVenda}
+      // Obrigatório desde o upstream (B1 do #1573): sem a lista, o cartão de
+      // "Fluxos de atendimento" aparecia numa instalação sem o módulo e o
+      // clique dava 404.
+      modulosLigados={await modulosLigados(createAdminClient())}
       // O título é a marca do produto ("Agente MIA", não "Agente de IA"), mas
       // ainda passa pelo dicionário: a entrada existe e a chave é o texto em
       // português, então quem usa es vê a marca sem cair em português cru no
-      // resto do hub.
+      // resto do hub. O upstream não mudou o título — só encostou nesta linha
+      // ao acrescentar `modulosLigados` logo acima.
       title={traduzir("Agente MIA", idioma)}
       subtitle={traduzir(
         "Tudo que define quem atende por você — e como acompanhar o que ele faz.",
