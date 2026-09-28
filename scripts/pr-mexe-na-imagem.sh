@@ -40,6 +40,9 @@ while IFS= read -r caminho || [ -n "$caminho" ]; do
       | docs/* | tasks/* | scratchpad/* | .vercel/* | .claude/* | .agents/* \
       | .agent/* | .codex/* | .cursor/* | .opencode/* | .specs/* | .changes/* \
       | evidence/* | .superpowers/*) ;;
+    # FORK: o cache do pnpm que o `pnpm install` cria dentro do repo (1,2 GB) sai
+    # do contexto pelo .dockerignore desta árvore; o espelho acompanha.
+    .pnpm-store/*) ;;
     .github/*.yml | .github/*.yaml | .github/*.md) ;;
     # Daqui para baixo, só arquivo da RAIZ: qualquer outro caminho com `/` alcança.
     */*) echo sim; exit 0 ;;

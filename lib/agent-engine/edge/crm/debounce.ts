@@ -9,7 +9,9 @@
  * Contrato:
  *   - mensagem que chega enquanto há job PENDING **do mesmo contato** com a
  *     janela ainda aberta (`run_after > now()`) viaja de carona nele: o turno lê
- *     o histórico completo e responde a todas as mensagens do lote;
+ *     o histórico completo e responde a todas as mensagens do lote — desde que o
+ *     job seja da MESMA conversa e saia dentro do debounce (as cercas do fork,
+ *     em `SQL_JOB_PARA_COALESCER`);
  *   - mensagem que chega fora da janela abre janela nova;
  *   - `debounceMs = 0` desliga a coalescência: job imediato, zero consulta.
  *
@@ -34,11 +36,33 @@ import type pg from 'pg';
  * saía "done" sem erro nenhum, e nenhum turno rodava. Medido em produção
  * (2026-09-14): 6 mensagens ao longo de 7h, zero resposta, zero job novo — só o
  * coalescing silencioso repetido no mesmo job com `held_run_after` no payload.
+ *
+ * ⚠️ DUAS CERCAS A MAIS (fork MIA, auditoria de 18/09), e nenhuma é zelo — cada
+ * uma fecha um ralo medido. Prova: `tests/unit/coalescencia-nao-engole-turno-adiado.test.ts`.
+ *
+ * (a) HORIZONTE. A carona só é carona enquanto o job que a leva sai LOGO.
+ *     `run_after > now()` não distingue um job adiado por 300 ms de debounce —
+ *     o propósito desta peça — de um adiado por HORAS pela janela anti-ban
+ *     (`inbound-turn.ts`, bloco "JANELA ANTI-BAN"), que adia com data real e
+ *     por isso escapa da exclusão de hold. Com a janela fechada, TODA mensagem
+ *     seguinte do contato virava `done` sem job novo. O teto é o próprio
+ *     debounce, que é a janela que esta peça existe para cobrir.
+ *
+ * (b) MESMA CONVERSA. O turno responde na conversa PINADA no payload do job. O
+ *     mesmo contato falando em dois canais (WhatsApp e Instagram são conversas
+ *     diferentes) tinha a segunda mensagem pendurada num job que responde na
+ *     PRIMEIRA — e a segunda conversa nunca recebia turno. Ali a mensagem não
+ *     atrasava: sumia.
+ *
+ * As cercas moram NA consulta, não num filtro depois dela: com `limit 1`, um
+ * filtro posterior recusaria o job errado sem enxergar o certo ao lado.
  */
 const SQL_JOB_PARA_COALESCER = `select id from job_queue
  where organization_id = $1 and contact_id = $2
    and kind = 'inbound_turn' and status = 'pending' and run_after > now()
    and not (payload ? 'held_run_after')
+   and run_after <= now() + make_interval(secs => $3 / 1000.0)
+   and payload->>'conversation_id' = $4
  limit 1`;
 
 /** O que fazer com a mensagem que acabou de chegar. */
@@ -46,14 +70,27 @@ export type DecisaoDeRajada =
   | { tipo: 'coalescido'; jobId: string }
   | { tipo: 'enfileirar'; runAfter: Date | undefined };
 
+/**
+ * Quem recebe a mensagem: o contato E a conversa em que ela chegou (a cerca
+ * "mesma conversa" acima).
+ */
+export interface AlvoDaRajada {
+  organizationId: string;
+  contactId: string;
+  conversationId: string;
+}
+
 /** Job pendente do contato que pode receber a mensagem de carona. */
 export async function buscarJobParaCoalescer(
   pool: pg.Pool,
-  alvo: { organizationId: string; contactId: string },
+  alvo: AlvoDaRajada,
+  debounceMs: number,
 ): Promise<string | undefined> {
   const { rows } = await pool.query<{ id: string }>(SQL_JOB_PARA_COALESCER, [
     alvo.organizationId,
     alvo.contactId,
+    debounceMs,
+    alvo.conversationId,
   ]);
   return rows[0]?.id;
 }
@@ -72,12 +109,12 @@ export function janelaDeRajada(debounceMs: number, agora: number = Date.now()): 
 /** Decide entre carona em job existente e janela nova. */
 export async function decidirRajada(
   pool: pg.Pool,
-  alvo: { organizationId: string; contactId: string },
+  alvo: AlvoDaRajada,
   debounceMs: number,
   agora: number = Date.now(),
 ): Promise<DecisaoDeRajada> {
   if (debounceMs > 0) {
-    const jobId = await buscarJobParaCoalescer(pool, alvo);
+    const jobId = await buscarJobParaCoalescer(pool, alvo, debounceMs);
     if (jobId !== undefined) return { tipo: 'coalescido', jobId };
   }
   return { tipo: 'enfileirar', runAfter: janelaDeRajada(debounceMs, agora) };

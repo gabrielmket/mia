@@ -136,13 +136,20 @@ export async function sendTemplateForSession(
       }
     : await resolveMetaCreds(createAdminClient(), {
         organizationId: input.organizationId,
-        // Os DOIS nomes do mesmo número, e o ambiente por último. `sessionRef`
-        // na frente porque é o nome de hoje; `phoneNumberId` porque é o que o
-        // disparador de campanha manda. Ficar só com um deixaria metade dos
-        // chamadores resolvendo a credencial sem número — que não casa linha
-        // nenhuma e devolve o envio ao `.env`, com o número de OUTRO cliente.
-        phoneNumberId:
-          input.sessionRef ?? input.phoneNumberId ?? process.env.META_PHONE_NUMBER_ID ?? "",
+        // Os DOIS nomes do mesmo número. `sessionRef` na frente porque é o nome
+        // de hoje; `phoneNumberId` porque é o que o disparador de campanha
+        // manda. Ficar só com um deixaria metade dos chamadores resolvendo a
+        // credencial sem número — que não casa linha nenhuma e devolve o envio
+        // ao `.env`, com o número de OUTRO cliente.
+        //
+        // O ambiente NÃO entra como chave de busca: sem número nenhum, quem cai
+        // no `.env` é o próprio `resolveMetaCreds` (`metaCredsFromEnv`), sem ir
+        // ao banco — o contrato do upstream (`tests/unit/janela-24h-recusa-
+        // quem-envia-por-token.test.ts`, modelo aprovado com a janela fechada).
+        // Usar o número do `.env` para procurar a sessão de uma organização
+        // qualquer não acha a credencial DESTE envio; acha, no máximo, a de
+        // outra conexão.
+        phoneNumberId: input.sessionRef ?? input.phoneNumberId ?? "",
       });
   if (!creds) {
     throw new Error(

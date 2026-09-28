@@ -11541,6 +11541,8 @@ export const DICIONARIO: Traducoes = {
 
   // ---- empresas (o cliente que é uma organização) ----
   "Empresas": { es: "Empresas" },
+  // A descrição do item no menu, no hub e no ⌘K (lib/navigation/catalogo.ts).
+  "Os clientes que são empresa — cada uma com suas pessoas e seus negócios.": { es: "Los clientes que son empresa — cada una con sus personas y sus negocios." },
   "Nova empresa": { es: "Nueva empresa" },
   // "Editar empresa" e "Negócios" também são usadas por estas telas, mas moram
   // nos blocos do UPSTREAM (empresas dele e relatório de perdas), com a mesma

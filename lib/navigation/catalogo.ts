@@ -238,22 +238,42 @@ export const NAV_CATALOG = [
     // campanha é montada de vez em quando, não aberta todo dia.
   },
   {
+    // MIA BROADCAST. Mora no CRM, ao lado de Campanhas, pelo motivo escrito
+    // nela: quem dispara está pensando em QUEM vai receber, não no número. E SÓ
+    // NO HUB, como ela: disparo se monta de vez em quando, não se abre todo dia.
+    //
+    // Morava em Atendimento com `sidebar: true` e era o 17º item de um menu
+    // cujo teto medido é 15 (folga 0 a 1280×900 — `tests/unit/interface-por-
+    // empresa.test.ts`; na tela, `tests/e2e/navegacao.spec.ts`). Atendimento
+    // não tem hub: lá, sem `sidebar`, a única porta seria o ⌘K. A vizinha
+    // Créditos fica em Organização (é dinheiro e contrato), e as duas somem
+    // juntas para quem não contratou o módulo (lib/modulos/catalogo.ts).
+    href: "/app/broadcast",
+    label: "MIA Broadcast",
+    description: "Enviar para uma lista pela API oficial, com template aprovado e cobrança por mensagem.",
+    icon: "Megaphone",
+    group: "crm",
+    section: "O dia a dia da venda",
+    // manager+: cada mensagem gasta dinheiro do cliente.
+    minRole: "manager",
+  },
+  {
     // Empresas fica ANTES de Contatos porque em venda B2B a empresa é a
     // unidade: a pessoa é por onde se fala com ela. Quem abre o CRM procurando
     // um cliente procura pelo nome da empresa primeiro.
     //
-    // Ela ENTRA no sidebar mesmo com Campanhas logo acima ficando só no hub, e
-    // isso não contradiz o limite de densidade citado ali: em B2C ela não chega
-    // ao menu (`modoDeVenda` a esconde, lib/empresas/modo-de-venda.ts), e em B2B
-    // ela é tela de todo dia — é por onde se acha o cliente. Campanha se monta
-    // de vez em quando; por isso é ela, e não esta, que fica só no hub.
+    // SÓ NO HUB. Ela chegou a entrar no sidebar como quarto item do CRM, mas o
+    // menu está no teto medido (15 itens, ver o MIA Broadcast acima), e o modo
+    // padrão é B2B (lib/empresas/modo-de-venda.ts): o item a mais caía em quase
+    // toda organização, não só nas que vendem para empresa. Fica em "O dia a
+    // dia da venda", como Campanhas e Prospecção, e no ⌘K. Para voltar ao
+    // menu, outro item do CRM tem de sair dele — o total não cresce.
     href: "/app/empresas",
     label: "Empresas",
     description: "Os clientes que são empresa — cada uma com suas pessoas e seus negócios.",
     icon: "Buildings",
     group: "crm",
     section: "O dia a dia da venda",
-    sidebar: true,
   },
   {
     href: "/app/contacts",
@@ -708,11 +728,17 @@ export const NAV_CATALOG = [
     // navegável. Para voltar a mostrá-la, basta devolver `sidebar: true`.
   },
   {
-    href: "/app/webhooks",
     // "Webhooks" era o nome de quando a tela SÓ recebia dados de fora. Hoje a
     // aba mais usada dela é Automações — e o dono do produto abriu o menu
     // procurando a regra de reunião marcada e não achou (16/09). Rótulo que
     // esconde a função é rótulo errado, por mais correto que seja o termo.
+    //
+    // O comentário mora ACIMA do `href`, e não entre ele e o `label`: o resumo
+    // do seed de demonstração manda a pessoa a esta tela pelo nome do menu, e
+    // `tests/unit/resumo-do-seed-diz-o-que-existe.test.ts` lê o rótulo como o
+    // `label` logo depois do `href`. O nome que o resumo usa está em
+    // scripts/lib/resumo-do-seed-de-demonstracao.ts — renomear aqui é renomear lá.
+    href: "/app/webhooks",
     label: "Automações",
     description:
       "Regras do tipo 'quando acontecer X, faça Y' — e a entrada de dados de outros sistemas.",
@@ -841,20 +867,6 @@ export const NAV_CATALOG = [
     icon: "Bell",
     group: "organizacao",
     section: "Sua conta",
-  },
-  {
-    // MIA BROADCAST. Mora em ATENDIMENTO e não em Organização: é operação —
-    // alguém abre isto para MANDAR mensagem, não para configurar nada. A
-    // vizinha Créditos fica em Organização pelo motivo oposto (é dinheiro e
-    // contrato), e as duas somem juntas para quem não contratou o módulo.
-    href: "/app/broadcast",
-    label: "MIA Broadcast",
-    description: "Enviar para uma lista pela API oficial, com template aprovado e cobrança por mensagem.",
-    icon: "Megaphone",
-    group: "atendimento",
-    sidebar: true,
-    // manager+: cada mensagem gasta dinheiro do cliente.
-    minRole: "manager",
   },
   {
     // O CRÉDITO do cliente, e o extrato que o explica. Mora em Organização e

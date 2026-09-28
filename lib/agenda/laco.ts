@@ -69,28 +69,6 @@ export function atividadeDaTransicao(
 }
 
 /**
- * A atividade que significa "a reunião foi marcada".
- *
- * Existe nomeada porque agora ela tem um SEGUNDO leitor — o aviso de reunião
- * marcada — e "appointment_scheduled" solto em dois arquivos é a forma mais
- * comum de as duas réguas divergirem no dia em que uma delas muda.
- */
-export const ATIVIDADE_DE_REUNIAO_MARCADA = "appointment_scheduled";
-
-/**
- * Este movimento anuncia uma reunião MARCADA?
- *
- * Recebe a atividade já decidida, e não a transição, de propósito: a régua de
- * "o que este movimento significa" é `atividadeDaTransicao` e só ela. Remarcar
- * e confirmar um pendente ficam de fora pelo mesmo motivo que ficam de fora da
- * timeline — a notícia "marcaram uma reunião" já foi dada quando ele nasceu, e
- * repeti-la faria o time ler o mesmo aviso duas vezes e parar de ler os dois.
- */
-export function avisaReuniaoMarcada(atividade: AtividadeDaAgenda | null): boolean {
-  return atividade === ATIVIDADE_DE_REUNIAO_MARCADA;
-}
-
-/**
  * O gatilho de automação que a transição emite, ou `null` quando ela não é
  * notícia para uma regra.
  *

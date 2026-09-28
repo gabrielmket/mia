@@ -91,7 +91,9 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
       const created = await createLeadHandler(ctx.admin, handlerCtx, {
         pipeline_id: pipelineId,
         stage_id: stageId,
-        title: contact?.name ?? contact?.display_name ?? lead?.title ?? contact?.phone_number ?? "Lead da automação",
+        // Mesmo resolvedor do ramo do contato, abaixo (`nomeDoContato`): o
+        // título remontado à mão gravava `Contato 543134@lid` no card.
+        title: nomeDoContato(contact) ?? lead?.title ?? contact?.phone_number ?? "Lead da automação",
         contact_id: contactId,
         source: "automation",
       } as Parameters<typeof createLeadHandler>[2]);

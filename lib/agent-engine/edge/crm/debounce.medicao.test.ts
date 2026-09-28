@@ -22,7 +22,7 @@ import type pg from 'pg';
 
 import { decidirRajada } from './debounce';
 
-const alvo = { organizationId: 'org1', contactId: 'contato1' };
+const alvo = { organizationId: 'org1', contactId: 'contato1', conversationId: 'conversa1' };
 const T0 = 1_700_000_000_000;
 
 interface JobNaFila {

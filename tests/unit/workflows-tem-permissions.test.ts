@@ -61,6 +61,12 @@ const ESCRITA_JUSTIFICADA: Record<string, string> = {
   "acolhida.yml::pull-requests: write":
     "comenta a acolhida no PR de fork; é o ÚNICO escopo do workflow (o bloco zera o resto), " +
     "e o job não faz checkout nem usa action nenhuma — ver tests/unit/acolhida-nao-toca-no-fork.test.ts",
+  // FORK: o upstream não tem este workflow.
+  "sincronizar-upstream.yml::issues: write":
+    "mantém UMA issue rolante com o veredito da sincronização com o upstream (edita a aberta, " +
+    "ou cria — e cria o rótulo `sincronizar-upstream` se faltar); é o único escopo de escrita " +
+    "do workflow, que só dispara por `schedule`/`workflow_dispatch`, não roda código de PR, " +
+    "não funde, não commita e não empurra — ver docs/FORK-MIA.md, regra 4",
 };
 
 interface Workflow {

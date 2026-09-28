@@ -25,6 +25,7 @@ import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/C
 import { useT } from "@/hooks/i18n/useT";
 import { usePipelines } from "@/hooks/webhooks/useWebhookSources";
 import { camposDoFunil } from "@/lib/leads/campos-do-funil";
+import { nomeDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
 import {
   useEmpresa,
   useEmpresas,
@@ -184,7 +185,8 @@ function FichaDaEmpresa({ id, aoFechar }: { id: string; aoFechar: () => void }) 
                 <ul className="space-y-1 text-sm">
                   {data.contatos.map((c) => (
                     <li key={c.id}>
-                      {c.display_name ?? c.name ?? t("sem nome")}
+                      {/* `nomeDoContato` e não o rótulo: o telefone já vem ao lado. */}
+                      {nomeDoContato(c) ?? t(SEM_NOME)}
                       {c.phone_number ? ` · ${c.phone_number}` : ""}
                     </li>
                   ))}

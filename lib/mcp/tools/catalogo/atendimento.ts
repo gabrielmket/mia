@@ -94,13 +94,26 @@ export const TOOLS_ATENDIMENTO = declararTools([
      */
     risco: "atencao",
     /**
-     * Em "vender", junto de `crm_propose_contact_field`, e pela mesma razão
-     * escrita ali: o pacote "Atender" está no tamanho em que o teto por agente
-     * começa a apertar, e esta capacidade serve à venda B2B — é ela que faz a
-     * pergunta "de qual empresa você é?" virar agrupamento no funil em vez de
-     * uma frase que se perde no histórico.
+     * Em "organizar", e NÃO em "vender" — a razão é o TETO, como a de
+     * `crm_propose_contact_field` logo acima, só que um pacote adiante.
+     *
+     * "vender" é o default do onboarding (`lib/ai/agents/capacidades-padrao.ts`):
+     * toda capacidade automática dele nasce ligada em todo agente e come uma
+     * vaga da folga que `TETO_TOOLS_POR_AGENTE` existe para deixar. Medido na
+     * fusão com a v1.60 (teto 27): com esta linha em "vender" o agente nasce
+     * com 23 e o menor segundo pacote (`evoluir`) passa a exigir 28 — NENHUMA
+     * jornada nova cabe, o beco D3 que `pacote-reserva-vaga-da-critica.test.ts`
+     * guarda. Em "organizar" o agente nasce com 22, `evoluir` volta a caber (27)
+     * e "organizar" sozinho vai a 22, longe do teto.
+     *
+     * "organizar" e não "atender": o upstream tirou a anotação irmã de "atender"
+     * pelo mesmo aperto, e agrupar o cliente pela empresa é manter o cadastro
+     * em ordem, vizinho de `crm_manage_tags`. Continua alcançável em qualquer
+     * jornada pelo modo avançado — ligar à mão, agente a agente, é o caminho
+     * para quem vende B2B; o modo B2C esconde a porta de qualquer jeito
+     * (`lib/empresas/modo-de-venda.ts`).
      */
-    pacotes: ["vender"],
+    pacotes: ["organizar"],
   },
   {
     name: "crm_list_conversations",

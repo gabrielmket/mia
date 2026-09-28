@@ -248,6 +248,19 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
       "(`vars.RELOGIO_LIGADO`), não uma adaptação de fork — mas ela fica no mapa para " +
       "que trocar a variável por outra coisa continue passando por revisão.",
   },
+
+  // --- só do fork (MIA) --------------------------------------------------------
+  // FORK: o upstream não tem este workflow. Gatilho: `schedule` (dia útil,
+  // 12:00 UTC) e `workflow_dispatch`, sem `if:` de job — o `if:` que existe é
+  // de STEP e só cala o aviso quando o veredito é "em dia".
+  "sincronizar-upstream.yml::medir": {
+    condicao: null,
+    efeito:
+      "Este job mede, todo dia útil, a próxima sincronização com o upstream e mantém UMA " +
+      "issue com o veredito (docs/FORK-MIA.md, regra 4). Desligá-lo não fica vermelho em " +
+      "lugar nenhum: a divergência volta a acumular calada e a próxima fusão chega grande — " +
+      "a de 23/09 juntou nove dias e deu 66 arquivos em conflito.",
+  },
 };
 
 interface JobLido {

@@ -112,14 +112,10 @@ describe("sidebarGroups", () => {
     // A lista é EXATA de propósito. `toContain` deixaria um sexto item entrar
     // calado no sidebar e reabrir a mesma corrida por pixel.
     //
-    // EMPRESAS entrou como quarto item, e a decisão é consciente: em venda B2B
-    // a empresa é a unidade e a pessoa é por onde se fala com ela — quem abre o
-    // CRM procurando um cliente procura pelo nome da empresa primeiro. Fica ao
-    // lado de Contatos, não escondida no hub.
-    //
-    // ⚠️ O que isso cobra: a dobra de 900px estourou por 13px quando o SIDEBAR
-    // chegou a cinco itens de CRM. Com quatro ainda há folga, mas ela acabou —
-    // o quinto precisa de medição (e2e `navegacao.spec.ts`) antes de entrar.
+    // EMPRESAS (MIA) chegou a ser o quarto item daqui e voltou para o hub: o
+    // menu inteiro está no teto medido (15 itens, `interface-por-empresa`), e o
+    // modo padrão B2B a mostrava a quase toda organização. A razão está ao lado
+    // do item, em lib/navigation/catalogo.ts.
     //
     // Comandas NÃO entra: ela chegou pedindo a quarta linha, e o e2e mediu o
     // menu rolando em 1280×900 — a mesma corrida por pixel que o hub existe
@@ -135,7 +131,6 @@ describe("sidebarGroups", () => {
     const crm = sidebarGroups(true, null).find((g) => g.group.id === "crm");
     expect(crm?.items.map((i) => i.href)).toEqual([
       "/app/kanban",
-      "/app/empresas",
       "/app/contacts",
       "/app/tasks",
       // "/app/calls" (telefonia por SIP) NÃO entra aqui, e a ausência é a
@@ -187,6 +182,8 @@ describe("hubSections", () => {
       "/app/prospecting",
       "/app/kanban",
       "/app/campaigns",
+      // MIA Broadcast mora ao lado de Campanhas, só no hub (lib/navigation/catalogo.ts).
+      "/app/broadcast",
       "/app/empresas",
       "/app/contacts",
       "/app/tasks",

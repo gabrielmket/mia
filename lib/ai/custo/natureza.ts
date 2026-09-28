@@ -49,6 +49,21 @@ const DO_SISTEMA = new Set<string>([
   // Indexar o acervo acontece ao subir material, não durante a conversa.
   // (Consultar o acervo, esse sim, roda dentro do turno e fica em atendimento.)
   "embedding_indexar",
+  // Configurar por conversa com o administrador: montar agente de campanha e
+  // transformar a proposta da empresa em modelo. É preparo, igual a subir
+  // material — não há cliente na linha.
+  "prospecting_agent_setup_chat",
+  "proposal_template_import",
+  // Ferramentas da EQUIPE, disparadas por um clique de gente da operação e não
+  // por mensagem do cliente: ajustar a proposta por instrução, preenchê-la lendo
+  // a conversa, perguntar sobre um caso escalado. Acontecem num dia em que o
+  // cliente não escreveu — e `case_chat` carimba o contato do caso, então como
+  // atendimento ele criaria uma "conversa" que não existiu.
+  // (`flow_validate`, ao contrário, roda dentro do turno a cada resposta do
+  // cliente ao fluxo e fica em atendimento.)
+  "proposal_assistant",
+  "proposal_fill_from_conversation",
+  "case_chat",
 ]);
 
 /**

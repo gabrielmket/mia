@@ -36,6 +36,8 @@ export interface Peneira {
 export interface ContatoParaDisparo {
   id: string;
   phone_number: string | null;
+  /** O nome que o operador escolheu — vence o do perfil (`nomeDoContato`). */
+  name?: string | null;
   display_name?: string | null;
   /** Bloqueado no atendimento — não recebe nada, nem disparo. */
   is_blocked?: boolean | null;

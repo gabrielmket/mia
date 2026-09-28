@@ -34,6 +34,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { peneirar, type ContatoParaDisparo } from "@/lib/broadcast/plano";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { moduloLiberado } from "@/lib/modulos/liberacao";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -310,8 +311,9 @@ export async function PATCH(
           null)
         : dados.variavel_do_nome;
 
+    // Mesmo nome da criação (`../route.ts`): `nomeDoContato`, nunca id técnico.
     const peneira = peneirar((contatos ?? []) as ContatoParaDisparo[], (c) =>
-      variavel ? { [variavel]: (c.display_name ?? "").trim() || "tudo bem" } : {},
+      variavel ? { [variavel]: nomeDoContato(c) ?? "tudo bem" } : {},
     );
 
     /**

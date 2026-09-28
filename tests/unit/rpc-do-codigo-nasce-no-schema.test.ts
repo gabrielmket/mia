@@ -73,6 +73,13 @@ const RAIZ = process.cwd();
 const DIRS_DE_CODIGO = ["app", "lib", "workers", "components", "hooks", "scripts"];
 const SUPABASE = "supabase";
 const BASELINE = "supabase/baseline.sql";
+// Fork MIA (docs/FORK-MIA.md): o schema que o banco recebe é o do upstream e,
+// por cima, o da MIA — `baseline-mia.sql` + `migrations-mia/`, na ordem de
+// easypanel/bootstrap.sh (a mesma concatenação de carimbo-do-schema.test.ts).
+// Uma RPC do fork declarada ali nasce no schema versionado tanto quanto uma do
+// upstream; ler só a metade do upstream devolveria falso órfão.
+const BASELINE_MIA = "supabase/baseline-mia.sql";
+const MIGRATIONS_MIA = `${SUPABASE}/migrations-mia`;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // As três chamadas congeladas: existem no código, NÃO existem no schema
@@ -413,7 +420,12 @@ type Declaracoes = {
 const RE_DECLARACAO = /create\s+(?:or\s+replace\s+)?function\s+([A-Za-z0-9_".]+)\s*\(/gi;
 
 function varrerSchema(): Declaracoes {
-  const arquivos = [BASELINE, ...listar(`${SUPABASE}/migrations`, /\.sql$/)];
+  const arquivos = [
+    BASELINE,
+    ...listar(`${SUPABASE}/migrations`, /\.sql$/),
+    BASELINE_MIA,
+    ...listar(MIGRATIONS_MIA, /\.sql$/),
+  ];
   const d: Declaracoes = {
     nomes: new Set(),
     citada: new Set(),
@@ -584,7 +596,8 @@ describe("todo `.rpc(\"nome\")` do código nasce no schema versionado", () => {
       .join("\n");
 
     throw new Error(
-      `\n\n${porNome.size} nome(s) de \`.rpc()\` sem declaração em \`${BASELINE}\` nem em \`${SUPABASE}/migrations/\`:\n\n` +
+      `\n\n${porNome.size} nome(s) de \`.rpc()\` sem declaração em \`${BASELINE}\`, \`${SUPABASE}/migrations/\`, ` +
+        `\`${BASELINE_MIA}\` nem \`${MIGRATIONS_MIA}/\`:\n\n` +
         `${relatorio}\n\n` +
         "O PostgREST responde `PGRST202` no clique (function not found) e o erro quase nunca é tratado.\n" +
         "Conserte de um dos dois lados:\n" +

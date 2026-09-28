@@ -204,7 +204,14 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     const dono = await donoDoEvento({
       sessionDoToken: session,
       wabaDoEvento: e.wabaId,
-      porWaba: metaSessionByWabaId,
+      // Embrulhado, e não a referência crua: a busca pela WABA só existe quando
+      // o token não serve, e só então o módulo é lido. Os testes de rota do
+      // upstream (`webhook-meta-le-do-banco`, `meta-coexistencia-eco-do-app`)
+      // dublam `session` só com `metaSessionByWebhookToken` — é o que a rota
+      // deles chama — e ler a referência aqui, mesmo sem chamar, derrubava os
+      // dois. Cenário que chegue a precisar da WABA continua falhando alto no
+      // dublê incompleto, que é o que se quer.
+      porWaba: (waba) => metaSessionByWabaId(waba),
     });
     if (!dono) {
       // Nem o token nem a WABA acharam dono: ignorar continua certo (é evento

@@ -46,6 +46,7 @@ import { normalizarIdioma, type Idioma } from '@/lib/i18n/idiomas';
 import { ehOptOutProvavel } from '@/lib/opt-out/deteccao';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 import { avisarGrupoDaPassagemPg } from '@/lib/avisos/aviso-da-passagem';
+import { nomeDoContato } from '@/lib/contacts/rotulo-do-contato';
 
 import type { DesfechoDoAviso } from './aviso-de-escalacao';
 
@@ -296,16 +297,19 @@ export async function performHumanHandoff(
   // `avisarGrupoDaPassagemPg` nunca lança.
   if ((itemDeCentral.rowCount ?? 0) > 0) {
     const { rows: contatos } = await db.query<{
+      name: string | null;
       display_name: string | null;
       phone_number: string | null;
-    }>(`select display_name, phone_number from contacts where organization_id = $1 and id = $2`, [
+    }>(`select name, display_name, phone_number from contacts where organization_id = $1 and id = $2`, [
       ids.tenantId,
       ids.leadId,
     ]);
     await avisarGrupoDaPassagemPg(db, {
       organizationId: ids.tenantId,
       conversationId: ids.conversationId,
-      nome: contatos[0]?.display_name ?? null,
+      // O nome que o time conhece (`nomeDoContato`: o escolhido antes do perfil
+      // do WhatsApp), nunca um identificador técnico.
+      nome: nomeDoContato(contatos[0]),
       telefone: contatos[0]?.phone_number ?? null,
       motivo: opts.reason,
       resumo: opts.conversationSummary,

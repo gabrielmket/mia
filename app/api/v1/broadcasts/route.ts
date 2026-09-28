@@ -20,6 +20,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { peneirar, podeComecar, type ContatoParaDisparo } from "@/lib/broadcast/plano";
 import { derivarSaldo, type LancamentoDaCarteira } from "@/lib/carteira/saldo";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { quemEntraNaLista } from "@/lib/broadcast/quem-entra-na-lista";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { moduloLiberado } from "@/lib/modulos/liberacao";
@@ -154,9 +155,12 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!lista.ok) return fail("query_failed", lista.erro, 500, { requestId });
   const contatos = lista.contatos;
 
+  // O nome que vai na mensagem é o de `nomeDoContato`: o que o operador
+  // escolheu antes do perfil do WhatsApp, e nunca um identificador técnico
+  // (`Contato 5431@lid`) — este texto chega ao CLIENTE.
   const peneira = peneirar((contatos ?? []) as ContatoParaDisparo[], (c) =>
     dados.variavel_do_nome
-      ? { [dados.variavel_do_nome]: (c.display_name ?? "").trim() || "tudo bem" }
+      ? { [dados.variavel_do_nome]: nomeDoContato(c) ?? "tudo bem" }
       : {},
   );
 

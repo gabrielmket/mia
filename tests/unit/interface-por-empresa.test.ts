@@ -55,7 +55,15 @@ describe("portas por empresa (issue #1341)", () => {
   it("sem escolha de nenhum dos lados nada muda: a empresa completa segue completa", () => {
     expect(combinarInterfaces(completa, completa)).toEqual(INTERFACE_COMPLETA);
     expect(combinarInterfaces(undefined, null).destinos).toBeUndefined();
-    expect(hrefs(combinarInterfaces(completa, completa))).toEqual(NAV_CATALOG.map((d) => d.href));
+    // FORK MIA: "completa" é o catálogo MENOS o que pertence a quem opera a
+    // plataforma (custo e chave do provedor de IA, lib/ai/custo-e-da-plataforma.ts),
+    // a mesma adaptação de interface-por-vinculo.test.ts. O controle abaixo impede
+    // que marcar tudo como somentePlataforma deixe este caso verde com o menu vazio.
+    const doTenant = NAV_CATALOG.filter((d) => !("somentePlataforma" in d && d.somentePlataforma));
+    expect(hrefs(combinarInterfaces(completa, completa))).toEqual(doTenant.map((d) => d.href));
+    expect(
+      destinosDaInterface(combinarInterfaces(completa, completa), true, "admin").map((d) => d.href),
+    ).toEqual(NAV_CATALOG.map((d) => d.href));
   });
 
   it("o vínculo NÃO abre porta que a empresa não oferece", () => {

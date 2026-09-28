@@ -37,6 +37,7 @@ import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidad
 import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
 
 import { avisarGrupoDaPassagem } from "@/lib/avisos/aviso-da-passagem";
+import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
 
 import { avisarLeadDoCrm, type DesfechoDoAvisoDoCrm } from "./aviso-ao-lead";
 import {
@@ -537,14 +538,15 @@ export async function triggerHandoff(
         if (!alvo && !inboxErr) {
           const { data: contato } = await admin
             .from("contacts")
-            .select("display_name, phone_number")
+            .select("name, display_name, phone_number")
             .eq("organization_id", input.organizationId)
             .eq("id", contactId)
             .maybeSingle();
           await avisarGrupoDaPassagem(admin, {
             organizationId: input.organizationId,
             conversationId: input.conversationId,
-            nome: (contato as { display_name?: string | null } | null)?.display_name ?? null,
+            // Mesmo nome do caminho do motor (`human-handoff.ts`): `nomeDoContato`.
+            nome: nomeDoContato(contato as ContatoNomeavel | null),
             telefone: (contato as { phone_number?: string | null } | null)?.phone_number ?? null,
             motivo: input.reason,
           });

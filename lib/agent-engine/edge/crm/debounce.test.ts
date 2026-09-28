@@ -3,7 +3,7 @@ import type pg from 'pg';
 
 import { decidirRajada, janelaDeRajada } from './debounce';
 
-const alvo = { organizationId: 'org1', contactId: 'contato1' };
+const alvo = { organizationId: 'org1', contactId: 'contato1', conversationId: 'conversa1' };
 /** Instante fixo: a janela é aritmética e o teste não depende do relógio. */
 const AGORA = 1_700_000_000_000;
 

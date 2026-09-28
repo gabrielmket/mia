@@ -14,6 +14,7 @@ import { marcaDaInstalacao } from "@/lib/branding/instalacao";
 import { resolverMarcaDaOrganizacao } from "@/lib/branding/organizacao";
 import { modulosDaOrganizacao } from "@/lib/modulos/liberacao";
 import { lerModoDeVenda } from "@/lib/empresas/modo-de-venda";
+import { ProvedorDoModoDeVenda } from "@/hooks/useMostraEmpresas";
 import { env } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { modulosLigados } from "@/lib/instalacao/modulos";
@@ -243,6 +244,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // acoplamento com a autenticação que derrubou 32 casos.
     <IdiomaProvider locale={user.idioma}>
     <AuthProvider user={user} activeOrg={activeOrg}>
+      {/* Fork MIA (item C2): o modo de venda desce PRONTO, como o idioma — ver hooks/useMostraEmpresas.ts. */}
+      <ProvedorDoModoDeVenda modo={activeOrg?.modo_de_venda}>
       {/*
         A COR DA ETIQUETA, uma leitura por tela.
 
@@ -286,6 +289,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         )}
       </div>
       </ProvedorDeCoresDasEtiquetas>
+      </ProvedorDoModoDeVenda>
     </AuthProvider>
     </IdiomaProvider>
   );

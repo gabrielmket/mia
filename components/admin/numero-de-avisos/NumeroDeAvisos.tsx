@@ -37,6 +37,7 @@ import {
   type EmpresaComGrupo,
   type GrupoDeAvisos,
 } from "@/hooks/useNumeroDeAvisos";
+import { nomeDoCanal } from "@/lib/channels/estado";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 
 /** Valor do item "não avisar" — `Select` não aceita valor vazio. */
@@ -294,9 +295,7 @@ export function NumeroDeAvisos() {
 
           {data.sessao ? (
             <div className="rounded-md border border-border p-4">
-              <p className="font-medium">
-                {data.sessao.display_name ?? data.sessao.phone_number}
-              </p>
+              <p className="font-medium">{nomeDoCanal(data.sessao, t)}</p>
               <p className="text-sm text-text-muted">
                 {data.sessao.phone_number} · {data.sessao.organizacao}
               </p>

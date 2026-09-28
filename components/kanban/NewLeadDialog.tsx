@@ -73,6 +73,15 @@ export function NewLeadDialog({
   const initialStage = useMemo(() => defaultStageId(stages), [stages]);
   // Quem abre o diálogo já sabendo o contato (Inbox) não escolhe de novo.
   const [contato, setContato] = useState<Contact | null>(null);
+  /**
+   * Estado à parte do formulário porque o vínculo não é texto digitado: é uma
+   * escolha numa lista, e `null` (sem empresa) é um valor legítimo que o
+   * `register` do formulário trataria como campo vazio.
+   *
+   * Nosso fork: a empresa também cria VÍNCULO, então entra na mesma limpeza do
+   * contato logo abaixo — a escolhida e abandonada não volta selecionada.
+   */
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
   // O contato é o único campo deste diálogo que cria VÍNCULO, e o componente
   // NÃO desmonta ao fechar: o funil o mantém montado enquanto há dados
   // (`app/app/pipelines/[id]/_client.tsx`). Sem esquecê-lo, quem escolheu um
@@ -86,15 +95,11 @@ export function NewLeadDialog({
   const [estavaAberto, setEstavaAberto] = useState(open);
   if (open !== estavaAberto) {
     setEstavaAberto(open);
-    if (!open) setContato(null);
+    if (!open) {
+      setContato(null);
+      setEmpresaId(null);
+    }
   }
-
-  /**
-   * Estado à parte do formulário porque o vínculo não é texto digitado: é uma
-   * escolha numa lista, e `null` (sem empresa) é um valor legítimo que o
-   * `register` do formulário trataria como campo vazio.
-   */
-  const [empresaId, setEmpresaId] = useState<string | null>(null);
 
   const form = useForm<FormShape>({
     defaultValues: {
@@ -173,6 +178,7 @@ export function NewLeadDialog({
         expected_close_date: "",
       });
       setContato(null);
+      setEmpresaId(null);
       onOpenChange(false);
     } catch {
       // toast already shown

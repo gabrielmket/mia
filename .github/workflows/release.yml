@@ -412,10 +412,13 @@ jobs:
               | tr -d '\r' | tr '[:upper:]' '[:lower:]' \
               | sed -n 's/^docker-content-digest: //p'
           }
+          # FORK: os nomes dos dois laços abaixo são os da matriz `build-and-push`
+          # de publish-image.yml desta árvore (`mia-*`), não os do upstream — a
+          # sonda perguntaria ao registro por imagens que este dono não publica.
           echo "esperando a publicação de v${VERSAO}…"
           for _ in $(seq 1 60); do
             faltando=""
-            for img in deskcommcrm deskcomm-worker deskcomm-scheduler deskcomm-voice-agent; do
+            for img in mia-crm mia-worker mia-scheduler mia-voice-agent; do
               [ -n "$(ghcr_digest "$img" "${VERSAO}")" ] || faltando="${faltando} ${img}"
             done
             if [ -z "$faltando" ]; then
@@ -441,7 +444,7 @@ jobs:
           divergentes=""
           for _ in $(seq 1 20); do
             divergentes=""
-            for img in deskcommcrm deskcomm-worker deskcomm-scheduler deskcomm-voice-agent; do
+            for img in mia-crm mia-worker mia-scheduler mia-voice-agent; do
               d_versao=$(ghcr_digest "$img" "${VERSAO}")
               d_stable=$(ghcr_digest "$img" stable)
               echo "  ${img}: ${VERSAO}=${d_versao:-ausente} stable=${d_stable:-ausente}"

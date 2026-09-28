@@ -146,7 +146,13 @@ async function operadorDeclarado(): Promise<Operador | null> {
     nome: null,
     razaoSocial,
     cnpj: linha.operador_cnpj?.trim() || null,
-    dpoEmail: linha.operador_dpo_email?.trim() || env.LGPD_DPO_EMAIL.trim() || null,
+    // O piso passa pelo resolvedor, como nos outros dois leitores deste arquivo:
+    // ler o ambiente direto aqui faria o campo do painel (migration 0341) não
+    // mudar nada no documento do modo gerenciado.
+    dpoEmail:
+      linha.operador_dpo_email?.trim() ||
+      (await valorDaInstalacao("LGPD_DPO_EMAIL")).valor?.trim() ||
+      null,
     politicaPropria: urlDePoliticaSegura(linha.operador_politica_url),
     resolvido: true,
   };
@@ -229,7 +235,7 @@ export function nomeDoOperador(op: Operador): string {
  *
  * Diferente de `resolverOperador`, que devolve o operador JÁ RESOLVIDO (com
  * fallbacks, com a URL checada, com o modo decidido). O formulário precisa do
- * valor cru: mostrar ao operador o `env.LGPD_DPO_EMAIL` como se fosse o que ele
+ * valor cru: mostrar ao operador o piso da instalação (`LGPD_DPO_EMAIL`) como se fosse o que ele
  * digitou faria o campo mentir, e salvar depois gravaria no banco um valor que
  * ele nunca escolheu.
  *

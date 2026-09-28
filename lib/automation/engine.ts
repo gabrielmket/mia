@@ -21,6 +21,7 @@ import { getAction } from "@/lib/automation/actions";
 import type { ActionResultDetail } from "@/lib/automation/types";
 import { audit } from "@/lib/audit";
 import { regraDoEvento } from "@/lib/automation/gatilho-de-data-do-funil";
+import { regrasDoNomeAntigo } from "@/lib/automation/regras-do-nome-antigo";
 import { ENTIDADE_ESPERADA_POR_GATILHO } from "@/lib/schemas/webhooks";
 import { logger } from "@/lib/logger";
 
@@ -226,7 +227,13 @@ export async function runAutomationForEvent(
   if (error) {
     return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "error", detail: error.message };
   }
-  const todas = (rules ?? []) as unknown as RuleRow[];
+  // Fork MIA: as regras salvas como `appointment.booked` rodam no
+  // `appointment.created`, que é o mesmo fato (ver regras-do-nome-antigo.ts).
+  const doNomeAntigo = await regrasDoNomeAntigo(admin, row);
+  if (doNomeAntigo.error) {
+    return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "error", detail: doNomeAntigo.error.message };
+  }
+  const todas = [...(rules ?? []), ...doNomeAntigo.data] as unknown as RuleRow[];
   if (!todas.length) {
     return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "ok", detail: "no_rules" };
   }

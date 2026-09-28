@@ -891,6 +891,12 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "endpoint padrão do canal parceiro que espelha a Cloud API (recorte do #1130), com override por DATAFY_API_BASE_URL. É o destino das chamadas de envio e de validação do token — e o canal só existe numa instalação que o liga (DATAFY_ENABLED).",
   },
+  // ── fork MIA (docs/FORK-MIA.md) ──
+  "economia.awesomeapi.com.br": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint público da cotação USD-BRL que o cron `app/api/v1/cron/cotacao-do-dolar/route.ts` busca uma vez por dia para converter o custo de IA (cobrado em dólar) em real no painel. É o destino do request, sem chave nem dado de cliente indo junto; trocar pelo domínio do revendedor faria a cotação não chegar, e o cron já degrada sem derrubar nada quando a origem cai.",
+  },
   // ── painel do fornecedor: texto de tela apontando para o endereço DELE ────
   "platform.openai.com": {
     categoria: "CONSOLE",

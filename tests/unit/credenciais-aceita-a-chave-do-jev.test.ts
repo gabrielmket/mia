@@ -46,7 +46,10 @@ beforeEach(() => {
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
     org: { orgId: ORG, role: "admin", name: "Org" },
-    user: { id: "actor", idioma: "pt-BR" },
+    // Fork MIA: só a plataforma CRIA chave de IA (lib/ai/custo-e-da-plataforma.ts).
+    // O admin daqui é também admin de plataforma — o upstream o autoriza igual,
+    // e o portão do fork é cobrado em credenciais-so-a-plataforma-cria.test.ts.
+    user: { id: "actor", idioma: "pt-BR", is_platform_admin: true, support: null },
   } as Awaited<ReturnType<typeof requireRole>>);
 });
 

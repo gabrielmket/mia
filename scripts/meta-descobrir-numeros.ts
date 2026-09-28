@@ -41,8 +41,12 @@
  * A saída traz, por número: o `phone_number_id` e o `waba_id` prontos para
  * colar em Conexões › Oficial, mais o veredito de se aquele número SERVE.
  */
+import { graphBaseUrl } from "@/lib/channels/meta/graph-base";
 
-const GRAPH = `https://graph.facebook.com/${process.env.META_GRAPH_VERSION ?? "v22.0"}`;
+// A mesma base que o canal usa ao conectar (host e versão da instalação, com
+// `META_GRAPH_VERSION` e `META_GRAPH_BASE_URL` valendo) — senão o diagnóstico
+// poderia perguntar numa versão e o canal falar em outra.
+const GRAPH = graphBaseUrl();
 
 interface Negocio {
   id: string;

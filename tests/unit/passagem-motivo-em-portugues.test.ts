@@ -84,6 +84,24 @@ const USO_COMO_CHAVE: Array<{ arquivo: string; codigo: string; razao: string }> 
     razao:
       "chave do campo no formulário de comportamento da instalação (`trocar(\"orcamento_de_ia\", …)`) — outro conceito, não o motivo da passagem",
   },
+  // ── fork MIA (docs/FORK-MIA.md) ──
+  // `sem_telefone` é colisão do mesmo tipo de `orcamento_de_ia`: no
+  // disparo em massa do fork ele é a CHAVE de uma contagem na resposta de
+  // `POST /api/v1/broadcasts` (`fora.sem_telefone` = quantos destinatários a
+  // peneira tirou por falta de número). A tela exibe o NÚMERO seguido de
+  // t("sem telefone"); o código nunca vira texto.
+  {
+    arquivo: "hooks/useBroadcasts.ts",
+    codigo: "sem_telefone",
+    razao:
+      "campo do tipo `CampanhaCriada.fora` (contagem da peneira do disparo em massa do fork) — outro conceito, não o motivo da passagem",
+  },
+  {
+    arquivo: "components/broadcast/MiaBroadcast.tsx",
+    codigo: "sem_telefone",
+    razao:
+      "lê a contagem `recemCriada.fora.sem_telefone` e exibe o número com t(\"sem telefone\") — o código não aparece na tela",
+  },
 ];
 
 /** Os arquivos de tela, onde um código cru vira texto no rosto de quem opera. */

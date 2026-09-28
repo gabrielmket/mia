@@ -18,7 +18,7 @@ import type pg from 'pg';
 import { insertInboxItem } from '../../db/repository';
 import type { Logger } from '../../obs/logger';
 import { enqueueJob } from '../../queue/queue';
-import { decidirRajada, janelaDeRajada } from './debounce';
+import { decidirRajada } from './debounce';
 import { avisoDeEventoMorto, IA_QUE_NAO_RESPONDEU } from '@/lib/event-log/aviso-de-evento-morto';
 import { TIPOS_DERIVAVEIS, DERIVACAO_TERMINADA } from '@/lib/messaging/media/derivable';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
@@ -481,59 +481,27 @@ async function processEvent(
   // entra de carona (o turno lê o histórico completo). Evento vira done.
   //
   // A janela e a exclusão do job em HOLD (`held_run_after` no payload — a lição
-  // do #830) moram em ./debounce.ts, com teste próprio.
+  // do #830) moram em ./debounce.ts, com teste próprio — e lá também as duas
+  // cercas do fork (horizonte = debounce, e MESMA conversa), por isso a conversa
+  // vai no alvo.
   const rajada = await decidirRajada(
     pool,
-    { organizationId: event.organization_id, contactId: p.contact_id },
+    {
+      organizationId: event.organization_id,
+      contactId: p.contact_id,
+      conversationId: p.conversation_id,
+    },
     knobs.debounceMs,
   );
   if (rajada.tipo === 'coalescido') {
-    // ⚠️ DUAS CERCAS A MAIS, e nenhuma é zelo — cada uma fecha um ralo medido.
-    // O `decidirRajada` ainda não as conhece (a chave dele é só contato +
-    // janela aberta + fora de hold), então a carona que ele aprova passa por
-    // elas aqui antes de valer. Recusada a carona, o fluxo segue para o
-    // `enqueueJob` abaixo e a mensagem ganha turno próprio — nunca é
-    // descartada.
-    //
-    // (a) HORIZONTE. A carona só é carona enquanto o job que a leva sai LOGO.
-    //     `run_after > now()` não distingue um job adiado por 300 ms de
-    //     debounce — o propósito desta peça — de um adiado por CINCO HORAS pela
-    //     janela anti-ban (`inbound-turn.ts`, bloco "JANELA ANTI-BAN"), que
-    //     adia com data real e por isso escapa da exclusão de hold. Enquanto a
-    //     janela está fechada, TODA mensagem seguinte do contato caía aqui:
-    //     evento marcado `done`, nenhum job novo, e o cliente atendido por um
-    //     único turno lá na frente. O teto é o próprio debounce, que é a janela
-    //     que esta peça existe para cobrir.
-    //
-    // (b) MESMA CONVERSA. A chave é só `contact_id`, e o turno responde na
-    //     conversa PINADA no payload do job. O mesmo contato falando em dois
-    //     canais (WhatsApp e Instagram são conversas diferentes) tinha a segunda
-    //     mensagem pendurada num job que responde na PRIMEIRA — e a segunda
-    //     conversa nunca recebia turno nenhum. Aqui a mensagem não atrasava:
-    //     sumia.
-    const { rows: caronaValida } = await pool.query<{ id: string }>(
-      `select id from job_queue
-       where organization_id = $1 and id = $2
-         and run_after <= now() + make_interval(secs => $3 / 1000.0)
-         and payload->>'conversation_id' = $4
-       limit 1`,
-      [event.organization_id, rajada.jobId, knobs.debounceMs, p.conversation_id],
-    );
-    if (caronaValida[0]) {
-      log.info('drain: rajada coalescida em job pendente', {
-        event_id: event.id,
-        job_id: rajada.jobId,
-      });
-      return 'processado';
-    }
-    log.info('drain: carona recusada — job pendente é de outra conversa ou está longe demais', {
+    log.info('drain: rajada coalescida em job pendente', {
       event_id: event.id,
       job_id: rajada.jobId,
     });
+    return 'processado';
   }
 
-  const runAfter =
-    rajada.tipo === 'enfileirar' ? rajada.runAfter : janelaDeRajada(knobs.debounceMs);
+  const runAfter = rajada.runAfter;
   const { job, deduped } = await enqueueJob(pool, event.organization_id, {
     kind: 'inbound_turn',
     leadId: p.contact_id,

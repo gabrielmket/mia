@@ -40,15 +40,19 @@ const sessao = vi.hoisted(() => ({
   organizacao: null as Record<string, unknown> | null,
 }));
 
+// O admin client responde POR TABELA: o piso do encarregado vem pelo resolvedor
+// da instalação (`valorDaInstalacao`, que lê `platform_config` antes do
+// ambiente). Sem linha lá, o resolvedor cai no `.env` mockado abaixo — é o
+// caminho de uma instalação que nunca tocou no campo pela tela.
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
-    from: () => ({
+    from: (tabela: string) => ({
       select: () => ({
         eq: () => ({
-          maybeSingle: async () => ({
-            data: platformBranding.linha,
-            error: platformBranding.erro,
-          }),
+          maybeSingle: async () =>
+            tabela === "platform_config"
+              ? { data: null, error: null }
+              : { data: platformBranding.linha, error: platformBranding.erro },
         }),
       }),
     }),

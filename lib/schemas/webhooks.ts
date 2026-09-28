@@ -60,10 +60,11 @@ export const ENTIDADE_ESPERADA_POR_GATILHO = {
    *
    * Este fork batizou o evento de `appointment.booked` antes de o ciclo de
    * vida completo existir; `appointment.created` é o mesmo fato com o nome de
-   * hoje. Duas coisas ainda falam o nome antigo e não podem emudecer:
-   * `app/api/v1/agenda/agendamentos/_handler.ts`, que o emite, e — o que dói —
-   * as regras JÁ SALVAS de cliente em produção, cuja coluna `trigger_event`
-   * guarda esta string. Tirá-lo daqui não daria erro nenhum na hora: o `z.enum`
+   * hoje. O handler da agenda NÃO o emite mais (emitir os dois anunciava a
+   * mesma reunião duas vezes): as regras JÁ SALVAS de cliente em produção, cuja
+   * coluna `trigger_event` guarda esta string, rodam no `appointment.created`
+   * pelo motor (`lib/automation/regras-do-nome-antigo.ts`), e é por elas que o
+   * nome fica. Tirá-lo daqui não daria erro nenhum na hora: o `z.enum`
    * passaria a recusar a regra antiga no primeiro PATCH, e o motor deixaria de
    * casar o evento — a automação simplesmente pararia de rodar, calada.
    *

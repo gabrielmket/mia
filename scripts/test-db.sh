@@ -183,13 +183,14 @@ psql_install() {
 # no próprio molde. Com isso um invariante PROVA quantas aplicações o banco que ele
 # lê recebeu, em vez de confiar na posição das linhas deste script.
 aplicar_baseline() {
-  psql_install < "$BASELINE"
   # FORK MIA (docs/FORK-MIA.md, regras 1 e 5): o schema do produto é o do upstream
-  # MAIS o nosso, na ordem do easypanel/bootstrap.sh. Sem esta linha o gate nunca via
-  # o baseline-mia.sql num Postgres de verdade: em 28/09 um `end$;` (no lugar de
-  # `end $$;`) desalinhou o dollar-quoting e 26 comandos, carimbo incluso, deixavam
-  # de rodar no deploy, com todos os testes de texto verdes.
-  psql_install < "$ROOT/supabase/baseline-mia.sql"
+  # MAIS o nosso, na ordem do easypanel/bootstrap.sh. Sem o segundo arquivo o gate
+  # nunca via o baseline-mia.sql num Postgres de verdade: em 28/09 um `end$;` (no
+  # lugar de `end $$;`) desalinhou o dollar-quoting e 26 comandos, carimbo incluso,
+  # deixavam de rodar no deploy, com todos os testes de texto verdes. UMA linha, e
+  # não duas: tests/unit/test-db-aplica-o-baseline-num-lugar-so.test.ts exige um
+  # lugar só alimentando o psql, porque é esta função que conta as aplicações.
+  cat "$BASELINE" "$ROOT/supabase/baseline-mia.sql" | psql_install
   psql_install <<'SQL'
 set client_min_messages = warning;
 create schema if not exists test_db;

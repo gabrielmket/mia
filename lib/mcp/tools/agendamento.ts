@@ -642,8 +642,8 @@ const marcarShape = {
       "o resumo do que você apurou na conversa, para quem vai atender: o que a pessoa quer, " +
         "o que já tem hoje, o que a incomoda, prazo e orçamento quando ela disse, e o que ficou " +
         "combinado. Escreva em frases curtas, só o que ela falou — nada de suposição sua. É " +
-        "anotação INTERNA: vai para a equipe, nunca para o cliente, e NÃO aparece no calendário " +
-        "de quem foi convidado.",
+        "anotação INTERNA da equipe. Não aparece no calendário do cliente: vai só para a " +
+        "equipe, nunca para o cliente nem para quem foi convidado.",
     ),
   /**
    * O convidado do Google. O handler e a tela já tinham o campo; a ferramenta

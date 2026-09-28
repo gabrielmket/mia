@@ -233,6 +233,28 @@ describe("a sétima cópia não nasce", () => {
       trecho: "display_name: data.display_name ?? null,",
       motivo: "o export de LGPD entrega as DUAS colunas do titular cruas; não decide nome",
     },
+    // ── fork MIA (docs/FORK-MIA.md) ──
+    {
+      arquivo: "app/api/v1/admin/numero-de-avisos/conectar/route.ts",
+      trecho: 'displayName: parsed.data.display_name ?? "Número de avisos",',
+      motivo: "apelido do CANAL (o número de avisos da plataforma) que vem no corpo; grava, não decide nome de contato",
+    },
+    {
+      arquivo: "app/api/v1/cron/report-da-plataforma/route.ts",
+      trecho: "const apelido = linha.display_name ?? linha.phone_number ?? linha.id;",
+      motivo:
+        "apelido do CANAL caído no report ao dono da plataforma; o `id` é o último degrau porque é a única pista de qual canal é quando não há apelido nem número",
+    },
+    {
+      arquivo: "components/admin/modelo-de-ia/ModeloDeIa.tsx",
+      trecho: "${m.display_name ?? m.model_id}",
+      motivo: "nome do MODELO de IA (ai_models.display_name), não de pessoa",
+    },
+    {
+      arquivo: "lib/ai/seletor-de-modelo.ts",
+      trecho: '${m.display_name ?? ""}',
+      motivo: "busca pelo nome do MODELO de IA no seletor, não de pessoa",
+    },
   ];
 
   /**

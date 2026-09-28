@@ -230,10 +230,16 @@ function atividades(): Linha[] {
   return banco.inserido["crm_lead_activities"] ?? [];
 }
 
-/** Os anúncios de "marcaram reunião" que chegaram ao `event_log`. */
+/**
+ * Os anúncios de "marcaram reunião" que chegaram ao `event_log`.
+ *
+ * É o `appointment.created`: o `appointment.booked` que este fork emitia ao
+ * lado dele era o mesmo fato anunciado duas vezes, e as regras salvas com o
+ * nome antigo rodam neste (`lib/automation/regras-do-nome-antigo.ts`).
+ */
 function reunioesAnunciadas(): Array<{ fn: string; args: Linha }> {
   return banco.rpc.filter(
-    (c) => c.fn === "emit_event" && c.args.p_event_type === "appointment.booked",
+    (c) => c.fn === "emit_event" && c.args.p_event_type === "appointment.created",
   );
 }
 
@@ -501,9 +507,13 @@ describe("quando a gravação da timeline falha", () => {
  * negócio. Reunião marcada com contato que ainda não virou card é justamente o
  * caso em que a automação tem trabalho; um emissor que só falasse com negócio
  * aberto ficaria mudo exatamente ali.
+ *
+ * O anúncio é o `appointment.created`, e UM só: as regras salvas como
+ * `appointment.booked` rodam nele, então as chaves que elas leem (`lead_id`,
+ * `nome_do_tipo`) têm de viajar no corpo dele.
  */
 describe("a agenda anuncia a reunião marcada", () => {
-  it("marcar anuncia `appointment.booked` com o contato e o negócio", async () => {
+  it("marcar anuncia `appointment.created` com o contato e o negócio — e não anuncia de novo pelo nome antigo", async () => {
     await marcarAgendamentoHandler(cliente(), ctx, {
       event_type_id: TIPO,
       starts_at: HORARIO,
@@ -524,6 +534,10 @@ describe("a agenda anuncia a reunião marcada", () => {
     expect(payload.contact_id, "sem o contato a automação não tem de quem criar o card").toBe(CONTATO);
     expect(payload.lead_id, "o negócio aberto do contato tem que viajar junto: sem ele a automação cria um card DUPLICADO em vez de mover o que já existe").toBe(NEGOCIO);
     expect(payload.nome_do_tipo, "é por ele que a regra separa reunião comercial de retorno de atendimento").toBe("Consulta");
+    expect(
+      banco.rpc.filter((c) => c.fn === "emit_event" && c.args.p_event_type === "appointment.booked"),
+      "a reunião foi anunciada duas vezes (nome antigo e nome de hoje): quem ouve compromisso por webhook conta a mesma reunião em dobro",
+    ).toHaveLength(0);
   });
 
   it("SEM negócio aberto o anúncio sai mesmo assim — é o caso que a automação existe para resolver", async () => {

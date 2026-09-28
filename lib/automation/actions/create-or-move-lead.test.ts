@@ -452,6 +452,9 @@ describe("create_or_move_lead — contato com negócio em OUTRO funil", () => {
 
   it("com `abrir_novo_card`, nasce um card no funil de destino — e o de origem fica intacto", async () => {
     const db = makeDb({
+      // A v1.60 confere que o contato existe NA organização antes de criar o card
+      // (createLeadHandler); sem a linha, a ação falha com "Contato não encontrado".
+      contacts: [{ id: "contato-1", organization_id: ORG_ID }],
       pipelines: [funilRow({ id: PIPE, name: "COMERCIAL" })],
       stages: [ETAPA_ORIGEM, ETAPA_DESTINO],
       leads: [],

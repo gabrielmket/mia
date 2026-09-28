@@ -33,7 +33,6 @@ import { colide } from "@/lib/agenda/horarios-livres";
 import {
   atividadeDaTransicao,
   autorParaTimeline,
-  avisaReuniaoMarcada,
   gatilhoDaTransicao,
   type SituacaoAnterior,
   type Transicao,
@@ -1078,16 +1077,26 @@ async function fecharOLaco(
       p_event_type: args.gatilho,
       p_entity_kind: ENTIDADE_DO_AGENDAMENTO,
       p_entity_id: args.appointmentId,
-      p_payload: payloadDoAviso({
-        appointmentId: args.appointmentId,
-        contactId: args.contactId,
-        transicao: args.transicao,
-        fuso: args.fusoDoCompromisso,
-        nomeDoTipo: args.nomeDoTipo,
-        compromisso,
-        tipo,
-        leadIds,
-      }),
+      p_payload: {
+        ...payloadDoAviso({
+          appointmentId: args.appointmentId,
+          contactId: args.contactId,
+          transicao: args.transicao,
+          fuso: args.fusoDoCompromisso,
+          nomeDoTipo: args.nomeDoTipo,
+          compromisso,
+          tipo,
+          leadIds,
+        }),
+        // Fork MIA: as chaves do antigo `appointment.booked`, que não é mais
+        // emitido (era o mesmo fato em dobro) — as regras salvas com ele rodam
+        // neste evento (`lib/automation/regras-do-nome-antigo.ts`) e as leem.
+        // `lead_id` hidrata `context.lead` no motor (sem ele, create_or_move_lead
+        // duplica o card; `null` = criar); `nome_do_tipo` é o das condições e do
+        // token `{{event.nome_do_tipo}}` do aviso no grupo.
+        lead_id: leadId,
+        nome_do_tipo: args.nomeDoTipo,
+      },
       // `request_id` sem o prefixo `rule:` de propósito: ele correlaciona com o
       // audit log e NÃO aciona o anti-loop do motor, que só barra o que uma
       // regra causou.
@@ -1121,40 +1130,6 @@ async function fecharOLaco(
         error: err instanceof Error ? err.message : String(err),
       });
     });
-  }
-
-  // ⚠️ ANTES dos dois early-returns abaixo. Reunião marcada para contato que
-  // ainda NÃO tem negócio aberto é exatamente o caso que a automação existe
-  // para resolver (ela cria o card); emitir só quando já há lead deixaria de
-  // fora o único cenário em que o aviso muda alguma coisa.
-  if (avisaReuniaoMarcada(args.atividade)) {
-    // Pelo client que já veio, como `registraFalhaDeAtividade` faz três
-    // linhas abaixo: `emit_event` é `security definer` e está concedida a
-    // `authenticated`. Abrir um client de service-role só para isto daria ao
-    // caminho da rota um poder que ele não precisa ter.
-    await supabase
-      .rpc("emit_event", {
-        p_event_type: "appointment.booked",
-        // A MESMA constante que o gatilho de automação usa logo acima: a string solta
-        // em dois emissores do mesmo arquivo é como os dois lados divergem no dia
-        // em que um deles muda, e o consumidor passa a não achar o compromisso.
-        p_entity_kind: ENTIDADE_DO_AGENDAMENTO,
-        p_entity_id: args.appointmentId,
-        p_payload: {
-          contact_id: args.contactId,
-          lead_id: leadId,
-          nome_do_tipo: args.nomeDoTipo,
-          fuso: args.fusoDoCompromisso,
-        },
-        p_metadata: { request_id: ctx.requestId },
-        p_organization_id: ctx.organization_id,
-      })
-      .then(({ error }) => {
-        // Fire-and-forget quanto a erro: o compromisso JÁ está marcado, e
-        // derrubar a marcação porque o aviso falhou trocaria um problema de
-        // comunicação por um de agenda.
-        if (error) logger.error("[agenda] emit_event appointment.booked falhou", { error: error.message });
-      });
   }
 
   if (!args.atividade) return;

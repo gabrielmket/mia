@@ -398,13 +398,20 @@ export async function rescheduleJob(
   // `motivo` é gravado SEMPRE, inclusive como NULL quando o chamador não declara:
   // um adiamento novo sobrescreve o motivo do anterior, e deixar o antigo colado
   // faria a rota de pacing reprogramar job que já está parado por outra condição.
+  //
+  // Sem motivo declarado, o NULL vai LITERAL no SQL em vez de virar um 6º
+  // parâmetro: quem chama como o upstream chama (espera de saldo, espera de
+  // sessão) manda ao banco exatamente os cinco parâmetros do upstream — e o
+  // teste que prende essa lista (`tests/unit/espera-de-saldo.test.ts`) segue
+  // valendo a cada sincronização. Estender, nunca redefinir (docs/FORK-MIA.md).
+  const comMotivo = opts.motivo !== undefined;
   const { rows } = await db.query<JobRow>(
     `update job_queue
      set status = 'pending', locked_by = null, locked_at = null,
          run_after = now() + ($3 * interval '1 millisecond'),
          attempts = greatest(attempts - 1, 0),
          last_error = $4,
-         deferred_reason = $6
+         deferred_reason = ${comMotivo ? '$6' : 'null'}
      where id = $1 and status = 'running' and locked_by = $2 and ($5::timestamptz is null or locked_at=$5)
      returning *`,
     [
@@ -413,7 +420,7 @@ export async function rescheduleJob(
       opts.delayMs,
       normalizeError(opts.reason),
       opts.acquiredAt ?? null,
-      opts.motivo ?? null,
+      ...(comMotivo ? [opts.motivo] : []),
     ],
   );
   return rows[0] ?? null;
