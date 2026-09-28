@@ -149,6 +149,21 @@ function silenceSweepDb(): SilenceSweepDb {
       );
       return new Set(rows.map((r) => r.contact_id));
     },
+    // FORK MIA: a mesma régua de `createSupabaseSilenceSweepDb` — inscrição
+    // ENCERRADA deste pointer depois da última mensagem do contato.
+    async loadJaInscritosNesteSilencio(orgId, pointerId, contactIds) {
+      const { rows } = await pool.query<{ contact_id: string }>(
+        `select distinct e.contact_id from followup_enrollments e
+          where e.organization_id = $1 and e.pointer_id = $2 and e.contact_id = any($3::uuid[])
+            and e.status in ('completed', 'cancelled', 'dead')
+            and e.started_at > coalesce(
+              (select max(c.last_inbound_at) from conversations c
+                where c.organization_id = $1 and c.contact_id = e.contact_id),
+              '-infinity'::timestamptz)`,
+        [orgId, pointerId, contactIds],
+      );
+      return new Set(rows.map((r) => r.contact_id));
+    },
     async loadTriggerNode(orgId, versionId) {
       const { rows } = await pool.query<{ graph: FlowGraph }>(
         `select graph from followup_flow_versions where organization_id = $1 and id = $2`,
@@ -377,6 +392,43 @@ describe("runSilenceSweep — enrolla contato silencioso gateado, sem duplicar",
     expect(await countEnrollments(pointerId, contactId)).toBe(1);
 
     expect(versionId).toBeTruthy(); // sanity — version foi realmente usada (current_node_id veio do grafo pinado nela)
+  });
+});
+
+// ---- FORK MIA: uma inscrição por silêncio ------------------------------------
+
+describe("runSilenceSweep — uma inscrição por silêncio (FORK MIA)", () => {
+  it("encerrada no mesmo silêncio não volta; volta depois que o contato escreve de novo", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org, { thresholdMinutes: 30 });
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [pointerId] });
+    const contactId = await seedContact(org);
+    await seedConversation(org, contactId, 90); // silencioso há 90 min > limiar de 30
+    const deps = { db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK };
+
+    expect((await runSilenceSweep(deps)).enrolled).toBe(1);
+    // O passo terminou rápido (janela de 24 h fechada, turno pulado) e o motor
+    // encerrou o enrollment. A inscrição foi há 60 min; a última fala, há 90.
+    await pool.query(
+      `update followup_enrollments
+          set status = 'cancelled', next_eval_at = null, cancel_reason = 'passo pulado',
+              started_at = now() - interval '60 minutes'
+        where pointer_id = $1 and contact_id = $2`,
+      [pointerId, contactId],
+    );
+
+    const mesmoSilencio = await runSilenceSweep(deps);
+    expect(mesmoSilencio.enrolled, "reinscreveu no mesmo silêncio: é o laço de set/2026").toBe(0);
+    expect(mesmoSilencio.skipped_same_silence).toBe(1);
+    expect(await countEnrollments(pointerId, contactId)).toBe(1);
+
+    // O contato escreveu há 40 min, DEPOIS da inscrição, e calou de novo (40 > 30):
+    // é outro silêncio, e o fluxo pode voltar.
+    await seedConversation(org, contactId, 40);
+    const outroSilencio = await runSilenceSweep(deps);
+    expect(outroSilencio.enrolled, "o controle: um silêncio novo tem de inscrever").toBe(1);
+    expect(await countEnrollments(pointerId, contactId)).toBe(2);
   });
 });
 

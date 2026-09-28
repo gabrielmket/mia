@@ -30,6 +30,11 @@ import { StaleServiceBoundaryError, parseServiceBoundary, assertCurrentServiceBo
  * pode ser re-enrollado na varredura seguinte se continuar silencioso —
  * aceitável no MVP, sem cooldown table.
  *
+ * FORK MIA: não era aceitável. O enrollment que termina rápido (passo pulado
+ * pela janela de 24 h fechada) voltava a cada minuto, e cada volta pagava um
+ * turno de IA. Agora o pointer inscreve o contato UMA vez por silêncio
+ * (`loadJaInscritosNesteSilencio`): só volta depois que o contato escrever de novo.
+ *
  * agent_id: `decidirAgenteDoEnrollmentAutomatico` pina o agente publicado que
  * ARMA o pointer (menor uuid se >1). Grafo só de texto fixo nasce com
  * `agent_id` nulo. Grafo que pede IA sem agente é gate-out.
@@ -78,6 +83,14 @@ export interface SilenceSweepDb {
    * caminho não entra no fluxo de silêncio. Ver `retorno-segura-o-fluxo.ts`.
    */
   loadContatosComRetornoVivo(orgId: string): Promise<Set<string>>;
+  /**
+   * FORK MIA — contatos que ESTE pointer já inscreveu DEPOIS da última mensagem
+   * deles. O silêncio é o mesmo: reinscrever repete o fluxo sobre quem não disse
+   * nada novo. Sem isto, um enrollment que termina rápido (cancelado, pulado) volta
+   * na varredura seguinte, a cada minuto — em set/2026, 22 contatos somaram 14.389
+   * enrollments e ~3.400 turnos de IA por dia. Ver `jaInscritosNesteSilencio`.
+   */
+  loadJaInscritosNesteSilencio(orgId: string, pointerId: string, contactIds: string[]): Promise<Set<string>>;
   /** Nó `trigger` do grafo pinado + se o fluxo pede agente; `null` se version/nó não existir. */
   loadTriggerNode(orgId: string, versionId: string): Promise<NoDeGatilho | null>;
   /** Insere o enrollment nascendo no nó trigger; `inserted:false` = 23505 (já vivo nesse pointer) → skip. */
@@ -99,6 +112,8 @@ export interface SilenceSweepSummary {
   skipped_existing: number;
   /** Silenciosos que ficaram de fora porque já têm um retorno agendado. */
   skipped_pending_return: number;
+  /** FORK MIA: silenciosos que este pointer já inscreveu neste mesmo silêncio. */
+  skipped_same_silence: number;
   /**
    * Pointers que FALHARAM nesta varredura (logados e pulados). Um pointer ruim
    * — de uma empresa só — não pode calar a varredura de todas as outras: antes,
@@ -121,6 +136,7 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     enrolled: 0,
     skipped_existing: 0,
     skipped_pending_return: 0,
+    skipped_same_silence: 0,
     pointers_failed: 0,
   };
 
@@ -165,10 +181,18 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
       const nextEvalAt = clock().toISOString();
       const comRetorno =
         contactIds.length > 0 ? await db.loadContatosComRetornoVivo(pointer.organization_id) : new Set<string>();
+      const jaInscritos =
+        contactIds.length > 0
+          ? await db.loadJaInscritosNesteSilencio(pointer.organization_id, pointer.id, contactIds)
+          : new Set<string>();
 
       for (const contactId of contactIds) {
         if (comRetorno.has(contactId)) {
           summary.skipped_pending_return++;
+          continue;
+        }
+        if (jaInscritos.has(contactId)) {
+          summary.skipped_same_silence++;
           continue;
         }
         const { inserted } = await db.insertEnrollment({
@@ -194,6 +218,35 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
   }
 
   return summary;
+}
+
+/** Estados em que a inscrição já acabou — a viva é assunto do índice one_live. */
+const INSCRICAO_ENCERRADA = ["completed", "cancelled", "dead"];
+
+/**
+ * FORK MIA — quem o pointer já inscreveu NESTE silêncio: alguma inscrição dele é
+ * posterior à última mensagem que o contato mandou (em qualquer conversa). Uma
+ * mensagem nova do contato abre outro silêncio, e aí ele volta a ser elegível.
+ * Contato sem mensagem registrada não chega aqui (a varredura só vê quem tem
+ * `last_inbound_at`); se chegasse, qualquer inscrição o seguraria.
+ */
+export function jaInscritosNesteSilencio(
+  inscricoes: ReadonlyArray<{ contact_id: string; started_at: string }>,
+  entradas: ReadonlyArray<{ contact_id: string; last_inbound_at: string | null }>,
+): Set<string> {
+  const ultimaEntrada = new Map<string, number>();
+  for (const e of entradas) {
+    if (!e.last_inbound_at) continue;
+    const t = new Date(e.last_inbound_at).getTime();
+    if (t > (ultimaEntrada.get(e.contact_id) ?? -Infinity)) ultimaEntrada.set(e.contact_id, t);
+  }
+  const saida = new Set<string>();
+  for (const i of inscricoes) {
+    if (new Date(i.started_at).getTime() > (ultimaEntrada.get(i.contact_id) ?? -Infinity)) {
+      saida.add(i.contact_id);
+    }
+  }
+  return saida;
 }
 
 type ContactEmbed =
@@ -336,6 +389,44 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
 
     loadContatosComRetornoVivo(orgId) {
       return contatosComRetornoVivo(admin, orgId);
+    },
+
+    // FORK MIA. Só inscrição ENCERRADA conta: a viva já é barrada pelo índice
+    // `idx_followup_enrollments_one_live` (1 follow-up vivo por lead), e ela
+    // continua sendo `skipped_existing`, como o upstream mede.
+    // Em lotes: os ids viajam na URL do PostgREST, e cada resposta para
+    // em mil linhas. Da inscrição mais NOVA para a mais antiga, então o que decide
+    // (a última de cada contato) vem primeiro; um contato cortado pelo teto ganha
+    // UMA inscrição a mais, que na varredura seguinte já é a mais nova.
+    async loadJaInscritosNesteSilencio(orgId, pointerId, contactIds) {
+      const LOTE = 100;
+      const inscricoes: Array<{ contact_id: string; started_at: string }> = [];
+      const entradas: Array<{ contact_id: string; last_inbound_at: string | null }> = [];
+      for (let i = 0; i < contactIds.length; i += LOTE) {
+        const lote = contactIds.slice(i, i + LOTE);
+        const [ins, conv] = await Promise.all([
+          admin
+            .from("followup_enrollments")
+            .select("contact_id, started_at")
+            .eq("organization_id", orgId)
+            .eq("pointer_id", pointerId)
+            .in("status", INSCRICAO_ENCERRADA)
+            .in("contact_id", lote)
+            .order("started_at", { ascending: false })
+            .limit(1000),
+          admin
+            .from("conversations")
+            .select("contact_id, last_inbound_at")
+            .eq("organization_id", orgId)
+            .in("contact_id", lote)
+            .not("last_inbound_at", "is", null),
+        ]);
+        if (ins.error) throw new Error(ins.error.message);
+        if (conv.error) throw new Error(conv.error.message);
+        inscricoes.push(...((ins.data ?? []) as typeof inscricoes));
+        entradas.push(...((conv.data ?? []) as typeof entradas));
+      }
+      return jaInscritosNesteSilencio(inscricoes, entradas);
     },
 
     async loadTriggerNode(orgId, versionId) {

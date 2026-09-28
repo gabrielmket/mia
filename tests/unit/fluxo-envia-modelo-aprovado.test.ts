@@ -226,12 +226,48 @@ describe("plano B da mensagem por IA (`fallback_template_id`)", () => {
     expect(runBeforeSend).not.toHaveBeenCalled();
   });
 
-  it("plano B apontado para texto pronto (legado): segue para a IA, que é o que sempre fez", async () => {
-    // Texto livre seria recusado pela mesma janela fechada — trocá-lo pela IA
-    // não perderia nada, e pular a IA por ele seria regressão.
-    const { d } = deps();
+  it("plano B apontado para texto pronto (legado), janela fechada: nem o texto nem a IA — o passo é pulado", async () => {
+    // FORK MIA: texto livre seria recusado pela janela fechada, e o texto da IA
+    // TAMBÉM — o upstream mandava para a IA mesmo assim, e o gate recusava depois
+    // de o turno inteiro (cinco chamadas de LLM) ter rodado. Ver o bloco
+    // "A IA NÃO RODA QUANDO NADA DO QUE ELA ESCREVER PODE SAIR" em followup-turn.ts.
+    const { d, completeFollowupTurn } = deps();
     await criarHandler(d)(job(PASSO_IA), fakePool({ texto: "oi", ultimoInboundHa: 30 }), { workerId: "w1" });
 
+    expect(runAgentTurn).not.toHaveBeenCalled();
+    expect(runBeforeSend).not.toHaveBeenCalled();
+    expect(resultado(completeFollowupTurn).kind).toBe("skipped");
+  });
+});
+
+describe("FORK MIA — a IA não roda quando nada do que ela escrever pode sair", () => {
+  const PASSO_IA_SEM_PLANO_B = { prompt_hint: "Retomá la charla" };
+
+  it("⭐ janela FECHADA e sem modelo aprovado: nenhuma chamada de IA, passo pulado com o motivo", async () => {
+    // O laço de set/2026: régua de silêncio de 24 h no Meta chega aqui SEMPRE com
+    // a janela fechada, e cada volta pagava um turno inteiro que o gate recusava.
+    const { d, send, completeFollowupTurn } = deps();
+    await criarHandler(d)(job(PASSO_IA_SEM_PLANO_B), fakePool({ ultimoInboundHa: 30 }), { workerId: "w1" });
+
+    expect(runAgentTurn, "a IA rodou com a janela fechada: turno pago que o gate recusaria").not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+    const r = resultado(completeFollowupTurn);
+    expect(r.kind).toBe("skipped");
+    expect(r.reason).toMatch(/janela de 24 h/);
+  });
+
+  it("controle: janela ABERTA e sem plano B, a IA escreve como sempre", async () => {
+    const { d } = deps();
+    await criarHandler(d)(job(PASSO_IA_SEM_PLANO_B), fakePool({ ultimoInboundHa: 2 }), { workerId: "w1" });
+
     expect(runAgentTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("controle: quem nunca escreveu também tem a janela fechada — a IA não roda", async () => {
+    const { d, completeFollowupTurn } = deps();
+    await criarHandler(d)(job(PASSO_IA_SEM_PLANO_B), fakePool({ ultimoInboundHa: null }), { workerId: "w1" });
+
+    expect(runAgentTurn).not.toHaveBeenCalled();
+    expect(resultado(completeFollowupTurn).kind).toBe("skipped");
   });
 });

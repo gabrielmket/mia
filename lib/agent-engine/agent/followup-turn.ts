@@ -484,6 +484,23 @@ async function runFlowDrivenTurn(
       }
       return;
     }
+    // FORK MIA — A IA NÃO RODA QUANDO NADA DO QUE ELA ESCREVER PODE SAIR. Com a
+    // janela de 24 h fechada e sem modelo aprovado (o plano B acima), o gate
+    // `before-send` recusa o texto da IA com `messaging_window_closed` — DEPOIS de
+    // o turno inteiro ter rodado: agent_turn, checkpoint, classificador de etapa,
+    // promessa e jailbreak, cinco chamadas por passo. Régua de silêncio de 24 h no
+    // Meta cai aqui SEMPRE (o silêncio de 24 h é a janela fechando), e em set/2026
+    // isso foi 89% da fatura da OpenAI da plataforma: ~3.400 turnos por dia, uma
+    // mensagem entregue na vida do fluxo. O desfecho é o mesmo que o gate daria
+    // (`skipped`), só que sem pagar pelo caminho.
+    if (await janelaFechada(pool, target, clock())) {
+      runLog.info('passo do fluxo pulado — janela de 24 h fechada e sem modelo aprovado: a IA não roda');
+      await complete(pool, {
+        jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId,
+        result: { kind: 'skipped', reason: 'A janela de 24 h do WhatsApp está fechada e este passo não tem modelo aprovado: nada que a IA escrevesse poderia sair.' },
+      });
+      return;
+    }
     await runAgentTurn(deps, job, pool, ctx, {
       channelSessionId: target.channelSessionId,
       conversationId: target.conversationId,
