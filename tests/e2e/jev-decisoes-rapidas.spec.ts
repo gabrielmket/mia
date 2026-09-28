@@ -43,7 +43,7 @@ import {
   mandarMensagemDoCliente,
   mensagensMedidas,
 } from "./helpers/jev";
-import { lerCreds, loginComoAdmin, type CredsE2E } from "./helpers/login-admin";
+import { lerCreds, loginComoDono, type CredsE2E } from "./helpers/login-admin";
 
 const BASE_DO_JEV = process.env.JEV_API_BASE_URL ?? "";
 /** A chave que o dublê aceita. Não é segredo: só vale para ele. */
@@ -140,7 +140,10 @@ test.describe("Jev — decisões rápidas, pela tela", () => {
   });
 
   test("[P1] o admin acha o Jev, liga, e a primeira mensagem é medida por ele", async ({ page }) => {
-    creds = await loginComoAdmin(page, creds);
+    // Fork MIA: só a PLATAFORMA cadastra chave de IA (lib/ai/custo-e-da-plataforma.ts;
+    // tests/unit/credenciais-so-a-plataforma-cria.test.ts). O admin do cliente recebe
+    // 403 na rota e /403 na tela; quem cola a chave é o dono do servidor.
+    creds = await loginComoDono(page, creds);
     orgId = credsDoJev().orgId;
     await limparOJev(orgId);
 

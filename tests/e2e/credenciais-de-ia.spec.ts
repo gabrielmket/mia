@@ -4,7 +4,7 @@
  */
 import { test, expect } from "./helpers/test";
 
-import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
+import { lerCreds, loginComoDono } from "./helpers/login-admin";
 
 let creds = lerCreds();
 
@@ -14,7 +14,10 @@ test.describe("Chaves de acesso à IA", () => {
   test.setTimeout(60_000);
 
   test("[P0] chave inválida vira frase legível, e a tela diz onde pegar outra", async ({ page }) => {
-    creds = await loginComoAdmin(page, creds);
+    // Fork MIA: só a PLATAFORMA cadastra chave de IA (lib/ai/custo-e-da-plataforma.ts;
+    // tests/unit/credenciais-so-a-plataforma-cria.test.ts). O admin do cliente recebe
+    // 403 na rota e /403 na tela; quem cola a chave é o dono do servidor.
+    creds = await loginComoDono(page, creds);
     await page.goto("/app/ai/credentials");
 
     const rotulo = `E2E ${Date.now()}`;
