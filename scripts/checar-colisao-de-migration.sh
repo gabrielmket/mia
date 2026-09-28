@@ -158,6 +158,16 @@ adicionadas_nomes="$(xargs -n1 basename <<<"$adicionadas" | sed '/^$/d')"
 base_arvore="$(git ls-tree -r --name-only "$BASE" -- supabase/migrations 2>/dev/null | sed 's#^supabase/migrations/##' || true)"
 head_arvore="$(git ls-tree -r --name-only HEAD -- supabase/migrations 2>/dev/null | sed 's#^supabase/migrations/##' || true)"
 
+# FORK MIA (docs/FORK-MIA.md, regra 1): a migration da base que o HEAD guarda em
+# supabase/migrations-mia/ saiu do diretório do upstream — o número dela deixou de estar
+# tomado AQUI. Sem isto, a PR que separa o schema da MIA do do upstream reprova contra as
+# próprias migrations que ela mudou de pasta (0239..0272, fusão com a v1.60).
+movidas_pro_fork="$(git ls-tree -r --name-only HEAD -- supabase/migrations-mia 2>/dev/null \
+  | sed -n 's#^supabase/migrations-mia/##p' || true)"
+if [ -n "$movidas_pro_fork" ] && [ -n "$base_arvore" ]; then
+  base_arvore="$(grep -vxF -f <(printf '%s\n' "$movidas_pro_fork") <<<"$base_arvore" || true)"
+fi
+
 # ── as outras refs da máquina (issue #1155) ────────────────────────────────────────────
 base_commit="$(git rev-parse "$BASE^{commit}" 2>/dev/null || true)"
 head_commit="$(git rev-parse HEAD^{commit} 2>/dev/null || true)"
