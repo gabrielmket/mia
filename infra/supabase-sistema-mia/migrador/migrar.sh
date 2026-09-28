@@ -9,7 +9,7 @@
 # (preparar-migracao.sh). A senha do banco da nuvem NUNCA entra neste serviço:
 # levar credencial de um sistema para a configuração de outro é vazamento.
 #
-#   app.dump              pg_dump -Fc -n public -n private (com donos e GRANTs:
+#   app.dir.tar           pg_dump -Fd -n public -n private num tar (com donos e GRANTs:
 #                         as políticas e GRANTs do anon/authenticated são o
 #                         isolamento entre empresas)
 #   auth_users.json       json_agg(auth.users) — com o hash da senha: ninguém troca
@@ -72,7 +72,7 @@ if [ "${ja:-0}" -gt 0 ]; then
 fi
 
 # ── 2. Os arquivos da nuvem, do balde interno ────────────────────────────────
-for a in app.dump auth_users.json auth_identities.json storage_buckets.json nuvem.txt; do
+for a in app.dir.tar auth_users.json auth_identities.json storage_buckets.json nuvem.txt; do
   curl -sf -o "$TMP/$a" "http://storage:5000/object/$BALDE/$a" \
     -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" \
     || falha "não baixei $a do balde $BALDE (ele foi subido antes de ligar o migrador?)"
@@ -125,8 +125,9 @@ copiar_json storage.buckets storage_buckets.json
 log "login e baldes ok"
 
 # ── 5. O app: public + private, com donos e permissões ───────────────────────
-log "pg_restore do dump da nuvem ($(du -h "$TMP/app.dump" | cut -f1))…"
-pg_restore -d "$ALVO" "$TMP/app.dump" > "$TMP/restore.log" 2>&1
+tar -C "$TMP" -xf "$TMP/app.dir.tar" || falha "tar do dump"
+log "pg_restore do dump da nuvem ($(du -sh "$TMP/app.dir" | cut -f1)), 4 conexões…"
+pg_restore -j 4 -d "$ALVO" "$TMP/app.dir" > "$TMP/restore.log" 2>&1
 n_erros="$(grep -c 'ERROR' "$TMP/restore.log" || true)"
 log "pg_restore terminou com ${n_erros} erro(s). Por tipo:"
 grep 'ERROR' "$TMP/restore.log" | sed -E 's/.*ERROR: +//; s/"[^"]*"/"…"/g' | sort | uniq -c | sort -rn | head -25 | sem_segredo
