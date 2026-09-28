@@ -1469,10 +1469,18 @@ jobs:
           create extension if not exists pg_trgm with schema public;
           SQL
 
-      - name: Aplicar o baseline.sql (o mesmo que o install.sh do kit aplica)
+      # FORK MIA (docs/FORK-MIA.md, regra 1): o schema do produto é o do upstream
+      # MAIS o nosso, na ordem e do jeito do easypanel/bootstrap.sh — dois `psql`
+      # com ON_ERROR_STOP, o baseline-mia.sql por cima. Sem o segundo, toda tela
+      # que toca coluna nossa (`crm_leads.empresa_id`, `contacts.cargo`, ...) caía
+      # em 500 ("Could not find the 'empresa_id' column of 'crm_leads' in the
+      # schema cache") e o e2e media um banco que nenhuma instalação da MIA tem.
+      - name: Aplicar o baseline.sql e o baseline-mia.sql (o mesmo que o bootstrap aplica)
         run: |
           psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
             -v ON_ERROR_STOP=1 -q -f supabase/baseline.sql
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+            -v ON_ERROR_STOP=1 -q -f supabase/baseline-mia.sql
 
       # A chave de cifra dos segredos, como o install.sh semeia em TODA instalação
       # (`ensure_encryption_key`, em hostgator-setup-kit/_common.sh). Sem ela,
