@@ -43,7 +43,8 @@ test("criar conta: signup → e-mail de confirmação → onboarding → re-logi
 
   // 4. Autenticado no onboarding — tenant provisionado
   await expect(page).toHaveURL(/\/onboarding\/welcome/);
-  await expect(page.getByText("Boas-vindas ao DeskcommCRM")).toBeVisible();
+  // Fork MIA: o nome padrão do produto é "MIA" (DEFAULT_APP_NAME, lib/branding.ts).
+  await expect(page.getByText("Boas-vindas ao MIA")).toBeVisible();
   await expect(page.getByText("Loja E2E Signup")).toBeVisible();
 
   // 5. Sai (limpa sessão) e entra de novo com as credenciais criadas

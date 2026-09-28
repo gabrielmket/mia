@@ -27,7 +27,7 @@ import * as path from "node:path";
 
 import { test, expect, type Page } from "./helpers/test";
 
-import { loginComoAdmin, lerCreds, type CredsE2E } from "./helpers/login-admin";
+import { loginComoAdmin, loginComoDono, lerCreds, type CredsE2E } from "./helpers/login-admin";
 
 const EVIDENCIA = path.join(process.cwd(), "evidence", "ia-360-w1");
 
@@ -40,12 +40,20 @@ test.use({ locale: "pt-BR" });
 // compartilhado. Medido: o primeiro caso da bateria estourava 120s só nisso.
 test.describe.configure({ timeout: 240_000 });
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(() => {
   fs.mkdirSync(EVIDENCIA, { recursive: true });
-  creds = await loginComoAdmin(page, creds);
 });
 
 test.describe("Criar um agente pela tela", () => {
+  // NESTE FORK quem escolhe provedor, modelo e chave é a PLATAFORMA
+  // (`podeConfigurarChaveDeIa`, lib/ai/custo-e-da-plataforma.ts): para o admin do
+  // cliente o bloco "A inteligência que ele usa" nem aparece. O formulário que
+  // estes casos medem — o que diz o que falta e deixa escolher — é o do dono do
+  // servidor, que no seed também é admin desta organização.
+  test.beforeEach(async ({ page }) => {
+    creds = await loginComoDono(page, creds);
+  });
+
   test("o formulário abre e diz o que falta antes de deixar criar", async ({ page }) => {
     await page.goto("/app/ai/agents/new");
     await expect(page.getByRole("heading", { name: /novo agent/i })).toBeVisible();
@@ -173,6 +181,10 @@ test.describe("Criar um agente pela tela", () => {
 });
 
 test.describe("Olhar o consumo de IA", () => {
+  test.beforeEach(async ({ page }) => {
+    creds = await loginComoAdmin(page, creds);
+  });
+
   /**
    * NESTE FORK a tela de consumo é da PLATAFORMA, não do cliente: quem paga o
    * provedor é quem opera, e o valor ali é o preço de custo do atendimento que o
