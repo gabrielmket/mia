@@ -36,6 +36,13 @@ services:
     volumes:
       - ./supabase/baseline.sql:/deskcomm/baseline.sql:ro
       - ./easypanel/bootstrap.sh:/deskcomm/bootstrap.sh:ro
+    # Rede do EasyPanel: é por ela que chegamos ao Postgres da plataforma, o
+    # serviço supabase-sistema-mia (projeto banco-de-dados), pelo apelido
+    # supabase-sistema-mia-db. Só quem conecta no banco entra: bootstrap, app e
+    # worker. O redis sem senha continua fora.
+    networks:
+      - default
+      - easypanel
     logging: *default-logging
 
   app:
@@ -62,6 +69,13 @@ services:
       timeout: 5s
       retries: 5
       start_period: 40s
+    # Rede do EasyPanel: é por ela que chegamos ao Postgres da plataforma, o
+    # serviço supabase-sistema-mia (projeto banco-de-dados), pelo apelido
+    # supabase-sistema-mia-db. Só quem conecta no banco entra: bootstrap, app e
+    # worker. O redis sem senha continua fora.
+    networks:
+      - default
+      - easypanel
     logging: *default-logging
 
   worker:
@@ -81,6 +95,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+    # Rede do EasyPanel: é por ela que chegamos ao Postgres da plataforma, o
+    # serviço supabase-sistema-mia (projeto banco-de-dados), pelo apelido
+    # supabase-sistema-mia-db. Só quem conecta no banco entra: bootstrap, app e
+    # worker. O redis sem senha continua fora.
+    networks:
+      - default
+      - easypanel
     logging: *default-logging
 
   # SEM `${VAR}` de segredo neste arquivo, em nenhum serviço. A checagem de
@@ -157,7 +178,7 @@ services:
     depends_on:
       app:
         condition: service_healthy
-    # Só o caddy entra na rede do EasyPanel, onde o Traefik dele o encontra.
+    # O caddy entra na rede do EasyPanel porque o Traefik dele o encontra lá.
     # O redis roda sem senha e fica fora dela, na rede padrão do projeto.
     networks:
       - default
