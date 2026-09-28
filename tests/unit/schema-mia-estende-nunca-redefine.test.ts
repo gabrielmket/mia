@@ -183,10 +183,11 @@ describe("o baseline-mia.sql instala num banco NOVO, não só atualiza o de prod
     const linhas = BASELINE_MIA.split("\n");
     const numeros: number[] = [];
     for (let i = 0; i < linhas.length; i += 1) {
+      const linha = linhas[i] ?? "";
       const m =
-        linhas[i].match(/^-- ---- .*\(migration (\d{4})\) ----$/) ??
-        linhas[i].match(/^-- ─── (\d{4}) · /) ??
-        (/^-- =+$/.test(linhas[i]) ? (linhas[i + 1] ?? "").match(/^-- APENDICE (\d{4})/) : null);
+        linha.match(/^-- ---- .*\(migration (\d{4})\) ----$/) ??
+        linha.match(/^-- ─── (\d{4}) · /) ??
+        (/^-- =+$/.test(linha) ? (linhas[i + 1] ?? "").match(/^-- APENDICE (\d{4})/) : null);
       if (m) numeros.push(Number(m[1]));
     }
     const semVarredura = numeros.slice(0, -1);
