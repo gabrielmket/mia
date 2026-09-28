@@ -530,7 +530,8 @@ test.describe("a moldura do logo no tema escuro", () => {
       "ainda há um <img> na barra — o logo enviado não foi removido, e o caso mediria outra coisa",
     ).toHaveCount(0, { timeout: 15_000 });
 
-    const marca = barra.getByRole("img", { name: "DeskcommCRM" });
+    // Fork MIA: o nome padrão do produto é "MIA" (DEFAULT_APP_NAME, lib/branding.ts).
+    const marca = barra.getByRole("img", { name: "MIA" });
     await expect(
       marca,
       "a barra não caiu no ramo `marcaDoProduto` — sem ele não há fronteira para medir",

@@ -92,7 +92,7 @@ test.describe("navegação agrupada", () => {
     const titulos = sidebar(page).getByRole("heading");
     await expect(titulos).toHaveText([
       "Atendimento",
-      "CRM",
+      "MIA CRM",
       "Agente MIA",
       "Canais",
       "MIA Insights",
@@ -157,7 +157,8 @@ test.describe("navegação agrupada", () => {
   test("chega em Conhecimento, que só existia atrás das abas de IA", async ({ page }) => {
     await loginAdmin(page);
 
-    await sidebar(page).getByRole("link", { name: "Ver tudo em IA" }).click();
+    // Fork MIA: o hub do grupo se chama "Ver tudo no agente" (lib/navigation/catalogo.ts).
+    await sidebar(page).getByRole("link", { name: "Ver tudo no agente" }).click();
     await page.waitForURL(/\/app\/ai$/);
 
     // O hub organiza por jornada, não numa grade solta.

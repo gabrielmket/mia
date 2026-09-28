@@ -300,7 +300,8 @@ test.describe("Relatório de atividades — o período, pela tela", () => {
       const acima = titulos.filter((h) => h.getBoundingClientRect().top < y);
       return (acima[acima.length - 1]?.textContent ?? "").trim();
     });
-    expect(grupo, "Atividades pertence ao grupo Análise").toMatch(/an[áa]lise/i);
+    // Fork MIA: o grupo Análise do upstream se chama MIA Insights (lib/navigation/catalogo.ts).
+    expect(grupo, "Atividades pertence ao grupo MIA Insights (o Análise do upstream)").toBe("MIA Insights");
 
     await item.click();
     await page.waitForURL(/\/app\/activities/, { timeout: 30_000 });
