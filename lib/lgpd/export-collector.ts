@@ -31,13 +31,6 @@ export interface ContactSnapshot {
   tags: string[];
   source: string | null;
   source_metadata: Record<string, unknown> | null;
-  // O jsonb LIVRE. Ele JÁ estava no `select` e era descartado no mapeamento —
-  // selecionado por alguém que sabia que era dado pessoal, e perdido antes de
-  // chegar ao relatório. É o campo onde o operador escreve o que a ficha não
-  // previu, e portanto o com maior chance de ser o mais sensível de todos:
-  // deixá-lo de fora responde "não temos mais nada sobre você" a quem exerce
-  // direito de acesso, e a resposta é falsa.
-  custom_fields: Record<string, unknown> | null;
   // Dado pessoal profissional (migration 0262).
   cargo: string | null;
   setor: string | null;
@@ -911,7 +904,6 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         tags: Array.isArray(data.tags) ? (data.tags as string[]) : [],
         source: data.source ?? null,
         source_metadata: (data.source_metadata as Record<string, unknown> | null) ?? null,
-        custom_fields: (data.custom_fields as Record<string, unknown> | null) ?? null,
         cargo: data.cargo ?? null,
         setor: data.setor ?? null,
         // O embed vem objeto ou array conforme a cardinalidade que o PostgREST

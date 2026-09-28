@@ -72,6 +72,19 @@ SEGREDO_SEGURO="$(printf '%s' "$SEGREDO_DO_CRON" | sed "s/'/'\\\\''/g")"
 # ⚠️ E o comentário fica AQUI, fora da string: dentro de CRONS= ele não seria
 # comentário, seria DADO — e crase em prosa dentro de aspas duplas o shell
 # EXECUTA. Foi o que quebrou o entrypoint na primeira tentativa desta linha.
+#
+# (MIA) O attendant-heartbeat saiu da lista de propósito, e não por descuido da
+# fusão: a rota foi removida no upstream junto com o conserto do plantão que se
+# desligava sozinho (o cron marcava offline quem não pingasse em 15 min).
+# Agendar o que não existe mais é curl 404 a cada 5 minutos, e o
+# cron-routes-scheduled confere esta lista contra o diretório das rotas.
+#
+# Esta nota morou DENTRO de CRONS= na fusão de 23/09, com crase e aspas duplas.
+# A aspa fechou a string no meio, o resto virou comando, e o entrypoint saía 127
+# no boot: o scheduler morria, e com ele todos os crons da plataforma. Por isso,
+# nas linhas de comentário que ficam dentro de CRONS=, nada de crase, aspas,
+# cifrão, barra invertida nem barra vertical; e em comentário nenhum deste
+# arquivo o caminho completo de uma rota que não existe (o teste lê por grep).
 CRONS="
 * * * * *|240|api/v1/cron/prospecting
 * * * * *|25|api/v1/cron/agent-dispatcher
@@ -83,11 +96,6 @@ CRONS="
 * * * * *|45|api/v1/cron/webhook-replay
 */5 * * * *|25|api/v1/cron/storage-redaction?limit=50
 */5 * * * *|25|api/v1/cron/snooze-watcher
-# ⚠️ O `attendant-heartbeat` saiu DESTA lista de propósito, e não por descuido da
-# fusão: a rota `app/api/v1/cron/attendant-heartbeat` foi removida junto com o
-# conserto de "o plantão se desliga sozinho" (o cron marcava offline quem não
-# pingasse em 15 min). Agendar o que não existe mais é curl 404 a cada 5 minutos
-# e cron-routes-scheduled vermelho — a lista aqui é conferida contra o diretório.
 */5 * * * *|60|api/v1/cron/handoff-devolucao
 # A CAMPANHA. Minuto a minuto, e a rodada manda no máximo uma mensagem por
 # número: é o cron que dá a cadência base, e o ritmo da campanha e do canal

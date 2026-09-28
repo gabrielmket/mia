@@ -87,6 +87,7 @@ function job(payload: Record<string, unknown>): JobRow {
     attempts: 1,
     max_attempts: 3,
     last_error: null,
+    deferred_reason: null,
     locked_by: "w1",
     locked_at: new Date(),
     created_at: new Date(),

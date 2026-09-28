@@ -275,17 +275,37 @@ function colunasQueOCascadeLimpa(sql: string): Set<string> {
  * anos vazando por um caminho e não pelo outro. O corpo dela vem do dump com as
  * atribuições coladas numa linha só (`name=null,display_name=...`), então o
  * regex aqui não pode assumir uma por linha.
+ *
+ * Desde a migration 0414 do upstream (issue #1504, chegou na fusão da v1.60) o
+ * botão deixou de ter lista própria: virou PORTÃO (autoridade, MFA, mutex) e
+ * DELEGA a redação à cascata, com o id deste contato. É o mesmo conserto que a
+ * 0265 fez pelo gatilho, feito pelo upstream na raiz. Quando a delegação está
+ * no corpo, o que a rota direta limpa é, por construção, o que a cascata limpa
+ * — e a leitura devolve isso, em vez de procurar um `update` que não existe
+ * mais. Se um dia ela não delegar NEM tiver o próprio `update`, o teste para
+ * aqui: um botão que marca anonimizado sem apagar nada é o pior dos casos.
  */
-function colunasQueARotaDiretaLimpa(sql: string): Set<string> {
+function colunasQueARotaDiretaLimpa(sql: string, cascata: Set<string>): Set<string> {
   // Ancorado no `create`: o nome dela aparece em grants e em comentários de
   // outras migrations, e `lastIndexOf` do nome solto cai num deles.
   const f = sql.lastIndexOf(
     "create or replace function public.fn_lgpd_anonymize_contact",
   );
   expect(f, "a função da rota direta sumiu do baseline").toBeGreaterThan(-1);
-  const corpo = sql.slice(f, sql.indexOf("$$;", f));
+  // Sem os comentários `--`: o corpo do upstream CITA a cascata em comentário,
+  // e citar não é chamar.
+  const corpo = sql.slice(f, sql.indexOf("$$;", f)).replace(/--.*$/gm, "");
+  const delega =
+    /perform\s+public\.fn_lgpd_cascade_redact_contact\s*\(\s*p_organization_id\s*,\s*p_contact_id\s*,/i.test(
+      corpo,
+    );
+  if (delega) return new Set(cascata);
   const ini = corpo.indexOf("update public.contacts set");
-  expect(ini, "o `update public.contacts set` sumiu da rota direta").toBeGreaterThan(-1);
+  expect(
+    ini,
+    "a rota direta nem delega à cascata (`perform public.fn_lgpd_cascade_redact_contact(p_organization_id,p_contact_id,...)`) " +
+      "nem tem o próprio `update public.contacts set`: o botão anonimiza sem apagar nada",
+  ).toBeGreaterThan(-1);
   const bloco = corpo.slice(ini, corpo.indexOf("where organization_id", ini));
 
   return new Set(capturas(bloco, /(?:^|[\s,])([a-z_]+)\s*=/gm));
@@ -334,7 +354,7 @@ function selectDaExportacao(fonte: string): string {
 
 const COLUNAS = colunasDeContacts(BASELINE);
 const CASCADE = colunasQueOCascadeLimpa(BASELINE);
-const ROTA_DIRETA = colunasQueARotaDiretaLimpa(BASELINE);
+const ROTA_DIRETA = colunasQueARotaDiretaLimpa(BASELINE, CASCADE);
 const GATILHO = oQueOGatilhoLimpa(BASELINE);
 const SELECT = selectDaExportacao(EXPORTADOR);
 

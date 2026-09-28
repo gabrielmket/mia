@@ -55,6 +55,10 @@ function payload(): ExportPayload {
       },
     ],
     voice_calls: [],
+    // Vazias de proposito: estes casos medem o PDF, nao a coleta (0266).
+    ai_runs: [],
+    broadcasts_recebidos: [],
+    cliques_de_anuncio: [],
     prospecting_candidates: [],
     cases: [],
     case_events: [],
@@ -138,6 +142,12 @@ it("o PDF lista as respostas pelo rótulo da pergunta, e o CPF só na linha do d
     tags: [],
     source: "whatsapp",
     source_metadata: null,
+    // Dado profissional (0262) e chave de rede social: vazios, o caso mede os
+    // campos personalizados.
+    cargo: null,
+    setor: null,
+    empresa_nome: null,
+    social_identity: null,
     created_at: "2030-01-02T13:05:00Z",
     last_activity_at: null,
     first_service_at: null,

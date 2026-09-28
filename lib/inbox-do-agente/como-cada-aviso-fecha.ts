@@ -208,6 +208,71 @@ export const COMO_FECHA = {
     quando: "um agente publicado passou a armar o fluxo, ou o grafo publicado deixou de pedir agente",
     tetoEmDias: 30,
   },
+  // A IA rascunhou a proposta e falta uma pessoa conferir: confirmar o modelo
+  // sugerido, dar preço ao que ficou "a definir", preencher o documento. Deixa
+  // de ser verdade quando essas pendências somem, ou quando a proposta sai de
+  // rascunho. Quem fecha é o próprio upstream: o
+  // `resolverAvisoDeRevisaoSeProntaOuEncerrada` (lib/propostas/aviso-de-revisao.ts)
+  // roda a cada edição, troca de modelo, envio e descarte da proposta.
+  // Não é `idade`: rascunho não vence, e o cliente que pediu a proposta espera
+  // tanto no dia 10 quanto no dia 2. Não é `decisao`: o banco responde a
+  // pergunta e o upstream já a refaz; declarar decisão obrigaria quem revisou e
+  // enviou a voltar à Central para fechar à mão.
+  // O teto cobre um buraco medido, não um hábito: apagar o NEGÓCIO cancela os
+  // rascunhos dele por gatilho SQL (`fn_cancelar_propostas_rascunho_do_lead`,
+  // migration 0466), e gatilho não chama o resolvedor. Sem teto, o aviso ficaria
+  // aberto para sempre pedindo revisão de uma proposta cancelada. Trinta dias
+  // pelo mesmo motivo de `case_stale`: depois disso não há cliente esperando
+  // aquela proposta, há um rascunho velho, e o lugar dele é a lista de
+  // propostas. O preço, aceito de propósito: no dia 30 ele sai também de
+  // "propostas esperando revisão" no radar, que lê este aviso ABERTO.
+  proposta_pronta_para_revisao: {
+    modo: "condicao",
+    quando: "a proposta ficou pronta (modelo confirmado, todo item com preço, documento sem pendência), ou foi enviada ou descartada",
+    tetoEmDias: 30,
+  },
+  // O cron `proposta-travada` achou proposta presa em `enviando` e a devolveu a
+  // rascunho, sem reenviar nada. É o par de `message_send_stuck` (a própria
+  // `lib/ai/inbox-destino.ts` diz isso), e pelo mesmo motivo é condição: o que
+  // o aviso pede, reenviar, deixa rastro no banco. Some quando as propostas
+  // devolvidas saem de rascunho: reenviadas (o envio zera `ultima_falha_envio`)
+  // ou descartadas.
+  // Quem escrever a re-pergunta não pode olhar só o `ref_id`: o aviso fala de
+  // TODAS as propostas da organização naquela rodada ("3 propostas não
+  // confirmaram o envio") e aponta só a primeira. Fechar pela primeira calaria
+  // as outras duas com o problema de pé.
+  // Hoje ninguém refaz a pergunta, e quem fecha é o teto. Sem ele, o aviso
+  // (`critical`) ficaria vermelho para sempre depois do reenvio: a parede que
+  // este registro existe para derrubar. Sete dias, como `message_send_stuck`, e
+  // aqui o teto não esconde nada: a proposta devolvida mostra a falha na
+  // própria tela enquanto estiver em rascunho ("O último envio falhou"), a
+  // conexão caída tem aviso próprio (`qr_rescan`, `channel_number_alert`), e o
+  // cron roda a cada minuto, então a próxima proposta que travar abre aviso novo.
+  proposta_travada: {
+    modo: "condicao",
+    quando: "as propostas devolvidas a rascunho saíram de lá: foram reenviadas ou descartadas",
+    tetoEmDias: 7,
+  },
+  // Uma tarefa de enviar proposta (`source_kind = 'promised_proposal'`) venceu
+  // e o negócio não ganhou proposta nenhuma depois da promessa. A pergunta é de
+  // estado e o banco a responde: some quando o negócio ganha proposta criada
+  // depois da promessa, ou quando a tarefa deixa de estar pendente (concluída
+  // ou cancelada). Não é `idade`: quem monta o rascunho no dia 3 resolveu, e
+  // manter o aviso até vencer é pedir algo já feito.
+  // Hoje ninguém refaz a pergunta: o cron que abre
+  // (`proposal-promised-not-created`) não fecha, e a varredura ainda não tem a
+  // consulta. Quem fecha é o teto, e por isso ele é curto. Fechar cedo aqui não
+  // esconde nada: aquele cron roda TODO DIA e só deixa de abrir enquanto houver
+  // um aviso ABERTO para o negócio, então a promessa que segue descumprida volta
+  // à Central na manhã seguinte. O limite do outro lado é o barulho: com teto de
+  // um dia o mesmo aviso nasceria (e tocaria) toda manhã. Sete dias é um lembrete
+  // por semana enquanto a promessa estiver de pé, e no máximo uma semana pedindo
+  // "monte o rascunho" a quem já montou.
+  proposal_promised_not_created: {
+    modo: "condicao",
+    quando: "o negócio ganhou proposta criada depois da promessa, ou a tarefa da promessa deixou de estar pendente",
+    tetoEmDias: 7,
+  },
 
   // ── Fecham por idade: o fato não muda, a utilidade sim ────────────────────
   midia_nao_lida: {
@@ -254,6 +319,44 @@ export const COMO_FECHA = {
     porque:
       "A sugestão de retomar contato já venceu quando o aviso nasceu. Um mês depois, " +
       "reabrir aquele lead é uma decisão nova — e ela começa no funil, não num aviso velho.",
+  },
+  // A proposta enviada passou da validade sem aceite nem recusa, e o cron
+  // `proposal-expiry` a marcou `vencida`. Não há condição a reperguntar:
+  // `vencida` não tem saída (o gatilho `fn_crm_proposals_transicao_da_sessao` só
+  // deixa `enviada` virar aceita ou recusada, e só `enviada` pode ser revisada).
+  // Não é `decisao`, embora peça uma: TODA proposta que vence sem resposta abre
+  // um aviso, e um por proposta que só fecha à mão é a parede de vermelho velho.
+  // Fechar por idade não tira o problema da vista: o radar lista a proposta em
+  // "propostas vencidas sem retomada" enquanto o negócio estiver aberto no funil
+  // e não ganhar proposta nova.
+  proposal_expired_notice: {
+    modo: "idade",
+    dias: 14,
+    porque:
+      "A proposta vencida não volta a valer. O aviso serve para alguém decidir se retoma o " +
+      "cliente; duas semanas depois, ou retomou, ou o cliente esfriou. E o que continua " +
+      "pendente segue no radar, em 'propostas vencidas sem retomada', até sair uma proposta nova.",
+  },
+  // A taxa de aceite dos últimos 30 dias ficou abaixo do piso. O aviso é um
+  // RETRATO: o número vai escrito no corpo no dia em que ele nasce e não se
+  // atualiza, e enquanto ele está aberto o cron não abre outro com o número de
+  // hoje. A pergunta "ainda está baixa?" já é refeita pelo próprio cron que
+  // abre (`proposal-acceptance-rate`), uma vez por semana. O que faltava era o
+  // retrato velho sair da frente dele.
+  // Seis dias, e não sete, de propósito: aquele cron roda domingo às 6h
+  // (`docker/scheduler/entrypoint.sh`) e esta varredura roda de hora em hora.
+  // Com sete, o aviso fecharia às 7h do domingo seguinte, UMA HORA DEPOIS da
+  // rodada que teria aberto o novo, e uma taxa ainda baixa passaria a semana
+  // inteira fora da Central. Com seis, fecha no sábado, e o domingo traz o
+  // número atual se ele ainda estiver baixo. Quem mudar a cadência daquele cron
+  // revê este prazo.
+  proposal_acceptance_rate_drop: {
+    modo: "idade",
+    dias: 6,
+    porque:
+      "É o boletim de uma janela de 30 dias, com o número congelado no dia em que nasceu. " +
+      "O cron que o abre mede de novo toda semana: se a taxa seguir baixa, chega um boletim " +
+      "com o número de hoje; se subiu, o velho não tem mais o que dizer.",
   },
 
   // ── Só pessoa fecha: o aviso É uma pergunta ──────────────────────────────
