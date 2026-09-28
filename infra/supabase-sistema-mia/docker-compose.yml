@@ -31,7 +31,8 @@
 #     "apagar" o banco sem apagar nada: o volume velho fica, órfão, até alguém
 #     remover de propósito.
 #   * `migrador`: roda UMA vez por volume e copia a plataforma da nuvem para
-#     cá, por dentro da VPS (sem abrir porta do banco). Ver migrador/migrar.sh.
+#     cá, por dentro da VPS (sem abrir porta do banco e sem a senha da nuvem
+#     neste serviço). Ver migrador/migrar.sh.
 # ═══════════════════════════════════════════════════════════════════════════
 
 services:
@@ -319,7 +320,7 @@ services:
       - ./migrador:/migrador:ro
     environment:
       MIGRAR: ${MIGRAR:-off}
-      NUVEM_DB_URL: ${NUVEM_DB_URL:-}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
       NUVEM_URL_PUBLICO: ${NUVEM_URL_PUBLICO:-}
       NOVO_URL_PUBLICO: ${SUPABASE_PUBLIC_URL}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

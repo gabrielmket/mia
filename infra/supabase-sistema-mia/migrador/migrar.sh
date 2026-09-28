@@ -1,26 +1,29 @@
 #!/usr/bin/env bash
-# migrar.sh — copia a plataforma MIA do Supabase da nuvem para esta instância.
+# migrar.sh — restaura a plataforma MIA, vinda do Supabase da nuvem, nesta instância.
 #
 # Roda dentro do serviço `migrador` (docker-compose.yml desta pasta), na VPS,
 # pela rede interna: nenhuma porta do banco novo fica aberta para a internet.
 #
-# O QUE É COPIADO, E POR QUÊ SÓ ISSO
+# DE ONDE VÊM OS DADOS: de arquivos num balde PRIVADO deste mesmo Supabase
+# (`migracao-da-nuvem`), subidos de fora por quem tem acesso de leitura à nuvem
+# (preparar-migracao.sh). A senha do banco da nuvem NUNCA entra neste serviço:
+# levar credencial de um sistema para a configuração de outro é vazamento.
 #
-#   public + private   o app inteiro, com donos e permissões (pg_dump sem
-#                      --no-owner/--no-acl: as políticas e GRANTs do anon e do
-#                      authenticated são o isolamento entre empresas).
-#   auth.users         as contas de login, com o hash da senha: ninguém troca
-#   auth.identities    de senha. Sessões e tokens NÃO vêm — a chave JWT é nova,
-#                      todo mundo entra de novo uma vez.
-#   storage.buckets    os baldes com as mesmas regras (público, limites).
+#   app.dump              pg_dump -Fc -n public -n private (com donos e GRANTs:
+#                         as políticas e GRANTs do anon/authenticated são o
+#                         isolamento entre empresas)
+#   auth_users.json       json_agg(auth.users) — com o hash da senha: ninguém troca
+#   auth_identities.json  json_agg(auth.identities)   de senha. Sessões NÃO vêm: a
+#                         chave JWT é nova, todo mundo entra de novo uma vez.
+#   storage_buckets.json  json_agg(storage.buckets) — mesmas regras de balde
+#   nuvem.txt             contagem linha a linha na nuvem, para a prova final
 #
-# O resto — políticas do Storage, gatilhos em auth, publicação do realtime —
-# é recriado pelo bootstrap do `deskcomm` a cada deploy (easypanel/bootstrap.sh
-# reaplica o baseline inteiro). Os ARQUIVOS do Storage vão pela API, de fora,
-# depois que isto termina (scripts/infra/copiar-storage.mjs).
+# O resto — políticas do Storage, gatilhos em auth, publicação do realtime — é
+# recriado pelo bootstrap do `deskcomm` a cada deploy (ele reaplica o baseline
+# inteiro). Os ARQUIVOS do Storage vão pela API (copiar-storage.mjs).
 #
-# A ORDEM IMPORTA: login antes do app. As FKs do app apontam para auth.users e
-# o pg_restore valida cada uma ao criá-la; com auth.users vazio, as FKs caem.
+# A ORDEM IMPORTA: login antes do app. As FKs do app apontam para auth.users e o
+# pg_restore valida cada uma ao criá-la.
 #
 # IDEMPOTÊNCIA: se o `public` deste banco já tem tabela, a migração já rodou
 # neste volume e o script sai sem tocar em nada. Para refazer, troque o volume
@@ -30,29 +33,26 @@ set -uo pipefail
 
 log() { printf '[migrador %s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 falha() { log "FALHOU: $*"; exit 1; }
+# Nada que o script imprime pode carregar URL com senha.
+sem_segredo() { sed -E 's#postgres(ql)?://[^ ]*#<url>#g'; }
 
 MODO="${MIGRAR:-off}"
 if [ "$MODO" = "off" ]; then
   log "desligado (MIGRAR=off) — nada a fazer"
   exit 0
 fi
-[ -n "${NUVEM_DB_URL:-}" ] || falha "NUVEM_DB_URL vazio"
+[ -n "${SERVICE_ROLE_KEY:-}" ] || falha "SERVICE_ROLE_KEY vazio"
 
 ALVO="postgresql://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
 export PGCONNECT_TIMEOUT=20
 TMP=/tmp/migracao
+BALDE="migracao-da-nuvem"
 mkdir -p "$TMP"
-
-# O que o psql imprime vai para o log do EasyPanel. A URL da nuvem carrega a
-# senha: nada aqui pode ecoá-la. Os erros passam por este filtro.
-sem_segredo() { sed -E 's#postgres(ql)?://[^ ]*#<url>#g'; }
-
 log "modo: $MODO"
 
 # ── 0. Os serviços criaram os schemas deles? ─────────────────────────────────
-# O GoTrue e o storage-api migram os próprios schemas ao subir. O depends_on
-# espera o healthcheck, mas "saudável" não garante que a última migration
-# acabou; conferir a tabela é o que garante.
+# GoTrue e storage-api migram os próprios schemas ao subir; "saudável" não
+# garante que a última migration acabou. Conferir a tabela garante.
 pronto=0
 for _ in $(seq 1 60); do
   pronto="$(psql "$ALVO" -tAc "select (to_regclass('auth.users') is not null
@@ -62,7 +62,7 @@ for _ in $(seq 1 60); do
   sleep 5
 done
 [ "$pronto" = "1" ] || falha "auth/storage não criaram os schemas em 5 min"
-sleep 15   # folga para a última migration dos serviços assentar
+sleep 15
 
 # ── 1. Idempotência ──────────────────────────────────────────────────────────
 ja="$(psql "$ALVO" -tAc "select count(*) from information_schema.tables where table_schema = 'public'")"
@@ -71,13 +71,15 @@ if [ "${ja:-0}" -gt 0 ]; then
   exit 0
 fi
 
-# ── 2. A nuvem responde? ─────────────────────────────────────────────────────
-versao="$(psql "$NUVEM_DB_URL" -tAc "select split_part(version(), ' ', 2)" 2>&1 | sem_segredo)" \
-  || falha "não conectei na nuvem: $versao"
-log "nuvem: Postgres $versao"
+# ── 2. Os arquivos da nuvem, do balde interno ────────────────────────────────
+for a in app.dump auth_users.json auth_identities.json storage_buckets.json nuvem.txt; do
+  curl -sf -o "$TMP/$a" "http://storage:5000/object/$BALDE/$a" \
+    -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" \
+    || falha "não baixei $a do balde $BALDE (ele foi subido antes de ligar o migrador?)"
+done
+log "arquivos baixados: $(du -sh "$TMP" | cut -f1)"
 
 # ── 3. Extensões que as tabelas do app usam como TIPO (vector, citext) ──────
-# O dump de um schema não leva a extensão; sem ela, a tabela não nasce.
 psql "$ALVO" -v ON_ERROR_STOP=1 -q <<'SQL' || falha "extensões"
 set client_min_messages = warning;
 create extension if not exists vector  with schema public;
@@ -87,13 +89,11 @@ SQL
 log "extensões ok"
 
 # ── 4. Login e baldes, por JSON ──────────────────────────────────────────────
-# Por JSON, e não por COPY, porque a versão do GoTrue da nuvem não é a daqui:
-# a coluna que só um lado tem quebraria o COPY. Aqui entra a interseção das
-# colunas, menos as geradas (confirmed_at, identities.email).
-copiar_json() { # $1 = schema.tabela
-  local tabela="$1" arq="$TMP/$(echo "$1" | tr . _).json"
-  psql "$NUVEM_DB_URL" -tAc "select coalesce(json_agg(x), '[]'::json) from $tabela x" > "$arq" 2>"$TMP/erro" \
-    || falha "ler $tabela na nuvem: $(sem_segredo < "$TMP/erro" | head -3)"
+# JSON, e não COPY: o GoTrue da nuvem não tem a mesma versão do daqui, e coluna
+# que só um lado tem quebraria o COPY. Entra a interseção das colunas, menos as
+# geradas (confirmed_at, identities.email).
+copiar_json() { # $1 = schema.tabela  $2 = arquivo
+  local tabela="$1" arq="$TMP/$2"
   psql "$ALVO" -v ON_ERROR_STOP=1 -q -v tabela="$tabela" -v doc="$(cat "$arq")" <<'SQL' 2>&1 | sem_segredo
 create temp table _j (tabela text, doc json);
 insert into _j values (:'tabela', :'doc');
@@ -119,18 +119,13 @@ begin
 end $$;
 SQL
 }
-copiar_json auth.users
-copiar_json auth.identities
-copiar_json storage.buckets
+copiar_json auth.users auth_users.json
+copiar_json auth.identities auth_identities.json
+copiar_json storage.buckets storage_buckets.json
 log "login e baldes ok"
 
 # ── 5. O app: public + private, com donos e permissões ───────────────────────
-log "pg_dump da nuvem (public, private)…"
-pg_dump "$NUVEM_DB_URL" -Fc -n public -n private -f "$TMP/app.dump" 2>"$TMP/dump.err" \
-  || falha "pg_dump: $(sem_segredo < "$TMP/dump.err" | tail -5)"
-log "dump: $(du -h "$TMP/app.dump" | cut -f1)"
-
-log "pg_restore…"
+log "pg_restore do dump da nuvem ($(du -h "$TMP/app.dump" | cut -f1))…"
 pg_restore -d "$ALVO" "$TMP/app.dump" > "$TMP/restore.log" 2>&1
 n_erros="$(grep -c 'ERROR' "$TMP/restore.log" || true)"
 log "pg_restore terminou com ${n_erros} erro(s). Por tipo:"
@@ -176,29 +171,25 @@ SQL
 fi
 
 # ── 7. A prova: contagem linha a linha, nuvem x aqui ─────────────────────────
-contar() { # $1 = url
-  psql "$1" -tAF'|' -c "
-    select table_schema || '.' || table_name,
-           (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', table_schema, table_name), false, true, '')))[1]::text
-      from information_schema.tables
-     where table_schema in ('public', 'private') and table_type = 'BASE TABLE'
-     order by 1" 2>&1 | sem_segredo
-}
-contar "$NUVEM_DB_URL" > "$TMP/nuvem.txt"
-contar "$ALVO"         > "$TMP/aqui.txt"
+psql "$ALVO" -tAF'|' -c "
+  select table_schema || '.' || table_name,
+         (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', table_schema, table_name), false, true, '')))[1]::text
+    from information_schema.tables
+   where table_schema in ('public', 'private') and table_type = 'BASE TABLE'
+   order by 1" > "$TMP/aqui.txt" 2>&1
 tabelas="$(wc -l < "$TMP/nuvem.txt" | tr -d ' ')"
 linhas="$(awk -F'|' '{s+=$2} END {print s+0}' "$TMP/nuvem.txt")"
 if diff -q "$TMP/nuvem.txt" "$TMP/aqui.txt" >/dev/null; then
   log "CONTAGEM IGUAL: ${tabelas} tabelas, ${linhas} linhas na nuvem e aqui."
 else
-  log "CONTAGEM DIFERENTE (nuvem | aqui):"
+  log "CONTAGEM DIFERENTE (< nuvem | > aqui):"
   diff "$TMP/nuvem.txt" "$TMP/aqui.txt" | head -40
 fi
 for t in users identities; do
-  a="$(psql "$NUVEM_DB_URL" -tAc "select count(*) from auth.$t" 2>/dev/null)"
+  a="$(grep -o '"id"' "$TMP/auth_$t.json" | wc -l | tr -d ' ')"
   b="$(psql "$ALVO" -tAc "select count(*) from auth.$t")"
   log "auth.$t: nuvem ${a} / aqui ${b}"
 done
 
-log "FIM (modo ${MODO}): erros do pg_restore = ${n_erros}. Proximo passo: copiar os arquivos do Storage e implantar o deskcomm."
+log "FIM (modo ${MODO}): erros do pg_restore = ${n_erros}. Próximo passo: arquivos do Storage e deploy do deskcomm."
 exit 0
