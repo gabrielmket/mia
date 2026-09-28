@@ -164,7 +164,13 @@ function semPermissao(minimo: Role): DestinoDoAviso {
  */
 export async function resolverDestinosDosAvisos<T extends ReferenciaDoAviso>(
   leitor: SupabaseClient, organizationId: string, papel: Role, itens: T[],
+  // FORK MIA (lib/ai/custo-e-da-plataforma.ts): custo e chave de IA são da
+  // PLATAFORMA. Quem não os vê não recebe botão para /app/ai/usage nem para
+  // /app/ai/credentials — as duas telas o mandariam para /403, e aviso que leva
+  // a uma recusa é pior que aviso sem botão. O padrão `true` é o do upstream.
+  opcoes: { veCustoEChaveDeIa?: boolean } = {},
 ): Promise<Array<T & { destination: DestinoDoAviso }>> {
+  const veCustoEChaveDeIa = opcoes.veCustoEChaveDeIa ?? true;
   const grupos = new Map<string, Set<string>>();
   for (const item of itens) {
     const p = politica(item), a = alvo(item.ref_kind);
@@ -212,7 +218,9 @@ export async function resolverDestinosDosAvisos<T extends ReferenciaDoAviso>(
         destination = INDISPONIVEL;
       } else {
         const a = alvo(item.ref_kind);
-        if (a) {
+        if (item.ref_kind === "ai_provider_credential" && !veCustoEChaveDeIa) {
+          destination = semPermissao("admin");
+        } else if (a) {
           destination = !permite(papel, a.papel) ? semPermissao(a.papel)
             : visiveis.get(item.ref_kind!)?.has(item.ref_id!)
               ? { estado: "disponivel", rotulo: ROTULO_POR_KIND[item.kind] ?? a.rotulo, href: a.href(item.ref_id!, funilPorLead.get(item.ref_id!)) }
@@ -221,6 +229,7 @@ export async function resolverDestinosDosAvisos<T extends ReferenciaDoAviso>(
           destination = item.ref_id !== organizationId ? INDISPONIVEL
             : item.kind === "contact_proposal_expired" ? { estado: "sem_destino", orientacao: p.orientacao }
             : !permite(papel, item.ref_kind === "ai_budget" ? "manager" : "agent") ? semPermissao("manager")
+            : item.ref_kind === "ai_budget" && !veCustoEChaveDeIa ? semPermissao("admin")
             : { estado: "disponivel", href: item.ref_kind === "ai_budget" ? "/app/ai/usage" : "/app/radar", rotulo: item.ref_kind === "ai_budget" ? "Abrir uso de IA" : "Abrir Radar" };
         } else destination = { estado: "sem_destino", orientacao: p.orientacao };
       }
