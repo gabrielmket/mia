@@ -107,7 +107,9 @@ services:
       SERVICE_ROLE_KEY_ASYMMETRIC: ""
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
-    entrypoint: /home/kong/kong-entrypoint.sh
+    # Pelo bash, e não direto: o bit de execução do script não sobrevive a todo
+    # checkout (medido: "permission denied" no primeiro deploy, 28/09/2026).
+    entrypoint: ["bash", "/home/kong/kong-entrypoint.sh"]
 
   auth:
     image: supabase/gotrue:v2.186.0

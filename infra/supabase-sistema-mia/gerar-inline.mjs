@@ -53,7 +53,6 @@ troca(
         target: /home/kong/kong-entrypoint.sh
 `,
 );
-troca(`    entrypoint: /home/kong/kong-entrypoint.sh\n`, `    entrypoint: ["bash", "/home/kong/kong-entrypoint.sh"]\n`);
 troca(
   `      - ./volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z
       - ./volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:Z
