@@ -112,8 +112,11 @@ async function registrarLeitura(
   formulario: LinhaDoFormulario,
   leitura: Leitura,
   iniciadaEm: Date,
+  // O relógio da rodada, não o do sistema: com o do sistema, duas leituras no
+  // mesmo milésimo empatavam em terminada_em e a "última" podia ser a errada.
+  relogio: Date,
 ): Promise<void> {
-  const agora = new Date().toISOString();
+  const agora = relogio.toISOString();
 
   const { error: erroForm } = await admin
     .from("mia_leads_da_meta_formularios")
@@ -394,7 +397,7 @@ export async function rodarLeadsDaMeta(
     const registrarTodos = async (leitura: Leitura) => {
       for (const f of formularios) {
         const iniciada = new Date();
-        await registrarLeitura(admin, f, leitura, iniciada);
+        await registrarLeitura(admin, f, leitura, iniciada, agora);
         resumo.formularios += 1;
         resumo.erros += 1;
         resumo.porFormulario.push({
@@ -437,7 +440,7 @@ export async function rodarLeadsDaMeta(
       } catch (e) {
         leitura = erro("erro_ao_gravar", e instanceof Error ? e.message.slice(0, 300) : null);
       }
-      await registrarLeitura(admin, formulario, leitura, iniciada);
+      await registrarLeitura(admin, formulario, leitura, iniciada, agora);
       resumo.formularios += 1;
       resumo.novos += leitura.novos;
       resumo.repetidos += leitura.repetidos;

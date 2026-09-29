@@ -285,9 +285,15 @@ describe("lead novo", () => {
 describe("deduplicação", () => {
   it("a leitura sobreposta não duplica nada, e 'sem novos' seguidos viram uma linha só", async () => {
     leadsDaMeta = [leadNaMeta("1001", { full_name: "Ana", phone_number: "+5531999990001" })];
-    await rodar();
-    await rodar();
-    await rodar();
+    // Como na produção: uma rodada a cada 5 minutos, cada uma com o seu relógio.
+    const rodarEm = (minutos: number) =>
+      rodarLeadsDaMeta(banco.cliente as never, {
+        requestId: "req-1",
+        agora: new Date(AGORA.getTime() + minutos * MINUTO),
+      });
+    await rodarEm(0);
+    await rodarEm(5);
+    await rodarEm(10);
 
     expect(banco.tabela("crm_leads")).toHaveLength(1);
     expect(banco.tabela("contacts")).toHaveLength(1);
