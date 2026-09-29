@@ -7309,6 +7309,10 @@ export const DICIONARIO: Traducoes = {
   "rascunho": { es: "borrador" },
   "— ele ainda não tem com o que pensar.": { es: "— todavía no tiene con qué pensar." },
   "Não achei chave": { es: "No encontré ninguna clave" },
+  // FORK MIA: o mesmo rascunho sem cérebro, dito ao CLIENTE (a chave é da plataforma).
+  "A inteligência dele é configurada pela nossa equipe e ainda não está pronta nesta conta. Pode seguir com a configuração; se ele não entrar no ar, fale com o suporte.": {
+    es: "Su inteligencia la configura nuestro equipo y todavía no está lista en esta cuenta. Puedes seguir con la configuración; si no entra en funcionamiento, habla con soporte.",
+  },
   "nem cadastrada aqui, nem vinda da instalação. Cole a chave no campo acima («o cérebro dele») e crie o atendente de novo — ou cadastre em": {
     es: "ni registrada aquí ni incluida con la instalación. Pega la clave en el campo de arriba («su cerebro») y vuelve a crear el agente, o regístrala en",
   },

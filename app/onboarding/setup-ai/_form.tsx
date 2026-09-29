@@ -45,14 +45,43 @@ const JEITOS: { id: PromptTemplate; titulo: string; desc: string }[] = [
   },
 ];
 
+/**
+ * FORK MIA — o que o CLIENTE lê quando o atendente fica rascunho por falta de
+ * chave ou de modelo. Sem "cole", sem "IA › Credenciais", sem nome de provedor:
+ * nada disso está ao alcance dele, e a pendência é da plataforma.
+ */
+function AvisoDoClienteSemCerebro({ t }: { t: (texto: string) => string }) {
+  return (
+    <p className="text-sm">
+      {t(
+        "A inteligência dele é configurada pela nossa equipe e ainda não está pronta nesta conta. Pode seguir com a configuração; se ele não entrar no ar, fale com o suporte.",
+      )}
+    </p>
+  );
+}
+
 interface Props {
   /** O que ele já sabe fazer, em linguagem de dono de negócio. */
   capacidades: string[];
   /** O que ele nunca faz — as conferências antes de cada mensagem sair. */
   conferencias: string[];
+  /**
+   * FORK MIA — quem olha pode configurar a chave e o modelo de IA?
+   *
+   * Só a plataforma (`podeConfigurarChaveDeIa`, em
+   * `lib/ai/custo-e-da-plataforma.ts`). Para o cliente o campo da chave («o
+   * cérebro dele», `_inteligencia.tsx`) nem aparece, e as telas de IA ›
+   * Credenciais e IA › Provedores devolvem 403. Mandar o cliente "colar a chave
+   * no campo acima" era mandá-lo a um campo que não existe para ele: o rascunho
+   * sem cérebro é pendência NOSSA, e a tela diz isso.
+   *
+   * Opcional e com padrão `false`, como `podeEscolherIa` no editor de agente:
+   * quem esquecer de passar mostra o texto do cliente, nunca o caminho da chave.
+   */
+  podeConfigurar?: boolean;
 }
 
-export function SetupAiForm({ capacidades, conferencias }: Props) {
+export function SetupAiForm({ capacidades, conferencias, podeConfigurar = false }: Props) {
   const t = useT();
   const [name, setName] = useState("Atendente IA");
   const [jeito, setJeito] = useState<PromptTemplate>("ecommerce_friendly");
@@ -232,7 +261,9 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
             {t("Seu atendente foi criado, mas ficou como")} <strong>{t("rascunho")}</strong>{" "}
             {t("— ele ainda não tem com o que pensar.")}
           </p>
-          {chaveEmVerificacao ? (
+          {!podeConfigurar ? (
+            <AvisoDoClienteSemCerebro t={t} />
+          ) : chaveEmVerificacao ? (
             // A chave EXISTE, está gravada, e o que falta é o provedor confirmar.
             // Dizer "não achei chave" aqui é falso — e manda a pessoa colar de
             // novo o que ela acabou de colar (#1007).
@@ -285,7 +316,9 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
             completo é mandar esperar para sempre. Foi o que a tela fazia, e só
             apareceu percorrendo o wizard num ambiente com 400 modelos baixados.
           */}
-          {motivoDoModelo === "nenhum_com_ferramentas" ? (
+          {!podeConfigurar ? (
+            <AvisoDoClienteSemCerebro t={t} />
+          ) : motivoDoModelo === "nenhum_com_ferramentas" ? (
             <p className="text-sm">
               {t("Os modelos")} {provedorLegivel(provedor, t)}{" "}
               {t(

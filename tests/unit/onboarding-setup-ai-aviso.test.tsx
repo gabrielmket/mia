@@ -32,11 +32,12 @@ import { SetupAiForm } from "@/app/onboarding/setup-ai/_form";
  * mesmas fontes que o runtime usa. Aqui são fixas de propósito: o que está sob
  * teste é o que a tela diz quando a publicação falha, não o catálogo.
  */
-function montar() {
+function montar(podeConfigurar = true) {
   return (
     <SetupAiForm
       capacidades={["Ver os clientes", "Mover o negócio no funil"]}
       conferencias={["Respeitar quem pediu para parar"]}
+      podeConfigurar={podeConfigurar}
     />
   );
 }
@@ -118,6 +119,52 @@ describe("setup de IA: o que a tela diz quando o agente fica rascunho", () => {
     expect(aviso).not.toHaveTextContent(/números de WhatsApp/i);
     expect(screen.getByRole("button", { name: /continuar sem publicar/i })).toBeInTheDocument();
     expect(toastWarning).toHaveBeenCalled();
+  });
+
+  /**
+   * FORK MIA — a chave e o modelo de IA são da PLATAFORMA. Para o cliente o
+   * campo «o cérebro dele» não existe (`_inteligencia.tsx` devolve null) e
+   * IA › Credenciais devolve 403: o aviso não pode mandá-lo colar a chave lá.
+   */
+  it.each(["chave", "modelo"] as const)(
+    "⭐ cliente, causa '%s': diz que é pendência da plataforma, sem mandar colar chave",
+    async (causa) => {
+      createDefaultAgentMock.mockResolvedValue({
+        ok: true,
+        agent_id: "agente-1",
+        publish_blocked_by: causa,
+        provider: "openai",
+      });
+
+      render(montar(false));
+      await enviar();
+
+      const aviso = await screen.findByRole("alert");
+      expect(aviso).toHaveTextContent(/rascunho/i);
+      expect(aviso).toHaveTextContent(/nossa equipe/i);
+      expect(aviso).toHaveTextContent(/suporte/i);
+      expect(aviso).not.toHaveTextContent(/cole|colar/i);
+      expect(aviso).not.toHaveTextContent(/credenciais|provedores/i);
+      expect(aviso).not.toHaveTextContent(/openai/i);
+      // A saída do passo continua: o rascunho não trava o resto do wizard.
+      expect(screen.getByRole("button", { name: /continuar sem publicar/i })).toBeInTheDocument();
+    },
+  );
+
+  it("plataforma, causa 'chave': continua mostrando o caminho da chave (o controle)", async () => {
+    createDefaultAgentMock.mockResolvedValue({
+      ok: true,
+      agent_id: "agente-1",
+      publish_blocked_by: "chave",
+      provider: "openai",
+    });
+
+    render(montar(true));
+    await enviar();
+
+    const aviso = await screen.findByRole("alert");
+    expect(aviso).toHaveTextContent(/credenciais/i);
+    expect(aviso).not.toHaveTextContent(/nossa equipe/i);
   });
 
   it("uma retentativa que dá certo apaga o aviso anterior", async () => {
