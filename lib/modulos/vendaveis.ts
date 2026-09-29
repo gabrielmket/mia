@@ -21,6 +21,12 @@
  * citam o caminho antigo nos comentários: são história, ficam como estão.
  */
 
+import {
+  CHAVE_DA_MARCA_DA_ORGANIZACAO,
+  marcaDaOrganizacaoTravada,
+  TELA_DA_MARCA_DA_ORGANIZACAO,
+} from "@/lib/branding/marca-da-organizacao-no-fork";
+
 export type ChaveDeModulo = "disparador";
 
 export interface ModuloVendavel {
@@ -69,14 +75,35 @@ export function moduloPorChave(chave: string): ModuloVendavel | null {
 }
 
 /**
+ * Telas que dependem de uma DECISÃO DA INSTALAÇÃO, e não de venda.
+ *
+ * Mesmo mecanismo de menu dos módulos (a tela some de quem não tem a chave na
+ * lista `modulos`), mas a chave não se compra nem se libera por empresa: quem a
+ * põe na lista é `modulosDaOrganizacao`, quando a instalação libera. Fora de
+ * `MODULOS` de propósito — o painel de liberação não pode oferecer um botão que
+ * não muda nada.
+ *
+ * Hoje: a marca por empresa, travada na MIA
+ * (`lib/branding/marca-da-organizacao-no-fork.ts`).
+ */
+export const TELAS_DA_INSTALACAO: Readonly<Record<string, typeof CHAVE_DA_MARCA_DA_ORGANIZACAO>> = {
+  [TELA_DA_MARCA_DA_ORGANIZACAO]: CHAVE_DA_MARCA_DA_ORGANIZACAO,
+};
+
+/** As chaves que a instalação libera agora — entram na lista `modulos` do menu. */
+export function liberacoesDaInstalacao(): string[] {
+  return marcaDaOrganizacaoTravada() ? [] : [CHAVE_DA_MARCA_DA_ORGANIZACAO];
+}
+
+/**
  * Qual módulo protege esta tela? `null` = nenhuma — e nenhuma é o caso da
  * esmagadora maioria das telas, que continuam valendo para todo mundo.
  */
-export function moduloDaTela(href: string): ChaveDeModulo | null {
+export function moduloDaTela(href: string): ChaveDeModulo | typeof CHAVE_DA_MARCA_DA_ORGANIZACAO | null {
   for (const m of MODULOS) {
     if (m.telas.includes(href)) return m.chave;
   }
-  return null;
+  return TELAS_DA_INSTALACAO[href] ?? null;
 }
 
 /**

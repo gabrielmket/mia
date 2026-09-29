@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { audit } from "@/lib/audit";
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
+import { marcaDaOrganizacaoTravada } from "@/lib/branding/marca-da-organizacao-no-fork";
 import { normalizarHex } from "@/lib/branding/rampa";
 import {
   marcaDaOrganizacaoSchema,
@@ -25,7 +26,9 @@ export type UpdateMarcaDaOrganizacaoResult =
         | "forbidden_role"
         | "mfa_required"
         | "nao_gravou"
-        | "db_error";
+        | "db_error"
+        // FORK MIA — a marca é da plataforma (lib/branding/marca-da-organizacao-no-fork.ts).
+        | "marca_da_plataforma";
       details?: unknown;
     };
 
@@ -88,6 +91,10 @@ export type UpdateMarcaDaOrganizacaoResult =
 export async function updateMarcaDaOrganizacao(
   input: MarcaDaOrganizacaoInput,
 ): Promise<UpdateMarcaDaOrganizacaoResult> {
+  // FORK MIA — antes de tudo: com a marca travada não há o que validar nem
+  // gravar. A leitura já ignora o que estiver gravado; recusar aqui é para a
+  // tela dizer o porquê em vez de "salvo" sem efeito nenhum.
+  if (marcaDaOrganizacaoTravada()) return { ok: false, error: "marca_da_plataforma" };
   const parsed = marcaDaOrganizacaoSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "validation_failed", details: parsed.error.flatten() };

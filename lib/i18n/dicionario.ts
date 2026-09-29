@@ -11705,6 +11705,10 @@ export const DICIONARIO: Traducoes = {
   "Marque o número acima para escolher os grupos.": { es: "Marca el número de arriba para elegir los grupos." },
   "Não consegui perguntar ao WhatsApp quais são os grupos. O que já estava escolhido continua valendo.": { es: "No pude preguntarle a WhatsApp cuáles son los grupos. Lo que ya estaba elegido sigue valiendo." },
   "Este número ainda não está em nenhum grupo. Adicione-o pelo WhatsApp e recarregue.": { es: "Este número todavía no está en ningún grupo. Agrégalo por WhatsApp y recarga." },
+  // FORK MIA — a marca por empresa travada (lib/branding/marca-da-organizacao-no-fork.ts).
+  "A marca é definida pela plataforma: nome, cor e logo são os mesmos para todas as empresas.": { es: "La marca la define la plataforma: nombre, color y logo son los mismos para todas las empresas." },
+  "Para trocar a marca de todas as empresas, use o painel da plataforma:": { es: "Para cambiar la marca de todas las empresas, usa el panel de la plataforma:" },
+  "Marca da instalação": { es: "Marca de la instalación" },
   // FORK MIA — o porquê da lista de grupos não ter vindo (MotivoDaFalhaDeGrupos).
   "O WhatsApp não respondeu a tempo. Recarregue a página em instantes.": { es: "WhatsApp no respondió a tiempo. Recarga la página en unos instantes." },
   "O serviço do WhatsApp não está configurado nesta instalação.": { es: "El servicio de WhatsApp no está configurado en esta instalación." },

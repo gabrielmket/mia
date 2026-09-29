@@ -34,6 +34,7 @@
  * dentro de `MarcaResolvida`, que é o que a tela mostra ao admin.
  */
 
+import { marcaDaOrganizacaoTravada } from "./marca-da-organizacao-no-fork";
 import { REGUA_DO_PRODUTO } from "./regua-do-produto";
 import {
   camadaDaInstalacao,
@@ -71,6 +72,11 @@ function texto(valor: unknown): string | null {
  * `envelope_malformado` que aponta para o campo errado no diagnóstico.
  */
 export function marcaDaOrganizacaoDeSettings(settings: unknown): MarcaDaOrganizacao | null {
+  // FORK MIA — na MIA a marca é da PLATAFORMA; a da empresa fica travada. É a
+  // trava de verdade: todo leitor passa por aqui, então o que estiver gravado
+  // (inclusive direto no banco) não aparece. O dado não é apagado. O porquê
+  // inteiro está em `./marca-da-organizacao-no-fork.ts`.
+  if (marcaDaOrganizacaoTravada()) return null;
   if (typeof settings !== "object" || settings === null || Array.isArray(settings)) return null;
   const bruto = (settings as Record<string, unknown>).branding;
   if (typeof bruto !== "object" || bruto === null || Array.isArray(bruto)) return null;

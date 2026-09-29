@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { modulosDaOrganizacao, moduloLiberado } from "@/lib/modulos/liberacao";
@@ -48,8 +48,19 @@ describe("a liberação por módulo", () => {
     expect(s.size, "a falha de leitura virou um menu com tudo liberado").toBe(0);
   });
 
-  it("a lista traz o que está vivo", async () => {
+  it("a lista traz o que está vivo — e o que a INSTALAÇÃO libera", async () => {
+    vi.stubEnv("MARCA_DA_ORGANIZACAO", "");
+    const s = await modulosDaOrganizacao(db({ data: [{ modulo: "disparador" }], error: null }), ORG);
+    // A tela de marca por empresa não se compra: entra na lista do menu quando
+    // a instalação a libera (lib/branding/marca-da-organizacao-no-fork.ts).
+    expect([...s]).toEqual(["disparador", "marca_da_organizacao"]);
+    vi.unstubAllEnvs();
+  });
+
+  it("com a marca travada (a MIA no ar), a lista é só o contratado", async () => {
+    vi.stubEnv("MARCA_DA_ORGANIZACAO", "travada");
     const s = await modulosDaOrganizacao(db({ data: [{ modulo: "disparador" }], error: null }), ORG);
     expect([...s]).toEqual(["disparador"]);
+    vi.unstubAllEnvs();
   });
 });

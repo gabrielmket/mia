@@ -547,6 +547,15 @@ const schema = z.object({
   APP_ACCENT_HEX: z.string().optional().default(""),
 
   /**
+   * FORK MIA — `travada` trava a marca POR EMPRESA: vale sempre a da instalação.
+   * Vazio (padrão) = liberada, como no upstream. Lida direto de `process.env` em
+   * `lib/branding/marca-da-organizacao-no-fork.ts` (o módulo roda também no
+   * cliente, pelo menu); declarada aqui para existir no inventário de variáveis.
+   * `z.string()` e não `z.enum` pelo motivo escrito ao lado de `APP_ACCENT_HEX`.
+   */
+  MARCA_DA_ORGANIZACAO: z.string().optional().default(""),
+
+  /**
    * Com o que a instalação NASCE quanto a cadastro: `aberto` (padrão),
    * `com_aprovacao` ou `so_convite`. Vazio = `aberto`, que é como o produto
    * sempre funcionou.

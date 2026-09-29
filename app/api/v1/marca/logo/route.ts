@@ -72,6 +72,10 @@ import {
 } from "@/lib/branding/logo";
 import { extensaoDe, farejarTipo, pareceSvg, podeApagar } from "@/lib/branding/logo-arquivo";
 import { marcaDaOrganizacaoDeSettings } from "@/lib/branding/organizacao";
+import {
+  MARCA_DEFINIDA_PELA_PLATAFORMA,
+  marcaDaOrganizacaoTravada,
+} from "@/lib/branding/marca-da-organizacao-no-fork";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -185,6 +189,14 @@ async function abrirContexto(escopo: Escopo): Promise<{ ctx: Contexto } | { recu
     return { ctx: { escopo, userId: user.id, prefixo: PREFIXO_DA_INSTALACAO } };
   }
 
+  // FORK MIA — a marca é da plataforma: o logo de EMPRESA não sobe nem sai.
+  // Recusa antes de qualquer outra pergunta, para ninguém receber "faça MFA"
+  // e descobrir depois que não adiantaria.
+  if (marcaDaOrganizacaoTravada()) {
+    return {
+      recusa: { codigo: "forbidden", mensagem: MARCA_DEFINIDA_PELA_PLATAFORMA, status: 403 },
+    };
+  }
   const org = await resolveActiveOrg(user);
   if (!org) {
     return {

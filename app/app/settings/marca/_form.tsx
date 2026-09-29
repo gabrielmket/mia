@@ -87,6 +87,9 @@ const ERRO_EM_PORTUGUES: Record<string, string> = {
   // gravação não casou nenhuma linha, e a tela dizer "salvo" quando nada foi
   // gravado é a forma exata do defeito que a função SQL veio fechar.
   nao_gravou: "A alteração não chegou ao banco — nada foi mudado. Tente de novo.",
+  // FORK MIA — a marca é da plataforma (lib/branding/marca-da-organizacao-no-fork.ts).
+  marca_da_plataforma:
+    "A marca é definida pela plataforma: nome, cor e logo são os mesmos para todas as empresas.",
 };
 
 const CLASSE_DO_TOM: Record<Tom, string> = {

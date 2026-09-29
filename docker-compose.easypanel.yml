@@ -60,6 +60,11 @@ services:
     pull_policy: missing
     restart: unless-stopped
     env_file: .env
+    environment:
+      # A marca é da PLATAFORMA: a de cada empresa fica travada (não é apagada).
+      # Valor fixo, sem `${}`: é decisão da MIA, não de quem edita o Environment.
+      # Ver lib/branding/marca-da-organizacao-no-fork.ts.
+      MARCA_DA_ORGANIZACAO: travada
     depends_on:
       bootstrap:
         condition: service_completed_successfully
@@ -90,6 +95,8 @@ services:
     env_file: .env
     environment:
       WAHA_API_BASE_URL: http://waha:3000
+      # Mesma trava do app: e-mail e aviso que o worker monta também leem a marca.
+      MARCA_DA_ORGANIZACAO: travada
     depends_on:
       bootstrap:
         condition: service_completed_successfully
