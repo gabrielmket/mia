@@ -91,9 +91,11 @@ const PERSONALIZADO = "personalizado";
 interface Props {
   contaPadrao: string | null;
   idioma: Idioma;
+  /** FORK MIA — para a tabela lembrar a ordem e o filtro de cada pessoa. */
+  usuarioId?: string;
 }
 
-export function MetaAdsClient({ contaPadrao }: Props) {
+export function MetaAdsClient({ contaPadrao, usuarioId }: Props) {
   const t = useT();
   // O carimbo "lido em" é uma DATA, e data segue o idioma de quem lê — fixar
   // "pt-BR" deixaria a tela em espanhol com a hora em português.
@@ -249,6 +251,7 @@ export function MetaAdsClient({ contaPadrao }: Props) {
             linhas={campanhas.data.data.campanhas}
             moeda={moeda}
             avisos={campanhas.data.data.avisos}
+            usuarioId={usuarioId}
           />
           {/*
             Sem carimbo, uma tabela que falhou ao atualizar é visualmente

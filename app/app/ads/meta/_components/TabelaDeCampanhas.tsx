@@ -1,16 +1,28 @@
 "use client";
 
+import { useMemo } from "react";
+
 import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { useT } from "@/hooks/i18n/useT";
 import { rotuloDoIndicador } from "@/lib/plataformas-de-anuncio/meta/tabela-de-campanhas";
 import type { LinhaDeCampanha } from "@/lib/plataformas-de-anuncio/types";
+// FORK MIA — ordem por coluna e filtro "só com impressão". A regra mora em
+// `lib/plataformas-de-anuncio/meta/ordem-da-tabela.ts`; aqui é só fiação.
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
+import {
+  ordenarCampanhas,
+  soQuemTeveImpressao,
+} from "@/lib/plataformas-de-anuncio/meta/ordem-da-tabela";
+
+import { BarraDaTabela } from "./BarraDaTabela";
+import { CabecalhoOrdenavel } from "./CabecalhoOrdenavel";
+import { usePreferenciaDaTabela } from "./usePreferenciaDaTabela";
 
 /**
  * As 15 colunas.
@@ -123,10 +135,29 @@ interface Props {
    * isso no hover, em vez de mostrar um "—" mudo que parece medição faltando.
    */
   avisos?: string[];
+  /**
+   * FORK MIA — quem está vendo. A ordem e o filtro escolhidos ficam lembrados no
+   * navegador POR PESSOA; sem o id, lembra num lugar comum ("anonimo").
+   */
+  usuarioId?: string | null;
 }
 
-export function TabelaDeCampanhas({ linhas, moeda, avisos }: Props) {
+export function TabelaDeCampanhas({ linhas, moeda, avisos, usuarioId }: Props) {
   const t = useT();
+  const tagDoIdioma = useTagDeIdioma();
+  const { preferencia, ordenarPor, voltarOrdemDaPlataforma, definirSoComImpressao } =
+    usePreferenciaDaTabela(usuarioId);
+
+  // O que está à vista: primeiro o filtro, depois a ordem. Status e veiculação
+  // ordenam pelo texto que a célula mostra, no idioma de quem lê.
+  const visiveis = useMemo(() => {
+    const filtradas = preferencia.soComImpressao ? soQuemTeveImpressao(linhas) : linhas;
+    return ordenarCampanhas(filtradas, preferencia.ordem, {
+      idioma: tagDoIdioma,
+      textoDoEstado: (codigo) => t(ESTADO_LEGIVEL[codigo] ?? codigo),
+    });
+  }, [linhas, preferencia, tagDoIdioma, t]);
+  const cabecalho = { ordem: preferencia.ordem, aoOrdenar: ordenarPor };
 
   /**
    * A ressalva da leitura, quando existe: é o `title` do "—" da coluna do
@@ -173,6 +204,24 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos }: Props) {
   }
 
   return (
+    <div className="flex flex-col gap-2">
+      <BarraDaTabela
+        soComImpressao={preferencia.soComImpressao}
+        aoMudarFiltro={definirSoComImpressao}
+        visiveis={visiveis.length}
+        total={linhas.length}
+        ordenada={preferencia.ordem !== null}
+        aoVoltarOrdem={voltarOrdemDaPlataforma}
+      />
+      {visiveis.length === 0 ? (
+        // Só o filtro chega aqui (a lista vazia de verdade já saiu acima): a
+        // frase diz qual chave desligar, em vez de uma tabela muda.
+        <p className="rounded-md border p-4 text-sm text-muted-foreground">
+          {t(
+            "Nenhuma campanha teve impressão neste período. Desligue a chave \"Só campanhas com impressão\" para ver todas.",
+          )}
+        </p>
+      ) : (
     /*
       O scroll horizontal mora AQUI, num contêiner próprio — nunca no `<body>`.
       São 15 colunas; em telas estreitas a tabela rola dentro do próprio quadro e
@@ -182,16 +231,36 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos }: Props) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="sticky left-0 z-10 bg-bg">{t("Campanha")}</TableHead>
-            <TableHead>{t("Status")}</TableHead>
-            <TableHead>{t("Veiculação")}</TableHead>
-            <TableHead className="text-right">{t("Resultado")}</TableHead>
-            <TableHead className="text-right">{t("Custo por Resultado")}</TableHead>
-            <TableHead className="text-right">{t("Valor Gasto")}</TableHead>
-            <TableHead className="text-right">{t("Impressões")}</TableHead>
-            <TableHead className="text-right">{t("Alcance")}</TableHead>
-            <TableHead className="text-right">{t("CPM")}</TableHead>
-            <TableHead className="text-right">{t("CTR")}</TableHead>
+            <CabecalhoOrdenavel {...cabecalho} coluna="nome" className="sticky left-0 z-10 bg-bg">
+              {t("Campanha")}
+            </CabecalhoOrdenavel>
+            <CabecalhoOrdenavel {...cabecalho} coluna="status">
+              {t("Status")}
+            </CabecalhoOrdenavel>
+            <CabecalhoOrdenavel {...cabecalho} coluna="veiculacao">
+              {t("Veiculação")}
+            </CabecalhoOrdenavel>
+            <CabecalhoOrdenavel {...cabecalho} coluna="resultado" className="text-right">
+              {t("Resultado")}
+            </CabecalhoOrdenavel>
+            <CabecalhoOrdenavel {...cabecalho} coluna="custoPorResultado" className="text-right">
+              {t("Custo por Resultado")}
+            </CabecalhoOrdenavel>
+            <CabecalhoOrdenavel {...cabecalho} coluna="gasto" className="text-right">
+              {t("Valor Gasto")}
+            </CabecalhoOrdenavel>
+            <CabecalhoOrdenavel {...cabecalho} coluna="impressoes" className="text-right">
+              {t("Impressões")}
+            </CabecalhoOrdenavel>
+            <CabecalhoOrdenavel {...cabecalho} coluna="alcance" className="text-right">
+              {t("Alcance")}
+            </CabecalhoOrdenavel>
+            <CabecalhoOrdenavel {...cabecalho} coluna="cpm" className="text-right">
+              {t("CPM")}
+            </CabecalhoOrdenavel>
+            <CabecalhoOrdenavel {...cabecalho} coluna="ctr" className="text-right">
+              {t("CTR")}
+            </CabecalhoOrdenavel>
             {/*
               Coluna nova, logo depois do CTR — e a ÚNICA das duas derivadas que
               fica sem o numerador escrito no rótulo. Não é inconsistência: o
@@ -205,14 +274,20 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos }: Props) {
               campanha de mensagem): coluna que aparece e some conforme o
               período faz a tabela pular, e "—" já diz o que precisa dizer.
             */}
-            <TableHead
+            <CabecalhoOrdenavel
+              {...cabecalho}
+              coluna="connectRate"
               className="text-right"
               title={t("Visualizações da página ÷ cliques no link")}
             >
               {t("Connect rate")}
-            </TableHead>
-            <TableHead className="text-right">{t("Frequência")}</TableHead>
-            <TableHead className="text-right">{t("CPC")}</TableHead>
+            </CabecalhoOrdenavel>
+            <CabecalhoOrdenavel {...cabecalho} coluna="frequencia" className="text-right">
+              {t("Frequência")}
+            </CabecalhoOrdenavel>
+            <CabecalhoOrdenavel {...cabecalho} coluna="cpc" className="text-right">
+              {t("CPC")}
+            </CabecalhoOrdenavel>
             {/*
               O rótulo diz o numerador de propósito. O Hook Rate de mercado usa
               reproduções de 3 segundos, e esse campo FOI REMOVIDO da v22.0 —
@@ -220,17 +295,24 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos }: Props) {
               "Hook Rate" pelada não bateria com o Gerenciador e não explicaria
               por quê; com o numerador escrito, bate a conta na hora.
             */}
-            <TableHead className="text-right" title={t("Reproduções de vídeo ÷ impressões")}>
+            <CabecalhoOrdenavel
+              {...cabecalho}
+              coluna="hookRate"
+              className="text-right"
+              title={t("Reproduções de vídeo ÷ impressões")}
+            >
               {t("Hook Rate")}
               <span className="ml-1 font-normal text-muted-foreground">
                 {t("(reproduções)")}
               </span>
-            </TableHead>
-            <TableHead className="text-right">{t("ThruPlays")}</TableHead>
+            </CabecalhoOrdenavel>
+            <CabecalhoOrdenavel {...cabecalho} coluna="thruPlays" className="text-right">
+              {t("ThruPlays")}
+            </CabecalhoOrdenavel>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {linhas.map((linha) => {
+          {visiveis.map((linha) => {
             const rotulo = rotuloDoIndicador(linha.resultado.indicador);
             return (
               <TableRow key={linha.campanhaId}>
@@ -287,6 +369,8 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos }: Props) {
           })}
         </TableBody>
       </Table>
+    </div>
+      )}
     </div>
   );
 }

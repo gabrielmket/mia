@@ -10531,6 +10531,15 @@ export const DICIONARIO: Traducoes = {
   ThruPlays: { es: "ThruPlays" },
   "Nenhuma campanha neste período. Ou a conta ainda não tem campanhas, ou elas foram criadas depois da data escolhida.":
     { es: "No hay campañas en este período. Puede que la cuenta aún no tenga campañas o que se hayan creado después de la fecha elegida." },
+  // FORK MIA — ordem por coluna e filtro "só com impressão" na tabela de campanhas.
+  "Só campanhas com impressão": { es: "Solo campañas con impresiones" },
+  Mostrando: { es: "Mostrando" },
+  "Voltar à ordem da plataforma": { es: "Volver al orden de la plataforma" },
+  "Clique no nome da coluna para ordenar; clique de novo para inverter.": {
+    es: "Haz clic en el nombre de la columna para ordenar; haz clic de nuevo para invertir.",
+  },
+  'Nenhuma campanha teve impressão neste período. Desligue a chave "Só campanhas com impressão" para ver todas.':
+    { es: 'Ninguna campaña tuvo impresiones en este período. Desactiva "Solo campañas con impresiones" para ver todas.' },
 
   // `effective_status` da campanha — chega por variável (ESTADO_LEGIVEL)
   Excluída: { es: "Eliminada" },
