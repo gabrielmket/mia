@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { apiClient } from "@/lib/api/client";
+import type { MotivoDaFalhaDeGrupos } from "@/lib/channels/motivo-da-falha-de-grupos";
 
 export interface GrupoDeAvisos {
   id: string;
@@ -46,6 +47,8 @@ export interface NumeroDeAvisos {
   grupos: GrupoDeAvisos[];
   /** `true` = não deu para perguntar ao WhatsApp. Diferente de "não há grupos". */
   grupos_indisponiveis: boolean;
+  /** O porquê de `grupos_indisponiveis` — o componente o transforma em frase e ação. */
+  grupos_motivo?: MotivoDaFalhaDeGrupos | null;
   empresas: EmpresaComGrupo[];
   report: ConfiguracaoDoReport;
 }
