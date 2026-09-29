@@ -39,9 +39,15 @@ export interface CampanhaCriada {
   custo_estimado_cents: number | null;
 }
 
-export function useBroadcasts() {
+/**
+ * `habilitado`: a lista unificada do Broadcast (.58) só pergunta pelos disparos
+ * oficiais quando a organização pode usá-los — sem o módulo a rota recusa, e a
+ * recusa viraria um erro na tela de quem só usa o caminho por QR.
+ */
+export function useBroadcasts(opcoes: { habilitado?: boolean } = {}) {
   return useQuery({
     queryKey: ["broadcasts"],
+    enabled: opcoes.habilitado ?? true,
     queryFn: async () => apiClient.get<{ data: { campanhas: Campanha[] } }>("/api/v1/broadcasts"),
     select: (r) => r.data.campanhas,
     // Campanha em curso muda sozinha (o cron manda a cada minuto): sem isto a
@@ -125,6 +131,11 @@ export function useEditarCampanha() {
       template_language?: string;
       /** Presente = REMONTAR a lista com este filtro. Vazio = todos. */
       tags?: string[];
+      /**
+       * As etapas do funil, que vão JUNTO com as tags ao remontar: sem elas, a
+       * rota remontaria ignorando a etapa e a lista cresceria em silêncio.
+       */
+      etapas?: string[];
     }) => {
       const { id, ...resto } = input;
       return apiClient.patch<{ data: { id: string; peneira: unknown } }>(
