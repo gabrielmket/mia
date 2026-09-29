@@ -448,7 +448,14 @@ export class WahaClient {
           ? ((id as Record<string, unknown>)._serialized as string)
           : typeof o.JID === "string" ? (o.JID as string) : null;
       if (!chatId || !chatId.endsWith("@g.us")) continue;
-      const subject = typeof o.subject === "string" ? o.subject : typeof o.name === "string" ? o.name : null;
+      // FORK MIA: o GOWS devolve as chaves do whatsmeow em PascalCase (`JID`,
+      // `Name`). O `JID` já era lido e o `Name` não — a tela listava o grupo
+      // pelo id cru. Candidato a PR no upstream (FORK-MIA.md, regra 6).
+      const subject =
+        typeof o.subject === "string" ? o.subject
+        : typeof o.name === "string" ? o.name
+        : typeof o.Name === "string" ? o.Name
+        : null;
       grupos.push({ chatId, subject });
     }
     return grupos;

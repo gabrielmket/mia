@@ -13,6 +13,7 @@ import type { McpToolDefinition } from "../types";
 import { TOOL_CATALOG, VALID_TOOL_IDS } from "./catalog";
 import { crmSearchContacts, crmGetContact, crmProposeContactField } from "./contacts";
 import { crmRegistrarEmpresaDoContato } from "./empresa-do-contato";
+import { crmPassarParaOComercial } from "./passar-para-o-comercial";
 import {
   crmListConversations,
   crmGetConversation,
@@ -108,6 +109,8 @@ export const allTools: ReadonlyArray<McpToolDefinition> = [
   crmGetContact,
   crmProposeContactField,
   crmRegistrarEmpresaDoContato,
+  // FORK MIA — a passagem SDR → Comercial numa chamada só.
+  crmPassarParaOComercial,
   crmListConversations,
   crmGetConversation,
   crmGetConversationHistory,

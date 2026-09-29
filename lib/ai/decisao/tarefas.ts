@@ -31,6 +31,7 @@ import {
   type IdDaTarefa,
   type TarefaGravada,
 } from "./config";
+import { TAREFA_DA_PASSAGEM_PROMETIDA } from "./tarefa-da-passagem-prometida";
 
 export interface TarefaDoJev {
   id: IdDaTarefa;
@@ -82,6 +83,13 @@ export interface TarefaDoJev {
    */
   rotulo: string;
   oQueFaz: string;
+  /**
+   * FORK MIA — a tarefa NÃO começa observando sozinha (a exceção ao item 5 do
+   * cabeçalho): só roda quando o administrador a liga. Para a tarefa que manda
+   * ao fornecedor um dado fora do que o aceite cobre — a passagem prometida
+   * lê a resposta do ATENDENTE, e o aceite fala da mensagem do CLIENTE.
+   */
+  comecaPausada?: boolean;
 }
 
 /**
@@ -176,7 +184,13 @@ export const TAREFA_DO_ROTEADOR = {
     "Lê a última mensagem do cliente, sozinha, e escolhe entre as intenções do seu roteador qual agente deve atender.",
 } as const satisfies TarefaDoJev;
 
-export const TAREFAS_DO_JEV: readonly TarefaDoJev[] = [TAREFA_DO_CLIMA, TAREFA_DA_MANIPULACAO, TAREFA_DO_ROTEADOR];
+export const TAREFAS_DO_JEV: readonly TarefaDoJev[] = [
+  TAREFA_DO_CLIMA,
+  TAREFA_DA_MANIPULACAO,
+  TAREFA_DO_ROTEADOR,
+  // FORK MIA — a rede de segurança da passagem prometida (arquivo nosso).
+  TAREFA_DA_PASSAGEM_PROMETIDA,
+];
 
 /**
  * O estado que a EMPRESA escolheu para a tarefa, sem olhar o interruptor nem o
@@ -195,13 +209,14 @@ export function estadoGravadoDaTarefa(config: ConfigDoJev, id: string): EstadoDa
  * também para a tarefa que ainda não existe — é assim que o teste prova o
  * item 5 antes de haver uma segunda tarefa.
  */
-type TarefaNaRegra = Pick<TarefaDoJev, "alcance"> & { id: string };
+type TarefaNaRegra = Pick<TarefaDoJev, "alcance" | "comecaPausada"> & { id: string };
 
 /** Itens 2 a 5 do cabeçalho, com o Jev ligado sob o aceite `aceito`. */
 function estadoSobOAceite(config: ConfigDoJev, tarefa: TarefaNaRegra, aceito: Alcance): EstadoDaTarefa {
   if (ALCANCES.indexOf(tarefa.alcance) > ALCANCES.indexOf(aceito)) return "desligada";
   return (
-    estadoGravadoDaTarefa(config, tarefa.id) ?? (tarefa.alcance === "mensagem" ? "observando" : "desligada")
+    estadoGravadoDaTarefa(config, tarefa.id) ??
+    (tarefa.alcance === "mensagem" && tarefa.comecaPausada !== true ? "observando" : "desligada")
   );
 }
 

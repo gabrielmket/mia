@@ -21,7 +21,9 @@ describe("de que natureza é cada ponto", () => {
   });
 
   it("os auxiliares que rodam dentro do turno são atendimento", () => {
-    for (const p of ["stage_classifier", "promise_semantic", "jailbreak_detect", "checkpoint"]) {
+    // FORK MIA — `handoff_promise`: o Jev lê a resposta que saiu no turno (a
+    // passagem prometida), com o contato da conversa na linha.
+    for (const p of ["stage_classifier", "promise_semantic", "jailbreak_detect", "checkpoint", "handoff_promise"]) {
       expect(naturezaDoGasto(p), p).toBe("atendimento");
     }
   });
@@ -82,6 +84,8 @@ describe("de que natureza é cada ponto", () => {
       "followup_decide_timing",
       "flow_validate",
       "jailbreak_detect",
+      // FORK MIA — o Jev conferindo a resposta que saiu no turno: atendimento.
+      "handoff_promise",
       "promise_semantic",
       "compaction",
       "flush",

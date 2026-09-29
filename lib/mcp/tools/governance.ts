@@ -16,6 +16,7 @@ import { audit } from "@/lib/audit";
 import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { conversationTagSchema, conversationTagsSchema } from "@/lib/schemas/messaging";
 import { getQueueStatus } from "@/lib/routing/queue";
+import { emitirEtiquetaAdicionada } from "./tag-adicionada-pela-ferramenta";
 import type { McpContext } from "../types";
 import type { McpToolDefinition } from "../types";
 
@@ -225,6 +226,15 @@ export const crmManageTags: McpToolDefinition<typeof tagsInputShape> = {
       resourceId: input.target_id,
       requestId: ctx.requestId,
       metadata: { ...a.metadataActor, tags: nextTags, via: "mcp" },
+    });
+
+    // FORK MIA — a etiqueta posta pela ferramenta dispara `*.tag_added` como a da
+    // tela; sem isso, a regra "quando ganhar a etiqueta" não via o agente.
+    await emitirEtiquetaAdicionada(ctx.supabase, ctx, {
+      alvo: input.target_kind,
+      alvoId: input.target_id,
+      antes: current,
+      depois: nextTags,
     });
 
     return { target_kind: input.target_kind, target_id: input.target_id, tags: nextTags };

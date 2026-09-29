@@ -23,6 +23,7 @@ import { audit } from "@/lib/audit";
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK, type ActiveOrg, type AuthUser, type Role } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { recusaPorModulo } from "@/lib/modulos/recusa-por-recurso"; // FORK MIA (.58)
 import { createClient } from "@/lib/supabase/server";
 
 export type RoleCheck =
@@ -165,6 +166,12 @@ export async function requireRole(min: Role, opts: RequireRoleOpts = {}): Promis
       }),
     };
   }
+
+  // FORK MIA (.58): recurso de módulo vendável — hoje, as Campanhas como caminho
+  // por QR do Broadcast. Uma chamada aqui em vez de uma por rota do upstream;
+  // ver `lib/modulos/recusa-por-recurso.ts` e docs/fork/broadcast-unificado.md.
+  const semModulo = await recusaPorModulo({ db: supabase, organizationId: org.orgId, userId: user.id, resource, requestId, t });
+  if (semModulo) return { ok: false, response: semModulo };
 
   return { ok: true, user, org: { ...org, role: effectiveRole as Role } };
 }

@@ -1,12 +1,12 @@
-import type { Metadata } from "next";
-
-import { ListaDeCampanhas } from "./_client";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Campanhas" };
 
+// FORK MIA (1.21.0-mia.58): a lista de Campanhas é a lista do Broadcast, que
+// junta os disparos pelo número oficial e pelo número por QR
+// (docs/fork/broadcast-unificado.md). Quem chega aqui por link salvo, pelo
+// "← Campanhas" do detalhe ou pelo "Cancelar" do formulário cai lá. A lista do
+// upstream continua em `./_client.tsx`, intacta, para a fusão não conflitar.
 export default function CampanhasPage() {
-  // Auth e organização já vêm garantidas pelo layout de /app; a lista carrega
-  // pela API, que confere o papel `manager` por conta própria.
-  return <ListaDeCampanhas />;
+  redirect("/app/broadcast");
 }

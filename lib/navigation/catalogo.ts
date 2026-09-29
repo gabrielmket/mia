@@ -223,25 +223,19 @@ export const NAV_CATALOG = [
     section: "O dia a dia da venda",
     sidebar: true,
   },
+  // FORK MIA (1.21.0-mia.58): a entrada "Campanhas" (/app/campaigns) do
+  // upstream SAIU daqui. As Campanhas viraram o caminho "Número por QR" do
+  // Broadcast, que é um produto só com o número oficial (decisão do dono do
+  // produto; docs/fork/broadcast-unificado.md). A rota continua existindo e
+  // redireciona para o Broadcast; as telas de dentro dela (new, [id], settings)
+  // são alcançadas pelo Broadcast. Na fusão, se o upstream mudar a entrada de
+  // Campanhas, fica esta — a porta é a de baixo.
   {
-    // A campanha vive no CRM e não em Conexões: quem a usa está pensando em
-    // QUEM vai falar, não no número que fala. O ritmo (que é de Conexões) ela
-    // herda, e só sabe deixar mais devagar.
-    href: "/app/campaigns",
-    label: "Campanhas",
-    description: "Fale com uma lista de contatos que você escolhe, no ritmo do número.",
-    icon: "Megaphone",
-    group: "crm",
-    section: "O dia a dia da venda",
-    // SÓ NO HUB, como as demais telas de preparação: o quinto item do sidebar do
-    // CRM já fez o menu rolar 13px em 900px (e2e `navegacao.spec.ts`), e a
-    // campanha é montada de vez em quando, não aberta todo dia.
-  },
-  {
-    // BROADCAST (até 29/09 "MIA Broadcast"). Mora no CRM, ao lado de Campanhas,
-    // pelo motivo escrito nela: quem dispara está pensando em QUEM vai receber,
-    // não no número. E SÓ NO HUB, como ela: disparo se monta de vez em quando,
-    // não se abre todo dia.
+    // BROADCAST (até 29/09 "MIA Broadcast"; desde a .58, também as Campanhas).
+    // Mora no CRM porque quem dispara está pensando em QUEM vai receber, não no
+    // número. E SÓ NO HUB: disparo se monta de vez em quando, não se abre todo
+    // dia — o quinto item do sidebar do CRM já fez o menu rolar 13px em 900px
+    // (e2e `navegacao.spec.ts`).
     //
     // Morava em Atendimento com `sidebar: true` e era o 17º item de um menu
     // cujo teto medido é 15 (folga 0 a 1280×900 — `tests/unit/interface-por-
@@ -249,13 +243,18 @@ export const NAV_CATALOG = [
     // não tem hub: lá, sem `sidebar`, a única porta seria o ⌘K. A vizinha
     // Créditos fica em Organização (é dinheiro e contrato), e as duas somem
     // juntas para quem não contratou o módulo (lib/modulos/vendaveis.ts).
+    //
+    // A descrição diz "campanhas" de propósito: é texto buscável no ⌘K, e quem
+    // conhecia a tela pelo nome antigo procura por ele.
     href: "/app/broadcast",
     label: "Broadcast",
-    description: "Enviar para uma lista pela API oficial, com template aprovado e cobrança por mensagem.",
+    description:
+      "Campanhas para uma lista de contatos: pelo número oficial, com custo por mensagem, ou pelo número por QR, no ritmo do número.",
     icon: "Megaphone",
     group: "crm",
     section: "O dia a dia da venda",
-    // manager+: cada mensagem gasta dinheiro do cliente.
+    // manager+: cada mensagem oficial gasta dinheiro do cliente, e cada uma por
+    // QR arrisca o número dele.
     minRole: "manager",
   },
   {

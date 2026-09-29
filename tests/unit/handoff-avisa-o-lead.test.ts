@@ -75,6 +75,9 @@ const FONTES = [
   "lib/agent-engine/agent/human-handoff.ts",
   "lib/ai/handoff/orchestrator.ts",
   "app/api/v1/ai/cases/[id]/reply/route.ts",
+  // FORK MIA — a rede de segurança da passagem prometida: o aviso ao cliente é a
+  // própria resposta que prometeu a passagem, declarado em `avisoAoLead`.
+  "lib/agent-engine/agent/passagem-prometida-no-turno.ts",
 ] as const;
 
 /**

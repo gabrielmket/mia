@@ -180,7 +180,17 @@ export type ActivityType =
    * retorno veio" seria indistinguível de "o retorno está a caminho" — e é
    * justamente no silêncio que a demanda morre. O PORQUÊ vai no `reason`.
    */
-  | "proposal_followup_skipped";
+  | "proposal_followup_skipped"
+  /**
+   * FORK MIA — o AVISO AO TIME no grupo do WhatsApp (ação `notify_group`,
+   * `lib/automation/actions/notify-group.ts`). O par, e não um tipo só, pelo
+   * motivo de `appointment_completed`/`appointment_no_show`: "o time foi
+   * avisado" e "o aviso não saiu" levam a ações opostas. Fora da lista positiva
+   * de `fn_update_last_activity_at` de propósito: avisar o time não é falar com
+   * o cliente, e não pode esfriar o Radar de Risco.
+   */
+  | "group_notice_sent"
+  | "group_notice_failed";
 
 export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   lead_created: "Entrou pelo WhatsApp",
@@ -288,6 +298,8 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   proposal_expired: "Proposta venceu sem decisão",
   proposal_value_changed: "Valor do negócio atualizado pela proposta",
   proposal_followup_skipped: "Follow-up automático não agendado",
+  group_notice_sent: "Aviso enviado ao time no grupo",
+  group_notice_failed: "O aviso ao time não saiu",
 };
 
 /** Quando o tipo é legado/desconhecido, a linha ainda é honesta — sem jargão. */

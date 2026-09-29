@@ -150,6 +150,10 @@ export const ALVO_DE_FUNIL: Record<string, AlvoDeFunil> = {
    * tabela viva: a próxima escrita que nascer sem classificação reprova.
    */
   crm_registrar_empresa_do_contato: "sem_funil",
+  // FORK MIA — a passagem ao comercial move o card do contato (pelo espelho do
+  // funil do agente), e o `contact_id` é OBRIGATÓRIO: o alvo resolve de verdade,
+  // como na agenda. Fora do escopo, a passagem é recusada antes de tocar em nada.
+  crm_passar_para_o_comercial: "funil_vem_do_contato",
   // Rascunho sugerido por integração (#1611): opera por `conversation_id`,
   // nunca `lead_id`, e não mexe em estado de funil nenhum. A barreira é OUTRA,
   // e é dela que a segurança depende: o RBAC da rota (agent+), o escopo

@@ -27,7 +27,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { lerGrupoDeAvisos } from "@/lib/avisos/destino-do-aviso";
-import { gruposDoNumero } from "@/lib/avisos/grupos-do-numero";
+import { lerGruposDoNumero } from "@/lib/avisos/grupos-do-numero";
 import { getAdapter, PROVIDERS_QUE_ENTREGAM_EM_GRUPO } from "@/lib/channels";
 import {
   CHANNEL_SESSION_REF_COLUMNS,
@@ -128,8 +128,8 @@ export async function GET(): Promise<Response> {
    * "não deu para perguntar", que é a verdade.
    */
   const adapter = marcada ? getAdapter(marcada.provider) : null;
-  const grupos =
-    marcada && adapter?.listGroups ? await gruposDoNumero(adapter, resolveSessionRef(marcada)) : null;
+  const leitura = marcada && adapter ? await lerGruposDoNumero(adapter, resolveSessionRef(marcada)) : null;
+  const grupos = leitura?.ok ? leitura.grupos : null;
 
   return ok(
     {
@@ -161,6 +161,13 @@ export async function GET(): Promise<Response> {
        */
       grupos: grupos ?? [],
       grupos_indisponiveis: marcada !== null && grupos === null,
+      /**
+       * O PORQUÊ de `grupos_indisponiveis`, em código (a tela traduz em frase
+       * e ação — `MotivoDaFalhaDeGrupos`). Sem ele a tela só
+       * dizia "não consegui perguntar ao WhatsApp" e o seletor ficava travado
+       * sem saída — foi o estado em produção em 29/09/2026.
+       */
+      grupos_motivo: leitura && !leitura.ok ? leitura.motivo : null,
       empresas,
       report: {
         grupo: (report as { grupo_id?: string | null; grupo_nome?: string | null } | null)?.grupo_id

@@ -170,7 +170,7 @@ export async function GET(): Promise<NextResponse> {
         onde: describeAddress(s.address),
         // `valueKey` é o MESMO valor de `chave`, com o nome que a outra tela
         // já lê. São duas telas e dois nomes: `components/broadcast/
-        // MiaBroadcast.tsx` procura `chave`, `components/inbox/
+        // FormularioDoOficial.tsx` procura `chave`, `components/inbox/
         // JanelaFechadaAviso.tsx` procura `valueKey`. Servir um só quebraria
         // uma delas em silêncio — o campo fica `undefined`, o valor nunca é
         // preenchido e o disparo sai sem a imagem. Renomear é trabalho de uma

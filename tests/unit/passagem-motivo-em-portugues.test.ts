@@ -97,7 +97,9 @@ const USO_COMO_CHAVE: Array<{ arquivo: string; codigo: string; razao: string }> 
       "campo do tipo `CampanhaCriada.fora` (contagem da peneira do disparo em massa do fork) — outro conceito, não o motivo da passagem",
   },
   {
-    arquivo: "components/broadcast/MiaBroadcast.tsx",
+    // Era `MiaBroadcast.tsx`; o formulário do disparo oficial mudou de arquivo
+    // na unificação do Broadcast (.58, docs/fork/broadcast-unificado.md).
+    arquivo: "components/broadcast/FormularioDoOficial.tsx",
     codigo: "sem_telefone",
     razao:
       "lê a contagem `recemCriada.fora.sem_telefone` e exibe o número com t(\"sem telefone\") — o código não aparece na tela",
