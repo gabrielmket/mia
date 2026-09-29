@@ -8,7 +8,7 @@ Instalação sem terminal na VPS: o EasyPanel puxa este repositório e sobe
 
 | arquivo | papel |
 |---|---|
-| `docker-compose.easypanel.yml` (raiz) | a stack: bootstrap, app, worker, waha, redis, srh, scheduler, caddy. Só `image:`, nada é compilado na VPS |
+| `docker-compose.easypanel.yml` (raiz) | a stack: bootstrap, app, worker, waha, wacalls, mia-smtp, redis, srh, scheduler, caddy. Só `image:`, nada é compilado na VPS |
 | `easypanel/bootstrap.sh` | prepara o banco, o mesmo que o `install.sh` faz nas etapas 7, 8 e 11 |
 | `easypanel/Caddyfile` | proxy interno atrás do Traefik do EasyPanel: bloqueia o webhook global do WAHA e dá timeout longo ao agente |
 
@@ -80,6 +80,66 @@ CONTA do número. Cada organização aceita isso na tela antes de ler o QR.
 
 Desligar: esvazie `WACALLS_API_BASE_URL` e faça redeploy (a tela volta ao aviso).
 
+### 6. E-mail do servidor (serviço `mia-smtp`)
+
+Relay **só de envio** (Postfix + OpenDKIM, `boky/postfix` pinada por digest): assina tudo com
+DKIM e entrega direto no destino, pela porta 25, sem Resend/SendGrid/Google. Atende o app e o
+worker (convite, export de LGPD, alarme de SLA) e o GoTrue do `supabase-sistema-mia` ("esqueci
+a senha", confirmação de conta), que chega pela rede `easypanel`. Nenhuma porta publicada e
+nenhuma caixa postal. Domínio padrão: `iamia.com.br`. O porquê de cada escolha está no
+comentário do serviço no compose e em `easypanel/smtp-relay.sh`.
+
+**DNS** (Cloudflare do domínio, tudo com nuvem **cinza**):
+
+| tipo | nome | valor |
+|---|---|---|
+| A | `mail` | `177.136.225.108` |
+| TXT | `@` | `v=spf1 ip4:177.136.225.108 ~all` (um SPF só; se já existir, acrescente o `ip4:`) |
+| TXT | `mia._domainkey` | `v=DKIM1; k=rsa; p=<pública>`, com `openssl pkey -in chave.pem -pubout -outform DER \| base64 -w0` |
+| TXT | `_dmarc` | `v=DMARC1; p=none` |
+
+O domínio precisa ter **MX ou A na raiz**: muito servidor recusa remetente de domínio sem os
+dois. Null MX (`MX 0 .`) não serve, é recusado do mesmo jeito.
+
+**No provedor da VPS** (EVEO, por chamado): PTR do IP `177.136.225.108` → `mail.iamia.com.br`,
+o mesmo nome do HELO, e porta 25 de saída liberada.
+
+**Environment**, antes do deploy:
+
+- `clientes/deskcomm`: `SMTP_HOST=mia-smtp`, `SMTP_PORT=587`, `SMTP_SECURITY=none`,
+  `SMTP_USERNAME=` e `SMTP_PASSWORD=` vazios, `SMTP_FROM_EMAIL=nao-responda@iamia.com.br`,
+  `SMTP_FROM_NAME=MIA`, `SMTP_RELAY_DOMAINS=iamia.com.br`, `SMTP_RELAY_HOSTNAME=mail.iamia.com.br`,
+  `SMTP_DKIM_SELECTOR=mia` e `SMTP_DKIM_PRIVATE_KEY_B64` (`base64 -w0 chave.pem`, segredo).
+  `none` é obrigatório: o relay não oferece STARTTLS na rede interna.
+- `banco-de-dados/supabase-sistema-mia`: `SMTP_HOST=mia-smtp`, `SMTP_PORT=587`, `SMTP_USER=`
+  e `SMTP_PASS=` vazios, `SMTP_ADMIN_EMAIL=nao-responda@iamia.com.br`, `SMTP_SENDER_NAME=MIA`.
+  Exige o compose em que o GoTrue se chama `mia-auth` e entra na rede `easypanel`
+  (`infra/supabase-sistema-mia`, branch `infra/supabase-sistema-mia`).
+- Se alguém salvou a tela **/admin/email**, o banco vence o Environment: confira lá a origem.
+
+**Testar a entrega**, depois do deploy:
+
+1. Log do `mia-smtp`: `[mia-smtp] remetentes aceitos: iamia.com.br | HELO: mail.iamia.com.br | DKIM: s=mia`.
+2. Console do `mia-smtp`: `nc -zv -w5 gmail-smtp-in.l.google.com 25` tem de conectar, e
+   `curl -4s https://api.ipify.org` tem de dar `177.136.225.108` (outro IP: o SPF e o PTR não
+   cobrem). `dig +short -x 177.136.225.108` tem de dar `mail.iamia.com.br.`.
+3. **/admin/email** › testar; mande um convite para um Gmail e, em "Mostrar original",
+   SPF, DKIM e DMARC têm de dizer PASS. Faça também "esqueci a senha" (sai pelo GoTrue).
+4. Nota geral: mande para o endereço que <https://www.mail-tester.com> mostra.
+5. Fila: `postqueue -p` no console do `mia-smtp` (vazia = entregue); `postqueue -f` tenta de novo.
+
+IP novo não tem reputação: comece com o volume transacional de sempre e evite disparo em massa
+por aqui nas primeiras semanas.
+
+**Trocar de domínio** (quando a MIA tiver outro):
+
+1. No DNS do domínio novo, os mesmos quatro registros. O TXT DKIM pode ser o mesmo valor: a
+   chave é uma só e assina todos os domínios da lista.
+2. `SMTP_RELAY_DOMAINS="iamia.com.br novo.com.br"` (os dois durante a troca) e redeploy.
+3. Um IP tem um PTR só: peça à EVEO o `mail.novo.com.br` e troque `SMTP_RELAY_HOSTNAME` junto.
+4. Troque o remetente: `SMTP_FROM_EMAIL` (deskcomm) e `SMTP_ADMIN_EMAIL` (supabase-sistema-mia).
+5. Dias depois, tire o domínio antigo de `SMTP_RELAY_DOMAINS`.
+
 ## Quando algo não funciona
 
 | sintoma | onde olhar |
@@ -91,6 +151,11 @@ Desligar: esvazie `WACALLS_API_BASE_URL` e faça redeploy (a tela volta ao aviso
 | app reiniciando | logs do `app`, procure `[env]` |
 | `wacalls` reiniciando | log diz `no admin configured`: faltam `WACALLS_ADMIN_USER`/`WACALLS_ADMIN_PASSWORD` |
 | ligação conecta e fica muda | `WACALLS_PUBLIC_IP` vazio/errado, ou UDP 7881 bloqueada no firewall do provedor |
+| `mia-smtp` reiniciando | log `[mia-smtp] ...`: `SMTP_DKIM_PRIVATE_KEY_B64` vazia ou não é o PEM em base64 |
+| envio recusado com `554 ... Recipient address rejected: Access denied` | o REMETENTE não é de um domínio de `SMTP_RELAY_DOMAINS` (o Postfix diz "recipient", mas é o remetente) |
+| app: `502 5.5.1` ou `STARTTLS`; GoTrue: `x509: certificate` | `SMTP_SECURITY` tem de ser `none` e ninguém liga TLS na entrada do relay |
+| fila crescendo, log `Connection timed out` na porta 25 | porta 25 de saída bloqueada no provedor da VPS |
+| Gmail recusa com `5.7.25` (PTR) ou `5.7.26` (não autenticado) | PTR ausente ou diferente do HELO; SPF/DKIM ainda não propagados |
 
 ## Atualizar
 
