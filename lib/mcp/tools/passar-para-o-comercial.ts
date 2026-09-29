@@ -45,17 +45,13 @@
 import { z } from "zod";
 
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
+import {
+  caminharAteQualificado,
+  estagioAtual,
+  JA_PASSOU,
+  passosAteQualificado,
+} from "@/lib/agent-engine/agent/caminhar-ate-qualificado";
 import { applySaveLeadNote } from "@/lib/agent-engine/agent/lead-notes";
-import {
-  applyLeadStateUpdate,
-  getLeadState,
-  LEAD_STAGE_TRANSITIONS,
-  type LeadStage,
-} from "@/lib/agent-engine/agent/lead-state";
-import {
-  abreAvisoDoEspelhoRecusado,
-  mirrorLeadStageToCrm,
-} from "@/lib/agent-engine/edge/crm/move-lead-stage";
 import type { CrmEdgeConfig } from "@/lib/agent-engine/edge/crm/mcp-client";
 import { logger } from "@/lib/logger";
 
@@ -64,28 +60,10 @@ import { crmManageTags } from "./governance";
 
 export const NOME_DA_FERRAMENTA = "crm_passar_para_o_comercial";
 
-/** O caminho da máquina até a passagem — só passos válidos, nunca salto. */
-const CAMINHO_ATE_QUALIFICADO: readonly LeadStage[] = ["new", "contacted", "qualifying", "qualified"];
-
-/** Etapas em que a passagem já aconteceu (ou o negócio já se encerrou). */
-const JA_PASSOU: ReadonlySet<LeadStage> = new Set<LeadStage>(["qualified", "negotiating", "won", "lost"]);
-
-/**
- * Os passos que faltam, do estágio atual até `qualified`, conferidos contra o
- * grafo da máquina — se o grafo mudar e o caminho deixar de ser válido, isto
- * devolve `null` e a ferramenta recusa, em vez de tentar um salto.
- */
-export function passosAteQualificado(atual: LeadStage): LeadStage[] | null {
-  const i = CAMINHO_ATE_QUALIFICADO.indexOf(atual);
-  if (i === -1) return null;
-  const passos = CAMINHO_ATE_QUALIFICADO.slice(i + 1);
-  let de = atual;
-  for (const para of passos) {
-    if (!LEAD_STAGE_TRANSITIONS[de].includes(para)) return null;
-    de = para;
-  }
-  return passos;
-}
+// O caminho (só passos válidos, nunca salto) e o laço com o espelho moram em
+// `lib/agent-engine/agent/caminhar-ate-qualificado.ts`, compartilhados com a
+// rede de segurança da passagem prometida.
+export { passosAteQualificado };
 
 /** O orçamento do índice de notas — o MESMO knob do motor (`LEAD_NOTES_INDEX_MAX_TOKENS`). */
 function orcamentoDoIndiceDeNotas(): number {
@@ -176,8 +154,7 @@ export const crmPassarParaOComercial: McpToolDefinition<typeof shape> = {
     const ids = { tenantId: ctx.organizationId, leadId: input.contact_id };
 
     // ── IDEMPOTÊNCIA: já passou (ou encerrou) → nada acontece ────────────────
-    const estado = await getLeadState(pool, ids.tenantId, ids.leadId);
-    const atual: LeadStage = estado?.stage ?? "new";
+    const atual = await estagioAtual(pool, ids.tenantId, ids.leadId);
     if (JA_PASSOU.has(atual)) {
       return {
         passado: false,
@@ -224,56 +201,42 @@ export const crmPassarParaOComercial: McpToolDefinition<typeof shape> = {
 
     // ── 3. O FUNIL, um passo válido por vez, com o espelho no card ────────────
     const cfg: CrmEdgeConfig = { supabase: ctx.supabase };
-    const card: Array<{ etapa: LeadStage; moveu: boolean; motivo?: string }> = [];
-    for (const [i, passo] of passos.entries()) {
-      const ultimo = i === passos.length - 1;
-      const r = await applyLeadStateUpdate(pool, { ...ids, jobId: ctx.sourceJobId ?? null }, {
-        stage: passo,
-        reason: input.motivo,
-        ...(ultimo && input.qualificacao ? { qualification: input.qualificacao } : {}),
-        ...(ultimo && input.proxima_acao !== undefined ? { next_action: input.proxima_acao } : {}),
+    const caminho = await caminharAteQualificado(
+      pool,
+      cfg,
+      { tenantId: ids.tenantId, contactId: ids.leadId, jobId: ctx.sourceJobId ?? null },
+      {
+        motivo: input.motivo,
+        ...(input.qualificacao ? { qualificacao: input.qualificacao } : {}),
+        ...(input.proxima_acao !== undefined ? { proximaAcao: input.proxima_acao } : {}),
+      },
+    );
+    if (!caminho.ok) {
+      // Não deveria acontecer (o caminho foi conferido antes da ficha), e por
+      // isso é log de erro: a passagem parou no meio e o modelo precisa saber.
+      logger.error("[crm_passar_para_o_comercial] a passagem parou no meio", {
+        organization_id: ctx.organizationId,
+        motivo: caminho.motivo,
       });
-      if (!r.ok) {
-        // Não deveria acontecer (o caminho foi conferido contra o grafo), e por
-        // isso é log de erro: a passagem parou no meio e o modelo precisa saber.
-        logger.error("[crm_passar_para_o_comercial] a máquina recusou um passo válido", {
-          organization_id: ctx.organizationId,
-          passo,
-          code: r.error.code,
-        });
-        return {
-          passado: false,
-          motivo: r.error.code,
-          mensagem: `a passagem parou em "${passo}": ${r.error.message}`,
-          ficha_salva: true,
-          etiquetas,
-          card,
-        };
-      }
-      if (r.transition === null) continue;
-      const espelho = await mirrorLeadStageToCrm(pool, cfg, {
-        tenantId: ids.tenantId,
-        leadId: ids.leadId,
-        toStage: r.transition.to,
-        reason: input.motivo,
-      });
-      if (espelho.ok) {
-        card.push({ etapa: r.transition.to, moveu: true });
-      } else {
-        card.push({ etapa: r.transition.to, moveu: false, motivo: espelho.reason });
-        await abreAvisoDoEspelhoRecusado(pool, ids.tenantId, {
-          leadId: ids.leadId,
-          motivo: espelho.reason,
-          detalhe: espelho.detail,
-          etapaDeDestino: r.transition.to,
-        });
-      }
+      return {
+        passado: false,
+        motivo: caminho.motivo,
+        mensagem:
+          caminho.motivo === "maquina_recusou"
+            ? `a passagem parou em "${caminho.passo}": ${caminho.mensagem}`
+            : `o funil não pôde andar (${caminho.motivo}).`,
+        ficha_salva: true,
+        etiquetas,
+        ...("card" in caminho ? { card: caminho.card } : {}),
+      };
     }
+    const card = caminho.card;
+    const passosFeitos = caminho.etapas;
 
     return {
       passado: true,
       de: atual,
-      etapas: passos,
+      etapas: passosFeitos,
       ficha_salva: true,
       etiquetas,
       card,

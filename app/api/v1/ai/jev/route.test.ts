@@ -237,7 +237,13 @@ describe("GET /api/v1/ai/jev", () => {
       erro_de_validacao: null,
     });
     expect(d.config).toEqual({ ligado: false, modo: "observacao", aceite: null });
-    expect(d.tarefas.map((t: { id: string }) => t.id)).toEqual(["sentiment_classify", "jailbreak_detect", "intent_router"]);
+    // FORK MIA — a quarta tarefa é a passagem prometida (lib/ai/decisao/tarefa-da-passagem-prometida.ts).
+    expect(d.tarefas.map((t: { id: string }) => t.id)).toEqual([
+      "sentiment_classify",
+      "jailbreak_detect",
+      "intent_router",
+      "handoff_promise",
+    ]);
     expect(d.tem_ia_de_sempre).toBe(true);
     expect(d.numeros).toEqual({
       dias: 7,
@@ -636,6 +642,8 @@ describe("o Jev por tarefa na rota", () => {
       expect.objectContaining({ id: "clima", ponto: "sentiment_classify", estado: "desligada", novo: false }),
       expect.objectContaining({ id: "manipulacao", ponto: "jailbreak_detect", estado: "desligada", novo: false }),
       expect.objectContaining({ id: "roteador", ponto: "intent_router", estado: "desligada", novo: false }),
+      // FORK MIA — a passagem prometida.
+      expect.objectContaining({ id: "passagem_prometida", ponto: "handoff_promise", estado: "desligada", novo: false }),
     ]);
 
     estado.settings = { jev: { ligado: true, modo: "decide", aceite: ACEITE_ANTIGO } };
@@ -658,6 +666,8 @@ describe("o Jev por tarefa na rota", () => {
       expect.objectContaining({ id: "sentiment_classify", rotulo: "Medir o clima da conversa" }),
       expect.objectContaining({ id: "jailbreak_detect", rotulo: "Perceber tentativa de manipulação" }),
       expect.objectContaining({ id: "intent_router", rotulo: "Escolher qual agente atende" }),
+      // FORK MIA — a passagem prometida.
+      expect.objectContaining({ id: "handoff_promise", rotulo: "Pegar a passagem prometida que não aconteceu" }),
     ]);
   });
 
@@ -730,6 +740,7 @@ describe("o Jev por tarefa na rota", () => {
       ["clima", false],
       ["manipulacao", false],
       ["roteador", false],
+      ["passagem_prometida", false], // FORK MIA
     ]);
     estado.camadas = [
       { organization_id: ORG, layer: "jailbreak", enabled: false },
@@ -739,6 +750,7 @@ describe("o Jev por tarefa na rota", () => {
       ["clima", false],
       ["manipulacao", true],
       ["roteador", false],
+      ["passagem_prometida", false], // FORK MIA
     ]);
   });
 
@@ -750,6 +762,7 @@ describe("o Jev por tarefa na rota", () => {
       ["clima", false],
       ["manipulacao", false],
       ["roteador", true],
+      ["passagem_prometida", false], // FORK MIA
     ]);
     // O ativo de OUTRA empresa não conta — o filtro é o da sessão.
     const intencoes = (n: number) => [{ count: n }];
@@ -758,6 +771,7 @@ describe("o Jev por tarefa na rota", () => {
       ["clima", false],
       ["manipulacao", false],
       ["roteador", true],
+      ["passagem_prometida", false], // FORK MIA
     ]);
     // Ativo, mas sem intenção nenhuma (o estado logo depois de criar um) ou com
     // mais do que cabe numa pergunta: o Jev nunca é perguntado, e "Só observa"
@@ -771,6 +785,7 @@ describe("o Jev por tarefa na rota", () => {
       ["clima", false],
       ["manipulacao", false],
       ["roteador", false],
+      ["passagem_prometida", false], // FORK MIA
     ]);
     // E o cartão segue dizendo que a tarefa observa: é o que ela faz quando há roteador.
     const roteador = (await ler()).corpo.data.por_tarefa.find((t: { id: string }) => t.id === "roteador");

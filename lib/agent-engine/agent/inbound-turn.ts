@@ -213,6 +213,7 @@ import { fusoDaOrganizacao } from './fuso-da-org';
 import { renderAgora } from '@/lib/tempo/agora';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
 import { anotarUltimaInboundVista, ultimaInboundJaRespondida } from './turno-ja-respondido';
+import { vigiarPassagemPrometida } from './passagem-prometida-no-turno';
 
 /**
  * Superfície ESTÁTICA das tools do agente (description + inputSchema) — parte do
@@ -4605,6 +4606,27 @@ async function executarTurnoDoAgente(
       throw new JobSettledError(
         'cap de envio atingido — job reagendado para a próxima abertura, sem mensagem enviada',
       );
+    }
+
+    // FORK MIA — a rede de segurança da passagem prometida: com a resposta já
+    // entregue e todas as ferramentas do turno feitas, o Jev confere se o
+    // atendente prometeu passar ao time sem ninguém ter sido avisado. Nunca lança.
+    if (!preview) {
+      const enviadas = outcomes.flatMap((o) => (o.kind === 'sent' ? [o.messageId] : []));
+      await vigiarPassagemPrometida({
+        pool,
+        crm: deps.crmCfg,
+        tenantId,
+        contactId: leadId,
+        conversationId: input.conversationId,
+        jobId: liveJob().id,
+        textos: corposEnviados,
+        messageIds: enviadas,
+        abriuCaso: openedCaseThisTurn,
+        inicioDoTurno: new Date(liveJob().claim_acquired_at ?? clock()),
+        log: runLog,
+        ...(deps.jev !== undefined ? { jev: deps.jev } : {}),
+      });
     }
 
     runLog.info('turno do agente concluído', {

@@ -83,6 +83,8 @@ export interface DadosDoJev {
       concordaram: number;
       /** Só a manipulação: em quantas das comparadas SÓ o Jev deu o alerta forte. */
       so_o_jev_alto?: number;
+      /** FORK MIA — a passagem prometida sem o time avisado no turno. */
+      prometida_sem_aviso?: number;
       /** Só o clima: a conta usou as N mensagens mais recentes, não o período inteiro. */
       teto_da_amostra?: number;
     };
@@ -1015,6 +1017,17 @@ function ConcordanciaDaTarefa({
             <>
               {" "}
               {t("A conta usa só as")} {formatar(o.teto_da_amostra)} {t("mensagens mais recentes do período.")}
+            </>
+          )}
+          {/* FORK MIA — o número da passagem prometida: a promessa que ninguém cumpriu. */}
+          {o.prometida_sem_aviso !== undefined && (
+            <>
+              {" "}
+              {t("Em")}{" "}
+              <span className="font-medium tabular-nums" data-testid="jev-passagem-prometida-sem-aviso">
+                {formatar(o.prometida_sem_aviso)}
+              </span>{" "}
+              {t("delas o atendente prometeu passar ao time e nada andou no mesmo turno — é o que o Jev pegaria decidindo.")}
             </>
           )}
           {/* O que decidir muda na manipulação: o alerta forte que só ele daria. */}
