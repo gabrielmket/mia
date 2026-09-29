@@ -223,6 +223,105 @@ services:
     # com uma rede só não há dúvida de para qual IP o Docker entrega a porta.
     logging: *default-logging
 
+  # ── E-mail saindo do PRÓPRIO servidor (relay só de envio) ─────────────────
+  #
+  # Convite, "esqueci a senha", export de LGPD e alarme de SLA saem daqui, sem
+  # Resend, SendGrid ou Google. Dois clientes usam este relay, pelo mesmo nome:
+  #
+  #   * o app e o worker (lib/email/smtp.ts), pelas SMTP_* do `.env`:
+  #     SMTP_HOST=mia-smtp, SMTP_PORT=587, SMTP_SECURITY=none, sem usuário;
+  #   * o GoTrue do supabase-sistema-mia (outro projeto do EasyPanel), que manda
+  #     o "esqueci a senha" e a confirmação de conta. Ele chega pela rede
+  #     `easypanel`, com SMTP_HOST=mia-smtp e SMTP_PORT=587 no env de lá.
+  #
+  # ═══ SÓ ENVIO ═══
+  #
+  # Nenhuma porta publicada no host: ninguém de fora entrega e-mail aqui, e o MX
+  # do domínio não aponta para cá (não há caixa postal). O Postfix só conversa
+  # com as redes privadas (padrão da imagem: 10/8, 172.16/12, 192.168/16 e 127/8,
+  # que é onde vivem as redes do Docker) e só aceita remetente de um domínio da
+  # lista SMTP_RELAY_DOMAINS; qualquer outro leva 554 na hora. A imagem já vem
+  # com a entrega local e o relay para outros domínios desligados.
+  #
+  # ═══ POR QUE `mia-smtp`, E NÃO `smtp` ═══
+  #
+  # O compose registra o NOME DO SERVIÇO como endereço em TODA rede em que ele
+  # entra, e na rede `easypanel` estão as pilhas de todos os projetos da VPS. Um
+  # `smtp` ou `mail` genérico pode responder no lugar do de outra pilha (foi o
+  # que fez o `db` e o `kong` do supabase-sistema-mia virarem `mia-db` e
+  # `mia-kong`). Com o nome único, o endereço é o mesmo nas duas redes.
+  #
+  # ═══ POR QUE SEM TLS E SEM SENHA AQUI DENTRO ═══
+  #
+  # A conversa app→relay e GoTrue→relay não sai da VPS. O único certificado que
+  # a imagem tem para a entrada é o autoassinado de fábrica (a mesma chave em
+  # toda cópia da imagem, então não protege nada), e os dois clientes o recusam:
+  # o nodemailer com SMTP_SECURITY=starttls, e o GoTrue v2.186, que faz STARTTLS
+  # sozinho sempre que o servidor oferece e confere o certificado (medido). Por
+  # isso o relay NÃO oferece STARTTLS na entrada. Na saída (relay → Gmail,
+  # Outlook) o TLS continua oportunístico, o padrão da imagem.
+  #
+  # ═══ O QUE FAZ O E-MAIL CAIR NA CAIXA DE ENTRADA (fora deste arquivo) ═══
+  #
+  #   * DKIM: toda mensagem sai assinada com d=<domínio> e s=mia. A chave privada
+  #     vem de SMTP_DKIM_PRIVATE_KEY_B64 (`.env`, base64 numa linha) e a pública
+  #     fica no DNS, em mia._domainkey.<domínio>. Sem a chave o relay NÃO sobe:
+  #     e-mail sem assinatura saindo de IP novo é spam certo e suja o IP.
+  #   * SPF: o IP da VPS (177.136.225.108) no SPF do domínio.
+  #   * PTR: o DNS reverso do IP aponta para o nome do HELO (SMTP_RELAY_HOSTNAME,
+  #     padrão mail.<domínio>), e esse nome tem registro A para o mesmo IP. Quem
+  #     configura o PTR é o provedor da VPS (EVEO), não o painel de DNS.
+  #   * Porta 25 de SAÍDA liberada no provedor. Bloqueada, a mensagem fica na
+  #     fila (volume mia-smtp-fila) e o log mostra "Connection timed out".
+  #   * Só IPv4 na saída: o PTR e o SPF cobrem só o IPv4 da VPS; um IPv6 sem PTR
+  #     é recusado de cara pelo Gmail.
+  #
+  # O domínio é trocável sem mexer aqui: SMTP_RELAY_DOMAINS, SMTP_RELAY_HOSTNAME
+  # e SMTP_DKIM_SELECTOR no `.env` (padrões e o porquê em easypanel/smtp-relay.sh).
+  # Registros de DNS, testes e a troca de domínio: easypanel/LEIA-ME.md.
+  #
+  # Imagem de terceiro pinada por digest, como o wacalls: boky/postfix 5.1.0
+  # (github.com/bokysan/docker-postfix, MIT; Postfix 3.10 + OpenDKIM 2.11).
+  mia-smtp:
+    mem_limit: 128m
+    image: ${SMTP_IMAGE:-boky/postfix:5.1.0@sha256:aafc772384232497bed875e1eb66b4d3e54ba1ebc86e2e185a6dc1dbc48182ef}
+    pull_policy: missing
+    restart: unless-stopped
+    # Segredo (a chave DKIM) pelo `env_file`, pela regra do bloco do `waha`.
+    env_file: .env
+    # O entrypoint da imagem (tini) fica; só o comando passa pelo nosso script,
+    # que escreve a chave e as variáveis da imagem e então chama /scripts/run.sh.
+    command: ["sh", "/mia/smtp-relay.sh"]
+    environment:
+      POSTFIX_smtpd_tls_security_level: "none"
+      POSTFIX_inet_protocols: "ipv4"
+      # O GoTrue manda e-mail SEM Message-ID (medido na v2.186), e o Postfix só
+      # completa cabeçalho de cliente local. Sem isto o Gmail recusa ("missing a
+      # valid Message-ID"), e quem acrescentar o cabeçalho no caminho quebra a
+      # assinatura DKIM, que declara o Message-ID ausente. Com isto ele entra
+      # ANTES de assinar e a assinatura passa.
+      POSTFIX_always_add_missing_headers: "yes"
+    volumes:
+      - ./easypanel/smtp-relay.sh:/mia/smtp-relay.sh:ro
+      # A fila. Mensagem adiada (greylisting, destino fora do ar, porta 25
+      # bloqueada) sobrevive ao redeploy em vez de sumir com o contêiner.
+      - mia-smtp-fila:/var/spool/postfix
+    # A imagem declara /etc/postfix e /etc/opendkim/keys como VOLUME. Sem isto o
+    # Docker cria volumes anônimos que o compose carrega de um contêiner para o
+    # outro (medido): a chave DKIM ficava gravada no disco da VPS, órfã depois
+    # de remover o serviço, e uma POSTFIX_* tirada daqui continuava valendo em
+    # silêncio. Em memória, os dois nascem de novo a cada subida: a config sai
+    # do molde da imagem e das variáveis, e a chave, do `.env`.
+    tmpfs:
+      - /etc/postfix:mode=755
+      - /etc/opendkim/keys:mode=755
+    # Rede padrão: o app e o worker. Rede `easypanel`: o GoTrue do
+    # supabase-sistema-mia. O healthcheck vem da imagem (EHLO na 587 + OpenDKIM).
+    networks:
+      - default
+      - easypanel
+    logging: *default-logging
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -281,6 +380,7 @@ volumes:
   waha-data:
   waha-media:
   wacalls-data:
+  mia-smtp-fila:
   caddy-data:
   caddy-config:
 
