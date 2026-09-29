@@ -1150,9 +1150,13 @@ jobs:
       # entre ~1240s e ~1320s, isto é, ~2 a 3 min abaixo do orçamento.
       #
       # NÃO MEDIDO até aquele run: se as 11 specs passam na vizinhança nova.
+      # FORK MIA (.58): `broadcast-unificado` — o Broadcast com os dois caminhos,
+      # pela tela (docs/fork/broadcast-unificado.md). Entra na parte mais folgada;
+      # semeia e desfaz o próprio dado (número, campanha, disparo e a liberação).
       SPECS_PARTE_6: >-
         agenda-google-meet.spec.ts
         agenda-presenca-recuperacao.spec.ts
+        broadcast-unificado.spec.ts
         filtro-por-marcador-pela-tela.spec.ts
         inbox-busca-e-filtros-dizem-a-verdade.spec.ts
         painel-de-configuracao-da-instalacao.spec.ts
