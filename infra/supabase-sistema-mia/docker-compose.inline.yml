@@ -12,13 +12,15 @@
 #
 #   * Postgres 17 (o override oficial docker-compose.pg17.yml). A plataforma
 #     roda em 17.6 na nuvem; restaurar um dump do 17 num 15 não é suportado.
-#   * `db` e `kong` viram `mia-db` e `mia-kong`. Os dois são os únicos que
-#     entram na rede comum do EasyPanel (`easypanel`), onde já vive o Supabase
-#     dos clientes do n8n com os MESMOS nomes de serviço. Dois `db` na mesma
-#     rede = o DNS responde um OU outro, e um serviço de um lado conecta no
-#     banco do outro. Os demais (auth, rest, storage, meta, studio, realtime)
-#     ficam só na rede interna desta pilha, e o kong.yml oficial os encontra
-#     pelos nomes de sempre.
+#   * `db`, `kong` e `auth` viram `mia-db`, `mia-kong` e `mia-auth`. Os três
+#     são os únicos que entram na rede comum do EasyPanel (`easypanel`), onde
+#     já vive o Supabase dos clientes do n8n com os MESMOS nomes de serviço.
+#     Dois `db` na mesma rede = o DNS responde um OU outro, e um serviço de um
+#     lado conecta no banco do outro. O `mia-auth` entra só para alcançar o
+#     relay de e-mail `mia-smtp` do deskcomm, e guarda o nome `auth` como
+#     apelido da rede interna. Os demais (rest, storage, meta, studio,
+#     realtime) ficam só na rede interna desta pilha, e o kong.yml oficial os
+#     encontra pelos nomes de sempre.
 #   * O banco entra na rede `easypanel` com o apelido
 #     `supabase-sistema-mia-db`: é por ele que o `deskcomm` (outro projeto)
 #     chega ao Postgres. Nenhuma porta é publicada no host.
@@ -116,9 +118,31 @@ services:
     # checkout (medido: "permission denied" no primeiro deploy, 28/09/2026).
     entrypoint: ["bash", "/home/kong/kong-entrypoint.sh"]
 
-  auth:
+  # O GoTrue entra na rede `easypanel` por UM motivo: é por ela que ele alcança
+  # o relay de e-mail `mia-smtp` ("esqueci a senha", confirmação de conta), que
+  # mora no projeto deskcomm (docker-compose.easypanel.yml). Por isso o serviço
+  # se chama `mia-auth`, e não `auth`: o compose registra o NOME DO SERVIÇO em
+  # toda rede em que ele entra, e na `easypanel` já existe o `auth` do Supabase
+  # dos clientes do n8n. Dois `auth` ali e o kong de uma pilha passa a mandar
+  # login para o GoTrue da outra (o mesmo motivo do mia-db e do mia-kong).
+  # O kong.yml oficial continua chamando `http://auth:9999`: `auth` agora é um
+  # apelido SÓ na rede interna desta pilha. Medido em teste local (29/09/2026):
+  # na rede `easypanel` o nome `auth` não resolve, `mia-auth` e `mia-smtp` sim;
+  # na rede interna, `auth` resolve para este contêiner.
+  #
+  # SMTP (no Environment): SMTP_HOST=mia-smtp, SMTP_PORT=587, SMTP_USER e
+  # SMTP_PASS vazios. O relay não oferece STARTTLS na rede interna de propósito:
+  # o GoTrue v2.186 faz STARTTLS sozinho sempre que o servidor oferece e recusa o
+  # certificado autoassinado ("x509: certificate is valid for localhost, not
+  # mia-smtp", medido). Detalhes no bloco `mia-smtp` do compose do deskcomm.
+  mia-auth:
     image: supabase/gotrue:v2.186.0
     restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - auth
+      easypanel: {}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
       timeout: 5s
@@ -326,7 +350,7 @@ services:
     depends_on:
       mia-db:
         condition: service_healthy
-      auth:
+      mia-auth:
         condition: service_healthy
       storage:
         condition: service_healthy
