@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Leads dos formulários da Meta (fork MIA, .60): do cadastro instantâneo ao funil",
+    "subtitle": "Consulta periódica a cada 5 min com o token da empresa; gravação pela mesma via da fonte de webhook. Plano em docs/fork/leads-da-meta.md",
+    "output": "leads-da-meta.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "meta", "label": "Meta (Graph)" },
+    { "id": "tela", "label": "Tela" },
+    { "id": "api", "label": "Borda HTTP" },
+    { "id": "rotina", "label": "Rotina" },
+    { "id": "via", "label": "Via da fonte de webhook (upstream)" },
+    { "id": "dados", "label": "Dados" },
+    { "id": "retorno", "label": "Laço de retorno" }
+  ],
+  "mainPath": ["cron", "rodada", "graph-leads", "gravar", "create-lead", "captacao", "automacoes"],
+  "nodes": [
+    { "id": "graph-permissoes", "lane": "meta", "col": 0, "type": "service", "label": "me/permissions: o que o token tem" },
+    { "id": "graph-paginas", "lane": "meta", "col": 1, "type": "service", "label": "me/accounts: Páginas e o token de cada uma" },
+    { "id": "graph-forms", "lane": "meta", "col": 2, "type": "service", "label": "{pagina}/leadgen_forms: formulários e perguntas" },
+    { "id": "graph-leads", "lane": "meta", "col": 3, "type": "service", "label": "{formulario}/leads por time_created (lib/plataformas-de-anuncio/meta/leads.ts)" },
+
+    { "id": "tela-config", "lane": "tela", "col": 0, "type": "ui", "label": "Configurações › Formulários da Meta (app/app/settings/leads-da-meta), porta em lib/navigation/catalogo.ts" },
+    { "id": "tela-historico", "lane": "tela", "col": 1, "type": "ui", "label": "Histórico de leituras: sucesso, sem novos, erro com o que fazer" },
+    { "id": "tela-captacoes", "lane": "tela", "col": 2, "type": "ui", "label": "Captações (webhook_lead_captures) e card com etiqueta Meta_ads" },
+
+    { "id": "rota-estado", "lane": "api", "col": 0, "type": "service", "label": "GET/PATCH /api/v1/leads-da-meta: estado e chave (admin muda)" },
+    { "id": "rota-paginas", "lane": "api", "col": 1, "type": "service", "label": "GET /api/v1/leads-da-meta/paginas: diagnóstico do token" },
+    { "id": "rota-formularios", "lane": "api", "col": 2, "type": "service", "label": "PUT /api/v1/leads-da-meta/formularios: destino conferido contra a empresa" },
+    { "id": "rota-ler-agora", "lane": "api", "col": 3, "type": "service", "label": "POST /api/v1/leads-da-meta/ler-agora: a rodada só da empresa" },
+
+    { "id": "cron", "lane": "rotina", "col": 0, "type": "worker", "label": "cron leads-da-meta a cada 5 min (docker/scheduler/entrypoint.sh)" },
+    { "id": "rodada", "lane": "rotina", "col": 1, "type": "worker", "label": "rodarLeadsDaMeta: janela desde a marca, do mais antigo ao mais novo" },
+    { "id": "gravar", "lane": "rotina", "col": 2, "type": "logic", "label": "gravarLeadDaMeta: dedup por id (hash) e por pessoa; origem do anúncio" },
+    { "id": "modulo", "lane": "rotina", "col": 3, "type": "logic", "label": "LEADS_DA_META_E_MODULO_VENDAVEL (lib/leads-da-meta/modulo.ts)" },
+
+    { "id": "create-lead", "lane": "via", "col": 0, "type": "service", "label": "createLeadHandler: negócio + lead.created" },
+    { "id": "captacao", "lane": "via", "col": 1, "type": "service", "label": "registrarCaptacao: formulário com as perguntas originais" },
+    { "id": "automacoes", "lane": "via", "col": 2, "type": "worker", "label": "event-log-drain / kickLocalPipeline: automações e follow-up de lead criado" },
+    { "id": "ia-formulario", "lane": "via", "col": 3, "type": "logic", "label": "dados-do-formulario.ts: a IA sabe que a pessoa preencheu o formulário X" },
+
+    { "id": "t-config", "lane": "dados", "col": 0, "type": "database", "label": "mia_leads_da_meta_config (chave por empresa)" },
+    { "id": "t-formularios", "lane": "dados", "col": 1, "type": "database", "label": "mia_leads_da_meta_formularios (destino e marca lido_ate)" },
+    { "id": "t-leituras", "lane": "dados", "col": 2, "type": "database", "label": "mia_leads_da_meta_leituras (histórico, podado em 30 dias)" },
+    { "id": "t-recebidos", "lane": "dados", "col": 3, "type": "database", "label": "mia_leads_da_meta_recebidos (hash do id, podado em 120 dias)" },
+    { "id": "t-contatos", "lane": "dados", "col": 4, "type": "database", "label": "contacts / crm_leads / webhook_lead_captures (dado pessoal, com LGPD)" },
+
+    { "id": "laco-erro", "lane": "retorno", "col": 0, "type": "logic", "label": "Erro: a marca não anda; a próxima leitura relê a janela (até 90 dias)" },
+    { "id": "laco-motivo", "lane": "retorno", "col": 1, "type": "logic", "label": "Motivo na tela diz a ação: token novo, permissão, Página, funil" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "cron", "to": "rodada", "label": "a cada 5 min" },
+    { "id": "e2", "from": "rota-ler-agora", "to": "rodada", "label": "só a empresa, na hora" },
+    { "id": "e3", "from": "rodada", "to": "t-config", "label": "quem está ligado" },
+    { "id": "e4", "from": "rodada", "to": "modulo", "label": "exige módulo?" },
+    { "id": "e5", "from": "rodada", "to": "graph-paginas", "label": "token da Página" },
+    { "id": "e6", "from": "rodada", "to": "graph-leads", "label": "janela desde lido_ate" },
+    { "id": "e7", "from": "rodada", "to": "gravar", "label": "cada lead" },
+    { "id": "e8", "from": "gravar", "to": "t-recebidos", "label": "dedup" },
+    { "id": "e9", "from": "gravar", "to": "create-lead", "label": "negócio" },
+    { "id": "e10", "from": "gravar", "to": "captacao", "label": "formulário" },
+    { "id": "e11", "from": "create-lead", "to": "t-contatos", "label": "grava" },
+    { "id": "e12", "from": "captacao", "to": "t-contatos", "label": "grava" },
+    { "id": "e13", "from": "create-lead", "to": "automacoes", "label": "lead.created" },
+    { "id": "e14", "from": "captacao", "to": "ia-formulario", "label": "a IA lê" },
+    { "id": "e15", "from": "rodada", "to": "t-leituras", "label": "histórico" },
+    { "id": "e16", "from": "rodada", "to": "t-formularios", "label": "marca e último status" },
+    { "id": "e17", "from": "t-leituras", "to": "tela-historico", "label": "observar" },
+    { "id": "e18", "from": "t-contatos", "to": "tela-captacoes", "label": "card e captação" },
+    { "id": "e19", "from": "tela-config", "to": "rota-estado", "label": "chave" },
+    { "id": "e20", "from": "tela-config", "to": "rota-paginas", "label": "diagnóstico" },
+    { "id": "e21", "from": "tela-config", "to": "rota-formularios", "label": "escolher destino" },
+    { "id": "e22", "from": "tela-config", "to": "rota-ler-agora", "label": "Ler agora" },
+    { "id": "e23", "from": "rota-paginas", "to": "graph-permissoes", "label": "permissões" },
+    { "id": "e24", "from": "rota-paginas", "to": "graph-forms", "label": "formulários" },
+    { "id": "e25", "from": "rota-estado", "to": "t-config", "label": "liga/desliga" },
+    { "id": "e26", "from": "rota-formularios", "to": "t-formularios", "label": "destino" },
+    { "id": "e27", "from": "rodada", "to": "laco-erro", "label": "falhou" },
+    { "id": "e28", "from": "laco-erro", "to": "t-formularios", "label": "lido_ate parado" },
+    { "id": "e29", "from": "tela-historico", "to": "laco-motivo", "label": "o que fazer" },
+    { "id": "e30", "from": "laco-motivo", "to": "tela-config", "label": "corrigir e Ler agora" },
+    { "id": "e31", "from": "modulo", "to": "tela-config", "label": "some do menu sem liberação" }
+  ]
+}
