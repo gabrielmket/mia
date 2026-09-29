@@ -183,7 +183,7 @@ describe("hubSections", () => {
       "/app/prospecting",
       "/app/kanban",
       "/app/campaigns",
-      // MIA Broadcast mora ao lado de Campanhas, só no hub (lib/navigation/catalogo.ts).
+      // Broadcast mora ao lado de Campanhas, só no hub (lib/navigation/catalogo.ts).
       "/app/broadcast",
       "/app/empresas",
       "/app/contacts",

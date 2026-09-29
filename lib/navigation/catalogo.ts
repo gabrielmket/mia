@@ -238,9 +238,10 @@ export const NAV_CATALOG = [
     // campanha é montada de vez em quando, não aberta todo dia.
   },
   {
-    // MIA BROADCAST. Mora no CRM, ao lado de Campanhas, pelo motivo escrito
-    // nela: quem dispara está pensando em QUEM vai receber, não no número. E SÓ
-    // NO HUB, como ela: disparo se monta de vez em quando, não se abre todo dia.
+    // BROADCAST (até 29/09 "MIA Broadcast"). Mora no CRM, ao lado de Campanhas,
+    // pelo motivo escrito nela: quem dispara está pensando em QUEM vai receber,
+    // não no número. E SÓ NO HUB, como ela: disparo se monta de vez em quando,
+    // não se abre todo dia.
     //
     // Morava em Atendimento com `sidebar: true` e era o 17º item de um menu
     // cujo teto medido é 15 (folga 0 a 1280×900 — `tests/unit/interface-por-
@@ -249,7 +250,7 @@ export const NAV_CATALOG = [
     // Créditos fica em Organização (é dinheiro e contrato), e as duas somem
     // juntas para quem não contratou o módulo (lib/modulos/vendaveis.ts).
     href: "/app/broadcast",
-    label: "MIA Broadcast",
+    label: "Broadcast",
     description: "Enviar para uma lista pela API oficial, com template aprovado e cobrança por mensagem.",
     icon: "Megaphone",
     group: "crm",
@@ -263,7 +264,7 @@ export const NAV_CATALOG = [
     // um cliente procura pelo nome da empresa primeiro.
     //
     // SÓ NO HUB. Ela chegou a entrar no sidebar como quarto item do CRM, mas o
-    // menu está no teto medido (15 itens, ver o MIA Broadcast acima), e o modo
+    // menu está no teto medido (15 itens, ver o Broadcast acima), e o modo
     // padrão é B2B (lib/empresas/modo-de-venda.ts): o item a mais caía em quase
     // toda organização, não só nas que vendem para empresa. Fica em "O dia a
     // dia da venda", como Campanhas e Prospecção, e no ⌘K. Para voltar ao

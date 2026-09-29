@@ -5198,7 +5198,7 @@ export const DICIONARIO: Traducoes = {
   "A tarifa da Meta não está cadastrada — sem ela não dá para saber se este preço dá lucro.": { es: "La tarifa de Meta no está registrada — sin ella no se puede saber si este precio da ganancia." },
   "este preço está ABAIXO do custo.": { es: "este precio está POR DEBAJO del costo." },
   "margem de": { es: "margen de" },
-  "MIA Broadcast": { es: "MIA Broadcast" },
+  "Broadcast": { es: "Broadcast" },
   "Enviar para uma lista pela API oficial, com template aprovado e cobrança por mensagem.": { es: "Enviar a una lista por la API oficial, con plantilla aprobada y cobro por mensaje." },
   "Campanhas": { es: "Campañas" },
   "Confira antes de disparar": { es: "Revisa antes de enviar" },

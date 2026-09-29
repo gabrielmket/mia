@@ -6,7 +6,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { MiaBroadcast } from "@/components/broadcast/MiaBroadcast";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "MIA Broadcast" };
+export const metadata: Metadata = { title: "Broadcast" };
 
 export default async function BroadcastPage() {
   const user = await requireAuth();
@@ -19,7 +19,7 @@ export default async function BroadcastPage() {
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight">MIA Broadcast</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Broadcast</h1>
         <p className="text-sm text-muted-foreground">
           {t("Enviar para uma lista pela API oficial da Meta, com template aprovado e cobrança por mensagem.")}
         </p>

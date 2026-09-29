@@ -45,13 +45,14 @@ export interface ModuloVendavel {
 
 export const MODULOS: readonly ModuloVendavel[] = [
   {
-    // ⚠️ A CHAVE NÃO ACOMPANHA O NOME, e é de propósito. O produto se chama
-    // "MIA Broadcast" desde 16/09, mas a chave `disparador` já está gravada em
-    // `organization_modules` para um cliente: renomeá-la deixaria a liberação
-    // órfã e tiraria o acesso de quem comprou — em silêncio, que é o pior jeito.
-    // Chave é identidade interna; rótulo é o nome do produto. Só o segundo muda.
+    // ⚠️ A CHAVE NÃO ACOMPANHA O NOME, e é de propósito. O produto se chamou
+    // "MIA Broadcast" de 16/09 a 29/09 e agora é só "Broadcast", mas a chave
+    // `disparador` já está gravada em `organization_modules` para um cliente:
+    // renomeá-la deixaria a liberação órfã e tiraria o acesso de quem comprou —
+    // em silêncio, que é o pior jeito. Chave é identidade interna; rótulo é o
+    // nome do produto. Só o segundo muda (e já mudou duas vezes).
     chave: "disparador",
-    rotulo: "MIA Broadcast",
+    rotulo: "Broadcast",
     descricao:
       "Enviar mensagem para uma lista de contatos pela API oficial da Meta, com crédito próprio e cobrança por mensagem.",
     // A carteira faz parte do módulo: crédito só existe para gastar aqui, e
