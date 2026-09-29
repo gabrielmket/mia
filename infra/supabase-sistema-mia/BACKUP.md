@@ -270,8 +270,11 @@ bash backup/testar-restauracao.sh <pasta-local>      # uma cópia já decifrada
 ```
 
 Rodada em 29/09/2026, do drive real: `RESTAURAÇÃO OK`, 7 arquivos intactos,
-147 tabelas e 337.493 linhas iguais, Storage 50 de 50, em 1m41s. Vale repetir
-uma vez por mês e depois de qualquer mudança nos scripts.
+147 tabelas e 337.493 linhas iguais, Storage 50 de 50, em 1m41s (cópia de
+teste). E no primeiro backup de produção, `2026-09-29T0434Z`, com as chaves do
+arquivo local (prova de que o servidor cifra com a mesma senha): 148 tabelas e
+348.771 linhas iguais, Storage 51 de 51, em 1m10s. Vale repetir uma vez por mês
+e depois de qualquer mudança nos scripts.
 
 ## Variáveis
 
