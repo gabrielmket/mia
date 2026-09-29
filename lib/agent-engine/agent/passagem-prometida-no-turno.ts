@@ -161,6 +161,12 @@ export async function vigiarPassagemPrometida(e: EntradaDaVigia): Promise<Desfec
         reason: "passagem_prometida",
         conversationSummary: resumoParaOTime(texto, ficha),
         inboxTitle: "O assistente prometeu passar ao time — assumir a conversa",
+        // O cliente JÁ foi avisado — pela própria resposta que disparou esta
+        // passagem ("vou encaminhar para a equipe…"). Mandar o aviso padrão de
+        // escalação por cima repetiria a mesma frase; declarar o desfecho é o que
+        // a guarda `tests/unit/handoff-avisa-o-lead.test.ts` pede, e é o que faz o
+        // item da Central dizer a verdade a quem assume.
+        avisoAoLead: { avisado: true },
         log: e.log,
       },
     );

@@ -117,7 +117,7 @@ describe("a rede de segurança da passagem prometida", () => {
     expect(d.registros).toMatchObject([{ decidiu: true }]);
     expect(d.handoffs).toHaveLength(1);
     expect(d.handoffs[0]!.ids).toEqual({ tenantId: "org", leadId: "contato", conversationId: "conversa" });
-    expect(d.handoffs[0]!.opts).toMatchObject({ reason: "passagem_prometida" });
+    expect(d.handoffs[0]!.opts).toMatchObject({ reason: "passagem_prometida", avisoAoLead: { avisado: true } });
     // O time lê o que foi prometido e a ficha — no grupo e na Central.
     expect(String(d.handoffs[0]!.opts.conversationSummary)).toContain(PROMESSA);
     expect(String(d.handoffs[0]!.opts.conversationSummary)).toContain(FICHA.body);
