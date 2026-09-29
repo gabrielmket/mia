@@ -18,7 +18,8 @@ import { expect, test } from "./helpers/test";
 
 import { PONTOS_DE_IA } from "@/lib/ai/pontos/registro";
 
-import { lerCreds, loginComoAdmin, type CredsE2E } from "./helpers/login-admin";
+import { lerCreds, loginComoDono, type CredsE2E } from "./helpers/login-admin";
+import { afirmarDonoDoServidor } from "./utils/precondicao";
 
 /**
  * Entra como ADMIN, com MFA — e não é detalhe de teste.
@@ -49,12 +50,20 @@ let creds: CredsE2E;
  */
 test.describe.configure({ timeout: 90_000 });
 
-test.beforeAll(() => {
+// FORK MIA: quem configura provedor e modelo de cada ponto, neste fork, é o dono
+// da plataforma (lib/ai/trava-da-ia.ts): para o admin da empresa o painel é só
+// de leitura (`podeEditar` falso, PUT/PATCH 403) e os seletores não existem.
+// O operador que esta prova dirige é, então, o `e2e-dono` — o mesmo 2FA, a
+// mesma tela, as mesmas asserções. O lado do cliente é cobrado em
+// tests/unit/trava-da-ia-portas.test.ts. `afirmarDonoDoServidor` concede o
+// `platform_admins` se faltar (o CI não roda o seed que o promove).
+test.beforeAll(async () => {
   creds = lerCreds();
+  await afirmarDonoDoServidor(creds.users.dono!.email);
 });
 
 test.beforeEach(async ({ page }) => {
-  creds = await loginComoAdmin(page, creds);
+  creds = await loginComoDono(page, creds);
 });
 
 test("F0/F1 — o painel abre agrupado, explica os pontos e diz a origem", async ({ page }) => {

@@ -106,7 +106,11 @@ import { POST as reconciliar } from "@/app/api/v1/ai/agents/[id]/reconcile/route
 import { POST as criarVersao } from "@/app/api/v1/ai/agents/[id]/versions/route";
 import { PATCH as editarVersao } from "@/app/api/v1/ai/agents/[id]/versions/[vid]/route";
 import { DELETE as apagarChave, PATCH as editarChave } from "@/app/api/v1/ai/credentials/[id]/route";
-import { PATCH as padraoDaEmpresa, PUT as modeloDoPonto } from "@/app/api/v1/ai/providers/route";
+import {
+  GET as painelDeProvedores,
+  PATCH as padraoDaEmpresa,
+  PUT as modeloDoPonto,
+} from "@/app/api/v1/ai/providers/route";
 import { POST as criarRoteador } from "@/app/api/v1/ai/routers/route";
 import { PATCH as editarRoteador } from "@/app/api/v1/ai/routers/[id]/route";
 
@@ -432,6 +436,22 @@ describe("chave, provedores e roteador", () => {
 
     como(PLATAFORMA);
     expect((await padraoDaEmpresa(req(`/x`, "PATCH", { provider: "openai", default_model: "x" }))).status).not.toBe(403);
+  });
+
+  // A e2e do upstream que prova o painel (prova-painel-provedores) passou a
+  // dirigi-lo como dono da plataforma, porque é ele quem edita aqui. O que ela
+  // provava do cliente — ver o painel e os seletores — vira isto: o cliente VÊ
+  // o painel (200, com os pontos), mas sem controle de edição.
+  it("provedores: o cliente vê o painel só de leitura; a plataforma edita", async () => {
+    const doCliente = await painelDeProvedores();
+    expect(doCliente.status).toBe(200);
+    const corpoDoCliente = (await doCliente.json()) as { data: { podeEditar: boolean; pontos: unknown[] } };
+    expect(corpoDoCliente.data.pontos.length).toBeGreaterThan(0);
+    expect(corpoDoCliente.data.podeEditar).toBe(false);
+
+    como(PLATAFORMA);
+    const daPlataforma = (await (await painelDeProvedores()).json()) as { data: { podeEditar: boolean } };
+    expect(daPlataforma.data.podeEditar).toBe(true);
   });
 
   it("roteador: o novo do cliente nasce no Automático; o existente não troca de classificador", async () => {

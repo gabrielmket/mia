@@ -40,6 +40,7 @@ import * as path from "node:path";
 import { test, expect, type Page } from "./helpers/test";
 
 import { zoomAte } from "./utils/canvas-do-fluxo";
+import { comoDonoDaPlataforma, respostaLida } from "./helpers/ia-da-plataforma";
 
 import { afirmarAdminDeTenantPuro } from "./utils/precondicao";
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
@@ -223,7 +224,7 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
     creds = JSON.parse(fs.readFileSync(CREDS_PATH, "utf8")) as Creds;
   });
 
-  test("silêncio → enroll → trigger→wait→action→classify → resposta → outcome → fila", async ({ page }) => {
+  test("silêncio → enroll → trigger→wait→action→classify → resposta → outcome → fila", async ({ page, browser }, testInfo) => {
     // Jornada ponta a ponta com múltiplos round-trips reais de cron (tick +
     // sweep + drain) — o timeout default de 30s do playwright.config.ts é
     // curto demais (mesmo padrão de tests/e2e/webhooks.spec.ts, que também
@@ -362,7 +363,13 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
       runHelper(["prepare-agent-fixtures"]); // credential.validated_at + channel_session=WORKING
       const fixtures = creds.followup_agent_fixtures!;
       const agentName = `E2E Agente Jornada ${stamp}`;
-      const createAgentRes = await page.request.post("/api/v1/ai/agents", {
+      // FORK MIA: criar o agente com provedor, modelo e a credencial semeada é
+      // escolher a IA dele, e neste fork isso é da plataforma
+      // (lib/ai/trava-da-ia.ts): pelo admin da empresa ele nascia com a chave da
+      // instalação, que o e2e não tem, e o publicar abaixo voltava 422. Quem cria
+      // é o dono da plataforma; o resto da jornada segue com o admin da empresa.
+      // Ver tests/e2e/helpers/ia-da-plataforma.ts.
+      const createAgentRes = await comoDonoDaPlataforma(browser, testInfo, (req) => respostaLida(req.post("/api/v1/ai/agents", {
         data: {
           name: agentName,
           version: {
@@ -373,7 +380,7 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
             channel_session_id: fixtures.channel_session_id,
           },
         },
-      });
+      })));
       expect(createAgentRes.status()).toBe(201);
       const { data: created } = (await createAgentRes.json()) as {
         data: { agent: { id: string }; version: { id: string } };
