@@ -11,11 +11,13 @@
 #  2. Não há instalador. O install.sh exige terminal na VPS; o serviço
 #     `bootstrap` faz no banco o que ele fazia (extensões, schema, chave de
 #     cifra e o dono) e roda de novo a cada deploy, como o update.sh.
-#  3. Não há portas publicadas nem Let's Encrypt próprio. Quem publica e emite o
-#     certificado é o Traefik do EasyPanel: o domínio aponta para o serviço
-#     `caddy`, porta 80. O Caddy fica na frente do app só para manter as regras
-#     do Caddyfile original (bloqueio do webhook global do WAHA e timeout longo
-#     do runner do agente). Ver easypanel/Caddyfile.
+#  3. Não há portas HTTP publicadas nem Let's Encrypt próprio. Quem publica e
+#     emite o certificado é o Traefik do EasyPanel: o domínio aponta para o
+#     serviço `caddy`, porta 80. O Caddy fica na frente do app só para manter as
+#     regras do Caddyfile original (bloqueio do webhook global do WAHA e timeout
+#     longo do runner do agente). Ver easypanel/Caddyfile. A ÚNICA porta
+#     publicada no host é a UDP do áudio da chamada de voz (serviço `wacalls`),
+#     porque áudio WebRTC não passa por proxy HTTP nenhum.
 #
 # Passo a passo no EasyPanel: easypanel/LEIA-ME.md.
 
@@ -133,6 +135,94 @@ services:
       - waha-media:/app/.media
     logging: *default-logging
 
+  # ── Chamada de voz do WhatsApp (WaCalls, spec 18) ─────────────────────────
+  #
+  # ⚠️ O RISCO, antes de tudo: a chamada de voz vincula um SEGUNDO APARELHO ao
+  # mesmo número que já atende, por um caminho que NÃO é o oficial do WhatsApp.
+  # Quem pode ser bloqueada é a CONTA do número, não só o aparelho — e com ela
+  # o canal onde o cliente vende. Por isso o contêiner no ar não liga nada
+  # sozinho: cada organização precisa aceitar o risco na tela (Configurações ›
+  # Segurança) e só então ler o QR em Conexões › Chamada de voz. Sem QR lido, o
+  # WaCalls não fala com o WhatsApp de ninguém.
+  #
+  # ═══ POR QUE AQUI ELE SOBE SEMPRE, SEM O PROFILE `voz` DO PROD ═══
+  #
+  # No docker-compose.prod.yml o serviço vive no profile `voz`, desligado,
+  # porque aquele arquivo é de TODA instalação self-host e serviço ligado por
+  # padrão transformaria o risco acima em padrão. Este arquivo é de UMA
+  # instalação só (a MIA, na VPS da Time Company), e a decisão de oferecer voz
+  # já foi tomada (BACKLOG-MIA D1). Os interruptores que valem continuam de pé,
+  # e são dois, os dois fora deste arquivo:
+  #
+  #   1. WACALLS_API_BASE_URL no Environment. Vazia, a tela mostra o aviso de
+  #      "não configurada" e o worker desliga a ponte de eventos — é o
+  #      interruptor da INSTALAÇÃO.
+  #   2. O aceite por organização em Configurações › Segurança — o da CONTA.
+  #
+  # Manter o profile acrescentaria um terceiro interruptor que depende de o
+  # deploy do EasyPanel ler COMPOSE_PROFILES do `.env`, e isso NUNCA foi medido
+  # aqui (o que foi medido é o contrário: a checagem de problemas do painel
+  # interpola sem ler o `.env`). Se ele não ler, o contêiner simplesmente não é
+  # criado, a URL aponta para um nome que não resolve e o sintoma na tela é
+  # "serviço fora do ar" — sem nada que diga que a causa é um profile. O custo
+  # de subir sempre é pequeno e conhecido: um processo Go ocioso (teto de
+  # 256 MiB) e uma porta UDP que descarta o que não vier de uma ligação aberta.
+  #
+  # ⚠️ `app` e `worker` NÃO ganham `depends_on: wacalls`, de propósito: voz fora
+  # do ar não pode derrubar o CRM. Os dois já tratam o serviço ausente (banner
+  # na tela, ponte do worker com backoff).
+  #
+  # ═══ A IMAGEM É A DO UPSTREAM, PINADA POR DIGEST ═══
+  #
+  # O mesmo digest do docker-compose.prod.yml (github.com/JotaDev66/WaCalls,
+  # MIT): peça de terceiro se referencia, não se republica, e o registry dela
+  # não tem `latest` (só `develop` e `sha-*`). Digest é imutável, então
+  # `pull_policy: missing` basta. Ao trazer o upstream, conferir se o digest do
+  # prod mudou e copiar o novo para cá.
+  wacalls:
+    mem_limit: 256m
+    image: ${WACALLS_IMAGE:-ghcr.io/jotadev66/wacalls@sha256:9ff52ef9455cf42125a911c38bb8c855f0cc205516cada2054e5c05546909022}
+    pull_policy: missing
+    restart: unless-stopped
+    # Segredos pelo `env_file`, pela regra do bloco do `waha`. O contêiner NÃO
+    # SOBE sem WACALLS_ADMIN_USER e WACALLS_ADMIN_PASSWORD (exigência do
+    # upstream: o build antigo não tinha autenticação nenhuma), e o app e o
+    # worker só falam com ele pelo Bearer WACALLS_API_TOKEN — o mesmo valor, lido
+    # do mesmo `.env` pelos três. WACALLS_PUBLIC_IP também vem daqui: é o IP
+    # público da VPS, anunciado ao navegador como candidato ICE. Sem ele o
+    # WaCalls anuncia o IP interno do contêiner (172.x), que navegador nenhum
+    # alcança, e a ligação toca, conecta e fica MUDA.
+    # (WACALLS_CORS_ORIGINS e WACALLS_TRUSTED_PROXIES ficam ausentes = vazios:
+    # o navegador nunca fala com a API do WaCalls, tudo passa pelas rotas
+    # /api/v1/voice/* do app.)
+    env_file: .env
+    environment:
+      # A porta do áudio, FIXA. Sem ela o upstream cai em portas UDP efêmeras
+      # aleatórias, impossíveis de publicar. Interpolada com padrão (não gera
+      # aviso no painel) e com a MESMA expressão da linha de `ports:` — se o
+      # deploy ler o `.env`, as duas mudam juntas; se não ler, as duas ficam em
+      # 7881. Nunca descasam.
+      WACALLS_WEBRTC_UDP_PORT: ${WACALLS_WEBRTC_UDP_PORT:-7881}
+    ports:
+      # Só UDP, e host == contêiner de PROPÓSITO: o número entra no candidato
+      # SDP que o navegador recebe. Um remap (7881:7882) mandaria a mídia para
+      # uma porta que o host não escuta. Precisa estar liberada também no
+      # firewall do provedor da VPS (UDP de entrada).
+      #
+      # NUNCA a 8080 (TCP): é a API de administração do WaCalls, e ela fica só
+      # na rede interna do compose, onde o app e o worker a alcançam como
+      # http://wacalls:8080 (é esse o valor de WACALLS_API_BASE_URL).
+      - "${WACALLS_WEBRTC_UDP_PORT:-7881}:${WACALLS_WEBRTC_UDP_PORT:-7881}/udp"
+    volumes:
+      # /data/wacalls.db guarda a credencial de sessão do WhatsApp, como o
+      # waha-data. Apagar o volume desvincula todos os aparelhos (QR de novo).
+      - wacalls-data:/data
+    # Só na rede padrão do projeto, como o waha: não conecta no banco, então
+    # não entra na rede `easypanel`. E há um motivo a mais, medido: o mux de
+    # UDP escuta no IP da interface do contêiner (172.x:7881, não 0.0.0.0), e
+    # com uma rede só não há dúvida de para qual IP o Docker entrega a porta.
+    logging: *default-logging
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -190,6 +280,7 @@ services:
 volumes:
   waha-data:
   waha-media:
+  wacalls-data:
   caddy-data:
   caddy-config:
 
