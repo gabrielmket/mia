@@ -1038,6 +1038,19 @@ export const NAV_CATALOG = [
     minRole: "admin",
   },
   {
+    // FORK MIA (.60) — os leads dos formulários de cadastro instantâneo da Meta
+    // entrando no funil (docs/fork/leads-da-meta.md). Ao lado de Meta Ads porque
+    // usa o MESMO token; `admin` porque decide que formulário cria negócio em
+    // que funil. Vira módulo vendável por `lib/leads-da-meta/modulo.ts`.
+    href: "/app/settings/leads-da-meta",
+    label: "Formulários da Meta",
+    description: "Importar os leads dos anúncios de cadastro instantâneo para o funil.",
+    icon: "Megaphone",
+    group: "organizacao",
+    section: "Sua empresa",
+    minRole: "admin",
+  },
+  {
     href: "/app/settings/marca",
     label: "Marca",
     description: "O nome e a cor que sua empresa mostra dentro do sistema.",
