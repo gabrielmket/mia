@@ -142,9 +142,13 @@ relato do envio começando com `ok:` e `visto_em` de menos de 20 min atrás.
 Problema: `ok = false` (a `etapa` diz onde parou), `enviado_em` vazio há mais de
 um dia, relato com `ERRO` ou `parado`.
 
+No painel do EasyPanel, os dois contêineres têm healthcheck com sentido:
+`backup` fica "unhealthy" se não houver cópia PRONTO de menos de 26 h;
+`backup-envio`, se o último relato não for `ok` ou tiver mais de 30 min. Os logs
+dos dois também estão lá.
+
 No drive, `relatorios/<pasta>.txt` mostra o resumo de cada dia sem precisar
-decifrar nada. Os logs dos contêineres `backup` e `backup-envio` estão no
-EasyPanel.
+decifrar nada.
 
 ## Como restaurar
 

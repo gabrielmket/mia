@@ -99,33 +99,33 @@ troca(
         target: /migrador/migrar.sh
 `,
 );
-// Os dois serviços do backup montam a mesma pasta: a âncora inclui o entrypoint,
-// que é o que difere entre eles.
+// Os dois serviços do backup montam a mesma pasta com as mesmas linhas: a âncora
+// vai até a linha seguinte, que é o que difere entre eles.
 troca(
-  `    entrypoint: ["bash", "/backup-scripts/fazer-backup.sh"]
-    volumes:
+  `    volumes:
       - ./backup:/backup-scripts:ro
-`,
-  `    entrypoint: ["bash", "/backup-scripts/fazer-backup.sh"]
-    configs:
+      - mia-backups\${MIA_VOLUME_SUFIXO:-}:/backups
+      # Só leitura`,
+  `    configs:
       - source: fazer_backup_sh
         target: /backup-scripts/fazer-backup.sh
     volumes:
-`,
+      - mia-backups\${MIA_VOLUME_SUFIXO:-}:/backups
+      # Só leitura`,
 );
 troca(
-  `    entrypoint: ["sh", "/backup-scripts/enviar.sh"]
-    volumes:
+  `    volumes:
       - ./backup:/backup-scripts:ro
-`,
-  `    entrypoint: ["sh", "/backup-scripts/enviar.sh"]
-    configs:
+      - mia-backups\${MIA_VOLUME_SUFIXO:-}:/backups
+    # Tudo com padrão vazio`,
+  `    configs:
       - source: enviar_sh
         target: /backup-scripts/enviar.sh
       - source: backup_leia_me
         target: /backup-scripts/LEIA-ME.txt
     volumes:
-`,
+      - mia-backups\${MIA_VOLUME_SUFIXO:-}:/backups
+    # Tudo com padrão vazio`,
 );
 const naoComentario = c.split("\n").filter((l) => !l.trimStart().startsWith("#"));
 if (naoComentario.some((l) => /\.\/(volumes|migrador|backup)/.test(l))) throw new Error("sobrou bind mount relativo");

@@ -346,6 +346,16 @@ services:
       mia-db:
         condition: service_healthy
     entrypoint: ["bash", "/backup-scripts/fazer-backup.sh"]
+    # A imagem traz o healthcheck do Postgres (pg_isready em localhost a cada 2 s),
+    # que aqui nunca passa: não há banco neste contêiner (medido no 1º deploy,
+    # 29/09/2026). O que o painel precisa mostrar é se o backup está em dia: há
+    # cópia PRONTO de menos de 26 h (o diário das 06:00, as 3 tentativas e folga).
+    healthcheck:
+      test: ["CMD-SHELL", "find /backups -maxdepth 2 -name PRONTO -mmin -1560 | grep -q ."]
+      interval: 5m
+      timeout: 10s
+      retries: 1
+      start_period: 15m
     volumes:
       - ./backup:/backup-scripts:ro
       - mia-backups${MIA_VOLUME_SUFIXO:-}:/backups
@@ -363,6 +373,14 @@ services:
     image: rclone/rclone:1.75.1
     restart: unless-stopped
     entrypoint: ["sh", "/backup-scripts/enviar.sh"]
+    # No painel, "unhealthy" = o último relato do envio não é "ok" (credencial,
+    # drive, senha) ou tem mais de 30 min (ele escreve um a cada volta de 10 min).
+    healthcheck:
+      test: ["CMD-SHELL", "find /backups/ENVIO-STATUS -mmin -30 | grep -q . && sed -n 2p /backups/ENVIO-STATUS | grep -q '^ok'"]
+      interval: 5m
+      timeout: 10s
+      retries: 1
+      start_period: 5m
     volumes:
       - ./backup:/backup-scripts:ro
       - mia-backups${MIA_VOLUME_SUFIXO:-}:/backups
