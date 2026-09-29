@@ -25,6 +25,7 @@ import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo"
 import { agentCreateSchema } from "@/lib/ai/guardrails-schema";
 import { agentMcpCreateSchema } from "@/lib/ai/agents/validation";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { escolheIa, travarIaDaVersaoNova } from "@/lib/ai/trava-da-ia";
 
 export const dynamic = "force-dynamic";
 
@@ -116,7 +117,15 @@ export async function POST(req: NextRequest): Promise<Response> {
         details: parsed.error.flatten(),
       });
     }
-    const input = parsed.data;
+    // FORK MIA: agente novo de quem não escolhe IA nasce com o par da plataforma
+    // e "a chave desta instalação", venha o que vier no corpo (lib/ai/trava-da-ia.ts).
+    const travada = await travarIaDaVersaoNova(
+      admin,
+      { user: authUser, orgId: activeOrg.orgId, agenteDeReferencia: null },
+      parsed.data.version,
+    );
+    if (!travada.ok) return fail(travada.erro, travada.mensagem, 422, { requestId });
+    const input = { ...parsed.data, version: travada.corpo };
 
     // Validate scope before the first write; a rejected form leaves no orphan.
     const escopo = await validarEscopoDaVersao(admin, activeOrg.orgId, input.version);
@@ -172,7 +181,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       organization_id: activeOrg.orgId,
       name: input.name,
       description: input.description ?? null,
-      model: input.model ?? "anthropic/claude-sonnet-5",
+      // FORK MIA: o modelo do cadastro é da plataforma (lib/ai/trava-da-ia.ts).
+      model: (escolheIa(authUser) ? input.model : undefined) ?? "anthropic/claude-sonnet-5",
       system_prompt: input.system_prompt,
       is_active: true,
       is_default: false,

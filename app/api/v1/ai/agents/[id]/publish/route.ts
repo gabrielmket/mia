@@ -22,6 +22,7 @@ import { publishSchema, PUBLISH_ERROR_CODES } from "@/lib/ai/agents/validation";
 import { VALID_TOOL_IDS } from "@/lib/mcp/tools";
 import { publishAgentVersion } from "@/lib/ai/agents/publish";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { iaPodeIrAoAr, MENSAGEM_IA_DA_PLATAFORMA } from "@/lib/ai/trava-da-ia";
 
 const VALID_TOOL_IDS_RUNTIME = new Set<string>(VALID_TOOL_IDS as readonly string[]);
 
@@ -67,13 +68,27 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
   // (catálogo evolui — validar à hora do publish, fora da transação SQL.)
   const { data: targetV } = await admin
     .from("ai_agent_versions")
-    .select("id, agent_id, organization_id, tool_ids, status")
+    .select("id, agent_id, organization_id, tool_ids, status, provider, model, credential_id, operator_model")
     .eq("id", parsed.data.version_id)
     .eq("organization_id", activeOrg.orgId)
     .maybeSingle();
 
   if (!targetV || targetV.agent_id !== id) {
     return fail("version_not_found", t("Version não encontrada."), 404, { requestId });
+  }
+
+  // FORK MIA: publicar aceita rascunho E versão antiga (`superseded`); sem esta
+  // pergunta, pôr no ar a v5 trocava o modelo do agente sem tocar em campo de IA
+  // (lib/ai/trava-da-ia.ts).
+  if (
+    !(await iaPodeIrAoAr(admin, {
+      user: authUser,
+      orgId: activeOrg.orgId,
+      agentId: id,
+      versao: targetV,
+    }))
+  ) {
+    return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403, { requestId });
   }
 
   const tools = (targetV.tool_ids ?? []) as string[];

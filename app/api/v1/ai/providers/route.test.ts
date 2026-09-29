@@ -130,7 +130,11 @@ function autorizadoComoAdmin() {
     email: "dono@example.com",
     full_name: null,
     avatar_url: null,
-    is_platform_admin: false,
+    // Fork MIA: trocar/apagar chave e mudar o padrão de IA são da plataforma
+    // (lib/ai/trava-da-ia.ts). O admin daqui é também admin de plataforma — o
+    // upstream o autoriza igual; o lado do cliente é cobrado em
+    // tests/unit/trava-da-ia-portas.test.ts. Precedente: credenciais-aceita-a-chave-do-jev.
+    is_platform_admin: true,
     idioma: "pt-BR" as const,
   } as AuthUser;
   vi.mocked(requireRole).mockResolvedValue({

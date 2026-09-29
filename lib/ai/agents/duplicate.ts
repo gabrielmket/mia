@@ -13,6 +13,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import type { IaDaVersao } from "@/lib/ai/trava-da-ia";
+
 export const DUPLICATE_AGENT_COLUMNS =
   "id, organization_id, name, description, model, system_prompt, is_active, is_default, kind, priority, published_version_id, archived_at, config, guardrails, active_kb_version_id, created_at, updated_at";
 
@@ -120,7 +122,17 @@ export async function pickSourceVersion(
 
 export async function duplicateAgentWithVersion(
   admin: SupabaseClient,
-  input: { orgId: string; agentId: string; actorUserId: string; requireVersion: boolean },
+  input: {
+    orgId: string;
+    agentId: string;
+    actorUserId: string;
+    requireVersion: boolean;
+    /**
+     * FORK MIA: a IA que a cópia leva no lugar da do rascunho copiado, quando
+     * quem duplica não escolhe IA (`iaDaCopia`, lib/ai/trava-da-ia.ts).
+     */
+    ia?: IaDaVersao | null;
+  },
 ): Promise<DuplicateAgentResult> {
   const { orgId, agentId, actorUserId, requireVersion } = input;
 
@@ -182,6 +194,7 @@ export async function duplicateAgentWithVersion(
       agent_id: (newAgent as { id: string }).id,
       version_number: 1,
       ...versionPayloadFrom(srcVersion),
+      ...(input.ia ?? {}),
       status: "draft",
       created_by: actorUserId,
     })

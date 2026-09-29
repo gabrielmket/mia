@@ -96,7 +96,11 @@ beforeEach(() => {
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
     org: { orgId: org, role: "admin", name: "Org" },
-    user: { id: "actor", idioma: "pt-BR" },
+    // Fork MIA: trocar/apagar chave e mudar o padrão de IA são da plataforma
+    // (lib/ai/trava-da-ia.ts). O admin daqui é também admin de plataforma — o
+    // upstream o autoriza igual; o lado do cliente é cobrado em
+    // tests/unit/trava-da-ia-portas.test.ts. Precedente: credenciais-aceita-a-chave-do-jev.
+    user: { id: "actor", idioma: "pt-BR", is_platform_admin: true, support: null },
   } as Awaited<ReturnType<typeof requireRole>>);
 });
 

@@ -16,6 +16,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { configDoRoteador } from "@/lib/ai/trava-da-ia";
 
 export const dynamic = "force-dynamic";
 
@@ -133,7 +134,8 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (patch.fallback_agent_id !== undefined) update.fallback_agent_id = patch.fallback_agent_id;
   if (patch.config !== undefined) {
     const currentConfig = (existing.config ?? {}) as Record<string, unknown>;
-    update.config = { ...currentConfig, ...patch.config };
+    // FORK MIA: o modelo do classificador é da plataforma (lib/ai/trava-da-ia.ts).
+    update.config = { ...currentConfig, ...configDoRoteador(authUser, patch.config, currentConfig) };
   }
 
   if (Object.keys(update).length === 0) {

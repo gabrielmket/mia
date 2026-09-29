@@ -15,6 +15,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { escolheIa } from "@/lib/ai/trava-da-ia";
 import {
   agentPatchSchema,
   AGENT_CONFIG_DEFAULTS,
@@ -164,6 +165,15 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
         },
       );
     }
+  }
+
+  // FORK MIA: o modelo do cadastro e o modelo de voz são da plataforma. Para quem
+  // não escolhe IA eles saem do patch, venha o que vier no corpo (lib/ai/trava-da-ia.ts).
+  // DEPOIS da recusa acima de propósito: com versão publicada, `model` no corpo
+  // segue sendo 409 para todo mundo, como no upstream.
+  if (!escolheIa(authz.user)) {
+    delete patch.model;
+    if (patch.config) delete patch.config.voice_model;
   }
 
   // Build UPDATE payload. Para `config`, faz merge preservando defaults.

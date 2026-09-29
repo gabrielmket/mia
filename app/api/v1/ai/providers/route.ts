@@ -35,6 +35,7 @@ import { modeloDeTranscricaoEmVigor } from "@/lib/messaging/media/transcription"
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { escolheIa, MENSAGEM_IA_DA_PLATAFORMA } from "@/lib/ai/trava-da-ia";
 
 export const dynamic = "force-dynamic";
 
@@ -215,7 +216,9 @@ export async function GET(): Promise<Response> {
     // `app/app/ai/credentials/page.tsx`.
     instalacaoTemChave: instalacaoTemChaveDeIa(),
     modelos,
-    podeEditar: roleAtLeast(org.role, "admin"),
+    // FORK MIA: provedor e modelo de cada ponto são da plataforma; o painel fica
+    // só de leitura para quem não escolhe IA (lib/ai/trava-da-ia.ts).
+    podeEditar: roleAtLeast(org.role, "admin") && escolheIa(authz.user),
   });
 }
 
@@ -248,6 +251,8 @@ export async function PUT(req: NextRequest): Promise<Response> {
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user, org } = authz;
+  // FORK MIA: provedor, modelo e chave de IA são da plataforma (lib/ai/trava-da-ia.ts).
+  if (!escolheIa(user)) return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403);
 
   const parsed = corpoDoPut.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -390,6 +395,8 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user, org } = authz;
+  // FORK MIA: provedor, modelo e chave de IA são da plataforma (lib/ai/trava-da-ia.ts).
+  if (!escolheIa(user)) return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403);
 
   const parsed = corpoDoPatch.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

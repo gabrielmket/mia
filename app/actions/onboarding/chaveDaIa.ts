@@ -31,6 +31,7 @@ import { guardarCredencial } from "@/lib/ai/credenciais/guardar";
 import { definirPadraoDeIaDaOrganizacao } from "@/lib/ai/pontos/padrao-da-organizacao";
 import { IDS_DE_PROVEDOR } from "@/lib/ai/pontos/provedores";
 import { requireOnboardingCtx, OnboardingError } from "./_shared";
+import { escolheIa } from "@/lib/ai/trava-da-ia";
 
 export type ResultadoDaChave =
   | {
@@ -67,6 +68,16 @@ export async function salvarChaveDaIa(formData: FormData): Promise<ResultadoDaCh
   // faz o onboarding é o dono, mas o papel é verificado e não presumido.
   if (ctx.role !== "admin") {
     return { ok: false, erro: "Só um administrador pode cadastrar a chave da inteligência artificial." };
+  }
+
+  // FORK MIA: a chave e o provedor da empresa são da plataforma. A tela esconde
+  // este campo de quem não é (setup-ai/page.tsx), mas uma ação do servidor se
+  // chama sem a tela; a recusa mora aqui (lib/ai/trava-da-ia.ts).
+  if (!escolheIa(ctx)) {
+    return {
+      ok: false,
+      erro: "A chave da inteligência artificial é configurada pela nossa equipe. Fale com o suporte.",
+    };
   }
 
   const provider = String(formData.get("provider") ?? "");

@@ -57,7 +57,16 @@ let orgIdAtualizado: string | null = null;
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/auth/server", () => ({
-  loadAuthUser: vi.fn(async () => ({ id: USER, email: "dono@qa.local", full_name: "Dono" })),
+  // Fork MIA: colar a chave é da plataforma (lib/ai/trava-da-ia.ts). O dono daqui é
+  // também admin de plataforma; o lado do cliente é cobrado em
+  // tests/unit/trava-da-ia-portas.test.ts.
+  loadAuthUser: vi.fn(async () => ({
+    id: USER,
+    email: "dono@qa.local",
+    full_name: "Dono",
+    is_platform_admin: true,
+    support: null,
+  })),
   resolveActiveOrg: vi.fn(async () => ({ orgId: ORG, name: "QA", role: "admin" })),
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => clienteFalso() }));

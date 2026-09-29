@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { versionPatchSchema } from "@/lib/ai/agents/validation";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { MENSAGEM_IA_DA_PLATAFORMA, semCamposDaIa } from "@/lib/ai/trava-da-ia";
 
 export const dynamic = "force-dynamic";
 
@@ -79,7 +80,13 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
       details: parsed.error.flatten(),
     });
   }
-  const patch = parsed.data;
+  // FORK MIA: provedor, modelo, chave e modelo do Operador são da plataforma.
+  // Para quem não escolhe IA eles saem do patch (lib/ai/trava-da-ia.ts); um
+  // pedido que SÓ trazia isso recebe o motivo, e não "corpo vazio".
+  const patch = semCamposDaIa(authUser, parsed.data);
+  if (Object.keys(patch).length === 0 && Object.keys(parsed.data).length > 0) {
+    return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403, { requestId });
+  }
   if (Object.keys(patch).length === 0) {
     return fail("invalid_request", "Body vazio.", 400, { requestId });
   }

@@ -19,6 +19,7 @@ import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo"
 import { versionCreateSchema } from "@/lib/ai/agents/validation";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { travarIaDaVersaoNova } from "@/lib/ai/trava-da-ia";
 
 export const dynamic = "force-dynamic";
 
@@ -92,14 +93,23 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
       details: parsed.error.flatten(),
     });
   }
-  const v = parsed.data;
-
   const agentCheck = await assertAgentInOrg(id, activeOrg.orgId);
   if (!agentCheck.ok) {
     return fail("not_found", t("Agent não encontrado."), 404, { requestId });
   }
 
   const admin = createAdminClient();
+
+  // FORK MIA: a versão nova de quem não escolhe IA herda a IA atual do agente,
+  // venha o que vier no corpo (lib/ai/trava-da-ia.ts). Antes da conferência da
+  // chave da instalação logo abaixo, para ela medir a IA que vai ser gravada.
+  const travada = await travarIaDaVersaoNova(
+    admin,
+    { user: authUser, orgId: activeOrg.orgId, agenteDeReferencia: id },
+    parsed.data,
+  );
+  if (!travada.ok) return fail(travada.erro, travada.mensagem, 422, { requestId });
+  const v = travada.corpo;
 
   // Ordering: insert with retry on 23505 (race com unique(agent_id,version_number)).
   for (let attempt = 0; attempt < 3; attempt++) {

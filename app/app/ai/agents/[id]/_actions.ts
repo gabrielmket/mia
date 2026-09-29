@@ -33,6 +33,12 @@ import {
 } from "@/lib/ai/agents/validation";
 import { publishAgentVersion } from "@/lib/ai/agents/publish";
 import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
+import {
+  iaPodeIrAoAr,
+  MENSAGEM_IA_DA_PLATAFORMA,
+  semCamposDaIa,
+  travarIaDaVersaoNova,
+} from "@/lib/ai/trava-da-ia";
 import { VALID_TOOL_IDS } from "@/lib/mcp/tools";
 
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -225,7 +231,10 @@ export async function saveAgentDraftAction(
     if (!patchValidated.success) {
       return { ok: false, error: "validation_failed", details: patchValidated.error.flatten() };
     }
-    const update: Record<string, unknown> = { ...patchValidated.data };
+    // FORK MIA: provedor, modelo, chave e modelo do Operador são da plataforma.
+    // Para quem não escolhe IA eles saem do patch, venha o que vier no corpo —
+    // a tela só esconde o cartão, e o corpo se escreve à mão (lib/ai/trava-da-ia.ts).
+    const update: Record<string, unknown> = semCamposDaIa(authUser, { ...patchValidated.data });
     const { data: updated, error } = await admin
       .from("ai_agent_versions")
       .update(update)
@@ -279,6 +288,16 @@ export async function saveAgentDraftAction(
     };
   }
 
+  // FORK MIA: a versão nova de quem não escolhe IA herda a IA atual do agente,
+  // não a do corpo (lib/ai/trava-da-ia.ts).
+  const travada = await travarIaDaVersaoNova(
+    admin,
+    { user: authUser, orgId: activeOrg.orgId, agenteDeReferencia: agentId },
+    v,
+  );
+  if (!travada.ok) return { ok: false, error: "validation_failed", message: travada.mensagem };
+  const ia = travada.corpo;
+
   // Cria draft v(max+1) com retry em 23505.
   for (let attempt = 0; attempt < 3; attempt++) {
     const { data: maxRow } = await admin
@@ -298,9 +317,9 @@ export async function saveAgentDraftAction(
         agent_id: agentId,
         version_number: nextNumber,
         system_prompt: v.system_prompt,
-        provider: v.provider,
-        model: v.model,
-        credential_id: v.credential_id,
+        provider: ia.provider,
+        model: ia.model,
+        credential_id: ia.credential_id,
         tool_ids: v.tool_ids,
         trigger_config: v.trigger_config ?? undefined,
         channel_session_id: v.channel_session_id,
@@ -314,7 +333,7 @@ export async function saveAgentDraftAction(
         proposal_ai_draft_enabled: v.proposal_ai_draft_enabled,
         cases_enabled: v.cases_enabled,
         operator_enabled: v.operator_enabled,
-        operator_model: v.operator_model,
+        operator_model: ia.operator_model,
         operator_tool_ids: v.operator_tool_ids,
         pipeline_ids: v.pipeline_ids,
         knowledge_source_ids: v.knowledge_source_ids,
@@ -388,7 +407,7 @@ export async function publishAgentAction(
   const valid = new Set<string>(VALID_TOOL_IDS as readonly string[]);
   const { data: targetV } = await admin
     .from("ai_agent_versions")
-    .select("id, agent_id, tool_ids")
+    .select("id, agent_id, tool_ids, provider, model, credential_id, operator_model")
     .eq("id", versionId)
     .eq("organization_id", activeOrg.orgId)
     .maybeSingle();
@@ -399,6 +418,13 @@ export async function publishAgentAction(
   const invalid = tools.filter((t) => !valid.has(t));
   if (invalid.length > 0) {
     return { ok: false, error: "tool_id_invalid", details: { invalid } };
+  }
+  // FORK MIA: publicar aceita rascunho E versão antiga (`superseded`); sem esta
+  // pergunta, pôr no ar a v5 trocava o modelo do agente sem tocar em campo de IA.
+  if (
+    !(await iaPodeIrAoAr(admin, { user: authUser, orgId: activeOrg.orgId, agentId, versao: targetV }))
+  ) {
+    return { ok: false, error: "ia_da_plataforma", message: MENSAGEM_IA_DA_PLATAFORMA };
   }
 
   const result = await publishAgentVersion(admin, {
@@ -540,6 +566,23 @@ export async function revertToVersionAction(
   };
   const src = source as unknown as SourceRow;
 
+  // FORK MIA: reverter volta o prompt, as ferramentas e o escopo daquela versão,
+  // mas NÃO o cérebro dela. Para quem não escolhe IA, a cópia fica com a IA atual
+  // do agente — senão "Reverter para a v5" era o jeito de voltar a um modelo
+  // antigo que a plataforma já tinha trocado (lib/ai/trava-da-ia.ts).
+  const travada = await travarIaDaVersaoNova(
+    admin,
+    { user: authUser, orgId: activeOrg.orgId, agenteDeReferencia: agentId },
+    {
+      provider: src.provider,
+      model: src.model,
+      credential_id: src.credential_id,
+      operator_model: src.operator_model,
+    },
+  );
+  if (!travada.ok) return { ok: false, error: "validation_failed", message: travada.mensagem };
+  const ia = travada.corpo;
+
   let createdId: string | null = null;
   let createdNumber: number | null = null;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -560,9 +603,9 @@ export async function revertToVersionAction(
         agent_id: agentId,
         version_number: nextNumber,
         system_prompt: src.system_prompt,
-        provider: src.provider,
-        model: src.model,
-        credential_id: src.credential_id,
+        provider: ia.provider,
+        model: ia.model,
+        credential_id: ia.credential_id,
         tool_ids: src.tool_ids,
         trigger_config: src.trigger_config ?? undefined,
         channel_session_id: src.channel_session_id,
@@ -576,7 +619,7 @@ export async function revertToVersionAction(
         proposal_ai_draft_enabled: src.proposal_ai_draft_enabled,
         cases_enabled: src.cases_enabled,
         operator_enabled: src.operator_enabled,
-        operator_model: src.operator_model,
+        operator_model: ia.operator_model,
         operator_tool_ids: src.operator_tool_ids,
         // O revert leva o escopo junto: voltar para uma versão e NÃO voltar a
         // permissão dela seria publicar uma configuração que nunca existiu.
@@ -694,6 +737,15 @@ export async function createMcpAgentAction(
   const requestId = randomUUID();
   const admin = createAdminClient();
 
+  // FORK MIA: agente novo de quem não escolhe IA nasce com o par da plataforma e
+  // "a chave desta instalação", venha o que vier no corpo (lib/ai/trava-da-ia.ts).
+  const travada = await travarIaDaVersaoNova(
+    admin,
+    { user: authUser, orgId: activeOrg.orgId, agenteDeReferencia: null },
+    parsed.data.version,
+  );
+  if (!travada.ok) return { ok: false, error: "validation_failed", message: travada.mensagem };
+
   // Cria agent kind='mcp_agent' + v1 draft. Compensa rollback se versão falhar.
   const { data: agentRow, error: agentErr } = await admin
     .from("ai_agents")
@@ -701,7 +753,7 @@ export async function createMcpAgentAction(
       organization_id: activeOrg.orgId,
       name: parsed.data.name,
       description: parsed.data.description ?? null,
-      model: parsed.data.version.model,
+      model: travada.corpo.model,
       system_prompt: parsed.data.version.system_prompt,
       kind: "mcp_agent",
       priority: parsed.data.priority,
@@ -716,7 +768,7 @@ export async function createMcpAgentAction(
     return { ok: false, error: "internal_error", message: agentErr?.message };
   }
 
-  const v = parsed.data.version;
+  const v = travada.corpo;
   const { error: versionErr } = await admin.from("ai_agent_versions").insert({
     organization_id: activeOrg.orgId,
     agent_id: agentRow.id,

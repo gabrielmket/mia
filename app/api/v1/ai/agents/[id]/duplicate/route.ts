@@ -17,6 +17,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { duplicateAgentWithVersion } from "@/lib/ai/agents/duplicate";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { iaDaCopia } from "@/lib/ai/trava-da-ia";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,8 @@ export async function POST(_req: NextRequest, ctx: Ctx): Promise<Response> {
     agentId: id,
     actorUserId: authUser.id,
     requireVersion: true,
+    // FORK MIA: a cópia leva a IA atual da origem (lib/ai/trava-da-ia.ts).
+    ia: await iaDaCopia(admin, { user: authUser, orgId: activeOrg.orgId, agentId: id }),
   });
 
   if (!result.ok) {
