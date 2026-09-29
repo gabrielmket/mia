@@ -82,6 +82,7 @@ describe("runSilenceSweep", () => {
       loadContatosComRetornoVivo: async () => new Set<string>(),
       loadJaInscritosNesteSilencio: async () => new Set<string>(),
       loadTriggerNode: async () => ({ id: "t", pedeAgente: false }),
+      loadContactIdsEmCooldown: async () => new Set(),
       insertEnrollment: insert,
     };
     const resumo = await runSilenceSweep({

@@ -30,7 +30,7 @@ import { z } from "zod";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { MODULOS } from "@/lib/modulos/catalogo";
+import { MODULOS } from "@/lib/modulos/vendaveis";
 import { nomeDoCanal } from "@/lib/channels/estado";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 import { saldoDaPlataforma } from "@/lib/ai/custo/saldo-da-plataforma";

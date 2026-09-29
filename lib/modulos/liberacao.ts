@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
-import { type ChaveDeModulo } from "@/lib/modulos/catalogo";
+import { type ChaveDeModulo } from "@/lib/modulos/vendaveis";
 
 /**
  * "Esta organização contratou este módulo?"

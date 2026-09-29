@@ -24,6 +24,8 @@ function payload(): ExportPayload {
     messages_count_total: 0,
     messages_recent: [],
     leads: [],
+    honorarios_contratos: [],
+    honorarios_parcelas: [],
     orders: [],
     activities: [],
     appointments: [],
@@ -63,6 +65,8 @@ function payload(): ExportPayload {
     avisos_de_caso: [],
     campaign_recipients: [],
     campaign_suppressions: [],
+    channel_session_groups: [],
+    group_messages_authored: [],
   appointment_notices: [
       {
         id: "aviso-aberto",

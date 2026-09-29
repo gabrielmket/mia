@@ -27,6 +27,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { lerGrupoDeAvisos } from "@/lib/avisos/destino-do-aviso";
+import { gruposDoNumero } from "@/lib/avisos/grupos-do-numero";
 import { getAdapter, PROVIDERS_QUE_ENTREGAM_EM_GRUPO } from "@/lib/channels";
 import {
   CHANNEL_SESSION_REF_COLUMNS,
@@ -128,12 +129,7 @@ export async function GET(): Promise<Response> {
    */
   const adapter = marcada ? getAdapter(marcada.provider) : null;
   const grupos =
-    marcada && adapter?.listGroups
-      ? await adapter.listGroups({
-          organizationId: marcada.organization_id,
-          sessionRef: resolveSessionRef(marcada),
-        })
-      : null;
+    marcada && adapter?.listGroups ? await gruposDoNumero(adapter, resolveSessionRef(marcada)) : null;
 
   return ok(
     {

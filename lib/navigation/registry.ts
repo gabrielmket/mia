@@ -121,7 +121,7 @@ export function sidebarGroups(
   isPlatformAdmin: boolean,
   role: Role | null,
   settings?: InterfaceSettings,
-  /** O que a ORGANIZAÇÃO contratou (lib/modulos/catalogo.ts). */
+  /** O que a ORGANIZAÇÃO contratou (lib/modulos/vendaveis.ts). */
   modulos?: string[],
   /**
    * B2B ou B2C (item C2). Atravessa igual aos `modulos`: `undefined` não
@@ -176,7 +176,7 @@ export function hubSections(
   isPlatformAdmin: boolean,
   role: Role | null,
   settings?: InterfaceSettings,
-  /** O que a ORGANIZAÇÃO contratou (lib/modulos/catalogo.ts). */
+  /** O que a ORGANIZAÇÃO contratou (lib/modulos/vendaveis.ts). */
   modulos?: string[],
   /**
    * B2B ou B2C (item C2). Atravessa igual aos `modulos`: `undefined` não
@@ -223,7 +223,7 @@ export function searchable(
   isPlatformAdmin: boolean,
   role: Role | null,
   settings?: InterfaceSettings,
-  /** O que a ORGANIZAÇÃO contratou (lib/modulos/catalogo.ts). */
+  /** O que a ORGANIZAÇÃO contratou (lib/modulos/vendaveis.ts). */
   modulos?: string[],
   /**
    * B2B ou B2C (item C2). Atravessa igual aos `modulos`: `undefined` não

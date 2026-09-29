@@ -152,4 +152,6 @@ export {
   // de dinheiro, e reaproveitar ChartLineUp faria a linha de Créditos parecer
   // um relatório.
   Wallet,
+  // /admin/modulos: módulo opcional com tabela própria (ADR-0002)
+  Stack,
 } from "@phosphor-icons/react/dist/ssr";

@@ -17,7 +17,7 @@ import { BookOpen, Lightbulb, ListChecks, Warning } from "@/lib/ui/icons";
 
 interface NavHubProps {
   interfaceSettings?: InterfaceSettings;
-  /** O que a organização contratou — ver lib/modulos/catalogo.ts. */
+  /** O que a organização contratou — ver lib/modulos/vendaveis.ts. */
   modulos?: string[];
   /** B2B ou B2C — ver lib/empresas/modo-de-venda.ts (item C2). */
   modoDeVenda?: ModoDeVenda;

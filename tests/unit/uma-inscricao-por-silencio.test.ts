@@ -58,6 +58,7 @@ describe("runSilenceSweep pula quem já foi inscrito neste silêncio", () => {
       loadSilentContactIds: async () => ["ja-inscrito", "novo"],
       loadContatosComRetornoVivo: async () => new Set<string>(),
       loadJaInscritosNesteSilencio: perguntou,
+      loadContactIdsEmCooldown: async () => new Set<string>(),
       loadTriggerNode: async () => ({ id: "inicio", pedeAgente: false }),
       insertEnrollment: insert,
     };
@@ -72,5 +73,36 @@ describe("runSilenceSweep pula quem já foi inscrito neste silêncio", () => {
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ contact_id: "novo" }));
     expect(resumo.skipped_same_silence).toBe(1);
     expect(resumo.enrolled).toBe(1);
+  });
+});
+
+describe("as duas travas convivem: cooldown do upstream primeiro, silêncio da MIA depois", () => {
+  it("o cooldown conta como o upstream mede; fora dele, o mesmo silêncio ainda segura", async () => {
+    // A v1.61 do upstream trouxe o cooldown pós-conclusão: passado
+    // threshold_minutes do fim da última tentativa, ele reinscreve. A MIA mantém
+    // a regra dela por cima: no MESMO silêncio, não reinscreve nunca.
+    const insert = vi.fn(async () => ({ inserted: true }));
+    const db: SilenceSweepDb = {
+      loadActiveSilencePointers: async () => [
+        { id: "ptr", organization_id: "org", active_version_id: "v1", threshold_minutes: 1440, segments: [] },
+      ],
+      loadSilentContactIds: async () => ["nas-duas", "so-no-silencio", "livre"],
+      loadContatosComRetornoVivo: async () => new Set<string>(),
+      loadContactIdsEmCooldown: async () => new Set(["nas-duas"]),
+      loadJaInscritosNesteSilencio: async () => new Set(["nas-duas", "so-no-silencio"]),
+      loadTriggerNode: async () => ({ id: "inicio", pedeAgente: false }),
+      insertEnrollment: insert,
+    };
+    const resumo = await runSilenceSweep({
+      db,
+      gateDb: { loadEnabledPublishedFollowupAgents: async () => [] },
+      clock: () => new Date("2026-09-29T12:00:00Z"),
+    });
+
+    expect(resumo.skipped_cooldown).toBe(1);
+    expect(resumo.skipped_same_silence).toBe(1);
+    expect(resumo.enrolled).toBe(1);
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ contact_id: "livre" }));
   });
 });

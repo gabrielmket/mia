@@ -4,7 +4,7 @@ import { ROLE_RANK, type Role } from "@/lib/auth/types";
 import type { ModuloOpcional } from "@/lib/instalacao/modulos";
 import type { CapacidadeDaOrganizacao } from "@/lib/organizacao/capacidades";
 import { NAV_CATALOG, type NavMetadata, type NavDestinationId } from "./catalogo";
-import { moduloDaTela } from "@/lib/modulos/catalogo";
+import { moduloDaTela } from "@/lib/modulos/vendaveis";
 import {
   mostraEmpresas,
   TELA_DE_EMPRESAS,
@@ -118,7 +118,7 @@ export function destinosDaInterface(
   platform: boolean,
   role: Role | null,
   /**
-   * O que a organização CONTRATOU — os módulos VENDÁVEIS (lib/modulos/catalogo.ts).
+   * O que a organização CONTRATOU — os módulos VENDÁVEIS (lib/modulos/vendaveis.ts).
    * `undefined` = não se sabe, e aí nada é escondido: a rota é que recusa, e
    * sumir com a tela de quem pagou por não ter carregado uma lista seria trocar
    * um erro visível por um invisível.

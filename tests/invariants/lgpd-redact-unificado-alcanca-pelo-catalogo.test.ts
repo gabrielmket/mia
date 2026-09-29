@@ -201,6 +201,11 @@ const DECISOES: Record<string, Decisao> = {
     caminho: "cascata",
     razao: "0379: a cauda do número sai, mas a linha é o 'não me mande mais' — apagá-la faria a pessoa voltar a receber campanha.",
   },
+  channel_session_groups: {
+    decidida: "redigir",
+    caminho: "cascata",
+    razao: "0482 (grupos na inbox, #1647): subject é o NOME do grupo e vira null; contact_id aponta para o placeholder do grupo (contacts.kind = 'whatsapp_group'), e número, conversa e liga/desliga ficam. O que o TITULAR escreveu em grupo é redigido pelo gatilho fn_redigir_conversas_ao_anonimizar, em messages.",
+  },
   // ── redigir pela virada de is_anonymized (gatilho) ────────────────────────
   ai_reply_drafts: {
     decidida: "redigir",
@@ -236,6 +241,11 @@ const DECISOES: Record<string, Decisao> = {
     decidida: "redigir",
     caminho: "gatilho",
     razao: "Fork MIA, 0266 da MIA: phone_e164 (o telefone COPIADO do destinatário, que no WhatsApp é também o endereço) vira o rótulo 'Contato anonimizado' e `valores` é zerado pela virada de is_anonymized (fn_redigir_o_que_sobrou_do_contato_anonimizado). A LINHA fica, porque o relatório do disparo e o débito da carteira apontam para ela. Gatilho, e não cascata, porque a cascata é do upstream e o fork estende sem redefinir.",
+  },
+  import_rows: {
+    decidida: "redigir",
+    caminho: "gatilho",
+    razao: "0449 (metade B2B do #1621): raw_data/normalized_data são a linha da planilha como veio — nome, telefone, e-mail, cargo — e error citava o telefone; zerados na virada por fn_redigir_b2b_do_contato_anonimizado, que também redige a pessoa (people) e o vínculo (company_people). A linha fica: número, status e lote são a prova de que o lote rodou.",
   },
   webhook_lead_captures: {
     decidida: "redigir",

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { NAV_CATALOG } from "@/lib/navigation/catalogo";
-import { MODULOS, moduloDaRota, moduloDaTela } from "@/lib/modulos/catalogo";
+import { MODULOS, moduloDaRota, moduloDaTela } from "@/lib/modulos/vendaveis";
 
 /**
  * A CATRACA DO QUE SE VENDE SEPARADO.
@@ -15,7 +15,7 @@ import { MODULOS, moduloDaRota, moduloDaTela } from "@/lib/modulos/catalogo";
  *     Fazer isso com uma tela que os clientes já usam seria um apagão silencioso
  *     no dia do deploy.
  *
- *     npx vitest run lib/modulos/catalogo.test.ts
+ *     npx vitest run lib/modulos/vendaveis.test.ts
  */
 
 describe("o catálogo de módulos aponta para telas que existem", () => {

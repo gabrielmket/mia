@@ -19,7 +19,7 @@ import { audit } from "@/lib/audit";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { MODULOS, moduloPorChave } from "@/lib/modulos/catalogo";
+import { MODULOS, moduloPorChave } from "@/lib/modulos/vendaveis";
 
 export const dynamic = "force-dynamic";
 

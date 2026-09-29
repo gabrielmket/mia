@@ -164,7 +164,7 @@ export interface ActiveOrg {
   visibility_mode?: VisibilityMode;
   /**
    * Os módulos VENDÁVEIS que esta organização contratou (chaves de
-   * `lib/modulos/catalogo.ts`). Opcional: preenchido no layout, com o client
+   * `lib/modulos/vendaveis.ts`). Opcional: preenchido no layout, com o client
    * de admin sobre a org do cookie já validado.
    *
    * ⚠️ É insumo de MENU, não de autorização. Quando vem ausente, a navegação
