@@ -23,6 +23,11 @@
 
 export type ChaveDeModulo = "disparador";
 
+// FORK MIA (.58): o caminho por QR do Broadcast, e o interruptor que o põe no
+// módulo. Import aqui, e não no topo, para não disputar linha com os imports
+// que outras versões acrescentam ali.
+import { QR_EXIGE_O_MODULO, ROTAS_DO_QR } from "@/lib/broadcast/canais-do-disparo";
+
 export interface ModuloVendavel {
   chave: ChaveDeModulo;
   /** Como aparece no painel administrativo, para quem libera. */
@@ -53,11 +58,15 @@ export const MODULOS: readonly ModuloVendavel[] = [
     // nome do produto. Só o segundo muda (e já mudou duas vezes).
     chave: "disparador",
     rotulo: "Broadcast",
-    descricao:
-      "Enviar mensagem para uma lista de contatos pela API oficial da Meta, com crédito próprio e cobrança por mensagem.",
+    // Desde a .58 o Broadcast tem dois caminhos, e o por QR (as Campanhas do
+    // upstream) entra no módulo quando o interruptor está ligado
+    // (lib/broadcast/canais-do-disparo.ts, docs/fork/broadcast-unificado.md).
+    descricao: QR_EXIGE_O_MODULO
+      ? "Enviar mensagem para uma lista de contatos: pelo número oficial da Meta, com crédito próprio e cobrança por mensagem, ou pelo número por QR, no ritmo do número."
+      : "Enviar mensagem para uma lista de contatos pela API oficial da Meta, com crédito próprio e cobrança por mensagem.",
     // A carteira faz parte do módulo: crédito só existe para gastar aqui, e
     // mostrar saldo a quem não pode disparar seria vender por acidente.
-    rotas: ["/api/v1/carteira", "/api/v1/broadcasts"],
+    rotas: ["/api/v1/carteira", "/api/v1/broadcasts", ...(QR_EXIGE_O_MODULO ? ROTAS_DO_QR : [])],
     telas: ["/app/settings/carteira", "/app/broadcast"],
   },
 ] as const;
