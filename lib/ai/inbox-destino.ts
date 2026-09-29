@@ -144,6 +144,8 @@ const ROTULO_POR_KIND: Record<string, string> = {
 
 const SEM_DESTINO: DestinoDoAviso = { estado: "sem_destino", orientacao: "Este aviso não tem um contexto que possa ser aberto nesta versão." };
 const INDISPONIVEL: DestinoDoAviso = { estado: "indisponivel", orientacao: "Este contexto não está disponível para você. Ele pode ter sido removido ou seu acesso pode ter mudado." };
+/** FORK MIA — o aviso de sem saldo, para quem não vê a chave de IA (o cliente). */
+const CREDITO_DA_PLATAFORMA: DestinoDoAviso = { estado: "sem_destino", orientacao: "O crédito de IA é da plataforma. As respostas saem sozinhas quando ele voltar; se demorar, fale com o suporte." };
 const uuid = z.uuid();
 function politica(item: ReferenciaDoAviso): Politica | undefined {
   return Object.hasOwn(POLITICAS_DE_AVISO, item.kind) ? POLITICAS_DE_AVISO[item.kind as InboxKind] : undefined;
@@ -219,7 +221,9 @@ export async function resolverDestinosDosAvisos<T extends ReferenciaDoAviso>(
       } else {
         const a = alvo(item.ref_kind);
         if (item.ref_kind === "ai_provider_credential" && !veCustoEChaveDeIa) {
-          destination = semPermissao("admin");
+          // FORK MIA: "peça a quem administra" não serve — quem lê É o admin do
+          // cliente, e a credencial não é dele. Diz de quem é e o que fazer.
+          destination = CREDITO_DA_PLATAFORMA;
         } else if (a) {
           destination = !permite(papel, a.papel) ? semPermissao(a.papel)
             : visiveis.get(item.ref_kind!)?.has(item.ref_id!)

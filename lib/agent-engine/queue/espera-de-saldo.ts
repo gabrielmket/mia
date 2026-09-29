@@ -54,8 +54,12 @@ export const PREFIXO_DA_ESPERA = 'aguardando saldo do provedor de IA: ';
 /** Título do aviso na Central, em português — a chave do dicionário. */
 export const TITULO_DO_AVISO = 'A IA está sem saldo no provedor';
 
+// FORK MIA: o aviso mora na Central do CLIENTE, e a conta do provedor é da
+// PLATAFORMA (`lib/ai/custo-e-da-plataforma.ts`). "Recarregue o saldo na conta do
+// provedor" mandava o cliente fazer o que só nós podemos; o texto diz a espera,
+// o prazo e com quem falar.
 const CORPO_DO_AVISO =
-  'As respostas aos clientes estão esperando. Recarregue o saldo na conta do provedor: elas saem sozinhas quando o saldo voltar, durante até 6 horas. Depois disso, a conversa que não foi respondida aparece aqui na Central.';
+  'As respostas aos clientes estão esperando o crédito de IA da plataforma voltar: elas saem sozinhas quando ele voltar, durante até 6 horas. Se demorar, fale com o suporte. Depois disso, a conversa que não foi respondida aparece aqui na Central.';
 
 /**
  * As frases com que cada provedor diz "sem crédito". São frases e não o status

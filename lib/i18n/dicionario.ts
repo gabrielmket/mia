@@ -1088,6 +1088,10 @@ export const DICIONARIO: Traducoes = {
   "Este aviso não tem um contexto que possa ser aberto nesta versão.": { es: "Este aviso no tiene un contexto que pueda abrirse en esta versión." },
   "Este contexto não está disponível para você. Ele pode ter sido removido ou seu acesso pode ter mudado.": { es: "Este contexto no está disponible para ti. Puede que se haya eliminado o que tu acceso haya cambiado." },
   "Peça a quem administra para revisar este contexto.": { es: "Pide a quien administra que revise este contexto." },
+  // FORK MIA: o aviso de sem saldo na Central do cliente (a chave é da plataforma).
+  "O crédito de IA é da plataforma. As respostas saem sozinhas quando ele voltar; se demorar, fale com o suporte.": {
+    es: "El crédito de IA es de la plataforma. Las respuestas salen solas cuando vuelva; si tarda, habla con soporte.",
+  },
   "Peça ao gestor para revisar este contexto.": { es: "Pide al responsable que revise este contexto." },
   "Seu acesso aos avisos não está disponível. Confira sua sessão e tente novamente.": { es: "Tu acceso a los avisos no está disponible. Revisa tu sesión e inténtalo de nuevo." },
   "Não foi possível atualizar os avisos. A lista abaixo pode estar desatualizada.": { es: "No se pudieron actualizar los avisos. La lista de abajo puede estar desactualizada." },
@@ -9932,8 +9936,9 @@ export const DICIONARIO: Traducoes = {
   "Aviso do assistente": { es: "Aviso del asistente" },
   // ─── lib/agent-engine/queue/espera-de-saldo.ts ───
   "A IA está sem saldo no provedor": { es: "La IA se quedó sin saldo en el proveedor" },
-  "As respostas aos clientes estão esperando. Recarregue o saldo na conta do provedor: elas saem sozinhas quando o saldo voltar, durante até 6 horas. Depois disso, a conversa que não foi respondida aparece aqui na Central.": {
-    es: "Las respuestas a los clientes están esperando. Recarga el saldo en la cuenta del proveedor: salen solas cuando vuelva el saldo, durante hasta 6 horas. Después de eso, la conversación que no se respondió aparece aquí en la Central.",
+  // FORK MIA: o crédito de IA é da plataforma (corpo do aviso de sem saldo).
+  "As respostas aos clientes estão esperando o crédito de IA da plataforma voltar: elas saem sozinhas quando ele voltar, durante até 6 horas. Se demorar, fale com o suporte. Depois disso, a conversa que não foi respondida aparece aqui na Central.": {
+    es: "Las respuestas a los clientes están esperando que vuelva el crédito de IA de la plataforma: salen solas cuando vuelva, durante hasta 6 horas. Si tarda, habla con soporte. Después de eso, la conversación que no se respondió aparece aquí en la Central.",
   },
   "Revisar credencial": { es: "Revisar credencial" },
   // ─── lib/leads/aviso-de-etapa.ts + editor de etapas (migration 0440) ───
@@ -9976,8 +9981,9 @@ export const DICIONARIO: Traducoes = {
   // ─── lib/notifications/push-dos-avisos.ts (migration 0442) ───
   "A IA passou uma conversa para a equipe": { es: "La IA pasó una conversación al equipo" },
   "Abra a conversa para responder o cliente.": { es: "Abre la conversación para responder al cliente." },
-  "Recarregue o saldo na conta do provedor: as respostas saem sozinhas quando ele voltar.": {
-    es: "Recarga el saldo en la cuenta del proveedor: las respuestas salen solas cuando vuelva.",
+  // FORK MIA: o crédito de IA é da plataforma (push do aviso de sem saldo).
+  "As respostas estão esperando o crédito de IA da plataforma voltar e saem sozinhas quando ele voltar. Se demorar, fale com o suporte.": {
+    es: "Las respuestas están esperando que vuelva el crédito de IA de la plataforma y salen solas cuando vuelva. Si tarda, habla con soporte.",
   },
   // `informativo` e `crítico` saem iguais nos dois idiomas — sem linha, por isso.
   "atenção": { es: "atención" },

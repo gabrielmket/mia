@@ -45,9 +45,16 @@ describe("Central × custo da plataforma", () => {
       veCustoEChaveDeIa: false,
     });
     for (const { destination } of itens) {
-      expect(destination.estado).toBe("sem_permissao");
       expect("href" in destination).toBe(false);
     }
+    expect(itens[0]?.destination.estado).toBe("sem_permissao");
+    // O de sem saldo: quem lê É o admin do cliente, e "peça a quem administra"
+    // mandaria ele pedir a si mesmo. Diz que o crédito é da plataforma.
+    expect(itens[1]?.destination).toMatchObject({ estado: "sem_destino" });
+    const orientacao = (itens[1]?.destination as { orientacao?: string }).orientacao ?? "";
+    expect(orientacao).toMatch(/plataforma/);
+    expect(orientacao).toMatch(/suporte/);
+    expect(orientacao).not.toMatch(/administra|recarregue|credenc/i);
   });
 
   it("controle: quem vê custo (a plataforma) recebe os dois botões", async () => {

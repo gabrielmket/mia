@@ -85,13 +85,22 @@ export async function pushDoAvisoDaCentral(
   const tag = `aviso:${item.id}`;
 
   // Sem saldo no provedor: o título já nasceu no idioma da organização
-  // (`espera-de-saldo.ts`); o corpo diz o remédio, que fica fora do CRM.
+  // (`espera-de-saldo.ts`).
+  //
+  // FORK MIA: a conta do provedor é da PLATAFORMA (`lib/ai/custo-e-da-plataforma.ts`).
+  // O push vai a quem atende no CLIENTE, e o corpo dizia "recarregue o saldo na
+  // conta do provedor" levando a /app/ai/credentials, que devolve 403 para ele:
+  // um remédio que ele não tem e uma porta fechada. Agora diz a verdade (a
+  // espera é pelo crédito da plataforma) e abre a Central, onde o aviso está.
   if (item.kind === "other" && item.ref_kind === "ai_provider_credential") {
     return {
       title: truncar(item.title),
-      body: traduzir("Recarregue o saldo na conta do provedor: as respostas saem sozinhas quando ele voltar.", idioma),
+      body: traduzir(
+        "As respostas estão esperando o crédito de IA da plataforma voltar e saem sozinhas quando ele voltar. Se demorar, fale com o suporte.",
+        idioma,
+      ),
       tag,
-      href: REFERENCIAS_DE_AVISO.ai_provider_credential.href(),
+      href: CENTRAL,
     };
   }
 

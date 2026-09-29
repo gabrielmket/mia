@@ -138,7 +138,8 @@ describe("o que vai para o banco", () => {
       "other",
       "critical",
       "La IA se quedó sin saldo en el proveedor",
-      expect.stringContaining("Recarga el saldo en la cuenta del proveedor"),
+      // FORK MIA: o crédito é da plataforma; o cliente não recarrega nada.
+      expect.stringContaining("crédito de IA de la plataforma"),
       "ai_provider_credential",
       "cred-1",
     ]);

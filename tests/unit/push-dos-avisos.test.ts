@@ -112,7 +112,10 @@ describe("aviso da Central → celular", () => {
     });
   });
 
-  it("IA sem saldo: o título da Central e o remédio, levando às credenciais", async () => {
+  // FORK MIA: o crédito de IA é da PLATAFORMA. O push vai ao time do cliente, e
+  // /app/ai/credentials devolve 403 para ele: o toque abre a Central, e o corpo
+  // não manda recarregar uma conta que não é dele.
+  it("IA sem saldo: o título da Central, a espera pelo crédito da plataforma, e a Central como destino", async () => {
     vi.mocked(createAdminClient).mockReturnValue(banco({
       agent_inbox_items: {
         id: "i4", kind: "other", ref_kind: "ai_provider_credential", ref_id: "cred-1",
@@ -121,12 +124,14 @@ describe("aviso da Central → celular", () => {
       organizations: { locale: "es" },
     }) as never);
     await webPushInboundHandler.handle(evento("central.aviso_criado", { item_id: "i4" }));
-    expect(vi.mocked(enviarPushDaOrg).mock.calls[0]![1]).toEqual({
+    const push = vi.mocked(enviarPushDaOrg).mock.calls[0]![1];
+    expect(push).toEqual({
       title: "La IA se quedó sin saldo en el proveedor",
-      body: "Recarga el saldo en la cuenta del proveedor: las respuestas salen solas cuando vuelva.",
+      body: "Las respuestas están esperando que vuelva el crédito de IA de la plataforma y salen solas cuando vuelva. Si tarda, habla con soporte.",
       tag: "aviso:i4",
-      href: "/app/ai/credentials",
+      href: "/app/ai/inbox",
     });
+    expect(push.href, "a tela de credenciais devolve 403 para o cliente").not.toContain("/credentials");
   });
 
   it("proposta rascunhada pela IA: vai ao celular ABRINDO A PROPOSTA, com o título do aviso e a frase do CARTÃO", async () => {
