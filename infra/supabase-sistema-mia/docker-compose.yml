@@ -33,6 +33,8 @@
 #   * `migrador`: roda UMA vez por volume e copia a plataforma da nuvem para
 #     cá, por dentro da VPS (sem abrir porta do banco e sem a senha da nuvem
 #     neste serviço). Ver migrador/migrar.sh.
+#   * `backup` e `backup-envio`: cópia diária do banco e do Storage, levada
+#     criptografada para um drive compartilhado do Google. Ver BACKUP.md.
 # ═══════════════════════════════════════════════════════════════════════════
 
 services:
@@ -330,6 +332,50 @@ services:
       POSTGRES_PORT: ${POSTGRES_PORT}
       POSTGRES_DB: ${POSTGRES_DB}
 
+  # Backup diário, em dois serviços (ver BACKUP.md). O `backup` grava a cópia no
+  # volume mia-backups; o `backup-envio` leva para o drive, criptografada. Dois, e
+  # não um, porque cada imagem já traz a ferramenta certa: pg_dump da MESMA versão
+  # do banco (a imagem do mia-db) e rclone (a imagem do rclone). E o que tem a
+  # senha do banco não tem a credencial do Google, nem o contrário.
+  # Nenhum dos dois entra na rede `easypanel`: um só fala com o mia-db, o outro
+  # só com a internet.
+  backup:
+    image: supabase/postgres:17.6.1.084
+    restart: unless-stopped
+    depends_on:
+      mia-db:
+        condition: service_healthy
+    entrypoint: ["bash", "/backup-scripts/fazer-backup.sh"]
+    volumes:
+      - ./backup:/backup-scripts:ro
+      - mia-backups${MIA_VOLUME_SUFIXO:-}:/backups
+      # Só leitura: o backup copia os arquivos do Storage, nunca escreve lá.
+      - mia-storage${MIA_VOLUME_SUFIXO:-}:/storage:ro
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      BACKUP_HORA_UTC: ${BACKUP_HORA_UTC:-06}
+      BACKUP_MANTER_LOCAL: ${BACKUP_MANTER_LOCAL:-3}
+
+  backup-envio:
+    image: rclone/rclone:1.75.1
+    restart: unless-stopped
+    entrypoint: ["sh", "/backup-scripts/enviar.sh"]
+    volumes:
+      - ./backup:/backup-scripts:ro
+      - mia-backups${MIA_VOLUME_SUFIXO:-}:/backups
+    # Tudo com padrão vazio: sem credencial, o serviço sobe e fica parado
+    # avisando (em operacao.backup_envio), em vez de derrubar o deploy da pilha.
+    environment:
+      GOOGLE_DRIVE_TOKEN_B64: ${GOOGLE_DRIVE_TOKEN_B64:-}
+      GOOGLE_SA_JSON_B64: ${GOOGLE_SA_JSON_B64:-}
+      BACKUP_DRIVE_ID: ${BACKUP_DRIVE_ID:-}
+      BACKUP_CRIPTO_SENHA: ${BACKUP_CRIPTO_SENHA:-}
+      BACKUP_CRIPTO_SAL: ${BACKUP_CRIPTO_SAL:-}
+      BACKUP_MANTER_DIAS: ${BACKUP_MANTER_DIAS:-30}
+
 networks:
   easypanel:
     external: true
@@ -342,3 +388,5 @@ volumes:
   mia-db-data-ensaio:
   mia-db-config-ensaio:
   mia-storage-ensaio:
+  mia-backups:
+  mia-backups-ensaio:
