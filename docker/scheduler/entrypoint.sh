@@ -106,6 +106,11 @@ CRONS="
 # volta. Rodada longa seguraria o processo e atrasaria a reconferência de saldo,
 # que é o que impede estourar o crédito do cliente.
 * * * * *|60|api/v1/cron/broadcast-worker
+# OS LEADS DOS FORMULARIOS DA META (fork MIA). A cada 5 minutos: e o atraso
+# maximo entre o cadastro no anuncio e o card no funil. Cada rodada le so o que
+# chegou desde a ultima marca, entao ela e curta; o teto de 240s e para a
+# primeira leitura de um formulario, que pode voltar ate 90 dias.
+*/5 * * * *|240|api/v1/cron/leads-da-meta
 */5 * * * *|60|api/v1/cron/webhook-log-retention
 */5 * * * *|45|api/v1/cron/channel-health
 */10 * * * *|60|api/v1/cron/contact-avatars

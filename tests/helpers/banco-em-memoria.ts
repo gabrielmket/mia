@@ -27,6 +27,7 @@ export function bancoEmMemoria(tabelas: Record<string, Linha[]> = {}) {
   const db: Record<string, Linha[]> = {};
   for (const [nome, linhas] of Object.entries(tabelas)) db[nome] = linhas.map((l) => ({ ...l }));
   const escritas: Escrita[] = [];
+  const chamadasRpc: Array<{ nome: string; args: unknown }> = [];
   const tabela = (nome: string) => (db[nome] ??= []);
 
   function consulta(nome: string) {
@@ -35,9 +36,29 @@ export function bancoEmMemoria(tabelas: Record<string, Linha[]> = {}) {
     let payload: Linha | Linha[] | null = null;
     let ordem: { col: string; asc: boolean } | null = null;
     let limite = Number.POSITIVE_INFINITY;
+    // `upsert(p, { onConflict: "a,b" })`: as colunas que identificam a linha. Sem
+    // elas o upsert se comporta como insert (o que os testes antigos esperam).
+    let conflito: { colunas: string[]; ignorar: boolean } | null = null;
 
     function executar(): { data: Linha[]; error: null } {
       const t = tabela(nome);
+      if (op === "upsert" && conflito) {
+        const { colunas, ignorar } = conflito;
+        const saida: Linha[] = [];
+        for (const p of Array.isArray(payload) ? payload : [payload ?? {}]) {
+          const existente = t.find((l) => colunas.every((c) => l[c] === p[c]));
+          if (existente) {
+            if (!ignorar) Object.assign(existente, p);
+            if (!ignorar) saida.push(existente);
+            continue;
+          }
+          const nova = { id: randomUUID(), ...p };
+          t.push(nova);
+          saida.push(nova);
+        }
+        escritas.push({ tabela: nome, op, payload, linhas: saida });
+        return { data: saida, error: null };
+      }
       if (op === "insert" || op === "upsert") {
         const novas = (Array.isArray(payload) ? payload : [payload ?? {}]).map((p) => ({
           id: randomUUID(),
@@ -77,10 +98,31 @@ export function bancoEmMemoria(tabelas: Record<string, Linha[]> = {}) {
       is: (c: string, v: unknown) => (filtros.push((l) => (l[c] ?? null) === v), q),
       in: (c: string, vs: unknown[]) => (filtros.push((l) => vs.includes(l[c])), q),
       not: (c: string, _op: string, v: unknown) => (filtros.push((l) => (l[c] ?? null) !== v), q),
-      order: (col: string, o?: { ascending?: boolean }) => ((ordem = { col, asc: o?.ascending !== false }), q),
+      lt: (c: string, v: unknown) => (
+        filtros.push((l) => (l[c] as string | number) < (v as string | number)),
+        q
+      ),
+      gt: (c: string, v: unknown) => (
+        filtros.push((l) => (l[c] as string | number) > (v as string | number)),
+        q
+      ),
+      order: (col: string, o?: { ascending?: boolean }) => (
+        (ordem = { col, asc: o?.ascending !== false }),
+        q
+      ),
       limit: (n: number) => ((limite = n), q),
       insert: (p: Linha | Linha[]) => ((op = "insert"), (payload = p), q),
-      upsert: (p: Linha | Linha[]) => ((op = "upsert"), (payload = p), q),
+      upsert: (p: Linha | Linha[], o?: { onConflict?: string; ignoreDuplicates?: boolean }) => (
+        (op = "upsert"),
+        (payload = p),
+        (conflito = o?.onConflict
+          ? {
+              colunas: o.onConflict.split(",").map((c) => c.trim()),
+              ignorar: o.ignoreDuplicates === true,
+            }
+          : null),
+        q
+      ),
       update: (p: Linha) => ((op = "update"), (payload = p), q),
       delete: () => ((op = "delete"), q),
       maybeSingle: async () => ({ data: executar().data[0] ?? null, error: null }),
@@ -88,7 +130,10 @@ export function bancoEmMemoria(tabelas: Record<string, Linha[]> = {}) {
         const d = executar().data[0] ?? null;
         return { data: d, error: d ? null : { message: "nenhuma linha", code: "PGRST116" } };
       },
-      then: (ok: (v: { data: Linha[]; error: null }) => unknown, falha?: (e: unknown) => unknown) => {
+      then: (
+        ok: (v: { data: Linha[]; error: null }) => unknown,
+        falha?: (e: unknown) => unknown,
+      ) => {
         try {
           return Promise.resolve(ok(executar()));
         } catch (e) {
@@ -101,8 +146,11 @@ export function bancoEmMemoria(tabelas: Record<string, Linha[]> = {}) {
 
   const cliente = {
     from: (nome: string) => consulta(nome),
-    rpc: async () => ({ data: null, error: null }),
+    rpc: async (nome: string, args: unknown) => {
+      chamadasRpc.push({ nome, args });
+      return { data: null, error: null };
+    },
   };
 
-  return { cliente, db, escritas, tabela };
+  return { cliente, db, escritas, tabela, chamadasRpc };
 }

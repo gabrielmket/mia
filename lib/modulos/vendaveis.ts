@@ -27,7 +27,16 @@ import {
   TELA_DA_MARCA_DA_ORGANIZACAO,
 } from "@/lib/branding/marca-da-organizacao-no-fork";
 
-export type ChaveDeModulo = "disparador";
+// FORK MIA (.60): os leads dos formulários da Meta, a uma linha de virar módulo
+// (`LEADS_DA_META_E_MODULO_VENDAVEL` em lib/leads-da-meta/modulo.ts).
+import {
+  LEADS_DA_META_E_MODULO_VENDAVEL,
+  MODULO_DOS_LEADS_DA_META,
+  ROTAS_DOS_LEADS_DA_META,
+  TELA_DOS_LEADS_DA_META,
+} from "@/lib/leads-da-meta/modulo";
+
+export type ChaveDeModulo = "disparador" | typeof MODULO_DOS_LEADS_DA_META;
 
 // FORK MIA (.58): o caminho por QR do Broadcast, e o interruptor que o põe no
 // módulo. Import aqui, e não no topo, para não disputar linha com os imports
@@ -75,6 +84,21 @@ export const MODULOS: readonly ModuloVendavel[] = [
     rotas: ["/api/v1/carteira", "/api/v1/broadcasts", ...(QR_EXIGE_O_MODULO ? ROTAS_DO_QR : [])],
     telas: ["/app/settings/carteira", "/app/broadcast"],
   },
+  // Só entra no catálogo quando a importação vira venda à parte. Desligado, a
+  // tela e as rotas continuam de todos, e o painel não oferece um botão que não
+  // muda nada.
+  ...(LEADS_DA_META_E_MODULO_VENDAVEL
+    ? [
+        {
+          chave: MODULO_DOS_LEADS_DA_META,
+          rotulo: "Leads dos formulários da Meta",
+          descricao:
+            "Os leads dos anúncios de cadastro instantâneo entram sozinhos no funil, com a origem do anúncio e as respostas do formulário.",
+          rotas: [...ROTAS_DOS_LEADS_DA_META],
+          telas: [TELA_DOS_LEADS_DA_META],
+        } satisfies ModuloVendavel,
+      ]
+    : []),
 ] as const;
 
 const POR_CHAVE = new Map<string, ModuloVendavel>(MODULOS.map((m) => [m.chave, m]));

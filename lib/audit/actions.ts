@@ -222,6 +222,13 @@ export const AUDIT_ACTIONS = [
   "broadcast.editado",
   "broadcast.excluido",
   "broadcast.disparado",
+  // FORK MIA (.60) — leads dos formulários da Meta: quem ligou a importação, que
+  // formulário vai para qual funil, quem pediu leitura na hora, e a rodada do
+  // relógio que trouxe lead ou deu erro (a vazia não audita).
+  "leads_da_meta.configurado",
+  "leads_da_meta.formulario_salvo",
+  "leads_da_meta.lido_agora",
+  "leads_da_meta.rodada",
   "platform_admin.users_listed",
   "platform_admin.user_viewed",
   "platform_admin.platform_admins_listed",
