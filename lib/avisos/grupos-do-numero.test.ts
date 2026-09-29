@@ -29,7 +29,7 @@ describe("gruposDoNumero", () => {
     const r = await gruposDoNumero(
       {
         listGroups: async () => {
-          throw new Error("waha_groups_502");
+          throw new Error("groups_502");
         },
       },
       "sessao",

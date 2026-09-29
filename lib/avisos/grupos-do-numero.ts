@@ -6,7 +6,7 @@ import type { ChannelAdapter } from "@/lib/channels";
  * FORK MIA — usa o `listGroups` do UPSTREAM (v1.61, "grupos na inbox"). O fork
  * tinha criado o seu, com o MESMO nome no `ChannelAdapter` e outro formato, e
  * a fusão fez os dois colidirem; ficou o dele, que também lê o formato em mapa
- * e o `JID` do WAHA, e o fork carrega uma diferença a menos nos arquivos dele.
+ * e o `JID`, e o fork carrega uma diferença a menos nos arquivos dele.
  *
  * ⚠️ `null` é FALHA (canal fora do ar, sessão caída; o do upstream LANÇA) e
  * `[]` é "não está em grupo nenhum". Juntar os dois faria a tela dizer "nenhum
