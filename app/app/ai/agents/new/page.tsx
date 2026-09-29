@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { podeConfigurarChaveDeIa } from "@/lib/ai/custo-e-da-plataforma";
+import { iaDoAgenteNovo } from "@/lib/ai/modelo-da-plataforma";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { listSelectableChannels } from "@/lib/channels/selectable";
 import { createClient } from "@/lib/supabase/server";
@@ -53,10 +55,19 @@ export default async function NewAgentPage() {
     listSelectableChannels(supabase, activeOrg.orgId),
   ]);
 
-  const credentials = (credentialsRes.data ?? []) as CredentialRow[];
   const llmDaOrg = (
     orgRes.data?.settings as { llm?: { provider?: string } } | null
   )?.llm;
+
+  // FORK MIA — modelo e chave são da PLATAFORMA. Quem não pode escolher (o
+  // cliente) recebe o par que vale e NENHUMA credencial: a lista, com os
+  // últimos dígitos da chave, iria no payload da página mesmo com o cartão
+  // escondido. Ver `iaDoAgenteNovo` (lib/ai/modelo-da-plataforma.ts).
+  const podeEscolherIa = podeConfigurarChaveDeIa(user);
+  const credentials = podeEscolherIa ? ((credentialsRes.data ?? []) as CredentialRow[]) : [];
+  const iaDaPlataforma = podeEscolherIa
+    ? null
+    : await iaDoAgenteNovo(createAdminClient(), llmDaOrg?.provider);
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
@@ -64,7 +75,8 @@ export default async function NewAgentPage() {
         mode="create"
         credentials={credentials}
         provedoresDaInstalacao={provedoresDaInstalacao()}
-        podeEscolherIa={podeConfigurarChaveDeIa(user)}
+        podeEscolherIa={podeEscolherIa}
+        iaDaPlataforma={iaDaPlataforma}
         provedorPadrao={llmDaOrg?.provider}
         channelSessions={channelSessions}
         organizationTimezone={fusoUtilizavel(activeOrg.timezone)}

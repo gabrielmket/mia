@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { modeloDaPlataforma } from "./modelo-da-plataforma";
+import { iaDoAgenteNovo, modeloDaPlataforma } from "./modelo-da-plataforma";
 
 /**
  * A ESCOLHA DA PLATAFORMA NÃO PODE IMPEDIR UM CLIENTE DE ENTRAR NO AR.
@@ -66,5 +66,63 @@ describe("o modelo escolhido no painel", () => {
     expect(
       await modeloDaPlataforma(admin({ data: null, error: { message: "timeout" } })),
     ).toBeNull();
+  });
+});
+
+/**
+ * FORK MIA — o par com que nasce o agente criado pelo CLIENTE, que não escolhe
+ * IA. `platform_ia` responde pelo `maybeSingle`; `ai_models` pela lista.
+ */
+function adminComCatalogo(opcoes: {
+  plataforma: { provider: string; model_id: string } | null;
+  catalogo: Record<string, Array<Record<string, unknown>>>;
+}) {
+  const provedoresLidos: string[] = [];
+  const cliente = {
+    from: (tabela: string) => ({
+      select: () => ({
+        eq: (_coluna: string, valor: string) => {
+          if (tabela === "platform_ia") {
+            return { maybeSingle: async () => ({ data: opcoes.plataforma, error: null }) };
+          }
+          provedoresLidos.push(valor);
+          return { is: async () => ({ data: opcoes.catalogo[valor] ?? [], error: null }) };
+        },
+      }),
+    }),
+  } as never;
+  return { cliente, provedoresLidos };
+}
+
+const MODELO_BOM = {
+  model_id: "gpt-5.6-terra",
+  is_default_for_provider: true,
+  supports_tools: true,
+  input_price_per_million_cents: 200,
+  output_price_per_million_cents: 1200,
+};
+
+describe("o cérebro do agente novo do cliente", () => {
+  it("o par do painel vence, sem ler o catálogo", async () => {
+    const { cliente, provedoresLidos } = adminComCatalogo({
+      plataforma: { provider: "openai", model_id: "gpt-5.6-terra" },
+      catalogo: {},
+    });
+    expect(await iaDoAgenteNovo(cliente, "anthropic")).toEqual({ provider: "openai", model: "gpt-5.6-terra" });
+    expect(provedoresLidos).toEqual([]);
+  });
+
+  it("sem par no painel, vale o provedor da organização e a escolha do catálogo", async () => {
+    const { cliente, provedoresLidos } = adminComCatalogo({
+      plataforma: null,
+      catalogo: { openai: [MODELO_BOM] },
+    });
+    expect(await iaDoAgenteNovo(cliente, "openai")).toEqual({ provider: "openai", model: "gpt-5.6-terra" });
+    expect(provedoresLidos).toEqual(["openai"]);
+  });
+
+  it("catálogo vazio devolve null — a tela diz que é pendência nossa, e não inventa modelo", async () => {
+    const { cliente } = adminComCatalogo({ plataforma: null, catalogo: {} });
+    expect(await iaDoAgenteNovo(cliente, "openai")).toBeNull();
   });
 });

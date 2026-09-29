@@ -1635,6 +1635,10 @@ export const DICIONARIO: Traducoes = {
   "Escolha o modelo de inteligência artificial.": {
     es: "Elige el modelo de inteligencia artificial.",
   },
+  // FORK MIA: modelo e chave são da plataforma; o que o cliente lê no editor de agente.
+  "A inteligência dos agentes desta conta é configurada pela nossa equipe e ainda não está pronta. Fale com o suporte.": {
+    es: "La inteligencia de los agentes de esta cuenta la configura nuestro equipo y todavía no está lista. Habla con soporte.",
+  },
   "Escolha a chave de acesso da empresa de inteligência artificial.": {
     es: "Elige la clave de acceso de la empresa de inteligencia artificial.",
   },

@@ -15,6 +15,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { escolherModeloNoCatalogo } from "@/lib/ai/agents/escolher-modelo";
 import { logger } from "@/lib/logger";
 
 export interface ModeloDaPlataforma {
@@ -49,4 +50,41 @@ export async function modeloDaPlataforma(
     });
     return null;
   }
+}
+
+/** O par provedor + modelo com que um agente nasce, sem credencial escolhida. */
+export interface IaDoAgenteNovo {
+  provider: string;
+  model: string;
+}
+
+/**
+ * O CÉREBRO DE UM AGENTE NOVO criado por quem não escolhe IA — o cliente.
+ *
+ * O editor de agente esconde o cartão de modelo e chave de quem não é da
+ * plataforma (`podeConfigurarChaveDeIa`), mas o formulário continuava EXIGINDO
+ * os dois, e o erro morava dentro do cartão escondido: o botão "Criar agente"
+ * ficava cinza para sempre, sem dizer por quê. A tela de criar passa a receber
+ * daqui o par que vale, com a mesma régua da primeira publicação do onboarding
+ * (`first-publication.ts`): o modelo escolhido no painel vence; sem ele, o
+ * provedor da organização e a escolha automática do catálogo.
+ *
+ * A credencial NÃO entra: o agente nasce com `credential_id: null`, que o
+ * runtime resolve como a credencial validada da organização ou, na falta dela,
+ * a chave da instalação (`resolveOrgLlmConfig`). Nenhuma chave chega à tela.
+ *
+ * `null` = não há par possível agora (catálogo vazio, leitura falhou). A tela
+ * diz que é pendência da plataforma, em vez de inventar um modelo.
+ */
+export async function iaDoAgenteNovo(
+  admin: SupabaseClient,
+  provedorDaOrganizacao: string | null | undefined,
+): Promise<IaDoAgenteNovo | null> {
+  const daPlataforma = await modeloDaPlataforma(admin);
+  if (daPlataforma) return { provider: daPlataforma.provider, model: daPlataforma.modelId };
+
+  const provider = provedorDaOrganizacao?.trim() || "anthropic";
+  const escolha = await escolherModeloNoCatalogo(admin, provider);
+  if (!escolha || !escolha.escolhido) return null;
+  return { provider, model: escolha.modelId };
 }
