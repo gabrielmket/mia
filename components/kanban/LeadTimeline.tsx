@@ -14,6 +14,8 @@ import {
 import { agrupaTimeline, ehBlocoColapsavel, ehBlocoDeDia } from "@/lib/leads/timeline-grouping";
 import type { TimelineItemView } from "@/lib/types/contacts";
 
+import { TextoDoAvisoAoTime } from "./TextoDoAvisoAoTime";
+
 interface Props {
   itens: TimelineItemView[];
   /** Ids que chegaram por realtime nesta sessão — ficam FORA do agrupamento. */
@@ -77,6 +79,8 @@ function Linha({ item, aoVivo }: { item: TimelineItemView; aoVivo?: boolean }) {
           )}
         </p>
         {item.reason && <p className="mt-0.5 text-xs text-text-muted">{t(item.reason)}</p>}
+        {/* FORK MIA — o texto que foi ao grupo do time (lib/avisos/registro-do-aviso.ts). */}
+        <TextoDoAvisoAoTime item={item} />
         <p className="mt-0.5 text-[11px] text-text-muted">
           {nome} · {quando(item.performed_at, tagDoIdioma)}
         </p>

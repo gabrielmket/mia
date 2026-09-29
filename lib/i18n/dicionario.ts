@@ -11705,6 +11705,10 @@ export const DICIONARIO: Traducoes = {
   "Marque o número acima para escolher os grupos.": { es: "Marca el número de arriba para elegir los grupos." },
   "Não consegui perguntar ao WhatsApp quais são os grupos. O que já estava escolhido continua valendo.": { es: "No pude preguntarle a WhatsApp cuáles son los grupos. Lo que ya estaba elegido sigue valiendo." },
   "Este número ainda não está em nenhum grupo. Adicione-o pelo WhatsApp e recarregue.": { es: "Este número todavía no está en ningún grupo. Agrégalo por WhatsApp y recarga." },
+  // FORK MIA — o aviso ao time no histórico do negócio (lib/avisos/registro-do-aviso.ts).
+  "Aviso enviado ao time no grupo": { es: "Aviso enviado al equipo en el grupo" },
+  "O aviso ao time não saiu": { es: "El aviso al equipo no salió" },
+  "O que foi mandado ao grupo": { es: "Lo que se envió al grupo" },
   // FORK MIA — a marca por empresa travada (lib/branding/marca-da-organizacao-no-fork.ts).
   "A marca é definida pela plataforma: nome, cor e logo são os mesmos para todas as empresas.": { es: "La marca la define la plataforma: nombre, color y logo son los mismos para todas las empresas." },
   "Para trocar a marca de todas as empresas, use o painel da plataforma:": { es: "Para cambiar la marca de todas las empresas, usa el panel de la plataforma:" },
