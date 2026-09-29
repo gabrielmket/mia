@@ -219,6 +219,19 @@ const CLASSIFICACAO: Record<string, Classificacao> = {
     porque:
       "contabilidade da etiqueta 'cliente' ('added' | 'removed' | null) — diz quem mexeu na etiqueta, sistema ou equipe, e nada sobre a pessoa",
   },
+
+  // ── Colunas que o upstream acrescentou, classificadas na fusão de 29/09/2026
+  //    (v1.61–v1.63) ──
+  person_id: {
+    tipo: "nao_pessoal",
+    porque:
+      "aponta para a ficha B2B (people) do MESMO titular (0448); é por ele que a virada de anonimização redige a ficha e o vínculo (fn_redigir_b2b_do_contato_anonimizado, 0449) e que o relatório de acesso a entrega (export-collector, seção de pessoas). O uuid sozinho não identifica ninguém, e zerá-lo cortaria o caminho da redação",
+  },
+  kind: {
+    tipo: "nao_pessoal",
+    porque:
+      "vocabulário fechado ('person' | 'whatsapp_group', contacts_kind_check, 0482): diz se a linha é uma pessoa ou um grupo do WhatsApp, nada sobre quem é",
+  },
 };
 
 /** Nomes capturados pelo primeiro grupo de um regex, já sem os `undefined`. */

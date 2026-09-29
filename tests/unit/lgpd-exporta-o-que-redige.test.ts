@@ -176,10 +176,16 @@ describe("LGPD: nenhuma tabela com contact_id fica fora da anonimização", () =
     )) {
       if (m[1] && m[2] && /"contact_id"/.test(m[2])) alvos.add(m[1]);
     }
+    // O fecho aceita recuo: tabela criada DENTRO de função (a provisionadora de
+    // módulo do upstream, 0480) fecha com "  );", e sem isto o corpo capturado
+    // corria até o próximo ");" na coluna zero, pegando o `contact_id` de outra
+    // tabela. E comentário não é coluna: a 0485 cita "$2 = contact_id" num `--`
+    // de `modulo_secoes_lgpd`, que não tem a coluna. (Fusão de 29/09/2026.)
     for (const m of BASELINE.matchAll(
-      /create table if not exists public\.([a-z_]+)\s*\(([\s\S]*?)\n\);/gi,
+      /create table if not exists public\.([a-z_]+)\s*\(([\s\S]*?)\n\s*\);/gi,
     )) {
-      if (m[1] && m[2] && /\bcontact_id\b/.test(m[2])) alvos.add(m[1]);
+      const corpo = m[2]?.replace(/--[^\n]*/g, "");
+      if (m[1] && corpo && /\bcontact_id\b/.test(corpo)) alvos.add(m[1]);
     }
     for (const m of BASELINE.matchAll(
       /alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?public\.([a-z_]+)\b([\s\S]*?);/gi,
@@ -226,8 +232,10 @@ describe("LGPD: nenhuma tabela com contact_id fica fora da anonimização", () =
       }
     };
 
+    // Nome com dígito conta: `fn_redigir_b2b_do_contato_anonimizado` (0449) sumia
+    // da varredura com `[a-z_]+`, e `import_rows` aparecia como não alcançada.
     for (const m of BASELINE.matchAll(
-      /create trigger\s+[a-z_]+[\s\S]{0,200}?on public\.contacts[\s\S]{0,300}?execute function public\.([a-z_]+)\(\)/gi,
+      /create trigger\s+[a-z0-9_]+[\s\S]{0,200}?on public\.contacts[\s\S]{0,300}?execute function public\.([a-z0-9_]+)\(\)/gi,
     )) {
       if (m[1]) colher(corpoDe(m[1]));
     }
