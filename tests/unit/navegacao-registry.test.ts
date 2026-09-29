@@ -182,8 +182,8 @@ describe("hubSections", () => {
     expect(secoes.flatMap((s) => s.items.map((i) => i.href))).toEqual([
       "/app/prospecting",
       "/app/kanban",
-      "/app/campaigns",
-      // Broadcast mora ao lado de Campanhas, só no hub (lib/navigation/catalogo.ts).
+      // FORK MIA (.58): Campanhas saiu do hub — virou o caminho "Número por QR"
+      // do Broadcast, que é a porta das duas (docs/fork/broadcast-unificado.md).
       "/app/broadcast",
       "/app/empresas",
       "/app/contacts",
