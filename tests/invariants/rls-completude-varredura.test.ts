@@ -320,6 +320,11 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     "broadcasts",
     "broadcast_recipients",
     "crm_empresas",
+    // .60 — leads dos formulários da Meta (9003).
+    "mia_leads_da_meta_config",
+    "mia_leads_da_meta_formularios",
+    "mia_leads_da_meta_leituras",
+    "mia_leads_da_meta_recebidos",
   ].map((tabela) => ({
     tabela,
     razao:

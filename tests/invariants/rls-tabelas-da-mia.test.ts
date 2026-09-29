@@ -38,6 +38,12 @@ const LIDAS_PELO_CLIENTE = [
   "broadcasts",
   "broadcast_recipients",
   "crm_empresas",
+  // .60 — os leads dos formulários da Meta (migration 9003): gerente lê, só o
+  // servidor escreve.
+  "mia_leads_da_meta_config",
+  "mia_leads_da_meta_formularios",
+  "mia_leads_da_meta_leituras",
+  "mia_leads_da_meta_recebidos",
 ] as const;
 
 /**
@@ -51,6 +57,10 @@ const SO_A_PLATAFORMA_ESCREVE = [
   "tenant_broadcast_pricing",
   "organization_modules",
   "broadcast_recipients",
+  "mia_leads_da_meta_config",
+  "mia_leads_da_meta_formularios",
+  "mia_leads_da_meta_leituras",
+  "mia_leads_da_meta_recebidos",
 ] as const;
 
 /** As que a sessão do cliente ESCREVE, cada uma com a linha que tentaria gravar no vizinho. */
@@ -99,6 +109,18 @@ function semear(org: string, gestor: string, tag: string): string {
       select '${org}', b.id, '+550000000000${tag === "a" ? "1" : "2"}' from b;
     insert into public.crm_empresas (organization_id, nome) values ('${org}', 'Empresa ${tag}');
     insert into public.meta_onboardings (waba_id, organization_id) values ('mia-rls-waba-${tag}', '${org}');
+    insert into public.mia_leads_da_meta_config (organization_id, ativo) values ('${org}', true);
+    with f as (
+      insert into public.mia_leads_da_meta_formularios (organization_id, page_id, form_id)
+        values ('${org}', 'pagina-${tag}', 'form-${tag}')
+        returning id
+    ), l as (
+      insert into public.mia_leads_da_meta_leituras (organization_id, formulario_id, status)
+        select '${org}', f.id, 'sem_novos' from f
+        returning 1
+    )
+    insert into public.mia_leads_da_meta_recebidos (organization_id, chave_do_lead, formulario_id, desfecho)
+      select '${org}', 'chave-${tag}', f.id, 'recusado' from f;
   `;
 }
 
