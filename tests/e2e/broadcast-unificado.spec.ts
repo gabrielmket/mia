@@ -27,6 +27,8 @@ import * as path from "node:path";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import { QR_EXIGE_O_MODULO } from "@/lib/broadcast/canais-do-disparo";
+
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
 import { expect, test } from "./helpers/test";
@@ -141,14 +143,27 @@ test.afterAll(async () => {
   }
 });
 
-test("sem o módulo, nenhum dos dois aparece, as Campanhas levam ao Broadcast e a API recusa", async ({ page }) => {
+test("sem o módulo, as Campanhas levam ao Broadcast, e ele diz o que a empresa pode usar", async ({ page }) => {
   await semModulo();
   await loginComoAdmin(page, lerCreds());
 
   await page.goto("/app/crm");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await expect(page.getByRole("link", { name: /^Broadcast/ })).toHaveCount(0);
   await expect(page.getByRole("link", { name: /^Campanhas/ })).toHaveCount(0);
+
+  if (!QR_EXIGE_O_MODULO) {
+    // A chave desligada (a outra posição da proposta): o QR é de todos, e o
+    // oficial diz "não contratado" em vez de sumir com a tela.
+    await page.goto("/app/campaigns");
+    await expect(page).toHaveURL(/\/app\/broadcast$/);
+    await expect(page.locator('[data-canal="oficial"]')).toContainText("Não contratado");
+    expect((await page.request.get("/api/v1/campaigns")).status()).toBe(200);
+    await page.screenshot({ path: evidencia("1-sem-modulo-qr-livre.png"), fullPage: true });
+    return;
+  }
+
+  // A proposta ligada (docs/fork/broadcast-unificado.md): nenhum dos dois.
+  await expect(page.getByRole("link", { name: /^Broadcast/ })).toHaveCount(0);
 
   // A lista antiga redireciona; a de dentro volta pelo layout.
   await page.goto("/app/campaigns");

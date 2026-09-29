@@ -112,14 +112,15 @@ function arquivosDeRota(prefixo: string): string[] {
 describe("toda rota que o módulo diz proteger, protege de fato", () => {
   const modulo = MODULOS.find((m) => m.chave === "disparador")!;
 
-  it("com o interruptor ligado, as rotas do QR são do módulo", () => {
-    expect(QR_EXIGE_O_MODULO).toBe(true);
+  // Vale nas DUAS posições do interruptor: virar a chave é uma linha em
+  // `canais-do-disparo.ts`, e esta cerca acompanha sem precisar ser reescrita.
+  it("as rotas do QR estão no módulo se, e só se, o interruptor está ligado", () => {
     for (const r of ROTAS_DO_QR) {
-      expect(modulo.rotas).toContain(r);
-      expect(moduloDaRota(`${r}/qualquer`)).toBe("disparador");
+      expect(modulo.rotas.includes(r)).toBe(QR_EXIGE_O_MODULO);
+      expect(moduloDaRota(`${r}/qualquer`)).toBe(QR_EXIGE_O_MODULO ? "disparador" : null);
     }
-    // Quem libera lê a descrição: ela tem de dizer que o QR vem junto.
-    expect(modulo.descricao).toContain("QR");
+    // Quem libera lê a descrição: ela diz que o QR vem junto quando vem.
+    expect(modulo.descricao.includes("QR")).toBe(QR_EXIGE_O_MODULO);
   });
 
   it.each(modulo.rotas)("%s: cada arquivo de rota confere o módulo", (prefixo) => {
@@ -200,10 +201,10 @@ function preparar(liberado: boolean) {
 describe("o requireRole trava as Campanhas pelo módulo", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it.each(RECURSOS_DO_QR)("%s sem o módulo: 403, com a frase de não contratado", async (resource) => {
+  it.each(RECURSOS_DO_QR)("%s sem o módulo: 403 com o interruptor ligado, livre com ele desligado", async (resource) => {
     preparar(false);
     const r = await requireRole("manager", { requestId: "req", resource });
-    expect(r.ok).toBe(false);
+    expect(r.ok).toBe(!QR_EXIGE_O_MODULO);
     if (!r.ok) {
       expect(r.response.status).toBe(403);
       const corpo = (await r.response.json()) as { error: { code: string; message: string } };
@@ -216,7 +217,7 @@ describe("o requireRole trava as Campanhas pelo módulo", () => {
     const banco = preparar(true);
     const r = await requireRole("manager", { requestId: "req", resource: "campaigns" });
     expect(r.ok).toBe(true);
-    expect(banco.consultas).toEqual(["organization_modules"]);
+    expect(banco.consultas).toEqual(QR_EXIGE_O_MODULO ? ["organization_modules"] : []);
   });
 
   it("recurso fora da lista nem pergunta ao banco — nada muda para o resto do produto", async () => {
