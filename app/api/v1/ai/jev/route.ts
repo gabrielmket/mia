@@ -53,6 +53,7 @@ import {
   tarefaSemRoteador,
 } from "@/lib/ai/decisao/tarefas";
 import { CODIGOS_SEM_REDE } from "@/lib/ai/decisao/textos";
+import { TAREFA_DA_PASSAGEM_PROMETIDA } from "@/lib/ai/decisao/tarefa-da-passagem-prometida";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { PROVEDORES_DE_DECISAO } from "@/lib/ai/pontos/provedores";
@@ -105,6 +106,12 @@ type Concordancia = {
    * de três níveis, dominada por "nenhum" dos dois lados, não mostra isso.
    */
   so_o_jev_alto?: number;
+  /**
+   * FORK MIA — só a passagem prometida: em quantas respostas o atendente
+   * prometeu passar ao time e NADA andou no mesmo turno (nem funil, nem
+   * passagem, nem caso). É o número que decide se vale deixar o Jev decidir.
+   */
+  prometida_sem_aviso?: number;
 };
 
 function porTarefa(
@@ -302,19 +309,27 @@ export async function GET(): Promise<Response> {
     const porTarefa: Record<string, Concordancia> = {};
     for (const t of TAREFAS_DO_JEV.filter((x) => x.id !== TAREFA_DO_CLIMA.id)) {
       const daManipulacao = t.id === TAREFA_DA_MANIPULACAO.id;
-      const [comparadas, concordaram, soDoJev] = await Promise.all([
+      const daPassagem = t.id === TAREFA_DA_PASSAGEM_PROMETIDA.id;
+      const [comparadas, concordaram, soDoJev, semAviso] = await Promise.all([
         contar(t.id).not("concordou", "is", null),
         contar(t.id).eq("concordou", true),
         // `neq` também deixa de fora o "sem par" (`rotulo_atual` nulo).
         daManipulacao ? contar(t.id).eq("rotulo_jev", "high").neq("rotulo_atual", "high") : null,
+        // FORK MIA — a promessa de passagem que ninguém cumpriu no turno.
+        daPassagem ? contar(t.id).eq("rotulo_jev", "passou").eq("rotulo_atual", "nao_passou") : null,
       ]);
-      const erro = comparadas.error?.message ?? concordaram.error?.message ?? soDoJev?.error?.message;
+      const erro =
+        comparadas.error?.message ??
+        concordaram.error?.message ??
+        soDoJev?.error?.message ??
+        semAviso?.error?.message;
       if (erro) return { porTarefa, erro };
       porTarefa[t.id] = {
         dias: DIAS_DA_CONCORDANCIA,
         comparadas: comparadas.count ?? 0,
         concordaram: concordaram.count ?? 0,
         ...(soDoJev ? { so_o_jev_alto: soDoJev.count ?? 0 } : {}),
+        ...(semAviso ? { prometida_sem_aviso: semAviso.count ?? 0 } : {}),
       };
     }
     return { porTarefa, erro: null };

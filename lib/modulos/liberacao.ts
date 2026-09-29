@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
-import { type ChaveDeModulo } from "@/lib/modulos/vendaveis";
+import { liberacoesDaInstalacao, type ChaveDeModulo } from "@/lib/modulos/vendaveis";
 
 /**
  * "Esta organização contratou este módulo?"
@@ -55,7 +55,10 @@ export async function modulosDaOrganizacao(
       .is("revoked_at", null);
     // Mesmo critério do singular: erro não vira liberação.
     if (error) return new Set();
-    return new Set((data ?? []).map((l) => l.modulo as string));
+    // As chaves que a INSTALAÇÃO libera (não se compram) entram junto: é esta a
+    // lista que o menu e os hubs leem. Hoje só a tela de marca por empresa,
+    // que some quando a marca está travada — ver `TELAS_DA_INSTALACAO`.
+    return new Set([...(data ?? []).map((l) => l.modulo as string), ...liberacoesDaInstalacao()]);
   } catch (erro) {
     logger.warn("módulos da organização: leitura falhou — tratando todos como não contratados", {
       detalhe: erro instanceof Error ? erro.message : String(erro),

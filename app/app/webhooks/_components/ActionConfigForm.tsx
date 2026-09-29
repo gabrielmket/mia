@@ -598,6 +598,10 @@ const VARS_DO_AVISO = [
   { token: "{{agendamento.starts_at}}", label: "Quando é" },
   { token: "{{agendamento.notes}}", label: "Resumo da qualificação" },
   { token: "{{event.nome_do_tipo}}", label: "Tipo de compromisso" },
+  // FORK MIA — a FICHA que o agente salvou (save_lead_note), a mais recente do
+  // contato. Só existe aqui, no aviso ao time: nunca na mensagem ao cliente.
+  { token: "{{nota.headline}}", label: "Ficha: título" },
+  { token: "{{nota.body}}", label: "Ficha: resumo da qualificação" },
 ];
 
 /**

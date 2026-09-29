@@ -32,6 +32,10 @@ import { redirect } from "next/navigation";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { marcaDaInstalacao } from "@/lib/branding/instalacao";
+import {
+  MARCA_DEFINIDA_PELA_PLATAFORMA,
+  marcaDaOrganizacaoTravada,
+} from "@/lib/branding/marca-da-organizacao-no-fork";
 import { marcaDaOrganizacaoDeSettings } from "@/lib/branding/organizacao";
 import { env } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
@@ -48,6 +52,31 @@ export default async function MarcaDaOrganizacaoPage() {
   if (!activeOrg) redirect("/app");
   if (!(user.is_platform_admin && !user.support) && ROLE_RANK[activeOrg.role] < ROLE_RANK.admin) {
     redirect("/403");
+  }
+
+  // FORK MIA — a marca é da plataforma (lib/branding/marca-da-organizacao-no-fork.ts).
+  // A tela não some com um 404: quem chega por um link antigo precisa ler o
+  // PORQUÊ, e quem administra a plataforma, onde a marca se troca.
+  if (marcaDaOrganizacaoTravada()) {
+    const idiomaDaTrava = user.idioma;
+    return (
+      <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
+        <header>
+          <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Marca", idiomaDaTrava)}</h1>
+        </header>
+        <p className="max-w-2xl text-sm" data-testid="marca-da-plataforma">
+          {traduzir(MARCA_DEFINIDA_PELA_PLATAFORMA, idiomaDaTrava)}
+        </p>
+        {user.is_platform_admin && !user.support && (
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            {traduzir("Para trocar a marca de todas as empresas, use o painel da plataforma:", idiomaDaTrava)}{" "}
+            <a className="underline" href="/admin/marca">
+              {traduzir("Marca da instalação", idiomaDaTrava)}
+            </a>
+          </p>
+        )}
+      </div>
+    );
   }
 
   // Client de SESSÃO para LER, igual às telas irmãs: a leitura de `organizations`

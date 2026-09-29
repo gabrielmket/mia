@@ -13,6 +13,13 @@
  *  - não abre conversa nem grava mensagem no inbox. O grupo do time não é
  *    atendimento; virar thread no inbox encheria a fila de quem atende cliente.
  *
+ * O que ele FAZ desde a .57 (`lib/avisos/registro-do-aviso.ts`):
+ *  - põe a FICHA mais recente do contato ao alcance do texto — `{{nota.headline}}`
+ *    e `{{nota.body}}` —, só aqui, nunca na mensagem ao cliente;
+ *  - registra no HISTÓRICO do negócio o que foi mandado e quando, e também
+ *    quando NÃO saiu, com o porquê. Antes, a única evidência era a linha da
+ *    regra na aba Atividade, que quem cuida do cliente não abre.
+ *
  * ─── Dois caminhos para o destino, e por que os dois existem ───────────────
  *
  * PADRÃO (config sem canal/grupo): o número é o da PLATAFORMA e o grupo é o
@@ -32,6 +39,12 @@ import { registerAction } from "@/lib/automation/actions";
 import type { ActionCtx, ActionResultDetail } from "@/lib/automation/types";
 import { renderTemplate } from "@/lib/automation/template";
 import { destinoDoAviso, pareceGrupo } from "@/lib/avisos/destino-do-aviso";
+import {
+  fichaMaisRecente,
+  negocioDoAviso,
+  registrarAvisoNoHistorico,
+  type AvisoParaRegistrar,
+} from "@/lib/avisos/registro-do-aviso";
 import { entregaEmGrupo, getAdapter } from "@/lib/channels";
 import {
   CHANNEL_SESSION_REF_COLUMNS,
@@ -41,7 +54,7 @@ import {
 
 const TIPO = "notify_group";
 
-type Destino = { sessao: ChannelSessionRef; chatId: string } | { erro: string };
+type Destino = { sessao: ChannelSessionRef; chatId: string; nomeDoGrupo?: string } | { erro: string };
 
 /** O caminho EXPLÍCITO: canal da própria org, id digitado pelo operador. */
 async function destinoConfigurado(
@@ -70,11 +83,59 @@ async function destinoConfigurado(
   return { sessao: ref, chatId: chatId.trim() };
 }
 
+/**
+ * Registra o desfecho no histórico do negócio e devolve o resultado da ação com
+ * o que aconteceu com o registro — "sem_negocio" também é resposta, e fica
+ * visível na linha da regra.
+ */
+async function comHistorico(
+  ctx: ActionCtx,
+  resultado: ActionResultDetail,
+  aviso: Omit<AvisoParaRegistrar, "organizationId" | "leadId" | "contactId" | "ruleId" | "ruleName">,
+): Promise<ActionResultDetail> {
+  const negocio = await negocioDoAviso(ctx.admin, ctx.organizationId, ctx.context).catch(() => ({
+    leadId: null,
+    motivo: "leitura_falhou",
+  }));
+  let historico: string;
+  if (negocio.leadId === null) {
+    historico = `sem_negocio:${"motivo" in negocio ? negocio.motivo : "desconhecido"}`;
+  } else {
+    const gravou = await registrarAvisoNoHistorico(ctx.admin, {
+      ...aviso,
+      organizationId: ctx.organizationId,
+      leadId: negocio.leadId,
+      contactId: negocio.contactId,
+      ruleId: ctx.ruleId,
+      ruleName: ctx.ruleName,
+    });
+    historico = gravou ? "registrado" : "falhou";
+  }
+  return { ...resultado, detail: { ...(resultado.detail ?? {}), historico, ficha: aviso.ficha } };
+}
+
 async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise<ActionResultDetail> {
   const sessionId = typeof config.channel_session_id === "string" ? config.channel_session_id : null;
   const chatIdConfig = typeof config.chat_id === "string" ? config.chat_id.trim() : null;
   const template = typeof config.template === "string" ? config.template : null;
-  if (!template) return { type: TIPO, status: "failed", error: "missing_config" };
+  if (!template) {
+    return comHistorico(
+      ctx,
+      { type: TIPO, status: "failed", error: "missing_config" },
+      { grupo: null, texto: null, ok: false, erro: "missing_config", ficha: "nao_pedida" },
+    );
+  }
+
+  // A FICHA só é lida quando o texto a pede: é uma consulta a mais, e a maioria
+  // dos avisos (reunião marcada) não a usa.
+  const pedeFicha = /\{\{\s*nota\./.test(template);
+  const contatoId =
+    (ctx.context.lead as { contact_id?: string | null } | undefined)?.contact_id ??
+    (ctx.context.contact as { id?: string } | undefined)?.id ??
+    null;
+  const ficha = pedeFicha ? await fichaMaisRecente(ctx.admin, ctx.organizationId, contatoId) : null;
+  const estadoDaFicha = !pedeFicha ? "nao_pedida" : ficha ? "usada" : "ausente";
+  const texto = renderTemplate(template, { ...ctx.context, nota: ficha ?? { headline: "", body: "" } });
 
   const destino =
     sessionId && chatIdConfig
@@ -85,10 +146,17 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
           // quando alguém for entender por que o time não recebeu. "sem grupo
           // neste cliente" manda a pessoa certa para a tela certa; um
           // "missing_config" genérico manda todo mundo reler a regra.
-          return d.ok ? { sessao: d.sessao, chatId: d.chatId } : { erro: d.motivo };
+          return d.ok ? { sessao: d.sessao, chatId: d.chatId, nomeDoGrupo: d.nomeDoGrupo } : { erro: d.motivo };
         })();
 
-  if ("erro" in destino) return { type: TIPO, status: "failed", error: destino.erro };
+  if ("erro" in destino) {
+    return comHistorico(
+      ctx,
+      { type: TIPO, status: "failed", error: destino.erro },
+      { grupo: null, texto, ok: false, erro: destino.erro, ficha: estadoDaFicha },
+    );
+  }
+  const grupo = destino.nomeDoGrupo ?? destino.chatId;
 
   try {
     const { externalId } = await getAdapter(destino.sessao.provider).send({
@@ -96,19 +164,20 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
       sessionRef: resolveSessionRef(destino.sessao),
       to: destino.chatId,
       kind: "text",
-      body: renderTemplate(template, ctx.context),
+      body: texto,
     });
-    return {
-      type: TIPO,
-      status: "success",
-      detail: { chat_id: destino.chatId, external_id: externalId },
-    };
+    return comHistorico(
+      ctx,
+      { type: TIPO, status: "success", detail: { chat_id: destino.chatId, external_id: externalId } },
+      { grupo, texto, ok: true, externalId, ficha: estadoDaFicha },
+    );
   } catch (err) {
-    return {
-      type: TIPO,
-      status: "failed",
-      error: err instanceof Error ? err.message : String(err),
-    };
+    const erro = err instanceof Error ? err.message : String(err);
+    return comHistorico(
+      ctx,
+      { type: TIPO, status: "failed", error: erro },
+      { grupo, texto, ok: false, erro: "envio_falhou", ficha: estadoDaFicha },
+    );
   }
 }
 

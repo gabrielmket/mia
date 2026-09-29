@@ -411,6 +411,31 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
         "Percebe, na mensagem do cliente, quem tenta enganar o agente para ele fugir das suas regras — e soma esse sinal ao da sua IA de sempre, sem nunca apagá-lo.",
     },
   },
+  // FORK MIA — a rede de segurança da passagem prometida
+  // (lib/ai/decisao/tarefa-da-passagem-prometida.ts). Ponto só do Jev: não há
+  // modelo de conversa aqui, e por isso ele é `fixo`.
+  {
+    id: "handoff_promise",
+    rotulo: "Pegar a passagem prometida que não aconteceu",
+    oQueFaz:
+      "Confere se a resposta que o atendente enviou promete ao cliente que a equipe vai dar sequência, quando ninguém do time foi avisado.",
+    papel: "proteger",
+    exige: {},
+    emissor: "lib/ai/decisao/passagem-prometida.ts",
+    sintomaDeFalha:
+      "O agente diz ao cliente que vai encaminhar para a equipe, e ninguém do time fica sabendo — o cliente espera um contato que não vem.",
+    fixo: {
+      razao:
+        "Quem responde aqui é o Jev, numa pergunta de sim ou não sobre a resposta que já saiu. Não há modelo de conversa para trocar.",
+      usa: { provider: "typesafe", modelId: "jev-1.13.0" },
+    },
+    registraEm: "llm_calls",
+    decisaoRapida: {
+      primitiva: "noul",
+      oQueOJevFaz:
+        "Lê cada resposta que o ATENDENTE envia, sozinha, e percebe quando ele diz ao cliente que a equipe vai dar sequência — para ninguém ficar esperando um contato que o time não sabe que tem de fazer.",
+    },
+  },
   {
     id: "promise_semantic",
     rotulo: "Impedir promessa que não se cumpre",

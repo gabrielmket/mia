@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "diagram_type": "fluxo",
+  "meta": {
+    "titulo": "FORK MIA — a passagem SDR → Comercial, e a rede de segurança dela",
+    "pergunta": "Quando o agente qualifica o cliente, como o time comercial fica sabendo — com a ficha — e o que acontece quando o agente promete a passagem e não a faz?",
+    "resumo": "O agente passa o cliente numa chamada (crm_passar_para_o_comercial): ficha em lead_notes, etiquetas pelo crm_manage_tags (que agora emite contact.tag_added) e o funil do agente até qualified, passo a passo, com o card espelhado (lead.stage_changed). A regra da organização abre o card no Comercial e o notify_group manda ao grupo do time a ficha ({{nota.*}}) e registra o aviso — enviado ou não — na timeline do negócio. Se o agente disser ao cliente que vai encaminhar sem nada andar no turno, a tarefa 'passagem prometida' do Jev mede (observando) e, decidindo, abre o bastão pela passagem para humano do motor e só qualifica se houver ficha do turno."
+  },
+  "lanes": [
+    { "id": "humano", "label": "O que o humano vê" },
+    { "id": "agente", "label": "O turno do agente" },
+    { "id": "regra", "label": "Automação" },
+    { "id": "jev", "label": "Rede de segurança (Jev)" },
+    { "id": "dados", "label": "Banco" }
+  ],
+  "mainPath": ["ferramenta", "funil", "eventos", "motor", "aviso", "grupo"],
+  "nodes": [
+    { "id": "ferramenta", "lane": "agente", "col": 1, "type": "api", "label": "crm_passar_para_o_comercial", "sublabel": "lib/mcp/tools/passar-para-o-comercial.ts · crítica, ligada à mão" },
+    { "id": "etiquetas", "lane": "agente", "col": 2, "type": "api", "label": "crm_manage_tags", "sublabel": "emite contact/lead.tag_added (só o novo) · request_id rule: não redispara" },
+    { "id": "funil", "lane": "agente", "col": 2, "type": "regra", "label": "caminharAteQualificado()", "sublabel": "um passo válido por vez · espelho no card" },
+    { "id": "notas", "lane": "dados", "col": 2, "type": "tabela", "label": "lead_notes", "sublabel": "a ficha (save_lead_note / a ferramenta)" },
+    { "id": "transicoes", "lane": "dados", "col": 3, "type": "tabela", "label": "lead_state / lead_state_transitions", "sublabel": "com o job do turno" },
+    { "id": "eventos", "lane": "dados", "col": 3, "type": "tabela", "label": "event_log", "sublabel": "lead.stage_changed · contact.tag_added" },
+    { "id": "motor", "lane": "regra", "col": 4, "type": "worker", "label": "runAutomationForEvent", "sublabel": "a regra 'Qualificado → card no Comercial' casa uma vez" },
+    { "id": "aviso", "lane": "regra", "col": 5, "type": "worker", "label": "notify_group", "sublabel": "{{nota.headline}} {{nota.body}} · número da plataforma + grupo da empresa" },
+    { "id": "grupo", "lane": "humano", "col": 6, "type": "externo", "label": "Grupo de WhatsApp do time", "sublabel": "o grupo escolhido em /admin/numero-de-avisos" },
+    { "id": "timeline", "lane": "humano", "col": 6, "type": "frontend", "label": "LeadTimeline (dossiê do negócio)", "sublabel": "group_notice_sent / group_notice_failed · o texto que saiu" },
+    { "id": "atividades", "lane": "dados", "col": 5, "type": "tabela", "label": "crm_lead_activities", "sublabel": "ator rule · texto no payload (LGPD limpa)" },
+    { "id": "painel", "lane": "humano", "col": 1, "type": "frontend", "label": "/admin/numero-de-avisos", "sublabel": "grupos pelo nome em todo motor · motivo quando não lista" },
+    { "id": "vigia", "lane": "jev", "col": 4, "type": "regra", "label": "vigiarPassagemPrometida()", "sublabel": "fim do turno, resposta já entregue · nunca lança" },
+    { "id": "pergunta", "lane": "jev", "col": 5, "type": "externo", "label": "Jev (noul) · handoff_promise", "sublabel": "a resposta do ATENDENTE, sozinha · começa pausada" },
+    { "id": "observacoes", "lane": "dados", "col": 6, "type": "tabela", "label": "jev_observacoes", "sublabel": "rotulo_jev × rotulo_atual (o time foi avisado no turno?)" },
+    { "id": "cartao", "lane": "humano", "col": 7, "type": "frontend", "label": "CartaoDoJev", "sublabel": "prometeu e nada andou: N — decide deixar o Jev decidir" },
+    { "id": "bastao", "lane": "jev", "col": 6, "type": "regra", "label": "performHumanHandoff", "sublabel": "caso na Central + aviso no grupo · nada ao cliente" }
+  ],
+  "edges": [
+    { "id": "p1", "from": "ferramenta", "to": "notas", "label": "1. a ficha primeiro — sem ela, nada mais" },
+    { "id": "p2", "from": "ferramenta", "to": "etiquetas", "label": "2. as etiquetas pedidas, pelo handler de sempre" },
+    { "id": "p3", "from": "ferramenta", "to": "funil", "label": "3. até qualified pelos passos válidos" },
+    { "id": "p4", "from": "funil", "to": "transicoes", "label": "applyLeadStateUpdate com o job" },
+    { "id": "p5", "from": "funil", "to": "eventos", "label": "o card anda → lead.stage_changed" },
+    { "id": "p6", "from": "etiquetas", "to": "eventos", "label": "contact.tag_added (antes, só a tela emitia)" },
+    { "id": "p7", "from": "eventos", "to": "motor", "label": "drain do event_log" },
+    { "id": "p8", "from": "motor", "to": "aviso", "label": "ação da regra" },
+    { "id": "p9", "from": "notas", "to": "aviso", "label": "a ficha mais recente do contato, só no aviso ao time" },
+    { "id": "p10", "from": "aviso", "to": "grupo", "label": "texto com a ficha" },
+    { "id": "p11", "from": "aviso", "to": "atividades", "label": "registra o desfecho — também quando NÃO sai" },
+    { "id": "p12", "from": "atividades", "to": "timeline", "label": "o que foi mandado e quando" },
+    { "id": "p13", "from": "painel", "to": "aviso", "label": "o número e o grupo de cada empresa" },
+    { "id": "p14", "from": "vigia", "to": "pergunta", "label": "a resposta que saiu no turno" },
+    { "id": "p15", "from": "transicoes", "to": "vigia", "label": "o time foi avisado neste job?" },
+    { "id": "p16", "from": "vigia", "to": "observacoes", "label": "mede sempre (observando e decidindo)" },
+    { "id": "p17", "from": "observacoes", "to": "cartao", "label": "laço de retorno: o número que decide ligar a decisão" },
+    { "id": "p18", "from": "vigia", "to": "bastao", "label": "decidindo, prometeu e nada andou" },
+    { "id": "p19", "from": "bastao", "to": "grupo", "label": "aviso da passagem com o que foi prometido" },
+    { "id": "p20", "from": "vigia", "to": "funil", "label": "só com ficha do turno" }
+  ]
+}

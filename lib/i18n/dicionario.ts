@@ -11749,6 +11749,52 @@ export const DICIONARIO: Traducoes = {
   "Marque o número acima para escolher os grupos.": { es: "Marca el número de arriba para elegir los grupos." },
   "Não consegui perguntar ao WhatsApp quais são os grupos. O que já estava escolhido continua valendo.": { es: "No pude preguntarle a WhatsApp cuáles son los grupos. Lo que ya estaba elegido sigue valiendo." },
   "Este número ainda não está em nenhum grupo. Adicione-o pelo WhatsApp e recarregue.": { es: "Este número todavía no está en ningún grupo. Agrégalo por WhatsApp y recarga." },
+  // FORK MIA — a passagem prometida (lib/ai/decisao/tarefa-da-passagem-prometida.ts e o ponto handoff_promise).
+  "Pegar a passagem prometida que não aconteceu": { es: "Detectar el traspaso prometido que no ocurrió" },
+  "Lê cada resposta que o ATENDENTE envia, sozinha, e percebe quando ele diz ao cliente que a equipe vai dar sequência — para ninguém ficar esperando um contato que o time não sabe que tem de fazer.": {
+    es: "Lee cada respuesta que envía el AGENTE, por separado, y detecta cuando le dice al cliente que el equipo va a darle seguimiento — para que nadie quede esperando un contacto que el equipo no sabe que tiene que hacer.",
+  },
+  "Quando o atendente disser ao cliente que a equipe vai dar sequência e nada tiver andado no turno, o Jev abre a passagem: caso na Central e aviso no grupo do time. O funil só vai a “qualificado” se a ficha do turno existir.": {
+    es: "Cuando el agente le diga al cliente que el equipo va a darle seguimiento y nada haya avanzado en el turno, Jev abre el traspaso: caso en la Central y aviso en el grupo del equipo. El embudo solo pasa a “calificado” si existe la ficha del turno.",
+  },
+  "O Jev confere a resposta que saiu; se ela prometeu passar ao time e nada andou, a passagem é aberta.": {
+    es: "Jev revisa la respuesta enviada; si prometió pasar al equipo y nada avanzó, se abre el traspaso.",
+  },
+  "A partir de agora, promessa de passagem sem nada andando vira passagem de verdade: a conversa sai do automático, a Central e o grupo do time são avisados.": {
+    es: "A partir de ahora, una promesa de traspaso sin nada avanzando se convierte en un traspaso real: la conversación sale del modo automático y se avisa a la Central y al grupo del equipo.",
+  },
+  "dias, o Jev e o que o sistema fez concordaram em": { es: "días, Jev y lo que hizo el sistema coincidieron en" },
+  "respostas — prometer passar ao time e o time ser mesmo avisado, ou nenhum dos dois.": {
+    es: "respuestas — prometer pasar al equipo y que el equipo sea realmente avisado, o ninguna de las dos cosas.",
+  },
+  "delas o atendente prometeu passar ao time e nada andou no mesmo turno — é o que o Jev pegaria decidindo.": {
+    es: "de ellas el agente prometió pasar al equipo y nada avanzó en el mismo turno — es lo que Jev detectaría decidiendo.",
+  },
+  "Confere se a resposta que o atendente enviou promete ao cliente que a equipe vai dar sequência, quando ninguém do time foi avisado.": {
+    es: "Revisa si la respuesta que envió el agente le promete al cliente que el equipo va a darle seguimiento, cuando nadie del equipo fue avisado.",
+  },
+  "O agente diz ao cliente que vai encaminhar para a equipe, e ninguém do time fica sabendo — o cliente espera um contato que não vem.": {
+    es: "El agente le dice al cliente que lo va a pasar al equipo y nadie del equipo se entera — el cliente espera un contacto que no llega.",
+  },
+  "Quem responde aqui é o Jev, numa pergunta de sim ou não sobre a resposta que já saiu. Não há modelo de conversa para trocar.": {
+    es: "Aquí responde Jev, con una pregunta de sí o no sobre la respuesta que ya se envió. No hay modelo de conversación para cambiar.",
+  },
+  // FORK MIA — o aviso ao time no histórico do negócio (lib/avisos/registro-do-aviso.ts).
+  "Aviso enviado ao time no grupo": { es: "Aviso enviado al equipo en el grupo" },
+  "O aviso ao time não saiu": { es: "El aviso al equipo no salió" },
+  "O que foi mandado ao grupo": { es: "Lo que se envió al grupo" },
+  // FORK MIA — a marca por empresa travada (lib/branding/marca-da-organizacao-no-fork.ts).
+  "A marca é definida pela plataforma: nome, cor e logo são os mesmos para todas as empresas.": { es: "La marca la define la plataforma: nombre, color y logo son los mismos para todas las empresas." },
+  "Para trocar a marca de todas as empresas, use o painel da plataforma:": { es: "Para cambiar la marca de todas las empresas, usa el panel de la plataforma:" },
+  "Marca da instalação": { es: "Marca de la instalación" },
+  // FORK MIA — o porquê da lista de grupos não ter vindo (MotivoDaFalhaDeGrupos).
+  "O WhatsApp não respondeu a tempo. Recarregue a página em instantes.": { es: "WhatsApp no respondió a tiempo. Recarga la página en unos instantes." },
+  "O serviço do WhatsApp não está configurado nesta instalação.": { es: "El servicio de WhatsApp no está configurado en esta instalación." },
+  "A chave do serviço do WhatsApp foi recusada — confira a configuração do servidor. Ler o QR de novo não resolve.": { es: "La clave del servicio de WhatsApp fue rechazada — revisa la configuración del servidor. Leer el QR de nuevo no lo resuelve." },
+  "A sessão deste número não existe mais no WhatsApp. Reconecte o número pelo QR.": { es: "La sesión de este número ya no existe en WhatsApp. Reconecta el número por el QR." },
+  "O número não está conectado agora. Reconecte-o (leia o QR de novo) e recarregue.": { es: "El número no está conectado ahora. Reconéctalo (lee el QR de nuevo) y recarga." },
+  "O WhatsApp recusou a consulta dos grupos. Tente de novo em instantes.": { es: "WhatsApp rechazó la consulta de los grupos. Inténtalo de nuevo en unos instantes." },
+  "Não foi possível consultar os grupos agora. Tente de novo em instantes.": { es: "No fue posible consultar los grupos ahora. Inténtalo de nuevo en unos instantes." },
   "Grupo que recebe o aviso": { es: "Grupo que recibe el aviso" },
   "endereço público do arquivo (https://…)": { es: "dirección pública del archivo (https://…)" },
   "Sem aviso": { es: "Sin aviso" },

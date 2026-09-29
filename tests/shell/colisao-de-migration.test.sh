@@ -124,6 +124,11 @@ GH
 chmod +x "$TMP/bin/gh"
 export PATH="$TMP/bin:$PATH"
 unset FAKE_GH_PRS FAKE_GH_PRS_FECHADOS FAKE_GH_PAI FAKE_GH_SEM_NUMERO
+# FORK MIA — o gate descobre o PRÓPRIO PR pelo GITHUB_REF do CI (refs/pull/N/merge), e
+# este arquivo não o isolava: rodando no PR #7 do fork, o #7 dos cenários abaixo virava
+# "o seu" e saía da conta (9 casos vermelhos sem defeito nenhum no gate). No repositório
+# do autor os números são de quatro dígitos e a colisão nunca aparece. Candidato a PR lá.
+unset GITHUB_REF
 
 # ── um "repositório principal" mínimo, com duas migrations já aplicadas ──────────────
 principal="$TMP/principal"; mkdir -p "$principal/supabase/migrations"
