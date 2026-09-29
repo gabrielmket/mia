@@ -1643,6 +1643,9 @@ export const DICIONARIO: Traducoes = {
   "A inteligência dos agentes desta conta é configurada pela nossa equipe e ainda não está pronta. Fale com o suporte.": {
     es: "La inteligencia de los agentes de esta cuenta la configura nuestro equipo y todavía no está lista. Habla con soporte.",
   },
+  "Esta instalação não tem chave de IA pronta para esta conta: a inteligência dos agentes é configurada pela nossa equipe. Fale com o suporte.": {
+    es: "Esta instalación no tiene una clave de IA lista para esta cuenta: la inteligencia de los agentes la configura nuestro equipo. Habla con soporte.",
+  },
   "Escolha a chave de acesso da empresa de inteligência artificial.": {
     es: "Elige la clave de acceso de la empresa de inteligencia artificial.",
   },

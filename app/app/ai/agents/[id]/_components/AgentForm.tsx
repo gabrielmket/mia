@@ -557,7 +557,10 @@ export function AgentForm(props: Props) {
     });
     if (!motivo) return null;
     // FORK MIA: a chave é da plataforma. Mandar o cliente "cadastrar uma chave"
-    // é mandá-lo a uma tela que devolve 403 para ele.
+    // é mandá-lo a uma tela que devolve 403 para ele. A frase começa como o
+    // motivo do upstream ("Esta instalação não tem chave de…") de propósito: a
+    // e2e dele (`motivo-do-publicar-na-tela.spec.ts`) reconhece os motivos pelo
+    // texto, e o fork não reescreve teste do upstream.
     if (
       !podeEscolherIa &&
       (motivo.codigo === "instalacao_sem_chave_do_provedor" ||
@@ -565,7 +568,7 @@ export function AgentForm(props: Props) {
         motivo.codigo === "chave_nao_utilizavel")
     )
       return t(
-        "A inteligência dos agentes desta conta é configurada pela nossa equipe e ainda não está pronta. Fale com o suporte.",
+        "Esta instalação não tem chave de IA pronta para esta conta: a inteligência dos agentes é configurada pela nossa equipe. Fale com o suporte.",
       );
     switch (motivo.codigo) {
       case "sem_rascunho":

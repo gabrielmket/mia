@@ -91,6 +91,48 @@ describe("admin do cliente cria agente com a IA da plataforma", () => {
     expect(aviso).not.toHaveTextContent(/chave|credencia/i);
   });
 
+  it("o motivo do Publicar bloqueado por chave não manda o cliente cadastrar chave", () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const versao = {
+      id: "v1", organization_id: "org", agent_id: "ag", version_number: 1, status: "draft",
+      system_prompt: "Você é a Rafa, atendente da casa. Atenda com cuidado.",
+      provider: "openai", model: "gpt-5.6-terra", credential_id: null, tool_ids: [],
+      channel_session_id: "22222222-2222-4222-8222-222222222222", max_steps: 10, token_budget: 50000, cost_budget_cents: 50,
+      history_message_window: 20, history_token_window: 8000, handoff_keywords: [],
+      handoff_tool_enabled: true, cases_enabled: false, split_messages: false, split_max_chars: 600,
+      followup: { enabled: false, flow_pointer_ids: [] }, operator_enabled: false, operator_model: null,
+      operator_tool_ids: [], pipeline_ids: [], knowledge_source_ids: [], trigger_config: null,
+      published_at: null, superseded_at: null, created_at: "2026-09-29T00:00:00Z", created_by: null,
+    };
+    render(
+      <QueryClientProvider client={qc}>
+        <AgentForm
+          mode="edit"
+          agent={{ id: "ag", organization_id: "org", name: "Rafa", description: null, priority: 0,
+            model: "gpt-5.6-terra", system_prompt: "x", is_active: false, is_default: false, config: {},
+            guardrails: [], active_kb_version_id: null, kind: "mcp_agent", published_version_id: null,
+            archived_at: null, created_at: "2026-09-29T00:00:00Z", updated_at: "2026-09-29T00:00:00Z" } as never}
+          credentials={[] as never}
+          // A instalação NÃO tem chave do provedor: o motivo de bloqueio é de chave.
+          provedoresDaInstalacao={[]}
+          podeEscolherIa={false}
+          channelSessions={[{ id: "22222222-2222-4222-8222-222222222222", display_name: "WhatsApp", status: "WORKING" }] as never}
+          draft={versao as never}
+          published={null}
+          base={versao as never}
+          draftObsoleto={null}
+        />
+      </QueryClientProvider>,
+    );
+    const motivo = screen.getByTestId("motivo-do-publicar").textContent ?? "";
+    expect(motivo).toMatch(/nossa equipe/i);
+    expect(motivo).toMatch(/suporte/i);
+    expect(motivo).not.toMatch(/cadastre|escolha outra empresa|credenciais/i);
+    // Mesma régua da e2e do upstream (`tests/e2e/motivo-do-publicar-na-tela.spec.ts`),
+    // que reconhece o motivo pelo texto e roda com o dono do wizard sem escolher IA.
+    expect(motivo).toMatch(/esta instalação não tem chave de/i);
+  });
+
   it("a plataforma continua escolhendo (o controle): sem modelo e chave, não cria", () => {
     const { botaoCriar, container } = criar({ podeEscolherIa: true, iaDaPlataforma: PAR });
 
