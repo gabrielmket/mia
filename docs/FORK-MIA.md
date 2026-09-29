@@ -110,7 +110,11 @@ npx vitest run
   próprios é trabalho contínuo, feito a cada vez que se mexe num desses arquivos.
 - **Funcionalidade duplicada.** Os dois lados construíram, na mesma semana, o
   cadastro incorporado da Meta, o disparo em massa e o aviso no WhatsApp. A decisão
-  de ficar com um, com o outro ou com os dois é de produto, e ainda está aberta.
+  de ficar com um, com o outro ou com os dois é de produto. Para o **disparo em
+  massa** ela foi tomada na .58: os dois ficam, como UM produto chamado Broadcast
+  (as Campanhas dele são o caminho "número por QR"), com os motores separados por
+  baixo — ver [`docs/fork/broadcast-unificado.md`](fork/broadcast-unificado.md).
+  As outras duas continuam abertas.
 - **A voz precisa de fiação.** O agente de voz é uma quarta imagem e um quinto
   contêiner (`asterisk`); o `docker-compose.easypanel.yml` é nosso e não recebe isso
   da fusão.
