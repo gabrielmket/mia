@@ -140,6 +140,18 @@ describe("FORK MIA · modelos por segmento", () => {
   const SEGMENTOS_DA_MIA = NICHOS_DE_MODELO.filter((n) => n !== "clinica");
   const modelosDaMia = MODELOS_DE_FOLLOWUP.filter((m) => m.nicho !== "clinica");
 
+  it("carro e academia decidem em cerca de um mês e meio; os outros segmentos seguem o ritmo longo", () => {
+    const DIA = 86_400_000;
+    const horizonte = (id: string) => horizonteDoModeloMs(modeloPorId(id)!.grafo) / DIA;
+    for (const id of ["automotivo-negociacao", "academia-matricula"]) {
+      expect(horizonte(id), id).toBeGreaterThanOrEqual(30);
+      expect(horizonte(id), id).toBeLessThanOrEqual(45);
+    }
+    for (const id of ["geral-proposta", "imobiliario-proposta", "servicos-b2b-proposta"]) {
+      expect(horizonte(id), id).toBeGreaterThan(60);
+    }
+  });
+
   /** Tudo o que a pessoa lê: na galeria e no canvas do construtor. */
   function textosDoModelo(m: (typeof MODELOS_DE_FOLLOWUP)[number]): string[] {
     const dosNos = m.grafo.nodes.flatMap((n) => [
@@ -171,7 +183,8 @@ describe("FORK MIA · modelos por segmento", () => {
         "appointment_no_show",
       ]);
       // A "decisão" acompanha por semanas; a "falta", por dias.
-      expect(horizonteDoModeloMs(modelos[2]!.grafo)).toBeGreaterThan(60 * DIA_MS);
+      // Carro e academia usam o ritmo curto (~um mês e meio); os demais, o longo.
+      expect(horizonteDoModeloMs(modelos[2]!.grafo)).toBeGreaterThan(30 * DIA_MS);
       expect(horizonteDoModeloMs(modelos[3]!.grafo)).toBeLessThan(15 * DIA_MS);
     },
   );

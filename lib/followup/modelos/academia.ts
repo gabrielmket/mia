@@ -65,7 +65,7 @@ export const MODELOS_DE_ACADEMIA: readonly ModeloDeFollowup[] = [
     nome: "Matrícula · acompanhar quem ainda está decidindo",
     jornada: "Matrícula",
     resumo:
-      "Quem fez a aula experimental ou pediu valores e não se matriculou pode estar só organizando a rotina. O fluxo acompanha por quase três meses, sem pressionar.",
+      "Quem fez a aula experimental ou pediu valores e não se matriculou pode estar só organizando a rotina. O fluxo acompanha por cerca de um mês e meio, sem pressionar.",
     toques: [
       {
         rotulo: "Abre para dúvidas",
@@ -88,7 +88,7 @@ export const MODELOS_DE_ACADEMIA: readonly ModeloDeFollowup[] = [
           "Esta é a minha última mensagem sobre isso, não quero incomodar. Quando fizer sentido começar, é só me escrever.",
       },
     ],
-  }),
+  }, "curto"),
 
   jornadaDeFalta("academia", {
     id: "academia-falta",

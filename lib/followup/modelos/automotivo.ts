@@ -65,7 +65,7 @@ export const MODELOS_AUTOMOTIVOS: readonly ModeloDeFollowup[] = [
     nome: "Negociação · acompanhar a decisão de compra",
     jornada: "Negociação",
     resumo:
-      "Quem viu o carro e recebeu proposta pode estar comparando, vendendo o usado ou esperando o crédito. O fluxo acompanha por quase três meses, sem pressionar.",
+      "Quem viu o carro e recebeu proposta pode estar comparando, vendendo o usado ou esperando o crédito. O fluxo acompanha por cerca de um mês e meio, sem pressionar.",
     toques: [
       {
         rotulo: "Abre para dúvidas",
@@ -88,7 +88,7 @@ export const MODELOS_AUTOMOTIVOS: readonly ModeloDeFollowup[] = [
           "Esta é a minha última mensagem sobre isso, não quero incomodar. Quando quiser voltar a olhar carro, é só me escrever.",
       },
     ],
-  }),
+  }, "curto"),
 
   jornadaDeFalta("automotivo", {
     id: "automotivo-falta",

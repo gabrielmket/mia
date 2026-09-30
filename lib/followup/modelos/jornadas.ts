@@ -141,9 +141,25 @@ export function jornadaDeAgendamento(nicho: NichoDeModelo, textos: TextosDaJorna
 
 /**
  * DECISÃO: recebeu proposta e está decidindo algo grande. Ritmo da "Cirurgia"
- * de clínica: quatro toques espaçados, quase três meses, sem pressionar.
+ * de clínica: quatro toques espaçados, uns dois meses, sem pressionar.
+ *
+ * `ritmo: "curto"` (FORK MIA, pedido do Gabriel em 30/09/2026): carro e
+ * academia se decidem em semanas, não em meses. Os mesmos quatro toques cabem
+ * em cerca de um mês.
  */
-export function jornadaDeDecisao(nicho: NichoDeModelo, textos: TextosDaJornada<4>): ModeloDeFollowup {
+export type RitmoDaDecisao = "longo" | "curto";
+
+const TOQUES_DA_DECISAO: Record<RitmoDaDecisao, { prazoDeRespostaMs: number; esperas: readonly [number, number, number, number] }> = {
+  longo: { prazoDeRespostaMs: 5 * DIA_MS, esperas: [3 * DIA_MS, 10 * DIA_MS, 21 * DIA_MS, 30 * DIA_MS] },
+  curto: { prazoDeRespostaMs: 3 * DIA_MS, esperas: [1 * DIA_MS, 4 * DIA_MS, 10 * DIA_MS, 15 * DIA_MS] },
+};
+
+export function jornadaDeDecisao(
+  nicho: NichoDeModelo,
+  textos: TextosDaJornada<4>,
+  ritmo: RitmoDaDecisao = "longo",
+): ModeloDeFollowup {
+  const { prazoDeRespostaMs, esperas } = TOQUES_DA_DECISAO[ritmo];
   const [primeiro, segundo, terceiro, quarto] = textos.toques;
   return {
     id: textos.id,
@@ -161,14 +177,14 @@ export function jornadaDeDecisao(nicho: NichoDeModelo, textos: TextosDaJornada<4
     }),
     grafo: comFimDeGanho(
       montarEscada({
-        prazoDeRespostaMs: 5 * DIA_MS,
+        prazoDeRespostaMs,
         sim: { rotulo: "Quer seguir", padrao: "quero" },
         notaDeResposta: O_ATENDIMENTO_ASSUME,
         toques: [
-          { esperaAntesMs: 3 * DIA_MS, ...primeiro },
-          { esperaAntesMs: 10 * DIA_MS, ...segundo },
-          { esperaAntesMs: 21 * DIA_MS, ...terceiro },
-          { esperaAntesMs: 30 * DIA_MS, ...quarto },
+          { esperaAntesMs: esperas[0], ...primeiro },
+          { esperaAntesMs: esperas[1], ...segundo },
+          { esperaAntesMs: esperas[2], ...terceiro },
+          { esperaAntesMs: esperas[3], ...quarto },
         ],
       }),
       "Fim: quis seguir",

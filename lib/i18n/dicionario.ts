@@ -12750,8 +12750,8 @@ export const DICIONARIO: Traducoes = {
   "O cliente se interessou por um carro e ainda não marcou o test drive ou a visita à loja. O fluxo lembra por duas semanas e sai de cena.": {
     es: "El cliente se interesó por un auto y todavía no agendó la prueba de manejo ni la visita a la tienda. El flujo le recuerda durante dos semanas y después se retira.",
   },
-  "Quem viu o carro e recebeu proposta pode estar comparando, vendendo o usado ou esperando o crédito. O fluxo acompanha por quase três meses, sem pressionar.": {
-    es: "Quien vio el auto y recibió una propuesta puede estar comparando, vendiendo su usado o esperando el crédito. El flujo da seguimiento durante casi tres meses, sin presionar.",
+  "Quem viu o carro e recebeu proposta pode estar comparando, vendendo o usado ou esperando o crédito. O fluxo acompanha por cerca de um mês e meio, sem pressionar.": {
+    es: "Quien vio el auto y recibió una propuesta puede estar comparando, vendiendo su usado o esperando el crédito. El flujo da seguimiento durante cerca de un mes y medio, sin presionar.",
   },
   "O cliente não apareceu no horário marcado na loja. O fluxo oferece outra data em vez de deixar o interesse esfriar.": {
     es: "El cliente no llegó a la hora agendada en la tienda. El flujo ofrece otra fecha en lugar de dejar que el interés se enfríe.",
@@ -12762,8 +12762,8 @@ export const DICIONARIO: Traducoes = {
   "O cliente quis conhecer o espaço e ainda não marcou a aula experimental. O fluxo lembra por duas semanas e sai de cena.": {
     es: "El cliente quiso conocer el lugar y todavía no agendó la clase de prueba. El flujo le recuerda durante dos semanas y después se retira.",
   },
-  "Quem fez a aula experimental ou pediu valores e não se matriculou pode estar só organizando a rotina. O fluxo acompanha por quase três meses, sem pressionar.": {
-    es: "Quien tomó la clase de prueba o pidió precios y no se inscribió puede estar solo organizando su rutina. El flujo da seguimiento durante casi tres meses, sin presionar.",
+  "Quem fez a aula experimental ou pediu valores e não se matriculou pode estar só organizando a rotina. O fluxo acompanha por cerca de um mês e meio, sem pressionar.": {
+    es: "Quien tomó la clase de prueba o pidió precios y no se inscribió puede estar solo organizando su rutina. El flujo da seguimiento durante cerca de un mes y medio, sin presionar.",
   },
   "O cliente não apareceu na aula experimental. O fluxo oferece outro horário em vez de deixar a vontade de começar passar.": {
     es: "El cliente no llegó a la clase de prueba. El flujo ofrece otro horario en lugar de dejar que se le pasen las ganas de empezar.",
