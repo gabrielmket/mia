@@ -18,6 +18,8 @@ export interface AdminTenantRow {
   created_at: string;
   user_count: Array<{ count: number }> | null;
   conversations_count: Array<{ count: number }> | null;
+  /** FORK MIA (cliente modelo, 9010): a empresa de demonstração, com dados fictícios. */
+  demonstracao?: boolean;
 }
 
 export interface AdminTenantsFilters {

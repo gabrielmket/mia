@@ -4762,6 +4762,10 @@ export const DICIONARIO: Traducoes = {
     es: "La clave del proveedor de IA es administrada por la plataforma.",
   },
   "Agente MIA": { es: "Agente MIA" },
+  // FORK MIA (cliente modelo, 9010): o selo da empresa de demonstração.
+  "Dados fictícios. Nenhuma mensagem, e-mail ou aviso sai desta empresa.": {
+    es: "Datos ficticios. Ningún mensaje, correo o aviso sale de esta empresa.",
+  },
   "MIA Insights": { es: "MIA Insights" },
   "Ver tudo no CRM": { es: "Ver todo en el CRM" },
   "Ver tudo no agente": { es: "Ver todo en el agente" },

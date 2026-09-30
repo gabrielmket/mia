@@ -23,6 +23,9 @@ import {
   ImpersonateBanner,
 } from "@/components/app/ImpersonateBanner";
 import { ConexaoCaidaBanner } from "@/components/app/ConexaoCaidaBanner";
+// FORK MIA (cliente modelo, 9010): o selo da empresa de demonstração.
+import { SeloDeDemonstracao } from "@/components/app/SeloDeDemonstracao";
+import { empresaEDemonstracao } from "@/lib/demonstracao/selo";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 import { listarConexoesCaidas, type ConexaoCaida } from "@/lib/channels/health";
 import { VoiceCallProvider } from "@/components/voice/VoiceCallContext";
@@ -63,6 +66,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // EPIC-02: gate /app/* on completed onboarding.
   // EPIC-11: gate /app/* on org not being suspended (S-11.08).
   let conexoesCaidas: ConexaoCaida[] = [];
+  let emDemonstracao = false;
   let enrolled = false;
   let needsMfaGate = false;
 
@@ -97,7 +101,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // aqui dariam, no melhor caso, erro de compilação; no pior, a lista de um
     // eixo filtrando o outro, e telas sumindo do menu sem ninguém ter
     // desligado nada.
-    const [orgRes, conexoes, isEnrolled, mfaRequired, ligadosNaInstalacao] = await Promise.all([
+    const [orgRes, conexoes, isEnrolled, mfaRequired, ligadosNaInstalacao, demonstracao] = await Promise.all([
       admin
         .from("organizations")
         .select("onboarded_at, status, settings")
@@ -113,7 +117,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       ),
       // Da INSTALAÇÃO: decide se a porta de um módulo opcional entra no menu.
       modulosLigados(admin),
+      // FORK MIA (cliente modelo): só o selo; nunca derruba o layout.
+      empresaEDemonstracao(admin, activeOrg.orgId),
     ]);
+    emDemonstracao = demonstracao;
 
     const orgRow = orgRes.data;
     conexoesCaidas = conexoes;
@@ -279,6 +286,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <EstiloDaMarcaDaOrganizacao css={cssDaOrganizacao} />
         <ImpersonateBanner impersonating={impersonating} />
         <ConexaoCaidaBanner caidas={conexoesCaidas} />
+        <SeloDeDemonstracao ligado={emDemonstracao} />
         {needsMfaGate ? (
           // Gate always mounted for MFA-required roles; it latches the blocking
           // decision client-side so the enroll Server Action's revalidation

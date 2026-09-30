@@ -168,7 +168,15 @@ export function TenantsTable({
             {data.map((row) => (
               <TableRow key={row.id}>
                 <TableCell className="font-mono text-xs">{row.slug}</TableCell>
-                <TableCell className="font-medium">{row.display_name}</TableCell>
+                <TableCell className="font-medium">
+                  {row.display_name}
+                  {/* FORK MIA (cliente modelo, 9010): o selo da empresa de demonstração. */}
+                  {row.demonstracao ? (
+                    <Badge variant="warning" className="ml-2">
+                      {t("Demonstração")}
+                    </Badge>
+                  ) : null}
+                </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">
                   {shortCnpj(row.cnpj)}
                 </TableCell>
