@@ -33,6 +33,9 @@ import { estadoDaJanela } from '@/lib/channels/janela';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
 import { isStatusSendable } from '@/lib/channels/meta/template-binding';
 import { deriveTemplateContract } from '@/lib/channels/meta/template-contract';
+// FORK MIA — o {{1}} (ou o primeiro nomeado) do modelo aprovado leva o primeiro nome.
+import { TEXTO_NEUTRO_SEM_NOME, variavelDoModelo } from '@/lib/channels/meta/variavel-do-nome';
+import { primeiroNomeDoContato } from '@/lib/contacts/primeiro-nome';
 import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
 import { classifyPromise } from '../guardrails/promise/semantic';
 import { scheduleCronJob } from '../cron/scheduler';
@@ -443,7 +446,7 @@ async function runFlowDrivenTurn(
   const runLog = withFields(deps.log, { job_id: job.id, tenant_id: target.tenantId, lead_id: target.leadId, enrollment_id: enrollmentId });
 
   if (input.purpose === 'send_message') {
-    let passo = await resolveFlowSendBody(pool, target.tenantId, target.channelSessionId, input);
+    let passo = await resolveFlowSendBody(pool, target.tenantId, target.channelSessionId, input, target.leadId);
     // O PLANO B DA MENSAGEM POR IA. Com a janela de 24 h fechada, o canal recusa
     // qualquer texto livre — o da IA inclusive —, e o passo terminava sem mandar
     // nada. A tela prometia "se a IA não conseguir escrever, mandar este modelo"
@@ -455,7 +458,7 @@ async function runFlowDrivenTurn(
       input.fallbackTemplateId !== undefined &&
       (await janelaFechada(pool, target, clock()))
     ) {
-      passo = await resolveModeloAprovado(pool, target.tenantId, target.channelSessionId, input.fallbackTemplateId);
+      passo = await resolveModeloAprovado(pool, target.tenantId, target.channelSessionId, input.fallbackTemplateId, target.leadId);
     }
     if (passo !== null && passo.tipo === 'recusado') {
       runLog.info('passo do fluxo pulado — o modelo não pode sair', { motivo: passo.motivo });
@@ -642,6 +645,8 @@ async function resolveFlowSendBody(
     voltaIndex: number | undefined;
     voltaTotal: number | undefined;
   },
+  /** FORK MIA — o contato, para o primeiro nome do modelo aprovado. */
+  contactId: string,
 ): Promise<PassoSemIa | null> {
   if (input.fixedBody !== undefined) {
     return { tipo: 'texto', body: interpolarVoltaDoPayload(input.fixedBody, input.voltaIndex, input.voltaTotal) };
@@ -659,7 +664,7 @@ async function resolveFlowSendBody(
   // lia `message_templates`, e um fluxo apontado para um modelo aprovado — o único
   // envio que passa com a janela de 24 h fechada — morria neste `throw` no primeiro
   // disparo, depois de o editor ter aceitado e publicado o grafo.
-  const aprovado = await resolveModeloAprovado(pool, tenantId, channelSessionId, input.templateId);
+  const aprovado = await resolveModeloAprovado(pool, tenantId, channelSessionId, input.templateId, contactId);
   if (aprovado === null) {
     throw new Error('followup_turn sem modelo de mensagem — o template_id do passo não existe nesta organização');
   }
@@ -674,14 +679,20 @@ async function resolveFlowSendBody(
  * (`definicaoNaConexao`, a mesma regra do `send_template` do agente): dois números
  * podem espelhar o mesmo nome, e disparar a linha de outra conta é recusa certa.
  *
- * O fluxo não tem de onde tirar valor para variável, então modelo com `{{1}}` é
- * recusado com o motivo — mandar o marcador cru ao cliente seria pior.
+ * FORK MIA — UMA variável tem de onde tirar valor: o `{{1}}` (ou o primeiro
+ * parâmetro nomeado) do corpo, com o primeiro nome do contato. A regra do que
+ * conta como "a variável do nome", e de quando o texto neutro pode entrar no
+ * lugar de um nome que falta, mora em `lib/channels/meta/variavel-do-nome.ts`.
+ * Qualquer outra variável continua recusada com o motivo: mandar o marcador cru
+ * ao cliente seria pior.
  */
 async function resolveModeloAprovado(
   pool: pg.Pool,
   tenantId: string,
   channelSessionId: string,
   metaTemplateId: string,
+  /** O contato do envio (`target.leadId`): de onde sai o primeiro nome. */
+  contactId: string,
 ): Promise<PassoSemIa | null> {
   const { rows } = await pool.query<{ name: string; language: string }>(
     `select name, language from meta_templates where organization_id = $1 and id = $2 limit 1`,
@@ -710,16 +721,32 @@ async function resolveModeloAprovado(
     parameter_format: linha.parameter_format,
     components: linha.components as never,
   });
-  if (contrato.slots.length > 0) {
+  const variavel = variavelDoModelo(contrato, linha.components);
+  if (variavel.tipo === 'outras') {
     return {
       tipo: 'recusado',
-      motivo: `O modelo "${alvo.name}" tem variáveis, e o fluxo não tem de onde tirar os valores. Use um modelo sem variáveis.`,
+      motivo: `O modelo "${alvo.name}" tem variáveis que o fluxo não sabe preencher. O fluxo só preenche uma: a primeira do corpo, com o primeiro nome do contato. Use um modelo sem variáveis ou só com o nome.`,
     };
+  }
+  let values: Record<string, string> = {};
+  if (variavel.tipo === 'nome') {
+    const { rows: contatos } = await pool.query<{ name: string | null; display_name: string | null; is_anonymized: boolean | null }>(
+      `select name, display_name, is_anonymized from contacts where organization_id = $1 and id = $2 limit 1`,
+      [tenantId, contactId],
+    );
+    const valor = primeiroNomeDoContato(contatos[0]) ?? (variavel.aceitaNeutro ? TEXTO_NEUTRO_SEM_NOME : null);
+    if (valor === null) {
+      return {
+        tipo: 'recusado',
+        motivo: `O modelo "${alvo.name}" leva o primeiro nome do contato em ${variavel.marcador}, e este contato não tem nome cadastrado. Cadastre o nome ou use um modelo sem variáveis.`,
+      };
+    }
+    values = { [variavel.chave]: valor };
   }
   return {
     tipo: 'modelo_aprovado',
-    body: renderTemplateBody(linha.components, {}, meta),
-    modelo: { name: alvo.name, language: alvo.language, values: {} },
+    body: renderTemplateBody(linha.components, values, meta),
+    modelo: { name: alvo.name, language: alvo.language, values },
   };
 }
 
