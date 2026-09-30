@@ -612,6 +612,13 @@ export interface MensagemDaSemente {
   min: number;
 }
 
+/**
+ * Status de ciclo de vida GRAVADO nas conversas da demonstração. Escrever o
+ * status segue permitido; o que a cerca `fila-tem-uma-definicao-so` proíbe é
+ * DECIDIR quem atende por ele, e aqui nada decide nada: é só o dado semeado.
+ */
+const CONVERSA_COM_A_IA = "ai_handling" as const;
+
 export interface ConversaDaSemente {
   chave: string;
   contato: ContatoDaSemente["chave"];
@@ -625,13 +632,6 @@ export interface ConversaDaSemente {
   /** A ficha que a IA escreveu (`lead_notes`). */
   ficha: { headline: string; body: string } | null;
   /** A IA passou a conversa para uma pessoa (`passagens_de_atendimento`). */
-/**
- * Status de ciclo de vida GRAVADO nas conversas da demonstração. Escrever o
- * status segue permitido; o que a cerca `fila-tem-uma-definicao-so` proíbe é
- * DECIDIR quem atende por ele, e aqui nada decide nada: é só o dado semeado.
- */
-const CONVERSA_COM_A_IA = "ai_handling" as const;
-
   passagem?: { titulo: string; resumo: string; ultimaFala: string; reconhecidaPor?: PessoaDaEquipe["chave"] };
   /** Quem está com a conversa agora. */
   com: DonoDoNegocio;
