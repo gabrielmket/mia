@@ -79,6 +79,8 @@ export async function issueInvite(input: {
           { name: "kind", value: "team_invite" },
           { name: "org", value: input.organizationId },
         ],
+        // FORK MIA (cliente modelo, 9010): o roteador trava a empresa de demonstração.
+        organizationId: input.organizationId,
       });
       dispatched = result.ok;
       deliveryError = result.ok ? undefined : result.error;

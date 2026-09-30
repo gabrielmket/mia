@@ -34,6 +34,9 @@ export const ApiErrorCodes = {
   forbidden_role: "forbidden_role",
   forbidden_tenant: "forbidden_tenant",
   lgpd_anonymization_irreversible: "lgpd_anonymization_irreversible",
+  // FORK MIA (cliente modelo, 9010): a empresa de demonstração não envia nada
+  // para fora — o banco recusou a fila de saída (lib/demonstracao/trava.ts).
+  organizacao_de_demonstracao: "organizacao_de_demonstracao",
 
   // 404
   not_found: "not_found",

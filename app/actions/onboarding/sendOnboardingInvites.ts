@@ -111,6 +111,8 @@ export async function sendOnboardingInvites(payload: InvitePayload): Promise<Sen
         { name: "src", value: "onboarding" },
         { name: "org", value: ctx.orgId },
       ],
+      // FORK MIA (cliente modelo, 9010): o roteador trava a empresa de demonstração.
+      organizationId: ctx.orgId,
     });
     if (result.ok) sent += 1;
     else {

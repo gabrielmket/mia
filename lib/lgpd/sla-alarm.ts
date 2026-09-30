@@ -178,6 +178,8 @@ Base legal: LGPD Lei nº 13.709/2018, Art. 18.`;
           { name: "threshold", value: threshold },
           { name: "request_short", value: shortId },
         ],
+        // FORK MIA (cliente modelo, 9010): o roteador trava a empresa de demonstração.
+        organizationId: request.organization_id,
       });
 
       emailOk = result.ok;

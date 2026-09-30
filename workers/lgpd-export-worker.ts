@@ -276,6 +276,8 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
         signedUrl: signed.signedUrl,
         expiresAt,
         marca: await marcaDaSaida(orgId),
+        // FORK MIA (cliente modelo, 9010): e-mail ao titular não sai da demonstração.
+        organizationId: orgId,
       });
       messageId = sent.messageId;
     } catch (err) {

@@ -51,6 +51,11 @@ import { emitirFalhaDeEntrega } from "@/lib/messaging/falha-de-entrega";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Message } from "@/lib/types/messaging";
+import {
+  CODIGO_DA_DEMONSTRACAO,
+  FRASE_DA_DEMONSTRACAO,
+  ehRecusaDaDemonstracao,
+} from "@/lib/demonstracao/trava";
 
 type SB = SupabaseClient;
 
@@ -764,6 +769,12 @@ export async function sendMessageHandler(
       )
     )
       return created as unknown as Message;
+  }
+  // FORK MIA (cliente modelo, 9010): a empresa de demonstração não enfileira
+  // saída — quem recusou foi o banco, e a linha não nasceu. Recusa esperada,
+  // não defeito: 403 com a frase, em vez do 500 genérico abaixo.
+  if (ehRecusaDaDemonstracao(insErr)) {
+    throw new ApiError(403, CODIGO_DA_DEMONSTRACAO, undefined, ctx.requestId, FRASE_DA_DEMONSTRACAO);
   }
   if (insErr || !created) {
     throw new ApiError(

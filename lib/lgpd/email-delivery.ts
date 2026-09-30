@@ -55,6 +55,8 @@ interface SendArgs {
   expiresAt: Date;
   /** A marca de quem PROCESSOU a solicitação. Obrigatória — ver o cabeçalho. */
   marca: MarcaDeSaida;
+  /** FORK MIA (cliente modelo, 9010): o roteador trava a empresa de demonstração. */
+  organizationId?: string;
 }
 
 export async function sendExportEmail(args: SendArgs): Promise<{ messageId: string }> {
@@ -103,10 +105,14 @@ Base legal: LGPD Lei nº 13.709/2018, Art. 18, II.`;
       { name: "kind", value: "lgpd_export" },
       { name: "request_short", value: shortId },
     ],
+    organizationId: args.organizationId,
   });
 
   if (!result.ok) {
-    if (result.error === "not_configured") {
+    // FORK MIA (cliente modelo, 9010): na empresa de demonstração o e-mail não
+    // sai, e nenhuma retentativa muda isso — o mesmo caminho do "sem transporte"
+    // (`pending_review`), em vez de retentar até a fila morta.
+    if (result.error === "not_configured" || result.error === "organizacao_de_demonstracao") {
       throw new EmailNotConfigured();
     }
     throw new EmailSendFailed(result.details ?? result.error ?? "unknown");

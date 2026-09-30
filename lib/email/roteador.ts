@@ -38,6 +38,8 @@
 import { getSmtpConfig } from "@/lib/email/config";
 import { isEmailConfigured as resendConfigurada, sendEmail as enviarPelaResend } from "@/lib/email/resend";
 import { isSmtpConfigured, sendEmail as enviarPorSmtp } from "@/lib/email/smtp";
+import { travaDaDemonstracao } from "@/lib/demonstracao/trava";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /** Quem entregou (ou tentou entregar). Vai ao audit, nunca ao destinatário. */
 export type TransporteDeEmail = "smtp" | "resend";
@@ -53,7 +55,9 @@ export type EmailDeliveryError =
   | "send_failed"
   | "rate_limited"
   | "sender_rejected"
-  | "dominio_nao_verificado";
+  | "dominio_nao_verificado"
+  // FORK MIA (cliente modelo, 9010): a empresa de demonstração não manda e-mail.
+  | "organizacao_de_demonstracao";
 
 export interface EmailSendResult {
   ok: boolean;
@@ -72,6 +76,12 @@ interface SendArgs {
   replyTo?: string;
   fromName?: string;
   tags?: { name: string; value: string }[];
+  /**
+   * FORK MIA (cliente modelo, 9010): de qual empresa é o e-mail, quando é de
+   * uma. Com ela, o roteador pergunta se a empresa é de demonstração e, se for
+   * (ou se não der para confirmar), o e-mail não sai.
+   */
+  organizationId?: string;
 }
 
 /**
@@ -108,7 +118,14 @@ export async function transporteEmVigor(): Promise<TransporteDeEmail | "nenhum">
 }
 
 export async function sendEmail(args: SendArgs): Promise<EmailSendResult> {
+  const { organizationId, ...envio } = args;
+  // FORK MIA (cliente modelo, 9010): e-mail da empresa de demonstração não sai.
+  // Falha fechada — sem confirmar que a empresa é de verdade, também não sai.
+  if (organizationId) {
+    const trava = await travaDaDemonstracao(createAdminClient(), organizationId);
+    if (trava.travado) return { ok: false, error: "organizacao_de_demonstracao", details: trava.motivo };
+  }
   const via = await transporteDeEmail();
-  const resultado = via === "smtp" ? await enviarPorSmtp(args) : await enviarPelaResend(args);
+  const resultado = via === "smtp" ? await enviarPorSmtp(envio) : await enviarPelaResend(envio);
   return { ...resultado, via };
 }
