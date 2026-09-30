@@ -199,3 +199,45 @@ describe("GET /api/v1/admin/usage — agente na carteira", () => {
     expect(corpo.data.tenants[0].agent_name).toBeNull();
   });
 });
+
+// FORK MIA (cliente modelo, 9010): a empresa de demonstração, com dados
+// fictícios, não entra no uso da plataforma — mas continua consultável pelo id.
+describe("GET /api/v1/admin/usage — a empresa de demonstração fica de fora", () => {
+  const ORG_DEMO = "90109010-0000-4000-8000-00000000000d";
+
+  function comDemonstracao() {
+    return dubleAdmin({
+      organizations: [
+        org(ORG_A, "Cliente A"),
+        { ...org(ORG_DEMO, "Empresa Modelo · Demonstração"), demonstracao: true },
+      ],
+      messages: [
+        { organization_id: ORG_A, created_at: "2026-09-29T12:00:00.000Z" },
+        { organization_id: ORG_DEMO, created_at: "2026-09-29T12:00:00.000Z" },
+        { organization_id: ORG_DEMO, created_at: "2026-09-29T12:05:00.000Z" },
+      ],
+    });
+  }
+
+  it("a lista de uso não traz a demonstração", async () => {
+    vi.mocked(createAdminClient).mockReturnValue(comDemonstracao() as never);
+
+    const corpo = await (await chamar()).json();
+    const ids = corpo.data.tenants.map((t: { organization_id: string }) => t.organization_id);
+
+    expect(ids).toContain(ORG_A);
+    expect(ids).not.toContain(ORG_DEMO);
+  });
+
+  it("controle: pedida pelo id, a demonstração responde (é o uso DELA, não o da plataforma)", async () => {
+    vi.mocked(createAdminClient).mockReturnValue(comDemonstracao() as never);
+
+    const corpo = await (
+      await GET(new NextRequest(`http://localhost/api/v1/admin/usage?range=30d&tenant_id=${ORG_DEMO}`))
+    ).json();
+
+    expect(corpo.data.tenants.map((t: { organization_id: string }) => t.organization_id)).toEqual([
+      ORG_DEMO,
+    ]);
+  });
+});

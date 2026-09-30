@@ -61,7 +61,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
     name: "plataforma_listar_clientes",
     description:
       "Lista as organizações desta instalação, com situação e data de entrada. " +
-      "Use para achar o id de um cliente antes de qualquer outra operação.",
+      "Use para achar o id de um cliente antes de qualquer outra operação. " +
+      "`demonstracao: true` é a empresa de demonstração (dados fictícios, nada sai dela): não é cliente.",
     inputSchema: {
       busca: z
         .string()
@@ -74,7 +75,7 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
     handler: async ({ admin }, args) => {
       let q = admin
         .from("organizations")
-        .select("id, display_name, legal_name, slug, status, onboarded_at, created_at")
+        .select("id, display_name, legal_name, slug, status, onboarded_at, created_at, demonstracao")
         .order("created_at", { ascending: false })
         .limit(TETO_DA_LISTA);
       const busca = typeof args.busca === "string" ? args.busca.trim() : "";

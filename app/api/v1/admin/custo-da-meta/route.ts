@@ -23,6 +23,7 @@ import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { calcularCusto, type ContagemPorCategoria } from "@/lib/channels/meta/custo-da-conversa";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { excluirDemonstracao, idsDasEmpresasDeDemonstracao } from "@/lib/demonstracao/fora-das-metricas";
 
 export const dynamic = "force-dynamic";
 
@@ -69,14 +70,24 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   const admin = createAdminClient();
 
+  // Cliente modelo (9010): a empresa de demonstração não entra no custo da Meta.
+  let demonstracao: string[];
+  try {
+    demonstracao = await idsDasEmpresasDeDemonstracao(admin);
+  } catch (e) {
+    return fail("db_error", (e as Error).message, 500, { requestId });
+  }
+
   const [{ data: linhas, error }, { data: precos }, { data: orgs }] = await Promise.all([
-    admin
-      .from("messages")
-      .select("organization_id, meta_pricing_category")
-      .eq("meta_billable", true)
-      .gte("created_at", inicio)
-      .lt("created_at", fim)
-      .limit(LIMITE),
+    excluirDemonstracao(
+      admin
+        .from("messages")
+        .select("organization_id, meta_pricing_category")
+        .eq("meta_billable", true)
+        .gte("created_at", inicio)
+        .lt("created_at", fim),
+      demonstracao,
+    ).limit(LIMITE),
     admin.from("platform_precos_meta").select("categoria, centavos_brl"),
     admin.from("organizations").select("id, display_name").is("redacted_at", null),
   ]);

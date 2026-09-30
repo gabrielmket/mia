@@ -27,6 +27,7 @@ import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { agruparFilaMorta, type JobMorto } from "@/lib/operacao/fila-morta";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { excluirDemonstracao, idsDasEmpresasDeDemonstracao } from "@/lib/demonstracao/fora-das-metricas";
 
 export const dynamic = "force-dynamic";
 
@@ -52,10 +53,21 @@ export async function GET(): Promise<Response> {
   if (!ctx) return fail("forbidden", "Platform admin required", 403, { requestId });
 
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("job_queue")
-    .select("id, organization_id, kind, last_error, attempts, created_at")
-    .eq("status", "dead")
+  // Cliente modelo (9010): o job da demonstração que morreu na trava é o
+  // esperado, não defeito — fora da fila que o dono da plataforma investiga.
+  let demonstracao: string[];
+  try {
+    demonstracao = await idsDasEmpresasDeDemonstracao(admin);
+  } catch (e) {
+    return fail("db_error", (e as Error).message, 500, { requestId });
+  }
+  const { data, error } = await excluirDemonstracao(
+    admin
+      .from("job_queue")
+      .select("id, organization_id, kind, last_error, attempts, created_at")
+      .eq("status", "dead"),
+    demonstracao,
+  )
     .order("created_at", { ascending: false })
     .limit(LIMITE);
   if (error) return fail("db_error", error.message, 500, { requestId });

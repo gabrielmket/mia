@@ -46,6 +46,11 @@ import { avaliarBackup, leituraDoRpc } from "@/lib/backup/estado-do-backup";
 import { alertaDoSchema, CARIMBO_DO_SCHEMA, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  excluirDemonstracao,
+  idsDasEmpresasDeDemonstracao,
+  SEM_DEMONSTRACAO,
+} from "@/lib/demonstracao/fora-das-metricas";
 
 export const dynamic = "force-dynamic";
 
@@ -245,7 +250,15 @@ async function handle(req: NextRequest): Promise<Response> {
   const UTC_MENOS_TRES = 3;
   const horaLocal = (agora.getUTCHours() - UTC_MENOS_TRES + 24) % 24;
 
+  // Cliente modelo (9010): a empresa de demonstração fica fora do resumo — os
+  // dados dela são inventados. Sem conseguir saber quem excluir, o resumo não
+  // sai hoje (um número inflado com a demonstração seria pior que nenhum).
+  let demonstracao: string[] | null = null;
   if (grupo.resumoDiario && horaLocal === HORA_DO_RESUMO) {
+    demonstracao = await idsDasEmpresasDeDemonstracao(admin).catch(() => null);
+  }
+
+  if (grupo.resumoDiario && horaLocal === HORA_DO_RESUMO && demonstracao) {
     const ontem = new Date(agora.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
     const [{ count: clientes }, { count: conversas }, { count: bastoes }, { count: caidos }] =
@@ -254,16 +267,23 @@ async function handle(req: NextRequest): Promise<Response> {
           .from("organizations")
           .select("id", { count: "exact", head: true })
           .is("redacted_at", null)
-          .is("suspended_at", null),
-        admin
-          .from("conversations")
-          .select("id", { count: "exact", head: true })
-          .gte("last_message_at", ontem),
-        admin
-          .from("agent_inbox_items")
-          .select("id", { count: "exact", head: true })
-          .eq("kind", "handoff")
-          .gte("created_at", ontem),
+          .is("suspended_at", null)
+          .not(...SEM_DEMONSTRACAO),
+        excluirDemonstracao(
+          admin
+            .from("conversations")
+            .select("id", { count: "exact", head: true })
+            .gte("last_message_at", ontem),
+          demonstracao,
+        ),
+        excluirDemonstracao(
+          admin
+            .from("agent_inbox_items")
+            .select("id", { count: "exact", head: true })
+            .eq("kind", "handoff")
+            .gte("created_at", ontem),
+          demonstracao,
+        ),
         admin
           .from("channel_sessions")
           .select("id", { count: "exact", head: true })

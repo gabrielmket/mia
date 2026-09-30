@@ -2,6 +2,7 @@ import { type NextRequest } from "next/server";
 import { z } from "zod";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { SEM_DEMONSTRACAO } from "@/lib/demonstracao/fora-das-metricas";
 import { separarGasto, type GastoSeparado } from "@/lib/ai/custo/natureza";
 import { taxaEfetiva, totalEmReais, type CotacaoDoDia } from "@/lib/ai/custo/cotacao";
 import { ok, fail } from "@/lib/api/wrappers";
@@ -136,6 +137,11 @@ export async function GET(req: NextRequest) {
   let orgsQuery = admin.from("organizations").select("id, display_name, slug");
   if (tenant_id) {
     orgsQuery = orgsQuery.eq("id", tenant_id);
+  } else {
+    // FORK MIA (cliente modelo, 9010): a empresa de demonstração não entra no
+    // uso da plataforma. Todo o resto desta rota filtra por `orgIds`, então o
+    // corte aqui vale para mensagens, conversas, IA e custo.
+    orgsQuery = orgsQuery.not(...SEM_DEMONSTRACAO);
   }
   const { data: orgs, error: orgsError } = await orgsQuery;
   if (orgsError) {
