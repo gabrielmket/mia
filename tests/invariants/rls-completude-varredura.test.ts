@@ -325,6 +325,8 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     "mia_leads_da_meta_formularios",
     "mia_leads_da_meta_leituras",
     "mia_leads_da_meta_recebidos",
+    // .61 — o dono de cada Página da Meta (9004).
+    "mia_paginas_da_meta",
   ].map((tabela) => ({
     tabela,
     razao:

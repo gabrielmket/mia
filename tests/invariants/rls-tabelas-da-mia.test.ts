@@ -44,6 +44,9 @@ const LIDAS_PELO_CLIENTE = [
   "mia_leads_da_meta_formularios",
   "mia_leads_da_meta_leituras",
   "mia_leads_da_meta_recebidos",
+  // .61 — o dono de cada Página da Meta (migration 9004): gerente lê as da
+  // própria empresa, só a plataforma atribui.
+  "mia_paginas_da_meta",
 ] as const;
 
 /**
@@ -61,6 +64,7 @@ const SO_A_PLATAFORMA_ESCREVE = [
   "mia_leads_da_meta_formularios",
   "mia_leads_da_meta_leituras",
   "mia_leads_da_meta_recebidos",
+  "mia_paginas_da_meta",
 ] as const;
 
 /** As que a sessão do cliente ESCREVE, cada uma com a linha que tentaria gravar no vizinho. */
@@ -110,9 +114,13 @@ function semear(org: string, gestor: string, tag: string): string {
     insert into public.crm_empresas (organization_id, nome) values ('${org}', 'Empresa ${tag}');
     insert into public.meta_onboardings (waba_id, organization_id) values ('mia-rls-waba-${tag}', '${org}');
     insert into public.mia_leads_da_meta_config (organization_id, ativo) values ('${org}', true);
+    -- .61 (9004): formulário ativo só existe para Página da própria empresa, e o
+    -- id de Página é só dígitos, como a Meta os devolve.
+    insert into public.mia_paginas_da_meta (page_id, organization_id, page_name)
+      values ('${tag === "a" ? "90040001" : "90040002"}', '${org}', 'Página ${tag}');
     with f as (
       insert into public.mia_leads_da_meta_formularios (organization_id, page_id, form_id)
-        values ('${org}', 'pagina-${tag}', 'form-${tag}')
+        values ('${org}', '${tag === "a" ? "90040001" : "90040002"}', 'form-${tag}')
         returning id
     ), l as (
       insert into public.mia_leads_da_meta_leituras (organization_id, formulario_id, status)
@@ -196,6 +204,14 @@ describe("tabelas da MIA: quem é de uma organização não lê a outra", () => 
     // devolver zero linhas: é o contrato mais estreito, e é o que se mede.
     expect(() =>
       countAs(GESTOR_A, `select count(*) from public.meta_onboardings where organization_id = '${ORG_A}';`),
+    ).toThrow(/permission denied/);
+  });
+
+  it("mia_meta_conexao_da_plataforma: a sessão do cliente não lê qual empresa empresta a conexão", () => {
+    // Configuração da instalação (9004), exclusiva do servidor, como
+    // `platform_ia`. Nem o gestor sabe de quem é o token que lê as Páginas dele.
+    expect(() =>
+      countAs(GESTOR_A, `select count(*) from public.mia_meta_conexao_da_plataforma;`),
     ).toThrow(/permission denied/);
   });
 });
