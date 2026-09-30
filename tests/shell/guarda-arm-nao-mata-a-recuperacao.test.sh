@@ -44,6 +44,20 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
 NS="$(sed -n 's/^IMG_NS="\(.*\)"$/\1/p' "$REPO_ROOT/hostgator-setup-kit/_common.sh" | head -1)"
 [ -n "$NS" ] || { echo "não consegui ler IMG_NS de _common.sh"; exit 1; }
 export NS
+# FORK MIA: o NOME de cada imagem também vem da fonte, pela mesma razão do NS.
+# O fork publica `mia-crm`, `mia-worker`, ... (ver `IMG_APP` em _common.sh), e o
+# que o caso 3b mede (a versão da atualização chega às quatro imagens) não
+# depende de como elas se chamam.
+repo_da_imagem() {  # repo_da_imagem <IMG_APP|IMG_WORKER|...> → o nome depois do NS
+  sed -n "s|^$1=\"[\$]{IMG_NS}/\(.*\)\"\$|\1|p" "$REPO_ROOT/hostgator-setup-kit/_common.sh" | head -1
+}
+REPO_APP="$(repo_da_imagem IMG_APP)"
+REPO_WORKER="$(repo_da_imagem IMG_WORKER)"
+REPO_SCHEDULER="$(repo_da_imagem IMG_SCHEDULER)"
+REPO_VOICE="$(repo_da_imagem IMG_VOICE_AGENT)"
+for r in "$REPO_APP" "$REPO_WORKER" "$REPO_SCHEDULER" "$REPO_VOICE"; do
+  [ -n "$r" ] || { echo "não consegui ler o nome das imagens de _common.sh"; exit 1; }
+done
 
 WORK="$(mktemp -d)"
 # Guarda de raio de ação: com TMPDIR apontando para diretório inexistente o
@@ -294,13 +308,13 @@ check "em ARM64 o update usa as imagens publicadas por pull" \
 check "em ARM64 não tenta compilar as imagens localmente" \
   nao_contem '-f docker-compose.build.yml build' "$DOCKER_LOG"
 check "o app recebe a versão da atualização" \
-  grep -q "^APP_IMAGE=${NS}/deskcommcrm:0.9.0$" "$ENV3B"
+  grep -q "^APP_IMAGE=${NS}/${REPO_APP}:0.9.0$" "$ENV3B"
 check "o worker recebe a mesma versão do app" \
-  grep -q "^WORKER_IMAGE=${NS}/deskcomm-worker:0.9.0$" "$ENV3B"
+  grep -q "^WORKER_IMAGE=${NS}/${REPO_WORKER}:0.9.0$" "$ENV3B"
 check "o scheduler recebe a mesma versão do app" \
-  grep -q "^SCHEDULER_IMAGE=${NS}/deskcomm-scheduler:0.9.0$" "$ENV3B"
+  grep -q "^SCHEDULER_IMAGE=${NS}/${REPO_SCHEDULER}:0.9.0$" "$ENV3B"
 check "a voz recebe a mesma versão do app" \
-  grep -q "^VOICE_AGENT_IMAGE=${NS}/deskcomm-voice-agent:0.9.0$" "$ENV3B"
+  grep -q "^VOICE_AGENT_IMAGE=${NS}/${REPO_VOICE}:0.9.0$" "$ENV3B"
 check "a atualização preserva o WAHA ARM64 escolhido na instalação" \
   grep -q '^WAHA_IMAGE=devlikeapro/waha:noweb-arm-2026.7.2$' "$ENV3B"
 
