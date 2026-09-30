@@ -6,6 +6,8 @@ import { useT } from "@/hooks/i18n/useT";
 import { ChatCircle } from "@/lib/ui/icons";
 import type { Lead } from "@/lib/types/leads";
 import { cn } from "@/lib/utils";
+// FORK MIA — com quem está a bola (lib/cartoes/bola.ts).
+import { PrefixoDaBola, SeloDaBola } from "@/components/cartoes/LinhasDoCartao";
 
 /**
  * A última mensagem do negócio, com atalho para o inbox.
@@ -52,6 +54,8 @@ export function ConversaSlot({ conversa }: { conversa: Lead["conversa"] }) {
       title={t("Abrir esta conversa no Inbox")}
     >
       <ChatCircle size={12} weight="regular" className="shrink-0" aria-hidden />
+      {/* FORK MIA — "Lead há 12 min:" antes da mensagem (quem falou por último). */}
+      {conversa.bola ? <PrefixoDaBola bola={conversa.bola} /> : null}
       <span className="truncate">
         {preview || <span className="italic">{t("conversa sem mensagens")}</span>}
       </span>
@@ -65,6 +69,12 @@ export function ConversaSlot({ conversa }: { conversa: Lead["conversa"] }) {
           {conversa.unread}
         </span>
       )}
+      {/* FORK MIA — "bola: nós" / "bola: cliente" no fim da linha. */}
+      {conversa.bola ? (
+        <span className={cn("shrink-0", !temNaoLidas && "ml-auto")}>
+          <SeloDaBola bola={conversa.bola} />
+        </span>
+      ) : null}
     </Link>
   );
 }

@@ -25,6 +25,7 @@ import {
 } from "@/lib/leads/next-action";
 import type { LeadCandidate } from "@/lib/leads/active-lead";
 import { anexarDadosDoContato, type LinhaDoContatoNoQuadro } from "@/lib/kanban/dados-do-contato";
+import { comSinaisDoCartao } from "@/lib/cartoes/sinais-do-quadro";
 import { buscaEmLotes } from "@/lib/supabase/em-lotes";
 import { createClient } from "@/lib/supabase/server";
 import type { BoardData, Pipeline, Stage } from "@/lib/kanban/types";
@@ -574,6 +575,16 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   if (leadsComMarcadores.error) {
     return fail("internal_error", leadsComMarcadores.error, 500, { requestId });
   }
+
+  // FORK MIA — os sinais do cartão fechado (bola, compromisso, objeção, canal,
+  // compras, tarefa atrasada): lib/cartoes/sinais-do-quadro.ts. Nunca derruba o
+  // quadro — falha ali devolve os cartões como vieram até aqui.
+  leadsComMarcadores.leads = await comSinaisDoCartao(
+    supabase,
+    (pipeline as Pipeline).organization_id,
+    leadsComMarcadores.leads,
+    { etapas: (stages ?? []) as Stage[] },
+  );
 
   const board: BoardData = {
     pipeline: pipeline as Pipeline,
