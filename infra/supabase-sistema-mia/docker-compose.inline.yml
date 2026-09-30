@@ -12,15 +12,16 @@
 #
 #   * Postgres 17 (o override oficial docker-compose.pg17.yml). A plataforma
 #     roda em 17.6 na nuvem; restaurar um dump do 17 num 15 não é suportado.
-#   * `db`, `kong` e `auth` viram `mia-db`, `mia-kong` e `mia-auth`. Os três
-#     são os únicos que entram na rede comum do EasyPanel (`easypanel`), onde
-#     já vive o Supabase dos clientes do n8n com os MESMOS nomes de serviço.
-#     Dois `db` na mesma rede = o DNS responde um OU outro, e um serviço de um
-#     lado conecta no banco do outro. O `mia-auth` entra só para alcançar o
-#     relay de e-mail `mia-smtp` do deskcomm, e guarda o nome `auth` como
-#     apelido da rede interna. Os demais (rest, storage, meta, studio,
-#     realtime) ficam só na rede interna desta pilha, e o kong.yml oficial os
-#     encontra pelos nomes de sempre.
+#   * `db` e `kong` viram `mia-db` e `mia-kong`. Os dois são os únicos que
+#     entram na rede comum do EasyPanel (`easypanel`), onde já vive o Supabase
+#     dos clientes do n8n com os MESMOS nomes de serviço. Dois `db` na mesma
+#     rede = o DNS responde um OU outro, e um serviço de um lado conecta no
+#     banco do outro. Os demais (auth, rest, storage, meta, studio, realtime)
+#     ficam só na rede interna desta pilha, e o kong.yml oficial os encontra
+#     pelos nomes de sempre. O GoTrue se chama `mia-auth` (ver o bloco dele),
+#     mas responde por `auth` na rede interna.
+#   * E-mail do login (confirmação, "esqueci a senha", convite): SMTP do Google
+#     Workspace, modelos em português servidos pelo `modelos-email`. Ver EMAIL.md.
 #   * O banco entra na rede `easypanel` com o apelido
 #     `supabase-sistema-mia-db`: é por ele que o `deskcomm` (outro projeto)
 #     chega ao Postgres. Nenhuma porta é publicada no host.
@@ -114,40 +115,31 @@ services:
       SERVICE_ROLE_KEY_ASYMMETRIC: ""
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
-      # Muda o valor para o compose RECRIAR o kong e ele resolver `auth` de novo
-      # (30/09/2026: depois da troca auth -> mia-auth o kong seguia com o IP antigo).
-      MIA_KONG_RECRIADO_EM: "2026-09-30-mia-auth"
+      # O kong guarda o IP de `auth`, `rest`, `storage`... pelo TTL que o DNS do
+      # Docker devolve (600 s). Contêiner recriado nasce com IP novo, e por até
+      # 10 min o kong manda o pedido para o IP velho (30/09/2026: depois da troca
+      # auth -> mia-auth ele seguia no IP antigo, e a saída foi recriar o kong na
+      # mão). Com 10 s ele volta a perguntar logo, e recriar um serviço de trás
+      # deixa de exigir recriar o kong junto. É o `dns_valid_ttl` do kong.conf.
+      KONG_DNS_VALID_TTL: 10
     # Pelo bash, e não direto: o bit de execução do script não sobrevive a todo
     # checkout (medido: "permission denied" no primeiro deploy, 28/09/2026).
     entrypoint: ["bash", "/home/kong/kong-entrypoint.sh"]
 
-  # O GoTrue entra na rede `easypanel` por UM motivo: é por ela que ele alcança
-  # o relay de e-mail `mia-smtp` ("esqueci a senha", confirmação de conta), que
-  # mora no projeto deskcomm (docker-compose.easypanel.yml). Por isso o serviço
-  # se chama `mia-auth`, e não `auth`: o compose registra o NOME DO SERVIÇO em
-  # toda rede em que ele entra, e na `easypanel` já existe o `auth` do Supabase
-  # dos clientes do n8n. Dois `auth` ali e o kong de uma pilha passa a mandar
-  # login para o GoTrue da outra (o mesmo motivo do mia-db e do mia-kong).
-  # O kong.yml oficial continua chamando `http://auth:9999`: `auth` agora é um
-  # apelido SÓ na rede interna desta pilha. Medido em teste local (29/09/2026):
-  # na rede `easypanel` o nome `auth` não resolve, `mia-auth` e `mia-smtp` sim;
-  # na rede interna, `auth` resolve para este contêiner.
+  # O GoTrue (login). Só na rede interna desta pilha: ninguém de fora fala com
+  # ele direto, tudo passa pelo kong (`/auth/v1`). O e-mail sai pelo SMTP do
+  # Google Workspace, na internet, e a rede interna já tem saída para ela (a
+  # mesma por onde o backup-envio chega ao Google Drive). Ver EMAIL.md.
   #
-  # SMTP (no Environment): SMTP_HOST=mia-smtp, SMTP_PORT=587, SMTP_USER e
-  # SMTP_PASS vazios. O relay não oferece STARTTLS na rede interna de propósito:
-  # o GoTrue v2.186 faz STARTTLS sozinho sempre que o servidor oferece e recusa o
-  # certificado autoassinado ("x509: certificate is valid for localhost, not
-  # mia-smtp", medido). Detalhes no bloco `mia-smtp` do compose do deskcomm.
-  # Só para APAGAR o contêiner antigo: com o serviço renomeado para `mia-auth`, o
-  # `auth-1` de antes virou órfão e seguiu rodando, respondendo pelo mesmo nome
-  # `auth` na rede interna (metade dos "esqueci a senha" ia para o GoTrue sem
-  # SMTP). Com réplicas 0 o `docker compose up` do EasyPanel o remove. Pode sair
-  # daqui depois que o painel não listar mais `auth-1` (30/09/2026).
-  auth:
-    image: supabase/gotrue:v2.186.0
-    deploy:
-      replicas: 0
-
+  # Por que o nome é `mia-auth`, e não `auth`, se ele não está mais na rede
+  # `easypanel`: de 29 a 30/09/2026 ele esteve lá, para alcançar um relay de
+  # e-mail próprio (`mia-smtp`) que nunca foi ao ar, e na `easypanel` o nome
+  # `auth` é do Supabase dos clientes do n8n. Voltar para `auth` agora recriaria
+  # o problema ao contrário: o `mia-auth-1` viraria órfão e seguiria rodando,
+  # respondendo por `auth` na rede interna junto com o novo (foi o que o
+  # `auth-1` órfão fez em 30/09: metade dos "esqueci a senha" ia para o GoTrue
+  # sem SMTP). O kong.yml oficial chama `http://auth:9999`, e o apelido abaixo
+  # é o que responde.
   mia-auth:
     image: supabase/gotrue:v2.186.0
     restart: unless-stopped
@@ -155,7 +147,6 @@ services:
       default:
         aliases:
           - auth
-      easypanel: {}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
       timeout: 5s
@@ -181,6 +172,9 @@ services:
       GOTRUE_EXTERNAL_EMAIL_ENABLED: ${ENABLE_EMAIL_SIGNUP}
       GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: ${ENABLE_ANONYMOUS_USERS}
       GOTRUE_MAILER_AUTOCONFIRM: ${ENABLE_EMAIL_AUTOCONFIRM}
+      # SMTP do Google Workspace (smtp-relay.gmail.com, 587, senha de app). Os
+      # valores ficam SÓ no Environment do serviço no painel; o que vai em cada
+      # um, e como testar, está em EMAIL.md.
       GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL}
       GOTRUE_SMTP_HOST: ${SMTP_HOST}
       GOTRUE_SMTP_PORT: ${SMTP_PORT}
@@ -207,7 +201,7 @@ services:
       # que fecha nesta instalação (ver app/auth/confirm/route.ts). O endereço
       # sai do SITE_URL ou do retorno que o app pediu (crm.timecompany.com.br ou
       # app.iamia.com.br): nenhum domínio está escrito nos modelos. Não dependem
-      # do servidor de envio: valem com qualquer SMTP configurado abaixo.
+      # do servidor de envio: valem com qualquer SMTP configurado acima.
       GOTRUE_MAILER_TEMPLATES_INVITE: http://modelos-email:8080/convite.html
       GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://modelos-email:8080/confirmacao.html
       GOTRUE_MAILER_TEMPLATES_RECOVERY: http://modelos-email:8080/recuperacao.html
