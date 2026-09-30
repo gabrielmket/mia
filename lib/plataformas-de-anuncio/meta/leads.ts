@@ -262,6 +262,26 @@ export async function lerPermissoes(token: string): Promise<ResultadoDeLeitura<s
   };
 }
 
+// ─── me ─────────────────────────────────────────────────────────────────────
+
+/**
+ * FORK MIA (.64) — de QUEM é o token: o id do usuário (ou usuário do sistema)
+ * na Meta. Tokens diferentes do mesmo usuário do sistema devolvem o mesmo id.
+ *
+ * É o que separa a conta própria de uma empresa da conta da agência colada nela
+ * (`lib/leads-da-meta/autoatendimento.ts`): o token da agência alcança as
+ * Páginas de todos os clientes, e deixá-lo escolher Página seria reabrir o que a
+ * 9004 fechou.
+ */
+export async function lerIdentidade(token: string): Promise<ResultadoDeLeitura<string>> {
+  const r = await requisitar<{ id?: unknown }>("GET", "me", { fields: "id" }, token, "identidade");
+  if (!r.ok) return r;
+  if (typeof r.dados.id !== "string" || r.dados.id === "") {
+    return { ok: false, falha: "transitorio", detalhe: "a Meta não devolveu o id do token" };
+  }
+  return { ok: true, dados: r.dados.id };
+}
+
 // ─── me/accounts ────────────────────────────────────────────────────────────
 
 export interface PaginaDoToken {

@@ -234,6 +234,11 @@ export const AUDIT_ACTIONS = [
   "platform.pagina_da_meta_atribuida",
   "platform.pagina_da_meta_retirada",
   "platform.conexao_da_meta_escolhida",
+  // FORK MIA (.64, migration 9008) — a empresa com conta própria da Meta assume
+  // e solta as Páginas dela: quem marcou ou desmarcou, e quantos formulários
+  // desligaram ao soltar.
+  "leads_da_meta.pagina_assumida",
+  "leads_da_meta.pagina_solta",
   // FORK MIA (.62) — por qual número sai o aviso de grupo de cada empresa (o da
   // plataforma ou um dela, com ou sem reserva): quem trocou, e para qual.
   "platform.origem_do_aviso_alterada",

@@ -26,6 +26,9 @@ export const MENSAGEM_DO_MOTIVO: Record<string, string> = {
   transitorio: "Não foi possível falar com a Meta agora. A próxima leitura tenta de novo sozinha.",
   pagina_nao_e_da_empresa:
     "Esta Página não é desta empresa na plataforma, e a importação dos formulários dela foi desligada aqui. Quem administra a plataforma define de qual empresa é cada Página.",
+  // FORK MIA (.64): a empresa desmarcou a Página que tinha assumido (9008).
+  pagina_solta:
+    "Esta Página foi desmarcada por esta empresa, e a importação dos formulários dela foi desligada. Para voltar a importar, marque a Página de novo e ligue os formulários.",
   pagina_nao_atribuida:
     "A Página deste formulário não está atribuída ao usuário do sistema do token. Atribua a Página no Gerenciador de Negócios.",
   sem_token_da_pagina:
@@ -67,3 +70,20 @@ export const TEMPO_REAL_LIGADO =
 /** A frase de quem ainda não tentou (formulário de antes da .62): a rotina tenta sozinha. */
 export const TEMPO_REAL_PENDENTE =
   "Tempo real ainda não conferido. O sistema tenta ligar na próxima leitura; enquanto isso, os leads chegam pela leitura a cada 5 minutos.";
+
+// ─── FORK MIA (.64) — a escolha das Páginas pela conta própria (9008) ───────
+
+/**
+ * A Página que o token da empresa alcança, mas que já tem dono. A frase NÃO diz
+ * qual empresa: é o que a tela mostra e o que a rota responde ao recusar.
+ */
+export const PAGINA_JA_LIGADA_A_OUTRA_EMPRESA =
+  "Esta Página já está ligada a outra empresa da plataforma. Fale com o suporte.";
+
+/** Por que esta empresa não escolhe as Páginas dela. Chave = `motivo` do modo `plataforma`. */
+export const MENSAGEM_DO_MODO_DA_PLATAFORMA: Record<string, string> = {
+  sem_conexao_propria:
+    "Esta empresa lê as Páginas pela conexão da plataforma. Quem define de qual empresa é cada Página é quem administra a plataforma; para escolher as Páginas aqui, conecte a conta da Meta desta empresa na aba Contas de anúncio.",
+  conta_da_plataforma:
+    "A conta da Meta conectada nesta empresa é a mesma da plataforma, que alcança as Páginas de outras empresas. Por isso quem define as Páginas desta empresa é o suporte. Para escolher aqui, conecte a conta da Meta da própria empresa.",
+};

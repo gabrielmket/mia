@@ -21,6 +21,9 @@ export type MotivoDaLeitura =
   // o motivo que o gatilho do banco grava ao desligar o formulário quando a
   // Página muda de dono. Não confundir com a de baixo, que é do lado da Meta.
   | "pagina_nao_e_da_empresa"
+  // FORK MIA (.64): a empresa desmarcou a Página que tinha assumido pela conta
+  // própria (9008). Gravado por `fn_mia_soltar_pagina_da_meta` ao desligar.
+  | "pagina_solta"
   // a Página é da empresa, mas nenhum token a alcança (atribuição no Gerenciador)
   | "pagina_nao_atribuida"
   | "sem_token_da_pagina"

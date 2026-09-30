@@ -9,7 +9,10 @@
  *     Página, e mantém as Páginas com dono que o token deixou de alcançar;
  *   - atribuir, trocar (com o dono anterior auditado) e retirar o dono;
  *   - a conexão da plataforma só aponta para empresa que TEM conexão de Meta Ads;
- *   - nenhum token sai na resposta.
+ *   - nenhum token sai na resposta;
+ *   - .64 (9008): a lista mostra a ORIGEM de cada dono (atribuída pela
+ *     plataforma ou assumida pela empresa), e o que a plataforma grava é sempre
+ *     da plataforma, inclusive ao transferir uma Página que a empresa assumiu.
  *
  * O gatilho que desliga os formulários da empresa antiga é do banco, e é provado
  * em tests/invariants/paginas-da-meta-por-empresa.test.ts.
@@ -70,7 +73,7 @@ beforeEach(() => {
     mia_meta_conexao_da_plataforma: [{ id: 1, organizacao_da_conexao: "0a000000-0000-4000-8000-000000000001" }],
     mia_paginas_da_meta: [
       { page_id: "111", organization_id: "0a000000-0000-4000-8000-000000000002", page_name: "Protev", atribuida_em: "x" },
-      { page_id: "444", organization_id: "0a000000-0000-4000-8000-000000000003", page_name: "Saiu do token", atribuida_em: "x" },
+      { page_id: "444", organization_id: "0a000000-0000-4000-8000-000000000003", page_name: "Saiu do token", atribuida_em: "x", origem: "conta_propria" },
     ],
   });
   h.banco = banco;
@@ -114,14 +117,17 @@ describe("GET", () => {
       data: { paginas: Array<{ id: string; organizacao: string | null; alcancada: boolean }> };
     };
     expect(data.paginas).toEqual([
-      { id: "111", nome: "Protev", organization_id: "0a000000-0000-4000-8000-000000000002", organizacao: "Protev", alcancada: true },
-      { id: "222", nome: "Castelo Butantã", organization_id: null, organizacao: null, alcancada: true },
+      // Linha de antes da 9008 (sem `origem`): é da plataforma.
+      { id: "111", nome: "Protev", organization_id: "0a000000-0000-4000-8000-000000000002", organizacao: "Protev", alcancada: true, origem: "plataforma" },
+      { id: "222", nome: "Castelo Butantã", organization_id: null, organizacao: null, alcancada: true, origem: null },
       {
         id: "444",
         nome: "Saiu do token",
         organization_id: "0a000000-0000-4000-8000-000000000003",
         organizacao: "Erglares",
         alcancada: false,
+        // .64: assumida pela empresa com a conta própria dela.
+        origem: "conta_propria",
       },
     ]);
   });
@@ -148,6 +154,27 @@ describe("POST e DELETE: o dono de cada Página", () => {
     expect(linhas).toHaveLength(1);
     expect(linhas[0]).toMatchObject({ organization_id: "0a000000-0000-4000-8000-000000000003" });
     expect(h.auditorias[0]).toMatchObject({ metadata: { dono_anterior: "0a000000-0000-4000-8000-000000000002" } });
+  });
+
+  it("⭐ .64: transferir a Página que a empresa assumiu grava a origem da plataforma", async () => {
+    // Sem a origem `plataforma` no upsert, o gatilho da 9008 recusaria a troca
+    // de dono de uma linha `conta_propria` (provado em tests/invariants).
+    const r = await POST(pedido("POST", { page_id: "444", organization_id: "0a000000-0000-4000-8000-000000000002" }));
+    expect(r.status).toBe(200);
+    expect(banco.tabela("mia_paginas_da_meta").find((p) => p.page_id === "444")).toMatchObject({
+      organization_id: "0a000000-0000-4000-8000-000000000002",
+      origem: "plataforma",
+    });
+    expect(h.auditorias[0]).toMatchObject({
+      metadata: { dono_anterior: "0a000000-0000-4000-8000-000000000003", origem_anterior: "conta_propria" },
+    });
+  });
+
+  it("atribuir pela primeira vez também é da plataforma", async () => {
+    await POST(pedido("POST", { page_id: "222", organization_id: "0a000000-0000-4000-8000-000000000003" }));
+    expect(banco.tabela("mia_paginas_da_meta").find((p) => p.page_id === "222")).toMatchObject({
+      origem: "plataforma",
+    });
   });
 
   it("empresa inexistente e id de Página inválido são recusados", async () => {

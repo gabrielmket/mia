@@ -10,7 +10,9 @@
  * ─── A regra ───────────────────────────────────────────────────────────────
  *
  * Cada Página tem UM dono em `mia_paginas_da_meta` (migration 9004), atribuído
- * pelo dono da plataforma em /admin/paginas-da-meta. Tudo aqui parte da lista de
+ * pelo dono da plataforma em /admin/paginas-da-meta — ou, da .64 em diante,
+ * assumido pela própria empresa que tem conta própria da Meta (9008,
+ * `autoatendimento.ts`). Para a leitura tanto faz: tudo aqui parte da lista de
  * Páginas DA EMPRESA, nunca da lista do token: o token só serve para achar o
  * token de cada Página que já é dela. Página que o token alcança e não é da
  * empresa não entra no mapa, e o que não está no mapa não é lido.

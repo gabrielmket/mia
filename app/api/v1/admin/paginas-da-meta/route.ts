@@ -18,6 +18,11 @@
  * na hora os formulários da empresa antiga naquela Página, com o motivo gravado.
  *
  * Nenhum token sai daqui: a resposta leva nomes, ids e donos.
+ *
+ * .64 (migration 9008): a empresa com conta própria da Meta também assume as
+ * Páginas dela. Cada dono tem a ORIGEM (`plataforma` ou `conta_propria`), que a
+ * lista mostra; e o que a plataforma grava aqui é sempre `plataforma` — é esta
+ * origem que o gatilho da 9008 deixa transferir a Página de uma empresa a outra.
  */
 import { randomUUID } from "node:crypto";
 
@@ -63,6 +68,8 @@ interface LinhaDeDono {
   organization_id: string;
   page_name: string | null;
   atribuida_em: string;
+  /** .64 (9008): quem pôs o dono. Linha anterior à 9008 = plataforma. */
+  origem?: "plataforma" | "conta_propria" | null;
 }
 
 interface PaginaNoPainel {
@@ -72,6 +79,8 @@ interface PaginaNoPainel {
   organizacao: string | null;
   /** A conexão da plataforma alcança esta Página hoje? */
   alcancada: boolean;
+  /** .64: atribuída pela plataforma ou assumida pela empresa. `null` = sem dono. */
+  origem: "plataforma" | "conta_propria" | null;
 }
 
 export async function GET(): Promise<Response> {
@@ -94,7 +103,7 @@ export async function GET(): Promise<Response> {
     admin.from("ad_insights_connections").select("organization_id").eq("platform", "meta_ads"),
     admin
       .from("mia_paginas_da_meta")
-      .select("page_id, organization_id, page_name, atribuida_em")
+      .select("page_id, organization_id, page_name, atribuida_em, origem")
       .order("page_name", { ascending: true }),
   ]);
   const falhou = conexao.error ?? orgs.error ?? conectadas.error ?? donos.error;
@@ -141,6 +150,7 @@ export async function GET(): Promise<Response> {
             organization_id: dono?.organization_id ?? null,
             organizacao: dono ? (nomeDaEmpresa.get(dono.organization_id) ?? null) : null,
             alcancada: true,
+            origem: dono ? (dono.origem ?? "plataforma") : null,
           });
         }
       }
@@ -158,6 +168,7 @@ export async function GET(): Promise<Response> {
       organization_id: d.organization_id,
       organizacao: nomeDaEmpresa.get(d.organization_id) ?? null,
       alcancada: false,
+      origem: d.origem ?? "plataforma",
     });
   }
 
@@ -254,10 +265,11 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const { data: antes } = await admin
     .from("mia_paginas_da_meta")
-    .select("organization_id")
+    .select("organization_id, origem")
     .eq("page_id", page_id)
     .maybeSingle();
   const donoAnterior = (antes as { organization_id?: string } | null)?.organization_id ?? null;
+  const origemAnterior = (antes as { origem?: string } | null)?.origem ?? null;
 
   const { error } = await admin.from("mia_paginas_da_meta").upsert(
     {
@@ -266,6 +278,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       page_name: page_name ?? null,
       atribuida_em: new Date().toISOString(),
       atribuida_por: ctx.user.id,
+      // .64: o que a plataforma grava é da plataforma, inclusive ao transferir
+      // uma Página que a empresa tinha assumido (o gatilho da 9008 só deixa
+      // trocar o dono com esta origem).
+      origem: "plataforma",
     },
     { onConflict: "page_id" },
   );
@@ -277,7 +293,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     // A empresa é o alvo: a Página passou a ser dela.
     organizationId: organization_id,
     requestId,
-    metadata: { page_id, dono_anterior: donoAnterior },
+    metadata: { page_id, dono_anterior: donoAnterior, origem_anterior: origemAnterior },
   });
 
   return ok({ page_id, organization_id, dono_anterior: donoAnterior }, { requestId });

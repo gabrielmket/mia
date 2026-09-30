@@ -70,11 +70,12 @@ export async function GET(): Promise<Response> {
       .eq("organization_id", org)
       .order("terminada_em", { ascending: false })
       .limit(50),
-    // FORK MIA (.61): as Páginas que a plataforma atribuiu a esta empresa (9004).
-    // Pela sessão: a RLS da 9004 só devolve as da própria empresa.
+    // FORK MIA (.61): as Páginas desta empresa (9004). Pela sessão: a RLS da
+    // 9004 só devolve as da própria empresa. .64: com a origem (9008), atribuída
+    // pela plataforma ou assumida pela empresa com conta própria.
     db
       .from("mia_paginas_da_meta")
-      .select("page_id, page_name")
+      .select("page_id, page_name, origem")
       .eq("organization_id", org)
       .order("page_name", { ascending: true }),
     // Conexão própria OU a da plataforma, que lê só as Páginas desta empresa.

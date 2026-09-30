@@ -130,7 +130,9 @@ describe("a empresa com conta própria assume as Páginas dela", () => {
 
   it("com a Página assumida, o formulário ativo dela passa (a regra da 9004 continua)", () => {
     expect(
-      tentar(`${assumir(ORG_PROPRIA, PAGINA_1)}; ${formulario(ORG_PROPRIA, PAGINA_1, "form-novo")}`),
+      tentar(
+        `${assumir(ORG_PROPRIA, PAGINA_1)}; ${formulario(ORG_PROPRIA, PAGINA_1, "form-novo")}`,
+      ),
     ).toBe("passou");
   });
 
