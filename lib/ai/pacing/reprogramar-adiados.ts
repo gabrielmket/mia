@@ -50,6 +50,12 @@ import type { ChannelKnobsRow } from "@/lib/ai/pacing-knobs";
 const CAMPOS_QUE_MEXEM_NA_JANELA = [
   "window_start_hour",
   "window_end_hour",
+  // Desde a 0495 (upstream v1.66.0) o turno que RESPONDE a quem escreveu é
+  // adiado pela janela de RESPOSTA, e não pela de disparo. Sem estes dois, o
+  // operador que abre a resposta para 0h-24h, que é o caso de uso inteiro da
+  // janela nova, deixaria o turno de madrugada preso no `run_after` antigo.
+  "resposta_start_hour",
+  "resposta_end_hour",
   "allow_sunday",
   "timezone",
 ] as const satisfies ReadonlyArray<keyof ChannelKnobsRow>;

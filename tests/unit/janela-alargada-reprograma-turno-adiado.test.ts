@@ -66,6 +66,15 @@ describe("mexeuNaJanela: quando vale a pena mexer na fila", () => {
     expect(mexeuNaJanela({ timezone: "America/Sao_Paulo" })).toBe(true);
   });
 
+  it("janela de RESPOSTA (0495) → sim: é ela que adia o turno de quem escreveu", () => {
+    // FORK MIA: desde a v1.66.0 do upstream o turno inbound é adiado pela janela
+    // de resposta. Abrir a resposta para 0h-24h sem reprogramar a fila deixaria o
+    // turno de madrugada preso no horário calculado com a janela antiga.
+    expect(mexeuNaJanela({ resposta_start_hour: 0 })).toBe(true);
+    expect(mexeuNaJanela({ resposta_end_hour: 24 })).toBe(true);
+    expect(mexeuNaJanela({ resposta_start_hour: null, resposta_end_hour: null })).toBe(true);
+  });
+
   it("só espaçamento entre envios → não", () => {
     // `throttle_ms`/`jitter_max_ms` mudam o RITMO, não a permissão de enviar. Um
     // turno adiado pela janela não está esperando por eles, e mexer na fila sem
