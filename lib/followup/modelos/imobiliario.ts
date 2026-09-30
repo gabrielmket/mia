@@ -105,7 +105,7 @@ export const MODELOS_IMOBILIARIOS: readonly ModeloDeFollowup[] = [
       {
         rotulo: "Pede dia e período",
         texto:
-          "Consigo marcar a visita em outro dia. Me diz o dia da semana e o período que ficam melhor para você.",
+          "Posso ver outro dia para a visita. Me diz o dia da semana e o período que ficam melhor para você.",
       },
       {
         rotulo: "Encerra o assunto",

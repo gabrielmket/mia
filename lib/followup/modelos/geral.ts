@@ -104,7 +104,7 @@ export const MODELOS_GERAIS: readonly ModeloDeFollowup[] = [
       {
         rotulo: "Pede dia e período",
         texto:
-          "Consigo encaixar você em outro horário. Me diz o dia da semana e o período que funcionam melhor para você.",
+          "Posso procurar outro horário para você. Me diz o dia da semana e o período que funcionam melhor.",
       },
       {
         rotulo: "Encerra o assunto",

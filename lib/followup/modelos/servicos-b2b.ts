@@ -105,7 +105,7 @@ export const MODELOS_DE_SERVICOS_B2B: readonly ModeloDeFollowup[] = [
       {
         rotulo: "Pede dia e período",
         texto:
-          "Consigo remarcar a nossa conversa. Me diz o dia e o período que funcionam melhor na sua agenda.",
+          "Posso remarcar a nossa conversa. Me diz o dia e o período que funcionam melhor na sua agenda.",
       },
       {
         rotulo: "Encerra o assunto",

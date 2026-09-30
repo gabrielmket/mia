@@ -105,7 +105,7 @@ export const MODELOS_DE_ACADEMIA: readonly ModeloDeFollowup[] = [
       {
         rotulo: "Pede dia e período",
         texto:
-          "Consigo encaixar a sua aula em outro dia. Me diz o dia da semana e o período que ficam melhor para você.",
+          "Posso ver outro dia para a sua aula. Me diz o dia da semana e o período que ficam melhor para você.",
       },
       {
         rotulo: "Encerra o assunto",
