@@ -20,6 +20,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { fecharAvisos, SEM_AVISO_DE_FALHA } from "@/lib/leads-da-meta/aviso-de-falha";
 import { leadsDaMetaLiberados } from "@/lib/leads-da-meta/liberacao";
 import { existeAcessoDeLeitura } from "@/lib/leads-da-meta/paginas";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -57,7 +58,7 @@ export async function GET(): Promise<Response> {
     db
       .from("mia_leads_da_meta_formularios")
       .select(
-        "id, page_id, page_name, form_id, form_name, pipeline_id, stage_id, ativo, lido_ate, ultima_leitura_em, ultimo_status, ultimo_motivo, ultimo_detalhe, importados_total",
+        "id, page_id, page_name, form_id, form_name, pipeline_id, stage_id, ativo, lido_ate, ultima_leitura_em, ultimo_status, ultimo_motivo, ultimo_detalhe, importados_total, perguntas, campo_telefone, campo_nome, campo_email, tempo_real, tempo_real_motivo, tempo_real_em, ultimo_aviso_da_meta_em, falhas_seguidas, aviso_de_falha_motivo",
       )
       .eq("organization_id", org)
       .order("criado_em", { ascending: true }),
@@ -159,6 +160,8 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     .maybeSingle();
 
   const ativo = parsed.data.ativo ?? (atual?.ativo as boolean | undefined) ?? false;
+  // Lido ANTES de gravar: é a transição (ligada → desligada) que fecha os avisos.
+  const estavaLigada = Boolean(atual?.ativo);
   const agora = new Date().toISOString();
   const linha = {
     organization_id: org,
@@ -177,6 +180,17 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     .upsert(linha, { onConflict: "organization_id" });
   if (error) {
     return fail("internal_error", "Não consegui salvar a configuração.", 500, { requestId });
+  }
+
+  // FORK MIA (.62): importação desligada não tem leitura que volte a funcionar.
+  // Os avisos de falha abertos fecham e os contadores zeram, para a empresa que
+  // religar começar do zero, e não com um "já avisado" de semanas atrás.
+  if (!ativo && estavaLigada) {
+    await fecharAvisos(admin, org);
+    await admin
+      .from("mia_leads_da_meta_formularios")
+      .update(SEM_AVISO_DE_FALHA)
+      .eq("organization_id", org);
   }
 
   void audit({

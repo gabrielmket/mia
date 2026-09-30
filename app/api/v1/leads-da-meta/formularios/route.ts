@@ -23,6 +23,16 @@
  *
  * Desligar um formulário que já existe é sempre permitido: é como a empresa
  * limpa o que ficou de uma Página que deixou de ser dela.
+ *
+ * .62 — três coisas a mais:
+ *
+ *   · a escolha de QUAL pergunta é o telefone, o nome e o e-mail
+ *     (`campo_telefone`/`campo_nome`/`campo_email`), para quando o automático
+ *     errar. Só vale chave que existe no formulário (ou um campo padrão da Meta);
+ *   · ligado, a Página é ASSINADA no app para o aviso em tempo real. A recusa
+ *     não impede salvar: o formulário fica ligado pela leitura a cada 5 minutos,
+ *     e o motivo volta na resposta e fica gravado para a tela dizer o que falta;
+ *   · desligado (ou religado), o aviso de falha dele fecha e o contador zera.
  */
 import { randomUUID } from "node:crypto";
 
@@ -33,6 +43,9 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { ligarTempoReal, type ColunasDoTempoReal } from "@/lib/leads-da-meta/assinatura";
+import { fecharAvisos, SEM_AVISO_DE_FALHA } from "@/lib/leads-da-meta/aviso-de-falha";
+import { CAMPOS_PADRAO, PAPEIS_DO_CAMPO } from "@/lib/leads-da-meta/campos-do-formulario";
 import { leadsDaMetaLiberados } from "@/lib/leads-da-meta/liberacao";
 import { acessoAsPaginas, paginasDaEmpresa } from "@/lib/leads-da-meta/paginas";
 import { listarFormularios } from "@/lib/plataformas-de-anuncio/meta/leads";
@@ -54,8 +67,18 @@ const formularioSchema = z
     pipeline_id: z.string().uuid(),
     stage_id: z.string().uuid(),
     ativo: z.boolean(),
+    // .62: a chave da pergunta; nulo = automático; ausente = não muda.
+    campo_telefone: z.string().max(200).nullable().optional(),
+    campo_nome: z.string().max(200).nullable().optional(),
+    campo_email: z.string().max(200).nullable().optional(),
   })
   .strict();
+
+const COLUNA_DO_PAPEL = {
+  telefone: "campo_telefone",
+  nome: "campo_nome",
+  email: "campo_email",
+} as const;
 
 const PAGINA_DE_OUTRA_EMPRESA =
   "Esta Página da Meta não é desta empresa. Quem administra a plataforma define de qual empresa é cada Página.";
@@ -119,7 +142,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
 
   const { data: existente } = await admin
     .from("mia_leads_da_meta_formularios")
-    .select("id, page_id")
+    .select("id, page_id, ativo, perguntas")
     .eq("organization_id", org)
     .eq("form_id", f.form_id)
     .maybeSingle();
@@ -132,6 +155,8 @@ export async function PUT(req: NextRequest): Promise<Response> {
   let pageName = f.page_name ?? null;
   let formName = f.form_name ?? null;
   let perguntas = f.perguntas ?? {};
+  /** O token da Página conferida na Meta: é com ele que a Página é assinada no app. */
+  let paginaNaMeta: { id: string; token: string } | null = null;
   if (f.ativo && pagina) {
     const acesso = await acessoAsPaginas(admin, org, [pagina]);
     if (!acesso.ok) {
@@ -172,7 +197,44 @@ export async function PUT(req: NextRequest): Promise<Response> {
     pageName = alcancada.nome;
     formName = daMeta.nome;
     perguntas = daMeta.perguntas;
+    paginaNaMeta = { id: alcancada.id, token: alcancada.tokenDaPagina };
   }
+
+  // .62: a pergunta escolhida para cada papel tem de existir no formulário. As
+  // perguntas são as da Meta quando ligado; desligando, as que já estavam.
+  const perguntasValidas = new Set([
+    ...Object.keys(
+      f.ativo && pagina
+        ? perguntas
+        : ((existente?.perguntas as Record<string, string> | null) ?? perguntas),
+    ),
+    ...PAPEIS_DO_CAMPO.flatMap((papel) => CAMPOS_PADRAO[papel]),
+  ]);
+  const campos: Record<string, string | null> = {};
+  for (const papel of PAPEIS_DO_CAMPO) {
+    const coluna = COLUNA_DO_PAPEL[papel];
+    const valor = f[coluna];
+    if (valor === undefined) continue;
+    if (valor !== null && !perguntasValidas.has(valor)) {
+      return fail("validation_failed", "Essa pergunta não existe neste formulário.", 422, {
+        requestId,
+      });
+    }
+    campos[coluna] = valor;
+  }
+
+  // .62: a Página assinada no app, para a Meta avisar na hora. Só depois de tudo
+  // validado, porque é uma escrita na Meta. Recusa não impede salvar: vira o
+  // motivo que a tela mostra.
+  const tempoReal: ColunasDoTempoReal | null = paginaNaMeta
+    ? await ligarTempoReal(paginaNaMeta.token, paginaNaMeta.id, new Date())
+    : null;
+
+  // Desligado, ou religado depois de desligado: o aviso de falha fecha e o
+  // contador zera. Salvar de novo o formulário que segue ligado não mexe: o
+  // problema continua o mesmo e já foi avisado.
+  const ligou = f.ativo && !(existente?.ativo as boolean | undefined);
+  const zeraAviso = !f.ativo || ligou;
 
   const agora = new Date().toISOString();
   const { data: salvo, error } = await admin
@@ -192,10 +254,15 @@ export async function PUT(req: NextRequest): Promise<Response> {
         ativo: f.ativo,
         atualizado_em: agora,
         atualizado_por: authz.user.id,
+        ...campos,
+        ...(tempoReal ?? {}),
+        ...(zeraAviso ? SEM_AVISO_DE_FALHA : {}),
       },
       { onConflict: "organization_id,form_id" },
     )
-    .select("id, form_id, ativo, pipeline_id, stage_id, lido_ate")
+    .select(
+      "id, form_id, ativo, pipeline_id, stage_id, lido_ate, campo_telefone, campo_nome, campo_email, tempo_real, tempo_real_motivo, tempo_real_em",
+    )
     .maybeSingle();
   if (error?.code === "42501") {
     // A camada 3 falou: a Página mudou de dono entre a leitura e a gravação.
@@ -204,6 +271,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
   if (error || !salvo) {
     return fail("internal_error", "Não consegui salvar o formulário.", 500, { requestId });
   }
+  if (zeraAviso) await fecharAvisos(admin, org, [salvo.id as string]);
 
   void audit({
     action: "leads_da_meta.formulario_salvo",
@@ -218,6 +286,9 @@ export async function PUT(req: NextRequest): Promise<Response> {
       pipeline_id: f.pipeline_id,
       stage_id: f.stage_id,
       ativo: f.ativo,
+      ...campos,
+      tempo_real: tempoReal?.tempo_real ?? null,
+      tempo_real_motivo: tempoReal?.tempo_real_motivo ?? null,
     },
   });
 

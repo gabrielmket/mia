@@ -104,6 +104,8 @@ const NA_META: Record<string, { nome: string; token: string; forms: Array<Record
   "555": { nome: "Página sem dono", token: "TOKEN-P555", forms: [] },
 };
 let chamadasNaMeta: string[] = [];
+/** .62: o que a Meta responde à escrita de `subscribed_apps` (a assinatura do tempo real). */
+let respostaDaAssinatura: { status: number; corpo: unknown } = { status: 200, corpo: { success: true } };
 
 beforeEach(() => {
   h.papel = "admin";
@@ -111,6 +113,7 @@ beforeEach(() => {
   h.rodadas = [];
   h.tokens = { "org-1": "TOKEN-DA-AGENCIA" };
   chamadasNaMeta = [];
+  respostaDaAssinatura = { status: 200, corpo: { success: true } };
   banco = bancoEmMemoria({
     crm_stages: [
       { id: ETAPA_MINHA, organization_id: "org-1", pipeline_id: FUNIL_MEU },
@@ -124,9 +127,17 @@ beforeEach(() => {
   h.banco = banco;
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (entrada: string | URL) => {
+    vi.fn(async (entrada: string | URL, init?: RequestInit) => {
       const url = new URL(String(entrada));
       chamadasNaMeta.push(url.pathname);
+      if (url.pathname.endsWith("/subscribed_apps")) {
+        if (init?.method === "POST") {
+          return new Response(JSON.stringify(respostaDaAssinatura.corpo), {
+            status: respostaDaAssinatura.status,
+          });
+        }
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      }
       if (url.pathname.endsWith("/me/accounts")) {
         const data = Object.entries(NA_META).map(([id, p]) => ({ id, name: p.nome, access_token: p.token }));
         return new Response(JSON.stringify({ data }), { status: 200 });
@@ -362,5 +373,85 @@ describe("GET /api/v1/leads-da-meta (o estado) · só as Páginas da empresa (.6
     banco.tabela("mia_meta_conexao_da_plataforma").push({ id: 1, organizacao_da_conexao: "org-agencia" });
     const corpo = (await (await ESTADO()).json()) as { data: { conectada: boolean; origem_da_conexao: string } };
     expect(corpo.data).toMatchObject({ conectada: true, origem_da_conexao: "plataforma" });
+  });
+});
+
+describe("PUT /api/v1/leads-da-meta/formularios · tempo real e perguntas (.62)", () => {
+  it("ligar assina a Página no app para o aviso em tempo real, e diz na resposta", async () => {
+    const r = await PUT(pedido(FORM));
+    expect(r.status).toBe(200);
+    const corpo = (await r.json()) as { data: { tempo_real: string; tempo_real_motivo: string | null } };
+    expect(corpo.data).toMatchObject({ tempo_real: "assinado", tempo_real_motivo: null });
+    expect(chamadasNaMeta.some((c) => c.endsWith("/111/subscribed_apps"))).toBe(true);
+  });
+
+  it("a Meta recusa por falta de pages_manage_metadata: salva igual, com o motivo gravado", async () => {
+    respostaDaAssinatura = {
+      status: 403,
+      corpo: { error: { code: 200, message: "(#200) Requires pages_manage_metadata permission" } },
+    };
+    const r = await PUT(pedido(FORM));
+    expect(r.status).toBe(200);
+    const corpo = (await r.json()) as { data: { tempo_real: string; tempo_real_motivo: string } };
+    expect(corpo.data).toMatchObject({ tempo_real: "recusado", tempo_real_motivo: "permissao_insuficiente" });
+    expect(banco.tabela("mia_leads_da_meta_formularios")[0]).toMatchObject({
+      ativo: true,
+      tempo_real: "recusado",
+      tempo_real_motivo: "permissao_insuficiente",
+    });
+  });
+
+  it("a pergunta escolhida para o telefone fica gravada, e 'automático' é nulo", async () => {
+    const r = await PUT(pedido({ ...FORM, campo_telefone: "full_name", campo_email: null }));
+    expect(r.status).toBe(200);
+    expect(banco.tabela("mia_leads_da_meta_formularios")[0]).toMatchObject({
+      campo_telefone: "full_name",
+      campo_email: null,
+    });
+  });
+
+  it("pergunta que não existe no formulário é recusada", async () => {
+    const r = await PUT(pedido({ ...FORM, campo_telefone: "pergunta_inventada" }));
+    expect(r.status).toBe(422);
+    expect(banco.tabela("mia_leads_da_meta_formularios")).toHaveLength(0);
+    // Recusado antes de escrever na Meta: a Página não foi assinada.
+    expect(chamadasNaMeta.some((c) => c.endsWith("/subscribed_apps"))).toBe(false);
+  });
+
+  it("desligar fecha o aviso de falha do formulário e zera o contador", async () => {
+    await PUT(pedido(FORM));
+    const linha = banco.tabela("mia_leads_da_meta_formularios")[0]!;
+    Object.assign(linha, { falhas_seguidas: 5, aviso_de_falha_motivo: "token_invalido" });
+    banco.tabela("agent_inbox_items").push({
+      id: "aviso-1",
+      organization_id: "org-1",
+      kind: "other",
+      ref_kind: "mia_leads_da_meta_formulario",
+      ref_id: linha.id,
+      status: "open",
+    });
+
+    await PUT(pedido({ ...FORM, ativo: false }));
+
+    expect(banco.tabela("agent_inbox_items")[0]).toMatchObject({ status: "resolved" });
+    expect(linha).toMatchObject({ falhas_seguidas: 0, aviso_de_falha_motivo: null });
+  });
+});
+
+describe("PATCH /api/v1/leads-da-meta · desligar a importação (.62)", () => {
+  it("fecha os avisos de falha da empresa, e só os dela", async () => {
+    banco.tabela("mia_leads_da_meta_config").push({ organization_id: "org-1", ativo: true });
+    banco.tabela("agent_inbox_items").push(
+      { id: "a1", organization_id: "org-1", ref_kind: "mia_leads_da_meta_formulario", ref_id: "f", status: "open" },
+      { id: "a2", organization_id: "org-1", ref_kind: "channel_session", ref_id: "s", status: "open" },
+      { id: "a3", organization_id: "org-2", ref_kind: "mia_leads_da_meta_formulario", ref_id: "g", status: "open" },
+    );
+    const r = await PATCH(pedido({ ativo: false }));
+    expect(r.status).toBe(200);
+    expect(banco.tabela("agent_inbox_items").map((a) => [a.id, a.status])).toEqual([
+      ["a1", "resolved"],
+      ["a2", "open"],
+      ["a3", "open"],
+    ]);
   });
 });
