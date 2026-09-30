@@ -1061,6 +1061,9 @@ export const DICIONARIO: Traducoes = {
   "Revisar provedores de IA": { es: "Revisar proveedores de IA" },
   "Revisar modelos do canal": { es: "Revisar plantillas del canal" },
   "Abrir uma conversa afetada": { es: "Abrir una conversación afectada" },
+  "Abrir Agenda": { es: "Abrir Agenda" },
+  "Este contato tem 1 compromisso na Agenda. Cancele ou apague o compromisso antes de excluir.": { es: "Este contacto tiene 1 cita en la Agenda. Cancela o elimina la cita antes de eliminar el contacto." },
+  "Este contato tem {n} compromissos na Agenda. Cancele ou apague os compromissos antes de excluir.": { es: "Este contacto tiene {n} citas en la Agenda. Cancela o elimina las citas antes de eliminar el contacto." },
   "Abrir uso de IA": { es: "Abrir uso de IA" },
   "Abrir Radar": { es: "Abrir Radar" },
   "Peça a quem administra para revisar a conexão do WhatsApp.": { es: "Pide a quien administra que revise la conexión de WhatsApp." },
@@ -3445,6 +3448,17 @@ export const DICIONARIO: Traducoes = {
   "Seu sistema usa inteligência artificial em": { es: "Tu sistema usa inteligencia artificial en" },
   "Skills da IA": { es: "Skills de la IA" },
   "Skills instaladas": { es: "Skills instaladas" },
+  "Se você adotar a versão do catálogo, muda:": { es: "Si adoptas la versión del catálogo, cambia:" },
+  "Palavras-chave de ativação": { es: "Palabras clave de activación" },
+  "Procedimento (corpo)": { es: "Procedimiento (cuerpo)" },
+  "Há uma versão nova desta skill no catálogo. Se você editou esta cópia, suas alterações ficam só no Histórico de versões: ao adotar, a versão nova do catálogo passa a ser a ativa. Confira antes de adotar.": {
+    es: "Hay una versión nueva de esta skill en el catálogo. Si editaste esta copia, tus cambios quedan solo en el Historial de versiones: al adoptarla, la versión nueva del catálogo pasa a ser la activa. Revisa antes de adoptar.",
+  },
+  "Adotar versão nova": { es: "Adoptar versión nueva" },
+  "Adotando…": { es: "Adoptando…" },
+  "Versão nova adotada — a sua cópia agora usa a versão mais recente do catálogo.": {
+    es: "Versión nueva adoptada: tu copia ahora usa la versión más reciente del catálogo.",
+  },
   "Skills prontas, mantidas pela plataforma, disponíveis para instalar com um clique.": {
     es: "Skills listas para usar, mantenidas por la plataforma e instalables con un clic.",
   },
@@ -5617,12 +5631,18 @@ export const DICIONARIO: Traducoes = {
   "dia(s) de uso. Enquanto esse número for menor que o teto diário, é ELE que limita, e mexer no teto diário não muda nada.": {
     es: "día(s) de uso. Mientras ese número sea menor que el tope diario, es ÉL quien limita, y cambiar el tope diario no cambia nada.",
   },
-  "Janela de envio (horário local)": { es: "Ventana de envío (horario local)" },
+  "Janela de resposta (horário local)": { es: "Ventana de respuesta (horario local)" },
+  "Janela de disparo (horário local)": { es: "Ventana de envíos proactivos (horario local)" },
+  "Hora de início da janela de resposta": { es: "Hora de inicio de la ventana de respuesta" },
+  "Hora de fim da janela de resposta": { es: "Hora de fin de la ventana de respuesta" },
   "Hora de início da janela": { es: "Hora de inicio de la ventana" },
   "h até": { es: "h hasta" },
   "Hora de fim da janela": { es: "Hora de fin de la ventana" },
-  "O assistente só envia mensagens dentro desta janela. Fora dela, a resposta fica agendada para a próxima abertura — você vê o motivo na conversa.": {
-    es: "El asistente solo envía mensajes dentro de esta ventana. Fuera de ella, la respuesta queda programada para cuando se abra de nuevo, y el motivo aparece en la conversación.",
+  "Quando o cliente escreve, o agente responde nesta janela. Em branco, segue a janela de disparo. Use 0 e 24 para responder a qualquer hora — o teto diário e o intervalo entre envios continuam valendo.": {
+    es: "Cuando el cliente escribe, el agente responde dentro de esta ventana. En blanco, sigue la ventana de envíos proactivos. Usa 0 y 24 para responder a cualquier hora: el tope diario y el intervalo entre envíos siguen valiendo.",
+  },
+  "Disparos em massa, prospecção e mensagens que retomam conversa parada só saem nesta janela. Fora dela, o envio fica agendado para a próxima abertura — você vê o motivo na conversa.": {
+    es: "Los envíos masivos, la prospección y los mensajes que retoman una conversación detenida solo salen dentro de esta ventana. Fuera de ella, el envío queda programado para cuando se abra de nuevo, y el motivo aparece en la conversación.",
   },
   "Enviar aos domingos": { es: "Enviar los domingos" },
   "Ligado por padrão: quem escreve no domingo espera resposta no domingo. Desligue se você faz prospecção ativa e prefere não incomodar no fim de semana.": {
@@ -7979,8 +7999,8 @@ export const DICIONARIO: Traducoes = {
   },
   "Contato anonimizado.": { es: "Contacto anonimizado." },
   "Anonimizar contato (LGPD)": { es: "Anonimizar contacto (LGPD)" },
-  "Esta ação é irreversível. O nome será substituído por \"Cliente Anonimizado #N\", email/telefone/CPF serão limpos, e atividades terão conteúdo redigido.": {
-    es: "Esta acción es irreversible. El nombre se reemplazará por \"Cliente Anonimizado #N\", se borrarán el email, el teléfono y el CPF, y se redactará el contenido de las actividades.",
+  "Esta ação é irreversível. O nome será substituído por \"Cliente Anonimizado #N\", email, telefone e documento serão limpos, e atividades terão conteúdo redigido.": {
+    es: "Esta acción es irreversible. El nombre se reemplazará por \"Cliente Anonimizado #N\", se borrarán el email, el teléfono y el documento, y se redactará el contenido de las actividades.",
   },
   "Justificativa (mínimo 10 caracteres)": { es: "Justificación (mínimo 10 caracteres)" },
   "Ex.: Solicitação formal do titular via email em DD/MM/YYYY": {
@@ -9725,6 +9745,7 @@ export const DICIONARIO: Traducoes = {
   "Faça login.": { es: "Inicia sesión." },
   "Faça login para continuar.": { es: "Inicia sesión para continuar." },
   "Falha ao atualizar o aviso.": { es: "No se pudo actualizar el aviso." },
+  "Já existe um aviso idêntico aberto nesta organização — reabrir duplicaria o alerta.": { es: "Ya existe un aviso idéntico abierto en esta organización: reabrir duplicaría la alerta." },
   "Falha ao carregar as propostas.": { es: "No se pudieron cargar las propuestas." },
   "Falha ao carregar conexões/knobs.": { es: "No se pudieron cargar las conexiones/knobs." },
   "Falha ao carregar o caso.": { es: "No se pudo cargar el caso." },
@@ -11078,8 +11099,8 @@ export const DICIONARIO: Traducoes = {
   },
   "e-mail inválido: ": { es: "e-mail inválido: " },
   "telefone inválido: ": { es: "teléfono inválido: " },
-  " (use DDI+DDD+número, ex.: +5511999998888)": {
-    es: " (usa código de país+código de área+número, ej.: +5511999998888)",
+  " (use o número com o código do país, por exemplo ": {
+    es: " (usa el número con el código del país, por ejemplo ",
   },
   "linha sem telefone nem e-mail": { es: "fila sin teléfono ni e-mail" },
   "Cabeçalho inválido:": { es: "Encabezado inválido:" },
@@ -14550,7 +14571,7 @@ export const DICIONARIO: Traducoes = {
   "Acesso da IA por número": { es: "Acceso de la IA por número" },
   "Em cada número, a IA atende todo mundo, só números de teste, ninguém, ou só quem veio de uma origem.": { es: "En cada número, la IA atiende a todos, solo a números de prueba, a nadie, o solo a quien vino de un origen." },
   "Proteção de envio por número": { es: "Protección de envío por número" },
-  "Janela, ritmo, teto diário, envio aos domingos e aquecimento de cada número.": { es: "Horario, ritmo, tope diario, envío los domingos y calentamiento de cada número." },
+  "Janelas de resposta e de disparo, ritmo, teto diário, envio aos domingos e aquecimento de cada número.": { es: "Horarios de respuesta y de envíos proactivos, ritmo, tope diario, envío los domingos y calentamiento de cada número." },
   "Grupos na caixa de entrada": { es: "Grupos en la bandeja de entrada" },
   "Em cada número, escolhe quais grupos do WhatsApp aparecem nas conversas.": { es: "En cada número, elige qué grupos de WhatsApp aparecen en las conversaciones." },
   "Verificação em duas etapas obrigatória": { es: "Verificación en dos pasos obligatoria" },

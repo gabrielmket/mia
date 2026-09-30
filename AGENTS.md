@@ -483,7 +483,7 @@ Lei completa em [`docs/doctrine/packaging.md`](docs/doctrine/packaging.md). O n�
   declara `image:` de uma imagem publicada; `build:` só existe **ao lado**, como escape.
   Serviço `build:`-only é pulado por `docker compose pull` e imune a `up -d` sem `--build` —
   ele não é só caro de instalar, ele **nunca é atualizado**.
-- **Publicação é ato do CI**, nunca da sua máquina: build ARM local não roda na VPS amd64.
+- **Publicação é ato do CI**, nunca da sua máquina: as imagens publicadas atendem linux/amd64 e linux/arm64.
 - **Instalação de cliente aponta para número de versão**, nunca para tag móvel. Aqui `latest`
   significa **topo da `main`**, não última release — quem quer a última release usa `stable`.
 - **Dependência upstream é referenciada com tag fixa, nunca republicada** (WAHA é licenciado).

@@ -2,7 +2,9 @@
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
+import { useActiveOrg } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
+import { perfilDoPais } from "@/lib/legal/perfil-do-pais";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +19,7 @@ import { Label } from "@/components/ui/label";
 import { SeletorDeEmpresa } from "@/components/empresas/SeletorDeEmpresa";
 import { useMostraEmpresas } from "@/hooks/useMostraEmpresas";
 import { normalizarTags } from "@/lib/contacts/tag-normalizada";
-import { contactPatchSchema, type ContactPatch } from "@/lib/schemas/contacts";
+import { contactPatchSchemaDoPais, type ContactPatch } from "@/lib/schemas/contacts";
 import { useUpdateContact } from "@/hooks/contacts/useUpdateContact";
 import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 import type { Contact } from "@/lib/types/contacts";
@@ -48,6 +50,7 @@ interface Props {
 export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs = [] }: Props) {
   const t = useT();
   const mostraEmpresa = useMostraEmpresas();
+  const perfil = perfilDoPais(useActiveOrg()?.country);
   const update = useUpdateContact(contact.id);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -111,7 +114,9 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
     payload.cargo = values.cargo?.trim() || null;
     payload.setor = values.setor?.trim() || null;
 
-    const parsed = contactPatchSchema.safeParse(payload);
+    // A MESMA régua do servidor (a rota usa `contactPatchSchemaDoPais`): a
+    // tela não pode recusar, com exemplo brasileiro, o que lá passaria.
+    const parsed = contactPatchSchemaDoPais(perfil).safeParse(payload);
     if (!parsed.success) {
       setServerError(parsed.error.issues[0]?.message ?? t("Dados inválidos"));
       return;

@@ -17,6 +17,9 @@ interface ChannelKnobsRow {
   jitter_max_ms: number | null;
   window_start_hour: number | null;
   window_end_hour: number | null;
+  /** Janela da RESPOSTA do agente (0495). NULL = usa `window_*` (comportamento anterior). */
+  resposta_start_hour: number | null;
+  resposta_end_hour: number | null;
   allow_sunday: boolean | null;
   timezone: string | null;
   warmup_daily_caps: unknown; // jsonb — shape validado em parseWarmupCaps (nunca confiado)
@@ -92,6 +95,7 @@ export async function loadChannelKnobs(
   // ainda precisa do fuso da empresa (`fusoDaJanela`). Uma ida ao banco só.
   const { rows } = await db.query<ChannelKnobsRow>(
     `select k.throttle_ms, k.jitter_max_ms, k.window_start_hour, k.window_end_hour,
+            k.resposta_start_hour, k.resposta_end_hour,
             k.allow_sunday, k.timezone, k.warmup_daily_caps, k.number_activated_at,
             o.timezone as org_timezone
      from organizations o
@@ -124,6 +128,13 @@ export async function loadChannelKnobs(
       jitterMaxMs: row.jitter_max_ms ?? PACING_DEFAULTS.jitterMaxMs,
       windowStartHour: row.window_start_hour ?? PACING_DEFAULTS.windowStartHour,
       windowEndHour: row.window_end_hour ?? PACING_DEFAULTS.windowEndHour,
+      // `null` nestas duas = o número nunca foi configurado com janela de
+      // resposta própria, e aí vale a janela de DISPARO. Sem esse `??`, um clone
+      // que rodou a 0495 porém nunca gravou as colunas teria resposta bloqueada
+      // fora de 7h-22h (o default do arquivo), que é justamente o que ele já
+      // fazia — mas por outro caminho, e ninguém saberia dizer qual.
+      respostaStartHour: row.resposta_start_hour ?? row.window_start_hour ?? PACING_DEFAULTS.respostaStartHour,
+      respostaEndHour: row.resposta_end_hour ?? row.window_end_hour ?? PACING_DEFAULTS.respostaEndHour,
       allowSunday: row.allow_sunday ?? PACING_DEFAULTS.allowSunday,
       timezone: fusoDaJanela(row.timezone, row.org_timezone),
       warmupDailyCaps,

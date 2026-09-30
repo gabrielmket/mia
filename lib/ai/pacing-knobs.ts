@@ -113,6 +113,14 @@ export const pacingKnobsUpdateSchema = z
     jitter_max_ms: z.number().int().min(0).max(KNOB_BOUNDS.intervalMaxMs).nullable().optional(),
     window_start_hour: z.number().int().min(0).max(KNOB_BOUNDS.hourLastStart).nullable().optional(),
     window_end_hour: z.number().int().min(1).max(KNOB_BOUNDS.hourEnd).nullable().optional(),
+    /**
+     * Janela da RESPOSTA do agente (0495). `0` e `24` são valores LEGÍTIMOS —
+     * é assim que o dono declara "responde 24h" — então o schema é o mesmo do
+     * par de disparo, e quem valida start<end é `windowIsValid` sobre o par
+     * RESULTANTE, depois de mesclar com o que já está gravado.
+     */
+    resposta_start_hour: z.number().int().min(0).max(KNOB_BOUNDS.hourLastStart).nullable().optional(),
+    resposta_end_hour: z.number().int().min(1).max(KNOB_BOUNDS.hourEnd).nullable().optional(),
     allow_sunday: z.boolean().nullable().optional(),
     timezone: z
       .string()
@@ -163,6 +171,9 @@ export interface ChannelKnobsRow {
   jitter_max_ms: number | null;
   window_start_hour: number | null;
   window_end_hour: number | null;
+  /** Janela da RESPOSTA (0495). Ausente/null = herda a janela de disparo. */
+  resposta_start_hour?: number | null;
+  resposta_end_hour?: number | null;
   allow_sunday: boolean | null;
   timezone: string | null;
   warmup_daily_caps: unknown;
@@ -191,6 +202,11 @@ export function effectiveKnobs(row: ChannelKnobsRow | null, fusoDaOrg?: string |
     jitterMaxMs: row?.jitter_max_ms ?? PACING_DEFAULTS.jitterMaxMs,
     windowStartHour: row?.window_start_hour ?? PACING_DEFAULTS.windowStartHour,
     windowEndHour: row?.window_end_hour ?? PACING_DEFAULTS.windowEndHour,
+    // Mesma regra do store do engine: coluna vazia herda a janela de DISPARO.
+    // A tela mostra `null` como "Usar o padrão" — e o padrão É o par de disparo,
+    // então mostrar 7h-22h aqui não mente: é o que o motor vai aplicar.
+    respostaStartHour: row?.resposta_start_hour ?? row?.window_start_hour ?? PACING_DEFAULTS.respostaStartHour,
+    respostaEndHour: row?.resposta_end_hour ?? row?.window_end_hour ?? PACING_DEFAULTS.respostaEndHour,
     allowSunday: row?.allow_sunday ?? PACING_DEFAULTS.allowSunday,
     timezone: fusoDaJanela(row?.timezone, fusoDaOrg),
     warmupDailyCaps: parseWarmupCaps(row?.warmup_daily_caps) ?? PACING_DEFAULTS.warmupDailyCaps,

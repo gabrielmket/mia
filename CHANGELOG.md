@@ -8,6 +8,220 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.66.0] — 2026-09-30
+
+### Adicionado
+
+- **Cada número ganha uma janela de resposta separada da janela de disparo** Até aqui, a proteção de envio de cada número tinha um único horário (7h às 22h por padrão), e ele valia para tudo: a resposta do agente a quem escreveu, os disparos em massa e as mensagens que retomam conversa parada. Para o agente responder de madrugada, era preciso abrir o horário inteiro, e com ele os disparos.
+
+  Agora há duas janelas por número, em Conexões › Proteção de envio. A **janela de resposta** vale quando o cliente escreveu e o agente responde. A **janela de disparo** vale para disparos em massa, prospecção e mensagens que retomam conversa parada. Para o agente responder a qualquer hora, use 0 e 24 na janela de resposta.
+
+  Nada muda ao atualizar: enquanto a janela de resposta estiver em branco, ela segue a janela de disparo, como antes. O teto diário, o aquecimento do número e o intervalo entre envios continuam valendo para os dois tipos de envio.
+
+  Contribuição de @suporteubere99-coder (#1983).
+
+## [1.65.0] — 2026-09-30
+
+### Adicionado
+
+- **Instalação em VPS ARM64** O instalador agora atende VPS ARM64/aarch64, como Oracle Ampere A1, AWS Graviton e Hetzner CAX, inclusive no modo com Supabase na mesma VPS. As imagens do DeskcommCRM são construídas em máquina ARM nativa e publicadas na mesma tag das de amd64, e o WAHA usa a variante oficial NOWEB ARM64 (`devlikeapro/waha:noweb-arm-2026.7.2`). Nada é compilado na VPS. Quem já roda em ARM passa a atualizar pelas imagens publicadas, e o `update.sh` troca no `.env` o WAHA amd64 antigo pela variante ARM (um valor escolhido à mão fica intacto). Em amd64 nada muda.
+
+  Contribuição de @mauriciobera1990-droid (#1938).
+
+- **Skills mostram o que mudou entre a sua cópia e a versão nova do catálogo antes de adotar** Ao ver o aviso de que o catálogo publicou uma versão nova de uma skill, o operador agora vê o que mudou em relação à cópia que a organização tem em uso — descrição, palavras-chave de ativação e as linhas adicionadas/removidas do procedimento — antes de decidir adotar.
+
+  Contribuição de @webtecnica (#1972).
+
+### Alterado
+
+- **A anonimização de um contato passa a apagar também as notas do agente, os argumentos das ferramentas da IA, a próxima ação da lead e a identidade social — direto no banco** Antes, o pedido de esquecimento (LGPD) só limpava a memória do agente, os argumentos de ferramentas da IA, a próxima ação da lead e o perfil social quando a camada de aplicação rodava; se a anonimização acontecesse por outro caminho (um update direto, por exemplo), essas quatro fontes ficavam com dados da pessoa. Agora a cascata do banco, disparada quando o contato vira anonimizado, redige as quatro na mesma transação: as notas da IA, o registro das ferramentas (preservando o nome da ferramenta), o estado da lead e a identidade social. Operação idempotente, então a varredura diária não reescreve o que já foi limpo.
+
+  Contribuição de @webtecnica (#1973).
+
+### Corrigido
+
+- **A exportação de dados do titular inclui a memória e os registros da IA sobre ele** O direito de acesso entregava conversas, leads, atividades e a ficha do titular, mas não três fontes que a cascata de anonimização já limpa a pedido dele: as notas de memória da IA (`lead_notes`), os argumentos passados às ferramentas (`ai_agent_runs.tool_calls`) e a próxima ação e a qualificação do funil (`lead_state`). O que se apaga a pedido do titular é o que se entrega a pedido dele.
+
+  A exportação agora coleta as três, filtradas por organização e contato, e as entrega no arquivo que o titular recebe (`data.json`), com a qualificação íntegra e, de cada execução da IA, o nome e os argumentos de cada ferramenta — que é o texto que o titular escreveu. O resultado das ferramentas e o texto intermediário do modelo ficam de fora: uma busca de contatos feita pelo agente devolve telefone e e-mail de outras pessoas, e isso não pode chegar ao arquivo de um titular. Quem já usa o produto recebe o relatório mais completo sem precisar fazer nada na instalação.
+
+  Refs #1965
+
+  Contribuição de @webtecnica (#1969).
+
+- **Turno descartado como obsoleto não emite mais a pergunta pendente do roteiro** Quando o #1940 recusa a resposta de um turno porque o cliente escreveu de novo enquanto o agente pensava, o turno é descartado. Mas, num agente com roteiro de atendimento, a pergunta pendente do roteiro ainda saía no fim desse turno descartado — e o turno da mensagem nova respondia em seguida. Efeito: resposta dupla.
+
+  Agora, num turno descartado como obsoleto nada mais sai, nem a pergunta do roteiro: ela fica pendente para o turno da mensagem nova, que lê a conversa inteira. Nenhuma configuração ou ação é necessária.
+
+  Refs: #1940, #1943
+
+  Contribuição de @webtecnica (#1968).
+
+## [1.64.1] — 2026-09-30
+
+### Corrigido
+
+- **A agenda desenha no fuso da organização, não no do navegador** A agenda aberta fora do fuso da empresa desenhava as horas no relógio de quem
+  abriu a tela: um compromisso às 09:00 da clínica aparecia às 09:00 do relógio
+  de quem estava viajando ou com a máquina em outro fuso, a régua do "agora"
+  subia para a hora local, e a chave de dia dos horários livres era a do navegador.
+
+  A âncora da semana já vinha do relógio da organização; faltava a grade. Os
+  blocos, os rótulos de hora, a linha do "agora" e a chave de dia agora saem de
+  `partesNoFuso` e `diaLocalISO` (`lib/agenda/fuso.ts`) sobre o fuso resolvido em
+  `page.tsx` — a mesma fonte que o servidor usa para a primeira pintura.
+
+  Para quem tem navegador e organização no mesmo fuso — a maioria das
+  instalações — a conversão é a identidade e nada muda de lugar. Um teste novo
+  escolhe de propósito um fuso diferente do ambiente, fixa o instante e mede a
+  posição da régua e o rótulo do card contra a hora de parede esperada; ele
+  reprova se a grade voltar a ler o relógio local.
+
+  Refs #1362
+
+  Contribuição de @webtecnica (#1831).
+
+- **A cópia de playbook que a organização editou também avisa quando sai versão nova no catálogo** Até aqui, a primeira edição de um playbook copiado do catálogo desligava de vez o aviso de versão nova: a cópia editada passava a aparecer como "manual" e nunca mais era avisada, justamente na empresa que mais precisa saber da atualização. Agora a cópia editada continua ligada à versão do catálogo de onde veio, segue marcada "do catálogo" e mostra o aviso quando a plataforma publica versão nova.
+
+  O aviso agora diz que, se a cópia foi editada, adotar a versão nova torna ativa a versão do catálogo e deixa as alterações só no Histórico de versões, de onde podem ser restauradas. Skills importadas por arquivo .zip continuam sem aviso. Uma cópia editada antes desta versão já tinha perdido o vínculo e continua sem o aviso.
+
+  Refs #1951
+
+  Contribuição de @webtecnica (#1960).
+
+- **Anonimizar um contato também limpa a memória e os registros da IA sobre ele** Anonimizar um contato limpava a ficha, as conversas, as leads, as atividades e a régua, mas deixava dado pessoal em quatro lugares que o agente de IA escreve: as notas de memória (`lead_notes`), o registro de execução com os argumentos passados às ferramentas (`ai_agent_runs.tool_calls`), a próxima ação e a qualificação do funil (`lead_state`) e a identidade social do contato (`contacts.social_identity`).
+
+  As quatro fontes agora entram na cascata de anonimização. No registro de execução fica só o nome das ferramentas que rodaram, para a trilha do que o agente fez continuar legível; o texto do modelo, os argumentos e os resultados são apagados. Quem anonimiza pela ficha do contato tem tudo limpo na hora. Um pedido formal de exclusão tem essas fontes limpas na varredura diária de retenção, que já completava cascatas interrompidas. Nada precisa ser feito na instalação.
+
+  Refs #1957
+
+  Contribuição de @webtecnica (#1958).
+
+- **O nome da marca no onboarding segue a configuração da tela Marca** As telas de boas-vindas, de primeiro acesso e o cabeçalho do onboarding escreviam o nome da marca lido só do arquivo de instalação (.env), então quem trocou o nome em Administração › Marca continuava vendo o nome antigo justamente nas primeiras telas. Agora elas usam o mesmo resolvedor do título da aba: a configuração salva na tela vence, e o .env segue como reserva. Sem marca própria configurada, nada muda.
+
+  Refs #1944
+
+  Contribuição de @webtecnica (#1961).
+
+## [1.64.0] — 2026-09-29
+
+### Adicionado
+
+- **A cópia de um playbook do catálogo avisa quando sai versão nova, e deixa adotar** Quando a plataforma publica uma versão nova de um playbook do catálogo que a organização
+  instalou, o painel de Skills passa a mostrar um aviso nessa skill com o botão "Adotar versão
+  nova". Nada é trocado sozinho: adotar é um clique de quem é gerente, a versão nova passa a ser
+  a ativa e a que estava em uso continua no Histórico de versões, de onde pode ser restaurada.
+  Skills importadas por arquivo .zip nunca mostram o aviso. Uma cópia que a organização já
+  editou no editor ainda não mostra o aviso.
+
+  Contribuição de @webtecnica (#1950).
+
+### Corrigido
+
+- **A busca deixa de devolver a lista inteira quando o termo tem só asteriscos** Digitar um termo feito só de asteriscos (duplo estrela, `* *` sem espaços) na busca da caixa de
+  entrada ou de contatos podia devolver tudo: o asterisco não era tratado como separador e virava
+  curinga no `or=`, equivalente a buscar sem critério. Agora o piso da busca o ignora — um termo só
+  de asteriscos não vai ao banco.
+
+  Contribuição de @webtecnica (#1948, issue #1935).
+
+- **Excluir contato com compromisso avisa o que barra e como resolver** Ao excluir um contato que tem compromisso na Agenda, a mensagem genérica ("registros
+  vinculados") cede lugar a um aviso que diz qual é o vínculo e oferece abrir a Agenda para
+  resolver antes de excluir.
+
+  Contribuição de @webtecnica (#1949, issue #1925).
+
+## [1.63.6] — 2026-09-29
+
+### Corrigido
+
+- **O cabeçalho do onboarding mostra o ícone da marca própria em vez de nenhum** Quem configurou marca própria em Marca da instalação não via ícone nenhum no cabeçalho do onboarding, só o nome escrito. Agora aparece o mesmo ícone da aba do navegador: o arquivo subido em Marca, ou a inicial na cor da marca quando nenhum arquivo foi subido. Sem marca própria, nada muda: o cabeçalho segue com o símbolo do produto, que acompanha o tema claro ou escuro. Nenhuma configuração ou ação é necessária.
+
+  Contribuição de @carlos0195 (#1942).
+
+- **O agente não envia a resposta que ficou desatualizada porque o cliente escreveu de novo enquanto ele pensava** Cliente que escreve em várias mensagens ("Oi", "Boa tarde", depois a pergunta) recebia duas ou mais respostas seguidas. A primeira saía desatualizada ("Como posso te ajudar?" com a pergunta já na conversa) porque o agente leu a conversa antes de a pergunta chegar e levou alguns segundos para escrever. Numa instalação real, 39% das respostas de um agente saíram a menos de 3 minutos de outra resposta ao mesmo cliente.
+
+  Agora, se chega mensagem nova do cliente enquanto a resposta está sendo escrita, ela não é enviada: o turno seguinte lê a conversa inteira e responde a tudo de uma vez. Para quem escreve sem parar não ficar sem resposta, a regra vale só enquanto a mensagem mais antiga sem resposta tiver menos de 2 minutos. Depois disso, a resposta sai mesmo assim. O tempo é ajustável por `RESPOSTA_OBSOLETA_TETO_MS`, e `0` desliga. Uma mensagem reentregue com atraso, com horário anterior ao da última que o agente leu, não segura a resposta: essa mensagem não abre turno próprio, e segurar a resposta deixaria o cliente sem nenhuma. Nenhuma configuração ou ação é necessária.
+
+  Contribuição de @automatikpg-ux (#1940).
+
+- **O valor do negócio e o documento do contato deixam de dizer Brasil sempre** Quem escolheu outra moeda em Configurações › Organização continuava lendo "Valor (R$)" ao criar ou editar um negócio, embora o valor já fosse gravado e mostrado na moeda da empresa. Agora o rótulo e o eco logo abaixo do campo usam a moeda certa — a do próprio negócio, que continua valendo mesmo se a empresa trocar de moeda depois, e a da empresa quando o negócio é novo. Na ficha do contato, o documento e o exemplo de telefone passam a vir do país da organização — a API já validava o documento por ele, só a tela é que escrevia "CPF" e um telefone brasileiro em duro. Para quem opera no Brasil nada muda. Crédito: @maclevison.
+
+  Contribuição de @maclevison (#1945).
+
+## [1.63.5] — 2026-09-29
+
+### Corrigido
+
+- **A busca da caixa de entrada para de consultar o banco com um termo feito só de parênteses** Um termo como `()`, `((` ou `(a` passava pelo tamanho mínimo da busca da caixa de entrada: o parêntese contava como letra, mas na consulta vira curinga, e a busca casava todas as conversas. Era uma consulta cara que não filtrava nada. Agora o tamanho mínimo é medido sem os parênteses, com a mesma régua que a busca de contatos já usava. Um termo assim conta como curto: a tela mostra a lista sem filtro, como acontece com uma letra só, e quem chama a API recebe a recusa de termo curto em vez da lista inteira. Nenhuma configuração ou ação é necessária.
+
+  Contribuição de @webtecnica (#1934).
+
+- **Gasto de IA sem arredondamento para cima, sentimento parado quando nenhum agente está no ar, e a frase de falta de saldo da OpenAI reconhecida** Três consertos medidos numa instalação real.
+
+  O custo das chamadas registradas pelos workers de sentimento e de resposta legada era arredondado para cima até o centavo inteiro. Uma classificação de sentimento, que custa cerca de um centésimo de centavo, entrava como um centavo inteiro. No mês medido, isso respondia por mais de 90% do gasto que o teto de orçamento enxergava. Agora o custo é gravado fracionado, como o motor do agente já fazia. Os registros antigos não são recalculados automaticamente. Por isso o gasto de IA mostrado em Uso e orçamento cai a partir desta versão, e o mês corrente mistura os registros antigos, arredondados, com os novos. O teto passa a disparar menos, porque deixa de contar gasto que não existiu.
+
+  Com todos os agentes pausados ou despublicados, o classificador de sentimento continuava rodando em cada mensagem recebida. A passagem para humano por sentimento mandava ao cliente "não há atendente disponível… sua conversa entrou na fila" enquanto a equipe já respondia por fora. Agora, sem agente no ar, o sentimento não roda: não cobra e não avisa ninguém.
+
+  A espera pela recarga de saldo não reconhecia a frase "You have no credits remaining" da OpenAI. Nesse caso a fila voltava a gastar as tentativas e gerava um `job_dead` por conversa. Agora a frase é reconhecida e a resposta espera a recarga como nos outros casos. Nenhuma configuração ou ação é necessária.
+
+  Contribuição de @automatikpg-ux (#1936).
+
+## [1.63.4] — 2026-09-29
+
+### Corrigido
+
+- **Com OpenRouter, o custo das respostas da IA volta a ser contado — e o limite de gasto passa a valer** Com o provedor OpenRouter (ou qualquer gateway que nomeie o modelo como `anthropic/claude-…` ou `openai/gpt-…`), o custo das respostas do agente, das guardas e da classificação de etapa ficava em branco: a tela Uso de IA mostrava gasto zero e o limite de gasto da organização nunca era alcançado. A busca de preço agora entende esse formato. Modelo que não está na tabela de preços continua sem custo — nunca com o preço de outro.
+
+  O que muda depois de atualizar: a tela Uso de IA passa a mostrar o gasto das chamadas feitas a partir da atualização (as anteriores seguem sem custo, então o total deste mês começa a contar do dia em que você atualizou). Se alguma organização tem limite de gasto configurado para interromper o atendimento, esse limite passa a valer de verdade: ao chegar nele vem primeiro o aviso na Central e, depois, a IA para de responder e as conversas vão para a fila humana. Aumentar o limite evita paradas novas, mas não devolve a IA às conversas que já pararam — cada uma é retomada na própria conversa. Para conferir antes, abra Uso de IA › Orçamento; a parada de emergência da instalação inteira fica em Administração › Recursos opcionais › Comportamento ("Proteção de gasto de IA"), com `AI_BUDGET_ENFORCEMENT=off` no `.env` como alternativa.
+
+  Contribuição de @webtecnica (#1929). Relatado por @eduardosuruagy (#1880).
+
+- **O aviso de evento morto não abre mais em dobro quando dois drenos rodam juntos** O dreno que vaza eventos para a Central consultava "já existe um aviso aberto?" e só depois inseria — e o cron `event-log-drain` e o drain-loop do worker disparam os dois ao mesmo tempo. Os dois liam "não existe" antes de qualquer escrita, os dois inseriam, e o problema de verdade ficava com dois avisos idênticos na Central. Aviso repetido é aviso que ninguém abre.
+
+  O banco agora é quem segura a fila: um índice único parcial em `agent_inbox_items` (organização, kind e título, só enquanto o aviso está aberto) recusa a segunda linha, e os dois caminhos de escrita passam a tratar essa recusa como o que ela é — "o aviso já estava aberto", e não um erro do dreno. A chave leva o título porque o `event_dead` tem duas famílias que precisam conviver abertas na mesma organização (a da IA que parou de responder e a de mídia), e o predicado é parcial porque uma linha resolvida não pode segurar o slot: reabrir um aviso continua funcionando, e reabrir quando já existe um aberto idêntico volta com resposta clara em vez de erro interno.
+
+  Kinds diferentes, organizações diferentes e as duas famílias do `event_dead` seguem gravando normalmente, em paralelo.
+
+  Contribuição de @webtecnica (#1928).
+
+- **O playbook de agenda ensina os dois passos — listar o que a empresa atende e só depois consultar horários** O playbook `agendamento` é o texto que entra na conversa quando o cliente fala em "agendar", "horário disponível" ou "que horas vocês". Ele começava no meio da cadeia: dizia que a IA só tem acesso à agenda se `crm_find_free_slots` estiver disponível e mandava consultar horários, mas nunca dizia de onde vem o `event_type_slug` que essa ferramenta exige. O primeiro passo, `crm_list_event_types`, não aparecia em nenhuma linha do texto.
+
+  Por isso acontecia a cena da issue #1019: a IA listava os tipos de atendimento, parava ali e respondia "vou verificar", ou passava para a equipe, em vez de oferecer um horário real.
+
+  Agora o texto ensina a cadeia inteira. Primeiro `crm_list_event_types`, de onde sai o `slug` de cada tipo de atendimento. Depois, **no mesmo turno**, `crm_find_free_slots` com esse `event_type_slug`. Quando o cliente escolhe um horário, `crm_book_appointment` com o `starts_at` que a consulta devolveu. Parar depois da lista e responder "vou verificar" passa a ser descrito como o erro que é.
+
+  Cada ferramenta só é mencionada com a condição "se ela estiver na sua mão". O texto vale para a organização inteira e chega por palavra-chave, sem saber quais ferramentas o agente tem ligadas. Para o agente que não tem a ferramenta, nada muda: ele não inventa horário e avisa a equipe.
+
+  A atualização reaplica o `baseline.sql`, e isso já troca o texto padrão. Nenhuma ação é necessária. Uma organização que instalou este playbook pelo catálogo, ou o editou, tem uma cópia própria: essa cópia continua como está e não recebe o texto novo.
+
+  Contribuição de @webtecnica (#1922).
+
+## [1.63.3] — 2026-09-29
+
+### Alterado
+
+- **O CI passa a rodar a conferência de isolamento da atualização contra o banco novo** Da v1.61.0 à v1.63.0, a atualização de quase toda instalação parava no meio e deixava o CRM atrás da página de manutenção: a conferência das regras de isolamento do `update.sh` passou a cobrar regras de um módulo que a instalação não tinha, e nenhum dos cinco checks obrigatórios rodava essa conferência. Agora o check `invariants` a roda contra o banco recém-montado pelo `baseline.sql`, em três versões do script — a do próprio PR, a da última release publicada (é a que roda do disco de quem atualiza) e a da v1.63.0, a última que ainda lê as regras só pelo texto. Uma mudança de banco que travaria a atualização de alguém passa a reprovar antes do merge. Nada muda para quem opera.
+
+### Corrigido
+
+- **O histórico de um follow-up e as versões publicadas de um fluxo não podem mais ser apagados por quem só visualiza** Qualquer membro da organização, inclusive quem só tem o papel de visualizador, conseguia apagar ou alterar o histórico de uma inscrição de follow-up (o que foi enviado, pulado ou cancelado) e as versões publicadas de um fluxo, que são a base para voltar a uma versão anterior, falando direto com o banco pela chave pública do sistema e pela própria sessão, sem passar pelas telas. Agora o histórico só recebe registros novos, e só de quem é gerente ou administrador, que é o papel que as telas já exigiam para pausar, retomar, pular, adiar ou cancelar um follow-up. Ninguém altera nem apaga um registro do histórico por esse caminho, e as versões de um fluxo só saem quando um gerente ou administrador apaga o fluxo inteiro. A leitura continua liberada para todos os membros, e as telas e os envios automáticos funcionam como antes. Não há nada para fazer: a regra entra sozinha na próxima atualização.
+
+## [1.63.2] — 2026-09-29
+
+### Corrigido
+
+- **O tempo na etapa do card do Kanban não zera mais a cada nota ou mensagem** O rodapé do card do Kanban contava o "tempo no estágio" a partir da última atividade do negócio: qualquer nota, edição ou mensagem na conversa zerava o relógio de um negócio parado na mesma etapa havia dias. Agora o tempo é contado a partir da entrada na etapa atual (a coluna `crm_leads.stage_changed_at`, carimbada pelo banco desde a migration 0071), e só mudar de etapa zera o relógio. Negócio sem esse registro cai na data de criação, nunca na última mensagem. Contribuição de @webtecnica (PR #1908).
+
+- **Excluir um contato que já passou por retorno automático não perde mais o histórico** Quem tentava excluir pela tela um contato que já passou por um retorno automático levava um erro **e** ficava com a ficha na base sem histórico: as mensagens e as conversas já tinham sido apagadas quando a exclusão foi recusada. A auditoria registrava `contact.delete_blocked` com `apagados: ["messages","conversations"]` — o rastro exato do estrago.
+
+  O defeito tinha duas metades e as duas foram consertadas. O banco recusava com `42501` o DELETE que chega **em cascata** quando a ficha é apagada, porque o gatilho de proteção do follow-up não distinguia cascata de escrita direta — agora ele distingue pela profundidade do gatilho: a cascata passa, quem apaga um turno de follow-up pela API com sessão de usuário continua sendo recusado, como sempre. E a rota, que apagava mensagens, conversas e a ficha em **três passos separados**, passa a chamar uma função única: as três saem numa transação só, ou sai tudo ou não sai nada.
+
+  Ficha com compromisso na agenda continua sendo recusada antes de qualquer coisa ser apagada, e uma exclusão que falhe por qualquer outro motivo deixa o histórico exatamente onde estava. Nada muda para quem opera além de a exclusão passar a funcionar. Não exige ação.
+
+  Contribuição de @webtecnica (#1912).
+
+- **Só gerente ou administrador consegue cancelar ou apagar uma inscrição de follow-up pelo acesso direto ao banco** Qualquer membro da organização, inclusive quem só tem o papel de visualizador, conseguia apagar ou alterar uma inscrição de follow-up, ou um fluxo inteiro, falando direto com o banco pela chave pública do sistema e pela própria sessão, sem passar pelas telas e sem ficar registrado na auditoria. Apagar a inscrição levava junto o histórico dela e as mensagens de follow-up já agendadas. Agora só quem tem o papel de gerente ou de administrador consegue criar, alterar, cancelar ou apagar uma inscrição ou um fluxo de follow-up por esse caminho, que é o mesmo papel que as telas e a API já exigiam. A leitura continua liberada para todos os membros, e as telas e os envios automáticos funcionam como antes. Não há nada para fazer: a regra entra sozinha na próxima atualização.
+
 ## [1.63.1] — 2026-09-29
 
 ### Corrigido
@@ -18,7 +232,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
   Se a sua atualização para a 1.61.0, 1.62.0 ou 1.63.0 parou nesse aviso, o CRM está fora do ar e o botão da tela não responde. Entre no servidor e rode a atualização de novo, na pasta do CRM: `bash hostgator-setup-kit/update.sh`. Ela termina e tira a página de manutenção do ar. Se mesmo assim parar no mesmo aviso, rode estes três comandos, que trocam o código para esta versão antes de atualizar e assim usam a conferência nova: `git fetch --tags origin`, depois `git checkout v1.63.1`, depois `bash hostgator-setup-kit/update.sh --to v1.63.1 --force`.
 
-  Contribuição de @webtecnica (#1906).
+  Contribuição de @webtecnica (#1906). Relatado por @emersonraza (#1893), @Draven9 (#1897) e @pmfproducer (#1899).
 
 ## [1.63.0] — 2026-09-29
 
@@ -9425,7 +9639,16 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.63.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.66.0...HEAD
+[1.66.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.65.0...v1.66.0
+[1.65.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.64.1...v1.65.0
+[1.64.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.64.0...v1.64.1
+[1.64.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.63.6...v1.64.0
+[1.63.6]: https://github.com/melgarafael/DeskcommCRM/compare/v1.63.5...v1.63.6
+[1.63.5]: https://github.com/melgarafael/DeskcommCRM/compare/v1.63.4...v1.63.5
+[1.63.4]: https://github.com/melgarafael/DeskcommCRM/compare/v1.63.3...v1.63.4
+[1.63.3]: https://github.com/melgarafael/DeskcommCRM/compare/v1.63.2...v1.63.3
+[1.63.2]: https://github.com/melgarafael/DeskcommCRM/compare/v1.63.1...v1.63.2
 [1.63.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.63.0...v1.63.1
 [1.63.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.62.0...v1.63.0
 [1.62.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.61.0...v1.62.0
