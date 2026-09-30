@@ -184,6 +184,17 @@ services:
       GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: ${MAILER_URLPATHS_EMAIL_CHANGE}
       GOTRUE_EXTERNAL_PHONE_ENABLED: ${ENABLE_PHONE_SIGNUP}
       GOTRUE_SMS_AUTOCONFIRM: ${ENABLE_PHONE_AUTOCONFIRM}
+      # ── Entrar e criar conta com Google ──────────────────────────────────────
+      # Desligado até alguém pôr GOOGLE_ENABLED=true no Environment (os padrões
+      # vazios não geram aviso de variável ausente). Ligado, o /auth/v1/settings
+      # passa a dizer `external.google: true` e o app desenha o botão sozinho
+      # em até 1 min (lib/auth/google-na-tela.ts). O retorno do Google vem para
+      # o GoTrue, no endereço público dele; o cliente OAuth no Google Cloud tem
+      # de ter exatamente este URI. Passo a passo em GOOGLE.md.
+      GOTRUE_EXTERNAL_GOOGLE_ENABLED: ${GOOGLE_ENABLED:-false}
+      GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_GOOGLE_SECRET: ${GOOGLE_SECRET:-}
+      GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI: ${API_EXTERNAL_URL}/auth/v1/callback
       # ── E-mails do login em português, com a cara da MIA ──────────────────
       # O corpo de cada e-mail o GoTrue só aceita por URL (ele faz um GET e
       # guarda em cache; medido no fonte da v2.186, templatemailer/template.go).
