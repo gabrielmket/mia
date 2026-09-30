@@ -26,11 +26,16 @@ import { useT } from "@/hooks/i18n/useT";
 import { useEtapasDeGatilho } from "@/hooks/followup/useEtapasDeGatilho";
 import { useInstalarModelo } from "@/hooks/followup/useInstalarModelo";
 import {
-  MODELOS_DE_FOLLOWUP,
+  NICHOS_DE_MODELO,
   horizonteDoModeloMs,
+  modelosDoNicho,
   toquesDoModelo,
   type ModeloDeFollowup,
+  type NichoDeModelo,
 } from "@/lib/followup/modelos";
+// FORK MIA: a galeria por segmento. Importado do módulo e não do índice para o
+// varredor de i18n achar a tabela de rótulos (chave dinâmica).
+import { ROTULO_DO_SEGMENTO, SEGMENTO_PADRAO } from "@/lib/followup/modelos/segmentos";
 import { Clock, PaperPlaneTilt } from "@/lib/ui/icons";
 
 /**
@@ -71,6 +76,8 @@ export function ModelosDialog({ open, onOpenChange, nomesExistentes }: Props) {
   const instalar = useInstalarModelo();
   const [etapaPorModelo, setEtapaPorModelo] = useState<Record<string, string>>({});
   const [erro, setErro] = useState<{ modelo: string; mensagem: string } | null>(null);
+  // FORK MIA: um segmento por vez; o geral é o padrão (lib/followup/modelos/segmentos.ts).
+  const [segmento, setSegmento] = useState<NichoDeModelo>(SEGMENTO_PADRAO);
 
   // Só busca as etapas quando o diálogo abre — o catálogo é lido muito mais
   // vezes do que instalado, e dois terços dos modelos nem pedem etapa.
@@ -119,14 +126,35 @@ export function ModelosDialog({ open, onOpenChange, nomesExistentes }: Props) {
         <DialogHeader>
           <DialogTitle>{t("Modelos prontos")}</DialogTitle>
           <DialogDescription>
+            {/* FORK MIA: texto geral, não só de clínica. */}
             {t(
-              "Fluxos com os textos já escritos, para as quatro vezes em que um paciente some no meio do caminho. Instalar não manda mensagem para ninguém: o fluxo nasce como rascunho para você revisar.",
+              "Fluxos com os textos já escritos, para os momentos em que um cliente some no meio do caminho. Escolha o seu segmento. Instalar não manda mensagem para ninguém: o fluxo nasce como rascunho para você revisar.",
             )}
           </DialogDescription>
         </DialogHeader>
 
+        {/* FORK MIA: o filtro por segmento, no padrão de botões com aria-pressed. */}
+        <div
+          role="group"
+          aria-label={t("Segmento do seu negócio")}
+          className="flex flex-wrap gap-2"
+        >
+          {NICHOS_DE_MODELO.map((nicho) => (
+            <Button
+              key={nicho}
+              size="sm"
+              variant={segmento === nicho ? "default" : "outline"}
+              aria-pressed={segmento === nicho}
+              onClick={() => setSegmento(nicho)}
+              data-testid={`segmento-${nicho}`}
+            >
+              {t(ROTULO_DO_SEGMENTO[nicho])}
+            </Button>
+          ))}
+        </div>
+
         <ul className="flex flex-col gap-3">
-          {MODELOS_DE_FOLLOWUP.map((modelo) => {
+          {modelosDoNicho(segmento).map((modelo) => {
             const jaInstalado = nomesExistentes.includes(modelo.nome);
             const etapaEscolhida = etapaPorModelo[modelo.id];
             const faltaEtapa = modelo.pedeEtapa && !etapaEscolhida;
@@ -141,7 +169,7 @@ export function ModelosDialog({ open, onOpenChange, nomesExistentes }: Props) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="neutral">{modelo.jornada}</Badge>
+                      <Badge variant="neutral">{t(modelo.jornada)}</Badge>
                       <h3 className="font-medium">{modelo.nome}</h3>
                     </div>
                     <p className="mt-1 text-sm text-text-muted">{t(modelo.resumo)}</p>
