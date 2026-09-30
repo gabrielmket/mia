@@ -234,6 +234,9 @@ export const AUDIT_ACTIONS = [
   "platform.pagina_da_meta_atribuida",
   "platform.pagina_da_meta_retirada",
   "platform.conexao_da_meta_escolhida",
+  // FORK MIA (.62) — por qual número sai o aviso de grupo de cada empresa (o da
+  // plataforma ou um dela, com ou sem reserva): quem trocou, e para qual.
+  "platform.origem_do_aviso_alterada",
   "platform_admin.users_listed",
   "platform_admin.user_viewed",
   "platform_admin.platform_admins_listed",

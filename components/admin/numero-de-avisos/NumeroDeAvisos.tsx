@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
   useDefinirGrupoDaEmpresa,
+  useDefinirOrigemDaEmpresa,
   useMarcarNumeroDeAvisos,
   useConectarNumeroDeAvisos,
   useNumeroDeAvisos,
@@ -36,8 +37,9 @@ import {
   type ConfiguracaoDoReport,
   type EmpresaComGrupo,
   type GrupoDeAvisos,
+  type ProblemaDoNumeroDaEmpresa,
 } from "@/hooks/useNumeroDeAvisos";
-import { nomeDoCanal } from "@/lib/channels/estado";
+import { nomeDoCanal, rotuloDoEstadoDoCanal } from "@/lib/channels/estado";
 import type { MotivoDaFalhaDeGrupos } from "@/lib/channels/motivo-da-falha-de-grupos";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 
@@ -60,17 +62,92 @@ const FRASE_DO_MOTIVO: Record<MotivoDaFalhaDeGrupos, string> = {
   desconhecido: "Não foi possível consultar os grupos agora. Tente de novo em instantes.",
 };
 
+/** Valor do item "número da plataforma" no seletor de número de cada empresa. */
+const NUMERO_DA_PLATAFORMA = "__plataforma__";
+/** O número gravado não existe mais: o item que o representa no seletor. */
+const NUMERO_SUMIDO = "__numero_sumido__";
+
+/**
+ * FORK MIA (.62) — o que aconteceu com o número que a empresa escolheu, em
+ * frase. A decisão é do motor (`lib/avisos/origem-do-aviso.ts`); a tela só a
+ * diz, com a ação de quem precisa agir.
+ */
+const FRASE_DO_NUMERO_DA_EMPRESA: Record<ProblemaDoNumeroDaEmpresa, string> = {
+  numero_da_empresa_sumiu: "O número escolhido não existe mais (foi arquivado ou removido).",
+  numero_da_empresa_nao_entrega_em_grupo: "O número escolhido não entrega em grupo.",
+  numero_da_empresa_fora_do_ar: "O número escolhido está fora do ar.",
+};
+
+function ehProblemaDoNumeroDaEmpresa(m: string | null): m is ProblemaDoNumeroDaEmpresa {
+  return m !== null && m in FRASE_DO_NUMERO_DA_EMPRESA;
+}
+
+/**
+ * A situação do aviso desta empresa, quando ela escolheu o próprio número.
+ *
+ * "Não troca calado" termina AQUI: o envio registra o desvio no histórico de
+ * cada negócio, mas quem opera olha esta tela — e ela precisa dizer, enquanto
+ * durar, que o número caiu e para onde os avisos estão indo (ou que não estão).
+ */
+function SituacaoDaEmpresa({ empresa }: { empresa: EmpresaComGrupo }) {
+  const t = useT();
+  if (empresa.origem.modo !== "empresa") return null;
+  const { situacao } = empresa;
+  const estado = empresa.numero_escolhido
+    ? ` (${rotuloDoEstadoDoCanal(empresa.numero_escolhido.status, t)})`
+    : "";
+
+  if (situacao.via === "empresa") {
+    return <p className="text-sm text-text-muted">{t("Os avisos saem pelo número desta empresa.")}</p>;
+  }
+
+  const problema = ehProblemaDoNumeroDaEmpresa(situacao.motivo)
+    ? `${t(FRASE_DO_NUMERO_DA_EMPRESA[situacao.motivo])}${estado}`
+    : null;
+
+  if (situacao.via === "reserva") {
+    return (
+      <p className="text-sm font-medium text-warning-fg" role="alert" data-testid="aviso-pela-reserva">
+        {problema}{" "}
+        {t("Enquanto isso, os avisos desta empresa estão saindo pelo número da plataforma (reserva).")}
+      </p>
+    );
+  }
+
+  return (
+    <p className="text-sm font-medium text-error-fg" role="alert" data-testid="aviso-parado">
+      {problema}{" "}
+      {situacao.reserva === "indisponivel"
+        ? t("A reserva está ligada, mas o número da plataforma também não está disponível: os avisos desta empresa NÃO estão saindo.")
+        : t("Os avisos desta empresa NÃO estão saindo — a reserva pelo número da plataforma está desligada.")}
+    </p>
+  );
+}
+
 function LinhaDaEmpresa({
   empresa,
-  grupos,
-  podeEscolher,
+  gruposDaPlataforma,
+  plataformaPodeListar,
 }: {
   empresa: EmpresaComGrupo;
-  grupos: GrupoDeAvisos[];
-  podeEscolher: boolean;
+  gruposDaPlataforma: GrupoDeAvisos[];
+  /** Há número da plataforma marcado, e deu para perguntar os grupos dele. */
+  plataformaPodeListar: boolean;
 }) {
   const t = useT();
   const definir = useDefinirGrupoDaEmpresa();
+  const definirOrigem = useDefinirOrigemDaEmpresa();
+
+  /**
+   * Os grupos que se escolhe são os do NÚMERO EM USO: no modo empresa, os do
+   * número dela (o da plataforma pode nem estar nesses grupos); no padrão, os da
+   * plataforma, como sempre.
+   */
+  const doProprio = empresa.origem.modo === "empresa";
+  const grupos = doProprio ? (empresa.grupos_do_numero?.grupos ?? []) : gruposDaPlataforma;
+  const podeEscolher = doProprio
+    ? empresa.grupos_do_numero?.indisponiveis === false
+    : plataformaPodeListar;
 
   /**
    * O grupo salvo entra na lista mesmo que o WhatsApp não o tenha devolvido.
@@ -83,32 +160,129 @@ function LinhaDaEmpresa({
   const opcoes = empresa.grupo && !grupos.some((g) => g.id === empresa.grupo?.id)
     ? [empresa.grupo, ...grupos]
     : grupos;
+  const grupoForaDoNumero =
+    podeEscolher && empresa.grupo !== null && !grupos.some((g) => g.id === empresa.grupo?.id);
+
+  const valorDoNumero =
+    empresa.origem.modo === "plataforma"
+      ? NUMERO_DA_PLATAFORMA
+      : (empresa.origem.channel_session_id ?? NUMERO_SUMIDO);
+  // O escolhido entra na lista mesmo caído: é o valor em vigor, e sumir com ele
+  // faria o seletor dizer "plataforma" sobre uma empresa cujo aviso está parado.
+  const numeros =
+    empresa.numero_escolhido && !empresa.numeros.some((n) => n.id === empresa.numero_escolhido?.id)
+      ? [empresa.numero_escolhido, ...empresa.numeros]
+      : empresa.numeros;
+  const reserva = empresa.origem.modo === "empresa" && empresa.origem.reserva_da_plataforma;
 
   return (
-    <div className="flex flex-col gap-2 border-b border-border py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between">
-      <p className="min-w-0 font-medium">{empresa.display_name}</p>
-      <Select
-        value={empresa.grupo?.id ?? SEM_GRUPO}
-        disabled={!podeEscolher || definir.isPending}
-        onValueChange={(v) =>
-          definir.mutate({
-            organization_id: empresa.id,
-            grupo: v === SEM_GRUPO ? null : (opcoes.find((g) => g.id === v) ?? null),
-          })
-        }
-      >
-        <SelectTrigger className="sm:w-80" aria-label={t("Grupo que recebe o aviso")}>
-          <SelectValue placeholder={t("Sem aviso")} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={SEM_GRUPO}>{t("Sem aviso")}</SelectItem>
-          {opcoes.map((g) => (
-            <SelectItem key={g.id} value={g.id}>
-              {g.nome}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div className="space-y-2 border-b border-border py-3 last:border-0">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="min-w-0 font-medium">{empresa.display_name}</p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Select
+            value={valorDoNumero}
+            disabled={definirOrigem.isPending}
+            onValueChange={(v) => {
+              if (v === NUMERO_SUMIDO) return;
+              definirOrigem.mutate({
+                organization_id: empresa.id,
+                origem:
+                  v === NUMERO_DA_PLATAFORMA
+                    ? { modo: "plataforma" }
+                    : { modo: "empresa", channel_session_id: v, reserva_da_plataforma: reserva },
+              });
+            }}
+          >
+            <SelectTrigger className="sm:w-64" aria-label={t("Número que envia o aviso")}>
+              <SelectValue placeholder={t("Número da plataforma")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NUMERO_DA_PLATAFORMA}>{t("Número da plataforma")}</SelectItem>
+              {valorDoNumero === NUMERO_SUMIDO && (
+                <SelectItem value={NUMERO_SUMIDO}>{t("Número que não existe mais")}</SelectItem>
+              )}
+              {numeros.map((n) => (
+                <SelectItem key={n.id} value={n.id}>
+                  {n.status === STATUS_SAUDAVEL
+                    ? nomeDoCanal(n, t)
+                    : `${nomeDoCanal(n, t)} · ${rotuloDoEstadoDoCanal(n.status, t)}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={empresa.grupo?.id ?? SEM_GRUPO}
+            disabled={!podeEscolher || definir.isPending}
+            onValueChange={(v) =>
+              definir.mutate({
+                organization_id: empresa.id,
+                grupo: v === SEM_GRUPO ? null : (opcoes.find((g) => g.id === v) ?? null),
+              })
+            }
+          >
+            <SelectTrigger className="sm:w-72" aria-label={t("Grupo que recebe o aviso")}>
+              <SelectValue placeholder={t("Sem aviso")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SEM_GRUPO}>{t("Sem aviso")}</SelectItem>
+              {opcoes.map((g) => (
+                <SelectItem key={g.id} value={g.id}>
+                  {g.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {empresa.origem.modo === "empresa" && (
+        <div className="flex items-center gap-2">
+          <Switch
+            id={`reserva-${empresa.id}`}
+            checked={reserva}
+            disabled={definirOrigem.isPending || !empresa.origem.channel_session_id}
+            onCheckedChange={(v) =>
+              empresa.origem.modo === "empresa" &&
+              empresa.origem.channel_session_id &&
+              definirOrigem.mutate({
+                organization_id: empresa.id,
+                origem: {
+                  modo: "empresa",
+                  channel_session_id: empresa.origem.channel_session_id,
+                  reserva_da_plataforma: v,
+                },
+              })
+            }
+          />
+          <Label htmlFor={`reserva-${empresa.id}`} className="text-sm font-normal">
+            {t("Se este número cair, mandar pelo número da plataforma (reserva)")}
+          </Label>
+        </div>
+      )}
+
+      <SituacaoDaEmpresa empresa={empresa} />
+
+      {doProprio && empresa.grupos_do_numero?.indisponiveis && empresa.grupos_do_numero.motivo && (
+        <p className="text-sm text-text-muted">
+          {t("Não deu para listar os grupos deste número agora. O que já estava escolhido continua valendo.")}{" "}
+          {t(FRASE_DO_MOTIVO[empresa.grupos_do_numero.motivo] ?? FRASE_DO_MOTIVO.desconhecido)}
+        </p>
+      )}
+
+      {grupoForaDoNumero && empresa.grupo && (
+        <p className="text-sm font-medium text-warning-fg" role="alert">
+          {t("O número em uso não está no grupo")} «{empresa.grupo.nome}»:{" "}
+          {t("o aviso não chega. Adicione o número ao grupo pelo WhatsApp ou escolha outro grupo.")}
+        </p>
+      )}
+
+      {empresa.reserva_no_grupo === false && empresa.grupo && (
+        <p className="text-sm text-warning-fg" role="alert">
+          {t("A reserva só funciona se o número da plataforma também estiver no grupo")} «{empresa.grupo.nome}»{" "}
+          {t("— hoje ele não está.")}
+        </p>
+      )}
     </div>
   );
 }
@@ -400,11 +574,17 @@ export function NumeroDeAvisos() {
           <CardTitle>{t("Quem recebe em cada cliente")}</CardTitle>
         </CardHeader>
         <CardContent>
-          {!data.sessao ? (
-            <p className="text-sm text-text-muted">
-              {t("Marque o número acima para escolher os grupos.")}
+          <p className="mb-3 text-sm text-text-muted">
+            {t(
+              "Cada empresa recebe pelo número da plataforma ou por um número que ela mesma conectou (por QR Code: a API oficial não manda mensagem para grupo). Os grupos da lista são os do número em uso.",
+            )}
+          </p>
+          {!data.sessao && (
+            <p className="mb-3 text-sm text-text-muted">
+              {t("Sem número da plataforma marcado, só as empresas com número próprio conseguem escolher o grupo.")}
             </p>
-          ) : (
+          )}
+          {data.sessao && (
             <>
               {data.grupos_indisponiveis && (
                 <div className="mb-3 space-y-1" role="alert">
@@ -427,18 +607,18 @@ export function NumeroDeAvisos() {
                   {t("Este número ainda não está em nenhum grupo. Adicione-o pelo WhatsApp e recarregue.")}
                 </p>
               )}
-              <div>
-                {data.empresas.map((e) => (
-                  <LinhaDaEmpresa
-                    key={e.id}
-                    empresa={e}
-                    grupos={data.grupos}
-                    podeEscolher={!data.grupos_indisponiveis}
-                  />
-                ))}
-              </div>
             </>
           )}
+          <div>
+            {data.empresas.map((e) => (
+              <LinhaDaEmpresa
+                key={e.id}
+                empresa={e}
+                gruposDaPlataforma={data.grupos}
+                plataformaPodeListar={data.sessao !== null && !data.grupos_indisponiveis}
+              />
+            ))}
+          </div>
         </CardContent>
       </Card>
     </div>

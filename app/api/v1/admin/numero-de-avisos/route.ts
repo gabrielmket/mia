@@ -17,6 +17,12 @@
  * O GET também lista os GRUPOS e as EMPRESAS: é do que a tela se alimenta para
  * o operador escolher, pelo NOME, qual grupo recebe o aviso de cada cliente em
  * vez de colar `120363…@g.us`.
+ *
+ * FORK MIA (.62): cada empresa pode mandar pelo número DELA
+ * (`lib/avisos/origem-do-aviso.ts`). Por isso cada linha de empresa traz a
+ * escolha, os números dela que podem ser escolhidos, a SITUAÇÃO de agora (por
+ * onde o aviso está saindo, e por que não pelo escolhido) e os grupos do número
+ * em uso — que, no modo empresa, são os do número dela e não os da plataforma.
  */
 import { randomUUID } from "node:crypto";
 
@@ -27,8 +33,14 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { lerGrupoDeAvisos } from "@/lib/avisos/destino-do-aviso";
-import { lerGruposDoNumero } from "@/lib/avisos/grupos-do-numero";
+import { lerGruposDoNumero, type LeituraDosGrupos } from "@/lib/avisos/grupos-do-numero";
+import {
+  escolherNumeroDoAviso,
+  lerOrigemDoAviso,
+  type OrigemDoAviso,
+} from "@/lib/avisos/origem-do-aviso";
 import { getAdapter, PROVIDERS_QUE_ENTREGAM_EM_GRUPO } from "@/lib/channels";
+import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 import {
   CHANNEL_SESSION_REF_COLUMNS,
   resolveSessionRef,
@@ -110,16 +122,19 @@ export async function GET(): Promise<Response> {
     .is("redacted_at", null)
     .order("display_name", { ascending: true });
 
-  const empresas = (orgs ?? []).map((o) => {
-    const linha = o as { id: string; display_name: string | null; settings: unknown };
-    return {
-      id: linha.id,
-      display_name: linha.display_name,
-      grupo: lerGrupoDeAvisos(linha.settings),
-    };
-  });
+  const base = (orgs ?? []).map(
+    (o) => o as { id: string; display_name: string | null; settings: unknown },
+  );
+  const nomeDaOrg = new Map(base.map((e) => [e.id, e.display_name]));
 
-  const nomeDaOrg = new Map(empresas.map((e) => [e.id, e.display_name]));
+  const resumoDaSessao = (s: LinhaDeSessao) => ({
+    id: s.id,
+    organization_id: s.organization_id,
+    organizacao: nomeDaOrg.get(s.organization_id) ?? null,
+    phone_number: s.phone_number,
+    display_name: s.display_name,
+    status: s.status,
+  });
 
   /**
    * A lista de grupos vem do ADAPTER, e por presença do método: o painel não
@@ -131,26 +146,92 @@ export async function GET(): Promise<Response> {
   const leitura = marcada && adapter ? await lerGruposDoNumero(adapter, resolveSessionRef(marcada)) : null;
   const grupos = leitura?.ok ? leitura.grupos : null;
 
+  /**
+   * FORK MIA (.62) — cada empresa, com a escolha do número e o que ela VALE agora.
+   *
+   * A situação sai da MESMA função que decide o envio (`escolherNumeroDoAviso`):
+   * a tela não tem uma opinião própria sobre para onde o aviso vai, ela mostra a
+   * do motor. Duas respostas para a mesma pergunta divergiriam no dia em que uma
+   * mudasse — e a tela diria "saindo pela empresa" com o aviso parado.
+   *
+   * Os grupos do número da empresa são lidos em paralelo, só para quem escolheu
+   * o próprio número; o número caído nem é perguntado (a resposta seria erro, e
+   * o motivo já se sabe).
+   */
+  const empresas = await Promise.all(
+    base.map(async (linha) => {
+      const origem: OrigemDoAviso = lerOrigemDoAviso(linha.settings);
+      const grupo = lerGrupoDeAvisos(linha.settings);
+      const idEscolhido = origem.modo === "empresa" ? origem.channel_session_id : null;
+      const escolhida = idEscolhido
+        ? (linhas.find((s) => s.id === idEscolhido && s.organization_id === linha.id) ?? null)
+        : null;
+
+      const numero = escolherNumeroDoAviso({
+        organizationId: linha.id,
+        origem,
+        daEmpresa: escolhida,
+        daPlataforma: marcada,
+      });
+
+      let gruposDoNumero: {
+        grupos: Array<{ id: string; nome: string }>;
+        indisponiveis: boolean;
+        motivo: string | null;
+      } | null = null;
+      if (origem.modo === "empresa") {
+        const lida: LeituraDosGrupos = !escolhida
+          ? { ok: false, motivo: "sessao_inexistente" }
+          : escolhida.status !== STATUS_SAUDAVEL
+            ? { ok: false, motivo: "desconectado" }
+            : await lerGruposDoNumero(getAdapter(escolhida.provider), resolveSessionRef(escolhida));
+        gruposDoNumero = lida.ok
+          ? { grupos: lida.grupos, indisponiveis: false, motivo: null }
+          : { grupos: [], indisponiveis: true, motivo: lida.motivo };
+      }
+
+      return {
+        id: linha.id,
+        display_name: linha.display_name,
+        grupo,
+        origem,
+        /**
+         * Os números DESTA empresa que podem ser escolhidos: conectados agora
+         * e que entregam em grupo (a lista de cima já só traz esses canais).
+         * O número da plataforma fica de fora — escolhê-lo como "da empresa"
+         * seria a opção "plataforma" com outro nome.
+         */
+        numeros: linhas
+          .filter(
+            (s) =>
+              s.organization_id === linha.id &&
+              s.status === STATUS_SAUDAVEL &&
+              s.e_numero_de_avisos !== true,
+          )
+          .map(resumoDaSessao),
+        /** O escolhido COMO ESTÁ (caído inclusive). `null` = modo plataforma, ou não existe mais. */
+        numero_escolhido: escolhida ? resumoDaSessao(escolhida) : null,
+        situacao: numero.ok
+          ? { via: numero.via, motivo: numero.desvio, reserva: null }
+          : { via: null, motivo: numero.motivo, reserva: numero.reserva },
+        grupos_do_numero: gruposDoNumero,
+        /**
+         * Com a reserva ligada: o número da plataforma está no grupo escolhido?
+         * A reserva manda pelo MESMO grupo, e o número da plataforma só consegue
+         * falar num grupo de que participa. `null` = não deu para saber.
+         */
+        reserva_no_grupo:
+          origem.modo === "empresa" && origem.reserva_da_plataforma && grupo && grupos
+            ? grupos.some((g) => g.id === grupo.id)
+            : null,
+      };
+    }),
+  );
+
   return ok(
     {
-      sessao: marcada
-        ? {
-            id: marcada.id,
-            organization_id: marcada.organization_id,
-            organizacao: nomeDaOrg.get(marcada.organization_id) ?? null,
-            phone_number: marcada.phone_number,
-            display_name: marcada.display_name,
-            status: marcada.status,
-          }
-        : null,
-      candidatas: linhas.map((s) => ({
-        id: s.id,
-        organization_id: s.organization_id,
-        organizacao: nomeDaOrg.get(s.organization_id) ?? null,
-        phone_number: s.phone_number,
-        display_name: s.display_name,
-        status: s.status,
-      })),
+      sessao: marcada ? resumoDaSessao(marcada) : null,
+      candidatas: linhas.map(resumoDaSessao),
       /**
        * `null` = não deu para perguntar (canal fora do ar, sessão caída).
        * `[]`   = perguntou e o número não está em grupo nenhum.
