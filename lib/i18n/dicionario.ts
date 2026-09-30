@@ -12697,6 +12697,89 @@ export const DICIONARIO: Traducoes = {
   "Alguém confirmar na agenda que o paciente não compareceu.": {
     es: "Que alguien confirme en la agenda que el paciente no asistió.",
   },
+  // FORK MIA: a galeria por segmento (lib/followup/modelos/segmentos.ts). Os
+  // rótulos, as jornadas e os resumos chegam por chave dinâmica; quem cobra o
+  // espanhol é lib/followup/modelos/modelos.test.ts.
+  "Fluxos com os textos já escritos, para os momentos em que um cliente some no meio do caminho. Escolha o seu segmento. Instalar não manda mensagem para ninguém: o fluxo nasce como rascunho para você revisar.": {
+    es: "Flujos con los textos ya escritos para los momentos en que un cliente desaparece a mitad de camino. Elige tu segmento. Instalar un flujo no envía mensajes a nadie: se crea como borrador para que lo revises.",
+  },
+  "Segmento do seu negócio": { es: "Segmento de tu negocio" },
+  "Saúde e estética": { es: "Salud y estética" },
+  "Imobiliário": { es: "Inmobiliario" },
+  "Automotivo": { es: "Automotriz" },
+  "Academias e bem-estar": { es: "Gimnasios y bienestar" },
+  "Serviços B2B": { es: "Servicios B2B" },
+  Retomada: { es: "Reactivación" },
+  "Test drive": { es: "Prueba de manejo" },
+  "Negociação": { es: "Negociación" },
+  "Aula experimental": { es: "Clase de prueba" },
+  "Matrícula": { es: "Inscripción" },
+  "Um dia inteiro sem o cliente responder, com a conversa em aberto.": {
+    es: "Un día entero sin que el cliente responda, con la conversación pendiente.",
+  },
+  "Alguém confirmar na agenda que o cliente não compareceu.": {
+    es: "Que alguien confirme en la agenda que el cliente no asistió.",
+  },
+  "O cliente chamou, a conversa parou antes do próximo passo e ninguém voltou nela.": {
+    es: "El cliente escribió, la conversación se detuvo antes del siguiente paso y nadie la retomó.",
+  },
+  "O cliente mostrou interesse e ainda não marcou a visita, a reunião ou o atendimento. O fluxo lembra por duas semanas e sai de cena.": {
+    es: "El cliente mostró interés y todavía no agendó la visita, la reunión o la cita. El flujo le recuerda durante dos semanas y después se retira.",
+  },
+  "Quem recebeu a proposta e não respondeu nem sempre desistiu: pode estar decidindo. O fluxo acompanha por quase três meses, sem pressionar.": {
+    es: "Quien recibió la propuesta y no respondió no siempre desistió: puede estar decidiendo. El flujo da seguimiento durante casi tres meses, sin presionar.",
+  },
+  "O cliente não compareceu ao horário marcado. O fluxo oferece outra data em vez de deixar a conversa esfriar.": {
+    es: "El cliente no asistió a la hora agendada. El flujo ofrece otra fecha en lugar de dejar que la conversación se enfríe.",
+  },
+  "A pessoa perguntou sobre um imóvel, a conversa parou antes da visita e ninguém voltou nela.": {
+    es: "La persona preguntó por un inmueble, la conversación se detuvo antes de la visita y nadie la retomó.",
+  },
+  "O cliente se interessou por um imóvel e ainda não marcou a visita. O fluxo lembra por duas semanas e sai de cena.": {
+    es: "El cliente se interesó por un inmueble y todavía no agendó la visita. El flujo le recuerda durante dos semanas y después se retira.",
+  },
+  "Comprar um imóvel é uma decisão grande, e quem visitou ou recebeu proposta costuma levar semanas. O fluxo acompanha por quase três meses, sem pressionar.": {
+    es: "Comprar un inmueble es una decisión grande, y quien visitó o recibió una propuesta suele tardar semanas. El flujo da seguimiento durante casi tres meses, sin presionar.",
+  },
+  "O cliente não apareceu na visita marcada. O fluxo oferece outra data em vez de deixar o interesse esfriar.": {
+    es: "El cliente no llegó a la visita agendada. El flujo ofrece otra fecha en lugar de dejar que el interés se enfríe.",
+  },
+  "A pessoa perguntou sobre um carro, a conversa parou antes de ela vir à loja e ninguém voltou nela.": {
+    es: "La persona preguntó por un auto, la conversación se detuvo antes de que viniera a la tienda y nadie la retomó.",
+  },
+  "O cliente se interessou por um carro e ainda não marcou o test drive ou a visita à loja. O fluxo lembra por duas semanas e sai de cena.": {
+    es: "El cliente se interesó por un auto y todavía no agendó la prueba de manejo ni la visita a la tienda. El flujo le recuerda durante dos semanas y después se retira.",
+  },
+  "Quem viu o carro e recebeu proposta pode estar comparando, vendendo o usado ou esperando o crédito. O fluxo acompanha por quase três meses, sem pressionar.": {
+    es: "Quien vio el auto y recibió una propuesta puede estar comparando, vendiendo su usado o esperando el crédito. El flujo da seguimiento durante casi tres meses, sin presionar.",
+  },
+  "O cliente não apareceu no horário marcado na loja. O fluxo oferece outra data em vez de deixar o interesse esfriar.": {
+    es: "El cliente no llegó a la hora agendada en la tienda. El flujo ofrece otra fecha en lugar de dejar que el interés se enfríe.",
+  },
+  "A pessoa perguntou sobre planos ou horários, a conversa parou antes da matrícula e ninguém voltou nela.": {
+    es: "La persona preguntó por planes u horarios, la conversación se detuvo antes de la inscripción y nadie la retomó.",
+  },
+  "O cliente quis conhecer o espaço e ainda não marcou a aula experimental. O fluxo lembra por duas semanas e sai de cena.": {
+    es: "El cliente quiso conocer el lugar y todavía no agendó la clase de prueba. El flujo le recuerda durante dos semanas y después se retira.",
+  },
+  "Quem fez a aula experimental ou pediu valores e não se matriculou pode estar só organizando a rotina. O fluxo acompanha por quase três meses, sem pressionar.": {
+    es: "Quien tomó la clase de prueba o pidió precios y no se inscribió puede estar solo organizando su rutina. El flujo da seguimiento durante casi tres meses, sin presionar.",
+  },
+  "O cliente não apareceu na aula experimental. O fluxo oferece outro horário em vez de deixar a vontade de começar passar.": {
+    es: "El cliente no llegó a la clase de prueba. El flujo ofrece otro horario en lugar de dejar que se le pasen las ganas de empezar.",
+  },
+  "A empresa chamou, a conversa parou antes de marcar uma reunião e ninguém voltou nela.": {
+    es: "La empresa escribió, la conversación se detuvo antes de agendar una reunión y nadie la retomó.",
+  },
+  "A empresa mostrou interesse e a reunião ainda não foi marcada. O fluxo lembra por duas semanas e sai de cena.": {
+    es: "La empresa mostró interés y la reunión todavía no se agendó. El flujo le recuerda durante dos semanas y después se retira.",
+  },
+  "Proposta enviada costuma passar por mais de uma pessoa antes do sim. O fluxo acompanha por quase três meses, sem pressionar.": {
+    es: "Una propuesta enviada suele pasar por más de una persona antes del sí. El flujo da seguimiento durante casi tres meses, sin presionar.",
+  },
+  "A reunião estava marcada e a pessoa não entrou. O fluxo oferece outro horário em vez de deixar a oportunidade esfriar.": {
+    es: "La reunión estaba agendada y la persona no se conectó. El flujo ofrece otro horario en lugar de dejar que la oportunidad se enfríe.",
+  },
   // O aviso da Central quando nenhum agente arma o fluxo.
   "Um follow-up está publicado e não está disparando": {
     es: "Hay un follow-up publicado que no se dispara",
