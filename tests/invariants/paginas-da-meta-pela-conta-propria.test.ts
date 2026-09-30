@@ -357,7 +357,7 @@ describe("desconectar a conta própria solta as Páginas que a empresa assumiu (
   it("apagar a conexão do Google Ads não solta Página da Meta", () => {
     const r = medir(`
       insert into public.ad_insights_connections (organization_id, platform, access_token_encrypted)
-        values ('${ORG_PROPRIA}', 'google_ads', '\x00'::bytea);
+        values ('${ORG_PROPRIA}', 'google_ads', '\\x00'::bytea);
       ${assumir(ORG_PROPRIA, PAGINA_1)};
       delete from public.ad_insights_connections
        where organization_id = '${ORG_PROPRIA}' and platform = 'google_ads';
