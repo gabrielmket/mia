@@ -11,13 +11,15 @@
 #
 #   * Postgres 17 (o override oficial docker-compose.pg17.yml). A plataforma
 #     roda em 17.6 na nuvem; restaurar um dump do 17 num 15 não é suportado.
-#   * `db` e `kong` viram `mia-db` e `mia-kong`. Os dois são os únicos que
-#     entram na rede comum do EasyPanel (`easypanel`), onde já vive o Supabase
-#     dos clientes do n8n com os MESMOS nomes de serviço. Dois `db` na mesma
-#     rede = o DNS responde um OU outro, e um serviço de um lado conecta no
-#     banco do outro. Os demais (auth, rest, storage, meta, studio, realtime)
-#     ficam só na rede interna desta pilha, e o kong.yml oficial os encontra
-#     pelos nomes de sempre.
+#   * `db`, `kong` e `auth` viram `mia-db`, `mia-kong` e `mia-auth`. Os três
+#     são os únicos que entram na rede comum do EasyPanel (`easypanel`), onde
+#     já vive o Supabase dos clientes do n8n com os MESMOS nomes de serviço.
+#     Dois `db` na mesma rede = o DNS responde um OU outro, e um serviço de um
+#     lado conecta no banco do outro. O `mia-auth` entra só para alcançar o
+#     relay de e-mail `mia-smtp` do deskcomm, e guarda o nome `auth` como
+#     apelido da rede interna. Os demais (rest, storage, meta, studio,
+#     realtime) ficam só na rede interna desta pilha, e o kong.yml oficial os
+#     encontra pelos nomes de sempre.
 #   * O banco entra na rede `easypanel` com o apelido
 #     `supabase-sistema-mia-db`: é por ele que o `deskcomm` (outro projeto)
 #     chega ao Postgres. Nenhuma porta é publicada no host.
@@ -33,6 +35,8 @@
 #   * `migrador`: roda UMA vez por volume e copia a plataforma da nuvem para
 #     cá, por dentro da VPS (sem abrir porta do banco e sem a senha da nuvem
 #     neste serviço). Ver migrador/migrar.sh.
+#   * `backup` e `backup-envio`: cópia diária do banco e do Storage, levada
+#     criptografada para um drive compartilhado do Google. Ver BACKUP.md.
 # ═══════════════════════════════════════════════════════════════════════════
 
 services:
@@ -107,13 +111,48 @@ services:
       SERVICE_ROLE_KEY_ASYMMETRIC: ""
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
+      # Muda o valor para o compose RECRIAR o kong e ele resolver `auth` de novo
+      # (30/09/2026: depois da troca auth -> mia-auth o kong seguia com o IP antigo).
+      MIA_KONG_RECRIADO_EM: "2026-09-30-mia-auth"
     # Pelo bash, e não direto: o bit de execução do script não sobrevive a todo
     # checkout (medido: "permission denied" no primeiro deploy, 28/09/2026).
     entrypoint: ["bash", "/home/kong/kong-entrypoint.sh"]
 
+  # O GoTrue entra na rede `easypanel` por UM motivo: é por ela que ele alcança
+  # o relay de e-mail `mia-smtp` ("esqueci a senha", confirmação de conta), que
+  # mora no projeto deskcomm (docker-compose.easypanel.yml). Por isso o serviço
+  # se chama `mia-auth`, e não `auth`: o compose registra o NOME DO SERVIÇO em
+  # toda rede em que ele entra, e na `easypanel` já existe o `auth` do Supabase
+  # dos clientes do n8n. Dois `auth` ali e o kong de uma pilha passa a mandar
+  # login para o GoTrue da outra (o mesmo motivo do mia-db e do mia-kong).
+  # O kong.yml oficial continua chamando `http://auth:9999`: `auth` agora é um
+  # apelido SÓ na rede interna desta pilha. Medido em teste local (29/09/2026):
+  # na rede `easypanel` o nome `auth` não resolve, `mia-auth` e `mia-smtp` sim;
+  # na rede interna, `auth` resolve para este contêiner.
+  #
+  # SMTP (no Environment): SMTP_HOST=mia-smtp, SMTP_PORT=587, SMTP_USER e
+  # SMTP_PASS vazios. O relay não oferece STARTTLS na rede interna de propósito:
+  # o GoTrue v2.186 faz STARTTLS sozinho sempre que o servidor oferece e recusa o
+  # certificado autoassinado ("x509: certificate is valid for localhost, not
+  # mia-smtp", medido). Detalhes no bloco `mia-smtp` do compose do deskcomm.
+  # Só para APAGAR o contêiner antigo: com o serviço renomeado para `mia-auth`, o
+  # `auth-1` de antes virou órfão e seguiu rodando, respondendo pelo mesmo nome
+  # `auth` na rede interna (metade dos "esqueci a senha" ia para o GoTrue sem
+  # SMTP). Com réplicas 0 o `docker compose up` do EasyPanel o remove. Pode sair
+  # daqui depois que o painel não listar mais `auth-1` (30/09/2026).
   auth:
     image: supabase/gotrue:v2.186.0
+    deploy:
+      replicas: 0
+
+  mia-auth:
+    image: supabase/gotrue:v2.186.0
     restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - auth
+      easypanel: {}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
       timeout: 5s
@@ -151,6 +190,62 @@ services:
       GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: ${MAILER_URLPATHS_EMAIL_CHANGE}
       GOTRUE_EXTERNAL_PHONE_ENABLED: ${ENABLE_PHONE_SIGNUP}
       GOTRUE_SMS_AUTOCONFIRM: ${ENABLE_PHONE_AUTOCONFIRM}
+      # ── E-mails do login em português, com a cara da MIA ──────────────────
+      # O corpo de cada e-mail o GoTrue só aceita por URL (ele faz um GET e
+      # guarda em cache; medido no fonte da v2.186, templatemailer/template.go).
+      # A URL aponta para o serviço `modelos-email` logo abaixo, DENTRO desta
+      # pilha: nada depende de internet de fora nem do app estar no ar. Se o
+      # modelo não vier (serviço parado, arquivo com erro), o GoTrue NÃO deixa
+      # de mandar: cai no modelo padrão dele, em inglês, e com o recarregamento
+      # ligado volta ao português sozinho em ~10 s quando o serviço volta
+      # (medido em teste local, 30/09/2026).
+      #
+      # Os links vão para /auth/confirm do app com token_hash, o único formato
+      # que fecha nesta instalação (ver app/auth/confirm/route.ts). O endereço
+      # sai do SITE_URL ou do retorno que o app pediu (crm.timecompany.com.br ou
+      # app.iamia.com.br): nenhum domínio está escrito nos modelos. Não dependem
+      # do servidor de envio: valem com qualquer SMTP configurado abaixo.
+      GOTRUE_MAILER_TEMPLATES_INVITE: http://modelos-email:8080/convite.html
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://modelos-email:8080/confirmacao.html
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: http://modelos-email:8080/recuperacao.html
+      GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE: http://modelos-email:8080/troca-de-email.html
+      GOTRUE_MAILER_TEMPLATES_MAGIC_LINK: http://modelos-email:8080/link-magico.html
+      GOTRUE_MAILER_TEMPLATES_REAUTHENTICATION: http://modelos-email:8080/reautenticacao.html
+      GOTRUE_MAILER_TEMPLATE_RELOADING_ENABLED: "true"
+      # O assunto não tem URL: vai aqui mesmo. É modelo também, e o da
+      # confirmação muda quando ela é o convite da equipe do app (o app grava
+      # invite_token nos metadados de quem foi convidado).
+      GOTRUE_MAILER_SUBJECTS_INVITE: "Você foi convidado para a MIA"
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: "{{ if .Data.invite_token }}Confirme seu e-mail para entrar na equipe na MIA{{ else }}Confirme seu e-mail na MIA{{ end }}"
+      GOTRUE_MAILER_SUBJECTS_RECOVERY: "Redefina sua senha da MIA"
+      GOTRUE_MAILER_SUBJECTS_EMAIL_CHANGE: "Confirme a troca de e-mail na MIA"
+      GOTRUE_MAILER_SUBJECTS_MAGIC_LINK: "Seu link de acesso à MIA"
+      GOTRUE_MAILER_SUBJECTS_REAUTHENTICATION: "Seu código de confirmação da MIA"
+      # Teto de e-mails do login por hora, na instalação inteira. O padrão do
+      # GoTrue (30) trava o convite de uma equipe maior: cada convidado é um
+      # e-mail, e o 31º convite da hora falha. 100 cobre isso e ainda segura
+      # abuso. ATENÇÃO, medido no fonte e em teste: com ENABLE_EMAIL_AUTOCONFIRM
+      # =true o GoTrue NÃO aplica este teto (mail.go, "TODO: deprecate"); aí
+      # seguram o intervalo de 60 s por pessoa (padrão) e o limite por IP das
+      # rotas de envio (RATE_LIMIT_OTP, 30 a cada 5 min).
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: ${RATE_LIMIT_EMAIL_SENT:-100}
+
+  # Serve os modelos dos e-mails do login (volumes/email/) para o GoTrue, só na
+  # rede interna desta pilha, sem porta publicada. Um servidor web mínimo
+  # (busybox httpd, ~7 MB, imagem fixada por digest), sem acesso ao banco e sem
+  # segredo nenhum: se ele cair, o login continua e só o e-mail volta ao inglês.
+  modelos-email:
+    image: busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+    restart: unless-stopped
+    user: "65534:65534"
+    command: ["httpd", "-f", "-p", "8080", "-h", "/www"]
+    volumes:
+      - ./volumes/email:/www:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/recuperacao.html"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   rest:
     image: postgrest/postgrest:v14.8
@@ -313,7 +408,7 @@ services:
     depends_on:
       mia-db:
         condition: service_healthy
-      auth:
+      mia-auth:
         condition: service_healthy
       storage:
         condition: service_healthy
@@ -330,6 +425,68 @@ services:
       POSTGRES_PORT: ${POSTGRES_PORT}
       POSTGRES_DB: ${POSTGRES_DB}
 
+  # Backup diário, em dois serviços (ver BACKUP.md). O `backup` grava a cópia no
+  # volume mia-backups; o `backup-envio` leva para o drive, criptografada. Dois, e
+  # não um, porque cada imagem já traz a ferramenta certa: pg_dump da MESMA versão
+  # do banco (a imagem do mia-db) e rclone (a imagem do rclone). E o que tem a
+  # senha do banco não tem a credencial do Google, nem o contrário.
+  # Nenhum dos dois entra na rede `easypanel`: um só fala com o mia-db, o outro
+  # só com a internet.
+  backup:
+    image: supabase/postgres:17.6.1.084
+    restart: unless-stopped
+    depends_on:
+      mia-db:
+        condition: service_healthy
+    entrypoint: ["bash", "/backup-scripts/fazer-backup.sh"]
+    # A imagem traz o healthcheck do Postgres (pg_isready em localhost a cada 2 s),
+    # que aqui nunca passa: não há banco neste contêiner (medido no 1º deploy,
+    # 29/09/2026). O que o painel precisa mostrar é se o backup está em dia: há
+    # cópia PRONTO de menos de 26 h (o diário das 06:00, as 3 tentativas e folga).
+    healthcheck:
+      test: ["CMD-SHELL", "find /backups -maxdepth 2 -name PRONTO -mmin -1560 | grep -q ."]
+      interval: 5m
+      timeout: 10s
+      retries: 1
+      start_period: 15m
+    volumes:
+      - ./backup:/backup-scripts:ro
+      - mia-backups${MIA_VOLUME_SUFIXO:-}:/backups
+      # Só leitura: o backup copia os arquivos do Storage, nunca escreve lá.
+      - mia-storage${MIA_VOLUME_SUFIXO:-}:/storage:ro
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      BACKUP_HORA_UTC: ${BACKUP_HORA_UTC:-06}
+      BACKUP_MANTER_LOCAL: ${BACKUP_MANTER_LOCAL:-3}
+
+  backup-envio:
+    image: rclone/rclone:1.75.1
+    restart: unless-stopped
+    entrypoint: ["sh", "/backup-scripts/enviar.sh"]
+    # No painel, "unhealthy" = o último relato do envio não é "ok" (credencial,
+    # drive, senha) ou tem mais de 30 min (ele escreve um a cada volta de 10 min).
+    healthcheck:
+      test: ["CMD-SHELL", "find /backups/ENVIO-STATUS -mmin -30 | grep -q . && sed -n 2p /backups/ENVIO-STATUS | grep -q '^ok'"]
+      interval: 5m
+      timeout: 10s
+      retries: 1
+      start_period: 5m
+    volumes:
+      - ./backup:/backup-scripts:ro
+      - mia-backups${MIA_VOLUME_SUFIXO:-}:/backups
+    # Tudo com padrão vazio: sem credencial, o serviço sobe e fica parado
+    # avisando (em operacao.backup_envio), em vez de derrubar o deploy da pilha.
+    environment:
+      GOOGLE_DRIVE_TOKEN_B64: ${GOOGLE_DRIVE_TOKEN_B64:-}
+      GOOGLE_SA_JSON_B64: ${GOOGLE_SA_JSON_B64:-}
+      BACKUP_DRIVE_ID: ${BACKUP_DRIVE_ID:-}
+      BACKUP_CRIPTO_SENHA: ${BACKUP_CRIPTO_SENHA:-}
+      BACKUP_CRIPTO_SAL: ${BACKUP_CRIPTO_SAL:-}
+      BACKUP_MANTER_DIAS: ${BACKUP_MANTER_DIAS:-30}
+
 networks:
   easypanel:
     external: true
@@ -342,3 +499,5 @@ volumes:
   mia-db-data-ensaio:
   mia-db-config-ensaio:
   mia-storage-ensaio:
+  mia-backups:
+  mia-backups-ensaio:
