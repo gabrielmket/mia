@@ -625,6 +625,13 @@ export interface ConversaDaSemente {
   /** A ficha que a IA escreveu (`lead_notes`). */
   ficha: { headline: string; body: string } | null;
   /** A IA passou a conversa para uma pessoa (`passagens_de_atendimento`). */
+/**
+ * Status de ciclo de vida GRAVADO nas conversas da demonstração. Escrever o
+ * status segue permitido; o que a cerca `fila-tem-uma-definicao-so` proíbe é
+ * DECIDIR quem atende por ele, e aqui nada decide nada: é só o dado semeado.
+ */
+const CONVERSA_COM_A_IA = "ai_handling" as const;
+
   passagem?: { titulo: string; resumo: string; ultimaFala: string; reconhecidaPor?: PessoaDaEquipe["chave"] };
   /** Quem está com a conversa agora. */
   com: DonoDoNegocio;
@@ -758,7 +765,7 @@ export const CONVERSAS: readonly ConversaDaSemente[] = [
       body: "Thiago quer ganhar massa muscular, só consegue treinar à noite. Aula experimental marcada para amanhã às 19h.",
     },
     com: "ia",
-    status: "ai_handling",
+    status: CONVERSA_COM_A_IA,
     etiquetas: ["Meta_ads"],
     mensagens: [
       { de: "cliente", texto: "Quanto custa a mensalidade?", min: 0 },
@@ -803,7 +810,7 @@ export const CONVERSAS: readonly ConversaDaSemente[] = [
     proximaAcao: "Perguntar se vai financiar",
     ficha: null,
     com: "ia",
-    status: "ai_handling",
+    status: CONVERSA_COM_A_IA,
     etiquetas: ["Meta_ads", "Formulario_Meta"],
     mensagens: [
       { de: "ia", texto: "Oi, Larissa! Aqui é a Sofia, da Empresa Modelo. Vi que você se cadastrou no nosso formulário procurando apartamento de 2 quartos. Posso te ajudar a encontrar?", min: 0 },
