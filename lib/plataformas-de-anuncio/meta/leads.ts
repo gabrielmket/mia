@@ -13,8 +13,12 @@
  *                              uma com o SEU token de Página
  *   {pagina}/leadgen_forms     os formulários da Página
  *   {formulario}/leads         os leads, filtrados por `time_created`
+ *   {lead}                     UM lead, pelo id que o aviso em tempo real traz (.62)
  *
- * As duas últimas usam o token DA PÁGINA, derivado do token da empresa a cada
+ * E uma escrita (.62): `{pagina}/subscribed_apps` assina a Página no app para o
+ * campo `leadgen`, que é o que faz a Meta avisar na hora em que alguém preenche.
+ *
+ * As que leem formulário e lead usam o token DA PÁGINA, derivado do token da empresa a cada
  * rodada e nunca guardado: a Meta pede token de Página (ou de quem anuncia na
  * Página) para ler formulários e leads, e derivar na hora evita guardar um
  * segundo segredo que vence em silêncio.
@@ -56,8 +60,22 @@ export const PERMISSOES_OBRIGATORIAS = [
   "pages_manage_ads",
 ] as const;
 
-/** Sem estas o lead entra, mas sem a origem do anúncio (ou sem a tabela de campanhas). */
-export const PERMISSOES_RECOMENDADAS = ["ads_management", "ads_read"] as const;
+/** O campo do webhook da Página que avisa lead novo (.62). */
+export const CAMPO_DO_AVISO_DE_LEAD = "leadgen";
+
+/** A permissão que a assinatura da Página no app pede ao token (.62). */
+export const PERMISSAO_DO_TEMPO_REAL = "pages_manage_metadata";
+
+/**
+ * Sem estas o lead entra, mas sem a origem do anúncio, sem a tabela de
+ * campanhas, ou só pela leitura a cada 5 minutos: `pages_manage_metadata` é a
+ * que deixa assinar a Página no app para o aviso em tempo real (.62).
+ */
+export const PERMISSOES_RECOMENDADAS = [
+  "ads_management",
+  "ads_read",
+  PERMISSAO_DO_TEMPO_REAL,
+] as const;
 
 const CAMPOS_DO_ANUNCIO = [
   "ad_id",
@@ -101,6 +119,76 @@ export function classificarErroDeLeads(
 
 type ResultadoDaBusca<T> = ResultadoDeLeitura<{ itens: T[]; truncado: boolean }>;
 
+/** A recusa da Graph, classificada. Nem a URL nem o token entram no log. */
+function recusa(
+  status: number,
+  texto: string,
+  contexto: string,
+): { ok: false; falha: FalhaDeLeitura; detalhe: string } {
+  let codigo: number | null = null;
+  let subcodigo: number | null = null;
+  let mensagem = texto.slice(0, 300);
+  try {
+    const json = JSON.parse(texto) as ErroGraph;
+    if (typeof json.error?.code === "number") codigo = json.error.code;
+    if (typeof json.error?.error_subcode === "number") subcodigo = json.error.error_subcode;
+    if (json.error?.message) mensagem = json.error.message.slice(0, 300);
+  } catch {
+    // Corpo não-JSON num erro é gateway no meio. Fica o texto cru, cortado.
+  }
+  const falha = classificarErroDeLeads(status, codigo, subcodigo);
+  logger.warn("[ads.meta.leads] leitura recusada", {
+    contexto,
+    status,
+    codigo,
+    subcodigo,
+    falha,
+  });
+  return { ok: false, falha, detalhe: mensagem };
+}
+
+/**
+ * UMA chamada que devolve um objeto (não uma lista): o lead pelo id e a
+ * assinatura da Página (.62). Token no cabeçalho, como em todo o resto; o corpo
+ * do POST vai como formulário, que é o que a Graph lê.
+ */
+async function requisitar<T>(
+  metodo: "GET" | "POST",
+  caminho: string,
+  parametros: Record<string, string>,
+  token: string,
+  contexto: string,
+): Promise<ResultadoDeLeitura<T>> {
+  const ehPost = metodo === "POST";
+  const url = montarUrl(caminho, ehPost ? {} : parametros);
+  let resposta: Response;
+  try {
+    resposta = await fetch(url, {
+      method: metodo,
+      headers: {
+        authorization: `Bearer ${token}`,
+        ...(ehPost ? { "content-type": "application/x-www-form-urlencoded" } : {}),
+      },
+      ...(ehPost ? { body: new URLSearchParams(parametros).toString() } : {}),
+      cache: "no-store",
+      signal: AbortSignal.timeout(TEMPO_LIMITE_MS),
+    });
+  } catch (erro) {
+    return {
+      ok: false,
+      falha: "transitorio",
+      detalhe: erro instanceof Error ? erro.message : "falha de rede",
+    };
+  }
+  const texto = await resposta.text().catch(() => "");
+  if (!resposta.ok) return recusa(resposta.status, texto, contexto);
+  try {
+    return { ok: true, dados: JSON.parse(texto) as T };
+  } catch {
+    return { ok: false, falha: "transitorio", detalhe: "resposta ilegível da plataforma" };
+  }
+}
+
 /**
  * GET paginado pelo cursor `after`. `truncado` diz que havia mais páginas do que
  * o teto — quem chama decide o que isso significa (para leads, leitura incompleta).
@@ -136,29 +224,7 @@ async function buscarPaginado<T>(
 
     const texto = await resposta.text().catch(() => "");
 
-    if (!resposta.ok) {
-      let codigo: number | null = null;
-      let subcodigo: number | null = null;
-      let mensagem = texto.slice(0, 300);
-      try {
-        const json = JSON.parse(texto) as ErroGraph;
-        if (typeof json.error?.code === "number") codigo = json.error.code;
-        if (typeof json.error?.error_subcode === "number") subcodigo = json.error.error_subcode;
-        if (json.error?.message) mensagem = json.error.message.slice(0, 300);
-      } catch {
-        // Corpo não-JSON num erro é gateway no meio. Fica o texto cru, cortado.
-      }
-      const falha = classificarErroDeLeads(resposta.status, codigo, subcodigo);
-      // Nem a URL nem o token entram no log.
-      logger.warn("[ads.meta.leads] leitura recusada", {
-        contexto,
-        status: resposta.status,
-        codigo,
-        subcodigo,
-        falha,
-      });
-      return { ok: false, falha, detalhe: mensagem };
-    }
+    if (!resposta.ok) return recusa(resposta.status, texto, contexto);
 
     let json: RespostaPaginada<T>;
     try {
@@ -351,4 +417,115 @@ export async function lerLeadsDoFormulario(
     dados: { leads: semAnuncio.dados.itens, truncado: semAnuncio.dados.truncado },
     aviso: AVISO_SEM_ORIGEM_DO_ANUNCIO,
   };
+}
+
+// ─── {lead}: um lead só, pelo id (.62) ──────────────────────────────────────
+
+/**
+ * UM lead, pelo id que o aviso em tempo real (webhook `leadgen`) traz. O aviso
+ * não traz as respostas, só os ids: nome, telefone e perguntas vêm daqui.
+ *
+ * A mesma repetição sem os campos do anúncio de `lerLeadsDoFormulario`: perder o
+ * lead por causa da origem seria trocar o principal pelo acessório.
+ */
+export async function lerLead(
+  tokenDaPagina: string,
+  leadgenId: string,
+): Promise<ResultadoDeLeitura<LeadCru>> {
+  const caminho = encodeURIComponent(leadgenId);
+  const completo = await requisitar<LeadCru>(
+    "GET",
+    caminho,
+    { fields: [...CAMPOS_DO_LEAD, ...CAMPOS_DO_ANUNCIO].join(",") },
+    tokenDaPagina,
+    "lead",
+  );
+  if (completo.ok) return completo;
+  if (completo.falha !== "permissao_insuficiente" && completo.falha !== "campo_invalido") {
+    return completo;
+  }
+  const semAnuncio = await requisitar<LeadCru>(
+    "GET",
+    caminho,
+    { fields: CAMPOS_DO_LEAD.join(",") },
+    tokenDaPagina,
+    "lead_sem_anuncio",
+  );
+  if (!semAnuncio.ok) return completo;
+  return { ok: true, dados: semAnuncio.dados, aviso: AVISO_SEM_ORIGEM_DO_ANUNCIO };
+}
+
+// ─── {pagina}/subscribed_apps: o aviso em tempo real (.62) ──────────────────
+
+export interface AssinaturaDaPagina {
+  /** A Página já estava assinada para `leadgen`: nada foi escrito na Meta. */
+  jaEstava: boolean;
+}
+
+interface AppAssinadoCru {
+  id?: string;
+  subscribed_fields?: unknown[];
+}
+
+/**
+ * Assina a Página no app para o campo `leadgen`: sem isto a Meta não avisa, e o
+ * lead só entra pela leitura a cada 5 minutos.
+ *
+ * ─── Por que ler antes de escrever ─────────────────────────────────────────
+ *
+ * O POST SUBSTITUI a lista de campos do app naquela Página. Se o app já tiver
+ * outro campo assinado ali, mandar só `leadgen` o apagaria em silêncio. Então:
+ * já assinada para `leadgen`, nada é escrito; um app só na lista (o do token de
+ * Página, que é o nosso), os campos dele entram junto; lista ilegível ou com
+ * vários apps, vai só `leadgen`, porque não há como saber qual é o nosso.
+ *
+ * ─── A recusa que importa ──────────────────────────────────────────────────
+ *
+ * Sem `pages_manage_metadata` no token a Meta responde 200 ("permissão"), que
+ * sai daqui como `permissao_insuficiente`. Quem chama grava o motivo e a tela
+ * diz qual permissão falta. O lead continua entrando pela leitura.
+ */
+export async function assinarLeadsDaPagina(
+  tokenDaPagina: string,
+  paginaId: string,
+): Promise<ResultadoDeLeitura<AssinaturaDaPagina>> {
+  const caminho = `${encodeURIComponent(paginaId)}/subscribed_apps`;
+
+  const atual = await requisitar<{ data?: AppAssinadoCru[] }>(
+    "GET",
+    caminho,
+    {},
+    tokenDaPagina,
+    "subscribed_apps",
+  );
+  let existentes: string[] = [];
+  if (atual.ok) {
+    const apps = Array.isArray(atual.dados.data) ? atual.dados.data : [];
+    const camposDe = (app: AppAssinadoCru) =>
+      (Array.isArray(app.subscribed_fields) ? app.subscribed_fields : []).filter(
+        (c): c is string => typeof c === "string" && c !== "",
+      );
+    if (apps.some((app) => camposDe(app).includes(CAMPO_DO_AVISO_DE_LEAD))) {
+      return { ok: true, dados: { jaEstava: true } };
+    }
+    if (apps.length === 1) existentes = camposDe(apps[0]!);
+  }
+
+  const campos = [...new Set([...existentes, CAMPO_DO_AVISO_DE_LEAD])].join(",");
+  const escrita = await requisitar<{ success?: boolean }>(
+    "POST",
+    caminho,
+    { subscribed_fields: campos },
+    tokenDaPagina,
+    "subscribed_apps_escrita",
+  );
+  if (!escrita.ok) return escrita;
+  if (escrita.dados.success !== true) {
+    return {
+      ok: false,
+      falha: "transitorio",
+      detalhe: "A Meta respondeu sem confirmar a assinatura da Página.",
+    };
+  }
+  return { ok: true, dados: { jaEstava: false } };
 }

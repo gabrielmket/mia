@@ -175,7 +175,8 @@ describe("Páginas e permissões", () => {
   it("a falta é dita pelo nome, separando obrigatória de recomendada", () => {
     expect(permissoesQueFaltam(["ads_read", "pages_show_list"])).toEqual({
       faltandoObrigatorias: ["leads_retrieval", "pages_read_engagement", "pages_manage_ads"],
-      faltandoRecomendadas: ["ads_management"],
+      // .62: pages_manage_metadata entrou (a assinatura do tempo real).
+      faltandoRecomendadas: ["ads_management", "pages_manage_metadata"],
     });
   });
 });
@@ -254,7 +255,8 @@ describe("o diagnóstico da tela", () => {
     expect(d.permissoes).toEqual({
       verificadas: true,
       faltandoObrigatorias: ["leads_retrieval", "pages_manage_ads"],
-      faltandoRecomendadas: ["ads_management"],
+      // .62: pages_manage_metadata entrou (a assinatura do tempo real).
+      faltandoRecomendadas: ["ads_management", "pages_manage_metadata"],
     });
     expect(d.erro).toBeNull();
     expect(d.paginas.map((p) => [p.id, p.erro, p.formularios.map((f) => f.id)])).toEqual([
