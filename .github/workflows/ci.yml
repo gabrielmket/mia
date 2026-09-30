@@ -231,6 +231,10 @@ jobs:
 
       - name: Typecheck
         if: matrix.parte == 1
+        # FORK MIA: com o fork somado ao upstream o tsc passou dos ~4 GB do heap
+        # padrão do Node e morreu com "heap out of memory" (código 134) na .61.
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm typecheck
 
       # Na parte 2, não na 1: o porquê e a conta estão no cabeçalho do job.

@@ -89,7 +89,10 @@ function textPreviews(components: unknown): Array<{ onde: string; text: string }
         continue;
       }
       const texto = typeof c.text === "string" ? c.text : "";
-      if (!texto.includes("{{")) continue;
+      // FORK MIA: o texto aparece mesmo SEM variável. Antes só entrava o que tinha
+      // `{{`, e o modelo sem variável ficava sem texto na lista e abria vazio no
+      // "Editar" (cadastro_recebido_v1, 30/09/2026). Rodapé e botões seguem fora.
+      if (!texto.trim() || (tipo !== "BODY" && tipo !== "HEADER")) continue;
       out.push({ onde: `${prefixo}${tipo === "HEADER" ? "cabeçalho" : "corpo"}`, text: texto });
     }
   };
