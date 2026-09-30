@@ -13,6 +13,8 @@ vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: deps.support 
 vi.mock("@/lib/audit", () => ({ audit: deps.audit }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: deps.client }));
 
+import { PROVIDERS_DE_MENSAGEM } from "@/lib/channels/capabilities";
+
 import { PATCH } from "./route";
 
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -21,9 +23,12 @@ const OUTRA_ORG = "0b000000-0000-4000-8000-00000000000b";
 const NUMERO_DA_ORG = "0c000000-0000-4000-8000-00000000000c";
 const NUMERO_DE_OUTRA_ORG = "0d000000-0000-4000-8000-00000000000d";
 
+/** Qualquer canal de mensagem serve: a conferência é de organização, não de provedor. */
+const PROVIDER = PROVIDERS_DE_MENSAGEM[0];
+
 const CANAIS = [
-  { id: NUMERO_DA_ORG, organization_id: ORG, archived_at: null, provider: "meta_cloud" },
-  { id: NUMERO_DE_OUTRA_ORG, organization_id: OUTRA_ORG, archived_at: null, provider: "meta_cloud" },
+  { id: NUMERO_DA_ORG, organization_id: ORG, archived_at: null, provider: PROVIDER },
+  { id: NUMERO_DE_OUTRA_ORG, organization_id: OUTRA_ORG, archived_at: null, provider: PROVIDER },
 ];
 
 /** Client que responde `channel_sessions` aplicando os filtros de verdade e registra o update. */
