@@ -8,6 +8,7 @@ import { supportWriteError } from "@/lib/impersonate/support";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { OnboardingState } from "@/lib/schemas/onboarding";
+import type { AuthUser } from "@/lib/auth/types";
 
 export class OnboardingError extends Error {
   constructor(
@@ -31,6 +32,9 @@ export interface OnboardingCtx {
   role: string;
   fullName: string | null;
   email: string;
+  /** FORK MIA: os dois campos de quem pode escolher IA (lib/ai/trava-da-ia.ts). */
+  is_platform_admin: boolean;
+  support: AuthUser["support"];
 }
 
 export async function requireOnboardingCtx(): Promise<OnboardingCtx> {
@@ -46,6 +50,8 @@ export async function requireOnboardingCtx(): Promise<OnboardingCtx> {
     role: activeOrg.role,
     fullName: user.full_name,
     email: user.email,
+    is_platform_admin: user.is_platform_admin === true,
+    support: user.support ?? null,
   };
 }
 

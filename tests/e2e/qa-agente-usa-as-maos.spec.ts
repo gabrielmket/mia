@@ -23,8 +23,9 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
+import { test, expect, type Page, type APIRequestContext } from "./helpers/test";
 
+import { comoDonoDaPlataforma } from "./helpers/ia-da-plataforma";
 import { afirmarAdminDeTenantPuro } from "./utils/precondicao";
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
 import { catalogoEntregueAoOperador } from "@/lib/agent-engine/agent/entrega-de-capacidade";
@@ -304,7 +305,7 @@ async function login(page: Page): Promise<void> {
   await page.goto(`${APP_URL}/login`);
   await page.locator("#email").fill(creds.users.admin!.email);
   await page.locator("#password").fill(creds.password);
-  await page.getByRole("button", { name: /entrar/i }).click();
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await page.waitForURL(/\/login\/mfa/);
 
   for (let tentativa = 0; tentativa < 2; tentativa++) {
@@ -411,7 +412,7 @@ async function criarVersao(
 }
 
 test.describe("QA — o agente usa as mãos que a W4 entregou?", () => {
-  test("um modelo de verdade escolhendo as capacidades novas", async ({ page }) => {
+  test("um modelo de verdade escolhendo as capacidades novas", async ({ page, browser }, testInfo) => {
     test.setTimeout(600_000);
     fs.mkdirSync(SAIDA, { recursive: true });
     fs.mkdirSync(TURNOS, { recursive: true });
@@ -422,7 +423,17 @@ test.describe("QA — o agente usa as mãos que a W4 entregou?", () => {
     const agenteId = agentes.data?.[0]?.id;
     expect(agenteId, "a org de E2E precisa de um agente").toBeTruthy();
 
-    const versaoId = await versaoComAsCapacidades(page.request, agenteId!);
+    // FORK MIA: a versão de teste ESCOLHE provedor, modelo e chave — é o modelo
+    // que esta medição quer pôr à prova —, e neste fork quem escolhe a IA de um
+    // agente é a plataforma (lib/ai/trava-da-ia.ts). Criada pelo admin da
+    // empresa, ela herdava a IA atual do agente — sem versão, o par da
+    // plataforma com a chave da instalação, que o e2e não tem (422
+    // credential_required). A preparação vai para o dono da
+    // plataforma; os turnos seguem com o admin da empresa, como no upstream.
+    // Ver tests/e2e/helpers/ia-da-plataforma.ts.
+    const versaoId = await comoDonoDaPlataforma(browser, testInfo, (req) =>
+      versaoComAsCapacidades(req, agenteId!),
+    );
     console.info(`[QA] versão de teste ${versaoId} com ${CAPACIDADES.length} capacidades`);
 
     /**

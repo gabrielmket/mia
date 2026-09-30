@@ -157,7 +157,7 @@ export function ResponsavelLegal({ gravado }: { readonly gravado: ResponsavelLeg
           id="operador_politica_url"
           value={politica}
           onChange={(e) => setPolitica(e.target.value)}
-          placeholder="https://exemplo.com.br/privacidade"
+          placeholder="https://…/privacidade"
           maxLength={2048}
           autoComplete="off"
           spellCheck={false}

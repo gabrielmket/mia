@@ -21,7 +21,7 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { test, expect, type Page, type Locator } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "./helpers/test";
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
 
 // Segue o dev server do harness (playwright.config webServer) — nunca hardcodar
@@ -73,7 +73,7 @@ async function login(page: Page, email: string): Promise<void> {
   await page.goto(`${APP_URL}/login`);
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(creds.password);
-  await page.getByRole("button", { name: /entrar/i }).click();
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await page.waitForURL(/\/app\//);
 }
 
@@ -125,10 +125,10 @@ test.describe("webhooks & automações — fluxo completo", () => {
     let pipelineId: string | undefined;
 
     try {
-      // --- Step 1: login como manager; sidebar mostra "Webhooks" ---
+      // --- Step 1: login como manager; sidebar mostra "Automações" (o "Webhooks" do upstream; fork MIA) ---
       await login(page, creds.users.manager!.email);
-      await expect(page.getByRole("link", { name: "Webhooks" })).toBeVisible();
-      await page.getByRole("link", { name: "Webhooks" }).click();
+      await expect(page.getByRole("link", { name: "Automações", exact: true })).toBeVisible();
+      await page.getByRole("link", { name: "Automações", exact: true }).click();
       await page.waitForURL(/\/app\/webhooks/);
 
       // --- Step 2: aba "Receber dados" — criar fonte ---
@@ -346,12 +346,12 @@ test.describe("webhooks & automações — fluxo completo", () => {
       );
       await expect(leadCard).toHaveAttribute("title", new RegExp(`Tags:.*${TAG}`));
 
-      // --- Step 9: AGENT não vê "Webhooks" e é redirecionado ---
+      // --- Step 9: AGENT não vê "Automações" e é redirecionado ---
       const agentContext = await browser.newContext();
       const agentPage = await agentContext.newPage();
       try {
         await login(agentPage, creds.users.agent!.email);
-        await expect(agentPage.getByRole("link", { name: "Webhooks" })).toHaveCount(0);
+        await expect(agentPage.getByRole("link", { name: "Automações", exact: true })).toHaveCount(0);
         await agentPage.goto(`${APP_URL}/app/webhooks`);
         await agentPage.waitForURL(/\/app\/inbox/);
         expect(agentPage.url()).toMatch(/\/app\/inbox/);

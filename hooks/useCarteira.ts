@@ -36,9 +36,15 @@ export interface Carteira {
   extrato_truncado: boolean;
 }
 
-export function useCarteira() {
+/**
+ * `habilitado`: a lista do Broadcast (.58) só lê a carteira quando a organização
+ * pode usar o número oficial — sem o módulo a rota recusa, e a carteira não
+ * existe para quem não contratou.
+ */
+export function useCarteira(opcoes: { habilitado?: boolean } = {}) {
   return useQuery({
     queryKey: ["carteira"],
+    enabled: opcoes.habilitado ?? true,
     queryFn: async () => apiClient.get<{ data: Carteira }>("/api/v1/carteira"),
     select: (r) => r.data,
     staleTime: 30_000,

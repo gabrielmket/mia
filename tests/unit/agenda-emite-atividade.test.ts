@@ -168,13 +168,18 @@ function dadoDaTabela(tabela: string): unknown {
 function cliente(): SupabaseClient {
   const leitura = (tabela: string) => {
     const cadeia: Record<string, unknown> = {};
-    for (const m of ["eq", "neq", "in", "is", "not", "or", "gte", "lte", "order", "limit"]) {
+    for (const m of ["eq", "neq", "in", "is", "not", "or", "gte", "lte", "lt", "gt", "order", "limit"]) {
       cadeia[m] = () => cadeia;
     }
     const resposta = () => ({ data: dadoDaTabela(tabela), error: null });
     cadeia.maybeSingle = async () => resposta();
     cadeia.single = async () => resposta();
-    cadeia.then = (r: (v: unknown) => unknown) => r(resposta());
+    // Leitura em LISTA de `calendar_appointments` é a ocupação que o encaixe de
+    // uma pessoa confere (`coletaOQueOcupa`) — e lista é array, nunca a linha
+    // solta que `maybeSingle` devolve. Agenda vazia: este arquivo não é sobre
+    // sobreposição (essa mora em `pessoa-marca-fora-da-grade.test.ts`).
+    cadeia.then = (r: (v: unknown) => unknown) =>
+      r(tabela === "calendar_appointments" ? { data: [], error: null } : resposta());
     return cadeia;
   };
 
@@ -225,10 +230,16 @@ function atividades(): Linha[] {
   return banco.inserido["crm_lead_activities"] ?? [];
 }
 
-/** Os anúncios de "marcaram reunião" que chegaram ao `event_log`. */
+/**
+ * Os anúncios de "marcaram reunião" que chegaram ao `event_log`.
+ *
+ * É o `appointment.created`: o `appointment.booked` que este fork emitia ao
+ * lado dele era o mesmo fato anunciado duas vezes, e as regras salvas com o
+ * nome antigo rodam neste (`lib/automation/regras-do-nome-antigo.ts`).
+ */
 function reunioesAnunciadas(): Array<{ fn: string; args: Linha }> {
   return banco.rpc.filter(
-    (c) => c.fn === "emit_event" && c.args.p_event_type === "appointment.booked",
+    (c) => c.fn === "emit_event" && c.args.p_event_type === "appointment.created",
   );
 }
 
@@ -312,6 +323,36 @@ describe("a agenda grava na timeline", () => {
       linha.organization_id,
       "a atividade nasceu carimbada com outra organização: a consulta aparece na timeline de um cliente de OUTRA empresa e some da do dono — a RLS não pega, porque a linha saiu de dentro já com o id errado",
     ).toBe(ORG);
+  });
+
+  it("o TOKEN de servidor não é a IA: a agenda e a timeline dizem a MESMA autoria", async () => {
+    // O defeito da #866, medido no ponto de uso: a mesma ação saía com duas
+    // autorias. `actorParaAtividade` (lib/leads/activity-emitter.ts) sempre
+    // gravou `system` para o token; só a coluna do agendamento dizia `ai`, e a
+    // tela (`ROTULO_DO_AUTOR`) anunciava "Marcado pelo atendente de IA" para
+    // compromisso que algoritmo nenhum escreveu.
+    const TOKEN_ID = "99999999-9999-4999-8999-999999999999";
+    const token = { type: "api_token" as const, id: TOKEN_ID };
+
+    await marcarAgendamentoHandler(cliente(), { ...ctx, actor: token }, {
+      event_type_id: TIPO,
+      starts_at: HORARIO,
+      contact_id: CONTATO,
+    });
+
+    const gravado = banco.inserido["calendar_appointments"]?.[0];
+    expect(
+      gravado?.created_by_kind,
+      "o agendamento nascido por token ficou carimbado como `ai`: a agenda atribui à IA o que a integração marcou, e a leitura de 'o que a IA marcou' incha",
+    ).toBe("system");
+    expect(
+      atividades()[0]?.actor_kind,
+      "a timeline discordou do agendamento sobre o MESMO gesto — é esta divergência que a issue descreve",
+    ).toBe("system");
+    expect(
+      gravado?.created_by_user_id,
+      "o id do TOKEN foi para a coluna com FK para auth.users — em Postgres isso é violação de FK e a marcação morre com 500",
+    ).toBeNull();
   });
 
   it("o compromisso PERTENCE ao negócio — sem o vínculo o dossiê não acha o que foi marcado", async () => {
@@ -466,9 +507,13 @@ describe("quando a gravação da timeline falha", () => {
  * negócio. Reunião marcada com contato que ainda não virou card é justamente o
  * caso em que a automação tem trabalho; um emissor que só falasse com negócio
  * aberto ficaria mudo exatamente ali.
+ *
+ * O anúncio é o `appointment.created`, e UM só: as regras salvas como
+ * `appointment.booked` rodam nele, então as chaves que elas leem (`lead_id`,
+ * `nome_do_tipo`) têm de viajar no corpo dele.
  */
 describe("a agenda anuncia a reunião marcada", () => {
-  it("marcar anuncia `appointment.booked` com o contato e o negócio", async () => {
+  it("marcar anuncia `appointment.created` com o contato e o negócio — e não anuncia de novo pelo nome antigo", async () => {
     await marcarAgendamentoHandler(cliente(), ctx, {
       event_type_id: TIPO,
       starts_at: HORARIO,
@@ -489,6 +534,10 @@ describe("a agenda anuncia a reunião marcada", () => {
     expect(payload.contact_id, "sem o contato a automação não tem de quem criar o card").toBe(CONTATO);
     expect(payload.lead_id, "o negócio aberto do contato tem que viajar junto: sem ele a automação cria um card DUPLICADO em vez de mover o que já existe").toBe(NEGOCIO);
     expect(payload.nome_do_tipo, "é por ele que a regra separa reunião comercial de retorno de atendimento").toBe("Consulta");
+    expect(
+      banco.rpc.filter((c) => c.fn === "emit_event" && c.args.p_event_type === "appointment.booked"),
+      "a reunião foi anunciada duas vezes (nome antigo e nome de hoje): quem ouve compromisso por webhook conta a mesma reunião em dobro",
+    ).toHaveLength(0);
   });
 
   it("SEM negócio aberto o anúncio sai mesmo assim — é o caso que a automação existe para resolver", async () => {
@@ -571,5 +620,59 @@ describe("a falta confirmada aciona a recuperação", () => {
   it("cancelar também não aciona — cancelar é decisão, faltar é ausência", async () => {
     await cancelarAgendamentoHandler(cliente(), ctx, { id: AGENDAMENTO, reason: "cliente pediu" });
     expect(avisosDeFalta()).toHaveLength(0);
+  });
+});
+
+describe("marcar grava local e observação neste compromisso", () => {
+  function linhaDoCompromisso(): Linha {
+    const linhas = banco.inserido["calendar_appointments"] ?? [];
+    expect(linhas, "o compromisso nem chegou a nascer — a sonda está no caminho errado").toHaveLength(
+      1,
+    );
+    return linhas[0]!;
+  }
+
+  it("o que a tela mandou vence o default do tipo, e não cai em notes", async () => {
+    banco.tipo = { ...banco.tipo, location_details: "Sala 2" };
+    await marcarAgendamentoHandler(cliente(), ctx, {
+      event_type_id: TIPO,
+      starts_at: HORARIO,
+      contact_id: CONTATO,
+      location_details: "Rua das Flores, 10",
+      description: "Trazer exames",
+    });
+
+    const linha = linhaDoCompromisso();
+    expect(linha.location_details).toBe("Rua das Flores, 10");
+    expect(linha.description).toBe("Trazer exames");
+    expect(
+      linha.notes,
+      "observação gravada em notes: o calendário não publica notes, e o compromisso nasce mudo",
+    ).toBeNull();
+  });
+
+  it("endereço em branco NÃO herda o do tipo — quem apagou quis apagar", async () => {
+    banco.tipo = { ...banco.tipo, location_details: "Sala 2" };
+    await marcarAgendamentoHandler(cliente(), ctx, {
+      event_type_id: TIPO,
+      starts_at: HORARIO,
+      contact_id: CONTATO,
+      location_details: "   ",
+    });
+
+    expect(linhaDoCompromisso().location_details).toBeNull();
+  });
+
+  it("sem os campos, herda o local do tipo e nasce sem observação", async () => {
+    banco.tipo = { ...banco.tipo, location_details: "Sala 2" };
+    await marcarAgendamentoHandler(cliente(), ctx, {
+      event_type_id: TIPO,
+      starts_at: HORARIO,
+      contact_id: CONTATO,
+    });
+
+    const linha = linhaDoCompromisso();
+    expect(linha.location_details).toBe("Sala 2");
+    expect(linha.description).toBeNull();
   });
 });

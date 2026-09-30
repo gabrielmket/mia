@@ -25,6 +25,8 @@ import {
   Lock,
   Megaphone,
   Palette,
+  PaperPlaneTilt,
+  Phone,
   Plugs,
   PlugsConnected,
   PuzzlePiece,
@@ -34,6 +36,7 @@ import {
   ShieldCheck,
   Signpost,
   Storefront,
+  Tag,
   UserCircle,
   Users,
   UsersThree,
@@ -48,6 +51,9 @@ import {
   type NavGroup,
   type NavGroupId,
 } from "./catalogo";
+import type { ModuloOpcional } from "@/lib/instalacao/modulos";
+import type { CapacidadeDaOrganizacao } from "@/lib/organizacao/capacidades";
+
 import { destinosDaInterface, type InterfaceSettings } from "./interface";
 import type { ModoDeVenda } from "@/lib/empresas/modo-de-venda";
 export { NAV_GROUPS, GRUPO_NO_RODAPE } from "./catalogo";
@@ -76,6 +82,8 @@ const ICONS = {
   Lock,
   Megaphone,
   Palette,
+  PaperPlaneTilt,
+  Phone,
   Plugs,
   PlugsConnected,
   PuzzlePiece,
@@ -85,6 +93,7 @@ const ICONS = {
   ShieldCheck,
   Signpost,
   Storefront,
+  Tag,
   UserCircle,
   Users,
   UsersThree,
@@ -112,15 +121,36 @@ export function sidebarGroups(
   isPlatformAdmin: boolean,
   role: Role | null,
   settings?: InterfaceSettings,
+  /** O que a ORGANIZAÇÃO contratou (lib/modulos/vendaveis.ts). */
   modulos?: string[],
   /**
-   * B2B ou B2C (item C2). Atravessa igual aos `modulos`: `undefined` nao
+   * B2B ou B2C (item C2). Atravessa igual aos `modulos`: `undefined` não
    * esconde nada.
    */
   modoDeVenda?: ModoDeVenda,
+  /**
+   * O que o DONO DO SERVIDOR ligou nesta instalação (lib/instalacao/modulos.ts).
+   * Lista diferente da de cima, e é por isso que são dois parâmetros — ver o
+   * comentário em `destinosDaInterface`.
+   */
+  modulosLigados?: readonly ModuloOpcional[],
+  /**
+   * As capacidades que a ORGANIZAÇÃO ligou (lib/organizacao/capacidades.ts, do
+   * upstream). Quarto eixo, por último pelo motivo escrito em
+   * `destinosDaInterface`: no meio, empurraria os nossos eixos de lugar.
+   */
+  capacidades?: readonly CapacidadeDaOrganizacao[],
 ): Array<{ group: NavGroup; items: NavDestination[] }> {
   const visible = new Set<string>(
-    destinosDaInterface(settings, isPlatformAdmin, role, modulos, modoDeVenda).map((d) => d.href),
+    destinosDaInterface(
+      settings,
+      isPlatformAdmin,
+      role,
+      modulos,
+      modoDeVenda,
+      modulosLigados,
+      capacidades,
+    ).map((d) => d.href),
   );
   return NAV_GROUPS.map((group) => ({
     group,
@@ -146,16 +176,37 @@ export function hubSections(
   isPlatformAdmin: boolean,
   role: Role | null,
   settings?: InterfaceSettings,
+  /** O que a ORGANIZAÇÃO contratou (lib/modulos/vendaveis.ts). */
   modulos?: string[],
   /**
-   * B2B ou B2C (item C2). Atravessa igual aos `modulos`: `undefined` nao
+   * B2B ou B2C (item C2). Atravessa igual aos `modulos`: `undefined` não
    * esconde nada.
    */
   modoDeVenda?: ModoDeVenda,
+  /**
+   * O que o DONO DO SERVIDOR ligou nesta instalação (lib/instalacao/modulos.ts).
+   * Lista diferente da de cima, e é por isso que são dois parâmetros — ver o
+   * comentário em `destinosDaInterface`.
+   */
+  modulosLigados?: readonly ModuloOpcional[],
+  /**
+   * As capacidades que a ORGANIZAÇÃO ligou (lib/organizacao/capacidades.ts, do
+   * upstream). Quarto eixo, por último pelo motivo escrito em
+   * `destinosDaInterface`: no meio, empurraria os nossos eixos de lugar.
+   */
+  capacidades?: readonly CapacidadeDaOrganizacao[],
 ): Array<{ section: string; items: NavDestination[] }> {
   const porSecao = new Map<string, NavDestination[]>();
   const visible = new Set<string>(
-    destinosDaInterface(settings, isPlatformAdmin, role, modulos, modoDeVenda).map((d) => d.href),
+    destinosDaInterface(
+      settings,
+      isPlatformAdmin,
+      role,
+      modulos,
+      modoDeVenda,
+      modulosLigados,
+      capacidades,
+    ).map((d) => d.href),
   );
   for (const d of NAV_DESTINATIONS) {
     if (d.group !== group || !visible.has(d.href)) continue;
@@ -172,15 +223,36 @@ export function searchable(
   isPlatformAdmin: boolean,
   role: Role | null,
   settings?: InterfaceSettings,
+  /** O que a ORGANIZAÇÃO contratou (lib/modulos/vendaveis.ts). */
   modulos?: string[],
   /**
-   * B2B ou B2C (item C2). Atravessa igual aos `modulos`: `undefined` nao
+   * B2B ou B2C (item C2). Atravessa igual aos `modulos`: `undefined` não
    * esconde nada.
    */
   modoDeVenda?: ModoDeVenda,
+  /**
+   * O que o DONO DO SERVIDOR ligou nesta instalação (lib/instalacao/modulos.ts).
+   * Lista diferente da de cima, e é por isso que são dois parâmetros — ver o
+   * comentário em `destinosDaInterface`.
+   */
+  modulosLigados?: readonly ModuloOpcional[],
+  /**
+   * As capacidades que a ORGANIZAÇÃO ligou (lib/organizacao/capacidades.ts, do
+   * upstream). Quarto eixo, por último pelo motivo escrito em
+   * `destinosDaInterface`: no meio, empurraria os nossos eixos de lugar.
+   */
+  capacidades?: readonly CapacidadeDaOrganizacao[],
 ): NavDestination[] {
   const visible = new Set<string>(
-    destinosDaInterface(settings, isPlatformAdmin, role, modulos, modoDeVenda).map((d) => d.href),
+    destinosDaInterface(
+      settings,
+      isPlatformAdmin,
+      role,
+      modulos,
+      modoDeVenda,
+      modulosLigados,
+      capacidades,
+    ).map((d) => d.href),
   );
   return NAV_DESTINATIONS.filter((d) => visible.has(d.href));
 }

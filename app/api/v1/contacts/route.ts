@@ -17,11 +17,12 @@ import { extractBearer, validateBearerToken, ensureRole, ensureScope, McpAuthErr
 import { traduzir } from "@/lib/i18n/dicionario";
 import type { Idioma } from "@/lib/i18n/idiomas";
 import {
-  contactCreateSchema,
+  contactCreateSchemaDoPais,
   contactListQuerySchema,
   validateRequest,
   type ContactCreate,
 } from "@/lib/schemas";
+import { perfilDaOrganizacao } from "@/lib/legal/perfil-do-pais";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -119,7 +120,10 @@ export async function GET(req: NextRequest): Promise<Response> {
   const url = new URL(req.url);
   const qsParsed = contactListQuerySchema.safeParse({
     search: url.searchParams.get("search") ?? undefined,
-    tag: url.searchParams.get("tag") ?? undefined,
+    // `getAll` (#1274): a repetição na URL soe viva pelo `getAll`. Um `get` leria
+    // so a primeira e a tela mostraria uma escolha que a lista ignora.
+    tag: url.searchParams.getAll("tag"),
+    modo: url.searchParams.get("modo") ?? undefined,
     source: url.searchParams.get("source") ?? undefined,
     cursor: url.searchParams.get("cursor") ?? undefined,
     limit: url.searchParams.get("limit") ?? undefined,
@@ -165,9 +169,14 @@ export async function POST(req: NextRequest): Promise<Response> {
   const user = authz.user;
   const activeOrg = authz.org;
 
+  // O documento do titular é validado pela régua do PAÍS da organização (issue
+  // #1033): quem decide é a coluna `organizations.country`, nunca o corpo da
+  // requisição — mesma doutrina da moeda em `lib/catalogo/moeda-da-org.ts`.
+  const perfil = await perfilDaOrganizacao(supabase, activeOrg.orgId);
+
   let input;
   try {
-    input = await validateRequest(contactCreateSchema, req);
+    input = await validateRequest(contactCreateSchemaDoPais(perfil), req);
   } catch (err) {
     if (err instanceof ApiError) {
       return fail(err.code, err.message, err.status, {
@@ -192,7 +201,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     return ok(result, { status: 201, requestId });
   } catch (err) {
     if (err instanceof ApiError) {
-      return fail(err.code, err.message, err.status, { requestId });
+      return fail(err.code, err.message, err.status, {
+        details: err.details as Record<string, unknown> | undefined,
+        requestId,
+      });
     }
     throw err;
   }

@@ -28,7 +28,17 @@ vi.mock("@/lib/channels/meta/session", () => ({
   metaSessionByWabaId: porWaba,
 }));
 
+const ecos: string[] = [];
+const naCampanha = vi.hoisted(() => [] as Array<{ organizationId: string; statusDaMeta: string }>);
+
 vi.mock("@/lib/channels/meta/ingest", () => ({
+  // O eco do app (coexistência, upstream v1.60) registra a organização como a
+  // recebida: é a mesma pergunta de "de quem é", e as duas têm que ouvir
+  // `donoDoEvento`, não o token do caminho.
+  ingestMetaEcho: async (_a: unknown, _e: unknown, opts: { organizationId: string }) => {
+    ecos.push(opts.organizationId);
+    return { status: "ingested" };
+  },
   ingestMetaInbound: async (_a: unknown, e: unknown, opts: { organizationId: string }) => {
     ingeridos.push(e);
     orgsIngeridas.push(opts.organizationId);
@@ -36,10 +46,30 @@ vi.mock("@/lib/channels/meta/ingest", () => ({
   },
 }));
 
+vi.mock("@/lib/broadcast/desfecho-da-campanha", () => ({
+  aplicarDesfechoNaCampanha: async (_a: unknown, input: { organizationId: string; statusDaMeta: string }) => {
+    naCampanha.push({ organizationId: input.organizationId, statusDaMeta: input.statusDaMeta });
+    return "nao_e_disparo";
+  },
+}));
+
+/**
+ * Uma consulta que aceita qualquer encadeamento e termina vazia.
+ *
+ * Era uma escada fixa de quatro `.eq()`, que só servia ao ramo de status comum.
+ * O ramo de `failed` do upstream (#1614) encadeia `.neq().select().maybeSingle()`,
+ * e a escada fixa lançaria ali — o teste mediria o mock, não a rota.
+ */
+function consultaVazia(): Record<string, unknown> {
+  const c: Record<string, unknown> = {};
+  for (const m of ["update", "eq", "neq", "select"]) c[m] = () => c;
+  c.maybeSingle = async () => ({ data: null, error: null });
+  c.then = (ok: (v: unknown) => unknown) => ok({ data: null, error: null });
+  return c;
+}
+
 vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: () => ({
-    from: () => ({ update: () => ({ eq: () => ({ eq: () => ({ eq: () => ({ eq: async () => ({}) }) }) }) }) }),
-  }),
+  createAdminClient: () => ({ from: () => consultaVazia() }),
 }));
 
 import { lerEnvelopeMeta } from "@/lib/channels/meta/envelope";
@@ -149,6 +179,8 @@ describe("a rota — o desfecho que a Meta enxerga", () => {
     porWaba.mockReset().mockResolvedValue(null);
     ingeridos.length = 0;
     orgsIngeridas.length = 0;
+    ecos.length = 0;
+    naCampanha.length = 0;
   });
 
   it("payload real bem assinado: 200 e a mensagem é ingerida", async () => {
@@ -220,6 +252,88 @@ describe("a rota — o desfecho que a Meta enxerga", () => {
     expect(res.status).toBe(200);
     expect(ingeridos, "sem dono não se escreve em tenant nenhum").toHaveLength(0);
     expect(await res.json()).toMatchObject({ outcomes: ["waba_desconhecida"] });
+    vi.unstubAllEnvs();
+  });
+
+  /**
+   * Os dois ramos que o upstream trouxe na v1.60 — o eco do app (coexistência)
+   * e o `failed` com `message.failed` (#1614) — foram escritos contra a rota
+   * antiga, em que `session` nunca era nula. Na fusão eles liam
+   * `session.organizationId`: com token órfão isso LANÇA, e com duas contas
+   * escreve no tenant errado. Estes dois casos seguram a costura.
+   */
+  it("eco do app WhatsApp Business com token órfão: a organização sai da WABA", async () => {
+    vi.stubEnv("META_APP_SECRET", APP_SECRET);
+    porToken.mockResolvedValue(null);
+    porWaba.mockResolvedValue(OUTRA_SESSAO);
+
+    const res = await POST(
+      pedido({
+        object: "whatsapp_business_account",
+        entry: [
+          {
+            id: OUTRA_SESSAO.wabaId,
+            changes: [
+              {
+                field: "smb_message_echoes",
+                value: {
+                  metadata: { phone_number_id: "pn-1" },
+                  message_echoes: [
+                    { id: "wamid.eco-1", to: "5511999990000", timestamp: "1700000000", type: "text", text: { body: "oi" } },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      }),
+      ctx,
+    );
+
+    expect(res.status).toBe(200);
+    expect(ecos, "era session.organizationId — nulo aqui").toEqual(["org-2"]);
+    vi.unstubAllEnvs();
+  });
+
+  it("status `failed` ainda chega à campanha — é ele que estorna o cliente", async () => {
+    vi.stubEnv("META_APP_SECRET", APP_SECRET);
+    porToken.mockResolvedValue(null);
+    porWaba.mockResolvedValue(OUTRA_SESSAO);
+
+    const res = await POST(
+      pedido({
+        object: "whatsapp_business_account",
+        entry: [
+          {
+            id: OUTRA_SESSAO.wabaId,
+            changes: [
+              {
+                field: "messages",
+                value: {
+                  metadata: { phone_number_id: "pn-1" },
+                  statuses: [
+                    {
+                      id: "wamid.falhou-1",
+                      status: "failed",
+                      recipient_id: "5511999990000",
+                      errors: [{ code: 131047, title: "Re-engagement message" }],
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      }),
+      ctx,
+    );
+
+    expect(res.status).toBe(200);
+    // O ramo de `failed` do upstream entrou como `else if` à frente do nosso
+    // `else`, e do jeito que a fusão os juntou o `failed` nunca chegava aqui.
+    expect(naCampanha, "sem isto a campanha não estorna a mensagem recusada").toEqual([
+      { organizationId: "org-2", statusDaMeta: "failed" },
+    ]);
     vi.unstubAllEnvs();
   });
 });

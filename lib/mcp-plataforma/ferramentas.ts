@@ -30,7 +30,8 @@ import { z } from "zod";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { MODULOS } from "@/lib/modulos/catalogo";
+import { MODULOS } from "@/lib/modulos/vendaveis";
+import { nomeDoCanal } from "@/lib/channels/estado";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 import { saldoDaPlataforma } from "@/lib/ai/custo/saldo-da-plataforma";
 import { CARIMBO_DO_SCHEMA, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
@@ -217,7 +218,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
           return {
             id: s.id,
             organization_id: s.organization_id,
-            nome: s.display_name ?? s.phone_number ?? s.id,
+            // O rótulo central de canal; o `id` já vai no campo ao lado.
+            nome: nomeDoCanal(s),
             status: s.status,
             e_o_numero_de_avisos: s.e_numero_de_avisos === true,
           };

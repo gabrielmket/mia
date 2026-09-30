@@ -13,6 +13,8 @@ export interface TemplateSlotView {
   expects: string;
   /** Rótulo humano do endereço: "corpo", "cabeçalho", "card 2 › cabeçalho". */
   onde: string;
+  /** A chave deste valor em `template_values` e em `savedValues` (`header:1`). */
+  valueKey: string;
 }
 
 /** Texto de um componente, inteiro e uma vez só — a UI marca os `{{n}}`. */
@@ -36,6 +38,8 @@ export interface TemplateView {
   /** DERIVADOS do template pela API — nunca digitados, nunca contados à mão. */
   slots: TemplateSlotView[];
   previews: TemplatePreview[];
+  /** Links de mídia salvos no modelo — o painel da janela fechada pré-preenche com eles. */
+  savedValues: Record<string, string>;
 }
 
 export interface TemplatesPayload {
@@ -86,6 +90,21 @@ export interface NovoTemplateInput {
   header?: string;
   footer?: string;
   header_midia?: CabecalhoDeMidia;
+}
+
+/**
+ * As duas listas que mostram template: a aba de Conexões (`channel-templates`) e
+ * o painel da janela fechada na conversa (`templates-da-conversa`, prefixo — a
+ * chave real leva a fonte).
+ *
+ * Editar e excluir invalidavam `["templates"]`, chave que nenhuma consulta usa: o
+ * template editado continuava com o texto velho na tela até o `staleTime`, e o
+ * excluído continuava lá para ser clicado. As chaves certas vieram do upstream
+ * (`useSaveTemplateValues`, v1.60), que invalida as duas pelo mesmo motivo.
+ */
+function invalidarListasDeTemplate(qc: ReturnType<typeof useQueryClient>): void {
+  void qc.invalidateQueries({ queryKey: ["channel-templates"] });
+  void qc.invalidateQueries({ queryKey: ["templates-da-conversa"] });
 }
 
 /**
@@ -140,7 +159,7 @@ export function useEditarTemplate() {
       } else {
         toast.success("Template editado.");
       }
-      void qc.invalidateQueries({ queryKey: ["templates"] });
+      invalidarListasDeTemplate(qc);
     },
     onError: (e: unknown) => {
       toast.error(e instanceof Error ? e.message : "Falha ao editar o template.");
@@ -158,10 +177,32 @@ export function useExcluirTemplate() {
     mutationFn: async (id: string) => apiClient.delete(`/api/v1/channels/templates/${id}`),
     onSuccess: () => {
       toast.success("Template excluído na Meta.");
-      void qc.invalidateQueries({ queryKey: ["templates"] });
+      invalidarListasDeTemplate(qc);
     },
     onError: (e: unknown) => {
       toast.error(e instanceof Error ? e.message : "Falha ao excluir o template.");
+    },
+  });
+}
+
+/**
+ * Grava (ou esquece, com string vazia) o link de mídia do modelo. Invalida
+ * também a lista do painel da janela fechada, que lê a mesma rota com outra
+ * chave: sem isso o link salvo aqui só apareceria na conversa depois do
+ * `staleTime`.
+ */
+export function useSaveTemplateValues() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { name: string; language: string; values: Record<string, string> }) =>
+      apiClient.patch<{ data: { savedValues: Record<string, string> } }>(
+        "/api/v1/channels/templates",
+        args,
+      ),
+    onError: showApiError,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["channel-templates"] });
+      qc.invalidateQueries({ queryKey: ["templates-da-conversa"] });
     },
   });
 }

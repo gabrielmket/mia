@@ -61,6 +61,14 @@ export async function updatePipelineConfig(
   const nextSettings: Record<string, unknown> = { ...currentSettings };
   if (parsed.data.fields !== undefined) nextSettings.fields = parsed.data.fields;
   if (parsed.data.lost_reasons !== undefined) nextSettings.lost_reasons = parsed.data.lost_reasons;
+  if (parsed.data.won_reasons !== undefined) nextSettings.won_reasons = parsed.data.won_reasons;
+  if (parsed.data.won_reason_required !== undefined) {
+    nextSettings.won_reason_required = parsed.data.won_reason_required;
+  }
+  if (parsed.data.reabertura !== undefined) nextSettings.reabertura = parsed.data.reabertura;
+  if (parsed.data.reabertura_campos !== undefined) {
+    nextSettings.reabertura_campos = parsed.data.reabertura_campos;
+  }
   // Ver `lib/crm/metas/progresso.ts`: ausente = vencer aqui é receita.
   if (parsed.data.vitoria_e_receita !== undefined) {
     nextSettings.vitoria_e_receita = parsed.data.vitoria_e_receita;
@@ -83,6 +91,9 @@ export async function updatePipelineConfig(
       vocabulary_changed: !!parsed.data.vocabulary,
       fields_count: parsed.data.fields?.length ?? null,
       lost_reasons_count: parsed.data.lost_reasons?.length ?? null,
+      won_reasons_count: parsed.data.won_reasons?.length ?? null,
+      won_reason_required: parsed.data.won_reason_required ?? null,
+      reabertura: parsed.data.reabertura ?? null,
     },
   });
 

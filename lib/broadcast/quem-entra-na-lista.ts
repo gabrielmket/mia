@@ -25,7 +25,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** O que o `peneirar` precisa de cada contato. */
-export const COLUNAS_DO_CONTATO = "id, phone_number, display_name, is_blocked, consent";
+export const COLUNAS_DO_CONTATO = "id, phone_number, name, display_name, is_blocked, consent";
 
 /** Teto da varredura, igual nas duas rotas. */
 const LIMITE = 50_000;

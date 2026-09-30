@@ -30,21 +30,42 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const RAIZ = path.resolve(__dirname, "../..");
-const BASELINE = fs.readFileSync(path.join(RAIZ, "supabase/baseline.sql"), "utf8");
+// O schema como o banco o recebe: o do upstream e, por cima, o da MIA — na
+// ordem de easypanel/bootstrap.sh. "Última definição vence" continua valendo.
+const BASELINE = [
+    fs.readFileSync(path.join(RAIZ, "supabase/baseline.sql"), "utf8"),
+    fs.readFileSync(path.join(RAIZ, "supabase/baseline-mia.sql"), "utf8"),
+  ].join("\n");
 const MIGRATION = fs.readFileSync(
-  path.join(RAIZ, "supabase/migrations/20260920070000_0270_regua_nova_encerra_ao_responder.sql"),
+  path.join(RAIZ, "supabase/migrations-mia/20260920070000_0270_regua_nova_encerra_ao_responder.sql"),
   "utf8",
 );
 
 describe("o padrão da régua nova", () => {
   it("nasce encerrando quando o lead responde", () => {
+    // O default vem do `alter column` no baseline-mia.sql, e NÃO de um retoque no
+    // `create table` do upstream: aquele arquivo é dele, byte a byte, e editá-lo
+    // viraria conflito em toda sincronização.
     expect(
-      BASELINE.includes(
-        `trigger_config jsonb not null default '{"kind":"manual","cancel_on_reply":true}'`,
+      /alter\s+table\s+public\.followup_flow_pointers\s+alter\s+column\s+trigger_config\s+set\s+default\s+'\{"kind":"manual","cancel_on_reply":true\}'/i.test(
+        BASELINE,
       ),
-      "o default de `followup_flows.trigger_config` voltou a nascer sem " +
+      "o default de `followup_flow_pointers.trigger_config` voltou a nascer sem " +
         "`cancel_on_reply` — e régua nova volta a se despedir de quem acabou de responder",
     ).toBe(true);
+  });
+
+  it("mira a tabela que EXISTE", () => {
+    // A 0270 original alterava `public.followup_flows`, que nunca existiu: errou
+    // em todo deploy desde a .46 e era o `erros: 1` da saúde. A régua mora em
+    // `followup_flow_pointers`. Este teste é o que teria pego isso no dia.
+    const semComentario = BASELINE.split("\n")
+      .filter((l) => !l.trimStart().startsWith("--"))
+      .join("\n");
+    expect(/public\.followup_flows\b/.test(semComentario), "voltou a alterar a tabela inexistente").toBe(
+      false,
+    );
+    expect(semComentario).toMatch(/create table if not exists followup_flow_pointers/);
   });
 
   it("o banco que já existe também recebe o default novo", () => {

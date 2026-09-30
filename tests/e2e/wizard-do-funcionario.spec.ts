@@ -16,7 +16,7 @@
  */
 import { randomUUID } from "node:crypto";
 
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/test";
 import { createClient } from "@supabase/supabase-js";
 
 const svc = createClient(
@@ -65,6 +65,23 @@ test.beforeAll(async () => {
     role: "admin",
     accepted_at: new Date().toISOString(),
   });
+
+  // FORK MIA: o `install.sh` também promove o dono a admin da instalação
+  // (`platform_admins`, passo 4 de scripts/bootstrap-owner.ts, com
+  // `mfa_required: false`). No upstream isso não mudava nada neste wizard; aqui
+  // muda, porque o bloco "o cérebro dele" (chave e provedor de IA) só aparece
+  // para quem paga a conta de IA — `podeConfigurarChaveDeIa`,
+  // lib/ai/custo-e-da-plataforma.ts. Sem esta linha a spec não reproduzia o
+  // estado que ela mesma diz reproduzir, e o caso do cérebro media a tela do
+  // admin de um cliente, que no fork não vê chave nenhuma.
+  const { error: errDono } = await svc.from("platform_admins").insert({
+    user_id: userId,
+    granted_by: userId,
+    scope: "full",
+    mfa_required: false,
+    reason: "E2E wizard: dono da instalação, como o install.sh deixa",
+  });
+  if (errDono) throw errDono;
 });
 
 test.afterAll(async () => {
@@ -78,6 +95,8 @@ test.afterAll(async () => {
     await svc.from("crm_pipelines").delete().eq("organization_id", orgId);
     await svc.from("user_organizations").delete().eq("organization_id", orgId);
   }
+  // `granted_by` é RESTRICT: o grant sai antes do usuário.
+  if (userId) await svc.from("platform_admins").delete().eq("user_id", userId);
   if (userId) await svc.auth.admin.deleteUser(userId);
 });
 
@@ -85,7 +104,7 @@ async function login(page: Page): Promise<void> {
   await page.goto("/login");
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(SENHA);
-  await page.getByRole("button", { name: /entrar/i }).click();
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
 }
 
 test.describe.configure({ mode: "serial", timeout: 120_000 });

@@ -18,6 +18,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { configDoRoteador } from "@/lib/ai/trava-da-ia";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +130,8 @@ export async function POST(req: NextRequest): Promise<Response> {
     });
   }
 
+  // FORK MIA: o modelo do classificador é da plataforma (lib/ai/trava-da-ia.ts).
+  const config = configDoRoteador(authUser, input.config, null);
   const { data: created, error: insErr } = await admin
     .from("ai_routers")
     .insert({
@@ -136,7 +139,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       name: input.name,
       channel_session_id: input.channel_session_id,
       fallback_agent_id: input.fallback_agent_id ?? null,
-      ...(input.config !== undefined ? { config: input.config } : {}),
+      ...(config !== undefined ? { config } : {}),
       created_by: authUser.id,
     })
     .select("id")

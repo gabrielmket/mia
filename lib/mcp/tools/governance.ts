@@ -13,8 +13,10 @@
 import { z } from "zod";
 
 import { audit } from "@/lib/audit";
+import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { conversationTagSchema, conversationTagsSchema } from "@/lib/schemas/messaging";
 import { getQueueStatus } from "@/lib/routing/queue";
+import { emitirEtiquetaAdicionada } from "./tag-adicionada-pela-ferramenta";
 import type { McpContext } from "../types";
 import type { McpToolDefinition } from "../types";
 
@@ -199,7 +201,10 @@ export const crmManageTags: McpToolDefinition<typeof tagsInputShape> = {
     if (fetchErr) throw new Error(fetchErr.message);
     if (!row) throw new Error("target_not_found");
 
-    const current = ((row as { tags: string[] | null }).tags ?? []).map((t) => t);
+    // O que já está gravado pode vir em caixa mista (dado anterior à #1224):
+    // sem normalizar aqui, `remove: ["vip"]` não alcançaria o "VIP" do banco e
+    // o marcador ficaria impossível de tirar pela MCP.
+    const current = normalizarTags((row as { tags: string[] | null }).tags ?? []);
     const merged = [...current, ...addTags].filter((t) => !removeTags.has(t));
     // Dedup + teto de 20 (rejeita se estourar) — mesma validação da G3-05.
     const nextTags = conversationTagsSchema.parse(merged);
@@ -221,6 +226,15 @@ export const crmManageTags: McpToolDefinition<typeof tagsInputShape> = {
       resourceId: input.target_id,
       requestId: ctx.requestId,
       metadata: { ...a.metadataActor, tags: nextTags, via: "mcp" },
+    });
+
+    // FORK MIA — a etiqueta posta pela ferramenta dispara `*.tag_added` como a da
+    // tela; sem isso, a regra "quando ganhar a etiqueta" não via o agente.
+    await emitirEtiquetaAdicionada(ctx.supabase, ctx, {
+      alvo: input.target_kind,
+      alvoId: input.target_id,
+      antes: current,
+      depois: nextTags,
     });
 
     return { target_kind: input.target_kind, target_id: input.target_id, tags: nextTags };

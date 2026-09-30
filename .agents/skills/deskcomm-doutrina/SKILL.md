@@ -1,6 +1,6 @@
 ---
 name: deskcomm-doutrina
-description: Doutrina de código do DeskcommCRM — multi-tenancy com RLS, tripla de migration, restrição de canal, eixo self-host. USE SEMPRE ao escrever ou revisar código neste repositório, e antes de responder pergunta sobre convenção, schema, tenancy, WhatsApp/WAHA, instalador ou Definition of Done. É o ponteiro para a doutrina viva do repo; não substitui ler o CLAUDE.md.
+description: 'Doutrina de código do DeskcommCRM — multi-tenancy com RLS, tripla de migration, restrição de canal, eixo self-host. USE SEMPRE ao escrever ou revisar código neste repositório, e antes de responder pergunta sobre convenção, schema, tenancy, WhatsApp/WAHA, instalador ou Definition of Done. É o ponteiro para a doutrina viva do repo; não substitui ler o CLAUDE.md.'
 ---
 
 # DeskcommCRM — doutrina de código
@@ -50,6 +50,12 @@ produto que a pessoa instala sozinha, ela não descobre que está quebrado.
 Verde de teste não é prova de comportamento. Sabote a linha que você corrigiu e confirme que a suíte
 fica **vermelha** — teste que não reprova não guarda nada. E declare o que **não** mediu: é o campo
 que separa medição de relato.
+
+E se o caminho de usuário que você provou passa por um **agente de IA**, o verde do agente não é
+prova da camada de baixo: todo caso de aceite que atravessa o agente **vem em par** com a medição
+direta da ferramenta, com o **mesmo texto cru** — o par é a unidade — e as duas medições só contam
+quando concordam. Discordância entre os dois significa que você mediu o modelo. Lei em
+[`docs/doctrine/prova-em-par.md`](../../../docs/doctrine/prova-em-par.md).
 
 ## Não-objetivos
 

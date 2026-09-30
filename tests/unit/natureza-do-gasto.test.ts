@@ -21,7 +21,9 @@ describe("de que natureza é cada ponto", () => {
   });
 
   it("os auxiliares que rodam dentro do turno são atendimento", () => {
-    for (const p of ["stage_classifier", "promise_semantic", "jailbreak_detect", "checkpoint"]) {
+    // FORK MIA — `handoff_promise`: o Jev lê a resposta que saiu no turno (a
+    // passagem prometida), com o contato da conversa na linha.
+    for (const p of ["stage_classifier", "promise_semantic", "jailbreak_detect", "checkpoint", "handoff_promise"]) {
       expect(naturezaDoGasto(p), p).toBe("atendimento");
     }
   });
@@ -44,6 +46,23 @@ describe("de que natureza é cada ponto", () => {
     expect(naturezaDoGasto("embedding_consultar")).toBe("atendimento");
   });
 
+  it("validar a resposta do fluxo é atendimento — roda dentro do turno, a cada resposta do cliente", () => {
+    expect(naturezaDoGasto("flow_validate")).toBe("atendimento");
+  });
+
+  it("configurar com o administrador é sistema — montar agente e importar modelo de proposta não têm cliente na linha", () => {
+    expect(naturezaDoGasto("prospecting_agent_setup_chat")).toBe("sistema");
+    expect(naturezaDoGasto("proposal_template_import")).toBe("sistema");
+  });
+
+  it("ferramenta da equipe é sistema — o clique é de quem opera, não mensagem do cliente", () => {
+    // `case_chat` carimba o contato do caso: contado como atendimento, criaria
+    // uma conversa num dia em que o cliente não escreveu.
+    for (const p of ["proposal_assistant", "proposal_fill_from_conversation", "case_chat"]) {
+      expect(naturezaDoGasto(p), p).toBe("sistema");
+    }
+  });
+
   it("purpose desconhecido vai para sistema — nunca infla o preço por conversa", () => {
     expect(naturezaDoGasto("ponto_que_nao_existe_mais")).toBe("sistema");
   });
@@ -63,7 +82,10 @@ describe("de que natureza é cada ponto", () => {
       "sentiment_classify",
       "followup_classify",
       "followup_decide_timing",
+      "flow_validate",
       "jailbreak_detect",
+      // FORK MIA — o Jev conferindo a resposta que saiu no turno: atendimento.
+      "handoff_promise",
       "promise_semantic",
       "compaction",
       "flush",
@@ -78,6 +100,11 @@ describe("de que natureza é cada ponto", () => {
       "flywheel_judge",
       "flywheel_distiller",
       "embedding_indexar",
+      "prospecting_agent_setup_chat",
+      "proposal_template_import",
+      "proposal_assistant",
+      "proposal_fill_from_conversation",
+      "case_chat",
     ]);
     const novos = PONTOS_DE_IA.map((p) => p.id).filter((id) => !classificados.has(id));
     expect(novos, "pontos de IA sem natureza decidida").toEqual([]);

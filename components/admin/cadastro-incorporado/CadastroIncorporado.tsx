@@ -66,7 +66,7 @@ export function CadastroIncorporado() {
             <Input
               id="link-do-cadastro"
               value={link ?? data.embedded_signup_url ?? ""}
-              placeholder="https://business.facebook.com/…"
+              placeholder="https://…"
               onChange={(e) => setLink(e.target.value)}
             />
           </div>

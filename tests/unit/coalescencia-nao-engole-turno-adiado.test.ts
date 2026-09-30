@@ -1,9 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { expect, it, describe, vi } from 'vitest';
 import type pg from 'pg';
 
 import { drainTick } from '@/lib/agent-engine/edge/crm/drain';
-import { haInboundNaoRespondido } from '@/lib/agent-engine/agent/inbound-turn';
-import type { LeadContextMessage } from '@/lib/agent-engine/edge/crm/get-lead-context';
 
 /**
  * O TURNO ADIADO VIRAVA RALO.
@@ -146,47 +147,40 @@ describe('coalescência: o turno adiado não engole a mensagem seguinte', () => 
  * lê o histórico inteiro, não só a mensagem pinada. Os seguintes chegariam com a
  * conversa JÁ respondida e mandariam o modelo falar por cima da própria resposta.
  *
- * `haInboundNaoRespondido` é o que os cala. Ela NÃO é
- * `inboundsNaoRespondidos().length > 0`: aquela devolve texto e descarta corpo
- * vazio de propósito, e áudio cuja transcrição falhou é exatamente uma inbound de
- * corpo vazio — o turno que responde "recebi seu áudio, mas não consigo ouvi-lo"
- * precisa acontecer.
+ * O cinto era nosso (`haInboundNaoRespondido`: "há outbound depois da última
+ * inbound?") e saiu na fusão da v1.60, porque o upstream fez a mesma pergunta do
+ * jeito certo e provou que a nossa calava o turno errado: um turno que LEU a
+ * conversa antes de a mensagem chegar e ENVIOU depois deixa uma outbound posterior
+ * a uma mensagem que ele nunca viu, e a nossa régua deixava essa mensagem sem
+ * resposta. A dele (`turno-ja-respondido.ts`) anota no job a inbound mais nova
+ * que o turno VIU e só cala quem chega depois de um turno que viu E enviou — o
+ * caso das N mensagens da noite, exatamente, sem o falso positivo.
+ * `tests/invariants/turno-nao-responde-duas-vezes.test.ts` prova as duas direções
+ * no handler real. A resposta de um HUMANO continua calando a IA pelo caminho do
+ * upstream: o envio da caixa estende `conversations.bot_silenced_until`.
+ *
+ * O que fica AQUI é a amarra: a cerca do drain só é segura enquanto o handler
+ * perguntar à régua ANTES de rodar o turno. Se a pergunta sumir numa fusão, as N
+ * mensagens da noite voltam a virar N respostas às 7h.
  */
-describe('haInboundNaoRespondido: quem cala o turno repetido', () => {
-  const msg = (direction: 'inbound' | 'outbound', body: string): LeadContextMessage =>
-    ({ direction, body, sent_at: '2026-09-18T09:00:00-03:00' }) as unknown as LeadContextMessage;
+describe('o cinto: o handler pergunta à régua antes de rodar o turno', () => {
+  const fonte = readFileSync(join(process.cwd(), 'lib/agent-engine/agent/inbound-turn.ts'), 'utf8');
+  const handler = fonte.slice(fonte.indexOf('export function createInboundTurnHandler'));
 
-  it('cliente falou por último → há o que responder', () => {
-    expect(haInboundNaoRespondido([msg('outbound', 'Oi!'), msg('inbound', 'quanto custa?')])).toBe(
-      true,
-    );
+  it('a régua é consultada, e antes de runAgentTurn', () => {
+    const pergunta = handler.indexOf('await ultimaInboundJaRespondida(pool, alvo)');
+    const turno = handler.indexOf('await runAgentTurn(deps, job, pool, ctx');
+    expect(handler.length, 'createInboundTurnHandler não encontrado — o instrumento ficou cego').toBeLessThan(fonte.length);
+    expect(pergunta, 'o handler de inbound_turn não consulta mais ultimaInboundJaRespondida').toBeGreaterThan(-1);
+    expect(turno, 'runAgentTurn não encontrado no handler — o instrumento ficou cego').toBeGreaterThan(-1);
+    expect(pergunta).toBeLessThan(turno);
   });
 
-  it('nós falamos por último → nada esperando', () => {
-    expect(haInboundNaoRespondido([msg('inbound', 'quanto custa?'), msg('outbound', 'R$ 90')])).toBe(
-      false,
-    );
-  });
-
-  it('resposta de HUMANO também conta como nossa — o agente não fala por cima', () => {
-    // O corte é a direção, não o autor. É o caso em que responder de novo é pior:
-    // o atendente já assumiu a conversa.
-    expect(
-      haInboundNaoRespondido([
-        msg('inbound', 'quero falar com alguém'),
-        msg('outbound', 'Oi, aqui é a Ana, vou te ajudar'),
-      ]),
-    ).toBe(false);
-  });
-
-  it('áudio sem transcrição (corpo VAZIO) ainda é inbound não respondida', () => {
-    // A armadilha que obrigou a função própria: `inboundsNaoRespondidos`
-    // devolveria [] aqui, e usá-la como guarda calaria o turno que existe para
-    // dizer ao cliente que o áudio não pôde ser ouvido.
-    expect(haInboundNaoRespondido([msg('outbound', 'Oi!'), msg('inbound', '')])).toBe(true);
-  });
-
-  it('conversa sem mensagem nenhuma → nada a responder', () => {
-    expect(haInboundNaoRespondido([])).toBe(false);
+  it('a anotação do que o turno viu vem depois da pergunta e antes do turno', () => {
+    const pergunta = handler.indexOf('await ultimaInboundJaRespondida(pool, alvo)');
+    const anotacao = handler.indexOf('await anotarUltimaInboundVista(pool, alvo)');
+    const turno = handler.indexOf('await runAgentTurn(deps, job, pool, ctx');
+    expect(anotacao).toBeGreaterThan(pergunta);
+    expect(anotacao).toBeLessThan(turno);
   });
 });

@@ -1,8 +1,7 @@
 import type {JobClaim} from "@/lib/agent-engine/queue/claim";
 import { assertAgendaEffectPg } from "@/lib/agenda/efeito";
-import { StaleServiceBoundaryError } from "@/lib/atendimento/fronteira";
+import { isFollowupCasRecusado, parseServiceBoundary, StaleServiceBoundaryError } from "@/lib/atendimento/fronteira";
 import { requireCurrentServiceBoundary } from "@/lib/atendimento/fronteira-server";
-import { parseServiceBoundary } from "@/lib/atendimento/fronteira";
 /**
  * Ponte engine ⇄ job_queue (Task 5.1, onda 5). Traduz o RESULTADO de um turno
  * `followup_turn` do agent-engine (lib/agent-engine/agent/followup-turn.ts) de
@@ -21,7 +20,7 @@ import type pg from "pg";
 
 import type { AdminClient, EnrollmentPatch } from "./engine";
 import { flowGraphSchema } from "./graph-schema";
-import { classEdgeMatch, selectEdge, type EnrollmentRow } from "./node-handlers";
+import { EVENTO_ACAO_ADIADA, classEdgeMatch, selectEdge, type EnrollmentRow } from "./node-handlers";
 import { coletarEsperasAdaptativas, montarTimingPlan, type PropostaDeEspera } from "./timing-plan";
 import { persistirRespostaFollowupPg } from "./persistir-resposta";
 
@@ -42,6 +41,13 @@ export type TurnResult =
   | { kind: "sent" }
   | { kind: "skipped"; reason: string }
   | { kind: "classified"; class: string }
+  /**
+   * O envio NÃO saiu e NÃO foi recusado: está estacionado até `until`, porque a
+   * janela está fechada (anti-ban por canal, ou a faixa de envio do agente). O
+   * turno já re-agendou o job para esse instante — o que falta é o enrollment
+   * saber disso. Ver `EVENTO_ACAO_ADIADA` em node-handlers.ts.
+   */
+  | { kind: "deferred"; until: Date; reason: string }
   /** Plano de tempo do fluxo inteiro, proposto no acionamento — cru, antes do clamp. */
   | { kind: "planned"; propostas: PropostaDeEspera[]; modelo: string };
 
@@ -131,6 +137,57 @@ export async function completeTurnForEnrollment(
 
   if(result.kind === "skipped"){
     await applyStep("turn_skipped",{reason:result.reason},{status:"cancelled",cancel_reason:result.reason,completed_at:now.toISOString(),next_eval_at:null});
+    return;
+  }
+
+  if (result.kind === "deferred") {
+    // ESTACIONAR, e não avançar nem completar: o envio ainda vai acontecer, no
+    // job que o turno já re-agendou para `until`.
+    //
+    // Três escolhas aqui, e cada uma conserta um pedaço do mesmo defeito:
+    //
+    // 1. `steps_taken` NÃO sobe, e a chave do evento NÃO é a do passo. O passo
+    //    continua devendo a sua conclusão (`action_sent`/`turn_skipped`) com a
+    //    chave `${node}:${steps}`; gastar essa chave aqui faria o motor ler o
+    //    adiamento como "a ação já aconteceu" — no `match_reply` de confirmação
+    //    isso vira ler a resposta de uma pergunta que nunca saiu.
+    // 2. A chave carrega o JOB, porque a unidade de idempotência é ele: o mesmo
+    //    job retentado depois de um crash grava o mesmo adiamento (23505, no-op),
+    //    e o job re-agendado que adia DE NOVO grava um adiamento novo — que é
+    //    exatamente a prova de vida que o dead-man precisa ver.
+    // 3. `next_eval_at` vai para a abertura da janela. É o que faz o motor
+    //    simplesmente não acordar durante a espera, em vez de gastar rechecks
+    //    nela. No `match_reply` soma-se a carência: a pergunta só sai em
+    //    `until`, e o lead precisa da carência INTEIRA depois disso para
+    //    responder — acordar em `until` leria silêncio como "não respondeu".
+    const carencia = node.type === "match_reply" ? node.config.grace_timeout_ms : 0;
+    const voltaEm = new Date(result.until.getTime() + carencia);
+    const patch: EnrollmentPatch = {
+      next_eval_at: voltaEm.toISOString(),
+      claimed_until: null,
+      updated_at: now.toISOString(),
+    };
+    const evento = {
+      node_id: node.id,
+      event_type: EVENTO_ACAO_ADIADA,
+      payload: { until: result.until.toISOString(), next_eval_at: voltaEm.toISOString(), reason: result.reason },
+      idempotency_key: `${node.id}:${enrollment.steps_taken}:adiado:${jobId ?? result.until.toISOString()}`,
+    };
+    await db.assertServiceBoundary?.(enrollment);
+    if (db.applyEnrollmentStep) {
+      await db.applyEnrollmentStep(enrollmentId, orgId, patch, {
+        ...(jobId ? { job_id: jobId, job_claim: jobClaim } : {}),
+        ...evento,
+      });
+      return;
+    }
+    const { inserted } = await db.insertEnrollmentEvent({
+      organization_id: orgId,
+      enrollment_id: enrollmentId,
+      ...evento,
+    });
+    if (!inserted) return; // replay — este adiamento já foi registrado
+    await db.updateEnrollment(enrollmentId, orgId, patch);
     return;
   }
 
@@ -335,7 +392,7 @@ export function createPgAdminClient(pool: pg.Pool): TurnBridgeAdminClient {
     async applyEnrollmentStep(id,orgId,patch,event){
       const revision=revisions.get(id);if(revision===undefined) throw new StaleServiceBoundaryError();
       try{const {rows}=await pool.query("select fn_followup_apply_step($1,$2,$3,$4,$5) revision",[orgId,id,revision,patch,event]);revisions.set(id,Number(rows[0].revision));}
-      catch(error){if((error as {code?:string}).code==="23505") return;if((error as {code?:string}).code==="40001") throw new StaleServiceBoundaryError();throw error;}
+      catch(error){if((error as {code?:string}).code==="23505") return;if(isFollowupCasRecusado(error as {code?:string;message?:string})) throw new StaleServiceBoundaryError();throw error;}
     },
     async updateEnrollment(id, orgId, patch) {
       const revision=revisions.get(id);
@@ -343,7 +400,7 @@ export function createPgAdminClient(pool: pg.Pool): TurnBridgeAdminClient {
       try {
         const {rows}=await pool.query<{revision:number}>("select fn_followup_patch($1,$2,$3,$4) as revision",[orgId,id,revision,patch]);
         revisions.set(id,Number(rows[0]!.revision));
-      } catch(error){if((error as {code?:string}).code==="40001") throw new StaleServiceBoundaryError();throw error;}
+      } catch(error){if(isFollowupCasRecusado(error as {code?:string;message?:string})) throw new StaleServiceBoundaryError();throw error;}
 
     },
     async loadFlowPointerName(orgId, pointerId) {
@@ -369,10 +426,13 @@ export function createPgAdminClient(pool: pg.Pool): TurnBridgeAdminClient {
       // anonimizado, `fn_meet_redact_contact` resolve os abertos, e há um bloco
       // de cura no baseline. Esta nascia sem, e a consequência é concreta:
       //
-      //   a cascata de LGPD NÃO cancela `followup_enrollments` (medido, com
+      //   a cascata de LGPD não cancelava `followup_enrollments` (medido, com
       //   controle positivo). Um contato anonimizado com régua em curso chega
       //   ao fim dela DEPOIS da redação — e reabriria, aqui, um aviso
       //   apontando para o compromisso que a anonimização tinha desligado.
+      //   Desde o #701 a cascata cancela a régua, e ESTA guarda continua sendo a
+      //   segunda linha: um turno já reivindicado pode terminar depois do
+      //   cancelamento, e é nesta escrita que ele não vira aviso.
       //
       // Um `if` em TypeScript antes do insert resolveria o caso e deixaria a
       // guarda a um refactor de distância de sumir. No `select` ela é parte da

@@ -28,8 +28,8 @@ import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
+import { autorizaCron } from "@/lib/auth/cron-auth";
 import { lerCotacaoDaOrigem } from "@/lib/ai/custo/cotacao";
-import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -107,15 +107,9 @@ export async function atualizarCotacao(
   return { dia, usd_brl: valor, gravado: true };
 }
 
-function autorizado(req: NextRequest): boolean {
-  const esperado = env.INTERNAL_CRON_SECRET || env.INTERNAL_SECRET;
-  if (!esperado) return false; // fail-closed
-  return req.headers.get("authorization") === `Bearer ${esperado}`;
-}
-
 async function handler(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
-  if (!autorizado(req)) {
+  if (!autorizaCron(req)) {
     return fail("unauthorized", "cron secret ausente ou inválido", 401, { requestId });
   }
   const resultado = await atualizarCotacao(createAdminClient(), buscarDaOrigem);

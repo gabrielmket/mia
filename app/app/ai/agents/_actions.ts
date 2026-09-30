@@ -16,8 +16,9 @@ import { audit } from "@/lib/audit";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Role } from "@/lib/auth/types";
+import type { AuthUser, Role } from "@/lib/auth/types";
 import { duplicateAgentWithVersion } from "@/lib/ai/agents/duplicate";
+import { iaDaCopia } from "@/lib/ai/trava-da-ia";
 
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -25,7 +26,12 @@ type ActionResult<T = void> =
   { ok: true; data?: T } | { ok: false; error: string; message?: string };
 
 type AdminGuard =
-  | { kind: "ok"; authUser: { id: string }; activeOrg: { orgId: string; role: Role } }
+  | {
+      kind: "ok";
+      // FORK MIA: os dois campos de quem pode escolher IA (lib/ai/trava-da-ia.ts).
+      authUser: Pick<AuthUser, "id" | "is_platform_admin" | "support">;
+      activeOrg: { orgId: string; role: Role };
+    }
   | { kind: "fail"; result: { ok: false; error: string } };
 
 async function ensureAdmin(): Promise<AdminGuard> {
@@ -232,6 +238,8 @@ export async function duplicateAgentAction(id: string): Promise<ActionResult<{ n
     agentId: id,
     actorUserId: authUser.id,
     requireVersion: false,
+    // FORK MIA: a cópia leva a IA atual da origem (lib/ai/trava-da-ia.ts).
+    ia: await iaDaCopia(admin, { user: authUser, orgId: activeOrg.orgId, agentId: id }),
   });
 
   if (!result.ok) {

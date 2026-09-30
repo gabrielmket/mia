@@ -28,6 +28,7 @@ import { env } from "@/lib/env";
 import { alvoDe, classificarFalhaDeAlcance, type FalhaDeAlcance } from "@/lib/net/alcance";
 import { validarConfigRedisRest } from "@/lib/redis-config";
 import { compararCarimbo, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
+import { urlDoSupabaseNoServidor } from "@/lib/supabase/url-do-servidor";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -69,14 +70,41 @@ function motivoDoStatusHttp(status: number): MotivoDeFalha {
 
 async function checkSupabase(): Promise<Check> {
   const t0 = Date.now();
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  // A sonda pergunta ao MESMO endereço que o app usa para falar com o banco, e
+  // não ao público: com `SUPABASE_SERVER_URL` (#1082) preenchida, uma instalação
+  // com Kong privado não tem REST publicado — a URL pública daria `down` com o
+  // CRM inteiro funcionando ao lado. Sem a variável, é a pública, como sempre.
+  const url = urlDoSupabaseNoServidor(env.SUPABASE_SERVER_URL, env.NEXT_PUBLIC_SUPABASE_URL);
   try {
     // Ping leve via REST com anon key — não precisa de service_role pra health check.
     // Se chegar 200/401/empty body, conexão e API key estão OK.
     const key = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const res = await withTimeout(
       fetch(`${url}/rest/v1/organizations?select=id&limit=1`, {
-        headers: { apikey: key, Authorization: `Bearer ${key}` },
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          // O SCHEMA VAI EXPLÍCITO, como o resto do app faz.
+          //
+          // Este `fetch` é cru, então ele cai no schema DEFAULT do PostgREST —
+          // o primeiro da lista "Exposed schemas" do projeto. Que esse default
+          // seja `public` é costume de projeto novo, não garantia do Supabase:
+          // num projeto que já servia outra aplicação (schema próprio primeiro
+          // na lista), o ping procurava `<outro>.organizations`, levava
+          // `404 PGRST205` e o check declarava o banco `down` — com o CRM
+          // atendendo normalmente ao lado.
+          //
+          // Não é falso alarme de menos importância: `update.sh` termina em
+          // `wait_app_healthy`, e sair diferente de zero é o sinal que o
+          // `agent.sh` usa para REVERTER a imagem. Uma atualização boa era
+          // desfeita por uma configuração de painel que o CRM não controla.
+          //
+          // Nenhum client do CRM declara `db.schema` (`lib/supabase/*.ts`), e o
+          // default do supabase-js é `public` — então é `public` que o app
+          // usa de verdade, e é o que esta sonda tem de perguntar para estar
+          // medindo o mesmo banco que o app enxerga.
+          "Accept-Profile": "public",
+        },
         cache: "no-store",
       }),
     );
@@ -293,6 +321,13 @@ function semAlvo(check: Check): Check {
  * segundos de parede a cada batida, exatamente quando o banco está fora do ar.
  * Pego por `tests/unit/health-separa-env-errado-de-servico-caido.test.ts`, que
  * mede a AUSÊNCIA de ida à rede — e estava medindo a minha.
+ *
+ * O endereço também é o do `checkSupabase`: `urlDoSupabaseNoServidor` (#1082 do
+ * upstream). Com `SUPABASE_SERVER_URL` preenchida, a instalação pode ter o Kong
+ * privado e o REST não publicado; o carimbo lido pela URL pública voltaria vazio
+ * e o health responderia `em_dia: false` com o banco em dia ao lado. Pego por
+ * `tests/unit/supabase-server-url-opcional.test.ts`, que exige que NADA desta
+ * rota vá à URL pública quando a do servidor existe.
  */
 interface LinhaDoCarimbo {
   migration: string | null;
@@ -302,7 +337,7 @@ interface LinhaDoCarimbo {
 
 async function lerCarimboDoSchema(): Promise<LinhaDoCarimbo> {
   const vazio: LinhaDoCarimbo = { migration: null, erros: 0, amostra: null };
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  const url = urlDoSupabaseNoServidor(env.SUPABASE_SERVER_URL, env.NEXT_PUBLIC_SUPABASE_URL);
   const chave = env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !chave) return vazio;
   try {

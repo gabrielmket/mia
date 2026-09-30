@@ -33,12 +33,18 @@ import {
 } from "@/lib/ai/agents/validation";
 import { publishAgentVersion } from "@/lib/ai/agents/publish";
 import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
+import {
+  iaPodeIrAoAr,
+  MENSAGEM_IA_DA_PLATAFORMA,
+  semCamposDaIa,
+  travarIaDaVersaoNova,
+} from "@/lib/ai/trava-da-ia";
 import { VALID_TOOL_IDS } from "@/lib/mcp/tools";
 
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin";
 
 type ActionResult<T = void> =
   | { ok: true; data?: T }
@@ -137,8 +143,12 @@ export async function saveAgentDraftAction(
   // conferido depois, uma ordem inválida devolveria erro com a versão já
   // gravada; se fosse GRAVADO antes, um escopo inválido devolveria erro com o
   // nome já trocado — a lista mostrando o novo e o editor o velho.
-  // `agentMcpPatchSchema` é a régua que a rota REST já usa: uma quarta régua
-  // para o mesmo campo é o defeito seguinte.
+  // `agentMcpPatchSchema` NÃO é a régua da rota REST (essa é `agentPatchSchema`,
+  // em lib/ai/guardrails-schema.ts — mais estrita em name/description). É a régua
+  // do cadastro do editor MCP, a mesma do formulário (AgentForm.tsx) e alinhada de
+  // propósito com `agentMcpCreateSchema`, para criar e editar terem a mesma régua.
+  // A afirmação de equivalência com o REST era falsa e ficou parada aqui até o
+  // achado #532 medir a divergência.
   const cadastroParsed =
     cadastro === undefined ? null : agentMcpPatchSchema.safeParse(cadastro);
   if (cadastroParsed && !cadastroParsed.success) {
@@ -221,7 +231,10 @@ export async function saveAgentDraftAction(
     if (!patchValidated.success) {
       return { ok: false, error: "validation_failed", details: patchValidated.error.flatten() };
     }
-    const update: Record<string, unknown> = { ...patchValidated.data };
+    // FORK MIA: provedor, modelo, chave e modelo do Operador são da plataforma.
+    // Para quem não escolhe IA eles saem do patch, venha o que vier no corpo —
+    // a tela só esconde o cartão, e o corpo se escreve à mão (lib/ai/trava-da-ia.ts).
+    const update: Record<string, unknown> = semCamposDaIa(authUser, { ...patchValidated.data });
     const { data: updated, error } = await admin
       .from("ai_agent_versions")
       .update(update)
@@ -275,6 +288,16 @@ export async function saveAgentDraftAction(
     };
   }
 
+  // FORK MIA: a versão nova de quem não escolhe IA herda a IA atual do agente,
+  // não a do corpo (lib/ai/trava-da-ia.ts).
+  const travada = await travarIaDaVersaoNova(
+    admin,
+    { user: authUser, orgId: activeOrg.orgId, agenteDeReferencia: agentId },
+    v,
+  );
+  if (!travada.ok) return { ok: false, error: "validation_failed", message: travada.mensagem };
+  const ia = travada.corpo;
+
   // Cria draft v(max+1) com retry em 23505.
   for (let attempt = 0; attempt < 3; attempt++) {
     const { data: maxRow } = await admin
@@ -294,9 +317,9 @@ export async function saveAgentDraftAction(
         agent_id: agentId,
         version_number: nextNumber,
         system_prompt: v.system_prompt,
-        provider: v.provider,
-        model: v.model,
-        credential_id: v.credential_id,
+        provider: ia.provider,
+        model: ia.model,
+        credential_id: ia.credential_id,
         tool_ids: v.tool_ids,
         trigger_config: v.trigger_config ?? undefined,
         channel_session_id: v.channel_session_id,
@@ -307,9 +330,10 @@ export async function saveAgentDraftAction(
         history_token_window: v.history_token_window,
         handoff_keywords: v.handoff_keywords,
         handoff_tool_enabled: v.handoff_tool_enabled,
+        proposal_ai_draft_enabled: v.proposal_ai_draft_enabled,
         cases_enabled: v.cases_enabled,
         operator_enabled: v.operator_enabled,
-        operator_model: v.operator_model,
+        operator_model: ia.operator_model,
         operator_tool_ids: v.operator_tool_ids,
         pipeline_ids: v.pipeline_ids,
         knowledge_source_ids: v.knowledge_source_ids,
@@ -383,7 +407,7 @@ export async function publishAgentAction(
   const valid = new Set<string>(VALID_TOOL_IDS as readonly string[]);
   const { data: targetV } = await admin
     .from("ai_agent_versions")
-    .select("id, agent_id, tool_ids")
+    .select("id, agent_id, tool_ids, provider, model, credential_id, operator_model")
     .eq("id", versionId)
     .eq("organization_id", activeOrg.orgId)
     .maybeSingle();
@@ -394,6 +418,13 @@ export async function publishAgentAction(
   const invalid = tools.filter((t) => !valid.has(t));
   if (invalid.length > 0) {
     return { ok: false, error: "tool_id_invalid", details: { invalid } };
+  }
+  // FORK MIA: publicar aceita rascunho E versão antiga (`superseded`); sem esta
+  // pergunta, pôr no ar a v5 trocava o modelo do agente sem tocar em campo de IA.
+  if (
+    !(await iaPodeIrAoAr(admin, { user: authUser, orgId: activeOrg.orgId, agentId, versao: targetV }))
+  ) {
+    return { ok: false, error: "ia_da_plataforma", message: MENSAGEM_IA_DA_PLATAFORMA };
   }
 
   const result = await publishAgentVersion(admin, {
@@ -414,6 +445,13 @@ export async function publishAgentAction(
     .insert({
       organization_id: activeOrg.orgId,
       event_type: "ai_agent.published",
+      // `entity_kind` é NOT NULL sem default (`baseline.sql`): sem esta linha o
+      // insert viola a constraint e o evento de publicação NUNCA é gravado. E o
+      // insert é `void` + `.then()`, então a violação cai num `console.error`
+      // que ninguém lê — o Sistema Vivo perde o registro em silêncio. Visto no
+      // log do CI de hoje: `null value in column "entity_kind" ... violates
+      // not-null constraint`.
+      entity_kind: "ai_agent",
       payload: {
         agent_id: result.agent_id,
         version_id: result.version_id,
@@ -506,7 +544,9 @@ export async function revertToVersionAction(
     credential_id: string;
     tool_ids: string[];
     trigger_config: Record<string, unknown> | null;
-    channel_session_id: string;
+    // Nulo desde a 0239: a versão de origem pode ser um rascunho de quem ainda
+    // não conectou o WhatsApp, e duplicá-la copia o "sem número" adiante.
+    channel_session_id: string | null;
     max_steps: number;
     token_budget: number;
     cost_budget_cents: number;
@@ -514,6 +554,7 @@ export async function revertToVersionAction(
     history_token_window: number;
     handoff_keywords: string[];
     handoff_tool_enabled: boolean;
+    proposal_ai_draft_enabled: boolean;
     cases_enabled: boolean;
     operator_enabled: boolean;
     operator_model: string | null;
@@ -524,6 +565,23 @@ export async function revertToVersionAction(
     split_max_chars: number;
   };
   const src = source as unknown as SourceRow;
+
+  // FORK MIA: reverter volta o prompt, as ferramentas e o escopo daquela versão,
+  // mas NÃO o cérebro dela. Para quem não escolhe IA, a cópia fica com a IA atual
+  // do agente — senão "Reverter para a v5" era o jeito de voltar a um modelo
+  // antigo que a plataforma já tinha trocado (lib/ai/trava-da-ia.ts).
+  const travada = await travarIaDaVersaoNova(
+    admin,
+    { user: authUser, orgId: activeOrg.orgId, agenteDeReferencia: agentId },
+    {
+      provider: src.provider,
+      model: src.model,
+      credential_id: src.credential_id,
+      operator_model: src.operator_model,
+    },
+  );
+  if (!travada.ok) return { ok: false, error: "validation_failed", message: travada.mensagem };
+  const ia = travada.corpo;
 
   let createdId: string | null = null;
   let createdNumber: number | null = null;
@@ -545,9 +603,9 @@ export async function revertToVersionAction(
         agent_id: agentId,
         version_number: nextNumber,
         system_prompt: src.system_prompt,
-        provider: src.provider,
-        model: src.model,
-        credential_id: src.credential_id,
+        provider: ia.provider,
+        model: ia.model,
+        credential_id: ia.credential_id,
         tool_ids: src.tool_ids,
         trigger_config: src.trigger_config ?? undefined,
         channel_session_id: src.channel_session_id,
@@ -558,9 +616,10 @@ export async function revertToVersionAction(
         history_token_window: src.history_token_window,
         handoff_keywords: src.handoff_keywords,
         handoff_tool_enabled: src.handoff_tool_enabled,
+        proposal_ai_draft_enabled: src.proposal_ai_draft_enabled,
         cases_enabled: src.cases_enabled,
         operator_enabled: src.operator_enabled,
-        operator_model: src.operator_model,
+        operator_model: ia.operator_model,
         operator_tool_ids: src.operator_tool_ids,
         // O revert leva o escopo junto: voltar para uma versão e NÃO voltar a
         // permissão dela seria publicar uma configuração que nunca existiu.
@@ -614,6 +673,13 @@ export async function revertToVersionAction(
     .insert({
       organization_id: activeOrg.orgId,
       event_type: "ai_agent.published",
+      // `entity_kind` é NOT NULL sem default (`baseline.sql`): sem esta linha o
+      // insert viola a constraint e o evento de publicação NUNCA é gravado. E o
+      // insert é `void` + `.then()`, então a violação cai num `console.error`
+      // que ninguém lê — o Sistema Vivo perde o registro em silêncio. Visto no
+      // log do CI de hoje: `null value in column "entity_kind" ... violates
+      // not-null constraint`.
+      entity_kind: "ai_agent",
       payload: {
         agent_id: result.agent_id,
         version_id: result.version_id,
@@ -671,6 +737,15 @@ export async function createMcpAgentAction(
   const requestId = randomUUID();
   const admin = createAdminClient();
 
+  // FORK MIA: agente novo de quem não escolhe IA nasce com o par da plataforma e
+  // "a chave desta instalação", venha o que vier no corpo (lib/ai/trava-da-ia.ts).
+  const travada = await travarIaDaVersaoNova(
+    admin,
+    { user: authUser, orgId: activeOrg.orgId, agenteDeReferencia: null },
+    parsed.data.version,
+  );
+  if (!travada.ok) return { ok: false, error: "validation_failed", message: travada.mensagem };
+
   // Cria agent kind='mcp_agent' + v1 draft. Compensa rollback se versão falhar.
   const { data: agentRow, error: agentErr } = await admin
     .from("ai_agents")
@@ -678,7 +753,7 @@ export async function createMcpAgentAction(
       organization_id: activeOrg.orgId,
       name: parsed.data.name,
       description: parsed.data.description ?? null,
-      model: parsed.data.version.model,
+      model: travada.corpo.model,
       system_prompt: parsed.data.version.system_prompt,
       kind: "mcp_agent",
       priority: parsed.data.priority,
@@ -693,7 +768,7 @@ export async function createMcpAgentAction(
     return { ok: false, error: "internal_error", message: agentErr?.message };
   }
 
-  const v = parsed.data.version;
+  const v = travada.corpo;
   const { error: versionErr } = await admin.from("ai_agent_versions").insert({
     organization_id: activeOrg.orgId,
     agent_id: agentRow.id,
@@ -712,6 +787,7 @@ export async function createMcpAgentAction(
     history_token_window: v.history_token_window,
     handoff_keywords: v.handoff_keywords,
     handoff_tool_enabled: v.handoff_tool_enabled,
+    proposal_ai_draft_enabled: v.proposal_ai_draft_enabled,
     cases_enabled: v.cases_enabled,
     split_messages: v.split_messages,
     split_max_chars: v.split_max_chars,

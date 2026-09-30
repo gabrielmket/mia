@@ -37,7 +37,10 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/test";
+
+import { zoomAte } from "./utils/canvas-do-fluxo";
+import { comoDonoDaPlataforma, respostaLida } from "./helpers/ia-da-plataforma";
 
 import { afirmarAdminDeTenantPuro } from "./utils/precondicao";
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
@@ -107,7 +110,7 @@ async function loginWithTotp(page: Page, email: string, secretTotp: string): Pro
   await page.goto("/login");
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(creds.password);
-  await page.getByRole("button", { name: /entrar/i }).click();
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await page.waitForURL(/\/login\/mfa/);
 
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -221,7 +224,7 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
     creds = JSON.parse(fs.readFileSync(CREDS_PATH, "utf8")) as Creds;
   });
 
-  test("silêncio → enroll → trigger→wait→action→classify → resposta → outcome → fila", async ({ page }) => {
+  test("silêncio → enroll → trigger→wait→action→classify → resposta → outcome → fila", async ({ page, browser }, testInfo) => {
     // Jornada ponta a ponta com múltiplos round-trips reais de cron (tick +
     // sweep + drain) — o timeout default de 30s do playwright.config.ts é
     // curto demais (mesmo padrão de tests/e2e/webhooks.spec.ts, que também
@@ -269,8 +272,7 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
       throw new Error("node ids ausentes após montar a paleta");
     }
 
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 6; i++) await zoomOut.click();
+    await zoomAte(page, 0.7);
     await page.waitForTimeout(300);
 
     const canvasBox = await page.getByTestId("flow-canvas").boundingBox();
@@ -284,14 +286,16 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
     await moveNodeTo(page, endNoReplyId, ...at(260, 650));
     await moveNodeTo(page, endFallbackId, ...at(460, 650));
 
-    // Configura: classify → 1 classe "positivo" (troca o default hot/cold);
+    // Configura: classify → 1 classe "positivo" (troca o padrão Interessado/Sem interesse);
     // action → prompt_hint real; end-positivo → outcome "Convertido" (os
     // outros 2 fins ficam no default "Esgotado", coerente com no_reply/fallback).
     await page.locator(`[data-testid="node-card-${classifyId}"]`).click();
     const panel = page.getByTestId("node-config-panel");
     await panel.getByLabel("Classes (separadas por vírgula)").fill("positivo");
     await panel.getByLabel("Classes (separadas por vírgula)").blur();
-    await expect(page.locator(`[data-testid="node-card-${classifyId}"]`)).toContainText("1 classes");
+    // "1 classe", não "1 classes": o card conta em português, e esta linha fixava
+    // o plural errado que o produto mostrava.
+    await expect(page.locator(`[data-testid="node-card-${classifyId}"]`)).toContainText("1 classe · espera");
 
     await page.locator(`[data-testid="node-card-${actionId}"]`).click();
     const promptHint = "Pergunte com simpatia se ainda há interesse e ofereça ajuda para fechar.";
@@ -359,7 +363,13 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
       runHelper(["prepare-agent-fixtures"]); // credential.validated_at + channel_session=WORKING
       const fixtures = creds.followup_agent_fixtures!;
       const agentName = `E2E Agente Jornada ${stamp}`;
-      const createAgentRes = await page.request.post("/api/v1/ai/agents", {
+      // FORK MIA: criar o agente com provedor, modelo e a credencial semeada é
+      // escolher a IA dele, e neste fork isso é da plataforma
+      // (lib/ai/trava-da-ia.ts): pelo admin da empresa ele nascia com a chave da
+      // instalação, que o e2e não tem, e o publicar abaixo voltava 422. Quem cria
+      // é o dono da plataforma; o resto da jornada segue com o admin da empresa.
+      // Ver tests/e2e/helpers/ia-da-plataforma.ts.
+      const createAgentRes = await comoDonoDaPlataforma(browser, testInfo, (req) => respostaLida(req.post("/api/v1/ai/agents", {
         data: {
           name: agentName,
           version: {
@@ -370,7 +380,7 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
             channel_session_id: fixtures.channel_session_id,
           },
         },
-      });
+      })));
       expect(createAgentRes.status()).toBe(201);
       const { data: created } = (await createAgentRes.json()) as {
         data: { agent: { id: string }; version: { id: string } };

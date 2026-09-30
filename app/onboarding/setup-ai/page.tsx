@@ -43,6 +43,7 @@ export default async function SetupAiPage() {
     .map((r) => traduzir(r, idioma));
 
   const conferencias = CONFERENCIAS_DE_SAIDA.map((c) => traduzir(c.rotulo, idioma));
+  const podeConfigurar = podeConfigurarChaveDeIa(user);
 
   return (
     <div className="space-y-6">
@@ -58,7 +59,7 @@ export default async function SetupAiPage() {
         a chave passa a importar — um clique antes de ele ser criado com ela.
       */}
       <InteligenciaDele
-        podeConfigurar={podeConfigurarChaveDeIa(user)}
+        podeConfigurar={podeConfigurar}
         inicial={{
           origem: retrato.inteligencia.origemDaChave,
           provedor: retrato.inteligencia.provedor,
@@ -67,7 +68,11 @@ export default async function SetupAiPage() {
         }}
       />
 
-      <SetupAiForm capacidades={capacidades} conferencias={conferencias} />
+      {/*
+        O MESMO predicado nos dois: o aviso de rascunho sem cérebro não pode
+        mandar colar a chave num campo que `InteligenciaDele` escondeu.
+      */}
+      <SetupAiForm capacidades={capacidades} conferencias={conferencias} podeConfigurar={podeConfigurar} />
     </div>
   );
 }

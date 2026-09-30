@@ -37,10 +37,28 @@ import {
   type EmpresaComGrupo,
   type GrupoDeAvisos,
 } from "@/hooks/useNumeroDeAvisos";
+import { nomeDoCanal } from "@/lib/channels/estado";
+import type { MotivoDaFalhaDeGrupos } from "@/lib/channels/motivo-da-falha-de-grupos";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 
 /** Valor do item "não avisar" — `Select` não aceita valor vazio. */
 const SEM_GRUPO = "__sem_grupo__";
+
+/**
+ * Por que a lista de grupos não veio, e O QUE FAZER. Cada frase é uma ação
+ * diferente: juntar todas em "não consegui perguntar" deixou o seletor travado
+ * sem saída em produção (29/09/2026).
+ */
+const FRASE_DO_MOTIVO: Record<MotivoDaFalhaDeGrupos, string> = {
+  sem_resposta: "O WhatsApp não respondeu a tempo. Recarregue a página em instantes.",
+  sem_transporte: "O serviço do WhatsApp não está configurado nesta instalação.",
+  chave_recusada:
+    "A chave do serviço do WhatsApp foi recusada — confira a configuração do servidor. Ler o QR de novo não resolve.",
+  sessao_inexistente: "A sessão deste número não existe mais no WhatsApp. Reconecte o número pelo QR.",
+  desconectado: "O número não está conectado agora. Reconecte-o (leia o QR de novo) e recarregue.",
+  recusado: "O WhatsApp recusou a consulta dos grupos. Tente de novo em instantes.",
+  desconhecido: "Não foi possível consultar os grupos agora. Tente de novo em instantes.",
+};
 
 function LinhaDaEmpresa({
   empresa,
@@ -294,9 +312,7 @@ export function NumeroDeAvisos() {
 
           {data.sessao ? (
             <div className="rounded-md border border-border p-4">
-              <p className="font-medium">
-                {data.sessao.display_name ?? data.sessao.phone_number}
-              </p>
+              <p className="font-medium">{nomeDoCanal(data.sessao, t)}</p>
               <p className="text-sm text-text-muted">
                 {data.sessao.phone_number} · {data.sessao.organizacao}
               </p>
@@ -391,11 +407,20 @@ export function NumeroDeAvisos() {
           ) : (
             <>
               {data.grupos_indisponiveis && (
-                <p className="mb-3 text-sm font-medium text-error-fg">
-                  {t(
-                    "Não consegui perguntar ao WhatsApp quais são os grupos. O que já estava escolhido continua valendo.",
+                <div className="mb-3 space-y-1" role="alert">
+                  <p className="text-sm font-medium text-error-fg">
+                    {t(
+                      "Não consegui perguntar ao WhatsApp quais são os grupos. O que já estava escolhido continua valendo.",
+                    )}
+                  </p>
+                  {/* O PORQUÊ, e com ele a ação: reconectar, trocar a chave ou esperar.
+                      Sem esta linha o seletor travado era um beco sem saída. */}
+                  {data.grupos_motivo && (
+                    <p className="text-sm text-error-fg" data-testid="grupos-motivo">
+                      {t(FRASE_DO_MOTIVO[data.grupos_motivo] ?? FRASE_DO_MOTIVO.desconhecido)}
+                    </p>
                   )}
-                </p>
+                </div>
               )}
               {!data.grupos_indisponiveis && data.grupos.length === 0 && (
                 <p className="mb-3 text-sm text-text-muted">

@@ -15,26 +15,64 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { graphVersion } from "@/lib/graph-version";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+import { linhaDoEspelho } from "../linha-do-espelho";
+
 import { resolveMetaCreds } from "./credentials";
 import { sendTemplate } from "./send-template";
 
 export interface SendTemplateForSessionInput {
   beforeSend?: () => Promise<void>;
   organizationId: string;
+  /**
+   * `channel_sessions.meta_phone_number_id` DESTA conexão — o `sessionRef` do canal
+   * oficial. É a segunda metade da chave por que a credencial é resolvida (a primeira
+   * é a organização) e o número por que a mensagem sai.
+   *
+   * Vem do chamador em vez de ser buscado aqui porque é ele quem tem a linha da
+   * sessão na mão — e pedir a credencial "da sessão" com o número de OUTRA conexão
+   * não casaria linha nenhuma, devolvendo o envio ao ambiente: o defeito que esta
+   * fatia fecha, de volta pela porta dos fundos.
+   *
+   * ⚠️ OPCIONAL no tipo, obrigatório na prática. Ele nasceu obrigatório, e
+   * continuaria, não fosse o disparador de campanha (`app/api/v1/cron/
+   * broadcast-worker`) mandar o mesmo número pelo nome antigo, `phoneNumberId`.
+   * Exigi-lo aqui não consertaria aquele chamador: ele pararia de compilar. Os
+   * dois nomes são lidos logo abaixo, nesta ordem, e nenhum envio fica sem
+   * número por causa do nome que o chamador escolheu.
+   */
+  sessionRef?: string;
   /** Destinatário em dígitos E.164, já resolvido pelo adapter. */
   to: string;
   /**
-   * Por QUAL número sai. É o `meta_phone_number_id` da sessão.
+   * Por QUAL número sai. É o `meta_phone_number_id` da sessão — o MESMO dado de
+   * `sessionRef`, com o nome que o disparador de campanha usa.
    *
-   * Opcional só por compatibilidade com quem chamava antes de a credencial da
-   * sessão existir neste caminho: sem ele, cai no número do ambiente, que é a
-   * instalação de número único.
+   * Opcional também por compatibilidade com quem chamava antes de a credencial
+   * da sessão existir neste caminho: sem nenhum dos dois, cai no número do
+   * ambiente, que é a instalação de número único.
    */
   phoneNumberId?: string;
   name: string;
   language: string;
   values: Record<string, string>;
+  /**
+   * Transporte explícito. Ausente = credencial da Meta (sessão, com o ambiente
+   * de reserva). Presente = canal Graph-compatível (parceiro), com host e token
+   * próprios. Sem isto o modelo do parceiro sairia pelo número da Meta.
+   */
+  transport?: {
+    phoneNumberId: string;
+    token: string;
+    graphBase?: string;
+    graphVersion?: string;
+    /** Prefixo dos códigos de erro (`meta_`/`datafy_`). Default `meta`. */
+    errorPrefix?: string;
+  };
+  /** Conexão dona da definição — restringe o `meta_templates` a ela. */
+  channelSessionId?: string | null;
 }
 
 /**
@@ -69,6 +107,16 @@ export async function sendTemplateForSession(
    *
    * A guarda continua ANTES da consulta ao espelho: "sem credencial" é desfecho
    * recuperável (`queued`), e a ordem dos desfechos é comportamento neste repo.
+   * Sem ela, uma instalação sem credencial nenhuma tentaria a Graph com `Bearer`
+   * vazio e viraria `failed` com um erro que não nomeia o motivo real — e a
+   * mudança de elegibilidade da #674 transformaria uma fila recuperável em
+   * falha. Com ela, o desfecho é `queued` com `meta_not_configured`.
+   *
+   * ── O `transport` explícito passa NA FRENTE ────────────────────────────────
+   *
+   * Canal Graph-compatível de parceiro traz host e token próprios: perguntar a
+   * credencial da Meta para ele faria o modelo do parceiro sair pelo número da
+   * Meta — pela conta errada, para o cliente errado.
    */
   /**
    * `createAdminClient()` e NÃO o `db` do chamador — o token está cifrado, e
@@ -80,23 +128,49 @@ export async function sendTemplateForSession(
    * O `db` do chamador continua valendo para a leitura do espelho logo abaixo,
    * que é consulta comum e não tem por que escapar da RLS de quem pediu.
    */
-  const creds = await resolveMetaCreds(createAdminClient(), {
-    organizationId: input.organizationId,
-    phoneNumberId: input.phoneNumberId ?? process.env.META_PHONE_NUMBER_ID ?? "",
-  });
+  const creds = input.transport
+    ? {
+        phoneNumberId: input.transport.phoneNumberId,
+        token: input.transport.token,
+        graphVersion: input.transport.graphVersion ?? graphVersion(),
+      }
+    : await resolveMetaCreds(createAdminClient(), {
+        organizationId: input.organizationId,
+        // Os DOIS nomes do mesmo número. `sessionRef` na frente porque é o nome
+        // de hoje; `phoneNumberId` porque é o que o disparador de campanha
+        // manda. Ficar só com um deixaria metade dos chamadores resolvendo a
+        // credencial sem número — que não casa linha nenhuma e devolve o envio
+        // ao `.env`, com o número de OUTRO cliente.
+        //
+        // O ambiente NÃO entra como chave de busca: sem número nenhum, quem cai
+        // no `.env` é o próprio `resolveMetaCreds` (`metaCredsFromEnv`), sem ir
+        // ao banco — o contrato do upstream (`tests/unit/janela-24h-recusa-
+        // quem-envia-por-token.test.ts`, modelo aprovado com a janela fechada).
+        // Usar o número do `.env` para procurar a sessão de uma organização
+        // qualquer não acha a credencial DESTE envio; acha, no máximo, a de
+        // outra conexão.
+        phoneNumberId: input.sessionRef ?? input.phoneNumberId ?? "",
+      });
   if (!creds) {
     throw new Error(
-      "meta_not_configured: sem credencial para enviar template (nem na sessão, nem no ambiente).",
+      "meta_not_configured: sem credencial para esta sessão enviar template (nem na sessão, nem no ambiente).",
     );
   }
 
-  const { data: linha, error } = await db
-    .from("meta_templates")
-    .select("name, language, status, contract_hash, components")
-    .eq("organization_id", input.organizationId)
-    .eq("name", input.name)
-    .eq("language", input.language)
-    .maybeSingle();
+  // Com sessão, a linha DESTA conexão — ou, se não houver, a do canal oficial,
+  // que o sync grava sem conexão. Nunca a de outro número (ver linha-do-espelho.ts).
+  const { data: linha, error } = await linhaDoEspelho<{
+    name: string;
+    language: string;
+    status: string;
+    contract_hash: string;
+    components: unknown;
+  }>(db, "name, language, status, contract_hash, components", {
+    organizationId: input.organizationId,
+    name: input.name,
+    language: input.language,
+    channelSessionId: input.channelSessionId,
+  });
 
   if (error) throw new Error(`template_lookup_failed: ${error.message}`);
 
@@ -105,6 +179,7 @@ export async function sendTemplateForSession(
     phoneNumberId: creds.phoneNumberId,
     token: creds.token,
     graphVersion: creds.graphVersion,
+    ...(input.transport?.graphBase ? { graphBase: input.transport.graphBase } : {}),
     to: input.to,
     binding: {
       name: input.name,
@@ -127,6 +202,7 @@ export async function sendTemplateForSession(
 
   if (resultado.sent) return resultado.externalId;
 
+  const prefixo = input.transport?.errorPrefix ?? "meta";
   switch (resultado.reason) {
     case "missing":
       throw new Error(`template_missing: ${input.name} (${input.language}) não está no espelho`);
@@ -137,6 +213,6 @@ export async function sendTemplateForSession(
     case "missing_values":
       throw new Error(`template_missing_values: ${resultado.missing.join(", ")}`);
     case "api_error":
-      throw new Error(`meta_${resultado.code ?? "erro"}: ${resultado.message}`);
+      throw new Error(`${prefixo}_${resultado.code ?? "erro"}: ${resultado.message}`);
   }
 }

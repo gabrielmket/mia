@@ -27,6 +27,8 @@ import { credenciaisDaOrg } from "@/lib/channels/meta/credenciais-da-org";
 import { comNomeDeArquivo, comoMidia } from "@/lib/channels/meta/midia-por-id";
 import { subirMidiaParaEnvio } from "@/lib/channels/meta/subir-midia-para-envio";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { moduloLiberado } from "@/lib/modulos/liberacao";
+import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +57,14 @@ export async function POST(req: NextRequest): Promise<Response> {
   // uma lista inteira, e cada linha custa dinheiro.
   const authz = await requireRole("admin", { requestId, resource: "broadcasts" });
   if (!authz.ok) return authz.response;
+
+  // A rota mora sob `/api/v1/broadcasts`, que o módulo declara proteger, e era a
+  // única ali sem a conferência — achada pela cerca da .58
+  // (`tests/unit/broadcast-unificado.test.ts`): subir arquivo para a conta do
+  // WhatsApp é parte do disparo oficial, e esconder o menu não é recusar.
+  if (!(await moduloLiberado(await createClient(), authz.org.orgId, "disparador"))) {
+    return fail("forbidden", "Módulo não contratado.", 403, { requestId });
+  }
 
   let formData: FormData;
   try {

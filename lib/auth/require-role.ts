@@ -23,6 +23,7 @@ import { audit } from "@/lib/audit";
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK, type ActiveOrg, type AuthUser, type Role } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { recusaPorModulo } from "@/lib/modulos/recusa-por-recurso"; // FORK MIA (.58)
 import { createClient } from "@/lib/supabase/server";
 
 export type RoleCheck =
@@ -91,6 +92,14 @@ export async function requireRole(min: Role, opts: RequireRoleOpts = {}): Promis
 
   // Role efetivo do banco (não do snapshot do cookie/membership em memória).
   const supabase = await createClient();
+  // Duas leituras independentes da mesma requisição: não somar a espera de
+  // permissões com a de MFA em cada botão/consulta. Nenhuma decisão é cacheada.
+  // Capturar a rejeição mantém a precedência: papel insuficiente continua 403,
+  // e uma falha de MFA só é propagada quando essa checagem seria necessária.
+  const mfaPendente = mfaEmDivida().then(
+    (required) => ({ required }),
+    (error: unknown) => ({ error }),
+  );
   const { data: effectiveRole, error } = await supabase.rpc("fn_user_role_in_org", {
     p_org: org.orgId,
   });
@@ -112,7 +121,13 @@ export async function requireRole(min: Role, opts: RequireRoleOpts = {}): Promis
   // Fica DEPOIS do rank e ANTES do retorno de sucesso, de propósito: quem não
   // tem papel suficiente continua levando 403 por falta de papel, sem que a
   // resposta revele o estado de MFA de quem nem chegaria lá.
-  if (rank >= ROLE_RANK[min] && (await mfaEmDivida())) {
+  let mfaRequired = false;
+  if (rank >= ROLE_RANK[min]) {
+    const mfa = await mfaPendente;
+    if ("error" in mfa) throw mfa.error;
+    mfaRequired = mfa.required;
+  }
+  if (mfaRequired) {
     void audit({
       action: "authz.denied",
       actorUserId: user.id,
@@ -151,6 +166,12 @@ export async function requireRole(min: Role, opts: RequireRoleOpts = {}): Promis
       }),
     };
   }
+
+  // FORK MIA (.58): recurso de módulo vendável — hoje, as Campanhas como caminho
+  // por QR do Broadcast. Uma chamada aqui em vez de uma por rota do upstream;
+  // ver `lib/modulos/recusa-por-recurso.ts` e docs/fork/broadcast-unificado.md.
+  const semModulo = await recusaPorModulo({ db: supabase, organizationId: org.orgId, userId: user.id, resource, requestId, t });
+  if (semModulo) return { ok: false, response: semModulo };
 
   return { ok: true, user, org: { ...org, role: effectiveRole as Role } };
 }

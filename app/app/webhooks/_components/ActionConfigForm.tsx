@@ -39,13 +39,23 @@ export type ActionItem =
     }
   | { type: "add_tag"; config: { tags: string[] } }
   | { type: "assign_owner"; config: { user_id: string } }
-  | { type: "call_webhook"; config: { url: string; secret?: string; secret_enc?: string } }
+  | { type: "call_webhook"; config: { url: string; secret?: string; secret_enc?: string; include_owner?: boolean } }
   | { type: "start_message_flow"; config: { flow_pointer_id: string } }
   | {
       type: "notify_group";
       // Opcionais: vazios, o aviso sai pelo número da PLATAFORMA e cai no grupo
       // que o operador escolheu para este cliente no painel administrativo.
       config: { channel_session_id?: string; chat_id?: string; template: string };
+    }
+  // #1540 — o lembrete interno: mesmos campos do schema da API e do nó de fluxo.
+  | {
+      type: "create_task";
+      config: {
+        titulo: string;
+        vence_em_dias: number;
+        atribuir_a: "dono_do_lead" | { usuario_id: string };
+        prioridade: string;
+      };
     };
 
 export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
@@ -68,6 +78,12 @@ export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
       // Sem canal nem grupo de propósito: quem monta a régua não deveria
       // precisar saber que existe um `120363…@g.us` no mundo.
       return { type, config: { template: "" } };
+    // #1540 — o lembrete interno: mesma forma que o schema da API exige.
+    case "create_task":
+      return {
+        type,
+        config: { titulo: "", vence_em_dias: 1, atribuir_a: "dono_do_lead", prioridade: "medium" },
+      };
   }
 }
 
@@ -379,10 +395,89 @@ function AssignOwnerForm({ config, onChange }: FormProps<{ user_id: string }>) {
   );
 }
 
+/**
+ * `create_task` (#1540) — o formulário do lembrete que NÃO vira mensagem.
+ *
+ * Atribuição nominal (`dono_do_lead`) é o padrão e continua sendo a opção que o
+ * operador mantém quando o dono do negócio muda; quem quiser fixar uma pessoa
+ * escolhe na lista dos atendentes ativos (mesma lista do `assign_owner`).
+ */
+function CreateTaskForm({
+  config,
+  onChange,
+}: FormProps<{
+  titulo: string;
+  vence_em_dias: number;
+  atribuir_a: "dono_do_lead" | { usuario_id: string };
+  prioridade: string;
+}>) {
+  const t = useT();
+  const { data: members } = useAssignableMembers(true);
+  const atribuido =
+    typeof config.atribuir_a === "object" ? config.atribuir_a.usuario_id : "dono_do_lead";
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      <div className="space-y-1 sm:col-span-2">
+        <Label>{t("Título da tarefa")}</Label>
+        <Input
+          value={config.titulo}
+          onChange={(e) => onChange({ ...config, titulo: e.target.value })}
+          placeholder={t("Ligar para {{contact.name}} sobre {{lead.title}}")}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label>{t("Vence em (dias)")}</Label>
+        <Input
+          type="number"
+          min={0}
+          max={365}
+          value={config.vence_em_dias}
+          onChange={(e) => onChange({ ...config, vence_em_dias: Number(e.target.value) })}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label>{t("Prioridade")}</Label>
+        <Select value={config.prioridade} onValueChange={(v) => onChange({ ...config, prioridade: v })}>
+          <SelectTrigger>
+            <SelectValue placeholder={t("Prioridade")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="low">{t("Baixa")}</SelectItem>
+            <SelectItem value="medium">{t("Média")}</SelectItem>
+            <SelectItem value="high">{t("Alta")}</SelectItem>
+            <SelectItem value="urgent">{t("Urgente")}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1 sm:col-span-2">
+        <Label>{t("Atribuir a")}</Label>
+        <Select
+          value={atribuido}
+          onValueChange={(v) =>
+            onChange({ ...config, atribuir_a: v === "dono_do_lead" ? "dono_do_lead" : { usuario_id: v } })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={t("Dono do negócio")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="dono_do_lead">{t("Dono do negócio")}</SelectItem>
+            {(members ?? []).map((m) => (
+              <SelectItem key={m.user_id} value={m.user_id}>
+                {m.full_name ?? m.user_id.slice(0, 8)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
+
 function CallWebhookForm({
   config,
   onChange,
-}: FormProps<{ url: string; secret?: string; secret_enc?: string }>) {
+}: FormProps<{ url: string; secret?: string; secret_enc?: string; include_owner?: boolean }>) {
   const t = useT();
   // O segredo é write-only: o servidor guarda cifrado (secret_enc) e nunca
   // devolve o valor. Digitar aqui envia `secret` novo; deixar em branco
@@ -417,6 +512,31 @@ function CallWebhookForm({
             ? t("Já existe um segredo guardado com segurança. Digitar aqui substitui; limpar remove.")
             : t("Se preencher, enviaremos uma assinatura para o outro sistema conferir que fomos nós.")}
         </p>
+        {/* O guia de quem recebe (#1529). Pelo CAMINHO, em texto, e não link:
+            numa instalação de marca própria um link para o repositório de
+            origem apareceria para o cliente do revendedor — mesmo precedente
+            do UpdatePanel, que aponta o CHANGELOG pelo nome do arquivo. */}
+        <p className="text-xs text-muted-foreground">
+          {t("Como o outro sistema confere a assinatura e reconhece reenvios: guia de integração em docs/integracao/webhooks-de-saida.md, na documentação do projeto.")}
+        </p>
+      </div>
+      {/* Opt-in do responsável (#1612) — DESLIGADO é o padrão, e a frase diz o
+          que muda no corpo: quem lê esta tela é justamente quem vai receber o
+          POST. "Incluir" aqui é a mesma palavra do schema (`include_owner`),
+          para o rótulo e o campo não parecerem coisas diferentes. */}
+      <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+        <div className="space-y-0.5">
+          <Label>{t("Incluir o responsável no corpo")}</Label>
+          <p className="text-xs text-muted-foreground">
+            {t(
+              "Padrão: o aviso não diz quem atende. Ligue só se o outro sistema precisar do nome da equipe.",
+            )}
+          </p>
+        </div>
+        <Switch
+          checked={config.include_owner === true}
+          onCheckedChange={(v) => onChange({ ...config, include_owner: v ? true : undefined })}
+        />
       </div>
     </div>
   );
@@ -478,6 +598,10 @@ const VARS_DO_AVISO = [
   { token: "{{agendamento.starts_at}}", label: "Quando é" },
   { token: "{{agendamento.notes}}", label: "Resumo da qualificação" },
   { token: "{{event.nome_do_tipo}}", label: "Tipo de compromisso" },
+  // FORK MIA — a FICHA que o agente salvou (save_lead_note), a mais recente do
+  // contato. Só existe aqui, no aviso ao time: nunca na mensagem ao cliente.
+  { token: "{{nota.headline}}", label: "Ficha: título" },
+  { token: "{{nota.body}}", label: "Ficha: resumo da qualificação" },
 ];
 
 /**
@@ -684,6 +808,13 @@ export function ActionConfigForm({
     case "notify_group":
       return (
         <NotifyGroupForm
+          config={action.config}
+          onChange={(config) => onChange({ type: action.type, config })}
+        />
+      );
+    case "create_task":
+      return (
+        <CreateTaskForm
           config={action.config}
           onChange={(config) => onChange({ type: action.type, config })}
         />

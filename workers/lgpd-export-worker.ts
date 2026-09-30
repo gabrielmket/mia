@@ -4,7 +4,8 @@
  * Pipeline (S-08.04):
  *   1. Load lgpd_requests row (programmatic org filter).
  *   2. Move status received -> processing, attempts++ (cap at 3).
- *   3. collectExportData → 8-table aggregator (PII-safe; no logs of bodies).
+ *   3. collectExportData → varredura das tabelas que a anonimização alcança (PII-safe).
+ *      Sem contagem fixa aqui: esta linha dizia "8 tabelas" muito depois de serem dezenas.
  *   4. Render PDF via @react-pdf/renderer (PT-BR, Art. 18 II).
  *   5. signPdfPades — STUB when LGPD_SIGNING_KEY missing (warning, no throw).
  *   6. Upload PDF + JSON to bucket `lgpd-exports/{org}/{request}/...`.
@@ -22,6 +23,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { valorDaInstalacao } from "@/lib/instalacao/config";
 
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { audit } from "@/lib/audit";
@@ -159,6 +161,10 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
   try {
     // 3. Collect data.
     const data = await collectExportData({
+      // O piso do encarregado é resolvido AQUI e injetado: o coletor de LGPD
+      // não consulta configuração, para a coleta sem identificador continuar
+      // visitando só `organizations` (tests/invariants/agenda-meet-export).
+      dpoDaInstalacao: (await valorDaInstalacao("LGPD_DPO_EMAIL")).valor?.trim() || null,
       organizationId: orgId,
       requestId,
       contactId: req.contact_id,

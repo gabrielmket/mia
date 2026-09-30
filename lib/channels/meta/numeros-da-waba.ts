@@ -27,8 +27,7 @@
  * desfechos são distintos de propósito — confundi-los faria o operador procurar
  * o problema na Meta quando ele está no nosso ambiente.
  */
-
-const GRAPH_PADRAO = "v22.0";
+import { graphBaseUrl } from "./graph-base";
 
 export interface NumeroDaWaba {
   id: string;
@@ -78,14 +77,15 @@ export async function numerosDaWaba(input: {
     };
   }
 
-  const versao = input.graphVersion ?? process.env.META_GRAPH_VERSION ?? GRAPH_PADRAO;
   const campos =
     "id,display_phone_number,verified_name,quality_rating,code_verification_status,platform_type";
 
   let res: Response;
   try {
+    // Host e versão da instalação (`graph-base.ts` / `lib/graph-version.ts`):
+    // a versão escrita aqui à mão era a cópia que fica para trás no dia do bump.
     res = await fetch(
-      `https://graph.facebook.com/${versao}/${input.wabaId}/phone_numbers?fields=${campos}&limit=100`,
+      `${graphBaseUrl(input.graphVersion)}/${input.wabaId}/phone_numbers?fields=${campos}&limit=100`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
   } catch (err) {

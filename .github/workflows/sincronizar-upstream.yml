@@ -1,0 +1,104 @@
+# Mede, todo dia, a próxima sincronização com o upstream — e avisa.
+#
+# ── Por que todo dia, e não toda semana ─────────────────────────────────────────
+#
+# O upstream (melgarafael/DeskcommCRM) faz perto de 240 commits por dia. Medido em
+# 25/09/2026: 479 commits em dois dias depois da fusão de 23/09. E a dor de uma
+# fusão cresce MAIS que o número de commits — a de 23/09 juntou nove dias (2.764
+# commits) e custou uma tarde, com 66 arquivos em conflito. O remédio não é ter
+# mais cuidado na fusão grande; é não deixar ela ficar grande.
+#
+# ── O que este robô NÃO faz ────────────────────────────────────────────────────
+#
+# Não funde, não commita, não empurra. A fusão é decisão de gente: o upstream pode
+# trazer coisa que a MIA não quer, ou trazer de novo uma que ela já fez do jeito
+# dela (o cadastro incorporado e o disparo em massa foram construídos pelos dois
+# lados na mesma semana). O robô mede e avisa, numa issue só, que ele atualiza em
+# vez de abrir uma nova por dia.
+#
+# Este arquivo é SÓ do fork (o upstream não o tem), então nunca entra em conflito.
+
+name: sincronizar-upstream
+
+on:
+  schedule:
+    # 09:00 em Brasília (12:00 UTC), dia útil: o aviso chega no começo do dia.
+    - cron: "0 12 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: sincronizar-upstream
+  cancel-in-progress: true
+
+jobs:
+  medir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # História inteira: sem ela não existe merge-base, e a medição mentiria
+          # dizendo "zero commits novos".
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Trazer o upstream (só leitura)
+        run: |
+          git remote add upstream https://github.com/melgarafael/DeskcommCRM.git
+          git config user.name  "mia-robo"
+          git config user.email "mia-robo@users.noreply.github.com"
+
+      - name: Medir a próxima sincronização
+        id: medir
+        # `|| true`: o script sai com 1 quando o veredito é PARE. Quem decide o que
+        # fazer com isso é o passo seguinte, que precisa ler o relatório mesmo assim.
+        run: |
+          node scripts/sincronizar-upstream.mjs --json > relatorio.json || true
+          echo "veredito=$(node -e 'console.log(require("./relatorio.json").veredito)')" >> "$GITHUB_OUTPUT"
+          cat relatorio.json
+
+      - name: Avisar numa issue só
+        if: ${{ !startsWith(steps.medir.outputs.veredito, 'em dia') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node - <<'JS' > corpo.md
+          const r = require("./relatorio.json");
+          const linhas = [
+            `**${r.veredito}**`,
+            "",
+            `Medido em ${r.medido_em} contra \`${r.alvo}\`.`,
+            "",
+            `- commits novos no upstream: **${r.commits_novos}**`,
+            `- arquivos em conflito: **${r.conflitos.length}**`,
+            `- conflito no schema do upstream: **${r.conflitos_no_schema.length}** (tem de ser 0)`,
+            `- objetos do upstream que a MIA passaria a redefinir: **${(r.redefinicoes ?? []).length}** (tem de ser 0)`,
+          ];
+          if (r.changelog.length) linhas.push("", `Versões novas: ${r.changelog.join(", ")}`);
+          if (r.conflitos.length) {
+            linhas.push("", "<details><summary>Arquivos em conflito</summary>", "");
+            for (const f of r.conflitos) linhas.push(`- \`${f}\``);
+            linhas.push("", "</details>");
+          }
+          linhas.push(
+            "",
+            "Como trazer: `docs/FORK-MIA.md`. Esta issue é atualizada todo dia útil enquanto houver o que trazer.",
+          );
+          process.stdout.write(linhas.join("\n") + "\n");
+          JS
+
+          titulo="Sincronizar com o upstream"
+          existente=$(gh issue list --state open --label sincronizar-upstream --json number --jq '.[0].number // empty')
+          if [ -n "$existente" ]; then
+            gh issue edit "$existente" --title "$titulo" --body-file corpo.md
+          else
+            gh label create sincronizar-upstream --color 0E8A16 --force >/dev/null 2>&1 || true
+            gh issue create --title "$titulo" --label sincronizar-upstream --body-file corpo.md
+          fi

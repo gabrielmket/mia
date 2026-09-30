@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { test, expect, type Page, type TestInfo } from "@playwright/test";
+import { test, expect, type Page, type TestInfo } from "./helpers/test";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, { auth: { persistSession: false } });
@@ -20,7 +20,7 @@ async function login(page: Page, role: string) {
   await page.goto("/login");
   await page.getByLabel(/e-?mail/i).fill(user.email);
   await page.getByLabel(/senha/i).fill(password);
-  await page.getByRole("button", { name: /entrar/i }).click();
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await page.waitForURL(/\/app(?:\/|$)/, { timeout: 60_000 });
 }
 const row = (page: Page, title: string) => page.getByTestId("inbox-item").filter({ hasText: title });
@@ -143,10 +143,14 @@ for (const role of ["manager", "admin"]) test(`${role}: destinos conforme papel 
   test.setTimeout(120_000); await login(page, role); await central(page);
   await expect(row(page, "Conversa outro atendente").getByRole("link")).toBeVisible();
   await expect(row(page, "Conversa outra organização").getByRole("link")).toHaveCount(0);
-  await row(page, "Orçamento para revisar").getByRole("link", { name: "Abrir uso de IA" }).click();
-  await expect(page).toHaveURL(/\/app\/ai\/usage/);
-  await expect(page.getByRole("heading", { name: /Uso de IA|Uso e custos/i }).first()).toBeVisible();
-  await page.goBack(); await expect(row(page, "Conexão para revisar")).toBeVisible();
+  // Fork MIA: uso e custo de IA são da PLATAFORMA (lib/ai/custo-e-da-plataforma.ts).
+  // Gestor e admin do cliente cairiam em /403 na tela de uso, então o aviso de
+  // orçamento chega a eles como orientação, sem botão — e a URL continua fechada.
+  await expect(row(page, "Orçamento para revisar").getByRole("link")).toHaveCount(0);
+  await expect(row(page, "Orçamento para revisar")).toContainText("Peça a quem administra");
+  await page.goto("/app/ai/usage");
+  await expect(page).not.toHaveURL(/\/app\/ai\/usage/);
+  await central(page); await expect(row(page, "Conexão para revisar")).toBeVisible();
   if (role === "manager") {
     await expect(row(page, "Conexão para revisar").getByRole("link")).toHaveCount(0);
     await expect(row(page, "Modelo do canal mudou").getByRole("link")).toHaveCount(0);

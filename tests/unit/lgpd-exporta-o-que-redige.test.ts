@@ -28,10 +28,13 @@ import { describe, expect, it } from "vitest";
  * oitava tabela redigida entraria sem ninguém acrescentá-la aqui, e o teste
  * ficaria verde por não medir. As duas pontas saem da fonte:
  *
- *   redação → toda função do baseline cujo nome case /redact|redigir/, pelos
- *             alvos de `update <tabela> set` no corpo dela
+ *   limpeza → toda função do baseline cujo nome case /redact|redigir|anonimiz|apagar/,
+ *             pelos alvos de `update <tabela> set` E de `delete from <tabela>` no corpo dela
  *   export  → os `.from("<tabela>")` de `lib/lgpd/export-collector.ts`
  *
+ * O `delete from` entrou DEPOIS: a varredura nasceu só de `update ... set`, em
+ * função com `redact|redigir` no nome — e a anonimização que APAGA se chama
+ * `fn_apagar_...`.
  * ═══ O que este teste NÃO prova ═══
  *
  * Que o conteúdo exportado seja suficiente — só que a tabela é VISITADA.
@@ -40,14 +43,20 @@ import { describe, expect, it } from "vitest";
  */
 
 const RAIZ = path.resolve(__dirname, "../..");
-const BASELINE = fs.readFileSync(path.join(RAIZ, "supabase/baseline.sql"), "utf8");
+// O schema como o banco o recebe: o do upstream e, por cima, o da MIA — na
+// ordem de easypanel/bootstrap.sh. "Última definição vence" continua valendo.
+const BASELINE = [
+    fs.readFileSync(path.join(RAIZ, "supabase/baseline.sql"), "utf8"),
+    fs.readFileSync(path.join(RAIZ, "supabase/baseline-mia.sql"), "utf8"),
+  ].join("\n");
 const COLETOR = fs.readFileSync(path.join(RAIZ, "lib/lgpd/export-collector.ts"), "utf8");
 
-/** Corpos de função cujo NOME anuncia redação — no dump vêm com identificador entre aspas. */
-function corposDeRedacao(): string[] {
+/** Corpos de função cujo NOME anuncia limpeza de dado pessoal — redigir OU apagar.
+ *  No dump vêm com identificador entre aspas. */
+function corposDeLimpeza(): string[] {
   const corpos: string[] = [];
   const abre =
-    /create or replace function\s+"?public"?\.\s*"?([a-z_]*(?:redact|redigir)[a-z_]*)"?/gi;
+    /create or replace function\s+"?public"?\.\s*"?([a-z_]*(?:redact|redigir|anonimiz|apagar)[a-z_]*)"?/gi;
   for (const m of BASELINE.matchAll(abre)) {
     const inicio = m.index ?? 0;
     // O corpo termina no primeiro `$$;` depois da abertura. Os dumps deste repo
@@ -58,11 +67,14 @@ function corposDeRedacao(): string[] {
   return corpos;
 }
 
-function tabelasRedigidas(): string[] {
+/** Tabelas que a limpeza alcança: `update <t> set` (redige) ou `delete from <t>` (apaga). */
+function tabelasDeLimpeza(): string[] {
   const alvos = new Set<string>();
-  for (const corpo of corposDeRedacao()) {
-    for (const m of corpo.matchAll(/\bupdate\s+(?:"?public"?\.)?"?([a-z_]+)"?\s+set\b/gi)) {
-      const t = m[1];
+  for (const corpo of corposDeLimpeza()) {
+    for (const m of corpo.matchAll(
+      /\b(?:update\s+(?:"?public"?\.)?"?([a-z_]+)"?\s+set|delete\s+from\s+(?:"?public"?\.)?"?([a-z_]+)"?)/gi,
+    )) {
+      const t = m[1] ?? m[2];
       if (t !== undefined) alvos.add(t);
     }
   }
@@ -81,24 +93,27 @@ describe("LGPD: o export alcança tudo que a redação alcança", () => {
     // Sem isto, um regex que deixe de casar devolve dois conjuntos vazios e a
     // asserção abaixo fica verde — o modo de falha que este repo já pagou várias
     // vezes. E o número tem de ser plausível: a redação move mais que 3 tabelas.
-    expect(tabelasRedigidas().length).toBeGreaterThan(3);
+    expect(tabelasDeLimpeza().length).toBeGreaterThan(3);
     expect(tabelasExportadas().length).toBeGreaterThan(3);
+    expect(tabelasDeLimpeza()).toContain("conversation_drafts");
+    expect(tabelasDeLimpeza()).toContain("contact_field_proposals");
   });
 
   it("CONTROLE: a varredura da redação enxerga a tabela que o trigger 0184 acrescentou", () => {
     // `calendar_appointments` não é redigida pelo cascade e sim por um trigger
     // separado (0184). Se a sonda só olhasse a função principal, ela sumiria — e
     // o teste passaria justamente sobre o caso que o motivou.
-    expect(tabelasRedigidas()).toContain("calendar_appointments");
+    expect(tabelasDeLimpeza()).toContain("calendar_appointments");
   });
 
-  it("toda tabela que a redação apaga é visitada pelo export", () => {
+  it("toda tabela que a anonimização limpa é visitada pelo export", () => {
     const exportadas = new Set(tabelasExportadas());
-    const faltando = tabelasRedigidas().filter((t) => !exportadas.has(t));
+    const faltando = tabelasDeLimpeza().filter((t) => !exportadas.has(t));
     expect(
       faltando,
-      "Estas tabelas são redigidas quando o titular pede anonimização e NÃO são " +
-        "coletadas quando ele pede acesso (Art. 18 II). O que se apaga a pedido " +
+      "Estas tabelas são limpas quando o titular pede anonimização (redigidas ou " +
+        "APAGADAS) e NÃO são coletadas quando ele pede acesso (Art. 18 II). O que " +
+        "se apaga a pedido " +
         "dele é o que se entrega a pedido dele — acrescente o bloco em " +
         "`lib/lgpd/export-collector.ts`, espelhando o de `crm_lead_activities`:\n" +
         faltando.map((f) => `  ${f}`).join("\n"),
@@ -143,6 +158,13 @@ describe("LGPD: nenhuma tabela com contact_id fica fora da anonimização", () =
     lgpd_requests:
       "É o REGISTRO do pedido — a prova de que o direito foi exercido, e o que " +
       "responde ao prazo legal. Apagá-la apagaria o recibo da própria exclusão.",
+    // Do upstream (financeiro/comanda, 0355 dele), declarada na fusão de 25/09/2026.
+    loyalty_ledger:
+      "É livro-razão CONTÁBIL: o saldo de fidelidade é sum(points), e cada linha " +
+      "está presa a uma venda (sale_id) que tem retenção fiscal. Apagar linhas " +
+      "mudaria a contabilidade. E não sobra dado da pessoa: o contact_id aponta " +
+      "para a ficha já anonimizada, e `reason` só recebe dois valores fixos do " +
+      "sistema ('Comanda finalizada', 'Estorno da comanda'), nunca texto livre.",
   };
 
   /** Tabelas do baseline que têm uma coluna `contact_id`. */
@@ -154,10 +176,16 @@ describe("LGPD: nenhuma tabela com contact_id fica fora da anonimização", () =
     )) {
       if (m[1] && m[2] && /"contact_id"/.test(m[2])) alvos.add(m[1]);
     }
+    // O fecho aceita recuo: tabela criada DENTRO de função (a provisionadora de
+    // módulo do upstream, 0480) fecha com "  );", e sem isto o corpo capturado
+    // corria até o próximo ");" na coluna zero, pegando o `contact_id` de outra
+    // tabela. E comentário não é coluna: a 0485 cita "$2 = contact_id" num `--`
+    // de `modulo_secoes_lgpd`, que não tem a coluna. (Fusão de 29/09/2026.)
     for (const m of BASELINE.matchAll(
-      /create table if not exists public\.([a-z_]+)\s*\(([\s\S]*?)\n\);/gi,
+      /create table if not exists public\.([a-z_]+)\s*\(([\s\S]*?)\n\s*\);/gi,
     )) {
-      if (m[1] && m[2] && /\bcontact_id\b/.test(m[2])) alvos.add(m[1]);
+      const corpo = m[2]?.replace(/--[^\n]*/g, "");
+      if (m[1] && corpo && /\bcontact_id\b/.test(corpo)) alvos.add(m[1]);
     }
     for (const m of BASELINE.matchAll(
       /alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?public\.([a-z_]+)\b([\s\S]*?);/gi,
@@ -204,8 +232,10 @@ describe("LGPD: nenhuma tabela com contact_id fica fora da anonimização", () =
       }
     };
 
+    // Nome com dígito conta: `fn_redigir_b2b_do_contato_anonimizado` (0449) sumia
+    // da varredura com `[a-z_]+`, e `import_rows` aparecia como não alcançada.
     for (const m of BASELINE.matchAll(
-      /create trigger\s+[a-z_]+[\s\S]{0,200}?on public\.contacts[\s\S]{0,300}?execute function public\.([a-z_]+)\(\)/gi,
+      /create trigger\s+[a-z0-9_]+[\s\S]{0,200}?on public\.contacts[\s\S]{0,300}?execute function public\.([a-z0-9_]+)\(\)/gi,
     )) {
       if (m[1]) colher(corpoDe(m[1]));
     }

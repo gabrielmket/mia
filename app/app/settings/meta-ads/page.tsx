@@ -2,6 +2,18 @@
  * Configurações → Meta Ads. Onde o token de LEITURA da conta de anúncios é
  * conectado.
  *
+ * ─── FORK MIA (.61): duas abas, tudo da Meta num lugar só ──────────────────
+ *
+ *   · "Contas de anúncio" (padrão): o token e a conta padrão, como sempre foi;
+ *   · "Formulários de leads" (`?aba=formularios`): a importação dos leads dos
+ *     formulários de cadastro instantâneo, que até a .60 era a tela própria
+ *     Configurações › Formulários da Meta. O endereço antigo redireciona para cá.
+ *
+ * As duas usam o MESMO token (a importação lê as Páginas com ele), e ter dois
+ * itens no menu fazia a empresa procurar o token num e os formulários no outro.
+ * Abas pela URL, no molde de Configurações › Conversões: dá para mandar o link
+ * direto da aba, e a aba que não está aberta não paga a leitura dela.
+ *
  * ─── Por que uma tela separada de Configurações › Conversões ────────────────
  *
  * As duas conectam "a Meta", e juntá-las é tentador. São credenciais
@@ -27,6 +39,8 @@
  */
 import { redirect } from "next/navigation";
 
+import { leadsDaMetaLiberados } from "@/lib/leads-da-meta/liberacao";
+
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -34,11 +48,20 @@ import { existeConexaoDeLeitura } from "@/lib/plataformas-de-anuncio/credenciais
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { FormularioDeMetaAds } from "./_form";
+import { LeadsDaMetaClient } from "./_formularios";
+
+/** As abas. "contas" é a padrão (sem `?aba=`). */
+type AbaDeMetaAds = "contas" | "formularios";
 
 export const metadata = { title: "Meta Ads" };
 export const dynamic = "force-dynamic";
 
-export default async function MetaAdsSettingsPage() {
+export default async function MetaAdsSettingsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | undefined>>;
+}) {
+  const parametros = (await searchParams) ?? {};
   const user = await requireAuth();
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) redirect("/app");
@@ -49,10 +72,57 @@ export default async function MetaAdsSettingsPage() {
   }
 
   const admin = createAdminClient();
-  const conexao = await existeConexaoDeLeitura(admin, activeOrg.orgId, "meta_ads");
+  // A aba dos formulários só existe para quem pode usar a importação (vira
+  // módulo vendável por `lib/leads-da-meta/modulo.ts`).
+  const comFormularios = await leadsDaMetaLiberados(admin, activeOrg.orgId);
+  const aba: AbaDeMetaAds =
+    parametros.aba === "formularios" && comFormularios ? "formularios" : "contas";
 
   const idioma = user.idioma;
   const t = (texto: string) => traduzir(texto, idioma);
+
+  const barra = comFormularios ? (
+    <nav className="flex gap-1 border-b" aria-label={t("Seções de Meta Ads")}>
+      {(
+        [
+          ["contas", t("Contas de anúncio")],
+          ["formularios", t("Formulários de leads")],
+        ] as const
+      ).map(([chave, rotulo]) => (
+        <a
+          key={chave}
+          href={chave === "contas" ? "?" : `?aba=${chave}`}
+          aria-current={aba === chave ? "page" : undefined}
+          className={
+            aba === chave
+              ? "-mb-px border-b-2 border-primary px-3 py-2 text-sm font-medium"
+              : "px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+          }
+        >
+          {rotulo}
+        </a>
+      ))}
+    </nav>
+  ) : null;
+
+  if (aba === "formularios") {
+    return (
+      <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
+        <header>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("Meta Ads")}</h1>
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            {t(
+              "Os leads dos anúncios de cadastro instantâneo (o formulário que abre dentro do Facebook e do Instagram) entram sozinhos no funil, a cada 5 minutos, com a origem do anúncio e as respostas do formulário. As automações de lead criado disparam como em qualquer captação.",
+            )}
+          </p>
+        </header>
+        {barra}
+        <LeadsDaMetaClient />
+      </div>
+    );
+  }
+
+  const conexao = await existeConexaoDeLeitura(admin, activeOrg.orgId, "meta_ads");
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
@@ -64,6 +134,8 @@ export default async function MetaAdsSettingsPage() {
           )}
         </p>
       </header>
+
+      {barra}
 
       <div className="rounded-md border border-sky-500/40 bg-sky-500/10 p-4 text-sm">
         {/*

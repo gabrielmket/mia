@@ -1,36 +1,23 @@
 import type { Metadata } from "next";
 
-import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
-import { ROLE_RANK } from "@/lib/auth/types";
-import { traduzir } from "@/lib/i18n/dicionario";
-import { MiaBroadcast } from "@/components/broadcast/MiaBroadcast";
+import { AvisoDeAcesso } from "@/components/broadcast/AvisoDeAcesso";
+import { ListaDoBroadcast } from "@/components/broadcast/ListaDoBroadcast";
+import { acessoAoBroadcast } from "@/lib/broadcast/acesso";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "MIA Broadcast" };
+export const metadata: Metadata = { title: "Broadcast" };
 
+/**
+ * FORK MIA — o Broadcast unificado (1.21.0-mia.58): os disparos pelo número
+ * oficial e pelo número por QR numa lista só. Desenho em
+ * docs/fork/broadcast-unificado.md.
+ *
+ * manager+: cada mensagem oficial gasta dinheiro do cliente e cada uma por QR
+ * arrisca o número dele — quem atende não decide nenhuma das duas coisas. As
+ * rotas recusam pelo mesmo critério; aqui é para a porta dizer por quê.
+ */
 export default async function BroadcastPage() {
-  const user = await requireAuth();
-  const t = (texto: string) => traduzir(texto, user.idioma);
-  const org = await resolveActiveOrg(user);
-  // manager+: cada mensagem gasta dinheiro do cliente, e quem atende não decide
-  // gastar. A rota recusa pelo mesmo critério — aqui é para a porta não abrir.
-  const podeVer = !!org && ROLE_RANK[org.role] >= ROLE_RANK.manager;
-
-  return (
-    <div className="flex h-full flex-col gap-6 p-6">
-      <header className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight">MIA Broadcast</h1>
-        <p className="text-sm text-muted-foreground">
-          {t("Enviar para uma lista pela API oficial da Meta, com template aprovado e cobrança por mensagem.")}
-        </p>
-      </header>
-      {podeVer ? (
-        <MiaBroadcast />
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          {t("Esta tela é de quem gerencia a empresa.")}
-        </p>
-      )}
-    </div>
-  );
+  const { acesso } = await acessoAoBroadcast();
+  if (acesso.estado !== "liberado") return <AvisoDeAcesso acesso={acesso} />;
+  return <ListaDoBroadcast canais={acesso.canais} />;
 }

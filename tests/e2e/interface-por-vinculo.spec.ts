@@ -1,19 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/test";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
   auth: { persistSession: false },
 });
 const password = `Local-${randomUUID()}!`;
-const evidence = ".superpowers/evidence/comunidade-360";
+const evidence = "evidence/comunidade-360";
 async function login(page: Page, email: string) {
   await page.goto("/login");
   await page.getByLabel(/e-?mail/i).fill(email);
   await page.getByLabel(/senha/i).fill(password);
-  await page.getByRole("button", { name: /entrar/i }).click();
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await page.waitForURL(/\/app\//, { timeout: 60_000 });
 }
 const nav = (page: Page) => page.getByRole("navigation", { name: "Navegação principal" });
@@ -121,7 +121,7 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await expect(nav(member).getByRole("link", { name: "Inbox", exact: true })).toHaveCount(0);
     await member.goto("/app");
     await member.waitForURL("**/app/products");
-    await nav(member).getByRole("link", { name: "Ver tudo em CRM" }).click();
+    await nav(member).getByRole("link", { name: "Ver tudo no CRM" }).click();
     await expect(member.getByRole("link", { name: /Produtos/ }).last()).toBeVisible();
     await expect(member.getByRole("link", { name: /Contatos/ })).toHaveCount(0);
     await member.keyboard.press("ControlOrMeta+k");
@@ -132,7 +132,7 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await member.screenshot({ path: `${evidence}/interface-hub-only.png` });
     await member.setViewportSize({ width: 390, height: 844 });
     await member.getByRole("button", { name: "Abrir navegação" }).click();
-    await expect(member.getByRole("link", { name: "Ver tudo em CRM" }).last()).toBeVisible();
+    await expect(member.getByRole("link", { name: "Ver tudo no CRM" }).last()).toBeVisible();
     expect(
       await member.evaluate(
         () => document.body.scrollWidth <= document.documentElement.clientWidth + 1,

@@ -13,6 +13,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import type { IaDaVersao } from "@/lib/ai/trava-da-ia";
+
 export const DUPLICATE_AGENT_COLUMNS =
   "id, organization_id, name, description, model, system_prompt, is_active, is_default, kind, priority, published_version_id, archived_at, config, guardrails, active_kb_version_id, created_at, updated_at";
 
@@ -24,7 +26,7 @@ export const DUPLICATE_AGENT_COLUMNS =
  * basta, se o INSERT não a escreve a cópia nasce com o default do banco.
  */
 export const DUPLICATE_VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin";
 
 export type DuplicateAgentError =
   | "not_found"
@@ -68,6 +70,7 @@ function versionPayloadFrom(src: Record<string, unknown>) {
     history_token_window: src.history_token_window,
     handoff_keywords: src.handoff_keywords,
     handoff_tool_enabled: src.handoff_tool_enabled,
+    proposal_ai_draft_enabled: src.proposal_ai_draft_enabled,
     cases_enabled: src.cases_enabled,
     // Papel Operador (spec 16). Duplicar um agente tem de duplicar o papel
     // inteiro: sem estas três, a cópia nasce com o Operador desligado e o dono
@@ -119,7 +122,17 @@ export async function pickSourceVersion(
 
 export async function duplicateAgentWithVersion(
   admin: SupabaseClient,
-  input: { orgId: string; agentId: string; actorUserId: string; requireVersion: boolean },
+  input: {
+    orgId: string;
+    agentId: string;
+    actorUserId: string;
+    requireVersion: boolean;
+    /**
+     * FORK MIA: a IA que a cópia leva no lugar da do rascunho copiado, quando
+     * quem duplica não escolhe IA (`iaDaCopia`, lib/ai/trava-da-ia.ts).
+     */
+    ia?: IaDaVersao | null;
+  },
 ): Promise<DuplicateAgentResult> {
   const { orgId, agentId, actorUserId, requireVersion } = input;
 
@@ -181,6 +194,7 @@ export async function duplicateAgentWithVersion(
       agent_id: (newAgent as { id: string }).id,
       version_number: 1,
       ...versionPayloadFrom(srcVersion),
+      ...(input.ia ?? {}),
       status: "draft",
       created_by: actorUserId,
     })

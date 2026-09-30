@@ -1,7 +1,6 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
-import type { OrigemDaMemoria } from "@/lib/ai/org-memory-source";
 
 export interface OrgMemoryDocument {
   version_id: string;
@@ -14,6 +13,13 @@ export interface OrgMemoryVersionMeta {
   version_number: number;
   created_at: string;
 }
+/**
+ * Quem escreveu o aprendizado. Espelha `org_memory_entries_source_check` (0385):
+ * `agent` é o que a ferramenta MCP `crm_save_org_memory` grava. Par cobrado por
+ * tests/unit/memoria-da-org-origem-cabe-no-check.test.ts.
+ */
+export type OrigemDaMemoria = "manual" | "flywheel" | "agent";
+
 export interface OrgMemoryEntryRow {
   id: string;
   title: string;

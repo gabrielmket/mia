@@ -23,8 +23,9 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/test";
 
+import { comoDonoDaPlataforma, respostaLida } from "./helpers/ia-da-plataforma";
 import { afirmarAdminDeTenantPuro } from "./utils/precondicao";
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
@@ -93,7 +94,7 @@ async function loginComTotp(page: Page, email: string, secret: string): Promise<
   await expect(page.locator("#email")).toBeVisible({ timeout: ESPERA });
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(creds.password);
-  await page.getByRole("button", { name: /entrar/i }).click();
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await page.waitForURL(/\/login\/mfa/, { timeout: ESPERA });
 
   for (let tentativa = 0; tentativa < 3; tentativa++) {
@@ -137,7 +138,7 @@ test.describe("gatilho de etapa do funil", () => {
     });
   });
 
-  test("o negócio movido no quadro para a etapa escolhida arma o follow-up sozinho", async ({ page }) => {
+  test("o negócio movido no quadro para a etapa escolhida arma o follow-up sozinho", async ({ page, browser }, testInfo) => {
     test.setTimeout(180_000);
     expect(creds.admin_totp?.secret, "seed deve gravar admin_totp").toBeTruthy();
     expect(creds.followup_agent_fixtures, "seed-e2e-followup-agent.ts deve gravar as fixtures").toBeTruthy();
@@ -281,7 +282,13 @@ test.describe("gatilho de etapa do funil", () => {
 
       // ---- 3. cenário: o agente publicado que ARMA o fluxo (o gate) ----
       const fixtures = creds.followup_agent_fixtures!;
-      const criaAgente = await page.request.post("/api/v1/ai/agents", {
+      // FORK MIA: criar o agente com provedor, modelo e a credencial semeada é
+      // escolher a IA dele, e neste fork isso é da plataforma
+      // (lib/ai/trava-da-ia.ts): pelo admin da empresa ele nascia com a chave da
+      // instalação, que o e2e não tem, e o publicar abaixo voltava 422. Quem cria
+      // é o dono da plataforma; o resto segue com o admin da empresa.
+      // Ver tests/e2e/helpers/ia-da-plataforma.ts.
+      const criaAgente = await comoDonoDaPlataforma(browser, testInfo, (req) => respostaLida(req.post("/api/v1/ai/agents", {
         data: {
           name: `E2E Agente Gatilho ${marca}`,
           version: {
@@ -293,7 +300,7 @@ test.describe("gatilho de etapa do funil", () => {
             followup: { enabled: true, flow_pointer_ids: [flowId] },
           },
         },
-      });
+      })));
       expect(criaAgente.status()).toBe(201);
       const criado = (await criaAgente.json()) as { data: { agent: { id: string }; version: { id: string } } };
       agentId = criado.data.agent.id;

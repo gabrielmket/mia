@@ -44,14 +44,14 @@ import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./helpers/test";
 import { createClient } from "@supabase/supabase-js";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA =
-  process.env.E2E_EVIDENCIA ?? path.join(process.cwd(), ".superpowers/evidence/relatorio-atividades");
+  process.env.E2E_EVIDENCIA ?? path.join(process.cwd(), "evidence/relatorio-atividades");
 
 interface Creds {
   password: string;
@@ -84,7 +84,7 @@ async function login(page: Page, email: string, senha: string): Promise<void> {
   await page.goto("/login");
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(senha);
-  await page.getByRole("button", { name: /entrar/i }).click();
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await page.waitForURL(/\/app/, { timeout: 60_000 });
 }
 
@@ -300,7 +300,8 @@ test.describe("Relatório de atividades — o período, pela tela", () => {
       const acima = titulos.filter((h) => h.getBoundingClientRect().top < y);
       return (acima[acima.length - 1]?.textContent ?? "").trim();
     });
-    expect(grupo, "Atividades pertence ao grupo Análise").toMatch(/an[áa]lise/i);
+    // Fork MIA: o grupo Análise do upstream se chama MIA Insights (lib/navigation/catalogo.ts).
+    expect(grupo, "Atividades pertence ao grupo MIA Insights (o Análise do upstream)").toBe("MIA Insights");
 
     await item.click();
     await page.waitForURL(/\/app\/activities/, { timeout: 30_000 });

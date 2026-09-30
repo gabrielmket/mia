@@ -94,13 +94,26 @@ export const TOOLS_ATENDIMENTO = declararTools([
      */
     risco: "atencao",
     /**
-     * Em "vender", junto de `crm_propose_contact_field`, e pela mesma razão
-     * escrita ali: o pacote "Atender" está no tamanho em que o teto por agente
-     * começa a apertar, e esta capacidade serve à venda B2B — é ela que faz a
-     * pergunta "de qual empresa você é?" virar agrupamento no funil em vez de
-     * uma frase que se perde no histórico.
+     * Em "organizar", e NÃO em "vender" — a razão é o TETO, como a de
+     * `crm_propose_contact_field` logo acima, só que um pacote adiante.
+     *
+     * "vender" é o default do onboarding (`lib/ai/agents/capacidades-padrao.ts`):
+     * toda capacidade automática dele nasce ligada em todo agente e come uma
+     * vaga da folga que `TETO_TOOLS_POR_AGENTE` existe para deixar. Medido na
+     * fusão com a v1.60 (teto 27): com esta linha em "vender" o agente nasce
+     * com 23 e o menor segundo pacote (`evoluir`) passa a exigir 28 — NENHUMA
+     * jornada nova cabe, o beco D3 que `pacote-reserva-vaga-da-critica.test.ts`
+     * guarda. Em "organizar" o agente nasce com 22, `evoluir` volta a caber (27)
+     * e "organizar" sozinho vai a 22, longe do teto.
+     *
+     * "organizar" e não "atender": o upstream tirou a anotação irmã de "atender"
+     * pelo mesmo aperto, e agrupar o cliente pela empresa é manter o cadastro
+     * em ordem, vizinho de `crm_manage_tags`. Continua alcançável em qualquer
+     * jornada pelo modo avançado — ligar à mão, agente a agente, é o caminho
+     * para quem vende B2B; o modo B2C esconde a porta de qualquer jeito
+     * (`lib/empresas/modo-de-venda.ts`).
      */
-    pacotes: ["vender"],
+    pacotes: ["organizar"],
   },
   {
     name: "crm_list_conversations",
@@ -141,5 +154,42 @@ export const TOOLS_ATENDIMENTO = declararTools([
     oQueToca: "Atendimento",
     risco: "critico",
     pacotes: ["atender"],
+  },
+  {
+    name: "crm_start_conversation_and_send",
+    category: "write",
+    rotulo: "Iniciar conversa com cliente novo e enviar mensagem",
+    explicacao:
+      "Cria o cadastro do cliente se ele ainda não existir, abre uma conversa nova no número de " +
+      "WhatsApp escolhido e manda a primeira mensagem para ele — de verdade, no celular dele.",
+    oQueToca: "Atendimento",
+    risco: "critico",
+    // Nasce para automação externa (ex.: prospecção que acabou de captar um
+    // cliente novo), não para o agente conversacional em turno — por isso
+    // `apenasHumano` abaixo e o papel mínimo ficam acima do que o agente
+    // publicado alcança (ver tests/unit/capacidade-alcancavel-pelo-agente.test.ts).
+    pacotes: ["vender"],
+    apenasHumano: true,
+  },
+  {
+    name: "crm_create_conversation_draft",
+    category: "write",
+    rotulo: "Deixar texto sugerido para a pessoa revisar",
+    explicacao:
+      "Guarda um texto vindo de outro sistema (ERP, formulário) na conversa, para a pessoa que atende revisar e enviar. " +
+      "Nada sai para o cliente por conta desta ação: o texto aparece no campo de resposta com o aviso de origem, " +
+      "e só o clique de quem atende manda a mensagem.",
+    oQueToca: "Atendimento",
+    // `atencao`, não `critico`: a ação em si não alcança o cliente — ela prepara
+    // uma sugestão que uma pessoa precisa confirmar. O peso do envio continua
+    // sendo do `crm_send_whatsapp_message`, que segue `critico`.
+    risco: "atencao",
+    // "escalar", não "atender": o texto é deixado para uma PESSOA revisar e
+    // enviar, que é a jornada "Passar para um humano". E "atender" é o pacote
+    // que encosta no teto por agente: cada capacidade a mais ali é uma vaga que
+    // o dono precisa liberar para ligar a jornada — o mesmo motivo que tirou
+    // `crm_propose_contact_field` daqui. A conta que isso quebra está no e2e
+    // `capacidades-do-agente.spec.ts` (comentário de `TOOLS_DO_SEED`).
+    pacotes: ["escalar"],
   },
 ]);

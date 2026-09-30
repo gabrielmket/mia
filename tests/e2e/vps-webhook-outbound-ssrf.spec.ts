@@ -20,7 +20,7 @@ import * as http from "node:http";
 import type { AddressInfo } from "node:net";
 import * as path from "node:path";
 
-import { test, expect, type Page, type Locator } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "./helpers/test";
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
 
 const APP_URL = `http://localhost:${process.env.E2E_PORT ?? "3001"}`;
@@ -60,7 +60,7 @@ async function login(page: Page, email: string): Promise<void> {
   await page.goto(`${APP_URL}/login`);
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(creds.password);
-  await page.getByRole("button", { name: /entrar/i }).click();
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await page.waitForURL(/\/app\//);
 }
 
@@ -103,7 +103,8 @@ test.describe("J6.8 — anti-SSRF do outbound call_webhook (real, ponta a ponta)
     try {
       // --- fonte inbound (para gerar o lead que dispara a regra) ---
       await login(page, creds.users.manager!.email);
-      await page.getByRole("link", { name: "Webhooks" }).click();
+      // Fork MIA: o item do menu se chama "Automações" (lib/navigation/catalogo.ts).
+      await page.getByRole("link", { name: "Automações", exact: true }).click();
       await page.waitForURL(/\/app\/webhooks/);
       await page.getByRole("button", { name: /Nova fonte|Criar primeira fonte/ }).click();
       await page.locator("#src-name").fill(SOURCE_NAME);

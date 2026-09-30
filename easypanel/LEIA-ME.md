@@ -64,6 +64,22 @@ A chave de IA fica para depois: **IA › Credenciais** (cifrada no banco) e o pr
 Depois de entrar, apague a linha `OWNER_PASSWORD` do Environment e faça redeploy: o
 bootstrap pula o dono quando ela está vazia.
 
+### 5. Chamada de voz do WhatsApp (serviço `wacalls`)
+
+⚠️ Liga um segundo aparelho ao número por caminho não oficial: o risco é o bloqueio da
+CONTA do número. Cada organização aceita isso na tela antes de ler o QR.
+
+1. **Antes** do deploy, acrescente ao Environment (sem apagar o resto):
+   `WACALLS_ADMIN_USER`, `WACALLS_ADMIN_PASSWORD`, `WACALLS_API_TOKEN` (segredos gerados
+   fora do repo), `WACALLS_PUBLIC_IP` (IP público da VPS), `WACALLS_WEBRTC_UDP_PORT=7881`
+   e `WACALLS_API_BASE_URL=http://wacalls:8080`. Sem usuário e senha de administrador o
+   contêiner não sobe (fica reiniciando).
+2. Libere **UDP 7881 de entrada** no firewall do provedor da VPS.
+3. Deploy. Na tela: **Configurações › Segurança** (aceitar o risco) e depois
+   **Conexões › Chamada de voz** (ler o QR).
+
+Desligar: esvazie `WACALLS_API_BASE_URL` e faça redeploy (a tela volta ao aviso).
+
 ## Quando algo não funciona
 
 | sintoma | onde olhar |
@@ -73,6 +89,8 @@ bootstrap pula o dono quando ela está vazia.
 | domínio mostra 404 ou 502 do painel | o domínio precisa apontar para o serviço `caddy`, porta 80, HTTP interno |
 | cadeado não aparece | registro A ainda não propagou, ou está com a nuvem laranja da Cloudflare |
 | app reiniciando | logs do `app`, procure `[env]` |
+| `wacalls` reiniciando | log diz `no admin configured`: faltam `WACALLS_ADMIN_USER`/`WACALLS_ADMIN_PASSWORD` |
+| ligação conecta e fica muda | `WACALLS_PUBLIC_IP` vazio/errado, ou UDP 7881 bloqueada no firewall do provedor |
 
 ## Atualizar
 

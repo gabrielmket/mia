@@ -5,11 +5,12 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import { audit } from "@/lib/audit";
 import { tenantSchema, type TenantInput } from "@/lib/schemas/settings";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
+import { paisesOferecidos } from "@/lib/legal/perfil-do-pais";
+import { lerModoDeVenda } from "@/lib/empresas/modo-de-venda";
 
 export type UpdateTenantResult =
   | { ok: true }
@@ -55,7 +56,43 @@ export async function updateTenant(input: TenantInput): Promise<UpdateTenantResu
   const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   const userAgent = hdrs.get("user-agent") ?? null;
 
-  // Read current settings jsonb to merge `lost_reasons_extra` non-destructively.
+  // O país só entra se tiver PERFIL REVISADO (issue #1033): `paisesOferecidos()`
+  // é a lista que o seletor mostra, e é ela que a gravação confere. Sem esta
+  // guarda, um PATCH à mão gravaria um país cujo documento legal ninguém
+  // revisou, e o PDF de acesso passaria a não citar lei nenhuma — ou, pior,
+  // citaria a brasileira para um titular de outro país.
+  const pais = parsed.data.country ?? null;
+  if (pais !== null && !paisesOferecidos().some((p) => p.codigo === pais)) {
+    return { ok: false, error: `País sem perfil revisado: ${pais}` };
+  }
+
+  /**
+   * A ESCRITA EM `settings` SÓ ACONTECE QUANDO O MODO DE VENDA MUDA — e o
+   * "só" é a peça toda.
+   *
+   * Esta action gravava o jsonb inteiro a cada Salvar: lia `settings`,
+   * espalhava em memória e regravava o objeto. O upstream apagou esse escritor
+   * ao aposentar `lost_reasons_extra`, e com razão medida: entre a leitura e a
+   * gravação, outro dono do jsonb (`llm`, `agenda`, `branding`,
+   * `visibility_mode`) escreve a chave dele e o nosso UPDATE a devolve ao valor
+   * antigo, sem erro em lugar nenhum. `visibility_mode` JÁ voltou de `own` para
+   * `all` assim — e quem lê essa chave é a RLS que decide qual conversa cada
+   * atendente enxerga. Um salvamento de RAZÃO SOCIAL abrindo a caixa de entrada
+   * inteira é exatamente o tipo de defeito que não dá sintoma.
+   * `tests/unit/moeda-da-organizacao-se-escolhe-na-tela.test.ts` guarda isto:
+   * exige que o UPDATE comum NÃO leve a chave `settings`.
+   *
+   * O item C2 (B2B/B2C) mora nesse mesmo jsonb e não tem, ainda, escritor
+   * atômico próprio. Tirá-lo junto deixaria o seletor decorativo: a tela diria
+   * "Organização atualizada" e o modo voltaria para b2b no reload. A saída é
+   * gravar SÓ QUANDO O VALOR MUDA — o caminho de todo dia (salvar dados da
+   * empresa) deixa o jsonb intocado, como o upstream quer, e a corrida fica
+   * restrita às pouquíssimas vezes em que alguém de fato vira a chave.
+   *
+   * ⚠️ PENDÊNCIA: a cura definitiva é uma função com `jsonb_set` sobre
+   * `{modo_de_venda}`, no molde de `fn_definir_marca_da_organizacao`
+   * (migration 0157). Enquanto ela não existe, é este o menor risco possível.
+   */
   const { data: orgRow, error: readErr } = await supabase
     .from("organizations")
     .select("settings")
@@ -63,14 +100,11 @@ export async function updateTenant(input: TenantInput): Promise<UpdateTenantResu
     .maybeSingle();
   if (readErr) return { ok: false, error: readErr.message };
 
-  const currentSettings = (orgRow?.settings as Record<string, unknown> | null) ?? {};
-  const nextSettings = {
-    ...currentSettings,
-    lost_reasons_extra: parsed.data.lost_reasons_extra,
-    // Item C2. Decide se a entidade empresa aparece — aba, campo no cadastro e
-    // a capacidade que faz a IA perguntar de qual empresa o cliente e.
-    modo_de_venda: parsed.data.modo_de_venda,
-  };
+  const settingsAtuais = (orgRow?.settings as Record<string, unknown> | null) ?? {};
+  // Item C2. Decide se a entidade empresa aparece — aba, campo no cadastro e a
+  // capacidade que faz a IA perguntar de qual empresa o cliente e.
+  const modoEscolhido = parsed.data.modo_de_venda;
+  const modoMudou = modoEscolhido !== lerModoDeVenda(settingsAtuais);
 
   const { error } = await supabase
     .from("organizations")
@@ -78,13 +112,15 @@ export async function updateTenant(input: TenantInput): Promise<UpdateTenantResu
       display_name: parsed.data.display_name,
       legal_name: parsed.data.legal_name,
       cnpj: parsed.data.cnpj ?? null,
+      country: pais,
       timezone: parsed.data.timezone,
       locale: parsed.data.locale,
       currency: parsed.data.currency,
       media_retention_days: parsed.data.media_retention_days,
       dpo_email: parsed.data.dpo_email ?? null,
       privacy_policy_url: parsed.data.privacy_policy_url ?? null,
-      settings: nextSettings,
+      // A chave só existe no payload quando o modo mudou — ver o bloco acima.
+      ...(modoMudou ? { settings: { ...settingsAtuais, modo_de_venda: modoEscolhido } } : {}),
     })
     .eq("id", activeOrg.orgId);
   if (error) return { ok: false, error: error.message };

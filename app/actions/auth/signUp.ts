@@ -10,6 +10,8 @@ import {
   type SignupComConviteInput,
 } from "@/lib/auth/schemas";
 import { verifyInviteToken } from "@/lib/auth/invite-token";
+import { criarContaDeConvite, lerConfigPublicaDoGoTrue } from "@/lib/auth/convite-no-gotrue";
+import { modoDeCadastro } from "@/lib/auth/politica-de-cadastro";
 import { audit, hashEmail } from "@/lib/audit";
 import { authRateLimited, AUTH_LIMITS } from "@/lib/auth/rate-limit";
 import { env } from "@/lib/env";
@@ -37,11 +39,23 @@ export type SignUpResult =
   | {
       ok: false;
       /**
+       * `somente_convite`: a instalação está em modo `so_convite` e esta
+       * tentativa não trouxe convite válido. É recusa de POLÍTICA, não de
+       * dado — por isso não vira `validation_error`: a pessoa não tem o que
+       * corrigir no formulário.
+       *
        * `conta_ja_existe`: só acontece COM convite na mão. Sem convite a
        * resposta continua indistinguível de sucesso — ver o parágrafo de
-       * anti-enumeração abaixo.
+       * anti-enumeração abaixo. Os dois convivem sem se confundir: a recusa por
+       * política é decidida ANTES de tocar no GoTrue, então numa instalação
+       * fechada quem chega sem convite nunca chega a saber se o e-mail existe.
        */
-      error: "validation_error" | "rate_limited" | "signup_failed" | "conta_ja_existe";
+      error:
+        | "validation_error"
+        | "rate_limited"
+        | "signup_failed"
+        | "somente_convite"
+        | "conta_ja_existe";
       details?: Record<string, unknown>;
     };
 
@@ -102,6 +116,74 @@ export async function signUp(
       return { ok: false, error: "validation_error", details: { invite: ["email_divergente"] } };
     }
     convite = inviteToken;
+  }
+
+  // ── A AUTORIDADE da política de cadastro ──────────────────────────────────
+  // A tela também recusa, mas a tela é adulterável: esta action é chamável
+  // direto, e sem esta guarda o modo `so_convite` seria decoração. A ordem
+  // importa — só se pergunta a política DEPOIS de o convite ter sido validado
+  // acima, senão um convite legítimo seria barrado.
+  if (convite === null && (await modoDeCadastro()) === "so_convite") {
+    await audit({
+      action: "auth.signup_failed",
+      metadata: { email_hash: hashEmail(parsed.data.email), reason: "somente_convite" },
+      requestId,
+      ip,
+      userAgent,
+    });
+    return { ok: false, error: "somente_convite" };
+  }
+
+  // ── O GoTrue com o cadastro público FECHADO (#1653) ──────────────────────────
+  //
+  // Com `disable_signup` ligado no GoTrue — é o que fecha `POST /auth/v1/signup`
+  // para quem tem a anon key do navegador, o buraco que esta issue abre — o
+  // `supabase.auth.signUp()` de baixo também é recusado, inclusive para quem
+  // TEM convite. Só se entra aqui quando o próprio GoTrue diz que está fechado
+  // (`GET /auth/v1/settings`, público); nos outros casos — instalação aberta e
+  // até `so_convite` que ainda não sincronizou — o caminho de baixo continua
+  // exatamente o de antes.
+  //
+  // A ordem em relação à trava de política acima continua sendo a mesma: sem
+  // convite válido não se chega aqui.
+  if (convite !== null && (await lerConfigPublicaDoGoTrue())?.disable_signup === true) {
+    const criada = await criarContaDeConvite({
+      email: parsed.data.email,
+      password: parsed.data.password,
+      inviteToken: convite,
+      fullName: (parsed.data as SignupComConviteInput).full_name,
+      emailRedirectTo: `${origin}/auth/confirm?type=signup`,
+    });
+
+    if (!criada.ok) {
+      await audit({
+        action: "auth.signup_failed",
+        metadata: {
+          email_hash: hashEmail(parsed.data.email),
+          // Mesmos motivos do caminho de baixo, para a trilha continuar
+          // distinguível sem mapa novo: `conta_ja_existe_com_convite` já é o
+          // vocabulário de quem chega com convite na mão.
+          reason: criada.motivo === "conta_ja_existe" ? "conta_ja_existe_com_convite" : criada.motivo,
+          detalhe: criada.detalhe ?? null,
+          via: "admin_convite",
+        },
+        requestId,
+        ip,
+        userAgent,
+      });
+      if (criada.motivo === "conta_ja_existe") return { ok: false, error: "conta_ja_existe" };
+      if (criada.motivo === "rate_limited") return { ok: false, error: "rate_limited" };
+      return { ok: false, error: "signup_failed" };
+    }
+
+    await audit({
+      action: "auth.signup_requested",
+      metadata: { email_hash: hashEmail(parsed.data.email), via: "admin_convite" },
+      requestId,
+      ip,
+      userAgent,
+    });
+    return { ok: true, sessao_ativa: criada.sessao_ativa };
   }
 
   const supabase = await createClient();

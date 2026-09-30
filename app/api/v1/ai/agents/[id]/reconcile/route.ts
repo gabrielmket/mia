@@ -8,9 +8,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { publishFirstVersion } from "@/lib/ai/agents/first-publication";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { ehProvedorSuportado } from "@/lib/ai/pontos/provedores";
+import { travarIaDaVersaoNova } from "@/lib/ai/trava-da-ia";
 const input = z.object({
   channel_id: z.uuid(),
-  provider: z.string().min(1).max(80),
+  // Só quem CONVERSA: o Jev tem chave cadastrável, mas escolhido como cérebro
+  // do agente todo turno morreria. Antes era qualquer texto, barrado só de
+  // raspão (catálogo sem linha e o credential_provider_mismatch da RPC).
+  provider: z.string().min(1).max(80).refine(ehProvedorSuportado),
   model: z.string().min(1).max(200),
   credential_id: z.uuid().nullable(),
 });
@@ -55,7 +60,22 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       409,
       { requestId },
     );
-  const p = parsed.data,
+  // FORK MIA: o agente legado de quem não escolhe IA vai ao ar com o par da
+  // plataforma e "a chave desta instalação", não com o que veio no corpo — a
+  // primeira publicação só troca provedor e modelo quando há par no painel, e a
+  // chave do corpo passava sempre (lib/ai/trava-da-ia.ts).
+  const travada = await travarIaDaVersaoNova(
+    admin,
+    { user: auth.user, orgId: auth.org.orgId, agenteDeReferencia: null },
+    {
+      provider: parsed.data.provider,
+      model: parsed.data.model,
+      credential_id: parsed.data.credential_id,
+      operator_model: null,
+    },
+  );
+  if (!travada.ok) return fail(travada.erro, travada.mensagem, 422, { requestId });
+  const p = { ...parsed.data, ...travada.corpo },
     result = await publishFirstVersion(
       admin,
       auth.org.orgId,

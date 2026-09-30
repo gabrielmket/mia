@@ -36,8 +36,9 @@ import {
 } from "@/app/api/v1/agenda/agendamentos/_handler";
 import { ApiError } from "@/lib/api/types";
 import { SITUACOES_DO_AGENDAMENTO } from "@/lib/agenda/tipos";
-import type { McpToolDefinition } from "@/lib/mcp/types";
+import type { McpContext, McpToolDefinition } from "@/lib/mcp/types";
 import { emailInformadoSchema, gravarEmailDoContato } from "./email-do-contato";
+import { resolveUserNames } from "./_users";
 
 /** Teto do horizonte pedido — espelha o da rota, e o excesso é erro de chamada. */
 const DIAS_PADRAO = 14;
@@ -158,7 +159,10 @@ const horariosLivresShape = {
     .min(1)
     .max(MAXIMO_DE_DIAS)
     .optional()
-    .describe(`quantos dias olhar a partir de agora (padrão ${DIAS_PADRAO}). Use ESTE campo se você não sabe a data de hoje.`),
+    .describe(
+      `quantos dias olhar a partir de agora (padrão ${DIAS_PADRAO}). Use ESTE campo se você não sabe a data de hoje. ` +
+        `Se 'dia' também for informado, 'dia' tem precedência.`,
+    ),
   /**
    * A data civil é deliberadamente diferente de um ISO com offset. O modelo sabe
    * que o cliente pediu "dia 13", mas não sabe onde começa esse dia no fuso da
@@ -169,7 +173,10 @@ const horariosLivresShape = {
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "dia deve estar em YYYY-MM-DD")
     .optional()
-    .describe("dia civil pedido pelo cliente, em YYYY-MM-DD. Use para uma data específica; o servidor aplica o fuso da agenda."),
+    .describe(
+      "dia civil pedido pelo cliente, em YYYY-MM-DD. Use para uma data específica; o servidor aplica o fuso da agenda " +
+        "(tem precedência sobre dias_a_frente).",
+    ),
   owner_user_id: z.string().uuid().optional(),
   limite: z
     .number()
@@ -184,6 +191,101 @@ const horariosLivresShape = {
 function diaCivilValido(dia: string): boolean {
   const d = new Date(`${dia}T00:00:00.000Z`);
   return !Number.isNaN(d.getTime()) && d.getUTCFullYear() >= 2000 && d.toISOString().slice(0, 10) === dia;
+}
+
+/** O ramo BOM da coleta — o que as DUAS ferramentas de agenda publicam. */
+type ConsultaOk = Extract<Awaited<ReturnType<typeof horariosLivresDaOrg>>, { ok: true }>;
+
+/**
+ * A faixa UTC LARGA que CONTÉM um dia civil em qualquer fuso.
+ *
+ * Existe como função porque as DUAS ferramentas que OLHAM a agenda precisam
+ * perguntar a mesma coisa: o dia que o cliente nomeou, sem converter "13/09" em
+ * meia-noite UTC e perder a noite de Manaus (é isto que `-14h/+38h` cobre).
+ */
+function faixaAmplaDoDia(dia: string): { de: Date; ate: Date } {
+  const inicioDoDiaUtc = new Date(`${dia}T00:00:00.000Z`);
+  return {
+    de: new Date(inicioDoDiaUtc.getTime() - 14 * 60 * 60 * 1000),
+    ate: new Date(inicioDoDiaUtc.getTime() + 38 * 60 * 60 * 1000),
+  };
+}
+
+/** "Seg 01/09 às 14:00" → "14:00": a hora local, na MESMA régua que o modelo fala. */
+function horaLocalDoRotulo(rotulo: string): string {
+  const marca = rotulo.lastIndexOf(" às ");
+  return marca === -1 ? "" : rotulo.slice(marca + 4);
+}
+
+/** "9:00" e "09:00" são a mesma hora — o modelo escreve das duas formas. */
+function normalizarHorario(horario: string): string {
+  const [h = "", m = ""] = horario.split(":");
+  return `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
+}
+
+/**
+ * O que uma resposta de CONSULTA publica — usado por `crm_find_free_slots` E pela
+ * ferramenta que consulta e marca numa chamada só (issue #831).
+ *
+ * Está aqui, e não copiado em cada handler, pela MESMA razão de a coleta ser uma
+ * só: duas cópias divergem, e a divergência apareceria como a IA oferecendo um
+ * horário que `quando`/`fuso_da_regra` desmentem.
+ */
+function payloadDeHorarios(
+  consulta: ConsultaOk,
+  slotsDoPeriodo: ConsultaOk["slots"],
+  limite: number,
+) {
+  // O fuso é o DA REGRA (a jornada do atendente), nunca o da organização: é nele
+  // que os horários foram calculados, e é o que esta resposta já publica.
+  // Rotular com outro faria `quando` discordar de `fuso_da_regra` na mesma
+  // resposta.
+  const escolhidos = espalhaPorDia(slotsDoPeriodo, consulta.fusoDaRegra, limite);
+  return {
+    horarios: escolhidos.map((s) => ({
+      // `inicio` é o que volta em `starts_at` — copie, não reescreva.
+      inicio: s.inicio.toISOString(),
+      fim: s.fim.toISOString(),
+      // `quando` é para FALAR com a pessoa. Um só, e do início: o fim não
+      // responde pergunta nenhuma (a duração é do tipo) e dobraria o custo.
+      quando: rotuloLocal(s.inicio, consulta.fusoDaRegra),
+    })),
+    // Sem estes dois, uma lista cortada é indistinguível de uma agenda que
+    // acabou — o mesmo modo de falha que `publicou_horarios` existe para
+    // evitar.
+    total_de_horarios: slotsDoPeriodo.length,
+    ha_mais: slotsDoPeriodo.length > escolhidos.length,
+    fuso_da_regra: consulta.fusoDaRegra,
+    /** false = o atendente NÃO publicou jornada. Diferente de "sem vaga" (DECISÃO 1.1). */
+    publicou_horarios: consulta.publicouHorarios,
+    /** true = o fuso veio do padrão, ninguém escolheu (DECISÃO 20.2). */
+    fuso_suposto: consulta.fusoSuposto,
+    /** Agendas externas que não estão saudáveis: o horário pode estar defasado. */
+    fontes_defasadas: consulta.fontesDefasadas,
+    /**
+     * NENHUMA conexão viva jamais sincronizou — a lista de ocupados pode estar
+     * vazia porque ninguém perguntou, não porque a agenda está livre.
+     *
+     * O campo existia em `ResultadoDaConsulta` desde sempre e chegava SÓ à rota
+     * REST (`app/api/v1/agenda/horarios-livres`): as duas tools MCP publicavam
+     * `fontes_defasadas` e engoliam este, que é o mais grave dos dois. O próprio
+     * comentário que o declara (lib/agenda/consulta.ts) diz que quem mais precisa
+     * dele é a IA — "um agente que o oferece MARCA por cima da cirurgia e confirma
+     * ao cliente" —, e com a ferramenta conjunta da #831 isso deixou de ser uma
+     * segunda decisão do modelo: virou escrita na mesma chamada.
+     */
+    agenda_externa_nunca_lida: consulta.agendaExternaNuncaLida,
+  };
+}
+
+/** A ressalva de agenda nunca sincronizada, ACRESCENTADA à mensagem da marcação. */
+function comRessalvaDeAgendaNuncaLida(resultado: unknown): string {
+  const original = String((resultado as { mensagem?: unknown } | null)?.mensagem ?? "").trim();
+  const ressalva =
+    "A agenda externa deste atendente nunca foi sincronizada, então pode haver compromisso " +
+    "que não aparece aqui. Diga que separou o horário e que a equipe confirma — não afirme " +
+    "que está confirmado.";
+  return original.length > 0 ? `${original} ${ressalva}` : ressalva;
 }
 
 export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
@@ -221,6 +323,11 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
     // com quatro horários livres naquela tarde. O dia é o pedido mais específico;
     // o período é o campo que o modelo preenche por hábito.
     //
+    // O upstream chegou à MESMA regra por conta própria (#1436: "toleramos e
+    // priorizamos o mais específico (`dia`)"), e as `describe` de `dia` e
+    // `dias_a_frente` que dizem ao modelo que o dia tem precedência são dele. O
+    // que fica só do nosso lado é o tratamento do dia inválido logo abaixo.
+    //
     // Dia que não é data de verdade ("0000-00-00", "0001-01-01", ambos medidos no
     // mesmo turno) passa pela regex mas não é pedido de ninguém: é descartado e a
     // consulta cai no período relativo, que é o caminho padrão.
@@ -240,13 +347,23 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
     // A faixa larga contém o dia civil em QUALQUER fuso. Depois de a coleta
     // revelar o fuso da regra, filtramos pelo mesmo dia local. Assim a IA não
     // converte "13/09" em meia-noite UTC e não perde a noite de Manaus.
-    const inicioDoDiaUtc = dia === undefined ? null : new Date(`${dia}T00:00:00.000Z`);
-    const de =
-      inicioDoDiaUtc === null ? agora : new Date(inicioDoDiaUtc.getTime() - 14 * 60 * 60 * 1000);
+    //
+    // A aritmética é a de `faixaAmplaDoDia`, e é ELA que roda aqui: o helper
+    // nasceu declarando que existe porque "as DUAS ferramentas que OLHAM a
+    // agenda precisam perguntar a mesma coisa" e ficou com um chamador só,
+    // enquanto esta cópia seguia inline — duas fontes para a mesma janela, que
+    // divergem no primeiro ajuste.
+    //
+    // ⚠️ A janela sai de `dia` (o que sobrou depois de `diaCivilValido`), NUNCA
+    // de `input.dia`: um "0000-00-00" que chegasse até aqui viraria uma faixa
+    // UTC sem sentido e a consulta voltaria vazia, como se a agenda estivesse
+    // cheia — que é exatamente o travamento que o descarte acima evita.
+    const janela = dia === undefined ? null : faixaAmplaDoDia(dia);
+    const de = janela === null ? agora : janela.de;
     const ate =
-      inicioDoDiaUtc === null
+      janela === null
         ? new Date(de.getTime() + (diasAFrente ?? DIAS_PADRAO) * 86_400_000)
-        : new Date(inicioDoDiaUtc.getTime() + 38 * 60 * 60 * 1000);
+        : janela.ate;
 
     const consulta = await horariosLivresDaOrg(ctx.supabase, ctx.organizationId, {
       eventTypeSlug: input.event_type_slug,
@@ -276,36 +393,18 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
       dia === undefined
         ? consulta.slots
         : consulta.slots.filter((s) => diaLocalISO(s.inicio, consulta.fusoDaRegra) === dia);
-    const escolhidos = espalhaPorDia(
-      slotsDoPeriodo,
-      consulta.fusoDaRegra,
-      input.limite ?? HORARIOS_PADRAO,
-    );
 
+    // O corpo da resposta é `payloadDeHorarios` — a MESMA forma que a ferramenta
+    // que consulta e marca numa chamada só publica. Montá-lo inline aqui foi o
+    // que fez `agenda_externa_nunca_lida` ficar de fora desta tool sem ninguém
+    // notar: o campo mais grave dos dois chegava à rota REST e não ao modelo.
     return {
-      horarios: escolhidos.map((s) => ({
-        // `inicio` é o que volta em `starts_at` — copie, não reescreva.
-        inicio: s.inicio.toISOString(),
-        fim: s.fim.toISOString(),
-        // `quando` é para FALAR com a pessoa. Um só, e do início: o fim não
-        // responde pergunta nenhuma (a duração é do tipo) e dobraria o custo.
-        quando: rotuloLocal(s.inicio, consulta.fusoDaRegra),
-      })),
-      // Sem estes dois, uma lista cortada é indistinguível de uma agenda que
-      // acabou — o mesmo modo de falha que `publicou_horarios` existe para
-      // evitar.
-      total_de_horarios: slotsDoPeriodo.length,
-      ha_mais: slotsDoPeriodo.length > escolhidos.length,
+      ...payloadDeHorarios(consulta, slotsDoPeriodo, input.limite ?? HORARIOS_PADRAO),
       // Avisa que a data mandada foi descartada e a lista é do período: sem isto
       // o modelo apresentaria os horários como se fossem do dia que ele pediu.
+      // Fica FORA de `payloadDeHorarios` porque é notícia só desta ferramenta —
+      // a outra não aceita dia e período na mesma chamada.
       ...(diaInvalido ? { dia_ignorado: input.dia, periodo_consultado_em_dias: diasAFrente } : {}),
-      fuso_da_regra: consulta.fusoDaRegra,
-      /** false = o atendente NÃO publicou jornada. Diferente de "sem vaga" (DECISÃO 1.1). */
-      publicou_horarios: consulta.publicouHorarios,
-      /** true = o fuso veio do padrão, ninguém escolheu (DECISÃO 20.2). */
-      fuso_suposto: consulta.fusoSuposto,
-      /** Agendas externas que não estão saudáveis: o horário pode estar defasado. */
-      fontes_defasadas: consulta.fontesDefasadas,
     };
   },
 };
@@ -336,7 +435,41 @@ const listarShape = {
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional()
-    .describe("um dia específico, no formato AAAA-MM-DD"),
+    .describe(
+      "um dia civil, no formato AAAA-MM-DD, contado NO FUSO DA ORGANIZAÇÃO — 22h de São Paulo " +
+        "é daquele dia. Para um recorte com hora exata, prefira `de` + `ate`.",
+    ),
+  /**
+   * ⚠️ `de`/`ate` são INSTANTES, e é isso que resolve o fuso na origem: quem
+   * chama calcula os limites no fuso em que está olhando e manda o instante,
+   * sem o servidor precisar adivinhar. Mesma escolha do `GET` da grade
+   * (`app/api/v1/agenda/agendamentos/route.ts`) — duas portas, uma régua.
+   */
+  de: z
+    .string()
+    .datetime({ offset: true })
+    .optional()
+    .describe(
+      "início do PERÍODO, como instante ISO com fuso (ex.: 2026-09-01T00:00:00-03:00). Com " +
+        "`ate`, lista a agenda INTEIRA da organização no intervalo — nenhum outro recorte é " +
+        "preciso. Os dois vêm juntos; a janela aceita no máximo " +
+        `${MAXIMO_DE_DIAS} dias.`,
+    ),
+  ate: z
+    .string()
+    .datetime({ offset: true })
+    .optional()
+    .describe(
+      `fim do PERÍODO, como instante ISO com fuso. Vem sempre junto com \`de\`, e a janela ` +
+        `aceita no máximo ${MAXIMO_DE_DIAS} dias — mais que isso é recusado.`,
+    ),
+  depois_de: z
+    .string()
+    .optional()
+    .describe(
+      "cursor da PRÓXIMA página: é o valor de `proximo` da resposta anterior, passado como " +
+        "está. Só use quando `proximo` vier preenchido; sem cursor, a leitura começa do início.",
+    ),
   owner_user_id: z.string().uuid().optional(),
   /**
    * ⚠️ A constante, NUNCA os literais. `SITUACOES_DO_AGENDAMENTO` é a fonte
@@ -351,10 +484,13 @@ const listarShape = {
 export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
   name: "crm_list_appointments",
   description:
-    "Lista os compromissos com HORA MARCADA de um cliente, ou de um dia da equipe, com a " +
-    "situação de cada um. Informe pelo menos um recorte: contact_id, lead_id, dia ou " +
-    "owner_user_id — sem recorte a chamada é recusada, porque varrer a agenda inteira não " +
-    "responde pergunta nenhuma. " +
+    "Lista os compromissos com HORA MARCADA de um cliente, de um dia da equipe ou de um " +
+    "PERÍODO, com a situação de cada um. Informe pelo menos um recorte: contact_id, lead_id, " +
+    "dia, owner_user_id ou o PAR de+ate — sem recorte a chamada é recusada. O par de+ate é o " +
+    "único que dispensa os outros: com os dois informados a listagem cobre a agenda INTEIRA da " +
+    `organização no intervalo, em janelas de até ${MAXIMO_DE_DIAS} dias (uma semana por chamada ` +
+    "é o que um calendário desenha). A paginação é pelo cursor: quando a resposta trouxer " +
+    "`proximo` preenchido, chame de novo passando-o em `depois_de` até ele vir `null`. " +
     "NÃO CONFUNDA COM `crm_list_followups`, que lista os RETORNOS — as vezes em que nós " +
     "decidimos voltar a falar, sem nada combinado com o cliente. Aqui é o que foi combinado " +
     "COM ele e ocupa o tempo de um atendente. O mesmo cliente pode ter os dois. " +
@@ -371,6 +507,14 @@ export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
       dia: input.dia ?? null,
       ownerUserId: input.owner_user_id ?? null,
       situacao: input.situacao ?? null,
+      // O PERÍODO e o CURSOR passam inteiros — quem define teto, fuso e
+      // continuidade é a regra, não a porta (issue #1744).
+      de: input.de ?? null,
+      ate: input.ate ?? null,
+      depoisDe: input.depois_de ?? null,
+      // O vínculo com o negócio É parte do que um calendário mostra, então esta
+      // porta paga a consulta extra que a grade da tela não paga.
+      comLeadIds: true,
       limite: input.limite ?? 20,
     });
 
@@ -378,6 +522,16 @@ export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
     if (!r.ok) {
       return { compromissos: [], motivo: r.codigo, mensagem: r.motivoParaCliente };
     }
+
+    // O NOME DO RESPONSÁVEL segue a mesma regra de exposição de #1528: sai pelo
+    // helper (`lib/mcp/tools/_users.ts`), que devolve SÓ o `full_name` — nunca
+    // e-mail, telefone ou o `user_metadata` inteiro — e é não-crítico: falha de
+    // lookup devolve `null`, não derruba a leitura. Montar nome à mão aqui seria
+    // uma segunda fonte de verdade sobre quem é uma pessoa.
+    const nomes = await resolveUserNames(
+      ctx.supabase,
+      r.agendamentos.map((a) => a.donoId),
+    );
 
     return {
       compromissos: r.agendamentos.map((a) => ({
@@ -389,9 +543,24 @@ export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
         situacao: a.situacao,
         meet_state: a.meetingState,
         meeting_url: a.meetingState === "ready" ? a.meetingUrl : null,
+        // O RÓTULO DO CONTATO nunca é montado aqui: vem de `nomeDoContato` por
+        // `contatoDoEmbed` (`lib/contacts/rotulo-do-contato.ts`), a mesma decisão
+        // de nome que a tela do produto usa.
+        // `contato_id`/`atendente_id` ficam AO LADO dos objetos: são a forma que
+        // esta ferramenta devolvia antes da #1744, e um integrador que já as lê
+        // não pode passar a receber `undefined` em silêncio.
         contato_id: a.contatoId,
         atendente_id: a.donoId,
+        contato: { id: a.contatoId, nome: a.contatoNome },
+        atendente: {
+          id: a.donoId,
+          nome: a.donoId ? (nomes.get(a.donoId) ?? null) : null,
+        },
+        tipo: a.tipo ?? null,
+        local: a.local ?? { tipo: null, descricao: null },
+        lead_ids: a.leadIds ?? [],
       })),
+      proximo: r.proximo ?? null,
     };
   },
 };
@@ -472,8 +641,9 @@ const marcarShape = {
     .describe(
       "o resumo do que você apurou na conversa, para quem vai atender: o que a pessoa quer, " +
         "o que já tem hoje, o que a incomoda, prazo e orçamento quando ela disse, e o que ficou " +
-        "combinado. Escreva em frases curtas, só o que ela falou — nada de suposição sua. Isto " +
-        "vai para a equipe, não para o cliente.",
+        "combinado. Escreva em frases curtas, só o que ela falou — nada de suposição sua. É " +
+        "anotação INTERNA da equipe. Não aparece no calendário do cliente: vai só para a " +
+        "equipe, nunca para o cliente nem para quem foi convidado.",
     ),
   /**
    * O convidado do Google. O handler e a tela já tinham o campo; a ferramenta
@@ -483,6 +653,16 @@ const marcarShape = {
   guest_email: emailInformadoSchema
     .optional()
     .describe("o e-mail que a pessoa informou para receber o convite da reunião; ela recebe o convite do Google"),
+  description: z
+    .string()
+    .max(2000)
+    .optional()
+    .describe("observação visível no calendário (descrição do compromisso)"),
+  location_details: z
+    .string()
+    .max(300)
+    .optional()
+    .describe("endereço ou local DESTE compromisso. Vazio apaga o que o tipo sugeriu."),
 };
 
 export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
@@ -496,7 +676,10 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
     "lá é decisão interna nossa e o cliente não sabe de nada. " +
     "Chame `crm_find_free_slots` ANTES e use um `starts_at` que veio de lá — marcar em horário que " +
     "não está livre é recusado, e a recusa manda você consultar de novo. " +
-    "SEMPRE preencha `notes` com o resumo do que você apurou: é o que a equipe lê antes de atender.",
+    "SEMPRE preencha `notes` com o resumo do que você apurou: é o que a equipe lê antes de atender. " +
+    "⚠️ Alguns atendimentos exigem que uma pessoa da equipe aprove: nesses, o horário fica " +
+    "RESERVADO e o retorno traz `aguarda_confirmacao: true`. Quando vier assim, NÃO diga que está " +
+    "confirmado — diga que separou o horário e que a equipe confirma.",
   inputSchema: marcarShape,
   category: "write",
   requiresRole: "ai_operator",
@@ -513,7 +696,14 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
       }
       const r = await marcarAgendamentoHandler(
         ctx.supabase,
-        { organization_id: ctx.organizationId, actor: ctx.actor, requestId: ctx.requestId, meetingBooking: ctx.meetingBooking },
+        {
+          organization_id: ctx.organizationId,
+          actor: ctx.actor,
+          requestId: ctx.requestId,
+          meetingBooking: ctx.meetingBooking,
+          ...(ctx.idempotencyKey !== undefined ? { idempotencyKey: ctx.idempotencyKey } : {}),
+          ...(ctx.sourceJobId !== undefined ? { sourceJobId: ctx.sourceJobId } : {}),
+        },
         {
           event_type_id: tipo.id,
           starts_at: input.starts_at,
@@ -522,6 +712,10 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
           ...(input.title ? { title: input.title } : {}),
           ...(input.notes ? { notes: input.notes } : {}),
           ...(input.guest_email ? { guest_email: input.guest_email } : {}),
+          ...(input.description ? { description: input.description } : {}),
+          ...(input.location_details !== undefined
+            ? { location_details: input.location_details }
+            : {}),
         },
       );
       // O e-mail do convite vai para o cadastro SÓ se o contato ainda não tem
@@ -530,13 +724,269 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
       const emailNoCadastro = input.guest_email
         ? (await gravarEmailDoContato(ctx, input.contact_id, input.guest_email, { soSeVazio: true })).gravado
         : undefined;
+      /**
+       * ⚠️ MARCADO NÃO É CONFIRMADO, e o modelo precisa ouvir isso em voz alta.
+       *
+       * Um tipo com `requires_confirmation` nasce `pending`: o horário fica
+       * RESERVADO (some da lista de livres, e outra marcação no mesmo horário é
+       * recusada), mas alguém da equipe ainda precisa dizer sim. É o arranjo de
+       * quem quer que uma pessoa aprove cada atendimento.
+       *
+       * Até aqui, a única pista disso era `status: "pending"` enterrado dentro
+       * de `compromisso` — enquanto a descrição desta tool diz "o cliente conta
+       * com ele" e o bloco de sistema da agenda manda o modelo dizer que está
+       * confirmado depois de marcar. O produto ENSINAVA o modelo a afirmar
+       * "está marcado!" num compromisso que ainda podia ser recusado, e o
+       * cliente ouviria uma confirmação que ninguém deu.
+       *
+       * Os dois "pending" deste retorno são coisas diferentes e coincidem no
+       * nome: `status` é o do compromisso, `meeting_state` é o do link do Meet.
+       * Por isso as mensagens são separadas e nomeadas.
+       */
+      const aguardaConfirmacao = r.status === "pending";
+      const avisos = [
+        aguardaConfirmacao
+          ? "O horário ficou RESERVADO para esta pessoa, e ninguém mais consegue pegá-lo — mas " +
+            "ainda NÃO está confirmado: alguém da equipe precisa aprovar. Não diga que está " +
+            "confirmado, marcado ou garantido. Diga que o horário foi separado e que a equipe " +
+            "confirma."
+          : null,
+        r.meeting_state === "pending"
+          ? "O link ainda está sendo criado. Não invente um link nem afirme que ele já foi enviado."
+          : null,
+      ].filter(Boolean);
+
       return {
         marcado: true,
         compromisso: r,
         ...(emailNoCadastro !== undefined ? { email_no_cadastro: emailNoCadastro } : {}),
-        ...(r.meeting_state === "pending" ? { mensagem: "O compromisso foi marcado; o link ainda está sendo criado. Não invente um link nem afirme que ele já foi enviado." } : {}),
+        // Campo próprio, além da mensagem: um booleano no topo é o que o modelo
+        // enxerga sem precisar interpretar prosa.
+        aguarda_confirmacao: aguardaConfirmacao,
+        ...(avisos.length > 0 ? { mensagem: avisos.join(" ") } : {}),
       };
     }),
+};
+
+/**
+ * O caminho de MARCAÇÃO de quem já TEM a hora na mão — usado pela ferramenta que
+ * só marca (`crm_book_appointment`) e pela que consulta E marca numa chamada só
+ * (`crm_find_and_book_appointment`, issue #831).
+ *
+ * ⚠️ Delega para o handler REGISTRADO de `crm_book_appointment` em vez de repetir
+ * as chamadas: é a MESMA marcação, com a mesma reserva de horário, o mesmo
+ * `aguarda_confirmacao` e a mesma recusa de negócio. Uma segunda implementação
+ * aqui divergiria da primeira na primeira mudança, e o sintoma seria o mesmo
+ * horário marcar de um jeito numa ferramenta e de outro na outra.
+ */
+async function marcarHorario(
+  ctx: McpContext,
+  args: {
+    eventTypeSlug: string;
+    startsAt: string;
+    contactId: string;
+    ownerUserId?: string;
+    title?: string;
+    notes?: string;
+  },
+): Promise<unknown> {
+  return crmBookAppointment.handler(
+    {
+      event_type_slug: args.eventTypeSlug,
+      starts_at: args.startsAt,
+      contact_id: args.contactId,
+      ...(args.ownerUserId !== undefined ? { owner_user_id: args.ownerUserId } : {}),
+      ...(args.title !== undefined ? { title: args.title } : {}),
+      ...(args.notes !== undefined ? { notes: args.notes } : {}),
+    },
+    ctx,
+  );
+}
+
+const consultarEMarcarShape = {
+  event_type_slug: z.string().min(1).describe("o identificador legível do tipo de atendimento"),
+  dia: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "dia deve estar em YYYY-MM-DD")
+    .describe(
+      "o dia CIVIL que o cliente pediu, em YYYY-MM-DD. O servidor aplica o fuso da agenda: " +
+        "nunca some nem subtraia horas para \"corrigir\" o fuso.",
+    ),
+  horario: z
+    .string()
+    .regex(/^\d{1,2}:\d{2}$/, "horario deve estar em HH:mm")
+    .describe(
+      "a HORA LOCAL que o cliente pediu no mesmo dia do campo `dia`, em HH:mm (ex.: \"14:00\"). " +
+        "É a hora que aparece em `quando` na consulta — a mesma do relógio de quem atende.",
+    ),
+  contact_id: z.string().uuid().describe("quem vai ser atendido"),
+  owner_user_id: z.string().uuid().optional(),
+  title: z.string().min(1).max(200).optional(),
+  notes: z.string().max(2000).optional(),
+};
+
+/**
+ * CONSULTA E MARCAÇÃO NUMA CHAMADA SÓ (issue #831).
+ *
+ * O sintoma que esta ferramenta existe para matar: o cliente diz "quinta às 14h",
+ * o modelo chama `crm_find_free_slots`, recebe a lista e encerra o turno achando
+ * que combinou — ninguém marcou nada. Consultar e marcar são a MESMA decisão
+ * quando o cliente já disse dia E hora: separá-las em duas idas ao modelo cria a
+ * chance (e a prática) de parar no meio.
+ *
+ * Duas promessas do contrato:
+ *  1. NADA é marcado sem estar livre — a lista de livres decide, não a palavra do
+ *     modelo. O horário que a ferramenta marca é `inicio` do slot encontrado, não
+ *     o que o modelo digitou.
+ *  2. Recusa NUNCA volta como exceção (e nada fica pela metade): se o horário não
+ *     está livre, a resposta traz `marcado: false` MAIS os horários daquele dia,
+ *     para o modelo oferecer as alternativas reais no mesmo turno em vez de pedir
+ *     outro dia no escuro.
+ */
+export const crmFindAndBookAppointment: McpToolDefinition<typeof consultarEMarcarShape> = {
+  name: "crm_find_and_book_appointment",
+  description:
+    "Confere UM horário e, se estiver livre, MARCA na MESMA chamada. Use quando o cliente " +
+    "JÁ disse o dia E a hora (\"quinta às 14h\", \"amanhã de manhã às 9\") e esse par ainda não " +
+    "foi checado: aqui consulta e marcação são uma decisão só, e é o caminho preferido — " +
+    "encerrar o turno com o horário apenas consultado deixa o cliente sem agendamento. " +
+    "Não use quando o cliente ainda não escolheu hora (aí é `crm_find_free_slots`) nem para " +
+    "voltar a falar com ele depois (é `crm_schedule_followup`). " +
+    "Se o horário NÃO estiver livre, NADA é marcado: a resposta traz `marcado: false` e a lista " +
+    "`horarios` daquele dia — ofereça uma dessas opções ao cliente, não peça outro dia sem " +
+    "mostrar o que existe. " +
+    "O horário marcado é o que a agenda confirmou como livre, então use `inicio`/`quando` do " +
+    "retorno ao falar com a pessoa. " +
+    "⚠️ Alguns atendimentos exigem aprovação da equipe: nesses o retorno traz " +
+    "`aguarda_confirmacao: true` — diga que separou o horário e que a equipe confirma, nunca que " +
+    "está confirmado.",
+  inputSchema: consultarEMarcarShape,
+  category: "write",
+  requiresRole: "ai_operator",
+  requiresScope: "mcp:write",
+  handler: async (input, ctx) => {
+    const agora = new Date();
+    const { de, ate } = faixaAmplaDoDia(input.dia);
+
+    const consulta = await horariosLivresDaOrg(ctx.supabase, ctx.organizationId, {
+      eventTypeSlug: input.event_type_slug,
+      ownerUserId: input.owner_user_id ?? null,
+      de,
+      ate,
+      agora,
+    });
+
+    // A recusa de NEGÓCIO da própria consulta (tipo desconhecido, atendente sem
+    // jornada, agenda ilegível) volta como RESPOSTA: exceção mataria o turno e o
+    // cliente ficaria sem ninguém (`repo-mcp.md` §7.5).
+    if (!consulta.ok) {
+      return {
+        marcado: false,
+        horarios: [],
+        motivo: consulta.codigo,
+        // A face do CLIENTE, nunca a do operador (DECISÃO 20).
+        mensagem: consulta.motivoParaCliente,
+      };
+    }
+
+    const slotsDoDia = consulta.slots.filter(
+      (s) => diaLocalISO(s.inicio, consulta.fusoDaRegra) === input.dia,
+    );
+    const pedido = normalizarHorario(input.horario);
+    // A comparação é entre o RÓTULO que a consulta publica e a hora que o cliente
+    // falou — a mesma régua, o mesmo fuso. Comparar `Date` contra texto, ou usar
+    // o fuso do processo, é o defeito que faria a ferramenta recusar 14:00 numa
+    // agenda que tem 14:00.
+    const achado = slotsDoDia.find(
+      (s) => horaLocalDoRotulo(rotuloLocal(s.inicio, consulta.fusoDaRegra)) === pedido,
+    );
+
+    if (achado === undefined) {
+      return {
+        ...payloadDeHorarios(consulta, slotsDoDia, HORARIOS_PADRAO),
+        marcado: false,
+        motivo: "horario_indisponivel",
+        // O tom importa: o cliente não fez nada errado, e "não está livre" NÃO é
+        // "não existe". A instrução é oferecer o que a agenda tem.
+        mensagem:
+          `${pedido} não está livre em ${input.dia}, e NADA foi marcado. Ofereça ao cliente uma ` +
+          "das opções de `horarios` (é o que a agenda realmente tem nesse dia); se a lista " +
+          "vier vazia, ofereça consultar outro dia com `crm_find_free_slots`.",
+      };
+    }
+
+    const resultado = await marcarHorario(ctx, {
+      eventTypeSlug: input.event_type_slug,
+      // O instante vem do SLOT, não do que o modelo escreveu: é o horário que a
+      // agenda confirmou como livre.
+      startsAt: achado.inicio.toISOString(),
+      contactId: input.contact_id,
+      ...(input.owner_user_id !== undefined ? { ownerUserId: input.owner_user_id } : {}),
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.notes !== undefined ? { notes: input.notes } : {}),
+    });
+
+    const recusado =
+      typeof resultado === "object" &&
+      resultado !== null &&
+      (resultado as { marcado?: unknown }).marcado === false;
+
+    if (recusado) {
+      // A marcação foi recusada depois de o horário estar livre (aprovação
+      // interna, conflito de última hora, erro de negócio). O turno continua, e
+      // a resposta junta a recusa ao que estava livre no dia: é o material que o
+      // modelo precisa para não encerrar a conversa com o cliente na mão.
+      //
+      // ⚠️ A lista vai SEM o horário recusado: ele acabou de ser recusado, e
+      // oferecê-lo de volta ao cliente é o começo de um laço.
+      const payload = payloadDeHorarios(
+        consulta,
+        slotsDoDia.filter((s) => s !== achado),
+        HORARIOS_PADRAO,
+      );
+      // ⚠️ E o ensino só é REESCRITO quando a recusa é o horário que ficou
+      // indisponível e SOBROU opção no dia. O texto de `ENSINO_POR_CODIGO` para
+      // esse código é o da marcação avulsa — "chame `crm_find_free_slots` de
+      // novo" —, que aqui é um laço: a lista do dia já está nesta resposta.
+      //
+      // Reescrever SEMPRE, como uma versão anterior fazia, apagava o ensino
+      // certo das outras recusas: `agenda_disponibilidade_invalida` diz "não
+      // ofereça horários", `agenda_tipo_desativado` diz "pergunte que outro
+      // atendimento serve" — e as duas passavam a mandar oferecer um horário da
+      // lista. E sem opção no dia, consultar outro dia é mesmo o próximo passo.
+      const motivoDaRecusa = (resultado as { motivo?: unknown }).motivo;
+      const ofereceDaLista =
+        motivoDaRecusa === "agenda_horario_indisponivel" && payload.horarios.length > 0;
+      return {
+        ...payload,
+        ...(resultado as Record<string, unknown>),
+        ...(ofereceDaLista
+          ? {
+              mensagem:
+                "esse horário acabou de ficar indisponível e NADA foi marcado. Ofereça ao cliente uma " +
+                "das opções de `horarios` desta mesma resposta — não chame a consulta de novo.",
+            }
+          : {}),
+      };
+    }
+
+    return {
+      ...(resultado as Record<string, unknown>),
+      // O horário que ESTA chamada usou, explícito: o modelo não precisa deduzir
+      // de dentro de `compromisso` o que ele mesmo pediu.
+      inicio: achado.inicio.toISOString(),
+      quando: rotuloLocal(achado.inicio, consulta.fusoDaRegra),
+      agenda_externa_nunca_lida: consulta.agendaExternaNuncaLida,
+      // ⚠️ A ressalva vai JUNTO da confirmação, e concatenada — não por cima. O
+      // texto que `resultado` traz é o da marcação ("marquei tal dia"), e é ele
+      // que o modelo repete ao cliente; sobrescrever perderia o que foi marcado.
+      // Recusar a marcação nesse estado é decisão do dono do produto, não um
+      // ajuste de consistência: hoje a ferramenta marca.
+      ...(consulta.agendaExternaNuncaLida
+        ? { mensagem: comRessalvaDeAgendaNuncaLida(resultado) }
+        : {}),
+    };
+  },
 };
 
 const remarcarShape = {

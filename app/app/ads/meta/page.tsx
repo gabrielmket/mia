@@ -69,7 +69,7 @@ export default async function MetaAdsPage() {
       </header>
 
       {conexao.conectada ? (
-        <MetaAdsClient contaPadrao={conexao.contaPadrao} idioma={idioma} />
+        <MetaAdsClient contaPadrao={conexao.contaPadrao} idioma={idioma} usuarioId={user.id} />
       ) : (
         <div className="rounded-md border p-6 text-sm">
           <p className="font-medium">{t("Nenhuma conta de anúncios conectada.")}</p>

@@ -17,12 +17,13 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { patchFollowupFlowSchema } from "@/lib/followup/api-schemas";
+import { numeroEhDaOrganizacao, numeroEscolhidoDoGatilho } from "@/lib/followup/numero-do-gatilho";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
 
 const DETAIL_COLUMNS =
-  "id, name, status, active_version_id, draft_graph, handoff_policy, trigger_config, created_at, updated_at";
+  "id, name, status, active_version_id, draft_graph, handoff_policy, trigger_config, surface, created_at, updated_at";
 
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -124,6 +125,25 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (!existing) return fail("not_found", t("Fluxo não encontrado."), 404, { requestId });
 
   const patch = parsed.data;
+
+  // FORK MIA — o número da abordagem do gatilho "Lead criado" tem de ser um canal
+  // ativo da organização ATIVA, conferido aqui e nunca aceito do corpo sem isso:
+  // um id de outra empresa faria o gatilho abrir atendimento pelo número alheio
+  // (`lib/followup/numero-do-gatilho.ts`).
+  const numeroDoGatilho = patch.trigger_config ? numeroEscolhidoDoGatilho(patch.trigger_config) : null;
+  if (numeroDoGatilho) {
+    const conferido = await numeroEhDaOrganizacao(supabase, activeOrg.orgId, numeroDoGatilho);
+    if (!conferido.ok) {
+      if (conferido.erro) return fail("internal_error", conferido.erro, 500, { requestId });
+      return fail(
+        "trigger_channel_not_found",
+        t("O número escolhido para o gatilho não é desta empresa ou foi excluído. Escolha outro número."),
+        422,
+        { requestId },
+      );
+    }
+  }
+
   if (Object.keys(patch).length === 0) {
     const { data: unchanged, error: reloadErr } = await supabase
       .from("followup_flow_pointers")
@@ -150,6 +170,16 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (updErr || !updated) {
     if (updErr?.code === "23505") {
       return fail("conflict", t("Já existe um fluxo com este nome."), 409, { requestId });
+    }
+    // O banco recusa gatilho de relógio em roteiro de atendimento (0394,
+    // `followup_flow_pointers_roteiro_so_manual`): ele começa na conversa.
+    if (updErr?.code === "23514") {
+      return fail(
+        "validation_failed",
+        t("Roteiro de atendimento começa por palavra-gatilho ou pelo roteador, não por gatilho de follow-up."),
+        422,
+        { requestId },
+      );
     }
     return fail("internal_error", updErr?.message ?? "followup_flow_update_failed", 500, {
       requestId,

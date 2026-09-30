@@ -30,9 +30,12 @@ import {
 import { PAPEIS, PONTOS_DE_IA, PONTO_POR_ID } from "@/lib/ai/pontos/registro";
 import { PROVEDORES, ehProvedorSuportado } from "@/lib/ai/pontos/provedores";
 import { validarBinding } from "@/lib/ai/pontos/validar-binding";
+import { lerAmbiente } from "@/lib/instalacao/ambiente";
+import { modeloDeTranscricaoEmVigor } from "@/lib/messaging/media/transcription";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { escolheIa, MENSAGEM_IA_DA_PLATAFORMA } from "@/lib/ai/trava-da-ia";
 
 export const dynamic = "force-dynamic";
 
@@ -166,7 +169,17 @@ export async function GET(): Promise<Response> {
       mandadoPeloAgente: agentePublicado !== null && PONTOS_DO_AGENTE_PUBLICADO.has(ponto.id),
       efetivo: {
         provider: decisao.provider,
-        modelId: decisao.modelId,
+        // O ponto fixo de transcrição declara `whisper-1`, mas `TRANSCRIPTION_MODEL`
+        // (o mesmo `.env` do worker) troca o modelo que roda: a tela anuncia o que
+        // roda, pela mesma função que o worker usa.
+        modelId:
+          ponto.id === "transcricao_de_audio"
+            ? modeloDeTranscricaoEmVigor({
+                model: process.env.TRANSCRIPTION_MODEL,
+                apiKey: process.env.TRANSCRIPTION_API_KEY,
+                baseUrl: process.env.TRANSCRIPTION_BASE_URL,
+              })
+            : decisao.modelId,
         credentialId: decisao.credentialId,
         baseUrl: decisao.baseUrl,
         origem: decisao.origem,
@@ -194,9 +207,18 @@ export async function GET(): Promise<Response> {
     // mostrá-lo nem trocá-lo (invariante 6: toda configuração tem superfície).
     padrao: padraoDaOrganizacao,
     provedores: PROVEDORES,
-    credenciais: credsRes.data ?? [],
+    // Só chave de quem CONVERSA. A do Jev contada aqui apagaria o aviso "você
+    // ainda não cadastrou nenhuma chave" com a empresa sem IA para atender, e
+    // nenhum ponto desta tela sabe usá-la.
+    credenciais: (credsRes.data ?? []).filter((c) => ehProvedorSuportado(c.provider)),
+    // Sem chave cadastrada, o aviso só pode dizer "o atendimento usa a chave que
+    // veio na instalação" quando ela existe. A mesma conta de
+    // `app/app/ai/credentials/page.tsx`.
+    instalacaoTemChave: instalacaoTemChaveDeIa(),
     modelos,
-    podeEditar: roleAtLeast(org.role, "admin"),
+    // FORK MIA: provedor e modelo de cada ponto são da plataforma; o painel fica
+    // só de leitura para quem não escolhe IA (lib/ai/trava-da-ia.ts).
+    podeEditar: roleAtLeast(org.role, "admin") && escolheIa(authz.user),
   });
 }
 
@@ -229,6 +251,8 @@ export async function PUT(req: NextRequest): Promise<Response> {
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user, org } = authz;
+  // FORK MIA: provedor, modelo e chave de IA são da plataforma (lib/ai/trava-da-ia.ts).
+  if (!escolheIa(user)) return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403);
 
   const parsed = corpoDoPut.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -371,6 +395,8 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user, org } = authz;
+  // FORK MIA: provedor, modelo e chave de IA são da plataforma (lib/ai/trava-da-ia.ts).
+  if (!escolheIa(user)) return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403);
 
   const parsed = corpoDoPatch.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -389,12 +415,42 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     .eq("provider", corpo.provider)
     .eq("model_id", corpo.default_model)
     .maybeSingle();
+
+  // MAS A CONFERÊNCIA SÓ VALE SE HOUVER CATÁLOGO PARA CONFERIR. `ai_models` é
+  // populada pela sincronização do catálogo; numa instalação recém-feita, ou
+  // numa que não roda scheduler, ela está VAZIA para o provedor escolhido — e o
+  // `404` abaixo recusava todo modelo, inclusive o certo, digitado de dentro da
+  // tela, que é o único caminho que sobra quando o combo está vazio. Era a
+  // segunda porta do mesmo defeito que o `PUT` já tinha resolvido: lá o
+  // `validar-binding.ts` aceita modelo fora do catálogo e devolve
+  // `conhecido: false` como aviso (é o que o `CartaoDoPonto` mostra).
+  //
+  // Então a pergunta muda de "conheço ESTE modelo?" para "conheço algum modelo
+  // deste provedor?": com catálogo presente o `404` continua e segue pegando o
+  // erro de digitação; sem catálogo nenhum, não há o que conferir — a escrita
+  // passa e sai com aviso. Recusar aqui seria inventar uma verificação que esta
+  // instalação não tem como fazer, e travar a tela que existe justamente para
+  // configurar isso.
+  let avisos: string[] = [];
   if (!modelo) {
-    return fail(
-      "modelo_desconhecido",
-      t(`"${corpo.default_model}" não está no catálogo de ${corpo.provider}`),
-      404,
-    );
+    const { data: algumDoProvedor } = await db
+      .from("ai_models")
+      .select("model_id")
+      .eq("provider", corpo.provider)
+      .limit(1)
+      .maybeSingle();
+    if (algumDoProvedor) {
+      return fail(
+        "modelo_desconhecido",
+        t(`"${corpo.default_model}" não está no catálogo de ${corpo.provider}`),
+        404,
+      );
+    }
+    avisos = [
+      t(
+        `o catálogo de ${corpo.provider} ainda não foi sincronizado nesta instalação, então não deu para conferir "${corpo.default_model}" — se o identificador estiver errado, todo ponto que herda o padrão vai falhar.`,
+      ),
+    ];
   }
 
   // ⚠️ CLIENTE ADMIN, E NÃO É ATALHO: a RLS de `organizations` só deixa
@@ -455,5 +511,13 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     metadata: { provider: corpo.provider, default_model: corpo.default_model },
   });
 
-  return ok({ padrao: { provider: corpo.provider, defaultModel: corpo.default_model } });
+  return ok({
+    padrao: { provider: corpo.provider, defaultModel: corpo.default_model },
+    avisos,
+  });
+}
+
+function instalacaoTemChaveDeIa(): boolean {
+  const ambiente = lerAmbiente();
+  return ambiente.gateway || Object.values(ambiente.chavesDeProvedor).some(Boolean);
 }

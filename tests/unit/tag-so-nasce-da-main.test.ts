@@ -79,7 +79,11 @@ describe("a tag nasce no CI, e nunca do GITHUB_TOKEN", () => {
     // não o nome da função — que já mudou uma vez, quando a conferência passou a
     // comparar digest em vez de código de status (issue #488).
     expect(t, "o corte não consulta mais o registro").toMatch(/ghcr\.io\/v2\//);
-    for (const img of ["deskcommcrm", "deskcomm-worker", "deskcomm-scheduler"]) {
+    // FORK: os NOMES são os desta árvore (`mia-*`), os da matriz de
+    // publish-image.yml — o mesmo motivo de packaging-artefato-do-cliente.test.ts.
+    // Com os do upstream a guarda aprovava a sonda ERRADA: o corte perguntava
+    // ao registro por imagens que este dono nunca publica.
+    for (const img of ["mia-crm", "mia-worker", "mia-scheduler", "mia-voice-agent"]) {
       expect(t, `a conferência não cobre ${img}`).toContain(img);
     }
     expect(t).toMatch(/::error::/);

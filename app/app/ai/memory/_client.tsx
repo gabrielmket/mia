@@ -29,6 +29,7 @@ import {
   useOrgMemoryVersion,
   type OrgMemoryState,
   type OrgMemoryVersionMeta,
+  type OrigemDaMemoria,
 } from "@/hooks/ai/useOrgMemory";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -49,6 +50,20 @@ function formatDate(iso: string, idioma: string): string {
 export function OrgMemoryClient({ initialState }: Props) {
   const tagDoIdioma = useTagDeIdioma();
   const t = useT();
+  // TRÊS origens, não duas. Um ternário aqui mandava tudo que não fosse
+  // `flywheel` para o rótulo "manual" — e desde a 0252 existe `agent`, que é a
+  // IA anotando sozinha pela ferramenta MCP. Chamar isso de "manual" é a
+  // mentira que a migration argumenta contra: esta tela mostra POLÍTICA que
+  // todos os agentes obedecem, e quem lê precisa saber se um humano assinou.
+  // Ver `lib/ai/org-memory-source.ts`.
+  //
+  // Exaustivo por tipo: uma origem nova no CHECK sem rótulo aqui para de compilar,
+  // em vez de a tela chamar de "manual" o que a IA anotou.
+  const rotuloDaOrigem: Record<OrigemDaMemoria, string> = {
+    manual: t("manual"),
+    flywheel: t("aprendido automaticamente"),
+    agent: t("anotado pela IA"),
+  };
   const { data } = useOrgMemory(initialState);
   const document = data?.document ?? null;
   const versions = data?.versions ?? [];
@@ -288,24 +303,11 @@ export function OrgMemoryClient({ initialState }: Props) {
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{entry.title}</span>
-                    {/*
-                      TRÊS origens, não duas. O ternário anterior mandava tudo que
-                      não fosse `flywheel` para o rótulo "manual" — e desde a 0252
-                      existe `agent`, que é a IA anotando sozinha pela ferramenta
-                      MCP. Chamar isso de "manual" é a mentira que a migration
-                      argumenta contra: esta tela mostra POLÍTICA que todos os
-                      agentes obedecem, e quem lê precisa saber se um humano
-                      assinou. Ver `lib/ai/org-memory-source.ts`.
-                    */}
                     <Badge
                       variant={entry.source === "manual" ? "neutral" : "info"}
                       className="text-[10px]"
                     >
-                      {entry.source === "flywheel"
-                        ? t("aprendido automaticamente")
-                        : entry.source === "agent"
-                          ? t("anotado pela IA")
-                          : t("manual")}
+                      {rotuloDaOrigem[entry.source]}
                     </Badge>
                     <span className="ml-auto text-xs text-muted-foreground">{formatDate(entry.created_at, tagDoIdioma)}</span>
                   </div>

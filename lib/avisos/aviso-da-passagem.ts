@@ -72,6 +72,8 @@ const MOTIVO_EM_PORTUGUES: Record<string, string> = {
   legal_mention: "menção a assunto jurídico",
   refund_mention: "menção a reembolso",
   orcamento_de_ia: "o teto de gasto com IA foi atingido",
+  // A rede de segurança do Jev (lib/agent-engine/agent/passagem-prometida-no-turno.ts).
+  passagem_prometida: "o assistente disse ao cliente que a equipe vai dar sequência, e ninguém tinha sido avisado",
 };
 
 export function textoDaPassagem(d: DadosDaPassagem): string {

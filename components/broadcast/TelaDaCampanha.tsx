@@ -27,6 +27,29 @@ import { usePaginaDaCampanha } from "@/hooks/useDestinatarios";
 
 const ESTADOS = ["pendente", "enviada", "entregue", "lida", "falhou", "estornada"] as const;
 
+/**
+ * O rótulo de cada estado, um literal por ramo. `t(e)` sobre o valor da
+ * iteração reprova na catraca do upstream (i18n-espanhol-cobre-a-tela, v1.63):
+ * ela não distingue a constante de cima de um dado que o operador digitou, e o
+ * literal em cada ramo é o conserto que ela pede.
+ */
+function rotuloDoEstado(estado: (typeof ESTADOS)[number], t: (texto: string) => string): string {
+  switch (estado) {
+    case "pendente":
+      return t("pendente");
+    case "enviada":
+      return t("enviada");
+    case "entregue":
+      return t("entregue");
+    case "lida":
+      return t("lida");
+    case "falhou":
+      return t("falhou");
+    case "estornada":
+      return t("estornada");
+  }
+}
+
 function tom(estado: string): "default" | "secondary" | "destructive" | "outline" {
   if (estado === "falhou" || estado === "estornada") return "destructive";
   if (estado === "entregue" || estado === "lida") return "default";
@@ -67,7 +90,7 @@ export function TelaDaCampanha({ id }: { id: string }) {
                 setInicio(0);
               }}
             >
-              {n} {t(e)}
+              {n} {rotuloDoEstado(e, t)}
             </Button>
           );
         })}
