@@ -15,8 +15,10 @@ import { flowGraphSchema } from "@/lib/followup/graph-schema";
 import { validateFlowForPublish } from "@/lib/followup/validate-publish";
 
 import { MODELOS_DE_FOLLOWUP, modeloPorId, modelosDoNicho } from "./index";
-import { horizonteDoModeloMs, toquesDoModelo } from "./tipos";
+import { NICHOS_DE_MODELO, horizonteDoModeloMs, toquesDoModelo } from "./tipos";
 import { montarEscada, rotuloDaEspera } from "./escada";
+// FORK MIA
+import { ROTULO_DO_SEGMENTO, SEGMENTO_PADRAO } from "./segmentos";
 
 const ETAPA = "44444444-4444-4444-8444-444444444444";
 const DIA_MS = 86_400_000;
@@ -120,6 +122,130 @@ describe("catálogo de modelos de follow-up", () => {
     const falta = modeloPorId("clinica-falta-remarcar")!;
     expect(horizonteDoModeloMs(cirurgia.grafo)).toBeGreaterThan(60 * DIA_MS);
     expect(horizonteDoModeloMs(falta.grafo)).toBeLessThan(15 * DIA_MS);
+  });
+});
+
+/**
+ * FORK MIA · OS SEGMENTOS.
+ *
+ * O `describe.each` de cima já roda schema, publish, gatilho e ciclo em TODO
+ * modelo do catálogo. O que este bloco acrescenta é o que a galeria por
+ * segmento promete: todo modelo aparece em algum segmento da tela, todo
+ * segmento tem as mesmas quatro jornadas, e o texto dos segmentos da MIA segue
+ * as regras de escrita (sem emoji, sem travessão, sem jargão de saúde fora de
+ * saúde).
+ */
+describe("FORK MIA · modelos por segmento", () => {
+  /** Os segmentos escritos na MIA. "clinica" é do upstream e segue o estilo dele. */
+  const SEGMENTOS_DA_MIA = NICHOS_DE_MODELO.filter((n) => n !== "clinica");
+  const modelosDaMia = MODELOS_DE_FOLLOWUP.filter((m) => m.nicho !== "clinica");
+
+  it("carro e academia decidem em cerca de um mês e meio; os outros segmentos seguem o ritmo longo", () => {
+    const DIA = 86_400_000;
+    const horizonte = (id: string) => horizonteDoModeloMs(modeloPorId(id)!.grafo) / DIA;
+    for (const id of ["automotivo-negociacao", "academia-matricula"]) {
+      expect(horizonte(id), id).toBeGreaterThanOrEqual(30);
+      expect(horizonte(id), id).toBeLessThanOrEqual(45);
+    }
+    for (const id of ["geral-proposta", "imobiliario-proposta", "servicos-b2b-proposta"]) {
+      expect(horizonte(id), id).toBeGreaterThan(60);
+    }
+  });
+
+  /** Tudo o que a pessoa lê: na galeria e no canvas do construtor. */
+  function textosDoModelo(m: (typeof MODELOS_DE_FOLLOWUP)[number]): string[] {
+    const dosNos = m.grafo.nodes.flatMap((n) => [
+      n.label,
+      ...(n.type === "action" && n.config.mode === "text" ? [n.config.body] : []),
+    ]);
+    return [m.nome, m.jornada, m.resumo, m.oQueDispara, ...dosNos];
+  }
+
+  it("o geral é o padrão e vem primeiro, na tela e no catálogo", () => {
+    expect(SEGMENTO_PADRAO).toBe("geral");
+    expect(NICHOS_DE_MODELO[0]).toBe("geral");
+    expect(MODELOS_DE_FOLLOWUP[0]?.nicho).toBe("geral");
+  });
+
+  it("todo modelo aparece em algum segmento da tela, nenhum fica fora da galeria", () => {
+    const naTela = NICHOS_DE_MODELO.flatMap((n) => modelosDoNicho(n)).map((m) => m.id);
+    expect([...naTela].sort()).toEqual(MODELOS_DE_FOLLOWUP.map((m) => m.id).sort());
+  });
+
+  it.each(NICHOS_DE_MODELO.map((n) => [n] as const))(
+    "o segmento %s tem as quatro jornadas: silêncio, etapa, etapa longa e falta",
+    (nicho) => {
+      const modelos = modelosDoNicho(nicho);
+      expect(modelos.map((m) => m.gatilho({ stageId: ETAPA }).kind)).toEqual([
+        "silence",
+        "stage_change",
+        "stage_change",
+        "appointment_no_show",
+      ]);
+      // A "decisão" acompanha por semanas; a "falta", por dias.
+      // Carro e academia usam o ritmo curto (~um mês e meio); os demais, o longo.
+      expect(horizonteDoModeloMs(modelos[2]!.grafo)).toBeGreaterThan(30 * DIA_MS);
+      expect(horizonteDoModeloMs(modelos[3]!.grafo)).toBeLessThan(15 * DIA_MS);
+    },
+  );
+
+  it.each(NICHOS_DE_MODELO.map((n) => [n] as const))(
+    "todo modelo do segmento %s passa no schema e no publish",
+    (nicho) => {
+      for (const modelo of modelosDoNicho(nicho)) {
+        const parsed = flowGraphSchema.safeParse(modelo.grafo);
+        expect([modelo.id, parsed.success ? null : parsed.error.issues]).toEqual([modelo.id, null]);
+        const publicavel = validateFlowForPublish(modelo.grafo);
+        expect([modelo.id, publicavel.ok ? [] : publicavel.errors]).toEqual([modelo.id, []]);
+      }
+    },
+  );
+
+  it("o nome cabe no limite da rota (80), porque é ele que vira o nome do fluxo", () => {
+    const longos = MODELOS_DE_FOLLOWUP.filter((m) => m.nome.length > 80).map((m) => m.nome);
+    expect(longos).toEqual([]);
+  });
+
+  it("todo segmento tem rótulo com espanhol, porque o rótulo chega à tela por chave dinâmica", () => {
+    const semEspanhol = NICHOS_DE_MODELO.map((n) => ROTULO_DO_SEGMENTO[n]).filter(
+      (rotulo) => !DICIONARIO[rotulo]?.es,
+    );
+    expect(semEspanhol).toEqual([]);
+  });
+
+  it("texto da MIA sem emoji e sem travessão", () => {
+    const ofensores = modelosDaMia.flatMap((m) =>
+      textosDoModelo(m)
+        .filter((texto) => /\p{Extended_Pictographic}|[—–]| - /u.test(texto))
+        .map((texto) => `${m.id}: ${texto}`),
+    );
+    expect(ofensores).toEqual([]);
+  });
+
+  it("fora de saúde, nenhum texto fala de paciente, consulta, exame ou clínica", () => {
+    const JARGAO_DE_SAUDE =
+      /\b(paciente|pacientes|consulta|consultas|exame|exames|cirurgia|clínica|médico|médica|tratamento|procedimento|dentista)\b/iu;
+    const ofensores = modelosDaMia.flatMap((m) =>
+      textosDoModelo(m)
+        .filter((texto) => JARGAO_DE_SAUDE.test(texto))
+        .map((texto) => `${m.id}: ${texto}`),
+    );
+    expect(ofensores).toEqual([]);
+  });
+
+  it("todo segmento da MIA tem os seus próprios modelos, não uma cópia do geral", () => {
+    const corposDoGeral = new Set(
+      modelosDoNicho("geral").flatMap((m) =>
+        m.grafo.nodes.flatMap((n) => (n.type === "action" && n.config.mode === "text" ? [n.config.body] : [])),
+      ),
+    );
+    for (const nicho of SEGMENTOS_DA_MIA.filter((n) => n !== "geral")) {
+      const primeiraMensagem = modelosDoNicho(nicho).map((m) => {
+        const no = m.grafo.nodes.find((n) => n.id === "msg-1");
+        return no?.type === "action" && no.config.mode === "text" ? no.config.body : "";
+      });
+      expect([nicho, primeiraMensagem.filter((c) => corposDoGeral.has(c))]).toEqual([nicho, []]);
+    }
   });
 });
 

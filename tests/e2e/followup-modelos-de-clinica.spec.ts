@@ -52,6 +52,11 @@ test.describe("follow-ups · modelos prontos de clínica", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("Modelos prontos")).toBeVisible();
 
+    // FORK MIA: a galeria abre no segmento Geral; os de clínica ficam em
+    // "Saúde e estética" (lib/followup/modelos/segmentos.ts).
+    await expect(dialog.getByTestId("segmento-geral")).toHaveAttribute("aria-pressed", "true");
+    await dialog.getByTestId("segmento-clinica").click();
+
     // As quatro jornadas, com a régua de decisão visível — não só o nome.
     for (const jornada of ["Consulta", "Exame", "Cirurgia", "Falta"]) {
       await expect(dialog.getByText(jornada, { exact: true }).first()).toBeVisible();
@@ -92,6 +97,7 @@ test.describe("follow-ups · modelos prontos de clínica", () => {
 
     // E aparece marcado na galeria, para ninguém instalar o mesmo duas vezes.
     await page.getByRole("button", { name: /Começar de um modelo/i }).click();
+    await page.getByTestId("segmento-clinica").click(); // FORK MIA
     await expect(
       page.getByTestId("modelo-clinica-falta-remarcar").getByText("Já instalado"),
     ).toBeVisible();
@@ -106,6 +112,7 @@ test.describe("follow-ups · modelos prontos de clínica", () => {
     await page.goto("/app/ai/followups");
 
     await page.getByRole("button", { name: /Começar de um modelo/i }).click();
+    await page.getByTestId("segmento-clinica").click(); // FORK MIA
     const cartaoDoExame = page.getByTestId("modelo-clinica-exame-marcar");
 
     // Botão travado enquanto a etapa não foi escolhida: gravar sem ela criaria
