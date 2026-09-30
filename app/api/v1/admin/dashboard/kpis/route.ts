@@ -3,11 +3,6 @@ import { normalizarModoDeOrcamento } from "@/lib/agent-engine/edge/llm/orcamento
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
-import {
-  excluirDemonstracao,
-  idsDasEmpresasDeDemonstracao,
-  SEM_DEMONSTRACAO,
-} from "@/lib/demonstracao/fora-das-metricas";
 
 export type AlertSeverity = "critical" | "warning" | "info";
 export type AlertKind =
@@ -49,15 +44,6 @@ export async function GET(_req: NextRequest) {
 
   const admin = createAdminClient();
 
-  // FORK MIA (cliente modelo, 9010): a empresa de demonstração fica fora dos
-  // números da plataforma — os dados dela são inventados.
-  let demonstracao: string[];
-  try {
-    demonstracao = await idsDasEmpresasDeDemonstracao(admin);
-  } catch (e) {
-    return fail("db_error", (e as Error).message, 500);
-  }
-
   // ── KPI counts in parallel ────────────────────────────────────────────────
   const [
     tenantsRes,
@@ -68,17 +54,13 @@ export async function GET(_req: NextRequest) {
     admin
       .from("organizations")
       .select("*", { count: "exact", head: true })
-      .eq("status", "active")
-      .not(...SEM_DEMONSTRACAO),
+      .eq("status", "active").not("demonstracao", "is", true), // FORK MIA (9010): sem a empresa de demonstração
 
-    excluirDemonstracao(
-      admin
-        .from("conversations")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "pending")
-        .lt("last_inbound_at", new Date(Date.now() - 10 * 60 * 1000).toISOString()),
-      demonstracao,
-    ),
+    admin
+      .from("conversations")
+      .select("*, organizations!inner(demonstracao)", { count: "exact", head: true }) // FORK MIA (9010)
+      .eq("status", "pending").not("organizations.demonstracao", "is", true)
+      .lt("last_inbound_at", new Date(Date.now() - 10 * 60 * 1000).toISOString()),
 
     admin
       .from("channel_sessions")
@@ -172,13 +154,14 @@ export async function GET(_req: NextRequest) {
 
     // Tenant pending overflow: conversations pending count per org > 50
     // Use a raw query via rpc or aggregate in JS
-    excluirDemonstracao(
-      admin
-        .from("conversations")
-        .select("organization_id, organizations!inner(display_name)")
-        .eq("status", "pending"),
-      demonstracao,
-    ).limit(2000),
+    admin
+      .from("conversations")
+      .select("organization_id, organizations!inner(display_name)")
+      .eq("status", "pending")
+      // FORK MIA (cliente modelo, 9010): a empresa de demonstração, com dados
+      // fictícios, fica fora dos números da plataforma.
+      .not("organizations.demonstracao", "is", true)
+      .limit(2000),
   ]);
 
   const alerts: AlertItem[] = [];
