@@ -1,4 +1,4 @@
-# Leads dos formulários da Meta (1.21.0-mia.60, separado por empresa na .61, em tempo real na .62)
+# Leads dos formulários da Meta (1.21.0-mia.60, separado por empresa na .61, em tempo real na .62, Páginas pela conta própria na .64)
 
 Os anúncios de **cadastro instantâneo** da Meta (o formulário que abre dentro do
 Facebook e do Instagram) passam a entregar o lead direto no funil do CRM, do mesmo
@@ -27,6 +27,37 @@ importar, a Página das outras. Da .61 em diante:
 - ao ligar um formulário, a rota confere **na Meta** que ele pertence àquela Página
   (sem isso, o id de um formulário do vizinho colado ao lado da Página certa passaria).
 
+### Com conta própria, a empresa escolhe as Páginas (.64)
+
+Até a .63 só o dono da plataforma atribuía Página, mesmo para a empresa que tinha
+conectado a própria conta da Meta. Da .64 em diante (migration 9008):
+
+- **empresa com conexão própria** (a dela em Configurações › Meta Ads › Contas de
+  anúncio): a aba Formulários de leads mostra o quadro **Páginas desta empresa**, com
+  as Páginas que o token DELA alcança. O administrador marca uma ou várias. Marcar
+  confere na Meta, na hora, que o token alcança a Página e grava o dono com a origem
+  `conta_propria`; desmarcar (com confirmação) solta a Página e desliga os
+  formulários dela com o motivo `pagina_solta`, numa transação só
+  (`fn_mia_soltar_pagina_da_meta`);
+- **Página já ligada a outra empresa**: aparece travada, com "Esta Página já está
+  ligada a outra empresa da plataforma. Fale com o suporte.", sem dizer qual. No
+  banco, um gatilho recusa assumir a Página de outra empresa (e a chave da 9004
+  recusa a segunda linha), venha a escrita de onde vier;
+- **empresa sem conexão própria**: como na .61, só o dono da plataforma atribui;
+- **a conta da agência colada numa empresa não conta como própria**: se o token da
+  empresa for o mesmo da conexão da plataforma, ou de o mesmo usuário do sistema
+  (conferido pelo `me` da Meta), a escolha não abre, porque ele alcança as Páginas
+  de todos os clientes. Sem conseguir conferir, também não abre (falha fechado);
+- a Página que a plataforma atribuiu aparece marcada e travada: quem solta é o
+  suporte;
+- em **/admin › Páginas da Meta** cada dono mostra a origem (atribuída pela
+  plataforma ou assumida pela empresa), e daqui se transfere ou corrige qualquer
+  Página; o que a plataforma grava é sempre da plataforma;
+- os formulários da aba vêm **agrupados por Página**.
+
+Código: `lib/leads-da-meta/autoatendimento.ts` e a rota
+`/api/v1/leads-da-meta/paginas/escolha` (GET, POST, DELETE).
+
 ### De onde vem o token de cada empresa
 
 O token de leitura é o de **Configurações › Meta Ads** (`ad_insights_connections`,
@@ -52,7 +83,9 @@ cada uma (`lib/leads-da-meta/paginas.ts`).
    exatamente qual falta e onde resolver.
 2. Ele vê **as Páginas da empresa** e os formulários de cada uma, marca quais
    importar e para qual **funil e etapa** vai cada um. Sem Página atribuída, a aba
-   diz que a Página é atribuída pela plataforma e nem consulta a Meta.
+   diz que a Página é atribuída pela plataforma e nem consulta a Meta. Com a
+   própria conta da Meta conectada (.64), ele mesmo marca as Páginas no quadro
+   **Páginas desta empresa**.
 3. Liga a chave **"Importar os leads dos formulários"** e escolhe quantos dias para
    trás buscar na primeira leitura (até 90, que é o que a Meta guarda).
 4. Com o **tempo real** ligado (.62), a Meta avisa na hora em que alguém preenche e

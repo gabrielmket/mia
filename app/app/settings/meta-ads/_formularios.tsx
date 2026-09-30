@@ -11,6 +11,12 @@
  * (migration 9004), atribuída pela plataforma. Sem Página atribuída, a aba diz
  * isso e nem consulta a Meta.
  *
+ * .64 — COM CONTA PRÓPRIA, A EMPRESA ESCOLHE. Quem conectou a própria conta da
+ * Meta (aba Contas de anúncio) vê as Páginas que essa conta alcança e marca uma
+ * ou várias (migration 9008, `lib/leads-da-meta/autoatendimento.ts`). Página
+ * de outra empresa aparece travada, sem dizer de qual. Quem lê pela conexão da
+ * plataforma continua como na .61. Os formulários vêm agrupados por Página.
+ *
  * Quatro quadros, na ordem em que quem configura pela primeira vez precisa deles:
  *
  *   1. a CHAVE da empresa (ligar, dias de recuperação, "Ler agora");
@@ -25,6 +31,16 @@
  */
 import { useState } from "react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,11 +53,14 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
+  useAssumirPagina,
   useDiagnosticoDaMeta,
+  useEscolhaDasPaginas,
   useEstadoDosLeadsDaMeta,
   useLerLeadsDaMetaAgora,
   useSalvarConfigDosLeadsDaMeta,
   useSalvarFormularioDaMeta,
+  useSoltarPagina,
   type ConfigDosLeadsDaMeta,
   type FormularioEscolhido,
   type LeituraDoHistorico,
@@ -57,10 +76,13 @@ import {
   sugestaoPelasPerguntas,
   type PapelDoCampo,
 } from "@/lib/leads-da-meta/campos-do-formulario";
+import type { PaginaParaEscolher } from "@/lib/leads-da-meta/autoatendimento";
 import type { Diagnostico, PaginaDiagnosticada } from "@/lib/leads-da-meta/diagnostico";
 import {
+  MENSAGEM_DO_MODO_DA_PLATAFORMA,
   MENSAGEM_DO_MOTIVO,
   MENSAGEM_DO_TEMPO_REAL,
+  PAGINA_JA_LIGADA_A_OUTRA_EMPRESA,
   TEMPO_REAL_LIGADO,
   TEMPO_REAL_PENDENTE,
 } from "@/lib/leads-da-meta/mensagens";
@@ -123,19 +145,27 @@ export function LeadsDaMetaClient() {
     );
   }
 
+  // .64: com a própria conta da Meta conectada, a empresa escolhe as Páginas.
+  const contaPropria = dados.origem_da_conexao === "propria";
+
   // .61: a Página vem antes do token. Sem Página desta empresa não há o que
   // importar, tenha o token que tiver, e mandar colar token seria a pista errada.
+  // .64: com conta própria, a pista certa é a escolha, e ela vem no lugar.
   if (dados.paginas.length === 0) {
     return (
       <div className="flex max-w-5xl flex-col gap-6">
-        <div className="rounded-md border p-6 text-sm">
-          <p className="font-medium">{t("Nenhuma Página da Meta é desta empresa ainda.")}</p>
-          <p className="mt-1 text-muted-foreground">
-            {t(
-              "Cada Página da Meta é de uma empresa só, e quem define de qual empresa é cada Página é quem administra a plataforma. Peça ao suporte para atribuir a Página desta empresa; depois disso os formulários dela aparecem aqui.",
-            )}
-          </p>
-        </div>
+        {contaPropria ? (
+          <QuadroDaEscolhaDasPaginas semPaginaAinda />
+        ) : (
+          <div className="rounded-md border p-6 text-sm">
+            <p className="font-medium">{t("Nenhuma Página da Meta é desta empresa ainda.")}</p>
+            <p className="mt-1 text-muted-foreground">
+              {t(
+                "Cada Página da Meta é de uma empresa só, e quem define de qual empresa é cada Página é quem administra a plataforma. Peça ao suporte para atribuir a Página desta empresa; depois disso os formulários dela aparecem aqui.",
+              )}
+            </p>
+          </div>
+        )}
         <FormulariosDeOutraEmpresa escolhidos={dados.formularios} paginas={[]} />
       </div>
     );
@@ -165,6 +195,7 @@ export function LeadsDaMetaClient() {
   return (
     <div className="flex max-w-5xl flex-col gap-6">
       <QuadroDaChave config={dados.config} temFormularioAtivo={temFormularioAtivo} />
+      {contaPropria && <QuadroDaEscolhaDasPaginas semPaginaAinda={false} />}
       <QuadroDePermissoes
         diagnostico={diagnostico.data?.data ?? null}
         carregando={diagnostico.isFetching}
@@ -275,6 +306,178 @@ function QuadroDaChave({
         )}
       </p>
     </section>
+  );
+}
+
+// ─── 1b. a escolha das Páginas pela conta própria (.64) ─────────────────────
+
+/**
+ * As Páginas que a conta da Meta desta empresa alcança, para marcar e desmarcar.
+ * Marcar assume a Página (conferida na Meta pela rota); desmarcar solta, depois
+ * de confirmar, porque desliga os formulários dela. Página de outra empresa fica
+ * travada com a frase do suporte, e a Página atribuída pela plataforma também.
+ */
+function QuadroDaEscolhaDasPaginas({ semPaginaAinda }: { semPaginaAinda: boolean }) {
+  const t = useT();
+  const escolha = useEscolhaDasPaginas(true);
+  const assumir = useAssumirPagina();
+  const soltar = useSoltarPagina();
+  const [aSoltar, setASoltar] = useState<PaginaParaEscolher | null>(null);
+  const dados = escolha.data?.data ?? null;
+  const ocupado = assumir.isPending || soltar.isPending;
+
+  return (
+    <section
+      className="flex flex-col gap-3 rounded-md border p-4"
+      aria-labelledby="titulo-escolha-das-paginas"
+      data-testid="escolha-das-paginas"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="titulo-escolha-das-paginas" className="text-base font-semibold">
+          {t("Páginas desta empresa")}
+        </h2>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void escolha.refetch()}
+          disabled={escolha.isFetching}
+        >
+          {escolha.isFetching ? t("Conferindo…") : t("Conferir de novo")}
+        </Button>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {t(
+          "Marque as Páginas da Meta de onde esta empresa importa os formulários. Aparecem as Páginas que a conta da Meta conectada aqui alcança; pode ser uma ou várias.",
+        )}
+      </p>
+
+      {escolha.isLoading && (
+        <p className="text-sm text-muted-foreground">{t("Lendo as Páginas na Meta…")}</p>
+      )}
+      {Boolean(escolha.error) && (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {mensagemDeErro(escolha.error, t)}
+        </p>
+      )}
+
+      {dados?.modo === "plataforma" && dados.motivo && (
+        <p className="text-sm">{t(MENSAGEM_DO_MODO_DA_PLATAFORMA[dados.motivo]!)}</p>
+      )}
+
+      {dados?.erro && (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {t(MENSAGEM_DO_MOTIVO[dados.erro.falha] ?? "Não consegui carregar agora.")}
+        </p>
+      )}
+
+      {dados?.modo === "conta_propria" && !dados.erro && dados.paginas.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          {t(
+            "A conta da Meta conectada não alcança nenhuma Página. No Gerenciador de Negócios, dê ao usuário do token acesso à Página (Usuários do sistema › Atribuir ativos › Páginas).",
+          )}
+        </p>
+      )}
+
+      {dados?.modo === "conta_propria" && dados.paginas.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {dados.paginas.map((pagina) => (
+            <LinhaDaEscolha
+              key={pagina.id}
+              pagina={pagina}
+              ocupado={ocupado}
+              aoMarcar={() => assumir.mutate(pagina.id)}
+              aoDesmarcar={() => setASoltar(pagina)}
+            />
+          ))}
+        </ul>
+      )}
+
+      {semPaginaAinda && dados?.modo === "conta_propria" && dados.paginas.length > 0 && (
+        <p className="text-sm text-muted-foreground">
+          {t("Marque uma Página para os formulários dela aparecerem aqui.")}
+        </p>
+      )}
+
+      <AlertDialog open={aSoltar !== null} onOpenChange={(aberto) => !aberto && setASoltar(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("Desmarcar esta Página?")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="block font-medium text-foreground">{aSoltar?.nome}</span>
+              {t(
+                "Os formulários desta Página param de ser importados agora. Para voltar, marque a Página de novo e ligue os formulários.",
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (aSoltar) soltar.mutate(aSoltar.id);
+                setASoltar(null);
+              }}
+            >
+              {t("Desmarcar")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </section>
+  );
+}
+
+function LinhaDaEscolha({
+  pagina,
+  ocupado,
+  aoMarcar,
+  aoDesmarcar,
+}: {
+  pagina: PaginaParaEscolher;
+  ocupado: boolean;
+  aoMarcar: () => void;
+  aoDesmarcar: () => void;
+}) {
+  const t = useT();
+  const id = `escolha-${pagina.id}`;
+  const marcada = pagina.estado === "desta_empresa";
+  // Só a Página livre se marca, e só a que a própria empresa assumiu se desmarca.
+  const travada =
+    pagina.estado === "de_outra_empresa" ||
+    (marcada && pagina.origem !== "conta_propria") ||
+    (!marcada && !pagina.alcancada);
+
+  return (
+    <li className="flex items-start gap-3 rounded-md border p-3">
+      <input
+        id={id}
+        type="checkbox"
+        className="mt-1 h-4 w-4 cursor-pointer disabled:cursor-not-allowed"
+        checked={marcada}
+        disabled={travada || ocupado}
+        onChange={(e) => (e.target.checked ? aoMarcar() : aoDesmarcar())}
+      />
+      <div className="flex flex-col gap-0.5">
+        <label htmlFor={id} className="cursor-pointer font-medium">
+          {pagina.nome}
+        </label>
+        <span className="text-xs text-muted-foreground">{pagina.id}</span>
+        {pagina.estado === "de_outra_empresa" && (
+          <span className="text-sm text-amber-700 dark:text-amber-400">
+            {t(PAGINA_JA_LIGADA_A_OUTRA_EMPRESA)}
+          </span>
+        )}
+        {marcada && pagina.origem === "plataforma" && (
+          <span className="text-sm text-muted-foreground">
+            {t("Atribuída pela plataforma. Para desmarcar, fale com o suporte.")}
+          </span>
+        )}
+        {marcada && pagina.origem !== "plataforma" && !pagina.alcancada && (
+          <span className="text-sm text-muted-foreground">
+            {t("A conta da Meta desta empresa não alcança mais esta Página.")}
+          </span>
+        )}
+      </div>
+    </li>
   );
 }
 
@@ -450,9 +653,24 @@ function BlocoDaPagina({
   porForm: Map<string, FormularioEscolhido>;
 }) {
   const t = useT();
+  // .64: um grupo por Página, com a borda e o título dela: com várias Páginas,
+  // cada formulário fica debaixo da Página de onde vem.
+  const tituloId = `pagina-${pagina.id}`;
   return (
-    <div className="flex flex-col gap-2">
-      <h3 className="text-sm font-medium">{pagina.nome}</h3>
+    <section
+      className="flex flex-col gap-2 rounded-md border bg-muted/20 p-3"
+      aria-labelledby={tituloId}
+      data-testid={`grupo-da-pagina-${pagina.id}`}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 id={tituloId} className="text-sm font-semibold">
+          {pagina.nome}
+        </h3>
+        <span className="text-xs text-muted-foreground">
+          {pagina.formularios.length}{" "}
+          {pagina.formularios.length === 1 ? t("formulário") : t("formulários")}
+        </span>
+      </div>
       {pagina.erro && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {t(MENSAGEM_DO_MOTIVO[pagina.erro] ?? "Não consegui carregar agora.")}
@@ -471,7 +689,7 @@ function BlocoDaPagina({
           escolhido={porForm.get(formulario.id) ?? null}
         />
       ))}
-    </div>
+    </section>
   );
 }
 
@@ -772,18 +990,36 @@ function FormulariosDeOutraEmpresa({
   const daEmpresa = new Set(paginas.map((p) => p.page_id));
   const alheios = escolhidos.filter((f) => !daEmpresa.has(f.page_id));
   if (alheios.length === 0) return null;
+  // .64: a Página que a própria empresa desmarcou (9008) não é "de outra
+  // empresa", e a frase diz como voltar a importar.
+  const desmarcados = alheios.filter((f) => f.ultimo_motivo === "pagina_solta");
+  const deOutra = alheios.filter((f) => f.ultimo_motivo !== "pagina_solta");
+  const lista = (forms: FormularioEscolhido[]) => (
+    <ul className="mt-1 list-disc pl-5">
+      {forms.map((f) => (
+        <li key={f.id}>
+          {f.form_name ?? f.form_id} ({f.page_name ?? f.page_id})
+        </li>
+      ))}
+    </ul>
+  );
   return (
-    <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-      <p className="font-medium">{t("Formulários de Páginas que não são desta empresa:")}</p>
-      <ul className="mt-1 list-disc pl-5">
-        {alheios.map((f) => (
-          <li key={f.id}>
-            {f.form_name ?? f.form_id} ({f.page_name ?? f.page_id})
-          </li>
-        ))}
-      </ul>
-      <p className="mt-1">{t(MENSAGEM_DO_MOTIVO.pagina_nao_e_da_empresa!)}</p>
-    </div>
+    <>
+      {desmarcados.length > 0 && (
+        <div className="rounded-md border p-3 text-sm">
+          <p className="font-medium">{t("Formulários de Páginas desmarcadas por esta empresa:")}</p>
+          {lista(desmarcados)}
+          <p className="mt-1 text-muted-foreground">{t(MENSAGEM_DO_MOTIVO.pagina_solta!)}</p>
+        </div>
+      )}
+      {deOutra.length > 0 && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          <p className="font-medium">{t("Formulários de Páginas que não são desta empresa:")}</p>
+          {lista(deOutra)}
+          <p className="mt-1">{t(MENSAGEM_DO_MOTIVO.pagina_nao_e_da_empresa!)}</p>
+        </div>
+      )}
+    </>
   );
 }
 

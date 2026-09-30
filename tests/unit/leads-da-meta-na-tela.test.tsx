@@ -18,7 +18,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LeadsDaMetaClient } from "@/app/app/settings/meta-ads/_formularios";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 
-const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), put: vi.fn() }));
+const api = vi.hoisted(() => ({
+  get: vi.fn(),
+  post: vi.fn(),
+  patch: vi.fn(),
+  put: vi.fn(),
+  delete: vi.fn(),
+}));
 vi.mock("@/lib/api/client", () => ({ apiClient: api }));
 vi.mock("@/components/feedback/ApiErrorToast", () => ({ showApiError: vi.fn() }));
 
@@ -107,10 +113,26 @@ const DIAGNOSTICO = {
   },
 };
 
-function responderGet(estadoAtual: unknown) {
+/** .64: a escolha das Páginas pela conta própria (9008). */
+const ESCOLHA = {
+  data: {
+    modo: "conta_propria",
+    motivo: null,
+    erro: null,
+    paginas: [
+      { id: "p1", nome: "Clínica Sorriso", estado: "desta_empresa", origem: "conta_propria", alcancada: true },
+      { id: "p2", nome: "Página sem acesso", estado: "desta_empresa", origem: "plataforma", alcancada: true },
+      { id: "p3", nome: "Clínica Norte", estado: "livre", origem: null, alcancada: true },
+      { id: "p9", nome: "Página do vizinho", estado: "de_outra_empresa", origem: null, alcancada: true },
+    ],
+  },
+};
+
+function responderGet(estadoAtual: unknown, escolha: unknown = ESCOLHA) {
   api.get.mockImplementation(async (caminho: string) => {
     if (caminho === "/api/v1/leads-da-meta") return estadoAtual;
     if (caminho === "/api/v1/leads-da-meta/paginas") return DIAGNOSTICO;
+    if (caminho === "/api/v1/leads-da-meta/paginas/escolha") return escolha;
     if (caminho === "/api/v1/pipelines")
       return { data: [{ id: "funil-1", name: "Comercial", is_default: true }] };
     if (caminho.startsWith("/api/v1/pipelines/"))
@@ -155,10 +177,16 @@ describe("sem token conectado", () => {
 
 describe("sem Página atribuída à empresa (.61)", () => {
   it("diz que a Página é atribuída pela plataforma, e a Meta nem é consultada", async () => {
-    responderGet(estado({ paginas: [], formularios: [] }));
+    // .64: é o caso de quem lê pela conexão da PLATAFORMA; com conta própria, a
+    // escolha vem no lugar (describe da .64 abaixo).
+    responderGet(estado({ paginas: [], formularios: [], origem_da_conexao: "plataforma" }));
     abrir();
     expect(await screen.findByText("Nenhuma Página da Meta é desta empresa ainda.")).toBeTruthy();
     expect(api.get).not.toHaveBeenCalledWith("/api/v1/leads-da-meta/paginas", expect.anything());
+    expect(api.get).not.toHaveBeenCalledWith(
+      "/api/v1/leads-da-meta/paginas/escolha",
+      expect.anything(),
+    );
     // Sem Página, a pista não é colar token.
     expect(screen.queryByText("Nenhum token de anúncios conectado.")).toBeNull();
   });
@@ -344,5 +372,115 @@ describe("tempo real e perguntas do formulário (.62)", () => {
     expect(screen.getByText("O automático usa: Celular (DDD + número)")).toBeTruthy();
     expect(screen.getByText("O automático usa: Nome completo")).toBeTruthy();
     expect(screen.getByText("O automático não reconheceu nenhuma pergunta.")).toBeTruthy();
+  });
+});
+
+describe(".64 — com conta própria, a empresa escolhe as Páginas (9008)", () => {
+  it("⭐ sem Página ainda: a escolha vem no lugar do recado do suporte", async () => {
+    responderGet(estado({ paginas: [], formularios: [] }));
+    abrir();
+    const quadro = await screen.findByTestId("escolha-das-paginas");
+    expect(within(quadro).getByText("Páginas desta empresa")).toBeTruthy();
+    expect(screen.queryByText("Nenhuma Página da Meta é desta empresa ainda.")).toBeNull();
+    expect(await within(quadro).findByLabelText("Clínica Norte")).toBeTruthy();
+  });
+
+  it("⭐ a Página de outra empresa aparece travada, com a frase do suporte e sem dizer qual", async () => {
+    responderGet(estado({ paginas: [], formularios: [] }));
+    abrir();
+    const vizinha = (await screen.findByLabelText("Página do vizinho")) as HTMLInputElement;
+    expect(vizinha.disabled).toBe(true);
+    expect(vizinha.checked).toBe(false);
+    expect(
+      screen.getByText(
+        "Esta Página já está ligada a outra empresa da plataforma. Fale com o suporte.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("marcar uma Página livre pede para assumi-la", async () => {
+    responderGet(estado({ paginas: [], formularios: [] }));
+    api.post.mockResolvedValue({ data: { page_id: "p3" } });
+    abrir();
+    await userEvent.setup().click(await screen.findByLabelText("Clínica Norte"));
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/api/v1/leads-da-meta/paginas/escolha",
+        { page_id: "p3" },
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("desmarcar pede confirmação, e só então solta", async () => {
+    responderGet(estado());
+    api.delete.mockResolvedValue({ data: { page_id: "p1", formularios_desligados: 1 } });
+    abrir();
+    const user = userEvent.setup();
+    const quadro = await screen.findByTestId("escolha-das-paginas");
+    await user.click(await within(quadro).findByLabelText("Clínica Sorriso"));
+    expect(api.delete).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole("button", { name: "Desmarcar" }));
+    await waitFor(() =>
+      expect(api.delete).toHaveBeenCalledWith("/api/v1/leads-da-meta/paginas/escolha?page_id=p1"),
+    );
+  });
+
+  it("a Página atribuída pela plataforma fica marcada e travada", async () => {
+    responderGet(estado());
+    abrir();
+    const quadro = await screen.findByTestId("escolha-das-paginas");
+    const daPlataforma = (await within(quadro).findByLabelText(
+      "Página sem acesso",
+    )) as HTMLInputElement;
+    expect(daPlataforma.checked).toBe(true);
+    expect(daPlataforma.disabled).toBe(true);
+    expect(
+      within(quadro).getByText("Atribuída pela plataforma. Para desmarcar, fale com o suporte."),
+    ).toBeTruthy();
+  });
+
+  it("a conta da agência colada: a tela diz por que a escolha não abre", async () => {
+    responderGet(estado({ paginas: [], formularios: [] }), {
+      data: { modo: "plataforma", motivo: "conta_da_plataforma", erro: null, paginas: [] },
+    });
+    abrir();
+    expect(
+      await screen.findByText(/A conta da Meta conectada nesta empresa é a mesma da plataforma/),
+    ).toBeTruthy();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
+  it("⭐ com várias Páginas, os formulários vêm agrupados debaixo de cada uma", async () => {
+    responderGet(estado());
+    abrir();
+    const grupo1 = await screen.findByTestId("grupo-da-pagina-p1");
+    expect(within(grupo1).getByRole("heading", { name: "Clínica Sorriso" })).toBeTruthy();
+    expect(within(grupo1).getByText("Avaliação grátis")).toBeTruthy();
+    const grupo2 = screen.getByTestId("grupo-da-pagina-p2");
+    expect(within(grupo2).getByRole("heading", { name: "Página sem acesso" })).toBeTruthy();
+    expect(within(grupo2).queryByText("Avaliação grátis")).toBeNull();
+  });
+
+  it("o formulário da Página desmarcada diz como voltar, sem acusar outra empresa", async () => {
+    responderGet(
+      estado({
+        paginas: [{ page_id: "p1", page_name: "Clínica Sorriso" }],
+        formularios: [
+          {
+            ...FORMULARIO_ESCOLHIDO,
+            page_id: "p7",
+            page_name: "Página desmarcada",
+            ativo: false,
+            ultimo_motivo: "pagina_solta",
+          },
+        ],
+      }),
+    );
+    abrir();
+    expect(
+      await screen.findByText("Formulários de Páginas desmarcadas por esta empresa:"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Formulários de Páginas que não são desta empresa:")).toBeNull();
   });
 });

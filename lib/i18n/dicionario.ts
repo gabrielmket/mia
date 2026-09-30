@@ -10655,10 +10655,6 @@ export const DICIONARIO: Traducoes = {
   "Não consegui carregar as Páginas da Meta agora.": {
     es: "No pude cargar las Páginas de Meta ahora.",
   },
-  "Cada Página da Meta é de uma empresa só. A empresa vê e importa os formulários apenas das Páginas atribuídas a ela aqui; Página sem dono não aparece para nenhuma empresa.":
-    {
-      es: "Cada Página de Meta es de una sola empresa. La empresa ve e importa los formularios solo de las Páginas asignadas a ella aquí; una Página sin dueño no aparece para ninguna empresa.",
-    },
   "Conexão da plataforma": { es: "Conexión de la plataforma" },
   "O token de Meta Ads desta empresa lê as Páginas atribuídas a quem não tem token próprio, e só elas. Normalmente é a empresa da agência.":
     {
@@ -10760,6 +10756,60 @@ export const DICIONARIO: Traducoes = {
   "Os leads da Meta pararam de chegar": { es: "Los leads de Meta dejaron de llegar" },
   "A leitura deste formulário na Meta está falhando.": {
     es: "La lectura de este formulario en Meta está fallando.",
+  },
+  // FORK MIA (.64) — a empresa com conta própria da Meta escolhe as Páginas dela
+  // (migration 9008, lib/leads-da-meta/autoatendimento.ts).
+  "Páginas desta empresa": { es: "Páginas de esta empresa" },
+  "Marque as Páginas da Meta de onde esta empresa importa os formulários. Aparecem as Páginas que a conta da Meta conectada aqui alcança; pode ser uma ou várias.":
+    {
+      es: "Marca las Páginas de Meta de donde esta empresa importa los formularios. Aparecen las Páginas que alcanza la cuenta de Meta conectada aquí; puede ser una o varias.",
+    },
+  "Esta empresa lê as Páginas pela conexão da plataforma. Quem define de qual empresa é cada Página é quem administra a plataforma; para escolher as Páginas aqui, conecte a conta da Meta desta empresa na aba Contas de anúncio.":
+    {
+      es: "Esta empresa lee las Páginas con la conexión de la plataforma. Quien define de qué empresa es cada Página es quien administra la plataforma; para elegir las Páginas aquí, conecta la cuenta de Meta de esta empresa en la pestaña Cuentas publicitarias.",
+    },
+  "A conta da Meta conectada nesta empresa é a mesma da plataforma, que alcança as Páginas de outras empresas. Por isso quem define as Páginas desta empresa é o suporte. Para escolher aqui, conecte a conta da Meta da própria empresa.":
+    {
+      es: "La cuenta de Meta conectada en esta empresa es la misma de la plataforma, que alcanza las Páginas de otras empresas. Por eso quien define las Páginas de esta empresa es el soporte. Para elegir aquí, conecta la cuenta de Meta de la propia empresa.",
+    },
+  "A conta da Meta conectada não alcança nenhuma Página. No Gerenciador de Negócios, dê ao usuário do token acesso à Página (Usuários do sistema › Atribuir ativos › Páginas).":
+    {
+      es: "La cuenta de Meta conectada no alcanza ninguna Página. En el Administrador comercial, da al usuario del token acceso a la Página (Usuarios del sistema › Asignar activos › Páginas).",
+    },
+  "Marque uma Página para os formulários dela aparecerem aqui.": {
+    es: "Marca una Página para que sus formularios aparezcan aquí.",
+  },
+  "Desmarcar esta Página?": { es: "¿Desmarcar esta Página?" },
+  "Os formulários desta Página param de ser importados agora. Para voltar, marque a Página de novo e ligue os formulários.":
+    {
+      es: "Los formularios de esta Página dejan de importarse ahora. Para volver, marca la Página de nuevo y activa los formularios.",
+    },
+  "Esta Página já está ligada a outra empresa da plataforma. Fale com o suporte.": {
+    es: "Esta Página ya está vinculada a otra empresa de la plataforma. Habla con el soporte.",
+  },
+  "Atribuída pela plataforma. Para desmarcar, fale com o suporte.": {
+    es: "Asignada por la plataforma. Para desmarcarla, habla con el soporte.",
+  },
+  "A conta da Meta desta empresa não alcança mais esta Página.": {
+    es: "La cuenta de Meta de esta empresa ya no alcanza esta Página.",
+  },
+  formulário: { es: "formulario" },
+  formulários: { es: "formularios" },
+  "Formulários de Páginas desmarcadas por esta empresa:": {
+    es: "Formularios de Páginas desmarcadas por esta empresa:",
+  },
+  "Esta Página foi desmarcada por esta empresa, e a importação dos formulários dela foi desligada. Para voltar a importar, marque a Página de novo e ligue os formulários.":
+    {
+      es: "Esta Página fue desmarcada por esta empresa, y la importación de sus formularios se desactivó. Para volver a importar, marca la Página de nuevo y activa los formularios.",
+    },
+  "Cada Página da Meta é de uma empresa só, e a empresa vê e importa os formulários apenas das Páginas dela. Quem lê pela conexão da plataforma recebe as Páginas atribuídas aqui; a empresa com a própria conta da Meta conectada também marca as Páginas que essa conta alcança. Daqui se transfere ou corrige qualquer Página.":
+    {
+      es: "Cada Página de Meta es de una sola empresa, y la empresa ve e importa los formularios solo de sus Páginas. Quien lee con la conexión de la plataforma recibe las Páginas asignadas aquí; la empresa con su propia cuenta de Meta conectada también marca las Páginas que esa cuenta alcanza. Desde aquí se transfiere o corrige cualquier Página.",
+    },
+  "assumida pela empresa": { es: "tomada por la empresa" },
+  "atribuída pela plataforma": { es: "asignada por la plataforma" },
+  "lida pela conta da Meta da própria empresa": {
+    es: "leída con la cuenta de Meta de la propia empresa",
   },
   // FORK MIA — ordem por coluna e filtro "só com impressão" na tabela de campanhas.
   "Só campanhas com impressão": { es: "Solo campañas con impresiones" },

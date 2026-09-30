@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { apiClient } from "@/lib/api/client";
+import type { EscolhaDasPaginas } from "@/lib/leads-da-meta/autoatendimento";
 import type { Diagnostico } from "@/lib/leads-da-meta/diagnostico";
 import type { MotivoDaLeitura, StatusDaLeitura } from "@/lib/leads-da-meta/motivos";
 
@@ -73,10 +74,12 @@ export interface LeituraDoHistorico {
   repeticoes: number;
 }
 
-/** FORK MIA (.61): uma Página que a plataforma atribuiu a esta empresa (9004). */
+/** FORK MIA (.61): uma Página desta empresa (9004). */
 export interface PaginaDaEmpresa {
   page_id: string;
   page_name: string | null;
+  /** .64 (9008): atribuída pela plataforma ou assumida pela própria empresa. */
+  origem?: "plataforma" | "conta_propria" | null;
 }
 
 export interface EstadoDosLeadsDaMeta {
@@ -100,6 +103,7 @@ export interface ResultadoDaLeituraAgora {
 
 const CHAVE_ESTADO = ["leads-da-meta", "estado"] as const;
 const CHAVE_DIAGNOSTICO = ["leads-da-meta", "diagnostico"] as const;
+const CHAVE_ESCOLHA = ["leads-da-meta", "escolha-das-paginas"] as const;
 
 export function useEstadoDosLeadsDaMeta() {
   return useQuery({
@@ -183,5 +187,60 @@ export function useLerLeadsDaMetaAgora() {
       ),
     onError: showApiError,
     onSettled: () => void qc.invalidateQueries({ queryKey: CHAVE_ESTADO }),
+  });
+}
+
+// ─── FORK MIA (.64) — a empresa com conta própria escolhe as Páginas (9008) ─
+
+/**
+ * As Páginas que a conta da Meta DESTA empresa alcança, cada uma com o estado.
+ * Consulta a Meta: mesma frequência do diagnóstico (só ao abrir e depois de
+ * cada mudança), e `retry: false` pelo mesmo motivo.
+ */
+export function useEscolhaDasPaginas(enabled: boolean) {
+  return useQuery({
+    queryKey: CHAVE_ESCOLHA,
+    queryFn: async () =>
+      apiClient.get<{ data: EscolhaDasPaginas }>("/api/v1/leads-da-meta/paginas/escolha", {
+        timeoutMs: 60_000,
+      }),
+    enabled,
+    staleTime: 5 * 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/** Depois de assumir ou soltar, tudo o que depende das Páginas da empresa relê. */
+function releDepoisDaEscolha(qc: ReturnType<typeof useQueryClient>) {
+  void qc.invalidateQueries({ queryKey: CHAVE_ESCOLHA });
+  void qc.invalidateQueries({ queryKey: CHAVE_ESTADO });
+  void qc.invalidateQueries({ queryKey: CHAVE_DIAGNOSTICO });
+}
+
+export function useAssumirPagina() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (pageId: string) =>
+      apiClient.post<{ data: { page_id: string; page_name?: string } }>(
+        "/api/v1/leads-da-meta/paginas/escolha",
+        { page_id: pageId },
+        // Confere a Página na Meta antes de gravar.
+        { timeoutMs: 45_000 },
+      ),
+    onError: showApiError,
+    onSettled: () => releDepoisDaEscolha(qc),
+  });
+}
+
+export function useSoltarPagina() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (pageId: string) =>
+      apiClient.delete<{ data: { page_id: string; formularios_desligados: number } }>(
+        `/api/v1/leads-da-meta/paginas/escolha?page_id=${encodeURIComponent(pageId)}`,
+      ),
+    onError: showApiError,
+    onSettled: () => releDepoisDaEscolha(qc),
   });
 }

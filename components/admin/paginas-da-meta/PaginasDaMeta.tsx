@@ -16,6 +16,11 @@
  * ⚠️ A atribuição é DELIBERADAMENTE manual, pela mesma razão do cadastro
  * incorporado: nada na resposta da Meta diz de qual cliente nosso é a Página, e
  * errar põe os leads de um cliente no funil de outro.
+ *
+ * .64 (migration 9008): a empresa com a própria conta da Meta também assume as
+ * Páginas que a conta dela alcança. Cada dono mostra a ORIGEM (atribuída pela
+ * plataforma ou assumida pela empresa), e daqui se transfere ou corrige
+ * qualquer uma — o que a plataforma grava é sempre da plataforma.
  */
 import { useState } from "react";
 
@@ -76,7 +81,7 @@ export function PaginasDaMeta() {
         <h1 className="text-2xl font-semibold tracking-tight">{t("Páginas da Meta")}</h1>
         <p className="mt-1 max-w-3xl text-sm text-text-muted">
           {t(
-            "Cada Página da Meta é de uma empresa só. A empresa vê e importa os formulários apenas das Páginas atribuídas a ela aqui; Página sem dono não aparece para nenhuma empresa.",
+            "Cada Página da Meta é de uma empresa só, e a empresa vê e importa os formulários apenas das Páginas dela. Quem lê pela conexão da plataforma recebe as Páginas atribuídas aqui; a empresa com a própria conta da Meta conectada também marca as Páginas que essa conta alcança. Daqui se transfere ou corrige qualquer Página.",
           )}
         </p>
       </div>
@@ -192,7 +197,14 @@ function LinhaDaPagina({
         <p className="text-xs text-text-muted">
           {pagina.id}
           {pagina.organizacao && <> · {pagina.organizacao}</>}
-          {!pagina.alcancada && <> · {t("o token não alcança mais esta Página")}</>}
+          {pagina.origem === "conta_propria" && <> · {t("assumida pela empresa")}</>}
+          {pagina.origem === "plataforma" && <> · {t("atribuída pela plataforma")}</>}
+          {!pagina.alcancada &&
+            (pagina.origem === "conta_propria" ? (
+              <> · {t("lida pela conta da Meta da própria empresa")}</>
+            ) : (
+              <> · {t("o token não alcança mais esta Página")}</>
+            ))}
         </p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">

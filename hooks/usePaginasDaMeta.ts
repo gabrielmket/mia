@@ -19,6 +19,8 @@ export interface PaginaNoPainel {
   organizacao: string | null;
   /** A conexão da plataforma alcança esta Página hoje? */
   alcancada: boolean;
+  /** .64 (9008): atribuída pela plataforma ou assumida pela empresa. `null` = sem dono. */
+  origem: "plataforma" | "conta_propria" | null;
 }
 
 export interface EstadoDasPaginasDaMeta {
