@@ -24,6 +24,12 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 
+import {
+  avaliarBackup,
+  FUNCAO_DO_ESTADO_DO_BACKUP,
+  type LeituraDoBackup,
+  type LinhaDoEstadoDoBackup,
+} from "@/lib/backup/estado-do-backup";
 import { env } from "@/lib/env";
 import { alvoDe, classificarFalhaDeAlcance, type FalhaDeAlcance } from "@/lib/net/alcance";
 import { validarConfigRedisRest } from "@/lib/redis-config";
@@ -372,12 +378,59 @@ async function lerCarimboDoSchema(): Promise<LinhaDoCarimbo> {
   }
 }
 
+/**
+ * FORK MIA (.62) — o backup diário do banco está em dia?
+ *
+ * Lido pela função `fn_mia_estado_do_backup()` (migration 9006), e não pela
+ * tabela: `operacao.backup` não é do app e carrega o texto de erro de cada
+ * falha. A função devolve só a situação e duas datas, e a regra de `em_dia`
+ * mora em `lib/backup/estado-do-backup.ts` (a mesma que o vigia interno usa).
+ *
+ * Mesmo caminho do carimbo: `fetch` cru no PostgREST do SERVIDOR, com o
+ * `service_role` (o único papel com EXECUTE na função) e o mesmo teto de tempo.
+ * GET porque a função é `stable`, e com `Accept-Profile: public` pela mesma
+ * razão do ping do banco — o schema default do projeto pode não ser `public`.
+ *
+ * Nada aqui derruba a saúde: sem a função, sem a tabela ou com a leitura
+ * falhando, o bloco diz `desconhecido` e o motivo, e o `status` da rota não
+ * muda. Backup atrasado não impede o produto de atender; o alarme é de quem
+ * monitora (o n8n lê `backup.em_dia`) e do vigia interno.
+ */
+async function lerEstadoDoBackup(): Promise<LeituraDoBackup> {
+  const url = urlDoSupabaseNoServidor(env.SUPABASE_SERVER_URL, env.NEXT_PUBLIC_SUPABASE_URL);
+  const chave = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !chave) return { falha: "nao_configurado" };
+  try {
+    const res = await withTimeout(
+      fetch(`${url}/rest/v1/rpc/${FUNCAO_DO_ESTADO_DO_BACKUP}`, {
+        headers: { apikey: chave, Authorization: `Bearer ${chave}`, "Accept-Profile": "public" },
+        cache: "no-store",
+      }),
+    );
+    // 404 é o PostgREST dizendo que a função não existe (PGRST202): o baseline
+    // da 9006 não passou. Diferente de "não consegui perguntar".
+    if (res.status === 404) return { falha: "sem_funcao" };
+    if (!res.ok) return { falha: "falha_de_leitura" };
+    const linhas = (await res.json()) as unknown;
+    const linha = Array.isArray(linhas) ? (linhas[0] as LinhaDoEstadoDoBackup | undefined) : undefined;
+    if (!linha || typeof linha.situacao !== "string") return { falha: "falha_de_leitura" };
+    return {
+      situacao: linha.situacao,
+      ultima_copia_em: linha.ultima_copia_em ?? null,
+      enviada_em: linha.enviada_em ?? null,
+    };
+  } catch {
+    return { falha: "falha_de_leitura" };
+  }
+}
+
 export async function GET(req: NextRequest) {
-  const [supabase, redis, waha, carimbo] = await Promise.all([
+  const [supabase, redis, waha, carimbo, backup] = await Promise.all([
     checkSupabase(),
     checkRedis(),
     checkWaha(),
     lerCarimboDoSchema(),
+    lerEstadoDoBackup(),
   ]);
 
   const verboso = req.nextUrl.searchParams.get("verbose") === "1" && segredoInternoConfere(req);
@@ -423,6 +476,10 @@ export async function GET(req: NextRequest) {
             ? lido
             : { em_dia: lido.em_dia, erros: lido.erros };
         })(),
+        // FORK MIA (.62). Igual com e sem o segredo: datas e códigos, nenhum
+        // texto de erro do backup (esse fica em `operacao.backup.detalhe`, que
+        // a função da 9006 não devolve). `em_dia: null` = desconhecido.
+        backup: avaliarBackup(backup, new Date()),
         timestamp: new Date().toISOString(),
         checks,
       },

@@ -65,11 +65,12 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 
-import { PROVIDERS_QUE_ENTREGAM_EM_GRUPO } from "@/lib/channels/capabilities";
+import { CHANNEL_PROVIDER_META, PROVIDERS_QUE_ENTREGAM_EM_GRUPO } from "@/lib/channels/capabilities";
 import { CHANNEL_SESSION_REF_COLUMNS } from "@/lib/channels/session-ref";
 
 import { GET } from "./route";
 import { PUT as PUT_GRUPO } from "./grupo/route";
+import { PUT as PUT_ORIGEM } from "./origem/route";
 
 const ULTRA = "65073c33-7aeb-45bd-8db1-10cea3fa8968";
 const TIME = "aaaaaaaa-0000-4000-8000-00000000000a";
@@ -184,5 +185,190 @@ describe("número de avisos: escolher o grupo da empresa pelo nome", () => {
         grupo_de_avisos: { id: G1, nome: "Ultra Sorriso · Comercial" },
       },
     });
+  });
+});
+
+/**
+ * FORK MIA (.62) — O NÚMERO DA PRÓPRIA EMPRESA, na tela.
+ *
+ * A tela é onde "não troca calado" termina: o envio registra o desvio no
+ * histórico de cada negócio, mas quem opera olha aqui. Então a situação de cada
+ * empresa tem de sair da MESMA decisão do envio, e dizer o número caído, a
+ * reserva, e os grupos do número EM USO (que, no modo empresa, não são os da
+ * plataforma).
+ */
+const NUMERO_DA_ULTRA = "eeeeeeee-0000-4000-8000-00000000000e";
+const REF_DA_ULTRA = "numero-da-ultra";
+const DA_ULTRA = (status: string) => ({
+  ...MARCADA,
+  ...Object.fromEntries(CHANNEL_SESSION_REF_COLUMNS.split(",").map((c) => [c.trim(), REF_DA_ULTRA])),
+  provider: PROVIDERS_QUE_ENTREGAM_EM_GRUPO[0],
+  id: NUMERO_DA_ULTRA,
+  organization_id: ULTRA,
+  display_name: "Comercial Ultra",
+  status,
+  e_numero_de_avisos: false,
+});
+
+type EmpresaNaTela = {
+  id: string;
+  origem: { modo: string; channel_session_id?: string | null; reserva_da_plataforma?: boolean };
+  numeros: Array<{ id: string }>;
+  numero_escolhido: { id: string; status: string } | null;
+  situacao: { via: string | null; motivo: string | null; reserva: string | null };
+  grupos_do_numero: {
+    grupos: Array<{ id: string; nome: string }>;
+    indisponiveis: boolean;
+    motivo: string | null;
+  } | null;
+  reserva_no_grupo: boolean | null;
+};
+
+function ultraCom(origem: unknown) {
+  return {
+    id: ULTRA,
+    display_name: "Ultra Sorriso",
+    settings: { grupo_de_avisos: { id: G1, nome: "Ultra · Comercial" }, numero_de_avisos: origem },
+  };
+}
+
+async function empresaUltra(): Promise<EmpresaNaTela> {
+  const { data } = (await (await GET()).json()) as { data: { empresas: EmpresaNaTela[] } };
+  return data.empresas.find((e) => e.id === ULTRA)!;
+}
+
+describe("número de avisos: a empresa com o PRÓPRIO número", () => {
+  it("⭐ número de pé: a situação diz 'empresa' e os grupos são os DO NÚMERO DELA", async () => {
+    estado.tabelas.channel_sessions = [MARCADA, DA_ULTRA("WORKING")];
+    estado.tabelas.organizations = [
+      ultraCom({ modo: "empresa", channel_session_id: NUMERO_DA_ULTRA, reserva_da_plataforma: false }),
+    ];
+    estado.listGroups = async (input) =>
+      input.sessionRef === REF_DA_ULTRA
+        ? [{ chatId: G1, subject: "Ultra · Comercial" }]
+        : [{ chatId: G2, subject: "Grupo só da plataforma" }];
+
+    const e = await empresaUltra();
+    expect(e.situacao).toEqual({ via: "empresa", motivo: null, reserva: null });
+    expect(e.numeros.map((n) => n.id), "o número conectado da empresa não aparece para escolher").toEqual([
+      NUMERO_DA_ULTRA,
+    ]);
+    expect(
+      e.grupos_do_numero?.grupos,
+      "a tela ofereceu os grupos da PLATAFORMA para uma empresa que manda pelo próprio número",
+    ).toEqual([{ id: G1, nome: "Ultra · Comercial" }]);
+    expect(estado.sessionRefs).toContain(REF_DA_ULTRA);
+  });
+
+  it("⭐ número CAÍDO sem reserva: a tela diz que os avisos NÃO estão saindo, e por quê", async () => {
+    estado.tabelas.channel_sessions = [MARCADA, DA_ULTRA("FAILED")];
+    estado.tabelas.organizations = [
+      ultraCom({ modo: "empresa", channel_session_id: NUMERO_DA_ULTRA, reserva_da_plataforma: false }),
+    ];
+    estado.listGroups = async () => [];
+
+    const e = await empresaUltra();
+    expect(e.situacao).toEqual({ via: null, motivo: "numero_da_empresa_fora_do_ar", reserva: "desligada" });
+    expect(e.numero_escolhido, "o número caído sumiu da tela, e o seletor diria 'plataforma'").toMatchObject({
+      id: NUMERO_DA_ULTRA,
+      status: "FAILED",
+    });
+    expect(e.numeros, "número caído oferecido como escolha nova").toEqual([]);
+    expect(e.grupos_do_numero).toMatchObject({ indisponiveis: true, motivo: "desconectado" });
+    expect(estado.sessionRefs, "a tela perguntou os grupos a um número que já se sabe caído").not.toContain(
+      REF_DA_ULTRA,
+    );
+  });
+
+  it("⭐ número CAÍDO com reserva: a tela diz que saem pela plataforma, e se ela está no grupo", async () => {
+    estado.tabelas.channel_sessions = [MARCADA, DA_ULTRA("SCAN_QR_CODE")];
+    estado.tabelas.organizations = [
+      ultraCom({ modo: "empresa", channel_session_id: NUMERO_DA_ULTRA, reserva_da_plataforma: true }),
+    ];
+    // A plataforma NÃO está no G1: a reserva mandaria para um grupo de que ela não participa.
+    estado.listGroups = async () => [{ chatId: G2, subject: "Outro grupo" }];
+
+    const e = await empresaUltra();
+    expect(e.situacao).toEqual({ via: "reserva", motivo: "numero_da_empresa_fora_do_ar", reserva: null });
+    expect(e.reserva_no_grupo, "a tela prometeu uma reserva que não chega ao grupo").toBe(false);
+  });
+
+  it("sem escolha nenhuma, a linha é a de sempre: plataforma, sem grupos próprios", async () => {
+    estado.tabelas.organizations = [{ id: TIME, display_name: "Time Company", settings: {} }];
+    estado.listGroups = async () => [];
+    const { data } = (await (await GET()).json()) as { data: { empresas: EmpresaNaTela[] } };
+    expect(data.empresas[0]).toMatchObject({
+      origem: { modo: "plataforma" },
+      situacao: { via: "plataforma" },
+      grupos_do_numero: null,
+      reserva_no_grupo: null,
+    });
+  });
+});
+
+describe("número de avisos: gravar a escolha do número da empresa", () => {
+  const pedir = (corpo: unknown) =>
+    PUT_ORIGEM(
+      new NextRequest("http://x/api/v1/admin/numero-de-avisos/origem", {
+        method: "PUT",
+        body: JSON.stringify(corpo),
+      }),
+    );
+  const gravado = () => estado.atualizacoes.find((a) => a.tabela === "organizations")?.valores;
+
+  it("⭐ grava o número da empresa com a reserva, sem apagar o resto do settings", async () => {
+    estado.tabelas.channel_sessions = [DA_ULTRA("WORKING")];
+    const origem = { modo: "empresa", channel_session_id: NUMERO_DA_ULTRA, reserva_da_plataforma: true };
+    const res = await pedir({ organization_id: ULTRA, origem });
+    expect(res.status).toBe(200);
+    expect(gravado()).toEqual({ settings: { routing: { modo: "rodizio" }, numero_de_avisos: origem } });
+  });
+
+  it("voltar para a plataforma APAGA a escolha (ausência é o padrão)", async () => {
+    estado.tabelas.organizations = [
+      ultraCom({ modo: "empresa", channel_session_id: NUMERO_DA_ULTRA, reserva_da_plataforma: false }),
+    ];
+    const res = await pedir({ organization_id: ULTRA, origem: { modo: "plataforma" } });
+    expect(res.status).toBe(200);
+    expect(gravado()).toEqual({ settings: { grupo_de_avisos: { id: G1, nome: "Ultra · Comercial" } } });
+  });
+
+  it("RECUSA número de OUTRA empresa", async () => {
+    estado.tabelas.channel_sessions = [{ ...DA_ULTRA("WORKING"), organization_id: TIME }];
+    const res = await pedir({
+      organization_id: ULTRA,
+      origem: { modo: "empresa", channel_session_id: NUMERO_DA_ULTRA, reserva_da_plataforma: false },
+    });
+    expect(res.status, "o aviso da Ultra sairia pelo telefone de outro cliente").toBe(422);
+    expect(gravado()).toBeUndefined();
+  });
+
+  it("RECUSA número que não entrega em grupo (a API oficial)", async () => {
+    estado.tabelas.channel_sessions = [
+      { ...DA_ULTRA("WORKING"), provider: CHANNEL_PROVIDER_META, meta_phone_number_id: "123" },
+    ];
+    const res = await pedir({
+      organization_id: ULTRA,
+      origem: { modo: "empresa", channel_session_id: NUMERO_DA_ULTRA, reserva_da_plataforma: false },
+    });
+    expect(res.status, "a escolha ficaria salva e o aviso morreria num 4xx").toBe(422);
+  });
+
+  it("RECUSA trocar para um número desconectado, mas deixa mexer na reserva do que já está escolhido", async () => {
+    estado.tabelas.channel_sessions = [DA_ULTRA("FAILED")];
+    const novo = await pedir({
+      organization_id: ULTRA,
+      origem: { modo: "empresa", channel_session_id: NUMERO_DA_ULTRA, reserva_da_plataforma: false },
+    });
+    expect(novo.status).toBe(422);
+
+    estado.tabelas.organizations = [
+      ultraCom({ modo: "empresa", channel_session_id: NUMERO_DA_ULTRA, reserva_da_plataforma: false }),
+    ];
+    const reserva = await pedir({
+      organization_id: ULTRA,
+      origem: { modo: "empresa", channel_session_id: NUMERO_DA_ULTRA, reserva_da_plataforma: true },
+    });
+    expect(reserva.status, "com o número caído, não deu para ligar a reserva, justo quando ela importa").toBe(200);
   });
 });

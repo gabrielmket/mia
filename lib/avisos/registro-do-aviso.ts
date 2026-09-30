@@ -40,6 +40,8 @@ import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import { resolveActiveLeadForContact, type LeadCandidate } from "@/lib/leads/active-lead";
 import { logger } from "@/lib/logger";
 
+import type { ProblemaDoNumeroDaEmpresa, SituacaoDaReserva, ViaDoAviso } from "./origem-do-aviso";
+
 /** A ficha como o template a enxerga: `{{nota.headline}}`, `{{nota.body}}`. */
 export interface FichaDoContato {
   headline: string;
@@ -125,11 +127,23 @@ const MOTIVO_EM_PORTUGUES: Record<string, string> = {
   canal_nao_encontrado: "o número configurado na regra não existe mais",
   canal_sem_grupo: "o número configurado na regra não entrega em grupo",
   missing_config: "a regra está sem o texto do aviso",
+  // FORK MIA (.62) — o número que a EMPRESA escolheu para os avisos
+  // (`lib/avisos/origem-do-aviso.ts`).
+  numero_da_empresa_sumiu: "o número desta empresa escolhido para os avisos não existe mais",
+  numero_da_empresa_nao_entrega_em_grupo:
+    "o número desta empresa escolhido para os avisos não entrega em grupo",
+  numero_da_empresa_fora_do_ar: "o número desta empresa escolhido para os avisos está fora do ar",
 };
 
 export function motivoDoAvisoEmPortugues(erro: string): string {
   return MOTIVO_EM_PORTUGUES[erro] ?? "o WhatsApp recusou o envio";
 }
+
+/** O complemento que diz o que aconteceu com a reserva, quando ela se aplica. */
+const RESERVA_EM_PORTUGUES: Record<Exclude<SituacaoDaReserva, null>, string> = {
+  desligada: "e a reserva pelo número da plataforma está desligada",
+  indisponivel: "e a reserva (o número da plataforma) também não está disponível",
+};
 
 export interface AvisoParaRegistrar {
   organizationId: string;
@@ -146,6 +160,15 @@ export interface AvisoParaRegistrar {
   erro?: string;
   externalId?: string | null;
   ficha: "usada" | "ausente" | "nao_pedida";
+  /**
+   * FORK MIA (.62) — por qual número saiu (`reserva` = era para ser o da
+   * empresa). Ausente no caminho explícito da regra, que escolhe o canal à mão.
+   */
+  via?: ViaDoAviso;
+  /** Com `via: "reserva"`: o que derrubou o número da empresa. */
+  desvio?: ProblemaDoNumeroDaEmpresa | null;
+  /** Na falha pelo número da empresa: o que aconteceu com a reserva. */
+  reserva?: SituacaoDaReserva;
 }
 
 /** Grava a linha na timeline do negócio. `true` = gravou. */
@@ -154,9 +177,17 @@ export async function registrarAvisoNoHistorico(
   a: AvisoParaRegistrar,
 ): Promise<boolean> {
   const grupo = a.grupo ? `«${a.grupo}»` : null;
+  // O desvio para a reserva NÃO é calado: a linha diz que saiu por outro número
+  // e por quê. É a diferença entre "o time recebeu" e "o time recebeu, e o
+  // número da empresa está fora do ar desde ontem".
+  const pelaReserva =
+    a.via === "reserva" && a.desvio
+      ? `, pelo número da plataforma (reserva): ${motivoDoAvisoEmPortugues(a.desvio)}`
+      : "";
+  const reserva = a.reserva ? `, ${RESERVA_EM_PORTUGUES[a.reserva]}` : "";
   const reason = a.ok
-    ? `Aviso enviado ao grupo ${grupo ?? "do time"} pela regra «${a.ruleName}».`
-    : `O aviso da regra «${a.ruleName}» não saiu: ${motivoDoAvisoEmPortugues(a.erro ?? "")}.`;
+    ? `Aviso enviado ao grupo ${grupo ?? "do time"} pela regra «${a.ruleName}»${pelaReserva}.`
+    : `O aviso da regra «${a.ruleName}» não saiu: ${motivoDoAvisoEmPortugues(a.erro ?? "")}${reserva}.`;
   const linha = buildLeadActivityRow({
     organizationId: a.organizationId,
     leadId: a.leadId,
@@ -170,7 +201,8 @@ export async function registrarAvisoNoHistorico(
       grupo: a.grupo,
       texto: a.texto,
       ficha: a.ficha,
-      ...(a.ok ? { external_id: a.externalId ?? null } : { erro: a.erro ?? null }),
+      ...(a.via ? { via: a.via, desvio: a.desvio ?? null } : {}),
+      ...(a.ok ? { external_id: a.externalId ?? null } : { erro: a.erro ?? null, reserva: a.reserva ?? null }),
     },
   });
   try {

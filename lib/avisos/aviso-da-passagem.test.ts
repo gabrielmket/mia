@@ -139,3 +139,78 @@ describe("o envio pelo motor", () => {
     ).toBe(false);
   });
 });
+
+/**
+ * FORK MIA (.62) — a passagem pelo número DA EMPRESA, no motor (`pg`).
+ *
+ * O motor lê o banco com SQL próprio, e é exatamente onde uma regra duplicada
+ * divergiria: o caminho Supabase respeitaria a reserva e este não. As consultas
+ * são respondidas pelo texto: `e_numero_de_avisos` é a plataforma, `where id` é
+ * o número que a empresa escolheu.
+ */
+const NUMERO_DA_EMPRESA = "eeeeeeee-0000-4000-8000-00000000000e";
+
+function bancoComEmpresa(empresa: unknown, settings: unknown) {
+  return {
+    query: async <T>(texto: string): Promise<{ rows: T[] }> => {
+      if (texto.includes("e_numero_de_avisos")) return { rows: [numeroDaPlataforma] as T[] };
+      if (texto.includes("channel_sessions")) return { rows: (empresa ? [empresa] : []) as T[] };
+      if (texto.includes("organizations")) return { rows: [{ settings }] as T[] };
+      return { rows: [] };
+    },
+  };
+}
+
+const numeroDaEmpresa = (status: string) => ({
+  id: NUMERO_DA_EMPRESA,
+  organization_id: ORG,
+  status,
+  archived_at: null,
+  provider: CHANNEL_PROVIDER_WAHA,
+  waha_session_name: "numero_da_empresa",
+});
+
+const escolheuOProprio = (reserva: boolean) => ({
+  ...comGrupo,
+  numero_de_avisos: { modo: "empresa", channel_session_id: NUMERO_DA_EMPRESA, reserva_da_plataforma: reserva },
+});
+
+const PASSAGEM = {
+  organizationId: ORG,
+  conversationId: CONVERSA,
+  nome: "Joana",
+  telefone: null,
+  motivo: "requested_human",
+};
+
+describe("o envio pelo motor, com o número da empresa", () => {
+  it("⭐ sai pelo número DA EMPRESA quando ele está conectado", async () => {
+    enviados.length = 0;
+    falhar.valor = false;
+    const ok = await avisarGrupoDaPassagemPg(bancoComEmpresa(numeroDaEmpresa("WORKING"), escolheuOProprio(false)), PASSAGEM);
+
+    expect(ok).toBe(true);
+    expect(enviados[0]!.sessionRef, "o recado saiu pelo número da plataforma, e a empresa escolheu o dela").toBe(
+      "numero_da_empresa",
+    );
+    expect(enviados[0]!.to).toBe(GRUPO);
+  });
+
+  it("⭐ número da empresa CAÍDO e reserva desligada: não sai por outro número", async () => {
+    enviados.length = 0;
+    const ok = await avisarGrupoDaPassagemPg(bancoComEmpresa(numeroDaEmpresa("FAILED"), escolheuOProprio(false)), PASSAGEM);
+
+    expect(ok).toBe(false);
+    expect(enviados, "o motor trocou de número calado: a empresa não autorizou a reserva").toHaveLength(0);
+  });
+
+  it("⭐ número da empresa CAÍDO e reserva ligada: sai pela plataforma", async () => {
+    enviados.length = 0;
+    const ok = await avisarGrupoDaPassagemPg(bancoComEmpresa(numeroDaEmpresa("FAILED"), escolheuOProprio(true)), PASSAGEM);
+
+    expect(ok).toBe(true);
+    expect(enviados[0]!.sessionRef, "a reserva estava ligada e o aviso não saiu pelo número da plataforma").toBe(
+      "plataforma_avisos",
+    );
+  });
+});

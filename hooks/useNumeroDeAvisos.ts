@@ -27,10 +27,52 @@ export interface SessaoDeAvisos {
   status: string | null;
 }
 
+/**
+ * FORK MIA (.62) — por qual número sai o aviso da empresa. Ausente no banco =
+ * `plataforma`. `channel_session_id: null` = o que estava gravado não é mais um
+ * número válido (a tela mostra como "não existe mais").
+ */
+export type OrigemDaEmpresa =
+  | { modo: "plataforma" }
+  | { modo: "empresa"; channel_session_id: string | null; reserva_da_plataforma: boolean };
+
+/** Por que o número escolhido pela empresa não serve agora. */
+export type ProblemaDoNumeroDaEmpresa =
+  | "numero_da_empresa_sumiu"
+  | "numero_da_empresa_nao_entrega_em_grupo"
+  | "numero_da_empresa_fora_do_ar";
+
+/**
+ * Por onde o aviso desta empresa sai AGORA — a mesma decisão do envio.
+ *  - `via` preenchido: sai. `reserva` = pelo da plataforma porque o da empresa
+ *    não serve, e `motivo` diz por quê.
+ *  - `via: null`: NÃO sai. `motivo` diz por quê, e `reserva` se ela estava
+ *    desligada ou também indisponível.
+ */
+export interface SituacaoDoAviso {
+  via: "plataforma" | "empresa" | "reserva" | null;
+  motivo: string | null;
+  reserva: "desligada" | "indisponivel" | null;
+}
+
 export interface EmpresaComGrupo {
   id: string;
   display_name: string | null;
   grupo: GrupoDeAvisos | null;
+  origem: OrigemDaEmpresa;
+  /** Números desta empresa que podem ser escolhidos (conectados, entregam em grupo). */
+  numeros: SessaoDeAvisos[];
+  /** O número escolhido como está agora (caído inclusive). */
+  numero_escolhido: SessaoDeAvisos | null;
+  situacao: SituacaoDoAviso;
+  /** Grupos do número da empresa (modo empresa). `null` no modo plataforma. */
+  grupos_do_numero: {
+    grupos: GrupoDeAvisos[];
+    indisponiveis: boolean;
+    motivo: MotivoDaFalhaDeGrupos | null;
+  } | null;
+  /** Reserva ligada: o número da plataforma está no grupo? `null` = não se sabe. */
+  reserva_no_grupo: boolean | null;
 }
 
 export interface ConfiguracaoDoReport {
@@ -113,6 +155,25 @@ export function useConectarNumeroDeAvisos() {
     },
     onError: (e: unknown) => {
       toast.error(e instanceof Error ? e.message : "Falha ao conectar o número.");
+    },
+  });
+}
+
+/** FORK MIA (.62) — o número que manda o aviso da empresa, e a reserva. */
+export function useDefinirOrigemDaEmpresa() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (v: {
+      organization_id: string;
+      origem:
+        | { modo: "plataforma" }
+        | { modo: "empresa"; channel_session_id: string; reserva_da_plataforma: boolean };
+    }) => apiClient.put("/api/v1/admin/numero-de-avisos/origem", v),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: CHAVE });
+    },
+    onError: (e: unknown) => {
+      toast.error(e instanceof Error ? e.message : "Falha ao salvar o número dos avisos.");
     },
   });
 }

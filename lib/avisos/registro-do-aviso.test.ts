@@ -53,6 +53,8 @@ const NUMERO_DE_AVISOS = {
 
 type Banco = {
   sessaoDeAvisos: unknown;
+  /** FORK MIA (.62): o número que a EMPRESA escolheu, lido pelo `id`. */
+  sessaoDaEmpresa?: unknown;
   settings: Record<string, unknown>;
   ficha: unknown;
   negocios: Array<Record<string, unknown>>;
@@ -63,12 +65,20 @@ function montar(b: Banco) {
   const admin = {
     from(tabela: string) {
       const q: Record<string, unknown> = {};
-      for (const m of ["select", "eq", "in", "is", "order", "limit"]) q[m] = () => q;
+      const filtros: string[] = [];
+      for (const m of ["select", "in", "is", "order", "limit"]) q[m] = () => q;
+      q.eq = (coluna: string) => {
+        filtros.push(coluna);
+        return q;
+      };
       q.insert = (linha: Record<string, unknown>) => {
         inserts.push({ tabela, linha });
         return Promise.resolve({ data: null, error: null });
       };
       q.maybeSingle = async () => {
+        if (tabela === "channel_sessions" && filtros.includes("id") && b.sessaoDaEmpresa !== undefined) {
+          return { data: b.sessaoDaEmpresa, error: null };
+        }
         if (tabela === "channel_sessions") return { data: b.sessaoDeAvisos, error: null };
         if (tabela === "organizations") return { data: { settings: b.settings }, error: null };
         if (tabela === "lead_notes") return { data: b.ficha, error: null };
@@ -222,5 +232,95 @@ describe("o aviso no histórico do negócio", () => {
     expect(r.status).toBe("success");
     expect(atividades(inserts)).toEqual([]);
     expect(r.detail).toMatchObject({ historico: "sem_negocio:no_open_lead" });
+  });
+});
+
+/**
+ * FORK MIA (.62) — o número DA EMPRESA caiu: o histórico diz o que aconteceu.
+ *
+ * "Não troca calado" tem duas metades, e as duas moram nesta linha da timeline:
+ * quando a reserva está desligada, o aviso não sai e a linha diz POR QUÊ (e que
+ * a reserva estava desligada); quando está ligada, o aviso sai pela plataforma
+ * e a linha diz que saiu pela RESERVA, e por quê.
+ */
+describe("o aviso pelo número da empresa, no histórico", () => {
+  const NUMERO_DA_EMPRESA = "eeeeeeee-0000-4000-8000-00000000000e";
+  const daEmpresa = (status: string) => ({
+    ...Object.fromEntries(CHANNEL_SESSION_REF_COLUMNS.split(",").map((c) => [c.trim(), "sessao-da-empresa"])),
+    provider: PROVIDERS_QUE_ENTREGAM_EM_GRUPO[0],
+    id: NUMERO_DA_EMPRESA,
+    organization_id: ORG,
+    status,
+    archived_at: null,
+  });
+  const escolheuOProprio = (reserva: boolean) => ({
+    grupo_de_avisos: { id: GRUPO, nome: "Comercial" },
+    numero_de_avisos: { modo: "empresa", channel_session_id: NUMERO_DA_EMPRESA, reserva_da_plataforma: reserva },
+  });
+
+  it("⭐ caiu e a reserva está DESLIGADA: não sai, e a linha diz o motivo e a reserva", async () => {
+    const { admin, inserts } = montar({
+      sessaoDeAvisos: NUMERO_DE_AVISOS,
+      sessaoDaEmpresa: daEmpresa("FAILED"),
+      settings: escolheuOProprio(false),
+      ficha: FICHA,
+      negocios: [],
+    });
+    const r = await getAction("notify_group")!.execute(ctx(admin, COM_NEGOCIO), { template: TEMPLATE });
+
+    expect(r).toMatchObject({ status: "failed", error: "numero_da_empresa_fora_do_ar", detail: { reserva: "desligada" } });
+    expect(envio.enviados, "o aviso saiu por outro número sem a empresa ter autorizado").toEqual([]);
+    const [linha] = atividades(inserts);
+    expect(linha).toMatchObject({
+      type: "group_notice_failed",
+      payload: { erro: "numero_da_empresa_fora_do_ar", reserva: "desligada" },
+    });
+    expect(linha!.reason).toBe(
+      "O aviso da regra «Qualificado → avisa o comercial» não saiu: o número desta empresa escolhido " +
+        "para os avisos está fora do ar, e a reserva pelo número da plataforma está desligada.",
+    );
+  });
+
+  it("⭐ caiu e a reserva está LIGADA: sai pela plataforma, e a linha diz que foi a reserva", async () => {
+    const { admin, inserts } = montar({
+      sessaoDeAvisos: NUMERO_DE_AVISOS,
+      sessaoDaEmpresa: daEmpresa("SCAN_QR_CODE"),
+      settings: escolheuOProprio(true),
+      ficha: FICHA,
+      negocios: [],
+    });
+    const r = await getAction("notify_group")!.execute(ctx(admin, COM_NEGOCIO), { template: TEMPLATE });
+
+    expect(r).toMatchObject({
+      status: "success",
+      detail: { via: "reserva", desvio: "numero_da_empresa_fora_do_ar" },
+    });
+    expect(envio.enviados[0]!.sessionRef, "a reserva não usou o número da plataforma").toBe("sessao-avisos");
+    const [linha] = atividades(inserts);
+    expect(linha).toMatchObject({
+      type: "group_notice_sent",
+      payload: { via: "reserva", desvio: "numero_da_empresa_fora_do_ar" },
+    });
+    expect(linha!.reason, "o desvio sumiu do histórico: saiu por outro número calado").toBe(
+      "Aviso enviado ao grupo «Comercial» pela regra «Qualificado → avisa o comercial», pelo número " +
+        "da plataforma (reserva): o número desta empresa escolhido para os avisos está fora do ar.",
+    );
+  });
+
+  it("de pé: sai pelo número DA EMPRESA, e a linha é a de sempre", async () => {
+    const { admin, inserts } = montar({
+      sessaoDeAvisos: NUMERO_DE_AVISOS,
+      sessaoDaEmpresa: daEmpresa("WORKING"),
+      settings: escolheuOProprio(true),
+      ficha: FICHA,
+      negocios: [],
+    });
+    const r = await getAction("notify_group")!.execute(ctx(admin, COM_NEGOCIO), { template: TEMPLATE });
+
+    expect(r).toMatchObject({ status: "success", detail: { via: "empresa", desvio: null } });
+    expect(envio.enviados[0]!.sessionRef).toBe("sessao-da-empresa");
+    expect(atividades(inserts)[0]!.reason).toBe(
+      "Aviso enviado ao grupo «Comercial» pela regra «Qualificado → avisa o comercial».",
+    );
   });
 });

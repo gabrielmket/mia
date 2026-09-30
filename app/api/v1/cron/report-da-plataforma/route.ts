@@ -1,8 +1,10 @@
 /**
  * report-da-plataforma — o vigia que fala no grupo INTERNO.
  *
- * Quatro perguntas, uma rodada:
+ * Quatro perguntas, uma rodada (e uma quinta, a zero, que não fala no grupo):
  *
+ *   0. O backup diário do banco está em dia? (FORK MIA .62 — avisa os
+ *      administradores da plataforma por incidente e push, não pelo grupo)
  *   1. O crédito de IA está acabando? (o que derruba TODOS os clientes de uma vez)
  *   2. Algum número caiu? (o que derruba um — e o de avisos derruba todos)
  *   3. O schema veio junto com o código no último deploy?
@@ -39,6 +41,8 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { autorizaCron } from "@/lib/auth/cron-auth";
 import { saldoDaPlataforma } from "@/lib/ai/custo/saldo-da-plataforma";
 import { grupoDeReport, reportar } from "@/lib/avisos/report-da-plataforma";
+import { vigiarBackup } from "@/lib/backup/aviso-do-backup";
+import { avaliarBackup, leituraDoRpc } from "@/lib/backup/estado-do-backup";
 import { alertaDoSchema, CARIMBO_DO_SCHEMA, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -64,11 +68,29 @@ async function handle(req: NextRequest): Promise<Response> {
 
   const admin = createAdminClient();
 
+  // ── 0. O BACKUP do banco (FORK MIA .62) ──────────────────────────────────
+  //
+  // Vem ANTES da saída "sem grupo" porque não fala no grupo: o aviso vai aos
+  // administradores da plataforma, pelo incidente e pelo push
+  // (`lib/backup/aviso-do-backup.ts`), com trava de um por dia. Um backup
+  // parado não pode ficar calado numa instalação que não configurou o report.
+  // A leitura é pela função da 9006; sem ela, o estado é `desconhecido` e o
+  // vigia não avisa nem fecha nada.
+  const backup = await (async () => {
+    try {
+      const estado = avaliarBackup(leituraDoRpc(await admin.rpc("fn_mia_estado_do_backup")), new Date());
+      const vigia = await vigiarBackup(admin, estado);
+      return { estado: estado.estado, ...vigia };
+    } catch {
+      return { estado: "desconhecido" as const, avisados: [], resolvidos: [] };
+    }
+  })();
+
   // Sem grupo escolhido não há o que fazer — e sair cedo evita gastar as
   // consultas de saldo (que varrem `llm_calls`) numa instalação que não usa
   // este recurso.
   const grupo = await grupoDeReport(admin);
-  if (!grupo) return ok({ enviados: 0, motivo: "sem_grupo_de_report" }, { requestId });
+  if (!grupo) return ok({ enviados: 0, motivo: "sem_grupo_de_report", backup }, { requestId });
 
   const enviados: string[] = [];
 
@@ -269,7 +291,7 @@ async function handle(req: NextRequest): Promise<Response> {
     if (saiu) enviados.push("resumo_diario");
   }
 
-  return ok({ enviados: enviados.length, chaves: enviados }, { requestId });
+  return ok({ enviados: enviados.length, chaves: enviados, backup }, { requestId });
 }
 
 export const GET = handle;

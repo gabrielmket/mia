@@ -39,6 +39,11 @@ import { registerAction } from "@/lib/automation/actions";
 import type { ActionCtx, ActionResultDetail } from "@/lib/automation/types";
 import { renderTemplate } from "@/lib/automation/template";
 import { destinoDoAviso, pareceGrupo } from "@/lib/avisos/destino-do-aviso";
+import type {
+  ProblemaDoNumeroDaEmpresa,
+  SituacaoDaReserva,
+  ViaDoAviso,
+} from "@/lib/avisos/origem-do-aviso";
 import {
   fichaMaisRecente,
   negocioDoAviso,
@@ -54,7 +59,20 @@ import {
 
 const TIPO = "notify_group";
 
-type Destino = { sessao: ChannelSessionRef; chatId: string; nomeDoGrupo?: string } | { erro: string };
+/**
+ * `via`/`desvio`/`reserva` só existem no caminho PADRÃO — é ali que a empresa
+ * pode ter escolhido um número dela no lugar do da plataforma (FORK MIA .62,
+ * `lib/avisos/origem-do-aviso.ts`). O caminho explícito escolhe o canal à mão.
+ */
+type Destino =
+  | {
+      sessao: ChannelSessionRef;
+      chatId: string;
+      nomeDoGrupo?: string;
+      via?: ViaDoAviso;
+      desvio?: ProblemaDoNumeroDaEmpresa | null;
+    }
+  | { erro: string; reserva?: SituacaoDaReserva };
 
 /** O caminho EXPLÍCITO: canal da própria org, id digitado pelo operador. */
 async function destinoConfigurado(
@@ -146,17 +164,28 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
           // quando alguém for entender por que o time não recebeu. "sem grupo
           // neste cliente" manda a pessoa certa para a tela certa; um
           // "missing_config" genérico manda todo mundo reler a regra.
-          return d.ok ? { sessao: d.sessao, chatId: d.chatId, nomeDoGrupo: d.nomeDoGrupo } : { erro: d.motivo };
+          return d.ok
+            ? { sessao: d.sessao, chatId: d.chatId, nomeDoGrupo: d.nomeDoGrupo, via: d.via, desvio: d.desvio }
+            : { erro: d.motivo, reserva: d.reserva };
         })();
 
   if ("erro" in destino) {
     return comHistorico(
       ctx,
-      { type: TIPO, status: "failed", error: destino.erro },
-      { grupo: null, texto, ok: false, erro: destino.erro, ficha: estadoDaFicha },
+      {
+        type: TIPO,
+        status: "failed",
+        error: destino.erro,
+        ...(destino.reserva ? { detail: { reserva: destino.reserva } } : {}),
+      },
+      { grupo: null, texto, ok: false, erro: destino.erro, ficha: estadoDaFicha, reserva: destino.reserva ?? null },
     );
   }
   const grupo = destino.nomeDoGrupo ?? destino.chatId;
+  // O desvio para a reserva vai para a linha da regra E para o histórico — o
+  // aviso saiu, mas por outro número, e quem cuida do cliente precisa saber que
+  // o número da empresa caiu.
+  const rota = destino.via ? { via: destino.via, desvio: destino.desvio ?? null } : {};
 
   try {
     const { externalId } = await getAdapter(destino.sessao.provider).send({
@@ -168,15 +197,15 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
     });
     return comHistorico(
       ctx,
-      { type: TIPO, status: "success", detail: { chat_id: destino.chatId, external_id: externalId } },
-      { grupo, texto, ok: true, externalId, ficha: estadoDaFicha },
+      { type: TIPO, status: "success", detail: { chat_id: destino.chatId, external_id: externalId, ...rota } },
+      { grupo, texto, ok: true, externalId, ficha: estadoDaFicha, ...rota },
     );
   } catch (err) {
     const erro = err instanceof Error ? err.message : String(err);
     return comHistorico(
       ctx,
-      { type: TIPO, status: "failed", error: erro },
-      { grupo, texto, ok: false, erro: "envio_falhou", ficha: estadoDaFicha },
+      { type: TIPO, status: "failed", error: erro, ...(destino.via ? { detail: rota } : {}) },
+      { grupo, texto, ok: false, erro: "envio_falhou", ficha: estadoDaFicha, ...rota },
     );
   }
 }
