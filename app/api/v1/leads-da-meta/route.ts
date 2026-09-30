@@ -21,7 +21,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { leadsDaMetaLiberados } from "@/lib/leads-da-meta/liberacao";
-import { existeConexaoDeLeitura } from "@/lib/plataformas-de-anuncio/credenciais-de-leitura";
+import { existeAcessoDeLeitura } from "@/lib/leads-da-meta/paginas";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -48,7 +48,7 @@ export async function GET(): Promise<Response> {
   }
 
   const db = await createClient();
-  const [config, formularios, leituras, conexao] = await Promise.all([
+  const [config, formularios, leituras, paginas, conexao] = await Promise.all([
     db
       .from("mia_leads_da_meta_config")
       .select("ativo, dias_de_recuperacao, ativado_em, atualizado_em")
@@ -69,11 +69,21 @@ export async function GET(): Promise<Response> {
       .eq("organization_id", org)
       .order("terminada_em", { ascending: false })
       .limit(50),
-    existeConexaoDeLeitura(admin, org, "meta_ads"),
+    // FORK MIA (.61): as Páginas que a plataforma atribuiu a esta empresa (9004).
+    // Pela sessão: a RLS da 9004 só devolve as da própria empresa.
+    db
+      .from("mia_paginas_da_meta")
+      .select("page_id, page_name")
+      .eq("organization_id", org)
+      .order("page_name", { ascending: true }),
+    // Conexão própria OU a da plataforma, que lê só as Páginas desta empresa.
+    existeAcessoDeLeitura(admin, org).catch(() => null),
   ]);
 
-  const falhou = config.error ?? formularios.error ?? leituras.error;
-  if (falhou) {
+  const falhou = config.error ?? formularios.error ?? leituras.error ?? paginas.error;
+  // Leitura que falha não pode virar "sem conexão": a tela mandaria colar um
+  // token que já está lá.
+  if (falhou || !conexao) {
     return fail("internal_error", "Não consegui ler a configuração dos formulários da Meta.", 500, {
       requestId,
     });
@@ -88,6 +98,8 @@ export async function GET(): Promise<Response> {
         atualizado_em: null,
       },
       conectada: conexao.conectada,
+      origem_da_conexao: conexao.origem,
+      paginas: paginas.data ?? [],
       formularios: formularios.data ?? [],
       leituras: leituras.data ?? [],
     },

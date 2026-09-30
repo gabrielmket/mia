@@ -1,6 +1,6 @@
 "use client";
 /**
- * FORK MIA — os hooks da tela Configurações › Formulários da Meta.
+ * FORK MIA — os hooks da aba Formulários de leads (Configurações › Meta Ads).
  *
  * Duas frequências diferentes, de propósito:
  *
@@ -58,9 +58,19 @@ export interface LeituraDoHistorico {
   repeticoes: number;
 }
 
+/** FORK MIA (.61): uma Página que a plataforma atribuiu a esta empresa (9004). */
+export interface PaginaDaEmpresa {
+  page_id: string;
+  page_name: string | null;
+}
+
 export interface EstadoDosLeadsDaMeta {
   config: ConfigDosLeadsDaMeta;
+  /** Há token para ler: o da própria empresa ou, sem ele, o da plataforma. */
   conectada: boolean;
+  origem_da_conexao: "propria" | "plataforma" | null;
+  /** As Páginas desta empresa. Vazia = nada a importar, e a Meta nem é consultada. */
+  paginas: PaginaDaEmpresa[];
   formularios: FormularioEscolhido[];
   leituras: LeituraDoHistorico[];
 }

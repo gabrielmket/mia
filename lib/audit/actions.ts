@@ -229,6 +229,11 @@ export const AUDIT_ACTIONS = [
   "leads_da_meta.formulario_salvo",
   "leads_da_meta.lido_agora",
   "leads_da_meta.rodada",
+  // FORK MIA (.61) — de qual empresa é cada Página da Meta (migration 9004): quem
+  // atribuiu ou retirou o dono, e qual empresa empresta a conexão da plataforma.
+  "platform.pagina_da_meta_atribuida",
+  "platform.pagina_da_meta_retirada",
+  "platform.conexao_da_meta_escolhida",
   "platform_admin.users_listed",
   "platform_admin.user_viewed",
   "platform_admin.platform_admins_listed",

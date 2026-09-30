@@ -31,6 +31,8 @@ const h = vi.hoisted(() => ({
   criarNegocio: null as
     null | ((input: Record<string, unknown>) => Promise<Record<string, unknown>>),
   credencialOk: true,
+  /** .61: o token de cada OUTRA empresa (a da conexão da plataforma, por exemplo). */
+  tokensDeOutras: {} as Record<string, string>,
 }));
 
 vi.mock("@/app/api/v1/leads/_handler", () => ({
@@ -71,11 +73,17 @@ vi.mock("@/lib/channels/contato-por-telefone", () => ({
   }),
 }));
 vi.mock("@/lib/plataformas-de-anuncio/credenciais-de-leitura", () => ({
-  lerCredencialDeLeitura: vi.fn(async () =>
-    h.credencialOk
-      ? { ok: true, credencial: { accessToken: "TOKEN-DA-EMPRESA", contaPadrao: null } }
-      : { ok: false, motivo: "sem_conexao" },
-  ),
+  lerCredencialDeLeitura: vi.fn(async (_db: unknown, org: string) => {
+    if (org === "org-1") {
+      return h.credencialOk
+        ? { ok: true, credencial: { accessToken: "TOKEN-DA-EMPRESA", contaPadrao: null } }
+        : { ok: false, motivo: "sem_conexao" };
+    }
+    const token = h.tokensDeOutras[org];
+    return token
+      ? { ok: true, credencial: { accessToken: token, contaPadrao: null } }
+      : { ok: false, motivo: "sem_conexao" };
+  }),
 }));
 vi.mock("@/lib/dev/kick-local-pipeline", () => ({
   kickLocalPipeline: vi.fn(async () => {
@@ -117,6 +125,8 @@ let leadsDaMeta: LeadNaMeta[] = [];
 let respostaDosLeads: null | { status: number; corpo: unknown } = null;
 let paginas: Array<Record<string, unknown>> = [];
 let urlsLidas: URL[] = [];
+/** O token (cabeçalho) de cada chamada à Meta, pelo caminho. */
+let tokensUsados: Array<{ caminho: string; token: string }> = [];
 let banco: ReturnType<typeof bancoEmMemoria>;
 
 function montar(extra: Record<string, Linha[]> = {}) {
@@ -138,6 +148,8 @@ function montar(extra: Record<string, Linha[]> = {}) {
         importados_total: 0,
       },
     ],
+    // .61 (9004): a Página do formulário é desta empresa.
+    mia_paginas_da_meta: [{ page_id: "p1", organization_id: ORG, page_name: "Clínica Sorriso" }],
     ...extra,
   });
   h.banco = banco;
@@ -150,15 +162,22 @@ beforeEach(() => {
   h.kicks = 0;
   h.criarNegocio = null;
   h.credencialOk = true;
+  h.tokensDeOutras = {};
+  tokensUsados = [];
   leadsDaMeta = [];
   respostaDosLeads = null;
   urlsLidas = [];
   paginas = [{ id: "p1", name: "Clínica Sorriso", access_token: "TOKEN-DA-PAGINA" }];
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (entrada: string | URL) => {
+    vi.fn(async (entrada: string | URL, init?: RequestInit) => {
       const url = new URL(String(entrada));
       urlsLidas.push(url);
+      const cabecalho = (init?.headers ?? {}) as Record<string, string>;
+      tokensUsados.push({
+        caminho: url.pathname,
+        token: String(cabecalho.authorization ?? "").replace("Bearer ", ""),
+      });
       if (url.pathname.endsWith("/me/accounts")) {
         return new Response(JSON.stringify({ data: paginas }), { status: 200 });
       }
@@ -436,6 +455,66 @@ describe("quando algo dá errado", () => {
     await rodar();
     expect(leituras()[0]).toMatchObject({ status: "erro", motivo: "sem_funil" });
     expect(urlsLidas.some((u) => u.pathname.endsWith("/leads"))).toBe(false);
+  });
+});
+
+describe("a Página é desta empresa (.61, migration 9004)", () => {
+  it("formulário de Página de OUTRA empresa: erro no histórico, e a Meta nem é chamada", async () => {
+    // O caso da .60: o formulário foi escolhido quando a tela mostrava tudo o que
+    // o token alcança. A Página agora é de org-2.
+    montar({
+      mia_paginas_da_meta: [{ page_id: "p1", organization_id: "org-2", page_name: "Clínica" }],
+    });
+    leadsDaMeta = [leadNaMeta("6001", { full_name: "Ana", phone_number: "+5531999990001" })];
+
+    const r = await rodar();
+
+    expect(r).toMatchObject({ novos: 0, erros: 1 });
+    expect(leituras()[0]).toMatchObject({ status: "erro", motivo: "pagina_nao_e_da_empresa" });
+    expect(urlsLidas).toHaveLength(0);
+    expect(banco.tabela("crm_leads")).toHaveLength(0);
+  });
+
+  it("Página sem dono: o mesmo, mesmo com o token alcançando a Página", async () => {
+    montar({ mia_paginas_da_meta: [] });
+    leadsDaMeta = [leadNaMeta("6002", { full_name: "Ana", phone_number: "+5531999990001" })];
+    await rodar();
+    expect(leituras()[0]).toMatchObject({ status: "erro", motivo: "pagina_nao_e_da_empresa" });
+    expect(urlsLidas).toHaveLength(0);
+  });
+
+  it("sem conexão própria, lê pela conexão da plataforma, e só a Página dela", async () => {
+    h.credencialOk = false;
+    h.tokensDeOutras = { "org-plataforma": "TOKEN-DA-PLATAFORMA" };
+    montar({
+      mia_meta_conexao_da_plataforma: [{ id: 1, organizacao_da_conexao: "org-plataforma" }],
+    });
+    // O token da agência alcança a Página desta empresa E a de um vizinho.
+    paginas = [
+      { id: "p1", name: "Clínica Sorriso", access_token: "TOKEN-DA-PAGINA" },
+      { id: "p9", name: "Página do vizinho", access_token: "TOKEN-DO-VIZINHO" },
+    ];
+    leadsDaMeta = [leadNaMeta("6003", { full_name: "Ana", phone_number: "+5531999990001" })];
+
+    const r = await rodar();
+
+    expect(r).toMatchObject({ novos: 1, erros: 0 });
+    expect(tokensUsados.find((c) => c.caminho.endsWith("/me/accounts"))?.token).toBe(
+      "TOKEN-DA-PLATAFORMA",
+    );
+    // Os leads saem com o token da Página DESTA empresa; o do vizinho nunca é usado.
+    expect(tokensUsados.find((c) => c.caminho.endsWith("/f1/leads"))?.token).toBe(
+      "TOKEN-DA-PAGINA",
+    );
+    expect(tokensUsados.some((c) => c.token === "TOKEN-DO-VIZINHO")).toBe(false);
+    expect(urlsLidas.some((u) => u.pathname.includes("p9"))).toBe(false);
+  });
+
+  it("sem conexão própria e sem conexão da plataforma: sem_conexao, sem chamar a Meta", async () => {
+    h.credencialOk = false;
+    await rodar();
+    expect(leituras()[0]).toMatchObject({ status: "erro", motivo: "sem_conexao" });
+    expect(urlsLidas).toHaveLength(0);
   });
 });
 

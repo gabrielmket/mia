@@ -180,6 +180,31 @@ describe("Páginas e permissões", () => {
   });
 });
 
+/**
+ * .61: o diagnóstico recebe as Páginas DA EMPRESA e o acesso já filtrado
+ * (`lib/leads-da-meta/paginas.ts`). Aqui o acesso é montado como `acessoAsPaginas`
+ * o monta: a listagem do token, só com as Páginas atribuídas.
+ */
+async function diagnosticarComToken(token: string, atribuidas: string[] = ["p1", "p2", "p3"]) {
+  const daEmpresa = atribuidas.map((id) => ({ page_id: id, page_name: null }));
+  const lidas = await listarPaginas(token);
+  const tokenDasPermissoes = { token, origem: "propria" as const };
+  if (!lidas.ok) {
+    return diagnosticar(daEmpresa, {
+      ok: true,
+      paginas: new Map(),
+      tokenDasPermissoes,
+      falhaParcial: { falha: lidas.falha, detalhe: lidas.detalhe },
+    });
+  }
+  const paginas = new Map(
+    lidas.dados
+      .filter((p) => atribuidas.includes(p.id))
+      .map((p) => [p.id, { ...p, origem: "propria" as const }]),
+  );
+  return diagnosticar(daEmpresa, { ok: true, paginas, tokenDasPermissoes, falhaParcial: null });
+}
+
 describe("o diagnóstico da tela", () => {
   it("permissões, Páginas e formulários, com o motivo de cada ausência", async () => {
     grafoFalso((url) => {
@@ -225,7 +250,7 @@ describe("o diagnóstico da tela", () => {
       };
     });
 
-    const d = await diagnosticar("T");
+    const d = await diagnosticarComToken("T");
     expect(d.permissoes).toEqual({
       verificadas: true,
       faltandoObrigatorias: ["leads_retrieval", "pages_manage_ads"],
@@ -242,9 +267,28 @@ describe("o diagnóstico da tela", () => {
     expect(JSON.stringify(d)).not.toContain("TP1");
   });
 
+  it("só as Páginas da empresa: a do vizinho não aparece nem tem formulário lido", async () => {
+    const chamadas = grafoFalso((url) => {
+      if (url.pathname.endsWith("/me/accounts")) {
+        return {
+          corpo: {
+            data: [
+              { id: "p1", name: "Clínica", access_token: "TP1" },
+              { id: "p9", name: "Do vizinho", access_token: "TP9" },
+            ],
+          },
+        };
+      }
+      return { corpo: { data: [] } };
+    });
+    const d = await diagnosticarComToken("T", ["p1"]);
+    expect(d.paginas.map((p) => p.id)).toEqual(["p1"]);
+    expect(chamadas.some((c) => c.url.pathname.includes("/p9/"))).toBe(false);
+  });
+
   it("token recusado inteiro: o erro vem no topo, com a classe", async () => {
     grafoFalso(() => ({ status: 400, corpo: { error: { code: 190, message: "expirado" } } }));
-    const d = await diagnosticar("T");
+    const d = await diagnosticarComToken("T");
     expect(d.erro).toEqual({ falha: "token_invalido", detalhe: "expirado" });
     expect(d.permissoes.verificadas).toBe(false);
   });

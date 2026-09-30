@@ -5,8 +5,11 @@
  * ─── O que cada rodada faz, por empresa ────────────────────────────────────
  *
  *   1. confere a chave (e o módulo, se ele virar venda: `modulo.ts`);
- *   2. decifra o token de leitura da empresa (o de Configurações › Meta Ads);
- *   3. lista as Páginas do token, cada uma com o token da Página;
+ *   2. confere que a Página de cada formulário é DESTA empresa (9004, `paginas.ts`);
+ *      o que não é vira erro no histórico, sem chamar a Meta;
+ *   3. acha o token de cada Página dela: pelo token da própria empresa (o de
+ *      Configurações › Meta Ads) ou, sem ele, pela conexão da plataforma. Página
+ *      que o token alcança e não é da empresa não entra;
  *   4. para cada formulário ativo, lê as janelas que faltam até o presente, grava
  *      do lead mais antigo para o mais novo e só então avança a marca de leitura;
  *   5. registra a leitura no histórico — sucesso, sem novos ou erro com motivo;
@@ -29,17 +32,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { kickLocalPipeline } from "@/lib/dev/kick-local-pipeline";
 import { logger } from "@/lib/logger";
-import { lerCredencialDeLeitura } from "@/lib/plataformas-de-anuncio/credenciais-de-leitura";
-import {
-  listarPaginas,
-  lerLeadsDoFormulario,
-  type PaginaDoToken,
-} from "@/lib/plataformas-de-anuncio/meta/leads";
+import { lerLeadsDoFormulario, type PaginaDoToken } from "@/lib/plataformas-de-anuncio/meta/leads";
 
 import { gravarLeadDaMeta, type FormularioParaGravar } from "./gravar";
 import { leadsDaMetaLiberados } from "./liberacao";
 import { janelaDeLeitura, lerLeadCru, type JanelaDeLeitura, type LeadDaMeta } from "./mapear";
 import type { MotivoDaLeitura, StatusDaLeitura } from "./motivos";
+import { acessoAsPaginas, paginasDaEmpresa, type PaginaAtribuida } from "./paginas";
 
 /** Janelas por formulário numa rodada: 13 × 7 dias alcança os 90 da Meta. */
 const JANELAS_POR_RODADA = 13;
@@ -394,8 +393,8 @@ export async function rodarLeadsDaMeta(
     if (formularios.length === 0) continue;
     resumo.empresas += 1;
 
-    const registrarTodos = async (leitura: Leitura) => {
-      for (const f of formularios) {
+    const registrarTodos = async (alvo: LinhaDoFormulario[], leitura: Leitura) => {
+      for (const f of alvo) {
         const iniciada = new Date();
         await registrarLeitura(admin, f, leitura, iniciada, agora);
         resumo.formularios += 1;
@@ -412,20 +411,49 @@ export async function rodarLeadsDaMeta(
       }
     };
 
-    const credencial = await lerCredencialDeLeitura(admin, org, "meta_ads");
-    if (!credencial.ok) {
-      await registrarTodos(erro(credencial.motivo));
+    // FORK MIA (.61) — a Página tem de ser DESTA empresa (9004). O banco já não
+    // deixa gravar formulário ativo de Página alheia; a conferência de novo aqui
+    // é a que decide, antes de qualquer chamada à Meta, e o formulário que não
+    // passa fica no histórico com o motivo, em vez de sumir calado.
+    let atribuidas: PaginaAtribuida[];
+    try {
+      atribuidas = await paginasDaEmpresa(admin, org);
+    } catch (e) {
+      logger.error("[leads-da-meta] Páginas da empresa não lidas", {
+        organization_id: org,
+        detalhe: e instanceof Error ? e.message : String(e),
+      });
       continue;
     }
-    const paginas = await listarPaginas(credencial.credencial.accessToken);
-    if (!paginas.ok) {
-      await registrarTodos(erro(paginas.falha, paginas.detalhe));
+    const daEmpresa = new Set(atribuidas.map((p) => p.page_id));
+    const alheios = formularios.filter((f) => !daEmpresa.has(f.page_id));
+    const proprios = formularios.filter((f) => daEmpresa.has(f.page_id));
+    for (const f of alheios) {
+      await registrarLeitura(admin, f, erro("pagina_nao_e_da_empresa"), new Date(), agora);
+      resumo.formularios += 1;
+      resumo.erros += 1;
+      resumo.porFormulario.push({
+        formularioId: f.id,
+        organizationId: org,
+        status: "erro",
+        motivo: "pagina_nao_e_da_empresa",
+        novos: 0,
+        repetidos: 0,
+        recusados: 0,
+      });
+    }
+    if (proprios.length === 0) continue;
+
+    // O token da própria empresa, senão o da plataforma, e SÓ para as Páginas dela.
+    const acesso = await acessoAsPaginas(admin, org, atribuidas);
+    if (!acesso.ok) {
+      await registrarTodos(proprios, erro(acesso.motivo, acesso.detalhe));
       continue;
     }
-    const porId = new Map(paginas.dados.map((p) => [p.id, p]));
+    const porId = acesso.paginas;
 
     let novosNaEmpresa = 0;
-    for (const formulario of formularios) {
+    for (const formulario of proprios) {
       const iniciada = new Date();
       let leitura: Leitura;
       try {

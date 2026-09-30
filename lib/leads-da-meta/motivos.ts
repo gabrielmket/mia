@@ -17,6 +17,11 @@ export type MotivoDaLeitura =
   // da Meta, como o eixo de anúncio classifica
   | FalhaDeLeitura
   // desta rotina
+  // FORK MIA (.61): a Página não é desta empresa na PLATAFORMA (9004). Também é
+  // o motivo que o gatilho do banco grava ao desligar o formulário quando a
+  // Página muda de dono. Não confundir com a de baixo, que é do lado da Meta.
+  | "pagina_nao_e_da_empresa"
+  // a Página é da empresa, mas nenhum token a alcança (atribuição no Gerenciador)
   | "pagina_nao_atribuida"
   | "sem_token_da_pagina"
   | "sem_funil"
