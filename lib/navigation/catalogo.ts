@@ -1026,28 +1026,20 @@ export const NAV_CATALOG = [
     // conversões vencido faz a empresa parar de reportar vendas sem sintoma.
     // Uma tela só, com dois campos de token parecidos, é como se cola o token
     // errado no campo errado e se perde uma semana achando que quebrou.
+    // FORK MIA (.61): a tela ganhou a aba "Formulários de leads", que até a .60
+    // era o item próprio "Formulários da Meta" logo abaixo (docs/fork/leads-da-meta.md).
+    // Um item só: as duas usam o mesmo token, e dois itens faziam procurar num e
+    // achar no outro. O endereço antigo redireciona para a aba.
     href: "/app/settings/meta-ads",
     label: "Meta Ads",
-    description: "Conectar a conta de anúncios para ler o desempenho das campanhas.",
+    description:
+      "Conectar a conta de anúncios e importar os leads dos formulários de cadastro instantâneo.",
     icon: "Megaphone",
     group: "organizacao",
     section: "Sua empresa",
     // `admin` pelo mesmo critério da vizinha, mesmo o token sendo só de
     // leitura: ele expõe orçamento e performance da conta inteira, e quem
     // apenas LÊ a tela (`manager`) não precisa poder trocar a credencial.
-    minRole: "admin",
-  },
-  {
-    // FORK MIA (.60) — os leads dos formulários de cadastro instantâneo da Meta
-    // entrando no funil (docs/fork/leads-da-meta.md). Ao lado de Meta Ads porque
-    // usa o MESMO token; `admin` porque decide que formulário cria negócio em
-    // que funil. Vira módulo vendável por `lib/leads-da-meta/modulo.ts`.
-    href: "/app/settings/leads-da-meta",
-    label: "Formulários da Meta",
-    description: "Importar os leads dos anúncios de cadastro instantâneo para o funil.",
-    icon: "Megaphone",
-    group: "organizacao",
-    section: "Sua empresa",
     minRole: "admin",
   },
   {

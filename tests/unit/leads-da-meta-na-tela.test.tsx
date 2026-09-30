@@ -1,5 +1,6 @@
 /**
- * FORK MIA — Configurações › Formulários da Meta, no DOM.
+ * FORK MIA — Configurações › Meta Ads › aba Formulários de leads, no DOM.
+ * (Até a .60, a tela própria Configurações › Formulários da Meta.)
  *
  * As rotas e a rodada têm testes próprios; aqui se prova o que quem configura VÊ:
  * a falta de conexão com o caminho para resolver, a permissão que falta pelo
@@ -14,7 +15,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LeadsDaMetaClient } from "@/app/app/settings/leads-da-meta/_client";
+import { LeadsDaMetaClient } from "@/app/app/settings/meta-ads/_formularios";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), put: vi.fn() }));
@@ -48,6 +49,12 @@ function estado(sobre: Record<string, unknown> = {}) {
         atualizado_em: null,
       },
       conectada: true,
+      origem_da_conexao: "propria",
+      // .61: as Páginas desta empresa (9004).
+      paginas: [
+        { page_id: "p1", page_name: "Clínica Sorriso" },
+        { page_id: "p2", page_name: "Página sem acesso" },
+      ],
       formularios: [FORMULARIO_ESCOLHIDO],
       leituras: [
         {
@@ -73,6 +80,7 @@ function estado(sobre: Record<string, unknown> = {}) {
 
 const DIAGNOSTICO = {
   data: {
+    origem: "propria",
     permissoes: {
       verificadas: true,
       faltandoObrigatorias: ["leads_retrieval"],
@@ -138,14 +146,59 @@ describe("sem token conectado", () => {
     responderGet(estado({ conectada: false }));
     abrir();
     expect(await screen.findByText("Nenhum token de anúncios conectado.")).toBeTruthy();
-    const link = screen.getByRole("link", { name: "Ir para Configurações › Meta Ads" });
+    const link = screen.getByRole("link", { name: "Ir para Contas de anúncio" });
     expect(link.getAttribute("href")).toBe("/app/settings/meta-ads");
     // Sem conexão, a Meta nem é consultada.
     expect(api.get).not.toHaveBeenCalledWith("/api/v1/leads-da-meta/paginas", expect.anything());
   });
 });
 
+describe("sem Página atribuída à empresa (.61)", () => {
+  it("diz que a Página é atribuída pela plataforma, e a Meta nem é consultada", async () => {
+    responderGet(estado({ paginas: [], formularios: [] }));
+    abrir();
+    expect(await screen.findByText("Nenhuma Página da Meta é desta empresa ainda.")).toBeTruthy();
+    expect(api.get).not.toHaveBeenCalledWith("/api/v1/leads-da-meta/paginas", expect.anything());
+    // Sem Página, a pista não é colar token.
+    expect(screen.queryByText("Nenhum token de anúncios conectado.")).toBeNull();
+  });
+
+  it("formulário que ficou de Página de outra empresa aparece com o motivo", async () => {
+    responderGet(
+      estado({
+        paginas: [],
+        formularios: [{ ...FORMULARIO_ESCOLHIDO, page_id: "p9", page_name: "Página do vizinho", ativo: false }],
+      }),
+    );
+    abrir();
+    expect(
+      await screen.findByText("Formulários de Páginas que não são desta empresa:"),
+    ).toBeTruthy();
+    expect(screen.getByText(/Página do vizinho/)).toBeTruthy();
+  });
+});
+
 describe("com token conectado", () => {
+  it("pela conexão da plataforma, a falta de permissão manda falar com o suporte", async () => {
+    responderGet(estado({ origem_da_conexao: "plataforma" }));
+    api.get.mockImplementation(async (caminho: string) => {
+      if (caminho === "/api/v1/leads-da-meta") return estado({ origem_da_conexao: "plataforma" });
+      if (caminho === "/api/v1/leads-da-meta/paginas")
+        return { data: { ...DIAGNOSTICO.data, origem: "plataforma" } };
+      if (caminho === "/api/v1/pipelines")
+        return { data: [{ id: "funil-1", name: "Comercial", is_default: true }] };
+      if (caminho.startsWith("/api/v1/pipelines/"))
+        return { data: { stages: [{ id: "etapa-1", name: "Novo" }] } };
+      throw new Error(`GET inesperado: ${caminho}`);
+    });
+    abrir();
+    expect(
+      await screen.findByText(
+        "Estas Páginas são lidas pela conexão da plataforma. Avise o suporte para gerar o token de novo com as permissões que faltam.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("a permissão que falta aparece pelo nome e pelo efeito", async () => {
     responderGet(estado());
     abrir();

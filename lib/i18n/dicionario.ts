@@ -10596,6 +10596,90 @@ export const DICIONARIO: Traducoes = {
   "listar os formulários e ler os leads com os dados do anúncio": { es: "listar los formularios y leer los leads con los datos del anuncio" },
   "trazer a origem do anúncio de cada lead": { es: "traer el origen del anuncio de cada lead" },
   "a tabela de campanhas em Análise › Meta Ads": { es: "la tabla de campañas en Análisis › Meta Ads" },
+  // FORK MIA (.61) — os Formulários da Meta viraram aba de Meta Ads, e cada
+  // Página da Meta é de uma empresa só (migration 9004, /admin/paginas-da-meta).
+  "Seções de Meta Ads": { es: "Secciones de Meta Ads" },
+  "Contas de anúncio": { es: "Cuentas publicitarias" },
+  "Formulários de leads": { es: "Formularios de leads" },
+  "Conectar a conta de anúncios e importar os leads dos formulários de cadastro instantâneo.": {
+    es: "Conectar la cuenta publicitaria e importar los leads de los formularios de registro instantáneo.",
+  },
+  "Nenhuma Página da Meta é desta empresa ainda.": {
+    es: "Ninguna Página de Meta es de esta empresa todavía.",
+  },
+  "Cada Página da Meta é de uma empresa só, e quem define de qual empresa é cada Página é quem administra a plataforma. Peça ao suporte para atribuir a Página desta empresa; depois disso os formulários dela aparecem aqui.":
+    {
+      es: "Cada Página de Meta es de una sola empresa, y quien define de qué empresa es cada Página es quien administra la plataforma. Pide al soporte que asigne la Página de esta empresa; después sus formularios aparecen aquí.",
+    },
+  "Os leads são lidos com o mesmo token da tabela de campanhas. Cole na aba Contas de anúncio um token com as permissões leads_retrieval, pages_show_list, pages_read_engagement e pages_manage_ads.":
+    {
+      es: "Los leads se leen con el mismo token de la tabla de campañas. Pega en la pestaña Cuentas publicitarias un token con los permisos leads_retrieval, pages_show_list, pages_read_engagement y pages_manage_ads.",
+    },
+  "Ir para Contas de anúncio": { es: "Ir a Cuentas publicitarias" },
+  "Estas Páginas são lidas pela conexão da plataforma. Avise o suporte para gerar o token de novo com as permissões que faltam.":
+    {
+      es: "Estas Páginas se leen con la conexión de la plataforma. Avisa al soporte para que genere el token de nuevo con los permisos que faltan.",
+    },
+  "Esta empresa tem mais Páginas do que esta tela lista de uma vez; aparecem as 30 primeiras.": {
+    es: "Esta empresa tiene más Páginas de las que esta pantalla lista de una vez; aparecen las 30 primeras.",
+  },
+  "Formulários de Páginas que não são desta empresa:": {
+    es: "Formularios de Páginas que no son de esta empresa:",
+  },
+  "Esta Página não é desta empresa na plataforma, e a importação dos formulários dela foi desligada aqui. Quem administra a plataforma define de qual empresa é cada Página.":
+    {
+      es: "Esta Página no es de esta empresa en la plataforma, y la importación de sus formularios se desactivó aquí. Quien administra la plataforma define de qué empresa es cada Página.",
+    },
+  "Páginas da Meta": { es: "Páginas de Meta" },
+  "Não consegui carregar as Páginas da Meta agora.": {
+    es: "No pude cargar las Páginas de Meta ahora.",
+  },
+  "Cada Página da Meta é de uma empresa só. A empresa vê e importa os formulários apenas das Páginas atribuídas a ela aqui; Página sem dono não aparece para nenhuma empresa.":
+    {
+      es: "Cada Página de Meta es de una sola empresa. La empresa ve e importa los formularios solo de las Páginas asignadas a ella aquí; una Página sin dueño no aparece para ninguna empresa.",
+    },
+  "Conexão da plataforma": { es: "Conexión de la plataforma" },
+  "O token de Meta Ads desta empresa lê as Páginas atribuídas a quem não tem token próprio, e só elas. Normalmente é a empresa da agência.":
+    {
+      es: "El token de Meta Ads de esta empresa lee las Páginas asignadas a quien no tiene token propio, y solo ellas. Normalmente es la empresa de la agencia.",
+    },
+  "Empresa que empresta a conexão": { es: "Empresa que presta la conexión" },
+  "Nenhuma: cada empresa usa o próprio token": { es: "Ninguna: cada empresa usa su propio token" },
+  "Nenhuma empresa tem conexão de Meta Ads. Conecte o token em Configurações › Meta Ads de uma empresa.":
+    {
+      es: "Ninguna empresa tiene conexión de Meta Ads. Conecta el token en Configuración › Meta Ads de una empresa.",
+    },
+  "Páginas e donos": { es: "Páginas y dueños" },
+  "Escolha a conexão da plataforma acima para ver as Páginas que o token alcança.": {
+    es: "Elige la conexión de la plataforma arriba para ver las Páginas que alcanza el token.",
+  },
+  Atribuídas: { es: "Asignadas" },
+  "o token não alcança mais esta Página": { es: "el token ya no alcanza esta Página" },
+  "De qual empresa é esta Página": { es: "De qué empresa es esta Página" },
+  "De qual empresa é esta Página?": { es: "¿De qué empresa es esta Página?" },
+  "Trocar dono": { es: "Cambiar dueño" },
+  Atribuir: { es: "Asignar" },
+  "Retirar dono": { es: "Quitar dueño" },
+  "A empresa escolhida não tem mais conexão de Meta Ads. Conecte o token em Configurações › Meta Ads dela.":
+    {
+      es: "La empresa elegida ya no tiene conexión de Meta Ads. Conecta el token en su Configuración › Meta Ads.",
+    },
+  "A Meta recusou o token: ele expirou ou foi revogado. Gere um novo no Gerenciador de Negócios e cole em Configurações › Meta Ads da empresa escolhida.":
+    {
+      es: "Meta rechazó el token: expiró o fue revocado. Genera uno nuevo en el Administrador comercial y pégalo en Configuración › Meta Ads de la empresa elegida.",
+    },
+  "O token não tem permissão para listar as Páginas (pages_show_list).": {
+    es: "El token no tiene permiso para listar las Páginas (pages_show_list).",
+  },
+  "A Meta limitou as chamadas por excesso de consultas. Tente de novo em alguns minutos.": {
+    es: "Meta limitó las llamadas por exceso de consultas. Inténtalo de nuevo en unos minutos.",
+  },
+  "Não foi possível falar com a Meta agora. Tente de novo em instantes.": {
+    es: "No fue posible comunicarse con Meta ahora. Inténtalo de nuevo en unos instantes.",
+  },
+  "A Meta recusou um campo da consulta. É problema do sistema, não da conta.": {
+    es: "Meta rechazó un campo de la consulta. Es un problema del sistema, no de la cuenta.",
+  },
   // FORK MIA — ordem por coluna e filtro "só com impressão" na tabela de campanhas.
   "Só campanhas com impressão": { es: "Solo campañas con impresiones" },
   Mostrando: { es: "Mostrando" },

@@ -85,6 +85,10 @@ const NAV_ITEMS: NavItem[] = [
   // webhook) — mesma razão da de cima: é da INSTALAÇÃO. O rótulo é o da aba de
   // Conexões, para quem vem de lá reconhecer o mesmo nome.
   { href: "/admin/meta", label: "API Oficial (Meta)", icon: WebhooksLogo },
+  // FORK MIA (.61) — de qual empresa é cada Página da Meta (migration 9004). Fica
+  // na plataforma porque o token que alcança as Páginas é o da agência e enxerga
+  // as de todos os clientes: quem decide o dono é quem opera a instalação.
+  { href: "/admin/paginas-da-meta", label: "Páginas da Meta", icon: Megaphone },
   // A porta da tela que decide quem pode criar conta nesta instalação — mesma
   // razão das duas de cima: é configuração da INSTALAÇÃO, e /admin tem
   // navegação própria (o registro de `lib/navigation/` cobre só `app/app/**`).

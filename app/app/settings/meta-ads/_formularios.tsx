@@ -1,7 +1,15 @@
 "use client";
 
 /**
- * FORK MIA — o corpo de Configurações › Formulários da Meta.
+ * FORK MIA — a aba "Formulários de leads" de Configurações › Meta Ads.
+ *
+ * Até a .60 era uma tela própria (Configurações › Formulários da Meta); na .61
+ * virou aba de Meta Ads, para a empresa configurar tudo da Meta num lugar só. O
+ * endereço antigo redireciona para cá.
+ *
+ * .61 — SÓ AS PÁGINAS DA EMPRESA. A lista vem de `mia_paginas_da_meta`
+ * (migration 9004), atribuída pela plataforma. Sem Página atribuída, a aba diz
+ * isso e nem consulta a Meta.
  *
  * Quatro quadros, na ordem em que quem configura pela primeira vez precisa deles:
  *
@@ -37,6 +45,7 @@ import {
   type ConfigDosLeadsDaMeta,
   type FormularioEscolhido,
   type LeituraDoHistorico,
+  type PaginaDaEmpresa,
   type ResultadoDaLeituraAgora,
 } from "@/hooks/ads/useLeadsDaMeta";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
@@ -60,6 +69,8 @@ const MENSAGEM_DO_MOTIVO: Record<string, string> = {
   campo_invalido:
     "A Meta recusou um campo da consulta. É problema do sistema, não da sua conta: avise quem mantém a instalação.",
   transitorio: "Não foi possível falar com a Meta agora. A próxima leitura tenta de novo sozinha.",
+  pagina_nao_e_da_empresa:
+    "Esta Página não é desta empresa na plataforma, e a importação dos formulários dela foi desligada aqui. Quem administra a plataforma define de qual empresa é cada Página.",
   pagina_nao_atribuida:
     "A Página deste formulário não está atribuída ao usuário do sistema do token. Atribua a Página no Gerenciador de Negócios.",
   sem_token_da_pagina:
@@ -115,7 +126,10 @@ export function LeadsDaMetaClient() {
   const t = useT();
   const estado = useEstadoDosLeadsDaMeta();
   const dados = estado.data?.data;
-  const diagnostico = useDiagnosticoDaMeta(Boolean(dados?.conectada));
+  // A Meta só é consultada quando há o que perguntar: token E Página da empresa.
+  const diagnostico = useDiagnosticoDaMeta(
+    Boolean(dados?.conectada) && (dados?.paginas.length ?? 0) > 0,
+  );
 
   if (estado.isLoading) {
     return <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>;
@@ -128,20 +142,38 @@ export function LeadsDaMetaClient() {
     );
   }
 
+  // .61: a Página vem antes do token. Sem Página desta empresa não há o que
+  // importar, tenha o token que tiver, e mandar colar token seria a pista errada.
+  if (dados.paginas.length === 0) {
+    return (
+      <div className="flex max-w-5xl flex-col gap-6">
+        <div className="rounded-md border p-6 text-sm">
+          <p className="font-medium">{t("Nenhuma Página da Meta é desta empresa ainda.")}</p>
+          <p className="mt-1 text-muted-foreground">
+            {t(
+              "Cada Página da Meta é de uma empresa só, e quem define de qual empresa é cada Página é quem administra a plataforma. Peça ao suporte para atribuir a Página desta empresa; depois disso os formulários dela aparecem aqui.",
+            )}
+          </p>
+        </div>
+        <FormulariosDeOutraEmpresa escolhidos={dados.formularios} paginas={[]} />
+      </div>
+    );
+  }
+
   if (!dados.conectada) {
     return (
       <div className="rounded-md border p-6 text-sm">
         <p className="font-medium">{t("Nenhum token de anúncios conectado.")}</p>
         <p className="mt-1 text-muted-foreground">
           {t(
-            "Os leads são lidos com o mesmo token da tabela de campanhas. Cole em Configurações › Meta Ads um token com as permissões leads_retrieval, pages_show_list, pages_read_engagement e pages_manage_ads.",
+            "Os leads são lidos com o mesmo token da tabela de campanhas. Cole na aba Contas de anúncio um token com as permissões leads_retrieval, pages_show_list, pages_read_engagement e pages_manage_ads.",
           )}
         </p>
         <a
           className="mt-4 inline-block rounded-md border px-4 py-2 font-medium hover:bg-muted"
           href="/app/settings/meta-ads"
         >
-          {t("Ir para Configurações › Meta Ads")}
+          {t("Ir para Contas de anúncio")}
         </a>
       </div>
     );
@@ -160,8 +192,11 @@ export function LeadsDaMetaClient() {
       />
       <QuadroDasPaginas
         diagnostico={diagnostico.data?.data ?? null}
-        escolhidos={dados.formularios}
+        escolhidos={dados.formularios.filter((f) =>
+          dados.paginas.some((p) => p.page_id === f.page_id),
+        )}
       />
+      <FormulariosDeOutraEmpresa escolhidos={dados.formularios} paginas={dados.paginas} />
       <HistoricoDeLeituras leituras={dados.leituras} formularios={dados.formularios} />
     </div>
   );
@@ -342,9 +377,15 @@ function QuadroDePermissoes({
 
       {p?.verificadas && p.faltandoObrigatorias.length + p.faltandoRecomendadas.length > 0 && (
         <p className="text-sm text-muted-foreground">
-          {t(
-            "Para resolver: Gerenciador de Negócios › Configurações do negócio › Usuários do sistema › o usuário do token › Gerar novo token. Marque as permissões que faltam e cole o token novo em Configurações › Meta Ads.",
-          )}
+          {diagnostico?.origem === "plataforma"
+            ? // .61: o token é o da plataforma, emprestado só para as Páginas desta
+              // empresa. Quem o gera de novo é quem administra a plataforma.
+              t(
+                "Estas Páginas são lidas pela conexão da plataforma. Avise o suporte para gerar o token de novo com as permissões que faltam.",
+              )
+            : t(
+                "Para resolver: Gerenciador de Negócios › Configurações do negócio › Usuários do sistema › o usuário do token › Gerar novo token. Marque as permissões que faltam e cole o token novo em Configurações › Meta Ads.",
+              )}
         </p>
       )}
     </section>
@@ -398,7 +439,7 @@ function QuadroDasPaginas({
       {diagnostico?.paginasCortadas && (
         <p className="text-xs text-muted-foreground">
           {t(
-            "O token alcança mais Páginas do que esta tela lista de uma vez; aparecem as 30 primeiras.",
+            "Esta empresa tem mais Páginas do que esta tela lista de uma vez; aparecem as 30 primeiras.",
           )}
         </p>
       )}
@@ -589,6 +630,40 @@ function LinhaDoFormulario({
           {t('Ligue "Importar este formulário", confira o destino e salve.')}
         </p>
       )}
+    </div>
+  );
+}
+
+// ─── 3b. o que ficou de Página que não é desta empresa ─────────────────────
+
+/**
+ * Formulários escolhidos numa Página que não é (ou deixou de ser) desta empresa.
+ * O banco já os desligou (9004) e a Página não aparece mais no quadro de cima;
+ * sem este aviso eles sumiriam da tela calados, e quem os configurou ficaria
+ * esperando lead que não vem.
+ */
+function FormulariosDeOutraEmpresa({
+  escolhidos,
+  paginas,
+}: {
+  escolhidos: FormularioEscolhido[];
+  paginas: PaginaDaEmpresa[];
+}) {
+  const t = useT();
+  const daEmpresa = new Set(paginas.map((p) => p.page_id));
+  const alheios = escolhidos.filter((f) => !daEmpresa.has(f.page_id));
+  if (alheios.length === 0) return null;
+  return (
+    <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+      <p className="font-medium">{t("Formulários de Páginas que não são desta empresa:")}</p>
+      <ul className="mt-1 list-disc pl-5">
+        {alheios.map((f) => (
+          <li key={f.id}>
+            {f.form_name ?? f.form_id} ({f.page_name ?? f.page_id})
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1">{t(MENSAGEM_DO_MOTIVO.pagina_nao_e_da_empresa!)}</p>
     </div>
   );
 }

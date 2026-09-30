@@ -33,7 +33,6 @@ import {
   LEADS_DA_META_E_MODULO_VENDAVEL,
   MODULO_DOS_LEADS_DA_META,
   ROTAS_DOS_LEADS_DA_META,
-  TELA_DOS_LEADS_DA_META,
 } from "@/lib/leads-da-meta/modulo";
 
 export type ChaveDeModulo = "disparador" | typeof MODULO_DOS_LEADS_DA_META;
@@ -95,7 +94,11 @@ export const MODULOS: readonly ModuloVendavel[] = [
           descricao:
             "Os leads dos anúncios de cadastro instantâneo entram sozinhos no funil, com a origem do anúncio e as respostas do formulário.",
           rotas: [...ROTAS_DOS_LEADS_DA_META],
-          telas: [TELA_DOS_LEADS_DA_META],
+          // .61: nenhuma tela de menu. A importação virou a aba "Formulários de
+          // leads" de Configurações › Meta Ads, e é a PÁGINA que esconde a aba de
+          // quem não tem a liberação (`leadsDaMetaLiberados`); esconder o item
+          // Meta Ads inteiro tiraria de quem não comprou a tabela de campanhas.
+          telas: [],
         } satisfies ModuloVendavel,
       ]
     : []),

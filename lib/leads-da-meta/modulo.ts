@@ -3,12 +3,14 @@
  * de distância.
  *
  * Hoje a importação é de toda empresa que ligar a chave dela (Configurações ›
- * Formulários da Meta). Se o Gabriel decidir vender à parte, vira
+ * Meta Ads › Formulários de leads). Se o Gabriel decidir vender à parte, vira
  * `LEADS_DA_META_E_MODULO_VENDAVEL = true` e mais nada:
  *
  *   · o módulo `leads_da_meta` aparece no painel da plataforma, para liberar por
  *     empresa (`lib/modulos/vendaveis.ts` lê daqui);
- *   · a tela some do menu de quem não tem a liberação;
+ *   · a aba "Formulários de leads" some de Configurações › Meta Ads de quem não
+ *     tem a liberação (a página confere; o item Meta Ads fica, pela tabela de
+ *     campanhas);
  *   · as rotas `/api/v1/leads-da-meta/*` recusam (a guarda de módulo por rota);
  *   · a rotina pula a empresa sem liberação.
  *
@@ -21,7 +23,5 @@ export const LEADS_DA_META_E_MODULO_VENDAVEL = false;
 
 /** A chave em `organization_modules`. Identidade interna: não muda com o nome do produto. */
 export const MODULO_DOS_LEADS_DA_META = "leads_da_meta" as const;
-
-export const TELA_DOS_LEADS_DA_META = "/app/settings/leads-da-meta";
 
 export const ROTAS_DOS_LEADS_DA_META = ["/api/v1/leads-da-meta"] as const;
