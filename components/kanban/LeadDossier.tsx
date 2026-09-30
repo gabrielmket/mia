@@ -4,7 +4,8 @@ import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useRef } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
-import { useActiveOrg, usePermission, useUser } from "@/hooks/auth/AuthProvider";
+import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
+import { usePodeVerEquipe } from "@/hooks/kanban/usePodeVerEquipe";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useLeadTimeline } from "@/hooks/leads/useLeadTimeline";
@@ -73,7 +74,7 @@ export function LeadDossier({
     user.is_platform_admin || (activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager) || false;
   // FORK MIA: a permissão do seletor de "quem originou" é lida aqui e descida
   // ao formulário. Ver `podeVerEquipe` no LeadFieldsForm.
-  const podeVerEquipe = usePermission("pipeline.move_card");
+  const podeVerEquipe = usePodeVerEquipe();
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

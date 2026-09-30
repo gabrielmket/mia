@@ -96,6 +96,14 @@ vi.mock("@/hooks/contacts/useContactList", () => ({
   useContactList: () => ({ data: { pages: [{ data: [] }] }, isLoading: false }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// A v1.63.6 do upstream pôs a moeda da organização no Novo Lead
+// (`useActiveOrg`), e o `novo-lead-escolhe-contato` dele passou a simular a
+// organização ativa. Aqui é o mesmo dublê, mas PARCIAL: o bloco do layout
+// acima usa o resto do módulo de verdade, e só a organização ativa é trocada.
+vi.mock("@/hooks/auth/AuthProvider", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/auth/AuthProvider")>()),
+  useActiveOrg: () => ({ currency: "BRL", country: null }),
+}));
 
 const EMPRESA = "44444444-4444-4444-8444-444444444444";
 vi.mock("@/hooks/useEmpresas", () => ({

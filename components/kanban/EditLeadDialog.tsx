@@ -1,6 +1,6 @@
 "use client";
-import { usePermission } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
+import { usePodeVerEquipe } from "@/hooks/kanban/usePodeVerEquipe";
 import {
   Dialog,
   DialogContent,
@@ -31,7 +31,7 @@ export function EditLeadDialog({ open, onOpenChange, lead, pipelineId }: Props) 
   const t = useT();
   // FORK MIA: a permissão do seletor de "quem originou" é lida aqui e descida
   // ao formulário. Ver `podeVerEquipe` no LeadFieldsForm.
-  const podeVerEquipe = usePermission("pipeline.move_card");
+  const podeVerEquipe = usePodeVerEquipe();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

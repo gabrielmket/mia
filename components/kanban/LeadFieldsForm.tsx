@@ -41,8 +41,8 @@ interface Props {
   /** O dossiê não tem "cancelar"; o diálogo tem. */
   onCancel?: () => void;
   /**
-   * FORK MIA: a pessoa enxerga a equipe (`usePermission("pipeline.move_card")`)?
-   * Decide se o seletor de "quem originou" lista os membros.
+   * FORK MIA: a pessoa enxerga a equipe (`usePodeVerEquipe`)? Decide se o
+   * seletor de "quem originou" lista os membros.
    *
    * Vem de quem monta o formulário (dossiê e diálogo), e não de um
    * `usePermission` aqui dentro: este componente é do upstream, e os testes

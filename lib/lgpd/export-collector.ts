@@ -1574,31 +1574,13 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   //
   // Alcança pela conversa além do `contact_id` porque metade das linhas nasce
   // antes de o contato ser resolvido — são justamente as do primeiro contato.
-  let ai_runs: AiRunRow[] = [];
-  if (contactId) {
-    const idsDeConversa = conversations.map((c) => c.id);
-    let q = admin
-      .from("ai_agent_runs")
-      .select("id, status, abort_reason, steps_count, started_at, completed_at")
-      .eq("organization_id", organizationId)
-      .order("started_at", { ascending: false })
-      .limit(500);
-    q =
-      idsDeConversa.length > 0
-        ? q.or(
-            `contact_id.eq.${contactId},conversation_id.in.(${idsDeConversa.join(",")})`,
-          )
-        : q.eq("contact_id", contactId);
-    const { data, error } = await q;
-    if (error) {
-      logger.warn("[lgpd-export-worker] ai runs load failed", {
-        request_id: requestId,
-        error: error.message,
-      });
-    } else if (data) {
-      ai_runs = data as AiRunRow[];
-    }
-  }
+  //
+  // FORK MIA: a lista é preenchida mais abaixo, pela MESMA leitura de
+  // `ai_agent_runs` que o upstream trouxe na v1.65.0 para os argumentos das
+  // ferramentas (#1965). Eram duas consultas à mesma tabela, e a cerca dele
+  // (`lgpd-export-ia-e-memoria`) exige uma: a tabela é lida uma vez, e cada
+  // parte do arquivo tira dela o que lhe cabe.
+  const ai_runs: AiRunRow[] = [];
 
   // Disparos recebidos — "que campanhas vocês me mandaram" é pergunta de
   // acesso legítima, e no Brasil é a pergunta de quem quer sair de uma lista.
@@ -1953,20 +1935,47 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     )) {
       lead_notes.push(nota as NonNullable<ExportPayload["lead_notes"]>[number]);
     }
-    for (const run of await lePaginado((de, ate) =>
-      admin
+    // FORK MIA: a leitura também alcança as conversas do titular (as linhas que
+    // nasceram antes de o contato ser resolvido) e traz as colunas dos
+    // "Atendimentos da IA" (`ai_runs`, acima). Os argumentos das ferramentas
+    // continuam só das linhas com o `contact_id` do titular, como o upstream
+    // decidiu: a linha sem contato não é redigida pela cascata dele.
+    const idsDeConversaDoTitular = conversations.map((c) => c.id);
+    for (const run of await lePaginado((de, ate) => {
+      const q = admin
         .from("ai_agent_runs")
-        .select("id, tool_calls, created_at")
-        .eq("organization_id", organizationId)
-        .eq("contact_id", contactId)
+        .select(
+          "id, tool_calls, created_at, contact_id, status, abort_reason, steps_count, started_at, completed_at",
+        )
+        .eq("organization_id", organizationId);
+      return (
+        idsDeConversaDoTitular.length > 0
+          ? q.or(
+              `contact_id.eq.${contactId},conversation_id.in.(${idsDeConversaDoTitular.join(",")})`,
+            )
+          : q.eq("contact_id", contactId)
+      )
         .order("id")
-        .range(de, ate),
-    )) {
+        .range(de, ate);
+    })) {
+      ai_runs.push({
+        id: run.id as string,
+        status: run.status as string,
+        abort_reason: (run.abort_reason as string | null) ?? null,
+        steps_count: run.steps_count as number,
+        started_at: run.started_at as string,
+        completed_at: (run.completed_at as string | null) ?? null,
+      });
+      if (run.contact_id !== contactId) continue;
       ai_agent_runs.push({
-        ...(run as NonNullable<ExportPayload["ai_agent_runs"]>[number]),
+        id: run.id as string,
         tool_calls: toolCallsParaOTitular(run.tool_calls),
+        created_at: (run.created_at as string | null) ?? null,
       });
     }
+    // O teto e a ordem de antes: os 500 atendimentos mais recentes.
+    ai_runs.sort((a, b) => (a.started_at < b.started_at ? 1 : a.started_at > b.started_at ? -1 : 0));
+    ai_runs.splice(500);
     for (const estado of await lePaginado((de, ate) =>
       admin
         .from("lead_state")
