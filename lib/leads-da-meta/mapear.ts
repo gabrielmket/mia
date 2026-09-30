@@ -7,6 +7,13 @@
 import { createHash } from "node:crypto";
 
 import type { LeadCru } from "@/lib/plataformas-de-anuncio/meta/leads";
+import { normalizePhoneBR, type FieldMap } from "@/lib/webhooks/inbound";
+
+import {
+  candidatasDoPapel,
+  type EscolhaDosCampos,
+  type PapelDoCampo,
+} from "./campos-do-formulario";
 
 // ─── as datas ───────────────────────────────────────────────────────────────
 
@@ -154,6 +161,80 @@ export function payloadParaMapear(lead: LeadDaMeta): Record<string, string> {
     delete payload.work_email;
   }
   return payload;
+}
+
+// ─── telefone, nome e e-mail em pergunta própria (.62) ─────────────────────
+
+/**
+ * A resposta de telefone como a pessoa digitou, pronta para `normalizePhoneBR`.
+ * Tira o que não é número e o zero da frente ("011 98765-4321", o prefixo de
+ * longa distância que muita gente ainda digita): com ele o número tem 12
+ * dígitos sem começar por 55, e a normalização o recusaria. Com `+` na frente,
+ * quem digitou já disse o país, e o valor passa como veio.
+ */
+export function limparTelefone(valor: string): string {
+  const t = valor.trim();
+  if (t.startsWith("+")) return t;
+  return t.replace(/\D/g, "").replace(/^0+/, "");
+}
+
+/** A resposta vira telefone E.164 (celular com o nono dígito)? `null` = não é telefone. */
+export function telefoneDaResposta(valor: string): string | null {
+  return normalizePhoneBR(limparTelefone(valor));
+}
+
+export interface LeadParaMapear {
+  /** As respostas, com a do telefone escolhido já limpa. */
+  payload: Record<string, string>;
+  /** As chaves escolhidas, na frente das que o mapeador já conhece. */
+  mapa: FieldMap;
+  /** Qual chave foi usada para cada papel (`null` = nenhuma serviu). */
+  campos: Record<PapelDoCampo, string | null>;
+}
+
+/**
+ * O lead pronto para `mapInboundPayload(payload, mapa)`.
+ *
+ * Para cada papel, a primeira candidata (`candidatasDoPapel`: a escolha manual,
+ * o campo padrão da Meta, a pergunta própria com a pista) cuja RESPOSTA serve:
+ * telefone que vira E.164, e-mail com cara de e-mail, nome não vazio. Conferir a
+ * resposta é o que impede "Qual o melhor horário para ligarmos no seu telefone?"
+ * de virar o telefone do contato, e é o que faz a escolha manual com resposta
+ * inválida cair no automático, em vez de deixar o contato sem telefone.
+ *
+ * Sem candidata que sirva, o mapa fica sem o papel, e o mapeador faz o que
+ * sempre fez (as chaves padrão dele).
+ */
+export function prepararParaMapear(
+  lead: LeadDaMeta,
+  perguntas: Record<string, string> = {},
+  escolha: EscolhaDosCampos = {},
+): LeadParaMapear {
+  const payload = payloadParaMapear(lead);
+  const chaves = Object.keys(payload);
+  const valor = (k: string) => payload[k] ?? "";
+
+  const telefone =
+    candidatasDoPapel("telefone", chaves, perguntas, escolha).find(
+      (k) => telefoneDaResposta(valor(k)) !== null,
+    ) ?? null;
+  if (telefone) payload[telefone] = limparTelefone(valor(telefone));
+
+  const email =
+    candidatasDoPapel("email", chaves, perguntas, escolha).find(
+      (k) => k !== telefone && emailAceito(valor(k).trim()) !== null,
+    ) ?? null;
+
+  const nome =
+    candidatasDoPapel("nome", chaves, perguntas, escolha).find(
+      (k) => k !== telefone && k !== email && valor(k).trim() !== "",
+    ) ?? null;
+
+  const mapa: FieldMap = {};
+  if (telefone) mapa.phone = [telefone];
+  if (nome) mapa.name = [nome];
+  if (email) mapa.email = [email];
+  return { payload, mapa, campos: { telefone, nome, email } };
 }
 
 /** Os rótulos das perguntas padrão, quando o formulário não traz o texto. */

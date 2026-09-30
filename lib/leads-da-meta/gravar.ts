@@ -41,6 +41,7 @@ import { logger } from "@/lib/logger";
 import { registrarCaptacao, type CaptacaoParaRegistrar } from "@/lib/webhooks/captacao";
 import { mapInboundPayload } from "@/lib/webhooks/inbound";
 
+import type { EscolhaDosCampos } from "./campos-do-formulario";
 import {
   atribuicaoDoLead,
   chaveDoLead,
@@ -49,6 +50,7 @@ import {
   externalIdDoLead,
   nomeDaFonte,
   payloadParaMapear,
+  prepararParaMapear,
   type LeadDaMeta,
 } from "./mapear";
 
@@ -79,7 +81,19 @@ export interface FormularioParaGravar {
   pipelineId: string;
   stageId: string;
   perguntas: Record<string, string>;
+  /**
+   * FORK MIA (.62): qual pergunta é o telefone, o nome e o e-mail, quando o
+   * administrador escolheu (`campo_telefone`/`campo_nome`/`campo_email`).
+   * Ausente ou nulo: automático (`campos-do-formulario.ts`).
+   */
+  campos?: EscolhaDosCampos;
 }
+
+/**
+ * Por qual caminho o lead chegou: a leitura a cada 5 minutos ou o aviso em
+ * tempo real da Meta (.62). Só o primeiro grava; o outro o acha já importado.
+ */
+export type ViaDoLead = "consulta" | "tempo_real";
 
 export type DesfechoDoLead = "criado" | "repetido" | "recusado" | "ja_importado";
 
@@ -102,6 +116,7 @@ async function registrarRecebido(
   lead: LeadDaMeta,
   desfecho: Exclude<DesfechoDoLead, "ja_importado">,
   crmLeadId: string | null,
+  via: ViaDoLead,
 ): Promise<void> {
   const { error } = await admin.from("mia_leads_da_meta_recebidos").upsert(
     {
@@ -116,6 +131,7 @@ async function registrarRecebido(
       criado_na_meta: lead.criadoEm?.toISOString() ?? null,
       desfecho,
       crm_lead_id: crmLeadId,
+      via,
     },
     { onConflict: "organization_id,chave_do_lead", ignoreDuplicates: true },
   );
@@ -218,15 +234,37 @@ async function resolverContato(
 }
 
 /**
+ * FORK MIA (.62) — este lead já passou por aqui, por qualquer dos dois caminhos?
+ * Só a tabela de recebidos, sem a reserva do negócio: é a pergunta barata que o
+ * aviso em tempo real faz ANTES de gastar uma chamada na Meta. A conferência
+ * completa continua em `gravarLeadDaMeta`.
+ */
+export async function leadJaRecebido(
+  admin: SupabaseClient,
+  organizationId: string,
+  leadgenId: string,
+): Promise<boolean> {
+  const { data, error } = await admin
+    .from("mia_leads_da_meta_recebidos")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("chave_do_lead", chaveDoLead(leadgenId))
+    .maybeSingle();
+  if (error) throw new Error(`consulta de recebidos falhou: ${error.message}`);
+  return Boolean(data);
+}
+
+/**
  * Grava um lead. Devolve o desfecho; lança só no inesperado (ver o cabeçalho).
  */
 export async function gravarLeadDaMeta(
   admin: SupabaseClient,
   formulario: FormularioParaGravar,
   lead: LeadDaMeta,
-  opcoes: { requestId: string },
+  opcoes: { requestId: string; via?: ViaDoLead },
 ): Promise<ResultadoDoLead> {
   const org = formulario.organizationId;
+  const via: ViaDoLead = opcoes.via ?? "consulta";
 
   // ── 1. já passou por aqui? ────────────────────────────────────────────────
   const anterior = await jaImportado(admin, formulario, lead);
@@ -234,13 +272,18 @@ export async function gravarLeadDaMeta(
     // Negócio existe e a linha de recebido não (a rodada anterior caiu entre os
     // dois passos): completa o registro para a próxima leitura nem consultar.
     if (anterior.soNoNegocio) {
-      await registrarRecebido(admin, formulario, lead, "criado", anterior.crmLeadId);
+      await registrarRecebido(admin, formulario, lead, "criado", anterior.crmLeadId, via);
     }
     return { desfecho: "ja_importado", leadId: anterior.crmLeadId, contactId: anterior.contactId };
   }
 
   // ── 2. o formulário como a fonte de webhook o entende ─────────────────────
-  const mapeado = mapInboundPayload(payloadParaMapear(lead));
+  // FORK MIA (.62): as chaves do telefone, do nome e do e-mail vão na frente
+  // das que o mapeador conhece, e a do telefone só entra se a resposta vira
+  // telefone. É o que faz o celular perguntado numa pergunta própria
+  // (`celular:_(ddd_+_número)`) chegar ao contato.
+  const preparado = prepararParaMapear(lead, formulario.perguntas, formulario.campos ?? {});
+  const mapeado = mapInboundPayload(preparado.payload, preparado.mapa);
   const atribuicao = atribuicaoDoLead(lead, formulario);
   const campos = comRotulos(mapeado.custom_fields, formulario.perguntas);
   const fonte: Pick<
@@ -271,7 +314,7 @@ export async function gravarLeadDaMeta(
       outcome: "recusado",
       rejectReason: "sem_campo_mapeavel",
     });
-    await registrarRecebido(admin, formulario, lead, "recusado", null);
+    await registrarRecebido(admin, formulario, lead, "recusado", null, via);
     return { desfecho: "recusado", leadId: null, contactId: null, motivo: "sem_campo_mapeavel" };
   }
 
@@ -338,7 +381,7 @@ export async function gravarLeadDaMeta(
           ad_id: lead.adId,
         },
       });
-      await registrarRecebido(admin, formulario, lead, "repetido", leadId);
+      await registrarRecebido(admin, formulario, lead, "repetido", leadId, via);
       return { desfecho: "repetido", leadId, contactId: contato.id };
     }
   }
@@ -377,7 +420,7 @@ export async function gravarLeadDaMeta(
     if (erro.message?.includes("uniq_crm_leads_org_source_external")) {
       const vencedor = await jaImportado(admin, formulario, lead);
       if (vencedor.crmLeadId)
-        await registrarRecebido(admin, formulario, lead, "criado", vencedor.crmLeadId);
+        await registrarRecebido(admin, formulario, lead, "criado", vencedor.crmLeadId, via);
       return {
         desfecho: "ja_importado",
         leadId: vencedor.crmLeadId,
@@ -393,7 +436,7 @@ export async function gravarLeadDaMeta(
       outcome: "recusado",
       rejectReason: "erro_ao_criar_lead",
     });
-    await registrarRecebido(admin, formulario, lead, "recusado", null);
+    await registrarRecebido(admin, formulario, lead, "recusado", null, via);
     return {
       desfecho: "recusado",
       leadId: null,
@@ -424,7 +467,7 @@ export async function gravarLeadDaMeta(
     contactId: contato?.id ?? null,
     outcome: "criado",
   });
-  await registrarRecebido(admin, formulario, lead, "criado", leadId);
+  await registrarRecebido(admin, formulario, lead, "criado", leadId, via);
 
   return { desfecho: "criado", leadId, contactId: contato?.id ?? null };
 }
