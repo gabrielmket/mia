@@ -59,6 +59,31 @@ CLIENTE_MODELO_EMAILS_DE_ACESSO='voce@timecompany.com.br,colega@timecompany.com.
   apresentação.
 - Tudo acontece numa transação só. Ou a empresa inteira fica de pé, ou nada muda.
 
+### Sem acesso ao Postgres: o modo `--sql`
+
+O banco de produção da MIA (`supabase-sistema-mia`) não expõe o Postgres para
+fora. O único jeito de rodar SQL ali é o `/pg/query` do postgres-meta, pelo Kong,
+com a service key: ele recebe um texto SQL e executa. Para esse caso, a semente
+gera o SQL em vez de conectar:
+
+```bash
+CLIENTE_MODELO_EMAILS_DE_ACESSO='voce@timecompany.com.br' \
+  npx tsx scripts/cliente-modelo.ts --sql cliente-modelo.sql
+```
+
+- Gera o arquivo inteiro: `begin; … commit;`, idempotente, com cerca de 800 KB.
+  É o **mesmo** código do modo conectado.
+- Ele próprio confere, em SQL, que a 9010 existe e que o slug não é de outra
+  empresa. Se qualquer uma das duas falhar, aborta antes de gravar.
+- Os usuários de `CLIENTE_MODELO_EMAILS_DE_ACESSO` são achados pelo e-mail
+  **dentro do banco**. Se um e-mail não existir, sai um `notice`, não um erro.
+- O arquivo não leva segredo nenhum: nem connection string, nem chave. O e-mail
+  de acesso vai no texto.
+- As datas relativas são as do momento em que o arquivo é **gerado**. Por isso,
+  gere perto de aplicar.
+- Aplicar duas vezes dá as mesmas contagens do modo conectado. Isso está provado
+  em `tests/invariants/cliente-modelo-semente.test.ts`.
+
 ## A trava: o que bloqueia
 
 A marca é a coluna `organizations.demonstracao`. É coluna, e não chave de

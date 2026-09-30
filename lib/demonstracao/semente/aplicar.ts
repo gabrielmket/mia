@@ -67,6 +67,17 @@ import {
   type OrigemDoNegocio,
 } from "./dados";
 import { idEstavel } from "./ids";
+import {
+  Json,
+  Sql,
+  escritorDeRoteiro,
+  escritorDireto,
+  json,
+  literal,
+  sql,
+  type Escritor,
+  type Valor,
+} from "./escritor";
 
 // ─── os ids ─────────────────────────────────────────────────────────────────
 
@@ -169,33 +180,30 @@ const FUNIL_DO_NICHO: Record<NichoDeModelo, ChaveDoFunil> = {
 
 // ─── a escrita ──────────────────────────────────────────────────────────────
 
-class Json {
-  constructor(readonly valor: unknown) {}
-}
-const json = (valor: unknown) => new Json(valor);
-
-type Valor = string | number | boolean | null | Date | string[] | Json;
 type Linha = Record<string, Valor>;
 
 async function gravar(
-  db: pg.ClientBase,
+  e: Escritor,
   tabela: string,
   linha: Linha,
   opcoes: { conflito?: string; manter?: string[]; nada?: boolean } = {},
 ): Promise<void> {
   const colunas = Object.keys(linha);
-  const valores = colunas.map((c) => {
-    const v = linha[c];
-    return v instanceof Json ? JSON.stringify(v.valor) : v;
+  const parametros: Valor[] = [];
+  const marcadores = colunas.map((c) => {
+    const v = linha[c]!;
+    // Expressão SQL crua (uma subconsulta do código) entra no texto; o resto é parâmetro.
+    if (v instanceof Sql) return v.texto;
+    parametros.push(v);
+    return v instanceof Json ? `$${parametros.length}::jsonb` : `$${parametros.length}`;
   });
-  const marcadores = colunas.map((c, i) => (linha[c] instanceof Json ? `$${i + 1}::jsonb` : `$${i + 1}`));
   const conflito = opcoes.conflito ?? "id";
   const fixas = new Set([...conflito.split(",").map((c) => c.trim()), "id", ...(opcoes.manter ?? [])]);
   const atualizar = colunas.filter((c) => !fixas.has(c)).map((c) => `${c} = excluded.${c}`);
   const acao = opcoes.nada || atualizar.length === 0 ? "do nothing" : `do update set ${atualizar.join(", ")}`;
-  await db.query(
+  await e.executar(
     `insert into ${tabela} (${colunas.join(", ")}) values (${marcadores.join(", ")}) on conflict (${conflito}) ${acao}`,
-    valores,
+    parametros,
   );
 }
 
@@ -284,32 +292,33 @@ export interface ResumoDaSemente {
   avisos: string[];
 }
 
-export async function aplicarSemente(db: pg.ClientBase, opcoes: OpcoesDaSemente = {}): Promise<ResumoDaSemente> {
+/** Os passos, na ordem. Os MESMOS nos dois modos (ver `escritor.ts`). */
+async function passos(e: Escritor, opcoes: OpcoesDaSemente, avisos: string[]): Promise<void> {
   const agora = opcoes.agora ?? new Date();
-  const avisos: string[] = [];
+  await exigirAMarca(e);
+  await conferirQueOEspacoEDaSemente(e);
+  await gravarEquipe(e, agora);
+  await gravarEmpresa(e, agora);
+  await gravarAcesso(e, opcoes.emailsDeAcesso ?? [], avisos);
+  await gravarModulos(e);
+  await gravarCanalEAgente(e, agora);
+  await gravarEmpresasEContatos(e, agora);
+  const etapas = await gravarFunis(e);
+  await gravarNegocios(e, agora, etapas);
+  await gravarConversas(e, agora);
+  await gravarFollowups(e, agora, etapas);
+  await gravarAgenda(e, agora);
+  await gravarTarefasSoltas(e, agora);
+  await neutralizarOsEventos(e);
+}
 
+/** Grava direto, conectada ao Postgres, numa transação só. */
+export async function aplicarSemente(db: pg.ClientBase, opcoes: OpcoesDaSemente = {}): Promise<ResumoDaSemente> {
+  const avisos: string[] = [];
   await db.query("begin");
   try {
-    const {
-      rows: [inicio],
-    } = await db.query<{ agora: Date }>("select now() as agora");
-
-    await conferirQueOEspacoEDaSemente(db);
-    await gravarEquipe(db, agora);
-    await gravarEmpresa(db, agora);
-    await gravarAcesso(db, opcoes.emailsDeAcesso ?? [], avisos);
-    await gravarModulos(db);
-    await gravarCanalEAgente(db, agora);
-    await gravarEmpresasEContatos(db, agora);
-    const etapas = await gravarFunis(db);
-    await gravarNegocios(db, agora, etapas);
-    await gravarConversas(db, agora);
-    await gravarFollowups(db, agora, etapas);
-    await gravarAgenda(db, agora);
-    await gravarTarefasSoltas(db, agora);
-    await neutralizarOsEventos(db, inicio!.agora);
-
-    const contagens = await contar(db);
+    await passos(escritorDireto(db), opcoes, avisos);
+    const contagens = await contarDaSemente(db);
     await db.query("commit");
     return { organizacaoId: ID_DA_EMPRESA, contagens, avisos };
   } catch (erro) {
@@ -318,55 +327,134 @@ export async function aplicarSemente(db: pg.ClientBase, opcoes: OpcoesDaSemente 
   }
 }
 
-/** O slug é da semente? Se outra empresa o usa, a semente para em vez de tomar o lugar dela. */
-async function conferirQueOEspacoEDaSemente(db: pg.ClientBase): Promise<void> {
-  const { rows } = await db.query<{ id: string; demonstracao: boolean }>(
-    "select id, demonstracao from public.organizations where slug = $1 or id = $2",
-    [SLUG_DA_EMPRESA, ID_DA_EMPRESA],
-  );
-  for (const r of rows) {
-    if (r.id !== ID_DA_EMPRESA) {
-      throw new Error(
-        `cliente modelo: o slug "${SLUG_DA_EMPRESA}" já é de outra empresa (${r.id}). A semente não toma o lugar dela.`,
-      );
-    }
-  }
+/**
+ * Gera o SQL da semente sem conectar a banco nenhum: uma transação só
+ * (`begin; … commit;`), idempotente, para quem só alcança o banco por um
+ * endpoint que recebe SQL. As datas relativas são as do momento em que o
+ * arquivo é GERADO — gere perto de aplicar. Nenhum segredo entra no texto.
+ */
+export async function gerarSqlDaSemente(opcoes: OpcoesDaSemente = {}): Promise<string> {
+  const agora = opcoes.agora ?? new Date();
+  const e = escritorDeRoteiro();
+  await passos(e, { ...opcoes, agora }, []);
+  const cabecalho = [
+    `-- FORK MIA · CLIENTE MODELO — a "${NOME_DA_EMPRESA}" (dados fictícios).`,
+    `-- Gerado por scripts/cliente-modelo.ts --sql; datas relativas a ${agora.toISOString()}.`,
+    "-- Uma transação só e idempotente: aplicar de novo não duplica nada. Sem a migration 9010",
+    "-- o script aborta antes de gravar. Ver docs/fork/cliente-modelo.md.",
+  ].join("\n");
+  return [cabecalho, "begin;", ...e.comandos(), "commit;", ""].join("\n\n");
 }
 
-async function gravarEquipe(db: pg.ClientBase, agora: Date): Promise<void> {
-  const { rows } = await db.query<{ column_name: string }>(
-    `select column_name from information_schema.columns where table_schema = 'auth' and table_name = 'users'`,
-  );
-  const colunas = new Set(rows.map((r) => r.column_name));
-  const criadoEm = new Date(agora.getTime() - 60 * DIA);
+/** Sem a 9010 (a marca e a trava) nada é gravado: uma demonstração sem trava falaria com gente de verdade. */
+async function exigirAMarca(e: Escritor): Promise<void> {
+  await e.executar(`do $semente$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'organizations' and column_name = 'demonstracao'
+  ) then
+    raise exception 'cliente modelo: este banco nao tem a migration 9010 (organizations.demonstracao); nada foi gravado';
+  end if;
+end
+$semente$`);
+}
 
+/** O slug é da semente? Se outra empresa o usa, a semente para em vez de tomar o lugar dela. */
+async function conferirQueOEspacoEDaSemente(e: Escritor): Promise<void> {
+  await e.executar(`do $semente$
+begin
+  if exists (
+    select 1 from public.organizations
+     where slug = ${literal(SLUG_DA_EMPRESA)} and id <> ${literal(ID_DA_EMPRESA)}::uuid
+  ) then
+    raise exception 'cliente modelo: o slug % ja e de outra empresa; a semente nao toma o lugar dela', ${literal(SLUG_DA_EMPRESA)};
+  end if;
+end
+$semente$`);
+}
+
+/**
+ * Um insert numa tabela de FORA do produto (`auth.users`, do GoTrue) só com as
+ * colunas que existem nela: a lista muda de versão para versão do GoTrue, e o
+ * banco de teste tem um esboço. A conferência roda NO banco, nos dois modos.
+ * `fixas` não são reescritas quando a linha já existe (a chave, a senha).
+ */
+async function gravarAdaptando(
+  e: Escritor,
+  schema: string,
+  tabela: string,
+  linha: Linha,
+  fixas: readonly string[],
+): Promise<void> {
+  const pares = Object.entries(linha)
+    .map(([c, v]) => `(${literal(c)}, ${literal(literal(v))}, ${fixas.includes(c) ? "true" : "false"})`)
+    .join(",\n      ");
+  await e.executar(`do $semente$
+declare
+  v_existe text[];
+  v_cols text := '';
+  v_vals text := '';
+  v_set text := '';
+  r record;
+begin
+  select array_agg(column_name::text) into v_existe
+    from information_schema.columns
+   where table_schema = ${literal(schema)} and table_name = ${literal(tabela)};
+  for r in
+    select * from (values
+      ${pares}
+    ) as t(col, val, fixa)
+  loop
+    if r.col = any(v_existe) then
+      v_cols := v_cols || case when v_cols = '' then '' else ', ' end || quote_ident(r.col);
+      v_vals := v_vals || case when v_vals = '' then '' else ', ' end || r.val;
+      if not r.fixa then
+        v_set := v_set || case when v_set = '' then '' else ', ' end || format('%I = excluded.%I', r.col, r.col);
+      end if;
+    end if;
+  end loop;
+  execute format(
+    'insert into %I.%I (%s) values (%s) on conflict (id) do %s',
+    ${literal(schema)}, ${literal(tabela)}, v_cols, v_vals,
+    case when v_set = '' then 'nothing' else 'update set ' || v_set end
+  );
+end
+$semente$`);
+}
+
+async function gravarEquipe(e: Escritor, agora: Date): Promise<void> {
+  const criadoEm = new Date(agora.getTime() - 60 * DIA);
   for (const p of EQUIPE) {
     // Sem senha e bloqueado: é dono de card, não gente que entra no sistema.
-    const completa: Linha = {
-      instance_id: "00000000-0000-0000-0000-000000000000",
-      id: ID.usuario(p.chave),
-      aud: "authenticated",
-      role: "authenticated",
-      email: emailFalso(p.nome),
-      encrypted_password: "",
-      raw_app_meta_data: json({ provider: "email", providers: ["email"], demonstracao: true }),
-      raw_user_meta_data: json({ full_name: p.nome, demonstracao: true }),
-      created_at: criadoEm,
-      updated_at: criadoEm,
-      confirmation_token: "",
-      recovery_token: "",
-      email_change_token_new: "",
-      email_change: "",
-      banned_until: new Date("2999-12-31T00:00:00.000Z"),
-    };
-    const linha: Linha = {};
-    for (const [c, v] of Object.entries(completa)) if (colunas.has(c)) linha[c] = v;
-    await gravar(db, "auth.users", linha, { manter: ["created_at", "encrypted_password"] });
+    await gravarAdaptando(
+      e,
+      "auth",
+      "users",
+      {
+        instance_id: sql("'00000000-0000-0000-0000-000000000000'::uuid"),
+        id: sql(`${literal(ID.usuario(p.chave))}::uuid`),
+        aud: "authenticated",
+        role: "authenticated",
+        email: emailFalso(p.nome),
+        encrypted_password: "",
+        raw_app_meta_data: json({ provider: "email", providers: ["email"], demonstracao: true }),
+        raw_user_meta_data: json({ full_name: p.nome, demonstracao: true }),
+        created_at: criadoEm,
+        updated_at: criadoEm,
+        confirmation_token: "",
+        recovery_token: "",
+        email_change_token_new: "",
+        email_change: "",
+        banned_until: new Date("2999-12-31T00:00:00.000Z"),
+      },
+      ["id", "created_at", "encrypted_password"],
+    );
   }
 }
 
-async function gravarEmpresa(db: pg.ClientBase, agora: Date): Promise<void> {
-  await db.query(
+async function gravarEmpresa(e: Escritor, agora: Date): Promise<void> {
+  await e.executar(
     `insert into public.organizations
        (id, slug, legal_name, display_name, status, timezone, locale, demonstracao, onboarded_at, settings)
      values ($1, $2, $3, $4, 'active', 'America/Sao_Paulo', 'pt-BR', true, $5, $6::jsonb)
@@ -388,17 +476,17 @@ async function gravarEmpresa(db: pg.ClientBase, agora: Date): Promise<void> {
   );
   // O banco semeia "Pedidos" (e-commerce) em toda empresa nova. Aqui ele sai
   // de cena: arquivado, e o funil geral da semente passa a ser o padrão.
-  await db.query(
+  await e.executar(
     `update public.crm_pipelines set is_default = false, is_archived = true
       where organization_id = $1 and slug = 'pedidos'`,
     [ID_DA_EMPRESA],
   );
 }
 
-async function gravarAcesso(db: pg.ClientBase, emails: readonly string[], avisos: string[]): Promise<void> {
+async function gravarAcesso(e: Escritor, emails: readonly string[], avisos: string[]): Promise<void> {
   for (const p of EQUIPE) {
     await gravar(
-      db,
+      e,
       "public.user_organizations",
       {
         user_id: ID.usuario(p.chave),
@@ -414,37 +502,37 @@ async function gravarAcesso(db: pg.ClientBase, emails: readonly string[], avisos
   for (const bruto of emails) {
     const email = bruto.trim().toLowerCase();
     if (!email) continue;
-    const { rows } = await db.query<{ id: string }>("select id from auth.users where lower(email) = $1", [email]);
-    if (!rows[0]) {
-      avisos.push(`acesso: não existe usuário com o e-mail ${email} nesta instalação`);
-      continue;
-    }
-    await gravar(
-      db,
-      "public.user_organizations",
-      {
-        user_id: rows[0].id,
-        organization_id: ID_DA_EMPRESA,
-        role: "admin",
-        accepted_at: new Date(),
-        revoked_at: null,
-      },
-      { conflito: "user_id, organization_id", manter: ["accepted_at"] },
+    // O usuário é achado pelo e-mail NO banco: o mesmo comando serve ao roteiro.
+    const n = await e.executar(
+      `insert into public.user_organizations (user_id, organization_id, role, accepted_at, revoked_at)
+       select u.id, $1::uuid, 'admin', now(), null
+         from auth.users u
+        where lower(u.email) = $2::text
+       on conflict (user_id, organization_id) do update set role = excluded.role, revoked_at = null`,
+      [ID_DA_EMPRESA, email],
     );
+    if (n === 0) avisos.push(`acesso: não existe usuário com o e-mail ${email} nesta instalação`);
+    await e.executar(`do $semente$
+begin
+  if not exists (select 1 from auth.users where lower(email) = ${literal(email)}) then
+    raise notice 'cliente modelo: nao existe usuario com o e-mail %; o acesso dele nao foi dado', ${literal(email)};
+  end if;
+end
+$semente$`);
   }
 }
 
-async function gravarModulos(db: pg.ClientBase): Promise<void> {
+async function gravarModulos(e: Escritor): Promise<void> {
   // Os módulos pagos ficam LIBERADOS para a demonstração mostrar as telas; o
   // envio deles continua travado pela 9010.
   const liberados: ChaveDeModulo[] = ["disparador", MODULO_DOS_LEADS_DA_META];
   for (const modulo of liberados) {
-    await db.query(
+    await e.executar(
       `insert into public.organization_modules (id, organization_id, modulo, note)
-       select $1, $2, $3, 'Cliente modelo: liberado para a demonstração (nada sai dela).'
+       select $1::uuid, $2::uuid, $3::text, 'Cliente modelo: liberado para a demonstração (nada sai dela).'
         where not exists (
           select 1 from public.organization_modules
-           where organization_id = $2 and modulo = $3 and revoked_at is null
+           where organization_id = $2::uuid and modulo = $3::text and revoked_at is null
         )
        on conflict (id) do nothing`,
       [ID.modulo(modulo), ID_DA_EMPRESA, modulo],
@@ -452,12 +540,12 @@ async function gravarModulos(db: pg.ClientBase): Promise<void> {
   }
 }
 
-async function gravarCanalEAgente(db: pg.ClientBase, agora: Date): Promise<void> {
+async function gravarCanalEAgente(e: Escritor, agora: Date): Promise<void> {
   // O número existe só para ancorar as conversas (a FK é obrigatória), e nasce
   // ARQUIVADO: para o produto ele não é número de ninguém, e a trava da 9010 não
   // deixa desarquivar.
   await gravar(
-    db,
+    e,
     "public.channel_sessions",
     {
       id: ID.canal,
@@ -476,7 +564,7 @@ async function gravarCanalEAgente(db: pg.ClientBase, agora: Date): Promise<void>
   );
 
   // A Sofia existe para ser dona de card e de conversa. Sem versão publicada: não responde ninguém.
-  await gravar(db, "public.ai_agents", {
+  await gravar(e, "public.ai_agents", {
     id: ID.agente,
     organization_id: ID_DA_EMPRESA,
     name: AGENTE_DE_IA.nome,
@@ -487,32 +575,32 @@ async function gravarCanalEAgente(db: pg.ClientBase, agora: Date): Promise<void>
   });
 }
 
-async function gravarEmpresasEContatos(db: pg.ClientBase, agora: Date): Promise<void> {
-  for (const e of EMPRESAS) {
+async function gravarEmpresasEContatos(e: Escritor, agora: Date): Promise<void> {
+  for (const emp of EMPRESAS) {
     // As DUAS entidades de empresa do produto: a da MIA (`crm_empresas`, a da
     // ficha do contato e do card) e a do módulo B2B do upstream (`companies` +
     // `people`, a da prospecção).
-    await gravar(db, "public.crm_empresas", {
-      id: ID.empresa(e.chave),
+    await gravar(e, "public.crm_empresas", {
+      id: ID.empresa(emp.chave),
       organization_id: ID_DA_EMPRESA,
-      nome: e.nome,
-      site: e.site,
-      email: `contato@${slug(e.nome)}.exemplo.invalid`,
-      endereco: `${e.cidade} · ${e.uf} (endereço fictício)`,
-      observacoes: e.observacoes,
-      tags: e.tags,
-      custom_fields: json({ setor: e.setor }),
+      nome: emp.nome,
+      site: emp.site,
+      email: `contato@${slug(emp.nome)}.exemplo.invalid`,
+      endereco: `${emp.cidade} · ${emp.uf} (endereço fictício)`,
+      observacoes: emp.observacoes,
+      tags: emp.tags,
+      custom_fields: json({ setor: emp.setor }),
     });
-    await gravar(db, "public.companies", {
-      id: ID.companhia(e.chave),
+    await gravar(e, "public.companies", {
+      id: ID.companhia(emp.chave),
       organization_id: ID_DA_EMPRESA,
-      legal_name: `${e.nome} (fictícia)`,
-      trade_name: e.nome,
-      city: e.cidade,
-      state: e.uf,
-      email: `contato@${slug(e.nome)}.exemplo.invalid`,
+      legal_name: `${emp.nome} (fictícia)`,
+      trade_name: emp.nome,
+      city: emp.cidade,
+      state: emp.uf,
+      email: `contato@${slug(emp.nome)}.exemplo.invalid`,
       enrichment_status: "completed",
-      main_cnae_description: e.setor,
+      main_cnae_description: emp.setor,
     });
   }
 
@@ -534,7 +622,7 @@ async function gravarEmpresasEContatos(db: pg.ClientBase, agora: Date): Promise<
     let pessoa: string | null = null;
     if (c.empresa) {
       pessoa = ID.pessoa(c.chave);
-      await gravar(db, "public.people", {
+      await gravar(e, "public.people", {
         id: pessoa,
         organization_id: ID_DA_EMPRESA,
         full_name: c.nome,
@@ -543,7 +631,7 @@ async function gravarEmpresasEContatos(db: pg.ClientBase, agora: Date): Promise<
       });
     }
     await gravar(
-      db,
+      e,
       "public.contacts",
       {
         id: ID.contato(c.chave),
@@ -566,7 +654,7 @@ async function gravarEmpresasEContatos(db: pg.ClientBase, agora: Date): Promise<
     );
     if (c.empresa && pessoa) {
       await gravar(
-        db,
+        e,
         "public.company_people",
         {
           id: ID.vinculo(c.chave),
@@ -586,12 +674,12 @@ async function gravarEmpresasEContatos(db: pg.ClientBase, agora: Date): Promise<
 
 type EtapasGravadas = Map<ChaveDoFunil, Map<string, { id: string; nome: string; fim?: "won" | "lost" }>>;
 
-async function gravarFunis(db: pg.ClientBase): Promise<EtapasGravadas> {
+async function gravarFunis(e: Escritor): Promise<EtapasGravadas> {
   const gravadas: EtapasGravadas = new Map();
   let posicao = 1000;
   for (const f of FUNIS) {
     await gravar(
-      db,
+      e,
       "public.crm_pipelines",
       {
         id: ID.funil(f.chave),
@@ -611,29 +699,29 @@ async function gravarFunis(db: pg.ClientBase): Promise<EtapasGravadas> {
 
     const doFunil = new Map<string, { id: string; nome: string; fim?: "won" | "lost" }>();
     const etapas = etapasDoFunil(f);
-    for (const [i, e] of etapas.entries()) {
-      const id = ID.etapa(f.chave, e.chave);
-      await gravar(db, "public.crm_stages", {
+    for (const [i, etp] of etapas.entries()) {
+      const id = ID.etapa(f.chave, etp.chave);
+      await gravar(e, "public.crm_stages", {
         id,
         organization_id: ID_DA_EMPRESA,
         pipeline_id: ID.funil(f.chave),
-        name: e.nome,
-        slug: slug(e.nome).replace(/-/g, "_").slice(0, 40),
+        name: etp.nome,
+        slug: slug(etp.nome).replace(/-/g, "_").slice(0, 40),
         position: (i + 1) * 1000,
-        color: e.fim === "won" ? "#16a34a" : e.fim === "lost" ? "#dc2626" : CORES[i % CORES.length]!,
-        is_won: e.fim === "won",
-        is_lost: e.fim === "lost",
-        agent_stage_hint: e.passo,
-        expected_duration_hours: e.fim ? null : (PRAZO_DA_ETAPA[e.passo ?? ""] ?? 72),
-        win_probability: e.fim === "won" ? 100 : e.fim === "lost" ? 0 : (PROBABILIDADE[e.passo ?? ""] ?? 50),
+        color: etp.fim === "won" ? "#16a34a" : etp.fim === "lost" ? "#dc2626" : CORES[i % CORES.length]!,
+        is_won: etp.fim === "won",
+        is_lost: etp.fim === "lost",
+        agent_stage_hint: etp.passo,
+        expected_duration_hours: etp.fim ? null : (PRAZO_DA_ETAPA[etp.passo ?? ""] ?? 72),
+        win_probability: etp.fim === "won" ? 100 : etp.fim === "lost" ? 0 : (PROBABILIDADE[etp.passo ?? ""] ?? 50),
       });
-      doFunil.set(e.chave, { id, nome: e.nome, ...(e.fim ? { fim: e.fim } : {}) });
+      doFunil.set(etp.chave, { id, nome: etp.nome, ...(etp.fim ? { fim: etp.fim } : {}) });
     }
     gravadas.set(f.chave, doFunil);
   }
 
   // O geral é o padrão (o "Pedidos" do banco já saiu de cena em gravarEmpresa).
-  await db.query(
+  await e.executar(
     `update public.crm_pipelines set is_default = (id = $2) where organization_id = $1 and is_default is distinct from (id = $2)`,
     [ID_DA_EMPRESA, ID.funil("generico")],
   );
@@ -646,7 +734,7 @@ function ator(dono: NegocioDaSemente["dono"]): Actor {
     : { type: "user", id: ID.usuario(dono) };
 }
 
-async function gravarNegocios(db: pg.ClientBase, agora: Date, etapas: EtapasGravadas): Promise<void> {
+async function gravarNegocios(e: Escritor, agora: Date, etapas: EtapasGravadas): Promise<void> {
   for (const f of FUNIS) {
     const doFunil = etapas.get(f.chave)!;
     const primeira = [...doFunil.values()][0]!;
@@ -662,7 +750,7 @@ async function gravarNegocios(db: pg.ClientBase, agora: Date, etapas: EtapasGrav
       const fechado = etapa.fim ? naEtapa : null;
 
       await gravar(
-        db,
+        e,
         "public.crm_leads",
         {
           id,
@@ -734,7 +822,7 @@ async function gravarNegocios(db: pg.ClientBase, agora: Date, etapas: EtapasGrav
           actor: quem,
           ...l.input,
         });
-        await gravar(db, "public.crm_lead_activities", {
+        await gravar(e, "public.crm_lead_activities", {
           id: ID.atividade(id, l.chave),
           organization_id: linha.organization_id,
           lead_id: linha.lead_id,
@@ -757,7 +845,7 @@ async function gravarNegocios(db: pg.ClientBase, agora: Date, etapas: EtapasGrav
       // A próxima ação vira TAREFA com prazo, ligada ao card.
       if (n.proximaAcao) {
         const dono = n.dono === "ia" ? "helena" : n.dono;
-        await gravar(db, "public.crm_tasks", {
+        await gravar(e, "public.crm_tasks", {
           id: ID.tarefa(`negocio:${id}`),
           organization_id: ID_DA_EMPRESA,
           title: n.proximaAcao.titulo,
@@ -774,7 +862,7 @@ async function gravarNegocios(db: pg.ClientBase, agora: Date, etapas: EtapasGrav
   }
 }
 
-async function gravarConversas(db: pg.ClientBase, agora: Date): Promise<void> {
+async function gravarConversas(e: Escritor, agora: Date): Promise<void> {
   for (const c of CONVERSAS) {
     const ultimoMinuto = Math.max(...c.mensagens.map((m) => m.min));
     const base = new Date(agora.getTime() - c.comecouHaDias * DIA - (ultimoMinuto + 20) * 60_000);
@@ -787,7 +875,7 @@ async function gravarConversas(db: pg.ClientBase, agora: Date): Promise<void> {
     const contato = ID.contato(c.contato);
 
     await gravar(
-      db,
+      e,
       "public.conversations",
       {
         id,
@@ -819,7 +907,7 @@ async function gravarConversas(db: pg.ClientBase, agora: Date): Promise<void> {
     for (const [i, m] of c.mensagens.entries()) {
       const saida = m.de !== "cliente";
       const em = emMin(m.min);
-      await gravar(db, "public.messages", {
+      await gravar(e, "public.messages", {
         id: ID.mensagem(c.chave, i),
         organization_id: ID_DA_EMPRESA,
         conversation_id: id,
@@ -842,7 +930,7 @@ async function gravarConversas(db: pg.ClientBase, agora: Date): Promise<void> {
 
     // O que a IA entendeu: o estado do lead, as transições e a ficha.
     await gravar(
-      db,
+      e,
       "public.lead_state",
       {
         id: ID.estado(c.chave),
@@ -860,7 +948,7 @@ async function gravarConversas(db: pg.ClientBase, agora: Date): Promise<void> {
     const passos = [...caminho.slice(0, Math.max(alvo, 0) + 1)];
     if (c.passo === "won" || c.passo === "lost") passos.push(c.passo);
     for (let i = 1; i < passos.length; i += 1) {
-      await gravar(db, "public.lead_state_transitions", {
+      await gravar(e, "public.lead_state_transitions", {
         id: ID.transicao(c.chave, i),
         organization_id: ID_DA_EMPRESA,
         contact_id: contato,
@@ -871,7 +959,7 @@ async function gravarConversas(db: pg.ClientBase, agora: Date): Promise<void> {
       });
     }
     if (c.ficha) {
-      await gravar(db, "public.lead_notes", {
+      await gravar(e, "public.lead_notes", {
         id: ID.nota(c.chave),
         organization_id: ID_DA_EMPRESA,
         contact_id: contato,
@@ -885,7 +973,7 @@ async function gravarConversas(db: pg.ClientBase, agora: Date): Promise<void> {
       const quem = c.passagem.reconhecidaPor ? ID.usuario(c.passagem.reconhecidaPor) : null;
       const ultimaDaIa = [...c.mensagens].reverse().find((m) => m.de === "ia");
       const passouEm = emMin(ultimaDaIa?.min ?? ultimoMinuto);
-      await gravar(db, "public.passagens_de_atendimento", {
+      await gravar(e, "public.passagens_de_atendimento", {
         id: ID.passagem(c.chave),
         organization_id: ID_DA_EMPRESA,
         contact_id: contato,
@@ -929,7 +1017,7 @@ function caminhoAte(grafo: FlowGraph, alvo: string): string[] {
   return caminho;
 }
 
-async function gravarFollowups(db: pg.ClientBase, agora: Date, etapas: EtapasGravadas): Promise<void> {
+async function gravarFollowups(e: Escritor, agora: Date, etapas: EtapasGravadas): Promise<void> {
   const emUso = new Set(INSCRICOES.map((i) => i.modelo));
   const grafos = new Map<string, FlowGraph>();
 
@@ -951,7 +1039,7 @@ async function gravarFollowups(db: pg.ClientBase, agora: Date, etapas: EtapasGra
     const ativo = emUso.has(modelo.id);
     // Nasce rascunho; a versão publicada entra depois (ela aponta para o ponteiro).
     await gravar(
-      db,
+      e,
       "public.followup_flow_pointers",
       {
         id: ID.fluxo(modelo.id),
@@ -966,7 +1054,7 @@ async function gravarFollowups(db: pg.ClientBase, agora: Date, etapas: EtapasGra
       { manter: ["status", "active_version_id"] },
     );
     if (ativo) {
-      await gravar(db, "public.followup_flow_versions", {
+      await gravar(e, "public.followup_flow_versions", {
         id: ID.versao(modelo.id),
         organization_id: ID_DA_EMPRESA,
         pointer_id: ID.fluxo(modelo.id),
@@ -974,7 +1062,7 @@ async function gravarFollowups(db: pg.ClientBase, agora: Date, etapas: EtapasGra
         created_by: ID.usuario("helena"),
       });
     }
-    await db.query(
+    await e.executar(
       `update public.followup_flow_pointers set status = $2::text, active_version_id = $3::uuid
         where id = $1 and (status, active_version_id) is distinct from ($2::text, $3::uuid)`,
       [ID.fluxo(modelo.id), ativo ? "active" : "draft", ativo ? ID.versao(modelo.id) : null],
@@ -992,7 +1080,7 @@ async function gravarFollowups(db: pg.ClientBase, agora: Date, etapas: EtapasGra
     const conversa = CONVERSAS.find((c) => c.contato === inscricao.contato);
     const id = ID.inscricao(inscricao.chave);
 
-    await gravar(db, "public.followup_enrollments", {
+    await gravar(e, "public.followup_enrollments", {
       id,
       organization_id: ID_DA_EMPRESA,
       pointer_id: ID.fluxo(modelo.id),
@@ -1030,21 +1118,21 @@ async function gravarFollowups(db: pg.ClientBase, agora: Date, etapas: EtapasGra
           : { cancel_reason: inscricao.motivoDoCancelamento ?? null },
       });
     }
-    for (const [i, e] of eventos.entries()) {
-      await gravar(db, "public.followup_enrollment_events", {
+    for (const [i, ev] of eventos.entries()) {
+      await gravar(e, "public.followup_enrollment_events", {
         id: ID.eventoDaInscricao(inscricao.chave, i),
         organization_id: ID_DA_EMPRESA,
         enrollment_id: id,
-        node_id: e.no,
-        event_type: e.tipo,
-        payload: json(e.payload),
+        node_id: ev.no,
+        event_type: ev.tipo,
+        payload: json(ev.payload),
         created_at: new Date(comecou.getTime() + (i + 1) * (intervalo / Math.max(eventos.length / 2, 1))),
       });
     }
   }
 }
 
-async function gravarAgenda(db: pg.ClientBase, agora: Date): Promise<void> {
+async function gravarAgenda(e: Escritor, agora: Date): Promise<void> {
   // "consulta", "reuniao" e "atendimento" o banco semeia em toda empresa nova.
   const extras = [
     { slug: "visita", nome: "Visita ao imóvel", categoria: "visita", duracao: 60 },
@@ -1053,7 +1141,7 @@ async function gravarAgenda(db: pg.ClientBase, agora: Date): Promise<void> {
   ];
   for (const [i, t] of extras.entries()) {
     await gravar(
-      db,
+      e,
       "public.calendar_event_types",
       {
         id: ID.tipoDeAgenda(t.slug),
@@ -1069,24 +1157,32 @@ async function gravarAgenda(db: pg.ClientBase, agora: Date): Promise<void> {
   }
   // Lembrete desligado: ele sairia pela fila de mensagens, que a 9010 recusa, e
   // o cron ficaria tentando. Na demonstração o lembrete aparece desligado.
-  await db.query(`update public.calendar_event_types set reminder_enabled = false where organization_id = $1`, [
+  await e.executar(`update public.calendar_event_types set reminder_enabled = false where organization_id = $1`, [
     ID_DA_EMPRESA,
   ]);
-  const { rows: tipos } = await db.query<{ id: string; slug: string; duration_minutes: number }>(
-    `select id, slug, duration_minutes from public.calendar_event_types where organization_id = $1`,
-    [ID_DA_EMPRESA],
-  );
+  // O tipo é achado pelo slug NO banco (os três primeiros o banco semeia), com
+  // a conferência de que todos existem antes de marcar qualquer compromisso.
+  const slugs = [...new Set(COMPROMISSOS.map((c) => c.tipo))];
+  await e.executar(`do $semente$
+begin
+  if (select count(distinct slug) from public.calendar_event_types
+       where organization_id = ${literal(ID_DA_EMPRESA)}::uuid
+         and slug in (${slugs.map((x) => literal(x)).join(", ")})) < ${slugs.length} then
+    raise exception 'cliente modelo: falta tipo de agendamento na empresa de demonstracao';
+  end if;
+end
+$semente$`);
 
   for (const c of COMPROMISSOS) {
-    const tipo = tipos.find((t) => t.slug === c.tipo);
-    if (!tipo) throw new Error(`cliente modelo: tipo de agendamento "${c.tipo}" não existe`);
     const inicio = naHoraLocal(agora, c.emDias, c.hora);
     const conversa = CONVERSAS.find((x) => x.contato === c.contato);
     const cancelado = c.status === "cancelled";
-    await gravar(db, "public.calendar_appointments", {
+    await gravar(e, "public.calendar_appointments", {
       id: ID.compromisso(c.chave),
       organization_id: ID_DA_EMPRESA,
-      event_type_id: tipo.id,
+      event_type_id: sql(
+        `(select id from public.calendar_event_types where organization_id = ${literal(ID_DA_EMPRESA)}::uuid and slug = ${literal(c.tipo)})`,
+      ),
       title: c.titulo,
       starts_at: inicio,
       ends_at: new Date(inicio.getTime() + c.duracaoMin * 60_000),
@@ -1110,9 +1206,9 @@ async function gravarAgenda(db: pg.ClientBase, agora: Date): Promise<void> {
   }
 }
 
-async function gravarTarefasSoltas(db: pg.ClientBase, agora: Date): Promise<void> {
+async function gravarTarefasSoltas(e: Escritor, agora: Date): Promise<void> {
   for (const t of TAREFAS) {
-    await gravar(db, "public.crm_tasks", {
+    await gravar(e, "public.crm_tasks", {
       id: ID.tarefa(t.chave),
       organization_id: ID_DA_EMPRESA,
       title: t.titulo,
@@ -1133,20 +1229,23 @@ async function gravarTarefasSoltas(db: pg.ClientBase, agora: Date): Promise<void
  * histórico fictício, não tráfego: marcados como consumidos, nenhum worker
  * reage a eles. Os eventos de quem usar a demonstração depois seguem normais.
  */
-async function neutralizarOsEventos(db: pg.ClientBase, desde: Date): Promise<void> {
-  await db.query(
+async function neutralizarOsEventos(e: Escritor): Promise<void> {
+  // `now()` é o INÍCIO da transação, o mesmo nos dois modos — e é quando as
+  // linhas de `event_log` desta carga nasceram (o default da coluna é `now()`).
+  await e.executar(
     `update public.event_log
         set status = 'done',
-            consumed_by = array(select distinct unnest(consumed_by || array[$3::text])),
+            consumed_by = array(select distinct unnest(consumed_by || array[$2::text])),
             updated_at = now()
-      where organization_id = $1
-        and created_at >= $2
+      where organization_id = $1::uuid
+        and created_at >= now()
         and status in ('pending', 'processing')`,
-    [ID_DA_EMPRESA, desde, CONSUMIDOR_DA_SEMENTE],
+    [ID_DA_EMPRESA, CONSUMIDOR_DA_SEMENTE],
   );
 }
 
-async function contar(db: pg.ClientBase): Promise<Record<string, number>> {
+/** Quantas linhas a empresa de demonstração tem em cada tabela que a semente grava. */
+export async function contarDaSemente(db: pg.ClientBase | pg.Pool): Promise<Record<string, number>> {
   const tabelas = [
     "user_organizations",
     "crm_empresas",

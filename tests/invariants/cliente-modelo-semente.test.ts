@@ -4,7 +4,14 @@ import path from "node:path";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { aplicarSemente, CONSUMIDOR_DA_SEMENTE, ID_DA_EMPRESA, type ResumoDaSemente } from "@/lib/demonstracao/semente/aplicar";
+import {
+  aplicarSemente,
+  CONSUMIDOR_DA_SEMENTE,
+  contarDaSemente,
+  gerarSqlDaSemente,
+  ID_DA_EMPRESA,
+  type ResumoDaSemente,
+} from "@/lib/demonstracao/semente/aplicar";
 import { FUNIS } from "@/lib/demonstracao/semente/dados";
 
 /**
@@ -65,6 +72,91 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool.end();
+});
+
+/**
+ * O MODO `--sql`: o SQL gerado, sem conexão, aplicado por psql num banco NOVO
+ * (cópia do molde com o baseline) — é o caminho do `/pg/query` do postgres-meta
+ * em produção, que recebe um texto e executa.
+ */
+describe("o SQL gerado (`--sql`)", () => {
+  const container = process.env.TEST_DB_CONTAINER!;
+  const molde = process.env.TEST_DB_TEMPLATE!;
+
+  function psql(banco: string, script: string): string {
+    return execFileSync(
+      "docker",
+      ["exec", "-i", container, "psql", "-U", "postgres", "-d", banco, "-v", "ON_ERROR_STOP=1", "-qtA", "-f", "-"],
+      { input: script, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+    );
+  }
+
+  async function gerar(): Promise<string> {
+    return gerarSqlDaSemente({
+      agora: AGORA,
+      emailsDeAcesso: ["quem-mostra@invariant.test", "nao-existe@invariant.test"],
+    });
+  }
+
+  it("⭐ aplicado DUAS vezes, dá as MESMAS contagens do modo conectado", async () => {
+    psql("template1", `drop database if exists semente_sql with (force); create database semente_sql template ${molde};`);
+    psql(
+      "semente_sql",
+      `insert into auth.users (id, email) values ('90109010-5555-4000-8000-000000000001', 'quem-mostra@invariant.test');`,
+    );
+    const texto = await gerar();
+    psql("semente_sql", texto);
+    const outra = new pg.Pool({
+      connectionString: `postgresql://postgres:postgres@127.0.0.1:${process.env.TEST_DB_PORT ?? 54329}/semente_sql`,
+      max: 1,
+    });
+    try {
+      const depoisDaPrimeira = await contarDaSemente(outra);
+      psql("semente_sql", await gerar());
+      const depoisDaSegunda = await contarDaSemente(outra);
+      expect(depoisDaPrimeira).toEqual(primeira.contagens);
+      expect(depoisDaSegunda).toEqual(primeira.contagens);
+
+      const { rows } = await outra.query<{ marca: boolean; pendentes: string; acesso: string | null }>(
+        `select o.demonstracao as marca,
+                (select count(*)::text from public.event_log e where e.organization_id = o.id and e.status in ('pending', 'processing')) as pendentes,
+                (select m.role from public.user_organizations m
+                  where m.organization_id = o.id and m.user_id = '90109010-5555-4000-8000-000000000001') as acesso
+           from public.organizations o where o.id = $1`,
+        [ID_DA_EMPRESA],
+      );
+      expect(rows[0]).toEqual({ marca: true, pendentes: "0", acesso: "admin" });
+    } finally {
+      await outra.end();
+      psql("template1", "drop database if exists semente_sql with (force);");
+    }
+  }, 180_000);
+
+  it("é UMA transação, sem segredo: começa em `begin;`, termina em `commit;`, não leva senha nem chave", async () => {
+    const texto = await gerar();
+    const comandos = texto.split("\n\n").filter((l) => !l.startsWith("--"));
+    expect(comandos[0]).toBe("begin;");
+    expect(comandos.filter((c) => c.trim() === "commit;")).toHaveLength(1);
+    expect(texto.trimEnd().endsWith("commit;")).toBe(true);
+    expect(texto).not.toMatch(/postgres(ql)?:\/\/|service_role|eyJhbGci|password=/i);
+    expect(texto, "sobrou parâmetro sem valor").not.toMatch(/\$\d+\b/);
+  });
+
+  it("⭐ sem a migration 9010 o script ABORTA antes de gravar qualquer coisa", async () => {
+    psql("template1", "drop database if exists semente_sem_9010 with (force); create database semente_sem_9010;");
+    try {
+      let erro = "";
+      try {
+        psql("semente_sem_9010", await gerar());
+      } catch (e) {
+        erro = String((e as { stderr?: string }).stderr ?? e);
+      }
+      expect(erro).toContain("nao tem a migration 9010");
+      expect(psql("semente_sem_9010", "select count(*) from information_schema.tables where table_schema = 'public';").trim()).toBe("0");
+    } finally {
+      psql("template1", "drop database if exists semente_sem_9010 with (force);");
+    }
+  });
 });
 
 describe("idempotência", () => {

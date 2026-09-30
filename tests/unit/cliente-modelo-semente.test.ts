@@ -184,3 +184,31 @@ describe("os funis", () => {
     expect([...origens].sort()).toEqual(["google", "indicacao", "meta_clique_whatsapp", "meta_formulario", "site"]);
   });
 });
+
+describe("o roteiro SQL (`--sql`) escreve literais que o Postgres lê do mesmo jeito que os parâmetros", () => {
+  it("texto com aspas e barra, nulo, número, booleano, data, lista e jsonb", async () => {
+    const { literal, json, sql } = await import("@/lib/demonstracao/semente/escritor");
+    expect(literal("d'Ávila")).toBe("'d''Ávila'");
+    // O bytea "\x00" (4 caracteres): com barra, a forma E'' dobra a barra.
+    expect(literal(String.raw`\x00`)).toBe(String.raw`E'\\x00'`);
+    expect(literal(null)).toBe("null");
+    expect(literal(42)).toBe("42");
+    expect(literal(true)).toBe("true");
+    expect(literal(new Date("2026-09-30T15:00:00.000Z"))).toBe("'2026-09-30T15:00:00.000Z'::timestamptz");
+    expect(literal([])).toBe("'{}'::text[]");
+    expect(literal(["a", "b'c"])).toBe("array['a', 'b''c']::text[]");
+    expect(literal(json({ a: "x'y" }))).toBe(`'{"a":"x''y"}'::jsonb`);
+    expect(literal(sql("(select 1)"))).toBe("(select 1)");
+    expect(() => literal(Number.NaN)).toThrow();
+  });
+
+  it("troca cada `$n` pelo literal certo, e recusa parâmetro que falta", async () => {
+    const { escritorDeRoteiro, json } = await import("@/lib/demonstracao/semente/escritor");
+    const r = escritorDeRoteiro();
+    expect(await r.executar("insert into t (a, b, c) values ($1, $2::jsonb, $10)", [
+      "x", json({ k: 1 }), 0, 0, 0, 0, 0, 0, 0, "dez",
+    ])).toBeNull();
+    expect(r.comandos()).toEqual([`insert into t (a, b, c) values ('x', '{"k":1}'::jsonb::jsonb, 'dez');`]);
+    await expect(r.executar("select $2", ["só um"])).rejects.toThrow(/\$2/);
+  });
+});
