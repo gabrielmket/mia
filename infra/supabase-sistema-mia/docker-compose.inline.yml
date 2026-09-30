@@ -22,6 +22,8 @@
 #     mas responde por `auth` na rede interna.
 #   * E-mail do login (confirmação, "esqueci a senha", convite): SMTP do Google
 #     Workspace, modelos em português servidos pelo `modelos-email`. Ver EMAIL.md.
+#   * Entrar e criar conta com Google: provedor do GoTrue, desligado por padrão
+#     (GOOGLE_ENABLED). Ver GOOGLE.md.
 #   * O banco entra na rede `easypanel` com o apelido
 #     `supabase-sistema-mia-db`: é por ele que o `deskcomm` (outro projeto)
 #     chega ao Postgres. Nenhuma porta é publicada no host.
