@@ -89,10 +89,20 @@ test.describe("o ícone e o título carregam a marca da instalação", () => {
     expect(marcaNoTitulo.length).toBeGreaterThan(0);
 
     // Cruza DUAS resoluções independentes: o título vem de `generateMetadata`
-    // (que lê `platform_branding` no banco) e o texto sob o "Entrar" vem de
-    // `branding()` (que lê o `.env`). Divergirem é defeito de verdade — foi
-    // por não cruzar isso que "trocar o nome pela tela e a aba não acompanhar"
-    // passou despercebido antes.
-    await expect(page.getByText(marcaNoTitulo, { exact: true }).first()).toBeVisible();
+    // (que lê `platform_branding` no banco) e a marca na tela vem da casca de
+    // acesso. Divergirem é defeito de verdade — foi por não cruzar isso que
+    // "trocar o nome pela tela e a aba não acompanhar" passou despercebido antes.
+    //
+    // FORK MIA (.64): o texto sob o "Entrar" só aparece quando a casca não
+    // mostra marca nenhuma (`lib/branding/fachada.ts`) — com logo ou com o
+    // logotipo do produto ele repetia o que estava logo acima. A marca da tela
+    // passa a ser o NOME ACESSÍVEL do logo (o `alt` da imagem ou o `aria-label`
+    // do logotipo) ou, sem logo, o texto sob o "Entrar".
+    await expect(
+      page
+        .getByRole("img", { name: marcaNoTitulo, exact: true })
+        .or(page.getByText(marcaNoTitulo, { exact: true }))
+        .first(),
+    ).toBeVisible();
   });
 });

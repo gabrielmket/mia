@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
-import { EntrarComGoogle } from "@/components/auth/EntrarComGoogle";
+import { EntrarComGoogleSeLigado } from "@/components/auth/EntrarComGoogleSeLigado";
 import { SignupForm } from "@/components/auth/SignupForm";
 import { Button } from "@/components/ui/button";
 import { branding } from "@/lib/branding";
@@ -111,7 +112,10 @@ export default async function SignupPage({
       <SignupForm convite={convite} />
       {/* O convite atravessa o Google na URL de retorno: sem ele, quem foi
           convidado e cria a conta com Google ganharia uma empresa própria. */}
-      <EntrarComGoogle convite={convite?.token} />
+      {/* FORK MIA (.64): só com o Google ligado no GoTrue desta instalação. */}
+      <Suspense fallback={null}>
+        <EntrarComGoogleSeLigado convite={convite?.token} />
+      </Suspense>
 
       <p className="text-center text-sm text-muted-foreground">
         {t("Já tem conta?")}{" "}

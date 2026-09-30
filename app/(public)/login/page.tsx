@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
-import { EntrarComGoogle } from "@/components/auth/EntrarComGoogle";
+import { EntrarComGoogleSeLigado } from "@/components/auth/EntrarComGoogleSeLigado";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { branding } from "@/lib/branding";
+import { fachadaMostraAMarca } from "@/lib/branding/fachada";
+import { marcaDaSaida } from "@/lib/branding/saida";
 import { createClient } from "@/lib/supabase/server";
 import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -27,12 +30,17 @@ export default async function LoginPage({
     (user?.user_metadata?.locale as string | undefined) ?? null,
   );
   const t = (texto: string) => traduzir(texto, idioma);
+  // FORK MIA (.64): o nome sob o "Entrar" repetia o logo que a casca
+  // (`app/(public)/layout.tsx`) desenha logo acima. Fica só quando a casca não
+  // mostra marca nenhuma (nome próprio sem logo) — `lib/branding/fachada.ts`.
+  // `marcaDaSaida` nunca lança e a leitura da instalação é memoizada.
+  const nomeDaMarcaNoTopo = !fachadaMostraAMarca(await marcaDaSaida(null));
 
   return (
     <div className="space-y-6">
       <div className="space-y-1.5 text-center">
         <h1 className="text-2xl font-semibold tracking-tight">{t("Entrar")}</h1>
-        <p className="text-sm text-muted-foreground">{branding().name}</p>
+        {nomeDaMarcaNoTopo && <p className="text-sm text-muted-foreground">{branding().name}</p>}
       </div>
       {reset === "success" && (
         <div
@@ -139,7 +147,11 @@ export default async function LoginPage({
         </div>
       )}
       <LoginForm next={next} />
-      <EntrarComGoogle next={next} />
+      {/* FORK MIA (.64): o botão só existe com o Google ligado no GoTrue desta
+          instalação; lido no servidor, sem segurar o formulário acima. */}
+      <Suspense fallback={null}>
+        <EntrarComGoogleSeLigado next={next} />
+      </Suspense>
       <div className="space-y-2 text-center text-sm">
         <p>
           <Link
