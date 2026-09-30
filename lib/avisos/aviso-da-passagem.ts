@@ -28,7 +28,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { entregaEmGrupo, getAdapter } from "@/lib/channels";
+import { getAdapter } from "@/lib/channels";
 import {
   CHANNEL_SESSION_REF_COLUMNS,
   resolveSessionRef,
@@ -37,7 +37,19 @@ import {
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 
-import { destinoDoAviso, lerGrupoDeAvisos, type GrupoDeAvisos } from "./destino-do-aviso";
+import {
+  COLUNAS_DA_SESSAO_DA_EMPRESA,
+  destinoDoAviso,
+  lerGrupoDeAvisos,
+  type GrupoDeAvisos,
+} from "./destino-do-aviso";
+import {
+  escolherNumeroDoAviso,
+  lerOrigemDoAviso,
+  type ProblemaDoNumeroDaEmpresa,
+  type SessaoDaEmpresa,
+  type SituacaoDaReserva,
+} from "./origem-do-aviso";
 
 export interface DadosDaPassagem {
   organizationId: string;
@@ -124,9 +136,39 @@ async function enviar(
 }
 
 /**
- * Caminho SUPABASE (`triggerHandoff`). Lê o número da plataforma e o grupo
- * daquele cliente, e manda. `false` quando não havia para onde mandar — que é
- * o normal em cliente sem grupo configurado, e por isso não vira erro.
+ * FORK MIA (.62) — o número DA EMPRESA não serviu: o log diz, nos dois motores.
+ *
+ * A passagem não escreve no histórico do negócio (é a Central que registra a
+ * passagem), então o registro do desvio é o log com o motivo em código. O que a
+ * pessoa vê é a tela do admin, que mostra o número caído e para onde os avisos
+ * estão indo enquanto ele estiver assim.
+ */
+function registrarNumeroDaEmpresa(
+  organizationId: string,
+  caso:
+    | { saiu: true; desvio: ProblemaDoNumeroDaEmpresa }
+    | { saiu: false; motivo: string; reserva: SituacaoDaReserva },
+): void {
+  if (caso.saiu) {
+    logger.warn("[aviso-da-passagem] o número da empresa não serve; saiu pelo da plataforma (reserva)", {
+      organizationId,
+      desvio: caso.desvio,
+    });
+    return;
+  }
+  if (!caso.reserva) return;
+  logger.warn("[aviso-da-passagem] o número da empresa não serve; o aviso NÃO saiu", {
+    organizationId,
+    motivo: caso.motivo,
+    reserva: caso.reserva,
+  });
+}
+
+/**
+ * Caminho SUPABASE (`triggerHandoff`). Lê o número (o da plataforma, ou o que a
+ * empresa escolheu) e o grupo daquele cliente, e manda. `false` quando não havia
+ * para onde mandar — que é o normal em cliente sem grupo configurado, e por isso
+ * não vira erro.
  */
 export async function avisarGrupoDaPassagem(
   admin: SupabaseClient,
@@ -134,7 +176,17 @@ export async function avisarGrupoDaPassagem(
 ): Promise<boolean> {
   try {
     const destino = await destinoDoAviso(admin, dados.organizationId);
-    if (!destino.ok) return false;
+    if (!destino.ok) {
+      registrarNumeroDaEmpresa(dados.organizationId, {
+        saiu: false,
+        motivo: destino.motivo,
+        reserva: destino.reserva,
+      });
+      return false;
+    }
+    if (destino.desvio) {
+      registrarNumeroDaEmpresa(dados.organizationId, { saiu: true, desvio: destino.desvio });
+    }
     return await enviar(destino.sessao, destino.chatId, dados.organizationId, textoDaPassagem(dados));
   } catch (err) {
     logger.warn("[aviso-da-passagem] falhou antes de enviar", {
@@ -156,13 +208,22 @@ interface ConsultaPg {
  * A leitura é escrita em SQL aqui, e não reaproveitada de `destinoDoAviso`,
  * porque os dois motores falam com o banco por bibliotecas diferentes. O que
  * NÃO se duplica é a regra: quem decide se o grupo vale (`@g.us`) e de onde ele
- * sai (`settings.grupo_de_avisos`) continua sendo `lerGrupoDeAvisos`.
+ * sai (`settings.grupo_de_avisos`) continua sendo `lerGrupoDeAvisos`, e por qual
+ * NÚMERO sai (o da plataforma, o da empresa ou a reserva) é
+ * `escolherNumeroDoAviso` — a mesma função que o caminho Supabase usa.
  */
 export async function avisarGrupoDaPassagemPg(
   db: ConsultaPg,
   dados: DadosDaPassagem,
 ): Promise<boolean> {
   try {
+    const { rows: orgs } = await db.query<{ settings: unknown }>(
+      `select settings from organizations where id = $1`,
+      [dados.organizationId],
+    );
+    const settings = orgs[0]?.settings;
+    const origem = lerOrigemDoAviso(settings);
+
     const { rows: sessoes } = await db.query<ChannelSessionRef>(
       `select ${CHANNEL_SESSION_REF_COLUMNS}
          from channel_sessions
@@ -170,19 +231,40 @@ export async function avisarGrupoDaPassagemPg(
         limit 1`,
       [],
     );
-    const sessao = sessoes[0];
-    if (!sessao) return false;
 
-    if (!entregaEmGrupo(sessao.provider)) return false;
+    let daEmpresa: SessaoDaEmpresa | null = null;
+    if (origem.modo === "empresa" && origem.channel_session_id) {
+      const { rows } = await db.query<SessaoDaEmpresa>(
+        `select ${COLUNAS_DA_SESSAO_DA_EMPRESA}
+           from channel_sessions
+          where id = $1`,
+        [origem.channel_session_id],
+      );
+      daEmpresa = rows[0] ?? null;
+    }
 
-    const { rows: orgs } = await db.query<{ settings: unknown }>(
-      `select settings from organizations where id = $1`,
-      [dados.organizationId],
-    );
-    const grupo: GrupoDeAvisos | null = lerGrupoDeAvisos(orgs[0]?.settings);
+    const numero = escolherNumeroDoAviso({
+      organizationId: dados.organizationId,
+      origem,
+      daEmpresa,
+      daPlataforma: sessoes[0] ?? null,
+    });
+    if (!numero.ok) {
+      registrarNumeroDaEmpresa(dados.organizationId, {
+        saiu: false,
+        motivo: numero.motivo,
+        reserva: numero.reserva,
+      });
+      return false;
+    }
+
+    const grupo: GrupoDeAvisos | null = lerGrupoDeAvisos(settings);
     if (!grupo) return false;
 
-    return await enviar(sessao, grupo.id, dados.organizationId, textoDaPassagem(dados));
+    if (numero.desvio) {
+      registrarNumeroDaEmpresa(dados.organizationId, { saiu: true, desvio: numero.desvio });
+    }
+    return await enviar(numero.sessao, grupo.id, dados.organizationId, textoDaPassagem(dados));
   } catch (err) {
     logger.warn("[aviso-da-passagem] falhou antes de enviar (motor)", {
       organizationId: dados.organizationId,
