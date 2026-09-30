@@ -177,6 +177,62 @@ services:
       GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: ${MAILER_URLPATHS_EMAIL_CHANGE}
       GOTRUE_EXTERNAL_PHONE_ENABLED: ${ENABLE_PHONE_SIGNUP}
       GOTRUE_SMS_AUTOCONFIRM: ${ENABLE_PHONE_AUTOCONFIRM}
+      # ── E-mails do login em português, com a cara da MIA ──────────────────
+      # O corpo de cada e-mail o GoTrue só aceita por URL (ele faz um GET e
+      # guarda em cache; medido no fonte da v2.186, templatemailer/template.go).
+      # A URL aponta para o serviço `modelos-email` logo abaixo, DENTRO desta
+      # pilha: nada depende de internet de fora nem do app estar no ar. Se o
+      # modelo não vier (serviço parado, arquivo com erro), o GoTrue NÃO deixa
+      # de mandar: cai no modelo padrão dele, em inglês, e com o recarregamento
+      # ligado volta ao português sozinho em ~10 s quando o serviço volta
+      # (medido em teste local, 30/09/2026).
+      #
+      # Os links vão para /auth/confirm do app com token_hash, o único formato
+      # que fecha nesta instalação (ver app/auth/confirm/route.ts). O endereço
+      # sai do SITE_URL ou do retorno que o app pediu (crm.timecompany.com.br ou
+      # app.iamia.com.br): nenhum domínio está escrito nos modelos. Não dependem
+      # do servidor de envio: valem com qualquer SMTP configurado abaixo.
+      GOTRUE_MAILER_TEMPLATES_INVITE: http://modelos-email:8080/convite.html
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://modelos-email:8080/confirmacao.html
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: http://modelos-email:8080/recuperacao.html
+      GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE: http://modelos-email:8080/troca-de-email.html
+      GOTRUE_MAILER_TEMPLATES_MAGIC_LINK: http://modelos-email:8080/link-magico.html
+      GOTRUE_MAILER_TEMPLATES_REAUTHENTICATION: http://modelos-email:8080/reautenticacao.html
+      GOTRUE_MAILER_TEMPLATE_RELOADING_ENABLED: "true"
+      # O assunto não tem URL: vai aqui mesmo. É modelo também, e o da
+      # confirmação muda quando ela é o convite da equipe do app (o app grava
+      # invite_token nos metadados de quem foi convidado).
+      GOTRUE_MAILER_SUBJECTS_INVITE: "Você foi convidado para a MIA"
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: "{{ if .Data.invite_token }}Confirme seu e-mail para entrar na equipe na MIA{{ else }}Confirme seu e-mail na MIA{{ end }}"
+      GOTRUE_MAILER_SUBJECTS_RECOVERY: "Redefina sua senha da MIA"
+      GOTRUE_MAILER_SUBJECTS_EMAIL_CHANGE: "Confirme a troca de e-mail na MIA"
+      GOTRUE_MAILER_SUBJECTS_MAGIC_LINK: "Seu link de acesso à MIA"
+      GOTRUE_MAILER_SUBJECTS_REAUTHENTICATION: "Seu código de confirmação da MIA"
+      # Teto de e-mails do login por hora, na instalação inteira. O padrão do
+      # GoTrue (30) trava o convite de uma equipe maior: cada convidado é um
+      # e-mail, e o 31º convite da hora falha. 100 cobre isso e ainda segura
+      # abuso. ATENÇÃO, medido no fonte e em teste: com ENABLE_EMAIL_AUTOCONFIRM
+      # =true o GoTrue NÃO aplica este teto (mail.go, "TODO: deprecate"); aí
+      # seguram o intervalo de 60 s por pessoa (padrão) e o limite por IP das
+      # rotas de envio (RATE_LIMIT_OTP, 30 a cada 5 min).
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: ${RATE_LIMIT_EMAIL_SENT:-100}
+
+  # Serve os modelos dos e-mails do login (volumes/email/) para o GoTrue, só na
+  # rede interna desta pilha, sem porta publicada. Um servidor web mínimo
+  # (busybox httpd, ~7 MB, imagem fixada por digest), sem acesso ao banco e sem
+  # segredo nenhum: se ele cair, o login continua e só o e-mail volta ao inglês.
+  modelos-email:
+    image: busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+    restart: unless-stopped
+    user: "65534:65534"
+    command: ["httpd", "-f", "-p", "8080", "-h", "/www"]
+    volumes:
+      - ./volumes/email:/www:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/recuperacao.html"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   rest:
     image: postgrest/postgrest:v14.8

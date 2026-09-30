@@ -180,6 +180,73 @@ services:
       GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: ${MAILER_URLPATHS_EMAIL_CHANGE}
       GOTRUE_EXTERNAL_PHONE_ENABLED: ${ENABLE_PHONE_SIGNUP}
       GOTRUE_SMS_AUTOCONFIRM: ${ENABLE_PHONE_AUTOCONFIRM}
+      # ── E-mails do login em português, com a cara da MIA ──────────────────
+      # O corpo de cada e-mail o GoTrue só aceita por URL (ele faz um GET e
+      # guarda em cache; medido no fonte da v2.186, templatemailer/template.go).
+      # A URL aponta para o serviço `modelos-email` logo abaixo, DENTRO desta
+      # pilha: nada depende de internet de fora nem do app estar no ar. Se o
+      # modelo não vier (serviço parado, arquivo com erro), o GoTrue NÃO deixa
+      # de mandar: cai no modelo padrão dele, em inglês, e com o recarregamento
+      # ligado volta ao português sozinho em ~10 s quando o serviço volta
+      # (medido em teste local, 30/09/2026).
+      #
+      # Os links vão para /auth/confirm do app com token_hash, o único formato
+      # que fecha nesta instalação (ver app/auth/confirm/route.ts). O endereço
+      # sai do SITE_URL ou do retorno que o app pediu (crm.timecompany.com.br ou
+      # app.iamia.com.br): nenhum domínio está escrito nos modelos. Não dependem
+      # do servidor de envio: valem com qualquer SMTP configurado abaixo.
+      GOTRUE_MAILER_TEMPLATES_INVITE: http://modelos-email:8080/convite.html
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://modelos-email:8080/confirmacao.html
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: http://modelos-email:8080/recuperacao.html
+      GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE: http://modelos-email:8080/troca-de-email.html
+      GOTRUE_MAILER_TEMPLATES_MAGIC_LINK: http://modelos-email:8080/link-magico.html
+      GOTRUE_MAILER_TEMPLATES_REAUTHENTICATION: http://modelos-email:8080/reautenticacao.html
+      GOTRUE_MAILER_TEMPLATE_RELOADING_ENABLED: "true"
+      # O assunto não tem URL: vai aqui mesmo. É modelo também, e o da
+      # confirmação muda quando ela é o convite da equipe do app (o app grava
+      # invite_token nos metadados de quem foi convidado).
+      GOTRUE_MAILER_SUBJECTS_INVITE: "Você foi convidado para a MIA"
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: "{{ if .Data.invite_token }}Confirme seu e-mail para entrar na equipe na MIA{{ else }}Confirme seu e-mail na MIA{{ end }}"
+      GOTRUE_MAILER_SUBJECTS_RECOVERY: "Redefina sua senha da MIA"
+      GOTRUE_MAILER_SUBJECTS_EMAIL_CHANGE: "Confirme a troca de e-mail na MIA"
+      GOTRUE_MAILER_SUBJECTS_MAGIC_LINK: "Seu link de acesso à MIA"
+      GOTRUE_MAILER_SUBJECTS_REAUTHENTICATION: "Seu código de confirmação da MIA"
+      # Teto de e-mails do login por hora, na instalação inteira. O padrão do
+      # GoTrue (30) trava o convite de uma equipe maior: cada convidado é um
+      # e-mail, e o 31º convite da hora falha. 100 cobre isso e ainda segura
+      # abuso. ATENÇÃO, medido no fonte e em teste: com ENABLE_EMAIL_AUTOCONFIRM
+      # =true o GoTrue NÃO aplica este teto (mail.go, "TODO: deprecate"); aí
+      # seguram o intervalo de 60 s por pessoa (padrão) e o limite por IP das
+      # rotas de envio (RATE_LIMIT_OTP, 30 a cada 5 min).
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: ${RATE_LIMIT_EMAIL_SENT:-100}
+
+  # Serve os modelos dos e-mails do login (volumes/email/) para o GoTrue, só na
+  # rede interna desta pilha, sem porta publicada. Um servidor web mínimo
+  # (busybox httpd, ~7 MB, imagem fixada por digest), sem acesso ao banco e sem
+  # segredo nenhum: se ele cair, o login continua e só o e-mail volta ao inglês.
+  modelos-email:
+    image: busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+    restart: unless-stopped
+    user: "65534:65534"
+    command: ["httpd", "-f", "-p", "8080", "-h", "/www"]
+    configs:
+      - source: email_convite
+        target: /www/convite.html
+      - source: email_confirmacao
+        target: /www/confirmacao.html
+      - source: email_recuperacao
+        target: /www/recuperacao.html
+      - source: email_troca_de_email
+        target: /www/troca-de-email.html
+      - source: email_link_magico
+        target: /www/link-magico.html
+      - source: email_reautenticacao
+        target: /www/reautenticacao.html
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/recuperacao.html"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   rest:
     image: postgrest/postgrest:v14.8
@@ -1869,4 +1936,343 @@ configs:
         gabrielmket/mia.
 
       Não apague nem mova nada aqui dentro à mão.
+
+  email_convite:
+    content: |
+      {{- /*
+        Convite do próprio GoTrue (GOTRUE_MAILER_TEMPLATES_INVITE): só sai quando
+        alguém convida pelo Studio ou pela API de administração. O convite da equipe
+        do app NÃO passa por aqui (ele usa confirmacao.html).
+      */ -}}
+      {{- $$link := printf "%s/auth/confirm?type=invite&token_hash=%s" .SiteURL .TokenHash -}}
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="color-scheme" content="light only">
+          <title>Você foi convidado para a MIA</title>
+        </head>
+        <body style="margin:0;padding:0;background:#eef2f1;">
+          <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Aceite o convite para acessar a MIA.</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef2f1;">
+            <tr>
+              <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
+                  <tr>
+                    <td style="background:#101d31;padding:20px 32px;">
+                      <span style="font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#3fb58b;">Mia</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 32px 8px;">
+                    <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:#101d31;">Você foi convidado para a MIA</h1>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Olá!</p>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Você recebeu um convite para acessar a MIA com o e-mail {{ .Email }}. Para aceitar, use o botão abaixo:</p>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;">
+                      <tr>
+                        <td style="border-radius:8px;background:#3fb58b;">
+                          <a href="{{ $$link }}" style="display:inline-block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#0b1f18;text-decoration:none;border-radius:8px;">Aceitar convite</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#5b6b7f;">Se o botão não abrir, copie e cole este endereço no navegador:</p>
+                    <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ $$link }}" style="color:#1f7a5a;">{{ $$link }}</a></p>
+                    <p style="margin:0 0 24px;font-size:13px;line-height:1.5;color:#5b6b7f;">O link vale por tempo limitado e funciona uma vez só. Se você não esperava este convite, ignore este e-mail.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px 32px;background:#f6f8f8;border-top:1px solid #e3e8ec;font-size:12px;line-height:1.5;color:#5b6b7f;">
+                      MIA · atendimento no WhatsApp<br>
+                      Este é um e-mail automático. Não responda: esta caixa não recebe mensagens.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+
+  email_confirmacao:
+    content: |
+      {{- /*
+        Confirmação de e-mail (GOTRUE_MAILER_TEMPLATES_CONFIRMATION). Serve a DOIS
+        casos do app: o cadastro (app/actions/auth/signUp.ts) e o convite da equipe
+        (lib/auth/convite-no-gotrue.ts, que cria a conta e manda esta confirmação).
+        O convite se reconhece pelo invite_token que o app grava nos metadados.
+        O link vai para /auth/confirm com token_hash, o único formato que fecha no
+        app (ver o cabeçalho de app/auth/confirm/route.ts).
+      */ -}}
+      {{- $$link := printf "%s/auth/confirm?type=signup&token_hash=%s" .SiteURL .TokenHash -}}
+      {{- if and .RedirectTo (ne .RedirectTo .SiteURL) }}{{ $$link = printf "%s&token_hash=%s" .RedirectTo .TokenHash }}{{ end -}}
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="color-scheme" content="light only">
+          <title>{{ if .Data.invite_token }}Seu convite para a MIA{{ else }}Confirme seu e-mail{{ end }}</title>
+        </head>
+        <body style="margin:0;padding:0;background:#eef2f1;">
+          <div style="display:none;max-height:0;overflow:hidden;opacity:0;">{{ if .Data.invite_token }}Falta só confirmar seu e-mail para entrar na equipe.{{ else }}Confirme seu e-mail para ativar sua conta na MIA.{{ end }}</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef2f1;">
+            <tr>
+              <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
+                  <tr>
+                    <td style="background:#101d31;padding:20px 32px;">
+                      <span style="font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#3fb58b;">Mia</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 32px 8px;">
+                    <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:#101d31;">{{ if .Data.invite_token }}Seu convite para a MIA{{ else }}Confirme seu e-mail{{ end }}</h1>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">{{ with .Data.full_name }}Olá, {{ . }}!{{ else }}Olá!{{ end }}</p>
+                    {{ if .Data.invite_token }}<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Você foi convidado para entrar na equipe de uma empresa na MIA. Para terminar, confirme que este e-mail é seu:</p>{{ else }}<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Sua conta na MIA está quase pronta. Confirme que este e-mail é seu para ativar o acesso:</p>{{ end }}
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;">
+                      <tr>
+                        <td style="border-radius:8px;background:#3fb58b;">
+                          <a href="{{ $$link }}" style="display:inline-block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#0b1f18;text-decoration:none;border-radius:8px;">{{ if .Data.invite_token }}Confirmar e entrar na equipe{{ else }}Confirmar e-mail{{ end }}</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#5b6b7f;">Se o botão não abrir, copie e cole este endereço no navegador:</p>
+                    <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ $$link }}" style="color:#1f7a5a;">{{ $$link }}</a></p>
+                    <p style="margin:0 0 24px;font-size:13px;line-height:1.5;color:#5b6b7f;">O link vale por tempo limitado e funciona uma vez só. Se você não pediu isso, ignore este e-mail: nada acontece sem o clique.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px 32px;background:#f6f8f8;border-top:1px solid #e3e8ec;font-size:12px;line-height:1.5;color:#5b6b7f;">
+                      MIA · atendimento no WhatsApp<br>
+                      Este é um e-mail automático. Não responda: esta caixa não recebe mensagens.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+
+  email_recuperacao:
+    content: |
+      {{- /*
+        "Esqueci a senha" (GOTRUE_MAILER_TEMPLATES_RECOVERY), pedido pela tela de
+        login (app/actions/auth/requestPasswordReset.ts). Volta para o endereço onde
+        a pessoa pediu e de lá segue para /login/reset.
+      */ -}}
+      {{- $$link := printf "%s/auth/confirm?type=recovery&token_hash=%s" .SiteURL .TokenHash -}}
+      {{- if and .RedirectTo (ne .RedirectTo .SiteURL) }}{{ $$link = printf "%s&token_hash=%s" .RedirectTo .TokenHash }}{{ end -}}
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="color-scheme" content="light only">
+          <title>Redefinir sua senha</title>
+        </head>
+        <body style="margin:0;padding:0;background:#eef2f1;">
+          <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Recebemos um pedido para redefinir a senha da sua conta na MIA.</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef2f1;">
+            <tr>
+              <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
+                  <tr>
+                    <td style="background:#101d31;padding:20px 32px;">
+                      <span style="font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#3fb58b;">Mia</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 32px 8px;">
+                    <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:#101d31;">Redefinir sua senha</h1>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">{{ with .Data.full_name }}Olá, {{ . }}!{{ else }}Olá!{{ end }}</p>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Recebemos um pedido para redefinir a senha da sua conta na MIA ({{ .Email }}). Para escolher uma senha nova, use o botão abaixo:</p>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;">
+                      <tr>
+                        <td style="border-radius:8px;background:#3fb58b;">
+                          <a href="{{ $$link }}" style="display:inline-block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#0b1f18;text-decoration:none;border-radius:8px;">Criar nova senha</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#5b6b7f;">Se o botão não abrir, copie e cole este endereço no navegador:</p>
+                    <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ $$link }}" style="color:#1f7a5a;">{{ $$link }}</a></p>
+                    <p style="margin:0 0 24px;font-size:13px;line-height:1.5;color:#5b6b7f;">O link vale por tempo limitado e funciona uma vez só. Se você não pediu a troca, ignore este e-mail: sua senha atual continua valendo.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px 32px;background:#f6f8f8;border-top:1px solid #e3e8ec;font-size:12px;line-height:1.5;color:#5b6b7f;">
+                      MIA · atendimento no WhatsApp<br>
+                      Este é um e-mail automático. Não responda: esta caixa não recebe mensagens.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+
+  email_troca_de_email:
+    content: |
+      {{- /*
+        Troca de e-mail (GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE). Com a troca segura
+        (padrão do GoTrue), sai UM e-mail para cada endereço, o atual e o novo, e a
+        troca só vale depois das duas confirmações. SendingTo diz qual dos dois está
+        recebendo esta cópia.
+      */ -}}
+      {{- $$link := printf "%s/auth/confirm?type=email_change&token_hash=%s" .SiteURL .TokenHash -}}
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="color-scheme" content="light only">
+          <title>Confirme a troca de e-mail</title>
+        </head>
+        <body style="margin:0;padding:0;background:#eef2f1;">
+          <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Confirme a troca do e-mail da sua conta na MIA.</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef2f1;">
+            <tr>
+              <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
+                  <tr>
+                    <td style="background:#101d31;padding:20px 32px;">
+                      <span style="font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#3fb58b;">Mia</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 32px 8px;">
+                    <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:#101d31;">Confirme a troca de e-mail</h1>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">{{ with .Data.full_name }}Olá, {{ . }}!{{ else }}Olá!{{ end }}</p>
+                    {{ if eq .SendingTo .NewEmail }}<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Pediram para trocar o e-mail da conta na MIA de {{ .Email }} para este endereço, {{ .NewEmail }}. Confirme que este e-mail é seu:</p>{{ else }}<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Recebemos um pedido para trocar o e-mail da sua conta na MIA de {{ .Email }} para {{ .NewEmail }}. Se foi você, confirme:</p>{{ end }}
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;">
+                      <tr>
+                        <td style="border-radius:8px;background:#3fb58b;">
+                          <a href="{{ $$link }}" style="display:inline-block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#0b1f18;text-decoration:none;border-radius:8px;">Confirmar troca de e-mail</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#5b6b7f;">Se o botão não abrir, copie e cole este endereço no navegador:</p>
+                    <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ $$link }}" style="color:#1f7a5a;">{{ $$link }}</a></p>
+                    <p style="margin:0 0 24px;font-size:13px;line-height:1.5;color:#5b6b7f;">A troca só vale depois da confirmação nos dois endereços. Se você não pediu isso, não clique e troque sua senha.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px 32px;background:#f6f8f8;border-top:1px solid #e3e8ec;font-size:12px;line-height:1.5;color:#5b6b7f;">
+                      MIA · atendimento no WhatsApp<br>
+                      Este é um e-mail automático. Não responda: esta caixa não recebe mensagens.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+
+  email_link_magico:
+    content: |
+      {{- /*
+        Link de acesso sem senha (GOTRUE_MAILER_TEMPLATES_MAGIC_LINK). O app hoje
+        não oferece esse login; o modelo existe para nada sair em inglês se ele for
+        pedido pela API ou pelo Studio.
+      */ -}}
+      {{- $$link := printf "%s/auth/confirm?type=magiclink&token_hash=%s" .SiteURL .TokenHash -}}
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="color-scheme" content="light only">
+          <title>Seu link de acesso</title>
+        </head>
+        <body style="margin:0;padding:0;background:#eef2f1;">
+          <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Entre na MIA com um clique, sem digitar senha.</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef2f1;">
+            <tr>
+              <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
+                  <tr>
+                    <td style="background:#101d31;padding:20px 32px;">
+                      <span style="font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#3fb58b;">Mia</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 32px 8px;">
+                    <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:#101d31;">Seu link de acesso</h1>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">{{ with .Data.full_name }}Olá, {{ . }}!{{ else }}Olá!{{ end }}</p>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Use o botão abaixo para entrar na MIA com a conta {{ .Email }}, sem digitar senha:</p>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;">
+                      <tr>
+                        <td style="border-radius:8px;background:#3fb58b;">
+                          <a href="{{ $$link }}" style="display:inline-block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#0b1f18;text-decoration:none;border-radius:8px;">Entrar na MIA</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#5b6b7f;">Se o botão não abrir, copie e cole este endereço no navegador:</p>
+                    <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ $$link }}" style="color:#1f7a5a;">{{ $$link }}</a></p>
+                    <p style="margin:0 0 24px;font-size:13px;line-height:1.5;color:#5b6b7f;">O link vale por tempo limitado e funciona uma vez só. Se você não pediu este acesso, ignore este e-mail.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px 32px;background:#f6f8f8;border-top:1px solid #e3e8ec;font-size:12px;line-height:1.5;color:#5b6b7f;">
+                      MIA · atendimento no WhatsApp<br>
+                      Este é um e-mail automático. Não responda: esta caixa não recebe mensagens.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+
+  email_reautenticacao:
+    content: |
+      {{- /*
+        Código de confirmação (GOTRUE_MAILER_TEMPLATES_REAUTHENTICATION): o GoTrue
+        pede antes de uma alteração sensível quando a reautenticação está ligada.
+        Não tem link, só o código.
+      */ -}}
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="color-scheme" content="light only">
+          <title>Seu código de confirmação</title>
+        </head>
+        <body style="margin:0;padding:0;background:#eef2f1;">
+          <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Use este código para confirmar a alteração na sua conta da MIA.</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef2f1;">
+            <tr>
+              <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
+                  <tr>
+                    <td style="background:#101d31;padding:20px 32px;">
+                      <span style="font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#3fb58b;">Mia</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 32px 8px;">
+                    <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:#101d31;">Seu código de confirmação</h1>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">{{ with .Data.full_name }}Olá, {{ . }}!{{ else }}Olá!{{ end }}</p>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Para confirmar a alteração na sua conta da MIA, digite este código:</p>
+                    <p style="margin:8px 0 24px;font-family:'Courier New',Courier,monospace;font-size:30px;font-weight:bold;letter-spacing:6px;color:#101d31;">{{ .Token }}</p>
+                    <p style="margin:0 0 24px;font-size:13px;line-height:1.5;color:#5b6b7f;">O código vale por tempo limitado. Se você não pediu nenhuma alteração, ignore este e-mail e troque sua senha.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px 32px;background:#f6f8f8;border-top:1px solid #e3e8ec;font-size:12px;line-height:1.5;color:#5b6b7f;">
+                      MIA · atendimento no WhatsApp<br>
+                      Este é um e-mail automático. Não responda: esta caixa não recebe mensagens.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
 

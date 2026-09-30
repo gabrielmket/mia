@@ -38,6 +38,13 @@ const ARQUIVOS = {
   fazer_backup_sh: "backup/fazer-backup.sh",
   enviar_sh: "backup/enviar.sh",
   backup_leia_me: "backup/LEIA-ME.txt",
+  // Os modelos dos e-mails do login, que o modelos-email serve ao GoTrue.
+  email_convite: "volumes/email/convite.html",
+  email_confirmacao: "volumes/email/confirmacao.html",
+  email_recuperacao: "volumes/email/recuperacao.html",
+  email_troca_de_email: "volumes/email/troca-de-email.html",
+  email_link_magico: "volumes/email/link-magico.html",
+  email_reautenticacao: "volumes/email/reautenticacao.html",
 };
 
 let c = ler("docker-compose.yml");
@@ -126,6 +133,25 @@ troca(
     volumes:
       - mia-backups\${MIA_VOLUME_SUFIXO:-}:/backups
     # Tudo com padrão vazio`,
+);
+troca(
+  `    volumes:
+      - ./volumes/email:/www:ro
+`,
+  `    configs:
+      - source: email_convite
+        target: /www/convite.html
+      - source: email_confirmacao
+        target: /www/confirmacao.html
+      - source: email_recuperacao
+        target: /www/recuperacao.html
+      - source: email_troca_de_email
+        target: /www/troca-de-email.html
+      - source: email_link_magico
+        target: /www/link-magico.html
+      - source: email_reautenticacao
+        target: /www/reautenticacao.html
+`,
 );
 const naoComentario = c.split("\n").filter((l) => !l.trimStart().startsWith("#"));
 if (naoComentario.some((l) => /\.\/(volumes|migrador|backup)/.test(l))) throw new Error("sobrou bind mount relativo");
