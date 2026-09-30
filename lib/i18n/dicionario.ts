@@ -10779,6 +10779,11 @@ export const DICIONARIO: Traducoes = {
   "Marque uma Página para os formulários dela aparecerem aqui.": {
     es: "Marca una Página para que sus formularios aparezcan aquí.",
   },
+  // FORK MIA (.65, migration 9009): desconectar a conta própria solta as Páginas.
+  "Se a conta da Meta desta empresa for desconectada, as Páginas marcadas aqui são desmarcadas e os formulários delas param de ser importados. Ao conectar de novo, é só marcar outra vez.":
+    {
+      es: "Si se desconecta la cuenta de Meta de esta empresa, las Páginas marcadas aquí se desmarcan y sus formularios dejan de importarse. Al conectar de nuevo, basta con marcarlas otra vez.",
+    },
   "Desmarcar esta Página?": { es: "¿Desmarcar esta Página?" },
   "Os formulários desta Página param de ser importados agora. Para voltar, marque a Página de novo e ligue os formulários.":
     {

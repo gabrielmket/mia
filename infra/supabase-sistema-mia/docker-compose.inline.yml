@@ -18,7 +18,12 @@
 #     rede = o DNS responde um OU outro, e um serviço de um lado conecta no
 #     banco do outro. Os demais (auth, rest, storage, meta, studio, realtime)
 #     ficam só na rede interna desta pilha, e o kong.yml oficial os encontra
-#     pelos nomes de sempre.
+#     pelos nomes de sempre. O GoTrue se chama `mia-auth` (ver o bloco dele),
+#     mas responde por `auth` na rede interna.
+#   * E-mail do login (confirmação, "esqueci a senha", convite): SMTP do Google
+#     Workspace, modelos em português servidos pelo `modelos-email`. Ver EMAIL.md.
+#   * Entrar e criar conta com Google: provedor do GoTrue, desligado por padrão
+#     (GOOGLE_ENABLED). Ver GOOGLE.md.
 #   * O banco entra na rede `easypanel` com o apelido
 #     `supabase-sistema-mia-db`: é por ele que o `deskcomm` (outro projeto)
 #     chega ao Postgres. Nenhuma porta é publicada no host.
@@ -34,6 +39,8 @@
 #   * `migrador`: roda UMA vez por volume e copia a plataforma da nuvem para
 #     cá, por dentro da VPS (sem abrir porta do banco e sem a senha da nuvem
 #     neste serviço). Ver migrador/migrar.sh.
+#   * `backup` e `backup-envio`: cópia diária do banco e do Storage, levada
+#     criptografada para um drive compartilhado do Google. Ver BACKUP.md.
 # ═══════════════════════════════════════════════════════════════════════════
 
 services:
@@ -110,13 +117,38 @@ services:
       SERVICE_ROLE_KEY_ASYMMETRIC: ""
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
+      # O kong guarda o IP de `auth`, `rest`, `storage`... pelo TTL que o DNS do
+      # Docker devolve (600 s). Contêiner recriado nasce com IP novo, e por até
+      # 10 min o kong manda o pedido para o IP velho (30/09/2026: depois da troca
+      # auth -> mia-auth ele seguia no IP antigo, e a saída foi recriar o kong na
+      # mão). Com 10 s ele volta a perguntar logo, e recriar um serviço de trás
+      # deixa de exigir recriar o kong junto. É o `dns_valid_ttl` do kong.conf.
+      KONG_DNS_VALID_TTL: 10
     # Pelo bash, e não direto: o bit de execução do script não sobrevive a todo
     # checkout (medido: "permission denied" no primeiro deploy, 28/09/2026).
     entrypoint: ["bash", "/home/kong/kong-entrypoint.sh"]
 
-  auth:
+  # O GoTrue (login). Só na rede interna desta pilha: ninguém de fora fala com
+  # ele direto, tudo passa pelo kong (`/auth/v1`). O e-mail sai pelo SMTP do
+  # Google Workspace, na internet, e a rede interna já tem saída para ela (a
+  # mesma por onde o backup-envio chega ao Google Drive). Ver EMAIL.md.
+  #
+  # Por que o nome é `mia-auth`, e não `auth`, se ele não está mais na rede
+  # `easypanel`: de 29 a 30/09/2026 ele esteve lá, para alcançar um relay de
+  # e-mail próprio (`mia-smtp`) que nunca foi ao ar, e na `easypanel` o nome
+  # `auth` é do Supabase dos clientes do n8n. Voltar para `auth` agora recriaria
+  # o problema ao contrário: o `mia-auth-1` viraria órfão e seguiria rodando,
+  # respondendo por `auth` na rede interna junto com o novo (foi o que o
+  # `auth-1` órfão fez em 30/09: metade dos "esqueci a senha" ia para o GoTrue
+  # sem SMTP). O kong.yml oficial chama `http://auth:9999`, e o apelido abaixo
+  # é o que responde.
+  mia-auth:
     image: supabase/gotrue:v2.186.0
     restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - auth
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
       timeout: 5s
@@ -142,6 +174,9 @@ services:
       GOTRUE_EXTERNAL_EMAIL_ENABLED: ${ENABLE_EMAIL_SIGNUP}
       GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: ${ENABLE_ANONYMOUS_USERS}
       GOTRUE_MAILER_AUTOCONFIRM: ${ENABLE_EMAIL_AUTOCONFIRM}
+      # SMTP do Google Workspace (smtp-relay.gmail.com, 587, senha de app). Os
+      # valores ficam SÓ no Environment do serviço no painel; o que vai em cada
+      # um, e como testar, está em EMAIL.md.
       GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL}
       GOTRUE_SMTP_HOST: ${SMTP_HOST}
       GOTRUE_SMTP_PORT: ${SMTP_PORT}
@@ -154,6 +189,84 @@ services:
       GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: ${MAILER_URLPATHS_EMAIL_CHANGE}
       GOTRUE_EXTERNAL_PHONE_ENABLED: ${ENABLE_PHONE_SIGNUP}
       GOTRUE_SMS_AUTOCONFIRM: ${ENABLE_PHONE_AUTOCONFIRM}
+      # ── Entrar e criar conta com Google ──────────────────────────────────────
+      # Desligado até alguém pôr GOOGLE_ENABLED=true no Environment (os padrões
+      # vazios não geram aviso de variável ausente). Ligado, o /auth/v1/settings
+      # passa a dizer `external.google: true` e o app desenha o botão sozinho
+      # em até 1 min (lib/auth/google-na-tela.ts). O retorno do Google vem para
+      # o GoTrue, no endereço público dele; o cliente OAuth no Google Cloud tem
+      # de ter exatamente este URI. Passo a passo em GOOGLE.md.
+      GOTRUE_EXTERNAL_GOOGLE_ENABLED: ${GOOGLE_ENABLED:-false}
+      GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_GOOGLE_SECRET: ${GOOGLE_SECRET:-}
+      GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI: ${API_EXTERNAL_URL}/auth/v1/callback
+      # ── E-mails do login em português, com a cara da MIA ──────────────────
+      # O corpo de cada e-mail o GoTrue só aceita por URL (ele faz um GET e
+      # guarda em cache; medido no fonte da v2.186, templatemailer/template.go).
+      # A URL aponta para o serviço `modelos-email` logo abaixo, DENTRO desta
+      # pilha: nada depende de internet de fora nem do app estar no ar. Se o
+      # modelo não vier (serviço parado, arquivo com erro), o GoTrue NÃO deixa
+      # de mandar: cai no modelo padrão dele, em inglês, e com o recarregamento
+      # ligado volta ao português sozinho em ~10 s quando o serviço volta
+      # (medido em teste local, 30/09/2026).
+      #
+      # Os links vão para /auth/confirm do app com token_hash, o único formato
+      # que fecha nesta instalação (ver app/auth/confirm/route.ts). O endereço
+      # sai do SITE_URL ou do retorno que o app pediu (crm.timecompany.com.br ou
+      # app.iamia.com.br): nenhum domínio está escrito nos modelos. Não dependem
+      # do servidor de envio: valem com qualquer SMTP configurado acima.
+      GOTRUE_MAILER_TEMPLATES_INVITE: http://modelos-email:8080/convite.html
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://modelos-email:8080/confirmacao.html
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: http://modelos-email:8080/recuperacao.html
+      GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE: http://modelos-email:8080/troca-de-email.html
+      GOTRUE_MAILER_TEMPLATES_MAGIC_LINK: http://modelos-email:8080/link-magico.html
+      GOTRUE_MAILER_TEMPLATES_REAUTHENTICATION: http://modelos-email:8080/reautenticacao.html
+      GOTRUE_MAILER_TEMPLATE_RELOADING_ENABLED: "true"
+      # O assunto não tem URL: vai aqui mesmo. É modelo também, e o da
+      # confirmação muda quando ela é o convite da equipe do app (o app grava
+      # invite_token nos metadados de quem foi convidado).
+      GOTRUE_MAILER_SUBJECTS_INVITE: "Você foi convidado para a MIA"
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: "{{ if .Data.invite_token }}Confirme seu e-mail para entrar na equipe na MIA{{ else }}Confirme seu e-mail na MIA{{ end }}"
+      GOTRUE_MAILER_SUBJECTS_RECOVERY: "Redefina sua senha da MIA"
+      GOTRUE_MAILER_SUBJECTS_EMAIL_CHANGE: "Confirme a troca de e-mail na MIA"
+      GOTRUE_MAILER_SUBJECTS_MAGIC_LINK: "Seu link de acesso à MIA"
+      GOTRUE_MAILER_SUBJECTS_REAUTHENTICATION: "Seu código de confirmação da MIA"
+      # Teto de e-mails do login por hora, na instalação inteira. O padrão do
+      # GoTrue (30) trava o convite de uma equipe maior: cada convidado é um
+      # e-mail, e o 31º convite da hora falha. 100 cobre isso e ainda segura
+      # abuso. ATENÇÃO, medido no fonte e em teste: com ENABLE_EMAIL_AUTOCONFIRM
+      # =true o GoTrue NÃO aplica este teto (mail.go, "TODO: deprecate"); aí
+      # seguram o intervalo de 60 s por pessoa (padrão) e o limite por IP das
+      # rotas de envio (RATE_LIMIT_OTP, 30 a cada 5 min).
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: ${RATE_LIMIT_EMAIL_SENT:-100}
+
+  # Serve os modelos dos e-mails do login (volumes/email/) para o GoTrue, só na
+  # rede interna desta pilha, sem porta publicada. Um servidor web mínimo
+  # (busybox httpd, ~7 MB, imagem fixada por digest), sem acesso ao banco e sem
+  # segredo nenhum: se ele cair, o login continua e só o e-mail volta ao inglês.
+  modelos-email:
+    image: busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+    restart: unless-stopped
+    user: "65534:65534"
+    command: ["httpd", "-f", "-p", "8080", "-h", "/www"]
+    configs:
+      - source: email_convite
+        target: /www/convite.html
+      - source: email_confirmacao
+        target: /www/confirmacao.html
+      - source: email_recuperacao
+        target: /www/recuperacao.html
+      - source: email_troca_de_email
+        target: /www/troca-de-email.html
+      - source: email_link_magico
+        target: /www/link-magico.html
+      - source: email_reautenticacao
+        target: /www/reautenticacao.html
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/recuperacao.html"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   rest:
     image: postgrest/postgrest:v14.8
@@ -324,7 +437,7 @@ services:
     depends_on:
       mia-db:
         condition: service_healthy
-      auth:
+      mia-auth:
         condition: service_healthy
       storage:
         condition: service_healthy
@@ -342,6 +455,74 @@ services:
       POSTGRES_PORT: ${POSTGRES_PORT}
       POSTGRES_DB: ${POSTGRES_DB}
 
+  # Backup diário, em dois serviços (ver BACKUP.md). O `backup` grava a cópia no
+  # volume mia-backups; o `backup-envio` leva para o drive, criptografada. Dois, e
+  # não um, porque cada imagem já traz a ferramenta certa: pg_dump da MESMA versão
+  # do banco (a imagem do mia-db) e rclone (a imagem do rclone). E o que tem a
+  # senha do banco não tem a credencial do Google, nem o contrário.
+  # Nenhum dos dois entra na rede `easypanel`: um só fala com o mia-db, o outro
+  # só com a internet.
+  backup:
+    image: supabase/postgres:17.6.1.084
+    restart: unless-stopped
+    depends_on:
+      mia-db:
+        condition: service_healthy
+    entrypoint: ["bash", "/backup-scripts/fazer-backup.sh"]
+    # A imagem traz o healthcheck do Postgres (pg_isready em localhost a cada 2 s),
+    # que aqui nunca passa: não há banco neste contêiner (medido no 1º deploy,
+    # 29/09/2026). O que o painel precisa mostrar é se o backup está em dia: há
+    # cópia PRONTO de menos de 26 h (o diário das 06:00, as 3 tentativas e folga).
+    healthcheck:
+      test: ["CMD-SHELL", "find /backups -maxdepth 2 -name PRONTO -mmin -1560 | grep -q ."]
+      interval: 5m
+      timeout: 10s
+      retries: 1
+      start_period: 15m
+    configs:
+      - source: fazer_backup_sh
+        target: /backup-scripts/fazer-backup.sh
+    volumes:
+      - mia-backups${MIA_VOLUME_SUFIXO:-}:/backups
+      # Só leitura: o backup copia os arquivos do Storage, nunca escreve lá.
+      - mia-storage${MIA_VOLUME_SUFIXO:-}:/storage:ro
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      BACKUP_HORA_UTC: ${BACKUP_HORA_UTC:-06}
+      BACKUP_MANTER_LOCAL: ${BACKUP_MANTER_LOCAL:-3}
+
+  backup-envio:
+    image: rclone/rclone:1.75.1
+    restart: unless-stopped
+    entrypoint: ["sh", "/backup-scripts/enviar.sh"]
+    # No painel, "unhealthy" = o último relato do envio não é "ok" (credencial,
+    # drive, senha) ou tem mais de 30 min (ele escreve um a cada volta de 10 min).
+    healthcheck:
+      test: ["CMD-SHELL", "find /backups/ENVIO-STATUS -mmin -30 | grep -q . && sed -n 2p /backups/ENVIO-STATUS | grep -q '^ok'"]
+      interval: 5m
+      timeout: 10s
+      retries: 1
+      start_period: 5m
+    configs:
+      - source: enviar_sh
+        target: /backup-scripts/enviar.sh
+      - source: backup_leia_me
+        target: /backup-scripts/LEIA-ME.txt
+    volumes:
+      - mia-backups${MIA_VOLUME_SUFIXO:-}:/backups
+    # Tudo com padrão vazio: sem credencial, o serviço sobe e fica parado
+    # avisando (em operacao.backup_envio), em vez de derrubar o deploy da pilha.
+    environment:
+      GOOGLE_DRIVE_TOKEN_B64: ${GOOGLE_DRIVE_TOKEN_B64:-}
+      GOOGLE_SA_JSON_B64: ${GOOGLE_SA_JSON_B64:-}
+      BACKUP_DRIVE_ID: ${BACKUP_DRIVE_ID:-}
+      BACKUP_CRIPTO_SENHA: ${BACKUP_CRIPTO_SENHA:-}
+      BACKUP_CRIPTO_SAL: ${BACKUP_CRIPTO_SAL:-}
+      BACKUP_MANTER_DIAS: ${BACKUP_MANTER_DIAS:-30}
+
 networks:
   easypanel:
     external: true
@@ -354,6 +535,8 @@ volumes:
   mia-db-data-ensaio:
   mia-db-config-ensaio:
   mia-storage-ensaio:
+  mia-backups:
+  mia-backups-ensaio:
 
 configs:
   kong_yml:
@@ -1093,7 +1276,7 @@ configs:
       # (preparar-migracao.sh). A senha do banco da nuvem NUNCA entra neste serviço:
       # levar credencial de um sistema para a configuração de outro é vazamento.
       #
-      #   app.dump              pg_dump -Fc -n public -n private (com donos e GRANTs:
+      #   app.dir.tar           pg_dump -Fd -n public -n private num tar (com donos e GRANTs:
       #                         as políticas e GRANTs do anon/authenticated são o
       #                         isolamento entre empresas)
       #   auth_users.json       json_agg(auth.users) — com o hash da senha: ninguém troca
@@ -1156,7 +1339,7 @@ configs:
       fi
 
       # ── 2. Os arquivos da nuvem, do balde interno ────────────────────────────────
-      for a in app.dump auth_users.json auth_identities.json storage_buckets.json nuvem.txt; do
+      for a in app.dir.tar auth_users.json auth_identities.json storage_buckets.json nuvem.txt; do
         curl -sf -o "$$TMP/$$a" "http://storage:5000/object/$$BALDE/$$a" \
           -H "Authorization: Bearer $$SERVICE_ROLE_KEY" -H "apikey: $$SERVICE_ROLE_KEY" \
           || falha "não baixei $$a do balde $$BALDE (ele foi subido antes de ligar o migrador?)"
@@ -1209,8 +1392,9 @@ configs:
       log "login e baldes ok"
 
       # ── 5. O app: public + private, com donos e permissões ───────────────────────
-      log "pg_restore do dump da nuvem ($$(du -h "$$TMP/app.dump" | cut -f1))…"
-      pg_restore -d "$$ALVO" "$$TMP/app.dump" > "$$TMP/restore.log" 2>&1
+      tar -C "$$TMP" -xf "$$TMP/app.dir.tar" || falha "tar do dump"
+      log "pg_restore do dump da nuvem ($$(du -sh "$$TMP/app.dir" | cut -f1)), 4 conexões…"
+      pg_restore -j 4 -d "$$ALVO" "$$TMP/app.dir" > "$$TMP/restore.log" 2>&1
       n_erros="$$(grep -c 'ERROR' "$$TMP/restore.log" || true)"
       log "pg_restore terminou com $${n_erros} erro(s). Por tipo:"
       grep 'ERROR' "$$TMP/restore.log" | sed -E 's/.*ERROR: +//; s/"[^"]*"/"…"/g' | sort | uniq -c | sort -rn | head -25 | sem_segredo
@@ -1277,4 +1461,838 @@ configs:
 
       log "FIM (modo $${MODO}): erros do pg_restore = $${n_erros}. Próximo passo: arquivos do Storage e deploy do deskcomm."
       exit 0
+
+  fazer_backup_sh:
+    content: |
+      #!/usr/bin/env bash
+      # fazer-backup.sh — a cópia diária do banco e dos arquivos da plataforma MIA.
+      #
+      # Roda no serviço `backup` (docker-compose.yml da pasta de cima), na VPS, pela
+      # rede interna. Uma vez por dia (BACKUP_HORA_UTC, padrão 06 = 03:00 de Brasília)
+      # grava uma pasta em /backups (volume mia-backups) com o MESMO formato que o
+      # migrador/migrar.sh já restaura — o caminho provado na virada de 29/09/2026:
+      #
+      #   app.dir.tar            pg_dump -Fd -n public -n private, com donos e GRANTs
+      #   auth_users.json        login: usuários (com o hash da senha) e identidades
+      #   auth_identities.json
+      #   storage_buckets.json   baldes e a lista de objetos do Storage
+      #   storage_objects.json
+      #   nuvem.txt              contagem linha a linha de cada tabela do app (o nome
+      #                          vem do migrador, que compara a ORIGEM com o destino)
+      #   storage.tar            os arquivos do Storage (volume mia-storage). O tipo e o
+      #                          cache de cada um estão no storage_objects.json: restaurar
+      #                          é subir pela API do Storage (ver BACKUP.md), não
+      #                          desempacotar no volume.
+      #   SHA256SUMS             para conferir a cópia antes de restaurar
+      #   relatorio.txt          o resumo legível
+      #
+      # TUDO DO MESMO INSTANTE: dump, contagem e JSON saem de UM snapshot
+      # (pg_export_snapshot). Sem isso, um usuário criado no meio do backup viraria FK
+      # quebrada na restauração, e a contagem nunca bateria com o dump.
+      #
+      # Este script só marca PRONTO. Quem leva para fora da VPS é o `backup-envio`
+      # (enviar.sh), que marca ENVIADO. Na VPS ficam as BACKUP_MANTER_LOCAL cópias mais
+      # novas já enviadas; as nunca enviadas ficam até 14 dias.
+      #
+      # ONDE VER SE FUNCIONA: não há log central na VPS, então o log é uma tabela deste
+      # mesmo banco: operacao.backup (uma linha por execução, com a etapa em que parou)
+      # e operacao.backup_envio (o último relato do envio). O schema `operacao` não é
+      # do app: fica fora do dump, da API e das migrations.
+      #
+      # BACKUP_UMA_VEZ=sim: faz um backup agora e sai (teste e disparo manual).
+
+      set -uo pipefail
+
+      log() { printf '[backup %s] %s\n' "$$(date -u +%FT%TZ)" "$$*"; }
+      # Nada que o script imprime ou grava pode carregar URL com senha.
+      sem_segredo() { sed -E 's#postgres(ql)?://[^ ]*#<url>#g'; }
+
+      ALVO="postgresql://supabase_admin:$${POSTGRES_PASSWORD}@$${POSTGRES_HOST}:$${POSTGRES_PORT}/$${POSTGRES_DB}"
+      export PGCONNECT_TIMEOUT=20 PGAPPNAME=backup-sistema-mia
+      RAIZ=/backups
+      STORAGE=/storage
+      HORA="$${BACKUP_HORA_UTC:-06}"
+      MANTER_LOCAL="$${BACKUP_MANTER_LOCAL:-3}"
+      JOBS="$${BACKUP_JOBS:-2}"
+      TENTATIVAS_POR_DIA=3
+      TEMPO_ENTRE_TENTATIVAS=1800
+
+      sql() { psql "$$ALVO" -X -q -tA -v ON_ERROR_STOP=1 "$$@"; }
+
+      esperar_banco() {
+        for _ in $$(seq 1 60); do
+          sql -c "select 1" >/dev/null 2>&1 && return 0
+          sleep 5
+        done
+        log "o banco não respondeu em 5 min"
+        return 1
+      }
+
+      preparar_tabela() {
+        sql <<'SQL'
+      set client_min_messages = warning;
+      create schema if not exists operacao;
+      comment on schema operacao is 'Infraestrutura da VPS (backup diário). Não é do app: fica fora do dump do app, da API e das migrations.';
+      create table if not exists operacao.backup (
+        pasta           text primary key,
+        iniciado_em     timestamptz not null default now(),
+        terminado_em    timestamptz,
+        ok              boolean,
+        etapa           text,
+        detalhe         text,
+        bytes           bigint,
+        tabelas         int,
+        linhas          bigint,
+        usuarios        int,
+        objetos_storage int,
+        enviado_em      timestamptz,
+        envio_detalhe   text
+      );
+      create table if not exists operacao.backup_envio (
+        id       int primary key default 1 check (id = 1),
+        visto_em timestamptz not null,
+        relato   text
+      );
+      SQL
+      }
+
+      # registrar PASTA OK ETAPA DETALHE [BYTES TABELAS LINHAS USUARIOS OBJETOS]
+      # OK vazio = em andamento. Falhar em registrar não derruba o backup.
+      registrar() {
+        sql -v pasta="$$1" -v ok="$$2" -v etapa="$$3" -v det="$$4" -v bytes="$${5:-}" -v tab="$${6:-}" \
+            -v lin="$${7:-}" -v usu="$${8:-}" -v obj="$${9:-}" >/dev/null 2>&1 <<'SQL' || log "AVISO: não consegui registrar em operacao.backup"
+      insert into operacao.backup as b (pasta, ok, etapa, detalhe, terminado_em, bytes, tabelas, linhas, usuarios, objetos_storage)
+      values (:'pasta', nullif(:'ok', '')::boolean, :'etapa', nullif(:'det', ''),
+              case when nullif(:'ok', '') is null then null else now() end,
+              nullif(:'bytes', '')::bigint, nullif(:'tab', '')::int, nullif(:'lin', '')::bigint,
+              nullif(:'usu', '')::int, nullif(:'obj', '')::int)
+      on conflict (pasta) do update
+         set ok = excluded.ok, etapa = excluded.etapa, detalhe = excluded.detalhe, terminado_em = excluded.terminado_em,
+             bytes = coalesce(excluded.bytes, b.bytes), tabelas = coalesce(excluded.tabelas, b.tabelas),
+             linhas = coalesce(excluded.linhas, b.linhas), usuarios = coalesce(excluded.usuarios, b.usuarios),
+             objetos_storage = coalesce(excluded.objetos_storage, b.objetos_storage);
+      SQL
+      }
+
+      # O snapshot vive enquanto esta sessão segura a transação aberta. O id sai por
+      # arquivo (\o), não pela saída do psql: saída de programa em pipe fica em buffer.
+      SNAP_ARQ=/tmp/snapshot.id
+      abrir_snapshot() {
+        rm -f "$$SNAP_ARQ"
+        coproc SEGURA { psql "$$ALVO" -X -q -tA -v ON_ERROR_STOP=1 > /tmp/snapshot.log 2>&1; }
+        printf '%s\n' "begin transaction isolation level repeatable read read only;" \
+          "\\o $$SNAP_ARQ" "select pg_export_snapshot();" "\\o" >&"$${SEGURA[1]}"
+        for _ in $$(seq 1 60); do
+          [ -s "$$SNAP_ARQ" ] && break
+          sleep 1
+        done
+        SNAP="$$(tr -d '[:space:]' < "$$SNAP_ARQ" 2>/dev/null)"
+        [[ "$$SNAP" =~ ^[0-9A-F]+-[0-9A-F]+-[0-9]+$$ ]]
+      }
+      fechar_snapshot() {
+        local pid="$${SEGURA_PID:-}"
+        if [ -n "$$pid" ] && kill -0 "$$pid" 2>/dev/null; then
+          printf 'commit;\n\\q\n' >&"$${SEGURA[1]}" 2>/dev/null || true
+        fi
+        [ -n "$$pid" ] && wait "$$pid" 2>/dev/null
+        unset SEGURA_PID
+        rm -f "$$SNAP_ARQ"
+      }
+
+      fazer_backup() {
+        local pasta="$$1" dir="$$RAIZ/$$1.parcial" inicio t0
+        inicio="$$(date -u +%FT%TZ)"
+        t0=$$(date +%s)
+        rm -rf "$$RAIZ"/*.parcial
+        if [ -e "$$RAIZ/$$pasta" ]; then log "a pasta $$pasta já existe; nada a fazer"; return 0; fi
+        mkdir -p "$$dir"
+        registrar "$$pasta" "" "início" ""
+        log "backup $$pasta: começando"
+
+        falhou() { # ETAPA DETALHE
+          local det; det="$$(printf '%s' "$$2" | sem_segredo | tr '\n' ' ' | cut -c1-900)"
+          log "FALHOU na etapa $$1: $$det"
+          registrar "$$pasta" false "$$1" "$$det"
+          fechar_snapshot
+          rm -rf "$$dir"
+          return 1
+        }
+
+        abrir_snapshot || { falhou snapshot "sem id de snapshot: $$(sem_segredo < /tmp/snapshot.log | tail -n 3)"; return 1; }
+
+        pg_dump "$$ALVO" --snapshot="$$SNAP" -Fd -j "$$JOBS" -n public -n private -f "$$dir/app.dir" 2> "$$dir/.erro" \
+          || { falhou pg_dump "$$(tail -n 3 "$$dir/.erro")"; return 1; }
+        pg_restore --list "$$dir/app.dir" > /dev/null 2> "$$dir/.erro" \
+          || { falhou "leitura do dump" "$$(tail -n 3 "$$dir/.erro")"; return 1; }
+        tar -C "$$dir" -cf "$$dir/app.dir.tar" app.dir 2> "$$dir/.erro" && rm -rf "$$dir/app.dir" \
+          || { falhou "tar do dump" "$$(tail -n 3 "$$dir/.erro")"; return 1; }
+
+        # Login, baldes, contagem e resumo no MESMO snapshot do dump.
+        sql > /dev/null 2> "$$dir/.erro" <<SQL || { falhou "login, baldes e contagem" "$$(tail -n 3 "$$dir/.erro")"; return 1; }
+      set statement_timeout = 0;
+      begin transaction isolation level repeatable read read only;
+      set transaction snapshot '$$SNAP';
+      \o $$dir/auth_users.json
+      select coalesce(json_agg(x), '[]'::json) from auth.users x;
+      \o $$dir/auth_identities.json
+      select coalesce(json_agg(x), '[]'::json) from auth.identities x;
+      \o $$dir/storage_buckets.json
+      select coalesce(json_agg(x), '[]'::json) from storage.buckets x;
+      \o $$dir/storage_objects.json
+      select coalesce(json_agg(x), '[]'::json) from storage.objects x;
+      \o $$dir/nuvem.txt
+      select table_schema || '.' || table_name,
+             (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', table_schema, table_name), false, true, '')))[1]::text
+        from information_schema.tables
+       where table_schema in ('public', 'private') and table_type = 'BASE TABLE'
+       order by 1;
+      \o $$dir/.resumo
+      select concat_ws('|', (select count(*) from auth.users), (select count(*) from auth.identities),
+                            (select count(*) from storage.buckets), (select count(*) from storage.objects),
+                            pg_database_size(current_database()), split_part(version(), ' on ', 1));
+      \o
+      commit;
+      SQL
+        fechar_snapshot
+
+        # O tar desta imagem é o do busybox (sem --xattrs): o que o volume guarda em
+        # atributo estendido está também no storage_objects.json.
+        [ -d "$$STORAGE" ] || { falhou storage "o volume do Storage não está montado em $$STORAGE"; return 1; }
+        tar -C "$$STORAGE" -cf "$$dir/storage.tar" . 2> "$$dir/.erro" && [ -s "$$dir/storage.tar" ] \
+          || { falhou storage "$$(tail -n 3 "$$dir/.erro")"; return 1; }
+
+        (cd "$$dir" && sha256sum app.dir.tar auth_users.json auth_identities.json storage_buckets.json \
+            storage_objects.json nuvem.txt storage.tar > SHA256SUMS) 2> "$$dir/.erro" \
+          || { falhou conferência "$$(tail -n 3 "$$dir/.erro")"; return 1; }
+
+        local usuarios identidades baldes objetos banco_bytes versao tabelas linhas bytes arquivos_storage
+        IFS='|' read -r usuarios identidades baldes objetos banco_bytes versao < "$$dir/.resumo"
+        tabelas="$$(wc -l < "$$dir/nuvem.txt" | tr -d ' ')"
+        linhas="$$(awk -F'|' '{s+=$$2} END {print s+0}' "$$dir/nuvem.txt")"
+        arquivos_storage="$$(tar -tf "$$dir/storage.tar" | grep -vc '/$$')"
+        rm -f "$$dir/.erro" "$$dir/.resumo"
+        bytes="$$(du -sb "$$dir" | cut -f1)"
+
+        cat > "$$dir/relatorio.txt" <<TXT
+      Backup da plataforma MIA · $$pasta
+      Início $$inicio · fim $$(date -u +%FT%TZ) · $$(( $$(date +%s) - t0 )) s
+
+      Banco: $$versao · $$(( banco_bytes / 1048576 )) MB em disco
+      App (public, private): $$tabelas tabelas · $$linhas linhas
+      Login: $$usuarios usuários · $$identidades identidades
+      Storage: $$baldes baldes · $$objetos objetos no banco · $$arquivos_storage arquivos no volume
+
+      Arquivos:
+      $$(cd "$$dir" && stat -c '%n %s' app.dir.tar auth_users.json auth_identities.json storage_buckets.json storage_objects.json nuvem.txt storage.tar \
+        | awk '{ if ($$2 < 1048576) printf "  %-22s %8.1f KB\n", $$1, $$2/1024; else printf "  %-22s %8.1f MB\n", $$1, $$2/1048576 }')
+
+      Tudo criptografado no drive (rclone crypt). Como restaurar:
+      infra/supabase-sistema-mia/BACKUP.md no repositório gabrielmket/mia.
+      TXT
+
+        mv "$$dir" "$$RAIZ/$$pasta" && touch "$$RAIZ/$$pasta/PRONTO" \
+          || { falhou "fechar a pasta" "mv falhou"; return 1; }
+        registrar "$$pasta" true fim "pronto em $$(( $$(date +%s) - t0 )) s" \
+          "$$bytes" "$$tabelas" "$$linhas" "$$usuarios" "$$objetos"
+        log "backup $$pasta: pronto ($$(( bytes / 1048576 )) MB, $$tabelas tabelas, $$linhas linhas, $$objetos objetos)"
+      }
+
+      # Leva para a tabela o que o backup-envio deixou no volume.
+      sincronizar_envio() {
+        local d
+        for d in "$$RAIZ"/20*/; do
+          d="$${d%/}"
+          [ -f "$$d/ENVIADO" ] && [ ! -f "$$d/.registrado" ] || continue
+          sql -v pasta="$$(basename "$$d")" -v quando="$$(head -n 1 "$$d/ENVIADO")" \
+              -v det="$$(tail -n +2 "$$d/ENVIADO" | head -c 500)" >/dev/null 2>&1 <<'SQL' && touch "$$d/.registrado"
+      update operacao.backup set enviado_em = :'quando'::timestamptz, envio_detalhe = :'det' where pasta = :'pasta';
+      SQL
+        done
+        if [ -f "$$RAIZ/ENVIO-STATUS" ]; then
+          sql -v quando="$$(head -n 1 "$$RAIZ/ENVIO-STATUS")" \
+              -v rel="$$(tail -n +2 "$$RAIZ/ENVIO-STATUS" | head -c 2000)" >/dev/null 2>&1 <<'SQL' || true
+      insert into operacao.backup_envio (id, visto_em, relato) values (1, :'quando'::timestamptz, :'rel')
+      on conflict (id) do update set visto_em = excluded.visto_em, relato = excluded.relato;
+      SQL
+        fi
+      }
+
+      limpar_local() {
+        local n=0 d
+        for d in $$(ls -1d "$$RAIZ"/20*/ 2>/dev/null | sort -r); do
+          d="$${d%/}"
+          if [ -f "$$d/ENVIADO" ]; then
+            n=$$((n + 1))
+            if [ "$$n" -gt "$$MANTER_LOCAL" ]; then rm -rf "$$d"; log "apagado da VPS (já está no drive): $$(basename "$$d")"; fi
+          elif [ -n "$$(find "$$d" -maxdepth 0 -mtime +14)" ]; then
+            rm -rf "$$d"; log "AVISO: apagado sem nunca ter sido enviado (mais de 14 dias): $$(basename "$$d")"
+          fi
+        done
+      }
+
+      # Devido = nunca houve backup, ou já passou do horário de hoje e o último pronto é
+      # de antes dele. Falha tenta de novo a cada 30 min, até 3 vezes no dia.
+      devido() {
+        local agora slot ultimo t
+        agora=$$(date -u +%s)
+        slot=$$(date -u -d "$$(date -u +%F) $${HORA}:00" +%s)
+        ultimo="$$(for d in "$$RAIZ"/20*/; do [ -f "$${d}PRONTO" ] && basename "$$d"; done 2>/dev/null | sort | tail -n 1)"
+        if [ -n "$$ultimo" ]; then
+          t=$$(date -u -d "$$(sed -E 's/^([0-9-]+)T([0-9]{2})([0-9]{2})Z$$/\1 \2:\3/' <<< "$$ultimo")" +%s 2>/dev/null || echo 0)
+          [ "$$agora" -ge "$$slot" ] && [ "$$t" -lt "$$slot" ] || return 1
+        fi
+        local f="$$RAIZ/.falhas-$$(date -u +%F)"
+        if [ -f "$$f" ]; then
+          [ "$$(cat "$$f")" -lt "$$TENTATIVAS_POR_DIA" ] || return 1
+          [ $$(( agora - $$(stat -c %Y "$$f") )) -ge "$$TEMPO_ENTRE_TENTATIVAS" ] || return 1
+        fi
+        return 0
+      }
+      contar_falha() {
+        local f="$$RAIZ/.falhas-$$(date -u +%F)"
+        echo $$(( $$(cat "$$f" 2>/dev/null || echo 0) + 1 )) > "$$f"
+      }
+
+      mkdir -p "$$RAIZ"
+      log "no ar: backup diário às $${HORA}:00 UTC; $${MANTER_LOCAL} cópias já enviadas ficam na VPS"
+      esperar_banco || exit 1
+      preparar_tabela > /dev/null 2>&1 || log "AVISO: não criei operacao.backup (sigo sem registro no banco)"
+
+      if [ "$${BACKUP_UMA_VEZ:-}" = "sim" ]; then
+        fazer_backup "$$(date -u +%Y-%m-%dT%H%MZ)"; rc=$$?
+        sincronizar_envio
+        exit "$$rc"
+      fi
+
+      while true; do
+        sincronizar_envio
+        if devido; then
+          if fazer_backup "$$(date -u +%Y-%m-%dT%H%MZ)"; then rm -f "$$RAIZ"/.falhas-*; else contar_falha; fi
+          limpar_local
+        fi
+        sleep 600
+      done
+
+  enviar_sh:
+    content: |
+      #!/bin/sh
+      # enviar.sh — leva os backups da VPS para o drive compartilhado do Google.
+      #
+      # Roda no serviço `backup-envio` (imagem rclone/rclone, Alpine: sh do busybox, sem
+      # bash). Lê o volume mia-backups, onde o `backup` (fazer-backup.sh) deixa uma pasta
+      # por dia com PRONTO. Para cada pasta pronta e ainda não enviada:
+      #
+      #   1. copia para  <drive>/backups/<pasta>/  CRIPTOGRAFADO (rclone crypt: o
+      #      conteúdo vira .bin ilegível; os nomes ficam legíveis para achar o dia);
+      #   2. confere com `rclone cryptcheck` (compara o hash de cada arquivo do drive
+      #      com o local, sem baixar nada);
+      #   3. só então marca ENVIADO, e sobe o relatorio.txt ABERTO em
+      #      <drive>/relatorios/<pasta>.txt (resumo sem dado pessoal, para quem abre o
+      #      drive saber o que tem ali).
+      #
+      # Retenção no drive: BACKUP_MANTER_DIAS (padrão 30). Os 7 backups mais novos
+      # nunca são apagados, mesmo velhos: backup que parou não pode levar os últimos
+      # junto.
+      #
+      # A cada volta grava /backups/ENVIO-STATUS (1ª linha: quando; resto: o relato),
+      # que o `backup` leva para operacao.backup_envio.
+      #
+      # Credencial do Google, uma das duas (em base64, porque JSON não cabe no .env):
+      #   GOOGLE_DRIVE_TOKEN_B64  token OAuth de um membro do drive, gerado por
+      #                           `rclone authorize drive` (o jeito em uso desde 29/09/2026:
+      #                           um clique do dono da conta, sem Google Cloud);
+      #   GOOGLE_SA_JSON_B64      JSON de uma conta de serviço, membro "Gerente de
+      #                           conteúdo" SÓ do drive (menos acesso; exige Google Cloud).
+      # O drive é o compartilhado BACKUP_DRIVE_ID. Senha e sal da criptografia:
+      # BACKUP_CRIPTO_SENHA / BACKUP_CRIPTO_SAL, já no formato `rclone obscure`. Sem
+      # credencial ou sem senha, o serviço fica parado avisando, sem enviar nada.
+      #
+      # BACKUP_UMA_VEZ=sim: uma volta só e sai. BACKUP_RAIZ_DRIVE troca o destino (o
+      # teste usa uma pasta local no lugar do drive).
+
+      set -u
+      umask 077
+
+      log() { echo "[envio $$(date -u +%FT%TZ)] $$*"; }
+      status() { printf '%s\n%s\n' "$$(date -u +%FT%TZ)" "$$*" > /backups/ENVIO-STATUS; }
+
+      INTERVALO="$${BACKUP_ENVIO_INTERVALO:-600}"
+      MANTER_DIAS="$${BACKUP_MANTER_DIAS:-30}"
+      MANTER_SEMPRE=7
+      RAIZ_DRIVE="$${BACKUP_RAIZ_DRIVE:-gdrive:}"
+
+      if { [ -z "$${GOOGLE_DRIVE_TOKEN_B64:-}" ] && [ -z "$${GOOGLE_SA_JSON_B64:-}" ]; } || [ -z "$${BACKUP_DRIVE_ID:-}" ] \
+         || [ -z "$${BACKUP_CRIPTO_SENHA:-}" ] || [ -z "$${BACKUP_CRIPTO_SAL:-}" ]; then
+        while true; do
+          msg="parado: falta configurar a conta do Google, o drive ou a senha da criptografia. Nada sai da VPS."
+          status "$$msg"; log "$$msg"
+          [ "$${BACKUP_UMA_VEZ:-}" = "sim" ] && exit 1
+          sleep 3600
+        done
+      fi
+
+      credencial_invalida() {
+        status "a credencial do Google ($$1) não é base64 válido"
+        log "credencial inválida: $$1"
+        sleep 3600
+        exit 1
+      }
+
+      # Os remotos saem do ambiente. O rclone grava o token renovado no arquivo de
+      # configuração: um descartável em /tmp (o token de base continua o do ambiente).
+      export RCLONE_CONFIG=/tmp/rclone.conf
+      : > "$$RCLONE_CONFIG"
+      export RCLONE_CONFIG_GDRIVE_TYPE=drive
+      export RCLONE_CONFIG_GDRIVE_SCOPE=drive
+      export RCLONE_CONFIG_GDRIVE_TEAM_DRIVE="$$BACKUP_DRIVE_ID"
+      if [ -n "$${GOOGLE_DRIVE_TOKEN_B64:-}" ]; then
+        RCLONE_CONFIG_GDRIVE_TOKEN="$$(echo "$$GOOGLE_DRIVE_TOKEN_B64" | base64 -d 2> /dev/null)" || credencial_invalida GOOGLE_DRIVE_TOKEN_B64
+        [ -n "$$RCLONE_CONFIG_GDRIVE_TOKEN" ] || credencial_invalida GOOGLE_DRIVE_TOKEN_B64
+        export RCLONE_CONFIG_GDRIVE_TOKEN
+      else
+        echo "$$GOOGLE_SA_JSON_B64" | base64 -d > /tmp/conta-google.json 2> /dev/null || credencial_invalida GOOGLE_SA_JSON_B64
+        export RCLONE_CONFIG_GDRIVE_SERVICE_ACCOUNT_FILE=/tmp/conta-google.json
+      fi
+      export RCLONE_CONFIG_COFRE_TYPE=crypt
+      export RCLONE_CONFIG_COFRE_REMOTE="$${RAIZ_DRIVE}backups"
+      export RCLONE_CONFIG_COFRE_PASSWORD="$$BACKUP_CRIPTO_SENHA"
+      export RCLONE_CONFIG_COFRE_PASSWORD2="$$BACKUP_CRIPTO_SAL"
+      export RCLONE_CONFIG_COFRE_FILENAME_ENCRYPTION=off
+      export RCLONE_CONFIG_COFRE_DIRECTORY_NAME_ENCRYPTION=false
+      RELATORIOS="$${RAIZ_DRIVE}relatorios"
+
+      # Marcas do volume (PRONTO, ENVIADO, .registrado) não viajam.
+      enviar() { rclone copy "$$1" "cofre:$$2" --exclude PRONTO --exclude ENVIADO --exclude '.*' \
+                   --transfers 4 --retries 3 --low-level-retries 10; }
+      conferir() { rclone cryptcheck "$$1" "cofre:$$2" --exclude PRONTO --exclude ENVIADO --exclude '.*' --one-way; }
+
+      log "no ar: envio a cada $${INTERVALO}s, $${MANTER_DIAS} dias guardados no drive"
+
+      while true; do
+        enviados=0
+        erros=""
+
+        for d in $$(ls -1d /backups/20*/ 2> /dev/null | sort); do
+          d="$${d%/}"
+          nome="$$(basename "$$d")"
+          [ -f "$$d/PRONTO" ] || continue
+          [ -f "$$d/ENVIADO" ] && continue
+          log "enviando $$nome ($$(du -sh "$$d" | cut -f1))…"
+          if enviar "$$d" "$$nome" 2> /tmp/erro.txt && conferir "$$d" "$$nome" 2> /tmp/erro.txt; then
+            rclone copyto "$$d/relatorio.txt" "$$RELATORIOS/$$nome.txt" 2> /dev/null \
+              || log "AVISO: o relatório de $$nome não subiu (o backup subiu)"
+            printf '%s\n%s\n' "$$(date -u +%FT%TZ)" "enviado e conferido no drive: $$(du -sh "$$d" | cut -f1)" > "$$d/ENVIADO"
+            enviados=$$((enviados + 1))
+            log "$$nome enviado e conferido"
+          else
+            e="$$(grep -E 'ERROR|Failed|NOTICE' /tmp/erro.txt | tail -n 2 | tr '\n' ' ' | cut -c1-400)"
+            erros="$$erros $$nome: $${e:-falhou sem mensagem};"
+            log "FALHOU $$nome: $$e"
+          fi
+        done
+
+        # Retenção: só os mais velhos que MANTER_DIAS, e nunca os MANTER_SEMPRE mais novos.
+        lista="$$(rclone lsf cofre: --dirs-only 2> /dev/null | sed 's#/$$##' | grep -E '^20[0-9-]+T[0-9]{4}Z$$' | sort)"
+        total="$$(printf '%s\n' "$$lista" | grep -c . || true)"
+        corte="$$(date -u -d "@$$(( $$(date +%s) - MANTER_DIAS * 86400 ))" +%Y-%m-%dT%H%MZ)"
+        apagados=0
+        if [ "$$total" -gt "$$MANTER_SEMPRE" ]; then
+          for n in $$(printf '%s\n' "$$lista" | head -n $$((total - MANTER_SEMPRE)) | awk -v c="$$corte" '$$0 < c'); do
+            if rclone purge "cofre:$$n" 2> /dev/null; then
+              rclone deletefile "$$RELATORIOS/$$n.txt" 2> /dev/null || true
+              apagados=$$((apagados + 1))
+              log "apagado do drive (mais de $${MANTER_DIAS} dias): $$n"
+            fi
+          done
+        fi
+
+        rclone copyto /backup-scripts/LEIA-ME.txt "$${RAIZ_DRIVE}LEIA-ME.txt" 2> /dev/null || true
+
+        # O mais novo nunca é apagado; o total é o que ficou depois da retenção.
+        ultimo="$$(printf '%s\n' "$$lista" | tail -n 1)"
+        total=$$((total - apagados))
+        if [ -z "$$erros" ]; then
+          status "ok: $${enviados} enviado(s) nesta volta, $${apagados} apagado(s) por idade; no drive: $${total} backup(s), o mais novo $${ultimo:-nenhum}"
+        else
+          status "ERRO:$${erros} (no drive: $${total} backup(s), o mais novo $${ultimo:-nenhum})"
+        fi
+
+        if [ "$${BACKUP_UMA_VEZ:-}" = "sim" ]; then
+          [ -z "$$erros" ]
+          exit $$?
+        fi
+        sleep "$$INTERVALO"
+      done
+
+  backup_leia_me:
+    content: |
+      BACKUP DA PLATAFORMA MIA (crm.timecompany.com.br)
+
+      O que tem aqui
+        backups/     uma pasta por dia (ex.: 2026-09-30T0600Z, horário UTC). Dentro,
+                     o banco inteiro da plataforma e os arquivos do Storage.
+                     Os arquivos terminam em .bin porque estão CRIPTOGRAFADOS: sem a
+                     senha, ninguém lê o conteúdo, nem quem tem acesso a este drive.
+        relatorios/  um resumo aberto de cada backup (quantas tabelas, linhas,
+                     usuários e arquivos). Não tem dado pessoal.
+
+      Quando e por quanto tempo
+        Todo dia às 03:00 (Brasília). Ficam 30 dias; os 7 mais novos nunca são
+        apagados, mesmo que o backup pare.
+
+      Quem grava
+        O servidor da plataforma, com uma autorização da conta
+        gabriel@timecompany.com.br (membro deste drive). Se essa conta sair do
+        drive ou a autorização for revogada, os backups param de chegar.
+
+      Senha da criptografia
+        Guardada no computador da operação, em
+        Consultoria/DeskcommCRM-implantacao/ENV-SUPABASE-SISTEMA-MIA.txt
+        (BACKUP_CRIPTO_SENHA e BACKUP_CRIPTO_SAL) e no servidor. Guarde também uma
+        cópia num cofre de senhas: sem ela, estes arquivos não servem para nada.
+
+      Como restaurar
+        Passo a passo em infra/supabase-sistema-mia/BACKUP.md, no repositório
+        gabrielmket/mia.
+
+      Não apague nem mova nada aqui dentro à mão.
+
+  email_convite:
+    content: |
+      {{- /*
+        Convite do próprio GoTrue (GOTRUE_MAILER_TEMPLATES_INVITE): só sai quando
+        alguém convida pelo Studio ou pela API de administração. O convite da equipe
+        do app NÃO passa por aqui (ele usa confirmacao.html).
+      */ -}}
+      {{- $$link := printf "%s/auth/confirm?type=invite&token_hash=%s" .SiteURL .TokenHash -}}
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="color-scheme" content="light only">
+          <title>Você foi convidado para a MIA</title>
+        </head>
+        <body style="margin:0;padding:0;background:#eef2f1;">
+          <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Aceite o convite para acessar a MIA.</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef2f1;">
+            <tr>
+              <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
+                  <tr>
+                    <td style="background:#101d31;padding:20px 32px;">
+                      <span style="font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#3fb58b;">Mia</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 32px 8px;">
+                    <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:#101d31;">Você foi convidado para a MIA</h1>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Olá!</p>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Você recebeu um convite para acessar a MIA com o e-mail {{ .Email }}. Para aceitar, use o botão abaixo:</p>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;">
+                      <tr>
+                        <td style="border-radius:8px;background:#3fb58b;">
+                          <a href="{{ $$link }}" style="display:inline-block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#0b1f18;text-decoration:none;border-radius:8px;">Aceitar convite</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#5b6b7f;">Se o botão não abrir, copie e cole este endereço no navegador:</p>
+                    <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ $$link }}" style="color:#1f7a5a;">{{ $$link }}</a></p>
+                    <p style="margin:0 0 24px;font-size:13px;line-height:1.5;color:#5b6b7f;">O link vale por tempo limitado e funciona uma vez só. Se você não esperava este convite, ignore este e-mail.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px 32px;background:#f6f8f8;border-top:1px solid #e3e8ec;font-size:12px;line-height:1.5;color:#5b6b7f;">
+                      MIA · atendimento no WhatsApp<br>
+                      Este é um e-mail automático. Não responda: esta caixa não recebe mensagens.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+
+  email_confirmacao:
+    content: |
+      {{- /*
+        Confirmação de e-mail (GOTRUE_MAILER_TEMPLATES_CONFIRMATION). Serve a DOIS
+        casos do app: o cadastro (app/actions/auth/signUp.ts) e o convite da equipe
+        (lib/auth/convite-no-gotrue.ts, que cria a conta e manda esta confirmação).
+        O convite se reconhece pelo invite_token que o app grava nos metadados.
+        O link vai para /auth/confirm com token_hash, o único formato que fecha no
+        app (ver o cabeçalho de app/auth/confirm/route.ts).
+      */ -}}
+      {{- $$link := printf "%s/auth/confirm?type=signup&token_hash=%s" .SiteURL .TokenHash -}}
+      {{- if and .RedirectTo (ne .RedirectTo .SiteURL) }}{{ $$link = printf "%s&token_hash=%s" .RedirectTo .TokenHash }}{{ end -}}
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="color-scheme" content="light only">
+          <title>{{ if .Data.invite_token }}Seu convite para a MIA{{ else }}Confirme seu e-mail{{ end }}</title>
+        </head>
+        <body style="margin:0;padding:0;background:#eef2f1;">
+          <div style="display:none;max-height:0;overflow:hidden;opacity:0;">{{ if .Data.invite_token }}Falta só confirmar seu e-mail para entrar na equipe.{{ else }}Confirme seu e-mail para ativar sua conta na MIA.{{ end }}</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef2f1;">
+            <tr>
+              <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
+                  <tr>
+                    <td style="background:#101d31;padding:20px 32px;">
+                      <span style="font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#3fb58b;">Mia</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 32px 8px;">
+                    <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:#101d31;">{{ if .Data.invite_token }}Seu convite para a MIA{{ else }}Confirme seu e-mail{{ end }}</h1>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">{{ with .Data.full_name }}Olá, {{ . }}!{{ else }}Olá!{{ end }}</p>
+                    {{ if .Data.invite_token }}<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Você foi convidado para entrar na equipe de uma empresa na MIA. Para terminar, confirme que este e-mail é seu:</p>{{ else }}<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Sua conta na MIA está quase pronta. Confirme que este e-mail é seu para ativar o acesso:</p>{{ end }}
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;">
+                      <tr>
+                        <td style="border-radius:8px;background:#3fb58b;">
+                          <a href="{{ $$link }}" style="display:inline-block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#0b1f18;text-decoration:none;border-radius:8px;">{{ if .Data.invite_token }}Confirmar e entrar na equipe{{ else }}Confirmar e-mail{{ end }}</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#5b6b7f;">Se o botão não abrir, copie e cole este endereço no navegador:</p>
+                    <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ $$link }}" style="color:#1f7a5a;">{{ $$link }}</a></p>
+                    <p style="margin:0 0 24px;font-size:13px;line-height:1.5;color:#5b6b7f;">O link vale por tempo limitado e funciona uma vez só. Se você não pediu isso, ignore este e-mail: nada acontece sem o clique.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px 32px;background:#f6f8f8;border-top:1px solid #e3e8ec;font-size:12px;line-height:1.5;color:#5b6b7f;">
+                      MIA · atendimento no WhatsApp<br>
+                      Este é um e-mail automático. Não responda: esta caixa não recebe mensagens.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+
+  email_recuperacao:
+    content: |
+      {{- /*
+        "Esqueci a senha" (GOTRUE_MAILER_TEMPLATES_RECOVERY), pedido pela tela de
+        login (app/actions/auth/requestPasswordReset.ts). Volta para o endereço onde
+        a pessoa pediu e de lá segue para /login/reset.
+      */ -}}
+      {{- $$link := printf "%s/auth/confirm?type=recovery&token_hash=%s" .SiteURL .TokenHash -}}
+      {{- if and .RedirectTo (ne .RedirectTo .SiteURL) }}{{ $$link = printf "%s&token_hash=%s" .RedirectTo .TokenHash }}{{ end -}}
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="color-scheme" content="light only">
+          <title>Redefinir sua senha</title>
+        </head>
+        <body style="margin:0;padding:0;background:#eef2f1;">
+          <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Recebemos um pedido para redefinir a senha da sua conta na MIA.</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef2f1;">
+            <tr>
+              <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
+                  <tr>
+                    <td style="background:#101d31;padding:20px 32px;">
+                      <span style="font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#3fb58b;">Mia</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 32px 8px;">
+                    <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:#101d31;">Redefinir sua senha</h1>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">{{ with .Data.full_name }}Olá, {{ . }}!{{ else }}Olá!{{ end }}</p>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Recebemos um pedido para redefinir a senha da sua conta na MIA ({{ .Email }}). Para escolher uma senha nova, use o botão abaixo:</p>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;">
+                      <tr>
+                        <td style="border-radius:8px;background:#3fb58b;">
+                          <a href="{{ $$link }}" style="display:inline-block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#0b1f18;text-decoration:none;border-radius:8px;">Criar nova senha</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#5b6b7f;">Se o botão não abrir, copie e cole este endereço no navegador:</p>
+                    <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ $$link }}" style="color:#1f7a5a;">{{ $$link }}</a></p>
+                    <p style="margin:0 0 24px;font-size:13px;line-height:1.5;color:#5b6b7f;">O link vale por tempo limitado e funciona uma vez só. Se você não pediu a troca, ignore este e-mail: sua senha atual continua valendo.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px 32px;background:#f6f8f8;border-top:1px solid #e3e8ec;font-size:12px;line-height:1.5;color:#5b6b7f;">
+                      MIA · atendimento no WhatsApp<br>
+                      Este é um e-mail automático. Não responda: esta caixa não recebe mensagens.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+
+  email_troca_de_email:
+    content: |
+      {{- /*
+        Troca de e-mail (GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE). Com a troca segura
+        (padrão do GoTrue), sai UM e-mail para cada endereço, o atual e o novo, e a
+        troca só vale depois das duas confirmações. SendingTo diz qual dos dois está
+        recebendo esta cópia.
+      */ -}}
+      {{- $$link := printf "%s/auth/confirm?type=email_change&token_hash=%s" .SiteURL .TokenHash -}}
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="color-scheme" content="light only">
+          <title>Confirme a troca de e-mail</title>
+        </head>
+        <body style="margin:0;padding:0;background:#eef2f1;">
+          <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Confirme a troca do e-mail da sua conta na MIA.</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef2f1;">
+            <tr>
+              <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
+                  <tr>
+                    <td style="background:#101d31;padding:20px 32px;">
+                      <span style="font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#3fb58b;">Mia</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 32px 8px;">
+                    <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:#101d31;">Confirme a troca de e-mail</h1>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">{{ with .Data.full_name }}Olá, {{ . }}!{{ else }}Olá!{{ end }}</p>
+                    {{ if eq .SendingTo .NewEmail }}<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Pediram para trocar o e-mail da conta na MIA de {{ .Email }} para este endereço, {{ .NewEmail }}. Confirme que este e-mail é seu:</p>{{ else }}<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Recebemos um pedido para trocar o e-mail da sua conta na MIA de {{ .Email }} para {{ .NewEmail }}. Se foi você, confirme:</p>{{ end }}
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;">
+                      <tr>
+                        <td style="border-radius:8px;background:#3fb58b;">
+                          <a href="{{ $$link }}" style="display:inline-block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#0b1f18;text-decoration:none;border-radius:8px;">Confirmar troca de e-mail</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#5b6b7f;">Se o botão não abrir, copie e cole este endereço no navegador:</p>
+                    <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ $$link }}" style="color:#1f7a5a;">{{ $$link }}</a></p>
+                    <p style="margin:0 0 24px;font-size:13px;line-height:1.5;color:#5b6b7f;">A troca só vale depois da confirmação nos dois endereços. Se você não pediu isso, não clique e troque sua senha.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px 32px;background:#f6f8f8;border-top:1px solid #e3e8ec;font-size:12px;line-height:1.5;color:#5b6b7f;">
+                      MIA · atendimento no WhatsApp<br>
+                      Este é um e-mail automático. Não responda: esta caixa não recebe mensagens.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+
+  email_link_magico:
+    content: |
+      {{- /*
+        Link de acesso sem senha (GOTRUE_MAILER_TEMPLATES_MAGIC_LINK). O app hoje
+        não oferece esse login; o modelo existe para nada sair em inglês se ele for
+        pedido pela API ou pelo Studio.
+      */ -}}
+      {{- $$link := printf "%s/auth/confirm?type=magiclink&token_hash=%s" .SiteURL .TokenHash -}}
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="color-scheme" content="light only">
+          <title>Seu link de acesso</title>
+        </head>
+        <body style="margin:0;padding:0;background:#eef2f1;">
+          <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Entre na MIA com um clique, sem digitar senha.</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef2f1;">
+            <tr>
+              <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
+                  <tr>
+                    <td style="background:#101d31;padding:20px 32px;">
+                      <span style="font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#3fb58b;">Mia</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 32px 8px;">
+                    <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:#101d31;">Seu link de acesso</h1>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">{{ with .Data.full_name }}Olá, {{ . }}!{{ else }}Olá!{{ end }}</p>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Use o botão abaixo para entrar na MIA com a conta {{ .Email }}, sem digitar senha:</p>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;">
+                      <tr>
+                        <td style="border-radius:8px;background:#3fb58b;">
+                          <a href="{{ $$link }}" style="display:inline-block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#0b1f18;text-decoration:none;border-radius:8px;">Entrar na MIA</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#5b6b7f;">Se o botão não abrir, copie e cole este endereço no navegador:</p>
+                    <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ $$link }}" style="color:#1f7a5a;">{{ $$link }}</a></p>
+                    <p style="margin:0 0 24px;font-size:13px;line-height:1.5;color:#5b6b7f;">O link vale por tempo limitado e funciona uma vez só. Se você não pediu este acesso, ignore este e-mail.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px 32px;background:#f6f8f8;border-top:1px solid #e3e8ec;font-size:12px;line-height:1.5;color:#5b6b7f;">
+                      MIA · atendimento no WhatsApp<br>
+                      Este é um e-mail automático. Não responda: esta caixa não recebe mensagens.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+
+  email_reautenticacao:
+    content: |
+      {{- /*
+        Código de confirmação (GOTRUE_MAILER_TEMPLATES_REAUTHENTICATION): o GoTrue
+        pede antes de uma alteração sensível quando a reautenticação está ligada.
+        Não tem link, só o código.
+      */ -}}
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="color-scheme" content="light only">
+          <title>Seu código de confirmação</title>
+        </head>
+        <body style="margin:0;padding:0;background:#eef2f1;">
+          <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Use este código para confirmar a alteração na sua conta da MIA.</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef2f1;">
+            <tr>
+              <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
+                  <tr>
+                    <td style="background:#101d31;padding:20px 32px;">
+                      <span style="font-family:'Arial Black',Arial,Helvetica,sans-serif;font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#3fb58b;">Mia</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 32px 8px;">
+                    <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:#101d31;">Seu código de confirmação</h1>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">{{ with .Data.full_name }}Olá, {{ . }}!{{ else }}Olá!{{ end }}</p>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#243447;">Para confirmar a alteração na sua conta da MIA, digite este código:</p>
+                    <p style="margin:8px 0 24px;font-family:'Courier New',Courier,monospace;font-size:30px;font-weight:bold;letter-spacing:6px;color:#101d31;">{{ .Token }}</p>
+                    <p style="margin:0 0 24px;font-size:13px;line-height:1.5;color:#5b6b7f;">O código vale por tempo limitado. Se você não pediu nenhuma alteração, ignore este e-mail e troque sua senha.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px 32px;background:#f6f8f8;border-top:1px solid #e3e8ec;font-size:12px;line-height:1.5;color:#5b6b7f;">
+                      MIA · atendimento no WhatsApp<br>
+                      Este é um e-mail automático. Não responda: esta caixa não recebe mensagens.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
 
