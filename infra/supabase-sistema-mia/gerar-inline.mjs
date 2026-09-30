@@ -7,7 +7,7 @@
 // vai inteiro no painel, e os arquivos que o oficial monta por bind (kong.yml,
 // SQL de init, migrar.sh) entram como `configs` com o conteúdo embutido.
 //
-// A FONTE DA VERDADE continua sendo docker-compose.yml + volumes/ + migrador/.
+// A FONTE DA VERDADE continua sendo docker-compose.yml + volumes/ + migrador/ + backup/.
 // Mudou algo? Rode `node gerar-inline.mjs` e cole o resultado no painel (ou pelo
 // MCP: updateComposeSourceInline). O teste de mesa é `docker compose -f
 // docker-compose.inline.yml config -q`.
@@ -33,6 +33,18 @@ const ARQUIVOS = {
   db_logs: "volumes/db/logs.sql",
   db_pooler: "volumes/db/pooler.sql",
   migrar_sh: "migrador/migrar.sh",
+  // O backup-envio sobe o LEIA-ME.txt para a raiz do drive a cada volta. O
+  // testar-restauracao.sh roda fora da VPS e não entra.
+  fazer_backup_sh: "backup/fazer-backup.sh",
+  enviar_sh: "backup/enviar.sh",
+  backup_leia_me: "backup/LEIA-ME.txt",
+  // Os modelos dos e-mails do login, que o modelos-email serve ao GoTrue.
+  email_convite: "volumes/email/convite.html",
+  email_confirmacao: "volumes/email/confirmacao.html",
+  email_recuperacao: "volumes/email/recuperacao.html",
+  email_troca_de_email: "volumes/email/troca-de-email.html",
+  email_link_magico: "volumes/email/link-magico.html",
+  email_reautenticacao: "volumes/email/reautenticacao.html",
 };
 
 let c = ler("docker-compose.yml");
@@ -94,8 +106,55 @@ troca(
         target: /migrador/migrar.sh
 `,
 );
+// Os dois serviços do backup montam a mesma pasta com as mesmas linhas: a âncora
+// vai até a linha seguinte, que é o que difere entre eles.
+troca(
+  `    volumes:
+      - ./backup:/backup-scripts:ro
+      - mia-backups\${MIA_VOLUME_SUFIXO:-}:/backups
+      # Só leitura`,
+  `    configs:
+      - source: fazer_backup_sh
+        target: /backup-scripts/fazer-backup.sh
+    volumes:
+      - mia-backups\${MIA_VOLUME_SUFIXO:-}:/backups
+      # Só leitura`,
+);
+troca(
+  `    volumes:
+      - ./backup:/backup-scripts:ro
+      - mia-backups\${MIA_VOLUME_SUFIXO:-}:/backups
+    # Tudo com padrão vazio`,
+  `    configs:
+      - source: enviar_sh
+        target: /backup-scripts/enviar.sh
+      - source: backup_leia_me
+        target: /backup-scripts/LEIA-ME.txt
+    volumes:
+      - mia-backups\${MIA_VOLUME_SUFIXO:-}:/backups
+    # Tudo com padrão vazio`,
+);
+troca(
+  `    volumes:
+      - ./volumes/email:/www:ro
+`,
+  `    configs:
+      - source: email_convite
+        target: /www/convite.html
+      - source: email_confirmacao
+        target: /www/confirmacao.html
+      - source: email_recuperacao
+        target: /www/recuperacao.html
+      - source: email_troca_de_email
+        target: /www/troca-de-email.html
+      - source: email_link_magico
+        target: /www/link-magico.html
+      - source: email_reautenticacao
+        target: /www/reautenticacao.html
+`,
+);
 const naoComentario = c.split("\n").filter((l) => !l.trimStart().startsWith("#"));
-if (naoComentario.some((l) => /\.\/(volumes|migrador)/.test(l))) throw new Error("sobrou bind mount relativo");
+if (naoComentario.some((l) => /\.\/(volumes|migrador|backup)/.test(l))) throw new Error("sobrou bind mount relativo");
 
 const blocos = Object.entries(ARQUIVOS).map(([nome, arq]) => {
   const corpo = ler(arq)

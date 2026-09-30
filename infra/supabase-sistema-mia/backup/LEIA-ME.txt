@@ -1,0 +1,30 @@
+BACKUP DA PLATAFORMA MIA (crm.timecompany.com.br)
+
+O que tem aqui
+  backups/     uma pasta por dia (ex.: 2026-09-30T0600Z, horário UTC). Dentro,
+               o banco inteiro da plataforma e os arquivos do Storage.
+               Os arquivos terminam em .bin porque estão CRIPTOGRAFADOS: sem a
+               senha, ninguém lê o conteúdo, nem quem tem acesso a este drive.
+  relatorios/  um resumo aberto de cada backup (quantas tabelas, linhas,
+               usuários e arquivos). Não tem dado pessoal.
+
+Quando e por quanto tempo
+  Todo dia às 03:00 (Brasília). Ficam 30 dias; os 7 mais novos nunca são
+  apagados, mesmo que o backup pare.
+
+Quem grava
+  O servidor da plataforma, com uma autorização da conta
+  gabriel@timecompany.com.br (membro deste drive). Se essa conta sair do
+  drive ou a autorização for revogada, os backups param de chegar.
+
+Senha da criptografia
+  Guardada no computador da operação, em
+  Consultoria/DeskcommCRM-implantacao/ENV-SUPABASE-SISTEMA-MIA.txt
+  (BACKUP_CRIPTO_SENHA e BACKUP_CRIPTO_SAL) e no servidor. Guarde também uma
+  cópia num cofre de senhas: sem ela, estes arquivos não servem para nada.
+
+Como restaurar
+  Passo a passo em infra/supabase-sistema-mia/BACKUP.md, no repositório
+  gabrielmket/mia.
+
+Não apague nem mova nada aqui dentro à mão.
