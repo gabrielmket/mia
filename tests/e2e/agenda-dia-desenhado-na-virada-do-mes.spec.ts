@@ -22,14 +22,18 @@ test.use({ timezoneId: "UTC" });
 
 const ORIGEM = "http://agenda-falsa.test";
 const AGORA = new Date("2026-09-27T04:20:00Z");
+// Uma semana INTEIRA no mês seguinte ao que o painel abre — é o que obriga o
+// helper a passar pelo quadro de transição. No CI da falha a semana começava no
+// domingo (04 a 10/10); com ela na segunda (`INICIO_DA_SEMANA`), a mesma
+// situação é a semana de 05 a 11/10.
 const SEMANA_DESENHADA = [
-  "2026-10-04",
   "2026-10-05",
   "2026-10-06",
   "2026-10-07",
   "2026-10-08",
   "2026-10-09",
   "2026-10-10",
+  "2026-10-11",
 ];
 
 // O painel reduzido ao que o helper lê. `janela(mes)` repete a conta de
@@ -49,7 +53,8 @@ const PAGINA = `<!doctype html><html><body><div id="painel"></div>
     horarios = await r.json(); pintar();
   };
   function pintar() {
-    const primeiro = new Date(mes); primeiro.setUTCDate(1 - mes.getUTCDay());
+    // A primeira linha começa na segunda, como o mini-calendário do produto.
+    const primeiro = new Date(mes); primeiro.setUTCDate(1 - ((mes.getUTCDay() + 6) % 7));
     let html = "";
     for (let i = 0; i < 42; i++) {
       const d = new Date(primeiro); d.setUTCDate(primeiro.getUTCDate() + i);

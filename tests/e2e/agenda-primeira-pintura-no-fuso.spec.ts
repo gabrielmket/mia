@@ -38,6 +38,7 @@ import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page } from "./helpers/test";
 
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
+import { diasDesdeOInicioDaSemana } from "../../lib/agenda/inicio-da-semana";
 
 /** Kiritimati (UTC+14) — o fuso mais adiantado do mundo, e o mais longe do CI. */
 const FUSO_DA_ORG = "Pacific/Kiritimati";
@@ -98,8 +99,11 @@ async function entrar(page: Page, email: string) {
   await page.waitForURL(/\/app(\/|$)/, { timeout: 30_000 });
 }
 
-/** O domingo da semana que contém `agora` naquele fuso, em `yyyy-MM-dd`. */
-function domingoNoFuso(agora: Date, fuso: string): string {
+/**
+ * O primeiro dia (a segunda) da semana que contém `agora` naquele fuso, em
+ * `yyyy-MM-dd`. A semana começa onde a grade a começa: `INICIO_DA_SEMANA`.
+ */
+function inicioDaSemanaNoFuso(agora: Date, fuso: string): string {
   const partes = new Intl.DateTimeFormat("en-CA", {
     timeZone: fuso,
     year: "numeric",
@@ -110,7 +114,7 @@ function domingoNoFuso(agora: Date, fuso: string): string {
   const campo = (t: string) => partes.find((p) => p.type === t)!.value;
   const dow = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(campo("weekday"));
   const dia = new Date(`${campo("year")}-${campo("month")}-${campo("day")}T00:00:00Z`);
-  dia.setUTCDate(dia.getUTCDate() - dow);
+  dia.setUTCDate(dia.getUTCDate() - diasDesdeOInicioDaSemana(dow));
   return dia.toISOString().slice(0, 10);
 }
 
@@ -141,7 +145,7 @@ test("o servidor pinta a semana do fuso configurado — sem o JavaScript da apli
     "o servidor não desenhou a semana — sem sete colunas não há o que medir",
   ).toHaveLength(7);
   expect(dias[0], `a primeira pintura veio na semana do SERVIDOR, não na de ${FUSO_DA_ORG}`).toBe(
-    domingoNoFuso(abertaEm, FUSO_DA_ORG),
+    inicioDaSemanaNoFuso(abertaEm, FUSO_DA_ORG),
   );
 });
 

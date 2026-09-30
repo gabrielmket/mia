@@ -29,6 +29,11 @@ function em(dia: Date, hora: number, minuto: number): string {
   return d.toISOString();
 }
 
+// A BASE das datas de mentira, e não o início da semana que a grade desenha
+// (esse é `INICIO_DA_SEMANA`). É o domingo antes da ANCORA, e os deslocamentos
+// abaixo contam a partir dele: trocá-lo pela segunda andaria todos os
+// compromissos um dia e desfaria o desenho da vitrine (a quinta sem horário,
+// o domingo vazio).
 const SEG = startOfWeek(ANCORA, { weekStartsOn: 0 });
 
 /**

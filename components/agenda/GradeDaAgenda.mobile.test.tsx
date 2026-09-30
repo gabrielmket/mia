@@ -41,14 +41,15 @@ describe("grade da semana no celular", () => {
     // a âncora fica
     expect(escondeNoCelular("2026-09-16")).toBe(false);
 
-    // os demais sete-menos-um somem abaixo de md
+    // os demais sete-menos-um somem abaixo de md (a semana vai de segunda a
+    // domingo — `INICIO_DA_SEMANA`)
     for (const outro of [
-      "2026-09-13",
       "2026-09-14",
       "2026-09-15",
       "2026-09-17",
       "2026-09-18",
       "2026-09-19",
+      "2026-09-20",
     ]) {
       expect(escondeNoCelular(outro), `${outro} deveria sumir no celular`).toBe(true);
     }

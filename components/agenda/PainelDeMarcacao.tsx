@@ -4,13 +4,14 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import { useT } from "@/hooks/i18n/useT";
 
-import { addDays, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek } from "date-fns";
+import { addDays, format, isSameDay, isSameMonth, startOfDay, startOfMonth } from "date-fns";
 import Link from "next/link";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { dataDeParede, instanteDe } from "@/lib/agenda/fuso";
+import { inicioDaSemana } from "@/lib/agenda/inicio-da-semana";
 import { ApiError } from "@/lib/api/types";
 import { CaretLeft, CaretRight, CheckCircle, Clock, MapPin, Warning } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
@@ -291,7 +292,10 @@ export function PainelDeMarcacao({
         : "escolhendo-dia";
 
   const semanas = React.useMemo(() => {
-    const primeiro = startOfWeek(startOfMonth(mes), { weekStartsOn: 0 });
+    // A mesma semana da grade ao lado (`INICIO_DA_SEMANA`): o mini-calendário
+    // com o domingo na frente e a grade com a segunda faria a mesma coluna
+    // significar dias diferentes a um palmo de distância.
+    const primeiro = inicioDaSemana(startOfMonth(mes));
     return Array.from({ length: 6 }, (_, s) =>
       Array.from({ length: 7 }, (_, d) => addDays(primeiro, s * 7 + d)),
     );
