@@ -23,7 +23,9 @@ import { sql } from "./gov-helpers";
  *      não é solta pela empresa;
  *   5. a plataforma transfere a Página que a empresa assumiu, e os formulários
  *      da empresa antiga desligam (gatilho da 9004);
- *   6. só o service_role executa a função de soltar.
+ *   6. só o service_role executa a função de soltar;
+ *   7. (9009) desconectar a conta própria solta as Páginas que a empresa
+ *      assumiu, mantém a da plataforma, e reconectar deixa assumir de novo.
  *
  * Sem PII: nomes sintéticos, e-mails @invariant.test (LGPD).
  */
@@ -298,5 +300,107 @@ describe("a plataforma continua mandando em qualquer Página", () => {
         rollback;
       `),
     ).toThrow(/permission denied/);
+  });
+});
+
+/**
+ * FORK MIA (.65, migration 9009) — DESCONECTAR A CONTA PRÓPRIA SOLTA AS PÁGINAS
+ * QUE A EMPRESA ASSUMIU. Decisão do Gabriel: "solta a página, o usuário pode
+ * conectar e desconectar". A tela desconecta com um DELETE em
+ * `ad_insights_connections`; o gatilho vale para esse e qualquer outro caminho.
+ */
+describe("desconectar a conta própria solta as Páginas que a empresa assumiu (9009)", () => {
+  const desconectar = (org: string) =>
+    `delete from public.ad_insights_connections
+      where organization_id = '${org}' and platform = 'meta_ads'`;
+
+  it("⭐ solta as de conta própria, com o motivo nos formulários, e mantém a da plataforma", () => {
+    const r = medir(`
+      ${assumir(ORG_PROPRIA, PAGINA_1)};
+      ${assumir(ORG_PROPRIA, PAGINA_2)};
+      ${formulario(ORG_PROPRIA, PAGINA_1, "form-desconectar-1")};
+      ${formulario(ORG_PROPRIA, PAGINA_2, "form-desconectar-2")};
+      ${desconectar(ORG_PROPRIA)};
+      select 'M:' || (select string_agg(page_id || '=' || origem, ',' order by page_id)
+                        from public.mia_paginas_da_meta where organization_id = '${ORG_PROPRIA}')
+        || '|' || (select string_agg(form_id || '=' || ativo::text || '/' || coalesce(ultimo_motivo, ''),
+                                     ',' order by form_id)
+                     from public.mia_leads_da_meta_formularios where organization_id = '${ORG_PROPRIA}');
+    `);
+    expect(r).toBe(
+      `${PAGINA_DA_PLATAFORMA}=plataforma|` +
+        "form-desconectar-1=false/pagina_solta,form-desconectar-2=false/pagina_solta," +
+        "form-na-da-plataforma=true/",
+    );
+  });
+
+  it("controle: com a conexão de pé, as Páginas assumidas continuam da empresa", () => {
+    const r = medir(`
+      ${assumir(ORG_PROPRIA, PAGINA_1)};
+      select 'M:' || count(*) from public.mia_paginas_da_meta
+       where organization_id = '${ORG_PROPRIA}' and origem = 'conta_propria';
+    `);
+    expect(r).toBe("1");
+  });
+
+  it("não toca as Páginas nem os formulários de outra empresa", () => {
+    const r = medir(`
+      ${desconectar(ORG_PROPRIA)};
+      select 'M:' || (select organization_id::text || '/' || origem from public.mia_paginas_da_meta
+                       where page_id = '${PAGINA_DA_VIZINHA}')
+        || ',' || (select ativo::text from public.mia_leads_da_meta_formularios
+                    where organization_id = '${ORG_VIZINHA}' and form_id = 'form-da-vizinha');
+    `);
+    expect(r).toBe(`${ORG_VIZINHA}/conta_propria,true`);
+  });
+
+  it("apagar a conexão do Google Ads não solta Página da Meta", () => {
+    const r = medir(`
+      insert into public.ad_insights_connections (organization_id, platform, access_token_encrypted)
+        values ('${ORG_PROPRIA}', 'google_ads', '\\x00'::bytea);
+      ${assumir(ORG_PROPRIA, PAGINA_1)};
+      delete from public.ad_insights_connections
+       where organization_id = '${ORG_PROPRIA}' and platform = 'google_ads';
+      select 'M:' || origem from public.mia_paginas_da_meta where page_id = '${PAGINA_1}';
+    `);
+    expect(r).toBe("conta_propria");
+  });
+
+  it("sem reconectar, assumir de novo continua recusado (a regra da 9008 segura)", () => {
+    expect(
+      tentar(`${assumir(ORG_PROPRIA, PAGINA_1)}; ${desconectar(ORG_PROPRIA)}; ${assumir(ORG_PROPRIA, PAGINA_1)}`),
+    ).toBe("42501");
+  });
+
+  it("⭐ reconectar deixa assumir de novo e religar o formulário", () => {
+    const r = medir(`
+      ${assumir(ORG_PROPRIA, PAGINA_1)};
+      ${formulario(ORG_PROPRIA, PAGINA_1, "form-volta")};
+      ${desconectar(ORG_PROPRIA)};
+      ${conexao(ORG_PROPRIA)}
+      ${assumir(ORG_PROPRIA, PAGINA_1)};
+      update public.mia_leads_da_meta_formularios
+         set ativo = true, ultimo_motivo = null
+       where organization_id = '${ORG_PROPRIA}' and form_id = 'form-volta';
+      select 'M:' || (select origem from public.mia_paginas_da_meta where page_id = '${PAGINA_1}')
+        || ',' || (select ativo::text from public.mia_leads_da_meta_formularios
+                    where organization_id = '${ORG_PROPRIA}' and form_id = 'form-volta');
+    `);
+    expect(r).toBe("conta_propria,true");
+  });
+
+  it("apagar a empresa inteira (a conexão sai em cascata) não trava no gatilho", () => {
+    expect(tentar(`delete from public.organizations where id = '${ORG_VIZINHA}'`)).toBe("passou");
+  });
+
+  it("a função do gatilho não é chamável por sessão", () => {
+    expect(
+      medir(`
+        select 'M:' || (has_function_privilege('authenticated',
+                          'public.fn_mia_soltar_paginas_ao_desconectar_a_meta()', 'EXECUTE')
+                        or has_function_privilege('anon',
+                          'public.fn_mia_soltar_paginas_ao_desconectar_a_meta()', 'EXECUTE'))::text;
+      `),
+    ).toBe("false");
   });
 });

@@ -398,6 +398,15 @@ function QuadroDaEscolhaDasPaginas({ semPaginaAinda }: { semPaginaAinda: boolean
         </p>
       )}
 
+      {/* .65: desconectar a conta própria solta as Páginas marcadas aqui (9009). */}
+      {dados?.modo === "conta_propria" && dados.paginas.length > 0 && (
+        <p className="text-xs text-muted-foreground" data-testid="desconectar-solta-as-paginas">
+          {t(
+            "Se a conta da Meta desta empresa for desconectada, as Páginas marcadas aqui são desmarcadas e os formulários delas param de ser importados. Ao conectar de novo, é só marcar outra vez.",
+          )}
+        </p>
+      )}
+
       <AlertDialog open={aSoltar !== null} onOpenChange={(aberto) => !aberto && setASoltar(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
