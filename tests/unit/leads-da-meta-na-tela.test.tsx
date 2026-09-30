@@ -263,3 +263,86 @@ describe("com token conectado", () => {
     ).toBeTruthy();
   });
 });
+
+describe("tempo real e perguntas do formulário (.62)", () => {
+  it("a Meta recusou assinar a Página: a tela diz a permissão que falta e deixa tentar de novo", async () => {
+    responderGet(
+      estado({
+        formularios: [
+          { ...FORMULARIO_ESCOLHIDO, tempo_real: "recusado", tempo_real_motivo: "permissao_insuficiente" },
+        ],
+      }),
+    );
+    api.put.mockResolvedValue({ data: { id: "linha-1", ativo: true, tempo_real: "assinado", tempo_real_motivo: null } });
+    abrir();
+    expect(await screen.findByText(/pages_manage_metadata no token/)).toBeTruthy();
+    const usuario = userEvent.setup();
+    await usuario.click(screen.getByRole("button", { name: "Ligar o tempo real" }));
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith(
+        "/api/v1/leads-da-meta/formularios",
+        expect.objectContaining({ form_id: "f1", ativo: true }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("ligado, mostra quando chegou o último lead pelo aviso da Meta", async () => {
+    responderGet(
+      estado({
+        formularios: [
+          {
+            ...FORMULARIO_ESCOLHIDO,
+            tempo_real: "assinado",
+            ultimo_aviso_da_meta_em: "2026-09-30T14:32:00.000Z",
+          },
+        ],
+      }),
+    );
+    abrir();
+    expect(await screen.findByText(/Tempo real ligado/)).toBeTruthy();
+    expect(screen.getByText(/Último lead pelo aviso da Meta:/)).toBeTruthy();
+  });
+
+  it("a pergunta própria do celular aparece como o que o automático usa", async () => {
+    responderGet(estado());
+    api.get.mockImplementation(async (caminho: string) => {
+      if (caminho === "/api/v1/leads-da-meta") return estado();
+      if (caminho === "/api/v1/leads-da-meta/paginas") {
+        return {
+          data: {
+            ...DIAGNOSTICO.data,
+            paginas: [
+              {
+                ...DIAGNOSTICO.data.paginas[0],
+                formularios: [
+                  {
+                    id: "f1",
+                    nome: "Avaliação grátis",
+                    status: "ACTIVE",
+                    perguntas: {
+                      full_name: "Nome completo",
+                      "celular:_(ddd_+_número)": "Celular (DDD + número)",
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        };
+      }
+      if (caminho === "/api/v1/pipelines")
+        return { data: [{ id: "funil-1", name: "Comercial", is_default: true }] };
+      if (caminho.startsWith("/api/v1/pipelines/"))
+        return { data: { stages: [{ id: "etapa-1", name: "Novo" }] } };
+      throw new Error(`GET inesperado: ${caminho}`);
+    });
+    abrir();
+    expect(
+      await screen.findByText("Quais perguntas são o telefone, o nome e o e-mail"),
+    ).toBeTruthy();
+    expect(screen.getByText("O automático usa: Celular (DDD + número)")).toBeTruthy();
+    expect(screen.getByText("O automático usa: Nome completo")).toBeTruthy();
+    expect(screen.getByText("O automático não reconheceu nenhuma pergunta.")).toBeTruthy();
+  });
+});

@@ -112,7 +112,7 @@ export default async function MetaAdsSettingsPage({
           <h1 className="text-2xl font-semibold tracking-tight">{t("Meta Ads")}</h1>
           <p className="max-w-3xl text-sm text-muted-foreground">
             {t(
-              "Os leads dos anúncios de cadastro instantâneo (o formulário que abre dentro do Facebook e do Instagram) entram sozinhos no funil, a cada 5 minutos, com a origem do anúncio e as respostas do formulário. As automações de lead criado disparam como em qualquer captação.",
+              "Os leads dos anúncios de cadastro instantâneo (o formulário que abre dentro do Facebook e do Instagram) entram sozinhos no funil, em segundos pelo aviso da Meta ou em até 5 minutos pela leitura, com a origem do anúncio e as respostas do formulário. As automações de lead criado disparam como em qualquer captação.",
             )}
           </p>
         </header>

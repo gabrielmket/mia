@@ -40,6 +40,21 @@ export interface FormularioEscolhido {
   ultimo_motivo: MotivoDaLeitura | null;
   ultimo_detalhe: string | null;
   importados_total: number;
+  /** .62: chave da pergunta → texto, como a Meta devolveu ao ligar. */
+  perguntas?: Record<string, string> | null;
+  /** .62: a pergunta escolhida para cada papel. Nulo = automático. */
+  campo_telefone?: string | null;
+  campo_nome?: string | null;
+  campo_email?: string | null;
+  /** .62: a Página assinada no app para o aviso em tempo real. */
+  tempo_real?: "assinado" | "recusado" | null;
+  tempo_real_motivo?: string | null;
+  tempo_real_em?: string | null;
+  /** .62: quando o último lead chegou pelo aviso da Meta. */
+  ultimo_aviso_da_meta_em?: string | null;
+  /** .62: leituras com erro seguidas, e o motivo já avisado aos administradores. */
+  falhas_seguidas?: number;
+  aviso_de_falha_motivo?: string | null;
 }
 
 export interface LeituraDoHistorico {
@@ -129,13 +144,28 @@ export interface FormularioParaSalvar {
   pipeline_id: string;
   stage_id: string;
   ativo: boolean;
+  /** .62: a chave da pergunta; nulo = automático; ausente = não muda. */
+  campo_telefone?: string | null;
+  campo_nome?: string | null;
+  campo_email?: string | null;
+}
+
+/** O que o PUT devolve: o formulário salvo e, ligado, o resultado do tempo real. */
+export interface FormularioSalvo {
+  id: string;
+  ativo: boolean;
+  tempo_real: "assinado" | "recusado" | null;
+  tempo_real_motivo: string | null;
 }
 
 export function useSalvarFormularioDaMeta() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (formulario: FormularioParaSalvar) =>
-      apiClient.put<{ data: { id: string } }>("/api/v1/leads-da-meta/formularios", formulario),
+      apiClient.put<{ data: FormularioSalvo }>("/api/v1/leads-da-meta/formularios", formulario, {
+        // Ligar confere o formulário na Meta E assina a Página: duas idas a mais.
+        timeoutMs: 45_000,
+      }),
     onError: showApiError,
     onSuccess: () => void qc.invalidateQueries({ queryKey: CHAVE_ESTADO }),
   });

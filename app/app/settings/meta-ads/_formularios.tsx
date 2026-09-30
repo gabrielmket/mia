@@ -52,40 +52,19 @@ import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { usePipelines, usePipelineStages } from "@/hooks/webhooks/useWebhookSources";
 import { ApiError } from "@/lib/api/types";
+import {
+  PAPEIS_DO_CAMPO,
+  sugestaoPelasPerguntas,
+  type PapelDoCampo,
+} from "@/lib/leads-da-meta/campos-do-formulario";
 import type { Diagnostico, PaginaDiagnosticada } from "@/lib/leads-da-meta/diagnostico";
+import {
+  MENSAGEM_DO_MOTIVO,
+  MENSAGEM_DO_TEMPO_REAL,
+  TEMPO_REAL_LIGADO,
+  TEMPO_REAL_PENDENTE,
+} from "@/lib/leads-da-meta/mensagens";
 import type { FormularioDaPagina } from "@/lib/plataformas-de-anuncio/meta/leads";
-
-/** O que cada motivo do histórico pede de quem lê. Chave = código gravado no banco. */
-const MENSAGEM_DO_MOTIVO: Record<string, string> = {
-  sem_conexao: "Nenhum token de anúncios conectado. Cole o token em Configurações › Meta Ads.",
-  cifra_indisponivel:
-    "A chave de criptografia do servidor não está disponível para ler o token. É configuração do servidor.",
-  token_invalido:
-    "A Meta recusou o token: ele expirou ou foi revogado. Gere um novo no Gerenciador de Negócios e cole em Configurações › Meta Ads.",
-  permissao_insuficiente:
-    "O token não tem permissão para ler os leads deste formulário. Confira as permissões acima e, no Gerenciador de Negócios, o Acesso a leads da Página.",
-  limite_de_chamadas:
-    "A Meta limitou as chamadas por excesso de consultas. A próxima leitura tenta de novo sozinha.",
-  campo_invalido:
-    "A Meta recusou um campo da consulta. É problema do sistema, não da sua conta: avise quem mantém a instalação.",
-  transitorio: "Não foi possível falar com a Meta agora. A próxima leitura tenta de novo sozinha.",
-  pagina_nao_e_da_empresa:
-    "Esta Página não é desta empresa na plataforma, e a importação dos formulários dela foi desligada aqui. Quem administra a plataforma define de qual empresa é cada Página.",
-  pagina_nao_atribuida:
-    "A Página deste formulário não está atribuída ao usuário do sistema do token. Atribua a Página no Gerenciador de Negócios.",
-  sem_token_da_pagina:
-    "O usuário do sistema não tem acesso suficiente à Página. Dê a ele acesso de anúncios e de leads (ou controle total) no Gerenciador de Negócios.",
-  sem_funil:
-    "O funil ou a etapa de destino deste formulário não existe mais. Escolha outro destino e salve.",
-  volume_acima_do_limite:
-    "Chegaram mais leads do que uma leitura comporta e a leitura ficou incompleta. Avise quem mantém a instalação.",
-  erro_ao_gravar:
-    "Os leads chegaram, mas a gravação parou no meio. A próxima leitura tenta de novo sozinha.",
-  sem_origem_do_anuncio:
-    "A Meta não devolveu a origem do anúncio (campanha, conjunto e anúncio) destes leads. Eles entraram mesmo assim. Para ter a origem, gere o token de novo com a permissão ads_management.",
-  recuperacao_cortada:
-    "Parte do período pedido tem mais de 90 dias, e a Meta não guarda leads tão antigos.",
-};
 
 const ROTULO_DO_STATUS: Record<string, string> = {
   sucesso: "Leads recebidos",
@@ -107,6 +86,8 @@ const USO_DA_PERMISSAO: Record<string, string> = {
   pages_manage_ads: "listar os formulários e ler os leads com os dados do anúncio",
   ads_management: "trazer a origem do anúncio de cada lead",
   ads_read: "a tabela de campanhas em Análise › Meta Ads",
+  // .62: sem ela a Página não é assinada no app, e o lead só entra pela leitura.
+  pages_manage_metadata: "receber os leads na hora (tempo real)",
 };
 
 function mensagemDeErro(erro: unknown, t: (s: string) => string): string {
@@ -281,7 +262,7 @@ function QuadroDaChave({
       </div>
       <p className="text-xs text-muted-foreground">
         {t(
-          "A leitura automática roda a cada 5 minutos. A primeira leitura de cada formulário volta os dias escolhidos acima; a Meta guarda os leads por 90 dias.",
+          "Com o tempo real ligado, a Meta avisa na hora e o lead entra em segundos; a leitura automática a cada 5 minutos continua como garantia. A primeira leitura de cada formulário volta os dias escolhidos acima; a Meta guarda os leads por 90 dias.",
         )}
       </p>
       <p aria-live="polite" className="text-sm">
@@ -494,6 +475,22 @@ function BlocoDaPagina({
   );
 }
 
+/** Valor do seletor para "Automático": o Select não aceita item de valor vazio. */
+const AUTOMATICO = "__automatico__";
+
+/** O rótulo de cada papel no seletor da pergunta. */
+const ROTULO_DO_PAPEL: Record<PapelDoCampo, string> = {
+  telefone: "Pergunta do telefone",
+  nome: "Pergunta do nome",
+  email: "Pergunta do e-mail",
+};
+
+const COLUNA_DO_PAPEL = {
+  telefone: "campo_telefone",
+  nome: "campo_nome",
+  email: "campo_email",
+} as const;
+
 function LinhaDoFormulario({
   pagina,
   formulario,
@@ -512,6 +509,12 @@ function LinhaDoFormulario({
   const [ativo, setAtivo] = useState<boolean>(escolhido?.ativo ?? false);
   const [funilEscolhido, setFunil] = useState<string>(escolhido?.pipeline_id ?? "");
   const [etapaEscolhida, setEtapa] = useState<string>(escolhido?.stage_id ?? "");
+  // .62: a pergunta de cada papel. "" = automático.
+  const [campos, setCampos] = useState<Record<PapelDoCampo, string>>({
+    telefone: escolhido?.campo_telefone ?? "",
+    nome: escolhido?.campo_nome ?? "",
+    email: escolhido?.campo_email ?? "",
+  });
 
   // Sem escolha ainda: o funil padrão da empresa e a primeira etapa dele. Derivado,
   // não gravado em estado — a lista chega depois da primeira pintura.
@@ -524,12 +527,33 @@ function LinhaDoFormulario({
       ? etapaEscolhida
       : (listaDeEtapas[0]?.id ?? "");
 
+  const camposMudaram = PAPEIS_DO_CAMPO.some(
+    (papel) => campos[papel] !== (escolhido?.[COLUNA_DO_PAPEL[papel]] ?? ""),
+  );
   const mudou =
     !escolhido ||
     ativo !== escolhido.ativo ||
     funil !== (escolhido.pipeline_id ?? "") ||
-    etapa !== (escolhido.stage_id ?? "");
+    etapa !== (escolhido.stage_id ?? "") ||
+    camposMudaram;
   const id = `form-${formulario.id}`;
+  const sugestao = sugestaoPelasPerguntas(formulario.perguntas);
+  const perguntas = Object.entries(formulario.perguntas);
+
+  const salvarAgora = (ligado: boolean) =>
+    salvar.mutate({
+      page_id: pagina.id,
+      page_name: pagina.nome,
+      form_id: formulario.id,
+      form_name: formulario.nome,
+      perguntas: formulario.perguntas,
+      pipeline_id: funil,
+      stage_id: etapa,
+      ativo: ligado,
+      campo_telefone: campos.telefone || null,
+      campo_nome: campos.nome || null,
+      campo_email: campos.email || null,
+    });
 
   return (
     <div className="flex flex-col gap-2 rounded-md border p-3">
@@ -561,6 +585,14 @@ function LinhaDoFormulario({
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {t(MENSAGEM_DO_MOTIVO[escolhido.ultimo_motivo] ?? "Não consegui carregar agora.")}
         </p>
+      )}
+
+      {escolhido?.ativo && (
+        <EstadoDoTempoReal
+          escolhido={escolhido}
+          ligando={salvar.isPending}
+          aoLigar={() => salvarAgora(true)}
+        />
       )}
 
       <div className="flex flex-wrap items-end gap-3">
@@ -609,27 +641,114 @@ function LinhaDoFormulario({
         </div>
         <Button
           disabled={!mudou || !funil || !etapa || salvar.isPending}
-          onClick={() =>
-            salvar.mutate({
-              page_id: pagina.id,
-              page_name: pagina.nome,
-              form_id: formulario.id,
-              form_name: formulario.nome,
-              perguntas: formulario.perguntas,
-              pipeline_id: funil,
-              stage_id: etapa,
-              ativo,
-            })
-          }
+          onClick={() => salvarAgora(ativo)}
         >
           {salvar.isPending ? t("Salvando…") : t("Salvar")}
         </Button>
       </div>
+
+      {/* .62: qual pergunta é o telefone, o nome e o e-mail. O automático
+          reconhece o campo padrão da Meta e a pergunta própria que fala em
+          celular, telefone ou WhatsApp; aqui se corrige quando ele erra. */}
+      {perguntas.length > 0 && (
+        <details className="text-sm">
+          <summary className="cursor-pointer text-muted-foreground">
+            {t("Quais perguntas são o telefone, o nome e o e-mail")}
+          </summary>
+          <div className="mt-2 flex flex-wrap items-start gap-3">
+            {PAPEIS_DO_CAMPO.map((papel) => {
+              const automatico = sugestao[papel];
+              return (
+                <div key={papel} className="flex flex-col gap-1.5">
+                  <Label htmlFor={`${id}-${papel}`}>{t(ROTULO_DO_PAPEL[papel])}</Label>
+                  <Select
+                    value={campos[papel] || AUTOMATICO}
+                    onValueChange={(v) =>
+                      setCampos((atual) => ({ ...atual, [papel]: v === AUTOMATICO ? "" : v }))
+                    }
+                  >
+                    <SelectTrigger id={`${id}-${papel}`} className="w-64">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={AUTOMATICO}>{t("Automático")}</SelectItem>
+                      {perguntas.map(([chave, rotulo]) => (
+                        <SelectItem key={chave} value={chave}>
+                          {rotulo}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!campos[papel] && (
+                    <span className="text-xs text-muted-foreground">
+                      {automatico
+                        ? `${t("O automático usa:")} ${formulario.perguntas[automatico] ?? automatico}`
+                        : t("O automático não reconheceu nenhuma pergunta.")}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t(
+              "O telefone só é aceito se a resposta tiver DDD e número; senão o sistema tenta a próxima pergunta. Salve para valer nos próximos leads.",
+            )}
+          </p>
+        </details>
+      )}
+
       {!escolhido && (
         <p className="text-xs text-muted-foreground">
           {t('Ligue "Importar este formulário", confira o destino e salve.')}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * .62 — o aviso em tempo real deste formulário: ligado, recusado (com o motivo
+ * e o que fazer) ou ainda não conferido. A recusa não para a importação: a
+ * leitura a cada 5 minutos continua, e a frase diz isso.
+ */
+function EstadoDoTempoReal({
+  escolhido,
+  ligando,
+  aoLigar,
+}: {
+  escolhido: FormularioEscolhido;
+  ligando: boolean;
+  aoLigar: () => void;
+}) {
+  const t = useT();
+  const tag = useTagDeIdioma();
+
+  if (escolhido.tempo_real === "assinado") {
+    return (
+      <p className="text-sm text-emerald-700 dark:text-emerald-400">
+        {t(TEMPO_REAL_LIGADO)}
+        {escolhido.ultimo_aviso_da_meta_em && (
+          <span className="block text-xs text-muted-foreground">
+            {t("Último lead pelo aviso da Meta:")}{" "}
+            {new Date(escolhido.ultimo_aviso_da_meta_em).toLocaleString(tag)}
+          </span>
+        )}
+      </p>
+    );
+  }
+
+  const frase =
+    escolhido.tempo_real === "recusado"
+      ? (MENSAGEM_DO_TEMPO_REAL[escolhido.tempo_real_motivo ?? ""] ??
+        MENSAGEM_DO_TEMPO_REAL.transitorio!)
+      : TEMPO_REAL_PENDENTE;
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-sm">
+      <p className="flex-1">{t(frase)}</p>
+      <Button variant="outline" size="sm" disabled={ligando} onClick={aoLigar}>
+        {ligando ? t("Ligando…") : t("Ligar o tempo real")}
+      </Button>
     </div>
   );
 }
