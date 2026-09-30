@@ -32,6 +32,10 @@ export const REFERENCIAS_DE_AVISO = {
   // O remédio é recarregar na conta do provedor, fora do CRM; a tela de
   // credenciais é onde se confere QUAL chave é, e onde se troca por outra.
   ai_provider_credential: { tabela: "ai_provider_credentials", papel: "admin", rotulo: "Revisar credencial", href: () => "/app/ai/credentials" },
+  // FORK MIA (.62): o formulário da Meta cuja leitura parou
+  // (`lib/leads-da-meta/aviso-de-falha.ts`). O conserto (token, permissão,
+  // destino) mora na aba dos formulários, que é de admin, como a tela.
+  mia_leads_da_meta_formulario: { tabela: "mia_leads_da_meta_formularios", papel: "admin", rotulo: "Revisar formulários da Meta", href: () => "/app/settings/meta-ads?aba=formularios" },
 } satisfies Record<string, Alvo>;
 
 export type InboxRefKind = keyof typeof REFERENCIAS_DE_AVISO | "organization" | "ai_budget" | "job_queue" | "cron_jobs";
@@ -122,7 +126,7 @@ export const POLITICAS_DE_AVISO = {
   },
   // `agent_case`: o caso que a IA abriu, na Central no instante da abertura
   // (`lib/escalacao/caso-na-central.handler.ts`).
-  other: { refs: ["lead", "channel_session", "appointment", "ai_agent", "ai_provider_credential", "agent_case"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
+  other: { refs: ["lead", "channel_session", "appointment", "ai_agent", "ai_provider_credential", "agent_case", "mia_leads_da_meta_formulario"], orientacao:"Confira a situação descrita neste aviso com a pessoa responsável." },
 } satisfies Record<InboxKind, Politica>;
 
 /**

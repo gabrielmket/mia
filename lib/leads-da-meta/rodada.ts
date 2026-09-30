@@ -16,6 +16,19 @@
  *   6. se entrou lead, drena o `event_log` na hora (automações de "lead criado"),
  *      como a rota do webhook faz.
  *
+ * E, da .62 em diante:
+ *
+ *   7. conta as falhas seguidas de cada formulário e, na terceira, avisa os
+ *      administradores na Central e no celular, UMA vez por problema; a
+ *      primeira leitura boa fecha o aviso (`aviso-de-falha.ts`);
+ *   8. confere a assinatura da Página no app para o aviso em tempo real
+ *      (`assinatura.ts`): tenta no formulário que nunca tentou, revê a recusa
+ *      depois de algumas horas e a assinatura uma vez por dia.
+ *
+ * O aviso em tempo real (`tempo-real.ts`) grava pela mesma `gravarLeadDaMeta`,
+ * e esta rodada continua lendo tudo: é a rede de segurança do que o webhook
+ * perder, e a deduplicação pelo id do lead faz os dois caminhos convivirem.
+ *
  * ─── A marca de leitura só anda para a frente, e só quando tudo deu certo ───
  *
  * Qualquer falha (Meta recusou, banco caiu no meio) deixa `lido_ate` onde estava.
@@ -34,11 +47,29 @@ import { kickLocalPipeline } from "@/lib/dev/kick-local-pipeline";
 import { logger } from "@/lib/logger";
 import { lerLeadsDoFormulario, type PaginaDoToken } from "@/lib/plataformas-de-anuncio/meta/leads";
 
-import { gravarLeadDaMeta, type FormularioParaGravar } from "./gravar";
+import { gravarTempoReal, ligarTempoReal, precisaConferirTempoReal } from "./assinatura";
+import {
+  abrirAviso,
+  avisarAdministradores,
+  decidirAviso,
+  fecharAvisos,
+  fecharAvisosSemLeitura,
+  type AvisoNovo,
+} from "./aviso-de-falha";
+import { COLUNAS_DO_FORMULARIO, paraGravar, type LinhaDoFormulario } from "./formulario";
+import { gravarLeadDaMeta } from "./gravar";
 import { leadsDaMetaLiberados } from "./liberacao";
 import { janelaDeLeitura, lerLeadCru, type JanelaDeLeitura, type LeadDaMeta } from "./mapear";
 import type { MotivoDaLeitura, StatusDaLeitura } from "./motivos";
-import { acessoAsPaginas, paginasDaEmpresa, type PaginaAtribuida } from "./paginas";
+import {
+  acessoAsPaginas,
+  existeAcessoDeLeitura,
+  paginasDaEmpresa,
+  type OrigemDoAcesso,
+  type PaginaAtribuida,
+} from "./paginas";
+
+export type { LinhaDoFormulario } from "./formulario";
 
 /** Janelas por formulário numa rodada: 13 × 7 dias alcança os 90 da Meta. */
 const JANELAS_POR_RODADA = 13;
@@ -47,20 +78,6 @@ const DIVISOES_DA_JANELA = 4;
 const DIAS_DO_HISTORICO = 30;
 const DIAS_DOS_RECEBIDOS = 120;
 const DIA = 24 * 60 * 60 * 1000;
-
-export interface LinhaDoFormulario {
-  id: string;
-  organization_id: string;
-  page_id: string;
-  page_name: string | null;
-  form_id: string;
-  form_name: string | null;
-  perguntas: Record<string, string> | null;
-  pipeline_id: string | null;
-  stage_id: string | null;
-  lido_ate: string | null;
-  importados_total: number | null;
-}
 
 export interface ResultadoDoFormulario {
   formularioId: string;
@@ -99,12 +116,63 @@ interface Leitura extends Contagem {
 
 // ─── o histórico ────────────────────────────────────────────────────────────
 
+/** De onde vem o token da empresa, perguntado só quando um aviso vai abrir. */
+type OrigemPreguicosa = () => Promise<OrigemDoAcesso | null>;
+
+/**
+ * FORK MIA (.62) — o aviso aos administradores depois desta leitura.
+ *
+ * Devolve as colunas do aviso a gravar no formulário, junto com a última
+ * leitura, e o aviso NOVO (para o push, que sai um por empresa por rodada).
+ */
+async function sincronizarAviso(
+  admin: SupabaseClient,
+  formulario: LinhaDoFormulario,
+  leitura: Leitura,
+  origem: OrigemPreguicosa,
+  agora: string,
+): Promise<{ colunas: Record<string, unknown>; novo: AvisoNovo | null }> {
+  const falhas = leitura.status === "erro" ? (formulario.falhas_seguidas ?? 0) + 1 : 0;
+  const jaAvisado = formulario.aviso_de_falha_motivo ?? null;
+  const acao = decidirAviso({
+    status: leitura.status,
+    motivo: leitura.motivo,
+    falhasSeguidas: falhas,
+    motivoJaAvisado: jaAvisado,
+  });
+
+  if (acao === "limpar") {
+    await fecharAvisos(admin, formulario.organization_id, [formulario.id]);
+    return {
+      colunas: { falhas_seguidas: 0, aviso_de_falha_motivo: null, aviso_de_falha_em: null },
+      novo: null,
+    };
+  }
+  if (acao === "avisar" || acao === "trocar") {
+    if (acao === "trocar") await fecharAvisos(admin, formulario.organization_id, [formulario.id]);
+    const abriu = await abrirAviso(admin, formulario, leitura.motivo, await origem());
+    const motivo = leitura.motivo ?? "desconhecido";
+    return {
+      // Gravado mesmo quando outra rodada abriu primeiro (`abriu` falso): o
+      // problema está avisado, e é isso que a coluna diz.
+      colunas: { falhas_seguidas: falhas, aviso_de_falha_motivo: motivo, aviso_de_falha_em: agora },
+      novo: abriu
+        ? { formName: formulario.form_name ?? formulario.form_id, motivo: leitura.motivo }
+        : null,
+    };
+  }
+  return { colunas: { falhas_seguidas: falhas }, novo: null };
+}
+
 /**
  * Grava o desfecho no formulário (a "última leitura" da tela) e no histórico.
  *
  * Leituras seguidas com o mesmo desfecho que NÃO é sucesso (sem novos; o mesmo
  * erro) viram uma linha só, com `repeticoes`: 288 linhas de "sem novos" por dia
  * esconderiam o erro que importa no meio do ruído.
+ *
+ * .62: e conta as falhas seguidas, abrindo ou fechando o aviso aos
+ * administradores (`sincronizarAviso`). Devolve o aviso novo, se abriu um.
  */
 async function registrarLeitura(
   admin: SupabaseClient,
@@ -114,8 +182,11 @@ async function registrarLeitura(
   // O relógio da rodada, não o do sistema: com o do sistema, duas leituras no
   // mesmo milésimo empatavam em terminada_em e a "última" podia ser a errada.
   relogio: Date,
-): Promise<void> {
+  origem: OrigemPreguicosa,
+): Promise<AvisoNovo | null> {
   const agora = relogio.toISOString();
+
+  const aviso = await sincronizarAviso(admin, formulario, leitura, origem, agora);
 
   const { error: erroForm } = await admin
     .from("mia_leads_da_meta_formularios")
@@ -126,6 +197,7 @@ async function registrarLeitura(
       ultimo_detalhe: leitura.detalhe,
       importados_total: (formulario.importados_total ?? 0) + leitura.novos,
       ...(leitura.lidoAte ? { lido_ate: leitura.lidoAte.toISOString() } : {}),
+      ...aviso.colunas,
     })
     .eq("id", formulario.id)
     .eq("organization_id", formulario.organization_id);
@@ -166,7 +238,7 @@ async function registrarLeitura(
         })
         .eq("id", anterior.id)
         .eq("organization_id", formulario.organization_id);
-      return;
+      return aviso.novo;
     }
   }
 
@@ -190,6 +262,7 @@ async function registrarLeitura(
       detalhe: error.message,
     });
   }
+  return aviso.novo;
 }
 
 function erro(
@@ -260,17 +333,12 @@ async function lerFormulario(
   if (!pagina) return erro("pagina_nao_atribuida");
   if (!pagina.tokenDaPagina) return erro("sem_token_da_pagina");
 
-  const paraGravar: FormularioParaGravar = {
-    id: formulario.id,
-    organizationId: formulario.organization_id,
-    formId: formulario.form_id,
-    formName: formulario.form_name,
-    pageId: formulario.page_id,
-    pageName: formulario.page_name,
-    pipelineId: formulario.pipeline_id,
-    stageId: formulario.stage_id,
-    perguntas: formulario.perguntas ?? {},
-  };
+  // .62: a mesma tradução do aviso em tempo real, com a escolha do telefone.
+  const destino = paraGravar({
+    ...formulario,
+    pipeline_id: formulario.pipeline_id,
+    stage_id: formulario.stage_id,
+  });
 
   const total: Contagem = { novos: 0, repetidos: 0, recusados: 0 };
   let lidoAte = formulario.lido_ate ? new Date(formulario.lido_ate) : null;
@@ -293,7 +361,7 @@ async function lerFormulario(
 
     for (const lead of lida.leads) {
       try {
-        const r = await gravarLeadDaMeta(admin, paraGravar, lead, { requestId });
+        const r = await gravarLeadDaMeta(admin, destino, lead, { requestId, via: "consulta" });
         if (r.desfecho === "criado") total.novos += 1;
         else if (r.desfecho === "repetido") total.repetidos += 1;
         else if (r.desfecho === "recusado") total.recusados += 1;
@@ -336,6 +404,157 @@ async function lerFormulario(
   };
 }
 
+// ─── uma empresa ────────────────────────────────────────────────────────────
+
+interface Empresa {
+  org: string;
+  diasDeRecuperacao: number;
+  agora: Date;
+  requestId: string;
+  resumo: ResumoDaRodada;
+  /** .62: os avisos de falha abertos nesta rodada, para UM push no fim. */
+  avisos: AvisoNovo[];
+}
+
+async function rodarEmpresa(admin: SupabaseClient, e: Empresa): Promise<void> {
+  const { org, agora, resumo } = e;
+
+  const { data: linhas, error: erroForms } = await admin
+    .from("mia_leads_da_meta_formularios")
+    .select(COLUNAS_DO_FORMULARIO)
+    .eq("organization_id", org)
+    .eq("ativo", true);
+  if (erroForms) {
+    logger.error("[leads-da-meta] formulários não lidos", {
+      organization_id: org,
+      detalhe: erroForms.message,
+    });
+    return;
+  }
+  const formularios = (linhas ?? []) as unknown as LinhaDoFormulario[];
+
+  // .62: aviso de formulário que já não é lido (desligado pela empresa, ou pelo
+  // banco quando a Página mudou de dono) não tem leitura que o feche. Fecha aqui.
+  await fecharAvisosSemLeitura(
+    admin,
+    org,
+    formularios.map((f) => f.id),
+  );
+  if (formularios.length === 0) return;
+  resumo.empresas += 1;
+
+  // A origem do token só é perguntada quando um aviso vai abrir, e uma vez.
+  let origemLida: Promise<OrigemDoAcesso | null> | null = null;
+  const origem: OrigemPreguicosa = () =>
+    (origemLida ??= existeAcessoDeLeitura(admin, org)
+      .then((r) => r.origem)
+      .catch(() => null));
+
+  const registrar = async (f: LinhaDoFormulario, leitura: Leitura, iniciada: Date) => {
+    const novo = await registrarLeitura(admin, f, leitura, iniciada, agora, origem);
+    if (novo) e.avisos.push(novo);
+  };
+
+  const registrarTodos = async (alvo: LinhaDoFormulario[], leitura: Leitura) => {
+    for (const f of alvo) {
+      await registrar(f, leitura, new Date());
+      resumo.formularios += 1;
+      resumo.erros += 1;
+      resumo.porFormulario.push({
+        formularioId: f.id,
+        organizationId: org,
+        status: leitura.status,
+        motivo: leitura.motivo,
+        novos: 0,
+        repetidos: 0,
+        recusados: 0,
+      });
+    }
+  };
+
+  // FORK MIA (.61) — a Página tem de ser DESTA empresa (9004). O banco já não
+  // deixa gravar formulário ativo de Página alheia; a conferência de novo aqui
+  // é a que decide, antes de qualquer chamada à Meta, e o formulário que não
+  // passa fica no histórico com o motivo, em vez de sumir calado.
+  let atribuidas: PaginaAtribuida[];
+  try {
+    atribuidas = await paginasDaEmpresa(admin, org);
+  } catch (erroDasPaginas) {
+    logger.error("[leads-da-meta] Páginas da empresa não lidas", {
+      organization_id: org,
+      detalhe: erroDasPaginas instanceof Error ? erroDasPaginas.message : String(erroDasPaginas),
+    });
+    return;
+  }
+  const daEmpresa = new Set(atribuidas.map((p) => p.page_id));
+  const alheios = formularios.filter((f) => !daEmpresa.has(f.page_id));
+  const proprios = formularios.filter((f) => daEmpresa.has(f.page_id));
+  await registrarTodos(alheios, erro("pagina_nao_e_da_empresa"));
+  if (proprios.length === 0) return;
+
+  // O token da própria empresa, senão o da plataforma, e SÓ para as Páginas dela.
+  const acesso = await acessoAsPaginas(admin, org, atribuidas);
+  if (!acesso.ok) {
+    await registrarTodos(proprios, erro(acesso.motivo, acesso.detalhe));
+    return;
+  }
+  const porId = acesso.paginas;
+  // .62: a assinatura é da PÁGINA; cada uma é conferida uma vez por rodada.
+  const paginasConferidas = new Set<string>();
+
+  let novosNaEmpresa = 0;
+  for (const formulario of proprios) {
+    const iniciada = new Date();
+    let leitura: Leitura;
+    try {
+      leitura = await lerFormulario(
+        admin,
+        formulario,
+        e.diasDeRecuperacao,
+        porId,
+        agora,
+        e.requestId,
+      );
+    } catch (falha) {
+      leitura = erro("erro_ao_gravar", falha instanceof Error ? falha.message.slice(0, 300) : null);
+    }
+    await registrar(formulario, leitura, iniciada);
+    resumo.formularios += 1;
+    resumo.novos += leitura.novos;
+    resumo.repetidos += leitura.repetidos;
+    resumo.recusados += leitura.recusados;
+    if (leitura.status === "erro") resumo.erros += 1;
+    novosNaEmpresa += leitura.novos;
+    resumo.porFormulario.push({
+      formularioId: formulario.id,
+      organizationId: org,
+      status: leitura.status,
+      motivo: leitura.motivo,
+      novos: leitura.novos,
+      repetidos: leitura.repetidos,
+      recusados: leitura.recusados,
+    });
+
+    // .62: a Página assinada no app para o aviso em tempo real. Tenta no
+    // formulário que nunca tentou (ligado antes da .62), revê a recusa depois de
+    // algumas horas e a assinatura uma vez por dia (`assinatura.ts`).
+    const pagina = porId.get(formulario.page_id);
+    if (
+      pagina?.tokenDaPagina &&
+      !paginasConferidas.has(formulario.page_id) &&
+      precisaConferirTempoReal(formulario, agora)
+    ) {
+      paginasConferidas.add(formulario.page_id);
+      const colunas = await ligarTempoReal(pagina.tokenDaPagina, formulario.page_id, agora);
+      await gravarTempoReal(admin, org, formulario.page_id, colunas);
+    }
+  }
+
+  // Os `lead.created` saem da fila agora, e não no próximo minuto: é o que faz
+  // a automação de primeiro contato disparar junto com a chegada do lead.
+  if (novosNaEmpresa > 0) await kickLocalPipeline(admin);
+}
+
 // ─── a rodada ───────────────────────────────────────────────────────────────
 
 export interface OpcoesDaRodada {
@@ -375,120 +594,17 @@ export async function rodarLeadsDaMeta(
     const org = config.organization_id;
     if (!(await leadsDaMetaLiberados(admin, org))) continue;
 
-    const { data: linhas, error: erroForms } = await admin
-      .from("mia_leads_da_meta_formularios")
-      .select(
-        "id, organization_id, page_id, page_name, form_id, form_name, perguntas, pipeline_id, stage_id, lido_ate, importados_total",
-      )
-      .eq("organization_id", org)
-      .eq("ativo", true);
-    if (erroForms) {
-      logger.error("[leads-da-meta] formulários não lidos", {
-        organization_id: org,
-        detalhe: erroForms.message,
-      });
-      continue;
-    }
-    const formularios = (linhas ?? []) as LinhaDoFormulario[];
-    if (formularios.length === 0) continue;
-    resumo.empresas += 1;
-
-    const registrarTodos = async (alvo: LinhaDoFormulario[], leitura: Leitura) => {
-      for (const f of alvo) {
-        const iniciada = new Date();
-        await registrarLeitura(admin, f, leitura, iniciada, agora);
-        resumo.formularios += 1;
-        resumo.erros += 1;
-        resumo.porFormulario.push({
-          formularioId: f.id,
-          organizationId: org,
-          status: leitura.status,
-          motivo: leitura.motivo,
-          novos: 0,
-          repetidos: 0,
-          recusados: 0,
-        });
-      }
-    };
-
-    // FORK MIA (.61) — a Página tem de ser DESTA empresa (9004). O banco já não
-    // deixa gravar formulário ativo de Página alheia; a conferência de novo aqui
-    // é a que decide, antes de qualquer chamada à Meta, e o formulário que não
-    // passa fica no histórico com o motivo, em vez de sumir calado.
-    let atribuidas: PaginaAtribuida[];
-    try {
-      atribuidas = await paginasDaEmpresa(admin, org);
-    } catch (e) {
-      logger.error("[leads-da-meta] Páginas da empresa não lidas", {
-        organization_id: org,
-        detalhe: e instanceof Error ? e.message : String(e),
-      });
-      continue;
-    }
-    const daEmpresa = new Set(atribuidas.map((p) => p.page_id));
-    const alheios = formularios.filter((f) => !daEmpresa.has(f.page_id));
-    const proprios = formularios.filter((f) => daEmpresa.has(f.page_id));
-    for (const f of alheios) {
-      await registrarLeitura(admin, f, erro("pagina_nao_e_da_empresa"), new Date(), agora);
-      resumo.formularios += 1;
-      resumo.erros += 1;
-      resumo.porFormulario.push({
-        formularioId: f.id,
-        organizationId: org,
-        status: "erro",
-        motivo: "pagina_nao_e_da_empresa",
-        novos: 0,
-        repetidos: 0,
-        recusados: 0,
-      });
-    }
-    if (proprios.length === 0) continue;
-
-    // O token da própria empresa, senão o da plataforma, e SÓ para as Páginas dela.
-    const acesso = await acessoAsPaginas(admin, org, atribuidas);
-    if (!acesso.ok) {
-      await registrarTodos(proprios, erro(acesso.motivo, acesso.detalhe));
-      continue;
-    }
-    const porId = acesso.paginas;
-
-    let novosNaEmpresa = 0;
-    for (const formulario of proprios) {
-      const iniciada = new Date();
-      let leitura: Leitura;
-      try {
-        leitura = await lerFormulario(
-          admin,
-          formulario,
-          config.dias_de_recuperacao ?? 7,
-          porId,
-          agora,
-          opcoes.requestId,
-        );
-      } catch (e) {
-        leitura = erro("erro_ao_gravar", e instanceof Error ? e.message.slice(0, 300) : null);
-      }
-      await registrarLeitura(admin, formulario, leitura, iniciada, agora);
-      resumo.formularios += 1;
-      resumo.novos += leitura.novos;
-      resumo.repetidos += leitura.repetidos;
-      resumo.recusados += leitura.recusados;
-      if (leitura.status === "erro") resumo.erros += 1;
-      novosNaEmpresa += leitura.novos;
-      resumo.porFormulario.push({
-        formularioId: formulario.id,
-        organizationId: org,
-        status: leitura.status,
-        motivo: leitura.motivo,
-        novos: leitura.novos,
-        repetidos: leitura.repetidos,
-        recusados: leitura.recusados,
-      });
-    }
-
-    // Os `lead.created` saem da fila agora, e não no próximo minuto: é o que faz
-    // a automação de primeiro contato disparar junto com a chegada do lead.
-    if (novosNaEmpresa > 0) await kickLocalPipeline(admin);
+    const avisos: AvisoNovo[] = [];
+    await rodarEmpresa(admin, {
+      org,
+      diasDeRecuperacao: config.dias_de_recuperacao ?? 7,
+      agora,
+      requestId: opcoes.requestId,
+      resumo,
+      avisos,
+    });
+    // .62: UM push por empresa por rodada, com todos os formulários que pararam.
+    await avisarAdministradores(admin, org, avisos);
   }
 
   // A poda vai só na rodada geral (a do relógio), nunca no "Ler agora".

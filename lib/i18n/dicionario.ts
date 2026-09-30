@@ -10680,6 +10680,66 @@ export const DICIONARIO: Traducoes = {
   "A Meta recusou um campo da consulta. É problema do sistema, não da conta.": {
     es: "Meta rechazó un campo de la consulta. Es un problema del sistema, no de la cuenta.",
   },
+  // FORK MIA (.62) — leads da Meta em tempo real, telefone em pergunta própria e
+  // aviso quando a leitura para (docs/fork/leads-da-meta.md).
+  "Os leads dos anúncios de cadastro instantâneo (o formulário que abre dentro do Facebook e do Instagram) entram sozinhos no funil, em segundos pelo aviso da Meta ou em até 5 minutos pela leitura, com a origem do anúncio e as respostas do formulário. As automações de lead criado disparam como em qualquer captação.":
+    {
+      es: "Los leads de los anuncios de registro instantáneo (el formulario que se abre dentro de Facebook e Instagram) entran solos al embudo, en segundos por el aviso de Meta o en hasta 5 minutos por la lectura, con el origen del anuncio y las respuestas del formulario. Las automatizaciones de lead creado se disparan como en cualquier captación.",
+    },
+  "Com o tempo real ligado, a Meta avisa na hora e o lead entra em segundos; a leitura automática a cada 5 minutos continua como garantia. A primeira leitura de cada formulário volta os dias escolhidos acima; a Meta guarda os leads por 90 dias.":
+    {
+      es: "Con el tiempo real activado, Meta avisa en el momento y el lead entra en segundos; la lectura automática cada 5 minutos sigue como garantía. La primera lectura de cada formulario retrocede los días elegidos arriba; Meta guarda los leads por 90 días.",
+    },
+  "receber os leads na hora (tempo real)": { es: "recibir los leads en el momento (tiempo real)" },
+  "Tempo real ligado: a Meta avisa na hora em que alguém preenche, e o lead entra em segundos. A leitura a cada 5 minutos continua como garantia.":
+    {
+      es: "Tiempo real activado: Meta avisa en el momento en que alguien completa el formulario, y el lead entra en segundos. La lectura cada 5 minutos sigue como garantía.",
+    },
+  "Tempo real ainda não conferido. O sistema tenta ligar na próxima leitura; enquanto isso, os leads chegam pela leitura a cada 5 minutos.":
+    {
+      es: "Tiempo real aún no verificado. El sistema intenta activarlo en la próxima lectura; mientras tanto, los leads llegan por la lectura cada 5 minutos.",
+    },
+  "Tempo real desligado: a Meta recusou assinar a Página por falta da permissão pages_manage_metadata no token. Os leads continuam chegando pela leitura a cada 5 minutos. Para ligar, gere o token de novo com essa permissão e clique em Ligar o tempo real.":
+    {
+      es: "Tiempo real desactivado: Meta rechazó suscribir la Página por falta del permiso pages_manage_metadata en el token. Los leads siguen llegando por la lectura cada 5 minutos. Para activarlo, genera el token de nuevo con ese permiso y haz clic en Activar el tiempo real.",
+    },
+  "Tempo real desligado: a Meta recusou o token. Os leads também não estão sendo lidos: gere um token novo e cole em Configurações › Meta Ads.":
+    {
+      es: "Tiempo real desactivado: Meta rechazó el token. Los leads tampoco se están leyendo: genera un token nuevo y pégalo en Configuración › Meta Ads.",
+    },
+  "Tempo real ainda não ligado: a Meta limitou as chamadas agora. O sistema tenta de novo sozinho; os leads continuam chegando pela leitura a cada 5 minutos.":
+    {
+      es: "Tiempo real aún no activado: Meta limitó las llamadas ahora. El sistema lo intenta de nuevo solo; los leads siguen llegando por la lectura cada 5 minutos.",
+    },
+  "Tempo real ainda não ligado: não foi possível falar com a Meta agora. O sistema tenta de novo sozinho; os leads continuam chegando pela leitura a cada 5 minutos.":
+    {
+      es: "Tiempo real aún no activado: no fue posible comunicarse con Meta ahora. El sistema lo intenta de nuevo solo; los leads siguen llegando por la lectura cada 5 minutos.",
+    },
+  "Tempo real desligado: a Meta recusou o pedido de assinatura da Página. É problema do sistema: avise quem mantém a instalação. Os leads continuam chegando pela leitura a cada 5 minutos.":
+    {
+      es: "Tiempo real desactivado: Meta rechazó el pedido de suscripción de la Página. Es un problema del sistema: avisa a quien mantiene la instalación. Los leads siguen llegando por la lectura cada 5 minutos.",
+    },
+  "Último lead pelo aviso da Meta:": { es: "Último lead por el aviso de Meta:" },
+  "Ligar o tempo real": { es: "Activar el tiempo real" },
+  "Quais perguntas são o telefone, o nome e o e-mail": {
+    es: "Qué preguntas son el teléfono, el nombre y el correo",
+  },
+  "Pergunta do telefone": { es: "Pregunta del teléfono" },
+  "Pergunta do nome": { es: "Pregunta del nombre" },
+  "Pergunta do e-mail": { es: "Pregunta del correo" },
+  "O automático usa:": { es: "El automático usa:" },
+  "O automático não reconheceu nenhuma pergunta.": {
+    es: "El automático no reconoció ninguna pregunta.",
+  },
+  "O telefone só é aceito se a resposta tiver DDD e número; senão o sistema tenta a próxima pergunta. Salve para valer nos próximos leads.":
+    {
+      es: "El teléfono solo se acepta si la respuesta tiene código de área y número; si no, el sistema prueba la siguiente pregunta. Guarda para que valga en los próximos leads.",
+    },
+  "Revisar formulários da Meta": { es: "Revisar formularios de Meta" },
+  "Os leads da Meta pararam de chegar": { es: "Los leads de Meta dejaron de llegar" },
+  "A leitura deste formulário na Meta está falhando.": {
+    es: "La lectura de este formulario en Meta está fallando.",
+  },
   // FORK MIA — ordem por coluna e filtro "só com impressão" na tabela de campanhas.
   "Só campanhas com impressão": { es: "Solo campañas con impresiones" },
   Mostrando: { es: "Mostrando" },
