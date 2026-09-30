@@ -68,6 +68,16 @@ jobs:
         if: ${{ !startsWith(steps.medir.outputs.veredito, 'em dia') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # SEM ISTO O `gh` FALA COM O REPOSITÓRIO DO UPSTREAM. Com mais de um
+          # remoto, ele escolhe pelo NOME, e `upstream` ganha de `origin` (o passo
+          # "Trazer o upstream" acabou de criá-lo). Medido em 30/09/2026: sem
+          # GH_REPO, `gh issue list`/`gh label list` num clone com os dois remotos
+          # respondem de melgarafael/DeskcommCRM. Foi por isso que o run de 29/09
+          # falhou: o rótulo não pôde ser criado lá (o token só escreve aqui; o
+          # erro sumia no `2>&1 || true`) e o `gh issue create` parou em "could not
+          # add label: 'sincronizar-upstream' not found". Vigiado por
+          # tests/unit/robo-da-sincronizacao-fala-com-o-fork.test.ts.
+          GH_REPO: ${{ github.repository }}
         run: |
           node - <<'JS' > corpo.md
           const r = require("./relatorio.json");
@@ -99,6 +109,9 @@ jobs:
           if [ -n "$existente" ]; then
             gh issue edit "$existente" --title "$titulo" --body-file corpo.md
           else
-            gh label create sincronizar-upstream --color 0E8A16 --force >/dev/null 2>&1 || true
+            # `--force` cria ou atualiza: se falhar aqui, é permissão ou repositório
+            # errado, e o erro tem de aparecer no log (antes ele era engolido).
+            gh label create sincronizar-upstream --color 0E8A16 --force \
+              --description "Aviso do robô de sincronização com o upstream" >/dev/null
             gh issue create --title "$titulo" --label sincronizar-upstream --body-file corpo.md
           fi
