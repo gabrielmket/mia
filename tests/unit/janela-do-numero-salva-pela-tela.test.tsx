@@ -95,6 +95,10 @@ const PADRAO: PacingKnobs = {
   jitterMaxMs: 800,
   windowStartHour: 7,
   windowEndHour: 22,
+  // A janela de RESPOSTA (0495, upstream v1.66.0): em branco ela herda a de
+  // disparo, então o padrão é o mesmo 7h-22h.
+  respostaStartHour: 7,
+  respostaEndHour: 22,
   allowSunday: true,
   timezone: "America/Sao_Paulo",
   warmupDailyCaps: [{ minAgeDays: 0, cap: null }],

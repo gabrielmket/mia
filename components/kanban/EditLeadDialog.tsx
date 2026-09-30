@@ -1,4 +1,5 @@
 "use client";
+import { usePermission } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
 import {
   Dialog,
@@ -28,6 +29,9 @@ interface Props {
  */
 export function EditLeadDialog({ open, onOpenChange, lead, pipelineId }: Props) {
   const t = useT();
+  // FORK MIA: a permissão do seletor de "quem originou" é lida aqui e descida
+  // ao formulário. Ver `podeVerEquipe` no LeadFieldsForm.
+  const podeVerEquipe = usePermission("pipeline.move_card");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -43,6 +47,7 @@ export function EditLeadDialog({ open, onOpenChange, lead, pipelineId }: Props) 
         <LeadFieldsForm
           lead={lead}
           pipelineId={pipelineId}
+          podeVerEquipe={podeVerEquipe}
           onSaved={() => onOpenChange(false)}
           onCancel={() => onOpenChange(false)}
         />

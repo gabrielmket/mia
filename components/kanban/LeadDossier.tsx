@@ -4,7 +4,7 @@ import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useRef } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
-import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
+import { useActiveOrg, usePermission, useUser } from "@/hooks/auth/AuthProvider";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useLeadTimeline } from "@/hooks/leads/useLeadTimeline";
@@ -71,6 +71,9 @@ export function LeadDossier({
   const activeOrg = useActiveOrg();
   const podeCriarProposta =
     user.is_platform_admin || (activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager) || false;
+  // FORK MIA: a permissão do seletor de "quem originou" é lida aqui e descida
+  // ao formulário. Ver `podeVerEquipe` no LeadFieldsForm.
+  const podeVerEquipe = usePermission("pipeline.move_card");
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -164,7 +167,12 @@ export function LeadDossier({
           <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
             {t("Dados do negócio")}
           </h3>
-          <LeadFieldsForm lead={lead} pipelineId={pipelineId} fieldDefs={fieldDefs} />
+          <LeadFieldsForm
+            lead={lead}
+            pipelineId={pipelineId}
+            fieldDefs={fieldDefs}
+            podeVerEquipe={podeVerEquipe}
+          />
         </div>
 
         {/* N1 — seção "Propostas", depois de "Dados do negócio". Some sozinha

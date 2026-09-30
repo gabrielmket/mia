@@ -12,7 +12,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useEditLead } from "@/hooks/kanban/useUpdateLead";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
-import { usePermission } from "@/hooks/auth/AuthProvider";
 import type { Lead } from "@/lib/types/leads";
 import { updateLeadSchema, type UpdateLeadInput } from "@/lib/schemas/leads";
 import { MOEDA_PADRAO, parseReaisToCents, simboloDaMoeda } from "@/lib/money";
@@ -41,6 +40,18 @@ interface Props {
   onSaved?: () => void;
   /** O dossiê não tem "cancelar"; o diálogo tem. */
   onCancel?: () => void;
+  /**
+   * FORK MIA: a pessoa enxerga a equipe (`usePermission("pipeline.move_card")`)?
+   * Decide se o seletor de "quem originou" lista os membros.
+   *
+   * Vem de quem monta o formulário (dossiê e diálogo), e não de um
+   * `usePermission` aqui dentro: este componente é do upstream, e os testes
+   * dele simulam `@/hooks/auth/AuthProvider` só com `useActiveOrg`. Um
+   * `usePermission` do fork aqui dentro derrubava a montagem inteira nesses
+   * testes. Ausente = não enxerga, que é o lado seguro: sem a lista, o valor
+   * gravado continua aparecendo pela opção de reserva.
+   */
+  podeVerEquipe?: boolean;
 }
 
 function centsToReais(cents: number | null | undefined): string {
@@ -57,7 +68,14 @@ function centsToReais(cents: number | null | undefined): string {
  * registro justamente de quem o produziu — a funcionalidade que prova "sua ação
  * fica registrada" provaria isso para todo mundo menos para o autor.
  */
-export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCancel }: Props) {
+export function LeadFieldsForm({
+  lead,
+  pipelineId,
+  fieldDefs = [],
+  onSaved,
+  onCancel,
+  podeVerEquipe = false,
+}: Props) {
   const t = useT();
   const org = useActiveOrg();
   // A moeda do negócio JÁ GRAVADO vence: trocar a moeda da empresa não
@@ -65,9 +83,9 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
   const moedaDoValor = lead.currency ?? org?.currency ?? MOEDA_PADRAO;
   const edit = useEditLead(pipelineId);
   const [customFields, setCustomFields] = useState<Record<string, unknown>>(lead.custom_fields ?? {});
-  // Mesmo picker da reatribuição (spec 13 §4: escrita no funil é agent+) — um
-  // viewer não veria a lista, e a rota também a negaria.
-  const podeVerEquipe = usePermission("pipeline.move_card");
+  // Mesmo picker da reatribuição (spec 13 §4: escrita no funil é agent+): um
+  // viewer não veria a lista, e a rota também a negaria. A permissão chega por
+  // `podeVerEquipe` (ver a prop).
   const { data: membros } = useAssignableMembers(podeVerEquipe);
   /**
    * Quem originou pode já ter saído do time — a lista só traz membro ATIVO.
