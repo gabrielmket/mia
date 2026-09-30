@@ -2,8 +2,8 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "Leads dos formulários da Meta (fork MIA, .60): do cadastro instantâneo ao funil",
-    "subtitle": "Consulta periódica a cada 5 min com o token da empresa; gravação pela mesma via da fonte de webhook. Plano em docs/fork/leads-da-meta.md",
+    "title": "Leads dos formulários da Meta (fork MIA, .60 a .62): do cadastro instantâneo ao funil",
+    "subtitle": "Aviso em tempo real pelo webhook leadgen (.62) e consulta a cada 5 min como rede de segurança; os dois gravam pela mesma via da fonte de webhook. Plano em docs/fork/leads-da-meta.md",
     "output": "leads-da-meta.html",
     "quality_profile": "standard"
   },
@@ -22,20 +22,27 @@
     { "id": "graph-paginas", "lane": "meta", "col": 1, "type": "service", "label": "me/accounts: Páginas e o token de cada uma" },
     { "id": "graph-forms", "lane": "meta", "col": 2, "type": "service", "label": "{pagina}/leadgen_forms: formulários e perguntas" },
     { "id": "graph-leads", "lane": "meta", "col": 3, "type": "service", "label": "{formulario}/leads por time_created (lib/plataformas-de-anuncio/meta/leads.ts)" },
+    { "id": "graph-assinatura", "lane": "meta", "col": 4, "type": "service", "label": "{pagina}/subscribed_apps: a Página assinada no app para leadgen (.62)" },
+    { "id": "graph-lead", "lane": "meta", "col": 5, "type": "service", "label": "{lead}: um lead pelo id que o aviso traz (.62)" },
+    { "id": "meta-webhook", "lane": "meta", "col": 6, "type": "service", "label": "Webhook da Página, campo leadgen: o aviso em segundos (.62)" },
 
-    { "id": "tela-config", "lane": "tela", "col": 0, "type": "ui", "label": "Configurações › Formulários da Meta (app/app/settings/leads-da-meta), porta em lib/navigation/catalogo.ts" },
+    { "id": "tela-config", "lane": "tela", "col": 0, "type": "ui", "label": "Configurações › Meta Ads › Formulários de leads (app/app/settings/meta-ads/_formularios.tsx), porta em lib/navigation/catalogo.ts" },
     { "id": "tela-historico", "lane": "tela", "col": 1, "type": "ui", "label": "Histórico de leituras: sucesso, sem novos, erro com o que fazer" },
     { "id": "tela-captacoes", "lane": "tela", "col": 2, "type": "ui", "label": "Captações (webhook_lead_captures) e card com etiqueta Meta_ads" },
+    { "id": "central", "lane": "tela", "col": 3, "type": "ui", "label": "Central de avisos e push no celular dos administradores (.62)" },
 
     { "id": "rota-estado", "lane": "api", "col": 0, "type": "service", "label": "GET/PATCH /api/v1/leads-da-meta: estado e chave (admin muda)" },
     { "id": "rota-paginas", "lane": "api", "col": 1, "type": "service", "label": "GET /api/v1/leads-da-meta/paginas: diagnóstico do token" },
     { "id": "rota-formularios", "lane": "api", "col": 2, "type": "service", "label": "PUT /api/v1/leads-da-meta/formularios: destino conferido contra a empresa" },
     { "id": "rota-ler-agora", "lane": "api", "col": 3, "type": "service", "label": "POST /api/v1/leads-da-meta/ler-agora: a rodada só da empresa" },
+    { "id": "rota-webhook", "lane": "api", "col": 4, "type": "service", "label": "GET/POST /api/v1/webhooks/leads-da-meta: HMAC com o App Secret da instalação (.62)" },
 
     { "id": "cron", "lane": "rotina", "col": 0, "type": "worker", "label": "cron leads-da-meta a cada 5 min (docker/scheduler/entrypoint.sh)" },
     { "id": "rodada", "lane": "rotina", "col": 1, "type": "worker", "label": "rodarLeadsDaMeta: janela desde a marca, do mais antigo ao mais novo" },
     { "id": "gravar", "lane": "rotina", "col": 2, "type": "logic", "label": "gravarLeadDaMeta: dedup por id (hash) e por pessoa; origem do anúncio" },
     { "id": "modulo", "lane": "rotina", "col": 3, "type": "logic", "label": "LEADS_DA_META_E_MODULO_VENDAVEL (lib/leads-da-meta/modulo.ts)" },
+    { "id": "tempo-real", "lane": "rotina", "col": 4, "type": "worker", "label": "receberAvisoDeLead: dono da Página (9004), formulário ligado, mesma gravação (lib/leads-da-meta/tempo-real.ts)" },
+    { "id": "campos", "lane": "rotina", "col": 5, "type": "logic", "label": "Telefone, nome e e-mail em pergunta própria, com escolha manual (campos-do-formulario.ts, .62)" },
 
     { "id": "create-lead", "lane": "via", "col": 0, "type": "service", "label": "createLeadHandler: negócio + lead.created" },
     { "id": "captacao", "lane": "via", "col": 1, "type": "service", "label": "registrarCaptacao: formulário com as perguntas originais" },
@@ -49,7 +56,8 @@
     { "id": "t-contatos", "lane": "dados", "col": 4, "type": "database", "label": "contacts / crm_leads / webhook_lead_captures (dado pessoal, com LGPD)" },
 
     { "id": "laco-erro", "lane": "retorno", "col": 0, "type": "logic", "label": "Erro: a marca não anda; a próxima leitura relê a janela (até 90 dias)" },
-    { "id": "laco-motivo", "lane": "retorno", "col": 1, "type": "logic", "label": "Motivo na tela diz a ação: token novo, permissão, Página, funil" }
+    { "id": "laco-motivo", "lane": "retorno", "col": 1, "type": "logic", "label": "Motivo na tela diz a ação: token novo, permissão, Página, funil" },
+    { "id": "aviso-falha", "lane": "retorno", "col": 2, "type": "logic", "label": "3 falhas seguidas: UM aviso por problema, fecha sozinho quando volta (aviso-de-falha.ts, .62)" }
   ],
   "edges": [
     { "id": "e1", "from": "cron", "to": "rodada", "label": "a cada 5 min" },
@@ -82,6 +90,18 @@
     { "id": "e28", "from": "laco-erro", "to": "t-formularios", "label": "lido_ate parado" },
     { "id": "e29", "from": "tela-historico", "to": "laco-motivo", "label": "o que fazer" },
     { "id": "e30", "from": "laco-motivo", "to": "tela-config", "label": "corrigir e Ler agora" },
-    { "id": "e31", "from": "modulo", "to": "tela-config", "label": "some do menu sem liberação" }
+    { "id": "e31", "from": "modulo", "to": "tela-config", "label": "some do menu sem liberação" },
+    { "id": "e32", "from": "meta-webhook", "to": "rota-webhook", "label": "aviso leadgen" },
+    { "id": "e33", "from": "rota-webhook", "to": "tempo-real", "label": "cada aviso, assinatura conferida" },
+    { "id": "e34", "from": "tempo-real", "to": "graph-lead", "label": "o lead pelo id" },
+    { "id": "e35", "from": "tempo-real", "to": "gravar", "label": "a mesma via da leitura" },
+    { "id": "e36", "from": "rota-formularios", "to": "graph-assinatura", "label": "ligar o tempo real" },
+    { "id": "e37", "from": "rodada", "to": "graph-assinatura", "label": "confere a assinatura" },
+    { "id": "e38", "from": "graph-assinatura", "to": "meta-webhook", "label": "a Meta passa a avisar" },
+    { "id": "e39", "from": "gravar", "to": "campos", "label": "qual pergunta é o telefone" },
+    { "id": "e40", "from": "rota-formularios", "to": "campos", "label": "pergunta escolhida" },
+    { "id": "e41", "from": "rodada", "to": "aviso-falha", "label": "falhas seguidas" },
+    { "id": "e42", "from": "aviso-falha", "to": "central", "label": "avisa uma vez" },
+    { "id": "e43", "from": "central", "to": "tela-config", "label": "Revisar formulários da Meta" }
   ]
 }
