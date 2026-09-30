@@ -37,7 +37,13 @@ export const triggerConfigSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("webhook"), ...CANCEL_ON_REPLY }),
   z.strictObject({
     kind: z.literal("lead_created"),
-    params: z.strictObject({}).optional(),
+    // FORK MIA — o número da abordagem (`lib/followup/numero-do-gatilho.ts`).
+    // Ausente = automático, como sempre foi: o banco escolhe o número da
+    // conversa mais recente com o contato ou, sem conversa, o conectado mais
+    // antigo. Presente = SÓ este número; se ele estiver arquivado ou
+    // desconectado o lead não é inscrito, nunca sai por outro calado. A rota
+    // PATCH confere que o canal é da organização ativa antes de gravar.
+    params: z.strictObject({ channel_session_id: z.string().uuid().optional() }).optional(),
     ...CANCEL_ON_REPLY,
   }),
   z.strictObject({

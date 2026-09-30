@@ -17,6 +17,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { patchFollowupFlowSchema } from "@/lib/followup/api-schemas";
+import { numeroEhDaOrganizacao, numeroEscolhidoDoGatilho } from "@/lib/followup/numero-do-gatilho";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -124,6 +125,25 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (!existing) return fail("not_found", t("Fluxo não encontrado."), 404, { requestId });
 
   const patch = parsed.data;
+
+  // FORK MIA — o número da abordagem do gatilho "Lead criado" tem de ser um canal
+  // ativo da organização ATIVA, conferido aqui e nunca aceito do corpo sem isso:
+  // um id de outra empresa faria o gatilho abrir atendimento pelo número alheio
+  // (`lib/followup/numero-do-gatilho.ts`).
+  const numeroDoGatilho = patch.trigger_config ? numeroEscolhidoDoGatilho(patch.trigger_config) : null;
+  if (numeroDoGatilho) {
+    const conferido = await numeroEhDaOrganizacao(supabase, activeOrg.orgId, numeroDoGatilho);
+    if (!conferido.ok) {
+      if (conferido.erro) return fail("internal_error", conferido.erro, 500, { requestId });
+      return fail(
+        "trigger_channel_not_found",
+        t("O número escolhido para o gatilho não é desta empresa ou foi excluído. Escolha outro número."),
+        422,
+        { requestId },
+      );
+    }
+  }
+
   if (Object.keys(patch).length === 0) {
     const { data: unchanged, error: reloadErr } = await supabase
       .from("followup_flow_pointers")

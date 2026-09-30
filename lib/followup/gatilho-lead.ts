@@ -28,6 +28,13 @@ import { ORIGEM_DA_PLANILHA } from "@/lib/leads/planilha";
 import { flowGraphSchema } from "./graph-schema";
 import { triggerConfigSchema } from "./api-schemas";
 import {
+  ehRecusaDoNumero,
+  motivoParaNaoUsar,
+  numeroEscolhidoDoGatilho,
+  type EstadoDoNumero,
+  type MotivoDoNumero,
+} from "./numero-do-gatilho";
+import {
   decidirAgenteDoEnrollmentAutomatico,
   noDeGatilhoDoGrafo,
   type FollowupGateDb,
@@ -40,6 +47,13 @@ export interface PointerDeLead {
   id: string;
   organization_id: string;
   active_version_id: string;
+  /**
+   * FORK MIA — o número da abordagem escolhido no gatilho
+   * (`lib/followup/numero-do-gatilho.ts`). Ausente = automático, idêntico ao
+   * de sempre. `estado` é como o número estava quando o evento foi consumido;
+   * `null` = o id não é mais um canal desta empresa.
+   */
+  numero_de_envio?: { channel_session_id: string; estado: EstadoDoNumero | null };
 }
 
 export interface GatilhoLeadDb {
@@ -56,7 +70,9 @@ export interface GatilhoLeadDb {
     current_node_id: string;
     next_eval_at?: string;
     agent_id: string | null;
-  }): Promise<{ inserted: boolean; id: string | null; reason?: "stale_origin" }>;
+    /** FORK MIA — o número escolhido no gatilho; vira o `p_session` de `fn_service_event_origin`. */
+    channel_session_id?: string;
+  }): Promise<{ inserted: boolean; id: string | null; reason?: "stale_origin" | "numero_divergente" }>;
   insereEventoDoEnrollment(evento: {
     organization_id: string;
     enrollment_id: string;
@@ -76,6 +92,12 @@ export interface GatilhoLeadSummary {
   skipped_stale_origin?: number;
   sem_contato: number;
   vindos_de_planilha: number;
+  /**
+   * FORK MIA — fluxos cujo número escolhido não pôde ser usado. O lead NÃO foi
+   * inscrito neles, nem saiu por outro número. O handler leva a contagem e os
+   * motivos ao `detail` (que o drain grava em `event_log.last_error`) e ao log.
+   */
+  numero_indisponivel?: Array<{ pointer_id: string; channel_session_id: string; motivo: MotivoDoNumero }>;
 }
 
 export interface GatilhoLeadDeps {
@@ -141,6 +163,21 @@ export async function aplicaGatilhoDeLead(
       continue;
     }
 
+    // FORK MIA — número escolhido que não pode sair: não inscreve e diz por quê.
+    // Cair no automático aqui seria trocar de número calado.
+    const numero = pointer.numero_de_envio;
+    if (numero) {
+      const motivo = motivoParaNaoUsar(numero.estado);
+      if (motivo) {
+        (summary.numero_indisponivel ??= []).push({
+          pointer_id: pointer.id,
+          channel_session_id: numero.channel_session_id,
+          motivo,
+        });
+        continue;
+      }
+    }
+
     const { inserted, id, reason } = await deps.db.insereEnrollment({
       service_origin: row.payload.service_origin,
       event_id: row.id,
@@ -150,10 +187,17 @@ export async function aplicaGatilhoDeLead(
       contact_id: contatoId,
       current_node_id: noDeGatilho.id,
       agent_id: agentId,
+      ...(numero ? { channel_session_id: numero.channel_session_id } : {}),
     });
     if (!inserted) {
       if (reason === "stale_origin") summary.skipped_stale_origin = (summary.skipped_stale_origin ?? 0) + 1;
-      else summary.skipped_existing++;
+      else if (reason === "numero_divergente" && numero) {
+        (summary.numero_indisponivel ??= []).push({
+          pointer_id: pointer.id,
+          channel_session_id: numero.channel_session_id,
+          motivo: "divergente",
+        });
+      } else summary.skipped_existing++;
       continue;
     }
     summary.enrolled++;
@@ -197,11 +241,37 @@ export function createSupabaseGatilhoLeadDb(admin: SupabaseClient): GatilhoLeadD
         if (!row.active_version_id || row.surface === "atendimento") continue;
         const parsed = triggerConfigSchema.safeParse(row.trigger_config);
         if (!parsed.success || parsed.data.kind !== "lead_created") continue;
+        const numero = numeroEscolhidoDoGatilho(parsed.data);
         pointers.push({
           id: row.id,
           organization_id: row.organization_id,
           active_version_id: row.active_version_id,
+          ...(numero ? { numero_de_envio: { channel_session_id: numero, estado: null } } : {}),
         });
+      }
+
+      // FORK MIA — o estado de cada número escolhido, lido AGORA e na organização
+      // do evento: um id de outra empresa (gravado por fora da rota) volta sem
+      // linha e vira `nao_encontrado`, nunca um envio pelo número alheio.
+      const escolhidos = [
+        ...new Set(pointers.flatMap((p) => (p.numero_de_envio ? [p.numero_de_envio.channel_session_id] : []))),
+      ];
+      if (escolhidos.length > 0) {
+        const { data: sessoes, error: sessoesErr } = await admin
+          .from("channel_sessions")
+          .select("id, status, archived_at")
+          .eq("organization_id", orgId)
+          .in("id", escolhidos);
+        if (sessoesErr) throw new Error(sessoesErr.message);
+        const porId = new Map(
+          ((sessoes ?? []) as Array<{ id: string; status: string; archived_at: string | null }>).map((s) => [
+            s.id,
+            { status: s.status, archived_at: s.archived_at },
+          ]),
+        );
+        for (const p of pointers) {
+          if (p.numero_de_envio) p.numero_de_envio.estado = porId.get(p.numero_de_envio.channel_session_id) ?? null;
+        }
       }
       return pointers;
     },
@@ -230,10 +300,19 @@ export function createSupabaseGatilhoLeadDb(admin: SupabaseClient): GatilhoLeadD
     },
 
     async insereEnrollment(input) {
-      const { service_origin: _origin, event_id, ...values } = input;
-      const boundary = event_id
-        ? await serviceForEvent(admin, input.organization_id, event_id, input.contact_id)
-        : null;
+      const { service_origin: _origin, event_id, channel_session_id: numero, ...values } = input;
+      let boundary: Awaited<ReturnType<typeof serviceForEvent>> = null;
+      try {
+        boundary = event_id
+          ? await serviceForEvent(admin, input.organization_id, event_id, input.contact_id, numero)
+          : null;
+      } catch (err) {
+        // FORK MIA — o banco recusou abrir o atendimento no número escolhido
+        // (23503 `service_channel_mismatch`). Tentar de novo não muda isso, e
+        // cair no automático trocaria de número calado: é desfecho, com motivo.
+        if (numero && ehRecusaDoNumero(err)) return { inserted: false, id: null, reason: "numero_divergente" };
+        throw err;
+      }
       if (!boundary) return { inserted: false, id: null, reason: "stale_origin" };
       const { data, error } = await admin
         .from("followup_enrollments")
