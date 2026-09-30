@@ -1,4 +1,4 @@
-# Leads dos formulários da Meta (1.21.0-mia.60)
+# Leads dos formulários da Meta (1.21.0-mia.60, separado por empresa na .61)
 
 Os anúncios de **cadastro instantâneo** da Meta (o formulário que abre dentro do
 Facebook e do Instagram) passam a entregar o lead direto no funil do CRM, do mesmo
@@ -8,13 +8,51 @@ origem do anúncio e as automações de "lead criado".
 Até a .59 o CRM só **contava** esses cadastros (coluna "Cadastros de formulário" na
 tabela de campanhas); o lead em si ficava preso na Meta.
 
+## Cada Página é de uma empresa (.61)
+
+Na .60 a tela listava **todas** as Páginas que o token alcança. O token que existe é
+o da agência (o usuário do sistema do Gerenciador da Time Company), e ele enxerga as
+Páginas de vários clientes (Protev, Erglares, Amanda...): qualquer empresa via, e podia
+importar, a Página das outras. Da .61 em diante:
+
+- cada Página tem **um dono só** (`mia_paginas_da_meta`, migration 9004);
+- quem define o dono é o **dono da plataforma**, em **/admin › Páginas da Meta**;
+- a empresa só vê e só configura formulário das Páginas dela; **Página sem dono não
+  aparece** para empresa nenhuma;
+- **no banco, não só na tela**: um gatilho recusa formulário ativo de Página que não
+  é da empresa (vale para qualquer caminho, inclusive o service role das rotas e da
+  rotina), e outro desliga na hora os formulários das outras empresas quando a Página
+  ganha, troca ou perde o dono, com o motivo à vista na tela delas. O que a .60 deixou
+  ligado em Página sem dono foi desligado no deploy da .61 com o mesmo motivo;
+- ao ligar um formulário, a rota confere **na Meta** que ele pertence àquela Página
+  (sem isso, o id de um formulário do vizinho colado ao lado da Página certa passaria).
+
+### De onde vem o token de cada empresa
+
+O token de leitura é o de **Configurações › Meta Ads** (`ad_insights_connections`,
+plataforma `meta_ads`). Hoje só a Time Company tem um. Uma empresa cliente sem token
+próprio **não conseguia** ler os leads da Página dela: a rotina parava em `sem_conexao`.
+
+Na .61 existe a **conexão da plataforma** (`mia_meta_conexao_da_plataforma`, escolhida
+em /admin › Páginas da Meta): a empresa cuja conexão de Meta Ads é emprestada. Para
+cada empresa, a rotina procura o token de cada Página **dela**:
+
+1. no token da própria empresa, se ela tiver um;
+2. senão, no token da plataforma.
+
+O token emprestado nunca lista nem lê Página que não seja da empresa que está lendo:
+tudo parte da lista de Páginas da empresa, e o token só serve para achar o token de
+cada uma (`lib/leads-da-meta/paginas.ts`).
+
 ## Como fica para o cliente
 
-1. O administrador da empresa abre **Configurações › Formulários da Meta**. A tela
-   confere se o token (o mesmo de Configurações › Meta Ads) tem as permissões e
-   diz exatamente qual falta e onde resolver.
-2. Ele vê as Páginas que o token alcança e os formulários de cada uma, marca quais
-   importar e para qual **funil e etapa** vai cada um.
+1. O administrador da empresa abre **Configurações › Meta Ads › Formulários de
+   leads** (até a .60 era o item próprio "Formulários da Meta"; o endereço antigo
+   redireciona para a aba). A aba confere se o token tem as permissões e diz
+   exatamente qual falta e onde resolver.
+2. Ele vê **as Páginas da empresa** e os formulários de cada uma, marca quais
+   importar e para qual **funil e etapa** vai cada um. Sem Página atribuída, a aba
+   diz que a Página é atribuída pela plataforma e nem consulta a Meta.
 3. Liga a chave **"Importar os leads dos formulários"** e escolhe quantos dias para
    trás buscar na primeira leitura (até 90, que é o que a Meta guarda).
 4. A cada **5 minutos** o sistema busca os leads novos. Cada lead vira:
@@ -72,6 +110,15 @@ deduplica pelo id do lead, então os dois caminhos podem rodar juntos).
   contato já resolve o anúncio pelo `ad_id`. O `ad_source_id` fica vazio **de
   propósito**: hoje ele é enviado à Meta como identificador de clique do WhatsApp,
   e o id do lead não é isso.
+- **Dono de cada Página (migration 9004):** `mia_paginas_da_meta` (page_id é a
+  chave: uma Página, um dono) e `mia_meta_conexao_da_plataforma` (linha única, zero
+  policies). Gatilhos `trg_mia_formulario_da_meta_so_da_pagina_da_empresa` e
+  `trg_mia_pagina_da_meta_mudou_de_dono`. Provado com o papel sem RLS em
+  `tests/invariants/paginas-da-meta-por-empresa.test.ts`.
+- **Etiqueta do card (.61):** o card nasce com `Meta_ads` e `Formulario_Meta`. A
+  segunda só existe aqui (o clique para o WhatsApp leva só `Meta_ads`) e é por ela
+  que a régua de follow-up aborda só quem preencheu o formulário. O texto é
+  contrato: renomear desliga a régua em silêncio.
 - **Tabelas novas (migration 9003):** `mia_leads_da_meta_config` (a chave por
   empresa), `mia_leads_da_meta_formularios` (o que importar e para onde, e a marca
   de leitura), `mia_leads_da_meta_leituras` (o histórico) e
@@ -116,10 +163,13 @@ do anúncio, então as duas entraram na lista. A tela confere tudo isso na hora.
    **Nunca** › marque as permissões da tabela acima.
    Permissão nova **sempre** pede token novo; Página nova atribuída ao mesmo
    usuário **não** pede.
-5. No CRM da empresa: Configurações › Meta Ads › cole o token novo (a tabela de
-   campanhas segue funcionando com ele).
-6. Configurações › Formulários da Meta: escolha os formulários, o funil e a etapa,
-   os dias de recuperação, ligue a chave e clique em **Ler agora**.
+5. No CRM da Time Company: Configurações › Meta Ads › cole o token novo (a tabela
+   de campanhas segue funcionando com ele).
+6. **/admin › Páginas da Meta** (.61): escolha a Time Company como conexão da
+   plataforma (uma vez só) e atribua a Página à empresa dona dela.
+7. No CRM da empresa: Configurações › Meta Ads › **Formulários de leads**: escolha
+   os formulários, o funil e a etapa, os dias de recuperação, ligue a chave e clique
+   em **Ler agora**. A empresa não precisa de token próprio.
 
 Para testar sem anúncio no ar: **Ferramenta de teste de anúncios de cadastro**
 (developers.facebook.com/tools/lead-ads-testing) › Página e formulário › criar
