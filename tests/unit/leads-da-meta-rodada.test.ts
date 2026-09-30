@@ -4,8 +4,9 @@
  *
  * O que se prova, cada um com o seu caso:
  *
- *   1. lead novo vira contato + negócio + captação, com a origem do anúncio, a
- *      etiqueta Meta_ads e as perguntas originais — e a marca de leitura anda;
+ *   1. lead novo vira contato + negócio + captação, com a origem do anúncio, as
+ *      etiquetas Meta_ads e Formulario_Meta e as perguntas originais — e a marca
+ *      de leitura anda;
  *   2. a leitura sobreposta não duplica nada (id do lead, em hash);
  *   3. a mesma pessoa com negócio aberto não ganha outro card;
  *   4. formulário sem nome, telefone nem e-mail é recusado UMA vez, com motivo;
@@ -228,7 +229,9 @@ describe("lead novo", () => {
       stage_id: "etapa-1",
       contact_id: contato!.id,
       title: "Ana Souza",
-      tags: ["Meta_ads"],
+      // .61: a segunda etiqueta separa quem PREENCHEU o formulário de quem
+      // clicou para o WhatsApp (que só leva `Meta_ads`).
+      tags: ["Meta_ads", "Formulario_Meta"],
       source: "meta_ads",
       custom_fields: { "Qual seu interesse?": "Implante" },
     });
@@ -326,6 +329,8 @@ describe("deduplicação", () => {
       contactId: "c-antigo",
     });
     expect(h.atividades[0]).toMatchObject({ leadId: "lead-aberto", type: "note" });
+    // O card aberto não nasceu do formulário: nenhuma etiqueta é posta nele.
+    expect(banco.tabela("crm_leads")[0]!.tags).toBeUndefined();
     expect(String(h.atividades[0]!.reason)).not.toContain("Ana");
     // Primeiro toque: a origem vai para o contato que ainda não tinha nenhuma.
     expect(banco.chamadasRpc.map((c) => c.nome)).toContain("fn_estampar_atribuicao_de_anuncio");

@@ -56,6 +56,17 @@ import {
 export const ORIGEM_DO_LEAD = "meta_ads";
 /** A etiqueta do card, a mesma que `nascimento-do-lead.ts` põe em quem veio de anúncio da Meta. */
 export const ETIQUETA_DO_CARD = "Meta_ads";
+/**
+ * FORK MIA (.61) — a SEGUNDA etiqueta, só de quem PREENCHEU o formulário.
+ *
+ * `Meta_ads` sozinha não separa as duas portas da Meta: o clique para o
+ * WhatsApp (`nascimento-do-lead.ts`) também a recebe, e ali a pessoa já chegou
+ * falando. Quem preencheu o formulário não mandou mensagem nenhuma, e é com ele
+ * que a IA precisa puxar a conversa: a régua de follow-up filtra por esta
+ * etiqueta no card (`crm_leads.tags`, o `tag` do nó de condição) para abordar
+ * só quem veio do formulário. Por isso ela mora aqui e em nenhum outro lugar.
+ */
+export const ETIQUETA_DO_FORMULARIO = "Formulario_Meta";
 
 export interface FormularioParaGravar {
   /** Id da linha em `mia_leads_da_meta_formularios`. */
@@ -349,7 +360,10 @@ export async function gravarLeadDaMeta(
         stage_id: formulario.stageId,
         title: titulo,
         contact_id: contato?.id,
-        tags: [ETIQUETA_DO_CARD],
+        // As duas: `Meta_ads` mantém o card igual ao de todo lead da Meta (o
+        // ponto do Kanban, os filtros que já existem); `Formulario_Meta` diz
+        // por qual porta ele entrou.
+        tags: [ETIQUETA_DO_CARD, ETIQUETA_DO_FORMULARIO],
         source: ORIGEM_DO_LEAD,
         custom_fields: campos,
         source_metadata: { ...atribuicao, ...mapeado.source_metadata },

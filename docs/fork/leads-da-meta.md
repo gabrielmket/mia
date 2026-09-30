@@ -19,7 +19,9 @@ tabela de campanhas); o lead em si ficava preso na Meta.
    trás buscar na primeira leitura (até 90, que é o que a Meta guarda).
 4. A cada **5 minutos** o sistema busca os leads novos. Cada lead vira:
    - contato (acha pelo telefone ou pelo e-mail; não duplica);
-   - negócio na etapa escolhida, com a etiqueta **Meta_ads** no card;
+   - negócio na etapa escolhida, com as etiquetas **Meta_ads** e **Formulario_Meta**
+     no card (a segunda só existe aqui: quem veio do clique para o WhatsApp leva só
+     `Meta_ads`, e é por ela que uma régua de follow-up aborda só quem preencheu);
    - as respostas do formulário com as **perguntas originais** (a IA do agente
      lê isso e sabe que a pessoa "preencheu o formulário X");
    - a origem: campanha, conjunto, anúncio, formulário e Página.
