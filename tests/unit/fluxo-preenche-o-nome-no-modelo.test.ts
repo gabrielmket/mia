@@ -213,7 +213,7 @@ describe("passo `template` com a variável do nome", () => {
     const { pool } = fakePool({ components: NEUTRO, contato: { name: null, display_name: null } });
     await criarHandler(d)(job({ template_id: MODELO_ID }), pool, { workerId: "w1" });
 
-    expect(send.mock.calls[0]![0].template.values).toEqual({ "1": "tudo bem" });
+    expect(send.mock.calls[0]![0].template).toMatchObject({ values: { "1": "tudo bem" } });
     expect(runBeforeSend.mock.calls[0]![0].body).toBe("Oi, tudo bem? Separei as condições para você.");
     expect(resultado(completeFollowupTurn).kind).toBe("sent");
   });
