@@ -11960,6 +11960,17 @@ export const DICIONARIO: Traducoes = {
   "Grupo que recebe o aviso": { es: "Grupo que recibe el aviso" },
   "endereço público do arquivo (https://…)": { es: "dirección pública del archivo (https://…)" },
   "Sem aviso": { es: "Sin aviso" },
+  // FORK MIA (.61) — o número da abordagem no gatilho "Lead criado" (lib/followup/numero-do-gatilho.ts).
+  "Número que faz a abordagem": { es: "Número que hace el primer contacto" },
+  "Automático (como hoje)": { es: "Automático (como hasta ahora)" },
+  "Outro canal": { es: "Otro canal" },
+  "Número excluído": { es: "Número eliminado" },
+  "Não consegui carregar os números da empresa. Recarregue a página.": { es: "No pude cargar los números de la empresa. Recarga la página." },
+  "Automático: sai pelo número da conversa mais recente com o contato ou, sem conversa, pelo número conectado mais antigo da empresa.": { es: "Automático: sale por el número de la conversación más reciente con el contacto o, sin conversación, por el número conectado más antiguo de la empresa." },
+  "O primeiro contato sai só por este número. Se ele estiver desconectado ou for excluído, o lead não entra no fluxo: o sistema não troca de número sozinho.": { es: "El primer contacto sale solo por este número. Si está desconectado o se elimina, el lead no entra en el flujo: el sistema no cambia de número por su cuenta." },
+  "Este número está desconectado agora. Enquanto ele não voltar, os leads novos não entram neste fluxo.": { es: "Este número está desconectado ahora. Mientras no vuelva, los leads nuevos no entran en este flujo." },
+  "O número escolhido foi excluído. Escolha outro número ou volte para o automático.": { es: "El número elegido fue eliminado. Elige otro número o vuelve al automático." },
+  "O número escolhido para o gatilho não é desta empresa ou foi excluído. Escolha outro número.": { es: "El número elegido para el disparador no es de esta empresa o fue eliminado. Elige otro número." },
 
   // ---- empresas (o cliente que é uma organização) ----
   "Empresas": { es: "Empresas" },

@@ -30,6 +30,9 @@ import {
   minutosDoLimiar,
   type UnidadeDeLimiar,
 } from "@/lib/followup/gap-de-retorno";
+// FORK MIA — o número da abordagem do gatilho "Lead criado".
+import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
+import { NumeroDoGatilho, rotuloDoNumero } from "./NumeroDoGatilho";
 
 /**
  * Controle de `trigger_config` do pointer (Task 8.5) — como o fluxo começa.
@@ -82,6 +85,8 @@ interface TriggerFormState {
   stageId: string;
   cancelOnReply: boolean;
   eventTypeIds: string[];
+  /** FORK MIA — `params.channel_session_id` do "Lead criado"; `""` = automático. */
+  channelSessionId: string;
 }
 
 const DEFAULT_THRESHOLD_MINUTES = 60;
@@ -128,7 +133,7 @@ function parseTriggerConfig(raw: Record<string, unknown>): TriggerFormState {
                   ? "lead_created"
                   : "manual";
   const params =
-    (raw.params as { threshold_minutes?: number; segments?: string[]; stage_id?: string; event_type_ids?: string[] } | undefined) ?? {};
+    (raw.params as { threshold_minutes?: number; segments?: string[]; stage_id?: string; event_type_ids?: string[]; channel_session_id?: string } | undefined) ?? {};
   const minutosRetorno =
     kind === "inbound_after_silence" && typeof params.threshold_minutes === "number"
       ? params.threshold_minutes
@@ -149,6 +154,8 @@ function parseTriggerConfig(raw: Record<string, unknown>): TriggerFormState {
         : "",
     stageId: kind === "stage_change" && typeof params.stage_id === "string" ? params.stage_id : "",
     cancelOnReply: raw.cancel_on_reply === true,
+    channelSessionId:
+      kind === "lead_created" && typeof params.channel_session_id === "string" ? params.channel_session_id : "",
   };
 }
 
@@ -165,7 +172,14 @@ function toTriggerConfig(form: TriggerFormState): Record<string, unknown> {
   // todo fluxo armado assim.
   if (form.kind === "case_opened") return { kind: "case_opened", ...cancelOnReply };
   if (form.kind === "webhook") return { kind: "webhook", ...cancelOnReply };
-  if (form.kind === "lead_created") return { kind: "lead_created", ...cancelOnReply };
+  // FORK MIA — sem número escolhido, sem `params`: o automático de sempre.
+  if (form.kind === "lead_created") {
+    return {
+      kind: "lead_created",
+      ...(form.channelSessionId ? { params: { channel_session_id: form.channelSessionId } } : {}),
+      ...cancelOnReply,
+    };
+  }
 
   const segments = form.segments
     .split(",")
@@ -195,6 +209,7 @@ function summaryLabel(
   cfg: Record<string, unknown>,
   etapa: { stageName: string; pipelineName: string } | null,
   t: (texto: string) => string = (texto) => texto,
+  numero: string | null = null,
 ): string {
   if(cfg.kind === "appointment_no_show") return t("Gatilho: falta confirmada pela equipe");
   if (cfg.kind === "silence") {
@@ -229,7 +244,10 @@ function summaryLabel(
   }
   if (cfg.kind === "case_opened") return `${t("Gatilho")}: ${t("quando o agente pede ajuda")}`;
   if (cfg.kind === "webhook") return t("Disparado por uma automação em Webhooks");
-  if (cfg.kind === "lead_created") return `${t("Gatilho")}: ${t("Lead criado")}`;
+  if (cfg.kind === "lead_created") {
+    // FORK MIA — o número escolhido vai no rótulo que dura, como a etapa.
+    return numero ? `${t("Gatilho")}: ${t("Lead criado")} · ${numero}` : `${t("Gatilho")}: ${t("Lead criado")}`;
+  }
   if (cfg.kind === "manual" || cfg.kind === undefined) return `${t("Gatilho")}: ${t("Manual")}`;
   // conversation_end de dados antigos (API crua) — sem UI própria, mas mostrado
   // com transparência em vez de mentir "Manual".
@@ -254,6 +272,11 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
   // fluxo já configurado.
   const { etapas, carregando: etapasCarregando } = useEtapasDeGatilho();
   const etapaSalva = etapas.find((e) => e.stageId === parseTriggerConfig(triggerConfig).stageId);
+  // FORK MIA — o nome do número escolhido no "Lead criado", para o rótulo fechado.
+  const numeroSalvo = triggerConfig.kind === "lead_created" ? parseTriggerConfig(triggerConfig).channelSessionId : "";
+  const canais = useChannelSessions({ enabled: numeroSalvo !== "" });
+  const canalSalvo = numeroSalvo ? canais.data?.find((c) => c.id === numeroSalvo) : undefined;
+  const rotuloDoNumeroSalvo = numeroSalvo ? (canalSalvo ? rotuloDoNumero(canalSalvo, t) : t("Número excluído")) : null;
 
   // Re-sincroniza com o valor persistido quando o popover está FECHADO — nunca
   // no meio de uma edição em andamento (mesma doutrina do `savedGraph` do canvas).
@@ -283,7 +306,8 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
       (form.thresholdValor !== saved.thresholdValor ||
         form.thresholdUnidade !== saved.thresholdUnidade ||
         form.segments !== saved.segments)) ||
-    (form.kind === "stage_change" && form.stageId !== saved.stageId);
+    (form.kind === "stage_change" && form.stageId !== saved.stageId) ||
+    (form.kind === "lead_created" && form.channelSessionId !== saved.channelSessionId);
 
   const onSave = () => {
     if (thresholdInvalid || stageInvalid) return;
@@ -303,7 +327,7 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button type="button" variant="outline" size="sm" data-testid="trigger-config-button">
-          {summaryLabel(triggerConfig, etapaSalva ?? null, t)}
+          {summaryLabel(triggerConfig, etapaSalva ?? null, t, canais.isLoading ? null : rotuloDoNumeroSalvo)}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80" align="end" data-testid="trigger-config-panel">
@@ -416,6 +440,10 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
                   "Quem escreveu pode receber a resposta do agente no mesmo instante — sem espera, saem duas mensagens juntas.",
                 )}
               </p>
+              <NumeroDoGatilho
+                valor={form.channelSessionId}
+                onChange={(channelSessionId) => setForm((f) => ({ ...f, channelSessionId }))}
+              />
             </div>
           )}
 
