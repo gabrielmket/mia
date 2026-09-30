@@ -38,6 +38,7 @@ import { triggerConfigSchema } from "@/lib/followup/api-schemas";
 import { validateFlowForPublish } from "@/lib/followup/validate-publish";
 import { MODELOS_DE_FOLLOWUP, type ModeloDeFollowup, type NichoDeModelo } from "@/lib/followup/modelos";
 import { buildLeadActivityRow, stageChangeReason } from "@/lib/leads/activity-emitter";
+import { colunasDaSessaoDaDemonstracao } from "@/lib/channels/sessao-da-demonstracao";
 import { MODULO_DOS_LEADS_DA_META } from "@/lib/leads-da-meta/modulo";
 import type { ChaveDeModulo } from "@/lib/modulos/vendaveis";
 import { PACOTES } from "@/lib/onboarding/pacotes-de-funil";
@@ -550,8 +551,8 @@ async function gravarCanalEAgente(e: Escritor, agora: Date): Promise<void> {
     {
       id: ID.canal,
       organization_id: ID_DA_EMPRESA,
-      provider: "waha",
-      waha_session_name: SESSAO_DO_CANAL,
+      // O transporte é conhecimento de lib/channels/ (doutrina de restrição de canal).
+      ...colunasDaSessaoDaDemonstracao(SESSAO_DO_CANAL),
       webhook_secret_encrypted: "\\x00",
       status: "STOPPED",
       status_reason: "Número fictício da empresa de demonstração: nunca conecta.",
