@@ -108,6 +108,15 @@ function SeletorDeModelo({
         </SelectContent>
       </Select>
       {escolhido && <p className="whitespace-pre-line text-xs text-text-muted">{escolhido.texto}</p>}
+      {/* FORK MIA — o modelo leva o primeiro nome do contato (lib/channels/meta/variavel-do-nome.ts). */}
+      {escolhido?.variavel_do_nome && (
+        <p className="text-xs text-text-muted" data-testid="modelo-leva-o-nome">
+          {t("O primeiro nome do contato entra em")} {escolhido.variavel_do_nome.marcador}.{" "}
+          {escolhido.variavel_do_nome.aceita_sem_nome
+            ? t("Sem nome cadastrado, entra «tudo bem».")
+            : t("Sem nome cadastrado, o passo é pulado.")}
+        </p>
+      )}
       {soAprovados && doCanal.length === 0 && (
         <p className="text-xs text-text-muted">
           {t("Nenhum modelo aprovado no WhatsApp ainda. Crie um em Conexões → Modelos e ele aparece aqui quando for aprovado.")}

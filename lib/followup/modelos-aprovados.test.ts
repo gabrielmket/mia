@@ -24,7 +24,10 @@ describe("modelos que um passo de fluxo consegue mandar sozinho", () => {
       linha("c", "APPROVED", "Hola {{1}}, ¿seguís interesado?"),
       linha("d", "REJECTED", "recusado"),
     ]);
-    expect(lista.map((m) => m.id)).toEqual(["a"]);
+    // FORK MIA — o "c" entra: o {{1}} sozinho no corpo o motor preenche com o
+    // primeiro nome do contato (lib/channels/meta/variavel-do-nome.ts). Modelo
+    // com outra variável continua de fora (tests/unit/fluxo-preenche-o-nome-no-modelo.test.ts).
+    expect(lista.map((m) => m.id)).toEqual(["a", "c"]);
   });
 
   it("devolve o texto que o cliente lê, para escolher pelo conteúdo", () => {

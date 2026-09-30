@@ -11971,6 +11971,10 @@ export const DICIONARIO: Traducoes = {
   "Este número está desconectado agora. Enquanto ele não voltar, os leads novos não entram neste fluxo.": { es: "Este número está desconectado ahora. Mientras no vuelva, los leads nuevos no entran en este flujo." },
   "O número escolhido foi excluído. Escolha outro número ou volte para o automático.": { es: "El número elegido fue eliminado. Elige otro número o vuelve al automático." },
   "O número escolhido para o gatilho não é desta empresa ou foi excluído. Escolha outro número.": { es: "El número elegido para el disparador no es de esta empresa o fue eliminado. Elige otro número." },
+  // FORK MIA (.61) — o modelo aprovado do fluxo leva o primeiro nome (lib/channels/meta/variavel-do-nome.ts).
+  "O primeiro nome do contato entra em": { es: "El primer nombre del contacto va en" },
+  "Sem nome cadastrado, entra «tudo bem».": { es: "Sin nombre registrado, va «tudo bem»." },
+  "Sem nome cadastrado, o passo é pulado.": { es: "Sin nombre registrado, el paso se omite." },
 
   // ---- empresas (o cliente que é uma organização) ----
   "Empresas": { es: "Empresas" },
