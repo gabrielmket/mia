@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { createClientDeEntradaComGoogle } from "@/lib/supabase/server";
 import { urlDeRetornoDoGoogle } from "@/lib/auth/entrada-com-google";
+import { origemDoRetornoDoGoogle } from "@/lib/auth/dominio-do-retorno-do-google";
 import { estadoDoProvedorGoogle } from "@/lib/auth/provedor-google";
 import { audit } from "@/lib/audit";
 import { env } from "@/lib/env";
@@ -87,9 +88,12 @@ export async function signInWithGoogle(
 
   const supabase = await createClientDeEntradaComGoogle();
 
+  // FORK MIA (.65): a volta cai no domínio em que a pessoa clicou, que é onde
+  // ficou o cookie do verificador de PKCE (lib/auth/dominio-do-retorno-do-google.ts).
+  const origem = origemDoRetornoDoGoogle(hdrs.get("origin"), env.NEXT_PUBLIC_APP_URL);
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: urlDeRetornoDoGoogle(env.NEXT_PUBLIC_APP_URL, params) },
+    options: { redirectTo: urlDeRetornoDoGoogle(origem, params) },
   });
 
   if (error || !data?.url) {
