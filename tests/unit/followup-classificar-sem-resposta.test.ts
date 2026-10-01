@@ -59,6 +59,8 @@ const job = {
   attempts: 1,
   max_attempts: 3,
   last_error: null,
+  // FORK MIA — o motivo do adiamento (migration 0251) é campo do JobRow no fork.
+  deferred_reason: null,
   locked_by: "w1",
   locked_at: new Date(),
   created_at: new Date(),

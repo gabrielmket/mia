@@ -99,6 +99,12 @@ const PADRAO: PacingKnobs = {
   // disparo, então o padrão é o mesmo 7h-22h.
   respostaStartHour: 7,
   respostaEndHour: 22,
+  // O tempo de espera do agente por número (0499, upstream v1.67.0): em branco
+  // vale o ritmo de antes — 0,9 s + 22 ms por caractere, entre 1,2 s e 7,5 s.
+  atrasoNotarMs: 900,
+  msPorCaractere: 22,
+  atrasoMinimoMs: 1_200,
+  atrasoMaximoMs: 7_500,
   allowSunday: true,
   timezone: "America/Sao_Paulo",
   warmupDailyCaps: [{ minAgeDays: 0, cap: null }],
@@ -118,7 +124,14 @@ const ITEM: PacingKnobsItem = {
   warmup: { number_activated_at: null, age_days: 90, skipped: false, cap_today: null },
   overrides: null,
   defaults: PADRAO,
-  bounds: { intervalMaxMs: 600_000, hourLastStart: 23, hourEnd: 24, daily_limit: { min: 1, max: 2_000 } },
+  bounds: {
+    intervalMaxMs: 600_000,
+    msPorCaractereMax: 200,
+    atrasoMaximoMsMax: 60_000,
+    hourLastStart: 23,
+    hourEnd: 24,
+    daily_limit: { min: 1, max: 2_000 },
+  },
 };
 
 afterEach(() => {

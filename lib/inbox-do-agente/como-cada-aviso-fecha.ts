@@ -152,6 +152,38 @@ export const COMO_FECHA = {
     quando: "o caso saiu de 'awaiting_human' — alguém concluiu, devolveu ao cliente, escalou ou cancelou",
     tetoEmDias: 30,
   },
+  // Os dois avisos do Jev (upstream v1.68.0, migration 0500): ele percebeu, numa
+  // mensagem que a regra sem IA deixou passar, um pedido para falar com uma
+  // pessoa ou para parar de receber. Quem fecha os dois é o PRÓPRIO upstream,
+  // por gatilho no banco (`trg_fechar_avisos_do_jev_da_conversa` e
+  // `trg_fechar_aviso_do_jev_ao_bloquear`), na mesma transação em que o pedido é
+  // atendido — a varredura não precisa reperguntar nada.
+  // O pedido novo sobre a mesma conversa REABRE o mesmo aviso e o põe na data de
+  // agora (`lib/ai/decisao/pedidos.ts`), então a idade aqui é sempre "desde o
+  // pedido mais recente".
+  //
+  // Falar com uma pessoa: par do `handoff` — é gente esperando gente —, com a
+  // mesma rede e o mesmo prazo. Depois de 30 dias sem a conversa ganhar uma
+  // pessoa nem ser encerrada, não há mais cliente esperando naquela mensagem; e
+  // se ele pedir de novo, o aviso volta.
+  jev_pedido_de_humano: {
+    modo: "condicao",
+    quando: "a conversa ficou com uma pessoa (alguém assumiu, ou ela foi passada) ou foi encerrada",
+    tetoEmDias: 30,
+  },
+  // Parar de receber: `tetoEmDias: null` não é omissão. O aviso é o único lugar
+  // do produto que sabe que o cliente pediu para sair e segue recebendo — a regra
+  // de hoje só bloqueia com o "PARAR" literal, e o Jev nunca bloqueia ninguém.
+  // Vencê-lo por tempo apagaria o sinal com o problema de pé, e este é pedido de
+  // titular: o pior dos dois erros é o silêncio. O upstream o desenhou para ficar
+  // aberto até o contato ser bloqueado ou a conversa encerrada (por isso ele NÃO
+  // fecha quando alguém assume), e o "Marcar resolvido" da Central segue valendo
+  // para quem conferiu e viu que não era pedido.
+  jev_parar_de_receber: {
+    modo: "condicao",
+    quando: "o contato foi bloqueado (o próprio cliente mandou PARAR) ou a conversa foi encerrada",
+    tetoEmDias: null,
+  },
   // O canal está ligado, em modo de teste e sem nenhum número autorizado: as
   // mensagens chegam normalmente e a IA não responde ninguém. O próprio vigia
   // (`app/api/v1/cron/canal-mudo-watcher`) já fecha o aviso nos quatro
