@@ -112,6 +112,10 @@ npx vitest run
   `lib/agenda-mia/` e `components/agenda/microsoft/`, e a lista fechada dos pontos
   de ligação dela no código do upstream está em
   [`docs/fork/agenda-microsoft.md`](fork/agenda-microsoft.md), seção 3.4.
+  O MCP de implantação mora em `lib/mcp-plataforma/` e `lib/implantacao/`; as seis
+  rotas do upstream de onde ele tirou a lógica para uma função compartilhada, e as
+  rotas que ele espelha, estão em
+  [`docs/fork/mcp-de-implantacao.md`](fork/mcp-de-implantacao.md), seção 5.
 - **Funcionalidade duplicada.** Os dois lados construíram, na mesma semana, o
   cadastro incorporado da Meta, o disparo em massa e o aviso no WhatsApp. A decisão
   de ficar com um, com o outro ou com os dois é de produto. Para o **disparo em
