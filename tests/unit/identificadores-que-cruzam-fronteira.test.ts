@@ -179,6 +179,13 @@ const SITES: { arquivo: string; fronteira: string; papel?: "gerador" | "validado
   { arquivo: "lib/ai/rag/criar-material.ts", fronteira: "storage.chave-de-objeto" },
   // O PDF da proposta comercial (#1832): `<org>/<proposta>.pdf`, dois uuids.
   { arquivo: "lib/propostas/storage.ts", fronteira: "storage.chave-de-objeto" },
+  // FORK MIA — a importação de materiais pelo MCP de plataforma
+  // (docs/fork/mcp-de-migracao.md). As chaves são as das duas rotas da tela:
+  // `<org>/<uuid>.<ext>` no conhecimento e `<org>/<produto>/<uuid>.<ext>` na
+  // foto (o uuid da foto sai do resumo do conteúdo). Só hexadecimal, hífen,
+  // ponto e barra: dentro do alfabeto do Storage.
+  { arquivo: "lib/mcp-plataforma/importacao/conhecimento.ts", fronteira: "storage.chave-de-objeto" },
+  { arquivo: "lib/mcp-plataforma/importacao/fotos-de-produto.ts", fronteira: "storage.chave-de-objeto" },
   // Chave de idempotência: os geradores (manda UUID) e os validadores (exige UUID).
   { arquivo: "app/onboarding/connect-whatsapp/_client.tsx", fronteira: "api.idempotency-key", papel: "gerador" },
   { arquivo: "components/extensions/ExtensionsManager.tsx", fronteira: "api.idempotency-key", papel: "gerador" },

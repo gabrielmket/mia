@@ -33,6 +33,8 @@ import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { FERRAMENTAS, FERRAMENTA_POR_NOME } from "./ferramentas";
+// A lista de pessoas de uma importação não vai para a auditoria.
+import { argumentosParaAuditoria } from "./importacao/auditoria";
 import { operacaoPorChave, podeExecutar } from "./operacoes";
 import { explicarValidacao, textoDaFalha } from "./recusa";
 import type { TokenDePlataforma } from "./auth";
@@ -97,7 +99,7 @@ const TETO_DE_LISTA_NA_AUDITORIA = 25;
  * itens e a contagem. O conteúdo inteiro está onde foi gravado (a versão do
  * agente, o catálogo), com data e autor.
  */
-export function argumentosParaAuditoria(valor: unknown, profundidade = 0): unknown {
+export function resumoParaAuditoria(valor: unknown, profundidade = 0): unknown {
   if (typeof valor === "string") {
     return valor.length <= TETO_DE_TEXTO_NA_AUDITORIA
       ? valor
@@ -105,7 +107,7 @@ export function argumentosParaAuditoria(valor: unknown, profundidade = 0): unkno
   }
   if (Array.isArray(valor)) {
     if (profundidade > 5) return `[lista de ${valor.length}]`;
-    const itens = valor.slice(0, TETO_DE_LISTA_NA_AUDITORIA).map((v) => argumentosParaAuditoria(v, profundidade + 1));
+    const itens = valor.slice(0, TETO_DE_LISTA_NA_AUDITORIA).map((v) => resumoParaAuditoria(v, profundidade + 1));
     return valor.length > TETO_DE_LISTA_NA_AUDITORIA
       ? { primeiros: itens, total: valor.length }
       : itens;
@@ -113,7 +115,7 @@ export function argumentosParaAuditoria(valor: unknown, profundidade = 0): unkno
   if (valor !== null && typeof valor === "object") {
     if (profundidade > 5) return "[objeto]";
     return Object.fromEntries(
-      Object.entries(valor as Record<string, unknown>).map(([k, v]) => [k, argumentosParaAuditoria(v, profundidade + 1)]),
+      Object.entries(valor as Record<string, unknown>).map(([k, v]) => [k, resumoParaAuditoria(v, profundidade + 1)]),
     );
   }
   return valor;
@@ -205,8 +207,14 @@ export function criarServidorDePlataforma(token: TokenDePlataforma, requestId: s
             // Os ARGUMENTOS vão, e é deliberado: sem eles a linha diz
             // "lançou crédito" sem dizer em quem nem quanto — e é
             // exatamente isso que alguém vai querer saber depois. Texto e
-            // lista longos vão resumidos (`argumentosParaAuditoria`).
-            argumentos: argumentosParaAuditoria(args),
+            // lista longos vão resumidos (`resumoParaAuditoria`).
+            //
+            // Menos nas ferramentas de IMPORTAÇÃO, cujos argumentos são a
+            // lista de pessoas de um cliente: elas declaram a própria
+            // redação (lista branca, só contagens), e é ela que vale
+            // (`importacao/auditoria.ts`). O resumo vem DEPOIS, por cima do
+            // que a redação deixou passar.
+            argumentos: resumoParaAuditoria(argumentosParaAuditoria(ferramenta, args)),
             duracao_ms: Date.now() - inicio,
           },
         });

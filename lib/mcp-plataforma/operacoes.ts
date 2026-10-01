@@ -20,6 +20,11 @@
  * mais aquela.
  */
 
+// As operações das ferramentas de importação (docs/fork/mcp-de-migracao.md).
+// O import vem de `./importacao/operacoes`, e não do índice da pasta, para a
+// tela dos tokens não puxar os handlers junto.
+import { OPERACOES_DE_IMPORTACAO } from "./importacao/operacoes";
+
 /** Uma escrita que um token de plataforma pode receber, nominalmente. */
 export interface OperacaoDePlataforma {
   /** O que vai gravado em `platform_api_tokens.operacoes`. */
@@ -103,6 +108,7 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
   // com o cuidado que a tela tem: papel conferido, expiração do convite, linha em
   // `team_invites` (que a tela lista e revoga) e a recusa na empresa de
   // demonstração. Ver `lib/implantacao/equipe.ts`.
+  ...OPERACOES_DE_IMPORTACAO,
 ] as const;
 
 const POR_CHAVE = new Map(OPERACOES.map((o) => [o.chave, o]));

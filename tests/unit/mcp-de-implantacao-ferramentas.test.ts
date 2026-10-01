@@ -32,7 +32,7 @@ vi.mock("@/lib/audit", () => ({
 const { FERRAMENTAS } = await import("@/lib/mcp-plataforma/ferramentas");
 const { OPERACOES, CHAVES_DE_OPERACAO } = await import("@/lib/mcp-plataforma/operacoes");
 const { AREAS_DO_CHECKLIST } = await import("@/lib/mcp-plataforma/checklist/areas");
-const { criarServidorDePlataforma, esquemaDosArgumentos, argumentosParaAuditoria } = await import(
+const { criarServidorDePlataforma, esquemaDosArgumentos, resumoParaAuditoria: argumentosParaAuditoria } = await import(
   "@/lib/mcp-plataforma/servidor"
 );
 const { audit } = await import("@/lib/audit");
@@ -48,7 +48,10 @@ const DE_ANTES = new Set([
   "plataforma_lancar_credito",
   "plataforma_definir_preco",
 ]);
-const NOVAS = FERRAMENTAS.filter((f) => !DE_ANTES.has(f.name));
+// As ferramentas de IMPORTAÇÃO (migração de outro CRM) têm a bateria própria, com as
+// mesmas exigências de descrição, exemplo e recusa: `tests/unit/mcp-de-migracao-*.test.ts`.
+// Aqui ficam as da implantação.
+const NOVAS = FERRAMENTAS.filter((f) => !DE_ANTES.has(f.name) && !f.name.includes("_importa"));
 
 beforeEach(() => {
   estado.cliente = cenarioDaImplantacao().cliente;

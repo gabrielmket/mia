@@ -34,6 +34,8 @@ import {
   validaCamposExigidos,
 } from "@/lib/leads/campos-exigidos";
 import { ORIGEM_DA_PLANILHA } from "@/lib/leads/planilha";
+// FORK MIA — a importação de base nasce com a história de origem e sem evento.
+import type { ImportacaoSilenciosaDoNegocio } from "@/lib/leads/importacao-silenciosa";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import { moedaDaOrganizacao } from "@/lib/catalogo/moeda-da-org";
 import {
@@ -429,6 +431,14 @@ export async function createLeadHandler(
      * MCP `crm_retomar_lead`), nunca o POST genérico.
      */
     retomado_de_lead_id?: string | null;
+    /**
+     * FORK MIA — interno (importação de base pelo MCP de plataforma). O negócio
+     * leva a data de criação, o fechamento e o motivo de perda que tinha no CRM
+     * de origem, e NÃO emite `lead.created`: migrar uma base não é o cliente
+     * chegando, e é esse evento que acorda automação e follow-up. O racional
+     * está em `lib/leads/importacao-silenciosa.ts`. Não vem do corpo da requisição.
+     */
+    importacao_silenciosa?: ImportacaoSilenciosaDoNegocio;
   },
 ): Promise<Record<string, unknown>> {
   // Validate stage belongs to pipeline within active org.
@@ -527,6 +537,20 @@ export async function createLeadHandler(
       external_id: input.external_id ?? null,
       custom_fields: input.custom_fields ?? {},
       retomado_de_lead_id: input.retomado_de_lead_id ?? null,
+      // FORK MIA — a história que o negócio importado traz do CRM de origem.
+      // Só as quatro colunas previstas, uma a uma: espalhar o objeto deixaria
+      // quem conseguisse preenchê-lo trocar QUALQUER coluna deste insert,
+      // inclusive a organização.
+      ...(input.importacao_silenciosa
+        ? {
+            ...(input.importacao_silenciosa.created_at ? { created_at: input.importacao_silenciosa.created_at } : {}),
+            ...(input.importacao_silenciosa.closed_at ? { closed_at: input.importacao_silenciosa.closed_at } : {}),
+            ...(input.importacao_silenciosa.lost_reason ? { lost_reason: input.importacao_silenciosa.lost_reason } : {}),
+            ...(input.importacao_silenciosa.lost_from_stage_id
+              ? { lost_from_stage_id: input.importacao_silenciosa.lost_from_stage_id }
+              : {}),
+          }
+        : {}),
       status: "open",
       position_in_stage: nextPos,
       created_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
@@ -572,7 +596,9 @@ export async function createLeadHandler(
   }
 
   const a = actorAuditPayload(ctx.actor);
-  await createAdminClient()
+  // FORK MIA — negócio importado de outro CRM não emite `lead.created` (ver
+  // `importacao_silenciosa` acima): calar na origem cobre todo consumidor.
+  if (!input.importacao_silenciosa) await createAdminClient()
     .rpc("emit_event", {
       p_event_type: "lead.created",
       p_entity_kind: "crm_lead",

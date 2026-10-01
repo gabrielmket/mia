@@ -36,6 +36,7 @@ import { ROTULO_DO_PASSO } from "@/lib/leads/agent-mapping";
 import { MODULOS } from "@/lib/modulos/vendaveis";
 import { routingConfigSchema } from "@/lib/schemas/routing";
 
+import { migracao } from "./area-da-migracao";
 import type { AreaDoChecklist, ResultadoDaArea } from "./tipos";
 
 function vazio(): ResultadoDaArea {
@@ -800,6 +801,8 @@ export const AREAS_DO_CHECKLIST: readonly AreaDoChecklist[] = [
   equipe,
   atendimento,
   mensagens,
+  // a base trazida de outro CRM: opcional, nunca conta como pendência
+  migracao,
   conversoes,
   plataforma,
 ];

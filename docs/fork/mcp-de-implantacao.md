@@ -246,6 +246,10 @@ WhatsApp conectado, então nenhum agente é publicado lá.
 
 ---
 
+## Migração de outro CRM
+
+Trazer a base que o cliente já tinha (empresas, contatos, negócios e materiais) é feito por outras sete ferramentas do mesmo servidor, com duas caixinhas próprias no token ("Importar base" e "Importar materiais"). A ordem, o formato de cada lista e os cuidados estão em [`mcp-de-migracao.md`](mcp-de-migracao.md). No roteiro acima, a migração entra depois da equipe e dos funis, e antes de pôr o agente no ar. Importar não envia nada a ninguém. No checklist (`plataforma_ver_implantacao`) ela aparece como a área "Base importada", que é opcional e nunca conta como pendência.
+
 ## 4. O que fica de fora, e por quê
 
 O checklist (`plataforma_ver_implantacao`) lista cada item abaixo em

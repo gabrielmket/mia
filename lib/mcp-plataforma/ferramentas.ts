@@ -39,6 +39,8 @@ import { FERRAMENTAS_DE_FUNIL } from "./ferramentas/funil";
 import { FERRAMENTAS_DE_LEITURA } from "./ferramentas/leituras";
 import { FERRAMENTAS_DA_PLATAFORMA } from "./ferramentas/plataforma";
 import { FERRAMENTAS_DE_PRODUTOS } from "./ferramentas/produtos";
+// As ferramentas de importação (docs/fork/mcp-de-migracao.md).
+import { FERRAMENTAS_DE_IMPORTACAO } from "./importacao";
 import type { FerramentaDePlataforma } from "./tipos";
 
 export type { ContextoDaFerramenta, FerramentaDePlataforma } from "./tipos";
@@ -57,6 +59,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DE_AGENTE,
   ...FERRAMENTAS_DE_AUTOMACAO_E_AGENDA,
   ...FERRAMENTAS_DE_EQUIPE_E_MENSAGENS,
+  // a migração de outro CRM: empresas, contatos, negócios e materiais (docs/fork/mcp-de-migracao.md)
+  ...FERRAMENTAS_DE_IMPORTACAO,
 ];
 
 export const FERRAMENTA_POR_NOME = new Map(FERRAMENTAS.map((f) => [f.name, f]));

@@ -97,7 +97,7 @@ describe("as ferramentas e o escopo que cada uma exige", () => {
     // escrita no nome de uma ferramenta livre é o sinal de que alguém a
     // classificou errado.
     const suspeitas = FERRAMENTAS.filter((f) => f.operacao === null)
-      .filter((f) => /criar|lancar|liberar|definir|apagar|remover|convidar|garantir|gravar|publicar|pausar|ligar|configurar|submeter|arquivar/.test(f.name))
+      .filter((f) => /criar|lancar|liberar|definir|apagar|remover|convidar|garantir|gravar|publicar|pausar|ligar|configurar|submeter|arquivar|importar/.test(f.name))
       .map((f) => f.name);
     expect(suspeitas, "ferramenta com nome de escrita passando como leitura livre").toEqual([]);
   });
