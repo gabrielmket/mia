@@ -11,6 +11,7 @@ import {
   type PipelineConfigPatch,
 } from "@/lib/schemas/settings";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { gravarConfiguracaoDoFunil } from "@/lib/pipelines/pipeline-config";
 import { ROLE_RANK } from "@/lib/auth/types";
 
 export type UpdatePipelineConfigResult =
@@ -42,43 +43,14 @@ export async function updatePipelineConfig(
   const hdrs = await headers();
   const requestId = hdrs.get("x-request-id");
 
-  const { data: row, error: readErr } = await supabase
-    .from("crm_pipelines")
-    .select("vocabulary, settings, organization_id")
-    .eq("id", pipelineId)
-    .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
-  if (!row) return { ok: false, error: "not_found" };
-  if (row.organization_id !== activeOrg.orgId) {
-    return { ok: false, error: "forbidden_tenant" };
-  }
-
-  const nextVocabulary = parsed.data.vocabulary
-    ? { ...((row.vocabulary as Record<string, unknown> | null) ?? {}), ...parsed.data.vocabulary }
-    : ((row.vocabulary as Record<string, unknown> | null) ?? {});
-
-  const currentSettings = (row.settings as Record<string, unknown> | null) ?? {};
-  const nextSettings: Record<string, unknown> = { ...currentSettings };
-  if (parsed.data.fields !== undefined) nextSettings.fields = parsed.data.fields;
-  if (parsed.data.lost_reasons !== undefined) nextSettings.lost_reasons = parsed.data.lost_reasons;
-  if (parsed.data.won_reasons !== undefined) nextSettings.won_reasons = parsed.data.won_reasons;
-  if (parsed.data.won_reason_required !== undefined) {
-    nextSettings.won_reason_required = parsed.data.won_reason_required;
-  }
-  if (parsed.data.reabertura !== undefined) nextSettings.reabertura = parsed.data.reabertura;
-  if (parsed.data.reabertura_campos !== undefined) {
-    nextSettings.reabertura_campos = parsed.data.reabertura_campos;
-  }
-  // Ver `lib/crm/metas/progresso.ts`: ausente = vencer aqui é receita.
-  if (parsed.data.vitoria_e_receita !== undefined) {
-    nextSettings.vitoria_e_receita = parsed.data.vitoria_e_receita;
-  }
-
-  const { error } = await supabase
-    .from("crm_pipelines")
-    .update({ vocabulary: nextVocabulary, settings: nextSettings })
-    .eq("id", pipelineId);
-  if (error) return { ok: false, error: error.message };
+  // FORK MIA: a mescla e a gravação moram em `lib/pipelines/pipeline-config.ts`,
+  // compartilhadas com o MCP de plataforma.
+  const gravado = await gravarConfiguracaoDoFunil(supabase, {
+    organizationId: activeOrg.orgId,
+    pipelineId,
+    patch: parsed.data,
+  });
+  if (!gravado.ok) return { ok: false, error: gravado.error };
 
   await audit({
     action: "pipeline.config_updated",

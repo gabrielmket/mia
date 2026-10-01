@@ -173,7 +173,10 @@ const SITES: { arquivo: string; fronteira: string; papel?: "gerador" | "validado
   // (`{org}/{conversa}/note-{uuid}.{ext}`), bucket próprio `internal-media`.
   { arquivo: "app/api/v1/conversations/[id]/notes/media/route.ts", fronteira: "storage.chave-de-objeto" },
   { arquivo: "app/api/v1/ai/knowledge/sources/upload/route.ts", fronteira: "storage.chave-de-objeto" },
-  { arquivo: "app/api/v1/ai/knowledge/sources/route.ts", fronteira: "storage.chave-de-objeto" },
+  // FORK MIA: o texto colado de documento é guardado por `criarMaterial`, que
+  // saiu de `app/api/v1/ai/knowledge/sources/route.ts` para a rota e o MCP de
+  // plataforma gravarem pelo mesmo caminho. A chave é a mesma: `<org>/<uuid>.md`.
+  { arquivo: "lib/ai/rag/criar-material.ts", fronteira: "storage.chave-de-objeto" },
   // O PDF da proposta comercial (#1832): `<org>/<proposta>.pdf`, dois uuids.
   { arquivo: "lib/propostas/storage.ts", fronteira: "storage.chave-de-objeto" },
   // Chave de idempotência: os geradores (manda UUID) e os validadores (exige UUID).

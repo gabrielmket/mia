@@ -23,15 +23,13 @@ import { z } from "zod";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { ApiError } from "@/lib/api/types";
 import {
   podeExcluirDeVez,
-  posicaoEntre,
-  updatesDeMarcaExclusiva,
-  updatesDePadrao,
   validarArquivamento,
-  validarNomeDeFunil,
   type FunilEditavel,
 } from "@/lib/pipelines/pipeline-editing";
+import { atualizarFunil } from "@/lib/pipelines/pipeline-operations";
 import { createClient } from "@/lib/supabase/server";
 
 import { conflitoDoBanco, corpo, lerDependencias, lerFunis } from "../_funis";
@@ -78,15 +76,6 @@ const bodySchema = z
   .strict()
   .refine((b) => Object.keys(b).length > 0, { message: "Nada para alterar." });
 
-type PatchDoFunil = {
-  name?: string;
-  description?: string | null;
-  position?: number;
-  is_default?: boolean;
-  is_client_pipeline?: boolean;
-  is_archived?: boolean;
-};
-
 export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
@@ -115,179 +104,27 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   }
   const pedido = parsed.data;
 
+  // FORK MIA: as regras e a ORDEM das escritas (arquivado não se edita, o padrão
+  // se muda e não se apaga, liberar o antigo antes de marcar o novo) moram em
+  // `lib/pipelines/pipeline-operations.ts`, compartilhadas com o MCP de
+  // plataforma. Aqui só há transporte, e a tradução da frase para quem lê.
   const supabase = await createClient();
-
-  let funis: FunilEditavel[];
   try {
-    funis = await lerFunis(supabase, orgId);
+    const { funis } = await atualizarFunil(
+      {
+        supabase,
+        organizationId: orgId,
+        actor: { type: "user", id: authz.user.id, role: authz.org.role },
+        requestId,
+      },
+      { pipelineId, pedido },
+    );
+    return ok(corpo(funis), { requestId });
   } catch (err) {
-    return fail("internal_error", (err as Error).message, 500, { requestId });
-  }
-
-  // Funil de outra org morre AQUI, antes de qualquer escrita: `lerFunis` filtra
-  // por `organization_id`, então ele simplesmente não está nesta lista — e a
-  // resposta é a mesma de um funil inexistente (dizer "existe, mas não é seu" já
-  // vaza a existência).
-  const alvo = funis.find((f) => f.id === pipelineId);
-  if (!alvo) return fail("not_found", t("Funil não encontrado."), 404, { requestId });
-
-  // ⚠️ ARQUIVAR É DO `DELETE`, NÃO DAQUI — ele conta as dependências antes
-  // (`validarArquivamento`), e este handler não conta nenhuma.
-  if (pedido.is_archived === true) {
-    return fail(
-      "unprocessable_entity",
-      `Para arquivar «${alvo.name}», use a opção Arquivar da lista de funis — ela confere antes se algum ` +
-        `formulário ou automação ainda manda negócio para ele. Por aqui só dá para tirar do arquivo.`,
-      422,
-      { requestId },
-    );
-  }
-
-  // ⚠️ ARQUIVADO NÃO SE EDITA — e a guarda fica, mas o MOTIVO escrito aqui era
-  // falso. Dizia que `uniq_crm_pipelines_org_default` é parcial em
-  // `is_archived`, e que por isso marcar um arquivado como padrão "passa pelo
-  // índice". Medido em `supabase/baseline.sql`: ele é `where (is_default = true)`
-  // e mais nada, então essa marcação bate em 23505, não passa.
-  //
-  // O que a guarda evita de verdade é pior de explicar ao usuário: editar nome,
-  // posição ou marca de um funil que sumiu da lista dele. Alcançável sem má-fé —
-  // uma aba aberta antes de o funil ser arquivado — e o erro do banco, quando
-  // vem, fala de índice, não do que a pessoa fez.
-  //
-  // ⚠️ A ÚNICA EXCEÇÃO É TIRÁ-LO DO ARQUIVO, E SÓ SE FOR ISSO SOZINHO (#979).
-  // Pedido MISTO (desarquivar + renomear, por exemplo) continua 409: quem o
-  // montou está com uma tela antiga na frente, e as validações de nome e de
-  // posição são medidas contra a lista de ATIVOS — lista de onde o alvo ainda
-  // não saiu no instante em que elas rodariam. Aceitar metade do pedido seria
-  // pior: o funil voltaria com o nome velho e ninguém saberia por quê.
-  const soTiraDoArquivo = pedido.is_archived === false && Object.keys(pedido).length === 1;
-  if (alvo.is_archived && !soTiraDoArquivo) {
-    return fail(
-      "state_conflict",
-      `O funil «${alvo.name}» está arquivado e não está mais na sua lista. Tire-o do arquivo antes de editar.`,
-      409,
-      { requestId },
-    );
-  }
-
-  if (pedido.name !== undefined) {
-    const veredito = validarNomeDeFunil(pedido.name, funis, pipelineId);
-    if (!veredito.ok) return fail("unprocessable_entity", veredito.erro, 422, { requestId });
-  }
-
-  // ⚠️ O PADRÃO SE MUDA, NÃO SE APAGA — mesma regra da marcação de ganho nas
-  // etapas. Sem funil padrão, todo lead criado sem funil escolhido fica sem
-  // destino; e o índice único não impede a organização de ficar com ZERO.
-  if (pedido.is_default === false) {
-    return fail(
-      "unprocessable_entity",
-      `«${alvo.name}» é o funil padrão e a organização precisa de um. Marque OUTRO funil como padrão — ` +
-        `o padrão se muda, não se apaga.`,
-      422,
-      { requestId },
-    );
-  }
-
-  const patchDoAlvo: PatchDoFunil = {};
-  if (pedido.name !== undefined) patchDoAlvo.name = pedido.name.trim();
-  if (pedido.description !== undefined) {
-    patchDoAlvo.description = pedido.description?.trim() || null;
-  }
-
-  // Tirar do arquivo é update SIMPLES: nenhum índice a disputar (nem o de slug
-  // nem o de padrão são parciais em `is_archived`, então o funil já ocupava o
-  // lugar dele enquanto estava arquivado). Só entra no patch se ele ESTIVER
-  // arquivado — pedir de novo em quem já está fora é pedido já atendido, e uma
-  // escrita vazia viraria linha de auditoria sem fato nenhum por trás.
-  const tiraDoArquivo = pedido.is_archived === false && alvo.is_archived;
-  if (tiraDoArquivo) patchDoAlvo.is_archived = false;
-
-  if (pedido.depois_de !== undefined) {
-    // Só os ativos compõem a régua: arquivado não ocupa lugar na lista.
-    const ativos = funis.filter((f) => !f.is_archived && f.id !== pipelineId);
-    const i = pedido.depois_de === null ? -1 : ativos.findIndex((f) => f.id === pedido.depois_de);
-    if (pedido.depois_de !== null && i < 0) {
-      return fail(
-        "unprocessable_entity",
-        t("O funil que você escolheu como vizinho não está mais na lista. Recarregue a página."),
-        422,
-        { requestId },
-      );
+    if (err instanceof ApiError) {
+      return fail(err.code, t(err.message), err.status, { requestId, details: err.details });
     }
-    const posicao = posicaoEntre(ativos[i]?.position ?? null, ativos[i + 1]?.position ?? null);
-    // `posicaoEntre` devolve NaN com vizinhos de MESMA posição (lista que precisa
-    // de rebalanceamento). NaN vira `null` no JSON e a coluna é NOT NULL: seria um
-    // 23502 cru. Recusar aqui é a diferença entre "tente de novo" e "null value in
-    // column position violates not-null constraint".
-    if (!Number.isFinite(posicao)) {
-      return fail(
-        "state_conflict",
-        t("Os funis desta lista estão empatados na ordenação. Recarregue a página e mova o funil para outro lugar."),
-        409,
-        { requestId },
-      );
-    }
-    patchDoAlvo.position = posicao;
-  }
-
-  // Eleger padrão pode exigir DOIS updates (liberar o antigo, ocupar o lugar);
-  // nome, descrição e posição viajam junto com o update do alvo, nunca num terceiro.
-  // O tipo é o mais LARGO dos dois de propósito: `UpdateDePadrao` (só `is_default`)
-  // cabe aqui dentro, e declarar assim evita o cast que esconderia um erro real
-  // se o formato do patch de padrão mudasse.
-  const updates: Array<{ pipelineId: string; patch: PatchDoFunil }> =
-    pedido.is_default === true
-      ? updatesDePadrao(funis, pipelineId)
-      : pedido.is_client_pipeline === true
-        ? updatesDeMarcaExclusiva(funis, pipelineId, "is_client_pipeline")
-        : [];
-
-  // Desligar é update SIMPLES: não há anterior a liberar, e nenhum índice a
-  // disputar. Entra pelo patch do alvo como nome e descrição entram.
-  if (pedido.is_client_pipeline === false) patchDoAlvo.is_client_pipeline = false;
-  if (Object.keys(patchDoAlvo).length > 0) {
-    const i = updates.findIndex((u) => u.pipelineId === pipelineId);
-    if (i >= 0) updates[i] = { pipelineId, patch: { ...updates[i]!.patch, ...patchDoAlvo } };
-    else updates.push({ pipelineId, patch: patchDoAlvo });
-  }
-
-  // ⚠️ EM SEQUÊNCIA, NA ORDEM QUE `updatesDePadrao` DEVOLVE.
-  // `uniq_crm_pipelines_org_default` é imediato (não deferível): marcar o novo
-  // antes de liberar o antigo é 23505 na cara do usuário. Disparar em paralelo
-  // desfaz exatamente essa proteção.
-  for (const u of updates) {
-    const { error } = await supabase
-      .from("crm_pipelines")
-      .update(u.patch)
-      .eq("id", u.pipelineId)
-      .eq("organization_id", orgId);
-    if (!error) continue;
-
-    const nome = funis.find((f) => f.id === u.pipelineId)?.name ?? alvo.name;
-    const conflito = conflitoDoBanco(error as { code?: string }, nome, requestId);
-    if (conflito) return conflito;
-    return fail("internal_error", error.message, 500, { requestId });
-  }
-
-  if (updates.length > 0) {
-    void audit({
-      // Tirar do arquivo tem código PRÓPRIO, espelhando o `pipeline.archived`
-      // que o DELETE emite: quem audita quer saber quem trouxe o funil de volta,
-      // e `pipeline.updated` esconderia isso entre os renames.
-      action: tiraDoArquivo ? "pipeline.unarchived" : "pipeline.updated",
-      actorUserId: authz.user.id,
-      organizationId: orgId,
-      resourceType: "crm_pipeline",
-      resourceId: pipelineId,
-      requestId,
-      metadata: { pedido, updates },
-    });
-  }
-
-  try {
-    return ok(corpo(await lerFunis(supabase, orgId)), { requestId });
-  } catch (err) {
-    return fail("internal_error", (err as Error).message, 500, { requestId });
+    throw err;
   }
 }
 

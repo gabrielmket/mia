@@ -23,14 +23,11 @@ import { type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { fail, ok } from "@/lib/api/wrappers";
-import { audit } from "@/lib/audit";
+import { respostaDeRecusa } from "@/lib/api/recusa";
 import { requireRole } from "@/lib/auth/require-role";
 import { LEAD_STAGES, type LeadStage } from "@/lib/agent-engine/agent/lead-state";
-import {
-  diffParaUpdates,
-  validarMapeamento,
-  type EtapaDoMapa,
-} from "@/lib/leads/agent-mapping";
+import { type EtapaDoMapa } from "@/lib/leads/agent-mapping";
+import { gravarMapeamentoDoAgente } from "@/lib/leads/agent-mapping-operations";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
@@ -217,67 +214,21 @@ export async function PUT(req: NextRequest, ctx: RouteCtx): Promise<Response> {
 
   const { mapeamento } = parsed.data;
 
-  // ⚠️ VALIDAR ANTES DE TOCAR O BANCO. O CHECK da 0084 é a rede de segurança, não
-  // a primeira linha: um `23514` cru chega ao dono da clínica como "violates
-  // check constraint crm_stages_hint_coerente_com_won_lost". As mensagens daqui
-  // são texto de tela — vão inteiras para o corpo, sem reescrita.
-  const veredito = validarMapeamento(mapeamento, funil.etapas);
-  if (!veredito.ok) {
-    return fail("unprocessable_entity", veredito.erros[0]!, 422, {
-      requestId,
-      details: { erros: veredito.erros },
-    });
-  }
-
-  const updates = diffParaUpdates(funil.etapas, mapeamento);
-
-  // ⚠️ EM SEQUÊNCIA, NA ORDEM DO DIFF. O índice único `uniq_crm_stages_pipeline_hint`
-  // é imediato: as liberações precisam estar gravadas antes das ocupações, senão
-  // o banco recusa. Disparar em paralelo desfaz essa proteção.
-  //
-  // Ceiling conhecido: não há transação — se um update falhar no meio, os
-  // anteriores ficam. É recuperável porque este PUT é total e idempotente
-  // (reenviar o mesmo mapa converge) e a resposta de erro não mente sobre o
-  // estado; a saída definitiva seria uma função SQL, que só vale a pena se isto
-  // deixar de ser uma tela de configuração ocasional.
-  for (const u of updates) {
-    const { error } = await supabase
-      .from("crm_stages")
-      .update({ agent_stage_hint: u.hint })
-      .eq("id", u.stageId)
-      .eq("organization_id", orgId)
-      .eq("pipeline_id", pipelineId);
-    if (!error) continue;
-
-    // As duas recusas do banco significam a mesma coisa para o usuário: o funil
-    // mudou entre a leitura e a gravação. Nenhuma das duas pode chegar à tela
-    // como texto do Postgres — `violates check constraint
-    // crm_stages_hint_coerente_com_won_lost` é exatamente a mensagem que a
-    // camada pura existe para evitar, e devolvê-la no 500 a traria de volta.
-    const nome = funil.etapas.find((e) => e.id === u.stageId)?.name ?? "escolhida";
-    const conflito: Record<string, string> = {
-      "23505": `A etapa «${nome}» já está representando esse passo do atendimento.`,
-      "23514": `A etapa «${nome}» mudou de papel neste funil (ganho ou perda) enquanto você editava.`,
-    };
-    const motivo = conflito[(error as { code?: string }).code ?? ""];
-    if (motivo) {
-      return fail("state_conflict", `${motivo} Recarregue a página e tente de novo.`, 409, {
+  // FORK MIA: validar, gravar na ordem do diff e traduzir as recusas do banco
+  // moram em `lib/leads/agent-mapping-operations.ts`, compartilhados com o MCP
+  // de plataforma. Aqui só há transporte.
+  try {
+    await gravarMapeamentoDoAgente(
+      {
+        supabase,
+        organizationId: orgId,
+        actor: { type: "user", id: authz.user.id, role: authz.org.role },
         requestId,
-      });
-    }
-    return fail("internal_error", error.message, 500, { requestId });
-  }
-
-  if (updates.length > 0) {
-    void audit({
-      action: "pipeline.agent_mapping_updated",
-      actorUserId: authz.user.id,
-      organizationId: orgId,
-      resourceType: "crm_pipeline",
-      resourceId: pipelineId,
-      requestId,
-      metadata: { mapeamento, updates },
-    });
+      },
+      { pipelineId, etapas: funil.etapas, mapeamento },
+    );
+  } catch (err) {
+    return respostaDeRecusa(err, requestId);
   }
 
   // Relê em vez de espelhar o que foi pedido: a tela mostra o que o banco tem,

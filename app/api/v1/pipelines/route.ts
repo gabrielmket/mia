@@ -11,17 +11,11 @@ import { type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
-import { audit } from "@/lib/audit";
+import { respostaDeRecusa } from "@/lib/api/recusa";
 import { requireRole } from "@/lib/auth/require-role";
-import {
-  ETAPAS_INICIAIS,
-  posicaoEntre,
-  slugDeFunil,
-  validarNomeDeFunil,
-  type FunilEditavel,
-} from "@/lib/pipelines/pipeline-editing";
+import { criarFunil } from "@/lib/pipelines/pipeline-operations";
 import { createClient } from "@/lib/supabase/server";
-import { conflitoDoBanco, corpo, lerFunis } from "./_funis";
+import { corpo } from "./_funis";
 import { listPipelinesHandler } from "./_handler";
 import { traduzir } from "@/lib/i18n/dicionario";
 
@@ -55,19 +49,6 @@ const bodySchema = z
   })
   .strict();
 
-/** As etapas com que o funil nasce, já com a régua de posição do board. */
-function etapasIniciais(orgId: string, pipelineId: string) {
-  return ETAPAS_INICIAIS.map((etapa, i) => ({
-    organization_id: orgId,
-    pipeline_id: pipelineId,
-    name: etapa.name,
-    slug: etapa.slug,
-    position: (i + 1) * 1000,
-    is_won: etapa.is_won,
-    is_lost: etapa.is_lost,
-  }));
-}
-
 export async function POST(req: NextRequest): Promise<Response> {
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
@@ -92,92 +73,22 @@ export async function POST(req: NextRequest): Promise<Response> {
       details: parsed.error.flatten(),
     });
   }
-  const name = parsed.data.name.trim();
-  const description = parsed.data.description?.trim() || null;
-
+  // FORK MIA: a criação (validar o nome, slug, posição, padrão do primeiro funil,
+  // etapas iniciais e a compensação) mora em `lib/pipelines/pipeline-operations.ts`,
+  // compartilhada com o MCP de plataforma. Aqui só há transporte.
   const supabase = await createClient();
-
-  let funis: FunilEditavel[];
   try {
-    funis = await lerFunis(supabase, orgId);
-  } catch (err) {
-    return fail("internal_error", (err as Error).message, 500, { requestId });
-  }
-
-  // ⚠️ VALIDAR ANTES DE TOCAR O BANCO. O índice único é a rede de segurança, não
-  // a primeira linha: um 23505 cru não diz QUAL funil já tem esse nome.
-  const veredito = validarNomeDeFunil(name, funis, null);
-  if (!veredito.ok) return fail("unprocessable_entity", veredito.erro, 422, { requestId });
-
-  const row = {
-    organization_id: orgId,
-    name,
-    description,
-    // Arquivados entram na conta do slug: `uniq_crm_pipelines_org_slug` não é parcial.
-    slug: slugDeFunil(name, funis.map((f) => f.slug)),
-    // No fim da lista: funil novo aparecendo no meio seria a tela decidindo por
-    // quem criou. `lerFunis` vem ordenado.
-    position: posicaoEntre(funis[funis.length - 1]?.position ?? null, null),
-    // ⚠️ O PRIMEIRO FUNIL DA ORGANIZAÇÃO NASCE PADRÃO. Numa instalação onde o
-    // gatilho de seed não rodou, a org fica sem padrão nenhum — e todo lead
-    // criado sem funil escolhido não teria para onde ir. `uniq_..._org_default`
-    // é parcial, então só os ativos disputam esse lugar.
-    is_default: funis.filter((f) => !f.is_archived).length === 0,
-  };
-
-  const { data: criado, error } = await supabase
-    .from("crm_pipelines")
-    .insert(row)
-    .select("id")
-    .single();
-
-  if (error) {
-    const conflito = conflitoDoBanco(error as { code?: string }, name, requestId);
-    if (conflito) return conflito;
-    return fail("internal_error", error.message, 500, { requestId });
-  }
-  const pipelineId = (criado as { id: string }).id;
-
-  const { error: etapasErr } = await supabase
-    .from("crm_stages")
-    .insert(etapasIniciais(orgId, pipelineId));
-
-  // ⚠️ COMPENSAÇÃO, PORQUE SÃO DUAS ESCRITAS SEM TRANSAÇÃO. Um funil sem etapa é
-  // quadro morto: o board abre sem coluna nenhuma, não recebe negócio, e quem
-  // criou não tem como saber que aquilo nasceu quebrado. O funil recém-criado
-  // ainda não tem negócio, então `crm_leads_pipeline_id_fkey ON DELETE RESTRICT`
-  // não atrapalha o desfazimento. A alternativa correta-por-construção seria uma
-  // função SQL transacional — que custaria migration + apêndice no baseline para
-  // um caso que estas três linhas cobrem.
-  if (etapasErr) {
-    await supabase
-      .from("crm_pipelines")
-      .delete()
-      .eq("id", pipelineId)
-      .eq("organization_id", orgId);
-    return fail(
-      "internal_error",
-      `Não consegui criar as etapas de «${name}». Nada foi salvo — tente de novo.`,
-      500,
-      { requestId, details: { erro: etapasErr.message } },
+    const { funis } = await criarFunil(
+      {
+        supabase,
+        organizationId: orgId,
+        actor: { type: "user", id: authz.user.id, role: authz.org.role },
+        requestId,
+      },
+      { name: parsed.data.name, description: parsed.data.description },
     );
-  }
-
-  void audit({
-    action: "pipeline.created",
-    actorUserId: authz.user.id,
-    organizationId: orgId,
-    resourceType: "crm_pipeline",
-    resourceId: pipelineId,
-    requestId,
-    metadata: { name, slug: row.slug, is_default: row.is_default },
-  });
-
-  // Relê em vez de espelhar o que foi pedido: a tela mostra o que o banco tem.
-  try {
-    const depois = await lerFunis(supabase, orgId);
-    return ok(corpo(depois), { status: 201, requestId });
+    return ok(corpo(funis), { status: 201, requestId });
   } catch (err) {
-    return fail("internal_error", (err as Error).message, 500, { requestId });
+    return respostaDeRecusa(err, requestId);
   }
 }

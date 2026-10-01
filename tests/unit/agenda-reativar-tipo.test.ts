@@ -70,6 +70,10 @@ vi.mock("@/lib/impersonate/support", async (importOriginal) => ({
 const RAIZ = join(__dirname, "..", "..");
 const ROTA_TIPOS = join(RAIZ, "app", "api", "v1", "agenda", "tipos", "route.ts");
 const ROTA_REATIVAR = join(RAIZ, "app", "api", "v1", "agenda", "tipos", "reativar", "route.ts");
+// FORK MIA: o contrato (`camposDoTipo`, `alterarSchema`) saiu da rota para
+// `lib/agenda/tipos-de-agendamento.ts`, de onde a rota e o MCP de plataforma o
+// importam. A travessia tela → rota continua medida no MESMO objeto, lido de lá.
+const CONTRATO_TIPOS = join(RAIZ, "lib", "agenda", "tipos-de-agendamento.ts");
 const TELA = join(RAIZ, "app", "app", "settings", "tenant", "agenda", "_client.tsx");
 
 const ORG = "22222222-2222-4222-8222-222222222222";
@@ -347,10 +351,18 @@ function chavesDoExtend(arquivo: ts.SourceFile, nome: string): string[] {
 }
 
 describe("travessia tela → rota: a tela não manda campo que a rota descarta", () => {
-  const rota = ast(ROTA_TIPOS);
+  const rota = ast(CONTRATO_TIPOS);
   const tela = ast(TELA);
   const camposDoTipo = chavesDaConstante(rota, "camposDoTipo");
   const soNoPatch = chavesDoExtend(rota, "alterarSchema");
+
+  // FORK MIA: o contrato é lido do módulo compartilhado; este caso prova que a
+  // ROTA valida com ele (e não com uma cópia que voltasse a nascer dentro dela).
+  it("CONTROLE: a rota valida com o contrato que este teste mede", () => {
+    const fonte = readFileSync(ROTA_TIPOS, "utf8");
+    expect(fonte).toContain('from "@/lib/agenda/tipos-de-agendamento"');
+    expect(fonte, "a rota voltou a declarar o próprio camposDoTipo").not.toMatch(/const camposDoTipo\s*=/);
+  });
 
   it("CONTROLE: as duas pontas foram realmente lidas", () => {
     // Sem isto, um `camposDoTipo` que o leitor não achasse viraria lista vazia e
