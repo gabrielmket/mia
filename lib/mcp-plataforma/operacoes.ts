@@ -81,7 +81,8 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
     rotulo: "Montar a configuração de um cliente",
     raio:
       "Grava dados da empresa, funis e etapas, catálogo e preços, etiquetas, memória, " +
-      "conhecimento, agenda, respostas prontas e os RASCUNHOS de agente, follow-up e " +
+      "conhecimento, agenda, respostas prontas, as regras de conversão DESLIGADAS e os " +
+      "RASCUNHOS de agente, follow-up e " +
       "automação de QUALQUER cliente. Não publica nada, mas atenção: o agente que já " +
       "está no ar lê o catálogo, a memória e o conhecimento na hora. Um preço errado " +
       "gravado por este token vira preço errado dito ao cliente final.",
@@ -93,7 +94,9 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "Publica e pausa agente de IA, publica follow-up, liga automação, liga lembrete de " +
       "agenda e submete modelo de mensagem à Meta em QUALQUER cliente. É a operação que faz o sistema começar a " +
       "mandar mensagem para os clientes do cliente: um token vazado põe no ar um agente " +
-      "com o texto que ele quiser, falando em nome da empresa.",
+      "com o texto que ele quiser, falando em nome da empresa. Também liga as regras de " +
+      "conversão por etapa e a volta dos leads de formulário: o sistema passa a mandar " +
+      "evento com dado dos clientes do cliente para a Meta e o Google Ads.",
   },
   {
     chave: "convidar_equipe",

@@ -36,6 +36,7 @@ import { ROTULO_DO_PASSO } from "@/lib/leads/agent-mapping";
 import { MODULOS } from "@/lib/modulos/vendaveis";
 import { routingConfigSchema } from "@/lib/schemas/routing";
 
+import { conversoes } from "./area-das-conversoes";
 import { migracao } from "./area-da-migracao";
 import type { AreaDoChecklist, ResultadoDaArea } from "./tipos";
 
@@ -714,29 +715,7 @@ const mensagens: AreaDoChecklist = {
   },
 };
 
-const conversoes: AreaDoChecklist = {
-  chave: "conversoes",
-  titulo: "Conversões e anúncios",
-  avaliar: async ({ admin }, org) => {
-    const r = vazio();
-    const { data, error } = await admin
-      .from("ad_platform_connections")
-      .select("platform, enabled")
-      .eq("organization_id", org.id);
-    if (error) throw new Error(error.message);
-    const ligadas = ((data ?? []) as Array<{ platform: string; enabled: boolean }>).filter((x) => x.enabled);
-    r.dados = { conexoes_ligadas: ligadas.map((x) => x.platform) };
-    r.so_pela_tela.push({
-      o_que: "Conectar o envio de conversões para a Meta e o Google (identificador do conjunto de dados e token).",
-      situacao: ligadas.length > 0 ? "feito" : "opcional",
-      tela: "Configurações › Conversões",
-      caminho: "/app/settings/conversoes",
-      quem: "cliente",
-      por_que: "O token de conversões é credencial da conta de anúncios do cliente.",
-    });
-    return r;
-  },
-};
+// A área de conversões mora num arquivo próprio (docs/fork/conversoes-da-meta.md).
 
 const plataforma: AreaDoChecklist = {
   chave: "plataforma",

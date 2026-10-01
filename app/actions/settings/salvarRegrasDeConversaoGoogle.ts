@@ -20,7 +20,8 @@ import { audit } from "@/lib/audit";
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { eventoDaEtapa, VALORES_DE_CATEGORIA } from "@/lib/conversoes/regras-google";
+import { gravarRegrasDeConversaoGoogle } from "@/lib/conversoes/gravar-regras-google";
+import { VALORES_DE_CATEGORIA } from "@/lib/conversoes/regras-google";
 
 export type SalvarRegrasResult =
   | { ok: true }
@@ -81,80 +82,17 @@ export async function salvarRegrasDeConversaoGoogle(
   }
   if (await mfaEmDivida()) return { ok: false, error: "mfa_required" };
 
-  const admin = createAdminClient();
   const orgId = activeOrg.orgId;
-  const regras = parsed.data;
 
-  // Toda etapa ligada precisa ser DESTA organização e estar aberta: ganho é a
-  // compra (outro consumidor) e perda não é conversão.
-  const ligadas = regras.filter((r) => r.enabled).map((r) => r.stage_id);
-  if (ligadas.length > 0) {
-    const { data: etapas, error } = await admin
-      .from("crm_stages")
-      .select("id")
-      .eq("organization_id", orgId)
-      .eq("is_won", false)
-      .eq("is_lost", false)
-      .in("id", ligadas);
-    if (error) return { ok: false, error: "erro_ao_gravar" };
-    const validas = new Set(((etapas ?? []) as Array<{ id: string }>).map((e) => e.id));
-    if (ligadas.some((id) => !validas.has(id))) return { ok: false, error: "etapa_invalida" };
-  }
-
-  const { data: existentes, error: erroLeitura } = await admin
-    .from("google_ads_conversion_rules")
-    .select("stage_id, event_name, label, google_action_id")
-    .eq("organization_id", orgId);
-  if (erroLeitura) return { ok: false, error: "erro_ao_gravar" };
-  type Existente = {
-    stage_id: string;
-    event_name: string;
-    label: string;
-    google_action_id: string;
-  };
-  const existentePorEtapa = new Map(
-    ((existentes ?? []) as Existente[]).map((r) => [r.stage_id, r]),
+  // FORK MIA: a conferência das etapas e a gravação moram em
+  // `lib/conversoes/gravar-regras-google.ts`, compartilhadas com o MCP de
+  // plataforma. A regra é a mesma; só mudou de endereço.
+  const gravado = await gravarRegrasDeConversaoGoogle(
+    createAdminClient(),
+    { organizationId: orgId, autorUserId: authUser.id },
+    parsed.data,
   );
-
-  // Regra desligada que nunca existiu não vira linha: não há nome a preservar.
-  const linhas = regras
-    .filter((r) => r.enabled || existentePorEtapa.has(r.stage_id))
-    .map((r) => {
-      // Desligada com campos vazios preserva o que já estava gravado: as
-      // colunas são NOT NULL, e todas as linhas do upsert levam as mesmas.
-      const antes = existentePorEtapa.get(r.stage_id);
-      return {
-        organization_id: orgId,
-        stage_id: r.stage_id,
-        event_name: antes?.event_name ?? eventoDaEtapa(r.stage_id),
-        label: r.label || antes?.label || "Etapa do funil",
-        google_action_id: r.google_action_id || antes?.google_action_id || "0",
-        category: r.category,
-        included_in_conversions: r.included_in_conversions,
-        channel: r.channel,
-        enabled: r.enabled,
-        updated_by: authUser.id,
-      };
-    });
-
-  if (linhas.length > 0) {
-    const { error } = await admin
-      .from("google_ads_conversion_rules")
-      .upsert(linhas, { onConflict: "organization_id,stage_id" });
-    if (error) return { ok: false, error: "erro_ao_gravar", details: error.message };
-  }
-
-  // O que sumiu da lista é desligado — nunca apagado (ver o cabeçalho).
-  const enviadas = new Set(regras.map((r) => r.stage_id));
-  const sumidas = [...existentePorEtapa.keys()].filter((id) => !enviadas.has(id));
-  if (sumidas.length > 0) {
-    const { error } = await admin
-      .from("google_ads_conversion_rules")
-      .update({ enabled: false, updated_by: authUser.id })
-      .eq("organization_id", orgId)
-      .in("stage_id", sumidas);
-    if (error) return { ok: false, error: "erro_ao_gravar", details: error.message };
-  }
+  if (!gravado.ok) return gravado;
 
   const hdrs = await headers();
   await audit({
@@ -167,8 +105,8 @@ export async function salvarRegrasDeConversaoGoogle(
     ip: hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined,
     userAgent: hdrs.get("user-agent") ?? undefined,
     metadata: {
-      ligadas: ligadas.length,
-      desligadas: regras.length - ligadas.length + sumidas.length,
+      ligadas: gravado.ligadas,
+      desligadas: gravado.desligadas,
     },
   });
 
