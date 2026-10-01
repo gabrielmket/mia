@@ -30,6 +30,9 @@ export interface Contact {
   /** O cargo desta pessoa na empresa dela, e o setor. */
   cargo: string | null;
   setor: string | null;
+  /** FORK MIA (9013): o papel na empresa e se é o contato principal dela. */
+  papel_na_empresa?: string | null;
+  principal_na_empresa?: boolean;
   created_at: string;
   updated_at: string;
   last_activity_at: string | null;

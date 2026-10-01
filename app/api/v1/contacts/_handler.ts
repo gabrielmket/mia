@@ -39,7 +39,7 @@ const SELECT_COLS =
   // tem hora marcada"). Coluna que sai daqui volta `undefined` no objeto, e o
   // PATCH seguinte da tela regrava o campo vazio — apagando dado do cliente sem
   // erro nenhum, que é o modo de falha caro deste SELECT.
-  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, custom_fields, empresa_id, cargo, setor, created_at, updated_at, last_activity_at, first_service_at";
+  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, custom_fields, empresa_id, cargo, setor, papel_na_empresa, principal_na_empresa, created_at, updated_at, last_activity_at, first_service_at";
 
 interface CursorPayload {
   sort: string | null;
@@ -458,6 +458,8 @@ export async function createContactHandler(
     empresa_id: input.empresa_id ?? null,
     cargo: input.cargo ?? null,
     setor: input.setor ?? null,
+    papel_na_empresa: input.papel_na_empresa ?? null,
+    principal_na_empresa: input.principal_na_empresa ?? false,
     consent: input.consent ?? {},
   };
 
@@ -620,6 +622,9 @@ export async function patchContactHandler(
   if (input.empresa_id !== undefined) patch.empresa_id = input.empresa_id;
   if (input.cargo !== undefined) patch.cargo = input.cargo;
   if (input.setor !== undefined) patch.setor = input.setor;
+  // FORK MIA (9013): o papel na empresa e o principal.
+  if (input.papel_na_empresa !== undefined) patch.papel_na_empresa = input.papel_na_empresa;
+  if (input.principal_na_empresa !== undefined) patch.principal_na_empresa = input.principal_na_empresa;
   if (input.consent !== undefined) {
     // MERGE por finalidade, nunca substituição.
     //

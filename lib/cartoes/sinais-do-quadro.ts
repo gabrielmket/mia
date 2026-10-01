@@ -71,7 +71,7 @@ const SITUACOES_ABERTAS_DA_TAREFA = ["pending", "in_progress"];
  * do PostgREST, então a lista cresce junto com o schema.
  */
 export const COLUNAS_DO_CONTATO_NO_CARTAO =
-  "id, name, display_name, source, source_metadata, cargo, is_anonymized";
+  "id, name, display_name, source, source_metadata, cargo, papel_na_empresa, is_anonymized";
 
 export interface OpcoesDosSinais {
   /** As etapas do funil: a chance calibrada da etapa entra no "Fechamento previsto". */

@@ -77,6 +77,12 @@ export const contactCreateSchema = z.object({
    */
   cargo: z.string().trim().max(120).nullish(),
   setor: z.string().trim().max(120).nullish(),
+  /**
+   * FORK MIA (9013) — o papel desta pessoa na empresa e se ela é a principal.
+   * Vocabulário fechado, o mesmo do papel num negócio (lib/cartoes/papel.ts).
+   */
+  papel_na_empresa: z.enum(["decisor", "financeiro", "usuario", "influenciador", "outro"]).nullish(),
+  principal_na_empresa: z.boolean().optional(),
 });
 export type ContactCreate = z.infer<typeof contactCreateSchema>;
 

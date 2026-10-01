@@ -40,6 +40,7 @@ import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { origemDoContato } from "@/lib/leads/origem-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
 import { DialButton } from "@/components/voice/DialButton";
+import { FichaConectadaDoContato } from "@/components/cartoes/fichas/FichaConectadaDoContato";
 
 interface Props {
   contactId: string;
@@ -244,7 +245,10 @@ export function ContactDetailClient({ contactId }: Props) {
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
-          <Card className="p-4">
+          {/* FORK MIA — a ficha conectada: empresa, negócios, conversas, IA, agenda,
+              tarefas e compras (components/cartoes/fichas/). */}
+          <FichaConectadaDoContato contactId={contactId} anonimizado={contact.is_anonymized} />
+          <Card className="mt-4 p-4">
             <dl className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
               <div>
                 <dt className="text-xs uppercase text-muted-foreground">{t("Nome")}</dt>

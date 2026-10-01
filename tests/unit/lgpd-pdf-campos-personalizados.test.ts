@@ -150,6 +150,8 @@ it("o PDF lista as respostas pelo rótulo da pergunta, e o CPF só na linha do d
     // campos personalizados.
     cargo: null,
     setor: null,
+    papel_na_empresa: null,
+    principal_na_empresa: false,
     empresa_nome: null,
     social_identity: null,
     created_at: "2030-01-02T13:05:00Z",

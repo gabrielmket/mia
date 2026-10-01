@@ -398,6 +398,14 @@ function InboxLeadEditor({
           </p>
         </div>
       )}
+      {/* FORK MIA — do atendimento ao cartão aberto do negócio, num clique. */}
+      <Link
+        href={`/app/leads/${ativo.id}`}
+        className="inline-block text-xs text-accent underline-offset-2 hover:underline"
+        data-testid="abrir-cartao-do-negocio"
+      >
+        {t("Abrir cartão do negócio")}
+      </Link>
       <EtapaDoNegocio key={`etapa-${ativo.id}`} lead={ativo} onMovido={onSalvo} />
       <CamposDoFunil
         key={ativo.id}
@@ -695,7 +703,10 @@ export function CRMSidePanel({ conversation }: Props) {
           */}
           {empresa && (
             <div className="text-xs text-muted-foreground">
-              {empresa.nome}
+              {/* FORK MIA — o nome da empresa leva à ficha dela. */}
+              <Link href={`/app/empresas/${empresa.id}`} className="underline-offset-2 hover:underline">
+                {empresa.nome}
+              </Link>
               {empresa.cargo ? ` · ${empresa.cargo}` : ""}
             </div>
           )}
