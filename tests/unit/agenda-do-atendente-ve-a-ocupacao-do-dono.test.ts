@@ -131,6 +131,9 @@ function clienteComRls(quemOlha: string) {
       return encadeavelCom(visiveis);
     },
     async rpc(nome: string, args: Record<string, unknown>) {
+      // FORK MIA (9011): a ocupação do Outlook é outra rpc, somada à do Google
+      // (lib/agenda-mia/ocupacao.ts). Nesta organização falsa ninguém tem Outlook.
+      if (nome.startsWith("fn_mia_")) return { data: [], error: null };
       rpcs.push({ nome, args });
       const dono = args.p_owner;
       if (dono === DONO_QUE_FALHA) {

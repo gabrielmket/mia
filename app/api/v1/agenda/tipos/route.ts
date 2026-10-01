@@ -42,6 +42,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listaTiposDeAtendimento } from "@/lib/agenda/consulta";
 import { TETO_DE_LEMBRETES_EXTRAS } from "@/lib/agenda/lembretes";
+import { localDoTeamsParaOUpstream, marcarTipoComoTeams } from "@/lib/agenda-mia/tipos-com-teams";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -279,7 +280,10 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!autorizado.ok) return autorizado.response;
   const t = (texto: string) => traduzir(texto, autorizado.user.idioma);
 
-  const lido = criarSchema.safeParse(await req.json().catch(() => ({})));
+  // FORK MIA (9015): "Microsoft Teams" é um "Link de vídeo" marcado como Teams
+  // (o CHECK do local é do upstream). Ver lib/agenda-mia/tipos-com-teams.ts.
+  const { corpo: corpoDoTipo, teams } = localDoTeamsParaOUpstream(await req.json().catch(() => ({})));
+  const lido = criarSchema.safeParse(corpoDoTipo);
   if (!lido.success) {
     // A mensagem do Zod passa pelo dicionário, e não direto ao corpo da resposta:
     // as recusas de `reminder_minutes_before` são escritas em português nesta
@@ -302,6 +306,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
     return fail("internal_error", error.message, 500, { requestId });
   }
+  if (teams) await marcarTipoComoTeams(admin, autorizado.org.orgId, data.id);
 
   await audit({
     actorUserId: autorizado.user.id,

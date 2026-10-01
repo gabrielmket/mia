@@ -327,6 +327,14 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     "mia_leads_da_meta_recebidos",
     // .61 — o dono de cada Página da Meta (9004).
     "mia_paginas_da_meta",
+    // 9011 — a agenda do Outlook.
+    "mia_agenda_microsoft_conexoes",
+    "mia_agenda_microsoft_calendarios",
+    "mia_agenda_microsoft_eventos",
+    // 9014 — o vínculo do compromisso com o Outlook.
+    "mia_agenda_microsoft_compromissos",
+    // 9015 — os tipos que são reunião do Teams.
+    "mia_agenda_tipos_com_teams",
   ].map((tabela) => ({
     tabela,
     razao:

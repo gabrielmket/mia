@@ -63,6 +63,9 @@ const NAV_ITEMS: NavItem[] = [
   // A porta da tela do app OAuth do Google — mesma razão da de cima: é
   // configuração da INSTALAÇÃO, e /admin tem navegação própria.
   { href: "/admin/google", label: "Google Agenda", icon: CalendarBlank },
+  // FORK MIA (9011): o app da Microsoft para a agenda do Outlook e o Teams.
+  // Mesma razão da de cima: é configuração da INSTALAÇÃO.
+  { href: "/admin/microsoft", label: "Microsoft 365", icon: CalendarBlank },
   // O número da plataforma que avisa os grupos dos clientes. Mesma razão das
   // duas de cima: é configuração da INSTALAÇÃO, não de um tenant — o número é
   // um só para todos, e quem o conecta é quem opera.

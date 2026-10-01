@@ -1908,7 +1908,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261001100000_9013_papel_do_contato_na_empresa', now())
+values (1, '20261001150000_9015_agenda_microsoft_teams', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -3903,6 +3903,955 @@ create trigger trg_mia_desliga_o_transitorio_da_demonstracao
   execute function public.fn_mia_desliga_o_transitorio_da_demonstracao();
 
 
+-- ─── 9011 · agenda do Microsoft 365, entrega 1: conexão e ocupação ───
+--
+-- Espelho EXATO da migration 9011 (supabase/migrations-mia/), onde está o porquê
+-- inteiro. Idempotente, como todo o apêndice. Vai antes da varredura anon, que
+-- fecha o arquivo.
+--
+-- 9011 · agenda do Microsoft 365, entrega 1: conexão e ocupação
+--
+-- ── O que esta migration faz ────────────────────────────────────────────────
+--
+-- Quem atende conecta a agenda do Outlook (conta de trabalho do Microsoft 365
+-- ou pessoal outlook.com), escolhe quais agendas de lá ocupam os horários dela,
+-- e os eventos dessas agendas passam a bloquear a marcação aqui: pela tela,
+-- pelo encaixe e pela IA. O desenho inteiro está em docs/fork/agenda-microsoft.md.
+--
+-- ── Por que tabelas NOSSAS, e não as do Google do upstream ─────────────────
+--
+-- Três leitores do motor do Google olham `calendar_connections` sem filtrar o
+-- provedor (a renovação de token, a reserva do destino e a escolha). Uma conexão
+-- Microsoft ali seria renovada no endereço do Google e publicada pela API do
+-- Google. E o CHECK do provedor só aceita 'google_calendar': alargá-lo seria
+-- redefinir uma constraint dele (regra 3 do docs/FORK-MIA.md). Então a conta
+-- Microsoft mora ao lado, com o mesmo vocabulário:
+--
+--   mia_microsoft_oauth_da_plataforma   o app da instalação (espelha platform_google_oauth)
+--   mia_agenda_microsoft_conexoes       a conta de cada pessoa (espelha calendar_connections)
+--   mia_agenda_microsoft_calendarios    as agendas da conta, fontes e destino (espelha calendar_connection_calendars)
+--   mia_agenda_microsoft_eventos        a ocupação vinda do Outlook, SEM título (espelha calendar_external_events)
+--
+-- ── Como a ocupação chega aos leitores dele sem mexer no SQL dele ──────────
+--
+-- As três leituras nossas devolvem AS MESMAS COLUNAS das dele, e o código soma
+-- as duas (lib/agenda-mia/ocupacao.ts):
+--
+--   fn_mia_agenda_ocupacao_microsoft_do_dono  ↔ fn_agenda_ocupacao_google_do_dono
+--   fn_mia_agenda_conexoes_microsoft_do_dono  ↔ fn_agenda_conexoes_google_do_dono
+--   fn_mia_agenda_cobertura_microsoft         ↔ fn_google_coverage
+--
+-- ── Um destino por pessoa, entre Google e Microsoft ────────────────────────
+--
+-- A regra dele é "um destino entre todas as contas". Ela passa a valer entre os
+-- provedores por gatilhos NOSSOS (extensão, nunca redefinição):
+--
+--   · gravar um destino Google (a escolha da pessoa) apaga o destino Microsoft;
+--   · o destino AUTOMÁTICO do primeiro catálogo do Google (gravado pelo servidor,
+--     sem sessão) não toma o lugar de um destino Microsoft que a pessoa já tem;
+--   · a escolha pela tela da MIA (`fn_mia_agenda_selecao`) grava os dois lados
+--     numa transação só.
+--
+-- Nomes com prefixo `mia_`/`fn_mia_`: nada do upstream é tocado.
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 1 · o app da Microsoft desta instalação
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists public.mia_microsoft_oauth_da_plataforma (
+  id smallint primary key default 1,
+  client_id text,
+  client_secret_encrypted bytea,
+  -- A Microsoft não deixa o segredo durar mais de 24 meses. A data é informada
+  -- por quem cadastra, e a tela avisa 30 dias antes: segredo vencido derruba a
+  -- renovação de todas as agendas da instalação de uma vez.
+  segredo_vence_em date,
+  -- `common` aceita conta de trabalho e pessoal. Um id de tenant restringe a uma
+  -- empresa só.
+  tenant text not null default 'common',
+  updated_at timestamptz not null default now(),
+  updated_by uuid,
+  constraint mia_microsoft_oauth_da_plataforma_linha_unica check (id = 1),
+  constraint mia_microsoft_oauth_da_plataforma_tenant check (tenant ~ '^[A-Za-z0-9._-]{1,100}$')
+);
+
+comment on table public.mia_microsoft_oauth_da_plataforma is
+  'MIA (9011): o app do Microsoft Entra DESTA INSTALACAO (linha unica), para a agenda do Outlook. So o servidor le: RLS ligada sem policies. O segredo e cifrado por fn_encrypt_oauth e nunca volta a tela.';
+
+alter table public.mia_microsoft_oauth_da_plataforma enable row level security;
+revoke all on public.mia_microsoft_oauth_da_plataforma from anon, authenticated;
+grant select, insert, update on public.mia_microsoft_oauth_da_plataforma to service_role;
+
+drop trigger if exists trg_mia_microsoft_oauth_da_plataforma_updated_at on public.mia_microsoft_oauth_da_plataforma;
+create trigger trg_mia_microsoft_oauth_da_plataforma_updated_at
+  before update on public.mia_microsoft_oauth_da_plataforma
+  for each row execute function public.fn_set_updated_at();
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 2 · a conta Microsoft de cada pessoa
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists public.mia_agenda_microsoft_conexoes (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  -- O e-mail da conta (mail ou userPrincipalName do /me). É da própria pessoa
+  -- da equipe, não de contato.
+  conta_email text not null,
+  -- O id estável do usuário na Microsoft (`oid`). É a chave: o e-mail pode mudar.
+  microsoft_user_id text not null,
+  -- 'pessoal' quando o tenant é o das contas pessoais da Microsoft.
+  tipo_de_conta text not null default 'trabalho',
+  tenant_id text,
+  access_token_cifrado bytea,
+  refresh_token_cifrado bytea,
+  token_expira_em timestamptz,
+  escopos text[] not null default array[]::text[],
+  -- Os mesmos sete valores de calendar_connections.status (SITUACOES_DA_CONEXAO).
+  status text not null default 'connecting',
+  ultima_leitura_em timestamptz,
+  ultimo_erro text,
+  revisao_da_escolha bigint not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint mia_agenda_microsoft_conexoes_tipo check (tipo_de_conta in ('trabalho','pessoal')),
+  constraint mia_agenda_microsoft_conexoes_status check (status in (
+    'connecting','healthy','token_expired','scope_missing','disconnected','rate_limited','error'
+  ))
+);
+
+create unique index if not exists mia_agenda_microsoft_conexoes_conta_key
+  on public.mia_agenda_microsoft_conexoes (organization_id, user_id, microsoft_user_id);
+create index if not exists mia_agenda_microsoft_conexoes_renovacao_idx
+  on public.mia_agenda_microsoft_conexoes (token_expira_em)
+  where status in ('healthy','rate_limited') and token_expira_em is not null;
+
+comment on table public.mia_agenda_microsoft_conexoes is
+  'MIA (9011): a conta Microsoft (Outlook) que UMA pessoa conectou. Espelha calendar_connections do upstream, que so aceita o Google. Tokens cifrados por fn_encrypt_oauth; so o servidor escreve.';
+
+drop trigger if exists trg_mia_agenda_microsoft_conexoes_updated_at on public.mia_agenda_microsoft_conexoes;
+create trigger trg_mia_agenda_microsoft_conexoes_updated_at
+  before update on public.mia_agenda_microsoft_conexoes
+  for each row execute function public.fn_set_updated_at();
+
+alter table public.mia_agenda_microsoft_conexoes enable row level security;
+drop policy if exists mia_agenda_microsoft_conexoes_dono_ou_gerente on public.mia_agenda_microsoft_conexoes;
+create policy mia_agenda_microsoft_conexoes_dono_ou_gerente on public.mia_agenda_microsoft_conexoes
+  for select using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and (user_id = auth.uid() or public.fn_role_at_least(organization_id, 'manager')))
+  );
+revoke all on public.mia_agenda_microsoft_conexoes from anon, authenticated;
+-- Coluna a coluna: os tokens, mesmo cifrados, não saem pela sessão.
+grant select (id, organization_id, user_id, conta_email, tipo_de_conta, status, token_expira_em,
+              ultima_leitura_em, ultimo_erro, revisao_da_escolha, created_at, updated_at)
+  on public.mia_agenda_microsoft_conexoes to authenticated;
+grant select, insert, update, delete on public.mia_agenda_microsoft_conexoes to service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 3 · as agendas da conta: o que ocupa, e qual recebe
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists public.mia_agenda_microsoft_calendarios (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  conexao_id uuid not null references public.mia_agenda_microsoft_conexoes(id) on delete cascade,
+  calendario_externo_id text not null,
+  nome text not null,
+  -- O calendário padrão da caixa (isDefaultCalendar). Só nele a Graph v1.0 dá
+  -- leitura incremental (delta); os outros são lidos inteiros a cada rodada.
+  padrao boolean not null default false,
+  -- No vocabulário de papéis do Google DE PROPÓSITO: é o que a tela e as regras
+  -- dele já entendem. owner = da própria pessoa com escrita; writer = com
+  -- escrita; reader = só leitura (não pode ser destino).
+  papel text not null default 'reader',
+  disponivel boolean not null default true,
+  catalogo_conferido_em timestamptz,
+  conta_como_ocupado boolean not null default false,
+  destino boolean not null default false,
+  -- allowedOnlineMeetingProviders do calendário (teamsForBusiness etc.).
+  reunioes_permitidas text[] not null default array[]::text[],
+  fuso text,
+  -- A leitura: reserva (claim), cursor da rodada, deltaLink e cobertura.
+  reserva_token uuid,
+  reserva_epoca bigint not null default 0,
+  reserva_ate timestamptz,
+  proxima_leitura_em timestamptz not null default now(),
+  ultima_leitura_em timestamptz,
+  erro_de_leitura text,
+  cursor_da_leitura jsonb,
+  delta_link text,
+  cobertura jsonb,
+  -- As notificações da Graph (assinatura por calendário).
+  assinatura_id text,
+  assinatura_expira_em timestamptz,
+  assinatura_segredo_hash text,
+  assinatura_erro text,
+  ultima_notificacao_em timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint mia_agenda_microsoft_calendarios_papel check (papel in ('owner','writer','reader'))
+);
+
+create unique index if not exists mia_agenda_microsoft_calendarios_key
+  on public.mia_agenda_microsoft_calendarios (organization_id, conexao_id, calendario_externo_id);
+create unique index if not exists mia_agenda_microsoft_calendarios_um_destino_key
+  on public.mia_agenda_microsoft_calendarios (conexao_id)
+  where destino;
+create unique index if not exists mia_agenda_microsoft_calendarios_assinatura_key
+  on public.mia_agenda_microsoft_calendarios (assinatura_id)
+  where assinatura_id is not null;
+create index if not exists mia_agenda_microsoft_calendarios_a_ler_idx
+  on public.mia_agenda_microsoft_calendarios (proxima_leitura_em)
+  where disponivel;
+
+comment on table public.mia_agenda_microsoft_calendarios is
+  'MIA (9011): as agendas dentro de uma conta Microsoft conectada, e o que cada uma faz: ocupar horario (conta_como_ocupado) e/ou receber o que marcamos (destino). Espelha calendar_connection_calendars do upstream. Um destino por pessoa, entre Google e Microsoft.';
+
+drop trigger if exists trg_mia_agenda_microsoft_calendarios_updated_at on public.mia_agenda_microsoft_calendarios;
+create trigger trg_mia_agenda_microsoft_calendarios_updated_at
+  before update on public.mia_agenda_microsoft_calendarios
+  for each row execute function public.fn_set_updated_at();
+
+alter table public.mia_agenda_microsoft_calendarios enable row level security;
+drop policy if exists mia_agenda_microsoft_calendarios_dono_ou_gerente on public.mia_agenda_microsoft_calendarios;
+create policy mia_agenda_microsoft_calendarios_dono_ou_gerente on public.mia_agenda_microsoft_calendarios
+  for select using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and exists (
+          select 1 from public.mia_agenda_microsoft_conexoes c
+           where c.id = conexao_id
+             and (c.user_id = auth.uid() or public.fn_role_at_least(c.organization_id, 'manager'))
+        ))
+  );
+revoke all on public.mia_agenda_microsoft_calendarios from anon, authenticated;
+grant select (id, organization_id, conexao_id, calendario_externo_id, nome, padrao, papel, disponivel,
+              catalogo_conferido_em, conta_como_ocupado, destino, reunioes_permitidas, fuso,
+              ultima_leitura_em, erro_de_leitura, cobertura, assinatura_expira_em, assinatura_erro,
+              ultima_notificacao_em, created_at, updated_at)
+  on public.mia_agenda_microsoft_calendarios to authenticated;
+grant select, insert, update, delete on public.mia_agenda_microsoft_calendarios to service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 4 · a ocupação vinda do Outlook (sem título, sem descrição, sem convidado)
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists public.mia_agenda_microsoft_eventos (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  conexao_id uuid not null references public.mia_agenda_microsoft_conexoes(id) on delete cascade,
+  calendario_externo_id text not null,
+  evento_externo_id text not null,
+  inicio timestamptz,
+  fim timestamptz,
+  dia_inteiro boolean not null default false,
+  situacao text not null default 'confirmed',
+  transparencia text not null default 'opaque',
+  atualizado_la_em timestamptz,
+  geracao uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint mia_agenda_microsoft_eventos_situacao check (situacao in ('confirmed','tentative','cancelled')),
+  constraint mia_agenda_microsoft_eventos_transparencia check (transparencia in ('opaque','transparent')),
+  constraint mia_agenda_microsoft_eventos_periodo check (
+    situacao = 'cancelled' or (inicio is not null and fim is not null and fim > inicio)
+  )
+);
+
+create unique index if not exists mia_agenda_microsoft_eventos_key
+  on public.mia_agenda_microsoft_eventos (organization_id, conexao_id, calendario_externo_id, evento_externo_id);
+create index if not exists mia_agenda_microsoft_eventos_ocupam_idx
+  on public.mia_agenda_microsoft_eventos (organization_id, conexao_id, inicio)
+  where situacao <> 'cancelled' and transparencia = 'opaque';
+
+comment on table public.mia_agenda_microsoft_eventos is
+  'MIA (9011): espelho, somente leitura, do que ja existe nas agendas do Outlook conectadas. So ocupacao (inicio, fim, situacao, transparencia): o titulo, a descricao e os convidados do evento pessoal nunca sao guardados. Espelha calendar_external_events do upstream.';
+
+drop trigger if exists trg_mia_agenda_microsoft_eventos_updated_at on public.mia_agenda_microsoft_eventos;
+create trigger trg_mia_agenda_microsoft_eventos_updated_at
+  before update on public.mia_agenda_microsoft_eventos
+  for each row execute function public.fn_set_updated_at();
+
+alter table public.mia_agenda_microsoft_eventos enable row level security;
+drop policy if exists mia_agenda_microsoft_eventos_da_empresa on public.mia_agenda_microsoft_eventos;
+create policy mia_agenda_microsoft_eventos_da_empresa on public.mia_agenda_microsoft_eventos
+  for select using (
+    (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
+  );
+revoke all on public.mia_agenda_microsoft_eventos from anon, authenticated;
+grant select (id, organization_id, conexao_id, calendario_externo_id, evento_externo_id, inicio, fim,
+              dia_inteiro, situacao, transparencia, atualizado_la_em, created_at, updated_at)
+  on public.mia_agenda_microsoft_eventos to authenticated;
+grant select, insert, update, delete on public.mia_agenda_microsoft_eventos to service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 5 · o catálogo: todas as agendas da conta, com o que cada uma permite
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Ausência só depois de todas as páginas recebidas (quem chama manda a lista
+-- inteira). A primeira vez de quem ainda não tem destino em lugar NENHUM marca a
+-- agenda padrão como fonte e destino, como o primeiro catálogo do Google faz.
+create or replace function public.fn_mia_agenda_microsoft_catalogo(
+  p_org uuid, p_conexao uuid, p_itens jsonb, p_revisao text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  conn public.mia_agenda_microsoft_conexoes;
+  it jsonb;
+  primeira boolean;
+begin
+  select * into conn from public.mia_agenda_microsoft_conexoes
+   where organization_id = p_org and id = p_conexao;
+  if not found then
+    raise exception 'microsoft_conexao_indisponivel' using errcode = 'P0002';
+  end if;
+  perform 1 from public.user_organizations
+   where organization_id = p_org and user_id = conn.user_id and revoked_at is null
+   for update;
+  if not found then
+    raise exception 'microsoft_dono_indisponivel' using errcode = '42501';
+  end if;
+  select * into conn from public.mia_agenda_microsoft_conexoes
+   where organization_id = p_org and id = p_conexao for update;
+  if conn.status <> 'healthy' then
+    raise exception 'microsoft_conexao_indisponivel' using errcode = '42501';
+  end if;
+  if conn.revisao_da_escolha::text is distinct from p_revisao then
+    raise exception 'microsoft_escolha_desatualizada' using errcode = '40001';
+  end if;
+
+  primeira := conn.revisao_da_escolha = 0
+    and not exists (
+      select 1 from public.mia_agenda_microsoft_calendarios k
+        join public.mia_agenda_microsoft_conexoes c
+          on c.organization_id = k.organization_id and c.id = k.conexao_id
+       where k.organization_id = p_org and c.user_id = conn.user_id and k.destino)
+    and not exists (
+      select 1 from public.calendar_connection_calendars k
+        join public.calendar_connections c
+          on c.organization_id = k.organization_id and c.id = k.connection_id
+       where k.organization_id = p_org and c.user_id = conn.user_id and k.is_destination);
+
+  for it in select value from jsonb_array_elements(coalesce(p_itens, '[]'::jsonb)) loop
+    insert into public.mia_agenda_microsoft_calendarios (
+      organization_id, conexao_id, calendario_externo_id, nome, padrao, papel, disponivel,
+      catalogo_conferido_em, reunioes_permitidas, fuso, conta_como_ocupado, destino
+    ) values (
+      p_org, p_conexao, it->>'id',
+      coalesce(nullif(btrim(it->>'nome'), ''), it->>'id'),
+      coalesce((it->>'padrao')::boolean, false),
+      case when it->>'papel' in ('owner','writer','reader') then it->>'papel' else 'reader' end,
+      true, now(),
+      coalesce(array(select jsonb_array_elements_text(coalesce(it->'reunioes', '[]'::jsonb))), array[]::text[]),
+      nullif(btrim(it->>'fuso'), ''),
+      primeira and coalesce((it->>'padrao')::boolean, false),
+      false
+    )
+    on conflict (organization_id, conexao_id, calendario_externo_id) do update set
+      nome = excluded.nome,
+      padrao = excluded.padrao,
+      papel = excluded.papel,
+      disponivel = true,
+      catalogo_conferido_em = excluded.catalogo_conferido_em,
+      reunioes_permitidas = excluded.reunioes_permitidas,
+      fuso = coalesce(excluded.fuso, mia_agenda_microsoft_calendarios.fuso),
+      proxima_leitura_em = now();
+  end loop;
+
+  update public.mia_agenda_microsoft_calendarios
+     set disponivel = false, catalogo_conferido_em = now()
+   where organization_id = p_org and conexao_id = p_conexao
+     and not exists (
+       select 1 from jsonb_array_elements(coalesce(p_itens, '[]'::jsonb)) v
+        where v->>'id' = calendario_externo_id);
+
+  -- Só destino com escrita: calendário só-leitura nunca recebe compromisso.
+  if primeira then
+    update public.mia_agenda_microsoft_calendarios
+       set destino = true
+     where organization_id = p_org and conexao_id = p_conexao
+       and padrao and disponivel and papel in ('owner','writer');
+  end if;
+
+  update public.mia_agenda_microsoft_conexoes
+     set revisao_da_escolha = revisao_da_escolha + 1
+   where organization_id = p_org and id = p_conexao;
+end
+$$;
+
+comment on function public.fn_mia_agenda_microsoft_catalogo(uuid, uuid, jsonb, text) is
+  'MIA (9011): grava o catalogo de agendas de uma conta Microsoft (lista inteira, com papel e reunioes permitidas). Primeira vez de quem nao tem destino em lugar nenhum: a agenda padrao vira fonte e destino. Execucao so para service_role.';
+revoke all on function public.fn_mia_agenda_microsoft_catalogo(uuid, uuid, jsonb, text) from public, anon, authenticated;
+grant execute on function public.fn_mia_agenda_microsoft_catalogo(uuid, uuid, jsonb, text) to service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 6 · o evento do Outlook que é compromisso nosso (anti-eco)
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Na 9011 ainda não publicamos nada no Outlook, então nenhum evento é nosso. A
+-- 9012 (publicação) redefine esta função — que é NOSSA — para olhar o vínculo.
+create or replace function public.fn_mia_agenda_microsoft_evento_e_compromisso(
+  p_org uuid, p_conexao uuid, p_calendario text, p_evento text
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select false;
+$$;
+revoke all on function public.fn_mia_agenda_microsoft_evento_e_compromisso(uuid, uuid, text, text) from public, anon, authenticated;
+grant execute on function public.fn_mia_agenda_microsoft_evento_e_compromisso(uuid, uuid, text, text) to service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 7 · a leitura de um calendário: reserva, página, erro, recomeço
+-- ═══════════════════════════════════════════════════════════════════════════
+-- O mesmo contrato de fn_google_calendar (upstream 0225), sobre as nossas
+-- tabelas. Duas diferenças, as duas da Microsoft:
+--   · `delta`: só o calendário padrão tem leitura incremental na Graph v1.0. Os
+--     outros fazem sempre a leitura completa da janela, e a rodada termina sem
+--     deltaLink (e não é erro).
+--   · o vínculo com compromisso nosso é resolvido por
+--     fn_mia_agenda_microsoft_evento_e_compromisso (a 9012 dá corpo a ela).
+create or replace function public.fn_mia_agenda_microsoft_calendario(
+  p_org uuid, p_id uuid, p_acao text, p_args jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  k public.mia_agenda_microsoft_calendarios;
+  cur jsonb;
+  it jsonb;
+  ger uuid;
+  completa boolean;
+  proxima text;
+begin
+  select * into k from public.mia_agenda_microsoft_calendarios
+   where organization_id = p_org and id = p_id for update;
+  if not found then
+    raise exception 'microsoft_calendario_inexistente' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.mia_agenda_microsoft_conexoes c
+      join public.user_organizations m on m.organization_id = c.organization_id and m.user_id = c.user_id
+     where c.organization_id = p_org and c.id = k.conexao_id and m.revoked_at is null and c.status = 'healthy'
+  ) then
+    raise exception 'microsoft_conexao_indisponivel' using errcode = '42501';
+  end if;
+
+  if p_acao = 'claim' then
+    if k.reserva_ate > clock_timestamp() or not k.disponivel then
+      return null;
+    end if;
+    cur := k.cursor_da_leitura;
+    if cur is null then
+      completa := not k.padrao
+        or k.delta_link is null
+        or k.cobertura is null
+        or (k.cobertura->>'completed_at')::timestamptz < now() - interval '24 hours';
+      cur := jsonb_build_object(
+        'generation', gen_random_uuid(),
+        'mode', case when completa then 'full' else 'incremental' end,
+        'delta', k.padrao,
+        'base', case when completa then null else k.delta_link end,
+        'page', null,
+        'window_start', case when completa then now() - interval '1 day'
+                             else (k.cobertura->>'window_start')::timestamptz end,
+        'window_end', case when completa then now() + interval '90 days'
+                           else (k.cobertura->>'window_end')::timestamptz end
+      );
+    end if;
+    update public.mia_agenda_microsoft_calendarios
+       set reserva_token = gen_random_uuid(),
+           reserva_epoca = reserva_epoca + 1,
+           reserva_ate = clock_timestamp() + interval '90 seconds',
+           cursor_da_leitura = cur
+     where organization_id = p_org and id = p_id
+     returning * into k;
+  else
+    if k.reserva_token is distinct from (p_args->'claim'->>'token')::uuid
+       or k.reserva_epoca::text is distinct from p_args->'claim'->>'epoch'
+       or k.reserva_ate is null or k.reserva_ate <= clock_timestamp()
+       or (p_args ? 'cursor' and k.cursor_da_leitura is distinct from p_args->'cursor') then
+      raise exception 'microsoft_stale' using errcode = '40001';
+    end if;
+
+    if p_acao = 'renew' then
+      update public.mia_agenda_microsoft_calendarios
+         set reserva_ate = clock_timestamp() + interval '90 seconds'
+       where organization_id = p_org and id = p_id
+       returning * into k;
+    elsif p_acao = 'release' then
+      update public.mia_agenda_microsoft_calendarios
+         set reserva_token = null, reserva_ate = null
+       where organization_id = p_org and id = p_id;
+      return 'true'::jsonb;
+    elsif p_acao = 'error' then
+      update public.mia_agenda_microsoft_calendarios
+         set erro_de_leitura = left(p_args->>'message', 200),
+             proxima_leitura_em = now() + interval '15 minutes'
+       where organization_id = p_org and id = p_id;
+      return 'true'::jsonb;
+    elsif p_acao = 'reset' then
+      update public.mia_agenda_microsoft_calendarios
+         set delta_link = null, cursor_da_leitura = null,
+             erro_de_leitura = 'A ocupação está desatualizada. Reconstruindo a leitura.',
+             proxima_leitura_em = now()
+       where organization_id = p_org and id = p_id;
+      return 'true'::jsonb;
+    elsif p_acao = 'item' then
+      it := p_args->'item';
+      ger := (k.cursor_da_leitura->>'generation')::uuid;
+      if public.fn_mia_agenda_microsoft_evento_e_compromisso(
+           p_org, k.conexao_id, k.calendario_externo_id, it->>'evento_externo_id') then
+        delete from public.mia_agenda_microsoft_eventos
+         where organization_id = p_org and conexao_id = k.conexao_id
+           and calendario_externo_id = k.calendario_externo_id
+           and evento_externo_id = it->>'evento_externo_id';
+        return jsonb_build_object('vinculado', true);
+      end if;
+      -- Apagado ou cancelado lá: sai da ocupação. Não guarda lápide: a delta
+      -- também anuncia exclusões de FORA da janela, e elas nunca estiveram aqui.
+      if it->>'situacao' = 'cancelled' then
+        delete from public.mia_agenda_microsoft_eventos
+         where organization_id = p_org and conexao_id = k.conexao_id
+           and calendario_externo_id = k.calendario_externo_id
+           and evento_externo_id = it->>'evento_externo_id';
+        return jsonb_build_object('vinculado', false);
+      end if;
+      insert into public.mia_agenda_microsoft_eventos (
+        organization_id, conexao_id, calendario_externo_id, evento_externo_id, inicio, fim,
+        dia_inteiro, situacao, transparencia, atualizado_la_em, geracao
+      ) values (
+        p_org, k.conexao_id, k.calendario_externo_id, it->>'evento_externo_id',
+        (it->>'inicio')::timestamptz, (it->>'fim')::timestamptz,
+        coalesce((it->>'dia_inteiro')::boolean, false),
+        coalesce(it->>'situacao', 'confirmed'),
+        coalesce(it->>'transparencia', 'opaque'),
+        (it->>'atualizado_la_em')::timestamptz,
+        ger
+      )
+      on conflict (organization_id, conexao_id, calendario_externo_id, evento_externo_id) do update set
+        inicio = coalesce(excluded.inicio, mia_agenda_microsoft_eventos.inicio),
+        fim = coalesce(excluded.fim, mia_agenda_microsoft_eventos.fim),
+        dia_inteiro = excluded.dia_inteiro,
+        situacao = excluded.situacao,
+        transparencia = excluded.transparencia,
+        atualizado_la_em = excluded.atualizado_la_em,
+        geracao = excluded.geracao;
+      return jsonb_build_object('vinculado', false);
+    elsif p_acao = 'page' then
+      proxima := nullif(p_args->>'next_page', '');
+      if proxima is not null then
+        if proxima = k.cursor_da_leitura->>'page' then
+          raise exception 'microsoft_cursor_sem_progresso' using errcode = '22023';
+        end if;
+        update public.mia_agenda_microsoft_calendarios
+           set cursor_da_leitura = jsonb_set(cursor_da_leitura, '{page}', to_jsonb(proxima)),
+               proxima_leitura_em = now()
+         where organization_id = p_org and id = p_id
+         returning * into k;
+      else
+        if coalesce((k.cursor_da_leitura->>'delta')::boolean, false)
+           and coalesce(p_args->>'delta_link', '') = '' then
+          raise exception 'microsoft_checkpoint_ausente' using errcode = '22023';
+        end if;
+        -- Leitura completa: o que não apareceu nesta geração, dentro da janela,
+        -- deixou de existir lá.
+        if k.cursor_da_leitura->>'mode' = 'full' then
+          delete from public.mia_agenda_microsoft_eventos
+           where organization_id = p_org and conexao_id = k.conexao_id
+             and calendario_externo_id = k.calendario_externo_id
+             and geracao is distinct from (k.cursor_da_leitura->>'generation')::uuid
+             and (situacao = 'cancelled'
+                  or (inicio < (k.cursor_da_leitura->>'window_end')::timestamptz
+                      and fim > (k.cursor_da_leitura->>'window_start')::timestamptz));
+        end if;
+        update public.mia_agenda_microsoft_calendarios
+           set delta_link = case when coalesce((cursor_da_leitura->>'delta')::boolean, false)
+                                 then p_args->>'delta_link' else null end,
+               cobertura = case when cursor_da_leitura->>'mode' = 'full'
+                                then jsonb_build_object(
+                                       'generation', cursor_da_leitura->'generation',
+                                       'window_start', cursor_da_leitura->'window_start',
+                                       'window_end', cursor_da_leitura->'window_end',
+                                       'completed_at', now())
+                                else cobertura end,
+               cursor_da_leitura = null,
+               ultima_leitura_em = now(),
+               erro_de_leitura = null,
+               proxima_leitura_em = now() + interval '15 minutes'
+         where organization_id = p_org and id = p_id
+         returning * into k;
+        update public.mia_agenda_microsoft_conexoes
+           set ultima_leitura_em = now(), ultimo_erro = null
+         where organization_id = p_org and id = k.conexao_id;
+      end if;
+    else
+      raise exception 'microsoft_acao_invalida' using errcode = '22023';
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'id', k.id, 'organization_id', k.organization_id, 'conexao_id', k.conexao_id,
+    'calendario_externo_id', k.calendario_externo_id, 'padrao', k.padrao, 'fuso', k.fuso,
+    'cursor', k.cursor_da_leitura,
+    'claim', jsonb_build_object('token', k.reserva_token, 'epoch', k.reserva_epoca::text, 'lease_until', k.reserva_ate)
+  );
+end
+$$;
+
+comment on function public.fn_mia_agenda_microsoft_calendario(uuid, uuid, text, jsonb) is
+  'MIA (9011): a leitura de um calendario do Outlook, com o contrato de fn_google_calendar do upstream (reserva de 90 s, cursor retomavel, geracao, cobertura, recomeco). Leitura completa apaga o que nao reapareceu na janela. Execucao so para service_role.';
+revoke all on function public.fn_mia_agenda_microsoft_calendario(uuid, uuid, text, jsonb) from public, anon, authenticated;
+grant execute on function public.fn_mia_agenda_microsoft_calendario(uuid, uuid, text, jsonb) to service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 8 · as três leituras com as colunas das do Google
+-- ═══════════════════════════════════════════════════════════════════════════
+-- FALHA ABERTO na ausência de catálogo, como fn_google_counts_for_conflicts: o
+-- evento só deixa de contar quando alguém DECLAROU que aquela agenda não ocupa.
+create or replace function public.fn_mia_agenda_ocupacao_microsoft_do_dono(
+  p_org uuid, p_owner uuid, p_de timestamptz, p_ate timestamptz
+)
+returns table (
+  starts_at timestamptz,
+  ends_at timestamptz,
+  transparency text,
+  status text,
+  connection_status text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select e.inicio, e.fim, e.transparencia, e.situacao, c.status
+    from public.mia_agenda_microsoft_eventos e
+    join public.mia_agenda_microsoft_conexoes c
+      on c.organization_id = e.organization_id and c.id = e.conexao_id
+   where (auth.uid() is null
+          or p_org in (select public.fn_user_org_ids())
+          or public.fn_is_platform_admin())
+     and e.organization_id = p_org
+     and c.user_id = p_owner
+     and e.situacao <> 'cancelled'
+     and not exists (
+       select 1 from public.mia_agenda_microsoft_calendarios k
+        where k.organization_id = e.organization_id and k.conexao_id = e.conexao_id
+          and k.calendario_externo_id = e.calendario_externo_id and not k.conta_como_ocupado)
+     -- Cruzamento ESTRITO, a régua de `colide`: encostar não é ocupar.
+     and e.inicio < p_ate
+     and e.fim > p_de;
+$$;
+comment on function public.fn_mia_agenda_ocupacao_microsoft_do_dono(uuid, uuid, timestamptz, timestamptz) is
+  'MIA (9011): a ocupacao do Outlook de um dono numa janela, com as MESMAS cinco colunas de fn_agenda_ocupacao_google_do_dono (upstream 0260), para o codigo somar as duas. So ocupacao, nunca titulo.';
+revoke all on function public.fn_mia_agenda_ocupacao_microsoft_do_dono(uuid, uuid, timestamptz, timestamptz) from public, anon;
+grant execute on function public.fn_mia_agenda_ocupacao_microsoft_do_dono(uuid, uuid, timestamptz, timestamptz) to authenticated, service_role;
+
+create or replace function public.fn_mia_agenda_conexoes_microsoft_do_dono(p_org uuid, p_owner uuid)
+returns table (
+  status text,
+  last_sync_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select c.status, c.ultima_leitura_em
+    from public.mia_agenda_microsoft_conexoes c
+   where (auth.uid() is null
+          or p_org in (select public.fn_user_org_ids())
+          or public.fn_is_platform_admin())
+     and c.organization_id = p_org
+     and c.user_id = p_owner;
+$$;
+comment on function public.fn_mia_agenda_conexoes_microsoft_do_dono(uuid, uuid) is
+  'MIA (9011): a situacao das contas Microsoft de um dono, com as colunas de fn_agenda_conexoes_google_do_dono (upstream), para "tem agenda que nunca foi lida" valer tambem para o Outlook.';
+revoke all on function public.fn_mia_agenda_conexoes_microsoft_do_dono(uuid, uuid) from public, anon;
+grant execute on function public.fn_mia_agenda_conexoes_microsoft_do_dono(uuid, uuid) to authenticated, service_role;
+
+create or replace function public.fn_mia_agenda_cobertura_microsoft(
+  p_org uuid, p_owner uuid, p_start timestamptz, p_end timestamptz
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when auth.uid() is not null and p_org not in (select public.fn_user_org_ids()) then true
+    else exists (
+      select 1 from public.mia_agenda_microsoft_calendarios k
+        join public.mia_agenda_microsoft_conexoes c
+          on c.organization_id = k.organization_id and c.id = k.conexao_id
+       where k.organization_id = p_org and c.user_id = p_owner and k.conta_como_ocupado
+         and (not k.disponivel or c.status <> 'healthy' or k.cobertura is null
+              or k.erro_de_leitura is not null or k.ultima_leitura_em is null
+              or k.ultima_leitura_em < now() - interval '30 minutes'
+              or (k.cobertura->>'window_start')::timestamptz > p_start
+              or (k.cobertura->>'window_end')::timestamptz < p_end))
+  end;
+$$;
+comment on function public.fn_mia_agenda_cobertura_microsoft(uuid, uuid, timestamptz, timestamptz) is
+  'MIA (9011): verdadeiro quando alguma agenda do Outlook que conta como ocupado nao foi lida por inteiro e recentemente naquele periodo (a mesma regra de fn_google_coverage do upstream). Vira o aviso de cobertura parcial; nao bloqueia a oferta.';
+revoke all on function public.fn_mia_agenda_cobertura_microsoft(uuid, uuid, timestamptz, timestamptz) from public, anon;
+grant execute on function public.fn_mia_agenda_cobertura_microsoft(uuid, uuid, timestamptz, timestamptz) to authenticated, service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 9 · um destino por pessoa, entre Google e Microsoft
+-- ═══════════════════════════════════════════════════════════════════════════
+-- (a) O destino AUTOMÁTICO do Google (o primeiro catálogo dele, gravado pelo
+--     servidor sem sessão) não toma o lugar de um destino Microsoft que a pessoa
+--     já tem. A escolha da pessoa (com sessão) passa.
+create or replace function public.fn_mia_destino_google_automatico_respeita_o_da_microsoft()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'UPDATE' then
+    if old.is_destination then
+      return new;
+    end if;
+  end if;
+  if new.is_destination and auth.uid() is null
+     and exists (
+       select 1 from public.mia_agenda_microsoft_calendarios k
+         join public.mia_agenda_microsoft_conexoes mc
+           on mc.organization_id = k.organization_id and mc.id = k.conexao_id
+         join public.calendar_connections gc
+           on gc.organization_id = new.organization_id and gc.id = new.connection_id
+        where k.organization_id = new.organization_id and mc.user_id = gc.user_id and k.destino)
+  then
+    new.is_destination := false;
+  end if;
+  return new;
+end
+$$;
+revoke all on function public.fn_mia_destino_google_automatico_respeita_o_da_microsoft() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_destino_google_automatico_respeita_o_da_microsoft on public.calendar_connection_calendars;
+create trigger trg_mia_destino_google_automatico_respeita_o_da_microsoft
+  before insert or update of is_destination on public.calendar_connection_calendars
+  for each row
+  when (new.is_destination)
+  execute function public.fn_mia_destino_google_automatico_respeita_o_da_microsoft();
+
+-- (b) Destino Google gravado (por qualquer caminho que passou pela regra acima)
+--     apaga o destino Microsoft da mesma pessoa.
+create or replace function public.fn_mia_destino_google_apaga_o_da_microsoft()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.mia_agenda_microsoft_calendarios k
+     set destino = false
+    from public.mia_agenda_microsoft_conexoes mc, public.calendar_connections gc
+   where k.organization_id = new.organization_id
+     and mc.organization_id = k.organization_id and mc.id = k.conexao_id
+     and gc.organization_id = new.organization_id and gc.id = new.connection_id
+     and mc.user_id = gc.user_id
+     and k.destino;
+  return null;
+end
+$$;
+revoke all on function public.fn_mia_destino_google_apaga_o_da_microsoft() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_destino_google_apaga_o_da_microsoft on public.calendar_connection_calendars;
+create trigger trg_mia_destino_google_apaga_o_da_microsoft
+  after insert or update of is_destination on public.calendar_connection_calendars
+  for each row
+  when (new.is_destination)
+  execute function public.fn_mia_destino_google_apaga_o_da_microsoft();
+
+-- (c) Do lado Microsoft: um destino por pessoa entre as contas Microsoft dela, e
+--     destino Microsoft apaga o destino Google. Só destino com escrita.
+create or replace function public.fn_mia_destino_microsoft_unico()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  dono uuid;
+begin
+  if new.papel not in ('owner','writer') or not new.disponivel then
+    raise exception 'microsoft_destino_sem_escrita' using errcode = '23514';
+  end if;
+  select user_id into dono from public.mia_agenda_microsoft_conexoes
+   where organization_id = new.organization_id and id = new.conexao_id;
+
+  update public.mia_agenda_microsoft_calendarios k
+     set destino = false
+    from public.mia_agenda_microsoft_conexoes mc
+   where k.organization_id = new.organization_id
+     and mc.organization_id = k.organization_id and mc.id = k.conexao_id
+     and mc.user_id = dono and k.id <> new.id and k.destino;
+
+  update public.calendar_connection_calendars k
+     set is_destination = false
+    from public.calendar_connections gc
+   where k.organization_id = new.organization_id
+     and gc.organization_id = k.organization_id and gc.id = k.connection_id
+     and gc.user_id = dono and k.is_destination;
+  return null;
+end
+$$;
+revoke all on function public.fn_mia_destino_microsoft_unico() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_destino_microsoft_unico on public.mia_agenda_microsoft_calendarios;
+create trigger trg_mia_destino_microsoft_unico
+  after insert or update of destino on public.mia_agenda_microsoft_calendarios
+  for each row
+  when (new.destino)
+  execute function public.fn_mia_destino_microsoft_unico();
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 10 · a escolha: fontes e UM destino, Google e Microsoft juntos
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Chamada pela sessão da pessoa (auth.uid()). As revisões das DUAS listas são
+-- conferidas antes de gravar: quem salvou uma tela velha recebe 40001 e relê.
+-- Destino Google: a escolha é gravada pela fn_google_selection DELE (as regras
+-- dele valem inteiras) e o lado Microsoft só atualiza fontes e zera o destino.
+-- Destino Microsoft: o lado Google recebe só as fontes, sem destino, e a revisão
+-- dele sobe para a tela dele saber que mudou.
+create or replace function public.fn_mia_agenda_selecao(
+  p_org uuid,
+  p_revisoes jsonb,
+  p_fontes_google uuid[],
+  p_fontes_microsoft uuid[],
+  p_destino_provedor text,
+  p_destino uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  ator uuid := auth.uid();
+  esperado jsonb;
+  atual jsonb;
+begin
+  if ator is null or not public.fn_role_at_least(p_org, 'agent') or not public.fn_support_write_allowed(p_org) then
+    raise exception 'agenda_selecao_proibida' using errcode = '42501';
+  end if;
+  perform 1 from public.user_organizations
+   where organization_id = p_org and user_id = ator and revoked_at is null
+   for update;
+  if not found then
+    raise exception 'agenda_dono_indisponivel' using errcode = '42501';
+  end if;
+  if p_destino_provedor not in ('google','microsoft') or p_destino is null then
+    raise exception 'agenda_destino_indisponivel' using errcode = '42501';
+  end if;
+
+  -- As revisões do lado Microsoft.
+  select coalesce(jsonb_agg(value order by value->>'connection_id'), '[]'::jsonb) into esperado
+    from jsonb_array_elements(coalesce(p_revisoes->'microsoft', '[]'::jsonb));
+  select coalesce(jsonb_agg(jsonb_build_object('connection_id', id, 'revision', revisao_da_escolha::text) order by id::text), '[]'::jsonb)
+    into atual
+    from public.mia_agenda_microsoft_conexoes
+   where organization_id = p_org and user_id = ator and status <> 'disconnected';
+  if atual is distinct from esperado then
+    raise exception 'agenda_selecao_desatualizada' using errcode = '40001';
+  end if;
+
+  -- As fontes Microsoft: agendas da própria pessoa, legíveis.
+  if exists (
+    select 1 from unnest(coalesce(p_fontes_microsoft, array[]::uuid[])) f(id)
+     where not exists (
+       select 1 from public.mia_agenda_microsoft_calendarios k
+         join public.mia_agenda_microsoft_conexoes c on c.organization_id = k.organization_id and c.id = k.conexao_id
+        where k.organization_id = p_org and k.id = f.id and c.user_id = ator and c.status = 'healthy' and k.disponivel)
+  ) then
+    raise exception 'agenda_fonte_indisponivel' using errcode = '42501';
+  end if;
+
+  if p_destino_provedor = 'google' then
+    -- Tudo do lado Google pelas regras dele, inclusive a conferência de revisão.
+    perform public.fn_google_selection(p_org, coalesce(p_revisoes->'google', '[]'::jsonb),
+                                       coalesce(p_fontes_google, array[]::uuid[]), p_destino);
+    update public.mia_agenda_microsoft_calendarios k
+       set destino = false,
+           conta_como_ocupado = k.id = any(coalesce(p_fontes_microsoft, array[]::uuid[])),
+           proxima_leitura_em = now()
+      from public.mia_agenda_microsoft_conexoes c
+     where k.organization_id = p_org and c.organization_id = p_org and c.id = k.conexao_id and c.user_id = ator;
+  else
+    -- As revisões do lado Google (o mesmo formato que a fn_google_selection confere).
+    select coalesce(jsonb_agg(value order by value->>'connection_id'), '[]'::jsonb) into esperado
+      from jsonb_array_elements(coalesce(p_revisoes->'google', '[]'::jsonb));
+    select coalesce(jsonb_agg(jsonb_build_object('connection_id', id, 'revision', calendar_selection_revision::text) order by id::text), '[]'::jsonb)
+      into atual
+      from public.calendar_connections
+     where organization_id = p_org and user_id = ator and provider = 'google_calendar';
+    if atual is distinct from esperado then
+      raise exception 'agenda_selecao_desatualizada' using errcode = '40001';
+    end if;
+    if not exists (
+      select 1 from public.mia_agenda_microsoft_calendarios k
+        join public.mia_agenda_microsoft_conexoes c on c.organization_id = k.organization_id and c.id = k.conexao_id
+       where k.organization_id = p_org and k.id = p_destino and c.user_id = ator and c.status = 'healthy'
+         and k.disponivel and k.papel in ('owner','writer')
+    ) then
+      raise exception 'agenda_destino_indisponivel' using errcode = '42501';
+    end if;
+    if exists (
+      select 1 from unnest(coalesce(p_fontes_google, array[]::uuid[])) f(id)
+       where not exists (
+         select 1 from public.calendar_connection_calendars k
+           join public.calendar_connections c on c.organization_id = k.organization_id and c.id = k.connection_id
+          where k.organization_id = p_org and k.id = f.id and c.user_id = ator and c.status = 'healthy' and k.available
+            and k.access_role in ('owner','writer','reader','writerWithoutPrivateAccess'))
+    ) then
+      raise exception 'agenda_fonte_indisponivel' using errcode = '42501';
+    end if;
+
+    update public.calendar_connection_calendars k
+       set is_destination = false,
+           counts_for_conflicts = k.id = any(coalesce(p_fontes_google, array[]::uuid[])),
+           sync_next_attempt_at = now()
+      from public.calendar_connections c
+     where k.organization_id = p_org and c.organization_id = p_org and k.connection_id = c.id and c.user_id = ator;
+    update public.calendar_connections
+       set calendar_selection_revision = calendar_selection_revision + 1
+     where organization_id = p_org and user_id = ator and provider = 'google_calendar';
+
+    update public.mia_agenda_microsoft_calendarios k
+       set destino = false
+      from public.mia_agenda_microsoft_conexoes c
+     where k.organization_id = p_org and c.organization_id = p_org and c.id = k.conexao_id
+       and c.user_id = ator and k.destino and k.id <> p_destino;
+    update public.mia_agenda_microsoft_calendarios k
+       set destino = k.id = p_destino,
+           conta_como_ocupado = k.id = any(coalesce(p_fontes_microsoft, array[]::uuid[])),
+           proxima_leitura_em = now()
+      from public.mia_agenda_microsoft_conexoes c
+     where k.organization_id = p_org and c.organization_id = p_org and c.id = k.conexao_id and c.user_id = ator;
+  end if;
+
+  update public.mia_agenda_microsoft_conexoes
+     set revisao_da_escolha = revisao_da_escolha + 1
+   where organization_id = p_org and user_id = ator and status <> 'disconnected';
+end
+$$;
+comment on function public.fn_mia_agenda_selecao(uuid, jsonb, uuid[], uuid[], text, uuid) is
+  'MIA (9011): a escolha das agendas da pessoa, Google e Microsoft juntos: fontes (o que ocupa) e UM destino. Destino Google passa pela fn_google_selection do upstream; destino Microsoft grava o nosso e tira o destino do lado Google. Revisoes das duas listas conferidas (40001 quando a tela esta velha).';
+revoke all on function public.fn_mia_agenda_selecao(uuid, jsonb, uuid[], uuid[], text, uuid) from public, anon;
+grant execute on function public.fn_mia_agenda_selecao(uuid, jsonb, uuid[], uuid[], text, uuid) to authenticated;
+
+
 -- ─── 9012 · os sinais do cartão do funil: a objeção aberta e quem mandou a última mensagem ───
 --
 -- Espelho EXATO da migration 9012 (supabase/migrations-mia/), onde está o porquê
@@ -4082,6 +5031,824 @@ update public.contacts
        principal_na_empresa = false
  where is_anonymized = true
    and (papel_na_empresa is not null or principal_na_empresa);
+
+
+-- ─── 9014 · agenda do Microsoft 365, entrega 2: publicação com conflitos ───
+--
+-- Espelho EXATO da migration 9014 (supabase/migrations-mia/), onde está o porquê
+-- inteiro. Idempotente, como todo o apêndice. Vai antes da varredura anon, que
+-- fecha o arquivo.
+--
+-- 9014 · agenda do Microsoft 365, entrega 2: publicação com conflitos
+--
+-- ── O que esta migration faz ────────────────────────────────────────────────
+--
+-- O que se marca no CRM vai para a agenda do Outlook de quem atende (quando o
+-- destino dela é uma agenda do Outlook), e o que muda lá volta: remarcar ou
+-- cancelar no Outlook remarca ou cancela aqui, com a atividade no negócio. Quando
+-- os dois lados mudaram, vira decisão humana, como no Google do upstream.
+-- Desenho: docs/fork/agenda-microsoft.md, 3.8 e 4.3.
+--
+-- ── Por que um espelho NOSSO do compromisso ────────────────────────────────
+--
+-- O vínculo do upstream mora em colunas `google_*` de `calendar_appointments`, e
+-- o motor dele (`fn_google_appointment`) publica no destino da pessoa de QUALQUER
+-- conexão. O compromisso que vai para o Outlook tem o vínculo dele em
+-- `mia_agenda_microsoft_compromissos` (1:1 com o compromisso), e a máquina de
+-- reserva e efetivação é nossa (`fn_mia_agenda_microsoft_compromisso`), com o
+-- mesmo contrato da dele: reserva de 90 s com época, revisão do domínio e
+-- revisão local conferidas em toda ação, escrita pendente como intenção (nunca
+-- recibo), base da comparação de três vias por hash (sem dado pessoal).
+--
+-- A revisão local é a `google_local_revision` que o gatilho DELE já sobe a cada
+-- mudança de horário, situação, título, descrição, local ou convidado: lida,
+-- nunca escrita. O espelho guarda a revisão que publicou.
+--
+-- A volta usa a `fn_appointment_change` pública dele (como servidor), que já
+-- cancela os follow-ups presos à revisão antiga e fecha os avisos da Central.
+--
+-- Os já publicados continuam onde estão: compromisso que já está no Google
+-- (`google_event_id`) não é publicado no Outlook. Só compromisso de pé e futuro
+-- é publicado: mandar o histórico da pessoa para o Outlook dela mandaria convite
+-- de reunião passada para cliente.
+--
+-- Nomes com prefixo `mia_`/`fn_mia_`: nada do upstream é redefinido.
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 1 · o vínculo compromisso ↔ evento do Outlook
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists public.mia_agenda_microsoft_compromissos (
+  appointment_id uuid primary key references public.calendar_appointments(id) on delete cascade,
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  conexao_id uuid references public.mia_agenda_microsoft_conexoes(id) on delete set null,
+  calendario_externo_id text,
+  -- O id IMUTÁVEL do evento (Prefer IdType="ImmutableId"). Nulo até a criação:
+  -- quem escolhe o id é a Microsoft.
+  evento_id text,
+  -- O `transactionId` do POST: a Graph descarta a criação repetida.
+  transacao_id uuid not null default gen_random_uuid(),
+  etag text,
+  base jsonb,
+  conflito jsonb,
+  escrita_pendente jsonb,
+  reserva_token uuid,
+  reserva_epoca bigint not null default 0,
+  reserva_ate timestamptz,
+  revisao_publicada bigint not null default 0,
+  proxima_tentativa_em timestamptz not null default now(),
+  erro text,
+  sincronizado_em timestamptz,
+  -- A reunião do Teams (entrega 3, migration 9015).
+  teams_pedido boolean not null default false,
+  teams_estado text not null default 'nao_pedido',
+  teams_erro text,
+  teams_tentativas integer not null default 0,
+  teams_pronto_em timestamptz,
+  -- A autorização de entrega do link dada na marcação pela IA (entrega 3).
+  entrega_da_ia jsonb,
+  entrega_armada_em timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint mia_agenda_microsoft_compromissos_teams_estado check (
+    teams_estado in ('nao_pedido','pendente','pronto','falhou','cancelado')
+  ),
+  constraint mia_agenda_microsoft_compromissos_teams_erro check (
+    teams_erro is null or teams_erro in ('microsoft_falhou','nao_permite','desconhecido','invalido','destino_google','sem_destino')
+  )
+);
+
+create unique index if not exists mia_agenda_microsoft_compromissos_evento_key
+  on public.mia_agenda_microsoft_compromissos (organization_id, conexao_id, calendario_externo_id, evento_id)
+  where evento_id is not null;
+create index if not exists mia_agenda_microsoft_compromissos_a_fazer_idx
+  on public.mia_agenda_microsoft_compromissos (proxima_tentativa_em)
+  where conexao_id is not null;
+
+comment on table public.mia_agenda_microsoft_compromissos is
+  'MIA (9014): o vinculo de um compromisso com o evento dele no Outlook (1:1), e o estado da sincronizacao: base da comparacao de tres vias por hash, conflito, escrita pendente, reserva e a revisao local publicada. Espelha as colunas google_* de calendar_appointments do upstream. Nenhum dado pessoal: o horario e o texto ficam no compromisso.';
+
+drop trigger if exists trg_mia_agenda_microsoft_compromissos_updated_at on public.mia_agenda_microsoft_compromissos;
+create trigger trg_mia_agenda_microsoft_compromissos_updated_at
+  before update on public.mia_agenda_microsoft_compromissos
+  for each row execute function public.fn_set_updated_at();
+
+alter table public.mia_agenda_microsoft_compromissos enable row level security;
+drop policy if exists mia_agenda_microsoft_compromissos_da_empresa on public.mia_agenda_microsoft_compromissos;
+create policy mia_agenda_microsoft_compromissos_da_empresa on public.mia_agenda_microsoft_compromissos
+  for select using (
+    (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
+  );
+revoke all on public.mia_agenda_microsoft_compromissos from anon, authenticated;
+-- A autorização de entrega (fronteira do atendimento) e a reserva ficam fora.
+grant select (appointment_id, organization_id, conexao_id, calendario_externo_id, evento_id, etag, conflito,
+              revisao_publicada, erro, sincronizado_em, teams_pedido, teams_estado, teams_erro,
+              teams_pronto_em, created_at, updated_at)
+  on public.mia_agenda_microsoft_compromissos to authenticated;
+grant select, insert, update, delete on public.mia_agenda_microsoft_compromissos to service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 2 · o anti-eco ganha corpo (a função é NOSSA, da 9011)
+-- ═══════════════════════════════════════════════════════════════════════════
+create or replace function public.fn_mia_agenda_microsoft_evento_e_compromisso(
+  p_org uuid, p_conexao uuid, p_calendario text, p_evento text
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.mia_agenda_microsoft_compromissos
+     where organization_id = p_org and conexao_id = p_conexao
+       and calendario_externo_id = p_calendario and evento_id = p_evento
+  );
+$$;
+revoke all on function public.fn_mia_agenda_microsoft_evento_e_compromisso(uuid, uuid, text, text) from public, anon, authenticated;
+grant execute on function public.fn_mia_agenda_microsoft_evento_e_compromisso(uuid, uuid, text, text) to service_role;
+
+-- O tipo do compromisso é reunião do Teams? Na 9014 nenhum é; a 9015 (Teams)
+-- redefine esta função, que é NOSSA.
+create or replace function public.fn_mia_agenda_tipo_e_teams(p_org uuid, p_tipo uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select false;
+$$;
+revoke all on function public.fn_mia_agenda_tipo_e_teams(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.fn_mia_agenda_tipo_e_teams(uuid, uuid) to service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 3 · mudança no compromisso põe o vínculo na frente da fila
+-- ═══════════════════════════════════════════════════════════════════════════
+-- O gatilho dele sobe `google_local_revision` e rearma o prazo do Google; este,
+-- nosso, rearma o do Outlook. Sem ele, uma remarcação feita aqui esperaria a
+-- próxima releitura (até 15 min) para chegar ao Outlook.
+create or replace function public.fn_mia_agenda_microsoft_compromisso_mudou()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.mia_agenda_microsoft_compromissos
+     set proxima_tentativa_em = now()
+   where appointment_id = new.id and organization_id = new.organization_id
+     and proxima_tentativa_em > now();
+  return null;
+end
+$$;
+revoke all on function public.fn_mia_agenda_microsoft_compromisso_mudou() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_agenda_microsoft_compromisso_mudou on public.calendar_appointments;
+create trigger trg_mia_agenda_microsoft_compromisso_mudou
+  after update of google_local_revision, status on public.calendar_appointments
+  for each row
+  when (new.google_local_revision is distinct from old.google_local_revision or new.status is distinct from old.status)
+  execute function public.fn_mia_agenda_microsoft_compromisso_mudou();
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 4 · quem a rotina de publicação pega
+-- ═══════════════════════════════════════════════════════════════════════════
+create or replace function public.fn_mia_agenda_microsoft_a_publicar(p_limite integer default 50)
+returns table (id uuid, organization_id uuid, user_id uuid)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select a.id, a.organization_id, a.owner_user_id
+    from public.calendar_appointments a
+    left join public.mia_agenda_microsoft_compromissos m on m.appointment_id = a.id
+   where a.owner_user_id is not null
+     and not exists (
+       select 1 from public.contacts c
+        where c.organization_id = a.organization_id and c.id = a.contact_id and c.is_anonymized)
+     and (
+       -- (a) Nunca publicado em lugar nenhum, de pé e futuro, e o destino de
+       --     quem atende é uma agenda do Outlook.
+       ((m.appointment_id is null or (m.conexao_id is null and m.proxima_tentativa_em <= now()))
+        and a.google_event_id is null
+        and a.status in ('pending','confirmed')
+        and a.ends_at > now()
+        and exists (
+          select 1 from public.mia_agenda_microsoft_calendarios k
+            join public.mia_agenda_microsoft_conexoes c
+              on c.organization_id = k.organization_id and c.id = k.conexao_id
+           where k.organization_id = a.organization_id and c.user_id = a.owner_user_id
+             and k.destino and c.status = 'healthy'))
+       -- (b) Já é do Outlook e há o que fazer: mudança daqui, releitura
+       --     periódica do que ainda não passou, decisão de conflito registrada.
+       or (m.conexao_id is not null and m.proxima_tentativa_em <= now()
+           and (m.conflito is null or m.conflito ? 'resolution')
+           and (a.ends_at > now() - interval '1 day' or a.google_local_revision > m.revisao_publicada))
+     )
+   order by coalesce(m.proxima_tentativa_em, a.created_at)
+   limit greatest(1, least(coalesce(p_limite, 50), 200));
+$$;
+revoke all on function public.fn_mia_agenda_microsoft_a_publicar(integer) from public, anon, authenticated;
+grant execute on function public.fn_mia_agenda_microsoft_a_publicar(integer) to service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 5 · a máquina de reserva e efetivação (o contrato de fn_google_appointment)
+-- ═══════════════════════════════════════════════════════════════════════════
+create or replace function public.fn_mia_agenda_microsoft_compromisso(
+  p_org uuid, p_id uuid, p_acao text, p_args jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  a public.calendar_appointments;
+  m public.mia_agenda_microsoft_compromissos;
+  k public.mia_agenda_microsoft_calendarios;
+  contato uuid;
+  reserva jsonb := p_args->'claim';
+  r jsonb;
+  remoto jsonb;
+  mudou boolean;
+  aceito boolean;
+  revisao_nova bigint;
+  teams boolean;
+begin
+  select contact_id into contato from public.calendar_appointments where organization_id = p_org and id = p_id;
+  if not found then
+    raise exception 'appointment_not_found' using errcode = 'P0002';
+  end if;
+  if contato is not null then
+    perform public.fn_service_lock(p_org, contato);
+  end if;
+  select * into a from public.calendar_appointments where organization_id = p_org and id = p_id for update;
+  if a.contact_id is distinct from contato then
+    raise exception 'appointment_stale' using errcode = '40001';
+  end if;
+  if contato is not null and exists (
+    select 1 from public.contacts where organization_id = p_org and id = contato and is_anonymized
+  ) then
+    if p_acao = 'claim' then
+      return jsonb_build_object('terminal', 'redacted');
+    end if;
+    raise exception 'microsoft_contato_anonimizado' using errcode = '42501';
+  end if;
+  if not exists (
+    select 1 from public.user_organizations
+     where organization_id = p_org and user_id = a.owner_user_id and revoked_at is null
+  ) then
+    raise exception 'microsoft_dono_indisponivel' using errcode = '42501';
+  end if;
+
+  select * into m from public.mia_agenda_microsoft_compromissos
+   where appointment_id = p_id and organization_id = p_org for update;
+
+  if p_acao = 'claim' then
+    if found and m.reserva_ate > clock_timestamp() then
+      return null;
+    end if;
+    if m.appointment_id is null or m.conexao_id is null then
+      -- Nunca publicado: reserva o destino do Outlook de quem atende.
+      if a.status not in ('pending','confirmed') or a.google_event_id is not null then
+        return null;
+      end if;
+      select k2.* into k
+        from public.mia_agenda_microsoft_calendarios k2
+        join public.mia_agenda_microsoft_conexoes c
+          on c.organization_id = k2.organization_id and c.id = k2.conexao_id
+       where k2.organization_id = p_org and c.user_id = a.owner_user_id and k2.destino;
+      if not found then
+        return null;
+      end if;
+      teams := public.fn_mia_agenda_tipo_e_teams(p_org, a.event_type_id);
+      if not k.disponivel or k.papel not in ('owner','writer') then
+        insert into public.mia_agenda_microsoft_compromissos (appointment_id, organization_id, erro, proxima_tentativa_em)
+        values (p_id, p_org, 'A agenda de destino no Outlook não permite publicação. Confira em Suas agendas.', now() + interval '15 minutes')
+        on conflict (appointment_id) do update set erro = excluded.erro, proxima_tentativa_em = excluded.proxima_tentativa_em;
+        return null;
+      end if;
+      insert into public.mia_agenda_microsoft_compromissos (
+        appointment_id, organization_id, conexao_id, calendario_externo_id, escrita_pendente,
+        teams_pedido, teams_estado, teams_erro
+      ) values (
+        p_id, p_org, k.conexao_id, k.calendario_externo_id, '{"reserva":true}'::jsonb,
+        teams, case when teams then 'pendente' else 'nao_pedido' end, null
+      )
+      on conflict (appointment_id) do update set
+        conexao_id = excluded.conexao_id,
+        calendario_externo_id = excluded.calendario_externo_id,
+        escrita_pendente = excluded.escrita_pendente,
+        teams_pedido = excluded.teams_pedido or mia_agenda_microsoft_compromissos.teams_pedido,
+        teams_estado = case when excluded.teams_pedido or mia_agenda_microsoft_compromissos.teams_pedido
+                            then 'pendente' else 'nao_pedido' end,
+        teams_erro = null,
+        erro = null
+      returning * into m;
+    end if;
+    update public.mia_agenda_microsoft_compromissos
+       set reserva_token = gen_random_uuid(),
+           reserva_epoca = reserva_epoca + 1,
+           reserva_ate = clock_timestamp() + interval '90 seconds'
+     where appointment_id = p_id
+     returning * into m;
+  else
+    if m.appointment_id is null
+       or m.reserva_token is distinct from (reserva->>'token')::uuid
+       or m.reserva_epoca::text is distinct from reserva->>'epoch'
+       or m.reserva_ate is null or m.reserva_ate <= clock_timestamp() then
+      raise exception 'microsoft_stale' using errcode = '40001';
+    end if;
+
+    if p_acao = 'release' then
+      update public.mia_agenda_microsoft_compromissos
+         set reserva_token = null, reserva_ate = null
+       where appointment_id = p_id;
+      return 'true'::jsonb;
+    end if;
+
+    if a.revision::text is distinct from p_args->>'revision'
+       or a.google_local_revision::text is distinct from p_args->>'local_revision'
+       or m.evento_id is distinct from p_args->>'event_id'
+       or m.conexao_id::text is distinct from p_args->>'connection_id'
+       or m.calendario_externo_id is distinct from p_args->>'calendar_id' then
+      raise exception 'microsoft_stale' using errcode = '40001';
+    end if;
+
+    if p_acao = 'renew' then
+      if not exists (
+        select 1 from public.mia_agenda_microsoft_conexoes c
+          join public.mia_agenda_microsoft_calendarios k2
+            on k2.organization_id = c.organization_id and k2.conexao_id = c.id
+         where c.organization_id = p_org and c.id = m.conexao_id and c.user_id = a.owner_user_id
+           and c.status = 'healthy' and k2.calendario_externo_id = m.calendario_externo_id
+           and k2.disponivel and k2.papel in ('owner','writer')
+      ) then
+        raise exception 'microsoft_conexao_indisponivel' using errcode = '42501';
+      end if;
+      update public.mia_agenda_microsoft_compromissos
+         set reserva_ate = clock_timestamp() + interval '90 seconds'
+       where appointment_id = p_id
+       returning * into m;
+    elsif p_acao = 'error' then
+      update public.mia_agenda_microsoft_compromissos
+         set erro = left(p_args->>'message', 200),
+             proxima_tentativa_em = now() + interval '15 minutes'
+       where appointment_id = p_id;
+      return 'true'::jsonb;
+    elsif p_acao = 'idle' then
+      update public.mia_agenda_microsoft_compromissos
+         set proxima_tentativa_em = now() + interval '15 minutes'
+       where appointment_id = p_id;
+      return 'true'::jsonb;
+    elsif p_acao = 'prepare' then
+      if (m.escrita_pendente is not null and m.escrita_pendente <> '{"reserva":true}'::jsonb)
+         or m.conflito is not null then
+        raise exception 'microsoft_escrita_indisponivel' using errcode = '40001';
+      end if;
+      update public.mia_agenda_microsoft_compromissos
+         set escrita_pendente = p_args->'operation'
+       where appointment_id = p_id;
+      return 'true'::jsonb;
+    elsif p_acao = 'commit' then
+      r := p_args->'result';
+      remoto := r->'remote';
+      revisao_nova := a.google_local_revision;
+      if r ? 'operation_id' and m.escrita_pendente->>'operation_id' is distinct from r->>'operation_id' then
+        raise exception 'microsoft_stale' using errcode = '40001';
+      end if;
+      if r ? 'apply_remote' then
+        if a.status not in ('pending','confirmed') then
+          raise exception 'microsoft_outcome_protected' using errcode = '40001';
+        end if;
+        -- Remarcar em cima de outro compromisso de quem atende não é aplicado:
+        -- vira conflito para uma pessoa decidir.
+        if not coalesce((remoto->>'cancelled')::boolean, false) and exists (
+          select 1 from public.calendar_appointments outro
+           where outro.organization_id = p_org and outro.owner_user_id = a.owner_user_id and outro.id <> a.id
+             and outro.status in ('pending','confirmed')
+             and outro.starts_at < (remoto->>'ends_at')::timestamptz
+             and outro.ends_at > (remoto->>'starts_at')::timestamptz
+        ) then
+          return jsonb_build_object('overlap', true);
+        end if;
+        mudou := row(a.starts_at, a.ends_at, a.status = 'cancelled') is distinct from
+                 row((remoto->>'starts_at')::timestamptz, (remoto->>'ends_at')::timestamptz,
+                     coalesce((remoto->>'cancelled')::boolean, false));
+        if mudou then
+          perform public.fn_appointment_change(
+            p_org, p_id, a.revision,
+            jsonb_build_object('starts_at', remoto->>'starts_at', 'ends_at', remoto->>'ends_at')
+            || case when coalesce((remoto->>'cancelled')::boolean, false)
+                    then '{"status":"cancelled","cancellation_reason":"Cancelado no Outlook"}'::jsonb
+                    else '{}'::jsonb end
+          );
+          insert into public.crm_lead_activities (organization_id, lead_id, contact_id, type, source_module, source_id, actor_kind, reason, payload)
+          select p_org, l.lead_id, a.contact_id,
+                 case when coalesce((remoto->>'cancelled')::boolean, false) then 'appointment_cancelled' else 'appointment_rescheduled' end,
+                 'agenda', p_id, 'system',
+                 case when coalesce((remoto->>'cancelled')::boolean, false) then 'Cancelado no Outlook' else 'Remarcado no Outlook' end,
+                 jsonb_build_object('origin', 'outlook', 'appointment_id', p_id, 'resolution_actor_id', m.conflito->'resolution'->>'actor_id')
+            from public.crm_lead_links l
+           where l.organization_id = p_org and l.target_id = p_id and l.target_kind = 'appointment'
+           group by l.lead_id;
+          select * into a from public.calendar_appointments where organization_id = p_org and id = p_id;
+          revisao_nova := a.google_local_revision;
+        end if;
+      end if;
+      aceito := coalesce((r->>'ack')::boolean, false);
+      update public.mia_agenda_microsoft_compromissos set
+        base = case when r ? 'base' then r->'base' else base end,
+        etag = case when r ? 'etag' then r->>'etag' else etag end,
+        evento_id = case when r ? 'event_id' and r->>'event_id' is not null then r->>'event_id' else evento_id end,
+        conflito = case when r ? 'conflict' then nullif(r->'conflict', 'null'::jsonb) else conflito end,
+        escrita_pendente = case
+          when coalesce((r->>'retry_creation')::boolean, false) and base is null and escrita_pendente->>'method' = 'POST'
+            then '{"reserva":true}'::jsonb
+          when coalesce((r->>'clear_pending')::boolean, false) then null
+          else escrita_pendente end,
+        revisao_publicada = case when aceito then revisao_nova else revisao_publicada end,
+        sincronizado_em = case when aceito then now() else sincronizado_em end,
+        erro = null,
+        proxima_tentativa_em = now() + interval '5 minutes'
+       where appointment_id = p_id
+       returning * into m;
+    else
+      raise exception 'microsoft_acao_invalida' using errcode = '22023';
+    end if;
+  end if;
+
+  select k2.* into k from public.mia_agenda_microsoft_calendarios k2
+   where k2.organization_id = p_org and k2.conexao_id = m.conexao_id
+     and k2.calendario_externo_id = m.calendario_externo_id;
+  return jsonb_build_object(
+    'appointment', jsonb_build_object(
+      'id', a.id, 'organization_id', a.organization_id, 'owner_user_id', a.owner_user_id,
+      'contact_id', a.contact_id, 'event_type_id', a.event_type_id, 'title', a.title,
+      'description', a.description, 'starts_at', a.starts_at, 'ends_at', a.ends_at,
+      'time_zone', a.time_zone, 'status', a.status, 'location_kind', a.location_kind,
+      'location_details', a.location_details, 'meeting_url', a.meeting_url,
+      'guest_email', a.guest_email, 'revision', a.revision::text,
+      'local_revision', a.google_local_revision::text, 'google_event_id', a.google_event_id
+    ),
+    'mirror', jsonb_build_object(
+      'connection_id', m.conexao_id, 'calendar_id', m.calendario_externo_id, 'event_id', m.evento_id,
+      'transaction_id', m.transacao_id, 'etag', m.etag, 'base', m.base, 'conflict', m.conflito,
+      'pending', m.escrita_pendente, 'published_revision', m.revisao_publicada::text,
+      'teams_requested', m.teams_pedido, 'teams_state', m.teams_estado, 'teams_attempts', m.teams_tentativas
+    ),
+    'meeting_providers', to_jsonb(coalesce(k.reunioes_permitidas, array[]::text[])),
+    'claim', jsonb_build_object('token', m.reserva_token, 'epoch', m.reserva_epoca::text, 'lease_until', m.reserva_ate)
+  );
+end
+$$;
+comment on function public.fn_mia_agenda_microsoft_compromisso(uuid, uuid, text, jsonb) is
+  'MIA (9014): a reserva e a efetivacao da publicacao de um compromisso no Outlook, com o contrato de fn_google_appointment do upstream (reserva de 90 s, revisoes conferidas, escrita pendente como intencao, volta pela fn_appointment_change com atividade "Remarcado no Outlook"/"Cancelado no Outlook"). Execucao so para service_role.';
+revoke all on function public.fn_mia_agenda_microsoft_compromisso(uuid, uuid, text, jsonb) from public, anon, authenticated;
+grant execute on function public.fn_mia_agenda_microsoft_compromisso(uuid, uuid, text, jsonb) to service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 6 · a decisão de conflito, pela pessoa responsável
+-- ═══════════════════════════════════════════════════════════════════════════
+create or replace function public.fn_mia_agenda_microsoft_resolver(
+  p_org uuid, p_id uuid, p_revision text, p_local_revision text, p_etag text, p_escolha text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  a public.calendar_appointments;
+  m public.mia_agenda_microsoft_compromissos;
+  contato uuid;
+begin
+  if auth.uid() is null or not public.fn_role_at_least(p_org, 'agent') or not public.fn_support_write_allowed(p_org) then
+    raise exception 'microsoft_decisao_proibida' using errcode = '42501';
+  end if;
+  select contact_id into contato from public.calendar_appointments where organization_id = p_org and id = p_id;
+  if contato is not null then
+    perform public.fn_service_lock(p_org, contato);
+  end if;
+  select * into a from public.calendar_appointments where organization_id = p_org and id = p_id for update;
+  if not found or a.owner_user_id is distinct from auth.uid() then
+    raise exception 'microsoft_decisao_proibida' using errcode = '42501';
+  end if;
+  select * into m from public.mia_agenda_microsoft_compromissos
+   where appointment_id = p_id and organization_id = p_org for update;
+  if not found then
+    raise exception 'microsoft_decisao_proibida' using errcode = '42501';
+  end if;
+  if a.revision::text is distinct from p_revision
+     or a.google_local_revision::text is distinct from p_local_revision
+     or m.etag is distinct from p_etag then
+    raise exception 'microsoft_stale' using errcode = '40001';
+  end if;
+  if p_escolha = 'retry' then
+    if m.conflito is not null then
+      raise exception 'microsoft_conflito_pede_escolha' using errcode = '40001';
+    end if;
+    update public.mia_agenda_microsoft_compromissos set proxima_tentativa_em = now() where appointment_id = p_id;
+  else
+    if p_escolha not in ('outlook','local','preserve_remote') or m.conflito is null then
+      raise exception 'microsoft_escolha_invalida' using errcode = '22023';
+    end if;
+    update public.mia_agenda_microsoft_compromissos
+       set conflito = conflito || jsonb_build_object('resolution', jsonb_build_object('choice', p_escolha, 'actor_id', auth.uid())),
+           proxima_tentativa_em = now()
+     where appointment_id = p_id;
+  end if;
+end
+$$;
+comment on function public.fn_mia_agenda_microsoft_resolver(uuid, uuid, text, text, text, text) is
+  'MIA (9014): a pessoa responsavel decide o conflito de um compromisso com o Outlook (usar o do Outlook, manter o daqui, preservar os campos do Outlook) ou pede nova tentativa. Revisoes e etag conferidos: a decisao vale para a comparacao que ela viu.';
+revoke all on function public.fn_mia_agenda_microsoft_resolver(uuid, uuid, text, text, text, text) from public, anon;
+grant execute on function public.fn_mia_agenda_microsoft_resolver(uuid, uuid, text, text, text, text) to authenticated;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 7 · LGPD: anonimizar o contato para a sincronização do compromisso
+-- ═══════════════════════════════════════════════════════════════════════════
+-- A redação DELE (`fn_redigir_agenda_do_contato_anonimizado`) já limpa o
+-- compromisso (título, descrição, local, link). Este gatilho, nosso, limpa o
+-- estado da sincronização com o Outlook, como o `fn_google_redact_contact` faz
+-- com as colunas google_*.
+create or replace function public.fn_mia_agenda_microsoft_redige_contato()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.mia_agenda_microsoft_compromissos m
+     set base = null, conflito = null, escrita_pendente = null, etag = null,
+         reserva_token = null, reserva_ate = null, reserva_epoca = m.reserva_epoca + 1,
+         entrega_da_ia = null,
+         erro = 'Contato anonimizado. Sincronização interrompida.'
+    from public.calendar_appointments a
+   where a.organization_id = new.organization_id and a.contact_id = new.id
+     and m.appointment_id = a.id;
+  return new;
+end
+$$;
+revoke all on function public.fn_mia_agenda_microsoft_redige_contato() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_agenda_microsoft_redige_contato on public.contacts;
+create trigger trg_mia_agenda_microsoft_redige_contato
+  after update of is_anonymized on public.contacts
+  for each row
+  when (new.is_anonymized is true)
+  execute function public.fn_mia_agenda_microsoft_redige_contato();
+
+
+-- ─── 9015 · agenda do Microsoft 365, entrega 3: Microsoft Teams ───
+--
+-- Espelho EXATO da migration 9015 (supabase/migrations-mia/), onde está o porquê
+-- inteiro. Idempotente, como todo o apêndice. Vai antes da varredura anon, que
+-- fecha o arquivo.
+--
+-- 9015 · agenda do Microsoft 365, entrega 3: Microsoft Teams
+--
+-- ── O que esta migration faz ────────────────────────────────────────────────
+--
+-- "Microsoft Teams" passa a ser um "onde acontece" do tipo de agendamento. Ao
+-- publicar no Outlook um compromisso desse tipo, a reunião é criada no próprio
+-- evento, o link vai para `calendar_appointments.meeting_url` e, quando foi a IA
+-- que marcou numa conversa, o link é entregue ao cliente pelo WhatsApp pela
+-- MESMA máquina de entrega do upstream (genérica desde a 0366). Desenho:
+-- docs/fork/agenda-microsoft.md, 3.6 e 3.7.
+--
+-- ── Por que o Teams é um "Link de vídeo" marcado, e não um local novo ──────
+--
+-- O local é fechado por CHECK do upstream em `calendar_event_types` e
+-- `calendar_appointments`; acrescentar `microsoft_teams` seria redefinir as
+-- constraints dele (regra 3 do docs/FORK-MIA.md). O Teams É um link de vídeo:
+-- o tipo fica `video_link` com `location_details = 'Microsoft Teams'`, e a marca
+-- mora em `mia_agenda_tipos_com_teams`. Tudo o que o upstream mostra de "link de
+-- vídeo" passa a mostrar o Teams, sem mexer nele.
+--
+-- ── Por que a entrega do link é ARMADA aqui, e não na marcação ─────────────
+--
+-- A entrega dele só ESPERA o link quando o local é `google_meet`; para
+-- `video_link` ela enfileira na hora e mandaria a mensagem sem o link. Então a
+-- marcação pela IA guarda a autorização no nosso espelho (`entrega_da_ia`) e
+-- `fn_mia_agenda_microsoft_teams` arma `meeting_delivery` quando o link fica
+-- pronto. Daí em diante é a máquina DELE: ela confere se o atendimento ainda é
+-- o mesmo (senão marca `stale` e avisa na Central), respeita opt-out, LGPD,
+-- janela e limites do canal.
+--
+-- Nomes com prefixo `mia_`/`fn_mia_`: nada do upstream é redefinido.
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 1 · quais tipos de agendamento são reunião do Teams
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists public.mia_agenda_tipos_com_teams (
+  event_type_id uuid primary key references public.calendar_event_types(id) on delete cascade,
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+comment on table public.mia_agenda_tipos_com_teams is
+  'MIA (9015): os tipos de agendamento "Link de video" que sao reuniao do Microsoft Teams. A publicacao no Outlook pede a reuniao no evento e grava o link em calendar_appointments.meeting_url. Existe porque o CHECK do local e do upstream.';
+
+alter table public.mia_agenda_tipos_com_teams enable row level security;
+drop policy if exists mia_agenda_tipos_com_teams_da_empresa on public.mia_agenda_tipos_com_teams;
+create policy mia_agenda_tipos_com_teams_da_empresa on public.mia_agenda_tipos_com_teams
+  for select using (
+    (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
+  );
+revoke all on public.mia_agenda_tipos_com_teams from anon, authenticated;
+grant select on public.mia_agenda_tipos_com_teams to authenticated;
+grant select, insert, update, delete on public.mia_agenda_tipos_com_teams to service_role;
+
+-- A função da 9014 (NOSSA) ganha corpo.
+create or replace function public.fn_mia_agenda_tipo_e_teams(p_org uuid, p_tipo uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p_tipo is not null and exists (
+    select 1 from public.mia_agenda_tipos_com_teams
+     where organization_id = p_org and event_type_id = p_tipo
+  );
+$$;
+revoke all on function public.fn_mia_agenda_tipo_e_teams(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.fn_mia_agenda_tipo_e_teams(uuid, uuid) to service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 2 · o que a publicação observou da reunião, e a entrega armada
+-- ═══════════════════════════════════════════════════════════════════════════
+create or replace function public.fn_mia_agenda_microsoft_teams(p_org uuid, p_id uuid, p_args jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  a public.calendar_appointments;
+  m public.mia_agenda_microsoft_compromissos;
+  r jsonb := p_args->'result';
+  contato uuid;
+begin
+  select contact_id into contato from public.calendar_appointments where organization_id = p_org and id = p_id;
+  if contato is not null then
+    perform public.fn_service_lock(p_org, contato);
+  end if;
+  select * into a from public.calendar_appointments where organization_id = p_org and id = p_id for update;
+  select * into m from public.mia_agenda_microsoft_compromissos where appointment_id = p_id and organization_id = p_org for update;
+  if a.id is null or m.appointment_id is null
+     or m.reserva_token is distinct from (p_args->'claim'->>'token')::uuid
+     or m.reserva_epoca::text is distinct from p_args->'claim'->>'epoch'
+     or m.reserva_ate is null or m.reserva_ate <= clock_timestamp()
+     or a.revision::text is distinct from p_args->>'revision'
+     or a.google_local_revision::text is distinct from p_args->>'local_revision' then
+    raise exception 'microsoft_stale' using errcode = '40001';
+  end if;
+  if not m.teams_pedido or a.status = 'cancelled' then
+    return;
+  end if;
+
+  if r->>'estado' = 'pronto' then
+    if coalesce(r->>'url', '') !~ '^https://teams[.](microsoft|live)[.]com/' then
+      raise exception 'microsoft_teams_link_invalido' using errcode = '22023';
+    end if;
+    update public.mia_agenda_microsoft_compromissos
+       set teams_estado = 'pronto', teams_erro = null, teams_pronto_em = coalesce(teams_pronto_em, now())
+     where appointment_id = p_id;
+    -- O link vai para o compromisso: tudo o que o upstream mostra e manda de
+    -- "link de vídeo" passa a ser o Teams.
+    update public.calendar_appointments
+       set meeting_url = r->>'url'
+     where organization_id = p_org and id = p_id and location_kind = 'video_link'
+       and meeting_url is distinct from r->>'url';
+    -- A entrega autorizada pela IA na marcação, armada agora que há link.
+    if m.entrega_da_ia is not null and m.entrega_armada_em is null and a.status in ('pending','confirmed') then
+      update public.calendar_appointments
+         set meeting_delivery = jsonb_build_object(
+               'state', 'waiting_for_link',
+               'generation', gen_random_uuid(),
+               'service_boundary', m.entrega_da_ia->'service_boundary',
+               'source_operation_id', m.entrega_da_ia->'source_operation_id',
+               'authorized_by', m.entrega_da_ia->'authorized_by')
+       where organization_id = p_org and id = p_id
+         and coalesce(meeting_delivery->>'state', 'none') = 'none';
+      update public.mia_agenda_microsoft_compromissos set entrega_armada_em = now() where appointment_id = p_id;
+    end if;
+  elsif r->>'estado' = 'pendente' then
+    update public.mia_agenda_microsoft_compromissos
+       set teams_tentativas = teams_tentativas + 1
+     where appointment_id = p_id;
+  elsif r->>'estado' = 'falhou' then
+    if coalesce(r->>'erro', '') not in ('microsoft_falhou','nao_permite','desconhecido','invalido') then
+      raise exception 'microsoft_teams_erro_invalido' using errcode = '22023';
+    end if;
+    update public.mia_agenda_microsoft_compromissos
+       set teams_estado = 'falhou', teams_erro = r->>'erro', teams_tentativas = teams_tentativas + 1
+     where appointment_id = p_id;
+    perform public.fn_meet_notice(p_org, p_id, 'meeting_failed');
+  else
+    raise exception 'microsoft_teams_estado_invalido' using errcode = '22023';
+  end if;
+end
+$$;
+comment on function public.fn_mia_agenda_microsoft_teams(uuid, uuid, jsonb) is
+  'MIA (9015): grava o que a publicacao no Outlook observou da reuniao do Teams (pronto com o link validado, pendente, falhou) sob a mesma reserva da publicacao. Pronto: o link vai para calendar_appointments.meeting_url e, se a IA marcou numa conversa, a entrega do upstream e armada (meeting_delivery waiting_for_link). Falhou: aviso na Central (fn_meet_notice do upstream).';
+revoke all on function public.fn_mia_agenda_microsoft_teams(uuid, uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.fn_mia_agenda_microsoft_teams(uuid, uuid, jsonb) to service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 3 · o compromisso Teams que não vai para o Outlook
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Quem atende publica no Google (ou não tem destino): o Teams não pode ser
+-- criado. Uma linha no espelho registra isso (o detalhe do compromisso mostra o
+-- porquê) e a Central avisa UMA vez. Se depois a pessoa escolher um destino do
+-- Outlook e o compromisso ainda não estiver no Google, a publicação o pega.
+create or replace function public.fn_mia_agenda_microsoft_teams_sem_outlook(p_limite integer default 50)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  c record;
+  n integer := 0;
+begin
+  for c in
+    select a.id, a.organization_id, (a.google_event_id is not null) as no_google
+      from public.calendar_appointments a
+      join public.mia_agenda_tipos_com_teams t
+        on t.organization_id = a.organization_id and t.event_type_id = a.event_type_id
+     where a.status in ('pending','confirmed') and a.ends_at > now() and a.owner_user_id is not null
+       and not exists (select 1 from public.mia_agenda_microsoft_compromissos m where m.appointment_id = a.id)
+       and (a.google_event_id is not null or not exists (
+         select 1 from public.mia_agenda_microsoft_calendarios k
+           join public.mia_agenda_microsoft_conexoes cx on cx.organization_id = k.organization_id and cx.id = k.conexao_id
+          where k.organization_id = a.organization_id and cx.user_id = a.owner_user_id and k.destino and cx.status = 'healthy'))
+       and a.created_at < now() - interval '2 minutes'
+     order by a.created_at
+     limit greatest(1, least(coalesce(p_limite, 50), 200))
+  loop
+    insert into public.mia_agenda_microsoft_compromissos (
+      appointment_id, organization_id, teams_pedido, teams_estado, teams_erro, proxima_tentativa_em
+    ) values (
+      c.id, c.organization_id, true, 'falhou', case when c.no_google then 'destino_google' else 'sem_destino' end,
+      now() + interval '1 hour'
+    ) on conflict (appointment_id) do nothing;
+    begin
+      perform public.fn_meet_notice(c.organization_id, c.id, 'meeting_failed');
+    exception when others then
+      null; -- o aviso é melhor esforço: a tela do compromisso já diz o porquê.
+    end;
+    n := n + 1;
+  end loop;
+  return n;
+end
+$$;
+comment on function public.fn_mia_agenda_microsoft_teams_sem_outlook(integer) is
+  'MIA (9015): registra os compromissos de tipo Teams que nao podem ter o Teams (quem atende publica no Google ou nao tem destino) e avisa na Central uma vez. Execucao so para service_role.';
+revoke all on function public.fn_mia_agenda_microsoft_teams_sem_outlook(integer) from public, anon, authenticated;
+grant execute on function public.fn_mia_agenda_microsoft_teams_sem_outlook(integer) to service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 4 · o link do Teams sai dos estados da IA, como o do Meet
+-- ═══════════════════════════════════════════════════════════════════════════
+-- O upstream troca o link do Meet por um marcador nas tabelas de estado da IA
+-- (`fn_meet_minimize_runtime`, 0226): o link é credencial de entrada na reunião
+-- e o lugar dele é o compromisso. O gatilho NOSSO faz o mesmo com o do Teams,
+-- nas mesmas seis tabelas e com os mesmos marcadores.
+create or replace function public.fn_mia_teams_minimize_runtime()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  new := jsonb_populate_record(
+    new,
+    regexp_replace(
+      to_jsonb(new)::text,
+      'https://teams[.](microsoft|live)[.]com/[^[:space:]"\\]+',
+      case when tg_table_name = 'outbound_copies' then '[meet-link]' else '[link da reunião disponível na Agenda]' end,
+      'g'
+    )::jsonb
+  );
+  return new;
+end
+$$;
+revoke all on function public.fn_mia_teams_minimize_runtime() from public, anon, authenticated;
+
+do $$
+declare
+  tab text;
+begin
+  foreach tab in array array['lead_checkpoints','lead_state','lead_state_transitions','agent_cases','outbound_copies','conversations'] loop
+    if to_regclass('public.' || tab) is not null then
+      execute format('drop trigger if exists trg_mia_teams_minimize_runtime on public.%I', tab);
+      execute format('create trigger trg_mia_teams_minimize_runtime before insert or update on public.%I for each row execute function public.fn_mia_teams_minimize_runtime()', tab);
+    end if;
+  end loop;
+end
+$$;
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----

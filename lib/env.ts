@@ -473,6 +473,14 @@ const schema = z.object({
   GOOGLE_CALENDAR_CLIENT_ID: z.string().optional().default(""),
   GOOGLE_CALENDAR_CLIENT_SECRET: z.string().optional().default(""),
 
+  // FORK MIA (9011): a agenda do Outlook / Microsoft 365. O mesmo contrato das
+  // duas de cima: opcionais, e a tela `/admin/microsoft` vale por cima delas.
+  // `TENANT` vazio é `common` (conta de trabalho e pessoal). Ver
+  // docs/fork/agenda-microsoft.md.
+  MICROSOFT_CALENDAR_CLIENT_ID: z.string().optional().default(""),
+  MICROSOFT_CALENDAR_CLIENT_SECRET: z.string().optional().default(""),
+  MICROSOFT_CALENDAR_TENANT: z.string().optional().default(""),
+
   // Google Ads — credencial da INSTALAÇÃO, não da organização (migration 0307).
   // O developer token pertence a quem construiu o software, não à conta de
   // anúncios de cada cliente: uma instalação usa o MESMO token pra reportar

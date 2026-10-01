@@ -146,6 +146,9 @@ export {
   CalendarX,
   CalendarCheck,
   GoogleLogo,
+  // FORK MIA (9011): a agenda do Outlook e o Teams.
+  MicrosoftOutlookLogo,
+  MicrosoftTeamsLogo,
   MapPin,
   ArrowsOutSimple,
   // carteira do cliente (crédito de disparo) — o barril não tinha NENHUM ícone

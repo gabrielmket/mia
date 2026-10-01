@@ -47,6 +47,14 @@ const LIDAS_PELO_CLIENTE = [
   // .61 — o dono de cada Página da Meta (migration 9004): gerente lê as da
   // própria empresa, só a plataforma atribui.
   "mia_paginas_da_meta",
+  // 9011 — a agenda do Outlook: dono da conta ou gerente lê, só o servidor escreve.
+  "mia_agenda_microsoft_conexoes",
+  "mia_agenda_microsoft_calendarios",
+  "mia_agenda_microsoft_eventos",
+  // 9014 — o vínculo do compromisso com o evento do Outlook.
+  "mia_agenda_microsoft_compromissos",
+  // 9015 — os tipos de agendamento que são reunião do Teams.
+  "mia_agenda_tipos_com_teams",
 ] as const;
 
 /**
@@ -65,6 +73,14 @@ const SO_A_PLATAFORMA_ESCREVE = [
   "mia_leads_da_meta_leituras",
   "mia_leads_da_meta_recebidos",
   "mia_paginas_da_meta",
+  // 9011 — a agenda do Outlook: dono da conta ou gerente lê, só o servidor escreve.
+  "mia_agenda_microsoft_conexoes",
+  "mia_agenda_microsoft_calendarios",
+  "mia_agenda_microsoft_eventos",
+  // 9014 — o vínculo do compromisso com o evento do Outlook.
+  "mia_agenda_microsoft_compromissos",
+  // 9015 — os tipos de agendamento que são reunião do Teams.
+  "mia_agenda_tipos_com_teams",
 ] as const;
 
 /** As que a sessão do cliente ESCREVE, cada uma com a linha que tentaria gravar no vizinho. */
@@ -129,6 +145,34 @@ function semear(org: string, gestor: string, tag: string): string {
     )
     insert into public.mia_leads_da_meta_recebidos (organization_id, chave_do_lead, formulario_id, desfecho)
       select '${org}', 'chave-${tag}', f.id, 'recusado' from f;
+    -- 9011: a conta do Outlook do gestor, uma agenda e um evento de ocupação.
+    with c as (
+      insert into public.mia_agenda_microsoft_conexoes (organization_id, user_id, conta_email, microsoft_user_id, status)
+        values ('${org}', '${gestor}', 'mia-rls-${tag}@invariant.test', 'ms-${tag}', 'healthy')
+        returning id
+    ), k as (
+      insert into public.mia_agenda_microsoft_calendarios (organization_id, conexao_id, calendario_externo_id, nome, papel, conta_como_ocupado)
+        select '${org}', c.id, 'cal-${tag}', 'Calendário', 'owner', true from c
+        returning conexao_id
+    )
+    insert into public.mia_agenda_microsoft_eventos (organization_id, conexao_id, calendario_externo_id, evento_externo_id, inicio, fim)
+      select '${org}', k.conexao_id, 'cal-${tag}', 'ev-${tag}', timestamptz '2030-01-02 10:00+00', timestamptz '2030-01-02 11:00+00' from k;
+    -- 9014: um compromisso publicado no Outlook.
+    with ap as (
+      insert into public.calendar_appointments (organization_id, title, starts_at, ends_at, owner_user_id)
+        values ('${org}', 'Compromisso ${tag}', timestamptz '2030-01-03 10:00+00', timestamptz '2030-01-03 11:00+00', '${gestor}')
+        returning id
+    )
+    insert into public.mia_agenda_microsoft_compromissos (appointment_id, organization_id, evento_id)
+      select ap.id, '${org}', 'ev-pub-${tag}' from ap;
+    -- 9015: um tipo de agendamento Teams.
+    with tp as (
+      insert into public.calendar_event_types (organization_id, name, slug, location_kind, location_details)
+        values ('${org}', 'Reunião Teams ${tag}', 'reuniao-teams-mia-${tag}', 'video_link', 'Microsoft Teams')
+        returning id
+    )
+    insert into public.mia_agenda_tipos_com_teams (event_type_id, organization_id)
+      select tp.id, '${org}' from tp;
   `;
 }
 

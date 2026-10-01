@@ -7,6 +7,10 @@ import { createClient } from "@/lib/supabase/server";
 import { clientePelaAgendaLigado, colegasPodemMexerNaAgendaLigado } from "@/lib/schemas/settings";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 
+import { agendasConectadasDaMia } from "@/components/agenda/microsoft/agendas-da-mia";
+import { microsoftEstaConfigurada } from "@/lib/agenda/microsoft/config";
+import { teamsNaTelaDeTipos } from "@/lib/agenda-mia/tipos-com-teams";
+
 import { TiposDeAgendamentoClient, type TipoRow } from "./_client";
 
 export const dynamic = "force-dynamic";
@@ -91,6 +95,8 @@ export default async function TiposDeAgendamentoPage() {
   // declarada, e o fallback abaixo volta ao rótulo de hoje. Degrada, não some.
   const nomes = await nomesDosAtendentes((pessoas ?? []).map((p) => String(p.user_id)));
 
+  // FORK MIA (9015): o Teams nos tipos e o aviso em "Suas agendas".
+  const teams = await teamsNaTelaDeTipos({ organizationId: activeOrg.orgId, userId: user.id, microsoftConfigurada: await microsoftEstaConfigurada() });
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
@@ -122,6 +128,9 @@ export default async function TiposDeAgendamentoPage() {
         // `admin`, e não `manager` como os prazos ao lado: ligar reescreve as
         // etiquetas de todo contato com histórico. A RPC cobra de novo.
         podeLigarClientePelaAgenda={ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin}
+        // FORK MIA (9011): Google e Outlook juntos, quando há Microsoft.
+        agendasConectadas={await agendasConectadasDaMia({ organizationId: activeOrg.orgId, userId: user.id, tiposTeamsDaPessoa: teams.tiposTeamsDaPessoa })}
+        teams={teams}
       />
     </div>
   );

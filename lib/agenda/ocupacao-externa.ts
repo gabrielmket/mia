@@ -69,6 +69,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { ocupacaoMicrosoftDoDono } from "@/lib/agenda-mia/ocupacao";
+
 /** Um compromisso externo como a tela o desenha: rótulo, dono e a fatia do recorte. */
 export interface BlocoExternoDaTela {
   id: string;
@@ -152,13 +154,27 @@ export async function lerOcupacaoExterna(
   // descobria no erro (issue #525).
   const leituras = await Promise.all(
     donos.map(async (dono) => {
-      const { data, error } = await supabase.rpc("fn_agenda_ocupacao_google_do_dono", {
-        p_org: recorte.organizationId,
-        p_owner: dono,
-        p_de: recorte.de,
-        p_ate: recorte.ate,
-      });
-      return { dono, linhas: (data ?? []) as unknown as LinhaDaOcupacaoDoGoogle[], error };
+      const [{ data, error }, doOutlook] = await Promise.all([
+        supabase.rpc("fn_agenda_ocupacao_google_do_dono", {
+          p_org: recorte.organizationId,
+          p_owner: dono,
+          p_de: recorte.de,
+          p_ate: recorte.ate,
+        }),
+        // FORK MIA (9011): a ocupação do Outlook do mesmo dono, com as mesmas
+        // colunas (docs/fork/agenda-microsoft.md).
+        ocupacaoMicrosoftDoDono(supabase, {
+          p_org: recorte.organizationId,
+          p_owner: dono,
+          p_de: recorte.de,
+          p_ate: recorte.ate,
+        }),
+      ]);
+      return {
+        dono,
+        linhas: [...((data ?? []) as unknown as LinhaDaOcupacaoDoGoogle[]), ...doOutlook.linhas],
+        error: error ?? doOutlook.error,
+      };
     }),
   );
 

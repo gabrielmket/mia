@@ -1,5 +1,8 @@
 "use client";
 import { AgendasConectadas } from "@/components/agenda/AgendasConectadas";
+// FORK MIA (9015): o Teams como "onde acontece".
+import { AvisoDoTeamsNoTipo, type TeamsNosTipos } from "@/components/agenda/microsoft/AvisoDoTeamsNoTipo";
+import { OPCAO_DO_TEAMS } from "@/lib/agenda-mia/opcao-do-teams";
 import { PrazosDePresenca } from "@/components/agenda/PrazosDePresenca";
 import { AgendaDosColegas } from "@/components/agenda/AgendaDosColegas";
 import { ClientePelaAgenda } from "@/components/agenda/ClientePelaAgenda";
@@ -312,7 +315,17 @@ export function TiposDeAgendamentoClient({
   podeLigarClientePelaAgenda,
   colegasPodemMexerNaAgendaLigado,
   podeMudarAgendaDosColegas,
+  agendasConectadas,
+  teams,
 }: {
+  /** FORK MIA (9015): o "Microsoft Teams" como local (docs/fork/agenda-microsoft.md, 3.6). */
+  teams?: TeamsNosTipos;
+  /**
+   * FORK MIA (9011): "Suas agendas" com Google e Outlook juntos, quando a
+   * instalação tem a Microsoft (docs/fork/agenda-microsoft.md). Sem ela, vale o
+   * `AgendasConectadas` de sempre.
+   */
+  agendasConectadas?: React.ReactNode;
   tiposIniciais: TipoRow[];
   pessoas: Array<{ id: string; papel: string; nome: string }>;
   podeEditar: boolean;
@@ -373,7 +386,7 @@ export function TiposDeAgendamentoClient({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4" data-testid="tipos-de-agendamento-config">
-      {podeConfigurarGoogle && <AgendasConectadas />}
+      {podeConfigurarGoogle && (agendasConectadas ?? <AgendasConectadas />)}
       <PrazosDePresenca podeEditar={podeEditar}/>
       <ClientePelaAgenda
         ligadoInicial={clientePelaAgendaLigado}
@@ -464,7 +477,7 @@ export function TiposDeAgendamentoClient({
                   onChange={(e) => setRascunho((r) => ({ ...r, location_kind: e.target.value }))}
                   className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text outline-hidden focus:border-border-strong"
                 >
-                  {LOCAIS.map((l) => (
+                  {[...LOCAIS, ...(teams?.disponivel ? [OPCAO_DO_TEAMS] : [])].map((l) => (
                     <option key={l.valor} value={l.valor}>
                       {t(l.rotulo)}
                     </option>
@@ -493,6 +506,13 @@ export function TiposDeAgendamentoClient({
                   ))}
                 </select>
               </label>
+              {teams && (
+                <AvisoDoTeamsNoTipo
+                  local={rascunho.location_kind}
+                  dono={pessoas.find((p) => p.id === rascunho.default_owner_user_id) ?? null}
+                  pessoasComOutlook={teams.pessoasComDestinoNoOutlook}
+                />
+              )}
               <div className="flex justify-end gap-2 sm:col-span-2">
                 <Button type="button" variant="ghost" size="sm" onClick={() => setCriando(false)}>
                   {t("Cancelar")}
@@ -554,7 +574,7 @@ export function TiposDeAgendamentoClient({
                 {t(rotuloDe(CATEGORIAS, tipo.category))}
               </span>
               <span className="text-xs tabular-nums text-text-muted">{tipo.duration_minutes} min</span>
-              <span className="text-xs text-text-muted">{t(rotuloDe(LOCAIS, tipo.location_kind))}</span>
+              <span className="text-xs text-text-muted">{teams?.tiposComTeams.includes(tipo.id) ? t("Microsoft Teams") : t(rotuloDe(LOCAIS, tipo.location_kind))}</span>
               {!tipo.default_owner_user_id ? (
                 // O aviso existe porque o sintoma é MUDO: sem dono, a tela de
                 // marcar simplesmente não mostra horário, sem dizer por quê.

@@ -33,7 +33,10 @@ export function textoDoCompromisso({
   timeZone,
   url,
   idioma,
+  provedor = "meet",
 }: {
+  /** FORK MIA (9015): o link é do Teams (docs/fork/agenda-microsoft.md, 3.7). */
+  provedor?: "meet" | "teams";
   /** Ausente = primeiro envio, que é o comportamento de quem não declara nada. */
   motivo?: MotivoDaEntrega;
   startsAt: string;
@@ -56,6 +59,7 @@ export function textoDoCompromisso({
       : url
         ? traduzir("Sua reunião está marcada para", idioma)
         : traduzir("Seu compromisso está marcado para", idioma);
-  const link = url ? ` ${traduzir("Link do Google Meet:", idioma)} ${url}` : "";
+  const rotuloDoLink = provedor === "teams" ? traduzir("Link do Microsoft Teams:", idioma) : traduzir("Link do Google Meet:", idioma);
+  const link = url ? ` ${rotuloDoLink} ${url}` : "";
   return `${abertura} ${quando} (${timeZone}).${link}`;
 }

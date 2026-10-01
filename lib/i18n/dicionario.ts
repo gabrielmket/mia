@@ -33,11 +33,15 @@
  */
 import type { Idioma } from "./idiomas";
 import { DICIONARIO_CARTOES_MIA } from "./dicionario-cartoes-mia";
+// FORK MIA (9011+): as frases da agenda do Outlook moram num arquivo à parte.
+import { DICIONARIO_DA_AGENDA_MICROSOFT } from "./dicionario-mia-agenda-microsoft";
 
 /** `pt-BR` não aparece: é a chave. Só o que DIFERE precisa de linha. */
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  // FORK MIA: primeiro, para que uma chave igual do upstream prevaleça.
+  ...DICIONARIO_DA_AGENDA_MICROSOFT,
   // ─── EMPRESAS, PESSOAS E IMPORTAÇÃO (metade B2B do #1621, de @renatofortal) ───
   "Arquivo": {"es": "Archivo"},
   "Atualizado": {"es": "Actualizado"},
