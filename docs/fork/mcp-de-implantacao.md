@@ -180,6 +180,7 @@ ferramenta não recebe nem devolve chave, e o agente nasce com a IA padrão.
 | `plataforma_ver_funis` | os funis inteiros: etapas, passo do agente, campos, motivos | leitura |
 | `plataforma_ver_agentes` | os agentes, a versão no ar, o rascunho e o que falta para publicar | leitura |
 | `plataforma_ver_catalogo` | os produtos e serviços, com busca e paginação | leitura |
+| `plataforma_ver_obrigacoes` | os documentos e obrigações com vencimento: contadores (vencidos, vencendo em 30 dias, pedidos sem resposta, em dia), os itens por situação e o catálogo de tipos por funil | leitura |
 | `plataforma_ver_configuracao` | o conteúdo do que está configurado, por seção (etiquetas, memória, conhecimento, follow-ups, automações, agenda, equipe, números, atendimento, mensagens) | leitura |
 | `plataforma_ver_followup` | um fluxo de follow-up por dentro: gatilho, nós, textos e esperas | leitura |
 
@@ -206,6 +207,7 @@ ferramenta não recebe nem devolve chave, e o agente nasce com a IA padrão.
 | `plataforma_garantir_followup` | instala um fluxo a partir de um modelo e ajusta textos, esperas, etapa do gatilho e política | nome do fluxo | um fluxo |
 | `plataforma_garantir_agente` | cria ou altera o **rascunho** do agente: prompt, capacidades por pacote, funis, materiais, follow-ups, palavras de passagem, horário, número | nome do agente | um agente |
 | `plataforma_garantir_automacao` | cria ou ajusta uma regra de automação, **desligada** | nome da regra | uma regra |
+| `plataforma_garantir_tipos_de_obrigacao` | o catálogo de tipos de documentos e obrigações de um funil, inclusive `modelo_do_segmento` (os tipos prontos do segmento) | nome do tipo dentro do funil | 60 tipos por funil |
 | `plataforma_garantir_tipos_de_agendamento` | tipos de agendamento (duração, local, categoria), com o lembrete desligado | nome do tipo | 30 tipos |
 | `plataforma_definir_jornada` | a jornada de uma pessoa da equipe, pelo e-mail | a pessoa | uma pessoa |
 | `plataforma_garantir_respostas_prontas` | respostas prontas compartilhadas da equipe | título da resposta | 50 respostas |
@@ -243,6 +245,22 @@ Na empresa de demonstração a montagem funciona inteira (é assim que ela é
 preenchida), e nada sai para fora: convite de equipe, modelo oficial do WhatsApp
 e automação ligada são recusados com a frase da trava. Ela não tem número de
 WhatsApp conectado, então nenhum agente é publicado lá.
+
+### Documentos e obrigações
+
+Três ferramentas, descritas em [`docs/fork/obrigacoes.md`](obrigacoes.md), seção 8.
+Duas estão nas tabelas acima (`plataforma_ver_obrigacoes` e
+`plataforma_garantir_tipos_de_obrigacao`). A terceira grava em lote e pede a
+operação da migração:
+
+| ferramenta | operação | o que faz | chave natural | teto por chamada |
+|---|---|---|---|---|
+| `plataforma_garantir_obrigacoes` | `importar_base` | cria ou atualiza os itens (documentos e atividades recorrentes) de um cliente; serve para a implantação e para migrar a planilha de vencimentos. A situação não é informada: mandam-se as datas. Não envia nada e não dispara aviso atrasado | tipo + a quem o item está ligado | 100 itens |
+
+Os avisos são regras de automação: os cinco gatilhos `obrigacao.*` aparecem em
+`plataforma_listar_modelos` (seção `automacoes`, com a configuração de cada um) e
+são aceitos por `plataforma_garantir_automacao`. O checklist tem a área
+`obrigacoes`, opcional: ela nunca entra em "falta".
 
 ---
 

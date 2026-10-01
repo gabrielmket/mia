@@ -22,17 +22,19 @@ admin, o mesmo selo aparece ao lado do nome.
 | agenda | 13 compromissos: passados (feito, faltou, cancelado) e futuros (confirmado, pendente), com o lembrete desligado |
 | tarefas | a próxima ação de cada negócio e mais algumas tarefas soltas, uma delas atrasada |
 | equipe | 4 pessoas fictícias **sem senha e bloqueadas**. Só servem para ser donas de card, tarefa e compromisso |
+| documentos e obrigações | no funil de serviços B2B: o catálogo de 8 tipos do segmento e 11 itens com datas relativas a hoje (um vencido com a renovação pedida, três vencendo, um pedido sem resposta, um a pedir, dois válidos e três atividades recorrentes com histórico). Um deles tem um arquivo do cliente esperando confirmação, para mostrar a proposta do agente. Nenhuma regra de aviso e nenhum arquivo de verdade ([docs/fork/obrigacoes.md](obrigacoes.md)) |
 
 Os dados não batem em pessoa real. Os telefones são **`+55 00 9xxxx-xxxx`**, e o
 DDD 00 não existe. Os e-mails são **`@exemplo.invalid`**, um domínio reservado
 (RFC 2606) que nenhum servidor aceita. Nenhum nome é de cliente da Time Company.
 
-**Ainda falta:** documentos e obrigações. O produto ainda não tem onde guardá-los
-por empresa; o `TODO` está em `lib/demonstracao/semente/aplicar.ts`.
+Renovar a semente refaz as datas: cada documento e cada atividade volta à situação
+que ilustra (o vencido continua vencido há 3 dias, o que vence continua vencendo).
 
 ## Como rodar
 
-O banco precisa ter a migration **9010**. Sem ela, o script para sem gravar nada.
+O banco precisa ter as migrations **9010** e **9018** (documentos e obrigações). Sem
+elas, o script para sem gravar nada.
 
 ```bash
 # 1. só mostra o alvo; nada é gravado

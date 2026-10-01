@@ -20,7 +20,7 @@ quem está tocando e **com quem está a bola**.
 | Fechamento | "Fechamento previsto 31/10 · 78%", numa linha própria. A chance é a da IA; sem ela, a da etapa | `expected_close_date`, `crm_lead_scores`, `crm_stages.win_probability` |
 | Faixa do agente | a precedência do upstream não muda (proposta › retomada › esfriando › medidor). No estado normal, o medidor ganha a palavra da faixa (quente, morno, frio) e a objeção aberta mais recente | `lead_checkpoints` (último retrato) |
 | Conversa | "Lead há 12 min:" (em cor de alerta quando a bola é nossa), a última mensagem e o selo "bola: nós" / "bola: cliente". Quem falou: Lead, Agente, Automação, Você ou o primeiro nome de quem da equipe respondeu | `conversations.last_inbound_at/last_outbound_at` + `messages.sent_via` |
-| Rodapé | dono, "· 1 tarefa atrasada" quando há, e o tempo na etapa | `crm_tasks` |
+| Rodapé | dono, "· 1 tarefa atrasada" quando há, o aviso de documento ou obrigação mais urgente ("Alvará venceu há 3 dias"; nada com tudo em dia) e o tempo na etapa | `crm_tasks`; `mia_obrigacoes` ([obrigacoes.md](obrigacoes.md)) |
 
 **Contrato de altura** (upstream, `docs/handoffs/BRIEFING-crm-vivo.md` §5): as linhas
 novas existem SEMPRE, com texto apagado quando falta o dado. O cartão não cresce com
