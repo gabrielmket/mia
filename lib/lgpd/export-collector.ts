@@ -629,6 +629,46 @@ export interface CampaignSuppressionRow {
   created_at: string;
 }
 
+/** FORK MIA — a linha de `mia_obrigacoes` como o relatório de acesso a lê. */
+interface LinhaDeObrigacaoExportada {
+  id: string;
+  nome: string;
+  categoria: string;
+  lead_id: string | null;
+  contact_id: string | null;
+  quem_entrega: string;
+  recorrencia: string;
+  pedido_em: string | null;
+  prazo_em: string | null;
+  recebido_em: string | null;
+  valido_ate: string | null;
+  proxima_em: string | null;
+  feita_em: string | null;
+  ciclo: number;
+  arquivo_nome: string | null;
+  arquivo_mime: string | null;
+  observacao: string | null;
+  created_at: string;
+}
+
+/** FORK MIA — um documento ou atividade do titular, com o histórico dele (migration 9018). */
+export interface ObrigacaoExportada extends Omit<LinhaDeObrigacaoExportada, "contact_id"> {
+  /** O item é da própria pessoa, ou de um negócio dela. */
+  ligado_a: "contato" | "negocio";
+  ciclos: Array<{
+    ciclo: number;
+    como: string;
+    pedido_em: string | null;
+    recebido_em: string | null;
+    valido_ate: string | null;
+    proxima_em: string | null;
+    feita_em: string | null;
+    arquivo_nome: string | null;
+    encerrado_em: string;
+  }>;
+  propostas: Array<{ arquivo_nome: string | null; situacao: string; created_at: string; decidida_em: string | null }>;
+}
+
 export interface ExportPayload {
   request_id: string;
   organization_id: string;
@@ -683,6 +723,16 @@ export interface ExportPayload {
   ai_runs: AiRunRow[];
   /** Disparos que chegaram a ela (0266). */
   broadcasts_recebidos: BroadcastRecipientRow[];
+  /**
+   * FORK MIA — os documentos e as obrigações do titular (migration 9018): os
+   * itens ligados a ele e os dos negócios dele, com o histórico dos ciclos e as
+   * propostas que o agente registrou a partir de arquivos que ele mandou. A
+   * anonimização apaga os itens dele e o arquivo de todos; o que se apaga a
+   * pedido dele é o que se entrega a pedido dele (Art. 18 II). O arquivo entra
+   * como METADADO (nome e formato): o export é `data.json` + `report.pdf`.
+   * Opcional como `conversation_notes`: o tipo é montado à mão nos testes de PDF.
+   */
+  obrigacoes?: ObrigacaoExportada[];
   /** Por qual anúncio ela chegou — ver `AdClickRow`. */
   cliques_de_anuncio: AdClickRow[];
   appointment_notices: AppointmentNoticeRow[];
@@ -1608,6 +1658,82 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // FORK MIA — documentos e obrigações (migration 9018). O MESMO escopo que o
+  // gatilho de anonimização usa (`fn_mia_obrigacoes_do_contato_anonimizado`):
+  // os itens ligados à pessoa e os dos negócios dela. É a outra metade do par
+  // que `tests/unit/lgpd-exporta-o-que-redige.test.ts` deriva da fonte.
+  const obrigacoes: ObrigacaoExportada[] = [];
+  if (contactId) {
+    const linhas: LinhaDeObrigacaoExportada[] = [];
+    const doContato = await admin
+      .from("mia_obrigacoes")
+      .select("id, nome, categoria, lead_id, contact_id, quem_entrega, recorrencia, pedido_em, prazo_em, recebido_em, valido_ate, proxima_em, feita_em, ciclo, arquivo_nome, arquivo_mime, observacao, created_at")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: true })
+      .limit(500);
+    if (doContato.error) {
+      logger.warn("[lgpd-export-worker] obrigacoes load failed", { request_id: requestId, error: doContato.error.message });
+    } else {
+      linhas.push(...((doContato.data ?? []) as LinhaDeObrigacaoExportada[]));
+    }
+    for (let batch = 0; batch < leadIds.length; batch += 100) {
+      const dosNegocios = await admin
+        .from("mia_obrigacoes")
+        .select("id, nome, categoria, lead_id, contact_id, quem_entrega, recorrencia, pedido_em, prazo_em, recebido_em, valido_ate, proxima_em, feita_em, ciclo, arquivo_nome, arquivo_mime, observacao, created_at")
+        .eq("organization_id", organizationId)
+        .in("lead_id", leadIds.slice(batch, batch + 100))
+        .limit(500);
+      if (dosNegocios.error) {
+        logger.warn("[lgpd-export-worker] obrigacoes dos negocios load failed", { request_id: requestId, error: dosNegocios.error.message });
+        break;
+      }
+      for (const linha of (dosNegocios.data ?? []) as LinhaDeObrigacaoExportada[]) {
+        if (!linhas.some((l) => l.id === linha.id)) linhas.push(linha);
+      }
+    }
+    const idsDasObrigacoes = linhas.map((l) => l.id);
+    const ciclosPorItem = new Map<string, ObrigacaoExportada["ciclos"]>();
+    for (let batch = 0; batch < idsDasObrigacoes.length; batch += 100) {
+      const { data, error } = await admin
+        .from("mia_obrigacoes_ciclos")
+        .select("obrigacao_id, ciclo, como, pedido_em, recebido_em, valido_ate, proxima_em, feita_em, arquivo_nome, encerrado_em")
+        .eq("organization_id", organizationId)
+        .in("obrigacao_id", idsDasObrigacoes.slice(batch, batch + 100))
+        .order("ciclo", { ascending: true });
+      if (error) {
+        logger.warn("[lgpd-export-worker] ciclos de obrigacao load failed", { request_id: requestId, error: error.message });
+        break;
+      }
+      for (const { obrigacao_id: item, ...ciclo } of (data ?? []) as Array<ObrigacaoExportada["ciclos"][number] & { obrigacao_id: string }>) {
+        ciclosPorItem.set(item, [...(ciclosPorItem.get(item) ?? []), ciclo]);
+      }
+    }
+    const propostasPorItem = new Map<string, ObrigacaoExportada["propostas"]>();
+    const propostasDoContato = await admin
+      .from("mia_obrigacoes_propostas")
+      .select("obrigacao_id, arquivo_nome, situacao, created_at, decidida_em")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: true })
+      .limit(500);
+    if (propostasDoContato.error) {
+      logger.warn("[lgpd-export-worker] propostas de obrigacao load failed", { request_id: requestId, error: propostasDoContato.error.message });
+    } else {
+      for (const { obrigacao_id: item, ...proposta } of (propostasDoContato.data ?? []) as Array<ObrigacaoExportada["propostas"][number] & { obrigacao_id: string }>) {
+        propostasPorItem.set(item, [...(propostasPorItem.get(item) ?? []), proposta]);
+      }
+    }
+    for (const { contact_id: doTitular, ...linha } of linhas) {
+      obrigacoes.push({
+        ...linha,
+        ligado_a: doTitular === contactId ? "contato" : "negocio",
+        ciclos: ciclosPorItem.get(linha.id) ?? [],
+        propostas: propostasPorItem.get(linha.id) ?? [],
+      });
+    }
+  }
+
   // Cliques em anúncio — a pergunta do outro lado do disparo: não "o que vocês
   // me mandaram", mas "por qual anúncio vocês me acharam, e o que guardaram".
   // Dois blocos e não um laço: a catraca lgpd-exporta-o-que-redige reconhece a
@@ -2337,6 +2463,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     meeting_deliveries,
     ai_runs,
     broadcasts_recebidos,
+    obrigacoes,
     cliques_de_anuncio,
     appointment_notices,
     voice_calls,

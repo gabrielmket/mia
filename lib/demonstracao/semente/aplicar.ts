@@ -27,8 +27,11 @@
  *    campos personalizados e motivos de perda;
  *  - a montagem da linha da timeline (`buildLeadActivityRow`).
  *
- * TODO(cliente modelo): documentos e obrigações. O produto ainda não tem onde
- * guardá-los por empresa — quando tiver, a semente ganha o bloco.
+ * Documentos e obrigações (migration 9018) entram por `gravarObrigacoes`: o
+ * catálogo do funil de serviços sai do modelo do segmento
+ * (`lib/obrigacoes/catalogo.ts`) e cada linha passa por `montarLinha`, a mesma
+ * função que a tela e o MCP usam. A situação não é gravada: é calculada pelas
+ * datas, e as datas são relativas a "agora".
  */
 import type pg from "pg";
 
@@ -42,6 +45,9 @@ import { colunasDaSessaoDaDemonstracao } from "@/lib/channels/sessao-da-demonstr
 import { MODULO_DOS_LEADS_DA_META } from "@/lib/leads-da-meta/modulo";
 import type { ChaveDeModulo } from "@/lib/modulos/vendaveis";
 import { PACOTES } from "@/lib/onboarding/pacotes-de-funil";
+import { modelosDoSegmento } from "@/lib/obrigacoes/catalogo";
+import { montarTipo } from "@/lib/obrigacoes/catalogo-servidor";
+import { montarLinha } from "@/lib/obrigacoes/operacoes";
 import { pipelineConfigPatchSchema } from "@/lib/schemas/settings";
 
 import {
@@ -51,9 +57,11 @@ import {
   CONVERSAS,
   EMPRESAS,
   EQUIPE,
+  FUNIL_DAS_OBRIGACOES,
   FUNIS,
   INSCRICOES,
   NOME_DA_EMPRESA,
+  OBRIGACOES,
   RAZAO_SOCIAL,
   SESSAO_DO_CANAL,
   SLUG_DA_EMPRESA,
@@ -119,6 +127,10 @@ const ID = {
   tipoDeAgenda: (k: string) => idEstavel(`tipo-de-agenda:${k}`),
   compromisso: (k: string) => idEstavel(`compromisso:${k}`),
   modulo: (k: string) => idEstavel(`modulo:${k}`),
+  tipoDeObrigacao: (nome: string) => idEstavel(`tipo-de-obrigacao:${slug(nome)}`),
+  obrigacao: (k: string) => idEstavel(`obrigacao:${k}`),
+  cicloDaObrigacao: (k: string, i: number) => idEstavel(`ciclo-da-obrigacao:${k}:${i}`),
+  propostaDaObrigacao: (k: string) => idEstavel(`proposta-da-obrigacao:${k}`),
 };
 
 /** Quem consome os eventos que a semente emite: ninguém — ver o cabeçalho. */
@@ -310,6 +322,7 @@ async function passos(e: Escritor, opcoes: OpcoesDaSemente, avisos: string[]): P
   await gravarFollowups(e, agora, etapas);
   await gravarAgenda(e, agora);
   await gravarTarefasSoltas(e, agora);
+  await gravarObrigacoes(e, agora);
   await neutralizarOsEventos(e);
 }
 
@@ -1226,6 +1239,167 @@ async function gravarTarefasSoltas(e: Escritor, agora: Date): Promise<void> {
 }
 
 /**
+ * Documentos e obrigações (migration 9018): o catálogo do funil de serviços e
+ * os itens da demonstração. Nada aqui emite evento nem dispara aviso: a semente
+ * só grava, e os gatilhos de obrigação nascem do relógio e das regras que
+ * alguém ligar na demonstração (onde a trava da 9010 recusa qualquer mensagem).
+ */
+async function gravarObrigacoes(e: Escritor, agora: Date): Promise<void> {
+  await e.executar(`do $semente$
+begin
+  if to_regclass('public.mia_obrigacoes') is null then
+    raise exception 'cliente modelo: este banco nao tem a migration 9018 (mia_obrigacoes); nada foi gravado';
+  end if;
+end
+$semente$`);
+
+  const dia = (dias: number | undefined) => (dias === undefined ? null : dataIso(naHoraLocal(agora, dias, "12:00")));
+  const hoje = dia(0)!;
+  const funil = ID.funil(FUNIL_DAS_OBRIGACOES);
+  const modelos = modelosDoSegmento("servicos_b2b");
+  const inteiros = (lista: readonly number[]) => sql(`${literal(`{${lista.join(",")}}`)}::integer[]`);
+
+  // O catálogo do funil: o modelo do segmento, pelo MESMO montador da tela.
+  // Um tipo de mesmo nome criado à mão na demonstração cede o lugar ao da
+  // semente (o índice único é por nome), para a renovação nunca parar aqui.
+  await e.executar(
+    `delete from public.mia_obrigacoes_tipos
+      where organization_id = $1::uuid and pipeline_id = $2::uuid
+        and lower(btrim(nome)) = any($3) and not (id::text = any($4))`,
+    [ID_DA_EMPRESA, funil, modelos.map((m) => m.nome.trim().toLowerCase()), modelos.map((m) => ID.tipoDeObrigacao(m.nome))],
+  );
+  for (const [posicao, m] of modelos.entries()) {
+    const tipo = montarTipo({ ...m, segmento: "servicos_b2b" }, posicao);
+    await gravar(e, "public.mia_obrigacoes_tipos", {
+      id: ID.tipoDeObrigacao(m.nome),
+      organization_id: ID_DA_EMPRESA,
+      pipeline_id: funil,
+      nome: tipo.nome,
+      nome_curto: tipo.nome_curto,
+      categoria: tipo.categoria,
+      quem_entrega: tipo.quem_entrega,
+      recorrencia: tipo.recorrencia,
+      recorrencia_meses: tipo.recorrencia_meses,
+      validade_meses: tipo.validade_meses,
+      avisos_dias: inteiros(tipo.avisos_dias),
+      dias_sem_resposta: tipo.dias_sem_resposta,
+      liga_a: tipo.liga_a,
+      pede_arquivo: tipo.pede_arquivo,
+      segmento: tipo.segmento,
+      posicao: tipo.posicao,
+      arquivado_em: null,
+      created_by_user_id: ID.usuario("helena"),
+    });
+  }
+
+  // O histórico e as propostas dos itens da semente são refeitos a cada rodada:
+  // quem mexeu num item na demonstração (recebeu, marcou feita) criou ciclos
+  // que colidiriam com os da semente.
+  const idsDosItens = OBRIGACOES.map((o) => ID.obrigacao(o.chave));
+  await e.executar(
+    `delete from public.mia_obrigacoes_ciclos where organization_id = $1::uuid and obrigacao_id::text = any($2)`,
+    [ID_DA_EMPRESA, idsDosItens],
+  );
+  await e.executar(
+    `delete from public.mia_obrigacoes_propostas where organization_id = $1::uuid and obrigacao_id::text = any($2)`,
+    [ID_DA_EMPRESA, idsDosItens],
+  );
+
+  const negociosDoFunil = FUNIS.find((f) => f.chave === FUNIL_DAS_OBRIGACOES)?.negocios ?? [];
+  for (const o of OBRIGACOES) {
+    const modelo = modelos.find((m) => m.nome === o.tipo);
+    if (!modelo) throw new Error(`cliente modelo: o tipo de obrigação "${o.tipo}" não está no modelo de Serviços B2B`);
+    if (o.negocio && !negociosDoFunil.some((n) => n.titulo === o.negocio)) {
+      throw new Error(`cliente modelo: a obrigação "${o.chave}" aponta para o negócio "${o.negocio}", que o funil não tem`);
+    }
+    const ciclos = o.ciclos ?? [];
+    const linha = montarLinha(
+      {
+        nome: modelo.nome,
+        nome_curto: modelo.nome_curto,
+        categoria: modelo.categoria,
+        lead_id: o.negocio ? ID.negocio(FUNIL_DAS_OBRIGACOES, o.negocio) : null,
+        empresa_id: o.empresa ? ID.empresa(o.empresa) : null,
+        contact_id: o.contato ? ID.contato(o.contato) : null,
+        quem_entrega: modelo.quem_entrega,
+        recorrencia: modelo.recorrencia,
+        recorrencia_meses: modelo.recorrencia_meses,
+        validade_meses: modelo.validade_meses,
+        avisos_dias: modelo.avisos_dias,
+        dias_sem_resposta: modelo.dias_sem_resposta,
+        pedido_em: dia(o.pedidoEmDias),
+        prazo_em: dia(o.prazoEmDias),
+        recebido_em: dia(o.recebidoEmDias),
+        valido_ate: dia(o.validoAteEmDias),
+        proxima_em: dia(o.proximaEmDias),
+        feita_em: dia(o.feitaEmDias),
+        responsavel_user_id: ID.usuario(o.responsavel),
+        observacao: o.observacao ?? null,
+        origem: "demonstracao",
+      },
+      hoje,
+    );
+    const { avisos_dias: avisos, ...resto } = linha as Record<string, Valor> & { avisos_dias: number[] };
+    await gravar(e, "public.mia_obrigacoes", {
+      id: ID.obrigacao(o.chave),
+      organization_id: ID_DA_EMPRESA,
+      ...resto,
+      tipo_id: ID.tipoDeObrigacao(modelo.nome),
+      avisos_dias: inteiros(avisos),
+      // Um ciclo por renovação já feita: o item está no seguinte.
+      ciclo: ciclos.length + 1,
+      renovado_em: modelo.categoria === "documento" && ciclos.length > 0 ? dia(o.recebidoEmDias) : null,
+      cobrado_em: null,
+      arquivo_path: null,
+      arquivo_nome: null,
+      arquivo_mime: null,
+      arquivo_bytes: null,
+      arquivado_em: null,
+      created_by_user_id: ID.usuario("helena"),
+      updated_by_user_id: ID.usuario("helena"),
+    });
+    for (const [i, c] of ciclos.entries()) {
+      await gravar(e, "public.mia_obrigacoes_ciclos", {
+        id: ID.cicloDaObrigacao(o.chave, i + 1),
+        organization_id: ID_DA_EMPRESA,
+        obrigacao_id: ID.obrigacao(o.chave),
+        ciclo: i + 1,
+        como: modelo.categoria === "atividade" ? "feita" : "recebido",
+        recebido_em: dia(c.recebidoEmDias),
+        valido_ate: dia(c.validoAteEmDias),
+        proxima_em: dia(c.proximaEmDias),
+        feita_em: dia(c.feitaEmDias),
+        encerrado_em: naHoraLocal(agora, c.feitaEmDias ?? c.validoAteEmDias ?? 0, "17:00"),
+        encerrado_por_user_id: ID.usuario(o.responsavel),
+      });
+    }
+    if (o.proposta) {
+      const pedida = o.proposta;
+      const conversa = CONVERSAS.find((c) => c.chave === pedida.conversa);
+      if (!conversa) throw new Error(`cliente modelo: a conversa "${pedida.conversa}" da obrigação "${o.chave}" não existe`);
+      await gravar(e, "public.mia_obrigacoes_propostas", {
+        id: ID.propostaDaObrigacao(o.chave),
+        organization_id: ID_DA_EMPRESA,
+        obrigacao_id: ID.obrigacao(o.chave),
+        ciclo: ciclos.length + 1,
+        contact_id: ID.contato(conversa.contato),
+        conversation_id: ID.conversa(conversa.chave),
+        // As conversas da demonstração não guardam arquivo: confirmar a proposta
+        // recebe o documento sem arquivo, e a tela diz isso.
+        message_id: null,
+        arquivo_nome: pedida.arquivo,
+        arquivo_mime: "application/pdf",
+        situacao: "pendente",
+        proposta_por_agente_id: ID.agente,
+        decidida_em: null,
+        decidida_por_user_id: null,
+        created_at: new Date(agora.getTime() - 2 * HORA),
+      });
+    }
+  }
+}
+
+/**
  * Os eventos que ESTA transação emitiu (gatilhos de mensagem, de negócio…) são
  * histórico fictício, não tráfego: marcados como consumidos, nenhum worker
  * reage a eles. Os eventos de quem usar a demonstração depois seguem normais.
@@ -1267,6 +1441,10 @@ export async function contarDaSemente(db: pg.ClientBase | pg.Pool): Promise<Reco
     "followup_enrollments",
     "calendar_event_types",
     "calendar_appointments",
+    "mia_obrigacoes_tipos",
+    "mia_obrigacoes",
+    "mia_obrigacoes_ciclos",
+    "mia_obrigacoes_propostas",
   ];
   const contagens: Record<string, number> = {};
   for (const t of tabelas) {

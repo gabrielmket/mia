@@ -954,3 +954,121 @@ export const INSCRICOES: readonly InscricaoDaSemente[] = [
   { chave: "tatiane-retomada", modelo: "clinica-consulta-retomada", contato: "tatiane", status: "completed", no: "fim-marcou", passos: 3, comecouHaDias: 12, desfecho: "converted" },
   { chave: "leandro-retomada", modelo: "geral-retomada", contato: "leandro", status: "cancelled", no: "resposta-1", passos: 1, comecouHaDias: 17, motivoDoCancelamento: "O cliente respondeu e pediu para ser procurado depois." },
 ];
+
+// ─── Documentos e obrigações (migration 9018, docs/fork/obrigacoes.md) ──────
+//
+// Um conjunto pequeno e coerente, no funil de Serviços B2B: um documento
+// vencido, um vencendo com a renovação pedida e um arquivo do cliente esperando
+// confirmação, um pedido sem resposta, um ainda a pedir, e atividades
+// recorrentes com histórico. As datas são relativas a "agora": renovar a
+// semente devolve cada item à situação que ele ilustra.
+
+export interface ObrigacaoDaSemente {
+  chave: string;
+  /** O nome de um modelo de `lib/obrigacoes/catalogo.ts` (segmento Serviços B2B). */
+  tipo: string;
+  empresa?: EmpresaDaSemente["chave"];
+  contato?: ContatoDaSemente["chave"];
+  /** O título de um negócio do funil `servicos`. */
+  negocio?: string;
+  responsavel: PessoaDaEquipe["chave"];
+  /** Dias a partir de hoje (negativo = no passado). */
+  pedidoEmDias?: number;
+  prazoEmDias?: number;
+  recebidoEmDias?: number;
+  validoAteEmDias?: number;
+  proximaEmDias?: number;
+  feitaEmDias?: number;
+  observacao?: string;
+  /** Os ciclos que já terminaram, do mais antigo para o mais novo. */
+  ciclos?: Array<{ recebidoEmDias?: number; validoAteEmDias?: number; proximaEmDias?: number; feitaEmDias?: number }>;
+  /** O agente reconheceu um arquivo na conversa e espera uma pessoa confirmar. */
+  proposta?: { conversa: ConversaDaSemente["chave"]; arquivo: string };
+}
+
+/** O funil que recebe o catálogo de tipos (o modelo do segmento Serviços B2B). */
+export const FUNIL_DAS_OBRIGACOES: ChaveDoFunil = "servicos";
+
+export const OBRIGACOES: readonly ObrigacaoDaSemente[] = [
+  {
+    chave: "alvara-rota-sul",
+    tipo: "Alvará de funcionamento",
+    empresa: "rota-sul",
+    responsavel: "helena",
+    recebidoEmDias: -368,
+    validoAteEmDias: -3,
+    pedidoEmDias: -17,
+    prazoEmDias: -10,
+    observacao: "A prefeitura costuma levar uns 10 dias para emitir o novo.",
+    ciclos: [{ recebidoEmDias: -735, validoAteEmDias: -370 }],
+  },
+  {
+    chave: "alvara-bem-viver",
+    tipo: "Alvará de funcionamento",
+    empresa: "bem-viver",
+    responsavel: "helena",
+    recebidoEmDias: -353,
+    validoAteEmDias: 12,
+    pedidoEmDias: -5,
+    prazoEmDias: 2,
+    proposta: { conversa: "patricia", arquivo: "alvara-renovado.pdf" },
+  },
+  { chave: "licenca-bem-viver", tipo: "Licença sanitária", empresa: "bem-viver", responsavel: "helena", recebidoEmDias: -190, validoAteEmDias: 175 },
+  { chave: "avcb-aurora", tipo: "AVCB (vistoria dos bombeiros)", empresa: "aurora", responsavel: "otavio", recebidoEmDias: -1066, validoAteEmDias: 29 },
+  {
+    chave: "certificado-felipe",
+    tipo: "Certificado digital",
+    contato: "felipe-ponto",
+    responsavel: "beatriz",
+    recebidoEmDias: -348,
+    validoAteEmDias: 17,
+    observacao: "Certificado pessoal do sócio, usado para assinar.",
+  },
+  {
+    chave: "contrato-social-ponto-certo",
+    tipo: "Contrato social",
+    negocio: "Contabilidade Ponto Certo · treinamento da equipe",
+    responsavel: "beatriz",
+    pedidoEmDias: -6,
+    prazoEmDias: 1,
+    observacao: "Alteração do contrato para incluir a nova unidade.",
+  },
+  {
+    chave: "alvara-ponto-certo",
+    tipo: "Alvará de funcionamento",
+    empresa: "ponto-certo",
+    responsavel: "beatriz",
+    observacao: "Pedir depois que o contrato social chegar.",
+  },
+  { chave: "certificado-vale-azul", tipo: "Certificado digital", empresa: "vale-azul", responsavel: "beatriz", recebidoEmDias: -100, validoAteEmDias: 265 },
+  {
+    chave: "relatorio-rota-sul",
+    tipo: "Relatório mensal",
+    negocio: "Transportadora Rota Sul · gestão de frota",
+    responsavel: "helena",
+    proximaEmDias: 4,
+    feitaEmDias: -26,
+    ciclos: [
+      { proximaEmDias: -57, feitaEmDias: -56 },
+      { proximaEmDias: -26, feitaEmDias: -26 },
+    ],
+  },
+  {
+    chave: "renovacao-aurora",
+    tipo: "Renovação anual do contrato",
+    negocio: "Grupo Aurora · consultoria de processos",
+    responsavel: "helena",
+    proximaEmDias: 45,
+    feitaEmDias: -320,
+    ciclos: [{ proximaEmDias: -320, feitaEmDias: -320 }],
+  },
+  {
+    chave: "reuniao-bem-viver",
+    tipo: "Reunião trimestral",
+    negocio: "Farmácias Bem Viver · implantação nas 6 lojas",
+    responsavel: "helena",
+    proximaEmDias: 42,
+    feitaEmDias: -48,
+    ciclos: [{ proximaEmDias: -48, feitaEmDias: -48 }],
+  },
+];
