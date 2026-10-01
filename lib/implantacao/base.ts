@@ -29,6 +29,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Actor } from "@/lib/api/handlers/types";
+import type { createAdminClient } from "@/lib/supabase/admin";
 import { textoEstavel } from "@/lib/ai/agents/mesmo-rascunho";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 
@@ -123,7 +124,10 @@ export async function organizacaoDaImplantacao(
  * `mudar` devolve o `settings` novo, ou `null` quando não há o que gravar.
  */
 export async function mudarSettingsDaOrganizacao(
-  admin: SupabaseClient,
+  // Tipado pela fábrica do cliente admin de propósito: a cerca
+  // `escrita-em-organizations-usa-cliente-admin` só aceita escrita em
+  // `organizations` de um cliente que seja admin PELO TIPO, não pelo nome.
+  admin: ReturnType<typeof createAdminClient>,
   orgId: string,
   mudar: (settings: Record<string, unknown>) => Record<string, unknown> | null,
   /** Colunas da própria linha que viajam no MESMO update (nome, fuso, moeda...). */

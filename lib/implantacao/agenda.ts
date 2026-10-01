@@ -179,10 +179,11 @@ export async function garantirTiposDeAgendamento(
       resultado.push({ id: String(existente.id), nome: String(existente.name), slug: String(existente.slug), desfecho: "ja_estava", mudancas: [] });
       continue;
     }
+    const existenteId = String(existente.id);
     const { error } = await c.admin
       .from("calendar_event_types")
       .update(patch)
-      .eq("id", String(existente.id))
+      .eq("id", existenteId)
       .eq("organization_id", c.orgId);
     if (error) throw new Error(`não consegui alterar o tipo «${pedido.nome}»: ${error.message}`);
     void audit({
@@ -190,7 +191,8 @@ export async function garantirTiposDeAgendamento(
       action: "agenda.tipo_alterado",
       organizationId: c.orgId,
       resourceType: "calendar_event_types",
-      resourceId: String(existente.id),
+      // A cerca do audit exige um nome que termine em id: o uuid do tipo.
+      resourceId: existenteId,
       requestId: c.requestId,
       metadata: { campos: Object.keys(patch), via: "mcp_plataforma" },
     });
@@ -255,10 +257,11 @@ export async function ligarLembrete(
   if (Object.keys(patch).length === 0) {
     return { tipo: { id: String(tipo.id), nome: String(tipo.name) }, lembrete_ligado: pedido.ligado, desfecho: "ja_estava", mudancas: [] };
   }
+  const tipoId = String(tipo.id);
   const { error } = await c.admin
     .from("calendar_event_types")
     .update(patch)
-    .eq("id", String(tipo.id))
+    .eq("id", tipoId)
     .eq("organization_id", c.orgId);
   if (error) throw new Error(`não consegui gravar o lembrete: ${error.message}`);
   void audit({
@@ -266,7 +269,7 @@ export async function ligarLembrete(
     action: "agenda.tipo_alterado",
     organizationId: c.orgId,
     resourceType: "calendar_event_types",
-    resourceId: String(tipo.id),
+    resourceId: tipoId,
     requestId: c.requestId,
     metadata: { campos: Object.keys(patch), via: "mcp_plataforma" },
   });
