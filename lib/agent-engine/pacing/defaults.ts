@@ -22,6 +22,19 @@ export interface PacingKnobs {
   /** Teto do jitter randômico somado ao throttle e ao next_allowed_at (ms) — intervalo fixo é assinatura de bot. */
   jitterMaxMs: number;
   /**
+   * Parcela FIXA do atraso humano antes da 1ª bolha (ms): ver a notificação,
+   * abrir a conversa, ler o que o cliente escreveu. Existe separada do termo
+   * proporcional porque mesmo um "Sim!" tem esse custo (atraso-humano.ts).
+   * NULL em channel_knobs = este default.
+   */
+  atrasoNotarMs: number;
+  /** Taxa de digitação do atraso humano (ms por caractere) — default 22ms ≈ 45 c/s. NULL = default. */
+  msPorCaractere: number;
+  /** Piso do atraso humano (ms) — abaixo dele o atraso não significa nada. NULL = default. */
+  atrasoMinimoMs: number;
+  /** Teto do atraso humano (ms) — acima dele o silêncio lê como queda. NULL = default. */
+  atrasoMaximoMs: number;
+  /**
    * Janela horária de DISPARO [start, end) na hora local do tenant — vale para o
    * disparo em massa (`lib/prospecting/worker.ts`) e para a retomada de conversa
    * parada (`lib/automation/janela-do-canal.ts`).
@@ -74,6 +87,10 @@ export interface PacingKnobs {
 export const KNOB_BOUNDS = {
   /** teto de intervalo/jitter aceito na UI (ms). */
   intervalMaxMs: 600_000,
+  /** teto de ms_por_caractere aceito na UI (ms) — 202ms ≈ 5 c/s é absurdamente lento; nada real precisa de mais. */
+  msPorCaractereMax: 200,
+  /** teto do atraso máximo aceito na UI (ms) — o piso é o default do anti-ban (1200). */
+  atrasoMaximoMsMax: 60_000,
   /** maior hora aceita como INÍCIO de janela (fim vai até 24). */
   hourLastStart: 23,
   /** fim de janela é exclusivo e pode chegar à meia-noite seguinte. */
@@ -83,6 +100,13 @@ export const KNOB_BOUNDS = {
 export const PACING_DEFAULTS: PacingKnobs = {
   throttleMs: 1200, // 1 msg / 1,2s
   jitterMaxMs: 800,
+  // Números do atraso humano antes da 1ª bolha (atraso-humano.ts). Espelham os
+  // valores que foram SEMPRE os literais do módulo — regressão zero para quem
+  // nunca configurou. Coluna em channel_knobs NULL cai aqui.
+  atrasoNotarMs: 900,
+  msPorCaractere: 22,
+  atrasoMinimoMs: 1200,
+  atrasoMaximoMs: 7500,
   windowStartHour: 7, // janela 7h-22h
   windowEndHour: 22,
   // Espelha a janela de disparo: quem nunca gravou as colunas `resposta_*`

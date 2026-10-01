@@ -35,7 +35,7 @@ export const dynamic = "force-dynamic";
 const KNOB_COLUMNS =
   // As duas janelas entram no SELECT: sem `resposta_*` aqui, a ficha Anti-ban
   // mostraria 7h-22h como se fosse a janela da resposta — e é a de DISPARO.
-  "throttle_ms, jitter_max_ms, window_start_hour, window_end_hour, resposta_start_hour, resposta_end_hour, allow_sunday, timezone, warmup_daily_caps, number_activated_at";
+  "throttle_ms, jitter_max_ms, window_start_hour, window_end_hour, resposta_start_hour, resposta_end_hour, allow_sunday, timezone, warmup_daily_caps, number_activated_at, atraso_notar_ms, ms_por_caractere, atraso_minimo_ms, atraso_maximo_ms";
 
 /**
  * `organizations.timezone`, para a tela mostrar o fuso em que o motor avalia a
@@ -171,6 +171,10 @@ export async function PUT(req: NextRequest): Promise<Response> {
       window_end_hour: null,
       resposta_start_hour: null,
       resposta_end_hour: null,
+      atraso_notar_ms: null,
+      ms_por_caractere: null,
+      atraso_minimo_ms: null,
+      atraso_maximo_ms: null,
       allow_sunday: null,
       timezone: null,
       warmup_daily_caps: null,
@@ -195,6 +199,17 @@ export async function PUT(req: NextRequest): Promise<Response> {
     return fail(
       "validation_failed",
       `Janela de resposta inválida: início (${eff.respostaStartHour}h) precisa ser antes do fim (${eff.respostaEndHour}h). Use 0 e 24 para responder a qualquer hora.`,
+      422,
+      { requestId },
+    );
+  }
+  // Atraso humano (0499), pelo mesmo par-resultante: com os dois gravados o
+  // CHECK do banco recusaria e a tela leria um 500 genérico; com só o mínimo
+  // acima do teto padrão, o clamp ignoraria o mínimo sem aviso.
+  if (eff.atrasoMinimoMs > eff.atrasoMaximoMs) {
+    return fail(
+      "validation_failed",
+      `Atraso humano inválido: o mínimo (${eff.atrasoMinimoMs} ms) precisa ser menor ou igual ao máximo (${eff.atrasoMaximoMs} ms).`,
       422,
       { requestId },
     );

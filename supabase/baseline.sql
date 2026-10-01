@@ -7970,8 +7970,18 @@ $seed$;
 -- não ai_pricing. Com a tabela vazia, computeCost() devolve 0 sem log e o teto
 -- de ai_budgets nunca dispara. Derivado de ai_models: idempotente e
 -- auto-curativo, cobre qualquer modelo futuro do catálogo.
+--
+-- `distinct on (m.model_id)`: ai_models é único por (provider, model_id), então
+-- o MESMO model_id pode existir sob dois provedores (ex.: openrouter e requesty)
+-- e, sem a deduplicação, o INSERT gerava DUAS linhas iguais dentro da mesma
+-- passada e a PK `ai_pricing_pkey` (só `model`) recusava com
+-- `duplicate key ... ai_pricing_pkey`. O `not exists` abaixo não resolve: os
+-- duplicados estão dentro do MESMO select. `distinct on` devolve UMA linha por
+-- model_id, e o `order by m.model_id, m.input_price_per_million_cents asc`
+-- escolhe o provedor de MENOR preço de entrada; empate por saída e depois por
+-- provedor, para a escolha ser determinística.
 insert into public.ai_pricing (model, prompt_cents_per_million_tokens, completion_cents_per_million_tokens, notes)
-select
+select distinct on (m.model_id)
   m.model_id,
   m.input_price_per_million_cents,
   m.output_price_per_million_cents,
@@ -7983,7 +7993,8 @@ where m.deprecated_at is null
   and not exists (
     select 1 from public.ai_pricing p
     where p.model = m.model_id and p.superseded_at is null
-  );
+  )
+order by m.model_id, m.input_price_per_million_cents asc, m.output_price_per_million_cents asc, m.provider asc;
 
 -- Embedding do RAG — não vive em ai_models.
 insert into public.ai_pricing (model, embedding_cents_per_million_tokens, notes)
@@ -10106,6 +10117,16 @@ alter table public.agent_inbox_items
     -- sugerido (plano N1) ou falta preço de catálogo — a Central acompanha
     -- até as duas pendências sumirem, ou até a proposta ser enviada/descartada.
     'proposta_pronta_para_revisao',
+    -- (migration 0500) O Jev percebeu, numa mensagem em que a regra de hoje não
+    -- viu nada, um pedido para falar com uma pessoa ou para parar de receber
+    -- mensagens, e a empresa escolheu "Avisar a equipe". Um kind por pedido, e
+    -- não `other`: a Central dá rótulo e destino por kind, e o `other` não leva
+    -- a uma conversa (lib/ai/inbox-destino.ts); e o aviso é um por CONVERSA e
+    -- pedido. O Jev só abre o aviso — quem passa a conversa é a regra de hoje
+    -- ou uma pessoa, e quem bloqueia é só o STOP do próprio cliente. NESTA
+    -- lista pelas razões de sempre (#159; a janela do `midia-nao-lida.test.ts`).
+    'jev_pedido_de_humano',
+    'jev_parar_de_receber',
     'other'
   ));
 
@@ -43765,6 +43786,93 @@ update public.messages set
 where body = '[mensagem anonimizada]'
   and media_derived_text is not null;
 
+-- ---- os avisos do Jev na Central: um por conversa e pedido, e fecham sozinhos (migration 0500) ----
+--
+-- Os dois kinds entraram no bloco ÚNICO de `agent_inbox_items_kind_check` (o
+-- do `capabilities_missing`, migration 0105), não aqui: um segundo bloco da
+-- mesma constraint é o defeito do #159. Daqui para baixo, o texto é o MESMO da
+-- migration 0500 (partes 2 e 3), com o racional inteiro lá.
+-- 2. UM AVISO POR CONVERSA E PEDIDO, NO BANCO. Índice único parcial em
+--    (organização, kind, conversa) para os dois kinds do Jev, SEM status — o
+--    precedente é o `agent_inbox_routing_unique` do `routing_unassigned`. Com o
+--    status fora do índice, o "Reabrir" nunca encontra um segundo aberto, e o
+--    pedido novo sobre o mesmo aviso o REABRE em vez de abrir outro (o gravador,
+--    lib/ai/decisao/pedidos.ts, faz o insert e trata o 23505). A busca antes da
+--    escrita, que havia antes, deixava dois drenos simultâneos abrirem dois.
+--    Antes do índice, os repetidos saem (fica o aberto, e o mais novo): só o
+--    banco de quem rodou este PR antes do conserto os tem, mas o `update.sh`
+--    de qualquer clone não pode quebrar aqui.
+delete from public.agent_inbox_items a
+ using (
+   select id, row_number() over (
+            partition by organization_id, kind, ref_id
+            order by (status = 'open') desc, created_at desc, id desc
+          ) as n
+     from public.agent_inbox_items
+    where kind in ('jev_pedido_de_humano','jev_parar_de_receber')
+ ) d
+ where a.id = d.id and d.n > 1;
+create unique index if not exists agent_inbox_jev_pedido_unico
+  on public.agent_inbox_items (organization_id, kind, ref_id)
+  where kind in ('jev_pedido_de_humano','jev_parar_de_receber');
+
+-- 3. O AVISO FECHA QUANDO O PEDIDO FOI ATENDIDO, por qualquer caminho.
+--    A conversa saiu dos estados abertos (encerrada): os dois avisos.
+--    A conversa ficou com uma pessoa — alguém assumiu, ou ela foi PASSADA:
+--    `performHumanHandoff` (a regra de hoje, o descadastro ambíguo, a
+--    ferramenta `request_human_handoff` do modelo), o orquestrador do clima e
+--    a atribuição manual gravam `last_handoff_at` e calam o robô
+--    (`bot_silenced_until` no futuro) — fecha SÓ o de falar com uma pessoa.
+--    O de parar de receber segue aberto aí: o texto dele pede que a equipe
+--    assuma E peça ao cliente o PARAR, e fechá-lo no primeiro passo sumiria
+--    com o lembrete de um pedido de descadastro antes do passo que o atende.
+--    No contato: bloqueado (`is_blocked` passa a true — o único escritor é o
+--    STOP do próprio cliente, na entrada da mensagem, lib/channels/pos-entrada.ts;
+--    ninguém da equipe bloqueia à mão), fecha o de parar de receber de todas
+--    as conversas dele.
+--    Gatilhos próprios, e não o de atribuição da 0228: aquele só dispara em
+--    `assigned_to_user_id`/`status`, e a passagem nem sempre muda o status.
+--    Nenhum faz HTTP; os dois filtram a organização da própria linha.
+create or replace function public.fn_fechar_avisos_do_jev_da_conversa()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+ if new.status not in('open','pending','claimed','ai_handling') then
+  update public.agent_inbox_items set status='resolved',resolved_at=now()
+   where organization_id=new.organization_id and ref_kind='conversation' and ref_id=new.id
+     and kind in('jev_pedido_de_humano','jev_parar_de_receber') and status<>'resolved';
+ elsif new.assigned_to_user_id is not null
+    or (new.last_handoff_at is not null and new.last_handoff_at is distinct from old.last_handoff_at)
+    or (new.bot_silenced_until > now() and new.bot_silenced_until is distinct from old.bot_silenced_until) then
+  update public.agent_inbox_items set status='resolved',resolved_at=now()
+   where organization_id=new.organization_id and ref_kind='conversation' and ref_id=new.id
+     and kind='jev_pedido_de_humano' and status<>'resolved';
+ end if;
+ return new;
+end;
+$$;
+revoke all on function public.fn_fechar_avisos_do_jev_da_conversa() from public,anon,authenticated;
+drop trigger if exists trg_fechar_avisos_do_jev_da_conversa on public.conversations;
+create trigger trg_fechar_avisos_do_jev_da_conversa
+ after update of assigned_to_user_id,status,bot_silenced_until,last_handoff_at on public.conversations
+ for each row execute function public.fn_fechar_avisos_do_jev_da_conversa();
+
+create or replace function public.fn_fechar_aviso_do_jev_ao_bloquear()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+ update public.agent_inbox_items set status='resolved',resolved_at=now()
+  where organization_id=new.organization_id and kind='jev_parar_de_receber' and ref_kind='conversation'
+    and status<>'resolved'
+    and ref_id in(select v.id from public.conversations v where v.organization_id=new.organization_id and v.contact_id=new.id);
+ return new;
+end;
+$$;
+revoke all on function public.fn_fechar_aviso_do_jev_ao_bloquear() from public,anon,authenticated;
+drop trigger if exists trg_fechar_aviso_do_jev_ao_bloquear on public.contacts;
+create trigger trg_fechar_aviso_do_jev_ao_bloquear
+ after update of is_blocked on public.contacts
+ for each row when (new.is_blocked and old.is_blocked is distinct from true)
+ execute function public.fn_fechar_aviso_do_jev_ao_bloquear();
+
 notify pgrst, 'reload schema';
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
@@ -45213,6 +45321,43 @@ alter table public.channel_knobs
     and (resposta_end_hour is null or resposta_end_hour between 1 and 24)
   );
 
+-- ---- atraso humano configurável por conexão (migration 0499) ----
+-- 0499 — os quatro números do atraso humano ANTES da primeira bolha
+-- (`atraso-humano.ts`) viram knob por conexão (issue #653): NOTAR, POR_CARACTERE,
+-- MINIMO e MAXIMO, todos NULL = default em defaults.ts (900/22/1200/7500 — os
+-- valores de antes, regressão zero). Nascem em `channel_knobs`, a mesma tabela
+-- dos knobs de pacing por conexão (0010 e 0495); nada de tabela nova. O jitter
+-- entre bolhas não ganha coluna: ele já é `throttle_ms` + `jitter_max_ms`.
+-- Reaplicável: `add column if not exists` e `drop constraint if exists` antes
+-- do `add constraint` — o `update.sh` roda o apêndice inteiro a cada atualização.
+alter table public.channel_knobs
+  add column if not exists atraso_notar_ms integer,
+  add column if not exists ms_por_caractere integer,
+  add column if not exists atraso_minimo_ms integer,
+  add column if not exists atraso_maximo_ms integer;
+
+comment on column public.channel_knobs.atraso_notar_ms is
+  'Parcela fixa do atraso humano (ms): ver a notificação e abrir a conversa. NULL = default (900).';
+comment on column public.channel_knobs.ms_por_caractere is
+  'Taxa de digitação do atraso humano (ms por caractere). NULL = default (22).';
+comment on column public.channel_knobs.atraso_minimo_ms is
+  'Piso do atraso humano (ms). NULL = default (1200).';
+comment on column public.channel_knobs.atraso_maximo_ms is
+  'Teto do atraso humano (ms). NULL = default (7500).';
+
+alter table public.channel_knobs
+  drop constraint if exists channel_knobs_atraso_humano_saneamento;
+
+alter table public.channel_knobs
+  add constraint channel_knobs_atraso_humano_saneamento
+  check (
+    (atraso_notar_ms   is null or (atraso_notar_ms   between 0 and 600000))
+    and (ms_por_caractere is null or (ms_por_caractere between 0 and 1000))
+    and (atraso_minimo_ms is null or (atraso_minimo_ms between 0 and 600000))
+    and (atraso_maximo_ms is null or (atraso_maximo_ms between 0 and 600000))
+    and (atraso_maximo_ms is null or atraso_minimo_ms is null or atraso_maximo_ms >= atraso_minimo_ms)
+  );
+
 -- ---- dedupe de event_dead atômico: índice único parcial (migration 0491) ----
 -- 0491 — o aviso `event_dead` não abre em dobro com dois drenos concorrentes
 -- (issue #880). O dedupe era uma pergunta seguida de uma escrita: `lib/event-log/
@@ -45254,3 +45399,22 @@ update public.agent_inbox_items i
 create unique index if not exists agent_inbox_event_dead_aberto_unico
   on public.agent_inbox_items (organization_id, kind, title)
   where status = 'open' and kind = 'event_dead';
+
+-- ---- janela de rajada configurável por agente (migration 0498) ----
+-- 0498 (#1856, de @webtecnica): a janela que junta mensagens do MESMO contato
+-- numa resposta sai da env global `INBOUND_DEBOUNCE_MS` e vira campo da versão
+-- do agente. NULL = usa a env da instalação (quem só atualiza não muda nada);
+-- 0 desliga; teto 60s. Par drop/add da CHECK para o `update.sh` reaplicar sem
+-- 'already exists'. Sem função nova (nada a revogar de anon).
+alter table public.ai_agent_versions
+  drop constraint if exists ai_agent_versions_inbound_debounce_ms_check;
+
+alter table public.ai_agent_versions
+  add column if not exists inbound_debounce_ms integer;
+
+comment on column public.ai_agent_versions.inbound_debounce_ms is
+  'Janela de coalescência de rajada inbound em ms para ESTE agente. NULL = usa o INBOUND_DEBOUNCE_MS da instalação; 0 = desliga a coalescência; teto 60s.';
+
+alter table public.ai_agent_versions
+  add constraint ai_agent_versions_inbound_debounce_ms_check
+  check (inbound_debounce_ms is null or (inbound_debounce_ms >= 0 and inbound_debounce_ms <= 60000));

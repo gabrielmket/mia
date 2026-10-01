@@ -42,6 +42,11 @@ interface FormState {
   resposta_end_hour: string;
   throttle_s: string;
   jitter_s: string;
+  /** Atraso humano antes da 1ª bolha (0499). '' = usar o padrão. */
+  atraso_notar_ms: string;
+  ms_por_caractere: string;
+  atraso_minimo_ms: string;
+  atraso_maximo_ms: string;
   daily_message_limit: string;
   allow_sunday: boolean;
   timezone: string;
@@ -59,6 +64,10 @@ function fromItem(item: PacingKnobsItem): FormState {
     resposta_end_hour: o?.resposta_end_hour != null ? String(o.resposta_end_hour) : "",
     throttle_s: o?.throttle_ms != null ? String(o.throttle_ms / 1000) : "",
     jitter_s: o?.jitter_max_ms != null ? String(o.jitter_max_ms / 1000) : "",
+    atraso_notar_ms: o?.atraso_notar_ms != null ? String(o.atraso_notar_ms) : "",
+    ms_por_caractere: o?.ms_por_caractere != null ? String(o.ms_por_caractere) : "",
+    atraso_minimo_ms: o?.atraso_minimo_ms != null ? String(o.atraso_minimo_ms) : "",
+    atraso_maximo_ms: o?.atraso_maximo_ms != null ? String(o.atraso_maximo_ms) : "",
     daily_message_limit:
       item.channel_session.daily_message_limit != null
         ? String(item.channel_session.daily_message_limit)
@@ -147,6 +156,10 @@ export function AntiBanSheet({ item, canWrite, onClose }: Props) {
         resposta_end_hour: intOrNull(form.resposta_end_hour),
         throttle_ms: msOrNull(form.throttle_s),
         jitter_max_ms: msOrNull(form.jitter_s),
+        atraso_notar_ms: intOrNull(form.atraso_notar_ms),
+        ms_por_caractere: intOrNull(form.ms_por_caractere),
+        atraso_minimo_ms: intOrNull(form.atraso_minimo_ms),
+        atraso_maximo_ms: intOrNull(form.atraso_maximo_ms),
         // `null` quando o Switch está no default: salvar esta ficha por outro
         // motivo (aquecimento, throttle) não pode congelar o padrão do dia como
         // escolha permanente — foi assim que uma instalação ficou muda todo
@@ -373,6 +386,77 @@ export function AntiBanSheet({ item, canWrite, onClose }: Props) {
             <p className="text-xs text-muted-foreground">
               {t(
                 "Intervalo mínimo entre mensagens do mesmo número, mais uma variação aleatória — ritmo cravado parece robô para o WhatsApp.",
+              )}
+            </p>
+          </fieldset>
+
+          <fieldset className="flex flex-col gap-2">
+            <Label>{t("Atraso humano antes da primeira resposta (ms)")}</Label>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <label className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">{t("Ver a notificação")}</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={item.bounds.intervalMaxMs}
+                  inputMode="numeric"
+                  placeholder={String(eff.atrasoNotarMs)}
+                  value={form.atraso_notar_ms}
+                  onChange={(e) => set({ atraso_notar_ms: e.target.value })}
+                  disabled={!canWrite}
+                  aria-label={t("Tempo para ver a notificação em ms")}
+                  className="w-24"
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">{t("Por caractere")}</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={item.bounds.msPorCaractereMax}
+                  inputMode="numeric"
+                  placeholder={String(eff.msPorCaractere)}
+                  value={form.ms_por_caractere}
+                  onChange={(e) => set({ ms_por_caractere: e.target.value })}
+                  disabled={!canWrite}
+                  aria-label={t("Milissegundos por caractere da resposta")}
+                  className="w-24"
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">{t("Mínimo")}</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={item.bounds.intervalMaxMs}
+                  inputMode="numeric"
+                  placeholder={String(eff.atrasoMinimoMs)}
+                  value={form.atraso_minimo_ms}
+                  onChange={(e) => set({ atraso_minimo_ms: e.target.value })}
+                  disabled={!canWrite}
+                  aria-label={t("Atraso humano mínimo em ms")}
+                  className="w-24"
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">{t("Máximo")}</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={item.bounds.atrasoMaximoMsMax}
+                  inputMode="numeric"
+                  placeholder={String(eff.atrasoMaximoMs)}
+                  value={form.atraso_maximo_ms}
+                  onChange={(e) => set({ atraso_maximo_ms: e.target.value })}
+                  disabled={!canWrite}
+                  aria-label={t("Atraso humano máximo em ms")}
+                  className="w-24"
+                />
+              </label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t(
+                "Quanto o agente \"pensa\" antes de mandar a primeira resposta (ver a notificação + digitação por caractere, limitado entre o mínimo e o máximo). Campo vazio usa o padrão — rápido demais parece robô; lento demais parece que caiu. Não mexe no intervalo entre mensagens.",
               )}
             </p>
           </fieldset>

@@ -66,6 +66,9 @@ const tarefasSchema = z.object({
   clima: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
   manipulacao: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
   roteador: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
+  humano: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
+  opt_out: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
+  followup: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
   // FORK MIA — a passagem prometida (./tarefa-da-passagem-prometida.ts).
   passagem_prometida: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
 });
