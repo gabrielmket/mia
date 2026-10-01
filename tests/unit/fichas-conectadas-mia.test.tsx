@@ -35,6 +35,17 @@ vi.mock("@/components/empresas/SeletorDeEmpresa", () => ({
 vi.mock("@/components/kanban/SeletorDeContato", () => ({ SeletorDeContato: () => null }));
 vi.mock("@/components/kanban/NewLeadDialog", () => ({ NewLeadDialog: () => null }));
 vi.mock("@/app/app/empresas/_client", () => ({ FormularioDaEmpresa: () => null }));
+// FORK MIA (9018) — Documentos e obrigações: a seção e o Foco leem destes hooks
+// (tests/unit/obrigacoes-telas.test.tsx prova o conteúdo; aqui só a presença).
+vi.mock("@/hooks/obrigacoes/useObrigacoes", () => {
+  const acao = { mutate: vi.fn(), isPending: false };
+  return {
+    useObrigacoes: () => ({ data: undefined, isLoading: false, isError: false }),
+    useDetalheDaObrigacao: () => ({ data: undefined, isLoading: false, isError: false }),
+    useTiposDeObrigacao: () => ({ data: undefined }),
+    useAcoesDeObrigacao: () => ({ adicionar: acao, pedir: acao, receber: acao, marcarFeita: acao, editar: acao, decidirProposta: acao }),
+  };
+});
 
 const COMPRAS = {
   selo: "recorrente" as const,
@@ -155,6 +166,19 @@ describe("ficha da empresa", () => {
     expect(within(compras).getByRole("link", { name: "Ricardo Alves" }).getAttribute("href")).toBe("/app/contacts/ricardo");
     expect(within(compras).getByText("já passou: bom momento para oferecer")).toBeTruthy();
     expect(within(screen.getByTestId("numeros-da-empresa")).getByText("65%")).toBeTruthy();
+  });
+});
+
+describe("documentos e obrigações nas fichas", () => {
+  it("a ficha da empresa e a do contato têm a seção; contato anonimizado, não", () => {
+    const { unmount } = render(<FichaDaEmpresa empresaId="vida" />);
+    expect(screen.getByTestId("documentos-e-obrigacoes")).toBeTruthy();
+    unmount();
+    const contato = render(<FichaConectadaDoContato contactId="carla" anonimizado={false} />);
+    expect(screen.getByTestId("documentos-e-obrigacoes")).toBeTruthy();
+    contato.unmount();
+    render(<FichaConectadaDoContato contactId="carla" anonimizado />);
+    expect(screen.queryByTestId("documentos-e-obrigacoes")).toBeNull();
   });
 });
 

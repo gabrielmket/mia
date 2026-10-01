@@ -77,6 +77,17 @@ vi.mock("@/components/kanban/LeadFieldsForm", () => ({ LeadFieldsForm: () => <di
 vi.mock("@/components/kanban/PropostasDoNegocio", () => ({ PropostasDoNegocio: () => null }));
 vi.mock("@/components/kanban/LoseLeadDialog", () => ({ LoseLeadDialog: () => null }));
 vi.mock("@/components/kanban/SeletorDeContato", () => ({ SeletorDeContato: () => null }));
+// FORK MIA (9018) — Documentos e obrigações: a seção e o Foco leem destes hooks
+// (tests/unit/obrigacoes-telas.test.tsx prova o conteúdo; aqui só a presença).
+vi.mock("@/hooks/obrigacoes/useObrigacoes", () => {
+  const acao = { mutate: vi.fn(), isPending: false };
+  return {
+    useObrigacoes: () => ({ data: undefined, isLoading: false, isError: false }),
+    useDetalheDaObrigacao: () => ({ data: undefined, isLoading: false, isError: false }),
+    useTiposDeObrigacao: () => ({ data: undefined }),
+    useAcoesDeObrigacao: () => ({ adicionar: acao, pedir: acao, receber: acao, marcarFeita: acao, editar: acao, decidirProposta: acao }),
+  };
+});
 
 import { CartaoAberto } from "@/components/cartoes/aberto/CartaoAberto";
 import { ProvedorDoCartao } from "@/components/cartoes/ContextoDoCartao";
@@ -267,6 +278,15 @@ describe("o cartão aberto", () => {
     expect(within(h).getByText(/A IA fez 2 ações · 2 decisões de não enviar/)).toBeTruthy();
     await user.click(within(h).getByRole("button", { name: /^Tudo/ }));
     expect(within(h).queryByText(/A IA fez/)).toBeNull();
+  });
+
+  it("a seção Documentos e obrigações está no cartão aberto, e as propostas do agente ficam com o Foco", () => {
+    renderCartao();
+    expect(screen.getByTestId("documentos-e-obrigacoes")).toBeTruthy();
+    expect(readFileSync("components/cartoes/aberto/CartaoAberto.tsx", "utf8")).toContain(
+      '<SecaoDeObrigacoes escopo={{ tipo: "negocio", id: lead.id }} mostrarPropostas={false}',
+    );
+    expect(readFileSync("components/cartoes/aberto/Foco.tsx", "utf8")).toContain("<ObrigacoesNoFoco ");
   });
 });
 

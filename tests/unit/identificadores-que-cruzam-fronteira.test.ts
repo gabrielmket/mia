@@ -186,6 +186,10 @@ const SITES: { arquivo: string; fronteira: string; papel?: "gerador" | "validado
   // ponto e barra: dentro do alfabeto do Storage.
   { arquivo: "lib/mcp-plataforma/importacao/conhecimento.ts", fronteira: "storage.chave-de-objeto" },
   { arquivo: "lib/mcp-plataforma/importacao/fotos-de-produto.ts", fronteira: "storage.chave-de-objeto" },
+  // FORK MIA — o arquivo de um documento (docs/fork/obrigacoes.md), no bucket
+  // privado `mia-obrigacoes`: `<org>/<obrigacao>/<uuid>.<ext>`, com a extensão
+  // tirada de uma lista fechada. Só hexadecimal, hífen, ponto e barra.
+  { arquivo: "lib/obrigacoes/arquivo.ts", fronteira: "storage.chave-de-objeto" },
   // Chave de idempotência: os geradores (manda UUID) e os validadores (exige UUID).
   { arquivo: "app/onboarding/connect-whatsapp/_client.tsx", fronteira: "api.idempotency-key", papel: "gerador" },
   { arquivo: "components/extensions/ExtensionsManager.tsx", fronteira: "api.idempotency-key", papel: "gerador" },

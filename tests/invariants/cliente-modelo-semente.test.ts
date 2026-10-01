@@ -12,7 +12,10 @@ import {
   ID_DA_EMPRESA,
   type ResumoDaSemente,
 } from "@/lib/demonstracao/semente/aplicar";
-import { FUNIS } from "@/lib/demonstracao/semente/dados";
+import { FUNIS, OBRIGACOES } from "@/lib/demonstracao/semente/dados";
+import { diaNoFuso } from "@/lib/obrigacoes/datas";
+import { contarObrigacoes, situacao } from "@/lib/obrigacoes/situacao";
+import type { ItemParaSituacao } from "@/lib/obrigacoes/tipos";
 
 /**
  * FORK MIA (cliente modelo, 9010) — A SEMENTE RODA DUAS VEZES E NÃO DUPLICA.
@@ -362,6 +365,122 @@ describe("o que a demonstração precisa mostrar", () => {
   it("agenda com compromissos passados e futuros", async () => {
     expect(await valor<number>(`select count(*)::int from public.calendar_appointments where organization_id = $1 and starts_at < now() - interval '2 days'`)).toBeGreaterThan(2);
     expect(await valor<number>(`select count(*)::int from public.calendar_appointments where organization_id = $1 and starts_at > now()`)).toBeGreaterThan(5);
+  });
+});
+
+describe("documentos e obrigações na demonstração (9018)", () => {
+  // A segunda rodada da semente foi dois dias depois da primeira: é o "hoje" dela.
+  const HOJE = diaNoFuso(new Date(AGORA.getTime() + 2 * 86_400_000), "America/Sao_Paulo");
+
+  async function itens(): Promise<Array<ItemParaSituacao & { nome: string }>> {
+    const { rows } = await pool.query(
+      `select nome, categoria, recorrencia, recorrencia_meses, validade_meses, avisos_dias, dias_sem_resposta,
+              pedido_em::text, prazo_em::text, cobrado_em::text, recebido_em::text, valido_ate::text, renovado_em::text,
+              proxima_em::text, feita_em::text
+         from public.mia_obrigacoes where organization_id = $1`,
+      [ID_DA_EMPRESA],
+    );
+    return rows as Array<ItemParaSituacao & { nome: string }>;
+  }
+
+  it("⭐ um conjunto pequeno e coerente: cada situação tem quem a ilustre, e renovar a semente devolve cada item ao lugar", async () => {
+    const todos = await itens();
+    expect(todos).toHaveLength(OBRIGACOES.length);
+    const porSituacao: Record<string, number> = {};
+    for (const item of todos) porSituacao[situacao(item, HOJE)] = (porSituacao[situacao(item, HOJE)] ?? 0) + 1;
+    expect(porSituacao).toEqual({ vencido: 1, vencendo: 3, valido: 2, pedido: 1, a_pedir: 1, pendente: 2, feita: 1 });
+    expect(contarObrigacoes(todos, HOJE)).toEqual({ vencidos: 1, vencendo_em_30_dias: 4, pedidos_sem_resposta: 3, em_dia: 3, total: 11 });
+  });
+
+  it("o catálogo do funil de serviços é o modelo do segmento, e todo item aponta para um tipo dele", async () => {
+    expect(
+      await valor(`select count(*)::text || ',' || count(distinct t.pipeline_id)::text from public.mia_obrigacoes_tipos t
+                     where t.organization_id = $1 and t.segmento = 'servicos_b2b' and t.arquivado_em is null`),
+    ).toBe("8,1");
+    expect(
+      await valor(`select count(*)::text from public.mia_obrigacoes o
+                     where o.organization_id = $1
+                       and not exists (select 1 from public.mia_obrigacoes_tipos t where t.id = o.tipo_id and t.organization_id = o.organization_id)`),
+    ).toBe("0");
+  });
+
+  it("ligados a empresa, a contato e a negócio; com histórico de ciclos e uma proposta do agente esperando", async () => {
+    expect(
+      await valor(`select count(*) filter (where empresa_id is not null)::text || ',' || count(*) filter (where contact_id is not null)::text
+                          || ',' || count(*) filter (where lead_id is not null)::text
+                     from public.mia_obrigacoes where organization_id = $1`),
+    ).toBe("6,1,4");
+    expect(await valor<number>(`select count(*)::int from public.mia_obrigacoes_ciclos where organization_id = $1`)).toBeGreaterThanOrEqual(5);
+    expect(
+      await valor(`select count(*)::text || ',' || count(*) filter (where p.situacao = 'pendente')::text
+                     from public.mia_obrigacoes_propostas p where p.organization_id = $1`),
+    ).toBe("1,1");
+    // A proposta não marcou nada: o documento continua com a renovação pedida, sem recebimento novo.
+    expect(
+      await valor(`select (o.pedido_em > o.recebido_em)::text from public.mia_obrigacoes o
+                     join public.mia_obrigacoes_propostas p on p.obrigacao_id = o.id where o.organization_id = $1`),
+    ).toBe("true");
+  });
+
+  it("⭐ a demonstração não envia: nenhum aviso disparado, nenhum evento de obrigação, nenhum arquivo e nada na fila de saída", async () => {
+    expect(await valor(`select count(*)::text from public.mia_obrigacoes_avisos where organization_id = $1`)).toBe("0");
+    expect(await valor(`select count(*)::text from public.event_log where organization_id = $1 and event_type like 'obrigacao.%'`)).toBe("0");
+    expect(await valor(`select count(*)::text from public.mia_obrigacoes where organization_id = $1 and arquivo_path is not null`)).toBe("0");
+    expect(
+      await valor(`select count(*)::text from public.automation_rules
+                     where organization_id = $1 and is_active and trigger_event like 'obrigacao.%'`),
+    ).toBe("0");
+    expect(
+      await valor(`select count(*)::text from public.messages
+                     where organization_id = $1 and direction = 'outbound' and status in ('queued', 'sending')`),
+    ).toBe("0");
+  });
+
+  it("⭐ e se alguém ligar uma regra de aviso lá: o gatilho vira evento, e a mensagem é recusada na porta", async () => {
+    const cliente = await pool.connect();
+    try {
+      await cliente.query("begin");
+      const regra = await cliente.query<{ id: string }>(
+        `insert into public.automation_rules (organization_id, name, trigger_event, trigger_config, actions, is_active)
+           values ($1, 'Alvará vencendo', 'obrigacao.documento_vencendo', '{"dias":12}'::jsonb, '[{"type":"add_tag","config":{"tags":["renovar"]}}]'::jsonb, true)
+         returning id`,
+        [ID_DA_EMPRESA],
+      );
+      const item = await cliente.query<{ id: string; valido_ate: string }>(
+        `select o.id, o.valido_ate::text from public.mia_obrigacoes o join public.mia_obrigacoes_propostas p on p.obrigacao_id = o.id
+          where o.organization_id = $1`,
+        [ID_DA_EMPRESA],
+      );
+      const evento = await cliente.query<{ e: string | null }>(
+        `select public.fn_mia_obrigacao_disparar($1, $2, $3, 'obrigacao.documento_vencendo', 1, $4::date) as e`,
+        [ID_DA_EMPRESA, item.rows[0]!.id, regra.rows[0]!.id, item.rows[0]!.valido_ate],
+      );
+      expect(evento.rows[0]!.e).toBeTruthy();
+      await cliente.query("savepoint antes_da_mensagem");
+      const erro = await cliente
+        .query(
+          `insert into public.messages (organization_id, conversation_id, channel_session_id, contact_id, type, direction, status, body)
+           select organization_id, id, channel_session_id, contact_id, 'text', 'outbound', 'queued', 'Seu alvará vence em 12 dias.'
+             from public.conversations where organization_id = $1 limit 1`,
+          [ID_DA_EMPRESA],
+        )
+        .then(() => null, (e: { code?: string; message?: string }) => e);
+      expect(erro?.code).toBe("42501");
+      expect(erro?.message).toMatch(/^organizacao_de_demonstracao:/);
+      await cliente.query("rollback to savepoint antes_da_mensagem");
+      // E a regra que avisaria o grupo do time nem liga.
+      const grupo = await cliente
+        .query(
+          `insert into public.automation_rules (organization_id, name, trigger_event, actions, is_active)
+             values ($1, 'Avisar o grupo', 'obrigacao.documento_vencido', '[{"type":"notify_group","config":{}}]'::jsonb, true)`,
+          [ID_DA_EMPRESA],
+        )
+        .then(() => null, (e: { code?: string }) => e);
+      expect(grupo?.code).toBe("42501");
+    } finally {
+      await cliente.query("rollback");
+      cliente.release();
+    }
   });
 });
 

@@ -223,6 +223,46 @@ describe("o cartão fechado responde sem abrir", () => {
   });
 });
 
+describe("o aviso de documentos e obrigações no cartão fechado", () => {
+  it("UM aviso curto no rodapé, o mais urgente: vencido em cor de erro, inteiro ao passar o mouse", () => {
+    renderCard(lead({ cartao: sinais({ obrigacao: { tipo: "vencido", nome: "Alvará", categoria: "documento", dias: -3 } }) }));
+    const aviso = document.querySelector("[data-aviso-de-obrigacao]") as HTMLElement;
+    expect(aviso.dataset.avisoDeObrigacao).toBe("vencido");
+    expect(aviso.textContent).toBe("Alvará venceu há 3 dias");
+    expect(aviso.getAttribute("title")).toBe("Alvará venceu há 3 dias");
+    expect(aviso.className).toContain("text-error-fg");
+    expect(aviso.querySelector("span")?.className).toContain("truncate");
+    expect(document.querySelectorAll("[data-aviso-de-obrigacao]")).toHaveLength(1);
+  });
+
+  it("vencendo e pedido sem resposta, cada um com a frase e a cor dele", () => {
+    const { unmount } = renderCard(
+      lead({ cartao: sinais({ obrigacao: { tipo: "vencendo", nome: "Relatório mensal", categoria: "atividade", dias: 4 } }) }),
+    );
+    const vencendo = document.querySelector("[data-aviso-de-obrigacao]") as HTMLElement;
+    expect(vencendo.textContent).toBe("Relatório mensal em 4 dias");
+    expect(vencendo.className).toContain("text-warning-fg");
+    unmount();
+    renderCard(lead({ cartao: sinais({ obrigacao: { tipo: "sem_resposta", nome: "Contrato social", categoria: "documento", dias: 6 } }) }));
+    expect((document.querySelector("[data-aviso-de-obrigacao]") as HTMLElement).textContent).toBe(
+      "Contrato social: pedido há 6 dias, sem resposta",
+    );
+  });
+
+  it("com tudo em dia o cartão não mostra nada, e a altura é a mesma com e sem aviso", () => {
+    const { container: sem, unmount } = renderCard(lead({ cartao: sinais({ obrigacao: null }) }));
+    expect(document.querySelector("[data-aviso-de-obrigacao]")).toBeNull();
+    const linhasSem = [...sem.querySelectorAll("p.h-5, p.h-4")].length;
+    unmount();
+    const { container: com } = renderCard(
+      lead({ cartao: sinais({ obrigacao: { tipo: "vencido", nome: "Alvará", categoria: "documento", dias: -3 } }) }),
+    );
+    // O aviso mora DENTRO da linha do rodapé: nenhuma linha a mais.
+    expect([...com.querySelectorAll("p.h-5, p.h-4")].length).toBe(linhasSem);
+    expect(com.querySelector("[data-aviso-de-obrigacao]")?.closest("p, div, span")).toBeTruthy();
+  });
+});
+
 describe("filtros de canal, faixa e ordem", () => {
   it("o canal oferece só os que estão no quadro e devolve a escolha", async () => {
     const user = userEvent.setup();

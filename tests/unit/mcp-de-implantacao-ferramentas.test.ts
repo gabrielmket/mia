@@ -223,7 +223,10 @@ describe("o servidor, pelo protocolo", () => {
   it("organização que não existe: recusa que diz como achar o id certo, em TODA ferramenta que recebe organização", async () => {
     const cenario = cenarioDaImplantacao();
     estado.cliente = cenario.cliente;
-    const mcp = await clienteMcp(criarServidorDePlataforma as never, TODAS_AS_OPERACOES);
+    // "importar_base" entra aqui por causa de plataforma_garantir_obrigacoes: é
+    // ferramenta de lote (migra a planilha de vencimentos), e sem a operação a
+    // recusa seria a do token, antes de a organização ser conferida.
+    const mcp = await clienteMcp(criarServidorDePlataforma as never, [...TODAS_AS_OPERACOES, "importar_base"]);
     const inexistente = "0a000000-0000-4000-8000-00000000dead";
 
     for (const f of NOVAS.filter((x) => "organization_id" in x.inputSchema)) {

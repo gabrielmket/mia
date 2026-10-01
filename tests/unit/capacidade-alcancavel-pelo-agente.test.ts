@@ -95,6 +95,13 @@ const ESCRITA_QUE_E_TRABALHO_DE_ATENDENTE: ReadonlyArray<string> = [
   // empresa de um contato que já tem uma. Um cliente que cita a empresa do
   // sócio ou do concorrente não muda o próprio vínculo por causa de uma frase.
   "crm_registrar_empresa_do_contato",
+  // FORK MIA — `app/api/v1/obrigacoes/[id]/receber/` exige `agent`: marcar um
+  // documento como recebido é trabalho de quem atende. O poder concedido aqui é
+  // MENOR que o daquela rota: a ferramenta não marca nada, cria uma linha em
+  // `mia_obrigacoes_propostas` que uma PESSOA confirma ou recusa. O custo é
+  // atenção humana, limitado a uma proposta viva por item (índice único parcial
+  // da migration 9018).
+  "crm_propor_recebimento_de_documento",
   // `app/api/v1/contacts/[id]/proposals/` — POST exige `agent`, e a paridade é
   // com o PATCH de contato (`app/api/v1/contacts/[id]/`), que também exige
   // `agent`: editar a ficha de um cliente é trabalho de quem atende.

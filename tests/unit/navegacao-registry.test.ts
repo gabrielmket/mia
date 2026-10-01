@@ -190,6 +190,9 @@ describe("hubSections", () => {
       "/app/companies",
       "/app/people",
       "/app/tasks",
+      // FORK MIA (9018): Documentos e obrigações, no dia a dia da venda. Só no
+      // hub e na busca: a barra lateral está no teto (docs/fork/obrigacoes.md).
+      "/app/obrigacoes",
       "/app/calls",
       "/app/comandas",
       "/app/products",

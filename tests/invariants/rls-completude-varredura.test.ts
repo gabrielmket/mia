@@ -352,6 +352,24 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "recusado por `permission denied` mesmo na linha amarrada à própria " +
       "organização (a amarração é ato humano no /admin, pelo service_role).",
   },
+  // Fork MIA, 9018 — documentos e obrigações com vencimento.
+  ...[
+    "mia_obrigacoes_tipos",
+    "mia_obrigacoes",
+    "mia_obrigacoes_ciclos",
+    "mia_obrigacoes_propostas",
+    "mia_obrigacoes_avisos",
+  ].map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/obrigacoes.test.ts — dois tenants reais por JWT " +
+      "(manager): leitura positiva local e ZERO do vizinho nas duas direções, a " +
+      "tabela inteira sem filtro igual à própria, anon recusado; escrita no " +
+      "vizinho recusada (insert) ou sem alcance (update/delete), inclusive " +
+      "pendurar histórico ou proposta no item do vizinho; e por papel: viewer " +
+      "lê e não grava, o catálogo é de manager, aviso só o servidor grava, e " +
+      "item de negócio que a pessoa não enxerga não aparece para ela.",
+  })),
   {
     tabela: "channel_session_groups",
     razao:

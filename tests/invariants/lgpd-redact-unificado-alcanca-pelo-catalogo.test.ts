@@ -242,6 +242,16 @@ const DECISOES: Record<string, Decisao> = {
     caminho: "gatilho",
     razao: "Fork MIA, 0266 da MIA: phone_e164 (o telefone COPIADO do destinatário, que no WhatsApp é também o endereço) vira o rótulo 'Contato anonimizado' e `valores` é zerado pela virada de is_anonymized (fn_redigir_o_que_sobrou_do_contato_anonimizado). A LINHA fica, porque o relatório do disparo e o débito da carteira apontam para ela. Gatilho, e não cascata, porque a cascata é do upstream e o fork estende sem redefinir.",
   },
+  mia_obrigacoes: {
+    decidida: "redigir",
+    caminho: "gatilho",
+    razao: "Fork MIA, 9018 (documentos e obrigações): o item ligado À PESSOA (contact_id) é APAGADO na virada de is_anonymized por fn_mia_obrigacoes_do_contato_anonimizado, com o histórico de ciclos (cascata da chave) e as propostas; o item dos NEGÓCIOS dela fica como registro do negócio, sem arquivo e sem observação. Todo arquivo (o do ciclo em vigor e os do histórico) entra em storage_redaction_queue com o bucket mia-obrigacoes, na mesma transação. Gatilho, e não cascata, porque a cascata é do upstream e o fork estende sem redefinir. Provado em tests/invariants/obrigacoes.test.ts.",
+  },
+  mia_obrigacoes_propostas: {
+    decidida: "redigir",
+    caminho: "gatilho",
+    razao: "Fork MIA, 9018: a proposta do agente guarda o NOME do arquivo que a pessoa mandou (\"cnh-fulano.pdf\") e aponta para a mensagem dela. As propostas do contato são APAGADAS na virada de is_anonymized pela mesma função (fn_mia_obrigacoes_do_contato_anonimizado): proposta de contato anonimizado não tem mais o que confirmar.",
+  },
   import_rows: {
     decidida: "redigir",
     caminho: "gatilho",
