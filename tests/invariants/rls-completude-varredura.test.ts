@@ -327,6 +327,9 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     "mia_leads_da_meta_recebidos",
     // .61 — o dono de cada Página da Meta (9004).
     "mia_paginas_da_meta",
+    // 9017 — as conversões da Meta por etapa.
+    "mia_conversoes_meta_regras",
+    "mia_conversoes_meta_config",
     // 9011 — a agenda do Outlook.
     "mia_agenda_microsoft_conexoes",
     "mia_agenda_microsoft_calendarios",

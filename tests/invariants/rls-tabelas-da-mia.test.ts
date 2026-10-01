@@ -47,6 +47,9 @@ const LIDAS_PELO_CLIENTE = [
   // .61 — o dono de cada Página da Meta (migration 9004): gerente lê as da
   // própria empresa, só a plataforma atribui.
   "mia_paginas_da_meta",
+  // 9017 — as conversões da Meta por etapa: gerente lê, só o servidor escreve.
+  "mia_conversoes_meta_regras",
+  "mia_conversoes_meta_config",
   // 9011 — a agenda do Outlook: dono da conta ou gerente lê, só o servidor escreve.
   "mia_agenda_microsoft_conexoes",
   "mia_agenda_microsoft_calendarios",
@@ -73,6 +76,9 @@ const SO_A_PLATAFORMA_ESCREVE = [
   "mia_leads_da_meta_leituras",
   "mia_leads_da_meta_recebidos",
   "mia_paginas_da_meta",
+  // 9017 — as conversões da Meta por etapa: gerente lê, só o servidor escreve.
+  "mia_conversoes_meta_regras",
+  "mia_conversoes_meta_config",
   // 9011 — a agenda do Outlook: dono da conta ou gerente lê, só o servidor escreve.
   "mia_agenda_microsoft_conexoes",
   "mia_agenda_microsoft_calendarios",
@@ -145,6 +151,19 @@ function semear(org: string, gestor: string, tag: string): string {
     )
     insert into public.mia_leads_da_meta_recebidos (organization_id, chave_do_lead, formulario_id, desfecho)
       select '${org}', 'chave-${tag}', f.id, 'recusado' from f;
+    -- 9017: a regra de uma etapa aberta e a chave dos leads de formulário.
+    with fn as (
+      insert into public.crm_pipelines (organization_id, name, slug)
+        values ('${org}', 'Funil 9017 ${tag}', 'funil-9017-${tag}')
+        returning id
+    ), et as (
+      insert into public.crm_stages (organization_id, pipeline_id, name, slug, position)
+        select '${org}', fn.id, 'Qualificação', 'qualificacao-9017-${tag}', 1000 from fn
+        returning id
+    )
+    insert into public.mia_conversoes_meta_regras (organization_id, stage_id, evento)
+      select '${org}', et.id, 'lead_qualificado' from et;
+    insert into public.mia_conversoes_meta_config (organization_id, leads_de_formulario) values ('${org}', true);
     -- 9011: a conta do Outlook do gestor, uma agenda e um evento de ocupação.
     with c as (
       insert into public.mia_agenda_microsoft_conexoes (organization_id, user_id, conta_email, microsoft_user_id, status)
