@@ -64,11 +64,45 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "Muda quanto cada mensagem custa ao cliente. Um valor errado aqui não " +
       "quebra nada na hora — aparece na fatura do mês, já cobrado.",
   },
-  // ⚠️ `convidar_pessoa` NÃO está aqui, e a ausência é deliberada. Ela daria
-  // acesso às conversas de um cliente a um e-mail qualquer: é a operação que
-  // entrega dado de TERCEIRO, e a mais difícil de desfazer. Entra quando o
-  // fluxo de convite for atravessado com o mesmo cuidado que a tela tem hoje
-  // (papel, expiração, aviso ao dono) — não como um atalho a mais nesta lista.
+  // ── IMPLANTAÇÃO DE CLIENTE (docs/fork/mcp-de-implantacao.md) ─────────────
+  //
+  // Três chaves, cortadas pelo TAMANHO DO ESTRAGO e não pela área do produto:
+  // montar (não fala com ninguém de fora), pôr no ar (passa a falar com o
+  // cliente final) e convidar (dá acesso às conversas a um e-mail). Um token de
+  // quem só monta não consegue fazer nada conversar com cliente; quem publica é
+  // outra caixinha, que pode ir num segundo token ou ficar com uma pessoa.
+  {
+    chave: "implantar_configuracao",
+    rotulo: "Montar a configuração de um cliente",
+    raio:
+      "Grava dados da empresa, funis e etapas, catálogo e preços, etiquetas, memória, " +
+      "conhecimento, agenda, respostas prontas e os RASCUNHOS de agente, follow-up e " +
+      "automação de QUALQUER cliente. Não publica nada, mas atenção: o agente que já " +
+      "está no ar lê o catálogo, a memória e o conhecimento na hora. Um preço errado " +
+      "gravado por este token vira preço errado dito ao cliente final.",
+  },
+  {
+    chave: "colocar_no_ar",
+    rotulo: "Pôr no ar o que fala com o cliente final",
+    raio:
+      "Publica e pausa agente de IA, publica follow-up, liga automação, liga lembrete de " +
+      "agenda e submete modelo de mensagem à Meta em QUALQUER cliente. É a operação que faz o sistema começar a " +
+      "mandar mensagem para os clientes do cliente: um token vazado põe no ar um agente " +
+      "com o texto que ele quiser, falando em nome da empresa.",
+  },
+  {
+    chave: "convidar_equipe",
+    rotulo: "Convidar pessoas para a equipe de um cliente",
+    raio:
+      "Manda e-mail de convite, com o papel que o token escolher, para entrar na empresa " +
+      "de QUALQUER cliente. Quem aceita passa a ler as conversas e os dados dos clientes " +
+      "daquela empresa. É a operação que entrega dado de terceiro, e a mais difícil de " +
+      "desfazer: um token vazado convida um e-mail de fora como administrador.",
+  },
+  // O fluxo de convite que justificava a ausência desta operação foi atravessado
+  // com o cuidado que a tela tem: papel conferido, expiração do convite, linha em
+  // `team_invites` (que a tela lista e revoga) e a recusa na empresa de
+  // demonstração. Ver `lib/implantacao/equipe.ts`.
 ] as const;
 
 const POR_CHAVE = new Map(OPERACOES.map((o) => [o.chave, o]));

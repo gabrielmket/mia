@@ -69,7 +69,7 @@ export async function validarTokenDePlataforma(
       -32001,
       401,
       `Este endpoint aceita token de PLATAFORMA (${PREFIXO_DE_PLATAFORMA}…). ` +
-        "Token de organização (dsk_…) fala com /api/v1/mcp.",
+        "Token de organização (dsk_…) fala com /api/mcp.",
     );
   }
 
