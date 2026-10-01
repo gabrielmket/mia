@@ -174,3 +174,107 @@ describe("Teams de quem publica no Google", () => {
     expect(valor(`select public.fn_mia_agenda_microsoft_teams_sem_outlook(200);`)).toBe("0");
   });
 });
+
+/**
+ * As duas funções que a SESSÃO da pessoa chama (`fn_mia_agenda_selecao` e
+ * `fn_mia_agenda_microsoft_resolver`) são `security definer` e escrevem. A
+ * varredura `hardening-definer-varredura` só as aceita em AUTHENTICATED_PERMITIDO
+ * com a prova de que quem é de fora não tem efeito. A prova é esta: anon sem
+ * EXECUTE, e viewer, outra empresa e colega (que não é o dono) recusados, com o
+ * estado conferido antes e depois. O controle no fim é a própria pessoa
+ * passando, para a recusa não ser um argumento errado disfarçado.
+ */
+describe("quem não é a pessoa não escolhe a agenda nem decide o conflito", () => {
+  const VIEWER = "90110000-1111-4000-8000-0000000000bb";
+  const COLEGA = "90110000-1111-4000-8000-0000000000cc";
+  const ESTRANHO = "90110000-1111-4000-8000-0000000000dd";
+  const OUTRA_ORG = "90110000-0000-4000-8000-0000000000bb";
+
+  /** Roda como outra sessão e devolve a recusa do banco ("" se passou). */
+  function recusaComo(sub: string, corpo: string): string {
+    try {
+      sql(`
+        begin;
+        set local role authenticated;
+        select set_config('request.jwt.claims', '{"sub":"${sub}","aal":"aal2","role":"authenticated"}', true);
+        ${corpo}
+        commit;
+      `);
+      return "";
+    } catch (e) {
+      const erro = e as { stderr?: Buffer | string; message?: string };
+      return `${erro.stderr?.toString() ?? ""} ${erro.message ?? ""}`;
+    }
+  }
+
+  const literal = (v: string): string => (v === "" ? "null" : `'${v}'`);
+
+  const estadoDaEscolha = (): string =>
+    valor(`select (select c.destino::text || '|' || x.revisao_da_escolha::text
+                     from public.mia_agenda_microsoft_calendarios c
+                     join public.mia_agenda_microsoft_conexoes x on x.id = c.conexao_id
+                    where c.id = '${CAL_M}')
+               || '|' || (select is_destination::text from public.calendar_connection_calendars where id = '${CAL_G}');`);
+
+  const escolha = (): string => {
+    const revG = valor(`select calendar_selection_revision from public.calendar_connections where id = '${CONEXAO_G}';`);
+    const revM = valor(`select revisao_da_escolha from public.mia_agenda_microsoft_conexoes where id = '${CONEXAO_M}';`);
+    return `select public.fn_mia_agenda_selecao('${ORG}',
+      '{"google":[{"connection_id":"${CONEXAO_G}","revision":"${revG}"}],"microsoft":[{"connection_id":"${CONEXAO_M}","revision":"${revM}"}]}'::jsonb,
+      array['${CAL_G}']::uuid[], array['${CAL_M}']::uuid[], 'microsoft', '${CAL_M}');`;
+  };
+
+  const estadoDoCompromisso = (): string =>
+    valor(`select coalesce(proxima_tentativa_em::text, 'nulo') || '|' || coalesce(conflito::text, 'nulo')
+             from public.mia_agenda_microsoft_compromissos where appointment_id = '${AP_NOVO}';`);
+
+  const decisao = (): string => {
+    const rev = valor(`select revision::text from public.calendar_appointments where id = '${AP_NOVO}';`);
+    const local = valor(`select coalesce(google_local_revision::text, '') from public.calendar_appointments where id = '${AP_NOVO}';`);
+    const etag = valor(`select coalesce(etag, '') from public.mia_agenda_microsoft_compromissos where appointment_id = '${AP_NOVO}';`);
+    return `select public.fn_mia_agenda_microsoft_resolver('${ORG}', '${AP_NOVO}', ${literal(rev)}, ${literal(local)}, ${literal(etag)}, 'retry');`;
+  };
+
+  beforeAll(() => {
+    sql(`
+      insert into auth.users (id, email) values
+        ('${VIEWER}', 'mia-ms-viewer@invariant.test'),
+        ('${COLEGA}', 'mia-ms-colega@invariant.test'),
+        ('${ESTRANHO}', 'mia-ms-estranho@invariant.test')
+        on conflict (id) do nothing;
+      insert into public.organizations (id, slug, legal_name, display_name)
+        values ('${OUTRA_ORG}', 'mia-ms-agenda-b', 'MIA MS B', 'MIA MS B') on conflict (id) do nothing;
+      insert into public.user_organizations (user_id, organization_id, role, accepted_at) values
+        ('${VIEWER}', '${ORG}', 'viewer', now()),
+        ('${COLEGA}', '${ORG}', 'agent', now()),
+        ('${ESTRANHO}', '${OUTRA_ORG}', 'manager', now())
+        on conflict do nothing;
+    `);
+  });
+
+  it("anon não tem EXECUTE em nenhuma das duas", () => {
+    expect(valor(`select has_function_privilege('anon', 'public.fn_mia_agenda_selecao(uuid,jsonb,uuid[],uuid[],text,uuid)', 'execute');`)).toBe("f");
+    expect(valor(`select has_function_privilege('anon', 'public.fn_mia_agenda_microsoft_resolver(uuid,uuid,text,text,text,text)', 'execute');`)).toBe("f");
+  });
+
+  it("viewer, outra empresa e colega não mudam a escolha de agendas da pessoa", () => {
+    const antes = estadoDaEscolha();
+    expect(recusaComo(VIEWER, escolha())).toContain("agenda_selecao_proibida");
+    expect(recusaComo(ESTRANHO, escolha())).toContain("agenda_selecao_proibida");
+    // O colega tem papel para escolher as agendas DELE; as da pessoa não são dele.
+    expect(recusaComo(COLEGA, escolha())).not.toBe("");
+    expect(estadoDaEscolha()).toBe(antes);
+  });
+
+  it("viewer, outra empresa e colega não decidem o compromisso da pessoa; a pessoa decide", () => {
+    const antes = estadoDoCompromisso();
+    expect(recusaComo(VIEWER, decisao())).toContain("microsoft_decisao_proibida");
+    expect(recusaComo(ESTRANHO, decisao())).toContain("microsoft_decisao_proibida");
+    expect(recusaComo(COLEGA, decisao())).toContain("microsoft_decisao_proibida");
+    expect(estadoDoCompromisso()).toBe(antes);
+
+    // Controle: com os mesmos argumentos, a dona do compromisso passa.
+    expect(recusaComo(PESSOA, decisao())).toBe("");
+    expect(estadoDoCompromisso()).not.toBe(antes);
+  });
+});

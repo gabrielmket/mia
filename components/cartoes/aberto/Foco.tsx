@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 import { quemFalouRotulo } from "@/lib/cartoes/bola";
 import { textoDoProximoCompromisso } from "@/lib/cartoes/compromisso";
 import { duracaoCurta } from "@/lib/cartoes/tempo";
-import { prazoDaProximaAcao, responsavelDaProximaAcao } from "@/lib/cartoes/tarefa-da-proxima-acao";
+import { prazoDaProximaAcao, responsavelDaProximaAcao } from "@/lib/cartoes/regras-da-proxima-acao";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { useAgoraDoCartao, useContextoDoCartao } from "@/components/cartoes/ContextoDoCartao";
 

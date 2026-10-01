@@ -44,6 +44,15 @@ const RAIZ = path.join(__dirname, "..", "..");
 /** O único arquivo de produção que pode escrever a versão à mão. */
 const MODULO_UNICO = path.join("lib", "graph-version.ts");
 
+/**
+ * FORK MIA — a agenda do Outlook fala com OUTRA plataforma, que também põe um
+ * número de versão no endereço: `graph.microsoft.com/v1.0` e os endereços de
+ * identidade `…/oauth2/v2.0/…`. O padrão desta catraca casa com os dois. A
+ * regra é a mesma, com o lugar próprio dela: só este arquivo escreve o número,
+ * e ele não pode citar a Graph da Meta (conferido no caso abaixo).
+ */
+const MODULO_UNICO_DA_MICROSOFT = path.join("lib", "agenda", "microsoft", "enderecos.ts");
+
 /** Onde mora código que chama a Graph valendo. */
 const ONDE_PROCURAR = ["app", "lib", "components", "hooks", "workers", "scripts"];
 
@@ -182,7 +191,7 @@ const ARQUIVOS = ONDE_PROCURAR.flatMap((pasta) => varrer(path.join(RAIZ, pasta))
 function culpados(): string[] {
   return ARQUIVOS.filter((caminho) => {
     const relativo = path.relative(RAIZ, caminho);
-    if (relativo === MODULO_UNICO) return false;
+    if (relativo === MODULO_UNICO || relativo === MODULO_UNICO_DA_MICROSOFT) return false;
     return linhasComVersao(fs.readFileSync(caminho, "utf8"), caminho).length > 0;
   }).map((caminho) => path.relative(RAIZ, caminho));
 }
@@ -198,6 +207,15 @@ describe("a versão da Graph tem um lugar só", () => {
     expect(ARQUIVOS.map((c) => path.relative(RAIZ, c))).toContain(MODULO_UNICO);
 
     expect(culpados()).toEqual([]);
+  });
+
+  it("FORK MIA: o lugar da Microsoft existe, é varrido e não esconde a Graph da Meta", () => {
+    expect(ARQUIVOS.map((c) => path.relative(RAIZ, c))).toContain(MODULO_UNICO_DA_MICROSOFT);
+    const fonte = fs.readFileSync(path.join(RAIZ, MODULO_UNICO_DA_MICROSOFT), "utf8");
+    // A exceção vale para os endereços da Microsoft. Se a versão da Meta
+    // aparecesse aqui, ela teria achado um segundo lugar sem a catraca ver.
+    expect(semComentarios(fonte, MODULO_UNICO_DA_MICROSOFT)).not.toMatch(/facebook.com|fbcdn|instagram.com/);
+    expect(linhasComVersao(fonte, MODULO_UNICO_DA_MICROSOFT).length).toBeGreaterThan(0);
   });
 
   it("o módulo único declara a versão — a catraca não passa com o arquivo apagado", () => {

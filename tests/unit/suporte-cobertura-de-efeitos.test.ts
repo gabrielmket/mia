@@ -51,6 +51,11 @@ it("todo handler mutante do app declara guarda de suporte ou é infraestrutura i
   // seria um no-op que devolve 503 quando o GoTrue oscila.
   if(path==="app/api/v1/tenants/provision/route.ts")continue;
   if(path.includes("/impersonate"))continue; // início/fim autenticam a posse e têm contrato próprio
+  // FORK MIA — notificações de mudança da Graph da Microsoft: quem chama é o
+  // servidor da Microsoft, sem cookie nem ator. A prova é o `clientState` de
+  // cada assinatura (guardado como hash), a mesma natureza de /webhooks/ acima.
+  // Não há sessão de suporte para a guarda ler.
+  if(path==="app/api/v1/agenda/microsoft/notificacoes/route.ts")continue;
   const source=ts.createSourceFile(path,readFileSync(path,"utf8"),ts.ScriptTarget.Latest,true);
   // DUAS FORMAS de exportar um handler, e o gate precisa das duas. A varredura
   // só enxergava `export async function POST`; `export const PATCH = async () => {}`

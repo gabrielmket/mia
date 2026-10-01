@@ -284,6 +284,29 @@ const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
       "regra do agente; tests/invariants/tags-cor-de-etiqueta.test.ts prova a " +
       "cor.",
   },
+  // ── FORK MIA: agenda do Outlook (migrations 9011 e 9014) ──────────────────
+  {
+    fn: "fn_mia_agenda_selecao(uuid,jsonb,uuid[],uuid[],text,uuid)",
+    razao:
+      "PATCH app/api/v1/agenda/microsoft/calendarios/route.ts chama createClient " +
+      "da sessão. É a irmã de fn_google_selection para a escolha com os dois " +
+      "provedores: auth.uid() exige agent, suporte de escrita e agendas do " +
+      "próprio dono, com as revisões das duas listas conferidas. Definer porque " +
+      "grava os dois lados (Google e Outlook) numa transação só, para a pessoa " +
+      "nunca ficar com dois destinos. tests/invariants/agenda-microsoft.test.ts " +
+      "prova anon sem EXECUTE e viewer, outra empresa e colega sem efeito.",
+  },
+  {
+    fn: "fn_mia_agenda_microsoft_resolver(uuid,uuid,text,text,text,text)",
+    razao:
+      "POST app/api/v1/agenda/agendamentos/[id]/microsoft/resolver/route.ts usa " +
+      "createClient da sessão. É a irmã de fn_google_resolve: auth.uid() exige " +
+      "agent, suporte de escrita e ser o DONO do compromisso, além das revisões " +
+      "e do etag conferidos. Só registra a decisão do conflito no vínculo com o " +
+      "Outlook, fechada por organization_id e appointment_id. " +
+      "tests/invariants/agenda-microsoft.test.ts prova anon sem EXECUTE e " +
+      "viewer, outra empresa e colega (que não é o dono) recusados.",
+  },
 ];
 
 interface Definer {

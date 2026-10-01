@@ -22,6 +22,8 @@ import { createHash, createHmac } from "node:crypto";
 
 import type { TokenDoGoogle } from "@/lib/agenda/google/oauth";
 
+import { enderecoDeAutorizacao, enderecoDeToken } from "./enderecos";
+
 /**
  * Os escopos, e por que são estes quatro.
  *
@@ -50,13 +52,8 @@ export const TENANT_DAS_CONTAS_PESSOAIS = "9188040d-6c67-4c5b-b112-36a304b66dad"
 
 export const FOLGA_DE_RENOVACAO_MS = 5 * 60_000;
 
-export function enderecoDeAutorizacao(tenant: string): string {
-  return `https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/authorize`;
-}
-
-export function enderecoDeToken(tenant: string): string {
-  return `https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/token`;
-}
+// Os endereços (com o número de versão no caminho) moram em `./enderecos`.
+export { enderecoDeAutorizacao, enderecoDeToken };
 
 /** O `code_verifier` do PKCE, derivado do nonce: 43 caracteres base64url. */
 export function verificadorPkce(nonce: string, segredo: string): string {

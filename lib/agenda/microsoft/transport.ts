@@ -21,9 +21,10 @@
 
 import { z } from "zod";
 
+import { RAIZ_DA_GRAPH } from "./enderecos";
 import { GraphHttpError } from "./erros";
 
-export const RAIZ_DA_GRAPH = "https://graph.microsoft.com/v1.0";
+export { RAIZ_DA_GRAPH };
 
 /**
  * O espaço de nomes das nossas propriedades estendidas no evento. CONTRATO DE

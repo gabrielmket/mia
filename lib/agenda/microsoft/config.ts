@@ -27,6 +27,8 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 
+import { ENDERECO_DA_APROVACAO_DO_TI } from "./enderecos";
+
 /** O caminho da volta do consentimento. Tem de estar registrado no app da Microsoft. */
 export const CAMINHO_DO_CALLBACK_MICROSOFT = "/api/v1/agenda/microsoft/callback";
 
@@ -197,5 +199,5 @@ export function linkDeAprovacaoDoTi(clientId: string, origem: string = origemCan
     redirect_uri: enderecoDeRetornoMicrosoft(origem),
     state: "aprovacao_do_ti",
   });
-  return `https://login.microsoftonline.com/organizations/v2.0/adminconsent?${parametros.toString()}`;
+  return `${ENDERECO_DA_APROVACAO_DO_TI}?${parametros.toString()}`;
 }

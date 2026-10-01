@@ -25,33 +25,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
-import { instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { registraAtividadeDaTarefa } from "@/lib/tarefas/atividade";
 import type { TaskSourceKind } from "@/lib/tarefas/vocabulario-de-origem";
 
+import { prazoDaProximaAcao, responsavelDaProximaAcao } from "./regras-da-proxima-acao";
+
+// As duas regras moram num módulo sem nada de servidor, porque o cartão aberto
+// as usa no navegador para anunciar prazo e responsável antes do clique.
+export { prazoDaProximaAcao, responsavelDaProximaAcao };
+
 /** De onde a tarefa nasceu (`crm_tasks.source_kind`, vocabulário aberto). */
 export const ORIGEM_PROXIMA_ACAO_APROVADA: TaskSourceKind = "next_action_approved";
-
-const HORA_DO_PRAZO_DE_HOJE = 18;
-const LIMITE_PARA_HOJE = 17;
-const HORA_DO_PRAZO_DE_AMANHA = 10;
-
-export function prazoDaProximaAcao(agora: Date, fuso: string): Date {
-  const p = partesNoFuso(agora, fuso);
-  if (p.hora < LIMITE_PARA_HOJE) {
-    return instanteDe({ ano: p.ano, mes: p.mes, dia: p.dia, hora: HORA_DO_PRAZO_DE_HOJE }, fuso);
-  }
-  const amanha = partesNoFuso(new Date(agora.getTime() + 86_400_000), fuso);
-  return instanteDe({ ano: amanha.ano, mes: amanha.mes, dia: amanha.dia, hora: HORA_DO_PRAZO_DE_AMANHA }, fuso);
-}
-
-export function responsavelDaProximaAcao(
-  lead: { owner_kind: string | null; owner_user_id: string | null },
-  quemAprovou: string,
-): string {
-  return lead.owner_kind !== "ai" && lead.owner_user_id ? lead.owner_user_id : quemAprovou;
-}
 
 export interface TarefaCriada {
   id: string;
