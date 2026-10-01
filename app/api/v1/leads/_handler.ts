@@ -538,7 +538,19 @@ export async function createLeadHandler(
       custom_fields: input.custom_fields ?? {},
       retomado_de_lead_id: input.retomado_de_lead_id ?? null,
       // FORK MIA — a história que o negócio importado traz do CRM de origem.
-      ...(input.importacao_silenciosa ?? {}),
+      // Só as quatro colunas previstas, uma a uma: espalhar o objeto deixaria
+      // quem conseguisse preenchê-lo trocar QUALQUER coluna deste insert,
+      // inclusive a organização.
+      ...(input.importacao_silenciosa
+        ? {
+            ...(input.importacao_silenciosa.created_at ? { created_at: input.importacao_silenciosa.created_at } : {}),
+            ...(input.importacao_silenciosa.closed_at ? { closed_at: input.importacao_silenciosa.closed_at } : {}),
+            ...(input.importacao_silenciosa.lost_reason ? { lost_reason: input.importacao_silenciosa.lost_reason } : {}),
+            ...(input.importacao_silenciosa.lost_from_stage_id
+              ? { lost_from_stage_id: input.importacao_silenciosa.lost_from_stage_id }
+              : {}),
+          }
+        : {}),
       status: "open",
       position_in_stage: nextPos,
       created_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,

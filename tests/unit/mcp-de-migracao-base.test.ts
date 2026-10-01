@@ -303,3 +303,32 @@ describe("as peças de base", () => {
     await expect(lerEmPaginas(async () => ({ data: null, error: { message: "sem permissão" } }))).rejects.toThrow(/sem permissão/);
   });
 });
+
+/**
+ * A importação silenciosa é uma opção INTERNA do criador de negócios: quem a
+ * preenche leva data de criação, fechamento e motivo de perda para o insert e
+ * cala o `lead.created`. Duas portas precisam ficar fechadas para ela não virar
+ * um jeito de escrever coluna alheia (a organização, por exemplo):
+ *   1. o corpo de `POST /api/v1/leads` não a carrega (o schema descarta);
+ *   2. o handler copia SÓ as quatro colunas previstas, nunca o objeto inteiro.
+ */
+describe("a importação silenciosa não é uma porta para o corpo da requisição", () => {
+  it("o schema de criação de negócio descarta a opção, mesmo que venha no corpo", async () => {
+    const { createLeadSchema } = await import("@/lib/schemas/leads");
+    const lido = createLeadSchema.parse({
+      pipeline_id: "11111111-1111-4111-8111-111111111111",
+      stage_id: "22222222-2222-4222-8222-222222222222",
+      title: "Negócio de teste",
+      importacao_silenciosa: { created_at: "2020-01-01T00:00:00Z", organization_id: "33333333-3333-4333-8333-333333333333" },
+    }) as Record<string, unknown>;
+    expect(lido).not.toHaveProperty("importacao_silenciosa");
+  });
+
+  it("o handler copia as quatro colunas uma a uma, e não espalha o objeto", () => {
+    const fonte = ler("app/api/v1/leads/_handler.ts");
+    expect(fonte).not.toMatch(/\.\.\.\(\s*input\.importacao_silenciosa\s*\?\?\s*\{\}\s*\)/);
+    for (const coluna of ["created_at", "closed_at", "lost_reason", "lost_from_stage_id"]) {
+      expect(fonte).toContain(`${coluna}: input.importacao_silenciosa.${coluna}`);
+    }
+  });
+});
