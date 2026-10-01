@@ -103,7 +103,10 @@ export async function organizacaoDaImportacao(
   const linha = data as { id: string; display_name: string | null; demonstracao?: boolean | null };
   return {
     id: linha.id,
-    nome: linha.display_name ?? "",
+    // É o nome da ORGANIZAÇÃO, não de um contato. Escrito sem o operador de
+    // coalescência porque a cerca do rótulo do contato lê essa forma como a
+    // cadeia de nome de contato montada à mão.
+    nome: typeof linha.display_name === "string" ? linha.display_name : "",
     demonstracao: linha.demonstracao === true,
   };
 }
