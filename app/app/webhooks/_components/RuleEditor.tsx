@@ -45,6 +45,17 @@ import { usePipelines, usePipelineStages } from "@/hooks/webhooks/useWebhookSour
 import { TRIGGER_LABELS, ACTION_LABELS, type TriggerEvent, type ActionType } from "./labels";
 import { ActionConfigForm, defaultActionConfig, type ActionItem } from "./ActionConfigForm";
 import { useT } from "@/hooks/i18n/useT";
+// FORK MIA — os cinco gatilhos de documentos e obrigações (docs/fork/obrigacoes.md).
+import {
+  ConfigDoGatilhoDeObrigacao,
+  type RascunhoDoGatilhoDeObrigacao,
+} from "@/components/obrigacoes/ConfigDoGatilhoDeObrigacao";
+import {
+  DIAS_SUGERIDOS,
+  configDoGatilhoDeObrigacao,
+  ehGatilhoDeObrigacao,
+  gatilhoPedeDias,
+} from "@/lib/obrigacoes/gatilhos";
 
 interface Props {
   open: boolean;
@@ -143,6 +154,15 @@ const AGENDAMENTO_FIELDS_LEGADO: CuratedField[] = [
 // ponytail: etapa de destino usa o funil default (cobre o caso comum de 1
 // funil); se o produto ganhar múltiplos funis relevantes aqui, trocar por um
 // seletor de funil antes do de etapa.
+// FORK MIA — o que as condições de uma regra de obrigação podem conferir: o
+// item (`obrigacao.*`, de lib/obrigacoes/contexto-da-automacao.ts) e as tags
+// do negócio e do contato que o motor resolveu para ele.
+const OBRIGACAO_FIELDS: CuratedField[] = [
+  { value: "obrigacao.nome", label: "Nome do documento ou da atividade", op: "contains" },
+  { value: "lead.tags", label: "Tags do lead", op: "contains", lista: true },
+  { value: "contact.tags", label: "Tags do contato", op: "contains", lista: true },
+];
+
 const CURATED_FIELDS: Record<TriggerEvent, CuratedField[]> = {
   "lead.created": LEAD_FIELDS,
   "lead.stage_changed": [...LEAD_FIELDS, STAGE_FIELD],
@@ -188,6 +208,12 @@ const CURATED_FIELDS: Record<TriggerEvent, CuratedField[]> = {
   // funil (via etapa/tags) e tags do contato.
   "lead.silent_for": LEAD_FIELDS,
   "lead.stage_stale": [...LEAD_FIELDS, STAGE_FIELD],
+  // FORK MIA — documentos e obrigações.
+  "obrigacao.documento_vencendo": OBRIGACAO_FIELDS,
+  "obrigacao.documento_vencido": OBRIGACAO_FIELDS,
+  "obrigacao.documento_nao_enviado": OBRIGACAO_FIELDS,
+  "obrigacao.documento_recebido": OBRIGACAO_FIELDS,
+  "obrigacao.atividade_chegando": OBRIGACAO_FIELDS,
 };
 
 const OP_LABELS: Record<Op, string> = { eq: "é", neq: "não é", contains: "contém" };
@@ -242,6 +268,12 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
     proteger_pela_agenda: false,
   });
 
+  // FORK MIA — o X (dias) e o filtro por tipo dos gatilhos de obrigação.
+  const [configDaObrigacao, setConfigDaObrigacao] = React.useState<RascunhoDoGatilhoDeObrigacao>({
+    dias: "",
+    tipo: "",
+  });
+
   const create = useCreateAutomationRule();
   const update = useUpdateAutomationRule();
   const saving = create.isPending || update.isPending;
@@ -282,12 +314,20 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
       direcao: silencioGuardado ? silencioGuardado.direcao : "da_equipe",
       proteger_pela_agenda: tempoGuardado ? tempoGuardado.proteger_pela_agenda : false,
     });
+    // FORK MIA
+    const obrigacaoGuardada = rule ? configDoGatilhoDeObrigacao(rule.trigger_event, rule.trigger_config) : null;
+    setConfigDaObrigacao({
+      dias: obrigacaoGuardada?.dias != null ? String(obrigacaoGuardada.dias) : "",
+      tipo: obrigacaoGuardada?.tipo ?? "",
+    });
   }, [open, rule]);
 
   const curatedFields = triggerEvent ? CURATED_FIELDS[triggerEvent] : [];
   const ehGatilhoDeData = triggerEvent === GATILHO_DE_DATA_DO_FUNIL;
   const ehGatilhoDeTempo =
     triggerEvent === GATILHO_SILENCIO || triggerEvent === GATILHO_ETAPA_PARADA;
+  // FORK MIA
+  const ehDeObrigacao = ehGatilhoDeObrigacao(triggerEvent);
   const camposDeData = camposDoFunil(
     (pipelinesRes?.data ?? []).find((p) => p.id === configDaData.pipeline_id)?.settings ?? null,
   ).filter((campo) => campo.type === "date");
@@ -351,7 +391,15 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
               ...(triggerEvent === GATILHO_SILENCIO ? { direcao: configDoTempo.direcao } : {}),
               proteger_pela_agenda: configDoTempo.proteger_pela_agenda,
             }
-          : undefined,
+          : ehDeObrigacao
+            ? {
+                // FORK MIA — o X só entra nos gatilhos que o pedem; o tipo vazio é "todos".
+                ...(gatilhoPedeDias(triggerEvent)
+                  ? { dias: configDaObrigacao.dias.trim() === "" ? Number.NaN : Number(configDaObrigacao.dias) }
+                  : {}),
+                ...(configDaObrigacao.tipo.trim() ? { tipo: configDaObrigacao.tipo.trim() } : {}),
+              }
+            : undefined,
     };
     const parsed = createAutomationRuleSchema.safeParse(payload);
     if (!parsed.success) {
@@ -404,6 +452,10 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                 setTriggerEvent(v as TriggerEvent);
                 setConditions([]);
                 setAdvancedRows({});
+                // FORK MIA — o X sugerido de cada gatilho de obrigação.
+                if (ehGatilhoDeObrigacao(v)) {
+                  setConfigDaObrigacao((prev) => ({ ...prev, dias: String(DIAS_SUGERIDOS[v] ?? "") }));
+                }
               }}
             >
               <SelectTrigger>
@@ -500,6 +552,16 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                   </p>
                 ) : null}
               </div>
+            ) : null}
+
+            {/* FORK MIA — os gatilhos de obrigação: X dias, filtro por tipo e o
+                que a regra alcançaria hoje. */}
+            {ehDeObrigacao ? (
+              <ConfigDoGatilhoDeObrigacao
+                gatilho={triggerEvent}
+                valor={configDaObrigacao}
+                onChange={setConfigDaObrigacao}
+              />
             ) : null}
 
             {/* #1540 — os gatilhos por TEMPO: N dias, de quem é o silêncio, e a

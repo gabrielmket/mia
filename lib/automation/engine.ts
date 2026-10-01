@@ -24,6 +24,9 @@ import { regraDoEvento } from "@/lib/automation/gatilho-de-data-do-funil";
 import { regrasDoNomeAntigo } from "@/lib/automation/regras-do-nome-antigo";
 import { ENTIDADE_ESPERADA_POR_GATILHO } from "@/lib/schemas/webhooks";
 import { logger } from "@/lib/logger";
+// FORK MIA — o contexto dos cinco gatilhos de documentos e obrigações.
+import { contextoDaObrigacao } from "@/lib/obrigacoes/contexto-da-automacao";
+import { ENTIDADE_DA_OBRIGACAO } from "@/lib/obrigacoes/gatilhos";
 
 export const AUTOMATION_CONSUMER_KEY = "automation-rules";
 
@@ -149,6 +152,10 @@ export async function buildContext(admin: SupabaseClient, row: EventRow): Promis
         .maybeSingle();
       if (contact) context.contact = contact;
     }
+  } else if (row.entity_kind === ENTIDADE_DA_OBRIGACAO && row.entity_id) {
+    // FORK MIA — o item de obrigação vira negócio, contato e `obrigacao` pela
+    // mesma herança da tela (lib/obrigacoes/contexto-da-automacao.ts).
+    Object.assign(context, await contextoDaObrigacao(admin, row));
   }
   return context;
 }

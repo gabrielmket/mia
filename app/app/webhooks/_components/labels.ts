@@ -54,6 +54,14 @@ export const TRIGGER_LABELS: Record<TriggerEvent, string> = {
   // funil) ficam embaixo, na configuração da regra.
   "lead.silent_for": "Quando ficar N dias sem mensagem",
   "lead.stage_stale": "Quando um lead ficar N dias na mesma etapa",
+  // FORK MIA — documentos e obrigações (lib/obrigacoes/gatilhos.ts). As frases
+  // são literais aqui, e não um espalhamento, para a cerca de espanhol alcançar
+  // cada uma pela tabela.
+  "obrigacao.documento_vencendo": "Quando um documento estiver para vencer (X dias antes)",
+  "obrigacao.documento_vencido": "Quando um documento vencer (no dia seguinte)",
+  "obrigacao.documento_nao_enviado": "Quando um documento pedido não chegar (pedido há X dias)",
+  "obrigacao.documento_recebido": "Quando um documento for recebido",
+  "obrigacao.atividade_chegando": "Quando uma atividade recorrente estiver chegando (X dias antes)",
 };
 
 export const ACTION_LABELS: Record<ActionType, string> = {

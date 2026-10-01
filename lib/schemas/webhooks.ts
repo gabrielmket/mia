@@ -18,6 +18,9 @@ import {
   configDaEtapaParada,
   configDoSilencio,
 } from "@/lib/automation/gatilhos-de-tempo";
+// FORK MIA — os cinco gatilhos de documentos e obrigações (docs/fork/obrigacoes.md).
+import { ENTIDADE_DOS_GATILHOS_DE_OBRIGACAO } from "@/lib/obrigacoes/gatilhos";
+import { exigirConfigDoGatilhoDeObrigacao } from "@/lib/obrigacoes/schema-do-gatilho";
 
 /**
  * Os gatilhos que o motor reconhece, e a entidade que cada um tem que trazer.
@@ -92,6 +95,11 @@ export const ENTIDADE_ESPERADA_POR_GATILHO = {
   // regras do mesmo gatilho com N diferentes disparariam juntas.
   "lead.silent_for": "crm_lead",
   "lead.stage_stale": "crm_lead",
+  // FORK MIA — documento vencendo, vencido, não enviado, recebido e atividade
+  // recorrente chegando. A entidade é o próprio item (`mia_obrigacao`); quem o
+  // transforma em negócio e contato para as ações é `lib/obrigacoes/
+  // contexto-da-automacao.ts`, chamado pelo `buildContext` do motor.
+  ...ENTIDADE_DOS_GATILHOS_DE_OBRIGACAO,
 } as const;
 
 export type GatilhoDeAutomacao = keyof typeof ENTIDADE_ESPERADA_POR_GATILHO;
@@ -260,7 +268,9 @@ export const createAutomationRuleSchema = z
     trigger_config: z.record(z.string(), z.unknown()).optional(),
   })
   .superRefine(exigirConfigDoGatilhoDeData)
-  .superRefine(exigirConfigDosGatilhosDeTempo);
+  .superRefine(exigirConfigDosGatilhosDeTempo)
+  // FORK MIA — os gatilhos de obrigação que pedem X dias.
+  .superRefine(exigirConfigDoGatilhoDeObrigacao);
 
 /**
  * O gatilho de data sem a configuração dele é uma regra que NUNCA dispara — a
@@ -338,7 +348,9 @@ export const updateAutomationRuleSchema = z
     // configuração, produz o mesmo calado da criação (#1540): regra salva que
     // a varredura não sabe avaliar.
     exigirConfigDosGatilhosDeTempo(patch as { trigger_event: string; trigger_config?: Record<string, unknown> }, ctx);
-  });
+  })
+  // FORK MIA — mesma recusa da criação para os gatilhos de obrigação.
+  .superRefine(exigirConfigDoGatilhoDeObrigacao);
 
 export type CreateWebhookSourceInput = z.infer<typeof createWebhookSourceSchema>;
 export type UpdateWebhookSourceInput = z.infer<typeof updateWebhookSourceSchema>;

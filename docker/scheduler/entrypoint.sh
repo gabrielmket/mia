@@ -172,6 +172,13 @@ CRONS="
 # repetição enquanto a âncora não mudar. Minuto 37, e não o 23 da data do funil:
 # as duas varrem crm_leads e não devem disputar a mesma batida num self-host pequeno.
 37 * * * *|60|api/v1/cron/lead-time-triggers
+# OS DOCUMENTOS E AS OBRIGACOES (fork MIA, docs/fork/obrigacoes.md): documento
+# vencendo, vencido, pedido sem resposta e atividade recorrente chegando. De hora
+# em hora, como a data do funil: quem decide o momento e o relogio de parede de
+# CADA empresa (a rodada so age na que marca 9h). Minuto 43, longe do 23 e do 37
+# das outras duas varreduras de data. Barato: empresa sem regra desses gatilhos
+# nao e varrida.
+43 * * * *|90|api/v1/cron/obrigacoes-avisos
 # O canal mudo (doc 11, decisão B): varredura de banco, sem rede, com régua em
 # DIAS. Diária e de madrugada porque o estado que ela lê muda em dias — de 5 em
 # 5 minutos seriam 288 varreduras para nada, e o aviso chegaria na mesma hora.
