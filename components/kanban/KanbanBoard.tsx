@@ -15,7 +15,9 @@ import { midpoint } from "@/lib/kanban/fractional-indexing";
 import type { Lead } from "@/lib/types/leads";
 import type { Pipeline, Stage } from "@/lib/kanban/types";
 import { StageColumn } from "./StageColumn";
-import { LeadDossier } from "./LeadDossier";
+// FORK MIA — o cartão aberto (gaveta larga com tela cheia) no lugar do dossiê
+// estreito; ele reusa as peças do dossiê (components/cartoes/aberto/).
+import { CartaoAberto } from "@/components/cartoes/aberto/CartaoAberto";
 import { RetomarComoNovoNegocioDialog } from "./RetomarComoNovoNegocioDialog";
 import { camposDoFunil } from "@/lib/leads/campos-do-funil";
 // FORK MIA — a ordem da coluna (urgência, quentes, valor, manual) e o contexto
@@ -344,16 +346,33 @@ export function KanbanBoard({
         ))}
       </div>
       {leadDoDossie && (
-        <LeadDossier
+        <CartaoAberto
           open
           onOpenChange={(v: boolean) => !v && setDossieId(null)}
           lead={leadDoDossie}
           pipelineId={pipelineId}
           fieldDefs={camposDoFunil(data.pipeline.settings ?? null)}
+          settingsDoFunil={(data.pipeline.settings ?? null) as Record<string, unknown> | null}
+          stages={data.stages}
           stageName={
             data.stages.find((s) => s.id === leadDoDossie.stage_id)?.name ?? "—"
           }
           ownerNames={ownerNames}
+          onMoverEtapa={(stageId) => {
+            // O mesmo caminho do arrasto (e da recusa de campos obrigatórios):
+            // o negócio entra no FIM da etapa de destino.
+            const destino = grouped?.get(stageId) ?? [];
+            const ultimo = destino.reduce<Lead | null>(
+              (maior, l) => (!maior || l.position_in_stage > maior.position_in_stage ? l : maior),
+              null,
+            );
+            moveCard.mutate({
+              leadId: leadDoDossie.id,
+              stageId,
+              positionInStage: midpoint(ultimo?.position_in_stage ?? null, null),
+              expectedUpdatedAt: leadDoDossie.updated_at,
+            });
+          }}
         />
       )}
 

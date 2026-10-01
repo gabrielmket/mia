@@ -73,3 +73,42 @@ next_action_approved`. Audita (`crm_task.created`) e entra na linha do tempo
    objeção que a IA registrou fica à vista de quem assume.
 9. **Laço de retorno:** a tarefa aprovada e não cumprida volta ao cartão como
    "1 tarefa atrasada" e sobe na ordem por urgência.
+
+## 2. O cartão aberto
+
+Clicar no cartão abre uma **gaveta larga** (em vez do dossiê estreito do upstream),
+com o botão **Tela cheia** (a escolha fica no navegador de quem olha). Mesma porta
+de antes: o clique no cartão e o endereço `/app/leads/<id>`.
+
+| Parte | O que mostra | De onde vem |
+|---|---|---|
+| Trilha | Conversa › Contato › Empresa › Negócio, cada um levando à sua tela | lead, contato, empresa |
+| Cabeçalho | título (com a pessoa ou a empresa), ganho/perdido, "Já comprou Nx · R$ X" (leva ao histórico de compras), valor, etapa, dono, faixa com o porquê, canal e campanha, próximo compromisso e fechamento previsto | como o cartão fechado |
+| Barra de etapas | as etapas do funil com os **dias em cada uma**; clicar numa etapa move o negócio pelo MESMO caminho do arrasto (inclusive a recusa de campos obrigatórios) | atividades `stage_changed` (`lib/cartoes/etapas.ts`) |
+| Foco | lead esperando resposta; proposta da IA ("Aprovar e criar tarefa", dizendo para quem e com que prazo antes do clique); próximo compromisso; tarefa atrasada ou a mais próxima ("Concluir"). Compositor: Nota (com "fixar no topo"), Tarefa (título, prazo, responsável), Mensagem e Agendar (levam à conversa e à agenda) | conversa, `lead_state`, agenda, `crm_tasks` |
+| Resumo da IA | estágio, quer, orçamento e pagamento, quem decide, prazo, objeções **abertas e respondidas**, prometido, próxima ação com Aprovar/Descartar, resumo do último turno | `lead_state` (BANT), `lead_checkpoints` (retratos, declaração) |
+| Pessoas | contato principal e as pessoas envolvidas com o **papel neste negócio** (incluir/tirar), outros negócios da pessoa, "ligar este negócio à empresa" quando a pessoa tem empresa, e os dados do contato (componente do upstream) | `crm_lead_links` (contact, `envolvido`, `metadata.papel`) |
+| Empresa | nome (leva à ficha), CNPJ, telefone, site | `crm_empresas` |
+| Histórico de compras | ver a seção 3 | |
+| Origem e atribuição | canal, campanha, conjunto, anúncio, 1ª mensagem (sem os códigos de rastreio), 1º toque, respostas do formulário da Meta, conversões enviadas à Meta e ao Google ou por que não | lead e contato, `ad_conversion_dispatches` |
+| Campos do funil | os campos do funil com a marca **"veio da conversa"** no que a IA preencheu e ninguém confirmou ("Confirmar"), e "obrigatório para <próxima etapa>"; "Editar campos" abre o formulário do upstream | `lead_edited.payload.custom_field_keys` + ator |
+| Agenda, Tarefas, Propostas | os compromissos do negócio (próximos e passados, com comparecimento), as tarefas (concluir/reabrir) e as propostas (componente do upstream) | agenda, `crm_tasks`, propostas |
+| Histórico | filtros **Importante** (padrão), **Tudo**, **Conversas** (com as últimas mensagens) e **Tarefas**. Em Importante, a nota fixada vai ao topo e a rotina da IA de um mesmo dia vira uma linha ("A IA fez 14 ações · 12 decisões de não enviar") — continua tudo registrado | `useLeadTimeline` (vivo) + mensagens |
+
+**Convivência com o upstream:** o `LeadDossier` continua no repositório; o quadro
+abre o cartão aberto (`components/cartoes/aberto/CartaoAberto.tsx`), que reusa as
+peças do dossiê. `tests/unit/cartao-aberto-mia.test.tsx` reprova quando o dossiê
+passa a importar uma peça que o cartão aberto não usa.
+
+**"Veio da conversa":** a edição do negócio (`updateLeadHandler`, upstream) passou a
+gravar em `lead_edited.payload.custom_field_keys` QUAIS campos personalizados
+mudaram. Vale a última palavra: se foi da IA, a marca aparece; "Confirmar"
+(`POST /api/v1/leads/[id]/campos-confirmados`) grava a palavra humana. Edição
+anterior a esta versão não tem a lista: esses campos ficam sem marca.
+
+**Rotas novas** (todas com `requireSupportWrite` antes do efeito, papel `agent`,
+organização do cookie, Zod, linha do tempo e auditoria):
+`GET /api/v1/leads/[id]/cartao` (leitura, `viewer`), `POST /api/v1/leads/[id]/notas`
+(`lead.nota_adicionada`), `POST|DELETE /api/v1/leads/[id]/envolvidos`
+(`lead.contato_envolvido_incluido`/`_retirado`), `POST
+/api/v1/leads/[id]/campos-confirmados` (`lead.campo_confirmado`).

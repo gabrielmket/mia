@@ -16,6 +16,8 @@ import { resolveOwnerPatch, type OwnerPatch, type OwnerPatchInput } from "@/lib/
 import { emitLeadActivity, stageChangeReason } from "@/lib/leads/activity-emitter";
 import { listaLegivel } from "@/lib/leads/activity-vocabulary";
 import { camposAlterados } from "@/lib/leads/campos-alterados";
+// FORK MIA — a marca "veio da conversa" do cartão aberto (lib/cartoes/campos-da-conversa.ts).
+import { chavesPersonalizadasAlteradas } from "@/lib/cartoes/campos-da-conversa";
 import { RECUSA_DE_TROCA_DE_FUNIL } from "@/lib/leads/clonar-para-funil";
 import {
   RECUSA_RETOMADA_ETAPA_INDISPONIVEL,
@@ -730,6 +732,12 @@ export async function updateLeadHandler(
   // inteiro a cada salvamento, entao `Object.keys(input)` acusava cinco campos
   // quando a pessoa mexeu em um. Detalhe em lib/leads/campos-alterados.ts.
   const fields = camposAlterados(patch, existing as Record<string, unknown>);
+  // FORK MIA — QUAIS campos personalizados mudaram, com o ator da atividade: é
+  // daí que o cartão aberto marca o campo que "veio da conversa" (preenchido pela
+  // IA e ainda não confirmado). Nomes de campo, nunca valores (ver o reason abaixo).
+  const customFieldKeys = fields.includes("custom_fields")
+    ? chavesPersonalizadasAlteradas(patch.custom_fields, existing.custom_fields)
+    : [];
 
   // A EDIÇÃO HUMANA ENTRA NA TIMELINE (wave 6). Antes disto, mexer num campo
   // era invisível: a IA deixava rastro e o humano não — meia continuidade
@@ -766,7 +774,7 @@ export async function updateLeadHandler(
     // antes-e-depois DE PROPÓSITO: lá o texto é a proposta do PRÓPRIO AGENTE,
     // escrita por máquina. A origem do texto é que decide, não a forma da frase.
     reason: `Alterou ${listaLegivel(fields)}`,
-    payload: { fields },
+    payload: { fields, ...(customFieldKeys.length > 0 ? { custom_field_keys: customFieldKeys } : {}) },
   });
   if (!atividadeEdicao.ok) {
     // Rastro de mutação já ocorrida: falha BAIXO, mas contada (ver
