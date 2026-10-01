@@ -16,6 +16,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { audit } from "@/lib/audit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { FERRAMENTAS } from "./ferramentas";
+// FORK MIA — a lista de pessoas de uma importação não vai para a auditoria.
+import { argumentosParaAuditoria } from "./importacao/auditoria";
 import { operacaoPorChave, podeExecutar } from "./operacoes";
 import type { TokenDePlataforma } from "./auth";
 
@@ -117,7 +119,11 @@ export function criarServidorDePlataforma(
                 // Os ARGUMENTOS vão, e é deliberado: sem eles a linha diz
                 // "lançou crédito" sem dizer em quem nem quanto — e é
                 // exatamente isso que alguém vai querer saber depois.
-                argumentos: args,
+                //
+                // FORK MIA — menos nas ferramentas de importação, cujos
+                // argumentos são a lista de pessoas de um cliente: lá entram
+                // contagens (`importacao/auditoria.ts`).
+                argumentos: argumentosParaAuditoria(ferramenta, args),
                 duracao_ms: Date.now() - inicio,
               },
             });

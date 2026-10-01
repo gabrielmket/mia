@@ -491,6 +491,11 @@ export const AUDIT_ACTIONS = [
   // dentro de um cliente e erra dentro dele; este administra todos.
   "plataforma.token_criado",
   "plataforma.token_revogado",
+  // FORK MIA — uma chamada de importacao de base ou de materiais pelo MCP de
+  // plataforma (docs/fork/mcp-de-migracao.md). Fica DENTRO da organizacao que
+  // recebeu a base, com contagens e ids e sem nome, telefone ou e-mail: e o
+  // "trabalho de importacao" que `plataforma_ver_importacao` lista.
+  "plataforma.importacao",
   // A política de cadastro da INSTALAÇÃO trocada em `platform_settings`
   // (migration 0233) — mutação de plataforma, sem `organization_id`. Auditável
   // porque decide quem consegue ENTRAR no sistema inteiro, e "por que ninguém

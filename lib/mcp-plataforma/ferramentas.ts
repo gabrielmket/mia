@@ -35,6 +35,8 @@ import { nomeDoCanal } from "@/lib/channels/estado";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 import { saldoDaPlataforma } from "@/lib/ai/custo/saldo-da-plataforma";
 import { CARIMBO_DO_SCHEMA, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
+// FORK MIA — as ferramentas de importação (docs/fork/mcp-de-migracao.md).
+import { FERRAMENTAS_DE_IMPORTACAO } from "./importacao";
 
 export interface ContextoDaFerramenta {
   admin: SupabaseClient;
@@ -423,6 +425,7 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
       };
     },
   },
+  ...FERRAMENTAS_DE_IMPORTACAO,
 ] as const;
 
 export const FERRAMENTA_POR_NOME = new Map(FERRAMENTAS.map((f) => [f.name, f]));

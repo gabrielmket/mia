@@ -61,8 +61,21 @@ function porUtm(m: Meta): SiglaDoCanal | null {
   return null;
 }
 
+/**
+ * A base trazida de outro CRM pelo MCP de migração nasce com
+ * `source = "importacao:<sistema de origem>"` (`sourceDaImportacao`, em
+ * `lib/mcp-plataforma/importacao/base.ts`). O prefixo é repetido aqui, e não
+ * importado, porque este arquivo roda no navegador e aquele não pode entrar no
+ * pacote da tela; `tests/unit/mcp-de-migracao-base.test.ts` reprova se os dois
+ * deixarem de bater.
+ */
+function veioDeMigracao(source: string | null): boolean {
+  return typeof source === "string" && source.startsWith("importacao:");
+}
+
 function siglaDoContato(c: OrigemDoContatoBruta): SiglaDoCanal | null {
   const m = c.source_metadata ?? {};
+  if (veioDeMigracao(c.source)) return "IMPORT";
   switch (c.source) {
     case "meta_ads":
       return texto(m.meta_lead_id) || texto(m.meta_form_id) ? "FORM" : "META";
@@ -93,6 +106,7 @@ function siglaDoNegocio(lead: OrigemDoNegocio, contato: OrigemDoContatoBruta | n
   const tags = lead.tags ?? [];
   if (lead.source === "campanha" || lead.source === "campaign") return "CAMPANHA";
   if (lead.external_id?.startsWith("meta-lead:") || tags.includes("Formulario_Meta")) return "FORM";
+  if (veioDeMigracao(lead.source)) return "IMPORT";
   switch (lead.source) {
     case "meta_ads":
       return texto(m.meta_lead_id) ? "FORM" : "META";

@@ -20,6 +20,9 @@
  * mais aquela.
  */
 
+// FORK MIA — as operações das ferramentas de importação (docs/fork/mcp-de-migracao.md).
+import { OPERACOES_DE_IMPORTACAO } from "./importacao/operacoes";
+
 /** Uma escrita que um token de plataforma pode receber, nominalmente. */
 export interface OperacaoDePlataforma {
   /** O que vai gravado em `platform_api_tokens.operacoes`. */
@@ -69,6 +72,7 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
   // entrega dado de TERCEIRO, e a mais difícil de desfazer. Entra quando o
   // fluxo de convite for atravessado com o mesmo cuidado que a tela tem hoje
   // (papel, expiração, aviso ao dono) — não como um atalho a mais nesta lista.
+  ...OPERACOES_DE_IMPORTACAO,
 ] as const;
 
 const POR_CHAVE = new Map(OPERACOES.map((o) => [o.chave, o]));
