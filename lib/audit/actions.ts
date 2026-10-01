@@ -563,6 +563,14 @@ export const AUDIT_ACTIONS = [
   // de mídia, então precisa de dono na trilha como a conexão acima.
   "google_ads_conversion_rules.updated",
   "google_ads_conversion_action.created",
+  // FORK MIA (migration 9017) — conversões da Meta por etapa do funil
+  // (docs/fork/conversoes-da-meta.md): quem mudou o que cada etapa informa à
+  // Meta, quem ligou a volta dos leads de formulário e quem pediu o reenvio de
+  // um evento de etapa. Nenhuma carrega token. O teste de conexão é leitura e
+  // não audita.
+  "conversoes_meta.regras_salvas",
+  "conversoes_meta.leads_de_formulario",
+  "conversoes_meta.reenvio_solicitado",
   // A conexão de LEITURA da organização com a conta de anúncios (0214).
   // Ação SEPARADA da de cima, e não um `metadata.purpose` na mesma: a pergunta
   // que cada trilha responde é diferente. "Quem apontou minhas vendas para este

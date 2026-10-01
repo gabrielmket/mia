@@ -25,6 +25,8 @@ import { mediaDeriveHandler } from "@/workers/media-derive-worker.handler";
 import { webPushInboundHandler } from "@/lib/notifications/push.handler";
 import { conversaoDeQualificacaoHandler } from "@/lib/conversoes/qualificacao.handler";
 import { conversaoDeVendaHandler } from "@/lib/conversoes/envio.handler";
+// FORK MIA (9017): as conversões da Meta por etapa, ao lado das duas do upstream.
+import { conversaoDeEtapaDaMetaHandler } from "@/lib/conversoes-meta/etapa.handler";
 import { avisoDeEtapaHandler } from "@/lib/leads/aviso-de-etapa.handler";
 import { avisoDeCasoAoSuporteHandler } from "@/lib/escalacao/aviso-ao-suporte.handler";
 import { avisoDePropostaNoWhatsAppHandler } from "@/lib/propostas/aviso-no-whatsapp.handler";
@@ -80,5 +82,8 @@ export function ensureHandlersRegistered(): void {
   // no banco. Falha dele nunca segura os handlers acima.
   registerHandler(conversaoDeVendaHandler);
   registerHandler(conversaoDeQualificacaoHandler);
+  // FORK MIA (9017): depois dos dois do upstream, pelo mesmo critério deles (sai
+  // por rede de terceiro). Escuta os mesmos eventos e não muda o que eles fazem.
+  registerHandler(conversaoDeEtapaDaMetaHandler);
   _registered = true;
 }
