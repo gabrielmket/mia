@@ -14,6 +14,8 @@ import { TOOL_CATALOG, VALID_TOOL_IDS } from "./catalog";
 import { crmSearchContacts, crmGetContact, crmProposeContactField } from "./contacts";
 import { crmRegistrarEmpresaDoContato } from "./empresa-do-contato";
 import { crmPassarParaOComercial } from "./passar-para-o-comercial";
+// FORK MIA — documentos e obrigações: ler as pendências e PROPOR o recebimento.
+import { crmListarObrigacoesPendentes, crmProporRecebimentoDeDocumento } from "./obrigacoes";
 import {
   crmListConversations,
   crmGetConversation,
@@ -111,6 +113,10 @@ export const allTools: ReadonlyArray<McpToolDefinition> = [
   crmRegistrarEmpresaDoContato,
   // FORK MIA — a passagem SDR → Comercial numa chamada só.
   crmPassarParaOComercial,
+  // FORK MIA — documentos e obrigações: o agente lê o que está pendente e propõe
+  // o recebimento de um arquivo; quem marca recebido é uma pessoa.
+  crmListarObrigacoesPendentes,
+  crmProporRecebimentoDeDocumento,
   crmListConversations,
   crmGetConversation,
   crmGetConversationHistory,

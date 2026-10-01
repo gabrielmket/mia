@@ -154,6 +154,13 @@ export const ALVO_DE_FUNIL: Record<string, AlvoDeFunil> = {
   // funil do agente), e o `contact_id` é OBRIGATÓRIO: o alvo resolve de verdade,
   // como na agenda. Fora do escopo, a passagem é recusada antes de tocar em nada.
   crm_passar_para_o_comercial: "funil_vem_do_contato",
+  // FORK MIA — propor que um arquivo da conversa é um documento pedido grava uma
+  // PROPOSTA em `mia_obrigacoes_propostas`, que uma pessoa confirma ou recusa.
+  // Não move negócio, não muda etapa e nem marca o documento como recebido: não
+  // toca funil nenhum. A barreira dela é outra, e está na própria ferramenta: o
+  // arquivo só entra em item do contato da conversa, do negócio dele ou da
+  // empresa dele.
+  crm_propor_recebimento_de_documento: "sem_funil",
   // Rascunho sugerido por integração (#1611): opera por `conversation_id`,
   // nunca `lead_id`, e não mexe em estado de funil nenhum. A barreira é OUTRA,
   // e é dela que a segurança depende: o RBAC da rota (agent+), o escopo
