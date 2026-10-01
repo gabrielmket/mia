@@ -112,3 +112,58 @@ organização do cookie, Zod, linha do tempo e auditoria):
 (`lead.nota_adicionada`), `POST|DELETE /api/v1/leads/[id]/envolvidos`
 (`lead.contato_envolvido_incluido`/`_retirado`), `POST
 /api/v1/leads/[id]/campos-confirmados` (`lead.campo_confirmado`).
+
+## 3. Fichas conectadas e histórico de compras
+
+### Ficha do contato (`/app/contacts/<id>`, aba Visão geral)
+
+O componente `FichaConectadaDoContato` entra na ficha do upstream por uma linha,
+acima dos dados de cadastro: estágio do ciclo (Novo › Qualificando › Qualificado ›
+Negociando › Cliente), **empresa opcional**, negócios (os dele e aqueles em que ele
+está envolvido, com o papel; "Novo negócio" já ligado à pessoa), conversas, histórico
+de compras, resumo da IA, memória da IA (`lead_notes`), agenda e tarefas. Os dados
+propostos pela IA para aprovar continuam no topo da página (`PropostasDeDado`).
+
+**Empresa opcional** (regra do Gabriel): sem empresa não aparece campo vazio, só o
+link "Vincular a uma empresa". Vincular pede a empresa, o cargo, o **papel**
+(decisor, financeiro, usuário, influenciador, outro) e se é o **contato principal**,
+e oferece ligar os negócios abertos da pessoa (sem empresa) a ela. "Desvincular"
+solta. Em modo B2C ("vende a pessoas") nada de empresa aparece. Tudo pela rota de
+contato que já existia (`PATCH /api/v1/contacts/[id]`, que passou a aceitar
+`papel_na_empresa` e `principal_na_empresa`).
+
+### Ficha da empresa (`/app/empresas/<id>`)
+
+Página própria: dados, selo de cliente com compras e total, números (negócios abertos
+com valor, total comprado, última interação, negócio mais quente), **contatos com
+papel e o principal** (vincular pessoa aqui mesmo), negócios (etapa, valor, dono,
+chance), histórico de compras somando todas as pessoas (cada compra diz quem
+comprou) e "Editar" com o formulário da lista. A lista `/app/empresas` segue igual.
+
+### Do atendimento ao negócio
+
+No painel do atendimento (`CRMSidePanel`), "Abrir cartão do negócio" leva ao cartão
+aberto, e o nome da empresa leva à ficha dela.
+
+### Histórico de compras (contato, empresa e cartão aberto)
+
+Uma régua só (`lib/cartoes/compras.ts`) e um bloco só (`HistoricoDeCompras`):
+selo **"Já é cliente"** (1 compra) ou **"Cliente recorrente"** (2+), número de
+compras e total, ticket médio, última compra e há quanto tempo, intervalo médio
+entre compras, **próxima compra provável** (última + intervalo médio, marcada como
+**estimativa**; com uma compra só não há padrão e a tela diz isso), o **hábito**
+(o quê, pagamento, finalidade) DERIVADO do que existe e dito assim, e a lista com
+data, o que comprou, valor e origem.
+
+Fontes: **negócios ganhos** (`crm_leads.status = 'won'`, valor e `closed_at`) e
+**pedidos do contato** (`orders`, a tabela que a ferramenta `crm_list_contact_orders`
+lê; contam pago, faturado, enviado e entregue). O pedido entra na régua do negócio
+(×100) antes de somar. Na empresa, soma os negócios ligados a ela e os de todas as
+pessoas dela, sem contar duas vezes.
+
+### Migration 9013
+
+`contacts.papel_na_empresa` (vocabulário fechado por CHECK) e
+`contacts.principal_na_empresa`. Dado pessoal profissional, como `cargo`: vão ao
+relatório da LGPD e somem na anonimização (gatilho nosso da 0264, redefinido). Na
+fase 6 do plano (empresa única no módulo do upstream), migram para o vínculo de lá.

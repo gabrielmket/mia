@@ -19,6 +19,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { empresaUpdateSchema } from "@/lib/schemas/empresas";
 import { createClient } from "@/lib/supabase/server";
+import { montarFichaDaEmpresa } from "@/lib/cartoes/fichas-servidor";
 
 import { COLUNAS_DA_EMPRESA } from "../route";
 
@@ -72,12 +73,18 @@ export async function GET(_req: NextRequest, ctx: Ctx): Promise<Response> {
     .filter((n) => (n as { status?: string }).status === "won")
     .reduce((soma, n) => soma + Number((n as { value_cents?: number | null }).value_cents ?? 0), 0);
 
+  // A ficha CONECTADA (pessoas com papel, negócios com etapa e dono, números e
+  // histórico de compras): lib/cartoes/fichas-servidor.ts. Os campos acima ficam
+  // como estavam, para quem já os lê.
+  const ficha = await montarFichaDaEmpresa(supabase, authz.org.orgId, id);
+
   return ok(
     {
       ...empresa,
       contatos: contatos ?? [],
       negocios: negocios ?? [],
       total_ganho_cents: ganhoCents,
+      ficha,
     },
     { requestId },
   );

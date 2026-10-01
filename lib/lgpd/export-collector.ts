@@ -35,6 +35,9 @@ export interface ContactSnapshot {
   // Dado pessoal profissional (migration 0262).
   cargo: string | null;
   setor: string | null;
+  // O papel na empresa e se é o contato principal (MIA, migration 9013).
+  papel_na_empresa: string | null;
+  principal_na_empresa: boolean;
   // A EMPRESA vai pelo NOME, não pelo id. O titular tem direito de saber a que
   // empresa foi vinculado; um uuid não responde isso a ninguém.
   empresa_nome: string | null;
@@ -1059,7 +1062,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         // sobrevive à anonimização. Deixar qualquer um de fora responde "não
         // temos mais nada sobre você" a quem exerce direito de acesso, e a
         // resposta é falsa.
-        "id, name, display_name, email, phone_number, wa_lid, cpf_encrypted, birthdate, is_blocked, is_anonymized, consent, tags, source, source_metadata, custom_fields, cargo, setor, empresa_id, social_identity, created_at, last_activity_at, first_service_at",
+        "id, name, display_name, email, phone_number, wa_lid, cpf_encrypted, birthdate, is_blocked, is_anonymized, consent, tags, source, source_metadata, custom_fields, cargo, setor, papel_na_empresa, principal_na_empresa, empresa_id, social_identity, created_at, last_activity_at, first_service_at",
       )
       .eq("organization_id", organizationId)
       .eq("id", contactId)
@@ -1125,6 +1128,8 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         source_metadata: (data.source_metadata as Record<string, unknown> | null) ?? null,
         cargo: data.cargo ?? null,
         setor: data.setor ?? null,
+        papel_na_empresa: (data.papel_na_empresa as string | null) ?? null,
+        principal_na_empresa: Boolean(data.principal_na_empresa),
         empresa_nome: await nomeDaEmpresa(admin, organizationId, data.empresa_id, requestId),
         social_identity: data.social_identity ?? null,
         created_at: data.created_at,

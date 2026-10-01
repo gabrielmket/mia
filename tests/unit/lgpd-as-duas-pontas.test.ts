@@ -103,6 +103,10 @@ const CLASSIFICACAO: Record<string, Classificacao> = {
   // Dado pessoal profissional (migration 0262).
   cargo: { tipo: "pessoal" },
   setor: { tipo: "pessoal" },
+  // O papel na empresa e se é o contato principal (migration 9013): dado
+  // pessoal profissional, da mesma família de cargo.
+  papel_na_empresa: { tipo: "pessoal" },
+  principal_na_empresa: { tipo: "pessoal" },
   // Vai ao relatório pelo NOME da empresa: um uuid não responde "a que empresa
   // vocês me vincularam" a ninguém. O `select` traz o id e uma leitura plana de
   // `crm_empresas` resolve o nome (o embed derrubava o coletor em cliente que só
