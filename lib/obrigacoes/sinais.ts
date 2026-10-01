@@ -59,11 +59,16 @@ export async function avisosDeObrigacaoDoQuadro(
           .in(coluna, lote) as unknown as PromiseLike<{ data: ItemDoSinal[] | null; error: { message: string } | null }>,
       );
     const unicos = (valores: Array<string | null | undefined>) => [...new Set(valores.filter((v): v is string => !!v))];
+    // Função `async` de propósito: se o cliente lançar na hora (e não numa
+    // promessa), o erro vira rejeição e chega ao `Promise.all` junto das outras
+    // leituras. Chamado direto na lista, o lançamento abortava a lista no meio e
+    // deixava as leituras já disparadas rejeitando sem ninguém ouvir.
+    const lerFuso = async () => db.from("organizations").select("timezone").eq("id", org).maybeSingle();
     const [doNegocio, daEmpresa, doContato, organizacao] = await Promise.all([
       ler("lead_id", vivos.map((n) => n.id)),
       ler("empresa_id", unicos(vivos.map((n) => n.empresa_id))),
       ler("contact_id", unicos(vivos.map((n) => n.contact_id))),
-      db.from("organizations").select("timezone").eq("id", org).maybeSingle(),
+      lerFuso(),
     ]);
     for (const r of [doNegocio, daEmpresa, doContato]) {
       if (r.error) throw new Error(r.error.message);
