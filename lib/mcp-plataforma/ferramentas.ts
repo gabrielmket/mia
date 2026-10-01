@@ -37,6 +37,7 @@ import { FERRAMENTAS_DE_EQUIPE_E_MENSAGENS } from "./ferramentas/equipe-e-mensag
 import { FERRAMENTAS_DE_ETIQUETAS_E_MEMORIA } from "./ferramentas/etiquetas-e-memoria";
 import { FERRAMENTAS_DE_FUNIL } from "./ferramentas/funil";
 import { FERRAMENTAS_DE_LEITURA } from "./ferramentas/leituras";
+import { FERRAMENTAS_DE_OBRIGACOES } from "./ferramentas/obrigacoes";
 import { FERRAMENTAS_DA_PLATAFORMA } from "./ferramentas/plataforma";
 import { FERRAMENTAS_DE_PRODUTOS } from "./ferramentas/produtos";
 // As ferramentas de importação (docs/fork/mcp-de-migracao.md).
@@ -59,6 +60,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DE_AGENTE,
   ...FERRAMENTAS_DE_AUTOMACAO_E_AGENDA,
   ...FERRAMENTAS_DE_EQUIPE_E_MENSAGENS,
+  // documentos e obrigações com vencimento: catálogo, itens e leitura (docs/fork/obrigacoes.md)
+  ...FERRAMENTAS_DE_OBRIGACOES,
   // a migração de outro CRM: empresas, contatos, negócios e materiais (docs/fork/mcp-de-migracao.md)
   ...FERRAMENTAS_DE_IMPORTACAO,
 ];

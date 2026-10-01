@@ -27,6 +27,7 @@ import { acharPorNomeOuId } from "@/lib/implantacao/base";
 import { lerAgentes, lerVersoes, pendenciasDePublicacao } from "@/lib/implantacao/agente";
 import { lerTipos } from "@/lib/implantacao/agenda";
 import { lerRegras } from "@/lib/implantacao/automacoes";
+import { CONFIGURACAO_DOS_GATILHOS_DE_OBRIGACAO, modelosDeObrigacaoParaOAgente } from "@/lib/implantacao/obrigacoes";
 import { capacidadesOferecidas, catalogoServido, pacotesLigados } from "@/lib/implantacao/capacidades";
 import { lerConvites, lerMembros } from "@/lib/implantacao/equipe";
 import { GATILHOS_COM_MOTOR, lerFluxos, nosDoGrafo } from "@/lib/implantacao/followup";
@@ -55,6 +56,8 @@ const SECOES_DE_MODELO = [
   "agenda",
   "etiquetas",
   "empresa",
+  // os tipos de documentos e obrigações por segmento (docs/fork/obrigacoes.md)
+  "obrigacoes",
 ] as const;
 
 const SECOES_DE_CONFIGURACAO = [
@@ -90,7 +93,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
       "Os MODELOS e VOCABULÁRIOS que as ferramentas de implantação aceitam, para montar os pedidos sem adivinhar: " +
       "funis prontos por tipo de negócio (com o passo do agente em cada etapa), modelos de follow-up por segmento (com o id para instalar), " +
       "pacotes de capacidade do agente (e as capacidades de cada um), gatilhos e ações de automação (com o formato de cada `config`), " +
-      "categorias e locais dos tipos de agendamento, a paleta de cores das etiquetas, e fusos, moedas e papéis. " +
+      "categorias e locais dos tipos de agendamento, a paleta de cores das etiquetas, fusos, moedas e papéis, e os tipos de documentos e obrigações por segmento. " +
       "QUANDO USAR: antes de plataforma_garantir_funil, plataforma_garantir_followup, plataforma_garantir_agente e plataforma_garantir_automacao. " +
       "Peça só as seções de que precisa em `secoes`: a resposta inteira é grande. Não depende de cliente nenhum.",
     inputSchema: {
@@ -177,12 +180,18 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             "lead.silent_for":
               `{ "dias": 3, "direcao": ${DIRECOES_DO_SILENCIO.map((d) => `"${d}"`).join(" | ")}, "pipeline_id": "<opcional>", "proteger_pela_agenda": true }`,
             "lead.stage_stale": '{ "dias": 7, "pipeline_id": "<opcional>", "stage_id": "<opcional>", "proteger_pela_agenda": true }',
+            // documentos e obrigações: os cinco gatilhos `obrigacao.*`
+            ...CONFIGURACAO_DOS_GATILHOS_DE_OBRIGACAO,
           },
           condicoes:
             '[{ "field": "lead.tags", "op": "eq" | "neq" | "contains", "value": "texto" }]. `field` é um caminho no contexto do evento: ' +
             "`lead.<coluna>` (o negócio), `contact.<coluna>` (o contato) ou `event.<campo>` (o que o evento trouxe). Em lista (etiquetas), `contains` exige a etiqueta inteira, sem diferenciar maiúsculas.",
           acoes: ACOES_DE_AUTOMACAO,
         };
+      }
+
+      if (pedidas.has("obrigacoes")) {
+        r.obrigacoes = modelosDeObrigacaoParaOAgente();
       }
 
       if (pedidas.has("agenda")) {

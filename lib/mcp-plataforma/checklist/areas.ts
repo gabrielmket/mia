@@ -37,6 +37,7 @@ import { MODULOS } from "@/lib/modulos/vendaveis";
 import { routingConfigSchema } from "@/lib/schemas/routing";
 
 import { migracao } from "./area-da-migracao";
+import { obrigacoes } from "./area-das-obrigacoes";
 import type { AreaDoChecklist, ResultadoDaArea } from "./tipos";
 
 function vazio(): ResultadoDaArea {
@@ -803,6 +804,8 @@ export const AREAS_DO_CHECKLIST: readonly AreaDoChecklist[] = [
   mensagens,
   // a base trazida de outro CRM: opcional, nunca conta como pendência
   migracao,
+  // documentos e obrigações com vencimento: opcional, nunca conta como pendência
+  obrigacoes,
   conversoes,
   plataforma,
 ];

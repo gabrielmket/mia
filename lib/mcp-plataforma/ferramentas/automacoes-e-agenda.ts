@@ -81,7 +81,9 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
       configuracao_do_gatilho: z
         .record(z.string(), z.unknown())
         .optional()
-        .describe("Só para os gatilhos de data do funil, de silêncio e de etapa parada: o que eles precisam saber (funil, campo, dias)."),
+        .describe(
+          "Só para os gatilhos de data do funil, de silêncio, de etapa parada e de documentos e obrigações (`obrigacao.*`): o que eles precisam saber (funil, campo, dias, tipo). O formato de cada um está em plataforma_listar_modelos, seção automacoes.",
+        ),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,
