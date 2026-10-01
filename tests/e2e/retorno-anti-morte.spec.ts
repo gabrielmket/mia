@@ -108,13 +108,24 @@ test("a linha do tempo do negócio mostra o retorno em português de gente", asy
   await login(page, creds.users.manager!.email);
   await page.goto(`/app/pipelines/${creds.retorno.pipeline_id}`);
 
-  await page.getByRole("button", { name: creds.retorno.lead_title, exact: true }).click();
+  // FORK MIA — o título do cartão fechado leva "empresa · " ou "pessoa · " na
+  // frente (lib/cartoes/identidade.ts), dentro do mesmo botão. A régua continua
+  // no título do cartão: o botão que mora no <h3> e traz este título.
+  await page.locator("h3").getByRole("button", { name: creds.retorno.lead_title }).click();
   const dossie = page.getByRole("dialog").first();
+  // FORK MIA — no cartão aberto o histórico abre em "Importante", que junta a
+  // rotina da IA (o retorno agendado entre ela) numa linha por dia. A linha do
+  // tempo inteira, que é o que este caso lê, é o filtro "Tudo".
+  const historico = dossie.getByTestId("historico-do-negocio");
+  await historico.getByRole("button", { name: /^Tudo/ }).click();
   await expect(dossie.getByText("Retorno agendado", { exact: true }).first()).toBeVisible();
 
   // O que o operador LÊ, não o que a API devolve: rótulo humano, sem
   // identificador técnico e sem a frase repetida.
-  const linha = (await dossie.innerText()).split("LINHA DO TEMPO")[1] ?? "";
+  // FORK MIA — a linha do tempo do cartão aberto é a seção "Histórico". Ler a
+  // seção (e conferir que ela tem o retorno) impede a régua de medir texto vazio.
+  const linha = await historico.innerText();
+  expect(linha).toContain("Retorno agendado");
   expect(linha).not.toMatch(/followup_scheduled|followup_cancelled|demand_closed/);
   expect(linha).not.toContain("Atividade registrada");
   await captura(page, "w2-retorno-na-linha-do-tempo.png");

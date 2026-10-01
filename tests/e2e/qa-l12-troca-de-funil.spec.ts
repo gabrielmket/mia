@@ -150,6 +150,11 @@ test.describe("Lote 12 — #936 a troca de funil", () => {
 
     // Os campos personalizados aparecem na tela do DESTINO — e eles moram em
     // <input>, cujo valor `innerText` não enxerga. A régua é `inputValue()`.
+    // FORK MIA — no cartão aberto os campos do funil aparecem como par
+    // rótulo/valor, e o formulário (os <input> que esta régua lê) abre em
+    // "Editar campos".
+    await dossie.getByRole("button", { name: "Editar campos", exact: true }).click();
+    await expect(dossie.locator("#tagsRaw")).toBeVisible();
     const campos = await dossie.locator("input").evaluateAll((els) =>
       els.map((e) => ({
         nome: (e as HTMLInputElement).name || (e as HTMLInputElement).id,

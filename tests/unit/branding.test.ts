@@ -257,6 +257,13 @@ const MARCA_CONGELADA: Record<string, EntradaDeMarca> = {
       "sufixo do `iCalUID` e prefixo das `extendedProperties` que GRAVAMOS dentro do Google Calendar do cliente. É por essa string que reconhecemos, meses depois, quais eventos daquela agenda vieram do CRM — e é o que impede o laço de eco. Trocar pela marca do revendedor faz todo evento já criado deixar de ser reconhecido, e o sintoma é compromisso fantasma ocupando horário, sem erro nenhum",
     marcas: ["deskcomm", "deskcomm.app"],
   },
+  // FORK MIA — a agenda do Outlook grava o mesmo rastro que a do Google.
+  "lib/agenda/microsoft/transport.ts": {
+    categoria: "PROTOCOLO",
+    motivo:
+      "nomes das propriedades estendidas que GRAVAMOS dentro do evento do Outlook do cliente (`deskcomm_org`, `deskcomm_appointment`, `deskcomm_v`). É por elas que reconhecemos, meses depois, quais eventos daquela agenda vieram do CRM, e é o que impede o laço de eco — o mesmo papel das `extendedProperties` de lib/agenda/google/evento.ts. Trocar pela marca do revendedor deixaria órfão todo evento já publicado",
+    marcas: ["deskcomm_appointment", "deskcomm_org", "deskcomm_v"],
+  },
 
   // ─── INFRA — cookie/storage/contêiner. Renomear desloga ou perde estado. ───
   "app/layout.tsx": {
@@ -873,6 +880,17 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "endpoint da Google Ads API, para onde `lib/plataformas-de-anuncio/google/conversions.ts` reporta a venda de volta ao anúncio que trouxe o lead. Irmão de `graph.facebook.com` no eixo da Meta: é contrato do fornecedor, não escolha nossa — a conta de anúncios é do cliente, o domínio é do Google.",
   },
+  // FORK MIA — a agenda do Outlook e a reunião do Teams (docs/fork/agenda-microsoft.md).
+  "graph.microsoft.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint da Graph da Microsoft que a agenda do Outlook usa (calendários, eventos, assinaturas de mudança e a reunião do Teams). O app é o que a instalação registrou no Azure; o domínio é do fornecedor. A raiz mora em lib/agenda/microsoft/enderecos.ts.",
+  },
+  "login.microsoftonline.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "plataforma de identidade da Microsoft: a tela de consentimento para onde o usuário é REDIRECIONADO, o endpoint de token e o link de aprovação do TI da empresa. O par de `accounts.google.com` + `oauth2.googleapis.com` no fluxo da agenda do Outlook.",
+  },
   "accounts.google.com": {
     categoria: "FORNECEDOR",
     motivo:
@@ -968,6 +986,18 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     categoria: "PLATAFORMA",
     motivo:
       "host do Google Meet aceito na validação do link de reunião (`meetVideoUrl`): é entrada que o produto CONFERE, não endereço que ele busca. Sem a linha, qualquer host passaria por link de reunião.",
+  },
+  // FORK MIA — os dois hosts em que a Microsoft entrega o link do Teams (o de
+  // empresa e o de conta pessoal). Mesma natureza de `meet.google.com`.
+  "teams.microsoft.com": {
+    categoria: "PLATAFORMA",
+    motivo:
+      "host do Microsoft Teams aceito na validação do link de reunião (lib/agenda/microsoft/teams.ts): é entrada que o produto CONFERE antes de mandar ao lead, não endereço que ele busca. Sem a linha, qualquer host passaria por link do Teams.",
+  },
+  "teams.live.com": {
+    categoria: "PLATAFORMA",
+    motivo:
+      "host do Teams das contas pessoais da Microsoft (outlook.com, hotmail), aceito na mesma validação do link de reunião de lib/agenda/microsoft/teams.ts. Entrada conferida, não destino de chamada.",
   },
   "deskcomm.app": {
     categoria: "PROTOCOLO",
@@ -1144,6 +1174,12 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // protocolo manda. Entrou aqui porque a régua nova do #914 passou a
       // enxergá-lo, e não porque o produto ganhou host novo.
       "s.whatsapp.net",
+      // FORK MIA — decisão escrita: os dois hosts do link do Teams (empresa e
+      // conta pessoal) que lib/agenda/microsoft/teams.ts CONFERE, como o
+      // `meet.google.com` acima. O produto não fala com eles: quem abre o link
+      // é o lead.
+      "teams.live.com",
+      "teams.microsoft.com",
       "tusitio.com",
       // Exemplo de link do WhatsApp gerado pela tela de Conversões (#924). Está
       // aqui, e não em FORNECEDOR, porque o produto NÃO fala com esse host: quem

@@ -114,7 +114,7 @@ export function LinhaDoCompromisso({ compromisso }: { compromisso: SinaisDoCarta
       <Linha
         icone={<CalendarBlank size={12} />}
         titulo={t("Nenhum compromisso marcado para este negócio")}
-        className="text-text-muted/80"
+        className="text-text-muted"
       >
         {t("sem compromisso marcado")}
       </Linha>
