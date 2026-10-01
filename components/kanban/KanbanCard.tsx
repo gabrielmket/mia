@@ -13,6 +13,17 @@ import { ConversaSlot } from "./ConversaSlot";
 import { ScoreSlot } from "./ScoreSlot";
 import { OwnerBadge } from "./OwnerBadge";
 import { ContatoNoCard } from "./ContatoNoCard";
+// FORK MIA — as linhas novas do cartão fechado (lib/cartoes/, components/cartoes/).
+import {
+  LinhaDeOrigem,
+  LinhaDoCompromisso,
+  LinhaDoFechamento,
+  ObjecaoNaFaixa,
+  SeloRecorrente,
+  TarefasAtrasadas,
+} from "@/components/cartoes/LinhasDoCartao";
+import { prefixoDoCartao } from "@/lib/cartoes/identidade";
+import { bandLabel } from "@/lib/kanban/score-band";
 
 /** Os dois gestos de seleção que o card sabe relatar. */
 export type GestoDeSelecao = "alterna" | "intervalo";
@@ -81,6 +92,11 @@ export function KanbanCard({
   const value = formatValor(card.valueCents, card.currency);
   const state = resolveCardState(card, t);
   const age = stageAgeLabel(card.hoursInStage, t);
+  // FORK MIA — "empresa quando existe, pessoa quando não": o prefixo do título.
+  const sinais = lead.cartao;
+  const prefixo = sinais
+    ? prefixoDoCartao({ titulo: card.title, empresa: card.empresa, contato: sinais.contatoNome })
+    : null;
 
   // Clique ABRE o dossiê; ctrl/cmd+clique SELECIONA; shift+clique estende até a
   // âncora. "Clicar abre" é a convenção mais forte, e seleção múltipla é recurso
@@ -230,10 +246,12 @@ export function KanbanCard({
                   }}
                   className="text-left hover:underline"
                 >
-                  {card.title}
+                  {prefixo ? `${prefixo} · ${card.title}` : card.title}
                 </button>
               </h3>
             </div>
+            {/* FORK MIA — a pessoa (ou a empresa) já comprou antes. */}
+            <SeloRecorrente compras={sinais?.compras ?? null} />
             <KanbanCardActions lead={lead} pipelineId={pipelineId} />
           </div>
 
@@ -246,7 +264,13 @@ export function KanbanCard({
             que o §5 proíbe. Onde ele existe, é a unidade da venda; onde não
             existe, não deixa rastro.
           */}
-          {card.empresa ? (
+          {/* FORK MIA — a linha de contexto substitui a linha da empresa: a sigla
+              do canal sempre, e ao lado a pessoa (negócio de empresa) ou a
+              campanha (negócio de pessoa). Sem os sinais (a leitura falhou), a
+              linha da empresa de antes continua valendo. */}
+          {sinais ? (
+            <LinhaDeOrigem lead={lead} />
+          ) : card.empresa ? (
             <p className="mt-0.5 truncate text-xs text-text-muted" title={card.empresa}>
               {card.empresa}
             </p>
@@ -261,6 +285,15 @@ export function KanbanCard({
           >
             {value ?? "—"}
           </p>
+
+          {/* FORK MIA — o próximo compromisso (o quê · onde · quando) e, numa linha
+              própria, o fechamento previsto com a chance. Altura fixa, sempre. */}
+          {sinais ? (
+            <>
+              <LinhaDoCompromisso compromisso={sinais.compromisso} />
+              <LinhaDoFechamento lead={lead} />
+            </>
+          ) : null}
 
           {/* ③ a linha do agente — um slot, três estados, nunca três blocos. */}
           <div className="mt-1.5 flex h-6 items-center gap-2 text-xs">
@@ -299,6 +332,14 @@ export function KanbanCard({
                 factors={state.slot.factors}
               />
             )}
+            {/* FORK MIA — a faixa (quente/morno/frio) e a objeção aberta, no estado
+                normal. Proposta e esfriando continuam mandando sozinhos na faixa. */}
+            {state.slot.type === "meter" && (
+              <span className="shrink-0 text-text-muted">{bandLabel(state.slot.band, t).toLowerCase()}</span>
+            )}
+            {(state.slot.type === "meter" || state.slot.type === "idle") && (
+              <ObjecaoNaFaixa objecao={sinais?.objecao} />
+            )}
           </div>
 
           {/* A última mensagem, com atalho para o inbox. Fica ANTES do rodapé
@@ -312,11 +353,15 @@ export function KanbanCard({
 
           {/* ④ dono · ⑤ tempo no estágio */}
           <div className="mt-1 flex h-6 items-center justify-between gap-2">
-            <OwnerBadge
-              ownerKind={card.owner.kind}
-              ownerName={card.owner.name}
-              agentVersion={card.owner.agentVersion}
-            />
+            <span className="flex min-w-0 items-center gap-1">
+              <OwnerBadge
+                ownerKind={card.owner.kind}
+                ownerName={card.owner.name}
+                agentVersion={card.owner.agentVersion}
+              />
+              {/* FORK MIA — a tarefa atrasada do negócio, junto de quem é o dono. */}
+              <TarefasAtrasadas n={sinais?.tarefasAtrasadas} />
+            </span>
             <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-text-muted">
               {state.showStageAge && age
                 ? `${age} ${t("em")} ${card.stageName}`

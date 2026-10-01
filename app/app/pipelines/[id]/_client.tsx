@@ -30,6 +30,16 @@ import type { LeadFilters } from "@/lib/kanban/filters";
 import { applyFilters, filtersFromParams, filtersToParams } from "@/lib/kanban/filters";
 import { categoriaDoMotivo } from "@/lib/leads/motivos-de-perda-do-funil";
 import { ROLE_RANK, type Role } from "@/lib/auth/types";
+// FORK MIA — canal, faixa e ordem do quadro (lib/cartoes/filtros.ts).
+import { FiltrosDoCartao } from "@/components/cartoes/FiltrosDoCartao";
+import {
+  aplicarFiltrosDoCartao,
+  escreverFiltrosDoCartao,
+  lerFiltrosDoCartao,
+  preservarParametrosDoCartao,
+  type FiltrosDoCartao as TipoDosFiltrosDoCartao,
+} from "@/lib/cartoes/filtros";
+import { useUser } from "@/hooks/auth/AuthProvider";
 
 export function PipelinePageClient({
   pipelineId,
@@ -46,12 +56,23 @@ export function PipelinePageClient({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const filters = useMemo(() => filtersFromParams(searchParams), [searchParams]);
+  const usuario = useUser();
+  // FORK MIA — os nossos filtros moram em parâmetros próprios; reescrever a URL
+  // pelos filtros do upstream não pode apagá-los (preservarParametrosDoCartao).
+  const filtrosDoCartao = useMemo(() => lerFiltrosDoCartao(searchParams), [searchParams]);
   const setFilters = useCallback(
     (next: LeadFilters) => {
-      const qs = filtersToParams(next);
+      const qs = preservarParametrosDoCartao(filtersToParams(next), searchParams);
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
-    [router, pathname],
+    [router, pathname, searchParams],
+  );
+  const mudarFiltrosDoCartao = useCallback(
+    (proximo: TipoDosFiltrosDoCartao) => {
+      const qs = escreverFiltrosDoCartao(searchParams.toString(), proximo);
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
   );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [newOpen, setNewOpen] = useState(false);
@@ -66,7 +87,9 @@ export function PipelinePageClient({
     const settings = data?.pipeline.settings;
     return (motivo: string) => categoriaDoMotivo(motivo, settings);
   }, [data?.pipeline.settings]);
-  const filteredLeads = data ? applyFilters(data.leads, filters, { categoriaDo }) : [];
+  const filteredLeads = data
+    ? aplicarFiltrosDoCartao(applyFilters(data.leads, filters, { categoriaDo }), filtrosDoCartao)
+    : [];
   // NÃO é a conta do FilterBar: o seletor de filtro lista as três caixas
   // (`marcadoresDoCard`: negócio, contato e conversa), e esta lista, a da tag em
   // lote, só `lead.tags` — é lá que a ação em lote grava (#852). O `useMemo` é o
@@ -134,6 +157,13 @@ export function PipelinePageClient({
         onChange={setFilters}
         leads={data?.leads ?? []}
         settings={data?.pipeline.settings}
+        extra={
+          <FiltrosDoCartao
+            filtros={filtrosDoCartao}
+            onChange={mudarFiltrosDoCartao}
+            leads={data?.leads ?? []}
+          />
+        }
       />
       {error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm">
@@ -154,6 +184,8 @@ export function PipelinePageClient({
           onSelectionChange={setSelectedIds}
           leadInicial={searchParams.get("lead")}
           podeRenomearEtapa={ROLE_RANK[role] >= ROLE_RANK.manager}
+          ordem={filtrosDoCartao.ordem}
+          usuarioAtualId={usuario.id}
         />
       )}
       <BulkActionBar

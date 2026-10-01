@@ -1,4 +1,6 @@
 import type { ScoreBand } from "@/lib/kanban/score-band";
+import type { SinaisDoCartao } from "@/lib/cartoes/tipos";
+import type { Bola } from "@/lib/cartoes/bola";
 
 /**
  * Canonical Lead shape returned by the `/api/v1/leads/*` endpoints.
@@ -88,6 +90,12 @@ export interface Lead {
     preview: string | null;
     last_message_at: string | null;
     unread: number;
+    /**
+     * FORK MIA — com quem está a bola nesta conversa (lib/cartoes/bola.ts).
+     * Anexado pela rota do quadro junto com `cartao`; a linha da conversa do
+     * cartão o mostra ("Lead há 12 min" · "bola: nós").
+     */
+    bola?: Bola | null;
   } | null;
   score?: {
     probability: number;
@@ -155,4 +163,10 @@ export interface Lead {
    * card faria o quadro disparar uma requisição por negócio aberto.
    */
   empresa_nome?: string | null;
+  /**
+   * FORK MIA — derivado (não é coluna): o que o cartão fechado sabe das outras
+   * áreas (bola, compromisso, objeção, canal, compras). Anexado pela rota do
+   * quadro via `comSinaisDoCartao` (lib/cartoes/sinais-do-quadro.ts).
+   */
+  cartao?: SinaisDoCartao;
 }

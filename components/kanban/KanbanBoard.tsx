@@ -18,6 +18,10 @@ import { StageColumn } from "./StageColumn";
 import { LeadDossier } from "./LeadDossier";
 import { RetomarComoNovoNegocioDialog } from "./RetomarComoNovoNegocioDialog";
 import { camposDoFunil } from "@/lib/leads/campos-do-funil";
+// FORK MIA — a ordem da coluna (urgência, quentes, valor, manual) e o contexto
+// das linhas do cartão (quem está olhando, nome de cada pessoa da equipe).
+import { ProvedorDoCartao } from "@/components/cartoes/ContextoDoCartao";
+import { ordenarColuna, type OrdemDoQuadro } from "@/lib/cartoes/urgencia";
 
 interface KanbanBoardProps {
   pipelineId: string;
@@ -45,6 +49,14 @@ interface KanbanBoardProps {
    * então o cabeçalho fica só leitura para eles.
    */
   podeRenomearEtapa?: boolean;
+  /**
+   * FORK MIA — a ordem dos cartões DENTRO da coluna. "manual" é a do upstream
+   * (`position_in_stage`, a do arrasto); as outras são da tela e não mudam a
+   * posição salva (lib/cartoes/urgencia.ts). Sem a prop, vale a do upstream.
+   */
+  ordem?: OrdemDoQuadro;
+  /** FORK MIA — quem está olhando: a bola diz "Você" quando foi esta pessoa. */
+  usuarioAtualId?: string | null;
 }
 
 function groupLeadsByStage(stages: Stage[], leads: Lead[]): Map<string, Lead[]> {
@@ -89,6 +101,8 @@ export function KanbanBoard({
   onSelectionChange,
   leadInicial,
   podeRenomearEtapa = false,
+  ordem = "manual",
+  usuarioAtualId = null,
 }: KanbanBoardProps) {
   const t = useT();
   const useExternal = stagesProp !== undefined && leadsProp !== undefined;
@@ -169,8 +183,16 @@ export function KanbanBoard({
 
   const grouped = useMemo(() => {
     if (!data) return null;
-    return groupLeadsByStage(data.stages, data.leads);
-  }, [data]);
+    const porEtapa = groupLeadsByStage(data.stages, data.leads);
+    // FORK MIA — fora do "manual", a coluna é ordenada pela tela (urgência,
+    // quentes, valor). O esfriando vem do MESMO radar que pinta a borda.
+    if (ordem === "manual") return porEtapa;
+    const agora = new Date();
+    for (const [etapa, lista] of porEtapa) {
+      porEtapa.set(etapa, ordenarColuna(lista, ordem, { esfriando: coolingIds, agora }));
+    }
+    return porEtapa;
+  }, [data, ordem, coolingIds]);
 
   // Um conjunto por vez, e não um card por vez: o board recebe o resultado do
   // gesto já resolvido pela coluna (um card, um intervalo, a etapa inteira). A
@@ -206,6 +228,11 @@ export function KanbanBoard({
       ) {
         return;
       }
+      // FORK MIA — com a coluna ordenada pela tela, arrastar DENTRO da mesma
+      // coluna não tem posição a respeitar (a próxima leitura reordena): não
+      // grava nada. Entre colunas o negócio muda de etapa e entra no FIM da
+      // posição salva — a tela o põe no lugar da ordem escolhida.
+      if (ordem !== "manual" && source.droppableId === destination.droppableId) return;
 
       const lead = data.leads.find((l) => l.id === draggableId);
       if (!lead) return;
@@ -215,9 +242,21 @@ export function KanbanBoard({
         (l) => l.id !== draggableId,
       );
 
-      const before = destination.index > 0 ? destList[destination.index - 1] : null;
-      const after =
-        destination.index < destList.length ? destList[destination.index] : null;
+      const ordenadaPelaTela = ordem !== "manual";
+      const maiorPosicao = destList.reduce<Lead | null>(
+        (maior, l) => (!maior || l.position_in_stage > maior.position_in_stage ? l : maior),
+        null,
+      );
+      const before = ordenadaPelaTela
+        ? maiorPosicao
+        : destination.index > 0
+          ? destList[destination.index - 1]
+          : null;
+      const after = ordenadaPelaTela
+        ? null
+        : destination.index < destList.length
+          ? destList[destination.index]
+          : null;
 
       const newPosition = midpoint(
         before?.position_in_stage ?? null,
@@ -236,7 +275,7 @@ export function KanbanBoard({
         expectedUpdatedAt: lead.updated_at,
       });
     },
-    [data, grouped, moveCard],
+    [data, grouped, moveCard, ordem],
   );
 
   if (isLoading) {
@@ -265,6 +304,7 @@ export function KanbanBoard({
   }
 
   return (
+    <ProvedorDoCartao usuarioAtualId={usuarioAtualId} nomes={ownerNames}>
     <DragDropContext onDragEnd={handleDragEnd}>
       {/* UM contêiner de rolagem só, nos dois eixos. Rolar cada coluna por
           conta própria seria o desenho "Trello", mas o @hello-pangea/dnd não
@@ -345,5 +385,6 @@ export function KanbanBoard({
         />
       )}
     </DragDropContext>
+    </ProvedorDoCartao>
   );
 }

@@ -22,6 +22,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { criarTarefaDaProximaAcao } from "@/lib/cartoes/tarefa-da-proxima-acao";
 
 export const dynamic = "force-dynamic";
 
@@ -144,5 +145,20 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     .eq("contact_id", row.contact_id);
   if (limpaErr) return fail("internal_error", limpaErr.message, 500, { requestId });
 
-  return ok({ lead_id: row.id, decision, next_action: atual }, { requestId });
+  // FORK MIA — aprovar cria a tarefa de verdade (prazo e responsável:
+  // lib/cartoes/tarefa-da-proxima-acao.ts). Falha aqui não desfaz a decisão já
+  // gravada: `tarefa: null` e a tela avisa.
+  const tarefa =
+    decision === "approve"
+      ? await criarTarefaDaProximaAcao(supabase, {
+          organizationId: row.organization_id,
+          leadId: row.id,
+          contactId: row.contact_id,
+          texto: atual,
+          quemAprovou: user.id,
+          requestId,
+        })
+      : null;
+
+  return ok({ lead_id: row.id, decision, next_action: atual, tarefa }, { requestId });
 }

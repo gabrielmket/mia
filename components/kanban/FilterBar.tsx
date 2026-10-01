@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,11 @@ interface FilterBarProps {
    * de categoria não teria o que oferecer.
    */
   settings?: Record<string, unknown>;
+  /**
+   * FORK MIA — filtros que moram fora deste componente (canal, faixa e ordem,
+   * components/cartoes/FiltrosDoCartao.tsx), desenhados DENTRO da mesma barra.
+   */
+  extra?: ReactNode;
 }
 
 const STATUS_OPTIONS: Array<{ value: NonNullable<LeadFilters["status"]>; label: string }> = [
@@ -50,7 +55,7 @@ const STATUS_OPTIONS: Array<{ value: NonNullable<LeadFilters["status"]>; label: 
   { value: "lost", label: "Perdidos" },
 ];
 
-export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps) {
+export function FilterBar({ filters, onChange, leads, settings, extra }: FilterBarProps) {
   const t = useT();
   const user = useUser();
   const { data: members } = useAssignableMembers(true);
@@ -363,6 +368,8 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {extra}
 
       <label
         className={cn(
