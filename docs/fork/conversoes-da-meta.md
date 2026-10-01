@@ -101,7 +101,14 @@ WhatsApp: pode ser recusado ou não servir para otimizar. Confira com o código 
 teste." O que a Meta responder aparece no histórico: aceito, ou recusado com a frase
 dela. **Só uma conta real diz qual dos dois acontece.**
 
-Só a compra exige valor e moeda; evento de etapa pode ir sem `custom_data`.
+Sobre o valor, a página da Meta só mostra o exemplo da compra, com valor e moeda, e
+não diz o que cada evento exige. Que evento que não é compra pode ir sem
+`custom_data` vem da documentação da AWS para a mesma API ("Non-purchase event types
+such as LeadSubmitted do not require custom_data"), que também diz que nome de evento
+não reconhecido é um dos motivos de recusa da Meta:
+<https://docs.aws.amazon.com/social-messaging/latest/userguide/conversions-api.html>.
+É fonte de terceiro, e por isso o item 1 da lista de testes com conta real, mais
+abaixo, é o que decide.
 
 **Lead de formulário** usa outra porta, a API de conversões para CRM:
 `action_source: system_generated`, `custom_data.event_source: crm`,
