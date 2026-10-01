@@ -16,6 +16,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { apenasDeMembrosAtivos } from "@/lib/agenda/google/membros";
 import { atualizarCatalogoMicrosoft, lerCalendarioMicrosoft } from "@/lib/agenda/microsoft/calendar-executor";
+import { compromissoDoEventoMicrosoft, reconciliarCompromissoMicrosoft } from "@/lib/agenda/microsoft/sync-executor";
 import { audit } from "@/lib/audit";
 import { autorizaCron } from "@/lib/auth/cron-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -28,6 +29,7 @@ const UM_DIA_MS = 86_400_000;
 
 interface CalendarioVencido {
   id: string;
+  calendario_externo_id: string;
   organization_id: string;
   conexao_id: string;
   conta_como_ocupado: boolean;
@@ -91,7 +93,7 @@ async function executar(req: NextRequest) {
   // 2. As leituras vencidas.
   const { data: vencidos } = await db
     .from("mia_agenda_microsoft_calendarios")
-    .select("id, organization_id, conexao_id, conta_como_ocupado, destino")
+    .select("id, organization_id, conexao_id, calendario_externo_id, conta_como_ocupado, destino")
     .eq("disponivel", true)
     .lte("proxima_leitura_em", agora.toISOString())
     .order("proxima_leitura_em")
@@ -111,7 +113,16 @@ async function executar(req: NextRequest) {
       continue;
     }
     lidos += 1;
-    const resultado = await lerCalendarioMicrosoft(db, k.organization_id, k.id);
+    // Evento que é compromisso nosso: a mudança feita no Outlook volta pela
+    // reconciliação (entrega 2), com o mesmo token da leitura.
+    const resultado = await lerCalendarioMicrosoft(db, k.organization_id, k.id, {
+      reconciliarVinculado: async (eventoId, token) => {
+        const compromisso = await compromissoDoEventoMicrosoft(db, k.organization_id, k.conexao_id, k.calendario_externo_id, eventoId);
+        if (!compromisso) return "ok";
+        const r = await reconciliarCompromissoMicrosoft(db, k.organization_id, compromisso, { token });
+        return r === "busy" ? "busy" : r === "failed" ? "failed" : "ok";
+      },
+    });
     if (resultado !== "busy") somar(k.organization_id);
   }
 

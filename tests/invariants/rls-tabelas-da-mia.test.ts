@@ -51,6 +51,8 @@ const LIDAS_PELO_CLIENTE = [
   "mia_agenda_microsoft_conexoes",
   "mia_agenda_microsoft_calendarios",
   "mia_agenda_microsoft_eventos",
+  // 9014 — o vínculo do compromisso com o evento do Outlook.
+  "mia_agenda_microsoft_compromissos",
 ] as const;
 
 /**
@@ -73,6 +75,8 @@ const SO_A_PLATAFORMA_ESCREVE = [
   "mia_agenda_microsoft_conexoes",
   "mia_agenda_microsoft_calendarios",
   "mia_agenda_microsoft_eventos",
+  // 9014 — o vínculo do compromisso com o evento do Outlook.
+  "mia_agenda_microsoft_compromissos",
 ] as const;
 
 /** As que a sessão do cliente ESCREVE, cada uma com a linha que tentaria gravar no vizinho. */
@@ -149,6 +153,14 @@ function semear(org: string, gestor: string, tag: string): string {
     )
     insert into public.mia_agenda_microsoft_eventos (organization_id, conexao_id, calendario_externo_id, evento_externo_id, inicio, fim)
       select '${org}', k.conexao_id, 'cal-${tag}', 'ev-${tag}', timestamptz '2030-01-02 10:00+00', timestamptz '2030-01-02 11:00+00' from k;
+    -- 9014: um compromisso publicado no Outlook.
+    with ap as (
+      insert into public.calendar_appointments (organization_id, title, starts_at, ends_at, owner_user_id)
+        values ('${org}', 'Compromisso ${tag}', timestamptz '2030-01-03 10:00+00', timestamptz '2030-01-03 11:00+00', '${gestor}')
+        returning id
+    )
+    insert into public.mia_agenda_microsoft_compromissos (appointment_id, organization_id, evento_id)
+      select ap.id, '${org}', 'ev-pub-${tag}' from ap;
   `;
 }
 

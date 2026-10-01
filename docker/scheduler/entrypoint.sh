@@ -129,6 +129,7 @@ CRONS="
 # basta para renovar com folga.
 */10 * * * *|60|api/v1/cron/agenda-microsoft-refresh
 * * * * *|55|api/v1/cron/agenda-microsoft-sync
+*/5 * * * *|60|api/v1/cron/agenda-microsoft-push
 0 * * * *|120|api/v1/cron/agenda-microsoft-assinaturas
 # O LEMBRETE. A cada 5 minutos porque a antecedência é escolhida pelo dono no
 # tipo de agendamento; uma varredura mais lenta transformaria avisar 30 minutos

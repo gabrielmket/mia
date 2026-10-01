@@ -145,6 +145,15 @@ export function AgendasConectadasMia({ tiposTeamsDaPessoa = [] }: { tiposTeamsDa
           </Button>
         </div>
       )}
+      {destinoNoGoogle && destinoSalvo?.provider === "microsoft" && (
+        // O motor do Google (upstream) publica no destino dele todo compromisso
+        // que ainda não está no Google, e não enxerga o vínculo com o Outlook:
+        // trocar o destino do Outlook para o Google leva os já publicados no
+        // Outlook também para o Google. A pessoa precisa saber antes de salvar.
+        <p role="status" className="rounded-md border border-warning/40 bg-warning-bg p-2 text-xs text-text">
+          {t("Os compromissos que já estão no Outlook continuam lá e também serão publicados no Google.")}
+        </p>
+      )}
       {destinoNoGoogle && tiposTeamsDaPessoa.length > 0 && (
         <p role="status" className="rounded-md border border-warning/40 bg-warning-bg p-2 text-xs text-text">
           {t("Com o destino no Google, estes tipos ficam sem link do Teams para você (o Teams só é criado em agenda do Outlook):")}{" "}

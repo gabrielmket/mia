@@ -157,4 +157,31 @@ export const DICIONARIO_DA_AGENDA_MICROSOFT: Record<string, { es: string }> = {
   },
   "Não consegui conectar sua agenda do Outlook": { es: "No pude conectar tu agenda de Outlook" },
   "Não há agenda do Outlook conectada para esta pessoa.": { es: "No hay agenda de Outlook conectada para esta persona." },
+
+  // entrega 2: a publicação e os conflitos
+  "Os compromissos que já estão no Outlook continuam lá e também serão publicados no Google.": {
+    es: "Los compromisos que ya están en Outlook siguen allí y también se publicarán en Google.",
+  },
+  "Sincronização Outlook": { es: "Sincronización Outlook" },
+  "O horário mudou nos dois lados. Este compromisso precisa de uma decisão.": {
+    es: "El horario cambió en los dos lados. Este compromiso necesita una decisión.",
+  },
+  "Enviando a alteração para o Outlook.": { es: "Enviando el cambio a Outlook." },
+  "Ainda não publicado no Outlook.": { es: "Todavía no publicado en Outlook." },
+  "No Outlook": { es: "En Outlook" },
+  "A publicação também substituiria campos alterados no Outlook. Revise antes de continuar.": {
+    es: "La publicación también reemplazaría campos cambiados en Outlook. Revísalo antes de continuar.",
+  },
+  "Preservamos o histórico daqui. Revise o evento no Outlook ou crie outro compromisso pela Agenda.": {
+    es: "Conservamos el historial de aquí. Revisa el evento en Outlook o crea otro compromiso desde la Agenda.",
+  },
+  "Usar cancelamento do Outlook": { es: "Usar la cancelación de Outlook" },
+  "Usar horário do Outlook": { es: "Usar el horario de Outlook" },
+  "Preservar campos do Outlook": { es: "Conservar los campos de Outlook" },
+  "Decisão registrada. O Outlook será relido antes de aplicar; mudanças novas exigem outra decisão.": {
+    es: "Decisión registrada. Outlook se volverá a leer antes de aplicar; los cambios nuevos exigen otra decisión.",
+  },
+  "Remarcar ou cancelar no Outlook volta para cá e fica registrado no negócio.": {
+    es: "Reprogramar o cancelar en Outlook vuelve aquí y queda registrado en el negocio.",
+  },
 };

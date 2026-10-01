@@ -331,6 +331,8 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     "mia_agenda_microsoft_conexoes",
     "mia_agenda_microsoft_calendarios",
     "mia_agenda_microsoft_eventos",
+    // 9014 — o vínculo do compromisso com o Outlook.
+    "mia_agenda_microsoft_compromissos",
   ].map((tabela) => ({
     tabela,
     razao:

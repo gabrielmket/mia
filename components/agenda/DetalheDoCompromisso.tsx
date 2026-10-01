@@ -1,6 +1,9 @@
 "use client";
 import { MeetDoCompromisso, type MeetingDetail } from "./MeetDoCompromisso";
 import { SincronizacaoDoCompromisso, type SyncDetail } from "./SincronizacaoDoCompromisso";
+// FORK MIA (9014/9015): o bloco do Outlook (docs/fork/agenda-microsoft.md).
+import { BlocosDoOutlook } from "./microsoft/BlocosDoOutlook";
+import type { OutlookDoCompromisso } from "@/lib/agenda-mia/compromisso-no-outlook";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
@@ -15,6 +18,7 @@ import { rotuloDoLocal } from "@/lib/agenda/locais";
 type Detalhe = {
   meeting?: MeetingDetail | null;
   google_sync?: SyncDetail;
+  microsoft?: OutlookDoCompromisso | null;
   id: string;
   title: string;
   description: string | null;
@@ -137,7 +141,7 @@ export function DetalheDoCompromisso({
         <SheetHeader>
           <SheetTitle>{a?.title ?? t("Compromisso")}</SheetTitle>
         </SheetHeader>
-        {a?.google_sync && (
+        {a?.microsoft?.publicado ? null : a?.google_sync && (
           <SincronizacaoDoCompromisso
             key={a.id}
             id={a.id}
@@ -145,7 +149,8 @@ export function DetalheDoCompromisso({
             onSaved={() => void query.refetch()}
           />
         )}
-        {a?.meeting && (
+        {a?.microsoft && <BlocosDoOutlook id={a.id} outlook={a.microsoft} onSaved={() => void query.refetch()} />}
+        {a?.meeting && !a?.microsoft?.teams && (
           <MeetDoCompromisso
             id={a.id}
             revision={a.google_sync?.revision ?? String(a.revision)}
