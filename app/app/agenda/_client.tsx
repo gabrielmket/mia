@@ -84,10 +84,13 @@ export function AgendaClient({
   enderecoDeRetorno,
   faltaNoGoogle,
   linkDeConfiguracaoDoGoogle,
+  conexaoDoOutlook,
   tiposIniciais,
   agendamentosIniciais,
   podeMarcar,
 }: {
+  /** FORK MIA (9011): o cartão do Outlook, montado no servidor (docs/fork/agenda-microsoft.md). */
+  conexaoDoOutlook?: React.ReactNode;
   /**
    * O fuso RESOLVIDO da organização (`fusoUtilizavel(activeOrg.timezone)`,
    * calculado em `page.tsx`). É a régua da grade: sem ele a agenda desenha
@@ -482,6 +485,7 @@ export function AgendaClient({
         contaConectada={contaConectada}
         enderecoDeRetorno={enderecoDeRetorno}
       />
+      {conexaoDoOutlook}
 
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="min-w-0">

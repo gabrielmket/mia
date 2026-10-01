@@ -14,6 +14,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { googleEstaConfigurado } from "@/lib/agenda/google/config";
+import { microsoftEstaConfigurada } from "@/lib/agenda/microsoft/config";
 import { canalGraphParceiroLigado } from "@/lib/channels/graph-parceiro/credentials";
 import { appDaMeta } from "@/lib/channels/meta/app";
 import { emailConfigurado } from "@/lib/email/roteador";
@@ -44,6 +45,8 @@ export async function detectarServidor(): Promise<Record<string, boolean | null>
   const pares = await Promise.all([
     detectar("email", emailConfigurado),
     detectar("google_agenda", googleEstaConfigurado),
+    // FORK MIA (9011): a agenda do Outlook.
+    detectar("microsoft_agenda", microsoftEstaConfigurada),
     detectar("meta", async () => {
       const app = await appDaMeta();
       return Boolean(app.appSecret && app.verifyToken);

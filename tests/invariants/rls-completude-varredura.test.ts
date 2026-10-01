@@ -327,6 +327,10 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     "mia_leads_da_meta_recebidos",
     // .61 — o dono de cada Página da Meta (9004).
     "mia_paginas_da_meta",
+    // 9011 — a agenda do Outlook.
+    "mia_agenda_microsoft_conexoes",
+    "mia_agenda_microsoft_calendarios",
+    "mia_agenda_microsoft_eventos",
   ].map((tabela) => ({
     tabela,
     razao:

@@ -19,6 +19,8 @@ import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 
 import type { Agendamento as AgendamentoDaTela } from "@/components/agenda/tipos";
+import { ConexaoDoOutlookNaAgenda } from "@/components/agenda/microsoft/CartaoDoOutlook";
+import { estadoDoCartaoDoOutlook } from "@/lib/agenda-mia/cartao-do-outlook";
 
 import { AgendaClient } from "./_client";
 
@@ -245,6 +247,13 @@ export default async function AgendaPage() {
   // gravou a credencial pela tela seria pior que não dizer nada.
   const googleConfigurado = await googleEstaConfigurado();
   const faltaNoGoogle = googleConfigurado ? [] : await faltaParaConectarOGoogle();
+  // FORK MIA (9011): o cartão do Outlook (docs/fork/agenda-microsoft.md).
+  const estadoDoOutlook = await estadoDoCartaoDoOutlook(supabase, {
+    organizationId: activeOrg.orgId,
+    userId: user.id,
+    administraAInstalacao: Boolean(user.is_platform_admin && !user.support),
+    cabecalhos,
+  });
 
   return (
     <AgendaClient
@@ -274,6 +283,7 @@ export default async function AgendaPage() {
       linkDeConfiguracaoDoGoogle={
         user.is_platform_admin && !user.support ? "/admin/google" : undefined
       }
+      conexaoDoOutlook={<ConexaoDoOutlookNaAgenda estado={estadoDoOutlook} />}
       // O piso da rota de marcar é `agent`; `viewer` — e o acompanhamento só de
       // leitura, que `resolveActiveOrg` resolve como `viewer` — levaria 403. A
       // tela esconder é cortesia: quem decide segue sendo a rota.

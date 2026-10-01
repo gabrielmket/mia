@@ -223,6 +223,18 @@ const DO_SERVIDOR: RecursoOpcional[] = [
     comoLigar: "Cadastre o app do Google na tela Google Agenda.",
     ler: peloServidor("google_agenda"),
   },
+  // FORK MIA (9011): a agenda do Outlook e o Teams (docs/fork/agenda-microsoft.md).
+  {
+    id: "microsoft_agenda",
+    nome: "Outlook e Microsoft Teams",
+    oQueFaz: "Cada pessoa conecta a própria agenda do Outlook na Agenda, e o Teams vira um local de atendimento.",
+    nivel: "servidor",
+    padrao: "desligado",
+    quemDecide: "dono_do_servidor",
+    href: "/admin/microsoft",
+    comoLigar: "Cadastre o app da Microsoft na tela Microsoft 365.",
+    ler: peloServidor("microsoft_agenda"),
+  },
   {
     id: "meta",
     nome: "API Oficial da Meta",

@@ -312,7 +312,14 @@ export function TiposDeAgendamentoClient({
   podeLigarClientePelaAgenda,
   colegasPodemMexerNaAgendaLigado,
   podeMudarAgendaDosColegas,
+  agendasConectadas,
 }: {
+  /**
+   * FORK MIA (9011): "Suas agendas" com Google e Outlook juntos, quando a
+   * instalação tem a Microsoft (docs/fork/agenda-microsoft.md). Sem ela, vale o
+   * `AgendasConectadas` de sempre.
+   */
+  agendasConectadas?: React.ReactNode;
   tiposIniciais: TipoRow[];
   pessoas: Array<{ id: string; papel: string; nome: string }>;
   podeEditar: boolean;
@@ -373,7 +380,7 @@ export function TiposDeAgendamentoClient({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4" data-testid="tipos-de-agendamento-config">
-      {podeConfigurarGoogle && <AgendasConectadas />}
+      {podeConfigurarGoogle && (agendasConectadas ?? <AgendasConectadas />)}
       <PrazosDePresenca podeEditar={podeEditar}/>
       <ClientePelaAgenda
         ligadoInicial={clientePelaAgendaLigado}

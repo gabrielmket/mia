@@ -239,6 +239,21 @@ export const AUDIT_ACTIONS = [
   // desligaram ao soltar.
   "leads_da_meta.pagina_assumida",
   "leads_da_meta.pagina_solta",
+  // FORK MIA (9011-9013) — a agenda do Outlook / Microsoft 365
+  // (docs/fork/agenda-microsoft.md): conectar, desconectar, a escolha das
+  // agendas, as rotinas e as decisões de conflito.
+  "agenda.microsoft.conexao_iniciada",
+  "agenda.microsoft.conexao_falhou",
+  "agenda.microsoft.conexao_concluida",
+  "agenda.microsoft.conexao_desconectada",
+  "agenda.microsoft.catalogo_atualizado",
+  "agenda.microsoft.renovacao_executada",
+  "agenda.microsoft.sync_executado",
+  "agenda.microsoft.publicacao_executada",
+  "agenda.microsoft.assinaturas_executadas",
+  "agenda.microsoft.decisao_registrada",
+  "agenda.selecao_atualizada",
+  "platform_microsoft_oauth.updated",
   // FORK MIA (.62) — por qual número sai o aviso de grupo de cada empresa (o da
   // plataforma ou um dela, com ou sem reserva): quem trocou, e para qual.
   "platform.origem_do_aviso_alterada",

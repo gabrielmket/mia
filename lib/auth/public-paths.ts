@@ -66,6 +66,12 @@ export const PUBLIC_PATHS: RegExp[] = [
   // Ancorados com `$` de propósito — `/^\/api\/v1\/agenda\/google\// deixaria
   // qualquer sub-path futuro nascer público de carona.
   /^\/api\/v1\/agenda\/google\/callback$/,
+  // FORK MIA (9011): a volta do consentimento da Microsoft (mesma natureza do
+  // callback do Google acima: `state` assinado + nonce + cookie de vínculo) e
+  // as notificações de mudança da Graph (o servidor da Microsoft chama; a
+  // prova é o `clientState` de cada assinatura, conferido na rota).
+  /^\/api\/v1\/agenda\/microsoft\/callback$/,
+  /^\/api\/v1\/agenda\/microsoft\/notificacoes$/,
   // Volta do consentimento do Google Ads. Mesma natureza das duas linhas
   // acima: a identidade vem do `state` assinado
   // (`lib/plataformas-de-anuncio/google/estado.ts`), não da sessão — quem

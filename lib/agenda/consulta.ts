@@ -1,5 +1,7 @@
 import { googleRpc } from "./google/sync-store";
 import { lerCorposDoLembrete } from "./lembretes";
+// FORK MIA (9011): a ocupação do Outlook entra na mesma coleta (docs/fork/agenda-microsoft.md).
+import { coberturaMicrosoftParcial, conexoesMicrosoftDoDono, ocupacaoMicrosoftDoDono } from "@/lib/agenda-mia/ocupacao";
 /**
  * OS HORÁRIOS LIVRES DE UMA ORGANIZAÇÃO — a coleta, num lugar só.
  *
@@ -331,10 +333,15 @@ export async function horariosLivresDaOrg(
   // Por RPC, e não direto em `calendar_connections`: a RLS da tabela esconde a
   // conexão de um Atendente, e "nunca foi lida" passava a ser "não tem Google"
   // conforme quem perguntava (ver o cabeçalho, issue #879).
-  const { data: conexoesRaw } = await supabase.rpc("fn_agenda_conexoes_google_do_dono", {
+  const { data: conexoesDoGoogle } = await supabase.rpc("fn_agenda_conexoes_google_do_dono", {
     p_org: organizationId,
     p_owner: donoId,
   });
+  // FORK MIA (9011): as contas do Outlook contam para "agenda que nunca foi lida".
+  const conexoesRaw = [
+    ...((conexoesDoGoogle ?? []) as Array<{ status: string; last_sync_at: string | null }>),
+    ...(await conexoesMicrosoftDoDono(supabase, { p_org: organizationId, p_owner: donoId })),
+  ];
 
   const excecoes: ExcecaoDeData[] = (excecoesRaw ?? []).map((linha) => ({
     // ⚠️ `exception_date` é `date` no Postgres e chega como "YYYY-MM-DD" pelo
@@ -365,6 +372,8 @@ export async function horariosLivresDaOrg(
 
   let googleCoberturaParcial = true;
   try { googleCoberturaParcial = Boolean(await googleRpc(supabase, "fn_google_coverage", { p_org: organizationId, p_owner: donoId, p_start: params.de.toISOString(), p_end: params.ate.toISOString() })); } catch { /* leitura incerta não afirma cobertura */ }
+  // FORK MIA (9011): o aviso de cobertura parcial vale também para o Outlook.
+  if (!googleCoberturaParcial) googleCoberturaParcial = await coberturaMicrosoftParcial(supabase, { p_org: organizationId, p_owner: donoId, p_start: params.de.toISOString(), p_end: params.ate.toISOString() });
   return {
     ok: true,
     googleCoberturaParcial,
@@ -431,7 +440,7 @@ export async function coletaOQueOcupa(
     .gt("ends_at", params.de.toISOString());
   if (params.ignorarAgendamentoId) agendamentos = agendamentos.neq("id", params.ignorarAgendamentoId);
 
-  const [{ data: agendaRaw, error: erroAg }, { data: externosRaw, error: erroExt }] = await Promise.all([
+  const [{ data: agendaRaw, error: erroAg }, { data: externosDoGoogle, error: erroExt }, doOutlook] = await Promise.all([
     agendamentos,
     // `calendar_external_events` NÃO tem `user_id`: o dono vem por
     // `connection_id → calendar_connections.user_id`, e a situação da conexão
@@ -447,10 +456,18 @@ export async function coletaOQueOcupa(
       p_de: params.de.toISOString(),
       p_ate: params.ate.toISOString(),
     }),
+    // FORK MIA (9011): a ocupação do Outlook, com as mesmas colunas.
+    ocupacaoMicrosoftDoDono(supabase, {
+      p_org: organizationId,
+      p_owner: params.donoId,
+      p_de: params.de.toISOString(),
+      p_ate: params.ate.toISOString(),
+    }),
   ]);
 
-  const erro = erroAg ?? erroExt;
+  const erro = erroAg ?? erroExt ?? doOutlook.error;
   if (erro) return { ok: false, erro: erro.message };
+  const externosRaw = [...((externosDoGoogle ?? []) as LinhaDaOcupacaoDoGoogle[]), ...doOutlook.linhas];
 
   return {
     ok: true,

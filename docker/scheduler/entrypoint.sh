@@ -121,6 +121,15 @@ CRONS="
 # manda o que mudou). A volta é cara — varre calendário inteiro — e por isso
 # roda a cada 15.
 */5 * * * *|60|api/v1/cron/agenda-google-push
+# A AGENDA DO OUTLOOK (fork MIA, docs/fork/agenda-microsoft.md). A renovação na
+# cadência da do Google. A volta roda a cada minuto, mas só lê o calendário
+# VENCIDO (15 min depois da última leitura, ou na hora quando a Microsoft avisa
+# pela notificação): rodada sem nada vencido é uma consulta e nenhuma chamada à
+# Graph. As assinaturas das notificações duram menos de 7 dias; de hora em hora
+# basta para renovar com folga.
+*/10 * * * *|60|api/v1/cron/agenda-microsoft-refresh
+* * * * *|55|api/v1/cron/agenda-microsoft-sync
+0 * * * *|120|api/v1/cron/agenda-microsoft-assinaturas
 # O LEMBRETE. A cada 5 minutos porque a antecedência é escolhida pelo dono no
 # tipo de agendamento; uma varredura mais lenta transformaria avisar 30 minutos
 # antes em avisar entre 30 e 45 minutos antes. Barato: só olha compromisso
