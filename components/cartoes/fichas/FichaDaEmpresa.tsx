@@ -31,6 +31,7 @@ import { valorCheio, valorCurto } from "@/lib/cartoes/dinheiro";
 import { ehPapel, PAPEIS, ROTULO_DO_PAPEL, type Papel } from "@/lib/cartoes/papel";
 import type { Contact } from "@/lib/types/contacts";
 import { ArrowsClockwise, Buildings, CheckCircle } from "@/lib/ui/icons";
+import { SecaoDeObrigacoes } from "@/components/obrigacoes/SecaoDeObrigacoes";
 
 const ROTULO_DO_STATUS = { open: "aberto", won: "ganho", lost: "perdido" } as const;
 
@@ -248,6 +249,9 @@ export function FichaDaEmpresa({ empresaId }: { empresaId: string }) {
           </Secao>
         </div>
         <div className="min-w-0">
+          {/* Os documentos e as atividades da empresa: o mesmo registro que
+              aparece no cartão aberto de cada negócio dela. */}
+          <SecaoDeObrigacoes escopo={{ tipo: "empresa", id: empresaId }} id="documentos-da-empresa" />
           <HistoricoDeCompras resumo={compras} modo="empresa" id="compras-da-empresa" />
           <Secao titulo={t("Dados")} testid="dados-da-empresa">
             <Pares>

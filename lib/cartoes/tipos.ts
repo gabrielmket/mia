@@ -12,6 +12,7 @@
  */
 import type { Bola } from "@/lib/cartoes/bola";
 import type { CompromissoDoCartao } from "@/lib/cartoes/compromisso";
+import type { AvisoDoCartao } from "@/lib/obrigacoes/situacao";
 
 /**
  * As siglas do canal de origem, na ordem em que o filtro as oferece.
@@ -95,4 +96,10 @@ export interface SinaisDoCartao {
   contatoNome: string | null;
   /** A chance calibrada da etapa (0–100), quando a IA ainda não calculou a do negócio. */
   chanceDaEtapa: number | null;
+  /**
+   * O documento ou a atividade mais urgente do negócio, da empresa dele e do
+   * contato dele (lib/obrigacoes/sinais.ts). Ausente ou nulo = tudo em dia, e o
+   * cartão não mostra nada.
+   */
+  obrigacao?: AvisoDoCartao | null;
 }

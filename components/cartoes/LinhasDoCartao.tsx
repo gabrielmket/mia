@@ -15,7 +15,7 @@
 import type { ReactNode } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
-import { ArrowsClockwise, CalendarBlank, Flag } from "@/lib/ui/icons";
+import { ArrowsClockwise, CalendarBlank, Flag, Warning } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/types/leads";
 import { quemFalouRotulo, type Bola } from "@/lib/cartoes/bola";
@@ -25,6 +25,7 @@ import { fechamentoPrevisto } from "@/lib/cartoes/fechamento";
 import { ehPapel, ROTULO_DO_PAPEL } from "@/lib/cartoes/papel";
 import { duracaoCurta } from "@/lib/cartoes/tempo";
 import { ROTULO_DO_CANAL, SELO_DO_CANAL, type SinaisDoCartao } from "@/lib/cartoes/tipos";
+import { textoDoAviso, type AvisoDoCartao } from "@/lib/obrigacoes/situacao";
 import { useAgoraDoCartao, useContextoDoCartao } from "./ContextoDoCartao";
 
 /** "recorrente" ao lado do título: a pessoa (ou a empresa) já comprou antes. */
@@ -184,6 +185,31 @@ export function TarefasAtrasadas({ n }: { n: number | undefined }) {
   return (
     <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-error-fg">
       · {n === 1 ? t("1 tarefa atrasada") : `${n} ${t("tarefas atrasadas")}`}
+    </span>
+  );
+}
+
+/**
+ * O aviso de documentos e obrigações no rodapé: UM, o mais urgente ("Alvará
+ * venceu há 3 dias", "Contrato social: pedido há 6 dias, sem resposta"). Nada
+ * quando está tudo em dia. Mora DENTRO da linha do rodapé, cortado com
+ * reticências e inteiro ao passar o mouse: o cartão não ganha altura.
+ */
+export function AvisoDeObrigacao({ aviso }: { aviso: AvisoDoCartao | null | undefined }) {
+  const t = useT();
+  if (!aviso) return null;
+  const texto = textoDoAviso(aviso, t);
+  return (
+    <span
+      title={texto}
+      data-aviso-de-obrigacao={aviso.tipo}
+      className={cn(
+        "flex min-w-0 items-center gap-0.5 text-[11px] font-medium",
+        aviso.tipo === "vencido" ? "text-error-fg" : aviso.tipo === "vencendo" ? "text-warning-fg" : "text-accent",
+      )}
+    >
+      <Warning size={11} aria-hidden className="shrink-0" />
+      <span className="min-w-0 truncate">{texto}</span>
     </span>
   );
 }

@@ -5,6 +5,8 @@ import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 import { PipelinesClient, type EtapaDoFunil, type PipelineRow } from "./_client";
 import { traduzir } from "@/lib/i18n/dicionario";
+// FORK MIA — o catálogo de tipos de documentos e obrigações por funil.
+import { CatalogoDeObrigacoesDosFunis } from "@/components/obrigacoes/TiposDeObrigacaoDoFunil";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +77,8 @@ export default async function PipelinesSettingsPage() {
         etapas={etapasPorFunil}
         podeEditarConfig={podeEditarConfig}
       />
+      {/* FORK MIA — documentos e obrigações: os tipos que cada funil oferece. */}
+      <CatalogoDeObrigacoesDosFunis funis={pipelines.map((p) => ({ id: p.id, name: p.name }))} />
     </div>
   );
 }

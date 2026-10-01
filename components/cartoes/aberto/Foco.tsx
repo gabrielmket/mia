@@ -6,7 +6,9 @@
  * No máximo cinco itens, por urgência: o lead esperando resposta; a proposta da
  * IA para aprovar (aprovar vira TAREFA — e a tela diz para quem e com que prazo
  * ANTES do clique); o próximo compromisso; a tarefa atrasada ou a mais próxima.
- * Documentos vencendo entram aqui quando a fase de documentos existir.
+ * Os documentos e as atividades recorrentes entram logo abaixo: a proposta do
+ * agente esperando confirmação e os itens vencidos, vencendo ou pedidos sem
+ * resposta, com a ação direta (components/obrigacoes/ObrigacoesNoFoco.tsx).
  *
  * Embaixo, o compositor: Nota e Tarefa gravam aqui; Mensagem e Agendar levam à
  * conversa e à agenda — responder de dentro do cartão exigiria uma segunda cópia
@@ -36,6 +38,8 @@ import { duracaoCurta } from "@/lib/cartoes/tempo";
 import { prazoDaProximaAcao, responsavelDaProximaAcao } from "@/lib/cartoes/regras-da-proxima-acao";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { useAgoraDoCartao, useContextoDoCartao } from "@/components/cartoes/ContextoDoCartao";
+import { ObrigacoesNoFoco, obrigacoesDoFoco } from "@/components/obrigacoes/ObrigacoesNoFoco";
+import { useObrigacoes } from "@/hooks/obrigacoes/useObrigacoes";
 
 type Item = {
   chave: string;
@@ -74,6 +78,12 @@ export function Foco({ lead, pipelineId }: { lead: Lead; pipelineId: string }) {
   const { data: membros } = useAssignableMembers(true);
   const nomeDe = (id: string | null | undefined) =>
     id ? (membros?.find((m) => m.user_id === id)?.full_name ?? null) : null;
+
+  // Documentos e obrigações do negócio, da empresa dele e do contato dele: a
+  // mesma leitura que a seção do cartão aberto usa (uma chave de cache só).
+  const obrigacoes = useObrigacoes({ tipo: "negocio", id: lead.id });
+  const doFoco = obrigacoesDoFoco(obrigacoes.data);
+  const semObrigacoes = doFoco.propostas.length === 0 && doFoco.urgentes.length === 0;
 
   const bola = lead.cartao?.bola ?? lead.conversa?.bola ?? null;
   const compromisso = lead.cartao?.compromisso ?? null;
@@ -193,9 +203,9 @@ export function Foco({ lead, pipelineId }: { lead: Lead; pipelineId: string }) {
       <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
         {t("Foco · o que fazer agora")}
       </h3>
-      {itens.length === 0 ? (
+      {itens.length === 0 && semObrigacoes ? (
         <p className="text-xs text-text-muted">{t("Nada pendente. Tudo em dia neste negócio.")}</p>
-      ) : (
+      ) : itens.length === 0 ? null : (
         <ul className="space-y-2">
           {itens.map((i) => (
             <li key={i.chave} className="flex gap-2">
@@ -221,6 +231,9 @@ export function Foco({ lead, pipelineId }: { lead: Lead; pipelineId: string }) {
           ))}
         </ul>
       )}
+      <div className={itens.length > 0 && !semObrigacoes ? "mt-2" : undefined}>
+        <ObrigacoesNoFoco dados={obrigacoes.data} />
+      </div>
       <Compositor lead={lead} />
       {/* O quem-falou da bola, para quem abriu o cartão vir do quadro com a mesma leitura. */}
       {bola && bola.com === "cliente" ? (

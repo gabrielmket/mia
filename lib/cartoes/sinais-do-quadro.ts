@@ -12,6 +12,7 @@
  *   tarefas ...... crm_tasks abertas do negócio
  *   compras ...... negócios ganhos + orders do contato/empresa            → compras-servidor.ts
  *   pessoa ....... contacts (cargo) + crm_lead_links (contatos envolvidos)
+ *   obrigação .... mia_obrigacoes do negócio, da empresa e do contato      → lib/obrigacoes/sinais.ts
  *
  * ⚠️ NUNCA DERRUBA O QUADRO. Falha de qualquer leitura daqui devolve os
  * cartões como o upstream os entregou (sem `cartao`) e registra no log: os
@@ -30,6 +31,7 @@ import { canalDoNegocio } from "@/lib/cartoes/canal";
 import { escolherProximoCompromisso, type CompromissoDoCartao } from "@/lib/cartoes/compromisso";
 import { contarComprasParaOQuadro } from "@/lib/cartoes/compras-servidor";
 import type { SinaisDoCartao } from "@/lib/cartoes/tipos";
+import { avisosDeObrigacaoDoQuadro } from "@/lib/obrigacoes/sinais";
 
 type Db = SupabaseClient;
 
@@ -117,7 +119,7 @@ async function montar(
   ];
   const agoraIso = agora.toISOString();
 
-  const [contatos, conversas, sinais, agenda, tarefas, envolvidos, compras] = await Promise.all([
+  const [contatos, conversas, sinais, agenda, tarefas, envolvidos, compras, obrigacoes] = await Promise.all([
     buscaEmLotes(contatoIds, (lote) =>
       db.from("contacts").select(COLUNAS_DO_CONTATO_NO_CARTAO).eq("organization_id", org).in("id", lote),
     ),
@@ -160,6 +162,8 @@ async function montar(
         .in("lead_id", lote),
     ),
     contarComprasParaOQuadro(db, org, { contatoIds, empresaIds }),
+    // Nunca lança: falha na leitura das obrigações devolve o quadro sem aviso.
+    avisosDeObrigacaoDoQuadro(db, org, leads, agora),
   ]);
   for (const r of [contatos, conversas, sinais, agenda, tarefas, envolvidos]) {
     if (r.error) throw new Error(r.error.message);
@@ -303,6 +307,7 @@ async function montar(
           : null,
       contatoNome: nome,
       chanceDaEtapa: chanceDaEtapa.get(lead.stage_id) ?? null,
+      obrigacao: obrigacoes.get(lead.id) ?? null,
     };
 
     return {

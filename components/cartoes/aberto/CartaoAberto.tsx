@@ -17,7 +17,8 @@
  *               caminho do arrasto, com a mesma recusa de campos obrigatórios);
  *   Foco      — o que fazer agora, e o compositor (à direita no computador; em
  *               cima no celular);
- *   blocos    — resumo da IA, pessoas, empresa, compras, origem, campos, agenda,
+ *   blocos    — resumo da IA, documentos e obrigações (do negócio, da empresa e
+ *               do contato), pessoas, empresa, compras, origem, campos, agenda,
  *               tarefas, propostas;
  *   histórico — com filtros e as ações da IA agrupadas.
  */
@@ -61,6 +62,7 @@ import {
   TarefasDoNegocio,
 } from "./Blocos";
 import { HistoricoDoNegocio } from "./HistoricoDoNegocio";
+import { SecaoDeObrigacoes } from "@/components/obrigacoes/SecaoDeObrigacoes";
 
 const CHAVE_DA_TELA_CHEIA = "mia.cartao-aberto.tela-cheia";
 
@@ -332,6 +334,10 @@ export function CartaoAberto({
             ) : (
               <>
                 <ResumoDaIa lead={lead} resumo={dados.resumo} pipelineId={pipelineId} />
+                {/* Documentos e atividades recorrentes: os do negócio e, por
+                    herança, os da empresa e os do contato. As propostas do
+                    agente ficam no Foco. */}
+                <SecaoDeObrigacoes escopo={{ tipo: "negocio", id: lead.id }} mostrarPropostas={false} id="documentos-do-negocio" />
                 <PessoasDoNegocio lead={lead} cartao={dados} pipelineId={pipelineId} />
                 <EmpresaDoNegocio empresa={dados.empresa} />
                 <div ref={compras}>

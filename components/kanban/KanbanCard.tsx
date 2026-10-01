@@ -15,6 +15,7 @@ import { OwnerBadge } from "./OwnerBadge";
 import { ContatoNoCard } from "./ContatoNoCard";
 // FORK MIA — as linhas novas do cartão fechado (lib/cartoes/, components/cartoes/).
 import {
+  AvisoDeObrigacao,
   LinhaDeOrigem,
   LinhaDoCompromisso,
   LinhaDoFechamento,
@@ -361,6 +362,9 @@ export function KanbanCard({
               />
               {/* FORK MIA — a tarefa atrasada do negócio, junto de quem é o dono. */}
               <TarefasAtrasadas n={sinais?.tarefasAtrasadas} />
+              {/* FORK MIA — o documento ou a atividade mais urgente do negócio, da
+                  empresa e do contato. Um aviso só; nada com tudo em dia. */}
+              <AvisoDeObrigacao aviso={sinais?.obrigacao} />
             </span>
             <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-text-muted">
               {state.showStageAge && age

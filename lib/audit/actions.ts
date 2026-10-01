@@ -1097,6 +1097,22 @@ export const AUDIT_ACTIONS = [
   "company_people.updated",
   "contacts.person_linked",
   "imports.companies_people",
+
+  // FORK MIA — documentos e obrigações com vencimento (migration 9018,
+  // docs/fork/obrigacoes.md). O metadata leva o tipo e as datas, nunca o nome
+  // de pessoa nem o conteúdo do arquivo.
+  "obrigacao.adicionada",
+  "obrigacao.editada",
+  "obrigacao.pedida",
+  "obrigacao.recebida",
+  "obrigacao.feita",
+  "obrigacao.arquivada",
+  "obrigacao.arquivo_anexado",
+  "obrigacao.proposta_confirmada",
+  "obrigacao.proposta_recusada",
+  "obrigacao.tipos_atualizados",
+  "obrigacao.tipo_arquivado",
+  "obrigacao.aviso_emitido",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

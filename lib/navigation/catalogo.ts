@@ -323,6 +323,23 @@ export const NAV_CATALOG = [
     sidebar: true,
   },
   {
+    // FORK MIA — documentos e obrigações com vencimento (docs/fork/obrigacoes.md):
+    // a agenda de renovações da carteira. Ao lado de Tarefas porque é o mesmo
+    // gesto de todo dia ("o que vence hoje?"), só que do cliente.
+    //
+    // SÓ NO HUB e no ⌘K, como Empresas: o menu está no teto medido (15 itens,
+    // ver o Broadcast acima). Quem vive disto chega pelo aviso no rodapé do
+    // cartão do funil e pelo Foco do cartão aberto, que apontam o item certo.
+    // Sem `minRole`: `viewer` VÊ (é informação de operação, como Tarefas), e a
+    // escrita é cobrada pela rota, com `requireRole("agent")`.
+    href: "/app/obrigacoes",
+    label: "Obrigações",
+    description: "Documentos e atividades recorrentes com vencimento: o que venceu, o que vence e o que foi pedido e não chegou.",
+    icon: "ClipboardText",
+    group: "crm",
+    section: "O dia a dia da venda",
+  },
+  {
     // Módulo VoIP (migration 0347). No grupo do CRM pelo mesmo critério de
     // Tarefas: quem atende confere ligações perdidas e transcrições no dia a
     // dia, não como revisão deliberada.

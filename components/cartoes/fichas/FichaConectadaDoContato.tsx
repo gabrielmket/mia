@@ -28,6 +28,7 @@ import { useFichaDoContato, useVincularEmpresa } from "@/hooks/cartoes/useFichas
 import { SeletorDeEmpresa } from "@/components/empresas/SeletorDeEmpresa";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
 import { HistoricoDeCompras } from "@/components/cartoes/HistoricoDeCompras";
+import { SecaoDeObrigacoes } from "@/components/obrigacoes/SecaoDeObrigacoes";
 import { Par, Pares, Secao } from "@/components/cartoes/aberto/Secao";
 import { useAgoraDoCartao } from "@/components/cartoes/ContextoDoCartao";
 import { format } from "date-fns";
@@ -89,6 +90,10 @@ export function FichaConectadaDoContato({ contactId, anonimizado }: { contactId:
         />
       </div>
       <div className="min-w-0">
+        {/* Os documentos e as atividades da pessoa (e, por herança, os da
+            empresa dela). Contato anonimizado não tem mais nenhum: a
+            anonimização os leva junto (migration 9018). */}
+        {anonimizado ? null : <SecaoDeObrigacoes escopo={{ tipo: "contato", id: contactId }} id="documentos-do-contato" />}
         <ResumoDoContato ficha={f} />
         <MemoriaDaIa ficha={f} />
         <AgendaDoContato ficha={f} contactId={contactId} />
