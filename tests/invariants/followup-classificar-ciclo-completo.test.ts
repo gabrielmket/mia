@@ -398,9 +398,16 @@ async function cenario(grafo: FlowGraph, entrar: boolean): Promise<Cenario> {
     `insert into followup_flow_versions (organization_id, graph) values ($1, $2) returning id`,
     [org, JSON.stringify(grafo)],
   );
+  // FORK MIA — o gatilho vai escrito, sem `cancel_on_reply`. No fork o DEFAULT da
+  // coluna traz `cancel_on_reply: true` (migration 0270: régua nova encerra
+  // quando o lead responde), e com ele a resposta ENCERRA a inscrição em vez de
+  // acordar o classificar — os casos A, C e E mediriam o encerramento, não o
+  // ciclo. Este arquivo prova a régua que classifica a resposta, que é a que tem
+  // "Cancelar se o lead responder" desligado; a que encerra é provada em
+  // followup-reactivity.test.ts.
   const { rows: ptr } = await pool.query<{ id: string }>(
-    `insert into followup_flow_pointers (organization_id, name, status, active_version_id)
-     values ($1, 'Oferta com classificação', 'active', $2) returning id`,
+    `insert into followup_flow_pointers (organization_id, name, status, active_version_id, trigger_config)
+     values ($1, 'Oferta com classificação', 'active', $2, '{"kind":"manual"}'::jsonb) returning id`,
     [org, ver[0]!.id],
   );
   const { rows: en } = await pool.query<{ id: string }>(
