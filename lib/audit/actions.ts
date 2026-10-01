@@ -221,6 +221,12 @@ export const AUDIT_ACTIONS = [
   "broadcast.criado",
   "broadcast.editado",
   "broadcast.excluido",
+  // FORK MIA — cartão aberto (docs/fork/cartoes-e-fichas.md): a nota interna, as
+  // pessoas envolvidas num negócio e a confirmação do campo que a IA preencheu.
+  "lead.nota_adicionada",
+  "lead.contato_envolvido_incluido",
+  "lead.contato_envolvido_retirado",
+  "lead.campo_confirmado",
   "broadcast.disparado",
   // FORK MIA (.60) — leads dos formulários da Meta: quem ligou a importação, que
   // formulário vai para qual funil, quem pediu leitura na hora, e a rodada do

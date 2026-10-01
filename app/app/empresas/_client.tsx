@@ -8,6 +8,7 @@
  * negociamos com eles. Uma tela só de cadastro seria uma agenda de CNPJ.
  */
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -240,7 +241,9 @@ export function EmpresasClient() {
   const [juntando, setJuntando] = useState<string[]>([]);
   const [editando, setEditando] = useState<Empresa | null>(null);
   const [criando, setCriando] = useState(false);
-  const [fichaAberta, setFichaAberta] = useState<string | null>(null);
+  // O endereço /app/empresas/<id> chega aqui como ?ficha=<id> (cartão aberto e ficha do contato).
+  const parametros = useSearchParams();
+  const [fichaAberta, setFichaAberta] = useState<string | null>(parametros.get("ficha"));
   /**
    * As definições de campo extra vêm dos FUNIS — o mesmo registro que o contato
    * e o lead usam (`crm_pipelines.settings.fields`). Um segundo registro só para
