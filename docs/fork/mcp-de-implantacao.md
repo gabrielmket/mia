@@ -3,7 +3,8 @@
 O MCP de **plataforma** (`/api/mcp/plataforma`) já criava o cliente, liberava
 módulo e lançava crédito. Agora ele também **monta o cliente por dentro**: dados
 da empresa, funil, catálogo, etiquetas, memória, conhecimento, follow-up, agente
-de IA, automações, agenda, equipe e mensagens prontas. Uma sessão do Claude Code
+de IA, automações, agenda, equipe, mensagens prontas e as regras de conversão
+para a Meta e o Google. Uma sessão do Claude Code
 com um token de plataforma faz a implantação inteira conversando, e para só onde
 o produto exige uma pessoa (ler o QR Code do WhatsApp, por exemplo).
 
@@ -40,7 +41,7 @@ token, a ferramenta e os argumentos (`plataforma.mcp_executado`).
    | `criar_cliente` | criar a organização | se o agente também cria o cliente |
    | `liberar_modulo` | ligar módulo vendido | se o cliente contratou algum módulo |
    | `implantar_configuracao` | montar tudo, inclusive os **rascunhos** de agente, follow-up e automação | sempre |
-   | `colocar_no_ar` | publicar e pausar agente, publicar follow-up, ligar automação, ligar lembrete, submeter modelo à Meta | quando o agente também publica |
+   | `colocar_no_ar` | publicar e pausar agente, publicar follow-up, ligar automação, ligar lembrete, submeter modelo à Meta, ligar regra de conversão e a volta dos leads de formulário | quando o agente também publica |
    | `convidar_equipe` | mandar convite por e-mail com o papel escolhido | quando o agente também convida |
 
    As três últimas são separadas pelo tamanho do estrago. Um token só com
@@ -118,6 +119,7 @@ pessoa faz (com a tela e o caminho).
 | 14 | Conferir o rascunho com o cliente antes de pôr no ar | `plataforma_ver_agentes`, `plataforma_ver_followup` | agente e pessoa |
 | 15 | Publicar os follow-ups e o agente | `plataforma_publicar_followup`, `plataforma_publicar_agente` | agente |
 | 16 | Ligar as automações e os lembretes | `plataforma_ligar_automacao`, `plataforma_ligar_lembrete` | agente |
+| 16a | Conversões (opcional, para quem anuncia): montar as regras por etapa, e ligar depois de a pessoa conectar a conta de anúncios | `plataforma_ver_conversoes`, `plataforma_garantir_conversoes_da_meta`, `plataforma_garantir_conversoes_do_google`, `plataforma_ligar_conversoes`, `plataforma_ligar_leads_de_formulario_da_meta` | agente (a conexão é com a pessoa do cliente) |
 | 17 | Convidar a equipe | `plataforma_convidar_pessoas` | agente |
 | 18 | Conferir o checklist: `pode_atender` e a lista do que ficou com uma pessoa | `plataforma_ver_implantacao` | agente |
 
@@ -182,6 +184,8 @@ ferramenta não recebe nem devolve chave, e o agente nasce com a IA padrão.
 | `plataforma_ver_catalogo` | os produtos e serviços, com busca e paginação | leitura |
 | `plataforma_ver_configuracao` | o conteúdo do que está configurado, por seção (etiquetas, memória, conhecimento, follow-ups, automações, agenda, equipe, números, atendimento, mensagens) | leitura |
 | `plataforma_ver_followup` | um fluxo de follow-up por dentro: gatilho, nós, textos e esperas | leitura |
+| `plataforma_ver_conversoes` | as conversões de um cliente: as conexões da Meta e do Google **sem segredo**, as regras por funil das duas plataformas, a chave dos leads de formulário, o evento recomendado para cada etapa e os 20 últimos envios com a situação e o motivo | leitura |
+| `plataforma_diagnosticar_conversoes_da_meta` | o diagnóstico da Meta, o mesmo do botão "Testar conexão": token, destino, permissão, último envio aceito, recusas em 7 dias e modo de teste. Faz três leituras na Meta com o token do cliente; nenhum evento é enviado | leitura |
 
 ### Operações que já existiam
 
@@ -209,6 +213,8 @@ ferramenta não recebe nem devolve chave, e o agente nasce com a IA padrão.
 | `plataforma_garantir_tipos_de_agendamento` | tipos de agendamento (duração, local, categoria), com o lembrete desligado | nome do tipo | 30 tipos |
 | `plataforma_definir_jornada` | a jornada de uma pessoa da equipe, pelo e-mail | a pessoa | uma pessoa |
 | `plataforma_garantir_respostas_prontas` | respostas prontas compartilhadas da equipe | título da resposta | 50 respostas |
+| `plataforma_garantir_conversoes_da_meta` | o que cada etapa aberta de um funil informa à Meta: o evento, o canal de entrada e o valor; com `usar_recomendado: true`, o sistema escolhe o evento pelo nome da etapa. A regra nasce **desligada** | a etapa do funil | 20 regras |
+| `plataforma_garantir_conversoes_do_google` | o que cada etapa aberta informa ao Google Ads: o nome da conversão e o id da ação de conversão (que já tem de existir na conta do Google). A regra nasce **desligada** | a etapa do funil | 20 regras |
 
 Todas respondem `criou`, `atualizou` ou `ja_estava`, item a item quando a chamada
 é em lote.
@@ -223,6 +229,8 @@ Todas respondem `criou`, `atualizou` ou `ja_estava`, item a item quando a chamad
 | `plataforma_ligar_automacao` | liga ou desliga uma regra | mesmo estado, `ja_estava` |
 | `plataforma_ligar_lembrete` | liga o lembrete de um tipo de agendamento, com antecedência e texto | mesmo pedido, `ja_estava` |
 | `plataforma_submeter_modelo_whatsapp` | submete à Meta um modelo oficial de mensagem (só texto) | modelo que já existe na conta não é reenviado |
+| `plataforma_ligar_conversoes` | liga ou desliga as regras de conversão por etapa de um funil, na Meta ou no Google: o sistema passa a mandar evento de cliente para a plataforma de anúncio. Ligar não envia o passado | mesmo pedido, `ja_estava` |
+| `plataforma_ligar_leads_de_formulario_da_meta` | liga ou desliga a volta dos leads de formulário para a Meta | mesmo pedido, `ja_estava` |
 
 ### Equipe · operação `convidar_equipe`
 
@@ -242,7 +250,9 @@ a recusa diz qual operação pedir.
 Na empresa de demonstração a montagem funciona inteira (é assim que ela é
 preenchida), e nada sai para fora: convite de equipe, modelo oficial do WhatsApp
 e automação ligada são recusados com a frase da trava. Ela não tem número de
-WhatsApp conectado, então nenhum agente é publicado lá.
+WhatsApp conectado, então nenhum agente é publicado lá. As regras de conversão
+podem ser gravadas e ligadas nela, e nada é enviado, porque a conexão de
+conversões ligada não existe lá: a resposta da ferramenta avisa.
 
 ---
 
@@ -260,7 +270,8 @@ O checklist (`plataforma_ver_implantacao`) lista cada item abaixo em
 | Conectar o número de WhatsApp | Conexões · `/app/connections` | é acesso do cliente: o QR Code é lido no celular dele, e a conta oficial pede o login dele na Meta |
 | Chave do provedor de IA e modelo padrão | Admin › IA · `/admin` | a IA dos agentes é da plataforma; chave é credencial e não entra por ferramenta |
 | Envio de e-mail da instalação (SMTP) | Admin › E-mail · `/admin` | servidor e senha são credenciais |
-| Token de conversões da Meta e do Google | Configurações › Conversões · `/app/settings/conversoes` | credencial da conta de anúncios do cliente |
+| Identificador do destino e token de conversões da Meta, e a autorização do Google | Configurações › Conversões · `/app/settings/conversoes` | credencial da conta de anúncios do cliente. As regras por etapa e a chave dos leads de formulário entram por ferramenta; a credencial, não |
+| Criar a ação de conversão na conta do Google Ads | Configurações › Conversões · `/app/settings/conversoes` | escreve na conta de anúncios do cliente; a ferramenta recebe o id de uma ação que já existe |
 | Agenda do Google ou do Outlook | Agenda · `/app/agenda` | é a conta pessoal de cada pessoa: o login é dela |
 | Prazos da agenda (confirmação, proteção, validade do pedido) | Configurações › Agenda · `/app/settings/tenant/agenda` | a gravação exige uma pessoa logada com verificação em duas etapas; os padrões valem até alguém mexer |
 | Roteador entre dois agentes do mesmo número | IA › Roteadores · `/app/ai/routers` | classifica a intenção com exemplos, e é montado e testado na tela |
@@ -304,7 +315,9 @@ Também ficaram de fora, por desenho:
   fina, a operação monta a mesma sequência com as mesmas funções de biblioteca,
   e `tests/unit/mcp-de-implantacao-espelhos.test.ts` reprova quando o código da
   rota muda, para alguém reler o espelho.
-- Nenhuma migration: tudo cabe nas tabelas que existem.
+- Nenhuma migration para as ferramentas: tudo cabe nas tabelas que existem. As
+  de conversões da Meta usam as tabelas da migration 9017, que é da peça
+  ([`conversoes-da-meta.md`](conversoes-da-meta.md)) e não do MCP.
 
 Pontos de ligação no código do upstream (a lista fechada, para a sincronização):
 
@@ -316,6 +329,7 @@ Pontos de ligação no código do upstream (a lista fechada, para a sincronizaç
 | `app/actions/settings/updatePipelineConfig.ts` | chama `gravarConfiguracaoDoFunil` (`lib/pipelines/pipeline-config.ts`) |
 | `app/api/v1/ai/knowledge/sources/route.ts` | o `POST` chama `criarMaterial` (`lib/ai/rag/criar-material.ts`) |
 | `app/api/v1/agenda/tipos/route.ts` | importa o contrato de `lib/agenda/tipos-de-agendamento.ts` |
+| `app/actions/settings/salvarRegrasDeConversaoGoogle.ts` | chama `gravarRegrasDeConversaoGoogle` (`lib/conversoes/gravar-regras-google.ts`) |
 | `tests/unit/identificadores-que-cruzam-fronteira.test.ts` | o registro do upload aponta para `lib/ai/rag/criar-material.ts` |
 | `tests/unit/agenda-reativar-tipo.test.ts` | lê o contrato no arquivo novo, com um controle de que a rota o importa |
 
@@ -330,6 +344,7 @@ Testes:
 |---|---|
 | `tests/unit/mcp-de-implantacao-ferramentas.test.ts` | o catálogo: descrições, exemplos que passam no próprio esquema, a guarda da operação, organização inexistente, recusa que ensina, auditoria |
 | `tests/unit/mcp-de-implantacao-operacoes.test.ts` | cada ferramenta: o que grava, a reexecução, as recusas e a empresa de demonstração |
+| `tests/unit/mcp-de-implantacao-conversoes.test.ts` | as seis ferramentas de conversões: o que gravam, que montar não liga, a reexecução, as recusas, a resposta sem segredo e a empresa de demonstração |
 | `tests/unit/mcp-de-implantacao-espelhos.test.ts` | as rotas espelhadas não mudaram sem alguém reler o espelho |
 | `tests/unit/mcp-de-implantacao-pela-porta-http.test.ts` | o mesmo servidor pela rota HTTP de verdade, com o cabeçalho `Authorization` |
 | `tests/invariants/mcp-de-implantacao-ponta-a-ponta.test.ts` | o roteiro inteiro no Postgres de verdade, e que rodar de novo não muda uma linha |

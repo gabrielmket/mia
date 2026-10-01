@@ -77,6 +77,9 @@ abertos:
 - `contacts.social_identity` não é anonimizada por nenhum caminho, nem exportada
 - `google_ads_click_refs` / `meta_ads_click_refs` guardam `query_raw` e nada as alcança
 - a rota direta de anonimização não zera `consent`, `tags`, `source_metadata`
+- conversões da Meta por etapa do funil e o diagnóstico da Meta (o par da 0436 do
+  Google), e dois defeitos da tela de Conversões: o link do negócio na lista de
+  pendências para na lista de funis, e todo evento de etapa lê "Compra" nela
 
 ## Como fazer uma sincronização
 
@@ -112,6 +115,9 @@ npx vitest run
   `lib/agenda-mia/` e `components/agenda/microsoft/`, e a lista fechada dos pontos
   de ligação dela no código do upstream está em
   [`docs/fork/agenda-microsoft.md`](fork/agenda-microsoft.md), seção 3.4.
+  As conversões da Meta por etapa (9017) moram em `lib/conversoes-meta/`, ao lado
+  de `lib/conversoes/` do upstream; os quatro arquivos dele que ela toca estão em
+  [`docs/fork/conversoes-da-meta.md`](fork/conversoes-da-meta.md).
   O MCP de implantação mora em `lib/mcp-plataforma/` e `lib/implantacao/`; as seis
   rotas do upstream de onde ele tirou a lógica para uma função compartilhada, e as
   rotas que ele espelha, estão em

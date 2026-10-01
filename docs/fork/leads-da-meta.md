@@ -228,7 +228,8 @@ uma pergunta criada por eles, e a chave que a Meta devolve é
   `meta_form_id`, `meta_form_name`, `meta_page_id` e `meta_lead_id`. A ficha do
   contato já resolve o anúncio pelo `ad_id`. O `ad_source_id` fica vazio **de
   propósito**: hoje ele é enviado à Meta como identificador de clique do WhatsApp,
-  e o id do lead não é isso.
+  e o id do lead não é isso. É o `meta_lead_id` do **negócio** que volta para a
+  Meta como identidade do lead de formulário ([`conversoes-da-meta.md`](conversoes-da-meta.md)).
 - **Dono de cada Página (migration 9004):** `mia_paginas_da_meta` (page_id é a
   chave: uma Página, um dono) e `mia_meta_conexao_da_plataforma` (linha única, zero
   policies). Gatilhos `trg_mia_formulario_da_meta_so_da_pagina_da_empresa` e
@@ -355,6 +356,8 @@ lead › no CRM, "Ler agora".
 - Mais de 5.000 leads num mesmo formulário em 7 dias: a leitura fica incompleta e
   aparece como erro no histórico.
 - A conversão de volta para a Meta com o id do lead (API de conversões para CRM)
-  ainda não sai; o dado já fica guardado para quando sair.
+  sai desde a migration 9017, com a chave "Leads de formulário da Meta voltam para a
+  Meta" ligada em Configurações › Conversões. Vem desligada, e ligar não envia o
+  passado: ver [`conversoes-da-meta.md`](conversoes-da-meta.md).
 - Respostas de termos personalizados (as caixinhas de consentimento extras do
   formulário) não são importadas nesta versão.
