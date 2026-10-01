@@ -333,6 +333,8 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     "mia_agenda_microsoft_eventos",
     // 9014 — o vínculo do compromisso com o Outlook.
     "mia_agenda_microsoft_compromissos",
+    // 9015 — os tipos que são reunião do Teams.
+    "mia_agenda_tipos_com_teams",
   ].map((tabela) => ({
     tabela,
     razao:

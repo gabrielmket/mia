@@ -53,6 +53,8 @@ const LIDAS_PELO_CLIENTE = [
   "mia_agenda_microsoft_eventos",
   // 9014 — o vínculo do compromisso com o evento do Outlook.
   "mia_agenda_microsoft_compromissos",
+  // 9015 — os tipos de agendamento que são reunião do Teams.
+  "mia_agenda_tipos_com_teams",
 ] as const;
 
 /**
@@ -77,6 +79,8 @@ const SO_A_PLATAFORMA_ESCREVE = [
   "mia_agenda_microsoft_eventos",
   // 9014 — o vínculo do compromisso com o evento do Outlook.
   "mia_agenda_microsoft_compromissos",
+  // 9015 — os tipos de agendamento que são reunião do Teams.
+  "mia_agenda_tipos_com_teams",
 ] as const;
 
 /** As que a sessão do cliente ESCREVE, cada uma com a linha que tentaria gravar no vizinho. */
@@ -161,6 +165,14 @@ function semear(org: string, gestor: string, tag: string): string {
     )
     insert into public.mia_agenda_microsoft_compromissos (appointment_id, organization_id, evento_id)
       select ap.id, '${org}', 'ev-pub-${tag}' from ap;
+    -- 9015: um tipo de agendamento Teams.
+    with tp as (
+      insert into public.calendar_event_types (organization_id, name, slug, location_kind, location_details)
+        values ('${org}', 'Reunião Teams ${tag}', 'reuniao-teams-mia-${tag}', 'video_link', 'Microsoft Teams')
+        returning id
+    )
+    insert into public.mia_agenda_tipos_com_teams (event_type_id, organization_id)
+      select tp.id, '${org}' from tp;
   `;
 }
 

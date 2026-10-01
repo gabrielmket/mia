@@ -38,6 +38,7 @@ import { ApiError } from "@/lib/api/types";
 import { SITUACOES_DO_AGENDAMENTO } from "@/lib/agenda/tipos";
 import type { McpContext, McpToolDefinition } from "@/lib/mcp/types";
 import { emailInformadoSchema, gravarEmailDoContato } from "./email-do-contato";
+import { teamsVideoUrl } from "@/lib/agenda/microsoft/teams";
 import { resolveUserNames } from "./_users";
 
 /** Teto do horizonte pedido — espelha o da rota, e o excesso é erro de chamada. */
@@ -542,7 +543,8 @@ export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
         fuso: a.fuso,
         situacao: a.situacao,
         meet_state: a.meetingState,
-        meeting_url: a.meetingState === "ready" ? a.meetingUrl : null,
+        // FORK MIA (9015): o link do Teams (um "Link de vídeo") também chega à IA.
+        meeting_url: a.meetingState === "ready" ? a.meetingUrl : teamsVideoUrl(a.meetingUrl),
         // O RÓTULO DO CONTATO nunca é montado aqui: vem de `nomeDoContato` por
         // `contatoDoEmbed` (`lib/contacts/rotulo-do-contato.ts`), a mesma decisão
         // de nome que a tela do produto usa.

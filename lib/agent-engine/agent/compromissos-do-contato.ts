@@ -29,6 +29,8 @@
  * cada turno. O teto corta a lista e DIZ que cortou.
  */
 import type { Queryable } from "../queue/queue";
+// FORK MIA (9015): o link do Teams é um "Link de vídeo" e também chega ao contexto da IA.
+import { teamsVideoUrl } from "@/lib/agenda/microsoft/teams";
 
 export interface CompromissoDoContato {
   id: string;
@@ -83,7 +85,7 @@ export function renderCompromissos(linhas: readonly CompromissoDoContato[]): str
   const itens = cabem.map((c) => {
     const titulo = (c.title ?? "").trim() || "compromisso";
     const fim = c.ends_at ? ` até ${c.ends_at}` : "";
-    return `- ${c.starts_at}${fim} — ${titulo} (${c.status})${c.meeting_state === "ready" && c.meeting_url ? ` — link da reunião: ${c.meeting_url}` : c.meeting_state === "pending" ? " — link ainda sendo criado" : c.meeting_state === "failed" ? " — link indisponível; a equipe precisa verificar" : ""}`;
+    return `- ${c.starts_at}${fim} — ${titulo} (${c.status})${c.meeting_state === "ready" && c.meeting_url ? ` — link da reunião: ${c.meeting_url}` : teamsVideoUrl(c.meeting_url) ? ` — link da reunião: ${teamsVideoUrl(c.meeting_url)}` : c.meeting_state === "pending" ? " — link ainda sendo criado" : c.meeting_state === "failed" ? " — link indisponível; a equipe precisa verificar" : ""}`;
   });
 
   // Truncar em silêncio faria o modelo afirmar que o cliente só tem estes — a

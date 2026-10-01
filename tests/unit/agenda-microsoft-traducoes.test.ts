@@ -259,3 +259,37 @@ describe("o mapa de desfechos da Microsoft", () => {
     expect(c.mensagem).not.toContain("ana@cliente.com.br");
   });
 });
+
+describe("o Teams (entrega 3)", () => {
+  it("só link do próprio Teams vale; o resto não chega ao cliente", async () => {
+    const { teamsVideoUrl, observarTeams } = await import("@/lib/agenda/microsoft/teams");
+    expect(teamsVideoUrl("https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0")).not.toBeNull();
+    expect(teamsVideoUrl("https://teams.live.com/meet/9876543210")).not.toBeNull();
+    expect(teamsVideoUrl("https://teams.microsoft.com.evil.com/l/x")).toBeNull();
+    expect(teamsVideoUrl("https://usuario:senha@teams.microsoft.com/l/x")).toBeNull();
+    expect(observarTeams({ id: "e", isOnlineMeeting: true, onlineMeeting: null } as EventoDaMicrosoft)).toEqual({ estado: "pendente" });
+    expect(observarTeams({ id: "e", isOnlineMeeting: false } as EventoDaMicrosoft)).toBeNull();
+  });
+
+  it("o tipo 'Microsoft Teams' vira um Link de vídeo marcado para a rota do upstream", async () => {
+    const { localDoTeamsParaOUpstream } = await import("@/lib/agenda-mia/tipos-com-teams");
+    expect(localDoTeamsParaOUpstream({ name: "Reunião", location_kind: "microsoft_teams" })).toEqual({
+      corpo: { name: "Reunião", location_kind: "video_link", location_details: "Microsoft Teams" },
+      teams: true,
+    });
+    expect(localDoTeamsParaOUpstream({ location_kind: "google_meet" }).teams).toBe(false);
+  });
+
+  it("o texto enviado ao cliente diz 'Link do Microsoft Teams'", async () => {
+    const { textoDoCompromisso } = await import("@/lib/agenda/texto-do-compromisso");
+    const texto = textoDoCompromisso({
+      startsAt: "2026-10-15T17:00:00.000Z",
+      timeZone: "America/Sao_Paulo",
+      url: "https://teams.microsoft.com/l/meetup-join/x",
+      idioma: "pt-BR",
+      provedor: "teams",
+    });
+    expect(texto).toContain("Link do Microsoft Teams: https://teams.microsoft.com/l/meetup-join/x");
+    expect(texto).not.toContain("Google Meet");
+  });
+});

@@ -184,4 +184,39 @@ export const DICIONARIO_DA_AGENDA_MICROSOFT: Record<string, { es: string }> = {
   "Remarcar ou cancelar no Outlook volta para cá e fica registrado no negócio.": {
     es: "Reprogramar o cancelar en Outlook vuelve aquí y queda registrado en el negocio.",
   },
+
+  // entrega 3: Microsoft Teams
+  "Microsoft Teams": { es: "Microsoft Teams" },
+  "O link do Teams é criado sozinho quando o compromisso vai para uma agenda do Outlook que permite Teams, e é enviado ao cliente pelo WhatsApp quando a IA marca. Quem atende este tipo precisa ter o Outlook como destino.": {
+    es: "El enlace de Teams se crea solo cuando el compromiso va a una agenda de Outlook que permite Teams, y se envía al cliente por WhatsApp cuando la IA agenda. Quien atiende este tipo necesita tener Outlook como destino.",
+  },
+  "não tem o Outlook como destino. Os compromissos deste tipo com essa pessoa ficam sem link do Teams.": {
+    es: "no tiene Outlook como destino. Los compromisos de este tipo con esa persona se quedan sin enlace de Teams.",
+  },
+  "Link enviado para a conversa autorizada.": { es: "Enlace enviado a la conversación autorizada." },
+  "Criando link do Microsoft Teams": { es: "Creando el enlace de Microsoft Teams" },
+  "Link do Microsoft Teams pronto": { es: "Enlace de Microsoft Teams listo" },
+  "Não foi possível criar o link do Microsoft Teams": { es: "No fue posible crear el enlace de Microsoft Teams" },
+  "O link fica pronto quando o compromisso chega ao Outlook. Até lá, nada é enviado ao cliente.": {
+    es: "El enlace queda listo cuando el compromiso llega a Outlook. Hasta entonces, no se envía nada al cliente.",
+  },
+  "Link do Microsoft Teams:": { es: "Enlace de Microsoft Teams:" },
+  "Esta agenda não permite Microsoft Teams. Confira a conta conectada ou escolha outro destino.": {
+    es: "Esta agenda no permite Microsoft Teams. Revisa la cuenta conectada o elige otro destino.",
+  },
+  "O Teams só é criado em agenda do Outlook. Este compromisso foi para o Google.": {
+    es: "Teams solo se crea en una agenda de Outlook. Este compromiso fue a Google.",
+  },
+  "O Teams só é criado em agenda do Outlook. Quem atende ainda não tem o Outlook como destino.": {
+    es: "Teams solo se crea en una agenda de Outlook. Quien atiende todavía no tiene Outlook como destino.",
+  },
+  "A Microsoft não conseguiu criar a reunião. Tente sincronizar novamente.": {
+    es: "Microsoft no pudo crear la reunión. Intenta sincronizar de nuevo.",
+  },
+  "O link ainda não foi confirmado pela Microsoft. Confira o evento no Outlook.": {
+    es: "Microsoft todavía no confirmó el enlace. Revisa el evento en Outlook.",
+  },
+  "A Microsoft não devolveu um link do Teams válido. Confira o evento no Outlook.": {
+    es: "Microsoft no devolvió un enlace de Teams válido. Revisa el evento en Outlook.",
+  },
 };

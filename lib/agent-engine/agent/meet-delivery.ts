@@ -16,6 +16,7 @@ import {
 } from "@/lib/agenda/meet-delivery";
 import { meetVideoUrl } from "@/lib/agenda/google/meet";
 import { textoDoCompromisso, type MotivoDaEntrega } from "@/lib/agenda/texto-do-compromisso";
+import { teamsVideoUrl } from "@/lib/agenda/microsoft/teams";
 import { normalizarIdioma, type Idioma } from "@/lib/i18n/idiomas";
 
 export function createMeetDeliveryHandler(deps: {
@@ -88,6 +89,9 @@ export function createMeetDeliveryHandler(deps: {
         // CRM. Onde o local É o Meet, o link continua obrigatório — mandar uma
         // reunião sem como entrar nela é pior que não mandar.
         const ehMeet = row?.location_kind === "google_meet";
+        // FORK MIA (9015): o "Link de vídeo" com link do Teams leva o link junto
+        // (docs/fork/agenda-microsoft.md, 3.7). Link que não é do Teams continua fora.
+        const urlDoTeams = !ehMeet && row?.location_kind === "video_link" ? teamsVideoUrl(row?.meeting_url) : null;
         if (!row || row.archived_at || (ehMeet && !url)) {
           await settle("blocked:channel");
           return;
@@ -115,7 +119,8 @@ export function createMeetDeliveryHandler(deps: {
             startsAt: row.starts_at,
             timeZone: row.time_zone,
             // Sem Meet não há link, e o texto não inventa um.
-            url: ehMeet ? url : null,
+            url: ehMeet ? url : urlDoTeams,
+            provedor: urlDoTeams ? "teams" : "meet",
             idioma: normalizarIdioma(row.contact_locale ?? row.organization_locale),
           }),
           optedOutThisTurn: false,

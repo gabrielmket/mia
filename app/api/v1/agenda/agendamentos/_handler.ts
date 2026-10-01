@@ -54,6 +54,7 @@ import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import { moverLeadParaEtapaDeAgendamento } from "@/lib/leads/appointment-stage-move";
 import { logger } from "@/lib/logger";
+import { registrarEntregaDoTeamsPelaIa } from "@/lib/agenda-mia/tipos-com-teams";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type SB = SupabaseClient;
@@ -435,6 +436,16 @@ async function executarCriacaoDeAgendamento(
   if (erroInsert) {
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, erroInsert.message);
   }
+  // FORK MIA (9015): tipo "Microsoft Teams" marcado pela IA guarda a autorização
+  // de entrega do link (docs/fork/agenda-microsoft.md, 3.7).
+  await registrarEntregaDoTeamsPelaIa({
+    organizationId: ctx.organization_id,
+    appointmentId: criado.id,
+    tipoId: tipo.id,
+    contactId: input.contact_id,
+    marcacao: ctx.meetingBooking,
+    autor: ctx.actor,
+  });
 
   const transicao: Transicao = criado.status === "pending" ? "pending" : "confirmed";
   await fecharOLaco(supabase, ctx, {

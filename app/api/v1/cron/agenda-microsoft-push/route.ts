@@ -50,6 +50,15 @@ async function executar(req: NextRequest) {
     }
   }
 
+  // Entrega 3: compromisso de tipo Teams cujo responsável publica no Google (ou
+  // não tem destino) não pode ter o Teams. A Central avisa uma vez.
+  let semOutlook = 0;
+  try {
+    semOutlook = Number((await rpcMicrosoft(db, "fn_mia_agenda_microsoft_teams_sem_outlook", { p_limite: 50 })) ?? 0);
+  } catch {
+    semOutlook = 0;
+  }
+
   for (const [organizationId, quantidade] of efeitos) {
     if (quantidade > 0) {
       await audit({
@@ -59,7 +68,7 @@ async function executar(req: NextRequest) {
       });
     }
   }
-  return NextResponse.json({ data: { candidatos: candidatos.length, ...resumo } });
+  return NextResponse.json({ data: { candidatos: candidatos.length, teams_sem_outlook: semOutlook, ...resumo } });
 }
 
 export async function GET(req: NextRequest) {

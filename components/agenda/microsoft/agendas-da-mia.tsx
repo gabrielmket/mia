@@ -18,5 +18,6 @@ export async function agendasConectadasDaMia(opcoes: {
   tiposTeamsDaPessoa?: string[];
 }): Promise<React.ReactNode | undefined> {
   if (!(await microsoftEstaConfigurada())) return undefined;
+  // O aviso "com o destino no Google, estes tipos ficam sem Teams para você".
   return <AgendasConectadasMia tiposTeamsDaPessoa={opcoes.tiposTeamsDaPessoa ?? []} />;
 }

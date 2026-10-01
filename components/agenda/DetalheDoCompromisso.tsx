@@ -149,7 +149,7 @@ export function DetalheDoCompromisso({
             onSaved={() => void query.refetch()}
           />
         )}
-        {a?.microsoft && <BlocosDoOutlook id={a.id} outlook={a.microsoft} onSaved={() => void query.refetch()} />}
+        {a?.microsoft && <BlocosDoOutlook id={a.id} revision={a.google_sync?.revision ?? String(a.revision)} outlook={a.microsoft} meeting={a.meeting} onSaved={() => void query.refetch()} />}
         {a?.meeting && !a?.microsoft?.teams && (
           <MeetDoCompromisso
             id={a.id}
