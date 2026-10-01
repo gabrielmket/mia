@@ -25,8 +25,10 @@ import {
   semCodigosDeRastreio,
   situacaoDaConversao,
   type CartaoAberto,
+  type OrigemPorPlataforma,
   type PessoaDoNegocio,
 } from "@/lib/cartoes/cartao-aberto";
+import { rotuloDoEventoDaMetaNoLivro } from "@/lib/conversoes-meta/eventos";
 
 type Db = SupabaseClient;
 
@@ -210,11 +212,21 @@ export async function montarCartaoAberto(
         ? seguro(
             admin
               .from("ad_conversion_dispatches")
-              .select("platform, event_name, status, reason, attempted_at, event_occurred_at")
+              .select("platform, event_name, status, reason, attempted_at, event_occurred_at, value_cents, currency, detail")
               .eq("organization_id", org)
               .eq("lead_id", leadId)
               .order("attempted_at", { ascending: false }),
-            [] as Array<{ platform: string; event_name: string; status: string; reason: string | null; attempted_at: string | null; event_occurred_at: string | null }>,
+            [] as Array<{
+              platform: string;
+              event_name: string;
+              status: string;
+              reason: string | null;
+              attempted_at: string | null;
+              event_occurred_at: string | null;
+              value_cents: number | null;
+              currency: string | null;
+              detail: string | null;
+            }>,
           )
         : Promise.resolve([]),
     ]);
@@ -339,15 +351,42 @@ export async function montarCartaoAberto(
     contato?.created_at ||
     null;
 
-  const conversoesDoNegocio = conversoes.map((c) => ({
-    plataforma: c.platform,
-    evento: c.event_name.startsWith("Etapa:")
+  const conversoesDoNegocio = conversoes.map((c) => {
+    const evento = c.event_name.startsWith("Etapa:")
       ? `Etapa: ${nomeDaEtapa.get(c.event_name.slice("Etapa:".length)) ?? "—"}`
-      : c.event_name,
-    situacao: situacaoDaConversao(c.status, c.reason),
-    motivo: c.reason,
-    quando: c.status === "sent" ? (c.attempted_at ?? c.event_occurred_at) : c.attempted_at,
-  }));
+      : c.event_name;
+    return {
+      plataforma: c.platform,
+      evento,
+      situacao: situacaoDaConversao(c.status, c.reason),
+      motivo: c.reason,
+      quando: c.status === "sent" ? (c.attempted_at ?? c.event_occurred_at) : c.attempted_at,
+      // O nome que a pessoa reconhece: os eventos da Meta (9017) e a compra têm
+      // rótulo próprio; a etapa do Google já vem com o nome da etapa.
+      rotulo:
+        rotuloDoEventoDaMetaNoLivro(c.event_name) ??
+        (c.event_name === "QualifiedLead" ? "Lead qualificado" : evento),
+      valorCentavos: typeof c.value_cents === "number" && c.value_cents > 0 ? c.value_cents : null,
+      moeda: c.currency ?? null,
+      detalhe: c.status === "error" ? (c.detail ?? null) : null,
+    };
+  });
+
+  // De qual plataforma este negócio veio. É a mesma leitura do consumidor das
+  // conversões: o clique mora na origem do CONTATO; o formulário, no negócio.
+  const plataformaDoClique =
+    typeof metaDoContato.ad_source_id === "string" && metaDoContato.ad_source_id.trim() !== ""
+      ? metaDoContato.ad_platform
+      : null;
+  const origemPorPlataforma: OrigemPorPlataforma = {
+    meta_ads:
+      plataformaDoClique === "meta_ads"
+        ? "clique"
+        : typeof metaDoLead.meta_lead_id === "string" && metaDoLead.meta_lead_id.trim() !== ""
+          ? "formulario"
+          : null,
+    google_ads: plataformaDoClique === "google_ads" ? "clique" : null,
+  };
 
   const anonimo = contato?.is_anonymized === true;
   const primeiraMensagem =
@@ -421,6 +460,7 @@ export async function montarCartaoAberto(
       primeiroToque: primeiroToqueEm ? { em: primeiroToqueEm } : null,
       conversoes: conversoesDoNegocio,
       semClique: !clique,
+      origemPorPlataforma,
     },
     pessoas,
     outrosNegocios: outros.map((o) => ({

@@ -113,8 +113,14 @@ const CARTAO: DadosDoCartao = {
     anuncioSemNome: false,
     primeiraMensagem: { texto: "Oi! Vi o vídeo", em: "2026-09-26T20:14:00Z" },
     primeiroToque: { em: "2026-09-26T20:14:00Z" },
-    conversoes: [{ plataforma: "meta_ads", evento: "QualifiedLead", situacao: "enviada", motivo: null, quando: "2026-09-27T11:02:00Z" }],
+    conversoes: [
+      { plataforma: "meta_ads", evento: "Meta:lead_qualificado", rotulo: "Lead qualificado", situacao: "enviada", motivo: null, quando: "2026-09-27T11:02:00Z", valorCentavos: null, moeda: "BRL", detalhe: null },
+      { plataforma: "meta_ads", evento: "Meta:agendou", rotulo: "Agendou", situacao: "enviada", motivo: null, quando: "2026-09-28T15:40:00Z", valorCentavos: 15000, moeda: "BRL", detalhe: null },
+      { plataforma: "meta_ads", evento: "Meta:pediu_orcamento", rotulo: "Pediu orçamento ou proposta", situacao: "falha", motivo: "recusado_pela_plataforma", quando: "2026-09-29T09:10:00Z", valorCentavos: null, moeda: "BRL", detalhe: "token de acesso vencido" },
+      { plataforma: "meta_ads", evento: "Purchase", rotulo: "Compra", situacao: "nao_enviada", motivo: "sem_valor", quando: "2026-09-30T10:00:00Z", valorCentavos: null, moeda: "BRL", detalhe: null },
+    ],
     semClique: false,
+    origemPorPlataforma: { meta_ads: "clique", google_ads: null },
   },
   pessoas: [
     { contatoId: "C1", nome: "Mariana Costa", telefone: "+5511955550142", cargo: null, papel: null, principal: true, conversaId: "CV1" },
@@ -247,7 +253,23 @@ describe("o cartão aberto", () => {
     expect(within(pessoas).getByText(/Studio Vista Parque/)).toBeTruthy();
     const origem = screen.getByTestId("origem-do-negocio");
     expect(within(origem).getByText("“Oi! Vi o vídeo”", { exact: false })).toBeTruthy();
-    expect(within(origem).getByText(/Lead qualificado · Meta · enviada/)).toBeTruthy();
+    // FORK MIA (9017): por plataforma, o que foi informado e quando, ou por que não foi.
+    const conversoes = within(origem).getByTestId("conversoes-da-origem");
+    expect(within(conversoes).getByText(/Lead qualificado informado à Meta em 27\/09/)).toBeTruthy();
+    expect(within(conversoes).getByText(/Agendou informado à Meta em 28\/09 · R\$\s150,00/)).toBeTruthy();
+    expect(
+      within(conversoes).getByText(/Pediu orçamento ou proposta recusado pela Meta em 29\/09: token de acesso vencido/),
+    ).toBeTruthy();
+    // A compra é a palavra feminina, e a que não saiu diz por quê.
+    expect(within(conversoes).getByText(/Compra não informada à Meta: o negócio fechou sem valor/)).toBeTruthy();
+    // A plataforma sem envio diz que o negócio não veio dela.
+    expect(
+      within(conversoes).getByText(
+        "Nada foi informado ao Google Ads: este negócio não veio de um anúncio desta plataforma.",
+      ),
+    ).toBeTruthy();
+    // Quem atende (papel `agent`) não vê o atalho para a tela de administrador.
+    expect(within(conversoes).queryByText("Ver o histórico de envios")).toBeNull();
   });
 
   it("o campo que a IA preencheu aparece 'veio da conversa' e Confirmar chama a rota", () => {

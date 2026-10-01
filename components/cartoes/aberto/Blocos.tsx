@@ -40,6 +40,7 @@ import { ehPapel, PAPEIS, ROTULO_DO_PAPEL, type Papel } from "@/lib/cartoes/pape
 import { haQuanto } from "@/lib/cartoes/tempo";
 import { ROTULO_DO_CANAL } from "@/lib/cartoes/tipos";
 import { useAgoraDoCartao } from "@/components/cartoes/ContextoDoCartao";
+import { ConversoesDaOrigem } from "./ConversoesDaOrigem";
 import { Par, Pares, Secao } from "./Secao";
 
 // ─── Resumo da IA ────────────────────────────────────────────────────────────
@@ -361,27 +362,6 @@ export function EmpresaDoNegocio({ empresa }: { empresa: CartaoAberto["empresa"]
 
 // ─── Origem e atribuição ─────────────────────────────────────────────────────
 
-const PLATAFORMA = { meta_ads: "Meta", google_ads: "Google Ads" } as const;
-
-const SITUACAO_DA_CONVERSAO = {
-  enviada: "enviada",
-  aguardando: "aguardando confirmação",
-  nao_enviada: "não enviada",
-  falha: "recusada",
-} as const;
-
-/** O porquê curto de a conversão não ter saído (a explicação longa mora em Configurações › Conversões). */
-const MOTIVO_CURTO: Record<string, string> = {
-  sem_valor: "o negócio fechou sem valor",
-  sem_conexao: "nenhuma conta de anúncios conectada",
-  conexao_desabilitada: "a conexão está desligada",
-  credencial_incompleta: "a conexão está incompleta",
-  cifra_indisponivel: "falta a chave de criptografia do servidor",
-  plataforma_sem_transporte: "plataforma sem envio de conversão",
-  evento_de_teste: "evento de teste",
-  recusado_pela_plataforma: "a plataforma recusou",
-};
-
 export function OrigemDoNegocio({
   lead,
   origem,
@@ -437,40 +417,9 @@ export function OrigemDoNegocio({
             </ul>
           </Par>
         ) : null}
-        <Par rotulo={t("Conversões")}>
-          {origem.conversoes.length === 0 ? (
-            <span className="text-text-muted">
-              {origem.semClique
-                ? t("nenhuma: o negócio não veio de clique em anúncio")
-                : t("nenhuma enviada até agora")}
-            </span>
-          ) : (
-            <ul className="space-y-0.5">
-              {origem.conversoes.map((c) => (
-                <li key={`${c.plataforma}-${c.evento}`}>
-                  <span
-                    className={cn(
-                      "rounded-full px-1.5 py-0.5 text-[11px]",
-                      c.situacao === "enviada" && "bg-success-bg text-success-fg",
-                      c.situacao === "aguardando" && "bg-info-bg text-info-fg",
-                      c.situacao === "falha" && "bg-error-bg text-error-fg",
-                      c.situacao === "nao_enviada" && "bg-surface-muted text-text-muted",
-                    )}
-                  >
-                    {c.evento === "Purchase" ? t("Compra") : c.evento === "QualifiedLead" ? t("Lead qualificado") : c.evento} ·{" "}
-                    {c.plataforma in PLATAFORMA ? t(PLATAFORMA[c.plataforma as keyof typeof PLATAFORMA]) : c.plataforma} ·{" "}
-                    {t(SITUACAO_DA_CONVERSAO[c.situacao])}
-                    {c.quando && c.situacao === "enviada" ? ` · ${format(new Date(c.quando), "dd/MM HH:mm", { locale })}` : ""}
-                  </span>
-                  {c.motivo && c.situacao !== "enviada" && MOTIVO_CURTO[c.motivo] ? (
-                    <span className="ml-1 text-[11px] text-text-muted">{t(MOTIVO_CURTO[c.motivo]!)}</span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Par>
       </Pares>
+      {/* FORK MIA (9017): por plataforma, o que foi informado e quando, ou por que não foi. */}
+      <ConversoesDaOrigem origem={origem} />
     </Secao>
   );
 }
