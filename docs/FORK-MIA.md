@@ -108,6 +108,10 @@ npx vitest run
   dentro de arquivos do upstream em vários lugares (navegação, canais, agenda). A
   medição de 25/09 deu 15 arquivos em conflito, todos de código. Mover para módulos
   próprios é trabalho contínuo, feito a cada vez que se mexe num desses arquivos.
+  A agenda do Outlook (9011, 9014, 9015) mora em `lib/agenda/microsoft/`,
+  `lib/agenda-mia/` e `components/agenda/microsoft/`, e a lista fechada dos pontos
+  de ligação dela no código do upstream está em
+  [`docs/fork/agenda-microsoft.md`](fork/agenda-microsoft.md), seção 3.4.
 - **Funcionalidade duplicada.** Os dois lados construíram, na mesma semana, o
   cadastro incorporado da Meta, o disparo em massa e o aviso no WhatsApp. A decisão
   de ficar com um, com o outro ou com os dois é de produto. Para o **disparo em

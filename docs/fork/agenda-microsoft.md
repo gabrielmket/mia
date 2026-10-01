@@ -1,8 +1,14 @@
-# Agenda com o Microsoft 365: Outlook e Teams (desenho para aprovação)
+# Agenda com o Microsoft 365: Outlook e Teams
 
-> **Situação:** desenho. Nada implementado. Branch `mia-agenda-microsoft`, a partir de
-> `mia/main` na .64 (upstream v1.67). A implementação começa depois da aprovação do
-> Gabriel e do protótipo clicável das telas da seção 6.
+> **Situação:** implementado na branch `mia-agenda-microsoft` (protótipo aprovado
+> pelo Gabriel em 30/09/2026), nas migrations **9011** (conexão e ocupação), **9014**
+> (publicação com conflitos) e **9015** (Teams). A 9012 e a 9013 são de outro trabalho.
+> Falta o teste com conta real (seção 8) depois que o app existir no Azure (seção 5).
+>
+> O que mudou do desenho na implementação: o escopo `openid` entrou (o `id_token`
+> diz se a conta é de trabalho ou pessoal); a escrita vai sempre em UTC (mais simples
+> e sempre aceita); a ida só publica compromisso de pé e futuro; e o vínculo da
+> ocupação, do detalhe e do Teams tem os pontos de ligação listados na 3.4.
 
 O pedido: "integrar a agenda com a agenda do Outlook, ou produtos da Microsoft como a
 videochamada lá, pois tem empresa que usa isso, assim dá opção do Google Agenda e suas
@@ -150,7 +156,7 @@ valem PR independente: o cartão da Agenda mostra "Agenda conectada" para conex�
 | `microsoft/provedor.ts` | (não existe) | a interface da Opção A |
 | `lib/agenda-mia/ocupacao.ts` | (não existe) | soma Google + Microsoft para os leitores dele |
 
-### 3.2 Tabelas (migration 9011, `agenda_microsoft`)
+### 3.2 Tabelas (migrations 9011, 9014 e 9015)
 
 | tabela | papel | espelha |
 |---|---|---|
@@ -205,7 +211,8 @@ seis tabelas onde o dele apaga o link do Meet dos estados da IA.
 | 7 | `app/api/v1/agenda/agendamentos/[id]/route.ts` e `components/agenda/DetalheDoCompromisso.tsx` | blocos "Sincronização Outlook" e "Microsoft Teams" |
 | 8 | `lib/agent-engine/agent/meet-delivery.ts` e `lib/agenda/texto-do-compromisso.ts` | o link do Teams entra no texto enviado, como "Link do Microsoft Teams:" |
 | 9 | `lib/mcp/tools/agendamento.ts` e `lib/agent-engine/agent/compromissos-do-contato.ts` | a IA passa a ver o link do Teams (hoje só vê `meeting_url` quando o Meet está `ready`) |
-| 10 | `lib/auth/public-paths.ts`, `components/admin/AdminSidebar.tsx`, `lib/recursos-opcionais/catalogo.ts`, `lib/lgpd/export-collector.ts`, `docker/scheduler/entrypoint.sh` | registros: rotas públicas, item "Microsoft 365" no `/admin` e em `/admin/sistema`, exportação LGPD do espelho, rotinas |
+| 10 | `lib/auth/public-paths.ts`, `components/admin/AdminSidebar.tsx`, `lib/recursos-opcionais/{catalogo,estado}.ts`, `lib/audit/actions.ts`, `lib/env.ts`, `lib/ui/icons.ts`, `lib/i18n/dicionario.ts` (uma linha que espalha `dicionario-mia-agenda-microsoft.ts`), `docker/scheduler/entrypoint.sh` | registros: rotas públicas, item "Microsoft 365" no `/admin` e em `/admin/sistema`, ações de auditoria, variáveis, ícones, traduções, rotinas |
+| 11 | `tests/unit/agenda-do-atendente-ve-a-ocupacao-do-dono.test.ts` | o dublê do banco responde vazio às rpcs `fn_mia_*` (a ocupação do Outlook é somada à do Google) |
 
 Todo o resto mora em arquivo nosso. Esta lista entra no `FORK-MIA.md` como código da
 MIA dentro de arquivo do upstream, para quem fizer a próxima sincronização.
@@ -307,7 +314,8 @@ isso:
   escolher a conta de trabalho. `prompt=consent` não é preciso: a Microsoft devolve
   `refresh_token` sempre que `offline_access` é pedido (a armadilha 1 do Google não
   existe aqui).
-- **Escopos:** `offline_access User.Read Calendars.ReadWrite`. Nada além:
+- **Escopos:** `openid offline_access User.Read Calendars.ReadWrite`. Nada além
+  (o `openid` só traz o `id_token`, de onde sai o tenant: conta de trabalho ou pessoal):
   - `Calendars.ReadWrite` cobre ler, criar, alterar e cancelar evento **e criar a
     reunião do Teams no próprio evento**. `OnlineMeetings.ReadWrite` fica de fora: cria
     reunião avulsa, fora da agenda, e não existe para conta pessoal;
@@ -359,9 +367,9 @@ isso:
   `deskcomm_appointment`, `deskcomm_v` (as mesmas chaves privadas do Google).
   Diferença que muda o motor: é a Microsoft que escolhe o id. Se a resposta se perder,
   a próxima reserva procura o evento pela propriedade estendida antes de criar de novo.
-- **Fuso:** o IANA do compromisso quando está na lista aceita pela Graph
-  (`America/Sao_Paulo` está); fora dela (`America/Manaus` não está), o instante vai em
-  UTC. O instante é o mesmo, e o Outlook mostra no fuso de quem abre.
+- **Fuso:** a escrita vai sempre em UTC. O instante é o mesmo, o Outlook mostra no
+  fuso de quem abre, e nada depende da lista de fusos IANA que a Graph aceita
+  (`America/Manaus`, por exemplo, não está nela).
 - **Alterar e cancelar:** `PATCH` só dos grupos que mudaram, com `If-Match:
   {@odata.etag}`; cancelar com convidados usa `POST /events/{id}/cancel` (a Microsoft
   avisa os convidados); sem convidados, `DELETE`.
@@ -597,6 +605,18 @@ primeira entrega ir ao ar.
 3. **Teams:** tipo "Microsoft Teams", criação do link, entrega ao cliente pela IA e
    pela tela, avisos na Central.
 
-Cada entrega vai com as catracas verdes (`tsc`, vitest,
-`schema-mia-estende-nunca-redefine`, LGPD, RLS) e com testes das traduções puras
-(evento, erros, delta, token) antes de qualquer token de verdade.
+Cada entrega foi com as catracas verdes (`tsc`, vitest das áreas,
+`schema-mia-estende-nunca-redefine`, carimbo, LGPD, i18n) e com os testes:
+
+- `tests/unit/agenda-microsoft-traducoes.test.ts`: consentimento (PKCE, escopos, o
+  erro raro da empresa que exige o TI, domínio da volta), leitura do evento como
+  ocupação, corpo da escrita, comparação de três vias (o bloco do Teams na descrição
+  não é conflito; remarcado no Outlook é aceito), PATCH só do que mudou, mapa de
+  desfechos, link do Teams e o texto enviado ao cliente;
+- `tests/invariants/agenda-microsoft.test.ts` (Postgres de verdade): um destino
+  entre provedores, o destino automático do Google não toma o do Outlook, só-leitura
+  não é destino, ocupação com as colunas do Google, a publicação pega o novo e não o
+  que está no Google, a reserva, e o Teams de quem publica no Google;
+- as tabelas novas na prova de RLS da MIA (`rls-tabelas-da-mia`, `rls-completude`).
+
+O baseline inteiro (upstream + MIA) aplicou limpo nos modos instalação e atualização.
