@@ -400,6 +400,9 @@ describe("⭐ as travas, com o consumidor de verdade e o banco de verdade", () =
     const i = ids(REAL);
     await regra(REAL, i.qualificacao, { ligada: false });
     const noIntervalo = await hora("0 seconds");
+    // Uma folga medível entre o movimento e o religar: sem ela os dois instantes
+    // dependem da velocidade da máquina para ficarem em ordem.
+    await pool.query("select pg_sleep(0.02)");
     await regra(REAL, i.qualificacao, { ligada: true });
 
     const r = await conversaoDeEtapaDaMetaHandler.handle(entrou(REAL, i.qualificacao, noIntervalo));

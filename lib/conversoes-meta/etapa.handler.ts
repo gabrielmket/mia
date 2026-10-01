@@ -60,6 +60,7 @@ import type { ResultadoDeEnvio } from "@/lib/plataformas-de-anuncio/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { lerChaveDeFormulario } from "./config";
+import { aconteceuAntes } from "./instante";
 import {
   chaveDoEventoNoLivro,
   COMPRA_NA_META,
@@ -316,7 +317,7 @@ async function etapa(admin: Admin, row: EventRow, leadId: string): Promise<Handl
       ocorridoEm: row.created_at,
     });
 
-  if (Date.parse(row.created_at) < Date.parse(regra.configuradaEm)) {
+  if (aconteceuAntes(row.created_at, regra.configuradaEm)) {
     await decisao("anterior_a_regra");
     return ignorar("anterior_a_regra");
   }
@@ -327,7 +328,7 @@ async function etapa(admin: Admin, row: EventRow, leadId: string): Promise<Handl
       await decisao("formulario_desligado");
       return ignorar("formulario_desligado");
     }
-    if (chave.desde && Date.parse(row.created_at) < Date.parse(chave.desde)) {
+    if (chave.desde && aconteceuAntes(row.created_at, chave.desde)) {
       await decisao("anterior_a_chave");
       return ignorar("anterior_a_chave");
     }
@@ -460,7 +461,7 @@ async function vendaDeFormulario(admin: Admin, row: EventRow, leadId: string): P
 
   const chave = await lerChaveDeFormulario(admin, org);
   if (!chave.ligada) return decisao("formulario_desligado");
-  if (chave.desde && Date.parse(ocorridoEm) < Date.parse(chave.desde)) return decisao("anterior_a_chave");
+  if (chave.desde && aconteceuAntes(ocorridoEm, chave.desde)) return decisao("anterior_a_chave");
   // A compra continua exigindo valor, como sempre: mandar zero ensinaria à Meta
   // que a venda não vale nada.
   if (valor === null) return decisao("sem_valor");
