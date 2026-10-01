@@ -23,7 +23,20 @@ export interface Escrita {
 
 type Filtro = (l: Linha) => boolean;
 
-export function bancoEmMemoria(tabelas: Record<string, Linha[]> = {}) {
+/**
+ * Uma função do banco de mentira. Recebe os argumentos da chamada e as tabelas
+ * (para ler e escrever nelas, como a função de verdade faria).
+ */
+export type RpcDeMentira = (
+  args: Record<string, unknown>,
+  db: Record<string, Linha[]>,
+) => { data: unknown; error: { message: string; code?: string } | null };
+
+export function bancoEmMemoria(
+  tabelas: Record<string, Linha[]> = {},
+  /** As funções do banco que o teste precisa de pé. Sem entrada, a chamada devolve `null`, como sempre. */
+  rpcs: Record<string, RpcDeMentira> = {},
+) {
   const db: Record<string, Linha[]> = {};
   for (const [nome, linhas] of Object.entries(tabelas)) db[nome] = linhas.map((l) => ({ ...l }));
   const escritas: Escrita[] = [];
@@ -36,6 +49,7 @@ export function bancoEmMemoria(tabelas: Record<string, Linha[]> = {}) {
     let payload: Linha | Linha[] | null = null;
     let ordem: { col: string; asc: boolean } | null = null;
     let limite = Number.POSITIVE_INFINITY;
+    let inicio = 0;
     // `upsert(p, { onConflict: "a,b" })`: as colunas que identificam a linha. Sem
     // elas o upsert se comporta como insert (o que os testes antigos esperam).
     let conflito: { colunas: string[]; ignorar: boolean } | null = null;
@@ -88,7 +102,7 @@ export function bancoEmMemoria(tabelas: Record<string, Linha[]> = {}) {
           return (va < vb ? -1 : va > vb ? 1 : 0) * (asc ? 1 : -1);
         });
       }
-      return { data: r.slice(0, limite), error: null };
+      return { data: r.slice(inicio, inicio + limite), error: null };
     }
 
     const q: Record<string, unknown> = {
@@ -111,6 +125,8 @@ export function bancoEmMemoria(tabelas: Record<string, Linha[]> = {}) {
         q
       ),
       limit: (n: number) => ((limite = n), q),
+      // `range(de, ate)`, inclusivo nas duas pontas, como no PostgREST.
+      range: (de: number, ate: number) => ((inicio = de), (limite = ate - de + 1), q),
       insert: (p: Linha | Linha[]) => ((op = "insert"), (payload = p), q),
       upsert: (p: Linha | Linha[], o?: { onConflict?: string; ignoreDuplicates?: boolean }) => (
         (op = "upsert"),
@@ -148,6 +164,8 @@ export function bancoEmMemoria(tabelas: Record<string, Linha[]> = {}) {
     from: (nome: string) => consulta(nome),
     rpc: async (nome: string, args: unknown) => {
       chamadasRpc.push({ nome, args });
+      const funcao = rpcs[nome];
+      if (funcao) return funcao((args ?? {}) as Record<string, unknown>, db);
       return { data: null, error: null };
     },
   };
