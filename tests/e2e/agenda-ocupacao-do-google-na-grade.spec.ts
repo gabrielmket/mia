@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { createClient } from "@supabase/supabase-js";
-import { test, expect, type Page } from "./helpers/test";
+import { test, expect, type Page, type Response } from "./helpers/test";
 
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 
@@ -26,20 +26,27 @@ import { irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
 const blocoDoGoogle = (page: Page) => page.locator('[data-origem="google_sync"]');
 
 /**
- * O mesmo bloco na visão MÊS, que é outro elemento — o chip, não o card.
+ * O chip da ocupação na visão MÊS — que NÃO deve existir.
  *
- * O chip também se chamava pelo id do evento (`chip-mes-<id>`), e pelo mesmo
- * motivo deixou de existir: o `id` que ele carrega é DERIVADO (dono + fatia
- * visível), não o do compromisso. A saída pela ORIGEM precisou de um atributo
- * no chip — ele não a carregava, só o card da semana.
- *
- * O que NÃO serve aqui, e é o caminho tentador: apontar o chip pelo texto
- * "Ocupado". É exatamente o que o `toContainText(/ocupado/i)` logo abaixo
- * AFIRMA — selecionar por ele faria a asserção provar o próprio seletor, e o
- * rótulo poderia sumir da tela com a spec verde.
+ * A ocupação de agenda conectada não vira chip no Mês: ela só bloqueia horário,
+ * e o Mês é a lista do que está marcado (ver `ehOcupacaoDeFora` em
+ * `GradeDaAgenda.tsx`). Quem a desenha é a Semana e o Dia, no horário que ela
+ * ocupa. O seletor segue sendo pela ORIGEM, que o chip carrega, e não pelo
+ * texto "Ocupado": a asserção é de ausência, e um seletor por rótulo ficaria
+ * vazio também se o rótulo mudasse — a spec passaria sem medir nada.
  */
 const chipDoGoogleNoMes = (page: Page) =>
   page.locator('[data-testid^="chip-mes-"][data-origem="google_sync"]');
+
+/** A busca da grade no recorte do Mês (seis semanas), não no da semana nem no do dia. */
+const ehABuscaDoMes = (resposta: Response) => {
+  const url = new URL(resposta.url());
+  if (!url.pathname.endsWith("/api/v1/agenda/agendamentos")) return false;
+  if (resposta.request().method() !== "GET") return false;
+  const de = Date.parse(url.searchParams.get("de") ?? "");
+  const ate = Date.parse(url.searchParams.get("ate") ?? "");
+  return ate - de > 28 * 24 * 60 * 60 * 1000;
+};
 
 /**
  * A OCUPAÇÃO QUE VEM DO GOOGLE APARECE NA GRADE — e continua lá depois do
@@ -173,7 +180,7 @@ test.describe("a ocupação do Google na grade da agenda", () => {
 
     // 1ª passada: descobrir QUE dias a semana seguinte desenha.
     const dias = await irParaASemanaSeguinte(page);
-    const alvo = dias[3]!; // quarta-feira da semana desenhada
+    const alvo = dias[3]!; // quinta-feira da semana desenhada (que começa na segunda)
     const comeca = await instanteNoDia(page, alvo, 15);
     const termina = await instanteNoDia(page, alvo, 16);
 
@@ -303,13 +310,37 @@ test.describe("a ocupação do Google na grade da agenda", () => {
     ).toBeVisible({ timeout: 20_000 });
 
     // Visão MÊS: outro recorte, outra busca. Aqui nem a semente do servidor
-    // chegava, porque `naJanelaDoServidor` vira falso.
+    // chegava, porque `naJanelaDoServidor` vira falso. A ocupação tem de VIR na
+    // resposta — é o que prova que o refetch não a perdeu — e NÃO virar chip:
+    // no Mês ela só bloqueia horário (ver `chipDoGoogleNoMes`).
+    const buscaDoMes = page.waitForResponse(ehABuscaDoMes, { timeout: 20_000 });
     await page.getByTestId("visao-mes").click();
+    const corpoDoMes = (await (await buscaDoMes).json()) as {
+      data?: Array<{ origem?: string }>;
+    };
+    expect(
+      (corpoDoMes.data ?? []).some((a) => a.origem === "google_sync"),
+      "a busca do recorte do Mês não trouxe a ocupação do Google — o refetch a perdeu",
+    ).toBe(true);
+
+    // Do Mês para o Dia pelo número da célula: o recorte troca de novo, e o
+    // bloco hachurado tem de estar lá. É o caminho que substitui o chip.
+    await page.getByTestId(`abrir-dia-${alvo}`).click();
+    await expect(page.getByTestId("grade-da-agenda")).toHaveAttribute("data-visao", "dia");
+    await expect(
+      blocoDoGoogle(page),
+      "abrindo o dia pelo Mês, a ocupação do Google não aparece no Dia",
+    ).toBeVisible({ timeout: 20_000 });
+
+    // De volta ao Mês com a resposta dele JÁ no cache: a primeira pintura já
+    // tem o dado, então "nenhum chip" mede o desenho, e não uma espera que
+    // ainda não terminou.
+    await page.getByTestId("visao-mes").click();
+    await expect(page.getByTestId(`celula-mes-${alvo}`)).toBeVisible({ timeout: 20_000 });
     await expect(
       chipDoGoogleNoMes(page),
-      "a ocupação do Google não aparece na visão Mês",
-    ).toBeVisible({ timeout: 20_000 });
-    await expect(chipDoGoogleNoMes(page)).toContainText(/ocupado/i);
+      "a ocupação do Google virou chip na visão Mês — ela só bloqueia horário",
+    ).toHaveCount(0);
     expect(
       await page.content(),
       "o título do evento do Google VAZOU na visão Mês",

@@ -1,4 +1,5 @@
 import { partesNoFuso, instanteDe } from "./fuso";
+import { diasDesdeOInicioDaSemana } from "./inicio-da-semana";
 
 /**
  * A SEMANA QUE A AGENDA ABRE — calculada no fuso de quem OLHA, não no do
@@ -26,15 +27,20 @@ import { partesNoFuso, instanteDe } from "./fuso";
  * Paulo — é um caso de teste de uma linha, verde em qualquer dia, em qualquer
  * máquina. Enquanto a conta morava dentro do render, a única forma de exercitá-la
  * era esperar a janela chegar.
+ *
+ * ═══ A semana começa na segunda ═════════════════════════════════════════════
+ *
+ * Como a grade desenha (`INICIO_DA_SEMANA`, em `inicio-da-semana.ts`). A borda
+ * de fuso é a mesma de antes, só mudou de noite: agora é das 21h de DOMINGO à
+ * meia-noite em São Paulo que UTC já está na semana seguinte.
  */
 
-/** Domingo, como a grade desenha (`weekStartsOn: 0`). */
 const DIAS_NA_SEMANA = 7;
 
 export interface SemanaSemente {
-  /** O instante em que começa o domingo local. */
+  /** O instante em que começa o primeiro dia da semana (a segunda) local. */
   de: Date;
-  /** O instante em que começa o domingo SEGUINTE — fim exclusivo. */
+  /** O instante em que começa o primeiro dia da semana SEGUINTE — fim exclusivo. */
   ate: Date;
 }
 
@@ -48,10 +54,13 @@ export interface SemanaSemente {
  */
 export function semanaSemente(agora: Date, fuso: string): SemanaSemente {
   const hoje = partesNoFuso(agora, fuso);
-  const domingo = new Date(Date.UTC(hoje.ano, hoje.mes - 1, hoje.dia));
-  domingo.setUTCDate(domingo.getUTCDate() - domingo.getUTCDay());
+  // O CALENDÁRIO de hoje no fuso pedido, guardado num `Date` UTC só para a
+  // aritmética de dias: aqui nada é instante ainda, e o fuso do processo não
+  // pode entrar na conta.
+  const inicio = new Date(Date.UTC(hoje.ano, hoje.mes - 1, hoje.dia));
+  inicio.setUTCDate(inicio.getUTCDate() - diasDesdeOInicioDaSemana(inicio.getUTCDay()));
 
-  const proximo = new Date(domingo);
+  const proximo = new Date(inicio);
   proximo.setUTCDate(proximo.getUTCDate() + DIAS_NA_SEMANA);
 
   const meiaNoiteLocal = (d: Date) =>
@@ -60,15 +69,15 @@ export function semanaSemente(agora: Date, fuso: string): SemanaSemente {
       fuso,
     );
 
-  return { de: meiaNoiteLocal(domingo), ate: meiaNoiteLocal(proximo) };
+  return { de: meiaNoiteLocal(inicio), ate: meiaNoiteLocal(proximo) };
 }
 
 /**
  * O DIA DE HOJE no fuso pedido, como a grade o desenha: `yyyy-MM-dd`.
  *
  * Existe para o CLIENTE poder ancorar no MESMO dia que o servidor, sem receber
- * um instante. Receber instante seria a armadilha: `domingo 00:00` em São Paulo
- * é `sábado 22:00` em UTC-5, e um `startOfWeek` sobre ele, em hora local do
+ * um instante. Receber instante seria a armadilha: `segunda 00:00` em São Paulo
+ * é `domingo 22:00` em UTC-5, e um `startOfWeek` sobre ele, em hora local do
  * navegador, cairia na semana ANTERIOR. O que atravessa a fronteira é a DATA;
  * quem a transforma em `Date` local é `ancoraLocalDoDia`, logo abaixo.
  */

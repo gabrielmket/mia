@@ -8943,6 +8943,12 @@ export const DICIONARIO: Traducoes = {
   "Cadastre um tipo de agendamento para começar": { es: "Registra un tipo de cita para empezar" },
   "Período anterior": { es: "Período anterior" },
   "Próximo período": { es: "Período siguiente" },
+  // Do Mês e da Semana para o Dia (`GradeDaAgenda`, `rotuloDeAbrirODia`).
+  "Abrir o dia {dia}": { es: "Abrir el día {dia}" },
+  "Abrir o dia {dia}, 1 compromisso": { es: "Abrir el día {dia}, 1 cita" },
+  "Abrir o dia {dia}, {n} compromissos": { es: "Abrir el día {dia}, {n} citas" },
+  "Abrir o dia {dia}, mais 1 compromisso": { es: "Abrir el día {dia}, 1 cita más" },
+  "Abrir o dia {dia}, mais {n} compromissos": { es: "Abrir el día {dia}, {n} citas más" },
   "Tipo de agendamento": { es: "Tipo de cita" },
   "Por que está cancelando?": { es: "¿Por qué estás cancelando?" },
   "O paciente pediu para remarcar por telefone": { es: "El paciente pidió reprogramar por teléfono" },

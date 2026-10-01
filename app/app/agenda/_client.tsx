@@ -9,7 +9,7 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import { useT } from "@/hooks/i18n/useT";
 
-import { addDays, format, startOfDay, startOfMonth, startOfWeek } from "date-fns";
+import { addDays, format, startOfDay, startOfMonth } from "date-fns";
 import * as React from "react";
 
 import { AvisoDaConexaoGoogle } from "./_components/AvisoDaConexaoGoogle";
@@ -24,8 +24,12 @@ import { rotuloDoLocal } from "@/lib/agenda/locais";
 import { ancoraAoFecharPainel } from "@/lib/agenda/ancora-depois-de-marcar";
 import { ancoraLocalDoDia } from "@/lib/agenda/semana-semente";
 import { dataDeParede, diaLocalISO, partesNoFuso } from "@/lib/agenda/fuso";
+import { inicioDaSemana } from "@/lib/agenda/inicio-da-semana";
 import { janelaDoMesVisivel } from "@/lib/agenda/janela-do-mes-visivel";
-import { recorteDaGrade as recorteDaGradeDe } from "@/lib/agenda/recorte-da-grade";
+import {
+  ancoraDoPeriodoVizinho,
+  recorteDaGrade as recorteDaGradeDe,
+} from "@/lib/agenda/recorte-da-grade";
 import { resolverResponsavelDoPainel } from "@/lib/agenda/responsavel-do-painel";
 import { useVinculoDaMarcacao } from "@/lib/agenda/vinculo-da-marcacao";
 import { Button } from "@/components/ui/button";
@@ -287,12 +291,25 @@ export function AgendaClient({
    * CRM fora do fuso da empresa, discordava sempre.
    *
    * O que atravessa a fronteira é a DATA (`hojeNaOrganizacao`), nunca o
-   * instante: `domingo 00:00` em São Paulo é `sábado 22:00` em UTC-5, e
+   * instante: `segunda 00:00` em São Paulo é `domingo 22:00` em UTC-5, e
    * `startOfWeek` sobre esse instante, em hora local, cairia na semana anterior.
    * `ancoraLocalDoDia` transforma a data numa `Date` local ao meio-dia — a doze
    * horas de qualquer borda de horário de verão.
    */
   const [ancora, setAncora] = React.useState(() => ancoraLocalDoDia(hojeNaOrganizacao));
+  /**
+   * ABRIR UM DIA a partir do Mês (número, "+N", vazio da célula) ou da Semana
+   * (cabeçalho do dia): troca a visão para Dia e ancora NAQUELE dia.
+   *
+   * O dia chega como data (`yyyy-MM-dd`), a chave com que a grade desenhou a
+   * célula, e vira âncora por `ancoraLocalDoDia` — o mesmo caminho da âncora
+   * inicial. É isso que faz cair no dia certo com o navegador em qualquer fuso:
+   * nenhum instante atravessa, só o calendário que a pessoa clicou.
+   */
+  const abrirDia = React.useCallback((dia: string) => {
+    setAncora(ancoraLocalDoDia(dia));
+    setVisao("dia");
+  }, []);
 
   // AS PESSOAS SÃO REAIS, e vêm da lista MÍNIMA da agenda — `/api/v1/agenda/pessoas`
   // (`ROTA_DA_LISTA_DE_PESSOAS`, `lib/agenda/lista-de-pessoas.ts`), papel mínimo
@@ -448,7 +465,8 @@ export function AgendaClient({
     [agendamentos],
   );
 
-  const passo = visao === "mes" ? 30 : visao === "semana" ? 7 : 1;
+  // A semana do rótulo é a que a grade desenha: as duas leem `INICIO_DA_SEMANA`.
+  const inicioDaSemanaVisivel = inicioDaSemana(ancora);
   // O PADRÃO de formato também muda de idioma, não só o locale: em português
   // "d 'de' MMMM" tem a preposição escrita à mão dentro do padrão, e em
   // espanhol ela também é "de" — mas quem garante isso é a chave no dicionário,
@@ -458,7 +476,7 @@ export function AgendaClient({
     visao === "mes"
       ? format(ancora, t("MMMM 'de' yyyy"), { locale: localeDaData })
       : visao === "semana"
-        ? `${format(startOfWeek(ancora, { weekStartsOn: 0 }), t("d 'de' MMM"), { locale: localeDaData })} — ${format(addDays(startOfWeek(ancora, { weekStartsOn: 0 }), 6), t("d 'de' MMM"), { locale: localeDaData })}`
+        ? `${format(inicioDaSemanaVisivel, t("d 'de' MMM"), { locale: localeDaData })} — ${format(addDays(inicioDaSemanaVisivel, 6), t("d 'de' MMM"), { locale: localeDaData })}`
         : format(ancora, t("EEEE, d 'de' MMMM"), { locale: localeDaData });
 
   return (
@@ -560,13 +578,16 @@ export function AgendaClient({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
+          {/* O PASSO das setas mora em `ancoraDoPeriodoVizinho`: um dia no Dia,
+              sete na Semana e um MÊS DE CALENDÁRIO no Mês (eram 30 dias, e do
+              dia 1º de um mês de 31 o "próximo" não saía do mês). */}
           <div className="flex items-center gap-0.5">
             <Button
               variant="ghost"
               size="icon"
               aria-label={t("Período anterior")}
               data-testid="periodo-anterior"
-              onClick={() => setAncora((d) => addDays(d, -passo))}
+              onClick={() => setAncora((d) => ancoraDoPeriodoVizinho(visao, d, -1))}
             >
               <CaretLeft size={16} weight="bold" aria-hidden />
             </Button>
@@ -575,7 +596,7 @@ export function AgendaClient({
               size="icon"
               aria-label={t("Próximo período")}
               data-testid="periodo-seguinte"
-              onClick={() => setAncora((d) => addDays(d, passo))}
+              onClick={() => setAncora((d) => ancoraDoPeriodoVizinho(visao, d, 1))}
             >
               <CaretRight size={16} weight="bold" aria-hidden />
             </Button>
@@ -1198,6 +1219,9 @@ export function AgendaClient({
           parametros.set("compromisso", id);
           router.push(`/app/agenda?${parametros.toString()}`);
         }}
+        // Do Mês e da Semana para o Dia: o número, o "+N" e o vazio da célula
+        // do Mês, e o cabeçalho de cada dia da Semana. Ver `abrirDia`.
+        onAbrirDia={abrirDia}
         className="min-h-0 flex-1"
       />
     </div>

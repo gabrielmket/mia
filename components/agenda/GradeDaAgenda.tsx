@@ -11,7 +11,7 @@ import {
   format,
   isSameDay,
   isSameMonth,
-  startOfWeek,
+  type Locale,
 } from "date-fns";
 
 import {
@@ -30,6 +30,7 @@ import {
   primeiroDiaDaVisaoDeMes,
 } from "@/lib/agenda/recorte-da-grade";
 import { diaLocalISO, instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
+import { inicioDaSemana } from "@/lib/agenda/inicio-da-semana";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -187,8 +188,86 @@ const CELULAS = Array.from(
 );
 
 function diasDaSemanaDe(ancora: Date): Date[] {
-  const inicio = startOfWeek(ancora, { weekStartsOn: 0 });
+  // A mesma conta do recorte que a tela busca (`recorte-da-grade.ts`): os dois
+  // leem `INICIO_DA_SEMANA`, e por isso a coluna desenhada é sempre um dia buscado.
+  const inicio = inicioDaSemana(ancora);
   return Array.from({ length: 7 }, (_, i) => addDays(inicio, i));
+}
+
+/**
+ * OCUPAÇÃO DE AGENDA CONECTADA — bloqueia horário, não é compromisso nosso.
+ *
+ * Um predicado só, e não `origem === "google_sync"` espalhado: o bloco da
+ * semana (inerte, hachurado) e o Mês (que não a lista) precisam concordar
+ * sobre O QUE é ocupação de fora. Uma agenda conectada nova que entregue
+ * ocupação à grade entra aqui, e as duas visões a tratam igual sem ninguém
+ * caçar comparação de origem pelo arquivo.
+ */
+function ehOcupacaoDeFora(agendamento: Agendamento): boolean {
+  return agendamento.origem === "google_sync";
+}
+
+type Traduzir = ReturnType<typeof useT>;
+
+/**
+ * O nome acessível de um compromisso — o MESMO no bloco da semana e no chip do Mês.
+ *
+ * "com" nesta tela significa QUEM SERÁ ATENDIDO — é o vocabulário do próprio
+ * subtítulo ("O que está marcado, com quem, e quem atende"). O rótulo dizia
+ * `, com ${pessoa.nome}`, que é o ATENDENTE: quem usa leitor de tela ouvia os
+ * dois papéis trocados, e o card visual não desmente porque em compromisso de
+ * 30min ele nem mostra o contato.
+ *
+ * `titulo` é DADO DO OPERADOR — a rota grava `title ?? tipo.name`, e
+ * `tipo.name` é o nome que ele cadastrou em Tipos de agendamento. Passá-lo por
+ * `t()` fazia "Retorno" virar "Seguimiento" na leitura de tela.
+ */
+function rotuloDoCompromisso(
+  agendamento: Agendamento,
+  pessoa: Pessoa | undefined,
+  fuso: string,
+  t: Traduzir,
+): string {
+  const comeca = new Date(agendamento.comeca);
+  const termina = new Date(agendamento.termina);
+  return `${agendamento.titulo}, ${rotuloHora(comeca, fuso)} ${t("às")} ${rotuloHora(termina, fuso)}${
+    agendamento.quemSeraAtendido ? `, ${t("com")} ${agendamento.quemSeraAtendido}` : ""
+  }${pessoa ? `, ${t("atendido por")} ${pessoa.nome}` : ""}${
+    ehOcupacaoDeFora(agendamento) ? `, ${t("ocupado na agenda do Google")}` : ""
+  }`;
+}
+
+/**
+ * O dia como a frase o diz: "quarta 14/10" (em espanhol, "mié 14/10").
+ *
+ * `dd/MM` e não o mês por extenso: o rótulo é lido a cada célula do Mês, e
+ * "quarta-feira, 14 de outubro de 2026" repetido 42 vezes enterra o número que
+ * interessa. O dia da semana fica porque é ele que diferencia duas células
+ * vizinhas para quem não as vê — e em `EEE`, não na sigla de duas letras do
+ * cabeçalho ("qua", "mi"), que lida em voz alta não é palavra nenhuma.
+ */
+function rotuloCurtoDoDia(dia: Date, locale: Locale): string {
+  return format(dia, "EEE dd/MM", { locale }).replace(".", "");
+}
+
+/**
+ * "Abrir o dia qua 14/10, 3 compromissos" — o nome do gesto que leva ao Dia.
+ *
+ * A contagem vai junto porque é o que a célula do Mês diz a quem enxerga (os
+ * chips e o "+N"); sem ela, quem usa leitor de tela teria de abrir dia por dia
+ * para saber onde há alguma coisa. Ocupação de fora não conta: ela não é
+ * compromisso, e o Mês não a mostra.
+ *
+ * Três frases inteiras, e não uma com o plural montado: o guarda de espanhol
+ * cobra `t("literal")`, e uma chave montada em tempo de execução escaparia dele.
+ */
+function rotuloDeAbrirODia(dia: Date, compromissos: number, t: Traduzir, locale: Locale): string {
+  const qual = rotuloCurtoDoDia(dia, locale);
+  if (compromissos === 0) return t("Abrir o dia {dia}").replace("{dia}", qual);
+  if (compromissos === 1) return t("Abrir o dia {dia}, 1 compromisso").replace("{dia}", qual);
+  return t("Abrir o dia {dia}, {n} compromissos")
+    .replace("{dia}", qual)
+    .replace("{n}", String(compromissos));
 }
 
 /**
@@ -381,7 +460,7 @@ function BlocoDeAgendamento({
   const termina = new Date(agendamento.termina);
   const duracao = Math.max(differenceInMinutes(termina, comeca), 15);
   const trilha = pessoa?.trilha ?? 1;
-  const doGoogle = agendamento.origem === "google_sync";
+  const doGoogle = ehOcupacaoDeFora(agendamento);
   const cancelado = agendamento.situacao === "cancelled";
 
   return (
@@ -412,19 +491,9 @@ function BlocoDeAgendamento({
       onKeyDown={
         arraste && !doGoogle && !cancelado ? (e) => arraste.aoTeclar(e, agendamento) : undefined
       }
-      // "com" nesta tela significa QUEM SERÁ ATENDIDO — é o vocabulário do
-      // próprio subtítulo ("O que está marcado, com quem, e quem atende"). O
-      // rótulo dizia `, com ${pessoa.nome}`, que é o ATENDENTE: quem usa leitor
-      // de tela ouvia os dois papéis trocados, e o card visual não desmente
-      // porque em compromisso de 30min ele nem mostra o contato.
-      // `titulo` é DADO DO OPERADOR — a rota grava `title ?? tipo.name`, e
-      // `tipo.name` é o nome que ele cadastrou em Tipos de agendamento. Passá-lo
-      // por `t()` fazia "Retorno" virar "Seguimiento" na leitura de tela.
-      aria-label={`${agendamento.titulo}, ${rotuloHora(comeca, fuso)} ${t("às")} ${rotuloHora(termina, fuso)}${
-        agendamento.quemSeraAtendido ? `, ${t("com")} ${agendamento.quemSeraAtendido}` : ""
-      }${pessoa ? `, ${t("atendido por")} ${pessoa.nome}` : ""}${
-        doGoogle ? `, ${t("ocupado na agenda do Google")}` : ""
-      }`}
+      // O porquê de cada pedaço do rótulo está em `rotuloDoCompromisso`, que o
+      // chip do Mês também usa: o mesmo compromisso não pode ter dois nomes.
+      aria-label={rotuloDoCompromisso(agendamento, pessoa, fuso, t)}
       className={cn(
         "absolute flex flex-col items-start overflow-hidden rounded-sm px-1.5 py-0.5 text-left",
         "border border-border/60 transition-colors duration-fast ease-out",
@@ -589,6 +658,7 @@ function ColunaDeDia({
   interacao,
   proposta,
   arrasteDoCard,
+  onAbrirDia,
 }: {
   dia: Date;
   agora: Date;
@@ -596,6 +666,12 @@ function ColunaDeDia({
   agendamentos: Agendamento[];
   pessoas: Pessoa[];
   onAbrir?: (id: string) => void;
+  /**
+   * Presente, o cabeçalho do dia vira o botão que abre a visão Dia dele. Só a
+   * Semana o passa: no Dia, o cabeçalho já É o dia aberto, e um botão que leva
+   * para onde se está seria controle decorativo.
+   */
+  onAbrirDia?: (dia: string) => void;
   destacado: boolean;
   /**
    * Some abaixo de `md`. Na semana, o celular mostra UM dia por vez: sete
@@ -612,6 +688,7 @@ function ColunaDeDia({
     moveu: () => boolean;
   };
 }) {
+  const t = useT();
   const localeDaData = useLocaleDeData();
   const doDia = agendamentos.filter(
     (c) => chaveDoDiaDoInstante(new Date(c.comeca), fuso) === chaveDoDia(dia),
@@ -619,6 +696,25 @@ function ColunaDeDia({
   // "Hoje" é o dia da ORGANIZAÇÃO, não o do navegador: a mesma data marca
   // colunas diferentes em cada lado do mundo.
   const ehHoje = chaveDoDia(dia) === chaveDoDiaDoInstante(agora, fuso);
+
+  // O conteúdo do cabeçalho é o mesmo com ou sem o gesto; o que muda é a casca.
+  const conteudoDoCabecalho = (
+    <>
+      <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+        {format(dia, "EEE", { locale: localeDaData }).replace(".", "")}
+      </span>
+      <span
+        className={cn(
+          "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] tabular-nums",
+          ehHoje ? "bg-accent text-accent-foreground font-semibold" : "text-text",
+        )}
+      >
+        {format(dia, "d")}
+      </span>
+    </>
+  );
+  const cascaDoCabecalho =
+    "sticky top-0 z-20 flex h-8 w-full items-center justify-center gap-1.5 border-b border-border bg-surface px-2";
 
   return (
     <div
@@ -629,23 +725,33 @@ function ColunaDeDia({
         destacado && "bg-surface-elevated/40",
       )}
     >
-      <div
-        className={cn(
-          "sticky top-0 z-20 flex h-8 items-center justify-center gap-1.5 border-b border-border bg-surface px-2",
-        )}
-      >
-        <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-text-muted">
-          {format(dia, "EEE", { locale: localeDaData }).replace(".", "")}
-        </span>
-        <span
+      {onAbrirDia ? (
+        // O CABEÇALHO DA SEMANA ABRE O DIA. Na semana, cada compromisso tem a
+        // largura de um sétimo da tela e o título corta cedo; o Dia dá a mesma
+        // grade com a largura inteira. A chave vai como DATA (`yyyy-MM-dd`) e
+        // não como `Date`: quem recebe ancora com `ancoraLocalDoDia`, e o dia
+        // que abre é o da coluna, em qualquer fuso de navegador.
+        <button
+          type="button"
+          data-testid={`cabecalho-dia-${chaveDoDia(dia)}`}
+          aria-label={rotuloDeAbrirODia(
+            dia,
+            doDia.filter((c) => !ehOcupacaoDeFora(c)).length,
+            t,
+            localeDaData,
+          )}
+          onClick={() => onAbrirDia(chaveDoDia(dia))}
           className={cn(
-            "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] tabular-nums",
-            ehHoje ? "bg-accent text-accent-foreground font-semibold" : "text-text",
+            cascaDoCabecalho,
+            "cursor-pointer transition-colors duration-fast ease-out hover:bg-surface-elevated",
+            "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-500",
           )}
         >
-          {format(dia, "d")}
-        </span>
-      </div>
+          {conteudoDoCabecalho}
+        </button>
+      ) : (
+        <div className={cascaDoCabecalho}>{conteudoDoCabecalho}</div>
+      )}
 
       <div
         className="relative"
@@ -704,18 +810,32 @@ function ColunaDeDia({
   );
 }
 
+/**
+ * Quantos compromissos a célula do Mês mostra — o resto vira "+N".
+ *
+ * Três: com a célula a 96px de altura mínima no desktop, três chips de 20px
+ * ainda deixam o número do dia e o "+N" à vista. Do quarto em diante, o "+N"
+ * leva ao Dia, que mostra todos. No celular o mesmo limite vale para os pontos,
+ * para o "+N" dizer a mesma coisa nas duas larguras.
+ */
+const CHIPS_POR_DIA_NO_MES = 3;
+
 function VisaoDeMes({
   ancora,
   agora,
   fuso,
   agendamentos,
   pessoas,
+  onAbrirAgendamento,
+  onAbrirDia,
 }: {
   ancora: Date;
   agora: Date;
   fuso: string;
   agendamentos: Agendamento[];
   pessoas: Pessoa[];
+  onAbrirAgendamento?: (id: string) => void;
+  onAbrirDia?: (dia: string) => void;
 }) {
   const t = useT();
   const localeDaData = useLocaleDeData();
@@ -730,6 +850,9 @@ function VisaoDeMes({
   const semanas: Date[][] = Array.from({ length: SEMANAS_NA_VISAO_DE_MES }, (_, s) =>
     Array.from({ length: 7 }, (_, d) => addDays(primeiro, s * 7 + d)),
   );
+  const hoje = chaveDoDiaDoInstante(agora, fuso);
+  const focoVisivel =
+    "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-500";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -745,71 +868,201 @@ function VisaoDeMes({
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-[repeat(auto-fit,minmax(0,1fr))]">
         {semanas.flat().map((d) => {
-          const doDia = agendamentos.filter(
-            (c) => chaveDoDiaDoInstante(new Date(c.comeca), fuso) === chaveDoDia(d),
-          );
+          const chave = chaveDoDia(d);
+          // ⚠️ A OCUPAÇÃO DE AGENDA CONECTADA NÃO ENTRA NO MÊS.
+          //
+          // O Mês responde "o que está marcado em cada dia", e ocupação de fora
+          // não é compromisso: é um horário que a agenda pessoal de alguém
+          // bloqueia, sem título, sem cliente e sem ação. Como chip, ela
+          // disputava as três vagas da célula com os compromissos de verdade e
+          // entrava na conta do "+N" — um dia com duas reuniões particulares no
+          // Google parecia cheio. Ela continua onde informa alguma coisa: na
+          // Semana e no Dia, hachurada, no horário que ocupa.
+          //
+          // Ordenado pelo começo porque a rota devolve os compromissos e DEPOIS
+          // a ocupação, e os três primeiros têm de ser os três primeiros do dia.
+          const doDia = agendamentos
+            .filter(
+              (c) =>
+                !ehOcupacaoDeFora(c) && chaveDoDiaDoInstante(new Date(c.comeca), fuso) === chave,
+            )
+            .sort((a, b) => new Date(a.comeca).getTime() - new Date(b.comeca).getTime());
+          const visiveis = doDia.slice(0, CHIPS_POR_DIA_NO_MES);
+          const resto = doDia.length - visiveis.length;
           const doMes = isSameMonth(d, ancora);
+          const qual = rotuloCurtoDoDia(d, localeDaData);
+          const classeDoNumero = cn(
+            "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] tabular-nums",
+            chave === hoje
+              ? "bg-accent font-semibold text-accent-foreground"
+              : doMes
+                ? "text-text"
+                : "text-text-subtle",
+          );
           return (
             <div
               key={d.toISOString()}
-              data-testid={`celula-mes-${format(d, "yyyy-MM-dd")}`}
+              data-testid={`celula-mes-${chave}`}
               className={cn(
-                "min-h-20 border-b border-r border-border p-1",
+                // `relative` para o fundo clicável; `overflow-hidden` para um
+                // dia cheio nunca pintar por cima da linha de baixo.
+                "relative min-h-20 overflow-hidden border-b border-r border-border p-1 md:min-h-24",
                 !doMes && "bg-surface-elevated/30",
               )}
             >
-              <div className="mb-1 flex items-center justify-between px-0.5">
-                <span
-                  className={cn(
-                    "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] tabular-nums",
-                    chaveDoDia(d) === chaveDoDiaDoInstante(agora, fuso)
-                      ? "bg-accent font-semibold text-accent-foreground"
-                      : doMes
-                        ? "text-text"
-                        : "text-text-subtle",
-                  )}
-                >
-                  {format(d, "d")}
-                </span>
-                {doDia.length > 2 && (
-                  <span className="text-[10px] tabular-nums text-text-subtle">
-                    +{doDia.length - 2}
-                  </span>
-                )}
-              </div>
-              <div className="space-y-0.5">
-                {doDia.slice(0, 2).map((c) => {
-                  const trilha = pessoas.find((p) => p.id === c.responsavelId)?.trilha ?? 1;
-                  return (
-                    <div
-                      key={c.id}
-                      data-testid={`chip-mes-${c.id}`}
-                      // A MESMA identidade que o bloco da semana carrega.
-                      //
-                      // Desde que a ocupação do Google passou a ser lida por
-                      // `fn_agenda_ocupacao_google_do_dono`, ela não tem id de
-                      // compromisso: o `c.id` daqui é DERIVADO (dono + fatia
-                      // visível), então não há como apontar para o chip por
-                      // fora. O bloco da semana já resolvia isso com a origem;
-                      // o chip do mês não a carregava, e sobrava apontá-lo pelo
-                      // rótulo "Ocupado" — que é justamente o que a spec
-                      // AFIRMA, e um seletor que repete a asserção não prova
-                      // nada.
-                      data-origem={c.origem}
-                      className="flex items-center gap-1 rounded-sm px-1 py-0.5"
-                      style={{ background: fundoDaTrilha(trilha, 14) }}
+              {onAbrirDia && (
+                // O ESPAÇO VAZIO DA CÉLULA TAMBÉM ABRE O DIA.
+                //
+                // Um botão por baixo de tudo, e não `onClick` na célula: a
+                // célula contém os chips, que são botões, e botão dentro de
+                // botão não existe em HTML. O conteúdo por cima é
+                // `pointer-events-none` e só o que é gesto (número, "+N",
+                // chip) volta a receber o ponteiro — o clique no vazio atravessa
+                // até aqui.
+                //
+                // Fora da ordem de tabulação e do leitor de tela de propósito: o
+                // número do dia é o MESMO gesto com nome ("Abrir o dia …"), e um
+                // segundo botão igual por célula dobraria as 42 paradas do Tab.
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  aria-hidden
+                  data-testid={`fundo-dia-${chave}`}
+                  onClick={() => onAbrirDia(chave)}
+                  className="absolute inset-0 z-0 cursor-pointer transition-colors duration-fast ease-out hover:bg-surface-elevated/60"
+                />
+              )}
+              <div className="pointer-events-none relative z-10">
+                <div className="mb-0.5 flex items-center justify-between px-0.5">
+                  {onAbrirDia ? (
+                    <button
+                      type="button"
+                      data-testid={`abrir-dia-${chave}`}
+                      aria-label={rotuloDeAbrirODia(d, doDia.length, t, localeDaData)}
+                      onClick={() => onAbrirDia(chave)}
+                      className={cn(
+                        classeDoNumero,
+                        "pointer-events-auto cursor-pointer transition-colors duration-fast ease-out",
+                        // Hoje já tem fundo (a accent); o realce de passagem é
+                        // para os outros dias.
+                        chave !== hoje && "hover:bg-surface-elevated",
+                        focoVisivel,
+                      )}
                     >
+                      {format(d, "d")}
+                    </button>
+                  ) : (
+                    <span className={classeDoNumero}>{format(d, "d")}</span>
+                  )}
+                  {resto > 0 &&
+                    (onAbrirDia ? (
+                      <button
+                        type="button"
+                        data-testid={`mais-do-dia-${chave}`}
+                        aria-label={(resto === 1
+                          ? t("Abrir o dia {dia}, mais 1 compromisso")
+                          : t("Abrir o dia {dia}, mais {n} compromissos")
+                        )
+                          .replace("{dia}", qual)
+                          .replace("{n}", String(resto))}
+                        onClick={() => onAbrirDia(chave)}
+                        className={cn(
+                          "pointer-events-auto cursor-pointer rounded-sm px-1 text-[10px] tabular-nums text-text-subtle",
+                          "transition-colors duration-fast ease-out hover:bg-surface-elevated hover:text-text",
+                          focoVisivel,
+                        )}
+                      >
+                        +{resto}
+                      </button>
+                    ) : (
                       <span
-                        aria-hidden
-                        className="h-1.5 w-1.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: corDaTrilha(trilha) }}
-                      />
-                      <span className="truncate text-[10px] leading-4 text-text">
-                        {rotuloHora(new Date(c.comeca), fuso)} {c.titulo}
+                        data-testid={`mais-do-dia-${chave}`}
+                        className="text-[10px] tabular-nums text-text-subtle"
+                      >
+                        +{resto}
                       </span>
-                    </div>
-                  );
-                })}
+                    ))}
+                </div>
+                {/*
+                  NO CELULAR, PONTOS NO LUGAR DOS CHIPS. A célula tem ~48px de
+                  largura em 360px de tela: o chip mostraria "09:0…" e seria um
+                  alvo de toque menor que o dedo. O ponto diz "tem compromisso, de
+                  quem" na cor da trilha, e a célula inteira vira o alvo que abre
+                  o Dia, onde o compromisso tem a largura da tela.
+                */}
+                {visiveis.length > 0 && (
+                  <div
+                    aria-hidden
+                    data-testid={`pontos-mes-${chave}`}
+                    className="flex flex-wrap gap-1 px-0.5 pt-0.5 md:hidden"
+                  >
+                    {visiveis.map((c) => (
+                      <span
+                        key={c.id}
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{
+                          backgroundColor: corDaTrilha(
+                            pessoas.find((p) => p.id === c.responsavelId)?.trilha ?? 1,
+                          ),
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+                <div className="space-y-0.5 max-md:hidden">
+                  {visiveis.map((c) => {
+                    const pessoa = pessoas.find((p) => p.id === c.responsavelId);
+                    const trilha = pessoa?.trilha ?? 1;
+                    const conteudo = (
+                      <>
+                        <span
+                          aria-hidden
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: corDaTrilha(trilha) }}
+                        />
+                        <span className="truncate text-[10px] leading-4 text-text">
+                          {rotuloHora(new Date(c.comeca), fuso)} {c.titulo}
+                        </span>
+                      </>
+                    );
+                    // A origem vai no chip, como no bloco da semana, para a spec
+                    // poder afirmar por ATRIBUTO que ocupação de fora não vira
+                    // chip. Pelo rótulo "Ocupado" não serviria: o seletor
+                    // repetiria a asserção e não provaria nada.
+                    return onAbrirAgendamento ? (
+                      // O CHIP ABRE O COMPROMISSO, pelo mesmo caminho do bloco
+                      // da semana. Era um `<div>`: o Mês mostrava o compromisso e
+                      // não deixava chegar nele sem trocar de visão e achar o
+                      // horário de novo.
+                      <button
+                        key={c.id}
+                        type="button"
+                        data-testid={`chip-mes-${c.id}`}
+                        data-origem={c.origem}
+                        aria-label={rotuloDoCompromisso(c, pessoa, fuso, t)}
+                        onClick={() => onAbrirAgendamento(c.id)}
+                        className={cn(
+                          "pointer-events-auto flex w-full cursor-pointer items-center gap-1 rounded-sm px-1 py-0.5 text-left",
+                          "hover:ring-1 hover:ring-inset hover:ring-border-strong",
+                          focoVisivel,
+                        )}
+                        style={{ background: fundoDaTrilha(trilha, 14) }}
+                      >
+                        {conteudo}
+                      </button>
+                    ) : (
+                      <div
+                        key={c.id}
+                        data-testid={`chip-mes-${c.id}`}
+                        data-origem={c.origem}
+                        className="flex items-center gap-1 rounded-sm px-1 py-0.5"
+                        style={{ background: fundoDaTrilha(trilha, 14) }}
+                      >
+                        {conteudo}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           );
@@ -827,6 +1080,7 @@ export function GradeDaAgenda({
   pessoas,
   agendamentos,
   onAbrirAgendamento,
+  onAbrirDia,
   interacao,
   className,
 }: {
@@ -853,6 +1107,19 @@ export function GradeDaAgenda({
   pessoas: Pessoa[];
   agendamentos: Agendamento[];
   onAbrirAgendamento?: (id: string) => void;
+  /**
+   * Pedido para abrir a visão Dia de um dia — vem do número, do "+N" e do vazio
+   * da célula do Mês, e do cabeçalho de cada dia da Semana.
+   *
+   * O dia chega como DATA (`yyyy-MM-dd`, a chave da coluna ou da célula), nunca
+   * como `Date`: um instante atravessaria fusos e poderia abrir o dia vizinho. É
+   * a mesma regra da âncora da tela — o que viaja é o calendário, e quem o
+   * transforma em âncora é `ancoraLocalDoDia`.
+   *
+   * Ausente, nada disso vira botão: a grade não oferece um gesto que ninguém
+   * vai atender (a vitrine a monta assim).
+   */
+  onAbrirDia?: (dia: string) => void;
   /** Ausente = grade só de leitura, como a vitrine a monta. Ver `InteracaoDaGrade`. */
   interacao?: InteracaoDaGrade;
   className?: string;
@@ -1072,6 +1339,8 @@ export function GradeDaAgenda({
           fuso={fuso}
           agendamentos={agendamentos}
           pessoas={pessoas}
+          onAbrirAgendamento={onAbrirAgendamento}
+          onAbrirDia={onAbrirDia}
         />
       ) : (
         // A rolagem mora AQUI dentro, e não na página: `html, body` têm
@@ -1089,6 +1358,7 @@ export function GradeDaAgenda({
                 agendamentos={agendamentos}
                 pessoas={pessoas}
                 onAbrir={onAbrirAgendamento}
+                onAbrirDia={visao === "semana" ? onAbrirDia : undefined}
                 destacado={visao === "semana" && chaveDoDia(d) === chaveDoDiaDoInstante(agora, fuso)}
                 soNoDesktop={visao === "semana" && !isSameDay(d, ancora)}
                 interacao={interacao}
