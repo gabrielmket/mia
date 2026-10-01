@@ -34,6 +34,7 @@ import { voltarParaAAgenda } from "@/lib/agenda/microsoft/ponte";
 import { trocarCodigoPorTokenMicrosoft } from "@/lib/agenda/microsoft/token";
 import { graphTransport } from "@/lib/agenda/microsoft/transport";
 import { audit } from "@/lib/audit";
+import { ehRecusaDaDemonstracao } from "@/lib/demonstracao/trava";
 import { env } from "@/lib/env";
 import { supportCallbackWriteAllowed } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
@@ -208,6 +209,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     )
     .select("id")
     .single();
+  // A empresa de demonstração não conecta agenda de fora: quem recusa é o banco
+  // (migration 9016), e a tela diz por quê em vez de "não consegui salvar".
+  if (ehRecusaDaDemonstracao(erroAoGravar)) {
+    await audit({
+      action: "agenda.microsoft.conexao_falhou",
+      organizationId,
+      metadata: { reason: "empresa_de_demonstracao", user_id: userId },
+    });
+    return voltar("ms_erro=empresa_de_demonstracao");
+  }
   if (erroAoGravar || !gravada) {
     await audit({
       action: "agenda.microsoft.conexao_falhou",

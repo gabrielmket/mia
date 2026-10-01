@@ -141,6 +141,12 @@ export const DICIONARIO_DA_AGENDA_MICROSOFT: Record<string, { es: string }> = {
   "Fale com quem administra o sistema.": { es: "Habla con quien administra el sistema." },
   "Não consegui começar a conexão com o Outlook": { es: "No pude iniciar la conexión con Outlook" },
   "Conecte de novo pelo cartão do Outlook.": { es: "Conéctalo de nuevo desde la tarjeta de Outlook." },
+  "A empresa de demonstração não conecta agenda de fora": {
+    es: "La empresa de demostración no conecta agendas externas",
+  },
+  "Nada sai da demonstração: nem convite por e-mail, nem reunião do Teams.": {
+    es: "Nada sale de la demostración: ni invitación por correo, ni reunión de Teams.",
+  },
   "A Microsoft devolveu uma resposta incompleta": { es: "Microsoft devolvió una respuesta incompleta" },
   "A Microsoft não confirmou a conexão": { es: "Microsoft no confirmó la conexión" },
   "Conecte de novo. Se continuar, fale com quem administra o sistema.": {

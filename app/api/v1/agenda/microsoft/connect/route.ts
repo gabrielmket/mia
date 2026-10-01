@@ -26,8 +26,10 @@ import {
 import { montarUrlDeConsentimentoMicrosoft, verificadorPkce } from "@/lib/agenda/microsoft/oauth";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { travaDaDemonstracao } from "@/lib/demonstracao/trava";
 import { env } from "@/lib/env";
 import { authenticatedSessionId, requireSupportWrite } from "@/lib/impersonate/support";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { cookieSecure } from "@/lib/supabase/cookie-secure";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +47,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!autorizado.ok) return autorizado.response;
   const { user, org } = autorizado;
   const origem = origemPublicaDoPedido(req.headers);
+
+  // FORK MIA (9016): a empresa de demonstração não conecta agenda de fora. Quem
+  // TRAVA é o banco, na volta (a conexão viva não nasce); aqui é só a cortesia de
+  // não mandar a pessoa até a Microsoft para recusar depois. Por isso só o "é
+  // demonstração" confirmado barra: falha de leitura segue, e o banco decide.
+  const trava = await travaDaDemonstracao(createAdminClient(), org.orgId);
+  if (trava.travado && trava.motivo === "demonstracao") {
+    return voltarComErro(origem, "empresa_de_demonstracao");
+  }
 
   const app = await configuracaoDaMicrosoft();
   if (!app) return voltarComErro(origem, "nao_configurado");

@@ -199,6 +199,11 @@ const ERROS: Record<string, { titulo: string; texto: string; reconectar: boolean
     texto: "Conecte de novo pelo cartão do Outlook.",
     reconectar: true,
   },
+  empresa_de_demonstracao: {
+    titulo: "A empresa de demonstração não conecta agenda de fora",
+    texto: "Nada sai da demonstração: nem convite por e-mail, nem reunião do Teams.",
+    reconectar: false,
+  },
   ti_nao_aprovou: {
     titulo: "A aprovação do TI não foi concluída",
     texto: "Peça ao administrador de TI para abrir o link de novo e aprovar.",

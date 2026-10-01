@@ -98,7 +98,8 @@ assinaturas de push somem e os convites pendentes são revogados.
 A trava fica **no banco**, na porta por onde cada envio tem de passar antes de
 sair. Ela falha fechada: recusa com `42501` e a mensagem
 `organizacao_de_demonstracao: …`. O código de cada porta está em
-`supabase/migrations-mia/…_9010_empresa_de_demonstracao.sql`:
+`supabase/migrations-mia/…_9010_empresa_de_demonstracao.sql` (e a agenda do
+Outlook, que chegou depois com tabela própria, em `…_9016_demonstracao_sem_agenda_microsoft.sql`):
 
 | envio | onde é barrado |
 |---|---|
@@ -110,6 +111,7 @@ sair. Ela falha fechada: recusa com `42501` e a mensagem
 | webhook de saída | nenhuma regra ativa com `call_webhook` |
 | conversões Meta/Google | a conexão de conversões não liga |
 | agenda externa (o Google manda convite por e-mail) | nenhuma conexão de agenda |
+| agenda do Outlook (a Microsoft manda convite por e-mail e cria a reunião do Teams) | conta Microsoft só existe desconectada (sem token), e não revive. Sem conexão viva não há publicação, convite, reunião do Teams nem link para entregar. Migration `9016`; a tela diz "A empresa de demonstração não conecta agenda de fora" |
 | push | nenhuma assinatura de push |
 | ligação (WhatsApp e tronco SIP) | a voz não liga e o tronco não ativa |
 | e-mail | o convite de equipe não nasce. Para o relatório LGPD ao titular e o alarme de prazo LGPD, o roteador de e-mail pergunta a `fn_mia_e_demonstracao` e não envia. Se não conseguir confirmar a empresa, também não envia |

@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { sql } from "./gov-helpers";
 
 /**
- * FORK MIA (migration 9010) — A EMPRESA DE DEMONSTRAÇÃO NÃO MANDA NADA PARA FORA.
+ * FORK MIA (migrations 9010 e 9016) — A EMPRESA DE DEMONSTRAÇÃO NÃO MANDA NADA PARA FORA.
  *
  * O cliente modelo mora em produção, com dados fictícios. A marca
  * `organizations.demonstracao` fecha, NO BANCO, cada porta por onde um envio
@@ -89,6 +89,11 @@ function sessao(id: string, org: string, arquivada: boolean): string {
       on conflict (id) do nothing;
   `;
 }
+
+/** Uma conta Microsoft (agenda do Outlook, 9011) no estado pedido. */
+const contaMicrosoft = (org: string, status: string) =>
+  `insert into public.mia_agenda_microsoft_conexoes (organization_id, user_id, conta_email, microsoft_user_id, status)
+     values ('${org}', '${GESTOR}', 'outlook-9016@invariant.test', 'ms-9016-${org.slice(-1)}', '${status}')`;
 
 const mensagem = (org: string, conversa: string, sessao: string, contato: string, status: string, direcao = "outbound") =>
   `insert into public.messages (organization_id, conversation_id, channel_session_id, contact_id, type, direction, status, body, sent_via)
@@ -264,6 +269,13 @@ describe("os destinos de fora não existem na demonstração", () => {
            values ('${org}', '${GESTOR}', 'agenda-9010@invariant.test')`,
     },
     {
+      // 9016: a agenda do Outlook tem tabela própria de conexões, que a 9010 não
+      // conhecia. Conta viva = evento publicado com o e-mail do contato como
+      // participante (convite da Microsoft) e reunião do Teams.
+      nome: "agenda do Outlook (convite da Microsoft e reunião do Teams)",
+      dml: (org) => contaMicrosoft(org, "healthy"),
+    },
+    {
       nome: "notificação push",
       dml: (org) =>
         `insert into public.push_subscriptions (organization_id, user_id, endpoint, p256dh, auth)
@@ -305,6 +317,26 @@ describe("os destinos de fora não existem na demonstração", () => {
     expect(
       tentar(`insert into public.config_aviso_de_caso (organization_id, telefone_destino, ligado)
                 values ('${DEMO}', '+5500900000904', false)`),
+    ).toBe("passou");
+  });
+
+  it("⭐ a conta Microsoft desconectada (sem token) pode existir na demonstração, e não revive", () => {
+    // O mesmo desenho do número arquivado: o estado morto existe, o vivo não.
+    expect(tentar(contaMicrosoft(DEMO, "disconnected"))).toBe("passou");
+    for (const vivo of ["connecting", "healthy", "token_expired", "error"]) {
+      const r = tentarComMensagem(
+        `update public.mia_agenda_microsoft_conexoes set status = '${vivo}' where organization_id = '${DEMO}'`,
+        `${contaMicrosoft(DEMO, "disconnected")};`,
+      );
+      expect(r.split("|")[0], `${vivo}: ${r}`).toBe("42501");
+      expect(r).toContain("organizacao_de_demonstracao: agenda do Outlook conectada");
+    }
+    // Controle: na empresa de verdade a conta desconectada reconecta.
+    expect(
+      tentar(
+        `update public.mia_agenda_microsoft_conexoes set status = 'healthy' where organization_id = '${REAL}'`,
+        `${contaMicrosoft(REAL, "disconnected")};`,
+      ),
     ).toBe("passou");
   });
 
@@ -366,6 +398,16 @@ describe("a marca: só a plataforma muda, e ela não convive com destino vivo", 
     const r = tentarComMensagem(`update public.organizations set demonstracao = true where id = '${REAL}'`);
     expect(r.split("|")[0]).toBe("42501");
     expect(r).toContain("numero de WhatsApp conectado");
+  });
+
+  it("⭐ marcar uma empresa com conta Microsoft viva é recusado; desconectada, a marcação passa (9016)", () => {
+    // OUTRA não tem número nem outro destino vivo: a recusa só pode vir da 9016.
+    const marcar = `update public.organizations set demonstracao = true where id = '${OUTRA}'`;
+    const r = tentarComMensagem(marcar, `${contaMicrosoft(OUTRA, "healthy")};`);
+    expect(r.split("|")[0], r).toBe("42501");
+    expect(r).toContain("organizacao_de_demonstracao: a empresa ainda tem destino vivo (agenda do Outlook conectada)");
+    expect(tentar(marcar, `${contaMicrosoft(OUTRA, "disconnected")};`)).toBe("passou");
+    expect(tentar(marcar)).toBe("passou");
   });
 
   it("⭐ ao marcar, a fila de saída vira `failed`, o push some e o convite pendente é revogado", () => {
