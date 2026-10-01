@@ -120,6 +120,14 @@ export function bancoEmMemoria(
         filtros.push((l) => (l[c] as string | number) > (v as string | number)),
         q
       ),
+      gte: (c: string, v: unknown) => (
+        filtros.push((l) => (l[c] as string | number) >= (v as string | number)),
+        q
+      ),
+      lte: (c: string, v: unknown) => (
+        filtros.push((l) => (l[c] as string | number) <= (v as string | number)),
+        q
+      ),
       order: (col: string, o?: { ascending?: boolean }) => (
         (ordem = { col, asc: o?.ascending !== false }),
         q

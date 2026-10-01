@@ -32,6 +32,7 @@ import { FERRAMENTAS_DE_AGENTE } from "./ferramentas/agente";
 import { FERRAMENTAS_DE_AUTOMACAO_E_AGENDA } from "./ferramentas/automacoes-e-agenda";
 import { FERRAMENTAS_DO_CHECKLIST } from "./ferramentas/checklist";
 import { FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP } from "./ferramentas/conhecimento-e-followup";
+import { FERRAMENTAS_DE_CONVERSOES } from "./ferramentas/conversoes";
 import { FERRAMENTAS_DE_EMPRESA } from "./ferramentas/empresa";
 import { FERRAMENTAS_DE_EQUIPE_E_MENSAGENS } from "./ferramentas/equipe-e-mensagens";
 import { FERRAMENTAS_DE_ETIQUETAS_E_MEMORIA } from "./ferramentas/etiquetas-e-memoria";
@@ -59,6 +60,7 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP,
   ...FERRAMENTAS_DE_AGENTE,
   ...FERRAMENTAS_DE_AUTOMACAO_E_AGENDA,
+  ...FERRAMENTAS_DE_CONVERSOES,
   ...FERRAMENTAS_DE_EQUIPE_E_MENSAGENS,
   // documentos e obrigações com vencimento: catálogo, itens e leitura (docs/fork/obrigacoes.md)
   ...FERRAMENTAS_DE_OBRIGACOES,

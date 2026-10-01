@@ -111,7 +111,7 @@ Outlook, que chegou depois com tabela própria, em `…_9016_demonstracao_sem_ag
 | aviso no grupo | não existe `settings.grupo_de_avisos`, e nenhuma regra ativa com `notify_group` |
 | aviso de caso e de proposta | a configuração do aviso de caso não liga |
 | webhook de saída | nenhuma regra ativa com `call_webhook` |
-| conversões Meta/Google | a conexão de conversões não liga |
+| conversões Meta/Google | a conexão de conversões não liga. As regras por etapa e a chave dos leads de formulário (9017) podem ser gravadas e ligadas, para a tela ser demonstrada: sem conexão ligada o consumidor para antes da rede, e o histórico mostra "não enviado" |
 | agenda externa (o Google manda convite por e-mail) | nenhuma conexão de agenda |
 | agenda do Outlook (a Microsoft manda convite por e-mail e cria a reunião do Teams) | conta Microsoft só existe desconectada (sem token), e não revive. Sem conexão viva não há publicação, convite, reunião do Teams nem link para entregar. Migration `9016`; a tela diz "A empresa de demonstração não conecta agenda de fora" |
 | push | nenhuma assinatura de push |

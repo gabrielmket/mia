@@ -222,9 +222,11 @@ describe("montar o cartão aberto", () => {
     expect(c.origem.primeiraMensagem?.texto).toBe("Oi! Vi o vídeo");
     expect(c.origem.semClique).toBe(false);
     expect(c.origem.conversoes).toEqual([
-      { plataforma: "meta_ads", evento: "QualifiedLead", situacao: "enviada", motivo: null, quando: "2026-09-27T11:02:00Z" },
-      { plataforma: "google_ads", evento: "Etapa: Visita agendada", situacao: "nao_enviada", motivo: "sem_conexao", quando: "2026-09-27T11:02:00Z" },
+      { plataforma: "meta_ads", evento: "QualifiedLead", rotulo: "Lead qualificado", situacao: "enviada", motivo: null, quando: "2026-09-27T11:02:00Z", valorCentavos: null, moeda: null, detalhe: null },
+      { plataforma: "google_ads", evento: "Etapa: Visita agendada", rotulo: "Etapa: Visita agendada", situacao: "nao_enviada", motivo: "sem_conexao", quando: "2026-09-27T11:02:00Z", valorCentavos: null, moeda: null, detalhe: null },
     ]);
+    // O contato tem clique em anúncio da Meta: é o que explica a plataforma sem envio.
+    expect(c.origem.origemPorPlataforma).toEqual({ meta_ads: "clique", google_ads: null });
     expect(c.agenda.map((a) => a.id)).toEqual(["A1"]);
   });
 

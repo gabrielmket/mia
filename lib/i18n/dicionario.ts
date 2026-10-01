@@ -35,6 +35,8 @@ import type { Idioma } from "./idiomas";
 import { DICIONARIO_CARTOES_MIA } from "./dicionario-cartoes-mia";
 // FORK MIA (9011+): as frases da agenda do Outlook moram num arquivo à parte.
 import { DICIONARIO_DA_AGENDA_MICROSOFT } from "./dicionario-mia-agenda-microsoft";
+// FORK MIA (9017): as frases das conversões da Meta por etapa, idem.
+import { DICIONARIO_DAS_CONVERSOES_DA_META } from "./dicionario-mia-conversoes";
 // FORK MIA (9018): documentos e obrigações, no arquivo ao lado.
 import { DICIONARIO_OBRIGACOES_MIA } from "./dicionario-obrigacoes-mia";
 
@@ -44,6 +46,7 @@ type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>
 export const DICIONARIO: Traducoes = {
   // FORK MIA: primeiro, para que uma chave igual do upstream prevaleça.
   ...DICIONARIO_DA_AGENDA_MICROSOFT,
+  ...DICIONARIO_DAS_CONVERSOES_DA_META,
   // ─── EMPRESAS, PESSOAS E IMPORTAÇÃO (metade B2B do #1621, de @renatofortal) ───
   "Arquivo": {"es": "Archivo"},
   "Atualizado": {"es": "Actualizado"},
