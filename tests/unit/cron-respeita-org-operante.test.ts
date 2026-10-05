@@ -79,6 +79,22 @@ const SEM_FILTRO: Record<string, string> = {
   "sync-model-catalog": "catálogo da instalação inteira; não pertence a organização nenhuma",
   "webhook-log-retention": "retenção do arquivo de webhook: obrigação, nunca bloqueada",
   "webhook-replay": "reprocessa ENTRADA do WAHA; mensagem que chega continua gravada (spec §1.3)",
+  // FORK MIA — as rotas de cron do fork (docs/FORK-MIA.md), com o mesmo critério.
+  // O motor do Broadcast (`broadcast-worker`) e o aviso das obrigações
+  // (`obrigacoes-avisos`) USAM a régua e não estão aqui.
+  "agenda-microsoft-assinaturas":
+    "FORK MIA: renova a assinatura de avisos do Outlook, o par do agenda-google-refresh; deliberadamente não gatilhada (spec §4)",
+  "agenda-microsoft-push":
+    "FORK MIA: publica compromisso no Outlook, o par do agenda-google-push; deliberadamente não gatilhada (spec §4)",
+  "agenda-microsoft-refresh":
+    "FORK MIA: renova o token do Outlook, o par do agenda-google-refresh; deliberadamente não gatilhado (spec §4)",
+  "agenda-microsoft-sync":
+    "FORK MIA: sincronia com o Outlook, o par do agenda-google-sync; deliberadamente não gatilhada (spec §4)",
+  "cotacao-do-dolar": "FORK MIA: a cotação do dia é da instalação inteira; não pertence a organização nenhuma",
+  "gasto-openai": "FORK MIA: o gasto da conta OpenAI é da plataforma; não pertence a organização nenhuma",
+  "report-da-plataforma":
+    "FORK MIA: fala só no grupo INTERNO da plataforma (saldo, números, schema, resumo); nenhuma mensagem a cliente",
+  "varredura-de-avisos": "FORK MIA: só fecha aviso da Central que deixou de valer; escrita interna, sem custo nem saída",
 };
 
 function rotasDeCron(): string[] {

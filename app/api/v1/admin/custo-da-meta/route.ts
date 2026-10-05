@@ -19,7 +19,7 @@ import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { falhaDaEscritaDePlatformAdmin, requirePlatformAdminEscrita, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { calcularCusto, type ContagemPorCategoria } from "@/lib/channels/meta/custo-da-conversa";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -46,6 +46,19 @@ async function exigirPlataforma() {
     return await requirePlatformAdmin();
   } catch {
     return null;
+  }
+}
+
+/**
+ * FORK MIA — a ESCRITA desta rota exige scope `full` e MFA em dia (upstream
+ * 1.70, `requirePlatformAdminEscrita`): o acesso só de leitura ao painel de
+ * plataforma (`support_readonly`) lê e não muda nada.
+ */
+async function exigirPlataformaParaEscrever(requestId: string) {
+  try {
+    return { ok: true as const, ctx: await requirePlatformAdminEscrita() };
+  } catch (err) {
+    return { ok: false as const, resposta: falhaDaEscritaDePlatformAdmin(err, requestId) };
   }
 }
 
@@ -148,8 +161,9 @@ export async function PUT(req: NextRequest): Promise<Response> {
   if (bloqueio) return bloqueio;
 
   const requestId = randomUUID();
-  const ctx = await exigirPlataforma();
-  if (!ctx) return fail("forbidden", "Platform admin required", 403, { requestId });
+  const escrita = await exigirPlataformaParaEscrever(requestId);
+  if (!escrita.ok) return escrita.resposta;
+  const ctx = escrita.ctx;
 
   const parsed = precosSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail("validation_failed", "Preços inválidos.", 422, { requestId });

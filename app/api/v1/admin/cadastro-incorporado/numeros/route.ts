@@ -21,7 +21,7 @@ import { type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
-import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { falhaDaEscritaDePlatformAdmin, requirePlatformAdminEscrita } from "@/lib/auth/requirePlatformAdmin";
 import { numerosDaWaba } from "@/lib/channels/meta/numeros-da-waba";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 
@@ -38,9 +38,9 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const requestId = randomUUID();
   try {
-    await requirePlatformAdmin();
-  } catch {
-    return fail("forbidden", "Platform admin required", 403, { requestId });
+    await requirePlatformAdminEscrita();
+  } catch (err) {
+    return falhaDaEscritaDePlatformAdmin(err, requestId);
   }
 
   const parsed = corpoSchema.safeParse(await req.json().catch(() => null));

@@ -106,8 +106,7 @@ export function ondeDoCompromisso(
   const detalhe = c.localDetalhe?.trim();
   if (detalhe) return detalhe;
   if (!c.localTipo || c.localTipo === "in_person") return null;
-  const rotulo = rotuloDoLocal(c.localTipo);
-  return rotulo ? t(rotulo) : null;
+  return rotuloDoLocal(c.localTipo) ? t(rotuloDoLocal(c.localTipo) as string) : null;
 }
 
 export interface TextoDoCompromisso {

@@ -98,6 +98,20 @@ export const ESCOPO_DAS_ESCRITAS: Readonly<Record<string, Readonly<Record<string
 
   // ---- sem registro de cliente ----
   crm_save_org_memory: {},
+
+  // ---- FORK MIA: as escritas nossas do agente (lib/mcp/tools/) ----
+  // Sem entrada aqui a ponte as RECUSA no turno (upstream 1.72, #2182).
+  crm_registrar_empresa_do_contato: { contact_id: "contato" },
+  crm_passar_para_o_comercial: { contact_id: "contato" },
+  // A ponte confere a conversa; o `obrigacao_id` e o `message_id` o PRÓPRIO
+  // handler confere contra o contato dessa conversa (lib/mcp/tools/obrigacoes.ts):
+  // o item precisa ser do contato, da empresa dele ou de um negócio dele, e a
+  // mensagem, desta conversa. Não são registros que a ponte saiba ler.
+  crm_propor_recebimento_de_documento: {
+    conversation_id: "conversa",
+    obrigacao_id: "configuracao",
+    message_id: "configuracao",
+  },
 };
 
 export type VereditoDaEscrita =

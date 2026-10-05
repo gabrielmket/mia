@@ -116,11 +116,14 @@ export function ConversoesDaOrigem({ origem }: { origem: CartaoAberto["origem"] 
                   const genero = c.evento === "Purchase" ? "f" : "m";
                   const dia = c.quando ? format(new Date(c.quando), "dd/MM", { locale }) : null;
                   const comData = c.situacao === "enviada" || c.situacao === "falha";
+                  // A frase do motivo sai da TABELA, traduzida aqui; a resposta da
+                  // plataforma (`detalhe`) é texto dela e vai como veio.
+                  const motivoCurto = c.motivo && MOTIVO_CURTO[c.motivo] ? t(MOTIVO_CURTO[c.motivo] as string) : null;
                   const porque =
                     c.situacao === "falha"
-                      ? (c.detalhe ?? (c.motivo ? MOTIVO_CURTO[c.motivo] : null))
-                      : c.situacao === "nao_enviada" && c.motivo
-                        ? MOTIVO_CURTO[c.motivo]
+                      ? (c.detalhe ?? motivoCurto)
+                      : c.situacao === "nao_enviada"
+                        ? motivoCurto
                         : null;
                   return (
                     <li key={`${c.plataforma}-${c.evento}`} className="flex flex-wrap items-baseline gap-x-1.5 text-xs">
@@ -133,7 +136,7 @@ export function ConversoesDaOrigem({ origem }: { origem: CartaoAberto["origem"] 
                         {c.valorCentavos !== null && c.situacao !== "nao_enviada"
                           ? ` · ${formatCents(c.valorCentavos, c.moeda ?? "BRL")}`
                           : ""}
-                        {porque ? `: ${c.situacao === "falha" && c.detalhe ? porque : t(porque)}` : ""}
+                        {porque ? `: ${porque}` : ""}
                       </span>
                     </li>
                   );

@@ -57,7 +57,7 @@ export function TeamsDoCompromisso({
 }) {
   const t = useT();
   const destinos = meeting?.destinations ?? [];
-  const erroDoTeams = teams.error ? ERRO[teams.error] : undefined;
+  const erroDoTeams = teams.error && ERRO[teams.error] ? t(ERRO[teams.error] as string) : undefined;
   const [conversa, setConversa] = useState(destinos[0]?.id ?? "");
   const mesmaConversa = meeting?.delivery_conversation_id === conversa && meeting?.delivery_authorization_current === true;
   const jaEnviado = mesmaConversa && meeting?.delivery_state === "sent";
@@ -86,7 +86,7 @@ export function TeamsDoCompromisso({
       <p className="text-sm">{t(ESTADO[teams.state])}</p>
       {erroDoTeams && (
         <p role="alert" className="text-sm text-destructive">
-          {t(erroDoTeams)}
+          {erroDoTeams}
         </p>
       )}
       {teams.state === "pendente" && (

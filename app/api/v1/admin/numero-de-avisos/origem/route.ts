@@ -30,7 +30,7 @@ import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { falhaDaEscritaDePlatformAdmin, requirePlatformAdminEscrita, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { CHAVE_DA_ORIGEM, lerOrigemDoAviso } from "@/lib/avisos/origem-do-aviso";
 import { entregaEmGrupo } from "@/lib/channels";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
@@ -68,9 +68,9 @@ export async function PUT(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
   let ctx: Awaited<ReturnType<typeof requirePlatformAdmin>>;
   try {
-    ctx = await requirePlatformAdmin();
-  } catch {
-    return fail("forbidden", "Platform admin required", 403, { requestId });
+    ctx = await requirePlatformAdminEscrita();
+  } catch (err) {
+    return falhaDaEscritaDePlatformAdmin(err, requestId);
   }
 
   const parsed = corpoSchema.safeParse(await req.json().catch(() => null));

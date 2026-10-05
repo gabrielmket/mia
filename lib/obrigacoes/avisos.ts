@@ -32,6 +32,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { eHoraDaVarredura, fusoDaOrganizacao, TAMANHO_DO_LOTE, TETO_POR_ORGANIZACAO } from "@/lib/automation/cron-de-data";
 import { logger } from "@/lib/logger";
+import { ehOperante } from "@/lib/organizacao/operante";
 
 import { diaNoFuso, somarDias, type Dia } from "./datas";
 import {
@@ -209,8 +210,9 @@ export async function varrerAvisosDeObrigacao(admin: Admin, agora: Date, opcoes:
   }
 
   for (const organizacao of organizacoes) {
-    // Empresa parada (suspensa, cancelada) não recebe aviso: ninguém atenderia a resposta.
-    if (organizacao.status && organizacao.status !== "active") {
+    // Empresa parada (suspensa, redigida, arquivada) não recebe aviso: ninguém
+    // atenderia a resposta. A régua é a do upstream (1.70, lib/organizacao/operante.ts).
+    if (!ehOperante(organizacao.status)) {
       pular("organizacao_parada");
       continue;
     }

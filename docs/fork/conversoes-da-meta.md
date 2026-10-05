@@ -1,296 +1,209 @@
-# Conversões da Meta por etapa do funil (migration 9017)
+# Conversões da Meta por etapa do funil (9017, revista na 9019)
 
-Até aqui a Meta só ficava sabendo da **compra** (o negócio ganho), e só de quem veio
-de clique em anúncio para o WhatsApp. O Google Ads já tinha a régua inteira: cada
-etapa do funil podia avisar uma conversão. Esta peça dá à Meta a mesma régua, faz o
-lead de formulário voltar para a Meta, e dá à Meta um diagnóstico, que só o Google
-tinha.
+Quanto mais cedo o sinal chega, mais rápido o anúncio aprende quem vira cliente.
+Uma clínica que só avisa a venda dá à Meta um punhado de sinais por mês; a mesma
+clínica avisando "qualificou" e "agendou" dá dezenas.
 
-Quanto mais cedo o sinal chega, mais rápido o anúncio aprende quem vira cliente. Uma
-clínica que só avisa a venda dá à Meta um punhado de sinais por mês; a mesma clínica
-avisando "qualificou" e "agendou" dá dezenas.
+## O que aconteceu
 
-## O que a peça faz
+Na **.70** (01/10/2026) a MIA pôs no ar a régua da Meta por etapa, em tabelas nossas
+(migration 9017). Dois dias depois o upstream lançou a dele (**1.70.0**, migration
+**0524**, PR #2087): a mesma régua, na tabela `meta_ads_conversion_rules`, com o
+consumidor `lib/conversoes/etapa-meta.handler.ts` e o cartão "O que cada etapa do
+funil informa à Meta" em Configurações › Conversões. No mesmo lançamento veio a
+venda de quem chegou pela página com UTM da Meta (PR #2076) e, depois, a correção da
+identidade da Página/WABA na compra (#2098, #2197).
 
-| o quê | onde aparece |
-|---|---|
-| **Regras por etapa**: cada etapa aberta do funil pode avisar um evento à Meta (evento, canal de entrada, valor) | Configurações › Conversões › "O que cada etapa do funil informa à Meta" |
-| **Leads de formulário voltam para a Meta**: uma chave; ligada, as etapas com regra e a venda também vão para o lead que veio de formulário | Configurações › Conversões, logo abaixo das regras |
-| **Diagnóstico da Meta**: botão "Testar conexão" | Configurações › Conversões › aba Diagnóstico |
-| **Histórico de envios** das duas plataformas, com a situação pelo motivo e o "Reenviar" só onde resolve | Configurações › Conversões › aba Histórico de envios |
-| **O que cada plataforma ficou sabendo** deste negócio | cartão aberto do negócio › Origem e atribuição |
-| **Seis ferramentas no MCP de plataforma** | `lib/mcp-plataforma/ferramentas/conversoes.ts` |
+Pela doutrina do fork ("nunca dois caminhos para a mesma coisa", `docs/FORK-MIA.md`),
+a régua do upstream virou a principal na **.72**. Em produção a nossa estava vazia
+(0 regras, 0 configurações de formulário, 0 envios de etapa, medido em 05/10), então
+nada foi migrado.
 
-## As travas
+## O que é do upstream e o que continua nosso
 
-São as mesmas do Google (migration 0436 do upstream), com as duas que a Meta pede a mais.
+| peça | de quem | onde |
+|---|---|---|
+| Regras por etapa (qual evento padrão cada etapa aberta manda) | **upstream** (0524) | `meta_ads_conversion_rules`, `lib/conversoes/regras-meta.ts`, cartão `_regrasMeta.tsx` |
+| Envio do evento de etapa e da venda para quem tem atribuição (clique para WhatsApp, ou página com UTM da Meta) | **upstream** | `lib/conversoes/etapa-meta.handler.ts`, `envio.handler.ts`, `plataformas-de-anuncio/meta/conversions.ts` |
+| Histórico de envios das duas plataformas, pendências e reenvio | **upstream** | aba Histórico (`_historico.tsx`, `lib/conversoes/historico.ts`), `fn_solicitar_reenvio_conversao` |
+| Gravação das regras, chamada pela tela E pelo MCP | **upstream**, com o miolo tirado para uma função | `lib/conversoes/gravar-regras-meta.ts` (FORK MIA, o par de `gravar-regras-google.ts`) |
+| **A volta dos leads de formulário** | **nosso** | consumidor `lib/conversoes-meta/formulario.handler.ts`, chave `mia_conversoes_meta_config` |
+| **Diagnóstico da Meta** ("Testar conexão") | **nosso** | aba Diagnóstico, `lib/conversoes-meta/diagnostico.ts` |
+| **Seção Origem do cartão aberto** (o que cada plataforma ficou sabendo) | **nosso** | `components/cartoes/aberto/ConversoesDaOrigem.tsx` |
+| **Seis ferramentas no MCP de plataforma** | **nosso**, gravando na tabela do upstream | `lib/mcp-plataforma/ferramentas/conversoes.ts`, `lib/implantacao/conversoes.ts` |
+| O link do negócio na lista de pendências (`/app/leads/<id>`; `/app/kanban?lead=` parava na lista de funis) | **nosso**, uma linha | `app/app/settings/conversoes/page.tsx` |
 
-1. **Uma vez por negócio e evento.** Sair e voltar à etapa não duplica. O mesmo
-   evento ligado em duas etapas só sai na primeira em que o negócio entrar, e a tela
-   **avisa** ("repetido: não envia de novo para o mesmo negócio"), sem bloquear.
-2. **Ligar uma regra não envia o passado.** Vale para os negócios que entrarem nas
-   etapas a partir dali. Quem já está na etapa não é enviado. Desligar e religar
-   conta como ligar de novo.
-3. **O reenvio usa o retrato do primeiro envio**: a data em que o negócio entrou na
-   etapa e o valor daquele dia, e não a regra de agora.
-4. **Canal de entrada**: todos, só WhatsApp (o negócio tem conversa) ou só fora do
-   WhatsApp.
-5. **Ganho e perda não entram na régua.** Ganho é a compra. Perda não é conversão.
-6. **A Meta recusa evento com mais de 7 dias.** Passou disso, não há reenvio que
-   resolva, e a tela diz isso em vez de oferecer o botão.
-7. **Só há o que informar quando o negócio veio da Meta**: clique em anúncio para o
-   WhatsApp ou, com a chave ligada, formulário.
+### O que foi apagado na .72
 
-### O valor do evento
+- o nosso consumidor de etapa (`conversoes.meta_etapa`), que saiu do registro;
+- a régua própria (`lib/conversoes-meta/regras.ts`), o vocabulário de eventos
+  (`eventos.ts`), o histórico próprio (`historico.ts`), as sete situações
+  (`situacao.ts`) e o livro-razão próprio (`livro.ts`);
+- as telas `_historicoDeEnvios.tsx` e `_reenviarEnvio.tsx`, e as ações de salvar
+  regras e de reenviar evento de etapa.
 
-Opcional, e nasce **sem valor** até alguém configurar:
+### O que ficou obsoleto (e não foi apagado)
 
-- **sem valor**: a Meta recebe o evento, e não aprende quanto ele vale;
-- **valor fixo**, em reais: quanto vale, em média, aquele passo (um agendamento);
-- **valor do negócio**: o valor do negócio na hora. Negócio sem valor envia o evento
-  de etapa **sem valor** (zero nunca sai: ensinaria que o evento não vale nada).
+Migration **9019**: `mia_conversoes_meta_regras`, o gatilho que carimbava a régua e
+`fn_mia_solicitar_reenvio_conversao_meta` ficam de pé, com comentário `OBSOLETA` na
+tabela e nas funções e a nota no MANIFEST. A função do reenvio devolve `false` e não
+emite mais `conversao_meta.retry_requested`, que perdeu o consumidor. **Podem sair
+numa fusão futura**, depois de a .72 ficar um ciclo no ar.
 
-A **compra** continua exigindo valor, como sempre.
+### O que se perdeu ao adotar a régua do upstream
 
-### O código de teste e a chave de vendas
+- **Valor por etapa** (sem valor, valor fixo, valor do negócio): a régua do upstream
+  manda o evento de etapa SEM valor, de propósito ("o negócio ainda não foi
+  vendido"). A venda continua com o valor.
+- **Canal de entrada** por regra (todos, só WhatsApp, só fora do WhatsApp).
+- **A chave por evento** (o mesmo evento em duas etapas saía só na primeira): na do
+  upstream a chave é a ETAPA (`MetaEtapa:<uuid>`), então o negócio que passa por duas
+  etapas com o mesmo evento manda o evento duas vezes. O MCP avisa quando isso é
+  montado.
 
-- Com o **código de teste** preenchido na conexão, os eventos de etapa também vão
-  marcados como teste. A Meta os mostra na ferramenta de teste, eles não contam para
-  a otimização, e no histórico ficam como "não enviado · conexão ou modo de teste",
-  para saírem de verdade depois de o código ser apagado.
-- A chave **"Reportar vendas automaticamente"** do cartão da Meta pausa **tudo**, a
-  compra e as etapas. É o comportamento do Google hoje: lá a chave "Enviar conversões
-  para o Google Ads" também pausa as etapas, e o que os eventos de etapa não exigem é
-  só a ação de conversão **da venda**. O quadro "Como a Meta vai enxergar este funil"
-  avisa quando o envio está pausado.
+Os três são candidatos a pull request no upstream, se fizerem falta.
+
+## ⭐ A regra da casa: uma ida só à Meta por evento
+
+**Um negócio que muda de etapa gera no máximo UM envio daquele evento para a Meta.**
+
+Ficam três consumidores que escutam `lead.stage_changed` e podem falar com a Meta: os
+dois do upstream (`conversoes.etapa_meta` e `conversoes.venda`) e o nosso
+(`conversoes.meta_formulario`). Eles não se sobrepõem porque a pergunta que os
+separa é a MESMA função (`lerAtribuicao`, do upstream):
+
+| origem do negócio | `lerAtribuicao` | quem envia | porta |
+|---|---|---|---|
+| clique em anúncio para o WhatsApp (`ad_source_id`) | tem atribuição | upstream | mensagens de negócio (`business_messaging`, `ctwa_clid`) |
+| página com UTM da Meta (`ad_platform: site`) | tem atribuição | upstream | `system_generated`, pelo telefone |
+| formulário da Meta (`meta_lead_id` no negócio) | **sem atribuição** | **nosso**, se a chave estiver ligada | API de conversões para CRM (`lead_id`) |
+| formulário **e** clique | tem atribuição | upstream (o nosso sai de cena) | mensagens de negócio |
+| orgânico | sem atribuição e sem formulário | ninguém | — |
+
+E, de reforço: os três escrevem no MESMO livro-razão (`ad_conversion_dispatches`,
+único por organização + negócio + evento), com a MESMA chave (`MetaEtapa:<uuid>` e
+`Purchase`) e o MESMO `event_id` (`<leadId>:<evento>`); `sent` nunca é rebaixado.
+
+Provado em:
+
+- `tests/unit/conversoes-da-meta-consumidor.test.ts`, bloco "um movimento de etapa
+  gera no máximo UM envio": os três consumidores rodam juntos sobre o mesmo banco
+  em memória, para cada origem, e o movimento é entregue duas vezes;
+- `tests/invariants/conversoes-da-meta-por-etapa.test.ts`, bloco "A REGRA DA CASA":
+  o mesmo, no Postgres de verdade, com os consumidores tirados do REGISTRO
+  (`ensureHandlersRegistered`), e a prova de que `conversoes.meta_etapa` não está
+  mais registrado.
 
 ## Os eventos
 
-A lista mora num lugar só: `lib/conversoes-meta/eventos.ts`. O banco e o histórico
-guardam a **chave** (`lead_qualificado`); o nome técnico que viaja para a Meta
-(`QualifiedLead`) só existe naquela lista. Trocar um nome técnico é uma linha, e não
-reenvia o que já foi.
+A lista é a do upstream (`EVENTOS_DA_META`, `lib/conversoes/regras-meta.ts`), com o
+CHECK da tabela repetindo:
 
-| evento na tela | chave | nome técnico | está na lista da Meta para anúncio de WhatsApp? |
-|---|---|---|---|
-| Novo lead | `novo_lead` | `LeadSubmitted` | sim |
-| Lead qualificado | `lead_qualificado` | `QualifiedLead` | sim |
-| Agendou | `agendou` | `Schedule` | **não** |
-| Pediu orçamento ou proposta | `pediu_orcamento` | `SubmitApplication` | **não** |
-| Iniciou a compra | `iniciou_compra` | `InitiateCheckout` | sim |
-| Compra (o negócio ganho) | não é regra de etapa | `Purchase` | sim |
+| evento | rótulo | está na lista da Meta para anúncio de WhatsApp? |
+|---|---|---|
+| `LeadSubmitted` | Lead enviado | sim |
+| `QualifiedLead` | Lead qualificado | sim |
+| `InitiateCheckout` | Início de compra (orçamento) | sim |
+| `AddToCart` | Adicionou ao carrinho | sim |
+| `ViewContent` | Viu o conteúdo | sim |
+| `Purchase` (o negócio ganho) | Compra | sim |
 
-### O que a documentação da Meta diz (conferido em 01/10/2026)
+**O aviso que a nossa tela dava some, porque o motivo dele sumiu.** Na 9017 a casa
+oferecia "Agendou" (`Schedule`) e "Pediu orçamento" (`SubmitApplication`), que NÃO
+estão na lista fechada da API de conversões para mensagens de negócio (conferido na
+documentação da Meta em 01/10/2026:
+<https://developers.facebook.com/docs/marketing-api/conversions-api/business-messaging/>).
+O upstream resolveu de outro jeito: só oferece eventos da lista, e o "Usar o
+recomendado" leva a etapa de agendamento para `LeadSubmitted` e a de orçamento para
+`InitiateCheckout` (`eventoRecomendadoParaMeta`). A MIA adota o dele.
 
-**Clique em anúncio para o WhatsApp** usa a API de conversões para mensagens de
-negócio: `action_source: business_messaging`, `messaging_channel: whatsapp`,
-identidade pelo `ctwa_clid`. A página publica uma lista **fechada** de eventos:
+## A volta dos leads de formulário
 
-> Purchase, LeadSubmitted, InitiateCheckout, AddToCart, ViewContent, OrderCreated,
-> OrderShipped, OrderDelivered, OrderCanceled, OrderReturned, CartAbandoned,
-> QualifiedLead, RatingProvided, ReviewProvided
+O id do lead do formulário é guardado na origem do negócio desde a 9003
+(`crm_leads.source_metadata.meta_lead_id`); o contato do formulário fica com
+`ad_platform: meta_ads` e SEM clique, e por isso o upstream não o informa. A chave
+mora em `mia_conversoes_meta_config`:
 
-Fonte: <https://developers.facebook.com/docs/marketing-api/conversions-api/business-messaging/>
+- **desligada por padrão** (sem linha é desligada);
+- **ligada**, os eventos das regras de etapa LIGADAS (as do upstream) e a venda vão
+  para o lead de formulário pela API de conversões para CRM (`action_source:
+  system_generated`, `custom_data.event_source: crm`, `lead_event_source` com o nome
+  do CRM, `user_data.lead_id` em TEXTO, telefone e e-mail com hash);
+- **ligar não envia o passado**: a trava da regra (`configured_at`, do upstream) e a
+  da chave (`leads_de_formulario_desde`), comparadas com a precisão de microssegundos
+  do banco (`lib/conversoes-meta/instante.ts`);
+- **contato anonimizado** não volta para a Meta pelo id de um formulário antigo;
+- decisão de não enviar (sem regra, chave desligada, anterior à regra ou à chave)
+  **não vira linha** no livro-razão, como o upstream faz com o orgânico;
+- o **reenvio** é o do upstream (`fn_solicitar_reenvio_conversao`, aceita
+  `MetaEtapa:<uuid>` exigindo o retrato), e quem reenvia o lead de formulário é o
+  nosso consumidor, com o retrato do primeiro envio.
 
-Dos cinco eventos da casa, três estão nessa lista. **"Agendou" e "Pediu orçamento ou
-proposta" não têm evento nela.** O protótipo usava `Schedule` e `SubmitApplication`,
-que são eventos padrão da API de conversões geral (a de site e aplicativo), e não
-desta porta. Eles foram mantidos com esses nomes, marcados como fora da lista, e a
-tela avisa em cada etapa que os usa: "Evento fora da lista da Meta para anúncio de
-WhatsApp: pode ser recusado ou não servir para otimizar. Confira com o código de
-teste." O que a Meta responder aparece no histórico: aceito, ou recusado com a frase
-dela. **Só uma conta real diz qual dos dois acontece.**
+Fonte da porta do CRM:
+<https://developers.facebook.com/docs/marketing-api/conversions-api/conversion-leads-integration/payload-specification>.
 
-Sobre o valor, a página da Meta só mostra o exemplo da compra, com valor e moeda, e
-não diz o que cada evento exige. Que evento que não é compra pode ir sem
-`custom_data` vem da documentação da AWS para a mesma API ("Non-purchase event types
-such as LeadSubmitted do not require custom_data"), que também diz que nome de evento
-não reconhecido é um dos motivos de recusa da Meta:
-<https://docs.aws.amazon.com/social-messaging/latest/userguide/conversions-api.html>.
-É fonte de terceiro, e por isso o item 1 da lista de testes com conta real, mais
-abaixo, é o que decide.
+### A venda pela página (#2076) e o formulário
 
-**Lead de formulário** usa outra porta, a API de conversões para CRM:
-`action_source: system_generated`, `custom_data.event_source: crm`,
-`custom_data.lead_event_source: <nome do CRM>`, identidade pelo `user_data.lead_id`
-(o `leadgen_id` do formulário, 15 a 17 dígitos, **sem hash**). O nome do evento é
-texto livre ("a etapa que você usa no CRM"): os mesmos nomes servem.
-
-Fonte: <https://developers.facebook.com/docs/marketing-api/conversions-api/conversion-leads-integration/payload-specification>
-
-**Nas duas portas**, o evento pode ter no máximo 7 dias; mais velho que isso a Meta
-recusa a requisição inteira.
-
-Fonte: <https://developers.facebook.com/docs/marketing-api/conversions-api/parameters/server-event>
-
-O `lead_id` vai como **texto**: com até 17 dígitos ele passa de 2^53, e como número
-do JavaScript perderia os últimos dígitos.
-
-## Leads de formulário voltam para a Meta
-
-O id do lead do formulário já era guardado na origem do negócio desde a migration 9003
-(`crm_leads.source_metadata.meta_lead_id`); a Meta nunca ficava sabendo o que tinha
-acontecido com ele. A chave mora em `mia_conversoes_meta_config`:
-
-- **desligada por padrão.** Toda empresa que existe chega aqui sem linha, e ausente
-  é desligada;
-- **ligada**, os eventos de etapa com regra ligada **e a venda** vão para o lead de
-  formulário pela porta do CRM, mesmo sem clique em anúncio de WhatsApp;
-- **ligar não envia o passado**: o banco carimba quando a chave foi ligada, e só o
-  que acontecer depois é informado;
-- o **clique vence** o formulário: quem tem os dois vai pela porta de mensagens;
-- **contato anonimizado** não volta para a Meta pelo id de um formulário antigo.
-
-Saem para a Meta o identificador do lead, o evento, o valor e o telefone e o e-mail do
-contato com hash. A tela diz isso e pede que a chave só seja ligada se a política de
-privacidade do cliente cobrir esse uso.
-
-A **venda de quem veio de clique** continua sendo do consumidor de venda do upstream.
-O nosso sai de cena na hora em que o contato tem clique: uma venda, um caminho, uma
-linha `Purchase` no livro-razão.
+A venda de quem chegou pela página com UTM da Meta é do consumidor de venda do
+upstream (pelo telefone). A do formulário é nossa (pelo `lead_id`). Como a escolha é
+pela MESMA leitura de atribuição e o primeiro toque do contato não é sobrescrito
+(`fn_estampar_atribuicao_de_anuncio`), a mesma venda nunca vai pelas duas: quem tem
+atribuição de página vai pelo upstream e o nosso sai de cena. Provado nos dois
+testes da regra da casa.
 
 ## O diagnóstico
 
-"A Meta está recebendo?", em seis conferências. As três primeiras perguntam à própria
-Meta, e por isso o diagnóstico só roda quando alguém clica em "Testar conexão":
+"A Meta está recebendo?", em seis conferências, pelo botão "Testar conexão" (aba
+Diagnóstico, antes do diagnóstico do Google). Três perguntam à própria Meta (token,
+destino, permissões; só LEITURA), duas leem o livro-razão (último envio aceito,
+recusas em 7 dias, que agora levam ao histórico do upstream já filtrado por
+`situacao=falha`) e uma lê a conexão (modo de teste). O token nunca aparece.
 
-| conferência | de onde vem |
+A permissão de envio é inferência: um envio aceito nos últimos 7 dias conta mais que
+a lista de permissões do token.
+
+## O MCP de plataforma
+
+As seis ferramentas continuam, com o mesmo nome:
+
+| ferramenta | o que faz desde a .72 |
 |---|---|
-| token aceito | a Meta, agora |
-| destino de conversões encontrado | a Meta, agora |
-| permissão de envio | a Meta, agora, e o histórico |
-| último envio aceito há quanto tempo | o histórico de envios |
-| eventos recusados nos últimos 7 dias, com o motivo e o atalho para o histórico | o histórico de envios |
-| modo de teste ligado | a conexão |
+| `plataforma_ver_conversoes` | as conexões sem segredo, as regras do upstream por funil (evento, ligada) e as do Google, o recomendado do upstream, a lista de eventos dele, os últimos envios com a situação do histórico dele |
+| `plataforma_garantir_conversoes_da_meta` | grava na `meta_ads_conversion_rules` pela gravação da tela do upstream (`gravar-regras-meta.ts`); regra nova nasce DESLIGADA com a chave `MetaEtapa:<uuid>`; os eventos aceitos são os do upstream (`Schedule`, `SubmitApplication`, canal e valor são recusados) |
+| `plataforma_garantir_conversoes_do_google` | sem mudança |
+| `plataforma_ligar_conversoes` | liga ou desliga pela mesma gravação (a lista inteira, para nenhuma outra regra ser desligada); o gatilho do upstream carimba `configured_at` |
+| `plataforma_ligar_leads_de_formulario_da_meta` | sem mudança |
+| `plataforma_diagnosticar_conversoes_da_meta` | sem mudança |
 
-São três **leituras** na Meta. Nenhum evento é enviado por um diagnóstico, e o token
-não aparece na resposta nem em log.
+## A empresa de demonstração
 
-**A permissão de envio é inferência, e a tela não finge o contrário.** A Meta não diz
-"este token pode enviar para este destino" numa leitura. O que dá para ler é a lista
-de permissões do token, e um token gerado dentro do próprio destino de conversões
-envia sem aparecer nela. Por isso: um envio **aceito** nos últimos 7 dias conta mais
-que a lista (se a Meta aceitou, o token pode); sem essa evidência e sem a permissão
-listada, o item fica em **atenção**, com a instrução de conferir pelo código de teste,
-e não em vermelho.
-
-## O histórico de envios
-
-Uma linha por negócio e evento, das duas plataformas, com sete situações:
-
-| situação | quando | Reenviar |
-|---|---|---|
-| Enviado | a plataforma aceitou | não |
-| Aguardando | na fila, ou a plataforma ainda está processando | só quando a plataforma demorou mais de 24 horas |
-| Recusado pela plataforma | com o motivo que ela deu | sim, até 7 dias na Meta |
-| Não enviado · sem clique de anúncio | o lead de formulário com a chave desligada | não |
-| Não enviado · sem valor | compra sem valor preenchido | sim, depois de preencher o valor |
-| Não enviado · anterior à regra | o movimento foi antes de a regra (ou a chave) ser ligada | não |
-| Não enviado · conexão ou modo de teste | sem conexão, pausada, incompleta, ou em teste | sim, depois de consertar a conexão |
-
-A sétima não estava no protótipo: o livro-razão já tinha esses motivos, e uma linha
-sem situação sumiria dos filtros.
-
-**Negócio orgânico não aparece aqui.** Um negócio que não veio de anúncio nem de
-formulário e entra numa etapa com regra não é uma conversão que deixou de ser
-informada: não havia o que informar. Gravar uma linha para cada um encheria o
-histórico de ruído, que é o motivo de o upstream também não gravar. O cartão do
-negócio diz isso na seção Origem ("Nada foi informado à Meta: este negócio não veio de
-um anúncio desta plataforma").
-
-## Como está montado
-
-```
-negócio muda de etapa ─► event_log (lead.stage_changed)
-                              │
-        ┌─────────────────────┼─────────────────────────┐
-        ▼                     ▼                         ▼
- venda (upstream)     etapa do Google (upstream)   etapa da Meta e venda do
- envio.handler.ts     qualificacao.handler.ts      lead de formulário (NOSSO)
-                                                   lib/conversoes-meta/etapa.handler.ts
-        └─────────────────────┼─────────────────────────┘
-                              ▼
-                 ad_conversion_dispatches (o livro-razão, do upstream)
-                 uma linha por organização + negócio + evento
-```
-
-- **O schema é nosso, ao lado** (migration `9017`): `mia_conversoes_meta_regras` e
-  `mia_conversoes_meta_config`, com RLS como as outras `mia_*` (gerente lê, só o
-  servidor escreve), e `fn_mia_solicitar_reenvio_conversao_meta`. Nenhuma tabela do
-  upstream muda.
-- **O livro-razão é o do upstream**, sem mudança de schema. A chave dos eventos de
-  etapa da Meta é `Meta:<evento>` (por evento, e não por etapa: é o que faz o
-  repetido não duplicar). A venda do lead de formulário usa `Purchase`, a mesma
-  chave da venda de clique.
-- **O consumidor é nosso**, ao lado dos dois do upstream, escutando os mesmos
-  eventos. O reenvio de um evento de etapa tem tipo próprio
-  (`conversao_meta.retry_requested`): com o do upstream, o consumidor de venda dele
-  leria um nome que não conhece como reenvio de compra.
-- **O transporte é nosso**, ao lado do dele, na mesma fronteira
-  (`lib/plataformas-de-anuncio/meta/eventos-do-funil.ts`). Reusa dele o hash, o teto
-  de 7 dias e a classificação do erro.
-- **A empresa de demonstração**: a regra pode ser gravada e ligada, e nada sai,
-  porque a conexão de conversões ligada não existe nela (migration 9010) e o
-  consumidor para antes da rede.
-
-### Arquivos do upstream tocados
-
-| arquivo | o que mudou |
-|---|---|
-| `app/app/settings/conversoes/page.tsx` | as seções da Meta entram na tela; o histórico e as pendências passam a ser lidos pelos módulos nossos; o nome do evento e o link do negócio na lista de pendências |
-| `app/actions/settings/salvarRegrasDeConversaoGoogle.ts` | o miolo saiu para `lib/conversoes/gravar-regras-google.ts`, que o MCP também chama |
-| `lib/event-log/register-handlers.ts` | o registro do consumidor |
-| `lib/audit/actions.ts` | três ações de auditoria |
-
-`app/app/settings/conversoes/_historico.tsx` e `lerPendencias`
-(`lib/conversoes/estado-da-conexao.ts`) continuam no upstream, sem uso nesta tela.
-
-Na próxima sincronização: o upstream passou a exigir que cada consumidor declare o que
-faz com a organização parada (`naOrgParada`). O nosso precisa de `naOrgParada: "pula"`,
-como os dois dele.
-
-## O que é genérico e o que é nosso
-
-| peça | para quem |
-|---|---|
-| Regras por etapa para a Meta | **genérico**: vale para qualquer instalação. Candidata a pull request ao upstream, como par da 0436 do Google |
-| Diagnóstico da Meta | **genérico**: idem |
-| Histórico com a situação pelo motivo e o reenvio só onde resolve | **genérico** |
-| O link do negócio na lista de pendências (`/app/kanban?lead=` parava na lista de funis) e o nome do evento de etapa nessa lista (lia "Compra") | **genérico**: são dois defeitos da tela dele |
-| Leads de formulário voltam para a Meta | **nosso**: depende dos leads dos formulários da Meta (`docs/fork/leads-da-meta.md`), que o upstream não tem |
-| A seção Origem do cartão aberto | **nosso**: o cartão aberto é do fork |
-| As ferramentas do MCP de plataforma | **nosso** |
+Regra e chave podem ser gravadas e ligadas; nada sai, porque a conexão de conversões
+ligada não existe nela (9010) e os consumidores param em `sem_conexao`.
 
 ## O que só uma conta real da Meta prova
 
 Nenhum teste fala com a Meta. Com o **código de teste** preenchido na conexão:
 
-1. **`Schedule` e `SubmitApplication` são aceitos pela porta de mensagens de negócio?**
-   Mova um negócio de anúncio para uma etapa com "Agendou" e veja o histórico. Se a
-   Meta recusar o nome, a troca é uma linha em `lib/conversoes-meta/eventos.ts`.
-2. **O evento de lead de formulário chega?** Ligue a chave, mova um lead de formulário
-   e confira no gerenciador de eventos (o destino precisa ser o mesmo que a campanha
-   de formulário usa). Dois pontos a olhar nesse teste: a documentação descreve o
-   `lead_id` como número de 15 a 17 dígitos e nós o mandamos como texto (para não
-   perder dígito); e ela não fala de valor e moeda nos eventos de CRM, que nós
-   mandamos na venda e nas etapas com valor.
-3. **O diagnóstico lê o destino com o token do cliente?** Um token gerado dentro do
+1. **O evento de lead de formulário chega?** Ligue a chave, mova um lead de
+   formulário e confira no gerenciador de eventos (o destino precisa ser o mesmo que
+   a campanha de formulário usa). A documentação descreve o `lead_id` como número de
+   15 a 17 dígitos e nós o mandamos como texto (para não perder dígito).
+2. **O diagnóstico lê o destino com o token do cliente?** Um token gerado dentro do
    destino de conversões pode não responder à leitura de permissões; nesse caso o
    item fica em atenção, como previsto.
-4. A documentação mostra `whatsapp_business_account_id` no `user_data` do exemplo de
-   WhatsApp. O transporte da compra (do upstream) não o envia, e o nosso segue o dele.
-   Se a Meta passar a exigir, é uma mudança nos dois.
+3. A compra de clique para WhatsApp exige `page_id` ou `whatsapp_business_account_id`
+   (#2098): o upstream os lê da tela de Conversões ("Identidade da conversão"), e é
+   lá que se preenche.
 
 ## Testes
 
 | arquivo | o que mede |
 |---|---|
-| `tests/unit/conversoes-da-meta-regras-puras.test.ts` | os eventos, o recomendado, o valor, a sequência do funil, as situações e o reenvio |
-| `tests/unit/conversoes-da-meta-transporte.test.ts` | o corpo que sai nas duas portas, o teto de 7 dias, o diagnóstico na Meta (com dublê) |
-| `tests/unit/conversoes-da-meta-consumidor.test.ts` | o consumidor: as travas, o valor, a conexão, o modo de teste, o lead de formulário e a venda |
-| `tests/unit/conversoes-da-meta-regras-e-diagnostico.test.ts` | gravar as regras, a chave, o diagnóstico e o histórico |
-| `tests/unit/conversoes-da-meta-acoes.test.ts` | o portão das ações da tela |
-| `tests/unit/conversoes-da-meta-tela.test.tsx` | a tela, pelo que a pessoa vê e clica: a régua, o recomendado, o quadro, a chave, o diagnóstico e o histórico |
-| `tests/unit/mcp-de-implantacao-conversoes.test.ts` | as seis ferramentas do MCP |
-| `tests/invariants/conversoes-da-meta-por-etapa.test.ts` | as travas no Postgres de verdade: os CHECK, os gatilhos, a função do reenvio, a empresa de demonstração, e as ferramentas do MCP (rodar de novo não muda uma linha) |
-| `tests/invariants/rls-tabelas-da-mia.test.ts` | as duas tabelas novas: uma empresa não lê a outra, e a sessão não escreve |
+| `tests/unit/conversoes-da-meta-consumidor.test.ts` | o consumidor dos formulários e ⭐ a regra da casa com os três consumidores juntos |
+| `tests/unit/conversoes-da-meta-transporte.test.ts` | o corpo que sai pela porta do CRM, o teto de 7 dias, o diagnóstico na Meta (com dublê) |
+| `tests/unit/conversoes-da-meta-regras-e-diagnostico.test.ts` | a gravação das regras (miolo compartilhado), a chave, o diagnóstico e o rótulo do envio |
+| `tests/unit/conversoes-da-meta-acoes.test.ts` | o portão das ações que continuam nossas |
+| `tests/unit/conversoes-da-meta-tela.test.tsx` | a chave e o diagnóstico, pelo que a pessoa vê e clica |
+| `tests/unit/mcp-de-implantacao-conversoes.test.ts` | as seis ferramentas do MCP sobre a tabela do upstream |
+| `tests/invariants/conversoes-da-meta-por-etapa.test.ts` | o Postgres de verdade: a 9019, ⭐ a regra da casa com o registro, os formulários, o reenvio do upstream, a demonstração e o MCP |
+| `tests/invariants/rls-tabelas-da-mia.test.ts` | as duas tabelas da 9017 continuam com a RLS delas |

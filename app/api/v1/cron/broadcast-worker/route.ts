@@ -29,6 +29,7 @@ import { renderTemplateBody } from "@/lib/channels/meta/render-template";
 import { registrarNaConversa } from "@/lib/broadcast/registro-na-conversa";
 import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-session";
 import { logger } from "@/lib/logger";
+import { ehOperante, STATUS_OPERANTE, statusDaOrgEmbutida } from "@/lib/organizacao/operante";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -47,19 +48,26 @@ async function handler(req: NextRequest): Promise<Response> {
 
   // `enviando` primeiro, depois `agendada` cuja hora chegou: quem já começou
   // termina antes de outra começar e disputar o mesmo saldo.
+  //
+  // Organização parada (suspensa, redigida, arquivada — upstream 1.70, #1987)
+  // não dispara: a régua é a do upstream (`lib/organizacao/operante.ts`), pelo
+  // status embutido, que corta ANTES do `limit`, e `ehOperante` linha a linha
+  // como cinto. A campanha fica onde estava e segue no ritmo de sempre quando a
+  // empresa for reativada — sem rajada: o teto por rodada é o mesmo.
   const { data: campanhas } = await admin
     .from("broadcasts")
     .select(
-      "id, organization_id, template_name, template_language, valores_padrao, preco_cents, status, agendado_para",
+      "id, organization_id, template_name, template_language, valores_padrao, preco_cents, status, agendado_para, organizations:organization_id!inner(status)",
     )
     .in("status", ["enviando", "agendada"])
+    .eq("organizations.status", STATUS_OPERANTE)
     .or(`agendado_para.is.null,agendado_para.lte.${agora}`)
     .order("status", { ascending: true })
     .limit(5);
 
-  const alvo = (campanhas ?? [])[0] as
-    | (CampanhaEmCurso & { status: string })
-    | undefined;
+  const alvo = ((campanhas ?? []) as Array<CampanhaEmCurso & { status: string; organizations?: unknown }>).find(
+    (c) => ehOperante(statusDaOrgEmbutida(c.organizations as Parameters<typeof statusDaOrgEmbutida>[0])),
+  );
   if (!alvo) return ok({ rodou: false, motivo: "nada_na_fila" }, { requestId });
 
   const creds = await credenciaisDaOrg(alvo.organization_id);

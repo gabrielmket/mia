@@ -3,7 +3,8 @@
 import { headers } from "next/headers";
 
 import { audit } from "@/lib/audit";
-import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { escritaDeAdminOuRecusa } from "@/lib/auth/escritaDeAdminOuRecusa";
+import { MENSAGEM_DA_RECUSA_DE_ESCRITA } from "@/lib/auth/recusa-de-escrita-de-admin";
 import {
   responsavelLegalSchema,
   type ResponsavelLegalInput,
@@ -50,7 +51,10 @@ export async function updateResponsavelLegal(
     return { ok: false, error: "validation_failed", details: parsed.error.flatten() };
   }
 
-  const { user: authUser } = await requirePlatformAdmin();
+  // Upstream 1.70: a escrita de platform admin exige scope `full` e MFA em dia.
+  const escrita = await escritaDeAdminOuRecusa();
+  if (!escrita.ok) return { ok: false, error: MENSAGEM_DA_RECUSA_DE_ESCRITA[escrita.error] };
+  const { user: authUser } = escrita.ctx;
 
   const hdrs = await headers();
   const requestId = hdrs.get("x-request-id");

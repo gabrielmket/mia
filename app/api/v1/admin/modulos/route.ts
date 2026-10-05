@@ -16,7 +16,7 @@ import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { falhaDaEscritaDePlatformAdmin, requirePlatformAdminEscrita, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MODULOS, moduloPorChave } from "@/lib/modulos/vendaveis";
@@ -34,6 +34,19 @@ async function exigirPlataforma() {
     return await requirePlatformAdmin();
   } catch {
     return null;
+  }
+}
+
+/**
+ * FORK MIA — a ESCRITA desta rota exige scope `full` e MFA em dia (upstream
+ * 1.70, `requirePlatformAdminEscrita`): o acesso só de leitura ao painel de
+ * plataforma (`support_readonly`) lê e não muda nada.
+ */
+async function exigirPlataformaParaEscrever(requestId: string) {
+  try {
+    return { ok: true as const, ctx: await requirePlatformAdminEscrita() };
+  } catch (err) {
+    return { ok: false as const, resposta: falhaDaEscritaDePlatformAdmin(err, requestId) };
   }
 }
 
@@ -82,8 +95,9 @@ export async function POST(req: NextRequest) {
   if (bloqueioDeSuporte) return bloqueioDeSuporte;
 
   const requestId = randomUUID();
-  const ctx = await exigirPlataforma();
-  if (!ctx) return fail("forbidden", "Platform admin required", 403, { requestId });
+  const escrita = await exigirPlataformaParaEscrever(requestId);
+  if (!escrita.ok) return escrita.resposta;
+  const ctx = escrita.ctx;
 
   let body: unknown;
   try {
@@ -142,8 +156,9 @@ export async function DELETE(req: NextRequest) {
   if (bloqueioDeSuporte) return bloqueioDeSuporte;
 
   const requestId = randomUUID();
-  const ctx = await exigirPlataforma();
-  if (!ctx) return fail("forbidden", "Platform admin required", 403, { requestId });
+  const escrita = await exigirPlataformaParaEscrever(requestId);
+  if (!escrita.ok) return escrita.resposta;
+  const ctx = escrita.ctx;
 
   const orgId = req.nextUrl.searchParams.get("organization_id");
   const modulo = req.nextUrl.searchParams.get("modulo");

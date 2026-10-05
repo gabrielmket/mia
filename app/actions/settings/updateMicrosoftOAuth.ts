@@ -15,7 +15,8 @@ import { z } from "zod";
 
 import { invalidarCredencialDaMicrosoft } from "@/lib/agenda/microsoft/config";
 import { audit } from "@/lib/audit";
-import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { escritaDeAdminOuRecusa } from "@/lib/auth/escritaDeAdminOuRecusa";
+import { MENSAGEM_DA_RECUSA_DE_ESCRITA } from "@/lib/auth/recusa-de-escrita-de-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 
@@ -43,7 +44,10 @@ const entradaSchema = z.object({
 export type MicrosoftOAuthInput = z.infer<typeof entradaSchema>;
 
 export async function updateMicrosoftOAuth(input: MicrosoftOAuthInput): Promise<UpdateMicrosoftOAuthResult> {
-  const { user: authUser } = await requirePlatformAdmin();
+  // Upstream 1.70: a escrita de platform admin exige scope `full` e MFA em dia.
+  const escrita = await escritaDeAdminOuRecusa();
+  if (!escrita.ok) return { ok: false, error: MENSAGEM_DA_RECUSA_DE_ESCRITA[escrita.error] };
+  const { user: authUser } = escrita.ctx;
   const parsed = entradaSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Confira o ID do aplicativo e o segredo.", details: parsed.error.flatten() };
 

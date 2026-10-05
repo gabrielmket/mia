@@ -4,7 +4,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { headers } from "next/headers";
 
 import { audit } from "@/lib/audit";
-import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { escritaDeAdminOuRecusa } from "@/lib/auth/escritaDeAdminOuRecusa";
+import { MENSAGEM_DA_RECUSA_DE_ESCRITA } from "@/lib/auth/recusa-de-escrita-de-admin";
 import { PREFIXO_DE_PLATAFORMA } from "@/lib/mcp-plataforma/auth";
 import { CHAVES_DE_OPERACAO } from "@/lib/mcp-plataforma/operacoes";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -37,13 +38,20 @@ export async function criarTokenDePlataforma(input: {
   operacoes: string[];
   expiresInDays: number | null;
 }): Promise<CriarTokenResult> {
-  const { user, platformAdmin } = await requirePlatformAdmin();
-
   // `support_readonly` administra lendo. Emitir credencial de escrita a partir
-  // de um acesso de leitura seria a escada que transforma um no outro.
-  if (platformAdmin.scope !== "full") {
-    return { ok: false, error: "Seu acesso de suporte não permite emitir tokens." };
+  // de um acesso de leitura seria a escada que transforma um no outro. Desde a
+  // .72 o portão é o do upstream (1.70): scope `full` e MFA em dia.
+  const escrita = await escritaDeAdminOuRecusa();
+  if (!escrita.ok) {
+    return {
+      ok: false,
+      error:
+        escrita.error === "forbidden_scope"
+          ? "Seu acesso de suporte não permite emitir tokens."
+          : MENSAGEM_DA_RECUSA_DE_ESCRITA[escrita.error],
+    };
   }
+  const { user } = escrita.ctx;
 
   const name = input.name.trim();
   const reason = input.reason.trim();
@@ -110,10 +118,17 @@ export async function revogarTokenDePlataforma(input: {
   id: string;
   motivo: string;
 }): Promise<RevogarTokenResult> {
-  const { user, platformAdmin } = await requirePlatformAdmin();
-  if (platformAdmin.scope !== "full") {
-    return { ok: false, error: "Seu acesso de suporte não permite revogar tokens." };
+  const escrita = await escritaDeAdminOuRecusa();
+  if (!escrita.ok) {
+    return {
+      ok: false,
+      error:
+        escrita.error === "forbidden_scope"
+          ? "Seu acesso de suporte não permite revogar tokens."
+          : MENSAGEM_DA_RECUSA_DE_ESCRITA[escrita.error],
+    };
   }
+  const { user } = escrita.ctx;
 
   const motivo = input.motivo.trim();
   if (!motivo) return { ok: false, error: "Escreva por que está revogando." };

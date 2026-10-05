@@ -965,14 +965,16 @@ function EstadoDoTempoReal({
     );
   }
 
+  const motivoDoTempoReal = escolhido.tempo_real_motivo ?? "";
   const frase =
-    escolhido.tempo_real === "recusado"
-      ? (MENSAGEM_DO_TEMPO_REAL[escolhido.tempo_real_motivo ?? ""] ??
-        MENSAGEM_DO_TEMPO_REAL.transitorio!)
-      : TEMPO_REAL_PENDENTE;
+    escolhido.tempo_real !== "recusado"
+      ? t(TEMPO_REAL_PENDENTE)
+      : MENSAGEM_DO_TEMPO_REAL[motivoDoTempoReal]
+        ? t(MENSAGEM_DO_TEMPO_REAL[motivoDoTempoReal])
+        : t(MENSAGEM_DO_TEMPO_REAL.transitorio!);
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-sm">
-      <p className="flex-1">{t(frase)}</p>
+      <p className="flex-1">{frase}</p>
       <Button variant="outline" size="sm" disabled={ligando} onClick={aoLigar}>
         {ligando ? t("Ligando…") : t("Ligar o tempo real")}
       </Button>

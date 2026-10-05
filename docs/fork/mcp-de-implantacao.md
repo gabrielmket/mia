@@ -215,7 +215,7 @@ ferramenta não recebe nem devolve chave, e o agente nasce com a IA padrão.
 | `plataforma_garantir_tipos_de_agendamento` | tipos de agendamento (duração, local, categoria), com o lembrete desligado | nome do tipo | 30 tipos |
 | `plataforma_definir_jornada` | a jornada de uma pessoa da equipe, pelo e-mail | a pessoa | uma pessoa |
 | `plataforma_garantir_respostas_prontas` | respostas prontas compartilhadas da equipe | título da resposta | 50 respostas |
-| `plataforma_garantir_conversoes_da_meta` | o que cada etapa aberta de um funil informa à Meta: o evento, o canal de entrada e o valor; com `usar_recomendado: true`, o sistema escolhe o evento pelo nome da etapa. A regra nasce **desligada** | a etapa do funil | 20 regras |
+| `plataforma_garantir_conversoes_da_meta` | o que cada etapa aberta de um funil informa à Meta (a régua do upstream, 0524): o evento padrão; com `usar_recomendado: true`, o sistema escolhe o evento pelo nome da etapa. A regra nasce **desligada** | a etapa do funil | 20 regras |
 | `plataforma_garantir_conversoes_do_google` | o que cada etapa aberta informa ao Google Ads: o nome da conversão e o id da ação de conversão (que já tem de existir na conta do Google). A regra nasce **desligada** | a etapa do funil | 20 regras |
 
 Todas respondem `criou`, `atualizou` ou `ja_estava`, item a item quando a chamada
@@ -333,9 +333,18 @@ Também ficaram de fora, por desenho:
   fina, a operação monta a mesma sequência com as mesmas funções de biblioteca,
   e `tests/unit/mcp-de-implantacao-espelhos.test.ts` reprova quando o código da
   rota muda, para alguém reler o espelho.
-- Nenhuma migration para as ferramentas: tudo cabe nas tabelas que existem. As
-  de conversões da Meta usam as tabelas da migration 9017, que é da peça
-  ([`conversoes-da-meta.md`](conversoes-da-meta.md)) e não do MCP.
+- Nenhuma migration para as ferramentas: tudo cabe nas tabelas que existem. Desde
+  a .72 as de conversões da Meta gravam na régua do UPSTREAM
+  (`meta_ads_conversion_rules`, 0524), pela gravação da tela dele, e a volta dos
+  leads de formulário na chave da 9017
+  ([`conversoes-da-meta.md`](conversoes-da-meta.md)).
+- O token `dsk_` do upstream (1.70, #2028) passou a administrar agentes, fluxos de
+  follow-up, prospecção e tipos de agendamento pelas MESMAS rotas da tela, só
+  trocando a autenticação (`resolveAuthDual`). Não nasceu handler reutilizável
+  novo: as funções compartilhadas de cima continuam sendo o caminho do MCP, e as
+  rotas relidas tiveram a impressão regravada na cerca dos espelhos. A trava da IA
+  vale também para o token (`lib/ai/trava-da-ia-na-rota.ts`: o token nunca
+  escolhe IA).
 
 Pontos de ligação no código do upstream (a lista fechada, para a sincronização):
 
@@ -348,6 +357,7 @@ Pontos de ligação no código do upstream (a lista fechada, para a sincronizaç
 | `app/api/v1/ai/knowledge/sources/route.ts` | o `POST` chama `criarMaterial` (`lib/ai/rag/criar-material.ts`) |
 | `app/api/v1/agenda/tipos/route.ts` | importa o contrato de `lib/agenda/tipos-de-agendamento.ts` |
 | `app/actions/settings/salvarRegrasDeConversaoGoogle.ts` | chama `gravarRegrasDeConversaoGoogle` (`lib/conversoes/gravar-regras-google.ts`) |
+| `app/actions/settings/salvarRegrasDeConversaoMeta.ts` | chama `gravarRegrasDeConversaoMeta` (`lib/conversoes/gravar-regras-meta.ts`) |
 | `tests/unit/identificadores-que-cruzam-fronteira.test.ts` | o registro do upload aponta para `lib/ai/rag/criar-material.ts` |
 | `tests/unit/agenda-reativar-tipo.test.ts` | lê o contrato no arquivo novo, com um controle de que a rota o importa |
 
