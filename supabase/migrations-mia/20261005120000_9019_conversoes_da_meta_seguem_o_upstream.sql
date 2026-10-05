@@ -1,4 +1,4 @@
--- manifest: As conversões da Meta por etapa passam a ser as do UPSTREAM (0524, `meta_ads_conversion_rules`, consumidor `conversoes.etapa_meta`), e a 9017 fica de pé só no que o upstream não tem. `mia_conversoes_meta_regras`, `fn_mia_marcar_configuracao_regra_meta` e `fn_mia_solicitar_reenvio_conversao_meta` ficam OBSOLETAS (comentário na tabela e nas funções): nenhum código lê nem grava a tabela, e a função do reenvio passa a devolver `false` sem emitir `conversao_meta.retry_requested`, que perdeu o consumidor. Nada é apagado nesta fusão; a tabela e as duas funções podem sair numa fusão futura, depois de a .72 ficar um ciclo no ar (em produção, em 05/10/2026, a tabela tinha 0 linhas). `mia_conversoes_meta_config` (a chave "leads de formulário voltam para a Meta") continua valendo, agora para o consumidor `conversoes.meta_formulario`, que só age no negócio SEM atribuição de anúncio que nasceu de formulário da Meta. Nenhum objeto do upstream é tocado. Provado em tests/invariants/conversoes-da-meta-por-etapa.test.ts. E, à parte: `fn_mia_contato_anonimizado_limpa` (nossa) ganha `search_path` fixo, que a 0521 do upstream passou a exigir de toda função de public (tests/invariants/avisos-do-security-advisor.test.ts).
+-- manifest: As conversões da Meta por etapa passam a ser as do UPSTREAM (0524, `meta_ads_conversion_rules`, consumidor `conversoes.etapa_meta`), e a 9017 fica de pé só no que o upstream não tem. `mia_conversoes_meta_regras`, `fn_mia_marcar_configuracao_regra_meta` e `fn_mia_solicitar_reenvio_conversao_meta` ficam OBSOLETAS (comentário na tabela e nas funções): nenhum código lê nem grava a tabela, e a função do reenvio passa a devolver `false` sem emitir `conversao_meta.retry_requested`, que perdeu o consumidor. Nada é apagado nesta fusão; a tabela e as duas funções podem sair numa fusão futura, depois de a .72 ficar um ciclo no ar (em produção, em 05/10/2026, a tabela tinha 0 linhas). `mia_conversoes_meta_config` (a chave "leads de formulário voltam para a Meta") continua valendo, agora para o consumidor `conversoes.meta_formulario`, que só age no negócio SEM atribuição de anúncio que nasceu de formulário da Meta. Nenhum objeto do upstream é tocado. Provado em tests/invariants/conversoes-da-meta-por-etapa.test.ts. E, à parte, duas catracas novas do upstream: `fn_mia_contato_anonimizado_limpa` (nossa) ganha `search_path` fixo, que a 0521 passou a exigir de toda função de public (tests/invariants/avisos-do-security-advisor.test.ts); e as sete policies de ESCRITA nossas que citavam `fn_is_platform_admin()` (crm_empresas_escrita e as das obrigações) passam a `fn_is_platform_admin_full()`, como a 0508 fez nas dele: `support_readonly` lê e não escreve (tests/invariants/platform-admin-full-so-escreve.test.ts).
 --
 -- 9019 · as conversões da Meta por etapa seguem as do upstream
 --
@@ -96,5 +96,104 @@ $f$;
 -- atribui campos de NEW com tipos do catálogo, então `search_path = ''` não muda
 -- o comportamento. Mesma forma da 0521: `alter function`, sem redefinir.
 alter function public.fn_mia_contato_anonimizado_limpa() set search_path = '';
+
+-- ── 6. as policies de escrita nossas exigem o platform admin de acesso completo
+--
+-- A 0508 do upstream (1.70, #2000) criou `fn_is_platform_admin_full()` (scope
+-- `full`) e trocou por ela a função pura em toda policy de ESCRITA dele; a
+-- 0529 e a 0533 fecharam o resto. O teste dele
+-- (tests/invariants/platform-admin-full-so-escreve.test.ts, "CONTA GLOBAL")
+-- passou a exigir que NENHUMA policy de escrita de public cite a função pura.
+-- Sete eram nossas: `crm_empresas_escrita` (9012) e as de escrita das obrigações
+-- (9018). Mesmo corpo, só a troca: quem tem acesso só de leitura ao painel de
+-- plataforma (`support_readonly`) segue LENDO pelas policies de leitura, que
+-- continuam com a função pura, e deixa de escrever.
+drop policy if exists "crm_empresas_escrita" on public.crm_empresas;
+create policy "crm_empresas_escrita" on public.crm_empresas
+  for all using (
+    public.fn_is_platform_admin_full()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent'))
+  ) with check (
+    public.fn_is_platform_admin_full()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent'))
+  );
+
+drop policy if exists "mia_obrigacoes_tipos_escrita" on public.mia_obrigacoes_tipos;
+create policy "mia_obrigacoes_tipos_escrita" on public.mia_obrigacoes_tipos
+  for all using (
+    public.fn_is_platform_admin_full()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  ) with check (
+    public.fn_is_platform_admin_full()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+drop policy if exists "mia_obrigacoes_insert" on public.mia_obrigacoes;
+create policy "mia_obrigacoes_insert" on public.mia_obrigacoes
+  for insert with check (
+    public.fn_is_platform_admin_full()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent')
+        and (lead_id is null
+             or exists (select 1 from public.crm_leads l where l.id = mia_obrigacoes.lead_id)))
+  );
+drop policy if exists "mia_obrigacoes_update" on public.mia_obrigacoes;
+create policy "mia_obrigacoes_update" on public.mia_obrigacoes
+  for update using (
+    public.fn_is_platform_admin_full()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent')
+        and (lead_id is null
+             or exists (select 1 from public.crm_leads l where l.id = mia_obrigacoes.lead_id)))
+  ) with check (
+    public.fn_is_platform_admin_full()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent'))
+  );
+drop policy if exists "mia_obrigacoes_delete" on public.mia_obrigacoes;
+create policy "mia_obrigacoes_delete" on public.mia_obrigacoes
+  for delete using (
+    public.fn_is_platform_admin_full()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent')
+        and (lead_id is null
+             or exists (select 1 from public.crm_leads l where l.id = mia_obrigacoes.lead_id)))
+  );
+
+drop policy if exists "mia_obrigacoes_ciclos_escrita" on public.mia_obrigacoes_ciclos;
+create policy "mia_obrigacoes_ciclos_escrita" on public.mia_obrigacoes_ciclos
+  for all using (
+    public.fn_is_platform_admin_full()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent')
+        and exists (select 1 from public.mia_obrigacoes o where o.id = mia_obrigacoes_ciclos.obrigacao_id))
+  ) with check (
+    public.fn_is_platform_admin_full()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent')
+        and exists (select 1 from public.mia_obrigacoes o
+                     where o.id = mia_obrigacoes_ciclos.obrigacao_id
+                       and o.organization_id = mia_obrigacoes_ciclos.organization_id))
+  );
+
+drop policy if exists "mia_obrigacoes_propostas_escrita" on public.mia_obrigacoes_propostas;
+create policy "mia_obrigacoes_propostas_escrita" on public.mia_obrigacoes_propostas
+  for all using (
+    public.fn_is_platform_admin_full()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent')
+        and exists (select 1 from public.mia_obrigacoes o where o.id = mia_obrigacoes_propostas.obrigacao_id))
+  ) with check (
+    public.fn_is_platform_admin_full()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent')
+        and exists (select 1 from public.mia_obrigacoes o
+                     where o.id = mia_obrigacoes_propostas.obrigacao_id
+                       and o.organization_id = mia_obrigacoes_propostas.organization_id))
+  );
 
 notify pgrst, 'reload schema';
