@@ -20,6 +20,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { lerTodasAsPaginas, TAMANHO_DA_PAGINA } from "@/lib/leitura/todas-as-paginas";
 import { buscaEmLotes } from "@/lib/supabase/em-lotes";
 
 import {
@@ -180,17 +181,26 @@ export async function lerObrigacoes(db: Db, org: string, escopo: EscopoDaLeitura
       ]),
     );
   } else {
-    const { data, error } = await db
-      .from("mia_obrigacoes")
-      .select(COLUNAS_DA_OBRIGACAO)
-      .eq("organization_id", org)
-      .is("arquivado_em", null)
-      .order("created_at", { ascending: true })
-      .limit(TETO_DA_LISTA + 1);
-    falhar("as obrigações", error);
-    const todas = (data ?? []) as unknown as Obrigacao[];
-    cortada = todas.length > TETO_DA_LISTA;
-    itens = todas.slice(0, TETO_DA_LISTA);
+    // PAGINADO. O `.limit(TETO_DA_LISTA + 1)` que estava aqui nunca trouxe 3001
+    // linhas: o PostgREST corta toda resposta em 1000 sem avisar, a lista parava
+    // nas 1000 mais antigas, os contadores saíam delas e o `cortada` (que
+    // comparava com 3000) nunca ligava. O laço é o de
+    // `lib/leitura/todas-as-paginas.ts`; `id` desempata a ordem.
+    const lido = await lerTodasAsPaginas<Obrigacao>(
+      (de, ate, pedirContagem) =>
+        db
+          .from("mia_obrigacoes")
+          .select(COLUNAS_DA_OBRIGACAO, pedirContagem ? { count: "exact" } : undefined)
+          .eq("organization_id", org)
+          .is("arquivado_em", null)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(de, ate),
+      { paginasMaximas: TETO_DA_LISTA / TAMANHO_DA_PAGINA },
+    );
+    falhar("as obrigações", lido.erro === null ? null : { message: lido.erro });
+    cortada = lido.truncado;
+    itens = lido.linhas.slice(0, TETO_DA_LISTA);
   }
 
   const naTela = await paraATela(db, org, itens);
