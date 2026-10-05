@@ -1,13 +1,14 @@
 /**
- * FORK MIA (9017) — O FIO: o que sai para a Meta num evento do funil, e o que
- * volta de um diagnóstico.
+ * FORK MIA — O FIO: o que sai para a Meta num evento do LEAD DE FORMULÁRIO, e o
+ * que volta de um diagnóstico.
  *
  * ⚠️ NUNCA fala com a Meta. `fetch` é um dublê em todo caso deste arquivo, e o
  * teste reprova se o endereço não for o da fronteira (`baseDaGraphDeAnuncio`).
  *
- * As duas portas são medidas pelo corpo que viaja:
- *   · clique em anúncio para o WhatsApp → mensagens de negócio (`ctwa_clid`);
- *   · lead de formulário → conversões para CRM (`lead_id`, `event_source: crm`).
+ * Desde a .72 este transporte só tem a porta que o upstream não tem: o lead de
+ * formulário, pela API de conversões para CRM (`lead_id`, `event_source: crm`).
+ * O clique em anúncio para o WhatsApp (mensagens de negócio, `ctwa_clid`) é do
+ * transporte do upstream (`conversions.ts`, 0524).
  */
 import { createHash } from "node:crypto";
 
@@ -32,9 +33,9 @@ const AGORA = new Date("2026-10-01T12:00:00Z");
 const evento = (over: Partial<EventoDoFunilParaAMeta> = {}): EventoDoFunilParaAMeta => ({
   leadId: "lead-1",
   nomeTecnico: "QualifiedLead",
-  eventoId: "lead-1:Meta:lead_qualificado",
+  eventoId: "lead-1:MetaEtapa:00000000-0000-4000-8000-000000000001",
   ocorridoEm: new Date("2026-09-30T15:00:00Z"),
-  identidade: { tipo: "clique_no_whatsapp", clique: "clique-ficticio" },
+  identidade: { tipo: "lead_de_formulario", idDoLead: "123456789012345" },
   telefone: "5500900000001",
   email: null,
   valorCentavos: null,
@@ -70,29 +71,34 @@ afterEach(() => {
 });
 
 describe("o corpo do evento", () => {
-  it("clique em anúncio para o WhatsApp: mensagens de negócio, com o clique e o telefone com hash", () => {
+  it("evento de etapa: conversões para CRM, sem valor, com o lead e o telefone com hash", () => {
     const corpo = corpoDoEvento(evento(), null);
     expect(corpo).toEqual({
       data: [
         {
           event_name: "QualifiedLead",
           event_time: Math.floor(Date.parse("2026-09-30T15:00:00Z") / 1000),
-          event_id: "lead-1:Meta:lead_qualificado",
-          action_source: "business_messaging",
-          messaging_channel: "whatsapp",
-          user_data: { ph: [sha("5500900000001")], ctwa_clid: "clique-ficticio" },
+          event_id: "lead-1:MetaEtapa:00000000-0000-4000-8000-000000000001",
+          action_source: "system_generated",
+          user_data: { ph: [sha("5500900000001")], lead_id: "123456789012345" },
+          custom_data: { event_source: "crm", lead_event_source: "CRM de Teste" },
         },
       ],
     });
-    // Sem valor não existe `custom_data`: zero ensinaria que o evento não vale nada.
-    expect(JSON.stringify(corpo)).not.toContain("custom_data");
+    // Sem valor não sai `value`: zero ensinaria que o evento não vale nada.
+    expect(JSON.stringify(corpo)).not.toContain("\"value\"");
     // E o telefone nunca viaja em claro.
     expect(JSON.stringify(corpo)).not.toContain("5500900000001");
   });
 
   it("com valor: reais e a moeda em maiúsculas", () => {
     const item = (corpoDoEvento(evento({ valorCentavos: 15000 }), null).data as Array<Record<string, unknown>>)[0]!;
-    expect(item.custom_data).toEqual({ value: 150, currency: "BRL" });
+    expect(item.custom_data).toEqual({
+      value: 150,
+      currency: "BRL",
+      event_source: "crm",
+      lead_event_source: "CRM de Teste",
+    });
   });
 
   it("lead de formulário: conversões para CRM, com o id do lead em TEXTO e sem hash", () => {
@@ -124,7 +130,7 @@ describe("o corpo do evento", () => {
     expect(JSON.stringify(corpo)).toContain(`"lead_id":"${idDoLead}"`);
   });
 
-  it("o código de teste marca o envio, também nos eventos de etapa", () => {
+  it("o código de teste marca o envio", () => {
     expect(corpoDoEvento(evento(), "TESTE12345").test_event_code).toBe("TESTE12345");
     expect(corpoDoEvento(evento(), null)).not.toHaveProperty("test_event_code");
   });

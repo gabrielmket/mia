@@ -31,7 +31,7 @@
 import { env } from "@/lib/env";
 import { valorDaInstalacao } from "@/lib/instalacao/config";
 import { branding } from "@/lib/branding";
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { loadAuthUser, orgAtivaSemPortao } from "@/lib/auth/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -188,7 +188,7 @@ export async function resolverOperador(): Promise<Operador> {
   const user = await loadAuthUser();
   if (!user) return await SEM_SESSAO();
 
-  const activeOrg = await resolveActiveOrg(user);
+  const activeOrg = await orgAtivaSemPortao(user);
   if (!activeOrg) return await SEM_SESSAO();
 
   const supabase = await createClient();

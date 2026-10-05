@@ -3,6 +3,11 @@
  * etapa do funil informa à Meta e ao Google Ads, a volta dos leads de formulário
  * e o diagnóstico da Meta. As operações moram em `lib/implantacao/conversoes.ts`.
  *
+ * Desde a .72 as regras da Meta são as do upstream (`meta_ads_conversion_rules`,
+ * migration 0524): estas ferramentas leem e gravam nelas pela mesma função da
+ * tela dele, e os eventos são os da lista dele (todos aceitos pela Meta também em
+ * conversa de WhatsApp).
+ *
  * Três tamanhos de estrago, como nas automações:
  *
  *   ler e diagnosticar   livre (nenhuma operação)
@@ -17,12 +22,7 @@
 import { z } from "zod";
 
 import { VALORES_DE_CATEGORIA } from "@/lib/conversoes/regras-google";
-import {
-  CHAVES_DOS_EVENTOS_DA_META,
-  TETO_DO_VALOR_FIXO_CENTAVOS,
-  VALORES_DE_CANAL_DA_META,
-  VALORES_DE_MODO_DO_VALOR,
-} from "@/lib/conversoes-meta/eventos";
+import { EVENTOS_DA_META, VALORES_DE_EVENTO_DA_META } from "@/lib/conversoes/regras-meta";
 import {
   diagnosticarConversoesDaMeta,
   garantirConversoesDaMeta,
@@ -54,8 +54,8 @@ export const FERRAMENTAS_DE_CONVERSOES: readonly FerramentaDePlataforma[] = [
       "As CONVERSÕES de um cliente: o que o sistema informa de volta à Meta e ao Google Ads para os anúncios aprenderem quem vira cliente. Devolve: " +
       "o estado das duas conexões SEM segredo (conectada, envio ligado, modo de teste; nunca o token); " +
       "a chave \"leads de formulário da Meta voltam para a Meta\"; " +
-      "por funil, cada etapa aberta com a regra da Meta (evento, canal, valor, ligada) e a do Google (nome, ação de conversão, categoria, ligada), mais o evento que o sistema recomendaria para a Meta pelo nome da etapa; " +
-      "a lista de eventos que a Meta aceita aqui, com o nome técnico de cada um; os 20 últimos envios com a situação e o motivo; e quantos foram recusados em 7 dias. " +
+      "por funil, cada etapa aberta com a regra da Meta (evento, ligada) e a do Google (nome, ação de conversão, categoria, ligada), mais o evento que o sistema recomendaria para a Meta pelo nome da etapa; " +
+      "a lista de eventos padrão da Meta que a régua oferece; os 20 últimos envios com a situação e o motivo; e quantos foram recusados em 7 dias. " +
       "QUANDO USAR: antes de plataforma_garantir_conversoes_da_meta ou _do_google (para ver os funis, as etapas e o que já existe) e depois de ligar, para conferir se os envios estão saindo. " +
       "A compra (negócio ganho) não é regra de etapa: sai sozinha quando a conexão está ligada.",
     inputSchema: { organization_id: ORGANIZACAO },
@@ -70,13 +70,15 @@ export const FERRAMENTAS_DE_CONVERSOES: readonly FerramentaDePlataforma[] = [
   {
     name: "plataforma_garantir_conversoes_da_meta",
     description:
-      "Grava O QUE CADA ETAPA DO FUNIL INFORMA À META: quando um negócio entra numa etapa aberta, a Meta recebe um evento (novo lead, lead qualificado, agendou, pediu orçamento, iniciou a compra), uma vez por negócio. " +
-      "Com `usar_recomendado: true` o sistema escolhe o evento pelo nome de cada etapa (a primeira etapa é novo lead; \"qualific\" é lead qualificado; \"agend\", \"visita\" ou \"reuni\" é agendou; \"proposta\" ou \"orçamento\" é pediu orçamento). " +
-      "Com `regras` você diz etapa a etapa: o evento, o canal de entrada (todos, só WhatsApp, só fora do WhatsApp) e o valor do evento (sem valor, valor fixo em centavos, ou o valor do negócio). Os dois juntos valem: `regras` vence o recomendado na etapa citada. " +
+      "Grava O QUE CADA ETAPA DO FUNIL INFORMA À META: quando um negócio que veio da Meta entra numa etapa aberta, a Meta recebe um evento padrão, uma vez por negócio e etapa. " +
+      `Os eventos são os da régua da tela: ${EVENTOS_DA_META.map((e) => `${e.valor} (${e.rotulo})`).join(", ")}. ` +
+      "Com `usar_recomendado: true` o sistema escolhe o evento pelo nome de cada etapa (\"orçamento\", \"proposta\" ou \"cotação\" é InitiateCheckout; \"agend\", \"consulta\", \"visita\" ou \"reunião\" é LeadSubmitted; \"qualific\", \"interess\" ou \"diagnóst\" é QualifiedLead). " +
+      "Com `regras` você diz etapa a etapa o evento. Os dois juntos valem: `regras` vence o recomendado na etapa citada. " +
       "A regra NASCE DESLIGADA e esta ferramenta nunca liga nem desliga: para a Meta passar a receber, plataforma_ligar_conversoes. " +
       "GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é a etapa; cada uma responde `criou`, `atualizou` ou `ja_estava`. Etapa que o pedido não cita fica como está. " +
-      "O mesmo evento em duas etapas é aceito, com aviso: só a primeira em que o negócio entrar envia. " +
+      "O mesmo evento em duas etapas é aceito, com aviso: cada etapa envia o seu, e o negócio que passar pelas duas manda o evento duas vezes. " +
       "Regra LIGADA não é editada por aqui (a mudança valeria no próximo negócio): desligue, ajuste e religue. " +
+      "O evento de etapa vai SEM valor (o negócio ainda não foi vendido); a venda vai com o valor quando o negócio é ganho. " +
       "O QUE NÃO FAZ: não liga a regra, não envia nada, não mexe em etapa de ganho nem de perda (ganho é a compra; perda não é conversão) e não recebe o identificador do destino nem o token da Meta, que são credencial e ficam com uma pessoa em Configurações › Conversões.",
     inputSchema: {
       organization_id: ORGANIZACAO,
@@ -84,30 +86,15 @@ export const FERRAMENTAS_DE_CONVERSOES: readonly FerramentaDePlataforma[] = [
       usar_recomendado: z
         .boolean()
         .optional()
-        .describe("true: grava, em cada etapa que tem recomendação pelo nome, o evento recomendado, sem valor e para todos os canais. Etapa sem recomendação fica como está."),
+        .describe("true: grava, em cada etapa que tem recomendação pelo nome, o evento recomendado. Etapa sem recomendação fica como está."),
       regras: z
         .array(
           z
             .object({
               etapa: ETAPA,
               evento: z
-                .enum(CHAVES_DOS_EVENTOS_DA_META)
-                .describe("novo_lead, lead_qualificado, agendou, pediu_orcamento ou iniciou_compra."),
-              canal: z
-                .enum(VALORES_DE_CANAL_DA_META)
-                .optional()
-                .describe("Por onde o negócio precisa ter entrado: todos (padrão), whatsapp (tem conversa) ou outros (sem conversa)."),
-              valor: z
-                .enum(VALORES_DE_MODO_DO_VALOR)
-                .optional()
-                .describe("sem_valor (padrão), valor_fixo (exige valor_fixo_centavos) ou valor_do_negocio (negócio sem valor envia o evento sem valor)."),
-              valor_fixo_centavos: z
-                .number()
-                .int()
-                .positive()
-                .max(TETO_DO_VALOR_FIXO_CENTAVOS)
-                .optional()
-                .describe("Quanto vale o evento, em centavos de real. Só com valor: valor_fixo. Ex.: 15000 para R$ 150,00."),
+                .enum(VALORES_DE_EVENTO_DA_META)
+                .describe("O evento padrão da Meta: LeadSubmitted, QualifiedLead, InitiateCheckout, AddToCart ou ViewContent."),
             })
             .strict(),
         )
@@ -119,7 +106,7 @@ export const FERRAMENTAS_DE_CONVERSOES: readonly FerramentaDePlataforma[] = [
       organization_id: ORG_DE_EXEMPLO,
       funil: "Agendamentos",
       usar_recomendado: true,
-      regras: [{ etapa: "Avaliação agendada", evento: "agendou", canal: "whatsapp", valor: "valor_fixo", valor_fixo_centavos: 15000 }],
+      regras: [{ etapa: "Avaliação agendada", evento: "LeadSubmitted" }],
     },
     operacao: "implantar_configuracao",
     handler: async (ctx, args) => {
@@ -189,7 +176,7 @@ export const FERRAMENTAS_DE_CONVERSOES: readonly FerramentaDePlataforma[] = [
     name: "plataforma_ligar_conversoes",
     description:
       "LIGA ou desliga as regras de conversão por etapa de um funil, na Meta ou no Google Ads. Ligada, a regra faz o sistema ENVIAR À PLATAFORMA DE ANÚNCIO um evento com dado do cliente final " +
-      "(o clique do anúncio ou o identificador do lead, o telefone em forma embaralhada e, quando configurado, um valor) toda vez que um negócio entrar na etapa. " +
+      "(o clique do anúncio ou o identificador do lead e o telefone em forma embaralhada) toda vez que um negócio entrar na etapa. " +
       "Sem `etapas`, vale para todas as etapas do funil que já têm regra; com `etapas`, só para as citadas. Etapa sem regra é recusada: crie antes com plataforma_garantir_conversoes_da_meta ou _do_google. " +
       "Ligar NÃO envia o passado: vale para os negócios que entrarem nas etapas a partir dali. Chamar de novo com o mesmo pedido responde `ja_estava`. " +
       "ANTES DE LIGAR: confira as regras em plataforma_ver_conversoes e confirme com o humano, porque é dado de cliente saindo para a conta de anúncios. " +
@@ -220,7 +207,7 @@ export const FERRAMENTAS_DE_CONVERSOES: readonly FerramentaDePlataforma[] = [
     description:
       "LIGA ou desliga a volta dos LEADS DE FORMULÁRIO para a Meta. O sistema recebe os leads dos formulários da Meta (anúncio de cadastro) e guarda o identificador de cada um; " +
       "desligada (o padrão), a Meta nunca fica sabendo o que aconteceu com eles. Ligada, os eventos de etapa com regra ligada e a venda também são enviados à Meta para o lead que veio de formulário, " +
-      "pelo identificador do lead, mesmo sem clique em anúncio de WhatsApp. Saem o identificador do lead, o evento, o valor e o telefone e o e-mail em forma embaralhada. " +
+      "pelo identificador do lead, mesmo sem clique em anúncio de WhatsApp. Saem o identificador do lead, o evento, o valor da venda e o telefone e o e-mail em forma embaralhada. " +
       "Ligar NÃO envia o passado: vale para o que acontecer a partir dali. Chamar de novo com o mesmo pedido responde `ja_estava`. " +
       "ANTES DE LIGAR: confirme com o humano que a política de privacidade do cliente cobre esse uso, porque é dado de cliente saindo para a conta de anúncios. " +
       "Só tem efeito com a conexão da Meta preenchida e ligada (pela tela) e com regras de etapa ligadas (plataforma_ligar_conversoes); a venda vai mesmo sem regra de etapa. " +

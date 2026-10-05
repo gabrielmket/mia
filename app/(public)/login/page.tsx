@@ -3,7 +3,6 @@ import { Suspense } from "react";
 
 import { EntrarComGoogleSeLigado } from "@/components/auth/EntrarComGoogleSeLigado";
 import { LoginForm } from "@/components/auth/LoginForm";
-import { branding } from "@/lib/branding";
 import { fachadaMostraAMarca } from "@/lib/branding/fachada";
 import { marcaDaSaida } from "@/lib/branding/saida";
 import { createClient } from "@/lib/supabase/server";
@@ -34,13 +33,16 @@ export default async function LoginPage({
   // (`app/(public)/layout.tsx`) desenha logo acima. Fica só quando a casca não
   // mostra marca nenhuma (nome próprio sem logo) — `lib/branding/fachada.ts`.
   // `marcaDaSaida` nunca lança e a leitura da instalação é memoizada.
-  const nomeDaMarcaNoTopo = !fachadaMostraAMarca(await marcaDaSaida(null));
+  // A instalação (upstream 1.71) passou a pôr o nome da marca sob o "Entrar";
+  // a regra do fork continua: só quando a casca não mostra marca nenhuma.
+  const marca = await marcaDaSaida(null);
+  const nomeDaMarcaNoTopo = !fachadaMostraAMarca(marca);
 
   return (
     <div className="space-y-6">
       <div className="space-y-1.5 text-center">
         <h1 className="text-2xl font-semibold tracking-tight">{t("Entrar")}</h1>
-        {nomeDaMarcaNoTopo && <p className="text-sm text-muted-foreground">{branding().name}</p>}
+        {nomeDaMarcaNoTopo && <p className="text-sm text-muted-foreground">{marca.nome}</p>}
       </div>
       {reset === "success" && (
         <div
@@ -163,10 +165,7 @@ export default async function LoginPage({
         </p>
         <p className="text-muted-foreground">
           {t("Não tem conta?")}{" "}
-          <Link
-            href="/signup"
-            className="font-medium text-foreground underline underline-offset-4"
-          >
+          <Link href="/signup" className="font-medium text-foreground underline underline-offset-4">
             {t("Criar conta")}
           </Link>
         </p>

@@ -32,13 +32,18 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * durante toda a vida dele e recebeu 422 "Nenhum campo para alterar." — uma
  * recusa que não nomeia o que foi descartado. Quem vigia a travessia hoje é
  * `tests/unit/agenda-reativar-tipo.test.ts`.
+ *
+ * Auth: sessão de navegador OU Bearer `dsk_...` (api_tokens) via
+ * `lib/api/auth-dual.ts` — a mesma dualidade das demais rotas de configuração
+ * que aceitam token. No ramo do token, a org sai da linha do token.
  */
+import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 import { z } from "zod";
 
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listaTiposDeAtendimento } from "@/lib/agenda/consulta";
 import { alterarSchema, criarSchema, slugDe } from "@/lib/agenda/tipos-de-agendamento";
@@ -52,9 +57,14 @@ export const dynamic = "force-dynamic";
 const desativarSchema = z.object({ id: z.string().uuid() });
 
 export async function GET(req: NextRequest): Promise<Response> {
-  const requestId = req.headers.get("x-request-id") ?? undefined;
-  const autorizado = await requireRole("viewer", { requestId, resource: "calendar_event_types" });
-  if (!autorizado.ok) return autorizado.response;
+  const requestId = req.headers.get("x-request-id") ?? randomUUID();
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "calendar_event_types",
+    role: "viewer",
+    scope: "mcp:read",
+  });
+  if (!authz.ok) return authz.response;
 
   // A MESMA coleta que a ferramenta MCP usa. Esta query era inline aqui, e havia
   // outras três iguais no repo — a tela e a IA respondendo por recortes
@@ -62,7 +72,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   //
   // `incluirInativos: true` porque quem chama esta rota administra o cadastro:
   // esconder o tipo desativado tiraria dele a única porta para reativá-lo.
-  const r = await listaTiposDeAtendimento(createAdminClient(), autorizado.org.orgId, {
+  const r = await listaTiposDeAtendimento(createAdminClient(), authz.organizationId, {
     incluirInativos: true,
   });
   if (!r.ok) return fail("internal_error", r.motivoParaOperador, 500, { requestId });
@@ -104,10 +114,18 @@ export async function POST(req: NextRequest): Promise<Response> {
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
 
-  const requestId = req.headers.get("x-request-id") ?? undefined;
-  const autorizado = await requireRole("manager", { requestId, resource: "calendar_event_types" });
-  if (!autorizado.ok) return autorizado.response;
-  const t = (texto: string) => traduzir(texto, autorizado.user.idioma);
+  const requestId = req.headers.get("x-request-id") ?? randomUUID();
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "calendar_event_types",
+    role: "manager",
+    scope: "mcp:write",
+  });
+  if (!authz.ok) return authz.response;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? "pt-BR");
+
+  const teto = await tetoDeEscritaDoToken(authz, "agenda_tipos", requestId ?? "");
+  if (teto) return teto;
 
   // FORK MIA (9015): "Microsoft Teams" é um "Link de vídeo" marcado como Teams
   // (o CHECK do local é do upstream). Ver lib/agenda-mia/tipos-com-teams.ts.
@@ -124,7 +142,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("calendar_event_types")
-    .insert({ ...lido.data, organization_id: autorizado.org.orgId, slug: slugDe(lido.data.name) })
+    .insert({ ...lido.data, organization_id: authz.organizationId, slug: slugDe(lido.data.name) })
     .select("id, slug")
     .single();
 
@@ -135,12 +153,13 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
     return fail("internal_error", error.message, 500, { requestId });
   }
-  if (teams) await marcarTipoComoTeams(admin, autorizado.org.orgId, data.id);
+  if (teams) await marcarTipoComoTeams(admin, authz.organizationId, data.id);
 
   await audit({
-    actorUserId: autorizado.user.id,
+    actorUserId: authz.actor.type === "user" ? authz.actor.id : null,
+    actorApiTokenId: authz.apiTokenId ?? null,
     action: "agenda.tipo_criado",
-    organizationId: autorizado.org.orgId,
+    organizationId: authz.organizationId,
     resourceType: "calendar_event_types",
     resourceId: data.id,
     metadata: { nome: lido.data.name, categoria: lido.data.category, duracao: lido.data.duration_minutes },
@@ -152,10 +171,18 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
 
-  const requestId = req.headers.get("x-request-id") ?? undefined;
-  const autorizado = await requireRole("manager", { requestId, resource: "calendar_event_types" });
-  if (!autorizado.ok) return autorizado.response;
-  const t = (texto: string) => traduzir(texto, autorizado.user.idioma);
+  const requestId = req.headers.get("x-request-id") ?? randomUUID();
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "calendar_event_types",
+    role: "manager",
+    scope: "mcp:write",
+  });
+  if (!authz.ok) return authz.response;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? "pt-BR");
+
+  const teto = await tetoDeEscritaDoToken(authz, "agenda_tipos", requestId ?? "");
+  if (teto) return teto;
 
   const lido = alterarSchema.safeParse(await req.json().catch(() => ({})));
   if (!lido.success) {
@@ -178,7 +205,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     .from("calendar_event_types")
     .update(campos)
     .eq("id", id)
-    .eq("organization_id", autorizado.org.orgId)
+    .eq("organization_id", authz.organizationId)
     .select("id")
     .maybeSingle();
 
@@ -186,9 +213,10 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   if (!data) return fail("not_found", t("Tipo de agendamento não encontrado."), 404, { requestId });
 
   await audit({
-    actorUserId: autorizado.user.id,
+    actorUserId: authz.actor.type === "user" ? authz.actor.id : null,
+    actorApiTokenId: authz.apiTokenId ?? null,
     action: "agenda.tipo_alterado",
-    organizationId: autorizado.org.orgId,
+    organizationId: authz.organizationId,
     resourceType: "calendar_event_types",
     resourceId: id,
     metadata: { campos: Object.keys(campos) },
@@ -200,10 +228,18 @@ export async function DELETE(req: NextRequest): Promise<Response> {
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
 
-  const requestId = req.headers.get("x-request-id") ?? undefined;
-  const autorizado = await requireRole("manager", { requestId, resource: "calendar_event_types" });
-  if (!autorizado.ok) return autorizado.response;
-  const t = (texto: string) => traduzir(texto, autorizado.user.idioma);
+  const requestId = req.headers.get("x-request-id") ?? randomUUID();
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "calendar_event_types",
+    role: "manager",
+    scope: "mcp:write",
+  });
+  if (!authz.ok) return authz.response;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? "pt-BR");
+
+  const teto = await tetoDeEscritaDoToken(authz, "agenda_tipos", requestId ?? "");
+  if (teto) return teto;
 
   const lido = desativarSchema.safeParse(await req.json().catch(() => ({})));
   if (!lido.success) return fail("validation_failed", t("corpo inválido"), 422, { requestId });
@@ -213,7 +249,7 @@ export async function DELETE(req: NextRequest): Promise<Response> {
     .from("calendar_event_types")
     .update({ is_active: false })
     .eq("id", lido.data.id)
-    .eq("organization_id", autorizado.org.orgId)
+    .eq("organization_id", authz.organizationId)
     .select("id")
     .maybeSingle();
 
@@ -221,9 +257,10 @@ export async function DELETE(req: NextRequest): Promise<Response> {
   if (!data) return fail("not_found", t("Tipo de agendamento não encontrado."), 404, { requestId });
 
   await audit({
-    actorUserId: autorizado.user.id,
+    actorUserId: authz.actor.type === "user" ? authz.actor.id : null,
+    actorApiTokenId: authz.apiTokenId ?? null,
     action: "agenda.tipo_desativado",
-    organizationId: autorizado.org.orgId,
+    organizationId: authz.organizationId,
     resourceType: "calendar_event_types",
     resourceId: lido.data.id,
     metadata: {},

@@ -131,7 +131,7 @@ export function DiagnosticoDaMetaNaTela({ idioma }: { idioma: Idioma }) {
                     </ul>
                     <a
                       className="text-xs underline underline-offset-2"
-                      href="?aba=historico&plataforma=meta_ads&situacao=recusado&periodo=7d"
+                      href="?aba=historico&plataforma=meta_ads&situacao=falha&periodo=7d"
                     >
                       {t("Ver no histórico")}
                     </a>

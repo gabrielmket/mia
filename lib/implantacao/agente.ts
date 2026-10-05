@@ -591,6 +591,9 @@ async function inserirVersao(
         history_token_window: v.history_token_window,
         handoff_keywords: v.handoff_keywords,
         handoff_tool_enabled: v.handoff_tool_enabled,
+        // Upstream 1.70 (#2013): a rota passou a gravar a chave do rascunho de
+        // proposta pela IA na versão nova; o espelho grava junto.
+        proposal_ai_draft_enabled: v.proposal_ai_draft_enabled,
         cases_enabled: v.cases_enabled,
         split_messages: v.split_messages,
         split_max_chars: v.split_max_chars,

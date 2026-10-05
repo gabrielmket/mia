@@ -6,7 +6,8 @@
  *
  *   a conexão        credencial da conta de anúncios do cliente: só uma pessoa
  *                    preenche, pela tela (`so_pela_tela`)
- *   as regras        o que cada etapa informa à Meta e ao Google: o agente
+ *   as regras        o que cada etapa informa à Meta e ao Google (as réguas são
+ *                    do upstream, 0436 e 0524): o agente
  *                    implantador monta (`plataforma_garantir_conversoes_da_meta`
  *                    e `_do_google`) e liga (`plataforma_ligar_conversoes`)
  *   os formulários   a chave "leads de formulário voltam para a Meta"
@@ -20,7 +21,7 @@
  */
 import { listarRegrasGoogle } from "@/lib/conversoes/regras-google";
 import { lerChaveDeFormulario } from "@/lib/conversoes-meta/config";
-import { listarRegrasDaMeta } from "@/lib/conversoes-meta/regras";
+import { listarRegrasMeta } from "@/lib/conversoes/regras-meta";
 
 import type { AreaDoChecklist } from "./tipos";
 
@@ -30,14 +31,14 @@ export const conversoes: AreaDoChecklist = {
   avaliar: async ({ admin }, org) => {
     const [conexoes, regrasMeta, regrasGoogle, chave] = await Promise.all([
       admin.from("ad_platform_connections").select("platform, enabled").eq("organization_id", org.id),
-      listarRegrasDaMeta(admin, org.id),
+      listarRegrasMeta(admin, org.id),
       listarRegrasGoogle(admin, org.id),
       lerChaveDeFormulario(admin, org.id),
     ]);
     if (conexoes.error) throw new Error(conexoes.error.message);
 
     const ligadas = ((conexoes.data ?? []) as Array<{ platform: string; enabled: boolean }>).filter((x) => x.enabled);
-    const metaLigadas = regrasMeta.filter((r) => r.ligada).length;
+    const metaLigadas = regrasMeta.filter((r) => r.enabled).length;
     const googleLigadas = regrasGoogle.filter((r) => r.enabled).length;
 
     const pronto: string[] = [];

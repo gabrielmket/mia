@@ -43,11 +43,22 @@ export function podeVerCusto(user: Pick<AuthUser, "is_platform_admin" | "support
  * Quem continua vendo é o admin de plataforma — e é ele quem instala num
  * self-host, então o caminho de quem roda por conta própria não se perde.
  * `support` fica de fora pela mesma razão do custo: acompanhar não é operar.
+ *
+ * Escolher a chave é ESCREVER. Desde a 1.70 do upstream, "o admin de plataforma
+ * pode escrever?" é UMA função (`escreveComoPlatformAdmin`, lib/auth/types.ts),
+ * e o `support_readonly` não escreve: ele lê o painel e não escolhe a IA de
+ * ninguém. Aqui a recusa é pelo scope de leitura, e não pela exigência de
+ * `full`, porque o scope ausente é o `full` (o default da coluna
+ * `platform_admins.scope`), e quem chama nem sempre o carrega.
  */
 export function podeConfigurarChaveDeIa(
-  user: Pick<AuthUser, "is_platform_admin" | "support">,
+  user: Pick<AuthUser, "is_platform_admin" | "platform_admin_scope" | "support">,
 ): boolean {
-  return user.is_platform_admin === true && !user.support;
+  return (
+    user.is_platform_admin === true &&
+    !user.support &&
+    user.platform_admin_scope !== "support_readonly"
+  );
 }
 
 /**

@@ -1,35 +1,37 @@
 /**
- * FORK MIA — o transporte dos EVENTOS DO FUNIL para a Meta: os eventos de etapa
- * e a venda do lead que veio de formulário.
+ * FORK MIA — o transporte dos eventos do LEAD DE FORMULÁRIO da Meta: os eventos
+ * de etapa e a venda, pela API de conversões para CRM.
+ *
+ * ── O que mudou na .72 ──────────────────────────────────────────────────────
+ *
+ * Até a .71 este arquivo levava também os eventos de etapa de quem veio de
+ * clique em anúncio para o WhatsApp. A 1.70 do upstream passou a fazer isso no
+ * transporte dele (`conversions.ts`, `eventoNaPlataforma`, migration 0524), e
+ * esse caminho é o principal: aqui sobrou só a porta que o upstream não tem, a
+ * do lead de formulário (docs/fork/conversoes-da-meta.md).
  *
  * ── Por que ao lado de `conversions.ts`, e não dentro ───────────────────────
  *
- * `conversions.ts` é do upstream e só sabe mandar a COMPRA de quem veio de
- * clique em anúncio para o WhatsApp ("Este transporte aceita apenas compras com
- * valor"). Abrir aquele `enviar` para mais eventos e mais uma identidade seria
- * reescrever o miolo dele, e a próxima mudança do upstream no arquivo viraria
- * conflito (docs/FORK-MIA.md, regra 1). Este arquivo mora ao lado, na MESMA
- * fronteira (`lib/plataformas-de-anuncio/`, a única que pode escrever o formato
- * do fio), e reusa dele o que é regra da plataforma e não pode divergir: o hash,
- * o teto de 7 dias e a classificação do 4xx (`INTERNOS`).
+ * `conversions.ts` é do upstream. Abrir aquele `enviar` para mais uma
+ * identidade seria reescrever o miolo dele, e a próxima mudança do upstream no
+ * arquivo viraria conflito (docs/FORK-MIA.md, regra 1). Este arquivo mora ao
+ * lado, na MESMA fronteira (`lib/plataformas-de-anuncio/`, a única que pode
+ * escrever o formato do fio), e reusa dele o que é regra da plataforma e não
+ * pode divergir: o hash, o teto de 7 dias e a classificação do 4xx (`INTERNOS`).
  *
- * ── As duas portas da Meta, conferidas na documentação em 01/10/2026 ────────
+ * ── A porta, conferida na documentação em 01/10/2026 ───────────────────────
  *
- * 1. CLIQUE EM ANÚNCIO PARA O WHATSAPP → API de conversões para mensagens de
- *    negócio. `action_source: business_messaging`, `messaging_channel:
- *    whatsapp`, identidade pelo `ctwa_clid` (o telefone com hash só reforça).
- *    A lista de eventos dessa porta é fechada (ver `lib/conversoes-meta/eventos.ts`).
- *    Só a compra exige valor e moeda; evento de etapa pode ir sem `custom_data`.
+ * LEAD DE FORMULÁRIO → API de conversões para CRM. `action_source:
+ * system_generated`, `custom_data.event_source: crm`,
+ * `custom_data.lead_event_source: <nome do CRM>`, identidade pelo `lead_id`
+ * (o `leadgen_id` do formulário, 15 a 17 dígitos, SEM hash). O nome do evento
+ * é texto livre ("a etapa do CRM"); a casa manda os nomes padrão da régua do
+ * upstream (`LeadSubmitted`, `QualifiedLead`…) e `Purchase`.
  *
- * 2. LEAD DE FORMULÁRIO → API de conversões para CRM. `action_source:
- *    system_generated`, `custom_data.event_source: crm`,
- *    `custom_data.lead_event_source: <nome do CRM>`, identidade pelo `lead_id`
- *    (o `leadgen_id` do formulário, 15 a 17 dígitos, SEM hash). O nome do evento
- *    é texto livre: a etapa do CRM.
- *
- * Nas duas: `event_time` em SEGUNDOS, no máximo 7 dias atrás (mais velho que
- * isso a Meta recusa a requisição inteira); `event_id` estável para a
- * deduplicação; `test_event_code` no corpo marca o envio como teste.
+ * `event_time` em SEGUNDOS, no máximo 7 dias atrás (mais velho que isso a Meta
+ * recusa a requisição inteira); `event_id` estável para a deduplicação (o
+ * mesmo formato do upstream, `<leadId>:<evento no livro>`); `test_event_code`
+ * no corpo marca o envio como teste.
  *
  * ── O `lead_id` vai como TEXTO ──────────────────────────────────────────────
  *
@@ -44,14 +46,15 @@ import type { CredencialDeConversao, ResultadoDeEnvio } from "../types";
 
 const TEMPO_LIMITE_MS = 10_000;
 
-/** Como a Meta reconhece de quem é o evento. */
-export type IdentidadeNaMeta =
-  | { tipo: "clique_no_whatsapp"; clique: string }
-  | { tipo: "lead_de_formulario"; idDoLead: string };
+/** Como a Meta reconhece de quem é o evento: o lead do formulário. */
+export interface IdentidadeNaMeta {
+  tipo: "lead_de_formulario";
+  idDoLead: string;
+}
 
 export interface EventoDoFunilParaAMeta {
   leadId: string;
-  /** O `event_name`: vem de `lib/conversoes-meta/eventos.ts`, nunca escrito à mão. */
+  /** O `event_name`: o evento padrão da regra do upstream, ou `Purchase`. */
   nomeTecnico: string;
   /** Deduplicação, determinística: `<leadId>:<evento no livro-razão>`. */
   eventoId: string;
@@ -96,16 +99,10 @@ export function corpoDoEvento(
     event_id: evento.eventoId,
   };
 
-  if (evento.identidade.tipo === "clique_no_whatsapp") {
-    userData.ctwa_clid = evento.identidade.clique;
-    item.action_source = "business_messaging";
-    item.messaging_channel = "whatsapp";
-  } else {
-    userData.lead_id = evento.identidade.idDoLead;
-    item.action_source = "system_generated";
-    customData.event_source = "crm";
-    customData.lead_event_source = evento.nomeDoCrm;
-  }
+  userData.lead_id = evento.identidade.idDoLead;
+  item.action_source = "system_generated";
+  customData.event_source = "crm";
+  customData.lead_event_source = evento.nomeDoCrm;
 
   item.user_data = userData;
   if (Object.keys(customData).length > 0) item.custom_data = customData;
@@ -134,7 +131,7 @@ export async function enviarEventoDoFunil(
         `Aconteceu em ${evento.ocorridoEm.toISOString()} e não pode mais ser informado.`,
     };
   }
-  if (evento.identidade.tipo === "lead_de_formulario" && !ehIdDeLeadDaMeta(evento.identidade.idDoLead)) {
+  if (!ehIdDeLeadDaMeta(evento.identidade.idDoLead)) {
     return { tipo: "permanente", detalhe: "o identificador do lead do formulário não tem o formato da plataforma." };
   }
 

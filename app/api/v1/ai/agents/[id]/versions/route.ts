@@ -6,20 +6,23 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * Spec 10 §4.4. Calcula próximo version_number = max(version_number)+1 com
  * unique constraint cobrindo a corrida; em caso de 23505, tenta novamente uma
  * vez.
+ *
+ * Auth: sessão de navegador OU Bearer `dsk_...` (api_tokens), resolvidos por
+ * `lib/api/auth-dual.ts` — a org sai do JWT (sessão) ou da linha do token.
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { requireRole } from "@/lib/auth/require-role";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
 import { versionCreateSchema } from "@/lib/ai/agents/validation";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { travarIaDaVersaoNova } from "@/lib/ai/trava-da-ia";
+import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
 
 export const dynamic = "force-dynamic";
 
@@ -45,20 +48,24 @@ async function assertAgentInOrg(
   return { ok: true, kind: (data as { kind: string }).kind };
 }
 
-export async function GET(_req: NextRequest, ctx: Ctx): Promise<Response> {
+export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
   const requestId = randomUUID();
   const { id } = await ctx.params;
   if (!UUID_RX.test(id)) return fail("invalid_request", "id inválido.", 400, { requestId });
 
-  const authz = await requireRole("manager", { requestId, resource: "ai_agents" });
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "ai_agents",
+    role: "manager",
+    scope: "mcp:read",
+  });
   if (!authz.ok) return authz.response;
-  const { org: activeOrg } = authz;
+  const { organizationId, supabase } = authz;
 
-  const supabase = await createClient();
   const { data, error } = await supabase
     .from("ai_agent_versions")
     .select(VERSION_COLUMNS)
-    .eq("organization_id", activeOrg.orgId)
+    .eq("organization_id", organizationId)
     .eq("agent_id", id)
     .order("version_number", { ascending: false });
 
@@ -74,10 +81,20 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
   const { id } = await ctx.params;
   if (!UUID_RX.test(id)) return fail("invalid_request", "id inválido.", 400, { requestId });
 
-  const authz = await requireRole("admin", { requestId, resource: "ai_agents" });
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "ai_agents",
+    role: "admin",
+    scope: "mcp:write",
+  });
   if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const { user: authUser, org: activeOrg } = authz;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? "pt-BR");
+  const { organizationId, actor, apiTokenId } = authz;
+
+  const teto = await tetoDeEscritaDoToken(authz, "ai_agents", requestId);
+  if (teto) return teto;
+
+  const authUserId = actor.type === "user" ? actor.id : null;
 
   let raw: unknown;
   try {
@@ -93,7 +110,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
       details: parsed.error.flatten(),
     });
   }
-  const agentCheck = await assertAgentInOrg(id, activeOrg.orgId);
+  const agentCheck = await assertAgentInOrg(id, organizationId);
   if (!agentCheck.ok) {
     return fail("not_found", t("Agent não encontrado."), 404, { requestId });
   }
@@ -103,9 +120,10 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
   // FORK MIA: a versão nova de quem não escolhe IA herda a IA atual do agente,
   // venha o que vier no corpo (lib/ai/trava-da-ia.ts). Antes da conferência da
   // chave da instalação logo abaixo, para ela medir a IA que vai ser gravada.
+  // O token da API nunca escolhe IA (lib/ai/trava-da-ia-na-rota.ts).
   const travada = await travarIaDaVersaoNova(
     admin,
-    { user: authUser, orgId: activeOrg.orgId, agenteDeReferencia: id },
+    { user: await quemPedeNaRota(authz), orgId: organizationId, agenteDeReferencia: id },
     parsed.data,
   );
   if (!travada.ok) return fail(travada.erro, travada.mensagem, 422, { requestId });
@@ -117,7 +135,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
       .from("ai_agent_versions")
       .select("version_number")
       .eq("agent_id", id)
-      .eq("organization_id", activeOrg.orgId)
+      .eq("organization_id", organizationId)
       .order("version_number", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -140,7 +158,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     // conferência, um id de outra organização (ou de um material apagado) entra
     // no array, a versão é publicada, e o assistente não acha nada — sem erro,
     // com a tela mostrando a marcação como se estivesse valendo.
-    const escopo = await validarEscopoDaVersao(admin, activeOrg.orgId, {
+    const escopo = await validarEscopoDaVersao(admin, organizationId, {
       pipeline_ids: v.pipeline_ids,
       knowledge_source_ids: v.knowledge_source_ids,
     });
@@ -153,7 +171,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     const { data, error } = await admin
       .from("ai_agent_versions")
       .insert({
-        organization_id: activeOrg.orgId,
+        organization_id: organizationId,
         agent_id: id,
         version_number: nextNumber,
         system_prompt: v.system_prompt,
@@ -170,6 +188,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
         history_token_window: v.history_token_window,
         handoff_keywords: v.handoff_keywords,
         handoff_tool_enabled: v.handoff_tool_enabled,
+        proposal_ai_draft_enabled: v.proposal_ai_draft_enabled,
         cases_enabled: v.cases_enabled,
         split_messages: v.split_messages,
         split_max_chars: v.split_max_chars,
@@ -184,7 +203,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
         pipeline_ids: v.pipeline_ids,
         knowledge_source_ids: v.knowledge_source_ids,
         status: "draft",
-        created_by: authUser.id,
+        created_by: authUserId,
       })
       .select(VERSION_COLUMNS)
       .single();
@@ -192,8 +211,9 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     if (!error && data) {
       void audit({
         action: "ai_agent.version_created",
-        actorUserId: authUser.id,
-        organizationId: activeOrg.orgId,
+        actorUserId: authUserId,
+        actorApiTokenId: apiTokenId ?? null,
+        organizationId,
         resourceType: "ai_agent_version",
         resourceId: data.id,
         requestId,

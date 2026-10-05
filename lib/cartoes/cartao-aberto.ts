@@ -43,7 +43,7 @@ export interface ConversaoDoNegocio {
   situacao: "enviada" | "aguardando" | "nao_enviada" | "falha";
   motivo: string | null;
   quando: string | null;
-  /** O nome que a pessoa reconhece: "Compra", "Lead qualificado", "Agendou", "Etapa: Visita agendada". */
+  /** O nome que a pessoa reconhece: "Compra", "Lead qualificado", "Lead enviado", "Etapa: Visita agendada". */
   rotulo: string;
   /** O valor que o evento levou, em centavos. Nulo quando saiu (ou sairia) sem valor. */
   valorCentavos: number | null;
@@ -54,7 +54,8 @@ export interface ConversaoDoNegocio {
 
 /** De onde o negócio veio em cada plataforma de anúncio: é o que explica a plataforma sem envio nenhum. */
 export interface OrigemPorPlataforma {
-  meta_ads: "clique" | "formulario" | null;
+  /** `pagina`: chegou pelo site com UTM da Meta (upstream 1.70, #2076). */
+  meta_ads: "clique" | "pagina" | "formulario" | null;
   google_ads: "clique" | null;
 }
 
@@ -71,7 +72,7 @@ export interface OrigemDoCartaoAberto {
   conversoes: ConversaoDoNegocio[];
   /** Por que não há conversão: o negócio não veio de clique em anúncio. */
   semClique: boolean;
-  /** Por plataforma: veio de clique, de formulário (só a Meta) ou não veio dela. */
+  /** Por plataforma: veio de clique, da página ou de formulário (só a Meta), ou não veio dela. */
   origemPorPlataforma: OrigemPorPlataforma;
 }
 

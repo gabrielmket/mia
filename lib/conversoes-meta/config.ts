@@ -2,9 +2,11 @@
  * FORK MIA — a chave "leads de formulário da Meta voltam para a Meta"
  * (`mia_conversoes_meta_config`, migration 9017).
  *
- * Ligada, os eventos de etapa com regra e a venda também são informados para o
- * lead que veio de formulário da Meta, pelo id do lead guardado na origem do
- * negócio, mesmo sem clique em anúncio de WhatsApp.
+ * Ligada, os eventos de etapa com regra ligada (as regras são as do upstream,
+ * `meta_ads_conversion_rules`, migration 0524) e a venda também são informados
+ * para o lead que veio de formulário da Meta, pelo id do lead guardado na origem
+ * do negócio, mesmo sem clique em anúncio de WhatsApp. Quem envia é o consumidor
+ * `formulario.handler.ts`, ao lado dos do upstream.
  *
  * ⚠️ AUSENTE É DESLIGADA, e é a decisão: toda empresa que existe hoje chega aqui
  * sem linha, e o id do lead e o telefone do cliente só saem para a Meta quando
@@ -17,7 +19,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
 
-import type { QuemSalva } from "./regras";
+/** Quem grava, para a trilha de auditoria. */
+export interface QuemSalva {
+  organizationId: string;
+  /** A pessoa responsável: quem clicou na tela, ou quem criou o token do MCP. */
+  autorUserId: string;
+  requestId?: string;
+  ip?: string;
+  userAgent?: string;
+  /** Por onde a gravação veio. */
+  via: "tela" | "mcp_plataforma";
+}
 
 export interface ChaveDeFormulario {
   ligada: boolean;

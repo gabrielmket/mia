@@ -50,7 +50,7 @@ export interface IaDaVersao {
   operator_model: string | null;
 }
 
-type QuemPede = Pick<AuthUser, "is_platform_admin" | "support">;
+type QuemPede = Pick<AuthUser, "is_platform_admin" | "platform_admin_scope" | "support">;
 
 /** A frase que volta para quem tentou trocar. Mesma da tela (AgentForm). */
 export const MENSAGEM_IA_DA_PLATAFORMA =

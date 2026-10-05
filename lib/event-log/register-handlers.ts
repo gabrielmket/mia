@@ -22,11 +22,14 @@ import { followupGatilhoCasoHandler } from "@/lib/followup/gatilho-caso.handler"
 import { casoNaCentralHandler } from "@/lib/escalacao/caso-na-central.handler";
 import { mediaPersistHandler } from "@/workers/media-persist-worker.handler";
 import { mediaDeriveHandler } from "@/workers/media-derive-worker.handler";
+import { CONSUMIDORES_DOS_CANAIS } from "@/lib/channels/consumidores";
 import { webPushInboundHandler } from "@/lib/notifications/push.handler";
 import { conversaoDeQualificacaoHandler } from "@/lib/conversoes/qualificacao.handler";
+import { conversaoDeEtapaMetaHandler } from "@/lib/conversoes/etapa-meta.handler";
 import { conversaoDeVendaHandler } from "@/lib/conversoes/envio.handler";
-// FORK MIA (9017): as conversões da Meta por etapa, ao lado das duas do upstream.
-import { conversaoDeEtapaDaMetaHandler } from "@/lib/conversoes-meta/etapa.handler";
+// FORK MIA: a volta dos leads de formulário da Meta, ao lado dos consumidores
+// de conversão do upstream (docs/fork/conversoes-da-meta.md).
+import { conversaoDoLeadDeFormularioHandler } from "@/lib/conversoes-meta/formulario.handler";
 import { avisoDeEtapaHandler } from "@/lib/leads/aviso-de-etapa.handler";
 import { avisoDeCasoAoSuporteHandler } from "@/lib/escalacao/aviso-ao-suporte.handler";
 import { avisoDePropostaNoWhatsAppHandler } from "@/lib/propostas/aviso-no-whatsapp.handler";
@@ -67,6 +70,8 @@ export function ensureHandlersRegistered(): void {
   registerHandler(followupGatilhoPresencaHandler);
   registerHandler(mediaPersistHandler);
   registerHandler(mediaDeriveHandler);
+  // Os consumidores dos canais (ex.: o pino que entrou sem coordenadas).
+  for (const consumidor of CONSUMIDORES_DOS_CANAIS) registerHandler(consumidor);
   registerHandler(webPushInboundHandler);
   // Penúltimo, pelo MESMO critério do último: o aviso ao suporte sai por rede de
   // terceiro (o transporte de WhatsApp) e nunca pode atrasar quem escreve no
@@ -82,8 +87,12 @@ export function ensureHandlersRegistered(): void {
   // no banco. Falha dele nunca segura os handlers acima.
   registerHandler(conversaoDeVendaHandler);
   registerHandler(conversaoDeQualificacaoHandler);
-  // FORK MIA (9017): depois dos dois do upstream, pelo mesmo critério deles (sai
-  // por rede de terceiro). Escuta os mesmos eventos e não muda o que eles fazem.
-  registerHandler(conversaoDeEtapaDaMetaHandler);
+  registerHandler(conversaoDeEtapaMetaHandler);
+  // FORK MIA: depois dos três do upstream, pelo mesmo critério (sai por rede de
+  // terceiro). Só age no negócio SEM atribuição de anúncio que nasceu de um
+  // formulário da Meta, que os do upstream não informam: um envio por evento.
+  // O nosso consumidor de etapa da .70 (`conversoes.meta_etapa`) saiu daqui na
+  // .72, quando a régua da Meta do upstream (0524) virou a principal.
+  registerHandler(conversaoDoLeadDeFormularioHandler);
   _registered = true;
 }

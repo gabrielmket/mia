@@ -416,6 +416,15 @@ export const COMO_FECHA = {
       "A recuperação de um compromisso perdido exige alguém dizer o que fazer com o " +
       "cliente. Não há estado no banco que responda por essa escolha.",
   },
+  // Upstream 1.70 (#1987): a revisão das conversas que chegaram enquanto a
+  // empresa estava suspensa (`fn_reativar_organizacao`).
+  org_reativada: {
+    modo: "decisao",
+    porque:
+      "É a lista das conversas que receberam mensagem durante a suspensão e que a IA não " +
+      "respondeu. Cada uma pede que alguém da equipe a abra e decida; não há estado no banco " +
+      "que diga que a revisão foi feita.",
+  },
   other: {
     modo: "decisao",
     porque:

@@ -40,7 +40,7 @@ import {
   type SaudeDoItem,
   type VereditoDoDiagnostico,
 } from "./diagnostico-frases";
-import { rotuloDoEventoDaMetaNoLivro } from "./eventos";
+import { rotuloDoEnvioDaMeta } from "./rotulo";
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 
@@ -126,7 +126,7 @@ export async function diagnosticarConexaoDaMeta(
     lerCredencial(admin, organizationId, "meta_ads"),
     admin
       .from("ad_conversion_dispatches")
-      .select("lead_id, event_name, attempted_at, crm_leads(title)")
+      .select("lead_id, event_name, meta_event_name, attempted_at, crm_leads(title)")
       .eq("organization_id", organizationId)
       .eq("platform", "meta_ads")
       .eq("status", "sent")
@@ -156,6 +156,7 @@ export async function diagnosticarConexaoDaMeta(
   const ultimoEnvio = ultimo.data as {
     lead_id: string;
     event_name: string;
+    meta_event_name: string | null;
     attempted_at: string;
     crm_leads: { title: string | null } | Array<{ title: string | null }> | null;
   } | null;
@@ -187,7 +188,7 @@ export async function diagnosticarConexaoDaMeta(
       item("ultimo_envio", idadeDoUltimo > 14 * DIA_MS ? "ultimo_envio_antigo" : "ultimo_envio_aceito", null, {
         ultimo: {
           em: ultimoEnvio.attempted_at,
-          evento: rotuloDoEventoDaMetaNoLivro(ultimoEnvio.event_name) ?? ultimoEnvio.event_name,
+          evento: rotuloDoEnvioDaMeta(ultimoEnvio.event_name, ultimoEnvio.meta_event_name) ?? ultimoEnvio.event_name,
           negocio: negocio?.title ?? null,
           leadId: ultimoEnvio.lead_id,
         },

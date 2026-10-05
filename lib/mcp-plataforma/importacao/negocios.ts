@@ -875,7 +875,11 @@ export async function importarNegocios(
           },
           // A presença deste campo é o que CALA o `lead.created`.
           importacao_silenciosa: historia,
-        });
+        },
+        // Migrar uma base não é criar negócio novo: o histórico entra como era
+        // no CRM de origem, e a régua de campos obrigatórios da etapa (upstream
+        // 1.73, #2295) vale para quem mexe no negócio daqui para frente.
+        { exigirCamposDaEtapa: false });
       } catch (err) {
         const mensagem = err instanceof ApiError ? err.message || err.code : err instanceof Error ? err.message : "falha inesperada";
         coletor.recusar(

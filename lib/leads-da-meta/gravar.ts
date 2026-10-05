@@ -412,6 +412,10 @@ export async function gravarLeadDaMeta(
         source_metadata: { ...atribuicao, ...mapeado.source_metadata },
         external_id: externalIdDoLead(lead.leadgenId),
       },
+      // O lead do formulário da Meta é captação, como o webhook de entrada do
+      // upstream: entra na etapa configurada mesmo que ela exija um campo que o
+      // formulário não mandou (a isenção é a mesma da rota de captação, #2295).
+      { exigirCamposDaEtapa: false },
     );
   } catch (erro) {
     if (!(erro instanceof ApiError)) throw erro;

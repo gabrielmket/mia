@@ -15,6 +15,7 @@ import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import type { Lead } from "@/lib/types/leads";
 import { updateLeadSchema, type UpdateLeadInput } from "@/lib/schemas/leads";
 import { MOEDA_PADRAO, parseReaisToCents, simboloDaMoeda } from "@/lib/money";
+import { soChavesAlteradas } from "@/lib/leads/custom-fields-so-diff";
 import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 import { EcoDoValor } from "./EcoDoValor";
 
@@ -95,6 +96,12 @@ export function LeadFieldsForm({
   const origemForaDaLista =
     !!lead.originated_by_user_id &&
     !(membros ?? []).some((m) => m.user_id === lead.originated_by_user_id);
+  // A RÉGUA do diff (issue #2132): o valor carregado ao abrir. Só o que a
+  // pessoa mudar daqui vai viajar — devolver o objeto inteiro sobrescrevia o
+  // que outra pessoa (ou o MCP `crm_update_lead`) mudou com a ficha aberta.
+  const [camposCarregados, setCamposCarregados] = useState<Record<string, unknown>>(
+    lead.custom_fields ?? {},
+  );
 
   const form = useForm<FormShape>({
     defaultValues: {
@@ -128,6 +135,7 @@ export function LeadFieldsForm({
       expected_close_date: lead.expected_close_date ?? "",
     });
     setCustomFields(lead.custom_fields ?? {});
+    setCamposCarregados(lead.custom_fields ?? {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id]);
 
@@ -163,7 +171,10 @@ export function LeadFieldsForm({
       // Vazio volta a NULO: "não teve SDR" é resposta, e é a mais frequente
       // quando quem prospecta é quem fecha.
       originated_by_user_id: values.originated_by_user_id ? values.originated_by_user_id : null,
-      ...(fieldDefs.length > 0 ? { custom_fields: customFields } : {}),
+      // Só o que a pessoa alterou (issue #2132) — o merge continua do servidor.
+      ...(fieldDefs.length > 0
+        ? { custom_fields: soChavesAlteradas(camposCarregados, customFields) }
+        : {}),
     };
 
     const parsed = updateLeadSchema.safeParse(patch);
@@ -178,6 +189,9 @@ export function LeadFieldsForm({
         leadId: lead.id,
         patch: parsed.data as UpdateLeadInput,
       });
+      // O que acabou de gravar vira a nova régua: o segundo salvamento não
+      // reenvia o primeiro, e uma limpeza alheia no intervalo não é atropelada.
+      setCamposCarregados({ ...customFields });
       toast.success(t("Lead atualizado"));
       onSaved?.();
     } catch {

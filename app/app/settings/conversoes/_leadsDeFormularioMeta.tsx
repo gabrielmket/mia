@@ -2,7 +2,8 @@
 
 /**
  * FORK MIA — a chave "leads de formulário da Meta voltam para a Meta"
- * (migration 9017). Salva no clique, como a chave vizinha da venda pelo canal:
+ * (migration 9017). Os eventos de etapa seguem a régua do upstream (0524), o
+ * quadro "O que cada etapa do funil informa à Meta" logo acima. Salva no clique, como a chave vizinha da venda pelo canal:
  * é uma chave só, sem formulário em volta.
  *
  * Desligada por padrão. Ligar não envia o passado: só o que acontecer depois.
@@ -69,12 +70,12 @@ export function LeadsDeFormularioDaMeta({
           <Label htmlFor="meta_leads_de_formulario">{t("Leads de formulário da Meta voltam para a Meta")}</Label>
           <p className="max-w-2xl text-xs text-muted-foreground">
             {t(
-              "O sistema recebe os leads dos formulários da Meta e guarda o identificador de cada um, mas a Meta não fica sabendo quais viraram venda. Ligada, cada etapa com regra e a venda também são informadas para o lead que veio de formulário, mesmo sem clique em anúncio de WhatsApp.",
+              "O sistema recebe os leads dos formulários da Meta e guarda o identificador de cada um, mas a Meta não fica sabendo quais viraram venda. Ligada, cada etapa com regra ligada no quadro acima e a venda também são informadas para o lead que veio de formulário, mesmo sem clique em anúncio de WhatsApp.",
             )}
           </p>
           <p className="max-w-2xl text-xs text-muted-foreground">
             {t(
-              "Saem para a Meta o identificador do lead, o evento, o valor e o telefone e o e-mail do contato em forma embaralhada. Vem desligada: ligue só se a sua política de privacidade cobre esse uso. Ligar não envia o passado.",
+              "Saem para a Meta o identificador do lead, o evento, o valor da venda e o telefone e o e-mail do contato em forma embaralhada. Vem desligada: ligue só se a sua política de privacidade cobre esse uso. Ligar não envia o passado.",
             )}
           </p>
           <p className="text-xs font-medium" data-testid="leads-de-formulario-estado">

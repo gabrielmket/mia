@@ -28,7 +28,8 @@ import {
   type OrigemPorPlataforma,
   type PessoaDoNegocio,
 } from "@/lib/cartoes/cartao-aberto";
-import { rotuloDoEventoDaMetaNoLivro } from "@/lib/conversoes-meta/eventos";
+import { UTM_SOURCES_DA_META } from "@/lib/conversoes/leitura-da-atribuicao";
+import { rotuloDoEnvioDaMeta } from "@/lib/conversoes-meta/rotulo";
 
 type Db = SupabaseClient;
 
@@ -212,13 +213,14 @@ export async function montarCartaoAberto(
         ? seguro(
             admin
               .from("ad_conversion_dispatches")
-              .select("platform, event_name, status, reason, attempted_at, event_occurred_at, value_cents, currency, detail")
+              .select("platform, event_name, meta_event_name, status, reason, attempted_at, event_occurred_at, value_cents, currency, detail")
               .eq("organization_id", org)
               .eq("lead_id", leadId)
               .order("attempted_at", { ascending: false }),
             [] as Array<{
               platform: string;
               event_name: string;
+              meta_event_name: string | null;
               status: string;
               reason: string | null;
               attempted_at: string | null;
@@ -352,19 +354,25 @@ export async function montarCartaoAberto(
     null;
 
   const conversoesDoNegocio = conversoes.map((c) => {
-    const evento = c.event_name.startsWith("Etapa:")
-      ? `Etapa: ${nomeDaEtapa.get(c.event_name.slice("Etapa:".length)) ?? "—"}`
-      : c.event_name;
+    // As duas réguas por etapa são do upstream: `Etapa:<uuid>` (Google, 0436) e
+    // `MetaEtapa:<uuid>` (Meta, 0524). O nome da etapa vem do funil deste negócio.
+    const etapa = c.event_name.startsWith("MetaEtapa:")
+      ? c.event_name.slice("MetaEtapa:".length)
+      : c.event_name.startsWith("Etapa:")
+        ? c.event_name.slice("Etapa:".length)
+        : null;
+    const evento = etapa ? `Etapa: ${nomeDaEtapa.get(etapa) ?? "—"}` : c.event_name;
     return {
       plataforma: c.platform,
       evento,
       situacao: situacaoDaConversao(c.status, c.reason),
       motivo: c.reason,
       quando: c.status === "sent" ? (c.attempted_at ?? c.event_occurred_at) : c.attempted_at,
-      // O nome que a pessoa reconhece: os eventos da Meta (9017) e a compra têm
-      // rótulo próprio; a etapa do Google já vem com o nome da etapa.
+      // O nome que a pessoa reconhece: a compra e o evento de etapa da Meta (o
+      // retrato do que saiu, `meta_event_name`) têm rótulo próprio; a etapa do
+      // Google já vem com o nome da etapa.
       rotulo:
-        rotuloDoEventoDaMetaNoLivro(c.event_name) ??
+        rotuloDoEnvioDaMeta(c.event_name, c.meta_event_name) ??
         (c.event_name === "QualifiedLead" ? "Lead qualificado" : evento),
       valorCentavos: typeof c.value_cents === "number" && c.value_cents > 0 ? c.value_cents : null,
       moeda: c.currency ?? null,
@@ -378,13 +386,22 @@ export async function montarCartaoAberto(
     typeof metaDoContato.ad_source_id === "string" && metaDoContato.ad_source_id.trim() !== ""
       ? metaDoContato.ad_platform
       : null;
+  // A página com UTM da Meta (upstream 1.70, #2076): quem chegou pelo site
+  // vindo de anúncio da Meta também é informado à Meta, pelo telefone.
+  const pelaPaginaDaMeta =
+    plataformaDoClique === null &&
+    metaDoContato.ad_platform === "site" &&
+    typeof metaDoContato.utm_source === "string" &&
+    UTM_SOURCES_DA_META.has(metaDoContato.utm_source.trim().toLowerCase());
   const origemPorPlataforma: OrigemPorPlataforma = {
     meta_ads:
       plataformaDoClique === "meta_ads"
         ? "clique"
-        : typeof metaDoLead.meta_lead_id === "string" && metaDoLead.meta_lead_id.trim() !== ""
-          ? "formulario"
-          : null,
+        : pelaPaginaDaMeta
+          ? "pagina"
+          : typeof metaDoLead.meta_lead_id === "string" && metaDoLead.meta_lead_id.trim() !== ""
+            ? "formulario"
+            : null,
     google_ads: plataformaDoClique === "google_ads" ? "clique" : null,
   };
 

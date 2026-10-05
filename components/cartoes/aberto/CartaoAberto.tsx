@@ -324,7 +324,9 @@ export function CartaoAberto({
             </div>
           </div>
           <div className="min-w-0 lg:order-1">
-            <ConversaNoDossie conversa={lead.conversa} />
+            {/* Upstream 1.71 (#2207): sem conversa e com contato, vira o botão
+                "Abrir conversa" (a mesma rota da tabela de contatos). */}
+            <ConversaNoDossie conversa={lead.conversa} contactId={lead.contact_id} phone={lead.contact_phone} />
             {cartao.isLoading ? (
               <p className="py-3 text-xs text-text-muted">{t("Carregando…")}</p>
             ) : cartao.isError || !dados ? (

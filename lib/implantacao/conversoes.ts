@@ -4,8 +4,11 @@
  *
  * ── O caminho da tela que isto usa ────────────────────────────────────────
  *
- *   regras da Meta      `salvarRegrasDaMeta` (`lib/conversoes-meta/regras.ts`),
- *                       a MESMA função da ação da tela
+ *   regras da Meta      `gravarRegrasDeConversaoMeta`
+ *                       (`lib/conversoes/gravar-regras-meta.ts`), o miolo tirado
+ *                       da ação `salvarRegrasDeConversaoMeta` do upstream (0524):
+ *                       desde a .72 a régua da Meta é a DELE, na tabela dele
+ *                       (`meta_ads_conversion_rules`)
  *   regras do Google    `gravarRegrasDeConversaoGoogle`
  *                       (`lib/conversoes/gravar-regras-google.ts`), o miolo tirado
  *                       da ação `salvarRegrasDeConversaoGoogle`
@@ -29,8 +32,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
-import { lerEstadoDaConexao } from "@/lib/conversoes/estado-da-conexao";
+import { lerEstadoDaConexao, MOTIVO_LEGIVEL } from "@/lib/conversoes/estado-da-conexao";
 import { gravarRegrasDeConversaoGoogle, type RegraGoogleParaGravar } from "@/lib/conversoes/gravar-regras-google";
+import { gravarRegrasDeConversaoMeta, type RegraMetaParaGravar } from "@/lib/conversoes/gravar-regras-meta";
+import { situacaoDaLinha } from "@/lib/conversoes/historico";
 import {
   eventoDaEtapa,
   listarRegrasGoogle,
@@ -39,29 +44,19 @@ import {
   type CategoriaDeConversao,
   type RegraDeConversaoGoogle,
 } from "@/lib/conversoes/regras-google";
-import { definirChaveDeFormulario, lerChaveDeFormulario } from "@/lib/conversoes-meta/config";
+import {
+  eventoDaEtapaMeta,
+  eventoRecomendadoParaMeta,
+  EVENTOS_DA_META,
+  listarRegrasMeta,
+  rotuloDoEventoDaMeta,
+  type EventoDaMeta,
+  type RegraDeConversaoMeta,
+} from "@/lib/conversoes/regras-meta";
+import { definirChaveDeFormulario, lerChaveDeFormulario, type QuemSalva } from "@/lib/conversoes-meta/config";
 import { diagnosticarConexaoDaMeta, diagnosticoEmFrases } from "@/lib/conversoes-meta/diagnostico";
 import { VEREDITO_DO_DIAGNOSTICO } from "@/lib/conversoes-meta/diagnostico-frases";
-import {
-  eventoDaMeta,
-  eventoRecomendado,
-  EVENTOS_DA_META,
-  passosDoFunil,
-  rotuloDoEventoDaMetaNoLivro,
-  type CanalDeEntradaDaMeta,
-  type ChaveDoEventoDaMeta,
-  type ModoDoValor,
-  type RegraDaEtapa,
-} from "@/lib/conversoes-meta/eventos";
-import {
-  lerFunisDaRegua,
-  listarRegrasDaMeta,
-  salvarRegrasDaMeta,
-  type FunilDaRegua,
-  type QuemSalva,
-  type RegraDeConversaoMeta,
-} from "@/lib/conversoes-meta/regras";
-import { MOTIVO_DA_META_LEGIVEL, ROTULO_DA_SITUACAO, situacaoDoEnvio } from "@/lib/conversoes-meta/situacao";
+import { rotuloDoEnvioDaMeta } from "@/lib/conversoes-meta/rotulo";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { lerEstadoDaConexaoGoogle } from "@/lib/plataformas-de-anuncio/google/estado-da-conexao";
 
@@ -73,6 +68,70 @@ const quem = (c: Implantacao): QuemSalva => ({
   requestId: c.requestId,
   via: "mcp_plataforma",
 });
+
+/** Como a situação do livro-razão (a do upstream) é dita a quem não vê a tela. */
+const ROTULO_DA_SITUACAO: Record<ReturnType<typeof situacaoDaLinha>, string> = {
+  todas: "todas",
+  entregue: "Enviado",
+  falha: "Recusado pela plataforma",
+  aguardando: "Aguardando",
+  nao_enviado: "Não enviado",
+};
+
+// ── Os funis ────────────────────────────────────────────────────────────────
+
+export interface FunilDaRegua {
+  id: string;
+  nome: string;
+  /** As etapas ABERTAS, na ordem do funil. A primeira é onde o negócio nasce. */
+  etapas: Array<{ id: string; nome: string }>;
+  /** Os nomes das etapas de ganho e de perda: ficam fora da régua, e a resposta diz por quê. */
+  ganho: string[];
+  perda: string[];
+}
+
+/**
+ * Os funis vivos da organização com as etapas na ordem. Ganho é a compra e
+ * perda não é conversão: nenhuma das duas é etapa da régua.
+ */
+async function lerFunisDaRegua(admin: SupabaseClient, organizationId: string): Promise<FunilDaRegua[]> {
+  const [funis, etapas] = await Promise.all([
+    admin
+      .from("crm_pipelines")
+      .select("id, name, position, is_archived")
+      .eq("organization_id", organizationId)
+      .order("position"),
+    admin
+      .from("crm_stages")
+      .select("id, name, pipeline_id, position, is_won, is_lost, is_archived")
+      .eq("organization_id", organizationId)
+      .order("position"),
+  ]);
+  if (funis.error || etapas.error) throw new Error("Não foi possível ler os funis da organização.");
+
+  type Etapa = {
+    id: string;
+    name: string;
+    pipeline_id: string;
+    is_won: boolean;
+    is_lost: boolean;
+    is_archived?: boolean | null;
+  };
+  const dasEtapas = ((etapas.data ?? []) as Etapa[]).filter((e) => e.is_archived !== true);
+
+  return ((funis.data ?? []) as Array<{ id: string; name: string; is_archived?: boolean | null }>)
+    .filter((f) => f.is_archived !== true)
+    .map((f) => {
+      const doFunil = dasEtapas.filter((e) => e.pipeline_id === f.id);
+      return {
+        id: f.id,
+        nome: f.name,
+        etapas: doFunil.filter((e) => !e.is_won && !e.is_lost).map((e) => ({ id: e.id, nome: e.name })),
+        ganho: doFunil.filter((e) => e.is_won).map((e) => e.name),
+        perda: doFunil.filter((e) => e.is_lost).map((e) => e.name),
+      };
+    });
+}
 
 async function funilDaRegua(c: Implantacao, referencia: string): Promise<FunilDaRegua> {
   const funis = await lerFunisDaRegua(c.admin, c.orgId);
@@ -105,17 +164,8 @@ function etapaDoFunil(funil: FunilDaRegua, referencia: string): { id: string; no
   });
 }
 
-function regraDaMetaEmTexto(r: RegraDaEtapa): Record<string, unknown> {
-  const evento = eventoDaMeta(r.evento);
-  return {
-    ligada: r.ligada,
-    evento: r.evento,
-    evento_rotulo: evento.rotulo,
-    nome_tecnico: evento.nomeTecnico,
-    canal: r.canal,
-    valor: r.modoDoValor,
-    ...(r.modoDoValor === "valor_fixo" ? { valor_fixo_centavos: r.valorFixoCentavos } : {}),
-  };
+function regraDaMetaEmTexto(r: Pick<RegraDeConversaoMeta, "enabled" | "metaEvent">): Record<string, unknown> {
+  return { ligada: r.enabled, evento: r.metaEvent, evento_rotulo: rotuloDoEventoDaMeta(r.metaEvent) };
 }
 
 // ── LER ─────────────────────────────────────────────────────────────────────
@@ -130,12 +180,12 @@ export async function verConversoes(c: Implantacao, demonstracao: boolean): Prom
     lerEstadoDaConexao(c.admin, c.orgId, "meta_ads"),
     lerEstadoDaConexaoGoogle(c.admin, c.orgId),
     lerFunisDaRegua(c.admin, c.orgId),
-    listarRegrasDaMeta(c.admin, c.orgId),
+    listarRegrasMeta(c.admin, c.orgId),
     listarRegrasGoogle(c.admin, c.orgId),
     lerChaveDeFormulario(c.admin, c.orgId),
     c.admin
       .from("ad_conversion_dispatches")
-      .select("lead_id, platform, event_name, status, reason, detail, value_cents, attempted_at")
+      .select("lead_id, platform, event_name, meta_event_name, status, reason, detail, value_cents, attempted_at")
       .eq("organization_id", c.orgId)
       .order("attempted_at", { ascending: false })
       .limit(20),
@@ -176,14 +226,14 @@ export async function verConversoes(c: Implantacao, demonstracao: boolean): Prom
     funis: funis.map((f) => ({
       id: f.id,
       funil: f.nome,
-      etapas: f.etapas.map((e, i) => {
+      etapas: f.etapas.map((e) => {
         const daMeta = metaPorEtapa.get(e.id);
         const doGoogle = googlePorEtapa.get(e.id);
         return {
           id: e.id,
           etapa: e.nome,
           meta: daMeta ? regraDaMetaEmTexto(daMeta) : null,
-          recomendado_para_a_meta: eventoRecomendado(e.nome, i === 0),
+          recomendado_para_a_meta: eventoRecomendadoParaMeta(e.nome),
           google: doGoogle
             ? {
                 ligada: doGoogle.enabled,
@@ -199,23 +249,26 @@ export async function verConversoes(c: Implantacao, demonstracao: boolean): Prom
       etapas_de_ganho: f.ganho,
       etapas_de_perda: f.perda,
     })),
-    eventos_da_meta: EVENTOS_DA_META.map((e) => ({
-      evento: e.chave,
-      rotulo: e.rotulo,
-      nome_tecnico: e.nomeTecnico,
-      na_lista_da_meta_para_anuncio_de_whatsapp: e.naListaDaMensagem,
-    })),
+    eventos_da_meta: EVENTOS_DA_META.map((e) => ({ evento: e.valor, rotulo: e.rotulo })),
     categorias_do_google: VALORES_DE_CATEGORIA,
     ultimos_envios: ((envios.data ?? []) as Array<Record<string, unknown>>).map((l) => {
-      const situacao = situacaoDoEnvio(String(l.status), (l.reason as string | null) ?? null);
+      const situacao = situacaoDaLinha(String(l.status), (l.reason as string | null) ?? null);
       const evento = String(l.event_name);
       const motivo = (l.reason as string | null) ?? null;
       return {
         negocio_id: l.lead_id,
         plataforma: l.platform,
-        evento: rotuloDoEventoDaMetaNoLivro(evento) ?? rotuloNoGoogle.get(evento) ?? evento,
+        evento:
+          rotuloDoEnvioDaMeta(evento, (l.meta_event_name as string | null) ?? null) ??
+          rotuloNoGoogle.get(evento) ??
+          (evento === "QualifiedLead" ? "Lead qualificado" : evento),
         situacao: ROTULO_DA_SITUACAO[situacao],
-        motivo: situacao === "recusado" ? ((l.detail as string | null) ?? motivo) : motivo ? (MOTIVO_DA_META_LEGIVEL[motivo] ?? motivo) : null,
+        motivo:
+          situacao === "falha"
+            ? ((l.detail as string | null) ?? motivo)
+            : motivo
+              ? (MOTIVO_LEGIVEL[motivo] ?? motivo)
+              : null,
         valor_centavos: l.value_cents,
         quando: l.attempted_at,
       };
@@ -234,13 +287,76 @@ export async function verConversoes(c: Implantacao, demonstracao: boolean): Prom
 export interface PedidoDeRegrasDaMeta {
   funil: string;
   usar_recomendado?: boolean;
-  regras?: Array<{
-    etapa: string;
-    evento: ChaveDoEventoDaMeta;
-    canal?: CanalDeEntradaDaMeta;
-    valor?: ModoDoValor;
-    valor_fixo_centavos?: number;
-  }>;
+  regras?: Array<{ etapa: string; evento: EventoDaMeta }>;
+}
+
+/** A lista INTEIRA que a gravação da Meta pede (a tela do upstream manda todas), a partir do que já existe. */
+function listaInteiraDaMeta(existentes: readonly RegraDeConversaoMeta[]): Map<string, RegraMetaParaGravar> {
+  return new Map(
+    existentes.map((r) => [r.stageId, { stage_id: r.stageId, enabled: r.enabled, meta_event: r.metaEvent }]),
+  );
+}
+
+async function gravarMeta(c: Implantacao, lista: Map<string, RegraMetaParaGravar>): Promise<void> {
+  const gravado = await gravarRegrasDeConversaoMeta(
+    c.admin,
+    { organizationId: c.orgId, autorUserId: c.autorUserId },
+    [...lista.values()],
+  );
+  if (!gravado.ok) {
+    throw new Recusa(
+      gravado.error === "etapa_invalida"
+        ? "Uma das etapas não existe mais ou foi fechada. Nada foi gravado. Confira em plataforma_ver_conversoes."
+        : "Não consegui gravar as regras da Meta. Tente de novo.",
+    );
+  }
+  void audit({
+    action: "meta_ads_conversion_rules.updated",
+    actorUserId: c.autorUserId,
+    organizationId: c.orgId,
+    resourceType: "meta_ads_conversion_rules",
+    resourceId: null,
+    requestId: c.requestId,
+    metadata: { ligadas: gravado.ligadas, desligadas: gravado.desligadas, via: "mcp_plataforma" },
+  });
+}
+
+/**
+ * A regra da Meta que nasce DESLIGADA: a gravação compartilhada (a do upstream)
+ * não cria linha para etapa desligada que nunca existiu, e a ferramenta precisa
+ * da linha para guardar o evento até alguém ligar. O `event_name` é o mesmo que a
+ * gravação daria (`MetaEtapa:<uuid>`), então ligar depois não muda de nome.
+ */
+async function criarRegrasDesligadasDaMeta(
+  c: Implantacao,
+  lista: Map<string, RegraMetaParaGravar>,
+  existentes: readonly RegraDeConversaoMeta[],
+): Promise<void> {
+  const jaExistiam = new Set(existentes.map((r) => r.stageId));
+  const linhas = [...lista.values()]
+    .filter((r) => !r.enabled && !jaExistiam.has(r.stage_id))
+    .map((r) => ({
+      organization_id: c.orgId,
+      stage_id: r.stage_id,
+      event_name: eventoDaEtapaMeta(r.stage_id),
+      meta_event: r.meta_event,
+      enabled: false,
+      updated_by: c.autorUserId,
+    }));
+  if (linhas.length === 0) return;
+  const { error } = await c.admin
+    .from("meta_ads_conversion_rules")
+    .upsert(linhas, { onConflict: "organization_id,stage_id" });
+  if (error) throw new Error(`não consegui gravar as regras da Meta: ${error.message}`);
+  void audit({
+    action: "meta_ads_conversion_rules.updated",
+    actorUserId: c.autorUserId,
+    organizationId: c.orgId,
+    resourceType: "meta_ads_conversion_rules",
+    resourceId: null,
+    requestId: c.requestId,
+    metadata: { ligadas: 0, desligadas: linhas.length, via: "mcp_plataforma" },
+  });
 }
 
 export async function garantirConversoesDaMeta(c: Implantacao, pedido: PedidoDeRegrasDaMeta) {
@@ -251,96 +367,80 @@ export async function garantirConversoesDaMeta(c: Implantacao, pedido: PedidoDeR
     );
   }
   const funil = await funilDaRegua(c, pedido.funil);
-  const existentes = new Map((await listarRegrasDaMeta(c.admin, c.orgId)).map((r) => [r.stageId, r]));
+  const existentes = await listarRegrasMeta(c.admin, c.orgId);
+  const antesPorEtapa = new Map(existentes.map((r) => [r.stageId, r]));
 
-  // O estado pedido, etapa a etapa. `ligada` nunca vem do pedido: fica como está,
-  // e regra nova nasce desligada.
-  const pedidas = new Map<string, RegraDaEtapa>();
+  // O evento pedido, etapa a etapa. `ligada` nunca vem do pedido: fica como
+  // está, e regra nova nasce desligada.
+  const pedidos = new Map<string, EventoDaMeta>();
   if (pedido.usar_recomendado) {
-    funil.etapas.forEach((etapa, i) => {
-      const sugerido = eventoRecomendado(etapa.nome, i === 0);
-      if (!sugerido) return;
-      const antes = existentes.get(etapa.id);
-      pedidas.set(
-        etapa.id,
-        antes && antes.evento === sugerido
-          ? { ligada: antes.ligada, evento: antes.evento, canal: antes.canal, modoDoValor: antes.modoDoValor, valorFixoCentavos: antes.valorFixoCentavos }
-          : { ligada: antes?.ligada ?? false, evento: sugerido, canal: antes?.canal ?? "todos", modoDoValor: "sem_valor", valorFixoCentavos: null },
-      );
-    });
+    for (const etapa of funil.etapas) {
+      const sugerido = eventoRecomendadoParaMeta(etapa.nome);
+      if (sugerido) pedidos.set(etapa.id, sugerido);
+    }
   }
   const citadas = new Set<string>();
   for (const r of pedido.regras ?? []) {
     const etapa = etapaDoFunil(funil, r.etapa);
-    if (citadas.has(etapa.id)) throw new Recusa(`A etapa «${etapa.nome}» aparece duas vezes em \`regras\`. Cada etapa tem uma regra só.`);
-    citadas.add(etapa.id);
-    const modo: ModoDoValor = r.valor ?? "sem_valor";
-    if (modo === "valor_fixo" && !(r.valor_fixo_centavos && r.valor_fixo_centavos > 0)) {
-      throw new Recusa(
-        `A etapa «${etapa.nome}» pede valor fixo e não diz quanto. Informe \`valor_fixo_centavos\` (ex.: 15000 para R$ 150,00), ` +
-          "ou troque `valor` para `sem_valor` ou `valor_do_negocio`.",
-      );
+    if (citadas.has(etapa.id)) {
+      throw new Recusa(`A etapa «${etapa.nome}» aparece duas vezes em \`regras\`. Cada etapa tem uma regra só.`);
     }
-    pedidas.set(etapa.id, {
-      ligada: existentes.get(etapa.id)?.ligada ?? false,
-      evento: r.evento,
-      canal: r.canal ?? "todos",
-      modoDoValor: modo,
-      valorFixoCentavos: modo === "valor_fixo" ? (r.valor_fixo_centavos ?? null) : null,
-    });
+    citadas.add(etapa.id);
+    pedidos.set(etapa.id, r.evento);
   }
 
   // Regra LIGADA não é editada por aqui: a mudança valeria no próximo negócio.
   const ligadasQueMudariam = funil.etapas.filter((e) => {
-    const antes = existentes.get(e.id);
-    const depois = pedidas.get(e.id);
-    return Boolean(
-      antes?.ligada &&
-        depois &&
-        (antes.evento !== depois.evento ||
-          antes.canal !== depois.canal ||
-          antes.modoDoValor !== depois.modoDoValor ||
-          antes.valorFixoCentavos !== depois.valorFixoCentavos),
-    );
+    const antes = antesPorEtapa.get(e.id);
+    const depois = pedidos.get(e.id);
+    return Boolean(antes?.enabled && depois && antes.metaEvent !== depois);
   });
   if (ligadasQueMudariam.length > 0) {
     throw new Recusa(
-      `A regra da Meta está LIGADA em ${ligadasQueMudariam.map((e) => `«${e.nome}»`).join(", ")}: mudar o evento, o canal ou o valor de uma regra ligada ` +
+      `A regra da Meta está LIGADA em ${ligadasQueMudariam.map((e) => `«${e.nome}»`).join(", ")}: mudar o evento de uma regra ligada ` +
         "passaria a valer no próximo negócio que entrar na etapa. Nada foi gravado. " +
         "Desligue com plataforma_ligar_conversoes (`ligada: false`), ajuste aqui e ligue de novo.",
     );
   }
 
-  const resultado = await salvarRegrasDaMeta(
-    c.admin,
-    quem(c),
-    [...pedidas.entries()].map(([stageId, r]) => ({ stageId, ...r })),
-  );
-  if (!resultado.ok) {
-    throw new Recusa(`Não consegui gravar as regras da Meta (${resultado.erro}). Nada foi gravado. Tente de novo.`);
+  const lista = listaInteiraDaMeta(existentes);
+  const desfechos = new Map<string, Desfecho>();
+  for (const [stageId, evento] of pedidos) {
+    const antes = antesPorEtapa.get(stageId);
+    desfechos.set(stageId, !antes ? "criou" : antes.metaEvent === evento ? "ja_estava" : "atualizou");
+    lista.set(stageId, { stage_id: stageId, enabled: antes?.enabled ?? false, meta_event: evento });
   }
 
-  const desfechoPorEtapa = new Map(resultado.regras.map((r) => [r.stageId, r.desfecho]));
-  const depois: Record<string, RegraDaEtapa | undefined> = {};
-  for (const e of funil.etapas) depois[e.id] = pedidas.get(e.id) ?? existentes.get(e.id);
-  const repetidos = passosDoFunil(funil.etapas, Object.fromEntries(
-    // O aviso de repetido olha a régua como ficaria com tudo ligado.
-    Object.entries(depois).map(([id, r]) => [id, r ? { ...r, ligada: true } : undefined]),
-  )).filter((p) => p.repetido);
+  // O que já existia e mudou passa pela gravação compartilhada com a tela (a
+  // lista INTEIRA, para nenhuma outra regra ser desligada). A regra NOVA nasce
+  // logo abaixo, pela mesma tabela, desligada.
+  if ([...desfechos.values()].includes("atualizou")) await gravarMeta(c, lista);
+  if ([...desfechos.values()].includes("criou")) await criarRegrasDesligadasDaMeta(c, lista, existentes);
+
+  // O mesmo evento em duas etapas do funil: na régua do upstream a chave é a
+  // etapa, então o negócio que passar pelas duas manda o evento DUAS vezes.
+  const porEvento = new Map<string, string[]>();
+  for (const e of funil.etapas) {
+    const regra = lista.get(e.id);
+    if (!regra) continue;
+    porEvento.set(regra.meta_event, [...(porEvento.get(regra.meta_event) ?? []), e.nome]);
+  }
+  const repetidos = [...porEvento.entries()].filter(([, etapas]) => etapas.length > 1);
 
   return {
     funil: { id: funil.id, nome: funil.nome },
     etapas: funil.etapas.map((e) => {
-      const regra = depois[e.id];
+      const regra = lista.get(e.id);
       return {
         etapa: e.nome,
-        regra: regra ? regraDaMetaEmTexto(regra) : null,
-        desfecho: (desfechoPorEtapa.get(e.id) ?? (regra ? "ja_estava" : null)) as Desfecho | null,
+        regra: regra ? regraDaMetaEmTexto({ enabled: regra.enabled, metaEvent: regra.meta_event }) : null,
+        desfecho: (desfechos.get(e.id) ?? (regra ? "ja_estava" : null)) as Desfecho | null,
       };
     }),
     avisos: repetidos.map(
-      (p) =>
-        `O evento «${eventoDaMeta(p.evento).rotulo}» está em mais de uma etapa: só a primeira etapa em que o negócio entrar envia; «${p.etapa}» não envia de novo para o mesmo negócio.`,
+      ([evento, etapas]) =>
+        `O evento «${rotuloDoEventoDaMeta(evento)}» está em ${etapas.map((n) => `«${n}»`).join(" e ")}: cada etapa envia o seu, ` +
+        "então o negócio que passar pelas duas manda o mesmo evento à Meta duas vezes. Se não for o que você quer, troque o evento de uma delas.",
     ),
     proximo_passo:
       "As regras estão gravadas e as novas nasceram DESLIGADAS. Para a Meta passar a receber, plataforma_ligar_conversoes (operação colocar_no_ar). " +
@@ -527,9 +627,10 @@ export async function ligarConversoes(c: Implantacao, pedido: PedidoDeLigarConve
   });
 
   if (pedido.plataforma === "meta") {
-    const existentes = new Map((await listarRegrasDaMeta(c.admin, c.orgId)).map((r) => [r.stageId, r]));
-    const etapas = alvos ?? funil.etapas.filter((e) => existentes.has(e.id));
-    const semRegra = etapas.filter((e) => !existentes.has(e.id));
+    const existentes = await listarRegrasMeta(c.admin, c.orgId);
+    const porEtapa = new Map(existentes.map((r) => [r.stageId, r]));
+    const etapas = alvos ?? funil.etapas.filter((e) => porEtapa.has(e.id));
+    const semRegra = etapas.filter((e) => !porEtapa.has(e.id));
     if (semRegra.length > 0 || etapas.length === 0) {
       throw new Recusa(
         (etapas.length === 0
@@ -538,34 +639,26 @@ export async function ligarConversoes(c: Implantacao, pedido: PedidoDeLigarConve
           "Crie as regras com plataforma_garantir_conversoes_da_meta (por exemplo, `usar_recomendado: true`) e ligue depois.",
       );
     }
-    const resultado = await salvarRegrasDaMeta(
-      c.admin,
-      quem(c),
-      etapas.map((e) => {
-        const r = existentes.get(e.id) as RegraDeConversaoMeta;
-        return {
-          stageId: e.id,
-          ligada: pedido.ligada,
-          evento: r.evento,
-          canal: r.canal,
-          modoDoValor: r.modoDoValor,
-          valorFixoCentavos: r.valorFixoCentavos,
-        };
-      }),
-    );
-    if (!resultado.ok) throw new Recusa(`Não consegui gravar (${resultado.erro}). Nada mudou. Tente de novo.`);
-    const desfecho = new Map(resultado.regras.map((r) => [r.stageId, r.desfecho]));
+    // A lista INTEIRA vai para a gravação compartilhada com a tela do upstream:
+    // a regra que some da lista é desligada, então nenhuma pode faltar.
+    const lista = listaInteiraDaMeta(existentes);
+    const desfechos = etapas.map((e) => {
+      const r = porEtapa.get(e.id) as RegraDeConversaoMeta;
+      lista.set(e.id, { stage_id: e.id, enabled: pedido.ligada, meta_event: r.metaEvent });
+      return {
+        etapa: e.nome,
+        evento: rotuloDoEventoDaMeta(r.metaEvent),
+        ligada: pedido.ligada,
+        desfecho: (r.enabled === pedido.ligada ? "ja_estava" : "atualizou") as Desfecho,
+      };
+    });
+    if (desfechos.some((d) => d.desfecho !== "ja_estava")) await gravarMeta(c, lista);
     const meta = await lerEstadoDaConexao(c.admin, c.orgId, "meta_ads");
     return comAviso(
       {
         plataforma: "meta",
         funil: { id: funil.id, nome: funil.nome },
-        etapas: etapas.map((e) => ({
-          etapa: e.nome,
-          evento: eventoDaMeta((existentes.get(e.id) as RegraDeConversaoMeta).evento).rotulo,
-          ligada: pedido.ligada,
-          desfecho: desfecho.get(e.id) === "ja_estava" ? "ja_estava" : "atualizou",
-        })),
+        etapas: desfechos,
         ...(pedido.ligada
           ? { vale_a_partir_de: "Vale para os negócios que entrarem nas etapas a partir de agora. Quem já está na etapa não é enviado." }
           : {}),
@@ -627,8 +720,8 @@ export async function ligarLeadsDeFormularioDaMeta(c: Implantacao, ligar: boolea
     ...(ligar
       ? {
           o_que_passa_a_acontecer:
-            "Os eventos de etapa com regra ligada e a venda também são informados à Meta para o lead que veio de formulário da Meta, " +
-            "pelo identificador do lead guardado. Ligar não envia o passado: vale para o que acontecer a partir de agora.",
+            "Os eventos de etapa com regra ligada (a régua da Meta, a mesma da tela) e a venda também são informados à Meta para o lead " +
+            "que veio de formulário da Meta, pelo identificador do lead guardado. Ligar não envia o passado: vale para o que acontecer a partir de agora.",
         }
       : {}),
     ...(demonstracao ? { aviso: "Empresa de demonstração: a chave fica gravada e nada é enviado." } : {}),

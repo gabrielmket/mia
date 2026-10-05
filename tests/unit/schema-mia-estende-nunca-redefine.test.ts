@@ -130,14 +130,34 @@ describe("a varredura anon fecha o schema da MIA", () => {
 });
 
 describe("as migrations da MIA moram na pasta delas, com MANIFEST próprio", () => {
-  it("todo arquivo tem linha no MANIFEST, e toda linha tem arquivo", () => {
-    for (const f of ARQUIVOS_MIA) {
-      const [ts, ...resto] = f.replace(/\.sql$/, "").split("_");
-      expect(MANIFEST_MIA, `sem linha no MANIFEST da MIA: ${f}`).toContain(`\`${ts}\``);
-      expect(MANIFEST_MIA, `sem linha no MANIFEST da MIA: ${f}`).toContain(`\`${resto.join("_")}\``);
-    }
+  // A partir da 9019 (05/10/2026) a MIA segue a convenção nova do upstream
+  // (1.70, #2149): a descrição de migration nova mora numa linha
+  // `-- manifest: <o quê e por quê>` do próprio .sql, e o MANIFEST vira
+  // histórico. Duas frentes em paralelo acrescentando linha no FIM da mesma
+  // tabela conflitavam sempre. "Registrada" passa a ser: linha no MANIFEST OU
+  // cabeçalho com descrição; nos dois ao mesmo tempo, não (duas fontes para o
+  // mesmo fato divergem).
+  it("todo arquivo se descreve num lugar só: linha no MANIFEST ou cabeçalho `-- manifest:`", () => {
     const linhas = MANIFEST_MIA.split("\n").filter((l) => /^\| `\d{14}` \|/.test(l));
-    expect(linhas.length).toBe(ARQUIVOS_MIA.length);
+    const comLinha = new Set(
+      linhas.map((l) => {
+        const [, ts, nome] = l.match(/^\| `(\d{14})` \| `([^`]+)`/) ?? [];
+        return `${ts}_${nome}`;
+      }),
+    );
+    for (const f of ARQUIVOS_MIA) {
+      const nome = f.replace(/\.sql$/, "");
+      const cabecalho = readFileSync(join(PASTA_MIA, f), "utf8")
+        .split("\n")
+        .find((l) => l.startsWith("-- manifest:"));
+      const temCabecalho = Boolean(cabecalho && cabecalho.slice("-- manifest:".length).trim().length > 0);
+      const temLinha = comLinha.has(nome);
+      expect(temCabecalho || temLinha, `sem descrição (nem linha no MANIFEST da MIA, nem \`-- manifest:\`): ${f}`).toBe(true);
+      expect(temCabecalho && temLinha, `descrita nos DOIS lugares (MANIFEST e cabeçalho): ${f}`).toBe(false);
+    }
+    // E toda linha do MANIFEST tem arquivo.
+    const arquivos = new Set(ARQUIVOS_MIA.map((f) => f.replace(/\.sql$/, "")));
+    expect([...comLinha].filter((n) => !arquivos.has(n)), "linha do MANIFEST sem arquivo").toEqual([]);
   });
 
   it("número e timestamp não se repetem", () => {

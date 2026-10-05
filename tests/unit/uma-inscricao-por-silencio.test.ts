@@ -57,6 +57,10 @@ describe("runSilenceSweep pula quem já foi inscrito neste silêncio", () => {
       ],
       loadSilentContactIds: async () => ["ja-inscrito", "novo"],
       loadContatosComRetornoVivo: async () => new Set<string>(),
+      // Pausa de reentrada, pessoa no comando e inscrição viva (upstream 1.70): neutros aqui.
+      loadEncerramentosDoFluxo: async () => new Map(),
+      loadContatosComPessoaNoComando: async () => new Set<string>(),
+      loadContatosComInscricaoViva: async () => new Set<string>(),
       loadJaInscritosNesteSilencio: perguntou,
       loadContactIdsEmCooldown: async () => new Set<string>(),
       loadTriggerNode: async () => ({ id: "inicio", pedeAgente: false }),
@@ -88,6 +92,10 @@ describe("as duas travas convivem: cooldown do upstream primeiro, silêncio da M
       ],
       loadSilentContactIds: async () => ["nas-duas", "so-no-silencio", "livre"],
       loadContatosComRetornoVivo: async () => new Set<string>(),
+      // Pausa de reentrada, pessoa no comando e inscrição viva (upstream 1.70): neutros aqui.
+      loadEncerramentosDoFluxo: async () => new Map(),
+      loadContatosComPessoaNoComando: async () => new Set<string>(),
+      loadContatosComInscricaoViva: async () => new Set<string>(),
       loadContactIdsEmCooldown: async () => new Set(["nas-duas"]),
       loadJaInscritosNesteSilencio: async () => new Set(["nas-duas", "so-no-silencio"]),
       loadTriggerNode: async () => ({ id: "inicio", pedeAgente: false }),

@@ -1,10 +1,11 @@
 /**
- * FORK MIA (9017) — AS AÇÕES DA TELA das conversões da Meta
- * (`app/actions/settings/conversoesDaMeta.ts`): o portão de cada uma, e que a
- * organização vem SEMPRE da sessão, nunca do que o navegador mandou.
+ * FORK MIA — AS AÇÕES DA TELA que continuam nossas nas conversões da Meta
+ * (`app/actions/settings/conversoesDaMeta.ts`): a chave dos leads de formulário
+ * e o teste de conexão. O portão de cada uma, e que a organização vem SEMPRE da
+ * sessão, nunca do que o navegador mandou.
  *
- * O miolo (o que é gravado, as recusas de etapa) é medido em
- * `conversoes-da-meta-regras-e-diagnostico.test.ts`; aqui é o portão.
+ * Desde a .72 as regras de etapa são gravadas pela ação do upstream
+ * (`salvarRegrasDeConversaoMeta.ts`, 0524) e o reenvio é a rota dele.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -32,41 +33,15 @@ vi.mock("next/cache", () => ({ revalidatePath: mock.revalidar }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-request-id": "req-teste" }) }));
 vi.mock("@/lib/conversoes-meta/diagnostico", () => ({ diagnosticarConexaoDaMeta: mock.diagnosticar }));
 
-const {
-  definirLeadsDeFormularioDaMeta,
-  reenviarConversaoDaMeta,
-  salvarRegrasDeConversaoMeta,
-  testarConexaoDaMeta,
-} = await import("@/app/actions/settings/conversoesDaMeta");
+const { definirLeadsDeFormularioDaMeta, testarConexaoDaMeta } = await import("@/app/actions/settings/conversoesDaMeta");
 
 const ORG = "0a000000-0000-4000-8000-000000000001";
-const ETAPA = "0d000000-0000-4000-8000-000000000001";
-const LEAD = "0e000000-0000-4000-8000-000000000001";
-
-const regra = (over: Record<string, unknown> = {}) => ({
-  stage_id: ETAPA,
-  ligada: true,
-  evento: "lead_qualificado" as const,
-  canal: "todos" as const,
-  modo_do_valor: "sem_valor" as const,
-  valor_fixo_centavos: null as number | null,
-  ...over,
-});
 
 let banco: ReturnType<typeof bancoEmMemoria>;
-let reenvioAgendado: boolean;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  reenvioAgendado = true;
-  banco = bancoEmMemoria(
-    {
-      crm_stages: [{ id: ETAPA, organization_id: ORG, is_won: false, is_lost: false }],
-      mia_conversoes_meta_regras: [],
-      mia_conversoes_meta_config: [],
-    },
-    { fn_mia_solicitar_reenvio_conversao_meta: () => ({ data: reenvioAgendado, error: null }) },
-  );
+  banco = bancoEmMemoria({ mia_conversoes_meta_config: [] });
   mock.user.mockResolvedValue({ id: "pessoa", is_platform_admin: false });
   mock.org.mockResolvedValue({ orgId: ORG, role: "admin" });
   mock.support.mockReturnValue(false);
@@ -75,11 +50,9 @@ beforeEach(() => {
   mock.diagnosticar.mockResolvedValue({ itens: [], veredito: "em_ordem", testadoEm: "2026-10-01T00:00:00Z" });
 });
 
-/** As três ações que ESCREVEM passam pelo mesmo portão. */
+/** A ação que ESCREVE passa pelo portão de escrita. */
 const ESCRITAS: Array<[string, () => Promise<{ ok: boolean; error?: string }>]> = [
-  ["salvar regras", () => salvarRegrasDeConversaoMeta([regra()])],
   ["ligar a volta dos leads de formulário", () => definirLeadsDeFormularioDaMeta(true)],
-  ["reenviar", () => reenviarConversaoDaMeta(LEAD, "Meta:agendou")],
 ];
 
 describe("o portão das escritas", () => {
@@ -108,57 +81,46 @@ describe("o portão das escritas", () => {
     });
   }
 
-  it("o administrador da plataforma passa pelo papel, menos quando está acompanhando um cliente", async () => {
-    mock.user.mockResolvedValue({ id: "plataforma", is_platform_admin: true });
+  it("o administrador da plataforma (scope full) passa pelo papel, menos quando está acompanhando um cliente", async () => {
+    mock.user.mockResolvedValue({ id: "plataforma", is_platform_admin: true, platform_admin_scope: "full" });
     mock.org.mockResolvedValue({ orgId: ORG, role: "viewer" });
     expect(await definirLeadsDeFormularioDaMeta(true)).toEqual({ ok: true });
 
-    mock.user.mockResolvedValue({ id: "plataforma", is_platform_admin: true, support: { somenteLeitura: false } });
+    mock.user.mockResolvedValue({
+      id: "plataforma",
+      is_platform_admin: true,
+      platform_admin_scope: "full",
+      support: { somenteLeitura: false },
+    });
     expect(await definirLeadsDeFormularioDaMeta(false)).toEqual({ ok: false, error: "forbidden_role" });
+  });
+
+  it("o acesso só de leitura ao painel de plataforma não escreve (a regra única do upstream, 1.70)", async () => {
+    mock.user.mockResolvedValue({ id: "plataforma", is_platform_admin: true, platform_admin_scope: "support_readonly" });
+    mock.org.mockResolvedValue({ orgId: ORG, role: "viewer" });
+    expect(await definirLeadsDeFormularioDaMeta(true)).toEqual({ ok: false, error: "forbidden_role" });
+    expect(banco.escritas).toEqual([]);
   });
 });
 
-describe("salvar as regras", () => {
+describe("a chave dos leads de formulário", () => {
   it("grava na organização da SESSÃO, com quem clicou como autor, e revalida a tela", async () => {
-    expect(await salvarRegrasDeConversaoMeta([regra({ modo_do_valor: "valor_fixo", valor_fixo_centavos: 15000 })])).toEqual({
-      ok: true,
-    });
-    expect(banco.tabela("mia_conversoes_meta_regras")).toMatchObject([
-      { organization_id: ORG, stage_id: ETAPA, evento: "lead_qualificado", ligada: true, valor_fixo_centavos: 15000, atualizada_por: "pessoa" },
+    expect(await definirLeadsDeFormularioDaMeta(true)).toEqual({ ok: true });
+    expect(banco.tabela("mia_conversoes_meta_config")).toMatchObject([
+      { organization_id: ORG, leads_de_formulario: true, atualizada_por: "pessoa" },
     ]);
     expect(mock.audit.mock.calls[0]![0]).toMatchObject({
-      action: "conversoes_meta.regras_salvas",
+      action: "conversoes_meta.leads_de_formulario",
       organizationId: ORG,
       requestId: "req-teste",
-      metadata: { via: "tela" },
+      metadata: { via: "tela", ligada: true },
     });
     expect(mock.revalidar).toHaveBeenCalledWith("/app/settings/conversoes");
   });
 
-  it("o que o navegador manda é conferido: etapa que não é id, evento fora da lista e valor fixo sem valor", async () => {
-    for (const ruim of [
-      regra({ stage_id: "etapa-1" }),
-      regra({ evento: "comprou_tudo" }),
-      regra({ canal: "sms" }),
-      regra({ modo_do_valor: "valor_fixo", valor_fixo_centavos: null }),
-      regra({ modo_do_valor: "valor_fixo", valor_fixo_centavos: 0 }),
-      regra({ organization_id: "0a000000-0000-4000-8000-000000000002" }),
-    ]) {
-      const r = await salvarRegrasDeConversaoMeta([ruim as never]);
-      // Campo a mais (a organização de outra empresa) é ignorado pelo esquema, e a gravação sai na da sessão.
-      if (r.ok) {
-        expect(banco.tabela("mia_conversoes_meta_regras").every((l) => l.organization_id === ORG)).toBe(true);
-      } else {
-        expect(r.error).toBe("validation_failed");
-      }
-    }
-    expect(await salvarRegrasDeConversaoMeta([regra(), regra()])).toEqual({ ok: false, error: "validation_failed" });
-  });
-
-  it("etapa de outra empresa (ou fechada) é recusada pela mesma função que o MCP usa", async () => {
-    const r = await salvarRegrasDeConversaoMeta([regra({ stage_id: "0d000000-0000-4000-8000-0000000000ff" })]);
-    expect(r).toEqual({ ok: false, error: "etapa_invalida" });
-    expect(banco.tabela("mia_conversoes_meta_regras")).toHaveLength(0);
+  it("o que o navegador manda é conferido", async () => {
+    expect(await definirLeadsDeFormularioDaMeta("sim" as never)).toEqual({ ok: false, error: "validation_failed" });
+    expect(banco.escritas).toEqual([]);
   });
 });
 
@@ -177,33 +139,5 @@ describe("o teste de conexão", () => {
   it("banco fora: a tela recebe \"não consegui ler\", e não um diagnóstico inventado", async () => {
     mock.diagnosticar.mockRejectedValueOnce(new Error("banco fora"));
     expect(await testarConexaoDaMeta()).toEqual({ ok: false, error: "leitura_indisponivel" });
-  });
-});
-
-describe("o reenvio de um evento de etapa", () => {
-  it("chama a função do banco com a organização da sessão, e audita quando agendou", async () => {
-    expect(await reenviarConversaoDaMeta(LEAD, "Meta:agendou")).toEqual({ ok: true, agendado: true });
-    expect(banco.chamadasRpc).toEqual([
-      { nome: "fn_mia_solicitar_reenvio_conversao_meta", args: { p_org: ORG, p_lead: LEAD, p_event: "Meta:agendou" } },
-    ]);
-    expect(mock.audit.mock.calls[0]![0]).toMatchObject({
-      action: "conversoes_meta.reenvio_solicitado",
-      resourceId: LEAD,
-      metadata: { event_name: "Meta:agendou" },
-    });
-  });
-
-  it("o banco decidiu que não há o que reenviar: não é erro, e não audita", async () => {
-    reenvioAgendado = false;
-    expect(await reenviarConversaoDaMeta(LEAD, "Meta:agendou")).toEqual({ ok: true, agendado: false });
-    expect(mock.audit).not.toHaveBeenCalled();
-  });
-
-  it("só evento de etapa da Meta entra por aqui: a compra e os do Google têm a rota do upstream", async () => {
-    for (const evento of ["Purchase", "QualifiedLead", "Etapa:11111111-1111-4111-8111-111111111111", "Meta:AGENDOU", ""]) {
-      expect(await reenviarConversaoDaMeta(LEAD, evento), evento).toEqual({ ok: false, error: "validation_failed" });
-    }
-    expect(await reenviarConversaoDaMeta("lead-1", "Meta:agendou")).toEqual({ ok: false, error: "validation_failed" });
-    expect(banco.chamadasRpc).toEqual([]);
   });
 });

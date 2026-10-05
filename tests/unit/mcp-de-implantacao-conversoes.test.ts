@@ -1,6 +1,8 @@
 /**
- * FORK MIA (9017) — AS FERRAMENTAS DE CONVERSÕES do MCP de plataforma, pelo
- * protocolo, contra tabelas de verdade em memória.
+ * FORK MIA — AS FERRAMENTAS DE CONVERSÕES do MCP de plataforma, pelo protocolo,
+ * contra tabelas de verdade em memória. Desde a .72 as regras da Meta são as do
+ * upstream (`meta_ads_conversion_rules`, 0524), gravadas pela mesma função da
+ * tela dele (`lib/conversoes/gravar-regras-meta.ts`).
  *
  * O que se mede é o banco, não a resposta: o que foi GRAVADO, em qual linha; a
  * REEXECUÇÃO (a segunda chamada não escreve nada); a recusa que ensina; a
@@ -91,7 +93,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 const daMeta = (tabela: (n: string) => Linha[]) =>
-  tabela("mia_conversoes_meta_regras").map((l) => [l.stage_id, l.evento, l.canal, l.modo_do_valor, l.valor_fixo_centavos, l.ligada]);
+  tabela("meta_ads_conversion_rules").map((l) => [l.stage_id, l.event_name, l.meta_event, l.enabled]);
 
 // ---------------------------------------------------------------------------
 
@@ -106,22 +108,21 @@ describe("plataforma_ver_conversoes", () => {
       test_event_code: "CODIGO-DE-TESTE-9",
       enabled: true,
     });
-    tabela("mia_conversoes_meta_regras").push({
+    tabela("meta_ads_conversion_rules").push({
       id: "r1",
       organization_id: ORG,
       stage_id: E.agendada,
-      evento: "agendou",
-      canal: "whatsapp",
-      modo_do_valor: "valor_fixo",
-      valor_fixo_centavos: 15000,
-      ligada: true,
-      configurada_em: "2026-09-25T00:00:00Z",
+      event_name: `MetaEtapa:${E.agendada}`,
+      meta_event: "LeadSubmitted",
+      enabled: true,
+      configured_at: "2026-09-25T00:00:00Z",
     });
     tabela("ad_conversion_dispatches").push({
       organization_id: ORG,
       lead_id: "0e000000-0000-4000-8000-000000000001",
       platform: "meta_ads",
-      event_name: "Meta:agendou",
+      event_name: `MetaEtapa:${E.agendada}`,
+      meta_event_name: "LeadSubmitted",
       status: "error",
       reason: "recusado_pela_plataforma",
       detail: "token de acesso vencido",
@@ -145,24 +146,17 @@ describe("plataforma_ver_conversoes", () => {
     const funil = (r.dados.funis as Array<{ funil: string; etapas: Array<Record<string, unknown>>; etapas_de_ganho: string[] }>).find(
       (f) => f.funil === "Agendamentos",
     )!;
+    // O recomendado é o do upstream, pelo nome da etapa (`eventoRecomendadoParaMeta`).
     expect(funil.etapas.map((e) => [e.etapa, e.recomendado_para_a_meta])).toEqual([
-      ["Novo contato", "novo_lead"],
-      ["Qualificação", "lead_qualificado"],
-      ["Avaliação agendada", "agendou"],
+      ["Novo contato", null],
+      ["Qualificação", "QualifiedLead"],
+      ["Avaliação agendada", "LeadSubmitted"],
       ["Compareceu", null],
     ]);
-    expect(funil.etapas[2]!.meta).toEqual({
-      ligada: true,
-      evento: "agendou",
-      evento_rotulo: "Agendou",
-      nome_tecnico: "Schedule",
-      canal: "whatsapp",
-      valor: "valor_fixo",
-      valor_fixo_centavos: 15000,
-    });
+    expect(funil.etapas[2]!.meta).toEqual({ ligada: true, evento: "LeadSubmitted", evento_rotulo: "Lead enviado" });
     expect(funil.etapas_de_ganho).toEqual(["Fechou tratamento"]);
     expect(r.dados.ultimos_envios).toEqual([
-      expect.objectContaining({ plataforma: "meta_ads", evento: "Agendou", situacao: "Recusado pela plataforma", motivo: "token de acesso vencido" }),
+      expect.objectContaining({ plataforma: "meta_ads", evento: "Lead enviado", situacao: "Recusado pela plataforma", motivo: "token de acesso vencido" }),
     ]);
     expect(r.dados.recusados_em_7_dias).toBe(1);
     expect((r.dados.eventos_da_meta as unknown[]).length).toBe(5);
@@ -178,13 +172,13 @@ describe("plataforma_garantir_conversoes_da_meta", () => {
       usar_recomendado: true,
     });
     expect(r.erro, r.texto).toBe(false);
+    // Na tabela do upstream, com a chave que a tela dele daria, e DESLIGADAS.
     expect(daMeta(tabela)).toEqual([
-      [E.novo, "novo_lead", "todos", "sem_valor", null, false],
-      [E.qualificacao, "lead_qualificado", "todos", "sem_valor", null, false],
-      [E.agendada, "agendou", "todos", "sem_valor", null, false],
+      [E.qualificacao, `MetaEtapa:${E.qualificacao}`, "QualifiedLead", false],
+      [E.agendada, `MetaEtapa:${E.agendada}`, "LeadSubmitted", false],
     ]);
     expect((r.dados.etapas as Array<{ etapa: string; desfecho: string | null }>).map((e) => [e.etapa, e.desfecho])).toEqual([
-      ["Novo contato", "criou"],
+      ["Novo contato", null],
       ["Qualificação", "criou"],
       ["Avaliação agendada", "criou"],
       ["Compareceu", null],
@@ -198,7 +192,7 @@ describe("plataforma_garantir_conversoes_da_meta", () => {
       usar_recomendado: true,
     });
     expect((deNovo.dados.etapas as Array<{ desfecho: string | null }>).map((e) => e.desfecho)).toEqual([
-      "ja_estava",
+      null,
       "ja_estava",
       "ja_estava",
       null,
@@ -206,25 +200,25 @@ describe("plataforma_garantir_conversoes_da_meta", () => {
     expect(banco.escritas.length).toBe(escritas);
   });
 
-  it("`regras` vence o recomendado na etapa citada, com canal e valor; o mesmo evento em duas etapas é aceito com aviso", async () => {
+  it("`regras` vence o recomendado na etapa citada; o mesmo evento em duas etapas é aceito com aviso", async () => {
     const { mcp, tabela } = await preparar();
     const r = await mcp.chamar("plataforma_garantir_conversoes_da_meta", {
       organization_id: ORG,
       funil: FUNIL,
       usar_recomendado: true,
       regras: [
-        { etapa: "Avaliação agendada", evento: "agendou", canal: "whatsapp", valor: "valor_fixo", valor_fixo_centavos: 15000 },
-        { etapa: "compareceu", evento: "agendou", valor: "valor_do_negocio" },
+        { etapa: "Avaliação agendada", evento: "InitiateCheckout" },
+        { etapa: "compareceu", evento: "InitiateCheckout" },
       ],
     });
     expect(r.erro, r.texto).toBe(false);
     expect(daMeta(tabela)).toEqual([
-      [E.novo, "novo_lead", "todos", "sem_valor", null, false],
-      [E.qualificacao, "lead_qualificado", "todos", "sem_valor", null, false],
-      [E.agendada, "agendou", "whatsapp", "valor_fixo", 15000, false],
-      [E.compareceu, "agendou", "todos", "valor_do_negocio", null, false],
+      [E.qualificacao, `MetaEtapa:${E.qualificacao}`, "QualifiedLead", false],
+      [E.agendada, `MetaEtapa:${E.agendada}`, "InitiateCheckout", false],
+      [E.compareceu, `MetaEtapa:${E.compareceu}`, "InitiateCheckout", false],
     ]);
-    expect(r.dados.avisos).toEqual([expect.stringContaining("«Compareceu» não envia de novo para o mesmo negócio")]);
+    // Na régua do upstream a chave é a ETAPA: o negócio que passar pelas duas manda o evento duas vezes.
+    expect(r.dados.avisos).toEqual([expect.stringContaining("«Avaliação agendada» e «Compareceu»: cada etapa envia o seu")]);
   });
 
   it("recusas que ensinam: etapa que não existe, etapa de ganho, valor fixo sem valor e pedido vazio", async () => {
@@ -232,19 +226,24 @@ describe("plataforma_garantir_conversoes_da_meta", () => {
     const chamar = (regras: unknown[]) =>
       mcp.chamar("plataforma_garantir_conversoes_da_meta", { organization_id: ORG, funil: "Agendamentos", regras });
 
-    const inexistente = await chamar([{ etapa: "Triagem", evento: "agendou" }]);
+    const inexistente = await chamar([{ etapa: "Triagem", evento: "LeadSubmitted" }]);
     expect(inexistente.erro).toBe(true);
     expect(inexistente.texto).toContain("«Triagem»");
     expect(inexistente.texto).toContain("«Qualificação»");
 
-    const ganho = await chamar([{ etapa: "Fechou tratamento", evento: "iniciou_compra" }]);
+    const ganho = await chamar([{ etapa: "Fechou tratamento", evento: "InitiateCheckout" }]);
     expect(ganho.texto).toContain("Ganho é a compra");
 
-    const semValor = await chamar([{ etapa: "Qualificação", evento: "lead_qualificado", valor: "valor_fixo" }]);
-    expect(semValor.texto).toContain("valor_fixo_centavos");
+    // O canal e o valor por etapa eram da régua da 9017: a do upstream não os tem.
+    const campoAntigo = await chamar([{ etapa: "Qualificação", evento: "QualifiedLead", valor: "valor_fixo" }]);
+    expect(campoAntigo.erro).toBe(true);
 
-    const eventoErrado = await chamar([{ etapa: "Qualificação", evento: "comprou" }]);
-    expect(eventoErrado.texto).toContain('aceita só: "novo_lead", "lead_qualificado", "agendou", "pediu_orcamento", "iniciou_compra"');
+    // Eventos fora da lista do upstream (os da 9017 também: `Schedule`, `SubmitApplication`).
+    for (const evento of ["comprou", "Schedule", "SubmitApplication", "agendou"]) {
+      const errado = await chamar([{ etapa: "Qualificação", evento }]);
+      expect(errado.erro, evento).toBe(true);
+      expect(errado.texto, evento).toContain("LeadSubmitted");
+    }
 
     const vazio = await mcp.chamar("plataforma_garantir_conversoes_da_meta", { organization_id: ORG, funil: "Agendamentos" });
     expect(vazio.texto).toContain("usar_recomendado: true");
@@ -252,7 +251,7 @@ describe("plataforma_garantir_conversoes_da_meta", () => {
     const funilErrado = await mcp.chamar("plataforma_garantir_conversoes_da_meta", { organization_id: ORG, funil: "Vendas", usar_recomendado: true });
     expect(funilErrado.texto).toContain("«Agendamentos»");
 
-    expect(tabela("mia_conversoes_meta_regras")).toHaveLength(0);
+    expect(tabela("meta_ads_conversion_rules")).toHaveLength(0);
   });
 });
 
@@ -265,7 +264,7 @@ describe("⭐ montar não liga: ligar é `colocar_no_ar`", () => {
     expect(ligar.texto).toContain('"colocar_no_ar"');
     const formularios = await mcp.chamar("plataforma_ligar_leads_de_formulario_da_meta", { organization_id: ORG, ligada: true });
     expect(formularios.texto).toContain('"colocar_no_ar"');
-    expect(tabela("mia_conversoes_meta_regras").every((l) => l.ligada === false)).toBe(true);
+    expect(tabela("meta_ads_conversion_rules").every((l) => l.enabled === false)).toBe(true);
     expect(tabela("mia_conversoes_meta_config")).toHaveLength(0);
   });
 
@@ -275,12 +274,12 @@ describe("⭐ montar não liga: ligar é `colocar_no_ar`", () => {
 
     const r = await mcp.chamar("plataforma_ligar_conversoes", { organization_id: ORG, plataforma: "meta", funil: "Agendamentos", ligada: true });
     expect(r.erro, r.texto).toBe(false);
-    expect(tabela("mia_conversoes_meta_regras").map((l) => l.ligada)).toEqual([true, true, true]);
+    expect(tabela("meta_ads_conversion_rules").map((l) => l.enabled)).toEqual([true, true]);
     expect((r.dados.etapas as Array<{ etapa: string; desfecho: string }>).map((e) => [e.etapa, e.desfecho])).toEqual([
-      ["Novo contato", "atualizou"],
       ["Qualificação", "atualizou"],
       ["Avaliação agendada", "atualizou"],
     ]);
+    expect(vi.mocked(audit).mock.calls.map(([e]) => e.action)).toContain("meta_ads_conversion_rules.updated");
     expect(String(r.dados.aviso)).toContain("nada sai até uma pessoa");
     expect(String(r.dados.vale_a_partir_de)).toContain("a partir de agora");
 
@@ -291,7 +290,7 @@ describe("⭐ montar não liga: ligar é `colocar_no_ar`", () => {
 
     // Uma etapa só, pelo nome.
     await mcp.chamar("plataforma_ligar_conversoes", { organization_id: ORG, plataforma: "meta", funil: "Agendamentos", etapas: ["Qualificação"], ligada: false });
-    expect(tabela("mia_conversoes_meta_regras").map((l) => l.ligada)).toEqual([true, false, true]);
+    expect(tabela("meta_ads_conversion_rules").map((l) => l.enabled)).toEqual([false, true]);
   });
 
   it("etapa sem regra não liga: a recusa manda criar antes", async () => {
@@ -313,17 +312,17 @@ describe("⭐ montar não liga: ligar é `colocar_no_ar`", () => {
     const editar = await mcp.chamar("plataforma_garantir_conversoes_da_meta", {
       organization_id: ORG,
       funil: "Agendamentos",
-      regras: [{ etapa: "Qualificação", evento: "iniciou_compra" }],
+      regras: [{ etapa: "Qualificação", evento: "InitiateCheckout" }],
     });
     expect(editar.erro).toBe(true);
     expect(editar.texto).toContain("está LIGADA em «Qualificação»");
     expect(editar.texto).toContain("Nada foi gravado");
-    expect(tabela("mia_conversoes_meta_regras").find((l) => l.stage_id === E.qualificacao)!.evento).toBe("lead_qualificado");
+    expect(tabela("meta_ads_conversion_rules").find((l) => l.stage_id === E.qualificacao)!.meta_event).toBe("QualifiedLead");
 
     // O mesmo pedido, sem mudança, passa: garantir de novo com a regra ligada é `ja_estava`.
     const igual = await mcp.chamar("plataforma_garantir_conversoes_da_meta", { organization_id: ORG, funil: "Agendamentos", usar_recomendado: true });
     expect(igual.erro, igual.texto).toBe(false);
-    expect(tabela("mia_conversoes_meta_regras").map((l) => l.ligada)).toEqual([true, true, true]);
+    expect(tabela("meta_ads_conversion_rules").map((l) => l.enabled)).toEqual([true, true]);
   });
 });
 
@@ -445,7 +444,7 @@ describe("⭐ a empresa de demonstração", () => {
     const ligar = await mcp.chamar("plataforma_ligar_conversoes", { organization_id: ORG, plataforma: "meta", funil: "Agendamentos", ligada: true });
     expect(ligar.erro, ligar.texto).toBe(false);
     expect(String(ligar.dados.aviso)).toContain("Empresa de demonstração");
-    expect(tabela("mia_conversoes_meta_regras").every((l) => l.ligada === true)).toBe(true);
+    expect(tabela("meta_ads_conversion_rules").every((l) => l.enabled === true)).toBe(true);
 
     const chave = await mcp.chamar("plataforma_ligar_leads_de_formulario_da_meta", { organization_id: ORG, ligada: true });
     expect(String(chave.dados.aviso)).toContain("nada é enviado");
@@ -466,10 +465,10 @@ describe("o checklist", () => {
     const area = (r.dados.areas as Array<Record<string, unknown>>).find((a) => a.area === "conversoes")!;
     expect(area.situacao).toBe("pronto");
     expect(area.falta).toEqual([]);
-    expect(area.pronto).toEqual(["1 de 3 regra(s) de etapa da Meta ligada(s)."]);
+    expect(area.pronto).toEqual(["1 de 2 regra(s) de etapa da Meta ligada(s)."]);
     expect(area.dados).toMatchObject({
       opcional: true,
-      regras_da_meta: { gravadas: 3, ligadas: 1 },
+      regras_da_meta: { gravadas: 2, ligadas: 1 },
       regras_do_google: { gravadas: 0, ligadas: 0 },
       leads_de_formulario_da_meta: false,
     });

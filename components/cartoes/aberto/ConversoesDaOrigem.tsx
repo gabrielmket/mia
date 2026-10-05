@@ -5,8 +5,9 @@
  * seção Origem do cartão aberto (docs/fork/conversoes-da-meta.md).
  *
  * Por plataforma (Meta e Google Ads): o que foi informado e quando ("Lead
- * qualificado informado à Meta em 28/09", "Agendou informado à Meta em 29/09 ·
- * R$ 150"), ou por que não foi. A plataforma sem envio nenhum diz se o negócio
+ * qualificado informado à Meta em 28/09", "Compra informada à Meta em 29/09 ·
+ * R$ 1.500"), ou por que não foi. Desde a .72 os eventos de etapa da Meta são os
+ * da régua do upstream (0524), lidos do mesmo livro-razão. A plataforma sem envio nenhum diz se o negócio
  * veio dela: é a resposta que quem atende precisa dar ao cliente que pergunta
  * "por que a Meta não ficou sabendo desta venda?".
  *
@@ -75,9 +76,6 @@ const MOTIVO_CURTO: Record<string, string> = {
   plataforma_sem_transporte: "plataforma sem envio de conversão",
   evento_de_teste: "evento de teste",
   recusado_pela_plataforma: "a plataforma recusou",
-  formulario_desligado: "veio de formulário e a volta dos leads de formulário está desligada",
-  anterior_a_regra: "entrou na etapa antes de a regra ser ligada",
-  anterior_a_chave: "aconteceu antes de a volta dos leads de formulário ser ligada",
   sem_atribuicao: "sem clique de anúncio",
 };
 

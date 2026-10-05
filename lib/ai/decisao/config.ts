@@ -69,6 +69,7 @@ const tarefasSchema = z.object({
   humano: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
   opt_out: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
   followup: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
+  campo_do_negocio: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
   // FORK MIA — a passagem prometida (./tarefa-da-passagem-prometida.ts).
   passagem_prometida: tarefaGravadaSchema.optional().catch(tarefaIlegivel),
 });

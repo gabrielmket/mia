@@ -7,46 +7,39 @@ import { clienteMcp, TODAS_AS_OPERACOES, TOKEN } from "@/tests/helpers/implantac
 import { pgComoSupabaseMia } from "../pg-como-supabase-mia";
 
 /**
- * FORK MIA (migration 9017) — AS CONVERSÕES DA META POR ETAPA, NO POSTGRES DE VERDADE.
+ * FORK MIA — AS CONVERSÕES DA META POR ETAPA, NO POSTGRES DE VERDADE, depois da
+ * fusão da 1.73 (.72).
  *
- * ═══ O QUE ESTE ARQUIVO PROVA QUE O TESTE DE UNIDADE NÃO PROVA ═══
+ * ═══ O QUE MUDOU ═══
  *
- * `tests/unit/conversoes-da-meta-consumidor.test.ts` roda o consumidor contra
- * tabelas em memória. Aqui as tabelas, os CHECK, os gatilhos e as funções são os
- * de verdade: `mia_conversoes_meta_regras` e o gatilho que carimba
- * `configurada_em`, a chave dos formulários e o gatilho do `desde`, o índice
- * único do livro-razão (`ad_conversion_dispatches`, do upstream), o gatilho que
- * não deixa um envio `sent` ser rebaixado, a função do reenvio e a trava da
- * empresa de demonstração (9010). Uma coluna que não existe, um CHECK que recusa
- * o valor ou um gatilho que o código não conhecia aparecem aqui e em nenhum
- * outro lugar.
+ * A régua por etapa da Meta passou a ser a do UPSTREAM (0524,
+ * `meta_ads_conversion_rules`, consumidor `conversoes.etapa_meta`). A nossa
+ * (9017) ficou obsoleta (9019) e o nosso consumidor de etapa saiu do registro.
+ * Ficou nosso só o que o upstream não tem: a volta dos LEADS DE FORMULÁRIO
+ * (consumidor `conversoes.meta_formulario`, chave `mia_conversoes_meta_config`),
+ * o diagnóstico da Meta e as ferramentas do MCP de plataforma, que agora gravam
+ * na tabela do upstream pela função da tela dele.
  *
- * ═══ AS TRAVAS, UMA A UMA ═══
+ * ═══ ⭐ A REGRA DA CASA, PROVADA AQUI ═══
  *
- *   1. uma vez por negócio e evento (sair e voltar, e o mesmo evento em outra
- *      etapa, não duplicam);
- *   2. ligar uma regra não envia o passado;
- *   3. o canal de entrada do negócio;
- *   4. o valor do evento;
- *   5. a empresa de demonstração: a regra pode existir, e nada sai.
- *
- * ═══ E AS FERRAMENTAS DO MCP, NO MESMO BANCO ═══
- *
- * As ferramentas de conversões gravam pelas mesmas funções da tela. Aqui elas
- * rodam pelo protocolo contra as tabelas de verdade, e a reexecução é medida pelo
- * RETRATO do banco (cada coluna de cada linha, inclusive `atualizada_em`): uma
- * ferramenta que respondesse "já estava" e regravasse a linha reprova.
+ * Um negócio que muda de etapa gera NO MÁXIMO UM envio daquele evento para a
+ * Meta. Os consumidores REGISTRADOS (os do upstream e o nosso) rodam juntos sobre
+ * o MESMO banco, como o dreno os rodaria, para cada origem do negócio (clique,
+ * página, formulário, formulário com clique, orgânico), e conta-se a ida à Meta
+ * e a linha no livro-razão. E o nosso consumidor de etapa da .70
+ * (`conversoes.meta_etapa`) não está mais registrado.
  *
  * ═══ O QUE NÃO É REPRODUZIDO (declarado) ═══
  *
  *  - A META. `fetch` é um dublê que guarda o corpo: nenhuma chamada sai da máquina.
  *  - A cifra do token: a função de decifrar é um dublê. A LEITURA da conexão
  *    (ligada, com destino, com token) é a de verdade, na tabela de verdade.
- *  - RLS: `pg` conecta como `postgres`, que é como o `service_role` do consumidor
- *    enxerga o banco. A RLS das duas tabelas é medida em `rls-tabelas-da-mia.test.ts`.
+ *  - RLS: `pg` conecta como `postgres`, que é como o `service_role` dos
+ *    consumidores enxerga o banco. A RLS das tabelas da MIA é medida em
+ *    `rls-tabelas-da-mia.test.ts`.
  *
  * Sem dado de ninguém: empresas e negócios fictícios, telefone +5500 (DDD que
- * não existe).
+ * não existe), id de lead de formulário inventado.
  */
 const container = process.env.TEST_DB_CONTAINER;
 if (!container) {
@@ -82,26 +75,34 @@ const pool = new pg.Pool({
 
 estado.cliente = await pgComoSupabaseMia(pool);
 
-const { conversaoDeEtapaDaMetaHandler } = await import("@/lib/conversoes-meta/etapa.handler");
+const { ensureHandlersRegistered } = await import("@/lib/event-log/register-handlers");
+const { getRegisteredHandlers } = await import("@/lib/event-log/dispatcher");
+const { conversaoDoLeadDeFormularioHandler } = await import("@/lib/conversoes-meta/formulario.handler");
 const { criarServidorDePlataforma } = await import("@/lib/mcp-plataforma/servidor");
 
-const IMPLANTADOR = "90179017-1111-4000-8000-0000000000c1";
+const IMPLANTADOR = "90199019-1111-4000-8000-0000000000c1";
 
-const REAL = "90179017-0000-4000-8000-0000000000a1";
-const DEMO = "90179017-0000-4000-8000-0000000000ad";
-const VIZINHA = "90179017-0000-4000-8000-0000000000a2";
+const REAL = "90199019-0000-4000-8000-0000000000a1";
+const DEMO = "90199019-0000-4000-8000-0000000000ad";
+const VIZINHA = "90199019-0000-4000-8000-0000000000a2";
+
+const ID_DO_LEAD_DA_META = "12345678901234567";
+const DE_CLIQUE = { ad_platform: "meta_ads", ad_source_id: "clique-ficticio" };
+const DA_PAGINA = { ad_platform: "site", utm_source: "instagram" };
+/** O contato do formulário traz a plataforma e NÃO traz clique (lib/leads-da-meta/mapear.ts). */
+const DO_FORMULARIO = { ad_platform: "meta_ads", meta_lead_id: ID_DO_LEAD_DA_META };
 
 /** Os ids de uma empresa: o mesmo desenho nas três, mudando o último dígito. */
 function ids(org: string) {
   const d = org.slice(-2);
   return {
-    funil: `90179017-1000-4000-8000-0000000000${d}`,
-    qualificacao: `90179017-2001-4000-8000-0000000000${d}`,
-    agendada: `90179017-2002-4000-8000-0000000000${d}`,
-    compareceu: `90179017-2003-4000-8000-0000000000${d}`,
-    ganho: `90179017-2009-4000-8000-0000000000${d}`,
-    contato: `90179017-3000-4000-8000-0000000000${d}`,
-    lead: `90179017-4000-4000-8000-0000000000${d}`,
+    funil: `90199019-1000-4000-8000-0000000000${d}`,
+    qualificacao: `90199019-2001-4000-8000-0000000000${d}`,
+    agendada: `90199019-2002-4000-8000-0000000000${d}`,
+    compareceu: `90199019-2003-4000-8000-0000000000${d}`,
+    ganho: `90199019-2009-4000-8000-0000000000${d}`,
+    contato: `90199019-3000-4000-8000-0000000000${d}`,
+    lead: `90199019-4000-4000-8000-0000000000${d}`,
   };
 }
 
@@ -111,27 +112,17 @@ async function uma<T extends pg.QueryResultRow>(consulta: string, valores: unkno
   return rows[0]!;
 }
 
-/** O código do erro do Postgres, ou "passou". */
-async function tentar(consulta: string, valores: unknown[] = []): Promise<string> {
-  try {
-    await pool.query(consulta, valores);
-    return "passou";
-  } catch (e) {
-    return (e as { code?: string }).code ?? "erro";
-  }
-}
-
 async function semear(org: string, tag: string, demonstracao: boolean) {
   const i = ids(org);
   await pool.query(
     `insert into public.organizations (id, slug, legal_name, display_name, demonstracao)
        values ($1, $2, $3, $3, $4) on conflict (id) do nothing`,
-    [org, `mia-9017-${tag}`, `MIA 9017 ${tag}`, demonstracao],
+    [org, `mia-9019-${tag}`, `MIA 9019 ${tag}`, demonstracao],
   );
   await pool.query(
     `insert into public.crm_pipelines (id, organization_id, name, slug) values ($1, $2, 'Agendamentos', $3)
        on conflict (id) do nothing`,
-    [i.funil, org, `agendamentos-9017-${tag}`],
+    [i.funil, org, `agendamentos-9019-${tag}`],
   );
   await pool.query(
     `insert into public.crm_stages (id, organization_id, pipeline_id, name, slug, position, is_won) values
@@ -143,10 +134,10 @@ async function semear(org: string, tag: string, demonstracao: boolean) {
     [i.qualificacao, i.agendada, i.compareceu, i.ganho, org, i.funil],
   );
   await pool.query(
-    `insert into public.contacts (id, organization_id, name, phone_number, source_metadata)
-       values ($1, $2, 'Pessoa de teste', $3, '{"ad_platform":"meta_ads","ad_source_id":"clique-ficticio"}'::jsonb)
+    `insert into public.contacts (id, organization_id, name, phone_number, email, source_metadata)
+       values ($1, $2, 'Pessoa de teste', $3, 'pessoa@exemplo.invalid', '{}'::jsonb)
        on conflict (id) do nothing`,
-    [i.contato, org, `+55009000000${org.slice(-2).replace(/\D/g, "1").padStart(2, "0")}`],
+    [i.contato, org, `+55009000001${org.slice(-2).replace(/\D/g, "1").padStart(2, "0")}`],
   );
   await pool.query(
     `insert into public.crm_leads (id, organization_id, pipeline_id, stage_id, contact_id, title, status)
@@ -155,19 +146,29 @@ async function semear(org: string, tag: string, demonstracao: boolean) {
   );
 }
 
-/** Grava (ou regrava) a regra de uma etapa e devolve quando ela foi configurada. */
-async function regra(org: string, etapa: string, over: Record<string, unknown> = {}): Promise<string> {
-  const r = { evento: "lead_qualificado", canal: "todos", modo_do_valor: "sem_valor", valor_fixo_centavos: null, ligada: true, ...over };
-  const linha = await uma<{ configurada_em: string }>(
-    `insert into public.mia_conversoes_meta_regras (organization_id, stage_id, evento, canal, modo_do_valor, valor_fixo_centavos, ligada)
-       values ($1, $2, $3, $4, $5, $6, $7)
-     on conflict (organization_id, stage_id) do update set
-       evento = excluded.evento, canal = excluded.canal, modo_do_valor = excluded.modo_do_valor,
-       valor_fixo_centavos = excluded.valor_fixo_centavos, ligada = excluded.ligada
-     returning configurada_em`,
-    [org, etapa, r.evento, r.canal, r.modo_do_valor, r.valor_fixo_centavos, r.ligada],
+/** A origem do negócio: o que fica no contato (atribuição) e no próprio negócio (formulário). */
+async function origem(org: string, contato: Record<string, unknown>, negocio: Record<string, unknown>) {
+  const i = ids(org);
+  await pool.query("update public.contacts set source_metadata = $2::jsonb where id = $1", [i.contato, JSON.stringify(contato)]);
+  await pool.query("update public.crm_leads set source_metadata = $2::jsonb where id = $1", [i.lead, JSON.stringify(negocio)]);
+}
+
+/** A regra do UPSTREAM (0524) numa etapa. `configured_at` é carimbado pelo gatilho dele. */
+async function regraDoUpstream(org: string, etapa: string, metaEvent = "QualifiedLead", ligada = true) {
+  await pool.query(
+    `insert into public.meta_ads_conversion_rules (organization_id, stage_id, event_name, meta_event, enabled)
+       values ($1, $2, $3, $4, $5)
+     on conflict (organization_id, stage_id) do update set meta_event = excluded.meta_event, enabled = excluded.enabled`,
+    [org, etapa, `MetaEtapa:${etapa}`, metaEvent, ligada],
   );
-  return linha.configurada_em;
+}
+
+async function chaveDosFormularios(org: string, ligada: boolean) {
+  await pool.query(
+    `insert into public.mia_conversoes_meta_config (organization_id, leads_de_formulario) values ($1, $2)
+       on conflict (organization_id) do update set leads_de_formulario = excluded.leads_de_formulario`,
+    [org, ligada],
+  );
 }
 
 /** A hora do BANCO deslocada: o relógio da máquina e o do contêiner não precisam bater. */
@@ -175,7 +176,7 @@ async function hora(deslocamento: string): Promise<string> {
   return (await uma<{ t: string }>(`select (now() + $1::interval) as t`, [deslocamento])).t;
 }
 
-function entrou(org: string, etapa: string, quando: string): EventRow {
+function entrou(org: string, etapa: string, quando: string, over: Partial<EventRow> = {}): EventRow {
   return {
     id: "evento",
     entity_id: ids(org).lead,
@@ -187,19 +188,36 @@ function entrou(org: string, etapa: string, quando: string): EventRow {
     attempts: 0,
     consumed_by: [],
     created_at: quando,
+    ...over,
   };
 }
 
 const livro = (org: string) =>
   pool
-    .query<{ event_name: string; platform: string; status: string; reason: string | null; value_cents: number | null }>(
-      "select event_name, platform, status, reason, value_cents from public.ad_conversion_dispatches where organization_id = $1 order by event_name",
+    .query<{ event_name: string; platform: string; status: string; reason: string | null; meta_event_name: string | null }>(
+      "select event_name, platform, status, reason, meta_event_name from public.ad_conversion_dispatches where organization_id = $1 order by event_name",
       [org],
     )
     .then((r) => r.rows);
 
-let enviados: Array<Record<string, unknown>>;
-const itemEnviado = (n = 0) => (enviados[n]!.data as Array<Record<string, unknown>>)[0]!;
+let enviados: Array<{ url: string; corpo: Record<string, unknown> }>;
+/** As respostas da Meta de mentira, na ordem; vazia = aceito. */
+let respostas: Array<{ status: number; corpo: unknown }>;
+const idasAMeta = () => enviados.filter((e) => /\/events$/.test(e.url));
+const itemEnviado = (n = 0) => (idasAMeta()[n]!.corpo.data as Array<Record<string, unknown>>)[0]!;
+
+/** Os consumidores de conversão REGISTRADOS, na ordem do registro: os que podem falar com a Meta. */
+function consumidoresDeConversao() {
+  ensureHandlersRegistered();
+  return getRegisteredHandlers().filter((h) => h.key.startsWith("conversoes."));
+}
+
+/** O dreno, para um evento: cada consumidor de conversão que escuta aquele tipo, como `dispatchEvent`. */
+async function drenar(row: EventRow) {
+  for (const h of consumidoresDeConversao()) {
+    if (h.events.includes(row.event_type)) await h.handle(row);
+  }
+}
 
 beforeAll(async () => {
   await semear(REAL, "real", false);
@@ -209,7 +227,8 @@ beforeAll(async () => {
   // quem decifra, neste arquivo, é o dublê.
   await pool.query(
     `insert into public.ad_platform_connections (organization_id, platform, dataset_id, access_token_encrypted, enabled)
-       values ($1, 'meta_ads', '900000000000001', '\\x00'::bytea, true)`,
+       values ($1, 'meta_ads', '900000000000001', '\\x00'::bytea, true)
+     on conflict do nothing`,
     [REAL],
   );
 });
@@ -220,100 +239,56 @@ afterAll(async () => {
 
 beforeEach(async () => {
   enviados = [];
+  respostas = [];
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (_url: string, init: RequestInit) => {
-      enviados.push(JSON.parse(String(init.body)) as Record<string, unknown>);
-      return new Response(JSON.stringify({ events_received: 1 }), { status: 200 });
+    vi.fn(async (url: string, init: RequestInit) => {
+      enviados.push({ url: String(url), corpo: JSON.parse(String(init.body)) as Record<string, unknown> });
+      const r = respostas.shift() ?? { status: 200, corpo: { events_received: 1 } };
+      return new Response(JSON.stringify(r.corpo), { status: r.status });
     }),
   );
-  await pool.query("delete from public.ad_conversion_dispatches where organization_id = any($1)", [[REAL, DEMO, VIZINHA]]);
-  await pool.query("delete from public.mia_conversoes_meta_regras where organization_id = any($1)", [[REAL, DEMO, VIZINHA]]);
-  await pool.query("delete from public.mia_conversoes_meta_config where organization_id = any($1)", [[REAL, DEMO, VIZINHA]]);
-  await pool.query("delete from public.google_ads_conversion_rules where organization_id = any($1)", [[REAL, DEMO, VIZINHA]]);
-  await pool.query("delete from public.crm_lead_links where organization_id = any($1)", [[REAL, DEMO, VIZINHA]]);
-  await pool.query("update public.crm_leads set value_cents = null where organization_id = any($1)", [[REAL, DEMO, VIZINHA]]);
+  const todas = [[REAL, DEMO, VIZINHA]];
+  await pool.query("delete from public.ad_conversion_dispatches where organization_id = any($1)", todas);
+  await pool.query("delete from public.meta_ads_conversion_rules where organization_id = any($1)", todas);
+  await pool.query("delete from public.mia_conversoes_meta_config where organization_id = any($1)", todas);
+  await pool.query("delete from public.google_ads_conversion_rules where organization_id = any($1)", todas);
+  await pool.query("update public.crm_leads set value_cents = null, status = 'open' where organization_id = any($1)", todas);
+  await origem(REAL, {}, {});
 });
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("o schema: o que o banco recusa sozinho", () => {
-  it("evento, canal e modo do valor fora do vocabulário são recusados", async () => {
-    const i = ids(REAL);
-    const inserir = (colunas: string, valores: string) =>
-      tentar(
-        `insert into public.mia_conversoes_meta_regras (organization_id, stage_id, ${colunas}) values ($1, $2, ${valores})`,
-        [REAL, i.qualificacao],
-      );
-    expect(await inserir("evento", "'comprou_tudo'")).toBe("23514");
-    expect(await inserir("evento, canal", "'agendou', 'sms'")).toBe("23514");
-    expect(await inserir("evento, modo_do_valor", "'agendou', 'gratis'")).toBe("23514");
-  });
-
-  it("valor fixo sem valor (ou com zero), e valor guardado fora do modo de valor fixo, são recusados", async () => {
-    const i = ids(REAL);
-    const inserir = (modo: string, valor: string) =>
-      tentar(
-        `insert into public.mia_conversoes_meta_regras (organization_id, stage_id, evento, modo_do_valor, valor_fixo_centavos)
-           values ($1, $2, 'agendou', '${modo}', ${valor})`,
-        [REAL, i.agendada],
-      );
-    expect(await inserir("valor_fixo", "null")).toBe("23514");
-    expect(await inserir("valor_fixo", "0")).toBe("23514");
-    expect(await inserir("sem_valor", "15000")).toBe("23514");
-    expect(await inserir("valor_fixo", "15000")).toBe("passou");
-  });
-
-  it("uma regra por etapa, e etapa de OUTRA empresa não entra", async () => {
-    const i = ids(REAL);
-    await regra(REAL, i.qualificacao);
-    expect(
-      await tentar(`insert into public.mia_conversoes_meta_regras (organization_id, stage_id, evento) values ($1, $2, 'agendou')`, [
-        REAL,
-        i.qualificacao,
-      ]),
-    ).toBe("23505");
-    expect(
-      await tentar(`insert into public.mia_conversoes_meta_regras (organization_id, stage_id, evento) values ($1, $2, 'agendou')`, [
-        REAL,
-        ids(VIZINHA).qualificacao,
-      ]),
-    ).toBe("23503");
-  });
-
-  it("a regra nasce DESLIGADA quando ninguém diz o contrário", async () => {
-    const i = ids(REAL);
-    const linha = await uma<{ ligada: boolean; canal: string; modo_do_valor: string }>(
-      `insert into public.mia_conversoes_meta_regras (organization_id, stage_id, evento) values ($1, $2, 'agendou')
-         returning ligada, canal, modo_do_valor`,
-      [REAL, i.agendada],
+describe("o schema depois da 9019", () => {
+  it("a régua da 9017 fica de pé, obsoleta e sem uso; nada a apagar nesta fusão", async () => {
+    const c = await uma<{ comentario: string }>(
+      "select obj_description('public.mia_conversoes_meta_regras'::regclass, 'pg_class') as comentario",
     );
-    expect(linha).toEqual({ ligada: false, canal: "todos", modo_do_valor: "sem_valor" });
+    expect(c.comentario).toMatch(/^OBSOLETA desde a \.72 \(MIA 9019\)/);
+    const f = await uma<{ comentario: string }>(
+      "select obj_description('public.fn_mia_solicitar_reenvio_conversao_meta(uuid, uuid, text)'::regprocedure, 'pg_proc') as comentario",
+    );
+    expect(f.comentario).toMatch(/^OBSOLETA desde a \.72/);
   });
 
-  it("⭐ `configurada_em` anda quando a regra é LIGADA ou troca de evento, e fica onde está no resto", async () => {
+  it("o reenvio nosso ficou inerte: devolve false e não emite o evento que perdeu o consumidor", async () => {
     const i = ids(REAL);
-    const nasceu = await regra(REAL, i.qualificacao, { ligada: false });
-    const mexer = async (sql: string) =>
-      (
-        await uma<{ configurada_em: string }>(
-          `update public.mia_conversoes_meta_regras set ${sql} where organization_id = $1 and stage_id = $2 returning configurada_em`,
-          [REAL, i.qualificacao],
-        )
-      ).configurada_em;
-    // Cada UPDATE é uma transação: `now()` de cada uma é depois da anterior.
-    expect(await mexer("canal = 'whatsapp'")).toBe(nasceu);
-    expect(await mexer("modo_do_valor = 'valor_fixo', valor_fixo_centavos = 15000")).toBe(nasceu);
-    const ligou = await mexer("ligada = true");
-    expect(Date.parse(ligou)).toBeGreaterThan(Date.parse(nasceu));
-    expect(await mexer("ligada = false")).toBe(ligou);
-    const trocou = await mexer("evento = 'agendou'");
-    expect(Date.parse(trocou)).toBeGreaterThan(Date.parse(ligou));
-    // E ninguém consegue voltar o relógio à mão.
-    expect(await mexer("configurada_em = timestamptz '2020-01-01'")).toBe(trocou);
+    await pool.query(
+      `insert into public.ad_conversion_dispatches (organization_id, lead_id, platform, event_name, status, reason, event_occurred_at)
+         values ($1, $2, 'meta_ads', 'Meta:agendou', 'error', 'recusado_pela_plataforma', now() - interval '1 day')`,
+      [REAL, i.lead],
+    );
+    const antes = await uma<{ n: number }>("select count(*)::int as n from public.event_log where event_type = 'conversao_meta.retry_requested'");
+    expect(
+      (await uma<{ ok: boolean }>("select public.fn_mia_solicitar_reenvio_conversao_meta($1, $2, 'Meta:agendou') as ok", [REAL, i.lead])).ok,
+    ).toBe(false);
+    const depois = await uma<{ n: number }>("select count(*)::int as n from public.event_log where event_type = 'conversao_meta.retry_requested'");
+    expect(depois.n).toBe(antes.n);
+    // E nenhum consumidor registrado escuta mais aquele tipo.
+    expect(consumidoresDeConversao().some((h) => h.events.includes("conversao_meta.retry_requested"))).toBe(false);
   });
 
-  it("⭐ a chave dos formulários guarda desde quando está ligada, e esquece ao desligar", async () => {
+  it("⭐ a chave dos formulários continua: guarda desde quando está ligada, e esquece ao desligar", async () => {
     const ligar = (valor: boolean) =>
       uma<{ desde: string | null }>(
         `insert into public.mia_conversoes_meta_config (organization_id, leads_de_formulario) values ($1, $2)
@@ -330,287 +305,155 @@ describe("o schema: o que o banco recusa sozinho", () => {
   });
 });
 
-describe("⭐ as travas, com o consumidor de verdade e o banco de verdade", () => {
-  it("1 · uma vez por negócio e evento: o primeiro movimento envia, e voltar à etapa não", async () => {
-    const i = ids(REAL);
-    await regra(REAL, i.qualificacao);
-    const quando = await hora("1 second");
+describe("⭐ A REGRA DA CASA: um movimento de etapa, no máximo UMA ida à Meta", () => {
+  it("o registro tem os três consumidores de etapa do upstream e o nosso dos formulários; o nosso de etapa da .70 saiu", () => {
+    const chaves = consumidoresDeConversao().map((h) => h.key).sort();
+    expect(chaves).toEqual([
+      "conversoes.etapa_meta",
+      "conversoes.meta_formulario",
+      "conversoes.qualificacao",
+      "conversoes.venda",
+    ]);
+    expect(chaves).not.toContain("conversoes.meta_etapa");
+  });
 
-    expect((await conversaoDeEtapaDaMetaHandler.handle(entrou(REAL, i.qualificacao, quando))).status).toBe("ok");
-    expect(enviados).toHaveLength(1);
+  it.each([
+    ["clique em anúncio para o WhatsApp (upstream)", DE_CLIQUE, {}, "business_messaging"],
+    ["página com UTM da Meta (upstream, #2076)", DA_PAGINA, {}, "system_generated"],
+    ["formulário da Meta (a MIA)", DO_FORMULARIO, DO_FORMULARIO, "system_generated"],
+    ["formulário E clique: vence a atribuição do upstream", DE_CLIQUE, DO_FORMULARIO, "business_messaging"],
+  ] as const)("%s", async (_nome, doContato, doNegocio, porta) => {
+    const i = ids(REAL);
+    await origem(REAL, doContato, doNegocio);
+    await regraDoUpstream(REAL, i.agendada, "LeadSubmitted");
+    await chaveDosFormularios(REAL, true);
+
+    await drenar(entrou(REAL, i.agendada, await hora("1 second")));
+    expect(idasAMeta()).toHaveLength(1);
     expect(itemEnviado()).toMatchObject({
-      event_name: "QualifiedLead",
-      event_id: `${i.lead}:Meta:lead_qualificado`,
-      action_source: "business_messaging",
-      messaging_channel: "whatsapp",
+      event_name: "LeadSubmitted",
+      event_id: `${i.lead}:MetaEtapa:${i.agendada}`,
+      action_source: porta,
     });
     expect(await livro(REAL)).toEqual([
-      { event_name: "Meta:lead_qualificado", platform: "meta_ads", status: "sent", reason: null, value_cents: null },
+      { event_name: `MetaEtapa:${i.agendada}`, platform: "meta_ads", status: "sent", reason: null, meta_event_name: "LeadSubmitted" },
     ]);
 
-    const voltou = await conversaoDeEtapaDaMetaHandler.handle(entrou(REAL, i.qualificacao, await hora("1 hour")));
-    expect(voltou).toMatchObject({ status: "skipped", detail: "ja_enviada" });
-    expect(enviados).toHaveLength(1);
+    // O mesmo movimento de novo (o dreno reentrega; alguém sai e volta à etapa):
+    // nenhuma ida a mais, nenhuma linha a mais.
+    await drenar(entrou(REAL, i.agendada, await hora("1 hour"), { id: "evento-2" }));
+    expect(idasAMeta()).toHaveLength(1);
     expect(await livro(REAL)).toHaveLength(1);
   });
 
-  it("1 · o mesmo evento ligado em duas etapas só sai na primeira; eventos diferentes saem os dois", async () => {
+  it("negócio orgânico: ninguém fala com a Meta, e nada vira pendência", async () => {
     const i = ids(REAL);
-    await regra(REAL, i.qualificacao);
-    await regra(REAL, i.compareceu);
-    await regra(REAL, i.agendada, { evento: "agendou" });
-    const quando = await hora("1 second");
-
-    await conversaoDeEtapaDaMetaHandler.handle(entrou(REAL, i.qualificacao, quando));
-    await conversaoDeEtapaDaMetaHandler.handle(entrou(REAL, i.agendada, quando));
-    const repetido = await conversaoDeEtapaDaMetaHandler.handle(entrou(REAL, i.compareceu, quando));
-    expect(repetido).toMatchObject({ status: "skipped", detail: "ja_enviada" });
-    expect(enviados.map((_, n) => itemEnviado(n).event_name)).toEqual(["QualifiedLead", "Schedule"]);
-    expect((await livro(REAL)).map((l) => [l.event_name, l.status])).toEqual([
-      ["Meta:agendou", "sent"],
-      ["Meta:lead_qualificado", "sent"],
-    ]);
-  });
-
-  it("1 · um envio aceito nunca é rebaixado, mesmo que alguém tente regravar a linha", async () => {
-    const i = ids(REAL);
-    await regra(REAL, i.qualificacao);
-    await conversaoDeEtapaDaMetaHandler.handle(entrou(REAL, i.qualificacao, await hora("1 second")));
-    await pool.query(
-      "update public.ad_conversion_dispatches set status = 'skipped', reason = 'sem_conexao' where organization_id = $1",
-      [REAL],
-    );
-    expect((await livro(REAL))[0]).toMatchObject({ status: "sent", reason: null });
-  });
-
-  it("2 · ligar uma regra não envia o passado: o movimento anterior à configuração fica como decisão", async () => {
-    const i = ids(REAL);
-    await regra(REAL, i.qualificacao);
-    const antes = await hora("-1 day");
-
-    const r = await conversaoDeEtapaDaMetaHandler.handle(entrou(REAL, i.qualificacao, antes));
-    expect(r).toMatchObject({ status: "skipped", detail: "anterior_a_regra" });
-    expect(enviados).toHaveLength(0);
-    expect(await livro(REAL)).toEqual([
-      { event_name: "Meta:lead_qualificado", platform: "meta_ads", status: "skipped", reason: "anterior_a_regra", value_cents: null },
-    ]);
-  });
-
-  it("2 · regra desligada e religada: o que aconteceu no intervalo também é passado", async () => {
-    const i = ids(REAL);
-    await regra(REAL, i.qualificacao, { ligada: false });
-    const noIntervalo = await hora("0 seconds");
-    // Uma folga medível entre o movimento e o religar: sem ela os dois instantes
-    // dependem da velocidade da máquina para ficarem em ordem.
-    await pool.query("select pg_sleep(0.02)");
-    await regra(REAL, i.qualificacao, { ligada: true });
-
-    const r = await conversaoDeEtapaDaMetaHandler.handle(entrou(REAL, i.qualificacao, noIntervalo));
-    expect(r).toMatchObject({ detail: "anterior_a_regra" });
-    expect(enviados).toHaveLength(0);
-  });
-
-  it("3 · canal de entrada: \"só WhatsApp\" não envia o negócio sem conversa, e envia o que tem", async () => {
-    const i = ids(REAL);
-    await regra(REAL, i.qualificacao, { canal: "whatsapp" });
-    const quando = await hora("1 second");
-
-    expect(await conversaoDeEtapaDaMetaHandler.handle(entrou(REAL, i.qualificacao, quando))).toMatchObject({
-      status: "skipped",
-      detail: "canal_fora_da_regra",
-    });
-    expect(enviados).toHaveLength(0);
+    await regraDoUpstream(REAL, i.agendada, "LeadSubmitted");
+    await chaveDosFormularios(REAL, true);
+    await drenar(entrou(REAL, i.agendada, await hora("1 second")));
+    expect(idasAMeta()).toHaveLength(0);
     expect(await livro(REAL)).toEqual([]);
-
-    await pool.query(
-      `insert into public.crm_lead_links (organization_id, lead_id, target_kind, target_id, link_kind)
-         values ($1, $2, 'conversation', gen_random_uuid(), 'origin')`,
-      [REAL, i.lead],
-    );
-    expect((await conversaoDeEtapaDaMetaHandler.handle(entrou(REAL, i.qualificacao, quando))).status).toBe("ok");
-    expect(enviados).toHaveLength(1);
   });
 
-  it("4 · o valor: fixo leva o valor da regra; do negócio leva o do negócio; sem valor no negócio, sai sem valor", async () => {
+  it("a venda do formulário: arrastar para o ganho e o `lead.won` juntos saem uma vez só", async () => {
     const i = ids(REAL);
-    await regra(REAL, i.agendada, { evento: "agendou", modo_do_valor: "valor_fixo", valor_fixo_centavos: 15000 });
-    await regra(REAL, i.qualificacao, { evento: "lead_qualificado", modo_do_valor: "valor_do_negocio" });
-    await regra(REAL, i.compareceu, { evento: "pediu_orcamento", modo_do_valor: "valor_do_negocio" });
-    const quando = await hora("1 second");
+    await origem(REAL, DO_FORMULARIO, DO_FORMULARIO);
+    await chaveDosFormularios(REAL, true);
+    await pool.query("update public.crm_leads set status = 'won', value_cents = 240000 where id = $1", [i.lead]);
 
-    await conversaoDeEtapaDaMetaHandler.handle(entrou(REAL, i.agendada, quando));
-    expect(itemEnviado(0).custom_data).toEqual({ value: 150, currency: "BRL" });
-
-    // O negócio ainda não tem valor: o evento de etapa sai, sem valor.
-    await conversaoDeEtapaDaMetaHandler.handle(entrou(REAL, i.qualificacao, quando));
-    expect(itemEnviado(1)).not.toHaveProperty("custom_data");
-
-    await pool.query("update public.crm_leads set value_cents = 240000 where id = $1", [i.lead]);
-    await conversaoDeEtapaDaMetaHandler.handle(entrou(REAL, i.compareceu, quando));
-    expect(itemEnviado(2).custom_data).toEqual({ value: 2400, currency: "BRL" });
-
-    expect((await livro(REAL)).map((l) => [l.event_name, l.status, l.value_cents])).toEqual([
-      ["Meta:agendou", "sent", 15000],
-      ["Meta:lead_qualificado", "sent", null],
-      ["Meta:pediu_orcamento", "sent", 240000],
-    ]);
-  });
-
-  it("a regra de uma empresa não vale para o negócio de outra", async () => {
-    const i = ids(REAL);
-    await regra(REAL, i.qualificacao);
-    // A vizinha não tem regra nem conexão: o mesmo movimento, lá, não envia nada.
-    const r = await conversaoDeEtapaDaMetaHandler.handle(entrou(VIZINHA, ids(VIZINHA).qualificacao, await hora("1 second")));
-    expect(r.status).toBe("skipped");
-    expect(enviados).toHaveLength(0);
-    expect(await livro(VIZINHA)).toEqual([]);
+    await drenar(entrou(REAL, i.ganho, await hora("1 second")));
+    await drenar(entrou(REAL, i.ganho, await hora("1 second"), { id: "evento-won", event_type: "lead.won", payload: {} }));
+    expect(idasAMeta()).toHaveLength(1);
+    expect(itemEnviado()).toMatchObject({ event_name: "Purchase", event_id: `${i.lead}:Purchase`, action_source: "system_generated" });
+    expect((await livro(REAL)).map((l) => [l.event_name, l.status])).toEqual([["Purchase", "sent"]]);
   });
 });
 
-describe("⭐ 5 · a empresa de demonstração: a regra pode existir, e nada sai", () => {
-  it("a regra LIGADA é gravada na demonstração (controle: é a mesma escrita da empresa de verdade)", async () => {
-    const d = ids(DEMO);
-    expect(
-      await tentar(
-        `insert into public.mia_conversoes_meta_regras (organization_id, stage_id, evento, ligada) values ($1, $2, 'lead_qualificado', true)`,
-        [DEMO, d.qualificacao],
-      ),
-    ).toBe("passou");
-    expect(
-      await tentar(`insert into public.mia_conversoes_meta_config (organization_id, leads_de_formulario) values ($1, true)`, [DEMO]),
-    ).toBe("passou");
-  });
-
-  it("a conexão de conversões LIGADA não nasce nela (a trava da 9010), e desligada pode existir", async () => {
-    const ligada = `insert into public.ad_platform_connections (organization_id, platform, dataset_id, access_token_encrypted, enabled)
-                      values ($1, 'meta_ads', '900000000000002', '\\x00'::bytea, true)`;
-    expect(await tentar(ligada, [DEMO])).toBe("42501");
-    expect(await tentar(ligada.replace("true)", "false)"), [DEMO])).toBe("passou");
-    await pool.query("delete from public.ad_platform_connections where organization_id = $1", [DEMO]);
-  });
-
-  it("sem conexão: o negócio entra na etapa com regra ligada, e NADA vai para a Meta", async () => {
-    const d = ids(DEMO);
-    await regra(DEMO, d.qualificacao);
-    const r = await conversaoDeEtapaDaMetaHandler.handle(entrou(DEMO, d.qualificacao, await hora("1 second")));
-    expect(r).toMatchObject({ status: "skipped", detail: "sem_conexao" });
-    expect(enviados).toHaveLength(0);
-    expect(await livro(DEMO)).toEqual([
-      { event_name: "Meta:lead_qualificado", platform: "meta_ads", status: "skipped", reason: "sem_conexao", value_cents: null },
-    ]);
-  });
-
-  it("com a conexão gravada e desligada (o máximo que a demonstração aceita): também não sai", async () => {
-    const d = ids(DEMO);
-    await pool.query(
-      `insert into public.ad_platform_connections (organization_id, platform, dataset_id, access_token_encrypted, enabled)
-         values ($1, 'meta_ads', '900000000000002', '\\x00'::bytea, false)`,
-      [DEMO],
-    );
-    await regra(DEMO, d.qualificacao);
-    const r = await conversaoDeEtapaDaMetaHandler.handle(entrou(DEMO, d.qualificacao, await hora("1 second")));
-    expect(r).toMatchObject({ status: "skipped", detail: "conexao_desabilitada" });
-    expect(enviados).toHaveLength(0);
-    await pool.query("delete from public.ad_platform_connections where organization_id = $1", [DEMO]);
-  });
-});
-
-describe("o reenvio de um evento de etapa", () => {
-  const pedir = (org: string, lead: string, evento: string) =>
-    uma<{ ok: boolean }>("select public.fn_mia_solicitar_reenvio_conversao_meta($1, $2, $3) as ok", [org, lead, evento]).then(
-      (r) => r.ok,
-    );
-  const linha = (org: string, lead: string, evento: string, status: string, motivo: string | null, ocorreu: string | null) =>
-    pool.query(
-      `insert into public.ad_conversion_dispatches (organization_id, lead_id, platform, event_name, status, reason, event_occurred_at, value_cents, currency)
-         values ($1, $2, 'meta_ads', $3, $4, $5, now() + $6::interval, 15000, 'BRL')`,
-      [org, lead, evento, status, motivo, ocorreu],
-    );
-
-  it("só o servidor chama: anon e authenticated não têm EXECUTE", async () => {
-    const acl = await uma<{ anon: boolean; autenticado: boolean; servico: boolean }>(
-      `select has_function_privilege('anon', 'public.fn_mia_solicitar_reenvio_conversao_meta(uuid, uuid, text)', 'execute') as anon,
-              has_function_privilege('authenticated', 'public.fn_mia_solicitar_reenvio_conversao_meta(uuid, uuid, text)', 'execute') as autenticado,
-              has_function_privilege('service_role', 'public.fn_mia_solicitar_reenvio_conversao_meta(uuid, uuid, text)', 'execute') as servico`,
-    );
-    expect(acl).toEqual({ anon: false, autenticado: false, servico: true });
-  });
-
-  it("⭐ recusado e dentro de 7 dias: agenda, uma vez, e o consumidor reenvia com o RETRATO do primeiro envio", async () => {
+describe("a volta dos leads de formulário, com o banco de verdade", () => {
+  it("chave desligada (o padrão): o lead de formulário não volta, e nada vira pendência", async () => {
     const i = ids(REAL);
-    await regra(REAL, i.agendada, { evento: "agendou", modo_do_valor: "valor_fixo", valor_fixo_centavos: 99900 });
-    await linha(REAL, i.lead, "Meta:agendou", "error", "recusado_pela_plataforma", "-2 days");
-    const retrato = await uma<{ em: string }>(
-      "select event_occurred_at as em from public.ad_conversion_dispatches where organization_id = $1",
-      [REAL],
-    );
+    await origem(REAL, DO_FORMULARIO, DO_FORMULARIO);
+    await regraDoUpstream(REAL, i.agendada, "LeadSubmitted");
+    await drenar(entrou(REAL, i.agendada, await hora("1 second")));
+    expect(idasAMeta()).toHaveLength(0);
+    expect(await livro(REAL)).toEqual([]);
+  });
 
-    expect(await pedir(REAL, i.lead, "Meta:agendou")).toBe(true);
-    // Um pedido pendente não vira dois.
-    expect(await pedir(REAL, i.lead, "Meta:agendou")).toBe(false);
+  it("ligar a regra (o gatilho do upstream carimba `configured_at`) não envia o passado", async () => {
+    const i = ids(REAL);
+    await origem(REAL, DO_FORMULARIO, DO_FORMULARIO);
+    await chaveDosFormularios(REAL, true);
+    const antes = await hora("-1 hour");
+    await regraDoUpstream(REAL, i.agendada, "LeadSubmitted");
+    const r = await conversaoDoLeadDeFormularioHandler.handle(entrou(REAL, i.agendada, antes));
+    expect(r).toMatchObject({ status: "skipped", detail: "anterior_a_configuracao" });
+    expect(idasAMeta()).toHaveLength(0);
+  });
 
+  it("o corpo vai pela porta do CRM, com o id do lead em TEXTO", async () => {
+    const i = ids(REAL);
+    await origem(REAL, DO_FORMULARIO, DO_FORMULARIO);
+    await chaveDosFormularios(REAL, true);
+    await regraDoUpstream(REAL, i.qualificacao, "QualifiedLead");
+    await drenar(entrou(REAL, i.qualificacao, await hora("1 second")));
+    expect(itemEnviado()).toMatchObject({
+      event_name: "QualifiedLead",
+      action_source: "system_generated",
+      custom_data: { event_source: "crm" },
+    });
+    expect(JSON.stringify(idasAMeta()[0]!.corpo)).toContain(`"lead_id":"${ID_DO_LEAD_DA_META}"`);
+  });
+
+  it("⭐ o reenvio é o do upstream (`fn_solicitar_reenvio_conversao`), e quem reenvia o lead de formulário é o nosso", async () => {
+    const i = ids(REAL);
+    await origem(REAL, DO_FORMULARIO, DO_FORMULARIO);
+    await chaveDosFormularios(REAL, true);
+    await regraDoUpstream(REAL, i.agendada, "LeadSubmitted");
+    // A Meta recusou da primeira vez.
+    respostas.push({ status: 400, corpo: { error: { code: 100, message: "Invalid parameter" } } });
+    await drenar(entrou(REAL, i.agendada, await hora("1 second")));
+    expect((await livro(REAL))[0]).toMatchObject({ status: "error", reason: "recusado_pela_plataforma", meta_event_name: "LeadSubmitted" });
+
+    const pedido = await uma<{ ok: boolean }>("select public.fn_solicitar_reenvio_conversao($1, $2, $3) as ok", [
+      REAL,
+      i.lead,
+      `MetaEtapa:${i.agendada}`,
+    ]);
+    expect(pedido.ok).toBe(true);
     const evento = await uma<{ id: string; event_type: string; payload: Record<string, unknown>; created_at: string }>(
       `select id, event_type, payload, created_at from public.event_log
-        where organization_id = $1 and entity_id = $2 and event_type = 'conversao_meta.retry_requested'`,
+        where organization_id = $1 and entity_id = $2 and event_type = 'ad_conversion.retry_requested'
+        order by created_at desc limit 1`,
       [REAL, i.lead],
     );
-    expect(evento.payload).toEqual({ event_name: "Meta:agendou" });
-    expect((await livro(REAL))[0]).toMatchObject({ status: "error", reason: "reprocessamento_solicitado" });
-    // O tipo é escutado pelo consumidor: não é um comando sem dono.
-    expect(conversaoDeEtapaDaMetaHandler.events).toContain(evento.event_type);
-
-    const r = await conversaoDeEtapaDaMetaHandler.handle({
-      ...entrou(REAL, i.agendada, evento.created_at),
-      id: evento.id,
-      event_type: evento.event_type,
-      payload: evento.payload,
-    });
-    expect(r.status).toBe("ok");
-    // A data e o valor do PRIMEIRO envio, e não os da regra de agora (R$ 999).
-    expect(itemEnviado().event_time).toBe(Math.floor(Date.parse(retrato.em) / 1000));
-    expect(itemEnviado().custom_data).toEqual({ value: 150, currency: "BRL" });
-    expect((await livro(REAL))[0]).toMatchObject({ status: "sent", value_cents: 15000 });
+    await drenar({ ...entrou(REAL, i.agendada, evento.created_at), id: evento.id, event_type: evento.event_type, payload: evento.payload });
+    expect(idasAMeta()).toHaveLength(2);
+    expect(itemEnviado(1)).toMatchObject({ event_name: "LeadSubmitted", event_id: `${i.lead}:MetaEtapa:${i.agendada}` });
+    expect((await livro(REAL))[0]).toMatchObject({ status: "sent" });
   });
 
-  it("o que não tem reenvio que resolva: já enviado, decisão das travas, mais de 7 dias, evento que não é da Meta, negócio de outra empresa", async () => {
-    const i = ids(REAL);
-    expect(await pedir(REAL, i.lead, "Meta:agendou")).toBe(false);
-
-    await linha(REAL, i.lead, "Meta:agendou", "sent", null, "-1 day");
-    await linha(REAL, i.lead, "Meta:lead_qualificado", "skipped", "anterior_a_regra", "-1 day");
-    await linha(REAL, i.lead, "Meta:pediu_orcamento", "skipped", "formulario_desligado", "-1 day");
-    await linha(REAL, i.lead, "Meta:novo_lead", "error", "recusado_pela_plataforma", "-8 days");
-    await linha(REAL, i.lead, "Meta:iniciou_compra", "error", "recusado_pela_plataforma", null);
-    for (const evento of ["Meta:agendou", "Meta:lead_qualificado", "Meta:pediu_orcamento", "Meta:novo_lead", "Meta:iniciou_compra"]) {
-      expect(await pedir(REAL, i.lead, evento), evento).toBe(false);
-    }
-    for (const evento of ["Purchase", "QualifiedLead", "Meta:AGENDOU", "Meta:"]) {
-      expect(await pedir(REAL, i.lead, evento), evento).toBe(false);
-    }
-    // A linha é da REAL: a vizinha não a alcança pedindo com o id do negócio alheio.
-    expect(await pedir(VIZINHA, i.lead, "Meta:novo_lead")).toBe(false);
-    expect(
-      (
-        await uma<{ n: number }>(
-          "select count(*)::int as n from public.event_log where event_type = 'conversao_meta.retry_requested' and organization_id = any($1)",
-          [[REAL, VIZINHA]],
-        )
-      ).n,
-    ).toBe(1); // só o do caso anterior
+  it("⭐ a empresa de demonstração: a regra e a chave existem, e nada sai (não há conexão ligada nela)", async () => {
+    const d = ids(DEMO);
+    await origem(DEMO, DO_FORMULARIO, DO_FORMULARIO);
+    await chaveDosFormularios(DEMO, true);
+    await regraDoUpstream(DEMO, d.agendada, "LeadSubmitted");
+    await drenar(entrou(DEMO, d.agendada, await hora("1 second")));
+    expect(idasAMeta()).toHaveLength(0);
+    expect((await livro(DEMO)).map((l) => [l.status, l.reason])).toEqual([["skipped", "sem_conexao"]]);
   });
 });
 
-describe("⭐ as ferramentas do MCP de plataforma, no banco de verdade", () => {
+describe("⭐ as ferramentas do MCP de plataforma, na tabela do upstream", () => {
   let mcp: Awaited<ReturnType<typeof clienteMcp>>;
 
   beforeAll(async () => {
     await pool.query(
-      "insert into auth.users (id, email) values ($1, 'implantador-conversoes-9017@invariant.test') on conflict (id) do nothing",
+      "insert into auth.users (id, email) values ($1, 'implantador-conversoes-9019@invariant.test') on conflict (id) do nothing",
       [IMPLANTADOR],
     );
     await pool.query(
       `insert into public.platform_api_tokens (id, name, prefix, token_hash, operacoes, created_by, reason)
-         values ($1, 'invariante de conversões', 'dskp_inv', '\\x00'::bytea, $2, $3, 'invariante 9017')
+         values ($1, 'invariante de conversões', 'dskp_inv', '\\x00'::bytea, $2, $3, 'invariante 9019')
        on conflict (id) do nothing`,
       [TOKEN, TODAS_AS_OPERACOES, IMPLANTADOR],
     );
@@ -624,7 +467,7 @@ describe("⭐ as ferramentas do MCP de plataforma, no banco de verdade", () => {
   /** Cada coluna de cada linha das três tabelas que as ferramentas gravam, para uma empresa. */
   async function retrato(org: string): Promise<Record<string, string>> {
     const saida: Record<string, string> = {};
-    for (const tabela of ["mia_conversoes_meta_regras", "mia_conversoes_meta_config", "google_ads_conversion_rules"]) {
+    for (const tabela of ["meta_ads_conversion_rules", "mia_conversoes_meta_config", "google_ads_conversion_rules"]) {
       const r = await uma<{ resumo: string }>(
         `select count(*)::text || ':' || md5(coalesce(string_agg(x::text, '|' order by x::text), '')) as resumo
            from public."${tabela}" x where x.organization_id = $1`,
@@ -646,7 +489,7 @@ describe("⭐ as ferramentas do MCP de plataforma, no banco de verdade", () => {
       organization_id: org,
       funil: "Agendamentos",
       usar_recomendado: true,
-      regras: [{ etapa: "Compareceu", evento: "pediu_orcamento", canal: "whatsapp", valor: "valor_fixo", valor_fixo_centavos: 15000 }],
+      regras: [{ etapa: "Compareceu", evento: "InitiateCheckout" }],
     }],
     ["plataforma_garantir_conversoes_do_google", {
       organization_id: org,
@@ -660,94 +503,79 @@ describe("⭐ as ferramentas do MCP de plataforma, no banco de verdade", () => {
     ["plataforma_ligar_leads_de_formulario_da_meta", { organization_id: org, ligada: true }],
   ];
 
-  it("montar grava as regras DESLIGADAS nas tabelas de verdade; ligar as liga e anda o relógio da trava", async () => {
+  it("montar grava as regras DESLIGADAS na tabela do upstream; ligar as liga e o gatilho dele anda a trava", async () => {
     const i = ids(REAL);
     for (const [nome, args] of MONTAGEM(REAL)) await ok(nome, args);
 
-    const { rows: daMeta } = await pool.query<{ stage_id: string; evento: string; canal: string; modo_do_valor: string; valor_fixo_centavos: number | null; ligada: boolean; atualizada_por: string }>(
-      "select stage_id, evento, canal, modo_do_valor, valor_fixo_centavos, ligada, atualizada_por from public.mia_conversoes_meta_regras where organization_id = $1 order by stage_id",
+    const { rows: daMeta } = await pool.query<{ stage_id: string; event_name: string; meta_event: string; enabled: boolean; updated_by: string }>(
+      "select stage_id, event_name, meta_event, enabled, updated_by from public.meta_ads_conversion_rules where organization_id = $1 order by stage_id",
       [REAL],
     );
     expect(daMeta).toEqual([
-      // A primeira etapa aberta do funil é onde o negócio nasce: novo lead.
-      { stage_id: i.qualificacao, evento: "novo_lead", canal: "todos", modo_do_valor: "sem_valor", valor_fixo_centavos: null, ligada: false, atualizada_por: IMPLANTADOR },
-      { stage_id: i.agendada, evento: "agendou", canal: "todos", modo_do_valor: "sem_valor", valor_fixo_centavos: null, ligada: false, atualizada_por: IMPLANTADOR },
-      { stage_id: i.compareceu, evento: "pediu_orcamento", canal: "whatsapp", modo_do_valor: "valor_fixo", valor_fixo_centavos: 15000, ligada: false, atualizada_por: IMPLANTADOR },
+      { stage_id: i.qualificacao, event_name: `MetaEtapa:${i.qualificacao}`, meta_event: "QualifiedLead", enabled: false, updated_by: IMPLANTADOR },
+      { stage_id: i.agendada, event_name: `MetaEtapa:${i.agendada}`, meta_event: "LeadSubmitted", enabled: false, updated_by: IMPLANTADOR },
+      { stage_id: i.compareceu, event_name: `MetaEtapa:${i.compareceu}`, meta_event: "InitiateCheckout", enabled: false, updated_by: IMPLANTADOR },
     ]);
-    const doGoogle = await uma<{ event_name: string; enabled: boolean; google_action_id: string; category: string }>(
-      "select event_name, enabled, google_action_id, category from public.google_ads_conversion_rules where organization_id = $1",
+    const doGoogle = await uma<{ event_name: string; enabled: boolean }>(
+      "select event_name, enabled from public.google_ads_conversion_rules where organization_id = $1",
       [REAL],
     );
-    expect(doGoogle).toEqual({ event_name: `Etapa:${i.agendada}`, enabled: false, google_action_id: "7123456789", category: "BOOK_APPOINTMENT" });
+    expect(doGoogle).toEqual({ event_name: `Etapa:${i.agendada}`, enabled: false });
 
     const antes = await uma<{ em: string }>(
-      "select configurada_em as em from public.mia_conversoes_meta_regras where organization_id = $1 and stage_id = $2",
+      "select configured_at as em from public.meta_ads_conversion_rules where organization_id = $1 and stage_id = $2",
       [REAL, i.agendada],
     );
     for (const [nome, args] of NO_AR(REAL)) await ok(nome, args);
-    const depois = await uma<{ em: string; ligada: boolean }>(
-      "select configurada_em as em, ligada from public.mia_conversoes_meta_regras where organization_id = $1 and stage_id = $2",
+    const depois = await uma<{ em: string; enabled: boolean }>(
+      "select configured_at as em, enabled from public.meta_ads_conversion_rules where organization_id = $1 and stage_id = $2",
       [REAL, i.agendada],
     );
-    expect(depois.ligada).toBe(true);
-    // Ligar pela ferramenta é ligar: a trava de retroatividade recomeça dali.
+    expect(depois.enabled).toBe(true);
+    // Ligar pela ferramenta é ligar: a trava de retroatividade do upstream recomeça dali.
     expect(Date.parse(depois.em)).toBeGreaterThan(Date.parse(antes.em));
-    expect((await uma<{ enabled: boolean }>("select enabled from public.google_ads_conversion_rules where organization_id = $1", [REAL])).enabled).toBe(true);
     expect(
       await uma<{ ligada: boolean; tem_desde: boolean }>(
         "select leads_de_formulario as ligada, leads_de_formulario_desde is not null as tem_desde from public.mia_conversoes_meta_config where organization_id = $1",
         [REAL],
       ),
     ).toEqual({ ligada: true, tem_desde: true });
+    // E a régua obsoleta da 9017 não é tocada.
+    expect((await uma<{ n: number }>("select count(*)::int as n from public.mia_conversoes_meta_regras where organization_id = $1", [REAL])).n).toBe(0);
   });
 
   it("⭐ rodar de novo não muda uma linha: o retrato do banco é idêntico", async () => {
     for (const [nome, args] of [...MONTAGEM(REAL), ...NO_AR(REAL)]) await ok(nome, args);
     const antes = await retrato(REAL);
     // O instrumento enxerga uma regravação: sem isto, retrato igual não provaria nada.
-    await pool.query("update public.mia_conversoes_meta_regras set canal = canal where organization_id = $1", [REAL]);
-    const mexido = await retrato(REAL);
-    expect(mexido.mia_conversoes_meta_regras).not.toBe(antes.mia_conversoes_meta_regras);
+    await pool.query("update public.meta_ads_conversion_rules set updated_by = null where organization_id = $1", [REAL]);
+    expect((await retrato(REAL)).meta_ads_conversion_rules).not.toBe(antes.meta_ads_conversion_rules);
 
     const base = await retrato(REAL);
-    const respostas = [];
-    for (const [nome, args] of [...MONTAGEM(REAL), ...NO_AR(REAL)]) respostas.push([nome, await ok(nome, args)] as const);
-    for (const [nome, r] of respostas) {
+    const saidas = [];
+    for (const [nome, args] of [...MONTAGEM(REAL), ...NO_AR(REAL)]) saidas.push([nome, await ok(nome, args)] as const);
+    for (const [nome, r] of saidas) {
       expect(r.texto, `${nome} respondeu que criou ou atualizou na segunda passada`).not.toMatch(/"desfecho": "(criou|atualizou)"/);
     }
     expect(await retrato(REAL)).toEqual(base);
   });
 
-  it("a leitura devolve as regras gravadas e a conexão sem segredo", async () => {
-    for (const [nome, args] of MONTAGEM(REAL)) await ok(nome, args);
-    const r = await ok("plataforma_ver_conversoes", { organization_id: REAL });
-    expect((r.dados.conexoes as { meta: Record<string, unknown> }).meta).toEqual({
-      conectada: true,
-      destino_de_conversoes: "900000000000001",
-      tem_token: true,
-      envio_ligado: true,
-      modo_de_teste: false,
-    });
-    expect(r.texto).not.toContain("token-ficticio-de-teste");
-    const funil = (r.dados.funis as Array<{ funil: string; etapas: Array<{ etapa: string; meta: { evento: string } | null }> }>).find(
-      (f) => f.funil === "Agendamentos",
-    )!;
-    expect(funil.etapas.map((e) => [e.etapa, e.meta?.evento ?? null])).toEqual([
-      ["Qualificação", "novo_lead"],
-      ["Avaliação agendada", "agendou"],
-      ["Compareceu", "pediu_orcamento"],
-    ]);
+  it("a regra que a ferramenta liga é a mesma que o consumidor do upstream lê: o movimento seguinte vai à Meta uma vez", async () => {
+    const i = ids(REAL);
+    for (const [nome, args] of [...MONTAGEM(REAL), ...NO_AR(REAL)]) await ok(nome, args);
+    await origem(REAL, DE_CLIQUE, {});
+    await drenar(entrou(REAL, i.compareceu, await hora("1 second")));
+    expect(idasAMeta()).toHaveLength(1);
+    expect(itemEnviado()).toMatchObject({ event_name: "InitiateCheckout", action_source: "business_messaging" });
   });
 
   it("na empresa de demonstração: a regra é gravada e ligada, e o movimento seguinte não envia nada", async () => {
     const d = ids(DEMO);
-    await pool.query("delete from public.ad_platform_connections where organization_id = $1", [DEMO]);
     await ok("plataforma_garantir_conversoes_da_meta", { organization_id: DEMO, funil: "Agendamentos", usar_recomendado: true });
     const ligar = await ok("plataforma_ligar_conversoes", { organization_id: DEMO, plataforma: "meta", funil: "Agendamentos", ligada: true });
     expect(String(ligar.dados.aviso)).toContain("Empresa de demonstração");
-
-    const r = await conversaoDeEtapaDaMetaHandler.handle(entrou(DEMO, d.agendada, await hora("1 second")));
-    expect(r).toMatchObject({ status: "skipped", detail: "sem_conexao" });
-    expect(enviados).toHaveLength(0);
+    await origem(DEMO, DE_CLIQUE, {});
+    await drenar(entrou(DEMO, d.agendada, await hora("1 second")));
+    expect(idasAMeta()).toHaveLength(0);
   });
 });

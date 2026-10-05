@@ -1,6 +1,11 @@
 import { notFound } from "next/navigation";
 
+import { CssPersonalizado } from "./_css-personalizado";
 import { loadAuthUser } from "@/lib/auth/server";
+import {
+  cssPersonalizadoDaInstalacao,
+  validarCssPersonalizado,
+} from "@/lib/branding/css-personalizado";
 import { marcaDaInstalacao } from "@/lib/branding/instalacao";
 import { logoDaCamada } from "@/lib/branding/logo";
 import { REGUA_DO_PRODUTO } from "@/lib/branding/regua-do-produto";
@@ -63,18 +68,19 @@ export default async function Page() {
   if (!usuario?.is_platform_admin) notFound();
   const idioma = normalizarIdioma(usuario.locale);
 
-  const linha = await marcaDaInstalacao();
-  // Leitura separada, e não um campo a mais em `marcaDaInstalacao()`: aquela
-  // alimenta um memo com TTL lido a cada render de toda tela, e identidade
+  const [linha, cssPersonalizado] = await Promise.all([
+    marcaDaInstalacao(),
+    cssPersonalizadoDaInstalacao(),
+  ]);
+  const validacaoCss = validarCssPersonalizado(cssPersonalizado);
+  // FORK MIA — o responsável legal. Leitura separada, e não um campo a mais em
+  // `marcaDaInstalacao()`: aquela alimenta um memo com TTL lido a cada render de toda tela, e identidade
   // jurídica não deve viajar num cache de cor e logo.
   const legal = await responsavelLegalGravado();
   // A MESMA pilha do `app/layout.tsx` — banco acima, arquivo de instalação
   // embaixo. Montar outra aqui faria a tela relatar uma precedência que o
   // produto não usa, que é a pior mentira possível numa tela de diagnóstico.
-  const marca = resolverMarca(
-    [camadaDaInstalacao(linha), camadaDoAmbiente(env)],
-    REGUA_DO_PRODUTO,
-  );
+  const marca = resolverMarca([camadaDaInstalacao(linha), camadaDoAmbiente(env)], REGUA_DO_PRODUTO);
 
   // O que apareceria SEM o arquivo subido — a MESMA pilha com `logo_path`
   // zerado, e não uma leitura solta de `APP_LOGO_URL`. É assim que a prévia
@@ -121,6 +127,7 @@ export default async function Page() {
         fallbackEm={instanteLegivel(linha?.fallback_at ?? null, tagDeIdioma(idioma))}
         fallbackMotivo={linha?.fallback_reason ?? null}
       />
+      <CssPersonalizado gravado={cssPersonalizado} erroAtual={validacaoCss.erro} />
 
       <ResponsavelLegal
         gravado={{

@@ -1,6 +1,8 @@
 /**
- * FORK MIA — as frases de tela das conversões da Meta por etapa do funil
- * (Configurações › Conversões e a seção Origem do cartão aberto), em espanhol.
+ * FORK MIA — as frases de tela das conversões da Meta que continuam nossas
+ * (a chave dos leads de formulário, o diagnóstico da Meta e a seção Origem do
+ * cartão aberto), em espanhol. Desde a .72 a régua por etapa e o histórico são
+ * os do upstream, e as frases deles moram no dicionário dele.
  *
  * Moram num arquivo NOSSO, espalhado no `DICIONARIO` do upstream por uma linha
  * (`...DICIONARIO_DAS_CONVERSOES_DA_META`), para a sincronização com o upstream
@@ -14,57 +16,16 @@ type Traducoes = Record<string, { es: string }>;
 export const DICIONARIO_DAS_CONVERSOES_DA_META: Traducoes = {
   // ─── o que cada etapa informa à Meta ───────────────────────────────────────
   "O que cada etapa do funil informa à Meta": { es: "Lo que cada etapa del embudo informa a Meta" },
-  "Uma linha por etapa aberta do funil. Ligada, a Meta recebe o evento escolhido quando um negócio entra naquela etapa, uma vez por negócio. É a mesma régua que o Google Ads tem logo abaixo.":
-    {
-      es: "Una línea por etapa abierta del embudo. Activada, Meta recibe el evento elegido cuando un negocio entra en esa etapa, una vez por negocio. Es la misma regla que Google Ads tiene justo debajo.",
-    },
   "Crie um funil com etapas para escolher o que cada etapa informa à Meta.": {
     es: "Crea un embudo con etapas para elegir lo que cada etapa informa a Meta.",
   },
-  "A Meta ainda não está conectada. Você pode montar e salvar as regras; nada é enviado até a conexão acima estar preenchida e ligada.":
-    {
-      es: "Meta aún no está conectada. Puedes armar y guardar las reglas; no se envía nada hasta que la conexión de arriba esté completa y activada.",
-    },
-  "O envio está pausado no cartão da Meta: nem a compra nem as etapas vão para a Meta enquanto ele estiver desligado.":
-    {
-      es: "El envío está en pausa en la tarjeta de Meta: ni la compra ni las etapas van a Meta mientras esté desactivado.",
-    },
-  "etapas informando a Meta": { es: "etapas informando a Meta" },
   "alterações não salvas": { es: "cambios sin guardar" },
-  "ª etapa": { es: "ª etapa" },
   "informa a Meta": { es: "informa a Meta" },
   "não informa": { es: "no informa" },
-  "Informar a Meta na etapa": { es: "Informar a Meta en la etapa" },
-  "Evento fora da lista da Meta para anúncio de WhatsApp: pode ser recusado ou não servir para otimizar. Confira com o código de teste.":
-    {
-      es: "Evento fuera de la lista de Meta para anuncios de WhatsApp: puede ser rechazado o no servir para optimizar. Compruébalo con el código de prueba.",
-    },
-  "Valor do evento (opcional)": { es: "Valor del evento (opcional)" },
-  "Valor fixo em reais na etapa": { es: "Valor fijo en reales en la etapa" },
-  "Valor do evento: sem valor, a Meta não aprende quanto vale um agendamento. Use um valor fixo (quanto vale, em média, aquele passo) ou o valor do negócio. Negócio sem valor envia o evento de etapa sem valor.":
-    {
-      es: "Valor del evento: sin valor, Meta no aprende cuánto vale una cita. Usa un valor fijo (cuánto vale, en promedio, ese paso) o el valor del negocio. Un negocio sin valor envía el evento de etapa sin valor.",
-    },
-  "As etapas de ganho e de perda não aparecem na lista. Ganho é a compra. Perda não é conversão.": {
-    es: "Las etapas de ganado y de perdido no aparecen en la lista. Ganado es la compra. Perdido no es conversión.",
-  },
   "Vale para os negócios que entrarem nas etapas a partir de agora.": {
     es: "Vale para los negocios que entren en las etapas a partir de ahora.",
   },
-  "Regras salvas. Vale para os negócios que entrarem nas etapas a partir de agora.": {
-    es: "Reglas guardadas. Vale para los negocios que entren en las etapas a partir de ahora.",
-  },
-  "Regras salvas. Vale para os negócios que entrarem nas etapas a partir de agora. Quem já está na etapa não é enviado.":
-    {
-      es: "Reglas guardadas. Vale para los negocios que entren en las etapas a partir de ahora. Quien ya está en la etapa no se envía.",
-    },
-  "Recomendado aplicado pelo nome das etapas. Etapas ligadas:": {
-    es: "Recomendado aplicado por el nombre de las etapas. Etapas activadas:",
-  },
   "Confira e salve.": { es: "Revisa y guarda." },
-  "Toda etapa com valor fixo precisa de um valor maior que zero.": {
-    es: "Toda etapa con valor fijo necesita un valor mayor que cero.",
-  },
   "valor fixo": { es: "valor fijo" },
   "valor do negócio": { es: "valor del negocio" },
   "Sem valor": { es: "Sin valor" },
@@ -72,44 +33,23 @@ export const DICIONARIO_DAS_CONVERSOES_DA_META: Traducoes = {
   "Valor do negócio": { es: "Valor del negocio" },
   "Novo lead": { es: "Nuevo lead" },
   Agendou: { es: "Agendó" },
-  "Pediu orçamento ou proposta": { es: "Pidió presupuesto o propuesta" },
-  "Iniciou a compra": { es: "Inició la compra" },
   "Todos os canais": { es: "Todos los canales" },
   "Só WhatsApp": { es: "Solo WhatsApp" },
   "Só fora do WhatsApp": { es: "Solo fuera de WhatsApp" },
 
   // ─── como a Meta vai enxergar o funil ──────────────────────────────────────
-  "Como a Meta vai enxergar este funil": { es: "Cómo verá Meta este embudo" },
   "ao entrar em": { es: "al entrar en" },
-  "repetido: não envia de novo para o mesmo negócio": { es: "repetido: no se envía de nuevo para el mismo negocio" },
   "quando o negócio é ganho": { es: "cuando el negocio se gana" },
-  "valor do negócio, com a moeda dele": { es: "valor del negocio, con su moneda" },
-  "desligada no cartão da Meta": { es: "desactivada en la tarjeta de Meta" },
-  "Nenhuma etapa ligada: a Meta só fica sabendo da compra, como é hoje.": {
-    es: "Ninguna etapa activada: Meta solo se entera de la compra, como hoy.",
-  },
-  "etapa informa a Meta antes da compra.": { es: "etapa informa a Meta antes de la compra." },
-  "etapas informam a Meta antes da compra.": { es: "etapas informan a Meta antes de la compra." },
-  "Quanto mais cedo o sinal, mais rápido o anúncio aprende quem vira cliente.": {
-    es: "Cuanto antes llega la señal, más rápido aprende el anuncio quién se vuelve cliente.",
-  },
-  "Modo de teste ligado: nada disso conta para a otimização.": {
-    es: "Modo de prueba activado: nada de esto cuenta para la optimización.",
-  },
-  "Só há o que informar quando o negócio veio de um clique em anúncio para o WhatsApp ou, com a chave abaixo ligada, de um formulário da Meta.":
-    {
-      es: "Solo hay algo que informar cuando el negocio vino de un clic en un anuncio hacia WhatsApp o, con la opción de abajo activada, de un formulario de Meta.",
-    },
 
   // ─── leads de formulário voltam para a Meta ────────────────────────────────
   "Leads de formulário da Meta voltam para a Meta": { es: "Los leads de formulario de Meta vuelven a Meta" },
-  "O sistema recebe os leads dos formulários da Meta e guarda o identificador de cada um, mas a Meta não fica sabendo quais viraram venda. Ligada, cada etapa com regra e a venda também são informadas para o lead que veio de formulário, mesmo sem clique em anúncio de WhatsApp.":
+  "O sistema recebe os leads dos formulários da Meta e guarda o identificador de cada um, mas a Meta não fica sabendo quais viraram venda. Ligada, cada etapa com regra ligada no quadro acima e a venda também são informadas para o lead que veio de formulário, mesmo sem clique em anúncio de WhatsApp.":
     {
-      es: "El sistema recibe los leads de los formularios de Meta y guarda el identificador de cada uno, pero Meta no se entera de cuáles se volvieron venta. Activada, cada etapa con regla y la venta también se informan para el lead que vino de un formulario, incluso sin clic en un anuncio de WhatsApp.",
+      es: "El sistema recibe los leads de los formularios de Meta y guarda el identificador de cada uno, pero Meta no se entera de cuáles se volvieron venta. Activada, cada etapa con regla activa en el cuadro de arriba y la venta también se informan para el lead que vino de un formulario, incluso sin clic en un anuncio de WhatsApp.",
     },
-  "Saem para a Meta o identificador do lead, o evento, o valor e o telefone e o e-mail do contato em forma embaralhada. Vem desligada: ligue só se a sua política de privacidade cobre esse uso. Ligar não envia o passado.":
+  "Saem para a Meta o identificador do lead, o evento, o valor da venda e o telefone e o e-mail do contato em forma embaralhada. Vem desligada: ligue só se a sua política de privacidade cobre esse uso. Ligar não envia o passado.":
     {
-      es: "Salen hacia Meta el identificador del lead, el evento, el valor y el teléfono y el correo del contacto en forma cifrada. Viene desactivada: actívala solo si tu política de privacidad cubre ese uso. Activarla no envía lo pasado.",
+      es: "Salen hacia Meta el identificador del lead, el evento, el valor de la venta y el teléfono y el correo del contacto en forma cifrada. Viene desactivada: actívala solo si tu política de privacidad cubre ese uso. Activarla no envía lo pasado.",
     },
   "Ligada: a Meta fica sabendo o que aconteceu com cada lead de formulário.": {
     es: "Activada: Meta se entera de lo que pasó con cada lead de formulario.",
@@ -223,44 +163,14 @@ export const DICIONARIO_DAS_CONVERSOES_DA_META: Traducoes = {
 
   // ─── histórico de envios ───────────────────────────────────────────────────
   Situação: { es: "Situación" },
-  "Todas as situações": { es: "Todas las situaciones" },
   "Limpar filtros": { es: "Limpiar filtros" },
   "do mais recente para o mais antigo": { es: "del más reciente al más antiguo" },
   "Enviado em": { es: "Enviado el" },
   Ação: { es: "Acción" },
-  "tentou em": { es: "intentó el" },
   "não saiu": { es: "no salió" },
-  "Detalhes do envio": { es: "Detalles del envío" },
-  "Última tentativa": { es: "Último intento" },
-  "sem reenvio: passou de 7 dias": { es: "sin reenvío: pasaron más de 7 días" },
   Reenviar: { es: "Reenviar" },
-  "Reenvio na fila, com os dados do primeiro envio.": { es: "Reenvío en cola, con los datos del primer envío." },
   Enviado: { es: "Enviado" },
   "Recusado pela plataforma": { es: "Rechazado por la plataforma" },
-  "Não enviado · sem clique de anúncio": { es: "No enviado · sin clic en anuncio" },
-  "Não enviado · sem valor": { es: "No enviado · sin valor" },
-  "Não enviado · anterior à regra": { es: "No enviado · anterior a la regla" },
-  "Não enviado · conexão ou modo de teste": { es: "No enviado · conexión o modo de prueba" },
-  "Veio de formulário da Meta e a volta dos leads de formulário está desligada.": {
-    es: "Vino de un formulario de Meta y el retorno de los leads de formulario está desactivado.",
-  },
-  "O negócio entrou na etapa antes de a regra ser ligada.": {
-    es: "El negocio entró en la etapa antes de que la regla se activara.",
-  },
-  "Aconteceu antes de a volta dos leads de formulário ser ligada.": {
-    es: "Ocurrió antes de que se activara el retorno de los leads de formulario.",
-  },
-  "O negócio não veio de um clique em anúncio desta plataforma.": {
-    es: "El negocio no vino de un clic en un anuncio de esta plataforma.",
-  },
-  "Travas: envia uma vez por negócio e evento (sair e voltar à etapa não duplica); ligar uma regra não envia o passado; o reenvio usa o retrato do primeiro envio; a Meta recusa evento com mais de 7 dias.":
-    {
-      es: "Reglas fijas: envía una vez por negocio y evento (salir y volver a la etapa no duplica); activar una regla no envía lo pasado; el reenvío usa los datos del primer envío; Meta rechaza un evento con más de 7 días.",
-    },
-  "Negócio que não veio de anúncio nem de formulário não aparece aqui: não havia o que informar. O cartão do negócio diz isso na seção Origem.":
-    {
-      es: "Un negocio que no vino de un anuncio ni de un formulario no aparece aquí: no había nada que informar. La tarjeta del negocio lo dice en la sección Origen.",
-    },
 
   // ─── cartão aberto › Origem ────────────────────────────────────────────────
   "O que cada plataforma ficou sabendo": { es: "Lo que supo cada plataforma" },
@@ -300,12 +210,5 @@ export const DICIONARIO_DAS_CONVERSOES_DA_META: Traducoes = {
   "plataforma sem envio de conversão": { es: "plataforma sin envío de conversión" },
   "evento de teste": { es: "evento de prueba" },
   "a plataforma recusou": { es: "la plataforma lo rechazó" },
-  "veio de formulário e a volta dos leads de formulário está desligada": {
-    es: "vino de un formulario y el retorno de los leads de formulario está desactivado",
-  },
-  "entrou na etapa antes de a regra ser ligada": { es: "entró en la etapa antes de que la regla se activara" },
-  "aconteceu antes de a volta dos leads de formulário ser ligada": {
-    es: "ocurrió antes de que se activara el retorno de los leads de formulario",
-  },
   "sem clique de anúncio": { es: "sin clic en anuncio" },
 };

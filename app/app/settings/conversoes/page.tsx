@@ -39,6 +39,7 @@ import { ROLE_RANK } from "@/lib/auth/types";
 import {
   contaEnviadas,
   lerEstadoDaConexao,
+  lerPendencias,
   MOTIVO_LEGIVEL,
 } from "@/lib/conversoes/estado-da-conexao";
 import { listSelectableChannels } from "@/lib/channels/selectable";
@@ -58,33 +59,32 @@ import { lerEstadoDaCaptura } from "@/lib/plataformas-de-anuncio/landing-config"
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { ReprocessarConversao } from "./_reprocessar";
+import { HistoricoDeEnvios } from "./_historico";
 import { DiagnosticoGoogle } from "./_diagnostico";
-import { lerDiagnosticoGoogle, rotuloDoEvento } from "@/lib/conversoes/historico";
-// FORK MIA (9017, docs/fork/conversoes-da-meta.md): as conversões da Meta por
-// etapa, a volta dos leads de formulário, o diagnóstico da Meta e o histórico
-// das duas plataformas. Tudo em arquivos nossos, ao lado dos do upstream; o
-// histórico e as pendências desta página passam a ser lidos por eles
-// (`_historico.tsx` e `lerPendencias` continuam no upstream, sem uso aqui).
-import { DiagnosticoDaMetaNaTela } from "./_diagnosticoMeta";
-import { HistoricoDeEnviosDasPlataformas } from "./_historicoDeEnvios";
-import { LeadsDeFormularioDaMeta } from "./_leadsDeFormularioMeta";
-import { RegrasDeConversaoMeta } from "./_regrasMeta";
-import { lerChaveDeFormulario } from "@/lib/conversoes-meta/config";
-import { rotuloDoEventoDaMetaNoLivro } from "@/lib/conversoes-meta/eventos";
 import {
-  lerFiltrosDoHistoricoDeEnvios,
-  lerHistoricoDeEnvios,
-  lerPendenciasDeEnvio,
-} from "@/lib/conversoes-meta/historico";
-import { lerFunisDaRegua, listarRegrasDaMeta } from "@/lib/conversoes-meta/regras";
-import { MOTIVO_DA_META_LEGIVEL } from "@/lib/conversoes-meta/situacao";
+  lerDiagnosticoGoogle,
+  lerFiltros,
+  lerHistorico,
+  rotuloDoEvento,
+} from "@/lib/conversoes/historico";
 import { FormularioDeCapturaDeUtm } from "./_formCapturaDeUtm";
 import { FormularioDeConversoes } from "./_form";
 import { FormularioDeConversoesGoogle } from "./_formGoogle";
+import { IdentidadeDaConversao } from "./_identidadeDaMeta";
 import { VendaPeloCanal } from "./_vendaPeloCanal";
 import { vendaPeloCanalLigada } from "@/lib/conversoes/venda-pelo-canal";
+import { identidadeDaMeta } from "@/lib/plataformas-de-anuncio/meta/identidade";
 import { RegrasDeConversaoGoogle, type EtapaAberta } from "./_regrasGoogle";
 import { listarRegrasGoogle } from "@/lib/conversoes/regras-google";
+import { RegrasDeConversaoMeta } from "./_regrasMeta";
+import { listarRegrasMeta, rotuloDoEventoDaMeta } from "@/lib/conversoes/regras-meta";
+// FORK MIA (docs/fork/conversoes-da-meta.md): a régua por etapa, o envio e o
+// histórico são do upstream (0524). O que continua nosso nesta tela: a volta dos
+// leads de formulário da Meta (9017, `mia_conversoes_meta_config`) e o
+// diagnóstico da Meta, ao lado do diagnóstico do Google.
+import { DiagnosticoDaMetaNaTela } from "./_diagnosticoMeta";
+import { LeadsDeFormularioDaMeta } from "./_leadsDeFormularioMeta";
+import { lerChaveDeFormulario } from "@/lib/conversoes-meta/config";
 
 export const metadata = { title: "Conversões" };
 export const dynamic = "force-dynamic";
@@ -135,13 +135,11 @@ export default async function ConversoesPage({
     capturaGoogle,
     etapas,
     regrasGoogle,
-    funisDaRegua,
-    regrasDaMeta,
+    regrasMeta,
     chaveDeFormulario,
   ] = await Promise.all([
     lerEstadoDaConexao(admin, activeOrg.orgId),
-    // FORK MIA: as pendências sem as decisões das travas (ver o import acima).
-    lerPendenciasDeEnvio(admin, activeOrg.orgId),
+    lerPendencias(admin, activeOrg.orgId),
     contaEnviadas(admin, activeOrg.orgId),
     lerEstadoDaConexaoGoogle(admin, activeOrg.orgId),
     lerEstadoDaCaptura(admin, "meta_ads_landing_pages", activeOrg.orgId),
@@ -160,13 +158,24 @@ export default async function ConversoesPage({
       .order("position"),
     // Falha na leitura das regras não derruba a tela: o editor some e o resto fica.
     listarRegrasGoogle(admin, activeOrg.orgId).catch(() => null),
-    // FORK MIA: o mesmo critério para a régua da Meta e a chave dos formulários.
-    lerFunisDaRegua(admin, activeOrg.orgId).catch(() => null),
-    listarRegrasDaMeta(admin, activeOrg.orgId).catch(() => null),
+    listarRegrasMeta(admin, activeOrg.orgId).catch(() => null),
+    // FORK MIA: o mesmo critério para a chave dos leads de formulário.
     lerChaveDeFormulario(admin, activeOrg.orgId).catch(() => null),
   ]);
+  // O nome que a pessoa reconhece para cada evento de etapa, das duas
+  // plataformas — o Histórico e as pendências leem daqui.
+  const rotulosDeEtapa = [
+    ...(regrasGoogle ?? []).map((r) => ({ eventName: r.eventName, label: r.label })),
+    ...(regrasMeta ?? []).map((r) => ({
+      eventName: r.eventName,
+      label: `${rotuloDoEventoDaMeta(r.metaEvent)} (Meta)`,
+    })),
+  ];
   const linhaDaOrganizacao = organizacao.data as { slug: string | null; settings?: unknown } | null;
   const slug = linhaDaOrganizacao?.slug ?? null;
+  // Página / WABA gravadas pela tela (#2098) — a MESMA leitura que a credencial
+  // faz no caminho do envio, para a tela e o envio nunca divergirem.
+  const identidadeMeta = identidadeDaMeta(linhaDaOrganizacao?.settings);
   // Etapas abertas agrupadas por funil, na ordem do funil; a primeira de cada
   // funil é onde o lead nasce (a sugestão "Novo lead" do recomendado).
   const vistosOsFunis = new Set<string>();
@@ -193,11 +202,10 @@ export default async function ConversoesPage({
     });
   // As abas de leitura só consultam o que mostram: a de configuração não paga
   // o histórico, e o histórico não paga o diagnóstico.
-  // FORK MIA: o histórico das duas plataformas, com a situação pelo motivo.
-  const filtrosDoHistorico = lerFiltrosDoHistoricoDeEnvios(parametros);
+  const filtrosDoHistorico = lerFiltros(parametros);
   const historico =
     aba === "historico"
-      ? await lerHistoricoDeEnvios(admin, activeOrg.orgId, filtrosDoHistorico).catch(() => null)
+      ? await lerHistorico(admin, activeOrg.orgId, filtrosDoHistorico).catch(() => null)
       : null;
   const diagnostico =
     aba === "diagnostico"
@@ -281,11 +289,11 @@ export default async function ConversoesPage({
         )
       ) : aba === "historico" ? (
         historico ? (
-          <HistoricoDeEnviosDasPlataformas
+          <HistoricoDeEnvios
             linhas={historico.linhas}
             total={historico.total}
             filtros={filtrosDoHistorico}
-            regrasGoogle={regrasGoogle ?? []}
+            regras={rotulosDeEtapa}
             idioma={idioma}
           />
         ) : (
@@ -342,20 +350,18 @@ export default async function ConversoesPage({
             ligada={vendaPeloCanalLigada(linhaDaOrganizacao?.settings)}
             idioma={idioma}
           />
-          {/* FORK MIA (9017): o que cada etapa informa à Meta, e a volta dos
-              leads de formulário. Falha de leitura esconde o bloco, não a tela. */}
-          {funisDaRegua && regrasDaMeta && (
-            <RegrasDeConversaoMeta
-              funis={funisDaRegua}
-              regras={regrasDaMeta}
-              conexao={{
-                conectada: estado.conectada && Boolean(estado.datasetId) && estado.temToken,
-                habilitada: estado.habilitada,
-                emTeste: Boolean(estado.testEventCode),
-              }}
+          {estado.conectada && (
+            <IdentidadeDaConversao
+              pageId={identidadeMeta.pageId}
+              whatsappBusinessAccountId={identidadeMeta.whatsappBusinessAccountId}
               idioma={idioma}
             />
           )}
+          {estado.conectada && !etapas.error && regrasMeta && (
+            <RegrasDeConversaoMeta etapas={etapasAbertas} regras={regrasMeta} idioma={idioma} />
+          )}
+          {/* FORK MIA: a volta dos leads de formulário da Meta, que usa as
+              regras logo acima. Falha de leitura esconde o bloco, não a tela. */}
           {chaveDeFormulario && (
             <LeadsDeFormularioDaMeta
               ligada={chaveDeFormulario.ligada}
@@ -447,12 +453,7 @@ export default async function ConversoesPage({
                           </a>
                         </td>
                         <td className="p-3">
-                          {/* FORK MIA: o nome do evento de etapa (Meta e Google).
-                              Antes, tudo o que não era a qualificação lia "Compra". */}
-                          {t(
-                            rotuloDoEventoDaMetaNoLivro(p.evento) ??
-                              rotuloDoEvento(p.evento, regrasGoogle ?? []),
-                          )}
+                          {t(rotuloDoEvento(p.evento, rotulosDeEtapa))}
                         </td>
                         <td className="p-3">
                           {p.plataforma === "meta_ads"
@@ -465,14 +466,7 @@ export default async function ConversoesPage({
                           {p.valorCentavos === null ? "—" : formatCentsBRL(p.valorCentavos)}
                         </td>
                         <td className="p-3">
-                          <span>
-                            {t(
-                              MOTIVO_LEGIVEL[p.motivo ?? ""] ??
-                                MOTIVO_DA_META_LEGIVEL[p.motivo ?? ""] ??
-                                p.motivo ??
-                                "—",
-                            )}
-                          </span>
+                          <span>{t(MOTIVO_LEGIVEL[p.motivo ?? ""] ?? p.motivo ?? "—")}</span>
                           {p.detalhe && (
                             <span className="mt-1 block text-xs text-muted-foreground">
                               {p.detalhe}

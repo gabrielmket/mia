@@ -47,6 +47,8 @@ type Linha = Record<string, unknown>;
 interface Consulta {
   cliente: "admin" | "sessao";
   tabela: string;
+  /** O texto do `select(…)` — é por ali que a rota pede `metadata->…` (alias incluído). */
+  colunas: string | null;
   eq: Array<[string, unknown]>;
   /** `.not(col, "is", valor)` — só `jev_observacoes` os aplica (as outras leituras não dependem deles aqui). */
   nao: Array<[string, unknown]>;
@@ -85,7 +87,7 @@ const MAX_ROWS = 1000;
 function cliente(tipo: Consulta["cliente"]) {
   return {
     from(tabela: string) {
-      const c: Consulta = { cliente: tipo, tabela, eq: [], nao: [], neq: [], gte: [], range: null, patch: null, head: false };
+      const c: Consulta = { cliente: tipo, tabela, colunas: null, eq: [], nao: [], neq: [], gte: [], range: null, patch: null, head: false };
       estado.consultas.push(c);
       const linhasDaTabela = (): Linha[] => {
         const base =
@@ -112,8 +114,9 @@ function cliente(tipo: Consulta["cliente"]) {
         return c.range ? filtradas.slice(c.range[0], c.range[1] + 1) : filtradas.slice(0, MAX_ROWS);
       };
       const chain = {
-        select: (_colunas?: string, opcoes?: { head?: boolean }) => {
+        select: (colunas?: string, opcoes?: { head?: boolean }) => {
           c.head = opcoes?.head === true;
+          c.colunas = colunas ?? null;
           return chain;
         },
         not: (col: string, _op: string, v: unknown) => {
@@ -515,6 +518,50 @@ describe("GET /api/v1/ai/jev", () => {
     const consulta = estado.consultas.find((c) => c.tabela === "messages");
     expect(consulta?.eq).toContainEqual(["metadata->>sentiment_engine", "llm"]);
   });
+
+  /**
+   * Issue #2219, ponta 2: o corte da concordância é o limiar GRAVADO na própria
+   * mensagem (o `config.sentiment_threshold` do agente da conversa, #2216), não
+   * o `DEFAULT_SENTIMENT_THRESHOLD`. O par discriminante é nota 0,2 × 0,05 com
+   * limiar 0,1: a IA ficou ACIMA do corte do agente e o Jev ABAIXO —
+   * discordaram. Contado contra 0,3 os dois estariam abaixo e concordariam,
+   * que é exatamente o defeito.
+   *
+   * A mensagem antiga, gravada antes do #2219, não tem a chave: cai no padrão —
+   * e uma chave corrompida nunca corta no escuro, também no padrão.
+   */
+  it("concordância: cada mensagem é cortada pelo limiar GRAVADO nela, com o padrão para as antigas", async () => {
+    estado.mensagens = [
+      { nota: 0.2, nota_do_jev: 0.05, limiar: 0.1 }, // agente em 0,1: discordaram
+      { nota: 0.05, nota_do_jev: 0.02, limiar: 0.1 }, // agente em 0,1: os dois abaixo, concordam
+      { nota: 0.2, nota_do_jev: 0.05 }, // mensagem antiga: sem chave, padrão 0,3, concordam
+      { nota: 0.8, nota_do_jev: 0.7, limiar: "0.1" }, // chave corrompida: padrão, concordam
+    ];
+    const { corpo } = await ler();
+    expect(corpo.data.numeros.observacao).toEqual({ dias: 30, comparadas: 4, concordaram: 3 });
+    // A rota tem de PEDIR a chave ao banco: sem o alias no `select`, a leitura
+    // volta `undefined` e a conta cai no padrão para toda mensagem, nova ou não.
+    const consulta = estado.consultas.find((c) => c.tabela === "messages");
+    expect(consulta?.colunas).toContain("limiar:metadata->sentiment_threshold");
+  });
+
+  /**
+   * A mesma ponta em `irritadosPercebidos`: um agente em 0,1 não deveria ter o
+   * cliente com nota 0,2 contado como irritado (contra 0,3 seria). Conversa
+   * única por mensagem, como a conta pede.
+   */
+  it("clientes irritados: o corte de cada mensagem também vem do limiar gravado", async () => {
+    estado.mensagens = [
+      { conversa: "c1", nota_do_jev: 0.2, limiar: 0.1 }, // acima de 0,1: NÃO conta (contra 0,3 contaria)
+      { conversa: "c2", nota_do_jev: 0.05, limiar: 0.1 }, // abaixo de 0,1: conta
+      { conversa: "c3", nota_do_jev: 0.2 }, // mensagem antiga: padrão 0,3, abaixo: conta
+      { conversa: "c4", nota_do_jev: 0.8, limiar: 0.1 }, // acima de 0,1: não conta
+    ];
+    const { corpo } = await ler();
+    expect(corpo.data.numeros.irritados).toBe(2);
+    const consultas = estado.consultas.filter((x) => x.tabela === "messages");
+    expect(consultas[1]?.colunas).toContain("limiar:metadata->sentiment_threshold");
+  });
 });
 
 describe("PATCH /api/v1/ai/jev", () => {
@@ -670,6 +717,8 @@ describe("o Jev por tarefa na rota", () => {
       expect.objectContaining({ id: "humano", ponto: null, estado: "desligada", novo: false }),
       expect.objectContaining({ id: "opt_out", ponto: null, estado: "desligada", novo: false }),
       expect.objectContaining({ id: "followup", ponto: "followup_classify", estado: "desligada", novo: false }),
+      // A conferência de campo (#2234) tem alcance "conversa": nasce desligada até o aceite dela.
+      expect.objectContaining({ id: "campo_do_negocio", ponto: null, estado: "desligada", novo: false }),
       // FORK MIA — a passagem prometida.
       expect.objectContaining({ id: "passagem_prometida", ponto: "handoff_promise", estado: "desligada", novo: false }),
     ]);
@@ -772,6 +821,7 @@ describe("o Jev por tarefa na rota", () => {
       ["humano", false],
       ["opt_out", false],
       ["followup", false],
+      ["campo_do_negocio", false],
       ["passagem_prometida", false], // FORK MIA
     ]);
     estado.camadas = [
@@ -785,6 +835,7 @@ describe("o Jev por tarefa na rota", () => {
       ["humano", false],
       ["opt_out", false],
       ["followup", false],
+      ["campo_do_negocio", false],
       ["passagem_prometida", false], // FORK MIA
     ]);
   });
@@ -800,6 +851,7 @@ describe("o Jev por tarefa na rota", () => {
       ["humano", false],
       ["opt_out", false],
       ["followup", false],
+      ["campo_do_negocio", false],
       ["passagem_prometida", false], // FORK MIA
     ]);
     // O ativo de OUTRA empresa não conta — o filtro é o da sessão.
@@ -812,6 +864,7 @@ describe("o Jev por tarefa na rota", () => {
       ["humano", false],
       ["opt_out", false],
       ["followup", false],
+      ["campo_do_negocio", false],
       ["passagem_prometida", false], // FORK MIA
     ]);
     // Ativo, mas sem intenção nenhuma (o estado logo depois de criar um) ou com
@@ -829,6 +882,7 @@ describe("o Jev por tarefa na rota", () => {
       ["humano", false],
       ["opt_out", false],
       ["followup", false],
+      ["campo_do_negocio", false],
       ["passagem_prometida", false], // FORK MIA
     ]);
     // E o cartão segue dizendo que a tarefa observa: é o que ela faz quando há roteador.
@@ -1009,6 +1063,7 @@ describe("o Jev por tarefa na rota", () => {
       humano: motivo,
       opt_out: motivo,
       followup: null,
+      campo_do_negocio: null,
       passagem_prometida: null, // FORK MIA — não é tarefa de pedido: lê a resposta do atendente.
     });
     // A organização é a da sessão, e a pergunta é a do portão do worker.
