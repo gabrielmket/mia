@@ -33,6 +33,7 @@ import { FERRAMENTAS_DE_AUTOMACAO_E_AGENDA } from "./ferramentas/automacoes-e-ag
 import { FERRAMENTAS_DO_CHECKLIST } from "./ferramentas/checklist";
 import { FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP } from "./ferramentas/conhecimento-e-followup";
 import { FERRAMENTAS_DE_CONVERSOES } from "./ferramentas/conversoes";
+import { FERRAMENTAS_DE_DEMONSTRACAO } from "./ferramentas/demonstracao";
 import { FERRAMENTAS_DE_EMPRESA } from "./ferramentas/empresa";
 import { FERRAMENTAS_DE_EQUIPE_E_MENSAGENS } from "./ferramentas/equipe-e-mensagens";
 import { FERRAMENTAS_DE_ETIQUETAS_E_MEMORIA } from "./ferramentas/etiquetas-e-memoria";
@@ -66,6 +67,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DE_OBRIGACOES,
   // a migração de outro CRM: empresas, contatos, negócios e materiais (docs/fork/mcp-de-migracao.md)
   ...FERRAMENTAS_DE_IMPORTACAO,
+  // as empresas de demonstração por segmento (docs/fork/cliente-modelo.md)
+  ...FERRAMENTAS_DE_DEMONSTRACAO,
 ];
 
 export const FERRAMENTA_POR_NOME = new Map(FERRAMENTAS.map((f) => [f.name, f]));

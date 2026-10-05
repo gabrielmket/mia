@@ -186,6 +186,7 @@ ferramenta não recebe nem devolve chave, e o agente nasce com a IA padrão.
 | `plataforma_ver_configuracao` | o conteúdo do que está configurado, por seção (etiquetas, memória, conhecimento, follow-ups, automações, agenda, equipe, números, atendimento, mensagens) | leitura |
 | `plataforma_ver_followup` | um fluxo de follow-up por dentro: gatilho, nós, textos e esperas | leitura |
 | `plataforma_ver_conversoes` | as conversões de um cliente: as conexões da Meta e do Google **sem segredo**, as regras por funil das duas plataformas, a chave dos leads de formulário, o evento recomendado para cada etapa e os 20 últimos envios com a situação e o motivo | leitura |
+| `plataforma_listar_demonstracoes` | as empresas de demonstração por segmento (construtora, clínica odontológica, indústria, academia) e a bancada: se existe, o id, quando a semente foi aplicada e as contagens; e qualquer outra organização marcada como demonstração | leitura |
 | `plataforma_diagnosticar_conversoes_da_meta` | o diagnóstico da Meta, o mesmo do botão "Testar conexão": token, destino, permissão, último envio aceito, recusas em 7 dias e modo de teste. Faz três leituras na Meta com o token do cliente; nenhum evento é enviado | leitura |
 
 ### Operações que já existiam
@@ -196,6 +197,20 @@ ferramenta não recebe nem devolve chave, e o agente nasce com a IA padrão.
 | `plataforma_liberar_modulo` | `liberar_modulo` | libera ou tira um módulo vendido | liberar de novo não duplica |
 | `plataforma_lancar_credito` | `lancar_credito` | lança crédito ou estorno na carteira de disparo | **não** é reexecutável: cada chamada lança |
 | `plataforma_definir_preco` | `definir_preco` | define o preço por mensagem de disparo | grava o mesmo valor |
+
+### Empresas de demonstração por segmento
+
+As quatro demonstrações (construtora, clínica odontológica, indústria e academia) e a
+bancada de teste saem da mesma semente do terminal (`scripts/cliente-modelo.ts`); o que
+cada uma mostra está em [cliente-modelo.md](cliente-modelo.md). A gravação vai pelo
+Postgres do app (`SUPABASE_DB_URL`), numa transação só, em poucos segundos: a resposta já
+traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do terminal
+(`--sql`).
+
+| ferramenta | operação | o que faz | reexecução |
+|---|---|---|---|
+| `plataforma_criar_demonstracao` | `criar_cliente` | cria a empresa de demonstração de um segmento, inteira e travada; quem criou o token e os `emails_de_acesso` entram como admin | se a do segmento já existe, não grava nada e devolve a que existe (`ja_estava`) |
+| `plataforma_reaplicar_demonstracao` | `implantar_configuracao` | regrava os dados fictícios de uma demonstração que já existe e renova as datas; recusa empresa que não é a do segmento ou que está desmarcada | ids estáveis: rodar de novo não duplica nada |
 
 ### Montagem · operação `implantar_configuracao`
 
