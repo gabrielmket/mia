@@ -7298,6 +7298,17 @@ begin
 end
 $f$;
 
+-- ── 5. o gatilho nosso da anonimização ganha search_path fixo ─────────────────
+--
+-- A 0521 do upstream (1.70) fecha o aviso `function_search_path_mutable` do
+-- Security Advisor do Supabase nas funções DELE, e o teste dela
+-- (tests/invariants/avisos-do-security-advisor.test.ts) passou a exigir
+-- `search_path` fixo em TODA função de `public`. A única nossa sem ele era
+-- `fn_mia_contato_anonimizado_limpa` (0264, redefinida na 9013). O corpo só
+-- atribui campos de NEW com tipos do catálogo, então `search_path = ''` não muda
+-- o comportamento. Mesma forma da 0521: `alter function`, sem redefinir.
+alter function public.fn_mia_contato_anonimizado_limpa() set search_path = '';
+
 notify pgrst, 'reload schema';
 
 

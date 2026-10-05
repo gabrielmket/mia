@@ -1,4 +1,4 @@
--- manifest: As conversões da Meta por etapa passam a ser as do UPSTREAM (0524, `meta_ads_conversion_rules`, consumidor `conversoes.etapa_meta`), e a 9017 fica de pé só no que o upstream não tem. `mia_conversoes_meta_regras`, `fn_mia_marcar_configuracao_regra_meta` e `fn_mia_solicitar_reenvio_conversao_meta` ficam OBSOLETAS (comentário na tabela e nas funções): nenhum código lê nem grava a tabela, e a função do reenvio passa a devolver `false` sem emitir `conversao_meta.retry_requested`, que perdeu o consumidor. Nada é apagado nesta fusão; a tabela e as duas funções podem sair numa fusão futura, depois de a .72 ficar um ciclo no ar (em produção, em 05/10/2026, a tabela tinha 0 linhas). `mia_conversoes_meta_config` (a chave "leads de formulário voltam para a Meta") continua valendo, agora para o consumidor `conversoes.meta_formulario`, que só age no negócio SEM atribuição de anúncio que nasceu de formulário da Meta. Nenhum objeto do upstream é tocado. Provado em tests/invariants/conversoes-da-meta-por-etapa.test.ts.
+-- manifest: As conversões da Meta por etapa passam a ser as do UPSTREAM (0524, `meta_ads_conversion_rules`, consumidor `conversoes.etapa_meta`), e a 9017 fica de pé só no que o upstream não tem. `mia_conversoes_meta_regras`, `fn_mia_marcar_configuracao_regra_meta` e `fn_mia_solicitar_reenvio_conversao_meta` ficam OBSOLETAS (comentário na tabela e nas funções): nenhum código lê nem grava a tabela, e a função do reenvio passa a devolver `false` sem emitir `conversao_meta.retry_requested`, que perdeu o consumidor. Nada é apagado nesta fusão; a tabela e as duas funções podem sair numa fusão futura, depois de a .72 ficar um ciclo no ar (em produção, em 05/10/2026, a tabela tinha 0 linhas). `mia_conversoes_meta_config` (a chave "leads de formulário voltam para a Meta") continua valendo, agora para o consumidor `conversoes.meta_formulario`, que só age no negócio SEM atribuição de anúncio que nasceu de formulário da Meta. Nenhum objeto do upstream é tocado. Provado em tests/invariants/conversoes-da-meta-por-etapa.test.ts. E, à parte: `fn_mia_contato_anonimizado_limpa` (nossa) ganha `search_path` fixo, que a 0521 do upstream passou a exigir de toda função de public (tests/invariants/avisos-do-security-advisor.test.ts).
 --
 -- 9019 · as conversões da Meta por etapa seguem as do upstream
 --
@@ -85,5 +85,16 @@ begin
   end if;
 end
 $f$;
+
+-- ── 5. o gatilho nosso da anonimização ganha search_path fixo ─────────────────
+--
+-- A 0521 do upstream (1.70) fecha o aviso `function_search_path_mutable` do
+-- Security Advisor do Supabase nas funções DELE, e o teste dela
+-- (tests/invariants/avisos-do-security-advisor.test.ts) passou a exigir
+-- `search_path` fixo em TODA função de `public`. A única nossa sem ele era
+-- `fn_mia_contato_anonimizado_limpa` (0264, redefinida na 9013). O corpo só
+-- atribui campos de NEW com tipos do catálogo, então `search_path = ''` não muda
+-- o comportamento. Mesma forma da 0521: `alter function`, sem redefinir.
+alter function public.fn_mia_contato_anonimizado_limpa() set search_path = '';
 
 notify pgrst, 'reload schema';
