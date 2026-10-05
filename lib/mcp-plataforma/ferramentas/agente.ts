@@ -11,6 +11,8 @@
  */
 import { z } from "zod";
 
+import { TAMANHO_MAXIMO_DO_TEXTO } from "@/lib/agent-engine/agent/aviso-fora-do-horario";
+import { DEFAULT_SENTIMENT_THRESHOLD } from "@/lib/ai/prompts/sentiment";
 import { garantirAgente, pausarAgente, publicarAgente, type PedidoDeAgente } from "@/lib/implantacao/agente";
 import { PACOTES } from "@/lib/mcp/tools/pacotes";
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
@@ -31,20 +33,21 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
     name: "plataforma_garantir_agente",
     description:
       "Cria ou altera um AGENTE DE IA de um cliente: o nome, o PROMPT, as capacidades (por pacote), os funis em que ele pode mexer, os materiais que consulta, " +
-      "os follow-ups que arma, as palavras que passam a conversa para uma pessoa, o horário em que atende e o número de WhatsApp. " +
-      "O que esta ferramenta grava é sempre um RASCUNHO: nada muda no atendimento até plataforma_publicar_agente. " +
+      "os follow-ups que arma, as palavras que passam a conversa para uma pessoa, o horário em que atende (e o aviso para quem escreve fora dele), o limiar de sentimento e o número de WhatsApp. " +
+      "O que esta ferramenta grava é um RASCUNHO: nada muda no atendimento até plataforma_publicar_agente. " +
+      "As exceções são do CADASTRO do agente e valem na hora: `nome`, `descricao`, `prioridade` e `limiar_de_sentimento`. " +
       "GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é o NOME do agente. Agente novo nasce com a versão 1 em rascunho; " +
       "agente com rascunho tem o rascunho atualizado; agente só com versão publicada ganha um rascunho novo. " +
       "Só os campos que VIERAM mudam: chamar só com `prompt` troca o prompt e preserva o resto. Pedido igual ao que está gravado responde `ja_estava`. " +
       "A resposta traz `falta_para_publicar`, com quem resolve cada pendência (você, uma pessoa na tela, ou a plataforma). " +
       "QUANTOS AGENTES: uma organização pode ter vários. Responde a mensagem o agente publicado no NÚMERO em que ela chegou; " +
-      "dois no mesmo número precisam de um roteador, que é montado por uma pessoa em IA › Roteadores. O desenho simples é um agente por número. " +
+      "dois no mesmo número precisam de um roteador de intenção (plataforma_garantir_roteador). O desenho simples é um agente por número. " +
       "A IA (provedor, modelo e chave) é da PLATAFORMA: não se informa aqui, e o agente nasce com a IA padrão. " +
       `CAPACIDADES: \`pacotes\` liga as capacidades de cada pacote (${PACOTES.map((p) => p.id).join(", ")}); as de efeito que não dá para desfazer entram uma a uma, em \`capacidades\`. ` +
       `Até ${TETO_TOOLS_POR_AGENTE} capacidades por agente. Agente novo sem \`pacotes\` nasce com o pacote "vender". ` +
       "ORDEM RECOMENDADA: antes desta, crie o que o agente referencia: o funil (plataforma_garantir_funil), os materiais (plataforma_garantir_conhecimento) " +
       "e os follow-ups (plataforma_garantir_followup). O número pode ficar para depois: o rascunho nasce sem número. " +
-      "O QUE NÃO FAZ: não publica, não troca o modelo de IA, não cria roteador e não arquiva agente.",
+      "O QUE NÃO FAZ: não publica, não troca o modelo de IA, não cria roteador (plataforma_garantir_roteador) e não arquiva agente.",
     inputSchema: {
       organization_id: ORGANIZACAO,
       nome: z.string().trim().min(1).max(120).describe('O nome do agente (ex.: "Bia"). É a chave: chamar de novo com o mesmo nome altera o mesmo agente.'),
@@ -103,7 +106,30 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
         .strict()
         .nullable()
         .optional()
-        .describe("O horário em que o agente RESPONDE. null = responde a qualquer hora."),
+        .describe("O horário em que o agente RESPONDE. null = responde a qualquer hora. Trocar a janela preserva o aviso de fora do horário que já existe."),
+      aviso_fora_do_horario: z
+        .string()
+        .trim()
+        .min(1)
+        .max(TAMANHO_MAXIMO_DO_TEXTO)
+        .nullable()
+        .optional()
+        .describe(
+          "O texto que o sistema manda a quem escreve FORA do horário de atendimento, para a pessoa saber que a mensagem chegou e quando alguém responde. " +
+            "Sai no máximo UMA vez por contato a cada período fechado, e nunca para contato bloqueado. Quando o horário abre, o agente responde normalmente. " +
+            `Até ${TAMANHO_MAXIMO_DO_TEXTO} caracteres. null apaga o aviso. Só vale com \`horario_de_atendimento\` definido. Sem isto, fica o texto que está gravado.`,
+        ),
+      limiar_de_sentimento: z
+        .number()
+        .min(0)
+        .max(1)
+        .optional()
+        .describe(
+          `A nota de clima da conversa, de 0 a 1, abaixo da qual ela passa para uma pessoa. Padrão: ${DEFAULT_SENTIMENT_THRESHOLD}. ` +
+            "Nota mais alta passa MAIS conversas para uma pessoa; mais baixa deixa só a hostilidade forte acionar a passagem. " +
+            "Em segmento onde todo contato chega como queixa (advocacia, saúde, assistência técnica), relatar o problema não é irritação. " +
+            "ATENÇÃO: é do cadastro do agente, não do rascunho. Vale na hora, sem publicar.",
+        ),
       numero: z
         .string()
         .trim()
@@ -141,7 +167,7 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
       "Se o rascunho não tem número e a empresa tem um único número conectado, ele é escolhido sozinho; com mais de um, informe `numero`. " +
       "Quando algo impede a publicação, a recusa lista TODAS as pendências e quem resolve cada uma (você, uma pessoa na tela, ou a plataforma). " +
       "Chamar de novo sem rascunho novo responde `ja_estava`. " +
-      "O QUE NÃO FAZ: não cria o agente (plataforma_garantir_agente), não conecta número e não cria roteador entre dois agentes do mesmo número.",
+      "O QUE NÃO FAZ: não cria o agente (plataforma_garantir_agente), não conecta número e não cria roteador entre dois agentes do mesmo número (plataforma_garantir_roteador).",
     inputSchema: {
       organization_id: ORGANIZACAO,
       agente: z.string().trim().min(1).max(120).describe("Nome ou id do agente."),

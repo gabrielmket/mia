@@ -81,11 +81,14 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
     rotulo: "Montar a configuração de um cliente",
     raio:
       "Grava dados da empresa, funis e etapas, catálogo e preços, etiquetas, memória, " +
-      "conhecimento, agenda, respostas prontas, as regras de conversão DESLIGADAS e os " +
-      "RASCUNHOS de agente, follow-up e " +
+      "conhecimento, agenda, respostas prontas, as regras de conversão DESLIGADAS, o " +
+      "roteador de intenção DESLIGADO e os RASCUNHOS de agente, follow-up e " +
       "automação de QUALQUER cliente. Não publica nada, mas atenção: o agente que já " +
       "está no ar lê o catálogo, a memória e o conhecimento na hora. Um preço errado " +
-      "gravado por este token vira preço errado dito ao cliente final.",
+      "gravado por este token vira preço errado dito ao cliente final. Também valem na " +
+      "hora a distribuição do atendimento, o nome de quem fala na mensagem, a janela de " +
+      "esfriando das etapas e o limiar de sentimento do agente (que decide quando a " +
+      "conversa passa para uma pessoa).",
   },
   {
     chave: "colocar_no_ar",
@@ -96,7 +99,9 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "mandar mensagem para os clientes do cliente: um token vazado põe no ar um agente " +
       "com o texto que ele quiser, falando em nome da empresa. Também liga as regras de " +
       "conversão por etapa e a volta dos leads de formulário: o sistema passa a mandar " +
-      "evento com dado dos clientes do cliente para a Meta e o Google Ads.",
+      "evento com dado dos clientes do cliente para a Meta e o Google Ads. E liga o " +
+      "roteador de intenção, que passa a escolher o agente a cada mensagem do número e " +
+      "a mover o negócio do cliente para o funil de destino da intenção.",
   },
   {
     chave: "convidar_equipe",

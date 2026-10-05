@@ -10,6 +10,7 @@ import {
   TETO_DO_DOCUMENTO,
   type PedidoDeConhecimento,
 } from "@/lib/implantacao/conhecimento";
+import { MAX_PAUSA_DE_REENTRADA_MINUTES } from "@/lib/followup/pausa-de-reentrada";
 import { garantirFollowup, publicarFollowup, type PedidoDeFollowup } from "@/lib/implantacao/followup";
 
 import type { FerramentaDePlataforma } from "../tipos";
@@ -73,12 +74,15 @@ export const FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP: readonly FerramentaDePlataf
       "INSTALAR: informe `modelo` (o id, de plataforma_listar_modelos, seção followup). O fluxo nasce RASCUNHO, com os textos do modelo, e NÃO manda mensagem para ninguém. " +
       "Modelo que dispara por etapa pede `etapa` (funil e etapa pelo nome). " +
       "AJUSTAR: `textos` troca o texto de uma mensagem pelo id do nó (veja os nós em plataforma_ver_followup); `esperas` troca os minutos de uma espera; " +
-      "`silencio_minutos`, `etapa` e `numero` ajustam o gatilho. " +
-      "GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é o NOME do fluxo (sem `nome`, vale o nome do modelo). " +
+      "`silencio_minutos`, `silencio_maximo_minutos`, `pausa_para_recomecar_minutos`, `etapa` e `numero` ajustam o gatilho. " +
+      "MEXER NO NEGÓCIO SEM FALAR COM O CLIENTE: `mover_no_funil` garante uma caixa que leva o card para uma etapa, e `etiquetar` uma caixa que grava etiquetas. " +
+      "Cada uma entra ANTES de um nó (`antes_de`): antes do fim «sem resposta» para marcar quem não respondeu, antes de uma mensagem para mover na hora em que ela sai. " +
+      "Com `no`, ajusta uma caixa que já existe (feita aqui ou na tela). " +
+      "GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é o NOME do fluxo (sem `nome`, vale o nome do modelo); a caixa é achada pelo lugar onde está. " +
       "ORDEM: (1) esta ferramenta, (2) plataforma_garantir_agente com `followups` para ARMAR o fluxo no agente, (3) plataforma_publicar_followup, (4) plataforma_publicar_agente. " +
       "Fluxo com gatilho automático só inscreve alguém se um agente PUBLICADO o tem armado. " +
-      "O QUE NÃO FAZ: não publica, não arma em agente, e não desenha fluxo do zero (isso é o construtor, na tela IA › Follow-ups). " +
-      "Num fluxo já publicado, o texto muda no rascunho; o gatilho não muda sem desligar o fluxo antes.",
+      "O QUE NÃO FAZ: não publica, não arma em agente, não tira caixa e não desenha fluxo do zero nem ramificação (isso é o construtor, na tela IA › Follow-ups). " +
+      "Num fluxo já publicado, textos, esperas e caixas mudam no rascunho; o gatilho não muda sem desligar o fluxo antes.",
     inputSchema: {
       organization_id: ORGANIZACAO,
       modelo: z.string().trim().min(1).max(80).optional().describe("O id do modelo a instalar. Obrigatório quando o fluxo ainda não existe."),
@@ -122,6 +126,70 @@ export const FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP: readonly FerramentaDePlataf
         .enum(["pause", "cancel", "allow"])
         .optional()
         .describe('O que acontece com o fluxo quando uma pessoa da equipe assume a conversa: "pause" (espera), "cancel" (encerra) ou "allow" (segue).'),
+      silencio_maximo_minutos: z
+        .number()
+        .int()
+        .min(5)
+        .max(10_080)
+        .nullable()
+        .optional()
+        .describe(
+          "Para gatilho de silêncio: o TETO do silêncio. O fluxo só começa para quem está calado entre `silencio_minutos` e este valor. " +
+            "Sem teto, ligar um fluxo de «10 minutos depois» dispara de uma vez para todo mundo que está calado há dias. Precisa ser maior que `silencio_minutos`. null tira o teto.",
+        ),
+      pausa_para_recomecar_minutos: z
+        .number()
+        .int()
+        .min(0)
+        .max(MAX_PAUSA_DE_REENTRADA_MINUTES)
+        .nullable()
+        .optional()
+        .describe(
+          "Para gatilho de silêncio: quanto esperar antes de o fluxo RECOMEÇAR para quem já passou por ele (1440 = um dia). " +
+            "Sem pausa, quem responde «obrigado» a uma mensagem do fluxo volta a ser inscrito logo depois. 0 ou null = sem pausa.",
+        ),
+      pausa_conta_do_ultimo_envio: z
+        .boolean()
+        .optional()
+        .describe(
+          "De onde a pausa conta. false (padrão): da última mensagem do CLIENTE, e cada mensagem nova recomeça a contagem. " +
+            "true: do fim do último envio deste fluxo, para o toque curto que roda no máximo uma vez por dia. Só vale com `pausa_para_recomecar_minutos`.",
+        ),
+      mover_no_funil: z
+        .array(
+          z
+            .object({
+              antes_de: z.string().min(1).max(120).optional().describe('O id do nó ANTES do qual a caixa entra (ex.: "fim-esgotou"). Toda seta que chegava nele passa pela caixa.'),
+              no: z.string().min(1).max(120).optional().describe("O id de uma caixa de mover que JÁ existe, para trocar a etapa de destino. Use este OU `antes_de`."),
+              funil: z.string().trim().min(1).max(120).describe("Nome (ou id) do funil da etapa de destino."),
+              etapa: z.string().trim().min(1).max(120).describe("Nome (ou id) da etapa para onde o card vai."),
+              rotulo: z.string().trim().min(1).max(60).optional().describe("O nome da caixa no construtor. Sem isto, «Mover card de etapa»."),
+            })
+            .strict(),
+        )
+        .max(10)
+        .optional()
+        .describe(
+          "Caixas que MOVEM o card no funil quando o fluxo chega ali, sem mandar mensagem. " +
+            'Ex.: [{ "antes_de": "fim-esgotou", "funil": "Agendamentos", "etapa": "Sem resposta" }]. Os ids dos nós estão em plataforma_ver_followup.',
+        ),
+      etiquetar: z
+        .array(
+          z
+            .object({
+              antes_de: z.string().min(1).max(120).optional().describe("O id do nó ANTES do qual a caixa entra."),
+              no: z.string().min(1).max(120).optional().describe("O id de uma caixa de etiquetar que JÁ existe, para trocar as etiquetas. Use este OU `antes_de`."),
+              etiquetas: z.array(z.string().max(60)).min(1).max(10).describe("As etiquetas a gravar, até 10, cada uma com até 60 caracteres. Prefira as do vocabulário (plataforma_garantir_etiquetas)."),
+              rotulo: z.string().trim().min(1).max(60).optional().describe("O nome da caixa no construtor. Sem isto, «Gravar tag no lead»."),
+            })
+            .strict(),
+        )
+        .max(10)
+        .optional()
+        .describe(
+          "Caixas que GRAVAM ETIQUETAS no negócio quando o fluxo chega ali, sem mandar mensagem. " +
+            'Ex.: [{ "antes_de": "fim-esgotou", "etiquetas": ["Follow-up sem resposta"] }].',
+        ),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,

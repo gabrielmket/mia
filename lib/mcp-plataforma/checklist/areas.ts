@@ -22,10 +22,12 @@ import { lerConvites, lerMembros } from "@/lib/implantacao/equipe";
 import { lerFluxos } from "@/lib/implantacao/followup";
 import { lerDocumentoDaMemoria } from "@/lib/implantacao/memoria";
 import { lerModelosOficiais, lerRespostasProntas, temCanalOficialProprio } from "@/lib/implantacao/mensagens";
+import { lerIntencoes, lerRoteadores } from "@/lib/implantacao/roteador";
 import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
 import { estadoDoAgente } from "@/lib/ai/agents/no-ar";
 import { temChaveDeEmbedding } from "@/lib/ai/embeddings/chave";
 import { modeloDaPlataforma } from "@/lib/ai/modelo-da-plataforma";
+import { empresaExigeMfa, politicaDaEmpresa } from "@/lib/auth/politica-mfa";
 import { DEFAULT_VISIBILITY_MODE } from "@/lib/auth/types";
 import { nomeDoCanal } from "@/lib/channels/estado";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
@@ -33,6 +35,7 @@ import { listSelectableChannels } from "@/lib/channels/selectable";
 import { lerModoDeVenda } from "@/lib/empresas/modo-de-venda";
 import { lerAmbiente, nomeAindaEhPlaceholder } from "@/lib/instalacao/ambiente";
 import { ROTULO_DO_PASSO } from "@/lib/leads/agent-mapping";
+import { configAssinatura } from "@/lib/messaging/assinatura";
 import { MODULOS } from "@/lib/modulos/vendaveis";
 import { routingConfigSchema } from "@/lib/schemas/routing";
 
@@ -435,23 +438,58 @@ const agentes: AreaDoChecklist = {
     if (todos.length === 0) {
       r.falta.push({ o_que: "A organização não tem agente de IA.", como: "plataforma_garantir_agente (o agente nasce como rascunho)." });
     }
+    // O roteador de intenção tem ferramenta desde a .73 (upstream 1.73: cada
+    // intenção pode levar o negócio para o funil de destino). Deixou de ser
+    // item "só pela tela": montar é com o agente, e ligar também.
+    //
+    // A leitura que falha NÃO derruba a área: é dela que sai `pode_atender`, e
+    // um banco que ainda não recebeu a 0542 (o destino de funil da intenção)
+    // não pode fazer o checklist dizer que ninguém está no ar.
+    let roteadores: Awaited<ReturnType<typeof lerRoteadores>> = [];
+    let intencoes: Awaited<ReturnType<typeof lerIntencoes>> = [];
+    try {
+      roteadores = await lerRoteadores(admin, org.id);
+      intencoes = roteadores.length > 0 ? await lerIntencoes(admin, org.id) : [];
+    } catch (err) {
+      r.dados = { agentes: retrato, roteadores_nao_medidos: err instanceof Error ? err.message : "erro desconhecido" };
+      return r;
+    }
+    r.dados = {
+      agentes: retrato,
+      roteadores: roteadores.map((x) => ({
+        id: x.id,
+        nome: x.name,
+        ligado: x.is_active,
+        numero_id: x.channel_session_id,
+        intencoes: intencoes.filter((i) => i.router_id === x.id).length,
+        intencoes_com_destino_de_funil: intencoes.filter((i) => i.router_id === x.id && i.pipeline_id).length,
+      })),
+    };
+    for (const x of roteadores) {
+      const quantas = intencoes.filter((i) => i.router_id === x.id).length;
+      if (x.is_active) r.pronto.push(`Roteador «${x.name}» ligado, com ${plural(quantas, "intenção", "intenções")}.`);
+      else if (quantas === 0) {
+        r.falta.push({ o_que: `O roteador «${x.name}» não tem intenção nenhuma.`, como: "plataforma_garantir_roteador com `intencoes`." });
+      } else {
+        r.falta.push({ o_que: `O roteador «${x.name}» está montado e desligado: ele ainda não decide nada.`, como: "plataforma_ligar_roteador." });
+      }
+    }
     for (const [numero, nomes] of publicadosPorNumero) {
       if (nomes.length < 2) continue;
-      const { data: roteador } = await admin
-        .from("ai_routers")
-        .select("id")
-        .eq("organization_id", org.id)
-        .eq("channel_session_id", numero)
-        .eq("is_active", true)
-        .limit(1);
-      const tem = ((roteador ?? []) as unknown[]).length > 0;
+      if (roteadores.some((x) => x.channel_session_id === numero)) continue;
+      r.falta.push({
+        o_que: `${nomes.map((n) => `«${n}»`).join(" e ")} estão publicados no mesmo número e não há roteador: só responde o de maior prioridade.`,
+        como: "plataforma_garantir_roteador (uma intenção por agente) e depois plataforma_ligar_roteador.",
+      });
+    }
+    if (roteadores.length > 0) {
       r.so_pela_tela.push({
-        o_que: `Criar o roteador que divide o atendimento entre ${nomes.map((n) => `«${n}»`).join(" e ")}, publicados no mesmo número.`,
-        situacao: tem ? "feito" : "pendente",
+        o_que: "Amarrar um roteiro de atendimento a uma intenção do roteador, e testar a classificação com uma mensagem de exemplo.",
+        situacao: "opcional",
         tela: "IA › Roteadores",
         caminho: "/app/ai/routers",
         quem: "cliente",
-        por_que: "Sem roteador, no mesmo número só responde o agente de maior prioridade. O roteador classifica a intenção com exemplos, e é montado na tela.",
+        por_que: "Roteiro de atendimento é outra superfície, sem ferramenta de montagem, e o teste chama o classificador com a mensagem digitada na tela.",
       });
     }
     return r;
@@ -631,6 +669,28 @@ const equipe: AreaDoChecklist = {
         por_que: "A instalação não conseguiu mandar o e-mail. O link do convite fica copiável na tela de Equipe.",
       });
     }
+    // Upstream 1.70 (#2163 e #2167): a verificação em duas etapas pode ser
+    // exigida a partir de um papel, com carência. É regra de ACESSO, e a própria
+    // tela pede o código do segundo fator de quem a muda: um token não tem como.
+    const mfa = politicaDaEmpresa(org.settings);
+    const exige = empresaExigeMfa(org.settings) || (mfa.papelMinimo !== null && mfa.papelMinimo !== "none");
+    r.dados = {
+      ...r.dados,
+      verificacao_em_duas_etapas: {
+        exigida: exige,
+        a_partir_do_papel: exige ? (mfa.papelMinimo ?? "admin") : null,
+        dias_de_carencia: mfa.diasDeCarencia,
+      },
+    };
+    r.so_pela_tela.push({
+      o_que: "Exigir a verificação em duas etapas da equipe: a partir de qual papel, e com quantos dias de carência.",
+      situacao: exige ? "feito" : "opcional",
+      tela: "Configurações › Segurança",
+      caminho: "/app/settings/security",
+      quem: "cliente",
+      por_que:
+        "É regra de acesso da empresa: a tela pede o código do segundo fator de quem muda a regra, e um token não apresenta segundo fator. Exigir sem carência tranca para fora quem ainda não cadastrou o aplicativo.",
+    });
     return r;
   },
 };
@@ -643,18 +703,31 @@ const atendimento: AreaDoChecklist = {
     const routing = routingConfigSchema.catch(routingConfigSchema.parse({})).parse(org.settings.routing ?? {});
     const visibilidade = (org.settings.visibility_mode as string | undefined) ?? DEFAULT_VISIBILITY_MODE;
     const grupo = org.settings.grupo_de_avisos as { nome?: string } | undefined;
+    // Upstream 1.70: o modo por menor carga (#1711), a espera da IA depois de uma
+    // resposta pelo celular (#2005) e a assinatura de quem fala (#2079).
+    const assinatura = configAssinatura(org.settings);
     r.dados = {
       modo: routing.mode,
       visibilidade,
       devolver_para_a_ia_apos_minutos: routing.handoff_return_after_minutes,
       conversa_fica_com_quem_atendeu: routing.conversation_stays_with_attendant,
+      ia_espera_apos_resposta_pelo_celular_minutos: routing.manual_reply_silence_minutes,
+      assinatura: { atendentes: assinatura.humanos, ia: assinatura.ia, nome_da_ia: assinatura.nomeIa },
       grupo_de_avisos: grupo?.nome ?? null,
     };
+    const ROTULO_DO_MODO: Record<string, string> = { manual: "manual", round_robin: "em rodízio", load: "por menor carga" };
     r.pronto.push(
-      `Distribuição ${routing.mode === "round_robin" ? "em rodízio" : "manual"}; atendente enxerga ${
+      `Distribuição ${ROTULO_DO_MODO[routing.mode] ?? routing.mode}; atendente enxerga ${
         visibilidade === "all" ? "tudo" : visibilidade === "own" ? "só o que é dele" : "o que é dele e o que não tem dono"
       }.`,
     );
+    if (assinatura.humanos || assinatura.ia) {
+      r.pronto.push(
+        `As mensagens mostram quem fala: ${[assinatura.humanos ? "atendentes" : null, assinatura.ia ? `IA («${assinatura.nomeIa}»)` : null]
+          .filter(Boolean)
+          .join(" e ")}.`,
+      );
+    }
     r.so_pela_tela.push(
       {
         o_que: "Escolher o grupo de WhatsApp que recebe os avisos de passagem para humano.",

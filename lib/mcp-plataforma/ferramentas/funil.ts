@@ -29,13 +29,18 @@ const etapa = z
       .nullable()
       .optional()
       .describe("Chance de fechamento, de 0 a 100, usada na previsão do funil. Não se aplica às etapas de ganho e de perda."),
+    // A régua (1 a 8760 horas inteiras) é a da tela de etapas, upstream 1.70 (#2161).
     prazo_esperado_horas: z
       .number()
+      .int()
       .min(1)
       .max(8760)
       .nullable()
       .optional()
-      .describe("Quantas horas um negócio costuma ficar nesta etapa. Passou disso, o radar de risco o marca como esfriando."),
+      .describe(
+        "A janela de ESFRIANDO da etapa: quantas horas INTEIRAS um negócio costuma ficar nela (de 1 a 8760). Passou disso, o radar de risco o marca como esfriando. " +
+          "null volta ao padrão do radar (24 h e 72 h). ATENÇÃO: diminuir a janela de uma etapa cheia esfria vários negócios de uma vez na passada seguinte do radar.",
+      ),
     cor: z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, 'use o formato #rrggbb, ex.: "#12a594"')

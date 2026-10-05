@@ -42,6 +42,7 @@ import { FERRAMENTAS_DE_LEITURA } from "./ferramentas/leituras";
 import { FERRAMENTAS_DE_OBRIGACOES } from "./ferramentas/obrigacoes";
 import { FERRAMENTAS_DA_PLATAFORMA } from "./ferramentas/plataforma";
 import { FERRAMENTAS_DE_PRODUTOS } from "./ferramentas/produtos";
+import { FERRAMENTAS_DE_ROTEADOR } from "./ferramentas/roteador";
 // As ferramentas de importação (docs/fork/mcp-de-migracao.md).
 import { FERRAMENTAS_DE_IMPORTACAO } from "./importacao";
 import type { FerramentaDePlataforma } from "./tipos";
@@ -60,6 +61,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DE_ETIQUETAS_E_MEMORIA,
   ...FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP,
   ...FERRAMENTAS_DE_AGENTE,
+  // o roteador de intenção entre dois agentes do mesmo número (upstream 1.73: destino de funil por intenção)
+  ...FERRAMENTAS_DE_ROTEADOR,
   ...FERRAMENTAS_DE_AUTOMACAO_E_AGENDA,
   ...FERRAMENTAS_DE_CONVERSOES,
   ...FERRAMENTAS_DE_EQUIPE_E_MENSAGENS,

@@ -12,6 +12,7 @@
  */
 import { z } from "zod";
 
+import { lerTextoDoAvisoForaDoHorario } from "@/lib/agent-engine/agent/aviso-fora-do-horario";
 import { LEAD_STAGES } from "@/lib/agent-engine/agent/lead-state";
 import { CATEGORIAS_DE_TIPO, LOCAIS_DE_TIPO } from "@/lib/agenda/tipos-de-agendamento";
 import { DIRECOES_DO_SILENCIO } from "@/lib/automation/gatilhos-de-tempo";
@@ -22,9 +23,10 @@ import { nomeDoCanal } from "@/lib/channels/estado";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 import { listSelectableChannels } from "@/lib/channels/selectable";
 import { horizonteDoModeloMs, MODELOS_DE_FOLLOWUP, ROTULO_DO_SEGMENTO, toquesDoModelo } from "@/lib/followup/modelos";
+import { carregaEtapasCitadas } from "@/lib/followup/etapas-citadas";
 import { rascunhoDoFluxo } from "@/lib/followup/rascunho";
 import { acharPorNomeOuId } from "@/lib/implantacao/base";
-import { lerAgentes, lerVersoes, pendenciasDePublicacao } from "@/lib/implantacao/agente";
+import { lerAgentes, lerVersoes, limiarDeSentimentoDo, pendenciasDePublicacao } from "@/lib/implantacao/agente";
 import { lerTipos } from "@/lib/implantacao/agenda";
 import { lerRegras } from "@/lib/implantacao/automacoes";
 import { CONFIGURACAO_DOS_GATILHOS_DE_OBRIGACAO, modelosDeObrigacaoParaOAgente } from "@/lib/implantacao/obrigacoes";
@@ -33,15 +35,22 @@ import { lerConvites, lerMembros } from "@/lib/implantacao/equipe";
 import { GATILHOS_COM_MOTOR, lerFluxos, nosDoGrafo } from "@/lib/implantacao/followup";
 import { lerDocumentoDaMemoria } from "@/lib/implantacao/memoria";
 import { lerModelosOficiais, lerRespostasProntas } from "@/lib/implantacao/mensagens";
+import { retratoDosRoteadores } from "@/lib/implantacao/roteador";
 import { EXPLICACAO_DO_PASSO, ROTULO_DO_PASSO } from "@/lib/leads/agent-mapping";
+import { configAssinatura } from "@/lib/messaging/assinatura";
 import { PACOTES } from "@/lib/mcp/tools/pacotes";
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
 import { MOEDAS_SERVIDAS } from "@/lib/money";
 import { PACOTES as PACOTES_DE_FUNIL } from "@/lib/onboarding/pacotes-de-funil";
 import { COLUNAS_DO_PRODUTO } from "@/lib/schemas/produtos";
-import { routingConfigSchema } from "@/lib/schemas/routing";
+import { ROUTING_MODES, routingConfigSchema } from "@/lib/schemas/routing";
 import { ROLES } from "@/lib/schemas/team";
-import { GATILHOS_OFERECIDOS } from "@/lib/schemas/webhooks";
+import {
+  ACOES_QUE_REGRAVAM_O_LEAD,
+  GATILHOS_DO_TRIGGER_DE_LEAD,
+  GATILHOS_OFERECIDOS,
+  MENSAGEM_DO_LACO_DE_LEAD,
+} from "@/lib/schemas/webhooks";
 import { PALETA_DE_ETIQUETAS } from "@/lib/tags/cor-da-etiqueta";
 import { FUSOS_OFERECIDOS } from "@/lib/tempo/fusos";
 
@@ -80,10 +89,22 @@ const ACOES_DE_AUTOMACAO = [
   { type: "assign_owner", o_que_faz: "Define o responsável.", config: '{ "user_id": "<id da pessoa da equipe>" }' },
   { type: "create_task", o_que_faz: "Cria uma tarefa para a equipe. Nunca fala com o cliente.", config: '{ "titulo": "Ligar para {{contact.name}}", "vence_em_dias": 1, "atribuir_a": "dono_do_lead" | { "usuario_id": "<id>" }, "prioridade": "low" | "medium" | "high" | "urgent" }' },
   { type: "start_message_flow", o_que_faz: "Inscreve o contato num follow-up publicado.", config: '{ "flow_pointer_id": "<id do fluxo>" }' },
-  { type: "send_whatsapp_message", o_que_faz: "Manda um texto fixo pelo WhatsApp. FALA COM O CLIENTE.", config: '{ "channel_session_id": "<id do número>", "template": "Olá, {{contact.name}}" }' },
+  {
+    type: "send_whatsapp_message",
+    o_que_faz: "Manda um texto fixo pelo WhatsApp. FALA COM O CLIENTE.",
+    config:
+      '{ "channel_session_id": "<id do número>", "template": "Olá, {{primeiro_nome}}! Recebemos seu pedido de {{servico}}." } ' +
+      "(marcações: {{nome}}, {{primeiro_nome}}, {{telefone}}, {{email}}, e a CHAVE de qualquer campo do funil, ex. {{servico}}, que é o campo que o formulário de captação mandou)",
+  },
   { type: "send_ai_message", o_que_faz: "O agente escreve e manda uma mensagem. FALA COM O CLIENTE.", config: '{ "agent_id": "<id do agente publicado>", "channel_session_id": "<id do número>", "instruction": "o que dizer" }' },
   { type: "notify_group", o_que_faz: "Avisa o grupo de WhatsApp da equipe (o grupo que a plataforma escolheu para o cliente).", config: '{ "template": "Novo lead: {{contact.name}}" }' },
-  { type: "call_webhook", o_que_faz: "Chama um endereço de outro sistema. MANDA DADO PARA FORA.", config: '{ "url": "https://...", "include_owner": false } (o segredo, se houver, é posto por uma pessoa na tela)' },
+  {
+    type: "call_webhook",
+    o_que_faz: "Chama um endereço de outro sistema (ERP, faturamento, planilha de comissão). MANDA DADO PARA FORA.",
+    config:
+      '{ "url": "https://...", "include_owner": false } (o segredo, se houver, é posto por uma pessoa na tela). ' +
+      "`include_owner: true` põe no corpo o responsável do compromisso ou do negócio (tipo, id e nome, sem e-mail). O negócio no corpo traz o motivo da perda e a data de fechamento.",
+  },
 ];
 
 export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
@@ -133,7 +154,12 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
         r.followup = {
           como_usar:
             "Instale com plataforma_garantir_followup informando `modelo` (o id). O fluxo nasce RASCUNHO, com os textos do modelo; " +
-            "ajuste os textos pelo id do nó (`textos`), publique com plataforma_publicar_followup e arme no agente com plataforma_garantir_agente (`followups`).",
+            "ajuste os textos pelo id do nó (`textos`), publique com plataforma_publicar_followup e arme no agente com plataforma_garantir_agente (`followups`). " +
+            "Nenhum modelo mexe no negócio: para o fluxo mover o card ou gravar etiqueta (ex.: quem não respondeu a nenhum toque), acrescente as caixas com `mover_no_funil` e `etiquetar`, " +
+            'antes do nó em que isso deve acontecer (o fim «sem resposta» dos modelos é o nó "fim-esgotou").',
+          gatilho_de_silencio:
+            "Três ajustes além de `silencio_minutos`: `silencio_maximo_minutos` (o fluxo só começa enquanto o silêncio for recente), " +
+            "`pausa_para_recomecar_minutos` (quanto esperar antes de recomeçar para quem já passou pelo fluxo) e `pausa_conta_do_ultimo_envio` (de onde a pausa conta).",
           gatilhos_com_motor: GATILHOS_COM_MOTOR,
           modelos: MODELOS_DE_FOLLOWUP.map((m) => ({
             id: m.id,
@@ -174,6 +200,16 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             "plataforma_garantir_automacao cria a regra DESLIGADA; plataforma_ligar_automacao a liga. " +
             "Os ids de funil, etapa, número, agente, fluxo e pessoa vêm das leituras (plataforma_ver_funis, plataforma_ver_agentes, plataforma_ver_configuracao).",
           gatilhos: GATILHOS_OFERECIDOS,
+          // Upstream 1.71 (#2211): ganho, perda, reabertura e troca de responsável.
+          gatilhos_de_desfecho_do_negocio: {
+            quais: GATILHOS_DO_TRIGGER_DE_LEAD,
+            quando_disparam:
+              "Quando um negócio que JÁ EXISTE é ganho (lead.won), perdido (lead.lost), reaberto (lead.reopened) ou troca de responsável (lead.assigned), por qualquer caminho: " +
+              "arrastar o card, o botão Ganhou/Perdeu, mover em lote, o fechamento feito pela IA ou outra automação. Criar o negócio já ganho, já perdido ou já com responsável NÃO dispara.",
+            acoes_proibidas: ACOES_QUE_REGRAVAM_O_LEAD,
+            por_que: MENSAGEM_DO_LACO_DE_LEAD,
+            uso_tipico: 'Avisar outro sistema: { "type": "call_webhook", "config": { "url": "https://...", "include_owner": true } }.',
+          },
           gatilhos_que_pedem_configuracao: {
             "lead.date_field_due":
               '{ "pipeline_id": "<id do funil>", "campo": "<chave do campo de data do funil>", "dias": 1 } (dias ATÉ a data; negativo = depois dela)',
@@ -217,6 +253,16 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           fusos: FUSOS_OFERECIDOS.map((f) => f.codigo),
           moedas: MOEDAS_SERVIDAS,
           modos_de_venda: { b2b: "vende para empresas (o cadastro pede empresa, cargo e setor)", b2c: "vende para pessoas" },
+          // A lista é a do upstream (`ROUTING_MODES`): modo novo aparece aqui sozinho.
+          modos_de_distribuicao: ROUTING_MODES.map((modo) => ({
+            modo,
+            significa:
+              ({
+                manual: "alguém assume cada conversa",
+                round_robin: "rodízio entre quem está de plantão",
+                load: "vai para quem está com menos conversas abertas; no empate, o rodízio decide",
+              } as Record<string, string>)[modo] ?? "veja Configurações › Atendimento",
+          })),
           papeis_da_equipe: ROLES.map((papel) => ({
             papel,
             significa: { viewer: "só vê", agent: "atende", manager: "gerencia (configura funil, agenda, automações)", admin: "administra a empresa" }[papel],
@@ -308,9 +354,10 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
     name: "plataforma_ver_agentes",
     description:
       "Os agentes de IA de um cliente: situação (no ar, pausado, rascunho), versão publicada, rascunho pendente, pacotes ligados, " +
-      "funis e materiais autorizados, follow-ups armados, número, e o que FALTA PARA PUBLICAR (com quem resolve: você, uma pessoa na tela, ou a plataforma). " +
-      "Com `agente`, devolve também o PROMPT e a configuração inteira da versão vigente (o rascunho, se houver; senão a publicada). " +
-      "QUANDO USAR: antes de plataforma_garantir_agente, e antes de publicar. " +
+      "funis e materiais autorizados, follow-ups armados, número, limiar de sentimento, e o que FALTA PARA PUBLICAR (com quem resolve: você, uma pessoa na tela, ou a plataforma). " +
+      "Com `agente`, devolve também o PROMPT e a configuração inteira da versão vigente (o rascunho, se houver; senão a publicada), com o horário de atendimento e o aviso de fora do horário. " +
+      "Devolve ainda os ROTEADORES de intenção: o número, se está ligado, o agente reserva e cada intenção com o agente e o funil de destino. " +
+      "QUANDO USAR: antes de plataforma_garantir_agente e de plataforma_garantir_roteador, e antes de publicar ou ligar. " +
       "Devolve ainda as capacidades que a tela oferece a ESTE cliente (módulos e modo de venda mudam a lista) quando `com_capacidades` é verdadeiro.",
     inputSchema: {
       organization_id: ORGANIZACAO,
@@ -347,6 +394,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           nome: agente.name,
           descricao: agente.description,
           prioridade: agente.priority,
+          // Do cadastro, não da versão: vale na hora (upstream 1.71, #2216).
+          limiar_de_sentimento: limiarDeSentimentoDo(agente),
           formato: agente.kind === "mcp_agent" ? "atual" : "antigo (editado só pela tela)",
           situacao: estado === "no_ar" ? "no ar" : agente.paused_at ? "pausado" : "rascunho",
           versao_publicada: tela.published?.version_number ?? null,
@@ -373,6 +422,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
                   tamanho_da_mensagem: base.split_max_chars,
                   espera_por_rajada_ms: base.inbound_debounce_ms ?? null,
                   horario_de_atendimento: horario,
+                  // O texto como o motor o lê (upstream 1.72, #1926): null = não avisa.
+                  aviso_fora_do_horario: lerTextoDoAvisoForaDoHorario(base.trigger_config),
                   janela_dos_followups: followup?.send_window ?? null,
                   max_passos: base.max_steps,
                   ia: "definida pela plataforma",
@@ -385,8 +436,15 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
       return {
         como_o_sistema_escolhe_quem_atende:
           "Uma organização pode ter vários agentes. Responde a mensagem o agente cuja versão publicada aponta para o número em que ela chegou; " +
-          "com mais de um no mesmo número, o de maior prioridade (no empate, o mais antigo), a não ser que exista um roteador (IA › Roteadores), que escolhe pela intenção.",
+          "com mais de um no mesmo número, o de maior prioridade (no empate, o mais antigo), a não ser que exista um roteador LIGADO naquele número, que escolhe pela intenção " +
+          "(plataforma_garantir_roteador e plataforma_ligar_roteador; veja `roteadores` abaixo).",
         agentes,
+        // Os roteadores de intenção, com o agente e o destino de cada intenção
+        // pelo nome. Leitura que falha não derruba a dos agentes: diz que não leu.
+        ...(await retratoDosRoteadores(c.admin, c.orgId).then(
+          (roteadores) => ({ roteadores }),
+          (err: unknown) => ({ roteadores_nao_lidos: err instanceof Error ? err.message : "erro desconhecido" }),
+        )),
         numeros_conectados: numeros.map((n) => ({ id: n.id, nome: n.display_name, telefone: n.phone_number, conectado: n.status === STATUS_SAUDAVEL })),
         ...(args.com_capacidades === true
           ? {
@@ -622,11 +680,16 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
 
       if (pedidas.has("atendimento")) {
         const routing = routingConfigSchema.catch(routingConfigSchema.parse({})).parse(org.settings.routing ?? {});
+        // A mesma leitura que o envio faz (upstream 1.70, #2079).
+        const assinatura = configAssinatura(org.settings);
         r.atendimento = {
           modo: routing.mode,
           visibilidade: (org.settings.visibility_mode as string | undefined) ?? DEFAULT_VISIBILITY_MODE,
           devolver_para_a_ia_apos_minutos: routing.handoff_return_after_minutes,
           conversa_fica_com_quem_atendeu: routing.conversation_stays_with_attendant,
+          // null = o padrão de 60 minutos (upstream 1.70, #2005).
+          ia_espera_apos_resposta_pelo_celular_minutos: routing.manual_reply_silence_minutes,
+          assinatura: { atendentes: assinatura.humanos, ia: assinatura.ia, nome_da_ia: assinatura.nomeIa },
         };
       }
 
@@ -654,8 +717,9 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
   {
     name: "plataforma_ver_followup",
     description:
-      "Um fluxo de follow-up por dentro: o gatilho e cada nó do rascunho (id, tipo, rótulo), com o TEXTO das mensagens e os minutos das esperas. " +
-      "QUANDO USAR: antes de ajustar os textos de um fluxo com plataforma_garantir_followup (`textos` e `esperas` pedem o id do nó).",
+      "Um fluxo de follow-up por dentro: o gatilho, cada nó do rascunho (id, tipo, rótulo), com o TEXTO das mensagens, os minutos das esperas, " +
+      "a etapa de destino das caixas de mover e as etiquetas das caixas de etiquetar, e as setas entre os nós. " +
+      "QUANDO USAR: antes de ajustar um fluxo com plataforma_garantir_followup (`textos`, `esperas`, `mover_no_funil` e `etiquetar` pedem o id do nó).",
     inputSchema: {
       organization_id: ORGANIZACAO,
       fluxo: z.string().trim().min(1).max(120).describe("Nome ou id do fluxo."),
@@ -669,13 +733,23 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
         comoListar: "Veja os fluxos em plataforma_ver_configuracao, seção followups.",
       });
       const rascunho = await rascunhoDoFluxo(c.admin, fluxo, c.orgId);
+      // O destino de uma caixa de mover é guardado como id: o nome vem do banco,
+      // pela mesma leitura que a publicação usa. Se ela falhar, o id basta.
+      const citadas = rascunho ? await carregaEtapasCitadas(c.admin, c.orgId, rascunho.nodes) : null;
+      const nomeDaEtapa = citadas?.ok ? (id: string) => citadas.etapas.get(id)?.nome ?? null : undefined;
       return {
         id: fluxo.id,
         nome: fluxo.name,
         situacao: fluxo.status === "active" ? "publicado" : fluxo.status === "disabled" ? "desligado" : "rascunho",
         gatilho: fluxo.trigger_config ?? { kind: "manual" },
         quando_humano_assume: fluxo.handoff_policy,
-        nos: nosDoGrafo(rascunho),
+        nos: nosDoGrafo(rascunho, nomeDaEtapa),
+        // Por onde o fluxo anda: é o que diz ANTES de qual nó uma caixa cabe.
+        setas: (rascunho?.edges ?? []).map((e) => ({
+          de: e.source,
+          para: e.target,
+          quando: e.condition.type === "always" ? "sempre" : e.condition.type === "branch" ? `ramo ${e.condition.branch_id}` : JSON.stringify(e.condition),
+        })),
       };
     },
   },

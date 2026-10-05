@@ -40,8 +40,11 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
   {
     name: "plataforma_garantir_automacao",
     description:
-      "Cria ou ajusta uma REGRA DE AUTOMAÇÃO de um cliente: quando um gatilho acontece (negócio criado, mudou de etapa, mensagem recebida, etiqueta, horário marcado, silêncio...) " +
+      "Cria ou ajusta uma REGRA DE AUTOMAÇÃO de um cliente: quando um gatilho acontece (negócio criado, mudou de etapa, foi GANHO, PERDIDO, reaberto ou trocou de responsável, " +
+      "mensagem recebida, etiqueta, horário marcado, silêncio...) " +
       "e as condições batem, as ações rodam (mover para uma etapa, pôr etiqueta, criar tarefa, inscrever em follow-up, mandar mensagem, avisar o grupo, chamar um webhook). " +
+      "O WEBHOOK DE SAÍDA é isto: uma regra com a ação `call_webhook` (ex.: avisar o faturamento quando o negócio é ganho, com o gatilho `lead.won`). " +
+      "Nos gatilhos de ganho, perda, reabertura e troca de responsável a regra não pode atribuir responsável nem mover o negócio: a própria mudança dispararia a regra de novo. " +
       "A regra NASCE DESLIGADA e continua desligada: para ela rodar, plataforma_ligar_automacao. " +
       "GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é o NOME da regra. " +
       "Regra LIGADA não é editada por aqui (a mudança valeria no próximo evento): desligue, ajuste e religue. " +

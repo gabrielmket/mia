@@ -22,6 +22,7 @@
 import { listarRegrasGoogle } from "@/lib/conversoes/regras-google";
 import { lerChaveDeFormulario } from "@/lib/conversoes-meta/config";
 import { listarRegrasMeta } from "@/lib/conversoes/regras-meta";
+import { identidadeDaMeta } from "@/lib/plataformas-de-anuncio/meta/identidade";
 
 import type { AreaDoChecklist } from "./tipos";
 
@@ -50,6 +51,12 @@ export const conversoes: AreaDoChecklist = {
     }
     if (chave.ligada) pronto.push("Leads de formulário da Meta voltam para a Meta.");
 
+    // Upstream 1.70 (#2197): sem o ID da Página ou o da conta do WhatsApp
+    // Business a Meta recusa a venda vinda de anúncio clique-para-WhatsApp.
+    const identidade = identidadeDaMeta(org.settings);
+    const temIdentidade = identidade.pageId !== null || identidade.whatsappBusinessAccountId !== null;
+    const metaLigada = ligadas.some((x) => x.platform === "meta_ads");
+
     return {
       pronto,
       falta: [],
@@ -62,10 +69,28 @@ export const conversoes: AreaDoChecklist = {
           quem: "cliente",
           por_que: "O token de conversões é credencial da conta de anúncios do cliente.",
         },
+        {
+          o_que: "Preencher o ID da Página do Facebook (ou o da conta do WhatsApp Business) no cartão da identidade da Meta.",
+          // Opcional de propósito, como o resto da área: quem não anuncia com
+          // clique-para-WhatsApp não precisa, e conversão nunca trava a implantação.
+          situacao: temIdentidade ? "feito" : "opcional",
+          tela: "Configurações › Conversões",
+          caminho: "/app/settings/conversoes",
+          quem: "cliente",
+          por_que:
+            "Sem ele a Meta recusa a venda que veio de anúncio clique-para-WhatsApp. É a identidade da conta de anúncios do cliente, preenchida junto da credencial: um id errado vincula a venda a outra conta.",
+        },
       ],
       dados: {
         opcional: true,
         conexoes_ligadas: ligadas.map((x) => x.platform),
+        identidade_da_meta_preenchida: temIdentidade,
+        ...(metaLigada && !temIdentidade
+          ? {
+              atencao:
+                "A conexão da Meta está ligada e a identidade da Meta está vazia: venda vinda de anúncio clique-para-WhatsApp é recusada pela Meta até uma pessoa preencher o ID da Página.",
+            }
+          : {}),
         regras_da_meta: { gravadas: regrasMeta.length, ligadas: metaLigadas },
         regras_do_google: { gravadas: regrasGoogle.length, ligadas: googleLigadas },
         leads_de_formulario_da_meta: chave.ligada,

@@ -53,6 +53,7 @@ export const FERRAMENTAS_DE_CONVERSOES: readonly FerramentaDePlataforma[] = [
     description:
       "As CONVERSÕES de um cliente: o que o sistema informa de volta à Meta e ao Google Ads para os anúncios aprenderem quem vira cliente. Devolve: " +
       "o estado das duas conexões SEM segredo (conectada, envio ligado, modo de teste; nunca o token); " +
+      "se a identidade da Meta está preenchida (o ID da Página ou da conta do WhatsApp Business, sem o qual a Meta recusa a venda vinda de anúncio clique-para-WhatsApp); " +
       "a chave \"leads de formulário da Meta voltam para a Meta\"; " +
       "por funil, cada etapa aberta com a regra da Meta (evento, ligada) e a do Google (nome, ação de conversão, categoria, ligada), mais o evento que o sistema recomendaria para a Meta pelo nome da etapa; " +
       "a lista de eventos padrão da Meta que a régua oferece; os 20 últimos envios com a situação e o motivo; e quantos foram recusados em 7 dias. " +
