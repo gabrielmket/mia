@@ -381,4 +381,6 @@ Testes:
 | `tests/unit/mcp-de-implantacao-espelhos.test.ts` | as rotas espelhadas não mudaram sem alguém reler o espelho |
 | `tests/unit/mcp-de-implantacao-pela-porta-http.test.ts` | o mesmo servidor pela rota HTTP de verdade, com o cabeçalho `Authorization` |
 | `tests/invariants/mcp-de-implantacao-ponta-a-ponta.test.ts` | o roteiro inteiro no Postgres de verdade, e que rodar de novo não muda uma linha |
+| `tests/unit/mcp-de-demonstracao.test.ts` | as ferramentas das demonstrações sem banco: a operação de cada uma e a recusa que ensina o `--sql` quando o app não tem `SUPABASE_DB_URL` |
+| `tests/invariants/mcp-de-demonstracao.test.ts` | criar, criar de novo e reaplicar uma demonstração no Postgres de verdade: a guarda da operação, a trava de pé, nada em fila, e as recusas do slug de outra empresa e da demonstração desmarcada |
 | `tests/invariants/pg-como-supabase-mia.test.ts` | o adaptador de teste que o invariante acima usa (`tests/pg-como-supabase-mia.ts`, um embrulho ao lado do adaptador do upstream) |

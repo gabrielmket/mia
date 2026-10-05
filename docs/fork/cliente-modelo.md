@@ -1,16 +1,130 @@
-# O cliente modelo · a empresa de demonstração
+# O cliente modelo · as empresas de demonstração
 
 A MIA não tem uma empresa que use todos os recursos da plataforma. Para testar,
-medir e mostrar em venda, existe a **Empresa Modelo · Demonstração**: uma empresa
-com dados fictícios que passa por todos os recursos. Ela fica em produção, separada
-das outras, com uma marca que trava qualquer envio real e a tira dos números da
-plataforma. A decisão é do Gabriel (30/09/2026).
+medir e mostrar em venda, existem **empresas de demonstração**: empresas com dados
+fictícios, em produção, separadas das outras, com uma marca que trava qualquer envio
+real e as tira dos números da plataforma.
 
-Dentro dela aparece, em toda tela, o selo **Demonstração** ("Dados fictícios.
-Nenhuma mensagem, e-mail ou aviso sai desta empresa."). Na lista de empresas do
-admin, o mesmo selo aparece ao lado do nome.
+São cinco, todas geradas pela **mesma semente** (`lib/demonstracao/semente/`):
 
-## O que a semente grava
+| segmento | empresa | slug | para quê |
+|---|---|---|---|
+| `bancada` | **Empresa Modelo · Demonstração** | `empresa-modelo-demonstracao` | a bancada de teste: dez funis de segmentos misturados e os follow-ups de todos os segmentos. Ótima para testar, confusa para mostrar a cliente |
+| `construtora` | **Demonstração · Construtora** | `demonstracao-construtora` | mostrar a construtora e imobiliária |
+| `clinica-odonto` | **Demonstração · Clínica Odontológica** | `demonstracao-clinica-odontologica` | mostrar a clínica odontológica |
+| `industria` | **Demonstração · Indústria** | `demonstracao-industria` | mostrar a indústria ou distribuidora que vende para revendas e profissionais |
+| `academia` | **Demonstração · Academia** | `demonstracao-academia` | mostrar a academia ou estúdio |
+
+A Empresa Modelo é decisão do Gabriel de 30/09/2026; as demonstrações por segmento,
+de 05/10/2026 ("uma demonstração por cliente modelo"). Cada uma parece o negócio do
+cliente que vai vê-la: o funil, os campos, as conversas, a agenda, os documentos e os
+produtos falam a língua daquele segmento.
+
+Dentro de qualquer uma aparece, em toda tela, o selo **Demonstração** ("Dados
+fictícios. Nenhuma mensagem, e-mail ou aviso sai desta empresa."). Na lista de
+empresas do admin, o mesmo selo aparece ao lado do nome.
+
+## O que cada demonstração por segmento mostra
+
+As quatro têm a mesma estrutura: funis com campos personalizados, probabilidade e
+prazo por etapa e **pelo menos um negócio em cada etapa**; contatos e empresas;
+conversas com a IA (a qualificação, a ficha e a passagem para uma pessoa); agenda
+passada e futura (com uma falta e um cancelamento); tarefas (uma atrasada);
+documentos e obrigações do segmento; os **quatro follow-ups do segmento publicados**,
+com inscrições andando e terminadas; produtos e serviços no catálogo; quatro pessoas
+fictícias na equipe; e um **agente de IA com persona do segmento**, sem versão
+publicada (não responde ninguém). O fuso é o de São Paulo.
+
+### Construtora · "Construtora Modelo"
+
+Um lançamento na planta (Vista Parque) e as últimas unidades prontas (Bosque das
+Palmeiras). Agente: **Lívia**.
+
+- **Funis**: "Lançamento · Vista Parque" (novo interessado, primeiro contato, perfil
+  e renda entendidos, visita ao decorado, simulação de financiamento, documentação e
+  crédito, contrato assinado, desistiu) e "Prontos para morar" (o quadro pronto de
+  imobiliária do onboarding). Campos: empreendimento, tipologia, renda familiar,
+  forma de pagamento, FGTS, unidade e entrada.
+- **Números**: 19 negócios (de R$ 265 mil a R$ 890 mil), 24 contatos, 2 empresas
+  parceiras (imobiliária e correspondente bancário), 5 conversas, 11 compromissos
+  (visitas ao decorado, uma marcada pela IA, uma falta remarcada, assinaturas), 10
+  produtos (as unidades por tipologia, com o estoque).
+- **Documentos do comprador** (10 itens): RG e CPF, comprovante de renda vencendo,
+  extrato do FGTS pedido sem resposta, certidões vencidas com o arquivo novo
+  esperando confirmação, aprovação de crédito a pedir e, depois da assinatura, a
+  parcela anual e o reajuste do contrato.
+- **Para apresentar**: a Juliana que veio do formulário, foi qualificada pela IA e
+  tem visita ao decorado no sábado; a Camila na documentação, com as certidões que
+  ela mandou pelo WhatsApp esperando o "sim, marcar recebido".
+
+### Clínica odontológica · "Clínica Odontológica Modelo"
+
+Avaliação, limpeza, clareamento, implante, prótese, aparelho, alinhadores e lentes.
+Agente: **Clara**.
+
+- **Funil**: "Pacientes · Avaliação e tratamento" (novo contato, já respondi,
+  entendendo o caso, avaliação marcada, avaliação feita, plano e orçamento
+  enviados, tratamento fechado, não fechou). Campos: tratamento de interesse,
+  pagamento, convênio, plano de tratamento, dentista, sessões.
+- **Números**: 15 negócios (de R$ 220 a R$ 22 mil), 19 contatos, 1 empresa com
+  convênio para os funcionários, 5 conversas, 12 compromissos (avaliações,
+  sessões, retornos), 12 tratamentos no catálogo com preço de referência.
+- **Retorno e manutenção a cada 6 meses** como atividade recorrente: um atrasado,
+  dois chegando, um em dia, com o histórico dos anteriores. O orçamento assinado
+  como documento, com o arquivo da paciente esperando confirmação.
+- **Para apresentar**: a Larissa, que pediu clareamento pelo anúncio e saiu com a
+  avaliação marcada pela IA; a Paula, que sumiu na hora de marcar e está no
+  follow-up de retomada; o Vítor, que faltou e não respondeu.
+
+### Indústria · "Indústria Modelo"
+
+Fábrica (fictícia) de materiais elétricos e iluminação que vende para revendas,
+distribuidores, instaladores e construtoras, com representante por região. Agente:
+**Bento**. Nada aqui é dado de cliente real: o segmento, os produtos e os nomes são
+genéricos.
+
+- **Funis**: "Pedidos · Revendas e profissionais" (o quadro pronto de indústria:
+  novo contato, já respondi, entendendo o que precisa, cotação enviada, negociando o
+  pedido, pedido fechado, não fechou) e "Recompra · Carteira ativa" (cliente ativo,
+  hora de repor, cotação de reposição, reposição fechada, parou de comprar). Campos:
+  tipo de cliente, tabela de preço, linha, número da cotação, prazo de pagamento,
+  representante, primeira compra.
+- **Números**: 16 negócios (de R$ 640 a R$ 96 mil), 19 contatos, 7 empresas
+  clientes com CNPJ fictício, tabela e representante na ficha; as revendas têm quem
+  compra, quem decide e quem cuida do financeiro. 6 conversas, 9 compromissos do
+  representante, 19 produtos com código, custo e estoque.
+- **Tabela por tipo de cliente**: o catálogo traz a tabela revenda; o agente sabe
+  que o distribuidor tem 12% de desconto e o instalador compra 8% acima, e que o
+  pedido mínimo é de R$ 1.500.
+- **Recompra e cadastro** (12 itens): o pedido de reposição de cada cliente como
+  atividade mensal, com o histórico das compras (uma atrasada, uma chegando, uma em
+  dia), a visita do representante e o reajuste da tabela; a ficha cadastral, o
+  contrato social, o alvará vencido, a certidão negativa pedida e o contrato de
+  revenda renovado esperando confirmação.
+- **Para apresentar**: a Fabiana, compradora da distribuidora, pedindo a reposição
+  do mês e a IA sugerindo as quantidades pela última compra; o Douglas, home center
+  novo, recebendo a lista de documentos do cadastro e a visita marcada.
+
+### Academia · "Academia Modelo"
+
+Musculação, funcional, pilates e aulas coletivas. Agente: **Duda**.
+
+- **Funis**: "Matrículas · Novos alunos" (novo contato, já respondi, entendendo o
+  objetivo, aula experimental marcada, escolhendo o plano, matriculado, não se
+  matriculou) e "Renovações e retenção" (plano vencendo, contato de renovação,
+  reavaliação marcada, renovou, cancelou). Campos: objetivo, modalidade, plano,
+  horário, treinos no último mês, risco de cancelar.
+- **Números**: 16 negócios, 19 contatos, 1 empresa com plano corporativo, 7
+  conversas, 11 compromissos (aulas experimentais, avaliações e reavaliações), 10
+  planos e serviços no catálogo.
+- **Renovação do plano e reavaliação física a cada 3 meses** como atividades
+  recorrentes, com uma atrasada de quem não voltou; o contrato do plano empresa
+  esperando confirmação.
+- **Para apresentar**: o Lucas, que perguntou a mensalidade e saiu com a aula
+  experimental marcada pela IA; o Nelson, que faltou na aula e está no follow-up de
+  falta; a Ana Clara, que parou de vir e recebeu o "sentimos sua falta".
+
+## A Empresa Modelo (a bancada): o que a semente grava
 
 | área | o que entra |
 |---|---|
@@ -18,33 +132,47 @@ admin, o mesmo selo aparece ao lado do nome.
 | negócios | 62 negócios, cada um com valor, dono (pessoa ou a IA "Sofia"), origem, próxima ação (uma tarefa com prazo ligada ao card) e histórico na timeline. As origens são cinco: formulário da Meta, clique para o WhatsApp, Google, site e indicação |
 | contatos e empresas | 54 contatos, com e sem empresa. As 5 empresas têm várias pessoas e existem nas duas entidades do produto: `crm_empresas` (a da ficha e do card) e `companies`/`people` (o módulo B2B) |
 | atendimento com a IA | 8 conversas fictícias (47 mensagens). Em cada uma entram a qualificação da IA (`lead_state`), a ficha (`lead_notes`) e, quando houver, a passagem para uma pessoa e o card no Comercial |
-| follow-ups | os 24 modelos por segmento (geral, clínica, imobiliário, automotivo, academia, serviços B2B). Os que estão em uso ficam publicados, com inscrições em andamento e terminadas e o registro de cada passo. Os demais ficam em rascunho |
+| follow-ups | os 28 modelos por segmento (geral, clínica, imobiliário, automotivo, academia, serviços B2B e indústria). Os que estão em uso ficam publicados, com inscrições em andamento e terminadas e o registro de cada passo. Os demais ficam em rascunho |
 | agenda | 13 compromissos: passados (feito, faltou, cancelado) e futuros (confirmado, pendente), com o lembrete desligado |
 | tarefas | a próxima ação de cada negócio e mais algumas tarefas soltas, uma delas atrasada |
 | equipe | 4 pessoas fictícias **sem senha e bloqueadas**. Só servem para ser donas de card, tarefa e compromisso |
 | documentos e obrigações | no funil de serviços B2B: o catálogo de 8 tipos do segmento e 11 itens com datas relativas a hoje (um vencido com a renovação pedida, três vencendo, um pedido sem resposta, um a pedir, dois válidos e três atividades recorrentes com histórico). Um deles tem um arquivo do cliente esperando confirmação, para mostrar a proposta do agente. Nenhuma regra de aviso e nenhum arquivo de verdade ([docs/fork/obrigacoes.md](obrigacoes.md)) |
 
+Os ids da bancada são os de antes das demonstrações por segmento (sem prefixo): a
+Empresa Modelo que já está em produção é renovada, não duplicada. As demonstrações
+por segmento têm os ids prefixados pelo segmento, então uma nunca mexe na outra.
+
+## Dado fictício, em todas
+
 Os dados não batem em pessoa real. Os telefones são **`+55 00 9xxxx-xxxx`**, e o
 DDD 00 não existe. Os e-mails são **`@exemplo.invalid`**, um domínio reservado
-(RFC 2606) que nenhum servidor aceita. Nenhum nome é de cliente da Time Company.
+(RFC 2606) que nenhum servidor aceita. O CNPJ das empresas tem o dígito verificador
+errado de propósito, então não é de empresa nenhuma. Nenhum nome é de cliente da
+Time Company, e o teste de unidade reprova se algum aparecer.
 
 Renovar a semente refaz as datas: cada documento e cada atividade volta à situação
-que ilustra (o vencido continua vencido há 3 dias, o que vence continua vencendo).
+que ilustra (o vencido continua vencido há 3 dias, o que vence continua vencendo), o
+compromisso de amanhã volta a ser de amanhã e os follow-ups voltam a esperar.
 
-## Como rodar
+## Como gerar
 
 O banco precisa ter as migrations **9010** e **9018** (documentos e obrigações). Sem
-elas, o script para sem gravar nada.
+elas, a semente para sem gravar nada.
+
+### Pelo terminal
+
+`--segmento` escolhe qual: `bancada` (o padrão), `construtora`, `clinica-odonto`,
+`industria`, `academia` ou `todos`.
 
 ```bash
 # 1. só mostra o alvo; nada é gravado
 CLIENTE_MODELO_DATABASE_URL='postgresql://USUARIO:SENHA@HOST:5432/postgres' \
-  npx tsx scripts/cliente-modelo.ts
+  npx tsx scripts/cliente-modelo.ts --segmento construtora
 
 # 2. grava (ou renova)
 CLIENTE_MODELO_DATABASE_URL='postgresql://…' \
 CLIENTE_MODELO_EMAILS_DE_ACESSO='voce@timecompany.com.br,colega@timecompany.com.br' \
-  npx tsx scripts/cliente-modelo.ts --aplicar
+  npx tsx scripts/cliente-modelo.ts --segmento construtora --aplicar
 ```
 
 - **`CLIENTE_MODELO_DATABASE_URL`**: a connection string do Postgres. Ela fica só
@@ -56,10 +184,9 @@ CLIENTE_MODELO_EMAILS_DE_ACESSO='voce@timecompany.com.br,colega@timecompany.com.
   o recusa. O admin da plataforma também entra pelo suporte, como em qualquer
   empresa.
 - **Idempotente**: rodar de novo não duplica nada, porque cada linha tem id
-  estável. As datas relativas também se renovam: o compromisso "de amanhã" volta
-  a ser de amanhã, e os follow-ups voltam a esperar. Vale rodar antes de uma
-  apresentação.
-- Tudo acontece numa transação só. Ou a empresa inteira fica de pé, ou nada muda.
+  estável. As datas relativas também se renovam.
+- Cada empresa grava numa transação só. Ou ela fica inteira de pé, ou nada muda.
+  Com `todos`, são cinco transações, uma por empresa.
 
 ### Sem acesso ao Postgres: o modo `--sql`
 
@@ -69,12 +196,18 @@ com a service key: ele recebe um texto SQL e executa. Para esse caso, a semente
 gera o SQL em vez de conectar:
 
 ```bash
+# uma empresa
 CLIENTE_MODELO_EMAILS_DE_ACESSO='voce@timecompany.com.br' \
-  npx tsx scripts/cliente-modelo.ts --sql cliente-modelo.sql
+  npx tsx scripts/cliente-modelo.ts --segmento industria --sql industria.sql
+
+# todas: um arquivo por empresa (demonstracoes-bancada.sql, demonstracoes-construtora.sql, …)
+CLIENTE_MODELO_EMAILS_DE_ACESSO='voce@timecompany.com.br' \
+  npx tsx scripts/cliente-modelo.ts --segmento todos --sql demonstracoes.sql
 ```
 
-- Gera o arquivo inteiro: `begin; … commit;`, idempotente, com cerca de 800 KB.
-  É o **mesmo** código do modo conectado.
+- Cada arquivo é a empresa inteira: `begin; … commit;`, idempotente. Tamanhos
+  medidos em 05/10/2026: bancada 856 KB, construtora 357 KB, clínica odontológica
+  320 KB, indústria 378 KB, academia 338 KB. É o **mesmo** código do modo conectado.
 - Ele próprio confere, em SQL, que a 9010 existe e que o slug não é de outra
   empresa. Se qualquer uma das duas falhar, aborta antes de gravar.
 - Os usuários de `CLIENTE_MODELO_EMAILS_DE_ACESSO` são achados pelo e-mail
@@ -83,12 +216,39 @@ CLIENTE_MODELO_EMAILS_DE_ACESSO='voce@timecompany.com.br' \
   de acesso vai no texto.
 - As datas relativas são as do momento em que o arquivo é **gerado**. Por isso,
   gere perto de aplicar.
-- Aplicar duas vezes dá as mesmas contagens do modo conectado. Isso está provado
-  em `tests/invariants/cliente-modelo-semente.test.ts`.
+- Aplicar duas vezes dá as mesmas contagens do modo conectado, para as cinco. Isso
+  está provado em `tests/invariants/cliente-modelo-semente.test.ts`.
+
+### Pelo MCP de plataforma
+
+Três ferramentas ([mcp-de-implantacao.md](mcp-de-implantacao.md)):
+
+| ferramenta | operação do token | o que faz |
+|---|---|---|
+| `plataforma_listar_demonstracoes` | leitura | por segmento: se existe, o id, quando a semente foi aplicada pela última vez e as contagens |
+| `plataforma_criar_demonstracao` | `criar_cliente` | cria a demonstração de um segmento. Se ela já existe, não grava nada e devolve a que existe |
+| `plataforma_reaplicar_demonstracao` | `implantar_configuracao` | regrava os dados fictícios e renova as datas de uma demonstração que já existe |
+
+Quem criou o token entra como admin, junto com os `emails_de_acesso` (pessoas que já
+têm login). A gravação usa a mesma função do terminal, pelo Postgres do app
+(`SUPABASE_DB_URL`), numa transação só, e leva segundos: a resposta já traz as
+contagens. Se o app não tiver `SUPABASE_DB_URL`, a ferramenta recusa e ensina o
+caminho do `--sql`. Reaplicar recusa a empresa que não é a do segmento (outro dono
+do slug) e a demonstração desmarcada (alguém tirou a trava de propósito).
+
+### Antes de uma reunião
+
+As datas envelhecem: o compromisso "de amanhã" vira "de ontem" e o documento
+"vencendo" vira "vencido". Antes de apresentar, renove a demonstração do segmento do
+cliente, pelo MCP (`plataforma_reaplicar_demonstracao` com o segmento) ou pelo
+terminal (`--segmento <segmento> --aplicar`, ou o `--sql` gerado na hora). O que
+alguém acrescentou à mão na demonstração continua lá; o que a semente gravou volta
+ao original.
 
 ## A trava: o que bloqueia
 
-A marca é a coluna `organizations.demonstracao`. É coluna, e não chave de
+A trava é a mesma para as cinco empresas: todas nascem marcadas, e a semente marca
+primeiro e grava depois. A marca é a coluna `organizations.demonstracao`. É coluna, e não chave de
 `settings`, porque `settings` é preferência que as rotas do cliente reescrevem:
 bastaria um PATCH mal feito para a chave sumir e a trava abrir sem ninguém ver.
 
@@ -133,6 +293,9 @@ Outlook, que chegou depois com tabela própria, em `…_9016_demonstracao_sem_ag
 Os testes estão em `tests/invariants/empresa-de-demonstracao-nao-envia.test.ts`,
 com cada porta e um controle numa empresa de verdade, e em
 `tests/unit/cliente-modelo-trava.test.ts`, com o 403, o e-mail e a falha fechada.
+Para cada demonstração por segmento, `tests/invariants/cliente-modelo-semente.test.ts`
+prova que ela nasce marcada, com o número arquivado, nada em fila, os eventos da
+carga consumidos e a saída enfileirada recusada na porta.
 
 ## Fora dos números da plataforma
 

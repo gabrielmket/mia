@@ -10,9 +10,12 @@ import {
   contarDaSemente,
   gerarSqlDaSemente,
   ID_DA_EMPRESA,
+  idDaDemonstracao,
   type ResumoDaSemente,
 } from "@/lib/demonstracao/semente/aplicar";
 import { FUNIS, OBRIGACOES } from "@/lib/demonstracao/semente/dados";
+import { sementeDoSegmento } from "@/lib/demonstracao/semente/segmentos";
+import type { SegmentoDeDemonstracao } from "@/lib/demonstracao/semente/tipos";
 import { diaNoFuso } from "@/lib/obrigacoes/datas";
 import { contarObrigacoes, situacao } from "@/lib/obrigacoes/situacao";
 import type { ItemParaSituacao } from "@/lib/obrigacoes/tipos";
@@ -34,6 +37,11 @@ import type { ItemParaSituacao } from "@/lib/obrigacoes/tipos";
  *      passagem, follow-up andando, agenda passada e futura, tarefas;
  *   4. os eventos que a carga emitiu não viram trabalho para os workers;
  *   5. telefone e e-mail são os falsos.
+ *
+ * E o mesmo para as QUATRO DEMONSTRAÇÕES POR SEGMENTO (construtora, clínica
+ * odontológica, indústria e academia), no fim do arquivo: duas rodadas sem
+ * mudar nada, a trava de pé, nada enviado nem enfileirado, o SQL gerado igual
+ * ao modo conectado, e uma empresa sem mexer na outra no mesmo banco.
  */
 
 const pool = new pg.Pool({
@@ -189,6 +197,20 @@ describe("idempotência", () => {
 });
 
 describe("o script de linha de comando", () => {
+  // O script grava com o relógio DE VERDADE, e os blocos de baixo medem as datas
+  // contra AGORA mais dois dias (a segunda rodada). Sem devolver a semente a esse
+  // "agora", o teste passava só enquanto o dia real estava perto de AGORA: em
+  // 05/10/2026 o alvará "vencido há 3 dias" já virava "vence hoje" e o bloco das
+  // obrigações reprovava sem nada ter mudado no produto.
+  afterAll(async () => {
+    const c = await pool.connect();
+    try {
+      await aplicarSemente(c, { agora: new Date(AGORA.getTime() + 2 * 86_400_000) });
+    } finally {
+      c.release();
+    }
+  }, 120_000);
+
   it("⭐ `scripts/cliente-modelo.ts --aplicar` grava pelo banco da variável de ambiente, e a terceira rodada não duplica", () => {
     const saida = execFileSync(
       process.execPath,
@@ -363,8 +385,22 @@ describe("o que a demonstração precisa mostrar", () => {
   });
 
   it("agenda com compromissos passados e futuros", async () => {
-    expect(await valor<number>(`select count(*)::int from public.calendar_appointments where organization_id = $1 and starts_at < now() - interval '2 days'`)).toBeGreaterThan(2);
-    expect(await valor<number>(`select count(*)::int from public.calendar_appointments where organization_id = $1 and starts_at > now()`)).toBeGreaterThan(5);
+    // Medido contra o "agora" da última rodada da semente (AGORA mais dois dias),
+    // e não contra o relógio: com `now()`, o teste dependia de o dia real estar
+    // perto de AGORA, e reprovava (ou passava) conforme a data em que rodava.
+    const agoraDaSemente = new Date(AGORA.getTime() + 2 * 86_400_000);
+    expect(
+      await valor<number>(
+        `select count(*)::int from public.calendar_appointments where organization_id = $1 and starts_at < $2::timestamptz - interval '2 days'`,
+        [ID_DA_EMPRESA, agoraDaSemente],
+      ),
+    ).toBeGreaterThan(2);
+    expect(
+      await valor<number>(`select count(*)::int from public.calendar_appointments where organization_id = $1 and starts_at > $2`, [
+        ID_DA_EMPRESA,
+        agoraDaSemente,
+      ]),
+    ).toBeGreaterThan(5);
   });
 });
 
@@ -496,5 +532,263 @@ describe("dado fictício que nunca bate em pessoa real", () => {
       await valor(`select count(*)::text from auth.users u join public.user_organizations m on m.user_id = u.id
                     where m.organization_id = $1 and u.email like '%@exemplo.invalid' and u.email !~ '@exemplo\\.invalid$'`),
     ).toBe("0");
+  });
+});
+
+// ─── AS QUATRO DEMONSTRAÇÕES POR SEGMENTO ────────────────────────────────────
+
+const DEMONSTRACOES: readonly SegmentoDeDemonstracao[] = ["construtora", "clinica-odonto", "industria", "academia"];
+const DIA_MS = 86_400_000;
+const resumos = new Map<SegmentoDeDemonstracao, { primeira: ResumoDaSemente; segunda: ResumoDaSemente; ms: number }>();
+
+describe.each(DEMONSTRACOES)("a demonstração %s, no banco", (segmento) => {
+  const s = sementeDoSegmento(segmento);
+  const org = idDaDemonstracao(segmento);
+  const naOrg = <T = string>(sql: string, extra: unknown[] = []) => valor<T>(sql, [org, ...extra]);
+
+  beforeAll(async () => {
+    const c = await pool.connect();
+    try {
+      const inicio = Date.now();
+      const primeira = await aplicarSemente(c, {
+        segmento,
+        agora: AGORA,
+        emailsDeAcesso: ["quem-mostra@invariant.test", "nao-existe@invariant.test"],
+      });
+      const ms = Date.now() - inicio;
+      const segunda = await aplicarSemente(c, { segmento, agora: new Date(AGORA.getTime() + 2 * DIA_MS) });
+      resumos.set(segmento, { primeira, segunda, ms });
+    } finally {
+      c.release();
+    }
+  }, 300_000);
+
+  it("⭐ aplicar duas vezes não muda nada: as mesmas contagens, e nenhuma zerada", () => {
+    const r = resumos.get(segmento)!;
+    expect(r.segunda.contagens).toEqual(r.primeira.contagens);
+    expect(r.primeira.organizacaoId).toBe(org);
+    for (const tabela of ["contacts", "crm_leads", "messages", "followup_enrollments", "calendar_appointments", "mia_obrigacoes", "catalog_products"]) {
+      expect(r.primeira.contagens[tabela], tabela).toBeGreaterThan(0);
+    }
+    // Leva segundos, não minutos: cabe numa chamada do MCP (maxDuration de 300 s).
+    expect(r.ms).toBeLessThan(120_000);
+  });
+
+  it("as contagens são as da semente: nada a mais, nada a menos", () => {
+    const c = resumos.get(segmento)!.primeira.contagens;
+    expect(c.contacts).toBe(s.contatos.length);
+    expect(c.crm_leads).toBe(s.funis.reduce((n, f) => n + f.negocios.length, 0));
+    expect(c.conversations).toBe(s.conversas.length);
+    expect(c.calendar_appointments).toBe(s.compromissos.length);
+    expect(c.catalog_products).toBe(s.produtos.length);
+    expect(c.mia_obrigacoes).toBe(s.obrigacoes!.itens.length);
+    expect(c.followup_flow_pointers).toBe(s.followups.length);
+    expect(c.followup_enrollments).toBe(s.inscricoes.length);
+    // A equipe da semente e quem mostra; o e-mail que não existe virou aviso.
+    expect(c.user_organizations).toBe(s.equipe.length + 1);
+    expect(resumos.get(segmento)!.primeira.avisos.join(" ")).toContain("nao-existe@invariant.test");
+  });
+
+  it("⭐ nasce travada: marcada, ativa, no fuso de São Paulo, com o nome e o slug próprios", async () => {
+    expect(
+      await naOrg(`select demonstracao::text || ',' || status || ',' || timezone || ',' || display_name || ',' || slug
+                     from public.organizations where id = $1`),
+    ).toBe(`true,active,America/Sao_Paulo,${s.nome},${s.slug}`);
+    expect(await naOrg(`select settings -> 'semente_de_demonstracao' ->> 'segmento' from public.organizations where id = $1`)).toBe(segmento);
+    expect(
+      await naOrg(`select role from public.user_organizations where organization_id = $1 and user_id = '90109010-5555-4000-8000-000000000001'`),
+    ).toBe("admin");
+  });
+
+  it("⭐ nada sai: número arquivado, nada em fila, e enfileirar uma saída é recusado na porta", async () => {
+    expect(await naOrg(`select count(*)::text from public.channel_sessions where organization_id = $1 and archived_at is null`)).toBe("0");
+    expect(
+      await naOrg(
+        `select count(*)::text from public.messages where organization_id = $1 and direction = 'outbound' and status in ('queued', 'sending')`,
+      ),
+    ).toBe("0");
+    const erro = await pool
+      .query(
+        `insert into public.messages (organization_id, conversation_id, channel_session_id, contact_id, type, direction, status, body)
+         select organization_id, id, channel_session_id, contact_id, 'text', 'outbound', 'queued', 'oi'
+           from public.conversations where organization_id = $1 limit 1`,
+        [org],
+      )
+      .then(() => null, (e: { code?: string; message?: string }) => e);
+    expect(erro?.code).toBe("42501");
+    expect(erro?.message).toMatch(/^organizacao_de_demonstracao:/);
+  });
+
+  it("⭐ nada enfileirado: os eventos da carga estão consumidos, sem trabalho, cron, aviso nem regra ligada", async () => {
+    expect(await naOrg(`select count(*)::text from public.event_log where organization_id = $1 and status in ('pending', 'processing')`)).toBe("0");
+    expect(
+      await naOrg<number>(`select count(*)::int from public.event_log where organization_id = $1 and $2 = any(consumed_by)`, [CONSUMIDOR_DA_SEMENTE]),
+    ).toBeGreaterThan(0);
+    expect(await naOrg(`select count(*)::text from public.job_queue where organization_id = $1 and status in ('pending', 'running')`)).toBe("0");
+    expect(await naOrg(`select count(*)::text from public.cron_jobs where organization_id = $1 and enabled`)).toBe("0");
+    expect(await naOrg(`select count(*)::text from public.mia_obrigacoes_avisos where organization_id = $1`)).toBe("0");
+    expect(await naOrg(`select count(*)::text from public.automation_rules where organization_id = $1 and is_active`)).toBe("0");
+    expect(await naOrg(`select count(*)::text from public.calendar_event_types where organization_id = $1 and reminder_enabled`)).toBe("0");
+  });
+
+  it("os funis: negócio em toda etapa, o padrão é o da semente e o Pedidos do banco saiu de cena", async () => {
+    const { rows } = await pool.query<{ funil: string; vazias: number }>(
+      `select p.slug as funil, count(*) filter (where l.id is null)::int as vazias
+         from public.crm_pipelines p
+         join public.crm_stages s on s.pipeline_id = p.id and not s.is_archived
+         left join lateral (select id from public.crm_leads where stage_id = s.id limit 1) l on true
+        where p.organization_id = $1 and not p.is_archived
+        group by p.slug`,
+      [org],
+    );
+    expect(rows.map((r) => r.funil).sort()).toEqual(s.funis.map((f) => `demo-${f.chave}`).sort());
+    for (const r of rows) expect(r.vazias, `etapa vazia em ${r.funil}`).toBe(0);
+    expect(await naOrg(`select slug from public.crm_pipelines where organization_id = $1 and is_default`)).toBe(`demo-${s.funilPadrao}`);
+    expect(await naOrg(`select is_archived::text from public.crm_pipelines where organization_id = $1 and slug = 'pedidos'`)).toBe("true");
+  });
+
+  it("⭐ follow-ups do segmento publicados com versão, e as inscrições vivas esperando no futuro", async () => {
+    expect(
+      await naOrg(
+        `select count(*)::text from public.followup_flow_pointers where organization_id = $1 and status = 'active' and active_version_id is not null`,
+      ),
+    ).toBe(String(s.followups.length));
+    expect(
+      await naOrg<number>(
+        `select count(*)::int from public.followup_enrollments where organization_id = $1 and status in ('active', 'waiting_reply') and next_eval_at > $2`,
+        [new Date(AGORA.getTime() + 2 * DIA_MS)],
+      ),
+    ).toBe(s.inscricoes.filter((i) => i.status === "active" || i.status === "waiting_reply").length);
+  });
+
+  it("a IA trabalhou: mensagens dela, ficha, passagem para uma pessoa e o agente sem versão publicada", async () => {
+    expect(await naOrg<number>(`select count(*)::int from public.messages where organization_id = $1 and sent_via = 'ai'`)).toBeGreaterThan(5);
+    expect(await naOrg<number>(`select count(*)::int from public.lead_notes where organization_id = $1`)).toBeGreaterThanOrEqual(3);
+    expect(await naOrg<number>(`select count(*)::int from public.passagens_de_atendimento where organization_id = $1`)).toBeGreaterThan(0);
+    expect(await naOrg(`select count(*)::text from public.ai_agents where organization_id = $1 and name = $2`, [s.agente.nome])).toBe("1");
+    expect(await naOrg(`select count(*)::text from public.ai_agent_versions where organization_id = $1`)).toBe("0");
+  });
+
+  it("⭐ as obrigações ilustram o que a semente promete, e o catálogo do funil é o do segmento", async () => {
+    const hoje = diaNoFuso(new Date(AGORA.getTime() + 2 * DIA_MS), "America/Sao_Paulo");
+    const { rows } = await pool.query(
+      `select categoria, recorrencia, recorrencia_meses, validade_meses, avisos_dias, dias_sem_resposta,
+              pedido_em::text, prazo_em::text, cobrado_em::text, recebido_em::text, valido_ate::text, renovado_em::text,
+              proxima_em::text, feita_em::text
+         from public.mia_obrigacoes where organization_id = $1`,
+      [org],
+    );
+    const situacoes = new Set((rows as ItemParaSituacao[]).map((i) => situacao(i, hoje)));
+    expect(situacoes.size, [...situacoes].join(", ")).toBeGreaterThanOrEqual(4);
+    expect(situacoes.has("pendente")).toBe(true);
+    expect(situacoes.has("a_pedir")).toBe(true);
+    expect(
+      await naOrg(
+        `select count(distinct segmento)::text || ',' || min(segmento) from public.mia_obrigacoes_tipos where organization_id = $1 and arquivado_em is null`,
+      ),
+    ).toBe(`1,${s.obrigacoes!.segmento}`);
+    expect(await naOrg(`select count(*)::text from public.mia_obrigacoes_propostas where organization_id = $1 and situacao = 'pendente'`)).toBe(
+      String(s.obrigacoes!.itens.filter((o) => o.proposta).length),
+    );
+    expect(await naOrg<number>(`select count(*)::int from public.mia_obrigacoes_ciclos where organization_id = $1`)).toBeGreaterThan(0);
+  });
+
+  it("dado fictício: DDD 00, e-mail .invalid e o catálogo com a origem da semente", async () => {
+    expect(await naOrg(`select count(*)::text from public.contacts where organization_id = $1 and phone_number !~ '^\\+5500'`)).toBe("0");
+    expect(
+      await naOrg(`select count(*)::text from public.contacts where organization_id = $1 and email is not null and email !~ '@exemplo\\.invalid$'`),
+    ).toBe("0");
+    expect(await naOrg(`select count(*)::text from public.catalog_products where organization_id = $1 and origem <> 'demonstracao'`)).toBe("0");
+  });
+});
+
+describe("as cinco empresas no mesmo banco", () => {
+  it("⭐ uma não mexe na outra: cada uma continua com as suas contagens depois das outras", async () => {
+    expect(await contarDaSemente(pool, ID_DA_EMPRESA)).toEqual(primeira.contagens);
+    for (const segmento of DEMONSTRACOES) {
+      expect(await contarDaSemente(pool, idDaDemonstracao(segmento)), segmento).toEqual(resumos.get(segmento)!.primeira.contagens);
+    }
+  });
+
+  it("cinco organizações de demonstração, cada uma com a sua sessão de canal", async () => {
+    const ids = [ID_DA_EMPRESA, ...DEMONSTRACOES.map((s) => idDaDemonstracao(s))];
+    expect(await valor(`select count(*)::text from public.organizations where id = any($1::uuid[]) and demonstracao`, [ids])).toBe("5");
+    expect(
+      await valor(`select count(distinct waha_session_name)::text from public.channel_sessions where organization_id = any($1::uuid[])`, [ids]),
+    ).toBe("5");
+  });
+});
+
+describe("o SQL gerado de cada demonstração (`--sql`)", () => {
+  const container = process.env.TEST_DB_CONTAINER!;
+  const molde = process.env.TEST_DB_TEMPLATE!;
+
+  function psql(banco: string, script: string): string {
+    return execFileSync(
+      "docker",
+      ["exec", "-i", container, "psql", "-U", "postgres", "-d", banco, "-v", "ON_ERROR_STOP=1", "-qtA", "-f", "-"],
+      { input: script, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 },
+    );
+  }
+
+  it("⭐ cada um, aplicado DUAS vezes num banco novo, dá as MESMAS contagens do modo conectado", async () => {
+    psql("template1", `drop database if exists semente_sql_segmentos with (force); create database semente_sql_segmentos template ${molde};`);
+    psql(
+      "semente_sql_segmentos",
+      `insert into auth.users (id, email) values ('90109010-5555-4000-8000-000000000001', 'quem-mostra@invariant.test');`,
+    );
+    const outra = new pg.Pool({
+      connectionString: `postgresql://postgres:postgres@127.0.0.1:${process.env.TEST_DB_PORT ?? 54329}/semente_sql_segmentos`,
+      max: 1,
+    });
+    try {
+      for (const segmento of DEMONSTRACOES) {
+        const gerar = () =>
+          gerarSqlDaSemente({
+            segmento,
+            agora: AGORA,
+            emailsDeAcesso: ["quem-mostra@invariant.test", "nao-existe@invariant.test"],
+          });
+        const texto = await gerar();
+        expect(texto.split("\n\n").filter((l) => !l.startsWith("--"))[0], segmento).toBe("begin;");
+        expect(texto, segmento).not.toMatch(/postgres(ql)?:\/\/|service_role|eyJhbGci|password=/i);
+        expect(texto, segmento).not.toMatch(/\$\d+\b/);
+        psql("semente_sql_segmentos", texto);
+        const depoisDaPrimeira = await contarDaSemente(outra, idDaDemonstracao(segmento));
+        psql("semente_sql_segmentos", await gerar());
+        const depoisDaSegunda = await contarDaSemente(outra, idDaDemonstracao(segmento));
+        expect(depoisDaPrimeira, segmento).toEqual(resumos.get(segmento)!.primeira.contagens);
+        expect(depoisDaSegunda, segmento).toEqual(resumos.get(segmento)!.primeira.contagens);
+      }
+      const pendentes = await outra.query<{ n: number }>(
+        `select count(*)::int as n from public.event_log where status in ('pending', 'processing')`,
+      );
+      expect(pendentes.rows[0]!.n).toBe(0);
+    } finally {
+      await outra.end();
+      psql("template1", "drop database if exists semente_sql_segmentos with (force);");
+    }
+  }, 300_000);
+});
+
+describe("o script escolhe o segmento", () => {
+  it("`--segmento academia` sem --aplicar mostra o alvo e não grava nada; segmento desconhecido é recusado", () => {
+    const tsx = path.resolve("node_modules/tsx/dist/cli.mjs");
+    const saida = execFileSync(process.execPath, [tsx, "scripts/cliente-modelo.ts", "--segmento", "academia"], {
+      encoding: "utf8",
+      env: { ...process.env, CLIENTE_MODELO_DATABASE_URL: "postgresql://ninguem:x@127.0.0.1:1/nada" },
+    });
+    expect(saida).toContain("Demonstração · Academia");
+    expect(saida).toContain("Nada foi gravado");
+    let recusa = "";
+    try {
+      execFileSync(process.execPath, [tsx, "scripts/cliente-modelo.ts", "--segmento", "padaria", "--sql", "x.sql"], {
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (e) {
+      recusa = String((e as { stderr?: string }).stderr ?? e);
+    }
+    expect(recusa).toContain("Segmento desconhecido");
   });
 });
