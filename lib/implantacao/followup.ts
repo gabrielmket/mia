@@ -30,6 +30,28 @@
  * Não publica e não arma o fluxo em agente nenhum. Gatilho automático só
  * inscreve alguém se um agente PUBLICADO tem o fluxo na lista dele: isso é
  * `plataforma_garantir_agente` com `followups`.
+ *
+ * ── As caixas que não falam com o cliente (upstream 1.70, #2181) ──────────
+ *
+ * O construtor ganhou duas caixas: "mover lead no funil" (`move_lead`) e
+ * "editar tag do lead" (`edit_lead_tag`). Nenhum modelo do catálogo as traz,
+ * então a ferramenta as GARANTE no rascunho: ou ajusta uma caixa que já existe
+ * (`no`), ou põe uma caixa nova ANTES de um nó (`antes_de`), que é como se diz
+ * "quando o fluxo chegar aqui, mova o card": antes do fim «sem resposta», antes
+ * de uma mensagem. Pôr antes de um nó desvia para a caixa TODAS as setas que
+ * chegavam nele e liga a caixa a ele por uma seta só, que é a forma que o motor
+ * exige (`processNode`: a caixa avança pela única aresta `always`).
+ *
+ * A forma de cada caixa é a do upstream (`flowGraphSchema`), o rascunho passa
+ * pelo mesmo `patchFollowupFlowSchema` do PATCH, e quem exige etapa viva e
+ * etiqueta preenchida é a publicação (`validateFlowForPublish`), como na tela.
+ *
+ * ── O gatilho de silêncio (upstream 1.70, #2037) ──────────────────────────
+ *
+ * Três parâmetros novos do gatilho `silence`, conferidos pelo mesmo
+ * `triggerConfigSchema`: o teto do silêncio, a pausa antes de recomeçar para
+ * quem já passou pelo fluxo, e de onde a pausa conta. A ferramenta os grava
+ * como a tela grava: pausa zero some com a chave, e a base só existe com pausa.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -40,6 +62,7 @@ import { carregaEtapasCitadas } from "@/lib/followup/etapas-citadas";
 import { flowGraphSchema, type FlowGraph } from "@/lib/followup/graph-schema";
 import { modeloPorId, MODELOS_DE_FOLLOWUP } from "@/lib/followup/modelos";
 import { numeroEhDaOrganizacao } from "@/lib/followup/numero-do-gatilho";
+import { MAX_PAUSA_DE_REENTRADA_MINUTES } from "@/lib/followup/pausa-de-reentrada";
 import { publishFollowupFlowVersion } from "@/lib/followup/publish";
 import { rascunhoDoFluxo } from "@/lib/followup/rascunho";
 import { algumCanalExigeModeloForaDaJanela, validateFlowForPublish } from "@/lib/followup/validate-publish";
@@ -108,6 +131,29 @@ export interface PedidoDeFollowup {
   cancelar_ao_responder?: boolean;
   /** O que acontece com o fluxo quando uma pessoa assume a conversa. */
   quando_humano_assume?: "pause" | "cancel" | "allow";
+  /**
+   * Para gatilho de silêncio: o fluxo só começa enquanto o silêncio for
+   * RECENTE (entre `silencio_minutos` e este teto). `null` tira o teto.
+   */
+  silencio_maximo_minutos?: number | null;
+  /**
+   * Para gatilho de silêncio: quanto esperar antes de o fluxo recomeçar para
+   * quem JÁ passou por ele. `0` ou `null` = sem pausa.
+   */
+  pausa_para_recomecar_minutos?: number | null;
+  /** A pausa conta do último envio deste fluxo, e não da última mensagem do cliente. */
+  pausa_conta_do_ultimo_envio?: boolean;
+  /** Caixas "mover lead no funil": o card vai para a etapa quando o fluxo chega ali. */
+  mover_no_funil?: Array<AncoraDaCaixa & { funil: string; etapa: string }>;
+  /** Caixas "editar tag do lead": as etiquetas são gravadas no negócio quando o fluxo chega ali. */
+  etiquetar?: Array<AncoraDaCaixa & { etiquetas: string[] }>;
+}
+
+/** Onde a caixa está: uma que já existe (`no`), ou uma nova antes de um nó (`antes_de`). */
+export interface AncoraDaCaixa {
+  no?: string;
+  antes_de?: string;
+  rotulo?: string;
 }
 
 export interface FollowupGarantido {
@@ -117,8 +163,12 @@ export interface FollowupGarantido {
   avisos: string[];
 }
 
-/** O grafo em palavras: o que o implantador precisa para ajustar texto e prazo. */
-export function nosDoGrafo(grafo: FlowGraph | null) {
+/**
+ * O grafo em palavras: o que o implantador precisa para ajustar texto, prazo e
+ * as caixas que mexem no negócio. `nomeDaEtapa` dá nome ao destino de uma caixa
+ * de mover (o grafo guarda só o id).
+ */
+export function nosDoGrafo(grafo: FlowGraph | null, nomeDaEtapa?: (id: string) => string | null) {
   if (!grafo) return [];
   return grafo.nodes.map((n) => {
     const base = { no: n.id, tipo: n.type as string, rotulo: n.label ?? null };
@@ -131,8 +181,117 @@ export function nosDoGrafo(grafo: FlowGraph | null) {
     if (n.type === "wait" && n.config.mode === "fixed") {
       return { ...base, espera_minutos: Math.round(n.config.duration_ms / 60_000) };
     }
+    if (n.type === "move_lead") {
+      const id = n.config.stage_id.trim();
+      return {
+        ...base,
+        faz: "move o card para outra etapa do funil",
+        etapa_de_destino_id: id === "" ? null : id,
+        ...(id !== "" && nomeDaEtapa ? { etapa_de_destino: nomeDaEtapa(id) } : {}),
+      };
+    }
+    if (n.type === "edit_lead_tag") {
+      return { ...base, faz: "grava etiquetas no negócio", etiquetas: n.config.tags };
+    }
     return base;
   });
+}
+
+// ---------------------------------------------------------------------------
+// as caixas que não falam com o cliente
+// ---------------------------------------------------------------------------
+
+/** Uma caixa já com o destino resolvido em id, pronta para entrar no grafo. */
+export type CaixaResolvida = AncoraDaCaixa &
+  ({ tipo: "move_lead"; config: { stage_id: string } } | { tipo: "edit_lead_tag"; config: { tags: string[] } });
+
+/** O rótulo com que cada caixa nasce no construtor (`nodeVisuals.ts`) e o prefixo do id estável. */
+const CAIXA: Record<CaixaResolvida["tipo"], { prefixo: string; rotulo: string; oQue: string; campo: string }> = {
+  move_lead: { prefixo: "mover", rotulo: "Mover card de etapa", oQue: "mover no funil", campo: "mover_no_funil" },
+  edit_lead_tag: { prefixo: "etiqueta", rotulo: "Gravar tag no lead", oQue: "etiquetar", campo: "etiquetar" },
+};
+
+/** A largura de uma coluna do desenho dos modelos (`modelos/escada.ts`). */
+const COLUNA_DO_DESENHO = 260;
+
+/**
+ * O id de uma caixa posta por aqui: estável, legível e derivado de ONDE ela
+ * está. É o que faz a segunda chamada achar a caixa em vez de pôr outra.
+ */
+export function idDaCaixa(tipo: CaixaResolvida["tipo"], antesDe: string): string {
+  return `${CAIXA[tipo].prefixo}-antes-de-${antesDe}`;
+}
+
+/**
+ * Garante as caixas no grafo. Pura: recebe o grafo e as caixas resolvidas e
+ * devolve o grafo novo e o que mudou. Rodar de novo com o mesmo pedido não muda
+ * nada, porque a caixa é achada pelo id.
+ */
+export function garantirCaixas(grafo: FlowGraph, caixas: readonly CaixaResolvida[]): { grafo: FlowGraph; mudancas: string[] } {
+  let nodes = [...grafo.nodes];
+  let edges = [...grafo.edges];
+  const mudancas: string[] = [];
+  const lista = () => nodes.map((n) => `${n.id} (${n.type})`).join(", ");
+
+  for (const caixa of caixas) {
+    const visual = CAIXA[caixa.tipo];
+    if ((caixa.no === undefined) === (caixa.antes_de === undefined)) {
+      throw new Recusa(
+        `Cada item de \`${visual.campo}\` informa \`no\` (ajusta uma caixa que já existe) OU \`antes_de\` (garante uma caixa antes daquele nó), e só um dos dois. ` +
+          "Veja os nós em plataforma_ver_followup.",
+      );
+    }
+    const id = caixa.no ?? idDaCaixa(caixa.tipo, caixa.antes_de as string);
+    const existente = nodes.find((n) => n.id === id);
+
+    if (existente) {
+      if (existente.type !== caixa.tipo) {
+        throw new Recusa(
+          `O nó «${id}» é do tipo ${existente.type}, e \`${visual.campo}\` só ajusta caixa do tipo ${caixa.tipo}. Os nós são: ${lista()}.`,
+        );
+      }
+      const rotulo = caixa.rotulo ?? existente.label;
+      if (!mesmoConteudo(existente.config, caixa.config) || rotulo !== existente.label) {
+        nodes = nodes.map((n) => (n.id === id ? ({ ...n, label: rotulo, config: caixa.config } as FlowGraph["nodes"][number]) : n));
+        mudancas.push(caixa.tipo === "move_lead" ? `destino de ${id}` : `etiquetas de ${id}`);
+      }
+      continue;
+    }
+
+    if (caixa.no !== undefined) {
+      throw new Recusa(`O fluxo não tem um nó «${caixa.no}». Os nós são: ${lista()}.`);
+    }
+    const alvo = nodes.find((n) => n.id === caixa.antes_de);
+    if (!alvo) {
+      throw new Recusa(`\`antes_de\`: o fluxo não tem um nó «${caixa.antes_de}». Os nós são: ${lista()}.`);
+    }
+    if (alvo.type === "trigger") {
+      throw new Recusa(
+        `«${alvo.id}» é o início do fluxo, e nada vem antes dele. Para a caixa rodar logo que o fluxo começa, use \`antes_de\` com o primeiro nó depois do início.`,
+      );
+    }
+    if (!edges.some((e) => e.target === alvo.id)) {
+      throw new Recusa(
+        `Nenhuma seta chega ao nó «${alvo.id}»: uma caixa posta antes dele nunca rodaria. Ligue o nó pela tela (IA › Follow-ups) ou escolha outro.`,
+      );
+    }
+
+    // Abre uma coluna no desenho: o alvo e tudo que está à direita dele andam
+    // para o lado, e a caixa ocupa o lugar do alvo, na mesma linha.
+    const lugar = { x: alvo.position.x, y: alvo.position.y };
+    nodes = nodes.map((n) =>
+      n.position.x >= lugar.x ? ({ ...n, position: { x: n.position.x + COLUNA_DO_DESENHO, y: n.position.y } } as FlowGraph["nodes"][number]) : n,
+    );
+    nodes.push({ id, type: caixa.tipo, label: caixa.rotulo ?? visual.rotulo, position: lugar, config: caixa.config } as FlowGraph["nodes"][number]);
+    // Toda seta que chegava ao alvo passa a chegar à caixa, com a MESMA
+    // condição (o ramo continua sendo o ramo); a caixa segue para o alvo por uma
+    // seta só, que é a que o motor procura.
+    edges = edges.map((e) => (e.target === alvo.id ? { ...e, target: id } : e));
+    edges.push({ id: `${id}__${alvo.id}__segue`, source: id, target: alvo.id, priority: 0, condition: { type: "always" } });
+    mudancas.push(`caixa de ${visual.oQue} antes de ${alvo.id}`);
+  }
+
+  return { grafo: { ...grafo, nodes, edges } as FlowGraph, mudancas };
 }
 
 async function resolverEtapa(admin: SupabaseClient, orgId: string, ref: { funil: string; etapa: string }): Promise<string> {
@@ -158,6 +317,59 @@ async function resolverEtapa(admin: SupabaseClient, orgId: string, ref: { funil:
     );
   }
   return etapa.id;
+}
+
+/**
+ * As caixas do pedido com o destino resolvido: a etapa pelo nome (viva, deste
+ * funil, desta organização) e as etiquetas limpas. O que cada caixa faz na hora
+ * de rodar entra em `avisos`, porque nem sempre é o que o nome sugere.
+ */
+async function resolverCaixas(c: Implantacao, pedido: PedidoDeFollowup, avisos: string[]): Promise<CaixaResolvida[]> {
+  const caixas: CaixaResolvida[] = [];
+  const ancora = (a: AncoraDaCaixa): AncoraDaCaixa => ({
+    ...(a.no !== undefined ? { no: a.no } : {}),
+    ...(a.antes_de !== undefined ? { antes_de: a.antes_de } : {}),
+    ...(a.rotulo !== undefined ? { rotulo: a.rotulo } : {}),
+  });
+
+  for (const m of pedido.mover_no_funil ?? []) {
+    const stageId = await resolverEtapa(c.admin, c.orgId, { funil: m.funil, etapa: m.etapa });
+    caixas.push({ ...ancora(m), tipo: "move_lead", config: { stage_id: stageId } });
+  }
+  for (const [i, e] of (pedido.etiquetar ?? []).entries()) {
+    const tags = [...new Set(e.etiquetas.map((t) => t.trim()).filter((t) => t !== ""))];
+    if (tags.length === 0) {
+      throw new Recusa(`\`etiquetar[${i}].etiquetas\`: informe ao menos uma etiqueta com texto (ex.: ["Follow-up sem resposta"]).`);
+    }
+    caixas.push({ ...ancora(e), tipo: "edit_lead_tag", config: { tags } });
+  }
+
+  if ((pedido.mover_no_funil ?? []).length > 0) {
+    avisos.push(
+      "A caixa de mover leva o negócio MAIS RECENTE do contato que está no funil da etapa de destino. Contato sem negócio nesse funil não tem card para mover, e o fluxo segue.",
+    );
+  }
+  if ((pedido.etiquetar ?? []).length > 0) {
+    avisos.push("A caixa de etiquetar grava no negócio mais recente do contato; sem negócio, grava no contato.");
+  }
+  return caixas;
+}
+
+/** O grafo que vai ser gravado passa pela forma do upstream; a recusa diz o que não coube. */
+function conferirGrafo(grafo: FlowGraph): void {
+  const lido = flowGraphSchema.safeParse(grafo);
+  if (lido.success) return;
+  const onde = lido.error.issues.map((i) => i.path.join(".")).join(" ");
+  if (grafo.nodes.length > 60) {
+    throw new Recusa(`O fluxo ficaria com ${grafo.nodes.length} caixas, e o construtor aceita até 60. Tire caixas pela tela (IA › Follow-ups) antes de acrescentar.`);
+  }
+  if (/config\.tags/.test(onde)) {
+    throw new Recusa("As etiquetas não passaram na conferência: até 10 por caixa, cada uma com até 60 caracteres.");
+  }
+  if (/\.label/.test(onde)) {
+    throw new Recusa("O `rotulo` de uma caixa tem de 1 a 60 caracteres.");
+  }
+  throw new Recusa("Os ajustes não passaram na conferência: cada mensagem tem de 1 a 4000 caracteres, e cada instrução para a IA de 1 a 1000.");
 }
 
 /** Aplica os ajustes de texto e de espera num grafo. Devolve o grafo novo e o que mudou. */
@@ -236,10 +448,66 @@ async function ajustarGatilho(
   }
   if (pedido.cancelar_ao_responder !== undefined) novo.cancel_on_reply = pedido.cancelar_ao_responder;
 
+  // ── os três parâmetros do gatilho de silêncio (upstream 1.70, #2037) ──────
+  const doSilencio = [
+    ["silencio_maximo_minutos", pedido.silencio_maximo_minutos],
+    ["pausa_para_recomecar_minutos", pedido.pausa_para_recomecar_minutos],
+    ["pausa_conta_do_ultimo_envio", pedido.pausa_conta_do_ultimo_envio],
+  ] as const;
+  const pedidos = doSilencio.filter(([, valor]) => valor !== undefined).map(([campo]) => campo);
+  if (pedidos.length > 0) {
+    if (novo.kind !== "silence") {
+      throw new Recusa(
+        `${pedidos.map((p) => `\`${p}\``).join(", ")} só ${pedidos.length === 1 ? "vale" : "valem"} para fluxo que dispara por silêncio; este dispara por «${novo.kind}».`,
+      );
+    }
+    const params: Record<string, unknown> = { ...(novo.params ?? {}) };
+    if (pedido.silencio_maximo_minutos !== undefined) {
+      if (pedido.silencio_maximo_minutos === null) delete params.max_silence_minutes;
+      else params.max_silence_minutes = pedido.silencio_maximo_minutos;
+    }
+    // Como a tela grava: pausa zero some com a chave, e a base da pausa só
+    // existe com pausa (e só quando não é a padrão, `ultima_mensagem`).
+    if (pedido.pausa_para_recomecar_minutos !== undefined) {
+      if (pedido.pausa_para_recomecar_minutos === null || pedido.pausa_para_recomecar_minutos === 0) {
+        delete params.reentry_pause_minutes;
+      } else {
+        params.reentry_pause_minutes = pedido.pausa_para_recomecar_minutos;
+      }
+    }
+    const temPausa = typeof params.reentry_pause_minutes === "number" && params.reentry_pause_minutes > 0;
+    if (pedido.pausa_conta_do_ultimo_envio === true && !temPausa) {
+      throw new Recusa(
+        "`pausa_conta_do_ultimo_envio` diz de onde a pausa conta, e este fluxo não tem pausa. Informe `pausa_para_recomecar_minutos` junto (ex.: 1440 para um dia).",
+      );
+    }
+    if (!temPausa || pedido.pausa_conta_do_ultimo_envio === false) delete params.reentry_pause_basis;
+    else if (pedido.pausa_conta_do_ultimo_envio === true) params.reentry_pause_basis = "ultimo_envio";
+    novo.params = params;
+  }
+  // O motor IGNORA, sem avisar, um teto que não passa do mínimo
+  // (`silence-sweep.ts`): gravar seria prometer um corte que não acontece. Só
+  // é conferido quando o pedido mexeu num dos dois, para um fluxo montado na
+  // tela continuar aceitando os outros ajustes.
+  if (
+    novo.kind === "silence" &&
+    (pedido.silencio_minutos !== undefined || (pedido.silencio_maximo_minutos ?? null) !== null)
+  ) {
+    const minimo = novo.params?.threshold_minutes;
+    const teto = novo.params?.max_silence_minutes;
+    if (typeof minimo === "number" && typeof teto === "number" && teto <= minimo) {
+      throw new Recusa(
+        `O teto do silêncio (\`silencio_maximo_minutos\`: ${teto}) precisa ser MAIOR que o silêncio que começa o fluxo (\`silencio_minutos\`: ${minimo}): ` +
+          "o fluxo começa para quem está calado entre os dois. Aumente o teto, diminua o mínimo, ou tire o teto com `silencio_maximo_minutos: null`.",
+      );
+    }
+  }
+
   const lido = triggerConfigSchema.safeParse(novo);
   if (!lido.success) {
     throw new Recusa(
-      "O gatilho do fluxo não passou na conferência. `silencio_minutos` vai de 5 a 10080 no gatilho de silêncio, e de 60 a 129600 no de cliente que voltou.",
+      "O gatilho do fluxo não passou na conferência. `silencio_minutos` vai de 5 a 10080 no gatilho de silêncio, e de 60 a 129600 no de cliente que voltou; " +
+        `\`silencio_maximo_minutos\` vai de 5 a 10080; \`pausa_para_recomecar_minutos\` vai de 0 a ${MAX_PAUSA_DE_REENTRADA_MINUTES}.`,
     );
   }
   if (!mesmoConteudo(lido.data, atual)) mudancas.push("gatilho");
@@ -290,11 +558,11 @@ export async function garantirFollowup(c: Implantacao, pedido: PedidoDeFollowup)
       throw new Error(`modelo_invalido: ${modelo.id}`);
     }
 
-    const { grafo, mudancas: mudancasDoGrafo } = ajustarGrafo(grafoBase.data, pedido);
+    const ajustado = ajustarGrafo(grafoBase.data, pedido);
+    const comCaixas = garantirCaixas(ajustado.grafo, await resolverCaixas(c, pedido, avisos));
+    const grafo = comCaixas.grafo;
     const { gatilho } = await ajustarGatilho(c, gatilhoBase.data, { ...pedido, etapa: undefined });
-    if (mudancasDoGrafo.length > 0 && !flowGraphSchema.safeParse(grafo).success) {
-      throw new Recusa("Os textos não passaram na conferência: cada mensagem tem de 1 a 4000 caracteres, e cada instrução para a IA de 1 a 1000.");
-    }
+    if (ajustado.mudancas.length + comCaixas.mudancas.length > 0) conferirGrafo(grafo);
 
     const { data: criado, error } = await c.admin
       .from("followup_flow_pointers")
@@ -338,7 +606,10 @@ export async function garantirFollowup(c: Implantacao, pedido: PedidoDeFollowup)
   const rascunho = await rascunhoDoFluxo(c.admin, existente, c.orgId);
   if (!rascunho) throw new Recusa(`O fluxo «${existente.name}» está vazio. Monte-o pela tela (IA › Follow-ups) ou instale um modelo com outro nome.`);
 
-  const { grafo, mudancas: mudancasDoGrafo } = ajustarGrafo(rascunho, pedido);
+  const ajustado = ajustarGrafo(rascunho, pedido);
+  const comCaixas = garantirCaixas(ajustado.grafo, await resolverCaixas(c, pedido, avisos));
+  const grafo = comCaixas.grafo;
+  const mudancasDoGrafo = [...ajustado.mudancas, ...comCaixas.mudancas];
   const gatilhoAtual = triggerConfigSchema.safeParse(existente.trigger_config ?? { kind: "manual" });
   if (!gatilhoAtual.success) {
     throw new Recusa(`O gatilho do fluxo «${existente.name}» está num formato que não reconheço. Ajuste-o pela tela (IA › Follow-ups).`);
@@ -379,6 +650,7 @@ export async function garantirFollowup(c: Implantacao, pedido: PedidoDeFollowup)
     };
   }
 
+  if (patch.draft_graph !== undefined) conferirGrafo(grafo);
   const conferido = patchFollowupFlowSchema.safeParse(patch);
   if (!conferido.success) {
     throw new Recusa("Os ajustes não passaram na conferência: cada mensagem tem de 1 a 4000 caracteres, e cada instrução para a IA de 1 a 1000.");
@@ -402,7 +674,7 @@ export async function garantirFollowup(c: Implantacao, pedido: PedidoDeFollowup)
     metadata: { fields_changed: Object.keys(patch), via: "mcp_plataforma" },
   });
   if (existente.status === "active" && patch.draft_graph) {
-    avisos.push("O fluxo está publicado: os textos novos ficaram no rascunho e só passam a valer depois de plataforma_publicar_followup.");
+    avisos.push("O fluxo está publicado: as mudanças (textos, esperas e caixas) ficaram no rascunho e só passam a valer depois de plataforma_publicar_followup.");
   }
   return {
     fluxo: { id: existente.id, nome: existente.name, situacao: existente.status, desfecho: "atualizou", mudancas },

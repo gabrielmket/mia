@@ -24,14 +24,19 @@
  * funil já existente, o caminho é o da tela: etapa a etapa, preservando os
  * ids, e sem arquivar nada que o pedido não cite.
  *
- * ── As duas colunas sem tela ──────────────────────────────────────────────
+ * ── A janela de esfriando ganhou tela; a cor continua sem ───────────────────
  *
  * `expected_duration_hours` (o prazo que o radar de risco usa para dizer que o
- * negócio esfriou) e `color` (a cor da coluna no quadro) existem, têm leitor e
- * nenhuma tela as grava. São escritas direto, com a autoria, como a semente da
- * empresa de demonstração faz. `requires_human` fica DE FORA de propósito: o
- * único leitor dela é o worker legado, que não responde mais; oferecê-la seria
- * prometer um comportamento que não existe.
+ * negócio esfriou) nasceu sem tela e era escrito direto. O upstream 1.70
+ * (#2161) deu a ele um campo na tela de etapas e uma régua
+ * (`validarJanelaDeEsfriamento`: 1 a 8760 horas INTEIRAS). Desde então ele vai
+ * por `atualizarEtapa`, como a probabilidade, com a mesma recusa e a mesma
+ * auditoria (`pipeline.stage_updated`).
+ *
+ * `color` (a cor da coluna no quadro) segue sem tela: é escrita direto, com a
+ * autoria, como a semente da empresa de demonstração faz. `requires_human` fica
+ * DE FORA de propósito: o único leitor dela é o worker legado, que não responde
+ * mais; oferecê-la seria prometer um comportamento que não existe.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -272,9 +277,9 @@ async function aplicarQuadro(
 }
 
 /**
- * As três colunas que nenhuma operação da tela grava, mais as duas que a tela
- * grava e a função do banco não recebe (probabilidade e aviso na Central).
- * Devolve o que mudou, em palavras.
+ * O que a função do banco não recebe: as três colunas que a tela de etapas
+ * grava (probabilidade, aviso na Central e janela de esfriando) e a cor, que
+ * nenhuma tela grava. Devolve o que mudou, em palavras.
  */
 async function ajustarAtributos(
   c: Implantacao,
@@ -284,9 +289,15 @@ async function ajustarAtributos(
 ): Promise<string[]> {
   const mudancas: string[] = [];
 
-  // Probabilidade e aviso na Central têm tela: vão pela operação dela, com a
-  // mesma validação (0 a 100) e a mesma auditoria.
-  const pedidoDaTela: { win_probability?: number | null; avisar_na_central?: boolean } = {};
+  // Probabilidade, aviso na Central e a janela de esfriando têm tela: vão pela
+  // operação dela, com a mesma validação e a mesma auditoria. A janela ganhou
+  // tela no upstream 1.70 (#2161): `atualizarEtapa` confere 1 a 8760 horas
+  // inteiras (`validarJanelaDeEsfriamento`) antes de tocar no banco.
+  const pedidoDaTela: {
+    win_probability?: number | null;
+    avisar_na_central?: boolean;
+    expected_duration_hours?: number | null;
+  } = {};
   if (pedida.probabilidade !== undefined && (atual.win_probability ?? null) !== pedida.probabilidade) {
     pedidoDaTela.win_probability = pedida.probabilidade;
     mudancas.push("probabilidade");
@@ -298,6 +309,15 @@ async function ajustarAtributos(
     pedidoDaTela.avisar_na_central = pedida.avisar_na_central;
     mudancas.push("aviso na Central");
   }
+  // `numeric` pode chegar como texto, conforme o transporte: compara como número.
+  const prazoAtual =
+    atual.expected_duration_hours === null || atual.expected_duration_hours === undefined
+      ? null
+      : Number(atual.expected_duration_hours);
+  if (pedida.prazo_esperado_horas !== undefined && prazoAtual !== pedida.prazo_esperado_horas) {
+    pedidoDaTela.expected_duration_hours = pedida.prazo_esperado_horas;
+    mudancas.push("prazo esperado");
+  }
   if (Object.keys(pedidoDaTela).length > 0) {
     await atualizarEtapa(
       { supabase: c.admin, organizationId: c.orgId, actor: atorDaImplantacao(c), requestId: c.requestId },
@@ -306,12 +326,6 @@ async function ajustarAtributos(
   }
 
   const direto: Record<string, unknown> = {};
-  // `numeric` pode chegar como texto, conforme o transporte: compara como número.
-  const prazoAtual = atual.expected_duration_hours === null ? null : Number(atual.expected_duration_hours);
-  if (pedida.prazo_esperado_horas !== undefined && prazoAtual !== pedida.prazo_esperado_horas) {
-    direto.expected_duration_hours = pedida.prazo_esperado_horas;
-    mudancas.push("prazo esperado");
-  }
   if (pedida.cor !== undefined && (atual.color ?? null) !== (pedida.cor?.toLowerCase() ?? null)) {
     direto.color = pedida.cor?.toLowerCase() ?? null;
     mudancas.push("cor");

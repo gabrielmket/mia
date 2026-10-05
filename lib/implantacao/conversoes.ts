@@ -59,6 +59,7 @@ import { VEREDITO_DO_DIAGNOSTICO } from "@/lib/conversoes-meta/diagnostico-frase
 import { rotuloDoEnvioDaMeta } from "@/lib/conversoes-meta/rotulo";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { lerEstadoDaConexaoGoogle } from "@/lib/plataformas-de-anuncio/google/estado-da-conexao";
+import { lerIdentidadeDaMeta } from "@/lib/plataformas-de-anuncio/meta/identidade";
 
 import { acharPorNomeOuId, type Desfecho, type Implantacao } from "./base";
 
@@ -176,13 +177,16 @@ function regraDaMetaEmTexto(r: Pick<RegraDeConversaoMeta, "enabled" | "metaEvent
  */
 export async function verConversoes(c: Implantacao, demonstracao: boolean): Promise<Record<string, unknown>> {
   const semana = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const [meta, google, funis, regrasMeta, regrasGoogle, chave, envios, recusas] = await Promise.all([
+  const [meta, google, funis, regrasMeta, regrasGoogle, chave, identidade, envios, recusas] = await Promise.all([
     lerEstadoDaConexao(c.admin, c.orgId, "meta_ads"),
     lerEstadoDaConexaoGoogle(c.admin, c.orgId),
     lerFunisDaRegua(c.admin, c.orgId),
     listarRegrasMeta(c.admin, c.orgId),
     listarRegrasGoogle(c.admin, c.orgId),
     lerChaveDeFormulario(c.admin, c.orgId),
+    // Upstream 1.70 (#2197): a Página ou a conta do WhatsApp Business que a Meta
+    // cobra na venda vinda de anúncio clique-para-WhatsApp. A mesma leitura do envio.
+    lerIdentidadeDaMeta(c.admin, c.orgId),
     c.admin
       .from("ad_conversion_dispatches")
       .select("lead_id, platform, event_name, meta_event_name, status, reason, detail, value_cents, attempted_at")
@@ -218,6 +222,16 @@ export async function verConversoes(c: Implantacao, demonstracao: boolean): Prom
         conta: google.customerId,
         envio_ligado: google.habilitada,
         tem_acao_de_venda: Boolean(google.conversionActionId),
+      },
+      // Identificador, não segredo: aparece aqui para o implantador saber se
+      // falta. Quem preenche é a pessoa, junto da credencial.
+      identidade_da_meta: {
+        pagina_id: identidade.pageId,
+        conta_do_whatsapp_business_id: identidade.whatsappBusinessAccountId,
+        preenchida: identidade.pageId !== null || identidade.whatsappBusinessAccountId !== null,
+        para_que:
+          "A Meta recusa a venda vinda de anúncio clique-para-WhatsApp sem o ID da Página ou o da conta do WhatsApp Business. " +
+          "Uma pessoa preenche em Configurações › Conversões, no cartão da identidade da Meta.",
       },
       como_conectar:
         "Credencial não entra por ferramenta: uma pessoa preenche em Configurações › Conversões (/app/settings/conversoes).",

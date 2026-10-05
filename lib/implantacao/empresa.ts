@@ -12,7 +12,16 @@
  *   distribuição       `atendimentoConfigPatchSchema` e
  *                      `mesclarSettingsDeAtendimento` (`lib/schemas/routing.ts`),
  *                      a mescla de `PATCH /api/v1/settings/routing`: quem recebe
- *                      o cliente novo e o que cada atendente enxerga.
+ *                      o cliente novo e o que cada atendente enxerga. Desde o
+ *                      upstream 1.70 a mesma régua carrega o modo por menor
+ *                      carga (`load`, #1711) e quanto a IA espera depois de uma
+ *                      resposta pelo celular (`manual_reply_silence_minutes`,
+ *                      #2005).
+ *   quem fala          `assinaturaEntradaSchema` e `configAssinatura`
+ *                      (`lib/messaging/assinatura.ts`), a régua de
+ *                      `PATCH /api/v1/settings/assinatura` (upstream 1.70,
+ *                      #2079): o nome de quem fala, em negrito, na linha de cima
+ *                      da mensagem que vai ao cliente.
  *
  * ── O que é diferente da tela, e por quê ──────────────────────────────────
  *
@@ -23,12 +32,16 @@
  */
 import { audit } from "@/lib/audit";
 import { lerModoDeVenda } from "@/lib/empresas/modo-de-venda";
+import { PRAZO_MAX_MINUTOS, PRAZO_MIN_MINUTOS } from "@/lib/escalacao/devolucao-automatica";
 import { paisesOferecidos } from "@/lib/legal/perfil-do-pais";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
+import { assinaturaEntradaSchema, configAssinatura } from "@/lib/messaging/assinatura";
 import {
   atendimentoConfigPatchSchema,
   mesclarSettingsDeAtendimento,
+  ROUTING_MODES,
   routingConfigSchema,
+  type RoutingMode,
 } from "@/lib/schemas/routing";
 import { tenantSchema } from "@/lib/schemas/settings";
 import { DEFAULT_VISIBILITY_MODE } from "@/lib/auth/types";
@@ -195,14 +208,40 @@ export async function configurarEmpresa(
 // distribuição do atendimento
 // ---------------------------------------------------------------------------
 
+/** Quem fala, em negrito, na linha de cima da mensagem (`organizations.settings.assinatura_mensagens`). */
+export interface PedidoDeAssinatura {
+  /** Assina as mensagens das pessoas da equipe com o nome de quem respondeu. */
+  atendentes?: boolean;
+  /** Assina as mensagens da IA com `nome_da_ia`. */
+  ia?: boolean;
+  nome_da_ia?: string;
+}
+
+interface AssinaturaGravada {
+  humanos: boolean;
+  ia: boolean;
+  nome_ia: string;
+}
+
 export interface PedidoDeAtendimento {
-  /** `manual`: alguém assume cada conversa. `round_robin`: rodízio entre quem está de plantão. */
-  modo?: "manual" | "round_robin";
+  /**
+   * `manual`: alguém assume cada conversa. `round_robin`: rodízio entre quem
+   * está de plantão. `load`: vai para quem está com MENOS conversas, e o rodízio
+   * desempata (upstream 1.70, #1711).
+   */
+  modo?: RoutingMode;
   /** O que o papel Atendente enxerga: tudo, o que é dele e o que não tem dono, ou só o que é dele. */
   visibilidade?: "all" | "own_and_unassigned" | "own";
   /** Minutos sem sinal de uma pessoa até a conversa voltar para a IA. `null` = nunca volta sozinha. */
   devolver_para_a_ia_apos_minutos?: number | null;
   conversa_fica_com_quem_atendeu?: boolean;
+  /**
+   * Minutos que a IA fica calada depois que alguém da equipe responde por FORA
+   * do sistema (pelo celular). `null` = o padrão de 60 (upstream 1.70, #2005).
+   */
+  ia_espera_apos_resposta_pelo_celular_minutos?: number | null;
+  /** Só as chaves que vieram mudam (upstream 1.70, #2079). */
+  assinatura?: PedidoDeAssinatura;
 }
 
 export async function configurarAtendimento(
@@ -211,6 +250,12 @@ export async function configurarAtendimento(
 ): Promise<{ desfecho: Desfecho; mudancas: string[]; atendimento: Record<string, unknown> }> {
   let mudancas: string[] = [];
   let retrato: Record<string, unknown> = {};
+  // O que cada metade gravou, para a auditoria de cada uma sair com o nome que
+  // a rota dela dá (`routing.config_changed` e `settings.message_signature_updated`).
+  let distribuicao: Record<string, unknown> = {};
+  let mudouDistribuicao = false;
+  // `as` no inicializador: sem ele o TypeScript estreita para `null` e não vê a escrita feita dentro da função de mescla.
+  let assinaturaGravada = null as AssinaturaGravada | null;
 
   const { mudou } = await mudarSettingsDaOrganizacao(c.admin, c.orgId, (settings) => {
     const atual = routingConfigSchema.catch(routingConfigSchema.parse({})).parse(settings.routing ?? {});
@@ -225,29 +270,80 @@ export async function configurarAtendimento(
       ...(pedido.conversa_fica_com_quem_atendeu !== undefined
         ? { conversation_stays_with_attendant: pedido.conversa_fica_com_quem_atendeu }
         : {}),
+      ...(pedido.ia_espera_apos_resposta_pelo_celular_minutos !== undefined
+        ? { manual_reply_silence_minutes: pedido.ia_espera_apos_resposta_pelo_celular_minutos }
+        : {}),
       ...(pedido.visibilidade !== undefined ? { visibility_mode: pedido.visibilidade } : {}),
     });
     if (!lido.success) {
       throw new Recusa(
-        "A distribuição do atendimento não passou na conferência. `devolver_para_a_ia_apos_minutos` vai de 5 a 1440 (ou null para nunca devolver); " +
-          '`modo` é "manual" ou "round_robin"; `visibilidade` é "all", "own_and_unassigned" ou "own".',
+        "A distribuição do atendimento não passou na conferência. " +
+          `\`devolver_para_a_ia_apos_minutos\` e \`ia_espera_apos_resposta_pelo_celular_minutos\` vão de ${PRAZO_MIN_MINUTOS} a ${PRAZO_MAX_MINUTOS} (ou null); ` +
+          `\`modo\` é ${ROUTING_MODES.map((m) => `"${m}"`).join(", ")}; \`visibilidade\` é "all", "own_and_unassigned" ou "own".`,
       );
     }
 
-    const { settings: novo, routing } = mesclarSettingsDeAtendimento(settings, lido.data);
+    // Quem fala: o que está gravado, lido como o envio lê (`configAssinatura`),
+    // com o pedido por cima; o resultado passa pela régua da rota.
+    const assinaturaAtual = configAssinatura(settings);
+    let assinaturaPedida: AssinaturaGravada | null = null;
+    if (pedido.assinatura !== undefined) {
+      const conferida = assinaturaEntradaSchema.safeParse({
+        humanos: pedido.assinatura.atendentes ?? assinaturaAtual.humanos,
+        ia: pedido.assinatura.ia ?? assinaturaAtual.ia,
+        nome_ia: pedido.assinatura.nome_da_ia ?? assinaturaAtual.nomeIa,
+      });
+      if (!conferida.success) {
+        throw new Recusa(
+          "A assinatura de quem fala não passou na conferência. `assinatura.nome_da_ia` tem de 1 a 120 caracteres, sem asterisco e sem quebra de linha " +
+            '(o nome vai em negrito, numa linha só). Ex.: { "atendentes": true, "ia": true, "nome_da_ia": "Assistente Virtual" }.',
+        );
+      }
+      assinaturaPedida = conferida.data;
+    }
+    const assinaturaMudou =
+      assinaturaPedida !== null &&
+      (assinaturaPedida.humanos !== assinaturaAtual.humanos ||
+        assinaturaPedida.ia !== assinaturaAtual.ia ||
+        assinaturaPedida.nome_ia !== assinaturaAtual.nomeIa);
+
+    const { settings: mesclado, routing } = mesclarSettingsDeAtendimento(settings, lido.data);
+    // A chave da assinatura só é escrita quando MUDA: a organização que nunca a
+    // ligou não ganha a chave porque o pedido repetiu o padrão.
+    const novo: Record<string, unknown> = assinaturaMudou
+      ? { ...mesclado, assinatura_mensagens: assinaturaPedida }
+      : mesclado;
+
     mudancas = [];
     if (routing.mode !== atual.mode) mudancas.push("modo de distribuição");
     if (routing.handoff_return_after_minutes !== atual.handoff_return_after_minutes) mudancas.push("devolução para a IA");
     if (routing.conversation_stays_with_attendant !== atual.conversation_stays_with_attendant) {
       mudancas.push("conversa fica com quem atendeu");
     }
+    if (routing.manual_reply_silence_minutes !== atual.manual_reply_silence_minutes) {
+      mudancas.push("espera da IA depois de resposta pelo celular");
+    }
     const visibilidadeNova = (novo.visibility_mode as string | undefined) ?? DEFAULT_VISIBILITY_MODE;
     if (visibilidadeNova !== visibilidadeAtual) mudancas.push("visibilidade");
-    retrato = {
+    mudouDistribuicao = mudancas.length > 0;
+    if (assinaturaMudou) mudancas.push("assinatura de quem fala");
+    assinaturaGravada = assinaturaMudou ? assinaturaPedida : null;
+
+    const assinaturaFinal: AssinaturaGravada = assinaturaPedida ?? {
+      humanos: assinaturaAtual.humanos,
+      ia: assinaturaAtual.ia,
+      nome_ia: assinaturaAtual.nomeIa,
+    };
+    distribuicao = {
       modo: routing.mode,
       visibilidade: visibilidadeNova,
       devolver_para_a_ia_apos_minutos: routing.handoff_return_after_minutes,
       conversa_fica_com_quem_atendeu: routing.conversation_stays_with_attendant,
+      ia_espera_apos_resposta_pelo_celular_minutos: routing.manual_reply_silence_minutes,
+    };
+    retrato = {
+      ...distribuicao,
+      assinatura: { atendentes: assinaturaFinal.humanos, ia: assinaturaFinal.ia, nome_da_ia: assinaturaFinal.nome_ia },
     };
 
     // Uma organização que nunca abriu a tela não tem `settings.routing`: gravar
@@ -256,7 +352,7 @@ export async function configurarAtendimento(
     return novo;
   });
 
-  if (mudou) {
+  if (mudou && mudouDistribuicao) {
     void audit({
       action: "routing.config_changed",
       actorUserId: c.autorUserId,
@@ -264,7 +360,19 @@ export async function configurarAtendimento(
       resourceType: "organization",
       resourceId: c.orgId,
       requestId: c.requestId,
-      metadata: { ...retrato, via: "mcp_plataforma" },
+      metadata: { ...distribuicao, via: "mcp_plataforma" },
+    });
+  }
+  if (mudou && assinaturaGravada !== null) {
+    // A mesma linha de `PATCH /api/v1/settings/assinatura`.
+    void audit({
+      action: "settings.message_signature_updated",
+      actorUserId: c.autorUserId,
+      organizationId: c.orgId,
+      resourceType: "organization",
+      resourceId: c.orgId,
+      requestId: c.requestId,
+      metadata: { ...assinaturaGravada, via: "mcp_plataforma" },
     });
   }
 

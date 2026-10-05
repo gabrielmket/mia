@@ -15,7 +15,8 @@
  *      no mesmo número, vence a maior `priority` e, no empate, o mais antigo;
  *   3. dois ou mais agentes no MESMO número só dividem o atendimento de
  *      verdade com um roteador (IA › Roteadores), que classifica a intenção e
- *      escolhe. O roteador fica com o humano, pela tela.
+ *      escolhe. O roteador tem ferramenta própria desde a .73
+ *      (`lib/implantacao/roteador.ts`): nasce desligado, e ligar é pôr no ar.
  *
  * Então o desenho de implantação é: um agente por número, ou vários agentes em
  * números diferentes. Vários no mesmo número pedem roteador.
@@ -30,6 +31,18 @@
  *   publicar         `iaPodeIrAoAr` + `publishAgentVersion` (a função do banco
  *                    `fn_publish_ai_agent_version`): `POST .../publish`
  *   pausar           só `paused_at`: `POST .../pause`
+ *   limiar de        `agentPatchSchema` e a mescla de `config` com os padrões:
+ *   sentimento       `PATCH /api/v1/ai/agents/[id]` (upstream 1.71, #2216). Mora
+ *                    no CADASTRO (`ai_agents.config.sentiment_threshold`), não
+ *                    na versão: vale na hora, sem publicar.
+ *
+ * ── O aviso de fora do horário (upstream 1.72, #1926) ─────────────────────
+ *
+ * É um texto dentro do horário de atendimento da versão
+ * (`trigger_config.filters.business_hours.notice`), conferido pelo mesmo
+ * `versionCreateSchema`. Quem manda é o motor, no turno adiado, no máximo uma
+ * vez por contato por período fechado. A ferramenta só grava o texto no
+ * rascunho, e PRESERVA o que a tela gravou quando o pedido muda só o horário.
  *
  * ── A IA do agente é da PLATAFORMA ────────────────────────────────────────
  *
@@ -56,6 +69,8 @@ import {
 } from "@/lib/ai/agents/validation";
 import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
 import { capacidadesPadraoDoOnboarding } from "@/lib/ai/agents/capacidades-padrao";
+import { AGENT_CONFIG_DEFAULTS, agentPatchSchema } from "@/lib/ai/guardrails-schema";
+import { DEFAULT_SENTIMENT_THRESHOLD } from "@/lib/ai/prompts/sentiment";
 import { iaPodeIrAoAr, travarIaDaVersaoNova } from "@/lib/ai/trava-da-ia";
 import { audit } from "@/lib/audit";
 import { listSelectableChannels, type SelectableChannel } from "@/lib/channels/selectable";
@@ -80,7 +95,7 @@ import { capacidadesOferecidas, montarCapacidades } from "./capacidades";
 const QUEM_NAO_ESCOLHE_IA = { is_platform_admin: false, support: null } as const;
 
 const COLUNAS_DO_AGENTE =
-  "id, organization_id, name, description, kind, priority, is_active, is_default, published_version_id, paused_at, archived_at, created_at";
+  "id, organization_id, name, description, kind, priority, is_active, is_default, published_version_id, paused_at, archived_at, config, created_at";
 
 const COLUNAS_DA_VERSAO =
   "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, created_at, pipeline_ids, knowledge_source_ids, inbound_debounce_ms";
@@ -146,7 +161,15 @@ export interface LinhaDoAgente {
   published_version_id: string | null;
   paused_at: string | null;
   archived_at: string | null;
+  /** Os ajustes do CADASTRO (não da versão): é onde mora o limiar de sentimento. */
+  config?: Record<string, unknown> | null;
   created_at: string;
+}
+
+/** O limiar de sentimento em vigor: o gravado no cadastro, ou o padrão que o worker usa. */
+export function limiarDeSentimentoDo(agente: Pick<LinhaDoAgente, "config">): number {
+  const gravado = (agente.config ?? {}).sentiment_threshold;
+  return typeof gravado === "number" ? gravado : DEFAULT_SENTIMENT_THRESHOLD;
 }
 
 export type LinhaDaVersao = Record<(typeof CAMPOS_DA_VERSAO)[number], unknown> & {
@@ -181,6 +204,16 @@ export interface PedidoDeAgente {
   tamanho_da_mensagem?: number;
   espera_por_rajada_ms?: number | null;
   horario_de_atendimento?: { inicio: string; fim: string; dias: number[]; fuso?: string } | null;
+  /**
+   * O texto mandado a quem escreve FORA do horário de atendimento (upstream
+   * 1.72, #1926). `null` apaga. Ausente: fica o que está gravado.
+   */
+  aviso_fora_do_horario?: string | null;
+  /**
+   * A nota de clima (0 a 1) abaixo da qual a conversa passa para uma pessoa
+   * (upstream 1.71, #2216). Mora no cadastro do agente e vale na hora.
+   */
+  limiar_de_sentimento?: number;
   /** Id, nome ou telefone de um número já conectado. */
   numero?: string | null;
   max_passos?: number;
@@ -500,6 +533,9 @@ async function montarVersao(
   if (pedido.horario_de_atendimento !== undefined) {
     const anterior = (corpo.trigger_config as Record<string, unknown> | null | undefined) ?? {};
     const filtros = (anterior.filters as Record<string, unknown> | undefined) ?? {};
+    // O aviso de fora do horário mora DENTRO do horário (`notice`). Trocar a
+    // janela não pode apagar o texto que alguém escreveu, pela tela ou por aqui.
+    const horarioAnterior = (filtros.business_hours as Record<string, unknown> | null | undefined) ?? null;
     corpo.trigger_config = {
       events: anterior.events ?? ["message"],
       concurrency: anterior.concurrency ?? "one_per_conversation",
@@ -515,9 +551,33 @@ async function montarVersao(
                 start: pedido.horario_de_atendimento.inicio,
                 end: pedido.horario_de_atendimento.fim,
                 weekdays: pedido.horario_de_atendimento.dias,
+                ...(horarioAnterior !== null && "notice" in horarioAnterior ? { notice: horarioAnterior.notice } : {}),
               },
       },
     };
+  }
+
+  if (pedido.aviso_fora_do_horario !== undefined) {
+    const gatilho = (corpo.trigger_config as Record<string, unknown> | null | undefined) ?? null;
+    const filtros = (gatilho?.filters as Record<string, unknown> | undefined) ?? {};
+    const horario = (filtros.business_hours as Record<string, unknown> | null | undefined) ?? null;
+    if (horario === null) {
+      // Sem janela não existe "fora dela": o motor nem adia o turno.
+      if (pedido.aviso_fora_do_horario !== null) {
+        throw new Recusa(
+          "O aviso de fora do horário só existe para agente que tem horário de atendimento, e este responde a qualquer hora. " +
+            'Informe `horario_de_atendimento` na mesma chamada. Ex.: { "horario_de_atendimento": { "inicio": "08:00", "fim": "18:00", "dias": [1,2,3,4,5] }, ' +
+            '"aviso_fora_do_horario": "Recebemos sua mensagem. Nosso atendimento volta às 8h." }.',
+        );
+      }
+    } else if (pedido.aviso_fora_do_horario !== null || (horario.notice ?? null) !== null) {
+      // `null` só é gravado quando havia um texto para apagar: o rascunho que
+      // nunca teve aviso não muda por um pedido de "sem aviso".
+      corpo.trigger_config = {
+        ...gatilho,
+        filters: { ...filtros, business_hours: { ...horario, notice: pedido.aviso_fora_do_horario } },
+      };
+    }
   }
 
   if (pedido.numero !== undefined) {
@@ -529,6 +589,53 @@ async function montarVersao(
   // `trigger_config` nulo vindo do banco não é o mesmo que ausente para o schema.
   if (corpo.trigger_config === null) delete corpo.trigger_config;
   return corpo;
+}
+
+/** O horário de atendimento de um `trigger_config`, ou `null`. */
+function horarioDoGatilho(gatilho: unknown): Record<string, unknown> | null {
+  const filtros = (gatilho as { filters?: { business_hours?: unknown } } | null | undefined)?.filters;
+  const horario = filtros?.business_hours;
+  return horario && typeof horario === "object" ? (horario as Record<string, unknown>) : null;
+}
+
+/** O que mudou no gatilho, nas palavras de quem configura: a janela, o aviso, ou os dois. */
+function rotulosDoGatilho(antes: unknown, depois: unknown): string[] {
+  const semAviso = (h: Record<string, unknown> | null) => {
+    if (h === null) return null;
+    const { notice: _aviso, ...janela } = h;
+    return janela;
+  };
+  const a = horarioDoGatilho(antes);
+  const d = horarioDoGatilho(depois);
+  const rotulos: string[] = [];
+  if (!mesmoConteudo(semAviso(a), semAviso(d))) rotulos.push("horário de atendimento");
+  if (((a?.notice as string | null | undefined) ?? null) !== ((d?.notice as string | null | undefined) ?? null)) {
+    rotulos.push("aviso de fora do horário");
+  }
+  return rotulos.length > 0 ? rotulos : ["horário de atendimento"];
+}
+
+/**
+ * O `config` do cadastro com o limiar pedido, ou `null` quando não há o que
+ * gravar. A MESMA mescla do `PATCH /api/v1/ai/agents/[id]`: os padrões, o que
+ * está gravado e o pedido por cima, conferido por `agentPatchSchema`.
+ *
+ * Limiar igual ao que vale hoje (o gravado, ou o padrão de quem nunca mexeu)
+ * não escreve: o agente que nunca foi configurado não ganha a chave por um
+ * pedido que repete o padrão.
+ */
+function configComLimiar(
+  agente: Pick<LinhaDoAgente, "config">,
+  limiar: number | undefined,
+): Record<string, unknown> | null {
+  if (limiar === undefined || limiar === limiarDeSentimentoDo(agente)) return null;
+  const conferido = agentPatchSchema.safeParse({ config: { sentiment_threshold: limiar } });
+  if (!conferido.success) {
+    throw new Recusa(
+      "`limiar_de_sentimento` vai de 0 a 1 (ex.: 0.3, o padrão). Nota mais alta passa mais conversas para uma pessoa; mais baixa deixa só a hostilidade forte acionar a passagem.",
+    );
+  }
+  return { ...AGENT_CONFIG_DEFAULTS, ...((agente.config ?? {}) as Record<string, unknown>), ...conferido.data.config };
 }
 
 function recusaDoSchema(erro: { issues: Array<{ path: PropertyKey[]; message: string }> }): never {
@@ -544,6 +651,9 @@ function recusaDoSchema(erro: { issues: Array<{ path: PropertyKey[]; message: st
       priority: "`prioridade` vai de 0 a 1000.",
     };
     const campo = String(i.path[i.path[0] === "version" ? 1 : 0] ?? "");
+    if (caminho.endsWith("business_hours.notice")) {
+      return "`aviso_fora_do_horario` aceita até 1000 caracteres.";
+    }
     if (caminho.includes("business_hours") || caminho.includes("send_window")) {
       return 'O horário usa "HH:MM" de 24 horas e dias de 0 (domingo) a 6 (sábado), com o fim depois do início. Ex.: { "inicio": "08:00", "fim": "18:00", "dias": [1,2,3,4,5] }.';
     }
@@ -582,7 +692,7 @@ async function inserirVersao(
         model: v.model,
         credential_id: v.credential_id,
         tool_ids: v.tool_ids,
-        ...(v.trigger_config ? { trigger_config: v.trigger_config } : {}),
+        trigger_config: v.trigger_config ?? undefined,
         channel_session_id: v.channel_session_id,
         max_steps: v.max_steps,
         token_budget: v.token_budget,
@@ -718,6 +828,18 @@ export async function garantirAgente(
       metadata: { kind: "mcp_agent", first_version_id: linhaDaVersao.id, priority: entrada.priority, via: "mcp_plataforma" },
     });
 
+    // O limiar de sentimento é do cadastro: entra depois de o agente nascer, pela
+    // mesma mescla de `config` do PATCH da tela.
+    const configDoNovo = configComLimiar(linhaDoAgente, pedido.limiar_de_sentimento);
+    if (configDoNovo) {
+      const { error } = await c.admin
+        .from("ai_agents")
+        .update({ config: configDoNovo })
+        .eq("id", linhaDoAgente.id)
+        .eq("organization_id", c.orgId);
+      if (error) throw new Error(`o agente nasceu, mas não consegui gravar o limiar de sentimento: ${error.message}. Chame de novo.`);
+    }
+
     return {
       agente: { id: linhaDoAgente.id, nome: linhaDoAgente.name, desfecho: "criou", mudancas: [] },
       versao: { id: linhaDaVersao.id, numero: linhaDaVersao.version_number, situacao: "rascunho", desfecho: "criou", mudancas: [] },
@@ -747,6 +869,16 @@ export async function garantirAgente(
   if (pedido.prioridade !== undefined && agente.priority !== pedido.prioridade) {
     patchDoAgente.priority = pedido.prioridade;
     mudancasDoAgente.push("prioridade");
+  }
+  const configNova = configComLimiar(agente, pedido.limiar_de_sentimento);
+  if (configNova) {
+    patchDoAgente.config = configNova;
+    mudancasDoAgente.push("limiar de sentimento");
+    if (estadoDoAgente(agente) === "no_ar") {
+      avisos.push(
+        "O limiar de sentimento é do cadastro do agente, não do rascunho: já vale para a próxima mensagem que tiver o clima medido, sem publicar.",
+      );
+    }
   }
   if (Object.keys(patchDoAgente).length > 0) {
     const { error } = await c.admin
@@ -783,7 +915,16 @@ export async function garantirAgente(
   const mudou = referencia
     ? CAMPOS_DA_VERSAO.filter((campo) => !mesmoConteudo(referencia[campo], (desejada as Record<string, unknown>)[campo]))
     : [...CAMPOS_DA_VERSAO];
-  const mudancasDaVersao = [...new Set(mudou.map((campo) => ROTULO_DO_CAMPO[campo] ?? campo))];
+  const mudancasDaVersao = [
+    ...new Set(
+      mudou.flatMap((campo) =>
+        // O gatilho carrega duas coisas que a pessoa enxerga separadas: a janela e o aviso.
+        campo === "trigger_config" && referencia
+          ? rotulosDoGatilho(referencia.trigger_config, desejada.trigger_config)
+          : [ROTULO_DO_CAMPO[campo] ?? campo],
+      ),
+    ),
+  ];
 
   let versaoFinal: LinhaDaVersao;
   let desfechoDaVersao: Desfecho;
@@ -1046,7 +1187,7 @@ export async function publicarAgente(
     if (noMesmoNumero.length > 0) {
       avisos.push(
         `Há ${noMesmoNumero.length + 1} agentes publicados no número «${canal.display_name}». Sem roteador, só o de maior prioridade responde. ` +
-          "Para dividir o atendimento entre eles, uma pessoa cria o roteador em IA › Roteadores (/app/ai/routers).",
+          "Para dividir o atendimento entre eles, monte o roteador de intenção com plataforma_garantir_roteador e ligue com plataforma_ligar_roteador.",
       );
     }
   }
