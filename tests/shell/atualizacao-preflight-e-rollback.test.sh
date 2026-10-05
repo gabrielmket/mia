@@ -40,6 +40,23 @@ RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NS="$(sed -n 's/^IMG_NS="\(.*\)"$/\1/p' "$RAIZ/hostgator-setup-kit/_common.sh" | head -1)"
 [ -n "$NS" ] || { echo "não consegui ler IMG_NS de _common.sh"; exit 1; }
 export NS
+# FORK MIA — os NOMES das quatro imagens também saem da fonte. O upstream os
+# repete aqui (`deskcommcrm`, `deskcomm-worker`...). Num fork que publica com
+# outros nomes (este: `mia-crm`, `mia-worker`...), o `.env` de mentira nascia com
+# imagens que o kit não escreve e o dublê do registro vigiava um pacote que o
+# kit nunca consulta: três casos vermelhos sem defeito nenhum no kit. Lendo de
+# `_common.sh`, o teste mede o kit DESTA árvore, com os nomes que forem.
+nome_da_imagem() {  # nome_da_imagem IMG_APP → o nome sem o namespace
+  sed -n "s|^$1=\"\${IMG_NS}/\(.*\)\"\$|\1|p" "$RAIZ/hostgator-setup-kit/_common.sh" | head -1
+}
+N_APP="$(nome_da_imagem IMG_APP)"
+N_WORKER="$(nome_da_imagem IMG_WORKER)"
+N_SCHEDULER="$(nome_da_imagem IMG_SCHEDULER)"
+N_VOZ="$(nome_da_imagem IMG_VOICE_AGENT)"
+if [ -z "$N_APP" ] || [ -z "$N_WORKER" ] || [ -z "$N_SCHEDULER" ] || [ -z "$N_VOZ" ]; then
+  echo "não consegui ler os nomes das imagens de _common.sh"; exit 1
+fi
+export N_APP N_WORKER N_SCHEDULER N_VOZ
 
 falhas=0
 ok()  { printf '  ✓ %s\n' "$1"; }
@@ -110,7 +127,7 @@ case "${1:-}" in
     # cuja publicação TERMINOU (`$DUB/voz-pronta` é o interruptor do caso 4).
     [ -f "$DUB/registro" ] || exit 1
     case "$*" in
-      *deskcomm-voice-agent*) [ -f "$DUB/voz-pronta" ] || exit 1 ;;
+      *"$N_VOZ"*) [ -f "$DUB/voz-pronta" ] || exit 1 ;;
     esac
     exit 0 ;;
 esac
@@ -205,13 +222,13 @@ STUB
   # de qualquer construção e o caso 3 (controle) mediria outra coisa.
   cp "$RAIZ/docker-compose.build.yml" "$proj/"
   cat > "$proj/.env" <<ENV
-APP_IMAGE=${NS}/deskcommcrm:0.8.0
+APP_IMAGE=${NS}/${N_APP}:0.8.0
 APP_PULL_POLICY=missing
-WORKER_IMAGE=${NS}/deskcomm-worker:0.8.0
+WORKER_IMAGE=${NS}/${N_WORKER}:0.8.0
 WORKER_PULL_POLICY=missing
-SCHEDULER_IMAGE=${NS}/deskcomm-scheduler:0.8.0
+SCHEDULER_IMAGE=${NS}/${N_SCHEDULER}:0.8.0
 SCHEDULER_PULL_POLICY=missing
-VOICE_AGENT_IMAGE=${NS}/deskcomm-voice-agent:0.8.0
+VOICE_AGENT_IMAGE=${NS}/${N_VOZ}:0.8.0
 VOICE_AGENT_PULL_POLICY=missing
 WAHA_IMAGE=devlikeapro/waha:latest-2026.7.2
 SUPABASE_DB_URL=postgresql://x/y
@@ -285,7 +302,7 @@ if grep -qE ' stop | up -d| rm -f' "$DOCKER_LOG"; then
 else
   ok "nenhum serviço foi parado, recriado ou removido"
 fi
-if grep -q "^APP_IMAGE=$NS/deskcommcrm:0.8.0$" "$R1/deskcommcrm/.env"; then
+if grep -q "^APP_IMAGE=$NS/$N_APP:0.8.0$" "$R1/deskcommcrm/.env"; then
   ok "o .env segue apontando para a versão de antes (0.8.0)"
 else
   nao ".env intocado" "APP_IMAGE=:0.8.0" "$(grep '^APP_IMAGE=' "$R1/deskcommcrm/.env")"
@@ -375,7 +392,7 @@ if grep -qE ' (created|exited)$' "$DUB/estado.txt"; then
 else
   ok "app, worker, scheduler e proxy saíram SAUDÁVEIS"
 fi
-if grep -q "^APP_IMAGE=$NS/deskcommcrm:0.9.0$" "$R3/deskcommcrm/.env"; then
+if grep -q "^APP_IMAGE=$NS/$N_APP:0.9.0$" "$R3/deskcommcrm/.env"; then
   ok "sem rollback: o .env ficou na versão nova (0.9.0)"
 else
   nao ".env na versão nova" "APP_IMAGE=:0.9.0" "$(grep '^APP_IMAGE=' "$R3/deskcommcrm/.env")"
@@ -418,8 +435,8 @@ for jeito in exited some; do
   else
     nao "worker $jeito acusado" "RC≠0 e 'NÃO subiram: worker'" "RC $RC5; $(tail -2 "$OUT5" | tr '\n' ' ')"
   fi
-  if grep -q "^APP_IMAGE=$NS/deskcommcrm:0.8.0$" "$R5/deskcommcrm/.env" \
-     && grep -q "^WORKER_IMAGE=$NS/deskcomm-worker:0.8.0$" "$R5/deskcommcrm/.env"; then
+  if grep -q "^APP_IMAGE=$NS/$N_APP:0.8.0$" "$R5/deskcommcrm/.env" \
+     && grep -q "^WORKER_IMAGE=$NS/$N_WORKER:0.8.0$" "$R5/deskcommcrm/.env"; then
     ok "worker $jeito: os pins voltaram para a versão anterior (0.8.0)"
   else
     nao "worker $jeito: pins de volta" "…:0.8.0" "$(grep -E '^(APP|WORKER)_IMAGE=' "$R5/deskcommcrm/.env" | tr '\n' ' ')"
