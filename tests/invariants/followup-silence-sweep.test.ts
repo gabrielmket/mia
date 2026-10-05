@@ -1146,7 +1146,15 @@ describe("dedup 0062 — >1 enrollment vivo pro mesmo (org,contact) vira 1 vivo 
 
 // ---- pausa de reentrada e pessoa no comando (lib/followup/pausa-de-reentrada.ts) ----
 
-/** Uma inscrição ENCERRADA deste fluxo, terminada há `agoMinutes`. */
+/**
+ * Uma inscrição ENCERRADA deste fluxo, terminada há `agoMinutes`.
+ *
+ * FORK MIA: a inscrição COMEÇA antes de terminar (`started_at` 30 min antes do
+ * fim). Sem isso o `started_at` ficava no padrão `now()`, posterior ao fim, e
+ * a regra da MIA "uma inscrição por silêncio" (`jaInscritosNesteSilencio`,
+ * que compara o início da inscrição com a última mensagem do contato) lia uma
+ * inscrição que nunca existiria: começada depois da resposta que a encerrou.
+ */
 async function seedEncerrada(
   org: string,
   pointerId: string,
@@ -1157,8 +1165,8 @@ async function seedEncerrada(
 ): Promise<void> {
   await pool.query(
     `insert into followup_enrollments
-       (organization_id, pointer_id, version_id, contact_id, current_node_id, status, next_eval_at, completed_at, updated_at)
-     values ($1, $2, $3, $4, 't1', $5, null, now() - interval '${agoMinutes} minutes', now() - interval '${agoMinutes} minutes')`,
+       (organization_id, pointer_id, version_id, contact_id, current_node_id, status, next_eval_at, started_at, completed_at, updated_at)
+     values ($1, $2, $3, $4, 't1', $5, null, now() - interval '${agoMinutes + 30} minutes', now() - interval '${agoMinutes} minutes', now() - interval '${agoMinutes} minutes')`,
     [org, pointerId, versionId, contactId, status],
   );
 }

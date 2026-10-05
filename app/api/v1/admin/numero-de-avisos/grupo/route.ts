@@ -23,7 +23,8 @@ import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { falhaDaEscritaDePlatformAdmin, requirePlatformAdminEscrita, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import type { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { falhaDaEscritaDePlatformAdmin, requirePlatformAdminEscrita } from "@/lib/auth/requirePlatformAdmin";
 import { CHAVE_DO_GRUPO, pareceGrupo } from "@/lib/avisos/destino-do-aviso";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
