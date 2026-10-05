@@ -322,12 +322,18 @@ describe("API REST de agentes", () => {
     expect(iaGravada()).toEqual(ATAQUE);
   });
 
-  it("POST /agents legado: o modelo do cadastro do cliente fica no padrão", async () => {
+  it("POST /agents legado: o modelo do cliente não vale — o cadastro e a v1 nascem com a IA da plataforma", async () => {
+    // Desde a 1.73 do upstream o corpo legado também nasce com versão (issue
+    // #1357): o `model` dele vira o modelo da v1, a trava o troca pelo par da
+    // plataforma, e o cadastro do agente espelha a v1.
     await criarAgente(
       req("/api/v1/ai/agents", "POST", { name: "Legado novo", model: "anthropic/claude-opus-4-7" }),
     );
     const ins = estado.banco.escritas.filter((e) => e.tabela === "ai_agents" && e.op === "insert").at(-1)!;
-    expect(ins.linhas[0]!.model).toBe("anthropic/claude-sonnet-5");
+    expect(ins.linhas[0]!.model).toBe("openai/luna");
+    const v1 = estado.banco.escritas.filter((e) => e.tabela === "ai_agent_versions" && e.op === "insert").at(-1)!;
+    expect(v1.linhas[0]!.provider).toBe("openai");
+    expect(v1.linhas[0]!.model).toBe("luna");
   });
 
   it("PATCH /agents/:id: o cliente não troca modelo do cadastro nem modelo de voz", async () => {

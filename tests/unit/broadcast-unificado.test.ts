@@ -28,7 +28,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { requireRole } from "@/lib/auth/require-role";
 import type * as AuthServer from "@/lib/auth/server";
-import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
+import { loadAuthUser, mfaEmDivida, orgAtivaSemPortao, resolveActiveOrg } from "@/lib/auth/server";
 import type { AuthUser } from "@/lib/auth/types";
 import {
   moduloExigidoPeloRecurso,
@@ -43,7 +43,16 @@ import { createClient } from "@/lib/supabase/server";
 
 vi.mock("@/lib/auth/server", async (importOriginal) => {
   const real = await importOriginal<typeof AuthServer>();
-  return { ...real, loadAuthUser: vi.fn(), resolveActiveOrg: vi.fn(), mfaEmDivida: vi.fn(), requireAuth: vi.fn() };
+  return {
+    ...real,
+    loadAuthUser: vi.fn(),
+    resolveActiveOrg: vi.fn(),
+    // Desde a 1.70 do upstream o `requireRole` lê a org ativa por aqui (sem o
+    // portão que redireciona a org suspensa) e recusa a org não operante.
+    orgAtivaSemPortao: vi.fn(),
+    mfaEmDivida: vi.fn(),
+    requireAuth: vi.fn(),
+  };
 });
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({
@@ -193,6 +202,7 @@ function preparar(liberado: boolean) {
     organizations: [],
   } as unknown as AuthUser);
   vi.mocked(resolveActiveOrg).mockResolvedValue({ orgId: ORG, name: "Org", role: "manager" });
+  vi.mocked(orgAtivaSemPortao).mockResolvedValue({ orgId: ORG, name: "Org", role: "manager", org_status: "active" });
   vi.mocked(mfaEmDivida).mockResolvedValue(false);
   vi.mocked(createClient).mockResolvedValue(banco.cliente as unknown as Awaited<ReturnType<typeof createClient>>);
   return banco;

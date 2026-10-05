@@ -74,6 +74,9 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/auth/server", () => ({
   loadAuthUser: async () => sessao.usuario,
   resolveActiveOrg: async () => sessao.org,
+  // Desde a fusão da 1.73 o operador lê a org ativa sem o portão da suspensão
+  // (o documento legal vale também para a empresa suspensa).
+  orgAtivaSemPortao: async () => sessao.org,
 }));
 
 vi.mock("@/lib/branding", () => ({ branding: () => ({ name: "MIA" }) }));

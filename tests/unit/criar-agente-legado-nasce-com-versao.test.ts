@@ -40,6 +40,13 @@ vi.mock("@/lib/api/auth-dual", () => ({
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
+// FORK MIA: a rota passa o corpo pela trava da IA (`lib/ai/trava-da-ia.ts`), e
+// quem não é da plataforma não escolhe o modelo. Este teste prova o caminho do
+// corpo legado com o modelo que veio nele, então quem pede é a plataforma
+// (acesso completo). A trava para o cliente está em `trava-da-ia-portas.test.ts`.
+vi.mock("@/lib/ai/trava-da-ia-na-rota", () => ({
+  quemPedeNaRota: vi.fn(async () => ({ is_platform_admin: true, platform_admin_scope: "full", support: null })),
+}));
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const USER = "11111111-1111-4111-8111-111111111111";
