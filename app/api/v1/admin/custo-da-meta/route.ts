@@ -22,13 +22,22 @@ import { audit } from "@/lib/audit";
 import { falhaDaEscritaDePlatformAdmin, requirePlatformAdminEscrita, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { calcularCusto, type ContagemPorCategoria } from "@/lib/channels/meta/custo-da-conversa";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { excluirDemonstracao, idsDasEmpresasDeDemonstracao } from "@/lib/demonstracao/fora-das-metricas";
 
 export const dynamic = "force-dynamic";
 
-/** Teto da varredura. Uma instalação com mais que isso num mês pede agregação no banco. */
-const LIMITE = 50_000;
+/**
+ * Teto da varredura: 50 páginas de 1000. Uma instalação com mais que isso num
+ * mês pede agregação no banco.
+ *
+ * ⚠️ PAGINADO. O `.limit(50_000)` que estava aqui nunca trouxe 50 mil linhas: o
+ * PostgREST corta toda resposta em 1000 sem avisar, a conta do mês saía de 1000
+ * mensagens, e o `truncado` (que comparava com 50.000) nunca ligava. O laço é o
+ * de `lib/leitura/todas-as-paginas.ts`.
+ */
+const PAGINAS_MAXIMAS = 50;
 
 const precosSchema = z.object({
   precos: z
@@ -91,20 +100,32 @@ export async function GET(req: NextRequest): Promise<Response> {
     return fail("db_error", (e as Error).message, 500, { requestId });
   }
 
-  const [{ data: linhas, error }, { data: precos }, { data: orgs }] = await Promise.all([
-    excluirDemonstracao(
-      admin
-        .from("messages")
-        .select("organization_id, meta_pricing_category")
-        .eq("meta_billable", true)
-        .gte("created_at", inicio)
-        .lt("created_at", fim),
-      demonstracao,
-    ).limit(LIMITE),
+  const [cobradas, { data: precos }, { data: orgs }] = await Promise.all([
+    lerTodasAsPaginas<{ organization_id: string; meta_pricing_category: string | null }>(
+      (de, ate, pedirContagem) =>
+        excluirDemonstracao(
+          admin
+            .from("messages")
+            .select(
+              "organization_id, meta_pricing_category",
+              pedirContagem ? { count: "exact" } : undefined,
+            )
+            .eq("meta_billable", true)
+            .gte("created_at", inicio)
+            .lt("created_at", fim),
+          demonstracao,
+        )
+          // Ordem única, que é o que deixa o `range` correto entre as páginas.
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(de, ate),
+      { paginasMaximas: PAGINAS_MAXIMAS },
+    ),
     admin.from("platform_precos_meta").select("categoria, centavos_brl"),
     admin.from("organizations").select("id, display_name").is("redacted_at", null),
   ]);
-  if (error) return fail("db_error", error.message, 500, { requestId });
+  if (cobradas.erro) return fail("db_error", cobradas.erro, 500, { requestId });
+  const linhas = cobradas.linhas;
 
   const tabela = (precos ?? []) as Array<{ categoria: string; centavos_brl: number }>;
   const nome = new Map(
@@ -118,10 +139,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   // função no banco para uma tela de painel que lê um mês é mais peça para
   // manter do que a pergunta merece. O teto acima é o que mantém isso honesto.
   const porOrg = new Map<string, Map<string, number>>();
-  for (const l of (linhas ?? []) as Array<{
-    organization_id: string;
-    meta_pricing_category: string | null;
-  }>) {
+  for (const l of linhas) {
     // Cobrada sem categoria é a Meta mudando o formato outra vez. Vira uma
     // linha com nome próprio em vez de sumir na contagem.
     const categoria = l.meta_pricing_category ?? "sem_categoria";
@@ -148,7 +166,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   return ok(
     {
       mes: `${ano}-${String(m).padStart(2, "0")}`,
-      truncado: (linhas ?? []).length >= LIMITE,
+      truncado: cobradas.truncado,
       precos: tabela,
       clientes,
     },

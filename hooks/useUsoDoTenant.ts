@@ -16,6 +16,8 @@ export interface UsoDoTenant {
     truncado: boolean;
   };
   mensagens_cobradas: {
+    /** A leitura das mensagens cobradas foi cortada no teto de páginas da rota. */
+    truncado: boolean;
     total: number;
     /** Centavos de REAL, da tabela de preços da plataforma. */
     totalCentavos: number;

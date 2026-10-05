@@ -99,6 +99,13 @@ export function UsoDoTenant({ organizationId }: { organizationId: string }) {
               · {data.mensagens_cobradas.total} {t("cobradas")}
             </span>
           </p>
+          {data.mensagens_cobradas.truncado && (
+            <p className="text-error-fg">
+              {/* O mesmo aviso do custo de IA, acima: sem ele o número se lê
+                  como total. */}
+              {t("A leitura foi cortada — o custo real é maior.")}
+            </p>
+          )}
           <ul className="space-y-0.5 text-text-muted">
             {data.mensagens_cobradas.linhas.map((l) => (
               <li key={l.categoria}>
