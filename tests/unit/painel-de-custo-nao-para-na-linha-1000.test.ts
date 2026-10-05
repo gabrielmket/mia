@@ -186,3 +186,61 @@ describe("GET /api/v1/admin/tenants/[id]/usage", () => {
     expect(data.ia.chamadas).toBe(50_000);
   });
 });
+
+/**
+ * A fila morta mora no mesmo painel e tinha o mesmo defeito: `.limit(5_000)`,
+ * 1000 jobs de verdade, grupos contados sobre eles e um `truncado` que
+ * comparava com 5.000.
+ */
+describe("GET /api/v1/admin/fila-morta", () => {
+  const pedir = async () => {
+    const { GET } = await import("@/app/api/v1/admin/fila-morta/route");
+    return GET();
+  };
+
+  const morto = (i: number): Linha => ({
+    id: `job-${String(i).padStart(6, "0")}`,
+    organization_id: CLINICA,
+    kind: "agent_turn",
+    status: "dead",
+    last_error: "rate_limit_exceeded",
+    attempts: 5,
+    created_at: new Date(Date.now() - i * 1_000).toISOString(),
+  });
+
+  const banco = (mortos: number) =>
+    postgrestComTeto({
+      organizations: [{ id: CLINICA, display_name: "Clínica Modelo", demonstracao: false }],
+      job_queue: [
+        ...Array.from({ length: mortos }, (_, i) => morto(i)),
+        // Jobs vivos não entram na conta.
+        ...Array.from({ length: 300 }, (_, i) => ({ ...morto(900_000 + i), status: "pending" })),
+      ],
+    });
+
+  it("2.500 jobs mortos: os grupos somam os 2.500", async () => {
+    const db = banco(2_500);
+    ligar(db);
+
+    const res = await pedir();
+    expect(res.status).toBe(200);
+    const { data } = (await res.json()) as {
+      data: { total: number; truncado: boolean; grupos: Array<{ quantidade?: number; total?: number }> };
+    };
+
+    expect(data.total).toBe(2_500);
+    expect(data.truncado).toBe(false);
+    expect(db.pedidosEm("job_queue")).toBe(3);
+  });
+
+  it("acima do teto de páginas: o truncado que a tela já mostra passa a ligar", async () => {
+    const db = banco(5_001);
+    ligar(db);
+
+    const res = await pedir();
+    const { data } = (await res.json()) as { data: { total: number; truncado: boolean } };
+
+    expect(data.total).toBe(5_000);
+    expect(data.truncado).toBe(true);
+  });
+});

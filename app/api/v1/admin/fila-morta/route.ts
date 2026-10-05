@@ -25,14 +25,23 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { falhaDaEscritaDePlatformAdmin, requirePlatformAdminEscrita, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { agruparFilaMorta, type JobMorto } from "@/lib/operacao/fila-morta";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { excluirDemonstracao, idsDasEmpresasDeDemonstracao } from "@/lib/demonstracao/fora-das-metricas";
 
 export const dynamic = "force-dynamic";
 
-/** Teto da varredura. Rajada grande é comum; ler 5.000 já responde a pergunta. */
-const LIMITE = 5_000;
+/**
+ * Teto da varredura: 5 páginas de 1000. Rajada grande é comum; ler 5.000 já
+ * responde a pergunta.
+ *
+ * ⚠️ PAGINADO. O `.limit(5_000)` que estava aqui nunca trouxe 5.000 jobs: o
+ * PostgREST corta toda resposta em 1000 sem avisar, os grupos eram contados
+ * sobre 1000, e o `truncado` (que comparava com 5.000) nunca ligava. O laço é o
+ * de `lib/leitura/todas-as-paginas.ts`.
+ */
+const PAGINAS_MAXIMAS = 5;
 
 const corpoSchema = z.object({
   /** Os jobs a devolver. A tela manda o grupo inteiro. */
@@ -74,18 +83,27 @@ export async function GET(): Promise<Response> {
   } catch (e) {
     return fail("db_error", (e as Error).message, 500, { requestId });
   }
-  const { data, error } = await excluirDemonstracao(
-    admin
-      .from("job_queue")
-      .select("id, organization_id, kind, last_error, attempts, created_at")
-      .eq("status", "dead"),
-    demonstracao,
-  )
-    .order("created_at", { ascending: false })
-    .limit(LIMITE);
-  if (error) return fail("db_error", error.message, 500, { requestId });
+  const lido = await lerTodasAsPaginas<JobMorto>(
+    (de, ate, pedirContagem) =>
+      excluirDemonstracao(
+        admin
+          .from("job_queue")
+          .select(
+            "id, organization_id, kind, last_error, attempts, created_at",
+            pedirContagem ? { count: "exact" } : undefined,
+          )
+          .eq("status", "dead"),
+        demonstracao,
+      )
+        .order("created_at", { ascending: false })
+        // `id` desempata: paginar por `range` só é correto sobre uma ordem única.
+        .order("id", { ascending: false })
+        .range(de, ate),
+    { paginasMaximas: PAGINAS_MAXIMAS },
+  );
+  if (lido.erro) return fail("db_error", lido.erro, 500, { requestId });
 
-  const jobs = (data ?? []) as unknown as JobMorto[];
+  const jobs = lido.linhas;
   const grupos = agruparFilaMorta(jobs);
 
   // O nome do cliente, para o grupo dizer QUEM ficou sem resposta. Uma consulta
@@ -102,7 +120,7 @@ export async function GET(): Promise<Response> {
   return ok(
     {
       total: jobs.length,
-      truncado: jobs.length >= LIMITE,
+      truncado: lido.truncado,
       grupos: grupos.map((g) => ({
         ...g,
         organizacoes: g.organizacoes.map((id) => nome.get(id) ?? id),
