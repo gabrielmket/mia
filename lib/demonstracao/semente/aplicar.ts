@@ -189,6 +189,9 @@ const FUNIL_DO_NICHO: Record<NichoDeModelo, ChaveDoFunil> = {
   automotivo: "automotivo",
   academia: "academia",
   servicos_b2b: "servicos",
+  // A indústria vende para empresa: na bancada, os modelos dela ficam em
+  // rascunho no funil de serviços B2B (a demonstração própria tem o funil dela).
+  industria_b2b: "servicos",
 };
 
 // ─── a escrita ──────────────────────────────────────────────────────────────

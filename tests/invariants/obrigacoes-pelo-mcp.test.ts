@@ -375,7 +375,7 @@ describe("4 · os avisos são automações: os cinco gatilhos pelo MCP", () => {
       expect(automacoes.gatilhos_que_pedem_configuracao[gatilho], gatilho).toBeTruthy();
     }
     const obrigacoes = r.dados.obrigacoes as { segmentos: Array<{ id: string; tipos: Array<{ nome: string }> }> };
-    expect(obrigacoes.segmentos.map((s) => s.id)).toEqual(["servicos_b2b", "clinica", "imobiliaria", "automotivo", "academia"]);
+    expect(obrigacoes.segmentos.map((s) => s.id)).toEqual(["servicos_b2b", "clinica", "imobiliaria", "automotivo", "academia", "industria_b2b"]);
     // Nenhum modelo é documento de saúde (dado sensível).
     expect(obrigacoes.segmentos.flatMap((s) => s.tipos.map((t) => t.nome)).join(" | ")).not.toMatch(/atestado|exame|laudo m[eé]dico|laudo de sa[uú]de/i);
   });

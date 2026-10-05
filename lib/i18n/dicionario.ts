@@ -7901,6 +7901,8 @@ export const DICIONARIO: Traducoes = {
   "Serviços, agência ou obra": { es: "Servicios, agencia u obra" },
   "Curso, mentoria ou infoproduto": { es: "Curso, mentoría o infoproducto" },
   "Loja — online ou de rua": { es: "Tienda en línea o física" },
+  // FORK MIA (lib/onboarding/pacotes-da-mia.ts)
+  "Indústria ou distribuidora que vende para revendas": { es: "Industria o distribuidora que vende a revendedores" },
   "Outro tipo de negócio": { es: "Otro tipo de negocio" },
 
   // ─── Onboarding: tool catalog (capacidades) usadas em "Ele já vem sabendo" ───
@@ -13171,6 +13173,8 @@ export const DICIONARIO: Traducoes = {
   "Automotivo": { es: "Automotriz" },
   "Academias e bem-estar": { es: "Gimnasios y bienestar" },
   "Serviços B2B": { es: "Servicios B2B" },
+  "Indústria e distribuição B2B": { es: "Industria y distribución B2B" },
+  "Cotação": { es: "Cotización" },
   Retomada: { es: "Reactivación" },
   "Test drive": { es: "Prueba de manejo" },
   "Negociação": { es: "Negociación" },
@@ -13241,6 +13245,18 @@ export const DICIONARIO: Traducoes = {
   },
   "A reunião estava marcada e a pessoa não entrou. O fluxo oferece outro horário em vez de deixar a oportunidade esfriar.": {
     es: "La reunión estaba agendada y la persona no se conectó. El flujo ofrece otro horario en lugar de dejar que la oportunidad se enfríe.",
+  },
+  "A revenda ou o instalador pediu informação de produto, a conversa parou antes da cotação e ninguém voltou nela.": {
+    es: "La reventa o el instalador pidió información de producto, la conversación se detuvo antes de la cotización y nadie la retomó.",
+  },
+  "O cliente quis conhecer a linha de produtos e a visita do representante ainda não foi marcada. O fluxo lembra por duas semanas e sai de cena.": {
+    es: "El cliente quiso conocer la línea de productos y la visita del representante todavía no se agendó. El flujo le recuerda durante dos semanas y después se retira.",
+  },
+  "Quem recebeu a cotação costuma comparar com outros fornecedores e conferir o próprio estoque antes de pedir. O fluxo acompanha por cerca de um mês e meio, sem pressionar.": {
+    es: "Quien recibió la cotización suele compararla con otros proveedores y revisar su propio inventario antes de pedir. El flujo da seguimiento durante cerca de un mes y medio, sin presionar.",
+  },
+  "A visita estava marcada e o representante não conseguiu ser recebido. O fluxo oferece outra data em vez de deixar o interesse esfriar.": {
+    es: "La visita estaba agendada y el representante no pudo ser recibido. El flujo ofrece otra fecha en lugar de dejar que el interés se enfríe.",
   },
   // O aviso da Central quando nenhum agente arma o fluxo.
   "Um follow-up está publicado e não está disparando": {

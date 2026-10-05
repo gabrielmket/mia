@@ -21,7 +21,7 @@
  */
 import { chaveDoNome, type Categoria, type LigaA, type QuemEntrega, type Recorrencia } from "./tipos";
 
-export const SEGMENTOS_DE_OBRIGACAO = ["servicos_b2b", "clinica", "imobiliaria", "automotivo", "academia"] as const;
+export const SEGMENTOS_DE_OBRIGACAO = ["servicos_b2b", "clinica", "imobiliaria", "automotivo", "academia", "industria_b2b"] as const;
 export type SegmentoDeObrigacao = (typeof SEGMENTOS_DE_OBRIGACAO)[number];
 
 export const ROTULO_DO_SEGMENTO_DE_OBRIGACAO = {
@@ -30,6 +30,7 @@ export const ROTULO_DO_SEGMENTO_DE_OBRIGACAO = {
   imobiliaria: "Imobiliária",
   automotivo: "Automotivo e proteção veicular",
   academia: "Academia",
+  industria_b2b: "Indústria e distribuição B2B",
 } as const satisfies Record<SegmentoDeObrigacao, string>;
 
 export interface ModeloDeTipo {
@@ -71,6 +72,7 @@ function modelo(segmento: SegmentoDeObrigacao, nome: string, categoria: Categori
 
 const B2B = "servicos_b2b";
 const AUTO = "automotivo";
+const IND = "industria_b2b";
 
 export const MODELOS_DE_TIPO: readonly ModeloDeTipo[] = [
   // ── Serviços B2B ──────────────────────────────────────────────────────────
@@ -106,6 +108,18 @@ export const MODELOS_DE_TIPO: readonly ModeloDeTipo[] = [
   modelo("academia", "Contrato do plano", "documento", { avisos_dias: [] }),
   modelo("academia", "Renovação do plano", "atividade", { recorrencia: "anual", quem_entrega: "cliente" }),
   modelo("academia", "Reavaliação física", "atividade", { a_cada_meses: 3, avisos_dias: [7, 2], quem_entrega: "cliente", liga_a: "contato" }),
+  // ── Indústria e distribuição B2B ──────────────────────────────────────────
+  // A fábrica que vende para revendas e profissionais cuida de duas coisas: o
+  // cadastro de quem compra a prazo (documentos da EMPRESA cliente) e o ritmo da
+  // carteira. A reposição do pedido é a recompra: atividade do cliente, todo mês.
+  modelo(IND, "Ficha cadastral da revenda", "documento", { nome_curto: "Ficha cadastral", recorrencia: "anual", validade_meses: 12, liga_a: "empresa" }),
+  modelo(IND, "Contrato social", "documento", { avisos_dias: [], liga_a: "empresa" }),
+  modelo(IND, "Alvará de funcionamento", "documento", { nome_curto: "Alvará", recorrencia: "anual", validade_meses: 12, liga_a: "empresa" }),
+  modelo(IND, "Certidão negativa de débitos", "documento", { nome_curto: "CND", a_cada_meses: 6, validade_meses: 6, avisos_dias: [15, 7], liga_a: "empresa" }),
+  modelo(IND, "Contrato de revenda", "documento", { recorrencia: "anual", validade_meses: 12, avisos_dias: [45, 30, 15], liga_a: "empresa" }),
+  modelo(IND, "Pedido de reposição", "atividade", { recorrencia: "mensal", avisos_dias: [7, 2], quem_entrega: "cliente", liga_a: "empresa" }),
+  modelo(IND, "Visita do representante", "atividade", { a_cada_meses: 2, avisos_dias: [7, 2], liga_a: "empresa" }),
+  modelo(IND, "Reajuste da tabela de preços", "atividade", { recorrencia: "anual", avisos_dias: [30, 15], liga_a: "empresa" }),
 ];
 
 export function modelosDoSegmento(segmento: SegmentoDeObrigacao): ModeloDeTipo[] {

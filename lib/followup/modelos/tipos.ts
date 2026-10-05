@@ -28,7 +28,9 @@ import type { FlowGraph } from "@/lib/followup/graph-schema";
  * Para qual tipo de negócio o modelo foi escrito.
  *
  * FORK MIA: além de clínica, os segmentos da MIA (`segmentos.ts`). A ordem é a
- * da tela, e "geral" vem primeiro porque é o padrão.
+ * da tela, e "geral" vem primeiro porque é o padrão. "industria_b2b" chegou com
+ * as empresas de demonstração por segmento: fabricante ou distribuidora que
+ * vende para revendas e profissionais.
  */
 export const NICHOS_DE_MODELO = [
   "geral",
@@ -37,6 +39,7 @@ export const NICHOS_DE_MODELO = [
   "automotivo",
   "academia",
   "servicos_b2b",
+  "industria_b2b",
 ] as const;
 export type NichoDeModelo = (typeof NICHOS_DE_MODELO)[number];
 
