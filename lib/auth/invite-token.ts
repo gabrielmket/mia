@@ -81,4 +81,10 @@ export function verifyInviteToken(token: string): InvitePayload | null {
   return payload;
 }
 
-export const INVITE_TTL_SECONDS = 60 * 60 * 24; // 24h
+// FORK MIA — 15 dias, e não as 24h do upstream. Quem é convidado numa
+// implantação (o dono da empresa, a equipe do cliente) raramente abre o e-mail
+// no mesmo dia, e convite vencido virava pedido de reenvio. O prazo vale para
+// o convite novo e para o reenvio; o aceite segue conferindo assinatura,
+// e-mail e revogação, e o convite continua podendo ser cancelado na tela.
+// Cerca: tests/unit/convite-vale-quinze-dias.test.ts.
+export const INVITE_TTL_SECONDS = 60 * 60 * 24 * 15; // 15 dias

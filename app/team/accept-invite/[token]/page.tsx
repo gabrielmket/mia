@@ -66,7 +66,7 @@ export default async function AcceptInvitePage({ params }: PageProps) {
         <h1 className="text-xl font-semibold">{t("Convite inválido ou expirado")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {t(
-            "Este link não é válido ou já passou da janela de 24h. Peça um novo convite ao admin do tenant.",
+            "Este link não é válido ou o prazo do convite já passou. Peça um novo convite a quem administra a sua empresa.",
           )}
         </p>
       </Shell>
