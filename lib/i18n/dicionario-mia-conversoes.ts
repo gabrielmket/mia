@@ -76,7 +76,6 @@ export const DICIONARIO_DAS_CONVERSOES_DA_META: Traducoes = {
   "Ainda não testado nesta visita.": { es: "Aún no probado en esta visita." },
   "Ver no histórico": { es: "Ver en el historial" },
   "há instantes": { es: "hace instantes" },
-  há: { es: "hace" },
   minutos: { es: "minutos" },
   hora: { es: "hora" },
   horas: { es: "horas" },

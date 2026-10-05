@@ -204,7 +204,7 @@ export function textoDaSituacao(item: ItemParaSituacao, hoje: Dia, t: Traduzir):
 
   if ((s === "vencido" || s === "vencendo") && aguardando(item)) {
     const i = idadeDoPedido(item, hoje);
-    texto += ` · ${t("renovação pedida")} ${i <= 0 ? t("hoje") : `${t("há")} ${emDias(i, t)}`}`;
+    texto += ` · ${t("renovação pedida")} ${i <= 0 ? t("hoje") : t("há {tempo}").replace("{tempo}", emDias(i, t))}`;
   }
   if (aguardando(item) && item.cobrado_em === hoje) texto += ` · ${t("cobrado hoje")}`;
   return texto;

@@ -17,11 +17,20 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as RequirePlatformAdmin from "@/lib/auth/requirePlatformAdmin";
 import type { ChannelGroup } from "@/lib/channels/types";
 
-vi.mock("@/lib/auth/requirePlatformAdmin", () => ({
-  requirePlatformAdmin: vi.fn(async () => ({ user: { id: "u-plataforma" }, platformAdmin: {} })),
-}));
+vi.mock("@/lib/auth/requirePlatformAdmin", async (importOriginal) => {
+  const real = await importOriginal<typeof RequirePlatformAdmin>();
+  const entrar = async () => ({ user: { id: "u-plataforma" }, platformAdmin: {} });
+  return {
+    ...real,
+    requirePlatformAdmin: vi.fn(entrar),
+    // A escrita passa pelo helper da 1.70 (scope `full` + MFA). Aqui só importa
+    // quem é da plataforma; scope e MFA: lib/auth/requirePlatformAdmin.test.ts.
+    requirePlatformAdminEscrita: vi.fn(entrar),
+  };
+});
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 
@@ -75,8 +84,8 @@ import { PUT as PUT_ORIGEM } from "./origem/route";
 const ULTRA = "65073c33-7aeb-45bd-8db1-10cea3fa8968";
 const TIME = "aaaaaaaa-0000-4000-8000-00000000000a";
 const SESSAO = "bbbbbbbb-0000-4000-8000-00000000000b";
-const G1 = "120363405136320907@g.us";
-const G2 = "120363405136320908@g.us";
+const G1 = "120363000000000001@g.us";
+const G2 = "120363000000000002@g.us";
 
 /**
  * O canal marcado. O provider é o que a MATRIZ diz que entrega em grupo, nunca
@@ -112,7 +121,7 @@ beforeEach(() => {
     channel_sessions: [MARCADA],
     platform_avisos: null,
     organizations: [
-      { id: ULTRA, display_name: "Ultra Sorriso", settings: { routing: { modo: "rodizio" } } },
+      { id: ULTRA, display_name: "Vita Odonto", settings: { routing: { modo: "rodizio" } } },
       { id: TIME, display_name: "Time Company", settings: {} },
     ],
   };
@@ -121,7 +130,7 @@ beforeEach(() => {
 describe("número de avisos: a lista de grupos que a tela recebe", () => {
   it("⭐ os grupos chegam PELO NOME, lidos da sessão marcada", async () => {
     estado.listGroups = async (): Promise<ChannelGroup[]> => [
-      { chatId: G1, subject: "Ultra Sorriso · Comercial" },
+      { chatId: G1, subject: "Vita Odonto · Comercial" },
       { chatId: G2, subject: "Time Company · Interno" },
     ];
     const res = await GET();
@@ -130,7 +139,7 @@ describe("número de avisos: a lista de grupos que a tela recebe", () => {
     expect(data.grupos_indisponiveis).toBe(false);
     expect(data.grupos_motivo).toBeNull();
     expect(data.grupos).toEqual([
-      { id: G1, nome: "Ultra Sorriso · Comercial" },
+      { id: G1, nome: "Vita Odonto · Comercial" },
       { id: G2, nome: "Time Company · Interno" },
     ]);
     expect(estado.sessionRefs).toEqual([REF_DA_SESSAO]);
@@ -167,9 +176,9 @@ describe("número de avisos: a lista de grupos que a tela recebe", () => {
 
 describe("número de avisos: escolher o grupo da empresa pelo nome", () => {
   it("o grupo escolhido na lista vai para as configurações DA EMPRESA, sem apagar o resto", async () => {
-    estado.listGroups = async () => [{ chatId: G1, subject: "Ultra Sorriso · Comercial" }];
+    estado.listGroups = async () => [{ chatId: G1, subject: "Vita Odonto · Comercial" }];
     const { data } = (await (await GET()).json()) as Corpo;
-    const escolhido = data.grupos.find((g) => g.nome === "Ultra Sorriso · Comercial");
+    const escolhido = data.grupos.find((g) => g.nome === "Vita Odonto · Comercial");
 
     const res = await PUT_GRUPO(
       new NextRequest("http://x/api/v1/admin/numero-de-avisos/grupo", {
@@ -182,7 +191,7 @@ describe("número de avisos: escolher o grupo da empresa pelo nome", () => {
     expect(gravado?.valores).toEqual({
       settings: {
         routing: { modo: "rodizio" },
-        grupo_de_avisos: { id: G1, nome: "Ultra Sorriso · Comercial" },
+        grupo_de_avisos: { id: G1, nome: "Vita Odonto · Comercial" },
       },
     });
   });
@@ -205,7 +214,7 @@ const DA_ULTRA = (status: string) => ({
   provider: PROVIDERS_QUE_ENTREGAM_EM_GRUPO[0],
   id: NUMERO_DA_ULTRA,
   organization_id: ULTRA,
-  display_name: "Comercial Ultra",
+  display_name: "Comercial Vita",
   status,
   e_numero_de_avisos: false,
 });
@@ -227,8 +236,8 @@ type EmpresaNaTela = {
 function ultraCom(origem: unknown) {
   return {
     id: ULTRA,
-    display_name: "Ultra Sorriso",
-    settings: { grupo_de_avisos: { id: G1, nome: "Ultra · Comercial" }, numero_de_avisos: origem },
+    display_name: "Vita Odonto",
+    settings: { grupo_de_avisos: { id: G1, nome: "Vita · Comercial" }, numero_de_avisos: origem },
   };
 }
 
@@ -245,7 +254,7 @@ describe("número de avisos: a empresa com o PRÓPRIO número", () => {
     ];
     estado.listGroups = async (input) =>
       input.sessionRef === REF_DA_ULTRA
-        ? [{ chatId: G1, subject: "Ultra · Comercial" }]
+        ? [{ chatId: G1, subject: "Vita · Comercial" }]
         : [{ chatId: G2, subject: "Grupo só da plataforma" }];
 
     const e = await empresaUltra();
@@ -256,7 +265,7 @@ describe("número de avisos: a empresa com o PRÓPRIO número", () => {
     expect(
       e.grupos_do_numero?.grupos,
       "a tela ofereceu os grupos da PLATAFORMA para uma empresa que manda pelo próprio número",
-    ).toEqual([{ id: G1, nome: "Ultra · Comercial" }]);
+    ).toEqual([{ id: G1, nome: "Vita · Comercial" }]);
     expect(estado.sessionRefs).toContain(REF_DA_ULTRA);
   });
 
@@ -330,7 +339,7 @@ describe("número de avisos: gravar a escolha do número da empresa", () => {
     ];
     const res = await pedir({ organization_id: ULTRA, origem: { modo: "plataforma" } });
     expect(res.status).toBe(200);
-    expect(gravado()).toEqual({ settings: { grupo_de_avisos: { id: G1, nome: "Ultra · Comercial" } } });
+    expect(gravado()).toEqual({ settings: { grupo_de_avisos: { id: G1, nome: "Vita · Comercial" } } });
   });
 
   it("RECUSA número de OUTRA empresa", async () => {

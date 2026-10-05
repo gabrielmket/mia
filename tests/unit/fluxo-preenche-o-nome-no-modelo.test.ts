@@ -118,6 +118,10 @@ function fakePool(c: Cenario) {
   const contatosConsultados: unknown[][] = [];
   const query = vi.fn(async (sql: string, params?: unknown[]): Promise<{ rows: Array<Record<string, unknown>> }> => {
     if (sql.includes("d.fechada_em::text")) return { rows: [{ ...boundary, status: "open", demanda_fechada_em: null }] };
+    // A inscrição viva, no mesmo nó do job (upstream 1.72: o turno confere antes de qualquer efeito).
+    if (sql.includes("select current_node_id, status from followup_enrollments")) {
+      return { rows: [{ current_node_id: "passo", status: "active" }] };
+    }
     if (/from meta_templates t/.test(sql)) {
       return { rows: [{ components: c.components, parameter_format: c.parameterFormat ?? "POSITIONAL", status: "APPROVED" }] };
     }
@@ -160,7 +164,7 @@ function resultado(complete: ReturnType<typeof vi.fn>): { kind: string; reason?:
 
 const corpo = (text: string, example?: unknown) => ({ type: "BODY", text, ...(example ? { example } : {}) });
 
-const POSICIONAL = [corpo("Olá {{1}}, tudo bem? Vi seu interesse no Castelo.", { body_text: [["Maria"]] })];
+const POSICIONAL = [corpo("Olá {{1}}, tudo bem? Vi seu interesse no Bosque.", { body_text: [["Maria"]] })];
 const NOMEADO = [
   corpo("Oi {{nome}}! Separei as condições para você.", {
     body_text_named_params: [{ param_name: "nome", example: "João" }],
@@ -190,7 +194,7 @@ describe("passo `template` com a variável do nome", () => {
 
     expect(contatosConsultados[0]).toEqual([ORG, LEAD]);
     expect(send.mock.calls[0]![0].template).toEqual({ name: "abordagem", language: "pt_BR", values: { "1": "Maria" } });
-    expect(runBeforeSend.mock.calls[0]![0].body).toBe("Olá Maria, tudo bem? Vi seu interesse no Castelo.");
+    expect(runBeforeSend.mock.calls[0]![0].body).toBe("Olá Maria, tudo bem? Vi seu interesse no Bosque.");
     expect(runBeforeSend.mock.calls[0]![0].isTemplate).toBe(true);
     expect(resultado(completeFollowupTurn).kind).toBe("sent");
   });
@@ -285,7 +289,7 @@ describe("plano B da mensagem por IA (`fallback_template_id`) com a variável do
 
     expect(runAgentTurn).not.toHaveBeenCalled();
     expect(send.mock.calls[0]![0].template).toEqual({ name: "abordagem", language: "pt_BR", values: { "1": "Ana" } });
-    expect(runBeforeSend.mock.calls[0]![0].body).toBe("Olá Ana, tudo bem? Vi seu interesse no Castelo.");
+    expect(runBeforeSend.mock.calls[0]![0].body).toBe("Olá Ana, tudo bem? Vi seu interesse no Bosque.");
     expect(resultado(completeFollowupTurn).kind).toBe("sent");
   });
 

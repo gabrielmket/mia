@@ -60,13 +60,13 @@ export function DiagnosticoDaMetaNaTela({ idioma }: { idioma: Idioma }) {
   function haQuanto(iso: string, agora: string): string {
     const minutos = Math.max(0, Math.round((Date.parse(agora) - Date.parse(iso)) / 60_000));
     if (minutos < 5) return t("há instantes");
-    if (minutos < 60) return `${t("há")} ${minutos} ${t("minutos")}`;
+    if (minutos < 60) return t("há {tempo}").replace("{tempo}", `${minutos} ${t("minutos")}`);
     if (minutos < 1440) {
       const horas = Math.round(minutos / 60);
-      return `${t("há")} ${horas} ${t(horas === 1 ? "hora" : "horas")}`;
+      return t("há {tempo}").replace("{tempo}", `${horas} ${t(horas === 1 ? "hora" : "horas")}`);
     }
     const dias = Math.round(minutos / 1440);
-    return `${t("há")} ${dias} ${t(dias === 1 ? "dia" : "dias")}`;
+    return t("há {tempo}").replace("{tempo}", `${dias} ${t(dias === 1 ? "dia" : "dias")}`);
   }
 
   function titulo(item: ItemDoDiagnosticoDaMeta, agora: string): string {

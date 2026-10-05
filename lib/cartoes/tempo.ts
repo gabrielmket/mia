@@ -42,7 +42,7 @@ export function duracaoCurta(ms: number, t: Traduzir = SEM_TRADUCAO): string {
 export function haQuanto(desde: string | Date, agora: Date, t: Traduzir = SEM_TRADUCAO): string {
   const ms = agora.getTime() - new Date(desde).getTime();
   const curta = duracaoCurta(ms, t);
-  return curta === t("agora") ? curta : `${t("há")} ${curta}`;
+  return curta === t("agora") ? curta : t("há {tempo}").replace("{tempo}", curta);
 }
 
 /** "8 dias", "5 meses", "1 ano e 3 meses" — para compras. */

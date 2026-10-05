@@ -92,7 +92,7 @@ export function rotuloDaBola(
 ): string {
   const t = opcoes.t ?? ((x: string) => x);
   const tempo = duracaoCurta(opcoes.agora.getTime() - new Date(bola.desde).getTime(), t);
-  const quando = tempo === t("agora") ? tempo : `${t("há")} ${tempo}`;
+  const quando = tempo === t("agora") ? tempo : t("há {tempo}").replace("{tempo}", tempo);
   return `${quemFalouRotulo(bola, opcoes)} ${quando}`;
 }
 

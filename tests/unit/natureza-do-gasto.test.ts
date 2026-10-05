@@ -63,6 +63,12 @@ describe("de que natureza é cada ponto", () => {
     }
   });
 
+  it("ler o valor da venda na conversa é sistema — roda quando o negócio é ganho, não quando o cliente escreve", () => {
+    // Uma leitura por venda de anúncio sem valor, no dia do ganho: contada como
+    // atendimento, entraria no custo por conversa de um dia sem conversa.
+    expect(naturezaDoGasto("conversion_value_from_conversation")).toBe("sistema");
+  });
+
   it("purpose desconhecido vai para sistema — nunca infla o preço por conversa", () => {
     expect(naturezaDoGasto("ponto_que_nao_existe_mais")).toBe("sistema");
   });
@@ -105,6 +111,7 @@ describe("de que natureza é cada ponto", () => {
       "proposal_assistant",
       "proposal_fill_from_conversation",
       "case_chat",
+      "conversion_value_from_conversation",
     ]);
     const novos = PONTOS_DE_IA.map((p) => p.id).filter((id) => !classificados.has(id));
     expect(novos, "pontos de IA sem natureza decidida").toEqual([]);

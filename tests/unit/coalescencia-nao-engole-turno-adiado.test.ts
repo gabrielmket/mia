@@ -9,7 +9,7 @@ import { drainTick } from '@/lib/agent-engine/edge/crm/drain';
 /**
  * O TURNO ADIADO VIRAVA RALO.
  *
- * Medido na implantação do tenant Academia Body Fit (18/09/2026), e é a
+ * Medido na implantação do tenant Academia Alfa (18/09/2026), e é a
  * composição de duas peças que, sozinhas, estão certas:
  *
  *   1. `inbound-turn.ts` ADIA o turno quando a janela anti-ban está fechada. O
@@ -81,7 +81,8 @@ async function rodarTick(): Promise<Chamada[]> {
   const query = vi.fn().mockImplementation((sql: string, params: unknown[] = []) => {
     chamadas.push({ sql, params });
     if (sql.includes('returning e.id')) return { rows: [evento] };
-    if (sql.includes('ai_dispatch_mode')) return { rows: [{ mode: null }] };
+    // A mesma consulta lê o status da organização (upstream 1.70): parada não gera turno.
+    if (sql.includes('ai_dispatch_mode')) return { rows: [{ mode: null, status: 'active' }] };
     if (sql.includes('is_group')) return { rows: [{ is_group: false }] };
     if (sql.includes('tem_agente')) return { rows: [{ tem_agente: true, tem_roteador: false }] };
     if (sql.includes('media_derived_status')) {

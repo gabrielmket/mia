@@ -64,6 +64,11 @@ const DO_SISTEMA = new Set<string>([
   "proposal_assistant",
   "proposal_fill_from_conversation",
   "case_chat",
+  // Ler o valor da venda na conversa (upstream 1.70): roda no dreno de eventos
+  // quando um negócio vindo de anúncio é GANHO sem valor, para a compra seguir
+  // à Meta. Varia com venda fechada, não com mensagem do cliente, e acontece no
+  // dia do ganho, que pode ser um dia sem conversa nenhuma.
+  "conversion_value_from_conversation",
 ]);
 
 /**

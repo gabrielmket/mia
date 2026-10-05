@@ -224,7 +224,7 @@ export function PrefixoDaBola({ bola }: { bola: Bola }) {
   const agora = useAgoraDoCartao();
   const quem = quemFalouRotulo(bola, { ...ctx, t });
   const tempo = duracaoCurta(agora.getTime() - new Date(bola.desde).getTime(), t);
-  const quando = tempo === t("agora") ? tempo : `${t("há")} ${tempo}`;
+  const quando = tempo === t("agora") ? tempo : t("há {tempo}").replace("{tempo}", tempo);
   return (
     <span
       className={cn(

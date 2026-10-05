@@ -239,7 +239,8 @@ export function Foco({ lead, pipelineId }: { lead: Lead; pipelineId: string }) {
       {bola && bola.com === "cliente" ? (
         <p className="mt-2 text-[11px] text-text-muted">
           {t("Última mensagem")}: {quemFalouRotulo(bola, { ...ctx, t })} ·{" "}
-          {t("há")} {duracaoCurta(agora.getTime() - new Date(bola.desde).getTime(), t)} · {t("aguardando o cliente")}
+          {t("há {tempo}").replace("{tempo}", duracaoCurta(agora.getTime() - new Date(bola.desde).getTime(), t))} ·{" "}
+          {t("aguardando o cliente")}
         </p>
       ) : null}
     </section>

@@ -19,6 +19,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as RequirePlatformAdmin from "@/lib/auth/requirePlatformAdmin";
+
 import { bancoEmMemoria } from "../helpers/banco-em-memoria";
 
 const h = vi.hoisted(() => ({
@@ -27,12 +29,20 @@ const h = vi.hoisted(() => ({
   auditorias: [] as Array<Record<string, unknown>>,
 }));
 
-vi.mock("@/lib/auth/requirePlatformAdmin", () => ({
-  requirePlatformAdmin: vi.fn(async () => {
+vi.mock("@/lib/auth/requirePlatformAdmin", async (importOriginal) => {
+  const real = await importOriginal<typeof RequirePlatformAdmin>();
+  const entrar = async () => {
     if (!h.plataforma) throw new Error("forbidden");
     return { user: { id: "dono-da-plataforma" } };
-  }),
-}));
+  };
+  return {
+    ...real,
+    requirePlatformAdmin: vi.fn(entrar),
+    // A escrita passa pelo helper da 1.70 (scope `full` + MFA). Aqui só importa
+    // quem é da plataforma; scope e MFA: lib/auth/requirePlatformAdmin.test.ts.
+    requirePlatformAdminEscrita: vi.fn(entrar),
+  };
+});
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn(() => h.banco!.cliente) }));
 vi.mock("@/lib/audit", () => ({
@@ -66,13 +76,13 @@ beforeEach(() => {
   banco = bancoEmMemoria({
     organizations: [
       { id: "0a000000-0000-4000-8000-000000000001", display_name: "Time Company", redacted_at: null },
-      { id: "0a000000-0000-4000-8000-000000000002", display_name: "Protev", redacted_at: null },
-      { id: "0a000000-0000-4000-8000-000000000003", display_name: "Erglares", redacted_at: null },
+      { id: "0a000000-0000-4000-8000-000000000002", display_name: "Protetora Zeta", redacted_at: null },
+      { id: "0a000000-0000-4000-8000-000000000003", display_name: "Construtora Delta", redacted_at: null },
     ],
     ad_insights_connections: [{ organization_id: "0a000000-0000-4000-8000-000000000001", platform: "meta_ads" }],
     mia_meta_conexao_da_plataforma: [{ id: 1, organizacao_da_conexao: "0a000000-0000-4000-8000-000000000001" }],
     mia_paginas_da_meta: [
-      { page_id: "111", organization_id: "0a000000-0000-4000-8000-000000000002", page_name: "Protev", atribuida_em: "x" },
+      { page_id: "111", organization_id: "0a000000-0000-4000-8000-000000000002", page_name: "Protetora Zeta", atribuida_em: "x" },
       { page_id: "444", organization_id: "0a000000-0000-4000-8000-000000000003", page_name: "Saiu do token", atribuida_em: "x", origem: "conta_propria" },
     ],
   });
@@ -85,8 +95,8 @@ beforeEach(() => {
         return new Response(
           JSON.stringify({
             data: [
-              { id: "111", name: "Protev", access_token: "TOKEN-P111" },
-              { id: "222", name: "Castelo Butantã", access_token: "TOKEN-P222" },
+              { id: "111", name: "Protetora Zeta", access_token: "TOKEN-P111" },
+              { id: "222", name: "Bosque Aurora", access_token: "TOKEN-P222" },
             ],
           }),
           { status: 200 },
@@ -118,13 +128,13 @@ describe("GET", () => {
     };
     expect(data.paginas).toEqual([
       // Linha de antes da 9008 (sem `origem`): é da plataforma.
-      { id: "111", nome: "Protev", organization_id: "0a000000-0000-4000-8000-000000000002", organizacao: "Protev", alcancada: true, origem: "plataforma" },
-      { id: "222", nome: "Castelo Butantã", organization_id: null, organizacao: null, alcancada: true, origem: null },
+      { id: "111", nome: "Protetora Zeta", organization_id: "0a000000-0000-4000-8000-000000000002", organizacao: "Protetora Zeta", alcancada: true, origem: "plataforma" },
+      { id: "222", nome: "Bosque Aurora", organization_id: null, organizacao: null, alcancada: true, origem: null },
       {
         id: "444",
         nome: "Saiu do token",
         organization_id: "0a000000-0000-4000-8000-000000000003",
-        organizacao: "Erglares",
+        organizacao: "Construtora Delta",
         alcancada: false,
         // .64: assumida pela empresa com a conta própria dela.
         origem: "conta_propria",
@@ -135,7 +145,7 @@ describe("GET", () => {
 
 describe("POST e DELETE: o dono de cada Página", () => {
   it("atribui a Página sem dono e audita na empresa que a recebeu", async () => {
-    const r = await POST(pedido("POST", { page_id: "222", page_name: "Castelo", organization_id: "0a000000-0000-4000-8000-000000000003" }));
+    const r = await POST(pedido("POST", { page_id: "222", page_name: "Bosque", organization_id: "0a000000-0000-4000-8000-000000000003" }));
     expect(r.status).toBe(200);
     expect(banco.tabela("mia_paginas_da_meta").find((p) => p.page_id === "222")).toMatchObject({
       organization_id: "0a000000-0000-4000-8000-000000000003",

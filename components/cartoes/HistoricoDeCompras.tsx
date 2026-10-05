@@ -97,7 +97,7 @@ export function HistoricoDeCompras({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Numero rotulo={t("Ticket médio")} valor={valorCurto(r.ticketMedioCents, r.moeda)} />
           <Numero rotulo={t("Última compra")} valor={data(r.ultima.data, locale)} />
-          <Numero rotulo={t("Há quanto tempo")} valor={`${t("há")} ${duracaoLonga(r.ultima.haDias, t)}`} />
+          <Numero rotulo={t("Há quanto tempo")} valor={t("há {tempo}").replace("{tempo}", duracaoLonga(r.ultima.haDias, t))} />
           {intervalo ? (
             <Numero
               rotulo={t("Intervalo médio entre compras")}
