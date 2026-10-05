@@ -26,6 +26,11 @@ export interface SaldoDoProvedor {
   lancamentos: LancamentoDeSaldo[];
   cotacao: { usd_brl: number; cotado_em: string | null } | null;
   chamadas_sem_preco: number;
+  /**
+   * FORK MIA: o consumo somado não cobre o período inteiro (teto de leitura da
+   * rota, ou falha). O saldo real é MENOR que `saldo_usd`. A tela avisa.
+   */
+  consumo_parcial: boolean;
 }
 
 const CHAVE = ["admin", "ai-saldo"] as const;

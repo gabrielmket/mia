@@ -71,6 +71,14 @@ function Cartoes({ s }: { s: Saldo }) {
   const acabaCedo = s.dias_restantes !== null && s.dias_restantes <= 7;
 
   return (
+    <>
+    {s.consumo_parcial ? (
+      // O consumo somado não cobre o período inteiro: sem esta linha o saldo se
+      // leria como o saldo, e ele está acima do real.
+      <p className="text-sm text-amber-600 dark:text-amber-500" data-testid="aviso-de-corte">
+        {t("O consumo passou do limite de leitura: a conta inclui só as chamadas mais recentes, e o saldo real é menor que o mostrado.")}
+      </p>
+    ) : null}
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Cartao
         titulo={t("Saldo estimado")}
@@ -113,6 +121,7 @@ function Cartoes({ s }: { s: Saldo }) {
         alerta={acabaCedo}
       />
     </div>
+    </>
   );
 }
 

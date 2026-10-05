@@ -31,6 +31,7 @@ import { audit } from "@/lib/audit";
 import { falhaDaEscritaDePlatformAdmin, requirePlatformAdminEscrita, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { lerConsumoDeIa } from "@/lib/ai/custo/consumo-de-ia";
 import { derivarSaldo } from "@/lib/ai/custo/saldo";
 
 export const dynamic = "force-dynamic";
@@ -113,26 +114,20 @@ export async function GET(_req: NextRequest) {
 
   // Consumo desde a leitura: a mesma fonte das telas (`llm_calls`), em centavos
   // de dólar. Sem leitura não há intervalo — e não há saldo.
-  let consumoDesdeLeituraUsd = 0;
-  if (leituraMaisNova) {
-    const { data: gastos } = await admin
-      .from("llm_calls")
-      .select("cost_cents")
-      .gte("created_at", leituraMaisNova.occurred_at)
-      .limit(100_000);
-    consumoDesdeLeituraUsd =
-      (gastos ?? []).reduce((acc, g) => acc + Number(g.cost_cents ?? 0), 0) / 100;
-  }
-
+  //
   // Ritmo dos últimos 30 dias, para dizer "dura até". Média sobre o período
   // inteiro, e não sobre os dias COM uso: o crédito acaba por calendário.
+  //
+  // As duas somas saem de UMA leitura paginada (`lerConsumoDeIa`). Os dois
+  // `.limit(100_000)` que estavam aqui traziam no máximo 1000 linhas cada, o
+  // teto do PostgREST, e o consumo saía de um recorte.
   const desde = new Date(Date.now() - DIAS_DA_MEDIA * 24 * 60 * 60 * 1000).toISOString();
-  const { data: recentes } = await admin
-    .from("llm_calls")
-    .select("cost_cents")
-    .gte("created_at", desde)
-    .limit(100_000);
-  const consumo30dUsd = (recentes ?? []).reduce((acc, g) => acc + Number(g.cost_cents ?? 0), 0) / 100;
+  const consumo = await lerConsumoDeIa(admin, {
+    desdeLeitura: leituraMaisNova?.occurred_at ?? null,
+    desdeJanela: desde,
+  });
+  const consumoDesdeLeituraUsd = consumo.consumoDesdeLeituraUsd;
+  const consumo30dUsd = consumo.consumoDaJanelaUsd;
   const mediaDiariaUsd = consumo30dUsd / DIAS_DA_MEDIA;
 
   const derivado = derivarSaldo({ lancamentos, consumoDesdeLeituraUsd, mediaDiariaUsd });
@@ -166,6 +161,9 @@ export async function GET(_req: NextRequest) {
         ? { usd_brl: Number(cotacaoRow.usd_brl), cotado_em: (cotacaoRow.cotado_em as string) ?? null }
         : null,
       chamadas_sem_preco: semPreco ?? 0,
+      // O consumo somado não cobre o período inteiro (teto de leitura, ou
+      // falha): o saldo real é menor que o mostrado, e a tela avisa.
+      consumo_parcial: consumo.parcial,
     },
     { requestId },
   );

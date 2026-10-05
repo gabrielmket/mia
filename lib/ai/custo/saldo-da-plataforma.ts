@@ -16,12 +16,22 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { lerConsumoDeIa } from "./consumo-de-ia";
 import { derivarSaldo, type LancamentoBruto, type SaldoDerivado } from "./saldo";
 
 /** A janela do "dura até". Média sobre o período inteiro: crédito acaba por calendário. */
 export const DIAS_DA_MEDIA = 30;
 
-export async function saldoDaPlataforma(admin: SupabaseClient): Promise<SaldoDerivado> {
+export interface SaldoDaPlataforma extends SaldoDerivado {
+  /**
+   * O consumo somado NÃO cobre o período inteiro (a leitura de `llm_calls`
+   * passou do teto de páginas, ou falhou). O saldo real é MENOR que
+   * `saldoUsd`, e o "dura até" real é mais cedo. Ver `consumo-de-ia.ts`.
+   */
+  consumoParcial: boolean;
+}
+
+export async function saldoDaPlataforma(admin: SupabaseClient): Promise<SaldoDaPlataforma> {
   const { data: linhas } = await admin
     .from("platform_ai_ledger")
     .select("tipo, amount_usd, occurred_at")
@@ -37,31 +47,21 @@ export async function saldoDaPlataforma(admin: SupabaseClient): Promise<SaldoDer
   // A leitura mais recente é a âncora; só o intervalo dela precisa de consulta.
   const leitura = lancamentos.find((l) => l.tipo === "leitura") ?? null;
 
-  let consumoDesdeLeituraUsd = 0;
-  if (leitura) {
-    const { data: gastos } = await admin
-      .from("llm_calls")
-      .select("cost_cents")
-      .gte("created_at", leitura.occurred_at)
-      .limit(100_000);
-    consumoDesdeLeituraUsd =
-      (gastos ?? []).reduce((acc, g) => acc + Number((g as { cost_cents: unknown }).cost_cents ?? 0), 0) /
-      100;
-  }
-
+  // As duas somas saem de UMA leitura paginada de `llm_calls`. Os dois
+  // `.limit(100_000)` que estavam aqui traziam no máximo 1000 linhas cada (o
+  // teto do PostgREST), e o consumo saía de um recorte.
   const desde = new Date(Date.now() - DIAS_DA_MEDIA * 24 * 60 * 60 * 1000).toISOString();
-  const { data: recentes } = await admin
-    .from("llm_calls")
-    .select("cost_cents")
-    .gte("created_at", desde)
-    .limit(100_000);
-  const consumo30dUsd =
-    (recentes ?? []).reduce((acc, g) => acc + Number((g as { cost_cents: unknown }).cost_cents ?? 0), 0) /
-    100;
-
-  return derivarSaldo({
-    lancamentos,
-    consumoDesdeLeituraUsd,
-    mediaDiariaUsd: consumo30dUsd / DIAS_DA_MEDIA,
+  const consumo = await lerConsumoDeIa(admin, {
+    desdeLeitura: leitura?.occurred_at ?? null,
+    desdeJanela: desde,
   });
+
+  return {
+    ...derivarSaldo({
+      lancamentos,
+      consumoDesdeLeituraUsd: consumo.consumoDesdeLeituraUsd,
+      mediaDiariaUsd: consumo.consumoDaJanelaUsd / DIAS_DA_MEDIA,
+    }),
+    consumoParcial: consumo.parcial,
+  };
 }
