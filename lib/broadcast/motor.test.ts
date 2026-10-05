@@ -38,19 +38,22 @@ function bancoFalso(estado: EstadoDoBanco): SupabaseClient {
   return {
     from(tabela: string) {
       if (tabela === "tenant_wallet_ledger") {
-        return {
-          select: () => ({
-            eq: () => ({
-              limit: async () => ({
-                data: estado.lancamentos.map((l) => ({
-                  tipo: l.tipo,
-                  amount_cents: l.amount_cents,
-                  occurred_at: "2026-09-16T00:00:00Z",
-                })),
-                error: null,
-              }),
-            }),
+        // O saldo é lido por `lerSaldoDaCarteira`, que pagina com `range` e pede
+        // a contagem na primeira página (lib/carteira/ler-saldo.ts).
+        const paginado = {
+          order: () => paginado,
+          range: async (de: number, ate: number) => ({
+            data: estado.lancamentos.slice(de, ate + 1).map((l) => ({
+              tipo: l.tipo,
+              amount_cents: l.amount_cents,
+              occurred_at: "2026-09-16T00:00:00Z",
+            })),
+            error: null,
+            count: estado.lancamentos.length,
           }),
+        };
+        return {
+          select: () => ({ eq: () => paginado }),
           insert: async (linha: Record<string, unknown>) => {
             const chave = `${linha.ref_kind}:${linha.ref_id}`;
             if (estado.cobrados.has(chave)) return { error: { code: "23505", message: "dup" } };

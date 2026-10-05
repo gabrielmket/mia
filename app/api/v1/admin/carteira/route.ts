@@ -25,7 +25,8 @@ import { audit } from "@/lib/audit";
 import { falhaDaEscritaDePlatformAdmin, requirePlatformAdminEscrita, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { creditoAcabando, derivarSaldo, type LancamentoDaCarteira } from "@/lib/carteira/saldo";
+import { lerSaldoDaCarteira } from "@/lib/carteira/ler-saldo";
+import { creditoAcabando } from "@/lib/carteira/saldo";
 import { pisoDoPreco } from "@/lib/broadcast/margem";
 
 export const dynamic = "force-dynamic";
@@ -86,12 +87,10 @@ export async function GET(req: NextRequest) {
   if (!orgId) return fail("validation_failed", "organization_id é obrigatório.", 422, { requestId });
 
   const admin = createAdminClient();
-  const [todosRes, extratoRes, precoRes] = await Promise.all([
-    admin
-      .from("tenant_wallet_ledger")
-      .select("tipo, amount_cents, occurred_at")
-      .eq("organization_id", orgId)
-      .limit(100_000),
+  // FORK MIA: o saldo sai do extrato INTEIRO, paginado. O `.limit(100_000)`
+  // que estava aqui trazia no máximo 1000 linhas (o teto do PostgREST).
+  const [saldo, extratoRes, precoRes] = await Promise.all([
+    lerSaldoDaCarteira(admin, orgId),
     admin
       .from("tenant_wallet_ledger")
       .select("id, tipo, amount_cents, currency, occurred_at, ref_kind, ref_id, note")
@@ -105,14 +104,7 @@ export async function GET(req: NextRequest) {
       .maybeSingle(),
   ]);
 
-  if (todosRes.error) return fail("db_error", "Falha ao ler a carteira.", 500, { requestId });
-
-  const lancamentos: LancamentoDaCarteira[] = (todosRes.data ?? []).map((l) => ({
-    tipo: l.tipo as LancamentoDaCarteira["tipo"],
-    amount_cents: Number(l.amount_cents),
-    occurred_at: l.occurred_at as string,
-  }));
-  const saldo = derivarSaldo(lancamentos);
+  if (saldo.erro) return fail("db_error", "Falha ao ler a carteira.", 500, { requestId });
   const alerta =
     precoRes.data?.alerta_saldo_cents === null || precoRes.data?.alerta_saldo_cents === undefined
       ? null
@@ -164,6 +156,8 @@ export async function GET(req: NextRequest) {
           : Number(precoRes.data.preco_por_mensagem_cents),
       alerta_saldo_cents: alerta,
       credito_acabando: creditoAcabando(saldo.saldo_cents, alerta),
+      // O extrato passou do teto de leitura e a soma é parcial: a tela avisa.
+      saldo_truncado: saldo.truncado,
       extrato: extratoRes.data ?? [],
     },
     { requestId },

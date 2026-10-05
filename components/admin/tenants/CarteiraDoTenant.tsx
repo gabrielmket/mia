@@ -84,6 +84,13 @@ export function CarteiraDoTenant({ organizationId }: { organizationId: string })
           {formatCentsBRL(data.debitado_cents)} · {t("Estornado")}{" "}
           {formatCentsBRL(data.estornado_cents)}
         </p>
+        {data.saldo_truncado && (
+          // O extrato passou do teto de leitura da rota: sem esta linha o
+          // número acima se leria como o saldo, e ele é uma soma parcial.
+          <p className="mt-2 text-sm text-warning-fg" data-testid="aviso-de-corte">
+            {t("O extrato passou do limite de leitura: o saldo soma só os lançamentos mais recentes.")}
+          </p>
+        )}
         {data.credito_acabando && (
           <p className="mt-2 text-sm text-warning-fg">
             {t("O crédito deste cliente está abaixo do piso de aviso.")}

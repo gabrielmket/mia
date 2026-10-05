@@ -19,7 +19,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { peneirar, podeComecar, type ContatoParaDisparo } from "@/lib/broadcast/plano";
-import { derivarSaldo, type LancamentoDaCarteira } from "@/lib/carteira/saldo";
+import { lerSaldoDaCarteira } from "@/lib/carteira/ler-saldo";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { quemEntraNaLista } from "@/lib/broadcast/quem-entra-na-lista";
 import { requireSupportWrite } from "@/lib/impersonate/support";
@@ -165,19 +165,17 @@ export async function POST(req: NextRequest): Promise<Response> {
   );
 
   // ---- cabe no saldo? ------------------------------------------------------
-  const [{ data: extrato }, { data: preco }] = await Promise.all([
-    db
-      .from("tenant_wallet_ledger")
-      .select("tipo, amount_cents, occurred_at")
-      .eq("organization_id", authz.org.orgId)
-      .limit(100_000),
+  // FORK MIA: o saldo sai do extrato INTEIRO (`lerSaldoDaCarteira`, paginado).
+  // O `.limit(100_000)` que estava aqui trazia no máximo 1000 linhas.
+  const [saldoLido, { data: preco }] = await Promise.all([
+    lerSaldoDaCarteira(db, authz.org.orgId),
     db
       .from("tenant_broadcast_pricing")
       .select("preco_por_mensagem_cents")
       .eq("organization_id", authz.org.orgId)
       .maybeSingle(),
   ]);
-  const saldo = derivarSaldo((extrato ?? []) as LancamentoDaCarteira[]).saldo_cents;
+  const saldo = saldoLido.saldo_cents;
   const precoCents =
     preco?.preco_por_mensagem_cents === null || preco?.preco_por_mensagem_cents === undefined
       ? null

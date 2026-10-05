@@ -26,4 +26,12 @@ export const DICIONARIO_RELATORIOS_MIA: Traducoes = {
   "O mês passou do limite de leitura: os números contam só as vendas e as reuniões mais recentes.": {
     es: "El mes superó el límite de lectura: los números cuentan solo las ventas y las reuniones más recientes.",
   },
+  // A carteira (lib/carteira/ler-saldo.ts): a tela do cliente e a do painel.
+  "O extrato passou do limite de leitura: o saldo soma só os lançamentos mais recentes.": {
+    es: "El extracto superó el límite de lectura: el saldo suma solo los movimientos más recientes.",
+  },
+  // O saldo do provedor de IA (lib/ai/custo/consumo-de-ia.ts), no painel.
+  "O consumo passou do limite de leitura: a conta inclui só as chamadas mais recentes, e o saldo real é menor que o mostrado.": {
+    es: "El consumo superó el límite de lectura: la cuenta incluye solo las llamadas más recientes, y el saldo real es menor que el mostrado.",
+  },
 };

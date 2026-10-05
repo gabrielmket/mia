@@ -19,7 +19,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { podeComecar } from "@/lib/broadcast/plano";
-import { derivarSaldo, type LancamentoDaCarteira } from "@/lib/carteira/saldo";
+import { lerSaldoDaCarteira } from "@/lib/carteira/ler-saldo";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { moduloLiberado } from "@/lib/modulos/liberacao";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -91,17 +91,15 @@ export async function POST(
     return fail("state_conflict", `A campanha está ${campanha.status}.`, 409, { requestId });
   }
 
-  const [{ count }, { data: extrato }, { data: preco }, { data: template }] = await Promise.all([
+  const [{ count }, saldoLido, { data: preco }, { data: template }] = await Promise.all([
     db
       .from("broadcast_recipients")
       .select("id", { count: "exact", head: true })
       .eq("broadcast_id", id)
       .eq("status", "pendente"),
-    db
-      .from("tenant_wallet_ledger")
-      .select("tipo, amount_cents, occurred_at")
-      .eq("organization_id", authz.org.orgId)
-      .limit(100_000),
+    // FORK MIA: o saldo sai do extrato INTEIRO (`lerSaldoDaCarteira`, paginado).
+    // O `.limit(100_000)` que estava aqui trazia no máximo 1000 linhas.
+    lerSaldoDaCarteira(db, authz.org.orgId),
     db
       .from("tenant_broadcast_pricing")
       .select("preco_por_mensagem_cents")
@@ -123,7 +121,7 @@ export async function POST(
 
   const veredicto = podeComecar({
     destinatarios: count ?? 0,
-    saldoCents: derivarSaldo((extrato ?? []) as LancamentoDaCarteira[]).saldo_cents,
+    saldoCents: saldoLido.saldo_cents,
     precoPorMensagemCents: precoCents,
     templateAprovado: template?.status === "APPROVED",
     temCanal: true,

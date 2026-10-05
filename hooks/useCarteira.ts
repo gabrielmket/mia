@@ -34,6 +34,11 @@ export interface Carteira {
   alerta_saldo_cents: number | null;
   extrato: LinhaDaCarteira[];
   extrato_truncado: boolean;
+  /**
+   * FORK MIA: o extrato passou do teto de leitura (lib/carteira/ler-saldo.ts) e
+   * o saldo é a soma só dos lançamentos mais recentes. A tela avisa.
+   */
+  saldo_truncado: boolean;
 }
 
 /**

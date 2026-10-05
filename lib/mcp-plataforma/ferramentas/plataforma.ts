@@ -22,6 +22,7 @@ import { MODULOS } from "@/lib/modulos/vendaveis";
 import { nomeDoCanal } from "@/lib/channels/estado";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 import { saldoDaPlataforma } from "@/lib/ai/custo/saldo-da-plataforma";
+import { lerSaldoDaCarteira } from "@/lib/carteira/ler-saldo";
 import { CARIMBO_DO_SCHEMA, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
 
 import type { FerramentaDePlataforma } from "../tipos";
@@ -90,28 +91,25 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
           .select("id, display_name, phone_number, provider, status")
           .eq("organization_id", id)
           .is("archived_at", null),
-        admin
-          .from("tenant_wallet_ledger")
-          .select("tipo, amount_cents")
-          .eq("organization_id", id)
-          .limit(5_000),
+        // O MESMO saldo da tela e da trava do disparo, pelo extrato inteiro. O
+        // `.limit(5_000)` que estava aqui trazia no máximo 1000 linhas.
+        lerSaldoDaCarteira(admin, id),
       ]);
 
       if (!org.data) throw new Error("cliente não encontrado");
 
-      // O saldo é somado AQUI e não lido de uma coluna: o livro-caixa é a
-      // verdade, e um total guardado em campo é a primeira coisa a divergir.
-      const linhas = (saldo.data ?? []) as Array<{ tipo: string; amount_cents: number }>;
-      const saldoCents = linhas.reduce(
-        (soma, l) => soma + (l.tipo === "debito" ? -l.amount_cents : l.amount_cents),
-        0,
-      );
+      // O saldo é SOMADO do livro-caixa e não lido de uma coluna: um total
+      // guardado em campo é a primeira coisa a divergir. Erro de leitura não
+      // vira "saldo zero" no retrato que alguém usa para decidir.
+      if (saldo.erro) throw new Error(`não consegui ler a carteira: ${saldo.erro}`);
 
       return {
         cliente: org.data,
         modulos: (modulos.data ?? []).map((m) => (m as { modulo: string }).modulo),
         canais: canais.data ?? [],
-        saldo_cents: saldoCents,
+        saldo_cents: saldo.saldo_cents,
+        // O extrato passou do teto de leitura e a soma é parcial.
+        saldo_truncado: saldo.truncado,
       };
     },
   },

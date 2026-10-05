@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { derivarSaldo, type LancamentoDaCarteira } from "@/lib/carteira/saldo";
+import { lerSaldoDaCarteira } from "@/lib/carteira/ler-saldo";
 import { deveParar, type QualidadeDoNumero } from "@/lib/broadcast/plano";
 import { logger } from "@/lib/logger";
 
@@ -96,13 +96,14 @@ export interface ResultadoDaRodada {
   restam: number;
 }
 
+/**
+ * O saldo sai do extrato INTEIRO (`lerSaldoDaCarteira`, paginado). O
+ * `.limit(100_000)` que estava aqui trazia no máximo 1000 linhas, o teto do
+ * PostgREST: a partir da milésima mensagem cobrada, o motor via saldo que não
+ * existia e continuava enviando.
+ */
 async function saldoAtual(db: SupabaseClient, organizationId: string): Promise<number> {
-  const { data } = await db
-    .from("tenant_wallet_ledger")
-    .select("tipo, amount_cents, occurred_at")
-    .eq("organization_id", organizationId)
-    .limit(100_000);
-  return derivarSaldo((data ?? []) as LancamentoDaCarteira[]).saldo_cents;
+  return (await lerSaldoDaCarteira(db, organizationId)).saldo_cents;
 }
 
 /**

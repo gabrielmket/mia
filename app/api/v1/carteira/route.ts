@@ -21,12 +21,8 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { moduloLiberado } from "@/lib/modulos/liberacao";
-import {
-  creditoAcabando,
-  derivarSaldo,
-  podeDisparar,
-  type LancamentoDaCarteira,
-} from "@/lib/carteira/saldo";
+import { lerSaldoDaCarteira } from "@/lib/carteira/ler-saldo";
+import { creditoAcabando, podeDisparar } from "@/lib/carteira/saldo";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +31,10 @@ export const dynamic = "force-dynamic";
  * só as 200 e mostraria um saldo errado para quem já teve mais lançamentos —
  * por isso a soma é feita sobre o extrato inteiro, e esta lista é só o que a
  * tela exibe.
+ *
+ * "O extrato inteiro" é `lerSaldoDaCarteira`, que pagina: o `.limit(100_000)`
+ * que estava aqui trazia no máximo 1000 linhas (o teto do PostgREST) e somava
+ * um recorte.
  */
 const LINHAS_NA_TELA = 200;
 
@@ -54,7 +54,7 @@ export async function GET(_req: NextRequest) {
     return fail("forbidden", "Módulo não contratado.", 403, { requestId });
   }
 
-  const [extratoRes, todosRes, precoRes] = await Promise.all([
+  const [extratoRes, saldo, precoRes] = await Promise.all([
     db
       .from("tenant_wallet_ledger")
       .select("id, tipo, amount_cents, currency, occurred_at, ref_kind, ref_id, note")
@@ -62,11 +62,7 @@ export async function GET(_req: NextRequest) {
       .order("occurred_at", { ascending: false })
       .limit(LINHAS_NA_TELA),
     // A soma vai sobre TODAS as linhas, não sobre a página acima.
-    db
-      .from("tenant_wallet_ledger")
-      .select("tipo, amount_cents, occurred_at")
-      .eq("organization_id", org.orgId)
-      .limit(100_000),
+    lerSaldoDaCarteira(db, org.orgId),
     db
       .from("tenant_broadcast_pricing")
       .select("preco_por_mensagem_cents, alerta_saldo_cents")
@@ -75,14 +71,7 @@ export async function GET(_req: NextRequest) {
   ]);
 
   if (extratoRes.error) return fail("query_failed", extratoRes.error.message, 500, { requestId });
-  if (todosRes.error) return fail("query_failed", todosRes.error.message, 500, { requestId });
-
-  const lancamentos: LancamentoDaCarteira[] = (todosRes.data ?? []).map((l) => ({
-    tipo: l.tipo as LancamentoDaCarteira["tipo"],
-    amount_cents: Number(l.amount_cents),
-    occurred_at: l.occurred_at as string,
-  }));
-  const saldo = derivarSaldo(lancamentos);
+  if (saldo.erro) return fail("query_failed", saldo.erro, 500, { requestId });
 
   const preco =
     precoRes.data?.preco_por_mensagem_cents === null ||
@@ -128,6 +117,8 @@ export async function GET(_req: NextRequest) {
         note: (l.note as string | null) ?? null,
       })),
       extrato_truncado: (extratoRes.data ?? []).length >= LINHAS_NA_TELA,
+      // O extrato passou do teto de leitura e a soma é parcial: a tela avisa.
+      saldo_truncado: saldo.truncado,
     },
     { requestId },
   );

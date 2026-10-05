@@ -41,6 +41,13 @@ export function CarteiraDaEmpresa() {
         <p className="mt-1 text-3xl font-semibold tabular-nums">
           {formatCentsBRL(data.saldo_cents)}
         </p>
+        {data.saldo_truncado && (
+          // O extrato passou do teto de leitura da rota: sem esta linha o
+          // número acima se leria como o saldo, e ele é uma soma parcial.
+          <p className="mt-2 text-sm text-warning-fg" data-testid="aviso-de-corte">
+            {t("O extrato passou do limite de leitura: o saldo soma só os lançamentos mais recentes.")}
+          </p>
+        )}
         {data.preco_por_mensagem_cents === null ? (
           <p className="mt-2 text-sm text-warning-fg">
             {t("Ainda não há preço por mensagem acordado — fale com quem cuida da sua conta antes de programar um disparo.")}

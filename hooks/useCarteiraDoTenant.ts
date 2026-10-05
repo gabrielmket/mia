@@ -36,6 +36,11 @@ export interface CarteiraDoTenant {
   /** O que a META cobra por mensagem de marketing. NULO = tarifa não cadastrada. */
   custo_da_meta_cents: number | null;
   custo_vigente_desde: string | null;
+  /**
+   * FORK MIA: o extrato passou do teto de leitura (lib/carteira/ler-saldo.ts) e
+   * o saldo é a soma só dos lançamentos mais recentes. A tela avisa.
+   */
+  saldo_truncado: boolean;
   extrato: LinhaDoExtrato[];
 }
 

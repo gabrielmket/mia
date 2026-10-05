@@ -29,10 +29,19 @@ function bancoFalso(pendentes: Array<{ id: string; phone_e164: string; contact_i
   const db = {
     from(tabela: string) {
       if (tabela === "tenant_wallet_ledger") {
-        return {
-          select: () => ({
-            eq: () => ({ limit: async () => ({ data: [{ tipo: "credito", amount_cents: 100_000, occurred_at: "2026-09-17T00:00:00Z" }], error: null }) }),
+        // O saldo é lido por `lerSaldoDaCarteira`, que pagina com `range` e pede
+        // a contagem na primeira página (lib/carteira/ler-saldo.ts).
+        const extrato = [{ tipo: "credito", amount_cents: 100_000, occurred_at: "2026-09-17T00:00:00Z" }];
+        const paginado = {
+          order: () => paginado,
+          range: async (de: number, ate: number) => ({
+            data: extrato.slice(de, ate + 1),
+            error: null,
+            count: extrato.length,
           }),
+        };
+        return {
+          select: () => ({ eq: () => paginado }),
           insert: async (linha: Record<string, unknown>) => {
             const chave = `${linha.ref_kind}:${linha.ref_id}`;
             if (cobrados.has(chave)) return { error: { code: "23505", message: "dup" } };
