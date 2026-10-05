@@ -10,6 +10,16 @@
  * Quem define meta é manager+ (é decisão de gestão); quem acompanha é todo mundo
  * que enxerga o funil. A RLS da tabela já diz isso; aqui a porta repete, porque
  * política de banco não devolve mensagem que gente entende.
+ *
+ * ── As leituras do mês PAGINAM, e dizem quando não coube ────────────────────
+ *
+ * O realizado é somado aqui, e o PostgREST corta toda resposta em `max_rows`
+ * (1000) sem avisar: o `.limit(10_000)` que estava nas duas leituras nunca
+ * trouxe mais de 1000 linhas. Numa casa com mais de 1000 vendas ganhas ou mais
+ * de 1000 reuniões no mês, a barra da meta parava num recorte arbitrário. As
+ * duas passam pelo laço de `lib/leitura/todas-as-paginas.ts` (o idioma do
+ * upstream em `app/api/v1/reports/tags/route.ts`), e o que passar do teto
+ * chega à tela como `truncado`.
  */
 import { randomUUID } from "node:crypto";
 
@@ -29,6 +39,7 @@ import {
 } from "@/lib/crm/metas/progresso";
 import { FUSO_PADRAO, janelaDoMes } from "@/lib/crm/metas/fuso";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
 
@@ -36,6 +47,31 @@ export const dynamic = "force-dynamic";
 
 /** AAAA-MM: o mês é a unidade da meta comercial. */
 const MES = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/**
+ * O teto de cada leitura do mês: 10 páginas de 1000, as 10 mil linhas que o
+ * `.limit(10_000)` antigo declarava e nunca entregou. Acima disso a resposta
+ * sai `truncado` e a tela avisa.
+ */
+const PAGINAS_MAXIMAS = 10;
+
+interface VendaGanhaLida {
+  status: string;
+  value_cents: number | string | null;
+  revenue_kind: string | null;
+  recurring_months: number | null;
+  owner_user_id: string | null;
+  originated_by_user_id: string | null;
+  closed_at: string | null;
+  pipeline_id: string;
+}
+
+interface ReuniaoLida {
+  created_by_user_id: string | null;
+  created_by_agent_id: string | null;
+  created_at: string;
+  status: string;
+}
 
 const criarSchema = z.object({
   periodo: z.string().regex(MES, "use AAAA-MM"),
@@ -95,26 +131,50 @@ export async function GET(req: NextRequest): Promise<Response> {
       .select("id, periodo, metrica, alvo_cents, alvo_quantidade, user_id, agent_id")
       .eq("organization_id", org.orgId)
       .eq("periodo", dia1),
-    db
-      .from("crm_leads")
-      .select(
-        "status, value_cents, revenue_kind, recurring_months, owner_user_id, originated_by_user_id, closed_at, pipeline_id",
-      )
-      .eq("organization_id", org.orgId)
-      .eq("status", "won")
-      .gte("closed_at", janela.inicio)
-      .lt("closed_at", fim)
-      .limit(10_000),
-    db
-      .from("calendar_appointments")
-      .select("created_by_user_id, created_by_agent_id, created_at, status")
-      .eq("organization_id", org.orgId)
-      .gte("created_at", janela.inicio)
-      .lt("created_at", fim)
-      .limit(10_000),
+    // Da mais NOVA para a mais antiga, com `id` de desempate: paginar por
+    // `range` só é correto sobre uma ordem única, e, se a leitura for cortada,
+    // o que sobra é o fim do mês, que é o que quem acompanha a meta está olhando.
+    lerTodasAsPaginas<VendaGanhaLida>(
+      (de, ate, pedirContagem) =>
+        db
+          .from("crm_leads")
+          .select(
+            "status, value_cents, revenue_kind, recurring_months, owner_user_id, originated_by_user_id, closed_at, pipeline_id",
+            pedirContagem ? { count: "exact" } : undefined,
+          )
+          .eq("organization_id", org.orgId)
+          .eq("status", "won")
+          .gte("closed_at", janela.inicio)
+          .lt("closed_at", fim)
+          .order("closed_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(de, ate),
+      { paginasMaximas: PAGINAS_MAXIMAS },
+    ),
+    lerTodasAsPaginas<ReuniaoLida>(
+      (de, ate, pedirContagem) =>
+        db
+          .from("calendar_appointments")
+          .select(
+            "created_by_user_id, created_by_agent_id, created_at, status",
+            pedirContagem ? { count: "exact" } : undefined,
+          )
+          .eq("organization_id", org.orgId)
+          .gte("created_at", janela.inicio)
+          .lt("created_at", fim)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(de, ate),
+      { paginasMaximas: PAGINAS_MAXIMAS },
+    ),
   ]);
 
   if (metasRes.error) return fail("query_failed", metasRes.error.message, 500, { requestId });
+  // Uma página que falha no meio não pode virar "zero vendas no mês": com a
+  // leitura em várias idas, o erro de uma delas responde 500 em vez de um
+  // realizado pela metade.
+  if (leadsRes.erro) return fail("query_failed", leadsRes.erro, 500, { requestId });
+  if (reunioesRes.erro) return fail("query_failed", reunioesRes.erro, 500, { requestId });
 
   /**
    * Em QUAIS funis vencer é receita.
@@ -141,26 +201,26 @@ export async function GET(req: NextRequest): Promise<Response> {
       )
     : null;
 
-  const leads: LeadFechadoComPrazo[] = (leadsRes.data ?? []).map((l) => ({
-    status: l.status as string,
+  const leads: LeadFechadoComPrazo[] = leadsRes.linhas.map((l) => ({
+    status: l.status,
     value_cents: l.value_cents === null ? null : Number(l.value_cents),
     revenue_kind: (l.revenue_kind as "recorrente" | "avulso" | null) ?? null,
-    recurring_months: (l.recurring_months as number | null) ?? null,
-    owner_user_id: (l.owner_user_id as string | null) ?? null,
-    originated_by_user_id: (l.originated_by_user_id as string | null) ?? null,
-    closed_at: (l.closed_at as string | null) ?? null,
-    pipeline_id: l.pipeline_id as string,
+    recurring_months: l.recurring_months ?? null,
+    owner_user_id: l.owner_user_id ?? null,
+    originated_by_user_id: l.originated_by_user_id ?? null,
+    closed_at: l.closed_at ?? null,
+    pipeline_id: l.pipeline_id,
   }));
 
   // Reunião CANCELADA não conta como marcada: a meta do SDR mede compromisso de
   // pé, e contar cancelamento premiaria quem marca por marcar.
-  const reunioes: ReuniaoMarcada[] = (reunioesRes.data ?? [])
+  const reunioes: ReuniaoMarcada[] = reunioesRes.linhas
     .filter((r) => r.status !== "cancelled")
     .map((r) => ({
-      marcada_por_user_id: (r.created_by_user_id as string | null) ?? null,
-      marcada_por_agent_id: (r.created_by_agent_id as string | null) ?? null,
-      created_at: r.created_at as string,
-      status: r.status as string,
+      marcada_por_user_id: r.created_by_user_id ?? null,
+      marcada_por_agent_id: r.created_by_agent_id ?? null,
+      created_at: r.created_at,
+      status: r.status,
     }));
 
   const metas = (metasRes.data ?? []) as unknown as Meta[];
@@ -181,6 +241,9 @@ export async function GET(req: NextRequest): Promise<Response> {
       // número parecer o total da casa.
       funis_que_contam_receita: funisDeReceita ? [...funisDeReceita] : null,
       reunioes_no_mes: reunioes.length,
+      // Alguma das duas leituras passou do teto: os números contam só as vendas
+      // e as reuniões mais recentes do mês, e a tela tem de dizer.
+      truncado: leadsRes.truncado || reunioesRes.truncado,
     },
     { requestId },
   );

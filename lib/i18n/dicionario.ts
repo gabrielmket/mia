@@ -41,6 +41,8 @@ import { DICIONARIO_DAS_CONVERSOES_DA_META } from "./dicionario-mia-conversoes";
 import { DICIONARIO_OBRIGACOES_MIA } from "./dicionario-obrigacoes-mia";
 // FORK MIA: as frases nossas da equipe e do convite, idem.
 import { DICIONARIO_DA_EQUIPE_MIA } from "./dicionario-mia-equipe";
+// FORK MIA: as frases novas dos relatórios e das metas, idem.
+import { DICIONARIO_RELATORIOS_MIA } from "./dicionario-relatorios-mia";
 
 /** `pt-BR` não aparece: é a chave. Só o que DIFERE precisa de linha. */
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
@@ -15507,6 +15509,7 @@ export const DICIONARIO: Traducoes = {
   ...DICIONARIO_CARTOES_MIA,
   ...DICIONARIO_OBRIGACOES_MIA,
   ...DICIONARIO_DA_EQUIPE_MIA,
+  ...DICIONARIO_RELATORIOS_MIA,
 };
 
 /**

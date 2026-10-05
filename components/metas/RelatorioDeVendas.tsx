@@ -84,6 +84,17 @@ export function RelatorioDeVendas() {
         </p>
       ) : (
         <>
+          {data.truncado ? (
+            // A leitura foi cortada no teto de páginas da rota (do fechamento
+            // mais novo para o mais antigo). Sem esta linha os números se
+            // leriam como o período inteiro. Mesmo aviso do relatório por
+            // etiqueta do upstream.
+            <p className="text-xs text-amber-600 dark:text-amber-500" data-testid="aviso-de-corte">
+              {t(
+                "O período passou do limite de leitura: os números contam só os negócios fechados mais recentes.",
+              )}
+            </p>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-md border p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">

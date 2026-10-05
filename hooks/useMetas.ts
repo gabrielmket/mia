@@ -18,6 +18,11 @@ export interface PainelDeMetas {
     /** NULO enquanto nenhuma reunião tiver desfecho. Não é zero. */
     taxa_de_comparecimento: number | null;
   };
+  /**
+   * FORK MIA: o mês passou do teto de leitura da rota, e os números contam só
+   * as vendas e as reuniões mais recentes. A tela avisa.
+   */
+  truncado: boolean;
 }
 
 const CHAVE = (periodo: string) => ["metas", periodo] as const;

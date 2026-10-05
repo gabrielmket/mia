@@ -18,6 +18,11 @@ export interface RelatorioDeVendas {
     vendas: number;
     perdas: number;
   }>;
+  /**
+   * FORK MIA: o período passou do teto de leitura da rota, e os números contam
+   * só os negócios fechados mais recentes. A tela avisa.
+   */
+  truncado: boolean;
 }
 
 export function useRelatorioDeVendas(periodo: string) {

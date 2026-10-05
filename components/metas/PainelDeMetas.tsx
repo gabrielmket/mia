@@ -115,6 +115,16 @@ export function PainelDeMetas() {
         </p>
       ) : (
         <>
+          {data.truncado ? (
+            // A leitura do mês foi cortada no teto de páginas da rota. Sem esta
+            // linha a barra da meta e o fechamento se leriam como o mês inteiro.
+            // Mesmo aviso do relatório por etiqueta do upstream.
+            <p className="text-xs text-amber-600 dark:text-amber-500" data-testid="aviso-de-corte">
+              {t(
+                "O mês passou do limite de leitura: os números contam só as vendas e as reuniões mais recentes.",
+              )}
+            </p>
+          ) : null}
           {data.metas.length === 0 ? (
             <p className="rounded-md border p-4 text-sm text-muted-foreground">
               {podeDefinir

@@ -10,6 +10,22 @@
  * há tabela de relatório, e por isso não há relatório que envelhece.
  *
  * Auth: manager+. Receita, ciclo e motivo de perda são leitura de gestão.
+ *
+ * ── A leitura PAGINA, e diz quando não coube ────────────────────────────────
+ *
+ * A conta é feita aqui (as funções puras de `lib/crm/relatorio/vendas.ts`), e
+ * por isso a leitura não pode parar na linha 1000: o PostgREST corta toda
+ * resposta em `max_rows` sem avisar, e o `.limit(50_000)` que estava aqui nunca
+ * trouxe mais de 1000 negócios. Numa casa com mais de 1000 fechamentos em seis
+ * meses, a taxa de ganho, o ciclo, os motivos e a série saíam de um recorte
+ * arbitrário, com cara de total. O idioma é o do upstream em
+ * `app/api/v1/reports/tags/route.ts`, pelo laço de
+ * `lib/leitura/todas-as-paginas.ts`.
+ *
+ * Por que paginar e não somar no banco: mediana, mês no fuso de quem opera e a
+ * régua "em qual funil vencer é receita" já estão escritas e testadas em
+ * TypeScript, e são as MESMAS do módulo de metas. Uma função no banco seria a
+ * segunda régua de receita do produto.
  */
 import { randomUUID } from "node:crypto";
 
@@ -26,6 +42,7 @@ import {
   type LeadDoRelatorio,
 } from "@/lib/crm/relatorio/vendas";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +50,14 @@ export const dynamic = "force-dynamic";
 const MES = /^\d{4}-(0[1-9]|1[0-2])$/;
 /** Quantos meses a série mostra. Seis cabem numa tela e mostram sazonalidade. */
 const MESES_DA_SERIE = 6;
+/**
+ * O teto da leitura: 50 páginas de 1000, os 50 mil negócios fechados que o
+ * `.limit(50_000)` antigo declarava e nunca entregou. Acima disso a resposta
+ * sai `truncado` e a tela avisa.
+ */
+const PAGINAS_MAXIMAS = 50;
+const COLUNAS_DO_NEGOCIO =
+  "status, pipeline_id, value_cents, revenue_kind, recurring_months, lost_reason, created_at, closed_at";
 
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
@@ -69,20 +94,28 @@ export async function GET(req: NextRequest): Promise<Response> {
   ).inicio;
   const fimDoMes = janelaDoMes(periodo, fuso).fim;
 
+  // Do fechamento mais NOVO para o mais antigo: se a leitura for cortada, o mês
+  // pedido (o último da série) continua inteiro e o que fica de fora é o começo
+  // da série. `id` desempata, porque paginar por `range` só é correto sobre uma
+  // ordem única.
   const [leadsRes, funisRes] = await Promise.all([
-    db
-      .from("crm_leads")
-      .select(
-        "status, pipeline_id, value_cents, revenue_kind, recurring_months, lost_reason, created_at, closed_at",
-      )
-      .eq("organization_id", org.orgId)
-      .not("closed_at", "is", null)
-      .gte("closed_at", inicioDaSerie)
-      .lt("closed_at", fimDoMes)
-      .limit(50_000),
+    lerTodasAsPaginas<LeadDoRelatorio>(
+      (de, ate, pedirContagem) =>
+        db
+          .from("crm_leads")
+          .select(COLUNAS_DO_NEGOCIO, pedirContagem ? { count: "exact" } : undefined)
+          .eq("organization_id", org.orgId)
+          .not("closed_at", "is", null)
+          .gte("closed_at", inicioDaSerie)
+          .lt("closed_at", fimDoMes)
+          .order("closed_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(de, ate),
+      { paginasMaximas: PAGINAS_MAXIMAS },
+    ),
     db.from("crm_pipelines").select("id, settings").eq("organization_id", org.orgId),
   ]);
-  if (leadsRes.error) return fail("query_failed", leadsRes.error.message, 500, { requestId });
+  if (leadsRes.erro) return fail("query_failed", leadsRes.erro, 500, { requestId });
 
   // A MESMA régua do módulo de metas: ganhar num funil de SDR não é receita.
   const declararam = (funisRes.data ?? []).some(
@@ -98,7 +131,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       )
     : null;
 
-  const leads = (leadsRes.data ?? []) as unknown as LeadDoRelatorio[];
+  const leads = leadsRes.linhas;
 
   return ok(
     {
@@ -108,6 +141,9 @@ export async function GET(req: NextRequest): Promise<Response> {
       ciclo_de_venda: cicloDeVenda(leads, periodo, fuso, funisDeReceita),
       motivos_de_perda: motivosDePerda(leads, periodo, fuso),
       historico: historico(leads, periodo, MESES_DA_SERIE, fuso, funisDeReceita),
+      // O período passou do teto de leitura: os números contam só os negócios
+      // fechados mais recentes, e a tela tem de dizer.
+      truncado: leadsRes.truncado,
     },
     { requestId },
   );

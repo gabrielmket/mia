@@ -30,11 +30,7 @@ export function mesNoFuso(iso: string | null, fuso: string): string {
   const quando = new Date(iso);
   if (Number.isNaN(quando.getTime())) return "";
   try {
-    const partes = new Intl.DateTimeFormat("en-CA", {
-      timeZone: fuso,
-      year: "numeric",
-      month: "2-digit",
-    }).formatToParts(quando);
+    const partes = formatadorDoMes(fuso).formatToParts(quando);
     const ano = partes.find((p) => p.type === "year")?.value;
     const mes = partes.find((p) => p.type === "month")?.value;
     return ano && mes ? `${ano}-${mes}` : "";
@@ -43,6 +39,34 @@ export function mesNoFuso(iso: string | null, fuso: string): string {
     // o relatório inteiro. É o mesmo mês de antes desta correção.
     return iso.slice(0, 7);
   }
+}
+
+/**
+ * O formatador do mês, UM por fuso.
+ *
+ * Construir um `Intl.DateTimeFormat` é a parte cara desta conta (medido: perto
+ * de 0,1 ms cada), e `mesNoFuso` roda uma vez por negócio em cada pergunta do
+ * relatório. Enquanto a rota lia no máximo 1000 linhas isso não aparecia; com a
+ * leitura inteira (`lib/leitura/todas-as-paginas.ts`), 50 mil negócios custavam
+ * 18 segundos de processador só construindo formatador. Guardado, o mesmo
+ * relatório sai em menos de um segundo, com o mesmo resultado.
+ *
+ * Fuso inválido LANÇA na construção e não entra no mapa: quem chama cai no
+ * `catch` de sempre, a cada vez.
+ */
+const FORMATADORES_DO_MES = new Map<string, Intl.DateTimeFormat>();
+
+function formatadorDoMes(fuso: string): Intl.DateTimeFormat {
+  let formatador = FORMATADORES_DO_MES.get(fuso);
+  if (!formatador) {
+    formatador = new Intl.DateTimeFormat("en-CA", {
+      timeZone: fuso,
+      year: "numeric",
+      month: "2-digit",
+    });
+    FORMATADORES_DO_MES.set(fuso, formatador);
+  }
+  return formatador;
 }
 
 /**
