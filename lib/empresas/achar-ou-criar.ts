@@ -23,6 +23,17 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
+import { logger } from "@/lib/logger";
+
+/**
+ * FORK MIA: 5 páginas de 1000, as 5 mil empresas que o `.limit(5_000)` antigo
+ * declarava. O PostgREST corta toda resposta em 1000 linhas sem avisar, então a
+ * busca só via as 1000 primeiras: a partir da 1001ª empresa, o nome que já
+ * existia não era achado e nascia uma ficha repetida, em silêncio.
+ */
+const PAGINAS_MAXIMAS = 5;
+
 /** Sufixos societários que não distinguem uma empresa de outra. */
 const SUFIXOS = /\b(ltda|me|epp|eireli|sa|s\/a|s\.a|mei|cia|e cia)\b/g;
 
@@ -86,22 +97,42 @@ export async function acharOuCriarEmpresa(
     // sufixo societário) não existe em SQL sem `unaccent`, e a lista de
     // empresas de um tenant é pequena — quem tiver dez mil pede um índice
     // funcional, não um `ilike` que erraria justamente nos acentuados.
-    const { data, error } = await db
-      .from("crm_empresas")
-      .select("id, nome")
-      .eq("organization_id", organizationId)
-      // Lápide fora: casar com uma ficha já fundida devolveria o contato para a
-      // empresa que alguém acabou de aposentar.
-      .is("mesclada_em", null)
-      .limit(5_000);
-    if (error) return { ok: false, motivo: "erro", detalhe: error.message };
-
-    const existente = (data ?? []).find(
-      (e) => nomeComparavel((e as { nome: string }).nome) === comparavel,
+    const lidas = await lerTodasAsPaginas<{ id: string; nome: string }>(
+      (de, ate, pedirContagem) =>
+        db
+          .from("crm_empresas")
+          .select("id, nome", pedirContagem ? { count: "exact" } : undefined)
+          .eq("organization_id", organizationId)
+          // Lápide fora: casar com uma ficha já fundida devolveria o contato para a
+          // empresa que alguém acabou de aposentar.
+          .is("mesclada_em", null)
+          // Ordem única: paginar por `range` só é correto assim.
+          .order("id", { ascending: true })
+          .range(de, ate),
+      { paginasMaximas: PAGINAS_MAXIMAS },
     );
+    if (lidas.erro) return { ok: false, motivo: "erro", detalhe: lidas.erro };
+
+    const existente = lidas.linhas.find((e) => nomeComparavel(e.nome) === comparavel);
     if (existente) {
-      const linha = existente as { id: string; nome: string };
-      return { ok: true, empresaId: linha.id, criada: false, nome: linha.nome };
+      return { ok: true, empresaId: existente.id, criada: false, nome: existente.nome };
+    }
+
+    /**
+     * Não achou, e a lista passou do teto: NÃO cria.
+     *
+     * "Não está entre as que li" não prova "não existe", e criar aqui seria o
+     * mesmo defeito de antes, só que a partir da 5001ª empresa. Recusar é
+     * visível (a ferramenta do agente responde "não consegui registrar" e a
+     * falha fica auditada); a ficha repetida não é.
+     */
+    if (lidas.truncado) {
+      logger.error("[empresas] lista acima do teto de leitura: empresa não criada para não repetir ficha", {
+        organization_id: organizationId,
+        lidas: lidas.linhas.length,
+        no_banco: lidas.total,
+      });
+      return { ok: false, motivo: "erro", detalhe: "lista de empresas acima do teto de leitura" };
     }
 
     const { data: nova, error: erroInsert } = await db
