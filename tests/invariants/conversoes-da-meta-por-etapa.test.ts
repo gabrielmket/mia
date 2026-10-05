@@ -253,7 +253,7 @@ beforeEach(async () => {
   await pool.query("delete from public.meta_ads_conversion_rules where organization_id = any($1)", todas);
   await pool.query("delete from public.mia_conversoes_meta_config where organization_id = any($1)", todas);
   await pool.query("delete from public.google_ads_conversion_rules where organization_id = any($1)", todas);
-  await pool.query("update public.crm_leads set value_cents = null, status = 'open' where organization_id = any($1)", todas);
+  await pool.query("update public.crm_leads set value_cents = null, status = 'open', closed_at = null where organization_id = any($1)", todas);
   await origem(REAL, {}, {});
 });
 
@@ -359,7 +359,8 @@ describe("⭐ A REGRA DA CASA: um movimento de etapa, no máximo UMA ida à Meta
     const i = ids(REAL);
     await origem(REAL, DO_FORMULARIO, DO_FORMULARIO);
     await chaveDosFormularios(REAL, true);
-    await pool.query("update public.crm_leads set status = 'won', value_cents = 240000 where id = $1", [i.lead]);
+    // `crm_leads_closed_at_consistency`: ganho tem data de fechamento.
+    await pool.query("update public.crm_leads set status = 'won', closed_at = now(), value_cents = 240000 where id = $1", [i.lead]);
 
     await drenar(entrou(REAL, i.ganho, await hora("1 second")));
     await drenar(entrou(REAL, i.ganho, await hora("1 second"), { id: "evento-won", event_type: "lead.won", payload: {} }));
