@@ -156,9 +156,24 @@ export async function rodarCampanha(
   let cobradoCents = 0;
   let parou: ResultadoDaRodada["parou"] = null;
 
+  /**
+   * O saldo é lido UMA vez por rodada, e a rodada desconta dele o que ela mesma
+   * cobra.
+   *
+   * Ele era relido a cada mensagem. Enquanto a leitura trazia no máximo 1000
+   * linhas isso custava uma ida ao banco; com o extrato lido INTEIRO
+   * (`lerSaldoDaCarteira`), uma carteira de 30 mil lançamentos custaria 30 idas
+   * por mensagem, 1.500 por rodada, e a rodada passaria do minuto do cron.
+   *
+   * O desconto local erra para o lado seguro: crédito ou estorno que entre no
+   * meio da rodada só é visto na próxima (um minuto depois), e a rodada nunca
+   * enxerga MAIS saldo do que havia quando começou.
+   */
+  let saldoCents = await saldoAtual(db, campanha.organization_id);
+
   for (let i = 0; i < limiteDaRodada; i += 1) {
     const motivo = deveParar({
-      saldoCents: await saldoAtual(db, campanha.organization_id),
+      saldoCents,
       precoPorMensagemCents: preco,
       qualidade,
     });
@@ -224,7 +239,10 @@ export async function rodarCampanha(
         precoCents: preco ?? 0,
         nome: `Disparo: ${campanha.template_name}`,
       });
-      if (ok && preco && preco > 0) cobradoCents += preco;
+      if (ok && preco && preco > 0) {
+        cobradoCents += preco;
+        saldoCents -= preco;
+      }
       enviadas += 1;
     } catch (err) {
       // Falha NÃO cobra: o débito só acontece depois do aceite da Meta, e este
