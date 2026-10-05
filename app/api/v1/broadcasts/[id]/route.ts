@@ -35,7 +35,9 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { peneirar, type ContatoParaDisparo } from "@/lib/broadcast/plano";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { logger } from "@/lib/logger";
 import { moduloLiberado } from "@/lib/modulos/liberacao";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -275,6 +277,32 @@ export async function PATCH(
     }
   }
 
+  /**
+   * A lista nova é LIDA antes de qualquer escrita.
+   *
+   * Se ela for recusada (acima do teto) ou a leitura falhar, nada da edição é
+   * gravado e a lista antiga fica como estava. Lida depois do `update`, a recusa
+   * deixaria o nome e o template trocados com a lista velha.
+   */
+  let contatosDaListaNova: unknown[] | null = null;
+  if (dados.tags !== undefined || dados.etapas !== undefined) {
+    // Qualquer um dos dois filtros remonta a lista, e os dois vão juntos para o
+    // mesmo lugar que a criação usa, para não existir uma segunda regra sobre
+    // quem entra na campanha.
+    const lista = await quemEntraNaLista(db, authz.org.orgId, {
+      tags: dados.tags ?? [],
+      etapas: dados.etapas ?? [],
+    });
+    if (!lista.ok) {
+      // Mesma recusa da criação: lista acima do teto não remonta cortada.
+      if (lista.acimaDoTeto) {
+        return fail("validation_failed", traduzir(lista.erro, authz.user.idioma), 422, { requestId });
+      }
+      return fail("query_failed", lista.erro, 500, { requestId });
+    }
+    contatosDaListaNova = lista.contatos;
+  }
+
   const admin = createAdminClient();
   const patch: Record<string, unknown> = {};
   if (dados.nome !== undefined) patch.nome = dados.nome;
@@ -294,16 +322,8 @@ export async function PATCH(
     semConsentimento: number;
   } | null = null;
 
-  // Qualquer um dos dois filtros remonta a lista — e os dois vão juntos para o
-  // mesmo lugar que a criação usa, para não existir uma segunda regra sobre
-  // quem entra na campanha.
-  if (dados.tags !== undefined || dados.etapas !== undefined) {
-    const lista = await quemEntraNaLista(db, authz.org.orgId, {
-      tags: dados.tags ?? [],
-      etapas: dados.etapas ?? [],
-    });
-    if (!lista.ok) return fail("query_failed", lista.erro, 500, { requestId });
-    const contatos = lista.contatos;
+  if (contatosDaListaNova !== null) {
+    const contatos = contatosDaListaNova;
 
     const variavel =
       dados.variavel_do_nome === undefined
@@ -324,7 +344,13 @@ export async function PATCH(
      * "3 destinatários" enquanto a campanha guarda 7. Rascunho é o único estado
      * em que apagar destinatário é seguro — nenhum deles recebeu nada.
      */
-    await admin.from("broadcast_recipients").delete().eq("broadcast_id", id);
+    const { error: erroAoLimpar } = await admin
+      .from("broadcast_recipients")
+      .delete()
+      .eq("broadcast_id", id);
+    // Sem limpar, a lista nova entraria POR CIMA da velha (e bateria no índice
+    // único): melhor parar com a lista antiga inteira.
+    if (erroAoLimpar) return fail("db_error", "Falha ao remontar a lista.", 500, { requestId });
 
     if (peneira.enviar.length > 0) {
       // Em blocos: uma lista de 50 mil numa tacada estoura o limite do PostgREST.
@@ -336,7 +362,25 @@ export async function PATCH(
           phone_e164: d.phoneE164,
           valores: d.valores,
         }));
-        await admin.from("broadcast_recipients").insert(bloco);
+        const { error: erroDoBloco } = await admin.from("broadcast_recipients").insert(bloco);
+        if (erroDoBloco) {
+          // Um bloco que não entra deixaria o rascunho com MENOS gente do que a
+          // resposta diz. A lista velha já saiu, então o lado seguro é ficar
+          // com NENHUM destinatário (rascunho vazio não dispara) e dizer isso.
+          logger.error("[broadcast] bloco de destinatários recusado ao remontar: lista zerada", {
+            request_id: requestId,
+            broadcast_id: id,
+            bloco: i,
+            detalhe: erroDoBloco.message?.slice(0, 300) ?? null,
+          });
+          await admin.from("broadcast_recipients").delete().eq("broadcast_id", id);
+          return fail(
+            "db_error",
+            traduzir("Não consegui gravar a lista nova, e o disparo ficou sem destinatários. Salve o filtro de novo para remontar a lista.", authz.user.idioma),
+            500,
+            { requestId },
+          );
+        }
       }
     }
 

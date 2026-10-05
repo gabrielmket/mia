@@ -18,11 +18,14 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { contarAndamento } from "@/lib/broadcast/andamento";
 import { peneirar, podeComecar, type ContatoParaDisparo } from "@/lib/broadcast/plano";
 import { lerSaldoDaCarteira } from "@/lib/carteira/ler-saldo";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { quemEntraNaLista } from "@/lib/broadcast/quem-entra-na-lista";
+import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { logger } from "@/lib/logger";
 import { moduloLiberado } from "@/lib/modulos/liberacao";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -77,25 +80,15 @@ export async function GET(_req: NextRequest): Promise<Response> {
     .limit(100);
   if (error) return fail("query_failed", error.message, 500, { requestId });
 
-  // O andamento sai da soma das LINHAS. Um contador na campanha divergiria da
-  // realidade no primeiro envio que falhasse fora do caminho feliz.
+  // O andamento sai das LINHAS, e não de um contador na campanha (que divergiria
+  // da realidade no primeiro envio que falhasse fora do caminho feliz). Mas as
+  // linhas são CONTADAS no banco, por campanha e por estado: trazê-las com
+  // `.limit(200_000)` e contar aqui devolvia no máximo 1000 (o teto do
+  // PostgREST), e uma campanha de 3.000 aparecia com "1.000 na lista".
   const ids = (campanhas ?? []).map((c) => c.id as string);
-  const porCampanha = new Map<string, Record<string, number>>();
-  if (ids.length > 0) {
-    const { data: linhas } = await db
-      .from("broadcast_recipients")
-      .select("broadcast_id, status")
-      .in("broadcast_id", ids)
-      .limit(200_000);
-    for (const l of linhas ?? []) {
-      const id = l.broadcast_id as string;
-      const atual = porCampanha.get(id) ?? {};
-      const s = l.status as string;
-      atual[s] = (atual[s] ?? 0) + 1;
-      atual.total = (atual.total ?? 0) + 1;
-      porCampanha.set(id, atual);
-    }
-  }
+  const andamento = await contarAndamento(db, authz.org.orgId, ids);
+  if (!andamento.ok) return fail("query_failed", andamento.erro, 500, { requestId });
+  const porCampanha = andamento.porCampanha;
 
   return ok(
     {
@@ -152,7 +145,16 @@ export async function POST(req: NextRequest): Promise<Response> {
     tags: dados.tags,
     etapas: dados.etapas,
   });
-  if (!lista.ok) return fail("query_failed", lista.erro, 500, { requestId });
+  if (!lista.ok) {
+    // Lista acima do teto não é falha do banco: é pedido que tem de ser
+    // dividido. Recusa AQUI, antes de existir disparo, com a frase que a tela
+    // mostra como veio. O que não pode é a lista sair cortada e a tela dizer
+    // que foi tudo.
+    if (lista.acimaDoTeto) {
+      return fail("validation_failed", traduzir(lista.erro, authz.user.idioma), 422, { requestId });
+    }
+    return fail("query_failed", lista.erro, 500, { requestId });
+  }
   const contatos = lista.contatos;
 
   // O nome que vai na mensagem é o de `nomeDoContato`: o que o operador
@@ -220,7 +222,26 @@ export async function POST(req: NextRequest): Promise<Response> {
         phone_e164: d.phoneE164,
         valores: d.valores,
       }));
-      await admin.from("broadcast_recipients").insert(bloco);
+      const { error: erroDoBloco } = await admin.from("broadcast_recipients").insert(bloco);
+      if (erroDoBloco) {
+        // Um bloco que não entra deixaria o disparo com MENOS gente do que a
+        // resposta diz, e ninguém perceberia. Desfaz o que entrou e o próprio
+        // disparo (é rascunho, nada saiu), e diz que não criou.
+        logger.error("[broadcast] bloco de destinatários recusado: disparo desfeito", {
+          request_id: requestId,
+          broadcast_id: campanha.id,
+          bloco: i,
+          detalhe: erroDoBloco.message?.slice(0, 300) ?? null,
+        });
+        await admin.from("broadcast_recipients").delete().eq("broadcast_id", campanha.id);
+        await admin.from("broadcasts").delete().eq("id", campanha.id);
+        return fail(
+          "db_error",
+          traduzir("Não consegui gravar a lista de destinatários, e o disparo não foi criado. Tente de novo.", authz.user.idioma),
+          500,
+          { requestId },
+        );
+      }
     }
   }
 

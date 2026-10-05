@@ -8,11 +8,15 @@
  *
  *   · corta TODA resposta em `maxRows`, por maior que seja o `limit`/`range`;
  *   · aplica de verdade os filtros (`eq`, `neq`, `is`, `not … is null`, `in`,
- *     `gte`, `gt`, `lt`, `lte`), a ordem e o `range`;
- *   · devolve o `count` exato só quando o `select` o pede, e `null` senão;
+ *     `overlaps`, `gte`, `gt`, `lt`, `lte`), a ordem e o `range`;
+ *   · devolve o `count` exato só quando o `select` o pede, e `null` senão; com
+ *     `head: true` devolve só a contagem, sem linha;
  *   · sem `order`, devolve na ordem de inserção (o que o Postgres costuma fazer
  *     com a ordem física: as linhas mais ANTIGAS primeiro);
  *   · registra cada pedido, para o teste contar as idas ao banco;
+ *   · escreve de verdade nas tabelas (`insert`, `update`, `delete`) e registra
+ *     cada escrita, para o teste provar que uma recusa não gravou nada e que um
+ *     desfazer desfez;
  *   · LANÇA em método que não conhece: engolir a cláusula devolveria a linha
  *     que o filtro existia para excluir (a mesma regra de
  *     `tests/helpers/stages-db-double.ts`).
@@ -30,6 +34,15 @@ export interface Pedido {
   devolvidas: number;
 }
 
+export interface Escrita {
+  tabela: string;
+  op: "insert" | "update" | "delete";
+  /** Quantas linhas a escrita alcançou (inseridas, alteradas ou apagadas). */
+  linhas: number;
+  /** A escrita foi recusada pelo banco de mentira (`falhaNaEscrita`). */
+  recusada: boolean;
+}
+
 export interface Resposta {
   data: Linha[] | null;
   error: { message: string } | null;
@@ -39,11 +52,15 @@ export interface Resposta {
 /** A cadeia do dublê: todo filtro devolve a própria cadeia, e ela é aguardável. */
 export interface Cadeia extends PromiseLike<Resposta> {
   select(colunas?: string, opcoes?: { count?: "exact"; head?: boolean }): Cadeia;
+  insert(linhas: Linha | Linha[]): Cadeia;
+  update(mudanca: Linha): Cadeia;
+  delete(): Cadeia;
   eq(coluna: string, valor: unknown): Cadeia;
   neq(coluna: string, valor: unknown): Cadeia;
   is(coluna: string, valor: unknown): Cadeia;
   not(coluna: string, operador: string, valor: unknown): Cadeia;
   in(coluna: string, valores: unknown[]): Cadeia;
+  overlaps(coluna: string, valores: unknown[]): Cadeia;
   gte(coluna: string, valor: unknown): Cadeia;
   gt(coluna: string, valor: unknown): Cadeia;
   lt(coluna: string, valor: unknown): Cadeia;
@@ -59,8 +76,22 @@ export interface PostgrestComTeto {
   /** O cliente, no formato que `createClient()` devolve. */
   cliente: { from: (tabela: string) => Cadeia };
   pedidos: Pedido[];
-  /** Quantos pedidos foram feitos a uma tabela. */
+  /** Quantos pedidos de LEITURA foram feitos a uma tabela. */
   pedidosEm: (tabela: string) => number;
+  /** Cada escrita, na ordem. */
+  escritas: Escrita[];
+  /** As tabelas DEPOIS das escritas: é aqui que se confere o que ficou gravado. */
+  tabelas: Record<string, Linha[]>;
+}
+
+export interface OpcoesDoDuble {
+  maxRows?: number;
+  /** O servidor não devolve `count` (cabeçalho ausente, proxy). */
+  semContagem?: boolean;
+  /** Erro do banco no n-ésimo pedido de leitura (1-based), como o PostgREST devolveria. */
+  falhaEm?: (pedido: number, tabela: string) => string | null;
+  /** Erro do banco na n-ésima escrita (1-based) da tabela. */
+  falhaNaEscrita?: (escrita: number, tabela: string, op: Escrita["op"]) => string | null;
 }
 
 /** Datas ISO comparam como instante; o resto, como veio. */
@@ -82,16 +113,20 @@ function comparar(a: unknown, b: unknown): number {
 }
 
 export function postgrestComTeto(
-  tabelas: Record<string, Linha[]>,
-  opcoes: { maxRows?: number; semContagem?: boolean; falhaEm?: (pedido: number, tabela: string) => string | null } = {},
+  tabelasIniciais: Record<string, Linha[]>,
+  opcoes: OpcoesDoDuble = {},
 ): PostgrestComTeto {
   const maxRows = opcoes.maxRows ?? 1000;
+  const tabelas: Record<string, Linha[]> = {};
+  for (const [nome, linhas] of Object.entries(tabelasIniciais)) tabelas[nome] = linhas;
   const pedidos: Pedido[] = [];
+  const escritas: Escrita[] = [];
+  let proximoId = 1;
   /**
    * O resultado filtrado e ordenado, por tabela + filtros + ordem. As páginas de
    * uma mesma leitura repetem a consulta inteira e só mudam o `range`; refazer
    * filtro e ordem de dezenas de milhares de linhas a cada ida custava o tempo
-   * do teste. As tabelas não mudam depois de criadas (o dublê só lê).
+   * do teste. Toda escrita esvazia a memória.
    */
   const memoria = new Map<string, Linha[]>();
 
@@ -109,8 +144,40 @@ export function postgrestComTeto(
     let limit: number | null = null;
     let pediuContagem = false;
     let soContagem = false;
+    let escrita: { op: Escrita["op"]; payload: Linha[] } | null = null;
+
+    function escrever(): Resposta {
+      const op = escrita!.op;
+      const n = escritas.filter((e) => e.tabela === tabela).length + 1;
+      const falha = opcoes.falhaNaEscrita?.(n, tabela, op) ?? null;
+      if (falha) {
+        escritas.push({ tabela, op, linhas: 0, recusada: true });
+        return { data: null, error: { message: falha }, count: null };
+      }
+      memoria.clear();
+      const atuais = (tabelas[tabela] ??= []);
+      if (op === "insert") {
+        const novas = escrita!.payload.map((l) => ({
+          id: `gerado-${String(proximoId++).padStart(6, "0")}`,
+          ...l,
+        }));
+        atuais.push(...novas);
+        escritas.push({ tabela, op, linhas: novas.length, recusada: false });
+        return { data: novas, error: null, count: null };
+      }
+      const alvos = atuais.filter((l) => filtros.every((f) => f(l)));
+      if (op === "update") {
+        for (const l of alvos) Object.assign(l, escrita!.payload[0]);
+      } else {
+        const fora = new Set(alvos);
+        tabelas[tabela] = atuais.filter((l) => !fora.has(l));
+      }
+      escritas.push({ tabela, op, linhas: alvos.length, recusada: false });
+      return { data: alvos, error: null, count: null };
+    }
 
     function executar(): Resposta {
+      if (escrita) return escrever();
       const falha = opcoes.falhaEm?.(pedidos.length + 1, tabela) ?? null;
       if (falha) {
         pedidos.push({ tabela, range, limit, ordem, pediuContagem, devolvidas: 0 });
@@ -163,6 +230,18 @@ export function postgrestComTeto(
         soContagem = o?.head === true;
         return q;
       },
+      insert: (linhas: Linha | Linha[]) => {
+        escrita = { op: "insert", payload: Array.isArray(linhas) ? linhas : [linhas] };
+        return q;
+      },
+      update: (mudanca: Linha) => {
+        escrita = { op: "update", payload: [mudanca] };
+        return q;
+      },
+      delete: () => {
+        escrita = { op: "delete", payload: [] };
+        return q;
+      },
       eq: (c: string, v: unknown) => filtrar("eq", c, v, (l) => l[c] === v),
       neq: (c: string, v: unknown) => filtrar("neq", c, v, (l) => l[c] !== v),
       is: (c: string, v: unknown) => filtrar("is", c, v, (l) => (l[c] ?? null) === v),
@@ -172,7 +251,16 @@ export function postgrestComTeto(
         }
         return filtrar("not-is-null", c, null, (l) => (l[c] ?? null) !== null);
       },
-      in: (c: string, vs: unknown[]) => filtrar("in", c, vs, (l) => vs.includes(l[c])),
+      in: (c: string, vs: unknown[]) => {
+        // Lista VAZIA lança, de propósito: código nenhum deve depender do que o
+        // PostgREST faz com `in.()`. Quem pode chegar aqui com lista vazia tem
+        // de decidir antes (ver `lib/broadcast/quem-entra-na-lista.ts`).
+        if (vs.length === 0) throw new Error(`dublê: .in("${c}", []) com lista vazia em "${tabela}"`);
+        const conjunto = new Set(vs);
+        return filtrar("in", c, vs, (l) => conjunto.has(l[c]));
+      },
+      overlaps: (c: string, vs: unknown[]) =>
+        filtrar("overlaps", c, vs, (l) => Array.isArray(l[c]) && (l[c] as unknown[]).some((x) => vs.includes(x))),
       gte: (c: string, v: unknown) => filtrar("gte", c, v, (l) => l[c] != null && comparar(l[c], v) >= 0),
       gt: (c: string, v: unknown) => filtrar("gt", c, v, (l) => l[c] != null && comparar(l[c], v) > 0),
       lt: (c: string, v: unknown) => filtrar("lt", c, v, (l) => l[c] != null && comparar(l[c], v) < 0),
@@ -208,5 +296,9 @@ export function postgrestComTeto(
     cliente: { from: (tabela: string) => consulta(tabela) },
     pedidos,
     pedidosEm: (tabela: string) => pedidos.filter((p) => p.tabela === tabela).length,
+    escritas,
+    get tabelas() {
+      return tabelas;
+    },
   };
 }

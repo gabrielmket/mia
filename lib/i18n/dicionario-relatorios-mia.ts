@@ -1,6 +1,7 @@
 /**
  * FORK MIA: as frases de tela dos relatórios e das metas que são nossas
- * (components/metas/, a carteira e os painéis de custo), em espanhol.
+ * (components/metas/, a carteira, os painéis de custo e as recusas do disparo
+ * que chegam à tela pela resposta da rota), em espanhol.
  *
  * Moram num arquivo NOSSO, espalhado no fim do `DICIONARIO` do upstream por uma
  * linha (`...DICIONARIO_RELATORIOS_MIA`), como as dos cartões e das obrigações:
@@ -33,5 +34,17 @@ export const DICIONARIO_RELATORIOS_MIA: Traducoes = {
   // O saldo do provedor de IA (lib/ai/custo/consumo-de-ia.ts), no painel.
   "O consumo passou do limite de leitura: a conta inclui só as chamadas mais recentes, e o saldo real é menor que o mostrado.": {
     es: "El consumo superó el límite de lectura: la cuenta incluye solo las llamadas más recientes, y el saldo real es menor que el mostrado.",
+  },
+  // ─── o disparo (lib/broadcast/quem-entra-na-lista.ts e as duas rotas) ───────
+  // Chegam à tela pela resposta da rota, já traduzidas (`traduzir`), no aviso
+  // que o formulário mostra como veio.
+  "A lista passa de 50.000 contatos, o máximo de um disparo. Filtre por tags ou por etapa do funil e crie um disparo para cada parte.": {
+    es: "La lista supera los 50.000 contactos, el máximo de un envío. Filtra por etiquetas o por etapa del embudo y crea un envío para cada parte.",
+  },
+  "Não consegui gravar a lista de destinatários, e o disparo não foi criado. Tente de novo.": {
+    es: "No pude guardar la lista de destinatarios, y el envío no fue creado. Inténtalo de nuevo.",
+  },
+  "Não consegui gravar a lista nova, e o disparo ficou sem destinatários. Salve o filtro de novo para remontar a lista.": {
+    es: "No pude guardar la lista nueva, y el envío quedó sin destinatarios. Guarda el filtro de nuevo para rearmar la lista.",
   },
 };
