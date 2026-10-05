@@ -1,5 +1,7 @@
 /**
- * FORK MIA · CLIENTE MODELO — os dados fictícios da "Empresa Modelo · Demonstração".
+ * FORK MIA · CLIENTE MODELO — os dados fictícios da "Empresa Modelo · Demonstração",
+ * a BANCADA de teste (`segmentos/bancada.ts`). As demonstrações por segmento
+ * moram em `segmentos/`; a forma de uma semente, em `tipos.ts`.
  *
  * Tudo aqui é inventado e foi escrito para NUNCA bater em pessoa real:
  *
@@ -19,9 +21,24 @@
  * aqui, com os mesmos sete passos.
  */
 import type { CustomFieldDef } from "@/lib/schemas/settings";
-import type { CategoriaDePerda } from "@/lib/schemas/leads";
-import type { LeadStage } from "@/lib/agent-engine/agent/lead-state";
-import type { NichoDeModelo } from "@/lib/followup/modelos";
+
+import type {
+  ChaveDoFunil,
+  CompromissoDaSemente,
+  ContatoDaSemente,
+  ConversaDaSemente,
+  EmpresaDaSemente,
+  FunilDaSemente,
+  InscricaoDaSemente,
+  MotivoDePerdaDaSemente,
+  ObrigacaoDaSemente,
+  PessoaDaEquipe,
+  TarefaDaSemente,
+} from "./tipos";
+
+// Os tipos moram em tipos.ts desde as demonstrações por segmento; quem os
+// importava daqui continua importando.
+export type * from "./tipos";
 
 export const NOME_DA_EMPRESA = "Empresa Modelo · Demonstração";
 export const RAZAO_SOCIAL = "Empresa Modelo Demonstração (fictícia)";
@@ -53,23 +70,12 @@ export function emailFalso(nome: string): string {
 // Pessoas fictícias, SEM senha: existem para serem donas de negócio, de
 // tarefa e de compromisso. Ninguém entra no sistema com elas.
 
-export type PapelNaEquipe = "manager" | "agent";
-
-export interface PessoaDaEquipe {
-  chave: string;
-  nome: string;
-  papel: PapelNaEquipe;
-  trilha: number;
-}
-
 export const EQUIPE: readonly PessoaDaEquipe[] = [
   { chave: "helena", nome: "Helena Prado", papel: "manager", trilha: 1 },
   { chave: "otavio", nome: "Otávio Lins", papel: "agent", trilha: 2 },
   { chave: "beatriz", nome: "Beatriz Moura", papel: "agent", trilha: 3 },
   { chave: "caio", nome: "Caio Fontes", papel: "agent", trilha: 4 },
 ];
-
-export type DonoDoNegocio = PessoaDaEquipe["chave"] | "ia";
 
 /** O agente de IA fictício. Nasce SEM versão publicada: não responde ninguém. */
 export const AGENTE_DE_IA = {
@@ -81,17 +87,6 @@ export const AGENTE_DE_IA = {
 } as const;
 
 // ─── Empresas (clientes B2B) ────────────────────────────────────────────────
-
-export interface EmpresaDaSemente {
-  chave: string;
-  nome: string;
-  site: string | null;
-  cidade: string;
-  uf: string;
-  setor: string;
-  observacoes: string | null;
-  tags: string[];
-}
 
 export const EMPRESAS: readonly EmpresaDaSemente[] = [
   {
@@ -147,21 +142,6 @@ export const EMPRESAS: readonly EmpresaDaSemente[] = [
 ];
 
 // ─── Contatos ───────────────────────────────────────────────────────────────
-
-export interface ContatoDaSemente {
-  chave: string;
-  nome: string;
-  /** Número sequencial do telefone falso. */
-  n: number;
-  /** Sem e-mail em alguns, de propósito: é o normal de quem chega pelo WhatsApp. */
-  comEmail: boolean;
-  empresa?: EmpresaDaSemente["chave"];
-  cargo?: string;
-  setor?: string;
-  /** Na empresa, é quem decide (vai para `company_people.is_decision_maker`). */
-  decisor?: boolean;
-  tags?: string[];
-}
 
 export const CONTATOS: readonly ContatoDaSemente[] = [
   // Clientes de empresa (B2B) — várias pessoas por empresa.
@@ -222,91 +202,7 @@ export const CONTATOS: readonly ContatoDaSemente[] = [
   { chave: "julio", nome: "Júlio César Fontana", n: 62, comEmail: true },
 ];
 
-// ─── Origens ────────────────────────────────────────────────────────────────
-//
-// Os valores de `source` e as etiquetas são OS DO PRODUTO: `meta_ads` e as
-// etiquetas `Meta_ads`/`Formulario_Meta` (lib/leads-da-meta/gravar.ts),
-// `google_ads`/`Google_ads` (lib/leads/nascimento-do-lead.ts), `site`.
-
-export type OrigemDoNegocio = "meta_formulario" | "meta_clique_whatsapp" | "google" | "site" | "indicacao";
-
 // ─── Funis por segmento ─────────────────────────────────────────────────────
-
-export type ChaveDoFunil =
-  | "clinica"
-  | "imobiliaria"
-  | "servicos"
-  | "curso"
-  | "loja"
-  | "generico"
-  | "automotivo"
-  | "academia"
-  | "comercial";
-
-/**
- * Uma coluna do quadro. `passo` é a que passo do funil da IA ela corresponde
- * (`crm_stages.agent_stage_hint`) — `null` quando só pessoas movem o card ali,
- * como no Comercial. `fim` marca a coluna de ganho ou de perda.
- */
-export interface EtapaDaSemente {
-  chave: string;
-  nome: string;
-  passo: LeadStage | null;
-  fim?: "won" | "lost";
-}
-
-export interface MotivoDePerdaDaSemente {
-  label: string;
-  categoria: CategoriaDePerda;
-}
-
-export interface NegocioDaSemente {
-  titulo: string;
-  /**
-   * A etapa onde o card está, pela CHAVE da etapa. Nos funis que saem de um
-   * quadro pronto, a chave é o passo (`new`, `qualified`, `won`…).
-   */
-  passo: string;
-  contato: ContatoDaSemente["chave"];
-  valorReais: number | null;
-  dono: DonoDoNegocio;
-  origem: OrigemDoNegocio;
-  /** Há quantos dias o negócio nasceu. */
-  criadoHaDias: number;
-  /** Há quantos dias está nesta etapa. */
-  naEtapaHaDias: number;
-  campos?: Record<string, unknown>;
-  tags?: string[];
-  /** A próxima ação: vira tarefa com prazo ligada ao card. */
-  proximaAcao?: { titulo: string; emDias: number; prioridade?: "low" | "medium" | "high" | "urgent" };
-  motivoDaPerda?: string;
-  motivoDoGanho?: string;
-  nota?: string;
-}
-
-export interface FunilDaSemente {
-  chave: ChaveDoFunil;
-  nome: string;
-  descricao: string;
-  /** De qual quadro pronto do onboarding saem as etapas. Ausente = etapas daqui. */
-  pacote?: "clinica" | "imobiliaria" | "servicos" | "curso" | "loja" | "generico";
-  etapas?: EtapaDaSemente[];
-  nichoDeFollowup: NichoDeModelo | null;
-  vocabulario: {
-    lead: string;
-    lead_plural: string;
-    deal: string;
-    deal_plural: string;
-    won: string;
-    lost: string;
-  };
-  campos: CustomFieldDef[];
-  motivosDePerda: MotivoDePerdaDaSemente[];
-  motivosDeGanho: string[];
-  /** Vencer aqui é dinheiro entrando? Ver `vitoria_e_receita` em lib/schemas/settings.ts. */
-  vitoriaEReceita: boolean;
-  negocios: NegocioDaSemente[];
-}
 
 const PERDAS_COMUNS: MotivoDePerdaDaSemente[] = [
   { label: "Preço acima do orçamento", categoria: "Nós" },
@@ -604,40 +500,12 @@ export const FUNIS: readonly FunilDaSemente[] = [
 
 // ─── Conversas com a IA ─────────────────────────────────────────────────────
 
-export interface MensagemDaSemente {
-  /** `cliente` = inbound; `ia` = a IA respondeu; `equipe` = uma pessoa respondeu. */
-  de: "cliente" | "ia" | "equipe";
-  texto: string;
-  /** Minutos depois do início da conversa. */
-  min: number;
-}
-
 /**
  * Status de ciclo de vida GRAVADO nas conversas da demonstração. Escrever o
  * status segue permitido; o que a cerca `fila-tem-uma-definicao-so` proíbe é
  * DECIDIR quem atende por ele, e aqui nada decide nada: é só o dado semeado.
  */
 const CONVERSA_COM_A_IA = "ai_handling" as const;
-
-export interface ConversaDaSemente {
-  chave: string;
-  contato: ContatoDaSemente["chave"];
-  /** Há quantos dias a conversa começou. */
-  comecouHaDias: number;
-  mensagens: MensagemDaSemente[];
-  /** Onde a IA deixou o lead (`lead_state`). */
-  passo: LeadStage;
-  qualificacao: { budget?: string; authority?: string; need?: string; timeline?: string };
-  proximaAcao: string | null;
-  /** A ficha que a IA escreveu (`lead_notes`). */
-  ficha: { headline: string; body: string } | null;
-  /** A IA passou a conversa para uma pessoa (`passagens_de_atendimento`). */
-  passagem?: { titulo: string; resumo: string; ultimaFala: string; reconhecidaPor?: PessoaDaEquipe["chave"] };
-  /** Quem está com a conversa agora. */
-  com: DonoDoNegocio;
-  status: "open" | "ai_handling" | "claimed" | "resolved";
-  etiquetas?: string[];
-}
 
 export const CONVERSAS: readonly ConversaDaSemente[] = [
   {
@@ -868,23 +736,6 @@ export const CONVERSAS: readonly ConversaDaSemente[] = [
 
 // ─── Agenda ─────────────────────────────────────────────────────────────────
 
-export interface CompromissoDaSemente {
-  chave: string;
-  titulo: string;
-  /** O tipo de agendamento (slug). `consulta`, `reuniao` e `atendimento` o produto já semeia. */
-  tipo: "consulta" | "reuniao" | "atendimento" | "visita" | "test-drive" | "aula-experimental";
-  contato: ContatoDaSemente["chave"];
-  dono: PessoaDaEquipe["chave"];
-  /** Dias a partir de hoje (negativo = passado) e hora local de São Paulo. */
-  emDias: number;
-  hora: string;
-  duracaoMin: number;
-  status: "pending" | "confirmed" | "completed" | "no_show" | "cancelled";
-  local: "in_person" | "phone" | "whatsapp";
-  criadoPor: "user" | "ai";
-  nota?: string;
-}
-
 export const COMPROMISSOS: readonly CompromissoDaSemente[] = [
   { chave: "marina-avaliacao", tipo: "consulta", titulo: "Avaliação de clareamento · Marina", contato: "marina", dono: "caio", emDias: 2, hora: "16:00", duracaoMin: 30, status: "confirmed", local: "in_person", criadoPor: "user" },
   { chave: "natalia-visita", tipo: "visita", titulo: "Visita a 3 apartamentos · Natália", contato: "natalia", dono: "otavio", emDias: 3, hora: "10:00", duracaoMin: 90, status: "confirmed", local: "in_person", criadoPor: "user" },
@@ -903,18 +754,6 @@ export const COMPROMISSOS: readonly CompromissoDaSemente[] = [
 
 // ─── Tarefas soltas (além das "próximas ações" dos negócios) ──────────────
 
-export interface TarefaDaSemente {
-  chave: string;
-  titulo: string;
-  descricao?: string;
-  dono: PessoaDaEquipe["chave"];
-  /** `null` = sem prazo. */
-  emDias: number | null;
-  prioridade: "low" | "medium" | "high" | "urgent";
-  status: "pending" | "in_progress" | "done" | "cancelled";
-  contato?: ContatoDaSemente["chave"];
-}
-
 export const TAREFAS: readonly TarefaDaSemente[] = [
   { chave: "revisar-textos", titulo: "Revisar os textos dos follow-ups de clínica", dono: "helena", emDias: 3, prioridade: "medium", status: "pending" },
   { chave: "relatorio-semanal", titulo: "Fechar o relatório semanal de vendas", dono: "helena", emDias: -1, prioridade: "high", status: "pending", descricao: "Atrasada de propósito: a lista de atrasadas precisa de exemplo." },
@@ -926,22 +765,6 @@ export const TAREFAS: readonly TarefaDaSemente[] = [
 ];
 
 // ─── Follow-ups em andamento ────────────────────────────────────────────────
-
-export interface InscricaoDaSemente {
-  chave: string;
-  /** O id do modelo de follow-up instalado (lib/followup/modelos). */
-  modelo: string;
-  contato: ContatoDaSemente["chave"];
-  status: "active" | "waiting_reply" | "completed" | "cancelled";
-  /** O nó do grafo em que a inscrição está. */
-  no: string;
-  passos: number;
-  comecouHaDias: number;
-  /** Próxima avaliação em horas a partir de agora (só active/waiting_reply). */
-  proximaEmHoras?: number;
-  desfecho?: "converted" | "replied" | "exhausted" | "opted_out" | "handoff";
-  motivoDoCancelamento?: string;
-}
 
 export const INSCRICOES: readonly InscricaoDaSemente[] = [
   { chave: "larissa-retomada", modelo: "imobiliario-retomada", contato: "larissa", status: "waiting_reply", no: "resposta-1", passos: 1, comecouHaDias: 0, proximaEmHoras: 20 },
@@ -962,29 +785,6 @@ export const INSCRICOES: readonly InscricaoDaSemente[] = [
 // confirmação, um pedido sem resposta, um ainda a pedir, e atividades
 // recorrentes com histórico. As datas são relativas a "agora": renovar a
 // semente devolve cada item à situação que ele ilustra.
-
-export interface ObrigacaoDaSemente {
-  chave: string;
-  /** O nome de um modelo de `lib/obrigacoes/catalogo.ts` (segmento Serviços B2B). */
-  tipo: string;
-  empresa?: EmpresaDaSemente["chave"];
-  contato?: ContatoDaSemente["chave"];
-  /** O título de um negócio do funil `servicos`. */
-  negocio?: string;
-  responsavel: PessoaDaEquipe["chave"];
-  /** Dias a partir de hoje (negativo = no passado). */
-  pedidoEmDias?: number;
-  prazoEmDias?: number;
-  recebidoEmDias?: number;
-  validoAteEmDias?: number;
-  proximaEmDias?: number;
-  feitaEmDias?: number;
-  observacao?: string;
-  /** Os ciclos que já terminaram, do mais antigo para o mais novo. */
-  ciclos?: Array<{ recebidoEmDias?: number; validoAteEmDias?: number; proximaEmDias?: number; feitaEmDias?: number }>;
-  /** O agente reconheceu um arquivo na conversa e espera uma pessoa confirmar. */
-  proposta?: { conversa: ConversaDaSemente["chave"]; arquivo: string };
-}
 
 /** O funil que recebe o catálogo de tipos (o modelo do segmento Serviços B2B). */
 export const FUNIL_DAS_OBRIGACOES: ChaveDoFunil = "servicos";

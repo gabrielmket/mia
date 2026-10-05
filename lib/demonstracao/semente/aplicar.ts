@@ -1,9 +1,14 @@
 /**
- * FORK MIA · CLIENTE MODELO — grava a "Empresa Modelo · Demonstração".
+ * FORK MIA · AS EMPRESAS DE DEMONSTRAÇÃO — o motor que grava uma semente.
  *
- * Idempotente: cada linha tem id estável (`ids.ts`) e entra por
- * `insert … on conflict (id) do update`. Rodar de novo NÃO duplica nada — e
- * renova as datas (a agenda "de amanhã" continua sendo de amanhã, os
+ * Um motor só, para as cinco sementes (`segmentos/`): a "Empresa Modelo ·
+ * Demonstração" (a bancada de teste) e as quatro demonstrações por segmento
+ * (construtora, clínica odontológica, indústria e academia). Quem chama escolhe
+ * o segmento (`OpcoesDaSemente.segmento`); sem ele, é a bancada, como sempre foi.
+ *
+ * Idempotente: cada linha tem id estável (`ids.ts`, com o prefixo do segmento)
+ * e entra por `insert … on conflict (id) do update`. Rodar de novo NÃO duplica
+ * nada — e renova as datas (a agenda "de amanhã" continua sendo de amanhã, os
  * follow-ups em andamento voltam a esperar a próxima mensagem).
  *
  * Tudo numa transação: ou a empresa inteira fica de pé, ou nada muda.
@@ -28,10 +33,10 @@
  *  - a montagem da linha da timeline (`buildLeadActivityRow`).
  *
  * Documentos e obrigações (migration 9018) entram por `gravarObrigacoes`: o
- * catálogo do funil de serviços sai do modelo do segmento
- * (`lib/obrigacoes/catalogo.ts`) e cada linha passa por `montarLinha`, a mesma
- * função que a tela e o MCP usam. A situação não é gravada: é calculada pelas
- * datas, e as datas são relativas a "agora".
+ * catálogo do funil sai do modelo do segmento (`lib/obrigacoes/catalogo.ts`) e
+ * cada linha passa por `montarLinha`, a mesma função que a tela e o MCP usam. A
+ * situação não é gravada: é calculada pelas datas, e as datas são relativas a
+ * "agora".
  */
 import type pg from "pg";
 
@@ -39,43 +44,26 @@ import type { Actor } from "@/lib/api/handlers/types";
 import { flowGraphSchema, type FlowGraph } from "@/lib/followup/graph-schema";
 import { triggerConfigSchema } from "@/lib/followup/api-schemas";
 import { validateFlowForPublish } from "@/lib/followup/validate-publish";
-import { MODELOS_DE_FOLLOWUP, type ModeloDeFollowup, type NichoDeModelo } from "@/lib/followup/modelos";
+import { MODELOS_DE_FOLLOWUP, type ModeloDeFollowup } from "@/lib/followup/modelos";
 import { buildLeadActivityRow, stageChangeReason } from "@/lib/leads/activity-emitter";
 import { colunasDaSessaoDaDemonstracao } from "@/lib/channels/sessao-da-demonstracao";
-import { MODULO_DOS_LEADS_DA_META } from "@/lib/leads-da-meta/modulo";
-import type { ChaveDeModulo } from "@/lib/modulos/vendaveis";
 import { PACOTES } from "@/lib/onboarding/pacotes-de-funil";
 import { modelosDoSegmento } from "@/lib/obrigacoes/catalogo";
 import { montarTipo } from "@/lib/obrigacoes/catalogo-servidor";
 import { montarLinha } from "@/lib/obrigacoes/operacoes";
 import { pipelineConfigPatchSchema } from "@/lib/schemas/settings";
 
-import {
-  AGENTE_DE_IA,
-  COMPROMISSOS,
-  CONTATOS,
-  CONVERSAS,
-  EMPRESAS,
-  EQUIPE,
-  FUNIL_DAS_OBRIGACOES,
-  FUNIS,
-  INSCRICOES,
-  NOME_DA_EMPRESA,
-  OBRIGACOES,
-  RAZAO_SOCIAL,
-  SESSAO_DO_CANAL,
-  SLUG_DA_EMPRESA,
-  TAREFAS,
-  TELEFONE_DO_CANAL,
-  emailFalso,
-  telefoneFalso,
-  type ChaveDoFunil,
-  type EtapaDaSemente,
-  type FunilDaSemente,
-  type NegocioDaSemente,
-  type OrigemDoNegocio,
-} from "./dados";
+import { emailFalso, telefoneFalso } from "./dados";
 import { idEstavel } from "./ids";
+import { sementeDoSegmento } from "./segmentos";
+import type {
+  EtapaDaSemente,
+  FunilDaSemente,
+  NegocioDaSemente,
+  OrigemDoNegocio,
+  SegmentoDeDemonstracao,
+  SementeDeDemonstracao,
+} from "./tipos";
 import {
   Json,
   Sql,
@@ -90,8 +78,6 @@ import {
 
 // ─── os ids ─────────────────────────────────────────────────────────────────
 
-export const ID_DA_EMPRESA = idEstavel("organizacao");
-
 const slug = (texto: string) =>
   texto
     .normalize("NFD")
@@ -100,41 +86,72 @@ const slug = (texto: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
-const ID = {
-  usuario: (k: string) => idEstavel(`usuario:${k}`),
-  agente: idEstavel("agente:sofia"),
-  canal: idEstavel("canal:whatsapp"),
-  empresa: (k: string) => idEstavel(`empresa:${k}`),
-  companhia: (k: string) => idEstavel(`companhia:${k}`),
-  pessoa: (k: string) => idEstavel(`pessoa:${k}`),
-  vinculo: (k: string) => idEstavel(`vinculo:${k}`),
-  contato: (k: string) => idEstavel(`contato:${k}`),
-  funil: (k: string) => idEstavel(`funil:${k}`),
-  etapa: (f: string, e: string) => idEstavel(`etapa:${f}:${e}`),
-  negocio: (f: string, titulo: string) => idEstavel(`negocio:${f}:${slug(titulo)}`),
-  atividade: (negocio: string, tipo: string) => idEstavel(`atividade:${negocio}:${tipo}`),
-  tarefa: (k: string) => idEstavel(`tarefa:${k}`),
-  conversa: (k: string) => idEstavel(`conversa:${k}`),
-  mensagem: (k: string, i: number) => idEstavel(`mensagem:${k}:${i}`),
-  estado: (k: string) => idEstavel(`estado:${k}`),
-  transicao: (k: string, i: number) => idEstavel(`transicao:${k}:${i}`),
-  nota: (k: string) => idEstavel(`nota:${k}`),
-  passagem: (k: string) => idEstavel(`passagem:${k}`),
-  fluxo: (m: string) => idEstavel(`fluxo:${m}`),
-  versao: (m: string) => idEstavel(`versao:${m}`),
-  inscricao: (k: string) => idEstavel(`inscricao:${k}`),
-  eventoDaInscricao: (k: string, i: number) => idEstavel(`evento-da-inscricao:${k}:${i}`),
-  tipoDeAgenda: (k: string) => idEstavel(`tipo-de-agenda:${k}`),
-  compromisso: (k: string) => idEstavel(`compromisso:${k}`),
-  modulo: (k: string) => idEstavel(`modulo:${k}`),
-  tipoDeObrigacao: (nome: string) => idEstavel(`tipo-de-obrigacao:${slug(nome)}`),
-  obrigacao: (k: string) => idEstavel(`obrigacao:${k}`),
-  cicloDaObrigacao: (k: string, i: number) => idEstavel(`ciclo-da-obrigacao:${k}:${i}`),
-  propostaDaObrigacao: (k: string) => idEstavel(`proposta-da-obrigacao:${k}`),
-};
+/**
+ * Os ids estáveis de uma semente. A bancada não tem prefixo (os ids dela são
+ * os de antes); cada demonstração por segmento tem o seu, e por isso duas
+ * sementes nunca disputam a mesma linha.
+ */
+function idsDa(s: SementeDeDemonstracao) {
+  const id = (chave: string) => idEstavel(s.prefixoDosIds ? `${s.prefixoDosIds}:${chave}` : chave);
+  return {
+    organizacao: id("organizacao"),
+    usuario: (k: string) => id(`usuario:${k}`),
+    agente: id(`agente:${s.agente.chave}`),
+    canal: id("canal:whatsapp"),
+    empresa: (k: string) => id(`empresa:${k}`),
+    companhia: (k: string) => id(`companhia:${k}`),
+    pessoa: (k: string) => id(`pessoa:${k}`),
+    vinculo: (k: string) => id(`vinculo:${k}`),
+    contato: (k: string) => id(`contato:${k}`),
+    funil: (k: string) => id(`funil:${k}`),
+    etapa: (f: string, e: string) => id(`etapa:${f}:${e}`),
+    negocio: (f: string, titulo: string) => id(`negocio:${f}:${slug(titulo)}`),
+    atividade: (negocio: string, tipo: string) => id(`atividade:${negocio}:${tipo}`),
+    tarefa: (k: string) => id(`tarefa:${k}`),
+    conversa: (k: string) => id(`conversa:${k}`),
+    mensagem: (k: string, i: number) => id(`mensagem:${k}:${i}`),
+    estado: (k: string) => id(`estado:${k}`),
+    transicao: (k: string, i: number) => id(`transicao:${k}:${i}`),
+    nota: (k: string) => id(`nota:${k}`),
+    passagem: (k: string) => id(`passagem:${k}`),
+    fluxo: (m: string) => id(`fluxo:${m}`),
+    versao: (m: string) => id(`versao:${m}`),
+    inscricao: (k: string) => id(`inscricao:${k}`),
+    eventoDaInscricao: (k: string, i: number) => id(`evento-da-inscricao:${k}:${i}`),
+    tipoDeAgenda: (k: string) => id(`tipo-de-agenda:${k}`),
+    compromisso: (k: string) => id(`compromisso:${k}`),
+    modulo: (k: string) => id(`modulo:${k}`),
+    tipoDeObrigacao: (nome: string) => id(`tipo-de-obrigacao:${slug(nome)}`),
+    obrigacao: (k: string) => id(`obrigacao:${k}`),
+    cicloDaObrigacao: (k: string, i: number) => id(`ciclo-da-obrigacao:${k}:${i}`),
+    propostaDaObrigacao: (k: string) => id(`proposta-da-obrigacao:${k}`),
+    produto: (codigo: string) => id(`produto:${slug(codigo)}`),
+  };
+}
+
+type Ids = ReturnType<typeof idsDa>;
+
+/** O que todo passo recebe: a semente, os ids dela e o "agora" das datas. */
+interface Contexto {
+  s: SementeDeDemonstracao;
+  ID: Ids;
+  org: string;
+  agora: Date;
+}
+
+/** O id da organização de uma demonstração. Sem segmento, o da Empresa Modelo (a bancada). */
+export function idDaDemonstracao(segmento: SegmentoDeDemonstracao = "bancada"): string {
+  return idsDa(sementeDoSegmento(segmento)).organizacao;
+}
+
+/** O id da Empresa Modelo · Demonstração (a bancada). */
+export const ID_DA_EMPRESA = idDaDemonstracao("bancada");
 
 /** Quem consome os eventos que a semente emite: ninguém — ver o cabeçalho. */
 export const CONSUMIDOR_DA_SEMENTE = "semente-cliente-modelo";
+
+/** A origem do produto que entra pela semente (`catalog_products.origem`, vocabulário aberto). */
+export const ORIGEM_DO_PRODUTO_DA_SEMENTE = "demonstracao";
 
 // ─── as origens, com o vocabulário do produto ───────────────────────────────
 //
@@ -145,14 +162,18 @@ export const CONSUMIDOR_DA_SEMENTE = "semente-cliente-modelo";
 // continuam iguais é tests/unit/cliente-modelo-semente.test.ts.
 export const ORIGENS: Record<
   OrigemDoNegocio,
-  { source: string; tags: string[]; metadata: (chave: string) => Record<string, unknown> }
+  {
+    source: string;
+    tags: string[];
+    metadata: (chave: string, s: Pick<SementeDeDemonstracao, "formularioDaMeta">) => Record<string, unknown>;
+  }
 > = {
   meta_formulario: {
     source: "meta_ads",
     tags: ["Meta_ads", "Formulario_Meta"],
-    metadata: () => ({
+    metadata: (_chave, s) => ({
       canal: "formulario_da_meta",
-      form_name: "Formulário · Empresa Modelo (demonstração)",
+      form_name: s.formularioDaMeta,
       campaign_name: "Campanha de demonstração",
     }),
   },
@@ -180,18 +201,6 @@ export const ORIGENS: Record<
     tags: ["indicacao"],
     metadata: () => ({ indicado_por: "Cliente da carteira (fictício)" }),
   },
-};
-
-const FUNIL_DO_NICHO: Record<NichoDeModelo, ChaveDoFunil> = {
-  geral: "generico",
-  clinica: "clinica",
-  imobiliario: "imobiliaria",
-  automotivo: "automotivo",
-  academia: "academia",
-  servicos_b2b: "servicos",
-  // A indústria vende para empresa: na bancada, os modelos dela ficam em
-  // rascunho no funil de serviços B2B (a demonstração própria tem o funil dela).
-  industria_b2b: "servicos",
 };
 
 // ─── a escrita ──────────────────────────────────────────────────────────────
@@ -243,7 +252,8 @@ const dataIso = (d: Date) => d.toISOString().slice(0, 10);
 
 // ─── os funis ───────────────────────────────────────────────────────────────
 
-function etapasDoFunil(funil: FunilDaSemente): EtapaDaSemente[] {
+/** As etapas do funil: as declaradas na semente ou as do quadro pronto do onboarding. */
+export function etapasDoFunil(funil: FunilDaSemente): EtapaDaSemente[] {
   if (funil.etapas) return funil.etapas;
   const pacote = PACOTES.find((p) => p.id === funil.pacote);
   if (!pacote) throw new Error(`cliente modelo: quadro pronto "${funil.pacote}" não existe mais no onboarding`);
@@ -292,6 +302,8 @@ const CORES = ["#94a3b8", "#60a5fa", "#2892d0", "#1651a0", "#7c3aed", "#16a34a",
 // ─── a semente ──────────────────────────────────────────────────────────────
 
 export interface OpcoesDaSemente {
+  /** Qual empresa de demonstração. Padrão: a bancada (a Empresa Modelo). */
+  segmento?: SegmentoDeDemonstracao;
   /** O "agora" das datas relativas. Padrão: o relógio. */
   agora?: Date;
   /**
@@ -300,9 +312,12 @@ export interface OpcoesDaSemente {
    * vira aviso no resumo, não erro.
    */
   emailsDeAcesso?: readonly string[];
+  /** Ids de usuários (de `auth.users`) que ganham o mesmo acesso. Id que não existe é ignorado. */
+  idsDeAcesso?: readonly string[];
 }
 
 export interface ResumoDaSemente {
+  segmento: SegmentoDeDemonstracao;
   organizacaoId: string;
   contagens: Record<string, number>;
   avisos: string[];
@@ -310,34 +325,39 @@ export interface ResumoDaSemente {
 
 /** Os passos, na ordem. Os MESMOS nos dois modos (ver `escritor.ts`). */
 async function passos(e: Escritor, opcoes: OpcoesDaSemente, avisos: string[]): Promise<void> {
-  const agora = opcoes.agora ?? new Date();
+  const s = sementeDoSegmento(opcoes.segmento ?? "bancada");
+  const ID = idsDa(s);
+  const c: Contexto = { s, ID, org: ID.organizacao, agora: opcoes.agora ?? new Date() };
   await exigirAMarca(e);
-  await conferirQueOEspacoEDaSemente(e);
-  await gravarEquipe(e, agora);
-  await gravarEmpresa(e, agora);
-  await gravarAcesso(e, opcoes.emailsDeAcesso ?? [], avisos);
-  await gravarModulos(e);
-  await gravarCanalEAgente(e, agora);
-  await gravarEmpresasEContatos(e, agora);
-  const etapas = await gravarFunis(e);
-  await gravarNegocios(e, agora, etapas);
-  await gravarConversas(e, agora);
-  await gravarFollowups(e, agora, etapas);
-  await gravarAgenda(e, agora);
-  await gravarTarefasSoltas(e, agora);
-  await gravarObrigacoes(e, agora);
-  await neutralizarOsEventos(e);
+  await conferirQueOEspacoEDaSemente(e, c);
+  await gravarEquipe(e, c);
+  await gravarEmpresa(e, c);
+  await gravarAcesso(e, c, opcoes, avisos);
+  await gravarModulos(e, c);
+  await gravarCanalEAgente(e, c);
+  await gravarProdutos(e, c);
+  await gravarEmpresasEContatos(e, c);
+  const etapas = await gravarFunis(e, c);
+  await gravarNegocios(e, c, etapas);
+  await gravarConversas(e, c);
+  await gravarFollowups(e, c, etapas);
+  await gravarAgenda(e, c);
+  await gravarTarefasSoltas(e, c);
+  await gravarObrigacoes(e, c);
+  await neutralizarOsEventos(e, c);
 }
 
 /** Grava direto, conectada ao Postgres, numa transação só. */
 export async function aplicarSemente(db: pg.ClientBase, opcoes: OpcoesDaSemente = {}): Promise<ResumoDaSemente> {
+  const segmento = opcoes.segmento ?? "bancada";
+  const organizacaoId = idDaDemonstracao(segmento);
   const avisos: string[] = [];
   await db.query("begin");
   try {
     await passos(escritorDireto(db), opcoes, avisos);
-    const contagens = await contarDaSemente(db);
+    const contagens = await contarDaSemente(db, organizacaoId);
     await db.query("commit");
-    return { organizacaoId: ID_DA_EMPRESA, contagens, avisos };
+    return { segmento, organizacaoId, contagens, avisos };
   } catch (erro) {
     await db.query("rollback");
     throw erro;
@@ -352,10 +372,11 @@ export async function aplicarSemente(db: pg.ClientBase, opcoes: OpcoesDaSemente 
  */
 export async function gerarSqlDaSemente(opcoes: OpcoesDaSemente = {}): Promise<string> {
   const agora = opcoes.agora ?? new Date();
+  const s = sementeDoSegmento(opcoes.segmento ?? "bancada");
   const e = escritorDeRoteiro();
   await passos(e, { ...opcoes, agora }, []);
   const cabecalho = [
-    `-- FORK MIA · CLIENTE MODELO — a "${NOME_DA_EMPRESA}" (dados fictícios).`,
+    `-- FORK MIA · EMPRESA DE DEMONSTRAÇÃO — a "${s.nome}" (segmento ${s.segmento}, dados fictícios).`,
     `-- Gerado por scripts/cliente-modelo.ts --sql; datas relativas a ${agora.toISOString()}.`,
     "-- Uma transação só e idempotente: aplicar de novo não duplica nada. Sem a migration 9010",
     "-- o script aborta antes de gravar. Ver docs/fork/cliente-modelo.md.",
@@ -378,14 +399,14 @@ $semente$`);
 }
 
 /** O slug é da semente? Se outra empresa o usa, a semente para em vez de tomar o lugar dela. */
-async function conferirQueOEspacoEDaSemente(e: Escritor): Promise<void> {
+async function conferirQueOEspacoEDaSemente(e: Escritor, { s, org }: Contexto): Promise<void> {
   await e.executar(`do $semente$
 begin
   if exists (
     select 1 from public.organizations
-     where slug = ${literal(SLUG_DA_EMPRESA)} and id <> ${literal(ID_DA_EMPRESA)}::uuid
+     where slug = ${literal(s.slug)} and id <> ${literal(org)}::uuid
   ) then
-    raise exception 'cliente modelo: o slug % ja e de outra empresa; a semente nao toma o lugar dela', ${literal(SLUG_DA_EMPRESA)};
+    raise exception 'cliente modelo: o slug % ja e de outra empresa; a semente nao toma o lugar dela', ${literal(s.slug)};
   end if;
 end
 $semente$`);
@@ -440,9 +461,9 @@ end
 $semente$`);
 }
 
-async function gravarEquipe(e: Escritor, agora: Date): Promise<void> {
+async function gravarEquipe(e: Escritor, { s, ID, agora }: Contexto): Promise<void> {
   const criadoEm = new Date(agora.getTime() - 60 * DIA);
-  for (const p of EQUIPE) {
+  for (const p of s.equipe) {
     // Sem senha e bloqueado: é dono de card, não gente que entra no sistema.
     await gravarAdaptando(
       e,
@@ -470,7 +491,7 @@ async function gravarEquipe(e: Escritor, agora: Date): Promise<void> {
   }
 }
 
-async function gravarEmpresa(e: Escritor, agora: Date): Promise<void> {
+async function gravarEmpresa(e: Escritor, { s, org, agora }: Contexto): Promise<void> {
   await e.executar(
     `insert into public.organizations
        (id, slug, legal_name, display_name, status, timezone, locale, demonstracao, onboarded_at, settings)
@@ -483,31 +504,36 @@ async function gravarEmpresa(e: Escritor, agora: Date): Promise<void> {
            onboarded_at = coalesce(public.organizations.onboarded_at, excluded.onboarded_at),
            settings = public.organizations.settings || excluded.settings`,
     [
-      ID_DA_EMPRESA,
-      SLUG_DA_EMPRESA,
-      RAZAO_SOCIAL,
-      NOME_DA_EMPRESA,
+      org,
+      s.slug,
+      s.razaoSocial,
+      s.nome,
       new Date(agora.getTime() - 45 * DIA),
-      JSON.stringify({ modo_de_venda: "b2b" }),
+      // `semente_de_demonstracao` diz de qual semente a empresa veio e quando
+      // ela foi aplicada pela última vez: é o que o MCP lista.
+      JSON.stringify({
+        modo_de_venda: s.modoDeVenda,
+        semente_de_demonstracao: { segmento: s.segmento, aplicada_em: agora.toISOString() },
+      }),
     ],
   );
   // O banco semeia "Pedidos" (e-commerce) em toda empresa nova. Aqui ele sai
-  // de cena: arquivado, e o funil geral da semente passa a ser o padrão.
+  // de cena: arquivado, e o funil padrão da semente passa a ser o padrão.
   await e.executar(
     `update public.crm_pipelines set is_default = false, is_archived = true
       where organization_id = $1 and slug = 'pedidos'`,
-    [ID_DA_EMPRESA],
+    [org],
   );
 }
 
-async function gravarAcesso(e: Escritor, emails: readonly string[], avisos: string[]): Promise<void> {
-  for (const p of EQUIPE) {
+async function gravarAcesso(e: Escritor, { s, ID, org }: Contexto, opcoes: OpcoesDaSemente, avisos: string[]): Promise<void> {
+  for (const p of s.equipe) {
     await gravar(
       e,
       "public.user_organizations",
       {
         user_id: ID.usuario(p.chave),
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         role: p.papel,
         accepted_at: new Date("2026-08-01T12:00:00.000Z"),
         revoked_at: null,
@@ -516,7 +542,7 @@ async function gravarAcesso(e: Escritor, emails: readonly string[], avisos: stri
       { conflito: "user_id, organization_id" },
     );
   }
-  for (const bruto of emails) {
+  for (const bruto of opcoes.emailsDeAcesso ?? []) {
     const email = bruto.trim().toLowerCase();
     if (!email) continue;
     // O usuário é achado pelo e-mail NO banco: o mesmo comando serve ao roteiro.
@@ -526,7 +552,7 @@ async function gravarAcesso(e: Escritor, emails: readonly string[], avisos: stri
          from auth.users u
         where lower(u.email) = $2::text
        on conflict (user_id, organization_id) do update set role = excluded.role, revoked_at = null`,
-      [ID_DA_EMPRESA, email],
+      [org, email],
     );
     if (n === 0) avisos.push(`acesso: não existe usuário com o e-mail ${email} nesta instalação`);
     await e.executar(`do $semente$
@@ -537,13 +563,23 @@ begin
 end
 $semente$`);
   }
+  for (const usuario of opcoes.idsDeAcesso ?? []) {
+    // Pelo id (quem criou o token do MCP). Id que não existe não casa nada.
+    await e.executar(
+      `insert into public.user_organizations (user_id, organization_id, role, accepted_at, revoked_at)
+       select u.id, $1::uuid, 'admin', now(), null
+         from auth.users u
+        where u.id = $2::uuid
+       on conflict (user_id, organization_id) do update set role = excluded.role, revoked_at = null`,
+      [org, usuario],
+    );
+  }
 }
 
-async function gravarModulos(e: Escritor): Promise<void> {
+async function gravarModulos(e: Escritor, { s, ID, org }: Contexto): Promise<void> {
   // Os módulos pagos ficam LIBERADOS para a demonstração mostrar as telas; o
   // envio deles continua travado pela 9010.
-  const liberados: ChaveDeModulo[] = ["disparador", MODULO_DOS_LEADS_DA_META];
-  for (const modulo of liberados) {
+  for (const modulo of s.modulos) {
     await e.executar(
       `insert into public.organization_modules (id, organization_id, modulo, note)
        select $1::uuid, $2::uuid, $3::text, 'Cliente modelo: liberado para a demonstração (nada sai dela).'
@@ -552,12 +588,12 @@ async function gravarModulos(e: Escritor): Promise<void> {
            where organization_id = $2::uuid and modulo = $3::text and revoked_at is null
         )
        on conflict (id) do nothing`,
-      [ID.modulo(modulo), ID_DA_EMPRESA, modulo],
+      [ID.modulo(modulo), org, modulo],
     );
   }
 }
 
-async function gravarCanalEAgente(e: Escritor, agora: Date): Promise<void> {
+async function gravarCanalEAgente(e: Escritor, { s, ID, org, agora }: Contexto): Promise<void> {
   // O número existe só para ancorar as conversas (a FK é obrigatória), e nasce
   // ARQUIVADO: para o produto ele não é número de ninguém, e a trava da 9010 não
   // deixa desarquivar.
@@ -566,13 +602,13 @@ async function gravarCanalEAgente(e: Escritor, agora: Date): Promise<void> {
     "public.channel_sessions",
     {
       id: ID.canal,
-      organization_id: ID_DA_EMPRESA,
+      organization_id: org,
       // O transporte é conhecimento de lib/channels/ (doutrina de restrição de canal).
-      ...colunasDaSessaoDaDemonstracao(SESSAO_DO_CANAL),
+      ...colunasDaSessaoDaDemonstracao(s.sessaoDoCanal),
       webhook_secret_encrypted: "\\x00",
       status: "STOPPED",
       status_reason: "Número fictício da empresa de demonstração: nunca conecta.",
-      phone_number: TELEFONE_DO_CANAL,
+      phone_number: s.telefoneDoCanal,
       display_name: "WhatsApp da demonstração (fictício)",
       archived_at: new Date(agora.getTime() - 30 * DIA),
       metadata: json({ demonstracao: true }),
@@ -580,37 +616,70 @@ async function gravarCanalEAgente(e: Escritor, agora: Date): Promise<void> {
     { manter: ["archived_at", "webhook_secret_encrypted"] },
   );
 
-  // A Sofia existe para ser dona de card e de conversa. Sem versão publicada: não responde ninguém.
+  // O agente existe para ser dono de card e de conversa. Sem versão publicada: não responde ninguém.
   await gravar(e, "public.ai_agents", {
     id: ID.agente,
-    organization_id: ID_DA_EMPRESA,
-    name: AGENTE_DE_IA.nome,
-    description: AGENTE_DE_IA.descricao,
-    system_prompt: AGENTE_DE_IA.prompt,
+    organization_id: org,
+    name: s.agente.nome,
+    description: s.agente.descricao,
+    system_prompt: s.agente.prompt,
     is_active: true,
     is_default: true,
   });
 }
 
-async function gravarEmpresasEContatos(e: Escritor, agora: Date): Promise<void> {
-  for (const emp of EMPRESAS) {
+/**
+ * Os produtos e serviços do segmento. A identidade no catálogo é o CÓDIGO
+ * (`catalog_products_org_codigo_key`): um produto de mesmo código criado à mão
+ * na demonstração é atualizado pela semente, em vez de a renovação parar aqui.
+ */
+async function gravarProdutos(e: Escritor, { s, ID, org }: Contexto): Promise<void> {
+  for (const p of s.produtos) {
+    await gravar(
+      e,
+      "public.catalog_products",
+      {
+        id: ID.produto(p.codigo),
+        organization_id: org,
+        codigo: p.codigo,
+        nome: p.nome,
+        descricao: p.descricao,
+        marca: p.marca ?? null,
+        categoria: p.categoria,
+        preco_cents: Math.round(p.precoReais * 100),
+        moeda: "BRL",
+        custo_cents: p.custoReais === undefined ? null : Math.round(p.custoReais * 100),
+        controla_estoque: p.controlaEstoque,
+        quantidade: p.controlaEstoque ? (p.quantidade ?? 0) : 0,
+        ativo: true,
+        origem: ORIGEM_DO_PRODUTO_DA_SEMENTE,
+        imagem_url: null,
+      },
+      { conflito: "organization_id, codigo" },
+    );
+  }
+}
+
+async function gravarEmpresasEContatos(e: Escritor, { s, ID, org, agora }: Contexto): Promise<void> {
+  for (const emp of s.empresas) {
     // As DUAS entidades de empresa do produto: a da MIA (`crm_empresas`, a da
     // ficha do contato e do card) e a do módulo B2B do upstream (`companies` +
     // `people`, a da prospecção).
     await gravar(e, "public.crm_empresas", {
       id: ID.empresa(emp.chave),
-      organization_id: ID_DA_EMPRESA,
+      organization_id: org,
       nome: emp.nome,
+      ...(emp.cnpj ? { cnpj: emp.cnpj } : {}),
       site: emp.site,
       email: `contato@${slug(emp.nome)}.exemplo.invalid`,
       endereco: `${emp.cidade} · ${emp.uf} (endereço fictício)`,
       observacoes: emp.observacoes,
       tags: emp.tags,
-      custom_fields: json({ setor: emp.setor }),
+      custom_fields: json({ setor: emp.setor, ...(emp.campos ?? {}) }),
     });
     await gravar(e, "public.companies", {
       id: ID.companhia(emp.chave),
-      organization_id: ID_DA_EMPRESA,
+      organization_id: org,
       legal_name: `${emp.nome} (fictícia)`,
       trade_name: emp.nome,
       city: emp.cidade,
@@ -623,7 +692,7 @@ async function gravarEmpresasEContatos(e: Escritor, agora: Date): Promise<void> 
 
   // A origem do contato é a do negócio mais antigo dele.
   const origemDoContato = new Map<string, { origem: OrigemDoNegocio; criadoHaDias: number }>();
-  for (const f of FUNIS) {
+  for (const f of s.funis) {
     for (const n of f.negocios) {
       const atual = origemDoContato.get(n.contato);
       if (!atual || n.criadoHaDias > atual.criadoHaDias) {
@@ -632,7 +701,7 @@ async function gravarEmpresasEContatos(e: Escritor, agora: Date): Promise<void> 
     }
   }
 
-  for (const c of CONTATOS) {
+  for (const c of s.contatos) {
     const origem = origemDoContato.get(c.chave);
     const o = origem ? ORIGENS[origem.origem] : null;
     const criado = new Date(agora.getTime() - ((origem?.criadoHaDias ?? 30) + 1) * DIA);
@@ -641,7 +710,7 @@ async function gravarEmpresasEContatos(e: Escritor, agora: Date): Promise<void> 
       pessoa = ID.pessoa(c.chave);
       await gravar(e, "public.people", {
         id: pessoa,
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         full_name: c.nome,
         normalized_name: slug(c.nome).replace(/-/g, " "),
         email: c.comEmail ? emailFalso(c.nome) : null,
@@ -652,14 +721,14 @@ async function gravarEmpresasEContatos(e: Escritor, agora: Date): Promise<void> 
       "public.contacts",
       {
         id: ID.contato(c.chave),
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         name: c.nome,
         display_name: c.nome.split(" ")[0]!,
         email: c.comEmail ? emailFalso(c.nome) : null,
         phone_number: telefoneFalso(c.n),
         tags: [...new Set([...(c.tags ?? []), ...(o?.tags ?? [])])],
         source: o?.source ?? "manual",
-        source_metadata: json(o ? o.metadata(c.chave) : {}),
+        source_metadata: json(o ? o.metadata(c.chave, s) : {}),
         empresa_id: c.empresa ? ID.empresa(c.empresa) : null,
         cargo: c.cargo ?? null,
         setor: c.setor ?? null,
@@ -675,7 +744,7 @@ async function gravarEmpresasEContatos(e: Escritor, agora: Date): Promise<void> 
         "public.company_people",
         {
           id: ID.vinculo(c.chave),
-          organization_id: ID_DA_EMPRESA,
+          organization_id: org,
           company_id: ID.companhia(c.empresa),
           person_id: pessoa,
           job_title: c.cargo ?? null,
@@ -689,18 +758,18 @@ async function gravarEmpresasEContatos(e: Escritor, agora: Date): Promise<void> 
   }
 }
 
-type EtapasGravadas = Map<ChaveDoFunil, Map<string, { id: string; nome: string; fim?: "won" | "lost" }>>;
+type EtapasGravadas = Map<string, Map<string, { id: string; nome: string; fim?: "won" | "lost" }>>;
 
-async function gravarFunis(e: Escritor): Promise<EtapasGravadas> {
+async function gravarFunis(e: Escritor, { s, ID, org }: Contexto): Promise<EtapasGravadas> {
   const gravadas: EtapasGravadas = new Map();
   let posicao = 1000;
-  for (const f of FUNIS) {
+  for (const f of s.funis) {
     await gravar(
       e,
       "public.crm_pipelines",
       {
         id: ID.funil(f.chave),
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         name: f.nome,
         slug: `demo-${f.chave}`,
         description: f.descricao,
@@ -720,7 +789,7 @@ async function gravarFunis(e: Escritor): Promise<EtapasGravadas> {
       const id = ID.etapa(f.chave, etp.chave);
       await gravar(e, "public.crm_stages", {
         id,
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         pipeline_id: ID.funil(f.chave),
         name: etp.nome,
         slug: slug(etp.nome).replace(/-/g, "_").slice(0, 40),
@@ -729,36 +798,41 @@ async function gravarFunis(e: Escritor): Promise<EtapasGravadas> {
         is_won: etp.fim === "won",
         is_lost: etp.fim === "lost",
         agent_stage_hint: etp.passo,
-        expected_duration_hours: etp.fim ? null : (PRAZO_DA_ETAPA[etp.passo ?? ""] ?? 72),
-        win_probability: etp.fim === "won" ? 100 : etp.fim === "lost" ? 0 : (PROBABILIDADE[etp.passo ?? ""] ?? 50),
+        expected_duration_hours: etp.fim ? null : (etp.prazoHoras ?? PRAZO_DA_ETAPA[etp.passo ?? ""] ?? 72),
+        win_probability:
+          etp.fim === "won"
+            ? 100
+            : etp.fim === "lost"
+              ? 0
+              : (etp.probabilidade ?? PROBABILIDADE[etp.passo ?? ""] ?? 50),
       });
       doFunil.set(etp.chave, { id, nome: etp.nome, ...(etp.fim ? { fim: etp.fim } : {}) });
     }
     gravadas.set(f.chave, doFunil);
   }
 
-  // O geral é o padrão (o "Pedidos" do banco já saiu de cena em gravarEmpresa).
+  // O funil padrão da semente (o "Pedidos" do banco já saiu de cena em gravarEmpresa).
   await e.executar(
     `update public.crm_pipelines set is_default = (id = $2) where organization_id = $1 and is_default is distinct from (id = $2)`,
-    [ID_DA_EMPRESA, ID.funil("generico")],
+    [org, ID.funil(s.funilPadrao)],
   );
   return gravadas;
 }
 
-function ator(dono: NegocioDaSemente["dono"]): Actor {
+function ator(dono: NegocioDaSemente["dono"], ID: Ids): Actor {
   return dono === "ia"
     ? { type: "ai_agent", id: "semente-cliente-modelo", role: "agent", agent_id: ID.agente }
     : { type: "user", id: ID.usuario(dono) };
 }
 
-async function gravarNegocios(e: Escritor, agora: Date, etapas: EtapasGravadas): Promise<void> {
-  for (const f of FUNIS) {
+async function gravarNegocios(e: Escritor, { s, ID, org, agora }: Contexto, etapas: EtapasGravadas): Promise<void> {
+  for (const f of s.funis) {
     const doFunil = etapas.get(f.chave)!;
     const primeira = [...doFunil.values()][0]!;
     for (const [i, n] of f.negocios.entries()) {
       const etapa = doFunil.get(n.passo);
       if (!etapa) throw new Error(`cliente modelo: "${n.titulo}" aponta para a etapa "${n.passo}", que ${f.chave} não tem`);
-      const contato = CONTATOS.find((c) => c.chave === n.contato);
+      const contato = s.contatos.find((c) => c.chave === n.contato);
       if (!contato) throw new Error(`cliente modelo: contato "${n.contato}" não existe`);
       const id = ID.negocio(f.chave, n.titulo);
       const origem = ORIGENS[n.origem];
@@ -771,7 +845,7 @@ async function gravarNegocios(e: Escritor, agora: Date, etapas: EtapasGravadas):
         "public.crm_leads",
         {
           id,
-          organization_id: ID_DA_EMPRESA,
+          organization_id: org,
           pipeline_id: ID.funil(f.chave),
           stage_id: etapa.id,
           contact_id: ID.contato(n.contato),
@@ -790,7 +864,7 @@ async function gravarNegocios(e: Escritor, agora: Date, etapas: EtapasGravadas):
           lost_reason: etapa.fim === "lost" ? (n.motivoDaPerda ?? "other") : null,
           won_reason: etapa.fim === "won" ? (n.motivoDoGanho ?? null) : null,
           source: origem.source,
-          source_metadata: json(origem.metadata(n.contato)),
+          source_metadata: json(origem.metadata(n.contato, s)),
           custom_fields: json(n.campos ?? {}),
           tags: [...new Set([...origem.tags, ...(n.tags ?? [])])],
           created_at: criado,
@@ -801,7 +875,7 @@ async function gravarNegocios(e: Escritor, agora: Date, etapas: EtapasGravadas):
       );
 
       // O histórico: nasceu, andou até a etapa de hoje, e o que ficou anotado.
-      const quem = ator(n.dono);
+      const quem = ator(n.dono, ID);
       const linhas = [
         {
           chave: "lead_created",
@@ -831,7 +905,7 @@ async function gravarNegocios(e: Escritor, agora: Date, etapas: EtapasGravadas):
       ];
       for (const l of linhas) {
         const linha = buildLeadActivityRow({
-          organizationId: ID_DA_EMPRESA,
+          organizationId: org,
           leadId: id,
           contactId: ID.contato(n.contato),
           sourceModule: "crm",
@@ -861,10 +935,10 @@ async function gravarNegocios(e: Escritor, agora: Date, etapas: EtapasGravadas):
 
       // A próxima ação vira TAREFA com prazo, ligada ao card.
       if (n.proximaAcao) {
-        const dono = n.dono === "ia" ? "helena" : n.dono;
+        const dono = n.dono === "ia" ? s.gestor : n.dono;
         await gravar(e, "public.crm_tasks", {
           id: ID.tarefa(`negocio:${id}`),
-          organization_id: ID_DA_EMPRESA,
+          organization_id: org,
           title: n.proximaAcao.titulo,
           due_date: naHoraLocal(agora, n.proximaAcao.emDias, "18:00"),
           priority: n.proximaAcao.prioridade ?? "medium",
@@ -872,15 +946,15 @@ async function gravarNegocios(e: Escritor, agora: Date, etapas: EtapasGravadas):
           lead_id: id,
           contact_id: ID.contato(n.contato),
           assigned_to: ID.usuario(dono),
-          created_by: ID.usuario("helena"),
+          created_by: ID.usuario(s.gestor),
         });
       }
     }
   }
 }
 
-async function gravarConversas(e: Escritor, agora: Date): Promise<void> {
-  for (const c of CONVERSAS) {
+async function gravarConversas(e: Escritor, { s, ID, org, agora }: Contexto): Promise<void> {
+  for (const c of s.conversas) {
     const ultimoMinuto = Math.max(...c.mensagens.map((m) => m.min));
     const base = new Date(agora.getTime() - c.comecouHaDias * DIA - (ultimoMinuto + 20) * 60_000);
     const emMin = (min: number) => new Date(base.getTime() + min * 60_000);
@@ -896,7 +970,7 @@ async function gravarConversas(e: Escritor, agora: Date): Promise<void> {
       "public.conversations",
       {
         id,
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         contact_id: contato,
         channel_session_id: ID.canal,
         channel: "whatsapp",
@@ -904,7 +978,7 @@ async function gravarConversas(e: Escritor, agora: Date): Promise<void> {
         status_changed_at: emMin(ultimoMinuto),
         assignee_kind: comIa ? "ai" : "user",
         assigned_to_user_id: comIa ? null : ID.usuario(c.com),
-        assigned_to_user_name: comIa ? null : (EQUIPE.find((p) => p.chave === c.com)?.nome ?? null),
+        assigned_to_user_name: comIa ? null : (s.equipe.find((p) => p.chave === c.com)?.nome ?? null),
         assigned_at: emMin(0),
         active_ai_agent_id: ID.agente,
         last_inbound_at: entradas.length ? emMin(entradas[entradas.length - 1]!.min) : null,
@@ -926,7 +1000,7 @@ async function gravarConversas(e: Escritor, agora: Date): Promise<void> {
       const em = emMin(m.min);
       await gravar(e, "public.messages", {
         id: ID.mensagem(c.chave, i),
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         conversation_id: id,
         channel_session_id: ID.canal,
         contact_id: contato,
@@ -951,7 +1025,7 @@ async function gravarConversas(e: Escritor, agora: Date): Promise<void> {
       "public.lead_state",
       {
         id: ID.estado(c.chave),
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         contact_id: contato,
         stage: c.passo,
         qualification: json(c.qualificacao),
@@ -967,7 +1041,7 @@ async function gravarConversas(e: Escritor, agora: Date): Promise<void> {
     for (let i = 1; i < passos.length; i += 1) {
       await gravar(e, "public.lead_state_transitions", {
         id: ID.transicao(c.chave, i),
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         contact_id: contato,
         from_stage: passos[i - 1]!,
         to_stage: passos[i]!,
@@ -978,7 +1052,7 @@ async function gravarConversas(e: Escritor, agora: Date): Promise<void> {
     if (c.ficha) {
       await gravar(e, "public.lead_notes", {
         id: ID.nota(c.chave),
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         contact_id: contato,
         headline: c.ficha.headline,
         body: c.ficha.body,
@@ -992,7 +1066,7 @@ async function gravarConversas(e: Escritor, agora: Date): Promise<void> {
       const passouEm = emMin(ultimaDaIa?.min ?? ultimoMinuto);
       await gravar(e, "public.passagens_de_atendimento", {
         id: ID.passagem(c.chave),
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         contact_id: contato,
         conversation_id: id,
         motor: "engine",
@@ -1034,15 +1108,17 @@ function caminhoAte(grafo: FlowGraph, alvo: string): string[] {
   return caminho;
 }
 
-async function gravarFollowups(e: Escritor, agora: Date, etapas: EtapasGravadas): Promise<void> {
-  const emUso = new Set(INSCRICOES.map((i) => i.modelo));
+async function gravarFollowups(e: Escritor, { s, ID, org, agora }: Contexto, etapas: EtapasGravadas): Promise<void> {
+  const emUso = new Set(s.inscricoes.map((i) => i.modelo));
   const grafos = new Map<string, FlowGraph>();
 
-  for (const modelo of MODELOS_DE_FOLLOWUP) {
-    const funil = etapas.get(FUNIL_DO_NICHO[modelo.nicho])!;
-    const passo = /proposta|negociacao|matricula|decisao/.test(modelo.id) ? "negotiating" : "qualified";
-    const etapa = funil.get(passo);
-    if (!etapa) throw new Error(`cliente modelo: o funil do nicho ${modelo.nicho} não tem a etapa "${passo}"`);
+  for (const instalado of s.followups) {
+    const modelo = MODELOS_DE_FOLLOWUP.find((m) => m.id === instalado.modelo);
+    if (!modelo) throw new Error(`cliente modelo: modelo de follow-up "${instalado.modelo}" não existe`);
+    const etapa = etapas.get(instalado.funil)?.get(instalado.etapa);
+    if (!etapa) {
+      throw new Error(`cliente modelo: o funil "${instalado.funil}" não tem a etapa "${instalado.etapa}" (modelo ${modelo.id})`);
+    }
 
     // As MESMAS três conferências da rota que instala o modelo (from-model).
     const gatilho = triggerConfigSchema.parse(modelo.gatilho({ stageId: etapa.id }));
@@ -1060,7 +1136,7 @@ async function gravarFollowups(e: Escritor, agora: Date, etapas: EtapasGravadas)
       "public.followup_flow_pointers",
       {
         id: ID.fluxo(modelo.id),
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         name: modelo.nome,
         status: "draft",
         active_version_id: null,
@@ -1073,10 +1149,10 @@ async function gravarFollowups(e: Escritor, agora: Date, etapas: EtapasGravadas)
     if (ativo) {
       await gravar(e, "public.followup_flow_versions", {
         id: ID.versao(modelo.id),
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         pointer_id: ID.fluxo(modelo.id),
         graph: json(grafo),
-        created_by: ID.usuario("helena"),
+        created_by: ID.usuario(s.gestor),
       });
     }
     await e.executar(
@@ -1086,20 +1162,21 @@ async function gravarFollowups(e: Escritor, agora: Date, etapas: EtapasGravadas)
     );
   }
 
-  for (const inscricao of INSCRICOES) {
+  for (const inscricao of s.inscricoes) {
     const modelo: ModeloDeFollowup | undefined = MODELOS_DE_FOLLOWUP.find((m) => m.id === inscricao.modelo);
     if (!modelo) throw new Error(`cliente modelo: modelo de follow-up "${inscricao.modelo}" não existe`);
-    const grafo = grafos.get(modelo.id)!;
+    const grafo = grafos.get(modelo.id);
+    if (!grafo) throw new Error(`cliente modelo: a inscrição "${inscricao.chave}" usa o modelo ${modelo.id}, que a semente não instala`);
     const caminho = caminhoAte(grafo, inscricao.no);
     const vivo = inscricao.status === "active" || inscricao.status === "waiting_reply";
     const comecou = new Date(agora.getTime() - inscricao.comecouHaDias * DIA - 3 * HORA);
     const acabou = vivo ? null : new Date(agora.getTime() - Math.max(inscricao.comecouHaDias - 3, 1) * DIA);
-    const conversa = CONVERSAS.find((c) => c.contato === inscricao.contato);
+    const conversa = s.conversas.find((c) => c.contato === inscricao.contato);
     const id = ID.inscricao(inscricao.chave);
 
     await gravar(e, "public.followup_enrollments", {
       id,
-      organization_id: ID_DA_EMPRESA,
+      organization_id: org,
       pointer_id: ID.fluxo(modelo.id),
       version_id: ID.versao(modelo.id),
       contact_id: ID.contato(inscricao.contato),
@@ -1138,7 +1215,7 @@ async function gravarFollowups(e: Escritor, agora: Date, etapas: EtapasGravadas)
     for (const [i, ev] of eventos.entries()) {
       await gravar(e, "public.followup_enrollment_events", {
         id: ID.eventoDaInscricao(inscricao.chave, i),
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         enrollment_id: id,
         node_id: ev.no,
         event_type: ev.tipo,
@@ -1149,20 +1226,15 @@ async function gravarFollowups(e: Escritor, agora: Date, etapas: EtapasGravadas)
   }
 }
 
-async function gravarAgenda(e: Escritor, agora: Date): Promise<void> {
+async function gravarAgenda(e: Escritor, { s, ID, org, agora }: Contexto): Promise<void> {
   // "consulta", "reuniao" e "atendimento" o banco semeia em toda empresa nova.
-  const extras = [
-    { slug: "visita", nome: "Visita ao imóvel", categoria: "visita", duracao: 60 },
-    { slug: "test-drive", nome: "Test drive", categoria: "demonstracao", duracao: 45 },
-    { slug: "aula-experimental", nome: "Aula experimental", categoria: "outro", duracao: 60 },
-  ];
-  for (const [i, t] of extras.entries()) {
+  for (const [i, t] of s.tiposDeAgenda.entries()) {
     await gravar(
       e,
       "public.calendar_event_types",
       {
         id: ID.tipoDeAgenda(t.slug),
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         name: t.nome,
         slug: t.slug,
         category: t.categoria,
@@ -1174,31 +1246,31 @@ async function gravarAgenda(e: Escritor, agora: Date): Promise<void> {
   }
   // Lembrete desligado: ele sairia pela fila de mensagens, que a 9010 recusa, e
   // o cron ficaria tentando. Na demonstração o lembrete aparece desligado.
-  await e.executar(`update public.calendar_event_types set reminder_enabled = false where organization_id = $1`, [
-    ID_DA_EMPRESA,
-  ]);
+  await e.executar(`update public.calendar_event_types set reminder_enabled = false where organization_id = $1`, [org]);
   // O tipo é achado pelo slug NO banco (os três primeiros o banco semeia), com
   // a conferência de que todos existem antes de marcar qualquer compromisso.
-  const slugs = [...new Set(COMPROMISSOS.map((c) => c.tipo))];
-  await e.executar(`do $semente$
+  const slugs = [...new Set(s.compromissos.map((c) => c.tipo))];
+  if (slugs.length > 0) {
+    await e.executar(`do $semente$
 begin
   if (select count(distinct slug) from public.calendar_event_types
-       where organization_id = ${literal(ID_DA_EMPRESA)}::uuid
+       where organization_id = ${literal(org)}::uuid
          and slug in (${slugs.map((x) => literal(x)).join(", ")})) < ${slugs.length} then
     raise exception 'cliente modelo: falta tipo de agendamento na empresa de demonstracao';
   end if;
 end
 $semente$`);
+  }
 
-  for (const c of COMPROMISSOS) {
+  for (const c of s.compromissos) {
     const inicio = naHoraLocal(agora, c.emDias, c.hora);
-    const conversa = CONVERSAS.find((x) => x.contato === c.contato);
+    const conversa = s.conversas.find((x) => x.contato === c.contato);
     const cancelado = c.status === "cancelled";
     await gravar(e, "public.calendar_appointments", {
       id: ID.compromisso(c.chave),
-      organization_id: ID_DA_EMPRESA,
+      organization_id: org,
       event_type_id: sql(
-        `(select id from public.calendar_event_types where organization_id = ${literal(ID_DA_EMPRESA)}::uuid and slug = ${literal(c.tipo)})`,
+        `(select id from public.calendar_event_types where organization_id = ${literal(org)}::uuid and slug = ${literal(c.tipo)})`,
       ),
       title: c.titulo,
       starts_at: inicio,
@@ -1209,7 +1281,7 @@ $semente$`);
       contact_id: ID.contato(c.contato),
       conversation_id: conversa ? ID.conversa(conversa.chave) : null,
       location_kind: c.local,
-      location_details: c.local === "in_person" ? "Unidade da demonstração (endereço fictício)" : null,
+      location_details: c.local === "in_person" ? s.enderecoFicticio : null,
       notes: c.nota ?? null,
       cancellation_reason: cancelado ? (c.nota ?? "Cancelado pelo cliente") : null,
       cancelled_at: cancelado ? new Date(inicio.getTime() - DIA) : null,
@@ -1223,11 +1295,11 @@ $semente$`);
   }
 }
 
-async function gravarTarefasSoltas(e: Escritor, agora: Date): Promise<void> {
-  for (const t of TAREFAS) {
+async function gravarTarefasSoltas(e: Escritor, { s, ID, org, agora }: Contexto): Promise<void> {
+  for (const t of s.tarefas) {
     await gravar(e, "public.crm_tasks", {
       id: ID.tarefa(t.chave),
-      organization_id: ID_DA_EMPRESA,
+      organization_id: org,
       title: t.titulo,
       description: t.descricao ?? null,
       due_date: t.emDias === null ? null : naHoraLocal(agora, t.emDias, "18:00"),
@@ -1236,18 +1308,18 @@ async function gravarTarefasSoltas(e: Escritor, agora: Date): Promise<void> {
       lead_id: null,
       contact_id: t.contato ? ID.contato(t.contato) : null,
       assigned_to: ID.usuario(t.dono),
-      created_by: ID.usuario("helena"),
+      created_by: ID.usuario(s.gestor),
     });
   }
 }
 
 /**
- * Documentos e obrigações (migration 9018): o catálogo do funil de serviços e
- * os itens da demonstração. Nada aqui emite evento nem dispara aviso: a semente
- * só grava, e os gatilhos de obrigação nascem do relógio e das regras que
- * alguém ligar na demonstração (onde a trava da 9010 recusa qualquer mensagem).
+ * Documentos e obrigações (migration 9018): o catálogo do funil e os itens da
+ * demonstração. Nada aqui emite evento nem dispara aviso: a semente só grava,
+ * e os gatilhos de obrigação nascem do relógio e das regras que alguém ligar na
+ * demonstração (onde a trava da 9010 recusa qualquer mensagem).
  */
-async function gravarObrigacoes(e: Escritor, agora: Date): Promise<void> {
+async function gravarObrigacoes(e: Escritor, { s, ID, org, agora }: Contexto): Promise<void> {
   await e.executar(`do $semente$
 begin
   if to_regclass('public.mia_obrigacoes') is null then
@@ -1255,11 +1327,13 @@ begin
   end if;
 end
 $semente$`);
+  if (!s.obrigacoes) return;
 
+  const { funil: chaveDoFunil, segmento, itens } = s.obrigacoes;
   const dia = (dias: number | undefined) => (dias === undefined ? null : dataIso(naHoraLocal(agora, dias, "12:00")));
   const hoje = dia(0)!;
-  const funil = ID.funil(FUNIL_DAS_OBRIGACOES);
-  const modelos = modelosDoSegmento("servicos_b2b");
+  const funil = ID.funil(chaveDoFunil);
+  const modelos = modelosDoSegmento(segmento);
   const inteiros = (lista: readonly number[]) => sql(`${literal(`{${lista.join(",")}}`)}::integer[]`);
 
   // O catálogo do funil: o modelo do segmento, pelo MESMO montador da tela.
@@ -1269,13 +1343,13 @@ $semente$`);
     `delete from public.mia_obrigacoes_tipos
       where organization_id = $1::uuid and pipeline_id = $2::uuid
         and lower(btrim(nome)) = any($3) and not (id::text = any($4))`,
-    [ID_DA_EMPRESA, funil, modelos.map((m) => m.nome.trim().toLowerCase()), modelos.map((m) => ID.tipoDeObrigacao(m.nome))],
+    [org, funil, modelos.map((m) => m.nome.trim().toLowerCase()), modelos.map((m) => ID.tipoDeObrigacao(m.nome))],
   );
   for (const [posicao, m] of modelos.entries()) {
-    const tipo = montarTipo({ ...m, segmento: "servicos_b2b" }, posicao);
+    const tipo = montarTipo({ ...m, segmento }, posicao);
     await gravar(e, "public.mia_obrigacoes_tipos", {
       id: ID.tipoDeObrigacao(m.nome),
-      organization_id: ID_DA_EMPRESA,
+      organization_id: org,
       pipeline_id: funil,
       nome: tipo.nome,
       nome_curto: tipo.nome_curto,
@@ -1291,27 +1365,27 @@ $semente$`);
       segmento: tipo.segmento,
       posicao: tipo.posicao,
       arquivado_em: null,
-      created_by_user_id: ID.usuario("helena"),
+      created_by_user_id: ID.usuario(s.gestor),
     });
   }
 
   // O histórico e as propostas dos itens da semente são refeitos a cada rodada:
   // quem mexeu num item na demonstração (recebeu, marcou feita) criou ciclos
   // que colidiriam com os da semente.
-  const idsDosItens = OBRIGACOES.map((o) => ID.obrigacao(o.chave));
+  const idsDosItens = itens.map((o) => ID.obrigacao(o.chave));
   await e.executar(
     `delete from public.mia_obrigacoes_ciclos where organization_id = $1::uuid and obrigacao_id::text = any($2)`,
-    [ID_DA_EMPRESA, idsDosItens],
+    [org, idsDosItens],
   );
   await e.executar(
     `delete from public.mia_obrigacoes_propostas where organization_id = $1::uuid and obrigacao_id::text = any($2)`,
-    [ID_DA_EMPRESA, idsDosItens],
+    [org, idsDosItens],
   );
 
-  const negociosDoFunil = FUNIS.find((f) => f.chave === FUNIL_DAS_OBRIGACOES)?.negocios ?? [];
-  for (const o of OBRIGACOES) {
+  const negociosDoFunil = s.funis.find((f) => f.chave === chaveDoFunil)?.negocios ?? [];
+  for (const o of itens) {
     const modelo = modelos.find((m) => m.nome === o.tipo);
-    if (!modelo) throw new Error(`cliente modelo: o tipo de obrigação "${o.tipo}" não está no modelo de Serviços B2B`);
+    if (!modelo) throw new Error(`cliente modelo: o tipo de obrigação "${o.tipo}" não está no modelo do segmento ${segmento}`);
     if (o.negocio && !negociosDoFunil.some((n) => n.titulo === o.negocio)) {
       throw new Error(`cliente modelo: a obrigação "${o.chave}" aponta para o negócio "${o.negocio}", que o funil não tem`);
     }
@@ -1321,7 +1395,7 @@ $semente$`);
         nome: modelo.nome,
         nome_curto: modelo.nome_curto,
         categoria: modelo.categoria,
-        lead_id: o.negocio ? ID.negocio(FUNIL_DAS_OBRIGACOES, o.negocio) : null,
+        lead_id: o.negocio ? ID.negocio(chaveDoFunil, o.negocio) : null,
         empresa_id: o.empresa ? ID.empresa(o.empresa) : null,
         contact_id: o.contato ? ID.contato(o.contato) : null,
         quem_entrega: modelo.quem_entrega,
@@ -1345,7 +1419,7 @@ $semente$`);
     const { avisos_dias: avisos, ...resto } = linha as Record<string, Valor> & { avisos_dias: number[] };
     await gravar(e, "public.mia_obrigacoes", {
       id: ID.obrigacao(o.chave),
-      organization_id: ID_DA_EMPRESA,
+      organization_id: org,
       ...resto,
       tipo_id: ID.tipoDeObrigacao(modelo.nome),
       avisos_dias: inteiros(avisos),
@@ -1358,13 +1432,13 @@ $semente$`);
       arquivo_mime: null,
       arquivo_bytes: null,
       arquivado_em: null,
-      created_by_user_id: ID.usuario("helena"),
-      updated_by_user_id: ID.usuario("helena"),
+      created_by_user_id: ID.usuario(s.gestor),
+      updated_by_user_id: ID.usuario(s.gestor),
     });
     for (const [i, c] of ciclos.entries()) {
       await gravar(e, "public.mia_obrigacoes_ciclos", {
         id: ID.cicloDaObrigacao(o.chave, i + 1),
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         obrigacao_id: ID.obrigacao(o.chave),
         ciclo: i + 1,
         como: modelo.categoria === "atividade" ? "feita" : "recebido",
@@ -1378,11 +1452,11 @@ $semente$`);
     }
     if (o.proposta) {
       const pedida = o.proposta;
-      const conversa = CONVERSAS.find((c) => c.chave === pedida.conversa);
+      const conversa = s.conversas.find((c) => c.chave === pedida.conversa);
       if (!conversa) throw new Error(`cliente modelo: a conversa "${pedida.conversa}" da obrigação "${o.chave}" não existe`);
       await gravar(e, "public.mia_obrigacoes_propostas", {
         id: ID.propostaDaObrigacao(o.chave),
-        organization_id: ID_DA_EMPRESA,
+        organization_id: org,
         obrigacao_id: ID.obrigacao(o.chave),
         ciclo: ciclos.length + 1,
         contact_id: ID.contato(conversa.contato),
@@ -1407,7 +1481,7 @@ $semente$`);
  * histórico fictício, não tráfego: marcados como consumidos, nenhum worker
  * reage a eles. Os eventos de quem usar a demonstração depois seguem normais.
  */
-async function neutralizarOsEventos(e: Escritor): Promise<void> {
+async function neutralizarOsEventos(e: Escritor, { org }: Contexto): Promise<void> {
   // `now()` é o INÍCIO da transação, o mesmo nos dois modos — e é quando as
   // linhas de `event_log` desta carga nasceram (o default da coluna é `now()`).
   await e.executar(
@@ -1418,42 +1492,48 @@ async function neutralizarOsEventos(e: Escritor): Promise<void> {
       where organization_id = $1::uuid
         and created_at >= now()
         and status in ('pending', 'processing')`,
-    [ID_DA_EMPRESA, CONSUMIDOR_DA_SEMENTE],
+    [org, CONSUMIDOR_DA_SEMENTE],
   );
 }
 
-/** Quantas linhas a empresa de demonstração tem em cada tabela que a semente grava. */
-export async function contarDaSemente(db: pg.ClientBase | pg.Pool): Promise<Record<string, number>> {
-  const tabelas = [
-    "user_organizations",
-    "crm_empresas",
-    "companies",
-    "company_people",
-    "contacts",
-    "crm_pipelines",
-    "crm_stages",
-    "crm_leads",
-    "crm_lead_activities",
-    "crm_tasks",
-    "conversations",
-    "messages",
-    "lead_state",
-    "lead_notes",
-    "passagens_de_atendimento",
-    "followup_flow_pointers",
-    "followup_enrollments",
-    "calendar_event_types",
-    "calendar_appointments",
-    "mia_obrigacoes_tipos",
-    "mia_obrigacoes",
-    "mia_obrigacoes_ciclos",
-    "mia_obrigacoes_propostas",
-  ];
+/** As tabelas que a semente grava, na ordem em que o resumo as mostra. */
+export const TABELAS_DA_SEMENTE = [
+  "user_organizations",
+  "crm_empresas",
+  "companies",
+  "company_people",
+  "contacts",
+  "crm_pipelines",
+  "crm_stages",
+  "crm_leads",
+  "crm_lead_activities",
+  "crm_tasks",
+  "conversations",
+  "messages",
+  "lead_state",
+  "lead_notes",
+  "passagens_de_atendimento",
+  "followup_flow_pointers",
+  "followup_enrollments",
+  "calendar_event_types",
+  "calendar_appointments",
+  "mia_obrigacoes_tipos",
+  "mia_obrigacoes",
+  "mia_obrigacoes_ciclos",
+  "mia_obrigacoes_propostas",
+  "catalog_products",
+] as const;
+
+/** Quantas linhas uma empresa de demonstração tem em cada tabela que a semente grava. */
+export async function contarDaSemente(
+  db: pg.ClientBase | pg.Pool,
+  organizacaoId: string = ID_DA_EMPRESA,
+): Promise<Record<string, number>> {
   const contagens: Record<string, number> = {};
-  for (const t of tabelas) {
+  for (const t of TABELAS_DA_SEMENTE) {
     const { rows } = await db.query<{ n: string }>(
       `select count(*)::text as n from public.${t} where organization_id = $1`,
-      [ID_DA_EMPRESA],
+      [organizacaoId],
     );
     contagens[t] = Number(rows[0]!.n);
   }
