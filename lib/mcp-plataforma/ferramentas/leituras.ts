@@ -37,6 +37,7 @@ import { lerDocumentoDaMemoria } from "@/lib/implantacao/memoria";
 import { lerModelosOficiais, lerRespostasProntas } from "@/lib/implantacao/mensagens";
 import { retratoDosRoteadores } from "@/lib/implantacao/roteador";
 import { EXPLICACAO_DO_PASSO, ROTULO_DO_PASSO } from "@/lib/leads/agent-mapping";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { configAssinatura } from "@/lib/messaging/assinatura";
 import { PACOTES } from "@/lib/mcp/tools/pacotes";
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
@@ -56,6 +57,9 @@ import { FUSOS_OFERECIDOS } from "@/lib/tempo/fusos";
 
 import type { FerramentaDePlataforma } from "../tipos";
 import { alvo, ORGANIZACAO, ORG_DE_EXEMPLO } from "./comum";
+
+/** Quantas páginas de 1000 produtos `plataforma_ver_catalogo` lê antes de dizer que cortou. */
+const PAGINAS_DO_CATALOGO = 10;
 
 const SECOES_DE_MODELO = [
   "funis",
@@ -477,17 +481,29 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
     handler: async (ctx, args) => {
       const { c } = await alvo(ctx, args);
       const pular = typeof args.pular === "number" ? args.pular : 0;
-      const { data, error } = await c.admin
-        .from("catalog_products")
-        .select(COLUNAS_DO_PRODUTO)
-        .eq("organization_id", c.orgId)
-        .order("nome")
-        .limit(5000);
-      if (error) throw new Error(`não consegui ler o catálogo: ${error.message}`);
+      // PAGINADO. O `.limit(5000)` que estava aqui devolvia no máximo 1000
+      // produtos (o teto do PostgREST): num catálogo maior, `total` dizia 1000, a
+      // busca só olhava os 1000 primeiros por nome e o resto não tinha página
+      // que alcançasse. Agora lê até 10 mil (o mesmo teto da busca de produtos
+      // do agente, `lib/mcp/tools/comercio.ts`) e, acima disso, DIZ que cortou.
+      const lido = await lerTodasAsPaginas<Record<string, unknown>>(
+        (de, ate, pedirContagem) =>
+          c.admin
+            .from("catalog_products")
+            .select(COLUNAS_DO_PRODUTO, pedirContagem ? { count: "exact" } : undefined)
+            .eq("organization_id", c.orgId)
+            .order("nome")
+            // `id` desempata nomes iguais: paginar por `range` só é correto
+            // sobre uma ordem única.
+            .order("id")
+            .range(de, ate),
+        { paginasMaximas: PAGINAS_DO_CATALOGO },
+      );
+      if (lido.erro) throw new Error(`não consegui ler o catálogo: ${lido.erro}`);
       // O filtro é em memória de propósito: é a busca de quem confere o que
       // gravou, e o catálogo de um cliente tem centenas de itens, não milhões.
       const termo = typeof args.busca === "string" ? args.busca.toLowerCase() : "";
-      const todos = ((data ?? []) as unknown as Array<Record<string, unknown>>).filter(
+      const todos = lido.linhas.filter(
         (p) =>
           termo === "" ||
           [p.nome, p.codigo, p.marca].some((v) => typeof v === "string" && v.toLowerCase().includes(termo)),
@@ -497,6 +513,16 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
         total: todos.length,
         devolvidos: pagina.length,
         ...(pular + pagina.length < todos.length ? { proxima_pagina: { pular: pular + pagina.length } } : {}),
+        // O catálogo passou do teto de leitura: `total` e a busca cobrem só os
+        // primeiros por nome, e quem lê precisa saber que há mais.
+        ...(lido.truncado
+          ? {
+              catalogo_cortado: true,
+              aviso:
+                `O catálogo tem mais produtos do que esta leitura alcança (${lido.total ?? "mais de " + lido.linhas.length} no banco, ` +
+                `${lido.linhas.length} lidos, em ordem de nome). A busca e o total acima cobrem só os lidos.`,
+            }
+          : {}),
         produtos: pagina.map((p) => ({
           codigo: p.codigo,
           nome: p.nome,

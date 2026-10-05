@@ -39,6 +39,8 @@ import { configAssinatura } from "@/lib/messaging/assinatura";
 import { MODULOS } from "@/lib/modulos/vendaveis";
 import { routingConfigSchema } from "@/lib/schemas/routing";
 
+import { contarNoBanco } from "../contar";
+
 import { conversoes } from "./area-das-conversoes";
 import { migracao } from "./area-da-migracao";
 import { obrigacoes } from "./area-das-obrigacoes";
@@ -236,23 +238,27 @@ const produtos: AreaDoChecklist = {
   titulo: "Catálogo de produtos e serviços",
   avaliar: async ({ admin }, org) => {
     const r = vazio();
-    const { data, error } = await admin
-      .from("catalog_products")
-      .select("id, ativo, descricao")
-      .eq("organization_id", org.id)
-      .limit(5000);
-    if (error) throw new Error(error.message);
-    const itens = (data ?? []) as Array<{ ativo: boolean; descricao: string | null }>;
-    const ativos = itens.filter((i) => i.ativo).length;
-    const semDescricao = itens.filter((i) => i.ativo && !i.descricao).length;
-    r.dados = { total: itens.length, ativos, sem_descricao: semDescricao };
-    if (itens.length === 0) {
+    // CONTADO no banco, e não trazido: o `.limit(5000)` que estava aqui devolvia
+    // no máximo 1000 produtos (o teto do PostgREST), e um catálogo de 3.000
+    // aparecia no checklist como "1.000 produtos". "Sem descrição" é o ativo com
+    // a descrição nula OU vazia, por isso são duas contagens somadas.
+    const doCatalogo = () =>
+      admin.from("catalog_products").select("id", { count: "exact", head: true }).eq("organization_id", org.id);
+    const [total, ativos, semDescricaoNula, semDescricaoVazia] = await Promise.all([
+      contarNoBanco(doCatalogo(), "os produtos"),
+      contarNoBanco(doCatalogo().eq("ativo", true), "os produtos ativos"),
+      contarNoBanco(doCatalogo().eq("ativo", true).is("descricao", null), "os produtos sem descrição"),
+      contarNoBanco(doCatalogo().eq("ativo", true).eq("descricao", ""), "os produtos sem descrição"),
+    ]);
+    const semDescricao = semDescricaoNula + semDescricaoVazia;
+    r.dados = { total, ativos, sem_descricao: semDescricao };
+    if (total === 0) {
       r.falta.push({
         o_que: "Catálogo vazio (só importa se a empresa vende itens com preço: sem catálogo o agente não informa preço).",
         como: "plataforma_garantir_produtos, em lotes de até 200.",
       });
     } else {
-      r.pronto.push(`${plural(itens.length, "produto", "produtos")} no catálogo, ${ativos} ativo(s).`);
+      r.pronto.push(`${plural(total, "produto", "produtos")} no catálogo, ${ativos} ativo(s).`);
       if (semDescricao > 0) {
         r.falta.push({
           o_que: `${plural(semDescricao, "produto ativo sem descrição", "produtos ativos sem descrição")}: o agente só tem o nome e o preço para responder.`,

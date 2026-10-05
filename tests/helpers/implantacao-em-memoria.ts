@@ -162,6 +162,8 @@ export interface OpcoesDoCenario {
   comNumero?: boolean;
   /** O número é o OFICIAL (tem conta de WhatsApp Business). */
   numeroOficial?: boolean;
+  /** O teto de linhas por resposta do PostgREST (1000 em produção). Ausente = sem corte. */
+  maxRows?: number;
 }
 
 /** Uma organização fictícia como `plataforma_criar_cliente` a deixa: com o funil semeado e o criador como admin. */
@@ -219,6 +221,7 @@ export function cenarioDaImplantacao(opcoes: OpcoesDoCenario = {}) {
         : [],
     },
     RPCS,
+    { maxRows: opcoes.maxRows },
   );
 
   // O que o PostgREST não alcança e o código pede ao GoTrue e ao Storage.

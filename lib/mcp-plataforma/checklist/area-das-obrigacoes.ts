@@ -16,37 +16,53 @@
  * resolve.
  */
 import { lerRegras } from "@/lib/implantacao/automacoes";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { diaNoFuso } from "@/lib/obrigacoes/datas";
 import { ehGatilhoDeObrigacao } from "@/lib/obrigacoes/gatilhos";
 import { contarObrigacoes } from "@/lib/obrigacoes/situacao";
 import { COLUNAS_DA_OBRIGACAO, type Obrigacao } from "@/lib/obrigacoes/tipos";
 
+import { contarNoBanco } from "../contar";
 import type { AreaDoChecklist } from "./tipos";
+
+/**
+ * Quantas páginas de 1000 itens a área lê: as 5 mil que o `.limit(5000)` antigo
+ * declarava e o PostgREST nunca entregou (ele corta em 1000 sem avisar). Os
+ * itens vêm em linhas porque a situação de cada um é CALCULADA pelas datas; os
+ * tipos são só contados, no banco.
+ */
+const PAGINAS_DE_ITENS = 5;
 
 export const obrigacoes: AreaDoChecklist = {
   chave: "obrigacoes",
   titulo: "Documentos e obrigações com vencimento (opcional)",
   avaliar: async ({ admin }, org) => {
-    const [itens, tipos, regras] = await Promise.all([
-      admin
-        .from("mia_obrigacoes")
-        .select(COLUNAS_DA_OBRIGACAO)
-        .eq("organization_id", org.id)
-        .is("arquivado_em", null)
-        .limit(5000),
-      admin
-        .from("mia_obrigacoes_tipos")
-        .select("id")
-        .eq("organization_id", org.id)
-        .is("arquivado_em", null)
-        .limit(2000),
+    const [itens, tiposNoCatalogo, regras] = await Promise.all([
+      lerTodasAsPaginas<Obrigacao>(
+        (de, ate, pedirContagem) =>
+          admin
+            .from("mia_obrigacoes")
+            .select(COLUNAS_DA_OBRIGACAO, pedirContagem ? { count: "exact" } : undefined)
+            .eq("organization_id", org.id)
+            .is("arquivado_em", null)
+            // Ordem única: paginar por `range` só é correto assim.
+            .order("id", { ascending: true })
+            .range(de, ate),
+        { paginasMaximas: PAGINAS_DE_ITENS },
+      ),
+      contarNoBanco(
+        admin
+          .from("mia_obrigacoes_tipos")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", org.id)
+          .is("arquivado_em", null),
+        "os tipos de obrigação",
+      ),
       lerRegras(admin, org.id),
     ]);
-    if (itens.error) throw new Error(itens.error.message);
-    if (tipos.error) throw new Error(tipos.error.message);
+    if (itens.erro) throw new Error(itens.erro);
 
-    const todos = (itens.data ?? []) as unknown as Obrigacao[];
-    const tiposNoCatalogo = (tipos.data ?? []).length;
+    const todos = itens.linhas;
     const contadores = contarObrigacoes(todos, diaNoFuso(new Date(), org.timezone));
     const deObrigacao = regras.filter((r) => ehGatilhoDeObrigacao(r.trigger_event));
     const ligadas = deObrigacao.filter((r) => r.is_active);
@@ -67,6 +83,12 @@ export const obrigacoes: AreaDoChecklist = {
       atencao.push(
         "Há itens cadastrados e nenhuma regra de aviso ligada: ninguém é avisado quando um documento vence. " +
           "Monte com plataforma_garantir_automacao (gatilhos obrigacao.*, em plataforma_listar_modelos, seção automacoes) e ligue com plataforma_ligar_automacao.",
+      );
+    }
+    if (itens.truncado) {
+      atencao.push(
+        `Há mais itens do que esta área lê (${itens.total ?? "mais de " + todos.length} no banco, ${todos.length} lidos): ` +
+          "os contadores acima cobrem só os lidos.",
       );
     }
     if (contadores.vencidos > 0) {

@@ -36,6 +36,7 @@
  * (`sem_aviso_antes_de`): um alvará que venceu no mês passado, migrado hoje,
  * aparece vencido na lista e não dispara o aviso de vencimento atrasado.
  */
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { comoDia, diaNoFuso, type Dia } from "@/lib/obrigacoes/datas";
 import {
   MODELOS_DE_TIPO,
@@ -100,6 +101,14 @@ export const TETO_DE_OBRIGACOES = 100;
 /** Quantos itens a leitura devolve por chamada. */
 export const TETO_DA_LEITURA = 200;
 
+/**
+ * Quantas páginas de 1000 o retrato lê: as 5 mil obrigações que o `.limit(5000)`
+ * antigo declarava. O PostgREST corta toda resposta em 1000 linhas sem avisar,
+ * então os contadores e o "de quantos" saíam das 1000 mais antigas, com cara de
+ * total. Acima do teto o retrato DIZ que cortou.
+ */
+const PAGINAS_DO_RETRATO = 5;
+
 export const SITUACOES_DA_LEITURA = ["todas", "pendentes", "vencidas", "vencendo", "pedidas_sem_resposta", "em_dia"] as const;
 export type SituacaoDaLeitura = (typeof SITUACOES_DA_LEITURA)[number];
 
@@ -139,15 +148,21 @@ export async function lerObrigacoesDoCliente(
   pedido: { situacao?: SituacaoDaLeitura; limite?: number },
 ): Promise<Record<string, unknown>> {
   const hoje = await hojeDoCliente(c);
-  const { data, error } = await c.admin
-    .from("mia_obrigacoes")
-    .select(COLUNAS_DA_OBRIGACAO)
-    .eq("organization_id", c.orgId)
-    .is("arquivado_em", null)
-    .order("created_at", { ascending: true })
-    .limit(5000);
-  if (error) throw new Error(`não consegui ler as obrigações: ${error.message}`);
-  const todos = (data ?? []) as unknown as Obrigacao[];
+  const lido = await lerTodasAsPaginas<Obrigacao>(
+    (de, ate, pedirContagem) =>
+      c.admin
+        .from("mia_obrigacoes")
+        .select(COLUNAS_DA_OBRIGACAO, pedirContagem ? { count: "exact" } : undefined)
+        .eq("organization_id", c.orgId)
+        .is("arquivado_em", null)
+        .order("created_at", { ascending: true })
+        // `id` desempata: paginar por `range` só é correto sobre uma ordem única.
+        .order("id", { ascending: true })
+        .range(de, ate),
+    { paginasMaximas: PAGINAS_DO_RETRATO },
+  );
+  if (lido.erro) throw new Error(`não consegui ler as obrigações: ${lido.erro}`);
+  const todos = lido.linhas;
   const filtro = pedido.situacao ?? "pendentes";
   const passa = (i: Obrigacao): boolean => {
     if (filtro === "todas") return true;
@@ -180,6 +195,16 @@ export async function lerObrigacoesDoCliente(
     hoje,
     contadores: contarObrigacoes(todos, hoje),
     filtro,
+    // A leitura passou do teto: os contadores e a lista cobrem só as mais
+    // antigas. Dito aqui para quem lê não tomar o retrato por inteiro.
+    ...(lido.truncado
+      ? {
+          lista_cortada: true,
+          aviso:
+            `Este cliente tem mais obrigações do que o retrato lê (${lido.total ?? "mais de " + todos.length} no banco, ` +
+            `${todos.length} lidas): os contadores e a lista cobrem só as mais antigas.`,
+        }
+      : {}),
     mostrando: Math.min(escolhidos.length, limite),
     de: escolhidos.length,
     itens: escolhidos.slice(0, limite).map((i) => ({
