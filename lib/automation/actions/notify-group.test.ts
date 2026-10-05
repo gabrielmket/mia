@@ -46,7 +46,7 @@ import {
 
 const ORG = "aaaaaaaa-0000-4000-8000-00000000000a";
 const CANAL = "bbbbbbbb-0000-4000-8000-00000000000b";
-const GRUPO = "120363405136320907@g.us";
+const GRUPO = "120363000000000001@g.us";
 
 function ctxCom(sessao: Record<string, unknown> | null): ActionCtx {
   const admin = {

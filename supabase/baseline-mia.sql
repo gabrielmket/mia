@@ -2899,7 +2899,7 @@ update public.mia_leads_da_meta_formularios f
 --      aviso da Meta chegou. `recebidos.via` diz por qual caminho cada lead
 --      entrou primeiro.
 --
---   2. O TELEFONE EM PERGUNTA PRÓPRIA. Formulário como o da Erglares pergunta
+--   2. O TELEFONE EM PERGUNTA PRÓPRIA. Formulário como o da Construtora Delta pergunta
 --      o celular numa pergunta criada por eles (`celular:_(ddd_+_número)`) e
 --      não no campo padrão `phone_number`. O sistema passa a reconhecer
 --      sozinho, e quando errar o administrador escolhe qual pergunta é o

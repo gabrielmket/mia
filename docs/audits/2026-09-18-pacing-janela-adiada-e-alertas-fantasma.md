@@ -1,6 +1,6 @@
 # Janela adiada e alertas fantasma — três defeitos que custaram uma hora
 
-**18/09/2026** · achado na implantação do tenant **Academia Body Fit**
+**18/09/2026** · achado na implantação do tenant **Academia Alfa**
 (`0637f3c1-53c3-45ac-a75f-5f0126fc6ecc`), canal WAHA
 `19fa43bd-466e-4474-8905-4986066322a9`, `WORKING`.
 
@@ -143,7 +143,7 @@ revisitada**.
 
 ---
 
-# Segunda rodada — 18/09/2026, implantação do tenant Academia Reativa
+# Segunda rodada — 18/09/2026, implantação do tenant Academia Beta
 
 Três achados novos. O primeiro estava no relato original desta sessão e não
 sobreviveu à reescrita; os outros dois apareceram configurando o segundo cliente.
@@ -152,7 +152,7 @@ sobreviveu à reescrita; os outros dois apareceram configurando o segundo client
 
 **O mais grave da série, e o único sem saída pela tela.**
 
-**Evidência de banco (Body Fit):** quatro mensagens inbound do mesmo contato
+**Evidência de banco (Academia Alfa):** quatro mensagens inbound do mesmo contato
 (04:36:14, 04:51:55, 04:58:04, 05:01:50) e **um único** job na fila, o das 04:36,
 `pending`, `run_after = 10:00Z`. `llm_calls` vazio: o modelo nunca foi chamado.
 
@@ -206,9 +206,9 @@ de escrita uma vez contra o banco real de teste — este defeito morreria no pri
 
 ## 6. Proteção de envio não segue o número quando ele troca de tenant
 
-**Evidência.** O mesmo chip físico (553175148146) foi desconectado da Body Fit e
-conectado na Reativa. Na Body Fit havia linha em `channel_knobs` com janela 0h–23h
-e `number_activated_at` de março. Na Reativa, `channel_knobs` não tem linha nenhuma:
+**Evidência.** O mesmo chip físico foi desconectado da Academia Alfa e
+conectado na Academia Beta. Na Academia Alfa havia linha em `channel_knobs` com janela 0h–23h
+e `number_activated_at` de março. Na Academia Beta, `channel_knobs` não tem linha nenhuma:
 janela 7h–22h e idade zero, ou seja, teto de 20 envios por aquecimento.
 
 **Causa.** A chave de `channel_knobs` é `(organization_id, channel_session_id)`, e

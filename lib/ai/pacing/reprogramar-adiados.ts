@@ -1,7 +1,7 @@
 /**
  * ALARGAR A JANELA REPROGRAMA O TURNO QUE ESTAVA ESPERANDO POR ELA.
  *
- * ## O defeito, medido em produção (Academia Body Fit, 18/09/2026)
+ * ## O defeito, medido em produção (Academia Alfa, 18/09/2026)
  *
  * `inbound-turn.ts` adia o turno quando a janela anti-ban está fechada e congela
  * `run_after` na abertura CALCULADA NAQUELE INSTANTE. Nada revisita jobs

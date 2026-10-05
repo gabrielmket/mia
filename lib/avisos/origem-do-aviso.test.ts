@@ -30,7 +30,7 @@ import {
 const ORG = "aaaaaaaa-0000-4000-8000-00000000000a";
 const OUTRA_ORG = "dddddddd-0000-4000-8000-00000000000d";
 const NUMERO_DA_EMPRESA = "eeeeeeee-0000-4000-8000-00000000000e";
-const GRUPO = "120363405136320907@g.us";
+const GRUPO = "120363000000000001@g.us";
 
 /** Um canal que entrega em grupo, sem nomear qual: a MATRIZ decide. */
 function sessaoQueEntregaEmGrupo(ref: string): ChannelSessionRef {

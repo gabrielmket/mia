@@ -38,7 +38,7 @@ import { CHANNEL_SESSION_REF_COLUMNS } from "@/lib/channels/session-ref";
 const ORG = "65073c33-7aeb-45bd-8db1-10cea3fa8968";
 const CONTATO = "c0c0c0c0-0000-4000-8000-000000000001";
 const NEGOCIO = "1e1e1e1e-0000-4000-8000-000000000002";
-const GRUPO = "120363405136320907@g.us";
+const GRUPO = "120363000000000001@g.us";
 
 const FICHA = {
   headline: "Implante · São Miguel · avaliação esta semana",
@@ -124,7 +124,7 @@ describe("a ficha no aviso do grupo", () => {
   it("⭐ {{nota.headline}} e {{nota.body}} saem com a ficha mais recente do contato", async () => {
     const { admin } = montar({
       sessaoDeAvisos: NUMERO_DE_AVISOS,
-      settings: { grupo_de_avisos: { id: GRUPO, nome: "Ultra Sorriso · Comercial" } },
+      settings: { grupo_de_avisos: { id: GRUPO, nome: "Vita Odonto · Comercial" } },
       ficha: FICHA,
       negocios: [],
     });
@@ -157,7 +157,7 @@ describe("o aviso no histórico do negócio", () => {
   it("⭐ o que saiu fica na timeline: tipo, ator Automação, texto no payload, sem PII no reason", async () => {
     const { admin, inserts } = montar({
       sessaoDeAvisos: NUMERO_DE_AVISOS,
-      settings: { grupo_de_avisos: { id: GRUPO, nome: "Ultra Sorriso · Comercial" } },
+      settings: { grupo_de_avisos: { id: GRUPO, nome: "Vita Odonto · Comercial" } },
       ficha: FICHA,
       negocios: [],
     });
@@ -171,10 +171,10 @@ describe("o aviso no histórico do negócio", () => {
       actor_kind: "rule",
       source_module: "automation",
       source_id: "regra-qualificado",
-      payload: { grupo: "Ultra Sorriso · Comercial", texto: envio.enviados[0]!.body, ficha: "usada", external_id: "msg-grupo-1" },
+      payload: { grupo: "Vita Odonto · Comercial", texto: envio.enviados[0]!.body, ficha: "usada", external_id: "msg-grupo-1" },
     });
     expect(linha!.reason).toBe(
-      "Aviso enviado ao grupo «Ultra Sorriso · Comercial» pela regra «Qualificado → avisa o comercial».",
+      "Aviso enviado ao grupo «Vita Odonto · Comercial» pela regra «Qualificado → avisa o comercial».",
     );
     // O reason é exibido e exportado no LGPD: nome e telefone ficam no payload.
     expect(String(linha!.reason)).not.toMatch(/Roberto|5511/);

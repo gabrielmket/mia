@@ -16,8 +16,8 @@
  *
  * O desenho acima supõe UMA instalação = UM operador, e a organização da sessão
  * é ele. Isso vale no self-host e é falso no modelo GERENCIADO: uma instalação
- * da Time Company com Academia Reativa, Body Fit e Ultra Sorriso dentro. Aberta
- * com a Reativa selecionada, `/legal/privacy` declarava que a Academia Reativa
+ * da Time Company com Academia Beta, Academia Alfa e Vita Odonto dentro. Aberta
+ * com a Academia Beta selecionada, `/legal/privacy` declarava que a Academia Beta
  * instalou o servidor e controla os dados de todos os tenants — e TROCAVA de
  * nome conforme quem estava logado. O mesmo documento, na mesma URL, nomeando
  * controladores diferentes para leitores diferentes.

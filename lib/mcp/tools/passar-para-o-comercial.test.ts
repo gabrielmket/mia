@@ -6,7 +6,7 @@
  * pelo cliente do Supabase). O resto é código de produção: `applySaveLeadNote`,
  * `applyLeadStateUpdate`, o espelho no card (`sincronizaEstagioDoAgente`, que
  * emite `lead.stage_changed`) e o handler de `crm_manage_tags` (que emite
- * `contact.tag_added`). O funil de teste é o da Ultra Sorriso: só "em
+ * `contact.tag_added`). O funil de teste é o da Vita Odonto: só "em
  * atendimento" (qualifying) e "Qualificado" (qualified) têm etapa no quadro.
  *
  *     npx vitest run lib/mcp/tools/passar-para-o-comercial.test.ts

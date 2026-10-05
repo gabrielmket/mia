@@ -41,9 +41,9 @@ export function nomeComparavel(nome: string): string {
     .trim();
 
   /**
-   * Letras soltas em sequência viram uma palavra só: `j h s` → `jhs`.
+   * Letras soltas em sequência viram uma palavra só: `a b c` → `abc`.
    *
-   * É o que faz "J.H.S. Biomateriais" e "JHS Biomateriais" serem a mesma
+   * É o que faz "A.B.C. Materiais" e "ABC Materiais" serem a mesma
    * empresa — e sigla pontuada é comum em razão social brasileira, enquanto o
    * agente ouve a sigla e digita sem ponto. Sem isto, o mesmo cliente vira duas
    * fichas por causa de três pontos.

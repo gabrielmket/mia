@@ -31,7 +31,7 @@ import { reportar } from "./report-da-plataforma";
  *     npx vitest run lib/avisos/report-da-plataforma.test.ts
  */
 
-const GRUPO = "120363405136320907@g.us";
+const GRUPO = "120363000000000001@g.us";
 const sessao = { provider: CHANNEL_PROVIDER_WAHA, waha_session_name: "plataforma" };
 
 /**

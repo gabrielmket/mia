@@ -5,7 +5,7 @@
  *
  * O mapeador da fonte de webhook (`mapInboundPayload`) acha o telefone pela
  * CHAVE exata: `phone_number`, `telefone`, `celular`... Formulário que usa o
- * campo padrão da Meta passa. O da Erglares não: o celular é uma pergunta criada
+ * campo padrão da Meta passa. O da Construtora Delta não: o celular é uma pergunta criada
  * por eles, e a chave que a Meta devolve é `celular:_(ddd_+_número)`. O lead
  * entrava sem telefone, o contato nascia só com o nome, e a IA não tinha para
  * quem mandar a primeira mensagem.

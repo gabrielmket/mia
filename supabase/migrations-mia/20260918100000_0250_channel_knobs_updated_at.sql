@@ -1,6 +1,6 @@
 -- 0250 — `channel_knobs.updated_at` para de mentir
 --
--- Achado na implantação do tenant Academia Body Fit (18/09/2026), documentado em
+-- Achado na implantação do tenant Academia Alfa (18/09/2026), documentado em
 -- `docs/audits/2026-09-18-pacing-janela-adiada-e-alertas-fantasma.md`.
 --
 -- A coluna existe, tem `default now()`, e NADA a atualiza: o upsert da rota

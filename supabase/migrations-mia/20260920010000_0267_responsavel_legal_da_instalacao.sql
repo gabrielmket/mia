@@ -9,9 +9,9 @@
 --
 -- Num self-host isso está certo e é o desenho original: uma instalação, um
 -- operador, e a organização é ele. No modelo GERENCIADO — uma instalação da
--- Time Company com Academia Reativa, Body Fit e Ultra Sorriso dentro — abrir a
--- página com a Reativa selecionada faz o documento declarar que a Academia
--- Reativa instalou e opera o servidor, e que ela é a controladora dos dados de
+-- Time Company com Academia Beta, Academia Alfa e Vita Odonto dentro — abrir a
+-- página com a Academia Beta selecionada faz o documento declarar que a Academia
+-- Beta instalou e opera o servidor, e que ela é a controladora dos dados de
 -- TODOS os tenants. Não é impreciso: é falso, num documento jurídico público,
 -- sobre uma empresa que não pode cumprir o que ele promete em nome dela.
 --

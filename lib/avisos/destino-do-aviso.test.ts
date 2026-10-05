@@ -21,7 +21,7 @@ import { destinoDoAviso, lerGrupoDeAvisos } from "./destino-do-aviso";
  */
 
 const ORG = "aaaaaaaa-0000-4000-8000-00000000000a";
-const GRUPO = "120363405136320907@g.us";
+const GRUPO = "120363000000000001@g.us";
 
 const wahaOk = { provider: CHANNEL_PROVIDER_WAHA, waha_session_name: "plataforma_avisos" };
 

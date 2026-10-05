@@ -19,6 +19,8 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
+import { nomesReservadosEm } from "../helpers/nomes-reservados";
+
 import {
   COMPROMISSOS,
   CONTATOS,
@@ -88,28 +90,8 @@ describe("dado fictício que nunca bate em pessoa real", () => {
   });
 
   it("⭐ nenhum nome de cliente real da Time Company", () => {
-    const proibidos = [
-      "ultra sorriso",
-      "erglares",
-      "castelo",
-      "jhs",
-      "conexão car",
-      "conexao car",
-      "skull",
-      "protev",
-      "foguinho",
-      "limpando",
-      "reativa",
-      "body fit",
-      "bodyfit",
-      "arco do triunfo",
-      "somattos",
-      "mércia",
-      "alessandra cieri",
-      "time company",
-    ];
-    const texto = JSON.stringify({ CONTATOS, EMPRESAS, EQUIPE, FUNIS, CONVERSAS, COMPROMISSOS, TAREFAS }).toLowerCase();
-    for (const p of proibidos) expect(texto, p).not.toContain(p);
+    const texto = JSON.stringify({ CONTATOS, EMPRESAS, EQUIPE, FUNIS, CONVERSAS, COMPROMISSOS, TAREFAS });
+    expect(nomesReservadosEm(texto, "com_pedacos")).toEqual([]);
     expect(NOME_DA_EMPRESA).toContain("Demonstração");
   });
 });
@@ -223,29 +205,9 @@ describe("o roteiro SQL (`--sql`) escreve literais que o Postgres lê do mesmo j
 
 // ─── AS CINCO SEMENTES ───────────────────────────────────────────────────────
 
-/** Os nomes de clientes reais da Time Company que nenhuma semente pode citar. */
-const PROIBIDOS = [
-  "ultra sorriso",
-  "sorriso",
-  "erglares",
-  "castelo",
-  "jhs",
-  "biomateria",
-  "conexão car",
-  "conexao car",
-  "skull",
-  "protev",
-  "foguinho",
-  "limpando",
-  "reativa",
-  "body fit",
-  "bodyfit",
-  "arco do triunfo",
-  "somattos",
-  "mércia",
-  "alessandra cieri",
-  "time company",
-];
+// Os nomes de clientes reais que nenhuma semente pode citar moram, só como
+// impressão (SHA-256), em tests/helpers/nomes-reservados.ts: o repositório é
+// público, e uma lista de nomes aqui seria a lista de clientes.
 
 /** Os três tipos de agendamento que o banco semeia em toda empresa nova. */
 const TIPOS_DO_BANCO = ["consulta", "reuniao", "atendimento"];
@@ -315,8 +277,7 @@ describe.each(SEGMENTOS)("a semente %s", (_segmento, s: SementeDeDemonstracao) =
       expect(emailFalso(nome)).toMatch(/^[a-z0-9.]+@exemplo\.invalid$/);
     }
     for (const e of s.empresas) if (e.site) expect(e.site).toMatch(/\.exemplo\.invalid$/);
-    const texto = JSON.stringify(s).toLowerCase();
-    for (const p of PROIBIDOS) expect(texto, p).not.toContain(p);
+    expect(nomesReservadosEm(JSON.stringify(s), "com_pedacos")).toEqual([]);
   });
 
   it("chaves e números de contato não se repetem; o gestor e os donos são da equipe", () => {

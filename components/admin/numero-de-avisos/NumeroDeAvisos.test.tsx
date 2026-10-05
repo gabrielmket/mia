@@ -31,9 +31,9 @@ function envolver(ui: ReactNode) {
 const NUMERO = {
   id: "eeeeeeee-0000-4000-8000-00000000000e",
   organization_id: "org-ultra",
-  organizacao: "Ultra Sorriso",
+  organizacao: "Vita Odonto",
   phone_number: "5511911112222",
-  display_name: "Comercial Ultra",
+  display_name: "Comercial Vita",
   status: "FAILED",
 };
 
@@ -48,8 +48,8 @@ function comEmpresa(empresa: Partial<EmpresaComGrupo>): Dados {
     empresas: [
       {
         id: "org-ultra",
-        display_name: "Ultra Sorriso",
-        grupo: { id: "120363405136320907@g.us", nome: "Ultra · Comercial" },
+        display_name: "Vita Odonto",
+        grupo: { id: "120363000000000001@g.us", nome: "Vita · Comercial" },
         origem: { modo: "empresa", channel_session_id: NUMERO.id, reserva_da_plataforma: false },
         numeros: [],
         numero_escolhido: NUMERO,
@@ -98,7 +98,7 @@ describe("a linha da empresa com o próprio número", () => {
         numero_escolhido: { ...NUMERO, status: "WORKING" },
         situacao: { via: "empresa", motivo: null, reserva: null },
         grupos_do_numero: {
-          grupos: [{ id: "120363405136320907@g.us", nome: "Ultra · Comercial" }],
+          grupos: [{ id: "120363000000000001@g.us", nome: "Vita · Comercial" }],
           indisponiveis: false,
           motivo: null,
         },

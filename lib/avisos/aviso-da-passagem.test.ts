@@ -36,7 +36,7 @@ import { avisarGrupoDaPassagemPg, textoDaPassagem } from "./aviso-da-passagem";
  */
 
 const ORG = "aaaaaaaa-0000-4000-8000-00000000000a";
-const GRUPO = "120363405136320907@g.us";
+const GRUPO = "120363000000000001@g.us";
 const CONVERSA = "cccccccc-0000-4000-8000-00000000000c";
 
 function bancoCom(sessao: unknown, settings: unknown) {

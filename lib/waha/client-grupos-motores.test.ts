@@ -25,19 +25,19 @@ const medidoNoweb = JSON.parse(
   readFileSync("lib/waha/__fixtures__/grupos-noweb-2026.7.2.json", "utf8"),
 ) as { groups: Array<{ id: string; subject: string }> };
 
-const G1 = "120363405136320907@g.us";
-const G2 = "120363405136320908@g.us";
+const G1 = "120363000000000001@g.us";
+const G2 = "120363000000000002@g.us";
 
 const RESPOSTA: Record<"NOWEB" | "GOWS" | "WEBJS", unknown> = {
   NOWEB: {
-    [G1]: { id: G1, subject: "Ultra Sorriso · Comercial", participants: [], addressingMode: "lid" },
+    [G1]: { id: G1, subject: "Vita Odonto · Comercial", participants: [], addressingMode: "lid" },
     [G2]: { id: G2, subject: "Time Company · Interno", participants: [] },
   },
   GOWS: [
     {
       JID: G1,
       OwnerJID: "5511900000000@s.whatsapp.net",
-      Name: "Ultra Sorriso · Comercial",
+      Name: "Vita Odonto · Comercial",
       NameSetAt: "2026-09-01T12:00:00Z",
       Topic: "",
       IsAnnounce: false,
@@ -46,8 +46,8 @@ const RESPOSTA: Record<"NOWEB" | "GOWS" | "WEBJS", unknown> = {
     { JID: G2, Name: "Time Company · Interno", Participants: [] },
   ],
   WEBJS: [
-    { id: { server: "g.us", user: "120363405136320907", _serialized: G1 }, name: "Ultra Sorriso · Comercial", isGroup: true },
-    { id: { server: "g.us", user: "120363405136320908", _serialized: G2 }, name: "Time Company · Interno", isGroup: true },
+    { id: { server: "g.us", user: "120363000000000001", _serialized: G1 }, name: "Vita Odonto · Comercial", isGroup: true },
+    { id: { server: "g.us", user: "120363000000000002", _serialized: G2 }, name: "Time Company · Interno", isGroup: true },
   ],
 };
 
@@ -74,7 +74,7 @@ describe("grupos do número de avisos, motor por motor", () => {
       expect(r).toEqual({
         ok: true,
         grupos: [
-          { id: G1, nome: "Ultra Sorriso · Comercial" },
+          { id: G1, nome: "Vita Odonto · Comercial" },
           { id: G2, nome: "Time Company · Interno" },
         ],
       });

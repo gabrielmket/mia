@@ -9,7 +9,7 @@
  *
  * ─── A pergunta, e por que ela existe ────────────────────────────────────────
  *
- * Medido na Ultra Sorriso (29/09/2026): o agente diz ao cliente "vou encaminhar
+ * Medido na Vita Odonto (29/09/2026): o agente diz ao cliente "vou encaminhar
  * para a equipe, em breve entrarão em contato" com ZERO ações — nem ficha, nem
  * funil, nem caso. O cliente fica esperando um contato que o time não sabe que
  * tem de fazer. O Jev lê a resposta que SAIU e responde sim/não: "o atendente

@@ -4,8 +4,8 @@
  * ─── O defeito ───────────────────────────────────────────────────────────────
  *
  * O agente diz ao cliente "vou encaminhar para a equipe, em breve entrarão em
- * contato" e não faz nada: nem ficha, nem funil, nem caso. Medido na Ultra
- * Sorriso em 29/09/2026 — é a falha "muda", a pior: o cliente espera um contato
+ * contato" e não faz nada: nem ficha, nem funil, nem caso. Medido na Vita
+ * Odonto em 29/09/2026 — é a falha "muda", a pior: o cliente espera um contato
  * que o time não sabe que tem de fazer. A ferramenta `crm_passar_para_o_comercial`
  * reduz a chance; esta peça pega o que ainda escapar.
  *

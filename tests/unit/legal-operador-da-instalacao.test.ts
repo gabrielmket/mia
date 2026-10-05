@@ -8,9 +8,9 @@
  *
  * Num self-host está certo, e é o desenho original: uma instalação, um
  * operador, e a organização é ele. No modelo GERENCIADO — uma instalação da
- * Time Company com Academia Reativa, Body Fit e Ultra Sorriso dentro — abrir a
- * página com a Reativa selecionada fazia o documento declarar que a Academia
- * Reativa instalou o servidor e controla os dados de TODOS os tenants.
+ * Time Company com Academia Beta, Academia Alfa e Vita Odonto dentro — abrir a
+ * página com a Academia Beta selecionada fazia o documento declarar que a Academia
+ * Beta instalou o servidor e controla os dados de TODOS os tenants.
  *
  * E o nome MUDAVA conforme o leitor: o mesmo documento, na mesma URL, no mesmo
  * instante, nomeando controladores diferentes para pessoas diferentes.
@@ -95,8 +95,8 @@ const DECLARADO = {
 
 /** Um CLIENTE dentro dessa instalação. Nunca deve aparecer como controlador. */
 const CLIENTE = {
-  display_name: "Academia Reativa",
-  legal_name: "Reativa Atividades Fisicas LTDA",
+  display_name: "Academia Beta",
+  legal_name: "Beta Atividades Fisicas LTDA",
   cnpj: "98.765.432/0001-10",
   dpo_email: "contato@reativa.test",
   privacy_policy_url: null,
@@ -168,7 +168,7 @@ describe("o operador da instalação", () => {
 
     const op = await resolverOperador();
 
-    expect(nomeDoOperador(op)).toBe("Reativa Atividades Fisicas LTDA");
+    expect(nomeDoOperador(op)).toBe("Beta Atividades Fisicas LTDA");
     expect(op.dpoEmail).toBe("contato@reativa.test");
   });
 
@@ -182,7 +182,7 @@ describe("o operador da instalação", () => {
 
     const op = await resolverOperador();
 
-    expect(nomeDoOperador(op)).toBe("Reativa Atividades Fisicas LTDA");
+    expect(nomeDoOperador(op)).toBe("Beta Atividades Fisicas LTDA");
   });
 
   it("leitura que FALHA não devolve a instalação ao self-host", async () => {

@@ -8,8 +8,8 @@
  * ganhar uma tag" das regras — eram só a tela (`app/api/v1/contacts/_handler.ts`,
  * `app/api/v1/leads/_handler.ts`) e a ação `add_tag` do próprio motor. Então a
  * MESMA etiqueta, posta pelo agente de IA, não disparava regra nenhuma: o card
- * andava pela tela e ficava parado pela IA, sem erro e sem log. Na Ultra
- * Sorriso, a unidade marcada no contato pela Sofia é o que deveria encaminhar o
+ * andava pela tela e ficava parado pela IA, sem erro e sem log. Na Vita
+ * Odonto, a unidade marcada no contato pela Sofia é o que deveria encaminhar o
  * lead; o agente marcava e ninguém reagia.
  *
  * ─── O contrato é o das rotas, campo a campo ────────────────────────────────

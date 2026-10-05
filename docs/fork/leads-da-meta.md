@@ -12,7 +12,7 @@ tabela de campanhas); o lead em si ficava preso na Meta.
 
 Na .60 a tela listava **todas** as Páginas que o token alcança. O token que existe é
 o da agência (o usuário do sistema do Gerenciador da Time Company), e ele enxerga as
-Páginas de vários clientes (Protev, Erglares, Amanda...): qualquer empresa via, e podia
+Páginas de vários clientes: qualquer empresa via, e podia
 importar, a Página das outras. Da .61 em diante:
 
 - cada Página tem **um dono só** (`mia_paginas_da_meta`, migration 9004);
@@ -166,7 +166,7 @@ alguém preenche ─► Meta ─► POST /api/v1/webhooks/leads-da-meta (campo l
 
 ## Telefone em pergunta própria (.62)
 
-Formulários como o da Erglares não usam o campo padrão `phone_number`: o celular é
+Formulários como o da Construtora Delta não usam o campo padrão `phone_number`: o celular é
 uma pergunta criada por eles, e a chave que a Meta devolve é
 `celular:_(ddd_+_número)`. Até a .61 esse lead entrava sem telefone.
 

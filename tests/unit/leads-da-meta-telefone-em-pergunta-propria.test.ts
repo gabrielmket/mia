@@ -1,7 +1,7 @@
 /**
  * FORK MIA (.62) — o telefone perguntado numa pergunta PRÓPRIA do formulário.
  *
- * O caso real: o formulário da Erglares não usa o campo padrão `phone_number`
+ * O caso real: o formulário da Construtora Delta não usa o campo padrão `phone_number`
  * da Meta; o celular é uma pergunta criada por eles, e a chave que a Meta
  * devolve é `celular:_(ddd_+_número)`. O mapeador da fonte de webhook só acha
  * telefone por chave exata, e o lead entrava sem telefone.
@@ -60,14 +60,14 @@ function mapear(
   return { ...mapInboundPayload(p.payload, p.mapa), usados: p.campos };
 }
 
-const PERGUNTAS_DA_ERGLARES = {
+const PERGUNTAS_DA_CONSTRUTORA = {
   full_name: "Nome completo",
   "celular:_(ddd_+_número)": "Celular (DDD + número)",
   "qual_o_seu_interesse?": "Qual o seu interesse?",
 };
 
 describe("a pergunta própria é reconhecida", () => {
-  it("pela chave da Erglares, com acento, dois-pontos e parênteses", () => {
+  it("pela chave da Construtora Delta, com acento, dois-pontos e parênteses", () => {
     expect(perguntaPareceDoPapel("telefone", "celular:_(ddd_+_número)")).toBe(true);
   });
 
@@ -87,7 +87,7 @@ describe("a pergunta própria é reconhecida", () => {
   });
 
   it("a tela mostra o que o automático escolheria, antes de qualquer lead", () => {
-    expect(sugestaoPelasPerguntas(PERGUNTAS_DA_ERGLARES)).toEqual({
+    expect(sugestaoPelasPerguntas(PERGUNTAS_DA_CONSTRUTORA)).toEqual({
       telefone: "celular:_(ddd_+_número)",
       nome: "full_name",
       email: null,
@@ -120,7 +120,7 @@ describe("a resposta vira E.164 brasileiro, com o nono dígito", () => {
   });
 });
 
-describe("o lead da Erglares chega com telefone", () => {
+describe("o lead da Construtora Delta chega com telefone", () => {
   it("o celular da pergunta própria vira o telefone do contato", () => {
     const m = mapear(
       {
@@ -128,7 +128,7 @@ describe("o lead da Erglares chega com telefone", () => {
         "celular:_(ddd_+_número)": "(11) 98765-4321",
         "qual_o_seu_interesse?": "2 quartos",
       },
-      PERGUNTAS_DA_ERGLARES,
+      PERGUNTAS_DA_CONSTRUTORA,
     );
     expect(m.phone).toBe("+5511987654321");
     expect(m.name).toBe("Ana Souza");

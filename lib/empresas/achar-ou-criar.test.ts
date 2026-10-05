@@ -43,7 +43,7 @@ describe("o nome comparável", () => {
   });
 
   it("tira a pontuação que só atrapalha", () => {
-    expect(nomeComparavel("J.H.S. Biomateriais")).toBe(nomeComparavel("JHS Biomateriais"));
+    expect(nomeComparavel("A.B.C. Materiais")).toBe(nomeComparavel("ABC Materiais"));
   });
 
   it("devolve vazio para o que não identifica empresa nenhuma", () => {

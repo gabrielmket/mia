@@ -4,7 +4,7 @@
  *
  * ─── O defeito que ela fecha ─────────────────────────────────────────────────
  *
- * Na Ultra Sorriso, passar o lead ao comercial exigia que o agente fizesse TRÊS
+ * Na Vita Odonto, passar o lead ao comercial exigia que o agente fizesse TRÊS
  * coisas antes de responder: salvar a ficha (`save_lead_note`), marcar a unidade
  * no contato (`crm_manage_tags`) e subir o funil passo a passo até `qualified`
  * (`update_lead_state` — a máquina não aceita salto). Medido no Testar em
