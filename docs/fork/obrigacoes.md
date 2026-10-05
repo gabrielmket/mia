@@ -102,8 +102,12 @@ ligar. É só o ponto de partida: tudo é copiado para o item e pode ser mudado 
 Configura-se em **Configurações › Etapas do funil**, no cartão "Documentos e
 obrigações": um catálogo por funil, com **"Usar o modelo do segmento"**. Os modelos
 (`lib/obrigacoes/catalogo.ts`) cobrem Serviços B2B, Clínica, Imobiliária, Automotivo
-e proteção veicular, e Academia. O formulário de adicionar oferece os tipos do
-funil, os da empresa e "Outro · escrever o nome".
+e proteção veicular, Academia e Indústria e distribuição B2B. O de indústria traz o
+cadastro da revenda (ficha cadastral, contrato social, alvará, certidão negativa e
+contrato de revenda) e o ritmo da carteira: o pedido de reposição todo mês (a
+recompra), a visita do representante a cada dois meses e o reajuste anual da tabela.
+O formulário de adicionar oferece os tipos do funil, os da empresa e "Outro ·
+escrever o nome".
 
 ### Privacidade
 
@@ -236,11 +240,17 @@ grava.
 
 ## 11. Na empresa de demonstração
 
-A semente (`lib/demonstracao/semente/`) traz o catálogo de Serviços B2B e 11 itens
+A Empresa Modelo (`lib/demonstracao/semente/`) traz o catálogo de Serviços B2B e 11 itens
 com datas relativas a hoje: um vencido com a renovação pedida, três vencendo (um
 deles com um arquivo do cliente esperando confirmação), um pedido sem resposta, um
 ainda a pedir, dois válidos e três atividades recorrentes com histórico. Renovar a
 semente devolve cada item à situação que ele ilustra.
+
+As demonstrações por segmento trazem o catálogo do segmento delas, com itens no
+mesmo estilo: a construtora com a documentação do comprador, a clínica odontológica
+com o retorno de seis meses, a indústria com o cadastro da revenda e o pedido de
+reposição, e a academia com a renovação do plano e a reavaliação física. O que cada
+uma mostra está em [cliente-modelo.md](cliente-modelo.md).
 
 A demonstração **não envia**: a semente não cria regra de aviso nem evento, a
 mensagem de saída é recusada no banco (migration 9010) e a regra que avisaria o

@@ -140,10 +140,10 @@ describe("FORK MIA · modelos por segmento", () => {
   const SEGMENTOS_DA_MIA = NICHOS_DE_MODELO.filter((n) => n !== "clinica");
   const modelosDaMia = MODELOS_DE_FOLLOWUP.filter((m) => m.nicho !== "clinica");
 
-  it("carro e academia decidem em cerca de um mês e meio; os outros segmentos seguem o ritmo longo", () => {
+  it("carro, academia e a cotação da indústria decidem em cerca de um mês e meio; os outros segmentos seguem o ritmo longo", () => {
     const DIA = 86_400_000;
     const horizonte = (id: string) => horizonteDoModeloMs(modeloPorId(id)!.grafo) / DIA;
-    for (const id of ["automotivo-negociacao", "academia-matricula"]) {
+    for (const id of ["automotivo-negociacao", "academia-matricula", "industria-b2b-cotacao"]) {
       expect(horizonte(id), id).toBeGreaterThanOrEqual(30);
       expect(horizonte(id), id).toBeLessThanOrEqual(45);
     }

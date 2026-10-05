@@ -2,7 +2,8 @@
  * FORK MIA · OS SEGMENTOS DA GALERIA DE MODELOS.
  *
  * A galeria nasceu só de clínica (upstream). A MIA atende também imobiliária,
- * loja de carros, academia e empresa que vende para empresa, e o dono dessas
+ * loja de carros, academia, empresa que vende serviço para empresa e a indústria
+ * que vende para revendas e profissionais, e o dono dessas
  * não se reconhece em "paciente" e "consulta". Cada segmento tem as mesmas
  * quatro jornadas (`jornadas.ts`) com a linguagem dele, e a tela mostra um
  * segmento por vez.
@@ -24,4 +25,5 @@ export const ROTULO_DO_SEGMENTO = {
   automotivo: "Automotivo",
   academia: "Academias e bem-estar",
   servicos_b2b: "Serviços B2B",
+  industria_b2b: "Indústria e distribuição B2B",
 } as const satisfies Record<NichoDeModelo, string>;

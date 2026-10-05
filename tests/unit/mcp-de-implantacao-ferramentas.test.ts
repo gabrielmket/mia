@@ -108,8 +108,14 @@ describe("a lista de ferramentas", () => {
 
   it("as ferramentas que recebem organização a declaram como `organization_id`", () => {
     const semOrganizacao = NOVAS.filter((f) => !("organization_id" in f.inputSchema)).map((f) => f.name);
-    // Só o catálogo de modelos não depende de cliente.
-    expect(semOrganizacao).toEqual(["plataforma_listar_modelos"]);
+    // Só o catálogo de modelos não depende de cliente. E as demonstrações, que são
+    // achadas pelo SEGMENTO: a empresa delas é a semente que cria (docs/fork/cliente-modelo.md).
+    expect(semOrganizacao).toEqual([
+      "plataforma_listar_modelos",
+      "plataforma_listar_demonstracoes",
+      "plataforma_criar_demonstracao",
+      "plataforma_reaplicar_demonstracao",
+    ]);
   });
 
   it("o JSON Schema de todas sai inteiro, como objeto, com os campos obrigatórios", () => {

@@ -19,6 +19,8 @@
  * `proposta-de-funil.ts` para a medição.
  */
 import type { PropostaDeFunil } from "@/lib/onboarding/proposta-de-funil";
+// FORK MIA: os quadros que a MIA acrescenta (ver o arquivo).
+import { PACOTES_DA_MIA } from "@/lib/onboarding/pacotes-da-mia";
 
 export interface PacoteDeFunil {
   id: string;
@@ -112,6 +114,7 @@ export const PACOTES: readonly PacoteDeFunil[] = [
       ],
     },
   },
+  ...PACOTES_DA_MIA,
   {
     id: "generico",
     // Último de propósito: quem não se reconhece em nenhum dos outros já leu

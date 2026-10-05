@@ -12,6 +12,7 @@ import { MODELOS_IMOBILIARIOS } from "./imobiliario";
 import { MODELOS_AUTOMOTIVOS } from "./automotivo";
 import { MODELOS_DE_ACADEMIA } from "./academia";
 import { MODELOS_DE_SERVICOS_B2B } from "./servicos-b2b";
+import { MODELOS_DE_INDUSTRIA_B2B } from "./industria-b2b";
 import type { ModeloDeFollowup, NichoDeModelo } from "./tipos";
 
 export type { ModeloDeFollowup, NichoDeModelo, EntradaDoModelo } from "./tipos";
@@ -27,6 +28,7 @@ export const MODELOS_DE_FOLLOWUP: readonly ModeloDeFollowup[] = [
   ...MODELOS_AUTOMOTIVOS,
   ...MODELOS_DE_ACADEMIA,
   ...MODELOS_DE_SERVICOS_B2B,
+  ...MODELOS_DE_INDUSTRIA_B2B,
 ];
 
 /** `undefined` — e não um erro — para a rota devolver 404 com a sua própria mensagem. */
