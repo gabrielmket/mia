@@ -1,3 +1,4 @@
+import { ORIGENS_DO_FORK } from "@/lib/catalogo/origens-do-fork";
 import { precoParaCentavos, type Produto } from "@/lib/schemas/produtos";
 
 /**
@@ -41,7 +42,10 @@ export interface RascunhoDaEdicao {
 }
 
 /** Origens que ESTE CRM escreve. Todo o resto veio de fora. */
-const ORIGENS_DO_CRM = new Set(["manual", "planilha"]);
+// FORK MIA: o catálogo que entrou pela implantação (MCP de plataforma) e o das
+// empresas de demonstração também são escritos por este CRM, e não por uma
+// integração que sincroniza (lib/catalogo/origens-do-fork.ts).
+const ORIGENS_DO_CRM = new Set(["manual", "planilha", ...ORIGENS_DO_FORK]);
 
 /**
  * `true` quando a linha é de uma fonte externa e editar aqui não vale.
