@@ -24,6 +24,7 @@ import {
 } from "@/lib/cartoes/compras";
 import { pedidoNaReguaDoNegocio } from "@/lib/cartoes/dinheiro";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { buscaEmLotesSemTeto } from "@/lib/leitura/em-lotes-sem-teto";
 import { buscaEmLotes } from "@/lib/supabase/em-lotes";
 
 type Db = SupabaseClient;
@@ -157,18 +158,19 @@ export async function listarComprasDaEmpresa(db: Db, org: string, empresaId: str
       .eq("empresa_id", empresaId)
       .eq("status", "won")
       .limit(500),
-    buscaEmLotes(idsDasPessoas, (lote) =>
+    // VÁRIAS compras por pessoa: ver `lib/leitura/em-lotes-sem-teto.ts`.
+    buscaEmLotesSemTeto(idsDasPessoas, (lote, contagem) =>
       db
         .from("crm_leads")
-        .select(COLUNAS_DO_GANHO)
+        .select(COLUNAS_DO_GANHO, contagem)
         .eq("organization_id", org)
         .eq("status", "won")
         .in("contact_id", lote),
     ),
-    buscaEmLotes(idsDasPessoas, (lote) =>
+    buscaEmLotesSemTeto(idsDasPessoas, (lote, contagem) =>
       db
         .from("orders")
-        .select(COLUNAS_DO_PEDIDO)
+        .select(COLUNAS_DO_PEDIDO, contagem)
         .eq("organization_id", org)
         .in("status", [...PEDIDO_E_COMPRA])
         .in("contact_id", lote),
@@ -231,8 +233,12 @@ export async function contarComprasParaOQuadro(
   org: string,
   alvo: { contatoIds: string[]; empresaIds: string[] },
 ): Promise<{ porContato: Map<string, ContagemDeCompras>; porEmpresa: Map<string, ContagemDeCompras> }> {
-  const { data: pessoas } = await buscaEmLotes(alvo.empresaIds, (lote) =>
-    db.from("contacts").select("id, empresa_id").eq("organization_id", org).in("empresa_id", lote),
+  // VÁRIAS linhas por id nas quatro leituras abaixo (pessoas de uma empresa,
+  // ganhos e pedidos de uma pessoa): um lote de 100 ids pode passar de 1000
+  // linhas, e o PostgREST cortaria ali sem avisar. Quem compra sempre aparecia
+  // com menos compras do que fez. Ver `lib/leitura/em-lotes-sem-teto.ts`.
+  const { data: pessoas } = await buscaEmLotesSemTeto(alvo.empresaIds, (lote, contagem) =>
+    db.from("contacts").select("id, empresa_id", contagem).eq("organization_id", org).in("empresa_id", lote),
   );
   const empresaDaPessoa = new Map(
     (pessoas as Array<{ id: string; empresa_id: string }>).map((p) => [p.id, p.empresa_id]),
@@ -240,26 +246,26 @@ export async function contarComprasParaOQuadro(
   const contatos = [...new Set([...alvo.contatoIds, ...empresaDaPessoa.keys()])];
 
   const [porContatoGanhos, porEmpresaGanhos, pedidos] = await Promise.all([
-    buscaEmLotes(contatos, (lote) =>
+    buscaEmLotesSemTeto(contatos, (lote, contagem) =>
       db
         .from("crm_leads")
-        .select("id, contact_id, empresa_id, value_cents, currency")
+        .select("id, contact_id, empresa_id, value_cents, currency", contagem)
         .eq("organization_id", org)
         .eq("status", "won")
         .in("contact_id", lote),
     ),
-    buscaEmLotes(alvo.empresaIds, (lote) =>
+    buscaEmLotesSemTeto(alvo.empresaIds, (lote, contagem) =>
       db
         .from("crm_leads")
-        .select("id, contact_id, empresa_id, value_cents, currency")
+        .select("id, contact_id, empresa_id, value_cents, currency", contagem)
         .eq("organization_id", org)
         .eq("status", "won")
         .in("empresa_id", lote),
     ),
-    buscaEmLotes(contatos, (lote) =>
+    buscaEmLotesSemTeto(contatos, (lote, contagem) =>
       db
         .from("orders")
-        .select("id, contact_id, total_cents, currency")
+        .select("id, contact_id, total_cents, currency", contagem)
         .eq("organization_id", org)
         .in("status", [...PEDIDO_E_COMPRA])
         .in("contact_id", lote),

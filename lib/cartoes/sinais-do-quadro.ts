@@ -22,6 +22,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
+import { buscaEmLotesSemTeto } from "@/lib/leitura/em-lotes-sem-teto";
 import { buscaEmLotes } from "@/lib/supabase/em-lotes";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import type { Lead } from "@/lib/types/leads";
@@ -133,11 +134,16 @@ async function montar(
     buscaEmLotes(contatoIds, (lote) =>
       db.rpc("fn_mia_sinais_do_cartao", { p_org: org, p_contatos: lote }),
     ),
-    buscaEmLotes(contatoIds, (lote) =>
+    // As três leituras abaixo têm VÁRIAS linhas por id (compromissos de um
+    // contato, tarefas e pessoas de um negócio): um lote de 100 ids pode passar
+    // de 1000 linhas, e o PostgREST cortaria ali sem avisar. Por isso vão pelo
+    // `buscaEmLotesSemTeto`, que lê cada lote até o fim.
+    buscaEmLotesSemTeto(contatoIds, (lote, contagem) =>
       db
         .from("calendar_appointments")
         .select(
           "id, title, event_type_id, location_kind, location_details, starts_at, ends_at, time_zone, status, contact_id",
+          contagem,
         )
         .eq("organization_id", org)
         .in("contact_id", lote)
@@ -145,18 +151,18 @@ async function montar(
         .not("status", "in", "(cancelled,completed,no_show)")
         .order("starts_at", { ascending: true }),
     ),
-    buscaEmLotes(leadIds, (lote) =>
+    buscaEmLotesSemTeto(leadIds, (lote, contagem) =>
       db
         .from("crm_tasks")
-        .select("id, lead_id, due_date")
+        .select("id, lead_id, due_date", contagem)
         .eq("organization_id", org)
         .in("lead_id", lote)
         .in("status", SITUACOES_ABERTAS_DA_TAREFA),
     ),
-    buscaEmLotes(leadIds, (lote) =>
+    buscaEmLotesSemTeto(leadIds, (lote, contagem) =>
       db
         .from("crm_lead_links")
-        .select("lead_id, target_id")
+        .select("lead_id, target_id", contagem)
         .eq("organization_id", org)
         .eq("target_kind", "contact")
         .in("lead_id", lote),

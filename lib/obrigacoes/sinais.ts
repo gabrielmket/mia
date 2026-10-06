@@ -13,7 +13,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
-import { buscaEmLotes } from "@/lib/supabase/em-lotes";
+import { buscaEmLotesSemTeto } from "@/lib/leitura/em-lotes-sem-teto";
 
 import { diaNoFuso } from "./datas";
 import { avisoDoCartao, type AvisoDoCartao } from "./situacao";
@@ -50,13 +50,16 @@ export async function avisosDeObrigacaoDoQuadro(
   if (vivos.length === 0) return avisos;
   try {
     const ler = (coluna: "lead_id" | "empresa_id" | "contact_id", ids: string[]) =>
-      buscaEmLotes<ItemDoSinal>(ids, (lote) =>
+      // VÁRIAS obrigações por dono: um lote de 100 negócios passa de 1000
+      // linhas com 11 documentos por negócio, e o PostgREST cortaria ali sem
+      // avisar. O cartão que ficasse depois do corte perdia o aviso de vencido.
+      buscaEmLotesSemTeto<ItemDoSinal>(ids, (lote, contagem) =>
         db
           .from("mia_obrigacoes")
-          .select(COLUNAS)
+          .select(COLUNAS, contagem)
           .eq("organization_id", org)
           .is("arquivado_em", null)
-          .in(coluna, lote) as unknown as PromiseLike<{ data: ItemDoSinal[] | null; error: { message: string } | null }>,
+          .in(coluna, lote),
       );
     const unicos = (valores: Array<string | null | undefined>) => [...new Set(valores.filter((v): v is string => !!v))];
     // Função `async` de propósito: se o cliente lançar na hora (e não numa

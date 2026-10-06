@@ -20,6 +20,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { buscaEmLotesSemTeto } from "@/lib/leitura/em-lotes-sem-teto";
 import { lerTodasAsPaginas, TAMANHO_DA_PAGINA } from "@/lib/leitura/todas-as-paginas";
 import { buscaEmLotes } from "@/lib/supabase/em-lotes";
 
@@ -84,13 +85,15 @@ async function itensPor(
   coluna: "lead_id" | "empresa_id" | "contact_id",
   ids: readonly string[],
 ): Promise<Obrigacao[]> {
-  const r = await buscaEmLotes<Obrigacao>(ids, (lote) =>
+  // VÁRIAS obrigações por dono: 100 negócios com 15 documentos cada são 1.500
+  // linhas num lote só, e o PostgREST cortaria em 1000 sem avisar.
+  const r = await buscaEmLotesSemTeto<Obrigacao>(ids, (lote, contagem) =>
     db
       .from("mia_obrigacoes")
-      .select(COLUNAS_DA_OBRIGACAO)
+      .select(COLUNAS_DA_OBRIGACAO, contagem)
       .eq("organization_id", org)
       .is("arquivado_em", null)
-      .in(coluna, lote) as unknown as PromiseLike<{ data: Obrigacao[] | null; error: { message: string } | null }>,
+      .in(coluna, lote),
   );
   falhar("as obrigações", r.error);
   return r.data;
