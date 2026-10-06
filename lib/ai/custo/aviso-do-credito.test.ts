@@ -20,6 +20,7 @@ import {
   esquecerSaldoDoVigia,
   saldoDaPlataformaParaOVigia,
   VALIDADE_DO_SALDO_DO_VIGIA_MS,
+  type SaldoDaPlataforma,
 } from "@/lib/ai/custo/saldo-da-plataforma";
 import { postgrestComTeto, type Linha } from "@/tests/helpers/postgrest-com-teto";
 
@@ -107,7 +108,7 @@ describe("o saldo do vigia tem memória curta", () => {
     const db = banco();
     const inicio = Date.now();
 
-    const saldos = [];
+    const saldos: SaldoDaPlataforma[] = [];
     for (let minuto = 0; minuto < 15; minuto++) {
       saldos.push(await saldoDaPlataformaParaOVigia(db.cliente as never, inicio + minuto * 60_000));
     }
