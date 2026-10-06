@@ -161,9 +161,12 @@ export async function GET(_req: NextRequest) {
         ? { usd_brl: Number(cotacaoRow.usd_brl), cotado_em: (cotacaoRow.cotado_em as string) ?? null }
         : null,
       chamadas_sem_preco: semPreco ?? 0,
-      // O consumo somado não cobre o período inteiro (teto de leitura, ou
-      // falha): o saldo real é menor que o mostrado, e a tela avisa.
-      consumo_parcial: consumo.parcial,
+      // O consumo desde a leitura não cobre o intervalo inteiro (teto de
+      // leitura, ou falha): o saldo real é menor que o mostrado, e a tela avisa.
+      consumo_parcial: consumo.desdeLeituraParcial,
+      // O consumo dos 30 dias não coube: a média diária está subestimada e o
+      // crédito acaba antes do "dura até" mostrado.
+      ritmo_parcial: consumo.janelaParcial,
     },
     { requestId },
   );

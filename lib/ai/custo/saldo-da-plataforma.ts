@@ -24,11 +24,16 @@ export const DIAS_DA_MEDIA = 30;
 
 export interface SaldoDaPlataforma extends SaldoDerivado {
   /**
-   * O consumo somado NÃO cobre o período inteiro (a leitura de `llm_calls`
-   * passou do teto de páginas, ou falhou). O saldo real é MENOR que
-   * `saldoUsd`, e o "dura até" real é mais cedo. Ver `consumo-de-ia.ts`.
+   * O consumo desde a última leitura NÃO cobre o intervalo inteiro (a leitura
+   * de `llm_calls` passou do teto de páginas, ou falhou). `saldoUsd` é um TETO:
+   * o saldo real é MENOR. Ver `consumo-de-ia.ts`.
    */
   consumoParcial: boolean;
+  /**
+   * O consumo dos 30 dias da média não coube inteiro: a média diária está
+   * subestimada, e o "dura até" real é mais cedo que `duraAte`.
+   */
+  ritmoParcial: boolean;
 }
 
 export async function saldoDaPlataforma(admin: SupabaseClient): Promise<SaldoDaPlataforma> {
@@ -62,6 +67,38 @@ export async function saldoDaPlataforma(admin: SupabaseClient): Promise<SaldoDaP
       consumoDesdeLeituraUsd: consumo.consumoDesdeLeituraUsd,
       mediaDiariaUsd: consumo.consumoDaJanelaUsd / DIAS_DA_MEDIA,
     }),
-    consumoParcial: consumo.parcial,
+    consumoParcial: consumo.desdeLeituraParcial,
+    ritmoParcial: consumo.janelaParcial,
   };
+}
+
+/**
+ * De quanto em quanto tempo o vigia relê o saldo.
+ *
+ * O vigia (`cron/report-da-plataforma`) roda de minuto em minuto, e o aviso de
+ * crédito sai no máximo uma vez por dia. Ler o consumo a cada minuto custava
+ * duas idas ao banco enquanto a leitura parava em 1000 linhas; com o período
+ * lido inteiro são até 100 páginas, e 100 páginas por minuto é carga que um
+ * aviso diário não justifica. Quinze minutos de atraso não mudam o aviso.
+ */
+export const VALIDADE_DO_SALDO_DO_VIGIA_MS = 15 * 60 * 1000;
+
+let saldoDoVigia: { lidoEm: number; saldo: SaldoDaPlataforma } | null = null;
+
+/** O saldo para o vigia: o mesmo de `saldoDaPlataforma`, relido no máximo a cada 15 minutos. */
+export async function saldoDaPlataformaParaOVigia(
+  admin: SupabaseClient,
+  agora: number = Date.now(),
+): Promise<SaldoDaPlataforma> {
+  if (saldoDoVigia && agora - saldoDoVigia.lidoEm < VALIDADE_DO_SALDO_DO_VIGIA_MS) {
+    return saldoDoVigia.saldo;
+  }
+  const saldo = await saldoDaPlataforma(admin);
+  saldoDoVigia = { lidoEm: agora, saldo };
+  return saldo;
+}
+
+/** Para teste: esquece o saldo guardado. */
+export function esquecerSaldoDoVigia(): void {
+  saldoDoVigia = null;
 }

@@ -27,10 +27,15 @@ export interface SaldoDoProvedor {
   cotacao: { usd_brl: number; cotado_em: string | null } | null;
   chamadas_sem_preco: number;
   /**
-   * FORK MIA: o consumo somado não cobre o período inteiro (teto de leitura da
-   * rota, ou falha). O saldo real é MENOR que `saldo_usd`. A tela avisa.
+   * FORK MIA: o consumo desde a leitura não cobre o intervalo inteiro (teto de
+   * leitura da rota, ou falha). O saldo real é MENOR que `saldo_usd`. A tela avisa.
    */
   consumo_parcial: boolean;
+  /**
+   * FORK MIA: o consumo dos 30 dias da média não coube inteiro. A média diária
+   * está subestimada e o crédito acaba antes de `dura_ate`. A tela avisa.
+   */
+  ritmo_parcial: boolean;
 }
 
 const CHAVE = ["admin", "ai-saldo"] as const;

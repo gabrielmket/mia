@@ -200,6 +200,20 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         credito_de_ia: {
           saldo_usd: saldo.saldoUsd,
           dias_restantes: saldo.diasRestantes,
+          // O consumo desde a última leitura veio parcial (volume acima do teto
+          // de leitura, ou falha): `saldo_usd` é um TETO, e o saldo de verdade é
+          // menor. Quem lê a saúde por aqui não pode tomá-lo por certo.
+          ...(saldo.consumoParcial
+            ? {
+                saldo_e_teto: true,
+                aviso:
+                  "A soma do consumo desde a última leitura veio incompleta: o saldo de verdade é MENOR que saldo_usd. " +
+                  "Confira na conta do provedor e registre uma leitura em /admin/usage.",
+              }
+            : {}),
+          // Só os 30 dias da média não couberam: o saldo está certo, mas o
+          // crédito acaba ANTES do que `dias_restantes` diz.
+          ...(saldo.ritmoParcial && !saldo.consumoParcial ? { dias_restantes_e_otimista: true } : {}),
         },
       };
     },

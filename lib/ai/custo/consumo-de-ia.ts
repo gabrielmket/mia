@@ -21,9 +21,10 @@
  * ── O teto, e o próximo passo ───────────────────────────────────────────────
  *
  * 100 páginas de 1000: as 100 mil chamadas que o código já declarava. Acima
- * disso (ou se a leitura falhar) o consumo sai `parcial`, quem mostra avisa, e
- * fica em log. Com volume acima do teto o saldo continua SUPERESTIMADO, só que
- * dito: a soma certa é no banco. O upstream está fazendo isso para o uso de IA
+ * disso (ou se a leitura falhar) a soma que não coube sai marcada como parcial
+ * (`desdeLeituraParcial`, `janelaParcial`), quem mostra avisa, o vigia do
+ * crédito avisa no grupo, e fica em log. Com volume acima do teto o número
+ * continua SUPERESTIMADO, só que dito: a soma certa é no banco. O upstream está fazendo isso para o uso de IA
  * por organização (PR #2139, `fn_uso_de_ia`, migration 0549); quando ela
  * chegar pela sincronização, o miolo DESTA função passa a perguntar a ela, por
  * organização, e o teto deixa de existir.
@@ -42,10 +43,16 @@ export interface ConsumoDeIa {
   /** Em DÓLAR, dos últimos `diasDaMedia` dias. */
   consumoDaJanelaUsd: number;
   /**
-   * A soma NÃO cobre o período inteiro: a leitura passou do teto de páginas ou
-   * falhou. O consumo real é maior, e o saldo calculado com ele, menor.
+   * O consumo DESDE A LEITURA não cobre o intervalo inteiro (teto de páginas, ou
+   * falha). O consumo real é maior, e o saldo calculado com ele é um TETO: o
+   * saldo de verdade é menor.
    */
-  parcial: boolean;
+  desdeLeituraParcial: boolean;
+  /**
+   * O consumo da JANELA da média não cobre os dias todos. A média diária sai
+   * subestimada, e o "dura até" calculado com ela, tarde demais.
+   */
+  janelaParcial: boolean;
 }
 
 export async function lerConsumoDeIa(
@@ -92,17 +99,33 @@ export async function lerConsumoDeIa(
 
   let desdeLeituraCents = 0;
   let daJanelaCents = 0;
+  let maisAntigaLida = Number.POSITIVE_INFINITY;
   for (const chamada of lido.linhas) {
+    const quando = Date.parse(chamada.created_at);
+    if (quando < maisAntigaLida) maisAntigaLida = quando;
     const custo = Number(chamada.cost_cents ?? 0);
     if (!Number.isFinite(custo)) continue;
-    const quando = Date.parse(chamada.created_at);
     if (inicioDaLeitura !== null && quando >= inicioDaLeitura) desdeLeituraCents += custo;
     if (quando >= inicioDaJanela) daJanelaCents += custo;
   }
 
+  /**
+   * Qual das duas somas ficou pela metade.
+   *
+   * A leitura vem da chamada mais NOVA para a mais antiga. Se o teto cortou, o
+   * que faltou é o começo do período: uma janela está inteira quando a leitura
+   * já passou do começo DELA (a chamada mais antiga lida é anterior a ele).
+   * Assim, com uma leitura de saldo recente, o saldo continua exato mesmo que
+   * os 30 dias da média não caibam. Leitura que falhou não cobre nada.
+   */
+  const cobriu = (inicio: number) => !lido.truncado || maisAntigaLida < inicio;
+  const falhou = lido.erro !== null;
+
   return {
     consumoDesdeLeituraUsd: desdeLeituraCents / 100,
     consumoDaJanelaUsd: daJanelaCents / 100,
-    parcial: lido.truncado || lido.erro !== null,
+    // Sem leitura registrada não há intervalo, nem saldo: nada a marcar.
+    desdeLeituraParcial: inicioDaLeitura !== null && (falhou || !cobriu(inicioDaLeitura)),
+    janelaParcial: falhou || !cobriu(inicioDaJanela),
   };
 }

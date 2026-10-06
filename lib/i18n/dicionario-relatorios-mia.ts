@@ -35,6 +35,9 @@ export const DICIONARIO_RELATORIOS_MIA: Traducoes = {
   "O consumo passou do limite de leitura: a conta inclui só as chamadas mais recentes, e o saldo real é menor que o mostrado.": {
     es: "El consumo superó el límite de lectura: la cuenta incluye solo las llamadas más recientes, y el saldo real es menor que el mostrado.",
   },
+  "O ritmo dos últimos 30 dias passou do limite de leitura: a média diária está subestimada, e o crédito acaba antes da data mostrada.": {
+    es: "El ritmo de los últimos 30 días superó el límite de lectura: el promedio diario está subestimado, y el crédito se acaba antes de la fecha mostrada.",
+  },
   // ─── o disparo (lib/broadcast/quem-entra-na-lista.ts e as duas rotas) ───────
   // Chegam à tela pela resposta da rota, já traduzidas (`traduzir`), no aviso
   // que o formulário mostra como veio.

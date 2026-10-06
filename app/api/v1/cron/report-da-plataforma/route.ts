@@ -39,7 +39,8 @@ import type { NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { autorizaCron } from "@/lib/auth/cron-auth";
-import { saldoDaPlataforma } from "@/lib/ai/custo/saldo-da-plataforma";
+import { avisoDoCreditoDeIa } from "@/lib/ai/custo/aviso-do-credito";
+import { saldoDaPlataformaParaOVigia } from "@/lib/ai/custo/saldo-da-plataforma";
 import { grupoDeReport, reportar } from "@/lib/avisos/report-da-plataforma";
 import { vigiarBackup } from "@/lib/backup/aviso-do-backup";
 import { avaliarBackup, leituraDoRpc } from "@/lib/backup/estado-do-backup";
@@ -104,24 +105,22 @@ async function handle(req: NextRequest): Promise<Response> {
   // `saldoUsd` nulo significa "nunca registraram uma leitura", e não "acabou".
   // Avisar nesse caso faria o grupo receber um alarme falso por dia para sempre
   // numa instalação que simplesmente não usa o livro-caixa.
-  const saldo = await saldoDaPlataforma(admin);
-  if (saldo.saldoUsd !== null && saldo.saldoUsd <= grupo.limiteSaldoUsd) {
-    const dias =
-      saldo.diasRestantes === null
-        ? ""
-        : `\n*Dura mais ou menos:* ${Math.max(0, Math.floor(saldo.diasRestantes))} dia(s)`;
+  //
+  // O saldo é relido no máximo a cada 15 minutos (`saldoDaPlataformaParaOVigia`):
+  // este cron roda de minuto em minuto, e a leitura do consumo agora cobre o
+  // período inteiro, em páginas. E a decisão do que dizer mora em
+  // `avisoDoCreditoDeIa`: além do "acabando", ela NÃO cala quando o consumo
+  // veio parcial e o saldo calculado é só um teto.
+  const saldo = await saldoDaPlataformaParaOVigia(admin);
+  const avisoDoCredito = avisoDoCreditoDeIa(saldo, grupo.limiteSaldoUsd);
+  if (avisoDoCredito) {
     const saiu = await reportar(admin, {
-      chave: "saldo_baixo",
+      chave: avisoDoCredito.chave,
       horas: UM_DIA,
-      texto:
-        `⚠️ *Crédito de IA acabando*\n\n` +
-        `*Saldo:* ${dinheiro(saldo.saldoUsd)}` +
-        `\n*Limite do aviso:* ${dinheiro(grupo.limiteSaldoUsd)}${dias}\n\n` +
-        `Quando o crédito acaba, a chave continua válida e a chamada volta recusada: ` +
-        `o sintoma chega como "a IA parou de responder", em todos os clientes ao mesmo tempo.`,
-      detalhe: { saldo_usd: saldo.saldoUsd },
+      texto: avisoDoCredito.texto,
+      detalhe: avisoDoCredito.detalhe,
     });
-    if (saiu) enviados.push("saldo_baixo");
+    if (saiu) enviados.push(avisoDoCredito.chave);
   }
 
   // ── 2. Os números que caíram ──────────────────────────────────────────────
@@ -294,7 +293,9 @@ async function handle(req: NextRequest): Promise<Response> {
     const linhaDoSaldo =
       saldo.saldoUsd === null
         ? "*Crédito de IA:* sem leitura registrada"
-        : `*Crédito de IA:* ${dinheiro(saldo.saldoUsd)}`;
+        : `*Crédito de IA:* ${dinheiro(saldo.saldoUsd)}` +
+          // O consumo veio parcial: o número é um teto, e o resumo não o dá por certo.
+          (saldo.consumoParcial ? " (conta incompleta: o saldo de verdade é menor)" : "");
 
     const saiu = await reportar(admin, {
       chave: "resumo_diario",

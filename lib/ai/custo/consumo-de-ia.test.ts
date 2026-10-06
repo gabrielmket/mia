@@ -50,7 +50,7 @@ describe("o consumo de IA da plataforma", () => {
       desdeJanela: diasAtras(agora, 30),
     });
 
-    expect(consumo.parcial).toBe(false);
+    expect(consumo).toMatchObject({ desdeLeituraParcial: false, janelaParcial: false });
     expect(consumo.consumoDesdeLeituraUsd).toBeCloseTo(20, 6); // 1.000 × US$ 0,02
     expect(consumo.consumoDaJanelaUsd).toBeCloseTo(50, 6); // 2.500 × US$ 0,02
     // 1000 + 1000 + 500, numa leitura só para as duas somas.
@@ -68,7 +68,7 @@ describe("o consumo de IA da plataforma", () => {
       desdeJanela: diasAtras(agora, 30),
     });
 
-    expect(consumo.parcial).toBe(false);
+    expect(consumo).toMatchObject({ desdeLeituraParcial: false, janelaParcial: false });
     expect(consumo.consumoDesdeLeituraUsd).toBeCloseTo(50, 6); // as 2.500
     expect(consumo.consumoDaJanelaUsd).toBeCloseTo(24, 6); // só as 1.200 dos 30 dias
   });
@@ -107,7 +107,8 @@ describe("o consumo de IA da plataforma", () => {
       desdeJanela: diasAtras(agora, 30),
     });
 
-    expect(consumo.parcial).toBe(true);
+    // Sem leitura registrada só existe a janela, e é ela que fica parcial.
+    expect(consumo).toMatchObject({ desdeLeituraParcial: false, janelaParcial: true });
     expect(banco.pedidosEm("llm_calls")).toBe(PAGINAS_MAXIMAS_DO_CONSUMO);
     expect(consumo.consumoDaJanelaUsd).toBeCloseTo(PAGINAS_MAXIMAS_DO_CONSUMO * 10 * 0.02, 6);
   });
@@ -124,7 +125,58 @@ describe("o consumo de IA da plataforma", () => {
       desdeJanela: diasAtras(agora, 30),
     });
 
-    expect(consumo).toEqual({ consumoDesdeLeituraUsd: 0, consumoDaJanelaUsd: 0, parcial: true });
+    expect(consumo).toEqual({
+      consumoDesdeLeituraUsd: 0,
+      consumoDaJanelaUsd: 0,
+      desdeLeituraParcial: false,
+      janelaParcial: true,
+    });
+  });
+
+  it("falha de leitura COM leitura de saldo registrada: as duas somas ficam parciais", async () => {
+    const agora = Date.now();
+    const banco = postgrestComTeto(
+      { llm_calls: chamadas(2_500, 20, 0, agora) },
+      { falhaEm: (_n, tabela) => (tabela === "llm_calls" ? "statement timeout" : null) },
+    );
+
+    const consumo = await lerConsumoDeIa(banco.cliente as never, {
+      desdeLeitura: diasAtras(agora, 5),
+      desdeJanela: diasAtras(agora, 30),
+    });
+
+    expect(consumo).toMatchObject({ desdeLeituraParcial: true, janelaParcial: true });
+  });
+
+  it("leitura de saldo recente e 30 dias acima do teto: o saldo continua exato, só o ritmo fica parcial", async () => {
+    const agora = Date.now();
+    // Página de 10 no dublê: o teto cobre as 1.000 chamadas mais novas. As 300
+    // dos últimos 2 dias cabem inteiras; as 1.500 dos 30 dias, não.
+    const banco = postgrestComTeto(
+      { llm_calls: [...chamadas(1_200, 29, 3, agora), ...chamadas(300, 2, 0, agora)] },
+      { maxRows: 10 },
+    );
+
+    const consumo = await lerConsumoDeIa(banco.cliente as never, {
+      desdeLeitura: diasAtras(agora, 2.5),
+      desdeJanela: diasAtras(agora, 30),
+    });
+
+    expect(consumo.desdeLeituraParcial).toBe(false);
+    expect(consumo.consumoDesdeLeituraUsd).toBeCloseTo(6, 6); // as 300 de depois da leitura
+    expect(consumo.janelaParcial).toBe(true);
+  });
+
+  it("leitura de saldo antiga e volume acima do teto: o consumo desde a leitura fica parcial (o saldo é um teto)", async () => {
+    const agora = Date.now();
+    const banco = postgrestComTeto({ llm_calls: chamadas(1_500, 19, 0, agora) }, { maxRows: 10 });
+
+    const consumo = await lerConsumoDeIa(banco.cliente as never, {
+      desdeLeitura: diasAtras(agora, 20),
+      desdeJanela: diasAtras(agora, 30),
+    });
+
+    expect(consumo).toMatchObject({ desdeLeituraParcial: true, janelaParcial: true });
   });
 });
 
@@ -138,7 +190,7 @@ describe("o saldo da plataforma", () => {
 
     const saldo = await saldoDaPlataforma(banco.cliente as never);
 
-    expect(saldo.consumoParcial).toBe(false);
+    expect(saldo).toMatchObject({ consumoParcial: false, ritmoParcial: false });
     expect(saldo.saldoUsd).toBeCloseTo(50, 6);
     // US$ 50,00 gastos em 30 dias de média: os US$ 50,00 que sobram duram 30 dias.
     expect(saldo.diasRestantes).toBeCloseTo(30, 3);
