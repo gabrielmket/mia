@@ -99,6 +99,22 @@ async function itensPor(
   return r.data;
 }
 
+/**
+ * Do mais antigo para o mais novo, com `id` no empate.
+ *
+ * A leitura já pede essa ordem ao banco (`created_at`, depois `id`, que é o que
+ * deixa o `range` correto entre as páginas). Repetir aqui garante a MESMA ordem
+ * em cliente que só guarda a última ordenação pedida, como o adaptador de
+ * Postgres dos invariantes: lá o desempate por `id` apagaria o `created_at`.
+ */
+function doMaisAntigoParaOMaisNovo<T extends { id: string; created_at: string }>(itens: T[]): T[] {
+  return [...itens].sort((a, b) => {
+    const quando = Date.parse(a.created_at) - Date.parse(b.created_at);
+    if (quando !== 0 && !Number.isNaN(quando)) return quando;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+}
+
 /** Junta por id: o mesmo item pode vir por duas chaves (do negócio E da empresa dele). */
 function semRepetir(grupos: Obrigacao[][]): Obrigacao[] {
   const porId = new Map<string, Obrigacao>();
@@ -203,7 +219,7 @@ export async function lerObrigacoes(db: Db, org: string, escopo: EscopoDaLeitura
     );
     falhar("as obrigações", lido.erro === null ? null : { message: lido.erro });
     cortada = lido.truncado;
-    itens = lido.linhas.slice(0, TETO_DA_LISTA);
+    itens = doMaisAntigoParaOMaisNovo(lido.linhas).slice(0, TETO_DA_LISTA);
   }
 
   const naTela = await paraATela(db, org, itens);

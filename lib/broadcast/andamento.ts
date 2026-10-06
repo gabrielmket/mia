@@ -29,6 +29,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { contagemDaResposta } from "@/lib/leitura/contagem-da-resposta";
+
 /** Os estados que o CHECK de `broadcast_recipients.status` aceita. */
 export const ESTADOS_DO_DESTINATARIO = [
   "pendente",
@@ -62,21 +64,21 @@ export async function contarAndamento(
     const contagens = await Promise.all(
       leva.flatMap((id) =>
         ESTADOS_DO_DESTINATARIO.map(async (estado) => {
-          const { count, error } = await db
+          const resposta = await db
             .from("broadcast_recipients")
             .select("id", { count: "exact", head: true })
             .eq("organization_id", organizationId)
             .eq("broadcast_id", id)
             .eq("status", estado);
-          return { id, estado, count, erro: error?.message ?? null };
+          return { id, estado, count: contagemDaResposta(resposta), erro: resposta.error?.message ?? null };
         }),
       ),
     );
 
     for (const c of contagens) {
       if (c.erro) return { ok: false, erro: c.erro };
-      // `count` nulo não é zero: é o servidor sem dizer quantas há.
-      if (typeof c.count !== "number") {
+      // Sem contagem não é zero: é o servidor sem dizer quantas há.
+      if (c.count === null) {
         return { ok: false, erro: "o banco não devolveu a contagem dos destinatários" };
       }
       const atual = porCampanha.get(c.id) ?? { total: 0 };
