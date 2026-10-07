@@ -4,6 +4,8 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { InviteForm } from "./_components/InviteForm";
+// FORK MIA (9020): na empresa de demonstração, a tela diz o que o convite faz.
+import { AvisoDeConviteNaDemonstracao } from "./_components/AvisoDeConviteNaDemonstracao";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,7 @@ export default async function TeamInvitePage() {
           {t("Cole até 20 emails (um por linha) e escolha a role compartilhada.")}
         </p>
       </header>
+      <AvisoDeConviteNaDemonstracao organizationId={activeOrg.orgId} idioma={idioma} />
       <InviteForm />
     </div>
   );

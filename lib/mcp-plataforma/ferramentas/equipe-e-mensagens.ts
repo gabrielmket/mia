@@ -30,7 +30,9 @@ export const FERRAMENTAS_DE_EQUIPE_E_MENSAGENS: readonly FerramentaDePlataforma[
       "A pessoa só entra na equipe quando ACEITA o convite, pelo link do e-mail: até lá ela não aparece como membro, e não dá para definir a jornada dela. " +
       "Se o e-mail não sair (instalação sem envio de e-mail), o convite existe mesmo assim e a resposta avisa: o link fica copiável na tela Equipe (/app/team). " +
       "ATENÇÃO: plataforma_criar_cliente NÃO convida o dono informado em `owner_email`. Convide-o aqui, com o papel admin. " +
-      "Na empresa de demonstração o convite é recusado: ela não manda e-mail. " +
+      "Se o banco não gravar o convite de alguém, essa pessoa volta com `nao_gravou`, nenhum e-mail sai para ela e as outras do pedido seguem. " +
+      "FUNCIONA NA EMPRESA DE DEMONSTRAÇÃO, como em qualquer empresa: é o jeito de dar acesso à demonstração a quem ainda não tem login, " +
+      "e a resposta avisa que quem aceitar vai ver dados fictícios. O convite é a única coisa que sai de uma demonstração. " +
       "O QUE NÃO FAZ: não cria usuário nem senha, não muda o papel de quem já é membro e não revoga convite (isso é pela tela Equipe).",
     inputSchema: {
       organization_id: ORGANIZACAO,

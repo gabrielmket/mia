@@ -42,15 +42,20 @@ vi.mock("@/lib/audit", () => ({
 // A chave que indexa o conhecimento é da plataforma; aqui ela existe.
 vi.mock("@/lib/ai/embeddings/chave", () => ({ temChaveDeEmbedding: vi.fn(async () => true) }));
 // O e-mail do convite: o que sai daqui é o que o teste mede, sem tocar em servidor de e-mail.
+// `emitirConvite` chama duas vezes (9020): com `dispatch: false` só confere e assina,
+// e a segunda, depois de a linha existir, é a que manda o e-mail. O dublê responde igual.
 vi.mock("@/lib/auth/issue-invite", () => ({
-  issueInvite: vi.fn(async (input: { email: string; inviteId: string }) => ({
-    email: input.email,
-    invite_id: input.inviteId,
-    expires_at: "2099-01-01T00:00:00.000Z",
-    email_dispatched: convite.emailSai,
-    email_error: convite.emailSai ? undefined : "not_configured",
-    accept_url: "https://exemplo.invalid/team/accept-invite/ficticio",
-  })),
+  issueInvite: vi.fn(async (input: { email: string; inviteId: string; dispatch?: boolean }) => {
+    const envia = input.dispatch !== false;
+    return {
+      email: input.email,
+      invite_id: input.inviteId,
+      expires_at: "2099-01-01T00:00:00.000Z",
+      email_dispatched: envia && convite.emailSai,
+      email_error: envia && !convite.emailSai ? "not_configured" : undefined,
+      accept_url: "https://exemplo.invalid/team/accept-invite/ficticio",
+    };
+  }),
 }));
 // A Meta: nenhuma chamada sai de um teste. Os dublês contam se foram chamados.
 vi.mock("@/lib/channels/meta/criar-template", () => ({
@@ -65,6 +70,14 @@ const { criarServidorDePlataforma } = await import("@/lib/mcp-plataforma/servido
 const { issueInvite } = await import("@/lib/auth/issue-invite");
 const { criarTemplate } = await import("@/lib/channels/meta/criar-template");
 const { audit } = await import("@/lib/audit");
+
+/** As chamadas a `issueInvite` que MANDAM o e-mail (as de `dispatch: false` só assinam). */
+function enviosDeConvite() {
+  return vi
+    .mocked(issueInvite)
+    .mock.calls.map(([pedido]) => pedido)
+    .filter((pedido) => pedido.dispatch !== false);
+}
 
 async function preparar(opcoes: OpcoesDoCenario = {}) {
   const cenario = cenarioDaImplantacao(opcoes);
@@ -936,8 +949,13 @@ describe("plataforma_convidar_pessoas", () => {
       ["dona@exemplo.invalid", "admin", ORG, AUTOR],
       ["recepcao@exemplo.invalid", "agent", ORG, AUTOR],
     ]);
-    expect(vi.mocked(issueInvite)).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(issueInvite).mock.calls[0]![0]).toMatchObject({ organizationId: ORG, orgName: "Clínica Exemplo", inviterId: AUTOR });
+    expect(enviosDeConvite()).toHaveLength(2);
+    expect(enviosDeConvite()[0]).toMatchObject({ organizationId: ORG, orgName: "Clínica Exemplo", inviterId: AUTOR });
+    // A linha diz que o e-mail saiu, e guarda o prazo que o token carrega.
+    expect(tabela("team_invites").map((c) => [c.email_dispatched, c.expires_at])).toEqual([
+      [true, "2099-01-01T00:00:00.000Z"],
+      [true, "2099-01-01T00:00:00.000Z"],
+    ]);
   });
 
   it("REEXECUÇÃO: não manda e-mail de novo; quem já é da equipe é pulado; `reenviar` reenvia", async () => {
@@ -956,7 +974,7 @@ describe("plataforma_convidar_pessoas", () => {
 
     const reenviar = await mcp.chamar("plataforma_convidar_pessoas", { organization_id: ORG, pessoas: [PEDIDO.pessoas[1]], reenviar: true });
     expect((reenviar.dados.convites as Linha[])[0]!.desfecho).toBe("reenviou");
-    expect(vi.mocked(issueInvite)).toHaveBeenCalledTimes(1);
+    expect(enviosDeConvite()).toHaveLength(1);
     expect(tabela("team_invites")).toHaveLength(2);
   });
 
@@ -968,14 +986,62 @@ describe("plataforma_convidar_pessoas", () => {
     expect((r.dados.avisos as string[]).join(" ")).toContain("/app/team");
   });
 
-  it("⭐ EMPRESA DE DEMONSTRAÇÃO: o convite é recusado com a frase da trava, sem e-mail e sem linha", async () => {
+  it("⭐ EMPRESA DE DEMONSTRAÇÃO (9020): o convite FUNCIONA, com a linha, o e-mail e o aviso de onde foi", async () => {
+    // Até a 9020 este caso provava a recusa, com a frase da trava. O convite
+    // não é saída para contato: fala com uma pessoa de verdade que quem
+    // administra escolheu, e é o jeito de dar acesso à demonstração.
     const { mcp, tabela } = await preparar({ demonstracao: true });
     const r = await mcp.chamar("plataforma_convidar_pessoas", PEDIDO);
-    expect(r.erro).toBe(true);
-    expect(r.texto).toContain("Esta é a empresa de demonstração: nenhuma mensagem, e-mail ou aviso sai daqui.");
-    expect(r.texto).toContain("Convite de equipe é um e-mail");
-    expect(vi.mocked(issueInvite)).not.toHaveBeenCalled();
-    expect(tabela("team_invites")).toHaveLength(0);
+    expect(r.erro, r.texto).toBe(false);
+    expect((r.dados.convites as Linha[]).map((c) => [c.email, c.papel, c.desfecho, c.email_enviado])).toEqual([
+      ["dona@exemplo.invalid", "admin", "convidou", true],
+      ["recepcao@exemplo.invalid", "agent", "convidou", true],
+    ]);
+    expect(tabela("team_invites").map((c) => [c.email, c.role, c.organization_id, c.email_dispatched])).toEqual([
+      ["dona@exemplo.invalid", "admin", ORG, true],
+      ["recepcao@exemplo.invalid", "agent", ORG, true],
+    ]);
+    expect(enviosDeConvite()).toHaveLength(2);
+    // A resposta diz que é a demonstração, e que o convite é só o convite.
+    const avisos = (r.dados.avisos as string[]).join(" ");
+    expect(avisos).toContain("empresa de demonstração");
+    expect(avisos).toContain("mensagem, automação, conversão e aviso continuam travados");
+    expect(r.texto).not.toContain("nenhuma mensagem, e-mail ou aviso sai daqui");
+  });
+
+  it("CONTROLE: na empresa de verdade a resposta não fala de demonstração", async () => {
+    const { mcp } = await preparar();
+    const r = await mcp.chamar("plataforma_convidar_pessoas", PEDIDO);
+    expect((r.dados.avisos as string[]).join(" ")).not.toContain("demonstração");
+  });
+
+  it("⭐ convite que o banco NÃO grava: `nao_gravou`, sem e-mail, e as outras pessoas seguem", async () => {
+    const { mcp, tabela, cliente } = await preparar();
+    // O banco recusa a linha de UMA pessoa, como um gatilho ou uma constraint recusaria.
+    const deVerdade = cliente.from.bind(cliente);
+    cliente.from = ((nome: string) => {
+      const consulta = deVerdade(nome) as Record<string, unknown>;
+      if (nome !== "team_invites") return consulta;
+      const inserir = consulta.insert as (p: Linha) => unknown;
+      consulta.insert = (p: Linha) =>
+        p.email === "dona@exemplo.invalid"
+          ? { select: () => ({ single: async () => ({ data: null, error: { code: "42501", message: "recusado pelo banco" } }) }) }
+          : inserir(p);
+      return consulta;
+    }) as typeof cliente.from;
+
+    const r = await mcp.chamar("plataforma_convidar_pessoas", PEDIDO);
+    expect(r.erro, r.texto).toBe(false);
+    expect((r.dados.convites as Linha[]).map((c) => [c.email, c.desfecho])).toEqual([
+      ["dona@exemplo.invalid", "nao_gravou"],
+      ["recepcao@exemplo.invalid", "convidou"],
+    ]);
+    const avisos = (r.dados.avisos as string[]).join(" ");
+    expect(avisos).toContain("O convite de dona@exemplo.invalid NÃO foi criado");
+    expect(avisos).toContain("42501");
+    // Nada saiu para quem não tem linha: nem e-mail, nem linha. A outra pessoa foi convidada.
+    expect(enviosDeConvite().map((p) => p.email)).toEqual(["recepcao@exemplo.invalid"]);
+    expect(tabela("team_invites").map((c) => c.email)).toEqual(["recepcao@exemplo.invalid"]);
   });
 
   it("papel que não existe é recusado com os papéis aceitos", async () => {

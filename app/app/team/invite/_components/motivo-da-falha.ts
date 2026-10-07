@@ -8,6 +8,10 @@
  */
 const MOTIVOS_DE_FALHA: Record<string, string> = {
   already_member: "Já é membro desta organização.",
+  // FORK MIA (9020): o banco não gravou a linha do convite. Nada saiu para este
+  // e-mail (`lib/team/convite-nao-gravado.ts`); o espanhol mora em
+  // `lib/i18n/dicionario-mia-equipe.ts`.
+  convite_nao_gravado: "Não foi possível registrar este convite, e nenhum e-mail foi enviado. Tente de novo em instantes.",
 };
 
 /** Código sem tradução conhecida: devolve o próprio código, nunca some da tela. */

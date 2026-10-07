@@ -26,6 +26,9 @@ import { ApiError } from "@/lib/api/types";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { inviteMemberSchema, validateRequest } from "@/lib/schemas";
+// FORK MIA (9020): o convite que o banco não gravou tem nome, motivo e registro.
+import { logger } from "@/lib/logger";
+import { ConviteNaoGravadoError, MOTIVO_CONVITE_NAO_GRAVADO } from "@/lib/team/convite-nao-gravado";
 
 export const dynamic = "force-dynamic";
 
@@ -98,16 +101,36 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
 
     if (admin) {
-      const { convite, accept_url, email_dispatched, email_error } = await emitirConvite(admin, {
-        email,
-        role: inv.role,
-        interfaceSettings: inv.interface_settings,
-        organizationId: activeOrg.orgId,
-        orgName: activeOrg.name,
-        inviterId: authUser.id,
-        inviterName,
-        requestId,
-      });
+      // FORK MIA (9020): convite que o banco não gravou vira um item de `failed`
+      // com motivo, e o lote segue. Antes o erro cru subia e a rota respondia
+      // "Erro interno" para o lote inteiro, inclusive para os convites que já
+      // tinham saído. Nesse ponto nada saiu nem foi auditado para ESTE e-mail
+      // (`emitirConvite` grava a linha antes do e-mail). Qualquer outro erro
+      // continua subindo.
+      let emitido;
+      try {
+        emitido = await emitirConvite(admin, {
+          email,
+          role: inv.role,
+          interfaceSettings: inv.interface_settings,
+          organizationId: activeOrg.orgId,
+          orgName: activeOrg.name,
+          inviterId: authUser.id,
+          inviterName,
+          requestId,
+        });
+      } catch (err) {
+        if (!(err instanceof ConviteNaoGravadoError)) throw err;
+        // Sem o e-mail do convidado: registro de servidor não leva dado pessoal.
+        logger.error("[team.invite] o convite não foi gravado", {
+          request_id: requestId,
+          organization_id: activeOrg.orgId,
+          codigo: err.codigoDoBanco,
+        });
+        failed.push({ email, reason: MOTIVO_CONVITE_NAO_GRAVADO });
+        continue;
+      }
+      const { convite, accept_url, email_dispatched, email_error } = emitido;
       sent.push({
         email,
         invite_id: convite.id,

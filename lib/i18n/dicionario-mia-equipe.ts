@@ -18,4 +18,14 @@ export const DICIONARIO_DA_EQUIPE_MIA: Traducoes = {
   "Este link não é válido ou o prazo do convite já passou. Peça um novo convite a quem administra a sua empresa.": {
     es: "Este enlace no es válido o el plazo de la invitación ya venció. Pide una nueva invitación a quien administra tu empresa.",
   },
+  // 9020: o aviso da tela Convidar membros na empresa de demonstração
+  // (`app/app/team/invite/_components/AvisoDeConviteNaDemonstracao.tsx`).
+  "Esta é a empresa de demonstração. O convite dá acesso a ela, e nada mais sai daqui.": {
+    es: "Esta es la empresa de demostración. La invitación da acceso a ella, y nada más sale de aquí.",
+  },
+  // 9020: o motivo de falha do convite que o banco não gravou
+  // (`app/app/team/invite/_components/motivo-da-falha.ts`).
+  "Não foi possível registrar este convite, e nenhum e-mail foi enviado. Tente de novo em instantes.": {
+    es: "No fue posible registrar esta invitación, y no se envió ningún correo. Inténtalo de nuevo en unos instantes.",
+  },
 };

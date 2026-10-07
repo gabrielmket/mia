@@ -60,14 +60,18 @@ const estado = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => estado.cliente }));
+// `emitirConvite` chama duas vezes (9020): com `dispatch: false` só confere e assina,
+// e a segunda, depois de a linha existir no banco, é a que manda o e-mail. Só
+// essa conta como convite enviado.
 vi.mock("@/lib/auth/issue-invite", () => ({
-  issueInvite: vi.fn(async (input: { email: string; inviteId: string }) => {
-    estado.convites.push(input.email);
+  issueInvite: vi.fn(async (input: { email: string; inviteId: string; dispatch?: boolean }) => {
+    const envia = input.dispatch !== false;
+    if (envia) estado.convites.push(input.email);
     return {
       email: input.email,
       invite_id: input.inviteId,
       expires_at: "2099-01-01T00:00:00.000Z",
-      email_dispatched: true,
+      email_dispatched: envia,
       accept_url: "https://exemplo.invalid/team/accept-invite/ficticio",
     };
   }),
@@ -555,7 +559,7 @@ describe("5 · etiquetas: a ferramenta grava o que a função da tela grava", ()
   });
 });
 
-describe("6 · a empresa de demonstração monta tudo e não manda nada para fora", () => {
+describe("6 · a empresa de demonstração monta tudo, convida a equipe e não manda nada para os contatos nem para fora", () => {
   beforeAll(async () => {
     await pool.query(
       "insert into organizations (id, slug, legal_name, display_name, demonstracao) values ($1, 'mia-9017-demo', 'MIA 9017 demo', 'MIA 9017 demo', true) on conflict (id) do nothing",
@@ -588,13 +592,36 @@ describe("6 · a empresa de demonstração monta tudo e não manda nada para for
     expect((await uma<{ n: number }>("select count(*)::int as n from catalog_products where organization_id = $1", [DEMO])).n).toBe(1);
   });
 
-  it("⭐ convite de equipe é recusado: nenhum e-mail, nenhuma linha de convite", async () => {
+  it("⭐ convite de equipe FUNCIONA na demonstração (9020): a linha nasce no banco e o e-mail sai uma vez", async () => {
+    // Até a 9020 este caso provava a recusa. O convite deixou de ser uma saída
+    // travada: ele fala com uma pessoa de verdade que quem administra escolheu,
+    // e não com um contato fictício. O gatilho que recusava a linha é do BANCO,
+    // então é aqui (e não no teste de unidade) que a retirada dele é medida.
+    const pedido = { organization_id: DEMO, pessoas: [{ email: "alguem@exemplo.invalid", papel: "agent" }] };
     const antes = estado.convites.length;
-    const r = await mcp.chamar("plataforma_convidar_pessoas", { organization_id: DEMO, pessoas: [{ email: "alguem@exemplo.invalid", papel: "agent" }] });
-    expect(r.erro).toBe(true);
-    expect(r.texto).toContain("Esta é a empresa de demonstração");
-    expect(estado.convites.length).toBe(antes);
-    expect((await uma<{ n: number }>("select count(*)::int as n from team_invites where organization_id = $1", [DEMO])).n).toBe(0);
+    const r = await mcp.chamar("plataforma_convidar_pessoas", pedido);
+    expect(r.erro, r.texto).toBe(false);
+    expect((r.dados.convites as Array<Record<string, unknown>>)[0]).toMatchObject({
+      email: "alguem@exemplo.invalid",
+      papel: "agent",
+      desfecho: "convidou",
+      email_enviado: true,
+    });
+    expect(estado.convites.slice(antes)).toEqual(["alguem@exemplo.invalid"]);
+    const { rows } = await pool.query<{ email: string; role: string; pendente: boolean; email_dispatched: boolean; invited_by: string }>(
+      `select email, role, (accepted_at is null and revoked_at is null) as pendente, email_dispatched, invited_by::text
+         from team_invites where organization_id = $1`,
+      [DEMO],
+    );
+    expect(rows).toEqual([
+      { email: "alguem@exemplo.invalid", role: "agent", pendente: true, email_dispatched: true, invited_by: IMPLANTADOR },
+    ]);
+
+    // Reexecução: o convite pendente não é reenviado, como em qualquer empresa.
+    const denovo = await mcp.chamar("plataforma_convidar_pessoas", pedido);
+    expect((denovo.dados.convites as Array<Record<string, unknown>>)[0]).toMatchObject({ desfecho: "ja_convidado" });
+    expect(estado.convites.length).toBe(antes + 1);
+    expect((await uma<{ n: number }>("select count(*)::int as n from team_invites where organization_id = $1", [DEMO])).n).toBe(1);
   });
 
   it("⭐ ligar a automação que chama um webhook é recusado pela trava do BANCO, e a regra segue desligada", async () => {

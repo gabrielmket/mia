@@ -27,6 +27,9 @@ import {
   type InterfaceSettings,
 } from "@/lib/navigation/interface";
 import type { Role } from "@/lib/schemas/team";
+// FORK MIA (9020): o erro com nome do convite que o banco não gravou, e o registro.
+import { logger } from "@/lib/logger";
+import { ConviteNaoGravadoError } from "@/lib/team/convite-nao-gravado";
 import {
   conviteEstaEmAberto,
   statusConvite,
@@ -105,6 +108,10 @@ export interface ResultadoEmissao {
  * `member.invited` (tudo dentro de `issueInvite`) e grava/atualiza a linha em
  * `team_invites`. Requer o client service-role — a linha é escrita ignorando
  * RLS e filtrando `organization_id` da fonte confiável (nunca do body).
+ *
+ * FORK MIA (9020): a ORDEM é assinar, gravar a linha e só então mandar o
+ * e-mail e auditar. Linha que o banco não grava lança `ConviteNaoGravadoError`,
+ * e nada sai nem é auditado.
  */
 export async function emitirConvite(
   admin: SupabaseClient,
@@ -127,7 +134,7 @@ export async function emitirConvite(
   const inviteId = (pendente?.id as string | undefined) ?? randomUUID();
   const issuedAt = Math.floor(Date.now() / 1000);
 
-  const emitido = await issueInvite({
+  const pedido = {
     email,
     role: params.role,
     interfaceSettings,
@@ -138,7 +145,24 @@ export async function emitirConvite(
     requestId: params.requestId,
     inviteId,
     issuedAt,
-  });
+  };
+
+  // FORK MIA (9020): a ordem é ASSINAR, GRAVAR e só então ENVIAR.
+  //
+  // Antes era uma chamada só a `issueInvite` (e-mail e auditoria) e a linha por
+  // último: uma gravação recusada deixava para trás um `member.invited` de um
+  // convite que não existe e um link que funciona sem linha para revogar, e a
+  // rota respondia 500 sem dizer o quê.
+  //
+  //   1. `dispatch: false` só confere e assina: nenhum e-mail, nenhuma auditoria.
+  //      O que `issueInvite` recusa, recusa aqui, antes de qualquer linha, e daqui
+  //      sai o prazo que o token carrega.
+  //   2. A linha nasce (ou é renovada) dizendo "o e-mail ainda não saiu". Se o
+  //      banco a recusa, o erro tem nome (`lib/team/convite-nao-gravado.ts`), e
+  //      nada saiu nem foi auditado.
+  //   3. Com a linha de pé, a mesma chamada de novo, agora valendo: mesmo
+  //      `inviteId` e mesmo `issuedAt`, então é o mesmo token.
+  const assinado = await issueInvite({ ...pedido, dispatch: false });
 
   const nowIso = new Date().toISOString();
   const base = {
@@ -148,9 +172,9 @@ export async function emitirConvite(
     interface_settings: interfaceSettings,
     invited_by: params.inviterId,
     inviter_name: params.inviterName,
-    email_dispatched: emitido.email_dispatched,
+    email_dispatched: false,
     last_sent_at: nowIso,
-    expires_at: emitido.expires_at,
+    expires_at: assinado.expires_at,
   };
 
   const { data: row, error } = pendente
@@ -166,10 +190,37 @@ export async function emitirConvite(
         .select("*")
         .single();
 
-  if (error) throw error;
+  if (error || !row) throw new ConviteNaoGravadoError(email, error);
+
+  const emitido = await issueInvite(pedido);
+
+  // FORK MIA (9020): o desfecho do envio vai para a linha. Só escreve quando há
+  // o que mudar (o e-mail saiu, ou o prazo não é o que foi gravado). Se ESTA
+  // escrita falhar, o convite existe e o e-mail já saiu: não é motivo para
+  // derrubar a emissão. A resposta leva o desfecho de verdade, e a linha fica
+  // dizendo "não saiu", o que só faz a tela oferecer o link para copiar.
+  let convite = row as ConviteDeTime;
+  if (emitido.email_dispatched || emitido.expires_at !== assinado.expires_at) {
+    const desfecho = { email_dispatched: emitido.email_dispatched, expires_at: emitido.expires_at };
+    const { data: fechada, error: erroDoDesfecho } = await admin
+      .from("team_invites")
+      .update(desfecho)
+      .eq("id", inviteId)
+      .select("*")
+      .maybeSingle();
+    if (erroDoDesfecho || !fechada) {
+      logger.warn("[team.convites] o desfecho do e-mail não foi gravado na linha do convite", {
+        invite_id: inviteId,
+        organization_id: params.organizationId,
+        request_id: params.requestId,
+        codigo: erroDoDesfecho?.code ?? null,
+      });
+    }
+    convite = { ...convite, ...desfecho, ...((fechada as ConviteDeTime | null) ?? {}) };
+  }
 
   return {
-    convite: row as ConviteDeTime,
+    convite,
     accept_url: emitido.accept_url,
     email_dispatched: emitido.email_dispatched,
     email_error: emitido.email_error,

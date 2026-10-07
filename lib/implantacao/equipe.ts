@@ -25,16 +25,28 @@
  *
  * ── A empresa de demonstração ─────────────────────────────────────────────
  *
- * Convite é e-mail, e a empresa de demonstração não manda nada para fora. O
- * roteador de e-mail e o banco já recusam; a ferramenta recusa antes, com a
- * frase da trava, para a resposta ser uma explicação e não um erro de banco.
+ * Convite de equipe FUNCIONA na empresa de demonstração, como em qualquer
+ * empresa (migration 9020, decisão do Gabriel em 07/10/2026). A trava dela
+ * existe para nada chegar aos contatos fictícios nem a um destino de fora;
+ * convite é o sistema falando com uma pessoa de verdade que quem administra
+ * escolheu, e é o jeito de dar acesso à demonstração a quem ainda não tem
+ * login. Até a 9020 esta ferramenta recusava antes de tentar, com a frase da
+ * trava. A resposta só acrescenta um aviso, para quem lê saber onde convidou.
+ *
+ * ── O convite que o banco não grava ───────────────────────────────────────
+ *
+ * `emitirConvite` grava a linha ANTES do e-mail e da auditoria. Se o banco a
+ * recusa, nada saiu para aquela pessoa: ela volta com o desfecho `nao_gravou`,
+ * um aviso diz o que o banco respondeu, e as outras pessoas do pedido seguem.
+ * É a mesma regra da rota (`app/api/v1/team/invite/route.ts`), que devolve o
+ * e-mail em `failed`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { FRASE_DA_DEMONSTRACAO, ehRecusaDaDemonstracao, travaDaDemonstracao } from "@/lib/demonstracao/trava";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { INTERFACE_COMPLETA, interfaceTemDestino } from "@/lib/navigation/interface";
 import { ROLES, type Role } from "@/lib/schemas/team";
+import { ConviteNaoGravadoError } from "@/lib/team/convite-nao-gravado";
 import { conviteEstaEmAberto, emitirConvite, statusConvite, type ConviteDeTime } from "@/lib/team/convites";
 
 import type { Implantacao, OrganizacaoDaImplantacao } from "./base";
@@ -125,7 +137,7 @@ export async function lerConvites(admin: SupabaseClient, orgId: string): Promise
 export interface ConviteFeito {
   email: string;
   papel: string;
-  desfecho: "convidou" | "reenviou" | "ja_convidado" | "ja_e_membro";
+  desfecho: "convidou" | "reenviou" | "ja_convidado" | "ja_e_membro" | "nao_gravou";
   email_enviado?: boolean;
   motivo_do_email?: string;
   expira_em?: string;
@@ -136,14 +148,6 @@ export async function convidarPessoas(
   org: OrganizacaoDaImplantacao,
   pedido: { pessoas: Array<{ email: string; papel: string }>; reenviar?: boolean },
 ): Promise<{ convites: ConviteFeito[]; avisos: string[] }> {
-  // Falha fechada: se não der para confirmar que a empresa é de verdade, não sai e-mail.
-  const trava = org.demonstracao ? { travado: true as const } : await travaDaDemonstracao(c.admin, c.orgId);
-  if (trava.travado) {
-    throw new Recusa(
-      `${FRASE_DA_DEMONSTRACAO} Convite de equipe é um e-mail, então não é enviado. ` +
-        "Para dar acesso à demonstração, quem opera a plataforma inclui a pessoa pelo script da empresa modelo (docs/fork/cliente-modelo.md).",
-    );
-  }
 
   for (const [i, p] of pedido.pessoas.entries()) {
     if (!(ROLES as readonly string[]).includes(p.papel)) {
@@ -221,11 +225,21 @@ export async function convidarPessoas(
         );
       }
     } catch (err) {
-      if (ehRecusaDaDemonstracao(err as { code?: string; message?: string })) {
-        throw new Recusa(`${FRASE_DA_DEMONSTRACAO} Convite de equipe é um e-mail, então não é enviado.`);
-      }
-      throw err;
+      // A linha não nasceu: nada saiu nem foi auditado para esta pessoa.
+      if (!(err instanceof ConviteNaoGravadoError)) throw err;
+      convites.push({ email, papel: pessoa.papel, desfecho: "nao_gravou" });
+      avisos.push(
+        `O convite de ${email} NÃO foi criado: o banco recusou a gravação` +
+          (err.codigoDoBanco ? ` (${err.codigoDoBanco})` : "") +
+          ". Nenhum e-mail saiu para essa pessoa. Chame de novo só com ela; se repetir, é com quem opera a plataforma.",
+      );
     }
+  }
+  if (org.demonstracao && convites.some((x) => x.desfecho === "convidou" || x.desfecho === "reenviou")) {
+    avisos.push(
+      "Esta é a empresa de demonstração: quem aceitar o convite entra nela e vê os dados fictícios. " +
+        "O convite é a única coisa que sai dela; mensagem, automação, conversão e aviso continuam travados.",
+    );
   }
   return { convites, avisos };
 }
