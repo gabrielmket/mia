@@ -14,6 +14,13 @@
  *     prazo). Aí quem pergunta é o roteador de e-mail, e a resposta FALHA
  *     FECHADA: se não der para confirmar que a empresa é de verdade, o e-mail
  *     não sai.
+ *
+ * A ÚNICA coisa que sai de uma empresa de demonstração é o CONVITE DE EQUIPE
+ * (migration 9020): ele fala com uma pessoa de verdade que quem administra
+ * escolheu, e não com um contato. No banco, `team_invites` deixou de ter
+ * gatilho da trava; no roteador de e-mail, só `issueInvite` pede a exceção
+ * `excecaoDaTravaDaDemonstracao: "convite_de_equipe"`. A frase abaixo
+ * continua valendo para todo o resto.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 

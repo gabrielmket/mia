@@ -81,6 +81,11 @@ export async function issueInvite(input: {
         ],
         // FORK MIA (cliente modelo, 9010): o roteador trava a empresa de demonstração.
         organizationId: input.organizationId,
+        // FORK MIA (9020): menos este e-mail. Convite de equipe funciona na
+        // empresa de demonstração: fala com uma pessoa de verdade que quem
+        // administra escolheu, e não com um contato. Este é o ÚNICO lugar que
+        // pede a exceção (tests/unit/convite-de-equipe-na-demonstracao.test.ts).
+        excecaoDaTravaDaDemonstracao: "convite_de_equipe",
       });
       dispatched = result.ok;
       deliveryError = result.ok ? undefined : result.error;

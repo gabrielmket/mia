@@ -82,7 +82,26 @@ interface SendArgs {
    * (ou se não der para confirmar), o e-mail não sai.
    */
   organizationId?: string;
+  /**
+   * FORK MIA (9020): a ÚNICA exceção à trava acima, e quem a pede é o chamador,
+   * pelo nome. Hoje só existe uma: o convite de equipe.
+   *
+   * A trava existe para nada chegar aos contatos fictícios da demonstração nem a
+   * um destino de fora. O convite de equipe não é isso: é o sistema falando com
+   * uma pessoa de verdade que quem administra a empresa escolheu, e é o jeito de
+   * dar acesso à demonstração a quem ainda não tem login.
+   *
+   * ⚠️ Quem usa é `issueInvite` (`lib/auth/issue-invite.ts`) e mais ninguém:
+   * `tests/unit/convite-de-equipe-na-demonstracao.test.ts` reprova um segundo
+   * chamador. A exceção é declarada por quem envia, NUNCA deduzida aqui de
+   * `tags` ou do assunto: um e-mail que se parecesse com convite sairia da
+   * demonstração sem ninguém ter decidido isso.
+   */
+  excecaoDaTravaDaDemonstracao?: ExcecaoDaTravaDaDemonstracao;
 }
+
+/** As exceções à trava de e-mail da empresa de demonstração. Uma só, e nomeada. */
+export type ExcecaoDaTravaDaDemonstracao = "convite_de_equipe";
 
 /**
  * Qual transporte atende agora. `resend` aqui NÃO afirma que a Resend está
@@ -118,10 +137,17 @@ export async function transporteEmVigor(): Promise<TransporteDeEmail | "nenhum">
 }
 
 export async function sendEmail(args: SendArgs): Promise<EmailSendResult> {
-  const { organizationId, ...envio } = args;
+  // Os dois campos do fork saem daqui: nenhum transporte os recebe.
+  const { organizationId, excecaoDaTravaDaDemonstracao, ...envio } = args;
   // FORK MIA (cliente modelo, 9010): e-mail da empresa de demonstração não sai.
   // Falha fechada — sem confirmar que a empresa é de verdade, também não sai.
-  if (organizationId) {
+  //
+  // FORK MIA (9020): menos o convite de equipe, que sai de qualquer empresa. Por
+  // isso a pergunta nem é feita para ele: a resposta não mudaria o desfecho, e
+  // uma leitura que falhasse ("não confirmado") seguraria um convite que pode
+  // sair nos dois casos. A comparação é com o valor exato, e não "tem exceção":
+  // um valor que não seja este continua travado.
+  if (organizationId && excecaoDaTravaDaDemonstracao !== "convite_de_equipe") {
     const trava = await travaDaDemonstracao(createAdminClient(), organizationId);
     if (trava.travado) return { ok: false, error: "organizacao_de_demonstracao", details: trava.motivo };
   }

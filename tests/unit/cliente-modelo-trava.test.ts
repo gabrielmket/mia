@@ -7,7 +7,8 @@
  *  1. a porta de saída de mensagens (`sendMessageHandler`) traduz a recusa do
  *     banco em 403 `organizacao_de_demonstracao` — e o canal NUNCA é chamado;
  *  2. o roteador de e-mail pergunta à empresa e, se for demonstração (ou se não
- *     der para confirmar), o e-mail não chega a nenhum transporte;
+ *     der para confirmar), o e-mail não chega a nenhum transporte; a única
+ *     exceção é o convite de equipe, pedida pelo nome (9020);
  *  3. o selo lê a marca sem nunca derrubar o layout;
  *  4. o corte das métricas monta o filtro certo.
  */
@@ -242,6 +243,92 @@ describe("o roteador de e-mail", () => {
 
     expect(r.ok).toBe(true);
     expect(rpcDoAdmin).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * FORK MIA (9020) — a ÚNICA exceção: o convite de equipe.
+ *
+ * Convite não fala com contato: fala com uma pessoa de verdade que quem
+ * administra a empresa escolheu, e é o jeito de dar acesso à demonstração. A
+ * exceção é pedida pelo chamador, pelo nome; o roteador não deduz nada. As duas
+ * pontas são medidas aqui: o convite sai, e tudo que NÃO pede a exceção, mesmo
+ * com cara de convite, segue recusado. Quem pode pedir (só `issueInvite`) é
+ * medido em `tests/unit/convite-de-equipe-na-demonstracao.test.ts`.
+ */
+describe("o roteador de e-mail: a exceção nomeada do convite de equipe (9020)", () => {
+  const email = { to: "convidada@exemplo.invalid", subject: "Convite", html: "<p>entre</p>" };
+
+  it("⭐ com a exceção, o e-mail da demonstração SAI, e os campos do fork não chegam ao transporte", async () => {
+    rpcDoAdmin.mockResolvedValue({ data: true, error: null });
+    const { sendEmail } = await import("@/lib/email/roteador");
+
+    const r = await sendEmail({ ...email, organizationId: ORG, excecaoDaTravaDaDemonstracao: "convite_de_equipe" });
+
+    expect(r).toMatchObject({ ok: true, via: "smtp" });
+    expect(enviarPorSmtp).toHaveBeenCalledTimes(1);
+    expect(enviarPorSmtp.mock.calls[0]).toEqual([email]);
+  });
+
+  it("⭐ CONTROLE: o MESMO e-mail, da MESMA empresa, sem a exceção, não sai", async () => {
+    rpcDoAdmin.mockResolvedValue({ data: true, error: null });
+    const { sendEmail } = await import("@/lib/email/roteador");
+
+    const r = await sendEmail({ ...email, organizationId: ORG });
+
+    expect(r).toMatchObject({ ok: false, error: "organizacao_de_demonstracao", details: "demonstracao" });
+    expect(enviarPorSmtp).not.toHaveBeenCalled();
+    expect(enviarPelaResend).not.toHaveBeenCalled();
+  });
+
+  it("⭐ nada é deduzido: e-mail com etiqueta e assunto de convite, sem a exceção, segue recusado", async () => {
+    rpcDoAdmin.mockResolvedValue({ data: true, error: null });
+    const { sendEmail } = await import("@/lib/email/roteador");
+
+    const r = await sendEmail({
+      to: "convidada@exemplo.invalid",
+      subject: "Você foi convidada para a equipe",
+      html: "<p>convite de equipe</p>",
+      tags: [
+        { name: "kind", value: "team_invite" },
+        { name: "org", value: ORG },
+      ],
+      organizationId: ORG,
+    });
+
+    expect(r).toMatchObject({ ok: false, error: "organizacao_de_demonstracao" });
+    expect(enviarPorSmtp).not.toHaveBeenCalled();
+  });
+
+  it("⭐ um valor que não é a exceção nomeada não abre nada", async () => {
+    rpcDoAdmin.mockResolvedValue({ data: true, error: null });
+    const { sendEmail } = await import("@/lib/email/roteador");
+
+    for (const valor of [true, "convite", "qualquer_coisa", ""]) {
+      const r = await sendEmail({ ...email, organizationId: ORG, excecaoDaTravaDaDemonstracao: valor as never });
+      expect(r, `valor ${JSON.stringify(valor)}`).toMatchObject({ ok: false, error: "organizacao_de_demonstracao" });
+    }
+    expect(enviarPorSmtp).not.toHaveBeenCalled();
+  });
+
+  it("o convite sai de qualquer empresa, então o roteador nem pergunta: leitura fora do ar não o segura", async () => {
+    rpcDoAdmin.mockResolvedValue({ data: null, error: { message: "fora do ar" } });
+    const { sendEmail } = await import("@/lib/email/roteador");
+
+    const r = await sendEmail({ ...email, organizationId: ORG, excecaoDaTravaDaDemonstracao: "convite_de_equipe" });
+
+    expect(r.ok).toBe(true);
+    expect(rpcDoAdmin).not.toHaveBeenCalled();
+  });
+
+  it("CONTROLE: a mesma leitura fora do ar segura qualquer outro e-mail (a falha fechada não mudou)", async () => {
+    rpcDoAdmin.mockResolvedValue({ data: null, error: { message: "fora do ar" } });
+    const { sendEmail } = await import("@/lib/email/roteador");
+
+    const r = await sendEmail({ ...email, organizationId: ORG });
+
+    expect(r).toMatchObject({ ok: false, error: "organizacao_de_demonstracao", details: "nao_confirmado" });
+    expect(enviarPorSmtp).not.toHaveBeenCalled();
   });
 });
 
