@@ -309,7 +309,8 @@ export interface OpcoesDaSemente {
   /**
    * E-mails de usuários que JÁ existem na instalação e ganham acesso de admin à
    * empresa de demonstração (quem vai mostrar o produto). E-mail que não existe
-   * vira aviso no resumo, não erro.
+   * vira aviso no resumo, não erro. Quem ainda não tem login entra por convite de
+   * equipe, que funciona na demonstração desde a 9020 (a semente não convida).
    */
   emailsDeAcesso?: readonly string[];
   /** Ids de usuários (de `auth.users`) que ganham o mesmo acesso. Id que não existe é ignorado. */
@@ -554,11 +555,16 @@ async function gravarAcesso(e: Escritor, { s, ID, org }: Contexto, opcoes: Opcoe
        on conflict (user_id, organization_id) do update set role = excluded.role, revoked_at = null`,
       [org, email],
     );
-    if (n === 0) avisos.push(`acesso: não existe usuário com o e-mail ${email} nesta instalação`);
+    if (n === 0) {
+      avisos.push(
+        `acesso: não existe usuário com o e-mail ${email} nesta instalação. ` +
+          "Para dar acesso a quem ainda não tem login, convide pela tela Equipe da demonstração (ou por plataforma_convidar_pessoas).",
+      );
+    }
     await e.executar(`do $semente$
 begin
   if not exists (select 1 from auth.users where lower(email) = ${literal(email)}) then
-    raise notice 'cliente modelo: nao existe usuario com o e-mail %; o acesso dele nao foi dado', ${literal(email)};
+    raise notice 'cliente modelo: nao existe usuario com o e-mail %; o acesso dele nao foi dado (quem nao tem login entra por convite, pela tela Equipe da demonstracao)', ${literal(email)};
   end if;
 end
 $semente$`);

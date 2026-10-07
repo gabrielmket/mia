@@ -180,9 +180,10 @@ CLIENTE_MODELO_EMAILS_DE_ACESSO='voce@timecompany.com.br,colega@timecompany.com.
   exigir SSL, acrescente `?sslmode=require`.
 - **`CLIENTE_MODELO_EMAILS_DE_ACESSO`**: usuários que **já existem** na instalação
   e entram como admin da demonstração. E-mail que não existe vira aviso na saída,
-  não erro. Essa é a porta de entrada, porque convite de equipe é e-mail e a trava
-  o recusa. O admin da plataforma também entra pelo suporte, como em qualquer
-  empresa.
+  não erro. Quem ainda não tem login entra por **convite de equipe**, que desde a
+  `9020` funciona na demonstração como em qualquer empresa: pela tela Equipe ›
+  Convidar membros, ou por `plataforma_convidar_pessoas`. O admin da plataforma
+  também entra pelo suporte, como em qualquer empresa.
 - **Idempotente**: rodar de novo não duplica nada, porque cada linha tem id
   estável. As datas relativas também se renovam.
 - Cada empresa grava numa transação só. Ou ela fica inteira de pé, ou nada muda.
@@ -255,13 +256,16 @@ bastaria um PATCH mal feito para a chave sumir e a trava abrir sem ninguém ver.
 **Só a plataforma** marca e desmarca (service_role, postgres ou admin da
 plataforma). Se a empresa ainda tem destino vivo, a marcação é recusada, e a
 recusa diz o que desligar antes. Ao marcar, a fila de saída vira `failed`, as
-assinaturas de push somem e os convites pendentes são revogados.
+assinaturas de push somem e os convites pendentes são revogados (foram emitidos
+para a empresa de verdade que ela era; depois de marcada, convidar funciona).
 
 A trava fica **no banco**, na porta por onde cada envio tem de passar antes de
 sair. Ela falha fechada: recusa com `42501` e a mensagem
 `organizacao_de_demonstracao: …`. O código de cada porta está em
 `supabase/migrations-mia/…_9010_empresa_de_demonstracao.sql` (e a agenda do
-Outlook, que chegou depois com tabela própria, em `…_9016_demonstracao_sem_agenda_microsoft.sql`):
+Outlook, que chegou depois com tabela própria, em `…_9016_demonstracao_sem_agenda_microsoft.sql`).
+A `…_9020_convite_de_equipe_funciona_na_demonstracao.sql` tirou da lista o convite
+de equipe, e só ele (ver "O que sai de propósito", abaixo):
 
 | envio | onde é barrado |
 |---|---|
@@ -276,7 +280,27 @@ Outlook, que chegou depois com tabela própria, em `…_9016_demonstracao_sem_ag
 | agenda do Outlook (a Microsoft manda convite por e-mail e cria a reunião do Teams) | conta Microsoft só existe desconectada (sem token), e não revive. Sem conexão viva não há publicação, convite, reunião do Teams nem link para entregar. Migration `9016`; a tela diz "A empresa de demonstração não conecta agenda de fora" |
 | push | nenhuma assinatura de push |
 | ligação (WhatsApp e tronco SIP) | a voz não liga e o tronco não ativa |
-| e-mail | o convite de equipe não nasce. Para o relatório LGPD ao titular e o alarme de prazo LGPD, o roteador de e-mail pergunta a `fn_mia_e_demonstracao` e não envia. Se não conseguir confirmar a empresa, também não envia |
+| e-mail | para o relatório LGPD ao titular, o alarme de prazo LGPD e qualquer outro e-mail com a empresa informada, o roteador de e-mail pergunta a `fn_mia_e_demonstracao` e não envia. Se não conseguir confirmar a empresa, também não envia. A única exceção é o convite de equipe (abaixo) |
+
+**O que sai de propósito: o convite de equipe.** Decisão do Gabriel em 07/10/2026
+(migration `9020`). A trava existe para nada chegar aos contatos fictícios nem a
+um destino de fora. Convite de equipe é outra coisa: é o sistema falando com uma
+pessoa de verdade que quem administra a empresa escolheu, e é o jeito de dar
+acesso à demonstração a quem ainda não tem login. Ele funciona como em qualquer
+empresa: a linha nasce em `team_invites`, o e-mail sai, a pessoa aceita e entra.
+
+- **No banco**, `team_invites` não tem mais gatilho da trava, e a função
+  `fn_mia_trava_da_demonstracao` não tem mais o ramo dela. Os outros gatilhos
+  ficaram como estavam.
+- **No e-mail**, o roteador (`lib/email/roteador.ts`) continua recusando e-mail de
+  empresa de demonstração, com uma exceção que o chamador pede pelo nome:
+  `excecaoDaTravaDaDemonstracao: "convite_de_equipe"`. Só `issueInvite` a usa, e
+  um teste reprova um segundo chamador. Nada é deduzido de etiqueta nem de assunto.
+- **Na tela** Convidar membros, a demonstração mostra o aviso "Esta é a empresa
+  de demonstração. O convite dá acesso a ela, e nada mais sai daqui."
+- O convite do **assistente de primeira configuração** (onboarding) não ganhou a
+  exceção: ele manda o e-mail por outro caminho, e uma demonstração nunca passa
+  por ali (nasce pronta, pela semente).
 
 **O que ela não cobre:**
 
@@ -291,8 +315,11 @@ Outlook, que chegou depois com tabela própria, em `…_9016_demonstracao_sem_ag
   demonstração não têm senha, estão bloqueadas e usam endereço `.invalid`.
 
 Os testes estão em `tests/invariants/empresa-de-demonstracao-nao-envia.test.ts`,
-com cada porta e um controle numa empresa de verdade, e em
-`tests/unit/cliente-modelo-trava.test.ts`, com o 403, o e-mail e a falha fechada.
+com cada porta e um controle numa empresa de verdade (e o convite de equipe
+entrando, com a prova de que só o gatilho dele saiu), em
+`tests/unit/cliente-modelo-trava.test.ts`, com o 403, o e-mail e a falha fechada,
+e em `tests/unit/convite-de-equipe-na-demonstracao.test.ts`, com a exceção do
+convite no roteador, a rota e a tela.
 Para cada demonstração por segmento, `tests/invariants/cliente-modelo-semente.test.ts`
 prova que ela nasce marcada, com o número arquivado, nada em fila, os eventos da
 carga consumidos e a saída enfileirada recusada na porta.

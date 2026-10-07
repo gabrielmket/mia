@@ -271,7 +271,7 @@ Todas respondem `criou`, `atualizou` ou `ja_estava`, item a item quando a chamad
 
 | ferramenta | o que faz | reexecução |
 |---|---|---|
-| `plataforma_convidar_pessoas` | convida por e-mail, até 20 pessoas por chamada, cada uma com um papel (`viewer`, `agent`, `manager`, `admin`) | quem já é da equipe é pulado; convite pendente **não** é reenviado, salvo com `reenviar: true` |
+| `plataforma_convidar_pessoas` | convida por e-mail, até 20 pessoas por chamada, cada uma com um papel (`viewer`, `agent`, `manager`, `admin`). Funciona também na empresa de demonstração. Convite que o banco não grava volta como `nao_gravou`, sem e-mail, e os outros seguem | quem já é da equipe é pulado; convite pendente **não** é reenviado, salvo com `reenviar: true` |
 
 ### Recusas
 
@@ -283,8 +283,15 @@ a recusa diz qual operação pedir.
 ### A empresa de demonstração
 
 Na empresa de demonstração a montagem funciona inteira (é assim que ela é
-preenchida), e nada sai para fora: convite de equipe, modelo oficial do WhatsApp
-e automação ligada são recusados com a frase da trava. Ela não tem número de
+preenchida), e nada sai para os contatos nem para fora: modelo oficial do
+WhatsApp e automação ligada com webhook ou aviso de grupo são recusados com a
+frase da trava. **O convite de equipe é a exceção** (migration `9020`):
+`plataforma_convidar_pessoas` funciona nela como em qualquer empresa, porque
+fala com uma pessoa de verdade que quem administra escolheu, e a resposta avisa
+que quem aceitar vai ver dados fictícios. É o jeito de dar acesso a quem ainda
+não tem login; `emails_de_acesso`, em `plataforma_criar_demonstracao` e
+`plataforma_reaplicar_demonstracao`, continua incluindo sem convite quem já tem.
+Ela não tem número de
 WhatsApp conectado, então nenhum agente é publicado lá. As regras de conversão
 podem ser gravadas e ligadas nela, e nada é enviado, porque a conexão de
 conversões ligada não existe lá: a resposta da ferramenta avisa.

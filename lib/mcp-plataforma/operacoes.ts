@@ -113,9 +113,10 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "desfazer: um token vazado convida um e-mail de fora como administrador.",
   },
   // O fluxo de convite que justificava a ausência desta operação foi atravessado
-  // com o cuidado que a tela tem: papel conferido, expiração do convite, linha em
-  // `team_invites` (que a tela lista e revoga) e a recusa na empresa de
-  // demonstração. Ver `lib/implantacao/equipe.ts`.
+  // com o cuidado que a tela tem: papel conferido, expiração do convite e linha em
+  // `team_invites` (que a tela lista e revoga), gravada antes de o e-mail sair.
+  // Desde a 9020 o convite funciona também na empresa de demonstração. Ver
+  // `lib/implantacao/equipe.ts`.
   ...OPERACOES_DE_IMPORTACAO,
 ] as const;
 

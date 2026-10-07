@@ -66,7 +66,8 @@ const EMAILS_DE_ACESSO = z
   .optional()
   .describe(
     "E-mails de pessoas que JÁ têm login nesta instalação e devem entrar como admin da demonstração (quem vai apresentar). " +
-      "Quem criou o token entra sempre. E-mail sem login vira aviso na resposta, não erro, e nenhum convite é mandado.",
+      "Quem criou o token entra sempre. E-mail sem login vira aviso na resposta, não erro, e esta ferramenta não manda convite: " +
+      "para quem ainda não tem login, convide depois com plataforma_convidar_pessoas, que funciona na demonstração.",
   );
 
 interface OrganizacaoAchada {
@@ -175,8 +176,10 @@ function emailsDe(args: Record<string, unknown>): string[] {
 }
 
 const AVISO_DE_TRAVA =
-  "Nada sai de uma empresa de demonstração: mensagem, follow-up, automação, conversão, convite, aviso e agenda de fora são " +
-  "recusados no banco (migration 9010). Testar o agente pela tela chama a IA de verdade e gasta saldo real.";
+  "Nada sai de uma empresa de demonstração para os contatos nem para fora: mensagem, follow-up, automação, conversão, aviso e " +
+  "agenda de fora são recusados no banco (migrations 9010 e 9016). A única exceção é o convite de equipe, que funciona como " +
+  "em qualquer empresa (plataforma_convidar_pessoas, migration 9020): ele dá acesso à demonstração a uma pessoa de verdade. " +
+  "Testar o agente pela tela chama a IA de verdade e gasta saldo real.";
 
 export const FERRAMENTAS_DE_DEMONSTRACAO: readonly FerramentaDePlataforma[] = [
   {
@@ -237,8 +240,9 @@ export const FERRAMENTAS_DE_DEMONSTRACAO: readonly FerramentaDePlataforma[] = [
       "criou o token entra como admin, junto com os `emails_de_acesso`. Grava numa transação só: ou a empresa inteira fica " +
       "de pé, ou nada muda. Reexecução segura: se a demonstração do segmento já existe, a chamada não grava nada e devolve a " +
       "que existe. ANTES DE chamar, veja plataforma_listar_demonstracoes. O QUE NÃO FAZ: não renova uma demonstração que já " +
-      "existe (isso é plataforma_reaplicar_demonstracao, operação implantar_configuracao), não manda convite nem e-mail, não " +
-      "conecta número de WhatsApp e não publica o agente. " +
+      "existe (isso é plataforma_reaplicar_demonstracao, operação implantar_configuracao), não manda convite nem e-mail (quem " +
+      "ainda não tem login entra por plataforma_convidar_pessoas, depois de a empresa existir), não conecta número de WhatsApp " +
+      "e não publica o agente. " +
       AVISO_DE_TRAVA,
     inputSchema: { segmento: SEGMENTO, emails_de_acesso: EMAILS_DE_ACESSO },
     operacao: "criar_cliente",
@@ -285,7 +289,7 @@ export const FERRAMENTAS_DE_DEMONSTRACAO: readonly FerramentaDePlataforma[] = [
       "acrescentou à mão na demonstração continua lá, e o que a semente gravou volta ao original. Quem criou o token e os " +
       "`emails_de_acesso` entram como admin. ATENÇÃO: só regrava empresa que é a demonstração do segmento e está marcada " +
       "como demonstração. O QUE NÃO FAZ: não cria a empresa (isso é plataforma_criar_demonstracao, operação criar_cliente), " +
-      "não apaga o que foi criado à mão, não manda convite e não publica nada. " +
+      "não apaga o que foi criado à mão, não manda convite (isso é plataforma_convidar_pessoas) e não publica nada. " +
       AVISO_DE_TRAVA,
     inputSchema: { segmento: SEGMENTO, emails_de_acesso: EMAILS_DE_ACESSO },
     operacao: "implantar_configuracao",

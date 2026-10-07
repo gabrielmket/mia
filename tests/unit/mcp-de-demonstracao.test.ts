@@ -71,6 +71,10 @@ describe("as ferramentas das demonstrações", () => {
     await mcp.fechar();
     expect(r.erro, r.texto).toBe(false);
     expect((r.dados.demonstracoes as unknown[]).length).toBe(5);
-    expect(r.dados.trava).toContain("migration 9010");
+    // O aviso diz o que a trava segura (9010 e 9016) e a única coisa que ela
+    // deixa sair desde a 9020: o convite de equipe.
+    expect(r.dados.trava).toContain("migrations 9010 e 9016");
+    expect(r.dados.trava).toContain("A única exceção é o convite de equipe");
+    expect(r.dados.trava).toContain("plataforma_convidar_pessoas");
   });
 });

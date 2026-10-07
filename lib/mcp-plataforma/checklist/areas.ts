@@ -86,7 +86,10 @@ const empresa: AreaDoChecklist = {
       r.falta.push({ o_que: "Sem CNPJ cadastrado (opcional).", como: "plataforma_configurar_empresa com `cnpj`." });
     }
     if (org.demonstracao) {
-      r.pronto.push("É a empresa de DEMONSTRAÇÃO: nada do que for configurado aqui manda mensagem, e-mail ou aviso para fora.");
+      r.pronto.push(
+        "É a empresa de DEMONSTRAÇÃO: nada do que for configurado aqui manda mensagem, e-mail ou aviso para os contatos nem para fora. " +
+          "O convite de equipe é a exceção: funciona, e dá acesso à demonstração a quem for convidado.",
+      );
     }
     return r;
   },
