@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { sql } from "./gov-helpers";
 
 /**
- * FORK MIA (migrations 9010 e 9016) — A EMPRESA DE DEMONSTRAÇÃO NÃO MANDA NADA PARA FORA.
+ * FORK MIA (migrations 9010, 9016 e 9020) — A EMPRESA DE DEMONSTRAÇÃO NÃO MANDA NADA PARA FORA.
  *
  * O cliente modelo mora em produção, com dados fictícios. A marca
  * `organizations.demonstracao` fecha, NO BANCO, cada porta por onde um envio
@@ -14,6 +17,11 @@ import { sql } from "./gov-helpers";
  * Cada porta tem CONTROLE: a mesma escrita, numa empresa de verdade, passa.
  * Sem o controle, um "42501" poderia vir de qualquer outra regra do schema e o
  * teste afirmaria a trava sem medi-la.
+ *
+ * A ÚNICA coisa que sai, desde a 9020: o CONVITE DE EQUIPE. Ele não fala com
+ * contato nenhum, fala com uma pessoa de verdade que quem administra escolheu.
+ * O bloco "o convite de equipe entra" prova que ele nasce na demonstração, e os
+ * outros blocos seguem provando que todo o resto continua recusado.
  *
  * Sem PII: nomes sintéticos, e-mails @invariant.test, telefones +5500 (DDD que
  * não existe).
@@ -292,12 +300,8 @@ describe("os destinos de fora não existem na demonstração", () => {
            (organization_id, host, username, password_encrypted, password_iv, password_tag, password_last4, endpoint_name, is_active)
          values ('${org}', 'sip.invalid', 'u', '\\x00'::bytea, '\\x00'::bytea, '\\x00'::bytea, '0000', 'e9010${org.slice(-1)}', true)`,
     },
-    {
-      nome: "convite de equipe (é e-mail)",
-      dml: (org) =>
-        `insert into public.team_invites (organization_id, email, role, expires_at)
-           values ('${org}', 'convite-9010@invariant.test', 'agent', now() + interval '7 days')`,
-    },
+    // O convite de equipe estava nesta lista até a 9020. Saiu: ver o bloco
+    // "o convite de equipe entra na demonstração", mais abaixo.
   ];
 
   for (const caso of casos) {
@@ -348,6 +352,152 @@ describe("os destinos de fora não existem na demonstração", () => {
     expect(tentar(`update public.organizations set settings = settings || ${grupo} where id = '${REAL}'`)).toBe(
       "passou",
     );
+  });
+});
+
+describe("o convite de equipe ENTRA na demonstração (9020)", () => {
+  /**
+   * Decisão do Gabriel (07/10/2026): convite de equipe funciona na empresa de
+   * demonstração como em qualquer empresa. Ele não é uma saída para contato: é o
+   * sistema falando com uma pessoa de verdade que quem administra escolheu.
+   */
+  const convite = (org: string) =>
+    `insert into public.team_invites (organization_id, email, role, expires_at)
+       values ('${org}', 'convite-9020@invariant.test', 'agent', now() + interval '15 days')`;
+
+  const PASTA_DAS_MIGRATIONS = join(process.cwd(), "supabase", "migrations-mia");
+  const MIGRATION_9010 = readFileSync(join(PASTA_DAS_MIGRATIONS, "20260930235700_9010_empresa_de_demonstracao.sql"), "utf8");
+  const MIGRATION_9020 = readFileSync(
+    join(PASTA_DAS_MIGRATIONS, "20261007120000_9020_convite_de_equipe_funciona_na_demonstracao.sql"),
+    "utf8",
+  );
+
+  it("⭐ o convite nasce na demonstração, como na empresa de verdade", () => {
+    expect(tentarComMensagem(convite(DEMO))).toBe("passou");
+    expect(tentar(convite(REAL))).toBe("passou");
+  });
+
+  it("⭐ a linha fica de pé (pendente, sem revogação), e renovar o convite também passa", () => {
+    const r = medir(`
+      ${convite(DEMO)};
+      update public.team_invites
+         set last_sent_at = now(), resend_count = resend_count + 1, email_dispatched = true
+       where organization_id = '${DEMO}';
+      select 'M:' || count(*)::text || ',' || bool_and(revoked_at is null and accepted_at is null)::text
+                  || ',' || max(resend_count)::text || ',' || bool_and(email_dispatched)::text
+        from public.team_invites where organization_id = '${DEMO}';
+    `);
+    expect(r).toBe("1,true,1,true");
+  });
+
+  it("⭐ e a pessoa convidada ACEITA e entra na demonstração, com o papel do convite", () => {
+    // O aceite é a função do upstream que a tela chama (`fn_accept_team_invite`).
+    // Nada na trava a alcança: quem entra passa a ver os dados fictícios.
+    const CONVIDADA = "90209020-1111-4000-8000-00000000000c";
+    const aceitar = (org: string) =>
+      medir(`
+        insert into auth.users (id, email) values ('${CONVIDADA}', 'convidada-9020@invariant.test')
+          on conflict (id) do nothing;
+        ${convite(org)};
+        select public.fn_accept_team_invite(
+          p_user => '${CONVIDADA}', p_org => '${org}', p_role => 'agent', p_invited_by => '${GESTOR}',
+          p_issued_at => now(), p_invited_at => now(), p_interface_settings => '{"preset":"completa"}'::jsonb);
+        select 'M:' || role || ',' || (accepted_at is not null)::text || ',' || (revoked_at is null)::text
+          from public.user_organizations where user_id = '${CONVIDADA}' and organization_id = '${org}';
+      `);
+    expect(aceitar(DEMO)).toBe("agent,true,true");
+    // Controle: o mesmo aceite na empresa de verdade dá o mesmo vínculo.
+    expect(aceitar(REAL)).toBe("agent,true,true");
+  });
+
+  it("⭐ SÓ o gatilho do convite saiu: os outros onze da 9010 e o da 9016 estão de pé", () => {
+    const gatilhos = medir(`
+      select 'M:' || coalesce(string_agg(c.relname || '.' || t.tgname, ','), '')
+        from pg_trigger t
+        join pg_class c on c.oid = t.tgrelid
+        join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public' and not t.tgisinternal and t.tgname like 'trg\\_mia\\_demonstracao\\_%';
+    `);
+    expect(gatilhos.split(",").sort()).toEqual(
+      [
+        "ad_platform_connections.trg_mia_demonstracao_sem_conversoes",
+        "automation_rules.trg_mia_demonstracao_sem_regra_de_saida",
+        "broadcasts.trg_mia_demonstracao_sem_broadcast",
+        "calendar_connections.trg_mia_demonstracao_sem_agenda_externa",
+        "campaigns.trg_mia_demonstracao_sem_campanha",
+        "channel_sessions.trg_mia_demonstracao_sem_numero",
+        "config_aviso_de_caso.trg_mia_demonstracao_sem_aviso_de_caso",
+        "messages.trg_mia_demonstracao_nao_envia",
+        "mia_agenda_microsoft_conexoes.trg_mia_demonstracao_sem_agenda_microsoft",
+        "org_voice_calls.trg_mia_demonstracao_sem_voz",
+        "push_subscriptions.trg_mia_demonstracao_sem_push",
+        "voip_trunk_settings.trg_mia_demonstracao_sem_tronco",
+      ].sort(),
+    );
+  });
+
+  it("⭐ a função da trava não conhece mais `team_invites`, e segue conhecendo as outras portas", () => {
+    // O baseline define a função duas vezes (bloco da 9010 e bloco da 9020):
+    // o que o banco guarda é a ÚLTIMA, e é ela que se mede.
+    expect(
+      medir(`
+        select 'M:' || (position('team_invites' in prosrc) > 0)::text
+                    || ',' || (position('voip_trunk_settings' in prosrc) > 0)::text
+                    || ',' || (position('push_subscriptions' in prosrc) > 0)::text
+          from pg_proc where oid = 'public.fn_mia_trava_da_demonstracao()'::regprocedure;
+      `),
+    ).toBe("false,true,true");
+  });
+
+  it("⭐ CONTROLE NEGATIVO: no banco que ainda tem a trava do convite, a 9020 a retira, e só ela", () => {
+    // O estado de produção em 07/10/2026, reproduzido dentro de uma transação
+    // desfeita: a função da 9010 (com o ramo do convite) e o gatilho dela. Sem
+    // este caso, "o convite passa" poderia ser verdade só num banco NOVO, e o
+    // banco que já existe, que é o que importa, seguiria recusando.
+    const funcaoDa9010 = /create or replace function public\.fn_mia_trava_da_demonstracao\(\)[\s\S]*?\n\$f\$;/.exec(
+      MIGRATION_9010,
+    )?.[0];
+    expect(funcaoDa9010, "não achei a função da trava na migration 9010").toBeDefined();
+    expect(funcaoDa9010).toContain("when 'team_invites'");
+
+    const provar = (chave: string, dml: string) => `
+      do $$
+      begin
+        begin
+          ${dml};
+          perform set_config('inv.${chave}', 'passou', true);
+        exception when others then
+          perform set_config('inv.${chave}', sqlstate, true);
+        end;
+      end $$;`;
+
+    const r = medir(`
+      ${funcaoDa9010}
+      create trigger trg_mia_demonstracao_sem_convite
+        before insert or update of organization_id on public.team_invites
+        for each row execute function public.fn_mia_trava_da_demonstracao();
+      ${provar("antes", convite(DEMO))}
+      -- A 9020, do arquivo, duas vezes: ela é idempotente.
+      ${MIGRATION_9020}
+      ${MIGRATION_9020}
+      ${provar("depois", convite(DEMO))}
+      ${provar("fila", mensagem(DEMO, CONVERSA_DEMO, SESSAO_DEMO, CONTATO_DEMO, "queued"))}
+      ${provar("push", `insert into public.push_subscriptions (organization_id, user_id, endpoint, p256dh, auth)
+                          values ('${DEMO}', '${GESTOR}', 'https://push.invalid/9020', 'p', 'a')`)}
+      select 'M:' || current_setting('inv.antes') || ',' || current_setting('inv.depois')
+                  || ',' || current_setting('inv.fila') || ',' || current_setting('inv.push');
+    `);
+    // antes: recusado · depois: passa · e as outras portas seguem recusadas.
+    expect(r).toBe("42501,passou,42501,42501");
+  });
+
+  it("o convite NÃO abre a fila: com convite pendente, mensagem de saída segue recusada", () => {
+    const r = tentarComMensagem(
+      mensagem(DEMO, CONVERSA_DEMO, SESSAO_DEMO, CONTATO_DEMO, "queued"),
+      `${convite(DEMO)};`,
+    );
+    expect(r.split("|")[0], r).toBe("42501");
+    expect(r).toContain("organizacao_de_demonstracao");
   });
 });
 
