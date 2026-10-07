@@ -98,6 +98,7 @@ vi.mock("@/lib/auth/require-role", () => ({
   }),
 }));
 
+const { sendEmail: enviarPorSmtp } = await import("@/lib/email/smtp");
 const { sendEmail } = await import("@/lib/email/roteador");
 const { issueInvite } = await import("@/lib/auth/issue-invite");
 const { emitirConvite } = await import("@/lib/team/convites");
@@ -188,6 +189,9 @@ beforeEach(() => {
   h.eventos.length = 0;
   h.auditorias.length = 0;
   h.emails.length = 0;
+  // Volta ao dublê de sempre: uma resposta "só desta vez" que um caso não
+  // consumiu não pode vazar para o seguinte.
+  vi.mocked(enviarPorSmtp).mockReset();
 });
 
 afterEach(() => {
@@ -324,8 +328,7 @@ describe("emitirConvite: a linha nasce ANTES do e-mail e da auditoria", () => {
 
   it("e-mail que não sai (instalação sem transporte funcionando): a linha existe e diz que não saiu", async () => {
     const { convites } = cenario({ demonstracao: true });
-    const { sendEmail: smtp } = await import("@/lib/email/smtp");
-    vi.mocked(smtp).mockResolvedValueOnce({ ok: false, error: "send_failed" } as never);
+    vi.mocked(enviarPorSmtp).mockResolvedValueOnce({ ok: false, error: "send_failed" } as never);
 
     const r = await emitirConvite(h.cliente as never, PEDIDO_DE_CONVITE);
 
