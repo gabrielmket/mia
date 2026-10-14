@@ -24,6 +24,7 @@ import { VALID_TOOL_IDS } from "@/lib/mcp/tools";
 import { publishAgentVersion } from "@/lib/ai/agents/publish";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { iaPodeIrAoAr, MENSAGEM_IA_DA_PLATAFORMA } from "@/lib/ai/trava-da-ia";
+import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
 
 const VALID_TOOL_IDS_RUNTIME = new Set<string>(VALID_TOOL_IDS as readonly string[]);
 
@@ -96,8 +97,9 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
   // (lib/ai/trava-da-ia.ts).
   if (
     !(await iaPodeIrAoAr(admin, {
-      user: authUser,
-      orgId: activeOrg.orgId,
+      // FORK MIA: desde a v1.74 do upstream a rota aceita token (resolveAuthDual).
+      user: await quemPedeNaRota(authz),
+      orgId: organizationId,
       agentId: id,
       versao: targetV,
     }))

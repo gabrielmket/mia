@@ -136,8 +136,12 @@ export const tenantSchema = z.object({
    * como a organizacao usa o produto, nao fato do dominio, e por isso nao virou
    * coluna.
    *
-   * `default("b2b")` e o que nao tira nada de ninguem — ver
-   * `lib/empresas/modo-de-venda.ts`.
+   * AUSENTE = NAO MUDA (fusao do upstream v1.80): desde a v1.74 o mesmo schema
+   * serve a gestao de tenants do admin da plataforma (`gravarDadosCadastrais`),
+   * cuja tela nao tem o campo. Com `default("b2b")`, salvar o cadastro por ali
+   * ou por qualquer chamada sem a chave viraria a empresa B2C em B2B calado.
+   * Quem le um valor ausente continua caindo em b2b, que nao tira nada de
+   * ninguem — ver `lib/empresas/modo-de-venda.ts`.
    *
    * ⚠️ Era vizinho de `lost_reasons_extra`, que saiu do produto no upstream
    * (o campo nao era lido por ninguem e prometia na tela um motivo de perda que
@@ -146,7 +150,7 @@ export const tenantSchema = z.object({
    * pede empresa/cargo/setor e se a IA ganha a capacidade de anotar a empresa
    * do cliente.
    */
-  modo_de_venda: z.enum(["b2b", "b2c"]).default("b2b"),
+  modo_de_venda: z.enum(["b2b", "b2c"]).optional(),
 });
 export type TenantInput = z.infer<typeof tenantSchema>;
 

@@ -15,6 +15,7 @@ import { audit } from "@/lib/audit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { escolheIa } from "@/lib/ai/trava-da-ia";
+import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
 import {
   agentPatchSchema,
   AGENT_CONFIG_DEFAULTS,
@@ -184,7 +185,7 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   // não escolhe IA eles saem do patch, venha o que vier no corpo (lib/ai/trava-da-ia.ts).
   // DEPOIS da recusa acima de propósito: com versão publicada, `model` no corpo
   // segue sendo 409 para todo mundo, como no upstream.
-  if (!escolheIa(authz.user)) {
+  if (!escolheIa(await quemPedeNaRota(authz))) {
     delete patch.model;
     if (patch.config) delete patch.config.voice_model;
   }

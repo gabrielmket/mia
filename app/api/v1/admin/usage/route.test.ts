@@ -63,13 +63,9 @@ function dubleAdmin(tabelas: Record<string, Linha[]>) {
       gte: () => consulta(tabela, predicados, ordem),
       // Fork MIA: a rota também lê a cotação do dólar e a fatura da OpenAI
       // (`platform_fx_rates`, `platform_openai_spend`), que filtram com `lt` e
-      // cortam com `limit`. Os dois aplicam de verdade, como o resto do dublê.
+      // cortam com `limit` (o `limit` do upstream, acima, já aplica o teto).
       lt: (coluna: string, valor: unknown) =>
         consulta(tabela, [...predicados, (l) => String(l[coluna]) < String(valor)], ordem),
-      limit: (n: number) => ({
-        then: (resolve: (v: { data: Linha[]; error: null }) => unknown) =>
-          resolve({ data: linhas().slice(0, n), error: null }),
-      }),
       // `order` é o que faz o caso "maior prioridade" medir a ROTA e não o
       // dublê: sem ele, o vencedor seria o primeiro do fixture, e a ordem que a
       // rota pede ao banco não estaria sendo exercida.

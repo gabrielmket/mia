@@ -37,14 +37,14 @@ async function pedirToken(tenant: string, corpo: URLSearchParams, agora: Date): 
     });
   } catch (erro) {
     const motivo = erro instanceof Error ? erro.message : String(erro);
-    return { ok: false, motivo: "resposta_invalida", detalhe: `sem resposta da Microsoft: ${motivo}`, erro: null };
+    return { ok: false, motivo: "resposta_invalida", detalhe: `sem resposta da Microsoft: ${motivo}`, status: null, erro: null };
   }
 
   let bruto: unknown;
   try {
     bruto = await resposta.json();
   } catch {
-    return { ok: false, motivo: "resposta_invalida", detalhe: `HTTP ${resposta.status} com corpo ilegível`, erro: null };
+    return { ok: false, motivo: "resposta_invalida", detalhe: `HTTP ${resposta.status} com corpo ilegível`, status: resposta.status, erro: null };
   }
 
   const corpoLido = typeof bruto === "object" && bruto !== null ? (bruto as Record<string, unknown>) : {};
@@ -53,7 +53,8 @@ async function pedirToken(tenant: string, corpo: URLSearchParams, agora: Date): 
   const leitura = lerRespostaDeToken(
     // A descrição do Entra carrega texto livre: só o erro e o código seguem.
     erro ? { error: codigo ? `${erro} ${codigo}` : erro } : bruto,
-    { agora },
+    // Upstream v1.77+ (#2393): o HTTP da resposta, para quem classifica a recusa.
+    { agora, status: resposta.status },
   );
   return {
     ...leitura,

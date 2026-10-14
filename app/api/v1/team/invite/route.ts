@@ -29,7 +29,6 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { inviteMemberSchema, validateRequest } from "@/lib/schemas";
 // FORK MIA (9020): o convite que o banco não gravou tem nome, motivo e registro.
-import { logger } from "@/lib/logger";
 import { ConviteNaoGravadoError, MOTIVO_CONVITE_NAO_GRAVADO } from "@/lib/team/convite-nao-gravado";
 
 export const dynamic = "force-dynamic";

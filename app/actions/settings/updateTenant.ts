@@ -95,27 +95,28 @@ export async function updateTenant(input: TenantInput): Promise<UpdateTenantResu
    * `{modo_de_venda}`, no molde de `fn_definir_marca_da_organizacao`
    * (migration 0157). Enquanto ela não existe, é este o menor risco possível.
    */
-  const { data: orgRow, error: readErr } = await supabase
-    .from("organizations")
-    .select("settings")
-    .eq("id", activeOrg.orgId)
-    .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
-
-  const settingsAtuais = (orgRow?.settings as Record<string, unknown> | null) ?? {};
   // Item C2. Decide se a entidade empresa aparece — aba, campo no cadastro e a
-  // capacidade que faz a IA perguntar de qual empresa o cliente e.
+  // capacidade que faz a IA perguntar de qual empresa o cliente e. Ausente no
+  // pedido = não muda (ver o schema).
   const modoEscolhido = parsed.data.modo_de_venda;
-  const modoMudou = modoEscolhido !== lerModoDeVenda(settingsAtuais);
-
-  // FORK MIA: os dados cadastrais já foram gravados por `gravarDadosCadastrais`
-  // (upstream); aqui só vai `settings`, e só quando o modo de venda mudou.
-  if (modoMudou) {
-    const { error } = await supabase
+  if (modoEscolhido !== undefined) {
+    const { data: orgRow, error: readErr } = await supabase
       .from("organizations")
-      .update({ settings: { ...settingsAtuais, modo_de_venda: modoEscolhido } })
-      .eq("id", activeOrg.orgId);
-    if (error) return { ok: false, error: error.message };
+      .select("settings")
+      .eq("id", activeOrg.orgId)
+      .maybeSingle();
+    if (readErr) return { ok: false, error: readErr.message };
+
+    const settingsAtuais = (orgRow?.settings as Record<string, unknown> | null) ?? {};
+    // FORK MIA: os dados cadastrais já foram gravados por `gravarDadosCadastrais`
+    // (upstream); aqui só vai `settings`, e só quando o modo de venda mudou.
+    if (modoEscolhido !== lerModoDeVenda(settingsAtuais)) {
+      const { error } = await supabase
+        .from("organizations")
+        .update({ settings: { ...settingsAtuais, modo_de_venda: modoEscolhido } })
+        .eq("id", activeOrg.orgId);
+      if (error) return { ok: false, error: error.message };
+    }
   }
 
   await audit({

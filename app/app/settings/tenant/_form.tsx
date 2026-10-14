@@ -263,7 +263,7 @@ export function TenantForm({ initial, onSave, onSaved }: Props) {
           <select
             id="modo_de_venda"
             className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
-            value={form.modo_de_venda}
+            value={form.modo_de_venda ?? "b2b"}
             onChange={(e) => set("modo_de_venda", e.target.value as TenantInput["modo_de_venda"])}
           >
             <option value="b2b">{t("Para outras empresas")}</option>

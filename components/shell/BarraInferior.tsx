@@ -108,6 +108,11 @@ export function BarraInferior() {
     user.is_platform_admin && !user.support,
     activeOrg?.role ?? null,
     activeOrg?.interface_settings,
+    // FORK MIA: a assinatura do fork tem dois eixos a mais no meio — o que a
+    // organização CONTRATOU e o modo de venda (ver `SidebarContent`). Sem eles,
+    // a barra do celular mostraria aba que o menu lateral esconde.
+    activeOrg?.modulos,
+    activeOrg?.modo_de_venda,
     activeOrg?.modulos_ligados ?? [],
     activeOrg?.capacidades_ligadas ?? [],
   )) {

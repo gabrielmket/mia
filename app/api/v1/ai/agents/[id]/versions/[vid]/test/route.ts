@@ -31,7 +31,7 @@ import { type NextRequest } from "next/server";
 import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { loadAuthUser } from "@/lib/auth/server";
+import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
 import { podeVerCusto } from "@/lib/ai/custo-e-da-plataforma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { testRunSchema } from "@/lib/ai/agents/validation";
@@ -258,7 +258,6 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
   // (lib/ai/custo-e-da-plataforma.ts): o painel de teste mostra "—" sem o valor.
   // FORK MIA: desde a v1.74 a rota aceita token (resolveAuthDual), que não
   // carrega o usuário. Pelo token o custo nunca sai; pela sessão, a mesma régua.
-  const usuarioDaSessao = authz.via === "session" ? await loadAuthUser() : null;
-  if (!usuarioDaSessao || !podeVerCusto(usuarioDaSessao)) delete resultPayload.cost_cents;
+  if (!podeVerCusto(await quemPedeNaRota(authz))) delete resultPayload.cost_cents;
   return ok(resultPayload, { requestId });
 }

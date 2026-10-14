@@ -155,7 +155,7 @@ async function operadorDeclarado(): Promise<Operador | null> {
   if (!razaoSocial) return null;
 
   return {
-    sistema: branding().name,
+    sistema: await sistemaDaInstalacao(),
     // No modo gerenciado o nome comercial é o próprio sistema: a plataforma não
     // tem "nome fantasia" separado da marca que ela já pinta em toda tela.
     nome: null,

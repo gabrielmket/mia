@@ -16,6 +16,7 @@ import { versionPatchSchema } from "@/lib/ai/agents/validation";
 import { codigoDoEscopo, mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { MENSAGEM_IA_DA_PLATAFORMA, semCamposDaIa } from "@/lib/ai/trava-da-ia";
+import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
 
 export const dynamic = "force-dynamic";
 
@@ -98,7 +99,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
   // FORK MIA: provedor, modelo, chave e modelo do Operador são da plataforma.
   // Para quem não escolhe IA eles saem do patch (lib/ai/trava-da-ia.ts); um
   // pedido que SÓ trazia isso recebe o motivo, e não "corpo vazio".
-  const patch = semCamposDaIa(authUser, parsed.data);
+  const patch = semCamposDaIa(await quemPedeNaRota(authz), parsed.data);
   if (Object.keys(patch).length === 0 && Object.keys(parsed.data).length > 0) {
     return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403, { requestId });
   }

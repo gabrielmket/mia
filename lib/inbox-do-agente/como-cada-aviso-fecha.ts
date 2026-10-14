@@ -425,6 +425,29 @@ export const COMO_FECHA = {
       "respondeu. Cada uma pede que alguém da equipe a abra e decida; não há estado no banco " +
       "que diga que a revisão foi feita.",
   },
+  // Upstream 1.76-1.79 (fusão da .76): os três kinds novos da Central.
+  // A cobrança do revendedor (0601): o pagamento fecha os avisos da régua
+  // (`lib/cobranca/sincronizar.ts`) e o aviso novo fecha o anterior
+  // (`fn_cobranca_registrar_aviso`). Sem rede de tempo: enquanto a dívida
+  // existe, o aviso é verdade.
+  cobranca: {
+    modo: "condicao",
+    quando: "a empresa pagou, ou um aviso mais novo da régua tomou o lugar deste",
+    tetoEmDias: null,
+  },
+  // A pausa da conexão (0589): retomar, arquivar ou excluir a conexão fecha o
+  // aviso, pela mesma porta que pausou.
+  canal_pausado: {
+    modo: "condicao",
+    quando: "a conexão foi retomada, arquivada ou excluída",
+    tetoEmDias: null,
+  },
+  email_de_login_trocado: {
+    modo: "decisao",
+    porque:
+      "Pede que alguém da empresa confirme que reconhece a troca do e-mail de acesso. Só a " +
+      "pessoa sabe; fechar sozinho apagaria a única chance de perceber uma troca indevida.",
+  },
   other: {
     modo: "decisao",
     porque:

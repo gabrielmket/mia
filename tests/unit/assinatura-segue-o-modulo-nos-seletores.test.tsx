@@ -42,6 +42,8 @@ async function opcoesDoEditor(provedoresOferecidos?: readonly string[]) {
         credentials={[] as never}
         channelSessions={[] as never}
         provedoresOferecidos={provedoresOferecidos}
+        // FORK MIA: o seletor de provedor só aparece para quem escolhe a IA.
+        podeEscolherIa
       />
     </QueryClientProvider>,
   );
@@ -57,6 +59,9 @@ function opcoesDoOnboarding() {
   const { container } = render(
     <InteligenciaDele
       inicial={{ origem: "nenhuma", provedor: "anthropic", rotulo: "Anthropic (Claude)", final: null }}
+      // FORK MIA: o seletor só existe para quem escolhe a IA (a plataforma);
+      // para o admin do cliente o cartão nem aparece (`podeConfigurarChaveDeIa`).
+      podeConfigurar
     />,
   );
   const select = container.querySelector("#provedor_da_ia") as HTMLSelectElement;

@@ -106,6 +106,8 @@ const PADRAO: PacingKnobs = {
   atrasoMinimoMs: 1_200,
   atrasoMaximoMs: 7_500,
   allowSunday: true,
+  // Os dias da prospecção por conexão (0642, upstream v1.80): o padrão é a semana inteira.
+  prospeccaoDias: [0, 1, 2, 3, 4, 5, 6],
   timezone: "America/Sao_Paulo",
   warmupDailyCaps: [{ minAgeDays: 0, cap: null }],
 };

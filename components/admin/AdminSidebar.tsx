@@ -26,7 +26,6 @@ import {
   Lock,
   PuzzlePiece,
   Stack,
-  Receipt,
 } from "@/lib/ui/icons";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";

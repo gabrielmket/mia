@@ -232,6 +232,7 @@ describe("modelo do follow-up (#2528)", () => {
       attempts: 1,
       max_attempts: 3,
       last_error: null,
+      deferred_reason: null, // FORK MIA: coluna da 0251 do fork
       locked_by: "w1",
       locked_at: new Date(),
       created_at: new Date(),

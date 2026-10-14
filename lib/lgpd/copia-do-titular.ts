@@ -123,6 +123,13 @@ export const O_QUE_FICA = {
   lead_state: "o próximo passo e a qualificação dele, por máquina (LGPD art. 20)",
   b2b: "a pessoa para quem a ficha dele aponta, os vínculos com empresas e as linhas de planilha sobre ele",
   reply_drafts: "as respostas sugeridas a ele e a revisão (o PDF já entrega)",
+  // FORK MIA (fusão da .76): as seções que o fork acrescenta ao payload.
+  ai_runs: "os atendimentos da IA na conversa com ele: estado, quando e quantos passos (o rastro interno não entra no payload)",
+  broadcasts_recebidos: "as mensagens de disparo em massa que chegaram a ele, e em que estado ficaram",
+  obrigacoes:
+    "os documentos e as obrigações dele e dos negócios dele, com o histórico de cada ciclo e as propostas feitas a partir de arquivos que ele mandou (o arquivo vai como nome e formato)",
+  cliques_de_anuncio:
+    "por qual anúncio ele chegou, com a query string crua da página (pode ter o e-mail e o nome dele: é o que a anonimização apaga)",
 } as const;
 
 /** Toda seção do payload decidida: a que falta não compila. */
@@ -177,6 +184,13 @@ export const CAMPOS_DA_EQUIPE: Readonly<Record<string, Readonly<Record<string, s
     tentativas: "contagem de reenvio do aviso à equipe",
   },
   prospecting_candidates: { error: "mensagem de erro interna da abordagem" },
+  // FORK MIA (fusão da .76).
+  ai_runs: { abort_reason: "código interno do motor para o atendimento interrompido" },
+  broadcasts_recebidos: { erro: "mensagem de erro interna do envio" },
+  obrigacoes: {
+    observacao:
+      "anotação da equipe sobre o item, escrita PARA a equipe (a mesma régua da nota interna no Brasil)",
+  },
   "b2b.linhas_importadas": { error: "erro interno da importação da planilha" },
 };
 
