@@ -410,7 +410,7 @@ describe("o convite de equipe ENTRA na demonstração (9020)", () => {
     expect(aceitar(REAL)).toBe("agent,true,true");
   });
 
-  it("⭐ SÓ o gatilho do convite saiu: os outros onze da 9010 e o da 9016 estão de pé", () => {
+  it("⭐ SÓ o gatilho do convite saiu: os outros onze da 9010 e o da 9016 estão de pé (e o da 9021 chegou)", () => {
     const gatilhos = medir(`
       select 'M:' || coalesce(string_agg(c.relname || '.' || t.tgname, ','), '')
         from pg_trigger t
@@ -424,6 +424,8 @@ describe("o convite de equipe ENTRA na demonstração (9020)", () => {
         "automation_rules.trg_mia_demonstracao_sem_regra_de_saida",
         "broadcasts.trg_mia_demonstracao_sem_broadcast",
         "calendar_connections.trg_mia_demonstracao_sem_agenda_externa",
+        // 9021: a cobrança do revendedor (upstream 0583) não nasce na demonstração.
+        "cobranca_assinaturas.trg_mia_demonstracao_sem_cobranca",
         "campaigns.trg_mia_demonstracao_sem_campanha",
         "channel_sessions.trg_mia_demonstracao_sem_numero",
         "config_aviso_de_caso.trg_mia_demonstracao_sem_aviso_de_caso",
@@ -498,6 +500,86 @@ describe("o convite de equipe ENTRA na demonstração (9020)", () => {
     );
     expect(r.split("|")[0], r).toBe("42501");
     expect(r).toContain("organizacao_de_demonstracao");
+  });
+});
+
+describe("a trava alcança o ai_decide e a cobrança do revendedor (9021)", () => {
+  /**
+   * A ação `ai_decide` (upstream v1.74, #1970) guarda as ações-alvo em
+   * `config.opcoes[].acao`: um webhook ou aviso no grupo pode morar ali dentro.
+   * E a cobrança do revendedor (0583) cria `cobranca_assinaturas`: a empresa de
+   * demonstração não tem plano, assinatura nem teste grátis.
+   */
+  const PASTA_DAS_MIGRATIONS = join(process.cwd(), "supabase", "migrations-mia");
+  const MIGRATION_9020 = readFileSync(
+    join(PASTA_DAS_MIGRATIONS, "20261007120000_9020_convite_de_equipe_funciona_na_demonstracao.sql"),
+    "utf8",
+  );
+  const MIGRATION_9021 = readFileSync(
+    join(PASTA_DAS_MIGRATIONS, "20261014120000_9021_demonstracao_alcanca_o_ai_decide_e_a_cobranca.sql"),
+    "utf8",
+  );
+  const PLANO = "90219021-5555-4000-8000-00000000000a";
+
+  const regraComDecisao = (org: string, alvo: string) =>
+    `insert into public.automation_rules (organization_id, name, trigger_event, actions, is_active)
+       values ('${org}', 'Regra 9021 ${alvo}', 'lead.created',
+               '[{"type":"ai_decide","config":{"pergunta":"Qual?","opcoes":[
+                  {"id":"a","rotulo":"Avisar","acao":{"type":"${alvo}","config":{}}},
+                  {"id":"b","rotulo":"Tarefa","acao":{"type":"create_task","config":{}}}]}}]'::jsonb, true)`;
+
+  const plano = `insert into public.cobranca_planos (id, nome, preco_cents, intervalo)
+       values ('${PLANO}', 'Plano 9021', 990, 'mes') on conflict (id) do nothing`;
+  const assinatura = (org: string) =>
+    `insert into public.cobranca_assinaturas (organization_id, plano_id, estado, trial_ate)
+       values ('${org}', '${PLANO}', 'trial', now() + interval '14 days')`;
+
+  it("⭐ regra ativa com webhook ou aviso no grupo DENTRO de um ai_decide é recusada", () => {
+    expect(tentar(regraComDecisao(DEMO, "call_webhook"))).toBe("42501");
+    expect(tentar(regraComDecisao(DEMO, "notify_group"))).toBe("42501");
+  });
+
+  it("o ai_decide só com ações internas fica ativo; controle: a empresa de verdade liga o aninhado", () => {
+    expect(tentar(regraComDecisao(DEMO, "assign_owner"))).toBe("passou");
+    expect(tentar(regraComDecisao(REAL, "call_webhook"))).toBe("passou");
+  });
+
+  it("⭐ assinatura de cobrança na demonstração é recusada; controle: na empresa de verdade, entra", () => {
+    const r = tentarComMensagem(assinatura(DEMO), `${plano};`);
+    expect(r.split("|")[0], r).toBe("42501");
+    expect(r).toContain("assinatura de cobranca");
+    expect(tentar(assinatura(REAL), `${plano};`)).toBe("passou");
+  });
+
+  it("⭐ CONTROLE NEGATIVO: no banco da .75 (função da 9020, sem o gatilho), as duas portas passavam; a 9021 as fecha", () => {
+    const provar = (chave: string, dml: string) => `
+      do $
+      begin
+        begin
+          ${dml};
+          perform set_config('inv.${chave}', 'passou', true);
+        exception when others then
+          perform set_config('inv.${chave}', sqlstate, true);
+        end;
+      end $;`;
+    const r = medir(`
+      ${plano};
+      drop trigger if exists trg_mia_demonstracao_sem_cobranca on public.cobranca_assinaturas;
+      ${MIGRATION_9020}
+      ${provar("regra_antes", regraComDecisao(DEMO, "call_webhook"))}
+      ${provar("cobranca_antes", assinatura(DEMO))}
+      delete from public.cobranca_assinaturas where organization_id = '${DEMO}';
+      -- A 9021, do arquivo, duas vezes: ela é idempotente.
+      ${MIGRATION_9021}
+      ${MIGRATION_9021}
+      ${provar("regra_depois", regraComDecisao(DEMO, "call_webhook"))}
+      ${provar("cobranca_depois", assinatura(DEMO))}
+      ${provar("real", assinatura(REAL))}
+      select 'M:' || current_setting('inv.regra_antes') || ',' || current_setting('inv.cobranca_antes')
+                  || ',' || current_setting('inv.regra_depois') || ',' || current_setting('inv.cobranca_depois')
+                  || ',' || current_setting('inv.real');
+    `);
+    expect(r).toBe("passou,passou,42501,42501,passou");
   });
 });
 
