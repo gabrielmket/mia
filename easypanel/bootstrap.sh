@@ -158,6 +158,33 @@ on conflict (name) do update set value = excluded.value, updated_at = now();
 SQL
 log "chave de cifra ativa no banco"
 
+# ── 3b. Chave do CPF (upstream v1.78, migration 0597, #2522) ────────────────
+# `encrypt_cpf`/`decrypt_cpf` leem `private.app_secrets` na linha `cpf_key`
+# (mínimo de 32 caracteres). Sem a linha, todo contato COM CPF é salvo SEM o
+# CPF (lib/contacts/cpf.ts degrada em silêncio) e a busca por CPF não acha
+# ninguém. O kit do upstream semeia no update.sh a partir de
+# CPF_ENCRYPTION_KEY, que o app já exige (lib/env.ts).
+#
+# Diferença DELIBERADA do kit: aqui é `on conflict do nothing`. O kit regrava
+# a linha a cada atualização; se a variável do Environment mudasse depois de
+# haver CPF cifrado, o que foi gravado não abriria mais. A chave do banco, uma
+# vez semeada, só muda por decisão de alguém (com re-cifra), nunca num deploy.
+if [ -n "${CPF_ENCRYPTION_KEY:-}" ] && [ "${#CPF_ENCRYPTION_KEY}" -ge 32 ]; then
+  cpf_estado="$(psql "$DB" -v ON_ERROR_STOP=1 -tA -q -v chave="$CPF_ENCRYPTION_KEY" <<'SQL'
+insert into private.app_secrets (name, value) values ('cpf_key', :'chave')
+on conflict (name) do nothing;
+select case when value = :'chave' then 'igual' else 'outra' end
+  from private.app_secrets where name = 'cpf_key';
+SQL
+)" || falha "não consegui gravar a chave do CPF em private.app_secrets"
+  case "$cpf_estado" in
+    *outra*) log "AVISO: a chave do CPF no banco é outra que a do Environment; mantive a do banco (o CPF já cifrado continua legível)" ;;
+    *) log "chave do CPF ativa no banco" ;;
+  esac
+else
+  log "AVISO: CPF_ENCRYPTION_KEY ausente ou com menos de 32 caracteres; contato com CPF será salvo sem o CPF"
+fi
+
 # ── 4. Dono ─────────────────────────────────────────────────────────────────
 if [ -z "${OWNER_EMAIL:-}" ] || [ -z "${OWNER_PASSWORD:-}" ]; then
   log "OWNER_EMAIL/OWNER_PASSWORD vazios: pulei a criação do dono"
