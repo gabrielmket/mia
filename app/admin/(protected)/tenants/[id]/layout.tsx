@@ -45,7 +45,10 @@ const TABS: TabItem[] = [
   { label: "Agente", href: "/agent", disabled: false },
   // Dinheiro do cliente: crédito, preço acordado e extrato. Fica aqui, e não
   // no painel dele, porque recarregar e precificar são decisões de negócio.
-  { label: "Carteira", href: "/carteira", disabled: false },
+  // FORK MIA (fusão da .76): o texto diz "Créditos", o mesmo nome que o
+  // cliente vê em /app/settings/carteira. "Carteira" passou a ser, no upstream
+  // (0622), o vendedor dono do cliente; a rota e a pasta seguem `carteira`.
+  { label: "Créditos", href: "/carteira", disabled: false },
   // O que este cliente comprou. Vizinha da Carteira de propósito: liberar um
   // módulo e acertar o preço dele são a mesma conversa.
   { label: "Módulos", href: "/modulos", disabled: false },
