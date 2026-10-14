@@ -621,6 +621,8 @@ describe("plataforma_configurar_canal · FERRAMENTA NOVA (upstream 1.74, 1.79 e 
 
   it("dias da prospecção: grava em `channel_knobs` pela régua da tela; repetir não escreve; a leitura devolve", async () => {
     const c = await preparar({ comNumero: true });
+    // Número oficial: não tem a opção de guardar o histórico, e a leitura devolve `null`.
+    c.tabela("channel_sessions")[0]!.provider = "meta_cloud";
     const r = await ok(c, "plataforma_configurar_canal", { canal: "Recepção", dias_da_prospeccao: [5, 1, 2, 3, 4, 1] });
     expect(r.dados).toMatchObject({ desfecho: "atualizou", mudancas: ["dias da prospecção"], dias_da_prospeccao: [1, 2, 3, 4, 5] });
     expect(c.tabela("channel_knobs")).toEqual([
@@ -645,9 +647,12 @@ describe("plataforma_configurar_canal · FERRAMENTA NOVA (upstream 1.74, 1.79 e 
 
   it("guardar o histórico: só número por QR; ligar pela função da tela, que aplica na sessão; desligar pede confirmação escrita", async () => {
     const c = await preparar({ comNumero: true });
+    // A opção é do número por QR Code: quem responde é `conexaoGuardaHistorico` (lib/channels).
+    c.tabela("channel_sessions")[0]!.provider = "meta_cloud";
     const semQr = await recusa(c, "plataforma_configurar_canal", { canal: "Recepção", guardar_historico: true });
     expect(semQr).toContain("não é um número conectado por QR Code");
 
+    c.tabela("channel_sessions")[0]!.provider = "waha";
     c.tabela("channel_sessions")[0]!.waha_session_name = "sessao-ficticia";
     c.tabela("channel_sessions")[0]!.metadata = { ai_gate: true };
     const liga = await ok(c, "plataforma_configurar_canal", { canal: "Recepção", guardar_historico: true });
@@ -667,6 +672,7 @@ describe("plataforma_configurar_canal · FERRAMENTA NOVA (upstream 1.74, 1.79 e 
 
   it("⭐ a ferramenta nunca escreve credencial nem número: o que ela grava em `channel_sessions` é só a chave da opção", async () => {
     const c = await preparar({ comNumero: true });
+    c.tabela("channel_sessions")[0]!.provider = "waha";
     c.tabela("channel_sessions")[0]!.waha_session_name = "sessao-ficticia";
     await ok(c, "plataforma_configurar_canal", { canal: "Recepção", guardar_historico: true, dias_da_prospeccao: [1, 2] });
     const escritasNaConexao = c.banco.escritas.filter((e) => e.tabela === "channel_sessions");

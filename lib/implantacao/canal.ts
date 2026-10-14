@@ -47,6 +47,7 @@ import { instanteDe } from "@/lib/agenda/fuso";
 import { effectiveKnobs, pacingKnobsUpdateSchema, windowIsValid, type ChannelKnobsRow } from "@/lib/ai/pacing-knobs";
 import { lerGuardarHistorico, salvarAcervoDoCanal } from "@/lib/channels/acervo-do-historico";
 import { nomeDoCanal } from "@/lib/channels/estado";
+import { conexaoGuardaHistorico } from "@/lib/channels/conexao-guarda-historico";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 
 import { chaveDoNome, type Desfecho, type Implantacao } from "./base";
@@ -57,7 +58,7 @@ export const TODOS_OS_DIAS = [0, 1, 2, 3, 4, 5, 6] as const;
 /** Uma janela de manutenção não vira plano: acima de 24h é outra coisa (a régua da rota). */
 const DURACAO_MAXIMA_MS = 24 * 60 * 60 * 1000;
 
-const COLUNAS_DO_CANAL = "id, display_name, phone_number, status, provider, waha_session_name, metadata, archived_at";
+const COLUNAS_DO_CANAL = "id, display_name, phone_number, status, provider, metadata, archived_at";
 
 const COLUNAS_DOS_AJUSTES =
   "channel_session_id, throttle_ms, jitter_max_ms, window_start_hour, window_end_hour, resposta_start_hour, resposta_end_hour, allow_sunday, prospeccao_dias, timezone, warmup_daily_caps, number_activated_at, atraso_notar_ms, ms_por_caractere, atraso_minimo_ms, atraso_maximo_ms";
@@ -68,7 +69,6 @@ export interface CanalDaEmpresa {
   phone_number: string | null;
   status: string | null;
   provider: string | null;
-  waha_session_name: string | null;
   metadata: Record<string, unknown> | null;
 }
 
@@ -297,7 +297,7 @@ export async function configurarCanal(c: Implantacao, fusoDaEmpresa: string, ped
 
   // ── guardar o histórico: o caminho de `PATCH .../acervo` ─────────────────
   if (pedido.guardar_historico !== undefined && canal) {
-    if (!canal.waha_session_name) {
+    if (!conexaoGuardaHistorico(canal.provider)) {
       throw new Recusa(
         `A conexão «${nomeDoCanal(canal)}» não é um número conectado por QR Code, e guardar o histórico só existe para esse tipo de conexão (é o transporte do QR que guarda). ` +
           "O número oficial e as redes sociais não têm esta opção.",

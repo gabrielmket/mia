@@ -20,6 +20,7 @@ import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
 import { estadoDoAgente } from "@/lib/ai/agents/no-ar";
 import { DEFAULT_VISIBILITY_MODE } from "@/lib/auth/types";
 import { lerGuardarHistorico } from "@/lib/channels/acervo-do-historico";
+import { conexaoGuardaHistorico } from "@/lib/channels/conexao-guarda-historico";
 import { nomeDoCanal } from "@/lib/channels/estado";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 import { listSelectableChannels } from "@/lib/channels/selectable";
@@ -751,7 +752,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           pausado: (s.metadata as { disabled?: unknown } | null)?.disabled === true,
           // Os ajustes do upstream 1.74 a 1.80 (plataforma_configurar_canal).
           dias_da_prospeccao: diasDaProspeccaoDe(ajustes.get(s.id)),
-          guardar_historico: s.waha_session_name ? lerGuardarHistorico(s.metadata) : null,
+          guardar_historico: conexaoGuardaHistorico(s.provider) ? lerGuardarHistorico(s.metadata) : null,
           pausas_agendadas: pausas.filter((a) => a.todos_os_numeros || a.numero_id === s.id).map((a) => ({ id: a.id, inicio: a.inicio, fim: a.fim, situacao: a.situacao, todos_os_numeros: a.todos_os_numeros })),
         }));
       }
