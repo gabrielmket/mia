@@ -54,6 +54,12 @@ function dubleAdmin(tabelas: Record<string, Linha[]>) {
         consulta(tabela, [...predicados, (l) => l[coluna] !== valor], ordem),
       in: (coluna: string, valores: unknown[]) =>
         consulta(tabela, [...predicados, (l) => valores.includes(l[coluna])], ordem),
+      limit: (n: number) => {
+        // Teto aplicado de verdade, como o PostgREST: sem ele, um dublê
+        // sem limite faria qualquer paginação parecer correta.
+        let vistos = 0;
+        return consulta(tabela, [...predicados, () => vistos++ < n], ordem);
+      },
       gte: () => consulta(tabela, predicados, ordem),
       // Fork MIA: a rota também lê a cotação do dólar e a fatura da OpenAI
       // (`platform_fx_rates`, `platform_openai_spend`), que filtram com `lt` e

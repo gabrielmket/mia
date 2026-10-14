@@ -166,7 +166,13 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx): Promise<Response>
     // A CONTAGEM VAI EM `details`, não só dentro da frase: a tela mostra "este
     // funil tem N negócios" sem precisar extrair o número da mensagem com regex —
     // segunda régua que quebraria na primeira vez que alguém melhorasse o texto.
-    return fail("unprocessable_entity", veredito.erro, 422, {
+    //
+    // `t()` + `replace("{nome}")` É O QUE DÁ IDIOMA À RECUSA NOVA DA #2559:
+    // `validarArquivamento` devolve o `{nome}` por preencher justamente para a
+    // frase casar a chave do dicionário. As outras recusas já vêm com o nome
+    // colado, não são chave de nada e caem no fallback do `traduzir` — que
+    // devolve o texto como está, sem mudar uma letra.
+    return fail("unprocessable_entity", t(veredito.erro).replace("{nome}", alvo.name), 422, {
       requestId,
       details: {
         negocios: deps.negocios,

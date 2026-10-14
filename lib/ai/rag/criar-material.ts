@@ -213,7 +213,7 @@ export async function criarMaterial(deps: DepsDoMaterial, input: EntradaDoMateri
     if (itemsErr) {
       // Fonte sem item nenhum é fonte vazia: melhor desfazer do que deixar uma
       // linha que promete conteúdo e nunca vai indexar nada.
-      await admin.from("ai_knowledge_sources").delete().eq("id", ksId);
+      await admin.from("ai_knowledge_sources").delete().eq("organization_id", organizationId).eq("id", ksId);
       console.error("[ai-knowledge-sources] insert dos itens falhou:", itemsErr.message);
       return recusa(500, "internal_error", "Erro ao gravar o conteúdo do material.");
     }

@@ -64,6 +64,10 @@ export async function gravarConfiguracaoDoFunil(
   if (patch.won_reason_required !== undefined) {
     nextSettings.won_reason_required = patch.won_reason_required;
   }
+  // Upstream v1.74+ (#1477): a comanda do ganho é opt-in por funil.
+  if (patch.comanda_no_ganho !== undefined) {
+    nextSettings.comanda_no_ganho = patch.comanda_no_ganho;
+  }
   if (patch.reabertura !== undefined) nextSettings.reabertura = patch.reabertura;
   if (patch.reabertura_campos !== undefined) {
     nextSettings.reabertura_campos = patch.reabertura_campos;

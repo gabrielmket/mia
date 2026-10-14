@@ -30,6 +30,7 @@ import type { Actor } from "@/lib/api/handlers/types";
 import { audit } from "@/lib/audit";
 import {
   ETAPAS_INICIAIS,
+  nomeOcupadoPorAtivo,
   posicaoEntre,
   slugDeFunil,
   updatesDeMarcaExclusiva,
@@ -337,7 +338,23 @@ export async function atualizarFunil(
   // arquivado — pedir de novo em quem já está fora é pedido já atendido, e uma
   // escrita vazia viraria linha de auditoria sem fato nenhum por trás.
   const tiraDoArquivo = pedido.is_archived === false && alvo.is_archived;
-  if (tiraDoArquivo) patchDoAlvo.is_archived = false;
+  if (tiraDoArquivo) {
+    patchDoAlvo.is_archived = false;
+
+    // Upstream v1.74+ (#2559) — TIRAR DO ARQUIVO TAMBÉM CONFERE O NOME. O pedido
+    // misto (desarquivar + renomear) é recusado lá em cima de propósito, então
+    // este é o ÚNICO ponto onde a volta do funil poderia colidir: se alguém criou
+    // outro funil ATIVO com o mesmo nome enquanto ele estava arquivado, o update
+    // simples devolveria dois funis iguais na lista. Recusa com 409 e o conselho.
+    const ocupado = nomeOcupadoPorAtivo(funis, pipelineId);
+    if (ocupado) {
+      throw recusa(
+        409,
+        "state_conflict",
+        `Já existe um funil ativo chamado «${ocupado}». Renomeie um dos dois antes de tirar este funil do arquivo.`,
+      );
+    }
+  }
 
   if (pedido.depois_de !== undefined) {
     // Só os ativos compõem a régua: arquivado não ocupa lugar na lista.

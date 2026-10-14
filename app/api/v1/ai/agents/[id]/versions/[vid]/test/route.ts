@@ -28,9 +28,10 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { requireRole } from "@/lib/auth/require-role";
+import { loadAuthUser } from "@/lib/auth/server";
 import { podeVerCusto } from "@/lib/ai/custo-e-da-plataforma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { testRunSchema } from "@/lib/ai/agents/validation";
@@ -40,6 +41,7 @@ import { requestTurnDeps } from "@/lib/agent-engine/agent/request-deps";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { logger } from "@/lib/logger";
+import { LlmConteudoBloqueadoError } from "@/lib/agent-engine/edge/llm/conteudo-bloqueado";
 
 export const dynamic = "force-dynamic";
 
@@ -90,10 +92,20 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     return fail("invalid_request", "ids inválidos.", 400, { requestId });
   }
 
-  const authz = await requireRole("admin", { requestId, resource: "ai_agents" });
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "ai_agents",
+    role: "admin",
+    scope: "config:write",
+    tokenRole: "admin",
+  });
   if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const { user: authUser, org: activeOrg } = authz;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? "pt-BR");
+  const { organizationId, actor } = authz;
+
+  const teto = await tetoDeEscritaDoToken(authz, "ai_agents_test", requestId);
+  if (teto) return teto;
+  const authUserId = actor.type === "user" ? actor.id : null;
 
   let raw: unknown;
   try {
@@ -124,7 +136,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
       "id, channel_session_id",
     )
     .eq("id", vid)
-    .eq("organization_id", activeOrg.orgId)
+    .eq("organization_id", organizationId)
     .eq("agent_id", id)
     .maybeSingle();
 
@@ -135,7 +147,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
   const { data: runRow, error: runErr } = await admin
     .from("ai_agent_runs")
     .insert({
-      organization_id: activeOrg.orgId,
+      organization_id: organizationId,
       agent_id: id,
       agent_version_id: vid,
       conversation_id: null,
@@ -158,7 +170,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
 
   try {
     const result = await testAgentVersion(getRequestPool(), requestTurnDeps(), {
-      organizationId: activeOrg.orgId,
+      organizationId: organizationId,
       agentId: id,
       versionId: vid,
       runId: runRow.id,
@@ -167,15 +179,19 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
       channelId: version.channel_session_id,
     });
     const finalText = result.candidates.map((c) => c.body).join("\n\n");
+    // #2490 — mídia pendente é teste REPROVADO, mesmo com candidato na mão: o
+    // `send_message` que falhou a foto devolveu erro ao modelo, e aprovar a tela
+    // com aquela resposta seria exatamente o "passou sem preparar" da issue.
+    const midiaPendente = result.midia.some((m) => m.falha !== undefined);
     resultPayload = {
       run_id: runRow.id,
-      status: result.candidates.length ? "ok" : "blocked",
+      status: result.candidates.length && !midiaPendente ? "ok" : "blocked",
       latency_ms: Date.now() - startedAt.getTime(),
       final_text: finalText,
       tool_calls: result.proposals,
       ...result,
       stub: process.env.INTERNAL_AGENT_RUN_STUB === "true",
-      guardrails: avaliarRespostaDeTeste(finalText),
+      guardrails: avaliarRespostaDeTeste(finalText, result.midia),
     };
     // ⚠️ `completed`, não `"ok"`. O CHECK da coluna aceita
     // pending|running|completed|failed|aborted|handoff — `"ok"` é o vocabulário
@@ -184,7 +200,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     // `await` não olhava `error`, ao contrário do INSERT logo acima): a linha
     // nascia `running` e morria `running`, em toda instalação, para sempre.
     // Medido numa VPS v1.20.0: 16 execuções, 16 linhas em `running`.
-    await atualizarRun(admin, activeOrg.orgId, runRow.id, requestId, {
+    await atualizarRun(admin, organizationId, runRow.id, requestId, {
       status: "completed",
       completed_at: new Date().toISOString(),
       latency_ms: Date.now() - startedAt.getTime(),
@@ -207,10 +223,10 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
       run_id: runRow.id,
       agent_id: id,
       version_id: vid,
-      organization_id: activeOrg.orgId,
+      organization_id: organizationId,
       error: mensagem,
     });
-    await atualizarRun(admin, activeOrg.orgId, runRow.id, requestId, {
+    await atualizarRun(admin, organizationId, runRow.id, requestId, {
       status: "failed",
       completed_at: new Date().toISOString(),
       latency_ms: Date.now() - startedAt.getTime(),
@@ -221,7 +237,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     });
     return fail(
       "preview_failed",
-      t("Não foi possível executar o teste. Confira modelo, credencial e materiais do agente."),
+      err instanceof LlmConteudoBloqueadoError ? err.message : t("Não foi possível executar o teste. Confira modelo, credencial e materiais do agente."),
       422,
       { requestId },
     );
@@ -229,8 +245,9 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
 
   void audit({
     action: "ai_agent.tested",
-    actorUserId: authUser.id,
-    organizationId: activeOrg.orgId,
+    actorUserId: authUserId,
+    actorApiTokenId: authz.apiTokenId ?? null,
+    organizationId: organizationId,
     resourceType: "ai_agent_version",
     resourceId: vid,
     requestId,
@@ -239,6 +256,9 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
 
   // O ensaio também custa dinheiro, e dinheiro é da plataforma nesta instalação
   // (lib/ai/custo-e-da-plataforma.ts): o painel de teste mostra "—" sem o valor.
-  if (!podeVerCusto(authz.user)) delete resultPayload.cost_cents;
+  // FORK MIA: desde a v1.74 a rota aceita token (resolveAuthDual), que não
+  // carrega o usuário. Pelo token o custo nunca sai; pela sessão, a mesma régua.
+  const usuarioDaSessao = authz.via === "session" ? await loadAuthUser() : null;
+  if (!usuarioDaSessao || !podeVerCusto(usuarioDaSessao)) delete resultPayload.cost_cents;
   return ok(resultPayload, { requestId });
 }

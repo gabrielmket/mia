@@ -1,6 +1,13 @@
 /**
  * FORK MIA — a etiqueta posta pela FERRAMENTA dispara a automação, igual à da tela.
  *
+ * ⚠️ APOSENTADA NA FUSÃO DO UPSTREAM v1.80 (.76): o upstream consertou o mesmo
+ * defeito em `lib/mcp/tools/governance.ts` (commit 95f42da4e, "crm_manage_tags
+ * emite tag_added como a tela"), com o MESMO evento e o MESMO payload. A
+ * ferramenta passou a usar a emissão dele; chamar as duas emitiria o evento duas
+ * vezes e rodaria cada regra em dobro. Este arquivo fica até a decisão de
+ * apagá-lo (relatada na fusão) — nada mais o chama.
+ *
  * ─── O defeito ───────────────────────────────────────────────────────────────
  *
  * `crm_manage_tags` gravava a etiqueta e só auditava (`*.tags_changed`). Quem

@@ -19,6 +19,7 @@ import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/arch
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { configDoRoteador } from "@/lib/ai/trava-da-ia";
+import { NEW_ROUTER_CONTEXT_MESSAGES, MAX_CLASSIFIER_CONTEXT_MESSAGES } from "@/lib/ai/classifier-context";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,11 @@ const createRouterSchema = z.object({
   name: z.string().min(1).max(120),
   channel_session_id: z.string().uuid(),
   fallback_agent_id: z.string().uuid().nullable().optional(),
-  config: z.record(z.string(), z.unknown()).optional(),
+  config: z.record(z.string(), z.unknown()).optional().refine((c) =>
+    c?.context_message_count === undefined ||
+    (typeof c.context_message_count === "number" && Number.isInteger(c.context_message_count) &&
+      c.context_message_count >= 0 && c.context_message_count <= MAX_CLASSIFIER_CONTEXT_MESSAGES),
+    "context_message_count deve ser inteiro entre 0 e 16"),
 });
 
 // ---------------------------------------------------------------------------
@@ -139,7 +144,9 @@ export async function POST(req: NextRequest): Promise<Response> {
       name: input.name,
       channel_session_id: input.channel_session_id,
       fallback_agent_id: input.fallback_agent_id ?? null,
-      ...(config !== undefined ? { config } : {}),
+      // FORK MIA: `config` já passou pela trava da IA (configDoRoteador); o upstream
+      // acrescenta a janela de contexto do classificador.
+      config: { ...config, context_message_count: config?.context_message_count ?? NEW_ROUTER_CONTEXT_MESSAGES },
       created_by: authUser.id,
     })
     .select("id")

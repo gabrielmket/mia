@@ -6,6 +6,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publishFirstVersion } from "@/lib/ai/agents/first-publication";
+import { codigoDoEscopo, mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { ehProvedorSuportado } from "@/lib/ai/pontos/provedores";
@@ -75,8 +76,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     },
   );
   if (!travada.ok) return fail(travada.erro, travada.mensagem, 422, { requestId });
-  const p = { ...parsed.data, ...travada.corpo },
-    result = await publishFirstVersion(
+  const p = { ...parsed.data, ...travada.corpo };
+  // O canal já é conferido contra a organização em `publishFirstVersion`.
+  // (Upstream) o escopo confere o que vai AO AR — por isso depois da trava.
+  const escopo = await validarEscopoDaVersao(admin, auth.org.orgId, { credential_id: p.credential_id, provider: p.provider });
+  if (!escopo.ok) return fail(codigoDoEscopo(escopo), mensagemDoEscopo(escopo), 422, { requestId });
+  const result = await publishFirstVersion(
       admin,
       auth.org.orgId,
       agent,

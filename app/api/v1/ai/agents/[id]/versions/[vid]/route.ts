@@ -8,41 +8,46 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { requireRole } from "@/lib/auth/require-role";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { versionPatchSchema } from "@/lib/ai/agents/validation";
+import { codigoDoEscopo, mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { MENSAGEM_IA_DA_PLATAFORMA, semCamposDaIa } from "@/lib/ai/trava-da-ia";
 
 export const dynamic = "force-dynamic";
 
 const VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin,inbound_debounce_ms";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, handoff_legal_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin,inbound_debounce_ms";
 
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Ctx = { params: Promise<{ id: string; vid: string }> };
 
-export async function GET(_req: NextRequest, ctx: Ctx): Promise<Response> {
+export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
   const requestId = randomUUID();
   const { id, vid } = await ctx.params;
   if (!UUID_RX.test(id) || !UUID_RX.test(vid)) {
     return fail("invalid_request", "ids inválidos.", 400, { requestId });
   }
 
-  const authz = await requireRole("manager", { requestId, resource: "ai_agents" });
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "ai_agents",
+    role: "manager",
+    scope: "config:read",
+    tokenRole: "admin",
+  });
   if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const { org: activeOrg } = authz;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? "pt-BR");
+  const { organizationId, supabase } = authz;
 
-  const supabase = await createClient();
   const { data, error } = await supabase
     .from("ai_agent_versions")
     .select(VERSION_COLUMNS)
-    .eq("organization_id", activeOrg.orgId)
+    .eq("organization_id", organizationId)
     .eq("agent_id", id)
     .eq("id", vid)
     .maybeSingle();
@@ -62,10 +67,20 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
     return fail("invalid_request", "ids inválidos.", 400, { requestId });
   }
 
-  const authz = await requireRole("admin", { requestId, resource: "ai_agents" });
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "ai_agents",
+    role: "admin",
+    scope: "config:write",
+    tokenRole: "admin",
+  });
   if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const { user: authUser, org: activeOrg } = authz;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? "pt-BR");
+  const { organizationId, actor } = authz;
+
+  const teto = await tetoDeEscritaDoToken(authz, "ai_agents", requestId);
+  if (teto) return teto;
+  const authUserId = actor.type === "user" ? actor.id : null;
 
   let raw: unknown;
   try {
@@ -96,7 +111,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
     .from("ai_agent_versions")
     .select("id, status, agent_id, organization_id, followup")
     .eq("id", vid)
-    .eq("organization_id", activeOrg.orgId)
+    .eq("organization_id", organizationId)
     .eq("agent_id", id)
     .maybeSingle();
 
@@ -106,6 +121,15 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
       requestId,
       details: { current_status: existing.status },
     });
+  }
+
+  const escopo = await validarEscopoDaVersao(admin, organizationId, {
+    provider: patch.provider,
+    credential_id: patch.credential_id,
+    channel_session_id: patch.channel_session_id,
+  });
+  if (!escopo.ok) {
+    return fail(codigoDoEscopo(escopo), mensagemDoEscopo(escopo), 422, { requestId });
   }
 
   const update: Record<string, unknown> = {};
@@ -126,6 +150,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
   if (patch.handoff_keywords !== undefined) update.handoff_keywords = patch.handoff_keywords;
   if (patch.handoff_tool_enabled !== undefined)
     update.handoff_tool_enabled = patch.handoff_tool_enabled;
+  if (patch.handoff_legal_enabled !== undefined)
+    update.handoff_legal_enabled = patch.handoff_legal_enabled;
   if (patch.proposal_ai_draft_enabled !== undefined)
     update.proposal_ai_draft_enabled = patch.proposal_ai_draft_enabled;
   if (patch.cases_enabled !== undefined) update.cases_enabled = patch.cases_enabled;
@@ -146,7 +172,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
     .from("ai_agent_versions")
     .update(update)
     .eq("id", vid)
-    .eq("organization_id", activeOrg.orgId)
+    .eq("organization_id", organizationId)
     .select(VERSION_COLUMNS)
     .single();
 
@@ -156,8 +182,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
 
   void audit({
     action: "ai_agent.version_updated",
-    actorUserId: authUser.id,
-    organizationId: activeOrg.orgId,
+    actorUserId: authUserId,
+    actorApiTokenId: authz.apiTokenId ?? null,
+    organizationId: organizationId,
     resourceType: "ai_agent_version",
     resourceId: vid,
     requestId,

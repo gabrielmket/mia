@@ -16,6 +16,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolverDestinosDosAvisos } from "@/lib/ai/inbox-destino";
 import { podeVerCusto } from "@/lib/ai/custo-e-da-plataforma";
+import { anexarLinkDePagamento } from "@/lib/cobranca/central";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -78,8 +79,9 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   // Fork MIA: custo e chave de IA são da plataforma — o aviso de orçamento e o
   // de credencial só levam botão para quem as telas de destino deixam entrar.
-  const items = await resolverDestinosDosAvisos(await createClient(), org.orgId, org.role, data, {
+  const comDestino = await resolverDestinosDosAvisos(await createClient(), org.orgId, org.role, data, {
     veCustoEChaveDeIa: podeVerCusto(authz.user),
   });
+  const items = await anexarLinkDePagamento(admin, org.orgId, org.role, comDestino);
   return ok({ items, open_count: openCount ?? 0 }, { requestId });
 }

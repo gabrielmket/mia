@@ -24,6 +24,7 @@ import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
 import { camposDoFunil } from "@/lib/leads/campos-do-funil";
 import { apiClient } from "@/lib/api/client";
 import type { FollowupFlowPointerRow } from "@/hooks/followup/useFollowupFlows";
+import type { PlanoDeTarefas } from "@/lib/tarefas/plano";
 
 export type ActionItem =
   | {
@@ -39,7 +40,10 @@ export type ActionItem =
       type: "send_ai_message";
       config: { agent_id: string; channel_session_id: string; instruction: string };
     }
-  | { type: "add_tag"; config: { tags: string[] } }
+  | {
+      type: "add_tag";
+      config: { tags: string[]; destino?: "card" | "contato" };
+    }
   | { type: "assign_owner"; config: { user_id: string } }
   | { type: "call_webhook"; config: { url: string; secret?: string; secret_enc?: string; include_owner?: boolean } }
   | { type: "start_message_flow"; config: { flow_pointer_id: string } }
@@ -58,7 +62,11 @@ export type ActionItem =
         atribuir_a: "dono_do_lead" | { usuario_id: string };
         prioridade: string;
       };
-    };
+    }
+  // #1752 — a SEQUÊNCIA: o plano mora em `organizations.settings.task_plans`,
+  // e o editor só escolhe QUAL deles aplicar. `plano_id` é o id do JSON (não
+  // uuid) — mesmos campos do schema da API e da ação `apply_task_plan`.
+  | { type: "apply_task_plan"; config: { plano_id: string } };
 
 export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
   switch (type) {
@@ -86,6 +94,8 @@ export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
         type,
         config: { titulo: "", vence_em_dias: 1, atribuir_a: "dono_do_lead", prioridade: "medium" },
       };
+    case "apply_task_plan":
+      return { type, config: { plano_id: "" } };
   }
 }
 
@@ -360,24 +370,60 @@ function SendAiMessageForm({
   );
 }
 
-function AddTagForm({ config, onChange }: FormProps<{ tags: string[] }>) {
+/**
+ * `add_tag` (#2498) — as tags, e AGORA o DESTINO delas.
+ *
+ * O destino é opcional na forma e no efeito: quem nunca mexeu continua sem
+ * chave no config e gravando no card, que é o comportamento de sempre. Só quem
+ * escolhe "Contato do lead" passa a gravar na caixa que o Inbox consulta — e
+ * a tela diz o que acontece quando o lead não tem contato (a ação é ignorada,
+ * nunca troca de destino sozinha).
+ */
+function AddTagForm({
+  config,
+  onChange,
+}: FormProps<{ tags: string[]; destino?: "card" | "contato" }>) {
   const t = useT();
   const [text, setText] = React.useState(config.tags.join(", "));
   return (
-    <div className="space-y-1">
-      <Label>{t("Tags (separadas por vírgula)")}</Label>
-      <Input
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          const tags = e.target.value
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean);
-          onChange({ tags });
-        }}
-        placeholder="boas-vindas, novo-lead"
-      />
+    <div className="space-y-2">
+      <div className="space-y-1">
+        <Label>{t("Tags (separadas por vírgula)")}</Label>
+        <Input
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            const tags = e.target.value
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean);
+            // `...config` preserva o destino escolhido: escrever `{ tags }`
+            // aqui apagaria a metade da tela que o operador acabou de preencher.
+            onChange({ ...config, tags });
+          }}
+          placeholder="boas-vindas, novo-lead"
+        />
+      </div>
+      <div className="space-y-1">
+        <Label>{t("Destino da etiqueta")}</Label>
+        <Select
+          value={config.destino ?? "card"}
+          onValueChange={(v) => onChange({ ...config, destino: v as "card" | "contato" })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="card">{t("Card (comportamento atual)")}</SelectItem>
+            <SelectItem value="contato">{t("Contato do lead")}</SelectItem>
+          </SelectContent>
+        </Select>
+        {config.destino === "contato" && (
+          <p className="text-xs text-muted-foreground">
+            {t("Sem contato vinculado, a etiqueta não é aplicada.")}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -757,6 +803,66 @@ function NotifyGroupForm({
   );
 }
 
+/**
+ * `apply_task_plan` (#1752) — o seletor dos planos CADASTRADOS.
+ *
+ * A lista vem da MESMA rota que a tela Tarefas › Planos grava
+ * (`settings/task-plans`), e é o motor quem a filtra: o que aparece aqui é
+ * exatamente o que `lib/tarefas/plano.ts` aplicaria. Um `plano_id` escrito à
+ * mão (regra criada pela API) morreria como `plano_nao_encontrado` em cada
+ * disparo — o seletor existe para que isso só aconteça se o plano for apagado
+ * DEPOIS de a regra estar pronta.
+ */
+function ApplyTaskPlanForm({ config, onChange }: FormProps<{ plano_id: string }>) {
+  const t = useT();
+  const { data, isLoading } = useQuery({
+    queryKey: ["settings", "task-plans"],
+    queryFn: async () =>
+      (
+        await apiClient.get<{ data: { planos: PlanoDeTarefas[] } }>(
+          "/api/v1/settings/task-plans",
+        )
+      ).data,
+  });
+  const planos = data?.planos ?? [];
+
+  return (
+    <div className="space-y-1">
+      <Label>{t("Plano de tarefa")}</Label>
+      <Select
+        value={config.plano_id}
+        onValueChange={(v) => onChange({ plano_id: v })}
+        disabled={isLoading}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder={t("Escolha um plano cadastrado")} />
+        </SelectTrigger>
+        <SelectContent>
+          {planos.map((p) => (
+            <SelectItem key={p.id} value={p.id}>
+              {p.nome}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {/* Carregando não diz nada: a frase abaixo só é verdade quando a lista
+          JÁ chegou, e um aviso de "nenhum plano" durante o carregamento ensina
+          o operador a desistir antes de a resposta chegar. */}
+      {isLoading ? null : planos.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          {t("Nenhum plano cadastrado ainda. Cadastre em Tarefas › Planos.")}
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          {t(
+            "Cada aplicação cria as tarefas do plano na ordem e não duplica — a marca da aplicação é a prova.",
+          )}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function ActionConfigForm({
   action,
   onChange,
@@ -824,6 +930,13 @@ export function ActionConfigForm({
     case "create_task":
       return (
         <CreateTaskForm
+          config={action.config}
+          onChange={(config) => onChange({ type: action.type, config })}
+        />
+      );
+    case "apply_task_plan":
+      return (
+        <ApplyTaskPlanForm
           config={action.config}
           onChange={(config) => onChange({ type: action.type, config })}
         />

@@ -17,6 +17,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { configDoRoteador } from "@/lib/ai/trava-da-ia";
+import { MAX_CLASSIFIER_CONTEXT_MESSAGES } from "@/lib/ai/classifier-context";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,11 @@ const patchRouterSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   is_active: z.boolean().optional(),
   fallback_agent_id: z.string().uuid().nullable().optional(),
-  config: z.record(z.string(), z.unknown()).optional(),
+  config: z.record(z.string(), z.unknown()).optional().refine((c) =>
+    c?.context_message_count === undefined ||
+    (typeof c.context_message_count === "number" && Number.isInteger(c.context_message_count) &&
+      c.context_message_count >= 0 && c.context_message_count <= MAX_CLASSIFIER_CONTEXT_MESSAGES),
+    "context_message_count deve ser inteiro entre 0 e 16"),
 });
 
 // ---------------------------------------------------------------------------

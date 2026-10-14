@@ -29,6 +29,9 @@ import { ConexaoCaidaBanner } from "@/components/app/ConexaoCaidaBanner";
 // FORK MIA (cliente modelo, 9010): o selo da empresa de demonstração.
 import { SeloDeDemonstracao } from "@/components/app/SeloDeDemonstracao";
 import { empresaEDemonstracao } from "@/lib/demonstracao/selo";
+import { FaixaDaCobranca } from "@/components/cobranca/FaixaDaCobranca";
+import { faixaDaCobranca, type FaixaDaCobranca as Faixa } from "@/lib/cobranca/faixa";
+import { logger } from "@/lib/logger";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 import { listarConexoesCaidas, type ConexaoCaida } from "@/lib/channels/health";
 import { VoiceCallProvider } from "@/components/voice/VoiceCallContext";
@@ -73,6 +76,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // EPIC-11: gate /app/* on org not being suspended (S-11.08).
   let conexoesCaidas: ConexaoCaida[] = [];
   let emDemonstracao = false;
+  let faixa: Faixa = null;
+  let orgFuso: string | null = null;
   let enrolled = false;
   let needsMfaGate = false;
 
@@ -110,7 +115,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     const [orgRes, conexoes, isEnrolled, mfaRequired, ligadosNaInstalacao, demonstracao] = await Promise.all([
       admin
         .from("organizations")
-        .select("onboarded_at, status, settings")
+        .select("onboarded_at, status, settings, timezone")
         .eq("id", activeOrg.orgId)
         .maybeSingle(),
       listarConexoesCaidas(admin, activeOrg.orgId),
@@ -170,6 +175,29 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       // lista da organização desligaria Propostas para todo mundo.
       capacidades_ligadas: capacidadesLigadas(orgRow?.settings, ligadosNaInstalacao),
     };
+
+    // A faixa do teste grátis (spec da cobrança §9): uma consulta a mais SÓ com
+    // a cobrança ligada (quem não administra só vê o atraso). Falha aberta na INFORMAÇÃO: sem a
+    // leitura, nenhuma faixa — o que ela diz não trava nada.
+    // FORK MIA: no upstream esta lista se chama `modulos` e é a da INSTALAÇÃO;
+    // aqui `modulos` é o que a organização contratou. A cobrança é chave da
+    // instalação (MODULO_COBRANCA), então a pergunta vai a `ligadosNaInstalacao`.
+    if (ligadosNaInstalacao.includes("cobranca")) {
+      const { data, error } = await admin
+        .from("cobranca_assinaturas")
+        .select("estado, trial_ate, vencida_desde, cancela_no_fim, proximo_vencimento, link_de_pagamento, provedor")
+        .eq("organization_id", activeOrg.orgId)
+        .maybeSingle();
+      if (error) {
+        logger.warn("app: assinatura ilegível — sem faixa da cobrança", {
+          organization_id: activeOrg.orgId,
+          codigo: error.code,
+        });
+      } else {
+        orgFuso = orgRow?.timezone ?? null;
+        faixa = faixaDaCobranca(data, new Date(), roleAtLeast(activeOrg.role, "admin"));
+      }
+    }
 
     // `marcaDaInstalacao()` é memoizada por TTL no PROCESSO (`lib/branding/
     // instalacao.ts`), e a derivação da cor é cacheada por régua+semente em
@@ -331,6 +359,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <ImpersonateBanner impersonating={impersonating} />
         <ConexaoCaidaBanner caidas={conexoesCaidas} />
         <SeloDeDemonstracao ligado={emDemonstracao} />
+        {faixa !== null && <FaixaDaCobranca faixa={faixa} fuso={orgFuso} />}
         {needsMfaGate ? (
           // Gate always mounted for MFA-required roles; it latches the blocking
           // decision client-side so the enroll Server Action's revalidation

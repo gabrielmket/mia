@@ -14,7 +14,8 @@ export type ActionType =
   | "call_webhook"
   | "start_message_flow"
   | "notify_group"
-  | "create_task";
+  | "create_task"
+  | "apply_task_plan";
 
 export const TRIGGER_LABELS: Record<TriggerEvent, string> = {
   "lead.created": "Quando entrar um contato novo (webhook)",
@@ -84,4 +85,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   notify_group: "Avisar o time num grupo do WhatsApp",
   // #1540 — a ação que não fala com o cliente: o lembrete é da equipe.
   create_task: "Criar tarefa interna (sem mensagem ao cliente)",
+  // #1752 — a SEQUÊNCIA em vez do lembrete único: aplica um plano salvo em
+  // Tarefas › Planos ao negócio, criando as N tarefas de uma vez e na ordem.
+  apply_task_plan: "Aplicar um plano de tarefas ao negócio",
 };

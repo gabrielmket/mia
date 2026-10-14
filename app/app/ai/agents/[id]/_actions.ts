@@ -23,7 +23,7 @@ import { audit } from "@/lib/audit";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
+import { codigoDoEscopo, mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
 import {
   agentMcpCreateSchema,
   agentMcpPatchSchema,
@@ -39,12 +39,13 @@ import {
   semCamposDaIa,
   travarIaDaVersaoNova,
 } from "@/lib/ai/trava-da-ia";
+import { toolIdAceito } from "@/lib/mcp/servidor-externo/ids";
 import { VALID_TOOL_IDS } from "@/lib/mcp/tools";
 
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin,inbound_debounce_ms";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, handoff_legal_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin,inbound_debounce_ms";
 
 type ActionResult<T = void> =
   | { ok: true; data?: T }
@@ -173,11 +174,14 @@ export async function saveAgentDraftAction(
   // material apagado (ou de outra organização) produz uma configuração muda: a
   // tela mostra a marcação, o assistente não acha nada, e ninguém vê erro.
   const escopo = await validarEscopoDaVersao(admin, activeOrg.orgId, {
+    provider: v.provider,
     pipeline_ids: v.pipeline_ids,
     knowledge_source_ids: v.knowledge_source_ids,
+    credential_id: v.credential_id,
+    channel_session_id: v.channel_session_id,
   });
   if (!escopo.ok) {
-    return { ok: false, error: "validation_failed", message: mensagemDoEscopo(escopo) };
+    return { ok: false, error: codigoDoEscopo(escopo), message: mensagemDoEscopo(escopo) };
   }
 
   // Em QUAL rascunho esta escrita cai — pela MESMA régua que a tela usa para
@@ -330,6 +334,7 @@ export async function saveAgentDraftAction(
         history_token_window: v.history_token_window,
         handoff_keywords: v.handoff_keywords,
         handoff_tool_enabled: v.handoff_tool_enabled,
+        handoff_legal_enabled: v.handoff_legal_enabled,
         proposal_ai_draft_enabled: v.proposal_ai_draft_enabled,
         cases_enabled: v.cases_enabled,
         operator_enabled: v.operator_enabled,
@@ -416,7 +421,7 @@ export async function publishAgentAction(
     return { ok: false, error: "version_not_found" };
   }
   const tools = (targetV.tool_ids ?? []) as string[];
-  const invalid = tools.filter((t) => !valid.has(t));
+  const invalid = tools.filter((t) => !toolIdAceito(t, valid));
   if (invalid.length > 0) {
     return { ok: false, error: "tool_id_invalid", details: { invalid } };
   }
@@ -432,6 +437,7 @@ export async function publishAgentAction(
     orgId: activeOrg.orgId,
     agentId,
     versionId,
+    quemPublicou: { actorUserId: authUser.id, requestId },
   });
 
   if (!result.ok) {
@@ -532,7 +538,7 @@ export async function revertToVersionAction(
   // Espelha tool_id check do publish.
   const tools = ((source as { tool_ids: string[] | null }).tool_ids ?? []) as string[];
   const valid = new Set<string>(VALID_TOOL_IDS as readonly string[]);
-  const invalid = tools.filter((t) => !valid.has(t));
+  const invalid = tools.filter((t) => !toolIdAceito(t, valid));
   if (invalid.length > 0) {
     return { ok: false, error: "tool_id_invalid", details: { invalid } };
   }
@@ -555,6 +561,7 @@ export async function revertToVersionAction(
     history_token_window: number;
     handoff_keywords: string[];
     handoff_tool_enabled: boolean;
+    handoff_legal_enabled: boolean;
     proposal_ai_draft_enabled: boolean;
     cases_enabled: boolean;
     operator_enabled: boolean;
@@ -585,6 +592,16 @@ export async function revertToVersionAction(
   );
   if (!travada.ok) return { ok: false, error: "validation_failed", message: travada.mensagem };
   const ia = travada.corpo;
+
+  // Voltar a uma versão de quando a assinatura estava ligada regravaria o
+  // provedor que a instalação desligou — a mesma régua do salvar. (FORK MIA:
+  // confere o provedor que vai ser GRAVADO, o que saiu da trava acima.)
+  const escopo = await validarEscopoDaVersao(admin, activeOrg.orgId, {
+    provider: ia.provider,
+  });
+  if (!escopo.ok) {
+    return { ok: false, error: codigoDoEscopo(escopo), message: mensagemDoEscopo(escopo) };
+  }
 
   let createdId: string | null = null;
   let createdNumber: number | null = null;
@@ -619,6 +636,10 @@ export async function revertToVersionAction(
         history_token_window: src.history_token_window,
         handoff_keywords: src.handoff_keywords,
         handoff_tool_enabled: src.handoff_tool_enabled,
+        // Reverter/duplicar leva a chave junto: voltar para uma versão sem ela
+        // seria publicar uma configuração que nunca existiu (mesma régua de
+        // `pipeline_ids` logo abaixo).
+        handoff_legal_enabled: src.handoff_legal_enabled,
         proposal_ai_draft_enabled: src.proposal_ai_draft_enabled,
         cases_enabled: src.cases_enabled,
         operator_enabled: src.operator_enabled,
@@ -657,6 +678,7 @@ export async function revertToVersionAction(
     orgId: activeOrg.orgId,
     agentId,
     versionId: createdId,
+    quemPublicou: { actorUserId: authUser.id, requestId },
   });
   if (!result.ok) {
     // Rollback: remove draft órfã para não deixar lixo (a draft só existe
@@ -751,6 +773,13 @@ export async function createMcpAgentAction(
   );
   if (!travada.ok) return { ok: false, error: "validation_failed", message: travada.mensagem };
 
+  // Antes da primeira escrita: recusado aqui, não sobra agente órfão. (Upstream;
+  // no fork confere a versão JÁ TRAVADA, que é a que vai ser gravada.)
+  const escopo = await validarEscopoDaVersao(admin, activeOrg.orgId, travada.corpo);
+  if (!escopo.ok) {
+    return { ok: false, error: codigoDoEscopo(escopo), message: mensagemDoEscopo(escopo) };
+  }
+
   // Cria agent kind='mcp_agent' + v1 draft. Compensa rollback se versão falhar.
   const { data: agentRow, error: agentErr } = await admin
     .from("ai_agents")
@@ -792,6 +821,7 @@ export async function createMcpAgentAction(
     history_token_window: v.history_token_window,
     handoff_keywords: v.handoff_keywords,
     handoff_tool_enabled: v.handoff_tool_enabled,
+    handoff_legal_enabled: v.handoff_legal_enabled,
     proposal_ai_draft_enabled: v.proposal_ai_draft_enabled,
     cases_enabled: v.cases_enabled,
     split_messages: v.split_messages,

@@ -43,6 +43,7 @@ import { metadataInicialDoCanal } from "@/lib/ai/elegibilidade/pre-go-live";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { basePublicaDoWebhookMeta } from "@/lib/webhooks/url-publica";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { traduzirLimiteDoPlano } from "@/lib/cobranca/limites";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -69,11 +70,13 @@ interface DesfechoGravado {
  */
 async function lerDesfechoDoWebhook(
   admin: ReturnType<typeof createAdminClient>,
+  orgId: string,
   channelSessionId: string,
 ): Promise<DesfechoGravado | null> {
   const { data, error } = await admin
     .from("channel_sessions")
     .select(COLUNAS_DO_DESFECHO_DO_WEBHOOK)
+    .eq("organization_id", orgId)
     .eq("id", channelSessionId)
     .maybeSingle();
   if (error) return null;
@@ -147,7 +150,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // mostrando uma URL e o registro apontando outra é o "duas telas, dois webhooks"
   // que o módulo `url-publica` existe para impedir.
   const base = basePublicaDoWebhookMeta(req);
-  const desfecho = data?.id ? await lerDesfechoDoWebhook(admin, data.id) : null;
+  const desfecho = data?.id ? await lerDesfechoDoWebhook(admin, orgId, data.id) : null;
   // O par em vigor (banco da 0257 primeiro, `.env` como piso) com os NOMES das
   // variáveis de ambiente — é o que `metaPodeReceber` sabe ler. Ver `podeReceber`
   // no corpo da resposta.
@@ -388,6 +391,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   if (error) {
+    // Ressuscitar ou criar o canal acima do plano: o gatilho de canais recusa (spec cobrança §5).
+    const limite = traduzirLimiteDoPlano(error, authz.user.idioma);
+    if (limite) return fail(limite.code, limite.message, 409, { requestId, details: limite.details });
     return fail("internal_error", error.message ?? "channel_session_write_failed", 500, {
       requestId,
     });

@@ -37,6 +37,7 @@ import { runBeforeSend } from '../guardrails/before-send';
 import { definicaoNaConexao } from '@/lib/channels/linha-do-espelho';
 import { estadoDaJanela } from '@/lib/channels/janela';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
+import { contextoDoContato, renderizarTextoDeFollowup } from '@/lib/automation/texto-do-followup';
 import { isStatusSendable } from '@/lib/channels/meta/template-binding';
 import { deriveTemplateContract } from '@/lib/channels/meta/template-contract';
 // FORK MIA — o {{1}} (ou o primeiro nomeado) do modelo aprovado leva o primeiro nome.
@@ -53,6 +54,7 @@ import {
   type LeadCheckpointRow,
 } from './inbound-turn';
 import { isLeadInHandoff } from './human-handoff';
+import { aplicarPessoaNoComandoAoTurno } from '@/lib/followup/pessoa-no-comando-no-turno';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import {
   followupPublicadoDoEnrollment,
@@ -346,13 +348,36 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
 
     const boundary = parseServiceBoundary(job.payload.service_boundary);
     await requireCurrentServiceBoundary(pool, boundary);
-    const { rows: targetRows } = await pool.query<{ channel_session_id: string; archived_at: string | null }>(
-      `select c.channel_session_id, to_jsonb(cs)->>'archived_at' as archived_at from conversations c
+    const { rows: targetRows } = await pool.query<{ channel_session_id: string; archived_at: string | null; canal_desativado: string | null }>(
+      `select c.channel_session_id, to_jsonb(cs)->>'archived_at' as archived_at, to_jsonb(cs)->'metadata'->>'disabled' as canal_desativado from conversations c
        join channel_sessions cs on cs.id=c.channel_session_id and cs.organization_id=c.organization_id
        where c.organization_id=$1 and c.id=$2 and c.contact_id=$3`,
       [tenantId, boundary!.conversation_id, leadId]);
     if (!targetRows[0]) throw new Error('conversa de origem indisponível');
     if (targetRows[0].archived_at) throw new Error('canal arquivado');
+    // Canal DESATIVADO (#2329): consumir SEM ERRO, em vez de `throw`.
+    //
+    // `throw` mandava o job para a fila de retentativa: 5 tentativas gastas para
+    // descartar uma mensagem que não pode sair, e no fim um `dead` com o aviso
+    // CRÍTICO "Job descartado" na Central — UM por follow-up, sem ninguém poder
+    // fazer nada (o canal continua desligado). O desfecho próprio é este: o job
+    // termina `done`, com o motivo no log, sem pagar o turno de modelo nem
+    // acender alerta.
+    //
+    // `turn_discarded` NÃO é gravado aqui, ao contrário do descarte por
+    // organização parada (migration 0501): lá a reativação reenfileira porque o
+    // `claim` não entrega inscrição com a org parada; com o CANAL pausado não há
+    // essa barreira, e o evento enfileiraria um turno novo a cada recheck até o
+    // operador religar — justamente a reação que esta issue está barrando.
+    if (targetRows[0].canal_desativado === 'true') {
+      deps.log?.info('followup_turn: canal desativado — turno consumido sem rodar', {
+        job_id: job.id,
+        tenant_id: tenantId,
+        lead_id: leadId,
+        motivo: 'canal_desativado',
+      });
+      return;
+    }
     const target: ReentrySendTarget = { tenantId, leadId, conversationId: boundary!.conversation_id, channelSessionId: targetRows[0]!.channel_session_id };
 
     // A INSCRIÇÃO PRECISA ESTAR VIVA ANTES DE QUALQUER EFEITO. O turno já
@@ -369,6 +394,52 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
     // sem nó é defeito de programação e segue falhando alto em
     // `runFlowDrivenTurn`, como falhava.
     if (payload.followup_enrollment_id !== undefined && payload.node_id !== undefined) {
+      // PESSOA NO COMANDO: a política de handoff do fluxo vale também para a
+      // conversa assumida à mão, que não emite `ai.handoff_triggered`. Com
+      // `pause` o passo é ADIADO e confere de novo (o mesmo `deferred` da janela
+      // de envio, abaixo); cancelada, a inscrição cai no descarte logo abaixo.
+      if (payload.purpose === 'send_message') {
+        const agora = (deps.clock ?? ((): Date => new Date()))();
+        const pessoa = await aplicarPessoaNoComandoAoTurno(
+          pool,
+          {
+            organizationId: tenantId,
+            enrollmentId: payload.followup_enrollment_id,
+            nodeId: payload.node_id,
+            contactId: leadId,
+          },
+          agora,
+        );
+        if (pessoa !== null) {
+          withFields(deps.log, {
+            job_id: job.id,
+            tenant_id: tenantId,
+            lead_id: leadId,
+            enrollment_id: payload.followup_enrollment_id,
+          }).info('turno de fluxo não fala por cima de quem assumiu a conversa', {
+            inscricao: pessoa.kind,
+            ...(pessoa.kind === 'adiada' ? { next_run_at: pessoa.ate.toISOString() } : {}),
+          });
+        }
+        if (pessoa?.kind === 'adiada') {
+          const complete = deps.completeFollowupTurn;
+          if (!complete) {
+            throw new Error(
+              'passo adiado por pessoa no comando sem completeFollowupTurn — o enrollment não saberia do adiamento',
+            );
+          }
+          await rescheduleReentry(pool, { tenantId, leadId, jobId: job.id, at: pessoa.ate, payload: job.payload });
+          await complete(pool, {
+            jobId: job.id,
+            jobClaim: claimOfJob(job),
+            organizationId: tenantId,
+            enrollmentId: payload.followup_enrollment_id,
+            nodeId: payload.node_id,
+            result: { kind: 'deferred', until: pessoa.ate, reason: 'pessoa_no_comando' },
+          });
+          return;
+        }
+      }
       const { rows: inscricaoRows } = await pool.query<{ current_node_id: string; status: string }>(
         `select current_node_id, status from followup_enrollments where organization_id = $1 and id = $2 limit 1`,
         [tenantId, payload.followup_enrollment_id],
@@ -620,7 +691,7 @@ async function runFlowDrivenTurn(
   const runLog = withFields(deps.log, { job_id: job.id, tenant_id: target.tenantId, lead_id: target.leadId, enrollment_id: enrollmentId });
 
   if (input.purpose === 'send_message') {
-    let passo = await resolveFlowSendBody(pool, target.tenantId, target.channelSessionId, input, target.leadId);
+    let passo = await resolveFlowSendBody(pool, target.tenantId, target.channelSessionId, target.leadId, input);
     // O PLANO B DA MENSAGEM POR IA. Com a janela de 24 h fechada, o canal recusa
     // qualquer texto livre — o da IA inclusive —, e o passo terminava sem mandar
     // nada. A tela prometia "se a IA não conseguir escrever, mandar este modelo"
@@ -841,9 +912,25 @@ async function runDeterministicReentry(
   );
 }
 
-function interpolarVoltaDoPayload(texto: string, index: number | undefined, total: number | undefined): string {
-  if (index === undefined || total === undefined) return texto;
-  return texto.replaceAll('{{volta}}', String(index)).replaceAll('{{voltas}}', String(total));
+/**
+ * `{{volta}}`/`{{voltas}}` PRIMEIRO e, com o contexto do contato e do negócio
+ * (#2528), o resto pelo MESMO renderizador das automações: `{{nome}}`,
+ * `{{primeiro_nome}}`, `{{contact.*}}` e `{{lead.*}}` saem preenchidos, e
+ * marcação sem valor sai da frase junto com o espaço vizinho — nunca `{{...}}`
+ * cru ao cliente. Sem contexto (chamador que não leu) o comportamento é o de
+ * antes: só a volta.
+ */
+function interpolarVoltaDoPayload(
+  texto: string,
+  index: number | undefined,
+  total: number | undefined,
+  contexto?: Record<string, unknown> | null,
+): string {
+  const comVolta =
+    index === undefined || total === undefined
+      ? texto
+      : texto.replaceAll('{{volta}}', String(index)).replaceAll('{{voltas}}', String(total));
+  return contexto ? renderizarTextoDeFollowup(comVolta, contexto) : comVolta;
 }
 
 /**
@@ -867,15 +954,20 @@ async function resolveFlowSendBody(
   pool: pg.Pool,
   tenantId: string,
   channelSessionId: string,
+  /** `job.contact_id` — de quem é este texto (#2528). */
+  contactId: string,
   input: {
     fixedBody: string | undefined;
     templateId: string | undefined;
     voltaIndex: number | undefined;
     voltaTotal: number | undefined;
   },
-  /** FORK MIA — o contato, para o primeiro nome do modelo aprovado. */
-  contactId: string,
+  // FORK MIA: o `contactId` (que o upstream trouxe na #2528) também dá o
+  // primeiro nome do modelo aprovado — ver `resolveModeloAprovado`.
 ): Promise<PassoSemIa | null> {
+  // O `fixed_body` já chega renderizado do enfileiramento (`lib/followup/engine.ts`),
+  // ou é a confirmação, que é dado do contato. Renderizar de novo leria o que veio
+  // do cadastro como modelo — por isso aqui ele só ganha a volta, nunca o contexto.
   if (input.fixedBody !== undefined) {
     return { tipo: 'texto', body: interpolarVoltaDoPayload(input.fixedBody, input.voltaIndex, input.voltaTotal) };
   }
@@ -886,7 +978,9 @@ async function resolveFlowSendBody(
   );
   const body = rows[0]?.body;
   if (body !== undefined && body.length > 0) {
-    return { tipo: 'texto', body: interpolarVoltaDoPayload(body, input.voltaIndex, input.voltaTotal) };
+    // #2528 — o corpo de `message_templates` só existe aqui: esta é a passada única dele.
+    const contexto = await contextoDoContato(pool, tenantId, contactId);
+    return { tipo: 'texto', body: interpolarVoltaDoPayload(body, input.voltaIndex, input.voltaTotal, contexto) };
   }
   // Não é texto pronto: pode ser um modelo APROVADO do canal. Até aqui o passo só
   // lia `message_templates`, e um fluxo apontado para um modelo aprovado — o único

@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { listSelectableChannels } from "@/lib/channels/selectable";
 import { createClient } from "@/lib/supabase/server";
+import { idsDosProvedoresOferecidos } from "@/lib/ai/pontos/provedores-oferecidos";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
 
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
@@ -77,6 +78,7 @@ export default async function NewAgentPage() {
         provedoresDaInstalacao={provedoresDaInstalacao()}
         podeEscolherIa={podeEscolherIa}
         iaDaPlataforma={iaDaPlataforma}
+        provedoresOferecidos={await idsDosProvedoresOferecidos(createAdminClient())}
         provedorPadrao={llmDaOrg?.provider}
         channelSessions={channelSessions}
         organizationTimezone={fusoUtilizavel(activeOrg.timezone)}
