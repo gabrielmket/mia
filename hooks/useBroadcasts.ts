@@ -32,7 +32,7 @@ export interface Campanha {
 export interface CampanhaCriada {
   id: string;
   destinatarios: number;
-  fora: { sem_telefone: number; repetidos: number; pediram_para_sair: number };
+  fora: { sem_telefone: number; repetidos: number; pediram_para_sair: number; pessoais: number };
   pode_disparar: boolean;
   motivo: string | null;
   falta_cents: number | null;

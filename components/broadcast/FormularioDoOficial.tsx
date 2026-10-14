@@ -200,7 +200,7 @@ export function FormularioDoOficial() {
         <p className="text-sm text-muted-foreground">
           {t("Ficaram de fora:")} {recemCriada.fora.sem_telefone} {t("sem telefone")} ·{" "}
           {recemCriada.fora.repetidos} {t("repetidos")} · {recemCriada.fora.pediram_para_sair}{" "}
-          {t("pediram para sair")}
+          {t("pediram para sair")} · {recemCriada.fora.pessoais} {t("contatos pessoais")}
         </p>
         {recemCriada.custo_estimado_cents !== null ? (
           <p className="text-sm">

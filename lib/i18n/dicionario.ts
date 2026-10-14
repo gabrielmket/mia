@@ -6100,6 +6100,7 @@ export const DICIONARIO: Traducoes = {
   "entregues": { es: "entregados" },
   "enviadas": { es: "enviadas" },
   "pediram para sair": { es: "pidieron salir" },
+  "contatos pessoais": { es: "contactos personales" },
   "repetidos": { es: "repetidos" },
   // "sem telefone" mora no bloco do upstream (1.71), com a mesma tradução.
   "Ainda não há preço por mensagem acordado para esta empresa.": { es: "Todavía no hay precio por mensaje acordado para esta empresa." },

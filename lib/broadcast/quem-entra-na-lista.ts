@@ -46,7 +46,7 @@ import { lerTodasAsPaginas, TAMANHO_DA_PAGINA } from "@/lib/leitura/todas-as-pag
 import { buscaEmLotes } from "@/lib/supabase/em-lotes";
 
 /** O que o `peneirar` precisa de cada contato. */
-export const COLUNAS_DO_CONTATO = "id, phone_number, name, display_name, is_blocked, consent";
+export const COLUNAS_DO_CONTATO = "id, phone_number, name, display_name, is_blocked, is_personal, consent";
 
 /** 50 páginas de 1000: os 50 mil que o `.limit(50_000)` antigo declarava. */
 const PAGINAS_MAXIMAS = 50;

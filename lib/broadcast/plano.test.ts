@@ -36,6 +36,21 @@ describe("a peneira da lista", () => {
     expect(r.semConsentimento, "bloqueado e recusa registrada contam os dois").toBe(2);
   });
 
+  it("tira o contato PESSOAL (upstream 0563), e conta à parte", () => {
+    const r = peneirar(
+      [
+        { id: "a", phone_number: "5531999990000" },
+        { id: "mae", phone_number: "5531999993333", is_personal: true },
+        // Controle: a marca desligada não tira ninguém.
+        { id: "b", phone_number: "5531999994444", is_personal: false },
+      ],
+      valores,
+    );
+    expect(r.enviar.map((d) => d.contactId), "disparo comercial chegou a um contato pessoal").toEqual(["a", "b"]);
+    expect(r.pessoais).toBe(1);
+    expect(r.semConsentimento).toBe(0);
+  });
+
   it("tira o telefone REPETIDO — cobraria duas vezes e mandaria duas vezes", () => {
     const r = peneirar(
       [

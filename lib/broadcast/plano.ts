@@ -31,6 +31,8 @@ export interface Peneira {
   semTelefone: number;
   repetidos: number;
   semConsentimento: number;
+  /** Contatos marcados como PESSOAIS (upstream 0563): ficam fora, e contam. */
+  pessoais: number;
 }
 
 export interface ContatoParaDisparo {
@@ -41,6 +43,14 @@ export interface ContatoParaDisparo {
   display_name?: string | null;
   /** Bloqueado no atendimento — não recebe nada, nem disparo. */
   is_blocked?: boolean | null;
+  /**
+   * Contato PESSOAL (upstream v1.75, migration 0563, spec 21): o número da mãe,
+   * do amigo, que a operação esconde. As Campanhas do upstream o tiram com o
+   * status `personal`; o Broadcast do fork tira igual — mandar disparo
+   * comercial para o contato pessoal de alguém da equipe é o erro que a marca
+   * existe para impedir.
+   */
+  is_personal?: boolean | null;
   /**
    * A RECUSA REGISTRADA. É `declined_at` e não a ausência de `granted_at`, e a
    * diferença é a instalação inteira: todo contato NASCE sem `granted_at`, então
@@ -74,6 +84,7 @@ export function peneirar(
   let semTelefone = 0;
   let repetidos = 0;
   let semConsentimento = 0;
+  let pessoais = 0;
 
   for (const c of contatos) {
     const fone = (c.phone_number ?? "").replace(/\D/g, "");
@@ -85,6 +96,10 @@ export function peneirar(
       semConsentimento += 1;
       continue;
     }
+    if (c.is_personal) {
+      pessoais += 1;
+      continue;
+    }
     if (vistos.has(fone)) {
       repetidos += 1;
       continue;
@@ -93,7 +108,7 @@ export function peneirar(
     enviar.push({ contactId: c.id, phoneE164: fone, valores: valoresPorContato(c) });
   }
 
-  return { enviar, semTelefone, repetidos, semConsentimento };
+  return { enviar, semTelefone, repetidos, semConsentimento, pessoais };
 }
 
 export type MotivoDaRecusa =

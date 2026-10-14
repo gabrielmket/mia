@@ -267,6 +267,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         sem_telefone: peneira.semTelefone,
         repetidos: peneira.repetidos,
         pediram_para_sair: peneira.semConsentimento,
+        pessoais: peneira.pessoais,
       },
       pode_disparar: veredicto.pode,
       motivo: veredicto.motivo,

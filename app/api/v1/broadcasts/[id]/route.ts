@@ -320,6 +320,7 @@ export async function PATCH(
     semTelefone: number;
     repetidos: number;
     semConsentimento: number;
+    pessoais: number;
   } | null = null;
 
   if (contatosDaListaNova !== null) {
@@ -391,6 +392,7 @@ export async function PATCH(
       semTelefone: peneira.semTelefone,
       repetidos: peneira.repetidos,
       semConsentimento: peneira.semConsentimento,
+      pessoais: peneira.pessoais,
     };
   }
 
