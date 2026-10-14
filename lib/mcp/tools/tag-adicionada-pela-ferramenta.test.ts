@@ -84,7 +84,9 @@ describe("crm_manage_tags emite o evento da etiqueta", () => {
           request_id: "job-da-sofia",
           actor_type: "ai_agent",
           actor_id: AGENTE,
-          actor_api_token_id: "tok-1",
+          // (.76) Desde a v1.80 a emissão é a do upstream (governance.ts): o id
+          // do token não vai no metadata do evento — ele fica na auditoria da
+          // ferramenta (`actorApiTokenId`). O resto do payload é o mesmo.
           via: "mcp",
         },
         p_organization_id: ORG,
