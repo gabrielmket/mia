@@ -12,7 +12,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AUTOR, ORG, OUTRA_ORG, TOKEN, organizacaoDeTeste, type BancoDaMigracao } from "../helpers/banco-da-migracao";
+import { AUTOR, ORG, OUTRA_ORG, TOKEN, VENDEDORA, organizacaoDeTeste, type BancoDaMigracao } from "../helpers/banco-da-migracao";
 
 const auditSpy = vi.fn();
 vi.mock("@/lib/audit", async (original) => ({
@@ -502,5 +502,88 @@ describe("importar contatos: o rastro", () => {
       contatos: [{ nome: "Ana Souza", telefone: "(10) 99111-0001" }, { nome: "Bruno Lima" }],
     });
     expect(redigido).toEqual({ organization_id: ORG, origem: "crm-antigo", quando_ja_existe: "completar", contatos: { itens: 2 } });
+  });
+});
+
+describe("importar contatos: o dono do contato, o vendedor responsável (upstream 1.79, gravado pela 9022)", () => {
+  const FUNCAO = "fn_mia_definir_dono_do_contato_pela_plataforma";
+
+  /**
+   * A função do banco (9022) com o efeito que ela tem no Postgres: o trio do dono
+   * e a adoção dos negócios abertos sem dono. A prova contra o Postgres de
+   * verdade é `tests/invariants/dono-do-contato-pela-plataforma.test.ts`.
+   */
+  function comAFuncaoDoBanco(erro?: string) {
+    for (const vinculo of banco.tabela("user_organizations")) vinculo.accepted_at = "2026-01-01T00:00:00Z";
+    const chamadas: Array<Record<string, unknown>> = [];
+    const original = banco.cliente.rpc;
+    // O dublê devolve sempre sucesso vazio; esta função do banco também recusa e devolve o dono.
+    banco.cliente.rpc = (async (nome: string, args: Record<string, unknown> = {}) => {
+      if (nome !== FUNCAO) return original(nome, args);
+      chamadas.push(args);
+      if (erro) return { data: null, error: { message: erro } };
+      const contato = banco.tabela("contacts").find((c) => c.id === args.p_contact && c.organization_id === args.p_org)!;
+      Object.assign(contato, { carteira_user_id: args.p_dono, carteira_origem: args.p_origem, carteira_definida_em: "2026-10-14T00:00:00Z" });
+      return { data: args.p_dono, error: null };
+    }) as unknown as typeof banco.cliente.rpc;
+    return chamadas;
+  }
+  const ANA = { nome: "Ana Souza", telefone: "(10) 99111-0001" };
+
+  it("contato novo com vendedor: grava pela função do fork, com o token como ator e a origem `importacao`, e deixa a auditoria da tela", async () => {
+    const chamadas = comAFuncaoDoBanco();
+    const r = await importar([{ ...ANA, vendedor_responsavel: "Vendedora@Exemplo.invalid" }]);
+    expect(r).toMatchObject({ criou: 1, recusou: 0 });
+    const ana = contatos()[0]!;
+    expect(chamadas).toEqual([{ p_org: ORG, p_token: TOKEN, p_contact: ana.id, p_dono: VENDEDORA, p_origem: "importacao" }]);
+    expect(ana).toMatchObject({ carteira_user_id: VENDEDORA, carteira_origem: "importacao" });
+    const linha = auditSpy.mock.calls.map(([e]) => e as { action: string; metadata: Record<string, unknown> }).find((e) => e.action === "contact.carteira_changed")!;
+    expect(linha.metadata).toMatchObject({ antes: null, depois: VENDEDORA, origem: "importacao" });
+    // A linha leva ids, nunca o nome, o telefone ou o e-mail da pessoa.
+    for (const dado of ["Ana", "99111", "exemplo.invalid"]) expect(JSON.stringify(linha)).not.toContain(dado);
+
+    const de_novo = await importar([{ ...ANA, vendedor_responsavel: "vendedora@exemplo.invalid" }]);
+    expect(de_novo.itens[0]).toMatchObject({ desfecho: "ja_estava" });
+    expect(chamadas, "a reexecução chamou a função de novo").toHaveLength(1);
+  });
+
+  it("o dono que já existe fica em `completar`, com o aviso; `atualizar` troca", async () => {
+    const chamadas = comAFuncaoDoBanco();
+    await importar([{ ...ANA, vendedor_responsavel: "autor.do.token@exemplo.invalid" }]);
+    const completar = await importar([{ ...ANA, vendedor_responsavel: "vendedora@exemplo.invalid" }]);
+    expect(completar.itens[0]).toMatchObject({ desfecho: "ja_estava" });
+    expect((completar.itens[0]!.avisos as string[]).join(" ")).toContain("já tem outro vendedor responsável");
+    expect(contatos()[0]!.carteira_user_id).toBe(AUTOR);
+
+    const atualizar = await importar([{ ...ANA, vendedor_responsavel: "vendedora@exemplo.invalid" }], { quando_ja_existe: "atualizar" });
+    expect(atualizar.itens[0]).toMatchObject({ desfecho: "atualizou" });
+    expect(contatos()[0]!.carteira_user_id).toBe(VENDEDORA);
+    expect(chamadas).toHaveLength(2);
+  });
+
+  it("quem só lê, quem não é da equipe e quem não aceitou o convite não são dono: o contato entra sem dono, e o aviso diz por quê", async () => {
+    const chamadas = comAFuncaoDoBanco();
+    banco.tabela("user_organizations").find((v) => v.user_id === VENDEDORA)!.accepted_at = null;
+    const r = await importar([
+      { ...ANA, vendedor_responsavel: "leitor@exemplo.invalid" },
+      { nome: "Bruno Lima", telefone: "(10) 99222-0002", vendedor_responsavel: "alguem@exemplo.invalid" },
+      { nome: "Carla Dias", telefone: "(10) 99333-0003", vendedor_responsavel: "vendedora@exemplo.invalid" },
+    ]);
+    expect(r).toMatchObject({ criou: 3, recusou: 0 });
+    for (const item of r.itens) expect((item.avisos as string[]).join(" ")).toContain("o contato ficou sem dono");
+    expect(chamadas).toEqual([]);
+    expect(contatos().every((c) => !c.carteira_user_id)).toBe(true);
+  });
+
+  it("o banco recusa o token como ator: o contato entra, e o aviso diz o que o banco respondeu", async () => {
+    comAFuncaoDoBanco("dono_sem_token_de_plataforma");
+    const r = await importar([{ ...ANA, vendedor_responsavel: "vendedora@exemplo.invalid" }]);
+    expect(r).toMatchObject({ criou: 1 });
+    expect((r.itens[0]!.avisos as string[]).join(" ")).toContain("o banco recusou o token desta chamada como ator");
+  });
+
+  it("o campo é lido na conferência do item", () => {
+    const lido = lerContato({ ...ANA, vendedor_responsavel: " vendedora@exemplo.invalid " });
+    expect(lido).toMatchObject({ ok: true, contato: { vendedor_responsavel: "vendedora@exemplo.invalid" } });
   });
 });

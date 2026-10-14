@@ -459,3 +459,68 @@ describe("migração de uma base inteira pelo MCP de plataforma", () => {
     expect(rows.map((r) => r.event_type)).toEqual(["lead.created"]);
   });
 });
+
+describe("o vendedor responsável (o dono do contato) chega ao banco pela função da 9022", () => {
+  beforeAll(async () => {
+    // O ator da 9022: o token de plataforma vivo, com `importar_base`, criado por um admin de plataforma.
+    await pool.query(
+      "insert into public.platform_admins (user_id, granted_by, reason, scope) values ($1, $1, 'invariante da migração', 'full') on conflict (user_id) do nothing",
+      [AUTOR],
+    );
+    await pool.query(
+      `insert into public.platform_api_tokens (id, name, prefix, token_hash, operacoes, created_by, reason)
+         values ($1, 'invariante da migração', 'dskp_mig', '\x09'::bytea, '{importar_base}', $2, 'invariante da migração')
+       on conflict (id) do nothing`,
+      [TOKEN, AUTOR],
+    );
+    // A vendedora aceitou o convite: só assim ela conta como dona.
+    await pool.query("update user_organizations set accepted_at = now() where organization_id = $1 and user_id = $2", [ORG, VENDEDORA]);
+  });
+
+  afterAll(async () => {
+    await pool.query("delete from public.platform_api_tokens where id = $1", [TOKEN]);
+    await pool.query("delete from public.platform_admins where user_id = $1", [AUTOR]);
+  });
+
+  it("⭐ grava o trio do dono com a origem `importacao`, sem emitir evento; repetir não chama de novo", async () => {
+    const { importarContatos } = await import("@/lib/mcp-plataforma/importacao/contatos");
+    const eventosAntes = (await pool.query("select count(*)::int as n from event_log where organization_id = $1", [ORG])).rows[0].n as number;
+    const pedido = {
+      organization_id: ORG,
+      origem: ORIGEM,
+      contatos: [{ nome: "Fábio Teles", telefone: "(10) 99555-0005", vendedor_responsavel: "Vendedora@Exemplo.invalid" }],
+    };
+    const r = await importarContatos(ctx(), pedido);
+    expect(r, JSON.stringify(r.itens)).toMatchObject({ criou: 1, recusou: 0 });
+    expect(r.itens[0]!.avisos ?? []).toEqual([]);
+    const { rows } = await pool.query<{ carteira_user_id: string | null; carteira_origem: string | null; definida: boolean }>(
+      `select carteira_user_id, carteira_origem, carteira_definida_em is not null as definida
+         from contacts where organization_id = $1 and phone_number = '+5510995550005'`,
+      [ORG],
+    );
+    expect(rows).toEqual([{ carteira_user_id: VENDEDORA, carteira_origem: "importacao", definida: true }]);
+    const eventosDepois = (await pool.query("select count(*)::int as n from event_log where organization_id = $1", [ORG])).rows[0].n as number;
+    expect(eventosDepois, "gravar o dono emitiu evento").toBe(eventosAntes);
+
+    const de_novo = await importarContatos(ctx(), pedido);
+    expect(de_novo.itens[0]).toMatchObject({ desfecho: "ja_estava" });
+  });
+
+  it("CONTROLE: com um token que não carrega `importar_base`, o banco recusa o ator e o contato entra sem dono", async () => {
+    const { importarContatos } = await import("@/lib/mcp-plataforma/importacao/contatos");
+    await pool.query("update public.platform_api_tokens set operacoes = '{implantar_configuracao}' where id = $1", [TOKEN]);
+    try {
+      const r = await importarContatos(ctx(), {
+        organization_id: ORG,
+        origem: ORIGEM,
+        contatos: [{ nome: "Gil Moura", telefone: "(10) 99666-0006", vendedor_responsavel: "vendedora@exemplo.invalid" }],
+      });
+      expect(r).toMatchObject({ criou: 1 });
+      expect((r.itens[0]!.avisos as string[]).join(" ")).toContain("o banco recusou o token desta chamada como ator");
+      const { rows } = await pool.query("select carteira_user_id from contacts where organization_id = $1 and phone_number = '+5510996660006'", [ORG]);
+      expect(rows).toEqual([{ carteira_user_id: null }]);
+    } finally {
+      await pool.query("update public.platform_api_tokens set operacoes = '{importar_base}' where id = $1", [TOKEN]);
+    }
+  });
+});

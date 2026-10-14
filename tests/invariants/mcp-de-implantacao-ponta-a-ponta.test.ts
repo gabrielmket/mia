@@ -526,7 +526,10 @@ describe("5 · etiquetas: a ferramenta grava o que a função da tela grava", ()
       await sessao.query("begin");
       await sessao.query("set local role authenticated");
       await sessao.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: GESTORA_DA_GEMEA, role: "authenticated" })]);
-      await sessao.query("select public.fn_vocabulario_de_tags_operar($1, 'definir_cor', 'Plano anual', null, '#12a594')", [GEMEA]);
+      // Um tom da paleta de HOJE: desde o upstream 1.74 (#2373) o verde antigo
+      // (#12a594) é lido como #00655a pela régua da tela, que a ferramenta usa, e a
+      // função do banco chamada direto grava o que recebe.
+      await sessao.query("select public.fn_vocabulario_de_tags_operar($1, 'definir_cor', 'Plano anual', null, '#00655a')", [GEMEA]);
       await sessao.query("select public.fn_vocabulario_de_tags_operar($1, 'definir_cor', 'VIP', null, '#0091ff')", [GEMEA]);
       await sessao.query("commit");
     } catch (e) {
@@ -544,14 +547,14 @@ describe("5 · etiquetas: a ferramenta grava o que a função da tela grava", ()
     );
     await ok("plataforma_garantir_etiquetas", {
       organization_id: pelaFerramenta,
-      etiquetas: [{ nome: "Plano anual", cor: "#12A594" }, { nome: "VIP", cor: "#0091ff" }],
+      etiquetas: [{ nome: "Plano anual", cor: "#00655A" }, { nome: "VIP", cor: "#0091ff" }],
     });
 
     const tags = async (org: string) => (await uma<{ tags: unknown }>("select settings -> 'tags' as tags from organizations where id = $1", [org])).tags;
     const daTela = await tags(GEMEA);
     expect(daTela, "a função da tela não gravou nada: o teste compararia vazio com vazio").toEqual([
       { tag: "vip", cor: "#0091ff" },
-      { tag: "Plano anual", cor: "#12a594" },
+      { tag: "Plano anual", cor: "#00655a" },
     ]);
     expect(await tags(pelaFerramenta)).toEqual(daTela);
     // E a chave vizinha, que a RLS lê, não foi tocada por nenhum dos dois.
@@ -679,5 +682,209 @@ describe("7 · a trilha: toda escrita fica auditada, com a ferramenta e o token"
     );
     expect(linha.actor_user_id).toBe(IMPLANTADOR);
     expect(linha.metadata.operacao).toBe("implantar_configuracao");
+  });
+});
+
+describe("8 · as novidades do upstream 1.74 a 1.80 (.76), no banco de verdade", () => {
+  // Uma organização própria: as tabelas do retrato da seção 4 não são tocadas.
+  const NOVA = "90179017-0000-4000-8000-0000000000e1";
+  const CONEXAO = "90179017-0000-4000-8000-0000000000e2";
+  let numero = "";
+  let fonte = "";
+
+  beforeAll(async () => {
+    await pool.query(
+      "insert into organizations (id, slug, legal_name, display_name) values ($1, 'mia-076-novidades', 'MIA 076 novidades', 'MIA 076 novidades') on conflict (id) do nothing",
+      [NOVA],
+    );
+    await pool.query(
+      "insert into user_organizations (user_id, organization_id, role, accepted_at) values ($1, $2, 'admin', now()) on conflict do nothing",
+      [IMPLANTADOR, NOVA],
+    );
+    const { rows } = await pool.query<{ id: string }>(
+      `insert into public.channel_sessions (organization_id, waha_session_name, webhook_secret_encrypted, status, display_name, phone_number)
+         values ($1, 'mia-076-recepcao', '\\x00'::bytea, 'WORKING', 'Recepção 076', '+5500900000076') returning id`,
+      [NOVA],
+    );
+    numero = rows[0]!.id;
+    // A conexão do banco externo é credencial do cliente: entra aqui direto, como a tela a gravaria.
+    await pool.query(
+      `insert into public.external_db_connections (id, organization_id, label, host, database_name, username, password_encrypted, password_iv, password_tag)
+         values ($1, $2, 'ERP 076', 'banco.exemplo.invalid', 'erp', 'leitor', '\\x01'::bytea, '\\x02'::bytea, '\\x03'::bytea)
+       on conflict (id) do nothing`,
+      [CONEXAO, NOVA],
+    );
+    await pool.query(
+      `insert into public.platform_config (chave, valor) values ('MODULO_BANCO_EXTERNO', 'ligado')
+       on conflict (chave) do update set valor = 'ligado'`,
+    );
+  });
+
+  /** O que cada ferramenta nova (ou campo novo) grava, nesta organização. */
+  function novidades(): Array<[string, Record<string, unknown>]> {
+    const futuro = new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 10);
+    return [
+      ["plataforma_configurar_empresa", { organization_id: NOVA, limpeza_automatica_de_midia: false }],
+      ["plataforma_configurar_atendimento", { organization_id: NOVA, ia_decide_nas_automacoes: false }],
+      ["plataforma_garantir_funil", { organization_id: NOVA, nome: "Agendamentos", adotar_funil_padrao: true, etapas: ETAPAS }],
+      ["plataforma_garantir_planos_de_tarefa", {
+        organization_id: NOVA,
+        planos: [{ nome: "Proposta enviada", passos: [{ titulo: "Ligar para {{contact.name}}", vence_em_dias: 2, responsavel: "implantador-9017@invariant.test" }] }],
+      }],
+      ["plataforma_garantir_fonte_de_formulario", {
+        organization_id: NOVA,
+        nome: "Formulário do site",
+        destino: { funil: "Agendamentos", etapa: "Novo contato" },
+        perguntas: [{ chave: "servico", pergunta: "Qual serviço?", tipo: "select", obrigatoria: true, opcoes: ["Avaliação", "Limpeza"] }],
+      }],
+      ["plataforma_garantir_automacao", {
+        organization_id: NOVA,
+        nome: "Triagem pela IA",
+        gatilho: "message.received",
+        acoes: [{
+          type: "ai_decide",
+          config: {
+            custo_de_token: true,
+            instrucao: "Se pediu orçamento, etiquete; se é proposta, aplique o plano.",
+            opcoes: [
+              { id: "orcamento", rotulo: "Orçamento", acao: { type: "add_tag", config: { tags: ["Orçamento"], destino: "contato" } } },
+              { id: "proposta", rotulo: "Proposta", acao: { type: "apply_task_plan", config: { plano_id: "plano-proposta-enviada" } } },
+            ],
+          },
+        }],
+      }],
+      ["plataforma_garantir_agente", {
+        organization_id: NOVA,
+        nome: "Bia",
+        prompt: PROMPT,
+        pacotes: ["vender"],
+        funis: ["Agendamentos"],
+        passagem_por_assunto_juridico: false,
+        bloquear_afirmacao_clinica: true,
+      }],
+      ["plataforma_garantir_agente", { organization_id: NOVA, nome: "Caio", prompt: PROMPT, pacotes: ["vender"], funis: ["Agendamentos"] }],
+      ["plataforma_garantir_roteador", {
+        organization_id: NOVA,
+        nome: "Recepção",
+        numero: "Recepção 076",
+        mensagens_de_contexto: 12,
+        intencoes: [
+          { nome: "Marcar", descricao: "Quer marcar uma avaliação.", agente: "Bia" },
+          { nome: "Empresas", descricao: "Fala por uma empresa.", agente: "Caio" },
+        ],
+      }],
+      ["plataforma_configurar_canal", {
+        organization_id: NOVA,
+        canal: "Recepção 076",
+        dias_da_prospeccao: [1, 2, 3, 4, 5],
+        guardar_historico: true,
+        pausa_agendada: { inicio: `${futuro}T23:00`, fim: `${futuro}T23:30` },
+      }],
+      ["plataforma_configurar_banco_externo", { organization_id: NOVA, conexao: "ERP 076", cliente_nas_conversas: { coluna: "telefone_cliente", tipo: "phone" } }],
+    ];
+  }
+
+  async function retratoDasNovidades(): Promise<Record<string, string>> {
+    const saida: Record<string, string> = {};
+    for (const tabela of [
+      "webhook_sources",
+      "automation_rules",
+      "ai_agent_versions",
+      "org_guardrail_layers",
+      "ai_routers",
+      "channel_knobs",
+      "channel_schedules",
+      "channel_sessions",
+      "external_db_connections",
+    ]) {
+      const r = await uma<{ linhas: number; resumo: string }>(
+        `select count(*)::int as linhas, md5(coalesce(string_agg(x::text, '|' order by x::text), '')) as resumo from public."${tabela}" x where x.organization_id = $1`,
+        [NOVA],
+      );
+      saida[tabela] = `${r.linhas} · ${r.resumo}`;
+    }
+    saida.organizations = (await uma<{ r: string }>("select md5(x::text) as r from organizations x where id = $1", [NOVA])).r;
+    return saida;
+  }
+
+  it("cada novidade grava sem recusa, na coluna que o banco tem", async () => {
+    for (const [nome, args] of novidades()) await ok(nome, args);
+
+    const org = await uma<{ media_retention_enforced: boolean; ai_decide: string | null; planos: number }>(
+      `select media_retention_enforced, settings -> 'automacoes' ->> 'ai_decide' as ai_decide,
+              jsonb_array_length(settings -> 'task_plans') as planos
+         from organizations where id = $1`,
+      [NOVA],
+    );
+    expect(org).toEqual({ media_retention_enforced: false, ai_decide: "false", planos: 1 });
+
+    const fonteLida = await uma<{ id: string; perguntas: number; authorize_ai_on_capture: boolean; secret_encrypted: string | null }>(
+      "select id, jsonb_array_length(form_fields) as perguntas, authorize_ai_on_capture, secret_encrypted from webhook_sources where organization_id = $1",
+      [NOVA],
+    );
+    expect(fonteLida).toMatchObject({ perguntas: 1, authorize_ai_on_capture: false, secret_encrypted: null });
+    fonte = fonteLida.id;
+
+    const regra = await uma<{ is_active: boolean; tipo: string }>(
+      "select is_active, actions -> 0 ->> 'type' as tipo from automation_rules where organization_id = $1",
+      [NOVA],
+    );
+    expect(regra).toEqual({ is_active: false, tipo: "ai_decide" });
+
+    const juridico = await uma<{ handoff_legal_enabled: boolean }>(
+      "select v.handoff_legal_enabled from ai_agent_versions v join ai_agents a on a.id = v.agent_id where a.organization_id = $1 and a.name = 'Bia'",
+      [NOVA],
+    );
+    expect(juridico.handoff_legal_enabled).toBe(false);
+    expect(await uma("select layer, enabled from org_guardrail_layers where organization_id = $1", [NOVA])).toEqual({ layer: "afirmacao_clinica", enabled: true });
+
+    const roteador = await uma<{ n: number; ativo: boolean }>(
+      "select (config ->> 'context_message_count')::int as n, is_active as ativo from ai_routers where organization_id = $1",
+      [NOVA],
+    );
+    expect(roteador).toEqual({ n: 12, ativo: false });
+
+    expect(await uma("select prospeccao_dias from channel_knobs where organization_id = $1 and channel_session_id = $2", [NOVA, numero])).toEqual({
+      prospeccao_dias: [1, 2, 3, 4, 5],
+    });
+    expect((await uma<{ g: boolean }>("select (metadata ->> 'guardar_historico')::boolean as g from channel_sessions where id = $1", [numero])).g).toBe(true);
+    const pausa = await uma<{ status: string; duracao: number; created_by: string }>(
+      "select status, extract(epoch from ends_at - starts_at)::int as duracao, created_by::text from channel_schedules where organization_id = $1",
+      [NOVA],
+    );
+    expect(pausa).toEqual({ status: "scheduled", duracao: 1800, created_by: IMPLANTADOR });
+
+    expect(
+      await uma("select customer_key_column, customer_key_kind from external_db_connections where id = $1", [CONEXAO]),
+    ).toEqual({ customer_key_column: "telefone_cliente", customer_key_kind: "phone" });
+  });
+
+  it("o recorte por fonte de formulário entra na regra, conferido contra a empresa", async () => {
+    await ok("plataforma_garantir_automacao", {
+      organization_id: NOVA,
+      nome: "Quem veio do site",
+      gatilho: "lead.created",
+      acoes: [{ type: "add_tag", config: { tags: ["Site"] } }],
+      configuracao_do_gatilho: { webhook_source_id: fonte },
+    });
+    expect(
+      (await uma<{ f: string }>("select trigger_config ->> 'webhook_source_id' as f from automation_rules where organization_id = $1 and name = 'Quem veio do site'", [NOVA])).f,
+    ).toBe(fonte);
+  });
+
+  it("⭐ rodar as novidades de novo não muda uma linha", async () => {
+    const antes = await retratoDasNovidades();
+    for (const [nome, args] of novidades()) {
+      const r = await ok(nome, args);
+      expect(r.texto, `${nome} respondeu que criou ou atualizou na segunda passada`).not.toMatch(/"desfecho": "(criou|atualizou)"/);
+    }
+    expect(await retratoDasNovidades()).toEqual(antes);
+  });
+
+  it("a leitura não devolve a credencial do banco externo nem o segredo da fonte", async () => {
+    await pool.query("update webhook_sources set secret_encrypted = 'cifra-ficticia-076' where id = $1", [fonte]);
+    const r = await ok("plataforma_ver_configuracao", { organization_id: NOVA, secoes: ["banco_externo", "fontes_de_formulario", "canais", "planos_de_tarefa"] });
+    expect(r.texto).not.toMatch(/banco\.exemplo\.invalid|leitor|cifra-ficticia-076/);
+    expect(r.texto).toContain("telefone_cliente");
   });
 });
