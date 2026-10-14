@@ -38,8 +38,12 @@ const enviados = vi.hoisted(() => [] as Array<{ subject: string; html: string; t
 const banco = vi.hoisted(() => ({ org: {} as Record<string, unknown> }));
 vi.mock("@sentry/nextjs", () => ({ captureMessage: vi.fn() }));
 vi.mock("@/lib/email/roteador", () => ({
-  sendEmail: vi.fn(async (e: { subject: string; html: string; text: string }) => {
-    enviados.push(e);
+  sendEmail: vi.fn(async (e: { subject: string; html: string; text: string; organizationId?: string }) => {
+    // FORK MIA: o fork passa `organizationId` ao roteador (a trava da empresa de
+    // demonstração, 9010). As fixtures são o e-mail do upstream byte a byte; o
+    // campo nosso sai antes da comparação.
+    const { organizationId: _daTravaDaDemonstracao, ...doUpstream } = e;
+    enviados.push(doUpstream);
     return { ok: true, id: "m1" };
   }),
 }));
@@ -175,7 +179,18 @@ async function dataJson(country: string | null, timezone: string, pais?: string 
  * sobe é `copiaDoTitular(data)` (`lgpd-copia-do-titular.test.ts`); estes
  * fixtures travam o payload de onde saem o PDF e essa cópia.
  */
-const comoGravado = (p: ExportPayload) => JSON.stringify({ ...p, generated_at: "X" }, null, 2);
+// FORK MIA: as quatro seções que o fork acrescenta ao payload (0266, 9018) saem
+// antes da comparação com as fixtures do upstream; a cópia do titular e o PDF
+// que as entregam têm testes próprios.
+const semAsSecoesDoFork = ({
+  ai_runs: _a,
+  broadcasts_recebidos: _b,
+  cliques_de_anuncio: _c,
+  obrigacoes: _o,
+  ...resto
+}: ExportPayload) => resto;
+const comoGravado = (p: ExportPayload) =>
+  JSON.stringify({ ...semAsSecoesDoFork(p), generated_at: "X" }, null, 2);
 
 /** O payload brasileiro menos as duas chaves que o doc 110 (2A) acrescentou — ver o cabeçalho. */
 const semAsChavesDoDoc110 = ({ messages_completas: _m, secoes_no_limite: _s, ...resto }: ExportPayload) =>
