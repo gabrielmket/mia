@@ -236,6 +236,25 @@ const CLASSIFICACAO: Record<string, Classificacao> = {
     porque:
       "vocabulário fechado ('person' | 'whatsapp_group', contacts_kind_check, 0482): diz se a linha é uma pessoa ou um grupo do WhatsApp, nada sobre quem é",
   },
+
+  // ── Colunas que o upstream acrescentou, classificadas na fusão de 14/10/2026
+  //    (v1.74–v1.80) ──
+  is_personal: {
+    tipo: "nao_pessoal",
+    porque:
+      "marca OPERACIONAL do contato pessoal (0563, spec 21): a empresa decidiu esconder este número da operação (a mãe, o amigo). Diz o que a equipe faz com a linha, não quem é a pessoa",
+  },
+  carteira_user_id: {
+    tipo: "nao_pessoal",
+    porque:
+      "o VENDEDOR dono do cliente (0622), um usuário da equipe — como created_by_user_id, é dado de outra pessoa, e apagá-lo na exclusão do titular apagaria dado do funcionário",
+  },
+  carteira_origem: {
+    tipo: "nao_pessoal",
+    porque:
+      "vocabulário fechado de como o dono foi definido ('manual' | 'importacao' | 'atribuicao_automatica', contacts_carteira_origem_vocabulario)",
+  },
+  carteira_definida_em: { tipo: "nao_pessoal", porque: "carimbo de tempo de quando o dono foi definido" },
 };
 
 /** Nomes capturados pelo primeiro grupo de um regex, já sem os `undefined`. */

@@ -169,6 +169,15 @@ describe("LGPD: nenhuma tabela com contact_id fica fora da anonimização", () =
       "mudaria a contabilidade. E não sobra dado da pessoa: o contact_id aponta " +
       "para a ficha já anonimizada, e `reason` só recebe dois valores fixos do " +
       "sistema ('Comanda finalizada', 'Estorno da comanda'), nunca texto livre.",
+    // Do upstream (0619/0620), declarada na fusão de 14/10/2026 (.76).
+    sales:
+      "É redigida, mas por um caminho que esta sonda não lê: desde a 0620 a " +
+      "cascata não nomeia mais a comanda (sem o módulo `financeiro` a tabela não " +
+      "existe, e o `update sales` derrubava a anonimização inteira), e a redação " +
+      "mora na SEÇÃO declarada `financeiro/sales` de `modulo_secoes_lgpd`, " +
+      "aplicada pelo gatilho `trg_lgpd_secoes_de_modulo` (notes vira nulo; " +
+      "cancel_reason e reverse_reason viram `[redigido]`). É dado, não SQL com o " +
+      "nome da tabela — e o upstream a prova na invariante da 0620.",
   };
 
   /** Tabelas do baseline que têm uma coluna `contact_id`. */

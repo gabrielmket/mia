@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type * as AgendaConsulta from "@/lib/agenda/consulta";
 import type { ResultadoDaConsulta } from "@/lib/agenda/consulta";
 import type { McpContext } from "@/lib/mcp/types";
+import type * as EmailDoContato from "@/lib/mcp/tools/email-do-contato";
 
 /**
  * `crm_find_free_slots` — o COMPORTAMENTO, não a declaração.
@@ -34,7 +35,7 @@ vi.mock("@/app/api/v1/agenda/agendamentos/_handler", () => ({
 // do upstream (#2077), em que um e-mail de fora da equipe não entra em lugar
 // nenhum; o caso do fork liga a gravação com `mockResolvedValueOnce`.
 vi.mock("@/lib/mcp/tools/email-do-contato", async (original) => {
-  const real = await original<typeof import("@/lib/mcp/tools/email-do-contato")>();
+  const real = await original<typeof EmailDoContato>();
   return {
     ...real,
     gravarEmailDoContato: vi.fn(async () => ({ gravado: false, motivo: "contato_ja_tem_outro_email" })),

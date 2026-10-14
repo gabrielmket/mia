@@ -34,12 +34,14 @@ import { padraoRegexDeBusca } from "@/lib/contacts/busca-regex";
 
 type SB = SupabaseClient;
 
+// FORK MIA. União das duas linhagens: empresa_id/cargo/setor (nosso fork, migrations
+// 0255/0262/0263) e first_service_at e is_personal (upstream, "o contato vira
+// cliente quando tem hora marcada"; contato pessoal, 0563). Coluna que sai daqui
+// volta `undefined` no objeto, e o PATCH seguinte da tela regrava o campo vazio —
+// apagando dado do cliente sem erro nenhum, que é o modo de falha caro deste
+// SELECT. (O comentário mora acima da constante: a cerca do upstream
+// `contato-pessoal-selects` lê a string logo depois do sinal de igual.)
 const SELECT_COLS =
-  // FORK MIA. União das duas linhagens: empresa_id/cargo/setor (nosso fork, migrations
-  // 0255/0262/0263) e first_service_at (upstream, "o contato vira cliente quando
-  // tem hora marcada"). Coluna que sai daqui volta `undefined` no objeto, e o
-  // PATCH seguinte da tela regrava o campo vazio — apagando dado do cliente sem
-  // erro nenhum, que é o modo de falha caro deste SELECT.
   "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, is_personal, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, custom_fields, empresa_id, cargo, setor, papel_na_empresa, principal_na_empresa, created_at, updated_at, last_activity_at, first_service_at";
 
 interface CursorPayload {
