@@ -17,7 +17,7 @@
  * pergunta pela capacidade `reportConversion` do adapter. O provider concreto
  * aparece aqui só porque é ele quem implementa a capacidade hoje.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { conversaoDeVendaHandler } from "@/lib/conversoes/envio.handler";
 import { conversaoDeEtapaMetaHandler } from "@/lib/conversoes/etapa-meta.handler";
@@ -398,6 +398,15 @@ describe("o evento de ETAPA da Meta também sai pelo canal", () => {
   beforeEach(() => {
     gravados.length = 0;
     tabelasLidas.length = 0;
+    // FORK MIA: `ENTROU_NA_ETAPA` é uma data fixa e a Meta recusa evento com
+    // mais de 7 dias; sem relógio parado, o caso da conexão direta vira
+    // `recusado_pela_plataforma` uma semana depois de escrito. Só o `Date`
+    // fica parado (duas horas depois da etapa); promessas e fetch seguem reais.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(Date.parse(ENTROU_NA_ETAPA) + 2 * 60 * 60 * 1000));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("sem conexão direta e com a chave ligada: sai pelo canal com o nome padrão, o instante da etapa e sem valor", async () => {
