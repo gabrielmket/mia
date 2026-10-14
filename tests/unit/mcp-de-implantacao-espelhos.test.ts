@@ -84,7 +84,7 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/api/v1/ai/agents/[id]/versions/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "b7f10fdc1237e374" },
   // Relido na .76: token dsk_ (resolveAuthDual), handoff_legal_enabled no PATCH e a conferência de escopo antes de editar o rascunho. O espelho confere o escopo antes das duas gravações.
   { rota: "app/api/v1/ai/agents/[id]/versions/[vid]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "ed48b99f03791c97" },
-  // Relido na .76 (upstream 1.79, #2156): publishAgentVersion recebe quemPublicou, e a mudança da chave jurídica sai como ai_agent.legal_handoff_changed com o ator. O espelho passa o autor do token. toolIdAceito só soma as ferramentas do MCP externo, que a implantação não liga.
+  // Relido na .76 (upstream 1.79, #2156): publishAgentVersion recebe quemPublicou, e a mudança da chave jurídica sai como ai_agent.legal_handoff_changed com o ator. O espelho passa o autor do token. E a ferramenta de servidor MCP externo escolhida no agente conta como capacidade válida (`toolIdAceito`): o espelho usa a mesma régua ao publicar.
   { rota: "app/api/v1/ai/agents/[id]/publish/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "479026df35f97b55" },
   { rota: "app/api/v1/ai/agents/[id]/pause/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "6e42c31f7151ac42" },
   // Espelhado na .73 (upstream 1.71, #2216): o limiar de sentimento mora em `config` do cadastro. O espelho (configComLimiar) faz a mesma mescla do PATCH: padrões, o gravado e o pedido por cima, conferido por agentPatchSchema.

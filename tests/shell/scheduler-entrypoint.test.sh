@@ -140,20 +140,25 @@ check "não deixou crontab pela metade" test ! -s "$TMP/crontab"
 #
 # A guarda antiga NÃO pegava isso: ela conferia se a chave estava vazia, e chave
 # errada passa por "não vazia".
+#
+# (MIA, fusão da .76) Desde a v1.80 do upstream o segredo NÃO vai mais na linha
+# do crontab: vai num arquivo de cabeçalho (`CRON_AUTH_DIR`), e o curl o lê com
+# `-H @arquivo`. A conferência da chave certa passa a ler esse arquivo.
 echo "scheduler: usa INTERNAL_CRON_SECRET quando ela existe"
-: > "$TMP/crontab"
-env INTERNAL_SECRET="a-chave-generica" INTERNAL_CRON_SECRET="a-chave-do-cron"   PATH="$TMP/bin:$PATH" CRONTAB_PATH="$TMP/crontab" sh "$ENTRYPOINT" >"$TMP/saida" 2>&1
-check "manda a chave do CRON no header" grep -q "Bearer a-chave-do-cron" "$TMP/crontab"
-check "não manda a genérica" sh -c "! grep -q \"Bearer a-chave-generica\" \"$TMP/crontab\""
+: > "$TMP/crontab"; rm -f "$TMP/auth/header"
+env INTERNAL_SECRET="a-chave-generica" INTERNAL_CRON_SECRET="a-chave-do-cron"   PATH="$TMP/bin:$PATH" CRONTAB_PATH="$TMP/crontab" CRON_AUTH_DIR="$TMP/auth" sh "$ENTRYPOINT" >"$TMP/saida" 2>&1
+check "manda a chave do CRON no header" grep -q "Bearer a-chave-do-cron" "$TMP/auth/header"
+check "não manda a genérica" sh -c "! grep -q \"Bearer a-chave-generica\" \"$TMP/auth/header\""
+check "e nenhuma das duas vai no crontab" sh -c "! grep -q \"a-chave-\" \"$TMP/crontab\""
 
 echo "scheduler: sem a do cron, cai na genérica (instalação antiga não quebra)"
-: > "$TMP/crontab"
-env -u INTERNAL_CRON_SECRET INTERNAL_SECRET="so-a-generica"   PATH="$TMP/bin:$PATH" CRONTAB_PATH="$TMP/crontab" sh "$ENTRYPOINT" >"$TMP/saida" 2>&1
-check "cai no fallback" grep -q "Bearer so-a-generica" "$TMP/crontab"
+: > "$TMP/crontab"; rm -f "$TMP/auth/header"
+env -u INTERNAL_CRON_SECRET INTERNAL_SECRET="so-a-generica"   PATH="$TMP/bin:$PATH" CRONTAB_PATH="$TMP/crontab" CRON_AUTH_DIR="$TMP/auth" sh "$ENTRYPOINT" >"$TMP/saida" 2>&1
+check "cai no fallback" grep -q "Bearer so-a-generica" "$TMP/auth/header"
 
 echo "scheduler: sem NENHUMA das duas, recusa"
 : > "$TMP/crontab"
-env -u INTERNAL_CRON_SECRET -u INTERNAL_SECRET   PATH="$TMP/bin:$PATH" CRONTAB_PATH="$TMP/crontab" sh "$ENTRYPOINT" >"$TMP/saida" 2>&1
+env -u INTERNAL_CRON_SECRET -u INTERNAL_SECRET   PATH="$TMP/bin:$PATH" CRONTAB_PATH="$TMP/crontab" CRON_AUTH_DIR="$TMP/auth" sh "$ENTRYPOINT" >"$TMP/saida" 2>&1
 RC=$?
 check "sai com código 1 quando falta tudo" test "$RC" -eq 1
 echo "scheduler: uma falha de cron não some em silêncio (#1109)"

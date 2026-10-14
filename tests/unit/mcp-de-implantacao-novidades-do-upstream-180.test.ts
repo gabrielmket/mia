@@ -184,7 +184,7 @@ describe("plataforma_configurar_empresa · PASSOU A ALCANÇAR a limpeza automát
       return consulta;
     }) as typeof c.cliente.from;
     const texto = await recusa(c, "plataforma_configurar_empresa", { cnpj: "00.000.000/0001-00" });
-    expect(texto).toBe("Este CNPJ já pertence a outra organização.");
+    expect(texto).toBe("Este CNPJ já pertence a outra organização. Confira o número e chame de novo.");
   });
 });
 

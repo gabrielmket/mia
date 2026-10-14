@@ -12,6 +12,12 @@ vi.mock("@/lib/impersonate/support", () => ({
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
+// FORK MIA: a rota pergunta "quem pede" para a trava da IA (lib/ai/trava-da-ia-na-rota.ts),
+// que lê a sessão. Aqui quem pede é da plataforma — é ela quem escolhe a IA no fork,
+// e é para ela que a regra medida (provedor, janela, follow-up) vale.
+vi.mock("@/lib/ai/trava-da-ia-na-rota", () => ({
+  quemPedeNaRota: vi.fn(async () => ({ is_platform_admin: true, platform_admin_scope: "full", support: null })),
+}));
 // #2052: a rota deixou de chamar `requireRole` direto e passou pelo
 // `resolveAuthDual` (sessão OU Bearer). O helper chama `createClient()` do
 // servidor no ramo de sessão, que precisa do escopo de request do Next — coisa

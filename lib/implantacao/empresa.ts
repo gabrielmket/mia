@@ -130,6 +130,8 @@ export async function configurarEmpresa(
     locale: pedido.idioma ?? org.locale,
     currency: pedido.moeda ?? org.currency ?? "BRL",
     media_retention_days: pedido.dias_de_retencao_de_midia ?? org.media_retention_days ?? 365,
+    // O schema da tela exige o interruptor desde a 1.74 (0557): vai o pedido, ou
+    // o que está gravado (padrão do banco: ligado).
     media_retention_enforced: pedido.limpeza_automatica_de_midia ?? org.media_retention_enforced,
     dpo_email: pedido.email_do_encarregado === undefined ? org.dpo_email : pedido.email_do_encarregado,
     privacy_policy_url:
@@ -188,8 +190,9 @@ export async function configurarEmpresa(
         colunas,
       );
     } catch (err) {
-      // CNPJ é único na instalação (`gravarDadosCadastrais` dá a mesma frase).
-      if ((err as { code?: string } | null)?.code === "23505") throw new Recusa(FRASE_DO_CNPJ_EM_USO);
+      // CNPJ é único na instalação (desde a 1.79, `gravarDadosCadastrais` dá a
+      // mesma frase), em vez do texto do Postgres.
+      if ((err as { code?: string } | null)?.code === "23505") throw new Recusa(`${FRASE_DO_CNPJ_EM_USO} Confira o número e chame de novo.`);
       throw err instanceof Error ? err : new Error(`não consegui gravar os dados da empresa: ${(err as { message?: string })?.message ?? "erro"}`);
     }
     if (colunas.media_retention_enforced === true) {

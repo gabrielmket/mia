@@ -156,7 +156,8 @@ test("liga um módulo, a tela diz onde ele aparece, e a porta está lá no CRM",
     // inclusive "Configurações › Dados externos", que é a exceção do grupo do
     // rodapé. Mas asserção que casa com quatro linhas não diz qual delas mediu.
     await expect(
-      page.getByText(/^Ao ligar, aparece no menu em: CRM › Ver tudo em CRM › Empresas/),
+      // FORK MIA: o grupo e o hub têm os rótulos do fork (lib/navigation/catalogo.ts).
+      page.getByText(/^Ao ligar, aparece no menu em: MIA CRM › Ver tudo no CRM › Empresas/),
     ).toBeVisible();
     await page.screenshot({ path: evidencia("modulo-desligado-diz-onde.png"), fullPage: true });
   });
@@ -168,7 +169,7 @@ test("liga um módulo, a tela diz onde ele aparece, e a porta está lá no CRM",
     // `^` separa os dois estados: "Ao ligar, aparece…" CONTÉM "aparece no menu
     // em:", e sem a âncora o caso de ligado passaria com a frase de desligado.
     await expect(
-      page.getByText(/^Aparece no menu em: CRM › Ver tudo em CRM › Empresas/),
+      page.getByText(/^Aparece no menu em: MIA CRM › Ver tudo no CRM › Empresas/),
     ).toBeVisible();
     await page.screenshot({ path: evidencia("modulo-ligado-diz-onde.png"), fullPage: true });
   });
@@ -204,8 +205,14 @@ test("liga um módulo, a tela diz onde ele aparece, e a porta está lá no CRM",
     // 2. Com `exact: true`, o `link` deixa de casar: o nome acessível do card do hub é o título
     //    MAIS a descrição ("Empresas Cadastro B2B — razão social, CNPJ e decisores."). O que tem
     //    nome exato é o `heading` de nível 3 dentro dele, como o snapshot da falha mostrou.
+    // FORK MIA: o hub do CRM do fork tem DOIS cards "Empresas" — o nosso
+    // (/app/empresas, cadastro de empresas do cliente) e o do módulo crm_b2b
+    // (/app/companies) que este caso liga. A âncora é o card que aponta para a
+    // porta do módulo, para o strict mode do Playwright não casar com os dois.
     await expect(
-      page.getByRole("heading", { level: 3, name: PORTA, exact: true }),
+      page
+        .locator('a[href="/app/companies"]')
+        .getByRole("heading", { level: 3, name: PORTA, exact: true }),
     ).toBeVisible();
 
     // E a rota abre de verdade — o gate do layout (`notFound()` com o módulo

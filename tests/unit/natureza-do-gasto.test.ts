@@ -23,7 +23,7 @@ describe("de que natureza é cada ponto", () => {
   it("os auxiliares que rodam dentro do turno são atendimento", () => {
     // FORK MIA — `handoff_promise`: o Jev lê a resposta que saiu no turno (a
     // passagem prometida), com o contato da conversa na linha.
-    for (const p of ["stage_classifier", "promise_semantic", "jailbreak_detect", "checkpoint", "handoff_promise"]) {
+    for (const p of ["stage_classifier", "promise_semantic", "jailbreak_detect", "checkpoint", "handoff_promise", "afirmacao_de_fato"]) {
       expect(naturezaDoGasto(p), p).toBe("atendimento");
     }
   });
@@ -92,6 +92,9 @@ describe("de que natureza é cada ponto", () => {
       "jailbreak_detect",
       // FORK MIA — o Jev conferindo a resposta que saiu no turno: atendimento.
       "handoff_promise",
+      // Upstream v1.77 (#2231): a conferência de fato lê a resposta que o
+      // assistente vai mandar, dentro do turno, a cada mensagem: atendimento.
+      "afirmacao_de_fato",
       "promise_semantic",
       "compaction",
       "flush",

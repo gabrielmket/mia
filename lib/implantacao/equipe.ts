@@ -170,15 +170,9 @@ export async function convidarPessoas(
   }
 
   // O limite de assentos do plano, antes de qualquer e-mail (a régua da rota).
-  const { data: vinculos, error: erroDosVinculos } = await c.admin
-    .from("user_organizations")
-    .select("user_id, provisional_until_handover")
-    .eq("organization_id", c.orgId)
-    .is("revoked_at", null);
-  if (erroDosVinculos) throw new Error(`não consegui ler a equipe: ${erroDosVinculos.message}`);
-  const ativos = ((vinculos ?? []) as Array<{ provisional_until_handover?: boolean | null }>).filter(
-    (m) => !m.provisional_until_handover,
-  ).length;
+  // Com a cobrança desligada (`MODULO_COBRANCA`) ou a empresa sem assinatura, o
+  // teto é nulo e a equipe nem é contada. Ler o teto falhou: o convite segue, e
+  // a trava do aceite continua no banco (`trg_trava_assentos_do_plano`).
   let limite: number | null = null;
   try {
     limite = await lerLimiteDoPlano(c.admin, c.orgId, "assentos");
@@ -189,10 +183,22 @@ export async function convidarPessoas(
       causa: err instanceof Error ? err.message : String(err),
     });
   }
-  if (limite !== null && ativos >= limite) {
-    throw new Recusa(
-      `${mensagemDoLimite("assentos", limite, "pt-BR")} Nenhum convite saiu. O limite é do plano de cobrança desta empresa: aumentar o plano é com quem opera a plataforma.`,
-    );
+  if (limite !== null) {
+    // A conta da rota: vínculo não revogado, sem o membro provisório do handover.
+    const { data: vinculos, error: erroDosVinculos } = await c.admin
+      .from("user_organizations")
+      .select("user_id, provisional_until_handover")
+      .eq("organization_id", c.orgId)
+      .is("revoked_at", null);
+    if (erroDosVinculos) throw new Error(`não consegui ler a equipe: ${erroDosVinculos.message}`);
+    const ativos = ((vinculos ?? []) as Array<{ provisional_until_handover?: boolean | null }>).filter(
+      (m) => !m.provisional_until_handover,
+    ).length;
+    if (ativos >= limite) {
+      throw new Recusa(
+        `${mensagemDoLimite("assentos", limite, "pt-BR")} Nenhum convite saiu. Pela plataforma, o plano se troca em Admin › Cobrança; ou libere uma vaga e chame de novo.`,
+      );
+    }
   }
 
   const membros = await lerMembros(c.admin, c.orgId);

@@ -82,6 +82,7 @@ import { audit } from "@/lib/audit";
 import { listSelectableChannels, type SelectableChannel } from "@/lib/channels/selectable";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { VALID_TOOL_IDS } from "@/lib/mcp/tools/catalog";
+import { toolIdAceito } from "@/lib/mcp/servidor-externo/ids";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 
 import {
@@ -125,7 +126,8 @@ const CAMPOS_DA_VERSAO = [
   "history_token_window",
   "handoff_keywords",
   "handoff_tool_enabled",
-  // upstream 1.79 (0616, #2156): a passagem por assunto jurídico, por versão
+  // upstream 1.79 (0616, #2156): a passagem por assunto jurídico, por versão.
+  // Na lista para a versão nova herdar o valor da de referência, como a rota.
   "handoff_legal_enabled",
   "proposal_ai_draft_enabled",
   "cases_enabled",
@@ -1046,7 +1048,8 @@ async function garantirAgenteECadastro(
     desfechoDaVersao = "ja_estava";
   } else {
     // A conferência de escopo das duas rotas (versão nova e edição do rascunho):
-    // desde a 1.74 elas conferem também o provedor, a chave e o número.
+    // desde a 1.74 elas conferem também o provedor (a assinatura do ChatGPT só com
+    // o módulo `login_codex`), a chave e o número contra ESTA organização.
     const escopo = await validarEscopoDaVersao(c.admin, c.orgId, {
       provider: desejada.provider,
       pipeline_ids: desejada.pipeline_ids,
@@ -1228,9 +1231,10 @@ export async function publicarAgente(
     );
   }
 
-  const invalidas = ((rascunho.tool_ids as string[] | null) ?? []).filter(
-    (id) => !(VALID_TOOL_IDS as readonly string[]).includes(id),
-  );
+  // Upstream v1.77+: a ferramenta de um servidor MCP externo escolhida no agente
+  // também é capacidade válida (`toolIdAceito`), como na rota de publicar.
+  const catalogo = new Set<string>(VALID_TOOL_IDS as readonly string[]);
+  const invalidas = ((rascunho.tool_ids as string[] | null) ?? []).filter((id) => !toolIdAceito(id, catalogo));
   if (invalidas.length > 0) {
     throw new Recusa(
       `O rascunho tem capacidades que não existem mais no catálogo: ${invalidas.join(", ")}. ` +

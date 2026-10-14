@@ -79,7 +79,9 @@ vi.mock("@/lib/auth/server", () => ({
   orgAtivaSemPortao: async () => sessao.org,
 }));
 
-vi.mock("@/lib/branding", () => ({ branding: () => ({ name: "MIA" }) }));
+// (.76) Desde a v1.80 do upstream o nome do sistema nos documentos legais vem do
+// resolvedor que lê o banco (`marcaDaSaida`, #2511), e não mais de `branding()`.
+vi.mock("@/lib/branding/saida", () => ({ marcaDaSaida: async () => ({ nome: "MIA" }) }));
 
 vi.mock("@/lib/env", () => ({ env: { LGPD_DPO_EMAIL: "dpo@plataforma.test" } }));
 

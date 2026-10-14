@@ -66,6 +66,12 @@ function clienteDeServico() {
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => clienteDeServico() }));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
+// FORK MIA: a rota pergunta "quem pede" para a trava da IA (lib/ai/trava-da-ia-na-rota.ts),
+// que lê a sessão. Aqui quem pede é da plataforma — é ela quem escolhe a IA no fork,
+// e é para ela que a regra medida (provedor, janela, follow-up) vale.
+vi.mock("@/lib/ai/trava-da-ia-na-rota", () => ({
+  quemPedeNaRota: vi.fn(async () => ({ is_platform_admin: true, platform_admin_scope: "full", support: null })),
+}));
 vi.mock("@/lib/api/auth-dual", () => ({
   resolveAuthDual: vi.fn(async () => ({
     ok: true,
@@ -81,7 +87,15 @@ vi.mock("@/lib/api/auth-dual", () => ({
 const onboarding = vi.hoisted(() => ({ guardar: vi.fn(), padrao: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/app/actions/onboarding/_shared", () => ({
-  requireOnboardingCtx: vi.fn(async () => ({ orgId: ORG, userId: "u1", role: "admin" })),
+  // FORK MIA: no fork só a plataforma cadastra a chave da IA (escolheIa).
+  requireOnboardingCtx: vi.fn(async () => ({
+    orgId: ORG,
+    userId: "u1",
+    role: "admin",
+    is_platform_admin: true,
+    platform_admin_scope: "full",
+    support: null,
+  })),
   OnboardingError: class extends Error {},
 }));
 vi.mock("@/lib/ai/credenciais/guardar", async (importOriginal) => ({

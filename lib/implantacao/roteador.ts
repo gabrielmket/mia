@@ -456,10 +456,12 @@ export async function garantirRoteador(c: Implantacao, pedido: PedidoDeRoteador)
     }
     const numero = acharNumero(numeros, pedido.numero);
     // O modelo do classificador é da plataforma: roteador novo nasce no "Automático".
-    // E a janela de contexto nasce com o valor da rota (8), ou o pedido.
+    // E a janela de contexto nasce com o pedido, ou com o valor da rota (8), como
+    // na rota de criar (upstream 1.74).
+    const configDaTrava = configDoRoteador(QUEM_NAO_ESCOLHE_IA, undefined, null);
     const config = {
-      ...(configDoRoteador(QUEM_NAO_ESCOLHE_IA, undefined, null) ?? {}),
-      context_message_count: pedido.mensagens_de_contexto ?? NEW_ROUTER_CONTEXT_MESSAGES,
+      ...(configDaTrava ?? {}),
+      context_message_count: pedido.mensagens_de_contexto ?? configDaTrava?.context_message_count ?? NEW_ROUTER_CONTEXT_MESSAGES,
     };
     const { data: criado, error } = await c.admin
       .from("ai_routers")

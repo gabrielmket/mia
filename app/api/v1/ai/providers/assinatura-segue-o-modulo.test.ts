@@ -113,7 +113,15 @@ beforeEach(() => {
   ];
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
-    user: { id: "11111111-1111-4111-8111-111111111111", idioma: "pt-BR" },
+    // FORK MIA: no fork o provedor e o modelo são da plataforma (escolheIa); quem
+    // muda o padrão aqui é o admin de plataforma, e para ele a régua do módulo vale.
+    user: {
+      id: "11111111-1111-4111-8111-111111111111",
+      idioma: "pt-BR",
+      is_platform_admin: true,
+      platform_admin_scope: "full",
+      support: null,
+    },
     org: { orgId: "22222222-2222-4222-8222-222222222222", role: "admin" },
   } as unknown as Awaited<ReturnType<typeof requireRole>>);
 });

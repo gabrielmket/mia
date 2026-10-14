@@ -28,8 +28,26 @@ import {
 } from "@/lib/navigation/catalogo";
 import { caminhoDaPorta, ondeOModuloAparece } from "@/lib/navigation/onde-o-modulo-aparece";
 import { MODULOS_NA_TELA } from "@/app/admin/(protected)/sistema/_form";
-import { combinarInterfaces, destinosDaInterface, permitidos } from "@/lib/navigation/interface";
+import {
+  combinarInterfaces,
+  destinosDaInterface as destinosDaInterfaceDoFork,
+  permitidos,
+} from "@/lib/navigation/interface";
 import { MODULOS_OPCIONAIS, type ModuloOpcional } from "@/lib/instalacao/modulos";
+
+/**
+ * FORK MIA: no upstream o 4º parâmetro de `destinosDaInterface` é a lista de
+ * módulos LIGADOS NA INSTALAÇÃO; no fork o 4º é o que a organização CONTRATOU e
+ * a lista da instalação é o 6º (`modulosLigados`, ver o comentário em
+ * lib/navigation/interface.ts). Este atalho mantém os casos do upstream
+ * escritos como ele os escreveu, entregando a lista no eixo certo.
+ */
+const destinosDaInterface = (
+  raw: unknown,
+  platform: boolean,
+  role: Parameters<typeof destinosDaInterfaceDoFork>[2],
+  ligados?: readonly ModuloOpcional[],
+) => destinosDaInterfaceDoFork(raw, platform, role, undefined, undefined, ligados);
 
 /**
  * ⚠️ `NAV_CATALOG` é UNIÃO DE TIPOS LITERAIS, não `NavMetadata[]`: cada entrada tem só os
@@ -117,7 +135,9 @@ describe("ondeOModuloAparece: a tela pode dizer o que ligar vai mudar", () => {
   it("módulo com porta devolve o caminho E o grupo do menu", () => {
     const onde = ondeOModuloAparece("crm_b2b");
     expect(onde.map((p) => p.href)).toEqual(["/app/companies", "/app/people", "/app/imports"]);
-    expect(onde.every((p) => p.grupo === "CRM")).toBe(true);
+    // FORK MIA: os grupos do menu têm o nome da marca ("MIA CRM", "Agente MIA",
+    // "MIA Insights") e os hubs dizem "Ver tudo no …" (lib/navigation/catalogo.ts).
+    expect(onde.every((p) => p.grupo === "MIA CRM")).toBe(true);
     expect(onde[0]!.label).toBe("Empresas");
   });
 
@@ -181,8 +201,8 @@ describe("o grupo é o que está NA TELA, não o rótulo do modelo de dados", ()
    */
   it("⭐ porta que mora no hub declara o passo do hub", () => {
     const onde = ondeOModuloAparece("crm_b2b");
-    expect(onde[0]!.grupo).toBe("CRM");
-    expect(onde[0]!.hub).toBe("Ver tudo em CRM");
+    expect(onde[0]!.grupo).toBe("MIA CRM"); // FORK MIA: o rótulo do grupo no fork
+    expect(onde[0]!.hub).toBe("Ver tudo no CRM");
     expect(onde[0]!.label).toBe("Empresas");
   });
 
@@ -216,9 +236,10 @@ describe("o grupo é o que está NA TELA, não o rótulo do modelo de dados", ()
   });
 
   it("os outros grupos seguem pelo próprio rótulo (controle)", () => {
-    expect(ondeOModuloAparece("crm_b2b")[0]!.grupo).toBe("CRM");
-    expect(ondeOModuloAparece("fluxos_atendimento")[0]!.grupo).toBe("Agente de IA");
-    expect(ondeOModuloAparece("honorarios")[0]!.grupo).toBe("Análise");
+    // FORK MIA: os rótulos dos grupos no fork.
+    expect(ondeOModuloAparece("crm_b2b")[0]!.grupo).toBe("MIA CRM");
+    expect(ondeOModuloAparece("fluxos_atendimento")[0]!.grupo).toBe("Agente MIA");
+    expect(ondeOModuloAparece("honorarios")[0]!.grupo).toBe("MIA Insights");
   });
 });
 
@@ -355,8 +376,8 @@ describe("nenhum caminho de menu é escrito à mão", () => {
   it("⭐ o painel do login por assinatura declara o caminho DERIVADO, com o passo do hub", () => {
     const onde = caminhoDaPorta("/app/ai/credentials");
     expect(onde).not.toBeNull();
-    expect(onde!.grupo).toBe("Agente de IA");
-    expect(onde!.hub).toBe("Ver tudo em IA");
+    expect(onde!.grupo).toBe("Agente MIA"); // FORK MIA: os rótulos do fork
+    expect(onde!.hub).toBe("Ver tudo no agente");
     expect(onde!.label).toBe("Credenciais");
   });
 
