@@ -44,6 +44,16 @@
  *    entra por aqui: roteiro é outra superfície, sem ferramenta de montagem. O
  *    que uma pessoa amarrou pela tela é PRESERVADO na intenção de mesmo nome.
  * 5. O modelo do classificador não se informa: é da plataforma.
+ *
+ * ── A janela de contexto do classificador (upstream 1.74, #2061) ──────────
+ *
+ * O classificador lê as últimas N mensagens da conversa (`config.context_message_count`,
+ * de 0 a 16) para desambiguar a mensagem atual (a IA de sempre; o Jev lê só a
+ * atual). A rota grava 8 no roteador novo;
+ * o roteador antigo sem a chave vale 4 (`CLASSIFIER_CONTEXT_MESSAGES`, a leitura
+ * do motor em `lib/agent-engine/agent/router-config.ts`). O espelho faz igual, e
+ * `mensagens_de_contexto` ajusta pela mesma mescla do PATCH (o que está gravado
+ * em `config` fica).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PoolClient } from "pg";
@@ -52,6 +62,7 @@ import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { estadoDoAgente } from "@/lib/ai/agents/no-ar";
 import { writeRouterMembers, type RouterMemberInput } from "@/lib/ai/agents/router-members";
 import { replaceRouterMembersHttp } from "@/lib/ai/agents/router-members-http";
+import { CLASSIFIER_CONTEXT_MESSAGES, MAX_CLASSIFIER_CONTEXT_MESSAGES, NEW_ROUTER_CONTEXT_MESSAGES } from "@/lib/ai/classifier-context";
 import { configDoRoteador } from "@/lib/ai/trava-da-ia";
 import { audit } from "@/lib/audit";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
@@ -91,6 +102,14 @@ export interface PedidoDeRoteador {
   agente_reserva?: string | null;
   /** A lista COMPLETA de intenções, na ordem. Substitui a que existe. */
   intencoes?: IntencaoPedida[];
+  /** Quantas mensagens anteriores o classificador lê (0 a 16). */
+  mensagens_de_contexto?: number;
+}
+
+/** A janela que o motor usa: a gravada, ou 4 quando a chave falta (roteador de antes da 1.79). */
+export function mensagensDeContextoDo(config: Record<string, unknown> | null | undefined): number {
+  const n = (config ?? {}).context_message_count;
+  return typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= MAX_CLASSIFIER_CONTEXT_MESSAGES ? n : CLASSIFIER_CONTEXT_MESSAGES;
 }
 
 export interface LinhaDoRoteador {
@@ -199,6 +218,7 @@ export async function retratoDosRoteadores(admin: SupabaseClient, orgId: string)
         ? { id: numero.id, nome: numero.display_name, telefone: numero.phone_number, conectado: numero.status === STATUS_SAUDAVEL }
         : { id: r.channel_session_id, nome: null, telefone: null, conectado: false },
       agente_reserva: nomeDoAgente(r.fallback_agent_id),
+      mensagens_de_contexto: mensagensDeContextoDo(r.config),
       intencoes: intencoes
         .filter((i) => i.router_id === r.id)
         .map((i) => {
@@ -232,6 +252,7 @@ export interface RoteadorGarantido {
     ligado: boolean;
     numero: { id: string; nome: string; telefone: string | null };
     agente_reserva: string | null;
+    mensagens_de_contexto: number;
     desfecho: Desfecho;
     mudancas: string[];
   };
@@ -330,6 +351,10 @@ function comoEntrada(i: LinhaDaIntencao): RouterMemberInput {
  */
 async function gravarIntencoes(c: Implantacao, routerId: string, members: RouterMemberInput[]): Promise<void> {
   let db: PoolClient | undefined;
+  // #2624 (upstream 1.79, a mesma correção da rota): consulta que estoura o tempo
+  // rejeita sem destruir o socket; devolvido ao pool sem erro, o cliente voltaria
+  // com a transação antiga de pé. O erro marcado faz o pool descartá-lo.
+  let erroNaTransacao: Error | undefined;
   try {
     if (process.env.SUPABASE_DB_URL) {
       db = await getRequestPool().connect();
@@ -340,6 +365,7 @@ async function gravarIntencoes(c: Implantacao, routerId: string, members: Router
       await replaceRouterMembersHttp(c.admin, c.orgId, routerId, members);
     }
   } catch (err) {
+    erroNaTransacao = err instanceof Error ? err : new Error(String(err));
     if (db) await db.query("rollback").catch(() => undefined);
     const mensagem = err instanceof Error ? err.message : "";
     const codigo = (err as { code?: string } | null)?.code;
@@ -358,7 +384,7 @@ async function gravarIntencoes(c: Implantacao, routerId: string, members: Router
     }
     throw new Error(`não consegui gravar as intenções do roteador: ${mensagem || "erro desconhecido"}`);
   } finally {
-    db?.release();
+    db?.release(erroNaTransacao);
   }
 }
 
@@ -430,7 +456,11 @@ export async function garantirRoteador(c: Implantacao, pedido: PedidoDeRoteador)
     }
     const numero = acharNumero(numeros, pedido.numero);
     // O modelo do classificador é da plataforma: roteador novo nasce no "Automático".
-    const config = configDoRoteador(QUEM_NAO_ESCOLHE_IA, undefined, null);
+    // E a janela de contexto nasce com o valor da rota (8), ou o pedido.
+    const config = {
+      ...(configDoRoteador(QUEM_NAO_ESCOLHE_IA, undefined, null) ?? {}),
+      context_message_count: pedido.mensagens_de_contexto ?? NEW_ROUTER_CONTEXT_MESSAGES,
+    };
     const { data: criado, error } = await c.admin
       .from("ai_routers")
       .insert({
@@ -440,7 +470,7 @@ export async function garantirRoteador(c: Implantacao, pedido: PedidoDeRoteador)
         fallback_agent_id: reserva ? reserva.id : null,
         // Nasce DESLIGADO: ligar é `plataforma_ligar_roteador` (colocar_no_ar).
         is_active: false,
-        ...(config !== undefined ? { config } : {}),
+        config,
         created_by: c.autorUserId,
       })
       .select(COLUNAS_DO_ROTEADOR)
@@ -474,6 +504,12 @@ export async function garantirRoteador(c: Implantacao, pedido: PedidoDeRoteador)
     if (reserva !== undefined && (existente.fallback_agent_id ?? null) !== (reserva ? reserva.id : null)) {
       patch.fallback_agent_id = reserva ? reserva.id : null;
       mudancas.push("agente reserva");
+    }
+    if (pedido.mensagens_de_contexto !== undefined && pedido.mensagens_de_contexto !== mensagensDeContextoDo(existente.config)) {
+      // A mescla do PATCH: o que está em `config` fica, e a trava da IA limpa o pedido.
+      const atual = (existente.config ?? {}) as Record<string, unknown>;
+      patch.config = { ...atual, ...configDoRoteador(QUEM_NAO_ESCOLHE_IA, { context_message_count: pedido.mensagens_de_contexto }, atual) };
+      mudancas.push("mensagens de contexto do classificador");
     }
     if (Object.keys(patch).length > 0) {
       if (existente.is_active) recusaDeRoteadorLigado(existente.name);
@@ -561,6 +597,7 @@ export async function garantirRoteador(c: Implantacao, pedido: PedidoDeRoteador)
       ligado: linha.is_active,
       numero: { id: linha.channel_session_id, nome: numero ? numero.display_name : "", telefone: numero ? numero.phone_number : null },
       agente_reserva: linha.fallback_agent_id ? (agentes.find((a) => a.id === linha.fallback_agent_id)?.name ?? linha.fallback_agent_id) : null,
+      mensagens_de_contexto: mensagensDeContextoDo(linha.config),
       desfecho,
       mudancas,
     },

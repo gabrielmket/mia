@@ -58,7 +58,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { mcpAgentDraftRecords } from "@/lib/ai/agents/create-draft";
 import { bloqueioDePublicacao, type EstadoDaCredencial, type MotivoDeBloqueio } from "@/lib/ai/agents/bloqueio-de-publicacao";
-import { validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
+import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
 import { estadoDoAgente } from "@/lib/ai/agents/no-ar";
 import { publishAgentVersion } from "@/lib/ai/agents/publish";
 import {
@@ -71,6 +71,12 @@ import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
 import { capacidadesPadraoDoOnboarding } from "@/lib/ai/agents/capacidades-padrao";
 import { AGENT_CONFIG_DEFAULTS, agentPatchSchema } from "@/lib/ai/guardrails-schema";
 import { DEFAULT_SENTIMENT_THRESHOLD } from "@/lib/ai/prompts/sentiment";
+import {
+  camadaLigada,
+  escolhaDasLinhas,
+  padraoDasCamadasNoAmbiente,
+  type CamadaSemantica,
+} from "@/lib/agent-engine/guardrails/camadas-da-org";
 import { iaPodeIrAoAr, travarIaDaVersaoNova } from "@/lib/ai/trava-da-ia";
 import { audit } from "@/lib/audit";
 import { listSelectableChannels, type SelectableChannel } from "@/lib/channels/selectable";
@@ -94,11 +100,14 @@ import { capacidadesOferecidas, montarCapacidades } from "./capacidades";
  */
 const QUEM_NAO_ESCOLHE_IA = { is_platform_admin: false, support: null } as const;
 
+/** A camada de segurança da empresa que a ferramenta alcança (as outras duas custam IA por mensagem e ficam na tela). */
+const CAMADA_CLINICA: CamadaSemantica = "afirmacao_clinica";
+
 const COLUNAS_DO_AGENTE =
   "id, organization_id, name, description, kind, priority, is_active, is_default, published_version_id, paused_at, archived_at, config, created_at";
 
 const COLUNAS_DA_VERSAO =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, created_at, pipeline_ids, knowledge_source_ids, inbound_debounce_ms";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, handoff_legal_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, created_at, pipeline_ids, knowledge_source_ids, inbound_debounce_ms";
 
 /** Os campos de conteúdo de uma versão: é sobre eles que se pergunta "mudou?". */
 const CAMPOS_DA_VERSAO = [
@@ -116,6 +125,8 @@ const CAMPOS_DA_VERSAO = [
   "history_token_window",
   "handoff_keywords",
   "handoff_tool_enabled",
+  // upstream 1.79 (0616, #2156): a passagem por assunto jurídico, por versão
+  "handoff_legal_enabled",
   "proposal_ai_draft_enabled",
   "cases_enabled",
   "split_messages",
@@ -137,6 +148,7 @@ const ROTULO_DO_CAMPO: Record<string, string> = {
   max_steps: "máximo de passos",
   handoff_keywords: "palavras de passagem",
   handoff_tool_enabled: "passagem para humano",
+  handoff_legal_enabled: "passagem por assunto jurídico",
   cases_enabled: "casos",
   split_messages: "dividir mensagens",
   split_max_chars: "tamanho da mensagem",
@@ -199,6 +211,18 @@ export interface PedidoDeAgente {
   };
   palavras_de_passagem?: string[];
   passagem_para_humano?: boolean;
+  /**
+   * Passar a conversa para uma pessoa quando o assunto é JURÍDICO (upstream 1.79,
+   * 0616, #2156). Ligada por padrão; num escritório de advocacia, "processo" e
+   * "advogado" são o vocabulário normal do cliente, e ali ela se desliga.
+   */
+  passagem_por_assunto_juridico?: boolean;
+  /**
+   * A camada de segurança "não fazer afirmação clínica" (upstream 1.74, #2321):
+   * é da EMPRESA (vale para todos os agentes dela), desligada por padrão, e só
+   * faz sentido em clínica e consultório.
+   */
+  bloquear_afirmacao_clinica?: boolean;
   casos?: boolean;
   dividir_mensagens?: boolean;
   tamanho_da_mensagem?: number;
@@ -221,6 +245,8 @@ export interface PedidoDeAgente {
 
 export interface AgenteGarantido {
   agente: { id: string; nome: string; desfecho: Desfecho; mudancas: string[] };
+  /** A camada "não fazer afirmação clínica" da EMPRESA, quando o pedido a trouxe. */
+  bloqueio_de_afirmacao_clinica?: { ligado: boolean; desfecho: Desfecho };
   versao: {
     id: string;
     numero: number;
@@ -267,7 +293,11 @@ export async function lerVersoes(admin: SupabaseClient, orgId: string, agentId: 
 }
 
 function conteudoDa(versao: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(CAMPOS_DA_VERSAO.map((campo) => [campo, versao[campo]]));
+  const conteudo = Object.fromEntries(CAMPOS_DA_VERSAO.map((campo) => [campo, versao[campo]]));
+  // A coluna nasceu na 0616 com padrão LIGADO: versão gravada antes dela (ou lida
+  // sem a coluna) vale como ligada, e é assim que a comparação a lê.
+  if (typeof conteudo.handoff_legal_enabled !== "boolean") conteudo.handoff_legal_enabled = true;
+  return conteudo;
 }
 
 /** O estado da credencial escolhida, na régua de `bloqueioDePublicacao`. */
@@ -524,6 +554,7 @@ async function montarVersao(
 
   if (pedido.palavras_de_passagem !== undefined) corpo.handoff_keywords = pedido.palavras_de_passagem;
   if (pedido.passagem_para_humano !== undefined) corpo.handoff_tool_enabled = pedido.passagem_para_humano;
+  if (pedido.passagem_por_assunto_juridico !== undefined) corpo.handoff_legal_enabled = pedido.passagem_por_assunto_juridico;
   if (pedido.casos !== undefined) corpo.cases_enabled = pedido.casos;
   if (pedido.dividir_mensagens !== undefined) corpo.split_messages = pedido.dividir_mensagens;
   if (pedido.tamanho_da_mensagem !== undefined) corpo.split_max_chars = pedido.tamanho_da_mensagem;
@@ -701,6 +732,8 @@ async function inserirVersao(
         history_token_window: v.history_token_window,
         handoff_keywords: v.handoff_keywords,
         handoff_tool_enabled: v.handoff_tool_enabled,
+        // Upstream 1.79 (0616, #2156): a rota copia a chave jurídica na versão nova.
+        handoff_legal_enabled: v.handoff_legal_enabled,
         // Upstream 1.70 (#2013): a rota passou a gravar a chave do rascunho de
         // proposta pela IA na versão nova; o espelho grava junto.
         proposal_ai_draft_enabled: v.proposal_ai_draft_enabled,
@@ -737,7 +770,75 @@ async function inserirVersao(
   throw new Error("conflito de numeração de versão. Chame de novo.");
 }
 
+// ---------------------------------------------------------------------------
+// a camada "não fazer afirmação clínica" (da empresa)
+// ---------------------------------------------------------------------------
+
+/** A camada como o motor a lê: a escolha da empresa, ou o padrão (desligada). */
+export async function lerCamadaClinica(admin: SupabaseClient, orgId: string): Promise<{ ligado: boolean; escolhido_pela_empresa: boolean }> {
+  const { data, error } = await admin
+    .from("org_guardrail_layers")
+    .select("layer, enabled")
+    .eq("organization_id", orgId)
+    .eq("layer", CAMADA_CLINICA);
+  if (error) throw new Error(`não consegui ler as camadas de segurança: ${error.message}`);
+  const escolha = escolhaDasLinhas((data ?? []) as Array<{ layer: string; enabled: boolean }>).afirmacao_clinica;
+  return { ligado: camadaLigada(escolha, padraoDasCamadasNoAmbiente().afirmacao_clinica), escolhido_pela_empresa: escolha !== null };
+}
+
+/**
+ * Liga ou desliga a camada "não fazer afirmação clínica" da EMPRESA, pela mesma
+ * gravação de `PUT /api/v1/ai/guardrail-layers` (upsert por organização e
+ * camada, e a auditoria `ai.guardrail_layer_changed`). Pedido igual ao que vale
+ * não escreve: a empresa que nunca escolheu não ganha linha por um pedido que
+ * repete o padrão (desligada).
+ */
+async function garantirCamadaClinica(c: Implantacao, ligar: boolean): Promise<{ ligado: boolean; desfecho: Desfecho }> {
+  const atual = await lerCamadaClinica(c.admin, c.orgId);
+  if (atual.ligado === ligar) return { ligado: ligar, desfecho: "ja_estava" };
+  const { data, error } = await c.admin
+    .from("org_guardrail_layers")
+    .upsert(
+      { organization_id: c.orgId, layer: CAMADA_CLINICA, enabled: ligar, updated_at: new Date().toISOString() },
+      { onConflict: "organization_id,layer" },
+    )
+    .select("layer, enabled")
+    .maybeSingle();
+  if (error) throw new Error(`não consegui gravar a camada de afirmação clínica: ${error.message}`);
+  // Upsert que casa zero linhas devolve sucesso no PostgREST: a mesma guarda da rota.
+  if (!data) throw new Error("nada foi gravado na camada de afirmação clínica. Chame de novo.");
+  void audit({
+    action: "ai.guardrail_layer_changed",
+    actorUserId: c.autorUserId,
+    organizationId: c.orgId,
+    resourceType: "org_guardrail_layers",
+    // A chave é (organização, camada): não há uuid a referenciar (o comentário da rota).
+    resourceId: null,
+    requestId: c.requestId,
+    metadata: { layer: CAMADA_CLINICA, enabled: ligar, via: "mcp_plataforma" },
+  });
+  return { ligado: ligar, desfecho: atual.escolhido_pela_empresa ? "atualizou" : "criou" };
+}
+
 export async function garantirAgente(
+  c: Implantacao,
+  org: OrganizacaoDaImplantacao,
+  pedido: PedidoDeAgente,
+): Promise<AgenteGarantido> {
+  const garantido = await garantirAgenteECadastro(c, org, pedido);
+  if (pedido.bloquear_afirmacao_clinica === undefined) return garantido;
+  const camada = await garantirCamadaClinica(c, pedido.bloquear_afirmacao_clinica);
+  if (camada.desfecho !== "ja_estava") {
+    garantido.avisos.push(
+      camada.ligado
+        ? "O bloqueio de afirmação clínica foi LIGADO para a empresa inteira, em todos os agentes, e já vale na próxima mensagem: o agente não diz o que a pessoa tem, não indica remédio nem dose, não garante resultado; reescreve oferecendo consulta, e se insistir a mensagem é barrada e um caso é aberto (com casos ligados)."
+        : "O bloqueio de afirmação clínica foi DESLIGADO para a empresa inteira, em todos os agentes, e já vale na próxima mensagem.",
+    );
+  }
+  return { ...garantido, bloqueio_de_afirmacao_clinica: camada };
+}
+
+async function garantirAgenteECadastro(
   c: Implantacao,
   org: OrganizacaoDaImplantacao,
   pedido: PedidoDeAgente,
@@ -787,7 +888,7 @@ export async function garantirAgente(
     const entrada = { ...lido.data, version: travada.corpo };
 
     const escopo = await validarEscopoDaVersao(c.admin, c.orgId, entrada.version);
-    if (!escopo.ok) throw new Recusa("Um dos funis ou materiais do agente não existe mais nesta organização. Chame de novo.");
+    if (!escopo.ok) throw new Recusa(`${mensagemDoEscopo(escopo)} Pela ferramenta: confira os nomes em plataforma_ver_funis e plataforma_ver_configuracao, e chame de novo.`);
 
     const registros = mcpAgentDraftRecords({ orgId: c.orgId, userId: c.autorUserId }, entrada);
     const { data: criado, error: agenteErr } = await c.admin
@@ -890,6 +991,16 @@ export async function garantirAgente(
       if (error.code === "23505") throw new Recusa(`Já existe outro agente chamado «${nome}» nesta organização.`);
       throw new Error(`não consegui atualizar o agente: ${error.message}`);
     }
+    // A linha que o PATCH da rota passou a deixar (1.74): quem mexeu no cadastro.
+    void audit({
+      action: "ai_agent.updated",
+      actorUserId: c.autorUserId,
+      organizationId: c.orgId,
+      resourceType: "ai_agent",
+      resourceId: agente.id,
+      requestId: c.requestId,
+      metadata: { fields: Object.keys(patchDoAgente), via: "mcp_plataforma" },
+    });
   }
 
   const versoes = await lerVersoes(c.admin, c.orgId, agente.id);
@@ -912,8 +1023,9 @@ export async function garantirAgente(
   if (!lido.success) recusaDoSchema(lido.error);
   const desejada = lido.data;
 
-  const mudou = referencia
-    ? CAMPOS_DA_VERSAO.filter((campo) => !mesmoConteudo(referencia[campo], (desejada as Record<string, unknown>)[campo]))
+  const comoEsta = referencia ? conteudoDa(referencia) : null;
+  const mudou = comoEsta
+    ? CAMPOS_DA_VERSAO.filter((campo) => !mesmoConteudo(comoEsta[campo], (desejada as Record<string, unknown>)[campo]))
     : [...CAMPOS_DA_VERSAO];
   const mudancasDaVersao = [
     ...new Set(
@@ -933,11 +1045,16 @@ export async function garantirAgente(
     versaoFinal = referencia;
     desfechoDaVersao = "ja_estava";
   } else {
+    // A conferência de escopo das duas rotas (versão nova e edição do rascunho):
+    // desde a 1.74 elas conferem também o provedor, a chave e o número.
     const escopo = await validarEscopoDaVersao(c.admin, c.orgId, {
+      provider: desejada.provider,
       pipeline_ids: desejada.pipeline_ids,
       knowledge_source_ids: desejada.knowledge_source_ids,
+      credential_id: desejada.credential_id,
+      channel_session_id: desejada.channel_session_id,
     });
-    if (!escopo.ok) throw new Recusa("Um dos funis ou materiais do agente não existe mais nesta organização. Chame de novo.");
+    if (!escopo.ok) throw new Recusa(`${mensagemDoEscopo(escopo)} Pela ferramenta: confira os nomes em plataforma_ver_funis e plataforma_ver_configuracao, e chame de novo.`);
 
     if (tela.draft && referencia && tela.draft.id === referencia.id) {
       // Há rascunho vigente: edita o rascunho, como `PATCH .../versions/[vid]`.
@@ -1136,7 +1253,14 @@ export async function publicarAgente(
     );
   }
 
-  const resultado = await publishAgentVersion(c.admin, { orgId: c.orgId, agentId: agente.id, versionId: rascunho.id });
+  // `quemPublicou`: a mudança da chave jurídica sai na auditoria com o ator
+  // (`ai_agent.legal_handoff_changed`, #2156), como na rota de publicar.
+  const resultado = await publishAgentVersion(c.admin, {
+    orgId: c.orgId,
+    agentId: agente.id,
+    versionId: rascunho.id,
+    quemPublicou: { actorUserId: c.autorUserId, requestId: c.requestId },
+  });
   if (!resultado.ok) {
     const frase = FRASE_DO_CODIGO[resultado.code];
     if (frase) throw new Recusa(`Não publiquei o agente «${agente.name}»: ${frase.o_que}. ${frase.como}`);

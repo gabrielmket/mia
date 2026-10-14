@@ -8,7 +8,14 @@
  *                      social, CNPJ, país, fuso, idioma, moeda, retenção de
  *                      mídia, encarregado, política de privacidade e o modo de
  *                      venda (B2B ou B2C). O país só entra se tem perfil
- *                      revisado (`paisesOferecidos`), como na tela.
+ *                      revisado (`paisesOferecidos`), como na tela. Desde o
+ *                      upstream 1.74 (0557, #1534) a mesma régua carrega o
+ *                      interruptor da limpeza automática de mídia antiga
+ *                      (`media_retention_enforced`), e desde a 1.79 a gravação
+ *                      da tela mora em `gravarDadosCadastrais`
+ *                      (`lib/tenants/dados-cadastrais.ts`): CNPJ repetido vira
+ *                      "Este CNPJ já pertence a outra organização.", e é a
+ *                      mesma frase aqui.
  *   distribuição       `atendimentoConfigPatchSchema` e
  *                      `mesclarSettingsDeAtendimento` (`lib/schemas/routing.ts`),
  *                      a mescla de `PATCH /api/v1/settings/routing`: quem recebe
@@ -31,6 +38,7 @@
  * por `mudarSettingsDaOrganizacao`, que não pisa em quem gravou no meio.
  */
 import { audit } from "@/lib/audit";
+import { AI_DECIDE_PADRAO, CHAVE_DAS_AUTOMACOES } from "@/lib/automation/ai-decide-da-org";
 import { lerModoDeVenda } from "@/lib/empresas/modo-de-venda";
 import { PRAZO_MAX_MINUTOS, PRAZO_MIN_MINUTOS } from "@/lib/escalacao/devolucao-automatica";
 import { paisesOferecidos } from "@/lib/legal/perfil-do-pais";
@@ -65,9 +73,18 @@ export interface PedidoDeEmpresa {
   moeda?: string;
   modo_de_venda?: "b2b" | "b2c";
   dias_de_retencao_de_midia?: number;
+  /**
+   * A limpeza automática de mídia antiga (upstream 0557): ligada, a limpeza
+   * diária apaga a mídia das conversas e o anexo de nota interna mais velhos que
+   * `dias_de_retencao_de_midia`. Nasce ligada em toda empresa.
+   */
+  limpeza_automatica_de_midia?: boolean;
   email_do_encarregado?: string | null;
   politica_de_privacidade_url?: string | null;
 }
+
+/** A frase de `updateTenant` para o CNPJ que já é de outra organização (índice único). */
+export const FRASE_DO_CNPJ_EM_USO = "Este CNPJ já pertence a outra organização.";
 
 const ROTULO: Record<string, string> = {
   display_name: "nome",
@@ -78,6 +95,7 @@ const ROTULO: Record<string, string> = {
   locale: "idioma",
   currency: "moeda",
   media_retention_days: "retenção de mídia",
+  media_retention_enforced: "limpeza automática de mídia",
   dpo_email: "e-mail do encarregado",
   privacy_policy_url: "política de privacidade",
   modo_de_venda: "modo de venda",
@@ -87,7 +105,8 @@ export async function configurarEmpresa(
   c: Implantacao,
   org: OrganizacaoDaImplantacao,
   pedido: PedidoDeEmpresa,
-): Promise<{ desfecho: Desfecho; mudancas: string[]; empresa: Record<string, unknown> }> {
+): Promise<{ desfecho: Desfecho; mudancas: string[]; empresa: Record<string, unknown>; avisos: string[] }> {
+  const avisos: string[] = [];
   if (pedido.fuso !== undefined && !fusoValido(pedido.fuso)) {
     throw new Recusa(
       `"${pedido.fuso}" não é um fuso horário válido. Use o nome da região, sem acento (ex.: "America/Sao_Paulo", "America/Manaus", "Europe/Lisbon").`,
@@ -111,6 +130,7 @@ export async function configurarEmpresa(
     locale: pedido.idioma ?? org.locale,
     currency: pedido.moeda ?? org.currency ?? "BRL",
     media_retention_days: pedido.dias_de_retencao_de_midia ?? org.media_retention_days ?? 365,
+    media_retention_enforced: pedido.limpeza_automatica_de_midia ?? org.media_retention_enforced,
     dpo_email: pedido.email_do_encarregado === undefined ? org.dpo_email : pedido.email_do_encarregado,
     privacy_policy_url:
       pedido.politica_de_privacidade_url === undefined ? org.privacy_policy_url : pedido.politica_de_privacidade_url,
@@ -145,6 +165,7 @@ export async function configurarEmpresa(
     ["locale", org.locale, d.locale],
     ["currency", org.currency ?? "BRL", d.currency],
     ["media_retention_days", org.media_retention_days ?? 365, d.media_retention_days],
+    ["media_retention_enforced", org.media_retention_enforced, d.media_retention_enforced],
     ["dpo_email", org.dpo_email ?? null, d.dpo_email ?? null],
     ["privacy_policy_url", org.privacy_policy_url ?? null, d.privacy_policy_url ?? null],
   ];
@@ -159,12 +180,27 @@ export async function configurarEmpresa(
   if (modoMudou) mudancas.push(ROTULO.modo_de_venda!);
 
   if (mudancas.length > 0) {
-    await mudarSettingsDaOrganizacao(
-      c.admin,
-      c.orgId,
-      (settings) => (modoMudou ? { ...settings, modo_de_venda: d.modo_de_venda } : null),
-      colunas,
-    );
+    try {
+      await mudarSettingsDaOrganizacao(
+        c.admin,
+        c.orgId,
+        (settings) => (modoMudou ? { ...settings, modo_de_venda: d.modo_de_venda } : null),
+        colunas,
+      );
+    } catch (err) {
+      // CNPJ é único na instalação (`gravarDadosCadastrais` dá a mesma frase).
+      if ((err as { code?: string } | null)?.code === "23505") throw new Recusa(FRASE_DO_CNPJ_EM_USO);
+      throw err instanceof Error ? err : new Error(`não consegui gravar os dados da empresa: ${(err as { message?: string })?.message ?? "erro"}`);
+    }
+    if (colunas.media_retention_enforced === true) {
+      avisos.push(
+        `A limpeza automática de mídia antiga ficou LIGADA: a partir da próxima limpeza diária, a mídia das conversas e o anexo de nota interna com mais de ${d.media_retention_days} dias são apagados, sem volta. ` +
+          "A nota e a mensagem continuam; só o arquivo sai.",
+      );
+    }
+    if (colunas.media_retention_enforced === false) {
+      avisos.push("A limpeza automática de mídia antiga ficou DESLIGADA: a mídia das conversas deixa de ser apagada por idade e o armazenamento passa a crescer sem teto.");
+    }
     void audit({
       action: "org.updated",
       actorUserId: c.autorUserId,
@@ -200,7 +236,10 @@ export async function configurarEmpresa(
       idioma: d.locale,
       moeda: d.currency,
       modo_de_venda: d.modo_de_venda,
+      dias_de_retencao_de_midia: d.media_retention_days,
+      limpeza_automatica_de_midia: d.media_retention_enforced,
     },
+    avisos,
   };
 }
 
@@ -242,6 +281,20 @@ export interface PedidoDeAtendimento {
   ia_espera_apos_resposta_pelo_celular_minutos?: number | null;
   /** Só as chaves que vieram mudam (upstream 1.70, #2079). */
   assinatura?: PedidoDeAssinatura;
+  /**
+   * O freio da empresa para o passo "a IA decide" das automações (upstream
+   * 1.76, #2367): `false` faz toda ação `ai_decide` da empresa parar sem
+   * consultar o modelo. Mora em `settings.automacoes.ai_decide`, padrão ligado.
+   */
+  ia_decide_nas_automacoes?: boolean;
+}
+
+/** O freio do `ai_decide` como o motor o lê (`aiDecideLigado`): só `false` gravado desliga. */
+export function iaDecideLigadaNa(settings: Record<string, unknown>): boolean {
+  const automacoes = settings[CHAVE_DAS_AUTOMACOES];
+  if (!automacoes || typeof automacoes !== "object" || Array.isArray(automacoes)) return AI_DECIDE_PADRAO;
+  const bruto = (automacoes as Record<string, unknown>).ai_decide;
+  return typeof bruto === "boolean" ? bruto : AI_DECIDE_PADRAO;
 }
 
 export async function configurarAtendimento(
@@ -256,6 +309,7 @@ export async function configurarAtendimento(
   let mudouDistribuicao = false;
   // `as` no inicializador: sem ele o TypeScript estreita para `null` e não vê a escrita feita dentro da função de mescla.
   let assinaturaGravada = null as AssinaturaGravada | null;
+  let iaDecideGravada = null as boolean | null;
 
   const { mudou } = await mudarSettingsDaOrganizacao(c.admin, c.orgId, (settings) => {
     const atual = routingConfigSchema.catch(routingConfigSchema.parse({})).parse(settings.routing ?? {});
@@ -310,9 +364,19 @@ export async function configurarAtendimento(
     const { settings: mesclado, routing } = mesclarSettingsDeAtendimento(settings, lido.data);
     // A chave da assinatura só é escrita quando MUDA: a organização que nunca a
     // ligou não ganha a chave porque o pedido repetiu o padrão.
-    const novo: Record<string, unknown> = assinaturaMudou
+    let novo: Record<string, unknown> = assinaturaMudou
       ? { ...mesclado, assinatura_mensagens: assinaturaPedida }
       : mesclado;
+
+    // O freio do `ai_decide`: a mescla nos DOIS níveis de `definirAiDecideDaEmpresa`
+    // (o resto de `settings.automacoes` fica), e só quando o valor MUDA.
+    const iaDecideAtual = iaDecideLigadaNa(settings);
+    const iaDecideMudou =
+      pedido.ia_decide_nas_automacoes !== undefined && pedido.ia_decide_nas_automacoes !== iaDecideAtual;
+    if (iaDecideMudou) {
+      const automacoes = (settings[CHAVE_DAS_AUTOMACOES] ?? {}) as Record<string, unknown>;
+      novo = { ...novo, [CHAVE_DAS_AUTOMACOES]: { ...automacoes, ai_decide: pedido.ia_decide_nas_automacoes } };
+    }
 
     mudancas = [];
     if (routing.mode !== atual.mode) mudancas.push("modo de distribuição");
@@ -328,6 +392,8 @@ export async function configurarAtendimento(
     mudouDistribuicao = mudancas.length > 0;
     if (assinaturaMudou) mudancas.push("assinatura de quem fala");
     assinaturaGravada = assinaturaMudou ? assinaturaPedida : null;
+    if (iaDecideMudou) mudancas.push("a IA decide nas automações");
+    iaDecideGravada = iaDecideMudou ? (pedido.ia_decide_nas_automacoes as boolean) : null;
 
     const assinaturaFinal: AssinaturaGravada = assinaturaPedida ?? {
       humanos: assinaturaAtual.humanos,
@@ -344,6 +410,7 @@ export async function configurarAtendimento(
     retrato = {
       ...distribuicao,
       assinatura: { atendentes: assinaturaFinal.humanos, ia: assinaturaFinal.ia, nome_da_ia: assinaturaFinal.nome_ia },
+      ia_decide_nas_automacoes: iaDecideMudou ? pedido.ia_decide_nas_automacoes : iaDecideAtual,
     };
 
     // Uma organização que nunca abriu a tela não tem `settings.routing`: gravar
@@ -373,6 +440,18 @@ export async function configurarAtendimento(
       resourceId: c.orgId,
       requestId: c.requestId,
       metadata: { ...assinaturaGravada, via: "mcp_plataforma" },
+    });
+  }
+  if (mudou && iaDecideGravada !== null) {
+    // A mesma linha de `definirAiDecideDaEmpresa` (Configurações › Automações).
+    void audit({
+      action: "settings.automation_ai_decide_updated",
+      actorUserId: c.autorUserId,
+      organizationId: c.orgId,
+      resourceType: "organization",
+      resourceId: c.orgId,
+      requestId: c.requestId,
+      metadata: { ligado: iaDecideGravada, via: "mcp_plataforma" },
     });
   }
 

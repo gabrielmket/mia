@@ -444,13 +444,15 @@ describe("plataforma_garantir_etiquetas", () => {
     expect(r.erro, r.texto).toBe(false);
     expect(r.dados).toMatchObject({ criadas: 1, atualizadas: 1, ja_estavam: 0 });
     const settings = tabela("organizations")[0]!.settings as Linha;
-    expect(settings.tags).toEqual([{ tag: "vip", cor: "#0091ff" }, { tag: "Plano anual", cor: "#12a594" }]);
+    // O tom antigo da paleta (#12a594) é lido como o novo, mais escuro, desde o upstream 1.74
+    // (#2373, `TONS_SUBSTITUIDOS`): a régua da tela vale aqui também.
+    expect(settings.tags).toEqual([{ tag: "vip", cor: "#0091ff" }, { tag: "Plano anual", cor: "#00655a" }]);
     // A chave que a RLS lê não foi tocada.
     expect(settings.visibility_mode).toBe("own");
 
     const de_novo = await mcp.chamar("plataforma_garantir_etiquetas", {
       organization_id: ORG,
-      etiquetas: [{ nome: "Plano anual", cor: "#12a594" }, { nome: "vip" }],
+      etiquetas: [{ nome: "Plano anual", cor: "#00655a" }, { nome: "vip" }],
     });
     expect(de_novo.dados).toMatchObject({ criadas: 0, atualizadas: 0, ja_estavam: 2 });
     expect((tabela("organizations")[0]!.settings as { tags: unknown[] }).tags).toHaveLength(2);
@@ -460,7 +462,7 @@ describe("plataforma_garantir_etiquetas", () => {
     const { mcp, banco } = await preparar();
     const cor = await mcp.chamar("plataforma_garantir_etiquetas", { organization_id: ORG, etiquetas: [{ nome: "Urgente", cor: "vermelho" }] });
     expect(cor.erro).toBe(true);
-    expect(cor.texto).toContain('formato #rrggbb (ex.: "#12a594")');
+    expect(cor.texto).toContain('formato #rrggbb (ex.: "#00655a")');
     const repetida = await mcp.chamar("plataforma_garantir_etiquetas", { organization_id: ORG, etiquetas: [{ nome: "Urgente" }, { nome: "urgente" }] });
     expect(repetida.texto).toContain("aparece duas vezes");
     expect(banco.escritas).toEqual([]);

@@ -77,7 +77,7 @@ export async function garantirEtiquetas(c: Implantacao, pedidas: EtiquetaPedida[
       const lida = corDeEtiquetaSchema.safeParse(p.cor);
       if (!lida.success) {
         throw new Recusa(
-          `etiquetas[${i}].cor não é uma cor válida ("${p.cor}"). Use o formato #rrggbb (ex.: "#12a594"). ` +
+          `etiquetas[${i}].cor não é uma cor válida ("${p.cor}"). Use o formato #rrggbb (ex.: "#00655a"). ` +
             "A paleta recomendada está em plataforma_listar_modelos, seção etiquetas.",
         );
       }

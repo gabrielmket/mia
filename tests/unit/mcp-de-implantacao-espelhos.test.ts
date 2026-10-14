@@ -61,12 +61,15 @@ function impressao(relativo: string): string {
  */
 const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string }> = [
   // Catálogo de produtos.
-  { rota: "app/api/v1/products/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "882cbb6f1f5970e8" },
+  // Relido na .76 (upstream 1.74 a 1.80): só o GET mudou (busca e página no servidor). O POST, que o espelho segue, é o mesmo.
+  { rota: "app/api/v1/products/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "8e1d25078bb05b83" },
   { rota: "app/api/v1/products/[id]/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "0c030f4dbec32b72" },
   // Automações.
-  { rota: "app/api/v1/automation-rules/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "421acfdd5ebf5624" },
+  // Relido na .76 (upstream 1.78): a fonte de formulário de `trigger_config.webhook_source_id` tem de ser da empresa. O espelho confere (conferirConfiguracaoDoGatilho), com a frase da rota; e também o funil e a etapa dos gatilhos de tempo.
+  { rota: "app/api/v1/automation-rules/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "60944af22187bd79" },
   // Relido na .72 (upstream 1.71, #2211): o PATCH parcial confere o laço de lead (acoesQueFechamLaco) contra a regra gravada. O espelho valida a regra INTEIRA com createAutomationRuleSchema, que já recusa o laço (recusarLacoDeLead): coberto.
-  { rota: "app/api/v1/automation-rules/[id]/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "f96ce8914978b826" },
+  // Relido na .76 (upstream 1.78): a mesma conferência da fonte no PATCH. Coberta pelo mesmo conferirConfiguracaoDoGatilho, que roda antes de criar e de editar.
+  { rota: "app/api/v1/automation-rules/[id]/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "13713ae934a645a7" },
   // Follow-up.
   // Relido na .72 (upstream 1.70, #2028): só a autenticação mudou (sessão OU token dsk_, resolveAuthDual). Nenhuma regra nova para o espelho.
   { rota: "app/api/v1/ai/followup-flows/from-model/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "a0e03549e796bcf8" },
@@ -74,24 +77,50 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/api/v1/ai/followup-flows/[id]/publish/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "c69f3113aa3c1067" },
   // Agente de IA.
   // Relido na .72 (upstream 1.70 #2028 e 1.73 #2296): token dsk_ e o corpo legado passa a criar mcp_agent com v1 rascunho pelo MESMO mcpAgentDraftRecords que o espelho já usa. A trava da IA continua na rota (lib/ai/trava-da-ia-na-rota.ts).
-  { rota: "app/api/v1/ai/agents/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "2ef1be8524c50214" },
+  // Relido na .76 (upstream 1.74 e 1.79): o código do erro de escopo (provedor desligado) e a coluna handoff_legal_enabled na leitura. O espelho já passava a versão inteira à conferência de escopo; a recusa passou a usar mensagemDoEscopo.
+  { rota: "app/api/v1/ai/agents/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "a121e37852edf28c" },
   // Relido na .72 (upstream 1.70, #2013 e #2028): a versão nova grava proposal_ai_draft_enabled; o espelho (inserirVersao) passou a gravar também. O resto é a autenticação por token.
-  { rota: "app/api/v1/ai/agents/[id]/versions/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "34fbc917df0f927e" },
-  { rota: "app/api/v1/ai/agents/[id]/versions/[vid]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "a7a06466ba489ee7" },
-  { rota: "app/api/v1/ai/agents/[id]/publish/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "94c4106ae472461e" },
+  // Relido na .76 (upstream 1.74 e 1.79): a versão nova copia handoff_legal_enabled e o escopo confere provedor, chave e número. O espelho (inserirVersao e a conferência antes de gravar) faz os dois.
+  { rota: "app/api/v1/ai/agents/[id]/versions/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "b7f10fdc1237e374" },
+  // Relido na .76: token dsk_ (resolveAuthDual), handoff_legal_enabled no PATCH e a conferência de escopo antes de editar o rascunho. O espelho confere o escopo antes das duas gravações.
+  { rota: "app/api/v1/ai/agents/[id]/versions/[vid]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "ed48b99f03791c97" },
+  // Relido na .76 (upstream 1.79, #2156): publishAgentVersion recebe quemPublicou, e a mudança da chave jurídica sai como ai_agent.legal_handoff_changed com o ator. O espelho passa o autor do token. toolIdAceito só soma as ferramentas do MCP externo, que a implantação não liga.
+  { rota: "app/api/v1/ai/agents/[id]/publish/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "479026df35f97b55" },
   { rota: "app/api/v1/ai/agents/[id]/pause/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "6e42c31f7151ac42" },
   // Espelhado na .73 (upstream 1.71, #2216): o limiar de sentimento mora em `config` do cadastro. O espelho (configComLimiar) faz a mesma mescla do PATCH: padrões, o gravado e o pedido por cima, conferido por agentPatchSchema.
-  { rota: "app/api/v1/ai/agents/[id]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "d936626303d10f95" },
+  // Relido na .76 (upstream 1.74): token dsk_ e a auditoria ai_agent.updated no PATCH do cadastro. O espelho deixa a mesma linha quando muda nome, descrição, prioridade ou limiar.
+  { rota: "app/api/v1/ai/agents/[id]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "e0f5fecd68174ac1" },
   // Roteador de intenção, espelhado na .73 (upstream 1.73, #2290: destino de funil por intenção). O espelho cria DESLIGADO de propósito; o resto segue a rota (número conferido, configDoRoteador, gravação das intenções pelas mesmas duas funções).
-  { rota: "app/api/v1/ai/routers/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "2b6aee5c444c9b91" },
-  { rota: "app/api/v1/ai/routers/[id]/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "f8b87207dbe05d67" },
-  { rota: "app/api/v1/ai/routers/[id]/members/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "65e0573c219a9ca0" },
+  // Relido na .76 (upstream 1.74, #2061): o roteador novo nasce com context_message_count 8, e a régua é 0 a 16. O espelho grava o mesmo e ganhou `mensagens_de_contexto`.
+  { rota: "app/api/v1/ai/routers/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "ae6ec0c7df54231f" },
+  { rota: "app/api/v1/ai/routers/[id]/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "355393b0881dc083" },
+  // Relido na .76 (upstream 1.79, #2624): o cliente do pool que falhou no meio da transação volta com erro (release(err)). O espelho faz o mesmo em gravarIntencoes.
+  { rota: "app/api/v1/ai/routers/[id]/members/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "07620fd49b8a6ea5" },
   // Memória da empresa.
   { rota: "app/api/v1/ai/memory/route.ts", espelho: "lib/implantacao/memoria.ts", impressao: "c28255da296e68b6" },
   { rota: "app/api/v1/ai/memory/entries/route.ts", espelho: "lib/implantacao/memoria.ts", impressao: "721aec1553d22379" },
   // Dados da empresa e regras de atendimento.
   // Relido na .72 (upstream 1.70, #2027): o papel passa por podeAdministrarEmpresa, a regra única do upstream. O espelho é do servidor (o token do MCP de plataforma já é a autorização).
-  { rota: "app/actions/settings/updateTenant.ts", espelho: "lib/implantacao/empresa.ts", impressao: "1688d446cb9dc922" },
+  // Relido na .76 (upstream 1.74 e 1.79): a gravação mora em gravarDadosCadastrais (com media_retention_enforced e a frase do CNPJ repetido), e o modo de venda ausente não muda. O espelho grava as mesmas colunas e dá a mesma frase.
+  { rota: "app/actions/settings/updateTenant.ts", espelho: "lib/implantacao/empresa.ts", impressao: "14a8d796f39e6d76" },
+  // Espelhado na .76 (upstream 1.76, #2367): o freio do passo "a IA decide", com a mescla nos dois níveis de settings e a mesma auditoria.
+  { rota: "app/actions/settings/definirAiDecideDaEmpresa.ts", espelho: "lib/implantacao/empresa.ts", impressao: "8168719014b15dca" },
+  // Espelhado na .76 (upstream 1.77, #1752): os planos de tarefa, conferidos por planosSchema, em settings.task_plans.
+  { rota: "app/api/v1/settings/task-plans/route.ts", espelho: "lib/implantacao/planos-de-tarefa.ts", impressao: "dbd8af9b1d6e19dd" },
+  // Espelhado na .76 (upstream 1.74, #2321): a camada de afirmação clínica da empresa, pelo mesmo upsert e auditoria.
+  { rota: "app/api/v1/ai/guardrail-layers/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "2bde06e4c4f3887e" },
+  // Espelhados na .76: os dias da prospecção (1.80, 0642), guardar o histórico (1.74, #999) e a pausa agendada (1.79, #2388).
+  { rota: "app/api/v1/ai/pacing/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "3a02cf8f709c4ea5" },
+  { rota: "app/api/v1/channel-sessions/[id]/acervo/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "1932744eaa41d92f" },
+  { rota: "app/api/v1/channel-schedules/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "a8182100962af47e" },
+  { rota: "app/api/v1/channel-schedules/[id]/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "c2250a4cbc7936d4" },
+  // Espelhados na .76 (upstream 1.76 e 1.78): a fonte de formulário, com as perguntas e a autorização de IA (que exige a assinatura).
+  { rota: "app/api/v1/webhook-sources/route.ts", espelho: "lib/implantacao/fonte-de-formulario.ts", impressao: "a400691a20559e3f" },
+  { rota: "app/api/v1/webhook-sources/[id]/route.ts", espelho: "lib/implantacao/fonte-de-formulario.ts", impressao: "f83c28ab7f4d3e8f" },
+  // Espelhado na .76 (upstream 1.74, 0558): a coluna do cliente numa conexão de banco externo, sem tocar na credencial.
+  { rota: "app/api/v1/external-db/connections/[id]/route.ts", espelho: "lib/implantacao/banco-externo.ts", impressao: "6e2d98edd7287b89" },
+  // Espelhado na .76 (upstream 1.79, #2591): o dono do contato. A rota chama fn_definir_carteira_do_cliente; o MCP chama a cópia do fork (9022) e deixa a mesma auditoria.
+  { rota: "app/api/v1/contacts/[id]/carteira/route.ts", espelho: "lib/mcp-plataforma/importacao/contatos.ts", impressao: "dde32113060d7ce5" },
   { rota: "app/api/v1/settings/routing/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "5141ab7ba6a82744" },
   // Espelhado na .73 (upstream 1.70, #2079): quem fala, em negrito, na mensagem. O espelho confere com o mesmo assinaturaEntradaSchema e grava a mesma chave de settings.
   { rota: "app/api/v1/settings/assinatura/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "874d611f8e1a7d71" },
@@ -103,7 +132,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/api/v1/channels/templates/criar/route.ts", espelho: "lib/implantacao/mensagens.ts", impressao: "42df61fe7056d0ea" },
   // Convite de equipe.
   // Relido na .75 (9020, mudança NOSSA na rota): convite que o banco não grava vira item de `failed` (`convite_nao_gravado`) e o lote segue, em vez de 500. O espelho faz o mesmo: desfecho `nao_gravou`, com aviso, e as outras pessoas seguem.
-  { rota: "app/api/v1/team/invite/route.ts", espelho: "lib/implantacao/equipe.ts", impressao: "3b88eb7266c6ec61" },
+  // Relido na .76 (upstream 1.78, cobrança): o pedido inteiro é recusado antes do e-mail quando a empresa já ocupa os assentos do plano. O espelho faz a mesma conta e dá a mesma frase; com a cobrança desligada, não há limite.
+  { rota: "app/api/v1/team/invite/route.ts", espelho: "lib/implantacao/equipe.ts", impressao: "216ab6f92e5f6eca" },
 ];
 
 describe("a regra copiada: gatilhos de follow-up que têm motor", () => {
@@ -132,6 +162,55 @@ describe("a regra copiada: gatilhos de follow-up que têm motor", () => {
       [...rota].filter((k) => !ferramenta.has(k)),
       "a tela publica um gatilho que a ferramenta recusa: acrescente-o a GATILHOS_COM_MOTOR em lib/implantacao/followup.ts",
     ).toEqual([]);
+  });
+});
+
+/**
+ * A FUNÇÃO DO BANCO que a migration 9022 copia (`fn_definir_carteira_do_cliente`,
+ * upstream 0622): a 9022 tem o mesmo corpo, com o token de plataforma no lugar do
+ * gerente membro como ator. A impressão é do texto da função como ele vale no
+ * install (a ÚLTIMA definição em `supabase/baseline.sql`), sem comentário e sem
+ * diferença de espaço. Mudou, reprova: releia a 9022 e leve a regra nova numa
+ * migration nova do fork (a 9022 não se edita depois de aplicada).
+ */
+const PORTA_DA_CARTEIRA = {
+  marca: "create or replace function public.fn_definir_carteira_do_cliente(",
+  copia: "supabase/migrations-mia/20261014150000_9022_dono_do_contato_pela_plataforma.sql",
+  impressao: "11a835066dd98199",
+};
+
+function impressaoDaFuncao(baseline: string, marca: string): string | null {
+  const inicio = baseline.lastIndexOf(marca);
+  if (inicio < 0) return null;
+  const fim = baseline.indexOf("$;", inicio);
+  const corpo = baseline
+    .slice(inicio, fim + 3)
+    .split("\n")
+    .map((l) => l.replace(/--.*$/, ""))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return createHash("sha256").update(corpo).digest("hex").slice(0, 16);
+}
+
+describe("a função do banco que a 9022 copia não mudou sem alguém reler a cópia", () => {
+  const baseline = readFileSync(path.join(RAIZ, "supabase/baseline.sql"), "utf8");
+
+  it("CONTROLE: o leitor acha a função, e a cópia do fork existe", () => {
+    expect(impressaoDaFuncao(baseline, PORTA_DA_CARTEIRA.marca)).not.toBeNull();
+    expect(existsSync(path.join(RAIZ, PORTA_DA_CARTEIRA.copia))).toBe(true);
+    // A impressão enxerga mudança de código e ignora comentário.
+    const base = impressaoDaFuncao("create or replace function public.f(\n x\n) as $ begin end; $;", "create or replace function public.f(");
+    expect(impressaoDaFuncao("create or replace function public.f( -- comentário\n x\n) as $ begin end; $;", "create or replace function public.f(")).toBe(base);
+    expect(impressaoDaFuncao("create or replace function public.f(\n y\n) as $ begin end; $;", "create or replace function public.f(")).not.toBe(base);
+  });
+
+  it("⭐ fn_definir_carteira_do_cliente", () => {
+    expect(
+      impressaoDaFuncao(baseline, PORTA_DA_CARTEIRA.marca),
+      "A função fn_definir_carteira_do_cliente mudou no upstream desde que a 9022 a copiou. Leia o que mudou (git log -p -- supabase/baseline.sql), " +
+        "leve a regra nova para uma migration nova do fork que redefina fn_mia_definir_dono_do_contato_pela_plataforma e grave a impressão nova aqui.",
+    ).toBe(PORTA_DA_CARTEIRA.impressao);
   });
 });
 

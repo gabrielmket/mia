@@ -40,9 +40,20 @@
  * um aviso diz o que o banco respondeu, e as outras pessoas do pedido seguem.
  * É a mesma regra da rota (`app/api/v1/team/invite/route.ts`), que devolve o
  * e-mail em `failed`.
+ *
+ * ── O limite de assentos do plano (upstream 1.78, cobrança do revendedor) ──
+ *
+ * A rota recusa o pedido INTEIRO, antes de qualquer e-mail, quando a empresa já
+ * tem tantas pessoas ativas (o membro provisório do handover não conta) quanto o
+ * plano dela permite (`fn_limite_do_plano`, recurso `assentos`). Com a cobrança
+ * desligada, a função responde "sem limite" e nada muda. O espelho faz igual, com
+ * a frase da rota; ler o limite falhou, o convite segue (a trava do aceite
+ * continua no banco), como lá.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { lerLimiteDoPlano, mensagemDoLimite } from "@/lib/cobranca/limites";
+import { logger } from "@/lib/logger";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { INTERFACE_COMPLETA, interfaceTemDestino } from "@/lib/navigation/interface";
 import { ROLES, type Role } from "@/lib/schemas/team";
@@ -156,6 +167,32 @@ export async function convidarPessoas(
     if (!interfaceTemDestino(INTERFACE_COMPLETA, p.papel as Role)) {
       throw new Recusa(`pessoas[${i}].papel: o papel «${p.papel}» não tem nenhuma área para abrir.`);
     }
+  }
+
+  // O limite de assentos do plano, antes de qualquer e-mail (a régua da rota).
+  const { data: vinculos, error: erroDosVinculos } = await c.admin
+    .from("user_organizations")
+    .select("user_id, provisional_until_handover")
+    .eq("organization_id", c.orgId)
+    .is("revoked_at", null);
+  if (erroDosVinculos) throw new Error(`não consegui ler a equipe: ${erroDosVinculos.message}`);
+  const ativos = ((vinculos ?? []) as Array<{ provisional_until_handover?: boolean | null }>).filter(
+    (m) => !m.provisional_until_handover,
+  ).length;
+  let limite: number | null = null;
+  try {
+    limite = await lerLimiteDoPlano(c.admin, c.orgId, "assentos");
+  } catch (err) {
+    logger.warn("implantacao.convite: limite do plano não pôde ser lido; o convite segue", {
+      organization_id: c.orgId,
+      request_id: c.requestId,
+      causa: err instanceof Error ? err.message : String(err),
+    });
+  }
+  if (limite !== null && ativos >= limite) {
+    throw new Recusa(
+      `${mensagemDoLimite("assentos", limite, "pt-BR")} Nenhum convite saiu. O limite é do plano de cobrança desta empresa: aumentar o plano é com quem opera a plataforma.`,
+    );
   }
 
   const membros = await lerMembros(c.admin, c.orgId);
