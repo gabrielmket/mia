@@ -526,7 +526,10 @@ describe("5 · etiquetas: a ferramenta grava o que a função da tela grava", ()
       await sessao.query("begin");
       await sessao.query("set local role authenticated");
       await sessao.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: GESTORA_DA_GEMEA, role: "authenticated" })]);
-      await sessao.query("select public.fn_vocabulario_de_tags_operar($1, 'definir_cor', 'Plano anual', null, '#12a594')", [GEMEA]);
+      // (.76) O verde-água antigo (#12a594) virou #00655a na paleta do upstream
+      // (#2373), e a normalização da ferramenta já o troca; os dois caminhos
+      // partem do tom de hoje.
+      await sessao.query("select public.fn_vocabulario_de_tags_operar($1, 'definir_cor', 'Plano anual', null, '#00655a')", [GEMEA]);
       await sessao.query("select public.fn_vocabulario_de_tags_operar($1, 'definir_cor', 'VIP', null, '#0091ff')", [GEMEA]);
       await sessao.query("commit");
     } catch (e) {
@@ -544,14 +547,14 @@ describe("5 · etiquetas: a ferramenta grava o que a função da tela grava", ()
     );
     await ok("plataforma_garantir_etiquetas", {
       organization_id: pelaFerramenta,
-      etiquetas: [{ nome: "Plano anual", cor: "#12A594" }, { nome: "VIP", cor: "#0091ff" }],
+      etiquetas: [{ nome: "Plano anual", cor: "#00655A" }, { nome: "VIP", cor: "#0091ff" }],
     });
 
     const tags = async (org: string) => (await uma<{ tags: unknown }>("select settings -> 'tags' as tags from organizations where id = $1", [org])).tags;
     const daTela = await tags(GEMEA);
     expect(daTela, "a função da tela não gravou nada: o teste compararia vazio com vazio").toEqual([
       { tag: "vip", cor: "#0091ff" },
-      { tag: "Plano anual", cor: "#12a594" },
+      { tag: "Plano anual", cor: "#00655a" },
     ]);
     expect(await tags(pelaFerramenta)).toEqual(daTela);
     // E a chave vizinha, que a RLS lê, não foi tocada por nenhum dos dois.

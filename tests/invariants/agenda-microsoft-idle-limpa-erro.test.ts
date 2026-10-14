@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { lastLine, sql } from "./gov-helpers";
+import { sql } from "./gov-helpers";
 
 /**
  * FORK MIA (migration 9021) — o `idle` do Outlook limpa o erro de rodada passada.
@@ -32,6 +32,13 @@ const PASTA = join(process.cwd(), "supabase", "migrations-mia");
 const MIGRATION_9014 = readFileSync(join(PASTA, "20261001140000_9014_agenda_microsoft_publicacao.sql"), "utf8");
 
 /** A função da 9014 como ela era: o `idle` só adia a próxima tentativa. */
+/** A linha que começa com `M:` (o `rollback` final imprime depois dela). */
+function linhaMarcada(saida: string): string {
+  const linha = saida.split("\n").find((l) => l.startsWith("M:"));
+  if (!linha) throw new Error(`saída inesperada do psql: ${saida}`);
+  return linha.slice(2).trim();
+}
+
 const FUNCAO_DA_9014 = /create or replace function public\.fn_mia_agenda_microsoft_compromisso\([\s\S]*?\n\$\$;/.exec(
   MIGRATION_9014,
 )?.[0];
@@ -61,7 +68,7 @@ beforeAll(() => {
  * primeiro (o controle negativo troca a função ali). Devolve o erro que sobrou.
  */
 function erroDepoisDoIdle(antes = ""): string {
-  return lastLine(
+  return linhaMarcada(
     sql(`
       begin;
       ${antes}
@@ -84,7 +91,7 @@ function erroDepoisDoIdle(antes = ""): string {
         from public.mia_agenda_microsoft_compromissos where appointment_id = '${AP}';
       rollback;
     `),
-  ).replace(/^M:/, "");
+  );
 }
 
 describe("o idle do Outlook (9021)", () => {
@@ -99,7 +106,7 @@ describe("o idle do Outlook (9021)", () => {
   });
 
   it("a ação de erro continua gravando o erro (o idle não engole a falha desta rodada)", () => {
-    const r = lastLine(
+    const r = linhaMarcada(
       sql(`
         begin;
         do $$
@@ -119,6 +126,6 @@ describe("o idle do Outlook (9021)", () => {
         rollback;
       `),
     );
-    expect(r).toBe("M:Falhou agora.");
+    expect(r).toBe("Falhou agora.");
   });
 });

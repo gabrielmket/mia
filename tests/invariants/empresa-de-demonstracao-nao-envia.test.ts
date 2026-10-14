@@ -553,7 +553,7 @@ describe("a trava alcança o ai_decide e a cobrança do revendedor (9021)", () =
 
   it("⭐ CONTROLE NEGATIVO: no banco da .75 (função da 9020, sem o gatilho), as duas portas passavam; a 9021 as fecha", () => {
     const provar = (chave: string, dml: string) => `
-      do $
+      do $$
       begin
         begin
           ${dml};
@@ -561,7 +561,7 @@ describe("a trava alcança o ai_decide e a cobrança do revendedor (9021)", () =
         exception when others then
           perform set_config('inv.${chave}', sqlstate, true);
         end;
-      end $;`;
+      end $$;`;
     const r = medir(`
       ${plano};
       drop trigger if exists trg_mia_demonstracao_sem_cobranca on public.cobranca_assinaturas;
