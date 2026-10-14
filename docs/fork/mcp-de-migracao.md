@@ -104,6 +104,7 @@ S.A.). Nome igual com CNPJ diferente é outra empresa (matriz e filial).
       "consentimento_marketing": "concedido",
       "consentimento_em": "2026-03-14",
       "opt_out": false,
+      "vendedor_responsavel": "vendedora@exemplo.invalid",
       "id_de_origem": "c-1042"
     }
   ]
@@ -259,6 +260,20 @@ com `+` e o código.
 contato e o e-mail é de outro, ela atualiza o do telefone, não mexe no outro e avisa.
 Juntar os dois é decisão de uma pessoa, em **Contatos › Duplicados**. O telefone de um
 contato que já tem telefone nunca é trocado pela importação.
+
+**O dono do contato (o vendedor responsável).** `vendedor_responsavel` é o e-mail de
+uma pessoa que JÁ é da equipe como atendente, gerente ou administrador (quem só lê e
+quem ainda não aceitou o convite não contam). Ele vira o vendedor dono do cliente
+(upstream 1.79, `contacts.carteira_*`): o negócio novo desse cliente nasce com ele, os
+negócios ABERTOS sem dono passam para ele, e ele é avisado por tarefa quando o cliente
+escreve numa conversa que está com outro vendedor. O dono que já existe só é trocado
+com `quando_ja_existe: "atualizar"`. A porta de escrita do upstream exige um gerente
+membro da empresa como ator, e o token de plataforma não é membro: a gravação vai pela
+função do fork `fn_mia_definir_dono_do_contato_pela_plataforma` (migration `9022`),
+com o mesmo corpo, o token como ator (vivo, com `importar_base`, criado por um admin
+de plataforma) e a origem `importacao`, e deixa a mesma auditoria da tela
+(`contact.carteira_changed`). Vendedor que não conta não derruba o contato: ele entra
+sem dono, com o aviso.
 
 **Opt-out.** Quem veio com `opt_out: true` entra **bloqueado para todo envio**. E a
 importação só bloqueia: quem já está bloqueado continua bloqueado, mesmo que a lista

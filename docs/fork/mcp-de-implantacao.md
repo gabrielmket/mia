@@ -3,8 +3,10 @@
 O MCP de **plataforma** (`/api/mcp/plataforma`) já criava o cliente, liberava
 módulo e lançava crédito. Agora ele também **monta o cliente por dentro**: dados
 da empresa, funil, catálogo, etiquetas, memória, conhecimento, follow-up, agente
-de IA, roteador de intenção, automações, agenda, equipe, mensagens prontas e as
-regras de conversão para a Meta e o Google. Uma sessão do Claude Code
+de IA, roteador de intenção, automações (com os planos de tarefa), agenda, equipe,
+mensagens prontas, as regras de conversão para a Meta e o Google, a fonte de
+formulário, os ajustes de cada número de WhatsApp e a coluna do cliente no banco
+externo. Uma sessão do Claude Code
 com um token de plataforma faz a implantação inteira conversando, e para só onde
 o produto exige uma pessoa (ler o QR Code do WhatsApp, por exemplo).
 
@@ -40,7 +42,7 @@ token, a ferramenta e os argumentos (`plataforma.mcp_executado`).
    |---|---|---|
    | `criar_cliente` | criar a organização | se o agente também cria o cliente |
    | `liberar_modulo` | ligar módulo vendido | se o cliente contratou algum módulo |
-   | `implantar_configuracao` | montar tudo, inclusive os **rascunhos** de agente, follow-up e automação | sempre |
+   | `implantar_configuracao` | montar tudo, inclusive os **rascunhos** de agente, follow-up e automação, os planos de tarefa, a fonte de formulário, os ajustes de um número (dias da prospecção, guardar o histórico, pausa agendada) e a coluna do cliente no banco externo | sempre |
    | `colocar_no_ar` | publicar e pausar agente, publicar follow-up, ligar automação, ligar lembrete, ligar o roteador de intenção, submeter modelo à Meta, ligar regra de conversão e a volta dos leads de formulário | quando o agente também publica |
    | `convidar_equipe` | mandar convite por e-mail com o papel escolhido | quando o agente também convida |
 
@@ -115,7 +117,9 @@ pessoa faz (com a tela e o caminho).
 | 10 | Instalar os follow-ups (rascunho) | `plataforma_listar_modelos`, `plataforma_garantir_followup` | agente |
 | 11 | Criar o agente de IA (rascunho), com o funil, os materiais e os follow-ups | `plataforma_garantir_agente` | agente |
 | 12 | Automações (nascem desligadas), tipos de agendamento, jornada e respostas prontas | `plataforma_garantir_automacao`, `plataforma_garantir_tipos_de_agendamento`, `plataforma_definir_jornada`, `plataforma_garantir_respostas_prontas` | agente |
+| 12a | Planos de tarefa (antes da automação que os aplica) e a fonte de formulário do site (antes da automação que reage a ela) | `plataforma_garantir_planos_de_tarefa`, `plataforma_garantir_fonte_de_formulario` | agente |
 | 13 | **Conectar o número de WhatsApp** | tela **Conexões** (`/app/connections`) | **pessoa do cliente** |
+| 13a | Depois do número: os dias da prospecção e, por QR Code, guardar o histórico | `plataforma_configurar_canal` | agente |
 | 14 | Conferir o rascunho com o cliente antes de pôr no ar | `plataforma_ver_agentes`, `plataforma_ver_followup` | agente e pessoa |
 | 15 | Publicar os follow-ups e o agente | `plataforma_publicar_followup`, `plataforma_publicar_agente` | agente |
 | 15a | Só com dois ou mais agentes no MESMO número: montar o roteador de intenção (uma intenção por agente, e o funil de destino de cada uma) e ligá-lo | `plataforma_garantir_roteador`, `plataforma_ligar_roteador` | agente |
@@ -182,24 +186,26 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **56** ferramentas no servidor: as 49 desta página e as 7 da migração
-([`mcp-de-migracao.md`](mcp-de-migracao.md)).
+São **60** ferramentas no servidor: as 53 desta página e as 7 da migração
+([`mcp-de-migracao.md`](mcp-de-migracao.md)). As quatro mais novas (.76) são
+`plataforma_garantir_planos_de_tarefa`, `plataforma_configurar_canal`,
+`plataforma_garantir_fonte_de_formulario` e `plataforma_configurar_banco_externo`.
 
 ### Leitura (nenhuma operação: qualquer token de plataforma lê)
 
 | ferramenta | o que devolve | reexecução |
 |---|---|---|
 | `plataforma_listar_clientes` | as organizações da instalação, com busca por nome | leitura |
-| `plataforma_ver_cliente` | o retrato de um cliente: módulos, números, saldo | leitura |
+| `plataforma_ver_cliente` | o retrato de um cliente: módulos, números, saldo e, em `configuracao`, a limpeza automática de mídia, o freio do passo "a IA decide", o bloqueio de afirmação clínica e quantos planos de tarefa existem | leitura |
 | `plataforma_listar_modulos` | os módulos que se vendem separado | leitura |
-| `plataforma_ver_saude` | o estado da instalação | leitura |
+| `plataforma_ver_saude` | o estado da instalação, e se a chave que cifra o CPF dos contatos está semeada (só sim ou não; o valor nunca sai) | leitura |
 | `plataforma_ver_implantacao` | o **checklist**: por área, o que está pronto, o que falta (com a ferramenta) e o que é com uma pessoa (com a tela) | leitura |
 | `plataforma_listar_modelos` | os modelos e vocabulários que as outras ferramentas aceitam: modelos de follow-up, pacotes e capacidades do agente, gatilhos e ações de automação, passos do funil, tipos de campo | leitura |
 | `plataforma_ver_funis` | os funis inteiros: etapas, passo do agente, campos, motivos | leitura |
-| `plataforma_ver_agentes` | os agentes, a versão no ar, o rascunho, o limiar de sentimento e o que falta para publicar; com `agente`, o horário de atendimento e o aviso de fora do horário; e os **roteadores** de intenção (número, se está ligado, agente reserva e cada intenção com o agente e o funil de destino) | leitura |
+| `plataforma_ver_agentes` | os agentes, a versão no ar, o rascunho, o limiar de sentimento, a passagem por assunto jurídico e o que falta para publicar; com `agente`, o horário de atendimento e o aviso de fora do horário; o bloqueio de afirmação clínica da empresa (`seguranca_da_empresa`); e os **roteadores** de intenção (número, se está ligado, agente reserva, janela de contexto do classificador e cada intenção com o agente e o funil de destino) | leitura |
 | `plataforma_ver_catalogo` | os produtos e serviços, com busca e paginação | leitura |
 | `plataforma_ver_obrigacoes` | os documentos e obrigações com vencimento: contadores (vencidos, vencendo em 30 dias, pedidos sem resposta, em dia), os itens por situação e o catálogo de tipos por funil | leitura |
-| `plataforma_ver_configuracao` | o conteúdo do que está configurado, por seção (etiquetas, memória, conhecimento, follow-ups, automações, agenda, equipe, números, atendimento, mensagens) | leitura |
+| `plataforma_ver_configuracao` | o conteúdo do que está configurado, por seção (etiquetas, memória, conhecimento, follow-ups, automações, agenda, equipe, números, atendimento, mensagens, planos de tarefa, fontes de formulário e banco externo). Em números, também os dias da prospecção, se guarda o histórico, se está pausado e as pausas agendadas; em atendimento, o freio do passo "a IA decide"; nas fontes, nunca o segredo; no banco externo, nunca endereço, usuário ou senha | leitura |
 | `plataforma_ver_followup` | um fluxo de follow-up por dentro: gatilho, nós, textos e esperas, a etapa de destino das caixas de mover e as etiquetas das caixas de etiquetar, e as setas entre os nós | leitura |
 | `plataforma_ver_conversoes` | as conversões de um cliente: as conexões da Meta e do Google **sem segredo**, se a identidade da Meta (ID da Página ou da conta do WhatsApp Business) está preenchida, as regras por funil das duas plataformas, a chave dos leads de formulário, o evento recomendado para cada etapa e os 20 últimos envios com a situação e o motivo | leitura |
 | `plataforma_listar_demonstracoes` | as empresas de demonstração por segmento (construtora, clínica odontológica, indústria, academia) e a bancada: se existe, o id, quando a semente foi aplicada e as contagens; e qualquer outra organização marcada como demonstração | leitura |
@@ -232,17 +238,21 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 
 | ferramenta | o que faz | chave natural | teto por chamada |
 |---|---|---|---|
-| `plataforma_configurar_empresa` | nome, razão social, CNPJ, país, fuso, idioma, moeda, modo de venda, retenção de mídia, encarregado e política de privacidade | a organização | só os campos que vieram mudam |
-| `plataforma_configurar_atendimento` | modo de distribuição (manual, rodízio ou menor carga), visibilidade das conversas, devolução para a IA, quanto a IA espera depois de uma resposta pelo celular, e o nome de quem fala (atendente ou IA) em negrito na mensagem | a organização | idem |
+| `plataforma_configurar_empresa` | nome, razão social, CNPJ, país, fuso, idioma, moeda, modo de venda, retenção de mídia, a limpeza automática de mídia antiga (ligada, apaga sem volta), encarregado e política de privacidade | a organização | só os campos que vieram mudam |
+| `plataforma_configurar_atendimento` | modo de distribuição (manual, rodízio ou menor carga), visibilidade das conversas, devolução para a IA, quanto a IA espera depois de uma resposta pelo celular, o nome de quem fala (atendente ou IA) em negrito na mensagem, e o freio da empresa para o passo "a IA decide" das automações | a organização | idem |
 | `plataforma_garantir_funil` | funil, etapas na ordem, passo do agente por etapa, probabilidade, janela de esfriando (`prazo_esperado_horas`, pela régua da tela: 1 a 8760 horas inteiras) e cor, campos personalizados (com obrigatoriedade por etapa), motivos de perda e de ganho, vocabulário | nome do funil; nome da etapa; `key` do campo; rótulo do motivo | 20 etapas |
 | `plataforma_garantir_produtos` | catálogo em lote, com preço em centavos ou em texto (`"R$ 189,90"`); item com problema é recusado com motivo e não derruba os outros | código do produto (sem código, o nome) | 200 produtos |
 | `plataforma_garantir_etiquetas` | etiquetas no vocabulário, com cor e descrição | nome da etiqueta, sem diferenciar maiúscula | 50 etiquetas |
 | `plataforma_gravar_memoria` | as regras da casa (documento que todos os agentes seguem) e as anotações | o documento é um só; anotação pelo título | 50 anotações |
 | `plataforma_garantir_conhecimento` | material por **texto**: perguntas e respostas, ou documento | nome do material | 200 perguntas; 200 mil caracteres |
 | `plataforma_garantir_followup` | instala um fluxo a partir de um modelo e ajusta textos, esperas, etapa do gatilho e política; no gatilho de silêncio, o teto do silêncio e a pausa antes de recomeçar; e garante as caixas que mexem no negócio sem falar com o cliente (`mover_no_funil` e `etiquetar`), antes de um nó do fluxo | nome do fluxo; a caixa, pelo lugar onde está | um fluxo; 10 caixas de cada tipo |
-| `plataforma_garantir_agente` | cria ou altera o **rascunho** do agente: prompt, capacidades por pacote, funis, materiais, follow-ups, palavras de passagem, horário, aviso de fora do horário, número. O limiar de sentimento é do cadastro e vale na hora | nome do agente | um agente |
-| `plataforma_garantir_roteador` | cria ou ajusta o roteador de intenção de um número, **desligado**: nome, número, agente reserva e as intenções, cada uma com o agente e o funil (e a etapa) de destino do negócio | nome do roteador; nome da intenção | 20 intenções |
-| `plataforma_garantir_automacao` | cria ou ajusta uma regra de automação, **desligada**. É também o webhook de saída: os gatilhos de ganho, perda, reabertura e troca de responsável com a ação `call_webhook` | nome da regra | uma regra |
+| `plataforma_garantir_agente` | cria ou altera o **rascunho** do agente: prompt, capacidades por pacote, funis, materiais, follow-ups, palavras de passagem, passagem por assunto jurídico, horário, aviso de fora do horário, número. O limiar de sentimento é do cadastro e vale na hora; o bloqueio de afirmação clínica é da EMPRESA (todos os agentes) e vale na hora | nome do agente | um agente |
+| `plataforma_garantir_roteador` | cria ou ajusta o roteador de intenção de um número, **desligado**: nome, número, agente reserva, a janela de contexto do classificador (0 a 16 mensagens, 8 no roteador novo) e as intenções, cada uma com o agente e o funil (e a etapa) de destino do negócio | nome do roteador; nome da intenção | 20 intenções |
+| `plataforma_garantir_automacao` | cria ou ajusta uma regra de automação, **desligada**. É também o webhook de saída: os gatilhos de ganho, perda, reabertura e troca de responsável com a ação `call_webhook`. Aceita o passo "a IA decide" (`ai_decide`, com as ações das opções conferidas pela mesma régua), aplicar um plano de tarefas, etiqueta no contato, o recorte por fonte de formulário e o funil e a etapa dos gatilhos de tempo | nome da regra | uma regra |
+| `plataforma_garantir_planos_de_tarefa` | os planos de tarefa (a sequência de tarefas que uma automação aplica ao negócio), com título, prazo, prioridade e responsável de cada passo | o `id` do plano, ou o nome | 50 planos; 30 passos por plano |
+| `plataforma_garantir_fonte_de_formulario` | a fonte de formulário: destino (funil e etapa), as perguntas do formulário, o mapeamento dos campos, o endereço de retorno e a autorização de IA na captação (que exige a assinatura, posta pela pessoa). Devolve o caminho do endereço de captação | nome da fonte | uma fonte; 20 perguntas |
+| `plataforma_configurar_canal` | de um número: os dias da prospecção, guardar o histórico (só QR Code; desligar pede confirmação escrita) e a pausa agendada de até 24 horas (de um número ou de todos), com o cancelamento. Nunca credencial, token ou número | o número; a pausa, pelo número e pela janela | um número |
+| `plataforma_configurar_banco_externo` | a coluna que identifica o cliente nas conversas numa conexão de banco externo que já existe (telefone ou e-mail). Nunca lê nem devolve a conexão ou a senha | o nome da conexão | uma conexão |
 | `plataforma_garantir_tipos_de_obrigacao` | o catálogo de tipos de documentos e obrigações de um funil, inclusive `modelo_do_segmento` (os tipos prontos do segmento) | nome do tipo dentro do funil | 60 tipos por funil |
 | `plataforma_garantir_tipos_de_agendamento` | tipos de agendamento (duração, local, categoria), com o lembrete desligado | nome do tipo | 30 tipos |
 | `plataforma_definir_jornada` | a jornada de uma pessoa da equipe, pelo e-mail | a pessoa | uma pessoa |
@@ -285,7 +295,9 @@ a recusa diz qual operação pedir.
 Na empresa de demonstração a montagem funciona inteira (é assim que ela é
 preenchida), e nada sai para os contatos nem para fora: modelo oficial do
 WhatsApp e automação ligada com webhook ou aviso de grupo são recusados com a
-frase da trava. **O convite de equipe é a exceção** (migration `9020`):
+frase da trava, inclusive quando o webhook ou o aviso está entre as opções do passo
+"a IA decide" (a trava do banco alcança esse caso desde a 9021, e a ferramenta de
+ligar explica antes de chegar ao banco). **O convite de equipe é a exceção** (migration `9020`):
 `plataforma_convidar_pessoas` funciona nela como em qualquer empresa, porque
 fala com uma pessoa de verdade que quem administra escolheu, e a resposta avisa
 que quem aceitar vai ver dados fictícios. É o jeito de dar acesso a quem ainda
@@ -342,6 +354,46 @@ conferida no código. A prova de cada linha está em
 
 O que dessas versões fica com a pessoa está na seção 4, com o motivo.
 
+### O que chegou do upstream 1.74 a 1.80 (.76)
+
+Mesma regra, na fusão da v1.80. Cada novidade de configuração foi conferida no
+código. A prova de cada linha está em
+`tests/unit/mcp-de-implantacao-novidades-do-upstream-180.test.ts` (e a do dono do
+contato em `tests/unit/mcp-de-migracao-contatos.test.ts` e
+`tests/invariants/dono-do-contato-pela-plataforma.test.ts`).
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| Interruptor da limpeza automática de mídia antiga (0557) | 1.74 | campo novo `limpeza_automatica_de_midia` em `plataforma_configurar_empresa`, pela régua da tela (`tenantSchema`); a leitura em `plataforma_ver_cliente` e no checklist | `implantar_configuracao` |
+| O passo "a IA decide" das automações (`ai_decide`) | 1.74 | `plataforma_garantir_automacao` aceita `ai_decide`; a ação de cada opção passa pelas mesmas conferências das de primeiro nível; a regra só nasce com `custo_de_token: true` | `implantar_configuracao` |
+| Freio da empresa para o passo "a IA decide" | 1.76 | campo novo `ia_decide_nas_automacoes` em `plataforma_configurar_atendimento`, com a mescla e a auditoria da tela | `implantar_configuracao` |
+| Planos de tarefa e a ação "aplicar um plano de tarefas" | 1.77 | ferramenta nova `plataforma_garantir_planos_de_tarefa`; `apply_task_plan` em `plataforma_garantir_automacao`, com o plano conferido | `implantar_configuracao` |
+| Etiqueta da automação gravada no contato (`add_tag` com `destino`) | 1.80 | já alcançava: o schema do upstream valida; `plataforma_listar_modelos` ensina | `implantar_configuracao` |
+| Regra recortada por fonte de formulário (`webhook_source_id`) | 1.78 | a fonte é conferida contra a empresa, com a frase da rota | `implantar_configuracao` |
+| Funil e etapa nos gatilhos de tempo (sem se perder ao salvar) | 1.79 | já gravava a configuração inteira; os ids passam a ser conferidos contra a empresa | `implantar_configuracao` |
+| Passagem para uma pessoa por assunto jurídico, por agente (0616) | 1.79 | campo novo `passagem_por_assunto_juridico` em `plataforma_garantir_agente` (do rascunho); a publicação deixa `ai_agent.legal_handoff_changed` com o autor do token | `implantar_configuracao` |
+| Bloqueio de afirmação clínica (camada de segurança da empresa) | 1.74 | campo novo `bloquear_afirmacao_clinica` em `plataforma_garantir_agente`; vale para todos os agentes da empresa, na hora | `implantar_configuracao` |
+| Janela de contexto do classificador do roteador | 1.74 | campo novo `mensagens_de_contexto` em `plataforma_garantir_roteador`; roteador novo nasce com 8, como na rota | `implantar_configuracao` |
+| Dias da semana da prospecção por conexão (0642) | 1.80 | ferramenta nova `plataforma_configurar_canal` (`dias_da_prospeccao`) | `implantar_configuracao` |
+| Guardar o histórico do número (QR Code) | 1.74 | `plataforma_configurar_canal` (`guardar_historico`), pela função da tela; desligar pede confirmação escrita | `implantar_configuracao` |
+| Pausa agendada de conexões (0626) | 1.79 | `plataforma_configurar_canal` (`pausa_agendada` e `cancelar_pausa_agendada`), com as recusas da rota | `implantar_configuracao` |
+| Perguntas do formulário por fonte (0595) | 1.78 | ferramenta nova `plataforma_garantir_fonte_de_formulario` (`perguntas`) | `implantar_configuracao` |
+| Autorizar o atendimento por IA a partir do formulário (0577) | 1.76 | `plataforma_garantir_fonte_de_formulario` (`autorizar_ia_na_captura`); exige a assinatura, que fica com a pessoa | `implantar_configuracao` |
+| Coluna que identifica o cliente no banco externo (0558) | 1.74 | ferramenta nova `plataforma_configurar_banco_externo`; recusa com o módulo da instalação desligado | `implantar_configuracao` |
+| O vendedor dono do contato, a "carteira do cliente" do upstream (0622) | 1.79 | campo novo `vendedor_responsavel` em `plataforma_importar_contatos`, gravado pela função do fork da migration `9022` (a porta do upstream exige gerente membro como ator) | `importar_base` |
+| Chave do CPF semeada no banco (0597) | 1.78 | `plataforma_ver_saude` diz sim ou não (`chave_do_cpf`), sem nunca devolver o valor | leitura |
+| Paleta das etiquetas com o verde e o vermelho mais escuros | 1.74 | já alcançava: a cor antiga é lida como a nova pela mesma régua da tela | `implantar_configuracao` |
+| Limite de assentos do plano no convite (cobrança do revendedor) | 1.78 | `plataforma_convidar_pessoas` faz a mesma conta da rota e recusa com a mesma frase; com a cobrança desligada, não há limite | `convidar_equipe` |
+
+Ficaram de fora desta fusão, por decisão: o plano de cobrança e a assinatura do
+revendedor (a cobrança do upstream fica desligada no fork), excluir organização,
+trocar o e-mail de login de alguém e marcar contato como pessoal (é decisão do
+gerente, na tela). Também o modo "o Jev escolhe o agente sozinho" do roteador
+(depende da chave do Jev e do aceite de mandar a conversa a um fornecedor de fora,
+como as tarefas do Jev) e as camadas de segurança que custam IA por mensagem
+(promessa semântica e tentativa de burlar o agente): é custo na conta da plataforma,
+e fica com quem opera, na tela de Segurança do agente.
+
 ---
 
 ## Migração de outro CRM
@@ -367,7 +419,12 @@ O checklist (`plataforma_ver_implantacao`) lista cada item abaixo em
 | ID da Página do Facebook (ou da conta do WhatsApp Business) das conversões da Meta | Configurações › Conversões · `/app/settings/conversoes` | é a identidade da conta de anúncios do cliente, preenchida junto da credencial; um id errado vincula a venda a outra conta. A leitura diz se está preenchido |
 | Reprocessar uma conversão que ficou pendente | Configurações › Conversões · `/app/settings/conversoes` | é operação do dia a dia sobre uma venda, e envia dado do cliente final para a plataforma de anúncio: não é montagem |
 | Ligar tarefas do Jev (por exemplo "Conferir o campo antes de a IA gravar") | IA › Provedores · `/app/ai/providers` | depende da chave do Jev e do aceite de mandar a conversa a um fornecedor de fora: os dois são atos de pessoa. Não há ferramenta nenhuma do Jev |
-| Assinatura (HMAC) de uma fonte de captação | Automações › Fontes · `/app/webhooks` | o segredo aparece uma vez na tela: é credencial. Não há ferramenta de fonte de captação no MCP de plataforma (existe no MCP de cliente) |
+| Assinatura (HMAC) de uma fonte de formulário | Automações › Fontes · `/app/webhooks` | o segredo aparece uma vez na tela: é credencial. A fonte em si (destino, perguntas, autorização de IA) entra por `plataforma_garantir_fonte_de_formulario`; a autorização de IA só liga depois da assinatura |
+| Ligar, desligar ou apagar uma fonte de formulário | Automações › Fontes · `/app/webhooks` | desligar faz o formulário que já está no site parar de virar contato na hora, sem ninguém ver do outro lado |
+| Criar, testar ou apagar a conexão com o banco externo do cliente | Dados externos · `/app/integracao-dados` | endereço, usuário e senha são credencial do cliente. A coluna do cliente nas conversas entra por `plataforma_configurar_banco_externo` |
+| Pausar um número AGORA, e o ritmo de envio (intervalos, janelas, teto diário, aquecimento) | Conexões · `/app/connections` | a pausa imediata é operação do dia; a pausa AGENDADA (janela de manutenção) e os dias da prospecção entram por `plataforma_configurar_canal` |
+| Plano e cobrança do cliente | Configurações › Plano e cobrança | a cobrança do revendedor do upstream fica desligada no fork |
+| Marcar um contato como pessoal | a ficha do contato | é decisão do gerente sobre um contato, não montagem |
 | CSS personalizado da marca | Admin › Marca · `/admin/marca` | é da instalação inteira, e não de um cliente; e é cosmético |
 | Renomear, juntar ou excluir etiqueta | Configurações › Etiquetas · `/app/settings/tags` | mexe em todos os contatos, negócios e conversas que carregam o nome: é operação, não montagem |
 | Enviar arquivo (PDF, planilha) ou site como conhecimento | IA › Conhecimento · `/app/ai/knowledge/sources` | upload não cabe numa chamada de ferramenta; por aqui entra o que é texto |
@@ -422,7 +479,12 @@ Também ficaram de fora, por desenho:
   fina, a operação monta a mesma sequência com as mesmas funções de biblioteca,
   e `tests/unit/mcp-de-implantacao-espelhos.test.ts` reprova quando o código da
   rota muda, para alguém reler o espelho.
-- Nenhuma migration para as ferramentas: tudo cabe nas tabelas que existem. Desde
+- Uma migration só para as ferramentas: a `9022`
+  (`fn_mia_definir_dono_do_contato_pela_plataforma`), porque a porta do dono do
+  contato do upstream exige um gerente membro da empresa como ator, e o token de
+  plataforma não é membro. Ela copia o corpo de `fn_definir_carteira_do_cliente`,
+  e a cerca dos espelhos guarda a impressão da função do upstream: mudou lá,
+  reprova aqui. O resto cabe nas tabelas que existem. Desde
   a .72 as de conversões da Meta gravam na régua do UPSTREAM
   (`meta_ads_conversion_rules`, 0524), pela gravação da tela dele, e a volta dos
   leads de formulário na chave da 9017
@@ -464,8 +526,10 @@ Testes:
 | `tests/unit/mcp-de-implantacao-operacoes.test.ts` | cada ferramenta: o que grava, a reexecução, as recusas e a empresa de demonstração |
 | `tests/unit/mcp-de-implantacao-conversoes.test.ts` | as seis ferramentas de conversões: o que gravam, que montar não liga, a reexecução, as recusas, a resposta sem segredo e a empresa de demonstração |
 | `tests/unit/mcp-de-implantacao-novidades-do-upstream.test.ts` | cada novidade do upstream 1.70 a 1.73: o campo ou a caixa nova passa pela ferramenta (o que grava, a reexecução, a recusa que ensina, a leitura), e as duas ferramentas do roteador |
+| `tests/unit/mcp-de-implantacao-novidades-do-upstream-180.test.ts` | cada novidade do upstream 1.74 a 1.80, no mesmo molde, as quatro ferramentas novas, a contagem da lista (60) e a prova de que os tipos de ação da ferramenta são exatamente os do upstream |
+| `tests/invariants/dono-do-contato-pela-plataforma.test.ts` | a função da 9022 no Postgres de verdade: o controle negativo (a porta do upstream recusa o ator da plataforma), o mesmo efeito da porta do upstream, as recusas do ator e que só o `service_role` executa |
 | `tests/unit/produto-da-implantacao-se-edita-na-tela.test.ts` | o produto que entrou pela implantação ou pela demonstração abre editável na tela do upstream, e a lista de origens do fork não envelhece |
-| `tests/unit/mcp-de-implantacao-espelhos.test.ts` | as rotas espelhadas não mudaram sem alguém reler o espelho |
+| `tests/unit/mcp-de-implantacao-espelhos.test.ts` | as rotas espelhadas não mudaram sem alguém reler o espelho, e a função do upstream que a 9022 copia também não |
 | `tests/unit/mcp-de-implantacao-pela-porta-http.test.ts` | o mesmo servidor pela rota HTTP de verdade, com o cabeçalho `Authorization` |
 | `tests/invariants/mcp-de-implantacao-ponta-a-ponta.test.ts` | o roteiro inteiro no Postgres de verdade, e que rodar de novo não muda uma linha |
 | `tests/unit/mcp-de-demonstracao.test.ts` | as ferramentas das demonstrações sem banco: a operação de cada uma e a recusa que ensina o `--sql` quando o app não tem `SUPABASE_DB_URL` |
