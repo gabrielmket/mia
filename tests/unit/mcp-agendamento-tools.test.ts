@@ -29,6 +29,18 @@ vi.mock("@/app/api/v1/agenda/agendamentos/_handler", () => ({
   cancelarAgendamentoHandler: vi.fn(),
 }));
 
+// FORK MIA (fusão da .76): o e-mail do CLIENTE no `guest_email` vai para a ficha
+// (`gravarEmailDoContato`). Dublê com a gravação recusada por padrão — o caso
+// do upstream (#2077), em que um e-mail de fora da equipe não entra em lugar
+// nenhum; o caso do fork liga a gravação com `mockResolvedValueOnce`.
+vi.mock("@/lib/mcp/tools/email-do-contato", async (original) => {
+  const real = await original<typeof import("@/lib/mcp/tools/email-do-contato")>();
+  return {
+    ...real,
+    gravarEmailDoContato: vi.fn(async () => ({ gravado: false, motivo: "contato_ja_tem_outro_email" })),
+  };
+});
+
 vi.mock("@/lib/agenda/consulta", async (original) => {
   const real = await original<typeof AgendaConsulta>();
   return { ...real, horariosLivresDaOrg: vi.fn(), listaAgendamentos: vi.fn(), idDoTipoPorSlug: vi.fn() };
@@ -44,6 +56,7 @@ const {
   crmCancelAppointment,
 } = await import("@/lib/mcp/tools/agendamento");
 const handlers = await import("@/app/api/v1/agenda/agendamentos/_handler");
+const { gravarEmailDoContato } = await import("@/lib/mcp/tools/email-do-contato");
 const { ApiError } = await import("@/lib/api/types");
 
 // O dublê do client existe só para satisfazer o contrato: `horariosLivresDaOrg` está
@@ -309,13 +322,32 @@ describe("as escritas de agenda", () => {
     expect(r.mensagem).toMatch(/crm_find_free_slots/);
   });
 
-  it("o e-mail informado vira convidado do Google, e falhar no cadastro não desfaz a reunião", async () => {
+  /** Equipe vazia: o e-mail ditado nunca é de alguém da equipe. */
+  const ctxSemEquipe: McpContext = {
+    ...ctx,
+    supabase: {
+      from: () => {
+        const q = {
+          select: () => q,
+          eq: () => q,
+          is: () => q,
+          then: (ok: (r: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(ok),
+        };
+        return q;
+      },
+    } as unknown as SupabaseClient,
+  };
+
+  it("FORK MIA: o e-mail que o CLIENTE ditou vai para a ficha dele, e o Google o convida por ela", async () => {
     // Produção (Time Company, 2026-09-15): o agente pedia o e-mail "para o convite"
-    // e a ferramenta não tinha o campo — o evento nascia sem convidado.
+    // e a ferramenta não tinha o campo — o evento nascia sem convidado. Desde a
+    // fusão da .76 ele entra pela ficha (o caminho do upstream para o contato),
+    // e não como convidado avulso.
     vi.mocked(idDoTipoPorSlug).mockResolvedValue({ id: "t-1", nome: "Diagnóstico" });
     vi.mocked(handlers.marcarAgendamentoHandler).mockResolvedValue(
       { id: "ag-1", meeting_state: "not_requested" } as never,
     );
+    vi.mocked(gravarEmailDoContato).mockResolvedValueOnce({ gravado: true });
 
     const r = (await crmBookAppointment.handler(
       {
@@ -324,15 +356,37 @@ describe("as escritas de agenda", () => {
         contact_id: "c-1",
         guest_email: "cliente@exemplo.com",
       },
-      ctx,
+      ctxSemEquipe,
     )) as { marcado: boolean; email_no_cadastro?: boolean };
 
-    expect(vi.mocked(handlers.marcarAgendamentoHandler).mock.calls[0]![2]).toMatchObject({
-      guest_email: "cliente@exemplo.com",
-    });
+    expect(vi.mocked(gravarEmailDoContato)).toHaveBeenCalledWith(
+      ctxSemEquipe,
+      "c-1",
+      "cliente@exemplo.com",
+      { soSeVazio: true },
+    );
+    // Não vai como convidado avulso: o convite sai pelo e-mail da ficha.
+    expect(vi.mocked(handlers.marcarAgendamentoHandler).mock.calls.at(-1)![2]).not.toHaveProperty("guest_email");
     expect(r.marcado).toBe(true);
-    // O dublê do client não grava nada: a gravação falha e a reunião continua marcada.
-    expect(r.email_no_cadastro).toBe(false);
+    expect(r.email_no_cadastro).toBe(true);
+  });
+
+  it("FORK MIA: ficha com OUTRO e-mail recusa o convidado e NADA é marcado", async () => {
+    vi.mocked(idDoTipoPorSlug).mockResolvedValue({ id: "t-1", nome: "Diagnóstico" });
+    vi.mocked(handlers.marcarAgendamentoHandler).mockClear();
+
+    const r = (await crmBookAppointment.handler(
+      {
+        event_type_slug: "diagnostico",
+        starts_at: "2026-09-16T17:40:00Z",
+        contact_id: "c-1",
+        guest_email: "secretaria@exemplo.com",
+      },
+      ctxSemEquipe,
+    )) as { marcado: boolean; motivo?: string };
+
+    expect(r).toMatchObject({ marcado: false, motivo: "convidado_fora_da_equipe" });
+    expect(handlers.marcarAgendamentoHandler).not.toHaveBeenCalled();
   });
 
   it("cada código traz o ensino DELE, não uma frase genérica", async () => {

@@ -668,10 +668,24 @@ async function semDerrubarOTurno<T>(
  * (`ctx.organizationId`), nunca do input, e nunca olha outras organizações: a
  * recusa é a mesma para e-mail desconhecido e para membro de outra empresa.
  */
+/*
+ * FORK MIA (fusão da .76) — o campo tem DOIS donos legítimos, e um terceiro não:
+ *
+ *  - alguém DA EQUIPE (#2077 do upstream): entra no convite como convidado;
+ *  - o PRÓPRIO CLIENTE (decisão desta instalação, 2026-09-15): o e-mail que ele
+ *    ditou vai para a ficha dele (`gravarEmailDoContato`, só se ela não tem
+ *    outro), e o Google o convida pela ficha — o caminho do upstream para o
+ *    contato atendido. O agente da MIA pede o e-mail "para o convite", e sem
+ *    isto o cliente nunca recebia;
+ *  - qualquer outro (a ficha já tem OUTRO e-mail, ou a gravação falhou) é
+ *    recusado como o upstream recusa: convite em nome do negócio a quem o
+ *    negócio nunca escolheu.
+ */
 const DESCRICAO_DO_CONVIDADO =
-  "e-mail de alguém DA EQUIPE (usuário desta empresa) que também participa do compromisso — por " +
-  "exemplo, o consultor que conduz a reunião. E-mail de cliente ou de terceiro é RECUSADO: o contato " +
-  "atendido já entra no convite pelo e-mail da ficha, quando ele existe.";
+  "o e-mail que o CLIENTE informou para receber o convite da reunião (vai para a ficha dele, se ela " +
+  "ainda não tem e-mail, e o Google o convida por ela), ou o de alguém DA EQUIPE (usuário desta " +
+  "empresa) que também participa — por exemplo, o consultor que conduz a reunião. E-mail de " +
+  "terceiro é RECUSADO.";
 
 async function convidadoEhDaEquipe(ctx: McpContext, email: string): Promise<boolean> {
   const { data, error } = await ctx.supabase
@@ -736,9 +750,6 @@ const marcarShape = {
    * da IA não, e o agente pedia o e-mail "para o convite" sem ter como mandá-lo:
    * o evento nascia no Google sem convidado (Time Company, 2026-09-15).
    */
-  guest_email: emailInformadoSchema
-    .optional()
-    .describe("o e-mail que a pessoa informou para receber o convite da reunião; ela recebe o convite do Google"),
   description: z
     .string()
     .max(2000)
@@ -749,12 +760,7 @@ const marcarShape = {
     .max(300)
     .optional()
     .describe("endereço ou local DESTE compromisso. Vazio apaga o que o tipo sugeriu."),
-  guest_email: z
-    .string()
-    .email()
-    .max(320)
-    .optional()
-    .describe(DESCRICAO_DO_CONVIDADO),
+  guest_email: emailInformadoSchema.optional().describe(DESCRICAO_DO_CONVIDADO),
 };
 
 export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
@@ -786,15 +792,26 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
           mensagem: `não existe atendimento chamado "${input.event_type_slug}". Pergunte que tipo de atendimento a pessoa quer.`,
         };
       }
-      if (input.guest_email !== undefined && !(await convidadoEhDaEquipe(ctx, input.guest_email))) {
-        return {
-          marcado: false,
-          motivo: "convidado_fora_da_equipe",
-          mensagem:
-            "NADA foi marcado: o convite só pode incluir e-mail de alguém da equipe desta empresa. " +
-            "Marque de novo SEM `guest_email` e, se a pessoa quer outro participante, diga que a " +
-            "equipe inclui no convite.",
-        };
+      // FORK MIA — ver o comentário de `DESCRICAO_DO_CONVIDADO`.
+      let convidadoDaEquipe: string | undefined;
+      let emailNoCadastro: boolean | undefined;
+      if (input.guest_email !== undefined) {
+        if (await convidadoEhDaEquipe(ctx, input.guest_email)) {
+          convidadoDaEquipe = input.guest_email;
+        } else if (
+          (await gravarEmailDoContato(ctx, input.contact_id, input.guest_email, { soSeVazio: true })).gravado
+        ) {
+          emailNoCadastro = true;
+        } else {
+          return {
+            marcado: false,
+            motivo: "convidado_fora_da_equipe",
+            mensagem:
+              "NADA foi marcado: o convite só vai para o e-mail da ficha do cliente ou de alguém da " +
+              "equipe desta empresa, e a ficha deste cliente já tem outro e-mail. Marque de novo SEM " +
+              "`guest_email` e, se a pessoa quer outro participante, diga que a equipe inclui no convite.",
+          };
+        }
       }
       const r = await marcarAgendamentoHandler(
         ctx.supabase,
@@ -813,20 +830,13 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
           ...(input.owner_user_id ? { owner_user_id: input.owner_user_id } : {}),
           ...(input.title ? { title: input.title } : {}),
           ...(input.notes ? { notes: input.notes } : {}),
-          ...(input.guest_email ? { guest_email: input.guest_email } : {}),
           ...(input.description ? { description: input.description } : {}),
           ...(input.location_details !== undefined
             ? { location_details: input.location_details }
             : {}),
-          ...(input.guest_email !== undefined ? { guest_email: input.guest_email } : {}),
+          ...(convidadoDaEquipe !== undefined ? { guest_email: convidadoDaEquipe } : {}),
         },
       );
-      // O e-mail do convite vai para o cadastro SÓ se o contato ainda não tem
-      // e-mail: o convidado pode ser outra pessoa (secretária, sócio) e não
-      // sobrescreve o do cliente. Falhar aqui não desfaz a reunião.
-      const emailNoCadastro = input.guest_email
-        ? (await gravarEmailDoContato(ctx, input.contact_id, input.guest_email, { soSeVazio: true })).gravado
-        : undefined;
       /**
        * ⚠️ MARCADO NÃO É CONFIRMADO, e o modelo precisa ouvir isso em voz alta.
        *
