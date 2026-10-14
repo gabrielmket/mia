@@ -99,7 +99,9 @@ export function PainelDeMetas() {
           {t("Mês")}
           <input
             type="month"
-            className="ml-2 h-9 rounded-md border bg-background px-2 text-sm text-foreground"
+            // 44px onde o dedo aciona e 16px de fonte no celular (o iPhone não
+            // dá zoom no foco): a régua de `components/ui/input.tsx`.
+            className="ml-2 h-9 min-h-11 rounded-md border bg-background px-2 text-base text-foreground md:text-sm lg:min-h-0"
             value={periodo}
             onChange={(e) => setPeriodo(e.target.value || mesAtual())}
           />

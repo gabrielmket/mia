@@ -233,6 +233,13 @@ test("liga um módulo, a tela diz onde ele aparece, e a porta está lá no CRM",
     // A mesma âncora do passo positivo, para os dois lados usarem a mesma régua. O `Received: 1`
     // da rodada anterior era o card "Prospecção" casando por substring — foi ele que me fez
     // perseguir três hipóteses erradas sobre revalidação e corrida de estado.
-    await expect(page.getByRole("heading", { level: 3, name: PORTA, exact: true })).toHaveCount(0);
+    // FORK MIA: a mesma âncora do passo positivo inclui o card da porta do
+    // módulo (`/app/companies`); o nosso card "Empresas" (/app/empresas) não
+    // depende do crm_b2b e continua no hub com o módulo desligado.
+    await expect(
+      page
+        .locator('a[href="/app/companies"]')
+        .getByRole("heading", { level: 3, name: PORTA, exact: true }),
+    ).toHaveCount(0);
   });
 });
