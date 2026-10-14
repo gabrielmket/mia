@@ -20,6 +20,7 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { bancoEmMemoria, type Linha } from "@/tests/helpers/banco-em-memoria";
+import { NEW_ROUTER_CONTEXT_MESSAGES } from "@/lib/ai/classifier-context";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const AGENTE = "22222222-2222-4222-8222-222222222222";
@@ -470,7 +471,14 @@ describe("chave, provedores e roteador", () => {
     );
     expect(criado.status).toBe(201);
     const ins = estado.banco.escritas.find((e) => e.tabela === "ai_routers" && e.op === "insert")!;
-    expect(ins.linhas[0]!.config).toEqual({ sticky: false, classifier_model: null, classifier_provider: null });
+    // (.76) O upstream v1.74 grava a janela de contexto do classificador no
+    // roteador novo (`NEW_ROUTER_CONTEXT_MESSAGES`); a trava segue a mesma.
+    expect(ins.linhas[0]!.config).toEqual({
+      sticky: false,
+      classifier_model: null,
+      classifier_provider: null,
+      context_message_count: NEW_ROUTER_CONTEXT_MESSAGES,
+    });
 
     await editarRoteador(req(`/x`, "PATCH", { config: { classifier_model: "o3-pro", sticky: false } }), ctx({ id: ROTEADOR }));
     const r = estado.banco.tabela("ai_routers").find((x) => x.id === ROTEADOR)!;

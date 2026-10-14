@@ -27,7 +27,15 @@ export const TOKEN_NAO_ESCOLHE_IA: QuemPedeIa = {
 
 export async function quemPedeNaRota(authz: Extract<AuthDual, { ok: true }>): Promise<QuemPedeIa> {
   if (authz.via === "token") return TOKEN_NAO_ESCOLHE_IA;
-  const usuario = await loadAuthUser();
+  // Falha FECHADA: sem conseguir ler a sessão, quem pede é tratado como quem não
+  // escolhe IA nem vê custo (a resposta mais restritiva), em vez de derrubar a
+  // rota inteira com 500. A autorização em si já passou em `resolveAuthDual`.
+  let usuario: Awaited<ReturnType<typeof loadAuthUser>>;
+  try {
+    usuario = await loadAuthUser();
+  } catch {
+    return TOKEN_NAO_ESCOLHE_IA;
+  }
   if (!usuario) return TOKEN_NAO_ESCOLHE_IA;
   return {
     is_platform_admin: usuario.is_platform_admin,

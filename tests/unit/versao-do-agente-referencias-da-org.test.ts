@@ -30,7 +30,16 @@ vi.mock("@/lib/ai/agents/legacy-notice", () => ({
   legacyRecoveryMessage: () => "",
 }));
 vi.mock("@/lib/auth/server", () => ({
-  loadAuthUser: vi.fn(async () => ({ id: USER, email: "u@example.com" })),
+  // FORK MIA: no fork só a plataforma escolhe provedor, modelo e chave do agente
+  // (lib/ai/trava-da-ia.ts); a régua medida aqui (o escopo da versão aponta para
+  // o que existe NESTA organização) vale para quem pode escolher.
+  loadAuthUser: vi.fn(async () => ({
+    id: USER,
+    email: "u@example.com",
+    is_platform_admin: true,
+    platform_admin_scope: "full",
+    support: null,
+  })),
   resolveActiveOrg: vi.fn(async () => ({ orgId: ORG, name: "Org", role: "admin" })),
 }));
 
@@ -110,7 +119,7 @@ beforeEach(() => {
   vi.mocked(createAdminClient).mockReturnValue(bancoFalso(escritas) as never);
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
-    user: { id: USER, idioma: "pt-BR" },
+    user: { id: USER, idioma: "pt-BR", is_platform_admin: true, platform_admin_scope: "full", support: null },
     org: { orgId: ORG, name: "Org", role: "admin" },
   } as never);
 });
