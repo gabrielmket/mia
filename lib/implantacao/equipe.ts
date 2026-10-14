@@ -48,6 +48,7 @@ import { INTERFACE_COMPLETA, interfaceTemDestino } from "@/lib/navigation/interf
 import { ROLES, type Role } from "@/lib/schemas/team";
 import { ConviteNaoGravadoError } from "@/lib/team/convite-nao-gravado";
 import { conviteEstaEmAberto, emitirConvite, statusConvite, type ConviteDeTime } from "@/lib/team/convites";
+import { lerLimiteDoPlano } from "@/lib/cobranca/limites";
 
 import type { Implantacao, OrganizacaoDaImplantacao } from "./base";
 
@@ -160,6 +161,32 @@ export async function convidarPessoas(
 
   const membros = await lerMembros(c.admin, c.orgId);
   const emailsDaEquipe = new Set(membros.filter((m) => m.ativo && m.email).map((m) => m.email as string));
+
+  // Upstream v1.76 (cobrança do revendedor, §5): plano com teto de pessoas
+  // cheio recusa ANTES do e-mail, como a rota de convidar. Com a cobrança
+  // desligada (`MODULO_COBRANCA`) ou o cliente sem assinatura, não há teto
+  // (`lerLimiteDoPlano` devolve null). Ler o teto falhou → segue: a trava do
+  // aceite continua no banco (`trg_trava_assentos_do_plano`).
+  let limite: number | null = null;
+  try {
+    limite = await lerLimiteDoPlano(c.admin, c.orgId, "assentos");
+  } catch {
+    limite = null;
+  }
+  if (limite !== null) {
+    const { count, error: contagemErr } = await c.admin
+      .from("user_organizations")
+      .select("user_id", { count: "exact", head: true })
+      .eq("organization_id", c.orgId)
+      .is("revoked_at", null)
+      .eq("provisional_until_handover", false);
+    if (!contagemErr && (count ?? 0) >= limite) {
+      throw new Recusa(
+        `O plano deste cliente permite ${limite} pessoa(s) na equipe, e as vagas estão ocupadas. ` +
+          "Troque o plano (Admin › Cobrança) ou libere uma vaga, e chame de novo. Nenhum convite saiu.",
+      );
+    }
+  }
 
   const { data: pendentesBrutos, error } = await c.admin
     .from("team_invites")

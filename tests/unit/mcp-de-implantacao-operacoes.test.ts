@@ -444,7 +444,9 @@ describe("plataforma_garantir_etiquetas", () => {
     expect(r.erro, r.texto).toBe(false);
     expect(r.dados).toMatchObject({ criadas: 1, atualizadas: 1, ja_estavam: 0 });
     const settings = tabela("organizations")[0]!.settings as Linha;
-    expect(settings.tags).toEqual([{ tag: "vip", cor: "#0091ff" }, { tag: "Plano anual", cor: "#12a594" }]);
+    // (.76) Desde o upstream v1.78 (#2373) o verde-água antigo (#12a594) é
+    // substituído pelo tom de texto branco legível (#00655a) na normalização.
+    expect(settings.tags).toEqual([{ tag: "vip", cor: "#0091ff" }, { tag: "Plano anual", cor: "#00655a" }]);
     // A chave que a RLS lê não foi tocada.
     expect(settings.visibility_mode).toBe("own");
 

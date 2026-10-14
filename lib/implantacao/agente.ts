@@ -58,7 +58,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { mcpAgentDraftRecords } from "@/lib/ai/agents/create-draft";
 import { bloqueioDePublicacao, type EstadoDaCredencial, type MotivoDeBloqueio } from "@/lib/ai/agents/bloqueio-de-publicacao";
-import { validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
+import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
 import { estadoDoAgente } from "@/lib/ai/agents/no-ar";
 import { publishAgentVersion } from "@/lib/ai/agents/publish";
 import {
@@ -76,6 +76,7 @@ import { audit } from "@/lib/audit";
 import { listSelectableChannels, type SelectableChannel } from "@/lib/channels/selectable";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { VALID_TOOL_IDS } from "@/lib/mcp/tools/catalog";
+import { toolIdAceito } from "@/lib/mcp/servidor-externo/ids";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 
 import {
@@ -98,7 +99,7 @@ const COLUNAS_DO_AGENTE =
   "id, organization_id, name, description, kind, priority, is_active, is_default, published_version_id, paused_at, archived_at, config, created_at";
 
 const COLUNAS_DA_VERSAO =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, created_at, pipeline_ids, knowledge_source_ids, inbound_debounce_ms";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, handoff_legal_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, created_at, pipeline_ids, knowledge_source_ids, inbound_debounce_ms";
 
 /** Os campos de conteúdo de uma versão: é sobre eles que se pergunta "mudou?". */
 const CAMPOS_DA_VERSAO = [
@@ -116,6 +117,9 @@ const CAMPOS_DA_VERSAO = [
   "history_token_window",
   "handoff_keywords",
   "handoff_tool_enabled",
+  // Upstream v1.80 (0616): a passagem por ASSUNTO JURÍDICO virou chave da versão.
+  // Na lista para a versão nova herdar o valor da de referência, como a rota.
+  "handoff_legal_enabled",
   "proposal_ai_draft_enabled",
   "cases_enabled",
   "split_messages",
@@ -137,6 +141,7 @@ const ROTULO_DO_CAMPO: Record<string, string> = {
   max_steps: "máximo de passos",
   handoff_keywords: "palavras de passagem",
   handoff_tool_enabled: "passagem para humano",
+  handoff_legal_enabled: "passagem por assunto jurídico",
   cases_enabled: "casos",
   split_messages: "dividir mensagens",
   split_max_chars: "tamanho da mensagem",
@@ -701,6 +706,8 @@ async function inserirVersao(
         history_token_window: v.history_token_window,
         handoff_keywords: v.handoff_keywords,
         handoff_tool_enabled: v.handoff_tool_enabled,
+        // Upstream v1.80 (0616): a chave da passagem por assunto jurídico.
+        handoff_legal_enabled: v.handoff_legal_enabled,
         // Upstream 1.70 (#2013): a rota passou a gravar a chave do rascunho de
         // proposta pela IA na versão nova; o espelho grava junto.
         proposal_ai_draft_enabled: v.proposal_ai_draft_enabled,
@@ -787,7 +794,7 @@ export async function garantirAgente(
     const entrada = { ...lido.data, version: travada.corpo };
 
     const escopo = await validarEscopoDaVersao(c.admin, c.orgId, entrada.version);
-    if (!escopo.ok) throw new Recusa("Um dos funis ou materiais do agente não existe mais nesta organização. Chame de novo.");
+    if (!escopo.ok) throw new Recusa(`${mensagemDoEscopo(escopo)} Chame de novo.`);
 
     const registros = mcpAgentDraftRecords({ orgId: c.orgId, userId: c.autorUserId }, entrada);
     const { data: criado, error: agenteErr } = await c.admin
@@ -933,11 +940,17 @@ export async function garantirAgente(
     versaoFinal = referencia;
     desfechoDaVersao = "ja_estava";
   } else {
+    // Upstream v1.74+: as rotas de versão passaram a conferir também o provedor
+    // (a assinatura do ChatGPT só com o módulo `login_codex`), a credencial e o
+    // canal contra ESTA organização. O espelho confere o mesmo conjunto.
     const escopo = await validarEscopoDaVersao(c.admin, c.orgId, {
+      provider: desejada.provider,
+      credential_id: desejada.credential_id,
+      channel_session_id: desejada.channel_session_id,
       pipeline_ids: desejada.pipeline_ids,
       knowledge_source_ids: desejada.knowledge_source_ids,
     });
-    if (!escopo.ok) throw new Recusa("Um dos funis ou materiais do agente não existe mais nesta organização. Chame de novo.");
+    if (!escopo.ok) throw new Recusa(`${mensagemDoEscopo(escopo)} Chame de novo.`);
 
     if (tela.draft && referencia && tela.draft.id === referencia.id) {
       // Há rascunho vigente: edita o rascunho, como `PATCH .../versions/[vid]`.
@@ -1111,9 +1124,10 @@ export async function publicarAgente(
     );
   }
 
-  const invalidas = ((rascunho.tool_ids as string[] | null) ?? []).filter(
-    (id) => !(VALID_TOOL_IDS as readonly string[]).includes(id),
-  );
+  // Upstream v1.77+: a ferramenta de um servidor MCP externo escolhida no agente
+  // também é capacidade válida (`toolIdAceito`), como na rota de publicar.
+  const catalogo = new Set<string>(VALID_TOOL_IDS as readonly string[]);
+  const invalidas = ((rascunho.tool_ids as string[] | null) ?? []).filter((id) => !toolIdAceito(id, catalogo));
   if (invalidas.length > 0) {
     throw new Recusa(
       `O rascunho tem capacidades que não existem mais no catálogo: ${invalidas.join(", ")}. ` +

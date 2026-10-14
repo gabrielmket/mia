@@ -61,12 +61,15 @@ function impressao(relativo: string): string {
  */
 const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string }> = [
   // Catálogo de produtos.
-  { rota: "app/api/v1/products/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "882cbb6f1f5970e8" },
+  // Relido na .76 (upstream 1.74-1.80): só o GET mudou (busca e paginação do catálogo). A criação, que é o que o espelho faz, não mudou.
+  { rota: "app/api/v1/products/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "8e1d25078bb05b83" },
   { rota: "app/api/v1/products/[id]/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "0c030f4dbec32b72" },
   // Automações.
-  { rota: "app/api/v1/automation-rules/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "421acfdd5ebf5624" },
+  // Relido na .76 (upstream 1.75): a fonte de captação do gatilho `lead.created` (`trigger_config.webhook_source_id`) tem de ser desta organização. O espelho confere igual (garantirAutomacao).
+  { rota: "app/api/v1/automation-rules/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "60944af22187bd79" },
   // Relido na .72 (upstream 1.71, #2211): o PATCH parcial confere o laço de lead (acoesQueFechamLaco) contra a regra gravada. O espelho valida a regra INTEIRA com createAutomationRuleSchema, que já recusa o laço (recusarLacoDeLead): coberto.
-  { rota: "app/api/v1/automation-rules/[id]/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "f96ce8914978b826" },
+  // Relido na .76: a mesma conferência da fonte de captação no PATCH; o espelho valida a regra inteira e confere a fonte antes de gravar.
+  { rota: "app/api/v1/automation-rules/[id]/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "13713ae934a645a7" },
   // Follow-up.
   // Relido na .72 (upstream 1.70, #2028): só a autenticação mudou (sessão OU token dsk_, resolveAuthDual). Nenhuma regra nova para o espelho.
   { rota: "app/api/v1/ai/followup-flows/from-model/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "a0e03549e796bcf8" },
@@ -74,24 +77,33 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/api/v1/ai/followup-flows/[id]/publish/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "c69f3113aa3c1067" },
   // Agente de IA.
   // Relido na .72 (upstream 1.70 #2028 e 1.73 #2296): token dsk_ e o corpo legado passa a criar mcp_agent com v1 rascunho pelo MESMO mcpAgentDraftRecords que o espelho já usa. A trava da IA continua na rota (lib/ai/trava-da-ia-na-rota.ts).
-  { rota: "app/api/v1/ai/agents/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "2ef1be8524c50214" },
+  // Relido na .76: o código do erro de escopo (`codigoDoEscopo`, provedor desligado) e a coluna `handoff_legal_enabled` (0616) na leitura. O espelho lê a coluna e dá a frase do escopo.
+  { rota: "app/api/v1/ai/agents/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "a121e37852edf28c" },
   // Relido na .72 (upstream 1.70, #2013 e #2028): a versão nova grava proposal_ai_draft_enabled; o espelho (inserirVersao) passou a gravar também. O resto é a autenticação por token.
-  { rota: "app/api/v1/ai/agents/[id]/versions/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "34fbc917df0f927e" },
-  { rota: "app/api/v1/ai/agents/[id]/versions/[vid]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "a7a06466ba489ee7" },
-  { rota: "app/api/v1/ai/agents/[id]/publish/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "94c4106ae472461e" },
+  // Relido na .76: a versão nova grava `handoff_legal_enabled` (0616) e o escopo passa a conferir provedor, credencial e canal. O espelho faz os dois (inserirVersao e a conferência da versão).
+  { rota: "app/api/v1/ai/agents/[id]/versions/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "b7f10fdc1237e374" },
+  // Relido na .76: token dsk_ (resolveAuthDual) e o PATCH confere provedor, credencial e canal no escopo. O espelho confere o mesmo conjunto.
+  { rota: "app/api/v1/ai/agents/[id]/versions/[vid]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "ed48b99f03791c97" },
+  // Relido na .76: token dsk_ e a ferramenta de servidor MCP externo conta como capacidade válida (`toolIdAceito`). O espelho usa a mesma régua.
+  { rota: "app/api/v1/ai/agents/[id]/publish/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "479026df35f97b55" },
   { rota: "app/api/v1/ai/agents/[id]/pause/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "6e42c31f7151ac42" },
   // Espelhado na .73 (upstream 1.71, #2216): o limiar de sentimento mora em `config` do cadastro. O espelho (configComLimiar) faz a mesma mescla do PATCH: padrões, o gravado e o pedido por cima, conferido por agentPatchSchema.
-  { rota: "app/api/v1/ai/agents/[id]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "d936626303d10f95" },
+  // Relido na .76: token dsk_ e a auditoria `ai_agent.updated`/`ai_agent.paused` no PATCH. O espelho já audita a pausa (pausarAgente).
+  { rota: "app/api/v1/ai/agents/[id]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "e0f5fecd68174ac1" },
   // Roteador de intenção, espelhado na .73 (upstream 1.73, #2290: destino de funil por intenção). O espelho cria DESLIGADO de propósito; o resto segue a rota (número conferido, configDoRoteador, gravação das intenções pelas mesmas duas funções).
-  { rota: "app/api/v1/ai/routers/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "2b6aee5c444c9b91" },
-  { rota: "app/api/v1/ai/routers/[id]/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "f8b87207dbe05d67" },
-  { rota: "app/api/v1/ai/routers/[id]/members/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "65e0573c219a9ca0" },
+  // Relido na .76 (upstream 1.74): o roteador novo nasce com `context_message_count` (NEW_ROUTER_CONTEXT_MESSAGES) e o valor é conferido (0 a 16). O espelho grava o padrão na criação e não aceita o campo de fora.
+  { rota: "app/api/v1/ai/routers/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "ae6ec0c7df54231f" },
+  // Relido na .76: a conferência do `context_message_count` no PATCH. O espelho não mexe no campo ao atualizar.
+  { rota: "app/api/v1/ai/routers/[id]/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "355393b0881dc083" },
+  // Relido na .76 (#2624): a conexão que falha no meio da transação é descartada (`release(erro)`). O espelho faz igual (gravarIntencoes).
+  { rota: "app/api/v1/ai/routers/[id]/members/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "07620fd49b8a6ea5" },
   // Memória da empresa.
   { rota: "app/api/v1/ai/memory/route.ts", espelho: "lib/implantacao/memoria.ts", impressao: "c28255da296e68b6" },
   { rota: "app/api/v1/ai/memory/entries/route.ts", espelho: "lib/implantacao/memoria.ts", impressao: "721aec1553d22379" },
   // Dados da empresa e regras de atendimento.
   // Relido na .72 (upstream 1.70, #2027): o papel passa por podeAdministrarEmpresa, a regra única do upstream. O espelho é do servidor (o token do MCP de plataforma já é a autorização).
-  { rota: "app/actions/settings/updateTenant.ts", espelho: "lib/implantacao/empresa.ts", impressao: "1688d446cb9dc922" },
+  // Relido na .76: a gravação dos dados cadastrais foi para `gravarDadosCadastrais` (compartilhada com a gestão de tenants), com `media_retention_enforced` (0557) e o CNPJ único (23505 vira frase). O espelho passa o interruptor gravado e traduz o CNPJ repetido.
+  { rota: "app/actions/settings/updateTenant.ts", espelho: "lib/implantacao/empresa.ts", impressao: "14a8d796f39e6d76" },
   { rota: "app/api/v1/settings/routing/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "5141ab7ba6a82744" },
   // Espelhado na .73 (upstream 1.70, #2079): quem fala, em negrito, na mensagem. O espelho confere com o mesmo assinaturaEntradaSchema e grava a mesma chave de settings.
   { rota: "app/api/v1/settings/assinatura/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "874d611f8e1a7d71" },
@@ -103,7 +115,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/api/v1/channels/templates/criar/route.ts", espelho: "lib/implantacao/mensagens.ts", impressao: "42df61fe7056d0ea" },
   // Convite de equipe.
   // Relido na .75 (9020, mudança NOSSA na rota): convite que o banco não grava vira item de `failed` (`convite_nao_gravado`) e o lote segue, em vez de 500. O espelho faz o mesmo: desfecho `nao_gravou`, com aviso, e as outras pessoas seguem.
-  { rota: "app/api/v1/team/invite/route.ts", espelho: "lib/implantacao/equipe.ts", impressao: "3b88eb7266c6ec61" },
+  // Relido na .76 (cobrança do revendedor): plano com teto de pessoas cheio recusa antes do e-mail. O espelho confere o mesmo teto (`lerLimiteDoPlano`), que é nulo com a cobrança desligada.
+  { rota: "app/api/v1/team/invite/route.ts", espelho: "lib/implantacao/equipe.ts", impressao: "216ab6f92e5f6eca" },
 ];
 
 describe("a regra copiada: gatilhos de follow-up que têm motor", () => {

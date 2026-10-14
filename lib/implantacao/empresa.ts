@@ -78,6 +78,7 @@ const ROTULO: Record<string, string> = {
   locale: "idioma",
   currency: "moeda",
   media_retention_days: "retenção de mídia",
+  media_retention_enforced: "limpeza automática de mídia",
   dpo_email: "e-mail do encarregado",
   privacy_policy_url: "política de privacidade",
   modo_de_venda: "modo de venda",
@@ -111,6 +112,10 @@ export async function configurarEmpresa(
     locale: pedido.idioma ?? org.locale,
     currency: pedido.moeda ?? org.currency ?? "BRL",
     media_retention_days: pedido.dias_de_retencao_de_midia ?? org.media_retention_days ?? 365,
+    // Upstream v1.75 (0557): o schema da tela passou a exigir o interruptor da
+    // limpeza de mídia. A ferramenta não o muda: vai o que está gravado
+    // (padrão do banco: ligado).
+    media_retention_enforced: org.media_retention_enforced ?? true,
     dpo_email: pedido.email_do_encarregado === undefined ? org.dpo_email : pedido.email_do_encarregado,
     privacy_policy_url:
       pedido.politica_de_privacidade_url === undefined ? org.privacy_policy_url : pedido.politica_de_privacidade_url,
@@ -145,6 +150,7 @@ export async function configurarEmpresa(
     ["locale", org.locale, d.locale],
     ["currency", org.currency ?? "BRL", d.currency],
     ["media_retention_days", org.media_retention_days ?? 365, d.media_retention_days],
+    ["media_retention_enforced", org.media_retention_enforced ?? true, d.media_retention_enforced],
     ["dpo_email", org.dpo_email ?? null, d.dpo_email ?? null],
     ["privacy_policy_url", org.privacy_policy_url ?? null, d.privacy_policy_url ?? null],
   ];
@@ -159,12 +165,21 @@ export async function configurarEmpresa(
   if (modoMudou) mudancas.push(ROTULO.modo_de_venda!);
 
   if (mudancas.length > 0) {
-    await mudarSettingsDaOrganizacao(
-      c.admin,
-      c.orgId,
-      (settings) => (modoMudou ? { ...settings, modo_de_venda: d.modo_de_venda } : null),
-      colunas,
-    );
+    try {
+      await mudarSettingsDaOrganizacao(
+        c.admin,
+        c.orgId,
+        (settings) => (modoMudou ? { ...settings, modo_de_venda: d.modo_de_venda } : null),
+        colunas,
+      );
+    } catch (err) {
+      // Upstream v1.80 (0614, gestão de tenants): o CNPJ é único na instalação.
+      // A mesma tradução de `gravarDadosCadastrais`, em vez do texto do Postgres.
+      if ((err as { code?: string } | null)?.code === "23505") {
+        throw new Recusa("Este CNPJ já pertence a outra organização. Confira o número e chame de novo.");
+      }
+      throw err;
+    }
     void audit({
       action: "org.updated",
       actorUserId: c.autorUserId,

@@ -63,6 +63,8 @@ export interface OrganizacaoDaImplantacao {
   currency: string | null;
   country: string | null;
   media_retention_days: number | null;
+  /** Upstream v1.75 (0557): o interruptor da limpeza automática de mídia antiga. */
+  media_retention_enforced: boolean | null;
   dpo_email: string | null;
   privacy_policy_url: string | null;
   settings: Record<string, unknown>;
@@ -73,7 +75,7 @@ export interface OrganizacaoDaImplantacao {
 
 const COLUNAS_DA_ORGANIZACAO =
   "id, display_name, legal_name, slug, cnpj, status, timezone, locale, currency, country, " +
-  "media_retention_days, dpo_email, privacy_policy_url, settings, onboarded_at, updated_at, demonstracao";
+  "media_retention_days, media_retention_enforced, dpo_email, privacy_policy_url, settings, onboarded_at, updated_at, demonstracao";
 
 /**
  * A organização alvo, ou a recusa que diz como achar o id certo.

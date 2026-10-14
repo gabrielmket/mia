@@ -147,6 +147,20 @@ export async function garantirAutomacao(
   if (!lido.success) recusaDoSchema(lido.error);
   const regra = lido.data;
   await conferirReferencias(c, regra.actions as Array<{ type: string; config: Record<string, unknown> }>);
+  // Upstream v1.75 (#2483/fontes): o gatilho "lead criado" pode ser recortado por
+  // FONTE de captação (`trigger_config.webhook_source_id`), e as duas rotas de
+  // automação conferem que a fonte é desta organização. O espelho confere igual.
+  const fonteDoGatilho = (regra.trigger_config as { webhook_source_id?: unknown } | undefined)?.webhook_source_id;
+  if (typeof fonteDoGatilho === "string") {
+    const { data: fonte, error: fonteErr } = await c.admin
+      .from("webhook_sources")
+      .select("id")
+      .eq("id", fonteDoGatilho)
+      .eq("organization_id", c.orgId)
+      .maybeSingle();
+    if (fonteErr) throw new Error(`não consegui conferir a fonte do gatilho: ${fonteErr.message}`);
+    if (!fonte) throw new Recusa("A fonte de captação escolhida no gatilho não pertence a este cliente. Confira o id e chame de novo.");
+  }
 
   const regras = await lerRegras(c.admin, c.orgId);
   const comEsteNome = regras.filter((r) => chaveDoNome(r.name) === chaveDoNome(regra.name));

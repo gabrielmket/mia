@@ -53,6 +53,7 @@ import { estadoDoAgente } from "@/lib/ai/agents/no-ar";
 import { writeRouterMembers, type RouterMemberInput } from "@/lib/ai/agents/router-members";
 import { replaceRouterMembersHttp } from "@/lib/ai/agents/router-members-http";
 import { configDoRoteador } from "@/lib/ai/trava-da-ia";
+import { NEW_ROUTER_CONTEXT_MESSAGES } from "@/lib/ai/classifier-context";
 import { audit } from "@/lib/audit";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 import { listSelectableChannels, type SelectableChannel } from "@/lib/channels/selectable";
@@ -330,6 +331,10 @@ function comoEntrada(i: LinhaDaIntencao): RouterMemberInput {
  */
 async function gravarIntencoes(c: Implantacao, routerId: string, members: RouterMemberInput[]): Promise<void> {
   let db: PoolClient | undefined;
+  // Upstream v1.79 (#2624): a conexão que falhou no meio da transação é
+  // DESCARTADA (`release(erro)`), e não devolvida ao grupo — a próxima tarefa
+  // herdaria a transação abortada. A rota faz assim; o espelho, igual.
+  let erroNaTransacao: Error | undefined;
   try {
     if (process.env.SUPABASE_DB_URL) {
       db = await getRequestPool().connect();
@@ -340,6 +345,7 @@ async function gravarIntencoes(c: Implantacao, routerId: string, members: Router
       await replaceRouterMembersHttp(c.admin, c.orgId, routerId, members);
     }
   } catch (err) {
+    erroNaTransacao = err instanceof Error ? err : new Error(String(err));
     if (db) await db.query("rollback").catch(() => undefined);
     const mensagem = err instanceof Error ? err.message : "";
     const codigo = (err as { code?: string } | null)?.code;
@@ -358,7 +364,7 @@ async function gravarIntencoes(c: Implantacao, routerId: string, members: Router
     }
     throw new Error(`não consegui gravar as intenções do roteador: ${mensagem || "erro desconhecido"}`);
   } finally {
-    db?.release();
+    db?.release(erroNaTransacao);
   }
 }
 
@@ -430,7 +436,13 @@ export async function garantirRoteador(c: Implantacao, pedido: PedidoDeRoteador)
     }
     const numero = acharNumero(numeros, pedido.numero);
     // O modelo do classificador é da plataforma: roteador novo nasce no "Automático".
-    const config = configDoRoteador(QUEM_NAO_ESCOLHE_IA, undefined, null);
+    const configDaTrava = configDoRoteador(QUEM_NAO_ESCOLHE_IA, undefined, null);
+    // Upstream v1.74: o roteador novo nasce com a janela de contexto do
+    // classificador (`NEW_ROUTER_CONTEXT_MESSAGES`), como na rota de criar.
+    const config = {
+      ...configDaTrava,
+      context_message_count: configDaTrava?.context_message_count ?? NEW_ROUTER_CONTEXT_MESSAGES,
+    };
     const { data: criado, error } = await c.admin
       .from("ai_routers")
       .insert({
@@ -440,7 +452,7 @@ export async function garantirRoteador(c: Implantacao, pedido: PedidoDeRoteador)
         fallback_agent_id: reserva ? reserva.id : null,
         // Nasce DESLIGADO: ligar é `plataforma_ligar_roteador` (colocar_no_ar).
         is_active: false,
-        ...(config !== undefined ? { config } : {}),
+        config,
         created_by: c.autorUserId,
       })
       .select(COLUNAS_DO_ROTEADOR)
