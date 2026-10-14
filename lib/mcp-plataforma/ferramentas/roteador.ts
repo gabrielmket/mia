@@ -13,6 +13,7 @@
  */
 import { z } from "zod";
 
+import { MAX_CLASSIFIER_CONTEXT_MESSAGES, NEW_ROUTER_CONTEXT_MESSAGES } from "@/lib/ai/classifier-context";
 import { garantirRoteador, ligarRoteador, TETO_DE_INTENCOES, type PedidoDeRoteador } from "@/lib/implantacao/roteador";
 
 import type { FerramentaDePlataforma } from "../tipos";
@@ -61,7 +62,7 @@ export const FERRAMENTAS_DE_ROTEADOR: readonly FerramentaDePlataforma[] = [
       "Roteador LIGADO não é editado por aqui (ele não tem rascunho: a mudança valeria na mensagem seguinte): desligue, ajuste e religue. " +
       "ORDEM RECOMENDADA: antes desta, crie e publique os agentes (plataforma_garantir_agente, plataforma_publicar_agente) e os funis de destino (plataforma_garantir_funil); o número precisa estar conectado. " +
       "A resposta traz `avisos` com o que conferir antes de ligar (agente fora do ar, falta de agente reserva, destino que move negócio). " +
-      "O modelo de IA do classificador é da PLATAFORMA: não se informa aqui. " +
+      "O modelo de IA do classificador é da PLATAFORMA: não se informa aqui. A janela de contexto dele (`mensagens_de_contexto`) se ajusta. " +
       "O QUE NÃO FAZ: não liga o roteador, não troca o número de um roteador que existe, não apaga roteador e não amarra roteiro de atendimento a uma intenção (isso é pela tela, em IA › Roteadores; o que já está amarrado é preservado).",
     inputSchema: {
       organization_id: ORGANIZACAO,
@@ -87,6 +88,16 @@ export const FERRAMENTAS_DE_ROTEADOR: readonly FerramentaDePlataforma[] = [
         .max(TETO_DE_INTENCOES)
         .optional()
         .describe("As intenções do roteador, na ordem em que o classificador as lê. Lista completa: intenção que existe e o pedido não cita é REMOVIDA."),
+      mensagens_de_contexto: z
+        .number()
+        .int()
+        .min(0)
+        .max(MAX_CLASSIFIER_CONTEXT_MESSAGES)
+        .optional()
+        .describe(
+          `Quantas mensagens anteriores da conversa o classificador lê para entender a atual (0 a ${MAX_CLASSIFIER_CONTEXT_MESSAGES}). ` +
+            `Roteador novo nasce com ${NEW_ROUTER_CONTEXT_MESSAGES}. Mais mensagens desambiguam respostas curtas ("sim", "quero esse"); 0 faz ele ler só a mensagem atual.`,
+        ),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,

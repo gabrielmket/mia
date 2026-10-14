@@ -98,9 +98,10 @@ beforeEach(() => {
 
 // ---------------------------------------------------------------------------
 
-describe("a lista: 56 ferramentas, as duas novas com a operação certa", () => {
+// A contagem da lista inteira mora no arquivo da fusão mais nova
+// (`mcp-de-implantacao-novidades-do-upstream-180.test.ts`): aqui, as duas da .73.
+describe("a lista: as duas ferramentas da .73 com a operação certa", () => {
   it("o roteador entrou com montar e ligar em operações separadas", () => {
-    expect(FERRAMENTAS).toHaveLength(56);
     const operacao = (nome: string) => FERRAMENTAS.find((f) => f.name === nome)?.operacao;
     expect(operacao("plataforma_garantir_roteador")).toBe("implantar_configuracao");
     expect(operacao("plataforma_ligar_roteador")).toBe("colocar_no_ar");

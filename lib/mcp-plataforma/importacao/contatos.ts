@@ -37,13 +37,27 @@
  * o veto que todo envio do produto respeita. E a importação só bloqueia: quem
  * já está bloqueado na base continua bloqueado, mesmo que a lista diga o
  * contrário. Quem pediu para sair não é "reativado" por uma planilha.
+ *
+ * ── O dono do contato (o vendedor responsável) ────────────────────────────
+ *
+ * Desde o upstream 1.79 (0622, #2591) o contato pode ter um vendedor dono: o
+ * negócio novo daquele cliente nasce com ele, e ele é avisado por tarefa quando
+ * o cliente escreve numa conversa que está com outro vendedor. A única porta de
+ * escrita do upstream (`fn_definir_carteira_do_cliente`) exige um gerente
+ * MEMBRO da empresa como ator, e o token de plataforma não é membro; a gravação
+ * vai pela função do fork `fn_mia_definir_dono_do_contato_pela_plataforma`
+ * (migration 9022), com o mesmo corpo e o token como ator, origem
+ * `importacao`. Ela também passa para o dono os negócios ABERTOS sem dono
+ * daquele contato. O dono que já existe segue a régua de `quando_ja_existe`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
+import { audit } from "@/lib/audit";
 import { escolherContatoCanonico } from "@/lib/channels/contato-por-telefone";
 import { phoneLookupVariants } from "@/lib/channels/phone-variants";
 import { normalizarTags } from "@/lib/contacts/tag-normalizada";
+import { papelContaDeCarteira } from "@/lib/carteira/dono";
 import { contactCreateSchema } from "@/lib/schemas/contacts";
 import { apenasDigitos } from "@/lib/schemas/empresas";
 import { normalizePhoneBR } from "@/lib/webhooks/inbound";
@@ -81,7 +95,7 @@ const PAPEIS = ["decisor", "financeiro", "usuario", "influenciador", "outro"] as
 
 const COLUNAS =
   "id, name, display_name, email, email_normalized, phone_number, tags, custom_fields, consent, " +
-  "is_blocked, is_anonymized, is_merged_into, empresa_id, cargo, setor, papel_na_empresa, principal_na_empresa";
+  "is_blocked, is_anonymized, is_merged_into, empresa_id, cargo, setor, papel_na_empresa, principal_na_empresa, carteira_user_id";
 
 export interface ContatoNaBase {
   id: string;
@@ -101,7 +115,12 @@ export interface ContatoNaBase {
   setor: string | null;
   papel_na_empresa: string | null;
   principal_na_empresa: boolean;
+  /** O vendedor dono do contato (0622). Ausente = sem dono. */
+  carteira_user_id?: string | null;
 }
+
+/** A função do fork que grava o dono do contato pelo token de plataforma (9022). */
+export const FUNCAO_DO_DONO_DO_CONTATO = "fn_mia_definir_dono_do_contato_pela_plataforma";
 
 export const EXEMPLO_DE_CONTATO = {
   nome: "Ana Souza",
@@ -115,6 +134,7 @@ export const EXEMPLO_DE_CONTATO = {
   consentimento_marketing: "concedido",
   consentimento_em: "2026-03-14",
   opt_out: false,
+  vendedor_responsavel: "vendedora@exemplo.invalid",
   id_de_origem: "c-1042",
 };
 
@@ -254,6 +274,8 @@ export interface ContatoLido {
   consentimento: Consentimento | null;
   consentimento_em: string | null;
   opt_out: boolean;
+  /** O e-mail (ou id) do vendedor dono do contato, como veio. */
+  vendedor_responsavel: string | null;
   id_de_origem: string | null;
   avisos: string[];
 }
@@ -465,6 +487,7 @@ export function lerContato(item: unknown): Leitura {
       consentimento,
       consentimento_em: consentimentoEm,
       opt_out: optOut,
+      vendedor_responsavel: texto(item.vendedor_responsavel, 320),
       id_de_origem: texto(item.id_de_origem, 200),
       avisos,
     },
@@ -649,6 +672,97 @@ async function gravarObservacao(
   return "atualizou";
 }
 
+// ── o dono do contato ─────────────────────────────────────────────────────
+
+/**
+ * Quem pode ser DONO de contato, por e-mail e por id: a régua de
+ * `fn_definir_carteira_do_cliente` (`lib/carteira/dono.ts`): vínculo aceito e
+ * não revogado, papel `agent`, `manager` ou `admin`. Quem só lê e quem ainda
+ * não aceitou o convite não conta.
+ */
+async function equipeQuePodeSerDona(ctx: ContextoDaFerramenta, orgId: string): Promise<Map<string, string>> {
+  const { data, error } = await ctx.admin
+    .from("user_organizations")
+    .select("user_id, role, accepted_at")
+    .eq("organization_id", orgId)
+    .is("revoked_at", null);
+  if (error) throw new Error(`não consegui ler a equipe: ${error.message}`);
+  const quem = new Map<string, string>();
+  for (const membro of (data ?? []) as Array<{ user_id: string; role: string; accepted_at: string | null }>) {
+    if (!papelContaDeCarteira(membro.role) || !membro.accepted_at) continue;
+    quem.set(membro.user_id, membro.user_id);
+    const { data: achado } = await ctx.admin.auth.admin.getUserById(membro.user_id);
+    const email = achado?.user?.email?.trim().toLowerCase();
+    if (email) quem.set(email, membro.user_id);
+  }
+  return quem;
+}
+
+/** A recusa da função do banco, em frase. */
+function fraseDaRecusaDoDono(mensagem: string): string {
+  if (mensagem.includes("carteira_dono_invalido")) {
+    return "o vendedor precisa ser da equipe desta empresa como atendente, gerente ou administrador (quem só lê, quem saiu e quem ainda não aceitou o convite não contam)";
+  }
+  if (mensagem.includes("dono_sem_token_de_plataforma") || mensagem.includes("dono_sem_admin_de_plataforma")) {
+    return "o banco recusou o token desta chamada como ator (ele precisa estar vivo, carregar a operação importar_base e ter sido criado por um admin de plataforma)";
+  }
+  return `o banco recusou: ${mensagem}`;
+}
+
+/**
+ * Grava o vendedor dono do contato, pela função do fork (9022). Devolve se
+ * gravou, e o aviso quando não gravou. O dono que já existe só é trocado com
+ * `quando_ja_existe: "atualizar"`.
+ */
+async function aplicarDono(
+  ctx: ContextoDaFerramenta,
+  orgId: string,
+  contato: ContatoNaBase,
+  pedido: string,
+  modo: QuandoJaExiste,
+  equipe: Map<string, string>,
+): Promise<{ gravou: boolean; aviso?: string }> {
+  const ref = pedido.trim();
+  const dono = equipe.get(ref.toLowerCase()) ?? equipe.get(ref);
+  if (!dono) {
+    return {
+      gravou: false,
+      aviso:
+        `O vendedor responsável «${ref}» não é da equipe desta empresa como atendente, gerente ou administrador (quem só lê e quem ainda não aceitou o convite não contam): ` +
+        "o contato ficou sem dono. Convide a pessoa (plataforma_convidar_pessoas) e repita quando ela tiver aceitado.",
+    };
+  }
+  const atual = contato.carteira_user_id ?? null;
+  if (atual === dono) return { gravou: false };
+  if (atual !== null && modo !== "atualizar") {
+    return {
+      gravou: false,
+      aviso: 'O contato já tem outro vendedor responsável, e ele foi mantido. Para trocar, repita com quando_ja_existe: "atualizar".',
+    };
+  }
+  const { error } = await ctx.admin.rpc(FUNCAO_DO_DONO_DO_CONTATO, {
+    p_org: orgId,
+    p_token: ctx.tokenId,
+    p_contact: contato.id,
+    p_dono: dono,
+    p_origem: "importacao",
+  });
+  if (error) {
+    return { gravou: false, aviso: `O vendedor responsável não foi gravado: ${fraseDaRecusaDoDono(error.message ?? "")}.` };
+  }
+  // A mesma linha da rota da tela (`PATCH /api/v1/contacts/[id]/carteira`).
+  void audit({
+    action: "contact.carteira_changed",
+    actorUserId: ctx.autorUserId,
+    organizationId: orgId,
+    resourceType: "contact",
+    resourceId: contato.id,
+    requestId: requestIdDe(ctx),
+    metadata: { antes: atual, depois: dono, origem: "importacao", adotados: true, via: "mcp_plataforma" },
+  });
+  return { gravou: true };
+}
+
 // ── a importação ──────────────────────────────────────────────────────────
 
 /** Os contatos que esta chamada já gravou: a mesma pessoa duas vezes na lista é UM contato. */
@@ -690,8 +804,9 @@ export async function importarContatos(
 
   const coletor = new Coletor();
   const vistos = new JaVistosNoLote();
-  // As empresas só são lidas se algum item pedir vínculo.
+  // As empresas só são lidas se algum item pedir vínculo; a equipe, se algum item trouxer vendedor.
   let empresas: EmpresasDaBase | null = null;
+  let equipe: Map<string, string> | null = null;
 
   for (let i = 0; i < itens.length; i += 1) {
     const posicao = i + 1;
@@ -790,6 +905,12 @@ export async function importarContatos(
             );
           }
         }
+        if (novo.vendedor_responsavel) {
+          equipe ??= await equipeQuePodeSerDona(ctx, orgId);
+          const dono = await aplicarDono(ctx, orgId, naBase, novo.vendedor_responsavel, modo, equipe);
+          if (dono.gravou) mudou = true;
+          if (dono.aviso) avisos.push(dono.aviso);
+        }
         vistos.lembrar(naBase);
         coletor.registrar(posicao, mudou ? "atualizou" : "ja_estava", { id: existente.id, avisos });
         continue;
@@ -841,6 +962,11 @@ export async function importarContatos(
       }
       const criado = data as unknown as ContatoNaBase;
       if (novo.observacao) await gravarObservacao(ctx.admin, orgId, criado.id, origem, novo.observacao, modo);
+      if (novo.vendedor_responsavel) {
+        equipe ??= await equipeQuePodeSerDona(ctx, orgId);
+        const dono = await aplicarDono(ctx, orgId, criado, novo.vendedor_responsavel, modo, equipe);
+        if (dono.aviso) avisos.push(dono.aviso);
+      }
       vistos.lembrar(criado);
       coletor.registrar(posicao, "criou", { id: criado.id, avisos });
     } catch (err) {
@@ -874,6 +1000,9 @@ export const FERRAMENTA_IMPORTAR_CONTATOS: FerramentaDeImportacao = {
     "O que NÃO faz: não envia mensagem, não inscreve em follow-up, não dispara automação (nem a de etiqueta), não abre conversa, " +
     "não cria empresa, não troca o telefone de quem já tem um e nunca tira o bloqueio de quem pediu para sair. Quem vier com " +
     "opt_out: true entra bloqueado para todo envio.\n\n" +
+    "O DONO DO CONTATO: `vendedor_responsavel` (o e-mail de uma pessoa que JÁ é da equipe como atendente, gerente ou administrador) grava o vendedor " +
+    "responsável pelo cliente: o negócio novo desse cliente nasce com ele, os negócios abertos sem dono passam para ele, e ele é avisado por tarefa quando o " +
+    "cliente escreve numa conversa que está com outro vendedor. O dono que já existe só é trocado com quando_ja_existe: \"atualizar\".\n\n" +
     "Só importe base que o cliente tem direito de usar (LGPD): pessoas com quem ele tem relação ou que consentiram.",
   inputSchema: {
     organization_id: z.string().describe("O id do cliente que recebe a base (de plataforma_listar_clientes)."),
@@ -890,7 +1019,8 @@ export const FERRAMENTA_IMPORTAR_CONTATOS: FerramentaDeImportacao = {
           "canal (por onde a pessoa chegou no CRM antigo), campos (objeto com campos personalizados), observacao (texto livre; " +
           "vira nota do contato, que a equipe e o agente de IA leem), empresa ({ cnpj e/ou nome, cargo, setor, papel: " +
           `${PAPEIS.join("|")}, principal: true|false }), consentimento_marketing ("concedido"|"recusado"), consentimento_em (data), ` +
-          "opt_out (true = pediu para não receber mensagens) e id_de_origem. " +
+          "opt_out (true = pediu para não receber mensagens), vendedor_responsavel (o e-mail de quem é o DONO do contato na equipe: " +
+          "o negócio novo do cliente nasce com ele, e os negócios abertos sem dono passam para ele) e id_de_origem. " +
           `Exemplo: ${JSON.stringify(EXEMPLO_DE_CONTATO)}`,
       ),
     quando_ja_existe: z

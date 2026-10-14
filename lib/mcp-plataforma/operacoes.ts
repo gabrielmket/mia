@@ -88,7 +88,12 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "gravado por este token vira preço errado dito ao cliente final. Também valem na " +
       "hora a distribuição do atendimento, o nome de quem fala na mensagem, a janela de " +
       "esfriando das etapas e o limiar de sentimento do agente (que decide quando a " +
-      "conversa passa para uma pessoa).",
+      "conversa passa para uma pessoa). Também valem na hora: o bloqueio de afirmação " +
+      "clínica de todos os agentes, o freio do passo \"a IA decide\" das automações, a " +
+      "limpeza automática de mídia antiga (ligada, apaga mídia velha sem volta), os " +
+      "planos de tarefa, as perguntas e a autorização de IA de uma fonte de formulário, a " +
+      "coluna do cliente no banco externo, os dias da prospecção e guardar o histórico " +
+      "de um número; e a pausa agendada, que cala um número (ou todos) por até 24 horas.",
   },
   {
     chave: "colocar_no_ar",

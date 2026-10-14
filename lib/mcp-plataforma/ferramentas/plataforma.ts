@@ -16,6 +16,7 @@
  * diferença aparecendo semanas depois, numa feature que supõe o que só a tela
  * faz.
  */
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { MODULOS } from "@/lib/modulos/vendaveis";
@@ -24,8 +25,39 @@ import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 import { saldoDaPlataforma } from "@/lib/ai/custo/saldo-da-plataforma";
 import { lerSaldoDaCarteira } from "@/lib/carteira/ler-saldo";
 import { CARIMBO_DO_SCHEMA, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
+import { lerCamadaClinica } from "@/lib/implantacao/agente";
+import { iaDecideLigadaNa } from "@/lib/implantacao/empresa";
+import { lePlanosDoSettings } from "@/lib/tarefas/plano";
 
 import type { FerramentaDePlataforma } from "../tipos";
+
+/**
+ * A chave do CPF está semeada? Só sim ou não, e o VALOR nunca sai.
+ *
+ * A pergunta é feita pelo caminho que a gravação usa: o banco cifra um CPF
+ * fictício com `encrypt_cpf` (upstream 0597), que lê a chave de
+ * `private.app_secrets` (linha `cpf_key`) ou da GUC `app.cpf_key` e recusa com
+ * "CPF_ENCRYPTION_KEY ausente" quando não há chave utilizável (menos de 32
+ * caracteres). A cifra devolvida é descartada aqui mesmo: não é gravada nem
+ * devolvida. O `private` não é exposto ao PostgREST, e é por isso que não se lê
+ * a tabela direto.
+ */
+async function chaveDoCpfSemeada(admin: SupabaseClient): Promise<{ semeada: boolean | null; detalhe?: string }> {
+  try {
+    const { error } = await admin.rpc("encrypt_cpf", { p_plaintext: "00000000000" });
+    if (!error) return { semeada: true };
+    if ((error.message ?? "").includes("CPF_ENCRYPTION_KEY")) {
+      return {
+        semeada: false,
+        detalhe:
+          "Sem a chave, contato com CPF é salvo SEM o CPF. Quem opera a instalação semeia rodando o bootstrap ou o update.sh (que leva a chave do .env ao banco, ou gera uma).",
+      };
+    }
+    return { semeada: null, detalhe: "Não consegui conferir: o banco recusou a pergunta por outro motivo." };
+  } catch {
+    return { semeada: null, detalhe: "Não consegui conferir: o banco não respondeu." };
+  }
+}
 
 /** Quantos clientes uma listagem devolve de uma vez. */
 const TETO_DA_LISTA = 200;
@@ -64,7 +96,10 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
     name: "plataforma_ver_cliente",
     description:
       "O retrato de um cliente: dados de cadastro, módulos liberados, saldo da " +
-      "carteira e números de WhatsApp conectados.",
+      "carteira, números de WhatsApp conectados e, em `configuracao`, os interruptores " +
+      "da empresa: a limpeza automática de mídia antiga (e em quantos dias), o freio do " +
+      "passo \"a IA decide\" das automações, o bloqueio de afirmação clínica dos agentes " +
+      "e quantos planos de tarefa existem.",
     inputSchema: {
       organization_id: z.string().uuid().describe("O id do cliente."),
     },
@@ -75,7 +110,7 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       const [org, modulos, canais, saldo] = await Promise.all([
         admin
           .from("organizations")
-          .select("id, display_name, legal_name, cnpj, slug, status, onboarded_at, settings")
+          .select("id, display_name, legal_name, cnpj, slug, status, onboarded_at, settings, media_retention_days, media_retention_enforced")
           .eq("id", id)
           .maybeSingle(),
         // `revoked_at is null` é obrigatório: a linha revogada FICA na tabela
@@ -103,8 +138,23 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       // vira "saldo zero" no retrato que alguém usa para decidir.
       if (saldo.erro) throw new Error(`não consegui ler a carteira: ${saldo.erro}`);
 
+      const linha = org.data as Record<string, unknown>;
+      const settings = (linha.settings as Record<string, unknown> | null) ?? {};
+      // Leitura que falha não derruba o retrato: diz que não leu.
+      const camada = await lerCamadaClinica(admin, id).catch(() => null);
+
       return {
         cliente: org.data,
+        // Os interruptores da empresa que chegaram do upstream 1.74 a 1.80.
+        configuracao: {
+          limpeza_automatica_de_midia: {
+            ligada: linha.media_retention_enforced !== false,
+            dias: typeof linha.media_retention_days === "number" ? linha.media_retention_days : 365,
+          },
+          ia_decide_nas_automacoes: iaDecideLigadaNa(settings),
+          bloqueio_de_afirmacao_clinica: camada === null ? "nao_lido" : camada.ligado,
+          planos_de_tarefa: lePlanosDoSettings(settings).length,
+        },
         modulos: (modulos.data ?? []).map((m) => (m as { modulo: string }).modulo),
         canais: canais.data ?? [],
         saldo_cents: saldo.saldo_cents,
@@ -134,12 +184,13 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
     name: "plataforma_ver_saude",
     description:
       "O estado da INSTALAÇÃO numa resposta: o schema veio junto com o código " +
-      "no último deploy, quais números estão fora do ar e quanto resta de " +
-      "crédito de IA. É a primeira pergunta depois de implantar.",
+      "no último deploy, quais números estão fora do ar, quanto resta de " +
+      "crédito de IA e se a chave que cifra o CPF dos contatos está semeada no banco " +
+      "(só sim ou não: o valor nunca sai). É a primeira pergunta depois de implantar.",
     inputSchema: {},
     operacao: null,
     handler: async ({ admin }) => {
-      const [carimbo, caidos, saldo] = await Promise.all([
+      const [carimbo, caidos, saldo, chaveDoCpf] = await Promise.all([
         admin
           .from(TABELA_DO_CARIMBO)
           .select("migration_mais_nova, aplicado_em, erros_inesperados, erros_amostra")
@@ -152,6 +203,7 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
           .neq("status", STATUS_SAUDAVEL)
           .limit(50),
         saldoDaPlataforma(admin),
+        chaveDoCpfSemeada(admin),
       ]);
 
       const linha = carimbo.data as {
@@ -197,6 +249,9 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
             e_o_numero_de_avisos: s.e_numero_de_avisos === true,
           };
         }),
+        // Sem a chave, todo contato com CPF é salvo SEM o CPF (upstream 1.78, 0597):
+        // a atualização a semeia do .env, e o bootstrap do fork também (.76).
+        chave_do_cpf: chaveDoCpf,
         credito_de_ia: {
           saldo_usd: saldo.saldoUsd,
           dias_restantes: saldo.diasRestantes,

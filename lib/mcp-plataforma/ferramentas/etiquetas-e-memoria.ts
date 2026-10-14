@@ -41,7 +41,7 @@ export const FERRAMENTAS_DE_ETIQUETAS_E_MEMORIA: readonly FerramentaDePlataforma
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,
       etiquetas: [
-        { nome: "Plano anual", cor: "#12a594" },
+        { nome: "Plano anual", cor: "#00655a" },
         { nome: "Indicação", cor: "#0091ff", descricao: "Chegou por indicação de cliente." },
       ],
     },

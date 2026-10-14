@@ -19,21 +19,33 @@ import {
   type TipoPedido,
 } from "@/lib/implantacao/agenda";
 import { garantirAutomacao, ligarAutomacao, type PedidoDeAutomacao } from "@/lib/implantacao/automacoes";
+import { garantirPlanosDeTarefa, TETO_DE_PASSOS, TETO_DE_PLANOS, type PlanoPedido } from "@/lib/implantacao/planos-de-tarefa";
 import { GATILHOS_OFERECIDOS } from "@/lib/schemas/webhooks";
+import { PRIORIDADES_DA_TAREFA } from "@/lib/tarefas/tipos";
 
 import type { FerramentaDePlataforma } from "../tipos";
 import { alvo, DIA_DA_SEMANA, HORA, ORGANIZACAO, ORG_DE_EXEMPLO } from "./comum";
 
-const TIPOS_DE_ACAO = [
+/**
+ * Os tipos de ação que a ferramenta aceita. É a lista do upstream
+ * (`actionSchema`, `lib/schemas/webhooks.ts`) escrita por extenso para a recusa
+ * ensinar os nomes; `tests/unit/mcp-de-implantacao-novidades-do-upstream.test.ts`
+ * reprova quando o upstream acrescenta uma ação que não está aqui.
+ */
+export const TIPOS_DE_ACAO = [
   "create_or_move_lead",
   "add_tag",
   "assign_owner",
   "create_task",
+  // upstream 1.77 (#1752): aplica um plano de tarefas ao negócio
+  "apply_task_plan",
   "start_message_flow",
   "send_whatsapp_message",
   "send_ai_message",
   "notify_group",
   "call_webhook",
+  // upstream 1.74 (#1970): a IA escolhe uma entre as opções da regra
+  "ai_decide",
 ] as const;
 
 export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[] = [
@@ -42,9 +54,12 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
     description:
       "Cria ou ajusta uma REGRA DE AUTOMAÇÃO de um cliente: quando um gatilho acontece (negócio criado, mudou de etapa, foi GANHO, PERDIDO, reaberto ou trocou de responsável, " +
       "mensagem recebida, etiqueta, horário marcado, silêncio...) " +
-      "e as condições batem, as ações rodam (mover para uma etapa, pôr etiqueta, criar tarefa, inscrever em follow-up, mandar mensagem, avisar o grupo, chamar um webhook). " +
+      "e as condições batem, as ações rodam (mover para uma etapa, pôr etiqueta no negócio ou no contato, criar tarefa, aplicar um plano de tarefas, inscrever em follow-up, mandar mensagem, avisar o grupo, chamar um webhook, " +
+      'ou o passo "a IA decide", `ai_decide`, em que a IA escolhe UMA entre 2 e 6 opções montadas na regra, cada uma com uma dessas ações em `config.opcoes[].acao`). ' +
       "O WEBHOOK DE SAÍDA é isto: uma regra com a ação `call_webhook` (ex.: avisar o faturamento quando o negócio é ganho, com o gatilho `lead.won`). " +
-      "Nos gatilhos de ganho, perda, reabertura e troca de responsável a regra não pode atribuir responsável nem mover o negócio: a própria mudança dispararia a regra de novo. " +
+      "Nos gatilhos de ganho, perda, reabertura e troca de responsável a regra não pode atribuir responsável nem mover o negócio, nem dentro de um `ai_decide`: a própria mudança dispararia a regra de novo. " +
+      "ATENÇÃO: `ai_decide` gasta IA a cada execução e só é aceito com `custo_de_token: true` escrito na config; o freio da empresa inteira está em plataforma_configurar_atendimento. " +
+      "`configuracao_do_gatilho.webhook_source_id` faz o gatilho `lead.created` valer só para o negócio que veio daquela fonte de formulário. " +
       "A regra NASCE DESLIGADA e continua desligada: para ela rodar, plataforma_ligar_automacao. " +
       "GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é o NOME da regra. " +
       "Regra LIGADA não é editada por aqui (a mudança valeria no próximo evento): desligue, ajuste e religue. " +
@@ -85,7 +100,9 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
         .record(z.string(), z.unknown())
         .optional()
         .describe(
-          "Só para os gatilhos de data do funil, de silêncio, de etapa parada e de documentos e obrigações (`obrigacao.*`): o que eles precisam saber (funil, campo, dias, tipo). O formato de cada um está em plataforma_listar_modelos, seção automacoes.",
+          "Para os gatilhos de data do funil, de silêncio, de etapa parada e de documentos e obrigações (`obrigacao.*`): o que eles precisam saber (funil, etapa, campo, dias, tipo). " +
+            "E, no `lead.created`, `webhook_source_id`: o id de uma fonte de formulário (plataforma_garantir_fonte_de_formulario), para a regra valer só para quem veio dela. " +
+            "Os ids de funil, etapa e fonte são conferidos contra o cliente. O formato de cada um está em plataforma_listar_modelos, seção automacoes.",
         ),
     },
     exemplo: {
@@ -104,11 +121,83 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
   },
 
   {
+    name: "plataforma_garantir_planos_de_tarefa",
+    description:
+      "Cria ou ajusta os PLANOS DE TAREFA de um cliente: a sequência de tarefas da equipe salva uma vez (ex.: proposta enviada: ligar em 2 dias, mandar o caso de sucesso em 5, cobrar em 10) " +
+      "e aplicada a cada negócio por uma regra de automação com a ação `apply_task_plan`, que cria todas as tarefas de uma vez, na ordem, e uma vez só por negócio. É o que a tela Tarefas › Planos grava. " +
+      "Cada passo tem título, prazo em dias contados da aplicação, prioridade e responsável (o dono do negócio, ou uma pessoa da equipe pelo e-mail). " +
+      "GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é o `id` do plano (o que a automação guarda em `plano_id`) ou, sem `id`, o NOME; plano novo ganha um id a partir do nome, e a resposta o devolve. " +
+      `Os passos de um plano citado são a lista COMPLETA dele, na ordem. Planos que o pedido não cita ficam. Até ${TETO_DE_PLANOS} planos por empresa e ${TETO_DE_PASSOS} passos por plano. ` +
+      "O QUE NÃO FAZ: não aplica o plano a negócio nenhum (isso é a regra de automação, que nasce desligada), não apaga plano e não fala com o cliente: tarefa é trabalho interno da equipe.",
+    inputSchema: {
+      organization_id: ORGANIZACAO,
+      planos: z
+        .array(
+          z
+            .object({
+              id: z.string().trim().min(1).max(64).optional().describe("O id de um plano que já existe (de plataforma_ver_configuracao, seção planos_de_tarefa). Só é preciso para renomear; sem ele, o plano é achado pelo nome."),
+              nome: z.string().trim().min(1).max(120).describe('O nome do plano (ex.: "Proposta enviada").'),
+              descricao: z.string().trim().max(300).nullable().optional().describe("Para que serve o plano, em uma frase. null apaga."),
+              passos: z
+                .array(
+                  z
+                    .object({
+                      titulo: z
+                        .string()
+                        .trim()
+                        .min(1)
+                        .max(200)
+                        .describe("O título da tarefa. Aceita {{lead.title}} e {{contact.name}}, como a tarefa da automação."),
+                      descricao: z.string().trim().max(1000).nullable().optional().describe("O detalhe da tarefa, para quem vai fazer."),
+                      vence_em_dias: z.number().int().min(0).max(365).describe("Em quantos dias, contados de quando o plano é aplicado, a tarefa vence. 0 = no mesmo dia."),
+                      prioridade: z.enum(PRIORIDADES_DA_TAREFA).optional().describe('"low", "medium" (o padrão), "high" ou "urgent".'),
+                      responsavel: z
+                        .string()
+                        .trim()
+                        .min(1)
+                        .max(200)
+                        .optional()
+                        .describe('"dono_do_lead" (o padrão: quem é o responsável pelo negócio) ou o e-mail de uma pessoa que JÁ é da equipe.'),
+                    })
+                    .strict(),
+                )
+                .min(1)
+                .max(TETO_DE_PASSOS)
+                .describe("Os passos do plano, na ordem. Lista completa: substitui os passos que o plano tinha."),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(TETO_DE_PLANOS)
+        .describe("Os planos a criar ou ajustar."),
+    },
+    exemplo: {
+      organization_id: ORG_DE_EXEMPLO,
+      planos: [
+        {
+          nome: "Proposta enviada",
+          descricao: "O acompanhamento de quem recebeu proposta.",
+          passos: [
+            { titulo: "Ligar para {{contact.name}} sobre a proposta", vence_em_dias: 2, prioridade: "high" },
+            { titulo: "Mandar o caso de sucesso", vence_em_dias: 5 },
+            { titulo: "Cobrar a resposta da proposta", vence_em_dias: 10, responsavel: "dono_do_lead" },
+          ],
+        },
+      ],
+    },
+    operacao: "implantar_configuracao",
+    handler: async (ctx, args) => {
+      const { c } = await alvo(ctx, args);
+      return garantirPlanosDeTarefa(c, args.planos as PlanoPedido[]);
+    },
+  },
+
+  {
     name: "plataforma_ligar_automacao",
     description:
       "LIGA ou desliga uma regra de automação. Ligada, a regra roda sozinha a cada evento do gatilho, e pode mandar mensagem para os clientes da empresa, " +
       "avisar um grupo ou chamar outro sistema. ANTES DE LIGAR: confira o que a regra faz em plataforma_ver_configuracao, seção automacoes. " +
-      "Na empresa de demonstração, regra com webhook ou aviso de grupo não liga: a recusa explica.",
+      'Na empresa de demonstração, regra com webhook ou aviso de grupo não liga, inclusive quando a ação está entre as opções do passo "a IA decide": a recusa explica.',
     inputSchema: {
       organization_id: ORGANIZACAO,
       regra: z.string().trim().min(1).max(120).describe("Nome ou id da regra."),
@@ -117,8 +206,8 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
     exemplo: { organization_id: ORG_DE_EXEMPLO, regra: "Etiquetar quem veio de anúncio", ligada: true },
     operacao: "colocar_no_ar",
     handler: async (ctx, args) => {
-      const { c } = await alvo(ctx, args);
-      return ligarAutomacao(c, { regra: String(args.regra), ligada: args.ligada === true });
+      const { c, org } = await alvo(ctx, args);
+      return ligarAutomacao(c, { regra: String(args.regra), ligada: args.ligada === true }, org.demonstracao);
     },
   },
 

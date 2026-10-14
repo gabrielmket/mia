@@ -30,6 +30,7 @@
  */
 import { FERRAMENTAS_DE_AGENTE } from "./ferramentas/agente";
 import { FERRAMENTAS_DE_AUTOMACAO_E_AGENDA } from "./ferramentas/automacoes-e-agenda";
+import { FERRAMENTAS_DE_CANAIS_E_INTEGRACOES } from "./ferramentas/canais-e-integracoes";
 import { FERRAMENTAS_DO_CHECKLIST } from "./ferramentas/checklist";
 import { FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP } from "./ferramentas/conhecimento-e-followup";
 import { FERRAMENTAS_DE_CONVERSOES } from "./ferramentas/conversoes";
@@ -64,6 +65,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   // o roteador de intenção entre dois agentes do mesmo número (upstream 1.73: destino de funil por intenção)
   ...FERRAMENTAS_DE_ROTEADOR,
   ...FERRAMENTAS_DE_AUTOMACAO_E_AGENDA,
+  // os ajustes da conexão, a fonte de formulário e o banco externo (upstream 1.74 a 1.80)
+  ...FERRAMENTAS_DE_CANAIS_E_INTEGRACOES,
   ...FERRAMENTAS_DE_CONVERSOES,
   ...FERRAMENTAS_DE_EQUIPE_E_MENSAGENS,
   // documentos e obrigações com vencimento: catálogo, itens e leitura (docs/fork/obrigacoes.md)

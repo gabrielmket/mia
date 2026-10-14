@@ -19,6 +19,7 @@ import { DIRECOES_DO_SILENCIO } from "@/lib/automation/gatilhos-de-tempo";
 import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
 import { estadoDoAgente } from "@/lib/ai/agents/no-ar";
 import { DEFAULT_VISIBILITY_MODE } from "@/lib/auth/types";
+import { lerGuardarHistorico } from "@/lib/channels/acervo-do-historico";
 import { nomeDoCanal } from "@/lib/channels/estado";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 import { listSelectableChannels } from "@/lib/channels/selectable";
@@ -26,8 +27,13 @@ import { horizonteDoModeloMs, MODELOS_DE_FOLLOWUP, ROTULO_DO_SEGMENTO, toquesDoM
 import { carregaEtapasCitadas } from "@/lib/followup/etapas-citadas";
 import { rascunhoDoFluxo } from "@/lib/followup/rascunho";
 import { acharPorNomeOuId } from "@/lib/implantacao/base";
-import { lerAgentes, lerVersoes, limiarDeSentimentoDo, pendenciasDePublicacao } from "@/lib/implantacao/agente";
+import { lerAgentes, lerCamadaClinica, lerVersoes, limiarDeSentimentoDo, pendenciasDePublicacao } from "@/lib/implantacao/agente";
 import { lerTipos } from "@/lib/implantacao/agenda";
+import { lerConexoesDeBancoExterno, retratoDaConexao } from "@/lib/implantacao/banco-externo";
+import { diasDaProspeccaoDe, lerAjustesDosCanais, lerCanais, lerPausasAgendadas } from "@/lib/implantacao/canal";
+import { iaDecideLigadaNa } from "@/lib/implantacao/empresa";
+import { lerFontes, retratoDaFonte } from "@/lib/implantacao/fonte-de-formulario";
+import { retratoDosPlanos } from "@/lib/implantacao/planos-de-tarefa";
 import { lerRegras } from "@/lib/implantacao/automacoes";
 import { CONFIGURACAO_DOS_GATILHOS_DE_OBRIGACAO, modelosDeObrigacaoParaOAgente } from "@/lib/implantacao/obrigacoes";
 import { capacidadesOferecidas, catalogoServido, pacotesLigados } from "@/lib/implantacao/capacidades";
@@ -84,14 +90,29 @@ const SECOES_DE_CONFIGURACAO = [
   "canais",
   "atendimento",
   "mensagens",
+  // upstream 1.74 a 1.80
+  "planos_de_tarefa",
+  "fontes_de_formulario",
+  "banco_externo",
 ] as const;
 
 /** O formato de cada ação de automação, para o modelo montar `acoes` sem adivinhar. */
 const ACOES_DE_AUTOMACAO = [
   { type: "create_or_move_lead", o_que_faz: "Cria o negócio ou o move para uma etapa.", config: '{ "pipeline_id": "<id do funil>", "stage_id": "<id da etapa>", "quando_em_outro_funil": "recusar" | "abrir_novo_card" (opcional) }' },
-  { type: "add_tag", o_que_faz: "Põe etiquetas no contato ou no negócio.", config: '{ "tags": ["Etiqueta"] }' },
+  {
+    type: "add_tag",
+    o_que_faz:
+      'Põe etiquetas no negócio (o padrão) ou no contato do negócio (`destino: "contato"`, preservando as que o contato já tem; negócio sem contato é ignorado). O filtro de etiquetas do Inbox lê a do contato.',
+    config: '{ "tags": ["Etiqueta"], "destino": "card" | "contato" (opcional, padrão "card") }',
+  },
   { type: "assign_owner", o_que_faz: "Define o responsável.", config: '{ "user_id": "<id da pessoa da equipe>" }' },
   { type: "create_task", o_que_faz: "Cria uma tarefa para a equipe. Nunca fala com o cliente.", config: '{ "titulo": "Ligar para {{contact.name}}", "vence_em_dias": 1, "atribuir_a": "dono_do_lead" | { "usuario_id": "<id>" }, "prioridade": "low" | "medium" | "high" | "urgent" }' },
+  {
+    type: "apply_task_plan",
+    o_que_faz:
+      "Aplica um PLANO DE TAREFAS ao negócio: cria de uma vez, na ordem, todas as tarefas do plano, e só uma vez por negócio (repetir a regra não duplica). Nunca fala com o cliente.",
+    config: '{ "plano_id": "<id do plano, de plataforma_garantir_planos_de_tarefa>" }',
+  },
   { type: "start_message_flow", o_que_faz: "Inscreve o contato num follow-up publicado.", config: '{ "flow_pointer_id": "<id do fluxo>" }' },
   {
     type: "send_whatsapp_message",
@@ -108,6 +129,18 @@ const ACOES_DE_AUTOMACAO = [
     config:
       '{ "url": "https://...", "include_owner": false } (o segredo, se houver, é posto por uma pessoa na tela). ' +
       "`include_owner: true` põe no corpo o responsável do compromisso ou do negócio (tipo, id e nome, sem e-mail). O negócio no corpo traz o motivo da perda e a data de fechamento.",
+  },
+  {
+    type: "ai_decide",
+    o_que_faz:
+      'O passo "a IA decide": a IA lê a instrução, a mensagem, os dados do negócio e as etiquetas, e escolhe UMA das opções; a ação da opção escolhida roda pelo caminho de sempre. ' +
+      "Resposta fora da lista não executa nada. GASTA IA a cada execução (custo das automações, dentro do teto mensal da empresa): a regra só é aceita com `custo_de_token: true`. " +
+      "E-mail, telefone, nome do contato e CPF não vão para a IA; o texto da mensagem e os campos do negócio vão.",
+    config:
+      '{ "custo_de_token": true, "instrucao": "Se a pessoa pediu orçamento, etiquete; se reclamou, crie tarefa urgente.", "opcoes": [ ' +
+      '{ "id": "orcamento", "rotulo": "Pediu orçamento", "acao": { "type": "add_tag", "config": { "tags": ["Orçamento"] } } }, ' +
+      '{ "id": "reclamacao", "rotulo": "Reclamou", "acao": { "type": "create_task", "config": { "titulo": "Ligar para {{contact.name}}", "vence_em_dias": 0, "atribuir_a": "dono_do_lead", "prioridade": "urgent" } } } ] } ' +
+      "(de 2 a 6 opções, `id` único em cada; a ação de uma opção é qualquer uma das outras desta lista, nunca outro ai_decide)",
   },
 ];
 
@@ -211,6 +244,9 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
               "Quando um negócio que JÁ EXISTE é ganho (lead.won), perdido (lead.lost), reaberto (lead.reopened) ou troca de responsável (lead.assigned), por qualquer caminho: " +
               "arrastar o card, o botão Ganhou/Perdeu, mover em lote, o fechamento feito pela IA ou outra automação. Criar o negócio já ganho, já perdido ou já com responsável NÃO dispara.",
             acoes_proibidas: ACOES_QUE_REGRAVAM_O_LEAD,
+            // O veto vale também dentro das opções de um `ai_decide` (o upstream
+            // descobre as ações-alvo antes de conferir o laço).
+            tambem_dentro_do_ai_decide: true,
             por_que: MENSAGEM_DO_LACO_DE_LEAD,
             uso_tipico: 'Avisar outro sistema: { "type": "call_webhook", "config": { "url": "https://...", "include_owner": true } }.',
           },
@@ -220,6 +256,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             "lead.silent_for":
               `{ "dias": 3, "direcao": ${DIRECOES_DO_SILENCIO.map((d) => `"${d}"`).join(" | ")}, "pipeline_id": "<opcional>", "proteger_pela_agenda": true }`,
             "lead.stage_stale": '{ "dias": 7, "pipeline_id": "<opcional>", "stage_id": "<opcional>", "proteger_pela_agenda": true }',
+            "lead.created":
+              '{ "webhook_source_id": "<opcional: id de uma fonte de formulário>" } (com a fonte, a regra vale só para o negócio que chegou por ela; sem, vale para todo negócio criado)',
             // documentos e obrigações: os cinco gatilhos `obrigacao.*`
             ...CONFIGURACAO_DOS_GATILHOS_DE_OBRIGACAO,
           },
@@ -360,6 +398,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
       "Os agentes de IA de um cliente: situação (no ar, pausado, rascunho), versão publicada, rascunho pendente, pacotes ligados, " +
       "funis e materiais autorizados, follow-ups armados, número, limiar de sentimento, e o que FALTA PARA PUBLICAR (com quem resolve: você, uma pessoa na tela, ou a plataforma). " +
       "Com `agente`, devolve também o PROMPT e a configuração inteira da versão vigente (o rascunho, se houver; senão a publicada), com o horário de atendimento e o aviso de fora do horário. " +
+      "Devolve a passagem por assunto jurídico de cada agente e, da EMPRESA, se o bloqueio de afirmação clínica está ligado (`seguranca_da_empresa`). " +
       "Devolve ainda os ROTEADORES de intenção: o número, se está ligado, o agente reserva e cada intenção com o agente e o funil de destino. " +
       "QUANDO USAR: antes de plataforma_garantir_agente e de plataforma_garantir_roteador, e antes de publicar ou ligar. " +
       "Devolve ainda as capacidades que a tela oferece a ESTE cliente (módulos e modo de venda mudam a lista) quando `com_capacidades` é verdadeiro.",
@@ -409,6 +448,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           capacidades: base ? ((base.tool_ids as string[] | null) ?? []) : [],
           funis_autorizados: base ? ((base.pipeline_ids as string[] | null) ?? []) : [],
           materiais: base ? ((base.knowledge_source_ids as string[] | null) ?? []) : [],
+          // Da versão vigente (0616, #2156): ligada quando a coluna não diz o contrário.
+          passagem_por_assunto_juridico: base ? base.handoff_legal_enabled !== false : null,
           followups_armados: (followup?.enabled ? (followup.flow_pointer_ids ?? []) : []).map(
             (id) => fluxos.find((f) => f.id === id)?.name ?? id,
           ),
@@ -421,6 +462,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
                   prompt: base.system_prompt,
                   palavras_de_passagem: base.handoff_keywords,
                   passagem_para_humano: base.handoff_tool_enabled,
+                  passagem_por_assunto_juridico: base.handoff_legal_enabled !== false,
                   casos: base.cases_enabled,
                   dividir_mensagens: base.split_messages,
                   tamanho_da_mensagem: base.split_max_chars,
@@ -443,6 +485,10 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           "com mais de um no mesmo número, o de maior prioridade (no empate, o mais antigo), a não ser que exista um roteador LIGADO naquele número, que escolhe pela intenção " +
           "(plataforma_garantir_roteador e plataforma_ligar_roteador; veja `roteadores` abaixo).",
         agentes,
+        // A camada da EMPRESA, que vale para todos os agentes (upstream 1.74, #2321).
+        seguranca_da_empresa: {
+          bloqueio_de_afirmacao_clinica: await lerCamadaClinica(c.admin, c.orgId),
+        },
         // Os roteadores de intenção, com o agente e o destino de cada intenção
         // pelo nome. Leitura que falha não derruba a dos agentes: diz que não leu.
         ...(await retratoDosRoteadores(c.admin, c.orgId).then(
@@ -547,7 +593,10 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
       "O conteúdo do que já está configurado num cliente, por seção: `etiquetas` (o vocabulário com as cores), `memoria` (as regras da casa e as anotações), " +
       "`conhecimento` (os materiais e a situação da indexação), `followups` (os fluxos e se estão publicados), `automacoes` (as regras, com gatilho e ações), " +
       "`agenda` (os tipos de agendamento e a jornada de cada pessoa), `equipe` (membros com id e e-mail, e convites), `canais` (os números com id e situação), " +
-      "`atendimento` (a distribuição) e `mensagens` (respostas prontas e modelos oficiais). " +
+      "`atendimento` (a distribuição e o freio do passo \"a IA decide\"), `mensagens` (respostas prontas e modelos oficiais), " +
+      "`planos_de_tarefa` (as sequências de tarefa com os passos), `fontes_de_formulario` (destino, perguntas, endereço de captação e a autorização de IA, sem o segredo) " +
+      "e `banco_externo` (as conexões, só com o nome e a coluna do cliente; nunca endereço, usuário ou senha). " +
+      "Em `canais`, cada número traz também os dias da prospecção, se guarda o histórico, se está pausado e as pausas agendadas. " +
       "QUANDO USAR: para ler antes de alterar, e para achar ids (de pessoa, de número, de fluxo) que outras ferramentas pedem. " +
       "Peça só as seções de que precisa: a resposta inteira é grande.",
     inputSchema: {
@@ -689,19 +738,51 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
       }
 
       if (pedidas.has("canais")) {
-        const { data, error } = await c.admin
-          .from("channel_sessions")
-          .select("id, display_name, phone_number, status, archived_at")
-          .eq("organization_id", c.orgId)
-          .is("archived_at", null);
-        if (error) throw new Error(`não consegui ler os números: ${error.message}`);
-        r.canais = ((data ?? []) as Array<{ id: string; display_name: string | null; phone_number: string | null; status: string | null }>).map((s) => ({
+        const canais = await lerCanais(c.admin, c.orgId);
+        const ajustes = await lerAjustesDosCanais(c.admin, c.orgId);
+        const pausas = await lerPausasAgendadas(c.admin, c.orgId, canais);
+        r.canais = canais.map((s) => ({
           id: s.id,
           nome: nomeDoCanal(s),
           telefone: s.phone_number,
           conectado: s.status === STATUS_SAUDAVEL,
           situacao: s.status,
+          // Pausado pela pessoa (ou por uma janela agendada): nada entra no inbox nem sai.
+          pausado: (s.metadata as { disabled?: unknown } | null)?.disabled === true,
+          // Os ajustes do upstream 1.74 a 1.80 (plataforma_configurar_canal).
+          dias_da_prospeccao: diasDaProspeccaoDe(ajustes.get(s.id)),
+          guardar_historico: s.waha_session_name ? lerGuardarHistorico(s.metadata) : null,
+          pausas_agendadas: pausas.filter((a) => a.todos_os_numeros || a.numero_id === s.id).map((a) => ({ id: a.id, inicio: a.inicio, fim: a.fim, situacao: a.situacao, todos_os_numeros: a.todos_os_numeros })),
         }));
+      }
+
+      if (pedidas.has("planos_de_tarefa")) {
+        const membros = await lerMembros(c.admin, c.orgId);
+        r.planos_de_tarefa = retratoDosPlanos(org.settings, membros);
+      }
+
+      if (pedidas.has("fontes_de_formulario")) {
+        const fontes = await lerFontes(c);
+        const { data: funis, error: funisErr } = await c.admin.from("crm_pipelines").select("id, name").eq("organization_id", c.orgId);
+        if (funisErr) throw new Error(`não consegui ler os funis: ${funisErr.message}`);
+        const { data: etapas, error: etapasErr } = await c.admin.from("crm_stages").select("id, name, pipeline_id").eq("organization_id", c.orgId);
+        if (etapasErr) throw new Error(`não consegui ler as etapas: ${etapasErr.message}`);
+        const funisComEtapas = ((funis ?? []) as Array<{ id: string; name: string }>).map((f) => ({
+          ...f,
+          etapas: ((etapas ?? []) as Array<{ id: string; name: string; pipeline_id: string }>).filter((e) => e.pipeline_id === f.id),
+        }));
+        // Sem o segredo: só o fato de haver um (`tem_assinatura`).
+        r.fontes_de_formulario = fontes.map((f) =>
+          retratoDaFonte(f, funisComEtapas, { pipeline_id: f.default_pipeline_id, stage_id: f.default_stage_id }),
+        );
+      }
+
+      if (pedidas.has("banco_externo")) {
+        const conexoes = await lerConexoesDeBancoExterno(c);
+        r.banco_externo =
+          conexoes === null
+            ? { modulo_ligado: false, conexoes: [] }
+            : { modulo_ligado: true, conexoes: conexoes.map(retratoDaConexao) };
       }
 
       if (pedidas.has("atendimento")) {
@@ -716,6 +797,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           // null = o padrão de 60 minutos (upstream 1.70, #2005).
           ia_espera_apos_resposta_pelo_celular_minutos: routing.manual_reply_silence_minutes,
           assinatura: { atendentes: assinatura.humanos, ia: assinatura.ia, nome_da_ia: assinatura.nomeIa },
+          // O freio do passo "a IA decide" das automações (upstream 1.76, #2367).
+          ia_decide_nas_automacoes: iaDecideLigadaNa(org.settings),
         };
       }
 

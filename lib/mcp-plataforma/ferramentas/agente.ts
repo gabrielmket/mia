@@ -33,9 +33,10 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
     name: "plataforma_garantir_agente",
     description:
       "Cria ou altera um AGENTE DE IA de um cliente: o nome, o PROMPT, as capacidades (por pacote), os funis em que ele pode mexer, os materiais que consulta, " +
-      "os follow-ups que arma, as palavras que passam a conversa para uma pessoa, o horário em que atende (e o aviso para quem escreve fora dele), o limiar de sentimento e o número de WhatsApp. " +
+      "os follow-ups que arma, as palavras que passam a conversa para uma pessoa, se o assunto jurídico passa a conversa para uma pessoa, o horário em que atende (e o aviso para quem escreve fora dele), o limiar de sentimento e o número de WhatsApp. " +
       "O que esta ferramenta grava é um RASCUNHO: nada muda no atendimento até plataforma_publicar_agente. " +
       "As exceções são do CADASTRO do agente e valem na hora: `nome`, `descricao`, `prioridade` e `limiar_de_sentimento`. " +
+      "ATENÇÃO: `bloquear_afirmacao_clinica` é da EMPRESA, não do agente: liga ou desliga a proteção para TODOS os agentes do cliente, na hora. Só faz sentido em clínica e consultório. " +
       "GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é o NOME do agente. Agente novo nasce com a versão 1 em rascunho; " +
       "agente com rascunho tem o rascunho atualizado; agente só com versão publicada ganha um rascunho novo. " +
       "Só os campos que VIERAM mudam: chamar só com `prompt` troca o prompt e preserva o resto. Pedido igual ao que está gravado responde `ja_estava`. " +
@@ -90,6 +91,22 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
         .optional()
         .describe('Expressões que, ditas pelo cliente, passam a conversa para uma pessoa (ex.: "falar com atendente").'),
       passagem_para_humano: z.boolean().optional().describe("O agente pode pedir a passagem para uma pessoa por conta própria. Padrão: sim."),
+      passagem_por_assunto_juridico: z
+        .boolean()
+        .optional()
+        .describe(
+          "Assunto jurídico (processo, advogado, ação na justiça) passa a conversa para uma pessoa. Padrão: sim. " +
+            "Num escritório de advocacia esse é o vocabulário normal do cliente: ali desligue (false). O pedido explícito de falar com uma pessoa e as palavras de passagem seguem valendo. " +
+            "É do rascunho: vale depois de publicar.",
+        ),
+      bloquear_afirmacao_clinica: z
+        .boolean()
+        .optional()
+        .describe(
+          "A proteção \"não fazer afirmação clínica\" da EMPRESA (vale para todos os agentes dela, na hora, sem publicar). Ligada, o agente não diz o que a pessoa tem, não indica remédio, pomada nem dose, " +
+            "não garante resultado e não diz que uma lesão é câncer: reescreve oferecendo consulta, e se insistir a mensagem é barrada e um caso é aberto. " +
+            "Nasce desligada; ligue só em clínica e consultório (em outro negócio ela barraria frases normais, como \"passe o creme\"). Não custa IA.",
+        ),
       casos: z.boolean().optional().describe("O agente abre um caso para a equipe quando promete algo que depende de uma pessoa. Padrão: não."),
       dividir_mensagens: z.boolean().optional().describe("Quebra a resposta em mensagens curtas, como uma pessoa digitando. Padrão: não."),
       tamanho_da_mensagem: z.number().int().min(80).max(4000).optional().describe("Tamanho máximo de cada mensagem quando `dividir_mensagens` está ligado."),

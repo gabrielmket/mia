@@ -23,8 +23,9 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
     name: "plataforma_configurar_empresa",
     description:
       "Ajusta os DADOS DA EMPRESA de um cliente: nome de exibição, razão social, CNPJ, fuso horário, idioma, moeda, modo de venda (para empresas ou para pessoas), " +
-      "e os dados de privacidade (e-mail do encarregado, endereço da política, dias de retenção de mídia). " +
+      "e os dados de privacidade (e-mail do encarregado, endereço da política, dias de retenção de mídia e se a limpeza automática de mídia antiga está ligada). " +
       "Só os campos que VIERAM mudam; o que veio igual ao que está gravado responde `ja_estava`. " +
+      "ATENÇÃO: `limpeza_automatica_de_midia` ligada apaga, na limpeza diária, a mídia das conversas e o anexo de nota interna mais velhos que `dias_de_retencao_de_midia`, sem volta. Ela nasce ligada em toda empresa. " +
       "QUANDO USAR: logo depois de criar o cliente, antes do catálogo (a MOEDA da empresa é a que os produtos novos recebem) e da agenda (o FUSO é o das jornadas e dos horários). " +
       "`modo_de_venda`: \"b2b\" mostra a aba Empresas e pede empresa, cargo e setor no cadastro; \"b2c\" esconde tudo isso. " +
       "O QUE NÃO FAZ: não muda o identificador da empresa na URL, não suspende nem apaga a empresa, e não mexe na marca (logo e cor).",
@@ -39,6 +40,13 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
       moeda: z.enum(MOEDAS_SERVIDAS).optional().describe("A moeda dos valores e dos produtos novos."),
       modo_de_venda: z.enum(["b2b", "b2c"]).optional().describe('"b2b" = vende para empresas; "b2c" = vende para pessoas.'),
       dias_de_retencao_de_midia: z.number().int().min(30).max(3650).optional().describe("Por quantos dias a mídia das conversas é guardada."),
+      limpeza_automatica_de_midia: z
+        .boolean()
+        .optional()
+        .describe(
+          "Liga (true) ou desliga (false) a limpeza automática de mídia antiga. Ligada, a limpeza diária apaga fotos, áudios, documentos e o anexo de nota interna " +
+            "com mais de `dias_de_retencao_de_midia` dias; a conversa mostra que a mídia foi apagada. Desligada, nada é apagado por idade e o armazenamento cresce sem teto.",
+        ),
       email_do_encarregado: z.string().email().max(200).nullable().optional().describe("O e-mail de quem responde pelos dados pessoais na empresa."),
       politica_de_privacidade_url: z
         .string()
@@ -70,6 +78,7 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
       "`conversa_fica_com_quem_atendeu`: quem responde pelo Inbox assume a conversa, e ela volta para a mesma pessoa quando o cliente escreve de novo. " +
       "`ia_espera_apos_resposta_pelo_celular_minutos`: quanto a IA fica calada depois que alguém da equipe responde pelo celular, fora do sistema. " +
       "`assinatura`: o nome de quem fala (o atendente, ou a IA) em negrito, na linha de cima de cada mensagem enviada ao cliente. Nasce desligada. " +
+      "`ia_decide_nas_automacoes`: o freio da empresa inteira para o passo \"a IA decide\" das automações; false faz toda regra com esse passo parar sem consultar a IA (e sem gastar). Nasce ligado. " +
       "Só os campos que VIERAM mudam; pedido igual ao que está gravado responde `ja_estava`. As duas primeiras decisões andam juntas: rodízio sem restringir a visibilidade deixa todo mundo vendo a carteira do colega. " +
       "ATENÇÃO: tudo aqui vale na hora, inclusive para o agente que já está no ar. A assinatura ligada aparece na PRÓXIMA mensagem que o cliente final receber. " +
       "O QUE NÃO FAZ: não define quais atendentes recebem cada NÚMERO (Configurações › Atendimento, depois de o número estar conectado e a equipe ter aceitado o convite) " +
@@ -115,6 +124,13 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
         .describe(
           "Mostra QUEM FALA em negrito, na linha de cima da mensagem que vai ao cliente, para ele saber quando a conversa passa de uma pessoa para outra ou para a IA. " +
             'Só as chaves que vieram mudam. Ex.: { "atendentes": true, "ia": true, "nome_da_ia": "Assistente Virtual" }. Mensagem de automação não é assinada.',
+        ),
+      ia_decide_nas_automacoes: z
+        .boolean()
+        .optional()
+        .describe(
+          'Liga (true) ou desliga (false), para a empresa inteira, o passo "a IA decide" das automações (a ação `ai_decide` de plataforma_garantir_automacao). ' +
+            "Desligado, cada regra com esse passo para nele sem chamar a IA, e a aba Atividade das automações diz que a empresa desligou. As outras ações da regra seguem.",
         ),
     },
     exemplo: { organization_id: ORG_DE_EXEMPLO, modo: "round_robin", visibilidade: "own_and_unassigned", devolver_para_a_ia_apos_minutos: 60 },

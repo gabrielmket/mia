@@ -72,6 +72,9 @@ const empresa: AreaDoChecklist = {
       modo_de_venda: modo,
       situacao: org.status,
       demonstracao: org.demonstracao,
+      // A limpeza automática de mídia antiga (upstream 1.74, 0557): ligada, apaga mídia velha sem volta.
+      limpeza_automatica_de_midia: org.media_retention_enforced,
+      dias_de_retencao_de_midia: org.media_retention_days ?? 365,
     };
     if (nomeAindaEhPlaceholder(org)) {
       r.falta.push({
@@ -82,6 +85,11 @@ const empresa: AreaDoChecklist = {
       r.pronto.push(`Nome: ${org.display_name}.`);
     }
     r.pronto.push(`Fuso ${org.timezone}, moeda ${org.currency ?? "BRL"}, venda ${modo === "b2b" ? "para empresas (B2B)" : "para pessoas (B2C)"}.`);
+    r.pronto.push(
+      org.media_retention_enforced
+        ? `Limpeza automática de mídia ligada: mídia com mais de ${org.media_retention_days ?? 365} dias é apagada.`
+        : "Limpeza automática de mídia DESLIGADA: a mídia das conversas não é apagada por idade.",
+    );
     if (!org.cnpj) {
       r.falta.push({ o_que: "Sem CNPJ cadastrado (opcional).", como: "plataforma_configurar_empresa com `cnpj`." });
     }
