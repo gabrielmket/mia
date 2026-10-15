@@ -149,7 +149,10 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await page.getByRole("checkbox", { name: "Tarefas", exact: true }).check();
     await page.getByRole("button", { name: "Enviar convites" }).click();
     const link = await page.locator("code").innerText();
-    expect(link).toContain("/team/accept-invite/");
+    // FORK MIA (.77): a tela mostra o link CURTO do convite (`/c/<código>`),
+    // que redireciona para o mesmo `/team/accept-invite/`; o resto do caso
+    // (abrir, aceitar, cair em Tarefas) prova que ele leva ao aceite.
+    expect(link).toMatch(/\/c\/[a-z0-9]{12}$|\/team\/accept-invite\//);
     await login(guest, emails[3]!);
     await guest.goto(link);
     await guest.getByRole("button", { name: /aceitar/i }).click();
