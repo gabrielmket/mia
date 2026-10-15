@@ -28,7 +28,11 @@ export const FERRAMENTAS_DE_EQUIPE_E_MENSAGENS: readonly FerramentaDePlataforma[
       "REPETIR NÃO REENVIA: quem já é da equipe é pulado (`ja_e_membro`), e quem já tem convite pendente com o mesmo papel não recebe outro e-mail (`ja_convidado`), " +
       "a não ser com `reenviar: true`. " +
       "A pessoa só entra na equipe quando ACEITA o convite, pelo link do e-mail: até lá ela não aparece como membro, e não dá para definir a jornada dela. " +
-      "Se o e-mail não sair (instalação sem envio de e-mail), o convite existe mesmo assim e a resposta avisa: o link fica copiável na tela Equipe (/app/team). " +
+      "LINK CURTO: cada convite emitido (`convidou`, `reenviou`) volta com `link_curto` (https://<instalação>/c/<código>), o MESMO link do e-mail, " +
+      "curto para mandar por WhatsApp. Ele cai no mesmo aceite e morre com o convite (vencido, aceito ou revogado). Reenviar troca o link: o anterior deixa de valer. " +
+      "Quem já tem convite pendente (`ja_convidado`) volta SEM link, porque o código do e-mail não fica guardado; com `gerar_link: true` ganha um link NOVO, " +
+      "sem e-mail nenhum, e o anterior (inclusive o do e-mail) deixa de valer. " +
+      "Se o e-mail não sair (instalação sem envio de e-mail), o convite existe mesmo assim e a resposta avisa, com o link curto para mandar por outro canal. " +
       "ATENÇÃO: plataforma_criar_cliente NÃO convida o dono informado em `owner_email`. Convide-o aqui, com o papel admin. " +
       "Se o banco não gravar o convite de alguém, essa pessoa volta com `nao_gravou`, nenhum e-mail sai para ela e as outras do pedido seguem. " +
       "FUNCIONA NA EMPRESA DE DEMONSTRAÇÃO, como em qualquer empresa: é o jeito de dar acesso à demonstração a quem ainda não tem login, " +
@@ -48,6 +52,12 @@ export const FERRAMENTAS_DE_EQUIPE_E_MENSAGENS: readonly FerramentaDePlataforma[
         .min(1)
         .max(TETO_DE_CONVITES),
       reenviar: z.boolean().optional().describe("true manda o e-mail de novo para quem já tem convite pendente. Padrão: falso."),
+      gerar_link: z
+        .boolean()
+        .optional()
+        .describe(
+          "true devolve um link curto NOVO para quem já tem convite pendente com o mesmo papel, sem mandar e-mail; o link anterior desse convite, inclusive o do e-mail, deixa de valer. Padrão: falso.",
+        ),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,
@@ -62,6 +72,7 @@ export const FERRAMENTAS_DE_EQUIPE_E_MENSAGENS: readonly FerramentaDePlataforma[
       return convidarPessoas(c, org, {
         pessoas: args.pessoas as Array<{ email: string; papel: string }>,
         reenviar: args.reenviar === true,
+        gerar_link: args.gerar_link === true,
       });
     },
   },

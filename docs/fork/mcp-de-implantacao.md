@@ -125,7 +125,7 @@ pessoa faz (com a tela e o caminho).
 | 15a | Só com dois ou mais agentes no MESMO número: montar o roteador de intenção (uma intenção por agente, e o funil de destino de cada uma) e ligá-lo | `plataforma_garantir_roteador`, `plataforma_ligar_roteador` | agente |
 | 16 | Ligar as automações e os lembretes | `plataforma_ligar_automacao`, `plataforma_ligar_lembrete` | agente |
 | 16a | Conversões (opcional, para quem anuncia): montar as regras por etapa, e ligar depois de a pessoa conectar a conta de anúncios | `plataforma_ver_conversoes`, `plataforma_garantir_conversoes_da_meta`, `plataforma_garantir_conversoes_do_google`, `plataforma_ligar_conversoes`, `plataforma_ligar_leads_de_formulario_da_meta` | agente (a conexão é com a pessoa do cliente) |
-| 17 | Convidar a equipe | `plataforma_convidar_pessoas` | agente |
+| 17 | Convidar a equipe (o link curto de cada convite volta na resposta, para mandar por WhatsApp) | `plataforma_convidar_pessoas` | agente |
 | 18 | Conferir o checklist: `pode_atender` e a lista do que ficou com uma pessoa | `plataforma_ver_implantacao` | agente |
 
 ### O que a pessoa faz no meio
@@ -281,7 +281,16 @@ Todas respondem `criou`, `atualizou` ou `ja_estava`, item a item quando a chamad
 
 | ferramenta | o que faz | reexecução |
 |---|---|---|
-| `plataforma_convidar_pessoas` | convida por e-mail, até 20 pessoas por chamada, cada uma com um papel (`viewer`, `agent`, `manager`, `admin`). Funciona também na empresa de demonstração. Convite que o banco não grava volta como `nao_gravou`, sem e-mail, e os outros seguem | quem já é da equipe é pulado; convite pendente **não** é reenviado, salvo com `reenviar: true` |
+| `plataforma_convidar_pessoas` | convida por e-mail, até 20 pessoas por chamada, cada uma com um papel (`viewer`, `agent`, `manager`, `admin`). Funciona também na empresa de demonstração. Convite que o banco não grava volta como `nao_gravou`, sem e-mail, e os outros seguem. Desde a `9023` cada convite emitido (`convidou`, `reenviou`) volta com `link_curto` (`https://<instalação>/c/<código>`), o mesmo link do e-mail, para mandar por WhatsApp | quem já é da equipe é pulado; convite pendente **não** é reenviado, salvo com `reenviar: true`, e volta **sem** link (o código do e-mail não fica guardado); `gerar_link: true` devolve um link NOVO sem e-mail, e o anterior, inclusive o do e-mail, deixa de valer |
+
+O link curto (migration `9023`, `lib/team/link-curto.ts`): 12 caracteres de um
+alfabeto sem os que se confundem (~59 bits), guardado só como hash (HMAC com o
+segredo do servidor) na linha do convite. Cai no mesmo aceite
+(`/team/accept-invite/<token>`), abrir não consome o convite, e ele morre com o
+convite: vencido, aceito, revogado (inclusive ao marcar a empresa como
+demonstração) ou reenviado. Na tela, a ação "Copiar link do convite" da lista de
+convites (aba Membros) faz o mesmo que `gerar_link`, e a tela Convidar membros
+mostra o link do e-mail para copiar logo depois do envio.
 
 ### Recusas
 

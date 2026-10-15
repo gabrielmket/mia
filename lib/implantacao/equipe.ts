@@ -41,6 +41,15 @@
  * É a mesma regra da rota (`app/api/v1/team/invite/route.ts`), que devolve o
  * e-mail em `failed`.
  *
+ * ── O link curto (9023) ───────────────────────────────────────────────────
+ *
+ * Todo convite emitido aqui (`convidou`, `reenviou`) volta com `link_curto`
+ * (`/c/<código>`), o MESMO link do e-mail, para mandar por WhatsApp. O código
+ * cru não fica guardado (só o hash, `lib/team/link-curto.ts`): quem já tem
+ * convite pendente (`ja_convidado`) só ganha link com `gerar_link: true`, que
+ * gera um NOVO sem mandar e-mail, e o anterior, inclusive o do e-mail, deixa de
+ * valer. É a ação "Copiar link do convite" da tela de Equipe.
+ *
  * ── O limite de assentos do plano (upstream 1.78, cobrança do revendedor) ──
  *
  * A rota recusa o pedido INTEIRO, antes de qualquer e-mail, quando a empresa já
@@ -59,6 +68,7 @@ import { INTERFACE_COMPLETA, interfaceTemDestino } from "@/lib/navigation/interf
 import { ROLES, type Role } from "@/lib/schemas/team";
 import { ConviteNaoGravadoError } from "@/lib/team/convite-nao-gravado";
 import { conviteEstaEmAberto, emitirConvite, statusConvite, type ConviteDeTime } from "@/lib/team/convites";
+import { trocarLinkCurto } from "@/lib/team/link-curto";
 
 import type { Implantacao, OrganizacaoDaImplantacao } from "./base";
 
@@ -152,12 +162,14 @@ export interface ConviteFeito {
   email_enviado?: boolean;
   motivo_do_email?: string;
   expira_em?: string;
+  /** O link curto (`/c/<código>`): o do e-mail, ou um novo com `gerar_link`. */
+  link_curto?: string;
 }
 
 export async function convidarPessoas(
   c: Implantacao,
   org: OrganizacaoDaImplantacao,
-  pedido: { pessoas: Array<{ email: string; papel: string }>; reenviar?: boolean },
+  pedido: { pessoas: Array<{ email: string; papel: string }>; reenviar?: boolean; gerar_link?: boolean },
 ): Promise<{ convites: ConviteFeito[]; avisos: string[] }> {
 
   for (const [i, p] of pedido.pessoas.entries()) {
@@ -234,12 +246,33 @@ export async function convidarPessoas(
     }
     const pendente = pendentes.find((x) => x.email === email);
     if (pendente && pendente.role === pessoa.papel && !pedido.reenviar) {
+      // O link curto de um convite pendente só existe se for GERADO de novo: o
+      // código cru do e-mail não fica guardado. Sem `gerar_link`, nada muda.
+      let linkNovo: string | undefined;
+      if (pedido.gerar_link) {
+        const troca = await trocarLinkCurto(c.admin, {
+          organizationId: c.orgId,
+          conviteId: pendente.id,
+          actorUserId: c.autorUserId,
+          requestId: c.requestId,
+          via: "mcp_plataforma",
+        });
+        if (troca.ok) {
+          linkNovo = troca.link_curto;
+          avisos.push(
+            `O link curto do convite de ${email} foi trocado: o anterior, inclusive o do e-mail, deixou de valer. Nenhum e-mail saiu.`,
+          );
+        } else {
+          avisos.push(`O convite de ${email} mudou enquanto o link era gerado (${troca.motivo}). Chame de novo.`);
+        }
+      }
       convites.push({
         email,
         papel: pessoa.papel,
         desfecho: "ja_convidado",
         email_enviado: pendente.email_dispatched,
         expira_em: pendente.expires_at,
+        ...(linkNovo ? { link_curto: linkNovo } : {}),
       });
       continue;
     }
@@ -260,11 +293,14 @@ export async function convidarPessoas(
         email_enviado: emitido.email_dispatched,
         ...(emitido.email_error ? { motivo_do_email: emitido.email_error } : {}),
         expira_em: emitido.convite.expires_at,
+        ...(emitido.link_curto ? { link_curto: emitido.link_curto } : {}),
       });
       if (!emitido.email_dispatched) {
         avisos.push(
           `O convite de ${email} foi criado, mas o e-mail NÃO saiu (${emitido.email_error ?? "sem transporte de e-mail"}). ` +
-            "Uma pessoa copia o link do convite na tela de Equipe (/app/team) e manda por outro canal.",
+            (emitido.link_curto
+              ? `Mande o link curto por outro canal (WhatsApp): ${emitido.link_curto}. Também dá para gerar outro na tela de Equipe (/app/team).`
+              : "Uma pessoa copia o link do convite na tela de Equipe (/app/team) e manda por outro canal."),
         );
       }
     } catch (err) {

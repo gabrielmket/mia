@@ -70,6 +70,7 @@ const { criarServidorDePlataforma } = await import("@/lib/mcp-plataforma/servido
 const { issueInvite } = await import("@/lib/auth/issue-invite");
 const { criarTemplate } = await import("@/lib/channels/meta/criar-template");
 const { audit } = await import("@/lib/audit");
+const { hashDoCodigoCurto } = await import("@/lib/team/link-curto");
 
 /** As chamadas a `issueInvite` que MANDAM o e-mail (as de `dispatch: false` só assinam). */
 function enviosDeConvite() {
@@ -986,6 +987,65 @@ describe("plataforma_convidar_pessoas", () => {
     const r = await mcp.chamar("plataforma_convidar_pessoas", { organization_id: ORG, pessoas: [PEDIDO.pessoas[1]] });
     expect((r.dados.convites as Linha[])[0]).toMatchObject({ desfecho: "convidou", email_enviado: false });
     expect((r.dados.avisos as string[]).join(" ")).toContain("/app/team");
+    // 9023: o aviso já traz o link curto, para mandar por outro canal.
+    expect((r.dados.avisos as string[]).join(" ")).toContain(String((r.dados.convites as Linha[])[0]!.link_curto));
+  });
+
+  it("⭐ LINK CURTO (9023): cada convite emitido volta com o link do e-mail, e a linha guarda só o hash", async () => {
+    const { mcp, tabela } = await preparar();
+    const r = await mcp.chamar("plataforma_convidar_pessoas", PEDIDO);
+    const feitos = r.dados.convites as Linha[];
+    for (const [i, feito] of feitos.entries()) {
+      const link = String(feito.link_curto);
+      expect(link).toMatch(/\/c\/[23456789abcdefghjkmnpqrstuvwxyz]{12}$/);
+      const codigo = link.split("/c/").at(-1)!;
+      // O e-mail leva ESTE link, e a linha só o hash dele.
+      expect(enviosDeConvite()[i]).toMatchObject({ linkCurto: link });
+      expect(tabela("team_invites")[i]!.codigo_curto_hash).toBe(hashDoCodigoCurto(codigo));
+      expect(JSON.stringify(tabela("team_invites"))).not.toContain(codigo);
+    }
+  });
+
+  it("⭐ LINK CURTO (9023): `ja_convidado` volta sem link; `gerar_link` dá um NOVO sem e-mail, e o anterior morre", async () => {
+    const { mcp, tabela } = await preparar();
+    const primeira = await mcp.chamar("plataforma_convidar_pessoas", { organization_id: ORG, pessoas: [PEDIDO.pessoas[1]] });
+    const linkDoEmail = String((primeira.dados.convites as Linha[])[0]!.link_curto);
+    for (const c of tabela("team_invites")) Object.assign(c, { accepted_at: null, revoked_at: null });
+    vi.mocked(issueInvite).mockClear();
+    vi.mocked(audit).mockClear();
+
+    const semPedir = await mcp.chamar("plataforma_convidar_pessoas", { organization_id: ORG, pessoas: [PEDIDO.pessoas[1]] });
+    expect((semPedir.dados.convites as Linha[])[0]).toMatchObject({ desfecho: "ja_convidado" });
+    expect((semPedir.dados.convites as Linha[])[0]).not.toHaveProperty("link_curto");
+    expect(tabela("team_invites")[0]!.codigo_curto_hash).toBe(hashDoCodigoCurto(linkDoEmail.split("/c/").at(-1)!));
+
+    const comLink = await mcp.chamar("plataforma_convidar_pessoas", {
+      organization_id: ORG,
+      pessoas: [PEDIDO.pessoas[1]],
+      gerar_link: true,
+    });
+    expect(comLink.erro, comLink.texto).toBe(false);
+    const feito = (comLink.dados.convites as Linha[])[0]!;
+    expect(feito).toMatchObject({ desfecho: "ja_convidado" });
+    const novo = String(feito.link_curto);
+    expect(novo).toMatch(/\/c\/[23456789abcdefghjkmnpqrstuvwxyz]{12}$/);
+    expect(novo).not.toBe(linkDoEmail);
+    expect(tabela("team_invites")[0]!.codigo_curto_hash).toBe(hashDoCodigoCurto(novo.split("/c/").at(-1)!));
+    // Nenhum e-mail, e a trilha diz quem gerou, pelo MCP, sem o código.
+    expect(vi.mocked(issueInvite), "gerar_link mandou e-mail").not.toHaveBeenCalled();
+    const gerado = (vi.mocked(audit).mock.calls as unknown as Array<[Record<string, unknown>]>)
+      .map(([e]) => e)
+      .find((e) => e.action === "member.invite_link_created");
+    expect(gerado).toMatchObject({ actorUserId: AUTOR, organizationId: ORG, metadata: { via: "mcp_plataforma" } });
+    expect(JSON.stringify(gerado)).not.toContain(novo.split("/c/").at(-1)!);
+    expect((comLink.dados.avisos as string[]).join(" ")).toContain("deixou de valer");
+
+    // E reenviar também troca o link, com e-mail.
+    const reenviado = await mcp.chamar("plataforma_convidar_pessoas", { organization_id: ORG, pessoas: [PEDIDO.pessoas[1]], reenviar: true });
+    const deNovo = (reenviado.dados.convites as Linha[])[0]!;
+    expect(deNovo).toMatchObject({ desfecho: "reenviou" });
+    expect(String(deNovo.link_curto)).not.toBe(novo);
+    expect(enviosDeConvite()).toHaveLength(1);
   });
 
   it("⭐ EMPRESA DE DEMONSTRAÇÃO (9020): o convite FUNCIONA, com a linha, o e-mail e o aviso de onde foi", async () => {

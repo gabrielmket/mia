@@ -117,6 +117,7 @@ estado.cliente = Object.assign(await pgComoSupabaseMia(pool), {
 });
 
 const { criarServidorDePlataforma } = await import("@/lib/mcp-plataforma/servidor");
+const { hashDoCodigoCurto, resolverLinkCurto } = await import("@/lib/team/link-curto");
 
 const IMPLANTADOR = "90179017-1111-4000-8000-00000000000a";
 const GESTORA_DA_GEMEA = "90179017-1111-4000-8000-00000000000b";
@@ -620,11 +621,30 @@ describe("6 · a empresa de demonstração monta tudo, convida a equipe e não m
       { email: "alguem@exemplo.invalid", role: "agent", pendente: true, email_dispatched: true, invited_by: IMPLANTADOR },
     ]);
 
+    // 9023: o convite volta com o link curto; no banco fica só o hash dele (a
+    // constraint de forma aceita), e a consulta da rota curta acha o convite.
+    const link = String((r.dados.convites as Array<Record<string, unknown>>)[0]!.link_curto);
+    const codigo = link.split("/c/").at(-1)!;
+    const hashNoBanco = async () =>
+      (await uma<{ h: string | null }>("select codigo_curto_hash as h from team_invites where organization_id = $1", [DEMO])).h;
+    expect(await hashNoBanco()).toBe(hashDoCodigoCurto(codigo));
+    expect(await resolverLinkCurto(estado.cliente as never, codigo)).toMatchObject({ email: "alguem@exemplo.invalid" });
+
     // Reexecução: o convite pendente não é reenviado, como em qualquer empresa.
     const denovo = await mcp.chamar("plataforma_convidar_pessoas", pedido);
     expect((denovo.dados.convites as Array<Record<string, unknown>>)[0]).toMatchObject({ desfecho: "ja_convidado" });
     expect(estado.convites.length).toBe(antes + 1);
     expect((await uma<{ n: number }>("select count(*)::int as n from team_invites where organization_id = $1", [DEMO])).n).toBe(1);
+
+    // 9023: `gerar_link` troca o hash no banco sem e-mail; o link anterior não acha mais nada.
+    const comLink = await mcp.chamar("plataforma_convidar_pessoas", { ...pedido, gerar_link: true });
+    expect(comLink.erro, comLink.texto).toBe(false);
+    const novo = String((comLink.dados.convites as Array<Record<string, unknown>>)[0]!.link_curto).split("/c/").at(-1)!;
+    expect(novo).not.toBe(codigo);
+    expect(await hashNoBanco()).toBe(hashDoCodigoCurto(novo));
+    expect(await resolverLinkCurto(estado.cliente as never, codigo)).toBeNull();
+    expect(await resolverLinkCurto(estado.cliente as never, novo)).toMatchObject({ email: "alguem@exemplo.invalid" });
+    expect(estado.convites.length).toBe(antes + 1);
   });
 
   it("⭐ ligar a automação que chama um webhook é recusado pela trava do BANCO, e a regra segue desligada", async () => {
