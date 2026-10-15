@@ -286,9 +286,11 @@ Todas respondem `criou`, `atualizou` ou `ja_estava`, item a item quando a chamad
 O link curto (migration `9023`, `lib/team/link-curto.ts`): 12 caracteres de um
 alfabeto sem os que se confundem (~59 bits), guardado só como hash (HMAC com o
 segredo do servidor) na linha do convite. Cai no mesmo aceite
-(`/team/accept-invite/<token>`), abrir não consome o convite, e ele morre com o
-convite: vencido, aceito, revogado (inclusive ao marcar a empresa como
-demonstração) ou reenviado. Na tela, a ação "Copiar link do convite" da lista de
+(`/team/accept-invite/<token>`), abrir não consome o convite, e ele vale enquanto
+o link do e-mail valeria: morre quando o convite vence, é revogado (inclusive ao
+marcar a empresa como demonstração) ou reenviado. Aceitar NÃO mata: o aceite do
+upstream é repetível, e quem já aceitou e abre de novo cai no mesmo aceite, como
+pelo link longo. Na tela, a ação "Copiar link do convite" da lista de
 convites (aba Membros) faz o mesmo que `gerar_link`, e a tela Convidar membros
 mostra o link do e-mail para copiar logo depois do envio.
 

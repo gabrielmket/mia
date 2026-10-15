@@ -8125,22 +8125,29 @@ begin
 end $$;
 
 comment on column public.team_invites.codigo_curto_hash is
-  'MIA (9023): HMAC-SHA256 em hex do codigo do link curto do convite (/c/<codigo>), com o segredo do servidor. O codigo cru nunca e gravado. Nulo = convite sem link curto (antigo, aceito ou revogado). Trocado a cada reenvio e a cada "Copiar link do convite": o anterior deixa de valer.';
+  'MIA (9023): HMAC-SHA256 em hex do codigo do link curto do convite (/c/<codigo>), com o segredo do servidor. O codigo cru nunca e gravado. Nulo = convite sem link curto (antigo ou revogado). Aceito mantem o hash ate vencer, como o link longo segue valendo ate o exp. Trocado a cada reenvio e a cada "Copiar link do convite": o anterior deixa de valer.';
 
 create unique index if not exists team_invites_mia_codigo_curto_hash_idx
   on public.team_invites (codigo_curto_hash)
   where codigo_curto_hash is not null;
 
--- O link curto morre com o convite: aceito ou revogado, o hash sai na mesma
--- escrita. Inclusive quando quem revoga é a marca de demonstração (9010), que
--- faz `update ... set revoked_at = now()` em todos os pendentes da empresa.
+-- O link curto morre com o convite REVOGADO: o hash sai na mesma escrita.
+-- Inclusive quando quem revoga é a marca de demonstração (9010), que faz
+-- `update ... set revoked_at = now()` em todos os pendentes da empresa.
+--
+-- O ACEITE não apaga, de propósito. O aceite do upstream é repetível: o token
+-- longo vale até `exp` e `lib/auth/aplicar-convite.ts` só recusa convite
+-- revogado (o fechamento usa `is("accepted_at", null)` para o replay não mexer
+-- em nada). O link curto segue o longo: quem aceitou e abre de novo o link do
+-- WhatsApp cai no mesmo aceite, e não em "peça um novo convite". O e2e do
+-- upstream `tests/e2e/interface-por-vinculo.spec.ts` depende disso.
 create or replace function public.fn_mia_link_curto_morre_com_o_convite()
 returns trigger
 language plpgsql
 set search_path = ''
 as $$
 begin
-  if new.accepted_at is not null or new.revoked_at is not null then
+  if new.revoked_at is not null then
     new.codigo_curto_hash := null;
   end if;
   return new;
@@ -8148,7 +8155,7 @@ end;
 $$;
 
 comment on function public.fn_mia_link_curto_morre_com_o_convite() is
-  'MIA (9023): convite aceito ou revogado perde o hash do link curto na mesma escrita (team_invites.codigo_curto_hash). Vencido nao precisa: a resolucao confere expires_at.';
+  'MIA (9023): convite revogado perde o hash do link curto na mesma escrita (team_invites.codigo_curto_hash). Aceito nao perde (o aceite e repetivel, como o do link longo). Vencido nao precisa: a resolucao confere expires_at.';
 
 revoke all on function public.fn_mia_link_curto_morre_com_o_convite() from public;
 revoke execute on function public.fn_mia_link_curto_morre_com_o_convite() from anon, authenticated;

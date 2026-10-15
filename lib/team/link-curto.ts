@@ -34,10 +34,17 @@
  *
  * ── Quando morre ──────────────────────────────────────────────────────────
  *
- * Junto com o convite. Aceito ou revogado (inclusive a revogação em massa quando
+ * Quando o link LONGO morreria. Revogado (inclusive a revogação em massa quando
  * a empresa vira demonstração, 9010): o gatilho da 9023 zera o hash na mesma
  * escrita. Vencido: a resolução confere `expires_at`. Reenviado: o reenvio gera
  * código novo (o e-mail novo leva o link novo).
+ *
+ * ACEITO NÃO MATA. O aceite do upstream é repetível: o token longo vale até
+ * `exp`, e `lib/auth/aplicar-convite.ts` só recusa convite revogado (o
+ * fechamento usa `is("accepted_at", null)` para o replay não mexer em nada).
+ * Quem aceitou e abre de novo o link do WhatsApp cai no mesmo aceite, como
+ * cairia pelo link longo, e não em "peça um novo convite". O e2e do upstream
+ * `tests/e2e/interface-por-vinculo.spec.ts` aceita duas vezes pelo mesmo link.
  *
  * ── O que a rota curta NÃO faz ────────────────────────────────────────────
  *
@@ -137,10 +144,11 @@ export function novoLinkCurto(): LinkCurtoNovo {
 }
 
 /**
- * O convite PENDENTE dono deste código, ou `null`.
+ * O convite dono deste código, NÃO REVOGADO e dentro do prazo (aceito ou não,
+ * como o link longo), ou `null`.
  *
  * `null` para tudo que não serve, sem distinguir: código malformado, que não
- * existe, de convite vencido, aceito ou revogado. Quem está varrendo códigos não
+ * existe, de convite vencido ou revogado. Quem está varrendo códigos não
  * pode aprender nada com a resposta. Erro do banco também vira `null` (com
  * registro no servidor, sem o código): é a mesma tela de "convite inválido", e
  * a pessoa tenta de novo.
@@ -158,7 +166,6 @@ export async function resolverLinkCurto(
     .from("team_invites")
     .select(COLUNAS_DO_CONVITE)
     .eq(COLUNA_DO_LINK_CURTO, hashDoCodigoCurto(codigo))
-    .is("accepted_at", null)
     .is("revoked_at", null)
     .maybeSingle();
   if (error) {
@@ -169,7 +176,10 @@ export async function resolverLinkCurto(
   }
   if (!data) return null;
   const convite = data as unknown as ConviteDeTime;
-  return statusConvite(convite, agora) === "pendente" ? convite : null;
+  // Pendente ou aceito servem (o aceite é repetível); vencido e revogado, não.
+  // O prazo é conferido à parte: `statusConvite` diz "aceito" antes de olhar o relógio.
+  if (convite.revoked_at) return null;
+  return Date.parse(convite.expires_at) > agora ? convite : null;
 }
 
 export type ResultadoDaTroca =

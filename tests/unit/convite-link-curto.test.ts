@@ -12,8 +12,9 @@
  *  2. A emissão: o convite novo nasce com o hash na linha (nunca o código), o
  *     e-mail leva o link curto, e reemitir ou reenviar troca o código (o
  *     anterior morre). O reenvio grava o código ANTES de o e-mail sair.
- *  3. A resolução: pendente resolve; vencido, aceito, revogado, inexistente e
- *     malformado não, e todos com a MESMA resposta.
+ *  3. A resolução: pendente resolve, e ACEITO também (o aceite do upstream é
+ *     repetível, e o link curto segue o longo); vencido, revogado, inexistente
+ *     e malformado não, e todos com a MESMA resposta.
  *  4. A página `/c/<código>`: só lê (abrir não consome o convite, nem muda a
  *     linha), redireciona para o aceite de sempre com um token do mesmo
  *     convite, conta a tentativa no teto por IP do limitador do login (o 61º
@@ -322,14 +323,14 @@ describe("a emissão leva o link curto, e só o hash fica na linha", () => {
 
 // ---------------------------------------------------------------------------
 
-describe("a resolução: só o convite pendente, e a mesma resposta para todo o resto", () => {
+describe("a resolução: o convite vivo (pendente ou aceito), e a mesma resposta para todo o resto", () => {
   async function convitePendente() {
     const { convites } = cenario();
     const r = await emitirConvite(h.cliente as never, PEDIDO);
     return { codigo: codigoDe(r.link_curto), linha: convites()[0]!, id: r.convite.id };
   }
 
-  it("pendente resolve; vencido, aceito e revogado não", async () => {
+  it("pendente e ACEITO resolvem (o aceite é repetível, como pelo link longo); vencido e revogado não", async () => {
     const { codigo, linha, id } = await convitePendente();
     expect(await resolverLinkCurto(h.cliente as never, codigo)).toMatchObject({ id });
     // Maiúscula e espaço, como quem digita do celular.
@@ -340,8 +341,14 @@ describe("a resolução: só o convite pendente, e a mesma resposta para todo o 
     expect(await resolverLinkCurto(h.cliente as never, codigo)).toBeNull();
     linha.expires_at = prazo;
 
+    // Aceito continua resolvendo: quem já aceitou e abre de novo cai no mesmo
+    // aceite, e o replay do upstream não muda nada (lib/auth/aplicar-convite.ts).
     linha.accepted_at = new Date().toISOString();
+    expect(await resolverLinkCurto(h.cliente as never, codigo)).toMatchObject({ id });
+    // ...mas não depois do prazo, como o token longo.
+    linha.expires_at = new Date(Date.now() - 1000).toISOString();
     expect(await resolverLinkCurto(h.cliente as never, codigo)).toBeNull();
+    linha.expires_at = prazo;
     linha.accepted_at = null;
 
     linha.revoked_at = new Date().toISOString();
@@ -404,7 +411,7 @@ describe("a página /c/<código>", () => {
     expect(convites()[0]!.revoked_at ?? null).toBeNull();
   });
 
-  it("⭐ vencido, aceito, revogado, inexistente e malformado: a MESMA tela, sem dizer qual é", async () => {
+  it("⭐ vencido, revogado, inexistente e malformado: a MESMA tela, sem dizer qual é", async () => {
     const { convites } = cenario();
     const r = await emitirConvite(h.cliente as never, PEDIDO);
     const codigo = codigoDe(r.link_curto);
@@ -414,9 +421,6 @@ describe("a página /c/<código>", () => {
     linha.expires_at = new Date(Date.now() - 1000).toISOString();
     telas.push((await abrir(codigo)).html);
     linha.expires_at = new Date(Date.now() + 86_400_000).toISOString();
-    linha.accepted_at = new Date().toISOString();
-    telas.push((await abrir(codigo)).html);
-    linha.accepted_at = null;
     linha.revoked_at = new Date().toISOString();
     telas.push((await abrir(codigo)).html);
     telas.push((await abrir(gerarCodigoCurto())).html);
@@ -427,6 +431,26 @@ describe("a página /c/<código>", () => {
     // Nada do convite vaza na tela de recusa.
     expect(telas[0]).not.toContain("convidada@exemplo.invalid");
     expect(telas[0]).not.toContain("Empresa Exemplo");
+  });
+
+  it("⭐ ACEITO E ABERTO DE NOVO: o mesmo link leva ao mesmo aceite (o replay do upstream), como o link longo", async () => {
+    // O e2e do upstream `interface-por-vinculo.spec.ts` aceita, muda a seleção do
+    // membro e abre o MESMO link para aceitar outra vez. Para a pessoa real: quem
+    // aceitou e abre de novo o link do WhatsApp não lê "peça um novo convite".
+    const { convites } = cenario();
+    const r = await emitirConvite(h.cliente as never, PEDIDO);
+    const codigo = codigoDe(r.link_curto);
+    const antes = (await abrir(codigo)).destino;
+    expect(antes).toContain("/team/accept-invite/");
+
+    convites()[0]!.accepted_at = new Date().toISOString();
+    const depois = (await abrir(codigo)).destino;
+    expect(depois).toContain("/team/accept-invite/");
+    expect(verifyInviteToken(depois!.split("/").at(-1)!)).toMatchObject({ invite_id: r.convite.id });
+
+    // CONTROLE: revogado depois do aceite, aí sim a tela é a de inválido.
+    convites()[0]!.revoked_at = new Date().toISOString();
+    expect((await abrir(codigo)).html).toContain("Convite inválido ou expirado");
   });
 
   it("⭐ teto por IP com o limitador do login: o 61º pedido do mesmo IP leva \"Muitas tentativas\", mesmo com código bom", async () => {

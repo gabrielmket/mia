@@ -29,7 +29,7 @@ export const FERRAMENTAS_DE_EQUIPE_E_MENSAGENS: readonly FerramentaDePlataforma[
       "a não ser com `reenviar: true`. " +
       "A pessoa só entra na equipe quando ACEITA o convite, pelo link do e-mail: até lá ela não aparece como membro, e não dá para definir a jornada dela. " +
       "LINK CURTO: cada convite emitido (`convidou`, `reenviou`) volta com `link_curto` (https://<instalação>/c/<código>), o MESMO link do e-mail, " +
-      "curto para mandar por WhatsApp. Ele cai no mesmo aceite e morre com o convite (vencido, aceito ou revogado). Reenviar troca o link: o anterior deixa de valer. " +
+      "curto para mandar por WhatsApp. Ele cai no mesmo aceite e vale enquanto o link do e-mail valeria: morre quando o convite vence ou é revogado, e depois de aceito continua levando ao mesmo aceite. Reenviar troca o link: o anterior deixa de valer. " +
       "Quem já tem convite pendente (`ja_convidado`) volta SEM link, porque o código do e-mail não fica guardado; com `gerar_link: true` ganha um link NOVO, " +
       "sem e-mail nenhum, e o anterior (inclusive o do e-mail) deixa de valer. " +
       "Se o e-mail não sair (instalação sem envio de e-mail), o convite existe mesmo assim e a resposta avisa, com o link curto para mandar por outro canal. " +

@@ -10,12 +10,14 @@
  *     balde próprio). Antes de olhar o código: a resposta de quem passou do
  *     teto é a mesma para código bom e ruim.
  *  2. Resolve o código pelo hash. Código malformado, que não existe, de
- *     convite vencido, aceito ou revogado: a MESMA tela de "convite inválido
- *     ou expirado" da página de aceite, sem dizer qual dos casos é.
- *  3. Convite pendente: redireciona para `/team/accept-invite/<token>`, a
- *     página de aceite de sempre, com o token re-assinado a partir da linha
- *     (`linkDeAceite`, o mesmo que a tela de Equipe usa). Daí em diante é o
- *     fluxo de sempre: login, criar conta, e-mail que não bate.
+ *     convite vencido ou revogado: a MESMA tela de "convite inválido ou
+ *     expirado" da página de aceite, sem dizer qual dos casos é.
+ *  3. Convite vivo (pendente, ou já aceito: o aceite do upstream é repetível,
+ *     e o link curto segue o longo): redireciona para
+ *     `/team/accept-invite/<token>`, a página de aceite de sempre, com o token
+ *     re-assinado a partir da linha (`linkDeAceite`, o mesmo que a tela de
+ *     Equipe usa). Daí em diante é o fluxo de sempre: login, criar conta,
+ *     e-mail que não bate, e o replay de quem já aceitou.
  *
  * NÃO grava nada. O Outlook, o Hotmail e o WhatsApp abrem o link sozinhos
  * (conferência de segurança, prévia) e essa visita não pode gastar o convite:

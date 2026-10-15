@@ -1,7 +1,7 @@
 /**
  * 9023 · O LINK CURTO DO CONVITE — a coluna `team_invites.codigo_curto_hash`,
  * o índice único, a constraint de forma e o gatilho que zera o hash quando o
- * convite morre, no Postgres de verdade.
+ * convite é revogado, no Postgres de verdade.
  *
  * ─── O que se mede, e por quê ───────────────────────────────────────────────
  *
@@ -9,13 +9,14 @@
  *    caracteres) gravado por engano é recusado (23514). CONTROLE: o hash passa.
  * 2. O índice é ÚNICO onde não é nulo: dois convites com o mesmo hash são
  *    recusados (23505), e vários sem link curto convivem.
- * 3. O link curto morre com o convite: aceitar ou revogar zera o hash na
- *    MESMA escrita, inclusive a revogação em massa ao marcar a empresa como
- *    demonstração (9010). CONTROLE: mexer em outra coluna não zera.
- *    CONTROLE NEGATIVO: com o gatilho desligado, revogar deixa o hash lá — é
- *    o gatilho, e não outra coisa, que faz o trabalho.
- * 4. A consulta da rota curta (as mesmas condições de `resolverLinkCurto`)
- *    acha o pendente e não acha o revogado.
+ * 3. O link curto morre com o convite REVOGADO: revogar zera o hash na MESMA
+ *    escrita, inclusive a revogação em massa ao marcar a empresa como
+ *    demonstração (9010). CONTROLE NEGATIVO: com o gatilho desligado, revogar
+ *    deixa o hash lá — é o gatilho, e não outra coisa, que faz o trabalho.
+ * 4. ACEITAR NÃO zera (nem mexer em outra coluna): o aceite do upstream é
+ *    repetível, e o link curto segue o longo. A consulta da rota curta (as
+ *    mesmas condições de `resolverLinkCurto`) acha o pendente e o aceito, e
+ *    não acha o revogado nem o vencido.
  * 5. Permissões: `anon` não lê a coluna, e a função do gatilho não é
  *    executável por `anon` nem `authenticated`.
  *
@@ -69,7 +70,7 @@ function achaPeloHash(hash: string): string {
     sql(`
       set role service_role;
       select count(*)::text from public.team_invites
-       where codigo_curto_hash = '${hash}' and accepted_at is null and revoked_at is null;
+       where codigo_curto_hash = '${hash}' and revoked_at is null and expires_at > now();
     `),
   );
 }
@@ -123,20 +124,26 @@ describe("9023 · o link curto do convite", () => {
     expect(tentar(convite("sem-link-b-9023@invariant.test", null))).toBe("passou");
   });
 
-  it("⭐ aceitar zera o hash na mesma escrita, e a consulta da rota curta deixa de achar", () => {
+  it("⭐ aceitar NÃO zera o hash (o aceite é repetível), e a consulta da rota curta continua achando; vencido, não", () => {
     sql(convite("aceita-9023@invariant.test", H3));
     expect(achaPeloHash(H3)).toBe("1");
-    // CONTROLE: mexer em outra coluna não zera.
     sql(`update public.team_invites set email_dispatched = true where email = 'aceita-9023@invariant.test';`);
     expect(hashDe("aceita-9023@invariant.test")).toBe(H3);
 
     sql(`update public.team_invites set accepted_at = now() where email = 'aceita-9023@invariant.test';`);
-    expect(hashDe("aceita-9023@invariant.test")).toBe("NULO");
+    expect(hashDe("aceita-9023@invariant.test")).toBe(H3);
+    expect(achaPeloHash(H3)).toBe("1");
+
+    // Vencido: o hash fica, mas a consulta não acha (o prazo é da resolução, não do gatilho).
+    sql(`update public.team_invites set expires_at = now() - interval '1 minute' where email = 'aceita-9023@invariant.test';`);
+    expect(hashDe("aceita-9023@invariant.test")).toBe(H3);
     expect(achaPeloHash(H3)).toBe("0");
   });
 
-  it("⭐ revogar zera o hash; CONTROLE NEGATIVO: com o gatilho desligado, o hash ficaria", () => {
+  it("⭐ revogar zera o hash, mesmo depois do aceite; CONTROLE NEGATIVO: com o gatilho desligado, o hash ficaria", () => {
     sql(convite("revogada-9023@invariant.test", H4));
+    sql(`update public.team_invites set accepted_at = now() where email = 'revogada-9023@invariant.test';`);
+    expect(hashDe("revogada-9023@invariant.test")).toBe(H4);
     sql(`update public.team_invites set revoked_at = now() where email = 'revogada-9023@invariant.test';`);
     expect(hashDe("revogada-9023@invariant.test")).toBe("NULO");
     expect(achaPeloHash(H4)).toBe("0");
