@@ -546,6 +546,77 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
     ).toEqual([]);
     await inviteeCtx.close();
   });
+
+  /**
+   * ─── FORK MIA (9023) · O LINK CURTO (`/c/<código>`) ──────────────────────
+   *
+   * O link longo ficava ilegível no WhatsApp. O envio devolve o link curto (o
+   * mesmo do e-mail), que cai no aceite de sempre SEM consumir o convite;
+   * "Copiar link do convite" gera outro e o anterior morre; revogado, o link
+   * curto mostra a mesma tela de convite inválido.
+   */
+  const CURTO_EMAIL = `convite.curto.${randomUUID().slice(0, 8)}@deskcomm.test`;
+
+  test("16. link curto: cai no aceite sem consumir, copiar gera outro e o anterior morre, revogar mata o link", async ({
+    browser,
+  }) => {
+    const adminCtx = await browser.newContext();
+    const adminPage = await adminCtx.newPage();
+    await loginAdminTotp(adminPage);
+
+    const res = await adminPage.request.post("/api/v1/team/invite", {
+      data: { invitations: [{ email: CURTO_EMAIL, role: "agent" }] },
+    });
+    expect(res.status(), await res.text()).toBe(201);
+    const enviado = ((await res.json()) as { data: { sent: Array<{ invite_id: string; link_curto?: string }> } }).data
+      .sent[0]!;
+    expect(enviado.link_curto).toMatch(/\/c\/[23456789abcdefghjkmnpqrstuvwxyz]{12}$/);
+    const primeiro = new URL(enviado.link_curto!).pathname;
+
+    // Quem abre o link (ou o verificador do e-mail, ou a prévia do WhatsApp) cai no aceite, sem consumir nada.
+    const anonimo = await browser.newContext();
+    const visita = await anonimo.newPage();
+    await visita.goto(primeiro);
+    await expect(visita).toHaveURL(/\/team\/accept-invite\//);
+    await expect(visita.getByRole("heading", { name: /Você foi convidado/i })).toBeVisible();
+    const linha = async () =>
+      (
+        await svc
+          .from("team_invites")
+          .select("accepted_at, revoked_at")
+          .eq("organization_id", inv.org_id)
+          .eq("email", CURTO_EMAIL)
+          .single()
+      ).data as { accepted_at: string | null; revoked_at: string | null };
+    expect(await linha()).toEqual({ accepted_at: null, revoked_at: null });
+
+    // "Copiar link do convite" pela tela: o aviso diz que o anterior deixou de valer
+    // (no toast, ou no diálogo quando o navegador do teste não deixa copiar).
+    await adminPage.goto("/app/team");
+    const row = adminPage.getByRole("row", { name: new RegExp(CURTO_EMAIL, "i") });
+    await row.getByRole("button", { name: /Ações/i }).click();
+    await adminPage.getByRole("menuitem", { name: /Copiar link do convite/i }).click();
+    await expect(adminPage.getByText(/deixou de valer/i).first()).toBeVisible();
+
+    // O do e-mail morreu: a mesma tela de convite inválido.
+    await visita.goto(primeiro);
+    await expect(visita.getByRole("heading", { name: /Convite inválido ou expirado/i })).toBeVisible();
+
+    // Pela rota, mais um: este vale; revogado, deixa de valer.
+    const gerado = await adminPage.request.post(`/api/v1/team/invites/${enviado.invite_id}/link-curto`, { data: {} });
+    expect(gerado.status(), await gerado.text()).toBe(200);
+    const atual = new URL(((await gerado.json()) as { data: { link_curto: string } }).data.link_curto).pathname;
+    await visita.goto(atual);
+    await expect(visita).toHaveURL(/\/team\/accept-invite\//);
+
+    const revogado = await adminPage.request.post(`/api/v1/team/invites/${enviado.invite_id}/revoke`, { data: {} });
+    expect(revogado.status(), await revogado.text()).toBe(200);
+    await visita.goto(atual);
+    await expect(visita.getByRole("heading", { name: /Convite inválido ou expirado/i })).toBeVisible();
+
+    await anonimo.close();
+    await adminCtx.close();
+  });
 });
 
 // helper: extrai só o path (relativo) do accept_url absoluto pro page.goto

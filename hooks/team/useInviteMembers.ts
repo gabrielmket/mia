@@ -12,6 +12,8 @@ interface InviteResult {
       expires_at: string;
       email_dispatched: boolean;
       accept_url: string;
+      /** FORK MIA (9023): o link curto do e-mail (`/c/<código>`). */
+      link_curto?: string;
     }>;
     failed: Array<{ email: string; reason: string }>;
   };

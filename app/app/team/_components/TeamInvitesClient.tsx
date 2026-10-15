@@ -36,6 +36,8 @@ import { ArrowsClockwise, Copy, DotsThree, Warning } from "@/lib/ui/icons";
 import { copyToClipboard } from "@/lib/clipboard";
 import type { StatusConvite } from "@/lib/team/convite-status";
 import { rotuloDoPapel } from "@/lib/auth/types";
+// FORK MIA (9023): "Copiar link do convite" gera o link curto (`/c/<código>`).
+import { useCopiarLinkDoConvite } from "./LinkCurtoDoConvite";
 
 interface Props {
   /** admin: mostra as ações de reenviar/revogar. Manager só lê. */
@@ -55,6 +57,7 @@ export function TeamInvitesClient({ canManage }: Props) {
   const { data, isLoading, isError } = useTeamInvites();
   const resend = useResendInvite();
   const revoke = useRevokeInvite();
+  const linkCurto = useCopiarLinkDoConvite(); // FORK MIA (9023)
 
   const [revokeDialog, setRevokeDialog] = useState<TeamInvite | null>(null);
 
@@ -139,7 +142,14 @@ export function TeamInvitesClient({ canManage }: Props) {
                               variant="outline"
                               size="sm"
                               className="h-7 w-fit gap-1 text-xs"
-                              onClick={() => copyLink(inv.accept_url!)}
+                              disabled={linkCurto.gerando}
+                              // FORK MIA (9023): quem administra copia o link curto
+                              // (código novo); quem só gerencia segue com o longo.
+                              onClick={() =>
+                                canManage && inv.status === "pendente"
+                                  ? void linkCurto.copiar(inv.id)
+                                  : copyLink(inv.accept_url!)
+                              }
                             >
                               <Copy size={13} />
                               {t("Copiar link")}
@@ -179,7 +189,10 @@ export function TeamInvitesClient({ canManage }: Props) {
                                 onClick={async () => {
                                   try {
                                     await resend.mutateAsync(inv.id);
-                                    toast.success(t("Convite reenviado."));
+                                    // FORK MIA (9023): o reenvio troca o link curto.
+                                    toast.success(
+                                      t("Convite reenviado com um link novo. O link anterior deixou de valer."),
+                                    );
                                   } catch {
                                     /* showApiError já disparou */
                                   }
@@ -188,10 +201,14 @@ export function TeamInvitesClient({ canManage }: Props) {
                                 <ArrowsClockwise size={16} />
                                 {t("Reenviar")}
                               </DropdownMenuItem>
-                              {inv.accept_url ? (
-                                <DropdownMenuItem onClick={() => copyLink(inv.accept_url!)}>
+                              {/* FORK MIA (9023): o link curto, gerado na hora; vencido sai por Reenviar. */}
+                              {inv.status === "pendente" ? (
+                                <DropdownMenuItem
+                                  disabled={linkCurto.gerando}
+                                  onClick={() => void linkCurto.copiar(inv.id)}
+                                >
                                   <Copy size={16} />
-                                  {t("Copiar link")}
+                                  {t("Copiar link do convite")}
                                 </DropdownMenuItem>
                               ) : null}
                               <DropdownMenuItem
@@ -247,6 +264,7 @@ export function TeamInvitesClient({ canManage }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {linkCurto.dialogo /* FORK MIA (9023) */}
     </section>
   );
 }

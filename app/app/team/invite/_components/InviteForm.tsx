@@ -23,10 +23,12 @@ import {
 import { ROLES, type Role } from "@/lib/schemas/team";
 import { rotuloDoPapel } from "@/lib/auth/types";
 import { descreverMotivoDaFalha } from "./motivo-da-falha";
+import { LinkCurtoDoEnvio } from "./LinkCurtoDoEnvio"; // FORK MIA (9023)
 import { ApiError } from "@/lib/api/types";
 
 interface ResultState {
-  sent: Array<{ email: string; accept_url: string; email_dispatched: boolean; expires_at: string }>;
+  // FORK MIA (9023): `link_curto` é o link do e-mail, curto, para mandar por WhatsApp.
+  sent: Array<{ email: string; accept_url: string; email_dispatched: boolean; expires_at: string; link_curto?: string }>;
   failed: Array<{ email: string; reason: string }>;
 }
 
@@ -141,7 +143,9 @@ export function InviteForm() {
                           ? t("Email enviado.")
                           : t("Resend não configurado — link copiável abaixo (DEV).")}
                       </div>
-                      {!s.email_dispatched ? (
+                      {/* FORK MIA (9023): com o link curto, ele substitui o longo. */}
+                      {s.link_curto ? <LinkCurtoDoEnvio link={s.link_curto} /> : null}
+                      {!s.email_dispatched && !s.link_curto ? (
                         <code className="mt-1 block text-xs break-all">{s.accept_url}</code>
                       ) : null}
                     </li>
