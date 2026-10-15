@@ -44,7 +44,7 @@
  * Três lugares, uma verdade, conferidos por máquina — que é o oposto do modo
  * como este repositório acumulou as listas que esta semana passou consertando.
  */
-export const CARIMBO_DO_SCHEMA = "20261014150000_9022_dono_do_contato_pela_plataforma";
+export const CARIMBO_DO_SCHEMA = "20261015120000_9023_link_curto_do_convite";
 
 /** Onde o baseline grava, e de onde a saúde lê. Singleton, como a marca. */
 export const TABELA_DO_CARIMBO = "schema_baseline";

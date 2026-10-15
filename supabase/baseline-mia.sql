@@ -1908,7 +1908,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261014150000_9022_dono_do_contato_pela_plataforma', now())
+values (1, '20261015120000_9023_link_curto_do_convite', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -8090,6 +8090,73 @@ revoke all on function public.fn_mia_definir_dono_do_contato_pela_plataforma(uui
   from public, anon, authenticated;
 grant execute on function public.fn_mia_definir_dono_do_contato_pela_plataforma(uuid, uuid, uuid, uuid, text)
   to service_role;
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9023 · o link curto do convite de equipe ───
+--
+-- Espelho EXATO da migration 9023 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9023 · o link curto do convite de equipe
+--
+-- `mia`: só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: `if not
+-- exists` na coluna e no índice, a constraint dentro de um `do` que confere o
+-- catálogo, `create or replace` da função nossa e `drop trigger if exists`.
+--
+-- O código, o tamanho (12 de um alfabeto de 31, ~59 bits) e a conta que o fecha
+-- estão em `lib/team/link-curto.ts`. Aqui mora só o que o banco garante.
+
+alter table public.team_invites
+  add column if not exists codigo_curto_hash text;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'team_invites_mia_codigo_curto_hash_formato'
+  ) then
+    alter table public.team_invites
+      add constraint team_invites_mia_codigo_curto_hash_formato
+      check (codigo_curto_hash is null or codigo_curto_hash ~ '^[0-9a-f]{64}$');
+  end if;
+end $$;
+
+comment on column public.team_invites.codigo_curto_hash is
+  'MIA (9023): HMAC-SHA256 em hex do codigo do link curto do convite (/c/<codigo>), com o segredo do servidor. O codigo cru nunca e gravado. Nulo = convite sem link curto (antigo, aceito ou revogado). Trocado a cada reenvio e a cada "Copiar link do convite": o anterior deixa de valer.';
+
+create unique index if not exists team_invites_mia_codigo_curto_hash_idx
+  on public.team_invites (codigo_curto_hash)
+  where codigo_curto_hash is not null;
+
+-- O link curto morre com o convite: aceito ou revogado, o hash sai na mesma
+-- escrita. Inclusive quando quem revoga é a marca de demonstração (9010), que
+-- faz `update ... set revoked_at = now()` em todos os pendentes da empresa.
+create or replace function public.fn_mia_link_curto_morre_com_o_convite()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.accepted_at is not null or new.revoked_at is not null then
+    new.codigo_curto_hash := null;
+  end if;
+  return new;
+end;
+$$;
+
+comment on function public.fn_mia_link_curto_morre_com_o_convite() is
+  'MIA (9023): convite aceito ou revogado perde o hash do link curto na mesma escrita (team_invites.codigo_curto_hash). Vencido nao precisa: a resolucao confere expires_at.';
+
+revoke all on function public.fn_mia_link_curto_morre_com_o_convite() from public;
+revoke execute on function public.fn_mia_link_curto_morre_com_o_convite() from anon, authenticated;
+
+drop trigger if exists trg_mia_link_curto_morre_com_o_convite on public.team_invites;
+create trigger trg_mia_link_curto_morre_com_o_convite
+  before insert or update on public.team_invites
+  for each row execute function public.fn_mia_link_curto_morre_com_o_convite();
 
 notify pgrst, 'reload schema';
 
