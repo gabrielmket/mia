@@ -25,6 +25,10 @@ export async function issueInvite(input: {
   inviteId?: string;
   issuedAt?: number;
   dispatch?: boolean;
+  // FORK MIA (9023): o link curto (`/c/<código>`) que vai no e-mail no lugar do
+  // longo. Só quem já gravou o hash do código na linha do convite o passa
+  // (`lib/team/convites.ts`); sem ele, o e-mail leva o link longo de sempre.
+  linkCurto?: string;
 }) {
   const interfaceSettings = interfaceSettingsSchema.parse(
     input.interfaceSettings ?? INTERFACE_COMPLETA,
@@ -66,7 +70,7 @@ export async function issueInvite(input: {
       const message = buildInviteEmail({
         inviterName: input.inviterName,
         orgName: input.orgName,
-        acceptUrl,
+        acceptUrl: input.linkCurto ?? acceptUrl, // FORK MIA (9023)
         role: input.role,
         expiresAt: new Date(exp * 1000),
         marca,
@@ -107,6 +111,9 @@ export async function issueInvite(input: {
         email_dispatched: dispatched,
         email_error: deliveryError ?? null,
         email_via: via ?? null,
+        // FORK MIA (9023): esta emissão trocou o link curto do convite (o
+        // anterior deixou de valer). Só o fato, nunca o código.
+        link_curto: input.linkCurto !== undefined,
       },
     });
   }

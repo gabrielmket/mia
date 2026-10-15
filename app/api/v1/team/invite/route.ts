@@ -41,6 +41,8 @@ interface SentItem {
   /** Por que não saiu, quando não saiu. Vocabulário de `lib/email/roteador.ts`. */
   email_error?: EmailDeliveryError;
   accept_url: string;
+  /** FORK MIA (9023): o link curto do e-mail (`/c/<código>`), para mandar por outro canal. */
+  link_curto?: string;
 }
 interface FailedItem {
   email: string;
@@ -155,7 +157,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         failed.push({ email, reason: MOTIVO_CONVITE_NAO_GRAVADO });
         continue;
       }
-      const { convite, accept_url, email_dispatched, email_error } = emitido;
+      const { convite, accept_url, email_dispatched, email_error, link_curto } = emitido;
       sent.push({
         email,
         invite_id: convite.id,
@@ -163,6 +165,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         email_dispatched,
         email_error,
         accept_url,
+        link_curto, // FORK MIA (9023)
       });
     } else {
       sent.push(

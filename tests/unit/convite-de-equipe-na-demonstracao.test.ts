@@ -102,6 +102,7 @@ const { sendEmail: enviarPorSmtp } = await import("@/lib/email/smtp");
 const { sendEmail } = await import("@/lib/email/roteador");
 const { issueInvite } = await import("@/lib/auth/issue-invite");
 const { emitirConvite } = await import("@/lib/team/convites");
+const { resolverLinkCurto } = await import("@/lib/team/link-curto");
 const { POST } = await import("@/app/api/v1/team/invite/route");
 const { descreverMotivoDaFalha } = await import("@/app/app/team/invite/_components/motivo-da-falha");
 const { AvisoDeConviteNaDemonstracao } = await import(
@@ -304,12 +305,19 @@ describe("emitirConvite: a linha nasce ANTES do e-mail e da auditoria", () => {
       invited_by: ADMIN,
       email_dispatched: true,
     });
-    // O link do e-mail é o do convite gravado: mesmo id, mesma empresa, mesmo prazo.
-    const token = String(h.emails[0]!.text).split("/").at(-1)!;
+    // O link do e-mail é o do convite gravado. Desde a 9023 ele é o CURTO
+    // (`/c/<código>`): o código resolve para a linha gravada, e o link longo
+    // devolvido aponta para o mesmo convite (mesmo id, mesma empresa, mesmo prazo).
+    const linkDoEmail = String(h.emails[0]!.text);
+    expect(linkDoEmail).toBe(r.link_curto);
+    expect(await resolverLinkCurto(h.cliente as never, linkDoEmail.split("/c/").at(-1))).toMatchObject({
+      id: r.convite.id,
+      organization_id: ORG,
+    });
+    const token = r.accept_url.split("/").at(-1)!;
     const lido = verifyInviteToken(token);
     expect(lido).toMatchObject({ invite_id: r.convite.id, organization_id: ORG, role: "agent" });
     expect(new Date(lido!.exp * 1000).toISOString()).toBe(convites()[0]!.expires_at);
-    expect(r.accept_url.endsWith(token)).toBe(true);
   });
 
   it("⭐ linha que o banco recusa: erro com nome, NENHUM e-mail e NENHUMA auditoria", async () => {

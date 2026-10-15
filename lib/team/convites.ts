@@ -30,6 +30,8 @@ import type { Role } from "@/lib/schemas/team";
 // FORK MIA (9020): o erro com nome do convite que o banco não gravou, e o registro.
 import { logger } from "@/lib/logger";
 import { ConviteNaoGravadoError } from "@/lib/team/convite-nao-gravado";
+// FORK MIA (9023): o link curto do convite (`/c/<código>`).
+import { COLUNA_DO_LINK_CURTO, novoLinkCurto } from "@/lib/team/link-curto";
 import {
   conviteEstaEmAberto,
   statusConvite,
@@ -101,6 +103,12 @@ export interface ResultadoEmissao {
   email_error?: EmailDeliveryError;
   /** true = renovou uma linha pendente que já existia (reenvio). */
   renovado: boolean;
+  /**
+   * FORK MIA (9023): o link curto desta emissão, o mesmo do e-mail. O código
+   * cru não fica guardado em lugar nenhum: este é o único momento em que ele
+   * existe fora do e-mail.
+   */
+  link_curto?: string;
 }
 
 /**
@@ -164,6 +172,10 @@ export async function emitirConvite(
   //      `inviteId` e mesmo `issuedAt`, então é o mesmo token.
   const assinado = await issueInvite({ ...pedido, dispatch: false });
 
+  // FORK MIA (9023): o link curto nasce com a linha (só o hash é gravado) e vai
+  // no e-mail. Renovar o convite troca o código: o link anterior deixa de valer.
+  const linkCurto = novoLinkCurto();
+
   const nowIso = new Date().toISOString();
   const base = {
     organization_id: params.organizationId,
@@ -175,6 +187,7 @@ export async function emitirConvite(
     email_dispatched: false,
     last_sent_at: nowIso,
     expires_at: assinado.expires_at,
+    [COLUNA_DO_LINK_CURTO]: linkCurto.hash, // FORK MIA (9023)
   };
 
   const { data: row, error } = pendente
@@ -192,7 +205,7 @@ export async function emitirConvite(
 
   if (error || !row) throw new ConviteNaoGravadoError(email, error);
 
-  const emitido = await issueInvite(pedido);
+  const emitido = await issueInvite({ ...pedido, linkCurto: linkCurto.url }); // FORK MIA (9023)
 
   // FORK MIA (9020): o desfecho do envio vai para a linha. Só escreve quando há
   // o que mudar (o e-mail saiu, ou o prazo não é o que foi gravado). Se ESTA
@@ -225,6 +238,7 @@ export async function emitirConvite(
     email_dispatched: emitido.email_dispatched,
     email_error: emitido.email_error,
     renovado: !!pendente,
+    link_curto: linkCurto.url, // FORK MIA (9023)
   };
 }
 
@@ -249,6 +263,23 @@ export async function reenviarConvite(
   },
 ): Promise<ResultadoEmissao | null> {
   const { convite } = params;
+
+  // FORK MIA (9023): o código novo é GRAVADO antes de o e-mail sair, para o link
+  // curto do e-mail já valer quando chegar. A escrita repete as condições do
+  // convite em aberto: aceito ou revogado no meio do caminho, nada sai. O link
+  // curto anterior deste convite deixa de valer aqui.
+  const linkCurto = novoLinkCurto();
+  const { data: comLinkNovo, error: erroDoLink } = await admin
+    .from("team_invites")
+    .update({ [COLUNA_DO_LINK_CURTO]: linkCurto.hash })
+    .eq("id", convite.id)
+    .is("accepted_at", null)
+    .is("revoked_at", null)
+    .select("id")
+    .maybeSingle();
+  if (erroDoLink) throw erroDoLink;
+  if (!comLinkNovo) return null;
+
   const emitido = await issueInvite({
     email: convite.email,
     role: convite.role,
@@ -260,6 +291,7 @@ export async function reenviarConvite(
     requestId: params.requestId,
     inviteId: convite.id,
     issuedAt: Math.floor(Date.now() / 1000),
+    linkCurto: linkCurto.url, // FORK MIA (9023)
   });
 
   const { data: row, error } = await admin
@@ -285,5 +317,6 @@ export async function reenviarConvite(
     email_dispatched: emitido.email_dispatched,
     email_error: emitido.email_error,
     renovado: true,
+    link_curto: linkCurto.url, // FORK MIA (9023)
   };
 }

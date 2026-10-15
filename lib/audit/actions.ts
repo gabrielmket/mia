@@ -97,6 +97,11 @@ export const AUDIT_ACTIONS = [
   // ser membro. O REENVIO de um convite audita como `member.invited` — é uma
   // nova emissão do mesmo convite.
   "member.invite_revoked",
+  // FORK MIA (9023) — um LINK CURTO novo foi gerado para um convite pendente
+  // ("Copiar link do convite" na tela de Equipe, ou o MCP de plataforma). O
+  // anterior deixou de valer. A linha diz quem gerou e para qual convite; o
+  // código nunca entra (`lib/team/link-curto.ts`).
+  "member.invite_link_created",
   "token.created",
   "token.revoked",
   "profile.updated",

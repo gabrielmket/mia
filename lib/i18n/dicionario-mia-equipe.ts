@@ -28,4 +28,27 @@ export const DICIONARIO_DA_EQUIPE_MIA: Traducoes = {
   "Não foi possível registrar este convite, e nenhum e-mail foi enviado. Tente de novo em instantes.": {
     es: "No fue posible registrar esta invitación, y no se envió ningún correo. Inténtalo de nuevo en unos instantes.",
   },
+  // 9023: o link curto do convite (`/c/<código>`). A lista de convites da aba
+  // Membros (`app/app/team/_components/LinkCurtoDoConvite.tsx`), o resultado da
+  // tela Convidar membros (`app/app/team/invite/_components/LinkCurtoDoEnvio.tsx`)
+  // e a rota que gera o link novo. "Link do convite" o upstream já traduz.
+  "Copiar link do convite": { es: "Copiar enlace de la invitación" },
+  "Link novo copiado. O link anterior deste convite, inclusive o do e-mail, deixou de valer.": {
+    es: "Enlace nuevo copiado. El enlace anterior de esta invitación, incluido el del correo, dejó de valer.",
+  },
+  "O link novo foi gerado, mas não deu para copiar sozinho. Copie abaixo e mande para a pessoa. O link anterior deste convite, inclusive o do e-mail, deixou de valer.": {
+    es: "El enlace nuevo se generó, pero no se pudo copiar solo. Cópialo abajo y envíalo a la persona. El enlace anterior de esta invitación, incluido el del correo, dejó de valer.",
+  },
+  "Não foi possível copiar. Selecione o link e copie à mão.": {
+    es: "No fue posible copiar. Selecciona el enlace y cópialo a mano.",
+  },
+  "Convite reenviado com um link novo. O link anterior deixou de valer.": {
+    es: "Invitación reenviada con un enlace nuevo. El enlace anterior dejó de valer.",
+  },
+  "O link curto do convite não está disponível nesta instalação.": {
+    es: "El enlace corto de la invitación no está disponible en esta instalación.",
+  },
+  "Este convite venceu. Use Reenviar para renovar o prazo, e o e-mail novo já leva um link novo.": {
+    es: "Esta invitación venció. Usa Reenviar para renovar el plazo, y el correo nuevo ya lleva un enlace nuevo.",
+  },
 };

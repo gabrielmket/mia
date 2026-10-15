@@ -133,7 +133,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Convite de equipe.
   // Relido na .75 (9020, mudança NOSSA na rota): convite que o banco não grava vira item de `failed` (`convite_nao_gravado`) e o lote segue, em vez de 500. O espelho faz o mesmo: desfecho `nao_gravou`, com aviso, e as outras pessoas seguem.
   // Relido na .76 (upstream 1.78, cobrança): o pedido inteiro é recusado antes do e-mail quando a empresa já ocupa os assentos do plano. O espelho faz a mesma conta e dá a mesma frase; com a cobrança desligada, não há limite.
-  { rota: "app/api/v1/team/invite/route.ts", espelho: "lib/implantacao/equipe.ts", impressao: "216ab6f92e5f6eca" },
+  // Relido na .77 (9023, mudança NOSSA na rota): cada convite enviado devolve `link_curto` (`/c/<código>`), o mesmo link do e-mail. O espelho devolve o mesmo campo em `convidou`/`reenviou` (e um novo com `gerar_link`).
+  { rota: "app/api/v1/team/invite/route.ts", espelho: "lib/implantacao/equipe.ts", impressao: "c57e5f3b7f70422f" },
 ];
 
 describe("a regra copiada: gatilhos de follow-up que têm motor", () => {

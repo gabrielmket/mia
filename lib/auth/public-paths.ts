@@ -76,6 +76,11 @@ export const PUBLIC_PATHS: RegExp[] = [
   // prova é o `clientState` de cada assinatura, conferido na rota).
   /^\/api\/v1\/agenda\/microsoft\/callback$/,
   /^\/api\/v1\/agenda\/microsoft\/notificacoes$/,
+  // FORK MIA (9023): o link curto do convite (`app/c/[codigo]/page.tsx`). Quem
+  // abre é a pessoa convidada, ainda sem conta. A página só lê e redireciona
+  // para `/team/accept-invite/<token>` (pública, logo abaixo); o teto por IP e a
+  // resposta única para código ruim moram nela. Um segmento só, alfanumérico.
+  /^\/c\/[A-Za-z0-9]{1,32}$/,
   // Volta do consentimento do Google Ads. Mesma natureza das duas linhas
   // acima: a identidade vem do `state` assinado
   // (`lib/plataformas-de-anuncio/google/estado.ts`), não da sessão — quem
