@@ -84,6 +84,7 @@ const CONTATO_LINHA = {
   empresa_id: null,
   cargo: null,
   setor: null,
+  ai_opt_out: false,
 } satisfies Contact;
 
 /** Onde a contagem enxerga: ficha existente e agenda desta organização. */

@@ -106,10 +106,7 @@ function resolverModulo(especificador: string, deArquivo: string, fontes: Map<st
   return null;
 }
 
-type Indice = {
-  funcoes: Map<string, Map<string, ts.Node>>;
-  imports: Map<string, Map<string, string>>;
-};
+type Indice = (rel: string) => { funcoes: Map<string, ts.Node>; imports: Map<string, string> } | undefined;
 
 /**
  * O arquivo sob varredura pode não estar no mapa — os controles abaixo passam
@@ -162,16 +159,18 @@ function importsDoArquivo(sf: ts.SourceFile, fontes: Map<string, string>): Map<s
 function indice(fontes: Map<string, string>): Indice {
   const existente = cacheDeIndice.get(fontes);
   if (existente) return existente;
-  const fns = new Map<string, Map<string, ts.Node>>();
-  const imp = new Map<string, Map<string, string>>();
-  for (const [rel, fonte] of fontes) {
-    // `fileName` é o caminho relativo POSIX de propósito: é a chave de
-    // resolução de `./x` e `@/x`, e mantém a sonda igual em Windows e Linux.
+  // Preguiçoso: só o arquivo que a busca alcança é parseado.
+  const porArquivo = new Map<string, { funcoes: Map<string, ts.Node>; imports: Map<string, string> }>();
+  const novo: Indice = (rel) => {
+    const pronto = porArquivo.get(rel);
+    if (pronto) return pronto;
+    const fonte = fontes.get(rel);
+    if (fonte === undefined) return undefined;
     const arquivo = ts.createSourceFile(rel, fonte, ts.ScriptTarget.Latest, true);
-    fns.set(rel, funcoesDoArquivo(arquivo));
-    imp.set(rel, importsDoArquivo(arquivo, fontes));
-  }
-  const novo = { funcoes: fns, imports: imp };
+    const item = { funcoes: funcoesDoArquivo(arquivo), imports: importsDoArquivo(arquivo, fontes) };
+    porArquivo.set(rel, item);
+    return item;
+  };
   cacheDeIndice.set(fontes, novo);
   return novo;
 }
@@ -183,8 +182,8 @@ function buscaCom(fontes: Map<string, string>, nomeDoArquivo: string, fonte: str
   const fns = funcoesDoArquivo(arquivo);
   const imp = importsDoArquivo(arquivo, fontes);
   return {
-    funcoes: (rel) => (rel === nomeDoArquivo ? fns : idx.funcoes.get(rel)),
-    imports: (rel) => (rel === nomeDoArquivo ? imp : idx.imports.get(rel)),
+    funcoes: (rel) => (rel === nomeDoArquivo ? fns : idx(rel)?.funcoes),
+    imports: (rel) => (rel === nomeDoArquivo ? imp : idx(rel)?.imports),
   };
 }
 
@@ -273,26 +272,17 @@ describe("o inicializador de useState não lê o navegador", () => {
     expect(fontes.has("lib/notifications/prefs.ts")).toBe(true);
   });
 
-  /**
- * TETO DE 60s, DECLARADO — e o número tem motivo.
- *
- * Este caso NÃO é lento por acidente: ele lê e analisa TODO `.ts/.tsx` de
- * `app`, `components`, `lib` e `hooks`, que é o que faz dele um gate de
- * verdade em vez de uma amostra. Medido nesta máquina: 8s sozinho, e acima dos
- * 15s padrão quando a suíte inteira disputa CPU.
- *
- * Deixar no padrão produzia vermelho INTERMITENTE — o pior estado para um
- * gate, porque some ao rodar o arquivo sozinho e ensina a ignorar a falha. O
- * teto maior é a escolha honesta: o trabalho é grande e conhecido, e "demorou"
- * não é a mesma notícia que "achou um inicializador que lê o navegador".
- *
- * ⚠️ Se um dia ele estourar 60s, a resposta NÃO é subir de novo o número: é que
- * a varredura passou a fazer mais do que precisa, e é isso que precisa ser
- * olhado.
- */
-it("nenhum arquivo de `app|components|lib|hooks` tem inicializador que lê o navegador", () => {
+  // CUSTO: este caso varre o repositório inteiro, e o tempo dele crescia com o
+  // código, não com o defeito — sob a suíte inteira chegou a 16 s e estourou o
+  // `testTimeout` global de 15 s sem vermelho de verdade (medição de
+  // @FabioMundoDigital no PR #2792). A causa era parsear cada arquivo três
+  // vezes. Agora só o arquivo que contém `useState` é examinado, e o índice só
+  // parseia o que a busca alcança: 7,1 s → 1,3 s no mesmo Mac. Não suba o teto
+  // deste caso — se ele voltar a ficar lento, a varredura regrediu.
+  it("nenhum arquivo de `app|components|lib|hooks` tem inicializador que lê o navegador", () => {
     const violacoes: string[] = [];
     for (const [rel, fonte] of fontes) {
+      if (!fonte.includes("useState")) continue;
       for (const linha of inicializadoresQueLeemONavegador(fonte, rel, fontes)) {
         violacoes.push(`${rel}:${linha}`);
       }

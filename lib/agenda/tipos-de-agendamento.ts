@@ -9,9 +9,11 @@
  * ferramenta recusa (ou o contrário). O bloco veio para cá sem mudar uma linha
  * das regras; a rota importa daqui.
  */
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { TETO_DE_LEMBRETES_EXTRAS } from "@/lib/agenda/lembretes";
+import { transportaMensagem } from "@/lib/channels/capabilities";
 
 /** As dez do CHECK da tabela. Fora daqui o Postgres recusa — melhor recusar antes. */
 export const CATEGORIAS_DE_TIPO = [
@@ -58,6 +60,13 @@ export const camposDoTipo = {
    * mensagem para o telefone de um cliente é irreversível.
    */
   reminder_enabled: z.boolean().optional(),
+  /**
+   * O NÚMERO que manda o lembrete (upstream v1.83, `calendar_event_types.
+   * reminder_channel_session_id`). Sem ele, compromisso sem conversa numa
+   * empresa com 2 ou mais números fica pendente como `remetente_ambiguo`.
+   * Quem grava confere antes, com `canalDoLembreteValido` abaixo.
+   */
+  reminder_channel_session_id: z.string().uuid().nullish(),
   /**
    * ⚠️ ESTA FAIXA É MAIS ESTREITA QUE O CHECK DO BANCO, E ISSO CONTRARIA O
    * PARÁGRAFO ACIMA DE PROPÓSITO.
@@ -185,4 +194,26 @@ export function slugDe(nome: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60) || "tipo";
+}
+
+/**
+ * O canal do lembrete precisa ser um número DESTA empresa, não arquivado e que
+ * transporte mensagem (o mesmo teste do POST/PATCH da rota do upstream, v1.83).
+ * A rota faz a conferência inline (texto dele, sem mexer); o MCP de plataforma
+ * confere por aqui, com o mesmo critério.
+ */
+export async function canalDoLembreteValido(
+  admin: SupabaseClient,
+  organizationId: string,
+  canalId: string,
+): Promise<"ok" | "erro_de_consulta" | "invalido"> {
+  const { data: canal, error } = await admin
+    .from("channel_sessions")
+    .select("id, provider, archived_at")
+    .eq("organization_id", organizationId)
+    .eq("id", canalId)
+    .maybeSingle();
+  if (error) return "erro_de_consulta";
+  if (!canal || canal.archived_at || !transportaMensagem(canal.provider)) return "invalido";
+  return "ok";
 }

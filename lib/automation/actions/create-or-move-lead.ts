@@ -15,11 +15,18 @@ import type { ActionCtx, ActionResultDetail } from "@/lib/automation/types";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
 import { createLeadHandler, moveLeadHandler } from "@/app/api/v1/leads/_handler";
 import {
+  escolheEtapaDeDestino,
+  montaPayloadDoClone,
+  type EtapaDoFunil,
   type OrigemParaClonar,
 } from "@/lib/leads/clonar-para-funil";
 // MESMA transferência do roteador de intenção (#2155): duas implementações de
 // "trocar de funil" divergiriam na primeira mudança de uma delas.
 import { COLUNAS_DA_ORIGEM, transfereParaOFunil } from "@/lib/leads/transfere-para-o-funil";
+// FORK MIA (.81): o "abrir um card novo aqui" da regra passa a ser o card
+// adicional do upstream (#2799), que confere etapa ativa, campos obrigatórios e
+// contato bloqueado ou anonimizado pelo mesmo `createLeadHandler`.
+import { abreCardAdicionalNoFunil } from "@/lib/leads/abre-card-adicional";
 
 /** O que a linha do tempo diz de quem levou o card — o roteador de intenção diz outra coisa. */
 const RAZAO_DA_AUTOMACAO = "Levado para outro funil pela automação";
@@ -28,7 +35,7 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
   const pipelineId = typeof config.pipeline_id === "string" ? config.pipeline_id : null;
   const stageId = typeof config.stage_id === "string" ? config.stage_id : null;
   /**
-   * O que fazer quando o contato JÁ tem negócio, mas em OUTRO funil.
+   * FORK MIA — o que fazer quando o negócio do evento está em OUTRO funil.
    *
    * Recusar era a única resposta, e ela está certa para "mover": um negócio
    * pertence a um funil, e arrastá-lo para outro apagaria o histórico de etapas
@@ -66,96 +73,228 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
     : { kind: "unavailable", reason: "origin_capture_failed" };
 
   try {
-    // Renomeado de `emOutroFunil`: mais abaixo, dentro do ramo do CONTATO, o
-    // upstream declara outra variável com o mesmo nome (o negócio aberto em
-    // outro funil, uma LINHA e não um booleano). Dois significados no mesmo
-    // nome, num arquivo onde um deles decide recusar e o outro decide
-    // transferir, é o tipo de coisa que passa na revisão e erra em produção.
-    const leadEmOutroFunil = Boolean(lead && lead.pipeline_id !== pipelineId);
-    if (lead && !leadEmOutroFunil) {
-      const movido = await moveLeadHandler(ctx.admin, handlerCtx, lead.id, { to_stage_id: stageId });
-      // Upstream (#958/#992): o negócio movido vira o `lead` do contexto. Sem
-      // isto, `add_tag` leria as tags do objeto antigo e o UPDATE APAGARIA as
-      // tags que já estavam no banco, e `call_webhook` entregaria ao cliente um
-      // corpo encolhido — as duas falhas sem erro nenhum na tela.
-      publicaNoContexto(ctx, movido, contactId);
-      return { type: "create_or_move_lead", status: "success", detail: { moved: lead.id } };
-    }
-    // A RECUSA do upstream continua sendo o padrão: um negócio pertence a um
-    // funil, e arrastá-lo para outro apaga o histórico de etapas dele. O
-    // upstream (1.73, #2155) abriu a TRANSFERÊNCIA para `lead.tag_added`; o
-    // nosso fork acrescenta a SAÍDA opt-in (`quando_em_outro_funil`), abaixo.
-    // Quem marcou "abrir novo card" na regra escolheu a cópia, e ela vence.
-    if (lead && leadEmOutroFunil && !abreNoOutroFunil) {
-      // ── O GATILHO lead.tag_added COM O NEGÓCIO EM OUTRO FUNIL: A REGRA TRANSFERE (#2155) ──
-      //
-      // O caminho que TRANSFERE (`transfereParaOFunil`, o mesmo da rota
-      // `POST /api/v1/leads/[id]/clone`) era alcançável SÓ pelo ramo por
-      // contato — e o ramo por contato roda quando o evento NÃO traz o
-      // negócio. Com o negócio no evento, o galho acima devolvia
-      // `cross_pipeline_move_not_allowed` e a regra "Recepção etiqueta,
-      // regra transfere" ficava sem saída: `run_count = 0` e o card parado
-      // no funil de entrada.
-      //
-      // O escopo é ESTREITO de propósito: só `lead.tag_added`. É o gatilho
-      // da que a Recepção usa para etiquetar, é o que a issue mediu, e é a
-      // fatia que não pede migration. Os demais gatilhos que trazem o
-      // negócio (`lead.created`, `lead.stage_changed`, …) seguem recusando —
-      // a proposta principal da #2155 (destino por intenção em
-      // `ai_router_members`) continua fora, porque exige migration.
-      if (ctx.event?.event_type === "lead.tag_added") {
-        // UMA TRANSFERÊNCIA POR EVENTO: o motor monta `context` uma vez e o
-        // passa a TODAS as regras aplicáveis (`engine.ts`), e o
-        // `publicaNoContexto` abaixo troca o negócio do evento pelo clone.
-        // Sem esta guarda, uma 2ª regra `lead.tag_added` para outro funil
-        // casando no mesmo evento transferia o clone de novo (A→B→C, ou
-        // A→B→A com regras opostas). Negócio no contexto que não é o do
-        // evento = outra regra já o transferiu: vale a primeira, como no ramo
-        // por contato.
-        if (lead.id !== ctx.event.entity_id) {
+    if (lead) {
+      if (lead.pipeline_id !== pipelineId) {
+        // ── O GATILHO lead.tag_added COM O NEGÓCIO EM OUTRO FUNIL: A REGRA TRANSFERE (#2155) ──
+        //
+        // O caminho que TRANSFERE (`transfereParaOFunil`, o mesmo da rota
+        // `POST /api/v1/leads/[id]/clone`) era alcançável SÓ pelo ramo por
+        // contato — e o ramo por contato roda quando o evento NÃO traz o
+        // negócio. Com o negócio no evento, o galho acima devolvia
+        // `cross_pipeline_move_not_allowed` e a regra "Recepção etiqueta,
+        // regra transfere" ficava sem saída: `run_count = 0` e o card parado
+        // no funil de entrada.
+        //
+        // O escopo é ESTREITO de propósito: só `lead.tag_added`. É o gatilho
+        // da que a Recepção usa para etiquetar, é o que a issue mediu, e é a
+        // fatia que não pede migration. Os demais gatilhos que trazem o
+        // negócio (`lead.created`, `lead.stage_changed`, …) seguem recusando —
+        // a proposta principal da #2155 (destino por intenção em
+        // `ai_router_members`) continua fora, porque exige migration.
+        // FORK MIA: quem marcou "abrir um card novo aqui" escolheu o card a
+        // mais, e ele vence a transferência (ramo do fork, mais abaixo).
+        if (ctx.event?.event_type === "lead.tag_added" && !abreNoOutroFunil) {
+          // UMA TRANSFERÊNCIA POR EVENTO: o motor monta `context` uma vez e o
+          // passa a TODAS as regras aplicáveis (`engine.ts`), e o
+          // `publicaNoContexto` abaixo troca o negócio do evento pelo clone.
+          // Sem esta guarda, uma 2ª regra `lead.tag_added` para outro funil
+          // casando no mesmo evento transferia o clone de novo (A→B→C, ou
+          // A→B→A com regras opostas). Negócio no contexto que não é o do
+          // evento = outra regra já o transferiu: vale a primeira, como no ramo
+          // por contato.
+          if (lead.id !== ctx.event.entity_id) {
+            return {
+              type: "create_or_move_lead",
+              status: "failed",
+              error: "lead_already_transferred_in_event",
+            };
+          }
+          const transferencia = await transfereParaOFunil(ctx.admin, ctx.organizationId, handlerCtx, lead, pipelineId, stageId, RAZAO_DA_AUTOMACAO);
+          if (!transferencia.ok) {
+            return { type: "create_or_move_lead", status: "failed", error: transferencia.error };
+          }
+          // O CLONE é o negócio das próximas ações da regra — não o que fechou.
+          publicaNoContexto(ctx, transferencia.clone, contactId);
           return {
             type: "create_or_move_lead",
-            status: "failed",
-            error: "lead_already_transferred_in_event",
+            status: "success",
+            detail: { transferido: String(transferencia.clone.id ?? ""), origem: lead.id },
           };
         }
-        const transferencia = await transfereParaOFunil(ctx.admin, ctx.organizationId, handlerCtx, lead, pipelineId, stageId, RAZAO_DA_AUTOMACAO);
-        if (!transferencia.ok) {
-          return { type: "create_or_move_lead", status: "failed", error: transferencia.error };
+
+        // ── O GATILHO lead.won COM O NEGÓCIO EM OUTRO FUNIL: A CONTINUAÇÃO (#2769) ──
+        //
+        // A agência fecha no funil de VENDAS e acompanha no funil de
+        // PÓS-VENDA. O que a issue mediu: marcar ganho ANTES da troca escondia
+        // a venda (a origem encerrava como PERDIDA com
+        // `moved_to_another_pipeline`), e trocar antes de marcar ganho tirava a
+        // origem dos relatórios de vendas e comissão. Os dois cantos da
+        // bifurcação perdiam dado — e a saída manual ("levar o card para
+        // Experiência") dependia de alguém lembrar.
+        //
+        // Aqui NADA é transferido: o negócio que ganhou fica GANHO, na mesma
+        // etapa, intocado, e nasce um card NOVO no funil de destino com o
+        // conteúdo daquele (o MESMO `montaPayloadDoClone` do `/clone`, então
+        // título, descrição, contato, valor, dono, tags e campos personalizados
+        // vêm juntos — nunca um card em branco). O vínculo dos dois cards é
+        // `source_metadata.clonado_de`, que `montaPayloadDoClone` grava. O
+        // ponteiro fica gravado no card novo, mas nenhuma tela o mostra ainda
+        // (#2769, item 2) — e a origem não recebe ponteiro de volta.
+        //
+        // `retomado_de_lead_id` é anulado de propósito: `montaPayloadDoClone`
+        // aponta para TODA origem encerrada, mas este card não é uma nova
+        // TENTATIVA do mesmo negócio — é a continuação de um que JÁ ganhou, e
+        // contar isso encheria "tentativas até ganhar" com o pós-venda.
+        //
+        // O escopo é ESTREITO de propósito: só `lead.won`. Os demais gatilhos
+        // que trazem o negócio (`lead.lost`, `lead.stage_changed`, …) seguem
+        // em `cross_pipeline_move_not_allowed` logo abaixo, e
+        // `tests/invariants/automation-actions-crud.test.ts` continua
+        // congelado batendo nesse erro.
+        if (ctx.event?.event_type === "lead.won") {
+          // UMA CONTINUAÇÃO POR EVENTO — a mesma guarda do `lead.tag_added`:
+          // o motor monta `context` uma vez e o passa a TODAS as regras do
+          // evento, e o `publicaNoContexto` abaixo troca o negócio do evento
+          // pelo card novo. Sem isto, uma 2ª regra `lead.won` para outro funil
+          // clonava a CLONAGEM. Só quando o motor declarou a entidade; sem
+          // `entity_id` não há o que comparar.
+          if (typeof ctx.event.entity_id === "string" && ctx.event.entity_id !== lead.id) {
+            return {
+              type: "create_or_move_lead",
+              status: "failed",
+              error: "lead_already_transferred_in_event",
+            };
+          }
+
+          const { data: etapas, error: etapasErr } = await ctx.admin
+            .from("crm_stages")
+            .select("id, pipeline_id, position, is_won, is_lost, is_archived")
+            .eq("organization_id", ctx.organizationId)
+            .eq("pipeline_id", pipelineId)
+            .eq("is_archived", false)
+            .order("position", { ascending: true });
+          if (etapasErr) {
+            return { type: "create_or_move_lead", status: "failed", error: etapasErr.message };
+          }
+          // A MESMA escolha de etapa da transferência e do `/clone`: com
+          // `stage_id` informado ele precisa ser etapa DESTE funil, e etapa de
+          // fechamento é recusada — nascer pós-venda dentro de uma etapa de
+          // ganho fecharia o card no instante em que ele nasce.
+          //
+          // `destino.texto`, não `destino.code`: a frase já vem em português
+          // ("A etapa de destino é de fechamento…") e é ela que a aba Atividade
+          // imprime. Mandar o código aqui seria exatamente o defeito da #1090 —
+          // o operador lendo `stage_destino_terminal` no lugar de uma frase —
+          // e a guarda de `tests/unit/motivo-de-parada-tem-frase.test.ts` cobra
+          // todo código literal que sai destas ações. `texto` cai na fronteira
+          // que a própria guarda declara: mensagem de gente, não código.
+          const destino = escolheEtapaDeDestino((etapas ?? []) as EtapaDoFunil[], stageId);
+          if (!destino.ok) {
+            return { type: "create_or_move_lead", status: "failed", error: destino.texto };
+          }
+
+          // NÃO DUPLICAR (#2769, item 3): a chave é o NEGÓCIO de origem, não o
+          // contato. Pelo contato, a 2ª venda do mesmo cliente achava o
+          // pós-venda da 1ª, MOVIA aquele card de volta para a etapa inicial e
+          // ficava sem card próprio; e um negócio sem contato reentregue
+          // nascia duas vezes. Se a continuação DESTE negócio já existe neste
+          // funil, nada se escreve.
+          //
+          // A falha da leitura é recusa, não "não achei": tratá-la como
+          // ausência criaria o card de novo — a duplicata que esta guarda
+          // existe para impedir.
+          //
+          // Card de pós-venda criado À MÃO antes desta regra não tem
+          // `clonado_de` e não é reconhecido como continuação.
+          const { data: continuacao, error: continuacaoErr } = await ctx.admin
+            .from("crm_leads")
+            .select("*")
+            .eq("organization_id", ctx.organizationId)
+            .eq("pipeline_id", pipelineId)
+            .eq("source_metadata->clonado_de->>lead_id", lead.id)
+            .limit(1)
+            .maybeSingle();
+          if (continuacaoErr) {
+            return { type: "create_or_move_lead", status: "failed", error: continuacaoErr.message };
+          }
+          if (continuacao) {
+            // As ações seguintes da regra enxergam a MESMA continuação que
+            // enxergaram da primeira vez.
+            publicaNoContexto(ctx, continuacao as Record<string, unknown>, contactId);
+            return {
+              type: "create_or_move_lead",
+              status: "success",
+              detail: { ja_existia: String((continuacao as { id?: unknown }).id ?? ""), origem: lead.id },
+            };
+          }
+
+          const criado = await createLeadHandler(ctx.admin, handlerCtx, {
+            ...montaPayloadDoClone(lead, destino.etapa),
+            retomado_de_lead_id: null,
+          });
+          // O card novo é o negócio que as ações seguintes da regra enxergam.
+          publicaNoContexto(ctx, criado, contactId);
+          return {
+            type: "create_or_move_lead",
+            status: "success",
+            detail: { criado: String(criado.id ?? ""), origem: lead.id },
+          };
         }
-        // O CLONE é o negócio das próximas ações da regra — não o que fechou.
-        publicaNoContexto(ctx, transferencia.clone, contactId);
+        // ── FORK MIA: A PASSAGEM DE BASTÃO (`quando_em_outro_funil: "abrir_novo_card"`) ──
+        //
+        // Card NOVO no funil de destino, com o negócio de origem intacto no
+        // funil de origem. É cópia, não mudança — quem qualificou continua com
+        // o histórico dele. Desde a .81 o card nasce pela função do upstream
+        // (`abreCardAdicionalNoFunil`, #2799): etapa de destino ativa e não
+        // terminal, campos obrigatórios da etapa e contato bloqueado ou
+        // anonimizado são os mesmos do roteador de intenção. O `lead.won` acima
+        // (#2787) vem antes de propósito: a continuação do ganho tem a guarda
+        // de não duplicar e copia o conteúdo inteiro.
+        if (abreNoOutroFunil) {
+          const aberto = await abreCardAdicionalNoFunil(
+            ctx.admin,
+            ctx.organizationId,
+            handlerCtx,
+            lead,
+            pipelineId,
+            stageId,
+          );
+          if (!aberto.ok) {
+            return { type: "create_or_move_lead", status: "failed", error: aberto.error };
+          }
+          // As ações seguintes da regra (etiquetar, chamar webhook) têm de falar
+          // do CARD NOVO, não do negócio do funil de origem.
+          publicaNoContexto(ctx, aberto.card, contactId);
+          return {
+            type: "create_or_move_lead",
+            status: "success",
+            detail: { created: String(aberto.card.id ?? ""), de_outro_funil: lead.id },
+          };
+        }
+        return { type: "create_or_move_lead", status: "failed", error: "cross_pipeline_move_not_allowed" };
+      }
+
+      // ── lead.won NO MESMO FUNIL: A AÇÃO NÃO MOVE (#1528 + #2769) ────────────
+      //
+      // Com a porta de `lead.won` aberta para `create_or_move_lead`, este ramo
+      // (mesmo funil) volta a ser alcançável — e é EXATAMENTE o que a #1528
+      // vetou: mover o negócio recém-ganho para uma etapa aberta o REABRE,
+      // `lead.stage_changed` sai do reabrir, uma regra de etapa o leva de volta
+      // para a etapa de ganho, e as duas se realimentam sem fim.
+      //
+      // Então `lead.won` só tem uma moda aqui: CRIAR a continuação noutro
+      // funil (o ramo acima). O mesmo funil não é continuação — é reescrever o
+      // ganho —, e a recusa diz isso com uma frase própria na aba Atividade.
+      if (ctx.event?.event_type === "lead.won") {
         return {
           type: "create_or_move_lead",
-          status: "success",
-          detail: { transferido: String(transferencia.clone.id ?? ""), origem: lead.id },
+          status: "failed",
+          error: "continuacao_exige_outro_funil",
         };
       }
-      return { type: "create_or_move_lead", status: "failed", error: "cross_pipeline_move_not_allowed" };
-    }
-    // A passagem de bastão: card NOVO no funil de destino, com o negócio de
-    // origem intacto no funil de origem. É cópia, não mudança — quem qualificou
-    // continua com o histórico dele.
-    if (leadEmOutroFunil && contactId) {
-      const created = await createLeadHandler(ctx.admin, handlerCtx, {
-        pipeline_id: pipelineId,
-        stage_id: stageId,
-        // Mesmo resolvedor do ramo do contato, abaixo (`nomeDoContato`): o
-        // título remontado à mão gravava `Contato 543134@lid` no card.
-        title: nomeDoContato(contact) ?? lead?.title ?? contact?.phone_number ?? "Lead da automação",
-        contact_id: contactId,
-        source: "automation",
-      } as Parameters<typeof createLeadHandler>[2]);
-      // Pela mesma razão do move acima: as ações seguintes da regra (etiquetar,
-      // chamar webhook) têm de falar do CARD NOVO. Sem esta linha elas seguiriam
-      // mexendo no negócio do funil de origem — o do SDR —, que é exatamente o
-      // que a passagem de bastão existe para não fazer.
-      publicaNoContexto(ctx, created, contactId);
-      return {
-        type: "create_or_move_lead",
-        status: "success",
-        detail: { created: String(created.id), de_outro_funil: lead!.id },
-      };
+      const movido = await moveLeadHandler(ctx.admin, handlerCtx, lead.id, { to_stage_id: stageId });
+      publicaNoContexto(ctx, movido, contactId);
+      return { type: "create_or_move_lead", status: "success", detail: { moved: lead.id } };
     }
     if (contact) {
       // Gatilho de CONTATO não traz lead no contexto (`lib/automation/engine.ts`),

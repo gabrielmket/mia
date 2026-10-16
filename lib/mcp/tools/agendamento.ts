@@ -163,7 +163,7 @@ const horariosLivresShape = {
     .optional()
     .describe(
       `quantos dias olhar a partir de agora (padrão ${DIAS_PADRAO}). Use ESTE campo se você não sabe a data de hoje. ` +
-        `Se 'dia' também for informado, 'dia' tem precedência.`,
+        `Se 'dia' também for informado, o período começa em 'dia' e cobre ESTE número de dias.`,
     ),
   /**
    * A data civil é deliberadamente diferente de um ISO com offset. O modelo sabe
@@ -176,8 +176,8 @@ const horariosLivresShape = {
     .regex(/^\d{4}-\d{2}-\d{2}$/, "dia deve estar em YYYY-MM-DD")
     .optional()
     .describe(
-      "dia civil pedido pelo cliente, em YYYY-MM-DD. Use para uma data específica; o servidor aplica o fuso da agenda " +
-        "(tem precedência sobre dias_a_frente).",
+      "dia civil pedido pelo cliente, em YYYY-MM-DD. Use para uma data específica; o servidor aplica o fuso da agenda. " +
+        "Sozinho, recorta a resposta nesse dia; junto com 'dias_a_frente', é o PRIMEIRO dia do período.",
     ),
   owner_user_id: z.string().uuid().optional(),
   limite: z
@@ -304,6 +304,7 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
     "existem e `ha_mais` avisa que sobraram — lista cortada NÃO é agenda cheia. " +
     "QUANDO: informe `dias_a_frente` (a partir de agora — ex.: 7 para a próxima semana). " +
     "Para uma data que o cliente nomeou, use `dia` em YYYY-MM-DD; o servidor aplica o fuso da agenda. " +
+    "Se mandar os DOIS, o período começa em `dia` e anda `dias_a_frente` dias — `dia` recorta a um dia só quando vier sozinho. " +
     "NUNCA monte um intervalo UTC por conta própria. " +
     "Lista vazia NÃO é erro e NÃO significa que a agenda está cheia: leia `publicou_horarios`. " +
     "Se ele for false, o atendente ainda não publicou os horários dele — não invente horários e " +
@@ -316,19 +317,21 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
     const agora = new Date();
-    // Dia E período juntos: VALE O DIA. Recusar com `periodo_ambiguo` era o
-    // desenho anterior, e travou o agendamento em produção (Time Company,
-    // 2026-09-15): o cliente disse "amanhã à tarde", o modelo mandou
-    // `dia: "2026-09-16"` junto de `dias_a_frente`, recebeu a recusa e repetiu o
-    // MESMO par 14 vezes em três turnos — com gpt-5.6-luna e depois com
-    // gpt-5.6-terra — até desistir dizendo que "a equipe confirma os horários",
-    // com quatro horários livres naquela tarde. O dia é o pedido mais específico;
-    // o período é o campo que o modelo preenche por hábito.
+    // Toleramos os dois campos juntos sem recusa silenciosa (#1436). Com os dois,
+    // o período COMEÇA em `dia` e anda `dias_a_frente` dias (#2889).
     //
-    // O upstream chegou à MESMA regra por conta própria (#1436: "toleramos e
-    // priorizamos o mais específico (`dia`)"), e as `describe` de `dia` e
-    // `dias_a_frente` que dizem ao modelo que o dia tem precedência são dele. O
-    // que fica só do nosso lado é o tratamento do dia inválido logo abaixo.
+    // O caso da issue: modelos tipo GPT (OpenRouter) mandaram `dia = HOJE` junto
+    // com `dias_a_frente` (auditoria `mcp.tool_called`), e a precedência do dia
+    // colapsava a janela em HOJE só — resposta VAZIA, e o agente repetia a
+    // chamada até desistir. Ignorar o `dia` também não serve: "tem vaga dia 05?"
+    // com `dias_a_frente` pequeno não alcançaria o dia 05. `dia` SOZINHO segue
+    // recortando naquele dia civil — o caminho de "o cliente pediu dia 13".
+    //
+    // FORK MIA: o fork tinha chegado ao mesmo problema por outro caminho (dia e
+    // período juntos travaram o agendamento em produção, 2026-09-15: o modelo
+    // repetiu o MESMO par 14 vezes em três turnos). Desde a .81 vale a regra do
+    // upstream (#2889) acima; o que fica só do nosso lado é o tratamento do dia
+    // inválido logo abaixo.
     //
     // Dia que não é data de verdade ("0000-00-00", "0001-01-01", ambos medidos no
     // mesmo turno) passa pela regex mas não é pedido de ninguém: é descartado e a
@@ -344,7 +347,6 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
       };
     }
     const dia = diaInvalido ? undefined : input.dia;
-    const diasAFrente = dia === undefined ? input.dias_a_frente : undefined;
 
     // A faixa larga contém o dia civil em QUALQUER fuso. Depois de a coleta
     // revelar o fuso da regra, filtramos pelo mesmo dia local. Assim a IA não
@@ -356,16 +358,27 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
     // enquanto esta cópia seguia inline — duas fontes para a mesma janela, que
     // divergem no primeiro ajuste.
     //
-    // ⚠️ A janela sai de `dia` (o que sobrou depois de `diaCivilValido`), NUNCA
-    // de `input.dia`: um "0000-00-00" que chegasse até aqui viraria uma faixa
-    // UTC sem sentido e a consulta voltaria vazia, como se a agenda estivesse
-    // cheia — que é exatamente o travamento que o descarte acima evita.
+    // ⚠️ FORK MIA: a janela sai de `dia` (o que sobrou depois de
+    // `diaCivilValido`), NUNCA de `input.dia`: um "0000-00-00" que chegasse até
+    // aqui viraria uma faixa UTC sem sentido e a consulta voltaria vazia, como
+    // se a agenda estivesse cheia.
+    const DIA_MS = 86_400_000;
+    const comPeriodo = input.dias_a_frente !== undefined;
     const janela = dia === undefined ? null : faixaAmplaDoDia(dia);
-    const de = janela === null ? agora : janela.de;
-    const ate =
-      janela === null
-        ? new Date(de.getTime() + (diasAFrente ?? DIAS_PADRAO) * 86_400_000)
-        : janela.ate;
+    let de = agora;
+    let ate = new Date(agora.getTime() + (input.dias_a_frente ?? DIAS_PADRAO) * DIA_MS);
+    if (janela !== null && !comPeriodo) {
+      de = janela.de;
+      ate = janela.ate;
+    } else if (janela !== null && input.dias_a_frente !== undefined) {
+      // Começa no dia pedido (nunca antes de agora) e cobre `dias_a_frente` dias
+      // CIVIS inteiros a partir dele: o fim da faixa larga do dia mais N−1 dias.
+      // O `max` com `de + N` só pesa quando `dia` é hoje e `agora` já passou dele.
+      de = new Date(Math.max(janela.de.getTime(), agora.getTime()));
+      ate = new Date(
+        Math.max(de.getTime() + input.dias_a_frente * DIA_MS, janela.ate.getTime() + (input.dias_a_frente - 1) * DIA_MS),
+      );
+    }
 
     const consulta = await horariosLivresDaOrg(ctx.supabase, ctx.organizationId, {
       eventTypeSlug: input.event_type_slug,
@@ -391,22 +404,27 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
     // nele que os horários foram calculados, e é o que esta resposta já publica.
     // Rotular com outro faria `quando` discordar de `fuso_da_regra` na mesma
     // resposta.
+    // `dia` sozinho recorta naquele dia local; com `dias_a_frente`, recorta só o
+    // que vem ANTES dele (a faixa larga alcança a véspera em fusos a leste).
+    // YYYY-MM-DD compara como string na ordem do calendário.
+    const diaPedido = dia;
     const slotsDoPeriodo =
-      dia === undefined
+      diaPedido === undefined
         ? consulta.slots
-        : consulta.slots.filter((s) => diaLocalISO(s.inicio, consulta.fusoDaRegra) === dia);
+        : consulta.slots.filter((s) => {
+            const local = diaLocalISO(s.inicio, consulta.fusoDaRegra);
+            return comPeriodo ? local >= diaPedido : local === diaPedido;
+          });
 
     // O corpo da resposta é `payloadDeHorarios` — a MESMA forma que a ferramenta
-    // que consulta e marca numa chamada só publica. Montá-lo inline aqui foi o
-    // que fez `agenda_externa_nunca_lida` ficar de fora desta tool sem ninguém
-    // notar: o campo mais grave dos dois chegava à rota REST e não ao modelo.
+    // que consulta e marca numa chamada só publica.
     return {
       ...payloadDeHorarios(consulta, slotsDoPeriodo, input.limite ?? HORARIOS_PADRAO),
-      // Avisa que a data mandada foi descartada e a lista é do período: sem isto
-      // o modelo apresentaria os horários como se fossem do dia que ele pediu.
-      // Fica FORA de `payloadDeHorarios` porque é notícia só desta ferramenta —
-      // a outra não aceita dia e período na mesma chamada.
-      ...(diaInvalido ? { dia_ignorado: input.dia, periodo_consultado_em_dias: diasAFrente } : {}),
+      // FORK MIA: avisa que a data mandada foi descartada e a lista é do
+      // período: sem isto o modelo apresentaria os horários como se fossem do
+      // dia que ele pediu. Fica FORA de `payloadDeHorarios` porque é notícia só
+      // desta ferramenta.
+      ...(diaInvalido ? { dia_ignorado: input.dia, periodo_consultado_em_dias: input.dias_a_frente } : {}),
     };
   },
 };

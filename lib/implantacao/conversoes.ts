@@ -247,7 +247,9 @@ export async function verConversoes(c: Implantacao, demonstracao: boolean): Prom
           id: e.id,
           etapa: e.nome,
           meta: daMeta ? regraDaMetaEmTexto(daMeta) : null,
-          recomendado_para_a_meta: eventoRecomendadoParaMeta(e.nome),
+          // A recomendação leva o canal em conta desde a v1.81 (#2890): sem conexão
+          // direta, a etapa de qualificação fica sem sugestão.
+          recomendado_para_a_meta: eventoRecomendadoParaMeta(e.nome, meta.conectada),
           google: doGoogle
             ? {
                 ligada: doGoogle.enabled,
@@ -388,8 +390,11 @@ export async function garantirConversoesDaMeta(c: Implantacao, pedido: PedidoDeR
   // está, e regra nova nasce desligada.
   const pedidos = new Map<string, EventoDaMeta>();
   if (pedido.usar_recomendado) {
+    // O mesmo critério da tela (#2890): sem conexão direta da Meta, o canal da
+    // conversa não repassa `QualifiedLead`, e a etapa de qualificação fica sem sugestão.
+    const conexaoDireta = (await lerEstadoDaConexao(c.admin, c.orgId, "meta_ads")).conectada;
     for (const etapa of funil.etapas) {
-      const sugerido = eventoRecomendadoParaMeta(etapa.nome);
+      const sugerido = eventoRecomendadoParaMeta(etapa.nome, conexaoDireta);
       if (sugerido) pedidos.set(etapa.id, sugerido);
     }
   }

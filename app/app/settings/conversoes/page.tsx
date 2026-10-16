@@ -359,7 +359,12 @@ export default async function ConversoesPage({
             />
           )}
           {(estado.conectada || vendaPeloCanal) && !etapas.error && regrasMeta && (
-            <RegrasDeConversaoMeta etapas={etapasAbertas} regras={regrasMeta} idioma={idioma} />
+            <RegrasDeConversaoMeta
+              etapas={etapasAbertas}
+              regras={regrasMeta}
+              idioma={idioma}
+              conexaoDireta={estado.conectada}
+            />
           )}
           {/* FORK MIA: a volta dos leads de formulário da Meta, que usa as
               regras logo acima. Falha de leitura esconde o bloco, não a tela. */}

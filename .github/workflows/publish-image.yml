@@ -323,6 +323,8 @@ jobs:
       contents: read
       packages: write
     steps:
+      - uses: actions/checkout@v7
+
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
@@ -359,12 +361,15 @@ jobs:
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -euo pipefail
+          source hostgator-setup-kit/_manifestos.sh
           while IFS= read -r tag; do
             [ -n "$tag" ] || continue
             docker buildx imagetools create \
               --tag "$tag" \
               "${tag}-amd64" \
               "${tag}-arm64"
+            manifesto_tem_plataforma "$tag" linux/amd64
+            manifesto_tem_plataforma "$tag" linux/arm64
           done <<< "$TAGS"
 
   # A imagem do app CONSTRÓI e MORRE ao subir? Este job existe porque isso
@@ -548,6 +553,8 @@ jobs:
       # fora do repo, muda num clique e não passa por PR.
       packages: write
     steps:
+      - uses: actions/checkout@v7
+
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
@@ -560,6 +567,7 @@ jobs:
           VERSAO: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          source hostgator-setup-kit/_manifestos.sh
           # `imagetools create` REAPONTA o índice que já foi publicado — não
           # reconstrói. Reconstruir o mesmo commit dá um digest DIFERENTE (foi o
           # que fez `stable` e `1.3.0` divergirem com o mesmo `revision`), e aí o
@@ -570,6 +578,13 @@ jobs:
           # Com os do upstream o laço reapontava imagens que este dono nunca
           # publicou: o job caía em toda tag e `mia-*:stable` nunca nasceu (404
           # no GHCR em 28/09/2026), que é o default de docker-compose.prod.yml.
+          # Confere o conjunto INTEIRO antes de mover QUALQUER ponteiro. Conferir
+          # dentro do laço de mover deixava uma falha na 3ª imagem com app e
+          # worker já em `stable` — o canal dividido da #488.
+          for img in mia-crm mia-worker mia-scheduler mia-voice-agent; do
+            manifesto_tem_plataforma "${REGISTRY}/${dono}/${img}:${numero}" linux/amd64
+            manifesto_tem_plataforma "${REGISTRY}/${dono}/${img}:${numero}" linux/arm64
+          done
           for img in mia-crm mia-worker mia-scheduler mia-voice-agent; do
             echo "::group::${img}"
             docker buildx imagetools create \
@@ -698,6 +713,9 @@ jobs:
             type=gha,scope=deskcommcrm-voice-agent-${{ matrix.arch }}
             type=gha,scope=deskcommcrm-voice-agent
           cache-to: ${{ github.event_name == 'pull_request' && format('type=gha,mode=max,scope=deskcommcrm-voice-agent-{0}', matrix.arch) || '' }}
+
+      - name: O agente de voz abre AudioSocket no runner nativo?
+        run: bash scripts/sonda-voice-agent-na-imagem.sh deskcomm-voice-agent:pr
 
       - name: O laço do event_log CARREGA dentro da imagem do worker?
         run: |

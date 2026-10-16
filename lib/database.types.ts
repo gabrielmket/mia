@@ -3750,6 +3750,7 @@ export type Database = {
           position: number
           reminder_body: string | null
           reminder_bodies: Json
+          reminder_channel_session_id: string | null
           reminder_enabled: boolean
           reminder_minutes_before: number
           reminder_extra_offsets_minutes: number[]
@@ -3779,6 +3780,7 @@ export type Database = {
           position?: number
           reminder_body?: string | null
           reminder_bodies?: Json
+          reminder_channel_session_id?: string | null
           reminder_enabled?: boolean
           reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
@@ -3808,6 +3810,7 @@ export type Database = {
           position?: number
           reminder_body?: string | null
           reminder_bodies?: Json
+          reminder_channel_session_id?: string | null
           reminder_enabled?: boolean
           reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
@@ -4874,6 +4877,7 @@ export type Database = {
           channel: string
           channel_session_id: string
           contact_id: string
+          contato_trava_humano: boolean
           created_at: string
           current_demanda_id: string | null
           group_chat_id: string | null
@@ -4918,6 +4922,7 @@ export type Database = {
           channel?: string
           channel_session_id: string
           contact_id: string
+          contato_trava_humano?: boolean
           created_at?: string
           current_demanda_id?: string | null
           group_chat_id?: string | null
@@ -4962,6 +4967,7 @@ export type Database = {
           channel?: string
           channel_session_id?: string
           contact_id?: string
+          contato_trava_humano?: boolean
           created_at?: string
           current_demanda_id?: string | null
           group_chat_id?: string | null
@@ -7398,6 +7404,7 @@ export type Database = {
           due_at: string
           emergency: boolean
           error_message: string | null
+          export_claimed_at: string | null
           external_customer_id: string | null
           id: string
           organization_id: string
@@ -7419,6 +7426,7 @@ export type Database = {
           due_at: string
           emergency?: boolean
           error_message?: string | null
+          export_claimed_at?: string | null
           external_customer_id?: string | null
           id?: string
           organization_id: string
@@ -7440,6 +7448,7 @@ export type Database = {
           due_at?: string
           emergency?: boolean
           error_message?: string | null
+          export_claimed_at?: string | null
           external_customer_id?: string | null
           id?: string
           organization_id?: string
@@ -10605,6 +10614,7 @@ export type Database = {
         Returns: Json
       }
 
+      fn_resolver_avisos_de_lembrete_expirados: { Args: Record<PropertyKey, never>; Returns: number }
       fn_support_context: { Args: Record<PropertyKey, never>; Returns: Json }
       fn_support_write_allowed: { Args: { p_org: string }; Returns: boolean }
       fn_support_storage_write_allowed: { Args: { p_name: string }; Returns: boolean }
@@ -10638,6 +10648,16 @@ export type Database = {
         Returns: {
           em_teste: number
           falhas: number
+          tool_name: string
+          total: number
+          ultima_vez: string
+        }[]
+      }
+      fn_agent_tool_usage_por_termo: {
+        Args: { p_agent_id: string; p_organization_id: string; p_since: string }
+        Returns: {
+          falhas: number
+          termo: string
           tool_name: string
           total: number
           ultima_vez: string
@@ -10688,12 +10708,20 @@ export type Database = {
           source_name: string
         }[]
       }
+      fn_can_view_appointment: {
+        Args: { p_org: string; p_owner_user_id: string }
+        Returns: boolean
+      }
       fn_can_view_conversation: {
         Args: { p_assigned_to_user_id: string; p_org: string }
         Returns: boolean
       }
       fn_can_view_lead: {
         Args: { p_org: string; p_owner_user_id: string }
+        Returns: boolean
+      }
+      fn_can_view_task: {
+        Args: { p_assigned_to: string; p_created_by: string; p_org: string }
         Returns: boolean
       }
       fn_claim_due_followup_enrollments: {

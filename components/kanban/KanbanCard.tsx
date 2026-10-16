@@ -14,6 +14,8 @@ import { ScoreSlot } from "./ScoreSlot";
 import { OwnerBadge } from "./OwnerBadge";
 import { ContatoNoCard } from "./ContatoNoCard";
 // FORK MIA — as linhas novas do cartão fechado (lib/cartoes/, components/cartoes/).
+// O selo de tarefas é o do upstream (`TarefasNoCard`, v1.81): o nosso
+// `TarefasAtrasadas` saiu na .81 para o cartão não contar a mesma coisa duas vezes.
 import {
   AvisoDeObrigacao,
   LinhaDeOrigem,
@@ -21,10 +23,10 @@ import {
   LinhaDoFechamento,
   ObjecaoNaFaixa,
   SeloRecorrente,
-  TarefasAtrasadas,
 } from "@/components/cartoes/LinhasDoCartao";
 import { prefixoDoCartao } from "@/lib/cartoes/identidade";
 import { bandLabel } from "@/lib/kanban/score-band";
+import { TarefasNoCard } from "./TarefasNoCard";
 
 /** Os dois gestos de seleção que o card sabe relatar. */
 export type GestoDeSelecao = "alterna" | "intervalo";
@@ -356,20 +358,19 @@ export function KanbanCard({
               negócio não tem nada disso, como a conversa acima. */}
           <ContatoNoCard lead={lead} />
 
-          {/* ④ dono · ⑤ tempo no estágio */}
+          {/* ④ dono (+ selo de tarefas) · ⑤ tempo no estágio */}
           <div className="mt-1 flex h-6 items-center justify-between gap-2">
-            <span className="flex min-w-0 items-center gap-1">
+            <div className="flex min-w-0 items-center gap-2">
               <OwnerBadge
                 ownerKind={card.owner.kind}
                 ownerName={card.owner.name}
                 agentVersion={card.owner.agentVersion}
               />
-              {/* FORK MIA — a tarefa atrasada do negócio, junto de quem é o dono. */}
-              <TarefasAtrasadas n={sinais?.tarefasAtrasadas} />
+              <TarefasNoCard tarefas={lead.tarefas} />
               {/* FORK MIA — o documento ou a atividade mais urgente do negócio, da
                   empresa e do contato. Um aviso só; nada com tudo em dia. */}
               <AvisoDeObrigacao aviso={sinais?.obrigacao} />
-            </span>
+            </div>
             <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-text-muted">
               {state.showStageAge && age
                 ? `${age} ${t("em")} ${card.stageName}`

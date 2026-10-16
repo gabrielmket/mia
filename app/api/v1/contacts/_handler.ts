@@ -35,14 +35,14 @@ import { padraoRegexDeBusca } from "@/lib/contacts/busca-regex";
 type SB = SupabaseClient;
 
 // FORK MIA. União das duas linhagens: empresa_id/cargo/setor (nosso fork, migrations
-// 0255/0262/0263) e first_service_at e is_personal (upstream, "o contato vira
+// 0255/0262/0263) e first_service_at, is_personal e ai_opt_out (upstream, "o contato vira
 // cliente quando tem hora marcada"; contato pessoal, 0563). Coluna que sai daqui
 // volta `undefined` no objeto, e o PATCH seguinte da tela regrava o campo vazio —
 // apagando dado do cliente sem erro nenhum, que é o modo de falha caro deste
 // SELECT. (O comentário mora acima da constante: a cerca do upstream
 // `contato-pessoal-selects` lê a string logo depois do sinal de igual.)
 const SELECT_COLS =
-  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, is_personal, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, custom_fields, empresa_id, cargo, setor, papel_na_empresa, principal_na_empresa, created_at, updated_at, last_activity_at, first_service_at";
+  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, is_personal, ai_opt_out, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, custom_fields, empresa_id, cargo, setor, papel_na_empresa, principal_na_empresa, created_at, updated_at, last_activity_at, first_service_at";
 
 interface CursorPayload {
   sort: string | null;
@@ -781,6 +781,42 @@ export async function patchContactHandler(
           if (error) console.error("[contacts.patch] emit_event failed", error.message);
         });
     }
+  }
+
+  /**
+   * #2812 (segunda metade) — O CONTATO GANHOU TELEFONE.
+   *
+   * O gatilho `contact.phone_added` é a transição que faltava no vocabulário de
+   * automação: a ficha que estava SEM número passa a ter um. Emitido AQUI, e só
+   * aqui, por dois motivos que são a metade do trabalho:
+   *
+   *  - DEPOIS do UPDATE acima — a regra que este evento dispara lê a ficha para
+   *    decidir, e a guarda `checarGuardasDeContato` (lib/automation/guarda-do-contato.ts)
+   *    mata com `no_phone` (sem nova tentativa) quem chega sem número. Emitir
+   *    antes da gravação entregaria à regra um contato ainda vazio, e o defeito
+   *    é MUDO: a regra some sem erro, sem log e sem run.
+   *  - SÓ na TRANSIÇÃO (antes vazio/nulo, depois preenchido) — quem já tinha
+   *    número não "ganhou" nenhum, e tirar o número não é ganhá-lo. Um evento a
+   *    cada edição de ficha encheria a fila de automação com o que não aconteceu.
+   *
+   * A grafia do par é a MESMA de `contact.tag_added`, logo acima — e o `contact.phone_added`
+   * está irmão dele no mapa de gatilhos (lib/schemas/webhooks.ts).
+   */
+  const telefoneAntes = ((antes as { phone_number?: string | null }).phone_number ?? "").trim();
+  const telefoneDepois = ((contact as { phone_number?: string | null }).phone_number ?? "").trim();
+  if (!telefoneAntes && telefoneDepois) {
+    await createAdminClient()
+      .rpc("emit_event", {
+        p_event_type: "contact.phone_added",
+        p_entity_kind: "contact",
+        p_entity_id: contact.id,
+        p_payload: { phone_number: telefoneDepois },
+        p_metadata: { request_id: ctx.requestId, ...a.metadataActor },
+        p_organization_id: contact.organization_id,
+      })
+      .then(({ error }) => {
+        if (error) console.error("[contacts.patch] emit_event failed", error.message);
+      });
   }
 
   await audit({
