@@ -43,6 +43,8 @@ import { DICIONARIO_OBRIGACOES_MIA } from "./dicionario-obrigacoes-mia";
 import { DICIONARIO_DA_EQUIPE_MIA } from "./dicionario-mia-equipe";
 // FORK MIA: as frases novas dos relatórios e das metas, idem.
 import { DICIONARIO_RELATORIOS_MIA } from "./dicionario-relatorios-mia";
+// FORK MIA (item 8): os painéis prontos, a análise do funil e o link do dono, idem.
+import { DICIONARIO_DOS_PAINEIS_MIA } from "./dicionario-mia-paineis";
 
 /** `pt-BR` não aparece: é a chave. Só o que DIFERE precisa de linha. */
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
@@ -51,6 +53,7 @@ export const DICIONARIO: Traducoes = {
   // FORK MIA: primeiro, para que uma chave igual do upstream prevaleça.
   ...DICIONARIO_DA_AGENDA_MICROSOFT,
   ...DICIONARIO_DAS_CONVERSOES_DA_META,
+  ...DICIONARIO_DOS_PAINEIS_MIA,
   "Conectar a assinatura do ChatGPT": { es: "Conectar la suscripción de ChatGPT" },
   "Cada empresa conecta a própria conta do ChatGPT. Abra o link e entre com a conta que tem a assinatura. No fim, o navegador vai para http://127.0.0.1:1455/auth/callback, que pode não abrir — é esperado. Copie esse endereço inteiro, da barra do navegador, e cole aqui.": {
     es: "Cada empresa conecta su propia cuenta de ChatGPT. Abre el enlace e inicia sesión con la cuenta que tiene la suscripción. Al final, el navegador irá a http://127.0.0.1:1455/auth/callback, que quizá no se abra — es normal. Copia la dirección completa de la barra del navegador y pégala aquí.",

@@ -137,7 +137,7 @@ export const CONSTRUTORA: SementeDeDemonstracao = {
         { chave: "desistiu", nome: "Desistiu", passo: "lost", fim: "lost" },
       ],
       nichoDeFollowup: "imobiliario",
-      vocabulario: { lead: "Interessado", lead_plural: "Interessados", deal: "Negociação", deal_plural: "Negociações", won: "Contrato assinado", lost: "Desistiu" },
+      vocabulario: { lead: "Interessado", lead_plural: "Interessados", deal: "Negociação", deal_plural: "Negociações", won: "Contrato assinado", lost: "Desistiu", compromisso: "Visita", compromisso_plural: "Visitas" },
       campos: [
         escolha("empreendimento", "Empreendimento", [VISTA_PARQUE, BOSQUE]),
         escolha("tipologia", "Tipologia", ["Studio", "2 quartos", "2 quartos com suíte", "3 quartos", "Cobertura"]),
@@ -171,7 +171,7 @@ export const CONSTRUTORA: SementeDeDemonstracao = {
       descricao: "As últimas unidades prontas, para quem precisa mudar já. O quadro pronto de imobiliária do produto.",
       pacote: "imobiliaria",
       nichoDeFollowup: "imobiliario",
-      vocabulario: { lead: "Interessado", lead_plural: "Interessados", deal: "Negociação", deal_plural: "Negociações", won: "Contrato assinado", lost: "Desistiu" },
+      vocabulario: { lead: "Interessado", lead_plural: "Interessados", deal: "Negociação", deal_plural: "Negociações", won: "Contrato assinado", lost: "Desistiu", compromisso: "Visita", compromisso_plural: "Visitas" },
       campos: [
         escolha("tipologia", "Tipologia", ["2 quartos", "2 quartos garden", "3 quartos"]),
         { key: "andar", label: "Andar ou posição", type: "text" },

@@ -240,6 +240,12 @@ export const pipelineConfigPatchSchema = z.object({
       deal: z.string().min(1).max(40).optional(),
       won: z.string().min(1).max(40).optional(),
       lost: z.string().min(1).max(40).optional(),
+      // FORK MIA (item 8): como o funil chama o compromisso da agenda
+      // ("Avaliação" / "Avaliações", "Visita" / "Visitas"). O painel pronto de
+      // agenda (lib/paineis/calcular.ts) leva o plural no título. Sem as duas
+      // linhas a mescla da tela e do MCP descartaria a chave em silêncio.
+      compromisso: z.string().min(1).max(40).optional(),
+      compromisso_plural: z.string().min(1).max(40).optional(),
     })
     .optional(),
   fields: z.array(customFieldSchema).max(50).optional(),
