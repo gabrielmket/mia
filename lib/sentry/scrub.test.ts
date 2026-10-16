@@ -19,6 +19,9 @@ describe("scrubUrl", () => {
       `/api/v1/webhooks/in/${TOKEN}`,
       `/api/v1/webhooks/canal-qualquer/${TOKEN}`,
       `/team/accept-invite/${TOKEN}`,
+      // FORK MIA: o link curto do convite (9023) e o link dos painéis (9031).
+      `/c/${TOKEN}`,
+      `/painel/${TOKEN}`,
     ]) {
       const out = scrubUrl(`https://crm.exemplo.com${path}`);
       expect(out).not.toContain(TOKEN);

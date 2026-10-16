@@ -109,7 +109,7 @@ export const CLINICA_ODONTO: SementeDeDemonstracao = {
         { chave: "perdido", nome: "Não fechou", passo: "lost", fim: "lost" },
       ],
       nichoDeFollowup: "clinica",
-      vocabulario: { lead: "Paciente", lead_plural: "Pacientes", deal: "Tratamento", deal_plural: "Tratamentos", won: "Tratamento fechado", lost: "Não fechou" },
+      vocabulario: { lead: "Paciente", lead_plural: "Pacientes", deal: "Tratamento", deal_plural: "Tratamentos", won: "Tratamento fechado", lost: "Não fechou", compromisso: "Avaliação", compromisso_plural: "Avaliações" },
       campos: [
         escolha("procedimento", "Tratamento de interesse", [
           "Avaliação",

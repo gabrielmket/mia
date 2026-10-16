@@ -178,6 +178,13 @@ export interface FunilDaSemente {
     deal_plural: string;
     won: string;
     lost: string;
+    /**
+     * FORK MIA (item 8): como o segmento chama o compromisso da agenda
+     * ("Avaliação", "Visita"). O painel pronto de agenda leva o plural no título;
+     * é vocabulário do funil, não código por nicho.
+     */
+    compromisso?: string;
+    compromisso_plural?: string;
   };
   campos: CustomFieldDef[];
   motivosDePerda: MotivoDePerdaDaSemente[];

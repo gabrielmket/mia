@@ -81,6 +81,12 @@ export const PUBLIC_PATHS: RegExp[] = [
   // para `/team/accept-invite/<token>` (pública, logo abaixo); o teto por IP e a
   // resposta única para código ruim moram nela. Um segmento só, alfanumérico.
   /^\/c\/[A-Za-z0-9]{1,32}$/,
+  // FORK MIA (9031): o link dos painéis para o dono do negócio
+  // (`app/painel/[token]/page.tsx`). Quem abre é o dono, sem conta. A página só
+  // lê números somados; o teto por IP, a resposta única para link ruim e a
+  // prévia sem dado moram nela. Um segmento só, alfanumérico, com âncora `$`:
+  // nada abaixo de `/painel/<token>` nasce público de carona.
+  /^\/painel\/[A-Za-z0-9]{1,64}$/,
   // Volta do consentimento do Google Ads. Mesma natureza das duas linhas
   // acima: a identidade vem do `state` assinado
   // (`lib/plataformas-de-anuncio/google/estado.ts`), não da sessão — quem

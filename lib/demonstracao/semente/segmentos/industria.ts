@@ -185,7 +185,7 @@ export const INDUSTRIA: SementeDeDemonstracao = {
       descricao: "O quadro pronto de indústria: do contato à cotação enviada e ao pedido fechado, para revendas, distribuidores, instaladores e construtoras.",
       pacote: "industria",
       nichoDeFollowup: "industria_b2b",
-      vocabulario: { lead: "Cliente", lead_plural: "Clientes", deal: "Cotação", deal_plural: "Cotações", won: "Pedido fechado", lost: "Não fechou" },
+      vocabulario: { lead: "Cliente", lead_plural: "Clientes", deal: "Cotação", deal_plural: "Cotações", won: "Pedido fechado", lost: "Não fechou", compromisso: "Reunião", compromisso_plural: "Reuniões" },
       campos: [
         escolha("tipo_de_cliente", "Tipo de cliente", ["Revenda", "Distribuidor", "Instalador ou eletricista", "Construtora"]),
         escolha("tabela", "Tabela de preço", [REVENDA, DISTRIBUIDOR, PROFISSIONAL]),
@@ -229,7 +229,7 @@ export const INDUSTRIA: SementeDeDemonstracao = {
         { chave: "parou", nome: "Parou de comprar", passo: null, fim: "lost" },
       ],
       nichoDeFollowup: "industria_b2b",
-      vocabulario: { lead: "Cliente", lead_plural: "Clientes", deal: "Reposição", deal_plural: "Reposições", won: "Reposição fechada", lost: "Parou de comprar" },
+      vocabulario: { lead: "Cliente", lead_plural: "Clientes", deal: "Reposição", deal_plural: "Reposições", won: "Reposição fechada", lost: "Parou de comprar", compromisso: "Reunião", compromisso_plural: "Reuniões" },
       campos: [
         { key: "ciclo_de_compra", label: "Ciclo de compra (dias)", type: "number" },
         { key: "ticket_medio", label: "Ticket médio (R$)", type: "number" },

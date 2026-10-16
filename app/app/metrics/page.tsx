@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { ROLE_RANK } from "@/lib/auth/types";
@@ -23,13 +24,34 @@ export default async function MetricsPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Desempenho")}</h1>
-        <p className="text-sm text-muted-foreground">
-          {canCompare
-            ? t("Atrito, funil e performance por atendente nos últimos 30 dias.")
-            : t("Atrito, seu funil e sua performance nos últimos 30 dias.")}
-        </p>
+      <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight">{t("Desempenho")}</h1>
+          <p className="text-sm text-muted-foreground">
+            {canCompare
+              ? t("Atrito, funil e performance por atendente nos últimos 30 dias.")
+              : t("Atrito, seu funil e sua performance nos últimos 30 dias.")}
+          </p>
+        </div>
+        {/* FORK MIA (item 8): as duas portas da área de relatórios que moram ao
+            lado de Desempenho — os doze painéis prontos (o que o link do dono
+            mostra) e a tela da análise do funil do upstream (#1750), que era só
+            API. Controles com 44px no celular: esta tela é medida em 360px por
+            `tests/e2e/celular-cabe-na-tela.spec.ts`. */}
+        <nav aria-label={t("Relatórios")} className="flex flex-wrap gap-2">
+          <Link
+            href="/app/paineis"
+            className="inline-flex min-h-11 items-center rounded-sm border border-border bg-surface px-4 text-sm font-medium hover:bg-surface-elevated lg:min-h-9"
+          >
+            {t("Painéis prontos")}
+          </Link>
+          <Link
+            href="/app/paineis/funil"
+            className="inline-flex min-h-11 items-center rounded-sm border border-border bg-surface px-4 text-sm font-medium hover:bg-surface-elevated lg:min-h-9"
+          >
+            {t("Análise do funil")}
+          </Link>
+        </nav>
       </header>
 
       {/* A meta vem ANTES do diagnóstico: quem abre Desempenho quer primeiro

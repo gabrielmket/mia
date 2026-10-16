@@ -139,10 +139,15 @@ export const FERRAMENTAS_DE_FUNIL: readonly FerramentaDePlataforma[] = [
           deal: z.string().min(1).max(40).optional(),
           won: z.string().min(1).max(40).optional(),
           lost: z.string().min(1).max(40).optional(),
+          compromisso: z.string().min(1).max(40).optional(),
+          compromisso_plural: z.string().min(1).max(40).optional(),
         })
         .strict()
         .optional()
-        .describe('Como este funil chama as coisas: { "lead": "Paciente", "deal": "Agendamento", "won": "Consulta marcada", "lost": "Não marcou" }.'),
+        .describe(
+          'Como este funil chama as coisas: { "lead": "Paciente", "deal": "Agendamento", "won": "Consulta marcada", "lost": "Não marcou", ' +
+            '"compromisso": "Avaliação", "compromisso_plural": "Avaliações" }. O compromisso é o que a agenda marca; o plural vira o título do painel pronto de agenda (e do link para o dono).',
+        ),
       reabertura: z
         .enum(["mesmo_registro", "novo_negocio"])
         .optional()

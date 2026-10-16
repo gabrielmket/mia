@@ -122,6 +122,21 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
   // `team_invites` (que a tela lista e revoga), gravada antes de o e-mail sair.
   // Desde a 9020 o convite funciona também na empresa de demonstração. Ver
   // `lib/implantacao/equipe.ts`.
+  //
+  // FORK MIA (9031): o link dos painéis para o dono do negócio. Chave própria,
+  // e não `convidar_equipe` nem `implantar_configuracao`, porque o estrago é
+  // outro: não dá login a ninguém e não fala com o cliente final, mas abre os
+  // NÚMEROS da empresa (faturamento, funil, metas) a quem tiver o endereço.
+  {
+    chave: "compartilhar_paineis",
+    rotulo: "Criar e revogar o link dos painéis para o dono",
+    raio:
+      "Cria e revoga, em QUALQUER cliente, o endereço sem senha que mostra os painéis prontos da empresa " +
+      "(resultado, meta, funil, atendimento, agenda, anúncios) a quem o tiver. Nenhum nome, telefone ou " +
+      "conversa de cliente sai por ele, mas o faturamento e a meta saem, se o link mostrar valores: um token " +
+      "vazado gera um link dos números de qualquer empresa, e quem o receber vê até a validade acabar ou " +
+      "alguém revogar.",
+  },
   ...OPERACOES_DE_IMPORTACAO,
 ] as const;
 

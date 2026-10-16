@@ -1258,6 +1258,15 @@ export const AUDIT_ACTIONS = [
   // Vários números da mesma pessoa viram uma pessoa só (e o desfazer).
   "contatos.numeros_juntados",
   "contatos.numero_separado",
+  // FORK MIA (9031): o link dos painéis prontos para o dono do negócio
+  // (`lib/paineis/link.ts`). Criar, alterar, revogar e renovar levam quem fez e por onde
+  // (tela ou MCP de plataforma); o acesso pela página pública é registrado sem
+  // identificar quem abriu (nem IP nem navegador). Nenhum leva o token.
+  "paineis.link_criado",
+  "paineis.link_revogado",
+  "paineis.link_renovado",
+  "paineis.link_alterado",
+  "paineis.link_acessado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

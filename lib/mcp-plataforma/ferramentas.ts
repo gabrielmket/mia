@@ -41,6 +41,7 @@ import { FERRAMENTAS_DE_ETIQUETAS_E_MEMORIA } from "./ferramentas/etiquetas-e-me
 import { FERRAMENTAS_DE_FUNIL } from "./ferramentas/funil";
 import { FERRAMENTAS_DE_LEITURA } from "./ferramentas/leituras";
 import { FERRAMENTAS_DE_OBRIGACOES } from "./ferramentas/obrigacoes";
+import { FERRAMENTAS_DE_PAINEIS } from "./ferramentas/paineis";
 import { FERRAMENTAS_DA_PLATAFORMA } from "./ferramentas/plataforma";
 import { FERRAMENTAS_DE_PRODUTOS } from "./ferramentas/produtos";
 import { FERRAMENTAS_DE_ROTEADOR } from "./ferramentas/roteador";
@@ -71,6 +72,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DE_EQUIPE_E_MENSAGENS,
   // documentos e obrigações com vencimento: catálogo, itens e leitura (docs/fork/obrigacoes.md)
   ...FERRAMENTAS_DE_OBRIGACOES,
+  // os painéis prontos e o link para o dono do negócio (item 8, migrations 9030 e 9031)
+  ...FERRAMENTAS_DE_PAINEIS,
   // a migração de outro CRM: empresas, contatos, negócios e materiais (docs/fork/mcp-de-migracao.md)
   ...FERRAMENTAS_DE_IMPORTACAO,
   // as empresas de demonstração por segmento (docs/fork/cliente-modelo.md)

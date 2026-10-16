@@ -355,6 +355,9 @@ describe("papel: quem lê, quem grava", () => {
       "fn_mia_obrigacao_exige_dono:false:false",
       "fn_mia_obrigacao_fechar_ciclo:false:true",
       "fn_mia_obrigacao_sem_dono_sai:false:false",
+      // 9030: a situação calculada pelas datas, que o motor de conta dos
+      // relatórios chama com a permissão de quem pede (invoker); só calcula.
+      "fn_mia_obrigacao_situacao:false:true",
       "fn_mia_obrigacoes_do_contato_anonimizado:false:false",
       "fn_mia_obrigacoes_seguem_a_empresa_mesclada:false:false",
       "fn_mia_obrigacoes_seguem_o_contato_mesclado:false:false",

@@ -108,7 +108,7 @@ export const ACADEMIA: SementeDeDemonstracao = {
         { chave: "nao", nome: "Não se matriculou", passo: "lost", fim: "lost" },
       ],
       nichoDeFollowup: "academia",
-      vocabulario: { lead: "Aluno", lead_plural: "Alunos", deal: "Matrícula", deal_plural: "Matrículas", won: "Matriculado", lost: "Não se matriculou" },
+      vocabulario: { lead: "Aluno", lead_plural: "Alunos", deal: "Matrícula", deal_plural: "Matrículas", won: "Matriculado", lost: "Não se matriculou", compromisso: "Aula experimental", compromisso_plural: "Aulas experimentais" },
       campos: [
         escolha("objetivo", "Objetivo", ["Emagrecer", "Ganhar massa", "Condicionamento", "Qualidade de vida", "Voltar a treinar"]),
         escolha("modalidade", "Modalidade", ["Musculação", "Funcional", "Pilates", "Spinning", "Lutas"]),
@@ -151,7 +151,7 @@ export const ACADEMIA: SementeDeDemonstracao = {
         { chave: "cancelou", nome: "Cancelou", passo: null, fim: "lost" },
       ],
       nichoDeFollowup: "academia",
-      vocabulario: { lead: "Aluno", lead_plural: "Alunos", deal: "Renovação", deal_plural: "Renovações", won: "Renovou", lost: "Cancelou" },
+      vocabulario: { lead: "Aluno", lead_plural: "Alunos", deal: "Renovação", deal_plural: "Renovações", won: "Renovou", lost: "Cancelou", compromisso: "Aula experimental", compromisso_plural: "Aulas experimentais" },
       campos: [
         escolha("plano_atual", "Plano atual", PLANOS),
         { key: "treinos_no_mes", label: "Treinos no último mês", type: "number" },

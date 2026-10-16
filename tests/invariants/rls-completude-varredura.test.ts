@@ -395,6 +395,17 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "lê e não grava, o catálogo é de manager, aviso só o servidor grava, e " +
       "item de negócio que a pessoa não enxerga não aparece para ela.",
   })),
+  // Fork MIA, 9031 — o link dos painéis para o dono do negócio.
+  {
+    tabela: "mia_paineis_links",
+    razao:
+      "tests/invariants/link-dos-paineis-para-o-dono.test.ts — exclusiva do " +
+      "servidor: RLS ligada com ZERO políticas, e o gestor da PRÓPRIA empresa " +
+      "recebe `permission denied` por JWT em select, insert, update e delete " +
+      "(não zero linhas), anon também; o service_role grava e lê (controle). " +
+      "A organização da linha é a do link, conferida no servidor; o funil é " +
+      "da mesma empresa por chave composta.",
+  },
   {
     tabela: "channel_session_groups",
     razao:
