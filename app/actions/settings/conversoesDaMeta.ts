@@ -29,6 +29,7 @@ import { z } from "zod";
 
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { podeAdministrarEmpresa } from "@/lib/auth/pode-administrar-empresa";
+import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import { definirChaveDeFormulario, type QuemSalva } from "@/lib/conversoes-meta/config";
 import { diagnosticarConexaoDaMeta, type DiagnosticoDaMeta } from "@/lib/conversoes-meta/diagnostico";
 import { supportWriteError } from "@/lib/impersonate/support";
@@ -58,7 +59,8 @@ async function autorizar(escreve: boolean): Promise<{ ok: true; quem: QuemSalva 
       organizationId: activeOrg.orgId,
       autorUserId: authUser.id,
       requestId: hdrs.get("x-request-id") ?? undefined,
-      ip: hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined,
+      // .81: a régua única do IP (upstream 1.81), que respeita IP_DO_CLIENTE_HEADER.
+      ip: ipDoCliente(hdrs) ?? undefined,
       userAgent: hdrs.get("user-agent") ?? undefined,
       via: "tela",
     },

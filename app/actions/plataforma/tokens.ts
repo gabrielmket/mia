@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { headers } from "next/headers";
 
 import { audit } from "@/lib/audit";
+import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import { escritaDeAdminOuRecusa } from "@/lib/auth/escritaDeAdminOuRecusa";
 import { MENSAGEM_DA_RECUSA_DE_ESCRITA } from "@/lib/auth/recusa-de-escrita-de-admin";
 import { PREFIXO_DE_PLATAFORMA } from "@/lib/mcp-plataforma/auth";
@@ -100,7 +101,8 @@ export async function criarTokenDePlataforma(input: {
     resourceType: "platform_api_token",
     resourceId: null,
     requestId: hdrs.get("x-request-id"),
-    ip: hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+    // .81: a régua única do IP (upstream 1.81), que respeita IP_DO_CLIENTE_HEADER.
+    ip: ipDoCliente(hdrs),
     userAgent: hdrs.get("user-agent") ?? null,
     metadata: {
       // O NOME e as OPERAÇÕES vão; o prefixo e o segredo não. Quem audita

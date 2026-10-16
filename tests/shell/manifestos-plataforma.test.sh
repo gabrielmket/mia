@@ -76,8 +76,9 @@ export MOCK_STATUS=403
 expect_fail 'private GHCR package' 403 preflight_imagens_crm 1.66.1 linux/arm64
 export MOCK_STATUS=000
 expect_fail 'GHCR offline' 000 preflight_imagens_crm 1.66.1 linux/arm64
-export MOCK_STATUS=200 MOCK_MISSING_IMAGE=deskcomm-voice-agent
-expect_fail 'one of four missing' deskcomm-voice-agent preflight_imagens_crm 1.66.1 linux/arm64
+# FORK MIA: o nome da imagem é o do fork (`mia-*`, hostgator-setup-kit/_manifestos.sh).
+export MOCK_STATUS=200 MOCK_MISSING_IMAGE=mia-voice-agent
+expect_fail 'one of four missing' mia-voice-agent preflight_imagens_crm 1.66.1 linux/arm64
 unset MOCK_MISSING_IMAGE
 expect_ok 'all four match' preflight_imagens_crm 1.66.1 linux/arm64
 expect_ok 'legacy name checks platform' trio_publicado 1.66.1

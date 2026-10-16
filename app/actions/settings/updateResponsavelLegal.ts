@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { audit } from "@/lib/audit";
 import { escritaDeAdminOuRecusa } from "@/lib/auth/escritaDeAdminOuRecusa";
 import { MENSAGEM_DA_RECUSA_DE_ESCRITA } from "@/lib/auth/recusa-de-escrita-de-admin";
+import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import {
   responsavelLegalSchema,
   type ResponsavelLegalInput,
@@ -58,7 +59,8 @@ export async function updateResponsavelLegal(
 
   const hdrs = await headers();
   const requestId = hdrs.get("x-request-id");
-  const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  // .81: a régua única do IP (upstream 1.81), que respeita IP_DO_CLIENTE_HEADER.
+  const ip = ipDoCliente(hdrs);
   const userAgent = hdrs.get("user-agent") ?? null;
 
   const { error } = await createAdminClient()

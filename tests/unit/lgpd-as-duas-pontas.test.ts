@@ -172,6 +172,12 @@ const CLASSIFICACAO: Record<string, Classificacao> = {
     tipo: "nao_pessoal",
     porque: "trava operacional do atendimento (a IA não assume), não atributo da pessoa",
   },
+  // .81 (upstream 0624, issue 2379): espelha `is_personal`, como a própria migration diz.
+  ai_opt_out: {
+    tipo: "nao_pessoal",
+    porque:
+      "marca OPERACIONAL permanente do atendimento (\"sempre atendimento humano\": a IA nunca assume este contato). Diz o que a equipe faz com a conversa, não quem é a pessoa; quem marcou e quando fica na auditoria",
+  },
   locale: {
     tipo: "nao_pessoal",
     porque: "idioma em que se responde; não identifica e o relatório não melhora com ele",

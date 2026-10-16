@@ -51,7 +51,10 @@ manifesto_tem_plataforma() { # <ref> <linux/platform>
 preflight_imagens_crm() { # <tag> <linux/platform>; IMG_NS e ghcr_status vêm de _common.sh
   local tag="${1:-}" plataforma="${2:-}" img status ref
   [ -n "$tag" ] || { printf 'Versão de imagem vazia\n' >&2; return 1; }
-  for img in deskcommcrm deskcomm-worker deskcomm-scheduler deskcomm-voice-agent; do
+  # FORK MIA: os nomes são os da matriz `build-and-push` desta árvore (`mia-*`),
+  # como em `trio_publicado` (_common.sh). Com os do upstream o pré-voo ARM64
+  # conferiria, debaixo do nosso IMG_NS, pacotes que este dono nunca publicou.
+  for img in mia-crm mia-worker mia-scheduler mia-voice-agent; do
     ref="${IMG_NS}/${img}:${tag}"
     status="$(ghcr_status "$img" "$tag")"
     case "$status" in

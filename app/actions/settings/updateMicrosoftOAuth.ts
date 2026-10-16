@@ -17,6 +17,7 @@ import { invalidarCredencialDaMicrosoft } from "@/lib/agenda/microsoft/config";
 import { audit } from "@/lib/audit";
 import { escritaDeAdminOuRecusa } from "@/lib/auth/escritaDeAdminOuRecusa";
 import { MENSAGEM_DA_RECUSA_DE_ESCRITA } from "@/lib/auth/recusa-de-escrita-de-admin";
+import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 
@@ -77,7 +78,8 @@ export async function updateMicrosoftOAuth(input: MicrosoftOAuthInput): Promise<
     resourceType: "mia_microsoft_oauth_da_plataforma",
     resourceId: null,
     requestId: cabecalhos.get("x-request-id") ?? undefined,
-    ip: cabecalhos.get("x-forwarded-for") ?? undefined,
+    // .81: a régua única do IP (upstream 1.81), que respeita IP_DO_CLIENTE_HEADER.
+    ip: ipDoCliente(cabecalhos) ?? undefined,
     userAgent: cabecalhos.get("user-agent") ?? undefined,
     actingAsPlatformAdmin: true,
     metadata: {
