@@ -51,6 +51,8 @@ import { PACOTES } from "@/lib/onboarding/pacotes-de-funil";
 import { modelosDoSegmento } from "@/lib/obrigacoes/catalogo";
 import { montarTipo } from "@/lib/obrigacoes/catalogo-servidor";
 import { montarLinha } from "@/lib/obrigacoes/operacoes";
+import { colunasDaConfig } from "@/lib/relatorios/config";
+import { RECEITAS, segmentoDaDemonstracao } from "@/lib/relatorios/segmentos";
 import { pipelineConfigPatchSchema } from "@/lib/schemas/settings";
 
 import { emailFalso, telefoneFalso } from "./dados";
@@ -126,6 +128,12 @@ function idsDa(s: SementeDeDemonstracao) {
     cicloDaObrigacao: (k: string, i: number) => id(`ciclo-da-obrigacao:${k}:${i}`),
     propostaDaObrigacao: (k: string) => id(`proposta-da-obrigacao:${k}`),
     produto: (codigo: string) => id(`produto:${slug(codigo)}`),
+    // FORK MIA (item 9): a proposta que liga o negócio ao produto, e o montador.
+    proposta: (negocio: string) => id(`proposta:${negocio}`),
+    itemDaProposta: (negocio: string) => id(`item-da-proposta:${negocio}`),
+    relatorio: (chave: string) => id(`relatorio:${chave}`),
+    painel: (chave: string) => id(`painel:${chave}`),
+    itemDoPainel: (chave: string, i: number) => id(`item-do-painel:${chave}:${i}`),
   };
 }
 
@@ -340,11 +348,13 @@ async function passos(e: Escritor, opcoes: OpcoesDaSemente, avisos: string[]): P
   await gravarEmpresasEContatos(e, c);
   const etapas = await gravarFunis(e, c);
   await gravarNegocios(e, c, etapas);
+  await gravarPropostasDosNegocios(e, c, etapas);
   await gravarConversas(e, c);
   await gravarFollowups(e, c, etapas);
   await gravarAgenda(e, c);
   await gravarTarefasSoltas(e, c);
   await gravarObrigacoes(e, c);
+  await gravarRelatorios(e, c);
   await neutralizarOsEventos(e, c);
 }
 
@@ -1502,6 +1512,122 @@ async function neutralizarOsEventos(e: Escritor, { org }: Contexto): Promise<voi
   );
 }
 
+/**
+ * FORK MIA (item 9) — a PROPOSTA de cada negócio que tem produto
+ * (`produtoDoNegocio` da semente): é por ela que o montador agrupa por produto.
+ * Ganho vira proposta aceita, perdido vira recusada, aberto vira enviada. Uma
+ * proposta e um item por negócio, com ids estáveis: rodar de novo não duplica.
+ */
+async function gravarPropostasDosNegocios(e: Escritor, { s, ID, org, agora }: Contexto, etapas: EtapasGravadas): Promise<void> {
+  if (!s.produtoDoNegocio) return;
+  for (const f of s.funis) {
+    const doFunil = etapas.get(f.chave)!;
+    for (const n of f.negocios) {
+      const codigo = s.produtoDoNegocio(f.chave, (n as { campos?: Record<string, unknown> }).campos ?? {});
+      const produto = codigo ? s.produtos.find((p) => p.codigo === codigo) : undefined;
+      if (!produto) continue;
+      const negocio = ID.negocio(f.chave, n.titulo);
+      const fim = doFunil.get(n.passo)?.fim;
+      const preco = n.valorReais === null ? Math.round(produto.precoReais * 100) : Math.round(n.valorReais * 100);
+      const quando = new Date(agora.getTime() - Math.max(0, n.naEtapaHaDias) * DIA - 3 * HORA);
+      await gravar(e, "public.crm_proposals", {
+        id: ID.proposta(negocio),
+        organization_id: org,
+        lead_id: negocio,
+        contact_id: ID.contato(n.contato),
+        status: fim === "won" ? "aceita" : fim === "lost" ? "recusada" : "enviada",
+        titulo: `Proposta · ${produto.nome}`.slice(0, 200),
+        total_cents: preco,
+        moeda: "BRL",
+        sent_at: quando,
+        decided_at: fim ? quando : null,
+      });
+      await gravar(e, "public.crm_proposal_items", {
+        id: ID.itemDaProposta(negocio),
+        proposal_id: ID.proposta(negocio),
+        organization_id: org,
+        product_id: ID.produto(produto.codigo),
+        descricao: produto.nome,
+        quantidade: 1,
+        preco_unitario_cents: preco,
+        desconto_cents: 0,
+        position: 1000,
+      });
+    }
+  }
+}
+
+/**
+ * FORK MIA (item 9) — os relatórios e o painel do SEGMENTO, a mesma receita que
+ * a implantação garante (`lib/relatorios/segmentos.ts`): os prontos ligados ao
+ * funil que abre primeiro, os relatórios a mais do segmento e o painel montado,
+ * compartilhados com a equipe e com a gestora da demonstração como dona.
+ * Reaplicar a demonstração devolve o painel à receita (o que alguém mexeu na
+ * vitrine volta ao lugar).
+ */
+async function gravarRelatorios(e: Escritor, { s, ID, org }: Contexto): Promise<void> {
+  const receita = RECEITAS[segmentoDaDemonstracao(s.segmento)];
+  const dona = ID.usuario(s.gestor);
+  await gravar(
+    e,
+    "public.mia_relatorios_da_empresa",
+    { organization_id: org, pipeline_id: ID.funil(s.funilPadrao), updated_by: dona },
+    { conflito: "organization_id" },
+  );
+  for (const r of receita.relatorios) {
+    const c = colunasDaConfig(r.config);
+    await gravar(e, "public.mia_relatorios", {
+      id: ID.relatorio(r.chave),
+      organization_id: org,
+      nome: r.nome,
+      fonte: c.fonte,
+      medida: c.medida,
+      dim1: c.dim1,
+      dim2: c.dim2,
+      filtros: json(c.filtros),
+      periodo: c.periodo,
+      de: c.de,
+      ate: c.ate,
+      comparar: c.comparar,
+      visualizacao: c.visualizacao,
+      compartilhado: true,
+      chave: r.chave,
+      criado_via: "demonstracao",
+      created_by: dona,
+    });
+  }
+  const painel = ID.painel(receita.painel.chave);
+  await gravar(e, "public.mia_paineis_usuario", {
+    id: painel,
+    organization_id: org,
+    nome: receita.painel.nome,
+    periodo: "30",
+    compartilhado: true,
+    chave: receita.painel.chave,
+    criado_via: "demonstracao",
+    created_by: dona,
+  });
+  const itens = receita.painel.itens.map((item, i) => ({ item, id: ID.itemDoPainel(receita.painel.chave, i) }));
+  // O painel volta à receita: o que não é dela sai antes (o índice único de
+  // relatório por painel recusaria o mesmo pronto posto à mão com outro id).
+  await e.executar(
+    `delete from public.mia_paineis_usuario_itens where organization_id = $1::uuid and painel_id = $2::uuid and not (id = any($3::uuid[]))`,
+    [org, painel, itens.map((x) => x.id)],
+  );
+  for (const [i, { item, id }] of itens.entries()) {
+    await gravar(e, "public.mia_paineis_usuario_itens", {
+      id,
+      organization_id: org,
+      painel_id: painel,
+      relatorio_id: item.relatorio ? ID.relatorio(item.relatorio) : null,
+      pronto: item.relatorio ? null : (item.pronto ?? null),
+      tamanho: item.tamanho,
+      periodo_proprio: false,
+      posicao: i + 1,
+    });
+  }
+}
+
 /** As tabelas que a semente grava, na ordem em que o resumo as mostra. */
 export const TABELAS_DA_SEMENTE = [
   "user_organizations",
@@ -1528,6 +1654,13 @@ export const TABELAS_DA_SEMENTE = [
   "mia_obrigacoes_ciclos",
   "mia_obrigacoes_propostas",
   "catalog_products",
+  // FORK MIA (item 9): a proposta de cada negócio com produto, e o montador.
+  "crm_proposals",
+  "crm_proposal_items",
+  "mia_relatorios_da_empresa",
+  "mia_relatorios",
+  "mia_paineis_usuario",
+  "mia_paineis_usuario_itens",
 ] as const;
 
 /** Quantas linhas uma empresa de demonstração tem em cada tabela que a semente grava. */

@@ -388,6 +388,18 @@ export const CLINICA_ODONTO: SementeDeDemonstracao = {
       { chave: "retorno-heloisa", tipo: "Retorno e manutenção", contato: "heloisa", responsavel: "mirela", proximaEmDias: 160, feitaEmDias: -20 },
     ],
   },
+  produtoDoNegocio: (_funil, campos) =>
+    ({
+      "Lentes de contato dental": "LENTES-DENTE",
+      "Limpeza e prevenção": "LIMPEZA",
+      Canal: "CANAL",
+      Clareamento: "CLAREAMENTO-CONSULTORIO",
+      "Prótese protocolo": "PROTESE-PROTOCOLO",
+      Implante: "IMPLANTE-UNITARIO",
+      Alinhadores: "ALINHADORES",
+      "Aparelho fixo": "APARELHO-FIXO",
+      Avaliação: "AVALIACAO",
+    } as Record<string, string>)[String(campos.procedimento ?? "")] ?? null,
   produtos: [
     { codigo: "AVALIACAO", nome: "Avaliação odontológica", descricao: "Primeira consulta com a dentista: exame clínico, plano de tratamento e orçamento. Gratuita.", categoria: "Avaliação", precoReais: 0, controlaEstoque: false },
     { codigo: "LIMPEZA", nome: "Limpeza e prevenção", descricao: "Limpeza, polimento e aplicação de flúor. Coberta pelo convênio de empresa.", categoria: "Prevenção", precoReais: 220, controlaEstoque: false },

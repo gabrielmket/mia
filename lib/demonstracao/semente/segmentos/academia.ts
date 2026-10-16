@@ -434,6 +434,14 @@ export const ACADEMIA: SementeDeDemonstracao = {
       { chave: "reavaliacao-tatiana", tipo: "Reavaliação física", contato: "tatiana", responsavel: "eder", proximaEmDias: 86, feitaEmDias: -4 },
     ],
   },
+  produtoDoNegocio: (_funil, campos) =>
+    ({
+      Anual: "PLANO-ANUAL",
+      Semestral: "PLANO-SEMESTRAL",
+      Trimestral: "PLANO-TRIMESTRAL",
+      Mensal: "PLANO-MENSAL",
+      "Plano empresa": "PLANO-EMPRESA",
+    } as Record<string, string>)[String(campos.plano ?? campos.plano_atual ?? "")] ?? null,
   produtos: [
     { codigo: "PLANO-MENSAL", nome: "Plano mensal", descricao: "Musculação e aulas coletivas todos os dias. Sem fidelidade.", categoria: "Planos", precoReais: 129.9, controlaEstoque: false },
     { codigo: "PLANO-TRIMESTRAL", nome: "Plano trimestral", descricao: "R$ 119,90 por mês, em até 3x.", categoria: "Planos", precoReais: 359.7, controlaEstoque: false },

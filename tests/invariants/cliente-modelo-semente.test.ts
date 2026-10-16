@@ -19,6 +19,7 @@ import type { SegmentoDeDemonstracao } from "@/lib/demonstracao/semente/tipos";
 import { diaNoFuso } from "@/lib/obrigacoes/datas";
 import { contarObrigacoes, situacao } from "@/lib/obrigacoes/situacao";
 import type { ItemParaSituacao } from "@/lib/obrigacoes/tipos";
+import { RECEITAS, segmentoDaDemonstracao } from "@/lib/relatorios/segmentos";
 
 /**
  * FORK MIA (cliente modelo, 9010) — A SEMENTE RODA DUAS VEZES E NÃO DUPLICA.
@@ -587,6 +588,24 @@ describe.each(DEMONSTRACOES)("a demonstração %s, no banco", (segmento) => {
     // A equipe da semente e quem mostra; o e-mail que não existe virou aviso.
     expect(c.user_organizations).toBe(s.equipe.length + 1);
     expect(resumos.get(segmento)!.primeira.avisos.join(" ")).toContain("nao-existe@invariant.test");
+  });
+
+  it("⭐ o montador (item 9): os relatórios e o painel do segmento, e o produto de cada negócio pela proposta", async () => {
+    const c = resumos.get(segmento)!.primeira.contagens;
+    const receita = RECEITAS[segmentoDaDemonstracao(segmento)];
+    expect(c.mia_relatorios).toBe(receita.relatorios.length);
+    expect(c.mia_paineis_usuario).toBe(1);
+    expect(c.mia_paineis_usuario_itens).toBe(receita.painel.itens.length);
+    expect(c.mia_relatorios_da_empresa).toBe(1);
+    expect(c.crm_proposals).toBeGreaterThan(0);
+    expect(c.crm_proposal_items).toBe(c.crm_proposals);
+    // O motor agrupa por produto com o que a semente gravou: há produto de verdade, não só "Sem produto".
+    const grupos = JSON.parse(
+      await naOrg<string>(
+        `select (public.fn_mia_relatorio($1::uuid, negocios, array[qtd], produto, null, {}, pers, 2020-01-01, 2030-12-31) -> grupos)::text`,
+      ),
+    ) as Array<{ chave: string; n: number }>;
+    expect(grupos.some((g) => g.chave !== "__sem" && g.n > 0)).toBe(true);
   });
 
   it("⭐ nasce travada: marcada, ativa, no fuso de São Paulo, com o nome e o slug próprios", async () => {

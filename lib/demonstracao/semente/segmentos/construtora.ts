@@ -431,6 +431,15 @@ export const CONSTRUTORA: SementeDeDemonstracao = {
       },
     ],
   },
+  produtoDoNegocio: (funil, campos) => {
+    const tipologia = String(campos.tipologia ?? "");
+    if (funil === "lancamento") {
+      return (
+        ({ Studio: "VP-STUDIO-32", "2 quartos": "VP-2Q-52", "2 quartos com suíte": "VP-2QS-61", "3 quartos": "VP-3Q-74", Cobertura: "VP-COB-128" } as Record<string, string>)[tipologia] ?? null
+      );
+    }
+    return ({ "2 quartos": "BP-2Q-58", "2 quartos garden": "BP-2QG-58", "3 quartos": "BP-3Q-80" } as Record<string, string>)[tipologia] ?? null;
+  },
   produtos: [
     { codigo: "VP-STUDIO-32", nome: "Vista Parque · Studio 32 m²", descricao: "Studio com varanda, 32 m², vaga rotativa. Entrega prevista para o segundo semestre de 2028. Aceita FGTS.", marca: "Construtora Modelo", categoria: "Lançamento Vista Parque", precoReais: 265000, controlaEstoque: true, quantidade: 6 },
     { codigo: "VP-2Q-52", nome: "Vista Parque · 2 quartos 52 m²", descricao: "Dois quartos, varanda gourmet, uma vaga. Entrega prevista para 2028. Aceita FGTS e subsídio.", marca: "Construtora Modelo", categoria: "Lançamento Vista Parque", precoReais: 389000, controlaEstoque: true, quantidade: 14 },

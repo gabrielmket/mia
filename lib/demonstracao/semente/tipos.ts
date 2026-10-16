@@ -396,4 +396,11 @@ export interface SementeDeDemonstracao {
   inscricoes: InscricaoDaSemente[];
   obrigacoes: ObrigacoesDaSemente | null;
   produtos: ProdutoDaSemente[];
+  /**
+   * FORK MIA (item 9): o produto do catálogo de um negócio (pelo `codigo`), a
+   * partir do funil e dos campos dele. A semente grava uma proposta com esse
+   * produto, e é por ela que o montador agrupa negócios por produto ("Tempo até
+   * fechar por tratamento", "Vendas por empreendimento"). Sem produto, nada.
+   */
+  produtoDoNegocio?: (funil: ChaveDoFunil, campos: Readonly<Record<string, unknown>>) => string | null;
 }

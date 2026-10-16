@@ -114,7 +114,7 @@ beforeEach(() => {
 describe("a lista: as quatro da .76 montam (implantar_configuracao)", () => {
   it("as quatro da .76 entraram com a operação de montagem", () => {
     // A contagem da lista mora no teste da versão mais nova
-    // (`mcp-de-implantacao-paineis.test.ts`, .79: 64). Aqui fica só o que é da .76.
+    // (`mcp-de-implantacao-relatorios.test.ts`, .80: 66). Aqui fica só o que é da .76.
     const operacao = (nome: string) => FERRAMENTAS.find((f) => f.name === nome)?.operacao;
     for (const nome of [
       "plataforma_garantir_planos_de_tarefa",

@@ -84,6 +84,7 @@ function paraResposta(l: LinkDoDono) {
     periodo: l.periodo,
     mostrar_valores: l.mostrarValores,
     funil_id: l.pipelineId,
+    painel_id: l.painelId,
     valido_ate: l.validoAte,
     revogado_em: l.revogadoEm,
     ultimo_acesso: l.ultimoAcesso,
@@ -98,6 +99,7 @@ function traduzirRecusa(e: unknown): never {
     const dicas: Record<LinkRecusado["motivo"], string> = {
       sem_painel: "Escolha pelo menos um painel em `paineis`.",
       funil_de_outra_empresa: "Esse `funil_id` não é desta empresa. Veja os funis com plataforma_ver_funis.",
+      painel_de_outra_empresa: "Esse painel não é desta empresa. Veja os painéis com plataforma_ver_relatorios.",
       nao_encontrado: "Link não encontrado nesta empresa. Veja os links com plataforma_ver_links_do_dono.",
       revogado: "Esse link foi revogado, e link revogado não volta. Crie outro com plataforma_garantir_link_do_dono.",
       ativo: "O link já está ativo.",
@@ -238,7 +240,8 @@ export const FERRAMENTAS_DE_PAINEIS: readonly FerramentaDePlataforma[] = [
       try {
         const existentes = await listarLinks(ctx.admin, org.id);
         const mesmo = existentes.find(
-          (l) => l.situacao === "ativo" && l.paraQuem.trim().toLowerCase() === paraQuem.toLowerCase(),
+          // O link de um painel do montador (9042) é de outro tipo: não se confunde com o dos prontos.
+          (l) => l.situacao === "ativo" && !l.painelId && l.paraQuem.trim().toLowerCase() === paraQuem.toLowerCase(),
         );
         if (mesmo) {
           const r = await alterarLink(ctx.admin, c, mesmo.id, pedido);

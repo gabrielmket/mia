@@ -93,7 +93,9 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "limpeza automática de mídia antiga (ligada, apaga mídia velha sem volta), os " +
       "planos de tarefa, as perguntas e a autorização de IA de uma fonte de formulário, a " +
       "coluna do cliente no banco externo, os dias da prospecção e guardar o histórico " +
-      "de um número; e a pausa agendada, que cala um número (ou todos) por até 24 horas.",
+      "de um número; e a pausa agendada, que cala um número (ou todos) por até 24 horas. " +
+      "E os relatórios e o painel do segmento (montador de relatórios), compartilhados com a " +
+      "equipe do cliente: toda a equipe passa a ver aqueles números, cada um só com o que já vê no CRM.",
   },
   {
     chave: "colocar_no_ar",

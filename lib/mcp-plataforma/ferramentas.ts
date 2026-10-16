@@ -44,6 +44,7 @@ import { FERRAMENTAS_DE_OBRIGACOES } from "./ferramentas/obrigacoes";
 import { FERRAMENTAS_DE_PAINEIS } from "./ferramentas/paineis";
 import { FERRAMENTAS_DA_PLATAFORMA } from "./ferramentas/plataforma";
 import { FERRAMENTAS_DE_PRODUTOS } from "./ferramentas/produtos";
+import { FERRAMENTAS_DE_RELATORIOS } from "./ferramentas/relatorios";
 import { FERRAMENTAS_DE_ROTEADOR } from "./ferramentas/roteador";
 // As ferramentas de importação (docs/fork/mcp-de-migracao.md).
 import { FERRAMENTAS_DE_IMPORTACAO } from "./importacao";
@@ -74,6 +75,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DE_OBRIGACOES,
   // os painéis prontos e o link para o dono do negócio (item 8, migrations 9030 e 9031)
   ...FERRAMENTAS_DE_PAINEIS,
+  // o montador de relatórios: os relatórios e o painel do segmento (item 9, migrations 9040 a 9042)
+  ...FERRAMENTAS_DE_RELATORIOS,
   // a migração de outro CRM: empresas, contatos, negócios e materiais (docs/fork/mcp-de-migracao.md)
   ...FERRAMENTAS_DE_IMPORTACAO,
   // as empresas de demonstração por segmento (docs/fork/cliente-modelo.md)

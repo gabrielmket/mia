@@ -529,6 +529,13 @@ export const INDUSTRIA: SementeDeDemonstracao = {
       },
     ],
   },
+  produtoDoNegocio: (_funil, campos) =>
+    ({
+      "Fios e cabos": "CABF-25-AZ",
+      "Mix completo": "KIT-RES-QD",
+      "Iluminação LED": "LED-PAI-18W-QD",
+      "Disjuntores e quadros": "DJ-2P-40A",
+    } as Record<string, string>)[String(campos.linha ?? "")] ?? null,
   produtos: [
     { codigo: "CABF-15-AZ", nome: "Cabo flexível 1,5 mm² azul · rolo 100 m", descricao: `Antichama, 750 V. ${POLITICA}`, marca: "Linha Modelo", categoria: "Fios e cabos", precoReais: 189.9, custoReais: 121.5, controlaEstoque: true, quantidade: 840 },
     { codigo: "CABF-25-AZ", nome: "Cabo flexível 2,5 mm² azul · rolo 100 m", descricao: `Antichama, 750 V. O mais vendido da linha. ${POLITICA}`, marca: "Linha Modelo", categoria: "Fios e cabos", precoReais: 289.9, custoReais: 185.5, controlaEstoque: true, quantidade: 1260 },
