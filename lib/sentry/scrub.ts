@@ -229,8 +229,10 @@ function apagarCpfETelefone(trecho: string, perfisDePais: boolean): string {
 // FORK MIA (9031): `/painel/<token>`, o link dos painéis para o dono do
 // negócio. O token É o acesso (abre os números da empresa sem senha); na
 // telemetria ele vale tanto quanto o do convite.
+// FORK MIA (9023): `/c/<código>`, o link curto do convite. O código leva ao
+// mesmo aceite que o token longo, então sai da telemetria pela mesma regra.
 const CREDENTIAL_PATH =
-  /(\/api\/v1\/webhooks\/[^/?#\s]+\/|\/team\/accept-invite\/|\/painel\/)[^/?#\s]+/g;
+  /(\/api\/v1\/webhooks\/[^/?#\s]+\/|\/team\/accept-invite\/|\/painel\/|\/c\/)[^/?#\s]+/g;
 
 /** Parâmetro de query (ou de fragmento) que carrega credencial: `token_hash`, `code`… */
 const CREDENTIAL_PARAM = /token|code|secret|password|otp|^sig$/i;
