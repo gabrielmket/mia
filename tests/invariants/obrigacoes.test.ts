@@ -547,6 +547,8 @@ describe("o próximo ciclo nasce sozinho, e o anterior vai para o histórico", (
   });
 
   it("⭐ duas pessoas confirmando o mesmo ciclo: a segunda é recusada, em vez de fechar o ciclo seguinte", () => {
+    // .81 (9043): a recusa é PERMANENTE e sai PT409, não 40001 — o PostgREST 14
+    // repete 40001 sem limite (a 0654 do upstream, issue #2805 de lá).
     expect(
       medir(`
         select public.fn_mia_obrigacao_fechar_ciclo('${ITEM_DA_EMPRESA}', 1, 'recebido', date '2026-10-01', date '2027-10-13');
@@ -558,7 +560,7 @@ describe("o próximo ciclo nasce sozinho, e o anterior vai para o histórico", (
         end $$;
         select 'M:' || current_setting('inv.r') || '|' || ciclo || '|' || valido_ate from public.mia_obrigacoes where id = '${ITEM_DA_EMPRESA}';
       `),
-    ).toBe("40001|2|2027-10-13");
+    ).toBe("PT409|2|2027-10-13");
   });
 
   it("a função recusa a categoria errada, o item que não existe e a chamada sem dia", () => {
