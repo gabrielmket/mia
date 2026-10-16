@@ -2,7 +2,7 @@
 
 /**
  * FORK MIA — os blocos do cartão aberto: resumo da IA, pessoas, empresa,
- * origem e atribuição, campos do funil, agenda e tarefas.
+ * origem e atribuição, campos do funil e agenda (as tarefas são as do upstream, .81).
  *
  * Cada bloco lê de uma área que já grava o dado (ver `lib/cartoes/cartao-aberto.ts`)
  * e leva a ela: o nome da pessoa abre a ficha, a empresa abre a ficha dela, o
@@ -18,8 +18,6 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useHierarquiaDoAnuncio } from "@/hooks/contacts/useHierarquiaDoAnuncio";
 import { useDecidirProximaAcao } from "@/hooks/kanban/useNextAction";
 import { useEditLead } from "@/hooks/kanban/useUpdateLead";
-import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
-import { useTasks } from "@/hooks/tasks/useTasks";
 import { useConfirmarCampo, useEnvolvidosDoNegocio } from "@/hooks/cartoes/useCartaoAberto";
 import { SeletorDeContato } from "@/components/kanban/SeletorDeContato";
 import { ContatoDoNegocio } from "@/components/kanban/ContatoDoNegocio";
@@ -643,46 +641,5 @@ export function AgendaDoNegocio({ agenda, contatoId }: { agenda: CartaoAberto["a
   );
 }
 
-export function TarefasDoNegocio({ leadId }: { leadId: string }) {
-  const t = useT();
-  const agora = useAgoraDoCartao();
-  const { tarefas, alternarConcluida } = useTasks({ lead_id: leadId });
-  const { data: membros } = useAssignableMembers(true);
-  const abertas = tarefas.filter((x) => x.status === "pending" || x.status === "in_progress");
-  return (
-    <Secao titulo={t("Tarefas")} contagem={`${abertas.length} ${t("abertas")}`} testid="tarefas-do-negocio">
-      {tarefas.length === 0 ? (
-        <p className="text-xs text-text-muted">{t("Nenhuma tarefa. Crie uma no Foco, acima.")}</p>
-      ) : (
-        <ul className="space-y-1">
-          {tarefas.map((x) => {
-            const feita = x.status === "done" || x.status === "cancelled";
-            const atrasada = !feita && x.due_date ? new Date(x.due_date).getTime() < agora.getTime() : false;
-            const dono = membros?.find((m) => m.user_id === x.assigned_to)?.full_name ?? null;
-            return (
-              <li key={x.id} className="flex items-start justify-between gap-2 text-xs">
-                <div className="min-w-0">
-                  <p className={cn(feita ? "text-text-muted line-through" : "text-text")}>{x.title}</p>
-                  <p className="text-[11px] text-text-muted">
-                    {[dono, x.due_date ? format(new Date(x.due_date), "dd/MM HH:mm") : t("sem prazo")]
-                      .filter(Boolean)
-                      .join(" · ")}
-                    {atrasada ? <span className="ml-1 font-medium text-error-fg">{t("atrasada")}</span> : null}
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 shrink-0 px-2 text-[11px]"
-                  onClick={() => void alternarConcluida(x).catch(() => undefined)}
-                >
-                  {feita ? t("Reabrir") : t("Concluir")}
-                </Button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </Secao>
-  );
-}
+// (.81) A seção de tarefas do negócio saiu daqui: o cartão aberto usa a do
+// dossiê do upstream (`components/kanban/TarefasDoNegocio.tsx`, v1.81).

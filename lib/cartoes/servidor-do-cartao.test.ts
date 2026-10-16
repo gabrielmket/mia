@@ -94,18 +94,15 @@ describe("os sinais do quadro", () => {
           { organization_id: ORG, lead_id: "L1", target_kind: "appointment", target_id: "A-meu" },
           { organization_id: ORG, lead_id: "L9", target_kind: "appointment", target_id: "A-outro" },
         ],
-        crm_tasks: [
-          { id: "T-atr", organization_id: ORG, lead_id: "L1", due_date: "2026-09-28T12:00:00Z", status: "pending" },
-          { id: "T-fut", organization_id: ORG, lead_id: "L1", due_date: "2026-10-02T12:00:00Z", status: "pending" },
-          { id: "T-feita", organization_id: ORG, lead_id: "L1", due_date: "2026-09-20T12:00:00Z", status: "done" },
-        ],
         crm_leads: [
           { id: "G1", organization_id: ORG, contact_id: "C1", empresa_id: null, status: "won", value_cents: 30_000_000, currency: "BRL" },
         ],
       },
       [{ contact_id: "C1", objecoes: ["distância do metrô", "parcela da obra"], objecoes_em: null, ultima_saida_via: "ai", ultima_saida_por: null, ultima_saida_em: null }],
     );
-    const [l] = await comSinaisDoCartao(cliente, ORG, [negocio()], { agora, etapas: [{ id: "S1", is_won: false, is_lost: false, win_probability: 40 }] });
+    // As tarefas chegam no resumo do upstream (`lead.tarefas`, v1.81), que a rota
+    // do quadro anexa antes dos sinais: 2 em aberto, 1 delas atrasada.
+    const [l] = await comSinaisDoCartao(cliente, ORG, [negocio({ tarefas: { abertas: 2, atrasadas: 1 } })], { agora, etapas: [{ id: "S1", is_won: false, is_lost: false, win_probability: 40 }] });
 
     expect(rpc).toHaveBeenCalledWith("fn_mia_sinais_do_cartao", { p_org: ORG, p_contatos: ["C1"] });
     expect(l!.cartao?.bola).toMatchObject({ com: "nos", quem: "lead" });

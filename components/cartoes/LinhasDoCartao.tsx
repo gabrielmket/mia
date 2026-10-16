@@ -178,16 +178,9 @@ export function ObjecaoNaFaixa({ objecao }: { objecao: string | null | undefined
   );
 }
 
-/** "· 1 tarefa atrasada" no rodapé, junto do dono. Nada quando não há. */
-export function TarefasAtrasadas({ n }: { n: number | undefined }) {
-  const t = useT();
-  if (!n) return null;
-  return (
-    <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-error-fg">
-      · {n === 1 ? t("1 tarefa atrasada") : `${n} ${t("tarefas atrasadas")}`}
-    </span>
-  );
-}
+// (.81) O selo de tarefas do rodapé é o do upstream (`components/kanban/TarefasNoCard.tsx`,
+// v1.81): "N tarefas abertas · M atrasadas", com a régua da lista do dossiê. O
+// `TarefasAtrasadas` que morava aqui saiu para o cartão não contar duas vezes.
 
 /**
  * O aviso de documentos e obrigações no rodapé: UM, o mais urgente ("Alvará

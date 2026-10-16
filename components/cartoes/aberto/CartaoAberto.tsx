@@ -59,8 +59,11 @@ import {
   OrigemDoNegocio,
   PessoasDoNegocio,
   ResumoDaIa,
-  TarefasDoNegocio,
 } from "./Blocos";
+// (.81) As tarefas do negócio são as do dossiê do upstream (v1.81): criar,
+// editar, concluir e apagar com os MESMOS componentes da tela de Tarefas. A
+// seção do fork (`Blocos.tsx`, só concluir e reabrir) saiu.
+import { TarefasDoNegocio } from "@/components/kanban/TarefasDoNegocio";
 import { HistoricoDoNegocio } from "./HistoricoDoNegocio";
 import { SecaoDeObrigacoes } from "@/components/obrigacoes/SecaoDeObrigacoes";
 
@@ -114,6 +117,10 @@ export function CartaoAberto({
   const podeCriarProposta =
     user.is_platform_admin || (activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager) || false;
   const podeVerEquipe = usePodeVerEquipe();
+  // A régua do dossiê do upstream: tarefas são `agent`+, e o suporte temporário só lê.
+  const podeEditarTarefas =
+    (user.is_platform_admin && !user.support) ||
+    (activeOrg ? ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent : false);
   const timeline = useLeadTimeline(open ? lead.id : null, lead.contact_id);
   const cartao = useCartaoAberto(open ? lead.id : null);
   const ganhar = useWinLead(pipelineId);
@@ -358,7 +365,12 @@ export function CartaoAberto({
                 <AgendaDoNegocio agenda={dados.agenda} contatoId={lead.contact_id} />
               </>
             )}
-            <TarefasDoNegocio leadId={lead.id} />
+            <TarefasDoNegocio
+              leadId={lead.id}
+              contactId={lead.contact_id}
+              podeEditar={podeEditarTarefas}
+              aberto={open}
+            />
             <PropostasDoNegocio leadId={lead.id} pipelineId={pipelineId} podeCriar={podeCriarProposta} />
           </div>
         </div>

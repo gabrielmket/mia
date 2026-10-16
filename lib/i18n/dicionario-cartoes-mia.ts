@@ -16,8 +16,6 @@ type Traducoes = Record<string, { es: string }>;
 
 export const DICIONARIO_CARTOES_MIA: Traducoes = {
   // ─── cartão fechado do funil ───────────────────────────────────────────────
-  "1 tarefa atrasada": { es: "1 tarea atrasada" },
-  "tarefas atrasadas": { es: "tareas atrasadas" },
   "Já comprou": { es: "Ya compró" },
   recorrente: { es: "recurrente" },
   "Nenhum compromisso marcado para este negócio": { es: "Ninguna cita agendada para este negocio" },

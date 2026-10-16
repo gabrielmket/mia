@@ -9,7 +9,8 @@
  *                  + fn_mia_sinais_do_cartao (quem mandou a última saída)  → bola.ts
  *   objeção ...... fn_mia_sinais_do_cartao (retrato do último checkpoint)
  *   compromisso .. calendar_appointments + crm_lead_links (appointment)    → compromisso.ts
- *   tarefas ...... crm_tasks abertas do negócio
+ *   tarefas ...... o resumo do upstream (`lead.tarefas`, v1.81: a rota do quadro
+ *                  já leu `crm_tasks` em `withTarefas`), só para a URGÊNCIA
  *   compras ...... negócios ganhos + orders do contato/empresa            → compras-servidor.ts
  *   pessoa ....... contacts (cargo) + crm_lead_links (contatos envolvidos)
  *   obrigação .... mia_obrigacoes do negócio, da empresa e do contato      → lib/obrigacoes/sinais.ts
@@ -66,8 +67,6 @@ export function objecaoAberta(objecoes: unknown): string | null {
   return null;
 }
 
-const SITUACOES_ABERTAS_DA_TAREFA = ["pending", "in_progress"];
-
 /**
  * As colunas de contato que este módulo lê. `cargo` é da MIA (0262); o papel na
  * empresa entra com a 9013 — quem lê a coluna antes de ela existir recebe erro
@@ -120,7 +119,7 @@ async function montar(
   ];
   const agoraIso = agora.toISOString();
 
-  const [contatos, conversas, sinais, agenda, tarefas, envolvidos, compras, obrigacoes] = await Promise.all([
+  const [contatos, conversas, sinais, agenda, envolvidos, compras, obrigacoes] = await Promise.all([
     buscaEmLotes(contatoIds, (lote) =>
       db.from("contacts").select(COLUNAS_DO_CONTATO_NO_CARTAO).eq("organization_id", org).in("id", lote),
     ),
@@ -134,8 +133,8 @@ async function montar(
     buscaEmLotes(contatoIds, (lote) =>
       db.rpc("fn_mia_sinais_do_cartao", { p_org: org, p_contatos: lote }),
     ),
-    // As três leituras abaixo têm VÁRIAS linhas por id (compromissos de um
-    // contato, tarefas e pessoas de um negócio): um lote de 100 ids pode passar
+    // As duas leituras abaixo têm VÁRIAS linhas por id (compromissos de um
+    // contato e pessoas de um negócio): um lote de 100 ids pode passar
     // de 1000 linhas, e o PostgREST cortaria ali sem avisar. Por isso vão pelo
     // `buscaEmLotesSemTeto`, que lê cada lote até o fim.
     buscaEmLotesSemTeto(contatoIds, (lote, contagem) =>
@@ -153,14 +152,6 @@ async function montar(
     ),
     buscaEmLotesSemTeto(leadIds, (lote, contagem) =>
       db
-        .from("crm_tasks")
-        .select("id, lead_id, due_date", contagem)
-        .eq("organization_id", org)
-        .in("lead_id", lote)
-        .in("status", SITUACOES_ABERTAS_DA_TAREFA),
-    ),
-    buscaEmLotesSemTeto(leadIds, (lote, contagem) =>
-      db
         .from("crm_lead_links")
         .select("lead_id, target_id", contagem)
         .eq("organization_id", org)
@@ -171,7 +162,7 @@ async function montar(
     // Nunca lança: falha na leitura das obrigações devolve o quadro sem aviso.
     avisosDeObrigacaoDoQuadro(db, org, leads, agora),
   ]);
-  for (const r of [contatos, conversas, sinais, agenda, tarefas, envolvidos]) {
+  for (const r of [contatos, conversas, sinais, agenda, envolvidos]) {
     if (r.error) throw new Error(r.error.message);
   }
 
@@ -240,14 +231,6 @@ async function montar(
   );
   const sinaisPorContato = new Map((sinais.data as LinhaDosSinais[]).map((s) => [s.contact_id, s]));
 
-  const tarefasDoLead = new Map<string, { atrasadas: number; futuras: number }>();
-  for (const t of tarefas.data as Array<{ lead_id: string; due_date: string | null }>) {
-    const conta = tarefasDoLead.get(t.lead_id) ?? { atrasadas: 0, futuras: 0 };
-    if (t.due_date && new Date(t.due_date).getTime() < agora.getTime()) conta.atrasadas += 1;
-    else conta.futuras += 1;
-    tarefasDoLead.set(t.lead_id, conta);
-  }
-
   const envolvidosDoLead = new Map<string, Set<string>>();
   for (const e of envolvidos.data as Array<{ lead_id: string; target_id: string }>) {
     const s = envolvidosDoLead.get(e.lead_id) ?? new Set<string>();
@@ -297,8 +280,13 @@ async function montar(
       bola,
       compromisso: proximo,
       objecao: anonimo ? null : objecaoAberta(sinal?.objecoes),
-      tarefasAtrasadas: tarefasDoLead.get(lead.id)?.atrasadas ?? 0,
-      temTarefaFutura: (tarefasDoLead.get(lead.id)?.futuras ?? 0) > 0,
+      // Desde a .81 as tarefas do cartão são as do upstream: o selo é o
+      // `TarefasNoCard` e a conta é `resumoDasTarefas` (a MESMA régua da lista
+      // do dossiê), que a rota do quadro já anexou em `lead.tarefas`. Aqui elas
+      // só alimentam a ordem por urgência (`lib/cartoes/urgencia.ts`): sem o
+      // campo, o negócio não tem tarefa em aberto.
+      tarefasAtrasadas: lead.tarefas?.atrasadas ?? 0,
+      temTarefaFutura: (lead.tarefas?.abertas ?? 0) - (lead.tarefas?.atrasadas ?? 0) > 0,
       // Só conta como "já comprou" o que é compra de fato; o próprio negócio,
       // aberto, nunca está na conta (a leitura é de `status = 'won'`).
       compras: contagem && contagem.quantidade > 0 ? contagem : null,

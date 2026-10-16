@@ -169,16 +169,20 @@ describe("o cartão fechado responde sem abrir", () => {
     expect(screen.getByText("recorrente")).toBeTruthy();
   });
 
-  it("objeção aberta ao lado da faixa, e tarefa atrasada no rodapé", () => {
+  it("objeção aberta ao lado da faixa, e a tarefa atrasada no rodapé pelo selo do upstream", () => {
+    // Desde a .81 o selo de tarefas é o `TarefasNoCard` do upstream (v1.81), que
+    // lê `lead.tarefas`; o `TarefasAtrasadas` do fork saiu.
     renderCard(
       lead({
         score: { probability: 78, reason: "respondeu rápido", band: "quente", factors: [], at: null },
+        tarefas: { abertas: 2, atrasadas: 1 },
         cartao: sinais({ objecao: "parcela da obra", tarefasAtrasadas: 1 }),
       }),
     );
     expect(screen.getByText("· objeção: parcela da obra")).toBeTruthy();
     expect(screen.getByText("quente")).toBeTruthy();
-    expect(screen.getByText("· 1 tarefa atrasada")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "2 tarefas abertas · 1 atrasada" })).toBeTruthy();
+    expect(screen.queryByText("· 1 tarefa atrasada"), "o selo antigo do fork voltou: o cartão conta duas vezes").toBeNull();
   });
 
   it("a bola na linha da conversa: 'Lead há 12 min' em alerta e 'bola: nós'", () => {
