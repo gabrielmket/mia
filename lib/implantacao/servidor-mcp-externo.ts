@@ -65,7 +65,7 @@ export async function configurarServidorMcpExterno(
   if (!apagando && (!endereco || !chave)) {
     throw new Recusa(
       "Informe `endereco` e `chave` juntos (o servidor MCP do sistema do cliente e a chave de acesso), ou `apagar: true` para tirar o servidor. " +
-        'Ex.: { "endereco": "https://erp.exemplo.com.br/mcp", "chave": "<a chave que o sistema do cliente deu>" }',
+        'Ex.: { "endereco": "https://erp.example.com/mcp", "chave": "<a chave que o sistema do cliente deu>" }',
     );
   }
   if (!apagando && org.demonstracao) {

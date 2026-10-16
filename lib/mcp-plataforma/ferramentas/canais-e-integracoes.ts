@@ -286,7 +286,7 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
       chave: z.string().trim().min(1).max(500).optional().describe("A chave de acesso que o sistema do cliente deu. Entra cifrada; nunca volta."),
       apagar: z.boolean().optional().describe("true tira o endereço e a chave: a IA deixa de alcançar o servidor."),
     },
-    exemplo: { organization_id: ORG_DE_EXEMPLO, endereco: "https://erp.exemplo.com.br/mcp", chave: "chave-de-exemplo-1234" },
+    exemplo: { organization_id: ORG_DE_EXEMPLO, endereco: "https://erp.example.com/mcp", chave: "chave-de-exemplo-1234" },
     operacao: "implantar_configuracao",
     // A chave NUNCA vai para a trilha, e o endereço vai só como host (pode trazer
     // caminho de terceiro): a mesma forma da auditoria da tela.
