@@ -9,7 +9,11 @@
  * consulta indexada e nenhuma chamada à Microsoft.
  *
  * O catálogo de cada conta é relido uma vez por dia (agenda nova, agenda que
- * sumiu, Teams que passou a ser permitido).
+ * sumiu, Teams que passou a ser permitido). A leitura do catálogo que FALHA
+ * espera 15 minutos (`catalogo_tentar_apos`, 9044): é o conserto que o upstream
+ * fez no Google na v1.84 (0668, `catalog_retry_at`). Sem ele, a conta com
+ * defeito era tentada a cada tick (60 vezes por hora) e cinco contas assim
+ * tomavam as cinco vagas de catálogo de toda rodada.
  */
 
 import { NextResponse, type NextRequest } from "next/server";
@@ -26,6 +30,8 @@ export const dynamic = "force-dynamic";
 const TETO_DE_CALENDARIOS = 25;
 const TETO_DE_CATALOGOS = 5;
 const UM_DIA_MS = 86_400_000;
+/** O mesmo prazo que a leitura de agenda que falha recebe (`proxima_leitura_em` + 15 min). */
+const RECUO_DO_CATALOGO_MS = 15 * 60_000;
 
 interface CalendarioVencido {
   id: string;
@@ -40,6 +46,8 @@ interface ConexaoAtiva {
   id: string;
   organization_id: string;
   user_id: string;
+  /** 9044: não ler o catálogo antes disto (a última leitura falhou). */
+  catalogo_tentar_apos: string | null;
 }
 
 async function executar(req: NextRequest) {
@@ -53,7 +61,7 @@ async function executar(req: NextRequest) {
 
   const { data: conexoesBrutas, error } = await db
     .from("mia_agenda_microsoft_conexoes")
-    .select("id, organization_id, user_id")
+    .select("id, organization_id, user_id, catalogo_tentar_apos")
     .eq("status", "healthy");
   if (error) {
     return NextResponse.json(
@@ -68,6 +76,9 @@ async function executar(req: NextRequest) {
   let catalogos = 0;
   for (const conexao of conexoes) {
     if (catalogos >= TETO_DE_CATALOGOS) break;
+    // 9044: no recuo, a conta espera como esperava antes, sem ocupar vaga nem
+    // ir ao banco perguntar pelo catálogo.
+    if (conexao.catalogo_tentar_apos && Date.parse(conexao.catalogo_tentar_apos) > agora.getTime()) continue;
     const { data: maisVelho } = await db
       .from("mia_agenda_microsoft_calendarios")
       .select("catalogo_conferido_em")
@@ -84,7 +95,10 @@ async function executar(req: NextRequest) {
     } catch {
       await db
         .from("mia_agenda_microsoft_conexoes")
-        .update({ ultimo_erro: "Não foi possível atualizar a lista de agendas. Confira a conexão nas configurações." })
+        .update({
+          ultimo_erro: "Não foi possível atualizar a lista de agendas. Confira a conexão nas configurações.",
+          catalogo_tentar_apos: new Date(agora.getTime() + RECUO_DO_CATALOGO_MS).toISOString(),
+        })
         .eq("organization_id", conexao.organization_id)
         .eq("id", conexao.id);
     }

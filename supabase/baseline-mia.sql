@@ -1908,7 +1908,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261016180000_9043_demonstracao_sem_email_e_mcp_externo_recusa_em_pt409', now())
+values (1, '20261017000000_9044_catalogo_do_outlook_que_falha_espera', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -14777,6 +14777,31 @@ revoke execute on function public.fn_mia_obrigacao_fechar_ciclo(uuid, integer, t
 grant execute on function public.fn_mia_obrigacao_fechar_ciclo(uuid, integer, text, date, date, date, jsonb, uuid, uuid) to authenticated, service_role;
 
 notify pgrst, 'reload schema';
+
+-- ─── 9044 · o catálogo do Outlook que falha espera 15 minutos ───
+--
+-- Espelho EXATO da migration 9044 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+-- 9044 · o catálogo do Outlook que falha espera 15 minutos
+--
+-- O upstream (0668, #2866) passou o cron da agenda do Google para 1 minuto e,
+-- junto, deu recuo à leitura do catálogo que falha: sem ele, a falha virava 60
+-- tentativas e 60 auditorias por hora. O cron do Outlook (9011) já roda a cada
+-- minuto e tinha o mesmo buraco: só o sucesso marca o catálogo como conferido.
+--
+-- A coluna é da CONEXÃO, como a do upstream (`calendar_connections`): é a lista
+-- de agendas da conta que falhou, e não uma agenda dela.
+
+alter table public.mia_agenda_microsoft_conexoes
+  add column if not exists catalogo_tentar_apos timestamptz;
+
+comment on column public.mia_agenda_microsoft_conexoes.catalogo_tentar_apos is
+  'MIA (9044): nao ler a lista de agendas desta conta Microsoft antes deste instante. Gravado pelo cron agenda-microsoft-sync quando a leitura do catalogo falha (recuo de 15 min, como calendar_connections.catalog_retry_at do upstream, 0668). NULL ou passado = pode tentar.';
+
+notify pgrst, 'reload schema';
+
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

@@ -161,7 +161,7 @@ valem PR independente: o cartão da Agenda mostra "Agenda conectada" para conex�
 | tabela | papel | espelha |
 |---|---|---|
 | `mia_microsoft_oauth_da_plataforma` | app da instalação, linha única, segredo cifrado, **vencimento do segredo**, tenant | `platform_google_oauth` |
-| `mia_agenda_microsoft_conexoes` | conta por pessoa: e-mail, id na Microsoft, tipo (trabalho/pessoal), tokens cifrados, validade, escopos, `status` com os mesmos 7 valores de `SITUACOES_DA_CONEXAO` | `calendar_connections` |
+| `mia_agenda_microsoft_conexoes` | conta por pessoa: e-mail, id na Microsoft, tipo (trabalho/pessoal), tokens cifrados, validade, escopos, `status` com os mesmos 7 valores de `SITUACOES_DA_CONEXAO`; desde a 9044 (.82), `catalogo_tentar_apos`: a leitura do catálogo que falha espera 15 minutos, o `catalog_retry_at` que o upstream deu ao Google na 0668 | `calendar_connections` |
 | `mia_agenda_microsoft_calendarios` | catálogo, "Conta como ocupado", destino, Teams permitido, papel (no vocabulário do Google, para reaproveitar regras e tela), reserva, cursor, `deltaLink`, cobertura, assinatura de notificação | `calendar_connection_calendars` |
 | `mia_agenda_microsoft_eventos` | ocupação vinda do Outlook, **sem título** | `calendar_external_events` |
 | `mia_agenda_microsoft_compromissos` | vínculo compromisso ↔ evento: id, `transactionId`, etag, base, conflito, escrita pendente, reserva, revisão publicada, erro, estado do Teams e a autorização de entrega da IA | colunas `google_*` e `meeting_state` |
