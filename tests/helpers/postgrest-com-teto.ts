@@ -74,7 +74,11 @@ export interface Cadeia extends PromiseLike<Resposta> {
 
 export interface PostgrestComTeto {
   /** O cliente, no formato que `createClient()` devolve. */
-  cliente: { from: (tabela: string) => Cadeia };
+  cliente: {
+    from: (tabela: string) => Cadeia;
+    /** FORK MIA: só quando `opcoes.rpc` existe; sem ela, a chamada ESTOURA. */
+    rpc: (nome: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string; details?: string } | null }>;
+  };
   pedidos: Pedido[];
   /** Quantos pedidos de LEITURA foram feitos a uma tabela. */
   pedidosEm: (tabela: string) => number;
@@ -92,6 +96,16 @@ export interface OpcoesDoDuble {
   falhaEm?: (pedido: number, tabela: string) => string | null;
   /** Erro do banco na n-ésima escrita (1-based) da tabela. */
   falhaNaEscrita?: (escrita: number, tabela: string, op: Escrita["op"]) => string | null;
+  /**
+   * FORK MIA: as funções do banco que o código chama por RPC, imitadas pelo
+   * teste (recebem as tabelas e a lista de escritas para gravar nelas).
+   */
+  rpc?: (
+    nome: string,
+    args: Record<string, unknown>,
+    tabelas: Record<string, Linha[]>,
+    escritas: Escrita[],
+  ) => { data: unknown; error: { message: string; details?: string } | null };
 }
 
 /** Datas ISO comparam como instante; o resto, como veio. */
@@ -293,7 +307,14 @@ export function postgrestComTeto(
   }
 
   return {
-    cliente: { from: (tabela: string) => consulta(tabela) },
+    cliente: {
+      from: (tabela: string) => consulta(tabela),
+      rpc: async (nome: string, args: Record<string, unknown> = {}) => {
+        if (!opcoes.rpc) throw new Error(`dublê: rpc("${nome}") sem opcoes.rpc`);
+        memoria.clear();
+        return opcoes.rpc(nome, args, tabelas, escritas);
+      },
+    },
     pedidos,
     pedidosEm: (tabela: string) => pedidos.filter((p) => p.tabela === tabela).length,
     escritas,

@@ -113,7 +113,8 @@ beforeEach(() => {
 
 describe("a lista: 60 ferramentas, as quatro novas montam (implantar_configuracao)", () => {
   it("as quatro da .76 entraram com a operação de montagem", () => {
-    expect(FERRAMENTAS).toHaveLength(60);
+    // FORK MIA (.79, empresa única): 61, com `plataforma_vincular_pessoas_a_empresas`.
+    expect(FERRAMENTAS).toHaveLength(61);
     const operacao = (nome: string) => FERRAMENTAS.find((f) => f.name === nome)?.operacao;
     for (const nome of [
       "plataforma_garantir_planos_de_tarefa",

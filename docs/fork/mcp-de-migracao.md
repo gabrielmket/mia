@@ -29,7 +29,11 @@ Este documento serve a duas pessoas: quem decide e confere a migração (as seç
 
 ## 2. A ordem da migração
 
-**equipe → funis → empresas → contatos → negócios → materiais**
+**equipe → funis → empresas → contatos → vínculos → negócios → materiais**
+
+Os vínculos são opcionais: a importação de contatos já liga cada contato à empresa
+da linha. `plataforma_vincular_pessoas_a_empresas` serve à base que traz a pessoa em
+mais de uma empresa, ou vários números da mesma pessoa.
 
 A ordem existe porque cada passo se apoia no anterior: o negócio se liga ao contato
 pelo telefone ou e-mail, o contato se liga à empresa pelo CNPJ ou pelo nome, e o dono
@@ -46,6 +50,7 @@ Antes de começar e depois de cada passo, chame `plataforma_ver_importacao`.
 | `plataforma_ver_importacao` | leitura | nenhuma | O retrato da base: contatos (sem telefone, bloqueados, importados), duplicatas suspeitas, empresas, negócios por origem, materiais e a indexação de cada um, produtos sem foto, trabalhos de importação dos últimos 90 dias e automações por tempo ativas |
 | `plataforma_importar_empresas` | escrita | `importar_base` | Importa até 200 empresas por chamada, reconhecendo as que já existem pelo CNPJ ou pelo nome |
 | `plataforma_importar_contatos` | escrita | `importar_base` | Importa até 200 contatos por chamada, reconhecendo os que já existem pelo telefone ou pelo e-mail |
+| `plataforma_vincular_pessoas_a_empresas` | escrita | `importar_base` | Liga até 200 contatos a empresas por chamada (papel, cargo, setor, principal, a empresa do cartão) e junta números que são da mesma pessoa (.79, [`empresa-unica.md`](empresa-unica.md)) |
 | `plataforma_importar_negocios` | escrita | `importar_base` | Importa até 100 negócios por chamada (abertos, ganhos e perdidos), reconhecendo os que já existem por `origem` + `id_de_origem` |
 | `plataforma_importar_conhecimento` | escrita | `importar_materiais` | Põe um arquivo (PDF, Markdown, CSV ou texto) na base de conhecimento do agente e pede a indexação |
 | `plataforma_importar_fotos_de_produto` | escrita | `importar_materiais` | Baixa até 20 fotos por chamada e as põe nos produtos, achados pelo código (SKU) ou pelo nome |
@@ -377,10 +382,12 @@ telefone, pelo e-mail e pelo CNPJ. O `id_de_origem` do contato fica em
 
 ### Qual tabela de empresa
 
-`crm_empresas`, a que as fichas e os cartões leem (`docs/fork/cartoes-e-fichas.md`). A
-outra representação (`companies` e `people`, o módulo B2B do upstream, com o
-enriquecimento pela Receita) não é tocada, e por isso nenhuma consulta à Receita é
-disparada.
+Desde a .79, o cadastro ÚNICO: `companies` (do upstream), com o que é só nosso ao
+lado em `mia_companies_extra`, gravado pela mesma porta da tela
+(`fn_mia_gravar_empresa`). A pessoa na empresa é o vínculo (`company_people`, com o
+nosso `papel`). Nenhuma consulta à Receita é disparada: ela é só da tela. O cadastro
+antigo (`crm_empresas`) está aposentado e não é tocado. Ver
+[`empresa-unica.md`](empresa-unica.md).
 
 ### O que a importação reaproveita das rotas
 

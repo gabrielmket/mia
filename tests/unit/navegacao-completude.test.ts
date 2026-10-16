@@ -47,6 +47,8 @@ const NAV_ALLOWLIST: Record<string, string> = {
   "/app/broadcast/novo":
     "FORK MIA: sub-fluxo de criar disparo (escolher número oficial ou por QR), alcançado pelo botão \"Novo disparo\" dentro do Broadcast",
   "/app/settings/tenant/whatsapp": "redirect legado para /app/connections; mantido por links salvos",
+  "/app/empresas":
+    "FORK MIA (.79, empresa única): redirect para /app/companies, a tela única de empresas; mantido por links salvos e pelo endereço das fichas antigas",
   "/app/settings/leads-da-meta":
     "FORK MIA (.61): redirect para /app/settings/meta-ads?aba=formularios — os Formulários da Meta viraram aba de Meta Ads; mantido por links salvos",
   "/app/settings/canal-oficial":

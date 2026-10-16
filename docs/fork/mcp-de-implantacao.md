@@ -186,10 +186,12 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **60** ferramentas no servidor: as 53 desta página e as 7 da migração
-([`mcp-de-migracao.md`](mcp-de-migracao.md)). As quatro mais novas (.76) são
-`plataforma_garantir_planos_de_tarefa`, `plataforma_configurar_canal`,
-`plataforma_garantir_fonte_de_formulario` e `plataforma_configurar_banco_externo`.
+São **61** ferramentas no servidor: as 53 desta página e as 8 da migração
+([`mcp-de-migracao.md`](mcp-de-migracao.md)). A mais nova (.79, empresa única) é
+`plataforma_vincular_pessoas_a_empresas`, da migração ([`empresa-unica.md`](empresa-unica.md)).
+As quatro de antes dela (.76) são `plataforma_garantir_planos_de_tarefa`,
+`plataforma_configurar_canal`, `plataforma_garantir_fonte_de_formulario` e
+`plataforma_configurar_banco_externo`.
 
 ### Leitura (nenhuma operação: qualquer token de plataforma lê)
 
@@ -409,7 +411,7 @@ e fica com quem opera, na tela de Segurança do agente.
 
 ## Migração de outro CRM
 
-Trazer a base que o cliente já tinha (empresas, contatos, negócios e materiais) é feito por outras sete ferramentas do mesmo servidor, com duas caixinhas próprias no token ("Importar base" e "Importar materiais"). A ordem, o formato de cada lista e os cuidados estão em [`mcp-de-migracao.md`](mcp-de-migracao.md). No roteiro acima, a migração entra depois da equipe e dos funis, e antes de pôr o agente no ar. Importar não envia nada a ninguém. No checklist (`plataforma_ver_implantacao`) ela aparece como a área "Base importada", que é opcional e nunca conta como pendência.
+Trazer a base que o cliente já tinha (empresas, contatos, os vínculos entre eles, negócios e materiais) é feito por outras oito ferramentas do mesmo servidor, com duas caixinhas próprias no token ("Importar base" e "Importar materiais"). A ordem, o formato de cada lista e os cuidados estão em [`mcp-de-migracao.md`](mcp-de-migracao.md). No roteiro acima, a migração entra depois da equipe e dos funis, e antes de pôr o agente no ar. Importar não envia nada a ninguém. No checklist (`plataforma_ver_implantacao`) ela aparece como a área "Base importada", que é opcional e nunca conta como pendência.
 
 ## 4. O que fica de fora, e por quê
 
@@ -460,10 +462,11 @@ Também ficaram de fora, por desenho:
   implantação, e a conta de cada um está montada dentro da rota, que ainda vai
   mudar no upstream (a tela da análise do funil é o passo seguinte dele). Num
   cliente recém-implantado não há histórico para ler.
-- **Empresas do upstream (`companies`).** A consulta de CNPJ, a edição e a
-  exclusão da 1.72 são da tela dele. O fork tem as próprias empresas
-  (`crm_empresas`), que entram por `plataforma_importar_empresas`. As duas não
-  foram unificadas.
+- **A consulta de CNPJ na Receita.** Desde a .79 (empresa única,
+  [`empresa-unica.md`](empresa-unica.md)) o cadastro de empresa é um só,
+  `companies`, e `plataforma_importar_empresas` grava nele. A consulta à Receita
+  fica só na tela, por uma pessoa (decisão do protótipo de 15/10/2026): nenhuma
+  ferramenta consulta.
 - **Prospecção.** As novidades da 1.70 (escolher as empresas da fila, ajustar o
   ritmo de campanha pausada) são operação de campanha, e o MCP de plataforma não
   tem ferramenta de prospecção.

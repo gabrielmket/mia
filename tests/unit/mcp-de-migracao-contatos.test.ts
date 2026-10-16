@@ -38,14 +38,13 @@ beforeEach(() => {
 
 describe("importar contatos: o caminho feliz", () => {
   it("grava o contato com tudo o que veio, e marca de onde veio", async () => {
-    banco.tabela("crm_empresas").push({
+    // FORK MIA (.79, empresa única): a empresa é a do cadastro único (`companies`).
+    banco.tabela("companies").push({
       id: "00000000-0000-4000-8000-00000000f010",
       organization_id: ORG,
-      nome: "Padaria Modelo LTDA",
-      cnpj: "12345678000190",
-      mesclada_em: null,
-      tags: [],
-      custom_fields: {},
+      trade_name: "Padaria Modelo LTDA",
+      legal_name: null,
+      normalized_cnpj: "12345678000190",
     });
 
     const r = await importar([
@@ -462,17 +461,15 @@ describe("os dois modos de reexecução", () => {
     const primeiro = await importar([{ nome: "Elisa Prado", telefone: "(10) 99444-0004", empresa: { nome: "Oficina Exemplo" } }]);
     expect(primeiro.itens[0]).toMatchObject({ desfecho: "criou" });
     expect(primeiro.itens[0]!.avisos?.join(" ")).toContain("plataforma_importar_empresas");
-    expect(banco.tabela("crm_empresas")).toHaveLength(0);
+    expect(banco.tabela("companies")).toHaveLength(0);
     expect(contatos()[0]!.empresa_id).toBeNull();
 
-    banco.tabela("crm_empresas").push({
+    banco.tabela("companies").push({
       id: "00000000-0000-4000-8000-00000000f050",
       organization_id: ORG,
-      nome: "Oficina Exemplo ME",
-      cnpj: null,
-      mesclada_em: null,
-      tags: [],
-      custom_fields: {},
+      trade_name: "Oficina Exemplo ME",
+      legal_name: null,
+      normalized_cnpj: null,
     });
     const segundo = await importar([{ nome: "Elisa Prado", telefone: "(10) 99444-0004", empresa: { nome: "Oficina Exemplo" } }]);
     expect(segundo.itens[0]).toMatchObject({ desfecho: "atualizou" });

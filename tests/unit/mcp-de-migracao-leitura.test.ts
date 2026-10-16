@@ -73,12 +73,15 @@ beforeEach(() => {
       contato({ name: "Grupo", kind: "whatsapp_group" }),
       contato({ name: "Vizinho", organization_id: OUTRA_ORG, phone_number: "+5510996660006" }),
     ],
-    crm_empresas: [
-      { id: "e1", organization_id: ORG, nome: "Padaria Modelo LTDA", cnpj: "12345678000190", mesclada_em: null },
-      { id: "e2", organization_id: ORG, nome: "Oficina Exemplo ME", cnpj: null, mesclada_em: null },
-      { id: "e3", organization_id: ORG, nome: "Lápide", cnpj: null, mesclada_em: "2026-01-01T00:00:00Z" },
-      { id: "e4", organization_id: OUTRA_ORG, nome: "Empresa vizinha", cnpj: null, mesclada_em: null },
+    // FORK MIA (.79, empresa única): o cadastro é `companies`; a lápide de
+    // fusão mora ao lado (`mia_companies_mescladas`) e não conta.
+    companies: [
+      { id: "e1", organization_id: ORG, trade_name: "Padaria Modelo LTDA", normalized_cnpj: "12345678000190" },
+      { id: "e2", organization_id: ORG, trade_name: "Oficina Exemplo ME", normalized_cnpj: null },
+      { id: "e4", organization_id: OUTRA_ORG, trade_name: "Empresa vizinha", normalized_cnpj: null },
     ],
+    mia_companies_mescladas: [{ id: "e3", organization_id: ORG, nome: "Lápide", mesclada_com: "e2" }],
+    company_people: [{ id: "v1", organization_id: ORG, company_id: "e1", person_id: "p1" }],
     crm_leads: [
       { id: "l1", organization_id: ORG, status: "open", source: "importacao:crm-antigo", external_id: "n-1" },
       { id: "l2", organization_id: ORG, status: "won", source: "importacao:crm-antigo", external_id: "n-2" },
@@ -162,10 +165,13 @@ describe("plataforma_ver_importacao: o retrato da base", () => {
     expect(area(r, "contatos").so_pela_tela.join(" ")).toContain("Duplicados");
   });
 
-  it("conta as empresas vivas e as sem CNPJ", async () => {
+  it("conta as empresas vivas, as sem CNPJ e os vínculos de pessoa (empresa única, .79)", async () => {
     const a = area(await ver(), "empresas");
-    expect(a.numeros).toEqual({ total: 2, sem_cnpj: 1 });
+    expect(a.numeros).toEqual({ total: 2, sem_cnpj: 1, vinculos: 1 });
     expect(a.falta.join(" ")).toContain("sem CNPJ");
+    expect(a.pronto.join(" ")).toContain("1 vínculo(s) de pessoa com empresa");
+    // A consulta de CNPJ é só pela tela (decisão do protótipo).
+    expect(a.so_pela_tela.join(" ")).toContain("Receita");
   });
 
   it("conta os negócios importados POR ORIGEM, com abertos, ganhos e perdidos", async () => {

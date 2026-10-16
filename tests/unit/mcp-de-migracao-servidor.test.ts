@@ -69,7 +69,8 @@ const ESCRITAS: Array<{ nome: string; operacao: string; outra: string; argumento
     operacao: "importar_base",
     outra: "importar_materiais",
     argumentos: { organization_id: ORG, empresas: [{ nome: "Padaria Modelo LTDA", cnpj: "12.345.678/0001-90" }] },
-    tabela: "crm_empresas",
+    // FORK MIA (.79, empresa única): o cadastro único.
+    tabela: "companies",
   },
   {
     nome: "plataforma_importar_contatos",
@@ -233,7 +234,7 @@ describe("com a operação no token, a importação roda e a trilha não carrega
     expect(r.erro, r.texto).toBe(false);
     const resposta = JSON.parse(r.texto);
     expect(resposta.itens.map((i: { desfecho: string }) => i.desfecho)).toEqual(["criou", "recusou", "criou"]);
-    expect(banco.tabela("crm_empresas")).toHaveLength(2);
+    expect(banco.tabela("companies")).toHaveLength(2);
   });
 });
 

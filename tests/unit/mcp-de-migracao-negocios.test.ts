@@ -69,12 +69,13 @@ describe("importar negócios: o caminho feliz", () => {
       is_merged_into: null,
       is_anonymized: false,
     });
-    banco.tabela("crm_empresas").push({
+    // FORK MIA (.79, empresa única): a empresa é a do cadastro único (`companies`).
+    banco.tabela("companies").push({
       id: "00000000-0000-4000-8000-00000000f102",
       organization_id: ORG,
-      nome: "Padaria Modelo LTDA",
-      cnpj: "12345678000190",
-      mesclada_em: null,
+      trade_name: "Padaria Modelo LTDA",
+      legal_name: null,
+      normalized_cnpj: "12345678000190",
     });
 
     const r = await importar([

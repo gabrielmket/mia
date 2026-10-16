@@ -140,6 +140,7 @@ const CARTAO: DadosDoCartao = {
   outrosNegocios: [{ id: "L0", titulo: "Studio Vista Parque", status: "lost", etapa: null, valorCents: null, moeda: null, motivoDaPerda: "Preço" }],
   empresa: null,
   empresaDoContato: null,
+  pessoasDaEmpresa: [],
   compras: {
     selo: "recorrente",
     quantidade: 2,

@@ -45,6 +45,8 @@ const NOMES = [
   "plataforma_ver_importacao",
   "plataforma_importar_empresas",
   "plataforma_importar_contatos",
+  // FORK MIA (.79, empresa única): pessoa em várias empresas e vários números.
+  "plataforma_vincular_pessoas_a_empresas",
   "plataforma_importar_negocios",
   "plataforma_importar_conhecimento",
   "plataforma_importar_fotos_de_produto",
@@ -52,7 +54,7 @@ const NOMES = [
 ];
 
 describe("os três pontos de encaixe", () => {
-  it("as sete ferramentas de importação estão no catálogo do MCP de plataforma, com estes nomes", () => {
+  it("as oito ferramentas de importação estão no catálogo do MCP de plataforma, com estes nomes", () => {
     expect(FERRAMENTAS_DE_IMPORTACAO.map((f) => f.name)).toEqual(NOMES);
     for (const nome of NOMES) {
       expect(FERRAMENTA_POR_NOME.get(nome), `${nome} não está em FERRAMENTAS`).toBeDefined();
@@ -106,6 +108,7 @@ describe("as duas operações: importar base e importar materiais", () => {
       plataforma_ver_importacao: null,
       plataforma_importar_empresas: "importar_base",
       plataforma_importar_contatos: "importar_base",
+      plataforma_vincular_pessoas_a_empresas: "importar_base",
       plataforma_importar_negocios: "importar_base",
       plataforma_importar_conhecimento: "importar_materiais",
       plataforma_importar_fotos_de_produto: "importar_materiais",

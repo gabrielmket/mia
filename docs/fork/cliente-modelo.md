@@ -130,7 +130,7 @@ Musculação, funcional, pilates e aulas coletivas. Agente: **Duda**.
 |---|---|
 | funis | 9 funis. Seis saem dos quadros prontos do onboarding: clínica, imobiliária, serviços B2B, cursos, loja e geral (este é o padrão). Os outros três são automotivo, academia e o **Comercial**, que recebe o que a IA passa. Todos têm campos personalizados, motivos de perda com categoria e motivos de ganho, e **pelo menos um negócio em cada etapa** |
 | negócios | 62 negócios, cada um com valor, dono (pessoa ou a IA "Sofia"), origem, próxima ação (uma tarefa com prazo ligada ao card) e histórico na timeline. As origens são cinco: formulário da Meta, clique para o WhatsApp, Google, site e indicação |
-| contatos e empresas | 54 contatos, com e sem empresa. As 5 empresas têm várias pessoas e existem nas duas entidades do produto: `crm_empresas` (a da ficha e do card) e `companies`/`people` (o módulo B2B) |
+| contatos e empresas | 55 contatos, com e sem empresa. As 5 empresas têm várias pessoas, no cadastro único (`companies`, `people` e `company_people` com o papel, desde a .79). Uma pessoa está em duas empresas (a contadora externa) e uma tem dois números |
 | atendimento com a IA | 8 conversas fictícias (47 mensagens). Em cada uma entram a qualificação da IA (`lead_state`), a ficha (`lead_notes`) e, quando houver, a passagem para uma pessoa e o card no Comercial |
 | follow-ups | os 28 modelos por segmento (geral, clínica, imobiliário, automotivo, academia, serviços B2B e indústria). Os que estão em uso ficam publicados, com inscrições em andamento e terminadas e o registro de cada passo. Os demais ficam em rascunho |
 | agenda | 13 compromissos: passados (feito, faltou, cancelado) e futuros (confirmado, pendente), com o lembrete desligado |

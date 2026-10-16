@@ -179,9 +179,22 @@ const NEGOCIOS = [
 /** O conteúdo INTEIRO das tabelas da base, linha a linha, com todas as colunas. */
 async function retratoDaBase(): Promise<Record<string, string>> {
   const retrato: Record<string, string> = {};
-  for (const tabela of ["contacts", "crm_empresas", "crm_leads", "lead_notes", "crm_lead_activities"]) {
+  // FORK MIA (.79, empresa única): a empresa é do cadastro único (`companies`, com
+  // o que é só nosso ao lado) e a pessoa na empresa é o vínculo (`people`,
+  // `company_people`). Repetir a importação não pode mexer em nenhuma delas.
+  for (const tabela of [
+    "contacts",
+    "companies",
+    "mia_companies_extra",
+    "people",
+    "company_people",
+    "crm_leads",
+    "lead_notes",
+    "crm_lead_activities",
+  ]) {
     const { rows } = await pool.query<{ total: string; resumo: string }>(
-      `select count(*)::text as total, md5(coalesce(string_agg(t::text, '|' order by t.id), '')) as resumo
+      // Ordem pela linha inteira: `mia_companies_extra` não tem `id` (a chave é a empresa).
+      `select count(*)::text as total, md5(coalesce(string_agg(t::text, '|' order by t::text), '')) as resumo
          from public."${tabela}" t where t.organization_id = $1`,
       [ORG],
     );
@@ -297,8 +310,8 @@ describe("migração de uma base inteira pelo MCP de plataforma", () => {
 
     const { rows: ana } = await pool.query(
       `select c.phone_number, c.email, c.tags, c.cargo, c.papel_na_empresa, c.principal_na_empresa, c.source,
-              c.consent -> 'marketing' ->> 'granted_at' as consentiu_em, e.nome as empresa
-         from contacts c left join crm_empresas e on e.id = c.empresa_id
+              c.consent -> 'marketing' ->> 'granted_at' as consentiu_em, coalesce(e.trade_name, e.legal_name) as empresa
+         from contacts c left join companies e on e.id = c.empresa_id
         where c.organization_id = $1 and c.email_normalized = 'ana.souza@exemplo.invalid'`,
       [ORG],
     );
@@ -330,12 +343,12 @@ describe("migração de uma base inteira pelo MCP de plataforma", () => {
     const { rows: leads } = await pool.query(
       `select l.external_id, l.source, l.status, l.value_cents::int as valor, l.lost_reason, s.name as etapa,
               morreu.name as morreu_em, l.owner_user_id, l.created_at::date::text as criado, l.closed_at::date::text as fechado,
-              c.name as contato, e.nome as empresa
+              c.name as contato, coalesce(e.trade_name, e.legal_name) as empresa
          from crm_leads l
          join crm_stages s on s.id = l.stage_id
          left join crm_stages morreu on morreu.id = l.lost_from_stage_id
          left join contacts c on c.id = l.contact_id
-         left join crm_empresas e on e.id = l.empresa_id
+         left join companies e on e.id = l.empresa_id
         where l.organization_id = $1 order by l.external_id`,
       [ORG],
     );
@@ -415,7 +428,7 @@ describe("migração de uma base inteira pelo MCP de plataforma", () => {
   });
 
   it("a importação fica na organização pedida: a vizinha não ganha linha nenhuma", async () => {
-    for (const tabela of ["contacts", "crm_empresas", "crm_leads"]) {
+    for (const tabela of ["contacts", "companies", "company_people", "crm_leads"]) {
       const { rows } = await pool.query<{ total: string }>(
         `select count(*)::text as total from public."${tabela}" where organization_id = $1`,
         [OUTRA_ORG],

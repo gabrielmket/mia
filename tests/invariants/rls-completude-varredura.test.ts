@@ -338,6 +338,10 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     "broadcasts",
     "broadcast_recipients",
     "crm_empresas",
+    // .79 — empresa única (9032): ao lado de `companies`, a lápide e o de-para.
+    "mia_companies_extra",
+    "mia_companies_mescladas",
+    "mia_companies_de_para",
     // .60 — leads dos formulários da Meta (9003).
     "mia_leads_da_meta_config",
     "mia_leads_da_meta_formularios",

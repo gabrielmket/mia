@@ -159,7 +159,8 @@ beforeAll(() => {
       values ('${FUNIL_A}', '${ORG_A}', 'Serviços 9018', 'servicos-9018') on conflict do nothing;
     insert into public.crm_stages (id, organization_id, pipeline_id, name, slug, position)
       values ('${ETAPA_A}', '${ORG_A}', '${FUNIL_A}', 'Novo', 'novo', 1000) on conflict do nothing;
-    insert into public.crm_empresas (id, organization_id, nome) values
+    -- FORK MIA (.79, empresa única): a empresa é do cadastro único (companies).
+    insert into public.companies (id, organization_id, trade_name) values
       ('${EMPRESA_A}', '${ORG_A}', 'Empresa 9018 A'),
       ('${EMPRESA_B}', '${ORG_B}', 'Empresa 9018 B'),
       ('${EMPRESA_DEMO}', '${DEMO}', 'Empresa 9018 Demo')
@@ -478,8 +479,10 @@ describe("o item e os donos dele", () => {
       medir(`
         insert into public.contacts (id, organization_id, display_name) values ('${outroContato}', '${ORG_A}', 'Contato que fica 9018');
         update public.contacts set is_merged_into = '${outroContato}' where id = '${CONTATO_A}';
-        insert into public.crm_empresas (id, organization_id, nome) values ('${outraEmpresa}', '${ORG_A}', 'Empresa que fica 9018');
-        update public.crm_empresas set mesclada_com = '${outraEmpresa}', mesclada_em = now() where id = '${EMPRESA_A}';
+        -- Desde a .79 a fusão de empresas é fn_mesclar_empresas sobre companies
+        -- (9034): ela reponta toda chave para a empresa, a das obrigações inclusive.
+        insert into public.companies (id, organization_id, trade_name) values ('${outraEmpresa}', '${ORG_A}', 'Empresa que fica 9018');
+        select public.fn_mesclar_empresas('${ORG_A}', '${outraEmpresa}', '${EMPRESA_A}');
         select 'M:' || (select contact_id from public.mia_obrigacoes where id = '${ITEM_DO_CONTATO}')
                     || '|' || (select empresa_id from public.mia_obrigacoes where id = '${ITEM_DA_EMPRESA}');
       `),

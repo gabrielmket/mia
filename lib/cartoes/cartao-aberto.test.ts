@@ -179,7 +179,8 @@ describe("montar o cartão aberto", () => {
         { id: "A1", organization_id: ORG, contact_id: "C1", title: "Visita", event_type_id: null, location_kind: "in_person", location_details: "Jardim das Flores", starts_at: "2026-10-03T13:00:00Z", ends_at: "2026-10-03T14:00:00Z", time_zone: "America/Sao_Paulo", status: "confirmed" },
         { id: "A2", organization_id: ORG, contact_id: "C1", title: "Do outro", event_type_id: null, location_kind: "phone", location_details: null, starts_at: "2026-10-02T13:00:00Z", ends_at: "2026-10-02T14:00:00Z", time_zone: "America/Sao_Paulo", status: "confirmed" },
       ],
-      crm_empresas: [{ id: "E1", organization_id: ORG, nome: "Clínica Vida Plena", cnpj: null, telefone: null, site: null }],
+      // FORK MIA (.79, empresa única): a empresa é a do cadastro do upstream.
+      companies: [{ id: "E1", organization_id: ORG, trade_name: "Clínica Vida Plena", legal_name: null, normalized_cnpj: null, phone: null }],
       orders: [],
     });
   }
@@ -215,6 +216,8 @@ describe("montar o cartão aberto", () => {
     ]);
     expect(c.empresa).toBeNull();
     expect(c.empresaDoContato).toEqual({ id: "E1", nome: "Clínica Vida Plena" });
+    // Negócio sem empresa: nenhuma sugestão de "outras pessoas desta empresa".
+    expect(c.pessoasDaEmpresa).toEqual([]);
     expect(c.compras?.quantidade).toBe(1);
     expect(c.compras?.habito.pagamento).toBe("À vista");
     expect(c.origem.canal.sigla).toBe("META");

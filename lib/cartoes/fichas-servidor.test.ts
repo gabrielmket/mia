@@ -1,6 +1,10 @@
 /**
  * FORK MIA — as fichas conectadas, montadas num banco em memória: o que a ficha
  * do contato e a da empresa juntam, e de onde.
+ *
+ * Desde a .79 (empresa única) a empresa é a do cadastro do upstream
+ * (`companies`), as pessoas dela vêm do vínculo (`company_people`, com o nosso
+ * `papel`), e o contato guarda o espelho da empresa do cartão.
  */
 import { describe, expect, it } from "vitest";
 
@@ -13,11 +17,22 @@ const agora = new Date("2026-09-30T15:00:00Z");
 function banco() {
   return bancoEmMemoria({
     contacts: [
-      { id: "carla", organization_id: ORG, name: "Carla Mendes", display_name: null, phone_number: "+5511955550110", email: null, empresa_id: "vida", cargo: "Sócia", papel_na_empresa: "decisor", principal_na_empresa: true, is_anonymized: false, last_activity_at: "2026-09-30T09:12:00Z" },
-      { id: "ricardo", organization_id: ORG, name: "Ricardo Alves", display_name: null, phone_number: null, email: null, empresa_id: "vida", cargo: "Financeiro", papel_na_empresa: "financeiro", principal_na_empresa: false, is_anonymized: false, last_activity_at: "2026-09-28T10:00:00Z" },
+      { id: "carla", organization_id: ORG, person_id: "p-carla", name: "Carla Mendes", display_name: null, phone_number: "+5511955550110", email: null, empresa_id: "vida", cargo: "Sócia", papel_na_empresa: "decisor", principal_na_empresa: true, is_anonymized: false, last_activity_at: "2026-09-30T09:12:00Z", created_at: "2026-01-01" },
+      // O segundo número da Carla (vários números = uma pessoa).
+      { id: "carla-2", organization_id: ORG, person_id: "p-carla", name: "Carla Mendes", display_name: null, phone_number: "+5511955550119", email: null, empresa_id: "vida", cargo: "Sócia", papel_na_empresa: "decisor", principal_na_empresa: true, is_anonymized: false, last_activity_at: null, created_at: "2026-02-01" },
+      { id: "ricardo", organization_id: ORG, person_id: "p-ricardo", name: "Ricardo Alves", display_name: null, phone_number: null, email: null, empresa_id: "vida", cargo: "Financeiro", papel_na_empresa: "financeiro", principal_na_empresa: false, is_anonymized: false, last_activity_at: "2026-09-28T10:00:00Z", created_at: "2026-01-02" },
       { id: "outra", organization_id: "OUTRA", name: "De fora", display_name: null, empresa_id: "vida", is_anonymized: false },
     ],
-    crm_empresas: [{ id: "vida", organization_id: ORG, nome: "Clínica Vida Plena", cnpj: "12345678000190" }],
+    companies: [
+      { id: "vida", organization_id: ORG, trade_name: "Clínica Vida Plena", legal_name: null, normalized_cnpj: "12345678000190" },
+      { id: "sol", organization_id: ORG, trade_name: "Studio Sol", legal_name: null, normalized_cnpj: null },
+    ],
+    company_people: [
+      { organization_id: ORG, company_id: "vida", person_id: "p-carla", job_title: "Sócia", department: null, papel: "decisor", is_primary: true, created_at: "2026-01-01" },
+      { organization_id: ORG, company_id: "vida", person_id: "p-ricardo", job_title: "Financeiro", department: null, papel: "financeiro", is_primary: false, created_at: "2026-01-02" },
+      // Ricardo também está em outra empresa: "Também está em".
+      { organization_id: ORG, company_id: "sol", person_id: "p-ricardo", job_title: "Consultor", department: null, papel: "influenciador", is_primary: false, created_at: "2026-03-01" },
+    ],
     crm_leads: [
       { id: "sala", organization_id: ORG, contact_id: "carla", empresa_id: "vida", title: "Sala 42 m²", status: "open", stage_id: "S", pipeline_id: "P", value_cents: 22_320_000, currency: "BRL", owner_user_id: "u", owner_kind: "user", lost_reason: null, updated_at: "2026-09-29" },
       { id: "moema", organization_id: ORG, contact_id: "carla", empresa_id: "vida", title: "Sala Moema", status: "won", stage_id: "S", pipeline_id: "P", value_cents: 42_000_000, currency: "BRL", owner_user_id: null, owner_kind: null, lost_reason: null, closed_at: "2023-03-15T12:00:00Z", updated_at: "2023-03-15" },
@@ -42,6 +57,8 @@ describe("ficha do contato", () => {
   it("empresa com cargo, papel e principal; negócios dele; resumo, memória, conversa; compras dele e a soma da empresa", async () => {
     const f = (await montarFichaDoContato(banco().cliente as never, ORG, "carla", agora))!;
     expect(f.empresa).toEqual({ id: "vida", nome: "Clínica Vida Plena", cnpj: "12345678000190", cargo: "Sócia", papel: "decisor", principal: true });
+    expect(f.empresas.map((e) => [e.nome, e.papel, e.noCartao])).toEqual([["Clínica Vida Plena", "decisor", true]]);
+    expect(f.outrosNumeros).toEqual([{ id: "carla-2", telefone: "+5511955550119", nome: "Carla Mendes" }]);
     expect(f.negocios.map((n) => [n.titulo, n.status, n.etapa, n.funil, n.probabilidade])).toEqual([
       ["Sala 42 m²", "open", "Proposta", "Locação", 65],
       ["Sala Moema", "won", "Proposta", "Locação", null],
@@ -74,6 +91,9 @@ describe("ficha da empresa", () => {
       ["Carla Mendes", "decisor", true, "cv-carla"],
       ["Ricardo Alves", "financeiro", false, null],
     ]);
+    // Uma linha por PESSOA, com todos os números dela.
+    expect(f.pessoas[0]!.telefones).toEqual(["+5511955550110", "+5511955550119"]);
+    expect(f.pessoas[1]!.outrasEmpresas).toEqual([{ id: "sol", nome: "Studio Sol" }]);
     expect(f.negocios.map((n) => n.id).sort()).toEqual(["aurora", "moema", "sala"]);
     expect(f.numeros).toEqual({
       abertos: 1,

@@ -252,7 +252,8 @@ const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
   {
     fn: "fn_mesclar_empresas(uuid,uuid,uuid)",
     razao:
-      "Fork MIA (migration 0263 da MIA). POST app/api/v1/empresas/mesclar/route.ts " +
+      "Fork MIA (migration 0263 da MIA, redefinida sobre companies na 9034, empresa " +
+      "única da .79). POST app/api/v1/empresas/mesclar/route.ts " +
       "chama com createClient da sessão, de propósito e pelo mesmo motivo de " +
       "fn_mesclar_contatos, acima: é `auth.uid()` que faz a função reconferir " +
       "`fn_role_at_least(p_organization_id, 'manager')` antes de travar as duas " +
@@ -262,6 +263,74 @@ const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
       "fichas são lidas FOR UPDATE fechadas por organization_id antes de qualquer " +
       "escrita (ficha de outra organização = `empresa_nao_encontrada`), e o " +
       "repontamento só alcança linhas que apontam para a perdedora já conferida.",
+  },
+  // ── .79 · empresa única (9034): as portas de escrita que a sessão chama ──
+  {
+    fn: "fn_mia_gravar_empresa(uuid,uuid,jsonb)",
+    razao:
+      "Fork MIA (9034). POST/PATCH app/api/v1/empresas e .../empresas/[id]/receita " +
+      "chamam com createClient da sessão (lib/empresas/fonte-unica.ts, gravarEmpresa): " +
+      "o atendente cria empresa (decisão do protótipo de 15/10/2026), papel 'agent'. " +
+      "Faz a própria checagem de papel com `fn_role_at_least` sobre o p_organization_id " +
+      "(auth.uid() nulo = servidor, o MCP de plataforma e o agente) e só alcança linhas " +
+      "daquela organização. Definer porque grava em tabelas que a sessão não escreve " +
+      "direto (companies tem INSERT só para gestor no upstream; as tabelas ao lado da " +
+      "9032 não têm escrita da sessão), numa transação só.",
+  },
+  {
+    fn: "fn_mia_vincular_pessoa(uuid,uuid,uuid,jsonb)",
+    razao:
+      "Fork MIA (9034). POST app/api/v1/empresas/[id]/pessoas chama com a sessão: " +
+      "papel 'agent'. " +
+      "Faz a própria checagem de papel com `fn_role_at_least` sobre o p_organization_id " +
+      "(auth.uid() nulo = servidor, o MCP de plataforma e o agente) e só alcança linhas " +
+      "daquela organização. Definer porque grava em tabelas que a sessão não escreve " +
+      "direto (companies tem INSERT só para gestor no upstream; as tabelas ao lado da " +
+      "9032 não têm escrita da sessão), numa transação só.",
+  },
+  {
+    fn: "fn_mia_desvincular_pessoa(uuid,uuid,uuid)",
+    razao:
+      "Fork MIA (9034). DELETE app/api/v1/empresas/[id]/pessoas chama com a sessão: " +
+      "papel 'agent'. " +
+      "Faz a própria checagem de papel com `fn_role_at_least` sobre o p_organization_id " +
+      "(auth.uid() nulo = servidor, o MCP de plataforma e o agente) e só alcança linhas " +
+      "daquela organização. Definer porque grava em tabelas que a sessão não escreve " +
+      "direto (companies tem INSERT só para gestor no upstream; as tabelas ao lado da " +
+      "9032 não têm escrita da sessão), numa transação só.",
+  },
+  {
+    fn: "fn_mia_juntar_numeros(uuid,uuid,uuid)",
+    razao:
+      "Fork MIA (9034). POST app/api/v1/contacts/[id]/mesma-pessoa chama com a sessão: " +
+      "papel 'agent'. " +
+      "Faz a própria checagem de papel com `fn_role_at_least` sobre o p_organization_id " +
+      "(auth.uid() nulo = servidor, o MCP de plataforma e o agente) e só alcança linhas " +
+      "daquela organização. Definer porque grava em tabelas que a sessão não escreve " +
+      "direto (companies tem INSERT só para gestor no upstream; as tabelas ao lado da " +
+      "9032 não têm escrita da sessão), numa transação só.",
+  },
+  {
+    fn: "fn_mia_separar_numero(uuid,uuid)",
+    razao:
+      "Fork MIA (9034). DELETE app/api/v1/contacts/[id]/mesma-pessoa chama com a sessão: " +
+      "papel 'agent'. " +
+      "Faz a própria checagem de papel com `fn_role_at_least` sobre o p_organization_id " +
+      "(auth.uid() nulo = servidor, o MCP de plataforma e o agente) e só alcança linhas " +
+      "daquela organização. Definer porque grava em tabelas que a sessão não escreve " +
+      "direto (companies tem INSERT só para gestor no upstream; as tabelas ao lado da " +
+      "9032 não têm escrita da sessão), numa transação só.",
+  },
+  {
+    fn: "fn_mia_excluir_empresa(uuid,uuid)",
+    razao:
+      "Fork MIA (9034). DELETE app/api/v1/empresas/[id] chama com a sessão: papel " +
+      "'manager', e recusa com negócio aberto. " +
+      "Faz a própria checagem de papel com `fn_role_at_least` sobre o p_organization_id " +
+      "(auth.uid() nulo = servidor, o MCP de plataforma e o agente) e só alcança linhas " +
+      "daquela organização. Definer porque grava em tabelas que a sessão não escreve " +
+      "direto (companies tem INSERT só para gestor no upstream; as tabelas ao lado da " +
+      "9032 não têm escrita da sessão), numa transação só.",
   },
   {
     fn: "fn_log_event(uuid,text,jsonb)",

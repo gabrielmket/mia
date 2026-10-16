@@ -205,14 +205,17 @@ test("liga um módulo, a tela diz onde ele aparece, e a porta está lá no CRM",
     // 2. Com `exact: true`, o `link` deixa de casar: o nome acessível do card do hub é o título
     //    MAIS a descrição ("Empresas Cadastro B2B — razão social, CNPJ e decisores."). O que tem
     //    nome exato é o `heading` de nível 3 dentro dele, como o snapshot da falha mostrou.
-    // FORK MIA: o hub do CRM do fork tem DOIS cards "Empresas" — o nosso
-    // (/app/empresas, cadastro de empresas do cliente) e o do módulo crm_b2b
-    // (/app/companies) que este caso liga. A âncora é o card que aponta para a
-    // porta do módulo, para o strict mode do Playwright não casar com os dois.
+    // FORK MIA (.79, empresa única): o card "Empresas" é um só, o de
+    // /app/companies, e no fork ele EXISTE sem o módulo (é o cadastro único de
+    // empresa; quem o esconde é o modo de venda B2C). A âncora continua no card
+    // dele, e a porta que o módulo traz de fato (Pessoas) é conferida também.
     await expect(
       page
         .locator('a[href="/app/companies"]')
         .getByRole("heading", { level: 3, name: PORTA, exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.locator('a[href="/app/people"]').getByRole("heading", { level: 3, name: "Pessoas", exact: true }),
     ).toBeVisible();
 
     // E a rota abre de verdade — o gate do layout (`notFound()` com o módulo
@@ -233,13 +236,17 @@ test("liga um módulo, a tela diz onde ele aparece, e a porta está lá no CRM",
     // A mesma âncora do passo positivo, para os dois lados usarem a mesma régua. O `Received: 1`
     // da rodada anterior era o card "Prospecção" casando por substring — foi ele que me fez
     // perseguir três hipóteses erradas sobre revalidação e corrida de estado.
-    // FORK MIA: a mesma âncora do passo positivo inclui o card da porta do
-    // módulo (`/app/companies`); o nosso card "Empresas" (/app/empresas) não
-    // depende do crm_b2b e continua no hub com o módulo desligado.
+    // FORK MIA (.79, empresa única): com o módulo desligado, a porta que SAI é
+    // a de Pessoas (/app/people); Empresas (/app/companies) é o cadastro único
+    // do fork e continua no hub (lib/navigation/interface.ts), no modo de venda
+    // padrão (B2B). docs/fork/empresa-unica.md.
+    await expect(
+      page.locator('a[href="/app/people"]').getByRole("heading", { level: 3, name: "Pessoas", exact: true }),
+    ).toHaveCount(0);
     await expect(
       page
         .locator('a[href="/app/companies"]')
         .getByRole("heading", { level: 3, name: PORTA, exact: true }),
-    ).toHaveCount(0);
+    ).toBeVisible();
   });
 });
