@@ -197,6 +197,12 @@ const SITES: { arquivo: string; fronteira: string; papel?: "gerador" | "validado
   // ponto e barra: dentro do alfabeto do Storage.
   { arquivo: "lib/mcp-plataforma/importacao/conhecimento.ts", fronteira: "storage.chave-de-objeto" },
   { arquivo: "lib/mcp-plataforma/importacao/fotos-de-produto.ts", fronteira: "storage.chave-de-objeto" },
+  // FORK MIA (.81) — as imagens da resposta pronta pelo MCP de plataforma
+  // (`plataforma_garantir_respostas_prontas`): a chave da rota da tela,
+  // `<org>/templates/<template>/<8-4-4-4-12>.<ext>` (`prefixoDoTemplate`), com o
+  // nome tirado do resumo do conteúdo e a extensão de `extensaoDe`. Só
+  // hexadecimal, hífen, ponto e barra (e a palavra `templates`).
+  { arquivo: "lib/implantacao/mensagens.ts", fronteira: "storage.chave-de-objeto" },
   // FORK MIA — o arquivo de um documento (docs/fork/obrigacoes.md), no bucket
   // privado `mia-obrigacoes`: `<org>/<obrigacao>/<uuid>.<ext>`, com a extensão
   // tirada de uma lista fechada. Só hexadecimal, hífen, ponto e barra.
