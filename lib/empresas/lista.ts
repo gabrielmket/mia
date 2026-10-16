@@ -19,6 +19,7 @@ import { buscaEmLotesSemTeto } from "@/lib/leitura/em-lotes-sem-teto";
 import { urgencia } from "@/lib/obrigacoes/situacao";
 import type { Dia } from "@/lib/obrigacoes/datas";
 import type { ItemParaSituacao } from "@/lib/obrigacoes/tipos";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { nomeComparavel } from "@/lib/empresas/nome-comparavel";
 import { duplicadasPossiveis } from "@/lib/empresas/parecida";
 import { lerTodasAsEmpresas, paraEmpresa, type EmpresaUnica } from "@/lib/empresas/fonte-unica";
@@ -131,7 +132,7 @@ export async function montarListaDeEmpresas(
   if (contatos.error) throw new Error(contatos.error.message);
   const nomeDaPessoa = new Map<string, string>();
   for (const c of contatos.data) {
-    const nome = (c.name ?? c.display_name ?? "").trim();
+    const nome = nomeDoContato(c) ?? "";
     if (nome && !nomeDaPessoa.has(c.person_id)) nomeDaPessoa.set(c.person_id, nome.split(/\s+/)[0]!);
   }
 

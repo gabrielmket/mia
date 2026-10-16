@@ -324,6 +324,13 @@ $copia$;
 -- seria escrever num lugar que nenhuma tela lê: melhor recusar alto.
 drop policy if exists "crm_empresas_escrita" on public.crm_empresas;
 revoke insert, update, delete on public.crm_empresas from anon, authenticated;
+-- Sem escrita da sessão, crm_empresas virou tabela só do servidor, e as travas
+-- do suporte somente leitura (support_write_*, que o laço do upstream põe em
+-- tabela que a sessão escreve) saem já, como o laço faria na passada seguinte:
+-- uma aplicação e duas aplicações chegam ao mesmo conjunto de travas.
+drop policy if exists support_write_insert on public.crm_empresas;
+drop policy if exists support_write_update on public.crm_empresas;
+drop policy if exists support_write_delete on public.crm_empresas;
 
 comment on table public.crm_empresas is
   'APOSENTADA (9033, empresa unica): os dados foram copiados para companies (mia_companies_de_para diz para onde foi cada linha). Leitura so; nenhuma escrita da sessao. Sai de vez na entrega 5.';
