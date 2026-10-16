@@ -26,7 +26,7 @@ export const DICIONARIO_OBRIGACOES_MIA: Traducoes = {
   "próxima em": { es: "próxima el" },
   "venceu ontem": { es: "venció ayer" },
   "venceu há": { es: "venció hace" },
-  "vence em": { es: "vence en" },
+  // "vence em" passou a morar no dicionário do upstream (v1.81, a mesma tradução).
   "válido até": { es: "vigente hasta" },
   "renovado em": { es: "renovado el" },
   "recebido em": { es: "recibido el" },

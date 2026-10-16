@@ -38,6 +38,15 @@ vi.mock("@/lib/api/auth-dual", () => ({
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
+// Fork MIA: provedor e modelo do agente são da plataforma (lib/ai/trava-da-ia.ts):
+// quem não escolhe IA tem o par trocado pelo da plataforma depois desta
+// resolução. Quem pede aqui é também admin de plataforma — o upstream o autoriza
+// igual; o lado do cliente é cobrado em tests/unit/trava-da-ia-portas.test.ts.
+// Precedente: app/api/v1/ai/providers/route.test.ts.
+vi.mock("@/lib/ai/trava-da-ia-na-rota", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai/trava-da-ia-na-rota")>()),
+  quemPedeNaRota: vi.fn(async () => ({ is_platform_admin: true, platform_admin_scope: null, support: null })),
+}));
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const USER = "11111111-1111-4111-8111-111111111111";
