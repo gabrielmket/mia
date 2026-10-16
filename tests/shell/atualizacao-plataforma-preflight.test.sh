@@ -20,8 +20,9 @@ reject() { local name="$1"; shift; if "$@" >"$TMP/out" 2>&1; then echo "✗ $nam
 
 WAHA_IMAGE=devlikeapro/waha:latest-2026.7.2
 ok 'release completa em AMD64' preflight_plataforma_atualizacao v1.66.1 linux/amd64
-grep -q 'deskcomm-voice-agent:1.66.1 linux/amd64' "$TMP/probes"
-TEST_MISSING=deskcomm-voice-agent
+# FORK MIA: os nomes das imagens são os do fork (`mia-*`, preflight_imagens_crm em _manifestos.sh).
+grep -q 'mia-voice-agent:1.66.1 linux/amd64' "$TMP/probes"
+TEST_MISSING=mia-voice-agent
 reject 'a quarta imagem ausente recusa update' preflight_plataforma_atualizacao v1.66.2 linux/arm64
 unset TEST_MISSING
 TEST_OFFLINE=1

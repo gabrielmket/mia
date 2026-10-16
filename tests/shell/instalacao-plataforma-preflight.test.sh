@@ -25,10 +25,11 @@ ok() { local nome="$1"; shift; if "$@" >"$TMP/out" 2>&1; then echo "✓ $nome"; 
 recusa() { local nome="$1" motivo="$2"; shift 2; if "$@" >"$TMP/out" 2>&1; then echo "✗ $nome passou"; exit 1; fi; grep -q "$motivo" "$TMP/out" || { echo "✗ $nome sem causa: $(<"$TMP/out")"; exit 1; }; echo "✓ $nome"; }
 
 ok 'versão numérica completa em ARM64' preflight_instalacao 1.66.1 linux/arm64 devlikeapro/waha:noweb-arm-2026.7.2
-TEST_MISSING=deskcomm-voice-agent
-recusa 'release ainda sem a quarta imagem' deskcomm-voice-agent preflight_instalacao 1.66.2 linux/arm64 devlikeapro/waha:noweb-arm-2026.7.2
+# FORK MIA: os nomes das imagens são os do fork (`mia-*`, preflight_imagens_crm em _manifestos.sh).
+TEST_MISSING=mia-voice-agent
+recusa 'release ainda sem a quarta imagem' mia-voice-agent preflight_instalacao 1.66.2 linux/arm64 devlikeapro/waha:noweb-arm-2026.7.2
 unset TEST_MISSING
-TEST_BAD_IMAGE=deskcomm-worker:1.65.0
+TEST_BAD_IMAGE=mia-worker:1.65.0
 recusa 'release antiga AMD-only não instala em ARM' linux/arm64 preflight_instalacao 1.65.0 linux/arm64 devlikeapro/waha:noweb-arm-2026.7.2
 unset TEST_BAD_IMAGE
 WAHA_IMAGE=registry.exemplo/plus:licenciada
