@@ -25,7 +25,7 @@ import { garantirMetaDoMes } from "@/lib/implantacao/empresa";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { CHAVE_OUTROS, CHAVE_SEM, PERIODOS_DOS_PAINEIS, type PeriodoDosPaineis } from "@/lib/paineis/catalogo";
 import { modeloDoGrafico, textoDoRotulo } from "@/lib/relatorios/apresentar";
-import { FONTES_DO_MONTADOR, MEDIDAS_DO_MONTADOR } from "@/lib/relatorios/catalogo";
+import type { FONTES_DO_MONTADOR, MEDIDAS_DO_MONTADOR } from "@/lib/relatorios/catalogo";
 import { identificaPessoa, visualizacaoQueVale } from "@/lib/relatorios/config";
 import { garantirRelatorios, GarantiaRecusada } from "@/lib/relatorios/garantir";
 import { configsDoPainel } from "@/lib/relatorios/link";

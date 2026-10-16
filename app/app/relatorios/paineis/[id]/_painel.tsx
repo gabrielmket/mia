@@ -179,7 +179,7 @@ export function PainelDoUsuario({ painel, itens: iniciais, periodoInicial, permi
           </span>
           {permissoes.compartilhar ? (
             <span className={`rounded-full px-2 py-0.5 ${link ? "bg-success-bg text-success-fg" : "bg-surface-elevated text-text-muted"}`}>
-              {link ? `${t("Link para o dono ativo até")} ${new Date(link.validoAte).toLocaleDateString()}` : t("Sem link para o dono")}
+              {link ? `${t("Link para o dono ativo até")} ${link.validoAte}` : t("Sem link para o dono")}
             </span>
           ) : (
             <span className="text-text-muted">{t("Compartilhar e gerar link é para gestor e administrador.")}</span>
@@ -429,7 +429,8 @@ function GerarLink({
         mostrar_valores: mostrarValores,
         validade_dias: validade,
       });
-      onCriado({ url: r.data.link.url, validoAte: r.data.link.validoAte });
+      // A validade como a tela mostra (dd/mm/aaaa); o servidor manda o instante.
+      onCriado({ url: r.data.link.url, validoAte: new Date(r.data.link.validoAte).toLocaleDateString("pt-BR") });
       toast.success(t("Link criado. Quem manda ao dono é você."));
     } catch (e) {
       toast.error(mensagemDoErro(e, t));

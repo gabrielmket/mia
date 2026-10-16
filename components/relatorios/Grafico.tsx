@@ -574,14 +574,15 @@ function Rosca({ modelo, fmt, nome, onClicar, t, compacto }: Omit<PropsDeDesenho
   const tam = compacto ? 150 : 200;
   const R = tam / 2 - 4;
   const r = R * 0.6;
-  let a = 0;
-  let rank = 0;
-  const desenho = fatias.map((g) => {
-    const fra = total > 0 ? (g.valor ?? 0) / total : 0;
-    const a0 = a;
-    const a1 = a + Math.max(fra * Math.PI * 2 - 0.0001, 0.0001);
-    a += fra * Math.PI * 2;
-    const cor = corDoGrupo(g, g.sem || g.outros ? 0 : rank++, false);
+  // O ângulo de início de cada fatia é a soma das anteriores; a cor segue a
+  // ordem dos grupos que não são "Sem" nem "Outros".
+  const fracoes = fatias.map((g) => (total > 0 ? (g.valor ?? 0) / total : 0));
+  const desenho = fatias.map((g, i) => {
+    const fra = fracoes[i]!;
+    const a0 = fracoes.slice(0, i).reduce((s, x) => s + x, 0) * Math.PI * 2;
+    const a1 = a0 + Math.max(fra * Math.PI * 2 - 0.0001, 0.0001);
+    const rank = fatias.slice(0, i).filter((x) => !x.sem && !x.outros).length;
+    const cor = corDoGrupo(g, g.sem || g.outros ? 0 : rank, false);
     return { g, a0, a1, cor, fra };
   });
   return (

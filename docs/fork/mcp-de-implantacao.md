@@ -127,7 +127,7 @@ pessoa faz (com a tela e o caminho).
 | 16a | Conversões (opcional, para quem anuncia): montar as regras por etapa, e ligar depois de a pessoa conectar a conta de anúncios | `plataforma_ver_conversoes`, `plataforma_garantir_conversoes_da_meta`, `plataforma_garantir_conversoes_do_google`, `plataforma_ligar_conversoes`, `plataforma_ligar_leads_de_formulario_da_meta` | agente (a conexão é com a pessoa do cliente) |
 | 17 | Convidar a equipe (o link curto de cada convite volta na resposta, para mandar por WhatsApp) | `plataforma_convidar_pessoas` | agente |
 | 18 | Conferir o checklist: `pode_atender` e a lista do que ficou com uma pessoa | `plataforma_ver_implantacao` | agente |
-| 18a | Os números do primeiro dia, e o link para o dono preparado (mandado só quando o cliente pedir) | `plataforma_ver_paineis`, `plataforma_garantir_link_do_dono` | agente (quem manda o link é uma pessoa) |
+| 18a | Os relatórios e o painel do segmento (montador de relatórios), os números do primeiro dia, e o link para o dono preparado (mandado só quando o cliente pedir) | `plataforma_garantir_relatorios`, `plataforma_ver_relatorios`, `plataforma_ver_paineis`, `plataforma_garantir_link_do_dono` | agente (quem manda o link é uma pessoa) |
 
 ### O que a pessoa faz no meio
 
@@ -187,9 +187,10 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **64** ferramentas no servidor: as 57 desta página e as 7 da migração
-([`mcp-de-migracao.md`](mcp-de-migracao.md)). As quatro mais novas (.79, item 8 do
-mapa: painéis prontos e link para o dono) são `plataforma_ver_paineis`,
+São **66** ferramentas no servidor: as 59 desta página e as 7 da migração
+([`mcp-de-migracao.md`](mcp-de-migracao.md)). As duas mais novas (.80, item 9 do
+mapa: o montador de relatórios) são `plataforma_garantir_relatorios` e
+`plataforma_ver_relatorios`. As quatro da .79 (item 8: painéis prontos e link para o dono) são `plataforma_ver_paineis`,
 `plataforma_ver_links_do_dono`, `plataforma_garantir_link_do_dono` e
 `plataforma_revogar_link_do_dono`. As quatro da .76 são
 `plataforma_garantir_planos_de_tarefa`, `plataforma_configurar_canal`,
@@ -215,6 +216,7 @@ mapa: painéis prontos e link para o dono) são `plataforma_ver_paineis`,
 | `plataforma_listar_demonstracoes` | as empresas de demonstração por segmento (construtora, clínica odontológica, indústria, academia) e a bancada: se existe, o id, quando a semente foi aplicada e as contagens; e qualquer outra organização marcada como demonstração | leitura |
 | `plataforma_diagnosticar_conversoes_da_meta` | o diagnóstico da Meta, o mesmo do botão "Testar conexão": token, destino, permissão, último envio aceito, recusas em 7 dias e modo de teste. Faz três leituras na Meta com o token do cliente; nenhum evento é enviado | leitura |
 | `plataforma_ver_paineis` | os doze PAINÉIS PRONTOS de um cliente (resultado do mês, meta do mês, funil, de onde vêm, por que perdemos, atendimento, tempo de resposta, agenda, follow-up, anúncios, previsão, assuntos), com os números do motor de conta no banco (`fn_mia_relatorio`, 9030): todas as linhas do período, no fuso e na moeda da empresa. Período 7, 30 ou 90 dias, ou o mês; funil opcional; com ou sem valores em reais. Nada de custo de IA, gasto com anúncio, nome ou contato | leitura |
+| `plataforma_ver_relatorios` | o MONTADOR DE RELATÓRIOS de um cliente (.80): os doze relatórios prontos e o funil a que estão ligados, os relatórios e os painéis da equipe (compartilhados ou criados pela implantação) com o que cada um mede e agrupa, e quantos são só de quem criou (esses não são listados: o "só para mim" não aparece para ninguém). Com `numeros: true`, calcula cada relatório dos painéis no banco (`fn_mia_relatorio`) e devolve total e maiores grupos; diz qual relatório fica fora do link do dono por mostrar pessoa da equipe | leitura |
 | `plataforma_ver_links_do_dono` | os links para o dono do negócio de um cliente: para quem, o endereço, a situação (ativo, vencido, revogado), os painéis, o período, se mostra valores, a validade, o último acesso e quantos acessos | leitura |
 
 ### Operações que já existiam
@@ -264,6 +266,7 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 | `plataforma_definir_jornada` | a jornada de uma pessoa da equipe, pelo e-mail | a pessoa | uma pessoa |
 | `plataforma_garantir_respostas_prontas` | respostas prontas compartilhadas da equipe | título da resposta | 50 respostas |
 | `plataforma_garantir_conversoes_da_meta` | o que cada etapa aberta de um funil informa à Meta (a régua do upstream, 0524): o evento padrão; com `usar_recomendado: true`, o sistema escolhe o evento pelo nome da etapa. A regra nasce **desligada** | a etapa do funil | 20 regras |
+| `plataforma_garantir_relatorios` | o MONTADOR DE RELATÓRIOS pronto (.80, item 9): liga os doze prontos ao funil do cliente (o principal ou `funil_id`, em `mia_relatorios_da_empresa`), cria os relatórios a mais do segmento (`clinica`, `construtora`, `industria`, `academia` ou `geral`: três do segmento e a conversão por origem) e monta o painel do segmento com oito relatórios, compartilhados com a equipe (`lib/relatorios/segmentos.ts`, a mesma receita da demonstração). Aceita `meta_do_mes` (a mesma de `plataforma_configurar_empresa`) e devolve o link para o dono SUGERIDO (para quem e quais prontos), sem criá-lo | o relatório pela chave natural (`mia_relatorios.chave`); o painel pela dele; no painel só COMPLETA o que faltar: o que o cliente pôs, o tamanho e a ordem que mudou ficam | um segmento |
 | `plataforma_garantir_conversoes_do_google` | o que cada etapa aberta informa ao Google Ads: o nome da conversão e o id da ação de conversão (que já tem de existir na conta do Google). A regra nasce **desligada** | a etapa do funil | 20 regras |
 
 Todas respondem `criou`, `atualizou` ou `ja_estava`, item a item quando a chamada
@@ -488,7 +491,8 @@ Também ficaram de fora, por desenho:
   histórica e o tempo por etapa. São leitura de operação, não configuração de
   implantação, e a conta de cada um está montada dentro da rota. A análise do
   funil ganhou tela no fork na .79 (`/app/paineis/funil`, por cima da conta dele);
-  os números que a implantação confere saem de `plataforma_ver_paineis`.
+  os números que a implantação confere saem de `plataforma_ver_paineis` e, desde a
+  .80, de `plataforma_ver_relatorios` (o montador de relatórios).
 - **Empresas do upstream (`companies`).** A consulta de CNPJ, a edição e a
   exclusão da 1.72 são da tela dele. O fork tem as próprias empresas
   (`crm_empresas`), que entram por `plataforma_importar_empresas`. As duas não
@@ -572,7 +576,9 @@ Testes:
 | `tests/unit/mcp-de-implantacao-conversoes.test.ts` | as seis ferramentas de conversões: o que gravam, que montar não liga, a reexecução, as recusas, a resposta sem segredo e a empresa de demonstração |
 | `tests/unit/mcp-de-implantacao-novidades-do-upstream.test.ts` | cada novidade do upstream 1.70 a 1.73: o campo ou a caixa nova passa pela ferramenta (o que grava, a reexecução, a recusa que ensina, a leitura), e as duas ferramentas do roteador |
 | `tests/unit/mcp-de-implantacao-novidades-do-upstream-180.test.ts` | cada novidade do upstream 1.74 a 1.80, no mesmo molde, as quatro ferramentas novas e a prova de que os tipos de ação da ferramenta são exatamente os do upstream |
-| `tests/unit/mcp-de-implantacao-paineis.test.ts` | as quatro ferramentas dos painéis e do link para o dono (.79): a contagem da lista (64), a caixinha `compartilhar_paineis`, que o garantir não duplica e ajusta no mesmo endereço, a revogação, a leitura e a demonstração; e a meta do mês em `plataforma_configurar_empresa` |
+| `tests/unit/mcp-de-implantacao-relatorios.test.ts` | as duas ferramentas do montador de relatórios (.80): a contagem da lista (66), a operação `implantar_configuracao`, o que o garantir grava (prontos ligados ao funil, relatórios do segmento e painel, compartilhados), que rodar de novo não duplica e só completa o painel, a meta do mês, o funil de outra empresa, e a leitura sem o "só para mim" de ninguém |
+| `tests/invariants/montador-de-relatorios.test.ts` | as tabelas do montador (9040) e o motor estendido (9041) no Postgres de verdade: quem vê, cria, compartilha, edita e exporta, com controle positivo e negativo; produto, filtro de vários valores, meta por grupo de tempo, funil com soma, responsável no follow-up, agente nas conversas; a lista por trás do número com a mesma conta; e o link do painel (9042) |
+| `tests/unit/mcp-de-implantacao-paineis.test.ts` | as quatro ferramentas dos painéis e do link para o dono (.79): a caixinha `compartilhar_paineis`, que o garantir não duplica e ajusta no mesmo endereço, a revogação, a leitura e a demonstração; e a meta do mês em `plataforma_configurar_empresa` |
 | `tests/invariants/motor-de-conta-dos-relatorios.test.ts` | o motor de conta (9030) no Postgres de verdade: a regra de data e o fuso, sem o teto de 1000 linhas, as etiquetas, o "Sem …" e o "Outros", a meta, quem vê o quê (atendente, gestor, outra empresa, anon, plataforma) e a situação da obrigação igual à de `lib/obrigacoes/situacao.ts` |
 | `tests/invariants/link-dos-paineis-para-o-dono.test.ts` | a tabela do link (9031): só o servidor lê e escreve, as constraints, o funil de outra empresa e a contagem de acesso só em link vivo |
 | `tests/invariants/dono-do-contato-pela-plataforma.test.ts` | a função da 9022 no Postgres de verdade: o controle negativo (a porta do upstream recusa o ator da plataforma), o mesmo efeito da porta do upstream, as recusas do ator e que só o `service_role` executa |

@@ -7,6 +7,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { listarLinks } from "@/lib/paineis/link";
 import { podeCompartilhar, podeEditar, podeExportar, veValores } from "@/lib/relatorios/acesso";
 import { ehPeriodoDoPainel } from "@/lib/relatorios/catalogo";
+import { dataCurta } from "@/lib/relatorios/apresentar";
 import { identificaPessoa } from "@/lib/relatorios/config";
 import { configsDoPainel } from "@/lib/relatorios/link";
 import { funisDosRelatorios, lerPainel } from "@/lib/relatorios/servidor";
@@ -77,7 +78,7 @@ export default async function PainelPage({
         exportar: podeExportar(activeOrg.role),
         valores: veValores(activeOrg.role),
       }}
-      link={link ? { url: link.url, validoAte: link.validoAte } : null}
+      link={link ? { url: link.url, validoAte: dataCurta(link.validoAte, activeOrg.timezone || "America/Sao_Paulo") } : null}
     />
   );
 }

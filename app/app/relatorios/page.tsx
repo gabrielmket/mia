@@ -5,6 +5,7 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { isServiceRoleConfigured } from "@/lib/audit";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { podeCompartilhar, podeEditar, podeExportar } from "@/lib/relatorios/acesso";
+import { dataCurta } from "@/lib/relatorios/apresentar";
 import { idsDePessoa, nomesDaEquipe } from "@/lib/relatorios/equipe";
 import { nomeDoPronto, RELATORIOS_PRONTOS } from "@/lib/relatorios/prontos";
 import { funisDosRelatorios, listarRelatorios } from "@/lib/relatorios/servidor";
@@ -48,7 +49,8 @@ export default async function RelatoriosPage() {
         nome: r.nome,
         config: r.config,
         compartilhado: r.compartilhado,
-        atualizadoEm: r.atualizadoEm,
+        // Formatada no servidor, no fuso da empresa: o navegador não refaz a data (hidratação igual).
+        atualizadoEm: dataCurta(r.atualizadoEm, activeOrg.timezone || "America/Sao_Paulo"),
         meu: r.criadoPor === user.id,
         criadoPorNome: r.criadoPor ? (nomes[r.criadoPor] ?? null) : null,
         podeEditar: podeEditar(r, { userId: user.id, role: activeOrg.role }),

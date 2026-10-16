@@ -120,7 +120,7 @@ describe("plataforma_garantir_relatorios", () => {
     const itens = tabela("mia_paineis_usuario_itens");
     expect(itens).toHaveLength(8);
     expect(itens.filter((i) => i.tamanho === "G")).toHaveLength(1);
-    const json = r.json as { painel: { desfecho: string; relatorios: number }; link_para_o_dono_sugerido: { para_quem: string } };
+    const json = r.dados as { painel: { desfecho: string; relatorios: number }; link_para_o_dono_sugerido: { para_quem: string } };
     expect(json.painel).toEqual(expect.objectContaining({ desfecho: "criou", relatorios: 8 }));
     expect(json.link_para_o_dono_sugerido.para_quem).toBe("Dono da clínica");
     expect(vi.mocked(audit).mock.calls.map((c) => (c[0] as { action: string }).action)).toContain("relatorios.garantidos");
@@ -129,7 +129,7 @@ describe("plataforma_garantir_relatorios", () => {
   it("⭐ rodar de novo não duplica: tudo `ja_estava`", async () => {
     await garantir({ segmento: "clinica" });
     const r = await garantir({ segmento: "clinica" });
-    const json = r.json as { relatorios: Array<{ desfecho: string }>; painel: { desfecho: string; novos: number } };
+    const json = r.dados as { relatorios: Array<{ desfecho: string }>; painel: { desfecho: string; novos: number } };
     expect(json.relatorios.every((x) => x.desfecho === "ja_estava")).toBe(true);
     expect(json.painel).toEqual(expect.objectContaining({ desfecho: "ja_estava", novos: 0 }));
     expect(tabela("mia_relatorios")).toHaveLength(RECEITAS.clinica.relatorios.length);
@@ -146,7 +146,7 @@ describe("plataforma_garantir_relatorios", () => {
     cenario.banco.tabela("mia_paineis_usuario_itens").splice(itens.indexOf(funil), 1);
     cenario.banco.tabela("mia_paineis_usuario_itens").push({ id: "extra", organization_id: ORG, painel_id: funil.painel_id, relatorio_id: null, pronto: "assuntos", tamanho: "M", posicao: 99 });
     const r = await garantir({ segmento: "clinica" });
-    expect((r.json as { painel: { novos: number } }).painel.novos).toBe(1);
+    expect((r.dados as { painel: { novos: number } }).painel.novos).toBe(1);
     const depois = tabela("mia_paineis_usuario_itens");
     expect(depois.some((i) => i.pronto === "funil")).toBe(true);
     expect(depois.some((i) => i.pronto === "assuntos")).toBe(true);
@@ -194,7 +194,7 @@ describe("plataforma_ver_relatorios", () => {
     const r = await mcp.chamar("plataforma_ver_relatorios", { organization_id: ORG, numeros: true, periodo: "30" });
     await mcp.fechar();
     expect(r.erro).toBe(false);
-    const json = r.json as {
+    const json = r.dados as {
       prontos: { relatorios: unknown[] };
       relatorios: Array<{ nome: string }>;
       relatorios_so_de_quem_criou: number;

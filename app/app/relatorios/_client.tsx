@@ -215,7 +215,7 @@ export function ListaDeRelatorios({ prontos, relatorios, permissoes }: Props) {
                     <h2 className="font-semibold">{r.nome}</h2>
                     <p className="text-sm text-text-muted">
                       {t("Criado por")} {r.meu ? t("você") : (r.criadoPorNome ?? t("Pessoa fora da equipe"))} ·{" "}
-                      {new Date(r.atualizadoEm).toLocaleDateString()}
+                      {r.atualizadoEm}
                     </p>
                   </div>
                   {detalhe(r.config)}

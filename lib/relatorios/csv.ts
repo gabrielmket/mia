@@ -6,9 +6,10 @@
  * vírgula para o resto), decimais com vírgula, datas em dd/mm/aaaa, UTF-8. O
  * BOM vai na frente: sem ele o Excel lê "Negócio" como "NegÃ³cio".
  *
- * A célula de texto que começa com `=`, `+`, `-` ou `@` ganha um apóstrofo na
- * frente: um nome de contato como `=HYPERLINK(...)` viraria fórmula ao abrir a
- * planilha (injeção de fórmula). Número não passa por isso: sai como número.
+ * A célula de texto que começa com `=` ou `@` (ou com `+` e `-` seguidos de algo
+ * que não é número) ganha um apóstrofo na frente: um nome de contato como
+ * `=HYPERLINK(...)` viraria fórmula ao abrir a planilha (injeção de fórmula). O
+ * telefone (`+5531…`) e a variação (`+12%`, `-3,5 pontos`) saem como estão.
  *
  * ⚠️ Módulo PURO.
  */
@@ -18,7 +19,7 @@ import type { Celula, ColunaDaLista, ContextoDaLista, LinhaDaLista } from "./lis
 
 export type Separador = ";" | ",";
 export const SEPARADORES: readonly Separador[] = [";", ","];
-export const BOM = "﻿";
+export const BOM = "\uFEFF";
 
 /** Um número com vírgula decimal, sem separador de milhar (a planilha soma). */
 export function numeroBr(v: number | null | undefined, casas = 2): string {
@@ -27,10 +28,13 @@ export function numeroBr(v: number | null | undefined, casas = 2): string {
   return String(arred).replace(".", ",");
 }
 
+/** Um número com sinal (o telefone `+5531…`, a variação `+12%` ou `-3,5 pontos`): não é fórmula. */
+const NUMERO_COM_SINAL = /^[+-][\d\s.,%]*( [A-Za-zÀ-ú]+)?$/;
+
 /** Uma célula de texto, protegida e escapada para o separador. */
 export function celulaCsv(valor: string, sep: Separador): string {
   let s = valor;
-  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  if (/^[=@\t\r]/.test(s) || (/^[+-]/.test(s) && !NUMERO_COM_SINAL.test(s))) s = `'${s}`;
   if (s.includes(sep) || /["\n\r]/.test(s)) s = `"${s.replace(/"/g, '""')}"`;
   return s;
 }
