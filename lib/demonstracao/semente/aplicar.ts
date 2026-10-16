@@ -1064,7 +1064,17 @@ async function gravarConversas(e: Escritor, { s, ID, org, agora }: Contexto): Pr
         sent_at: em,
         delivered_at: saida ? new Date(em.getTime() + 5_000) : null,
         read_at: saida ? new Date(em.getTime() + 60_000) : null,
-        metadata: json({ demonstracao: true, ...(m.de === "ia" ? { ai_actor_id: ID.agente } : {}) }),
+        // .82 (upstream 1.84, 0686): a fala da equipe passou a carimbar a última
+        // atividade do negócio aberto do contato. O histórico da semente é
+        // PASSADO escrito de propósito, e a data de cada negócio é a que a semente
+        // escolheu (`naEtapaHaDias`): a marca de histórico importado, que o
+        // gatilho do upstream respeita, deixa o radar da demonstração como foi
+        // desenhado.
+        metadata: json({
+          demonstracao: true,
+          historico_importado: "true",
+          ...(m.de === "ia" ? { ai_actor_id: ID.agente } : {}),
+        }),
         created_at: em,
       });
     }
