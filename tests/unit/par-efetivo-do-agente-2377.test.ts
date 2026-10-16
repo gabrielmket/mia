@@ -30,6 +30,7 @@ import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/audit";
+import type * as TravaDaIaNaRota from "@/lib/ai/trava-da-ia-na-rota";
 
 vi.mock("@/lib/api/auth-dual", () => ({
   resolveAuthDual: vi.fn(),
@@ -44,7 +45,7 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 // igual; o lado do cliente é cobrado em tests/unit/trava-da-ia-portas.test.ts.
 // Precedente: app/api/v1/ai/providers/route.test.ts.
 vi.mock("@/lib/ai/trava-da-ia-na-rota", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/ai/trava-da-ia-na-rota")>()),
+  ...(await importOriginal<typeof TravaDaIaNaRota>()),
   quemPedeNaRota: vi.fn(async () => ({ is_platform_admin: true, platform_admin_scope: null, support: null })),
 }));
 
