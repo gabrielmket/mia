@@ -191,7 +191,10 @@ export function dataCurta(valor: string | null | undefined, fuso: string): strin
   if (soData) return `${soData[3]}/${soData[2]}/${soData[1]}`;
   const d = new Date(valor);
   if (Number.isNaN(d.getTime())) return "";
-  const partes = new Intl.DateTimeFormat("pt-BR", { timeZone: fuso, day: "2-digit", month: "2-digit", year: "numeric" }).formatToParts(d);
+  // O idioma aqui só extrai os NÚMEROS de dia, mês e ano no fuso da empresa; o
+  // texto (dd/mm/aaaa) é montado abaixo. `en-US` com algarismos latinos é neutro:
+  // nenhum idioma de leitura muda a saída, e nenhum sistema de numeração vaza.
+  const partes = new Intl.DateTimeFormat("en-US", { timeZone: fuso, day: "2-digit", month: "2-digit", year: "numeric", numberingSystem: "latn" }).formatToParts(d);
   const p = (tipo: string) => partes.find((x) => x.type === tipo)?.value ?? "";
   return `${p("day")}/${p("month")}/${p("year")}`;
 }

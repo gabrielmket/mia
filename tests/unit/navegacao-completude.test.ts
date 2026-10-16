@@ -59,6 +59,16 @@ const NAV_ALLOWLIST: Record<string, string> = {
     "porta é o rodapé de versão (VersionFooter), que aparece justamente quando há versão nova — melhor que um card fixo. Além disso é só do dono do servidor (is_platform_admin), papel que o registro não modela",
   "/app/proposals/novo":
     "sub-fluxo de criação de proposta, alcançado pelo botão 'Nova proposta' em /app/proposals",
+  // FORK MIA (.80, montador de relatórios): a porta é "Relatórios"
+  // (/app/relatorios) no grupo Análise; as telas abaixo são passos dela.
+  "/app/relatorios/novo":
+    "FORK MIA (.80): sub-fluxo de escolher a fonte do relatório, alcançado pelo botão \"Novo relatório\" em /app/relatorios",
+  "/app/relatorios/editor":
+    "FORK MIA (.80): o editor de um relatório, aberto por \"Abrir\"/\"Copiar e editar\" na lista ou pela fonte escolhida em /app/relatorios/novo; sem relatório escolhido não há o que editar",
+  "/app/relatorios/paineis":
+    "FORK MIA (.80): os painéis montados pelo usuário, alcançados de dentro de /app/relatorios e pelo \"Adicionar a um painel\" do editor",
+  "/app/relatorios/exportacoes":
+    "FORK MIA (.80): o registro de exportações (só gestor e administrador), alcançado de dentro de /app/relatorios",
 };
 
 /** Deriva as rotas estáticas a partir dos arquivos de página que existem. */

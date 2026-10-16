@@ -22,8 +22,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
+import { copyToClipboard } from "@/lib/clipboard";
 import { modeloDoGrafico } from "@/lib/relatorios/apresentar";
 import {
   ATUALIZAR_A_CADA_MS,
@@ -413,6 +415,7 @@ function GerarLink({
   valores: boolean;
 }) {
   const t = useT();
+  const tagDeIdioma = useTagDeIdioma();
   const [paraQuem, setParaQuem] = useState("");
   const [mostrarValores, setMostrarValores] = useState(valores);
   const [validade, setValidade] = useState<30 | 90 | 365>(90);
@@ -430,7 +433,7 @@ function GerarLink({
         validade_dias: validade,
       });
       // A validade como a tela mostra (dd/mm/aaaa); o servidor manda o instante.
-      onCriado({ url: r.data.link.url, validoAte: new Date(r.data.link.validoAte).toLocaleDateString("pt-BR") });
+      onCriado({ url: r.data.link.url, validoAte: new Date(r.data.link.validoAte).toLocaleDateString(tagDeIdioma) });
       toast.success(t("Link criado. Quem manda ao dono é você."));
     } catch (e) {
       toast.error(mensagemDoErro(e, t));
@@ -441,12 +444,10 @@ function GerarLink({
 
   async function copiar() {
     if (!link) return;
-    try {
-      await navigator.clipboard.writeText(link.url);
-      toast.success(t("Link copiado."));
-    } catch {
-      toast.error(t("Não deu para copiar. Selecione o endereço e copie."));
-    }
+    // lib/clipboard: em http://IP a área de transferência do navegador nem existe; o helper cai
+    // no fallback em vez de quebrar o botão.
+    if (await copyToClipboard(link.url)) toast.success(t("Link copiado."));
+    else toast.error(t("Não deu para copiar. Selecione o endereço e copie."));
   }
 
   return (
