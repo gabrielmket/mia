@@ -102,7 +102,11 @@ beforeEach(() => {
   banco.gravacoes = [];
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
-    user: { id: "11111111-1111-4111-8111-111111111111", idioma: "pt-BR" },
+    // Fork MIA: provedor e modelo de IA são da plataforma (lib/ai/trava-da-ia.ts).
+    // O admin daqui é também admin de plataforma — o upstream o autoriza igual; o
+    // lado do cliente é cobrado em tests/unit/trava-da-ia-portas.test.ts.
+    // Precedente: app/api/v1/ai/providers/route.test.ts.
+    user: { id: "11111111-1111-4111-8111-111111111111", idioma: "pt-BR", is_platform_admin: true, support: null },
     org: { orgId: "22222222-2222-4222-8222-222222222222", role: "admin" },
   } as unknown as Awaited<ReturnType<typeof requireRole>>);
 });
