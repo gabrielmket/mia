@@ -467,7 +467,9 @@ export async function calcularPaineis(
           ...pergunta,
           periodo: pergunta.periodo ?? opcoes.periodo,
         });
-        if (!pergunta.periodo) {
+        // A janela que a tela anuncia é a do período pedido; a agenda vai até o
+        // fim do mês em "Este mês" (dia marcado) e não serve de régua.
+        if (!pergunta.periodo && chave !== "agenda") {
           janela = { de: resposta.janela.de, ate: resposta.janela.ate, hoje: resposta.janela.hoje };
         }
         return { ...base, restrito: null, erro: null, dados: lerPainel(chave, resposta) };
