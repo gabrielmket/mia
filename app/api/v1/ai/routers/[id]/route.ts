@@ -17,6 +17,7 @@ import { audit } from "@/lib/audit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { configDoRoteador } from "@/lib/ai/trava-da-ia";
+import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
 import { MAX_CLASSIFIER_CONTEXT_MESSAGES } from "@/lib/ai/classifier-context";
 
 export const dynamic = "force-dynamic";
@@ -157,7 +158,8 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (patch.config !== undefined) {
     const currentConfig = (existing.config ?? {}) as Record<string, unknown>;
     // FORK MIA: o modelo do classificador é da plataforma (lib/ai/trava-da-ia.ts).
-    update.config = { ...currentConfig, ...configDoRoteador(authUser, patch.config, currentConfig) };
+    // Desde a v1.84 a rota aceita token (resolveAuthDual): token nunca escolhe IA.
+    update.config = { ...currentConfig, ...configDoRoteador(await quemPedeNaRota(authz), patch.config, currentConfig) };
   }
 
   if (Object.keys(update).length === 0) {

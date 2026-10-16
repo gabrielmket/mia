@@ -12011,7 +12011,6 @@ export const DICIONARIO: Traducoes = {
   "Ler agora": { es: "Leer ahora" },
   "A leitura automática roda a cada 5 minutos. A primeira leitura de cada formulário volta os dias escolhidos acima; a Meta guarda os leads por 90 dias.": { es: "La lectura automática se ejecuta cada 5 minutos. La primera lectura de cada formulario vuelve los días elegidos arriba; Meta guarda los leads durante 90 días." },
   "Leitura concluída": { es: "Lectura concluida" },
-  "recusados": { es: "rechazados" },
   "Permissões do token": { es: "Permisos del token" },
   "Conferindo…": { es: "Verificando…" },
   "Conferir de novo": { es: "Verificar de nuevo" },

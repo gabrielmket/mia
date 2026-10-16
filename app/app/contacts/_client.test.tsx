@@ -49,6 +49,10 @@ const CONTATO = {
   source: "manual",
   source_metadata: {},
   custom_fields: {},
+  // FORK MIA: empresa, cargo e setor do contato (0255/0262/0263).
+  empresa_id: null,
+  cargo: null,
+  setor: null,
   created_at: "2026-01-01T10:00:00.000Z",
   updated_at: "2026-01-01T10:00:00.000Z",
   last_activity_at: null,
