@@ -52,6 +52,7 @@ import { MOEDAS_SERVIDAS } from "@/lib/money";
 import { PACOTES as PACOTES_DE_FUNIL } from "@/lib/onboarding/pacotes-de-funil";
 import { COLUNAS_DO_PRODUTO } from "@/lib/schemas/produtos";
 import { ROUTING_MODES, routingConfigSchema } from "@/lib/schemas/routing";
+import { colegasPodemMexerNaAgendaLigado, meetAbertoLigado } from "@/lib/schemas/settings";
 import { ROLES } from "@/lib/schemas/team";
 import {
   ACOES_QUE_REGRAVAM_O_LEAD,
@@ -114,7 +115,21 @@ const ACOES_DE_AUTOMACAO = [
       "Aplica um PLANO DE TAREFAS ao negócio: cria de uma vez, na ordem, todas as tarefas do plano, e só uma vez por negócio (repetir a regra não duplica). Nunca fala com o cliente.",
     config: '{ "plano_id": "<id do plano, de plataforma_garantir_planos_de_tarefa>" }',
   },
-  { type: "start_message_flow", o_que_faz: "Inscreve o contato num follow-up publicado.", config: '{ "flow_pointer_id": "<id do fluxo>" }' },
+  {
+    type: "start_message_flow",
+    o_que_faz:
+      'Inscreve o contato num follow-up publicado (o padrão) ou, com `surface: "atendimento"` (upstream 1.81), inicia um FLUXO DE ATENDIMENTO publicado: a automação abre o atendimento e a primeira pergunta sai quando o cliente responder.',
+    config: '{ "flow_pointer_id": "<id do fluxo>", "surface": "followup" | "atendimento" (opcional, padrão "followup") }',
+  },
+  {
+    type: "send_email",
+    o_que_faz:
+      "Manda um E-MAIL (upstream 1.81) pelo servidor de e-mail da instalação: para o contato do negócio, para o responsável do negócio ou para um endereço fixo. " +
+      "MANDA PARA FORA. Contato bloqueado ou que recusou comunicação não recebe. Na empresa de demonstração não sai e a regra com ele não liga.",
+    config:
+      '{ "destinatario": "contato" | "dono_do_lead" | "fixo", "email_fixo": "<só com fixo>", "assunto": "Sua visita a {{destino}}", "corpo": "Olá, {{primeiro_nome}}!", "formato": "texto" | "html" (opcional) } ' +
+      "(as mesmas marcações da mensagem de WhatsApp)",
+  },
   {
     type: "send_whatsapp_message",
     o_que_faz: "Manda um texto fixo pelo WhatsApp. FALA COM O CLIENTE.",
@@ -250,6 +265,16 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             tambem_dentro_do_ai_decide: true,
             por_que: MENSAGEM_DO_LACO_DE_LEAD,
             uso_tipico: 'Avisar outro sistema: { "type": "call_webhook", "config": { "url": "https://...", "include_owner": true } }.',
+            // Upstream 1.81 (#2769, #2787): a continuação do ganho.
+            excecao_do_ganho:
+              "No `lead.won`, `create_or_move_lead` declarado na regra e apontando para OUTRO funil é aceito: o negócio ganho fica GANHO e nasce um card novo no funil de destino " +
+              "(o pós-venda), com o conteúdo do negócio e sem duplicar se a regra rodar de novo. Para o MESMO funil, a ação recusa.",
+          },
+          // Upstream 1.81 (#2812): o contato ganhou telefone.
+          gatilhos_de_contato: {
+            "contact.phone_added":
+              "Quando a ficha de um contato que estava SEM telefone passa a ter um (informado pelo cliente, pela equipe ou por integração). " +
+              "Serve para a primeira mensagem de WhatsApp a quem chegou por e-mail ou formulário sem número.",
           },
           gatilhos_que_pedem_configuracao: {
             "lead.date_field_due":
@@ -713,6 +738,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             exige_confirmacao: t.requires_confirmation === true,
             lembrete_ligado: t.reminder_enabled === true,
             lembrete_minutos_antes: t.reminder_minutes_before ?? null,
+            // .81: o número que manda o lembrete (upstream v1.83). null = automático.
+            canal_do_lembrete_id: (t.reminder_channel_session_id as string | null | undefined) ?? null,
             preco_padrao_cents: t.default_price_cents === null || t.default_price_cents === undefined ? null : Number(t.default_price_cents),
           })),
           jornadas: ((jornadas ?? []) as Array<{ user_id: string; is_available: boolean; capacity: number; schedule: { timezone?: string; windows?: Array<{ dow: number; start: string; end: string }> } | null }>).map((j) => ({
@@ -800,6 +827,9 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           assinatura: { atendentes: assinatura.humanos, ia: assinatura.ia, nome_da_ia: assinatura.nomeIa },
           // O freio do passo "a IA decide" das automações (upstream 1.76, #2367).
           ia_decide_nas_automacoes: iaDecideLigadaNa(org.settings),
+          // .81: as duas opções da agenda do upstream (1.80 #978, 1.81 #2063).
+          colegas_podem_mexer_na_agenda: colegasPodemMexerNaAgendaLigado(org.settings),
+          google_meet_com_acesso_aberto: meetAbertoLigado(org.settings),
         };
       }
 
@@ -809,6 +839,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             titulo: x.title,
             texto: x.body,
             atalho: x.shortcut,
+            // .81: quantas imagens vão junto (o caminho no bucket privado não sai).
+            imagens: (x.midias ?? []).length,
           })),
           modelos_oficiais: (await lerModelosOficiais(c.admin, c.orgId)).map((m) => ({
             nome: m.name,

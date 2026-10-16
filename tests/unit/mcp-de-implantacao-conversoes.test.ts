@@ -92,6 +92,23 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+/**
+ * .81 (upstream #2890): a recomendação de `QualifiedLead` para a etapa de
+ * qualificação pede a CONEXÃO DIRETA da Meta (sem ela, o canal da conversa não
+ * repassa esse evento, e a etapa fica sem sugestão). Os testes que contam com o
+ * recomendado na Qualificação montam a conexão, ainda com o envio DESLIGADO.
+ */
+function conexaoDiretaDaMeta(tabela: (n: string) => Linha[]) {
+  tabela("ad_platform_connections").push({
+    organization_id: ORG,
+    platform: "meta_ads",
+    dataset_id: "900000000000001",
+    access_token_encrypted: TOKEN_CIFRADO,
+    test_event_code: null,
+    enabled: false,
+  });
+}
+
 const daMeta = (tabela: (n: string) => Linha[]) =>
   tabela("meta_ads_conversion_rules").map((l) => [l.stage_id, l.event_name, l.meta_event, l.enabled]);
 
@@ -166,6 +183,7 @@ describe("plataforma_ver_conversoes", () => {
 describe("plataforma_garantir_conversoes_da_meta", () => {
   it("⭐ usar o recomendado grava as regras DESLIGADAS, e a segunda chamada não escreve nada", async () => {
     const { mcp, tabela, banco } = await preparar();
+    conexaoDiretaDaMeta(tabela);
     const r = await mcp.chamar("plataforma_garantir_conversoes_da_meta", {
       organization_id: ORG,
       funil: "Agendamentos",
@@ -202,6 +220,7 @@ describe("plataforma_garantir_conversoes_da_meta", () => {
 
   it("`regras` vence o recomendado na etapa citada; o mesmo evento em duas etapas é aceito com aviso", async () => {
     const { mcp, tabela } = await preparar();
+    conexaoDiretaDaMeta(tabela);
     const r = await mcp.chamar("plataforma_garantir_conversoes_da_meta", {
       organization_id: ORG,
       funil: FUNIL,
@@ -270,6 +289,7 @@ describe("⭐ montar não liga: ligar é `colocar_no_ar`", () => {
 
   it("ligar vale para as etapas que têm regra, avisa quando a conexão não está pronta, e repetir responde `ja_estava`", async () => {
     const { mcp, tabela, banco } = await preparar();
+    conexaoDiretaDaMeta(tabela);
     await mcp.chamar("plataforma_garantir_conversoes_da_meta", { organization_id: ORG, funil: "Agendamentos", usar_recomendado: true });
 
     const r = await mcp.chamar("plataforma_ligar_conversoes", { organization_id: ORG, plataforma: "meta", funil: "Agendamentos", ligada: true });
@@ -306,6 +326,7 @@ describe("⭐ montar não liga: ligar é `colocar_no_ar`", () => {
 
   it("regra LIGADA não é editada pelo garantir: desliga, ajusta, religa", async () => {
     const { mcp, tabela } = await preparar();
+    conexaoDiretaDaMeta(tabela);
     await mcp.chamar("plataforma_garantir_conversoes_da_meta", { organization_id: ORG, funil: "Agendamentos", usar_recomendado: true });
     await mcp.chamar("plataforma_ligar_conversoes", { organization_id: ORG, plataforma: "meta", funil: "Agendamentos", ligada: true });
 
@@ -457,7 +478,8 @@ describe("⭐ a empresa de demonstração", () => {
 
 describe("o checklist", () => {
   it("a área de conversões conta as regras e aponta as ferramentas, sem virar pendência", async () => {
-    const { mcp } = await preparar();
+    const { mcp, tabela } = await preparar();
+    conexaoDiretaDaMeta(tabela);
     await mcp.chamar("plataforma_garantir_conversoes_da_meta", { organization_id: ORG, funil: "Agendamentos", usar_recomendado: true });
     await mcp.chamar("plataforma_ligar_conversoes", { organization_id: ORG, plataforma: "meta", funil: "Agendamentos", etapas: ["Qualificação"], ligada: true });
 

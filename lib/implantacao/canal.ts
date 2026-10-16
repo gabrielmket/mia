@@ -80,6 +80,17 @@ export interface PedidoDeCanal {
   confirmo_apagar_historico_guardado?: boolean;
   pausa_agendada?: { inicio: string; fim: string; todos_os_numeros?: boolean };
   cancelar_pausa_agendada?: string;
+  /**
+   * .81 — o NOME INTERNO da conexão (upstream 1.81, `PATCH /channel-sessions/[id]/name`):
+   * só a equipe vê; o nome público no provedor não muda.
+   */
+  nome_interno?: string;
+  /**
+   * .81 — corrigir os horários de uma pausa agendada que AINDA NÃO começou
+   * (upstream 1.81, `PATCH /channel-schedules/[id]`): os dois horários, com a
+   * mesma régua de criar.
+   */
+  ajustar_pausa_agendada?: { id: string; inicio: string; fim: string };
 }
 
 export interface AgendaDePausaLida {
@@ -202,6 +213,8 @@ export interface CanalConfigurado {
   guardar_historico?: { ligado: boolean; aplicado_na_conexao: boolean | null };
   pausa_agendada?: AgendaDePausaLida & { desfecho: Desfecho };
   pausa_cancelada?: { id: string; desfecho: "atualizou" | "ja_estava" };
+  pausa_ajustada?: { id: string; inicio: string; fim: string; desfecho: "atualizou" | "ja_estava" };
+  nome_interno?: { nome: string; desfecho: "atualizou" | "ja_estava" };
   avisos: string[];
 }
 
@@ -212,6 +225,7 @@ export async function configurarCanal(c: Implantacao, fusoDaEmpresa: string, ped
   const precisaDoCanal =
     pedido.dias_da_prospeccao !== undefined ||
     pedido.guardar_historico !== undefined ||
+    pedido.nome_interno !== undefined ||
     (pedido.pausa_agendada !== undefined && pedido.pausa_agendada.todos_os_numeros !== true);
   if (precisaDoCanal && !pedido.canal) {
     throw new Recusa(
@@ -228,6 +242,41 @@ export async function configurarCanal(c: Implantacao, fusoDaEmpresa: string, ped
     mudancas,
     avisos,
   };
+
+  // ── o nome interno: o caminho de `PATCH /api/v1/channel-sessions/[id]/name` (.81) ──
+  if (pedido.nome_interno !== undefined && canal) {
+    const nome = pedido.nome_interno.trim();
+    if (nome.length < 1 || nome.length > 80) {
+      throw new Recusa("Informe um nome interno com até 80 caracteres. Ex.: \"WA | Recepção\". Só a equipe vê; o nome público no provedor não muda.");
+    }
+    const anterior = canal.display_name;
+    if (anterior === nome) {
+      r.nome_interno = { nome, desfecho: "ja_estava" };
+    } else {
+      const { data, error } = await c.admin
+        .from("channel_sessions")
+        .update({ display_name: nome })
+        .eq("organization_id", c.orgId)
+        .eq("id", canal.id)
+        .is("archived_at", null)
+        .select("id")
+        .maybeSingle();
+      if (error) throw new Error(`não consegui salvar o nome da conexão: ${error.message}`);
+      if (!data) throw new Recusa("A conexão foi arquivada ou não existe mais nesta organização.");
+      void audit({
+        action: "channel.renamed",
+        actorUserId: c.autorUserId,
+        organizationId: c.orgId,
+        resourceType: "channel_session",
+        resourceId: canal.id,
+        requestId: c.requestId,
+        metadata: { previous_display_name: anterior, display_name: nome, via: "mcp_plataforma" },
+      });
+      mudancas.push("nome interno");
+      r.nome_interno = { nome, desfecho: "atualizou" };
+      r.canal = { id: canal.id, nome };
+    }
+  }
 
   // ── os dias da prospecção: o caminho de `PUT /api/v1/ai/pacing` ──────────
   if (pedido.dias_da_prospeccao !== undefined && canal) {
@@ -464,6 +513,77 @@ export async function configurarCanal(c: Implantacao, fusoDaEmpresa: string, ped
     }
   }
 
+  // ── ajustar uma pausa agendada: o caminho de `PATCH .../[id]` (.81) ──────
+  if (pedido.ajustar_pausa_agendada !== undefined) {
+    const id = pedido.ajustar_pausa_agendada.id.trim();
+    const inicio = instanteDaPausa(pedido.ajustar_pausa_agendada.inicio, fusoDaEmpresa, "ajustar_pausa_agendada.inicio");
+    const fim = instanteDaPausa(pedido.ajustar_pausa_agendada.fim, fusoDaEmpresa, "ajustar_pausa_agendada.fim");
+    const recusa = recusaDaJanela(inicio, fim);
+    if (recusa) throw new Recusa(recusa);
+    const { data: agenda, error } = await c.admin
+      .from("channel_schedules")
+      .select("id, status, starts_at, ends_at")
+      .eq("organization_id", c.orgId)
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw new Error(`não consegui ler a pausa agendada: ${error.message}`);
+    if (!agenda) {
+      throw new Recusa(`Não existe pausa agendada com o id ${id} nesta organização. As marcadas estão em plataforma_ver_configuracao, seção canais.`);
+    }
+    const linha = agenda as { status: string; starts_at: string; ends_at: string };
+    if (linha.status !== "scheduled") {
+      throw new Recusa(
+        "Só dá para ajustar uma pausa que ainda não começou: uma em andamento já pausou conexões, e uma encerrada ou cancelada é passado.",
+      );
+    }
+    if (
+      new Date(linha.starts_at).getTime() === inicio.getTime() &&
+      new Date(linha.ends_at).getTime() === fim.getTime()
+    ) {
+      r.pausa_ajustada = { id, inicio: inicio.toISOString(), fim: fim.toISOString(), desfecho: "ja_estava" };
+    } else {
+      // O filtro de status é a trava contra a corrida com o relógio (a janela
+      // que abriu agora vira `running`), como na rota.
+      const { data, error: erroAoAjustar } = await c.admin
+        .from("channel_schedules")
+        .update({ starts_at: inicio.toISOString(), ends_at: fim.toISOString(), updated_at: new Date().toISOString() })
+        .eq("organization_id", c.orgId)
+        .eq("id", id)
+        .eq("status", "scheduled")
+        .select("id");
+      if (erroAoAjustar) throw new Error(`não consegui ajustar a pausa: ${erroAoAjustar.message}`);
+      if (((data ?? []) as unknown[]).length === 0) {
+        throw new Recusa("A pausa mudou de estado enquanto era ajustada (a janela abriu). Leia de novo em plataforma_ver_configuracao, seção canais.");
+      }
+      void audit({
+        action: "channel.schedule_updated",
+        actorUserId: c.autorUserId,
+        organizationId: c.orgId,
+        resourceType: "channel_schedule",
+        resourceId: id,
+        requestId: c.requestId,
+        metadata: { starts_at: inicio.toISOString(), ends_at: fim.toISOString(), via: "mcp_plataforma" },
+      });
+      mudancas.push("pausa ajustada");
+      r.pausa_ajustada = { id, inicio: inicio.toISOString(), fim: fim.toISOString(), desfecho: "atualizou" };
+    }
+  }
+
   r.desfecho = mudancas.length > 0 ? "atualizou" : "ja_estava";
   return r;
+}
+
+/**
+ * A régua da janela, a mesma de `validarJanela` da rota do upstream (1.81: criar
+ * e EDITAR recusam o mesmo), com a frase que diz ao implantador o que fazer.
+ */
+function recusaDaJanela(inicio: Date, fim: Date): string | null {
+  if (fim.getTime() <= inicio.getTime()) return "A janela termina antes de começar: escolha um fim depois do início.";
+  if (fim.getTime() - inicio.getTime() > DURACAO_MAXIMA_MS) {
+    return "A janela de manutenção não pode durar mais de 24h: para uma pausa longa, uma pessoa faz a pausa manual em Conexões e desfaz quando voltar.";
+  }
+  if (inicio.getTime() <= Date.now()) {
+    return "A janela precisa começar no futuro. Para pausar agora, uma pessoa usa a pausa manual em Conexões: a pausa agendada é para a janela de manutenção.";
+  }
+  return null;
 }

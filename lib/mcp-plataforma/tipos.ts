@@ -34,4 +34,12 @@ export interface FerramentaDePlataforma {
    * valer reprova o teste, em vez de ensinar errado.
    */
   exemplo?: Record<string, unknown>;
+  /**
+   * .81 — a redação dos argumentos para a auditoria (`plataforma.mcp_executado`),
+   * quando um argumento é SEGREDO (a chave do servidor MCP externo). Sem ela, os
+   * argumentos vão resumidos, mas inteiros no que é curto: uma chave de 30
+   * caracteres ficaria na trilha append-only para sempre. As de importação já a
+   * declaram (`importacao/tipos.ts`, obrigatória lá).
+   */
+  redigirParaAuditoria?: (args: Record<string, unknown>) => Record<string, unknown>;
 }

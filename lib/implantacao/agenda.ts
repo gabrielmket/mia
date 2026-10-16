@@ -31,12 +31,14 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { alterarSchema, criarSchema, slugDe } from "@/lib/agenda/tipos-de-agendamento";
+import { alterarSchema, canalDoLembreteValido, criarSchema, slugDe } from "@/lib/agenda/tipos-de-agendamento";
 import { audit } from "@/lib/audit";
+import { nomeDoCanal } from "@/lib/channels/estado";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { availabilityPatchSchema } from "@/lib/schemas/routing";
 
 import { chaveDoNome, mesmoConteudo, type Desfecho, type Implantacao } from "./base";
+import { acharCanal, lerCanais, type CanalDaEmpresa } from "./canal";
 import { acharMembro, lerMembros } from "./equipe";
 
 /** Quantos tipos de agendamento uma chamada aceita. */
@@ -57,10 +59,18 @@ export interface TipoPedido {
   antecedencia_minima_minutos?: number;
   janela_de_agendamento_dias?: number;
   preco_padrao_cents?: number | null;
+  /**
+   * .81 — o NÚMERO que manda o lembrete deste tipo (upstream v1.83,
+   * `calendar_event_types.reminder_channel_session_id`): id, nome ou telefone de
+   * uma conexão da empresa. `null` volta ao automático (a conversa da reserva,
+   * ou o único número). Com 2 ou mais números, compromisso marcado sem conversa
+   * fica com o lembrete pendente (`remetente_ambiguo`) até isto ser escolhido.
+   */
+  canal_do_lembrete?: string | null;
 }
 
 const COLUNAS_DO_TIPO =
-  "id, name, slug, description, category, duration_minutes, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body, default_price_cents";
+  "id, name, slug, description, category, duration_minutes, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, reminder_enabled, reminder_channel_session_id, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body, default_price_cents";
 
 export async function lerTipos(admin: SupabaseClient, orgId: string): Promise<Array<Record<string, unknown>>> {
   const { data, error } = await admin
@@ -87,6 +97,7 @@ const ROTULO_DO_CAMPO: Record<string, string> = {
   booking_window_days: "janela de agendamento",
   default_price_cents: "preço padrão",
   reminder_enabled: "lembrete",
+  reminder_channel_session_id: "canal do lembrete",
   reminder_minutes_before: "antecedência do lembrete",
   reminder_extra_offsets_minutes: "lembretes extras",
   reminder_body: "mensagem do lembrete",
@@ -115,6 +126,8 @@ export async function garantirTiposDeAgendamento(
   const existentes = await lerTipos(c.admin, c.orgId);
   const precisaDeEquipe = pedidos.some((p) => p.responsavel_padrao);
   const membros = precisaDeEquipe ? await lerMembros(c.admin, c.orgId) : [];
+  // .81: as conexões, para o canal do lembrete e para o aviso dos 2+ números.
+  const canais = await lerCanais(c.admin, c.orgId);
   const resultado: Array<{ id: string; nome: string; slug: string; desfecho: Desfecho; mudancas: string[] }> = [];
 
   for (const [i, pedido] of pedidos.entries()) {
@@ -136,6 +149,10 @@ export async function garantirTiposDeAgendamento(
     if (pedido.antecedencia_minima_minutos !== undefined) corpo.minimum_notice_minutes = pedido.antecedencia_minima_minutos;
     if (pedido.janela_de_agendamento_dias !== undefined) corpo.booking_window_days = pedido.janela_de_agendamento_dias;
     if (pedido.preco_padrao_cents !== undefined) corpo.default_price_cents = pedido.preco_padrao_cents;
+    if (pedido.canal_do_lembrete !== undefined) {
+      corpo.reminder_channel_session_id =
+        pedido.canal_do_lembrete === null ? null : await canalDoLembrete(c, canais, pedido.canal_do_lembrete);
+    }
 
     const slug = slugDe(pedido.nome);
     const existente = existentes.find((t) => t.slug === slug || chaveDoNome(String(t.name)) === chaveDoNome(pedido.nome));
@@ -205,7 +222,39 @@ export async function garantirTiposDeAgendamento(
     });
   }
 
+  // .81 — com 2 ou mais números, o lembrete de compromisso marcado SEM conversa
+  // (pela tela, pela agenda, por automação) não sabe por qual número sair e fica
+  // pendente (`remetente_ambiguo`). O tipo com lembrete ligado precisa do canal.
+  if (canais.length >= 2) {
+    const semCanal = (await lerTipos(c.admin, c.orgId)).filter(
+      (t) => t.is_active !== false && t.reminder_enabled === true && !t.reminder_channel_session_id,
+    );
+    if (semCanal.length > 0) {
+      avisos.push(
+        `Esta empresa tem ${canais.length} números, e ${semCanal.map((t) => `«${String(t.name)}»`).join(", ")} tem lembrete ligado sem o canal do lembrete: ` +
+          "compromisso marcado sem conversa fica com o lembrete pendente (remetente ambíguo). Diga `canal_do_lembrete` em cada um.",
+      );
+    }
+  }
+
   return { tipos: resultado, avisos };
+}
+
+/**
+ * O canal do lembrete por id, nome ou telefone, conferido pela MESMA régua da
+ * rota do upstream (`canalDoLembreteValido`): número desta empresa, não
+ * arquivado e que transporta mensagem.
+ */
+async function canalDoLembrete(c: Implantacao, canais: CanalDaEmpresa[], referencia: string): Promise<string> {
+  const canal = acharCanal(canais, referencia);
+  const veredito = await canalDoLembreteValido(c.admin, c.orgId, canal.id);
+  if (veredito === "erro_de_consulta") throw new Error("não consegui consultar o canal do lembrete");
+  if (veredito === "invalido") {
+    throw new Recusa(
+      `A conexão «${nomeDoCanal(canal)}» não serve para mandar o lembrete: escolha um canal de mensagem não arquivado desta organização.`,
+    );
+  }
+  return canal.id;
 }
 
 // ---------------------------------------------------------------------------

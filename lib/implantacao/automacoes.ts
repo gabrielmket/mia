@@ -39,7 +39,7 @@
  *
  * ── A empresa de demonstração ─────────────────────────────────────────────
  *
- * Regra ATIVA com `call_webhook` ou `notify_group` é recusada pelo banco na
+ * Regra ATIVA com `call_webhook`, `notify_group` ou `send_email` (.81, 9043) é recusada pelo banco na
  * empresa de demonstração (migration 9010, e desde a 9021 também quando a ação
  * mora dentro das opções de um `ai_decide`). A ferramenta de ligar explica a
  * recusa ANTES de chegar ao banco, e a recusa do banco, se vier, volta com a
@@ -232,8 +232,18 @@ export function tiposDasAcoes(acoes: unknown): string[] {
   });
 }
 
-/** As ações que a trava da demonstração recusa numa regra LIGADA (9010, e dentro do `ai_decide` desde a 9021). */
-const ACOES_QUE_SAEM_PARA_FORA = ["call_webhook", "notify_group"] as const;
+/**
+ * As ações que a trava da demonstração recusa numa regra LIGADA (9010, e dentro
+ * do `ai_decide` desde a 9021; o e-mail desde a 9043).
+ */
+const ACOES_QUE_SAEM_PARA_FORA = ["call_webhook", "notify_group", "send_email"] as const;
+
+/** O que a recusa diz de cada ação que sai para fora. */
+const O_QUE_SAI: Record<(typeof ACOES_QUE_SAEM_PARA_FORA)[number], string> = {
+  call_webhook: "uma chamada de webhook",
+  notify_group: "um aviso no grupo",
+  send_email: "um envio de e-mail",
+};
 
 function recusaDoSchema(erro: { issues: Array<{ path: PropertyKey[]; message: string }> }): never {
   const linhas = erro.issues.slice(0, 8).map((i) => {
@@ -398,7 +408,7 @@ export async function ligarAutomacao(
       const dentroDoAiDecide = !primeiroNivel.some((a) => (ACOES_QUE_SAEM_PARA_FORA as readonly string[]).includes(a?.type ?? ""));
       throw new Recusa(
         `${FRASE_DA_DEMONSTRACAO} A regra «${regra.name}» ${dentroDoAiDecide ? 'tem, entre as opções do passo "a IA decide",' : "tem"} ` +
-          `${deFora.includes("call_webhook") ? "uma chamada de webhook" : "um aviso no grupo"}, e por isso não liga na empresa de demonstração.`,
+          `${O_QUE_SAI[deFora[0] as (typeof ACOES_QUE_SAEM_PARA_FORA)[number]]}, e por isso não liga na empresa de demonstração.`,
       );
     }
   }
@@ -409,7 +419,7 @@ export async function ligarAutomacao(
     .eq("organization_id", c.orgId);
   if (error) {
     if (ehRecusaDaDemonstracao(error)) {
-      throw new Recusa(`${FRASE_DA_DEMONSTRACAO} A regra «${regra.name}» chama um webhook ou avisa um grupo, e por isso não liga na empresa de demonstração.`);
+      throw new Recusa(`${FRASE_DA_DEMONSTRACAO} A regra «${regra.name}» chama um webhook, avisa um grupo ou manda e-mail, e por isso não liga na empresa de demonstração.`);
     }
     throw new Error(`não consegui ${pedido.ligada ? "ligar" : "desligar"} a regra: ${error.message}`);
   }

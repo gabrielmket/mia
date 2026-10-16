@@ -95,7 +95,7 @@ const PAPEIS = ["decisor", "financeiro", "usuario", "influenciador", "outro"] as
 
 const COLUNAS =
   "id, name, display_name, email, email_normalized, phone_number, tags, custom_fields, consent, " +
-  "is_blocked, is_anonymized, is_merged_into, empresa_id, cargo, setor, papel_na_empresa, principal_na_empresa, carteira_user_id";
+  "is_blocked, is_anonymized, is_merged_into, empresa_id, cargo, setor, papel_na_empresa, principal_na_empresa, carteira_user_id, ai_opt_out";
 
 export interface ContatoNaBase {
   id: string;
@@ -117,6 +117,8 @@ export interface ContatoNaBase {
   principal_na_empresa: boolean;
   /** O vendedor dono do contato (0622). Ausente = sem dono. */
   carteira_user_id?: string | null;
+  /** .81 — "sempre atendimento humano" (upstream 0624, issue 2379). */
+  ai_opt_out?: boolean;
 }
 
 /** A função do fork que grava o dono do contato pelo token de plataforma (9022). */
@@ -134,6 +136,7 @@ export const EXEMPLO_DE_CONTATO = {
   consentimento_marketing: "concedido",
   consentimento_em: "2026-03-14",
   opt_out: false,
+  sempre_atendimento_humano: false,
   vendedor_responsavel: "vendedora@exemplo.invalid",
   id_de_origem: "c-1042",
 };
@@ -274,6 +277,12 @@ export interface ContatoLido {
   consentimento: Consentimento | null;
   consentimento_em: string | null;
   opt_out: boolean;
+  /**
+   * .81 — a marca permanente "sempre atendimento humano" do upstream
+   * (`contacts.ai_opt_out`, 0624): a IA nunca atende este contato, e a devolução
+   * ao automático não a desfaz. Como o opt-out, a importação só LIGA.
+   */
+  sempre_atendimento_humano: boolean;
   /** O e-mail (ou id) do vendedor dono do contato, como veio. */
   vendedor_responsavel: string | null;
   id_de_origem: string | null;
@@ -451,6 +460,24 @@ export function lerContato(item: unknown): Leitura {
     optOut = lido;
   }
 
+  let sempreHumano = false;
+  if (
+    item.sempre_atendimento_humano !== undefined &&
+    item.sempre_atendimento_humano !== null &&
+    item.sempre_atendimento_humano !== ""
+  ) {
+    const lido = booleano(item.sempre_atendimento_humano);
+    if (lido === null) {
+      return {
+        ok: false,
+        campo: "sempre_atendimento_humano",
+        esperado: "deveria ser verdadeiro ou falso (true = este contato é sempre atendido por uma pessoa, nunca pela IA).",
+        exemplo: "true",
+      };
+    }
+    sempreHumano = lido;
+  }
+
   const nome = texto(item.nome, 400);
   const candidato: Record<string, unknown> = {
     ...(nome ? { name: nome } : {}),
@@ -487,6 +514,7 @@ export function lerContato(item: unknown): Leitura {
       consentimento,
       consentimento_em: consentimentoEm,
       opt_out: optOut,
+      sempre_atendimento_humano: sempreHumano,
       vendedor_responsavel: texto(item.vendedor_responsavel, 320),
       id_de_origem: texto(item.id_de_origem, 200),
       avisos,
@@ -642,6 +670,12 @@ export function mudancasDoContato(
     patch.is_blocked = true;
     patch.blocked_reason = MOTIVO_DO_OPT_OUT_IMPORTADO;
     patch.blocked_at = contexto.agora;
+  }
+
+  // .81 — "sempre atendimento humano" só liga: quem já tem a marca continua com
+  // ela, e a importação nunca a tira (tirar é decisão da equipe, na ficha).
+  if (novo.sempre_atendimento_humano && atual.ai_opt_out !== true) {
+    patch.ai_opt_out = true;
   }
 
   return { patch, naoAplicados, avisos, tambemNaEmpresa };
@@ -925,6 +959,7 @@ export async function importarContatos(
           }
           naBase = data as unknown as ContatoNaBase;
           mudou = true;
+          if (patch.ai_opt_out === true) auditarSempreHumano(ctx, orgId, existente.id, requestId);
         }
         if (tambemNaEmpresa) {
           // FORK MIA (.79): mais uma empresa da pessoa, pela porta da 9034.
@@ -1000,6 +1035,7 @@ export async function importarContatos(
           ...(novo.opt_out
             ? { is_blocked: true, blocked_reason: MOTIVO_DO_OPT_OUT_IMPORTADO, blocked_at: agora }
             : {}),
+          ...(novo.sempre_atendimento_humano ? { ai_opt_out: true } : {}),
         })
         .select(COLUNAS)
         .single();
@@ -1014,6 +1050,7 @@ export async function importarContatos(
         continue;
       }
       const criado = data as unknown as ContatoNaBase;
+      if (novo.sempre_atendimento_humano) auditarSempreHumano(ctx, orgId, criado.id, requestId);
       if (novo.observacao) await gravarObservacao(ctx.admin, orgId, criado.id, origem, novo.observacao, modo);
       if (novo.vendedor_responsavel) {
         equipe ??= await equipeQuePodeSerDona(ctx, orgId);
@@ -1040,6 +1077,22 @@ export async function importarContatos(
   return coletor.resultado(organizacao);
 }
 
+/**
+ * A linha da tela do upstream quando a marca é ligada na ficha
+ * (`contacts.always_human_marked`), com a origem. Nunca derruba a importação.
+ */
+function auditarSempreHumano(ctx: ContextoDaFerramenta, orgId: string, contatoId: string, requestId: string): void {
+  void audit({
+    action: "contacts.always_human_marked",
+    actorUserId: ctx.autorUserId,
+    organizationId: orgId,
+    resourceType: "contact",
+    resourceId: contatoId,
+    requestId,
+    metadata: { via: "mcp_plataforma", origem: "importacao" },
+  });
+}
+
 export const FERRAMENTA_IMPORTAR_CONTATOS: FerramentaDeImportacao = {
   name: "plataforma_importar_contatos",
   description:
@@ -1052,7 +1105,8 @@ export const FERRAMENTA_IMPORTAR_CONTATOS: FerramentaDeImportacao = {
     "ou recusou e por quê. Contato sem telefone válido E sem e-mail é recusado. Um item ruim não derruba os outros.\n\n" +
     "O que NÃO faz: não envia mensagem, não inscreve em follow-up, não dispara automação (nem a de etiqueta), não abre conversa, " +
     "não cria empresa, não troca o telefone de quem já tem um e nunca tira o bloqueio de quem pediu para sair. Quem vier com " +
-    "opt_out: true entra bloqueado para todo envio.\n\n" +
+    "opt_out: true entra bloqueado para todo envio. sempre_atendimento_humano: true marca o contato para NUNCA ser atendido pela IA " +
+    "(a devolução ao automático não desfaz; a importação só liga a marca, nunca a tira).\n\n" +
     "O DONO DO CONTATO: `vendedor_responsavel` (o e-mail de uma pessoa que JÁ é da equipe como atendente, gerente ou administrador) grava o vendedor " +
     "responsável pelo cliente: o negócio novo desse cliente nasce com ele, os negócios abertos sem dono passam para ele, e ele é avisado por tarefa quando o " +
     "cliente escreve numa conversa que está com outro vendedor. O dono que já existe só é trocado com quando_ja_existe: \"atualizar\".\n\n" +
@@ -1072,7 +1126,7 @@ export const FERRAMENTA_IMPORTAR_CONTATOS: FerramentaDeImportacao = {
           "canal (por onde a pessoa chegou no CRM antigo), campos (objeto com campos personalizados), observacao (texto livre; " +
           "vira nota do contato, que a equipe e o agente de IA leem), empresa ({ cnpj e/ou nome, cargo, setor, papel: " +
           `${PAPEIS.join("|")}, principal: true|false }), consentimento_marketing ("concedido"|"recusado"), consentimento_em (data), ` +
-          "opt_out (true = pediu para não receber mensagens), vendedor_responsavel (o e-mail de quem é o DONO do contato na equipe: " +
+          "opt_out (true = pediu para não receber mensagens), sempre_atendimento_humano (true = só uma pessoa atende, nunca a IA), vendedor_responsavel (o e-mail de quem é o DONO do contato na equipe: " +
           "o negócio novo do cliente nasce com ele, e os negócios abertos sem dono passam para ele) e id_de_origem. " +
           `Exemplo: ${JSON.stringify(EXEMPLO_DE_CONTATO)}`,
       ),

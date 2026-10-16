@@ -71,6 +71,10 @@ import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
 import { capacidadesPadraoDoOnboarding } from "@/lib/ai/agents/capacidades-padrao";
 import { AGENT_CONFIG_DEFAULTS, agentPatchSchema } from "@/lib/ai/guardrails-schema";
 import { DEFAULT_SENTIMENT_THRESHOLD } from "@/lib/ai/prompts/sentiment";
+// .81 — a régua do par (provedor, modelo) do upstream (#2955, issue #2377): a
+// rota POST /api/v1/ai/agents recusa, antes de qualquer insert, o par que o
+// provedor não executa. O espelho recusa o mesmo.
+import { validarParProvedorModelo } from "@/lib/ai/par-provedor-modelo";
 import {
   camadaLigada,
   escolhaDasLinhas,
@@ -82,7 +86,8 @@ import { audit } from "@/lib/audit";
 import { listSelectableChannels, type SelectableChannel } from "@/lib/channels/selectable";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { VALID_TOOL_IDS } from "@/lib/mcp/tools/catalog";
-import { toolIdAceito } from "@/lib/mcp/servidor-externo/ids";
+import { ehToolIdRemoto, toolIdAceito, toolIdRemoto } from "@/lib/mcp/servidor-externo/ids";
+import { FRASE_DA_DEMONSTRACAO } from "@/lib/demonstracao/trava";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 
 import {
@@ -243,6 +248,18 @@ export interface PedidoDeAgente {
   /** Id, nome ou telefone de um número já conectado. */
   numero?: string | null;
   max_passos?: number;
+  /**
+   * .81 — o SERVIDOR MCP EXTERNO da empresa no agente (upstream #2147/#2948):
+   * `ferramentas` são as ferramentas do servidor que o agente pode usar
+   * (`tool_ids` `mcp_externo:leitura:<nome>` ou `mcp_externo:escrita:<nome>`, a
+   * lista INTEIRA; [] tira todas) e `no_atendimento` liga o servidor nas
+   * conversas com cliente (`ai_agents.config.mcp_externo_no_atendimento`: o
+   * servidor passa a receber a identidade do cliente). Recusado na demonstração.
+   */
+  servidor_mcp_externo?: {
+    no_atendimento?: boolean;
+    ferramentas?: Array<{ nome: string; leitura?: boolean }>;
+  };
 }
 
 export interface AgenteGarantido {
@@ -532,6 +549,19 @@ async function montarVersao(
     avisos.push('Sem `pacotes` no pedido, o agente nasceu com o pacote "vender" (o mesmo do onboarding).');
   }
 
+  // .81 — as ferramentas do servidor MCP externo moram no MESMO `tool_ids`
+  // (`mcp_externo:*`). Trocar os pacotes não pode apagá-las, e a lista pedida
+  // substitui só as remotas.
+  const pediuRemotas = pedido.servidor_mcp_externo?.ferramentas !== undefined;
+  if (pediuRemotas || pedido.pacotes !== undefined || pedido.capacidades !== undefined) {
+    const compiladas = ((corpo.tool_ids as string[] | null | undefined) ?? []).filter((id) => !ehToolIdRemoto(id));
+    const remotasDaReferencia = ((referencia?.tool_ids as string[] | null | undefined) ?? []).filter((id) => ehToolIdRemoto(id));
+    const remotas = pediuRemotas
+      ? ferramentasRemotas(pedido.servidor_mcp_externo!.ferramentas!)
+      : remotasDaReferencia;
+    corpo.tool_ids = [...compiladas, ...remotas];
+  }
+
   if (pedido.funis !== undefined) corpo.pipeline_ids = await resolverFunis(c.admin, c.orgId, pedido.funis);
   if (pedido.materiais !== undefined) {
     corpo.knowledge_source_ids = await resolverMateriais(c.admin, c.orgId, pedido.materiais);
@@ -662,6 +692,31 @@ function configComLimiar(
   limiar: number | undefined,
 ): Record<string, unknown> | null {
   if (limiar === undefined || limiar === limiarDeSentimentoDo(agente)) return null;
+  return configComLimiarConferido(agente, limiar);
+}
+
+/**
+ * .81 — o `config` do cadastro com o limiar E o servidor MCP externo no
+ * atendimento (`mcp_externo_no_atendimento`, que a tela grava pelo PATCH do
+ * agente, só administrador). `null` quando nada muda.
+ */
+function configDoCadastro(
+  agente: Pick<LinhaDoAgente, "config">,
+  pedido: Pick<PedidoDeAgente, "limiar_de_sentimento" | "servidor_mcp_externo">,
+): { config: Record<string, unknown>; mudancas: string[] } | null {
+  const mudancas: string[] = [];
+  let config = configComLimiar(agente, pedido.limiar_de_sentimento);
+  if (config) mudancas.push("limiar de sentimento");
+  const noAtendimento = pedido.servidor_mcp_externo?.no_atendimento;
+  const atual = ((agente.config ?? {}) as Record<string, unknown>).mcp_externo_no_atendimento === true;
+  if (noAtendimento !== undefined && noAtendimento !== atual) {
+    config = { ...AGENT_CONFIG_DEFAULTS, ...((agente.config ?? {}) as Record<string, unknown>), ...(config ?? {}), mcp_externo_no_atendimento: noAtendimento };
+    mudancas.push("servidor externo no atendimento");
+  }
+  return config ? { config, mudancas } : null;
+}
+
+function configComLimiarConferido(agente: Pick<LinhaDoAgente, "config">, limiar: number): Record<string, unknown> {
   const conferido = agentPatchSchema.safeParse({ config: { sentiment_threshold: limiar } });
   if (!conferido.success) {
     throw new Recusa(
@@ -847,6 +902,21 @@ async function garantirAgenteECadastro(
 ): Promise<AgenteGarantido> {
   const avisos: string[] = [];
   const nome = pedido.nome.trim();
+  // .81 — o servidor MCP externo é rede para o sistema de outra empresa: da
+  // demonstração nada sai (a carga do turno também recusa, e o cadastro do
+  // servidor, 9043). Tirar continua valendo.
+  const externo = pedido.servidor_mcp_externo;
+  if (org.demonstracao && externo && (externo.no_atendimento === true || (externo.ferramentas?.length ?? 0) > 0)) {
+    throw new Recusa(
+      `${FRASE_DA_DEMONSTRACAO} O agente da demonstração não usa o servidor MCP externo (é a IA consultando o sistema de outra empresa pela rede).`,
+    );
+  }
+  if (externo?.no_atendimento === true) {
+    avisos.push(
+      "Com o servidor externo no atendimento, cada consulta remota durante a conversa leva ao servidor a identidade do cliente (id, telefone e canal). " +
+        "Só as ferramentas marcadas como leitura montam em conversa com cliente.",
+    );
+  }
   const agentes = await lerAgentes(c.admin, c.orgId);
   const canais = await listSelectableChannels(c.admin, c.orgId);
 
@@ -888,6 +958,7 @@ async function garantirAgenteECadastro(
       );
     }
     const entrada = { ...lido.data, version: travada.corpo };
+    exigirParExecutavel(entrada.version.provider, entrada.version.model, "Nada foi criado.");
 
     const escopo = await validarEscopoDaVersao(c.admin, c.orgId, entrada.version);
     if (!escopo.ok) throw new Recusa(`${mensagemDoEscopo(escopo)} Pela ferramenta: confira os nomes em plataforma_ver_funis e plataforma_ver_configuracao, e chame de novo.`);
@@ -933,14 +1004,14 @@ async function garantirAgenteECadastro(
 
     // O limiar de sentimento é do cadastro: entra depois de o agente nascer, pela
     // mesma mescla de `config` do PATCH da tela.
-    const configDoNovo = configComLimiar(linhaDoAgente, pedido.limiar_de_sentimento);
+    const configDoNovo = configDoCadastro(linhaDoAgente, pedido);
     if (configDoNovo) {
       const { error } = await c.admin
         .from("ai_agents")
-        .update({ config: configDoNovo })
+        .update({ config: configDoNovo.config })
         .eq("id", linhaDoAgente.id)
         .eq("organization_id", c.orgId);
-      if (error) throw new Error(`o agente nasceu, mas não consegui gravar o limiar de sentimento: ${error.message}. Chame de novo.`);
+      if (error) throw new Error(`o agente nasceu, mas não consegui gravar o cadastro dele (${configDoNovo.mudancas.join(", ")}): ${error.message}. Chame de novo.`);
     }
 
     return {
@@ -973,11 +1044,11 @@ async function garantirAgenteECadastro(
     patchDoAgente.priority = pedido.prioridade;
     mudancasDoAgente.push("prioridade");
   }
-  const configNova = configComLimiar(agente, pedido.limiar_de_sentimento);
+  const configNova = configDoCadastro(agente, pedido);
   if (configNova) {
-    patchDoAgente.config = configNova;
-    mudancasDoAgente.push("limiar de sentimento");
-    if (estadoDoAgente(agente) === "no_ar") {
+    patchDoAgente.config = configNova.config;
+    mudancasDoAgente.push(...configNova.mudancas);
+    if (estadoDoAgente(agente) === "no_ar" && configNova.mudancas.includes("limiar de sentimento")) {
       avisos.push(
         "O limiar de sentimento é do cadastro do agente, não do rascunho: já vale para a próxima mensagem que tiver o clima medido, sem publicar.",
       );
@@ -1024,6 +1095,7 @@ async function garantirAgenteECadastro(
   const lido = versionCreateSchema.safeParse(comIa.corpo);
   if (!lido.success) recusaDoSchema(lido.error);
   const desejada = lido.data;
+  exigirParExecutavel(desejada.provider, desejada.model, "Nenhuma versão nova foi gravada.");
 
   const comoEsta = referencia ? conteudoDa(referencia) : null;
   const mudou = comoEsta
@@ -1368,4 +1440,38 @@ export async function pausarAgente(
     });
   }
   return { agente: { id: agente.id, nome: agente.name }, pausado: pedido.pausar, desfecho: "atualizou" };
+}
+
+/**
+ * A IA que a plataforma escolhe para o agente (`travarIaDaVersaoNova`) passa pela
+ * MESMA régua da rota do upstream antes de gravar (#2955): um par cruzado
+ * (`openai` + `claude-sonnet-5`, o legado da issue #2377) nasceria gravado e só
+ * apareceria no turno, longe de quem pode consertar.
+ */
+function exigirParExecutavel(provider: unknown, model: unknown, consequencia: string): void {
+  const par = validarParProvedorModelo(provider, model);
+  if (par.valido) return;
+  throw new Recusa(
+    `Não foi possível definir o provedor e o modelo deste agente: ${par.motivo}. ${consequencia} ` +
+      "Quem opera a plataforma confere o modelo padrão dos agentes em Admin › IA.",
+  );
+}
+
+/** As ferramentas remotas pedidas viram os ids que a tela grava (`toolIdRemoto`), sem repetir nome. */
+function ferramentasRemotas(pedidas: ReadonlyArray<{ nome: string; leitura?: boolean }>): string[] {
+  const vistas = new Set<string>();
+  const ids: string[] = [];
+  for (const f of pedidas) {
+    const nome = f.nome.trim();
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(nome)) {
+      throw new Recusa(
+        `\`servidor_mcp_externo.ferramentas\`: «${f.nome}» não é um nome de ferramenta MCP (letras, números, _ e -, até 64). ` +
+          "Use o nome exato que o servidor anuncia (a tela Configurações › Servidor MCP externo mostra a lista).",
+      );
+    }
+    if (vistas.has(nome)) continue;
+    vistas.add(nome);
+    ids.push(toolIdRemoto(nome, f.leitura === false ? "escrita" : "leitura"));
+  }
+  return ids;
 }

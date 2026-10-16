@@ -52,7 +52,7 @@ import {
   routingConfigSchema,
   type RoutingMode,
 } from "@/lib/schemas/routing";
-import { tenantSchema } from "@/lib/schemas/settings";
+import { colegasPodemMexerNaAgendaLigado, meetAbertoLigado, tenantSchema } from "@/lib/schemas/settings";
 import { DEFAULT_VISIBILITY_MODE } from "@/lib/auth/types";
 import { fusoValido } from "@/lib/tempo/fusos";
 
@@ -370,6 +370,20 @@ export interface PedidoDeAtendimento {
    * consultar o modelo. Mora em `settings.automacoes.ai_decide`, padrão ligado.
    */
   ia_decide_nas_automacoes?: boolean;
+  /**
+   * .81 — "Atendentes podem mexer na agenda dos colegas" (upstream 1.80, #978):
+   * `settings.colegas_podem_mexer_na_agenda`, ligado por padrão (só o `false`
+   * gravado desliga). A função do upstream (`fn_definir_colegas_podem_mexer_na_agenda`)
+   * exige sessão com a verificação em duas etapas; o token não tem sessão, e a
+   * gravação é a mescla da chave de topo, pelo servidor, com a auditoria dela.
+   */
+  colegas_podem_mexer_na_agenda?: boolean;
+  /**
+   * .81 — "Google Meet já com acesso aberto" (upstream 1.81, #2063, 0648):
+   * `settings.google_meet_acesso_aberto`, desligado por padrão (só o `true`
+   * liga). Mesma razão da opção de cima para gravar pelo servidor.
+   */
+  google_meet_com_acesso_aberto?: boolean;
 }
 
 /** O freio do `ai_decide` como o motor o lê (`aiDecideLigado`): só `false` gravado desliga. */
@@ -393,6 +407,8 @@ export async function configurarAtendimento(
   // `as` no inicializador: sem ele o TypeScript estreita para `null` e não vê a escrita feita dentro da função de mescla.
   let assinaturaGravada = null as AssinaturaGravada | null;
   let iaDecideGravada = null as boolean | null;
+  let colegasGravado = null as boolean | null;
+  let meetGravado = null as boolean | null;
 
   const { mudou } = await mudarSettingsDaOrganizacao(c.admin, c.orgId, (settings) => {
     const atual = routingConfigSchema.catch(routingConfigSchema.parse({})).parse(settings.routing ?? {});
@@ -461,6 +477,18 @@ export async function configurarAtendimento(
       novo = { ...novo, [CHAVE_DAS_AUTOMACOES]: { ...automacoes, ai_decide: pedido.ia_decide_nas_automacoes } };
     }
 
+    // .81 — as duas opções da agenda: chave de TOPO, como as funções do upstream
+    // gravam (`settings || jsonb_build_object(...)`), e só quando o valor MUDA,
+    // lido pela MESMA régua da tela (`colegasPodemMexerNaAgendaLigado`, `meetAbertoLigado`).
+    const colegasAtual = colegasPodemMexerNaAgendaLigado(settings);
+    const colegasMudou =
+      pedido.colegas_podem_mexer_na_agenda !== undefined && pedido.colegas_podem_mexer_na_agenda !== colegasAtual;
+    if (colegasMudou) novo = { ...novo, colegas_podem_mexer_na_agenda: pedido.colegas_podem_mexer_na_agenda };
+    const meetAtual = meetAbertoLigado(settings);
+    const meetMudou =
+      pedido.google_meet_com_acesso_aberto !== undefined && pedido.google_meet_com_acesso_aberto !== meetAtual;
+    if (meetMudou) novo = { ...novo, google_meet_acesso_aberto: pedido.google_meet_com_acesso_aberto };
+
     mudancas = [];
     if (routing.mode !== atual.mode) mudancas.push("modo de distribuição");
     if (routing.handoff_return_after_minutes !== atual.handoff_return_after_minutes) mudancas.push("devolução para a IA");
@@ -477,6 +505,10 @@ export async function configurarAtendimento(
     assinaturaGravada = assinaturaMudou ? assinaturaPedida : null;
     if (iaDecideMudou) mudancas.push("a IA decide nas automações");
     iaDecideGravada = iaDecideMudou ? (pedido.ia_decide_nas_automacoes as boolean) : null;
+    if (colegasMudou) mudancas.push("colegas podem mexer na agenda");
+    colegasGravado = colegasMudou ? (pedido.colegas_podem_mexer_na_agenda as boolean) : null;
+    if (meetMudou) mudancas.push("Google Meet com acesso aberto");
+    meetGravado = meetMudou ? (pedido.google_meet_com_acesso_aberto as boolean) : null;
 
     const assinaturaFinal: AssinaturaGravada = assinaturaPedida ?? {
       humanos: assinaturaAtual.humanos,
@@ -494,6 +526,8 @@ export async function configurarAtendimento(
       ...distribuicao,
       assinatura: { atendentes: assinaturaFinal.humanos, ia: assinaturaFinal.ia, nome_da_ia: assinaturaFinal.nome_ia },
       ia_decide_nas_automacoes: iaDecideMudou ? pedido.ia_decide_nas_automacoes : iaDecideAtual,
+      colegas_podem_mexer_na_agenda: colegasMudou ? pedido.colegas_podem_mexer_na_agenda : colegasAtual,
+      google_meet_com_acesso_aberto: meetMudou ? pedido.google_meet_com_acesso_aberto : meetAtual,
     };
 
     // Uma organização que nunca abriu a tela não tem `settings.routing`: gravar
@@ -535,6 +569,31 @@ export async function configurarAtendimento(
       resourceId: c.orgId,
       requestId: c.requestId,
       metadata: { ligado: iaDecideGravada, via: "mcp_plataforma" },
+    });
+  }
+
+  if (mudou && colegasGravado !== null) {
+    // A mesma linha de `definirAgendaDosColegas` (Configurações › Agenda).
+    void audit({
+      action: "agenda.colegas_podem_mexer_alterado",
+      actorUserId: c.autorUserId,
+      organizationId: c.orgId,
+      resourceType: "organization",
+      resourceId: c.orgId,
+      requestId: c.requestId,
+      metadata: { ligado: colegasGravado, mudou: true, via: "mcp_plataforma" },
+    });
+  }
+  if (mudou && meetGravado !== null) {
+    // A mesma linha de `definirMeetAberto` (Configurações › Agenda).
+    void audit({
+      action: "agenda.meet_acesso_aberto_alterado",
+      actorUserId: c.autorUserId,
+      organizationId: c.orgId,
+      resourceType: "organization",
+      resourceId: c.orgId,
+      requestId: c.requestId,
+      metadata: { ligado: meetGravado, mudou: true, via: "mcp_plataforma" },
     });
   }
 

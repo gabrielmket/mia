@@ -82,6 +82,7 @@ export const FERRAMENTAS_DE_EQUIPE_E_MENSAGENS: readonly FerramentaDePlataforma[
     description:
       "Cria ou ajusta as RESPOSTAS PRONTAS de um cliente: textos que a equipe insere na conversa pelo atalho, sem digitar (boas-vindas, endereço, formas de pagamento). " +
       "São as compartilhadas da empresa, que todo atendente vê. Não saem para ninguém sozinhas: é o atendente que escolhe usar. " +
+      "Cada uma pode levar até 5 IMAGENS junto com o texto (`imagens`, endereços https públicos), guardadas no bucket privado do atendimento. " +
       `Até ${TETO_DE_RESPOSTAS} por chamada. GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é o TÍTULO. ` +
       "NÃO CONFUNDA com modelo oficial do WhatsApp, que é submetido à Meta: esse é plataforma_submeter_modelo_whatsapp.",
     inputSchema: {
@@ -93,6 +94,15 @@ export const FERRAMENTAS_DE_EQUIPE_E_MENSAGENS: readonly FerramentaDePlataforma[
               titulo: z.string().trim().min(1).max(80).describe("Como o atendente acha a resposta na lista."),
               texto: z.string().trim().min(1).max(4096).describe("O texto que entra na conversa."),
               atalho: z.string().trim().min(1).max(40).nullable().optional().describe('O atalho para inserir (ex.: "endereco").'),
+              // .81 — as imagens da resposta pronta (upstream #2526).
+              imagens: z
+                .array(z.string().trim().url().max(2000))
+                .max(5)
+                .optional()
+                .describe(
+                  "Até 5 imagens que vão JUNTO com o texto, por endereço https público (JPG ou PNG, até 5 MB, conferidos pelo conteúdo). " +
+                    "É a lista INTEIRA: a que não vier sai da resposta. Ausente: ficam as que estão. [] tira todas.",
+                ),
             })
             .strict(),
         )

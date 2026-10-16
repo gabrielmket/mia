@@ -626,6 +626,25 @@ const agenda: AreaDoChecklist = {
     };
     if (ativos.length > 0) r.pronto.push(`${plural(ativos.length, "tipo de agendamento ativo", "tipos de agendamento ativos")}.`);
     else r.falta.push({ o_que: "Nenhum tipo de agendamento ativo: ninguém marca horário.", como: "plataforma_garantir_tipos_de_agendamento." });
+    // .81 (upstream v1.83): com 2 ou mais números, o lembrete de compromisso
+    // marcado SEM conversa não sabe por qual sair e fica pendente (remetente
+    // ambíguo) até o tipo dizer o canal do lembrete.
+    const comLembreteSemCanal = ativos.filter((t) => t.reminder_enabled === true && !t.reminder_channel_session_id);
+    if (comLembreteSemCanal.length > 0) {
+      const { count: numeros } = await admin
+        .from("channel_sessions")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", org.id)
+        .is("archived_at", null);
+      if ((numeros ?? 0) >= 2) {
+        r.falta.push({
+          o_que:
+            `A empresa tem ${numeros} números e ${comLembreteSemCanal.map((t) => `«${String(t.name)}»`).join(", ")} tem lembrete ligado sem o número do lembrete: ` +
+            "compromisso marcado sem conversa fica com o lembrete pendente (remetente ambíguo).",
+          como: "plataforma_garantir_tipos_de_agendamento, com `canal_do_lembrete` em cada tipo.",
+        });
+      }
+    }
     if (comJornada > 0) r.pronto.push(`${plural(comJornada, "pessoa com jornada publicada", "pessoas com jornada publicada")}.`);
     else {
       r.falta.push({

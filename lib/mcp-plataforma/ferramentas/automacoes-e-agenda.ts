@@ -41,6 +41,8 @@ export const TIPOS_DE_ACAO = [
   "apply_task_plan",
   "start_message_flow",
   "send_whatsapp_message",
+  // upstream 1.81 (#2726): o e-mail como saída da regra
+  "send_email",
   "send_ai_message",
   "notify_group",
   "call_webhook",
@@ -54,7 +56,7 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
     description:
       "Cria ou ajusta uma REGRA DE AUTOMAÇÃO de um cliente: quando um gatilho acontece (negócio criado, mudou de etapa, foi GANHO, PERDIDO, reaberto ou trocou de responsável, " +
       "mensagem recebida, etiqueta, horário marcado, silêncio...) " +
-      "e as condições batem, as ações rodam (mover para uma etapa, pôr etiqueta no negócio ou no contato, criar tarefa, aplicar um plano de tarefas, inscrever em follow-up, mandar mensagem, avisar o grupo, chamar um webhook, " +
+      "e as condições batem, as ações rodam (mover para uma etapa, pôr etiqueta no negócio ou no contato, criar tarefa, aplicar um plano de tarefas, inscrever em follow-up ou iniciar um fluxo de atendimento, mandar mensagem, mandar e-mail, avisar o grupo, chamar um webhook, " +
       'ou o passo "a IA decide", `ai_decide`, em que a IA escolhe UMA entre 2 e 6 opções montadas na regra, cada uma com uma dessas ações em `config.opcoes[].acao`). ' +
       "O WEBHOOK DE SAÍDA é isto: uma regra com a ação `call_webhook` (ex.: avisar o faturamento quando o negócio é ganho, com o gatilho `lead.won`). " +
       "Nos gatilhos de ganho, perda, reabertura e troca de responsável a regra não pode atribuir responsável nem mover o negócio, nem dentro de um `ai_decide`: a própria mudança dispararia a regra de novo. " +
@@ -220,6 +222,7 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
       "Tipo novo nasce; o que já existe tem atualizados só os campos que vieram; igual, nada acontece. Tipos que o pedido não cita ficam. " +
       "Toda organização nasce com três tipos de exemplo: confira em plataforma_ver_configuracao, seção agenda, antes de criar. " +
       "Categorias e locais aceitos: plataforma_listar_modelos, seção agenda. " +
+      "`canal_do_lembrete` escolhe o NÚMERO que manda o lembrete do tipo: com 2 ou mais números na empresa, sem ele o lembrete de compromisso marcado sem conversa fica pendente (a resposta avisa). " +
       "O QUE NÃO FAZ: não liga o lembrete (plataforma_ligar_lembrete), não desativa nem reativa tipo, não define a jornada de ninguém (plataforma_definir_jornada), " +
       "não cria tipo com Microsoft Teams e não mexe nos prazos da agenda (esses são pela tela: Configurações › Agenda).",
     inputSchema: {
@@ -241,6 +244,18 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
               antecedencia_minima_minutos: z.number().int().min(0).max(43_200).optional().describe("Com quanto tempo de antecedência, no mínimo, se agenda."),
               janela_de_agendamento_dias: z.number().int().min(1).max(365).optional().describe("Até quantos dias à frente se agenda."),
               preco_padrao_cents: z.number().int().min(0).max(100_000_000).nullable().optional().describe("O preço padrão do serviço, em centavos."),
+              // .81 — o canal do lembrete (upstream v1.83).
+              canal_do_lembrete: z
+                .string()
+                .trim()
+                .min(1)
+                .max(120)
+                .nullable()
+                .optional()
+                .describe(
+                  "O NÚMERO que manda o lembrete deste tipo: id, nome ou telefone de uma conexão (plataforma_ver_configuracao, seção canais). " +
+                    "null = automático (a conversa da reserva, ou o único número). Com 2 ou mais números, sem isto o lembrete de compromisso marcado sem conversa fica pendente.",
+                ),
             })
             .strict(),
         )

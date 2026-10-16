@@ -103,6 +103,8 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
       "`ia_espera_apos_resposta_pelo_celular_minutos`: quanto a IA fica calada depois que alguém da equipe responde pelo celular, fora do sistema. " +
       "`assinatura`: o nome de quem fala (o atendente, ou a IA) em negrito, na linha de cima de cada mensagem enviada ao cliente. Nasce desligada. " +
       "`ia_decide_nas_automacoes`: o freio da empresa inteira para o passo \"a IA decide\" das automações; false faz toda regra com esse passo parar sem consultar a IA (e sem gastar). Nasce ligado. " +
+      "`colegas_podem_mexer_na_agenda`: o atendente marca, remarca e cancela na agenda dos colegas (nasce ligado); false deixa cada atendente só na própria agenda (gestor e administrador seguem mexendo em todas). " +
+      "`google_meet_com_acesso_aberto`: a reunião do Google Meet que o sistema cria já nasce com o acesso aberto a quem tem o link, sem sala de espera (nasce desligado). " +
       "Só os campos que VIERAM mudam; pedido igual ao que está gravado responde `ja_estava`. As duas primeiras decisões andam juntas: rodízio sem restringir a visibilidade deixa todo mundo vendo a carteira do colega. " +
       "ATENÇÃO: tudo aqui vale na hora, inclusive para o agente que já está no ar. A assinatura ligada aparece na PRÓXIMA mensagem que o cliente final receber. " +
       "O QUE NÃO FAZ: não define quais atendentes recebem cada NÚMERO (Configurações › Atendimento, depois de o número estar conectado e a equipe ter aceitado o convite) " +
@@ -155,6 +157,20 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
         .describe(
           'Liga (true) ou desliga (false), para a empresa inteira, o passo "a IA decide" das automações (a ação `ai_decide` de plataforma_garantir_automacao). ' +
             "Desligado, cada regra com esse passo para nele sem chamar a IA, e a aba Atividade das automações diz que a empresa desligou. As outras ações da regra seguem.",
+        ),
+      // .81 — as duas opções da agenda do upstream (1.80 #978 e 1.81 #2063, 0648).
+      colegas_podem_mexer_na_agenda: z
+        .boolean()
+        .optional()
+        .describe(
+          "true (o padrão): o atendente pode marcar, remarcar e cancelar compromissos na agenda dos colegas. false: cada atendente só mexe na própria agenda. " +
+            "Gestor e administrador mexem em todas nos dois casos.",
+        ),
+      google_meet_com_acesso_aberto: z
+        .boolean()
+        .optional()
+        .describe(
+          "true: a reunião do Google Meet criada pelo sistema já nasce com o acesso aberto (quem tem o link entra sem esperar ser admitido). false (o padrão): a sala de espera do Google vale.",
         ),
     },
     exemplo: { organization_id: ORG_DE_EXEMPLO, modo: "round_robin", visibilidade: "own_and_unassigned", devolver_para_a_ia_apos_minutos: 60 },

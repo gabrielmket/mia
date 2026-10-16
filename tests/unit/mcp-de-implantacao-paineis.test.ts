@@ -109,7 +109,8 @@ function acoesAuditadas(): string[] {
   return vi.mocked(audit).mock.calls.map((c) => (c[0] as { action: string }).action);
 }
 
-// A contagem da lista mora no teste da versão mais nova (`mcp-de-implantacao-relatorios.test.ts`, .80: 67 =
+// A contagem da lista mora no teste da versão mais nova (`mcp-de-implantacao-novidades-do-upstream-183.test.ts`, .81: 68;
+// na .80 eram 67 =
 // 64 da .78, `plataforma_vincular_pessoas_a_empresas` da empresa única (.79) e as duas do montador).
 describe("a lista: as quatro do item 8", () => {
   it("as quatro estão lá, a leitura é livre e a escrita pede `compartilhar_paineis`", () => {

@@ -78,12 +78,14 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Agente de IA.
   // Relido na .72 (upstream 1.70 #2028 e 1.73 #2296): token dsk_ e o corpo legado passa a criar mcp_agent com v1 rascunho pelo MESMO mcpAgentDraftRecords que o espelho já usa. A trava da IA continua na rota (lib/ai/trava-da-ia-na-rota.ts).
   // Relido na .76 (upstream 1.74 e 1.79): o código do erro de escopo (provedor desligado) e a coluna handoff_legal_enabled na leitura. O espelho já passava a versão inteira à conferência de escopo; a recusa passou a usar mensagemDoEscopo.
-  { rota: "app/api/v1/ai/agents/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "a121e37852edf28c" },
+  // Relido na .81 (upstream 1.81, #2955): o corpo legado sem modelo passa a resolver o par (provedor, modelo) pelo padrão da instalação e RECUSA par que o provedor não executa, antes do insert. O espelho não recebe modelo (a IA é da plataforma, travarIaDaVersaoNova), e passou a conferir o par que vai gravar com a MESMA régua (validarParProvedorModelo), recusando com "Nada foi criado".
+  { rota: "app/api/v1/ai/agents/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "2a79a511461b83ef" },
   // Relido na .72 (upstream 1.70, #2013 e #2028): a versão nova grava proposal_ai_draft_enabled; o espelho (inserirVersao) passou a gravar também. O resto é a autenticação por token.
   // Relido na .76 (upstream 1.74 e 1.79): a versão nova copia handoff_legal_enabled e o escopo confere provedor, chave e número. O espelho (inserirVersao e a conferência antes de gravar) faz os dois.
   { rota: "app/api/v1/ai/agents/[id]/versions/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "b7f10fdc1237e374" },
   // Relido na .76: token dsk_ (resolveAuthDual), handoff_legal_enabled no PATCH e a conferência de escopo antes de editar o rascunho. O espelho confere o escopo antes das duas gravações.
-  { rota: "app/api/v1/ai/agents/[id]/versions/[vid]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "ed48b99f03791c97" },
+  // Relido na .81 (upstream 1.81): o PATCH do rascunho passa a GRAVAR pipeline_ids e knowledge_source_ids (antes só entravam no schema) e os confere no escopo. O espelho já gravava os dois e já os passava a validarEscopoDaVersao.
+  { rota: "app/api/v1/ai/agents/[id]/versions/[vid]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "500b60627f41c339" },
   // Relido na .76 (upstream 1.79, #2156): publishAgentVersion recebe quemPublicou, e a mudança da chave jurídica sai como ai_agent.legal_handoff_changed com o ator. O espelho passa o autor do token. E a ferramenta de servidor MCP externo escolhida no agente conta como capacidade válida (`toolIdAceito`): o espelho usa a mesma régua ao publicar.
   { rota: "app/api/v1/ai/agents/[id]/publish/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "479026df35f97b55" },
   { rota: "app/api/v1/ai/agents/[id]/pause/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "6e42c31f7151ac42" },
@@ -102,7 +104,13 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Dados da empresa e regras de atendimento.
   // Relido na .72 (upstream 1.70, #2027): o papel passa por podeAdministrarEmpresa, a regra única do upstream. O espelho é do servidor (o token do MCP de plataforma já é a autorização).
   // Relido na .76 (upstream 1.74 e 1.79): a gravação mora em gravarDadosCadastrais (com media_retention_enforced e a frase do CNPJ repetido), e o modo de venda ausente não muda. O espelho grava as mesmas colunas e dá a mesma frase.
-  { rota: "app/actions/settings/updateTenant.ts", espelho: "lib/implantacao/empresa.ts", impressao: "14a8d796f39e6d76" },
+  // Relido na .81 (upstream 1.81): só o IP da auditoria passou a sair de ipDoCliente. Nenhuma regra nova para o espelho.
+  { rota: "app/actions/settings/updateTenant.ts", espelho: "lib/implantacao/empresa.ts", impressao: "f0f3d2eca4518724" },
+  // Espelhados na .81 (upstream 1.80 #978 e 1.81 #2063): as duas opções da agenda. As funções do upstream exigem sessão com MFA; o espelho grava a MESMA chave de topo pelo servidor (mudarSettingsDaOrganizacao), lida pelas mesmas réguas (colegasPodemMexerNaAgendaLigado, meetAbertoLigado), com a mesma auditoria.
+  { rota: "app/actions/settings/definirAgendaDosColegas.ts", espelho: "lib/implantacao/empresa.ts", impressao: "a723732e45ad75f4" },
+  { rota: "app/actions/settings/definirMeetAberto.ts", espelho: "lib/implantacao/empresa.ts", impressao: "62dbe5c947055ca7" },
+  // Espelhado na .81 (upstream v1.83, #2147/#2948): o servidor MCP externo, com o guard anti-SSRF, a chave cifrada nas colunas e a auditoria só com o host. A recusa da demonstração é NOSSA nos dois lados.
+  { rota: "app/actions/settings/definirServidorMcpExterno.ts", espelho: "lib/implantacao/servidor-mcp-externo.ts", impressao: "49a7cae71537b064" },
   // Espelhado na .76 (upstream 1.76, #2367): o freio do passo "a IA decide", com a mescla nos dois níveis de settings e a mesma auditoria.
   { rota: "app/actions/settings/definirAiDecideDaEmpresa.ts", espelho: "lib/implantacao/empresa.ts", impressao: "8168719014b15dca" },
   // Espelhado na .76 (upstream 1.77, #1752): os planos de tarefa, conferidos por planosSchema, em settings.task_plans.
@@ -112,23 +120,32 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Espelhados na .76: os dias da prospecção (1.80, 0642), guardar o histórico (1.74, #999) e a pausa agendada (1.79, #2388).
   { rota: "app/api/v1/ai/pacing/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "3a02cf8f709c4ea5" },
   { rota: "app/api/v1/channel-sessions/[id]/acervo/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "1932744eaa41d92f" },
-  { rota: "app/api/v1/channel-schedules/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "a8182100962af47e" },
-  { rota: "app/api/v1/channel-schedules/[id]/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "c2250a4cbc7936d4" },
+  // Relido na .81 (upstream 1.81, #2388): a régua da janela virou validarJanela, compartilhada por criar e EDITAR, e o [id] ganhou o PATCH que corrige os dois horários de uma janela que ainda não começou (status scheduled, com a trava contra a corrida do relógio). O espelho ganhou `ajustar_pausa_agendada` com a mesma régua (recusaDaJanela) e a mesma auditoria channel.schedule_updated.
+  { rota: "app/api/v1/channel-schedules/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "a15f8ed9f3c6296a" },
+  { rota: "app/api/v1/channel-schedules/[id]/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "71f6d0aeb4a8e9ae" },
+  // Espelhado na .81 (upstream 1.81): o nome interno da conexão, com a mesma faixa (1 a 80) e a auditoria channel.renamed.
+  { rota: "app/api/v1/channel-sessions/[id]/name/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "9d65a85056a96789" },
   // Espelhados na .76 (upstream 1.76 e 1.78): a fonte de formulário, com as perguntas e a autorização de IA (que exige a assinatura).
   { rota: "app/api/v1/webhook-sources/route.ts", espelho: "lib/implantacao/fonte-de-formulario.ts", impressao: "a400691a20559e3f" },
   { rota: "app/api/v1/webhook-sources/[id]/route.ts", espelho: "lib/implantacao/fonte-de-formulario.ts", impressao: "f83c28ab7f4d3e8f" },
   // Espelhado na .76 (upstream 1.74, 0558): a coluna do cliente numa conexão de banco externo, sem tocar na credencial.
-  { rota: "app/api/v1/external-db/connections/[id]/route.ts", espelho: "lib/implantacao/banco-externo.ts", impressao: "6e2d98edd7287b89" },
+  // Relido na .81 (upstream 0618): a leitura e a volta do PATCH trazem source_mode e sources_count. O espelho lê as duas pela visão segura.
+  { rota: "app/api/v1/external-db/connections/[id]/route.ts", espelho: "lib/implantacao/banco-externo.ts", impressao: "e3df664752a56968" },
+  // Espelhado na .81 (upstream 0618): as fontes liberadas, o modo e a lista inteira num UPDATE só, conferidos por atualizarFontesSchema, com a auditoria external_db_sources.updated.
+  { rota: "app/api/v1/external-db/connections/[id]/sources/route.ts", espelho: "lib/implantacao/banco-externo.ts", impressao: "46c64eadd3622e63" },
   // Espelhado na .76 (upstream 1.79, #2591): o dono do contato. A rota chama fn_definir_carteira_do_cliente; o MCP chama a cópia do fork (9022) e deixa a mesma auditoria.
-  { rota: "app/api/v1/contacts/[id]/carteira/route.ts", espelho: "lib/mcp-plataforma/importacao/contatos.ts", impressao: "dde32113060d7ce5" },
+  // Relido na .81 (upstream 1.81): a rota ganhou o GET (quem é o dono hoje, para a tela). O PATCH, que o espelho segue, é o mesmo.
+  { rota: "app/api/v1/contacts/[id]/carteira/route.ts", espelho: "lib/mcp-plataforma/importacao/contatos.ts", impressao: "7b9ce7b08a58e8ba" },
   { rota: "app/api/v1/settings/routing/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "5141ab7ba6a82744" },
   // Espelhado na .73 (upstream 1.70, #2079): quem fala, em negrito, na mensagem. O espelho confere com o mesmo assinaturaEntradaSchema e grava a mesma chave de settings.
   { rota: "app/api/v1/settings/assinatura/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "874d611f8e1a7d71" },
   // Jornada de quem atende.
   { rota: "app/api/v1/attendants/availability/[user_id]/route.ts", espelho: "lib/implantacao/agenda.ts", impressao: "de0c21f50707a594" },
   // Respostas prontas e modelo oficial do WhatsApp.
-  { rota: "app/api/v1/message-templates/route.ts", espelho: "lib/implantacao/mensagens.ts", impressao: "dcd56e5cc8b68b25" },
-  { rota: "app/api/v1/message-templates/[id]/route.ts", espelho: "lib/implantacao/mensagens.ts", impressao: "8740628df9e2dc2f" },
+  // Relido na .81 (upstream 1.81, #2526): `midias` nasce vazia no POST, o PATCH remove pela lista que fica (conferida, e o arquivo sai do bucket só depois da linha) e o upload é a rota /midias. O espelho ganhou `imagens`: a lista inteira por endereço, baixada e conferida pelos bytes, com o nome tirado do conteúdo (repetir não empilha), e as mesmas auditorias.
+  { rota: "app/api/v1/message-templates/route.ts", espelho: "lib/implantacao/mensagens.ts", impressao: "266e6163fc6be85d" },
+  { rota: "app/api/v1/message-templates/[id]/route.ts", espelho: "lib/implantacao/mensagens.ts", impressao: "b87581d2af2a3630" },
+  { rota: "app/api/v1/message-templates/[id]/midias/route.ts", espelho: "lib/implantacao/mensagens.ts", impressao: "ef4269050096e0eb" },
   { rota: "app/api/v1/channels/templates/criar/route.ts", espelho: "lib/implantacao/mensagens.ts", impressao: "42df61fe7056d0ea" },
   // Convite de equipe.
   // Relido na .75 (9020, mudança NOSSA na rota): convite que o banco não grava vira item de `failed` (`convite_nao_gravado`) e o lote segue, em vez de 500. O espelho faz o mesmo: desfecho `nao_gravou`, com aviso, e as outras pessoas seguem.

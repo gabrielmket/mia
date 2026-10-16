@@ -28,7 +28,20 @@
  *
  * Modelo com cabeçalho de imagem, vídeo ou documento exige subir a amostra:
  * fica na tela.
+ *
+ * ── As imagens da resposta pronta (.81, upstream #2526) ───────────────────
+ *
+ * Até 5 imagens (JPG ou PNG, até 5 MB) que vão junto com o texto, no bucket
+ * PRIVADO do atendimento. O upstream sobe uma a uma
+ * (`POST /message-templates/:id/midias`) e REMOVE pelo PATCH com a lista que
+ * fica; aqui `imagens` é a lista INTEIRA, por endereço https público: a que
+ * falta é baixada (com as guardas do download da migração) e conferida pelos
+ * BYTES (`farejarTipo`), a que sobra sai da linha e só depois do bucket. O
+ * nome do arquivo sai do CONTEÚDO: a mesma imagem de novo é o mesmo caminho, e
+ * repetir a chamada não empilha cópias.
  */
+import { createHash } from "node:crypto";
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
@@ -38,6 +51,17 @@ import { syncTemplates } from "@/lib/channels/meta/template-sync";
 import { FRASE_DA_DEMONSTRACAO } from "@/lib/demonstracao/trava";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { createTemplateSchema } from "@/lib/schemas/templates";
+import {
+  BUCKET_DAS_MIDIAS,
+  extensaoDe,
+  farejarTipo,
+  MAXIMO_DE_MIDIAS,
+  prefixoDoTemplate,
+  TAMANHO_MAXIMO_DA_MIDIA,
+  type MidiaDeTemplate,
+} from "@/lib/templates/midias";
+import { apagarMidiasDoTemplate } from "@/lib/templates/midias-no-bucket";
+import { baixarArquivoPublico } from "@/lib/mcp-plataforma/importacao/download";
 
 import { chaveDoNome, type Desfecho, type Implantacao, type OrganizacaoDaImplantacao } from "./base";
 
@@ -48,17 +72,28 @@ export interface RespostaPedida {
   titulo: string;
   texto: string;
   atalho?: string | null;
+  /**
+   * .81 — as imagens que vão junto com o texto (até 5), por endereço https
+   * público. A lista é a INTEIRA: a que não vier sai. Ausente: ficam as que estão.
+   */
+  imagens?: string[];
 }
 
 export async function lerRespostasProntas(admin: SupabaseClient, orgId: string) {
   const { data, error } = await admin
     .from("message_templates")
-    .select("id, title, body, shortcut, owner_user_id, updated_at")
+    .select("id, title, body, shortcut, owner_user_id, updated_at, midias")
     .eq("organization_id", orgId)
     .is("owner_user_id", null)
     .order("title");
   if (error) throw new Error(`não consegui ler as respostas prontas: ${error.message}`);
-  return (data ?? []) as Array<{ id: string; title: string; body: string; shortcut: string | null }>;
+  return (data ?? []) as Array<{
+    id: string;
+    title: string;
+    body: string;
+    shortcut: string | null;
+    midias?: MidiaDeTemplate[] | null;
+  }>;
 }
 
 export async function garantirRespostasProntas(
@@ -99,6 +134,9 @@ export async function garantirRespostasProntas(
         .single();
       if (error || !data) throw new Error(`não consegui criar a resposta pronta «${title}»: ${error?.message ?? "sem linha"}`);
       const id = (data as { id: string }).id;
+      if (pedida.imagens !== undefined && pedida.imagens.length > 0) {
+        await gravarImagens(c, id, [], pedida.imagens);
+      }
       void audit({
         action: "template.created",
         actorUserId: c.autorUserId,
@@ -115,8 +153,10 @@ export async function garantirRespostasProntas(
     const patch: Record<string, unknown> = {};
     if (existente.body !== body) patch.body = body;
     if (pedida.atalho !== undefined && (existente.shortcut ?? null) !== (shortcut ?? null)) patch.shortcut = shortcut ?? null;
+    const imagensMudaram =
+      pedida.imagens !== undefined ? await gravarImagens(c, existente.id, existente.midias ?? [], pedida.imagens) : false;
     if (Object.keys(patch).length === 0) {
-      resultado.push({ id: existente.id, titulo: existente.title, desfecho: "ja_estava" });
+      resultado.push({ id: existente.id, titulo: existente.title, desfecho: imagensMudaram ? "atualizou" : "ja_estava" });
       continue;
     }
     const { error } = await c.admin
@@ -128,6 +168,84 @@ export async function garantirRespostasProntas(
     resultado.push({ id: existente.id, titulo: existente.title, desfecho: "atualizou" });
   }
   return resultado;
+}
+
+/**
+ * As imagens de UMA resposta pronta: a lista pedida (endereços) vira a lista da
+ * linha. Devolve se mudou. A ordem é a do pedido.
+ */
+async function gravarImagens(
+  c: Implantacao,
+  templateId: string,
+  atuais: readonly MidiaDeTemplate[],
+  enderecos: readonly string[],
+): Promise<boolean> {
+  if (enderecos.length > MAXIMO_DE_MIDIAS) {
+    throw new Recusa(`Cada resposta pronta tem no máximo ${MAXIMO_DE_MIDIAS} imagens.`);
+  }
+  const prefixo = prefixoDoTemplate(c.orgId, templateId);
+  const desejadas: MidiaDeTemplate[] = [];
+  for (const [i, endereco] of enderecos.entries()) {
+    let bytes: Uint8Array;
+    try {
+      bytes = (await baixarArquivoPublico(endereco, TAMANHO_MAXIMO_DA_MIDIA, `imagens[${i}]`)).bytes;
+    } catch (err) {
+      throw new Recusa(err instanceof Error ? err.message : `Não consegui baixar a imagem ${i + 1}.`);
+    }
+    const tipo = farejarTipo(bytes);
+    if (!tipo) throw new Recusa(`A imagem ${i + 1} (${endereco}) precisa ser JPG ou PNG (conferido pelo conteúdo do arquivo).`);
+    const caminho = `${prefixo}${nomePeloConteudo(bytes)}.${extensaoDe(tipo)}`;
+    if (desejadas.some((d) => d.storage_path === caminho)) continue;
+    const jaTem = atuais.find((a) => a.storage_path === caminho);
+    if (!jaTem) {
+      const { error } = await c.admin.storage.from(BUCKET_DAS_MIDIAS).upload(caminho, bytes, { contentType: tipo, upsert: true });
+      if (error) throw new Error(`não consegui subir a imagem ${i + 1}: ${error.message}`);
+    }
+    desejadas.push(jaTem ?? { storage_path: caminho, media_mime: tipo, media_size_bytes: bytes.byteLength });
+  }
+  const mesmas =
+    desejadas.length === atuais.length && desejadas.every((d, i) => d.storage_path === atuais[i]!.storage_path);
+  if (mesmas) return false;
+
+  const { error } = await c.admin
+    .from("message_templates")
+    .update({ midias: desejadas, updated_at: new Date().toISOString() })
+    .eq("id", templateId)
+    .eq("organization_id", c.orgId);
+  if (error) throw new Error(`não consegui gravar as imagens da resposta pronta: ${error.message}`);
+  // A que saiu da lista sai do bucket SÓ DEPOIS da linha gravada (como o PATCH da rota).
+  const removidas = atuais.map((a) => a.storage_path).filter((p) => !desejadas.some((d) => d.storage_path === p) && p.startsWith(prefixo));
+  if (removidas.length > 0) await apagarMidiasDoTemplate(removidas, c.requestId);
+  const novas = desejadas.filter((d) => !atuais.some((a) => a.storage_path === d.storage_path)).length;
+  if (novas > 0) {
+    void audit({
+      action: "template.media_added",
+      actorUserId: c.autorUserId,
+      organizationId: c.orgId,
+      resourceType: "message_template",
+      resourceId: templateId,
+      requestId: c.requestId,
+      metadata: { total: desejadas.length, novas, via: "mcp_plataforma" },
+    });
+  }
+  if (removidas.length > 0) {
+    void audit({
+      action: "template.updated",
+      actorUserId: c.autorUserId,
+      organizationId: c.orgId,
+      resourceType: "message_template",
+      resourceId: templateId,
+      requestId: c.requestId,
+      metadata: { fields: ["midias"], removidas: removidas.length, via: "mcp_plataforma" },
+    });
+  }
+  return true;
+}
+
+/** O nome do arquivo a partir do CONTEÚDO, na forma `8-4-4-4-12` que `midiaPertenceAoTemplate` exige. */
+function nomePeloConteudo(bytes: Uint8Array): string {
+  const h = createHash("sha256").update(bytes).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
 // ---------------------------------------------------------------------------

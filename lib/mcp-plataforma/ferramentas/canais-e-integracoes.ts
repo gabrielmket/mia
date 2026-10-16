@@ -15,7 +15,10 @@ import { z } from "zod";
 import { configurarBancoExterno, type PedidoDeBancoExterno } from "@/lib/implantacao/banco-externo";
 import { configurarCanal, type PedidoDeCanal } from "@/lib/implantacao/canal";
 import { garantirFonteDeFormulario, TETO_DE_PERGUNTAS, type PedidoDeFonte } from "@/lib/implantacao/fonte-de-formulario";
+import { configurarServidorMcpExterno, type PedidoDoServidorExterno } from "@/lib/implantacao/servidor-mcp-externo";
 import { recusar } from "@/lib/mcp-plataforma/recusa";
+import { hostDoEndpoint } from "@/lib/mcp/servidor-externo/registro";
+import { fonteSchema, MAX_FONTES, MODOS_DE_FONTES } from "@/lib/external-db/fontes";
 import { TIPOS_DE_IDENTIFICADOR } from "@/lib/external-db/schemas";
 
 import type { FerramentaDePlataforma } from "../tipos";
@@ -27,11 +30,12 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
   {
     name: "plataforma_configurar_canal",
     description:
-      "Ajusta três coisas de uma CONEXÃO (número de WhatsApp) de um cliente: " +
+      "Ajusta uma CONEXÃO (número de WhatsApp) de um cliente: " +
+      "`nome_interno` (o nome que só a equipe vê; o público no provedor não muda), " +
       "`dias_da_prospeccao` (em que dias da semana a prospecção pode fazer a PRIMEIRA abordagem, dentro da janela de disparo do número; resposta e disparo em massa não mudam), " +
       "`guardar_historico` (só para número conectado por QR Code: o canal passa a guardar o histórico do número; nasce desligado) e " +
       "`pausa_agendada` (uma janela de manutenção de até 24 horas em que o número, ou todos os números da empresa, fica pausado e volta sozinho no fim; a mensagem que chega é guardada e volta à fila na retomada), " +
-      "com `cancelar_pausa_agendada` para desmarcar. " +
+      "com `ajustar_pausa_agendada` para corrigir os horários de uma que ainda não começou e `cancelar_pausa_agendada` para desmarcar. " +
       "Só o que VEIO muda; o que veio igual responde `ja_estava`, e a pausa igual a uma já marcada não é marcada de novo. " +
       "A hora da pausa pode vir sem fuso (\"2026-10-20T23:00\", na hora da empresa) ou com ele. " +
       "ATENÇÃO: desligar `guardar_historico` num número que já guarda pode apagar o que o canal guardou, e por isso pede `confirmo_apagar_historico_guardado: true`. " +
@@ -78,6 +82,23 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
         .uuid()
         .optional()
         .describe("O id de uma pausa agendada (de plataforma_ver_configuracao, seção canais) para cancelar. O que ela já pausou continua pausado."),
+      // .81 — upstream 1.81: corrigir a hora de uma pausa que ainda não começou, e o nome interno.
+      ajustar_pausa_agendada: z
+        .object({
+          id: z.string().uuid().describe("O id da pausa agendada (plataforma_ver_configuracao, seção canais)."),
+          inicio: z.string().trim().min(10).max(40).describe('O novo início, "AAAA-MM-DDTHH:MM" na hora da empresa ou com o fuso. No futuro.'),
+          fim: z.string().trim().min(10).max(40).describe("O novo fim. No máximo 24 horas depois do início."),
+        })
+        .strict()
+        .optional()
+        .describe("Corrige os dois horários de uma pausa agendada que AINDA NÃO começou (em andamento ou encerrada não se ajusta)."),
+      nome_interno: z
+        .string()
+        .trim()
+        .min(1)
+        .max(80)
+        .optional()
+        .describe('O nome da conexão que só a equipe vê (ex.: "WA | Recepção"). O nome público no provedor não muda.'),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,
@@ -94,10 +115,12 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
         p.dias_da_prospeccao === undefined &&
         p.guardar_historico === undefined &&
         p.pausa_agendada === undefined &&
-        p.cancelar_pausa_agendada === undefined
+        p.cancelar_pausa_agendada === undefined &&
+        p.ajustar_pausa_agendada === undefined &&
+        p.nome_interno === undefined
       ) {
         recusar(
-          "Informe ao menos um ajuste: `dias_da_prospeccao`, `guardar_historico`, `pausa_agendada` ou `cancelar_pausa_agendada`. " +
+          "Informe ao menos um ajuste: `dias_da_prospeccao`, `guardar_historico`, `pausa_agendada`, `ajustar_pausa_agendada`, `cancelar_pausa_agendada` ou `nome_interno`. " +
             'Ex.: { "canal": "Recepção", "dias_da_prospeccao": [1, 2, 3, 4, 5] }',
         );
       }
@@ -189,7 +212,8 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
   {
     name: "plataforma_configurar_banco_externo",
     description:
-      "Ajusta o CLIENTE NAS CONVERSAS de uma conexão de BANCO EXTERNO de um cliente (o banco de dados de outro sistema dele, que o agente consulta): " +
+      "Ajusta, numa conexão de BANCO EXTERNO de um cliente (o banco de dados de outro sistema dele, que o agente consulta), as FONTES LIBERADAS (`fontes_liberadas`: " +
+      "quais tabelas e colunas o agente pode ler) e o CLIENTE NAS CONVERSAS (`cliente_nas_conversas`): " +
       "qual coluna das tabelas guarda o telefone ou o e-mail de quem está conversando. Com ela escolhida, durante a conversa de atendimento o agente lê SÓ as linhas daquela pessoa. " +
       "Sem ela, o agente lê as tabelas sem esse recorte. Chamar de novo com o mesmo pedido responde `ja_estava`. " +
       "ATENÇÃO: o banco externo é módulo da INSTALAÇÃO; com ele desligado, a recusa diz isso. A conexão tem de existir: veja em plataforma_ver_configuracao, seção banco_externo. " +
@@ -205,7 +229,26 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
         })
         .strict()
         .nullable()
-        .describe("A coluna e o tipo, sempre juntos. null tira o recorte."),
+        .optional()
+        .describe("A coluna e o tipo, sempre juntos. null tira o recorte. Ausente: fica como está."),
+      // .81 — as fontes liberadas do upstream (0618).
+      fontes_liberadas: z
+        .object({
+          modo: z.enum(MODOS_DE_FONTES).describe('"list": o agente lê só as tabelas da lista. "all": qualquer tabela que o usuário do banco enxerga.'),
+          fontes: z
+            .array(fonteSchema)
+            .max(MAX_FONTES)
+            .optional()
+            .describe(
+              'A lista INTEIRA (substitui a gravada): [{ "schema": "public", "tabela": "pedidos", "colunas": ["numero", "status"], "descricao": "Pedidos do cliente" }]. ' +
+                "`colunas: null` libera todas as colunas da tabela. Só NOMES de tabela e coluna: nada de credencial.",
+            ),
+        })
+        .strict()
+        .optional()
+        .describe(
+          "O que o agente, o MCP externo e a grade podem LER do banco do cliente. Conexão criada depois da 0618 nasce em \"list\" vazia: nada é lido até alguém liberar.",
+        ),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,
@@ -216,7 +259,47 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
     handler: async (ctx, args) => {
       const { c } = await alvo(ctx, args);
       const { organization_id: _org, ...pedido } = args;
+      if (pedido.cliente_nas_conversas === undefined && pedido.fontes_liberadas === undefined) {
+        recusar(
+          "Informe ao menos um ajuste: `cliente_nas_conversas` ou `fontes_liberadas`. " +
+            'Ex.: { "conexao": "ERP da clínica", "fontes_liberadas": { "modo": "list", "fontes": [{ "schema": "public", "tabela": "pedidos", "colunas": null, "descricao": "" }] } }',
+        );
+      }
       return configurarBancoExterno(c, pedido as unknown as PedidoDeBancoExterno);
+    },
+  },
+
+  // .81 — upstream v1.83 (#2147, #2948): o servidor MCP externo da empresa.
+  {
+    name: "plataforma_configurar_servidor_mcp_externo",
+    description:
+      "Cadastra (ou tira) o SERVIDOR MCP EXTERNO de um cliente: o endereço e a chave do sistema de fora dele (o ERP, a plataforma de pedidos) que a IA da empresa pode consultar. " +
+      "É o mesmo cadastro da tela Configurações › Servidor MCP externo, que só o dono da instalação faz. " +
+      "A chave é gravada CIFRADA e nunca volta: a resposta traz só os quatro últimos caracteres. O endereço precisa ser https público (rede interna, localhost e segredo colado no endereço são recusados). " +
+      "Cadastrar NÃO liga nada no agente: a IA só usa as ferramentas do servidor que forem escolhidas em plataforma_garantir_agente (`servidor_mcp_externo`). " +
+      "Chamar de novo com o mesmo endereço e a mesma chave responde `ja_estava`; `apagar: true` tira o servidor. " +
+      "ATENÇÃO: a empresa de demonstração é recusada (nada sai dela, e o servidor externo é rede para o sistema de outra empresa). " +
+      "O QUE NÃO FAZ: não fala com o servidor (a lista do que ele oferece é lida pela tela ou pelo editor do agente), não escolhe ferramenta no agente e não devolve a chave.",
+    inputSchema: {
+      organization_id: ORGANIZACAO,
+      endereco: z.string().trim().min(8).max(500).optional().describe("O endereço https do servidor MCP do sistema do cliente. Vai junto com `chave`."),
+      chave: z.string().trim().min(1).max(500).optional().describe("A chave de acesso que o sistema do cliente deu. Entra cifrada; nunca volta."),
+      apagar: z.boolean().optional().describe("true tira o endereço e a chave: a IA deixa de alcançar o servidor."),
+    },
+    exemplo: { organization_id: ORG_DE_EXEMPLO, endereco: "https://erp.exemplo.com.br/mcp", chave: "chave-de-exemplo-1234" },
+    operacao: "implantar_configuracao",
+    // A chave NUNCA vai para a trilha, e o endereço vai só como host (pode trazer
+    // caminho de terceiro): a mesma forma da auditoria da tela.
+    redigirParaAuditoria: (args) => ({
+      organization_id: args.organization_id,
+      endereco: typeof args.endereco === "string" ? hostDoEndpoint(args.endereco) : null,
+      chave: typeof args.chave === "string" && args.chave ? "[redigida]" : null,
+      apagar: args.apagar === true,
+    }),
+    handler: async (ctx, args) => {
+      const { c, org } = await alvo(ctx, args);
+      const { organization_id: _org, ...pedido } = args;
+      return configurarServidorMcpExterno(c, org, pedido as PedidoDoServidorExterno);
     },
   },
 ];

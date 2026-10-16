@@ -187,9 +187,10 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **67** ferramentas no servidor: as 59 desta página e as 8 da migração
-([`mcp-de-migracao.md`](mcp-de-migracao.md)). As duas mais novas (.80, item 9 do
-mapa: o montador de relatórios) são `plataforma_garantir_relatorios` e
+São **68** ferramentas no servidor: as 60 desta página e as 8 da migração
+([`mcp-de-migracao.md`](mcp-de-migracao.md)). A mais nova (.81, a fusão do
+upstream v1.81 a v1.83) é `plataforma_configurar_servidor_mcp_externo`. As duas
+da .80 (item 9 do mapa: o montador de relatórios) são `plataforma_garantir_relatorios` e
 `plataforma_ver_relatorios`. A da .79 (empresa única,
 [`empresa-unica.md`](empresa-unica.md)) é `plataforma_vincular_pessoas_a_empresas`, da
 migração. As quatro do item 8 do mapa (.78: painéis prontos e link para o dono) são
@@ -249,7 +250,7 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 | ferramenta | o que faz | chave natural | teto por chamada |
 |---|---|---|---|
 | `plataforma_configurar_empresa` | nome, razão social, CNPJ, país, fuso, idioma, moeda, modo de venda, retenção de mídia, a limpeza automática de mídia antiga (ligada, apaga sem volta), encarregado e política de privacidade; e, desde a .79, a **meta do mês** (`meta_do_mes`: o faturamento dos ganhos da empresa inteira, em centavos, no mês corrente ou no `mes` pedido), pelo mesmo upsert da tela de Desempenho (`lib/crm/metas/gravar.ts`). É ela que vira a barra do painel "Meta do mês" | a organização; a meta, pelo mês | só os campos que vieram mudam |
-| `plataforma_configurar_atendimento` | modo de distribuição (manual, rodízio ou menor carga), visibilidade das conversas, devolução para a IA, quanto a IA espera depois de uma resposta pelo celular, o nome de quem fala (atendente ou IA) em negrito na mensagem, e o freio da empresa para o passo "a IA decide" das automações | a organização | idem |
+| `plataforma_configurar_atendimento` | modo de distribuição (manual, rodízio ou menor carga), visibilidade das conversas, devolução para a IA, quanto a IA espera depois de uma resposta pelo celular, o nome de quem fala (atendente ou IA) em negrito na mensagem, o freio da empresa para o passo "a IA decide" das automações e, desde a .81, as duas opções da agenda (atendentes mexem na agenda dos colegas; Google Meet com acesso aberto) | a organização | idem |
 | `plataforma_garantir_funil` | funil, etapas na ordem, passo do agente por etapa, probabilidade, janela de esfriando (`prazo_esperado_horas`, pela régua da tela: 1 a 8760 horas inteiras) e cor, campos personalizados (com obrigatoriedade por etapa), motivos de perda e de ganho, vocabulário (desde a .79 também `compromisso` e `compromisso_plural`, como o segmento chama o que a agenda marca: o plural é o título do painel pronto de agenda) | nome do funil; nome da etapa; `key` do campo; rótulo do motivo | 20 etapas |
 | `plataforma_garantir_produtos` | catálogo em lote, com preço em centavos ou em texto (`"R$ 189,90"`); item com problema é recusado com motivo e não derruba os outros | código do produto (sem código, o nome) | 200 produtos |
 | `plataforma_garantir_etiquetas` | etiquetas no vocabulário, com cor e descrição | nome da etiqueta, sem diferenciar maiúscula | 50 etiquetas |
@@ -261,12 +262,13 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 | `plataforma_garantir_automacao` | cria ou ajusta uma regra de automação, **desligada**. É também o webhook de saída: os gatilhos de ganho, perda, reabertura e troca de responsável com a ação `call_webhook`. Aceita o passo "a IA decide" (`ai_decide`, com as ações das opções conferidas pela mesma régua), aplicar um plano de tarefas, etiqueta no contato, o recorte por fonte de formulário e o funil e a etapa dos gatilhos de tempo | nome da regra | uma regra |
 | `plataforma_garantir_planos_de_tarefa` | os planos de tarefa (a sequência de tarefas que uma automação aplica ao negócio), com título, prazo, prioridade e responsável de cada passo | o `id` do plano, ou o nome | 50 planos; 30 passos por plano |
 | `plataforma_garantir_fonte_de_formulario` | a fonte de formulário: destino (funil e etapa), as perguntas do formulário, o mapeamento dos campos, o endereço de retorno e a autorização de IA na captação (que exige a assinatura, posta pela pessoa). Devolve o caminho do endereço de captação | nome da fonte | uma fonte; 20 perguntas |
-| `plataforma_configurar_canal` | de um número: os dias da prospecção, guardar o histórico (só QR Code; desligar pede confirmação escrita) e a pausa agendada de até 24 horas (de um número ou de todos), com o cancelamento. Nunca credencial, token ou número | o número; a pausa, pelo número e pela janela | um número |
-| `plataforma_configurar_banco_externo` | a coluna que identifica o cliente nas conversas numa conexão de banco externo que já existe (telefone ou e-mail). Nunca lê nem devolve a conexão ou a senha | o nome da conexão | uma conexão |
+| `plataforma_configurar_canal` | de um número: o nome interno (.81), os dias da prospecção, guardar o histórico (só QR Code; desligar pede confirmação escrita) e a pausa agendada de até 24 horas (de um número ou de todos), com o ajuste dos horários de uma que ainda não começou (.81) e o cancelamento. Nunca credencial, token ou número | o número; a pausa, pelo número e pela janela | um número |
+| `plataforma_configurar_banco_externo` | numa conexão de banco externo que já existe: as fontes liberadas (o modo e a lista de tabelas e colunas que o agente pode ler, .81) e a coluna que identifica o cliente nas conversas (telefone ou e-mail). Nunca lê nem devolve a conexão ou a senha | o nome da conexão | uma conexão |
+| `plataforma_configurar_servidor_mcp_externo` | (.81) o servidor MCP externo do cliente (o sistema de fora que a IA consulta): o endereço https público e a chave, gravada CIFRADA e nunca devolvida (a resposta traz os quatro últimos caracteres; a trilha leva só o host); `apagar: true` tira. Recusa a empresa de demonstração | a organização | um servidor |
 | `plataforma_garantir_tipos_de_obrigacao` | o catálogo de tipos de documentos e obrigações de um funil, inclusive `modelo_do_segmento` (os tipos prontos do segmento) | nome do tipo dentro do funil | 60 tipos por funil |
-| `plataforma_garantir_tipos_de_agendamento` | tipos de agendamento (duração, local, categoria), com o lembrete desligado | nome do tipo | 30 tipos |
+| `plataforma_garantir_tipos_de_agendamento` | tipos de agendamento (duração, local, categoria), com o lembrete desligado; desde a .81, o número que manda o lembrete (`canal_do_lembrete`), com aviso quando a empresa tem 2 ou mais números e um tipo com lembrete está sem ele | nome do tipo | 30 tipos |
 | `plataforma_definir_jornada` | a jornada de uma pessoa da equipe, pelo e-mail | a pessoa | uma pessoa |
-| `plataforma_garantir_respostas_prontas` | respostas prontas compartilhadas da equipe | título da resposta | 50 respostas |
+| `plataforma_garantir_respostas_prontas` | respostas prontas compartilhadas da equipe; desde a .81, até 5 imagens por resposta, por endereço https público (a lista inteira; a imagem entra pelo conteúdo e repetir não empilha) | título da resposta | 50 respostas |
 | `plataforma_garantir_conversoes_da_meta` | o que cada etapa aberta de um funil informa à Meta (a régua do upstream, 0524): o evento padrão; com `usar_recomendado: true`, o sistema escolhe o evento pelo nome da etapa. A regra nasce **desligada** | a etapa do funil | 20 regras |
 | `plataforma_garantir_relatorios` | o MONTADOR DE RELATÓRIOS pronto (.80, item 9): liga os doze prontos ao funil do cliente (o principal ou `funil_id`, em `mia_relatorios_da_empresa`), cria os relatórios a mais do segmento (`clinica`, `construtora`, `industria`, `academia` ou `geral`: três do segmento e a conversão por origem) e monta o painel do segmento com oito relatórios, compartilhados com a equipe (`lib/relatorios/segmentos.ts`, a mesma receita da demonstração). Aceita `meta_do_mes` (a mesma de `plataforma_configurar_empresa`) e devolve o link para o dono SUGERIDO (para quem e quais prontos), sem criá-lo | o relatório pela chave natural (`mia_relatorios.chave`); o painel pela dele; no painel só COMPLETA o que faltar: o que o cliente pôs, o tamanho e a ordem que mudou ficam | um segmento |
 | `plataforma_garantir_conversoes_do_google` | o que cada etapa aberta informa ao Google Ads: o nome da conversão e o id da ação de conversão (que já tem de existir na conta do Google). A regra nasce **desligada** | a etapa do funil | 20 regras |
@@ -430,7 +432,30 @@ contato em `tests/unit/mcp-de-migracao-contatos.test.ts` e
 | Paleta das etiquetas com o verde e o vermelho mais escuros | 1.74 | já alcançava: a cor antiga é lida como a nova pela mesma régua da tela | `implantar_configuracao` |
 | Limite de assentos do plano no convite (cobrança do revendedor) | 1.78 | `plataforma_convidar_pessoas` faz a mesma conta da rota e recusa com a mesma frase; com a cobrança desligada, não há limite | `convidar_equipe` |
 
-Ficaram de fora desta fusão, por decisão: o plano de cobrança e a assinatura do
+### O que chegou do upstream 1.81 a 1.83 (.81)
+
+Mesma regra, na fusão da v1.83. A prova de cada linha está em
+`tests/unit/mcp-de-implantacao-novidades-do-upstream-183.test.ts` (que também guarda
+a contagem: 68).
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| Canal do lembrete por tipo (`calendar_event_types.reminder_channel_session_id`) | 1.83 | campo novo `canal_do_lembrete` em `plataforma_garantir_tipos_de_agendamento`, conferido pela régua da rota (`canalDoLembreteValido`); aviso de remetente ambíguo com 2+ números; a leitura devolve `canal_do_lembrete_id` | `implantar_configuracao` |
+| Atendentes mexem na agenda dos colegas (`settings.colegas_podem_mexer_na_agenda`) | 1.80/1.81 | campo novo `colegas_podem_mexer_na_agenda` em `plataforma_configurar_atendimento` (a função do upstream exige sessão com MFA: o espelho grava a mesma chave de topo pelo servidor, com a mesma auditoria) | `implantar_configuracao` |
+| Google Meet com acesso aberto (`settings.google_meet_acesso_aberto`, 0648) | 1.81 | campo novo `google_meet_com_acesso_aberto` em `plataforma_configurar_atendimento`, pelo mesmo caminho | `implantar_configuracao` |
+| Fontes liberadas do banco externo (`source_mode`, `sources`, 0618) | 1.81 | campo novo `fontes_liberadas` em `plataforma_configurar_banco_externo`, conferido por `atualizarFontesSchema` | `implantar_configuracao` |
+| Servidor MCP externo (`settings.mcp_externo`, chave cifrada da 0580) | 1.83 | ferramenta NOVA `plataforma_configurar_servidor_mcp_externo`; campo novo `servidor_mcp_externo` em `plataforma_garantir_agente` (`ferramentas` vira `tool_ids` `mcp_externo:*`; `no_atendimento` vira `ai_agents.config.mcp_externo_no_atendimento`). As duas recusam a empresa de demonstração | `implantar_configuracao` |
+| "Sempre atendimento humano" (`contacts.ai_opt_out`, 0624) | 1.81 | campo novo `sempre_atendimento_humano` em `plataforma_importar_contatos` (só liga, como o opt-out), com a auditoria `contacts.always_human_marked` | `importar_base` |
+| Ação `send_email`, `start_message_flow.config.surface`, gatilhos `contact.phone_added` e a continuação no `lead.won` | 1.81 | `send_email` em `TIPOS_DE_ACAO`; `plataforma_listar_modelos` ensina o formato do e-mail, a `surface` do fluxo de atendimento, o gatilho do telefone ganho e a exceção do ganho; a regra com e-mail não liga na demonstração | `implantar_configuracao` |
+| Campo condicional do funil (`settings.fields[].mostrar_quando`, #2728) | 1.81 | campo novo `mostrar_quando` nos `campos` de `plataforma_garantir_funil` (o campo de quem depende tem de existir; `null` tira) | `implantar_configuracao` |
+| Nome interno da conexão (`channel_sessions.display_name`) e ajuste da pausa agendada (PATCH de `channel-schedules`) | 1.81 | campos novos `nome_interno` e `ajustar_pausa_agendada` em `plataforma_configurar_canal` | `implantar_configuracao` |
+| Resposta pronta com imagens (`message_templates.midias`, até 5, bucket privado) | 1.81 | campo novo `imagens` em `plataforma_garantir_respostas_prontas` | `implantar_configuracao` |
+| Par (provedor, modelo) recusado antes de gravar (#2955) | 1.83 | `plataforma_garantir_agente` confere o par que a plataforma escolheu pela mesma régua (`validarParProvedorModelo`) e recusa com "Nada foi criado" | `implantar_configuracao` |
+
+Ficou de fora desta fusão, por decisão: o agente em vários números
+(`ai_agent_version_channels`, 0665), que o upstream ainda não usa na execução.
+
+Ficaram de fora da fusão da .76, por decisão: o plano de cobrança e a assinatura do
 revendedor (a cobrança do upstream fica desligada no fork), excluir organização,
 trocar o e-mail de login de alguém e marcar contato como pessoal (é decisão do
 gerente, na tela). Também o modo "o Jev escolhe o agente sozinho" do roteador
@@ -579,7 +604,8 @@ Testes:
 | `tests/unit/mcp-de-implantacao-conversoes.test.ts` | as seis ferramentas de conversões: o que gravam, que montar não liga, a reexecução, as recusas, a resposta sem segredo e a empresa de demonstração |
 | `tests/unit/mcp-de-implantacao-novidades-do-upstream.test.ts` | cada novidade do upstream 1.70 a 1.73: o campo ou a caixa nova passa pela ferramenta (o que grava, a reexecução, a recusa que ensina, a leitura), e as duas ferramentas do roteador |
 | `tests/unit/mcp-de-implantacao-novidades-do-upstream-180.test.ts` | cada novidade do upstream 1.74 a 1.80, no mesmo molde, as quatro ferramentas novas e a prova de que os tipos de ação da ferramenta são exatamente os do upstream |
-| `tests/unit/mcp-de-implantacao-relatorios.test.ts` | as duas ferramentas do montador de relatórios (.80): a contagem da lista (67: as 64 da .78, a de vínculos da empresa única e as duas do montador), a operação `implantar_configuracao`, o que o garantir grava (prontos ligados ao funil, relatórios do segmento e painel, compartilhados), que rodar de novo não duplica e só completa o painel, a meta do mês, o funil de outra empresa, e a leitura sem o "só para mim" de ninguém |
+| `tests/unit/mcp-de-implantacao-novidades-do-upstream-183.test.ts` | cada novidade do upstream 1.81 a 1.83 (.81), no mesmo molde, a ferramenta nova do servidor MCP externo (a chave nunca volta nem vai para a trilha), a empresa de demonstração e a CONTAGEM da lista (68) |
+| `tests/unit/mcp-de-implantacao-relatorios.test.ts` | as duas ferramentas do montador de relatórios (.80), a operação `implantar_configuracao`, o que o garantir grava (prontos ligados ao funil, relatórios do segmento e painel, compartilhados), que rodar de novo não duplica e só completa o painel, a meta do mês, o funil de outra empresa, e a leitura sem o "só para mim" de ninguém |
 | `tests/invariants/montador-de-relatorios.test.ts` | as tabelas do montador (9040) e o motor estendido (9041) no Postgres de verdade: quem vê, cria, compartilha, edita e exporta, com controle positivo e negativo; produto, filtro de vários valores, meta por grupo de tempo, funil com soma, responsável no follow-up, agente nas conversas; a lista por trás do número com a mesma conta; e o link do painel (9042) |
 | `tests/unit/mcp-de-implantacao-paineis.test.ts` | as quatro ferramentas dos painéis e do link para o dono (.78): a caixinha `compartilhar_paineis`, que o garantir não duplica e ajusta no mesmo endereço, a revogação, a leitura e a demonstração; e a meta do mês em `plataforma_configurar_empresa` |
 | `tests/invariants/motor-de-conta-dos-relatorios.test.ts` | o motor de conta (9030) no Postgres de verdade: a regra de data e o fuso, sem o teto de 1000 linhas, as etiquetas, o "Sem …" e o "Outros", a meta, quem vê o quê (atendente, gestor, outra empresa, anon, plataforma) e a situação da obrigação igual à de `lib/obrigacoes/situacao.ts` |

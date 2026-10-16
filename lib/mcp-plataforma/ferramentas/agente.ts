@@ -35,7 +35,7 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
       "Cria ou altera um AGENTE DE IA de um cliente: o nome, o PROMPT, as capacidades (por pacote), os funis em que ele pode mexer, os materiais que consulta, " +
       "os follow-ups que arma, as palavras que passam a conversa para uma pessoa, se o assunto jurídico passa a conversa para uma pessoa, o horário em que atende (e o aviso para quem escreve fora dele), o limiar de sentimento e o número de WhatsApp. " +
       "O que esta ferramenta grava é um RASCUNHO: nada muda no atendimento até plataforma_publicar_agente. " +
-      "As exceções são do CADASTRO do agente e valem na hora: `nome`, `descricao`, `prioridade` e `limiar_de_sentimento`. " +
+      "As exceções são do CADASTRO do agente e valem na hora: `nome`, `descricao`, `prioridade`, `limiar_de_sentimento` e `servidor_mcp_externo.no_atendimento`. " +
       "ATENÇÃO: `bloquear_afirmacao_clinica` é da EMPRESA, não do agente: liga ou desliga a proteção para TODOS os agentes do cliente, na hora. Só faz sentido em clínica e consultório. " +
       "GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é o NOME do agente. Agente novo nasce com a versão 1 em rascunho; " +
       "agente com rascunho tem o rascunho atualizado; agente só com versão publicada ganha um rascunho novo. " +
@@ -156,6 +156,38 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
         .optional()
         .describe("O número de WhatsApp por onde o agente atende: id, nome ou telefone de um número JÁ CONECTADO. Pode ficar de fora e ser informado ao publicar."),
       max_passos: z.number().int().min(1).max(25).optional().describe("Quantas ações o agente pode encadear numa resposta. Padrão: 10."),
+      // .81 — o servidor MCP externo da empresa no agente (upstream v1.83).
+      servidor_mcp_externo: z
+        .object({
+          ferramentas: z
+            .array(
+              z
+                .object({
+                  nome: z.string().trim().min(1).max(64).describe("O nome EXATO da ferramenta, como o servidor a anuncia."),
+                  leitura: z
+                    .boolean()
+                    .optional()
+                    .describe("true (o padrão): só consulta. false: a ferramenta escreve no sistema do cliente, e não monta em conversa com cliente."),
+                })
+                .strict(),
+            )
+            .max(30)
+            .optional()
+            .describe("A lista INTEIRA das ferramentas do servidor que o agente pode usar (substitui as escolhidas; [] tira todas). Vai para o RASCUNHO."),
+          no_atendimento: z
+            .boolean()
+            .optional()
+            .describe(
+              "true: o servidor também é usado nas CONVERSAS com cliente, e cada consulta leva a ele a identidade de quem está falando (id, telefone, canal). " +
+                "É do CADASTRO do agente e vale na hora. Nasce desligado.",
+            ),
+        })
+        .strict()
+        .optional()
+        .describe(
+          "As ferramentas do SERVIDOR MCP EXTERNO da empresa (cadastrado por plataforma_configurar_servidor_mcp_externo) que este agente pode usar. " +
+            "Recusado na empresa de demonstração.",
+        ),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,

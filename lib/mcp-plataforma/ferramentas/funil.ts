@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { LEAD_STAGES } from "@/lib/agent-engine/agent/lead-state";
 import { garantirFunil, TETO_DE_ETAPAS, type PedidoDeFunil } from "@/lib/implantacao/funil";
+import { mostrarQuandoSchema } from "@/lib/schemas/mostrar-quando";
 
 import type { FerramentaDePlataforma } from "../tipos";
 import { alvo, ORGANIZACAO, ORG_DE_EXEMPLO } from "./comum";
@@ -77,6 +78,14 @@ const campo = z
       .strict()
       .optional()
       .describe("Quando o campo passa a OBRIGAR: ao entrar em certas etapas, ao ganhar ou ao perder."),
+    // .81 — o campo condicional do upstream (v1.81, #2728).
+    mostrar_quando: mostrarQuandoSchema
+      .nullable()
+      .optional()
+      .describe(
+        'Mostrar o campo SÓ quando outro campo do funil tem um valor: { "campo": "<key do outro campo>", "operador": "igual" | "contem" | "maior_que", "valor": "..." }. ' +
+          "Esconder nunca apaga o valor gravado. null tira a condição.",
+      ),
   })
   .strict();
 

@@ -50,6 +50,7 @@ import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { autoriaDaMudanca } from "@/lib/operacao/autoria";
 import { etapasParaGravar } from "@/lib/onboarding/proposta-de-funil";
 import { gravarConfiguracaoDoFunil } from "@/lib/pipelines/pipeline-config";
+import type { MostrarQuando } from "@/lib/schemas/mostrar-quando";
 import type { FunilEditavel } from "@/lib/pipelines/pipeline-editing";
 import {
   atualizarFunil,
@@ -89,6 +90,12 @@ export interface CampoPedido {
   options?: Array<{ value: string; label: string }>;
   /** Nomes de etapa (não ids): a ferramenta resolve depois de as etapas existirem. */
   obrigatorio_em?: { etapas?: string[]; ao_ganhar?: boolean; ao_perder?: boolean };
+  /**
+   * .81 — o campo CONDICIONAL do upstream (v1.81, #2728): o campo só aparece
+   * quando outro campo do funil tem um valor. `null` tira a condição. Esconder
+   * nunca apaga o valor gravado.
+   */
+  mostrar_quando?: MostrarQuando | null;
 }
 
 export interface PedidoDeFunil {
@@ -516,12 +523,32 @@ function montarConfiguracao(
             }
           : {}),
       };
+      if (campo.mostrar_quando) {
+        const quemManda = campo.mostrar_quando.campo.trim().toLowerCase();
+        const existe =
+          porChave.has(quemManda) || pedido.campos.some((outro) => outro.key.toLowerCase() === quemManda);
+        if (quemManda === campo.key.toLowerCase() || !existe) {
+          throw new Recusa(
+            `O campo «${campo.label}» só aparece quando o campo «${campo.mostrar_quando.campo}» tem um valor, e ` +
+              (quemManda === campo.key.toLowerCase()
+                ? "um campo não pode depender dele mesmo."
+                : "este funil não tem um campo com essa chave. Mande o campo de quem ele depende na mesma chamada (ou antes)."),
+          );
+        }
+        definicao.mostrar_quando = campo.mostrar_quando as CustomFieldDef["mostrar_quando"];
+      }
       const anterior = porChave.get(campo.key.toLowerCase());
+      // `null` tira a condição: sem esta linha a mescla com o anterior a manteria.
+      const semCondicao = (f: CustomFieldDef): CustomFieldDef => {
+        if (campo.mostrar_quando !== null) return f;
+        const { mostrar_quando: _fora, ...resto } = f;
+        return resto as CustomFieldDef;
+      };
       if (!anterior) {
-        campos.push(definicao);
+        campos.push(semCondicao(definicao));
         mudancas.push(`campo «${campo.label}» criado`);
-      } else if (!mesmoConteudo(anterior, { ...anterior, ...definicao })) {
-        campos[campos.indexOf(anterior)] = { ...anterior, ...definicao };
+      } else if (!mesmoConteudo(anterior, semCondicao({ ...anterior, ...definicao }))) {
+        campos[campos.indexOf(anterior)] = semCondicao({ ...anterior, ...definicao });
         mudancas.push(`campo «${campo.label}» atualizado`);
       }
     }
