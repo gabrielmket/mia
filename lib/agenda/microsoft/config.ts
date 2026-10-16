@@ -119,10 +119,24 @@ export interface LinhaDoAppMicrosoft {
 declare global {
   // eslint-disable-next-line no-var
   var __memoDoAppDaMicrosoft: { readonly valor: LinhaDoAppMicrosoft | null; readonly expiraEm: number } | null | undefined;
+  /**
+   * Contador de escritas (o conserto #2905 do upstream no irmão do Google,
+   * trazido na .81). Mora no `globalThis` pelo mesmo motivo que o memo — a
+   * rota que grava e a tela que renderiza são duas instâncias do módulo.
+   *
+   * Zerar o memo não basta: uma leitura que já estava em voo quando a escrita
+   * aconteceu volta com a linha PRÉ-ESCRITA e a reinstala por um TTL inteiro,
+   * desfazendo a invalidação.
+   */
+  // eslint-disable-next-line no-var
+  var __geracaoDoAppDaMicrosoft: number | undefined;
 }
 
 /** Chamada por quem ESCREVE a credencial (a action do /admin). */
 export function invalidarCredencialDaMicrosoft(): void {
+  // A geração sobe ANTES de zerar: quem estiver lendo agora fica marcado como
+  // anterior a esta escrita e não poderá reinstalar o que leu.
+  globalThis.__geracaoDoAppDaMicrosoft = (globalThis.__geracaoDoAppDaMicrosoft ?? 0) + 1;
   globalThis.__memoDoAppDaMicrosoft = null;
 }
 
@@ -130,12 +144,21 @@ export async function linhaDoAppMicrosoft(): Promise<LinhaDoAppMicrosoft | null>
   const memo = globalThis.__memoDoAppDaMicrosoft;
   if (memo && memo.expiraEm > Date.now()) return memo.valor;
 
+  // A geração é lida ANTES da ida ao banco e conferida depois (lost-update do
+  // memo, #2905 do upstream em `lib/agenda/google/config.ts`).
+  const geracao = globalThis.__geracaoDoAppDaMicrosoft ?? 0;
   let valor: LinhaDoAppMicrosoft | null = null;
   try {
     const { data, error } = await createAdminClient()
       .from("mia_microsoft_oauth_da_plataforma")
       .select("client_id, client_secret_encrypted, segredo_vence_em, tenant, updated_at")
       .eq("id", 1)
+      // Fora da deduplicação de `fetch` do Next dentro de um render: sem o
+      // `signal`, uma 2ª leitura do MESMO render, feita depois de uma escrita ter
+      // invalidado o memo, recebe a resposta de ANTES dela e a memoiza. O porquê
+      // inteiro está em `lerLinha` de `lib/branding/instalacao.ts` (#1218).
+      // Nunca é abortado.
+      .abortSignal(new AbortController().signal)
       .maybeSingle();
     if (error) {
       logger.info("[agenda.microsoft.config] sem credencial no banco; vale o .env", { codigo: error.code });
@@ -148,7 +171,11 @@ export async function linhaDoAppMicrosoft(): Promise<LinhaDoAppMicrosoft | null>
       error: err instanceof Error ? err.message : String(err),
     });
   }
-  globalThis.__memoDoAppDaMicrosoft = { valor, expiraEm: Date.now() + TTL_MS };
+  // Só memoiza quem não perdeu uma escrita no meio do caminho — a leitura em
+  // voo devolve o valor velho a quem a chamou, mas não o reinstala no memo.
+  if ((globalThis.__geracaoDoAppDaMicrosoft ?? 0) === geracao) {
+    globalThis.__memoDoAppDaMicrosoft = { valor, expiraEm: Date.now() + TTL_MS };
+  }
   return valor;
 }
 

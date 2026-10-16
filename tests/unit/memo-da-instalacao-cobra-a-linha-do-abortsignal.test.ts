@@ -120,6 +120,15 @@ const SITIOS: Sitio[] = [
     arquivoDoMemo: "lib/channels/meta/app.ts",
     marcadorDoMemo: "expiraEm: Date.now() + TTL_MS",
   },
+  // FORK MIA (.81): o irmão do Google para o Outlook, com o mesmo memo de
+  // `globalThis` e, desde a .81, o mesmo contador de geração (#2905).
+  {
+    chave: "credencial da Microsoft (Outlook)",
+    arquivoDaLeitura: "lib/agenda/microsoft/config.ts",
+    tabela: "mia_microsoft_oauth_da_plataforma",
+    arquivoDoMemo: "lib/agenda/microsoft/config.ts",
+    marcadorDoMemo: "expiraEm: Date.now() + TTL_MS",
+  },
 ];
 
 /** Um passo `.metodo(...)` da cadeia e a chamada que o aplica. */
