@@ -35,6 +35,7 @@ import {
   type PropostaDecidida,
   type PropostaPendente,
 } from "./tipos";
+import { lerIdENomeDaEmpresa, lerIdsENomesDasEmpresas } from "@/lib/empresas/fonte-unica";
 
 type Db = SupabaseClient;
 
@@ -157,12 +158,8 @@ export async function lerObrigacoes(db: Db, org: string, escopo: EscopoDaLeitura
       ]),
     );
   } else if (escopo.tipo === "empresa") {
-    const { data, error } = await db
-      .from("crm_empresas")
-      .select("id, nome")
-      .eq("organization_id", org)
-      .eq("id", escopo.id)
-      .maybeSingle();
+    // FORK MIA (.79, empresa única): a empresa vem do cadastro único.
+    const { data, error } = await lerIdENomeDaEmpresa(db, org, escopo.id);
     falhar("a empresa", error);
     if (!data) return null;
     const empresa = data as { id: string; nome: string };
@@ -228,7 +225,7 @@ export async function lerObrigacoes(db: Db, org: string, escopo: EscopoDaLeitura
   if (escopo.tipo === "negocio" && contexto.negocio) {
     const [empresa, contato] = await Promise.all([
       contexto.negocio.empresa_id
-        ? db.from("crm_empresas").select("id, nome").eq("organization_id", org).eq("id", contexto.negocio.empresa_id).maybeSingle()
+        ? lerIdENomeDaEmpresa(db, org, contexto.negocio.empresa_id)
         : Promise.resolve({ data: null, error: null }),
       contexto.negocio.contact_id
         ? db.from("contacts").select(COLUNAS_DO_CONTATO).eq("organization_id", org).eq("id", contexto.negocio.contact_id).maybeSingle()
@@ -241,13 +238,8 @@ export async function lerObrigacoes(db: Db, org: string, escopo: EscopoDaLeitura
     }
   }
   if (escopo.tipo === "contato" && contexto.contato?.empresa_id) {
-    const { data } = await db
-      .from("crm_empresas")
-      .select("id, nome")
-      .eq("organization_id", org)
-      .eq("id", contexto.contato.empresa_id)
-      .maybeSingle();
-    if (data) contexto.empresa = data as { id: string; nome: string };
+    const { data } = await lerIdENomeDaEmpresa(db, org, contexto.contato.empresa_id);
+    if (data) contexto.empresa = data;
   }
 
   return { itens: naTela, contexto, cortada };
@@ -287,7 +279,7 @@ export async function paraATela(db: Db, org: string, itens: readonly Obrigacao[]
       db.from("crm_leads").select("id, title").eq("organization_id", org).in("id", lote),
     ),
     buscaEmLotes<{ id: string; nome: string }>(empresaIds, (lote) =>
-      db.from("crm_empresas").select("id, nome").eq("organization_id", org).in("id", lote),
+      lerIdsENomesDasEmpresas(db, org, lote),
     ),
     buscaEmLotes<LinhaDoContato>(contatoIds, (lote) =>
       db.from("contacts").select(COLUNAS_DO_CONTATO).eq("organization_id", org).in("id", lote) as unknown as PromiseLike<{

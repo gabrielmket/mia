@@ -27,7 +27,7 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
       "Só os campos que VIERAM mudam; o que veio igual ao que está gravado responde `ja_estava`. " +
       "ATENÇÃO: `limpeza_automatica_de_midia` ligada apaga, na limpeza diária, a mídia das conversas e o anexo de nota interna mais velhos que `dias_de_retencao_de_midia`, sem volta. Ela nasce ligada em toda empresa. " +
       "QUANDO USAR: logo depois de criar o cliente, antes do catálogo (a MOEDA da empresa é a que os produtos novos recebem) e da agenda (o FUSO é o das jornadas e dos horários). " +
-      "`modo_de_venda`: \"b2b\" mostra a aba Empresas e pede empresa, cargo e setor no cadastro; \"b2c\" esconde tudo isso. " +
+      "`modo_de_venda`: \"b2b\" mostra a aba Empresas e pede empresa, cargo e setor no cadastro; \"misto\" (vende para empresas e para pessoas) mostra igual, com a empresa sempre opcional; \"b2c\" esconde tudo isso. " +
       "O QUE NÃO FAZ: não muda o identificador da empresa na URL, não suspende nem apaga a empresa, e não mexe na marca (logo e cor).",
     inputSchema: {
       organization_id: ORGANIZACAO,
@@ -38,7 +38,10 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
       fuso: z.string().trim().min(1).max(64).optional().describe('O fuso da empresa, pelo nome da região sem acento (ex.: "America/Sao_Paulo").'),
       idioma: z.string().trim().min(2).max(10).optional().describe('O idioma da interface para a equipe (ex.: "pt-BR").'),
       moeda: z.enum(MOEDAS_SERVIDAS).optional().describe("A moeda dos valores e dos produtos novos."),
-      modo_de_venda: z.enum(["b2b", "b2c"]).optional().describe('"b2b" = vende para empresas; "b2c" = vende para pessoas.'),
+      modo_de_venda: z
+        .enum(["b2b", "misto", "b2c"])
+        .optional()
+        .describe('"b2b" = vende para empresas; "misto" = para empresas e para pessoas; "b2c" = vende para pessoas.'),
       dias_de_retencao_de_midia: z.number().int().min(30).max(3650).optional().describe("Por quantos dias a mídia das conversas é guardada."),
       limpeza_automatica_de_midia: z
         .boolean()

@@ -25,13 +25,19 @@ import { FERRAMENTA_IMPORTAR_FOTOS_DE_PRODUTO } from "./fotos-de-produto";
 import { FERRAMENTA_VER_IMPORTACAO } from "./leitura";
 import { FERRAMENTA_IMPORTAR_MODELO_DE_PROPOSTA } from "./modelos-de-proposta";
 import { FERRAMENTA_IMPORTAR_NEGOCIOS } from "./negocios";
+import { FERRAMENTA_VINCULAR_PESSOAS_A_EMPRESAS } from "./vinculos";
 import type { FerramentaComExemplo } from "./tipos";
 
-/** Na ordem em que uma migração as usa: ver, base (empresas → contatos → negócios), materiais. */
+/**
+ * Na ordem em que uma migração as usa: ver, base (empresas → contatos →
+ * vínculos → negócios), materiais. Os vínculos (pessoa em várias empresas,
+ * vários números da mesma pessoa) entraram na .79, com a empresa única.
+ */
 export const FERRAMENTAS_DE_IMPORTACAO: readonly FerramentaComExemplo[] = [
   FERRAMENTA_VER_IMPORTACAO,
   FERRAMENTA_IMPORTAR_EMPRESAS,
   FERRAMENTA_IMPORTAR_CONTATOS,
+  FERRAMENTA_VINCULAR_PESSOAS_A_EMPRESAS,
   FERRAMENTA_IMPORTAR_NEGOCIOS,
   FERRAMENTA_IMPORTAR_CONHECIMENTO,
   FERRAMENTA_IMPORTAR_FOTOS_DE_PRODUTO,

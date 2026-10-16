@@ -15,6 +15,7 @@ import {
   seModuloB2bDesligado,
 } from "@/lib/crm-b2b/route-helpers";
 import { createClient } from "@/lib/supabase/server";
+import { receitaTravada } from "@/lib/empresas/receita";
 
 export const dynamic = "force-dynamic";
 
@@ -50,12 +51,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx): Promise<Response
   try {
     const body = await req.json();
     const supabase = await createClient();
+    // FORK MIA (.79, empresa única): empresa de DEMONSTRAÇÃO não consulta a
+    // Receita (nada sai de lá, migration 9010; protótipo aprovado em 15/10/2026).
+    const semReceita = await receitaTravada(supabase, authz.org.orgId);
     const data = await patchCompanyHandler(
       supabase,
       ctxFromAuthz(authz, requestId),
       authz.user.id,
       id,
-      body,
+      semReceita ? { ...body, enrich: false } : body,
     );
     return ok(data, { requestId });
   } catch (e) {

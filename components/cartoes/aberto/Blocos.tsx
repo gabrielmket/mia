@@ -220,12 +220,30 @@ export function PessoasDoNegocio({
                   {[
                     p.principal ? t("Contato principal") : null,
                     p.cargo,
-                    ehPapel(p.papel) ? t(ROTULO_DO_PAPEL[p.papel]) : null,
+                    p.principal && ehPapel(p.papel) ? t(ROTULO_DO_PAPEL[p.papel]) : null,
                     p.telefone ? phoneForDisplay(p.telefone) : null,
                   ]
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
+                {!p.principal ? (
+                  // FORK MIA (.79): o papel NESTE negócio, na mesma lista fechada
+                  // do papel na empresa, e trocável aqui (protótipo, tela 4).
+                  <select
+                    aria-label={`${t("Papel neste negócio")}: ${p.nome ?? t("Contato")}`}
+                    value={ehPapel(p.papel) ? p.papel : ""}
+                    disabled={incluir.isPending}
+                    onChange={(e) => incluir.mutate({ contactId: p.contatoId, papel: (e.target.value || null) as Papel | null })}
+                    className="mt-1 min-h-11 rounded-md border border-border bg-background px-2 text-base lg:min-h-0 lg:h-7 lg:text-xs"
+                  >
+                    <option value="">{t("Sem papel definido")}</option>
+                    {PAPEIS.map((papelDaLista) => (
+                      <option key={papelDaLista} value={papelDaLista}>
+                        {t(ROTULO_DO_PAPEL[papelDaLista])}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
               </div>
               <div className="flex shrink-0 gap-1">
                 {p.conversaId ? (
@@ -250,6 +268,29 @@ export function PessoasDoNegocio({
           ))}
         </ul>
       )}
+
+      {cartao.pessoasDaEmpresa.length > 0 ? (
+        <div className="mt-2" data-testid="pessoas-da-empresa-do-negocio">
+          <p className="mb-1 text-[11px] font-medium text-text-muted">{t("Outras pessoas desta empresa")}</p>
+          <div className="flex flex-wrap gap-1">
+            {cartao.pessoasDaEmpresa.map((p) => (
+              <button
+                key={p.contatoId}
+                type="button"
+                disabled={incluir.isPending}
+                onClick={() => incluir.mutate({ contactId: p.contatoId, papel: ehPapel(p.papel) ? p.papel : null })}
+                className="min-h-11 rounded-full border border-border px-3 text-base text-text hover:bg-surface-muted lg:min-h-0 lg:py-0.5 lg:text-[11px]"
+              >
+                + {p.nome ?? t("Contato")}
+                {ehPapel(p.papel) ? ` · ${t(ROTULO_DO_PAPEL[p.papel]).toLowerCase()}` : ""}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-[11px] text-text-muted">
+            {t("O papel aqui vale só para este negócio. Ao adicionar alguém da empresa, entra o papel que a pessoa tem lá, e pode ser trocado.")}
+          </p>
+        </div>
+      ) : null}
 
       {adicionando ? (
         <div className="mt-2 space-y-2 rounded-md border border-border p-2">
@@ -341,13 +382,22 @@ export function PessoasDoNegocio({
   );
 }
 
-export function EmpresaDoNegocio({ empresa }: { empresa: CartaoAberto["empresa"] }) {
+export function EmpresaDoNegocio({
+  empresa,
+  lead,
+  pipelineId,
+}: {
+  empresa: CartaoAberto["empresa"];
+  lead?: Lead;
+  pipelineId?: string;
+}) {
   const t = useT();
+  const editar = useEditLead(pipelineId ?? "");
   if (!empresa) return null;
   return (
     <Secao titulo={t("Empresa")} testid="empresa-do-negocio">
       <p className="mb-1 text-xs">
-        <Link href={`/app/empresas/${empresa.id}`} className="font-medium text-text hover:underline">
+        <Link href={`/app/companies/${empresa.id}`} className="font-medium text-text hover:underline">
           {empresa.nome}
         </Link>
       </p>
@@ -356,6 +406,19 @@ export function EmpresaDoNegocio({ empresa }: { empresa: CartaoAberto["empresa"]
         {empresa.telefone ? <Par rotulo={t("Telefone")}>{empresa.telefone}</Par> : null}
         {empresa.site ? <Par rotulo={t("Site")}>{empresa.site}</Par> : null}
       </Pares>
+      {lead && pipelineId ? (
+        // FORK MIA (.79): negócio sem empresa é sempre permitido (protótipo,
+        // tela 4). Tirar não mexe na empresa nem nas pessoas dela.
+        <Button
+          size="sm"
+          variant="ghost"
+          className="mt-1"
+          disabled={editar.isPending}
+          onClick={() => editar.mutate({ leadId: lead.id, patch: { empresa_id: null } })}
+        >
+          {t("Tirar a empresa deste negócio")}
+        </Button>
+      ) : null}
     </Secao>
   );
 }

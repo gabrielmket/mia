@@ -30,6 +30,7 @@ import { buscaEmLotes } from "@/lib/supabase/em-lotes";
 import { createClient } from "@/lib/supabase/server";
 import { idsDeContatosPessoais } from "@/app/api/v1/conversations/_handler";
 import type { BoardData, Pipeline, Stage } from "@/lib/kanban/types";
+import { lerNomesDasEmpresas } from "@/lib/empresas/fonte-unica";
 import type { Lead } from "@/lib/types/leads";
 
 export const dynamic = "force-dynamic";
@@ -71,16 +72,9 @@ async function withEmpresas(
   ];
   if (ids.length === 0) return { leads, error: null };
 
-  const { data, error } = await supabase
-    .from("crm_empresas")
-    .select("id, nome")
-    .eq("organization_id", organizationId)
-    .in("id", ids);
-  if (error) return { leads, error: error.message };
-
-  const nome = new Map(
-    (data ?? []).map((e) => [(e as { id: string }).id, (e as { nome: string }).nome]),
-  );
+  // FORK MIA (.79, empresa única): o nome vem do cadastro único (`companies`).
+  const { nomes: nome, erro } = await lerNomesDasEmpresas(supabase, organizationId, ids);
+  if (erro) return { leads, error: erro };
   return {
     // Empresa apagada depois do vínculo devolve `null` — e `null` some do card,
     // em vez de virar um rótulo vazio ocupando linha.

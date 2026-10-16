@@ -146,17 +146,32 @@ export const EMPRESAS: readonly EmpresaDaSemente[] = [
 export const CONTATOS: readonly ContatoDaSemente[] = [
   // Clientes de empresa (B2B) — várias pessoas por empresa.
   { chave: "marcia-aurora", nome: "Márcia Vilela", n: 1, comEmail: true, empresa: "aurora", cargo: "Diretora de operações", setor: "Operações", decisor: true },
-  { chave: "joao-aurora", nome: "João Pedro Arantes", n: 2, comEmail: true, empresa: "aurora", cargo: "Comprador", setor: "Compras" },
-  { chave: "luana-aurora", nome: "Luana Siqueira", n: 3, comEmail: false, empresa: "aurora", cargo: "Analista financeira", setor: "Financeiro" },
+  { chave: "joao-aurora", nome: "João Pedro Arantes", n: 2, comEmail: true, empresa: "aurora", cargo: "Comprador", setor: "Compras", papel: "usuario" },
+  { chave: "luana-aurora", nome: "Luana Siqueira", n: 3, comEmail: false, empresa: "aurora", cargo: "Analista financeira", setor: "Financeiro", papel: "financeiro" },
   { chave: "renato-vale", nome: "Renato Queiroz", n: 4, comEmail: true, empresa: "vale-azul", cargo: "Gerente industrial", setor: "Produção", decisor: true },
   { chave: "sonia-vale", nome: "Sônia Batista", n: 5, comEmail: true, empresa: "vale-azul", cargo: "Assistente administrativa", setor: "Administrativo" },
   { chave: "felipe-ponto", nome: "Felipe Andrade", n: 6, comEmail: true, empresa: "ponto-certo", cargo: "Sócio", setor: "Diretoria", decisor: true },
-  { chave: "carolina-ponto", nome: "Carolina Reis", n: 7, comEmail: true, empresa: "ponto-certo", cargo: "Coordenadora", setor: "Fiscal" },
+  // A contadora que também atende a transportadora: uma pessoa em DUAS empresas
+  // (empresa única, .79). A do cartão é a Ponto Certo.
+  {
+    chave: "carolina-ponto",
+    nome: "Carolina Reis",
+    n: 7,
+    comEmail: true,
+    empresa: "ponto-certo",
+    cargo: "Coordenadora",
+    setor: "Fiscal",
+    papel: "financeiro",
+    tambemEm: [{ empresa: "rota-sul", papel: "influenciador", cargo: "Contadora externa" }],
+  },
   { chave: "patricia-bem", nome: "Patrícia Moreira", n: 8, comEmail: true, empresa: "bem-viver", cargo: "Diretora de operações", setor: "Operações", decisor: true },
   { chave: "gustavo-bem", nome: "Gustavo Farias", n: 9, comEmail: true, empresa: "bem-viver", cargo: "Gerente de loja", setor: "Varejo" },
   { chave: "ivan-bem", nome: "Ivan Camargo", n: 10, comEmail: false, empresa: "bem-viver", cargo: "Supervisor de TI", setor: "Tecnologia" },
   { chave: "eduardo-rota", nome: "Eduardo Tavares", n: 11, comEmail: true, empresa: "rota-sul", cargo: "Diretor comercial", setor: "Comercial", decisor: true },
-  { chave: "priscila-rota", nome: "Priscila Nogueira", n: 12, comEmail: true, empresa: "rota-sul", cargo: "Analista de frota", setor: "Operações" },
+  { chave: "priscila-rota", nome: "Priscila Nogueira", n: 12, comEmail: true, empresa: "rota-sul", cargo: "Analista de frota", setor: "Operações", papel: "usuario" },
+  // O segundo número da Márcia (vários números = uma pessoa, .79): cada número
+  // com a sua conversa; a empresa e os negócios são um só.
+  { chave: "marcia-aurora-2", nome: "Márcia Vilela", n: 13, comEmail: false, mesmaPessoaQue: "marcia-aurora" },
   // Pessoas físicas (B2C) — sem empresa.
   { chave: "marina", nome: "Marina Costa", n: 21, comEmail: true, tags: ["paciente"] },
   { chave: "rogerio", nome: "Rogério Paiva", n: 22, comEmail: false },

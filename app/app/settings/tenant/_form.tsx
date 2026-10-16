@@ -267,6 +267,7 @@ export function TenantForm({ initial, onSave, onSaved }: Props) {
             onChange={(e) => set("modo_de_venda", e.target.value as TenantInput["modo_de_venda"])}
           >
             <option value="b2b">{t("Para outras empresas")}</option>
+            <option value="misto">{t("Para empresas e para pessoas")}</option>
             <option value="b2c">{t("Direto para pessoas")}</option>
           </select>
           <p className="text-xs text-muted-foreground">
@@ -274,9 +275,13 @@ export function TenantForm({ initial, onSave, onSaved }: Props) {
               ? t(
                   "A aba Empresas some do menu, o cadastro deixa de pedir empresa, cargo e setor, e a IA não oferece mais a capacidade de anotar a empresa do cliente. Os dados já cadastrados continuam no banco.",
                 )
-              : t(
-                  "O sistema agrupa contatos e negócios por empresa: a aba Empresas fica no menu, o cadastro pede empresa, cargo e setor, e a IA pode anotar de qual empresa o cliente é.",
-                )}
+              : form.modo_de_venda === "misto"
+                ? t(
+                    "A aba Empresas fica no menu e a empresa é sempre opcional: o contato que compra como pessoa física fica sem empresa, e o que compra por uma empresa fica ligado a ela.",
+                  )
+                : t(
+                    "O sistema agrupa contatos e negócios por empresa: a aba Empresas fica no menu, o cadastro pede empresa, cargo e setor, e a IA pode anotar de qual empresa o cliente é.",
+                  )}
           </p>
         </div>
 

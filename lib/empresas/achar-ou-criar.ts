@@ -23,61 +23,33 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
+import { gravarEmpresa, lerTodasAsEmpresas, nomeDaEmpresa } from "@/lib/empresas/fonte-unica";
+import { nomeComparavel } from "@/lib/empresas/nome-comparavel";
+import { pareceAMesma } from "@/lib/empresas/parecida";
 import { logger } from "@/lib/logger";
 
-/**
- * FORK MIA: 5 páginas de 1000, as 5 mil empresas que o `.limit(5_000)` antigo
- * declarava. O PostgREST corta toda resposta em 1000 linhas sem avisar, então a
- * busca só via as 1000 primeiras: a partir da 1001ª empresa, o nome que já
- * existia não era achado e nascia uma ficha repetida, em silêncio.
- */
-const PAGINAS_MAXIMAS = 5;
-
-/** Sufixos societários que não distinguem uma empresa de outra. */
-const SUFIXOS = /\b(ltda|me|epp|eireli|sa|s\/a|s\.a|mei|cia|e cia)\b/g;
-
-/**
- * A forma comparável do nome. NÃO é o que se guarda: a empresa fica com o nome
- * como a pessoa escreveu — normalizar o que se mostra faria a ficha exibir
- * "padaria do ze" para quem digitou direito.
- */
-export function nomeComparavel(nome: string): string {
-  const limpo = nome
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(SUFIXOS, " ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-
-  /**
-   * Letras soltas em sequência viram uma palavra só: `a b c` → `abc`.
-   *
-   * É o que faz "A.B.C. Materiais" e "ABC Materiais" serem a mesma
-   * empresa — e sigla pontuada é comum em razão social brasileira, enquanto o
-   * agente ouve a sigla e digita sem ponto. Sem isto, o mesmo cliente vira duas
-   * fichas por causa de três pontos.
-   */
-  return limpo
-    .split(" ")
-    .reduce<string[]>((tokens, palavra) => {
-      const anterior = tokens[tokens.length - 1];
-      if (palavra.length === 1 && anterior !== undefined && anterior.length <= 3 && /^[a-z]+$/.test(anterior)) {
-        tokens[tokens.length - 1] = anterior + palavra;
-        return tokens;
-      }
-      tokens.push(palavra);
-      return tokens;
-    }, [])
-    .join(" ")
-    .trim();
-}
+export { nomeComparavel };
 
 export type ResultadoDaEmpresa =
-  | { ok: true; empresaId: string; criada: boolean; nome: string }
+  | { ok: true; empresaId: string; criada: boolean; nome: string; parecida?: boolean }
   | { ok: false; motivo: "nome_curto" | "erro"; detalhe?: string };
 
+/**
+ * FORK MIA (.79, empresa única): lê e grava no cadastro único (`companies`,
+ * docs/fork/empresa-unica.md), e não mais em `crm_empresas`.
+ *
+ * A ordem do casamento, do mais forte ao mais frouxo:
+ *
+ *  1. o nome comparável IGUAL (o de sempre);
+ *  2. o nome PARECIDO (`pareceAMesma`, a régua do protótipo aprovado em
+ *     15/10/2026): "o agente sempre usa a existente". A tela avisa e deixa a
+ *     pessoa escolher; o agente não tem a quem perguntar, e criar a segunda
+ *     ficha é o erro que ninguém vê. Com mais de uma parecida, fica a mais
+ *     antiga, que é a que mais história tem.
+ *
+ * Só depois disso a empresa é criada, pela porta `fn_mia_gravar_empresa` (9034),
+ * a mesma da tela: atendente e agente podem criar.
+ */
 export async function acharOuCriarEmpresa(
   db: SupabaseClient,
   organizationId: string,
@@ -97,25 +69,19 @@ export async function acharOuCriarEmpresa(
     // sufixo societário) não existe em SQL sem `unaccent`, e a lista de
     // empresas de um tenant é pequena — quem tiver dez mil pede um índice
     // funcional, não um `ilike` que erraria justamente nos acentuados.
-    const lidas = await lerTodasAsPaginas<{ id: string; nome: string }>(
-      (de, ate, pedirContagem) =>
-        db
-          .from("crm_empresas")
-          .select("id, nome", pedirContagem ? { count: "exact" } : undefined)
-          .eq("organization_id", organizationId)
-          // Lápide fora: casar com uma ficha já fundida devolveria o contato para a
-          // empresa que alguém acabou de aposentar.
-          .is("mesclada_em", null)
-          // Ordem única: paginar por `range` só é correto assim.
-          .order("id", { ascending: true })
-          .range(de, ate),
-      { paginasMaximas: PAGINAS_MAXIMAS },
-    );
+    const lidas = await lerTodasAsEmpresas(db, organizationId, "id, trade_name, legal_name, normalized_cnpj, created_at");
     if (lidas.erro) return { ok: false, motivo: "erro", detalhe: lidas.erro };
 
-    const existente = lidas.linhas.find((e) => nomeComparavel(e.nome) === comparavel);
+    const empresas = lidas.linhas.map((l) => ({ id: l.id, nome: nomeDaEmpresa(l), criadaEm: l.created_at ?? "" }));
+    const existente = empresas.find((e) => nomeComparavel(e.nome) === comparavel);
     if (existente) {
       return { ok: true, empresaId: existente.id, criada: false, nome: existente.nome };
+    }
+    const parecida = empresas
+      .filter((e) => pareceAMesma(nome, e.nome))
+      .sort((a, b) => a.criadaEm.localeCompare(b.criadaEm))[0];
+    if (parecida) {
+      return { ok: true, empresaId: parecida.id, criada: false, nome: parecida.nome, parecida: true };
     }
 
     /**
@@ -130,22 +96,14 @@ export async function acharOuCriarEmpresa(
       logger.error("[empresas] lista acima do teto de leitura: empresa não criada para não repetir ficha", {
         organization_id: organizationId,
         lidas: lidas.linhas.length,
-        no_banco: lidas.total,
       });
       return { ok: false, motivo: "erro", detalhe: "lista de empresas acima do teto de leitura" };
     }
 
-    const { data: nova, error: erroInsert } = await db
-      .from("crm_empresas")
-      // O nome vai como a pessoa DISSE. O comparável serve para achar, não para
-      // guardar.
-      .insert({ organization_id: organizationId, nome })
-      .select("id, nome")
-      .single();
-    if (erroInsert) return { ok: false, motivo: "erro", detalhe: erroInsert.message };
-
-    const linha = nova as { id: string; nome: string };
-    return { ok: true, empresaId: linha.id, criada: true, nome: linha.nome };
+    // O nome vai como a pessoa DISSE. O comparável serve para achar, não para guardar.
+    const gravada = await gravarEmpresa(db, organizationId, null, { nome });
+    if (!gravada.ok) return { ok: false, motivo: "erro", detalhe: gravada.detalhe ?? gravada.motivo };
+    return { ok: true, empresaId: gravada.id, criada: true, nome };
   } catch (err) {
     return {
       ok: false,

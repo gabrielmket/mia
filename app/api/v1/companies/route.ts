@@ -14,6 +14,7 @@ import {
   seModuloB2bDesligado,
 } from "@/lib/crm-b2b/route-helpers";
 import { createClient } from "@/lib/supabase/server";
+import { receitaTravada } from "@/lib/empresas/receita";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     const body = await req.json();
     const supabase = await createClient();
     const ctx = ctxFromAuthz(authz, requestId);
-    const data = await createCompanyHandler(supabase, ctx, authz.user.id, body);
+    // FORK MIA (.79, empresa única): empresa de DEMONSTRAÇÃO não consulta a
+    // Receita (nada sai de lá, migration 9010; protótipo aprovado em 15/10/2026).
+    const semReceita = await receitaTravada(supabase, authz.org.orgId);
+    const data = await createCompanyHandler(supabase, ctx, authz.user.id, semReceita ? { ...body, enrich: false } : body);
     return ok(data, { requestId, status: 201 });
   } catch (e) {
     return handleRouteError(e, requestId);

@@ -16,8 +16,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SeletorDeEmpresa } from "@/components/empresas/SeletorDeEmpresa";
 import { useMostraEmpresas } from "@/hooks/useMostraEmpresas";
+import { CampoDaEmpresaDoNegocio } from "@/components/empresas/CampoDaEmpresaDoNegocio";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -71,6 +71,12 @@ interface Props {
    * mesmo funil + aberto, e depender de quem chama é como a regra se perde.
    */
   leads?: Lead[];
+  /**
+   * FORK MIA (.79, empresa única): o negócio nasce desta empresa (o "Novo
+   * negócio com esta empresa" da ficha). Sem ela, a empresa que entra é a do
+   * cartão do contato escolhido, e pode ser trocada ou tirada.
+   */
+  empresaIdInicial?: string | null;
 }
 
 function defaultStageId(stages: Stage[]): string {
@@ -86,6 +92,7 @@ export function NewLeadDialog({
   contactId,
   leads,
   onCreated,
+  empresaIdInicial = null,
 }: Props) {
   const t = useT();
   const mostraEmpresa = useMostraEmpresas();
@@ -104,7 +111,14 @@ export function NewLeadDialog({
    * Nosso fork: a empresa também cria VÍNCULO, então entra na mesma limpeza do
    * contato logo abaixo — a escolhida e abandonada não volta selecionada.
    */
-  const [empresaId, setEmpresaId] = useState<string | null>(null);
+  const [empresaId, setEmpresaId] = useState<string | null>(empresaIdInicial);
+  /**
+   * FORK MIA (.79): a pessoa mexeu na empresa? Enquanto não mexeu, a empresa do
+   * negócio é a do CARTÃO do contato (decisão do protótipo aprovado em
+   * 15/10/2026: "ao escolher o contato, a empresa dele entra sozinha e pode ser
+   * trocada ou tirada"). Mexeu, vale a escolha, inclusive "Sem empresa".
+   */
+  const [empresaTocada, setEmpresaTocada] = useState(Boolean(empresaIdInicial));
   // ─── O AVISO DE NEGÓCIO ABERTO DUPLICADO (issue #1751) ─────────────────────
   //
   // Guarda TAMBÉM os valores do formulário: quem chega aqui já preencheu tudo,
@@ -133,7 +147,8 @@ export function NewLeadDialog({
     // reapresentar a pendência de quem desistiu no meio.
     if (!open) {
       setContato(null);
-      setEmpresaId(null);
+      setEmpresaId(empresaIdInicial);
+      setEmpresaTocada(Boolean(empresaIdInicial));
       setAviso(null);
     }
   }
@@ -221,7 +236,11 @@ export function NewLeadDialog({
     if (idDoContato) payload.contact_id = idDoContato;
     // Nosso fork, independente do contato: o negócio é DA EMPRESA, e quem fala por
     // ela pode ser o contato de outra (o contador, o sócio que indicou).
-    if (empresaId) payload.empresa_id = empresaId;
+    // FORK MIA (.79, empresa única): quem MEXEU na empresa manda a escolha,
+    // inclusive `null` ("Sem empresa" vale, e o servidor não põe a do contato).
+    // Quem não mexeu não manda nada: o banco põe a empresa do cartão do contato
+    // (`trg_mia_negocio_e_a_empresa`, 9034), a mesma que o campo mostra.
+    if (empresaTocada) payload.empresa_id = empresaId;
     if (values.description.trim()) payload.description = values.description.trim();
     if (valueCents !== null) payload.value_cents = valueCents;
     if (values.expected_close_date) payload.expected_close_date = values.expected_close_date;
@@ -272,7 +291,8 @@ export function NewLeadDialog({
         expected_close_date: "",
       });
       setContato(null);
-      setEmpresaId(null);
+      setEmpresaId(empresaIdInicial);
+      setEmpresaTocada(Boolean(empresaIdInicial));
       setAviso(null);
       onOpenChange(false);
     } catch {
@@ -387,7 +407,17 @@ export function NewLeadDialog({
           {mostraEmpresa ? (
             <div className="space-y-2">
               <Label htmlFor="lead-empresa">{t("Empresa")}</Label>
-              <SeletorDeEmpresa id="lead-empresa" valor={empresaId} aoMudar={setEmpresaId} />
+              <CampoDaEmpresaDoNegocio
+                id="lead-empresa"
+                contatoId={contactId ?? contato?.id ?? null}
+                empresaDoContato={contato?.empresa_id ?? null}
+                valor={empresaId}
+                tocada={empresaTocada}
+                aoMudar={(v) => {
+                  setEmpresaId(v);
+                  setEmpresaTocada(true);
+                }}
+              />
             </div>
           ) : null}
 

@@ -95,6 +95,7 @@ import { apenasDigitos } from "@/lib/schemas/empresas";
 import { normalizePhoneBR } from "@/lib/webhooks/inbound";
 
 import { acharPorNomeOuId, type Implantacao } from "./base";
+import { lerIdsENomesDasEmpresas } from "@/lib/empresas/fonte-unica";
 
 /** Quantos itens uma chamada de lote aceita. */
 export const TETO_DE_OBRIGACOES = 100;
@@ -195,7 +196,7 @@ export async function lerObrigacoesDoCliente(
   const leadIds = [...new Set(escolhidos.slice(0, limite).map((i) => i.lead_id).filter((v): v is string => !!v))];
   const [empresas, negocios, funis, tipos] = await Promise.all([
     empresaIds.length
-      ? c.admin.from("crm_empresas").select("id, nome").eq("organization_id", c.orgId).in("id", empresaIds)
+      ? lerIdsENomesDasEmpresas(c.admin, c.orgId, empresaIds)
       : Promise.resolve({ data: [] }),
     leadIds.length
       ? c.admin.from("crm_leads").select("id, title").eq("organization_id", c.orgId).in("id", leadIds)
@@ -456,7 +457,8 @@ export async function garantirObrigacoesEmLote(
         coletor.recusar(posicao, "empresa_id", "é o id da empresa na plataforma. Sem o id, use `empresa_cnpj` ou `empresa_nome`.");
         continue;
       }
-      const { data } = await ctx.admin.from("crm_empresas").select("id").eq("organization_id", organizacao.id).eq("id", bruto.empresa_id.trim()).maybeSingle();
+      // FORK MIA (.79, empresa única): a empresa é a do cadastro único.
+      const { data } = await ctx.admin.from("companies").select("id").eq("organization_id", organizacao.id).eq("id", bruto.empresa_id.trim()).maybeSingle();
       if (!data) {
         coletor.recusar(posicao, "empresa_id", "não existe empresa com este id neste cliente.");
         continue;

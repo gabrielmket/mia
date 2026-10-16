@@ -73,7 +73,7 @@ const SELETOR = "h-8 rounded-md border border-border bg-background px-2 text-xs"
 /** Para onde a linha leva: o negócio, ou a ficha dona do item. */
 function destinoDoItem(item: ObrigacaoNaTela): string {
   if (item.vinculos.negocio) return `/app/leads/${item.vinculos.negocio.id}`;
-  if (item.vinculos.empresa) return `/app/empresas/${item.vinculos.empresa.id}`;
+  if (item.vinculos.empresa) return `/app/companies/${item.vinculos.empresa.id}`;
   return `/app/contacts/${item.vinculos.contato?.id ?? ""}`;
 }
 
@@ -254,7 +254,7 @@ export function ObrigacoesClient() {
                             </Link>
                           ) : null}
                           {item.vinculos.empresa ? (
-                            <Link href={`/app/empresas/${item.vinculos.empresa.id}`} className="hover:underline">
+                            <Link href={`/app/companies/${item.vinculos.empresa.id}`} className="hover:underline">
                               <span className="text-text-muted">{t("empresa")}</span> {item.vinculos.empresa.nome}
                             </Link>
                           ) : null}

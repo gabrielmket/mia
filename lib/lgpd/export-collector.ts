@@ -30,6 +30,19 @@ import type { Json } from "@/lib/database.types";
 // Public types
 // ---------------------------------------------------------------------------
 
+/**
+ * FORK MIA (.79, empresa única): uma empresa em que o titular está. Tipo à
+ * parte, e não literal dentro de `ContactSnapshot`: a cerca da LGPD lê aquela
+ * interface até a primeira chave que fecha.
+ */
+export interface EmpresaVinculadaDoTitular {
+  empresa_nome: string | null;
+  cargo: string | null;
+  setor: string | null;
+  papel: string | null;
+  principal: boolean;
+}
+
 export interface ContactSnapshot {
   id: string;
   name: string | null;
@@ -53,6 +66,12 @@ export interface ContactSnapshot {
   // A EMPRESA vai pelo NOME, não pelo id. O titular tem direito de saber a que
   // empresa foi vinculado; um uuid não responde isso a ninguém.
   empresa_nome: string | null;
+  /**
+   * FORK MIA (.79, empresa única): TODAS as empresas em que a pessoa está, com
+   * o cargo, o setor, o papel e se é a principal (o vínculo de `company_people`
+   * e o nosso `papel`). `empresa_nome` acima é só a do cartão.
+   */
+  empresas_vinculadas?: EmpresaVinculadaDoTitular[];
   /**
    * A chave da pessoa numa rede social (redes sociais nativas, 0368 do upstream).
    * Identifica sozinha, então é dado pessoal — e ficava fora deste relatório,
@@ -94,9 +113,10 @@ async function nomeDaEmpresa(
   requestId: string,
 ): Promise<string | null> {
   if (typeof empresaId !== "string" || empresaId === "") return null;
+  // FORK MIA (.79, empresa única): o cadastro único (`companies`).
   const { data, error } = await admin
-    .from("crm_empresas")
-    .select("nome")
+    .from("companies")
+    .select("trade_name, legal_name")
     .eq("organization_id", organizationId)
     .eq("id", empresaId)
     .maybeSingle();
@@ -104,8 +124,51 @@ async function nomeDaEmpresa(
     logger.warn("[lgpd-export-worker] empresa load failed", { request_id: requestId, error: error.message });
     return null;
   }
-  const nome = (data as { nome?: unknown } | null)?.nome;
-  return typeof nome === "string" && nome.trim().length > 0 ? nome : null;
+  const linha = data as { trade_name?: unknown; legal_name?: unknown } | null;
+  const nome = [linha?.trade_name, linha?.legal_name].find((v) => typeof v === "string" && v.trim().length > 0);
+  return typeof nome === "string" ? nome : null;
+}
+
+/**
+ * FORK MIA (.79): as empresas da PESSOA do contato, em leituras planas (o mesmo
+ * cuidado de `nomeDaEmpresa`: o coletor roda sobre cliente que só entende
+ * coluna simples). Falha de leitura vira lista vazia com aviso no registro.
+ */
+async function empresasDaPessoa(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  personId: unknown,
+  requestId: string,
+): Promise<EmpresaVinculadaDoTitular[]> {
+  if (typeof personId !== "string" || personId === "") return [];
+  const { data: vinculos, error } = await admin
+    .from("company_people")
+    .select("company_id, job_title, department, papel, is_primary")
+    .eq("organization_id", organizationId)
+    .eq("person_id", personId)
+    .limit(200);
+  if (error) {
+    logger.warn("[lgpd-export-worker] vinculos load failed", { request_id: requestId, error: error.message });
+    return [];
+  }
+  const lista = (vinculos ?? []) as Array<{
+    company_id: string;
+    job_title: string | null;
+    department: string | null;
+    papel: string | null;
+    is_primary: boolean;
+  }>;
+  const saida: EmpresaVinculadaDoTitular[] = [];
+  for (const v of lista) {
+    saida.push({
+      empresa_nome: await nomeDaEmpresa(admin, organizationId, v.company_id, requestId),
+      cargo: v.job_title ?? null,
+      setor: v.department ?? null,
+      papel: v.papel ?? null,
+      principal: Boolean(v.is_primary),
+    });
+  }
+  return saida;
 }
 
 export interface ConsentRow {
@@ -1248,7 +1311,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         // sobrevive à anonimização. Deixar qualquer um de fora responde "não
         // temos mais nada sobre você" a quem exerce direito de acesso, e a
         // resposta é falsa.
-        "id, name, display_name, email, phone_number, wa_lid, cpf_encrypted, birthdate, is_blocked, is_anonymized, consent, tags, source, source_metadata, custom_fields, cargo, setor, papel_na_empresa, principal_na_empresa, empresa_id, social_identity, created_at, last_activity_at, first_service_at",
+        "id, name, display_name, email, phone_number, wa_lid, cpf_encrypted, birthdate, is_blocked, is_anonymized, consent, tags, source, source_metadata, custom_fields, cargo, setor, papel_na_empresa, principal_na_empresa, empresa_id, person_id, social_identity, created_at, last_activity_at, first_service_at",
       )
       .eq("organization_id", organizationId)
       .eq("id", contactId)
@@ -1317,6 +1380,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         papel_na_empresa: (data.papel_na_empresa as string | null) ?? null,
         principal_na_empresa: Boolean(data.principal_na_empresa),
         empresa_nome: await nomeDaEmpresa(admin, organizationId, data.empresa_id, requestId),
+        empresas_vinculadas: await empresasDaPessoa(admin, organizationId, data.person_id, requestId),
         social_identity: data.social_identity ?? null,
         created_at: data.created_at,
         last_activity_at: data.last_activity_at ?? null,

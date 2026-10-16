@@ -733,6 +733,20 @@ export async function createLeadHandler(
     );
   }
 
+  // FORK MIA (.79, empresa única): o negócio novo SEM empresa herda a do cartão
+  // do contato no banco (gatilho `trg_mia_negocio_e_a_empresa`, migration 9034,
+  // decisão do protótipo aprovado em 15/10/2026). Quem TIROU a empresa na tela
+  // manda `empresa_id: null` de propósito, e essa escolha vale: o negócio fica
+  // sem empresa.
+  if (input.empresa_id === null && (lead as { empresa_id?: string | null }).empresa_id) {
+    const { error: semEmpresaErr } = await supabase
+      .from("crm_leads")
+      .update({ empresa_id: null })
+      .eq("organization_id", ctx.organization_id)
+      .eq("id", (lead as { id: string }).id);
+    if (!semEmpresaErr) (lead as { empresa_id?: string | null }).empresa_id = null;
+  }
+
   if (donoHerdadoDescartado) {
     const leadId = (lead as { id: string }).id;
     const atividade = await emitLeadActivity(supabase, {

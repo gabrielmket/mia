@@ -25,6 +25,8 @@ const textoCurto = z.string().trim().max(200);
 
 export const empresaCreateSchema = z.object({
   nome: z.string().trim().min(1, "A empresa precisa de um nome.").max(200),
+  /** FORK MIA (.79): a razão social (`companies.legal_name`), opcional. */
+  razao_social: z.string().trim().max(500).optional(),
   cnpj: z
     .string()
     .trim()
@@ -43,6 +45,15 @@ export const empresaCreateSchema = z.object({
    * `crm_pipelines.settings.fields` — o mesmo lugar do contato e do lead.
    */
   custom_fields: z.record(z.string(), z.unknown()).optional(),
+  /**
+   * FORK MIA (.79, empresa única): os campos que a consulta à Receita devolveu
+   * NA TELA (`mapBrasilApiToCompanyFields`), revisados por quem salva. Só a tela
+   * consulta: nem o agente nem o MCP mandam isto.
+   */
+  receita: z.record(z.string(), z.unknown()).optional(),
+  receita_bruta: z.record(z.string(), z.unknown()).nullable().optional(),
+  /** O nome parece o de outra empresa, e a pessoa escolheu criar mesmo assim. */
+  criar_mesmo_assim: z.boolean().optional(),
 });
 
 /** No PATCH todo campo é opcional — inclusive o nome, que só não pode virar vazio. */
@@ -54,6 +65,13 @@ export type EmpresaUpdate = z.infer<typeof empresaUpdateSchema>;
 export const empresaListQuerySchema = z.object({
   /** Busca por trecho do nome ou do CNPJ. */
   q: z.string().trim().max(200).optional(),
-  limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+  limit: z.coerce.number().int().min(1).max(500).optional().default(50),
   offset: z.coerce.number().int().min(0).optional().default(0),
+  /** FORK MIA (.79): os filtros da tela (protótipo, tela 1). */
+  filtro: z.enum(["todas", "abertos", "semcnpj", "dup"]).optional().default("todas"),
+  /** Só id e nome, sem os números de cada linha (o seletor de empresa). */
+  simples: z
+    .enum(["1", "true", "0", "false"])
+    .optional()
+    .transform((v) => v === "1" || v === "true"),
 });

@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
-import { useEmpresas } from "@/hooks/useEmpresas";
+import { useEmpresasDoSeletor } from "@/hooks/useEmpresas";
 
 /** `Select` do Radix não aceita valor vazio; este é o "nenhuma". */
 const SEM_EMPRESA = "__sem_empresa__";
@@ -37,7 +37,8 @@ export function SeletorDeEmpresa({
   desabilitado?: boolean;
 }) {
   const t = useT();
-  const { data, isLoading } = useEmpresas("");
+  // FORK MIA (.79, empresa única): todas as empresas do cadastro único, só id e nome.
+  const { data, isLoading } = useEmpresasDoSeletor();
   const empresas = data?.data ?? [];
 
   /**

@@ -277,24 +277,10 @@ export const NAV_CATALOG = [
     // QR arrisca o número dele.
     minRole: "manager",
   },
-  {
-    // Empresas fica ANTES de Contatos porque em venda B2B a empresa é a
-    // unidade: a pessoa é por onde se fala com ela. Quem abre o CRM procurando
-    // um cliente procura pelo nome da empresa primeiro.
-    //
-    // SÓ NO HUB. Ela chegou a entrar no sidebar como quarto item do CRM, mas o
-    // menu está no teto medido (15 itens, ver o Broadcast acima), e o modo
-    // padrão é B2B (lib/empresas/modo-de-venda.ts): o item a mais caía em quase
-    // toda organização, não só nas que vendem para empresa. Fica em "O dia a
-    // dia da venda", como Campanhas e Prospecção, e no ⌘K. Para voltar ao
-    // menu, outro item do CRM tem de sair dele — o total não cresce.
-    href: "/app/empresas",
-    label: "Empresas",
-    description: "Os clientes que são empresa — cada uma com suas pessoas e seus negócios.",
-    icon: "Buildings",
-    group: "crm",
-    section: "O dia a dia da venda",
-  },
+  // FORK MIA (.79, empresa única): o card "Empresas" do fork (`/app/empresas`)
+  // saiu. A tela é uma só, a do upstream (`/app/companies`, logo abaixo de
+  // Contatos), que no fork existe sem o módulo `crm_b2b` e some no modo B2C
+  // (lib/navigation/interface.ts). Era o hub com DOIS cards "Empresas".
   {
     href: "/app/contacts",
     label: "Contatos",

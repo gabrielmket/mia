@@ -72,7 +72,7 @@ export interface EmpresaDaSemente {
   tags: string[];
   /** Só dígitos, com os verificadores errados (`cnpjFalso`). */
   cnpj?: string;
-  /** Campos a mais da ficha da empresa (`crm_empresas.custom_fields`), além do setor. */
+  /** Campos a mais da ficha da empresa (`mia_companies_extra.custom_fields`, 9032), além do setor. */
   campos?: Record<string, unknown>;
 }
 
@@ -86,8 +86,21 @@ export interface ContatoDaSemente {
   empresa?: EmpresaDaSemente["chave"];
   cargo?: string;
   setor?: string;
-  /** Na empresa, é quem decide (vai para `company_people.is_decision_maker`). */
+  /** Na empresa, é quem decide (vai para `company_people.is_decision_maker`, e é o principal). */
   decisor?: boolean;
+  /**
+   * FORK MIA (.79, empresa única): o papel na empresa (lista fechada). Sem ele,
+   * quem decide é `decisor` e o resto fica "não informado".
+   */
+  papel?: "decisor" | "financeiro" | "usuario" | "influenciador" | "outro";
+  /** Outras empresas em que a MESMA pessoa está (a do cartão é `empresa`). */
+  tambemEm?: ReadonlyArray<{
+    empresa: EmpresaDaSemente["chave"];
+    papel?: "decisor" | "financeiro" | "usuario" | "influenciador" | "outro";
+    cargo?: string;
+  }>;
+  /** Este número é de uma pessoa que já tem outro (vários números = uma pessoa). */
+  mesmaPessoaQue?: string;
   tags?: string[];
 }
 
@@ -365,7 +378,7 @@ export interface SementeDeDemonstracao {
   /** O nome da sessão-âncora do canal (único na instalação). */
   sessaoDoCanal: string;
   telefoneDoCanal: string;
-  modoDeVenda: "b2b" | "b2c";
+  modoDeVenda: "b2b" | "misto" | "b2c";
   /** O nome do formulário da Meta nas origens dos negócios. */
   formularioDaMeta: string;
   /** O lugar dos compromissos presenciais (`location_details`). */

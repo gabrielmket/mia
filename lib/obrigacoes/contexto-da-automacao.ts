@@ -25,6 +25,7 @@ import type { EventRow } from "@/lib/event-log/dispatcher";
 import { diaNoFuso, diaPorExtenso } from "./datas";
 import { ROTULO_DA_SITUACAO, diasAteAData, idadeDoPedido, situacao } from "./situacao";
 import { COLUNAS_DA_OBRIGACAO, type Obrigacao } from "./tipos";
+import { lerIdENomeDaEmpresa } from "@/lib/empresas/fonte-unica";
 
 export async function contextoDaObrigacao(admin: SupabaseClient, row: EventRow): Promise<Record<string, unknown>> {
   const contexto: Record<string, unknown> = {};
@@ -104,7 +105,8 @@ export async function contextoDaObrigacao(admin: SupabaseClient, row: EventRow):
   }
 
   if (item.empresa_id) {
-    const r = await admin.from("crm_empresas").select("id, nome").eq("organization_id", org).eq("id", item.empresa_id).maybeSingle();
+    // FORK MIA (.79, empresa única): o nome vem do cadastro único.
+    const r = await lerIdENomeDaEmpresa(admin, org, item.empresa_id);
     if (r.data) contexto.empresa = r.data;
   }
   return contexto;

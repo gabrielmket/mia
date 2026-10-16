@@ -35,6 +35,7 @@
 import { z } from "zod";
 
 import { acharOuCriarEmpresa } from "@/lib/empresas/achar-ou-criar";
+import { lerNomesDasEmpresas } from "@/lib/empresas/fonte-unica";
 
 import type { McpToolDefinition } from "../types";
 
@@ -56,8 +57,8 @@ export const crmRegistrarEmpresaDoContato: McpToolDefinition<typeof shape> = {
   name: "crm_registrar_empresa_do_contato",
   description:
     "Registra de qual EMPRESA o cliente faz parte, quando ele mesmo disser. Grava direto: se já " +
-    "existir uma empresa com esse nome (ignorando maiúsculas, acentos e Ltda/ME), o contato é " +
-    "vinculado a ela; se não, ela é criada. NÃO troca a empresa de um contato que já tem uma — " +
+    "existir uma empresa com esse nome, ou com um nome parecido (ignorando maiúsculas, acentos e " +
+    "Ltda/ME), o contato é vinculado a ela; se não, ela é criada. NÃO troca a empresa de um contato que já tem uma — " +
     "nesse caso a resposta diz qual é e nada muda. Use só para a empresa DO PRÓPRIO cliente, " +
     "nunca para a de um terceiro que ele citou.",
   inputSchema: shape,
@@ -85,15 +86,11 @@ export const crmRegistrarEmpresaDoContato: McpToolDefinition<typeof shape> = {
     }
 
     if (linha.empresa_id) {
-      const { data: atual } = await ctx.supabase
-        .from("crm_empresas")
-        .select("nome")
-        .eq("organization_id", ctx.organizationId)
-        .eq("id", linha.empresa_id)
-        .maybeSingle();
+      // FORK MIA (.79): o nome vem do cadastro único (`companies`).
+      const { nomes } = await lerNomesDasEmpresas(ctx.supabase, ctx.organizationId, [linha.empresa_id]);
       return {
         gravado: false,
-        ja_tem_empresa: (atual as { nome?: string } | null)?.nome ?? null,
+        ja_tem_empresa: nomes.get(linha.empresa_id) ?? null,
         motivo:
           "este contato já está vinculado a uma empresa; trocar exige uma pessoa fazer isso na ficha.",
       };
@@ -108,16 +105,17 @@ export const crmRegistrarEmpresaDoContato: McpToolDefinition<typeof shape> = {
       return { gravado: false, motivo: explicacao[r.motivo] ?? explicacao.erro };
     }
 
-    const patch: Record<string, unknown> = { empresa_id: r.empresaId };
+    // FORK MIA (.79, empresa única): o vínculo é o do cadastro único
+    // (`company_people`), pela porta `fn_mia_vincular_pessoa` (9034). É a
+    // primeira empresa do contato, então ela é a que aparece no cartão.
     // O cargo só entra junto: ele é da pessoa DENTRO daquela empresa, e gravá-lo
     // sem vínculo deixaria "Diretor" pendurado em ninguém.
-    if (input.cargo?.trim()) patch.cargo = input.cargo.trim();
-
-    const { error } = await ctx.supabase
-      .from("contacts")
-      .update(patch)
-      .eq("organization_id", ctx.organizationId)
-      .eq("id", input.contact_id);
+    const { error } = await ctx.supabase.rpc("fn_mia_vincular_pessoa", {
+      p_organization_id: ctx.organizationId,
+      p_contato_id: input.contact_id,
+      p_empresa_id: r.empresaId,
+      p_dados: { no_cartao: true, ...(input.cargo?.trim() ? { cargo: input.cargo.trim() } : {}) },
+    });
     if (error) return { gravado: false, motivo: "não consegui vincular o contato à empresa agora." };
 
     return {

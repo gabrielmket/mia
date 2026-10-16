@@ -27,7 +27,7 @@ export function digitosDoCnpj(base12: string): string {
  * Um CNPJ que NÃO EXISTE: base `99NNNNNN0001` e o primeiro dígito verificador
  * trocado de propósito. Nenhuma Receita aceita, então não é de empresa nenhuma,
  * e a ficha da demonstração mostra um documento com cara de documento.
- * Só dígitos, como `crm_empresas.cnpj` guarda.
+ * Só dígitos, como `companies.normalized_cnpj` guarda (a semente formata o `cnpj`).
  */
 export function cnpjFalso(n: number): string {
   if (!Number.isInteger(n) || n < 1 || n > 999_999) throw new Error(`cnpjFalso: ${n}`);

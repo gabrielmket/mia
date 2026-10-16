@@ -136,7 +136,8 @@ async function conferirVinculos(
   };
   await Promise.all([
     conferir("crm_leads", vinculos.lead_id, "o negócio"),
-    conferir("crm_empresas", vinculos.empresa_id, "a empresa"),
+    // FORK MIA (.79, empresa única): a empresa é a do cadastro único.
+    conferir("companies", vinculos.empresa_id, "a empresa"),
     conferir("contacts", vinculos.contact_id, "o contato"),
   ]);
 }

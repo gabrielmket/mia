@@ -30,6 +30,7 @@ import {
 } from "@/lib/cartoes/cartao-aberto";
 import { UTM_SOURCES_DA_META } from "@/lib/conversoes/leitura-da-atribuicao";
 import { rotuloDoEnvioDaMeta } from "@/lib/conversoes-meta/rotulo";
+import { formatarCnpj, lerEmpresa } from "@/lib/empresas/fonte-unica";
 
 type Db = SupabaseClient;
 
@@ -310,21 +311,64 @@ export async function montarCartaoAberto(
   }
 
   // ─── empresa ───────────────────────────────────────────────────────────────
+  // FORK MIA (.79, empresa única): a empresa vem do cadastro único
+  // (`companies` + `mia_companies_extra`, lib/empresas/fonte-unica.ts).
   const idDaEmpresa = lead.empresa_id ?? contato?.empresa_id ?? null;
-  const empresaBruta = idDaEmpresa
-    ? await seguro(
-        db
-          .from("crm_empresas")
-          .select("id, nome, cnpj, telefone, site")
-          .eq("organization_id", org)
-          .eq("id", idDaEmpresa)
-          .maybeSingle(),
-        null as { id: string; nome: string; cnpj: string | null; telefone: string | null; site: string | null } | null,
-      )
-    : null;
+  let empresaBruta: { id: string; nome: string; cnpj: string | null; telefone: string | null; site: string | null } | null = null;
+  if (idDaEmpresa) {
+    try {
+      const lida = await lerEmpresa(db, org, idDaEmpresa);
+      empresaBruta = lida
+        ? { id: lida.id, nome: lida.nome, cnpj: formatarCnpj(lida.cnpj), telefone: lida.telefone, site: lida.site }
+        : null;
+    } catch {
+      empresaBruta = null;
+    }
+  }
   const empresa = lead.empresa_id ? empresaBruta : null;
   const empresaDoContato =
     !lead.empresa_id && empresaBruta ? { id: empresaBruta.id, nome: empresaBruta.nome } : null;
+
+  // As OUTRAS pessoas da empresa do negócio, para entrar nele com um clique e o
+  // papel que têm lá (protótipo: "ao adicionar alguém da empresa, entra o papel
+  // que a pessoa tem lá, e pode ser trocado").
+  const pessoasDaEmpresa: CartaoAberto["pessoasDaEmpresa"] = [];
+  if (lead.empresa_id) {
+    const vinculos = await seguro(
+      db
+        .from("company_people")
+        .select("person_id, papel, job_title")
+        .eq("organization_id", org)
+        .eq("company_id", lead.empresa_id)
+        .limit(200),
+      [] as Array<{ person_id: string; papel: string | null; job_title: string | null }>,
+    );
+    const porPessoa = new Map(vinculos.map((v) => [v.person_id, v]));
+    const contatosDaEmpresa = porPessoa.size
+      ? await seguro(
+          db
+            .from("contacts")
+            .select("id, name, display_name, phone_number, person_id")
+            .eq("organization_id", org)
+            .in("person_id", [...porPessoa.keys()])
+            .is("is_merged_into", null)
+            .eq("is_anonymized", false)
+            .order("created_at", { ascending: true }),
+          [] as Array<{ id: string; name: string | null; display_name: string | null; phone_number: string | null; person_id: string }>,
+        )
+      : [];
+    // Uma linha por PESSOA (vários números = uma pessoa); a pessoa que já está
+    // no negócio por qualquer um dos números fica de fora.
+    const jaNoNegocio = new Set(pessoas.map((p) => p.contatoId));
+    const pessoasNoNegocio = new Set(contatosDaEmpresa.filter((c) => jaNoNegocio.has(c.id)).map((c) => c.person_id));
+    const pessoasVistas = new Set<string>();
+    for (const c of contatosDaEmpresa) {
+      if (pessoasVistas.has(c.person_id) || pessoasNoNegocio.has(c.person_id)) continue;
+      pessoasVistas.add(c.person_id);
+      const v = porPessoa.get(c.person_id);
+      pessoasDaEmpresa.push({ contatoId: c.id, nome: nomeDoContato(c), papel: v?.papel ?? null, cargo: v?.job_title ?? null });
+    }
+  }
 
   // ─── compras ───────────────────────────────────────────────────────────────
   let compras: CartaoAberto["compras"] = null;
@@ -491,6 +535,7 @@ export async function montarCartaoAberto(
     })),
     empresa,
     empresaDoContato,
+    pessoasDaEmpresa,
     compras,
     agenda: doNegocio,
   };

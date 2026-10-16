@@ -1245,6 +1245,19 @@ export const AUDIT_ACTIONS = [
   // dedicada `PATCH /contacts/[id]/carteira` (#2591) — a escrita é do servidor,
   // então o audit é a única trilha de quem mudou o dono.
   "contact.carteira_changed",
+  // FORK MIA (.79, empresa única, docs/fork/empresa-unica.md): o cadastro de
+  // empresa passou a ser o do upstream (`companies`), e as portas de escrita são
+  // as funções `fn_mia_*` da 9034. Quem criou, mudou, excluiu, consultou na
+  // Receita e quem ligou ou tirou uma pessoa de uma empresa.
+  "empresas.criada",
+  "empresas.editada",
+  "empresas.excluida",
+  "empresas.consultada_na_receita",
+  "empresas.pessoa_vinculada",
+  "empresas.pessoa_desvinculada",
+  // Vários números da mesma pessoa viram uma pessoa só (e o desfazer).
+  "contatos.numeros_juntados",
+  "contatos.numero_separado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

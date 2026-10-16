@@ -713,7 +713,7 @@ export function CRMSidePanel({ conversation }: Props) {
           {empresa && (
             <div className="text-xs text-muted-foreground">
               {/* FORK MIA — o nome da empresa leva à ficha dela. */}
-              <Link href={`/app/empresas/${empresa.id}`} className="underline-offset-2 hover:underline">
+              <Link href={`/app/companies/${empresa.id}`} className="underline-offset-2 hover:underline">
                 {empresa.nome}
               </Link>
               {empresa.cargo ? ` · ${empresa.cargo}` : ""}

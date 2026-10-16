@@ -43,7 +43,16 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type ModoDeVenda = "b2b" | "b2c";
+/**
+ * FORK MIA (.79, empresa única): o terceiro modo, `misto` ("os dois"), veio do
+ * protótipo aprovado em 15/10/2026 (tela 3). Para a tela ele é igual ao B2B
+ * (empresa aparece, sempre opcional); a diferença é de leitura humana: diz que
+ * a organização também vende para pessoa, e que contato sem empresa é o normal.
+ */
+export type ModoDeVenda = "b2b" | "misto" | "b2c";
+
+/** Os modos, na ordem em que a tela os oferece. */
+export const MODOS_DE_VENDA: readonly ModoDeVenda[] = ["b2b", "misto", "b2c"];
 
 /** O padrão. Ver o bloco acima: o que não tira nada de ninguém. */
 export const MODO_PADRAO: ModoDeVenda = "b2b";
@@ -58,7 +67,7 @@ export const MODO_PADRAO: ModoDeVenda = "b2b";
 export function lerModoDeVenda(settings: unknown): ModoDeVenda {
   if (!settings || typeof settings !== "object") return MODO_PADRAO;
   const bruto = (settings as { modo_de_venda?: unknown }).modo_de_venda;
-  return bruto === "b2c" || bruto === "b2b" ? bruto : MODO_PADRAO;
+  return bruto === "b2c" || bruto === "b2b" || bruto === "misto" ? bruto : MODO_PADRAO;
 }
 
 /**
@@ -69,7 +78,7 @@ export function lerModoDeVenda(settings: unknown): ModoDeVenda {
  * aparecer um terceiro modo, ele se decide aqui, uma vez.
  */
 export function mostraEmpresas(modo: ModoDeVenda | undefined): boolean {
-  return (modo ?? MODO_PADRAO) === "b2b";
+  return (modo ?? MODO_PADRAO) !== "b2c";
 }
 
 /**
@@ -80,7 +89,9 @@ export function mostraEmpresas(modo: ModoDeVenda | undefined): boolean {
  * renomeada — com o sintoma sendo a tela VOLTANDO a aparecer para quem não a
  * quer, em silêncio. É o mesmo cuidado que `MODULOS[].telas` já documenta.
  */
-export const TELA_DE_EMPRESAS = "/app/empresas";
+// FORK MIA (.79, empresa única): a tela é a do cadastro do upstream; a antiga
+// `/app/empresas` redireciona para cá (docs/fork/empresa-unica.md).
+export const TELA_DE_EMPRESAS = "/app/companies";
 
 /**
  * Lê o modo direto do banco, para quem não tem o `activeOrg` enriquecido.

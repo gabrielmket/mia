@@ -98,7 +98,6 @@ function idsDa(s: SementeDeDemonstracao) {
     usuario: (k: string) => id(`usuario:${k}`),
     agente: id(`agente:${s.agente.chave}`),
     canal: id("canal:whatsapp"),
-    empresa: (k: string) => id(`empresa:${k}`),
     companhia: (k: string) => id(`companhia:${k}`),
     pessoa: (k: string) => id(`pessoa:${k}`),
     vinculo: (k: string) => id(`vinculo:${k}`),
@@ -667,33 +666,40 @@ async function gravarProdutos(e: Escritor, { s, ID, org }: Contexto): Promise<vo
 }
 
 async function gravarEmpresasEContatos(e: Escritor, { s, ID, org, agora }: Contexto): Promise<void> {
+  // FORK MIA (.79, empresa única): UMA entidade de empresa, a do cadastro do
+  // upstream (`companies`), com o que é só nosso ao lado (`mia_companies_extra`).
+  // O id é o `companhia:<chave>` de sempre: a cópia da 9033 casou a empresa
+  // antiga (`crm_empresas`, id `empresa:<chave>`) com esta pelo nome, e
+  // reaplicar a semente grava por cima da mesma linha.
   for (const emp of s.empresas) {
-    // As DUAS entidades de empresa do produto: a da MIA (`crm_empresas`, a da
-    // ficha do contato e do card) e a do módulo B2B do upstream (`companies` +
-    // `people`, a da prospecção).
-    await gravar(e, "public.crm_empresas", {
-      id: ID.empresa(emp.chave),
-      organization_id: org,
-      nome: emp.nome,
-      ...(emp.cnpj ? { cnpj: emp.cnpj } : {}),
-      site: emp.site,
-      email: `contato@${slug(emp.nome)}.exemplo.invalid`,
-      endereco: `${emp.cidade} · ${emp.uf} (endereço fictício)`,
-      observacoes: emp.observacoes,
-      tags: emp.tags,
-      custom_fields: json({ setor: emp.setor, ...(emp.campos ?? {}) }),
-    });
+    const cnpj = emp.cnpj && emp.cnpj.length === 14 ? emp.cnpj : null;
     await gravar(e, "public.companies", {
       id: ID.companhia(emp.chave),
       organization_id: org,
       legal_name: `${emp.nome} (fictícia)`,
       trade_name: emp.nome,
+      cnpj: cnpj ? `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}` : null,
+      normalized_cnpj: cnpj,
       city: emp.cidade,
       state: emp.uf,
       email: `contato@${slug(emp.nome)}.exemplo.invalid`,
       enrichment_status: "completed",
       main_cnae_description: emp.setor,
     });
+    await gravar(
+      e,
+      "public.mia_companies_extra",
+      {
+        company_id: ID.companhia(emp.chave),
+        organization_id: org,
+        site: emp.site,
+        endereco: `${emp.cidade} · ${emp.uf} (endereço fictício)`,
+        observacoes: emp.observacoes,
+        tags: emp.tags,
+        custom_fields: json({ setor: emp.setor, ...(emp.campos ?? {}) }),
+      },
+      { conflito: "company_id" },
+    );
   }
 
   // A origem do contato é a do negócio mais antigo dele.
@@ -707,21 +713,63 @@ async function gravarEmpresasEContatos(e: Escritor, { s, ID, org, agora }: Conte
     }
   }
 
+  // A PESSOA de cada contato (vários números = uma pessoa): a do próprio
+  // contato, ou a de quem ele é outro número. Só quem tem empresa precisa dela.
+  const porChave = new Map(s.contatos.map((c) => [c.chave, c]));
+  const donoDaPessoa = (c: (typeof s.contatos)[number]) => (c.mesmaPessoaQue ? (porChave.get(c.mesmaPessoaQue) ?? c) : c);
+
+  // Pessoas e vínculos ANTES dos contatos: o contato nasce já apontando para a
+  // pessoa, e o gatilho da 9034 encontra o vínculo pronto.
+  for (const c of s.contatos) {
+    if (c.mesmaPessoaQue) continue;
+    if (!c.empresa && !c.tambemEm?.length) continue;
+    const pessoa = ID.pessoa(c.chave);
+    await gravar(e, "public.people", {
+      id: pessoa,
+      organization_id: org,
+      full_name: c.nome,
+      normalized_name: slug(c.nome).replace(/-/g, " "),
+      email: c.comEmail ? emailFalso(c.nome) : null,
+    });
+    const vinculos = [
+      ...(c.empresa
+        ? [{ empresa: c.empresa, papel: c.papel ?? (c.decisor ? "decisor" : null), cargo: c.cargo ?? null, setor: c.setor ?? null, principal: c.decisor === true, id: ID.vinculo(c.chave) }]
+        : []),
+      ...(c.tambemEm ?? []).map((v) => ({
+        empresa: v.empresa,
+        papel: v.papel ?? null,
+        cargo: v.cargo ?? null,
+        setor: null,
+        principal: false,
+        id: ID.vinculo(`${c.chave}:${v.empresa}`),
+      })),
+    ];
+    for (const v of vinculos) {
+      await gravar(
+        e,
+        "public.company_people",
+        {
+          id: v.id,
+          organization_id: org,
+          company_id: ID.companhia(v.empresa),
+          person_id: pessoa,
+          job_title: v.cargo,
+          department: v.setor,
+          papel: v.papel,
+          is_decision_maker: v.papel === "decisor",
+          is_primary: v.principal,
+        },
+        { conflito: "company_id, person_id" },
+      );
+    }
+  }
+
   for (const c of s.contatos) {
     const origem = origemDoContato.get(c.chave);
     const o = origem ? ORIGENS[origem.origem] : null;
     const criado = new Date(agora.getTime() - ((origem?.criadoHaDias ?? 30) + 1) * DIA);
-    let pessoa: string | null = null;
-    if (c.empresa) {
-      pessoa = ID.pessoa(c.chave);
-      await gravar(e, "public.people", {
-        id: pessoa,
-        organization_id: org,
-        full_name: c.nome,
-        normalized_name: slug(c.nome).replace(/-/g, " "),
-        email: c.comEmail ? emailFalso(c.nome) : null,
-      });
-    }
+    const dono = donoDaPessoa(c);
+    const temPessoa = Boolean(dono.empresa || dono.tambemEm?.length);
     await gravar(
       e,
       "public.contacts",
@@ -735,32 +783,18 @@ async function gravarEmpresasEContatos(e: Escritor, { s, ID, org, agora }: Conte
         tags: [...new Set([...(c.tags ?? []), ...(o?.tags ?? [])])],
         source: o?.source ?? "manual",
         source_metadata: json(o ? o.metadata(c.chave, s) : {}),
-        empresa_id: c.empresa ? ID.empresa(c.empresa) : null,
-        cargo: c.cargo ?? null,
-        setor: c.setor ?? null,
-        person_id: pessoa,
+        // O espelho da empresa do cartão (9034): a mesma que o vínculo diz.
+        empresa_id: dono.empresa ? ID.companhia(dono.empresa) : null,
+        cargo: dono.empresa ? (dono.cargo ?? null) : null,
+        setor: dono.empresa ? (dono.setor ?? null) : null,
+        papel_na_empresa: dono.empresa ? (dono.papel ?? (dono.decisor ? "decisor" : null)) : null,
+        principal_na_empresa: Boolean(dono.empresa && dono.decisor),
+        person_id: temPessoa ? ID.pessoa(dono.chave) : null,
         created_at: criado,
         last_activity_at: new Date(agora.getTime() - Math.min(origem?.criadoHaDias ?? 30, 3) * DIA),
       },
       { manter: ["created_at"] },
     );
-    if (c.empresa && pessoa) {
-      await gravar(
-        e,
-        "public.company_people",
-        {
-          id: ID.vinculo(c.chave),
-          organization_id: org,
-          company_id: ID.companhia(c.empresa),
-          person_id: pessoa,
-          job_title: c.cargo ?? null,
-          department: c.setor ?? null,
-          is_decision_maker: c.decisor === true,
-          is_primary: c.decisor === true,
-        },
-        { conflito: "company_id, person_id" },
-      );
-    }
   }
 }
 
@@ -875,7 +909,7 @@ async function gravarNegocios(e: Escritor, { s, ID, org, agora }: Contexto, etap
           tags: [...new Set([...origem.tags, ...(n.tags ?? [])])],
           created_at: criado,
           stage_changed_at: naEtapa,
-          empresa_id: contato.empresa ? ID.empresa(contato.empresa) : null,
+          empresa_id: contato.empresa ? ID.companhia(contato.empresa) : null,
         },
         { manter: ["created_at"] },
       );
@@ -1402,7 +1436,7 @@ $semente$`);
         nome_curto: modelo.nome_curto,
         categoria: modelo.categoria,
         lead_id: o.negocio ? ID.negocio(chaveDoFunil, o.negocio) : null,
-        empresa_id: o.empresa ? ID.empresa(o.empresa) : null,
+        empresa_id: o.empresa ? ID.companhia(o.empresa) : null,
         contact_id: o.contato ? ID.contato(o.contato) : null,
         quem_entrega: modelo.quem_entrega,
         recorrencia: modelo.recorrencia,
@@ -1505,8 +1539,9 @@ async function neutralizarOsEventos(e: Escritor, { org }: Contexto): Promise<voi
 /** As tabelas que a semente grava, na ordem em que o resumo as mostra. */
 export const TABELAS_DA_SEMENTE = [
   "user_organizations",
-  "crm_empresas",
   "companies",
+  "mia_companies_extra",
+  "people",
   "company_people",
   "contacts",
   "crm_pipelines",

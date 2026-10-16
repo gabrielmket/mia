@@ -150,7 +150,7 @@ export const tenantSchema = z.object({
    * pede empresa/cargo/setor e se a IA ganha a capacidade de anotar a empresa
    * do cliente.
    */
-  modo_de_venda: z.enum(["b2b", "b2c"]).optional(),
+  modo_de_venda: z.enum(["b2b", "misto", "b2c"]).optional(),
 });
 export type TenantInput = z.infer<typeof tenantSchema>;
 
