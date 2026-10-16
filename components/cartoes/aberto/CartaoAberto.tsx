@@ -170,7 +170,7 @@ export function CartaoAberto({
           )}
           <span aria-hidden>›</span>
           {empresaDoNegocio ? (
-            <Link href={`/app/empresas/${empresaDoNegocio.id}`} className="hover:text-text hover:underline">
+            <Link href={`/app/companies/${empresaDoNegocio.id}`} className="hover:text-text hover:underline">
               {empresaDoNegocio.nome}
             </Link>
           ) : (
@@ -341,7 +341,7 @@ export function CartaoAberto({
                     agente ficam no Foco. */}
                 <SecaoDeObrigacoes escopo={{ tipo: "negocio", id: lead.id }} mostrarPropostas={false} id="documentos-do-negocio" />
                 <PessoasDoNegocio lead={lead} cartao={dados} pipelineId={pipelineId} />
-                <EmpresaDoNegocio empresa={dados.empresa} />
+                <EmpresaDoNegocio empresa={dados.empresa} lead={lead} pipelineId={pipelineId} />
                 <div ref={compras}>
                   <HistoricoDeCompras resumo={dados.compras} modo="negocio" id="compras-do-negocio" />
                 </div>

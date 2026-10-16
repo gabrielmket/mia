@@ -6,7 +6,10 @@
  * Empresa OPCIONAL (regra do Gabriel, 30/09: "o contato pode ser vinculado a uma
  * empresa ou não"): sem empresa, nenhum campo vazio — só o link discreto
  * "Vincular a uma empresa"; e quem vende só a pessoas (modo B2C) não vê nada de
- * empresa. Depois: negócios (os dele e os em que está envolvido), conversas,
+ * empresa. Desde a .79 (empresa única, protótipo aprovado em 15/10/2026, tela
+ * 3): o contato pode estar em VÁRIAS empresas, com papel e cargo em cada uma, e
+ * uma delas aparece no cartão; e vários números da mesma pessoa são uma pessoa
+ * só (cada número segue com a sua conversa). Depois: negócios (os dele e os em que está envolvido), conversas,
  * estágio do ciclo, resumo e memória da IA, agenda, tarefas e histórico de
  * compras. Os dados propostos pela IA para aprovar continuam no topo da página
  * (`PropostasDeDado`, do upstream).
@@ -24,7 +27,12 @@ import { useMostraEmpresas } from "@/hooks/useMostraEmpresas";
 import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useTasks } from "@/hooks/tasks/useTasks";
-import { useFichaDoContato, useVincularEmpresa } from "@/hooks/cartoes/useFichas";
+import { useFichaDoContato } from "@/hooks/cartoes/useFichas";
+import { useDesvincularPessoa, useJuntarNumeros, useSepararNumero, useVincularPessoa } from "@/hooks/useEmpresas";
+import { SeletorDeContato } from "@/components/kanban/SeletorDeContato";
+import { phoneForDisplay } from "@/lib/channels/phone-variants";
+import type { Contact } from "@/lib/types/contacts";
+import { apiClient } from "@/lib/api/client";
 import { SeletorDeEmpresa } from "@/components/empresas/SeletorDeEmpresa";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
 import { HistoricoDeCompras } from "@/components/cartoes/HistoricoDeCompras";
@@ -69,6 +77,7 @@ export function FichaConectadaDoContato({ contactId, anonimizado }: { contactId:
     <div className="grid gap-x-6 lg:grid-cols-2" data-testid="ficha-conectada-do-contato">
       <div className="min-w-0">
         <Ciclo estagio={f.estagio} temCompra={Boolean(f.compras)} />
+        {!anonimizado ? <NumerosDaPessoa contactId={contactId} ficha={f} /> : null}
         {mostraEmpresa && !anonimizado ? <EmpresaDoContato contactId={contactId} ficha={f} /> : null}
         <NegociosDoContato contactId={contactId} ficha={f} />
         <ConversasDoContato ficha={f} />
@@ -81,7 +90,7 @@ export function FichaConectadaDoContato({ contactId, anonimizado }: { contactId:
               <p className="text-[11px] text-text-muted">
                 {t("A empresa soma")} {f.comprasDaEmpresa.quantidade} {t("compras")} ·{" "}
                 {valorCurto(f.comprasDaEmpresa.totalCents, f.comprasDaEmpresa.moeda)} {t("com todos os contatos")} ·{" "}
-                <Link className="underline-offset-2 hover:underline" href={`/app/empresas/${f.empresa.id}`}>
+                <Link className="underline-offset-2 hover:underline" href={`/app/companies/${f.empresa.id}`}>
                   {t("Ver na ficha da empresa")}
                 </Link>
               </p>
@@ -126,36 +135,147 @@ function Ciclo({ estagio, temCompra }: { estagio: string | null; temCompra: bool
   );
 }
 
+/** O `<select>` das fichas: 44px e 16px no celular, como `components/ui/input.tsx`. */
+const SELECT =
+  "min-h-11 w-full rounded-md border border-border bg-background px-2 text-base lg:min-h-0 lg:h-8 lg:text-xs";
+
+/**
+ * FORK MIA (.79) — os números da MESMA pessoa (`contacts.person_id`). Cada um
+ * segue com a sua conversa; a ficha, as empresas e os negócios são um só.
+ * Juntar soma as empresas dos dois; separar leva uma cópia delas.
+ */
+function NumerosDaPessoa({ contactId, ficha }: { contactId: string; ficha: FichaDoContato }) {
+  const t = useT();
+  const juntar = useJuntarNumeros();
+  const separar = useSepararNumero();
+  const [juntando, setJuntando] = useState(false);
+  const [outro, setOutro] = useState<Contact | null>(null);
+  const outros = ficha.outrosNumeros ?? [];
+
+  if (outros.length === 0 && !juntando) {
+    return (
+      <p className="border-b border-border py-3 text-xs">
+        <button type="button" className="min-h-11 text-accent underline-offset-2 hover:underline lg:min-h-0" onClick={() => setJuntando(true)}>
+          + {t("Outro número desta pessoa")}
+        </button>
+      </p>
+    );
+  }
+
+  return (
+    <Secao titulo={t("Números desta pessoa")} contagem={outros.length + 1} testid="numeros-da-pessoa">
+      {outros.length > 0 ? (
+        <>
+          <p className="mb-1 text-[11px] text-text-muted">
+            {t("{n} números, a mesma pessoa. Cada número continua com a sua conversa; a ficha, a empresa e os negócios são um só.").replace(
+              "{n}",
+              String(outros.length + 1),
+            )}
+          </p>
+          <ul className="space-y-1 text-xs">
+            {outros.map((o) => (
+              <li key={o.id}>
+                <Link href={`/app/contacts/${o.id}`} className="hover:underline">
+                  {o.telefone ? phoneForDisplay(o.telefone) : (o.nome ?? t("Contato"))}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {juntando ? (
+        <div className="mt-2 space-y-2 rounded-md border border-border p-2 text-xs" data-testid="juntar-numeros">
+          <SeletorDeContato escolhido={outro} onEscolher={setOutro} />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              disabled={!outro || outro.id === contactId || juntar.isPending}
+              onClick={() =>
+                outro &&
+                juntar.mutate(
+                  { contatoId: contactId, outroContatoId: outro.id },
+                  {
+                    onSuccess: () => {
+                      setOutro(null);
+                      setJuntando(false);
+                    },
+                  },
+                )
+              }
+            >
+              {t("É a mesma pessoa")}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setJuntando(false)}>
+              {t("Cancelar")}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button size="sm" variant="ghost" onClick={() => setJuntando(true)}>
+            {t("Juntar outro número")}
+          </Button>
+          {outros.length > 0 ? (
+            <Button size="sm" variant="ghost" disabled={separar.isPending} onClick={() => separar.mutate(contactId)}>
+              {t("Separar este número")}
+            </Button>
+          ) : null}
+        </div>
+      )}
+    </Secao>
+  );
+}
+
+/**
+ * FORK MIA — as EMPRESAS do contato (desde a .79, várias). Cada vínculo com
+ * papel (lista fechada) e cargo; a do cartão marcada; "Mostrar esta no cartão"
+ * quando há mais de uma; tirar da empresa não mexe nos negócios de antes.
+ */
 function EmpresaDoContato({ contactId, ficha }: { contactId: string; ficha: FichaDoContato }) {
   const t = useT();
-  const vincular = useVincularEmpresa();
+  const vincular = useVincularPessoa();
+  const desvincular = useDesvincularPessoa();
   const [editando, setEditando] = useState(false);
-  const [empresaId, setEmpresaId] = useState<string | null>(ficha.empresa?.id ?? null);
-  const [cargo, setCargo] = useState(ficha.empresa?.cargo ?? "");
-  const [papel, setPapel] = useState<Papel | "">(ehPapel(ficha.empresa?.papel) ? (ficha.empresa!.papel as Papel) : "");
-  const [principal, setPrincipal] = useState(ficha.empresa?.principal ?? false);
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
+  const [cargo, setCargo] = useState("");
+  const [papel, setPapel] = useState<Papel | "">("usuario");
+  const [principal, setPrincipal] = useState(false);
+  const empresas = ficha.empresas ?? [];
   const abertosSemEmpresa = ficha.negocios.filter(
     (n) => n.status === "open" && n.envolvidoComo === null && !n.empresaId,
   );
   const [ligarNegocios, setLigarNegocios] = useState(true);
 
   const salvar = () =>
+    empresaId &&
     vincular.mutate(
       {
-        contatoId: contactId,
         empresaId,
+        contatoId: contactId,
         cargo: cargo.trim() || null,
         papel: papel || null,
         principal,
-        ligarNegocios: empresaId && ligarNegocios ? abertosSemEmpresa.map((n) => n.id) : [],
       },
-      { onSuccess: () => setEditando(false) },
+      {
+        onSuccess: async () => {
+          if (ligarNegocios) {
+            for (const n of abertosSemEmpresa) {
+              await apiClient.patch(`/api/v1/leads/${n.id}`, { empresa_id: empresaId });
+            }
+          }
+          setEmpresaId(null);
+          setCargo("");
+          setPapel("usuario");
+          setPrincipal(false);
+          setEditando(false);
+        },
+      },
     );
 
-  if (!ficha.empresa && !editando) {
+  if (empresas.length === 0 && !editando) {
     return (
       <p className="border-b border-border py-3 text-xs">
-        <button type="button" className="text-accent underline-offset-2 hover:underline" onClick={() => setEditando(true)}>
+        <button type="button" className="min-h-11 text-accent underline-offset-2 hover:underline lg:min-h-0" onClick={() => setEditando(true)}>
           + {t("Vincular a uma empresa")}
         </button>
       </p>
@@ -163,62 +283,73 @@ function EmpresaDoContato({ contactId, ficha }: { contactId: string; ficha: Fich
   }
 
   return (
-    <Secao titulo={t("Empresa")} testid="empresa-do-contato">
-      {ficha.empresa && !editando ? (
-        <>
-          <p className="mb-1 text-xs">
-            <Link href={`/app/empresas/${ficha.empresa.id}`} className="font-medium text-text hover:underline">
-              {ficha.empresa.nome}
-            </Link>
-            {ficha.empresa.principal ? (
-              <span className="ml-1 rounded-full bg-surface-muted px-1.5 text-[10px] text-text-muted">{t("principal")}</span>
-            ) : null}
-          </p>
-          <Pares>
-            {ficha.empresa.cnpj ? <Par rotulo={t("CNPJ")}>{ficha.empresa.cnpj}</Par> : null}
-            <Par rotulo={t("Cargo")}>{ficha.empresa.cargo ?? <span className="text-text-muted">{t("não informado")}</span>}</Par>
-            <Par rotulo={t("Papel")}>
-              {ehPapel(ficha.empresa.papel) ? t(ROTULO_DO_PAPEL[ficha.empresa.papel]) : <span className="text-text-muted">{t("não informado")}</span>}
-            </Par>
-          </Pares>
-          <div className="mt-2 flex flex-wrap gap-1">
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditando(true)}>
-              {t("Alterar vínculo")}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs"
-              disabled={vincular.isPending}
-              onClick={() => vincular.mutate({ contatoId: contactId, empresaId: null, papel: null, principal: false })}
-            >
-              {t("Desvincular")}
-            </Button>
-          </div>
-        </>
+    <Secao titulo={empresas.length > 1 ? t("Empresas") : t("Empresa")} contagem={empresas.length || null} testid="empresa-do-contato">
+      {empresas.length === 0 ? (
+        <p className="text-xs text-text-muted">{t("Sem empresa. É o normal para quem compra como pessoa física.")}</p>
       ) : (
-        <div className="space-y-2 text-xs" data-testid="vincular-empresa">
-          <p className="text-text-muted">
-            {t("Opcional. Sem empresa, tudo funciona igual. Uma empresa tem vários contatos.")}
-          </p>
+        <ul className="space-y-3">
+          {empresas.map((v) => (
+            <li key={v.id} className="text-xs" data-testid="vinculo-do-contato">
+              <p>
+                <Link href={`/app/companies/${v.id}`} className="font-medium text-text hover:underline">
+                  {v.nome}
+                </Link>
+                {empresas.length > 1 && v.noCartao ? (
+                  <span className="ml-1 rounded-full bg-accent/10 px-1.5 text-[10px] text-accent">★ {t("a que aparece no cartão")}</span>
+                ) : null}
+              </p>
+              <p className="text-[11px] text-text-muted">
+                {[v.cargo ?? t("cargo não informado"), v.principal ? t("contato principal da empresa") : null].filter(Boolean).join(" · ")}
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <select
+                  aria-label={`${t("Papel")}: ${v.nome}`}
+                  value={ehPapel(v.papel) ? v.papel : ""}
+                  disabled={vincular.isPending}
+                  onChange={(ev) => vincular.mutate({ empresaId: v.id, contatoId: contactId, papel: (ev.target.value || null) as Papel | null })}
+                  className={cn(SELECT, "w-auto")}
+                >
+                  <option value="">{t("Sem papel definido")}</option>
+                  {PAPEIS.map((p) => (
+                    <option key={p} value={p}>
+                      {t(ROTULO_DO_PAPEL[p])}
+                    </option>
+                  ))}
+                </select>
+                {empresas.length > 1 && !v.noCartao ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={vincular.isPending}
+                    onClick={() => vincular.mutate({ empresaId: v.id, contatoId: contactId, noCartao: true })}
+                  >
+                    {t("Mostrar esta no cartão")}
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={desvincular.isPending}
+                  onClick={() => desvincular.mutate({ empresaId: v.id, contatoId: contactId })}
+                >
+                  {t("Tirar da empresa")}
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {editando ? (
+        <div className="mt-3 space-y-2 text-xs" data-testid="vincular-empresa">
+          <p className="text-text-muted">{t("Opcional. Sem empresa, tudo funciona igual. Uma empresa tem vários contatos.")}</p>
           <SeletorDeEmpresa id="ficha-empresa" valor={empresaId} aoMudar={setEmpresaId} />
           <div className="grid gap-2 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="ficha-cargo" className="text-xs">
-                {t("Cargo")}
-              </Label>
-              <Input id="ficha-cargo" value={cargo} onChange={(e) => setCargo(e.target.value)} className="h-8 text-xs" placeholder={t("Ex.: sócia, gerente")} />
-            </div>
             <div className="space-y-1">
               <Label htmlFor="ficha-papel" className="text-xs">
                 {t("Papel")}
               </Label>
-              <select
-                id="ficha-papel"
-                value={papel}
-                onChange={(e) => setPapel(e.target.value as Papel | "")}
-                className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs"
-              >
+              <select id="ficha-papel" value={papel} onChange={(e) => setPapel(e.target.value as Papel | "")} className={SELECT}>
                 <option value="">{t("Sem papel definido")}</option>
                 {PAPEIS.map((p) => (
                   <option key={p} value={p}>
@@ -227,26 +358,38 @@ function EmpresaDoContato({ contactId, ficha }: { contactId: string; ficha: Fich
                 ))}
               </select>
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="ficha-cargo" className="text-xs">
+                {t("Cargo (opcional)")}
+              </Label>
+              <Input id="ficha-cargo" value={cargo} onChange={(e) => setCargo(e.target.value)} placeholder={t("Ex.: sócia, gerente")} />
+            </div>
           </div>
-          <label className="flex items-center gap-2">
+          <label className="flex min-h-11 items-center gap-2 lg:min-h-0">
             <input type="checkbox" checked={principal} onChange={(e) => setPrincipal(e.target.checked)} />
             {t("Contato principal desta empresa")}
           </label>
           {abertosSemEmpresa.length > 0 ? (
-            <label className="flex items-center gap-2">
+            <label className="flex min-h-11 items-center gap-2 lg:min-h-0">
               <input type="checkbox" checked={ligarNegocios} onChange={(e) => setLigarNegocios(e.target.checked)} />
               {t("Ligar também os negócios abertos desta pessoa a esta empresa")} ({abertosSemEmpresa.length})
             </label>
           ) : null}
-          <div className="flex gap-1">
-            <Button size="sm" className="h-7 text-xs" disabled={vincular.isPending || !empresaId} onClick={salvar}>
-              {t("Vincular")}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={vincular.isPending || !empresaId || empresas.some((x) => x.id === empresaId)} onClick={salvar}>
+              {t("Vincular a esta empresa")}
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditando(false)}>
+            <Button size="sm" variant="outline" onClick={() => setEditando(false)}>
               {t("Cancelar")}
             </Button>
           </div>
         </div>
+      ) : (
+        <p className="mt-2 text-xs">
+          <button type="button" className="min-h-11 text-accent underline-offset-2 hover:underline lg:min-h-0" onClick={() => setEditando(true)}>
+            + {t("Vincular a outra empresa")}
+          </button>
+        </p>
       )}
     </Secao>
   );

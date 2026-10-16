@@ -84,7 +84,7 @@ const empresa: AreaDoChecklist = {
     } else {
       r.pronto.push(`Nome: ${org.display_name}.`);
     }
-    r.pronto.push(`Fuso ${org.timezone}, moeda ${org.currency ?? "BRL"}, venda ${modo === "b2b" ? "para empresas (B2B)" : "para pessoas (B2C)"}.`);
+    r.pronto.push(`Fuso ${org.timezone}, moeda ${org.currency ?? "BRL"}, venda ${modo === "b2b" ? "para empresas (B2B)" : modo === "misto" ? "para empresas e para pessoas" : "para pessoas (B2C)"}.`);
     r.pronto.push(
       org.media_retention_enforced
         ? `Limpeza automática de mídia ligada: mídia com mais de ${org.media_retention_days ?? 365} dias é apagada.`

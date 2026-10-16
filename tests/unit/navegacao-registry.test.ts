@@ -185,7 +185,8 @@ describe("hubSections", () => {
       // FORK MIA (.58): Campanhas saiu do hub — virou o caminho "Número por QR"
       // do Broadcast, que é a porta das duas (docs/fork/broadcast-unificado.md).
       "/app/broadcast",
-      "/app/empresas",
+      // FORK MIA (.79, empresa única): o card "Empresas" do fork
+      // (`/app/empresas`) saiu; a tela é a do upstream, logo abaixo.
       "/app/contacts",
       "/app/companies",
       "/app/people",
@@ -207,7 +208,15 @@ describe("hubSections", () => {
   });
 
   it("empresas, pessoas e importação só existem com o módulo crm_b2b ligado (doc 68)", () => {
-    const B2B = ["/app/companies", "/app/people", "/app/imports"];
+    // FORK MIA (.79, empresa única): Empresas (`/app/companies`) é o cadastro
+    // ÚNICO de empresa do fork e existe sem o módulo; quem a esconde é o modo de
+    // venda B2C (lib/navigation/interface.ts). Pessoas e Importação seguem atrás
+    // do módulo, como no upstream.
+    const B2B = ["/app/people", "/app/imports"];
+    const hrefsSemModulo = hubSections("crm", true, null, undefined, undefined, undefined, []).flatMap((s) =>
+      s.items.map((i) => i.href),
+    );
+    expect(hrefsSemModulo).toContain("/app/companies");
     const hrefs = (modulos: readonly ModuloOpcional[]) =>
       // FORK MIA: o 5º e o 6º parâmetros são os NOSSOS (módulos contratados e modo
       // de venda); os módulos da instalação vêm em 7º. Ver `hubSections`.

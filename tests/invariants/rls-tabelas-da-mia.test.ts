@@ -38,6 +38,11 @@ const LIDAS_PELO_CLIENTE = [
   "broadcasts",
   "broadcast_recipients",
   "crm_empresas",
+  // .79 — empresa única (9032): o que é só nosso ao lado de `companies`, a lápide
+  // de fusão e o de-para da cópia. A sessão lê; a escrita é das funções da 9034.
+  "mia_companies_extra",
+  "mia_companies_mescladas",
+  "mia_companies_de_para",
   // .60 — os leads dos formulários da Meta (migration 9003): gerente lê, só o
   // servidor escreve.
   "mia_leads_da_meta_config",
@@ -87,6 +92,13 @@ const SO_A_PLATAFORMA_ESCREVE = [
   "mia_agenda_microsoft_compromissos",
   // 9015 — os tipos de agendamento que são reunião do Teams.
   "mia_agenda_tipos_com_teams",
+  // .79 — empresa única: `crm_empresas` está APOSENTADA (9033: os dados foram para
+  // `companies`, a sessão só lê até a entrega 5 tirá-la de vez), e as três tabelas
+  // ao lado são escritas só pelas funções definer da 9034.
+  "crm_empresas",
+  "mia_companies_extra",
+  "mia_companies_mescladas",
+  "mia_companies_de_para",
 ] as const;
 
 /** As que a sessão do cliente ESCREVE, cada uma com a linha que tentaria gravar no vizinho. */
@@ -100,10 +112,6 @@ const ESCRITAS_PELO_CLIENTE: ReadonlyArray<{ tabela: string; insertNoVizinho: st
     tabela: "broadcasts",
     insertNoVizinho: `insert into public.broadcasts (organization_id, nome, template_name, template_language)
                       values ('${ORG_B}', 'intrusa', 'tpl', 'pt_BR')`,
-  },
-  {
-    tabela: "crm_empresas",
-    insertNoVizinho: `insert into public.crm_empresas (organization_id, nome) values ('${ORG_B}', 'Intrusa Ltda')`,
   },
 ];
 
@@ -134,6 +142,16 @@ function semear(org: string, gestor: string, tag: string): string {
     insert into public.broadcast_recipients (organization_id, broadcast_id, phone_e164)
       select '${org}', b.id, '+550000000000${tag === "a" ? "1" : "2"}' from b;
     insert into public.crm_empresas (organization_id, nome) values ('${org}', 'Empresa ${tag}');
+    -- .79 (9032): a empresa do cadastro único, com o que é só nosso ao lado, uma
+    -- lápide de fusão e uma linha do de-para da cópia.
+    insert into public.companies (id, organization_id, trade_name)
+      values ('90019001-7777-4000-8000-00000000000${tag}', '${org}', 'Empresa única ${tag}');
+    insert into public.mia_companies_extra (company_id, organization_id, site)
+      values ('90019001-7777-4000-8000-00000000000${tag}', '${org}', 'empresa-${tag}.exemplo');
+    insert into public.mia_companies_mescladas (id, organization_id, mesclada_com, motivo, nome)
+      values ('90019001-7777-4000-8000-0000000000e${tag}', '${org}', '90019001-7777-4000-8000-00000000000${tag}', 'mesclagem', 'Lápide ${tag}');
+    insert into public.mia_companies_de_para (crm_empresa_id, organization_id, company_id, como)
+      values ('90019001-7777-4000-8000-0000000000d${tag}', '${org}', '90019001-7777-4000-8000-00000000000${tag}', 'copiada');
     insert into public.meta_onboardings (waba_id, organization_id) values ('mia-rls-waba-${tag}', '${org}');
     insert into public.mia_leads_da_meta_config (organization_id, ativo) values ('${org}', true);
     -- .61 (9004): formulário ativo só existe para Página da própria empresa, e o

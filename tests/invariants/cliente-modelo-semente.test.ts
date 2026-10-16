@@ -363,6 +363,21 @@ describe("o que a demonstração precisa mostrar", () => {
     ).toBeGreaterThanOrEqual(3);
   });
 
+  it("empresa única (.79): a pessoa em duas empresas, dois números da mesma pessoa, e nada no cadastro antigo", async () => {
+    expect(
+      await valor<number>(`select max(n)::int from (select count(*) as n from public.company_people where organization_id = $1 group by person_id) x`),
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      await valor<number>(`select max(n)::int from (select count(*) as n from public.contacts where organization_id = $1 and person_id is not null group by person_id) x`),
+    ).toBeGreaterThanOrEqual(2);
+    // O espelho do contato concorda com o vínculo: toda empresa do cartão é um vínculo da pessoa.
+    expect(
+      await valor<number>(`select count(*)::int from public.contacts c where c.organization_id = $1 and c.empresa_id is not null
+                              and not exists (select 1 from public.company_people cp where cp.person_id = c.person_id and cp.company_id = c.empresa_id)`),
+    ).toBe(0);
+    expect(await valor<number>(`select count(*)::int from public.crm_empresas where organization_id = $1`)).toBe(0);
+  });
+
   it("⭐ conversa com a IA: qualificação, ficha, passagem para o comercial", async () => {
     expect(await valor<number>(`select count(*)::int from public.messages where organization_id = $1 and sent_via = 'ai'`)).toBeGreaterThan(10);
     expect(await valor<number>(`select count(*)::int from public.lead_state where organization_id = $1 and stage = 'qualified' and qualification ? 'budget'`)).toBeGreaterThan(1);

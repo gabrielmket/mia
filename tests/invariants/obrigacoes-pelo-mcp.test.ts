@@ -177,9 +177,10 @@ beforeAll(async () => {
     [ETAPA, ORG, FUNIL],
   );
   await pool.query(
-    `insert into public.crm_empresas (id, organization_id, nome, cnpj) values
-       ($1, $3, 'Padaria Trigo Dourado 9018', '11222333000181'),
-       ($2, $3, 'Transportadora Rota Sul 9018', '44555666000181')
+    // FORK MIA (.79, empresa única): a empresa é do cadastro único (`companies`).
+    `insert into public.companies (id, organization_id, trade_name, cnpj, normalized_cnpj) values
+       ($1, $3, 'Padaria Trigo Dourado 9018', '11.222.333/0001-81', '11222333000181'),
+       ($2, $3, 'Transportadora Rota Sul 9018', '44.555.666/0001-81', '44555666000181')
      on conflict (id) do nothing`,
     [PADARIA, TRANSPORTADORA, ORG],
   );

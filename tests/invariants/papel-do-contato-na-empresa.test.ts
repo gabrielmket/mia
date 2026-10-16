@@ -11,6 +11,10 @@ import { sql } from "./gov-helpers";
  *      redefinido aqui), junto com cargo e empresa — e o controle: sem anonimizar,
  *      nada muda.
  *
+ * Desde a empresa única (.79, 9032 a 9034) a empresa é do cadastro único
+ * (`companies`) e o papel mora no vínculo (`company_people.papel`); a coluna
+ * do contato é o espelho dele, com o mesmo vocabulário fechado.
+ *
  * Sem PII: nomes sintéticos.
  */
 const ORG = "90139013-0000-4000-8000-00000000000a";
@@ -22,7 +26,7 @@ beforeAll(() => {
   sql(`
     insert into public.organizations (id, slug, legal_name, display_name)
       values ('${ORG}', 'mia-9013', 'MIA 9013', 'MIA 9013') on conflict (id) do nothing;
-    insert into public.crm_empresas (id, organization_id, nome) values ('${EMPRESA}', '${ORG}', 'Empresa 9013')
+    insert into public.companies (id, organization_id, trade_name) values ('${EMPRESA}', '${ORG}', 'Empresa 9013')
       on conflict (id) do nothing;
     insert into public.contacts (id, organization_id, display_name, empresa_id, cargo, papel_na_empresa, principal_na_empresa) values
       ('${PESSOA}', '${ORG}', 'Pessoa 9013', '${EMPRESA}', 'Sócia', 'decisor', true),

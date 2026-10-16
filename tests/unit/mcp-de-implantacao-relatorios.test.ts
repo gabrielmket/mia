@@ -77,9 +77,10 @@ beforeEach(() => {
 
 const tabela = (nome: string) => cenario.banco.tabela(nome) as Array<Record<string, unknown>>;
 
-describe("a lista: 66 ferramentas, as duas do item 9", () => {
+describe("a lista: 67 ferramentas, as duas do item 9", () => {
   it("garantir pede `implantar_configuracao`; ver é leitura livre", () => {
-    expect(FERRAMENTAS).toHaveLength(66);
+    // 64 da .78, `plataforma_vincular_pessoas_a_empresas` da empresa única (.79) e as duas do montador (.80).
+    expect(FERRAMENTAS).toHaveLength(67);
     const operacao = (nome: string) => FERRAMENTAS.find((f) => f.name === nome)?.operacao;
     expect(operacao("plataforma_garantir_relatorios")).toBe("implantar_configuracao");
     expect(operacao("plataforma_ver_relatorios")).toBeNull();

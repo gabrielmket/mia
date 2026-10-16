@@ -1,13 +1,22 @@
 /**
  * IMPORTAR EMPRESAS pelo MCP de plataforma (`plataforma_importar_empresas`).
  *
- * O que se mede aqui: a tabela certa (`crm_empresas`, a das fichas e dos
- * cartões), a deduplicação por CNPJ e por nome, os dois modos de reexecução e a
- * recusa que ensina. Todo dado é fictício.
+ * O que se mede aqui: o cadastro certo (desde a .79, a empresa única:
+ * `companies` do upstream com o que é só nosso ao lado, gravado pela porta
+ * `fn_mia_gravar_empresa`), a deduplicação por CNPJ e por nome, os dois modos
+ * de reexecução e a recusa que ensina. Todo dado é fictício.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AUTOR, ORG, OUTRA_ORG, TOKEN, organizacaoDeTeste, type BancoDaMigracao } from "../helpers/banco-da-migracao";
+import {
+  AUTOR,
+  ORG,
+  OUTRA_ORG,
+  TOKEN,
+  empresasGravadas,
+  organizacaoDeTeste,
+  type BancoDaMigracao,
+} from "../helpers/banco-da-migracao";
 
 const auditSpy = vi.fn();
 vi.mock("@/lib/audit", async (original) => ({
@@ -32,7 +41,7 @@ beforeEach(() => {
 });
 
 describe("importar empresas: o caminho feliz", () => {
-  it("grava em crm_empresas, com o CNPJ só em dígitos e a autoria de quem criou o token", async () => {
+  it("grava no cadastro único (companies), com o CNPJ só em dígitos e a autoria de quem criou o token", async () => {
     const r = await importar([
       {
         nome: "Padaria Modelo LTDA",
@@ -47,24 +56,24 @@ describe("importar empresas: o caminho feliz", () => {
     expect(r).toMatchObject({ total: 1, criou: 1, atualizou: 0, ja_estava: 0, recusou: 0 });
     expect(r.organizacao).toEqual({ id: ORG, nome: "Cliente em Migração", demonstracao: false });
     expect(r.nada_foi_enviado).toContain("Nenhuma mensagem foi enviada");
-    expect(banco.tabela("crm_empresas")).toHaveLength(1);
-    expect(banco.tabela("crm_empresas")[0]).toMatchObject({
+    expect(empresasGravadas(banco)).toHaveLength(1);
+    expect(empresasGravadas(banco)[0]).toMatchObject({
       organization_id: ORG,
       nome: "Padaria Modelo LTDA",
       cnpj: "12345678000190",
       tags: ["atacado"],
       custom_fields: { segmento: "alimentação" },
-      created_by_user_id: AUTOR,
     });
-    // A outra representação de empresa do produto (`companies`, do módulo B2B) não é tocada.
-    expect(banco.tabela("companies")).toHaveLength(0);
-    // Importar empresa não emite evento nenhum.
-    expect(banco.chamadasRpc).toEqual([]);
+    expect(banco.tabela("companies")[0]).toMatchObject({ normalized_cnpj: "12345678000190", cnpj: "12.345.678/0001-90", created_by: AUTOR });
+    // Grava pela porta da 9034, e mais nada: importar empresa não emite evento.
+    expect(banco.chamadasRpc.map((c) => c.nome)).toEqual(["fn_mia_gravar_empresa"]);
+    // O cadastro antigo (`crm_empresas`, aposentado) não é tocado.
+    expect(banco.tabela("crm_empresas")).toHaveLength(0);
   });
 
   it("empresa sem CNPJ entra com o campo NULO, nunca vazio (o índice único trata '' como valor)", async () => {
     await importar([{ nome: "Oficina Exemplo ME" }, { nome: "Clínica Fictícia" }]);
-    expect(banco.tabela("crm_empresas").map((e) => e.cnpj)).toEqual([null, null]);
+    expect(banco.tabela("companies").map((e) => e.normalized_cnpj)).toEqual([null, null]);
   });
 });
 
@@ -81,7 +90,7 @@ describe("importar empresas: reexecução sem duplicar", () => {
 
     expect(r).toMatchObject({ criou: 0, atualizou: 0, ja_estava: 2, recusou: 0 });
     expect(banco.escritas).toHaveLength(escritasAntes);
-    expect(banco.tabela("crm_empresas")).toHaveLength(2);
+    expect(banco.tabela("companies")).toHaveLength(2);
   });
 
   it("CNPJ com e sem pontuação é a MESMA empresa", async () => {
@@ -89,7 +98,7 @@ describe("importar empresas: reexecução sem duplicar", () => {
     const r = await importar([{ nome: "Padaria Modelo (matriz)", cnpj: "12345678000190" }]);
 
     expect(r.itens[0]).toMatchObject({ desfecho: "ja_estava" });
-    expect(banco.tabela("crm_empresas")).toHaveLength(1);
+    expect(banco.tabela("companies")).toHaveLength(1);
     // O nome diferente não foi aplicado, e a resposta diz como aplicar.
     expect(r.itens[0]!.avisos?.join(" ")).toContain('quando_ja_existe: "atualizar"');
   });
@@ -99,9 +108,9 @@ describe("importar empresas: reexecução sem duplicar", () => {
     const r = await importar([{ nome: "padaria do ze", telefone: "(10) 3000-0003" }]);
 
     expect(r.itens[0]).toMatchObject({ desfecho: "atualizou" });
-    expect(banco.tabela("crm_empresas")).toHaveLength(1);
+    expect(banco.tabela("companies")).toHaveLength(1);
     // O nome guardado continua o que já estava; o telefone, que estava vazio, foi preenchido.
-    expect(banco.tabela("crm_empresas")[0]).toMatchObject({ nome: "Padaria do Zé LTDA", telefone: "(10) 3000-0003" });
+    expect(empresasGravadas(banco)[0]).toMatchObject({ nome: "Padaria do Zé LTDA", telefone: "(10) 3000-0003" });
   });
 
   it("a mesma empresa duas vezes na MESMA lista vira uma ficha só", async () => {
@@ -110,22 +119,22 @@ describe("importar empresas: reexecução sem duplicar", () => {
       { nome: "Padaria Modelo", cnpj: "12345678000190", site: "https://padaria.exemplo.invalid" },
     ]);
     expect(r.itens.map((i) => i.desfecho)).toEqual(["criou", "atualizou"]);
-    expect(banco.tabela("crm_empresas")).toHaveLength(1);
+    expect(banco.tabela("companies")).toHaveLength(1);
   });
 
   it("nome igual com CNPJ DIFERENTE é outra empresa (matriz e filial)", async () => {
     await importar([{ nome: "Rede Exemplo", cnpj: "11.111.111/0001-11" }]);
     const r = await importar([{ nome: "Rede Exemplo", cnpj: "11.111.111/0002-00" }]);
     expect(r.itens[0]).toMatchObject({ desfecho: "criou" });
-    expect(banco.tabela("crm_empresas")).toHaveLength(2);
+    expect(banco.tabela("companies")).toHaveLength(2);
   });
 
   it("o CNPJ que faltava é preenchido; o que já existe NUNCA é trocado, em modo nenhum", async () => {
     await importar([{ nome: "Oficina Exemplo ME" }]);
     const preencheu = await importar([{ nome: "Oficina Exemplo", cnpj: "22.222.222/0001-22" }]);
     expect(preencheu.itens[0]).toMatchObject({ desfecho: "atualizou" });
-    expect(banco.tabela("crm_empresas")[0]!.cnpj).toBe("22222222000122");
-    expect(banco.tabela("crm_empresas")).toHaveLength(1);
+    expect(empresasGravadas(banco)[0]!.cnpj).toBe("22222222000122");
+    expect(banco.tabela("companies")).toHaveLength(1);
   });
 
   it("'completar' só preenche o vazio; 'atualizar' substitui o que veio; etiqueta só soma", async () => {
@@ -136,7 +145,7 @@ describe("importar empresas: reexecução sem duplicar", () => {
     ]);
     expect(completar.itens[0]).toMatchObject({ desfecho: "atualizou" });
     expect(completar.itens[0]!.avisos?.join(" ")).toContain("telefone");
-    expect(banco.tabela("crm_empresas")[0]).toMatchObject({
+    expect(empresasGravadas(banco)[0]).toMatchObject({
       telefone: "(10) 3000-0001",
       site: "https://padaria.exemplo.invalid",
       tags: ["atacado", "vip"],
@@ -147,7 +156,7 @@ describe("importar empresas: reexecução sem duplicar", () => {
       { quando_ja_existe: "atualizar" },
     );
     expect(atualizar.itens[0]).toMatchObject({ desfecho: "atualizou" });
-    expect(banco.tabela("crm_empresas")[0]).toMatchObject({
+    expect(empresasGravadas(banco)[0]).toMatchObject({
       telefone: "(10) 3000-9999",
       // O que NÃO veio na lista fica como estava: importar nunca apaga.
       site: "https://padaria.exemplo.invalid",
@@ -156,32 +165,39 @@ describe("importar empresas: reexecução sem duplicar", () => {
   });
 
   it("empresa fundida (lápide) não é casada: o nome dela volta a ser uma empresa nova", async () => {
-    banco.tabela("crm_empresas").push({
+    // A fusão tira a perdedora de `companies`; a lápide mora ao lado.
+    banco.tabela("mia_companies_mescladas").push({
       id: "00000000-0000-4000-8000-00000000f001",
       organization_id: ORG,
       nome: "Padaria Antiga",
-      cnpj: null,
-      mesclada_em: "2026-01-01T00:00:00Z",
-      tags: [],
-      custom_fields: {},
+      mesclada_com: null,
     });
     const r = await importar([{ nome: "Padaria Antiga" }]);
     expect(r.itens[0]).toMatchObject({ desfecho: "criou" });
   });
 
   it("a empresa de OUTRA organização com o mesmo CNPJ não é a mesma", async () => {
-    banco.tabela("crm_empresas").push({
+    banco.tabela("companies").push({
       id: "00000000-0000-4000-8000-00000000f002",
       organization_id: OUTRA_ORG,
-      nome: "Padaria Modelo LTDA",
-      cnpj: "12345678000190",
-      mesclada_em: null,
-      tags: [],
-      custom_fields: {},
+      trade_name: "Padaria Modelo LTDA",
+      legal_name: null,
+      normalized_cnpj: "12345678000190",
     });
     const r = await importar([{ nome: "Padaria Modelo LTDA", cnpj: "12.345.678/0001-90" }]);
     expect(r.itens[0]).toMatchObject({ desfecho: "criou" });
-    expect(banco.tabela("crm_empresas").filter((e) => e.organization_id === ORG)).toHaveLength(1);
+    expect(empresasGravadas(banco).filter((e) => e.organization_id === ORG)).toHaveLength(1);
+  });
+});
+
+describe("importar empresas: nome parecido sem CNPJ só avisa (protótipo, 15/10/2026)", () => {
+  it("entra como empresa nova, e o aviso diz com qual ela parece e como juntar", async () => {
+    await importar([{ nome: "Padaria Trigo Dourado" }]);
+    const r = await importar([{ nome: "Trigo Dourado Panificadora" }]);
+    expect(r.itens[0]).toMatchObject({ desfecho: "criou" });
+    expect(r.itens[0]!.avisos?.join(" ")).toContain("Padaria Trigo Dourado");
+    expect(r.itens[0]!.avisos?.join(" ")).toContain("Mesclar");
+    expect(banco.tabela("companies")).toHaveLength(2);
   });
 });
 
@@ -199,7 +215,7 @@ describe("importar empresas: a recusa que ensina", () => {
     expect(r.itens[1]!.motivo).toContain("`cnpj`");
     expect(r.itens[1]!.motivo).toContain("14 dígitos");
     expect(r.itens[1]!.motivo).toContain("Exemplo que passa");
-    expect(banco.tabela("crm_empresas").map((e) => e.nome)).toEqual(["Padaria Modelo LTDA", "Oficina Exemplo ME"]);
+    expect(empresasGravadas(banco).map((e) => e.nome)).toEqual(["Padaria Modelo LTDA", "Oficina Exemplo ME"]);
   });
 
   it("recusa empresa sem nome, e-mail inválido, item que não é objeto e nome curto demais sem CNPJ", async () => {
@@ -218,7 +234,7 @@ describe("importar empresas: a recusa que ensina", () => {
     expect(r.itens[3]!.motivo).toContain("curto demais");
     expect(r.itens[4]!.motivo).toContain("`etiquetas`");
     expect(r.itens[4]!.motivo).toContain("lista");
-    expect(banco.tabela("crm_empresas")).toHaveLength(0);
+    expect(banco.tabela("companies")).toHaveLength(0);
   });
 
   it("organização que não existe: recusa a chamada inteira e diz como achar o id", async () => {
@@ -228,7 +244,7 @@ describe("importar empresas: a recusa que ensina", () => {
     await expect(importarEmpresas(ctx(), { organization_id: "cliente-x", empresas: [{ nome: "Padaria" }] })).rejects.toThrow(
       /organization_id/,
     );
-    expect(banco.tabela("crm_empresas")).toHaveLength(0);
+    expect(banco.tabela("companies")).toHaveLength(0);
   });
 
   it("lista vazia, lista que não é lista e lista acima do teto: recusa antes de gravar, dizendo o que fazer", async () => {
@@ -237,7 +253,7 @@ describe("importar empresas: a recusa que ensina", () => {
     const demais = Array.from({ length: TETO_DE_EMPRESAS + 1 }, (_, i) => ({ nome: `Empresa ${i}` }));
     await expect(importar(demais)).rejects.toThrow(new RegExp(`teto é ${TETO_DE_EMPRESAS}`));
     await expect(importar(demais)).rejects.toThrow(/Divida a lista/);
-    expect(banco.tabela("crm_empresas")).toHaveLength(0);
+    expect(banco.tabela("companies")).toHaveLength(0);
   });
 
   it("modo desconhecido é recusado, em vez de valer como 'atualizar'", async () => {
@@ -263,7 +279,7 @@ describe("importar empresas: o rastro", () => {
       total: 1,
       criou: 1,
     });
-    expect(linha.metadata.ids_criados).toEqual([banco.tabela("crm_empresas")[0]!.id]);
+    expect(linha.metadata.ids_criados).toEqual([banco.tabela("companies")[0]!.id]);
     const texto = JSON.stringify(linha);
     for (const dado of ["Padaria", "12345678000190", "exemplo.invalid"]) expect(texto).not.toContain(dado);
   });

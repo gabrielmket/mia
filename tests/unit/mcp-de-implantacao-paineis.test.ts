@@ -109,10 +109,11 @@ function acoesAuditadas(): string[] {
   return vi.mocked(audit).mock.calls.map((c) => (c[0] as { action: string }).action);
 }
 
-// A contagem da lista mora no teste da versão mais nova (`mcp-de-implantacao-relatorios.test.ts`, .80: 66).
+// A contagem da lista mora no teste da versão mais nova (`mcp-de-implantacao-relatorios.test.ts`, .80: 67 =
+// 64 da .78, `plataforma_vincular_pessoas_a_empresas` da empresa única (.79) e as duas do montador).
 describe("a lista: as quatro do item 8", () => {
   it("as quatro estão lá, a leitura é livre e a escrita pede `compartilhar_paineis`", () => {
-    expect(FERRAMENTAS.length).toBeGreaterThanOrEqual(64);
+    expect(FERRAMENTAS.length).toBeGreaterThanOrEqual(65);
     const operacao = (nome: string) => FERRAMENTAS.find((f) => f.name === nome)?.operacao;
     expect(operacao("plataforma_ver_paineis")).toBeNull();
     expect(operacao("plataforma_ver_links_do_dono")).toBeNull();

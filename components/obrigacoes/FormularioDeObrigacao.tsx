@@ -24,7 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAcoesDeObrigacao, useTiposDeObrigacao, type NovaObrigacao } from "@/hooks/obrigacoes/useObrigacoes";
-import { useEmpresas } from "@/hooks/useEmpresas";
+import { useEmpresasDoSeletor } from "@/hooks/useEmpresas";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import {
   ROTULO_DO_SEGMENTO_DE_OBRIGACAO,
@@ -679,7 +679,8 @@ export function FormularioDeObrigacao({
 function EscolhaDeEmpresa({ valor, aoMudar }: { valor: string; aoMudar: (id: string) => void }) {
   const t = useT();
   const [busca, setBusca] = useState("");
-  const empresas = useEmpresas(busca);
+  // FORK MIA (.79, empresa única): a busca leve, sem os números de cada empresa.
+  const empresas = useEmpresasDoSeletor(busca);
   return (
     <div className="space-y-1">
       <Label htmlFor="ob-empresa" className="text-xs">

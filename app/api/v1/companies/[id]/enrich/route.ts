@@ -5,12 +5,14 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { enrichCompanyHandler } from "@/lib/crm-b2b/companies-handler";
 import {
   ctxFromAuthz,
+  fail,
   handleRouteError,
   ok,
   requestIdOf,
   seModuloB2bDesligado,
 } from "@/lib/crm-b2b/route-helpers";
 import { createClient } from "@/lib/supabase/server";
+import { receitaTravada } from "@/lib/empresas/receita";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +31,11 @@ export async function POST(req: NextRequest, { params }: Ctx): Promise<Response>
 
   try {
     const supabase = await createClient();
+    // FORK MIA (.79, empresa única): empresa de DEMONSTRAÇÃO não consulta a
+    // Receita (nada sai de lá, migration 9010; protótipo aprovado em 15/10/2026).
+    if (await receitaTravada(supabase, authz.org.orgId)) {
+      return fail("organizacao_de_demonstracao", "Esta é a empresa de demonstração: a consulta à Receita fica desligada.", 403, { requestId });
+    }
     const data = await enrichCompanyHandler(
       supabase,
       ctxFromAuthz(authz, requestId),

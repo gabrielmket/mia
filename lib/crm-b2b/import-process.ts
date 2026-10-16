@@ -250,6 +250,27 @@ async function processOneRow(
       ctx.companyByKey.set(cacheKey, companyId);
     } else {
       // Sem CNPJ: agrupa só dentro do lote pelo nome (não dedupa no banco por nome).
+      //
+      // FORK MIA (.79, empresa única): a planilha segue a regra da tela e do
+      // agente (protótipo aprovado em 15/10/2026): sem CNPJ, a empresa com o
+      // MESMO nome que já está no cadastro é usada, em vez de nascer repetida.
+      // Mesmo nome sem diferenciar maiúsculas; o "parecido" a tela avisa e a
+      // planilha não tem a quem perguntar.
+      const nomeDaLinha = (trade || legal).replace(/[\\%_]/g, (c) => `\\${c}`);
+      const { data: mesmoNome } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .or(`trade_name.ilike.${JSON.stringify(nomeDaLinha)},legal_name.ilike.${JSON.stringify(nomeDaLinha)}`)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (mesmoNome) {
+        companyId = mesmoNome.id as string;
+        ctx.companyByKey.set(cacheKey, companyId);
+      }
+    }
+    if (!companyId && !normalizedCnpj) {
       const { data: created, error } = await supabase
         .from("companies")
         .insert({
@@ -307,7 +328,10 @@ async function processOneRow(
             company_id: companyId,
             person_id: personId,
             job_title: mapped.job_title.trim() || null,
-            is_decision_maker: true,
+            // FORK MIA (.79): a planilha não diz quem decide; marcar todo mundo
+            // como decisor era o defeito que o protótipo apontou. Sem a coluna,
+            // o papel fica "não informado" (a tela muda depois).
+            is_decision_maker: false,
           },
           { onConflict: "company_id,person_id", ignoreDuplicates: true },
         );

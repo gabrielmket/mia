@@ -72,7 +72,7 @@ export interface PedidoDeEmpresa {
   fuso?: string;
   idioma?: string;
   moeda?: string;
-  modo_de_venda?: "b2b" | "b2c";
+  modo_de_venda?: "b2b" | "misto" | "b2c";
   dias_de_retencao_de_midia?: number;
   /**
    * A limpeza automática de mídia antiga (upstream 0557): ligada, a limpeza

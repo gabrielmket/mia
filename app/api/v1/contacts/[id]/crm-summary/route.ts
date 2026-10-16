@@ -35,6 +35,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { camposDoFunil, settingsDoEmbed } from "@/lib/leads/campos-do-funil";
 import { createClient } from "@/lib/supabase/server";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
+import { lerNomesDasEmpresas } from "@/lib/empresas/fonte-unica";
 
 export const dynamic = "force-dynamic";
 
@@ -181,18 +182,12 @@ export async function GET(
   const contatoRow = contactScope as { empresa_id?: string | null; cargo?: string | null };
   let empresa: { id: string; nome: string; cargo: string | null } | null = null;
   if (contatoRow.empresa_id) {
-    const { data: e } = await supabase
-      .from("crm_empresas")
-      .select("id, nome")
-      .eq("organization_id", contactScope.organization_id)
-      .eq("id", contatoRow.empresa_id)
-      .maybeSingle();
-    if (e) {
-      empresa = {
-        id: (e as { id: string }).id,
-        nome: (e as { nome: string }).nome,
-        cargo: contatoRow.cargo ?? null,
-      };
+    // FORK MIA (.79, empresa única): a empresa do cartão, lida do cadastro
+    // único (`companies`). O cargo é o do vínculo com ela (o espelho do contato).
+    const { nomes } = await lerNomesDasEmpresas(supabase, contactScope.organization_id, [contatoRow.empresa_id]);
+    const nome = nomes.get(contatoRow.empresa_id);
+    if (nome) {
+      empresa = { id: contatoRow.empresa_id, nome, cargo: contatoRow.cargo ?? null };
     }
   }
 

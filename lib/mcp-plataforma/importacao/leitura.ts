@@ -157,20 +157,33 @@ function areaDeContatos(n: NumerosDosContatos): SituacaoDaArea {
 export interface NumerosDasEmpresas {
   total: number;
   sem_cnpj: number;
+  /** FORK MIA (.79): quantos vínculos pessoa ↔ empresa (`company_people`) a base tem. */
+  vinculos: number;
 }
 
+/**
+ * FORK MIA (.79, empresa única): o cadastro de empresa é o do upstream
+ * (`companies`), e a fusão apaga a perdedora (a lápide mora em
+ * `mia_companies_mescladas`): toda linha de `companies` é uma empresa viva.
+ */
 export async function numerosDasEmpresas(admin: SupabaseClient, orgId: string): Promise<NumerosDasEmpresas> {
-  const vivas = () =>
-    admin.from("crm_empresas").select("id", SO_CONTAR).eq("organization_id", orgId).is("mesclada_em", null);
-  const [total, semCnpj] = await Promise.all([contar(vivas()), contar(vivas().is("cnpj", null))]);
-  return { total, sem_cnpj: semCnpj };
+  const todas = () => admin.from("companies").select("id", SO_CONTAR).eq("organization_id", orgId);
+  const [total, semCnpj, vinculos] = await Promise.all([
+    contar(todas()),
+    contar(todas().is("normalized_cnpj", null)),
+    contar(admin.from("company_people").select("id", SO_CONTAR).eq("organization_id", orgId)),
+  ]);
+  return { total, sem_cnpj: semCnpj, vinculos };
 }
 
 function areaDeEmpresas(n: NumerosDasEmpresas): SituacaoDaArea {
   return {
     chave: "empresas",
     rotulo: "Empresas",
-    pronto: n.total > 0 ? [`${n.total} empresa(s) na base.`] : [],
+    pronto: [
+      ...(n.total > 0 ? [`${n.total} empresa(s) na base.`] : []),
+      ...(n.vinculos > 0 ? [`${n.vinculos} vínculo(s) de pessoa com empresa (cargo, papel e principal).`] : []),
+    ],
     falta: [
       ...(n.total === 0
         ? ["Nenhuma empresa na base. Se o cliente vende para empresas, importe com plataforma_importar_empresas antes dos contatos."]
@@ -179,7 +192,11 @@ function areaDeEmpresas(n: NumerosDasEmpresas): SituacaoDaArea {
         ? [`${n.sem_cnpj} empresa(s) sem CNPJ: são reconhecidas só pelo nome. Com o CNPJ na lista, plataforma_importar_empresas o preenche.`]
         : []),
     ],
-    so_pela_tela: ["Juntar empresas duplicadas: Empresas › Mesclar. A fusão não tem desfazer."],
+    so_pela_tela: [
+      "Juntar empresas duplicadas: Empresas › Mesclar. A fusão não tem desfazer.",
+      "Consultar o CNPJ na Receita: na tela da empresa, por uma pessoa. Nem o agente nem o MCP consultam.",
+      "Excluir empresa: na ficha dela, por um gestor. Com negócio aberto, a exclusão é recusada.",
+    ],
     numeros: { ...n },
   };
 }

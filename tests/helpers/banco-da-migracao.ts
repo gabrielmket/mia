@@ -24,6 +24,8 @@
  */
 import { randomUUID } from "node:crypto";
 
+import { paraEmpresa, type EmpresaUnica, type LinhaDaEmpresa } from "@/lib/empresas/fonte-unica";
+
 export type Linha = Record<string, unknown>;
 
 interface Erro {
@@ -45,8 +47,13 @@ const UNICOS: Record<string, Array<{ nome: string; chave: (l: Linha) => string |
       chave: (l) => (l.email_normalized && !l.is_merged_into ? `${l.organization_id}|${l.email_normalized}` : null),
     },
   ],
-  crm_empresas: [
-    { nome: "uq_crm_empresas_org_cnpj", chave: (l) => (l.cnpj ? `${l.organization_id}|${l.cnpj}` : null) },
+  // FORK MIA (.79, empresa única): o cadastro é `companies`, e o CNPJ é único
+  // por organização no `normalized_cnpj` (0448 do upstream).
+  companies: [
+    {
+      nome: "companies_org_normalized_cnpj_uidx",
+      chave: (l) => (l.normalized_cnpj ? `${l.organization_id}|${l.normalized_cnpj}` : null),
+    },
   ],
   crm_leads: [
     {
@@ -85,7 +92,7 @@ const PADROES: Record<string, () => Linha> = {
     principal_na_empresa: false,
     empresa_id: null,
   }),
-  crm_empresas: () => ({ tags: [], custom_fields: {}, mesclada_em: null }),
+  companies: () => ({ trade_name: null, legal_name: null, cnpj: null, normalized_cnpj: null, phone: null, email: null }),
   crm_leads: () => ({ tags: [], custom_fields: {}, status: "open", closed_at: null, lost_reason: null }),
   catalog_products: () => ({ fotos: [], ativo: true }),
 };
@@ -281,10 +288,191 @@ export function bancoDaMigracao(inicial: Record<string, Linha[]> = {}) {
     return q;
   }
 
+  /** `fn_mia_gravar_empresa` (9034): cria ou edita, CNPJ repetido é recusado. */
+  function gravarEmpresa(args: Record<string, unknown>): { data: unknown; error: Erro | null } {
+    const falha = falhas.companies;
+    if (falha) {
+      falhas.companies = undefined;
+      return { data: null, error: falha };
+    }
+    const org = args.p_organization_id as string;
+    const id = (args.p_empresa_id as string | null) ?? null;
+    const d = (args.p_dados ?? {}) as Record<string, unknown>;
+    const temCnpj = "cnpj" in d;
+    const digitos = typeof d.cnpj === "string" ? d.cnpj.replace(/\D/g, "") : "";
+    if (temCnpj && digitos && digitos.length !== 14) return { data: null, error: { message: "cnpj_invalido" } };
+    const cnpj = digitos.length === 14 ? digitos : null;
+    if (cnpj) {
+      const dono = tabela("companies").find((c) => c.organization_id === org && c.normalized_cnpj === cnpj && c.id !== id);
+      if (dono) return { data: null, error: { message: "cnpj_ja_cadastrado", code: "23505", details: dono.id as string } as Erro };
+    }
+    let linha = id ? tabela("companies").find((c) => c.id === id && c.organization_id === org) : undefined;
+    if (id && !linha) return { data: null, error: { message: "empresa_nao_encontrada" } };
+    const criada = !linha;
+    if (!linha) {
+      const agora = new Date().toISOString();
+      linha = {
+        id: randomUUID(),
+        organization_id: org,
+        created_at: agora,
+        updated_at: agora,
+        ...PADROES.companies!(),
+        created_by: typeof d.criado_por === "string" ? d.criado_por : null,
+      };
+      tabela("companies").push(linha);
+    }
+    const texto = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+    if ("nome" in d && texto(d.nome)) linha.trade_name = texto(d.nome);
+    if ("razao_social" in d) linha.legal_name = texto(d.razao_social);
+    if (temCnpj) {
+      linha.normalized_cnpj = cnpj;
+      linha.cnpj = cnpj ? `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}` : null;
+    }
+    if ("telefone" in d) linha.phone = texto(d.telefone);
+    if ("email" in d) linha.email = texto(d.email);
+    // O que é só nosso mora ao lado, em `mia_companies_extra` (1:1 pela chave).
+    const atual = tabela("mia_companies_extra").find((x) => x.company_id === linha!.id);
+    const extra: Linha = atual ?? {
+      company_id: linha.id,
+      organization_id: org,
+      site: null,
+      endereco: null,
+      observacoes: null,
+      tags: [],
+      custom_fields: {},
+    };
+    let mudouExtra = false;
+    for (const chave of ["site", "endereco", "observacoes"] as const) {
+      if (chave in d) {
+        extra[chave] = texto(d[chave]);
+        mudouExtra = true;
+      }
+    }
+    if ("tags" in d) {
+      extra.tags = Array.isArray(d.tags) ? [...new Set(d.tags as string[])] : [];
+      mudouExtra = true;
+    }
+    if ("custom_fields" in d) {
+      extra.custom_fields = (d.custom_fields as Record<string, unknown>) ?? {};
+      mudouExtra = true;
+    }
+    if (mudouExtra && !atual) tabela("mia_companies_extra").push(extra);
+    escritas.push({ tabela: "companies", op: criada ? "insert" : "update", linha });
+    return { data: { id: linha.id, criada }, error: null };
+  }
+
+  // ── O vínculo pessoa × empresa (9034), no que a importação depende dele ──
+  const vivosDaPessoa = (pessoa: unknown) =>
+    tabela("contacts").filter((c) => c.person_id === pessoa && !c.is_merged_into && !c.is_anonymized);
+
+  /** `fn_mia_nova_pessoa_do_contato`: a pessoa nasce do número. */
+  function pessoaDo(contato: Linha): string {
+    if (typeof contato.person_id === "string") return contato.person_id;
+    const id = randomUUID();
+    tabela("people").push({ id, organization_id: contato.organization_id });
+    contato.person_id = id;
+    return id;
+  }
+
+  /** `fn_mia_espelhar_empresa_da_pessoa`: o contato mostra a empresa do cartão. */
+  function espelhar(pessoa: string): void {
+    const vinculos = tabela("company_people").filter((v) => v.person_id === pessoa);
+    const vivos = vivosDaPessoa(pessoa);
+    const cartao =
+      vivos.map((c) => c.empresa_id).find((e) => vinculos.some((v) => v.company_id === e)) ??
+      vinculos[0]?.company_id ??
+      null;
+    const v = vinculos.find((x) => x.company_id === cartao);
+    for (const c of vivos) {
+      c.empresa_id = cartao;
+      c.cargo = v?.job_title ?? null;
+      c.setor = v?.department ?? null;
+      c.papel_na_empresa = v?.papel ?? null;
+      c.principal_na_empresa = Boolean(v?.is_primary);
+    }
+  }
+
+  /** `fn_mia_vincular_pessoa` (9034). */
+  function vincularPessoa(args: Record<string, unknown>): { data: unknown; error: Erro | null } {
+    const org = args.p_organization_id;
+    const d = (args.p_dados ?? {}) as Record<string, unknown>;
+    const contato = tabela("contacts").find((c) => c.id === args.p_contato_id && c.organization_id === org);
+    if (!contato) return { data: null, error: { message: "contato_nao_encontrado", code: "P0002" } };
+    if (contato.is_anonymized) return { data: null, error: { message: "contato_anonimizado", code: "22023" } };
+    if (!tabela("companies").some((e) => e.id === args.p_empresa_id && e.organization_id === org)) {
+      return { data: null, error: { message: "empresa_nao_encontrada", code: "P0002" } };
+    }
+    const papeis = ["decisor", "financeiro", "usuario", "influenciador", "outro"];
+    if ("papel" in d && d.papel !== null && !papeis.includes(String(d.papel))) {
+      return { data: null, error: { message: "papel_invalido", code: "22023" } };
+    }
+    const pessoa = pessoaDo(contato);
+    let v = tabela("company_people").find((x) => x.company_id === args.p_empresa_id && x.person_id === pessoa);
+    const criado = !v;
+    if (!v) {
+      v = {
+        id: randomUUID(),
+        organization_id: org,
+        company_id: args.p_empresa_id,
+        person_id: pessoa,
+        job_title: null,
+        department: null,
+        papel: null,
+        is_primary: false,
+      };
+      tabela("company_people").push(v);
+      escritas.push({ tabela: "company_people", op: "insert", linha: v });
+    }
+    if ("cargo" in d) v.job_title = d.cargo ?? null;
+    if ("setor" in d) v.department = d.setor ?? null;
+    if ("papel" in d) v.papel = d.papel ?? null;
+    if ("principal" in d) v.is_primary = Boolean(d.principal);
+    if (v.is_primary) {
+      // Um principal por empresa: quem vira principal tira o de antes.
+      for (const outro of tabela("company_people")) {
+        if (outro !== v && outro.company_id === v.company_id) outro.is_primary = false;
+      }
+    }
+    const temCartao = vivosDaPessoa(pessoa).some((c) =>
+      tabela("company_people").some((x) => x.person_id === pessoa && x.company_id === c.empresa_id),
+    );
+    if (d.no_cartao === true || !temCartao) for (const c of vivosDaPessoa(pessoa)) c.empresa_id = args.p_empresa_id;
+    espelhar(pessoa);
+    return { data: { vinculo_id: v.id, pessoa_id: pessoa, criado }, error: null };
+  }
+
+  /** `fn_mia_juntar_numeros` (9034): dois números, uma pessoa; os vínculos se somam. */
+  function juntarNumeros(args: Record<string, unknown>): { data: unknown; error: Erro | null } {
+    const org = args.p_organization_id;
+    const a = tabela("contacts").find((c) => c.id === args.p_contato_id && c.organization_id === org);
+    const b = tabela("contacts").find((c) => c.id === args.p_outro_contato_id && c.organization_id === org);
+    if (!a || !b) return { data: null, error: { message: "contato_nao_encontrado", code: "P0002" } };
+    if (a.id === b.id) return { data: null, error: { message: "mesmo_contato", code: "22023" } };
+    const fica = pessoaDo(a);
+    const sai = b.person_id;
+    if (typeof sai === "string" && sai !== fica) {
+      for (const v of tabela("company_people").filter((x) => x.person_id === sai)) {
+        const ja = tabela("company_people").find((x) => x.person_id === fica && x.company_id === v.company_id);
+        if (ja) tabela("company_people").splice(tabela("company_people").indexOf(v), 1);
+        else v.person_id = fica;
+      }
+      for (const c of tabela("contacts").filter((x) => x.person_id === sai)) c.person_id = fica;
+    }
+    b.person_id = fica;
+    espelhar(fica);
+    return { data: { pessoa_id: fica }, error: null };
+  }
+
   const cliente = {
     from: (nome: string) => consulta(nome),
     rpc: async (nome: string, args: Record<string, unknown> = {}) => {
       chamadasRpc.push({ nome, args });
+      // FORK MIA (.79, empresa única): as portas da 9034 que a importação usa,
+      // imitadas no que o contrato delas promete (a prova no banco de verdade é
+      // tests/invariants/empresa-unica.test.ts).
+      if (nome === "fn_mia_gravar_empresa") return gravarEmpresa(args);
+      if (nome === "fn_mia_vincular_pessoa") return vincularPessoa(args);
+      if (nome === "fn_mia_juntar_numeros") return juntarNumeros(args);
       return { data: null, error: null };
     },
     storage: {
@@ -384,5 +572,17 @@ export function organizacaoDeTeste(extra: Record<string, Linha[]> = {}): BancoDa
       { id: ETAPA_PERDIDO, organization_id: ORG, pipeline_id: FUNIL, name: "Perdido", position: 4000, is_won: false, is_lost: true, is_archived: false },
     ],
     ...extra,
+  });
+}
+
+/**
+ * FORK MIA (.79, empresa única): as empresas gravadas em `companies` (com o
+ * que é só nosso, de `mia_companies_extra`, juntado pela chave), no formato que as telas e a importação
+ * leem (`lib/empresas/fonte-unica.ts`). É o que os testes conferem.
+ */
+export function empresasGravadas(banco: BancoDaMigracao): Array<EmpresaUnica & { organization_id: string }> {
+  return banco.tabela("companies").map((l) => {
+    const extra = banco.tabela("mia_companies_extra").find((x) => x.company_id === l.id) ?? null;
+    return { ...paraEmpresa({ ...l, extra } as unknown as LinhaDaEmpresa), organization_id: l.organization_id as string };
   });
 }

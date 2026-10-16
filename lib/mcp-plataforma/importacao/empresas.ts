@@ -3,15 +3,15 @@
  *
  * ── Em qual tabela ────────────────────────────────────────────────────────
  *
- * O produto tem duas representações de empresa: `companies` (o módulo B2B do
- * upstream, com `people` e o enriquecimento pela Receita) e `crm_empresas` (a
- * nossa). A que as FICHAS e os CARTÕES leem é `crm_empresas`
- * (`docs/fork/cartoes-e-fichas.md`): é nela que `contacts.empresa_id` e
- * `crm_leads.empresa_id` apontam. A importação grava nela, pelo mesmo insert e
- * com o mesmo schema (`empresaCreateSchema`) de `POST /api/v1/empresas`.
+ * Desde a .79 o cadastro de empresa é UM só (docs/fork/empresa-unica.md): o do
+ * upstream (`companies`), com o que é só nosso ao lado
+ * (`mia_companies_extra`). É nele que `contacts.empresa_id`,
+ * `crm_leads.empresa_id` e `mia_obrigacoes.empresa_id` apontam. A importação
+ * grava pela MESMA porta da tela (`fn_mia_gravar_empresa`, migration 9034), com
+ * o mesmo schema (`empresaCreateSchema`) de `POST /api/v1/empresas`.
  *
- * Não há enriquecimento pela Receita aqui: quem enriquece é o módulo
- * `companies`, que esta importação não toca.
+ * Não há consulta à Receita aqui: pela decisão do protótipo aprovado em
+ * 15/10/2026, a consulta de CNPJ é só pela tela, por uma pessoa.
  *
  * ── Como se decide que a empresa já existe ────────────────────────────────
  *
@@ -28,6 +28,16 @@
 import { z } from "zod";
 
 import { nomeComparavel } from "@/lib/empresas/achar-ou-criar";
+import {
+  COLUNAS_DA_EMPRESA_UNICA,
+  COLUNAS_DO_QUE_E_SO_NOSSO,
+  gravarEmpresa,
+  paraEmpresa,
+  type DadosDaEmpresa,
+  type ExtraDaEmpresa,
+  type LinhaDaEmpresa,
+} from "@/lib/empresas/fonte-unica";
+import { pareceAMesma } from "@/lib/empresas/parecida";
 import { apenasDigitos, empresaCreateSchema } from "@/lib/schemas/empresas";
 
 import {
@@ -52,9 +62,7 @@ import type { ContextoDaFerramenta, FerramentaDeImportacao, QuandoJaExiste, Resu
 
 export const TETO_DE_EMPRESAS = 200;
 
-const COLUNAS =
-  "id, nome, cnpj, site, telefone, email, endereco, observacoes, tags, custom_fields";
-
+/** A empresa no formato que a importação compara (o de `crm_empresas` até a .77). */
 export interface EmpresaNaBase {
   id: string;
   nome: string;
@@ -101,11 +109,30 @@ const EXEMPLO_POR_CAMPO: Record<string, string> = {
   campos: '{ "segmento": "alimentação" }',
 };
 
+/** Do cadastro único para o formato da importação. */
+export function empresaNaBaseDe(l: LinhaDaEmpresa): EmpresaNaBase {
+  const e = paraEmpresa(l);
+  return {
+    id: e.id,
+    nome: e.nome,
+    cnpj: e.cnpj,
+    site: e.site,
+    telefone: e.telefone,
+    email: e.email,
+    // O endereço NOSSO (texto livre). O da Receita não entra na comparação: a
+    // importação nunca o escreve.
+    endereco: (Array.isArray(l.extra) ? l.extra[0]?.endereco : l.extra?.endereco) ?? null,
+    observacoes: e.observacoes,
+    tags: e.tags,
+    custom_fields: e.custom_fields,
+  };
+}
+
 /**
- * As empresas VIVAS da organização, indexadas pelas duas chaves de casamento.
+ * As empresas da organização, indexadas pelas duas chaves de casamento.
  *
- * Lápide de fusão (`mesclada_em`) fica de fora: casar com ela devolveria o
- * contato para a ficha que alguém acabou de aposentar.
+ * A fusão APAGA a perdedora de `companies` (ela vira lápide em
+ * `mia_companies_mescladas`): não há ficha aposentada para casar por engano.
  */
 export class EmpresasDaBase {
   private readonly porCnpj = new Map<string, EmpresaNaBase>();
@@ -113,18 +140,27 @@ export class EmpresasDaBase {
   private readonly chaveDoNomePorId = new Map<string, string>();
 
   static async carregar(ctx: ContextoDaFerramenta, orgId: string): Promise<EmpresasDaBase> {
-    const linhas = await lerEmPaginas<EmpresaNaBase>((depoisDoId) => {
-      const consulta = ctx.admin
-        .from("crm_empresas")
-        .select(COLUNAS)
-        .eq("organization_id", orgId)
-        .is("mesclada_em", null);
+    const linhas = await lerEmPaginas<LinhaDaEmpresa>((depoisDoId) => {
+      const consulta = ctx.admin.from("companies").select(COLUNAS_DA_EMPRESA_UNICA).eq("organization_id", orgId);
       return (depoisDoId ? consulta.gt("id", depoisDoId) : consulta)
         .order("id", { ascending: true })
         .limit(TAMANHO_DA_PAGINA);
     });
+    // O que é só nosso (endereço, observações, etiquetas, campos) vem à parte,
+    // nas mesmas páginas por chave (a chave de `mia_companies_extra` é a empresa).
+    const extras = await lerEmPaginas<ExtraDaEmpresa & { id: string; company_id: string }>((depoisDoId) => {
+      const consulta = ctx.admin.from("mia_companies_extra").select(COLUNAS_DO_QUE_E_SO_NOSSO).eq("organization_id", orgId);
+      return (depoisDoId ? consulta.gt("company_id", depoisDoId) : consulta)
+        .order("company_id", { ascending: true })
+        .limit(TAMANHO_DA_PAGINA)
+        .then((r) => ({
+          data: ((r.data ?? []) as Array<ExtraDaEmpresa & { company_id: string }>).map((x) => ({ ...x, id: x.company_id })),
+          error: r.error,
+        }));
+    });
+    const porEmpresa = new Map(extras.map((x) => [x.company_id, x]));
     const base = new EmpresasDaBase();
-    for (const linha of linhas) base.incluir(linha);
+    for (const linha of linhas) base.incluir(empresaNaBaseDe({ ...linha, extra: porEmpresa.get(linha.id) ?? null }));
     return base;
   }
 
@@ -167,6 +203,14 @@ export class EmpresasDaBase {
       return { empresa: semCnpj[0] ?? null, ambigua: semCnpj.length > 1 };
     }
     return { empresa: homonimas[0]!, ambigua: homonimas.length > 1 };
+  }
+
+  /** A primeira empresa SEM CNPJ igual cujo nome parece este (o aviso do protótipo). */
+  parecida(nome: string): EmpresaNaBase | null {
+    for (const lista of this.porNome.values()) {
+      for (const e of lista) if (pareceAMesma(nome, e.nome)) return e;
+    }
+    return null;
   }
 }
 
@@ -347,58 +391,56 @@ export async function importarEmpresas(
         coletor.registrar(posicao, "ja_estava", { id: existente.id, avisos });
         continue;
       }
-      const { data, error } = await ctx.admin
-        .from("crm_empresas")
-        .update({ ...patch, updated_at: new Date().toISOString() })
-        .eq("organization_id", organizacao.id)
-        .eq("id", existente.id)
-        .select(COLUNAS)
-        .maybeSingle();
-      if (error || !data) {
+      const gravada = await gravarEmpresa(ctx.admin, organizacao.id, existente.id, patch as DadosDaEmpresa);
+      if (!gravada.ok) {
         coletor.recusar(
           posicao,
           "(gravação)",
-          error?.code === "23505"
+          gravada.motivo === "cnpj_ja_cadastrado"
             ? "o CNPJ informado já é de OUTRA empresa desta base."
-            : `o banco recusou a atualização: ${error?.message ?? "a empresa não está mais na base"}.`,
+            : `o banco recusou a atualização: ${gravada.detalhe ?? gravada.motivo}.`,
         );
         continue;
       }
-      base.incluir(data as unknown as EmpresaNaBase);
+      base.incluir({ ...existente, ...(patch as Partial<EmpresaNaBase>) });
       coletor.registrar(posicao, "atualizou", { id: existente.id, avisos });
       continue;
     }
 
-    const { data, error } = await ctx.admin
-      .from("crm_empresas")
-      .insert({
-        organization_id: organizacao.id,
-        nome: nova.nome,
-        // `null`, nunca `''`: o índice único de CNPJ ignora nulo e trata vazio
-        // como valor (o mesmo cuidado de `POST /api/v1/empresas`).
-        cnpj: nova.cnpj,
-        site: nova.site,
-        telefone: nova.telefone,
-        email: nova.email,
-        endereco: nova.endereco,
-        observacoes: nova.observacoes,
-        tags: nova.tags,
-        custom_fields: nova.custom_fields,
-        created_by_user_id: ctx.autorUserId,
-      })
-      .select(COLUNAS)
-      .single();
-    if (error || !data) {
+    // Sem CNPJ e com um nome PARECIDO com outra (protótipo: "nome parecido sem
+    // CNPJ só avisa"): entra como nova, e quem migra sabe que pode ser a mesma.
+    const parecida = nova.cnpj ? null : base.parecida(nova.nome);
+    if (parecida) {
+      avisos.push(
+        `O nome parece o de «${parecida.nome}», que já está na base, e a lista não trouxe CNPJ para confirmar. ` +
+          "Entrou como empresa nova; se for a mesma, junte as duas pela tela (Empresas › Mesclar).",
+      );
+    }
+    const gravada = await gravarEmpresa(ctx.admin, organizacao.id, null, {
+      nome: nova.nome,
+      // `null`, nunca `''`: o índice único de CNPJ ignora nulo e trata vazio
+      // como valor (o mesmo cuidado de `POST /api/v1/empresas`).
+      cnpj: nova.cnpj,
+      site: nova.site,
+      telefone: nova.telefone,
+      email: nova.email,
+      endereco: nova.endereco,
+      observacoes: nova.observacoes,
+      tags: nova.tags,
+      custom_fields: nova.custom_fields,
+      criado_por: ctx.autorUserId,
+    });
+    if (!gravada.ok) {
       coletor.recusar(
         posicao,
         "(gravação)",
-        error?.code === "23505"
+        gravada.motivo === "cnpj_ja_cadastrado"
           ? "já existe uma empresa com este CNPJ, gravada enquanto esta importação rodava. Repita a chamada: ela será reconhecida."
-          : `o banco recusou a criação: ${error?.message ?? "sem linha"}.`,
+          : `o banco recusou a criação: ${gravada.detalhe ?? gravada.motivo}.`,
       );
       continue;
     }
-    const criada = data as unknown as EmpresaNaBase;
+    const criada: EmpresaNaBase = { id: gravada.id, ...nova };
     base.incluir(criada);
     coletor.registrar(posicao, "criou", { id: criada.id, avisos });
   }

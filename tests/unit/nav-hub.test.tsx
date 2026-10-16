@@ -201,7 +201,9 @@ describe("NavHub", () => {
         capacidadesLigadas={[]}
       />,
     );
-    expect(screen.getByRole("link", { name: /Empresas/ })).toHaveAttribute("href", "/app/empresas");
+    // FORK MIA (.79, empresa única): a tela de Empresas é `/app/companies`, que
+    // no fork existe sem o módulo `crm_b2b` (modulosLigados vazio, acima).
+    expect(screen.getByRole("link", { name: /Empresas/ })).toHaveAttribute("href", "/app/companies");
     expect(screen.queryByRole("link", { name: /Propostas/ })).toBeNull();
   });
 

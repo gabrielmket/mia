@@ -43,6 +43,8 @@ import { DICIONARIO_OBRIGACOES_MIA } from "./dicionario-obrigacoes-mia";
 import { DICIONARIO_DA_EQUIPE_MIA } from "./dicionario-mia-equipe";
 // FORK MIA: as frases novas dos relatórios e das metas, idem.
 import { DICIONARIO_RELATORIOS_MIA } from "./dicionario-relatorios-mia";
+// FORK MIA (.79): a empresa única (lista, ficha, pessoa em várias empresas), idem.
+import { DICIONARIO_EMPRESAS_MIA } from "./dicionario-empresas-mia";
 // FORK MIA (item 8): os painéis prontos, a análise do funil e o link do dono, idem.
 import { DICIONARIO_DOS_PAINEIS_MIA } from "./dicionario-mia-paineis";
 // FORK MIA (item 9): o montador de relatórios, idem.
@@ -16200,6 +16202,7 @@ export const DICIONARIO: Traducoes = {
   ...DICIONARIO_OBRIGACOES_MIA,
   ...DICIONARIO_DA_EQUIPE_MIA,
   ...DICIONARIO_RELATORIOS_MIA,
+  ...DICIONARIO_EMPRESAS_MIA,
   "Guardar o histórico anterior à vinculação": { es: "Guardar el historial anterior al vínculo" },
   "Acervo ligado: o servidor do canal guarda as conversas deste número. Num número que já estava pareado, guarda daqui em diante; o histórico anterior (cerca de 1 ano) só chega numa vinculação nova. Ocupa disco lá e não é apagado quando o CRM anonimiza um contato.": {
     es: "Acervo activo: el servidor del canal guarda las conversaciones de este número. En un número que ya estaba vinculado, guarda de aquí en adelante; el historial anterior (cerca de 1 año) solo llega en una vinculación nueva. Ocupa disco allí y no se borra cuando el CRM anonimiza un contacto.",

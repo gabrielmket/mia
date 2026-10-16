@@ -106,6 +106,11 @@ export interface CartaoAberto {
   empresa: { id: string; nome: string; cnpj: string | null; telefone: string | null; site: string | null } | null;
   /** O contato tem empresa e o negócio ainda não está ligado a ela. */
   empresaDoContato: { id: string; nome: string } | null;
+  /**
+   * FORK MIA (.79): as outras pessoas da empresa do negócio (uma por pessoa, sem
+   * quem já está nele), com o papel e o cargo que têm na empresa.
+   */
+  pessoasDaEmpresa: Array<{ contatoId: string; nome: string | null; papel: string | null; cargo: string | null }>;
   compras: ResumoDeCompras | null;
   /** Os compromissos do negócio (ligados a ele, ou do contato sem outro negócio). */
   agenda: Array<CompromissoDoCartao & { resultado: string | null }>;

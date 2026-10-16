@@ -105,7 +105,7 @@ export function FolhaDaObrigacao({ pedido, aoFechar }: { pedido: PedidoDeFolha |
                 </Link>
               ) : null}
               {item.vinculos.empresa ? (
-                <Link href={`/app/empresas/${item.vinculos.empresa.id}`} className="rounded-full bg-surface-muted px-2 py-0.5 hover:text-text">
+                <Link href={`/app/companies/${item.vinculos.empresa.id}`} className="rounded-full bg-surface-muted px-2 py-0.5 hover:text-text">
                   {t("Empresa")} · {item.vinculos.empresa.nome}
                 </Link>
               ) : null}

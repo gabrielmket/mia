@@ -88,7 +88,11 @@ export function permitidos(
   return (NAV_CATALOG as readonly NavMetadata[]).filter(
     (d) =>
       canSee(d, platform, role) &&
-      (!modulos || !d.modulo || modulos.includes(d.modulo)) &&
+      // FORK MIA (.79, empresa única): Empresas (`/app/companies`) é o cadastro
+      // ÚNICO de empresa do fork e existe sem o módulo `crm_b2b`; quem a
+      // esconde é o modo de venda (B2C), em `destinosDaInterface`. Pessoas e
+      // Importação seguem atrás do módulo. docs/fork/empresa-unica.md.
+      (!modulos || !d.modulo || modulos.includes(d.modulo) || d.href === TELA_DE_EMPRESAS) &&
       (!capacidades || !d.capacidade || capacidades.includes(d.capacidade)),
   );
 }

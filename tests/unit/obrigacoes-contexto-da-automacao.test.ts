@@ -50,7 +50,8 @@ function cenario(itens: Linha[], comNegocioAberto = true) {
   return bancoEmMemoria({
     organizations: [{ id: ORG, timezone: "America/Sao_Paulo" }],
     mia_obrigacoes: itens,
-    crm_empresas: [{ id: "E1", organization_id: ORG, nome: "Padaria Trigo Dourado" }],
+    // FORK MIA (.79, empresa única): o cadastro de empresa é `companies`.
+    companies: [{ id: "E1", organization_id: ORG, trade_name: "Padaria Trigo Dourado", legal_name: null }],
     contacts: [
       { id: "C-socio", organization_id: ORG, empresa_id: "E1", name: "Rui Prado", is_anonymized: false, is_merged_into: null, principal_na_empresa: false, created_at: "2026-02-01" },
       { id: "C-principal", organization_id: ORG, empresa_id: "E1", name: "Helena Souza", is_anonymized: false, is_merged_into: null, principal_na_empresa: true, created_at: "2026-01-01" },

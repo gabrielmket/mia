@@ -187,12 +187,14 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **66** ferramentas no servidor: as 59 desta página e as 7 da migração
+São **67** ferramentas no servidor: as 59 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). As duas mais novas (.80, item 9 do
 mapa: o montador de relatórios) são `plataforma_garantir_relatorios` e
-`plataforma_ver_relatorios`. As quatro da .79 (item 8: painéis prontos e link para o dono) são `plataforma_ver_paineis`,
-`plataforma_ver_links_do_dono`, `plataforma_garantir_link_do_dono` e
-`plataforma_revogar_link_do_dono`. As quatro da .76 são
+`plataforma_ver_relatorios`. A da .79 (empresa única,
+[`empresa-unica.md`](empresa-unica.md)) é `plataforma_vincular_pessoas_a_empresas`, da
+migração. As quatro do item 8 do mapa (.78: painéis prontos e link para o dono) são
+`plataforma_ver_paineis`, `plataforma_ver_links_do_dono`, `plataforma_garantir_link_do_dono`
+e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 `plataforma_garantir_planos_de_tarefa`, `plataforma_configurar_canal`,
 `plataforma_garantir_fonte_de_formulario` e `plataforma_configurar_banco_externo`.
 
@@ -441,7 +443,7 @@ e fica com quem opera, na tela de Segurança do agente.
 
 ## Migração de outro CRM
 
-Trazer a base que o cliente já tinha (empresas, contatos, negócios e materiais) é feito por outras sete ferramentas do mesmo servidor, com duas caixinhas próprias no token ("Importar base" e "Importar materiais"). A ordem, o formato de cada lista e os cuidados estão em [`mcp-de-migracao.md`](mcp-de-migracao.md). No roteiro acima, a migração entra depois da equipe e dos funis, e antes de pôr o agente no ar. Importar não envia nada a ninguém. No checklist (`plataforma_ver_implantacao`) ela aparece como a área "Base importada", que é opcional e nunca conta como pendência.
+Trazer a base que o cliente já tinha (empresas, contatos, os vínculos entre eles, negócios e materiais) é feito por outras oito ferramentas do mesmo servidor, com duas caixinhas próprias no token ("Importar base" e "Importar materiais"). A ordem, o formato de cada lista e os cuidados estão em [`mcp-de-migracao.md`](mcp-de-migracao.md). No roteiro acima, a migração entra depois da equipe e dos funis, e antes de pôr o agente no ar. Importar não envia nada a ninguém. No checklist (`plataforma_ver_implantacao`) ela aparece como a área "Base importada", que é opcional e nunca conta como pendência.
 
 ## 4. O que fica de fora, e por quê
 
@@ -490,13 +492,14 @@ Também ficaram de fora, por desenho:
   funil (`GET /api/v1/metrics/funil`), o relatório por etiqueta e a taxa
   histórica e o tempo por etapa. São leitura de operação, não configuração de
   implantação, e a conta de cada um está montada dentro da rota. A análise do
-  funil ganhou tela no fork na .79 (`/app/paineis/funil`, por cima da conta dele);
+  funil ganhou tela no fork (`/app/paineis/funil`, por cima da conta dele);
   os números que a implantação confere saem de `plataforma_ver_paineis` e, desde a
   .80, de `plataforma_ver_relatorios` (o montador de relatórios).
-- **Empresas do upstream (`companies`).** A consulta de CNPJ, a edição e a
-  exclusão da 1.72 são da tela dele. O fork tem as próprias empresas
-  (`crm_empresas`), que entram por `plataforma_importar_empresas`. As duas não
-  foram unificadas.
+- **A consulta de CNPJ na Receita.** Desde a .79 (empresa única,
+  [`empresa-unica.md`](empresa-unica.md)) o cadastro de empresa é um só,
+  `companies`, e `plataforma_importar_empresas` grava nele. A consulta à Receita
+  fica só na tela, por uma pessoa (decisão do protótipo de 15/10/2026): nenhuma
+  ferramenta consulta.
 - **Prospecção.** As novidades da 1.70 (escolher as empresas da fila, ajustar o
   ritmo de campanha pausada) são operação de campanha, e o MCP de plataforma não
   tem ferramenta de prospecção.
@@ -576,9 +579,9 @@ Testes:
 | `tests/unit/mcp-de-implantacao-conversoes.test.ts` | as seis ferramentas de conversões: o que gravam, que montar não liga, a reexecução, as recusas, a resposta sem segredo e a empresa de demonstração |
 | `tests/unit/mcp-de-implantacao-novidades-do-upstream.test.ts` | cada novidade do upstream 1.70 a 1.73: o campo ou a caixa nova passa pela ferramenta (o que grava, a reexecução, a recusa que ensina, a leitura), e as duas ferramentas do roteador |
 | `tests/unit/mcp-de-implantacao-novidades-do-upstream-180.test.ts` | cada novidade do upstream 1.74 a 1.80, no mesmo molde, as quatro ferramentas novas e a prova de que os tipos de ação da ferramenta são exatamente os do upstream |
-| `tests/unit/mcp-de-implantacao-relatorios.test.ts` | as duas ferramentas do montador de relatórios (.80): a contagem da lista (66), a operação `implantar_configuracao`, o que o garantir grava (prontos ligados ao funil, relatórios do segmento e painel, compartilhados), que rodar de novo não duplica e só completa o painel, a meta do mês, o funil de outra empresa, e a leitura sem o "só para mim" de ninguém |
+| `tests/unit/mcp-de-implantacao-relatorios.test.ts` | as duas ferramentas do montador de relatórios (.80): a contagem da lista (67: as 64 da .78, a de vínculos da empresa única e as duas do montador), a operação `implantar_configuracao`, o que o garantir grava (prontos ligados ao funil, relatórios do segmento e painel, compartilhados), que rodar de novo não duplica e só completa o painel, a meta do mês, o funil de outra empresa, e a leitura sem o "só para mim" de ninguém |
 | `tests/invariants/montador-de-relatorios.test.ts` | as tabelas do montador (9040) e o motor estendido (9041) no Postgres de verdade: quem vê, cria, compartilha, edita e exporta, com controle positivo e negativo; produto, filtro de vários valores, meta por grupo de tempo, funil com soma, responsável no follow-up, agente nas conversas; a lista por trás do número com a mesma conta; e o link do painel (9042) |
-| `tests/unit/mcp-de-implantacao-paineis.test.ts` | as quatro ferramentas dos painéis e do link para o dono (.79): a caixinha `compartilhar_paineis`, que o garantir não duplica e ajusta no mesmo endereço, a revogação, a leitura e a demonstração; e a meta do mês em `plataforma_configurar_empresa` |
+| `tests/unit/mcp-de-implantacao-paineis.test.ts` | as quatro ferramentas dos painéis e do link para o dono (.78): a caixinha `compartilhar_paineis`, que o garantir não duplica e ajusta no mesmo endereço, a revogação, a leitura e a demonstração; e a meta do mês em `plataforma_configurar_empresa` |
 | `tests/invariants/motor-de-conta-dos-relatorios.test.ts` | o motor de conta (9030) no Postgres de verdade: a regra de data e o fuso, sem o teto de 1000 linhas, as etiquetas, o "Sem …" e o "Outros", a meta, quem vê o quê (atendente, gestor, outra empresa, anon, plataforma) e a situação da obrigação igual à de `lib/obrigacoes/situacao.ts` |
 | `tests/invariants/link-dos-paineis-para-o-dono.test.ts` | a tabela do link (9031): só o servidor lê e escreve, as constraints, o funil de outra empresa e a contagem de acesso só em link vivo |
 | `tests/invariants/dono-do-contato-pela-plataforma.test.ts` | a função da 9022 no Postgres de verdade: o controle negativo (a porta do upstream recusa o ator da plataforma), o mesmo efeito da porta do upstream, as recusas do ator e que só o `service_role` executa |

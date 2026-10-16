@@ -513,10 +513,22 @@ export function mudancasDoContato(
   novo: ContatoLido,
   modo: QuandoJaExiste,
   contexto: { empresaId: string | null; origem: string; agora: string; emailLivre: boolean; telefoneLivre: boolean },
-): { patch: Record<string, unknown>; naoAplicados: string[]; avisos: string[] } {
+): {
+  patch: Record<string, unknown>;
+  naoAplicados: string[];
+  avisos: string[];
+  /**
+   * FORK MIA (.79, empresa única): a empresa da linha é OUTRA que a do cartão,
+   * e o modo é completar. Contato pode estar em várias empresas (decisão do
+   * protótipo aprovado em 15/10/2026): ela entra como MAIS UMA empresa dele,
+   * com o cargo, o setor, o papel e o principal da linha, e a do cartão fica.
+   */
+  tambemNaEmpresa: string | null;
+} {
   const patch: Record<string, unknown> = {};
   const naoAplicados: string[] = [];
   const avisos: string[] = [];
+  let tambemNaEmpresa: string | null = null;
 
   const escalar = (coluna: keyof ContatoNaBase, veio: string | null, rotulo: string) => {
     if (!veio) return;
@@ -580,18 +592,36 @@ export function mudancasDoContato(
   }
   if (mudouCampo) patch.custom_fields = camposNovos;
 
-  if (contexto.empresaId && contexto.empresaId !== atual.empresa_id) {
-    if (!atual.empresa_id || modo === "atualizar") patch.empresa_id = contexto.empresaId;
-    else naoAplicados.push("empresa");
-  }
-  escalar("cargo", novo.cargo, "empresa.cargo");
-  escalar("setor", novo.setor, "empresa.setor");
-  escalar("papel_na_empresa", novo.papel_na_empresa, "empresa.papel");
-  if (novo.principal_na_empresa !== null && novo.principal_na_empresa !== atual.principal_na_empresa) {
-    // `false` é o valor de quem nunca foi marcado: ligar o principal é
-    // completar; desligar é trocar, e só o modo "atualizar" troca.
-    if (novo.principal_na_empresa || modo === "atualizar") patch.principal_na_empresa = novo.principal_na_empresa;
-    else naoAplicados.push("empresa.principal");
+  const outraEmpresa = Boolean(contexto.empresaId && atual.empresa_id && contexto.empresaId !== atual.empresa_id);
+  if (outraEmpresa && modo !== "atualizar") {
+    // O vínculo novo é gravado pela porta da 9034; o cartão e o vínculo de
+    // antes ficam como estavam.
+    tambemNaEmpresa = contexto.empresaId;
+  } else {
+    if (contexto.empresaId && contexto.empresaId !== atual.empresa_id) {
+      // Sem empresa, ou "atualizar": a da linha passa a ser a do cartão (o
+      // gatilho da 9034 cria o vínculo; o de antes continua lá).
+      patch.empresa_id = contexto.empresaId;
+    }
+    // O cargo, o setor, o papel e o principal são do vínculo com a empresa do
+    // cartão: numa empresa NOVA no cartão, entram como vieram.
+    const empresaNova = outraEmpresa && modo === "atualizar";
+    const daLinha = (coluna: "cargo" | "setor" | "papel_na_empresa", veio: string | null, rotulo: string) => {
+      if (empresaNova) {
+        if (veio) patch[coluna] = veio;
+        return;
+      }
+      escalar(coluna, veio, rotulo);
+    };
+    daLinha("cargo", novo.cargo, "empresa.cargo");
+    daLinha("setor", novo.setor, "empresa.setor");
+    daLinha("papel_na_empresa", novo.papel_na_empresa, "empresa.papel");
+    if (novo.principal_na_empresa !== null && (empresaNova || novo.principal_na_empresa !== atual.principal_na_empresa)) {
+      // `false` é o valor de quem nunca foi marcado: ligar o principal é
+      // completar; desligar é trocar, e só o modo "atualizar" troca.
+      if (novo.principal_na_empresa || modo === "atualizar") patch.principal_na_empresa = novo.principal_na_empresa;
+      else naoAplicados.push("empresa.principal");
+    }
   }
 
   if (novo.consentimento) {
@@ -614,7 +644,7 @@ export function mudancasDoContato(
     patch.blocked_at = contexto.agora;
   }
 
-  return { patch, naoAplicados, avisos };
+  return { patch, naoAplicados, avisos, tambemNaEmpresa };
 }
 
 // ── a observação ──────────────────────────────────────────────────────────
@@ -855,7 +885,7 @@ export async function importarContatos(
       }
 
       if (existente) {
-        const { patch, naoAplicados, avisos: avisosDoPatch } = mudancasDoContato(existente, novo, modo, {
+        const { patch, naoAplicados, avisos: avisosDoPatch, tambemNaEmpresa } = mudancasDoContato(existente, novo, modo, {
           empresaId,
           origem,
           agora,
@@ -895,6 +925,29 @@ export async function importarContatos(
           }
           naBase = data as unknown as ContatoNaBase;
           mudou = true;
+        }
+        if (tambemNaEmpresa) {
+          // FORK MIA (.79): mais uma empresa da pessoa, pela porta da 9034.
+          const { error: erroDoVinculo } = await ctx.admin.rpc("fn_mia_vincular_pessoa", {
+            p_organization_id: orgId,
+            p_contato_id: existente.id,
+            p_empresa_id: tambemNaEmpresa,
+            p_dados: {
+              ...(novo.cargo ? { cargo: novo.cargo } : {}),
+              ...(novo.setor ? { setor: novo.setor } : {}),
+              ...(novo.papel_na_empresa ? { papel: novo.papel_na_empresa } : {}),
+              ...(novo.principal_na_empresa !== null ? { principal: novo.principal_na_empresa } : {}),
+            },
+          });
+          if (erroDoVinculo) {
+            avisos.push(`Não consegui ligar o contato a esta empresa: ${erroDoVinculo.message}.`);
+          } else {
+            mudou = true;
+            avisos.push(
+              "O contato já estava em outra empresa: esta entrou como mais uma empresa dele, e a que aparece no cartão continua a mesma. " +
+                'Para trocar a do cartão, repita com quando_ja_existe: "atualizar".',
+            );
+          }
         }
         if (novo.observacao) {
           const nota = await gravarObservacao(ctx.admin, orgId, existente.id, origem, novo.observacao, modo);

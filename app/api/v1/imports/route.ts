@@ -21,6 +21,7 @@ import {
   seModuloB2bDesligado,
 } from "@/lib/crm-b2b/route-helpers";
 import { createClient } from "@/lib/supabase/server";
+import { receitaTravada } from "@/lib/empresas/receita";
 
 export const dynamic = "force-dynamic";
 
@@ -125,7 +126,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       userId: authz.user.id,
       sheet: parsed.sheet,
       mapping,
-      enrichCompanies: form.get("enrich") !== "false",
+      // FORK MIA (.79): empresa de demonstração não consulta a Receita.
+      enrichCompanies: form.get("enrich") !== "false" && !(await receitaTravada(supabase, authz.org.orgId)),
     });
 
     await audit({

@@ -106,8 +106,14 @@ vi.mock("@/hooks/auth/AuthProvider", async (importOriginal) => ({
 }));
 
 const EMPRESA = "44444444-4444-4444-8444-444444444444";
+// FORK MIA (.79, empresa única): o seletor lê a lista simples
+// (`useEmpresasDoSeletor`), e o campo da empresa do negócio lê a ficha do
+// contato para dizer qual empresa entrou sozinha.
 vi.mock("@/hooks/useEmpresas", () => ({
-  useEmpresas: () => ({ data: { data: [{ id: EMPRESA, nome: "Padaria do Zé" }] }, isLoading: false }),
+  useEmpresasDoSeletor: () => ({ data: { data: [{ id: EMPRESA, nome: "Padaria do Zé" }] }, isLoading: false }),
+}));
+vi.mock("@/hooks/cartoes/useFichas", () => ({
+  useFichaDoContato: () => ({ data: undefined }),
 }));
 
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
