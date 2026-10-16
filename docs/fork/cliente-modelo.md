@@ -281,6 +281,8 @@ de equipe, e só ele (ver "O que sai de propósito", abaixo):
 | push | nenhuma assinatura de push |
 | ligação (WhatsApp e tronco SIP) | a voz não liga e o tronco não ativa |
 | e-mail | para o relatório LGPD ao titular, o alarme de prazo LGPD e qualquer outro e-mail com a empresa informada, o roteador de e-mail pergunta a `fn_mia_e_demonstracao` e não envia. Se não conseguir confirmar a empresa, também não envia. A única exceção é o convite de equipe (abaixo) |
+| e-mail das automações (ação `send_email`, upstream 1.81) | nenhuma regra ativa com `send_email`, no primeiro nível ou dentro de um `ai_decide` (migration `9043`); e a ação passa a organização ao roteador, que não envia (a aba Atividade mostra a frase da demonstração) |
+| servidor MCP externo (upstream: registro da 0580, tela na 1.83) | não se cadastra nem se troca na demonstração, e a empresa que tem um não vira demonstração (`trg_mia_demonstracao_sem_mcp_externo`, 9043); o cadastro da tela e o MCP de plataforma recusam antes, e a carga do turno e do editor do agente não abre rede (`carregarServidorMcpExterno` lê a marca na mesma leitura) |
 
 **O que sai de propósito: o convite de equipe.** Decisão do Gabriel em 07/10/2026
 (migration `9020`). A trava existe para nada chegar aos contatos fictícios nem a
