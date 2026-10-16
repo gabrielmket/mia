@@ -15,7 +15,10 @@
  *                      da tela mora em `gravarDadosCadastrais`
  *                      (`lib/tenants/dados-cadastrais.ts`): CNPJ repetido vira
  *                      "Este CNPJ já pertence a outra organização.", e é a
- *                      mesma frase aqui.
+ *                      mesma frase aqui. Desde o upstream 1.84 (#2347,
+ *                      item 4) TROCAR o país na tela sugere o fuso dele
+ *                      (`perfilDoPais(...).fusoDoSugerido`): aqui, `pais`
+ *                      novo sem `fuso` leva o fuso sugerido, e a resposta avisa.
  *   distribuição       `atendimentoConfigPatchSchema` e
  *                      `mesclarSettingsDeAtendimento` (`lib/schemas/routing.ts`),
  *                      a mescla de `PATCH /api/v1/settings/routing`: quem recebe
@@ -42,7 +45,7 @@ import { AI_DECIDE_PADRAO, CHAVE_DAS_AUTOMACOES } from "@/lib/automation/ai-deci
 import { gravarMeta } from "@/lib/crm/metas/gravar";
 import { lerModoDeVenda } from "@/lib/empresas/modo-de-venda";
 import { PRAZO_MAX_MINUTOS, PRAZO_MIN_MINUTOS } from "@/lib/escalacao/devolucao-automatica";
-import { paisesOferecidos } from "@/lib/legal/perfil-do-pais";
+import { paisesOferecidos, perfilDoPais } from "@/lib/legal/perfil-do-pais";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { assinaturaEntradaSchema, configAssinatura } from "@/lib/messaging/assinatura";
 import {
@@ -128,6 +131,12 @@ export async function configurarEmpresa(
     );
   }
 
+  // .82 (upstream 1.84, #2347 item 4): trocar o país SUGERE o fuso dele, como o
+  // seletor da tela. Só na TROCA e só sem `fuso` no pedido: quem manda o fuso
+  // escolhe, e a empresa que já estava no país fica com o fuso gravado.
+  const paisTrocado = pedido.pais !== undefined && pedido.pais !== null && pedido.pais !== (org.country ?? null);
+  const fusoDoPais = paisTrocado && pedido.fuso === undefined ? perfilDoPais(pedido.pais).fusoDoSugerido : undefined;
+
   // O formulário inteiro, como a tela o mandaria: o que está gravado, com o
   // pedido por cima. É ele que passa pela régua da tela.
   const lido = tenantSchema.safeParse({
@@ -135,7 +144,7 @@ export async function configurarEmpresa(
     legal_name: pedido.razao_social ?? org.legal_name,
     cnpj: pedido.cnpj === undefined ? org.cnpj : pedido.cnpj,
     country: pais ?? null,
-    timezone: pedido.fuso ?? org.timezone,
+    timezone: pedido.fuso ?? fusoDoPais ?? org.timezone,
     locale: pedido.idioma ?? org.locale,
     currency: pedido.moeda ?? org.currency ?? "BRL",
     media_retention_days: pedido.dias_de_retencao_de_midia ?? org.media_retention_days ?? 365,
@@ -203,6 +212,12 @@ export async function configurarEmpresa(
       // mesma frase), em vez do texto do Postgres.
       if ((err as { code?: string } | null)?.code === "23505") throw new Recusa(`${FRASE_DO_CNPJ_EM_USO} Confira o número e chame de novo.`);
       throw err instanceof Error ? err : new Error(`não consegui gravar os dados da empresa: ${(err as { message?: string })?.message ?? "erro"}`);
+    }
+    if (fusoDoPais !== undefined && colunas.timezone === fusoDoPais) {
+      avisos.push(
+        `O país mudou e o fuso acompanhou: ${fusoDoPais} (o sugerido para o país, como na tela). ` +
+          "É o fuso das jornadas, da agenda e das datas que saem para o cliente. Para outro fuso, chame de novo com `fuso`.",
+      );
     }
     if (colunas.media_retention_enforced === true) {
       avisos.push(

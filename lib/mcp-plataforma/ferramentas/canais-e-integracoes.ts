@@ -134,10 +134,11 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
       "Cria ou ajusta uma FONTE DE FORMULÁRIO de um cliente: a entrada por onde o formulário do site (ou outro sistema) põe contato e negócio no CRM, num funil e numa etapa, sem ninguém digitar. " +
       "Ajusta também as PERGUNTAS do formulário (até 20: chave, texto, tipo e se é obrigatória; as respostas viram campos do negócio e a tela gera o HTML do formulário a partir delas), " +
       "o mapeamento dos nomes de campo que o sistema de fora manda, o endereço para onde a pessoa vai depois de enviar, e a AUTORIZAÇÃO DE IA NA CAPTAÇÃO " +
-      "(o contato novo que chega com o envio completo e com o consentimento explícito para atendimento automatizado fica autorizado para a IA). " +
+      "(o contato novo que chega com o envio completo e com o consentimento explícito para atendimento automatizado fica autorizado para a IA) " +
+      "e a ATUALIZAÇÃO DO CARD NO REENVIO (o envio que repete o `external_id` de um card que esta fonte criou atualiza o card, em vez de ser descartado como reenvio). " +
       "GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é o NOME da fonte. Só o que VEIO muda; `perguntas` é a lista completa. " +
       "A resposta traz o caminho do endereço de captação (e o endereço inteiro quando a instalação o conhece), que uma pessoa põe no formulário do site. " +
-      "ATENÇÃO: a fonte nasce LIGADA, como na tela (todo envio para o endereço vira contato); a autorização de IA só liga com a ASSINATURA da fonte, que é credencial e é posta por uma pessoa na tela. " +
+      "ATENÇÃO: a fonte nasce LIGADA, como na tela (todo envio para o endereço vira contato); a autorização de IA e a atualização do card no reenvio só ligam com a ASSINATURA da fonte, que é credencial e é posta por uma pessoa na tela. " +
       "O QUE NÃO FAZ: não recebe nem devolve o segredo da assinatura, não liga nem desliga a fonte, não apaga fonte e não cria a regra de automação do formulário " +
       "(para isso, plataforma_garantir_automacao com o gatilho lead.created e `configuracao_do_gatilho.webhook_source_id`).",
     inputSchema: {
@@ -189,6 +190,16 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
         .describe(
           "Autoriza o atendimento por IA do contato novo que chega com o envio completo e o consentimento explícito para atendimento automatizado. " +
             "Exige a assinatura da fonte (posta por uma pessoa na tela); o integrador manda o aceite separado da política de privacidade e um `external_id` por envio. Nasce desligada.",
+        ),
+      // .82 — upstream 1.84 (0683, #2316).
+      atualizar_card_no_reenvio: z
+        .boolean()
+        .optional()
+        .describe(
+          "Quando o sistema de fora manda de novo um envio com o mesmo `external_id` de um card que ESTA fonte criou: true ATUALIZA o card (os campos novos entram, o nome do card acompanha o nome enviado " +
+            "e o campo reservado `stage` move o card para a etapa pedida); false (o padrão) descarta o envio como reenvio, sem tocar no card. " +
+            "Não alcança card criado por outra fonte, card sem origem registrada nem card de contato anonimizado. Exige a assinatura da fonte; fonte nova não nasce com ela. " +
+            "Ligada, a correção feita à mão num campo do card pode ser sobrescrita pelo próximo envio da integração.",
         ),
     },
     exemplo: {

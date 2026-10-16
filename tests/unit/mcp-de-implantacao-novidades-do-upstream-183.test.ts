@@ -10,7 +10,8 @@
  * recusa que ensina e a leitura que devolve. A empresa de demonstração aparece
  * onde há saída para fora (e-mail, servidor externo).
  *
- * A CONTAGEM da lista mora aqui (a versão mais nova): 68.
+ * A CONTAGEM da lista mora no teste da versão mais nova
+ * (`mcp-de-implantacao-novidades-do-upstream-184.test.ts`, .82: 68).
  *
  * Nenhum dado daqui é de cliente real: empresa fictícia, nomes inventados,
  * e-mails `@exemplo.invalid`.
@@ -103,10 +104,9 @@ beforeEach(() => {
 
 // ---------------------------------------------------------------------------
 
-describe("a lista: 68 ferramentas, e os tipos de ação são os do upstream", () => {
+describe("a lista: a ferramenta da .81, e os tipos de ação são os do upstream", () => {
   it("a ferramenta nova do servidor MCP externo monta (implantar_configuracao)", () => {
-    // 67 da .80 e `plataforma_configurar_servidor_mcp_externo` (.81).
-    expect(FERRAMENTAS).toHaveLength(68);
+    // A contagem mora no teste da versão mais nova (184); aqui fica só o que é da .81.
     expect(FERRAMENTAS.find((f) => f.name === "plataforma_configurar_servidor_mcp_externo")?.operacao).toBe("implantar_configuracao");
   });
 

@@ -234,6 +234,7 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
     name: "plataforma_pausar_agente",
     description:
       "PAUSA ou RETOMA um agente de IA. Pausado, ele para de responder na hora; a versão publicada continua guardada, e retomar o põe de volta sem publicar de novo. " +
+      "Se houver OUTRO agente publicado e no ar no mesmo número, é ele que passa a responder ali; com todos os agentes do número pausados, o número fica sem resposta automática. " +
       "QUANDO USAR: para calar um agente que foi ao ar com algo errado, enquanto o rascunho é corrigido. `pausar: false` retoma. " +
       "Chamar de novo com o mesmo pedido responde `ja_estava`. " +
       "O QUE NÃO FAZ: não despublica nem arquiva o agente, e não mexe nas conversas que uma pessoa já assumiu.",

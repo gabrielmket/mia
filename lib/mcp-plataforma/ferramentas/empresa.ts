@@ -26,6 +26,7 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
       "e os dados de privacidade (e-mail do encarregado, endereço da política, dias de retenção de mídia e se a limpeza automática de mídia antiga está ligada). " +
       "Grava também a META DO MÊS (`meta_do_mes`, o faturamento dos negócios ganhos da empresa inteira, em centavos): é ela que vira a barra do painel \"Meta do mês\" e do link para o dono. " +
       "Só os campos que VIERAM mudam; o que veio igual ao que está gravado responde `ja_estava`. " +
+      "Trocar o `pais` sem mandar `fuso` leva o fuso sugerido do país, como na tela. " +
       "ATENÇÃO: `limpeza_automatica_de_midia` ligada apaga, na limpeza diária, a mídia das conversas e o anexo de nota interna mais velhos que `dias_de_retencao_de_midia`, sem volta. Ela nasce ligada em toda empresa. " +
       "QUANDO USAR: logo depois de criar o cliente, antes do catálogo (a MOEDA da empresa é a que os produtos novos recebem) e da agenda (o FUSO é o das jornadas e dos horários). " +
       "`modo_de_venda`: \"b2b\" mostra a aba Empresas e pede empresa, cargo e setor no cadastro; \"misto\" (vende para empresas e para pessoas) mostra igual, com a empresa sempre opcional; \"b2c\" esconde tudo isso. " +
@@ -35,7 +36,15 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
       nome: z.string().trim().min(1).max(120).optional().describe("O nome que aparece no produto e nas mensagens."),
       razao_social: z.string().trim().min(1).max(200).optional(),
       cnpj: z.string().trim().max(20).nullable().optional().describe('O CNPJ (ex.: "00.000.000/0001-00"). null apaga.'),
-      pais: z.string().regex(/^[A-Z]{2}$/, 'duas letras maiúsculas, ex.: "BR"').nullable().optional(),
+      pais: z
+        .string()
+        .regex(/^[A-Z]{2}$/, 'duas letras maiúsculas, ex.: "BR"')
+        .nullable()
+        .optional()
+        .describe(
+          'O país da empresa, em duas letras (ex.: "BR", "PT"). Decide a lei citada e a língua dos avisos ao encarregado. ' +
+            "TROCAR o país sem mandar `fuso` leva o fuso sugerido do país (Portugal: Europe/Lisbon), como a tela faz; mande `fuso` junto para escolher outro.",
+        ),
       fuso: z.string().trim().min(1).max(64).optional().describe('O fuso da empresa, pelo nome da região sem acento (ex.: "America/Sao_Paulo").'),
       idioma: z.string().trim().min(2).max(10).optional().describe('O idioma da interface para a equipe (ex.: "pt-BR").'),
       moeda: z.enum(MOEDAS_SERVIDAS).optional().describe("A moeda dos valores e dos produtos novos."),
@@ -98,6 +107,7 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
       "Ajusta a DISTRIBUIÇÃO DO ATENDIMENTO de um cliente: quem recebe o cliente novo, o que cada atendente enxerga, quando a IA volta a responder e se a mensagem mostra quem fala. " +
       "`modo`: \"manual\" (alguém assume cada conversa), \"round_robin\" (rodízio entre quem está de plantão) ou \"load\" (vai para quem está com MENOS conversas abertas; no empate, o rodízio decide). " +
       "`visibilidade` do papel Atendente: \"all\" (vê tudo), \"own_and_unassigned\" (o que é dele e o que não tem dono) ou \"own\" (só o que é dele). " +
+      "A mesma régua decide o que o atendente pode ASSUMIR e TRANSFERIR: conversa que ele não enxerga, ele também não assume nem repassa (gestor e administrador seguem com tudo). " +
       "`devolver_para_a_ia_apos_minutos`: depois de quanto tempo sem sinal de uma pessoa a conversa volta para o agente (null = nunca volta sozinha). " +
       "`conversa_fica_com_quem_atendeu`: quem responde pelo Inbox assume a conversa, e ela volta para a mesma pessoa quando o cliente escreve de novo. " +
       "`ia_espera_apos_resposta_pelo_celular_minutos`: quanto a IA fica calada depois que alguém da equipe responde pelo celular, fora do sistema. " +

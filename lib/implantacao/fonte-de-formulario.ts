@@ -15,6 +15,16 @@
  *    (`assinaturaObrigatoriaAusente`): é ela que prova que o envio veio do
  *    integrador.
  *
+ * ── O que chegou do upstream 1.84 (.82) ───────────────────────────────────
+ *
+ *  - ATUALIZAR O CARD NO REENVIO (`update_existing_lead_on_capture`, 0683,
+ *    #2316): o envio que repete o `external_id` de um card que ESTA fonte criou
+ *    atualiza o card (campos novos, nome, e o campo reservado `stage` move de
+ *    etapa) em vez de ser descartado como reenvio. Nasce desligada, só entra no
+ *    PATCH (fonte nova não nasce com ela) e exige a ASSINATURA, pela mesma
+ *    régua da autorização de IA (`opcaoSemAssinatura`), com a frase de cada
+ *    opção.
+ *
  * ── O caminho da tela que isto espelha ────────────────────────────────────
  *
  *   criar    `POST /api/v1/webhook-sources`: `createWebhookSourceSchema` e
@@ -38,7 +48,7 @@ import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { autoriaDaMudanca } from "@/lib/operacao/autoria";
 import { criarEntradaAutomatica, type FonteVisivel } from "@/lib/operacao/entradas-automaticas";
 import { createWebhookSourceSchema, updateWebhookSourceSchema } from "@/lib/schemas/webhooks";
-import { assinaturaObrigatoriaAusente } from "@/lib/webhooks/assinatura-autorizacao";
+import { opcaoSemAssinatura } from "@/lib/webhooks/assinatura-autorizacao";
 import type { WebhookFormField } from "@/lib/webhooks/formulario";
 import { ApiError } from "@/lib/api/types";
 
@@ -66,6 +76,8 @@ export interface PedidoDeFonte {
   mapeamento?: { nome?: string[]; telefone?: string[]; email?: string[] };
   endereco_de_retorno?: string | null;
   autorizar_ia_na_captura?: boolean;
+  /** .82 (upstream 1.84, 0683): o reenvio do mesmo `external_id` atualiza o card desta fonte. */
+  atualizar_card_no_reenvio?: boolean;
 }
 
 interface LinhaDaFonte {
@@ -79,11 +91,12 @@ interface LinhaDaFonte {
   field_map: Record<string, unknown> | null;
   form_fields: unknown;
   authorize_ai_on_capture: boolean;
+  update_existing_lead_on_capture: boolean;
   secret_encrypted: string | null;
 }
 
 const COLUNAS =
-  "id, name, is_active, path_token, default_pipeline_id, default_stage_id, redirect_to, field_map, form_fields, authorize_ai_on_capture, secret_encrypted";
+  "id, name, is_active, path_token, default_pipeline_id, default_stage_id, redirect_to, field_map, form_fields, authorize_ai_on_capture, update_existing_lead_on_capture, secret_encrypted";
 
 export async function lerFontes(c: Pick<Implantacao, "admin" | "orgId">): Promise<LinhaDaFonte[]> {
   const { data, error } = await c.admin
@@ -105,6 +118,8 @@ export function enderecoDeCaptacao(pathToken: string): { caminho: string; endere
 /** A fonte para a leitura e para a resposta: SEM o segredo, com o fato de haver um. */
 export function retratoDaFonte(
   f: Pick<LinhaDaFonte, "id" | "name" | "is_active" | "path_token" | "redirect_to" | "field_map" | "form_fields" | "authorize_ai_on_capture"> & {
+    /** Ausente na fonte que acabou de nascer pela função do upstream: nasce desligada. */
+    update_existing_lead_on_capture?: boolean | null;
     has_secret?: boolean;
     secret_encrypted?: string | null;
   },
@@ -132,6 +147,7 @@ export function retratoDaFonte(
     })),
     tem_assinatura: f.has_secret ?? Boolean(f.secret_encrypted),
     autorizar_ia_na_captura: f.authorize_ai_on_capture === true,
+    atualizar_card_no_reenvio: f.update_existing_lead_on_capture === true,
   };
 }
 
@@ -255,6 +271,14 @@ export async function garantirFonteDeFormulario(c: Implantacao, pedido: PedidoDe
           "Crie a fonte sem `autorizar_ia_na_captura`; depois da assinatura, chame de novo com `autorizar_ia_na_captura: true`.",
       );
     }
+    // .82 (upstream 1.84, 0683): o schema de criação nem tem o campo; a opção
+    // só entra pelo PATCH, depois da assinatura, como na tela.
+    if (pedido.atualizar_card_no_reenvio === true) {
+      throw new Recusa(
+        "Fonte nova não nasce com a atualização do card no reenvio: ela exige a ASSINATURA da fonte, que é credencial e é posta por uma pessoa na tela (Automações › Fontes, /app/webhooks). " +
+          "Crie a fonte sem `atualizar_card_no_reenvio`; depois da assinatura, chame de novo com `atualizar_card_no_reenvio: true`.",
+      );
+    }
     const lido = createWebhookSourceSchema.safeParse({
       name: nome,
       default_pipeline_id: destino.pipeline_id,
@@ -325,6 +349,13 @@ export async function garantirFonteDeFormulario(c: Implantacao, pedido: PedidoDe
     patch.authorize_ai_on_capture = pedido.autorizar_ia_na_captura;
     mudancas.push("autorizar IA na captação");
   }
+  if (
+    pedido.atualizar_card_no_reenvio !== undefined &&
+    pedido.atualizar_card_no_reenvio !== (existente.update_existing_lead_on_capture === true)
+  ) {
+    patch.update_existing_lead_on_capture = pedido.atualizar_card_no_reenvio;
+    mudancas.push("atualizar o card no reenvio");
+  }
 
   if (Object.keys(patch).length === 0) {
     return {
@@ -337,11 +368,19 @@ export async function garantirFonteDeFormulario(c: Implantacao, pedido: PedidoDe
 
   const conferido = updateWebhookSourceSchema.safeParse(patch);
   if (!conferido.success) recusaDoSchema(conferido.error);
-  // A mesma recusa da rota: autorizar IA exige a prova de origem (a assinatura).
-  if (assinaturaObrigatoriaAusente(existente, conferido.data)) {
+  // A mesma recusa da rota: as duas opções que dependem de prova de origem (a
+  // assinatura), cada uma com a própria frase (upstream 1.84, #2316).
+  const opcaoQuePedeAssinatura = opcaoSemAssinatura(existente, conferido.data);
+  if (opcaoQuePedeAssinatura === "ai") {
     throw new Recusa(
       `A fonte «${existente.name}» não tem ASSINATURA, e autorizar o atendimento por IA na captação exige uma: é ela que prova que o envio veio do integrador. ` +
         "A assinatura é credencial e é posta por uma pessoa na tela (Automações › Fontes, /app/webhooks). Depois, chame de novo.",
+    );
+  }
+  if (opcaoQuePedeAssinatura === "update_lead") {
+    throw new Recusa(
+      `A fonte «${existente.name}» não tem ASSINATURA, e atualizar o card no reenvio exige uma: só a integração que assina o envio pode reescrever um card que já existe ` +
+        "(o formulário HTML público, que qualquer um posta, não). A assinatura é credencial e é posta por uma pessoa na tela (Automações › Fontes, /app/webhooks). Depois, chame de novo.",
     );
   }
 
@@ -369,6 +408,16 @@ export async function garantirFonteDeFormulario(c: Implantacao, pedido: PedidoDe
       "A autorização de IA na captação ficou LIGADA: o contato novo que chega com o envio completo E com o consentimento explícito para atendimento automatizado fica autorizado para a IA. " +
         "O integrador precisa mandar esse aceite (separado da política de privacidade) e um `external_id` por envio. A IA só fala com ele se houver agente publicado no número.",
     );
+  }
+  if (patch.update_existing_lead_on_capture === true) {
+    avisos.push(
+      "A atualização do card no reenvio ficou LIGADA: um envio com o mesmo `external_id` de um card que ESTA fonte criou atualiza o card (os campos novos entram, o nome do card acompanha o nome enviado e o campo reservado `stage` move o card para a etapa pedida), " +
+        "em vez de ser descartado como reenvio; em Leads recebidos ele aparece como \"Card atualizado\". Card criado por outra fonte, card sem origem registrada e card de contato anonimizado não são alcançados. " +
+        "ATENÇÃO: o campo que alguém corrigir à mão no card pode ser sobrescrito pelo próximo envio da integração.",
+    );
+  }
+  if (patch.update_existing_lead_on_capture === false) {
+    avisos.push("A atualização do card no reenvio ficou DESLIGADA: o envio que repete o mesmo `external_id` volta a ser só reenvio, sem tocar no card.");
   }
   if (patch.default_pipeline_id !== undefined) {
     avisos.push("O destino novo vale para o próximo envio do formulário; os contatos que já entraram ficam onde estão.");
