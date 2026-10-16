@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { sql } from "./gov-helpers";
 
 /**
- * FORK MIA (migrations 9010, 9016 e 9020) — A EMPRESA DE DEMONSTRAÇÃO NÃO MANDA NADA PARA FORA.
+ * FORK MIA (migrations 9010, 9016, 9020, 9021 e 9043) — A EMPRESA DE DEMONSTRAÇÃO NÃO MANDA NADA PARA FORA.
  *
  * O cliente modelo mora em produção, com dados fictícios. A marca
  * `organizations.demonstracao` fecha, NO BANCO, cada porta por onde um envio
@@ -410,7 +410,7 @@ describe("o convite de equipe ENTRA na demonstração (9020)", () => {
     expect(aceitar(REAL)).toBe("agent,true,true");
   });
 
-  it("⭐ SÓ o gatilho do convite saiu: os outros onze da 9010 e o da 9016 estão de pé (e o da 9021 chegou)", () => {
+  it("⭐ SÓ o gatilho do convite saiu: os outros onze da 9010 e o da 9016 estão de pé (e os da 9021 e 9043 chegaram)", () => {
     const gatilhos = medir(`
       select 'M:' || coalesce(string_agg(c.relname || '.' || t.tgname, ','), '')
         from pg_trigger t
@@ -432,6 +432,8 @@ describe("o convite de equipe ENTRA na demonstração (9020)", () => {
         "messages.trg_mia_demonstracao_nao_envia",
         "mia_agenda_microsoft_conexoes.trg_mia_demonstracao_sem_agenda_microsoft",
         "org_voice_calls.trg_mia_demonstracao_sem_voz",
+        // 9043: o servidor MCP externo do upstream (0580, tela na v1.83).
+        "organizations.trg_mia_demonstracao_sem_mcp_externo",
         "push_subscriptions.trg_mia_demonstracao_sem_push",
         "voip_trunk_settings.trg_mia_demonstracao_sem_tronco",
       ].sort(),
@@ -677,5 +679,124 @@ describe("a marca: só a plataforma muda, e ela não convive com destino vivo", 
         has_function_privilege('authenticated', 'public.fn_mia_e_demonstracao(uuid)', 'EXECUTE')::text || ',' ||
         has_function_privilege('service_role', 'public.fn_mia_e_demonstracao(uuid)', 'EXECUTE')::text;`),
     ).toBe("false,false,true");
+  });
+});
+
+describe("a trava alcança o e-mail das regras e o servidor MCP externo (9043)", () => {
+  /**
+   * A fusão da v1.83 (.81) trouxe duas saídas novas: a ação `send_email` das
+   * automações (v1.81, #2726), que manda e-mail para o contato, o responsável
+   * ou um endereço fixo; e o servidor MCP externo (registro da 0580, tela na
+   * v1.83), que a IA consulta pela rede. As duas fecham no banco; o código
+   * fecha também (lib/automation/actions/send-email.ts passa a organização ao
+   * roteador; lib/mcp/servidor-externo/carregar.ts não carrega na demonstração).
+   */
+  const PASTA_DAS_MIGRATIONS = join(process.cwd(), "supabase", "migrations-mia");
+  const MIGRATION_9043 = readFileSync(
+    join(PASTA_DAS_MIGRATIONS, "20261016180000_9043_demonstracao_sem_email_e_mcp_externo_recusa_em_pt409.sql"),
+    "utf8",
+  );
+  const regraDeEmail = (org: string, ativa: boolean) =>
+    `insert into public.automation_rules (organization_id, name, trigger_event, actions, is_active)
+       values ('${org}', 'Regra 9043 e-mail', 'lead.created',
+               '[{"type":"send_email","config":{"destinatario":"fixo","email_fixo":"time@invariant.test","assunto":"a","corpo":"b","formato":"texto"}}]'::jsonb, ${ativa})`;
+  const decisaoComEmail = (org: string) =>
+    `insert into public.automation_rules (organization_id, name, trigger_event, actions, is_active)
+       values ('${org}', 'Regra 9043 decisão', 'lead.created',
+               '[{"type":"ai_decide","config":{"pergunta":"Qual?","opcoes":[
+                  {"id":"a","rotulo":"Avisar","acao":{"type":"send_email","config":{}}},
+                  {"id":"b","rotulo":"Tarefa","acao":{"type":"create_task","config":{}}}]}}]'::jsonb, true)`;
+  const cadastrarServidor = (org: string) =>
+    `update public.organizations
+        set settings = coalesce(settings, '{}'::jsonb) || '{"mcp_externo":{"endpoint":"https://erp.invariant.test/mcp"}}'::jsonb,
+            mcp_externo_chave_encrypted = decode('00', 'hex')
+      where id = '${org}'`;
+
+  it("⭐ regra ativa com e-mail é recusada, no primeiro nível e dentro de um ai_decide", () => {
+    const r = tentarComMensagem(regraDeEmail(DEMO, true));
+    expect(r.split("|")[0], r).toBe("42501");
+    expect(r).toContain("regra de automacao ativa com webhook, aviso no grupo ou e-mail");
+    expect(tentar(decisaoComEmail(DEMO))).toBe("42501");
+  });
+
+  it("a regra de e-mail pode existir desligada; controle: a empresa de verdade liga", () => {
+    expect(tentar(regraDeEmail(DEMO, false))).toBe("passou");
+    expect(tentar(regraDeEmail(REAL, true))).toBe("passou");
+    expect(tentar(decisaoComEmail(REAL))).toBe("passou");
+  });
+
+  it("⭐ cadastrar o servidor externo na demonstração é recusado; controle: na empresa de verdade, grava", () => {
+    const r = tentarComMensagem(cadastrarServidor(DEMO));
+    expect(r.split("|")[0], r).toBe("42501");
+    expect(r).toContain("servidor MCP externo nao existe numa empresa de demonstracao");
+    expect(tentar(cadastrarServidor(REAL))).toBe("passou");
+  });
+
+  it("⭐ marcar como demonstração a empresa com servidor cadastrado é recusado, com o que desligar", () => {
+    // OUTRA não tem número nem outro destino vivo: a recusa só pode vir da 9043.
+    const r = tentarComMensagem(
+      `update public.organizations set demonstracao = true where id = '${OUTRA}'`,
+      `${cadastrarServidor(OUTRA)};`,
+    );
+    expect(r.split("|")[0], r).toBe("42501");
+    expect(r).toContain("a empresa ainda tem destino vivo (servidor MCP externo cadastrado)");
+  });
+
+  it("apagar o servidor e mexer em outra opção seguem livres na demonstração", () => {
+    const r = medir(`
+      -- Um cadastro anterior à 9043, posto por baixo da trava (sem o gatilho).
+      alter table public.organizations disable trigger trg_mia_demonstracao_sem_mcp_externo;
+      ${cadastrarServidor(DEMO)};
+      alter table public.organizations enable trigger trg_mia_demonstracao_sem_mcp_externo;
+      -- Outra opção da empresa: não mexe no servidor, passa.
+      update public.organizations set settings = settings || '{"inv_9043":true}'::jsonb where id = '${DEMO}';
+      -- Apagar: passa.
+      update public.organizations
+         set settings = settings - 'mcp_externo', mcp_externo_chave_encrypted = null
+       where id = '${DEMO}';
+      select 'M:' || coalesce((settings ? 'mcp_externo')::text, 'null') || ',' || (mcp_externo_chave_encrypted is null)::text
+        from public.organizations where id = '${DEMO}';
+    `);
+    expect(r).toBe("false,true");
+  });
+
+  it("⭐ CONTROLE NEGATIVO: com a função da 9021, o e-mail passava; a 9043, do arquivo e duas vezes, fecha", () => {
+    const MIGRATION_9021 = readFileSync(
+      join(PASTA_DAS_MIGRATIONS, "20261014120000_9021_demonstracao_alcanca_o_ai_decide_e_a_cobranca.sql"),
+      "utf8",
+    );
+    const provar = (chave: string, dml: string) => `
+      do $$
+      begin
+        begin
+          ${dml};
+          perform set_config('inv.${chave}', 'passou', true);
+        exception when others then
+          perform set_config('inv.${chave}', sqlstate, true);
+        end;
+      end $$;`;
+    const r = medir(`
+      drop trigger if exists trg_mia_demonstracao_sem_mcp_externo on public.organizations;
+      ${MIGRATION_9021}
+      ${provar("email_antes", regraDeEmail(DEMO, true))}
+      ${provar("servidor_antes", cadastrarServidor(DEMO))}
+      delete from public.automation_rules where organization_id = '${DEMO}' and name like 'Regra 9043%';
+      update public.organizations set settings = settings - 'mcp_externo', mcp_externo_chave_encrypted = null where id = '${DEMO}';
+      ${MIGRATION_9043}
+      ${MIGRATION_9043}
+      ${provar("email_depois", regraDeEmail(DEMO, true))}
+      ${provar("servidor_depois", cadastrarServidor(DEMO))}
+      select 'M:' || current_setting('inv.email_antes') || ',' || current_setting('inv.servidor_antes')
+                  || ',' || current_setting('inv.email_depois') || ',' || current_setting('inv.servidor_depois');
+    `);
+    expect(r).toBe("passou,passou,42501,42501");
+  });
+
+  it("a função do gatilho novo é só do banco (nem anon nem authenticated a executam)", () => {
+    expect(
+      medir(`select 'M:' ||
+        has_function_privilege('anon', 'public.fn_mia_demonstracao_sem_mcp_externo()', 'EXECUTE')::text || ',' ||
+        has_function_privilege('authenticated', 'public.fn_mia_demonstracao_sem_mcp_externo()', 'EXECUTE')::text;`),
+    ).toBe("false,false");
   });
 });

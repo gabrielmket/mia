@@ -61,7 +61,9 @@ export type ResultadoRegistroDeServidorMcp =
         | "mfa_required"
         | "upstream_unavailable"
         | "endpoint_inseguro"
-        | "erro_ao_gravar";
+        | "erro_ao_gravar"
+        // FORK MIA (cliente modelo, 9010): servidor externo não se cadastra na demonstração.
+        | "organizacao_de_demonstracao";
     };
 
 /**
@@ -121,10 +123,19 @@ export async function definirServidorMcpExterno(
   const admin = createAdminClient();
   const { data: atual, error: erroLeitura } = await admin
     .from("organizations")
-    .select("settings")
+    // FORK MIA: a marca da demonstração vem na mesma leitura (ver abaixo).
+    .select("settings, demonstracao")
     .eq("id", org.orgId)
     .maybeSingle();
   if (erroLeitura) return { ok: false, error: "erro_ao_gravar" };
+  // FORK MIA (cliente modelo, 9010; .81): da empresa de demonstração nada sai, e o
+  // servidor externo é rede para um sistema de terceiro. Cadastrar é recusado;
+  // APAGAR continua valendo (é o caminho de limpar uma demonstração). O banco
+  // recusa o mesmo (9043, `trg_mia_demonstracao_sem_mcp_externo`) e a carga do
+  // turno também (`carregarServidorMcpExterno`).
+  if (!apagando && (atual as { demonstracao?: unknown } | null)?.demonstracao === true) {
+    return { ok: false, error: "organizacao_de_demonstracao" };
+  }
 
   // `settings` é jsonb compartilhado: ler, mesclar SÓ o nosso bolso e gravar
   // preserva o que é dos outros — é a razão do merge em dois níveis.

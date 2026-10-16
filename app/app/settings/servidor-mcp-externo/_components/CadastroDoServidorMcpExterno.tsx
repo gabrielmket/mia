@@ -72,6 +72,8 @@ export const MENSAGEM_DA_RECUSA: Record<CodigoDeRecusa, string> = {
   erro_ao_gravar: "Não foi possível salvar. Tente de novo em instantes.",
   sem_servidor:
     "Nenhum servidor externo respondeu. Salve o endereço e a chave e teste de novo.",
+  // FORK MIA (cliente modelo, 9010): a demonstração não cadastra servidor externo.
+  organizacao_de_demonstracao: "Esta é a empresa de demonstração: nenhuma mensagem, e-mail ou aviso sai daqui.",
 };
 
 interface FerramentaAnunciada {

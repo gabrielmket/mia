@@ -345,7 +345,8 @@ export async function pedirObrigacao(
 }
 
 function traduzirErroDoCiclo(erro: { message: string; code?: string }): never {
-  if (erro.code === "40001" || /mia_obrigacao_mudou/.test(erro.message)) {
+  // PT409: o item já mudou de ciclo (9043, recusa permanente). 40001: banco anterior à 9043.
+  if (erro.code === "PT409" || erro.code === "40001" || /mia_obrigacao_mudou/.test(erro.message)) {
     throw new ErroDeObrigacao(
       "conflito",
       "Este item já foi atualizado por outra pessoa. Abra de novo para ver como ficou.",

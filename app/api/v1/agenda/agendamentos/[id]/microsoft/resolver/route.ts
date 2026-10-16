@@ -46,7 +46,8 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     p_escolha: parsed.data.choice,
   } as never);
   if (error) {
-    const desatualizada = error.code === "40001";
+    // PT409: o compromisso mudou (9043, recusa permanente). 40001: banco anterior à 9043.
+    const desatualizada = error.code === "PT409" || error.code === "40001";
     return fail(
       desatualizada ? "conflict" : "forbidden",
       desatualizada

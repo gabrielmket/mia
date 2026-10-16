@@ -210,6 +210,9 @@ const MOTIVO_DA_PARADA: Record<string, string> = {
     "O servidor recusou o endereço de quem envia. Confira o remetente em Admin › E-mail.",
   dominio_nao_verificado:
     "O domínio do remetente não está verificado na Resend. Verifique o domínio na conta Resend e tente de novo.",
+  // FORK MIA (cliente modelo, 9010): o e-mail da regra numa empresa de demonstração.
+  organizacao_de_demonstracao:
+    "Esta é a empresa de demonstração: nenhuma mensagem, e-mail ou aviso sai daqui.",
 };
 
 function explicacaoDe(

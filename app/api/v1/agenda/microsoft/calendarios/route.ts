@@ -118,7 +118,10 @@ export async function PATCH(req: Request) {
     p_destino: parsed.data.destination.id,
   } as never);
   if (error) {
-    const desatualizada = error.code === "40001";
+    // PT409: tela velha (9043, recusa permanente; destino Google passa pela
+    // `fn_google_selection` do upstream, PT409 desde a 0654). 40001: banco
+    // anterior à 9043 e à 0654 — o banco e a imagem não sobem no mesmo instante.
+    const desatualizada = error.code === "PT409" || error.code === "40001";
     return fail(
       desatualizada ? "conflict" : "forbidden",
       desatualizada

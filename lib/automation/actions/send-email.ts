@@ -245,9 +245,18 @@ async function execute(
     // Mesma tag da cobrança, com o valor que diz de ONDE veio: no painel da
     // Resend dá para separar o envio de automação do convite de equipe.
     tags: [{ name: "origem", value: "automacao" }],
+    // FORK MIA (cliente modelo, 9010): a trava da empresa de demonstração no
+    // roteador só age com a organização. Sem ela, a regra de uma demonstração
+    // mandaria e-mail de verdade para o endereço fixo ou o do responsável.
+    organizationId: ctx.organizationId,
   });
 
   const base = { destinatario, via: resultado.via ?? null };
+  // FORK MIA: na empresa de demonstração nada sai — é recusa de configuração
+  // (reenviar não muda), então `skipped`, como as do destinatário.
+  if (!resultado.ok && resultado.error === "organizacao_de_demonstracao") {
+    return { type: "send_email", status: "skipped", detail: { ...base, reason: "organizacao_de_demonstracao" } };
+  }
   if (!resultado.ok) {
     return {
       type: "send_email",

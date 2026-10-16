@@ -50,6 +50,16 @@ import { abrirChaveMcpExterno } from "./segredo";
 const COLUNAS_DO_SEGREDO =
   "settings, mcp_externo_chave_encrypted, mcp_externo_chave_iv, mcp_externo_chave_tag";
 
+/**
+ * FORK MIA (cliente modelo, 9010; .81): a marca da empresa de DEMONSTRAÇÃO vem na
+ * MESMA leitura. Da demonstração nada sai, e o servidor externo é rede para um
+ * sistema de terceiro: com a marca ligada a carga devolve `null` antes de abrir
+ * a chave e de falar com o servidor (vale para o turno e para o editor do
+ * agente). Banco sem a coluna (sem a 9010) erra a leitura, e a leitura que erra
+ * já devolve `null`: falha fechada.
+ */
+const COLUNAS_DA_CARGA = `${COLUNAS_DO_SEGREDO}, demonstracao`;
+
 /** O que o montador do turno recebe: a configuração e o que o servidor anunciou. */
 export interface ServidorMcpExternoMontado {
   servidor: ServidorMcpExterno;
@@ -159,7 +169,7 @@ export async function carregarServidorMcpExterno(
 
   const { data, error } = await supabase
     .from("organizations")
-    .select(COLUNAS_DO_SEGREDO)
+    .select(COLUNAS_DA_CARGA)
     // SEMPRE o `organization_id` do run, nunca do corpo do pedido (item 2): a
     // mesma linha que a ação gravou é a única que este turno enxerga.
     .eq("id", organizationId)
@@ -177,7 +187,11 @@ export async function carregarServidorMcpExterno(
     mcp_externo_chave_encrypted?: unknown;
     mcp_externo_chave_iv?: unknown;
     mcp_externo_chave_tag?: unknown;
+    demonstracao?: unknown;
   } | null;
+
+  // FORK MIA: empresa de demonstração não fala com servidor de fora.
+  if (linha?.demonstracao === true) return null;
 
   const endpoint = lerEndpointMcpExterno(linha?.settings);
   const chave = abrirChaveMcpExterno({

@@ -12,6 +12,11 @@
 type Traducoes = Record<string, { es: string }>;
 
 export const DICIONARIO_DA_EQUIPE_MIA: Traducoes = {
+  // .81: a frase da trava da demonstração (`FRASE_DA_DEMONSTRACAO`, lib/demonstracao/trava.ts),
+  // que a aba Atividade das automações passou a mostrar no e-mail da regra.
+  "Esta é a empresa de demonstração: nenhuma mensagem, e-mail ou aviso sai daqui.": {
+    es: "Esta es la empresa de demostración: ningún mensaje, correo o aviso sale de aquí.",
+  },
   // A frase do upstream dizia "janela de 24h". No fork o convite vale 15 dias
   // (`INVITE_TTL_SECONDS`), e a frase deixou de citar o número para não voltar a
   // mentir quando o prazo mudar.
