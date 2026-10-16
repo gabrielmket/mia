@@ -698,7 +698,7 @@ create or replace function public.fn_mia_relatorio_chaves(
   p_fuso text
 ) returns setof text
 language plpgsql
-immutable
+stable
 set search_path = ''
 as $f$
 declare
