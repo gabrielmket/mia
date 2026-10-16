@@ -56,6 +56,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
+import { ehOperante } from "@/lib/organizacao/operante";
 import { env } from "@/lib/env";
 
 import {
@@ -502,7 +503,7 @@ export async function resolverLink(admin: SupabaseClient, bruto: unknown): Promi
     .select("status")
     .eq("id", linha.organization_id)
     .maybeSingle();
-  if (erroOrg || !org || (org as { status?: string }).status !== "active") return null;
+  if (erroOrg || !org || !ehOperante((org as { status?: string }).status)) return null;
   return { link: paraLink(linha), organizationId: linha.organization_id };
 }
 
