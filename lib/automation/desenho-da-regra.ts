@@ -31,6 +31,8 @@ import {
   configDoSilencio,
   type DirecaoDoSilencio,
 } from "@/lib/automation/gatilhos-de-tempo";
+// FORK MIA (.81) — os gatilhos de documentos e obrigações (docs/fork/obrigacoes.md).
+import { DIAS_SUGERIDOS, ehGatilhoDeObrigacao, gatilhoPedeDias } from "@/lib/obrigacoes/gatilhos";
 import {
   MENSAGEM_DO_LACO_DE_LEAD,
   acoesQueFechamLaco,
@@ -61,6 +63,12 @@ export type TelaDoGatilho = {
   fonte: string | null;
   data: { pipeline_id: string; campo: string; dias: string };
   tempo: { dias: string; direcao: DirecaoDoSilencio; proteger_pela_agenda: boolean };
+  /**
+   * FORK MIA (.81) — o X (dias) e o filtro por tipo dos gatilhos de obrigação
+   * (`obrigacao.*`). Só existe quando o gatilho é um deles; ausente, a montagem
+   * usa o X sugerido de cada gatilho (`DIAS_SUGERIDOS`), como o editor em lista.
+   */
+  obrigacao?: { dias: string; tipo: string };
 };
 
 export type AcaoDaRegra = { type: string; config: Record<string, unknown> };
@@ -151,6 +159,8 @@ export const PROBLEMA_DO_CAMPO: Record<string, string> = {
   atribuir_a: "Escolha quem recebe a tarefa.",
   prioridade: "Escolha a prioridade.",
   plano_id: "Escolha o plano de tarefas.",
+  // FORK MIA — o aviso ao time num grupo (`notify_group`): canal e grupo vão juntos.
+  chat_id: "Informe canal e grupo juntos, ou nenhum dos dois.",
 };
 
 /* ───────────────────────── gatilho ───────────────────────── */
@@ -160,7 +170,7 @@ export const PROBLEMA_DO_CAMPO: Record<string, string> = {
  * leitores que a varredura usa (como o editor de hoje faz ao abrir): se eles não
  * reconhecem o que está guardado, a tela não inventa nada e a pessoa reescolhe.
  */
-export function telaDoGatilho(config: unknown): TelaDoGatilho {
+export function telaDoGatilho(config: unknown, evento?: string): TelaDoGatilho {
   const data = configDoGatilhoDeData(config);
   const silencio = configDoSilencio(config);
   const tempo = silencio ?? configDaEtapaParada(config);
@@ -168,7 +178,18 @@ export function telaDoGatilho(config: unknown): TelaDoGatilho {
     config && typeof config === "object" && !Array.isArray(config)
       ? (config as Record<string, unknown>).webhook_source_id
       : undefined;
+  // FORK MIA (.81): o gatilho de obrigação guarda `dias` e `tipo` no próprio config.
+  const bruto = config && typeof config === "object" && !Array.isArray(config) ? (config as Record<string, unknown>) : {};
+  const obrigacao = ehGatilhoDeObrigacao(evento)
+    ? {
+        obrigacao: {
+          dias: typeof bruto.dias === "number" ? String(bruto.dias) : String(DIAS_SUGERIDOS[evento] ?? ""),
+          tipo: typeof bruto.tipo === "string" ? bruto.tipo : "",
+        },
+      }
+    : {};
   return {
+    ...obrigacao,
     fonte: typeof fonte === "string" ? fonte : null,
     data: data
       ? { pipeline_id: data.pipeline_id, campo: data.campo, dias: String(data.dias) }
@@ -218,6 +239,16 @@ export function triggerConfigDaTela(
   if (evento === "lead.created") {
     return configAoSalvarDaTela({ ...base, configDaTela: { webhook_source_id: tela.fonte } });
   }
+  if (ehGatilhoDeObrigacao(evento)) {
+    // FORK MIA (.81) — a MESMA montagem do editor em lista (RuleEditor): o X só
+    // entra nos gatilhos que o pedem, e o tipo vazio é "todos". Literal, e não
+    // `configAoSalvarDaTela`: limpar o tipo tem de limpar de verdade.
+    const obrigacao = tela.obrigacao ?? { dias: String(DIAS_SUGERIDOS[evento] ?? ""), tipo: "" };
+    return {
+      ...(gatilhoPedeDias(evento) ? { dias: dias(obrigacao.dias) } : {}),
+      ...(obrigacao.tipo.trim() ? { tipo: obrigacao.tipo.trim() } : {}),
+    };
+  }
   return {};
 }
 
@@ -230,7 +261,7 @@ export function desenhoDaRegra(regra: RegraGravada | null): Desenho {
       id: ID_DO_GATILHO,
       type: "gatilho",
       position: { x: 0, y: 0 },
-      data: { kind: "gatilho", evento: regra?.trigger_event ?? "", tela: telaDoGatilho(regra?.trigger_config ?? null) },
+      data: { kind: "gatilho", evento: regra?.trigger_event ?? "", tela: telaDoGatilho(regra?.trigger_config ?? null, regra?.trigger_event) },
     },
   ];
   const ligacoes: LigacaoDoDesenho[] = [];

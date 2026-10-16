@@ -366,7 +366,8 @@ export function CanvasDaAutomacao({ regra }: Props) {
           setNos((atuais) =>
             atuais.map((n) => {
               if (n.id === selecionado.id && n.data.kind === "gatilho") {
-                return { ...n, data: { ...n.data, evento: novo, tela: { ...n.data.tela, fonte: novo === "lead.created" ? n.data.tela.fonte : null } } };
+                // FORK MIA (.81): o X de um gatilho de obrigação não passa para outro (volta o sugerido).
+                return { ...n, data: { ...n.data, evento: novo, tela: { ...n.data.tela, fonte: novo === "lead.created" ? n.data.tela.fonte : null, obrigacao: undefined } } };
               }
               if (n.data.kind === "condicoes") return { ...n, data: { ...n.data, linhas: [] } };
               return n;

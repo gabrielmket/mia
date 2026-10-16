@@ -8,7 +8,10 @@ import { Plus, Trash } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
 import { usePipelineStages, usePipelines, useWebhookSources } from "@/hooks/webhooks/useWebhookSources";
-import { acoesQueFechamLaco, MENSAGEM_DO_LACO_DE_LEAD, TRIGGER_EVENTS } from "@/lib/schemas/webhooks";
+import { acoesQueFechamLaco, GATILHOS_OFERECIDOS, MENSAGEM_DO_LACO_DE_LEAD } from "@/lib/schemas/webhooks";
+// FORK MIA (.81) — os gatilhos de obrigação no designer, com a mesma caixa do editor em lista.
+import { ConfigDoGatilhoDeObrigacao } from "@/components/obrigacoes/ConfigDoGatilhoDeObrigacao";
+import { DIAS_SUGERIDOS, ehGatilhoDeObrigacao } from "@/lib/obrigacoes/gatilhos";
 import { DIAS_MAX, DIAS_MIN, GATILHO_DE_DATA_DO_FUNIL } from "@/lib/automation/gatilho-de-data-do-funil";
 import {
   DIRECOES_DO_SILENCIO,
@@ -101,7 +104,14 @@ export function PainelDoGatilho({
             <SelectValue placeholder={t("Escolha o gatilho")} />
           </SelectTrigger>
           <SelectContent>
-            {TRIGGER_EVENTS.map((ev) => (
+            {/* FORK MIA: `GATILHOS_OFERECIDOS`, e não a lista inteira — o nome
+                antigo de "horário marcado" (`appointment.booked`) não é
+                oferecido para regra nova; a regra gravada com ele continua
+                mostrando o próprio gatilho. */}
+            {(evento && !(GATILHOS_OFERECIDOS as string[]).includes(evento) && evento in TRIGGER_LABELS
+              ? [evento as TriggerEvent, ...GATILHOS_OFERECIDOS]
+              : GATILHOS_OFERECIDOS
+            ).map((ev) => (
               <SelectItem key={ev} value={ev}>
                 {t(TRIGGER_LABELS[ev])}
               </SelectItem>
@@ -265,6 +275,16 @@ export function PainelDoGatilho({
             {t("Não gerar lembrete quando o cliente tiver compromisso marcado")}
           </label>
         </div>
+      ) : null}
+
+      {/* FORK MIA (.81) — os gatilhos de obrigação: X dias, filtro por tipo e o
+          que a regra alcançaria hoje. */}
+      {ehGatilhoDeObrigacao(evento) ? (
+        <ConfigDoGatilhoDeObrigacao
+          gatilho={evento}
+          valor={tela.obrigacao ?? { dias: String(DIAS_SUGERIDOS[evento] ?? ""), tipo: "" }}
+          onChange={(valor) => onTela({ ...tela, obrigacao: valor })}
+        />
       ) : null}
 
       {acoesQueFechamLaco(evento, [{ type: "assign_owner" }]).length > 0 ? (

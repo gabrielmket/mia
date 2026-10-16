@@ -132,6 +132,9 @@ function DescricaoDoGatilho({ dados }: { dados: Extract<DadosDaCaixa, { kind: "g
     detalhe = campo ? `${campo.label} · N = ${dados.tela.data.dias}` : t("Escolha o funil e o campo de data");
   } else if (evento === GATILHO_SILENCIO || evento === GATILHO_ETAPA_PARADA) {
     detalhe = `N = ${dados.tela.tempo.dias}`;
+  } else if (dados.tela.obrigacao && dados.tela.obrigacao.dias) {
+    // FORK MIA (.81): os gatilhos de obrigação que pedem X dias.
+    detalhe = `N = ${dados.tela.obrigacao.dias}`;
   }
   return <>{detalhe ? `${rotulo} · ${detalhe}` : rotulo}</>;
 }
