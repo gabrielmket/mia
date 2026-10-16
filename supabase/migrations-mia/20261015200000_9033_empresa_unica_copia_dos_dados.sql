@@ -1,6 +1,6 @@
 -- manifest: EMPRESA ÚNICA, PARTE 2 DE 3: a cópia do cadastro antigo (`crm_empresas`, 0255) para o do upstream (`companies`), sem perder nem duplicar nada, idempotente em toda passada do baseline. Numa transação só (um `do`): (0) as chaves estrangeiras que apontam para `crm_empresas` (`contacts.empresa_id`, `crm_leads.empresa_id`, `mia_obrigacoes.empresa_id`, lidas do catálogo) saem; (1) cada empresa VIVA ainda sem registro em `mia_companies_de_para` vai para `companies` com o MESMO id, ou casa com uma que já existe na organização, primeiro pelo CNPJ (só dígitos) e, sem CNPJ, pelo nome comparável quando o par é único dos dois lados (é o caso das demonstrações, que gravavam a mesma empresa nos dois cadastros com ids diferentes); quem casa completa só o que a de lá não tem e ganha lápide `de_para` em `mia_companies_mescladas`; site, endereço, observações, etiquetas e campos adicionais vão para `mia_companies_extra`; (2) as lápides antigas (`mesclada_em`) seguem a cadeia até a viva e entram como lápide `mesclagem`; (3) as linhas que apontavam para uma empresa que casou passam a apontar para a que ficou; (4) as chaves voltam, agora para `companies(id)` com o mesmo `on delete` (nome `<tabela>_<coluna>_mia_companies_fkey`); (5) `crm_empresas` deixa de aceitar escrita da sessão (sai a policy de escrita e o privilégio; leitura e dados ficam até a entrega 5); (6) cada contato com empresa ganha pessoa (`people`, `contacts.person_id`) e vínculo (`company_people`) com cargo, setor, papel e principal, um principal por empresa; (7) contato com pessoa e vínculo mas sem empresa no cartão ganha a do vínculo mais antigo; (8) o espelho do contato (`empresa_id`, `cargo`, `setor`, `papel_na_empresa`, `principal_na_empresa`) passa a ser o do vínculo da empresa do cartão, e o papel `decisor` acompanha `is_decision_maker`. Rodar de novo não muda nenhuma linha: o registro de-para pula o que já foi, e o resto só escreve onde há diferença. Medido no ensaio do banco de produção (scratchpad/ensaio78-empresas.sh) e provado em tests/invariants/empresa-unica.test.ts.
 --
--- 9025 · empresa única: a cópia dos dados
+-- 9033 · empresa única: a cópia dos dados
 --
 -- `mia`: só objetos NOSSOS e dados. A ordem importa e é esta por um motivo
 -- só: a chave estrangeira. Enquanto `contacts.empresa_id` aponta para
@@ -9,7 +9,7 @@
 -- na mesma transação (se algo falhar no meio, nada muda e a próxima passada
 -- tenta de novo).
 --
--- Os gatilhos de vínculo da 9026 vêm DEPOIS deste bloco no arquivo: na primeira
+-- Os gatilhos de vínculo da 9034 vêm DEPOIS deste bloco no arquivo: na primeira
 -- passada eles ainda não existem, e a cópia escreve o estado final à mão. Nas
 -- seguintes eles existem, e a cópia não tem mais o que copiar.
 
@@ -29,7 +29,7 @@ declare
   v_principal boolean;
   v_n bigint;
 begin
-  -- Os gatilhos da 9026 (nas passadas seguintes) não devem traduzir as escritas
+  -- Os gatilhos da 9034 (nas passadas seguintes) não devem traduzir as escritas
   -- desta cópia de volta para vínculo: ela escreve os dois lados.
   perform set_config('mia.empresa_unica', 'propagando', true);
 
@@ -326,6 +326,6 @@ drop policy if exists "crm_empresas_escrita" on public.crm_empresas;
 revoke insert, update, delete on public.crm_empresas from anon, authenticated;
 
 comment on table public.crm_empresas is
-  'APOSENTADA (9025, empresa unica): os dados foram copiados para companies (mia_companies_de_para diz para onde foi cada linha). Leitura so; nenhuma escrita da sessao. Sai de vez na entrega 5.';
+  'APOSENTADA (9033, empresa unica): os dados foram copiados para companies (mia_companies_de_para diz para onde foi cada linha). Leitura so; nenhuma escrita da sessao. Sai de vez na entrega 5.';
 
 notify pgrst, 'reload schema';

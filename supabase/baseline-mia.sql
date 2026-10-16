@@ -1908,7 +1908,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261015180000_9026_empresa_unica_funcoes_e_gatilhos', now())
+values (1, '20261015210000_9034_empresa_unica_funcoes_e_gatilhos', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -8168,14 +8168,14 @@ create trigger trg_mia_link_curto_morre_com_o_convite
 notify pgrst, 'reload schema';
 
 
--- ─── 9024 · empresa única: o que é só nosso mora ao lado de `companies` ───
+-- ─── 9032 · empresa única: o que é só nosso mora ao lado de `companies` ───
 --
--- Espelho EXATO da migration 9024 (supabase/migrations-mia/), onde está o porquê
+-- Espelho EXATO da migration 9032 (supabase/migrations-mia/), onde está o porquê
 -- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
 -- da varredura anon, que fecha o arquivo.
 --
 --
--- 9024 · empresa única: o que é só nosso mora ao lado de `companies`
+-- 9032 · empresa única: o que é só nosso mora ao lado de `companies`
 --
 -- `mia`: só objetos NOSSOS (docs/FORK-MIA.md, regra 3), e o porquê inteiro está
 -- em docs/fork/empresa-unica.md. Idempotente: `if not exists` em tabela, coluna
@@ -8224,7 +8224,7 @@ as $$
     from (select public.fn_mia_cnpj_normalizado(p_cnpj) as d) x
 $$;
 
--- O nome sem caixa, sem acento e sem pontuação. Serve à cópia da 9025 (casar a
+-- O nome sem caixa, sem acento e sem pontuação. Serve à cópia da 9033 (casar a
 -- empresa dos dois cadastros quando nenhuma tem CNPJ) e só a ela: a régua do
 -- agente e da importação continua em `lib/empresas/achar-ou-criar.ts`.
 create or replace function public.fn_mia_nome_de_empresa_comparavel(p_nome text)
@@ -8267,7 +8267,7 @@ create table if not exists public.mia_companies_extra (
 );
 
 comment on table public.mia_companies_extra is
-  'MIA (9024): o que a empresa tem so no nosso cadastro (site, endereco em texto livre, observacoes, etiquetas, campos adicionais), ao lado de companies (do upstream), 1:1 pela chave. Sem linha = sem nada disso. Escrita so por fn_mia_gravar_empresa e pelo servidor.';
+  'MIA (9032): o que a empresa tem so no nosso cadastro (site, endereco em texto livre, observacoes, etiquetas, campos adicionais), ao lado de companies (do upstream), 1:1 pela chave. Sem linha = sem nada disso. Escrita so por fn_mia_gravar_empresa e pelo servidor.';
 
 create index if not exists idx_mia_companies_extra_org
   on public.mia_companies_extra (organization_id);
@@ -8308,7 +8308,7 @@ create table if not exists public.mia_companies_mescladas (
   organization_id uuid not null references public.organizations(id) on delete cascade,
   mesclada_com uuid references public.companies(id) on delete set null,
   mesclada_em timestamptz not null default now(),
-  -- `mesclagem`: alguém juntou as duas (tela, rota). `de_para`: a cópia da 9025
+  -- `mesclagem`: alguém juntou as duas (tela, rota). `de_para`: a cópia da 9033
   -- achou a mesma empresa nos dois cadastros e ficou com a do upstream.
   motivo text not null,
   nome text,
@@ -8319,7 +8319,7 @@ create table if not exists public.mia_companies_mescladas (
 );
 
 comment on table public.mia_companies_mescladas is
-  'MIA (9024): a lapide de fusao de empresas. A perdedora sai de companies e fica aqui (nome, cnpj, os dados de quando saiu), com a empresa que ficou. O endereco antigo da ficha cai na que ficou. Escrita so por fn_mesclar_empresas e pela copia da 9025.';
+  'MIA (9032): a lapide de fusao de empresas. A perdedora sai de companies e fica aqui (nome, cnpj, os dados de quando saiu), com a empresa que ficou. O endereco antigo da ficha cai na que ficou. Escrita so por fn_mesclar_empresas e pela copia da 9033.';
 
 create index if not exists idx_mia_companies_mescladas_org
   on public.mia_companies_mescladas (organization_id, mesclada_com);
@@ -8339,7 +8339,7 @@ create table if not exists public.mia_companies_de_para (
 );
 
 comment on table public.mia_companies_de_para is
-  'MIA (9024): de onde veio cada empresa do cadastro antigo (crm_empresas) e para onde foi em companies: copiada (mesmo id), casada_por_cnpj, casada_por_nome ou lapide (ja era fusao antiga). E o que faz a copia da 9025 nunca repetir uma linha, em nenhuma passada do baseline.';
+  'MIA (9032): de onde veio cada empresa do cadastro antigo (crm_empresas) e para onde foi em companies: copiada (mesmo id), casada_por_cnpj, casada_por_nome ou lapide (ja era fusao antiga). E o que faz a copia da 9033 nunca repetir uma linha, em nenhuma passada do baseline.';
 
 create index if not exists idx_mia_companies_de_para_org
   on public.mia_companies_de_para (organization_id, company_id);
@@ -8359,7 +8359,7 @@ begin
 end $$;
 
 comment on column public.company_people.papel is
-  'MIA (9024): o papel desta pessoa NESTA empresa, vocabulario fechado e o mesmo do papel num negocio (lib/cartoes/papel.ts): decisor, financeiro, usuario, influenciador, outro. Nulo = nao informado. is_decision_maker (do upstream) acompanha: decisor = true. Dado pessoal profissional: some na anonimizacao (9026).';
+  'MIA (9032): o papel desta pessoa NESTA empresa, vocabulario fechado e o mesmo do papel num negocio (lib/cartoes/papel.ts): decisor, financeiro, usuario, influenciador, outro. Nulo = nao informado. is_decision_maker (do upstream) acompanha: decisor = true. Dado pessoal profissional: some na anonimizacao (9034).';
 
 -- Um contato principal por empresa (decisão do protótipo). Os repetidos que já
 -- existirem ficam com o mais antigo antes do índice nascer.
@@ -8395,7 +8395,7 @@ drop policy if exists mia_companies_de_para_select on public.mia_companies_de_pa
 create policy mia_companies_de_para_select on public.mia_companies_de_para
   for select using (organization_id in (select public.fn_user_org_ids()));
 
--- A escrita é das funções da 9026 (definer, papel conferido dentro) e do
+-- A escrita é das funções da 9034 (definer, papel conferido dentro) e do
 -- servidor. O default ACL do Supabase dá ALL a toda tabela nova; tirar é o que
 -- faz o contrato dizer a verdade (e `fn_aplicar_travas_de_suporte` lê isto).
 revoke all on public.mia_companies_extra from anon, authenticated;
@@ -8413,14 +8413,14 @@ do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
 notify pgrst, 'reload schema';
 
 
--- ─── 9025 · empresa única: a cópia dos dados ───
+-- ─── 9033 · empresa única: a cópia dos dados ───
 --
--- Espelho EXATO da migration 9025 (supabase/migrations-mia/), onde está o porquê
+-- Espelho EXATO da migration 9033 (supabase/migrations-mia/), onde está o porquê
 -- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
 -- da varredura anon, que fecha o arquivo.
 --
 --
--- 9025 · empresa única: a cópia dos dados
+-- 9033 · empresa única: a cópia dos dados
 --
 -- `mia`: só objetos NOSSOS e dados. A ordem importa e é esta por um motivo
 -- só: a chave estrangeira. Enquanto `contacts.empresa_id` aponta para
@@ -8429,7 +8429,7 @@ notify pgrst, 'reload schema';
 -- na mesma transação (se algo falhar no meio, nada muda e a próxima passada
 -- tenta de novo).
 --
--- Os gatilhos de vínculo da 9026 vêm DEPOIS deste bloco no arquivo: na primeira
+-- Os gatilhos de vínculo da 9034 vêm DEPOIS deste bloco no arquivo: na primeira
 -- passada eles ainda não existem, e a cópia escreve o estado final à mão. Nas
 -- seguintes eles existem, e a cópia não tem mais o que copiar.
 
@@ -8449,7 +8449,7 @@ declare
   v_principal boolean;
   v_n bigint;
 begin
-  -- Os gatilhos da 9026 (nas passadas seguintes) não devem traduzir as escritas
+  -- Os gatilhos da 9034 (nas passadas seguintes) não devem traduzir as escritas
   -- desta cópia de volta para vínculo: ela escreve os dois lados.
   perform set_config('mia.empresa_unica', 'propagando', true);
 
@@ -8746,19 +8746,19 @@ drop policy if exists "crm_empresas_escrita" on public.crm_empresas;
 revoke insert, update, delete on public.crm_empresas from anon, authenticated;
 
 comment on table public.crm_empresas is
-  'APOSENTADA (9025, empresa unica): os dados foram copiados para companies (mia_companies_de_para diz para onde foi cada linha). Leitura so; nenhuma escrita da sessao. Sai de vez na entrega 5.';
+  'APOSENTADA (9033, empresa unica): os dados foram copiados para companies (mia_companies_de_para diz para onde foi cada linha). Leitura so; nenhuma escrita da sessao. Sai de vez na entrega 5.';
 
 notify pgrst, 'reload schema';
 
 
--- ─── 9026 · empresa única: funções e gatilhos ───
+-- ─── 9034 · empresa única: funções e gatilhos ───
 --
--- Espelho EXATO da migration 9026 (supabase/migrations-mia/), onde está o porquê
+-- Espelho EXATO da migration 9034 (supabase/migrations-mia/), onde está o porquê
 -- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
 -- da varredura anon, que fecha o arquivo.
 --
 --
--- 9026 · empresa única: funções e gatilhos
+-- 9034 · empresa única: funções e gatilhos
 --
 -- `mia`: só objetos NOSSOS (docs/FORK-MIA.md, regra 3); `fn_mesclar_empresas` é
 -- nossa desde a 0263. O desenho inteiro está em docs/fork/empresa-unica.md.
@@ -8837,7 +8837,7 @@ begin
 end $$;
 
 comment on function public.fn_mia_espelhar_empresa_da_pessoa(uuid) is
-  'MIA (9026): recalcula o espelho de todos os numeros vivos de uma pessoa (contacts.empresa_id = a empresa do cartao, mais cargo, setor, papel e principal do vinculo dela). Chamada pelos gatilhos e pelas funcoes da empresa unica.';
+  'MIA (9034): recalcula o espelho de todos os numeros vivos de uma pessoa (contacts.empresa_id = a empresa do cartao, mais cargo, setor, papel e principal do vinculo dela). Chamada pelos gatilhos e pelas funcoes da empresa unica.';
 
 -- Uma pessoa nova a partir de um contato. Chamada com a chave ligada.
 create or replace function public.fn_mia_nova_pessoa_do_contato(p_contato uuid)
@@ -9111,6 +9111,7 @@ set search_path = ''
 as $$
 declare
   v_antes text;
+  cur record;
 begin
   if coalesce(current_setting('mia.empresa_unica', true), '') = 'propagando' then
     return null;
@@ -9118,12 +9119,22 @@ begin
   if tg_op = 'UPDATE' and new.person_id is not distinct from old.person_id then
     return null;
   end if;
-  if tg_op = 'UPDATE' and old.person_id is not null then
+  -- A linha COMO ESTÁ AGORA, e não o NEW: os gatilhos AFTER da mesma linha
+  -- disparam em ordem de nome, e o tradutor (`trg_mia_contato_empresa_vira_vinculo`)
+  -- vem antes deste. No INSERT com empresa ele já criou a pessoa e o vínculo, e
+  -- o NEW daqui ainda diz "sem pessoa": confiar nele apagaria a empresa do contato.
+  select person_id, empresa_id, is_anonymized, is_merged_into into cur
+    from public.contacts
+   where id = new.id;
+  if not found then
+    return null;
+  end if;
+  if tg_op = 'UPDATE' and old.person_id is not null and old.person_id is distinct from cur.person_id then
     perform public.fn_mia_espelhar_empresa_da_pessoa(old.person_id);
   end if;
-  if new.person_id is not null then
-    perform public.fn_mia_espelhar_empresa_da_pessoa(new.person_id);
-  elsif new.empresa_id is not null and not new.is_anonymized and new.is_merged_into is null then
+  if cur.person_id is not null then
+    perform public.fn_mia_espelhar_empresa_da_pessoa(cur.person_id);
+  elsif cur.empresa_id is not null and not cur.is_anonymized and cur.is_merged_into is null then
     -- Sem pessoa não há vínculo, e o cartão fica sem empresa.
     v_antes := coalesce(current_setting('mia.empresa_unica', true), '');
     perform set_config('mia.empresa_unica', 'propagando', true);
@@ -9317,8 +9328,14 @@ begin
     if v_nome is null then
       raise exception using errcode = '22023', message = 'empresa_sem_nome';
     end if;
+    -- Quem criou: a pessoa da sessão; no servidor (`auth.uid()` nulo), quem a
+    -- rota disser em `criado_por` (o autor do token do MCP de plataforma).
     insert into public.companies (organization_id, trade_name, enrichment_status, created_by)
-    values (p_organization_id, v_nome, 'pending', auth.uid())
+    values (
+      p_organization_id, v_nome, 'pending',
+      coalesce(auth.uid(), case when auth.uid() is null and coalesce(p_dados->>'criado_por', '') ~ '^[0-9a-f-]{36}$'
+                                then (p_dados->>'criado_por')::uuid end)
+    )
     returning id into v_id;
     v_criada := true;
   end if;

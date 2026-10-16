@@ -1,6 +1,6 @@
--- manifest: EMPRESA ÚNICA, PARTE 1 DE 3 (item 7 do mapa de produção, protótipo aprovado pelo Gabriel em 15/10/2026). O cadastro de empresa passa a ser UM só, o do upstream (`companies` → `company_people` → `people` ← `contacts.person_id`, migration 0448 dele), e o que é só nosso mora AO LADO, nunca dentro: `mia_companies_extra` (1:1 com `companies`, chave `company_id` com `on delete cascade`: site, endereço em texto livre, observações, etiquetas e campos adicionais, as colunas de `crm_empresas` que o upstream não tem); `mia_companies_mescladas` (a lápide de fusão: a empresa que deixou de existir, para onde foi, quando e por quê, `mesclagem` ou `de_para`; o endereço antigo `/app/companies/<id>` cai na que ficou); `mia_companies_de_para` (o registro da cópia de `crm_empresas`, uma linha por empresa antiga, com o destino e COMO ela chegou: copiada com o mesmo id, casada pelo CNPJ, casada pelo nome ou lápide; é ele que faz a cópia da 9025 nunca repetir uma linha). Em `company_people` (tabela do upstream) entra a coluna NOSSA `papel` (vocabulário fechado, o mesmo do negócio: decisor, financeiro, usuario, influenciador, outro; constraint `company_people_mia_papel_check`) e o índice único parcial `company_people_mia_um_principal_uidx` (um contato principal por empresa, garantido pelo banco; antes dele, os principais repetidos que já existirem viram não principais, ficando o mais antigo). Duas funções puras de apoio (`fn_mia_cnpj_normalizado`, `fn_mia_cnpj_formatado`, `fn_mia_nome_de_empresa_comparavel`). RLS: as três tabelas são lidas por qualquer membro da organização; a escrita é só pelas funções da 9026 (security definer, papel conferido dentro) e pelo servidor; `authenticated` não tem privilégio de escrita, e as travas do suporte somente leitura entram por `fn_aplicar_travas_de_suporte()` (a função do upstream, chamada). Nenhuma tabela, função, gatilho ou policy do upstream é redefinida. Provado em tests/invariants/empresa-unica.test.ts.
+-- manifest: EMPRESA ÚNICA, PARTE 1 DE 3 (item 7 do mapa de produção, protótipo aprovado pelo Gabriel em 15/10/2026). O cadastro de empresa passa a ser UM só, o do upstream (`companies` → `company_people` → `people` ← `contacts.person_id`, migration 0448 dele), e o que é só nosso mora AO LADO, nunca dentro: `mia_companies_extra` (1:1 com `companies`, chave `company_id` com `on delete cascade`: site, endereço em texto livre, observações, etiquetas e campos adicionais, as colunas de `crm_empresas` que o upstream não tem); `mia_companies_mescladas` (a lápide de fusão: a empresa que deixou de existir, para onde foi, quando e por quê, `mesclagem` ou `de_para`; o endereço antigo `/app/companies/<id>` cai na que ficou); `mia_companies_de_para` (o registro da cópia de `crm_empresas`, uma linha por empresa antiga, com o destino e COMO ela chegou: copiada com o mesmo id, casada pelo CNPJ, casada pelo nome ou lápide; é ele que faz a cópia da 9033 nunca repetir uma linha). Em `company_people` (tabela do upstream) entra a coluna NOSSA `papel` (vocabulário fechado, o mesmo do negócio: decisor, financeiro, usuario, influenciador, outro; constraint `company_people_mia_papel_check`) e o índice único parcial `company_people_mia_um_principal_uidx` (um contato principal por empresa, garantido pelo banco; antes dele, os principais repetidos que já existirem viram não principais, ficando o mais antigo). Duas funções puras de apoio (`fn_mia_cnpj_normalizado`, `fn_mia_cnpj_formatado`, `fn_mia_nome_de_empresa_comparavel`). RLS: as três tabelas são lidas por qualquer membro da organização; a escrita é só pelas funções da 9034 (security definer, papel conferido dentro) e pelo servidor; `authenticated` não tem privilégio de escrita, e as travas do suporte somente leitura entram por `fn_aplicar_travas_de_suporte()` (a função do upstream, chamada). Nenhuma tabela, função, gatilho ou policy do upstream é redefinida. Provado em tests/invariants/empresa-unica.test.ts.
 --
--- 9024 · empresa única: o que é só nosso mora ao lado de `companies`
+-- 9032 · empresa única: o que é só nosso mora ao lado de `companies`
 --
 -- `mia`: só objetos NOSSOS (docs/FORK-MIA.md, regra 3), e o porquê inteiro está
 -- em docs/fork/empresa-unica.md. Idempotente: `if not exists` em tabela, coluna
@@ -49,7 +49,7 @@ as $$
     from (select public.fn_mia_cnpj_normalizado(p_cnpj) as d) x
 $$;
 
--- O nome sem caixa, sem acento e sem pontuação. Serve à cópia da 9025 (casar a
+-- O nome sem caixa, sem acento e sem pontuação. Serve à cópia da 9033 (casar a
 -- empresa dos dois cadastros quando nenhuma tem CNPJ) e só a ela: a régua do
 -- agente e da importação continua em `lib/empresas/achar-ou-criar.ts`.
 create or replace function public.fn_mia_nome_de_empresa_comparavel(p_nome text)
@@ -92,7 +92,7 @@ create table if not exists public.mia_companies_extra (
 );
 
 comment on table public.mia_companies_extra is
-  'MIA (9024): o que a empresa tem so no nosso cadastro (site, endereco em texto livre, observacoes, etiquetas, campos adicionais), ao lado de companies (do upstream), 1:1 pela chave. Sem linha = sem nada disso. Escrita so por fn_mia_gravar_empresa e pelo servidor.';
+  'MIA (9032): o que a empresa tem so no nosso cadastro (site, endereco em texto livre, observacoes, etiquetas, campos adicionais), ao lado de companies (do upstream), 1:1 pela chave. Sem linha = sem nada disso. Escrita so por fn_mia_gravar_empresa e pelo servidor.';
 
 create index if not exists idx_mia_companies_extra_org
   on public.mia_companies_extra (organization_id);
@@ -133,7 +133,7 @@ create table if not exists public.mia_companies_mescladas (
   organization_id uuid not null references public.organizations(id) on delete cascade,
   mesclada_com uuid references public.companies(id) on delete set null,
   mesclada_em timestamptz not null default now(),
-  -- `mesclagem`: alguém juntou as duas (tela, rota). `de_para`: a cópia da 9025
+  -- `mesclagem`: alguém juntou as duas (tela, rota). `de_para`: a cópia da 9033
   -- achou a mesma empresa nos dois cadastros e ficou com a do upstream.
   motivo text not null,
   nome text,
@@ -144,7 +144,7 @@ create table if not exists public.mia_companies_mescladas (
 );
 
 comment on table public.mia_companies_mescladas is
-  'MIA (9024): a lapide de fusao de empresas. A perdedora sai de companies e fica aqui (nome, cnpj, os dados de quando saiu), com a empresa que ficou. O endereco antigo da ficha cai na que ficou. Escrita so por fn_mesclar_empresas e pela copia da 9025.';
+  'MIA (9032): a lapide de fusao de empresas. A perdedora sai de companies e fica aqui (nome, cnpj, os dados de quando saiu), com a empresa que ficou. O endereco antigo da ficha cai na que ficou. Escrita so por fn_mesclar_empresas e pela copia da 9033.';
 
 create index if not exists idx_mia_companies_mescladas_org
   on public.mia_companies_mescladas (organization_id, mesclada_com);
@@ -164,7 +164,7 @@ create table if not exists public.mia_companies_de_para (
 );
 
 comment on table public.mia_companies_de_para is
-  'MIA (9024): de onde veio cada empresa do cadastro antigo (crm_empresas) e para onde foi em companies: copiada (mesmo id), casada_por_cnpj, casada_por_nome ou lapide (ja era fusao antiga). E o que faz a copia da 9025 nunca repetir uma linha, em nenhuma passada do baseline.';
+  'MIA (9032): de onde veio cada empresa do cadastro antigo (crm_empresas) e para onde foi em companies: copiada (mesmo id), casada_por_cnpj, casada_por_nome ou lapide (ja era fusao antiga). E o que faz a copia da 9033 nunca repetir uma linha, em nenhuma passada do baseline.';
 
 create index if not exists idx_mia_companies_de_para_org
   on public.mia_companies_de_para (organization_id, company_id);
@@ -184,7 +184,7 @@ begin
 end $$;
 
 comment on column public.company_people.papel is
-  'MIA (9024): o papel desta pessoa NESTA empresa, vocabulario fechado e o mesmo do papel num negocio (lib/cartoes/papel.ts): decisor, financeiro, usuario, influenciador, outro. Nulo = nao informado. is_decision_maker (do upstream) acompanha: decisor = true. Dado pessoal profissional: some na anonimizacao (9026).';
+  'MIA (9032): o papel desta pessoa NESTA empresa, vocabulario fechado e o mesmo do papel num negocio (lib/cartoes/papel.ts): decisor, financeiro, usuario, influenciador, outro. Nulo = nao informado. is_decision_maker (do upstream) acompanha: decisor = true. Dado pessoal profissional: some na anonimizacao (9034).';
 
 -- Um contato principal por empresa (decisão do protótipo). Os repetidos que já
 -- existirem ficam com o mais antigo antes do índice nascer.
@@ -220,7 +220,7 @@ drop policy if exists mia_companies_de_para_select on public.mia_companies_de_pa
 create policy mia_companies_de_para_select on public.mia_companies_de_para
   for select using (organization_id in (select public.fn_user_org_ids()));
 
--- A escrita é das funções da 9026 (definer, papel conferido dentro) e do
+-- A escrita é das funções da 9034 (definer, papel conferido dentro) e do
 -- servidor. O default ACL do Supabase dá ALL a toda tabela nova; tirar é o que
 -- faz o contrato dizer a verdade (e `fn_aplicar_travas_de_suporte` lê isto).
 revoke all on public.mia_companies_extra from anon, authenticated;

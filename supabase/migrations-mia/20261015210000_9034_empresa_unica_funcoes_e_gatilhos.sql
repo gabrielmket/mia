@@ -1,6 +1,6 @@
 -- manifest: EMPRESA ÚNICA, PARTE 3 DE 3: as regras do protótipo aprovado (15/10/2026) no banco. A verdade passa a ser o vínculo do upstream (`company_people`, com o nosso `papel`), e o contato guarda um ESPELHO da empresa que aparece no cartão (`contacts.empresa_id`, `cargo`, `setor`, `papel_na_empresa`, `principal_na_empresa`), mantido por gatilho, para toda leitura de antes continuar valendo. Funções que a sessão chama (security definer, papel conferido dentro, `auth.uid()` nulo = servidor): `fn_mia_gravar_empresa` (criar e editar empresa com o que é só nosso numa transação só; atendente, gestor e agente criam, decisão do protótipo; CNPJ repetido é RECUSADO com `cnpj_ja_cadastrado` e o id da que já existe no detalhe; os dados da Receita entram por `receita`, que só a tela consulta), `fn_mia_vincular_pessoa` (o contato numa empresa, com papel, cargo, setor, principal e se é a empresa do cartão; contato pode estar em várias), `fn_mia_desvincular_pessoa`, `fn_mia_juntar_numeros` (vários números = uma pessoa: os vínculos se somam), `fn_mia_separar_numero` (o desfazer: o número leva uma cópia dos vínculos), `fn_mia_excluir_empresa` (gestor; RECUSA com `empresa_com_negocio_aberto` quando há negócio aberto; sem ele exclui, as pessoas ficam como contato sem empresa e os negócios encerrados ficam no histórico sem empresa) e `fn_mesclar_empresas` (NOSSA, da 0263, redefinida para `companies`: gestor; os vínculos vão para a vencedora, quem estava nas duas fica com um só, toda chave para `companies` lida do catálogo é repontada, a vencedora só herda o que não tem, a perdedora vira lápide em `mia_companies_mescladas` e sai). Gatilhos nossos: `trg_mia_vinculo_antes` (papel e `is_decision_maker` dizem a mesma coisa; quem vira principal tira o de antes, um por empresa), `trg_mia_vinculo_depois` (o espelho dos contatos da pessoa), `trg_mia_contato_empresa_vira_vinculo` (quem escreve direto no contato, o jeito de antes, vira vínculo: empresa nova = vínculo novo e empresa do cartão; "sem empresa" = sai o vínculo com a do cartão), `trg_mia_contato_ganhou_pessoa`, `trg_mia_contato_mesclado_leva_os_vinculos` (fusão de contatos junta as pessoas), `trg_mia_negocio_e_a_empresa` (negócio novo sem empresa herda a do cartão do contato, decisão do protótipo; empresa de outra organização é recusada) e `trg_mia_empresa_unica_contato_anonimizado` (LGPD: o vínculo sai quando nenhum outro número vivo fala pela pessoa; com outro número vivo fica, e o upstream já redige cargo e nome). Uma chave de transação (`mia.empresa_unica`) impede o eco entre os gatilhos. Nenhum objeto do upstream é redefinido: só gatilhos e funções com nome nosso sobre as tabelas dele. Provado em tests/invariants/empresa-unica.test.ts e no invariante do upstream companies-people-rls (o agente segue sem INSERT direto em `companies`).
 --
--- 9026 · empresa única: funções e gatilhos
+-- 9034 · empresa única: funções e gatilhos
 --
 -- `mia`: só objetos NOSSOS (docs/FORK-MIA.md, regra 3); `fn_mesclar_empresas` é
 -- nossa desde a 0263. O desenho inteiro está em docs/fork/empresa-unica.md.
@@ -79,7 +79,7 @@ begin
 end $$;
 
 comment on function public.fn_mia_espelhar_empresa_da_pessoa(uuid) is
-  'MIA (9026): recalcula o espelho de todos os numeros vivos de uma pessoa (contacts.empresa_id = a empresa do cartao, mais cargo, setor, papel e principal do vinculo dela). Chamada pelos gatilhos e pelas funcoes da empresa unica.';
+  'MIA (9034): recalcula o espelho de todos os numeros vivos de uma pessoa (contacts.empresa_id = a empresa do cartao, mais cargo, setor, papel e principal do vinculo dela). Chamada pelos gatilhos e pelas funcoes da empresa unica.';
 
 -- Uma pessoa nova a partir de um contato. Chamada com a chave ligada.
 create or replace function public.fn_mia_nova_pessoa_do_contato(p_contato uuid)
@@ -353,6 +353,7 @@ set search_path = ''
 as $$
 declare
   v_antes text;
+  cur record;
 begin
   if coalesce(current_setting('mia.empresa_unica', true), '') = 'propagando' then
     return null;
@@ -360,12 +361,22 @@ begin
   if tg_op = 'UPDATE' and new.person_id is not distinct from old.person_id then
     return null;
   end if;
-  if tg_op = 'UPDATE' and old.person_id is not null then
+  -- A linha COMO ESTÁ AGORA, e não o NEW: os gatilhos AFTER da mesma linha
+  -- disparam em ordem de nome, e o tradutor (`trg_mia_contato_empresa_vira_vinculo`)
+  -- vem antes deste. No INSERT com empresa ele já criou a pessoa e o vínculo, e
+  -- o NEW daqui ainda diz "sem pessoa": confiar nele apagaria a empresa do contato.
+  select person_id, empresa_id, is_anonymized, is_merged_into into cur
+    from public.contacts
+   where id = new.id;
+  if not found then
+    return null;
+  end if;
+  if tg_op = 'UPDATE' and old.person_id is not null and old.person_id is distinct from cur.person_id then
     perform public.fn_mia_espelhar_empresa_da_pessoa(old.person_id);
   end if;
-  if new.person_id is not null then
-    perform public.fn_mia_espelhar_empresa_da_pessoa(new.person_id);
-  elsif new.empresa_id is not null and not new.is_anonymized and new.is_merged_into is null then
+  if cur.person_id is not null then
+    perform public.fn_mia_espelhar_empresa_da_pessoa(cur.person_id);
+  elsif cur.empresa_id is not null and not cur.is_anonymized and cur.is_merged_into is null then
     -- Sem pessoa não há vínculo, e o cartão fica sem empresa.
     v_antes := coalesce(current_setting('mia.empresa_unica', true), '');
     perform set_config('mia.empresa_unica', 'propagando', true);
@@ -559,8 +570,14 @@ begin
     if v_nome is null then
       raise exception using errcode = '22023', message = 'empresa_sem_nome';
     end if;
+    -- Quem criou: a pessoa da sessão; no servidor (`auth.uid()` nulo), quem a
+    -- rota disser em `criado_por` (o autor do token do MCP de plataforma).
     insert into public.companies (organization_id, trade_name, enrichment_status, created_by)
-    values (p_organization_id, v_nome, 'pending', auth.uid())
+    values (
+      p_organization_id, v_nome, 'pending',
+      coalesce(auth.uid(), case when auth.uid() is null and coalesce(p_dados->>'criado_por', '') ~ '^[0-9a-f-]{36}$'
+                                then (p_dados->>'criado_por')::uuid end)
+    )
     returning id into v_id;
     v_criada := true;
   end if;
