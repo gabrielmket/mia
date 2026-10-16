@@ -44,7 +44,7 @@ import {
   type PeriodoDoMontador,
   type Visualizacao,
 } from "@/lib/relatorios/catalogo";
-import { motivoDaVisualizacao, normalizarConfig, visualizacaoQueVale, type ConfigDoRelatorio } from "@/lib/relatorios/config";
+import { chaveDoMotivo, MOTIVOS_DA_VISUALIZACAO, normalizarConfig, visualizacaoQueVale, type ConfigDoRelatorio } from "@/lib/relatorios/config";
 import { fraseDoAnterior, fraseDoRelatorio } from "@/lib/relatorios/frases";
 
 export interface InicioDoEditor {
@@ -133,7 +133,7 @@ export function EditorDeRelatorio({ inicio, funis, funilPadrao, permissoes }: Pr
 
   const modelo = useMemo(() => (calc ? modeloDoGrafico(calc.resposta, config.medida, calc.nomes) : null), [calc, config.medida]);
   const vis = visualizacaoQueVale(config, calc?.resposta ?? null);
-  const motivos = VISUALIZACOES.map((v) => [v, motivoDaVisualizacao(config, v, calc?.resposta ?? null)] as const).filter(([, m]) => m);
+  const motivos = VISUALIZACOES.map((v) => [v, chaveDoMotivo(config, v, calc?.resposta ?? null)] as const).filter(([, m]) => m);
   const fonte = FONTES_DO_MONTADOR[config.fonte];
   const medida = MEDIDAS_DO_MONTADOR[config.medida];
   const f = { t, tag, moeda: modelo?.moeda ?? "BRL" };
@@ -424,14 +424,14 @@ export function EditorDeRelatorio({ inicio, funis, funilPadrao, permissoes }: Pr
           <Secao titulo={t("Visualização")}>
             <div role="group" aria-label={t("Visualização")} className="grid grid-cols-3 gap-2">
               {VISUALIZACOES.map((v) => {
-                const motivo = motivoDaVisualizacao(config, v, calc?.resposta ?? null);
+                const motivo = chaveDoMotivo(config, v, calc?.resposta ?? null);
                 return (
                   <button
                     key={v}
                     type="button"
                     aria-pressed={vis === v}
                     disabled={Boolean(motivo)}
-                    title={motivo ? t(motivo) : t(ROTULO_DA_VISUALIZACAO[v])}
+                    title={motivo ? t(MOTIVOS_DA_VISUALIZACAO[motivo]) : t(ROTULO_DA_VISUALIZACAO[v])}
                     onClick={() => mudar({ visualizacao: v })}
                     className={`min-h-11 rounded-sm border px-2 text-base lg:min-h-9 lg:text-sm ${vis === v ? "border-accent bg-accent-soft text-accent" : "border-border hover:bg-surface-elevated"} disabled:opacity-40`}
                   >
@@ -444,7 +444,7 @@ export function EditorDeRelatorio({ inicio, funis, funilPadrao, permissoes }: Pr
               <ul className="flex flex-col gap-1 text-xs text-text-muted">
                 {motivos.map(([v, m]) => (
                   <li key={v}>
-                    <b>{t(ROTULO_DA_VISUALIZACAO[v])}:</b> {t(m!)}
+                    <b>{t(ROTULO_DA_VISUALIZACAO[v])}:</b> {m ? t(MOTIVOS_DA_VISUALIZACAO[m]) : null}
                   </li>
                 ))}
               </ul>

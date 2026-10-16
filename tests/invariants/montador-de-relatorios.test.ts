@@ -157,10 +157,10 @@ beforeAll(() => {
       ('${E2}', '${ORG_A}', '${FUNIL}', 'Proposta', 'proposta-9040', 2000, false, false),
       ('${EW}', '${ORG_A}', '${FUNIL}', 'Fechou', 'fechou-9040', 3000, true, false),
       ('${EL}', '${ORG_A}', '${FUNIL}', 'Perdeu', 'perdeu-9040', 4000, false, true);
-    insert into public.contacts (id, organization_id, display_name, phone_number, carteira_user_id, created_at) values
-      ('${C(1)}', '${ORG_A}', 'Contato Um', '+5531900000001', '${AT1}', '2026-10-02 10:00-03'),
-      ('${C(2)}', '${ORG_A}', 'Contato Dois', '+5531900000002', '${AT2}', '2026-10-02 10:00-03'),
-      ('${C(3)}', '${ORG_A}', 'Contato Três', null, null, '2026-10-02 10:00-03');
+    insert into public.contacts (id, organization_id, display_name, phone_number, carteira_user_id, carteira_origem, carteira_definida_em, created_at) values
+      ('${C(1)}', '${ORG_A}', 'Contato Um', '+5531900000001', '${AT1}', 'manual', now(), '2026-10-02 10:00-03'),
+      ('${C(2)}', '${ORG_A}', 'Contato Dois', '+5531900000002', '${AT2}', 'manual', now(), '2026-10-02 10:00-03'),
+      ('${C(3)}', '${ORG_A}', 'Contato Três', null, null, null, null, '2026-10-02 10:00-03');
     insert into public.crm_leads (id, organization_id, pipeline_id, stage_id, contact_id, title, status, value_cents, currency,
       owner_user_id, source, created_at, closed_at, lost_reason, lost_from_stage_id) values
       ('${L(1)}', '${ORG_A}', '${FUNIL}', '${E1}', '${C(1)}', 'N1', 'open', 1000, 'BRL', '${AT1}', 'meta_ads', '2026-10-05 10:00-03', null, null, null),
@@ -452,7 +452,7 @@ describe("a lista por trás do número", () => {
     expect(l.n).toBe(nDe(grafico, "meta_ads"));
     expect(l.total.valores.soma).toBe(grupos(grafico).find((g) => g.chave === "meta_ads")?.valores.soma);
     const n1 = l.linhas.find((x) => x.registro === L(1))!;
-    expect(n1.detalhe.contato).toBe("Contato Um");
+    expect(n1.detalhe.contato_nome).toBe("Contato Um");
     expect(n1.detalhe.link).toBe(`/app/leads/${L(1)}`);
   });
 

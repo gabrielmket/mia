@@ -204,7 +204,7 @@ describe("a planilha", () => {
       x1: null,
       x2: null,
       ok: true,
-      detalhe: { titulo: "N1", contato: "Contato Um", telefone: "+5500900000001", etapa: "Fechou", link: "/app/leads/r1" },
+      detalhe: { titulo: "N1", contato_nome: "Contato Um", contato_apelido: "Apelido do WhatsApp", telefone: "+5500900000001", etapa: "Fechou", link: "/app/leads/r1" },
     };
     const ctx = { nomes: { u1: "Ana" }, fuso: "America/Sao_Paulo", t };
     const comValor = csvDaLista(colunasDaLista("negocios", { valores: true, tela: false }), [linha], { sep: ";", moeda: "BRL", ctx }).texto;

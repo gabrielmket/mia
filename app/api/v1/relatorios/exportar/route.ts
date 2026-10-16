@@ -82,7 +82,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       dobrados2: d.dobrados2 ?? null,
       funil: d.funil ?? false,
       grupo: d.grupo ?? null,
-      empresa: empresa.display_name ?? "empresa",
+      empresa: typeof empresa.display_name === "string" && empresa.display_name.trim() ? empresa.display_name : "empresa",
       fuso,
       f: { t: ctx.t, tag: tagDeIdioma(ctx.idioma), moeda: empresa.currency || "BRL" },
     });

@@ -187,38 +187,62 @@ export function normalizarConfig(entrada: ConfigDoRelatorio, ctx: ContextoDoEdit
   return { config: c, avisos };
 }
 
+/** Os motivos de uma visualização não combinar, pela chave (a tela passa o texto por `t()`). */
+export const MOTIVOS_DA_VISUALIZACAO = {
+  linha_sem_tempo: "Linha mostra a evolução no tempo: agrupe por mês, semana ou dia.",
+  rosca_com_tempo: "Rosca não mostra tempo: use barras ou linha.",
+  rosca_nao_soma: "Rosca reparte um total: média, taxa e tempo não se repartem.",
+  rosca_com_serie: "Rosca não tem segundo agrupamento.",
+  rosca_multi: "Um registro pode estar em mais de um grupo: as fatias somariam mais que o total.",
+  rosca_fatias: "Mais de 8 fatias ninguém lê: use barras.",
+  funil_sem_etapa: "Funil só agrupando negócios por etapa.",
+  funil_com_serie: "Funil não tem segundo agrupamento.",
+  funil_medida: "Funil conta quantidade ou soma do valor.",
+} as const;
+export type MotivoDaVisualizacao = keyof typeof MOTIVOS_DA_VISUALIZACAO;
+
 /**
  * Por que a visualização `v` não combina com a configuração (ou `null`, quando
- * combina). A tela desliga o botão e escreve o motivo. `resposta` (opcional)
- * conta as fatias da rosca.
+ * combina), pela chave. A tela desliga o botão e escreve o motivo. `resposta`
+ * (opcional) conta as fatias da rosca.
  */
-export function motivoDaVisualizacao(
+export function chaveDoMotivo(
   c: ConfigDoRelatorio,
   v: Visualizacao,
   resposta?: Pick<RespostaDoMotor, "grupos"> | null,
-): string | null {
+): MotivoDaVisualizacao | null {
   const d1 = c.dim1 ? DIMENSOES_DO_MONTADOR[c.dim1] : null;
   const m = MEDIDAS_DO_MONTADOR[c.medida];
-  if (v === "linha" && !d1?.tempo) return "Linha mostra a evolução no tempo: agrupe por mês, semana ou dia.";
+  if (v === "linha" && !d1?.tempo) return "linha_sem_tempo";
   if (v === "rosca") {
-    if (d1?.tempo) return "Rosca não mostra tempo: use barras ou linha.";
-    if (!m.aditiva) return "Rosca reparte um total: média, taxa e tempo não se repartem.";
-    if (c.dim2) return "Rosca não tem segundo agrupamento.";
-    if (d1?.multi) return "Um registro pode estar em mais de um grupo: as fatias somariam mais que o total.";
+    if (d1?.tempo) return "rosca_com_tempo";
+    if (!m.aditiva) return "rosca_nao_soma";
+    if (c.dim2) return "rosca_com_serie";
+    if (d1?.multi) return "rosca_multi";
     if (resposta) {
       const comValor = resposta.grupos.filter((g) => {
         const x = g.valores[c.medida as Medida];
         return typeof x === "number" ? x > 0 : g.n > 0;
       }).length;
-      if (comValor > FATIAS_DA_ROSCA) return "Mais de 8 fatias ninguém lê: use barras.";
+      if (comValor > FATIAS_DA_ROSCA) return "rosca_fatias";
     }
   }
   if (v === "funil") {
-    if (c.fonte !== "negocios" || c.dim1 !== "etapa") return "Funil só agrupando negócios por etapa.";
-    if (c.dim2) return "Funil não tem segundo agrupamento.";
-    if (c.medida !== "qtd" && c.medida !== "soma") return "Funil conta quantidade ou soma do valor.";
+    if (c.fonte !== "negocios" || c.dim1 !== "etapa") return "funil_sem_etapa";
+    if (c.dim2) return "funil_com_serie";
+    if (c.medida !== "qtd" && c.medida !== "soma") return "funil_medida";
   }
   return null;
+}
+
+/** O texto do motivo (para o MCP e os testes); a tela usa a chave. */
+export function motivoDaVisualizacao(
+  c: ConfigDoRelatorio,
+  v: Visualizacao,
+  resposta?: Pick<RespostaDoMotor, "grupos"> | null,
+): string | null {
+  const chave = chaveDoMotivo(c, v, resposta);
+  return chave ? MOTIVOS_DA_VISUALIZACAO[chave] : null;
 }
 
 /** A visualização que vale: a pedida, ou barras quando a pedida não combina. */

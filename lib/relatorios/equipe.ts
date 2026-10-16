@@ -1,5 +1,3 @@
-import "server-only";
-
 /**
  * FORK MIA (item 9) — O NOME de quem é da equipe, para o grupo "Larissa" do
  * relatório por responsável.
@@ -13,6 +11,10 @@ import "server-only";
  *
  * Quem saiu da equipe continua com nome (o trabalho foi dele); sem nome no
  * Auth, a tela escreve "Pessoa fora da equipe".
+ *
+ * Sem `server-only` de propósito: o MCP de plataforma e os invariantes de banco
+ * também importam (pelo `lib/relatorios/servidor.ts`). O cliente de serviço vem
+ * de quem chama, e nenhum navegador o tem.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 

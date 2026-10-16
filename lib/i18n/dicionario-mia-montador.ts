@@ -341,6 +341,9 @@ export const DICIONARIO_DO_MONTADOR_MIA: Traducoes = {
   escolhidos: { es: "elegidos" },
   nenhum: { es: "ninguno" },
   "Montar relatório": { es: "Armar informe" },
+  "Monte o seu relatório: o que medir, como agrupar, filtros e gráfico. Copie um pronto e junte num painel.": {
+    es: "Arma tu informe: qué medir, cómo agrupar, filtros y gráfico. Copia uno listo y júntalo en un panel.",
+  },
 
   // ── o painel do usuário ──
   "Relatórios salvos lado a lado, com o período do painel.": { es: "Informes guardados lado a lado, con el período del panel." },
@@ -407,6 +410,7 @@ export const DICIONARIO_DO_MONTADOR_MIA: Traducoes = {
 
   // ── as respostas das rotas ──
   "Confira os campos do relatório.": { es: "Revisa los campos del informe." },
+  "Não deu certo. Tente de novo.": { es: "No funcionó. Inténtalo de nuevo." },
   "Relatório não encontrado.": { es: "Informe no encontrado." },
   "Painel não encontrado.": { es: "Panel no encontrado." },
   "Só gestor e administrador compartilham com a equipe.": { es: "Solo gerente y administrador comparten con el equipo." },

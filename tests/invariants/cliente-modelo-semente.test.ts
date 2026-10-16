@@ -602,7 +602,7 @@ describe.each(DEMONSTRACOES)("a demonstração %s, no banco", (segmento) => {
     // O motor agrupa por produto com o que a semente gravou: há produto de verdade, não só "Sem produto".
     const grupos = JSON.parse(
       await naOrg<string>(
-        `select (public.fn_mia_relatorio($1::uuid, negocios, array[qtd], produto, null, {}, pers, 2020-01-01, 2030-12-31) -> grupos)::text`,
+        `select (public.fn_mia_relatorio($1::uuid, 'negocios', array['qtd'], 'produto', null, '{}', 'pers', '2025-01-01', '2027-12-31') -> 'grupos')::text`,
       ),
     ) as Array<{ chave: string; n: number }>;
     expect(grupos.some((g) => g.chave !== "__sem" && g.n > 0)).toBe(true);

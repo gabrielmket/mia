@@ -10351,6 +10351,15 @@ create policy "mia_relatorios_da_empresa_escrita" on public.mia_relatorios_da_em
     and public.fn_role_at_least(organization_id, 'manager')
   );
 
+-- ── 7. as travas do suporte somente leitura ─────────────────────────────────
+--
+-- As cinco tabelas são escritas pela sessão: entram nas restritivas
+-- `support_write_*` pela função DO UPSTREAM (0274), como a 9001 e a 9018 fazem.
+-- Chamada aqui porque elas nascem depois do último bloco do baseline.sql; é ela
+-- que decide (tabela gravável por `authenticated` ganha as três travas).
+-- Provado em tests/invariants/travas-de-suporte-cobrem-toda-tabela-na-instalacao.test.ts.
+do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
+
 notify pgrst, 'reload schema';
 
 -- ─── 9041 · o motor do montador e a lista por trás do número ───
@@ -11526,7 +11535,9 @@ comment on function public.fn_mia_relatorio(uuid, text, text[], text, text, json
 --
 -- O que a lista mostra de cada linha contada e onde abrir no CRM. `security
 -- invoker`: a RLS de quem pergunta decide também aqui (o atendente não lê o
--- contato que não vê). Anúncios não passam por aqui: a tabela é só do
+-- contato que não vê). O nome do contato vai CRU (`name` e `display_name`,
+-- com o telefone): quem escolhe qual mostrar é a régua única da tela,
+-- `rotuloDoContato` (lib/contacts/rotulo-do-contato.ts), que pula o nome técnico. Anúncios não passam por aqui: a tabela é só do
 -- servidor, e a lista usa o negócio de origem que o definer já devolve.
 create or replace function public.fn_mia_relatorio_detalhes(
   p_org uuid,
@@ -11542,7 +11553,8 @@ begin
     return query
     select l.id, jsonb_build_object(
       'titulo', l.title,
-      'contato', coalesce(nullif(btrim(ct.display_name), ''), nullif(btrim(ct.name), '')),
+      'contato_nome', ct.name,
+      'contato_apelido', ct.display_name,
       'telefone', ct.phone_number,
       'etapa', s.name,
       'funil', p.name,
@@ -11557,7 +11569,8 @@ begin
   elsif p_fonte = 'conversas' then
     return query
     select c.id, jsonb_build_object(
-      'contato', coalesce(nullif(btrim(ct.display_name), ''), nullif(btrim(ct.name), '')),
+      'contato_nome', ct.name,
+      'contato_apelido', ct.display_name,
       'telefone', ct.phone_number,
       'link', '/app/inbox/' || c.id)
     from public.conversations c
@@ -11567,7 +11580,8 @@ begin
   elsif p_fonte = 'contatos' then
     return query
     select ct.id, jsonb_build_object(
-      'contato', coalesce(nullif(btrim(ct.display_name), ''), nullif(btrim(ct.name), '')),
+      'contato_nome', ct.name,
+      'contato_apelido', ct.display_name,
       'telefone', ct.phone_number,
       'link', '/app/contacts/' || ct.id)
     from public.contacts ct
@@ -11577,7 +11591,8 @@ begin
     return query
     select a.id, jsonb_build_object(
       'titulo', a.title,
-      'contato', coalesce(nullif(btrim(ct.display_name), ''), nullif(btrim(ct.name), '')),
+      'contato_nome', ct.name,
+      'contato_apelido', ct.display_name,
       'telefone', ct.phone_number,
       'link', case when a.contact_id is not null then '/app/contacts/' || a.contact_id else '/app/agenda' end)
     from public.calendar_appointments a
@@ -11587,7 +11602,8 @@ begin
   elsif p_fonte = 'followup' then
     return query
     select e.id, jsonb_build_object(
-      'contato', coalesce(nullif(btrim(ct.display_name), ''), nullif(btrim(ct.name), '')),
+      'contato_nome', ct.name,
+      'contato_apelido', ct.display_name,
       'telefone', ct.phone_number,
       'link', case when e.conversation_id is not null then '/app/inbox/' || e.conversation_id
                    else '/app/contacts/' || e.contact_id end)
@@ -11599,7 +11615,9 @@ begin
     return query
     select o.id, jsonb_build_object(
       'titulo', o.nome,
-      'contato', coalesce(nullif(btrim(ct.display_name), ''), nullif(btrim(ct.name), ''), l.title),
+      'contato_nome', ct.name,
+      'contato_apelido', ct.display_name,
+      'negocio', l.title,
       'telefone', ct.phone_number,
       'link', case when o.lead_id is not null then '/app/leads/' || o.lead_id
                    when o.contact_id is not null then '/app/contacts/' || o.contact_id

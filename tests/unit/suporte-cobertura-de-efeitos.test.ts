@@ -56,6 +56,13 @@ it("todo handler mutante do app declara guarda de suporte ou é infraestrutura i
   // cada assinatura (guardado como hash), a mesma natureza de /webhooks/ acima.
   // Não há sessão de suporte para a guarda ler.
   if(path==="app/api/v1/agenda/microsoft/notificacoes/route.ts")continue;
+  // FORK MIA (item 9) — o montador de relatórios LÊ por POST: o corpo leva a
+  // configuração do relatório (filtros em lista, período, agrupamentos), que
+  // não cabe numa query string. Calcular, abrir a lista por trás do número e
+  // listar os valores de um filtro não escrevem nada (o motor é `stable`), e
+  // o acompanhamento só-leitura PRECISA vê-los. As rotas que escrevem
+  // (`/relatorios`, `/relatorios/[id]`, `/exportar`, `/paineis/**`) têm a guarda.
+  if(["app/api/v1/relatorios/calcular/route.ts","app/api/v1/relatorios/lista/route.ts","app/api/v1/relatorios/valores/route.ts"].includes(path))continue;
   const source=ts.createSourceFile(path,readFileSync(path,"utf8"),ts.ScriptTarget.Latest,true);
   // DUAS FORMAS de exportar um handler, e o gate precisa das duas. A varredura
   // só enxergava `export async function POST`; `export const PATCH = async () => {}`

@@ -11,6 +11,7 @@
  *
  * ⚠️ Módulo PURO.
  */
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import type { Dimensao, Fonte } from "@/lib/paineis/catalogo";
 
 import { rotuloDaChave, dataCurta, tempoDeEspera, type Rotulo } from "./apresentar";
@@ -29,7 +30,11 @@ export interface LinhaDaLista {
   ok: boolean | null;
   detalhe: {
     titulo?: string | null;
-    contato?: string | null;
+    /** O nome do contato CRU: quem escolhe o que mostrar é `rotuloDoContato`. */
+    contato_nome?: string | null;
+    contato_apelido?: string | null;
+    /** Na obrigação sem contato, o título do negócio dela. */
+    negocio?: string | null;
     telefone?: string | null;
     etapa?: string | null;
     funil?: string | null;
@@ -97,7 +102,18 @@ function dimTexto(fonte: Fonte, dim: Dimensao, l: LinhaDaLista, ctx: ContextoDaL
 
 const dataDoMomento = (l: LinhaDaLista, ctx: ContextoDaLista) => texto(dataCurta(l.momento, ctx.fuso));
 
-const contato: ColunaDaLista = { titulo: "Contato", tela: true, valor: false, celula: (l) => texto(l.detalhe.contato) };
+/**
+ * O contato pela régua única do produto (`rotuloDoContato`): o nome digitado,
+ * depois o do WhatsApp, pulando o identificador técnico, e então o telefone.
+ * Na obrigação sem contato, o título do negócio dela.
+ */
+function nomeDoContatoDaLinha(l: LinhaDaLista, ctx: ContextoDaLista): string {
+  const d = l.detalhe;
+  if (!d.contato_nome && !d.contato_apelido && !d.telefone && d.negocio) return d.negocio;
+  return rotuloDoContato({ name: d.contato_nome ?? null, display_name: d.contato_apelido ?? null, phone_number: d.telefone ?? null }, ctx.t);
+}
+
+const contato: ColunaDaLista = { titulo: "Contato", tela: true, valor: false, celula: (l, ctx) => texto(nomeDoContatoDaLinha(l, ctx)) };
 const telefone: ColunaDaLista = { titulo: "Telefone", tela: false, valor: false, celula: (l) => texto(l.detalhe.telefone) };
 
 export const COLUNAS_DA_LISTA: Record<Fonte, ColunaDaLista[]> = {

@@ -181,8 +181,7 @@ export function formatarValor(formato: FormatoDaMedida, v: number | null | undef
 
 /** O rótulo da medida, com o plural da fonte ("Quantidade de negócios"), já traduzido. */
 export function rotuloDaMedida(medida: MedidaDoMontador, fonte: Fonte, t: (s: string) => string): string {
-  const r = MEDIDAS_DO_MONTADOR[medida].rotulo;
-  return t(r).replace("{varios}", t(FONTES_DO_MONTADOR[fonte].varios));
+  return t(MEDIDAS_DO_MONTADOR[medida].rotulo).replace("{varios}", t(FONTES_DO_MONTADOR[fonte].varios));
 }
 
 /** "05/10/2026" de um `AAAA-MM-DD` ou de um instante, no fuso da empresa. */
