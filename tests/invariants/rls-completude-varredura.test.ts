@@ -391,6 +391,25 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "lê e não grava, o catálogo é de manager, aviso só o servidor grava, e " +
       "item de negócio que a pessoa não enxerga não aparece para ela.",
   })),
+  // Fork MIA, 9040 — o montador de relatórios: relatórios salvos, painéis do
+  // usuário e os itens, o registro das exportações e o funil dos prontos.
+  ...[
+    "mia_relatorios",
+    "mia_paineis_usuario",
+    "mia_paineis_usuario_itens",
+    "mia_relatorios_exportacoes",
+    "mia_relatorios_da_empresa",
+  ].map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/montador-de-relatorios.test.ts — controle positivo e " +
+      "negativo por papel: o próprio e o compartilhado aparecem, o \"só para mim\" " +
+      "de outra pessoa não (nem para o administrador); outra empresa vê zero; " +
+      "anon recebe permission denied; só gestor compartilha (42501); o " +
+      "compartilhado só quem criou e o administrador editam; o item segue o " +
+      "painel e nunca cruza empresa; a exportação é de gestor, cada um a sua, " +
+      "e ninguém altera nem apaga.",
+  })),
   // Fork MIA, 9031 — o link dos painéis para o dono do negócio.
   {
     tabela: "mia_paineis_links",

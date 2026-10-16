@@ -29,8 +29,11 @@ export interface PedidoAoMotor {
   medidas: readonly Medida[];
   dim1?: Dimensao | null;
   dim2?: Dimensao | null;
-  /** Um valor por chave; `"__sem"` pede a ausência. */
-  filtros?: Record<string, string | boolean>;
+  /**
+   * Um valor por chave, ou uma lista (qualquer um passa, 9041); `"__sem"` pede
+   * a ausência. Funil e só-receita são de um valor só.
+   */
+  filtros?: Record<string, string | boolean | string[]>;
   periodo: PeriodoDoMotor;
   /** Só com `periodo: "pers"`: `AAAA-MM-DD`, no fuso da empresa. */
   de?: string | null;
@@ -60,6 +63,11 @@ export interface GrupoDoMotor extends ValoresDoGrupo {
   quantos?: number | null;
   /** Etapa de ganho (só no funil "chegaram"). */
   ganho?: boolean;
+  /**
+   * A meta daquele pedaço de tempo, em centavos (9041): na soma dos ganhos
+   * agrupando por mês, semana ou dia. Nula sem meta cadastrada ou sem valores.
+   */
+  meta_cents?: number | null;
   series?: Record<string, ValoresDoGrupo>;
 }
 
@@ -109,6 +117,8 @@ export interface RespostaDoMotor {
   grupos: GrupoDoMotor[];
   series: SerieDoMotor[] | null;
   dobrados: string[];
+  /** As séries que foram para "Outros" (9041): a lista da célula "Outros" pede por elas. */
+  series_dobradas?: string[];
   funil: { id: string; nome: string; vocabulario: Record<string, unknown> | null } | null;
   meta: MetaDoMotor | null;
   anterior: {

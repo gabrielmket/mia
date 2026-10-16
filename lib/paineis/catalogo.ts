@@ -57,6 +57,7 @@ export const DIMENSOES = [
   "resp",
   "origem",
   "etiqueta",
+  "produto",
   "motivo",
   "previsto",
   "funil",
@@ -84,12 +85,16 @@ export interface DefinicaoDaFonte {
   futuro: boolean;
 }
 
-/** O espelho de `fn_mia_relatorio_catalogo()`. Mude os dois juntos. */
+/**
+ * O espelho de `fn_mia_relatorio_catalogo()`. Mude os dois juntos. A 9041 (o
+ * montador, item 9) acrescentou o produto nos negócios e o responsável no
+ * follow-up.
+ */
 export const CATALOGO_DO_MOTOR: Record<Fonte, DefinicaoDaFonte> = {
   negocios: {
     medidas: ["qtd", "soma", "media", "conv", "tetapa", "tfechar", "prev", "sem_prob", "chegaram"],
-    dims: ["etapa", "situacao", "resp", "origem", "etiqueta", "motivo", "previsto", "funil", "mes", "semana", "dia"],
-    filtros: ["funil", "resp", "etiqueta", "situacao", "origem", "motivo", "so_receita"],
+    dims: ["etapa", "situacao", "resp", "origem", "etiqueta", "produto", "motivo", "previsto", "funil", "mes", "semana", "dia"],
+    filtros: ["funil", "resp", "etiqueta", "situacao", "origem", "produto", "motivo", "so_receita"],
     futuro: false,
   },
   conversas: {
@@ -112,8 +117,8 @@ export const CATALOGO_DO_MOTOR: Record<Fonte, DefinicaoDaFonte> = {
   },
   followup: {
     medidas: ["qtd", "taxa"],
-    dims: ["resultado", "fluxo", "mes", "semana", "dia"],
-    filtros: ["fluxo", "resultado"],
+    dims: ["resultado", "fluxo", "resp", "mes", "semana", "dia"],
+    filtros: ["fluxo", "resultado", "resp"],
     futuro: false,
   },
   obrigacoes: {
@@ -317,6 +322,7 @@ export const ROTULO_DO_SEM: Record<string, string> = {
   prof: "Sem profissional",
   origem: "Sem origem",
   etiqueta: "Sem etiqueta",
+  produto: "Sem produto",
   motivo: "Sem motivo",
   previsto: "Sem data prevista",
   tipo: "Sem tipo",
