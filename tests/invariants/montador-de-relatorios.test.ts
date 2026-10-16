@@ -452,7 +452,9 @@ describe("a lista por trás do número", () => {
     expect(l.n).toBe(nDe(grafico, "meta_ads"));
     expect(l.total.valores.soma).toBe(grupos(grafico).find((g) => g.chave === "meta_ads")?.valores.soma);
     const n1 = l.linhas.find((x) => x.registro === L(1))!;
-    expect(n1.detalhe.contato_nome).toBe("Contato Um");
+    // O nome vai cru: o fixture grava o nome do perfil (display_name), e a tela escolhe pela régua única.
+    expect(n1.detalhe.contato_apelido).toBe("Contato Um");
+    expect(n1.detalhe.telefone).toBe("+5531900000001");
     expect(n1.detalhe.link).toBe(`/app/leads/${L(1)}`);
   });
 
