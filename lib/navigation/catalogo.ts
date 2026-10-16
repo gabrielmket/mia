@@ -927,6 +927,17 @@ export const NAV_CATALOG = [
     // da empresa (decisão do protótipo aprovado em 15/10/2026).
     minRole: "manager",
   },
+  // FORK MIA (item 9): o montador de relatórios. Só no hub e no ⌘K, como os
+  // painéis prontos (a barra lateral está no teto); a porta de todo dia é
+  // Painéis prontos, que ganhou o atalho no cabeçalho.
+  {
+    href: "/app/relatorios",
+    label: "Relatórios",
+    description: "Monte o seu relatório: o que medir, como agrupar, filtros e gráfico. Copie um pronto e junte num painel.",
+    icon: "ChartBar",
+    group: "analise",
+    section: "Os números do período",
+  },
   {
     // Logo abaixo de Desempenho porque responde a metade da MESMA pergunta: lá
     // está o que aconteceu depois que a pessoa chegou; aqui, quanto custou

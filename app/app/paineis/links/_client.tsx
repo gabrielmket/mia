@@ -352,7 +352,16 @@ export function LinksDoDonoClient({ linksIniciais, funis, demonstracao, disponiv
                     <div className="min-w-0">
                       <dt className="text-xs text-text-muted">{t("O que mostra")}</dt>
                       <dd className="truncate">
-                        {l.paineis.length} {t("painéis")} · {l.paineis.map((p) => tituloDoPainel(p, l.pipelineId)).join(", ")}
+                        {/* FORK MIA (9042): o link de um painel do montador mostra os relatórios dele. */}
+                        {l.painelId ? (
+                          <a href={`/app/relatorios/paineis/${l.painelId}`} className="text-accent hover:underline">
+                            {t("Um painel do montador")}
+                          </a>
+                        ) : (
+                          <>
+                            {l.paineis.length} {t("painéis")} · {l.paineis.map((p) => tituloDoPainel(p, l.pipelineId)).join(", ")}
+                          </>
+                        )}
                       </dd>
                     </div>
                     <div>
@@ -408,7 +417,7 @@ export function LinksDoDonoClient({ linksIniciais, funis, demonstracao, disponiv
                         {t("Renovar por 90 dias")}
                       </Button>
                     ) : null}
-                    {l.situacao === "revogado" ? (
+                    {l.situacao === "revogado" && !l.painelId ? (
                       <Button variant="secondary" className="min-h-11 lg:min-h-9" onClick={() => criarOutroIgual(l)}>
                         {t("Criar outro igual")}
                       </Button>

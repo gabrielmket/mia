@@ -148,6 +148,8 @@ export interface LinhaDoLink {
   periodo: string;
   mostrar_valores: boolean;
   pipeline_id: string | null;
+  /** FORK MIA (9042): o painel do montador que o link mostra; nulo = os prontos de `paineis`. */
+  painel_id?: string | null;
   expires_at: string;
   revoked_at: string | null;
   last_used_at: string | null;
@@ -164,6 +166,8 @@ export interface LinkDoDono {
   periodo: PeriodoDoLink;
   mostrarValores: boolean;
   pipelineId: string | null;
+  /** O painel do montador (9042); nulo = os prontos. */
+  painelId: string | null;
   validoAte: string;
   revogadoEm: string | null;
   ultimoAcesso: string | null;
@@ -176,7 +180,7 @@ export interface LinkDoDono {
 }
 
 const COLUNAS =
-  "id, organization_id, para_quem, paineis, periodo, mostrar_valores, pipeline_id, expires_at, revoked_at, last_used_at, acessos, created_by, created_via, created_at";
+  "id, organization_id, para_quem, paineis, periodo, mostrar_valores, pipeline_id, painel_id, expires_at, revoked_at, last_used_at, acessos, created_by, created_via, created_at";
 
 export function situacaoDoLink(
   linha: Pick<LinhaDoLink, "revoked_at" | "expires_at">,
@@ -194,6 +198,7 @@ export function paraLink(linha: LinhaDoLink, agora: number = Date.now()): LinkDo
     periodo: ehPeriodoDoLink(linha.periodo) ? linha.periodo : "escolhe",
     mostrarValores: linha.mostrar_valores,
     pipelineId: linha.pipeline_id,
+    painelId: linha.painel_id ?? null,
     validoAte: linha.expires_at,
     revogadoEm: linha.revoked_at,
     ultimoAcesso: linha.last_used_at,
@@ -210,6 +215,11 @@ export function paraLink(linha: LinhaDoLink, agora: number = Date.now()): LinkDo
 export interface PedidoDeLink {
   paraQuem: string;
   paineis: readonly ChaveDoPainel[];
+  /**
+   * FORK MIA (9042): o painel do montador. Com ele, `paineis` vai vazio: o link
+   * mostra os relatórios do painel (menos os que identificam pessoa da equipe).
+   */
+  painelId?: string | null;
   periodo: PeriodoDoLink;
   mostrarValores: boolean;
   pipelineId?: string | null;
@@ -226,7 +236,7 @@ export interface ContextoDoLink {
 
 export class LinkRecusado extends Error {
   constructor(
-    readonly motivo: "sem_painel" | "funil_de_outra_empresa" | "nao_encontrado" | "revogado" | "ativo",
+    readonly motivo: "sem_painel" | "funil_de_outra_empresa" | "painel_de_outra_empresa" | "nao_encontrado" | "revogado" | "ativo",
     mensagem: string,
   ) {
     super(mensagem);
@@ -243,8 +253,19 @@ export async function criarLink(
   ctx: ContextoDoLink,
   pedido: PedidoDeLink,
 ): Promise<LinkDoDono> {
-  const paineis = paineisSemRepeticao(pedido.paineis);
-  if (paineis.length === 0) throw new LinkRecusado("sem_painel", "Escolha pelo menos um painel.");
+  const painelId = pedido.painelId ?? null;
+  const paineis = painelId ? [] : paineisSemRepeticao(pedido.paineis);
+  if (!painelId && paineis.length === 0) throw new LinkRecusado("sem_painel", "Escolha pelo menos um painel.");
+  if (painelId) {
+    const { data: painel, error } = await admin
+      .from("mia_paineis_usuario")
+      .select("id")
+      .eq("organization_id", ctx.organizationId)
+      .eq("id", painelId)
+      .maybeSingle();
+    if (error) throw new Error(`não consegui conferir o painel: ${error.message}`);
+    if (!painel) throw new LinkRecusado("painel_de_outra_empresa", "Esse painel não é desta empresa.");
+  }
   const pipelineId = pedido.pipelineId ?? null;
   if (pipelineId) {
     const { data: funil, error } = await admin
@@ -268,6 +289,7 @@ export async function criarLink(
       periodo: pedido.periodo,
       mostrar_valores: pedido.mostrarValores,
       pipeline_id: pipelineId,
+      painel_id: painelId,
       token_hash: hashDoToken(tokenDoLink(id)),
       expires_at: new Date(Date.now() + validade * 86_400_000).toISOString(),
       created_by: ctx.actorUserId,
@@ -287,6 +309,7 @@ export async function criarLink(
     // Sem o token e sem o hash: a trilha diz quem criou, o que mostra e até quando.
     metadata: {
       paineis,
+      painel_id: painelId,
       periodo: pedido.periodo,
       mostrar_valores: pedido.mostrarValores,
       validade_dias: validade,

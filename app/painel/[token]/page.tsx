@@ -19,6 +19,9 @@
  *  4. Link vivo: calcula os painéis do link com o cliente de serviço e a
  *     organização DA LINHA (nunca da URL), conta o acesso e audita sem
  *     identificar a pessoa.
+ *  5. FORK MIA (9042): o link de um PAINEL DO MONTADOR mostra os relatórios
+ *     daquele painel, na ordem e no tamanho dele (`lib/relatorios/link.ts`),
+ *     menos os que identificam pessoa da equipe, e diz quantos ficaram de fora.
  *
  * Os METADADOS são fixos e neutros: nem o nome da empresa nem número nenhum
  * aparecem no título, na descrição ou no cartão de prévia.
@@ -29,6 +32,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { GradeDePaineis } from "@/components/paineis/CartoesDosPaineis";
+import { GradeDoPainel } from "@/components/relatorios/GradeDoPainel";
 import { isServiceRoleConfigured } from "@/lib/audit";
 import { authRateLimited } from "@/lib/auth/rate-limit";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -46,6 +50,7 @@ import {
 } from "@/lib/paineis/catalogo";
 import { calcularPaineis } from "@/lib/paineis/calcular";
 import { ehVisitaDePrevia, LIMITE_DA_PAGINA, registrarAcesso, resolverLink } from "@/lib/paineis/link";
+import { calcularPainelDoDono, type PainelDoLink } from "@/lib/relatorios/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -97,10 +102,21 @@ export default async function PainelDoDonoPage({ params, searchParams }: PagePro
   const periodo: PeriodoDosPaineis =
     link.periodo === "escolhe" ? (ehPeriodoDosPaineis(busca.periodo) ? busca.periodo : PERIODO_PADRAO) : link.periodo;
 
+  // O painel do montador (9042) ou os prontos (9031). A empresa vem da linha do link.
+  let doMontador: PainelDoLink | null = null;
+  if (link.painelId) {
+    doMontador = await calcularPainelDoDono(admin, {
+      organizationId: resolvido.organizationId,
+      painelId: link.painelId,
+      periodo,
+      valores: link.mostrarValores,
+    });
+    if (!doMontador) notFound();
+  }
   const calculados = await calcularPaineis(admin, {
     organizationId: resolvido.organizationId,
     periodo,
-    paineis: link.paineis,
+    paineis: link.painelId ? ["resultado"] : link.paineis,
     pipelineId: link.pipelineId,
     valores: link.mostrarValores,
   });
@@ -165,7 +181,19 @@ export default async function PainelDoDonoPage({ params, searchParams }: PagePro
           </nav>
         ) : null}
 
-        <GradeDePaineis calculados={calculados} f={{ t, tag, moeda: calculados.empresa.moeda }} />
+        {doMontador ? (
+          <>
+            <h2 className="text-lg font-semibold">{doMontador.nome}</h2>
+            <GradeDoPainel itens={doMontador.itens} />
+            {doMontador.deFora > 0 ? (
+              <p className="text-xs text-text-muted">
+                {doMontador.deFora} {t("relatórios deste painel ficam só dentro do sistema, porque mostram pessoas da equipe.")}
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <GradeDePaineis calculados={calculados} f={{ t, tag, moeda: calculados.empresa.moeda }} />
+        )}
 
         <footer className="mt-auto border-t border-border pt-4 text-xs text-text-muted">
           {t("Números somados, sem dados pessoais de clientes.")} {t("Link válido até")} {validoAte}.

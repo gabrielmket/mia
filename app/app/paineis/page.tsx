@@ -84,6 +84,13 @@ export default async function PaineisPage({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {/* FORK MIA (item 9): o montador de relatórios, ao lado dos painéis prontos. */}
+          <Link
+            href="/app/relatorios"
+            className="inline-flex min-h-11 items-center rounded-sm border border-border px-4 text-sm font-medium hover:bg-surface-elevated lg:min-h-9"
+          >
+            {t("Montar relatório")}
+          </Link>
           <Link
             href="/app/paineis/funil"
             className="inline-flex min-h-11 items-center rounded-sm border border-border px-4 text-sm font-medium hover:bg-surface-elevated lg:min-h-9"

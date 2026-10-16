@@ -1255,6 +1255,21 @@ export const AUDIT_ACTIONS = [
   "paineis.link_renovado",
   "paineis.link_alterado",
   "paineis.link_acessado",
+
+  // FORK MIA (9040): o montador de relatórios (item 9, `lib/relatorios/`). Criar,
+  // alterar, compartilhar e apagar um relatório ou um painel levam quem fez e por
+  // onde (tela ou MCP de plataforma); exportar a planilha leva o quê e quantas
+  // linhas (a lista sai com nome e telefone: "cada exportação fica registrada").
+  // A garantia da implantação (`plataforma_garantir_relatorios`) registra o que criou.
+  "relatorios.criado",
+  "relatorios.alterado",
+  "relatorios.compartilhado",
+  "relatorios.apagado",
+  "relatorios.exportado",
+  "relatorios.painel_criado",
+  "relatorios.painel_alterado",
+  "relatorios.painel_apagado",
+  "relatorios.garantidos",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

@@ -7,6 +7,9 @@
  *    a qualquer hora: o token é derivado do id no servidor e nunca é gravado).
  *  - POST: cria um link. Valida painéis, período, validade e funil; o funil tem
  *    de ser da empresa. Audita `paineis.link_criado`, sem o token.
+ *    FORK MIA (9042): ou os prontos (`paineis`) ou um painel do montador
+ *    (`painel_id`, da mesma empresa): o link mostra os relatórios do painel,
+ *    menos os que identificam pessoa da equipe (`lib/relatorios/link.ts`).
  *
  * Gestor e administrador (decisão do protótipo: quem cria e revoga são os que
  * respondem pela empresa). A tabela é só do servidor (RLS sem política): a
@@ -33,13 +36,15 @@ export const dynamic = "force-dynamic";
 const criarSchema = z
   .object({
     para_quem: z.string().trim().min(1).max(120),
-    paineis: z.array(z.enum(PAINEIS_PRONTOS)).min(1).max(PAINEIS_PRONTOS.length),
+    paineis: z.array(z.enum(PAINEIS_PRONTOS)).max(PAINEIS_PRONTOS.length).default([]),
+    painel_id: z.string().uuid().nullish(),
     periodo: z.enum(["escolhe", ...PERIODOS_DOS_PAINEIS]),
     mostrar_valores: z.boolean(),
     validade_dias: z.union([z.literal(30), z.literal(90), z.literal(365)]).optional(),
     pipeline_id: z.string().uuid().nullish(),
   })
-  .strict();
+  .strict()
+  .refine((v) => Boolean(v.painel_id) !== v.paineis.length > 0, { message: "os prontos OU um painel do montador" });
 
 export async function GET(): Promise<Response> {
   const requestId = randomUUID();
@@ -86,6 +91,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       {
         paraQuem: d.para_quem,
         paineis: d.paineis,
+        painelId: d.painel_id ?? null,
         periodo: d.periodo,
         mostrarValores: d.mostrar_valores,
         pipelineId: d.pipeline_id ?? null,
