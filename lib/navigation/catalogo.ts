@@ -897,6 +897,36 @@ export const NAV_CATALOG = [
     section: "Os números do período",
     sidebar: true,
   },
+  // FORK MIA (item 8): os painéis prontos, a análise do funil e os links para o
+  // dono. Só no hub e no ⌘K — a barra lateral está no teto; a porta de todo dia
+  // é Desempenho, que ganhou os dois atalhos no cabeçalho.
+  {
+    href: "/app/paineis",
+    label: "Painéis prontos",
+    description: "Doze painéis do mês: resultado, meta, funil, atendimento, agenda, anúncios e previsão.",
+    icon: "ChartBar",
+    group: "analise",
+    section: "Os números do período",
+  },
+  {
+    href: "/app/paineis/funil",
+    label: "Análise do funil",
+    description: "Quantos passam de cada etapa, em quanto tempo fecham e de onde vêm os que fecham.",
+    icon: "ChartLineUp",
+    group: "analise",
+    section: "Os números do período",
+  },
+  {
+    href: "/app/paineis/links",
+    label: "Links para o dono do negócio",
+    description: "Um endereço sem senha que mostra ao dono os painéis escolhidos, só com números somados.",
+    icon: "ChartBar",
+    group: "analise",
+    section: "Os números do período",
+    // Gestor e administrador: criar e revogar link é decidir quem vê os números
+    // da empresa (decisão do protótipo aprovado em 15/10/2026).
+    minRole: "manager",
+  },
   {
     // Logo abaixo de Desempenho porque responde a metade da MESMA pergunta: lá
     // está o que aconteceu depois que a pessoa chegou; aqui, quanto custou

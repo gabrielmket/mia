@@ -225,8 +225,12 @@ function apagarCpfETelefone(trecho: string, perfisDePais: boolean): string {
  * proteção sozinho, e este arquivo não precisa nomear provider (invariante 1 de
  * `docs/doctrine/restricao-de-canal.md`).
  */
+//
+// FORK MIA (9031): `/painel/<token>`, o link dos painéis para o dono do
+// negócio. O token É o acesso (abre os números da empresa sem senha); na
+// telemetria ele vale tanto quanto o do convite.
 const CREDENTIAL_PATH =
-  /(\/api\/v1\/webhooks\/[^/?#\s]+\/|\/team\/accept-invite\/)[^/?#\s]+/g;
+  /(\/api\/v1\/webhooks\/[^/?#\s]+\/|\/team\/accept-invite\/|\/painel\/)[^/?#\s]+/g;
 
 /** Parâmetro de query (ou de fragmento) que carrega credencial: `token_hash`, `code`… */
 const CREDENTIAL_PARAM = /token|code|secret|password|otp|^sig$/i;
