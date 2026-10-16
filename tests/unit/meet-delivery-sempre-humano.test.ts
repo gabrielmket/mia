@@ -39,8 +39,17 @@ function politica(over: Record<string, unknown> = {}) {
 
 const pg = (policy: unknown) =>
   ({ query: async () => ({ rows: [{ policy }] }) }) as unknown as Queryable;
+// Fork MIA: a entrega do link também lê o modo do canal e o telefone do contato
+// (o gate do pré-lançamento, `lerAcessoDoCanalSupabase`), pelo `from`. O dublê
+// responde "nada a mais": canal sem metadata, contato sem telefone — o mesmo que
+// o `pg` acima devolve para essa segunda leitura.
+const linhaVazia = () => {
+  const chain: Record<string, unknown> = { maybeSingle: async () => ({ data: null, error: null }) };
+  for (const m of ["select", "eq"]) chain[m] = () => chain;
+  return chain;
+};
 const supa = (data: unknown, error: unknown = null) =>
-  ({ rpc: async () => ({ data, error }) }) as unknown as SupabaseClient;
+  ({ rpc: async () => ({ data, error }), from: () => linhaVazia() }) as unknown as SupabaseClient;
 
 describe("envio do link da agenda e a marca sempre atendimento humano", () => {
   it("controle: contato sem a marca é liberado", async () => {
