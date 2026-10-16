@@ -17,7 +17,7 @@
  * Plugado na aba "Visão geral" da ficha do upstream por uma linha.
  */
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,7 +59,21 @@ const ROTULO_DO_STATUS = { open: "aberto", won: "ganho", lost: "perdido" } as co
 
 const RESULTADO = { completed: "compareceu", no_show: "faltou", cancelled: "cancelado" } as const;
 
-export function FichaConectadaDoContato({ contactId, anonimizado }: { contactId: string; anonimizado: boolean }) {
+export function FichaConectadaDoContato({
+  contactId,
+  anonimizado,
+  carteira,
+}: {
+  contactId: string;
+  anonimizado: boolean;
+  /**
+   * (.81) O cartão "Carteira" do upstream (`CartaoDaCarteira`, #2591: o vendedor
+   * dono do cliente), passado pela página para morar DENTRO da ficha, logo depois
+   * de quem é a pessoa (números e empresa). Quem decide se ele aparece (só de
+   * `agent` para cima) continua sendo a página, com a régua do upstream.
+   */
+  carteira?: ReactNode;
+}) {
   const t = useT();
   const ficha = useFichaDoContato(contactId);
   const mostraEmpresa = useMostraEmpresas();
@@ -79,6 +93,7 @@ export function FichaConectadaDoContato({ contactId, anonimizado }: { contactId:
         <Ciclo estagio={f.estagio} temCompra={Boolean(f.compras)} />
         {!anonimizado ? <NumerosDaPessoa contactId={contactId} ficha={f} /> : null}
         {mostraEmpresa && !anonimizado ? <EmpresaDoContato contactId={contactId} ficha={f} /> : null}
+        {carteira ? <div className="mb-4">{carteira}</div> : null}
         <NegociosDoContato contactId={contactId} ficha={f} />
         <ConversasDoContato ficha={f} />
         <HistoricoDeCompras

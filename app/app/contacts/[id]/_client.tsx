@@ -375,8 +375,18 @@ export function ContactDetailClient({ contactId, paineisDeModulo = [] }: Props) 
 
         <TabsContent value="overview" className="mt-4">
           {/* FORK MIA — a ficha conectada: empresa, negócios, conversas, IA, agenda,
-              tarefas e compras (components/cartoes/fichas/). */}
-          <FichaConectadaDoContato contactId={contactId} anonimizado={contact.is_anonymized} />
+              tarefas e compras (components/cartoes/fichas/). Desde a .81 a
+              CARTEIRA DO CLIENTE do upstream (#2591) mora dentro dela, logo
+              depois de quem é a pessoa; a régua de quem vê é a do upstream. */}
+          <FichaConectadaDoContato
+            contactId={contactId}
+            anonimizado={contact.is_anonymized}
+            carteira={
+              activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent ? (
+                <CartaoDaCarteira contactId={contactId} papelDoUsuario={activeOrg.role} />
+              ) : undefined
+            }
+          />
           <Card className="mt-4 p-4">
             <dl className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
               <div>
@@ -490,11 +500,7 @@ export function ContactDetailClient({ contactId, paineisDeModulo = [] }: Props) 
               dono aqui (o seletor só aparece para `manager`+; o gate real é o da
               rota `PATCH /contacts/[id]/carteira`). Só de `agent` para cima: é
               o piso do GET da carteira, e o `viewer` receberia 403. */}
-          {activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent && (
-            <div className="mt-4">
-              <CartaoDaCarteira contactId={contactId} papelDoUsuario={activeOrg.role} />
-            </div>
-          )}
+          {/* FORK MIA (.81): o cartão da carteira foi para dentro da ficha conectada, acima. */}
           <div className="mt-4">
             <RoteirosDoContato contactId={contactId} />
           </div>

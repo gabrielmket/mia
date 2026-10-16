@@ -222,6 +222,16 @@ describe("ficha do contato", () => {
     expect(screen.getByText("Negociando").getAttribute("aria-current")).toBe("step");
     expect(screen.getByText("Prefere Teams depois das 18h")).toBeTruthy();
   });
+
+  it("(.81) a carteira do cliente do upstream mora dentro da ficha, e sem ela nada sobra", () => {
+    const { unmount } = render(
+      <FichaConectadaDoContato contactId="carla" anonimizado={false} carteira={<div data-testid="carteira-do-contato" />} />,
+    );
+    expect(within(screen.getByTestId("ficha-conectada-do-contato")).getByTestId("carteira-do-contato")).toBeTruthy();
+    unmount();
+    render(<FichaConectadaDoContato contactId="carla" anonimizado={false} />);
+    expect(screen.queryByTestId("carteira-do-contato")).toBeNull();
+  });
 });
 
 describe("ficha da empresa", () => {
