@@ -111,9 +111,10 @@ beforeEach(() => {
 
 // ---------------------------------------------------------------------------
 
-describe("a lista: 60 ferramentas, as quatro novas montam (implantar_configuracao)", () => {
+describe("a lista: as quatro da .76 montam (implantar_configuracao)", () => {
   it("as quatro da .76 entraram com a operação de montagem", () => {
-    expect(FERRAMENTAS).toHaveLength(60);
+    // A contagem da lista mora no teste da versão mais nova
+    // (`mcp-de-implantacao-paineis.test.ts`, .79: 64). Aqui fica só o que é da .76.
     const operacao = (nome: string) => FERRAMENTAS.find((f) => f.name === nome)?.operacao;
     for (const nome of [
       "plataforma_garantir_planos_de_tarefa",

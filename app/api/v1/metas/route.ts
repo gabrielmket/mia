@@ -38,6 +38,7 @@ import {
   type ReuniaoMarcada,
 } from "@/lib/crm/metas/progresso";
 import { FUSO_PADRAO, janelaDoMes } from "@/lib/crm/metas/fuso";
+import { gravarMeta } from "@/lib/crm/metas/gravar";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -296,26 +297,20 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const db = await createClient();
-  const { data, error } = await db
-    .from("sales_targets")
-    .upsert(
-      {
-        organization_id: org.orgId,
-        periodo: primeiroDia(dados.periodo),
-        metrica: dados.metrica,
-        alvo_cents: ehAtividade ? null : (dados.alvo_cents ?? null),
-        alvo_quantidade: ehAtividade ? (dados.alvo_quantidade ?? null) : null,
-        user_id: dados.user_id ?? null,
-        agent_id: dados.agent_id ?? null,
-        created_by: user.id,
-      },
-      // Redefinir a meta do mês é o caminho NORMAL (o número muda no meio do
-      // trimestre); criar uma segunda linha para o mesmo par faria a tela
-      // mostrar duas metas concorrentes sem dizer qual vale.
-      { onConflict: "organization_id,periodo,metrica,user_id,agent_id" },
-    )
-    .select("id, periodo, metrica, alvo_cents, alvo_quantidade, user_id, agent_id")
-    .single();
+  // Redefinir a meta do mês é o caminho NORMAL (o número muda no meio do
+  // trimestre); criar uma segunda linha para o mesmo par faria a tela mostrar
+  // duas metas concorrentes sem dizer qual vale. O upsert mora em
+  // `lib/crm/metas/gravar.ts`, o mesmo que a implantação pelo MCP usa (9030).
+  const { data, error } = await gravarMeta(db, {
+    organizationId: org.orgId,
+    periodo: dados.periodo,
+    metrica: dados.metrica,
+    alvo_cents: dados.alvo_cents ?? null,
+    alvo_quantidade: dados.alvo_quantidade ?? null,
+    user_id: dados.user_id ?? null,
+    agent_id: dados.agent_id ?? null,
+    created_by: user.id,
+  });
 
   if (error || !data) {
     /**

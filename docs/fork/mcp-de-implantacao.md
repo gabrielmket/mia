@@ -108,8 +108,8 @@ pessoa faz (com a tela e o caminho).
 | 1 | Criar a organização | `plataforma_criar_cliente` | agente |
 | 2 | Liberar os módulos contratados | `plataforma_listar_modulos`, `plataforma_liberar_modulo` | agente |
 | 3 | Ver o ponto de partida | `plataforma_ver_implantacao` | agente |
-| 4 | Dados da empresa (nome, CNPJ, fuso, modo de venda) e distribuição do atendimento | `plataforma_configurar_empresa`, `plataforma_configurar_atendimento` | agente |
-| 5 | Funil, etapas, campos e motivos | `plataforma_garantir_funil` | agente |
+| 4 | Dados da empresa (nome, CNPJ, fuso, modo de venda, a meta do mês) e distribuição do atendimento | `plataforma_configurar_empresa`, `plataforma_configurar_atendimento` | agente |
+| 5 | Funil, etapas, campos, motivos e o vocabulário do segmento (inclusive o nome do compromisso da agenda) | `plataforma_garantir_funil` | agente |
 | 6 | Catálogo, em lote | `plataforma_garantir_produtos` | agente |
 | 7 | Etiquetas | `plataforma_garantir_etiquetas` | agente |
 | 8 | Memória: as regras da casa e as anotações | `plataforma_gravar_memoria` | agente |
@@ -127,6 +127,7 @@ pessoa faz (com a tela e o caminho).
 | 16a | Conversões (opcional, para quem anuncia): montar as regras por etapa, e ligar depois de a pessoa conectar a conta de anúncios | `plataforma_ver_conversoes`, `plataforma_garantir_conversoes_da_meta`, `plataforma_garantir_conversoes_do_google`, `plataforma_ligar_conversoes`, `plataforma_ligar_leads_de_formulario_da_meta` | agente (a conexão é com a pessoa do cliente) |
 | 17 | Convidar a equipe (o link curto de cada convite volta na resposta, para mandar por WhatsApp) | `plataforma_convidar_pessoas` | agente |
 | 18 | Conferir o checklist: `pode_atender` e a lista do que ficou com uma pessoa | `plataforma_ver_implantacao` | agente |
+| 18a | Os números do primeiro dia, e o link para o dono preparado (mandado só quando o cliente pedir) | `plataforma_ver_paineis`, `plataforma_garantir_link_do_dono` | agente (quem manda o link é uma pessoa) |
 
 ### O que a pessoa faz no meio
 
@@ -186,8 +187,11 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **60** ferramentas no servidor: as 53 desta página e as 7 da migração
-([`mcp-de-migracao.md`](mcp-de-migracao.md)). As quatro mais novas (.76) são
+São **64** ferramentas no servidor: as 57 desta página e as 7 da migração
+([`mcp-de-migracao.md`](mcp-de-migracao.md)). As quatro mais novas (.79, item 8 do
+mapa: painéis prontos e link para o dono) são `plataforma_ver_paineis`,
+`plataforma_ver_links_do_dono`, `plataforma_garantir_link_do_dono` e
+`plataforma_revogar_link_do_dono`. As quatro da .76 são
 `plataforma_garantir_planos_de_tarefa`, `plataforma_configurar_canal`,
 `plataforma_garantir_fonte_de_formulario` e `plataforma_configurar_banco_externo`.
 
@@ -210,6 +214,8 @@ São **60** ferramentas no servidor: as 53 desta página e as 7 da migração
 | `plataforma_ver_conversoes` | as conversões de um cliente: as conexões da Meta e do Google **sem segredo**, se a identidade da Meta (ID da Página ou da conta do WhatsApp Business) está preenchida, as regras por funil das duas plataformas, a chave dos leads de formulário, o evento recomendado para cada etapa e os 20 últimos envios com a situação e o motivo | leitura |
 | `plataforma_listar_demonstracoes` | as empresas de demonstração por segmento (construtora, clínica odontológica, indústria, academia) e a bancada: se existe, o id, quando a semente foi aplicada e as contagens; e qualquer outra organização marcada como demonstração | leitura |
 | `plataforma_diagnosticar_conversoes_da_meta` | o diagnóstico da Meta, o mesmo do botão "Testar conexão": token, destino, permissão, último envio aceito, recusas em 7 dias e modo de teste. Faz três leituras na Meta com o token do cliente; nenhum evento é enviado | leitura |
+| `plataforma_ver_paineis` | os doze PAINÉIS PRONTOS de um cliente (resultado do mês, meta do mês, funil, de onde vêm, por que perdemos, atendimento, tempo de resposta, agenda, follow-up, anúncios, previsão, assuntos), com os números do motor de conta no banco (`fn_mia_relatorio`, 9030): todas as linhas do período, no fuso e na moeda da empresa. Período 7, 30 ou 90 dias, ou o mês; funil opcional; com ou sem valores em reais. Nada de custo de IA, gasto com anúncio, nome ou contato | leitura |
+| `plataforma_ver_links_do_dono` | os links para o dono do negócio de um cliente: para quem, o endereço, a situação (ativo, vencido, revogado), os painéis, o período, se mostra valores, a validade, o último acesso e quantos acessos | leitura |
 
 ### Operações que já existiam
 
@@ -238,9 +244,9 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 
 | ferramenta | o que faz | chave natural | teto por chamada |
 |---|---|---|---|
-| `plataforma_configurar_empresa` | nome, razão social, CNPJ, país, fuso, idioma, moeda, modo de venda, retenção de mídia, a limpeza automática de mídia antiga (ligada, apaga sem volta), encarregado e política de privacidade | a organização | só os campos que vieram mudam |
+| `plataforma_configurar_empresa` | nome, razão social, CNPJ, país, fuso, idioma, moeda, modo de venda, retenção de mídia, a limpeza automática de mídia antiga (ligada, apaga sem volta), encarregado e política de privacidade; e, desde a .79, a **meta do mês** (`meta_do_mes`: o faturamento dos ganhos da empresa inteira, em centavos, no mês corrente ou no `mes` pedido), pelo mesmo upsert da tela de Desempenho (`lib/crm/metas/gravar.ts`). É ela que vira a barra do painel "Meta do mês" | a organização; a meta, pelo mês | só os campos que vieram mudam |
 | `plataforma_configurar_atendimento` | modo de distribuição (manual, rodízio ou menor carga), visibilidade das conversas, devolução para a IA, quanto a IA espera depois de uma resposta pelo celular, o nome de quem fala (atendente ou IA) em negrito na mensagem, e o freio da empresa para o passo "a IA decide" das automações | a organização | idem |
-| `plataforma_garantir_funil` | funil, etapas na ordem, passo do agente por etapa, probabilidade, janela de esfriando (`prazo_esperado_horas`, pela régua da tela: 1 a 8760 horas inteiras) e cor, campos personalizados (com obrigatoriedade por etapa), motivos de perda e de ganho, vocabulário | nome do funil; nome da etapa; `key` do campo; rótulo do motivo | 20 etapas |
+| `plataforma_garantir_funil` | funil, etapas na ordem, passo do agente por etapa, probabilidade, janela de esfriando (`prazo_esperado_horas`, pela régua da tela: 1 a 8760 horas inteiras) e cor, campos personalizados (com obrigatoriedade por etapa), motivos de perda e de ganho, vocabulário (desde a .79 também `compromisso` e `compromisso_plural`, como o segmento chama o que a agenda marca: o plural é o título do painel pronto de agenda) | nome do funil; nome da etapa; `key` do campo; rótulo do motivo | 20 etapas |
 | `plataforma_garantir_produtos` | catálogo em lote, com preço em centavos ou em texto (`"R$ 189,90"`); item com problema é recusado com motivo e não derruba os outros | código do produto (sem código, o nome) | 200 produtos |
 | `plataforma_garantir_etiquetas` | etiquetas no vocabulário, com cor e descrição | nome da etiqueta, sem diferenciar maiúscula | 50 etiquetas |
 | `plataforma_gravar_memoria` | as regras da casa (documento que todos os agentes seguem) e as anotações | o documento é um só; anotação pelo título | 50 anotações |
@@ -293,6 +299,29 @@ upstream é repetível, e quem já aceitou e abre de novo cai no mesmo aceite, c
 pelo link longo. Na tela, a ação "Copiar link do convite" da lista de
 convites (aba Membros) faz o mesmo que `gerar_link`, e a tela Convidar membros
 mostra o link do e-mail para copiar logo depois do envio.
+
+### Link para o dono do negócio · operação `compartilhar_paineis`
+
+O link abre, sem usuário nem senha e no celular, os painéis prontos escolhidos de
+uma empresa, com o nome dela no topo e só números somados (nenhum nome, telefone
+ou conversa de cliente, nem nome de quem é da equipe). Caixinha própria no token
+porque o estrago é outro: não dá login a ninguém e não fala com o cliente final,
+mas abre o faturamento e a meta a quem tiver o endereço.
+
+| ferramenta | o que faz | reexecução |
+|---|---|---|
+| `plataforma_garantir_link_do_dono` | cria o link: para quem (rótulo livre, até 120 caracteres), os painéis, o período (`escolhe`, ou fixo em 7, 30, 90 dias ou o mês), se mostra valores em reais, o funil (opcional) e a validade (30, 90 ou 365 dias; padrão 90). Devolve o endereço; quem manda ao dono é uma pessoa | a chave é `para_quem`: link ATIVO com o mesmo nome e o mesmo conteúdo responde `ja_estava`; com outro conteúdo é ajustado no MESMO endereço (`atualizou`) |
+| `plataforma_revogar_link_do_dono` | revoga pelo `link_id` ou por `para_quem` (os ativos com esse nome): quem abrir vê "não está disponível". Revogado não volta | revogado de novo responde `ja_estava` |
+
+O link (migration `9031`, `lib/paineis/link.ts`): 24 caracteres do base32 de
+Crockford (120 bits), DERIVADOS do id da linha por HMAC com o segredo do servidor;
+no banco fica só o hash. Por isso "Copiar link" funciona a qualquer hora e
+"Renovar" (do vencido, na tela) mantém o endereço. A página
+(`/painel/<token>`) tem teto de 30 aberturas por minuto por IP, responde igual
+(404) para link malformado, inexistente, vencido, revogado ou de empresa parada,
+não manda dado nenhum para a prévia do WhatsApp, conta e audita cada abertura sem
+identificar a pessoa, e usa metadados fixos. Na empresa de demonstração o link
+funciona com os dados fictícios e a página avisa que é demonstração.
 
 ### Recusas
 
@@ -457,9 +486,9 @@ Também ficaram de fora, por desenho:
 - **Relatórios de operação** que o upstream trouxe na 1.71 à 1.73: a análise do
   funil (`GET /api/v1/metrics/funil`), o relatório por etiqueta e a taxa
   histórica e o tempo por etapa. São leitura de operação, não configuração de
-  implantação, e a conta de cada um está montada dentro da rota, que ainda vai
-  mudar no upstream (a tela da análise do funil é o passo seguinte dele). Num
-  cliente recém-implantado não há histórico para ler.
+  implantação, e a conta de cada um está montada dentro da rota. A análise do
+  funil ganhou tela no fork na .79 (`/app/paineis/funil`, por cima da conta dele);
+  os números que a implantação confere saem de `plataforma_ver_paineis`.
 - **Empresas do upstream (`companies`).** A consulta de CNPJ, a edição e a
   exclusão da 1.72 são da tela dele. O fork tem as próprias empresas
   (`crm_empresas`), que entram por `plataforma_importar_empresas`. As duas não
@@ -500,6 +529,11 @@ Também ficaram de fora, por desenho:
   (`meta_ads_conversion_rules`, 0524), pela gravação da tela dele, e a volta dos
   leads de formulário na chave da 9017
   ([`conversoes-da-meta.md`](conversoes-da-meta.md)).
+- Os painéis prontos e o link para o dono (.79) moram em `lib/paineis/`: o
+  catálogo (`catalogo.ts`, espelho de `fn_mia_relatorio_catalogo`), a porta do
+  motor (`motor.ts`), os doze painéis (`calcular.ts`) e o link (`link.ts`). A
+  conta é do banco (migration `9030`); a tabela do link é a `9031`. A tela, a
+  página pública e as ferramentas chamam as MESMAS funções.
 - O token `dsk_` do upstream (1.70, #2028) passou a administrar agentes, fluxos de
   follow-up, prospecção e tipos de agendamento pelas MESMAS rotas da tela, só
   trocando a autenticação (`resolveAuthDual`). Não nasceu handler reutilizável
@@ -537,7 +571,10 @@ Testes:
 | `tests/unit/mcp-de-implantacao-operacoes.test.ts` | cada ferramenta: o que grava, a reexecução, as recusas e a empresa de demonstração |
 | `tests/unit/mcp-de-implantacao-conversoes.test.ts` | as seis ferramentas de conversões: o que gravam, que montar não liga, a reexecução, as recusas, a resposta sem segredo e a empresa de demonstração |
 | `tests/unit/mcp-de-implantacao-novidades-do-upstream.test.ts` | cada novidade do upstream 1.70 a 1.73: o campo ou a caixa nova passa pela ferramenta (o que grava, a reexecução, a recusa que ensina, a leitura), e as duas ferramentas do roteador |
-| `tests/unit/mcp-de-implantacao-novidades-do-upstream-180.test.ts` | cada novidade do upstream 1.74 a 1.80, no mesmo molde, as quatro ferramentas novas, a contagem da lista (60) e a prova de que os tipos de ação da ferramenta são exatamente os do upstream |
+| `tests/unit/mcp-de-implantacao-novidades-do-upstream-180.test.ts` | cada novidade do upstream 1.74 a 1.80, no mesmo molde, as quatro ferramentas novas e a prova de que os tipos de ação da ferramenta são exatamente os do upstream |
+| `tests/unit/mcp-de-implantacao-paineis.test.ts` | as quatro ferramentas dos painéis e do link para o dono (.79): a contagem da lista (64), a caixinha `compartilhar_paineis`, que o garantir não duplica e ajusta no mesmo endereço, a revogação, a leitura e a demonstração; e a meta do mês em `plataforma_configurar_empresa` |
+| `tests/invariants/motor-de-conta-dos-relatorios.test.ts` | o motor de conta (9030) no Postgres de verdade: a regra de data e o fuso, sem o teto de 1000 linhas, as etiquetas, o "Sem …" e o "Outros", a meta, quem vê o quê (atendente, gestor, outra empresa, anon, plataforma) e a situação da obrigação igual à de `lib/obrigacoes/situacao.ts` |
+| `tests/invariants/link-dos-paineis-para-o-dono.test.ts` | a tabela do link (9031): só o servidor lê e escreve, as constraints, o funil de outra empresa e a contagem de acesso só em link vivo |
 | `tests/invariants/dono-do-contato-pela-plataforma.test.ts` | a função da 9022 no Postgres de verdade: o controle negativo (a porta do upstream recusa o ator da plataforma), o mesmo efeito da porta do upstream, as recusas do ator e que só o `service_role` executa |
 | `tests/unit/produto-da-implantacao-se-edita-na-tela.test.ts` | o produto que entrou pela implantação ou pela demonstração abre editável na tela do upstream, e a lista de origens do fork não envelhece |
 | `tests/unit/mcp-de-implantacao-espelhos.test.ts` | as rotas espelhadas não mudaram sem alguém reler o espelho, e a função do upstream que a 9022 copia também não |

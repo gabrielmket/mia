@@ -24,6 +24,7 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
     description:
       "Ajusta os DADOS DA EMPRESA de um cliente: nome de exibição, razão social, CNPJ, fuso horário, idioma, moeda, modo de venda (para empresas ou para pessoas), " +
       "e os dados de privacidade (e-mail do encarregado, endereço da política, dias de retenção de mídia e se a limpeza automática de mídia antiga está ligada). " +
+      "Grava também a META DO MÊS (`meta_do_mes`, o faturamento dos negócios ganhos da empresa inteira, em centavos): é ela que vira a barra do painel \"Meta do mês\" e do link para o dono. " +
       "Só os campos que VIERAM mudam; o que veio igual ao que está gravado responde `ja_estava`. " +
       "ATENÇÃO: `limpeza_automatica_de_midia` ligada apaga, na limpeza diária, a mídia das conversas e o anexo de nota interna mais velhos que `dias_de_retencao_de_midia`, sem volta. Ela nasce ligada em toda empresa. " +
       "QUANDO USAR: logo depois de criar o cliente, antes do catálogo (a MOEDA da empresa é a que os produtos novos recebem) e da agenda (o FUSO é o das jornadas e dos horários). " +
@@ -55,6 +56,26 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
         .nullable()
         .optional()
         .describe("O endereço (https://...) da política de privacidade da empresa."),
+      meta_do_mes: z
+        .object({
+          valor_cents: z
+            .number()
+            .int()
+            .positive()
+            .max(1_000_000_000_000)
+            .describe("A meta de faturamento do mês, em CENTAVOS (ex.: 10000000 = R$ 100.000,00)."),
+          mes: z
+            .string()
+            .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'use AAAA-MM, ex.: "2026-10"')
+            .optional()
+            .describe('O mês da meta, AAAA-MM. Ausente: o mês corrente no fuso da empresa.'),
+        })
+        .strict()
+        .optional()
+        .describe(
+          "A meta do mês da empresa inteira: a soma do valor dos negócios GANHOS no mês, nos funis em que ganhar é receita. " +
+            "É a mesma meta da tela Desempenho (sem pessoa nem agente). A mesma meta já gravada responde `ja_estava`.",
+        ),
     },
     exemplo: { organization_id: ORG_DE_EXEMPLO, nome: "Clínica Exemplo", fuso: "America/Sao_Paulo", moeda: "BRL", modo_de_venda: "b2c" },
     operacao: "implantar_configuracao",

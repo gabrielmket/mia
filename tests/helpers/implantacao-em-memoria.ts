@@ -35,6 +35,8 @@ export const TODAS_AS_OPERACOES = [
   "implantar_configuracao",
   "colocar_no_ar",
   "convidar_equipe",
+  // FORK MIA (.79): o link dos painéis para o dono do negócio.
+  "compartilhar_paineis",
 ];
 
 /** O funil de e-commerce que o gatilho de seed entrega a toda organização nova. */

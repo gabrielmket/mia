@@ -106,7 +106,15 @@ export interface PedidoDeFunil {
   motivos_de_perda?: Array<string | { label: string; categoria?: string }>;
   motivos_de_ganho?: string[];
   motivo_de_ganho_obrigatorio?: boolean;
-  vocabulario?: { lead?: string; deal?: string; won?: string; lost?: string };
+  vocabulario?: {
+    lead?: string;
+    deal?: string;
+    won?: string;
+    lost?: string;
+    /** FORK MIA (item 8): o compromisso da agenda, no singular e no plural (o título do painel de agenda). */
+    compromisso?: string;
+    compromisso_plural?: string;
+  };
   reabertura?: "mesmo_registro" | "novo_negocio";
   vitoria_e_receita?: boolean;
 }

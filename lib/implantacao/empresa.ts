@@ -39,6 +39,7 @@
  */
 import { audit } from "@/lib/audit";
 import { AI_DECIDE_PADRAO, CHAVE_DAS_AUTOMACOES } from "@/lib/automation/ai-decide-da-org";
+import { gravarMeta } from "@/lib/crm/metas/gravar";
 import { lerModoDeVenda } from "@/lib/empresas/modo-de-venda";
 import { PRAZO_MAX_MINUTOS, PRAZO_MIN_MINUTOS } from "@/lib/escalacao/devolucao-automatica";
 import { paisesOferecidos } from "@/lib/legal/perfil-do-pais";
@@ -81,6 +82,14 @@ export interface PedidoDeEmpresa {
   limpeza_automatica_de_midia?: boolean;
   email_do_encarregado?: string | null;
   politica_de_privacidade_url?: string | null;
+  /**
+   * FORK MIA (9030): a META DO MÊS da empresa inteira (faturamento dos ganhos,
+   * `sales_targets` com a métrica `receita_total`, sem pessoa nem agente). É ela
+   * que vira a barra do painel "Meta do mês" e a linha da meta no montador.
+   * `mes` ausente = o mês corrente no fuso da empresa. Grava pelo mesmo upsert
+   * da tela de Desempenho (`lib/crm/metas/gravar.ts`).
+   */
+  meta_do_mes?: { valor_cents: number; mes?: string };
 }
 
 /** A frase de `updateTenant` para o CNPJ que já é de outra organização (índice único). */
@@ -227,6 +236,13 @@ export async function configurarEmpresa(
       });
   }
 
+  let metaDoMes: { mes: string; valor_cents: number } | null = null;
+  if (pedido.meta_do_mes) {
+    const r = await garantirMetaDoMes(c, d.timezone, pedido.meta_do_mes);
+    metaDoMes = { mes: r.mes, valor_cents: r.valor_cents };
+    if (r.mudou) mudancas.push("meta do mês");
+  }
+
   return {
     desfecho: mudancas.length > 0 ? "atualizou" : "ja_estava",
     mudancas,
@@ -241,9 +257,73 @@ export async function configurarEmpresa(
       modo_de_venda: d.modo_de_venda,
       dias_de_retencao_de_midia: d.media_retention_days,
       limpeza_automatica_de_midia: d.media_retention_enforced,
+      ...(metaDoMes ? { meta_do_mes: metaDoMes } : {}),
     },
     avisos,
   };
+}
+
+/** AAAA-MM de hoje no fuso da empresa. */
+export function mesCorrenteNoFuso(fuso: string, agora: Date = new Date()): string {
+  const partes = new Intl.DateTimeFormat("en-CA", { timeZone: fuso, year: "numeric", month: "2-digit" }).formatToParts(
+    agora,
+  );
+  const ano = partes.find((p) => p.type === "year")?.value ?? String(agora.getUTCFullYear());
+  const mes = partes.find((p) => p.type === "month")?.value ?? String(agora.getUTCMonth() + 1).padStart(2, "0");
+  return `${ano}-${mes}`;
+}
+
+/**
+ * FORK MIA (9030) — a meta do mês da empresa inteira (receita dos ganhos).
+ * "Garantir": a mesma meta já gravada responde sem escrever; outra, regrava pelo
+ * upsert da tela (`lib/crm/metas/gravar.ts`).
+ */
+export async function garantirMetaDoMes(
+  c: Implantacao,
+  fuso: string,
+  pedido: { valor_cents: number; mes?: string },
+  agora: Date = new Date(),
+): Promise<{ mudou: boolean; mes: string; valor_cents: number }> {
+  if (!Number.isInteger(pedido.valor_cents) || pedido.valor_cents <= 0) {
+    throw new Recusa(
+      "`meta_do_mes.valor_cents` precisa ser um número inteiro de centavos, maior que zero (ex.: 10000000 para R$ 100.000,00).",
+    );
+  }
+  const mes = pedido.mes ?? mesCorrenteNoFuso(fuso, agora);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) {
+    throw new Recusa(`\`meta_do_mes.mes\` usa AAAA-MM (ex.: "2026-10"); veio "${mes}".`);
+  }
+  const { data: atual, error: erroDeLeitura } = await c.admin
+    .from("sales_targets")
+    .select("id, alvo_cents")
+    .eq("organization_id", c.orgId)
+    .eq("periodo", `${mes}-01`)
+    .eq("metrica", "receita_total")
+    .is("user_id", null)
+    .is("agent_id", null)
+    .maybeSingle();
+  if (erroDeLeitura) throw new Error(`não consegui ler a meta: ${erroDeLeitura.message}`);
+  if (atual && Number((atual as { alvo_cents: number | string | null }).alvo_cents) === pedido.valor_cents) {
+    return { mudou: false, mes, valor_cents: pedido.valor_cents };
+  }
+  const { error } = await gravarMeta(c.admin, {
+    organizationId: c.orgId,
+    periodo: mes,
+    metrica: "receita_total",
+    alvo_cents: pedido.valor_cents,
+    created_by: c.autorUserId,
+  });
+  if (error) throw new Error(`não consegui gravar a meta do mês: ${error.message}`);
+  void audit({
+    action: "org.updated",
+    actorUserId: c.autorUserId,
+    organizationId: c.orgId,
+    resourceType: "organization",
+    resourceId: c.orgId,
+    requestId: c.requestId,
+    metadata: { fields_changed: ["meta_do_mes"], mes, via: "mcp_plataforma" },
+  });
+  return { mudou: true, mes, valor_cents: pedido.valor_cents };
 }
 
 // ---------------------------------------------------------------------------
