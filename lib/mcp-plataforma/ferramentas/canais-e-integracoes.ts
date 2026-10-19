@@ -16,7 +16,9 @@ import { configurarBancoExterno, type PedidoDeBancoExterno } from "@/lib/implant
 import { configurarCanal, type PedidoDeCanal } from "@/lib/implantacao/canal";
 import { garantirFonteDeFormulario, TETO_DE_PERGUNTAS, type PedidoDeFonte } from "@/lib/implantacao/fonte-de-formulario";
 import { configurarServidorMcpExterno, type PedidoDoServidorExterno } from "@/lib/implantacao/servidor-mcp-externo";
+import { TETO_DE_RESPONSAVEIS } from "@/lib/implantacao/distribuicao-do-numero";
 import { recusar } from "@/lib/mcp-plataforma/recusa";
+import { ROUTING_MODES } from "@/lib/schemas/routing";
 import { hostDoEndpoint } from "@/lib/mcp/servidor-externo/registro";
 import { fonteSchema, MAX_FONTES, MODOS_DE_FONTES } from "@/lib/external-db/fontes";
 import { TIPOS_DE_IDENTIFICADOR } from "@/lib/external-db/schemas";
@@ -35,11 +37,15 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
       "`dias_da_prospeccao` (em que dias da semana a prospecção pode fazer a PRIMEIRA abordagem, dentro da janela de disparo do número; resposta e disparo em massa não mudam), " +
       "`guardar_historico` (só para número conectado por QR Code: o canal passa a guardar o histórico do número; nasce desligado) e " +
       "`pausa_agendada` (uma janela de manutenção de até 24 horas em que o número, ou todos os números da empresa, fica pausado e volta sozinho no fim; a mensagem que chega é guardada e volta à fila na retomada), " +
-      "com `ajustar_pausa_agendada` para corrigir os horários de uma que ainda não começou e `cancelar_pausa_agendada` para desmarcar. " +
+      "com `ajustar_pausa_agendada` para corrigir os horários de uma que ainda não começou e `cancelar_pausa_agendada` para desmarcar, " +
+      "e a `distribuicao` do número (as regras de atendimento POR NÚMERO): quem pode receber as conversas dele (`responsaveis`), o jeito de distribuir só deste número (`modo`: " +
+      "\"manual\", \"round_robin\" ou \"load\"; null segue a organização) e o `atendente_padrao`, que recebe DIRETO todo cliente novo do número. " +
       "Só o que VEIO muda; o que veio igual responde `ja_estava`, e a pausa igual a uma já marcada não é marcada de novo. " +
       "A hora da pausa pode vir sem fuso (\"2026-10-20T23:00\", na hora da empresa) ou com ele. " +
       "ATENÇÃO: desligar `guardar_historico` num número que já guarda pode apagar o que o canal guardou, e por isso pede `confirmo_apagar_historico_guardado: true`. " +
       "Ligar num número já pareado guarda daqui em diante e reinicia a conexão por alguns segundos. " +
+      "Número sem regra de distribuição própria usa TODOS os atendentes elegíveis e o modo da organização; criar a regra RESTRINGE quem recebe, e por isso pede `responsaveis` por extenso " +
+      "(`[]` = ninguém recebe pelo rodízio e as conversas ficam na fila). A regra vale na hora e redistribui as conversas abertas sem dono do número; não cala o agente de IA. " +
       "O QUE NÃO FAZ: não conecta, não reconecta nem desconecta número, não recebe nem devolve token, credencial ou número de telefone, não pausa AGORA (a pausa manual é com a pessoa, em Conexões) " +
       "e não mexe no ritmo de envio (intervalos, janelas, teto diário), que fica na tela Conexões › Proteção de envio.",
     inputSchema: {
@@ -99,6 +105,45 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
         .max(80)
         .optional()
         .describe('O nome da conexão que só a equipe vê (ex.: "WA | Recepção"). O nome público no provedor não muda.'),
+      // .83 — upstream 1.85 (0663, #2331): as regras de atendimento por número.
+      distribuicao: z
+        .object({
+          responsaveis: z
+            .array(z.string().trim().min(1).max(320))
+            .max(TETO_DE_RESPONSAVEIS)
+            .optional()
+            .describe(
+              "A lista INTEIRA de quem pode receber as conversas deste número, por e-mail (de plataforma_ver_configuracao, seção equipe; papel agent, manager ou admin). " +
+                "[] = ninguém recebe pelo rodízio e as conversas ficam na fila. Obrigatória para criar a regra de um número que ainda não tem uma.",
+            ),
+          modo: z
+            .enum(ROUTING_MODES)
+            .nullable()
+            .optional()
+            .describe(
+              'Como ESTE número distribui: "manual" (cada um pega), "round_robin" (rodízio) ou "load" (menor carga). null = segue o modo da organização (e tira o atendente padrão).',
+            ),
+          atendente_padrao: z
+            .string()
+            .trim()
+            .min(1)
+            .max(320)
+            .nullable()
+            .optional()
+            .describe(
+              "E-mail de quem recebe DIRETO todo cliente novo deste número, antes de qualquer distribuição (mesmo fora da jornada; espera só se estiver indisponível ou sem folga de capacidade). " +
+                "Só com `modo` próprio. null tira.",
+            ),
+          voltar_ao_padrao_da_organizacao: z
+            .literal(true)
+            .optional()
+            .describe("Apaga a regra do número: volta a valer todos os atendentes elegíveis e o modo da organização. Vai sozinho, sem os outros campos."),
+        })
+        .strict()
+        .optional()
+        .describe(
+          "As regras de atendimento DESTE número (Configurações › Atendimento › Responsáveis por número). Só o que vier muda; o resto da regra gravada fica.",
+        ),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,
@@ -117,14 +162,15 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
         p.pausa_agendada === undefined &&
         p.cancelar_pausa_agendada === undefined &&
         p.ajustar_pausa_agendada === undefined &&
-        p.nome_interno === undefined
+        p.nome_interno === undefined &&
+        p.distribuicao === undefined
       ) {
         recusar(
-          "Informe ao menos um ajuste: `dias_da_prospeccao`, `guardar_historico`, `pausa_agendada`, `ajustar_pausa_agendada`, `cancelar_pausa_agendada` ou `nome_interno`. " +
+          "Informe ao menos um ajuste: `dias_da_prospeccao`, `guardar_historico`, `pausa_agendada`, `ajustar_pausa_agendada`, `cancelar_pausa_agendada`, `nome_interno` ou `distribuicao`. " +
             'Ex.: { "canal": "Recepção", "dias_da_prospeccao": [1, 2, 3, 4, 5] }',
         );
       }
-      return configurarCanal(c, org.timezone, p);
+      return configurarCanal(c, org.timezone, p, ctx.tokenId);
     },
   },
 

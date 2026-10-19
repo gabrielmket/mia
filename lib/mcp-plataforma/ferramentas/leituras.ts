@@ -32,6 +32,7 @@ import { lerAgentes, lerCamadaClinica, lerVersoes, limiarDeSentimentoDo, pendenc
 import { lerTipos } from "@/lib/implantacao/agenda";
 import { lerConexoesDeBancoExterno, retratoDaConexao } from "@/lib/implantacao/banco-externo";
 import { diasDaProspeccaoDe, lerAjustesDosCanais, lerCanais, lerPausasAgendadas } from "@/lib/implantacao/canal";
+import { lerRegrasDosNumeros, retratoDaDistribuicao } from "@/lib/implantacao/distribuicao-do-numero";
 import { iaDecideLigadaNa } from "@/lib/implantacao/empresa";
 import { lerFontes, retratoDaFonte } from "@/lib/implantacao/fonte-de-formulario";
 import { retratoDosPlanos } from "@/lib/implantacao/planos-de-tarefa";
@@ -132,9 +133,11 @@ const ACOES_DE_AUTOMACAO = [
   },
   {
     type: "send_whatsapp_message",
-    o_que_faz: "Manda um texto fixo pelo WhatsApp. FALA COM O CLIENTE.",
+    o_que_faz:
+      "Manda um texto fixo pelo WhatsApp. FALA COM O CLIENTE. Com `media_url` (upstream 1.85), manda uma IMAGEM ou um PDF e o texto vira a legenda: " +
+      "o endereço tem de terminar na extensão (.jpg, .png, .webp, .gif ou .pdf); no número oficial, fora da janela de 24 horas, nem a mídia nem o texto saem.",
     config:
-      '{ "channel_session_id": "<id do número>", "template": "Olá, {{primeiro_nome}}! Recebemos seu pedido de {{servico}}." } ' +
+      '{ "channel_session_id": "<id do número>", "template": "Olá, {{primeiro_nome}}! Recebemos seu pedido de {{servico}}.", "media_url": "https://.../tabela.pdf" (opcional) } ' +
       "(marcações: {{nome}}, {{primeiro_nome}}, {{telefone}}, {{email}}, e a CHAVE de qualquer campo do funil, ex. {{servico}}, que é o campo que o formulário de captação mandou)",
   },
   { type: "send_ai_message", o_que_faz: "O agente escreve e manda uma mensagem. FALA COM O CLIENTE.", config: '{ "agent_id": "<id do agente publicado>", "channel_session_id": "<id do número>", "instruction": "o que dizer" }' },
@@ -622,7 +625,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
       "`atendimento` (a distribuição e o freio do passo \"a IA decide\"), `mensagens` (respostas prontas e modelos oficiais), " +
       "`planos_de_tarefa` (as sequências de tarefa com os passos), `fontes_de_formulario` (destino, perguntas, endereço de captação e a autorização de IA, sem o segredo) " +
       "e `banco_externo` (as conexões, só com o nome e a coluna do cliente; nunca endereço, usuário ou senha). " +
-      "Em `canais`, cada número traz também os dias da prospecção, se guarda o histórico, se está pausado e as pausas agendadas. " +
+      "Em `canais`, cada número traz também os dias da prospecção, se guarda o histórico, se está pausado, as pausas agendadas e a distribuição do número (regra própria, modo, atendente padrão e responsáveis). " +
       "QUANDO USAR: para ler antes de alterar, e para achar ids (de pessoa, de número, de fluxo) que outras ferramentas pedem. " +
       "Peça só as seções de que precisa: a resposta inteira é grande.",
     inputSchema: {
@@ -769,6 +772,9 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
         const canais = await lerCanais(c.admin, c.orgId);
         const ajustes = await lerAjustesDosCanais(c.admin, c.orgId);
         const pausas = await lerPausasAgendadas(c.admin, c.orgId, canais);
+        // .83 — as regras de atendimento por número (upstream 1.85, 0663).
+        const regras = await lerRegrasDosNumeros(c.admin, c.orgId);
+        const equipe = regras.size > 0 ? await lerMembros(c.admin, c.orgId) : [];
         r.canais = canais.map((s) => ({
           id: s.id,
           nome: nomeDoCanal(s),
@@ -781,6 +787,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           dias_da_prospeccao: diasDaProspeccaoDe(ajustes.get(s.id)),
           guardar_historico: conexaoGuardaHistorico(s.provider) ? lerGuardarHistorico(s.metadata) : null,
           pausas_agendadas: pausas.filter((a) => a.todos_os_numeros || a.numero_id === s.id).map((a) => ({ id: a.id, inicio: a.inicio, fim: a.fim, situacao: a.situacao, todos_os_numeros: a.todos_os_numeros })),
+          distribuicao: retratoDaDistribuicao(regras.get(s.id), equipe),
         }));
       }
 

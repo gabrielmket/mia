@@ -50,6 +50,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { audit } from "@/lib/audit";
 import { ehRecusaDaDemonstracao, FRASE_DA_DEMONSTRACAO } from "@/lib/demonstracao/trava";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
+import { classificarMidiaComLegenda } from "@/lib/messaging/media/midia-com-legenda";
 import { autoriaDaMudanca } from "@/lib/operacao/autoria";
 import { createAutomationRuleSchema, updateAutomationRuleSchema } from "@/lib/schemas/webhooks";
 import { lePlanosDoSettings, type PlanoDeTarefas } from "@/lib/tarefas/plano";
@@ -122,6 +123,18 @@ async function conferirAcao(c: Implantacao, acao: Acao, onde: string, planos: ()
     if (!data || (data as { revoked_at: string | null }).revoked_at) {
       throw new Recusa(
         `${onde}: a pessoa ${pessoa} não faz parte da equipe desta organização. Os ids estão em plataforma_ver_configuracao (seção equipe).`,
+      );
+    }
+  }
+  // .83 — upstream 1.85 (#2734): a mídia da mensagem de WhatsApp (imagem ou PDF por
+  // endereço, com o texto como legenda). A tela grava qualquer URL e o envio
+  // recusa o que não é imagem nem PDF a cada execução; aqui a recusa vem antes,
+  // pela MESMA régua do envio (`classificarMidiaComLegenda`).
+  if (acao.type === "send_whatsapp_message" && typeof acao.config.media_url === "string" && acao.config.media_url.trim() !== "") {
+    const midia = classificarMidiaComLegenda(acao.config.media_url.trim());
+    if (!midia.ok) {
+      throw new Recusa(
+        `${onde}.config.media_url: ${midia.motivo} O endereço precisa terminar na extensão do arquivo (.jpg, .png, .webp, .gif ou .pdf); link sem extensão, como os do Google Drive, não serve.`,
       );
     }
   }

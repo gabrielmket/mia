@@ -139,6 +139,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Relido na .81 (upstream 1.81): a rota ganhou o GET (quem é o dono hoje, para a tela). O PATCH, que o espelho segue, é o mesmo.
   { rota: "app/api/v1/contacts/[id]/carteira/route.ts", espelho: "lib/mcp-plataforma/importacao/contatos.ts", impressao: "7b9ce7b08a58e8ba" },
   { rota: "app/api/v1/settings/routing/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "5141ab7ba6a82744" },
+  // Espelhado na .83 (upstream 1.85, 0663, #2331): as regras de atendimento POR NÚMERO (responsáveis, modo do número e destino padrão), na mesma gravação. A rota chama fn_set_channel_routing; o MCP chama a cópia do fork (9045), com o token como ator, e deixa a mesma auditoria routing.config_changed.
+  { rota: "app/api/v1/settings/routing/channels/route.ts", espelho: "lib/implantacao/distribuicao-do-numero.ts", impressao: "5b49c3b3a43fda9a" },
   // Espelhado na .73 (upstream 1.70, #2079): quem fala, em negrito, na mensagem. O espelho confere com o mesmo assinaturaEntradaSchema e grava a mesma chave de settings.
   { rota: "app/api/v1/settings/assinatura/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "874d611f8e1a7d71" },
   // Jornada de quem atende.
@@ -231,6 +233,37 @@ describe("a função do banco que a 9022 copia não mudou sem alguém reler a c�
       "A função fn_definir_carteira_do_cliente mudou no upstream desde que a 9022 a copiou. Leia o que mudou (git log -p -- supabase/baseline.sql), " +
         "leve a regra nova para uma migration nova do fork que redefina fn_mia_definir_dono_do_contato_pela_plataforma e grave a impressão nova aqui.",
     ).toBe(PORTA_DA_CARTEIRA.impressao);
+  });
+});
+
+/**
+ * .83 — A FUNÇÃO DO BANCO que a migration 9045 copia (`fn_set_channel_routing`,
+ * na forma da 0663 do upstream 1.85: os responsáveis, o modo do número e o
+ * destino padrão). A 9045 tem o mesmo corpo, com o token de plataforma no lugar
+ * da sessão de gerente membro com MFA. Mesma régua da 9022: mudou lá, reprova
+ * aqui, e a regra nova vai numa migration nova do fork.
+ */
+const PORTA_DA_DISTRIBUICAO = {
+  marca: "create or replace function public.fn_set_channel_routing(",
+  copia: "supabase/migrations-mia/20261019160000_9045_distribuicao_do_numero_pela_plataforma.sql",
+  impressao: "531b1ac9afa209bb",
+};
+
+describe("a função do banco que a 9045 copia não mudou sem alguém reler a cópia", () => {
+  const baseline = readFileSync(path.join(RAIZ, "supabase/baseline.sql"), "utf8");
+
+  it("CONTROLE: o leitor acha a função, e a cópia do fork existe", () => {
+    expect(impressaoDaFuncao(baseline, PORTA_DA_DISTRIBUICAO.marca)).not.toBeNull();
+    expect(existsSync(path.join(RAIZ, PORTA_DA_DISTRIBUICAO.copia))).toBe(true);
+  });
+
+  it("⭐ fn_set_channel_routing", () => {
+    expect(
+      impressaoDaFuncao(baseline, PORTA_DA_DISTRIBUICAO.marca),
+      "A função fn_set_channel_routing mudou no upstream desde que a 9045 a copiou. Leia o que mudou (git log -p -- supabase/baseline.sql), " +
+        "leve a regra nova para uma migration nova do fork que redefina fn_mia_distribuicao_do_numero_pela_plataforma, " +
+        "confira lib/implantacao/distribuicao-do-numero.ts e grave a impressão nova aqui.",
+    ).toBe(PORTA_DA_DISTRIBUICAO.impressao);
   });
 });
 

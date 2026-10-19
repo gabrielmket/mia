@@ -18,6 +18,7 @@ import { capacidadesOferecidas, pacotesLigados } from "@/lib/implantacao/capacid
 import { lerAgentes, lerVersoes, pendenciasDePublicacao } from "@/lib/implantacao/agente";
 import { lerRegras } from "@/lib/implantacao/automacoes";
 import { lerTipos } from "@/lib/implantacao/agenda";
+import { lerRegrasDosNumeros } from "@/lib/implantacao/distribuicao-do-numero";
 import { lerConvites, lerMembros } from "@/lib/implantacao/equipe";
 import { lerFluxos } from "@/lib/implantacao/followup";
 import { lerDocumentoDaMemoria } from "@/lib/implantacao/memoria";
@@ -734,8 +735,10 @@ const equipe: AreaDoChecklist = {
 const atendimento: AreaDoChecklist = {
   chave: "atendimento",
   titulo: "Distribuição do atendimento e passagem para humano",
-  avaliar: async (_ctx, org) => {
+  avaliar: async ({ admin }, org) => {
     const r = vazio();
+    // .83 — as regras de atendimento por número (upstream 1.85, 0663).
+    const regrasDosNumeros = await lerRegrasDosNumeros(admin, org.id);
     const routing = routingConfigSchema.catch(routingConfigSchema.parse({})).parse(org.settings.routing ?? {});
     const visibilidade = (org.settings.visibility_mode as string | undefined) ?? DEFAULT_VISIBILITY_MODE;
     const grupo = org.settings.grupo_de_avisos as { nome?: string } | undefined;
@@ -750,6 +753,7 @@ const atendimento: AreaDoChecklist = {
       ia_espera_apos_resposta_pelo_celular_minutos: routing.manual_reply_silence_minutes,
       assinatura: { atendentes: assinatura.humanos, ia: assinatura.ia, nome_da_ia: assinatura.nomeIa },
       grupo_de_avisos: grupo?.nome ?? null,
+      numeros_com_regra_propria: regrasDosNumeros.size,
     };
     const ROTULO_DO_MODO: Record<string, string> = { manual: "manual", round_robin: "em rodízio", load: "por menor carga" };
     r.pronto.push(
@@ -757,6 +761,11 @@ const atendimento: AreaDoChecklist = {
         visibilidade === "all" ? "tudo" : visibilidade === "own" ? "só o que é dele" : "o que é dele e o que não tem dono"
       }.`,
     );
+    if (regrasDosNumeros.size > 0) {
+      r.pronto.push(
+        `${plural(regrasDosNumeros.size, "número tem", "números têm")} regra própria de distribuição (os outros seguem a organização).`,
+      );
+    }
     if (assinatura.humanos || assinatura.ia) {
       r.pronto.push(
         `As mensagens mostram quem fala: ${[assinatura.humanos ? "atendentes" : null, assinatura.ia ? `IA («${assinatura.nomeIa}»)` : null]
@@ -772,14 +781,6 @@ const atendimento: AreaDoChecklist = {
         caminho: "/admin",
         quem: "plataforma",
         por_que: "O grupo é escolhido da lista de grupos em que o número de avisos já está. Um id errado manda nome e resumo de lead para o lugar errado.",
-      },
-      {
-        o_que: "Definir quais atendentes recebem as conversas de cada número.",
-        situacao: "opcional",
-        tela: "Configurações › Atendimento",
-        caminho: "/app/settings/atendimento",
-        quem: "cliente",
-        por_que: "Depende do número conectado e de a equipe já ter aceitado o convite.",
       },
     );
     return r;

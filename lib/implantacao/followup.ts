@@ -68,6 +68,7 @@ import { rascunhoDoFluxo } from "@/lib/followup/rascunho";
 import { algumCanalExigeModeloForaDaJanela, validateFlowForPublish } from "@/lib/followup/validate-publish";
 import { chaveDeNome } from "@/lib/leads/stage-editing";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
+import { classificarMidiaComLegenda } from "@/lib/messaging/media/midia-com-legenda";
 
 import { acharPorNomeOuId, chaveDoNome, mesmoConteudo, type Desfecho, type Implantacao } from "./base";
 import { acharNumero } from "./agente";
@@ -120,8 +121,12 @@ export interface PedidoDeFollowup {
   nome?: string;
   /** Para o modelo que dispara por etapa: o funil e a etapa, pelo nome. */
   etapa?: { funil: string; etapa: string };
-  /** Troca o texto (ou a instrução para a IA) dos nós de mensagem, pelo id do nó. */
-  textos?: Array<{ no: string; texto: string }>;
+  /**
+   * Troca o texto (ou a instrução para a IA) dos nós de mensagem, pelo id do nó.
+   * .83 — `midia` (upstream 1.85, #2734): a imagem ou o PDF que sai com a
+   * mensagem de texto fixo, por endereço; o texto vira a legenda. `null` tira.
+   */
+  textos?: Array<{ no: string; texto?: string; midia?: string | null }>;
   /** Troca a espera dos nós de espera fixa, pelo id do nó, em minutos. */
   esperas?: Array<{ no: string; minutos: number }>;
   /** Para gatilho de silêncio: depois de quantos minutos sem resposta. */
@@ -174,7 +179,8 @@ export function nosDoGrafo(grafo: FlowGraph | null, nomeDaEtapa?: (id: string) =
     const base = { no: n.id, tipo: n.type as string, rotulo: n.label ?? null };
     if (n.type === "action") {
       const cfg = n.config;
-      if (cfg.mode === "text") return { ...base, modo: "texto", texto: cfg.body };
+      // .83: a mídia do passo (upstream 1.85, #2734); o texto é a legenda dela.
+      if (cfg.mode === "text") return { ...base, modo: "texto", texto: cfg.body, midia: cfg.media_url ?? null };
       if (cfg.mode === "ai_message") return { ...base, modo: "mensagem_da_ia", texto: cfg.prompt_hint };
       return { ...base, modo: "modelo_do_canal" };
     }
@@ -382,13 +388,51 @@ function ajustarGrafo(grafo: FlowGraph, pedido: PedidoDeFollowup): { grafo: Flow
       if (no.type !== "action") {
         throw new Recusa(`O nó «${no.id}» é do tipo ${no.type}, não é uma mensagem. Os nós de mensagem são os de tipo "action".`);
       }
-      if (no.config.mode === "text" && no.config.body !== texto.texto) {
-        mudancas.push(`texto de ${no.id}`);
-        return { ...no, config: { ...no.config, body: texto.texto } };
+      if (texto.texto === undefined && texto.midia === undefined) {
+        throw new Recusa(`Em \`textos\`, o nó «${no.id}» veio sem \`texto\` e sem \`midia\`: informe ao menos um.`);
       }
-      if (no.config.mode === "ai_message" && no.config.prompt_hint !== texto.texto) {
-        mudancas.push(`instrução de ${no.id}`);
-        return { ...no, config: { ...no.config, prompt_hint: texto.texto } };
+      if (no.config.mode === "text") {
+        let config = no.config;
+        if (texto.texto !== undefined && config.body !== texto.texto) {
+          mudancas.push(`texto de ${no.id}`);
+          config = { ...config, body: texto.texto };
+        }
+        // .83 — a mídia do passo (upstream 1.85, #2734), pela MESMA régua do envio:
+        // o que não é imagem nem PDF faria o passo ser pulado a cada inscrição.
+        if (texto.midia !== undefined) {
+          const atual = config.media_url ?? null;
+          if (texto.midia === null) {
+            if (atual !== null) {
+              mudancas.push(`mídia de ${no.id}`);
+              const { media_url: _tirada, ...semMidia } = config;
+              config = semMidia;
+            }
+          } else {
+            const url = texto.midia.trim();
+            const midia = classificarMidiaComLegenda(url);
+            if (!midia.ok) {
+              throw new Recusa(
+                `A mídia do nó «${no.id}»: ${midia.motivo} O endereço precisa terminar na extensão do arquivo (.jpg, .png, .webp, .gif ou .pdf); link sem extensão, como os do Google Drive, não serve.`,
+              );
+            }
+            if (atual !== url) {
+              mudancas.push(`mídia de ${no.id}`);
+              config = { ...config, media_url: url };
+            }
+          }
+        }
+        if (config !== no.config) return { ...no, config };
+      }
+      if (no.config.mode === "ai_message") {
+        if (texto.midia !== undefined) {
+          throw new Recusa(
+            `O nó «${no.id}» é uma mensagem escrita pela IA, e a mídia só acompanha mensagem de TEXTO FIXO (o texto vira a legenda). Troque o passo para texto fixo pela tela, ou tire \`midia\`.`,
+          );
+        }
+        if (texto.texto !== undefined && no.config.prompt_hint !== texto.texto) {
+          mudancas.push(`instrução de ${no.id}`);
+          return { ...no, config: { ...no.config, prompt_hint: texto.texto } };
+        }
       }
       if (no.config.mode === "template") {
         throw new Recusa(`O nó «${no.id}» envia um modelo aprovado do canal; o texto dele é o do modelo, e se troca pela tela.`);

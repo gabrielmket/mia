@@ -106,6 +106,7 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
     description:
       "Ajusta a DISTRIBUIÇÃO DO ATENDIMENTO de um cliente: quem recebe o cliente novo, o que cada atendente enxerga, quando a IA volta a responder e se a mensagem mostra quem fala. " +
       "`modo`: \"manual\" (alguém assume cada conversa), \"round_robin\" (rodízio entre quem está de plantão) ou \"load\" (vai para quem está com MENOS conversas abertas; no empate, o rodízio decide). " +
+      "O `modo` daqui vale para os números SEM regra própria: um número com modo próprio (plataforma_configurar_canal, `distribuicao`) segue o dele. " +
       "`visibilidade` do papel Atendente: \"all\" (vê tudo), \"own_and_unassigned\" (o que é dele e o que não tem dono) ou \"own\" (só o que é dele). " +
       "A mesma régua decide o que o atendente pode ASSUMIR e TRANSFERIR: conversa que ele não enxerga, ele também não assume nem repassa (gestor e administrador seguem com tudo). " +
       "`devolver_para_a_ia_apos_minutos`: depois de quanto tempo sem sinal de uma pessoa a conversa volta para o agente (null = nunca volta sozinha). " +
@@ -117,7 +118,7 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
       "`google_meet_com_acesso_aberto`: a reunião do Google Meet que o sistema cria já nasce com o acesso aberto a quem tem o link, sem sala de espera (nasce desligado). " +
       "Só os campos que VIERAM mudam; pedido igual ao que está gravado responde `ja_estava`. As duas primeiras decisões andam juntas: rodízio sem restringir a visibilidade deixa todo mundo vendo a carteira do colega. " +
       "ATENÇÃO: tudo aqui vale na hora, inclusive para o agente que já está no ar. A assinatura ligada aparece na PRÓXIMA mensagem que o cliente final receber. " +
-      "O QUE NÃO FAZ: não define quais atendentes recebem cada NÚMERO (Configurações › Atendimento, depois de o número estar conectado e a equipe ter aceitado o convite) " +
+      "O QUE NÃO FAZ: não define a distribuição de cada NÚMERO (quem recebe, o modo próprio e o atendente padrão do número: é plataforma_configurar_canal, `distribuicao`) " +
       "e não escolhe o grupo de avisos (Admin › Número de avisos).",
     inputSchema: {
       organization_id: ORGANIZACAO,

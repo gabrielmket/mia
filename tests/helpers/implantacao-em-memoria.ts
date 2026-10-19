@@ -151,6 +151,56 @@ const RPCS: Record<string, RpcDeMentira> = {
     return { data: id, error: null };
   },
 
+  // .83 — a cópia do fork (9045) de `fn_set_channel_routing` (0663): a regra de
+  // atendimento de um número. O mesmo efeito: número da empresa e não arquivado,
+  // responsáveis e destino membros ativos agent/manager/admin, upsert da regra,
+  // troca dos responsáveis, `reset` que apaga. A prova no Postgres de verdade é
+  // `tests/invariants/distribuicao-do-numero-pela-plataforma.test.ts`.
+  fn_mia_distribuicao_do_numero_pela_plataforma: (args, db) => {
+    const org = args.p_org as string;
+    const canal = args.p_channel as string;
+    if (!args.p_token) return { data: null, error: { message: "distribuicao_sem_token_de_plataforma", code: "42501" } };
+    const usuarios = (args.p_users as string[] | null) ?? null;
+    if (usuarios === null || usuarios.some((u) => u === null)) {
+      return { data: null, error: { message: "routing_invalid_members", code: "22023" } };
+    }
+    const modo = (args.p_mode as string | null) ?? null;
+    if (modo !== null && !["manual", "round_robin", "load"].includes(modo)) {
+      return { data: null, error: { message: "routing_invalid_mode", code: "22023" } };
+    }
+    const numero = (db.channel_sessions ?? []).find((s) => s.id === canal && s.organization_id === org && !s.archived_at);
+    if (!numero) return { data: null, error: { message: "routing_channel_not_found", code: "P0002" } };
+    const recebe = (id: string) =>
+      (db.user_organizations ?? []).some(
+        (m) => m.organization_id === org && m.user_id === id && !m.revoked_at && ["agent", "manager", "admin"].includes(String(m.role)),
+      );
+    if (args.p_reset === true) {
+      const politica = (db.channel_routing_policies ?? []).find((p) => p.organization_id === org && p.channel_session_id === canal);
+      db.channel_routing_policies = (db.channel_routing_policies ?? []).filter((p) => p !== politica);
+      if (politica) db.channel_routing_responsibles = (db.channel_routing_responsibles ?? []).filter((r) => r.policy_id !== politica.id);
+      return { data: { channel_session_id: canal, policy_id: null, mode: "legacy_unconfigured", user_ids: [] }, error: null };
+    }
+    const destino = (args.p_default_assignee as string | null) ?? null;
+    if (!usuarios.every(recebe) || (destino !== null && !recebe(destino))) {
+      return { data: null, error: { message: "routing_invalid_members", code: "22023" } };
+    }
+    let politica = (db.channel_routing_policies ?? []).find((p) => p.organization_id === org && p.channel_session_id === canal);
+    if (!politica) {
+      politica = { id: randomUUID(), organization_id: org, channel_session_id: canal };
+      (db.channel_routing_policies ??= []).push(politica);
+    }
+    politica.distribution_mode = modo;
+    politica.default_assignee_user_id = destino;
+    db.channel_routing_responsibles = (db.channel_routing_responsibles ?? []).filter((r) => r.policy_id !== politica!.id);
+    for (const u of [...new Set(usuarios)]) {
+      db.channel_routing_responsibles.push({ id: randomUUID(), organization_id: org, policy_id: politica.id, user_id: u });
+    }
+    return {
+      data: { channel_session_id: canal, policy_id: politica.id, mode: usuarios.length === 0 ? "restricted_empty" : "restricted", user_ids: usuarios },
+      error: null,
+    };
+  },
+
   fn_mia_e_demonstracao: (args, db) => ({
     data: (db.organizations ?? []).find((o) => o.id === args.p_org)?.demonstracao === true,
     error: null,

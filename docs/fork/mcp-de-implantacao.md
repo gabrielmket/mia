@@ -119,7 +119,7 @@ pessoa faz (com a tela e o caminho).
 | 12 | Automações (nascem desligadas), tipos de agendamento, jornada e respostas prontas | `plataforma_garantir_automacao`, `plataforma_garantir_tipos_de_agendamento`, `plataforma_definir_jornada`, `plataforma_garantir_respostas_prontas` | agente |
 | 12a | Planos de tarefa (antes da automação que os aplica) e a fonte de formulário do site (antes da automação que reage a ela) | `plataforma_garantir_planos_de_tarefa`, `plataforma_garantir_fonte_de_formulario` | agente |
 | 13 | **Conectar o número de WhatsApp** | tela **Conexões** (`/app/connections`) | **pessoa do cliente** |
-| 13a | Depois do número: os dias da prospecção e, por QR Code, guardar o histórico | `plataforma_configurar_canal` | agente |
+| 13a | Depois do número: os dias da prospecção, por QR Code guardar o histórico e, desde a .83, quem recebe as conversas dele (a distribuição do número: responsáveis, modo próprio e atendente padrão; a equipe já tem de ter aceitado o convite) | `plataforma_configurar_canal` | agente |
 | 14 | Conferir o rascunho com o cliente antes de pôr no ar | `plataforma_ver_agentes`, `plataforma_ver_followup` | agente e pessoa |
 | 15 | Publicar os follow-ups e o agente | `plataforma_publicar_followup`, `plataforma_publicar_agente` | agente |
 | 15a | Só com dois ou mais agentes no MESMO número: montar o roteador de intenção (uma intenção por agente, e o funil de destino de cada uma) e ligá-lo | `plataforma_garantir_roteador`, `plataforma_ligar_roteador` | agente |
@@ -188,8 +188,9 @@ ferramenta (desliga, ajusta, religa), como as automações.
 ## 3. Todas as ferramentas
 
 São **68** ferramentas no servidor: as 60 desta página e as 8 da migração
-([`mcp-de-migracao.md`](mcp-de-migracao.md)). A fusão da v1.84 (.82) não pediu
-ferramenta nova, só um campo e duas regras novas (veja "O que chegou do upstream 1.84", nesta seção). A mais nova (.81, a fusão do
+([`mcp-de-migracao.md`](mcp-de-migracao.md)). As fusões da v1.84 (.82) e da v1.85 (.83) não
+pediram ferramenta nova, só campos e regras novas (veja "O que chegou do upstream 1.84" e
+"O que chegou do upstream 1.85", nesta seção). A mais nova (.81, a fusão do
 upstream v1.81 a v1.83) é `plataforma_configurar_servidor_mcp_externo`. As duas
 da .80 (item 9 do mapa: o montador de relatórios) são `plataforma_garantir_relatorios` e
 `plataforma_ver_relatorios`. A da .79 (empresa única,
@@ -214,7 +215,7 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | `plataforma_ver_agentes` | os agentes, a versão no ar, o rascunho, o limiar de sentimento, a passagem por assunto jurídico e o que falta para publicar; com `agente`, o horário de atendimento e o aviso de fora do horário; o bloqueio de afirmação clínica da empresa (`seguranca_da_empresa`); e os **roteadores** de intenção (número, se está ligado, agente reserva, janela de contexto do classificador e cada intenção com o agente e o funil de destino) | leitura |
 | `plataforma_ver_catalogo` | os produtos e serviços, com busca e paginação | leitura |
 | `plataforma_ver_obrigacoes` | os documentos e obrigações com vencimento: contadores (vencidos, vencendo em 30 dias, pedidos sem resposta, em dia), os itens por situação e o catálogo de tipos por funil | leitura |
-| `plataforma_ver_configuracao` | o conteúdo do que está configurado, por seção (etiquetas, memória, conhecimento, follow-ups, automações, agenda, equipe, números, atendimento, mensagens, planos de tarefa, fontes de formulário e banco externo). Em números, também os dias da prospecção, se guarda o histórico, se está pausado e as pausas agendadas; em atendimento, o freio do passo "a IA decide"; nas fontes, nunca o segredo; no banco externo, nunca endereço, usuário ou senha | leitura |
+| `plataforma_ver_configuracao` | o conteúdo do que está configurado, por seção (etiquetas, memória, conhecimento, follow-ups, automações, agenda, equipe, números, atendimento, mensagens, planos de tarefa, fontes de formulário e banco externo). Em números, também os dias da prospecção, se guarda o histórico, se está pausado, as pausas agendadas e, desde a .83, a distribuição do número (regra própria, modo, atendente padrão e responsáveis, por e-mail); em atendimento, o freio do passo "a IA decide"; nas fontes, nunca o segredo; no banco externo, nunca endereço, usuário ou senha | leitura |
 | `plataforma_ver_followup` | um fluxo de follow-up por dentro: gatilho, nós, textos e esperas, a etapa de destino das caixas de mover e as etiquetas das caixas de etiquetar, e as setas entre os nós | leitura |
 | `plataforma_ver_conversoes` | as conversões de um cliente: as conexões da Meta e do Google **sem segredo**, se a identidade da Meta (ID da Página ou da conta do WhatsApp Business) está preenchida, as regras por funil das duas plataformas, a chave dos leads de formulário, o evento recomendado para cada etapa e os 20 últimos envios com a situação e o motivo | leitura |
 | `plataforma_listar_demonstracoes` | as empresas de demonstração por segmento (construtora, clínica odontológica, indústria, academia) e a bancada: se existe, o id, quando a semente foi aplicada e as contagens; e qualquer outra organização marcada como demonstração | leitura |
@@ -251,19 +252,19 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 | ferramenta | o que faz | chave natural | teto por chamada |
 |---|---|---|---|
 | `plataforma_configurar_empresa` | nome, razão social, CNPJ, país (desde a .82, trocar o país sem mandar `fuso` leva o fuso sugerido do país, como a tela), fuso, idioma, moeda, modo de venda, retenção de mídia, a limpeza automática de mídia antiga (ligada, apaga sem volta), encarregado e política de privacidade; e, desde a .79, a **meta do mês** (`meta_do_mes`: o faturamento dos ganhos da empresa inteira, em centavos, no mês corrente ou no `mes` pedido), pelo mesmo upsert da tela de Desempenho (`lib/crm/metas/gravar.ts`). É ela que vira a barra do painel "Meta do mês" | a organização; a meta, pelo mês | só os campos que vieram mudam |
-| `plataforma_configurar_atendimento` | modo de distribuição (manual, rodízio ou menor carga), visibilidade das conversas, devolução para a IA, quanto a IA espera depois de uma resposta pelo celular, o nome de quem fala (atendente ou IA) em negrito na mensagem, o freio da empresa para o passo "a IA decide" das automações e, desde a .81, as duas opções da agenda (atendentes mexem na agenda dos colegas; Google Meet com acesso aberto) | a organização | idem |
+| `plataforma_configurar_atendimento` | modo de distribuição (manual, rodízio ou menor carga; desde a .83 vale para os números SEM regra própria), visibilidade das conversas, devolução para a IA, quanto a IA espera depois de uma resposta pelo celular, o nome de quem fala (atendente ou IA) em negrito na mensagem, o freio da empresa para o passo "a IA decide" das automações e, desde a .81, as duas opções da agenda (atendentes mexem na agenda dos colegas; Google Meet com acesso aberto) | a organização | idem |
 | `plataforma_garantir_funil` | funil, etapas na ordem, passo do agente por etapa, probabilidade, janela de esfriando (`prazo_esperado_horas`, pela régua da tela: 1 a 8760 horas inteiras) e cor, campos personalizados (com obrigatoriedade por etapa), motivos de perda e de ganho, vocabulário (desde a .79 também `compromisso` e `compromisso_plural`, como o segmento chama o que a agenda marca: o plural é o título do painel pronto de agenda) | nome do funil; nome da etapa; `key` do campo; rótulo do motivo | 20 etapas |
 | `plataforma_garantir_produtos` | catálogo em lote, com preço em centavos ou em texto (`"R$ 189,90"`); item com problema é recusado com motivo e não derruba os outros | código do produto (sem código, o nome) | 200 produtos |
 | `plataforma_garantir_etiquetas` | etiquetas no vocabulário, com cor e descrição | nome da etiqueta, sem diferenciar maiúscula | 50 etiquetas |
 | `plataforma_gravar_memoria` | as regras da casa (documento que todos os agentes seguem) e as anotações | o documento é um só; anotação pelo título | 50 anotações |
 | `plataforma_garantir_conhecimento` | material por **texto**: perguntas e respostas, ou documento | nome do material | 200 perguntas; 200 mil caracteres |
-| `plataforma_garantir_followup` | instala um fluxo a partir de um modelo e ajusta textos, esperas, etapa do gatilho e política; no gatilho de silêncio, o teto do silêncio e a pausa antes de recomeçar; e garante as caixas que mexem no negócio sem falar com o cliente (`mover_no_funil` e `etiquetar`), antes de um nó do fluxo | nome do fluxo; a caixa, pelo lugar onde está | um fluxo; 10 caixas de cada tipo |
+| `plataforma_garantir_followup` | instala um fluxo a partir de um modelo e ajusta textos, esperas, etapa do gatilho e política; no gatilho de silêncio, o teto do silêncio e a pausa antes de recomeçar; e garante as caixas que mexem no negócio sem falar com o cliente (`mover_no_funil` e `etiquetar`), antes de um nó do fluxo; desde a .83, a `midia` do passo de texto fixo (imagem ou PDF por endereço, com o texto de legenda) | nome do fluxo; a caixa, pelo lugar onde está | um fluxo; 10 caixas de cada tipo |
 | `plataforma_garantir_agente` | cria ou altera o **rascunho** do agente: prompt, capacidades por pacote, funis, materiais, follow-ups, palavras de passagem, passagem por assunto jurídico, horário, aviso de fora do horário, número. O limiar de sentimento é do cadastro e vale na hora; o bloqueio de afirmação clínica é da EMPRESA (todos os agentes) e vale na hora | nome do agente | um agente |
 | `plataforma_garantir_roteador` | cria ou ajusta o roteador de intenção de um número, **desligado**: nome, número, agente reserva, a janela de contexto do classificador (0 a 16 mensagens, 8 no roteador novo) e as intenções, cada uma com o agente e o funil (e a etapa) de destino do negócio | nome do roteador; nome da intenção | 20 intenções |
-| `plataforma_garantir_automacao` | cria ou ajusta uma regra de automação, **desligada**. É também o webhook de saída: os gatilhos de ganho, perda, reabertura e troca de responsável com a ação `call_webhook`. Aceita o passo "a IA decide" (`ai_decide`, com as ações das opções conferidas pela mesma régua), aplicar um plano de tarefas, etiqueta no contato, o recorte por fonte de formulário e o funil e a etapa dos gatilhos de tempo | nome da regra | uma regra |
+| `plataforma_garantir_automacao` | cria ou ajusta uma regra de automação, **desligada**. É também o webhook de saída: os gatilhos de ganho, perda, reabertura e troca de responsável com a ação `call_webhook`. Aceita o passo "a IA decide" (`ai_decide`, com as ações das opções conferidas pela mesma régua), aplicar um plano de tarefas, etiqueta no contato, o recorte por fonte de formulário e o funil e a etapa dos gatilhos de tempo; desde a .83, a `media_url` da mensagem de WhatsApp (imagem ou PDF, conferida antes de gravar) | nome da regra | uma regra |
 | `plataforma_garantir_planos_de_tarefa` | os planos de tarefa (a sequência de tarefas que uma automação aplica ao negócio), com título, prazo, prioridade e responsável de cada passo | o `id` do plano, ou o nome | 50 planos; 30 passos por plano |
 | `plataforma_garantir_fonte_de_formulario` | a fonte de formulário: destino (funil e etapa), as perguntas do formulário, o mapeamento dos campos, o endereço de retorno, a autorização de IA na captação e, desde a .82, a atualização do card no reenvio (`atualizar_card_no_reenvio`); as duas últimas exigem a assinatura, posta pela pessoa. Devolve o caminho do endereço de captação | nome da fonte | uma fonte; 20 perguntas |
-| `plataforma_configurar_canal` | de um número: o nome interno (.81), os dias da prospecção, guardar o histórico (só QR Code; desligar pede confirmação escrita) e a pausa agendada de até 24 horas (de um número ou de todos), com o ajuste dos horários de uma que ainda não começou (.81) e o cancelamento. Nunca credencial, token ou número | o número; a pausa, pelo número e pela janela | um número |
+| `plataforma_configurar_canal` | de um número: o nome interno (.81), os dias da prospecção, guardar o histórico (só QR Code; desligar pede confirmação escrita) e a pausa agendada de até 24 horas (de um número ou de todos), com o ajuste dos horários de uma que ainda não começou (.81) e o cancelamento; e, desde a .83, a `distribuicao` do número (os `responsaveis`, o `modo` próprio e o `atendente_padrao`, ou `voltar_ao_padrao_da_organizacao`), gravada pela função do fork da `9045`. Nunca credencial, token ou número | o número; a pausa, pelo número e pela janela | um número |
 | `plataforma_configurar_banco_externo` | numa conexão de banco externo que já existe: as fontes liberadas (o modo e a lista de tabelas e colunas que o agente pode ler, .81) e a coluna que identifica o cliente nas conversas (telefone ou e-mail). Nunca lê nem devolve a conexão ou a senha | o nome da conexão | uma conexão |
 | `plataforma_configurar_servidor_mcp_externo` | (.81) o servidor MCP externo do cliente (o sistema de fora que a IA consulta): o endereço https público e a chave, gravada CIFRADA e nunca devolvida (a resposta traz os quatro últimos caracteres; a trilha leva só o host); `apagar: true` tira. Recusa a empresa de demonstração | a organização | um servidor |
 | `plataforma_garantir_tipos_de_obrigacao` | o catálogo de tipos de documentos e obrigações de um funil, inclusive `modelo_do_segmento` (os tipos prontos do segmento) | nome do tipo dentro do funil | 60 tipos por funil |
@@ -477,6 +478,32 @@ Ficou de fora desta fusão, por decisão: o plano padrão do cadastro, a entrada
 paga e a troca de plano proporcional (0679): é a cobrança do revendedor, que fica
 desligada no fork (`platform_config.MODULO_COBRANCA`), como na .76.
 
+### O que chegou do upstream 1.85 (.83)
+
+Mesma regra, na fusão da v1.85. A prova de cada linha está em
+`tests/unit/mcp-de-implantacao-novidades-do-upstream-185.test.ts` (que agora
+guarda a contagem: 68, nenhuma ferramenta nova) e, para a função do banco, em
+`tests/invariants/distribuicao-do-numero-pela-plataforma.test.ts`.
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| Regras de atendimento por número: modo próprio e atendente de destino padrão, na mesma gravação dos responsáveis (`channel_routing_policies.distribution_mode` e `default_assignee_user_id`, 0663, #2331) | 1.85 | campo novo `distribuicao` em `plataforma_configurar_canal` (`responsaveis` por e-mail, `modo`, `atendente_padrao`, `voltar_ao_padrao_da_organizacao`). A porta do upstream (`fn_set_channel_routing`) exige sessão de gerente membro com MFA; o MCP grava pela cópia do fork, `fn_mia_distribuicao_do_numero_pela_plataforma` (migration `9045`), com o token como ator e a mesma auditoria `routing.config_changed`. Criar a regra de um número sem regra pede `responsaveis` por extenso (`[]` = a fila); quem só lê é recusado; destino sem modo próprio é recusado. A leitura (`plataforma_ver_configuracao`, seção `canais`) e o checklist mostram a regra. Não há recusa na demonstração: decidir de quem é a conversa não manda nada para fora | `implantar_configuracao` |
+| Imagem ou PDF com legenda na ação "Enviar mensagem de WhatsApp" das automações (`send_whatsapp_message.config.media_url`, #2734) | 1.85 | já alcançava pelo esquema do upstream; o espelho passou a conferir a URL ANTES de gravar com a régua do envio (`classificarMidiaComLegenda`: imagem ou PDF, pela extensão), e `plataforma_listar_modelos` ensina o campo | `implantar_configuracao` |
+| Imagem ou PDF com legenda no passo de texto fixo do follow-up (`config.media_url` do nó `action`/`text`, #2734) | 1.85 | campo novo `midia` em cada item de `textos` de `plataforma_garantir_followup` (`null` tira; recusado em passo escrito pela IA); `plataforma_ver_followup` devolve a mídia do nó | `implantar_configuracao` |
+| O "contém" das condições ignora acento e pontuação | 1.85 | já alcançava: a descrição de `condicoes[].op` em `plataforma_garantir_automacao` ensina o efeito novo | `implantar_configuracao` |
+| Publicar follow-up com "Repetir" conta as voltas contra o teto de 80 passos (#2977) | 1.85 | já alcançava: `plataforma_publicar_followup` publica pela régua do upstream (`validateFlowForPublish`) e a recusa chega com o motivo | `colocar_no_ar` |
+| A chance de fechamento da etapa volta na leitura (#2999) | 1.85 | já alcançava: `plataforma_garantir_funil` grava `probabilidade` e `plataforma_ver_funis` lê a coluna direto | `implantar_configuracao` |
+| Visibilidade da conversa na atribuição e no registro de eventos (0685) | 1.85 | nada a configurar: é a `visibilidade` de `plataforma_configurar_atendimento`, que já ensina que o atendente não assume nem transfere o que não vê | |
+| Desmarcar a conversa como exemplo tira os trechos do RAG (0688) | 1.85 | nada a configurar: é ação do dia a dia na conversa | |
+| O agente deixa de repetir a mesma mensagem (#2996) e o custo do provedor personalizado pelo catálogo (#3013) | 1.85 | nada a configurar: automáticos | |
+
+Ficou de fora desta fusão, por decisão: de onde o Jev responde (TypeSafe direto ou
+pela OpenRouter, com a chave OpenRouter da empresa): é escolha de IA e pede o aceite
+de mandar a mensagem a um fornecedor de fora, como as tarefas do Jev (não há
+ferramenta nenhuma do Jev); e o export de contatos em CSV e vCard, a listagem de
+instalações com suspender e reativar, o aviso de SMTP no admin e o ponto de extensão
+do Caddy (`caddy-sites/`): são operação ou instalação, não montagem de cliente.
+
 Ficaram de fora da fusão da .76, por decisão: o plano de cobrança e a assinatura do
 revendedor (a cobrança do upstream fica desligada no fork), excluir organização,
 trocar o e-mail de login de alguém e marcar contato como pessoal (é decisão do
@@ -510,7 +537,7 @@ O checklist (`plataforma_ver_implantacao`) lista cada item abaixo em
 | Exigir a verificação em duas etapas da equipe (a partir de qual papel, com quantos dias de carência) | Configurações › Segurança · `/app/settings/security` | é regra de acesso: a tela pede o código do segundo fator de quem muda a regra, e um token não apresenta segundo fator. Exigir sem carência tranca a equipe para fora |
 | ID da Página do Facebook (ou da conta do WhatsApp Business) das conversões da Meta | Configurações › Conversões · `/app/settings/conversoes` | é a identidade da conta de anúncios do cliente, preenchida junto da credencial; um id errado vincula a venda a outra conta. A leitura diz se está preenchido |
 | Reprocessar uma conversão que ficou pendente | Configurações › Conversões · `/app/settings/conversoes` | é operação do dia a dia sobre uma venda, e envia dado do cliente final para a plataforma de anúncio: não é montagem |
-| Ligar tarefas do Jev (por exemplo "Conferir o campo antes de a IA gravar") | IA › Provedores · `/app/ai/providers` | depende da chave do Jev e do aceite de mandar a conversa a um fornecedor de fora: os dois são atos de pessoa. Não há ferramenta nenhuma do Jev |
+| Ligar tarefas do Jev (por exemplo "Conferir o campo antes de a IA gravar") e, desde a v1.85, de onde o Jev responde (TypeSafe ou OpenRouter) | IA › Provedores · `/app/ai/providers` | depende da chave do Jev e do aceite de mandar a conversa a um fornecedor de fora: os dois são atos de pessoa. Não há ferramenta nenhuma do Jev |
 | Assinatura (HMAC) de uma fonte de formulário | Automações › Fontes · `/app/webhooks` | o segredo aparece uma vez na tela: é credencial. A fonte em si (destino, perguntas, autorização de IA, atualização do card no reenvio) entra por `plataforma_garantir_fonte_de_formulario`; as duas opções só ligam depois da assinatura |
 | Ligar, desligar ou apagar uma fonte de formulário | Automações › Fontes · `/app/webhooks` | desligar faz o formulário que já está no site parar de virar contato na hora, sem ninguém ver do outro lado |
 | Criar, testar ou apagar a conexão com o banco externo do cliente | Dados externos · `/app/integracao-dados` | endereço, usuário e senha são credencial do cliente. A coluna do cliente nas conversas entra por `plataforma_configurar_banco_externo` |
@@ -523,7 +550,6 @@ O checklist (`plataforma_ver_implantacao`) lista cada item abaixo em
 | Modelo oficial com cabeçalho de imagem, vídeo ou documento | Configurações › Modelos · `/app/settings/templates` | a amostra de mídia é enviada por upload |
 | Segredo de webhook numa automação | Automações · `/app/webhooks` | segredo é credencial |
 | Grupo de WhatsApp que recebe os avisos de passagem para humano | Admin › Número de avisos · `/admin` | o grupo é escolhido de uma lista; um id errado manda nome e resumo de lead para o lugar errado |
-| Quais atendentes recebem as conversas de cada número | Configurações › Atendimento · `/app/settings/atendimento` | depende do número conectado e de a equipe já ter aceitado o convite |
 | Apagar ou arquivar agente, funil e material | a tela de cada um | a implantação monta; desfazer é decisão de uma pessoa |
 
 Também ficaram de fora, por desenho:
@@ -573,12 +599,16 @@ Também ficaram de fora, por desenho:
   fina, a operação monta a mesma sequência com as mesmas funções de biblioteca,
   e `tests/unit/mcp-de-implantacao-espelhos.test.ts` reprova quando o código da
   rota muda, para alguém reler o espelho.
-- Uma migration só para as ferramentas: a `9022`
+- Duas migrations só para as ferramentas: a `9022`
   (`fn_mia_definir_dono_do_contato_pela_plataforma`), porque a porta do dono do
   contato do upstream exige um gerente membro da empresa como ator, e o token de
   plataforma não é membro. Ela copia o corpo de `fn_definir_carteira_do_cliente`,
   e a cerca dos espelhos guarda a impressão da função do upstream: mudou lá,
-  reprova aqui. O resto cabe nas tabelas que existem. Desde
+  reprova aqui. E a `9045` (.83,
+  `fn_mia_distribuicao_do_numero_pela_plataforma`), pelo mesmo motivo e no mesmo
+  molde: a porta das regras por número (`fn_set_channel_routing`, 0663) exige
+  sessão de gerente membro com MFA; a cópia leva o token como ator, e a cerca guarda
+  a impressão da função do upstream. O resto cabe nas tabelas que existem. Desde
   a .72 as de conversões da Meta gravam na régua do UPSTREAM
   (`meta_ads_conversion_rules`, 0524), pela gravação da tela dele, e a volta dos
   leads de formulário na chave da 9017
@@ -627,7 +657,9 @@ Testes:
 | `tests/unit/mcp-de-implantacao-novidades-do-upstream.test.ts` | cada novidade do upstream 1.70 a 1.73: o campo ou a caixa nova passa pela ferramenta (o que grava, a reexecução, a recusa que ensina, a leitura), e as duas ferramentas do roteador |
 | `tests/unit/mcp-de-implantacao-novidades-do-upstream-180.test.ts` | cada novidade do upstream 1.74 a 1.80, no mesmo molde, as quatro ferramentas novas e a prova de que os tipos de ação da ferramenta são exatamente os do upstream |
 | `tests/unit/mcp-de-implantacao-novidades-do-upstream-183.test.ts` | cada novidade do upstream 1.81 a 1.83 (.81), no mesmo molde, a ferramenta nova do servidor MCP externo (a chave nunca volta nem vai para a trilha) e a empresa de demonstração |
-| `tests/unit/mcp-de-implantacao-novidades-do-upstream-184.test.ts` | cada novidade do upstream 1.84 (.82), no mesmo molde: a atualização do card no reenvio da fonte de formulário, o fuso que acompanha o país, as descrições que ensinam o efeito novo, e a CONTAGEM da lista (68) |
+| `tests/unit/mcp-de-implantacao-novidades-do-upstream-184.test.ts` | cada novidade do upstream 1.84 (.82), no mesmo molde: a atualização do card no reenvio da fonte de formulário, o fuso que acompanha o país e as descrições que ensinam o efeito novo |
+| `tests/unit/mcp-de-implantacao-novidades-do-upstream-185.test.ts` | cada novidade do upstream 1.85 (.83), no mesmo molde: a distribuição do número (o que a função grava, a reexecução, as recusas, a leitura, o checklist e a demonstração), a mídia na automação e no follow-up, as descrições que ensinam o efeito novo, e a CONTAGEM da lista (68) |
+| `tests/invariants/distribuicao-do-numero-pela-plataforma.test.ts` | a função da 9045 no Postgres de verdade: o controle negativo (a porta do upstream recusa o ator da plataforma), o mesmo efeito da porta do upstream, as recusas copiadas, o gatilho do upstream que solta o destino de quem sai, o `reset`, as recusas do ator e que só o `service_role` executa |
 | `tests/unit/mcp-de-implantacao-relatorios.test.ts` | as duas ferramentas do montador de relatórios (.80), a operação `implantar_configuracao`, o que o garantir grava (prontos ligados ao funil, relatórios do segmento e painel, compartilhados), que rodar de novo não duplica e só completa o painel, a meta do mês, o funil de outra empresa, e a leitura sem o "só para mim" de ninguém |
 | `tests/invariants/montador-de-relatorios.test.ts` | as tabelas do montador (9040) e o motor estendido (9041) no Postgres de verdade: quem vê, cria, compartilha, edita e exporta, com controle positivo e negativo; produto, filtro de vários valores, meta por grupo de tempo, funil com soma, responsável no follow-up, agente nas conversas; a lista por trás do número com a mesma conta; e o link do painel (9042) |
 | `tests/unit/mcp-de-implantacao-paineis.test.ts` | as quatro ferramentas dos painéis e do link para o dono (.78): a caixinha `compartilhar_paineis`, que o garantir não duplica e ajusta no mesmo endereço, a revogação, a leitura e a demonstração; e a meta do mês em `plataforma_configurar_empresa` |

@@ -29,6 +29,10 @@
  *                       gravada em `channel_schedules`; quem pausa e retoma é o
  *                       cron `channel-pause-scheduler`, como na tela.
  *
+ * .83 — a DISTRIBUIÇÃO do número (upstream 1.85, 0663): o modo próprio, o
+ * atendente de destino padrão e os responsáveis, pela função do fork da 9045.
+ * Mora em `./distribuicao-do-numero.ts`, que explica o espelho.
+ *
  * ── O que é diferente da tela, e por quê ──────────────────────────────────
  *
  * 1. Só o que veio muda, e o que veio igual responde `ja_estava`. A pausa
@@ -51,6 +55,11 @@ import { conexaoGuardaHistorico } from "@/lib/channels/conexao-guarda-historico"
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 
 import { chaveDoNome, type Desfecho, type Implantacao } from "./base";
+import {
+  configurarDistribuicaoDoNumero,
+  type DistribuicaoDoNumero,
+  type DistribuicaoPedida,
+} from "./distribuicao-do-numero";
 
 /** Todos os dias: o padrão da coluna (0642) para a conexão que nunca escolheu. */
 export const TODOS_OS_DIAS = [0, 1, 2, 3, 4, 5, 6] as const;
@@ -91,6 +100,11 @@ export interface PedidoDeCanal {
    * mesma régua de criar.
    */
   ajustar_pausa_agendada?: { id: string; inicio: string; fim: string };
+  /**
+   * .83 — as regras de atendimento do NÚMERO (upstream 1.85, 0663): modo
+   * próprio, destino padrão e responsáveis. Ver `./distribuicao-do-numero.ts`.
+   */
+  distribuicao?: DistribuicaoPedida;
 }
 
 export interface AgendaDePausaLida {
@@ -215,10 +229,20 @@ export interface CanalConfigurado {
   pausa_cancelada?: { id: string; desfecho: "atualizou" | "ja_estava" };
   pausa_ajustada?: { id: string; inicio: string; fim: string; desfecho: "atualizou" | "ja_estava" };
   nome_interno?: { nome: string; desfecho: "atualizou" | "ja_estava" };
+  distribuicao?: DistribuicaoDoNumero & { desfecho: Desfecho };
   avisos: string[];
 }
 
-export async function configurarCanal(c: Implantacao, fusoDaEmpresa: string, pedido: PedidoDeCanal): Promise<CanalConfigurado> {
+/**
+ * `tokenId` é o token de plataforma da chamada: o ator da função do fork que
+ * grava a distribuição do número (9045). Os outros ajustes não o usam.
+ */
+export async function configurarCanal(
+  c: Implantacao,
+  fusoDaEmpresa: string,
+  pedido: PedidoDeCanal,
+  tokenId: string,
+): Promise<CanalConfigurado> {
   const avisos: string[] = [];
   const mudancas: string[] = [];
   const canais = await lerCanais(c.admin, c.orgId);
@@ -226,6 +250,7 @@ export async function configurarCanal(c: Implantacao, fusoDaEmpresa: string, ped
     pedido.dias_da_prospeccao !== undefined ||
     pedido.guardar_historico !== undefined ||
     pedido.nome_interno !== undefined ||
+    pedido.distribuicao !== undefined ||
     (pedido.pausa_agendada !== undefined && pedido.pausa_agendada.todos_os_numeros !== true);
   if (precisaDoCanal && !pedido.canal) {
     throw new Recusa(
@@ -567,6 +592,13 @@ export async function configurarCanal(c: Implantacao, fusoDaEmpresa: string, ped
       mudancas.push("pausa ajustada");
       r.pausa_ajustada = { id, inicio: inicio.toISOString(), fim: fim.toISOString(), desfecho: "atualizou" };
     }
+  }
+
+  // ── a distribuição do número: o caminho de `PATCH /api/v1/settings/routing/channels` (.83) ──
+  if (pedido.distribuicao !== undefined && canal) {
+    const feita = await configurarDistribuicaoDoNumero(c, tokenId, canal, pedido.distribuicao, avisos);
+    mudancas.push(...feita.mudancas);
+    r.distribuicao = { ...feita.distribuicao, desfecho: feita.desfecho };
   }
 
   r.desfecho = mudancas.length > 0 ? "atualizou" : "ja_estava";

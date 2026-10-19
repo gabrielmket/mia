@@ -9,9 +9,10 @@
  * prova o que foi GRAVADO, que a REEXECUÇÃO não escreve, a recusa que ensina e
  * a leitura que devolve.
  *
- * A CONTAGEM da lista mora aqui (a versão mais nova): 68. A v1.84 não pediu
- * ferramenta nova; pediu um campo novo e duas regras novas em campos que já
- * existiam.
+ * A CONTAGEM da lista mora no teste da versão mais nova
+ * (`mcp-de-implantacao-novidades-do-upstream-185.test.ts`, .83: 68). A v1.84
+ * não pediu ferramenta nova; pediu um campo novo e duas regras novas em campos
+ * que já existiam.
  *
  * Nenhum dado daqui é de cliente real: empresa fictícia, nomes inventados,
  * endereços `exemplo.invalid`.
@@ -93,9 +94,9 @@ beforeEach(() => {
 
 // ---------------------------------------------------------------------------
 
-describe("a lista: 68 ferramentas, e os tipos de ação seguem os do upstream", () => {
-  it("a v1.84 não acrescentou ferramenta (68), e a da fonte de formulário segue montando", () => {
-    expect(FERRAMENTAS).toHaveLength(68);
+describe("a lista: a fonte de formulário monta, e os tipos de ação seguem os do upstream", () => {
+  it("a v1.84 não acrescentou ferramenta, e a da fonte de formulário segue montando", () => {
+    // A contagem mora no teste da versão mais nova (185).
     expect(FERRAMENTAS.find((f) => f.name === "plataforma_garantir_fonte_de_formulario")?.operacao).toBe("implantar_configuracao");
   });
 

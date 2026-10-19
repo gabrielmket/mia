@@ -78,7 +78,11 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
           z
             .object({
               field: z.string().min(1).max(200).describe('O campo a conferir (ex.: "lead.tags", "contact.name", "event.to_stage_id").'),
-              op: z.enum(["eq", "neq", "contains"]).describe('"eq" igual, "neq" diferente, "contains" contém.'),
+              op: z
+                .enum(["eq", "neq", "contains"])
+                .describe(
+                  '"eq" igual, "neq" diferente, "contains" contém. Desde a v1.85 do upstream o "contains" ignora maiúscula, ACENTO e pontuação ("anúncio" casa "anuncio"; "Olá! Vi o anúncio" casa "ola vi o anuncio"); "eq" continua exato.',
+                ),
               value: z.string().max(500),
             })
             .strict(),
