@@ -142,8 +142,10 @@ comprou) e "Editar" com o formulário da lista. A lista `/app/empresas` segue ig
 
 ### Do atendimento ao negócio
 
-No painel do atendimento (`CRMSidePanel`), "Abrir cartão do negócio" leva ao cartão
-aberto, e o nome da empresa leva à ficha dela.
+No painel do atendimento (`CRMSidePanel`), "Abrir no funil" leva ao cartão aberto
+no quadro do funil, e o nome da empresa leva à ficha dela. O atalho é do upstream
+desde a v1.85 (#3004); o do fork ("Abrir cartão do negócio", pelo `/app/leads/<id>`,
+que redireciona para o mesmo endereço) saiu na .83 para não haver dois botões iguais.
 
 ### Histórico de compras (contato, empresa e cartão aberto)
 

@@ -232,7 +232,6 @@ export const DICIONARIO_CARTOES_MIA: Traducoes = {
   "A IA ainda não registrou fatos duráveis desta pessoa.": { es: "La IA todavía no registró hechos duraderos de esta persona." },
   "A IA ainda não registrou nada sobre esta pessoa.": { es: "La IA todavía no registró nada sobre esta persona." },
   "A empresa soma": { es: "La empresa suma" },
-  "Abrir cartão do negócio": { es: "Abrir la tarjeta del negocio" },
   "Alterar vínculo": { es: "Cambiar vínculo" },
   "Contato principal desta empresa": { es: "Contacto principal de esta empresa" },
   "Esta pessoa está ligada a outra empresa; vincular aqui troca a empresa dela.": { es: "Esta persona está vinculada a otra empresa; vincularla aquí cambia su empresa." },

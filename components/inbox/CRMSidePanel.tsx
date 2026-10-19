@@ -425,14 +425,6 @@ function InboxLeadEditor({
           </p>
         </div>
       )}
-      {/* FORK MIA — do atendimento ao cartão aberto do negócio, num clique. */}
-      <Link
-        href={`/app/leads/${ativo.id}`}
-        className="inline-block text-xs text-accent underline-offset-2 hover:underline"
-        data-testid="abrir-cartao-do-negocio"
-      >
-        {t("Abrir cartão do negócio")}
-      </Link>
       <EtapaDoNegocio key={`etapa-${ativo.id}`} lead={ativo} onMovido={onSalvo} />
       {/*
         ABRIR O NEGÓCIO NO QUADRO DO FUNIL (issue #3004).
@@ -444,6 +436,10 @@ function InboxLeadEditor({
         direto no negócio (`KanbanBoard.leadInicial` abre o dossiê do card). Aqui
         só se reusa essa âncora com o `pipeline_id` do negócio ativo — nada novo
         de rota, nada de quadro reimplementado.
+
+        FORK MIA (.83): o fork tinha aqui o link "Abrir cartão do negócio"
+        (`/app/leads/<id>`, que redireciona para este MESMO endereço). Os dois
+        levavam ao mesmo lugar; ficou só o do upstream.
       */}
       <Button asChild size="sm" variant="outline" className="h-7 w-full text-xs">
         <Link
