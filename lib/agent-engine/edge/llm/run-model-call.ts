@@ -56,8 +56,9 @@ import {
   SQL_ORCAMENTO,
   type ChaveDeOrcamento,
 } from './orcamento';
-import { custoPelaTarifa, tarifaDoCatalogo } from './preco-do-catalogo';
+import { custoPelaTarifa, tarifaDoPrecoDaInstalacao } from './preco-do-catalogo';
 import { costCents } from './pricing';
+import { custoDoModeloForaDoMotor, precoDaInstalacao } from './pricing-do-catalogo';
 import { chaveDeOrcamentoDaInstalacao } from '../../../instalacao/comportamento';
 import { cobrancaLigadaComMemo } from '../../../instalacao/modulos';
 import { createDefaultRegistry, type ProviderRegistry } from './providers';
@@ -1152,17 +1153,44 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     cacheReadTokens: result.usage.inputTokenDetails.cacheReadTokens ?? 0,
     cacheWriteTokens: result.usage.inputTokenDetails.cacheWriteTokens ?? 0,
   };
-  // Tabela fixa primeiro (tem as tarifas de cache exatas dos Claude); o catálogo
-  // do banco cobre todo o resto que a tela oferece — sem ele, o modelo padrão de
-  // OpenAI gravava custo NULO e o teto mensal não vinculava ninguém.
-  //
   // O TTL é o MESMO que gravou o prefixo estável acima: a gravação de cache custa
   // 1.25× a entrada em 5m e 2× em 1h, e supor a doutrina superfaturaria 60% da
-  // parcela de cache write em quem usa o knob. Só a tabela fixa sabe disso; o
-  // catálogo do banco só tem entrada e saída, e por isso não recebe o TTL.
-  const daTabelaFixa = costCents(model, usage, cfg.cacheTtl ?? '1h');
-  const tarifa = daTabelaFixa === null ? await tarifaDoCatalogo(db, model) : null;
-  const cost = daTabelaFixa ?? (tarifa ? custoPelaTarifa(tarifa, usage) : null);
+  // parcela de cache write em quem usa o knob.
+  //
+  // A tabela estática do motor é a PRIMEIRA verdade. Quando ela não conhece o id
+  // — o caso do provedor PERSONALIZADO, que serve qualquer modelo de qualquer
+  // preço (#3013: 180 chamadas de `openai/gpt-oss-120b` no Groq, custo nulo) —, o
+  // preço da linha sai do catálogo da INSTALAÇÃO (`ai_models`/`ai_pricing`, as
+  // mesmas tabelas que `lib/ai/cost.ts` e `lib/ai/runtime/cost.ts` já consultam).
+  // Sem preço em nenhum dos dois o custo continua `null` — mas com aviso no log,
+  // nunca calado, e nunca um 0 inventado. O caminho dos modelos que já têm linha
+  // na tabela estática não muda uma vírgula: `costCents` segue sendo chamado
+  // primeiro, e só o `null` dele chega aqui.
+  //
+  // FORK MIA — o fork resolvia isto desde 16/09 (`preco-do-catalogo.ts`, o
+  // modelo padrão de OpenAI gravava custo nulo). Na v1.85 o upstream fez o
+  // mesmo, mais completo (ids sem prefixo/data, desempate pelo provedor, aviso
+  // no log): a LINHA DE PREÇO passa a ser a dele (`precoDaInstalacao`). O que
+  // fica nosso é só a CONTA: o token lido do cache entra a 10% da entrada
+  // (`custoPelaTarifa`), o desconto que a OpenAI cobra na família do catálogo,
+  // e é esse o número que a MIA confere contra a fatura real
+  // (`platform_openai_spend`). O upstream cobra o cache a preço cheio porque o
+  // banco não tem coluna de cache; aqui a diferença é a do saldo do provedor.
+  // Sem linha (ou leitura que falhou), cai no caminho dele, que grava nulo e AVISA.
+  let cost = costCents(model, usage, cfg.cacheTtl ?? '1h');
+  let origemDoCusto: 'catalogo_da_instalacao' | undefined;
+  if (cost === null) {
+    const preco = await precoDaInstalacao(db, model, config.provider);
+    cost = preco
+      ? custoPelaTarifa(tarifaDoPrecoDaInstalacao(preco), usage)
+      : await custoDoModeloForaDoMotor(db, {
+          model,
+          provider: config.provider,
+          usage,
+          log: deps.log,
+        });
+    if (cost !== null) origemDoCusto = 'catalogo_da_instalacao';
+  }
 
   const { rows } = await db.query<{ id: string }>(
     `insert into llm_calls
@@ -1202,6 +1230,11 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     origem_da_escolha: origem,
     ...usage,
     cost_cents: cost,
+    // Só quando o preço NÃO veio da tabela estática do motor: diz de qual caminho
+    // saiu o número gravado, e é o que um operador procura quando pergunta "de
+    // onde saiu este custo?". Modelo sem preço em lugar nenhum não traz o campo —
+    // o `cost_cents: null` acima somado ao aviso de sem-preço é a marca.
+    ...(origemDoCusto !== undefined ? { custo_origem: origemDoCusto } : {}),
     latency_ms: latencyMs,
   });
   for (const aviso of decisao.avisos) {

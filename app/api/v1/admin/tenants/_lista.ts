@@ -100,6 +100,7 @@ export async function listarTenants(
       status,
       onboarded_at,
       suspended_at,
+      suspended_kind,
       created_at,
       demonstracao,
       user_count:user_organizations(count),

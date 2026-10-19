@@ -1,37 +1,38 @@
 /**
- * O preço que FALTAVA: o catálogo do banco, quando o modelo não está na tabela
+ * FORK MIA — A CONTA do custo pelo catálogo, quando o modelo não está na tabela
  * fixa de `pricing.ts`.
  *
- * ── Por que este arquivo existe ────────────────────────────────────────────
+ * ── De onde veio ───────────────────────────────────────────────────────────
  *
- * `pricing.ts` lista três modelos Claude e devolve `null` para qualquer outro,
- * de propósito ("mais honesto que inventar 0"). Só que o catálogo que a tela de
- * IA oferece (`ai_models`, migration 0104) tem 16 modelos, e o PADRÃO de OpenAI
- * — `gpt-5.6-terra` — é um deles. Medido nesta instalação (Time Company,
- * 15/09/2026), com o agente rodando nesse modelo há um dia:
+ * `pricing.ts` lista poucos modelos e devolve `null` para qualquer outro. O
+ * catálogo que a tela de IA oferece (`ai_models`, migration 0104) tem muitos
+ * mais, e o PADRÃO de OpenAI — `gpt-5.6-terra` — é um deles. Medido na
+ * instalação da plataforma em 15/09/2026, com o agente rodando nesse modelo:
+ * toda linha de `llm_calls` com `cost_cents` nulo, "Custo AI US$ 0,00" no
+ * painel, e o teto mensal desarmado (`fn_gasto_de_ia_do_mes` soma
+ * `coalesce(cost_cents, 0)`). O fork passou a ler o preço do catálogo aqui.
  *
- *   • as 100 últimas linhas de `llm_calls` com `cost_cents` NULO;
- *   • 2,8 milhões de tokens no painel da plataforma ao lado de "Custo AI
- *     US$ 0,00", que se lê como "a IA não custou nada";
- *   • e o pior: `fn_gasto_de_ia_do_mes` soma `coalesce(cost_cents, 0)`, então o
- *     TETO mensal nunca dispara. A proteção contra a conta estourar estava
- *     desarmada justamente para quem escolheu um modelo do catálogo.
+ * ── O que mudou na .83 (upstream v1.85, #3013) ─────────────────────────────
  *
- * O conserto de raiz é o que `lib/ai/budget/check.ts` já apontava: o motor
- * consulta o catálogo. O preço nunca é inventado — se o modelo não está nem na
- * tabela fixa nem no banco, o custo continua nulo.
+ * O upstream fez a mesma coisa, mais completa: `pricing-do-catalogo.ts` acha a
+ * linha de preço por id exato, sem prefixo `provider/` e sem sufixo de data,
+ * desempata pelo provedor da chamada, guarda em memória e AVISA no log quando
+ * não há preço. A leitura do fork (`tarifaDoCatalogo`, só id exato, sem aviso)
+ * saiu: a linha de preço agora é a dele (`precoDaInstalacao`).
  *
- * ── A tarifa de cache ──────────────────────────────────────────────────────
+ * Fica aqui só o que é nosso, a CONTA:
  *
- * `ai_pricing` tem entrada e saída, não tem cache. Aqui o token lido do cache
- * entra a 10% da entrada (o desconto que as duas famílias do catálogo praticam,
- * e o mesmo fator que `pricing.ts` usa nos Claude), e o token ESCRITO no cache
- * entra a preço de entrada — a OpenAI não cobra a escrita à parte, e cobrar a
- * mais seria pior que cobrar de menos num número que decide bloqueio.
- * Aproximação declarada, e conferível: a leitura de saldo da conta do provedor
- * (Uso & Custo, no admin) compara este número com a fatura real.
+ * `ai_pricing`/`ai_models` têm entrada e saída, não têm cache. O upstream cobra
+ * o token lido do cache a preço de entrada cheio. A MIA cobra a 10% da entrada
+ * (o desconto que a OpenAI pratica na família do catálogo, e o mesmo fator que
+ * `pricing.ts` usa nos Claude), e o token ESCRITO no cache a preço de entrada —
+ * a OpenAI não cobra a escrita à parte. Aproximação declarada e conferível: o
+ * cron `gasto-openai` grava o que a OpenAI COBROU (`platform_openai_spend`) ao
+ * lado do que o sistema mediu, e a diferença é a margem desta conta. Cobrar o
+ * cache cheio faria o saldo do provedor (`lib/ai/custo/saldo.ts`) cair mais
+ * rápido no painel do que na fatura.
  */
-import type pg from 'pg';
+import type { PrecoDaInstalacao } from './pricing-do-catalogo';
 
 /** USD por MILHÃO de tokens, como o resto do motor conta. */
 export interface TarifaDoCatalogo {
@@ -39,73 +40,12 @@ export interface TarifaDoCatalogo {
   output: number;
 }
 
-const TTL_MS = 5 * 60 * 1000;
-const cache = new Map<string, { tarifa: TarifaDoCatalogo | null; expiraEm: number }>();
-
-/** Esvazia o cache de preços. Existe para os testes não contaminarem um ao outro. */
-export function esquecerPrecos(): void {
-  cache.clear();
-}
-
-/**
- * Preço vigente do modelo em `ai_pricing`, com o catálogo `ai_models` como
- * segunda fonte (a 0113 semeia uma a partir da outra, mas uma instalação que
- * habilitou um modelo só pela tela do catálogo tem a linha em `ai_models` e não
- * em `ai_pricing`). Resultado — inclusive "não tem preço" — fica 5 min em cache:
- * é uma consulta por chamada de LLM, e o preço não muda no meio da hora.
- */
-export async function tarifaDoCatalogo(
-  db: pg.Pool,
-  model: string,
-): Promise<TarifaDoCatalogo | null> {
-  const agora = Date.now();
-  const emCache = cache.get(model);
-  if (emCache && emCache.expiraEm > agora) return emCache.tarifa;
-
-  let tarifa: TarifaDoCatalogo | null = null;
-  try {
-    // `ai_pricing` é versionada por vigência: a linha válida é a que já começou
-    // e não foi substituída. `limit 1` com a mais recente na frente para o caso
-    // de duas vigências abertas por engano — a nova vale, e não a soma.
-    const { rows } = await db.query<{ entrada: string | null; saida: string | null }>(
-      `select prompt_cents_per_million_tokens as entrada,
-              completion_cents_per_million_tokens as saida
-         from public.ai_pricing
-        where model = $1
-          and effective_from <= now()
-          and superseded_at is null
-        order by effective_from desc
-        limit 1`,
-      [model],
-    );
-    const linha = rows[0];
-    if (linha && linha.entrada !== null && linha.saida !== null) {
-      // A coluna está em CENTAVOS por milhão; o motor conta em dólar por milhão.
-      tarifa = { input: Number(linha.entrada) / 100, output: Number(linha.saida) / 100 };
-    } else {
-      const doCatalogo = await db.query<{ entrada: number | null; saida: number | null }>(
-        `select input_price_per_million_cents as entrada,
-                output_price_per_million_cents as saida
-           from public.ai_models
-          where model_id = $1 and deprecated_at is null
-          limit 1`,
-        [model],
-      );
-      const c = doCatalogo.rows[0];
-      if (c && c.entrada !== null && c.saida !== null) {
-        tarifa = { input: Number(c.entrada) / 100, output: Number(c.saida) / 100 };
-      }
-    }
-  } catch {
-    // Preço é telemetria: uma falha de leitura NÃO pode derrubar o turno do
-    // agente que já rodou. Cai para nulo (custo desconhecido), como um modelo
-    // sem preço, e a próxima chamada tenta de novo — o cache negativo dura os
-    // mesmos 5 min, então uma indisponibilidade não vira uma consulta por turno.
-    tarifa = null;
-  }
-
-  cache.set(model, { tarifa, expiraEm: agora + TTL_MS });
-  return tarifa;
+/** A linha de preço do upstream (centavos por milhão) na unidade desta conta. */
+export function tarifaDoPrecoDaInstalacao(preco: PrecoDaInstalacao): TarifaDoCatalogo {
+  return {
+    input: preco.entradaCentsPorMilhao / 100,
+    output: preco.saidaCentsPorMilhao / 100,
+  };
 }
 
 export interface TokensDaChamada {

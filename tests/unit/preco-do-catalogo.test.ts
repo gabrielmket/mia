@@ -6,65 +6,42 @@
  * TODA linha de `llm_calls` nascia com `cost_cents` nulo — tela zerada e teto
  * mensal desarmado, porque `fn_gasto_de_ia_do_mes` soma `coalesce(cost_cents, 0)`.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   custoPelaTarifa,
-  esquecerPrecos,
-  tarifaDoCatalogo,
+  tarifaDoPrecoDaInstalacao,
 } from "@/lib/agent-engine/edge/llm/preco-do-catalogo";
 
-type Linha = Record<string, unknown>;
-
-function bancoQueResponde(respostas: Linha[][]) {
-  const query = vi.fn(async () => ({ rows: respostas.shift() ?? [] }));
-  return { db: { query } as never, query };
-}
-
-beforeEach(() => {
-  esquecerPrecos();
-});
-
-describe("tarifa do catálogo", () => {
-  it("lê o preço vigente de ai_pricing, convertendo centavos por milhão em dólar", async () => {
+// A LEITURA da linha de preço é do upstream desde a .83 (v1.85, #3013:
+// `pricing-do-catalogo.ts`, com teste próprio). O que fica do fork é a conta.
+describe("a linha de preço do upstream na unidade da conta", () => {
+  it("converte centavos por milhão em dólar por milhão", () => {
     // gpt-5.6-terra no catálogo: 200 e 1200 centavos por milhão = US$ 2 e US$ 12.
-    const { db } = bancoQueResponde([[{ entrada: "200.0000", saida: "1200.0000" }]]);
-    expect(await tarifaDoCatalogo(db, "gpt-5.6-terra")).toEqual({ input: 2, output: 12 });
-  });
-
-  it("cai para ai_models quando ai_pricing não tem a linha", async () => {
-    const { db, query } = bancoQueResponde([[], [{ entrada: 20, saida: 120 }]]);
-    expect(await tarifaDoCatalogo(db, "gpt-5.6-luna")).toEqual({ input: 0.2, output: 1.2 });
-    expect(query).toHaveBeenCalledTimes(2);
-  });
-
-  it("modelo sem preço em lugar nenhum continua sem custo — nunca zero inventado", async () => {
-    const { db } = bancoQueResponde([[], []]);
-    expect(await tarifaDoCatalogo(db, "modelo-que-ninguem-cadastrou")).toBeNull();
-  });
-
-  it("falha do banco não derruba o turno que já rodou", async () => {
-    const db = {
-      query: vi.fn(async () => {
-        throw new Error("conexão caiu");
+    expect(
+      tarifaDoPrecoDaInstalacao({
+        entradaCentsPorMilhao: 200,
+        saidaCentsPorMilhao: 1200,
+        origem: "catalogo",
       }),
-    } as never;
-    await expect(tarifaDoCatalogo(db, "gpt-5.6-terra")).resolves.toBeNull();
+    ).toEqual({ input: 2, output: 12 });
   });
 
-  it("guarda a resposta em cache: uma consulta por modelo, não uma por turno", async () => {
-    const { db, query } = bancoQueResponde([[{ entrada: "200.0000", saida: "1200.0000" }]]);
-    await tarifaDoCatalogo(db, "gpt-5.6-terra");
-    await tarifaDoCatalogo(db, "gpt-5.6-terra");
-    await tarifaDoCatalogo(db, "gpt-5.6-terra");
-    expect(query).toHaveBeenCalledTimes(1);
-  });
-
-  it("cacheia também o 'não tem preço', senão a indisponibilidade vira consulta por turno", async () => {
-    const { db, query } = bancoQueResponde([[], []]);
-    await tarifaDoCatalogo(db, "sem-preco");
-    await tarifaDoCatalogo(db, "sem-preco");
-    expect(query).toHaveBeenCalledTimes(2); // as duas fontes, uma vez só
+  it("sem cache, a conta do fork dá o mesmo número que a do upstream", () => {
+    // 2 MTok de entrada a 15¢/M + 1 MTok de saída a 60¢/M = 90 centavos (#3013).
+    const tarifa = tarifaDoPrecoDaInstalacao({
+      entradaCentsPorMilhao: 15,
+      saidaCentsPorMilhao: 60,
+      origem: "catalogo",
+    });
+    expect(
+      custoPelaTarifa(tarifa, {
+        inputTokens: 2_000_000,
+        outputTokens: 1_000_000,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      }),
+    ).toBeCloseTo(90, 9);
   });
 });
 
