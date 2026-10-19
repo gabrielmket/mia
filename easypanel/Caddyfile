@@ -21,15 +21,6 @@
 		@waha_global path /api/v1/webhooks/waha
 		respond @waha_global 403
 
-		# O runner do agente de IA pode levar até ~5min por requisição.
-		@agentrun path /api/internal/agents/run*
-		reverse_proxy @agentrun app:3000 {
-			transport http {
-				read_timeout 320s
-				write_timeout 320s
-			}
-		}
-
 		reverse_proxy app:3000
 	}
 }
