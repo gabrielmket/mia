@@ -261,6 +261,18 @@ const CLASSIFICACAO: Record<string, Classificacao> = {
       "vocabulário fechado de como o dono foi definido ('manual' | 'importacao' | 'atribuicao_automatica', contacts_carteira_origem_vocabulario)",
   },
   carteira_definida_em: { tipo: "nao_pessoal", porque: "carimbo de tempo de quando o dono foi definido" },
+
+  // ── Colunas que o upstream acrescentou, classificadas na fusão de 20/10/2026
+  //    (v1.86, .84) ──
+  // O nome salvo na agenda do celular (0593, #2439): identifica a pessoa (e
+  // pode ser um apelido interno). Sai no relatório de acesso (export-collector)
+  // e o gatilho do upstream `fn_contato_anonimizado_esquece_a_agenda` o zera.
+  address_book_name: { tipo: "pessoal" },
+  name_lookup_at: {
+    tipo: "nao_pessoal",
+    porque:
+      "carimbo da última vez que o sistema PERGUNTOU ao canal o nome da agenda (0593); diz quando a fila da varredura girou, nada sobre a pessoa, e o nome em si é apagado",
+  },
 };
 
 /** Nomes capturados pelo primeiro grupo de um regex, já sem os `undefined`. */
@@ -370,12 +382,21 @@ function colunasQueARotaDiretaLimpa(sql: string, cascata: Set<string>): Set<stri
  * entra na conta sem ninguém precisar lembrar de editar este arquivo.
  */
 function oQueOGatilhoLimpa(sql: string): Set<string> {
-  const funcoes = new Set(
-    capturas(
+  const funcoes = new Set([
+    ...capturas(
       sql,
       /create\s+trigger\s+[a-z0-9_]+\s+before\s+update\s+of\s+is_anonymized\s+on\s+public\.contacts[\s\S]*?execute\s+function\s+(?:public\.)?([a-z0-9_]+)\s*\(/gi,
     ),
-  );
+    // Upstream 1.86 (0593): o gatilho que esquece o nome da agenda age em TODA
+    // escrita que deixa a linha anonimizada (`before insert or update ... when
+    // (new.is_anonymized is true ...)`), inclusive a escrita futura num contato
+    // que já estava anonimizado. É pendurado no FATO como o nosso, e cobre todo
+    // caminho; a coluna não precisa ser repetida no gatilho da MIA.
+    ...capturas(
+      sql,
+      /create\s+trigger\s+[a-z0-9_]+\s+before\s+insert\s+or\s+update\s+on\s+public\.contacts\s+for\s+each\s+row\s+when\s*\(\s*new\.is_anonymized\s+is\s+true\b[\s\S]*?execute\s+function\s+(?:public\.)?([a-z0-9_]+)\s*\(/gi,
+    ),
+  ]);
   expect(funcoes.size, "nenhum gatilho de anonimização pendurado em is_anonymized").toBeGreaterThan(0);
 
   const limpa = new Set<string>();
@@ -383,7 +404,9 @@ function oQueOGatilhoLimpa(sql: string): Set<string> {
     // A ÚLTIMA definição é a que vale no banco — `create or replace` substitui.
     const f = sql.lastIndexOf(`create or replace function public.${fn}(`);
     expect(f, `a função do gatilho ${fn} sumiu do schema`).toBeGreaterThan(-1);
-    const corpo = sql.slice(f, sql.indexOf("end$$;", f));
+    // O corpo acaba no primeiro `$$;` (o nosso fecha com `end$$;`; o do
+    // upstream, com `end;` e `$$;` na linha de baixo).
+    const corpo = sql.slice(f, sql.indexOf("$$;", f));
     for (const coluna of capturas(corpo, /new\.([a-z_]+)\s*:=/g)) limpa.add(coluna);
   }
   return limpa;

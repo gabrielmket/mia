@@ -1324,16 +1324,18 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   let contact: ContactSnapshot | null = null;
   let contactLid: string | null = null;
   if (contactId) {
+    // FORK MIA — as colunas dos DOIS lados (o upstream passou a exportar
+    // `wa_lid` na v1.61, para achar as mensagens de grupo, e
+    // `address_book_name` na v1.86, o nome da agenda do celular). `cargo`,
+    // `setor` e `empresa` são dado pessoal profissional (0262) e fecham a ponta
+    // que a cascata já limpava; `first_service_at` é registro de operação e
+    // sobrevive à anonimização. Deixar qualquer um de fora responde "não temos
+    // mais nada sobre você" a quem exerce direito de acesso, e a resposta é
+    // falsa. (O comentário mora AQUI, e não dentro do `.select(`: a cerca
+    // `lgpd-exporta-o-que-redige` lê a string logo depois do parêntese.)
     const { data, error } = await admin
       .from("contacts")
       .select(
-        // As colunas dos DOIS lados (o upstream passou a exportar `wa_lid` na
-        // v1.61, para achar as mensagens de grupo, e `address_book_name` na
-        // v1.86, o nome da agenda do celular). `cargo`, `setor` e `empresa` são
-        // dado pessoal profissional (0262) e fecham a ponta que a cascata já
-        // limpava; `first_service_at` é registro de operação e sobrevive à
-        // anonimização. Deixar qualquer um de fora responde "não temos mais nada
-        // sobre você" a quem exerce direito de acesso, e a resposta é falsa.
         "id, name, display_name, address_book_name, email, phone_number, wa_lid, cpf_encrypted, birthdate, is_blocked, is_anonymized, consent, tags, source, source_metadata, custom_fields, cargo, setor, papel_na_empresa, principal_na_empresa, empresa_id, person_id, social_identity, created_at, last_activity_at, first_service_at",
       )
       .eq("organization_id", organizationId)

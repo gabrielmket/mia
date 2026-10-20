@@ -49,7 +49,11 @@ vi.mock("@/lib/supabase/server", () => ({
         });
         cadeia.update = (payload: unknown) => {
           h.gravou = payload;
-          return { eq: async () => ({ error: null }) };
+          // FORK MIA: a gravação mora em `lib/pipelines/pipeline-config.ts`
+          // (compartilhada com o MCP de plataforma) e filtra id E organização:
+          // duas `.eq` encadeadas, a segunda devolvendo o resultado.
+          const filtro = { eq: () => ({ eq: async () => ({ error: null }) }) };
+          return filtro;
         };
         return cadeia;
       }
