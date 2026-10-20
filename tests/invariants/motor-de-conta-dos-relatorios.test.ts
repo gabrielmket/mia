@@ -205,7 +205,13 @@ beforeAll(() => {
       ('${ORG_A}', 'e9030e90-7777-4000-8000-000000000002', '${SESSAO_A}', 'e9030e90-6666-4000-8000-000000000002', 'text', 'inbound', 'oi', 'crm', null, '2026-10-04 10:00:00-03', 'motor-9030-m3'),
       ('${ORG_A}', 'e9030e90-7777-4000-8000-000000000002', '${SESSAO_A}', 'e9030e90-6666-4000-8000-000000000002', 'text', 'outbound', 'ola', 'ai', null, '2026-10-04 10:00:10-03', 'motor-9030-m4'),
       ('${ORG_A}', 'e9030e90-7777-4000-8000-000000000002', '${SESSAO_A}', 'e9030e90-6666-4000-8000-000000000002', 'text', 'outbound', 'equipe', 'crm', '${ATENDENTE_A}', '2026-10-04 10:07:00-03', 'motor-9030-m5'),
-      ('${ORG_A}', 'e9030e90-7777-4000-8000-000000000003', '${SESSAO_A}', 'e9030e90-6666-4000-8000-000000000003', 'text', 'inbound', 'oi', 'crm', null, '2026-10-05 10:00:00-03', 'motor-9030-m6');
+      ('${ORG_A}', 'e9030e90-7777-4000-8000-000000000003', '${SESSAO_A}', 'e9030e90-6666-4000-8000-000000000003', 'text', 'inbound', 'oi', 'crm', null, '2026-10-05 10:00:00-03', 'motor-9030-m6'),
+      -- 9046: a REAÇÃO (upstream 0684) não é fala. Uma do cliente ANTES do "oi"
+      -- da C1 (abriria o relógio 30 s antes: 42 s em vez de 12) e uma da equipe
+      -- pelo celular na C3 (viraria a "primeira resposta humana": a C3 sairia
+      -- de "sem resposta"). Os números do caso "conversas" só batem sem elas.
+      ('${ORG_A}', 'e9030e90-7777-4000-8000-000000000001', '${SESSAO_A}', 'e9030e90-6666-4000-8000-000000000001', 'reaction', 'inbound', null, 'crm', null, '2026-10-03 09:59:30-03', 'motor-9046-r1'),
+      ('${ORG_A}', 'e9030e90-7777-4000-8000-000000000003', '${SESSAO_A}', 'e9030e90-6666-4000-8000-000000000003', 'reaction', 'outbound', null, 'external_device', null, '2026-10-05 10:05:00-03', 'motor-9046-r2');
     insert into public.calendar_appointments (organization_id, title, starts_at, ends_at, status, cancelled_at, owner_user_id, created_by_kind, created_by_user_id) values
       ('${ORG_A}', 'A1', '2026-10-06 10:00-03', '2026-10-06 11:00-03', 'completed', null, '${GESTOR_A}', 'user', '${ATENDENTE_A}'),
       ('${ORG_A}', 'A2', '2026-10-07 10:00-03', '2026-10-07 11:00-03', 'no_show', null, '${GESTOR_A}', 'user', '${ATENDENTE_A}'),
@@ -389,7 +395,11 @@ describe("quem vê o quê", () => {
 });
 
 describe("conversas", () => {
-  it("quem atendeu e quanto o cliente esperou", () => {
+  it("CONTROLE (9046): as duas reações estão gravadas nas conversas medidas", () => {
+    expect(lastLine(sql(`select count(*) from public.messages where organization_id = ${A} and type = 'reaction';`))).toBe("2");
+  });
+
+  it("quem atendeu e quanto o cliente esperou (a reação não abre o relógio nem responde, 9046)", () => {
     const res = motor(`${A}, 'conversas', array['qtd','tresp','resolv'], 'quem', null, '{}', 'mes', null, null, true, false, '${AGORA}'`);
     expect(grupos(res).map((g) => [g.chave, g.n])).toEqual([
       ["agente", 1],

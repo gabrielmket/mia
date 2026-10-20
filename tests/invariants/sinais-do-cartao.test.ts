@@ -14,7 +14,9 @@ import { sql } from "./gov-helpers";
  *      conta —, com `sent_via` e `sent_by_user_id`;
  *   3. `security invoker`: um membro da empresa A, pedindo contatos de A e de B,
  *      recebe só o de A; pedindo pela empresa B, não recebe nada;
- *   4. nem `anon` nem `PUBLIC` executam a função; `authenticated` executa.
+ *   4. nem `anon` nem `PUBLIC` executam a função; `authenticated` executa;
+ *   5. (9046) a REAÇÃO do WhatsApp (`type = 'reaction'`, upstream 0684) não é a
+ *      última saída: reagir pelo celular depois da pessoa não troca quem falou.
  *
  * Sem PII: nomes sintéticos, e-mails @invariant.test (LGPD).
  */
@@ -67,6 +69,8 @@ beforeAll(() => {
       ('${ORG_A}', '${CONVERSA_A}', '${SESSAO_A}', '${CONTATO_A}', 'text', 'outbound', 'sent', 'a', 'ai', null, now() - interval '3 hours'),
       ('${ORG_A}', '${CONVERSA_A}', '${SESSAO_A}', '${CONTATO_A}', 'text', 'outbound', 'sent', 'b', 'crm', '${MEMBRO_A}', now() - interval '2 hours'),
       ('${ORG_A}', '${CONVERSA_A}', '${SESSAO_A}', '${CONTATO_A}', 'text', 'outbound', 'failed', 'c', 'ai', null, now() - interval '1 hour'),
+      -- 9046: a reação da equipe pelo celular, depois da pessoa: não é fala.
+      ('${ORG_A}', '${CONVERSA_A}', '${SESSAO_A}', '${CONTATO_A}', 'reaction', 'outbound', 'sent', null, 'external_device', null, now() - interval '90 minutes'),
       ('${ORG_A}', '${CONVERSA_A}', '${SESSAO_A}', '${CONTATO_A}', 'text', 'inbound', 'received', 'd', 'crm', null, now()),
       ('${ORG_B}', '${CONVERSA_B}', '${SESSAO_B}', '${CONTATO_B}', 'text', 'outbound', 'sent', 'e', 'ai', null, now());
   `);
@@ -80,6 +84,17 @@ function linhas(saida: string): string[][] {
 }
 
 describe("fn_mia_sinais_do_cartao", () => {
+  it("CONTROLE (9046): a linha da reação existe e é a saída mais nova que não falhou", () => {
+    const r = sql(`
+      select 'L|' || type || '|' || coalesce(sent_via, '-')
+        from public.messages
+       where organization_id = '${ORG_A}' and contact_id = '${CONTATO_A}' and direction = 'outbound' and status <> 'failed'
+       order by sent_at desc
+       limit 1;
+    `);
+    expect(linhas(r)).toEqual([["reaction", "external_device"]]);
+  });
+
   it("a objeção é o ÚLTIMO retrato, e quem mandou é a última saída que não falhou", () => {
     const r = linhas(
       sql(`

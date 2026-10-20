@@ -180,6 +180,8 @@ export async function montarCartaoAberto(
               .eq("organization_id", org)
               .eq("contact_id", contatoId)
               .eq("direction", "inbound")
+              // .84 — upstream 1.86 (#2797): a reação é linha de `messages`, mas não é fala.
+              .neq("type", "reaction")
               .order("sent_at", { ascending: true })
               .limit(1)
               .maybeSingle(),
