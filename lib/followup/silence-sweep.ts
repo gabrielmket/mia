@@ -103,7 +103,11 @@ import { StaleServiceBoundaryError, parseServiceBoundary, assertCurrentServiceBo
  * (silêncio de 24 h, mensagem por IA, canal Meta) somou 14.389 inscrições para
  * 22 contatos, e cada volta pagava um turno de IA. A outra metade do conserto
  * (não rodar a IA com a janela de 24 h fechada) mora em
- * `lib/agent-engine/agent/followup-turn.ts`.
+ * `lib/agent-engine/agent/followup-turn.ts`. Desde a v1.86 o upstream tem
+ * também o teto de repetições (`max_enrollments_por_contato`, opt-in): ele é
+ * conferido antes do cooldown, e a inscrição única por silêncio continua
+ * valendo sempre, por baixo dele.
+ *
  * ─── Dívida da equipe não é silêncio do cliente (2026-10-15) ──────────────
  *
  * O limiar mede UMA coisa: há quanto tempo o CLIENTE não escreve. Mensagem
@@ -221,6 +225,7 @@ export interface SilenceSweepDb {
    * ~3.400 turnos de IA por dia. Ver `jaInscritosNesteSilencio`.
    */
   loadJaInscritosNesteSilencio(orgId: string, pointerId: string, contactIds: string[]): Promise<Set<string>>;
+  /**
    * Dos `contactIds`, os que AINDA NÃO FORAM RESPONDIDOS: na conversa que guarda
    * o inbound mais recente, não há outbound depois dele.
    *

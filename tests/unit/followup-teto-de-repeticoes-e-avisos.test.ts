@@ -51,6 +51,8 @@ function fakeDb(opts: {
     loadEncerramentosDoFluxo: async () => new Map(),
     loadContatosComPessoaNoComando: async () => new Set<string>(),
     loadContatosComInscricaoViva: async () => new Set<string>(),
+    // FORK MIA — uma inscrição por silêncio (lib/followup/silence-sweep.ts): neutro aqui.
+    loadJaInscritosNesteSilencio: async () => new Set<string>(),
     loadTriggerNode: async () => ({ id: "t-1", pedeAgente: false }),
     loadContactIdsEmCooldown: async () => new Set<string>(),
     insertEnrollment: opts.insert ?? (async () => ({ inserted: true })),

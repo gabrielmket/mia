@@ -161,6 +161,36 @@ async function handle(req: NextRequest): Promise<Response> {
     );
   }
 
+  // ── 2b. Por CONDIÇÃO: a tarefa do lembrete de prazo terminou ──────────────
+  //
+  // Upstream 1.86 (0655, #2529): o `task-reminder` abre o aviso e não o fecha.
+  // Tarefa concluída ou cancelada tira a verdade do aviso. Tarefa sumida não
+  // fecha aqui (o teto cuida), pelo mesmo motivo da conversa sumida.
+  const { data: abertosDeTarefa } = await admin
+    .from("agent_inbox_items")
+    .select("id, ref_id")
+    .in("kind", ["task_due", "task_overdue"])
+    .eq("ref_kind", "task")
+    .eq("status", "open")
+    .limit(LIMITE);
+
+  const porTarefa = (abertosDeTarefa ?? []) as Array<{ id: string; ref_id: string }>;
+  if (porTarefa.length > 0) {
+    const { data: encerradas } = await admin
+      .from("crm_tasks")
+      .select("id")
+      .in(
+        "id",
+        porTarefa.map((a) => a.ref_id),
+      )
+      .in("status", ["done", "cancelled"]);
+    const terminadas = new Set((encerradas ?? []).map((t) => (t as { id: string }).id));
+    await fechar(
+      "tarefa_encerrada",
+      porTarefa.filter((a) => terminadas.has(a.ref_id)).map((a) => a.id),
+    );
+  }
+
   // ── 3. Por IDADE: o fato não muda, a utilidade sim ────────────────────────
   for (const { kind, dias } of avisosQueVencem()) {
     const { data } = await admin

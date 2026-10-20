@@ -442,6 +442,21 @@ export const COMO_FECHA = {
     quando: "a conexão foi retomada, arquivada ou excluída",
     tetoEmDias: null,
   },
+  // Upstream 1.86 (0655, #2529): os lembretes de prazo da tarefa, avisos de UMA
+  // pessoa (`para_user_id`, 0689). O cron que abre (`task-reminder`) não fecha:
+  // a varredura do fork repergunta se a tarefa ainda está aberta. Reagendar não
+  // fecha (a trava de "já avisado" do upstream não avisa de novo a mesma
+  // tarefa); quem fecha nesse caso é a pessoa ou o teto.
+  task_due: {
+    modo: "condicao",
+    quando: "a tarefa foi concluída ou cancelada",
+    tetoEmDias: 7,
+  },
+  task_overdue: {
+    modo: "condicao",
+    quando: "a tarefa vencida foi concluída ou cancelada",
+    tetoEmDias: 30,
+  },
   email_de_login_trocado: {
     modo: "decisao",
     porque:
