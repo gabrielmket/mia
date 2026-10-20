@@ -153,8 +153,10 @@ test.describe("Lote 12 — #936 a troca de funil", () => {
     // FORK MIA — no cartão aberto os campos do funil aparecem como par
     // rótulo/valor, e o formulário (os <input> que esta régua lê) abre em
     // "Editar campos".
+    // A espera é o título do negócio: as etiquetas viraram o editor do upstream
+    // (#2979) e o antigo campo de texto `#tagsRaw` não existe mais.
     await dossie.getByRole("button", { name: "Editar campos", exact: true }).click();
-    await expect(dossie.locator("#tagsRaw")).toBeVisible();
+    await expect(dossie.locator("#title")).toBeVisible();
     const campos = await dossie.locator("input").evaluateAll((els) =>
       els.map((e) => ({
         nome: (e as HTMLInputElement).name || (e as HTMLInputElement).id,
