@@ -816,6 +816,9 @@ export async function garantirFunil(c: Implantacao, pedido: PedidoDeFunil): Prom
         pipelineId: alvo.id,
         patch: conferido.data,
       });
+      // Upstream v1.86 (#2791): marcar como Contato um campo que uma regra ativa
+      // do gatilho por data lê é recusa de regra, não falha interna.
+      if (!gravado.ok && gravado.regrasQuePerdemOCampo) throw new Recusa(gravado.error);
       if (!gravado.ok) throw new Error(`não consegui gravar a configuração do funil: ${gravado.error}`);
       configuracao = { desfecho: "atualizou", mudancas };
     }

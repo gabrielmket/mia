@@ -13,11 +13,25 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  mensagemDasRegrasQuePerdemOCampo,
+  regrasDeDataQuePerdemOCampo,
+} from "@/lib/automation/campo-do-gatilho-de-data";
+import { IDIOMA_PADRAO, type Idioma } from "@/lib/i18n/idiomas";
 import type { PipelineConfigPatch } from "@/lib/schemas/settings";
 
 export type ResultadoDaConfiguracaoDoFunil =
   | { ok: true; mudou: boolean }
-  | { ok: false; error: "not_found" | "forbidden_tenant" | (string & {}) };
+  | {
+      ok: false;
+      error: "not_found" | "forbidden_tenant" | (string & {});
+      /**
+       * Upstream v1.86 (#2791): a gravação marcaria como Contato um campo que
+       * uma regra ATIVA do gatilho por data lê. `error` traz a frase legível;
+       * o MCP de plataforma devolve como recusa, não como falha interna.
+       */
+      regrasQuePerdemOCampo?: string[];
+    };
 
 /** Texto canônico (chaves ordenadas) para comparar dois jsonb sem depender da ordem. */
 function estavel(valor: unknown): string {
@@ -38,7 +52,13 @@ function estavel(valor: unknown): string {
  */
 export async function gravarConfiguracaoDoFunil(
   supabase: SupabaseClient,
-  args: { organizationId: string; pipelineId: string; patch: PipelineConfigPatch },
+  args: {
+    organizationId: string;
+    pipelineId: string;
+    patch: PipelineConfigPatch;
+    /** Idioma da frase de recusa; o MCP de plataforma fala português. */
+    idioma?: Idioma;
+  },
 ): Promise<ResultadoDaConfiguracaoDoFunil> {
   const { organizationId, pipelineId, patch } = args;
 
@@ -75,6 +95,27 @@ export async function gravarConfiguracaoDoFunil(
   // Ver `lib/crm/metas/progresso.ts`: ausente = vencer aqui é receita.
   if (patch.vitoria_e_receita !== undefined) {
     nextSettings.vitoria_e_receita = patch.vitoria_e_receita;
+  }
+
+  // Upstream v1.86 (#2791): campo que passa a ser do Contato e que uma regra
+  // ativa do gatilho por data lê. A regra seguiria ligada e pararia de disparar
+  // em silêncio. Mora aqui (e não na action) para valer também no MCP.
+  if (patch.fields !== undefined) {
+    const perdem = await regrasDeDataQuePerdemOCampo(
+      supabase,
+      organizationId,
+      pipelineId,
+      currentSettings,
+      nextSettings,
+    );
+    if ("erro" in perdem) return { ok: false, error: perdem.erro };
+    if (perdem.nomes.length > 0) {
+      return {
+        ok: false,
+        error: mensagemDasRegrasQuePerdemOCampo(perdem.nomes, args.idioma ?? IDIOMA_PADRAO),
+        regrasQuePerdemOCampo: perdem.nomes,
+      };
+    }
   }
 
   // Para quem repete a mesma gravação (a implantação roda mais de uma vez):

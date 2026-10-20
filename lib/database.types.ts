@@ -1630,6 +1630,7 @@ export type Database = {
           legacy_recovery_code: string | null
           kind: string
           organization_id: string | null
+          para_user_id: string | null
           ref_id: string | null
           ref_kind: string | null
           resolved_at: string | null
@@ -1645,6 +1646,7 @@ export type Database = {
           legacy_recovery_code?: string | null
           kind: string
           organization_id?: string | null
+          para_user_id?: string | null
           ref_id?: string | null
           ref_kind?: string | null
           resolved_at?: string | null
@@ -1660,6 +1662,7 @@ export type Database = {
           legacy_recovery_code?: string | null
           kind?: string
           organization_id?: string | null
+          para_user_id?: string | null
           ref_id?: string | null
           ref_kind?: string | null
           resolved_at?: string | null
@@ -4648,6 +4651,8 @@ export type Database = {
           organization_id: string
           person_id: string | null
           phone_lookup_at: string | null
+          name_lookup_at: string | null
+          address_book_name: string | null
           phone_number: string | null
           social_identity: string | null
           source: string
@@ -4692,6 +4697,8 @@ export type Database = {
           organization_id: string
           person_id?: string | null
           phone_lookup_at?: string | null
+          name_lookup_at?: string | null
+          address_book_name?: string | null
           phone_number?: string | null
           social_identity?: string | null
           source?: string
@@ -4736,6 +4743,8 @@ export type Database = {
           organization_id?: string
           person_id?: string | null
           phone_lookup_at?: string | null
+          name_lookup_at?: string | null
+          address_book_name?: string | null
           phone_number?: string | null
           social_identity?: string | null
           source?: string

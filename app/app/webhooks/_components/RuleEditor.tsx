@@ -36,7 +36,7 @@ import {
   type DirecaoDoSilencio,
 } from "@/lib/automation/gatilhos-de-tempo";
 import { configAoSalvarDaTela } from "@/lib/automation/config-ao-salvar";
-import { camposDoFunil } from "@/lib/leads/campos-do-funil";
+import { camposDeDataDoNegocio } from "@/lib/leads/campos-do-funil";
 import {
   useCreateAutomationRule,
   useUpdateAutomationRule,
@@ -376,9 +376,9 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
   const ehGatilhoDeNovoContato = triggerEvent === "lead.created";
   // FORK MIA
   const ehDeObrigacao = ehGatilhoDeObrigacao(triggerEvent);
-  const camposDeData = camposDoFunil(
+  const camposDeData = camposDeDataDoNegocio(
     (pipelinesRes?.data ?? []).find((p) => p.id === configDaData.pipeline_id)?.settings ?? null,
-  ).filter((campo) => campo.type === "date");
+  );
 
   const updateCondition = (idx: number, patch: Partial<ConditionRow>) => {
     setConditions((prev) => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)));

@@ -44,11 +44,14 @@ export async function updatePipelineConfig(
   const requestId = hdrs.get("x-request-id");
 
   // FORK MIA: a mescla e a gravação moram em `lib/pipelines/pipeline-config.ts`,
-  // compartilhadas com o MCP de plataforma.
+  // compartilhadas com o MCP de plataforma. A recusa do upstream v1.86 (#2791:
+  // campo que vira do Contato e que uma regra ativa do gatilho por data lê) foi
+  // para lá, para valer também no MCP.
   const gravado = await gravarConfiguracaoDoFunil(supabase, {
     organizationId: activeOrg.orgId,
     pipelineId,
     patch: parsed.data,
+    idioma: authUser.idioma,
   });
   if (!gravado.ok) return { ok: false, error: gravado.error };
 

@@ -47,6 +47,15 @@ export interface ContactSnapshot {
   id: string;
   name: string | null;
   display_name: string | null;
+  /**
+   * O nome que a equipe salvou na agenda do celular (PR #2439). Só a equipe o
+   * vê na tela, mas é dado pessoal do titular: a anonimização o apaga
+   * (`trg_contato_anonimizado_esquece_a_agenda`), então o `data.json` o leva.
+   * Quem RECEBE o `data.json` é o titular fora do Brasil: o worker só assina a
+   * ligação dele quando o país não é o padrão (`lgpd-export-worker.ts`). No
+   * Brasil o arquivo fica guardado sem ser enviado, e o PDF não lê este campo.
+   */
+  address_book_name: string | null;
   email: string | null;
   phone_number: string | null;
   cpf_present: boolean;
@@ -1319,13 +1328,13 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       .from("contacts")
       .select(
         // As colunas dos DOIS lados (o upstream passou a exportar `wa_lid` na
-        // v1.61, para achar as mensagens de grupo). `cargo`, `setor` e
-        // `empresa` são dado pessoal profissional (0262) e fecham a ponta que a
-        // cascata já limpava; `first_service_at` é registro de operação e
-        // sobrevive à anonimização. Deixar qualquer um de fora responde "não
-        // temos mais nada sobre você" a quem exerce direito de acesso, e a
-        // resposta é falsa.
-        "id, name, display_name, email, phone_number, wa_lid, cpf_encrypted, birthdate, is_blocked, is_anonymized, consent, tags, source, source_metadata, custom_fields, cargo, setor, papel_na_empresa, principal_na_empresa, empresa_id, person_id, social_identity, created_at, last_activity_at, first_service_at",
+        // v1.61, para achar as mensagens de grupo, e `address_book_name` na
+        // v1.86, o nome da agenda do celular). `cargo`, `setor` e `empresa` são
+        // dado pessoal profissional (0262) e fecham a ponta que a cascata já
+        // limpava; `first_service_at` é registro de operação e sobrevive à
+        // anonimização. Deixar qualquer um de fora responde "não temos mais nada
+        // sobre você" a quem exerce direito de acesso, e a resposta é falsa.
+        "id, name, display_name, address_book_name, email, phone_number, wa_lid, cpf_encrypted, birthdate, is_blocked, is_anonymized, consent, tags, source, source_metadata, custom_fields, cargo, setor, papel_na_empresa, principal_na_empresa, empresa_id, person_id, social_identity, created_at, last_activity_at, first_service_at",
       )
       .eq("organization_id", organizationId)
       .eq("id", contactId)
@@ -1379,6 +1388,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         id: data.id,
         name: data.name ?? null,
         display_name: data.display_name ?? null,
+        address_book_name: data.address_book_name ?? null,
         email: data.email ?? null,
         phone_number: data.phone_number ?? null,
         cpf_present: Boolean(data.cpf_encrypted),

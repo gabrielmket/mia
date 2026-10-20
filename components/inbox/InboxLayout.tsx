@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, startTransition } fr
 import { useT } from "@/hooks/i18n/useT";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth, usePermission } from "@/hooks/auth/AuthProvider";
+import { roleAtLeast } from "@/lib/auth/types";
 import { useBulkConversations, type AcaoEmLote } from "@/hooks/inbox/useBulkConversations";
 import { useSelecaoEmLote } from "@/hooks/inbox/useSelecaoEmLote";
 import { estadoDaJanela } from "@/lib/channels/janela";
@@ -421,6 +422,9 @@ export function InboxLayout({
   // aparece. (A rota ainda valida por conta própria: este portão é de tela,
   // a fonte da regra é a API.)
   const podeAgirEmLote = usePermission("inbox.reply");
+  // O mesmo critério da rota `usable-for-rag` (#3006), como no CRMSidePanel.
+  const podeMarcarExemplo =
+    (user.is_platform_admin && !user.support) || roleAtLeast(activeOrg?.role, "agent");
   const selecao = useSelecaoEmLote();
   const lote = useBulkConversations();
 
@@ -778,6 +782,7 @@ export function InboxLayout({
                     )
                 : undefined
             }
+            podeMarcarExemplo={podeMarcarExemplo}
           />
         </div>
       </div>

@@ -21,7 +21,7 @@ import { StageColumn } from "./StageColumn";
 // estreito; ele reusa as peças do dossiê (components/cartoes/aberto/).
 import { CartaoAberto } from "@/components/cartoes/aberto/CartaoAberto";
 import { RetomarComoNovoNegocioDialog } from "./RetomarComoNovoNegocioDialog";
-import { camposDoFunil } from "@/lib/leads/campos-do-funil";
+import { camposDoFunil, camposPorEscopo } from "@/lib/leads/campos-do-funil";
 // FORK MIA — a ordem da coluna (urgência, quentes, valor, manual) e o contexto
 // das linhas do cartão (quem está olhando, nome de cada pessoa da equipe).
 import { ProvedorDoCartao } from "@/components/cartoes/ContextoDoCartao";
@@ -379,7 +379,7 @@ export function KanbanBoard({
           onOpenChange={(v: boolean) => !v && setDossieId(null)}
           lead={leadDoDossie}
           pipelineId={pipelineId}
-          fieldDefs={camposDoFunil(data.pipeline.settings ?? null)}
+          fieldDefs={camposPorEscopo(camposDoFunil(data.pipeline.settings ?? null), "negocio")}
           settingsDoFunil={(data.pipeline.settings ?? null) as Record<string, unknown> | null}
           stages={data.stages}
           stageName={

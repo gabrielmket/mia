@@ -37,6 +37,12 @@ export const REFERENCIAS_DE_AVISO = {
   // (`lib/leads-da-meta/aviso-de-falha.ts`). O conserto (token, permissão,
   // destino) mora na aba dos formulários, que é de admin, como a tela.
   mia_leads_da_meta_formulario: { tabela: "mia_leads_da_meta_formularios", papel: "admin", rotulo: "Revisar formulários da Meta", href: () => "/app/settings/meta-ads?aba=formularios" },
+  // (migration 0655, issue #2529) A tarefa que vence ou que já venceu: o aviso
+  // de prazo leva ao TRABALHO que pede gente, e a lista de tarefas é onde ele
+  // está (o mesmo destino do push de tarefa criada, em
+  // `lib/tarefas/criar-tarefa.ts`). Sem referência o botão cairia na Central,
+  // meio caminho — quem recebe o aviso já está nela.
+  task: { tabela: "crm_tasks", papel: "agent", rotulo: "Abrir tarefa", href: () => "/app/tasks" },
 } satisfies Record<string, Alvo>;
 
 export type InboxRefKind = keyof typeof REFERENCIAS_DE_AVISO | "organization" | "ai_budget" | "plano" | "job_queue" | "cron_jobs";
@@ -172,8 +178,21 @@ export const POLITICAS_DE_AVISO = {
     orientacao: "Confirme com a pessoa que ela reconhece a troca. Se não reconhece, fale com quem administra o servidor.",
     geral: { papel: "admin", href: "/app/team", rotulo: "Abrir a equipe" },
   },
+  // Os dois avisos de prazo de tarefa (#2529) levam à tarefa, e a orientação
+  // diz as DUAS saídas possíveis — concluir ou reagendar — porque as duas são
+  // conclusões legítimas do aviso: ele não pede que a pessoa se desculpe pelo
+  // atraso, pede que o prazo volte a ser verdade.
+  task_due: {
+    refs: ["task"],
+    orientacao: "Abra a tarefa e conclua antes do prazo — ou reagende agora, se já dá para ver que não vai caber.",
+  },
+  task_overdue: {
+    refs: ["task"],
+    orientacao: "A tarefa venceu sem conclusão. Abra e conclua, ou reagende o prazo se ele não for mais possível.",
+  },
   // `agent_case`: o caso que a IA abriu, na Central no instante da abertura
-  // (`lib/escalacao/caso-na-central.handler.ts`).
+  // (`lib/escalacao/caso-na-central.handler.ts`). FORK MIA:
+  // `mia_leads_da_meta_formulario`, o formulário da Meta cuja leitura parou.
   other: { refs: ["agenda_reminder_sender", "lead", "channel_session", "appointment", "ai_agent", "ai_provider_credential", "agent_case", "mia_leads_da_meta_formulario"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
 } satisfies Record<InboxKind, Politica>;
 
@@ -300,4 +319,16 @@ export async function resolverDestinosDosAvisos<T extends ReferenciaDoAviso>(
     }
     return { ...item, destination };
   });
+}
+
+/**
+ * Quem ENXERGA um aviso da Central (migration 0689, doc de decisão 162): sem
+ * `para_user_id` é da empresa inteira; com ele, só daquela pessoa. É o filtro
+ * `.or()` do PostgREST que a lista, o contador do sino, o "Marcar todos
+ * resolvidos" e o resolver de um aviso aplicam — os quatro com o mesmo texto,
+ * para que o que a pessoa vê seja exatamente o que ela resolve. `userId` vem do
+ * JWT validado (`requireRole` → `getUser`), nunca do corpo.
+ */
+export function avisoVisivelPara(userId: string): string {
+  return `para_user_id.is.null,para_user_id.eq.${userId}`;
 }
