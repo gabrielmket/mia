@@ -114,7 +114,7 @@ pessoa faz (com a tela e o caminho).
 | 7 | Etiquetas | `plataforma_garantir_etiquetas` | agente |
 | 8 | Memória: as regras da casa e as anotações | `plataforma_gravar_memoria` | agente |
 | 9 | Conhecimento por texto (perguntas e respostas, documento) | `plataforma_garantir_conhecimento` | agente |
-| 10 | Instalar os follow-ups (rascunho) | `plataforma_listar_modelos`, `plataforma_garantir_followup` | agente |
+| 10 | Instalar os follow-ups (rascunho), de um modelo ou copiados de outra empresa | `plataforma_listar_modelos`, `plataforma_garantir_followup`, `plataforma_copiar_followup` | agente |
 | 11 | Criar o agente de IA (rascunho), com o funil, os materiais e os follow-ups | `plataforma_garantir_agente` | agente |
 | 12 | Automações (nascem desligadas), tipos de agendamento, jornada e respostas prontas | `plataforma_garantir_automacao`, `plataforma_garantir_tipos_de_agendamento`, `plataforma_definir_jornada`, `plataforma_garantir_respostas_prontas` | agente |
 | 12a | Planos de tarefa (antes da automação que os aplica) e a fonte de formulário do site (antes da automação que reage a ela) | `plataforma_garantir_planos_de_tarefa`, `plataforma_garantir_fonte_de_formulario` | agente |
@@ -187,11 +187,13 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **68** ferramentas no servidor: as 60 desta página e as 8 da migração
-([`mcp-de-migracao.md`](mcp-de-migracao.md)). As fusões da v1.84 (.82) e da v1.85 (.83) não
-pediram ferramenta nova, só campos e regras novas (veja "O que chegou do upstream 1.84" e
-"O que chegou do upstream 1.85", nesta seção). A mais nova (.81, a fusão do
-upstream v1.81 a v1.83) é `plataforma_configurar_servidor_mcp_externo`. As duas
+São **69** ferramentas no servidor: as 61 desta página e as 8 da migração
+([`mcp-de-migracao.md`](mcp-de-migracao.md)). A mais nova (.84, a fusão do upstream
+v1.86) é `plataforma_copiar_followup`: a exportação e a importação de fluxo da tela,
+de outra empresa ou de um `.fluxo.json` (veja "O que chegou do upstream 1.86", nesta
+seção). As fusões da v1.84 (.82) e da v1.85 (.83) não pediram ferramenta nova, só campos
+e regras novas (veja "O que chegou do upstream 1.84" e "O que chegou do upstream 1.85").
+A da .81 (a fusão do upstream v1.81 a v1.83) é `plataforma_configurar_servidor_mcp_externo`. As duas
 da .80 (item 9 do mapa: o montador de relatórios) são `plataforma_garantir_relatorios` e
 `plataforma_ver_relatorios`. A da .79 (empresa única,
 [`empresa-unica.md`](empresa-unica.md)) é `plataforma_vincular_pessoas_a_empresas`, da
@@ -253,19 +255,20 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 |---|---|---|---|
 | `plataforma_configurar_empresa` | nome, razão social, CNPJ, país (desde a .82, trocar o país sem mandar `fuso` leva o fuso sugerido do país, como a tela), fuso, idioma, moeda, modo de venda, retenção de mídia, a limpeza automática de mídia antiga (ligada, apaga sem volta), encarregado e política de privacidade; e, desde a .79, a **meta do mês** (`meta_do_mes`: o faturamento dos ganhos da empresa inteira, em centavos, no mês corrente ou no `mes` pedido), pelo mesmo upsert da tela de Desempenho (`lib/crm/metas/gravar.ts`). É ela que vira a barra do painel "Meta do mês" | a organização; a meta, pelo mês | só os campos que vieram mudam |
 | `plataforma_configurar_atendimento` | modo de distribuição (manual, rodízio ou menor carga; desde a .83 vale para os números SEM regra própria), visibilidade das conversas, devolução para a IA, quanto a IA espera depois de uma resposta pelo celular, o nome de quem fala (atendente ou IA) em negrito na mensagem, o freio da empresa para o passo "a IA decide" das automações e, desde a .81, as duas opções da agenda (atendentes mexem na agenda dos colegas; Google Meet com acesso aberto) | a organização | idem |
-| `plataforma_garantir_funil` | funil, etapas na ordem, passo do agente por etapa, probabilidade, janela de esfriando (`prazo_esperado_horas`, pela régua da tela: 1 a 8760 horas inteiras) e cor, campos personalizados (com obrigatoriedade por etapa), motivos de perda e de ganho, vocabulário (desde a .79 também `compromisso` e `compromisso_plural`, como o segmento chama o que a agenda marca: o plural é o título do painel pronto de agenda) | nome do funil; nome da etapa; `key` do campo; rótulo do motivo | 20 etapas |
+| `plataforma_garantir_funil` | funil, etapas na ordem, passo do agente por etapa, probabilidade, janela de esfriando (`prazo_esperado_horas`, pela régua da tela: 1 a 8760 horas inteiras) e cor, campos personalizados (com obrigatoriedade por etapa; desde a .84, de quem é o campo, `escopo` negócio ou contato, só no funil padrão, e a lista pesquisável `searchable_select` com `aliases` e `allow_new`), motivos de perda e de ganho, vocabulário (desde a .79 também `compromisso` e `compromisso_plural`, como o segmento chama o que a agenda marca: o plural é o título do painel pronto de agenda) | nome do funil; nome da etapa; `key` do campo; rótulo do motivo | 20 etapas |
 | `plataforma_garantir_produtos` | catálogo em lote, com preço em centavos ou em texto (`"R$ 189,90"`); item com problema é recusado com motivo e não derruba os outros | código do produto (sem código, o nome) | 200 produtos |
 | `plataforma_garantir_etiquetas` | etiquetas no vocabulário, com cor e descrição | nome da etiqueta, sem diferenciar maiúscula | 50 etiquetas |
 | `plataforma_gravar_memoria` | as regras da casa (documento que todos os agentes seguem) e as anotações | o documento é um só; anotação pelo título | 50 anotações |
 | `plataforma_garantir_conhecimento` | material por **texto**: perguntas e respostas, ou documento | nome do material | 200 perguntas; 200 mil caracteres |
-| `plataforma_garantir_followup` | instala um fluxo a partir de um modelo e ajusta textos, esperas, etapa do gatilho e política; no gatilho de silêncio, o teto do silêncio e a pausa antes de recomeçar; e garante as caixas que mexem no negócio sem falar com o cliente (`mover_no_funil` e `etiquetar`), antes de um nó do fluxo; desde a .83, a `midia` do passo de texto fixo (imagem ou PDF por endereço, com o texto de legenda) | nome do fluxo; a caixa, pelo lugar onde está | um fluxo; 10 caixas de cada tipo |
+| `plataforma_garantir_followup` | instala um fluxo a partir de um modelo e ajusta textos, esperas, etapa do gatilho e política; no gatilho de silêncio, o teto do silêncio e a pausa antes de recomeçar; e garante as caixas que mexem no negócio sem falar com o cliente (`mover_no_funil` e `etiquetar`), antes de um nó do fluxo; desde a .83, a `midia` do passo de texto fixo (imagem ou PDF por endereço, com o texto de legenda); desde a .84, no gatilho de silêncio, `so_se_a_equipe_respondeu` e `repeticoes_por_contato` | nome do fluxo; a caixa, pelo lugar onde está | um fluxo; 10 caixas de cada tipo |
+| `plataforma_copiar_followup` | (.84) copia um fluxo de follow-up de OUTRA EMPRESA da plataforma (`de_outra_empresa`) ou de um `.fluxo.json` exportado pela tela (`arquivo`), pelo caminho da importação do upstream (#3056): nasce RASCUNHO; etapas, modelos, responsáveis e próximos fluxos casam por id ou por nome, e o que não casa volta em `pendencias` (com a frase da tela e se bloqueia a publicação). Não copia roteiro de atendimento | o NOME no cliente: nome que já existe responde `ja_estava` e nada é copiado | um fluxo |
 | `plataforma_garantir_agente` | cria ou altera o **rascunho** do agente: prompt, capacidades por pacote, funis, materiais, follow-ups, palavras de passagem, passagem por assunto jurídico, horário, aviso de fora do horário, número. O limiar de sentimento é do cadastro e vale na hora; o bloqueio de afirmação clínica é da EMPRESA (todos os agentes) e vale na hora | nome do agente | um agente |
 | `plataforma_garantir_roteador` | cria ou ajusta o roteador de intenção de um número, **desligado**: nome, número, agente reserva, a janela de contexto do classificador (0 a 16 mensagens, 8 no roteador novo) e as intenções, cada uma com o agente e o funil (e a etapa) de destino do negócio | nome do roteador; nome da intenção | 20 intenções |
-| `plataforma_garantir_automacao` | cria ou ajusta uma regra de automação, **desligada**. É também o webhook de saída: os gatilhos de ganho, perda, reabertura e troca de responsável com a ação `call_webhook`. Aceita o passo "a IA decide" (`ai_decide`, com as ações das opções conferidas pela mesma régua), aplicar um plano de tarefas, etiqueta no contato, o recorte por fonte de formulário e o funil e a etapa dos gatilhos de tempo; desde a .83, a `media_url` da mensagem de WhatsApp (imagem ou PDF, conferida antes de gravar) | nome da regra | uma regra |
+| `plataforma_garantir_automacao` | cria ou ajusta uma regra de automação, **desligada**. É também o webhook de saída: os gatilhos de ganho, perda, reabertura e troca de responsável com a ação `call_webhook`. Aceita o passo "a IA decide" (`ai_decide`, com as ações das opções conferidas pela mesma régua), aplicar um plano de tarefas, etiqueta no contato, o recorte por fonte de formulário e o funil e a etapa dos gatilhos de tempo; desde a .83, a `media_url` da mensagem de WhatsApp (imagem ou PDF, conferida antes de gravar); desde a .84, o RODÍZIO da ação atribuir (`{ "modo": "rodizio", "fila": [...] }`, cada pessoa conferida contra a equipe) e a recusa do gatilho por data num campo do contato | nome da regra | uma regra |
 | `plataforma_garantir_planos_de_tarefa` | os planos de tarefa (a sequência de tarefas que uma automação aplica ao negócio), com título, prazo, prioridade e responsável de cada passo | o `id` do plano, ou o nome | 50 planos; 30 passos por plano |
 | `plataforma_garantir_fonte_de_formulario` | a fonte de formulário: destino (funil e etapa), as perguntas do formulário, o mapeamento dos campos, o endereço de retorno, a autorização de IA na captação e, desde a .82, a atualização do card no reenvio (`atualizar_card_no_reenvio`); as duas últimas exigem a assinatura, posta pela pessoa. Devolve o caminho do endereço de captação | nome da fonte | uma fonte; 20 perguntas |
 | `plataforma_configurar_canal` | de um número: o nome interno (.81), os dias da prospecção, guardar o histórico (só QR Code; desligar pede confirmação escrita) e a pausa agendada de até 24 horas (de um número ou de todos), com o ajuste dos horários de uma que ainda não começou (.81) e o cancelamento; e, desde a .83, a `distribuicao` do número (os `responsaveis`, o `modo` próprio e o `atendente_padrao`, ou `voltar_ao_padrao_da_organizacao`), gravada pela função do fork da `9045`. Nunca credencial, token ou número | o número; a pausa, pelo número e pela janela | um número |
-| `plataforma_configurar_banco_externo` | numa conexão de banco externo que já existe: as fontes liberadas (o modo e a lista de tabelas e colunas que o agente pode ler, .81) e a coluna que identifica o cliente nas conversas (telefone ou e-mail). Nunca lê nem devolve a conexão ou a senha | o nome da conexão | uma conexão |
+| `plataforma_configurar_banco_externo` | numa conexão de banco externo que já existe: as fontes liberadas (o modo e a lista de tabelas e colunas que o agente pode ler, .81) e a coluna que identifica o cliente nas conversas (telefone ou e-mail). Desde a .84 a resposta e a leitura dizem o motor (`tipo_do_banco`: PostgreSQL ou MySQL) e o aviso do último teste. Nunca lê nem devolve a conexão ou a senha | o nome da conexão | uma conexão |
 | `plataforma_configurar_servidor_mcp_externo` | (.81) o servidor MCP externo do cliente (o sistema de fora que a IA consulta): o endereço https público e a chave, gravada CIFRADA e nunca devolvida (a resposta traz os quatro últimos caracteres; a trilha leva só o host); `apagar: true` tira. Recusa a empresa de demonstração | a organização | um servidor |
 | `plataforma_garantir_tipos_de_obrigacao` | o catálogo de tipos de documentos e obrigações de um funil, inclusive `modelo_do_segmento` (os tipos prontos do segmento) | nome do tipo dentro do funil | 60 tipos por funil |
 | `plataforma_garantir_tipos_de_agendamento` | tipos de agendamento (duração, local, categoria), com o lembrete desligado; desde a .81, o número que manda o lembrete (`canal_do_lembrete`), com aviso quando a empresa tem 2 ou mais números e um tipo com lembrete está sem ele | nome do tipo | 30 tipos |
@@ -284,7 +287,7 @@ Todas respondem `criou`, `atualizou` ou `ja_estava`, item a item quando a chamad
 |---|---|---|
 | `plataforma_publicar_agente` | publica o rascunho do agente: ele passa a responder no número | sem rascunho novo, `ja_estava` |
 | `plataforma_pausar_agente` | pausa ou retoma um agente sem despublicar; desde a v1.84 do upstream, outro agente no ar no mesmo número passa a responder ali | mesmo pedido, `ja_estava` |
-| `plataforma_publicar_followup` | publica (ou desliga) um fluxo de follow-up | sem mudança no rascunho, `ja_estava` |
+| `plataforma_publicar_followup` | publica (ou desliga) um fluxo de follow-up; desde a .84, recusa o passo cujo modelo de mensagem não existe na empresa e devolve os avisos do gatilho de silêncio (sem teto, sem limite de repetições, alcançando quem a equipe não respondeu), com o campo que resolve cada um | sem mudança no rascunho, `ja_estava` |
 | `plataforma_ligar_automacao` | liga ou desliga uma regra | mesmo estado, `ja_estava` |
 | `plataforma_ligar_roteador` | liga ou desliga o roteador de intenção: ligado, ele escolhe o agente a cada mensagem do número e as intenções com destino movem o negócio. Roteador sem intenção não liga, e só um fica ligado por número | mesmo estado, `ja_estava` |
 | `plataforma_ligar_lembrete` | liga o lembrete de um tipo de agendamento, com antecedência e texto | mesmo pedido, `ja_estava` |
@@ -478,6 +481,33 @@ Ficou de fora desta fusão, por decisão: o plano padrão do cadastro, a entrada
 paga e a troca de plano proporcional (0679): é a cobrança do revendedor, que fica
 desligada no fork (`platform_config.MODULO_COBRANCA`), como na .76.
 
+### O que chegou do upstream 1.86 (.84)
+
+Mesma regra, na fusão da v1.86. A prova de cada linha está em
+`tests/unit/mcp-de-implantacao-novidades-do-upstream-186.test.ts` (que agora
+guarda a contagem: 69, uma ferramenta nova).
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| Exportar e importar fluxo de follow-up (`.fluxo.json`, #3056) | 1.86 | ferramenta NOVA `plataforma_copiar_followup`: de outra empresa da plataforma (a exportação e a importação numa chamada, sem o arquivo passar de mão em mão) ou de um arquivo; as regras são as do upstream (`lib/followup/portabilidade.ts`); nasce rascunho; a chave é o nome no cliente; auditoria `followup_flow.imported` | `implantar_configuracao` |
+| Publicar confere se o modelo de mensagem existe nesta conta (#3056) e devolve avisos do gatilho de silêncio (#3048) | 1.86 | `plataforma_publicar_followup` passa a ler os modelos citados (`carregaModelosCitados`) e o gatilho, como a rota; os avisos voltam em `avisos` com o campo do MCP que resolve cada um | `colocar_no_ar` |
+| Gatilho de silêncio: "só começar se a equipe já respondeu" e "quantas vezes no máximo, por contato" (`exige_resposta_da_equipe`, `max_enrollments_por_contato`, #3048) | 1.86 | campos novos `so_se_a_equipe_respondeu` e `repeticoes_por_contato` em `plataforma_garantir_followup` (`false` e `null` tiram a chave, como a tela). A inscrição única por silêncio do fork continua valendo por baixo | `implantar_configuracao` |
+| Condição por "data de um campo do negócio" no follow-up (`lead_date`, #3048) | 1.86 | já alcançava: o rascunho segue a forma do upstream (`flowGraphSchema`) e a publicação é a dele | |
+| Campo do funil do CONTATO ou do NEGÓCIO (`escopo`, #2791) | 1.86 | campo novo `escopo` em cada item de `campos` de `plataforma_garantir_funil`: só no funil padrão (o que a ficha do contato lê), não combina com `obrigatorio_em`; marcar como do contato um campo de data que uma regra LIGADA do gatilho por data lê é recusado nomeando a regra (a recusa mora em `gravarConfiguracaoDoFunil`, compartilhada com a tela) | `implantar_configuracao` |
+| Lista pesquisável (`searchable_select`, apelidos, "permitir valor novo", #2521) | 1.86 | tipo novo `searchable_select`, `options[].aliases` e `allow_new` (só nesse tipo) em `plataforma_garantir_funil` | `implantar_configuracao` |
+| O gatilho por data recusa campo do contato (#2791) | 1.86 | `plataforma_garantir_automacao` (criar e reescrever) e `plataforma_ligar_automacao` (ligar) recusam com a frase da rota | `implantar_configuracao` e `colocar_no_ar` |
+| Rodízio de atendentes na ação "Atribuir a um atendente" (`assign_owner` com `modo: "rodizio"` e `fila`, 0692, #2041) | 1.86 | já alcançava pelo esquema do upstream (o tipo da ação é o mesmo); o espelho passou a conferir cada pessoa da fila contra a equipe (vínculo vivo, papel que atende) e `plataforma_listar_modelos` ensina o formato | `implantar_configuracao` |
+| O motor do banco externo e o aviso do último teste (`db_type`, `last_test_aviso`, 0691; MySQL pela API) | 1.86 | `plataforma_configurar_banco_externo` e a leitura (`plataforma_ver_configuracao`, seção `banco_externo`) devolvem `tipo_do_banco` e `aviso_do_ultimo_teste`. O motor é escolhido na criação, que é da pessoa (credencial) | |
+| Lembrete de prazo da tarefa na Central e no aparelho do responsável (0655, 0689) | 1.86 | nada a configurar pela implantação: a antecedência, a repetição e o WhatsApp são preferência de CADA pessoa (no perfil dela, Configurações › Notificações) | |
+| Nome salvo na agenda do celular (0593), reação do cliente (0684), motivo `verificacao_manual` na passagem (0693), Gemini 4 Argon no catálogo (0703), marcar conversa como exemplo pela lista | 1.86 | nada a configurar: automáticos, do dia a dia ou escolha de modelo (que é da plataforma) | |
+
+Ficou de fora desta fusão, por decisão: responder ao caso pelo WhatsApp da
+equipe (`config_aviso_de_caso.resposta_whatsapp_habilitada`, 0687). O aviso de caso
+inteiro (o número da equipe que recebe o caso) não tem ferramenta: a porta do
+upstream (`fn_definir_aviso_de_caso`) exige uma pessoa admin com verificação em
+duas etapas, o número passa a ser INTERNO (o que chega dele deixa de virar
+contato), e a resposta dele retoma a IA com o cliente. Veja a seção 4.
+
 ### O que chegou do upstream 1.85 (.83)
 
 Mesma regra, na fusão da v1.85. A prova de cada linha está em
@@ -549,6 +579,7 @@ O checklist (`plataforma_ver_implantacao`) lista cada item abaixo em
 | Enviar arquivo (PDF, planilha) ou site como conhecimento | IA › Conhecimento · `/app/ai/knowledge/sources` | upload não cabe numa chamada de ferramenta; por aqui entra o que é texto |
 | Modelo oficial com cabeçalho de imagem, vídeo ou documento | Configurações › Modelos · `/app/settings/templates` | a amostra de mídia é enviada por upload |
 | Segredo de webhook numa automação | Automações · `/app/webhooks` | segredo é credencial |
+| Aviso de caso (o número da equipe que recebe o caso que a IA abre) e, desde a v1.86, responder ao caso por esse WhatsApp | Configurações › Atendimento · aviso de caso | a porta do upstream exige uma pessoa admin com verificação em duas etapas; o número vira INTERNO (o que chega dele deixa de virar contato, e se ele já é cliente a tela pergunta); responder por ele retoma a IA com o cliente |
 | Grupo de WhatsApp que recebe os avisos de passagem para humano | Admin › Número de avisos · `/admin` | o grupo é escolhido de uma lista; um id errado manda nome e resumo de lead para o lugar errado |
 | Apagar ou arquivar agente, funil e material | a tela de cada um | a implantação monta; desfazer é decisão de uma pessoa |
 
