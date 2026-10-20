@@ -37,6 +37,17 @@
  *    tempo e de data, que o motor lê desde o #2483): conferidos contra a
  *    organização.
  *
+ * Desde o upstream 1.86 (.84):
+ *
+ *  - `assign_owner` em RODÍZIO (#2041, 0692): `{ modo: "rodizio", fila: [{ user_id,
+ *    pausado }] }`. O schema do upstream já recusa pessoa repetida e o rodízio
+ *    fora do lugar (dois na mesma regra, ou dentro de um `ai_decide`); aqui
+ *    cada pessoa da fila é conferida contra a equipe da empresa (vínculo vivo e
+ *    papel que atende: quem só lê seria pulado calado a cada lead);
+ *  - o gatilho por data num campo do CONTATO (#2791) nunca dispara: criar,
+ *    reescrever ou LIGAR uma regra assim é recusado com a frase da rota
+ *    (`campoDoGatilhoDeDataEhDoContato`).
+ *
  * ── A empresa de demonstração ─────────────────────────────────────────────
  *
  * Regra ATIVA com `call_webhook`, `notify_group` ou `send_email` (.81, 9043) é recusada pelo banco na
@@ -48,6 +59,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
+import {
+  campoDoGatilhoDeDataEhDoContato,
+  MENSAGEM_CAMPO_DE_DATA_DO_CONTATO,
+} from "@/lib/automation/campo-do-gatilho-de-data";
 import { ehRecusaDaDemonstracao, FRASE_DA_DEMONSTRACAO } from "@/lib/demonstracao/trava";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { classificarMidiaComLegenda } from "@/lib/messaging/media/midia-com-legenda";
@@ -124,6 +139,39 @@ async function conferirAcao(c: Implantacao, acao: Acao, onde: string, planos: ()
       throw new Recusa(
         `${onde}: a pessoa ${pessoa} não faz parte da equipe desta organização. Os ids estão em plataforma_ver_configuracao (seção equipe).`,
       );
+    }
+  }
+  // .84 — upstream 1.86 (#2041, 0692): o RODÍZIO da ação atribuir. A função do
+  // banco pula, a cada lead, quem saiu da equipe ou só lê; na tela a fila só
+  // oferece quem atende. Aqui a fila chega como texto: cada pessoa é conferida.
+  const fila = (acao.config as { modo?: unknown; fila?: unknown }).fila;
+  if (acao.type === "assign_owner" && acao.config.modo === "rodizio" && Array.isArray(fila)) {
+    const ids = fila
+      .map((p) => (p && typeof p === "object" ? (p as { user_id?: unknown }).user_id : undefined))
+      .filter((id): id is string => typeof id === "string");
+    if (ids.length > 0) {
+      const { data, error } = await c.admin
+        .from("user_organizations")
+        .select("user_id, role, revoked_at")
+        .eq("organization_id", c.orgId)
+        .in("user_id", ids);
+      if (error) throw new Error(`não consegui conferir a fila do rodízio: ${error.message}`);
+      const vinculos = new Map(
+        ((data ?? []) as Array<{ user_id: string; role: string; revoked_at: string | null }>).map((v) => [v.user_id, v]),
+      );
+      for (const [j, id] of ids.entries()) {
+        const vinculo = vinculos.get(id);
+        if (!vinculo || vinculo.revoked_at) {
+          throw new Recusa(
+            `${onde}.config.fila[${j}]: a pessoa ${id} não faz parte da equipe desta organização. Os ids estão em plataforma_ver_configuracao (seção equipe).`,
+          );
+        }
+        if (vinculo.role === "viewer") {
+          throw new Recusa(
+            `${onde}.config.fila[${j}]: a pessoa ${id} só tem acesso de visualização e não atende: o rodízio a pularia a cada lead. Tire-a da fila ou mude o papel dela.`,
+          );
+        }
+      }
     }
   }
   // .83 — upstream 1.85 (#2734): a mídia da mensagem de WhatsApp (imagem ou PDF por
@@ -233,6 +281,21 @@ async function conferirConfiguracaoDoGatilho(c: Implantacao, config: Record<stri
   }
 }
 
+/**
+ * .84 — upstream 1.86 (#2791): o gatilho por data lê a data no NEGÓCIO; um
+ * campo marcado como do contato mora no contato, e a regra nunca dispararia.
+ * A mesma recusa das rotas (`POST` e `PATCH` de `automation-rules`).
+ */
+async function recusarDataDoContato(c: Implantacao, gatilho: string, configuracao: unknown): Promise<void> {
+  const campo = await campoDoGatilhoDeDataEhDoContato(c.admin, c.orgId, gatilho, configuracao);
+  if ("erro" in campo) throw new Error(`não consegui conferir o campo de data do gatilho: ${campo.erro}`);
+  if (campo.doContato) {
+    throw new Recusa(
+      `configuracao_do_gatilho.campo: ${MENSAGEM_CAMPO_DE_DATA_DO_CONTATO} Os campos de cada funil, com o escopo, estão em plataforma_ver_funis.`,
+    );
+  }
+}
+
 /** Os tipos de ação de uma regra, com os de dentro das opções de um `ai_decide`. */
 export function tiposDasAcoes(acoes: unknown): string[] {
   if (!Array.isArray(acoes)) return [];
@@ -285,6 +348,7 @@ export async function garantirAutomacao(
   const regra = lido.data;
   await conferirReferencias(c, regra.actions as Acao[]);
   await conferirConfiguracaoDoGatilho(c, regra.trigger_config);
+  await recusarDataDoContato(c, regra.trigger_event, regra.trigger_config);
   if (tiposDasAcoes(regra.actions).includes("ai_decide")) {
     avisos.push(
       'A regra tem o passo "a IA decide": cada execução chama a IA (custo das automações, dentro do teto mensal da empresa) e manda a ela a mensagem, os dados do negócio e as etiquetas. ' +
@@ -412,6 +476,9 @@ export async function ligarAutomacao(
   if (regra.is_active === pedido.ligada) {
     return { regra: { id: regra.id, nome: regra.name, ligada: regra.is_active }, desfecho: "ja_estava" };
   }
+  // .84 — upstream 1.86 (#2791): religar uma regra antiga do gatilho por data
+  // que aponta para um campo do contato é recusado, como na rota.
+  if (pedido.ligada) await recusarDataDoContato(c, regra.trigger_event, regra.trigger_config);
   if (pedido.ligada && demonstracao) {
     // A mesma régua da 9010/9021, dita antes de o banco recusar: webhook e aviso
     // no grupo, no primeiro nível ou dentro das opções de um `ai_decide`.

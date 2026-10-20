@@ -9,7 +9,7 @@
  * prova o que foi GRAVADO, que a REEXECUÇÃO não escreve, a recusa que ensina e
  * a leitura que devolve.
  *
- * A CONTAGEM da lista mora aqui (a versão mais nova): 68. A v1.85 não pediu
+ * A CONTAGEM da lista mudou para o teste da versão mais nova (186). A v1.85 não pediu
  * ferramenta nova; pediu um campo novo em `plataforma_configurar_canal` (a
  * distribuição do número, 0663), a mídia na ação de WhatsApp das automações e
  * no passo de texto fixo do follow-up (#2734), e o efeito novo do "contém".
@@ -97,9 +97,9 @@ beforeEach(() => {
 
 // ---------------------------------------------------------------------------
 
-describe("a lista: 68 ferramentas, e os tipos de ação seguem os do upstream", () => {
-  it("a v1.85 não acrescentou ferramenta (68); a distribuição do número entrou como campo de plataforma_configurar_canal", () => {
-    expect(FERRAMENTAS).toHaveLength(68);
+describe("a lista: a distribuição do número monta, e os tipos de ação seguem os do upstream", () => {
+  it("a v1.85 não acrescentou ferramenta; a distribuição do número entrou como campo de plataforma_configurar_canal", () => {
+    // A contagem mora no teste da versão mais nova (186).
     const canal = FERRAMENTAS.find((f) => f.name === "plataforma_configurar_canal");
     expect(canal?.operacao).toBe("implantar_configuracao");
     expect(Object.keys(canal!.inputSchema)).toContain("distribuicao");

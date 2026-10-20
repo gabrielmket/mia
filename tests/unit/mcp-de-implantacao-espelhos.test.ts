@@ -66,15 +66,18 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/api/v1/products/[id]/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "0c030f4dbec32b72" },
   // Automações.
   // Relido na .76 (upstream 1.78): a fonte de formulário de `trigger_config.webhook_source_id` tem de ser da empresa. O espelho confere (conferirConfiguracaoDoGatilho), com a frase da rota; e também o funil e a etapa dos gatilhos de tempo.
-  { rota: "app/api/v1/automation-rules/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "60944af22187bd79" },
+  // Relido na .84 (upstream 1.86, #2791): o POST recusa o gatilho por data num campo do CONTATO (campoDoGatilhoDeDataEhDoContato, MENSAGEM_CAMPO_DE_DATA_DO_CONTATO). O espelho recusa com a mesma frase (recusarDataDoContato), ao criar e ao reescrever.
+  { rota: "app/api/v1/automation-rules/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "4473e2fcd29a5683" },
   // Relido na .72 (upstream 1.71, #2211): o PATCH parcial confere o laço de lead (acoesQueFechamLaco) contra a regra gravada. O espelho valida a regra INTEIRA com createAutomationRuleSchema, que já recusa o laço (recusarLacoDeLead): coberto.
   // Relido na .76 (upstream 1.78): a mesma conferência da fonte no PATCH. Coberta pelo mesmo conferirConfiguracaoDoGatilho, que roda antes de criar e de editar.
-  { rota: "app/api/v1/automation-rules/[id]/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "13713ae934a645a7" },
+  // Relido na .84 (upstream 1.86, #2791): o PATCH recusa o mesmo campo do contato quando muda o gatilho, a configuração dele OU liga a regra. O espelho confere ao reescrever (garantirAutomacao) e ao ligar (ligarAutomacao); desligar e renomear seguem livres.
+  { rota: "app/api/v1/automation-rules/[id]/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "aed965ba98fa05c8" },
   // Follow-up.
   // Relido na .72 (upstream 1.70, #2028): só a autenticação mudou (sessão OU token dsk_, resolveAuthDual). Nenhuma regra nova para o espelho.
   { rota: "app/api/v1/ai/followup-flows/from-model/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "a0e03549e796bcf8" },
   { rota: "app/api/v1/ai/followup-flows/[id]/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "d7640ddfa33c7917" },
-  { rota: "app/api/v1/ai/followup-flows/[id]/publish/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "c69f3113aa3c1067" },
+  // Relido na .84 (upstream 1.86, #3056 e #3048): a publicação confere os modelos de mensagem citados (carregaModelosCitados, modelo inexistente nesta conta é recusado) e devolve os AVISOS do gatilho de silêncio (avisosDoGatilho). O espelho (publicarFollowup) faz as duas coisas e devolve os avisos em `avisos`.
+  { rota: "app/api/v1/ai/followup-flows/[id]/publish/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "c669f202a47bde3d" },
   // Agente de IA.
   // Relido na .72 (upstream 1.70 #2028 e 1.73 #2296): token dsk_ e o corpo legado passa a criar mcp_agent com v1 rascunho pelo MESMO mcpAgentDraftRecords que o espelho já usa. A trava da IA continua na rota (lib/ai/trava-da-ia-na-rota.ts).
   // Relido na .76 (upstream 1.74 e 1.79): o código do erro de escopo (provedor desligado) e a coluna handoff_legal_enabled na leitura. O espelho já passava a versão inteira à conferência de escopo; a recusa passou a usar mensagemDoEscopo.
@@ -132,7 +135,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/api/v1/webhook-sources/[id]/route.ts", espelho: "lib/implantacao/fonte-de-formulario.ts", impressao: "c40f5ef9d4c41d82" },
   // Espelhado na .76 (upstream 1.74, 0558): a coluna do cliente numa conexão de banco externo, sem tocar na credencial.
   // Relido na .81 (upstream 0618): a leitura e a volta do PATCH trazem source_mode e sources_count. O espelho lê as duas pela visão segura.
-  { rota: "app/api/v1/external-db/connections/[id]/route.ts", espelho: "lib/implantacao/banco-externo.ts", impressao: "e3df664752a56968" },
+  // Relido na .84 (upstream 1.86, 0691): a leitura e a volta do PATCH trazem db_type e last_test_aviso, e o pool fecha pelo registro de drivers. O espelho lê as duas colunas (tipo_do_banco, aviso_do_ultimo_teste); não muda endereço nem senha, então não fecha pool.
+  { rota: "app/api/v1/external-db/connections/[id]/route.ts", espelho: "lib/implantacao/banco-externo.ts", impressao: "6eda05f3f92f18de" },
   // Espelhado na .81 (upstream 0618): as fontes liberadas, o modo e a lista inteira num UPDATE só, conferidos por atualizarFontesSchema, com a auditoria external_db_sources.updated.
   { rota: "app/api/v1/external-db/connections/[id]/sources/route.ts", espelho: "lib/implantacao/banco-externo.ts", impressao: "46c64eadd3622e63" },
   // Espelhado na .76 (upstream 1.79, #2591): o dono do contato. A rota chama fn_definir_carteira_do_cliente; o MCP chama a cópia do fork (9022) e deixa a mesma auditoria.

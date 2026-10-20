@@ -108,7 +108,16 @@ const ACOES_DE_AUTOMACAO = [
       'Põe etiquetas no negócio (o padrão) ou no contato do negócio (`destino: "contato"`, preservando as que o contato já tem; negócio sem contato é ignorado). O filtro de etiquetas do Inbox lê a do contato.',
     config: '{ "tags": ["Etiqueta"], "destino": "card" | "contato" (opcional, padrão "card") }',
   },
-  { type: "assign_owner", o_que_faz: "Define o responsável.", config: '{ "user_id": "<id da pessoa da equipe>" }' },
+  {
+    type: "assign_owner",
+    o_que_faz:
+      "Define o responsável: uma pessoa fixa, ou (upstream 1.86) um RODÍZIO entre várias, em que cada negócio que dispara a regra vai para a próxima da fila, voltando à primeira depois da última. " +
+      "Serve para os leads de formulário, que nascem sem conversa e não passam pelo rodízio de conversas. Quem está pausado, saiu da equipe ou só lê é pulado. " +
+      "Uma regra tem no máximo um rodízio, como ação direta (nunca dentro de um `ai_decide`).",
+    config:
+      '{ "user_id": "<id da pessoa da equipe>" } ou { "modo": "rodizio", "fila": [{ "user_id": "<id>", "pausado": false }, { "user_id": "<id>", "pausado": false }] } ' +
+      "(a ordem da fila é a ordem do rodízio; cada pessoa entra uma vez só)",
+  },
   { type: "create_task", o_que_faz: "Cria uma tarefa para a equipe. Nunca fala com o cliente.", config: '{ "titulo": "Ligar para {{contact.name}}", "vence_em_dias": 1, "atribuir_a": "dono_do_lead" | { "usuario_id": "<id>" }, "prioridade": "low" | "medium" | "high" | "urgent" }' },
   {
     type: "apply_task_plan",
@@ -214,8 +223,10 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             "Nenhum modelo mexe no negócio: para o fluxo mover o card ou gravar etiqueta (ex.: quem não respondeu a nenhum toque), acrescente as caixas com `mover_no_funil` e `etiquetar`, " +
             'antes do nó em que isso deve acontecer (o fim «sem resposta» dos modelos é o nó "fim-esgotou").',
           gatilho_de_silencio:
-            "Três ajustes além de `silencio_minutos`: `silencio_maximo_minutos` (o fluxo só começa enquanto o silêncio for recente), " +
-            "`pausa_para_recomecar_minutos` (quanto esperar antes de recomeçar para quem já passou pelo fluxo) e `pausa_conta_do_ultimo_envio` (de onde a pausa conta).",
+            "Cinco ajustes além de `silencio_minutos`: `silencio_maximo_minutos` (o fluxo só começa enquanto o silêncio for recente), " +
+            "`pausa_para_recomecar_minutos` (quanto esperar antes de recomeçar para quem já passou pelo fluxo), `pausa_conta_do_ultimo_envio` (de onde a pausa conta), " +
+            "`so_se_a_equipe_respondeu` (não alcança quem escreveu e ficou sem atendimento) e `repeticoes_por_contato` (quantas vezes no máximo, por contato). " +
+            "Ao publicar, a resposta avisa o que ficou desprotegido (sem teto, sem limite, alcançando quem não foi atendido).",
           gatilhos_com_motor: GATILHOS_COM_MOTOR,
           modelos: MODELOS_DE_FOLLOWUP.map((m) => ({
             id: m.id,
@@ -281,7 +292,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           },
           gatilhos_que_pedem_configuracao: {
             "lead.date_field_due":
-              '{ "pipeline_id": "<id do funil>", "campo": "<chave do campo de data do funil>", "dias": 1 } (dias ATÉ a data; negativo = depois dela)',
+              '{ "pipeline_id": "<id do funil>", "campo": "<chave do campo de data do funil>", "dias": 1 } (dias ATÉ a data; negativo = depois dela). ' +
+              "Só campo de data do NEGÓCIO: o campo marcado como do contato (`escopo: \"contato\"`) mora no contato, e a regra é recusada.",
             "lead.silent_for":
               `{ "dias": 3, "direcao": ${DIRECOES_DO_SILENCIO.map((d) => `"${d}"`).join(" | ")}, "pipeline_id": "<opcional>", "proteger_pela_agenda": true }`,
             "lead.stage_stale": '{ "dias": 7, "pipeline_id": "<opcional>", "stage_id": "<opcional>", "proteger_pela_agenda": true }',

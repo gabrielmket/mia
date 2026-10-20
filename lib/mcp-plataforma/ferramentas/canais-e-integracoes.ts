@@ -273,6 +273,7 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
       "quais tabelas e colunas o agente pode ler) e o CLIENTE NAS CONVERSAS (`cliente_nas_conversas`): " +
       "qual coluna das tabelas guarda o telefone ou o e-mail de quem está conversando. Com ela escolhida, durante a conversa de atendimento o agente lê SÓ as linhas daquela pessoa. " +
       "Sem ela, o agente lê as tabelas sem esse recorte. Chamar de novo com o mesmo pedido responde `ja_estava`. " +
+      "Vale para conexão PostgreSQL e MySQL (upstream 1.86): a resposta diz o motor (`tipo_do_banco`, escolhido na criação e imutável) e o aviso do último teste (ex.: o usuário do banco pode escrever). " +
       "ATENÇÃO: o banco externo é módulo da INSTALAÇÃO; com ele desligado, a recusa diz isso. A conexão tem de existir: veja em plataforma_ver_configuracao, seção banco_externo. " +
       "O QUE NÃO FAZ: não cria, não testa e não apaga conexão, não lê nem devolve endereço, usuário, senha ou o texto de conexão do banco (é credencial do cliente, posta por uma pessoa na tela Dados externos), " +
       "e não confere no banco do cliente se a coluna existe.",

@@ -29,6 +29,14 @@
  * `external_db_sources.updated`. A lista diz NOMES de tabela e de coluna; nunca
  * credencial. Conexão criada pela tela depois da 0618 nasce em `list` e vazia:
  * o agente não lê nada até alguém liberar.
+ *
+ * ── O motor do banco (.84, upstream 1.86, 0691) ───────────────────────────
+ *
+ * A conexão guarda o motor (`db_type`: `postgres` ou `mysql`) e o aviso do
+ * último teste (`last_test_aviso`, por exemplo "este usuário pode escrever").
+ * O motor é escolhido na CRIAÇÃO e não muda depois (trocar = apagar e criar),
+ * e criar é da pessoa, na tela: aqui ele só é LIDO, como o aviso. As fontes e a
+ * coluna do cliente valem igual para os dois motores.
  */
 import { audit } from "@/lib/audit";
 import { lerFontesDoBanco, MAX_FONTES, type Fonte } from "@/lib/external-db/fontes";
@@ -45,13 +53,14 @@ import { acharPorNomeOuId, type Desfecho, type Implantacao } from "./base";
 
 /** Só o que é seguro mostrar: nenhum pedaço da credencial nem do endereço. */
 const COLUNAS_SEGURAS =
-  "id, label, enabled, customer_key_column, customer_key_kind, last_test_ok, last_tested_at, source_mode, sources_count";
+  "id, label, enabled, customer_key_column, customer_key_kind, last_test_ok, last_tested_at, source_mode, sources_count, db_type, last_test_aviso";
 
 /**
  * A volta das ESCRITAS, que é da tabela base: `sources_count` só existe na visão
  * segura (a mesma separação de `COLUNAS_DA_TABELA` na rota do upstream).
  */
-const COLUNAS_DA_TABELA = "id, label, enabled, customer_key_column, customer_key_kind, last_test_ok, last_tested_at, source_mode";
+const COLUNAS_DA_TABELA =
+  "id, label, enabled, customer_key_column, customer_key_kind, last_test_ok, last_tested_at, source_mode, db_type, last_test_aviso";
 
 export interface ConexaoDeBancoExterno {
   id: string;
@@ -64,6 +73,13 @@ export interface ConexaoDeBancoExterno {
   /** .81 (0618): `all` lê qualquer tabela; `list` só as liberadas. */
   source_mode?: string | null;
   sources_count?: number | null;
+  /**
+   * .84 — upstream 1.86 (0691): o motor do banco (`postgres` ou `mysql`),
+   * escolhido na criação e imutável depois, e o aviso (não erro) do último teste,
+   * por exemplo o usuário do MySQL que pode escrever.
+   */
+  db_type?: string | null;
+  last_test_aviso?: string | null;
 }
 
 export interface PedidoDeBancoExterno {
@@ -104,6 +120,9 @@ export function retratoDaConexao(x: ConexaoDeBancoExterno): Record<string, unkno
     ultimo_teste_em: x.last_tested_at ?? null,
     // .81 (0618): o que o agente pode ler.
     fontes_liberadas: { modo: x.source_mode ?? "all", quantas: x.sources_count ?? 0 },
+    // .84 (upstream 0691): o motor e o aviso do último teste que passou.
+    tipo_do_banco: x.db_type ?? "postgres",
+    aviso_do_ultimo_teste: x.last_test_aviso ?? null,
   };
 }
 

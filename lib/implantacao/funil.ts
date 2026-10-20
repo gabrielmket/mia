@@ -87,7 +87,16 @@ export interface CampoPedido {
   label: string;
   type: CustomFieldDef["type"];
   required?: boolean;
-  options?: Array<{ value: string; label: string }>;
+  /** .84 — `aliases` (upstream 1.86, #2521): outras grafias da opção, na lista pesquisável. */
+  options?: Array<{ value: string; label: string; aliases?: string[] }>;
+  /**
+   * .84 — upstream 1.86 (#2791): o campo é do NEGÓCIO (o padrão, chave ausente)
+   * ou do CONTATO (sai do card e vai para a ficha do contato). Só no funil
+   * PADRÃO: é o único que a ficha do contato lê.
+   */
+  escopo?: "negocio" | "contato";
+  /** .84 — upstream 1.86 (#2521): só na lista pesquisável, aceita valor fora da lista. */
+  allow_new?: boolean;
   /** Nomes de etapa (não ids): a ferramenta resolve depois de as etapas existirem. */
   obrigatorio_em?: { etapas?: string[]; ao_ganhar?: boolean; ao_perder?: boolean };
   /**
@@ -488,6 +497,8 @@ function montarConfiguracao(
   pedido: PedidoDeFunil,
   atual: { settings: Record<string, unknown>; vocabulary: Record<string, unknown> },
   idPorNome: Map<string, string>,
+  /** .84: este funil é o que a ficha do contato lê (o padrão, ou o primeiro ativo sem padrão marcado). */
+  ehFunilPadrao: boolean,
 ): { patch: PipelineConfigPatch; mudancas: string[] } {
   const patch: PipelineConfigPatch = {};
   const mudancas: string[] = [];
@@ -497,6 +508,24 @@ function montarConfiguracao(
     const porChave = new Map(existentes.map((f) => [f.key.toLowerCase(), f]));
     const campos = [...existentes];
     for (const campo of pedido.campos) {
+      // .84 — upstream 1.86: as três regras do campo que a tela segue sozinha
+      // (ela só oferece cada escolha onde ela vale).
+      if (campo.escopo === "contato" && !ehFunilPadrao) {
+        throw new Recusa(
+          `O campo «${campo.label}» foi marcado como do CONTATO, e este não é o funil padrão: a ficha do contato lê só os campos do funil padrão, ` +
+            "e o campo sumiria de todas as telas. Mande-o no funil padrão (ou deixe sem `escopo`, que é do negócio).",
+        );
+      }
+      if (campo.escopo === "contato" && campo.obrigatorio_em) {
+        throw new Recusa(
+          `O campo «${campo.label}» é do CONTATO e não entra na régua de campos obrigatórios do NEGÓCIO: tire \`obrigatorio_em\` ou deixe o campo do negócio.`,
+        );
+      }
+      if (campo.allow_new !== undefined && campo.type !== "searchable_select") {
+        throw new Recusa(
+          `\`allow_new\` só existe na lista pesquisável (\`type: "searchable_select"\`), e o campo «${campo.label}» é «${campo.type}».`,
+        );
+      }
       const etapas = campo.obrigatorio_em?.etapas?.map((nome) => {
         const id = idPorNome.get(chaveDeNome(nome));
         if (!id) {
@@ -513,6 +542,7 @@ function montarConfiguracao(
         type: campo.type,
         ...(campo.required !== undefined ? { required: campo.required } : {}),
         ...(campo.options ? { options: campo.options } : {}),
+        ...(campo.allow_new !== undefined ? { allow_new: campo.allow_new } : {}),
         ...(campo.obrigatorio_em
           ? {
               obrigatorio_em: {
@@ -539,10 +569,20 @@ function montarConfiguracao(
       }
       const anterior = porChave.get(campo.key.toLowerCase());
       // `null` tira a condição: sem esta linha a mescla com o anterior a manteria.
+      // .84 — e o escopo, como a tela grava: a chave só existe quando é
+      // `contato` (ausente é negócio); `negocio` pedido por extenso tira a chave.
       const semCondicao = (f: CustomFieldDef): CustomFieldDef => {
-        if (campo.mostrar_quando !== null) return f;
-        const { mostrar_quando: _fora, ...resto } = f;
-        return resto as CustomFieldDef;
+        let r: CustomFieldDef = f;
+        if (campo.mostrar_quando === null) {
+          const { mostrar_quando: _fora, ...resto } = r;
+          r = resto as CustomFieldDef;
+        }
+        if (campo.escopo === "contato") r = { ...r, escopo: "contato" };
+        else if (campo.escopo === "negocio") {
+          const { escopo: _negocio, ...resto } = r;
+          r = resto as CustomFieldDef;
+        }
+        return r;
       };
       if (!anterior) {
         campos.push(semCondicao(definicao));
@@ -793,10 +833,15 @@ export async function garantirFunil(c: Implantacao, pedido: PedidoDeFunil): Prom
       .maybeSingle();
     if (error || !linha) throw new Error(`não consegui ler a configuração do funil: ${error?.message ?? "sem linha"}`);
     const lida = linha as { settings: Record<string, unknown> | null; vocabulary: Record<string, unknown> | null };
+    // .84 — o funil que a ficha do contato lê: a régua de `/api/v1/pipelines/default`
+    // (o marcado como padrão; sem marcado, o primeiro ativo por posição).
+    const ativos = funis.filter((f) => !f.is_archived);
+    const funilDaFicha = ativos.find((f) => f.is_default) ?? ativos[0];
     const { patch, mudancas } = montarConfiguracao(
       pedido,
       { settings: lida.settings ?? {}, vocabulary: lida.vocabulary ?? {} },
       idPorNome,
+      funilDaFicha?.id === alvo.id,
     );
     if (mudancas.length === 0) {
       configuracao = { desfecho: "ja_estava", mudancas: [] };

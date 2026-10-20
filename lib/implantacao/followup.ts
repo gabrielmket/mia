@@ -59,6 +59,7 @@ import { audit } from "@/lib/audit";
 import { listSelectableChannels } from "@/lib/channels/selectable";
 import { patchFollowupFlowSchema, triggerConfigSchema, type TriggerConfig } from "@/lib/followup/api-schemas";
 import { carregaEtapasCitadas } from "@/lib/followup/etapas-citadas";
+import { carregaModelosCitados } from "@/lib/followup/modelos-citados";
 import { flowGraphSchema, type FlowGraph } from "@/lib/followup/graph-schema";
 import { modeloPorId, MODELOS_DE_FOLLOWUP } from "@/lib/followup/modelos";
 import { numeroEhDaOrganizacao } from "@/lib/followup/numero-do-gatilho";
@@ -148,6 +149,18 @@ export interface PedidoDeFollowup {
   pausa_para_recomecar_minutos?: number | null;
   /** A pausa conta do último envio deste fluxo, e não da última mensagem do cliente. */
   pausa_conta_do_ultimo_envio?: boolean;
+  /**
+   * .84 — upstream 1.86 (#3048): para gatilho de silêncio, só começa para quem
+   * a EQUIPE já respondeu depois da última mensagem do cliente. Desligado é o
+   * padrão do upstream (o fluxo alcança também quem ficou sem atendimento).
+   */
+  so_se_a_equipe_respondeu?: boolean;
+  /**
+   * .84 — upstream 1.86 (#3048): para gatilho de silêncio, quantas vezes NO
+   * MÁXIMO o fluxo começa para o mesmo contato (contando as canceladas). `null`
+   * tira o limite. A inscrição única por silêncio do fork vale por baixo dele.
+   */
+  repeticoes_por_contato?: number | null;
   /** Caixas "mover lead no funil": o card vai para a etapa quando o fluxo chega ali. */
   mover_no_funil?: Array<AncoraDaCaixa & { funil: string; etapa: string }>;
   /** Caixas "editar tag do lead": as etiquetas são gravadas no negócio quando o fluxo chega ali. */
@@ -497,6 +510,8 @@ async function ajustarGatilho(
     ["silencio_maximo_minutos", pedido.silencio_maximo_minutos],
     ["pausa_para_recomecar_minutos", pedido.pausa_para_recomecar_minutos],
     ["pausa_conta_do_ultimo_envio", pedido.pausa_conta_do_ultimo_envio],
+    ["so_se_a_equipe_respondeu", pedido.so_se_a_equipe_respondeu],
+    ["repeticoes_por_contato", pedido.repeticoes_por_contato],
   ] as const;
   const pedidos = doSilencio.filter(([, valor]) => valor !== undefined).map(([campo]) => campo);
   if (pedidos.length > 0) {
@@ -527,6 +542,14 @@ async function ajustarGatilho(
     }
     if (!temPausa || pedido.pausa_conta_do_ultimo_envio === false) delete params.reentry_pause_basis;
     else if (pedido.pausa_conta_do_ultimo_envio === true) params.reentry_pause_basis = "ultimo_envio";
+    // .84 — upstream 1.86 (#3048), como a tela grava: desligado e sem limite
+    // somem com a chave (ausente = o comportamento de sempre).
+    if (pedido.so_se_a_equipe_respondeu === true) params.exige_resposta_da_equipe = true;
+    else if (pedido.so_se_a_equipe_respondeu === false) delete params.exige_resposta_da_equipe;
+    if (pedido.repeticoes_por_contato !== undefined) {
+      if (pedido.repeticoes_por_contato === null) delete params.max_enrollments_por_contato;
+      else params.max_enrollments_por_contato = pedido.repeticoes_por_contato;
+    }
     novo.params = params;
   }
   // O motor IGNORA, sem avisar, um teto que não passa do mínimo
@@ -551,7 +574,7 @@ async function ajustarGatilho(
   if (!lido.success) {
     throw new Recusa(
       "O gatilho do fluxo não passou na conferência. `silencio_minutos` vai de 5 a 10080 no gatilho de silêncio, e de 60 a 129600 no de cliente que voltou; " +
-        `\`silencio_maximo_minutos\` vai de 5 a 10080; \`pausa_para_recomecar_minutos\` vai de 0 a ${MAX_PAUSA_DE_REENTRADA_MINUTES}.`,
+        `\`silencio_maximo_minutos\` vai de 5 a 10080; \`pausa_para_recomecar_minutos\` vai de 0 a ${MAX_PAUSA_DE_REENTRADA_MINUTES}; \`repeticoes_por_contato\` vai de 1 a 50.`,
     );
   }
   if (!mesmoConteudo(lido.data, atual)) mudancas.push("gatilho");
@@ -837,18 +860,38 @@ export async function publicarFollowup(
     .eq("organization_id", c.orgId)
     .is("archived_at", null);
   if (conexoesErr) throw new Error(`não consegui ler os canais da organização: ${conexoesErr.message}`);
+  // .84 — upstream 1.86 (#3056): o modelo de mensagem que o passo cita tem de
+  // existir NESTA empresa (fluxo copiado de outra conta, ou modelo apagado), e
+  // o gatilho entra só pelos AVISOS (silêncio sem teto, sem limite de
+  // repetições, alcançando quem a equipe não respondeu), como na rota.
+  const modelos = await carregaModelosCitados(c.admin, c.orgId, grafo.nodes);
+  if (!modelos.ok) throw new Error(modelos.mensagem);
+  const gatilhoLido = triggerConfigSchema.safeParse(fluxo.trigger_config);
   const validacao = validateFlowForPublish(grafo, {
     etapas: citadas.etapas,
     surface: "followup",
     exigeModeloForaDaJanela: algumCanalExigeModeloForaDaJanela(
       ((conexoes ?? []) as Array<{ provider: string | null }>).map((x) => x.provider),
     ),
+    modelos: modelos.modelos,
+    ...(gatilhoLido.success ? { trigger: gatilhoLido.data } : {}),
   });
   if (!validacao.ok) {
     throw new Recusa(
       `O fluxo «${fluxo.name}» não passou na validação de publicação:\n` +
         validacao.errors.map((e) => `- ${e.node_id ? `nó ${e.node_id}: ` : ""}${e.message}`).join("\n"),
     );
+  }
+
+  // Os avisos da tela, com o campo DESTA ferramenta que resolve cada um.
+  const comoResolver: Record<string, string> = {
+    silencio_sem_teto: "`silencio_maximo_minutos`",
+    silencio_sem_limite_de_repeticoes: "`repeticoes_por_contato`",
+    silencio_alcanca_nao_atendido: "`so_se_a_equipe_respondeu: true`",
+  };
+  for (const aviso of validacao.warnings ?? []) {
+    const campo = comoResolver[aviso.code];
+    avisos.push(campo ? `${aviso.message} (Pelo MCP: ${campo} em plataforma_garantir_followup.)` : aviso.message);
   }
 
   const resultado = await publishFollowupFlowVersion(c.admin, {

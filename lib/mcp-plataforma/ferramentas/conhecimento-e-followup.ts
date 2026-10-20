@@ -1,6 +1,7 @@
 /**
  * As ferramentas de CONHECIMENTO (por texto) e de FOLLOW-UP. As operações moram
- * em `lib/implantacao/conhecimento.ts` e `lib/implantacao/followup.ts`.
+ * em `lib/implantacao/conhecimento.ts`, `lib/implantacao/followup.ts` e (.84,
+ * a cópia de fluxo do upstream 1.86) `lib/implantacao/copiar-followup.ts`.
  */
 import { z } from "zod";
 
@@ -11,6 +12,7 @@ import {
   type PedidoDeConhecimento,
 } from "@/lib/implantacao/conhecimento";
 import { MAX_PAUSA_DE_REENTRADA_MINUTES } from "@/lib/followup/pausa-de-reentrada";
+import { copiarFollowup, type PedidoDeCopiaDeFollowup } from "@/lib/implantacao/copiar-followup";
 import { garantirFollowup, publicarFollowup, type PedidoDeFollowup } from "@/lib/implantacao/followup";
 
 import type { FerramentaDePlataforma } from "../tipos";
@@ -74,7 +76,7 @@ export const FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP: readonly FerramentaDePlataf
       "INSTALAR: informe `modelo` (o id, de plataforma_listar_modelos, seção followup). O fluxo nasce RASCUNHO, com os textos do modelo, e NÃO manda mensagem para ninguém. " +
       "Modelo que dispara por etapa pede `etapa` (funil e etapa pelo nome). " +
       "AJUSTAR: `textos` troca o texto de uma mensagem pelo id do nó (veja os nós em plataforma_ver_followup) e, no texto fixo, a `midia` (imagem ou PDF que sai com o texto de legenda); `esperas` troca os minutos de uma espera; " +
-      "`silencio_minutos`, `silencio_maximo_minutos`, `pausa_para_recomecar_minutos`, `etapa` e `numero` ajustam o gatilho. " +
+      "`silencio_minutos`, `silencio_maximo_minutos`, `pausa_para_recomecar_minutos`, `so_se_a_equipe_respondeu`, `repeticoes_por_contato`, `etapa` e `numero` ajustam o gatilho. " +
       "MEXER NO NEGÓCIO SEM FALAR COM O CLIENTE: `mover_no_funil` garante uma caixa que leva o card para uma etapa, e `etiquetar` uma caixa que grava etiquetas. " +
       "Cada uma entra ANTES de um nó (`antes_de`): antes do fim «sem resposta» para marcar quem não respondeu, antes de uma mensagem para mover na hora em que ela sai. " +
       "Com `no`, ajusta uma caixa que já existe (feita aqui ou na tela). " +
@@ -167,6 +169,26 @@ export const FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP: readonly FerramentaDePlataf
           "De onde a pausa conta. false (padrão): da última mensagem do CLIENTE, e cada mensagem nova recomeça a contagem. " +
             "true: do fim do último envio deste fluxo, para o toque curto que roda no máximo uma vez por dia. Só vale com `pausa_para_recomecar_minutos`.",
         ),
+      // .84 — upstream 1.86 (#3048): os dois freios novos do gatilho de silêncio.
+      so_se_a_equipe_respondeu: z
+        .boolean()
+        .optional()
+        .describe(
+          "Para gatilho de silêncio: true só começa o fluxo para quem a EQUIPE já respondeu depois da última mensagem do cliente. " +
+            "Sem isto (o padrão), o fluxo alcança também quem escreveu e ficou sem atendimento, e pergunta «ainda tem interesse?» a quem está esperando resposta. false desliga.",
+        ),
+      repeticoes_por_contato: z
+        .number()
+        .int()
+        .min(1)
+        .max(50)
+        .nullable()
+        .optional()
+        .describe(
+          "Para gatilho de silêncio: quantas vezes NO MÁXIMO o fluxo começa para o mesmo contato (as tentativas canceladas no meio contam). " +
+            "A pausa só espaça os recomeços; sem limite, quem nunca responde recomeça para sempre. null tira o limite. " +
+            "Nesta plataforma o fluxo já não recomeça no MESMO silêncio (só depois de o contato escrever de novo); o limite conta por cima disso.",
+        ),
       mover_no_funil: z
         .array(
           z
@@ -213,6 +235,52 @@ export const FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP: readonly FerramentaDePlataf
       const { c } = await alvo(ctx, args);
       const { organization_id: _org, ...pedido } = args;
       return garantirFollowup(c, pedido as PedidoDeFollowup);
+    },
+  },
+
+  // .84 — upstream 1.86 (#3056): exportar e importar fluxo de follow-up.
+  {
+    name: "plataforma_copiar_followup",
+    description:
+      "COPIA um fluxo de FOLLOW-UP para um cliente: de OUTRA EMPRESA da plataforma (`de_outra_empresa`: a empresa e o fluxo, ex.: o fluxo que já funciona na Empresa Modelo) " +
+      "ou de um ARQUIVO `.fluxo.json` exportado pela tela (`arquivo`). É a exportação e a importação de fluxos da tela IA › Follow-ups, sem o arquivo passar de mão em mão. " +
+      "O fluxo copiado nasce RASCUNHO e NÃO manda mensagem para ninguém. Etapas, modelos de mensagem, responsáveis e próximos fluxos citados são conferidos contra o cliente: " +
+      "o que existe com o mesmo id fica, o que tem o mesmo NOME aqui é ligado sozinho, e o resto é esvaziado e volta em `pendencias` (as com `bloqueia: true` impedem a publicação até serem resolvidas). " +
+      "GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é o NOME no cliente (`nome`, ou o do fluxo de origem): se já existe um fluxo com esse nome, nada é copiado (`ja_estava`). " +
+      "ORDEM: crie antes os funis, as etapas e os modelos de mensagem que o fluxo cita (para casarem pelo nome); depois esta ferramenta; depois plataforma_ver_followup, os ajustes em plataforma_garantir_followup, " +
+      "plataforma_publicar_followup e, se o gatilho é automático, plataforma_garantir_agente com `followups`. " +
+      "O QUE NÃO FAZ: não publica, não arma em agente, não sobrescreve fluxo e não copia roteiro de atendimento (outra superfície).",
+    inputSchema: {
+      organization_id: ORGANIZACAO,
+      de_outra_empresa: z
+        .object({
+          organization_id: z.string().uuid().describe("A empresa de ORIGEM (de plataforma_listar_clientes ou plataforma_listar_demonstracoes)."),
+          fluxo: z.string().trim().min(1).max(120).describe("O nome (ou id) do fluxo de follow-up na empresa de origem."),
+        })
+        .strict()
+        .optional()
+        .describe("De onde copiar, quando o fluxo está em outra empresa da plataforma. Use este OU `arquivo`."),
+      arquivo: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe('O conteúdo de um arquivo ".fluxo.json" exportado pela tela (o objeto inteiro, com `format`, `version`, `flow` e `refs`). Use este OU `de_outra_empresa`.'),
+      nome: z
+        .string()
+        .trim()
+        .min(1)
+        .max(80)
+        .optional()
+        .describe("O nome do fluxo no cliente. Sem isto, o nome do fluxo de origem. É a chave para não duplicar."),
+    },
+    exemplo: {
+      organization_id: ORG_DE_EXEMPLO,
+      de_outra_empresa: { organization_id: "00000000-0000-4000-8000-000000000002", fluxo: "Retomada · voltar a quem parou de responder" },
+    },
+    operacao: "implantar_configuracao",
+    handler: async (ctx, args) => {
+      const { c } = await alvo(ctx, args);
+      const { organization_id: _org, ...pedido } = args;
+      return copiarFollowup(c, pedido as PedidoDeCopiaDeFollowup);
     },
   },
 

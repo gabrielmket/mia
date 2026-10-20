@@ -62,13 +62,45 @@ const campo = z
       .describe("A chave técnica do campo. É por ela que uma nova chamada atualiza o campo em vez de criar outro."),
     label: z.string().min(1).max(80).describe("O nome do campo como aparece na ficha do negócio."),
     type: z
-      .enum(["text", "textarea", "number", "date", "select", "multiselect", "boolean", "email", "phone", "url"])
-      .describe("O tipo do campo. `select` e `multiselect` pedem `options`."),
+      // .84 — `searchable_select`, a lista pesquisável do upstream 1.86 (#2521).
+      .enum(["text", "textarea", "number", "date", "select", "multiselect", "searchable_select", "boolean", "email", "phone", "url"])
+      .describe(
+        "O tipo do campo. `select` e `multiselect` pedem `options`. `searchable_select` é a LISTA PESQUISÁVEL, para listas longas (cidade, destino, especialidade): " +
+          "na ficha a pessoa digita e escolhe, a busca ignora maiúscula, acento e espaço e casa também pelos apelidos, e o que fica gravado é sempre o `value` da opção.",
+      ),
     required: z.boolean().optional().describe("Destaca o campo no formulário. Quem BARRA movimento é `obrigatorio_em`."),
     options: z
-      .array(z.object({ value: z.string().min(1), label: z.string().min(1) }).strict())
+      .array(
+        z
+          .object({
+            value: z.string().min(1),
+            label: z.string().min(1),
+            // .84 — upstream 1.86 (#2521): os apelidos da opção na lista pesquisável.
+            aliases: z
+              .array(z.string().min(1).max(80))
+              .max(20)
+              .optional()
+              .describe('Outras grafias que casam com a opção na lista pesquisável (ex.: ["mcz", "maceio"]).'),
+          })
+          .strict(),
+      )
       .optional()
-      .describe('As opções de um campo de escolha: [{ "value": "mensal", "label": "Mensal" }].'),
+      .describe(
+        'As opções de um campo de escolha: [{ "value": "mensal", "label": "Mensal" }]. Na lista pesquisável: [{ "value": "maceio-al", "label": "Maceió (AL)", "aliases": ["mcz"] }].',
+      ),
+    // .84 — upstream 1.86 (#2791): de quem é o campo.
+    escopo: z
+      .enum(["negocio", "contato"])
+      .optional()
+      .describe(
+        'De quem é o campo. "negocio" (o padrão): aparece no card e no dossiê do negócio, gravado no negócio. "contato": sai do card e vai para a FICHA DO CONTATO (ex.: CPF, nascimento), gravado no contato. ' +
+          "Só no funil PADRÃO (a ficha do contato lê só os campos dele). Um campo do contato não entra em `obrigatorio_em` nem serve ao gatilho por data das automações.",
+      ),
+    // .84 — upstream 1.86 (#2521).
+    allow_new: z
+      .boolean()
+      .optional()
+      .describe("Só na lista pesquisável: true aceita, na ficha, um valor que não está na lista (gravado como digitado). Padrão: falso, só valores da lista."),
     obrigatorio_em: z
       .object({
         etapas: z.array(z.string().min(1)).max(50).optional().describe("NOMES das etapas em que entrar já exige o campo preenchido."),
@@ -129,7 +161,14 @@ export const FERRAMENTAS_DE_FUNIL: readonly FerramentaDePlataforma[] = [
         .boolean()
         .optional()
         .describe("true ARQUIVA as etapas do funil que não estão em `etapas`, desde que estejam sem negócio. Padrão: falso (nada é tirado)."),
-      campos: z.array(campo).max(50).optional().describe("Campos personalizados do negócio neste funil."),
+      campos: z
+        .array(campo)
+        .max(50)
+        .optional()
+        .describe(
+          "Campos personalizados deste funil: do negócio (o padrão) ou, só no funil padrão, do contato (`escopo`). " +
+            "Marcar como do contato um campo de data que uma automação ligada usa no gatilho por data é recusado: troque o campo da regra ou desligue-a antes.",
+        ),
       motivos_de_perda: z
         .array(
           z.union([
