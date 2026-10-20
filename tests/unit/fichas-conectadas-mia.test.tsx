@@ -288,7 +288,11 @@ describe("documentos e obrigações nas fichas", () => {
 describe("as portas", () => {
   it("do atendimento ao cartão do negócio e à ficha da empresa (a tela única, /app/companies)", () => {
     const painel = readFileSync("components/inbox/CRMSidePanel.tsx", "utf8");
-    expect(painel).toContain("href={`/app/leads/${ativo.id}`}");
+    // .83: a porta para o cartão é o "Abrir no funil" do upstream (v1.85, #3004),
+    // que leva ao MESMO lugar que o link do fork levava (`/app/leads/<id>` só
+    // redireciona para o quadro com `?lead=`). Uma porta só, não duas.
+    expect(painel).toContain("href={`/app/pipelines/${ativo.pipeline_id}?lead=${ativo.id}`}");
+    expect(painel).not.toContain("href={`/app/leads/${ativo.id}`}");
     expect(painel).toContain("href={`/app/companies/${empresa.id}`}");
   });
 
