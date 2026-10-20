@@ -16,6 +16,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/hooks/auth/AuthProvider", () => ({
   useActiveOrg: () => ({ orgId: "org-1", currency: "BRL" }),
   useAuth: () => ({ activeOrg: { orgId: "org-1", role: "agent" } }),
+  // FORK MIA (.83): o `EditLeadDialog` do fork pergunta se a pessoa enxerga a
+  // equipe (`usePodeVerEquipe` → `usePermission("pipeline.move_card")`, o piso
+  // agent da reatribuição) para o seletor de "quem originou" do formulário.
+  // O papel do dublê é agent: a resposta é a mesma que a régua daria.
+  usePermission: () => true,
 }));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));
 const api = vi.hoisted(() => ({

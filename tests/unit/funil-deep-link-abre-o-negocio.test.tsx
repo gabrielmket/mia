@@ -30,6 +30,16 @@ vi.mock("@/components/kanban/LeadDossier", () => ({
     return <div data-testid="dossie-aberto">{`${p.lead.id}@${p.stageName}`}</div>;
   },
 }));
+// FORK MIA (.83): no fork o quadro abre o CARTÃO ABERTO (`components/cartoes/
+// aberto/CartaoAberto.tsx`) no lugar do `LeadDossier`, com os mesmos `lead`,
+// `stageName` e `pipelineId`. O dublê é o mesmo: o contrato medido aqui (qual
+// negócio o `?lead=` abre, e em que etapa) é o do quadro, não o da gaveta.
+vi.mock("@/components/cartoes/aberto/CartaoAberto", () => ({
+  CartaoAberto: (p: { lead: { id: string }; stageName: string; pipelineId: string }) => {
+    capturado.dossies.push({ leadId: p.lead.id, stageName: p.stageName, pipelineId: p.pipelineId });
+    return <div data-testid="dossie-aberto">{`${p.lead.id}@${p.stageName}`}</div>;
+  },
+}));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (texto: string) => texto }));
 vi.mock("@/hooks/inbox/useAssignableMembers", () => ({ useAssignableMembers: () => ({ data: [] }) }));
 vi.mock("@/hooks/leads/useAtRiskLeads", () => ({ useAtRiskLeads: () => ({ data: null }) }));
