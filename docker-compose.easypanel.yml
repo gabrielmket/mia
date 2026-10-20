@@ -133,7 +133,9 @@ services:
     environment:
       # Interno: o WAHA fala com o app pela rede do compose, nunca pela internet.
       WHATSAPP_HOOK_URL: http://app:3000/api/v1/webhooks/waha
-      WHATSAPP_HOOK_EVENTS: "message.any,message.ack,message.edited,message.revoked,session.status,state.change"
+      # FORK MIA (upstream v1.86, #2797): `message.reaction` entra, é por onde
+      # chega a reação (👍) do cliente pelo canal por QR; `message.any` não a cobre.
+      WHATSAPP_HOOK_EVENTS: "message.any,message.ack,message.edited,message.revoked,message.reaction,session.status,state.change"
       WHATSAPP_DEFAULT_ENGINE: NOWEB
       WAHA_DASHBOARD_ENABLED: "false"
       WHATSAPP_RESTART_ALL_SESSIONS: "True"

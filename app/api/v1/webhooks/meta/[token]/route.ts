@@ -256,7 +256,11 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       // geraria prévia/contador por um gesto que não é mensagem. Quem grava é
       // `ingestMetaReaction`, que também trata a remoção (emoji vazio) e o
       // descarte de reação sem alvo.
-      const r = await ingestMetaReaction(admin, e, { organizationId: session.organizationId });
+      //
+      // FORK MIA: `dono.organizationId`, e não `session.organizationId` como
+      // veio do upstream (1.86) — o mesmo motivo do eco abaixo: `session` pode
+      // ser `null`, e quem decide o tenant é `donoDoEvento`.
+      const r = await ingestMetaReaction(admin, e, { organizationId: dono.organizationId });
       desfechos.push(`reacao:${r.status}`);
       if (r.status === "failed" || r.status === "no_session") {
         logger.error("[meta.ingest] reação não ingerida", {
