@@ -12,6 +12,12 @@ import { ehToolIdRemoto } from "@/lib/mcp/servidor-externo/ids";
 import { VALID_TOOL_IDS } from "@/lib/mcp/tools/catalog";
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
 import { IDS_DE_PROVEDOR } from "@/lib/ai/pontos/provedores";
+// FORK MIA (.85): a régua do horário de atendimento da IA.
+import {
+  fraseDoProblema,
+  MAX_FAIXAS_POR_DIA,
+  problemasDoHorario,
+} from "@/lib/agent-engine/agent/horario-da-ia";
 
 /**
  * Derivado de `lib/ai/pontos/provedores.ts` (a lista única desde a 0127). Como
@@ -23,6 +29,38 @@ export const PROVIDERS = IDS_DE_PROVEDOR;
 export type Provider = (typeof PROVIDERS)[number];
 
 const UUID = z.string().uuid();
+
+/**
+ * FORK MIA (.85) — o HORÁRIO DE ATENDIMENTO DA IA, `filters.horario_da_ia`.
+ * A forma e a régua moram em `lib/agent-engine/agent/horario-da-ia.ts`: o
+ * `superRefine` aplica a MESMA lista de problemas que o motor usa para ler
+ * (inclusive a recusa de zero faixas), então tela, rota e MCP recusam igual.
+ */
+const horarioDaIaSchema = z
+  .object({
+    fuso: z.string().trim().min(1).max(64),
+    faixas: z
+      .array(
+        z
+          .object({
+            dias: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+            inicio: z.string().max(5),
+            fim: z.string().max(5),
+          })
+          .strict(),
+      )
+      .max(MAX_FAIXAS_POR_DIA * 7),
+  })
+  .strict()
+  .superRefine((horario, ctx) => {
+    for (const problema of problemasDoHorario(horario)) {
+      ctx.addIssue({
+        code: "custom",
+        path: "faixa" in problema ? ["faixas", problema.faixa] : problema.tipo === "fuso" ? ["fuso"] : ["faixas"],
+        message: fraseDoProblema(problema),
+      });
+    }
+  });
 
 const triggerConfigSchema = z
   .object({
@@ -46,6 +84,10 @@ const triggerConfigSchema = z
           .nullable()
           .optional()
           .default(null),
+        // FORK MIA (.85): sem esta linha o Zod descarta o campo ao salvar e o
+        // horário da IA nunca liga pela tela. Sem `.default`: versão que não
+        // tem horário continua sem a chave (ver `horarioDaIaSchema`, acima).
+        horario_da_ia: horarioDaIaSchema.nullable().optional(),
       })
       .default({ ignore_groups: true, ignore_self: true, keyword_regex: null, business_hours: null }),
     concurrency: z.enum(["one_per_conversation", "one_per_contact"]).default("one_per_conversation"),

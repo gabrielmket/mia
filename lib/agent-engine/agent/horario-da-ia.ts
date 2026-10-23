@@ -61,6 +61,9 @@ export const MINUTOS_NA_SEMANA = 7 * MINUTOS_NO_DIA;
 export const MENSAGEM_SEM_FAIXA =
   "Sem nenhuma faixa a IA nunca responde. Para parar o agente, use Pausar.";
 
+/** O nome do dia na frase, 0 (domingo) a 6 (sábado). */
+const NOME_DO_DIA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"] as const;
+
 /** Uma faixa como ela é gravada (e como o MCP a recebe). */
 export interface FaixaDaIa {
   dias: number[];
@@ -249,6 +252,31 @@ export function problemasDoHorario(valor: unknown): ProblemaDoHorario[] {
   });
   if (faixas.length === 0) problemas.push({ tipo: "sem_faixa" });
   return problemas;
+}
+
+/**
+ * A frase de um problema, para quem grava fora da tela (a rota e o MCP). A tela
+ * tem as dela, traduzidas, ao lado de cada faixa.
+ */
+export function fraseDoProblema(p: ProblemaDoHorario): string {
+  switch (p.tipo) {
+    case "forma":
+      return 'O horário da IA é { "fuso": "America/Sao_Paulo", "faixas": [{ "dias": [1,2,3,4,5], "inicio": "08:00", "fim": "18:00" }] }.';
+    case "fuso":
+      return 'O fuso não existe. Use um fuso como "America/Sao_Paulo".';
+    case "dias":
+      return `A faixa ${p.faixa + 1} precisa de ao menos um dia, de 0 (domingo) a 6 (sábado).`;
+    case "hora":
+      if (p.detalhe === "vira_a_meia_noite") {
+        return `A faixa ${p.faixa + 1} passa da meia-noite. Divida em duas: uma até "24:00" no dia e outra de "00:00" no dia seguinte.`;
+      }
+      if (p.detalhe === "igual") return `A faixa ${p.faixa + 1} começa e termina no mesmo horário.`;
+      return `A faixa ${p.faixa + 1} usa "HH:MM" de 24 horas; o início vai de "00:00" a "23:59" e o fim pode ser "24:00", o fim do dia.`;
+    case "mais_de_seis":
+      return `Até ${MAX_FAIXAS_POR_DIA} faixas por dia (${NOME_DO_DIA[p.dia]} tem mais).`;
+    case "sem_faixa":
+      return MENSAGEM_SEM_FAIXA;
+  }
 }
 
 /**
@@ -464,8 +492,6 @@ export function proximaAbertura(horario: HorarioDaIa, instante: Date): Date | nu
   if (ativaEm(horario, instante)) return null;
   return proximaTroca(horario, instante)?.em ?? null;
 }
-
-const NOME_DO_DIA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"] as const;
 
 /** "hoje às 17:30", "amanhã às 10:00", "na segunda às 10:00", "no sábado às 08:00". */
 export function textoDaTroca(troca: Pick<TrocaDeEstado, "diasAdiante" | "dia" | "hora">): string {
