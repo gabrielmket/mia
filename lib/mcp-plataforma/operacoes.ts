@@ -140,6 +140,26 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "alguém revogar.",
   },
   ...OPERACOES_DE_IMPORTACAO,
+  // FORK MIA (.89): o disparo de e-mail marketing (docs/fork/email-marketing.md).
+  // Duas chaves próprias, porque o estrago é outro: uma LIBERA envio para pessoas
+  // (o aceite importado), a outra manda e-mail com o domínio do cliente (o teste).
+  // Disparar a campanha não tem chave: é só pela tela, assinado por uma pessoa.
+  {
+    chave: "importar_consentimentos",
+    rotulo: "Importar aceites de e-mail marketing",
+    raio:
+      "Grava, em QUALQUER cliente, que uma lista de pessoas aceitou receber e-mail marketing (com data, origem e evidência). " +
+      "Aceite gravado libera o envio: um token vazado faz a empresa mandar e-mail para quem nunca pediu, em nome dela, e a " +
+      "prova do aceite passa a ser o que o token escreveu. Descadastro não volta por aqui.",
+  },
+  {
+    chave: "criar_campanha_de_email",
+    rotulo: "Criar campanha de e-mail em rascunho e mandar o teste",
+    raio:
+      "Cria e edita rascunhos de campanha de e-mail em QUALQUER cliente e manda o TESTE (até 5 endereços por vez, só da equipe " +
+      "daquele cliente ou de quem criou o token) pelo domínio verificado da empresa, com [TESTE] no assunto. Não dispara a " +
+      "campanha: o envio é só pela tela, com a declaração da base legal assinada por uma pessoa da empresa.",
+  },
 ] as const;
 
 const POR_CHAVE = new Map(OPERACOES.map((o) => [o.chave, o]));

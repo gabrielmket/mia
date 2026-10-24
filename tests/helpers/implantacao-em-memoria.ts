@@ -37,6 +37,9 @@ export const TODAS_AS_OPERACOES = [
   "convidar_equipe",
   // FORK MIA (.79): o link dos painéis para o dono do negócio.
   "compartilhar_paineis",
+  // FORK MIA (.89): o e-mail marketing (aceites importados e o rascunho com teste).
+  "importar_consentimentos",
+  "criar_campanha_de_email",
 ];
 
 /** O funil de e-commerce que o gatilho de seed entrega a toda organização nova. */

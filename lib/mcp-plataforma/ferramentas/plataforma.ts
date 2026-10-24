@@ -329,7 +329,9 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
   {
     name: "plataforma_liberar_modulo",
     description:
-      "Libera um módulo vendido para um cliente. Passe `liberar: false` para tirar.",
+      "Libera um módulo vendido para um cliente. Passe `liberar: false` para tirar. " +
+      // FORK MIA (.89): o e-mail marketing é módulo vendido.
+      "`email_marketing` libera o disparo de e-mail marketing (a tela de configuração, o caminho E-mail no Broadcast e a cobrança por e-mail).",
     inputSchema: {
       organization_id: z.string().uuid(),
       modulo: z.string().trim().min(1).max(60).describe("A chave do módulo."),
@@ -422,7 +424,10 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
     description:
       "Define quanto cada mensagem de disparo custa ao cliente, em CENTAVOS. " +
       "Passe `null` para devolver o cliente ao estado 'sem preço acordado', em " +
-      "que o disparador recusa.",
+      "que o disparador recusa. " +
+      // FORK MIA (.89): o preço por e-mail do disparo de e-mail marketing.
+      "Também define o preço por E-MAIL aceito pela Amazon (`preco_por_email_cents`; `null` volta ao padrão de R$ 0,02). " +
+      "Campo ausente fica como está.",
     inputSchema: {
       organization_id: z.string().uuid(),
       preco_por_mensagem_cents: z
@@ -431,7 +436,18 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         .min(0)
         .max(100_000)
         .nullable()
-        .describe("Centavos por mensagem. `null` = sem preço acordado."),
+        // FORK MIA (.89): opcional, para dar preço só ao e-mail sem mexer no da mensagem.
+        .optional()
+        .describe("Centavos por mensagem. `null` = sem preço acordado. Ausente: fica como está."),
+      // FORK MIA (.89): o preço por e-mail (coluna `preco_por_email_cents`, migration 9060).
+      preco_por_email_cents: z
+        .number()
+        .int()
+        .min(0)
+        .max(10_000)
+        .nullable()
+        .optional()
+        .describe("Centavos por e-mail de marketing aceito pela Amazon. `null` = o padrão (2 centavos). Ausente: fica como está."),
       alerta_saldo_cents: z
         .number()
         .int()
@@ -443,24 +459,34 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
     operacao: "definir_preco",
     handler: async ({ admin, autorUserId }, args) => {
       const preco = args.preco_por_mensagem_cents;
-      const { error } = await admin.from("tenant_broadcast_pricing").upsert(
-        {
-          organization_id: String(args.organization_id),
-          preco_por_mensagem_cents: preco === null ? null : Number(preco),
-          alerta_saldo_cents:
-            typeof args.alerta_saldo_cents === "number" ? args.alerta_saldo_cents : null,
-          updated_at: new Date().toISOString(),
-          updated_by: autorUserId,
-        },
-        { onConflict: "organization_id" },
-      );
+      // FORK MIA (.89): os dois preços são opcionais, e o ausente fica como está.
+      const temMensagem = preco !== undefined;
+      const temEmail = args.preco_por_email_cents !== undefined;
+      if (!temMensagem && !temEmail) {
+        throw new Error("diga `preco_por_mensagem_cents`, `preco_por_email_cents` ou os dois.");
+      }
+      const linha: Record<string, unknown> = {
+        organization_id: String(args.organization_id),
+        updated_at: new Date().toISOString(),
+        updated_by: autorUserId,
+      };
+      if (temMensagem) {
+        linha.preco_por_mensagem_cents = preco === null ? null : Number(preco);
+        // Como sempre foi: com o preço da mensagem, o alerta ausente volta a nulo.
+        linha.alerta_saldo_cents = typeof args.alerta_saldo_cents === "number" ? args.alerta_saldo_cents : null;
+      } else if (args.alerta_saldo_cents !== undefined) {
+        linha.alerta_saldo_cents = typeof args.alerta_saldo_cents === "number" ? args.alerta_saldo_cents : null;
+      }
+      if (temEmail) linha.preco_por_email_cents = args.preco_por_email_cents === null ? null : Number(args.preco_por_email_cents);
+      const { error } = await admin.from("tenant_broadcast_pricing").upsert(linha, { onConflict: "organization_id" });
       if (error) throw new Error(`não consegui gravar o preço: ${error.message}`);
       // O valor volta na resposta de propósito: preço é dinheiro, e quem
       // acabou de gravá-lo por conversa precisa ver o número que ficou — não
       // um "ok" que esconde um zero digitado a mais.
       return {
         organization_id: String(args.organization_id),
-        preco_por_mensagem_cents: preco === null ? null : Number(preco),
+        ...(temMensagem ? { preco_por_mensagem_cents: preco === null ? null : Number(preco) } : {}),
+        ...(temEmail ? { preco_por_email_cents: args.preco_por_email_cents === null ? null : Number(args.preco_por_email_cents) } : {}),
       };
     },
   },

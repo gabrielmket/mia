@@ -7,7 +7,8 @@
  * O molde é o de `mcp-de-implantacao-novidades-do-upstream-186.test.ts`: um
  * bloco por novidade, e o que se mede é o BANCO, não a resposta.
  *
- * A CONTAGEM da lista mora aqui (a versão mais nova): 69. As v1.87 e v1.88 não
+ * A CONTAGEM da lista morava aqui até a .86: 69. Desde a .89 ela mora em
+ * `mcp-de-implantacao-email-marketing.test.ts` (78, com as nove do e-mail). As v1.87 e v1.88 não
  * pediram ferramenta nova, só campos: o reaproveitamento do card aberto na
  * fonte (0722), a assinatura com o nome de cada agente (#3318), a devolução à
  * fila da conversa do rodízio sem resposta (#2988), o telefone que entra
@@ -101,8 +102,8 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("a lista: 69 ferramentas, e os tipos de ação seguem os do upstream", () => {
-  it("as v1.87 e v1.88 não acrescentaram ferramenta (69)", () => {
-    expect(FERRAMENTAS).toHaveLength(69);
+  it("as v1.87 e v1.88 não acrescentaram ferramenta (69 até a .86; a .89 trouxe as nove do e-mail)", () => {
+    expect(FERRAMENTAS.filter((f) => !/email|supressao|consentimentos|segmentos/.test(f.name))).toHaveLength(69);
   });
 
   it("⭐ os tipos de ação são EXATAMENTE os do upstream: a v1.88 trouxe `notify_team` (#2642)", () => {

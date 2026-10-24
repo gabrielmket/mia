@@ -43,6 +43,8 @@ import { routingConfigSchema } from "@/lib/schemas/routing";
 import { contarNoBanco } from "../contar";
 
 import { conversoes } from "./area-das-conversoes";
+// FORK MIA (.89): o e-mail marketing.
+import { emailMarketing } from "./area-do-email-marketing";
 import { migracao } from "./area-da-migracao";
 import { obrigacoes } from "./area-das-obrigacoes";
 import type { AreaDoChecklist, ResultadoDaArea } from "./tipos";
@@ -896,5 +898,7 @@ export const AREAS_DO_CHECKLIST: readonly AreaDoChecklist[] = [
   // documentos e obrigações com vencimento: opcional, nunca conta como pendência
   obrigacoes,
   conversoes,
+  // FORK MIA (.89): o e-mail marketing; opcional sem o módulo, nunca conta o envio como pendência
+  emailMarketing,
   plataforma,
 ];

@@ -128,6 +128,7 @@ pessoa faz (com a tela e o caminho).
 | 17 | Convidar a equipe (o link curto de cada convite volta na resposta, para mandar por WhatsApp) | `plataforma_convidar_pessoas` | agente |
 | 18 | Conferir o checklist: `pode_atender` e a lista do que ficou com uma pessoa | `plataforma_ver_implantacao` | agente |
 | 18a | Os relatórios e o painel do segmento (montador de relatórios), os números do primeiro dia, e o link para o dono preparado (mandado só quando o cliente pedir) | `plataforma_garantir_relatorios`, `plataforma_ver_relatorios`, `plataforma_ver_paineis`, `plataforma_garantir_link_do_dono` | agente (quem manda o link é uma pessoa) |
+| 18b | E-mail marketing (opcional, módulo `email_marketing`): liberar o módulo e o preço por e-mail, cadastrar o domínio (os seis registros vão a quem cuida do DNS do cliente), remetente e rodapé, a supressão e os aceites da ferramenta anterior, os segmentos e os modelos, e uma campanha em RASCUNHO com o teste para a equipe. **O envio é da pessoa da empresa, pela tela** | `plataforma_liberar_modulo`, `plataforma_definir_preco`, `plataforma_verificar_dominio_de_email`, `plataforma_configurar_email_marketing`, `plataforma_importar_supressao`, `plataforma_importar_consentimentos`, `plataforma_garantir_segmentos`, `plataforma_garantir_modelos_de_email`, `plataforma_criar_campanha_de_email`, `plataforma_ver_email_marketing` | agente (o DNS e o envio são de pessoas) |
 
 ### O que a pessoa faz no meio
 
@@ -187,8 +188,10 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **69** ferramentas no servidor: as 61 desta página e as 8 da migração
-([`mcp-de-migracao.md`](mcp-de-migracao.md)). A fusão das v1.87 e v1.88 (.86) não pediu
+São **78** ferramentas no servidor: as 70 desta página e as 8 da migração
+([`mcp-de-migracao.md`](mcp-de-migracao.md)). As nove mais novas (.89) são as do disparo de
+e-mail marketing ([`email-marketing.md`](email-marketing.md); veja "O disparo de e-mail
+marketing (.89)", nesta seção). A fusão das v1.87 e v1.88 (.86) não pediu
 ferramenta nova, só campos e regras novas (veja "O que chegou do upstream 1.87 e 1.88",
 nesta seção). A mais nova (.84, a fusão do upstream
 v1.86) é `plataforma_copiar_followup`: a exportação e a importação de fluxo da tela,
@@ -226,6 +229,8 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | `plataforma_diagnosticar_conversoes_da_meta` | o diagnóstico da Meta, o mesmo do botão "Testar conexão": token, destino, permissão, último envio aceito, recusas em 7 dias e modo de teste. Faz três leituras na Meta com o token do cliente; nenhum evento é enviado | leitura |
 | `plataforma_ver_paineis` | os doze PAINÉIS PRONTOS de um cliente (resultado do mês, meta do mês, funil, de onde vêm, por que perdemos, atendimento, tempo de resposta, agenda, follow-up, anúncios, previsão, assuntos), com os números do motor de conta no banco (`fn_mia_relatorio`, 9030): todas as linhas do período, no fuso e na moeda da empresa. Período 7, 30 ou 90 dias, ou o mês; funil opcional; com ou sem valores em reais. Nada de custo de IA, gasto com anúncio, nome ou contato | leitura |
 | `plataforma_ver_relatorios` | o MONTADOR DE RELATÓRIOS de um cliente (.80): os doze relatórios prontos e o funil a que estão ligados, os relatórios e os painéis da equipe (compartilhados ou criados pela implantação) com o que cada um mede e agrupa, e quantos são só de quem criou (esses não são listados: o "só para mim" não aparece para ninguém). Com `numeros: true`, calcula cada relatório dos painéis no banco (`fn_mia_relatorio`) e devolve total e maiores grupos; diz qual relatório fica fora do link do dono por mostrar pessoa da equipe | leitura |
+| `plataforma_ver_email_marketing` | o RETRATO do e-mail marketing (.89): módulo, Amazon ligada no servidor (só sim ou não, nunca a chave), o domínio e os seis registros com o que falta, os remetentes, o "responder para", o rodapé, o ritmo e a janela, o degrau do aquecimento, a saúde dos 30 dias, o preço por e-mail, o saldo, a supressão, os textos de consentimento, os segmentos, os modelos e as PENDÊNCIAS para o primeiro envio | leitura |
+| `plataforma_ver_campanhas_de_email` | as campanhas de e-mail (.89): situação, por que pausou, o andamento e, com `campanha_id`, os resultados (entregues, aberturas como estimativa, cliques únicos sem robô, descadastros, rejeições, reclamações, cobrado e cliques por link) | leitura |
 | `plataforma_ver_links_do_dono` | os links para o dono do negócio de um cliente: para quem, o endereço, a situação (ativo, vencido, revogado), os painéis, o período, se mostra valores, a validade, o último acesso e quantos acessos | leitura |
 
 ### Operações que já existiam
@@ -233,9 +238,9 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | ferramenta | operação | o que faz | reexecução |
 |---|---|---|---|
 | `plataforma_criar_cliente` | `criar_cliente` | cria a organização; quem criou o token entra como admin | a mesma `chave` devolve a mesma organização |
-| `plataforma_liberar_modulo` | `liberar_modulo` | libera ou tira um módulo vendido | liberar de novo não duplica |
+| `plataforma_liberar_modulo` | `liberar_modulo` | libera ou tira um módulo vendido (desde a .89, também `email_marketing`) | liberar de novo não duplica |
 | `plataforma_lancar_credito` | `lancar_credito` | lança crédito ou estorno na carteira de disparo | **não** é reexecutável: cada chamada lança |
-| `plataforma_definir_preco` | `definir_preco` | define o preço por mensagem de disparo | grava o mesmo valor |
+| `plataforma_definir_preco` | `definir_preco` | define o preço por mensagem de disparo e, desde a .89, o preço por e-mail (`preco_por_email_cents`; `null` volta ao padrão de 2 centavos). Os dois são opcionais: o ausente fica como está | grava o mesmo valor |
 
 ### Empresas de demonstração por segmento
 
@@ -336,6 +341,36 @@ no banco fica só o hash. Por isso "Copiar link" funciona a qualquer hora e
 não manda dado nenhum para a prévia do WhatsApp, conta e audita cada abertura sem
 identificar a pessoa, e usa metadados fixos. Na empresa de demonstração o link
 funciona com os dados fictícios e a página avisa que é demonstração.
+
+### O disparo de e-mail marketing (.89)
+
+Função do fork, e entra no MCP na mesma versão. Desenho e passo a passo da Amazon em
+[`email-marketing.md`](email-marketing.md); a prova está em
+`tests/unit/mcp-de-implantacao-email-marketing.test.ts` (a CONTAGEM da lista mora ali
+desde a .89: 78).
+
+**O MCP nunca dispara.** Ele monta tudo e manda o TESTE; quem envia é uma pessoa da
+empresa (gestor para cima), na tela da campanha, com a declaração da base legal
+assinada por ela. Nenhum arquivo de `lib/mcp-plataforma/` importa a confirmação, a
+retomada ou o motor do envio (o teste confere no código-fonte). E o teste pelo MCP vai
+SÓ para e-mails da equipe do cliente ou de quem criou o token: um token vazado não
+manda e-mail com o domínio do cliente para endereço de fora.
+
+| ferramenta | operação | o que faz | reexecução |
+|---|---|---|---|
+| `plataforma_verificar_dominio_de_email` | `implantar_configuracao` | cadastra o domínio na Amazon (uma vez) e confere no DNS os seis registros: 3 CNAME de DKIM, o MX e o SPF do subdomínio de retorno (padrão `envio`) e o DMARC. Devolve a tabela para quem cuida do DNS; recusa provedor gratuito | rodar de novo só confere |
+| `plataforma_configurar_email_marketing` | `implantar_configuracao` | os remetentes (nome e parte antes do @; um padrão), o "responder para", o rodapé obrigatório (razão social, CNPJ, endereço, motivo, privacidade ou a página padrão, que é rascunho para revisão jurídica), o ritmo, a janela e os dias úteis | campo ausente fica; o mesmo pedido responde `ja_estava` |
+| `plataforma_garantir_segmentos` | `implantar_configuracao` | os segmentos salvos (o recorte do Broadcast mais empresa e campanha anterior, com a base legal; interesse legítimo exige `lia_ref`) | pelo nome |
+| `plataforma_garantir_modelos_de_email` | `implantar_configuracao` | os modelos do catálogo por segmento de negócio e os escritos à parte | pela chave |
+| `plataforma_importar_supressao` | `implantar_configuracao` | os descadastros da ferramenta anterior entram como `importada` e nunca mais recebem | só acrescenta; o repetido é `ja_estava` |
+| `plataforma_importar_consentimentos` | `importar_consentimentos` | aceites com data, ORIGEM (obrigatória), versão do texto e evidência, no contato com aquele e-mail. Quem está na supressão continua fora | o aceite igual não duplica |
+| `plataforma_criar_campanha_de_email` | `criar_campanha_de_email` | o RASCUNHO (de um modelo, de um segmento ou com o conteúdo escrito ali), com `campanha_id` edita; com `teste_para` (até 5, da equipe) manda o teste com [TESTE] no assunto, sem cobrar. Devolve a conferência: quem recebe, quem fica de fora e por quê, o plano dia a dia, o custo, o saldo e o que trava. **Não dispara** | cada chamada sem `campanha_id` cria um rascunho |
+
+As duas caixinhas novas do token, e o raio de cada uma: `importar_consentimentos` LIBERA
+envio para pessoas (o aceite importado é o que prova o consentimento), e
+`criar_campanha_de_email` manda e-mail pelo domínio do cliente (o teste, só para a
+equipe). A área nova do checklist (`email_marketing`, em `plataforma_ver_implantacao`) é
+opcional sem o módulo e nunca conta o envio como pendência do implantador.
 
 ### Recusas
 
@@ -748,6 +783,8 @@ Testes:
 
 | arquivo | o que mede |
 |---|---|
+| `tests/unit/mcp-de-implantacao-email-marketing.test.ts` | as nove ferramentas do e-mail marketing (.89) e a CONTAGEM da lista (78): leitura livre e as duas caixinhas novas, o MCP que nunca dispara (pelo código-fonte e pelo banco: rascunho, ninguém na fila), o teste só para a equipe, a demonstração e o módulo que recusam o teste, a configuração que não duplica, a supressão que só acrescenta, o preço por e-mail que não mexe no da mensagem e a área nova do checklist |
+| `tests/invariants/email-marketing.test.ts` | as tabelas do e-mail (9060 a 9065) no Postgres de verdade: isolamento por empresa e papel, só o servidor grava, a demonstração que não envia, a supressão que só acrescenta, a anonimização que apaga o legível e mantém o veto, o débito por lote e a fila do worker |
 | `tests/unit/mcp-de-implantacao-ferramentas.test.ts` | o catálogo: descrições, exemplos que passam no próprio esquema, a guarda da operação, organização inexistente, recusa que ensina, auditoria |
 | `tests/unit/mcp-de-implantacao-operacoes.test.ts` | cada ferramenta: o que grava, a reexecução, as recusas e a empresa de demonstração |
 | `tests/unit/mcp-de-implantacao-conversoes.test.ts` | as seis ferramentas de conversões: o que gravam, que montar não liga, a reexecução, as recusas, a resposta sem segredo e a empresa de demonstração |
