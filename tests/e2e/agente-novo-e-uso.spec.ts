@@ -28,6 +28,7 @@ import * as path from "node:path";
 import { test, expect, type Page } from "./helpers/test";
 
 import { loginComoAdmin, loginComoDono, lerCreds, type CredsE2E } from "./helpers/login-admin";
+import { afirmarDonoDoServidor } from "./utils/precondicao";
 
 const EVIDENCIA = path.join(process.cwd(), "evidence", "ia-360-w1");
 
@@ -50,7 +51,14 @@ test.describe("Criar um agente pela tela", () => {
   // cliente o bloco "A inteligência que ele usa" nem aparece. O formulário que
   // estes casos medem — o que diz o que falta e deixa escolher — é o do dono do
   // servidor, que no seed também é admin desta organização.
+  //
+  // O `platform_admins` do `e2e-dono` é AFIRMADO aqui (e concedido se faltar):
+  // quem o promove é `seed-e2e-system-update`, que o CI não roda como passo. Na
+  // parte 1 ela passava com o dono já promovido pela vizinhança; desde a v1.88 mora na
+  // parte 7, sem essa vizinha, e o formulário abria como o do CLIENTE (sem o
+  // cartão da IA), reprovando o primeiro caso pela ordem de execução.
   test.beforeEach(async ({ page }) => {
+    await afirmarDonoDoServidor(creds.users.dono!.email);
     creds = await loginComoDono(page, creds);
   });
 

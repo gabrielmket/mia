@@ -79,6 +79,16 @@ async function login(page: Page, email: string, senha: string): Promise<void> {
 
 test.describe("Campanhas — número oficial manda modelo aprovado", () => {
   test.describe.configure({ mode: "serial", timeout: 240_000 });
+  // FORK MIA (.58, docs/fork/broadcast-unificado.md): no fork as Campanhas são
+  // SÓ o caminho "Número por QR" do Broadcast, e o número oficial dispara pelo
+  // motor do Broadcast. O layout de /app/campaigns manda ao Broadcast quem não
+  // tem o caminho por QR liberado (`app/app/campaigns/layout.tsx`), e o Broadcast
+  // leva só o número por QR às Campanhas (`components/broadcast/NovoDisparo.tsx`,
+  // `ehNumeroPorQr`). O caminho que esta
+  // spec mede (número oficial dentro de Campanhas, 0710) não existe aqui por
+  // decisão de produto; abrir ou não as Campanhas ao número oficial é decisão
+  // pendente do dono do produto, e esta spec volta a rodar no dia em que abrir.
+  test.skip(true, "no fork o número oficial dispara pelo Broadcast (docs/fork/broadcast-unificado.md)");
 
   const env = carregarEnvLocal();
   const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!, {
