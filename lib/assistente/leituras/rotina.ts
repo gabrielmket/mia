@@ -186,7 +186,7 @@ export async function lerRotinaDoDia(
     .order("awaiting_since", { ascending: true, nullsFirst: false })
     .limit(500);
   fontes.add("Caixa de entrada");
-  const abertas = (abertasBrutas ?? []) as Array<{
+  const abertas = (abertasBrutas ?? []) as unknown as Array<{
     id: string;
     contact_id: string;
     assigned_to_user_id: string | null;

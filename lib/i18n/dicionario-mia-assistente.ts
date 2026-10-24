@@ -253,6 +253,10 @@ export const DICIONARIO_DO_ASSISTENTE_MIA: Traducoes = {
   "Salvo. Chegou por": { es: "Guardado. Llegó por" },
   "Não consegui gravar a resposta.": { es: "No pude guardar la respuesta." },
 
+  // ── os botões dos avisos do sino (lib/ai/inbox-destino.ts) ──
+  "Ver a resposta": { es: "Ver la respuesta" },
+  "Abrir o resumo": { es: "Abrir el resumen" },
+
   // ── a resposta do chamado (assistente, sino e e-mail) ──
   "Seu chamado #{n} foi resolvido.": { es: "Tu ticket #{n} fue resuelto." },
   "A Time Company respondeu o seu chamado #{n} ({s}).": { es: "Time Company respondió tu ticket #{n} ({s})." },

@@ -136,6 +136,9 @@ npx vitest run
   rotas do upstream de onde ele tirou a lógica para uma função compartilhada, e as
   rotas que ele espelha, estão em
   [`docs/fork/mcp-de-implantacao.md`](fork/mcp-de-implantacao.md), seção 5.
+  O assistente da MIA (.88) mora em `lib/assistente/`, `components/assistente/` e
+  `app/app/assistente/`, e a lista fechada dos pontos de ligação dele no código do
+  upstream está em [`docs/fork/assistente.md`](fork/assistente.md), seção 7.
 - **Funcionalidade duplicada.** Os dois lados construíram, na mesma semana, o
   cadastro incorporado da Meta, o disparo em massa e o aviso no WhatsApp. A decisão
   de ficar com um, com o outro ou com os dois é de produto. Para o **disparo em
