@@ -221,7 +221,11 @@ describe("passo `template` apontado para um modelo aprovado do canal", () => {
     expect(runBeforeSend).not.toHaveBeenCalled();
     const r = resultado(completeFollowupTurn);
     expect(r.kind).toBe("skipped");
-    expect(r.reason).toContain("{{1}} sem origem");
+    // FORK MIA: sem mapa no passo, o {{1}} sozinho leva o primeiro nome do contato
+    // (lib/channels/meta/variavel-do-nome.ts); este contato não tem nome, então o
+    // passo é pulado e o motivo diz qual variável e o que falta.
+    expect(r.reason).toContain("{{1}}");
+    expect(r.reason).toContain("não tem nome cadastrado");
   });
 
   it("controle: texto pronto de Ajustes → Modelos continua saindo como TEXTO", async () => {

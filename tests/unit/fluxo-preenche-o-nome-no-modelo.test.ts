@@ -247,19 +247,22 @@ describe("passo `template` com a variável do nome", () => {
     expect(resultado(completeFollowupTurn).kind).toBe("skipped");
   });
 
-  it("⭐ modelo com DUAS variáveis continua recusado, e nem consulta o contato", async () => {
+  it("⭐ modelo com DUAS variáveis e sem mapa no passo continua recusado, e o motivo diz quais (a régua do upstream, v1.87)", async () => {
+    // Desde a v1.87 o passo pode escolher a origem de cada variável (#3121). Sem
+    // o mapa, a regra do nome do fork só vale para o {{1}} SOZINHO; com mais de
+    // uma variável quem responde é a régua do upstream, que nomeia cada uma.
     const { d, completeFollowupTurn } = deps();
-    const { pool, contatosConsultados } = fakePool({
+    const { pool } = fakePool({
       components: [corpo("Olá {{1}}, sua visita é {{2}}.", { body_text: [["Maria", "amanhã"]] })],
       contato: { name: "Maria", display_name: null },
     });
     await criarHandler(d)(job({ template_id: MODELO_ID }), pool, { workerId: "w1" });
 
     expect(runBeforeSend).not.toHaveBeenCalled();
-    expect(contatosConsultados).toHaveLength(0);
     const r = resultado(completeFollowupTurn);
     expect(r.kind).toBe("skipped");
-    expect(r.reason).toContain("variáveis que o fluxo não sabe preencher");
+    expect(r.reason).toContain("{{1}} sem origem");
+    expect(r.reason).toContain("{{2}} sem origem");
   });
 
   it("variável fora do corpo (cabeçalho) junto do {{1}}: recusado como antes", async () => {

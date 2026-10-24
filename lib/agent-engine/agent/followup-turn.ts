@@ -1152,8 +1152,9 @@ async function resolveFlowSendBody(
  * (que não tinham onde guardar o mapa) e do plano B da mensagem por IA, que não
  * tem mapa. A regra do que conta como "a variável do nome", e de quando o texto
  * neutro pode entrar no lugar de um nome que falta, mora em
- * `lib/channels/meta/variavel-do-nome.ts`. Com o mapa preenchido, vale o do
- * upstream inteiro, sem a regra do fork por cima.
+ * `lib/channels/meta/variavel-do-nome.ts`. Com o mapa preenchido, ou num modelo
+ * com outras variáveis, vale a régua do upstream inteira (que diz qual variável
+ * está sem origem), sem a regra do fork por cima.
  */
 async function resolveModeloAprovado(
   pool: pg.Pool,
@@ -1190,40 +1191,37 @@ async function resolveModeloAprovado(
     components: linha.components as never,
   });
   let values: Record<string, string> = {};
-  const passoTemMapa =
-    alvoDasVariaveis.variaveis !== undefined && Object.keys(alvoDasVariaveis.variaveis).length > 0;
-  if (contrato.slots.length > 0 && passoTemMapa) {
-    const dados = await dadosParaVariaveis(pool, tenantId, alvoDasVariaveis.contactId);
-    const resolucao = resolverVariaveisDoModelo(contrato, alvoDasVariaveis.variaveis, dados);
-    if (!resolucao.ok) {
-      return {
-        tipo: 'recusado',
-        motivo: `O modelo "${alvo.name}" não pode sair: ${resolucao.problemas.join('; ')}.`,
-      };
-    }
-    values = resolucao.values;
-  } else if (contrato.slots.length > 0) {
-    // FORK MIA — sem mapa no passo: o primeiro nome do contato no `{{1}}`.
-    const variavel = variavelDoModelo(contrato, linha.components);
-    if (variavel.tipo === 'outras') {
-      return {
-        tipo: 'recusado',
-        motivo: `O modelo "${alvo.name}" tem variáveis sem origem escolhida no passo. Sem escolher a origem de cada uma, o fluxo só preenche a primeira do corpo, com o primeiro nome do contato. Escolha a origem das variáveis no passo, ou use um modelo sem variáveis ou só com o nome.`,
-      };
-    }
-    if (variavel.tipo === 'nome') {
+  if (contrato.slots.length > 0) {
+    // FORK MIA — sem mapa no passo, o `{{1}}` sozinho no corpo leva o primeiro
+    // nome do contato (a regra do fork desde a .61). Qualquer outro caso (mapa
+    // preenchido, ou modelo com mais variáveis) vai pela régua do upstream, que
+    // diz qual variável está sem origem.
+    const passoTemMapa =
+      alvoDasVariaveis.variaveis !== undefined && Object.keys(alvoDasVariaveis.variaveis).length > 0;
+    const doNome = passoTemMapa ? null : variavelDoModelo(contrato, linha.components);
+    if (doNome !== null && doNome.tipo === 'nome') {
       const { rows: contatos } = await pool.query<{ name: string | null; display_name: string | null; is_anonymized: boolean | null }>(
         `select name, display_name, is_anonymized from contacts where organization_id = $1 and id = $2 limit 1`,
         [tenantId, alvoDasVariaveis.contactId],
       );
-      const valor = primeiroNomeDoContato(contatos[0]) ?? (variavel.aceitaNeutro ? TEXTO_NEUTRO_SEM_NOME : null);
+      const valor = primeiroNomeDoContato(contatos[0]) ?? (doNome.aceitaNeutro ? TEXTO_NEUTRO_SEM_NOME : null);
       if (valor === null) {
         return {
           tipo: 'recusado',
-          motivo: `O modelo "${alvo.name}" leva o primeiro nome do contato em ${variavel.marcador}, e este contato não tem nome cadastrado. Cadastre o nome ou use um modelo sem variáveis.`,
+          motivo: `O modelo "${alvo.name}" leva o primeiro nome do contato em ${doNome.marcador}, e este contato não tem nome cadastrado. Cadastre o nome, escolha a origem da variável no passo ou use um modelo sem variáveis.`,
         };
       }
-      values = { [variavel.chave]: valor };
+      values = { [doNome.chave]: valor };
+    } else {
+      const dados = await dadosParaVariaveis(pool, tenantId, alvoDasVariaveis.contactId);
+      const resolucao = resolverVariaveisDoModelo(contrato, alvoDasVariaveis.variaveis, dados);
+      if (!resolucao.ok) {
+        return {
+          tipo: 'recusado',
+          motivo: `O modelo "${alvo.name}" não pode sair: ${resolucao.problemas.join('; ')}.`,
+        };
+      }
+      values = resolucao.values;
     }
   }
   return {

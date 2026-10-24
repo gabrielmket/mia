@@ -84,6 +84,10 @@ function fakePool() {
     }
     if (sql.includes("left join channel_knobs")) return r([KNOBS]);
     if (/insert into cron_jobs/i.test(sql)) return r([{ id: "cron-1" }]);
+    // FORK MIA: antes do passo de IA o fork confere a janela de 24 h do número
+    // (a IA não roda quando nada do que ela escrever pode sair). Aqui a conversa
+    // falou há uma hora: a janela está aberta e quem decide é a anti-ban.
+    if (/from channel_sessions s/.test(sql)) return r([{ provider: null, last_inbound_at: new Date(Date.now() - 3_600_000) }]);
     if (/from conversations/.test(sql)) {
       return r([{ id: CONVERSA, channel_session_id: CANAL, archived_at: null }]);
     }
