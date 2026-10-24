@@ -197,6 +197,12 @@ CRONS="
 # das outras duas varreduras de data. Barato: empresa sem regra desses gatilhos
 # nao e varrida.
 43 * * * *|90|api/v1/cron/obrigacoes-avisos
+# O ASSISTENTE DA MIA (fork MIA, docs/fork/assistente.md): o resumo da manha de
+# quem ligou o seu, em dia util, as 8h no fuso de CADA empresa (a rodada so age
+# na que marca 8h), sem gastar IA; e a retencao do historico do assistente (90
+# dias) e dos chamados resolvidos (um ano). De hora em hora, no minuto 2, longe
+# das outras varreduras horarias. Empresa parada nao recebe resumo.
+2 * * * *|120|api/v1/cron/assistente-resumo-da-manha
 # A COBRANCA DOS SEUS CLIENTES. De hora em hora: a reativacao chega pelo aviso
 # do provedor, em segundos, e a hora so pesa na regua, que conta em dias. Minuto
 # 43, longe das outras varreduras horarias. Chave desligada: sai na hora.
