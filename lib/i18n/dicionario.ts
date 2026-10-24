@@ -51,6 +51,8 @@ import { DICIONARIO_DOS_PAINEIS_MIA } from "./dicionario-mia-paineis";
 import { DICIONARIO_DO_MONTADOR_MIA } from "./dicionario-mia-montador";
 // FORK MIA (.85): o horário de atendimento da IA, idem.
 import { DICIONARIO_DO_HORARIO_DA_IA } from "./dicionario-mia-horario-da-ia";
+// FORK MIA (.88): o assistente da MIA, idem.
+import { DICIONARIO_DO_ASSISTENTE_MIA } from "./dicionario-mia-assistente";
 import { TEXTOS_AGENDA_CONFIGURACAO } from "./agenda-configuracao";
 import { TEXTOS_AGENDA_SERVICOS } from "./agenda-servicos";
 
@@ -64,6 +66,7 @@ export const DICIONARIO: Traducoes = {
   ...DICIONARIO_DOS_PAINEIS_MIA,
   ...DICIONARIO_DO_MONTADOR_MIA,
   ...DICIONARIO_DO_HORARIO_DA_IA,
+  ...DICIONARIO_DO_ASSISTENTE_MIA,
   // Encaminhar mensagem (#2835) — botão na bolha do chat e o diálogo de destino.
   "Encaminhar": { es: "Reenviar" },
   "Encaminhar mensagem": { es: "Reenviar mensaje" },

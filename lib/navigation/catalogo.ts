@@ -361,6 +361,22 @@ export const NAV_CATALOG = [
     section: "O dia a dia da venda",
   },
   {
+    // FORK MIA (.88) — o assistente da MIA (docs/fork/assistente.md): a rotina
+    // do dia, os números e as dúvidas de uso, com o que cada pessoa já vê. No dia
+    // a dia da venda porque é a pergunta de toda manhã ("por onde eu começo?").
+    //
+    // SÓ NO HUB e no ⌘K, como Obrigações: o menu lateral está no teto medido. A
+    // porta de todo dia é o botão "Assistente" no topo, ao lado do sino, que
+    // abre o painel ao lado de qualquer tela (`components/assistente/`). Sem
+    // `minRole`: todos os papéis usam (o administrador desliga por papel).
+    href: "/app/assistente",
+    label: "Assistente",
+    description: "Pergunte do seu jeito: a sua rotina, os seus números e como usar o sistema, com o que você já pode ver.",
+    icon: "Sparkle",
+    group: "crm",
+    section: "O dia a dia da venda",
+  },
+  {
     // Módulo VoIP (migration 0347). No grupo do CRM pelo mesmo critério de
     // Tarefas: quem atende confere ligações perdidas e transcrições no dia a
     // dia, não como revisão deliberada.

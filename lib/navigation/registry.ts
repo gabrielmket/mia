@@ -36,6 +36,7 @@ import {
   ScalesSimple,
   ShieldCheck,
   Signpost,
+  Sparkle, // FORK MIA (.88): o assistente da MIA
   Storefront,
   Tag,
   UserCircle,
@@ -95,6 +96,7 @@ const ICONS = {
   ScalesSimple,
   ShieldCheck,
   Signpost,
+  Sparkle, // FORK MIA (.88): o assistente da MIA
   Storefront,
   Tag,
   UserCircle,
