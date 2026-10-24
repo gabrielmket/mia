@@ -7,6 +7,8 @@
  * entrada por entrada.
  */
 export const DICIONARIO_DA_AGENDA_MICROSOFT: Record<string, { es: string }> = {
+  // a seção das contas na configuração da agenda (Google e Outlook juntos)
+  "Contas e calendários": { es: "Cuentas y calendarios" },
   // recursos opcionais
   "Outlook e Microsoft Teams": { es: "Outlook y Microsoft Teams" },
   "Cada pessoa conecta a própria agenda do Outlook na Agenda, e o Teams vira um local de atendimento.": {

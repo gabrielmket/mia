@@ -46,7 +46,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listaTiposDeAtendimento } from "@/lib/agenda/consulta";
-import { alterarSchema, criarSchema, slugDe } from "@/lib/agenda/tipos-de-agendamento";
+import { alterarSchema, criarComRascunhoSchema, slugDe } from "@/lib/agenda/tipos-de-agendamento";
 import { localDoTeamsParaOUpstream, marcarTipoComoTeams } from "@/lib/agenda-mia/tipos-com-teams";
 import { transportaMensagem } from "@/lib/channels/capabilities";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -107,6 +107,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       reminder_body: t.lembreteMensagem,
       reminder_bodies: t.lembreteMensagens,
       default_price_cents: t.precoPadraoCents,
+      ...(t.servico ? { service_enabled: true, booking_mode: t.servico.booking_mode, service_capacity: t.servico.capacity,
+        service_revision: t.servico.revision, service_publication_mode: t.servico.publication_mode } : {}),
     })),
     { requestId },
   );
@@ -132,7 +134,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   // FORK MIA (9015): "Microsoft Teams" é um "Link de vídeo" marcado como Teams
   // (o CHECK do local é do upstream). Ver lib/agenda-mia/tipos-com-teams.ts.
   const { corpo: corpoDoTipo, teams } = localDoTeamsParaOUpstream(await req.json().catch(() => ({})));
-  const lido = criarSchema.safeParse(corpoDoTipo);
+  const lido = criarComRascunhoSchema.safeParse(corpoDoTipo);
   if (!lido.success) {
     // A mensagem do Zod passa pelo dicionário, e não direto ao corpo da resposta:
     // as recusas de `reminder_minutes_before` são escritas em português nesta
@@ -164,9 +166,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
     }
   }
+  const { service_draft, ...fields } = lido.data;
   const { data, error } = await admin
     .from("calendar_event_types")
-    .insert({ ...lido.data, organization_id: authz.organizationId, slug: slugDe(lido.data.name) })
+    .insert({ ...fields, ...(service_draft ? { service_enabled: true, is_active: false, default_owner_user_id: null } : {}), organization_id: authz.organizationId, slug: slugDe(lido.data.name) })
     .select("id, slug")
     .single();
 

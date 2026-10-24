@@ -134,6 +134,9 @@ export const camposDoTipo = {
 };
 
 export const criarSchema = z.object(camposDoTipo);
+// Somente a criação pode nascer como serviço em rascunho (v1.87, 0716). O PATCH legado não
+// ganha uma porta de ativação: a programação é validada pelo núcleo de serviços.
+export const criarComRascunhoSchema = criarSchema.extend({ service_draft: z.boolean().optional() });
 // `.partial()` em vez de repetir os doze campos como opcionais: repetir criaria
 // duas listas para manter em sincronia, e a segunda envelhece calada.
 export const alterarSchema = criarSchema.partial().extend({

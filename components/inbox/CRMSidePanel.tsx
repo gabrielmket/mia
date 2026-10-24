@@ -4,7 +4,9 @@ import { RoteirosDoContato } from "@/components/contacts/RoteirosDoContato";
 import { AcervoSearch } from "./AcervoSearch";
 import { LeadEnrichment } from "./LeadEnrichment";
 import { AnuncioDoContato, type AnuncioDeOrigem, type AnuncioMaisRecente } from "./AnuncioDoContato";
+import { UltimasComprasDoContato } from "@/components/contacts/UltimasCompras";
 import type { ProspectEnrichment } from "@/lib/prospecting/schema";
+import type { PersonalizacaoProspeccao } from "@/lib/prospecting/personalizar";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { roleAtLeast } from "@/lib/auth/types";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
@@ -245,7 +247,7 @@ function MarcarProximoPasso({ demandaId, onPronto }: { demandaId: string; onPron
         placeholder={t("O que acontece a seguir?")}
         aria-label={t("Próximo passo desta demanda")}
         data-testid="campo-proximo-passo"
-        className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-hidden focus:ring-1 focus:ring-ring"
+        className="w-full rounded-md border border-input bg-background px-2 py-1 text-base focus:outline-hidden focus:ring-1 focus:ring-ring md:text-xs"
       />
       <div className="flex gap-1.5">
         <Button
@@ -730,6 +732,8 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
 
   const [enrichment, setEnrichment] = useState<(ProspectEnrichment & { collected_at: string }) | null>(null);
   const [enrichmentError, setEnrichmentError] = useState(false);
+  const [personalizacao, setPersonalizacao] =
+    useState<PersonalizacaoProspeccao | null>(null);
   const [leads, setLeads] = useState<LeadRow[] | null>(null);
   /**
    * A empresa do contato. Estado próprio e não derivado de `leads`: ela vem do
@@ -803,6 +807,7 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
           data: {
             enrichment?: (ProspectEnrichment & { collected_at: string }) | null;
             enrichment_error?: boolean;
+            personalizacao?: PersonalizacaoProspeccao | null;
             leads: LeadRow[];
             orders: OrderRow[];
             activities: ActivityRow[];
@@ -819,6 +824,7 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
         setSummaryContactId(contactId);
         setEnrichment(r.data.enrichment ?? null);
         setEnrichmentError(r.data.enrichment_error ?? false);
+        setPersonalizacao(r.data.personalizacao ?? null);
         setLeads(r.data.leads);
         setEmpresa(r.data.empresa ?? null);
         // A TROCA DE FUNIL cria um negócio que ESTE painel nunca viu, e o
@@ -1038,6 +1044,7 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
         loading={sectionsLoading}
         error={erro || (summaryContactId === contactId && enrichmentError)}
         onRetry={recarregar}
+        sobrescritaVocabulario={personalizacao?.vocabulario ?? null}
       />
 
       {contactId && defaultPipeline.data && (
@@ -1046,6 +1053,9 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
           onOpenChange={setLeadDialogOpen}
           pipelineId={defaultPipeline.data.pipeline.id}
           stages={defaultPipeline.data.stages}
+          // #3038: mesmo recorte do funil — os campos exigidos pela etapa vão
+          // no `settings` do funil padrão que este painel já carregou.
+          settings={defaultPipeline.data.pipeline.settings}
           contactId={contactId}
           onCreated={() => {
             setLeadAtivoId(null);
@@ -1181,6 +1191,13 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
           <SemLista vazio="Sem leads." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
         )}
       </section>
+
+      {/* AS ÚLTIMAS COMPRAS (issue #3179): o que este cliente JÁ comprou — negócios
+          ganhos em TODOS os funis, com data, título, valor, os campos escolhidos
+          pela organização e o atalho para abrir o negócio. Em agência de viagens é
+          a pergunta mais comum do atendimento ("para onde esse cliente já foi?"),
+          e ela não tinha resposta no painel onde a equipe atende. */}
+      {contactId && !contact?.is_anonymized && <UltimasComprasDoContato contactId={contactId} />}
 
       <Separator />
 

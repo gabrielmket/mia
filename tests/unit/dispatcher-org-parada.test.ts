@@ -33,6 +33,7 @@ import { conversaoDeQualificacaoHandler } from "@/lib/conversoes/qualificacao.ha
 import { conversaoDeEtapaMetaHandler } from "@/lib/conversoes/etapa-meta.handler";
 // FORK MIA — a volta dos leads de formulário da Meta (docs/fork/conversoes-da-meta.md).
 import { conversaoDoLeadDeFormularioHandler } from "@/lib/conversoes-meta/formulario.handler";
+import { avisoDeAgendamentoNoWhatsAppHandler } from "@/lib/agenda/aviso-de-agendamento.handler";
 import { avisoDeCasoAoSuporteHandler } from "@/lib/escalacao/aviso-ao-suporte.handler";
 import { casoNaCentralHandler } from "@/lib/escalacao/caso-na-central.handler";
 import { followupGatilhoCasoHandler } from "@/lib/followup/gatilho-caso.handler";
@@ -85,6 +86,7 @@ const PULA: EventHandler[] = [
   webPushInboundHandler,
   avisoDeCasoAoSuporteHandler,
   avisoDePropostaNoWhatsAppHandler,
+  avisoDeAgendamentoNoWhatsAppHandler,
   conversaoDeVendaHandler,
   conversaoDeQualificacaoHandler,
   conversaoDeEtapaMetaHandler,

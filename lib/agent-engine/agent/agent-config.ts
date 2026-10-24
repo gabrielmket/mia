@@ -19,6 +19,7 @@ import { lerJanelaDeAtendimento, type JanelaDeAtendimento } from './janela-de-at
 import { lerTextoDoAvisoForaDoHorario } from './aviso-fora-do-horario';
 // FORK MIA (.85): o horário de atendimento da IA.
 import { lerHorarioDaIa, temHorarioDaIaDeclarado, type HorarioDaIa } from './horario-da-ia';
+import { lerFiltroDePalavraChave } from './palavra-chave-do-gatilho';
 
 export interface PublishedAgentConfig {
   operationMode?: 'automatic' | 'assisted';
@@ -104,6 +105,15 @@ export interface PublishedAgentConfig {
    * conserta (o campo existia na tela e nenhum leitor vivo o consultava).
    */
   janelaDeAtendimento: JanelaDeAtendimento | null;
+  /**
+   * Filtro "Só responder quando a mensagem falar de algo específico"
+   * (`trigger_config.filters.keyword_regex`, #2679). `null` = sem filtro (o
+   * agente entra em tudo). Quem obedece é o turno inbound, que encerra o job
+   * sem resposta quando a mensagem não casa — ver `palavra-chave-do-gatilho.ts`
+   * para o defeito que isto conserta e a direção da falha aberta.
+   * Opcional porque nasce depois das fixtures que montam esta interface à mão.
+   */
+  filtroDePalavraChave?: RegExp | null;
   /**
    * Texto do aviso de fora do horário (#1926), lido do mesmo `trigger_config`
    * (`filters.business_hours.notice`). `null` = sem aviso configurado: quem
@@ -276,6 +286,9 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     horarioDaIa: lerHorarioDaIa(r.trigger_config),
     // `=== true`: jsonb ausente ou com outro tipo é DESLIGADO, o lado seguro.
     mcpExternoNoAtendimento: cfg.mcp_externo_no_atendimento === true,
+    // Mesma leitura defensiva da linha acima: regex torta/valor vazio ⇒ `null`
+    // (sem filtro ⇒ entra em tudo), nunca uma mordaça acidental (#2679).
+    filtroDePalavraChave: lerFiltroDePalavraChave(r.trigger_config),
     versionCreatedBy: r.version_created_by,
     agentCreatedBy: r.agent_created_by,
   };
