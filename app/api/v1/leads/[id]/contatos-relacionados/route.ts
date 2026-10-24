@@ -48,6 +48,15 @@ import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createClient } from "@/lib/supabase/server";
+// FORK MIA (.87): as pessoas do negócio do fork (`envolvido`, papel da lista
+// fechada) e as do upstream (`related`) são lidas e tiradas juntas, sem
+// converter dado. O porquê inteiro: lib/leads/pessoas-do-negocio.ts.
+import {
+  papelParaODossie,
+  tirarOOutroVinculo,
+  VINCULO_DO_FORK,
+  VINCULOS_DA_PESSOA_DO_NEGOCIO,
+} from "@/lib/leads/pessoas-do-negocio";
 
 export const dynamic = "force-dynamic";
 
@@ -123,17 +132,18 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   // e nenhuma consulta por id resolve sozinha de quem é o dono da linha.
   const { data: links, error: linksErr } = await supabase
     .from("crm_lead_links")
-    .select("target_id, metadata")
+    .select("target_id, link_kind, metadata")
     .eq("lead_id", leadId)
     .eq("organization_id", orgId)
     .eq("target_kind", ALVO_DE_CONTATO)
-    .eq("link_kind", VINCULO_DE_CONTATO)
+    // FORK MIA (.87): `related` e o `envolvido` do fork.
+    .in("link_kind", [...VINCULOS_DA_PESSOA_DO_NEGOCIO])
     // Ordem explícita: sem ela, a ordem da lista e o papel que vence na
     // deduplicação ficariam por conta da ordem física da tabela.
     .order("created_at", { ascending: true });
   if (linksErr) return fail("internal_error", linksErr.message, 500, { requestId });
 
-  const linhasDeLink = (links ?? []) as unknown as { target_id: string; metadata: unknown }[];
+  const linhasDeLink = (links ?? []) as unknown as { target_id: string; link_kind: string; metadata: unknown }[];
   const alvos = [...new Set(linhasDeLink.map((l) => l.target_id))];
   if (alvos.length === 0) return ok([], { requestId });
 
@@ -187,7 +197,11 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
     resultado.push({
       contact_id: contato.id,
       nome: nomeDoContato(contato),
-      papel: papelDo(link.metadata),
+      // FORK MIA (.87): o papel do fork é código da lista; o dossiê mostra o rótulo.
+      papel:
+        link.link_kind === VINCULO_DO_FORK
+          ? papelParaODossie(link.link_kind, link.metadata, t)
+          : papelDo(link.metadata),
       anonimizado: contato.is_anonymized === true,
     });
   }
@@ -322,6 +336,15 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     { onConflict: "lead_id,target_kind,target_id,link_kind" },
   );
   if (upsertErr) return fail("internal_error", upsertErr.message, 500, { requestId });
+  // FORK MIA (.87): a pessoa fica com um vínculo só; se ela estava no negócio
+  // pelo cartão do fork (`envolvido`), o papel que vale passa a ser este. Falhar
+  // aqui não desfaz a escrita: a leitura mostra a pessoa uma vez, pelo mais antigo.
+  await tirarOOutroVinculo(supabase, {
+    organizationId: lead.organization_id,
+    leadId,
+    contatoId: contactId,
+    fica: VINCULO_DE_CONTATO,
+  });
 
   // O papel é texto livre: a trilha guarda só SE havia papel, nunca o texto.
   await audit({
@@ -374,7 +397,8 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx): Promise<Response>
     .eq("lead_id", leadId)
     .eq("organization_id", lead.organization_id)
     .eq("target_kind", ALVO_DE_CONTATO)
-    .eq("link_kind", VINCULO_DE_CONTATO)
+    // FORK MIA (.87): tirar a pessoa tira também o vínculo dela pelo cartão do fork.
+    .in("link_kind", [...VINCULOS_DA_PESSOA_DO_NEGOCIO])
     .eq("target_id", contactId)
     .select("target_id");
   if (delErr) return fail("internal_error", delErr.message, 500, { requestId });

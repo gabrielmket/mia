@@ -161,6 +161,17 @@ export interface NegocioDaSemente {
   motivoDaPerda?: string;
   motivoDoGanho?: string;
   nota?: string;
+  /**
+   * FORK MIA (.87): as OUTRAS pessoas do negócio, além do contato principal,
+   * com o papel de cada uma NESTE negócio (a lista fechada do fork,
+   * lib/cartoes/papel.ts). Vão para `crm_lead_links` como o cartão aberto grava
+   * (`envolvido`), e o dossiê do upstream também as mostra
+   * (lib/leads/pessoas-do-negocio.ts).
+   */
+  pessoas?: ReadonlyArray<{
+    contato: ContatoDaSemente["chave"];
+    papel: "decisor" | "financeiro" | "usuario" | "influenciador" | "outro";
+  }>;
 }
 
 export interface FunilDaSemente {

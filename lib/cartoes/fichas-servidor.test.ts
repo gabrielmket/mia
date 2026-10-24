@@ -39,7 +39,7 @@ function banco() {
       { id: "aurora", organization_id: ORG, contact_id: "ricardo", empresa_id: null, title: "Sala Aurora", status: "won", stage_id: "S", pipeline_id: "P", value_cents: 45_000_000, currency: "BRL", owner_user_id: null, owner_kind: null, lost_reason: null, closed_at: "2024-08-22T12:00:00Z", updated_at: "2024-08-22" },
       { id: "outro-neg", organization_id: ORG, contact_id: "joao", empresa_id: null, title: "Negócio do João", status: "open", stage_id: "S", pipeline_id: "P", value_cents: null, currency: "BRL", owner_user_id: null, owner_kind: null, lost_reason: null, updated_at: "2026-09-01" },
     ],
-    crm_lead_links: [{ organization_id: ORG, lead_id: "outro-neg", target_kind: "contact", target_id: "ricardo", metadata: { papel: "financeiro" } }],
+    crm_lead_links: [{ organization_id: ORG, lead_id: "outro-neg", target_kind: "contact", target_id: "ricardo", link_kind: "envolvido", metadata: { papel: "financeiro" }, created_at: "2026-09-01" }],
     crm_stages: [{ id: "S", organization_id: ORG, name: "Proposta" }],
     crm_pipelines: [{ id: "P", organization_id: ORG, name: "Locação" }],
     crm_lead_scores: [{ organization_id: ORG, lead_id: "sala", ai_probability: "65" }],
@@ -77,6 +77,25 @@ describe("ficha do contato", () => {
     const envolvido = f.negocios.find((n) => n.id === "outro-neg");
     expect(envolvido?.envolvidoComo).toBe("financeiro");
     expect(f.negocios.find((n) => n.id === "aurora")?.envolvidoComo).toBeNull();
+  });
+
+  it(".87 · também os negócios em que ela entrou pelo dossiê do upstream, com o papel escrito, inclusive pela lápide de uma fusão", async () => {
+    const b = banco();
+    b.db.contacts!.push({ id: "ricardo-antigo", organization_id: ORG, person_id: null, name: "Ricardo A.", display_name: null, phone_number: null, email: null, empresa_id: null, is_anonymized: false, is_merged_into: "ricardo", created_at: "2025-01-01" });
+    b.db.crm_leads!.push({ id: "pela-lapide", organization_id: ORG, contact_id: "joao", empresa_id: null, title: "Negócio antigo", status: "open", stage_id: "S", pipeline_id: "P", value_cents: null, currency: "BRL", owner_user_id: null, owner_kind: null, lost_reason: null, updated_at: "2026-08-01" });
+    b.db.crm_lead_links!.push(
+      { organization_id: ORG, lead_id: "pela-lapide", target_kind: "contact", target_id: "ricardo-antigo", link_kind: "related", metadata: { papel: "Pagante" }, created_at: "2026-08-01" },
+      // O mesmo negócio pelos dois modelos: vale o mais antigo, sem repetir.
+      { organization_id: ORG, lead_id: "outro-neg", target_kind: "contact", target_id: "ricardo", link_kind: "related", metadata: { papel: "Outro" }, created_at: "2026-09-02" },
+    );
+    const f = (await montarFichaDoContato(b.cliente as never, ORG, "ricardo", agora))!;
+    expect(f.negocios.filter((n) => n.envolvidoComo !== null).map((n) => [n.id, n.envolvidoComo])).toEqual(
+      expect.arrayContaining([
+        ["outro-neg", "financeiro"],
+        ["pela-lapide", "Pagante"],
+      ]),
+    );
+    expect(f.negocios.filter((n) => n.id === "outro-neg")).toHaveLength(1);
   });
 
   it("contato de outra organização: nada", async () => {

@@ -107,6 +107,8 @@ function idsDa(s: SementeDeDemonstracao) {
     funil: (k: string) => id(`funil:${k}`),
     etapa: (f: string, e: string) => id(`etapa:${f}:${e}`),
     negocio: (f: string, titulo: string) => id(`negocio:${f}:${slug(titulo)}`),
+    // FORK MIA (.87): a pessoa de um negócio além do contato principal.
+    pessoaDoNegocio: (negocio: string, contato: string) => id(`pessoa-do-negocio:${negocio}:${contato}`),
     atividade: (negocio: string, tipo: string) => id(`atividade:${negocio}:${tipo}`),
     tarefa: (k: string) => id(`tarefa:${k}`),
     conversa: (k: string) => id(`conversa:${k}`),
@@ -924,6 +926,35 @@ async function gravarNegocios(e: Escritor, { s, ID, org, agora }: Contexto, etap
         { manter: ["created_at"] },
       );
 
+      // FORK MIA (.87): as outras pessoas do negócio, com o papel NESTE negócio,
+      // como o cartão aberto grava (`envolvido`, a lista fechada do fork). O
+      // dossiê do upstream também as mostra (lib/leads/pessoas-do-negocio.ts).
+      // A chave é a do índice único do vínculo: uma pessoa incluída à mão na
+      // demonstração é a mesma linha, e reaplicar só renova o papel.
+      for (const pessoa of n.pessoas ?? []) {
+        if (pessoa.contato === n.contato) {
+          throw new Error(`cliente modelo: "${n.titulo}" põe o contato principal entre as pessoas do negócio`);
+        }
+        if (!s.contatos.some((c) => c.chave === pessoa.contato)) {
+          throw new Error(`cliente modelo: "${n.titulo}" cita o contato "${pessoa.contato}", que não existe`);
+        }
+        await gravar(
+          e,
+          "public.crm_lead_links",
+          {
+            id: ID.pessoaDoNegocio(id, pessoa.contato),
+            organization_id: org,
+            lead_id: id,
+            target_kind: "contact",
+            target_id: ID.contato(pessoa.contato),
+            link_kind: "envolvido",
+            metadata: json({ papel: pessoa.papel }),
+            created_at: criado,
+          },
+          { conflito: "lead_id, target_kind, target_id, link_kind", manter: ["created_at"] },
+        );
+      }
+
       // O histórico: nasceu, andou até a etapa de hoje, e o que ficou anotado.
       const quem = ator(n.dono, ID);
       const linhas = [
@@ -1684,6 +1715,8 @@ export const TABELAS_DA_SEMENTE = [
   "crm_stages",
   "crm_leads",
   "crm_lead_activities",
+  // FORK MIA (.87): as pessoas de cada negócio além do contato principal.
+  "crm_lead_links",
   "crm_tasks",
   "conversations",
   "messages",

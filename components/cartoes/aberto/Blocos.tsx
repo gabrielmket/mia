@@ -176,6 +176,13 @@ export function ResumoDaIa({
 
 // ─── Pessoas e empresa ───────────────────────────────────────────────────────
 
+/**
+ * FORK MIA (.87): o valor do seletor quando o papel veio escrito no dossiê do
+ * upstream e não é um dos cinco ("Pagante"). A opção aparece com o texto e não
+ * se escolhe; escolher um dos cinco troca o papel por ele.
+ */
+const PAPEL_ESCRITO_NO_DOSSIE = "__papel_escrito_no_dossie__";
+
 export function PessoasDoNegocio({
   lead,
   cartao,
@@ -229,12 +236,20 @@ export function PessoasDoNegocio({
                   // do papel na empresa, e trocável aqui (protótipo, tela 4).
                   <select
                     aria-label={`${t("Papel neste negócio")}: ${p.nome ?? t("Contato")}`}
-                    value={ehPapel(p.papel) ? p.papel : ""}
+                    value={ehPapel(p.papel) ? p.papel : p.papelLivre ? PAPEL_ESCRITO_NO_DOSSIE : ""}
                     disabled={incluir.isPending}
-                    onChange={(e) => incluir.mutate({ contactId: p.contatoId, papel: (e.target.value || null) as Papel | null })}
+                    onChange={(e) => {
+                      if (e.target.value === PAPEL_ESCRITO_NO_DOSSIE) return;
+                      incluir.mutate({ contactId: p.contatoId, papel: (e.target.value || null) as Papel | null });
+                    }}
                     className="mt-1 min-h-11 rounded-md border border-border bg-background px-2 text-base lg:min-h-0 lg:h-7 lg:text-xs"
                   >
                     <option value="">{t("Sem papel definido")}</option>
+                    {p.papelLivre ? (
+                      <option value={PAPEL_ESCRITO_NO_DOSSIE} disabled>
+                        {p.papelLivre}
+                      </option>
+                    ) : null}
                     {PAPEIS.map((papelDaLista) => (
                       <option key={papelDaLista} value={papelDaLista}>
                         {t(ROTULO_DO_PAPEL[papelDaLista])}

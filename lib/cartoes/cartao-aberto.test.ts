@@ -170,7 +170,7 @@ describe("montar o cartão aberto", () => {
         { id: "C1", organization_id: ORG, name: "Mariana Costa", display_name: null, phone_number: "+5511955550142", source: "meta_ads", source_metadata: { ad_source_id: "clk", ad_platform: "meta_ads" }, cargo: null, empresa_id: "E1", is_anonymized: false, created_at: "2026-09-26T12:00:00Z" },
         { id: "C2", organization_id: ORG, name: "Diego Costa", display_name: null, phone_number: "+5511955550187", cargo: null, is_anonymized: false },
       ],
-      crm_lead_links: [{ organization_id: ORG, lead_id: "L1", target_kind: "contact", target_id: "C2", metadata: { papel: "decisor" } }],
+      crm_lead_links: [{ organization_id: ORG, lead_id: "L1", target_kind: "contact", target_id: "C2", link_kind: "envolvido", metadata: { papel: "decisor" }, created_at: "2026-09-27T00:00:00Z" }],
       conversations: [{ id: "CV2", organization_id: ORG, contact_id: "C2", last_message_at: "2026-09-29T00:00:00Z" }],
       messages: [
         { organization_id: ORG, contact_id: "C1", direction: "inbound", body: "Oi! Vi o vídeo [ref:ABC234]", sent_at: "2026-09-26T20:14:00Z" },
@@ -231,6 +231,30 @@ describe("montar o cartão aberto", () => {
     // O contato tem clique em anúncio da Meta: é o que explica a plataforma sem envio.
     expect(c.origem.origemPorPlataforma).toEqual({ meta_ads: "clique", google_ads: null });
     expect(c.agenda.map((a) => a.id)).toEqual(["A1"]);
+  });
+
+  it(".87 · as pessoas que entraram pelo dossiê do upstream: o papel escrito e a lápide pelo vencedor", async () => {
+    const b = banco();
+    b.db.contacts!.push(
+      { id: "C3", organization_id: ORG, name: "Rogério Paes", display_name: null, phone_number: null, cargo: null, is_anonymized: false, is_merged_into: null },
+      { id: "C4", organization_id: ORG, name: "Nome antigo", display_name: null, phone_number: null, cargo: null, is_anonymized: false, is_merged_into: "C5" },
+      { id: "C5", organization_id: ORG, name: "Vera Vencedora", display_name: null, phone_number: null, cargo: null, is_anonymized: false, is_merged_into: null },
+    );
+    b.db.crm_lead_links!.push(
+      { organization_id: ORG, lead_id: "L1", target_kind: "contact", target_id: "C3", link_kind: "related", metadata: { papel: "Pagante" }, created_at: "2026-09-28T00:00:00Z" },
+      { organization_id: ORG, lead_id: "L1", target_kind: "contact", target_id: "C4", link_kind: "related", metadata: { papel: "Financeiro" }, created_at: "2026-09-29T00:00:00Z" },
+      // O principal e o mesmo contato pelo outro modelo não repetem ninguém.
+      { organization_id: ORG, lead_id: "L1", target_kind: "contact", target_id: "C1", link_kind: "related", metadata: {}, created_at: "2026-09-29T00:00:00Z" },
+      { organization_id: ORG, lead_id: "L1", target_kind: "contact", target_id: "C2", link_kind: "related", metadata: { papel: "Outro" }, created_at: "2026-09-30T00:00:00Z" },
+    );
+    const c = (await montarCartaoAberto(b.cliente as never, null, ORG, "L1", agora))!;
+    expect(c.pessoas.map((p) => [p.nome, p.principal, p.papel, p.papelLivre])).toEqual([
+      ["Mariana Costa", true, null, null],
+      ["Diego Costa", false, "decisor", null],
+      ["Rogério Paes", false, null, "Pagante"],
+      ["Vera Vencedora", false, "financeiro", null],
+    ]);
+    expect(c.pessoas[3]!.contatoId).toBe("C5");
   });
 
   it("negócio de outra organização não é lido", async () => {
