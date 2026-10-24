@@ -83,6 +83,11 @@ export interface PessoaDoNegocio {
   cargo: string | null;
   /** Papel NESTE negócio (crm_lead_links.metadata.papel) ou na empresa. */
   papel: string | null;
+  /**
+   * FORK MIA (.87): o papel escrito no dossiê do upstream (`related`, texto livre)
+   * que não é um dos cinco da lista ("Pagante"). Com ele, `papel` é nulo.
+   */
+  papelLivre: string | null;
   principal: boolean;
   conversaId: string | null;
 }

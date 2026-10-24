@@ -445,7 +445,13 @@ function NegociosDoContato({ contactId, ficha }: { contactId: string; ficha: Fic
                       dono,
                       n.status === "lost" && n.motivoDaPerda ? n.motivoDaPerda : null,
                       n.envolvidoComo !== null
-                        ? `${t("envolvido")}${ehPapel(n.envolvidoComo) ? ` · ${t(ROTULO_DO_PAPEL[n.envolvidoComo])}` : ""}`
+                        ? `${t("envolvido")}${
+                            ehPapel(n.envolvidoComo)
+                              ? ` · ${t(ROTULO_DO_PAPEL[n.envolvidoComo])}`
+                              : n.envolvidoComo
+                                ? ` · ${n.envolvidoComo}`
+                                : ""
+                          }`
                         : null,
                     ]
                       .filter(Boolean)

@@ -26,6 +26,12 @@ import { listarComprasDaEmpresa, listarComprasDoContato } from "@/lib/cartoes/co
 import type { CompromissoDoCartao } from "@/lib/cartoes/compromisso";
 import { resumoDaIa, type ResumoDaIa } from "@/lib/cartoes/cartao-aberto";
 import { nomeDaEmpresa, type LinhaDaEmpresa } from "@/lib/empresas/fonte-unica";
+import {
+  ALVO_DA_PESSOA_DO_NEGOCIO,
+  alvosDoContato,
+  papelDoVinculo,
+  VINCULOS_DA_PESSOA_DO_NEGOCIO,
+} from "@/lib/leads/pessoas-do-negocio";
 
 type Db = SupabaseClient;
 
@@ -50,7 +56,11 @@ export interface NegocioDaFicha {
   donoKind: string | null;
   motivoDaPerda: string | null;
   empresaId: string | null;
-  /** O papel da pessoa quando ela está no negócio como ENVOLVIDA (não principal). */
+  /**
+   * O papel da pessoa quando ela está no negócio como ENVOLVIDA (não principal):
+   * um dos cinco da lista, ou (.87) o texto que o dossiê do upstream gravou e
+   * não é um deles. `""` = envolvida sem papel; `null` = o negócio é dela.
+   */
   envolvidoComo: string | null;
   probabilidade: number | null;
 }
@@ -196,6 +206,8 @@ export async function montarFichaDoContato(db: Db, org: string, contatoId: strin
       ])
     : [[], []];
   const idsDaPessoa = [contatoId, ...outrosDaPessoa.map((o) => o.id)];
+  // .87: o vínculo gravado antes de uma fusão de contatos aponta para a lápide.
+  const alvosDosVinculos = await alvosDoContato(db, org, contatoId);
 
   const [proprios, vinculos, conversas, estado, retratos, notas, agenda, empresasLidas] = await Promise.all([
     seguro(
@@ -203,8 +215,17 @@ export async function montarFichaDoContato(db: Db, org: string, contatoId: strin
       [] as LinhaDoNegocio[],
     ),
     seguro(
-      db.from("crm_lead_links").select("lead_id, metadata").eq("organization_id", org).eq("target_kind", "contact").eq("target_id", contatoId),
-      [] as Array<{ lead_id: string; metadata: Record<string, unknown> | null }>,
+      // .87: os dois modelos de pessoa do negócio, o `envolvido` do cartão e o
+      // `related` do dossiê do upstream (lib/leads/pessoas-do-negocio.ts).
+      db
+        .from("crm_lead_links")
+        .select("lead_id, link_kind, metadata")
+        .eq("organization_id", org)
+        .eq("target_kind", ALVO_DA_PESSOA_DO_NEGOCIO)
+        .in("target_id", alvosDosVinculos)
+        .in("link_kind", [...VINCULOS_DA_PESSOA_DO_NEGOCIO])
+        .order("created_at", { ascending: true }),
+      [] as Array<{ lead_id: string; link_kind: string; metadata: Record<string, unknown> | null }>,
     ),
     seguro(
       db
@@ -258,13 +279,18 @@ export async function montarFichaDoContato(db: Db, org: string, contatoId: strin
 
   // Os negócios em que a pessoa está como ENVOLVIDA, além dos dela.
   const idsProprios = new Set(proprios.map((p) => p.id));
-  const idsDeFora = vinculos.map((v) => v.lead_id).filter((id) => !idsProprios.has(id));
+  const idsDeFora = [...new Set(vinculos.map((v) => v.lead_id))].filter((id) => !idsProprios.has(id));
   const deFora = idsDeFora.length
     ? await seguro(db.from("crm_leads").select(COLUNAS_DO_NEGOCIO).eq("organization_id", org).in("id", idsDeFora), [] as LinhaDoNegocio[])
     : [];
-  const papelDe = new Map(
-    vinculos.filter((v) => !idsProprios.has(v.lead_id)).map((v) => [v.lead_id, typeof v.metadata?.papel === "string" ? (v.metadata.papel as string) : null]),
-  );
+  // Um vínculo por negócio: com dois (os dois modelos, ou a lápide e o vencedor),
+  // vale o mais antigo, a mesma régua da leitura do cartão.
+  const papelDe = new Map<string, string | null>();
+  for (const v of vinculos) {
+    if (idsProprios.has(v.lead_id) || papelDe.has(v.lead_id)) continue;
+    const { papel, papelLivre } = papelDoVinculo(v.link_kind, v.metadata);
+    papelDe.set(v.lead_id, papel ?? papelLivre);
+  }
   const negocios = await montarNegocios(db, org, [...proprios, ...deFora], papelDe);
 
   const tipos = [...new Set(agenda.map((a) => a.event_type_id).filter((t): t is string => !!t))];

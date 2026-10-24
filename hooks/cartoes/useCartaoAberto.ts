@@ -14,6 +14,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { CartaoAberto } from "@/lib/cartoes/cartao-aberto";
 import type { Papel } from "@/lib/cartoes/papel";
 import type { Message } from "@/lib/types/messaging";
+import { chaveDosContatosRelacionados } from "@/hooks/leads/useContatosRelacionados";
 
 export function chaveDoCartaoAberto(leadId: string | null) {
   return ["cartao-aberto", leadId] as const;
@@ -71,6 +72,8 @@ export function useEnvolvidosDoNegocio(leadId: string, pipelineId: string) {
     invalidar();
     // O "+N contatos" do cartão fechado sai da rota do quadro.
     void qc.invalidateQueries({ queryKey: ["board", pipelineId] });
+    // .87: as mesmas pessoas aparecem no dossiê do upstream (lib/leads/pessoas-do-negocio.ts).
+    void qc.invalidateQueries({ queryKey: chaveDosContatosRelacionados(leadId) });
   };
   const incluir = useMutation({
     mutationFn: async (v: { contactId: string; papel: Papel | null }) =>

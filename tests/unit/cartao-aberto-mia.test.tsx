@@ -134,8 +134,10 @@ const CARTAO: DadosDoCartao = {
     origemPorPlataforma: { meta_ads: "clique", google_ads: null },
   },
   pessoas: [
-    { contatoId: "C1", nome: "Mariana Costa", telefone: "+5511955550142", cargo: null, papel: null, principal: true, conversaId: "CV1" },
-    { contatoId: "C2", nome: "Diego Costa", telefone: null, cargo: null, papel: "decisor", principal: false, conversaId: null },
+    { contatoId: "C1", nome: "Mariana Costa", telefone: "+5511955550142", cargo: null, papel: null, papelLivre: null, principal: true, conversaId: "CV1" },
+    { contatoId: "C2", nome: "Diego Costa", telefone: null, cargo: null, papel: "decisor", papelLivre: null, principal: false, conversaId: null },
+    // .87: quem entrou pelo dossiê do upstream com um papel que não é dos cinco.
+    { contatoId: "C3", nome: "Rogério Paes", telefone: null, cargo: null, papel: null, papelLivre: "Pagante", principal: false, conversaId: null },
   ],
   outrosNegocios: [{ id: "L0", titulo: "Studio Vista Parque", status: "lost", etapa: null, valorCents: null, moeda: null, motivoDaPerda: "Preço" }],
   empresa: null,
@@ -261,7 +263,12 @@ describe("o cartão aberto", () => {
     renderCartao();
     const pessoas = screen.getByTestId("pessoas-do-negocio");
     expect(within(pessoas).getByText("Diego Costa")).toBeTruthy();
-    expect(within(pessoas).getByText("Decisor")).toBeTruthy();
+    expect(within(pessoas).getByLabelText("Papel neste negócio: Diego Costa")).toHaveProperty("value", "decisor");
+    expect(within(pessoas).getAllByText("Decisor").length).toBeGreaterThan(0);
+    // .87: o papel escrito no dossiê do upstream aparece como foi escrito, no
+    // seletor da pessoa; escolher um dos cinco troca por ele.
+    expect(within(pessoas).getByLabelText("Papel neste negócio: Rogério Paes")).toHaveProperty("value", "__papel_escrito_no_dossie__");
+    expect(within(pessoas).getByText("Pagante")).toBeTruthy();
     expect(within(pessoas).getByText(/Studio Vista Parque/)).toBeTruthy();
     const origem = screen.getByTestId("origem-do-negocio");
     expect(within(origem).getByText("“Oi! Vi o vídeo”", { exact: false })).toBeTruthy();

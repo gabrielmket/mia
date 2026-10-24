@@ -137,8 +137,11 @@ describe("os sinais do quadro", () => {
         { id: "C2", organization_id: ORG, name: "Ricardo Alves", display_name: null, source: "whatsapp", source_metadata: {}, cargo: null, is_anonymized: false, empresa_id: "E1" },
       ],
       crm_lead_links: [
-        { organization_id: ORG, lead_id: "L1", target_kind: "contact", target_id: "C2" },
-        { organization_id: ORG, lead_id: "L1", target_kind: "contact", target_id: "C3" },
+        // .87: as pessoas dos dois modelos contam (o `envolvido` do cartão e o
+        // `related` do dossiê do upstream); outro vínculo de contato, não.
+        { organization_id: ORG, lead_id: "L1", target_kind: "contact", target_id: "C2", link_kind: "envolvido" },
+        { organization_id: ORG, lead_id: "L1", target_kind: "contact", target_id: "C3", link_kind: "related" },
+        { organization_id: ORG, lead_id: "L1", target_kind: "contact", target_id: "C4", link_kind: "mentioned" },
       ],
       crm_leads: [
         { id: "G1", organization_id: ORG, contact_id: "C1", empresa_id: "E1", status: "won", value_cents: 42_000_000, currency: "BRL" },
