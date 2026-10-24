@@ -119,6 +119,8 @@ function job(): JobRow {
     attempts: 1,
     max_attempts: 3,
     last_error: null,
+    // FORK MIA (.86): o JobRow exige `deferred_reason`; sem ele o `as JobRow` reprova o typecheck.
+    deferred_reason: null,
     locked_by: "w1",
     locked_at: new Date(),
     created_at: new Date(),

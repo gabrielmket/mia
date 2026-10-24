@@ -51,10 +51,13 @@ import { syncTemplates } from "@/lib/channels/meta/template-sync";
 import { FRASE_DA_DEMONSTRACAO } from "@/lib/demonstracao/trava";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { createTemplateSchema } from "@/lib/schemas/templates";
+// A v1.87 (#2833) trocou o farejador das mídias da resposta rápida para o que
+// aceita áudio também; aqui a resposta pronta recebe IMAGENS, então o
+// farejador continua o da imagem (o do logo, o mesmo que o upstream reusa).
+import { farejarTipo } from "@/lib/branding/logo-arquivo";
 import {
   BUCKET_DAS_MIDIAS,
-  extensaoDe,
-  farejarTipo,
+  extensaoDaMidia,
   MAXIMO_DE_MIDIAS,
   prefixoDoTemplate,
   TAMANHO_MAXIMO_DA_MIDIA,
@@ -194,7 +197,7 @@ async function gravarImagens(
     }
     const tipo = farejarTipo(bytes);
     if (!tipo) throw new Recusa(`A imagem ${i + 1} (${endereco}) precisa ser JPG ou PNG (conferido pelo conteúdo do arquivo).`);
-    const caminho = `${prefixo}${nomePeloConteudo(bytes)}.${extensaoDe(tipo)}`;
+    const caminho = `${prefixo}${nomePeloConteudo(bytes)}.${extensaoDaMidia(tipo)}`;
     if (desejadas.some((d) => d.storage_path === caminho)) continue;
     const jaTem = atuais.find((a) => a.storage_path === caminho);
     if (!jaTem) {

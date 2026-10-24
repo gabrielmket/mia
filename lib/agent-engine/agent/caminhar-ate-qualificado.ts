@@ -102,7 +102,9 @@ export async function caminharAteQualificado(
     } else {
       card.push({ etapa: r.transition.to, moveu: false, motivo: espelho.reason });
       await abreAvisoDoEspelhoRecusado(db, ids.tenantId, {
-        leadId: ids.contactId,
+        // O NEGÓCIO resolvido pelo espelho (v1.88), não o contato: a Central
+        // abre o aviso por `crm_leads.id`, e sem negócio o aviso sai sem ref.
+        ...(espelho.negocioId !== undefined ? { negocioId: espelho.negocioId } : {}),
         motivo: espelho.reason,
         detalhe: espelho.detail,
         etapaDeDestino: r.transition.to,

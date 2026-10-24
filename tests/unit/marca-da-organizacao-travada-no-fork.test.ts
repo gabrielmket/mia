@@ -152,13 +152,13 @@ describe("1. a leitura ignora a marca da empresa", () => {
 describe("2. a escrita recusa sem tocar no banco", () => {
   it("⭐ a server action devolve `marca_da_plataforma` e não chama a RPC", async () => {
     travar();
-    const r = await updateMarcaDaOrganizacao({ app_name: "Outra", accent_hex: "#000000", accent_dark_hex: null });
+    const r = await updateMarcaDaOrganizacao({ app_name: "Outra", accent_hex: "#000000", accent_dark_hex: null, email_from_name: null, email_reply_to: null });
     expect(r).toEqual({ ok: false, error: "marca_da_plataforma" });
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
   it("o controle: liberada, a mesma chamada grava pela RPC", async () => {
-    const r = await updateMarcaDaOrganizacao({ app_name: "Outra", accent_hex: "#000000", accent_dark_hex: null });
+    const r = await updateMarcaDaOrganizacao({ app_name: "Outra", accent_hex: "#000000", accent_dark_hex: null, email_from_name: null, email_reply_to: null });
     expect(r).toEqual({ ok: true });
     expect(mocks.rpc).toHaveBeenCalledWith("fn_definir_marca_da_organizacao", expect.anything());
   });
