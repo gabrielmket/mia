@@ -245,6 +245,32 @@ export const AUDIT_ACTIONS = [
   "lead.contato_envolvido_retirado",
   "lead.campo_confirmado",
   "broadcast.disparado",
+  // FORK MIA (.89) — o disparo de e-mail marketing (docs/fork/email-marketing.md):
+  // a configuração, o domínio, as campanhas (cada passo que gasta dinheiro ou
+  // fala com a base inteira), a supressão, os consentimentos importados, o
+  // descadastro e a reinscrição pela própria pessoa, os avisos da Amazon e a
+  // rodada do cron que mandou, pausou ou concluiu (a vazia não audita).
+  "email_marketing.configurado",
+  "email_marketing.dominio_conferido",
+  "email_marketing.remetente_salvo",
+  "email_marketing.texto_de_consentimento_salvo",
+  "email_marketing.segmento_salvo",
+  "email_marketing.campanha_criada",
+  "email_marketing.campanha_editada",
+  "email_marketing.teste_enviado",
+  "email_marketing.campanha_confirmada",
+  "email_marketing.campanha_pausada",
+  "email_marketing.campanha_retomada",
+  "email_marketing.campanha_cancelada",
+  "email_marketing.acao_sobre_cliques",
+  "email_marketing.supressao_acrescentada",
+  "email_marketing.supressao_importada",
+  "email_marketing.consentimentos_importados",
+  "email_marketing.descadastro",
+  "email_marketing.reinscricao",
+  "email_marketing.aviso_da_amazon",
+  "email_marketing.rodada",
+  "email_marketing.imagem_enviada",
   // FORK MIA (.60) — leads dos formulários da Meta: quem ligou a importação, que
   // formulário vai para qual funil, quem pediu leitura na hora, e a rodada do
   // relógio que trouxe lead ou deu erro (a vazia não audita).

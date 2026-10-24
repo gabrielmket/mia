@@ -252,6 +252,18 @@ const DO_SERVIDOR: RecursoOpcional[] = [
     comoLigar: "Cadastre o app da Microsoft na tela Microsoft 365.",
     ler: peloServidor("microsoft_agenda"),
   },
+  // FORK MIA (.89): o transporte do disparo de e-mail marketing (docs/fork/email-marketing.md).
+  {
+    id: "email_marketing_amazon",
+    nome: "Envio de e-mail marketing pela Amazon",
+    oQueFaz: "O caminho por onde saem as campanhas de e-mail das empresas que contrataram o disparo. O e-mail do sistema (convite, senha, LGPD) continua no servidor de e-mail.",
+    nivel: "servidor",
+    padrao: "desligado",
+    quemDecide: "dono_do_servidor",
+    href: null,
+    comoLigar: "No arquivo de ambiente, AWS_SES_ACCESS_KEY_ID, AWS_SES_SECRET_ACCESS_KEY, AWS_SES_CONFIGURATION_SET e AWS_SES_SNS_TOPIC_ARN (região sa-east-1). Passo a passo em docs/fork/email-marketing.md.",
+    ler: peloServidor("email_marketing_amazon"),
+  },
   {
     id: "meta",
     nome: "API Oficial da Meta",
@@ -362,6 +374,16 @@ const DO_SERVIDOR: RecursoOpcional[] = [
 ];
 
 const DA_EMPRESA: RecursoOpcional[] = [
+  // FORK MIA (.89): o disparo de e-mail marketing, módulo vendido por empresa.
+  {
+    id: "email_marketing",
+    nome: "Disparo de e-mail marketing",
+    oQueFaz: "Campanhas de e-mail pelo domínio da empresa, com descadastro de um clique e lista de supressão. A plataforma libera o módulo; a empresa configura o domínio, o remetente e o rodapé.",
+    nivel: "organizacao",
+    padrao: "desligado",
+    quemDecide: "admin",
+    href: "/app/settings/email-marketing",
+  },
   {
     id: "conversa_fica_com_quem_atendeu",
     nome: "A conversa fica com quem atendeu",

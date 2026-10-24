@@ -102,6 +102,11 @@ CRONS="
 # volta. Rodada longa seguraria o processo e atrasaria a reconferência de saldo,
 # que é o que impede estourar o crédito do cliente.
 * * * * *|60|api/v1/cron/broadcast-worker
+# O MOTOR DO DISPARO DE E-MAIL MARKETING (fork MIA, docs/fork/email-marketing.md).
+# A cada minuto, como o do Broadcast: o ritmo da campanha e medido desde o comeco
+# da janela do dia, e cada rodada manda so a diferenca (no maximo 120 por
+# campanha). Rodada perdida nao vira rajada. Sem as chaves da Amazon, nao faz nada.
+* * * * *|60|api/v1/cron/email-marketing
 # OS LEADS DOS FORMULARIOS DA META (fork MIA). A cada 5 minutos: e o atraso
 # maximo entre o cadastro no anuncio e o card no funil. Cada rodada le so o que
 # chegou desde a ultima marca, entao ela e curta; o teto de 240s e para a

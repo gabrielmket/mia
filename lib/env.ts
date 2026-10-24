@@ -575,6 +575,18 @@ const schema = z.object({
   MICROSOFT_CALENDAR_CLIENT_SECRET: z.string().optional().default(""),
   MICROSOFT_CALENDAR_TENANT: z.string().optional().default(""),
 
+  // FORK MIA (.89): o disparo de e-mail marketing pela Amazon SES
+  // (lib/email/ses.ts, docs/fork/email-marketing.md). Opcionais: sem as quatro
+  // primeiras o módulo nasce desligado e a tela diz o que falta. A região vazia
+  // é São Paulo (sa-east-1). O segredo dos links do e-mail (descadastro,
+  // preferências, clique, abertura) cai no INTERNAL_SECRET, como o do convite.
+  AWS_SES_ACCESS_KEY_ID: z.string().optional().default(""),
+  AWS_SES_SECRET_ACCESS_KEY: z.string().optional().default(""),
+  AWS_SES_REGION: z.string().optional().default(""),
+  AWS_SES_CONFIGURATION_SET: z.string().optional().default(""),
+  AWS_SES_SNS_TOPIC_ARN: z.string().optional().default(""),
+  EMAIL_MARKETING_TOKEN_SECRET: z.string().optional().default(""),
+
   // Google Ads — credencial da INSTALAÇÃO, não da organização (migration 0307).
   // O developer token pertence a quem construiu o software, não à conta de
   // anúncios de cada cliente: uma instalação usa o MESMO token pra reportar

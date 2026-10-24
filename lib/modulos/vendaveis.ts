@@ -35,7 +35,8 @@ import {
   ROTAS_DOS_LEADS_DA_META,
 } from "@/lib/leads-da-meta/modulo";
 
-export type ChaveDeModulo = "disparador" | typeof MODULO_DOS_LEADS_DA_META;
+// FORK MIA (.89): o disparo de e-mail marketing (docs/fork/email-marketing.md).
+export type ChaveDeModulo = "disparador" | typeof MODULO_DOS_LEADS_DA_META | "email_marketing";
 
 // FORK MIA (.58): o caminho por QR do Broadcast, e o interruptor que o põe no
 // módulo. Import aqui, e não no topo, para não disputar linha com os imports
@@ -83,6 +84,18 @@ export const MODULOS: readonly ModuloVendavel[] = [
     rotas: ["/api/v1/carteira", "/api/v1/broadcasts", ...(QR_EXIGE_O_MODULO ? ROTAS_DO_QR : [])],
     telas: ["/app/settings/carteira", "/app/broadcast"],
   },
+  {
+    // FORK MIA (.89): o disparo de e-mail marketing pela Amazon SES, pelo domínio
+    // da empresa, com descadastro de um clique e lista de supressão. O custo sai
+    // da MESMA carteira do número oficial, e por isso a carteira e o Broadcast
+    // também abrem para quem só tem este módulo (`TELAS_TAMBEM_DE`, abaixo).
+    chave: "email_marketing",
+    rotulo: "Disparo de e-mail marketing",
+    descricao:
+      "Mandar campanhas de e-mail para a própria base, pelo domínio da empresa, com descadastro de um clique, lista de supressão e resultados por link. O custo sai da carteira de créditos, por e-mail aceito.",
+    rotas: ["/api/v1/email-marketing"],
+    telas: ["/app/settings/email-marketing"],
+  },
   // Só entra no catálogo quando a importação vira venda à parte. Desligado, a
   // tela e as rotas continuam de todos, e o painel não oferece um botão que não
   // muda nada.
@@ -105,6 +118,28 @@ export const MODULOS: readonly ModuloVendavel[] = [
 ] as const;
 
 const POR_CHAVE = new Map<string, ModuloVendavel>(MODULOS.map((m) => [m.chave, m]));
+
+/**
+ * FORK MIA (.89) — telas que um SEGUNDO módulo também abre.
+ *
+ * Uma tela tem um dono em `MODULOS` (a catraca de `vendaveis.test.ts` proíbe
+ * dois donos: liberar um e não o outro daria resultados diferentes conforme a
+ * ordem da lista). Mas o Broadcast e a carteira servem a dois produtos: quem só
+ * contratou o e-mail marketing manda campanha pelo Broadcast (o terceiro
+ * caminho, "E-mail") e paga pela mesma carteira. Aqui se declara esse "também",
+ * e quem decide o menu pergunta a `modulosQueAbremATela`.
+ */
+export const TELAS_TAMBEM_DE: Readonly<Record<string, readonly ChaveDeModulo[]>> = {
+  "/app/broadcast": ["email_marketing"],
+  "/app/settings/carteira": ["email_marketing"],
+};
+
+/** Todos os módulos que abrem esta tela: o dono e os do `TELAS_TAMBEM_DE`. Vazio = tela de todos. */
+export function modulosQueAbremATela(href: string): string[] {
+  const dono = moduloDaTela(href);
+  if (!dono) return [];
+  return [dono, ...(TELAS_TAMBEM_DE[href] ?? [])];
+}
 
 export function moduloPorChave(chave: string): ModuloVendavel | null {
   return POR_CHAVE.get(chave) ?? null;

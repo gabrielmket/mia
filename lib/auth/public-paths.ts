@@ -87,6 +87,14 @@ export const PUBLIC_PATHS: RegExp[] = [
   // prévia sem dado moram nela. Um segmento só, alfanumérico, com âncora `$`:
   // nada abaixo de `/painel/<token>` nasce público de carona.
   /^\/painel\/[A-Za-z0-9]{1,64}$/,
+  // FORK MIA (.89): a página de preferências do e-mail marketing
+  // (`app/preferencias/[token]/page.tsx`). Quem abre é a pessoa que recebeu o
+  // e-mail, sem conta. A identidade vem do token assinado (HMAC, o formato do
+  // convite), conferido na linha do banco; a escrita mora em
+  // `/api/v1/webhooks/email-marketing/preferencias/`, que já é público. Um
+  // segmento só, na forma do token (`<corpo>.<assinatura>` em base64url), com
+  // âncora `$`: nada abaixo dele nasce público de carona.
+  /^\/preferencias\/[A-Za-z0-9_-]{20,400}\.[A-Za-z0-9_-]{43}$/,
   // Volta do consentimento do Google Ads. Mesma natureza das duas linhas
   // acima: a identidade vem do `state` assinado
   // (`lib/plataformas-de-anuncio/google/estado.ts`), não da sessão — quem

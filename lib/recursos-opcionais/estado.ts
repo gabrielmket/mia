@@ -18,6 +18,8 @@ import { microsoftEstaConfigurada } from "@/lib/agenda/microsoft/config";
 import { canalGraphParceiroLigado } from "@/lib/channels/graph-parceiro/credentials";
 import { appDaMeta } from "@/lib/channels/meta/app";
 import { emailConfigurado } from "@/lib/email/roteador";
+// FORK MIA (.89): o transporte do disparo de e-mail marketing.
+import { configuracaoDaAmazon } from "@/lib/email/ses";
 import { env } from "@/lib/env";
 import { modulosLigados } from "@/lib/instalacao/modulos";
 import { logger } from "@/lib/logger";
@@ -48,6 +50,8 @@ export async function detectarServidor(): Promise<Record<string, boolean | null>
     detectar("google_agenda", googleEstaConfigurado),
     // FORK MIA (9011): a agenda do Outlook.
     detectar("microsoft_agenda", microsoftEstaConfigurada),
+    // FORK MIA (.89): a Amazon SES do disparo de e-mail marketing (só sim ou não).
+    detectar("email_marketing_amazon", () => configuracaoDaAmazon().configurado),
     detectar("meta", async () => {
       const app = await appDaMeta();
       return Boolean(app.appSecret && app.verifyToken);
