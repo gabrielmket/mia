@@ -36,6 +36,7 @@ vi.mock("@/lib/auth/require-role", () => ({
 import { createClient } from "@/lib/supabase/server";
 import { papelDoTexto } from "@/lib/cartoes/papel";
 import {
+  alvosDoContato,
   lerPessoasDoNegocio,
   papelDoVinculo,
   papelParaODossie,
@@ -184,6 +185,14 @@ describe("2 · a leitura do fork une os dois modelos", () => {
   it("falha de leitura volta a lista vazia, nunca derruba o cartão", async () => {
     const quebrado = { from: () => { throw new Error("banco fora"); } };
     expect(await lerPessoasDoNegocio(quebrado as never, ORG, LEAD, PRINCIPAL)).toEqual([]);
+    // A ficha do contato também não cai: sem ler as lápides, o contato sozinho.
+    expect(await alvosDoContato(quebrado as never, ORG, VENCEDORA)).toEqual([VENCEDORA]);
+  });
+
+  it("os alvos de um contato: ele e as lápides das fusões que apontam para ele", async () => {
+    montar([]);
+    expect(await alvosDoContato(banco.cliente as never, ORG, VENCEDORA)).toEqual([VENCEDORA, LAPIDE]);
+    expect(await alvosDoContato(banco.cliente as never, ORG, LUANA)).toEqual([LUANA]);
   });
 });
 

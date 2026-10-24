@@ -199,14 +199,20 @@ export async function lerPessoasDoNegocio(
  * Quem tira a pessoa pelo vencedor tem de alcançar os dois ids.
  */
 export async function alvosDoContato(db: Db, org: string, contatoId: string): Promise<string[]> {
-  const { data, error } = await db
-    .from("contacts")
-    .select("id")
-    .eq("organization_id", org)
-    .eq("is_merged_into", contatoId)
-    .limit(50);
-  if (error) return [contatoId];
-  return [contatoId, ...((data ?? []) as Array<{ id: string }>).map((c) => c.id).filter((id) => id !== contatoId)];
+  // Nunca lança: a ficha do contato abre com o que conseguir ler, e sem a
+  // leitura das lápides o contato sozinho ainda é a resposta certa.
+  try {
+    const { data, error } = await db
+      .from("contacts")
+      .select("id")
+      .eq("organization_id", org)
+      .eq("is_merged_into", contatoId)
+      .limit(50);
+    if (error) return [contatoId];
+    return [contatoId, ...((data ?? []) as Array<{ id: string }>).map((c) => c.id).filter((id) => id !== contatoId)];
+  } catch {
+    return [contatoId];
+  }
 }
 
 /**
