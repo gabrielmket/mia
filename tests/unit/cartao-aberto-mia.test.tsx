@@ -324,7 +324,13 @@ describe("convivência com o dossiê do upstream", () => {
     );
     // A linha do tempo do upstream é substituída pelo histórico com filtros, que
     // reusa o hook vivo (useLeadTimeline) e o vocabulário dela.
-    const substituidas = new Set(["LeadTimeline"]);
+    // A moldura das seções recolhíveis do dossiê (#3181, v1.88: `SecaoDoDossie`
+    // e `useSecoesRecolhidas`) também não entra: o cartão aberto tem o desenho
+    // próprio aprovado no protótipo (.67), e o que o #3181 pede ao dossiê — os
+    // campos do negócio ANTES da linha do tempo — ele já faz (os campos do
+    // segmento vêm no corpo e o histórico no fim). É moldura, não conteúdo:
+    // nenhuma informação do dossiê some do cartão.
+    const substituidas = new Set(["LeadTimeline", "SecaoDoDossie", "useSecoesRecolhidas"]);
     const faltando = pecas.filter((p) => !substituidas.has(p) && !cartao.includes(p));
     expect(faltando, "peça do dossiê do upstream que sumiu do cartão aberto").toEqual([]);
     expect(pecas.length).toBeGreaterThan(4);

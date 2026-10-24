@@ -66,6 +66,8 @@ vi.mock("@/lib/auth/server", () => ({
   resolveActiveOrg: async () => ({ orgId: "org-1", role: "admin", interface_settings: null }),
   isMfaEnrolled: async () => true,
   requiresMfa: async () => false,
+  // v1.88 (#3207): o layout pede a prova do MFA de quem já tem fator; a sessão daqui já provou.
+  exigirProvaDeMfa: async () => undefined,
 }));
 vi.mock("@/lib/auth/vinculo-revogado", () => ({ acessoFoiRevogado: async () => false }));
 vi.mock("next/navigation", () => ({

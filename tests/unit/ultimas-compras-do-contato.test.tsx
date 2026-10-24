@@ -301,6 +301,11 @@ vi.mock("@/components/contacts/EditContactDialog", () => ({ EditContactDialog: (
 vi.mock("@/components/contacts/AnonymizeDialog", () => ({ AnonymizeDialog: () => null }));
 vi.mock("@/components/modulos/FichasDoModulo", () => ({ FichasDoModulo: () => null }));
 vi.mock("@/components/voice/DialButton", () => ({ DialButton: () => null }));
+// FORK MIA: a ficha do contato do fork monta a ficha conectada (empresa, pessoas e
+// negócios, `components/cartoes/fichas/`), que lê a rota própria `/ficha`. Este
+// teste mede a seção das últimas compras; o dublê de `get` daqui responde o
+// resumo para toda rota, e a ficha conectada tem testes próprios.
+vi.mock("@/components/cartoes/fichas/FichaConectadaDoContato", () => ({ FichaConectadaDoContato: () => null }));
 
 const conversa = {
   id: "cv-1",

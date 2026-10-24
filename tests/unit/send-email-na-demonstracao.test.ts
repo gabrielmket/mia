@@ -38,7 +38,13 @@ const ORG = "90109010-0000-4000-8000-00000000081e";
 
 function ctx(): ActionCtx {
   return {
-    admin: {} as ActionCtx["admin"],
+    // Desde a v1.88 (#3287) a ação lê `organizations.settings` (o remetente da
+    // organização) antes de chamar o roteador: a empresa sem remetente próprio.
+    admin: {
+      from: () => ({
+        select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { settings: {} }, error: null }) }) }),
+      }),
+    } as unknown as ActionCtx["admin"],
     organizationId: ORG,
     ruleId: "regra-1",
     ruleName: "Aviso por e-mail",

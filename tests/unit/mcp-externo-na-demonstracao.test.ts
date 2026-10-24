@@ -35,6 +35,8 @@ vi.mock("@/lib/auth/server", () => ({
   })),
   resolveActiveOrg: vi.fn(async () => ({ orgId: ORG, name: "Demonstração" })),
   mfaEmDivida: vi.fn(async () => false),
+  // v1.88 (#3207, 0747): as ações da instalação usam a régua ESTRITA (sem dispositivo confiável).
+  mfaEmDividaEstrita: vi.fn(async () => false),
   sessionAal: vi.fn(async () => "aal2"),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));

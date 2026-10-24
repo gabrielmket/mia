@@ -756,6 +756,10 @@ describe("send_email — o remetente da organização (#3287, fatia 1)", () => {
       html: expect.stringContaining("Ana Souza"),
       text: expect.stringContaining("Ana Souza"),
       tags: [{ name: "origem", value: "automacao" }],
+      // FORK MIA (9010): a ação passa a organização ao roteador, onde mora a
+      // trava da empresa de demonstração (sem ela, a regra de uma demonstração
+      // mandaria e-mail de verdade). Não é remetente: o cabeçalho não muda.
+      organizationId: expect.any(String),
     });
   });
 

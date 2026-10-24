@@ -46,6 +46,11 @@ vi.mock("@/hooks/auth/AuthProvider", () => ({
   useUser: () => ({ id: "u1", is_platform_admin: false, support: false }),
   useActiveOrg: () => ({ role: "agent" }),
 }));
+// FORK MIA: o dossiê do fork lê quem pode ver a equipe (`usePodeVerEquipe`, que
+// desce ao formulário do negócio o seletor de "quem originou"), e o hook pergunta
+// `usePermission` ao AuthProvider. O dublê responde direto, como em
+// tests/unit/cartao-aberto-mia.test.tsx: a ordem e o recolhimento não dependem dele.
+vi.mock("@/hooks/kanban/usePodeVerEquipe", () => ({ usePodeVerEquipe: () => false }));
 vi.mock("@/hooks/leads/useLeadTimeline", () => ({
   useLeadTimeline: () => ({
     itens: linhaDoTempo.itens,

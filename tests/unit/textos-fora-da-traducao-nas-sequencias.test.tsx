@@ -123,7 +123,10 @@ describe("os modelos prontos", () => {
     const tela = textoDaTela(document.body);
     expect(tela).toMatch(/da seguimiento durante \d+ días/);
     expect(tela).not.toMatch(/\d+ dias(?!\p{L})/u);
-    expect(screen.getAllByText("Examen").length).toBeGreaterThan(0);
+    // FORK MIA: a galeria do fork abre num segmento por vez, e o padrão é o geral
+    // (lib/followup/modelos/segmentos.ts); a jornada "Exame" é da clínica. A do
+    // geral que prova a tradução é "Proposta" → « Propuesta ».
+    expect(screen.getAllByText("Propuesta").length).toBeGreaterThan(0);
   });
 
   it("em português, como antes: « acompanha por 12 dias »", () => {
