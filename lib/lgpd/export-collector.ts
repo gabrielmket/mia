@@ -920,6 +920,16 @@ export interface ExportPayload {
     messages_sent: number;
     ferramentas: unknown;
   }>;
+  /**
+   * FORK MIA (9050/9051) — as mensagens do assistente da MIA que citam o
+   * titular (`mia_assistente_mensagens.contatos`): a pergunta de alguém da
+   * equipe e a resposta do assistente, com a data e a tela. A anonimização
+   * (9051) apaga esse texto; o que se apaga a pedido dele é o que se entrega a
+   * pedido dele (Art. 18 II). É conversa interna da equipe com a IA, como a do
+   * caso: vai no relatório e não no arquivo do titular (`SECOES_DA_EQUIPE`).
+   * Opcional como `obrigacoes`: o tipo é montado à mão nos testes de PDF.
+   */
+  assistente_da_mia?: Array<{ tipo: string; texto: string; tela: string | null; created_at: string }>;
   /** Por qual anúncio ela chegou — ver `AdClickRow`. */
   cliques_de_anuncio: AdClickRow[];
   appointment_notices: AppointmentNoticeRow[];
@@ -1975,6 +1985,26 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // FORK MIA (9050/9051) — o histórico do assistente da MIA que cita o titular,
+  // pelo MESMO alcance da anonimização (a lista `contatos` da mensagem). É a
+  // outra metade do par que `tests/unit/lgpd-exporta-o-que-redige.test.ts`
+  // deriva da fonte.
+  const assistente_da_mia: NonNullable<ExportPayload["assistente_da_mia"]> = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("mia_assistente_mensagens")
+      .select("tipo, texto, tela, created_at")
+      .eq("organization_id", organizationId)
+      .contains("contatos", [contactId])
+      .order("created_at", { ascending: true })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] assistente_da_mia load failed", { request_id: requestId, error: error.message });
+    } else {
+      assistente_da_mia.push(...((data ?? []) as NonNullable<ExportPayload["assistente_da_mia"]>));
+    }
+  }
+
   // FORK MIA — documentos e obrigações (migration 9018). O MESMO escopo que o
   // gatilho de anonimização usa (`fn_mia_obrigacoes_do_contato_anonimizado`):
   // os itens ligados à pessoa e os dos negócios dela. É a outra metade do par
@@ -2814,6 +2844,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     ai_runs,
     broadcasts_recebidos,
     obrigacoes,
+    assistente_da_mia,
     cliques_de_anuncio,
     appointment_notices,
     voice_calls,
