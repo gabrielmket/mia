@@ -58,19 +58,30 @@ async function membrosAtivos(
  */
 async function enviarAsInscricoes(
   admin: Admin,
-  organizationId: string,
+  // FORK MIA (.86): `null` é o aviso da INSTALAÇÃO aos administradores da
+  // plataforma (`enviarPushAsInscricoesDaPlataforma`, abaixo): não há vínculo de
+  // organização a conferir nem opção de empresa para a tela bloqueada.
+  organizationId: string | null,
   inscricoes: Inscricao[],
   payload: PushPayload,
   papelMinimo?: Role,
 ): Promise<{ sent: number; gone: number }> {
   const conhecidas = inscricoes.filter((i) => ehServicoDePushConhecido(i.endpoint));
   if (conhecidas.length === 0) return NADA;
-  const membros = await membrosAtivos(admin, organizationId, papelMinimo);
-  if (!membros) return NADA;
-  const rows = conhecidas.filter((i) => membros.has(i.user_id));
+  let rows = conhecidas;
+  if (organizationId !== null) {
+    const membros = await membrosAtivos(admin, organizationId, papelMinimo);
+    if (!membros) return NADA;
+    rows = conhecidas.filter((i) => membros.has(i.user_id));
+  }
   if (rows.length === 0) return NADA;
 
-  const { modo, idioma } = await lerTelaBloqueada(admin, organizationId);
+  // FORK MIA (.86): o aviso da instalação não carrega dado de cliente, e sai
+  // inteiro — pela MESMA redação campo a campo, no modo que mostra tudo.
+  const { modo, idioma } =
+    organizationId === null
+      ? { modo: "nome_e_previa" as const, idioma: "pt-BR" as const }
+      : await lerTelaBloqueada(admin, organizationId);
   const body = JSON.stringify(redigirParaATelaBloqueada(payload, modo, idioma));
 
   webpush.setVapidDetails(await vapidSubject(), vapidPublica()!, env.VAPID_PRIVATE_KEY.trim());
@@ -90,11 +101,9 @@ async function enviarAsInscricoes(
         const status = (err as { statusCode?: number }).statusCode;
         if (status === 404 || status === 410) {
           gone += 1;
-          await admin
-            .from("push_subscriptions")
-            .delete()
-            .eq("id", row.id)
-            .eq("organization_id", organizationId);
+          const apagar = admin.from("push_subscriptions").delete().eq("id", row.id);
+          // FORK MIA (.86): a inscrição do administrador da plataforma pode ser de qualquer organização.
+          await (organizationId === null ? apagar : apagar.eq("organization_id", organizationId));
           return;
         }
         logger.warn("web_push_send_failed", { status: status ?? 0 });
@@ -106,6 +115,21 @@ async function enviarAsInscricoes(
 }
 
 export type DestinoDoPush = { soUsuario?: string; papelMinimo?: Role };
+
+/**
+ * FORK MIA (.62, revisto na .86) — o push aos ADMINISTRADORES DA PLATAFORMA
+ * (`./push-da-plataforma.ts`): o aviso da instalação (o backup parou) não é de
+ * organização nenhuma. As inscrições chegam prontas (as dos administradores), e
+ * o envio passa por este funil, como todo push (`push-sai-so-pelo-funil`).
+ */
+export async function enviarPushAsInscricoesDaPlataforma(
+  inscricoes: ReadonlyArray<PushSubRow & { user_id: string }>,
+  payload: PushPayload,
+  admin: Admin = createAdminClient(),
+): Promise<{ sent: number; gone: number }> {
+  if (!vapidPronto()) return NADA;
+  return enviarAsInscricoes(admin, null, [...inscricoes], payload);
+}
 
 /** Push às inscrições da organização — ou só às de `soUsuario`, e só a quem alcança `papelMinimo`. */
 export async function enviarPushDaOrg(

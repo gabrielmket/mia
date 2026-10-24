@@ -8,33 +8,23 @@
  * `revoked_at`), em qualquer aparelho em que essa pessoa tenha ligado o push,
  * seja qual for a organização ativa na hora em que ligou.
  *
- * ── Por que o envio é daqui, e não de `web_push.ts` (.86) ─────────────────
- *
- * Até a .85 isto reaproveitava `enviarPushDaOrg` com uma lista pronta. A v1.87
- * do upstream fez o push seguir o VÍNCULO de quem recebe (só membro ativo da
- * organização, com o papel mínimo) e a opção da empresa para a tela bloqueada.
- * Um aviso da plataforma não tem organização, então passar por ali calaria o
- * aviso para todo mundo. O envio continua com as MESMAS peças do upstream: o
- * VAPID (`./vapid.ts`), a lista de serviços de push conhecidos
- * (`./servicos-de-push.ts`) e a montagem campo a campo da tela bloqueada
- * (`redigirParaATelaBloqueada`, no modo que mostra tudo: o aviso da instalação
- * não carrega dado de cliente). A assinatura expirada (404/410) é apagada.
+ * Desde a v1.87 o push do upstream segue o VÍNCULO de quem recebe (membro ativo
+ * da organização) e a opção da empresa para a tela bloqueada; passar por
+ * `enviarPushDaOrg` calaria o aviso da instalação. Por isso ele sai pela porta
+ * própria do MESMO funil (`enviarPushAsInscricoesDaPlataforma`, em
+ * `./web_push.ts`), que guarda o VAPID, os serviços de push conhecidos, a
+ * redação campo a campo e a limpeza da inscrição expirada (.86).
  *
  * Nunca lança: o aviso já está registrado (o incidente) quando isto roda, e o
  * push é a campainha, não o registro.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import webpush from "web-push";
 
-import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 
 import type { PushPayload } from "./push_payload";
-import { ehServicoDePushConhecido } from "./servicos-de-push";
-import { redigirParaATelaBloqueada } from "./tela-bloqueada";
-import { vapidPronto, vapidPublica, vapidSubject } from "./vapid";
-
-type Assinatura = { id: string; endpoint: string; p256dh: string; auth: string };
+import { vapidPronto } from "./vapid";
+import { enviarPushAsInscricoesDaPlataforma, type PushSubRow } from "./web_push";
 
 export async function enviarPushAosAdminsDaPlataforma(
   admin: SupabaseClient,
@@ -56,40 +46,19 @@ export async function enviarPushAosAdminsDaPlataforma(
 
     const { data: assinaturas, error } = await admin
       .from("push_subscriptions")
-      .select("id, endpoint, p256dh, auth")
+      .select("id, user_id, endpoint, p256dh, auth")
       .in("user_id", ids);
     if (error) {
       logger.warn("[push-da-plataforma] não li as assinaturas", { detail: error.message });
       return { admins: ids.length, sent: 0, gone: 0 };
     }
-    const linhas = ((assinaturas ?? []) as Assinatura[]).filter((a) => ehServicoDePushConhecido(a.endpoint));
-    if (linhas.length === 0) return { admins: ids.length, sent: 0, gone: 0 };
 
-    const corpo = JSON.stringify(redigirParaATelaBloqueada(payload, "nome_e_previa", "pt-BR"));
-    webpush.setVapidDetails(await vapidSubject(), vapidPublica()!, env.VAPID_PRIVATE_KEY.trim());
-
-    let sent = 0;
-    let gone = 0;
-    await Promise.all(
-      linhas.map(async (linha) => {
-        try {
-          await webpush.sendNotification(
-            { endpoint: linha.endpoint, keys: { p256dh: linha.p256dh, auth: linha.auth } },
-            corpo,
-          );
-          sent += 1;
-        } catch (err) {
-          const status = (err as { statusCode?: number }).statusCode;
-          if (status === 404 || status === 410) {
-            gone += 1;
-            await admin.from("push_subscriptions").delete().eq("id", linha.id);
-            return;
-          }
-          logger.warn("[push-da-plataforma] envio falhou", { status: status ?? 0 });
-        }
-      }),
+    const r = await enviarPushAsInscricoesDaPlataforma(
+      (assinaturas ?? []) as Array<PushSubRow & { user_id: string }>,
+      payload,
+      admin as unknown as Parameters<typeof enviarPushAsInscricoesDaPlataforma>[2],
     );
-    return { admins: ids.length, sent, gone };
+    return { admins: ids.length, ...r };
   } catch (err) {
     logger.warn("[push-da-plataforma] falhou", { detail: err instanceof Error ? err.message : "erro" });
     return { admins: 0, sent: 0, gone: 0 };
