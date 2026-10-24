@@ -25,6 +25,7 @@ import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/hooks/i18n/useT";
 import type { FunilDaResposta } from "@/hooks/pipelines/usePipelines";
+import { NAV_DESTINATIONS, NAV_GROUPS } from "@/lib/navigation/registry";
 
 /** Quanto de cada funil o assistente sabe percorrer (spec 17 passo 4). */
 export interface CoberturaPorFunil {
@@ -42,6 +43,19 @@ interface Props {
   onChange: (ids: string[]) => void;
   disabled?: boolean;
 }
+
+/**
+ * O caminho da tela das etapas, LIDO do catálogo da navegação (o grupo, o hub
+ * do grupo e o destino), e não escrito à mão. FORK MIA: o fork renomeia o grupo
+ * do CRM ("MIA CRM", "Ver tudo no CRM"), e o texto fixo mandava a pessoa
+ * procurar um nome que o menu dela não tem — o mesmo defeito que este aviso
+ * existe para consertar.
+ */
+const DESTINO_DAS_ETAPAS = NAV_DESTINATIONS.find((d) => d.href === "/app/settings/tenant/pipelines");
+const GRUPO_DAS_ETAPAS = NAV_GROUPS.find((g) => g.id === DESTINO_DAS_ETAPAS?.group);
+const CAMINHO_DAS_ETAPAS: string[] = [GRUPO_DAS_ETAPAS?.label, GRUPO_DAS_ETAPAS?.hub?.label, DESTINO_DAS_ETAPAS?.label].filter(
+  (parte): parte is string => typeof parte === "string",
+);
 
 export function FunisDoAgente({ funis, value, onChange, cobertura, disabled = false }: Props) {
   const t = useT();
@@ -145,7 +159,7 @@ export function FunisDoAgente({ funis, value, onChange, cobertura, disabled = fa
             className="underline underline-offset-2"
             data-testid="agente-funis-mudos-caminho"
           >
-            {`CRM › ${t("Ver tudo em CRM")} › ${t("Etapas do funil")}`}
+            {CAMINHO_DAS_ETAPAS.map((parte) => t(parte)).join(" › ")}
           </Link>
           .
         </p>
