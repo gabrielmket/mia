@@ -33,6 +33,11 @@
  * atendente de destino padrão e os responsáveis, pela função do fork da 9045.
  * Mora em `./distribuicao-do-numero.ts`, que explica o espelho.
  *
+ * .85 — a JANELA DE RESPOSTA do número (`resposta_start_hour`/`resposta_end_hour`,
+ * 0495), pela régua de `PUT /api/v1/ai/pacing`: é o ajuste que o horário da IA
+ * pede quando a deixa ativa fora dela. Só a resposta: a janela de disparo, o
+ * ritmo e o teto diário continuam na tela.
+ *
  * ── O que é diferente da tela, e por quê ──────────────────────────────────
  *
  * 1. Só o que veio muda, e o que veio igual responde `ja_estava`. A pausa
@@ -49,6 +54,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { audit } from "@/lib/audit";
 import { instanteDe } from "@/lib/agenda/fuso";
 import { effectiveKnobs, pacingKnobsUpdateSchema, windowIsValid, type ChannelKnobsRow } from "@/lib/ai/pacing-knobs";
+import { reprogramarTurnosAdiadosPelaJanela } from "@/lib/ai/pacing/reprogramar-adiados";
 import { lerGuardarHistorico, salvarAcervoDoCanal } from "@/lib/channels/acervo-do-historico";
 import { nomeDoCanal } from "@/lib/channels/estado";
 import { conexaoGuardaHistorico } from "@/lib/channels/conexao-guarda-historico";
@@ -105,6 +111,13 @@ export interface PedidoDeCanal {
    * próprio, destino padrão e responsáveis. Ver `./distribuicao-do-numero.ts`.
    */
   distribuicao?: DistribuicaoPedida;
+  /**
+   * .85 — a janela de RESPOSTA do número (`channel_knobs.resposta_start_hour` e
+   * `resposta_end_hour`, 0495): em que horas o número responde a quem escreveu.
+   * 0 e 24 = 24h. `null` volta a seguir a janela de disparo. Disparo e
+   * prospecção não mudam.
+   */
+  janela_de_resposta?: { inicio_hora: number; fim_hora: number } | null;
 }
 
 export interface AgendaDePausaLida {
@@ -230,6 +243,7 @@ export interface CanalConfigurado {
   pausa_ajustada?: { id: string; inicio: string; fim: string; desfecho: "atualizou" | "ja_estava" };
   nome_interno?: { nome: string; desfecho: "atualizou" | "ja_estava" };
   distribuicao?: DistribuicaoDoNumero & { desfecho: Desfecho };
+  janela_de_resposta?: { inicio_hora: number; fim_hora: number; propria: boolean; desfecho: "atualizou" | "ja_estava"; turnos_reprogramados?: number | null };
   avisos: string[];
 }
 
@@ -251,6 +265,7 @@ export async function configurarCanal(
     pedido.guardar_historico !== undefined ||
     pedido.nome_interno !== undefined ||
     pedido.distribuicao !== undefined ||
+    pedido.janela_de_resposta !== undefined ||
     (pedido.pausa_agendada !== undefined && pedido.pausa_agendada.todos_os_numeros !== true);
   if (precisaDoCanal && !pedido.canal) {
     throw new Recusa(
@@ -594,6 +609,11 @@ export async function configurarCanal(
     }
   }
 
+  // ── a janela de RESPOSTA: o caminho de `PUT /api/v1/ai/pacing` (.85) ────
+  if (pedido.janela_de_resposta !== undefined && canal) {
+    await ajustarJanelaDeResposta(c, canal, pedido.janela_de_resposta, r, mudancas, avisos);
+  }
+
   // ── a distribuição do número: o caminho de `PATCH /api/v1/settings/routing/channels` (.83) ──
   if (pedido.distribuicao !== undefined && canal) {
     const feita = await configurarDistribuicaoDoNumero(c, tokenId, canal, pedido.distribuicao, avisos);
@@ -603,6 +623,106 @@ export async function configurarCanal(
 
   r.desfecho = mudancas.length > 0 ? "atualizou" : "ja_estava";
   return r;
+}
+
+/** A linha de `channel_knobs` vazia: cada coluna `null` cai no padrão do motor. */
+const AJUSTES_VAZIOS: ChannelKnobsRow = {
+  throttle_ms: null,
+  jitter_max_ms: null,
+  window_start_hour: null,
+  window_end_hour: null,
+  resposta_start_hour: null,
+  resposta_end_hour: null,
+  atraso_notar_ms: null,
+  ms_por_caractere: null,
+  atraso_minimo_ms: null,
+  atraso_maximo_ms: null,
+  allow_sunday: null,
+  prospeccao_dias: null,
+  timezone: null,
+  warmup_daily_caps: null,
+};
+
+/**
+ * .85 — a janela de RESPOSTA do número, pela régua de `PUT /api/v1/ai/pacing`:
+ * `pacingKnobsUpdateSchema`, a janela RESULTANTE conferida (`windowIsValid`), o
+ * upsert só das duas colunas, a auditoria `ai.pacing_knobs_updated` e a
+ * reprogramação dos turnos que esperavam a janela abrir. Disparo e prospecção
+ * seguem `window_*` e não mudam.
+ *
+ * É o ajuste que a tela do agente oferece ao administrador quando o horário da
+ * IA cai fora desta janela: com a IA ativa de madrugada e o número respondendo
+ * só das 7h às 22h, o que ela escreve às 3h só sai às 7h.
+ */
+async function ajustarJanelaDeResposta(
+  c: Implantacao,
+  canal: CanalDaEmpresa,
+  pedida: { inicio_hora: number; fim_hora: number } | null,
+  r: CanalConfigurado,
+  mudancas: string[],
+  avisos: string[],
+): Promise<void> {
+  const campos = {
+    resposta_start_hour: pedida === null ? null : pedida.inicio_hora,
+    resposta_end_hour: pedida === null ? null : pedida.fim_hora,
+  };
+  const conferido = pacingKnobsUpdateSchema.safeParse({ channel_session_id: canal.id, ...campos });
+  if (!conferido.success) {
+    throw new Recusa(
+      "`janela_de_resposta` usa horas cheias: `inicio_hora` de 0 a 23 e `fim_hora` de 1 a 24, com o fim depois do início. " +
+        'Ex.: { "inicio_hora": 0, "fim_hora": 24 } para responder a qualquer hora, ou { "inicio_hora": 7, "fim_hora": 22 }.',
+    );
+  }
+  const { data: atual, error } = await c.admin
+    .from("channel_knobs")
+    .select(COLUNAS_DOS_AJUSTES)
+    .eq("organization_id", c.orgId)
+    .eq("channel_session_id", canal.id)
+    .maybeSingle();
+  if (error) throw new Error(`não consegui ler os ajustes da conexão: ${error.message}`);
+  const linha = (atual as unknown as ChannelKnobsRow | null) ?? null;
+  const mesclado: ChannelKnobsRow = { ...(linha ?? AJUSTES_VAZIOS), ...campos };
+  const efetivo = effectiveKnobs(mesclado);
+  if (!windowIsValid(efetivo.respostaStartHour, efetivo.respostaEndHour)) {
+    throw new Recusa(
+      `A janela de resposta termina antes de começar (${efetivo.respostaStartHour}h às ${efetivo.respostaEndHour}h). Use 0 e 24 para responder a qualquer hora.`,
+    );
+  }
+  if (!windowIsValid(efetivo.windowStartHour, efetivo.windowEndHour)) {
+    throw new Recusa(
+      "A janela de envio gravada nesta conexão está invertida (o início depois do fim), e a tela recusa qualquer ajuste até ela ser corrigida. " +
+        "Uma pessoa corrige em Conexões › Proteção de envio (/app/connections), e depois chame de novo.",
+    );
+  }
+  const igual =
+    (linha?.resposta_start_hour ?? null) === campos.resposta_start_hour &&
+    (linha?.resposta_end_hour ?? null) === campos.resposta_end_hour;
+  const retrato = { inicio_hora: efetivo.respostaStartHour, fim_hora: efetivo.respostaEndHour, propria: pedida !== null };
+  if (igual) {
+    r.janela_de_resposta = { ...retrato, desfecho: "ja_estava" };
+    return;
+  }
+  const { error: erroAoGravar } = await c.admin
+    .from("channel_knobs")
+    .upsert({ organization_id: c.orgId, channel_session_id: canal.id, ...campos }, { onConflict: "organization_id,channel_session_id" });
+  if (erroAoGravar) throw new Error(`não consegui gravar a janela de resposta: ${erroAoGravar.message}`);
+  // O laço da rota: quem esperava a janela abrir é reavaliado com a janela nova.
+  const turnosReprogramados = await reprogramarTurnosAdiadosPelaJanela({ organizationId: c.orgId, channelSessionId: canal.id });
+  void audit({
+    action: "ai.pacing_knobs_updated",
+    actorUserId: c.autorUserId,
+    organizationId: c.orgId,
+    resourceType: "channel_knobs",
+    resourceId: canal.id,
+    requestId: c.requestId,
+    metadata: { ...campos, daily_message_limit: null, turnos_reprogramados: turnosReprogramados, via: "mcp_plataforma" },
+  });
+  mudancas.push("janela de resposta");
+  r.janela_de_resposta = { ...retrato, desfecho: "atualizou", turnos_reprogramados: turnosReprogramados };
+  avisos.push(
+    `O número passa a RESPONDER a quem escreveu das ${efetivo.respostaStartHour}h às ${efetivo.respostaEndHour}h${efetivo.respostaStartHour === 0 && efetivo.respostaEndHour === 24 ? " (a qualquer hora)" : ""}. ` +
+      "Disparo em massa, retomada e prospecção continuam na janela de disparo do número.",
+  );
 }
 
 /**

@@ -38,6 +38,8 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
       "`guardar_historico` (só para número conectado por QR Code: o canal passa a guardar o histórico do número; nasce desligado) e " +
       "`pausa_agendada` (uma janela de manutenção de até 24 horas em que o número, ou todos os números da empresa, fica pausado e volta sozinho no fim; a mensagem que chega é guardada e volta à fila na retomada), " +
       "com `ajustar_pausa_agendada` para corrigir os horários de uma que ainda não começou e `cancelar_pausa_agendada` para desmarcar, " +
+      "a `janela_de_resposta` (as horas em que o número RESPONDE a quem escreveu, 0 a 24; o padrão é 7h às 22h, para proteger o número de bloqueio: o que o agente escreve fora dela sai na abertura; " +
+      "é o ajuste que plataforma_ver_agentes aponta quando o horário de atendimento da IA cai fora dela; disparo em massa, retomada e prospecção NÃO mudam) " +
       "e a `distribuicao` do número (as regras de atendimento POR NÚMERO): quem pode receber as conversas dele (`responsaveis`), o jeito de distribuir só deste número (`modo`: " +
       "\"manual\", \"round_robin\" ou \"load\"; null segue a organização) e o `atendente_padrao`, que recebe DIRETO todo cliente novo do número. " +
       "Só o que VEIO muda; o que veio igual responde `ja_estava`, e a pausa igual a uma já marcada não é marcada de novo. " +
@@ -47,7 +49,7 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
       "Número sem regra de distribuição própria usa TODOS os atendentes elegíveis e o modo da organização; criar a regra RESTRINGE quem recebe, e por isso pede `responsaveis` por extenso " +
       "(`[]` = ninguém recebe pelo rodízio e as conversas ficam na fila). A regra vale na hora e redistribui as conversas abertas sem dono do número; não cala o agente de IA. " +
       "O QUE NÃO FAZ: não conecta, não reconecta nem desconecta número, não recebe nem devolve token, credencial ou número de telefone, não pausa AGORA (a pausa manual é com a pessoa, em Conexões) " +
-      "e não mexe no ritmo de envio (intervalos, janelas, teto diário), que fica na tela Conexões › Proteção de envio.",
+      "e não mexe no resto do ritmo de envio (intervalos, janela de DISPARO, teto diário), que fica na tela Conexões › Proteção de envio.",
     inputSchema: {
       organization_id: ORGANIZACAO,
       canal: z
@@ -144,6 +146,19 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
         .describe(
           "As regras de atendimento DESTE número (Configurações › Atendimento › Responsáveis por número). Só o que vier muda; o resto da regra gravada fica.",
         ),
+      // .85 — a janela de RESPOSTA do número (0495), a que o horário da IA pede.
+      janela_de_resposta: z
+        .object({
+          inicio_hora: z.number().int().min(0).max(23).describe("A hora em que o número começa a responder (0 a 23)."),
+          fim_hora: z.number().int().min(1).max(24).describe("A hora em que para de responder (1 a 24; 24 = meia-noite). Depois do início."),
+        })
+        .strict()
+        .nullable()
+        .optional()
+        .describe(
+          "As horas em que o número RESPONDE a quem escreveu. { inicio_hora: 0, fim_hora: 24 } = responde a qualquer hora (a IA ativa de madrugada responde na hora). " +
+            "null = volta a seguir a janela de disparo do número. Disparo em massa, retomada e prospecção não mudam. Vale na hora.",
+        ),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,
@@ -163,10 +178,11 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
         p.cancelar_pausa_agendada === undefined &&
         p.ajustar_pausa_agendada === undefined &&
         p.nome_interno === undefined &&
-        p.distribuicao === undefined
+        p.distribuicao === undefined &&
+        p.janela_de_resposta === undefined
       ) {
         recusar(
-          "Informe ao menos um ajuste: `dias_da_prospeccao`, `guardar_historico`, `pausa_agendada`, `ajustar_pausa_agendada`, `cancelar_pausa_agendada`, `nome_interno` ou `distribuicao`. " +
+          "Informe ao menos um ajuste: `dias_da_prospeccao`, `guardar_historico`, `pausa_agendada`, `ajustar_pausa_agendada`, `cancelar_pausa_agendada`, `nome_interno`, `distribuicao` ou `janela_de_resposta`. " +
             'Ex.: { "canal": "Recepção", "dias_da_prospeccao": [1, 2, 3, 4, 5] }',
         );
       }

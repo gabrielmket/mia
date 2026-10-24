@@ -198,47 +198,51 @@ describe("plataforma_configurar_atendimento · PASSOU A ALCANÇAR (upstream 1.70
 // 1.72 · aviso de fora do horário (#1926) e 1.71 · limiar de sentimento (#2216)
 // ---------------------------------------------------------------------------
 
-describe("plataforma_garantir_agente · PASSOU A ALCANÇAR o aviso de fora do horário (upstream 1.72)", () => {
+// .85 — o aviso existia DENTRO do horário antigo (`business_hours`, que adiava a
+// resposta). O horário de atendimento da IA substituiu aquele horário no MCP:
+// `horario_de_atendimento` grava o nosso e zera o dele, e com ele não há aviso
+// (inativa = a equipe atende). O aviso segue editável só no agente que AINDA
+// tem o horário antigo gravado pela tela. O horário novo inteiro é medido em
+// `mcp-de-implantacao-horario-da-ia.test.ts`.
+describe("plataforma_garantir_agente · o aviso de fora do horário (upstream 1.72) depois do horário da IA (.85)", () => {
   const AVISO = "Recebemos sua mensagem. Nosso atendimento volta às 8h.";
   const horarioDe = (versao: Linha) =>
     ((versao.trigger_config as { filters: { business_hours: Linha | null } }).filters.business_hours ?? null) as Linha | null;
+  /** O horário antigo como a tela do upstream o gravava, direto na versão. */
+  const ANTIGO = { timezone: "America/Sao_Paulo", start: "08:00", end: "18:00", weekdays: [1, 2, 3, 4, 5] };
+  const comHorarioAntigo = (versao: Linha, aviso: string | null) => {
+    const gatilho = (versao.trigger_config as Linha | null) ?? { events: ["message"], concurrency: "one_per_conversation" };
+    versao.trigger_config = { ...gatilho, filters: { ignore_groups: true, ignore_self: true, keyword_regex: null, business_hours: { ...ANTIGO, notice: aviso } } };
+  };
 
-  it("grava o texto DENTRO do horário de atendimento do rascunho, onde o motor o lê; repetir não escreve", async () => {
+  it("aviso junto com o horário da IA é recusado com o motivo, e o agente não nasce", async () => {
     const c = await comFunil();
-    const pedido = { ...BIA, horario_de_atendimento: HORARIO, aviso_fora_do_horario: AVISO };
-    await ok(c, "plataforma_garantir_agente", pedido);
-    expect(horarioDe(c.tabela("ai_agent_versions")[0]!)).toEqual({
-      timezone: "America/Sao_Paulo",
-      start: "08:00",
-      end: "18:00",
-      weekdays: [1, 2, 3, 4, 5],
-      notice: AVISO,
-    });
-
-    const antes = c.banco.escritas.length;
-    const de_novo = await ok(c, "plataforma_garantir_agente", pedido);
-    expect(de_novo.dados.versao).toMatchObject({ desfecho: "ja_estava", mudancas: [] });
-    expect(c.banco.escritas.length, "a reexecução escreveu no banco").toBe(antes);
-
-    const lido = await ok(c, "plataforma_ver_agentes", { agente: "Bia" });
-    expect(((lido.dados.agentes as Linha[])[0]!.versao_vigente as Linha).aviso_fora_do_horario).toBe(AVISO);
+    const r = await c.mcp.chamar("plataforma_garantir_agente", { organization_id: ORG, ...BIA, horario_de_atendimento: HORARIO, aviso_fora_do_horario: AVISO });
+    expect(r.erro).toBe(true);
+    expect(r.texto).toContain("a IA fica INATIVA e a conversa é da equipe");
+    expect(c.tabela("ai_agents")).toHaveLength(0);
   });
 
-  it("⭐ trocar SÓ o horário preserva o aviso, inclusive o que uma pessoa gravou pela tela", async () => {
+  it("⭐ o horário da IA zera o horário antigo (e o aviso dele) que a tela tinha gravado", async () => {
     const c = await comFunil();
-    await ok(c, "plataforma_garantir_agente", { ...BIA, horario_de_atendimento: HORARIO });
-    // A tela de gatilho do agente gravou o aviso direto na versão.
-    const versao = c.tabela("ai_agent_versions")[0]!;
-    horarioDe(versao)!.notice = "Texto escrito pela equipe na tela.";
+    await ok(c, "plataforma_garantir_agente", BIA);
+    comHorarioAntigo(c.tabela("ai_agent_versions")[0]!, "Texto escrito pela equipe na tela.");
 
     const r = await ok(c, "plataforma_garantir_agente", { nome: "Bia", horario_de_atendimento: { ...HORARIO, fim: "20:00" } });
-    expect(r.dados.versao).toMatchObject({ desfecho: "atualizou", mudancas: ["horário de atendimento"] });
-    expect(horarioDe(c.tabela("ai_agent_versions")[0]!)).toMatchObject({ end: "20:00", notice: "Texto escrito pela equipe na tela." });
+    expect(r.dados.versao).toMatchObject({ desfecho: "atualizou" });
+    const versao = c.tabela("ai_agent_versions")[0]!;
+    expect(horarioDe(versao)).toBeNull();
+    expect((versao.trigger_config as { filters: Linha }).filters.horario_da_ia).toEqual({
+      fuso: "America/Sao_Paulo",
+      faixas: [{ dias: [1, 2, 3, 4, 5], inicio: "08:00", fim: "20:00" }],
+    });
   });
 
-  it("trocar só o aviso não mexe na janela; null apaga", async () => {
+  it("no agente que ainda tem o horário antigo, o aviso segue editável; null apaga", async () => {
     const c = await comFunil();
-    await ok(c, "plataforma_garantir_agente", { ...BIA, horario_de_atendimento: HORARIO, aviso_fora_do_horario: AVISO });
+    await ok(c, "plataforma_garantir_agente", BIA);
+    comHorarioAntigo(c.tabela("ai_agent_versions")[0]!, AVISO);
+
     const troca = await ok(c, "plataforma_garantir_agente", { nome: "Bia", aviso_fora_do_horario: "Voltamos amanhã cedo." });
     expect(troca.dados.versao).toMatchObject({ desfecho: "atualizou", mudancas: ["aviso de fora do horário"] });
     expect(horarioDe(c.tabela("ai_agent_versions")[0]!)).toMatchObject({ start: "08:00", end: "18:00", notice: "Voltamos amanhã cedo." });
@@ -249,12 +253,12 @@ describe("plataforma_garantir_agente · PASSOU A ALCANÇAR o aviso de fora do ho
     expect(((lido.dados.agentes as Linha[])[0]!.versao_vigente as Linha).aviso_fora_do_horario).toBeNull();
   });
 
-  it("aviso sem horário de atendimento: a recusa diz o que mandar junto, e o agente não nasce", async () => {
+  it("aviso sem horário nenhum: a recusa diz que o horário da IA não tem aviso, e o agente não nasce", async () => {
     const c = await comFunil();
     const r = await c.mcp.chamar("plataforma_garantir_agente", { organization_id: ORG, ...BIA, aviso_fora_do_horario: AVISO });
     expect(r.erro).toBe(true);
-    expect(r.texto).toContain("só existe para agente que tem horário de atendimento");
-    expect(r.texto).toContain('"horario_de_atendimento"');
+    expect(r.texto).toContain("só existia no horário antigo");
+    expect(r.texto).toContain("`horario_de_atendimento`");
     expect(c.tabela("ai_agents")).toHaveLength(0);
   });
 

@@ -44,6 +44,15 @@
  * vez por contato por período fechado. A ferramenta só grava o texto no
  * rascunho, e PRESERVA o que a tela gravou quando o pedido muda só o horário.
  *
+ * ── O horário de atendimento da IA (.85) ──────────────────────────────────
+ *
+ * Desde a .85, `horario_de_atendimento` grava o horário NOSSO
+ * (`filters.horario_da_ia`, faixas por dia; fora delas a IA fica inativa e a
+ * conversa é da equipe) e zera o `business_hours` do upstream, como a tela.
+ * O formato antigo de uma faixa continua aceito e vira uma faixa. Com o
+ * horário da IA, o aviso de fora do horário é recusado: não há aviso, a equipe
+ * atende. A conversão e a recusa moram em `./horario-da-ia.ts`.
+ *
  * ── A IA do agente é da PLATAFORMA ────────────────────────────────────────
  *
  * Nenhuma ferramenta daqui recebe provedor, modelo ou chave. O agente novo
@@ -99,6 +108,8 @@ import {
   type OrganizacaoDaImplantacao,
 } from "./base";
 import { capacidadesOferecidas, montarCapacidades } from "./capacidades";
+import { horarioDaIaDoPedido, type HorarioPedido } from "./horario-da-ia";
+import { temHorarioDaIaDeclarado } from "@/lib/agent-engine/agent/horario-da-ia";
 
 /**
  * Quem pede, para a trava da IA: NÃO escolhe. É o que faz a ferramenta herdar a
@@ -234,10 +245,19 @@ export interface PedidoDeAgente {
   dividir_mensagens?: boolean;
   tamanho_da_mensagem?: number;
   espera_por_rajada_ms?: number | null;
-  horario_de_atendimento?: { inicio: string; fim: string; dias: number[]; fuso?: string } | null;
+  /**
+   * .85 — o HORÁRIO DE ATENDIMENTO DA IA (`filters.horario_da_ia`): as faixas
+   * por dia em que a IA fica ATIVA; fora delas ela não responde e a conversa é
+   * da equipe. O formato antigo de uma faixa (`{ inicio, fim, dias }`) é
+   * convertido em uma faixa. `null` tira o horário (responde a qualquer hora).
+   * Ver `./horario-da-ia.ts`.
+   */
+  horario_de_atendimento?: HorarioPedido | null;
   /**
    * O texto mandado a quem escreve FORA do horário de atendimento (upstream
-   * 1.72, #1926). `null` apaga. Ausente: fica o que está gravado.
+   * 1.72, #1926). `null` apaga. Ausente: fica o que está gravado. Desde a .85
+   * só existe no horário ANTIGO do upstream: com o horário da IA é recusado
+   * (inativa quer dizer que a equipe atende).
    */
   aviso_fora_do_horario?: string | null;
   /**
@@ -596,9 +616,9 @@ async function montarVersao(
   if (pedido.horario_de_atendimento !== undefined) {
     const anterior = (corpo.trigger_config as Record<string, unknown> | null | undefined) ?? {};
     const filtros = (anterior.filters as Record<string, unknown> | undefined) ?? {};
-    // O aviso de fora do horário mora DENTRO do horário (`notice`). Trocar a
-    // janela não pode apagar o texto que alguém escreveu, pela tela ou por aqui.
-    const horarioAnterior = (filtros.business_hours as Record<string, unknown> | null | undefined) ?? null;
+    // .85 — o horário da IA SUBSTITUI o horário do upstream (`business_hours`,
+    // que adiava o turno e tinha o aviso): gravar o nosso zera o dele, como a
+    // tela. `null` tira os dois: a IA responde a qualquer hora.
     corpo.trigger_config = {
       events: anterior.events ?? ["message"],
       concurrency: anterior.concurrency ?? "one_per_conversation",
@@ -606,16 +626,9 @@ async function montarVersao(
         ignore_groups: filtros.ignore_groups ?? true,
         ignore_self: filtros.ignore_self ?? true,
         keyword_regex: filtros.keyword_regex ?? null,
-        business_hours:
-          pedido.horario_de_atendimento === null
-            ? null
-            : {
-                timezone: pedido.horario_de_atendimento.fuso ?? org.timezone,
-                start: pedido.horario_de_atendimento.inicio,
-                end: pedido.horario_de_atendimento.fim,
-                weekdays: pedido.horario_de_atendimento.dias,
-                ...(horarioAnterior !== null && "notice" in horarioAnterior ? { notice: horarioAnterior.notice } : {}),
-              },
+        business_hours: null,
+        horario_da_ia:
+          pedido.horario_de_atendimento === null ? null : horarioDaIaDoPedido(pedido.horario_de_atendimento, org.timezone),
       },
     };
   }
@@ -624,13 +637,20 @@ async function montarVersao(
     const gatilho = (corpo.trigger_config as Record<string, unknown> | null | undefined) ?? null;
     const filtros = (gatilho?.filters as Record<string, unknown> | undefined) ?? {};
     const horario = (filtros.business_hours as Record<string, unknown> | null | undefined) ?? null;
+    // .85 — com o horário da IA não existe aviso: fora do horário a IA fica
+    // inativa e quem atende é a equipe. Apagar (`null`) segue valendo.
+    if (temHorarioDaIaDeclarado(gatilho) && pedido.aviso_fora_do_horario !== null) {
+      throw new Recusa(
+        "Este agente tem horário de atendimento da IA, e com ele não existe aviso de fora do horário: fora das faixas a IA fica INATIVA e a conversa é da equipe, que responde. " +
+          "Tire `aviso_fora_do_horario` do pedido (ou mande `null` para apagar um aviso antigo).",
+      );
+    }
     if (horario === null) {
       // Sem janela não existe "fora dela": o motor nem adia o turno.
       if (pedido.aviso_fora_do_horario !== null) {
         throw new Recusa(
-          "O aviso de fora do horário só existe para agente que tem horário de atendimento, e este responde a qualquer hora. " +
-            'Informe `horario_de_atendimento` na mesma chamada. Ex.: { "horario_de_atendimento": { "inicio": "08:00", "fim": "18:00", "dias": [1,2,3,4,5] }, ' +
-            '"aviso_fora_do_horario": "Recebemos sua mensagem. Nosso atendimento volta às 8h." }.',
+          "O aviso de fora do horário só existia no horário antigo, que adiava a resposta, e este agente não o tem. " +
+            "O horário de atendimento da IA (`horario_de_atendimento`) não tem aviso: fora das faixas a IA fica inativa e a conversa é da equipe. Tire `aviso_fora_do_horario` do pedido.",
         );
       }
     } else if (pedido.aviso_fora_do_horario !== null || (horario.notice ?? null) !== null) {
@@ -661,6 +681,11 @@ function horarioDoGatilho(gatilho: unknown): Record<string, unknown> | null {
   return horario && typeof horario === "object" ? (horario as Record<string, unknown>) : null;
 }
 
+/** O horário da IA (.85) de um `trigger_config`, como gravado, ou `null`. */
+function horarioDaIaDoGatilho(gatilho: unknown): unknown {
+  return (gatilho as { filters?: { horario_da_ia?: unknown } } | null | undefined)?.filters?.horario_da_ia ?? null;
+}
+
 /** O que mudou no gatilho, nas palavras de quem configura: a janela, o aviso, ou os dois. */
 function rotulosDoGatilho(antes: unknown, depois: unknown): string[] {
   const semAviso = (h: Record<string, unknown> | null) => {
@@ -671,6 +696,7 @@ function rotulosDoGatilho(antes: unknown, depois: unknown): string[] {
   const a = horarioDoGatilho(antes);
   const d = horarioDoGatilho(depois);
   const rotulos: string[] = [];
+  if (!mesmoConteudo(horarioDaIaDoGatilho(antes), horarioDaIaDoGatilho(depois))) rotulos.push("horário de atendimento da IA");
   if (!mesmoConteudo(semAviso(a), semAviso(d))) rotulos.push("horário de atendimento");
   if (((a?.notice as string | null | undefined) ?? null) !== ((d?.notice as string | null | undefined) ?? null)) {
     rotulos.push("aviso de fora do horário");
@@ -742,6 +768,8 @@ function recusaDoSchema(erro: { issues: Array<{ path: PropertyKey[]; message: st
     if (caminho.endsWith("business_hours.notice")) {
       return "`aviso_fora_do_horario` aceita até 1000 caracteres.";
     }
+    // .85 — a régua do horário da IA já devolve a frase pronta (`fraseDoProblema`).
+    if (caminho.includes("horario_da_ia")) return `\`horario_de_atendimento\`: ${i.message}`;
     if (caminho.includes("business_hours") || caminho.includes("send_window")) {
       return 'O horário usa "HH:MM" de 24 horas e dias de 0 (domingo) a 6 (sábado), com o fim depois do início. Ex.: { "inicio": "08:00", "fim": "18:00", "dias": [1,2,3,4,5] }.';
     }

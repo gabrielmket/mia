@@ -13,6 +13,8 @@
 import { z } from "zod";
 
 import { lerTextoDoAvisoForaDoHorario } from "@/lib/agent-engine/agent/aviso-fora-do-horario";
+import { horarioGravadoDe, temHorarioDaIaDeclarado } from "@/lib/agent-engine/agent/horario-da-ia";
+import { janelaDeRespostaDe, retratoDoHorarioDaIa } from "@/lib/implantacao/horario-da-ia";
 import { LEAD_STAGES } from "@/lib/agent-engine/agent/lead-state";
 import { CATEGORIAS_DE_TIPO, LOCAIS_DE_TIPO } from "@/lib/agenda/tipos-de-agendamento";
 import { DIRECOES_DO_SILENCIO } from "@/lib/automation/gatilhos-de-tempo";
@@ -438,7 +440,9 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
     description:
       "Os agentes de IA de um cliente: situação (no ar, pausado, rascunho), versão publicada, rascunho pendente, pacotes ligados, " +
       "funis e materiais autorizados, follow-ups armados, número, limiar de sentimento, e o que FALTA PARA PUBLICAR (com quem resolve: você, uma pessoa na tela, ou a plataforma). " +
-      "Com `agente`, devolve também o PROMPT e a configuração inteira da versão vigente (o rascunho, se houver; senão a publicada), com o horário de atendimento e o aviso de fora do horário. " +
+      "Devolve o HORÁRIO DE ATENDIMENTO DA IA da versão publicada (`horario_de_atendimento`: as faixas, o fuso, se a IA está `ativa_agora`, a `proxima_troca` com o instante e o texto, " +
+      "e se o horário cai FORA da janela de resposta do número, que segura o que a IA escreve até a abertura; `faixas: null` = responde a qualquer hora). " +
+      "Com `agente`, devolve também o PROMPT e a configuração inteira da versão vigente (o rascunho, se houver; senão a publicada), com o horário de atendimento da IA dela. " +
       "Devolve a passagem por assunto jurídico de cada agente e, da EMPRESA, se o bloqueio de afirmação clínica está ligado (`seguranca_da_empresa`). " +
       "Devolve ainda os ROTEADORES de intenção: o número, se está ligado, o agente reserva e cada intenção com o agente e o funil de destino. " +
       "QUANDO USAR: antes de plataforma_garantir_agente e de plataforma_garantir_roteador, e antes de publicar ou ligar. " +
@@ -451,9 +455,12 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
     exemplo: { organization_id: ORG_DE_EXEMPLO, agente: "Bia" },
     operacao: null,
     handler: async (ctx, args) => {
-      const { c } = await alvo(ctx, args);
+      const { c, org } = await alvo(ctx, args);
       const todos = (await lerAgentes(c.admin, c.orgId)).filter((a) => !a.archived_at);
       const numeros = await listSelectableChannels(c.admin, c.orgId);
+      // .85 — a janela de RESPOSTA de cada número, para dizer se o horário da IA cabe nela.
+      const ajustesDosNumeros = await lerAjustesDosCanais(c.admin, c.orgId);
+      const agora = new Date();
       const oferecidas = await capacidadesOferecidas(c.admin, c.orgId);
       const fluxos = await lerFluxos(c.admin, c.orgId);
       const alvoUnico =
@@ -471,7 +478,18 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
         const base = tela.base;
         const numero = base ? numeros.find((n) => n.id === base.channel_session_id) : undefined;
         const followup = (base?.followup as { enabled?: boolean; flow_pointer_ids?: string[]; send_window?: unknown } | null) ?? null;
-        const horario = (base?.trigger_config as { filters?: { business_hours?: unknown } } | null)?.filters?.business_hours ?? null;
+        // O horário ANTIGO do upstream (`business_hours`), só para quem ainda o tem.
+        const horarioAntigo = (base?.trigger_config as { filters?: { business_hours?: unknown } } | null)?.filters?.business_hours ?? null;
+        // .85 — o horário da IA que VALE (o da versão publicada) e o que ele causa agora.
+        const publicada = tela.published;
+        const numeroPublicado = (publicada?.channel_session_id as string | null | undefined) ?? null;
+        const horario = retratoDoHorarioDaIa({
+          gatilhoPublicado: publicada ? (publicada.trigger_config ?? null) : undefined,
+          ajustesDoNumero: numeroPublicado ? ajustesDosNumeros.get(numeroPublicado) : undefined,
+          temNumero: numeroPublicado !== null,
+          fusoDaEmpresa: org.timezone,
+          agora,
+        });
         const estado = estadoDoAgente(agente);
         agentes.push({
           id: agente.id,
@@ -494,6 +512,15 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           followups_armados: (followup?.enabled ? (followup.flow_pointer_ids ?? []) : []).map(
             (id) => fluxos.find((f) => f.id === id)?.name ?? id,
           ),
+          // .85 — o horário de atendimento da IA da versão PUBLICADA.
+          horario_de_atendimento: {
+            faixas: horario.horario_da_ia?.faixas ?? null,
+            fuso: horario.horario_da_ia?.fuso ?? null,
+            ativa_agora: horario.ativa_agora,
+            proxima_troca: horario.proxima_troca,
+            janela_de_resposta_do_numero: horario.janela_de_resposta_do_numero,
+            fora_da_janela_de_resposta_do_numero: horario.horario_fora_da_janela_de_resposta,
+          },
           falta_para_publicar: tela.draft ? await pendenciasDePublicacao(c.admin, c.orgId, tela.draft, numeros) : [],
           ...(alvoUnico && base
             ? {
@@ -508,9 +535,12 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
                   dividir_mensagens: base.split_messages,
                   tamanho_da_mensagem: base.split_max_chars,
                   espera_por_rajada_ms: base.inbound_debounce_ms ?? null,
-                  horario_de_atendimento: horario,
+                  // .85 — o horário da IA DESTA versão (o rascunho, se houver), na forma gravada.
+                  horario_de_atendimento: horarioGravadoDe(base.trigger_config),
+                  // O horário antigo do upstream, só quando ainda está gravado.
+                  ...(horarioAntigo !== null ? { horario_antigo_que_adia: horarioAntigo } : {}),
                   // O texto como o motor o lê (upstream 1.72, #1926): null = não avisa.
-                  aviso_fora_do_horario: lerTextoDoAvisoForaDoHorario(base.trigger_config),
+                  aviso_fora_do_horario: temHorarioDaIaDeclarado(base.trigger_config) ? null : lerTextoDoAvisoForaDoHorario(base.trigger_config),
                   janela_dos_followups: followup?.send_window ?? null,
                   max_passos: base.max_steps,
                   ia: "definida pela plataforma",
@@ -797,6 +827,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           pausado: (s.metadata as { disabled?: unknown } | null)?.disabled === true,
           // Os ajustes do upstream 1.74 a 1.80 (plataforma_configurar_canal).
           dias_da_prospeccao: diasDaProspeccaoDe(ajustes.get(s.id)),
+          // .85 — as horas em que o número RESPONDE (a janela que o horário da IA pede).
+          janela_de_resposta: janelaDeRespostaDe(ajustes.get(s.id), org.timezone),
           guardar_historico: conexaoGuardaHistorico(s.provider) ? lerGuardarHistorico(s.metadata) : null,
           pausas_agendadas: pausas.filter((a) => a.todos_os_numeros || a.numero_id === s.id).map((a) => ({ id: a.id, inicio: a.inicio, fim: a.fim, situacao: a.situacao, todos_os_numeros: a.todos_os_numeros })),
           distribuicao: retratoDaDistribuicao(regras.get(s.id), equipe),

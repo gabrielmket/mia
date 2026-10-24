@@ -12,6 +12,7 @@
 import { z } from "zod";
 
 import { TAMANHO_MAXIMO_DO_TEXTO } from "@/lib/agent-engine/agent/aviso-fora-do-horario";
+import { MAX_FAIXAS_POR_DIA } from "@/lib/agent-engine/agent/horario-da-ia";
 import { DEFAULT_SENTIMENT_THRESHOLD } from "@/lib/ai/prompts/sentiment";
 import { garantirAgente, pausarAgente, publicarAgente, type PedidoDeAgente } from "@/lib/implantacao/agente";
 import { PACOTES } from "@/lib/mcp/tools/pacotes";
@@ -28,12 +29,51 @@ const janela = z
   })
   .strict();
 
+/**
+ * .85 — uma faixa do horário de atendimento da IA. O fim aceita "24:00" (o fim
+ * do dia); a conferência de cada faixa (fim depois do início, até 6 por dia,
+ * nenhuma faixa) mora em `lib/implantacao/horario-da-ia.ts`, com a frase que
+ * ensina.
+ */
+const FIM_DA_FAIXA = z
+  .string()
+  .regex(/^(([01][0-9]|2[0-3]):[0-5][0-9]|24:00)$/, 'use "HH:MM" de 24 horas, ou "24:00" para o fim do dia');
+
+const faixaDaIa = z
+  .object({
+    dias: z.array(DIA_DA_SEMANA).min(1).max(7).describe("Os dias desta faixa: 0 (domingo) a 6 (sábado)."),
+    inicio: HORA.describe('Quando a IA fica ativa, em "HH:MM" ("00:00" a "23:59").'),
+    fim: FIM_DA_FAIXA.describe('Quando a IA fica inativa, em "HH:MM", ou "24:00" (o fim do dia). Depois do início.'),
+  })
+  .strict();
+
+/** O formato antigo, de UMA faixa, com a régua nova ("24:00" vale como fim). */
+const faixaNoFormatoAntigo = z
+  .object({
+    inicio: HORA.describe('Quando a IA fica ativa, em "HH:MM".'),
+    fim: FIM_DA_FAIXA.describe('Quando fica inativa, em "HH:MM" ou "24:00". Depois do início.'),
+    dias: z.array(DIA_DA_SEMANA).min(1).max(7).describe("Os dias da semana: 0 (domingo) a 6 (sábado)."),
+    fuso: z.string().min(1).max(64).optional().describe("Fuso. Sem isto, o da empresa."),
+  })
+  .strict()
+  .describe('O formato antigo, de UMA faixa: { "inicio", "fim", "dias" }. Vira uma faixa.');
+
+const horarioDaIa = z
+  .object({
+    faixas: z
+      .array(faixaDaIa)
+      .max(MAX_FAIXAS_POR_DIA * 7)
+      .describe(`As faixas em que a IA fica ATIVA. Até ${MAX_FAIXAS_POR_DIA} por dia; as que se cruzam são unidas.`),
+    fuso: z.string().min(1).max(64).optional().describe("Fuso do horário. Sem isto, o da empresa."),
+  })
+  .strict();
+
 export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
   {
     name: "plataforma_garantir_agente",
     description:
       "Cria ou altera um AGENTE DE IA de um cliente: o nome, o PROMPT, as capacidades (por pacote), os funis em que ele pode mexer, os materiais que consulta, " +
-      "os follow-ups que arma, as palavras que passam a conversa para uma pessoa, se o assunto jurídico passa a conversa para uma pessoa, o horário em que atende (e o aviso para quem escreve fora dele), o limiar de sentimento e o número de WhatsApp. " +
+      "os follow-ups que arma, as palavras que passam a conversa para uma pessoa, se o assunto jurídico passa a conversa para uma pessoa, o HORÁRIO DE ATENDIMENTO DA IA (as faixas por dia em que ela fica ativa; fora delas ela não responde e a conversa é da equipe), o limiar de sentimento e o número de WhatsApp. " +
       "O que esta ferramenta grava é um RASCUNHO: nada muda no atendimento até plataforma_publicar_agente. " +
       "As exceções são do CADASTRO do agente e valem na hora: `nome`, `descricao`, `prioridade`, `limiar_de_sentimento` e `servidor_mcp_externo.no_atendimento`. " +
       "ATENÇÃO: `bloquear_afirmacao_clinica` é da EMPRESA, não do agente: liga ou desliga a proteção para TODOS os agentes do cliente, na hora. Só faz sentido em clínica e consultório. " +
@@ -118,12 +158,23 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
         .nullable()
         .optional()
         .describe("Quanto esperar o cliente terminar de mandar várias mensagens seguidas antes de responder, em milissegundos. null = o padrão da instalação."),
-      horario_de_atendimento: janela
-        .extend({ fuso: z.string().min(1).max(64).optional().describe("Fuso da janela. Sem isto, o da empresa.") })
-        .strict()
+      horario_de_atendimento: z
+        .union([horarioDaIa, faixaNoFormatoAntigo])
         .nullable()
         .optional()
-        .describe("O horário em que o agente RESPONDE. null = responde a qualquer hora. Trocar a janela preserva o aviso de fora do horário que já existe."),
+        .describe(
+          "O HORÁRIO DE ATENDIMENTO DA IA: as faixas por dia em que ela fica ATIVA e responde. " +
+            "FORA delas a IA fica INATIVA: não responde a mensagem que chegou, nem depois, e a conversa fica com a equipe (não há aviso automático). " +
+            "Se o cliente escrever de novo com a IA ativa, ela responde lendo a conversa inteira. Os toques de follow-up que caem com ela inativa esperam a próxima abertura. " +
+            'Forma: { "faixas": [{ "dias": [1,2,3,4,5], "inicio": "00:00", "fim": "10:00" }, { "dias": [1,2,3,4,5], "inicio": "17:30", "fim": "24:00" }], "fuso"?: "America/Sao_Paulo" }. ' +
+            `"24:00" vale como fim do dia; até ${MAX_FAIXAS_POR_DIA} faixas por dia; faixas que se cruzam são unidas. ` +
+            'A faixa que passa da meia-noite é DUAS: até "24:00" num dia e de "00:00" no seguinte. ' +
+            "Zero faixas é recusado: para parar o agente, use plataforma_pausar_agente. " +
+            "O formato antigo { inicio, fim, dias } continua aceito e vira uma faixa. Sem `fuso`, o da empresa. null = a IA responde a qualquer hora. " +
+            "É do RASCUNHO: vale depois de publicar. Substitui o horário antigo (que adiava a resposta e tinha aviso). " +
+            "A janela de RESPOSTA do número (anti-bloqueio, padrão 7h às 22h) continua valendo: o que a IA escrever fora dela sai na abertura; " +
+            "plataforma_ver_agentes diz se o horário cai fora dela, e plataforma_configurar_canal (`janela_de_resposta`) a abre.",
+        ),
       aviso_fora_do_horario: z
         .string()
         .trim()
@@ -132,9 +183,9 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
         .nullable()
         .optional()
         .describe(
-          "O texto que o sistema manda a quem escreve FORA do horário de atendimento, para a pessoa saber que a mensagem chegou e quando alguém responde. " +
-            "Sai no máximo UMA vez por contato a cada período fechado, e nunca para contato bloqueado. Quando o horário abre, o agente responde normalmente. " +
-            `Até ${TAMANHO_MAXIMO_DO_TEXTO} caracteres. null apaga o aviso. Só vale com \`horario_de_atendimento\` definido. Sem isto, fica o texto que está gravado.`,
+          "SÓ DO HORÁRIO ANTIGO (o que adiava a resposta), que nenhum agente novo usa: o texto mandado a quem escrevia fora dele. " +
+            "Com o horário de atendimento da IA (`horario_de_atendimento`) é RECUSADO: fora das faixas a IA fica inativa e a conversa é da equipe, que responde. " +
+            `Até ${TAMANHO_MAXIMO_DO_TEXTO} caracteres. null apaga um aviso antigo.`,
         ),
       limiar_de_sentimento: z
         .number()
@@ -198,7 +249,13 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
       pacotes: ["atender", "vender"],
       funis: ["Agendamentos"],
       palavras_de_passagem: ["falar com atendente", "pessoa de verdade"],
-      horario_de_atendimento: { inicio: "08:00", fim: "20:00", dias: [1, 2, 3, 4, 5, 6] },
+      horario_de_atendimento: {
+        faixas: [
+          { dias: [1, 2, 3, 4, 5], inicio: "00:00", fim: "08:00" },
+          { dias: [1, 2, 3, 4, 5], inicio: "18:00", fim: "24:00" },
+          { dias: [0, 6], inicio: "00:00", fim: "24:00" },
+        ],
+      },
     },
     operacao: "implantar_configuracao",
     handler: async (ctx, args) => {
