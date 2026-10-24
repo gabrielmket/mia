@@ -49,6 +49,8 @@ import { DICIONARIO_EMPRESAS_MIA } from "./dicionario-empresas-mia";
 import { DICIONARIO_DOS_PAINEIS_MIA } from "./dicionario-mia-paineis";
 // FORK MIA (item 9): o montador de relatórios, idem.
 import { DICIONARIO_DO_MONTADOR_MIA } from "./dicionario-mia-montador";
+// FORK MIA (.85): o horário de atendimento da IA, idem.
+import { DICIONARIO_DO_HORARIO_DA_IA } from "./dicionario-mia-horario-da-ia";
 
 /** `pt-BR` não aparece: é a chave. Só o que DIFERE precisa de linha. */
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
@@ -59,6 +61,7 @@ export const DICIONARIO: Traducoes = {
   ...DICIONARIO_DAS_CONVERSOES_DA_META,
   ...DICIONARIO_DOS_PAINEIS_MIA,
   ...DICIONARIO_DO_MONTADOR_MIA,
+  ...DICIONARIO_DO_HORARIO_DA_IA,
   "Há um ajuste proporcional esperando pagamento. Escolher outro plano cancela esse ajuste.": { es: "Hay un ajuste proporcional esperando el pago. Elegir otro plan cancela ese ajuste." },
   "Estamos preparando o ajuste proporcional. Aguarde alguns segundos e tente novamente.": { es: "Estamos preparando el ajuste proporcional. Espera unos segundos e inténtalo de nuevo." },
   "Estamos preparando o ajuste proporcional. Aguarde alguns segundos.": { es: "Estamos preparando el ajuste proporcional. Espera unos segundos." },

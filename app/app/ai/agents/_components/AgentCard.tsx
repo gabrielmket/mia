@@ -8,6 +8,8 @@ import { useT } from "@/hooks/i18n/useT";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import { AgentStatusBadge, deriveAgentStatus } from "./AgentStatusBadge";
 import { AgentRowMenu } from "./AgentRowMenu";
+// FORK MIA (.85): o selo do horário de atendimento da IA.
+import { SeloDoHorarioNaLista } from "@/components/ai/SeloDoHorarioDaIa";
 
 interface Props {
   agent: AgentRow;
@@ -84,6 +86,12 @@ export function AgentCard({ agent, canWrite }: Props) {
           {canWrite && <AgentRowMenu agent={agent} />}
         </div>
       </div>
+      {/* FORK MIA (.85): o horário da IA da versão publicada ("Ativa até 17:30"). */}
+      {status === "published" && (
+        <div className="flex min-w-0">
+          <SeloDoHorarioNaLista agentId={agent.id} />
+        </div>
+      )}
       {agent.description && (
         <p className="line-clamp-2 text-xs text-muted-foreground">{agent.description}</p>
       )}

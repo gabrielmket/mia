@@ -15,6 +15,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { JanelaSelo } from "@/components/inbox/JanelaSelo";
+// FORK MIA (.85): o selo do horário de atendimento da IA.
+import { SeloDoHorarioNaConversa } from "@/components/ai/SeloDoHorarioDaIa";
 import { ChannelLogo } from "@/components/inbox/ChannelLogo";
 import { Phone, ArrowRight, MagnifyingGlass } from "@/lib/ui/icons";
 import { useAuth } from "@/hooks/auth/AuthProvider";
@@ -260,6 +262,8 @@ export function ConversationHeader({
             provider={conversation.channel_sessions?.provider ?? null}
             lastInboundAt={conversation.last_inbound_at}
           />
+          {/* FORK MIA (.85): a IA está ativa ou a conversa é da equipe, pelo horário da IA. */}
+          <SeloDoHorarioNaConversa conversationId={conversation.id} />
           {/* #2383: O CANAL DESTA CONVERSA, NO CABEÇALHO — a acepção que faltava
               da issue: a lista já dizia por onde a conversa entrou, a conversa
               ABERTA não dizia. O logo ao lado nomeia o provedor, não o número:
