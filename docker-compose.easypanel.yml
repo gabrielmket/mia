@@ -106,6 +106,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+    # O prazo do `docker stop` (v1.88, #2823 e #3237, o par do docker-compose.prod.yml
+    # do upstream): o worker se dá 30 s (`SHUTDOWN_GRACE_MS`) para fechar laços,
+    # drain e pool, contados do SIGTERM; sem esta chave o Docker manda SIGKILL aos
+    # 10 s e o job em voo fica `running` até o reaper. Literal, sem `${}`: a
+    # checagem do EasyPanel interpola o compose sem ler o `.env`.
+    stop_grace_period: 40s
     # Rede do EasyPanel: é por ela que chegamos ao Postgres da plataforma, o
     # serviço supabase-sistema-mia (projeto banco-de-dados), pelo apelido
     # supabase-sistema-mia-db. Só quem conecta no banco entra: bootstrap, app e
