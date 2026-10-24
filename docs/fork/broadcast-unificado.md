@@ -102,3 +102,15 @@ modelo aprovado (o texto livre fora da janela de 24h é recusado depois, pelo
 webhook). O filtro certo é pela capacidade `freeformOutsideWindow`, como a
 prospecção já faz. Enquanto não volta de lá, o cartão "Número por QR" do
 Broadcast lista os números certos pelo nome.
+
+## O terceiro caminho: E-mail (.89)
+
+Desde a .89 o "por onde sai" tem um terceiro cartão, **E-mail**, ao lado do
+número oficial e do número por QR: pelo domínio da empresa, cobrado por e-mail
+aceito da mesma carteira, só para quem tem base legal. É o módulo
+`email_marketing`, vendido à parte; a tela do Broadcast e a da carteira abrem
+também para quem só contratou ele (`TELAS_TAMBEM_DE` em `lib/modulos/vendaveis.ts`),
+e aí o QR aparece como "Não contratado". A lista unificada mostra as campanhas de
+e-mail com o selo do canal, e o detalhe abre em `/app/broadcast/email/[id]`. Os
+motores continuam separados: o do e-mail é `lib/email-marketing/motor.ts`, no cron
+`email-marketing`. Desenho inteiro em [`email-marketing.md`](email-marketing.md).
