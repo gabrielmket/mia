@@ -55,7 +55,8 @@ import {
   routingConfigSchema,
   type RoutingMode,
 } from "@/lib/schemas/routing";
-import { colegasPodemMexerNaAgendaLigado, meetAbertoLigado, tenantSchema } from "@/lib/schemas/settings";
+import { colegasPodemMexerNaAgendaLigado, crmSettingsSchema, meetAbertoLigado, tenantSchema } from "@/lib/schemas/settings";
+import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { DEFAULT_VISIBILITY_MODE } from "@/lib/auth/types";
 import { fusoValido } from "@/lib/tempo/fusos";
 
@@ -352,12 +353,18 @@ export interface PedidoDeAssinatura {
   /** Assina as mensagens da IA com `nome_da_ia`. */
   ia?: boolean;
   nome_da_ia?: string;
+  /**
+   * .86 (upstream 1.88, #3318): com `ia` ligada, cada agente assina com o
+   * PRÓPRIO nome, e não com `nome_da_ia`. Ausente mantém o gravado, como a rota.
+   */
+  nome_de_cada_agente?: boolean;
 }
 
 interface AssinaturaGravada {
   humanos: boolean;
   ia: boolean;
   nome_ia: string;
+  por_agente?: boolean;
 }
 
 export interface PedidoDeAtendimento {
@@ -399,6 +406,25 @@ export interface PedidoDeAtendimento {
    * liga). Mesma razão da opção de cima para gravar pelo servidor.
    */
   google_meet_com_acesso_aberto?: boolean;
+  /**
+   * .86 (upstream 1.88, #2988, 0 migration): a conversa que o RODÍZIO entregou e
+   * ninguém respondeu no prazo volta para a fila (`routing.unanswered_return_minutes`,
+   * cron `rodizio-devolucao`). `null` desliga, o padrão. Sem tela no upstream.
+   */
+  devolver_a_fila_sem_resposta_minutos?: number | null;
+  /**
+   * .86 (upstream 1.87, #2593): o telefone que o cliente diz numa conversa entra
+   * SOZINHO na ficha que está SEM número (`settings.crm.telefone_de_ficha_vazia`),
+   * em vez de virar proposta. Nasce desligada; nunca troca o número de quem tem.
+   */
+  telefone_de_ficha_vazia?: boolean;
+  /**
+   * .86 (upstream 1.88, refs #2353): as ETIQUETAS DE CONTATO INTERNO
+   * (`settings.crm.internal_contact_tags`): o contato com uma delas (equipe,
+   * sócio, família, fornecedor) não vira card no funil e a IA não responde a ele;
+   * a conversa segue no Inbox. A lista INTEIRA; `[]` tira todas.
+   */
+  etiquetas_de_contato_interno?: string[];
 }
 
 /** O freio do `ai_decide` como o motor o lê (`aiDecideLigado`): só `false` gravado desliga. */
@@ -424,6 +450,8 @@ export async function configurarAtendimento(
   let iaDecideGravada = null as boolean | null;
   let colegasGravado = null as boolean | null;
   let meetGravado = null as boolean | null;
+  let telefoneGravado = null as boolean | null;
+  let internasGravadas = null as string[] | null;
 
   const { mudou } = await mudarSettingsDaOrganizacao(c.admin, c.orgId, (settings) => {
     const atual = routingConfigSchema.catch(routingConfigSchema.parse({})).parse(settings.routing ?? {});
@@ -442,6 +470,9 @@ export async function configurarAtendimento(
         ? { manual_reply_silence_minutes: pedido.ia_espera_apos_resposta_pelo_celular_minutos }
         : {}),
       ...(pedido.visibilidade !== undefined ? { visibility_mode: pedido.visibilidade } : {}),
+      ...(pedido.devolver_a_fila_sem_resposta_minutos !== undefined
+        ? { unanswered_return_minutes: pedido.devolver_a_fila_sem_resposta_minutos }
+        : {}),
     });
     if (!lido.success) {
       throw new Recusa(
@@ -460,6 +491,9 @@ export async function configurarAtendimento(
         humanos: pedido.assinatura.atendentes ?? assinaturaAtual.humanos,
         ia: pedido.assinatura.ia ?? assinaturaAtual.ia,
         nome_ia: pedido.assinatura.nome_da_ia ?? assinaturaAtual.nomeIa,
+        // Ausente mantém o gravado (a régua da rota desde a v1.88): sem isto, a
+        // implantação que mexe só no nome apagaria a escolha feita na tela.
+        por_agente: pedido.assinatura.nome_de_cada_agente ?? assinaturaAtual.porAgente,
       });
       if (!conferida.success) {
         throw new Recusa(
@@ -473,7 +507,8 @@ export async function configurarAtendimento(
       assinaturaPedida !== null &&
       (assinaturaPedida.humanos !== assinaturaAtual.humanos ||
         assinaturaPedida.ia !== assinaturaAtual.ia ||
-        assinaturaPedida.nome_ia !== assinaturaAtual.nomeIa);
+        assinaturaPedida.nome_ia !== assinaturaAtual.nomeIa ||
+        (assinaturaPedida.por_agente ?? false) !== assinaturaAtual.porAgente);
 
     const { settings: mesclado, routing } = mesclarSettingsDeAtendimento(settings, lido.data);
     // A chave da assinatura só é escrita quando MUDA: a organização que nunca a
@@ -504,6 +539,27 @@ export async function configurarAtendimento(
       pedido.google_meet_com_acesso_aberto !== undefined && pedido.google_meet_com_acesso_aberto !== meetAtual;
     if (meetMudou) novo = { ...novo, google_meet_acesso_aberto: pedido.google_meet_com_acesso_aberto };
 
+    // .86 — as duas opções do bloco `settings.crm`, pela mesma mescla das ações
+    // da tela (`definirTelefoneDeFichaVazia`, `definirTagsDeContatoInterno`): o
+    // resto do bloco fica, e só grava quando o valor MUDA.
+    const crmAtual = crmSettingsSchema.parse(settings.crm ?? {});
+    const telefoneMudou =
+      pedido.telefone_de_ficha_vazia !== undefined && pedido.telefone_de_ficha_vazia !== crmAtual.telefone_de_ficha_vazia;
+    const internasPedidas =
+      pedido.etiquetas_de_contato_interno !== undefined ? normalizarTags(pedido.etiquetas_de_contato_interno) : null;
+    const internasMudaram = internasPedidas !== null && !mesmoConteudo(internasPedidas, crmAtual.internal_contact_tags);
+    if (telefoneMudou || internasMudaram) {
+      const crm = (settings.crm ?? {}) as Record<string, unknown>;
+      novo = {
+        ...novo,
+        crm: {
+          ...crm,
+          ...(telefoneMudou ? { telefone_de_ficha_vazia: pedido.telefone_de_ficha_vazia } : {}),
+          ...(internasMudaram ? { internal_contact_tags: internasPedidas } : {}),
+        },
+      };
+    }
+
     mudancas = [];
     if (routing.mode !== atual.mode) mudancas.push("modo de distribuição");
     if (routing.handoff_return_after_minutes !== atual.handoff_return_after_minutes) mudancas.push("devolução para a IA");
@@ -512,6 +568,9 @@ export async function configurarAtendimento(
     }
     if (routing.manual_reply_silence_minutes !== atual.manual_reply_silence_minutes) {
       mudancas.push("espera da IA depois de resposta pelo celular");
+    }
+    if ((routing.unanswered_return_minutes ?? null) !== (atual.unanswered_return_minutes ?? null)) {
+      mudancas.push("devolução à fila da conversa sem resposta");
     }
     const visibilidadeNova = (novo.visibility_mode as string | undefined) ?? DEFAULT_VISIBILITY_MODE;
     if (visibilidadeNova !== visibilidadeAtual) mudancas.push("visibilidade");
@@ -524,11 +583,16 @@ export async function configurarAtendimento(
     colegasGravado = colegasMudou ? (pedido.colegas_podem_mexer_na_agenda as boolean) : null;
     if (meetMudou) mudancas.push("Google Meet com acesso aberto");
     meetGravado = meetMudou ? (pedido.google_meet_com_acesso_aberto as boolean) : null;
+    if (telefoneMudou) mudancas.push("telefone entra sozinho na ficha sem número");
+    telefoneGravado = telefoneMudou ? (pedido.telefone_de_ficha_vazia as boolean) : null;
+    if (internasMudaram) mudancas.push("etiquetas de contato interno");
+    internasGravadas = internasMudaram ? internasPedidas : null;
 
     const assinaturaFinal: AssinaturaGravada = assinaturaPedida ?? {
       humanos: assinaturaAtual.humanos,
       ia: assinaturaAtual.ia,
       nome_ia: assinaturaAtual.nomeIa,
+      por_agente: assinaturaAtual.porAgente,
     };
     distribuicao = {
       modo: routing.mode,
@@ -536,13 +600,21 @@ export async function configurarAtendimento(
       devolver_para_a_ia_apos_minutos: routing.handoff_return_after_minutes,
       conversa_fica_com_quem_atendeu: routing.conversation_stays_with_attendant,
       ia_espera_apos_resposta_pelo_celular_minutos: routing.manual_reply_silence_minutes,
+      devolver_a_fila_sem_resposta_minutos: routing.unanswered_return_minutes ?? null,
     };
     retrato = {
       ...distribuicao,
-      assinatura: { atendentes: assinaturaFinal.humanos, ia: assinaturaFinal.ia, nome_da_ia: assinaturaFinal.nome_ia },
+      assinatura: {
+        atendentes: assinaturaFinal.humanos,
+        ia: assinaturaFinal.ia,
+        nome_da_ia: assinaturaFinal.nome_ia,
+        nome_de_cada_agente: assinaturaFinal.por_agente === true,
+      },
       ia_decide_nas_automacoes: iaDecideMudou ? pedido.ia_decide_nas_automacoes : iaDecideAtual,
       colegas_podem_mexer_na_agenda: colegasMudou ? pedido.colegas_podem_mexer_na_agenda : colegasAtual,
       google_meet_com_acesso_aberto: meetMudou ? pedido.google_meet_com_acesso_aberto : meetAtual,
+      telefone_de_ficha_vazia: telefoneMudou ? pedido.telefone_de_ficha_vazia : crmAtual.telefone_de_ficha_vazia,
+      etiquetas_de_contato_interno: internasMudaram ? internasPedidas : crmAtual.internal_contact_tags,
     };
 
     // Uma organização que nunca abriu a tela não tem `settings.routing`: gravar
@@ -609,6 +681,31 @@ export async function configurarAtendimento(
       resourceId: c.orgId,
       requestId: c.requestId,
       metadata: { ligado: meetGravado, mudou: true, via: "mcp_plataforma" },
+    });
+  }
+
+  if (mudou && telefoneGravado !== null) {
+    // A mesma linha de `definirTelefoneDeFichaVazia` (Configurações › Distribuição).
+    void audit({
+      action: "crm.telefone_de_ficha_vazia_alterado",
+      actorUserId: c.autorUserId,
+      organizationId: c.orgId,
+      resourceType: "organization",
+      resourceId: c.orgId,
+      requestId: c.requestId,
+      metadata: { ligado: telefoneGravado, via: "mcp_plataforma" },
+    });
+  }
+  if (mudou && internasGravadas !== null) {
+    // A mesma linha de `definirTagsDeContatoInterno` (Configurações › Tags).
+    void audit({
+      action: "crm.tags_internas_alteradas",
+      actorUserId: c.autorUserId,
+      organizationId: c.orgId,
+      resourceType: "organization",
+      resourceId: c.orgId,
+      requestId: c.requestId,
+      metadata: { tags: internasGravadas, quantidade: internasGravadas.length, via: "mcp_plataforma" },
     });
   }
 

@@ -9,7 +9,7 @@
  * prova o que foi GRAVADO, que a REEXECUÇÃO não escreve, a recusa que ensina e
  * a leitura que devolve.
  *
- * A CONTAGEM da lista mora aqui (a versão mais nova): 69. A v1.86 pediu UMA
+ * A CONTAGEM da lista mora no teste da versão mais nova (188). A v1.86 pediu UMA
  * ferramenta nova (`plataforma_copiar_followup`: a exportação e a importação de
  * fluxo, #3056) e campos novos: o escopo e a lista pesquisável dos campos do
  * funil (#2791, #2521), o rodízio da ação atribuir (#2041, 0692), os dois freios
@@ -112,7 +112,7 @@ beforeEach(() => {
 
 describe("a lista: 69 ferramentas, e os tipos de ação seguem os do upstream", () => {
   it("a v1.86 acrescentou UMA ferramenta (69): copiar fluxo de follow-up, que só monta", () => {
-    expect(FERRAMENTAS).toHaveLength(69);
+    // A contagem mora no teste da versão mais nova (188).
     const copiar = FERRAMENTAS.find((f) => f.name === "plataforma_copiar_followup");
     expect(copiar?.operacao).toBe("implantar_configuracao");
     expect(Object.keys(copiar!.inputSchema).sort()).toEqual(["arquivo", "de_outra_empresa", "nome", "organization_id"]);

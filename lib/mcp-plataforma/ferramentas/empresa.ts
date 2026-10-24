@@ -10,6 +10,7 @@ import {
   type PedidoDeAtendimento,
   type PedidoDeEmpresa,
 } from "@/lib/implantacao/empresa";
+import { TAMANHO_MAXIMO_DA_TAG } from "@/lib/contacts/tag-normalizada";
 import { PRAZO_MAX_MINUTOS, PRAZO_MIN_MINUTOS } from "@/lib/escalacao/devolucao-automatica";
 import { recusar } from "@/lib/mcp-plataforma/recusa";
 import { MOEDAS_SERVIDAS } from "@/lib/money";
@@ -116,6 +117,8 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
       "`ia_decide_nas_automacoes`: o freio da empresa inteira para o passo \"a IA decide\" das automações; false faz toda regra com esse passo parar sem consultar a IA (e sem gastar). Nasce ligado. " +
       "`colegas_podem_mexer_na_agenda`: o atendente marca, remarca e cancela na agenda dos colegas (nasce ligado); false deixa cada atendente só na própria agenda (gestor e administrador seguem mexendo em todas). " +
       "`google_meet_com_acesso_aberto`: a reunião do Google Meet que o sistema cria já nasce com o acesso aberto a quem tem o link, sem sala de espera (nasce desligado). " +
+      "Desde a .86 (upstream 1.87 e 1.88): `assinatura.nome_de_cada_agente` (cada agente assina com o próprio nome), `devolver_a_fila_sem_resposta_minutos` (a conversa do rodízio sem resposta humana volta para a fila), " +
+      "`telefone_de_ficha_vazia` (o telefone dito na conversa entra sozinho na ficha sem número) e `etiquetas_de_contato_interno` (o contato com uma delas não vira card e a IA não responde). " +
       "Só os campos que VIERAM mudam; pedido igual ao que está gravado responde `ja_estava`. As duas primeiras decisões andam juntas: rodízio sem restringir a visibilidade deixa todo mundo vendo a carteira do colega. " +
       "ATENÇÃO: tudo aqui vale na hora, inclusive para o agente que já está no ar. A assinatura ligada aparece na PRÓXIMA mensagem que o cliente final receber. " +
       "O QUE NÃO FAZ: não define a distribuição de cada NÚMERO (quem recebe, o modo próprio e o atendente padrão do número: é plataforma_configurar_canal, `distribuicao`) " +
@@ -155,6 +158,13 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
             .max(200)
             .optional()
             .describe('O nome que assina as mensagens da IA (ex.: "Assistente Virtual", ou o nome do agente). De 1 a 120 caracteres, sem asterisco e sem quebra de linha.'),
+          // .86 — upstream 1.88 (#3318).
+          nome_de_cada_agente: z
+            .boolean()
+            .optional()
+            .describe(
+              "Com `ia` ligada: true faz cada agente assinar com o PRÓPRIO nome (o do cadastro do agente) em vez de `nome_da_ia`; útil quando o cliente tem mais de um agente no mesmo número. Nasce desligada; ausente mantém o que está gravado.",
+            ),
         })
         .strict()
         .optional()
@@ -182,6 +192,36 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
         .optional()
         .describe(
           "true: a reunião do Google Meet criada pelo sistema já nasce com o acesso aberto (quem tem o link entra sem esperar ser admitido). false (o padrão): a sala de espera do Google vale.",
+        ),
+      // .86 — upstream 1.88 (#2988).
+      devolver_a_fila_sem_resposta_minutos: z
+        .number()
+        .int()
+        .min(PRAZO_MIN_MINUTOS)
+        .max(PRAZO_MAX_MINUTOS)
+        .nullable()
+        .optional()
+        .describe(
+          `Só com distribuição em RODÍZIO: a conversa que o rodízio entregou e ninguém da equipe respondeu neste prazo volta para a fila (de ${PRAZO_MIN_MINUTOS} a ${PRAZO_MAX_MINUTOS} minutos); ` +
+            "quem não respondeu fica fora dela por 24 horas, no máximo duas devoluções, só para entregas das últimas 3 horas. Num número com atendente de destino padrão, ela volta para a mesma pessoa. " +
+            "null (o padrão) desliga. Não manda mensagem nenhuma ao cliente.",
+        ),
+      // .86 — upstream 1.87 (#2593).
+      telefone_de_ficha_vazia: z
+        .boolean()
+        .optional()
+        .describe(
+          "true: o telefone que o cliente informa na conversa entra SOZINHO na ficha que está SEM número (em formato internacional), em vez de virar proposta para uma pessoa confirmar. " +
+            "Nunca troca o número de quem já tem um. false (o padrão): todo dado ouvido vira proposta.",
+        ),
+      // .86 — upstream 1.88 (refs #2353).
+      etiquetas_de_contato_interno: z
+        .array(z.string().trim().min(1).max(TAMANHO_MAXIMO_DA_TAG))
+        .max(50)
+        .optional()
+        .describe(
+          "As etiquetas de CONTATO INTERNO (a lista inteira; [] tira todas): o contato marcado com uma delas (equipe, sócio, família, fornecedor) não vira card no funil e a IA NÃO responde a ele. " +
+            "A conversa continua normal no Inbox, inclusive para envio manual. As etiquetas são comparadas sem diferença de maiúscula e acento.",
         ),
     },
     exemplo: { organization_id: ORG_DE_EXEMPLO, modo: "round_robin", visibilidade: "own_and_unassigned", devolver_para_a_ia_apos_minutos: 60 },

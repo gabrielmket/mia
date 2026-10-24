@@ -187,6 +187,18 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
             "Com o horário de atendimento da IA (`horario_de_atendimento`) é RECUSADO: fora das faixas a IA fica inativa e a conversa é da equipe, que responde. " +
             `Até ${TAMANHO_MAXIMO_DO_TEXTO} caracteres. null apaga um aviso antigo.`,
         ),
+      // .86 — upstream 1.87 (#2696).
+      filtro_de_palavras: z
+        .string()
+        .max(500)
+        .nullable()
+        .optional()
+        .describe(
+          'O FILTRO DE PALAVRAS da versão ("Só responder quando a mensagem falar de algo específico"): uma expressão sem diferença de maiúscula, ex.: "orçamento|preço|valor". ' +
+            "Desde a v1.87 do upstream ele VALE: no modo automático a IA NÃO responde a mensagem sem nenhuma das palavras, inclusive no meio da conversa (a mensagem fica na conversa, sem aviso na Central). " +
+            "Pedido de atendente, pedido para parar e áudio ou imagem ainda sem transcrição continuam passando. Quase sempre o certo é NÃO ter filtro. " +
+            "null ou vazio tira o filtro. É do RASCUNHO: vale depois de publicar.",
+        ),
       limiar_de_sentimento: z
         .number()
         .min(0)

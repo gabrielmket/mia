@@ -110,6 +110,7 @@ import {
 import { capacidadesOferecidas, montarCapacidades } from "./capacidades";
 import { horarioDaIaDoPedido, type HorarioPedido } from "./horario-da-ia";
 import { temHorarioDaIaDeclarado } from "@/lib/agent-engine/agent/horario-da-ia";
+import { lerFiltroDePalavraChave } from "@/lib/agent-engine/agent/palavra-chave-do-gatilho";
 
 /**
  * Quem pede, para a trava da IA: NÃO escolhe. É o que faz a ferramenta herdar a
@@ -260,6 +261,15 @@ export interface PedidoDeAgente {
    * (inativa quer dizer que a equipe atende).
    */
   aviso_fora_do_horario?: string | null;
+  /**
+   * .86 (upstream 1.87, #2696): o FILTRO DE PALAVRAS da versão (o campo "Só
+   * responder quando a mensagem falar de algo específico"), uma expressão
+   * regular sem diferença de maiúscula. Desde a v1.87 ele VALE: no modo
+   * automático, a mensagem sem nenhuma das palavras não recebe resposta,
+   * inclusive no meio da conversa (pedido de atendente, de parar e mídia sem
+   * transcrição passam). `null` ou vazio tira o filtro. Ausente: fica o gravado.
+   */
+  filtro_de_palavras?: string | null;
   /**
    * A nota de clima (0 a 1) abaixo da qual a conversa passa para uma pessoa
    * (upstream 1.71, #2216). Mora no cadastro do agente e vale na hora.
@@ -663,6 +673,33 @@ async function montarVersao(
     }
   }
 
+  if (pedido.filtro_de_palavras !== undefined) {
+    const texto = pedido.filtro_de_palavras === null ? null : pedido.filtro_de_palavras.trim() || null;
+    // A régua do motor (`lerFiltroDePalavraChave`): a expressão que não compila
+    // FALHA ABERTA lá (o agente entra em tudo). Aqui ela é recusada, para quem
+    // configura não achar que filtrou.
+    if (texto !== null && lerFiltroDePalavraChave({ filters: { keyword_regex: texto } }) === null) {
+      throw new Recusa(
+        `\`filtro_de_palavras\`: «${texto}» não é uma expressão válida. Use as palavras separadas por barra vertical, ex.: "orçamento|preço|valor".`,
+      );
+    }
+    const gatilho = (corpo.trigger_config as Record<string, unknown> | null | undefined) ?? {};
+    const filtros = (gatilho.filters as Record<string, unknown> | undefined) ?? {};
+    if (((filtros.keyword_regex as string | null | undefined) ?? null) !== texto) {
+      corpo.trigger_config = {
+        ...gatilho,
+        events: gatilho.events ?? ["message"],
+        concurrency: gatilho.concurrency ?? "one_per_conversation",
+        filters: {
+          ignore_groups: true,
+          ignore_self: true,
+          ...filtros,
+          keyword_regex: texto,
+        },
+      };
+    }
+  }
+
   if (pedido.numero !== undefined) {
     corpo.channel_session_id = pedido.numero === null ? null : acharNumero(canais, pedido.numero).id;
   } else if (!referencia) {
@@ -697,6 +734,9 @@ function rotulosDoGatilho(antes: unknown, depois: unknown): string[] {
   const d = horarioDoGatilho(depois);
   const rotulos: string[] = [];
   if (!mesmoConteudo(horarioDaIaDoGatilho(antes), horarioDaIaDoGatilho(depois))) rotulos.push("horário de atendimento da IA");
+  // .86 — o filtro de palavras (upstream 1.87, #2696).
+  const filtroDe = (g: unknown) => (g as { filters?: { keyword_regex?: unknown } } | null | undefined)?.filters?.keyword_regex ?? null;
+  if (filtroDe(antes) !== filtroDe(depois)) rotulos.push("filtro de palavras");
   if (!mesmoConteudo(semAviso(a), semAviso(d))) rotulos.push("horário de atendimento");
   if (((a?.notice as string | null | undefined) ?? null) !== ((d?.notice as string | null | undefined) ?? null)) {
     rotulos.push("aviso de fora do horário");

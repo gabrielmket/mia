@@ -9,6 +9,7 @@
 import { z } from "zod";
 
 import { CATEGORIAS_DE_TIPO, LOCAIS_DE_TIPO } from "@/lib/agenda/tipos-de-agendamento";
+import { OPS_DE_CONDICAO } from "@/lib/automation/conditions";
 import {
   definirJornada,
   garantirTiposDeAgendamento,
@@ -45,6 +46,8 @@ export const TIPOS_DE_ACAO = [
   "send_email",
   "send_ai_message",
   "notify_group",
+  // upstream 1.88 (#2642): o resumo do negócio no WhatsApp da equipe (o número de Avisos)
+  "notify_team",
   "call_webhook",
   // upstream 1.74 (#1970): a IA escolhe uma entre as opções da regra
   "ai_decide",
@@ -79,17 +82,24 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
             .object({
               field: z.string().min(1).max(200).describe('O campo a conferir (ex.: "lead.tags", "contact.name", "event.to_stage_id").'),
               op: z
-                .enum(["eq", "neq", "contains"])
+                .enum(OPS_DE_CONDICAO)
                 .describe(
-                  '"eq" igual, "neq" diferente, "contains" contém. Desde a v1.85 do upstream o "contains" ignora maiúscula, ACENTO e pontuação ("anúncio" casa "anuncio"; "Olá! Vi o anúncio" casa "ola vi o anuncio"); "eq" continua exato.',
+                  '"eq" igual, "neq" diferente, "contains" contém, "not_contains" não contém, "is_empty" está vazio, "is_not_empty" está preenchido, ' +
+                    '"gt"/"gte"/"lt"/"lte" maior, maior ou igual, menor, menor ou igual (número ou data). Desde a v1.85 do upstream o "contains" ignora maiúscula, ACENTO e pontuação ' +
+                    '("anúncio" casa "anuncio"); "eq" continua exato. ATENÇÃO (v1.87): "neq" num campo AUSENTE (nunca preenchido) não casa mais; para pegar "não preencheu", use "is_empty".',
                 ),
-              value: z.string().max(500),
+              value: z.string().max(500).optional().describe('O valor a comparar. Sem valor em "is_empty" e "is_not_empty".'),
             })
             .strict(),
         )
         .max(10)
         .optional()
-        .describe("As condições que precisam bater TODAS. Sem condições, a regra roda em todo evento do gatilho."),
+        .describe("As condições da regra. Sem condições, a regra roda em todo evento do gatilho."),
+      // .86 — upstream 1.87 (#2727).
+      combinar_condicoes: z
+        .enum(["todas", "qualquer"])
+        .optional()
+        .describe('"todas" (o padrão): todas as condições precisam bater. "qualquer": basta uma.'),
       acoes: z
         .array(
           z
@@ -259,6 +269,14 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
                 .describe(
                   "O NÚMERO que manda o lembrete deste tipo: id, nome ou telefone de uma conexão (plataforma_ver_configuracao, seção canais). " +
                     "null = automático (a conversa da reserva, ou o único número). Com 2 ou mais números, sem isto o lembrete de compromisso marcado sem conversa fica pendente.",
+                ),
+              // .86 — upstream 1.87 (0716, #3132).
+              servico_em_rascunho: z
+                .boolean()
+                .optional()
+                .describe(
+                  "Só para tipo NOVO: true cria o tipo como SERVIÇO EM RASCUNHO (agenda por serviço: individual por profissional, ou turma com capacidade), desativado e sem responsável padrão. " +
+                    "Nenhuma reserva é oferecida até uma pessoa configurar a programação (horários, profissionais, capacidade, recursos, calendário Google) e ATIVAR na tela, em Configurações › Agenda › Configurar.",
                 ),
             })
             .strict(),

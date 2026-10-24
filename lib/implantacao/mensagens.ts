@@ -39,6 +39,15 @@
  * BYTES (`farejarTipo`), a que sobra sai da linha e só depois do bucket. O
  * nome do arquivo sai do CONTEÚDO: a mesma imagem de novo é o mesmo caminho, e
  * repetir a chamada não empilha cópias.
+ *
+ * ── A ordem da resposta pronta (.86, upstream 0729, #3244) ───────────────
+ *
+ * A lista passou a ter ORDEM própria (`message_templates.ordem`), que a tela
+ * muda arrastando e o atalho do Inbox respeita. A rota grava a resposta NOVA
+ * no topo, um passo acima da primeira (`posicaoEntre`). Aqui é igual, com um
+ * cuidado a mais por ser em lote: as novas de uma chamada entram no topo NA
+ * ORDEM em que vieram (a primeira da lista fica em cima). A que já existe não
+ * muda de lugar: a ordem é escolha de quem usa a tela.
  */
 import { createHash } from "node:crypto";
 
@@ -64,6 +73,7 @@ import {
   type MidiaDeTemplate,
 } from "@/lib/templates/midias";
 import { apagarMidiasDoTemplate } from "@/lib/templates/midias-no-bucket";
+import { ordemDaRenumeracao, PASSO_DA_ORDEM } from "@/lib/templates/ordem";
 import { baixarArquivoPublico } from "@/lib/mcp-plataforma/importacao/download";
 
 import { chaveDoNome, type Desfecho, type Implantacao, type OrganizacaoDaImplantacao } from "./base";
@@ -105,6 +115,24 @@ export async function garantirRespostasProntas(
 ): Promise<Array<{ id: string; titulo: string; desfecho: Desfecho }>> {
   const existentes = await lerRespostasProntas(c.admin, c.orgId);
   const resultado: Array<{ id: string; titulo: string; desfecho: Desfecho }> = [];
+  // A posição das NOVAS: no topo, na ordem do pedido. A primeira da lista da
+  // organização é a de menor `ordem` entre TODAS (as pessoais também), como na
+  // rota de criação.
+  const novas = pedidas.filter((p) => !existentes.some((e) => chaveDoNome(e.title) === chaveDoNome(p.titulo))).length;
+  const { data: primeira, error: erroDaPrimeira } = await c.admin
+    .from("message_templates")
+    .select("ordem")
+    .eq("organization_id", c.orgId)
+    .order("ordem", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (erroDaPrimeira) throw new Error(`não consegui ler a ordem das respostas prontas: ${erroDaPrimeira.message}`);
+  const menor = (primeira as { ordem: number | string } | null)?.ordem ?? null;
+  let criadas = 0;
+  const ordemDaNova = (): number => {
+    const k = criadas++;
+    return menor === null ? ordemDaRenumeracao(k) : Number(menor) - (novas - k) * PASSO_DA_ORDEM;
+  };
 
   for (const [i, pedida] of pedidas.entries()) {
     const lido = createTemplateSchema.safeParse({
@@ -132,6 +160,7 @@ export async function garantirRespostasProntas(
           body,
           shortcut: shortcut ?? null,
           created_by_user_id: c.autorUserId,
+          ordem: ordemDaNova(),
         })
         .select("id")
         .single();

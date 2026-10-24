@@ -102,6 +102,12 @@ const SECOES_DE_CONFIGURACAO = [
 ] as const;
 
 /** O formato de cada ação de automação, para o modelo montar `acoes` sem adivinhar. */
+/** .86 — o filtro de palavras gravado na versão (`filters.keyword_regex`), ou `null`. */
+function filtroDePalavrasDe(gatilho: unknown): string | null {
+  const valor = (gatilho as { filters?: { keyword_regex?: unknown } } | null | undefined)?.filters?.keyword_regex;
+  return typeof valor === "string" && valor.trim() !== "" ? valor : null;
+}
+
 const ACOES_DE_AUTOMACAO = [
   { type: "create_or_move_lead", o_que_faz: "Cria o negócio ou o move para uma etapa.", config: '{ "pipeline_id": "<id do funil>", "stage_id": "<id da etapa>", "quando_em_outro_funil": "recusar" | "abrir_novo_card" (opcional) }' },
   {
@@ -139,8 +145,8 @@ const ACOES_DE_AUTOMACAO = [
       "Manda um E-MAIL (upstream 1.81) pelo servidor de e-mail da instalação: para o contato do negócio, para o responsável do negócio ou para um endereço fixo. " +
       "MANDA PARA FORA. Contato bloqueado ou que recusou comunicação não recebe. Na empresa de demonstração não sai e a regra com ele não liga.",
     config:
-      '{ "destinatario": "contato" | "dono_do_lead" | "fixo", "email_fixo": "<só com fixo>", "assunto": "Sua visita a {{destino}}", "corpo": "Olá, {{primeiro_nome}}!", "formato": "texto" | "html" (opcional) } ' +
-      "(as mesmas marcações da mensagem de WhatsApp)",
+      '{ "destinatario": "contato" | "dono_do_lead" | "membro_da_equipe" | "fixo", "email_fixo": "<só com fixo>", "membro_id": "<só com membro_da_equipe: o id da pessoa da equipe>", "assunto": "Sua visita a {{destino}}", "corpo": "Olá, {{primeiro_nome}}!", "formato": "texto" | "html" (opcional) } ' +
+      "(as mesmas marcações da mensagem de WhatsApp; desde a v1.88, `{{resumo}}` põe o resumo do negócio, e a pessoa da equipe é conferida contra a equipe aqui e de novo na hora do envio)",
   },
   {
     type: "send_whatsapp_message",
@@ -153,6 +159,13 @@ const ACOES_DE_AUTOMACAO = [
   },
   { type: "send_ai_message", o_que_faz: "O agente escreve e manda uma mensagem. FALA COM O CLIENTE.", config: '{ "agent_id": "<id do agente publicado>", "channel_session_id": "<id do número>", "instruction": "o que dizer" }' },
   { type: "notify_group", o_que_faz: "Avisa o grupo de WhatsApp da equipe (o grupo que a plataforma escolheu para o cliente).", config: '{ "template": "Novo lead: {{contact.name}}" }' },
+  {
+    type: "notify_team",
+    o_que_faz:
+      "Manda ao WhatsApp da EQUIPE (o número do aviso de caso, em Configurações › Avisos, que uma pessoa cadastra) um resumo do negócio, lido na hora: sem o título nem a conversa (upstream 1.88, #2642). " +
+      "Não escolhe destinatário nem texto. Sem o número do aviso de caso cadastrado e ligado, nada sai. O limite de envios por organização vale igual.",
+    config: '{ "canal": "whatsapp" }',
+  },
   {
     type: "call_webhook",
     o_que_faz: "Chama um endereço de outro sistema (ERP, faturamento, planilha de comissão). MANDA DADO PARA FORA.",
@@ -305,8 +318,10 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             ...CONFIGURACAO_DOS_GATILHOS_DE_OBRIGACAO,
           },
           condicoes:
-            '[{ "field": "lead.tags", "op": "eq" | "neq" | "contains", "value": "texto" }]. `field` é um caminho no contexto do evento: ' +
-            "`lead.<coluna>` (o negócio), `contact.<coluna>` (o contato) ou `event.<campo>` (o que o evento trouxe). Em lista (etiquetas), `contains` exige a etiqueta inteira, sem diferenciar maiúsculas.",
+            '[{ "field": "lead.tags", "op": "eq" | "neq" | "contains" | "not_contains" | "is_empty" | "is_not_empty" | "gt" | "gte" | "lt" | "lte", "value": "texto" }]. `field` é um caminho no contexto do evento: ' +
+            "`lead.<coluna>` (o negócio), `contact.<coluna>` (o contato) ou `event.<campo>` (o que o evento trouxe). Em lista (etiquetas), `contains` exige a etiqueta inteira, sem diferenciar maiúsculas. " +
+            "`is_empty`/`is_not_empty` não levam valor; `gt`/`gte`/`lt`/`lte` comparam número ou data. Com `combinar_condicoes: \"qualquer\"` basta uma condição bater (o padrão é todas). " +
+            "Desde a v1.87, `neq` num campo nunca preenchido não casa: para \"não preencheu\", use `is_empty`.",
           acoes: ACOES_DE_AUTOMACAO,
         };
       }
@@ -443,6 +458,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
       "Devolve o HORÁRIO DE ATENDIMENTO DA IA da versão publicada (`horario_de_atendimento`: as faixas, o fuso, se a IA está `ativa_agora`, a `proxima_troca` com o instante e o texto, " +
       "e se o horário cai FORA da janela de resposta do número, que segura o que a IA escreve até a abertura; `faixas: null` = responde a qualquer hora). " +
       "Com `agente`, devolve também o PROMPT e a configuração inteira da versão vigente (o rascunho, se houver; senão a publicada), com o horário de atendimento da IA dela. " +
+      "Devolve o FILTRO DE PALAVRAS da versão vigente (`filtro_de_palavras`): desde a v1.87 do upstream, com ele preenchido a IA não responde a mensagem sem nenhuma das palavras. " +
       "Devolve a passagem por assunto jurídico de cada agente e, da EMPRESA, se o bloqueio de afirmação clínica está ligado (`seguranca_da_empresa`). " +
       "Devolve ainda os ROTEADORES de intenção: o número, se está ligado, o agente reserva e cada intenção com o agente e o funil de destino. " +
       "QUANDO USAR: antes de plataforma_garantir_agente e de plataforma_garantir_roteador, e antes de publicar ou ligar. " +
@@ -509,6 +525,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           materiais: base ? ((base.knowledge_source_ids as string[] | null) ?? []) : [],
           // Da versão vigente (0616, #2156): ligada quando a coluna não diz o contrário.
           passagem_por_assunto_juridico: base ? base.handoff_legal_enabled !== false : null,
+          // .86 — o filtro de palavras da versão vigente (upstream 1.87: ele VALE; null = sem filtro).
+          filtro_de_palavras: base ? filtroDePalavrasDe(base.trigger_config) : null,
           followups_armados: (followup?.enabled ? (followup.flow_pointer_ids ?? []) : []).map(
             (id) => fluxos.find((f) => f.id === id)?.name ?? id,
           ),
@@ -529,6 +547,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
                   situacao: base.status === "draft" ? "rascunho" : "publicada",
                   prompt: base.system_prompt,
                   palavras_de_passagem: base.handoff_keywords,
+                  filtro_de_palavras: filtroDePalavrasDe(base.trigger_config),
                   passagem_para_humano: base.handoff_tool_enabled,
                   passagem_por_assunto_juridico: base.handoff_legal_enabled !== false,
                   casos: base.cases_enabled,
@@ -786,6 +805,11 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             // .81: o número que manda o lembrete (upstream v1.83). null = automático.
             canal_do_lembrete_id: (t.reminder_channel_session_id as string | null | undefined) ?? null,
             preco_padrao_cents: t.default_price_cents === null || t.default_price_cents === undefined ? null : Number(t.default_price_cents),
+            // .86 — a agenda por serviço (upstream 1.87, 0716): null quando o tipo não adotou a programação.
+            servico:
+              t.service_enabled === true
+                ? { modo_de_reserva: t.booking_mode ?? null, capacidade: t.service_capacity ?? null, em_rascunho: t.is_active === false }
+                : null,
           })),
           jornadas: ((jornadas ?? []) as Array<{ user_id: string; is_available: boolean; capacity: number; schedule: { timezone?: string; windows?: Array<{ dow: number; start: string; end: string }> } | null }>).map((j) => ({
             pessoa: membros.find((m) => m.user_id === j.user_id)?.email ?? j.user_id,

@@ -20,6 +20,14 @@
  *  - a conta Google ou Microsoft de quem atende: é acesso, não configuração.
  *  - o tipo "Microsoft Teams": depende da conta Microsoft conectada.
  *  - desativar e reativar um tipo: têm rota própria e trilha própria na tela.
+ *  - a PROGRAMAÇÃO do serviço (upstream 1.87, 0716, #3132: individual por
+ *    profissional ou turma com capacidade, horários, exceções, profissionais,
+ *    recursos, bloqueios e o calendário Google de destino) e a ATIVAÇÃO dele:
+ *    a porta do banco (`fn_calendar_service_configure`) confere o ator como
+ *    MEMBRO gerente da empresa ou token da própria empresa, e a programação
+ *    depende das agendas Google conectadas por pessoa. O MCP cria o tipo como
+ *    serviço em RASCUNHO (`servico_em_rascunho`, o mesmo atalho da tela): nenhuma
+ *    reserva é oferecida até a pessoa configurar e ativar na tela.
  *
  * ── O lembrete é outra operação ───────────────────────────────────────────
  *
@@ -31,7 +39,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { alterarSchema, canalDoLembreteValido, criarSchema, slugDe } from "@/lib/agenda/tipos-de-agendamento";
+import { alterarSchema, canalDoLembreteValido, criarComRascunhoSchema, slugDe } from "@/lib/agenda/tipos-de-agendamento";
 import { audit } from "@/lib/audit";
 import { nomeDoCanal } from "@/lib/channels/estado";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
@@ -67,10 +75,17 @@ export interface TipoPedido {
    * fica com o lembrete pendente (`remetente_ambiguo`) até isto ser escolhido.
    */
   canal_do_lembrete?: string | null;
+  /**
+   * .86 (upstream 1.87, 0716): o tipo NOVO nasce como SERVIÇO EM RASCUNHO (o
+   * "Criar como serviço em rascunho" da tela): agenda por serviço, desativado e
+   * sem responsável padrão, até a programação ser configurada e ativada na tela.
+   * Só na criação, como a rota: o tipo que já existe não vira serviço por aqui.
+   */
+  servico_em_rascunho?: boolean;
 }
 
 const COLUNAS_DO_TIPO =
-  "id, name, slug, description, category, duration_minutes, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, reminder_enabled, reminder_channel_session_id, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body, default_price_cents";
+  "id, name, slug, description, category, duration_minutes, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, reminder_enabled, reminder_channel_session_id, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body, default_price_cents, service_enabled, booking_mode, service_capacity";
 
 export async function lerTipos(admin: SupabaseClient, orgId: string): Promise<Array<Record<string, unknown>>> {
   const { data, error } = await admin
@@ -158,11 +173,22 @@ export async function garantirTiposDeAgendamento(
     const existente = existentes.find((t) => t.slug === slug || chaveDoNome(String(t.name)) === chaveDoNome(pedido.nome));
 
     if (!existente) {
-      const lido = criarSchema.safeParse(corpo);
+      const lido = criarComRascunhoSchema.safeParse({
+        ...corpo,
+        ...(pedido.servico_em_rascunho === true ? { service_draft: true } : {}),
+      });
       if (!lido.success) recusaDoTipo(i, lido.error);
+      // A mesma gravação de `POST /api/v1/agenda/tipos`: o rascunho de serviço
+      // nasce desativado e sem responsável padrão (quem atende é a programação).
+      const { service_draft, ...campos } = lido.data;
       const { data, error } = await c.admin
         .from("calendar_event_types")
-        .insert({ ...lido.data, organization_id: c.orgId, slug })
+        .insert({
+          ...campos,
+          ...(service_draft ? { service_enabled: true, is_active: false, default_owner_user_id: null } : {}),
+          organization_id: c.orgId,
+          slug,
+        })
         .select("id, slug")
         .single();
       if (error || !data) {
@@ -179,8 +205,19 @@ export async function garantirTiposDeAgendamento(
         requestId: c.requestId,
         metadata: { nome: lido.data.name, categoria: lido.data.category, duracao: lido.data.duration_minutes, via: "mcp_plataforma" },
       });
+      if (service_draft) {
+        avisos.push(
+          `O tipo «${pedido.nome}» nasceu como SERVIÇO EM RASCUNHO (agenda por serviço): desativado, sem responsável padrão, e nenhuma reserva é oferecida até ele ser ativado. ` +
+            "A programação (individual por profissional ou turma com capacidade, os horários, as exceções, os profissionais, os recursos e o calendário Google de destino) e a ativação são de uma pessoa na tela: Configurações › Agenda › Configurar.",
+        );
+      }
       resultado.push({ id: criado.id, nome: pedido.nome, slug: criado.slug, desfecho: "criou", mudancas: [] });
       continue;
+    }
+    if (pedido.servico_em_rascunho === true && existente.service_enabled !== true) {
+      throw new Recusa(
+        `tipos[${i}]: o tipo «${String(existente.name)}» já existe e não é serviço. Virar serviço é só na criação (como na tela) ou pela configuração do serviço na tela (Configurações › Agenda › Configurar). Tire \`servico_em_rascunho\` do pedido.`,
+      );
     }
 
     if (existente.is_active === false) {

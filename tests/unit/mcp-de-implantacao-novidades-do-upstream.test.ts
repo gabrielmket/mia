@@ -130,7 +130,8 @@ describe("plataforma_configurar_atendimento · PASSOU A ALCANÇAR (upstream 1.70
     const settings = c.tabela("organizations")[0]!.settings as Linha;
     expect(settings.routing).toMatchObject({ mode: "load", manual_reply_silence_minutes: 15 });
     // A mesma chave e a mesma forma que `PATCH /api/v1/settings/assinatura` grava.
-    expect(settings.assinatura_mensagens).toEqual({ humanos: true, ia: true, nome_ia: "Assistente da Clínica" });
+    // Desde a v1.88 (#3318) a rota grava também `por_agente` (ausente mantém o gravado; aqui, o padrão).
+    expect(settings.assinatura_mensagens).toEqual({ humanos: true, ia: true, nome_ia: "Assistente da Clínica", por_agente: false });
     expect(settings.llm).toEqual({ provider: "openai" });
     expect(settings.tags).toEqual(["vip"]);
     // Cada metade deixa a linha de auditoria da rota dela.
@@ -165,7 +166,7 @@ describe("plataforma_configurar_atendimento · PASSOU A ALCANÇAR (upstream 1.70
     const r = await ok(c, "plataforma_configurar_atendimento", { assinatura: { atendentes: false } });
     expect(r.dados.mudancas).toEqual(["assinatura de quem fala"]);
     const settings = c.tabela("organizations")[0]!.settings as Linha;
-    expect(settings.assinatura_mensagens).toEqual({ humanos: false, ia: true, nome_ia: "Assistente da Clínica" });
+    expect(settings.assinatura_mensagens).toEqual({ humanos: false, ia: true, nome_ia: "Assistente da Clínica", por_agente: false });
     expect(settings.routing).toMatchObject({ mode: "load", manual_reply_silence_minutes: 15 });
     expect(acoesAuditadas().filter((a) => a !== "plataforma.mcp_executado")).toEqual(["settings.message_signature_updated"]);
   });

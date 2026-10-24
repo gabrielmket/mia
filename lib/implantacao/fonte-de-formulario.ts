@@ -25,6 +25,14 @@
  *    régua da autorização de IA (`opcaoSemAssinatura`), com a frase de cada
  *    opção.
  *
+ * ── O que chegou do upstream 1.88 (.86) ───────────────────────────────────
+ *
+ *  - REAPROVEITAR O CARD ABERTO (`reuse_open_lead_on_capture`, 0722, #3101):
+ *    o envio SEM `external_id` de quem já tem card ABERTO no funil da fonte
+ *    atualiza esse card (campos novos e a etapa da fonte, sempre para a
+ *    frente) em vez de abrir outro. Mesma régua da opção irmã: nasce
+ *    desligada, só entra no PATCH e exige a ASSINATURA (`opcaoSemAssinatura`).
+ *
  * ── O caminho da tela que isto espelha ────────────────────────────────────
  *
  *   criar    `POST /api/v1/webhook-sources`: `createWebhookSourceSchema` e
@@ -78,6 +86,8 @@ export interface PedidoDeFonte {
   autorizar_ia_na_captura?: boolean;
   /** .82 (upstream 1.84, 0683): o reenvio do mesmo `external_id` atualiza o card desta fonte. */
   atualizar_card_no_reenvio?: boolean;
+  /** .86 (upstream 1.88, 0722): o envio sem `external_id` reaproveita o card aberto do contato no funil. */
+  reaproveitar_card_aberto?: boolean;
 }
 
 interface LinhaDaFonte {
@@ -92,11 +102,12 @@ interface LinhaDaFonte {
   form_fields: unknown;
   authorize_ai_on_capture: boolean;
   update_existing_lead_on_capture: boolean;
+  reuse_open_lead_on_capture: boolean;
   secret_encrypted: string | null;
 }
 
 const COLUNAS =
-  "id, name, is_active, path_token, default_pipeline_id, default_stage_id, redirect_to, field_map, form_fields, authorize_ai_on_capture, update_existing_lead_on_capture, secret_encrypted";
+  "id, name, is_active, path_token, default_pipeline_id, default_stage_id, redirect_to, field_map, form_fields, authorize_ai_on_capture, update_existing_lead_on_capture, reuse_open_lead_on_capture, secret_encrypted";
 
 export async function lerFontes(c: Pick<Implantacao, "admin" | "orgId">): Promise<LinhaDaFonte[]> {
   const { data, error } = await c.admin
@@ -120,6 +131,7 @@ export function retratoDaFonte(
   f: Pick<LinhaDaFonte, "id" | "name" | "is_active" | "path_token" | "redirect_to" | "field_map" | "form_fields" | "authorize_ai_on_capture"> & {
     /** Ausente na fonte que acabou de nascer pela função do upstream: nasce desligada. */
     update_existing_lead_on_capture?: boolean | null;
+    reuse_open_lead_on_capture?: boolean | null;
     has_secret?: boolean;
     secret_encrypted?: string | null;
   },
@@ -148,6 +160,7 @@ export function retratoDaFonte(
     tem_assinatura: f.has_secret ?? Boolean(f.secret_encrypted),
     autorizar_ia_na_captura: f.authorize_ai_on_capture === true,
     atualizar_card_no_reenvio: f.update_existing_lead_on_capture === true,
+    reaproveitar_card_aberto: f.reuse_open_lead_on_capture === true,
   };
 }
 
@@ -279,6 +292,13 @@ export async function garantirFonteDeFormulario(c: Implantacao, pedido: PedidoDe
           "Crie a fonte sem `atualizar_card_no_reenvio`; depois da assinatura, chame de novo com `atualizar_card_no_reenvio: true`.",
       );
     }
+    // .86 (upstream 1.88, 0722): a irmã, pela mesma régua.
+    if (pedido.reaproveitar_card_aberto === true) {
+      throw new Recusa(
+        "Fonte nova não nasce reaproveitando o card aberto do contato: a opção exige a ASSINATURA da fonte, que é credencial e é posta por uma pessoa na tela (Automações › Fontes, /app/webhooks). " +
+          "Crie a fonte sem `reaproveitar_card_aberto`; depois da assinatura, chame de novo com `reaproveitar_card_aberto: true`.",
+      );
+    }
     const lido = createWebhookSourceSchema.safeParse({
       name: nome,
       default_pipeline_id: destino.pipeline_id,
@@ -356,6 +376,13 @@ export async function garantirFonteDeFormulario(c: Implantacao, pedido: PedidoDe
     patch.update_existing_lead_on_capture = pedido.atualizar_card_no_reenvio;
     mudancas.push("atualizar o card no reenvio");
   }
+  if (
+    pedido.reaproveitar_card_aberto !== undefined &&
+    pedido.reaproveitar_card_aberto !== (existente.reuse_open_lead_on_capture === true)
+  ) {
+    patch.reuse_open_lead_on_capture = pedido.reaproveitar_card_aberto;
+    mudancas.push("reaproveitar o card aberto");
+  }
 
   if (Object.keys(patch).length === 0) {
     return {
@@ -368,8 +395,8 @@ export async function garantirFonteDeFormulario(c: Implantacao, pedido: PedidoDe
 
   const conferido = updateWebhookSourceSchema.safeParse(patch);
   if (!conferido.success) recusaDoSchema(conferido.error);
-  // A mesma recusa da rota: as duas opções que dependem de prova de origem (a
-  // assinatura), cada uma com a própria frase (upstream 1.84, #2316).
+  // A mesma recusa da rota: as três opções que dependem de prova de origem (a
+  // assinatura), cada uma com a própria frase (upstream 1.84, #2316; 1.88, #3101).
   const opcaoQuePedeAssinatura = opcaoSemAssinatura(existente, conferido.data);
   if (opcaoQuePedeAssinatura === "ai") {
     throw new Recusa(
@@ -380,6 +407,12 @@ export async function garantirFonteDeFormulario(c: Implantacao, pedido: PedidoDe
   if (opcaoQuePedeAssinatura === "update_lead") {
     throw new Recusa(
       `A fonte «${existente.name}» não tem ASSINATURA, e atualizar o card no reenvio exige uma: só a integração que assina o envio pode reescrever um card que já existe ` +
+        "(o formulário HTML público, que qualquer um posta, não). A assinatura é credencial e é posta por uma pessoa na tela (Automações › Fontes, /app/webhooks). Depois, chame de novo.",
+    );
+  }
+  if (opcaoQuePedeAssinatura === "reuse_lead") {
+    throw new Recusa(
+      `A fonte «${existente.name}» não tem ASSINATURA, e reaproveitar o card aberto do contato exige uma: reescrever um card que já existe é integração entre sistemas ` +
         "(o formulário HTML público, que qualquer um posta, não). A assinatura é credencial e é posta por uma pessoa na tela (Automações › Fontes, /app/webhooks). Depois, chame de novo.",
     );
   }
@@ -418,6 +451,15 @@ export async function garantirFonteDeFormulario(c: Implantacao, pedido: PedidoDe
   }
   if (patch.update_existing_lead_on_capture === false) {
     avisos.push("A atualização do card no reenvio ficou DESLIGADA: o envio que repete o mesmo `external_id` volta a ser só reenvio, sem tocar no card.");
+  }
+  if (patch.reuse_open_lead_on_capture === true) {
+    avisos.push(
+      "O reaproveitamento do card aberto ficou LIGADO: um envio SEM `external_id` de quem já tem card ABERTO no funil desta fonte atualiza esse card (os campos novos e a etapa da fonte, sempre para a frente) em vez de abrir um segundo card; em Leads recebidos ele aparece como \"Card atualizado\". " +
+        "ATENÇÃO: o campo que alguém corrigir à mão no card pode ser sobrescrito pelo próximo envio.",
+    );
+  }
+  if (patch.reuse_open_lead_on_capture === false) {
+    avisos.push("O reaproveitamento do card aberto ficou DESLIGADO: cada envio volta a virar um card novo.");
   }
   if (patch.default_pipeline_id !== undefined) {
     avisos.push("O destino novo vale para o próximo envio do formulário; os contatos que já entraram ficam onde estão.");

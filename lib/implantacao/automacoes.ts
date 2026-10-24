@@ -67,6 +67,7 @@ import { ehRecusaDaDemonstracao, FRASE_DA_DEMONSTRACAO } from "@/lib/demonstraca
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { classificarMidiaComLegenda } from "@/lib/messaging/media/midia-com-legenda";
 import { autoriaDaMudanca } from "@/lib/operacao/autoria";
+import type { ConditionOp } from "@/lib/automation/conditions";
 import { createAutomationRuleSchema, updateAutomationRuleSchema } from "@/lib/schemas/webhooks";
 import { lePlanosDoSettings, type PlanoDeTarefas } from "@/lib/tarefas/plano";
 
@@ -75,7 +76,13 @@ import { acharPorNomeOuId, atorDaImplantacao, chaveDoNome, mesmoConteudo, type D
 export interface PedidoDeAutomacao {
   nome: string;
   gatilho: string;
-  condicoes?: Array<{ field: string; op: "eq" | "neq" | "contains"; value: string }>;
+  /** Os operadores são os do upstream (`OPS_DE_CONDICAO`, v1.87 #2727). */
+  condicoes?: Array<{ field: string; op: ConditionOp; value?: string }>;
+  /**
+   * .86 (upstream 1.87, #2727): `todas` (o padrão, a lista de sempre) ou
+   * `qualquer` (basta uma), gravado como o grupo `{ any: [...] }` do topo.
+   */
+  combinar_condicoes?: "todas" | "qualquer";
   acoes: Array<{ type: string; config: Record<string, unknown> }>;
   configuracao_do_gatilho?: Record<string, unknown>;
 }
@@ -121,12 +128,16 @@ async function conferirAcao(c: Implantacao, acao: Acao, onde: string, planos: ()
   }
   // Quem recebe o negócio ou a tarefa precisa ser da equipe desta empresa.
   const atribuir = acao.config.atribuir_a;
+  // .86 (upstream 1.88, #2642): o e-mail para uma PESSOA da equipe
+  // (`send_email` com `destinatario: "membro_da_equipe"`) leva `membro_id`.
   const pessoa =
     typeof acao.config.user_id === "string"
       ? acao.config.user_id
-      : atribuir && typeof atribuir === "object"
-        ? (atribuir as { usuario_id?: unknown }).usuario_id
-        : undefined;
+      : acao.type === "send_email" && typeof acao.config.membro_id === "string"
+        ? acao.config.membro_id
+        : atribuir && typeof atribuir === "object"
+          ? (atribuir as { usuario_id?: unknown }).usuario_id
+          : undefined;
   if (typeof pessoa === "string") {
     const { data, error } = await c.admin
       .from("user_organizations")
@@ -332,6 +343,17 @@ function recusaDoSchema(erro: { issues: Array<{ path: PropertyKey[]; message: st
   );
 }
 
+/**
+ * As condições como o banco as guarda (#2727): a lista simples para "todas" (o
+ * formato de sempre, que a tela também grava assim) e `{ any: [...] }` para
+ * "qualquer uma". Operador sem valor ("está vazio", "está preenchido") leva
+ * `value: ""`, como a tela.
+ */
+function condicoesParaOBanco(pedido: PedidoDeAutomacao): unknown {
+  const lista = (pedido.condicoes ?? []).map((cond) => ({ field: cond.field, op: cond.op, value: cond.value ?? "" }));
+  return pedido.combinar_condicoes === "qualquer" && lista.length > 0 ? { any: lista } : lista;
+}
+
 export async function garantirAutomacao(
   c: Implantacao,
   pedido: PedidoDeAutomacao,
@@ -340,7 +362,7 @@ export async function garantirAutomacao(
   const lido = createAutomationRuleSchema.safeParse({
     name: pedido.nome,
     trigger_event: pedido.gatilho,
-    conditions: pedido.condicoes ?? [],
+    conditions: condicoesParaOBanco(pedido),
     actions: pedido.acoes,
     ...(pedido.configuracao_do_gatilho !== undefined ? { trigger_config: pedido.configuracao_do_gatilho } : {}),
   });

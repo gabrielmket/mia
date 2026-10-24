@@ -22,6 +22,7 @@ import { ROUTING_MODES } from "@/lib/schemas/routing";
 import { hostDoEndpoint } from "@/lib/mcp/servidor-externo/registro";
 import { fonteSchema, MAX_FONTES, MODOS_DE_FONTES } from "@/lib/external-db/fontes";
 import { TIPOS_DE_IDENTIFICADOR } from "@/lib/external-db/schemas";
+import { IDS_DAS_RECEITAS } from "@/lib/external-db/receitas/registro";
 
 import type { FerramentaDePlataforma } from "../tipos";
 import { alvo, DIA_DA_SEMANA, ORGANIZACAO, ORG_DE_EXEMPLO } from "./comum";
@@ -263,6 +264,15 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
             "Não alcança card criado por outra fonte, card sem origem registrada nem card de contato anonimizado. Exige a assinatura da fonte; fonte nova não nasce com ela. " +
             "Ligada, a correção feita à mão num campo do card pode ser sobrescrita pelo próximo envio da integração.",
         ),
+      // .86 — upstream 1.88 (0722, #3101).
+      reaproveitar_card_aberto: z
+        .boolean()
+        .optional()
+        .describe(
+          "Quando o envio NÃO traz `external_id` e o contato já tem card ABERTO no funil desta fonte: true ATUALIZA esse card (os campos novos e a etapa da fonte, sempre para a frente) " +
+            "em vez de abrir um segundo card; false (o padrão) faz cada envio virar um card novo. Exige a assinatura da fonte; fonte nova não nasce com ela. " +
+            "Ligada, a correção feita à mão num campo do card pode ser sobrescrita pelo próximo envio.",
+        ),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,
@@ -290,6 +300,8 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
       "qual coluna das tabelas guarda o telefone ou o e-mail de quem está conversando. Com ela escolhida, durante a conversa de atendimento o agente lê SÓ as linhas daquela pessoa. " +
       "Sem ela, o agente lê as tabelas sem esse recorte. Chamar de novo com o mesmo pedido responde `ja_estava`. " +
       "Vale para conexão PostgreSQL e MySQL (upstream 1.86): a resposta diz o motor (`tipo_do_banco`, escolhido na criação e imutável) e o aviso do último teste (ex.: o usuário do banco pode escrever). " +
+      "Desde a .86 (upstream 1.87 e 1.88), as RECEITAS PRONTAS (`receitas`): numa conexão MySQL de uma loja WooCommerce (\"woocommerce-produtos\": nome, preço, estoque e link) ou de um site WordPress " +
+      "(\"wordpress-conteudo\": qualquer tipo de post, com ACF ou JetEngine, os campos e categorias mapeados), o agente consulta o banco sem ninguém escrever SQL. " +
       "ATENÇÃO: o banco externo é módulo da INSTALAÇÃO; com ele desligado, a recusa diz isso. A conexão tem de existir: veja em plataforma_ver_configuracao, seção banco_externo. " +
       "O QUE NÃO FAZ: não cria, não testa e não apaga conexão, não lê nem devolve endereço, usuário, senha ou o texto de conexão do banco (é credencial do cliente, posta por uma pessoa na tela Dados externos), " +
       "e não confere no banco do cliente se a coluna existe.",
@@ -323,6 +335,32 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
         .describe(
           "O que o agente, o MCP externo e a grade podem LER do banco do cliente. Conexão criada depois da 0618 nasce em \"list\" vazia: nada é lido até alguém liberar.",
         ),
+      // .86 — upstream 1.87 (0706, #3096) e 1.88 (#3213).
+      receitas: z
+        .array(
+          z
+            .object({
+              receita: z.enum(IDS_DAS_RECEITAS as [string, ...string[]]).describe("A receita pronta."),
+              rotulo: z.string().trim().min(1).max(80).describe("O nome que o agente e a equipe veem. Com a receita, é a chave: repetir não duplica."),
+              descricao: z
+                .string()
+                .max(300)
+                .optional()
+                .describe("O que o agente lê para decidir usar esta receita (até 300). Ausente: o texto da própria receita."),
+              fixos: z
+                .record(z.string(), z.unknown())
+                .optional()
+                .describe(
+                  'Os parâmetros fixos, pela régua da receita. "woocommerce-produtos": { "prefixo": "wp_" } (o prefixo das tabelas do WordPress). ' +
+                    '"wordpress-conteudo": { "prefixo": "wp_", "post_type": "imovel", "campos": [...], "categorias": [...] } (os campos e as categorias mapeados; a recusa diz o que falta, campo a campo).',
+                ),
+              ativa: z.boolean().optional().describe("Ausente: ligada. Desligada, o agente não a usa."),
+            })
+            .strict(),
+        )
+        .max(20)
+        .optional()
+        .describe("A lista INTEIRA de receitas da conexão (substitui a gravada); [] tira todas. A receita tem de rodar no motor da conexão (as duas de hoje são MySQL)."),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,
@@ -333,9 +371,9 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
     handler: async (ctx, args) => {
       const { c } = await alvo(ctx, args);
       const { organization_id: _org, ...pedido } = args;
-      if (pedido.cliente_nas_conversas === undefined && pedido.fontes_liberadas === undefined) {
+      if (pedido.cliente_nas_conversas === undefined && pedido.fontes_liberadas === undefined && pedido.receitas === undefined) {
         recusar(
-          "Informe ao menos um ajuste: `cliente_nas_conversas` ou `fontes_liberadas`. " +
+          "Informe ao menos um ajuste: `cliente_nas_conversas`, `fontes_liberadas` ou `receitas`. " +
             'Ex.: { "conexao": "ERP da clínica", "fontes_liberadas": { "modo": "list", "fontes": [{ "schema": "public", "tabela": "pedidos", "colunas": null, "descricao": "" }] } }',
         );
       }
