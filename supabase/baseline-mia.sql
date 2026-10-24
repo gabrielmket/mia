@@ -1908,7 +1908,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261023200000_9047_traco_do_turno_entra_na_anonimizacao', now())
+values (1, '20261025100500_9065_imagens_das_campanhas_de_email', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -15527,6 +15527,1084 @@ update public.agent_turn_traces t
           else t.ferramentas is not null
         end
    );
+
+
+-- ─── 9060 · o disparo de e-mail: configuração, domínio e remetentes ───
+--
+-- Espelho EXATO da migration 9060 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9060 · o disparo de e-mail: configuração, domínio e remetentes
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: `if not exists`,
+-- `drop policy if exists`, constraint nova só quando ainda não existe.
+
+-- ── 1. a configuração da empresa ───────────────────────────────────────────
+--
+-- Uma linha por empresa. Ausência de linha = os padrões do protótipo aprovado
+-- (300 por hora, das 8h às 19h, só em dias úteis), lidos pelo código. O rodapé
+-- vazio TRAVA o envio: quem lê o e-mail tem de saber quem mandou e por quê.
+create table if not exists public.mia_email_config (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  -- "Responder para": começa com o da marca da empresa (upstream v1.88, #3287).
+  responder_para text,
+  rodape_razao_social text,
+  rodape_cnpj text,
+  rodape_endereco text,
+  rodape_motivo text,
+  rodape_privacidade_url text,
+  -- Sem página própria, a empresa pode adotar o texto padrão de privacidade do
+  -- sistema (rascunho para revisão jurídica), mostrado na página de preferências.
+  rodape_usar_privacidade_padrao boolean not null default false,
+  ritmo_por_hora integer not null default 300,
+  janela_inicio smallint not null default 8,
+  janela_fim smallint not null default 19,
+  so_dias_uteis boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id) on delete set null,
+  constraint mia_email_config_ritmo check (ritmo_por_hora between 50 and 5000),
+  constraint mia_email_config_janela check (
+    janela_inicio between 0 and 23 and janela_fim between 1 and 24 and janela_fim > janela_inicio
+  ),
+  constraint mia_email_config_responder check (
+    responder_para is null or responder_para ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+  ),
+  constraint mia_email_config_privacidade check (
+    rodape_privacidade_url is null or rodape_privacidade_url ~* '^https://[^\s]+\.[^\s]+'
+  )
+);
+
+comment on table public.mia_email_config is
+  'MIA (9060): a configuracao do disparo de e-mail marketing da empresa: responder para, rodape obrigatorio (razao social, CNPJ, endereco, motivo, privacidade), ritmo por hora, janela e dias uteis no fuso da empresa. Sem linha valem os padroes do codigo (lib/email-marketing/regras.ts). Escrita so pelo servidor.';
+
+-- ── 2. o domínio verificado na Amazon ──────────────────────────────────────
+--
+-- Um por empresa, e um domínio pertence a UMA empresa: a identidade mora na
+-- conta da Amazon da plataforma, que é uma só para todos os clientes.
+create table if not exists public.mia_email_dominios (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  dominio text not null,
+  subdominio_de_retorno text not null default 'envio',
+  regiao text not null default 'sa-east-1',
+  identidade_criada_em timestamptz,
+  -- Os três tokens que a Amazon devolve ao criar a identidade (DKIM fácil).
+  dkim_tokens text[] not null default '{}'::text[],
+  -- O resultado da última conferência de cada um dos seis registros:
+  -- {"dkim1":true,"dkim2":true,"dkim3":true,"mx":true,"spf":true,"dmarc":false}.
+  registros jsonb not null default '{}'::jsonb,
+  verificado_em timestamptz,
+  conferido_em timestamptz,
+  erro_da_conferencia text,
+  -- O aquecimento: o degrau de HOJE (0 = primeiro dia de envio, 200 e-mails) e o
+  -- último dia (no fuso da empresa) em que houve envio. Só dia com envio conta.
+  aquecimento_degrau smallint not null default 0,
+  aquecimento_ultimo_dia date,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint mia_email_dominios_um_por_empresa unique (organization_id),
+  constraint mia_email_dominios_formato check (
+    dominio ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+  ),
+  constraint mia_email_dominios_subdominio check (
+    subdominio_de_retorno ~ '^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$'
+  ),
+  constraint mia_email_dominios_degrau check (aquecimento_degrau between 0 and 14)
+);
+
+create unique index if not exists uq_mia_email_dominios_dominio
+  on public.mia_email_dominios (dominio);
+
+comment on table public.mia_email_dominios is
+  'MIA (9060): o dominio do remetente da empresa, verificado na Amazon SES (regiao sa-east-1): os tokens DKIM, o subdominio de retorno (MX e SPF), o resultado dos seis registros (3 DKIM, MX, SPF, DMARC) e o degrau do aquecimento (14 degraus de 200 a 20.000 por dia de envio). Sem os seis registros o envio trava. Um dominio por empresa e um dono por dominio. Escrita so pelo servidor.';
+
+-- ── 3. os remetentes ───────────────────────────────────────────────────────
+create table if not exists public.mia_email_remetentes (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  nome_exibicao text not null,
+  -- A parte antes do @. O domínio é o verificado da empresa.
+  local text not null,
+  padrao boolean not null default false,
+  arquivado_em timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  created_by uuid references auth.users(id) on delete set null,
+  constraint mia_email_remetentes_local check (local ~ '^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$'),
+  constraint mia_email_remetentes_nome check (length(btrim(nome_exibicao)) between 1 and 120)
+);
+
+create unique index if not exists uq_mia_email_remetentes_local
+  on public.mia_email_remetentes (organization_id, local)
+  where arquivado_em is null;
+
+create unique index if not exists uq_mia_email_remetentes_padrao
+  on public.mia_email_remetentes (organization_id)
+  where padrao and arquivado_em is null;
+
+comment on table public.mia_email_remetentes is
+  'MIA (9060): os remetentes do e-mail marketing da empresa (nome de exibicao e parte local, sempre no dominio verificado). Um padrao por empresa. Arquivar em vez de apagar: campanha antiga continua dizendo de quem saiu. Escrita so pelo servidor.';
+
+-- ── 4. o preço por e-mail ──────────────────────────────────────────────────
+--
+-- Nulo = o padrão de R$ 0,02 por e-mail aceito pela Amazon (decisão do dono do
+-- produto em 24/10/2026), definido no código. Zero é cortesia, digitada como tal.
+alter table public.tenant_broadcast_pricing
+  add column if not exists preco_por_email_cents integer;
+
+do $f$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'tenant_broadcast_pricing_preco_por_email_check'
+       and conrelid = 'public.tenant_broadcast_pricing'::regclass
+  ) then
+    alter table public.tenant_broadcast_pricing
+      add constraint tenant_broadcast_pricing_preco_por_email_check
+      check (preco_por_email_cents is null or (preco_por_email_cents >= 0 and preco_por_email_cents <= 100000));
+  end if;
+end
+$f$;
+
+comment on column public.tenant_broadcast_pricing.preco_por_email_cents is
+  'MIA (9060): centavos por e-mail de marketing ACEITO pela Amazon SES, debitado da mesma carteira. Nulo = o padrao do codigo (R$ 0,02). O teste nao cobra; a rejeicao nao estorna.';
+
+-- ── 5. o relógio de atualização ────────────────────────────────────────────
+drop trigger if exists trg_mia_email_config_updated_at on public.mia_email_config;
+create trigger trg_mia_email_config_updated_at
+  before update on public.mia_email_config
+  for each row execute function public.fn_set_updated_at();
+
+drop trigger if exists trg_mia_email_dominios_updated_at on public.mia_email_dominios;
+create trigger trg_mia_email_dominios_updated_at
+  before update on public.mia_email_dominios
+  for each row execute function public.fn_set_updated_at();
+
+drop trigger if exists trg_mia_email_remetentes_updated_at on public.mia_email_remetentes;
+create trigger trg_mia_email_remetentes_updated_at
+  before update on public.mia_email_remetentes
+  for each row execute function public.fn_set_updated_at();
+
+-- ── 6. RLS: gestor ou administrador lê a da própria empresa; só o servidor escreve
+alter table public.mia_email_config enable row level security;
+alter table public.mia_email_dominios enable row level security;
+alter table public.mia_email_remetentes enable row level security;
+
+drop policy if exists mia_email_config_select on public.mia_email_config;
+create policy mia_email_config_select on public.mia_email_config
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+drop policy if exists mia_email_dominios_select on public.mia_email_dominios;
+create policy mia_email_dominios_select on public.mia_email_dominios
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+drop policy if exists mia_email_remetentes_select on public.mia_email_remetentes;
+create policy mia_email_remetentes_select on public.mia_email_remetentes
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+revoke all on public.mia_email_config from anon, authenticated;
+revoke all on public.mia_email_dominios from anon, authenticated;
+revoke all on public.mia_email_remetentes from anon, authenticated;
+grant select on public.mia_email_config to authenticated;
+grant select on public.mia_email_dominios to authenticated;
+grant select on public.mia_email_remetentes to authenticated;
+grant all on public.mia_email_config to service_role;
+grant all on public.mia_email_dominios to service_role;
+grant all on public.mia_email_remetentes to service_role;
+
+
+-- ─── 9061 · o consentimento de e-mail marketing ───
+--
+-- Espelho EXATO da migration 9061 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9061 · o consentimento de e-mail marketing
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente.
+
+-- ── 1. as versões do texto aceito ──────────────────────────────────────────
+--
+-- O texto aceito é o que dá sentido ao aceite: "quero receber novidades" e
+-- "quero receber novidades, e a empresa mede aberturas" são consentimentos
+-- diferentes (a abertura só é medida no segundo). Sem linha, vale o texto padrão
+-- do código, marcado como rascunho para revisão jurídica.
+create table if not exists public.mia_email_textos_de_consentimento (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  versao text not null,
+  texto text not null,
+  inclui_aviso_de_medicao boolean not null default true,
+  rascunho_juridico boolean not null default false,
+  vigente_desde timestamptz not null default now(),
+  arquivado_em timestamptz,
+  created_at timestamptz not null default now(),
+  created_by uuid references auth.users(id) on delete set null,
+  constraint mia_email_textos_de_consentimento_versao check (versao ~ '^[A-Za-z0-9._-]{1,30}$'),
+  constraint mia_email_textos_de_consentimento_texto check (length(btrim(texto)) between 10 and 2000),
+  constraint mia_email_textos_de_consentimento_unica unique (organization_id, versao)
+);
+
+comment on table public.mia_email_textos_de_consentimento is
+  'MIA (9061): as versoes do texto de consentimento de e-mail marketing da empresa. inclui_aviso_de_medicao = o texto avisa que aberturas e cliques sao medidos (sem isso, o pixel de abertura nao entra). Sem linha vale o padrao do codigo (lib/email-marketing/textos-padrao.ts), um rascunho para revisao juridica. Escrita so pelo servidor.';
+
+-- ── 2. o registro de cada aceite e de cada recusa ──────────────────────────
+create table if not exists public.mia_email_consentimentos (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  contact_id uuid references public.contacts(id) on delete set null,
+  -- O mesmo cálculo da supressão (SHA-256 do endereço em minúsculas): o registro
+  -- continua casando com o endereço depois que o contato é anonimizado.
+  email_hash text not null,
+  tipo text not null,
+  -- QUANDO a pessoa aceitou ou recusou, não quando a linha foi gravada.
+  ocorrido_em timestamptz not null,
+  origem text,
+  versao_do_texto text,
+  texto_aceito text,
+  aceitou_medicao boolean not null default false,
+  evidencia text,
+  registrado_por uuid references auth.users(id) on delete set null,
+  registrado_pelo text not null,
+  created_at timestamptz not null default now(),
+  constraint mia_email_consentimentos_tipo check (tipo in ('aceite', 'recusa')),
+  constraint mia_email_consentimentos_porta check (
+    registrado_pelo in ('ficha', 'importacao', 'pagina_de_preferencias', 'plataforma')
+  )
+);
+
+create index if not exists idx_mia_email_consentimentos_contato
+  on public.mia_email_consentimentos (organization_id, contact_id, created_at desc);
+create index if not exists idx_mia_email_consentimentos_hash
+  on public.mia_email_consentimentos (organization_id, email_hash);
+
+comment on table public.mia_email_consentimentos is
+  'MIA (9061): o REGISTRO de cada aceite e recusa de e-mail marketing (data, origem, versao e texto aceito, evidencia, quem registrou e por qual porta). E a prova da base legal de consentimento e entra no acesso do titular. O vigente mora em contacts.consent.email_marketing. Anonimizar (9064) apaga origem, evidencia e texto e solta o contato. Escrita so pelo servidor.';
+
+-- ── 3. RLS: atendente para cima lê (é quem registra na ficha); só o servidor escreve
+alter table public.mia_email_textos_de_consentimento enable row level security;
+alter table public.mia_email_consentimentos enable row level security;
+
+drop policy if exists mia_email_textos_de_consentimento_select on public.mia_email_textos_de_consentimento;
+create policy mia_email_textos_de_consentimento_select on public.mia_email_textos_de_consentimento
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent'))
+  );
+
+drop policy if exists mia_email_consentimentos_select on public.mia_email_consentimentos;
+create policy mia_email_consentimentos_select on public.mia_email_consentimentos
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent'))
+  );
+
+revoke all on public.mia_email_textos_de_consentimento from anon, authenticated;
+revoke all on public.mia_email_consentimentos from anon, authenticated;
+grant select on public.mia_email_textos_de_consentimento to authenticated;
+grant select on public.mia_email_consentimentos to authenticated;
+grant all on public.mia_email_textos_de_consentimento to service_role;
+grant all on public.mia_email_consentimentos to service_role;
+
+
+-- ─── 9062 · as campanhas de e-mail, os segmentos salvos e os modelos ───
+--
+-- Espelho EXATO da migration 9062 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9062 · as campanhas de e-mail, os segmentos salvos e os modelos
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente.
+
+-- ── 1. os segmentos salvos ─────────────────────────────────────────────────
+--
+-- Guarda o FILTRO, não a lista: a conta refaz na hora de usar. Por isso o nome
+-- é genérico (`mia_segmentos`): o mesmo recorte serve ao WhatsApp e ao e-mail.
+create table if not exists public.mia_segmentos (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  nome text not null,
+  recorte jsonb not null default '{}'::jsonb,
+  base_legal text not null default 'consent',
+  lia_ref text,
+  criado_por uuid references auth.users(id) on delete set null,
+  arquivado_em timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint mia_segmentos_nome check (length(btrim(nome)) between 1 and 120),
+  constraint mia_segmentos_base_legal check (base_legal in ('consent', 'legitimate_interest'))
+);
+
+create unique index if not exists uq_mia_segmentos_nome
+  on public.mia_segmentos (organization_id, lower(nome))
+  where arquivado_em is null;
+
+comment on table public.mia_segmentos is
+  'MIA (9062): recortes salvos pelo nome, com a base legal. Guarda o filtro (o das Campanhas do upstream mais empresa e campanha anterior), nao a lista: a conta refaz na hora de usar. Serve ao WhatsApp e ao e-mail. Escrita so pelo servidor.';
+
+-- ── 2. os modelos de campanha ──────────────────────────────────────────────
+create table if not exists public.mia_email_modelos (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  chave text not null,
+  nome text not null,
+  segmento_de_negocio text,
+  assunto text not null default '',
+  pre_cabecalho text not null default '',
+  blocos jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  created_by uuid references auth.users(id) on delete set null,
+  constraint mia_email_modelos_chave check (chave ~ '^[a-z0-9][a-z0-9-]{0,62}$'),
+  constraint mia_email_modelos_nome check (length(btrim(nome)) between 1 and 120),
+  constraint mia_email_modelos_blocos check (jsonb_typeof(blocos) = 'array'),
+  constraint mia_email_modelos_unico unique (organization_id, chave)
+);
+
+comment on table public.mia_email_modelos is
+  'MIA (9062): modelos de campanha de e-mail em blocos (titulo, texto, imagem, botao, divisor), por segmento de negocio. A campanha COPIA o modelo: mudar o modelo nao muda campanha nenhuma. Escrita so pelo servidor.';
+
+-- ── 3. as campanhas ────────────────────────────────────────────────────────
+create table if not exists public.mia_email_campanhas (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  nome text not null,
+  status text not null default 'rascunho',
+  remetente_id uuid references public.mia_email_remetentes(id) on delete set null,
+  assunto text not null default '',
+  pre_cabecalho text not null default '',
+  blocos jsonb not null default '[]'::jsonb,
+  -- O texto reserva de cada variável que depende de cadastro. Vazio = quem não
+  -- tem o dado fica de fora (motivo visível na conferência).
+  reservas jsonb not null default '{}'::jsonb,
+  -- Toda mudança de conteúdo soma 1; o envio só libera com teste da versão atual.
+  versao integer not null default 1,
+  teste_versao integer,
+  recorte jsonb not null default '{}'::jsonb,
+  segmento_id uuid references public.mia_segmentos(id) on delete set null,
+  base_legal text not null default 'consent',
+  lia_ref text,
+  -- Nulo = o da configuração. A campanha pode ir mais devagar, nunca mais rápido.
+  ritmo_por_hora integer,
+  so_dias_uteis boolean,
+  agendada_para timestamptz,
+  -- O que a tela mostrou na confirmação: dias, horários e quantidades.
+  plano jsonb,
+  total_previsto integer,
+  -- O preço CONGELADO na confirmação: mudar o preço depois não muda a campanha.
+  preco_cents integer,
+  custo_previsto_cents bigint,
+  confirmada_por uuid references auth.users(id) on delete set null,
+  confirmada_em timestamptz,
+  -- A declaração da base legal, com o texto que a pessoa marcou.
+  declaracao_base_legal text,
+  motivo_da_pausa text,
+  pausada_em timestamptz,
+  iniciada_em timestamptz,
+  concluida_em timestamptz,
+  cancelada_em timestamptz,
+  origem text not null default 'tela',
+  criada_por uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint mia_email_campanhas_status check (
+    status in ('rascunho', 'agendada', 'enviando', 'pausada', 'concluida', 'cancelada')
+  ),
+  constraint mia_email_campanhas_nome check (length(btrim(nome)) between 1 and 120),
+  constraint mia_email_campanhas_base_legal check (base_legal in ('consent', 'legitimate_interest')),
+  -- A régua das Campanhas do upstream: interesse legítimo sem a LIA não sai.
+  constraint mia_email_campanhas_lia check (
+    base_legal <> 'legitimate_interest' or status in ('rascunho', 'cancelada')
+    or length(btrim(coalesce(lia_ref, ''))) > 0
+  ),
+  -- Fora do rascunho, alguém confirmou, com a declaração registrada.
+  constraint mia_email_campanhas_confirmada check (
+    status in ('rascunho', 'cancelada')
+    or (confirmada_por is not null and confirmada_em is not null and declaracao_base_legal is not null)
+  ),
+  constraint mia_email_campanhas_ritmo check (ritmo_por_hora is null or ritmo_por_hora between 50 and 5000),
+  constraint mia_email_campanhas_blocos check (jsonb_typeof(blocos) = 'array'),
+  constraint mia_email_campanhas_origem check (origem in ('tela', 'mcp'))
+);
+
+create index if not exists idx_mia_email_campanhas_org
+  on public.mia_email_campanhas (organization_id, created_at desc);
+create index if not exists idx_mia_email_campanhas_fila
+  on public.mia_email_campanhas (status, agendada_para)
+  where status in ('agendada', 'enviando');
+
+comment on table public.mia_email_campanhas is
+  'MIA (9062): as campanhas de e-mail marketing. Nasce rascunho; sai so com dominio verificado, rodape completo, teste da versao atual, base legal declarada em nome de quem confirmou e saldo que cubra. O MCP de plataforma cria rascunho e manda teste, nunca dispara. Escrita so pelo servidor.';
+
+-- ── 4. os testes ───────────────────────────────────────────────────────────
+create table if not exists public.mia_email_testes (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  campanha_id uuid not null references public.mia_email_campanhas(id) on delete cascade,
+  versao integer not null,
+  -- Endereços da EQUIPE (até 5), escolhidos por quem testa. Não são contatos.
+  para text[] not null,
+  enviado_por uuid references auth.users(id) on delete set null,
+  enviado_em timestamptz not null default now(),
+  resultado jsonb not null default '{}'::jsonb,
+  constraint mia_email_testes_para check (cardinality(para) between 1 and 5)
+);
+
+create index if not exists idx_mia_email_testes_campanha
+  on public.mia_email_testes (campanha_id, enviado_em desc);
+
+comment on table public.mia_email_testes is
+  'MIA (9062): cada envio de teste de uma campanha, por versao do conteudo. Ate 5 enderecos, [TESTE] no assunto, sem cobrar. Na empresa de demonstracao nao nasce (9064). Escrita so pelo servidor.';
+
+-- ── 5. os destinatários ────────────────────────────────────────────────────
+create table if not exists public.mia_email_destinatarios (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  campanha_id uuid not null references public.mia_email_campanhas(id) on delete cascade,
+  contact_id uuid references public.contacts(id) on delete set null,
+  -- COPIADO do contato na confirmação: é para onde o e-mail vai. A anonimização
+  -- (9064) o apaga; o hash fica, e é ele que faz o "uma vez só" por endereço.
+  email text,
+  email_hash text not null,
+  status text not null default 'pendente',
+  -- Por que ficou de fora (os dez motivos da conferência) ou por que falhou.
+  motivo text,
+  lote_id uuid,
+  tentativas smallint not null default 0,
+  ses_message_id text,
+  -- Abertura só é medida em quem consentiu com o aviso de medição.
+  medir_abertura boolean not null default false,
+  enviado_em timestamptz,
+  entregue_em timestamptz,
+  rejeitado_em timestamptz,
+  rejeicao_tipo text,
+  reclamacao_em timestamptz,
+  primeira_abertura_em timestamptz,
+  aberturas integer not null default 0,
+  primeiro_clique_em timestamptz,
+  -- Saiu da lista por um link DESTE e-mail (rodapé, botão do Gmail ou página).
+  descadastrado_em timestamptz,
+  cobrado boolean not null default false,
+  cobrado_cents integer,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint mia_email_destinatarios_status check (
+    status in ('pendente', 'enviando', 'enviado', 'entregue', 'rejeitado', 'reclamacao', 'pulado', 'falhou')
+  ),
+  constraint mia_email_destinatarios_rejeicao check (
+    rejeicao_tipo is null or rejeicao_tipo in ('permanente', 'temporaria')
+  ),
+  constraint mia_email_destinatarios_um_por_endereco unique (campanha_id, email_hash)
+);
+
+create unique index if not exists uq_mia_email_destinatarios_mensagem
+  on public.mia_email_destinatarios (ses_message_id)
+  where ses_message_id is not null;
+create index if not exists idx_mia_email_destinatarios_fila
+  on public.mia_email_destinatarios (campanha_id, status, created_at);
+create index if not exists idx_mia_email_destinatarios_hash
+  on public.mia_email_destinatarios (organization_id, email_hash, created_at desc);
+create index if not exists idx_mia_email_destinatarios_contato
+  on public.mia_email_destinatarios (organization_id, contact_id);
+
+comment on table public.mia_email_destinatarios is
+  'MIA (9062): um endereco por campanha. Estado do envio, motivo de ficar de fora, lote, id da Amazon, entrega, rejeicao (permanente ou temporaria), reclamacao, abertura (estimativa, so em quem consentiu com o aviso de medicao) e clique, e se ja foi cobrado (por lote, fn_mia_email_cobrar). O endereco copiado sai na anonimizacao; o hash fica. Escrita so pelo servidor.';
+
+-- ── 6. os links e os cliques ───────────────────────────────────────────────
+create table if not exists public.mia_email_links (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  campanha_id uuid not null references public.mia_email_campanhas(id) on delete cascade,
+  ordem integer not null,
+  url text not null,
+  rotulo text,
+  created_at timestamptz not null default now(),
+  constraint mia_email_links_url check (url ~* '^https?://'),
+  constraint mia_email_links_ordem unique (campanha_id, ordem)
+);
+
+comment on table public.mia_email_links is
+  'MIA (9062): os links da campanha, congelados na confirmacao. O e-mail leva um link de passagem medido para cada um. Escrita so pelo servidor.';
+
+create table if not exists public.mia_email_cliques (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  destinatario_id uuid not null references public.mia_email_destinatarios(id) on delete cascade,
+  link_id uuid not null references public.mia_email_links(id) on delete cascade,
+  clicado_em timestamptz not null default now(),
+  -- O robô de segurança abre todos os links no primeiro minuto depois de
+  -- entregue. O clique fica (é o que aconteceu), e sai da conta.
+  robo boolean not null default false
+);
+
+create index if not exists idx_mia_email_cliques_destinatario
+  on public.mia_email_cliques (destinatario_id, clicado_em);
+create index if not exists idx_mia_email_cliques_link
+  on public.mia_email_cliques (link_id);
+
+comment on table public.mia_email_cliques is
+  'MIA (9062): cada clique num link de campanha, pelo link de passagem. robo = clique do robo de seguranca (todos os links no primeiro minuto depois de entregue, ou agente de robo conhecido), fora das contas. Sem dado de pessoa alem do vinculo com o destinatario. Escrita so pelo servidor.';
+
+-- ── 7. os avisos da Amazon ─────────────────────────────────────────────────
+create table if not exists public.mia_email_eventos (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  destinatario_id uuid references public.mia_email_destinatarios(id) on delete set null,
+  tipo text not null,
+  -- O id do aviso: a Amazon entrega o mesmo aviso mais de uma vez.
+  aviso_id text not null,
+  ocorrido_em timestamptz not null,
+  -- Só a classificação (tipo e subtipo da rejeição, tipo da reclamação). Nunca o
+  -- endereço nem o texto de diagnóstico, que costuma repetir o endereço.
+  detalhe jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  constraint mia_email_eventos_tipo check (tipo in ('entrega', 'rejeicao', 'reclamacao')),
+  constraint mia_email_eventos_aviso unique (aviso_id)
+);
+
+create index if not exists idx_mia_email_eventos_destinatario
+  on public.mia_email_eventos (destinatario_id);
+
+comment on table public.mia_email_eventos is
+  'MIA (9062): os avisos da Amazon SES (entrega, rejeicao, reclamacao), recebidos pela rota publica com assinatura conferida, idempotentes pelo id do aviso. Guarda so a classificacao, nunca o endereco. Escrita so pelo servidor.';
+
+-- ── 8. o relógio de atualização ────────────────────────────────────────────
+drop trigger if exists trg_mia_segmentos_updated_at on public.mia_segmentos;
+create trigger trg_mia_segmentos_updated_at
+  before update on public.mia_segmentos
+  for each row execute function public.fn_set_updated_at();
+
+drop trigger if exists trg_mia_email_modelos_updated_at on public.mia_email_modelos;
+create trigger trg_mia_email_modelos_updated_at
+  before update on public.mia_email_modelos
+  for each row execute function public.fn_set_updated_at();
+
+drop trigger if exists trg_mia_email_campanhas_updated_at on public.mia_email_campanhas;
+create trigger trg_mia_email_campanhas_updated_at
+  before update on public.mia_email_campanhas
+  for each row execute function public.fn_set_updated_at();
+
+drop trigger if exists trg_mia_email_destinatarios_updated_at on public.mia_email_destinatarios;
+create trigger trg_mia_email_destinatarios_updated_at
+  before update on public.mia_email_destinatarios
+  for each row execute function public.fn_set_updated_at();
+
+-- ── 9. RLS: gestor ou administrador lê o da própria empresa; só o servidor escreve
+alter table public.mia_segmentos enable row level security;
+alter table public.mia_email_modelos enable row level security;
+alter table public.mia_email_campanhas enable row level security;
+alter table public.mia_email_testes enable row level security;
+alter table public.mia_email_destinatarios enable row level security;
+alter table public.mia_email_links enable row level security;
+alter table public.mia_email_cliques enable row level security;
+alter table public.mia_email_eventos enable row level security;
+
+drop policy if exists mia_segmentos_select on public.mia_segmentos;
+create policy mia_segmentos_select on public.mia_segmentos
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+drop policy if exists mia_email_modelos_select on public.mia_email_modelos;
+create policy mia_email_modelos_select on public.mia_email_modelos
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+drop policy if exists mia_email_campanhas_select on public.mia_email_campanhas;
+create policy mia_email_campanhas_select on public.mia_email_campanhas
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+drop policy if exists mia_email_testes_select on public.mia_email_testes;
+create policy mia_email_testes_select on public.mia_email_testes
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+drop policy if exists mia_email_destinatarios_select on public.mia_email_destinatarios;
+create policy mia_email_destinatarios_select on public.mia_email_destinatarios
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+drop policy if exists mia_email_links_select on public.mia_email_links;
+create policy mia_email_links_select on public.mia_email_links
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+drop policy if exists mia_email_cliques_select on public.mia_email_cliques;
+create policy mia_email_cliques_select on public.mia_email_cliques
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+drop policy if exists mia_email_eventos_select on public.mia_email_eventos;
+create policy mia_email_eventos_select on public.mia_email_eventos
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+revoke all on public.mia_segmentos from anon, authenticated;
+revoke all on public.mia_email_modelos from anon, authenticated;
+revoke all on public.mia_email_campanhas from anon, authenticated;
+revoke all on public.mia_email_testes from anon, authenticated;
+revoke all on public.mia_email_destinatarios from anon, authenticated;
+revoke all on public.mia_email_links from anon, authenticated;
+revoke all on public.mia_email_cliques from anon, authenticated;
+revoke all on public.mia_email_eventos from anon, authenticated;
+grant select on public.mia_segmentos to authenticated;
+grant select on public.mia_email_modelos to authenticated;
+grant select on public.mia_email_campanhas to authenticated;
+grant select on public.mia_email_testes to authenticated;
+grant select on public.mia_email_destinatarios to authenticated;
+grant select on public.mia_email_links to authenticated;
+grant select on public.mia_email_cliques to authenticated;
+grant select on public.mia_email_eventos to authenticated;
+grant all on public.mia_segmentos to service_role;
+grant all on public.mia_email_modelos to service_role;
+grant all on public.mia_email_campanhas to service_role;
+grant all on public.mia_email_testes to service_role;
+grant all on public.mia_email_destinatarios to service_role;
+grant all on public.mia_email_links to service_role;
+grant all on public.mia_email_cliques to service_role;
+grant all on public.mia_email_eventos to service_role;
+
+
+-- ─── 9063 · a supressão de e-mail na lista de exclusão do upstream ───
+--
+-- Espelho EXATO da migration 9063 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9063 · a supressão de e-mail na lista de exclusão do upstream
+--
+-- `campaign_suppressions` é do upstream e recebe só ACRÉSCIMO (docs/FORK-MIA.md,
+-- regra 3): duas colunas, duas constraints com nome nosso, um gatilho nosso.
+
+alter table public.campaign_suppressions
+  add column if not exists tipo_de_endereco text not null default 'telefone';
+alter table public.campaign_suppressions
+  add column if not exists motivo text;
+
+do $f$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'campaign_suppressions_mia_tipo_check'
+       and conrelid = 'public.campaign_suppressions'::regclass
+  ) then
+    alter table public.campaign_suppressions
+      add constraint campaign_suppressions_mia_tipo_check
+      check (tipo_de_endereco in ('telefone', 'email'));
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'campaign_suppressions_mia_motivo_check'
+       and conrelid = 'public.campaign_suppressions'::regclass
+  ) then
+    alter table public.campaign_suppressions
+      add constraint campaign_suppressions_mia_motivo_check
+      check (motivo is null or motivo in ('descadastro', 'rejeicao', 'reclamacao', 'manual', 'importada'));
+  end if;
+end
+$f$;
+
+comment on column public.campaign_suppressions.tipo_de_endereco is
+  'MIA (9063): de que endereco e o hash: telefone (o padrao, toda linha do upstream) ou email (SHA-256 do endereco em minusculas, lib/email-marketing/supressao.ts).';
+comment on column public.campaign_suppressions.motivo is
+  'MIA (9063): por que o e-mail entrou na supressao: descadastro (a pessoa pediu), rejeicao (permanente, ou temporaria em 3 campanhas seguidas), reclamacao (marcou como spam), manual (pediu a equipe), importada (da ferramenta anterior). Codigo, nao texto livre: sobrevive a anonimizacao.';
+
+create index if not exists idx_campaign_suppressions_mia_email
+  on public.campaign_suppressions (organization_id, tipo_de_endereco, created_at desc);
+
+-- ── a linha de e-mail só acrescenta ────────────────────────────────────────
+--
+-- Se a equipe pudesse tirar alguém da lista, a supressão viraria sugestão. Quem
+-- desfaz é a própria pessoa, pela página de preferências, e só por
+-- `fn_mia_email_voltar_a_receber`, que liga a chave desta transação.
+--
+-- `pg_trigger_depth() > 1` é a exclusão da EMPRESA em cascata (o gatilho de
+-- chave estrangeira apaga as linhas de dentro de outro gatilho): apagar a
+-- empresa apaga a lista dela, e isso não é tirar alguém da lista.
+create or replace function public.fn_mia_supressao_de_email_so_acrescenta()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $f$
+begin
+  if old.tipo_de_endereco is distinct from 'email' then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+
+  if coalesce(current_setting('mia.email_marketing.reinscricao', true), '') = 'pelo_titular' then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+
+  if tg_op = 'DELETE' then
+    if pg_trigger_depth() > 1 then
+      return old;
+    end if;
+    raise exception 'supressao_de_email_so_acrescenta: um endereco de e-mail nao sai da lista de supressao pela equipe'
+      using errcode = '42501',
+            hint = 'So a propria pessoa volta a receber, pelo link de um e-mail que ja recebeu (docs/fork/email-marketing.md).';
+  end if;
+
+  -- UPDATE: a anonimização do upstream solta contato, cauda e motivo em texto, e
+  -- isso continua livre. Trocar o endereço, o tipo ou a empresa da linha não.
+  if new.recipient_address_hash is distinct from old.recipient_address_hash
+     or new.tipo_de_endereco is distinct from old.tipo_de_endereco
+     or new.organization_id is distinct from old.organization_id then
+    raise exception 'supressao_de_email_so_acrescenta: a linha de e-mail da lista de supressao nao troca de endereco nem de tipo'
+      using errcode = '42501';
+  end if;
+  return new;
+end
+$f$;
+
+comment on function public.fn_mia_supressao_de_email_so_acrescenta() is
+  'MIA (9063): a linha de e-mail de campaign_suppressions so acrescenta: nao sai (42501) e nao troca de endereco, tipo ou empresa. Passa a cascata da exclusao da empresa (pg_trigger_depth > 1) e a reinscricao pela propria pessoa (chave mia.email_marketing.reinscricao, ligada por fn_mia_email_voltar_a_receber). A anonimizacao do upstream (soltar contato, cauda e reason) continua livre.';
+
+revoke all on function public.fn_mia_supressao_de_email_so_acrescenta() from public;
+revoke execute on function public.fn_mia_supressao_de_email_so_acrescenta() from anon, authenticated;
+
+drop trigger if exists trg_mia_supressao_de_email_so_acrescenta on public.campaign_suppressions;
+create trigger trg_mia_supressao_de_email_so_acrescenta
+  before update or delete on public.campaign_suppressions
+  for each row execute function public.fn_mia_supressao_de_email_so_acrescenta();
+
+
+-- ─── 9064 · o motor do disparo de e-mail, a trava da demonstração e a LGPD ───
+--
+-- Espelho EXATO da migration 9064 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9064 · o motor do disparo de e-mail, a trava da demonstração e a LGPD
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: `create or
+-- replace` e `drop trigger if exists`.
+
+-- ── 1. o worker reivindica um lote ─────────────────────────────────────────
+create or replace function public.fn_mia_email_reivindicar(
+  p_campanha uuid,
+  p_lote uuid,
+  p_limite integer
+)
+returns setof public.mia_email_destinatarios
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $f$
+begin
+  if p_limite is null or p_limite < 1 then
+    return;
+  end if;
+  return query
+  with alvo as (
+    select d.id
+      from public.mia_email_destinatarios d
+     where d.campanha_id = p_campanha
+       and d.status = 'pendente'
+     order by d.created_at, d.id
+     limit least(p_limite, 500)
+     for update skip locked
+  )
+  update public.mia_email_destinatarios d
+     set status = 'enviando',
+         lote_id = p_lote,
+         tentativas = d.tentativas + 1,
+         updated_at = now()
+    from alvo
+   where d.id = alvo.id
+  returning d.*;
+end
+$f$;
+
+comment on function public.fn_mia_email_reivindicar(uuid, uuid, integer) is
+  'MIA (9064): o worker do disparo de e-mail pega ate p_limite (teto 500) destinatarios pendentes da campanha, com for update skip locked, e os marca enviando no lote p_lote. Duas rodadas ao mesmo tempo nunca pegam a mesma linha. So service_role.';
+
+revoke all on function public.fn_mia_email_reivindicar(uuid, uuid, integer) from public;
+revoke execute on function public.fn_mia_email_reivindicar(uuid, uuid, integer) from anon, authenticated;
+grant execute on function public.fn_mia_email_reivindicar(uuid, uuid, integer) to service_role;
+
+-- ── 2. a cobrança por lote ─────────────────────────────────────────────────
+--
+-- Envia → marca a linha com o id da Amazon e o preço → cobra o LOTE. Lote com
+-- linha ainda `enviando` espera: cobrá-lo pela metade e marcar o resto depois
+-- faria o resto bater no índice único e sair de graça.
+create or replace function public.fn_mia_email_cobrar(p_campanha uuid)
+returns bigint
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $f$
+declare
+  v_org uuid;
+  v_nome text;
+  v_lote record;
+  v_total bigint := 0;
+begin
+  select c.organization_id, c.nome into v_org, v_nome
+    from public.mia_email_campanhas c
+   where c.id = p_campanha;
+  if v_org is null then
+    return 0;
+  end if;
+
+  for v_lote in
+    select d.lote_id, count(*) as quantos, coalesce(sum(coalesce(d.cobrado_cents, 0)), 0) as soma
+      from public.mia_email_destinatarios d
+     where d.campanha_id = p_campanha
+       and d.cobrado = false
+       and d.ses_message_id is not null
+       and d.lote_id is not null
+       and not exists (
+         select 1 from public.mia_email_destinatarios x
+          where x.campanha_id = p_campanha
+            and x.lote_id = d.lote_id
+            and x.status = 'enviando'
+       )
+     group by d.lote_id
+  loop
+    if v_lote.soma > 0 then
+      insert into public.tenant_wallet_ledger (organization_id, tipo, amount_cents, ref_kind, ref_id, note)
+      values (
+        v_org, 'debito', v_lote.soma, 'email_lote', v_lote.lote_id::text,
+        left(v_nome, 80) || ' · ' || v_lote.quantos || ' e-mail(s)'
+      )
+      on conflict do nothing;
+      v_total := v_total + v_lote.soma;
+    end if;
+    update public.mia_email_destinatarios
+       set cobrado = true
+     where campanha_id = p_campanha
+       and lote_id = v_lote.lote_id
+       and cobrado = false
+       and ses_message_id is not null;
+  end loop;
+  return v_total;
+end
+$f$;
+
+comment on function public.fn_mia_email_cobrar(uuid) is
+  'MIA (9064): debita da carteira (tenant_wallet_ledger, ref_kind email_lote, ref_id = lote) a soma do preco congelado dos e-mails ACEITOS pela Amazon de cada lote terminado da campanha, e marca as linhas como cobradas. Idempotente pelo indice unico da carteira (on conflict do nothing). Rejeicao depois do aceite nao estorna. So service_role.';
+
+revoke all on function public.fn_mia_email_cobrar(uuid) from public;
+revoke execute on function public.fn_mia_email_cobrar(uuid) from anon, authenticated;
+grant execute on function public.fn_mia_email_cobrar(uuid) to service_role;
+
+-- ── 3. voltar a receber: só a própria pessoa ───────────────────────────────
+create or replace function public.fn_mia_email_voltar_a_receber(p_org uuid, p_hash text)
+returns integer
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $f$
+declare
+  v_quantos integer;
+begin
+  perform set_config('mia.email_marketing.reinscricao', 'pelo_titular', true);
+  delete from public.campaign_suppressions
+   where organization_id = p_org
+     and recipient_address_hash = p_hash
+     and tipo_de_endereco = 'email'
+     and coalesce(motivo, '') <> 'rejeicao';
+  get diagnostics v_quantos = row_count;
+  perform set_config('mia.email_marketing.reinscricao', '', true);
+  return v_quantos;
+end
+$f$;
+
+comment on function public.fn_mia_email_voltar_a_receber(uuid, text) is
+  'MIA (9064): a unica porta de saida da supressao de e-mail, chamada so pela pagina de preferencias da propria pessoa (token assinado conferido no servidor). Nao tira rejeicao: o endereco nao existe. So service_role.';
+
+revoke all on function public.fn_mia_email_voltar_a_receber(uuid, text) from public;
+revoke execute on function public.fn_mia_email_voltar_a_receber(uuid, text) from anon, authenticated;
+grant execute on function public.fn_mia_email_voltar_a_receber(uuid, text) to service_role;
+
+-- ── 4. a trava da demonstração ─────────────────────────────────────────────
+--
+-- A mesma pergunta da 9010 (`fn_mia_e_demonstracao`) e a mesma forma de recusa
+-- (42501 com a mensagem começando por `organizacao_de_demonstracao:`), que
+-- `lib/demonstracao/trava.ts` traduz para a tela. Função própria, e não um ramo
+-- a mais em `fn_mia_trava_da_demonstracao`: a campanha de e-mail é peça nova, e
+-- a trava dela nasce com ela.
+create or replace function public.fn_mia_email_demonstracao_nao_envia()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $f$
+declare
+  v_porta text;
+begin
+  if tg_table_name = 'mia_email_campanhas' then
+    if new.status not in ('agendada', 'enviando') then
+      return new;
+    end if;
+    v_porta := 'campanha de e-mail agendada ou enviando';
+  elsif tg_table_name = 'mia_email_testes' then
+    v_porta := 'envio de teste de e-mail';
+  else
+    return new;
+  end if;
+
+  if not public.fn_mia_e_demonstracao(new.organization_id) then
+    return new;
+  end if;
+
+  raise exception 'organizacao_de_demonstracao: % nao existe numa empresa de demonstracao', v_porta
+    using errcode = '42501',
+          hint = 'Esta e a empresa de demonstracao da plataforma: nada sai dela (docs/fork/cliente-modelo.md).';
+end
+$f$;
+
+comment on function public.fn_mia_email_demonstracao_nao_envia() is
+  'MIA (9064): a trava da empresa de demonstracao no disparo de e-mail. Recusa (42501) campanha de e-mail agendada ou enviando e o registro de um envio de teste. Rascunho, pausa e cancelamento seguem livres.';
+
+revoke all on function public.fn_mia_email_demonstracao_nao_envia() from public;
+revoke execute on function public.fn_mia_email_demonstracao_nao_envia() from anon, authenticated;
+
+drop trigger if exists trg_mia_email_demonstracao_nao_envia on public.mia_email_campanhas;
+create trigger trg_mia_email_demonstracao_nao_envia
+  before insert or update of status on public.mia_email_campanhas
+  for each row execute function public.fn_mia_email_demonstracao_nao_envia();
+
+drop trigger if exists trg_mia_email_demonstracao_nao_envia on public.mia_email_testes;
+create trigger trg_mia_email_demonstracao_nao_envia
+  before insert on public.mia_email_testes
+  for each row execute function public.fn_mia_email_demonstracao_nao_envia();
+
+-- ── 5. a anonimização ──────────────────────────────────────────────────────
+--
+-- Gatilho NOSSO, pendurado no fato (`is_anonymized` virando verdadeiro), como o
+-- `trg_redigir_exclusoes_anonimizado` do upstream: vale para a cascata e para a
+-- rota direta. A cascata do upstream (`fn_lgpd_cascade_redact_contact`) não é
+-- redefinida (docs/FORK-MIA.md, regra 3).
+create or replace function public.fn_mia_redigir_email_marketing_do_contato_anonimizado()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $f$
+begin
+  if new.is_anonymized is not true or coalesce(old.is_anonymized, false) is true then
+    return new;
+  end if;
+
+  -- 1 · o endereço copiado em cada campanha. O hash fica: é ele que mantém
+  --     "uma vez só por endereço" na campanha e casa com a supressão.
+  update public.mia_email_destinatarios
+     set email = null,
+         contact_id = null
+   where organization_id = new.organization_id
+     and contact_id = new.id;
+
+  -- 2 · o registro de consentimento: sai o que pode identificar (origem,
+  --     evidência, texto aceito) e o vínculo; ficam o tipo, a data e a versão.
+  update public.mia_email_consentimentos
+     set origem = null,
+         evidencia = null,
+         texto_aceito = null,
+         contact_id = null
+   where organization_id = new.organization_id
+     and contact_id = new.id;
+
+  return new;
+end
+$f$;
+
+comment on function public.fn_mia_redigir_email_marketing_do_contato_anonimizado() is
+  'MIA (9064): quando o contato e anonimizado, apaga o endereco copiado de mia_email_destinatarios e a origem, a evidencia e o texto aceito de mia_email_consentimentos, e solta o contato das duas. O hash fica (a supressao e o uma-vez-so por endereco continuam valendo). O consentimento vigente (contacts.consent) ja e zerado pela anonimizacao do upstream.';
+
+revoke all on function public.fn_mia_redigir_email_marketing_do_contato_anonimizado() from public;
+revoke execute on function public.fn_mia_redigir_email_marketing_do_contato_anonimizado() from anon, authenticated;
+
+drop trigger if exists trg_mia_email_marketing_contato_anonimizado on public.contacts;
+create trigger trg_mia_email_marketing_contato_anonimizado
+  after update of is_anonymized on public.contacts
+  for each row
+  execute function public.fn_mia_redigir_email_marketing_do_contato_anonimizado();
+
+-- Quem JÁ foi anonimizado antes desta migration não tem linha nestas tabelas
+-- (elas nascem nesta entrega): não há o que curar.
+
+notify pgrst, 'reload schema';
+
+
+
+-- ─── 9065 · as imagens das campanhas de e-mail ───
+--
+-- Espelho EXATO da migration 9065 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9065 · as imagens das campanhas de e-mail
+--
+-- Só objeto NOSSO (docs/FORK-MIA.md, regra 3).
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('email-marketing-imagens', 'email-marketing-imagens', true, 1048576, array['image/png', 'image/jpeg', 'image/gif'])
+on conflict (id) do update
+  set public             = excluded.public,
+      file_size_limit    = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
