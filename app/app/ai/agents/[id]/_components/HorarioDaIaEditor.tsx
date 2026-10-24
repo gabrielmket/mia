@@ -187,7 +187,7 @@ export function HorarioDaIaEditor({
       </div>
 
       {horarioAntigo ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-400/60 bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-warning/35 bg-warning-bg p-2 text-xs text-warning-fg">
           <span className="min-w-0 flex-1">
             {`${t("Este agente ainda tem o horário antigo, que adia a resposta para a abertura:")} ${horarioAntigo.start} ${t("às")} ${horarioAntigo.end}. ${t("Ele deixa de valer quando você monta o horário da IA.")}`}
           </span>
@@ -435,7 +435,7 @@ export function HorarioDaIaEditor({
       )}
 
       {foraDaJanela && janela ? (
-        <div className="space-y-2 rounded-md border border-amber-400/60 bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200" data-testid="horario-fora-da-janela">
+        <div className="space-y-2 rounded-md border border-warning/35 bg-warning-bg p-2 text-xs text-warning-fg" data-testid="horario-fora-da-janela">
           <p>
             {`${t("O número")} ${nomeDoNumero} ${t("só envia respostas das")} ${janela.inicioHora}h ${t("às")} ${janela.fimHora}h${janela.domingo ? "" : ` ${t("e não envia no domingo")}`}, ${t("para se proteger de bloqueio. Com este horário a IA fica ativa fora dessa janela, e o que ela escrever nesse período só sai quando a janela abre.")}`}
           </p>
@@ -446,7 +446,7 @@ export function HorarioDaIaEditor({
           ) : (
             <p>{t("Um administrador pode abrir as respostas 24h neste número.")}</p>
           )}
-          <p className="text-amber-700/80 dark:text-amber-200/80">
+          <p className="opacity-80">
             {t("Abrir vale só para a resposta a quem escreveu. Disparo em massa, retomada e prospecção continuam na janela de disparo do número.")}
           </p>
         </div>

@@ -85,14 +85,8 @@ export function seloDaConversa(horario: HorarioDaIa, agora: Date, t: Traduz): Es
 function SeloBase({ estado, titulo, testId, compacto }: { estado: EstadoDoSelo; titulo: string; testId: string; compacto?: boolean }) {
   return (
     <Badge
-      variant="outline"
-      className={cn(
-        "min-w-0 max-w-full truncate",
-        compacto && "h-4 max-w-[16rem] px-1.5 text-[10px]",
-        estado.ativa
-          ? "border-emerald-400 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300"
-          : "border-amber-400 text-amber-700 dark:border-amber-700 dark:text-amber-300",
-      )}
+      variant={estado.ativa ? "success" : "warning"}
+      className={cn("min-w-0 max-w-full truncate", compacto && "h-4 max-w-[16rem] px-1.5 text-[10px]")}
       title={titulo}
       data-testid={testId}
     >
