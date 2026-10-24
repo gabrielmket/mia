@@ -155,6 +155,9 @@ import { garantirPerguntaDoRoteiro, perguntaDoRoteiroPodeSair, prepararRoteiroDo
 import { validarRespostaDoFluxo } from './flow-validate';
 import { moduloLigadoComMemo } from '@/lib/instalacao/modulos';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
+// FORK MIA (.85): o horário de atendimento da IA.
+import { encerrarTurnoSeIaInativa } from './horario-da-ia-no-motor';
+import { aberturaDoToque } from './horario-da-ia-no-turno';
 import { enviaAvisoForaDoHorario, portasDeProducao } from './aviso-fora-do-horario';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
@@ -2211,6 +2214,35 @@ async function executarTurnoDoAgente(
       router_outcome: routed.outcome,
       intent: routed.intentName,
     });
+  }
+  // FORK MIA (.85) — O RETORNO PROMETIDO TAMBÉM ESPERA A IA FICAR ATIVA. O
+  // `followup_turn` sem régua (o "te chamo amanhã" de `schedule_followup`) é
+  // escrito pela IA, e com ela inativa a conversa é da equipe. Reagendado para
+  // a próxima abertura, não perdido. O toque da RÉGUA não passa aqui: ele é
+  // adiado antes, em `followup-turn.ts`, onde o enrollment fica sabendo.
+  if (
+    !preview &&
+    liveJob().kind === 'followup_turn' &&
+    turnoVaiFalarComOLead(liveJob()) &&
+    (liveJob().payload as { followup_enrollment_id?: unknown } | null)?.followup_enrollment_id === undefined &&
+    agentConfig?.horarioDaIa
+  ) {
+    const abertura = aberturaDoToque(agentConfig.horarioDaIa, clock());
+    if (abertura !== null) {
+      await rescheduleJob(pool, liveJob().id, ctx.workerId, {
+        acquiredAt: claimOfJob(liveJob())?.acquired_at,
+        delayMs: Math.max(abertura.getTime() - clock().getTime(), 1_000),
+        reason: 'IA inativa no horário do agente — retorno adiado para a próxima abertura',
+        // O motivo do banco que já existe para "depende da versão publicada do
+        // agente": alargar a janela anti-ban não traz este turno junto.
+        motivo: 'horario_do_agente',
+      });
+      runLog.info('retorno prometido adiado — a IA está inativa no horário do agente', {
+        agent_id: agentConfig.agentId,
+        abertura: abertura.toISOString(),
+      });
+      throw new JobSettledError('IA inativa — retorno reagendado para a próxima abertura do horário da IA');
+    }
   }
   // Horário de funcionamento da versão publicada (spec da tela: TriggerEditor).
   // Vale SÓ para o turno inbound: a janela do lojista é sobre QUANDO ele atende
@@ -5728,6 +5760,23 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       inbound: true,
     }, { log: deps.log, jev: deps.jev });
     const operationAgent = resolvedAgent.config;
+    // FORK MIA (.85) — O HORÁRIO DA IA. Fora dele a IA está inativa: a mensagem
+    // que chegou é da equipe, e o turno termina aqui, sem enviar, sem rascunho e
+    // sem reagendar. O pedido de parar continua registrado, sem mensagem
+    // automática. Agente pausado segue o caminho de sempre, logo abaixo. Ver
+    // `horario-da-ia-no-turno.ts`.
+    if (
+      operationAgent &&
+      !operationAgent.pausedAt &&
+      (await encerrarTurnoSeIaInativa(pool, deps, {
+        job,
+        agent: operationAgent,
+        conversationId: payload.conversation_id,
+        inboundMessageId: payload.inbound_message_id,
+      }))
+    ) {
+      return;
+    }
     if (operationAgent?.operationMode === 'assisted') {
       // As travas do assistido (handoff e elegibilidade) já rodaram acima, antes
       // de escolher o agente.

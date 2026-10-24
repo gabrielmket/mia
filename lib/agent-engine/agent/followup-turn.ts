@@ -57,6 +57,9 @@ import {
 import { isLeadInHandoff } from './human-handoff';
 import { aplicarPessoaNoComandoAoTurno } from '@/lib/followup/pessoa-no-comando-no-turno';
 import { fusoDaOrganizacao } from './fuso-da-org';
+// FORK MIA (.85): o horário de atendimento da IA.
+import { horarioDaIaDoEnrollment } from './horario-da-ia-no-motor';
+import { aberturaDoToque } from './horario-da-ia-no-turno';
 import {
   followupPublicadoDoEnrollment,
   proximaAberturaDoFollowup,
@@ -573,6 +576,40 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
           });
           return;
         }
+      }
+      // FORK MIA (.85) — O HORÁRIO DA IA. Com ela inativa a conversa é da
+      // equipe, e o toque da régua (escrito pela IA ou texto fixo) espera a
+      // próxima abertura: reagendado como o da faixa acima, com o adiamento
+      // voltando para o enrollment. Ver `horario-da-ia-no-turno.ts`.
+      const aberturaDaIa = aberturaDoToque(
+        await horarioDaIaDoEnrollment(pool, tenantId, payload.followup_enrollment_id),
+        clock(),
+      );
+      if (aberturaDaIa !== null) {
+        const complete = deps.completeFollowupTurn;
+        if (!complete || payload.node_id === undefined) {
+          throw new Error(
+            'follow-up adiado pelo horário da IA sem completeFollowupTurn/node_id — o enrollment não saberia do adiamento',
+          );
+        }
+        await rescheduleReentry(pool, { tenantId, leadId, jobId: job.id, at: aberturaDaIa, payload: job.payload });
+        withFields(deps.log, {
+          job_id: job.id,
+          tenant_id: tenantId,
+          lead_id: leadId,
+          enrollment_id: payload.followup_enrollment_id,
+        }).info('toque da régua adiado — a IA está inativa no horário do agente', {
+          next_run_at: aberturaDaIa.toISOString(),
+        });
+        await complete(pool, {
+          jobId: job.id,
+          jobClaim: claimOfJob(job),
+          organizationId: tenantId,
+          enrollmentId: payload.followup_enrollment_id,
+          nodeId: payload.node_id,
+          result: { kind: 'deferred', until: aberturaDaIa, reason: 'horario_da_ia' },
+        });
+        return;
       }
     }
 

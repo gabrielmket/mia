@@ -17,6 +17,8 @@ import type pg from 'pg';
 
 import { lerJanelaDeAtendimento, type JanelaDeAtendimento } from './janela-de-atendimento';
 import { lerTextoDoAvisoForaDoHorario } from './aviso-fora-do-horario';
+// FORK MIA (.85): o horário de atendimento da IA.
+import { lerHorarioDaIa, temHorarioDaIaDeclarado, type HorarioDaIa } from './horario-da-ia';
 
 export interface PublishedAgentConfig {
   operationMode?: 'automatic' | 'assisted';
@@ -109,6 +111,16 @@ export interface PublishedAgentConfig {
    * Opcional porque nasce depois das fixtures que montam esta interface à mão.
    */
   avisoForaDoHorario?: string | null;
+  /**
+   * FORK MIA (.85) — o HORÁRIO DE ATENDIMENTO DA IA
+   * (`trigger_config.filters.horario_da_ia`, ver `horario-da-ia.ts`). Fora dele
+   * a IA está inativa: a mensagem que chega é da equipe e o toque de follow-up
+   * espera a próxima abertura. `null` = ativa a qualquer hora. Quando a versão
+   * o declara, `janelaDeAtendimento` e `avisoForaDoHorario` vêm `null`: o
+   * horário do upstream (que ADIAVA o turno) não vale junto com o nosso.
+   * Opcional porque nasce depois das fixtures que montam esta interface à mão.
+   */
+  horarioDaIa?: HorarioDaIa | null;
   /**
    * `ai_agents.config.mcp_externo_no_atendimento` (#2147): o servidor MCP
    * externo também carrega em turno com contato, com a identidade dele em
@@ -258,8 +270,10 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     pipelineIds: r.pipeline_ids ?? [],
     // Leitura DEFENSIVA e que falha ABERTA: jsonb livre com shape estranho vira
     // `null` (sem janela ⇒ atende sempre), nunca uma mordaça acidental.
-    janelaDeAtendimento: lerJanelaDeAtendimento(r.trigger_config),
-    avisoForaDoHorario: lerTextoDoAvisoForaDoHorario(r.trigger_config),
+    // FORK MIA (.85): com o horário da IA declarado, o motor obedece só ele.
+    janelaDeAtendimento: temHorarioDaIaDeclarado(r.trigger_config) ? null : lerJanelaDeAtendimento(r.trigger_config),
+    avisoForaDoHorario: temHorarioDaIaDeclarado(r.trigger_config) ? null : lerTextoDoAvisoForaDoHorario(r.trigger_config),
+    horarioDaIa: lerHorarioDaIa(r.trigger_config),
     // `=== true`: jsonb ausente ou com outro tipo é DESLIGADO, o lado seguro.
     mcpExternoNoAtendimento: cfg.mcp_externo_no_atendimento === true,
     versionCreatedBy: r.version_created_by,

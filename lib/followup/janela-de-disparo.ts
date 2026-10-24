@@ -4,6 +4,9 @@ import { proximaAberturaDoFollowup } from "@/lib/agent-engine/agent/janela-de-fo
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from "@/lib/agent-engine/pacing/engine";
 import { knobsDoCanal } from "@/lib/automation/janela-do-canal";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
+// FORK MIA (.85): o horário de atendimento da IA.
+import { aberturaDoToque } from "@/lib/agent-engine/agent/horario-da-ia-no-turno";
+import { horarioDaIaDaReguaViaSupabase } from "@/lib/followup/horario-da-ia-da-regua";
 
 /**
  * As DUAS réguas de horário do follow-up, agora também no atalho INLINE
@@ -170,6 +173,11 @@ export async function decidirAdiamentoPorJanela(
     fuso = fusoUtilizavel((org as { timezone?: string | null } | null)?.timezone);
   }
 
+  // FORK MIA (.85) — a TERCEIRA régua: o horário da IA do agente que armou a
+  // régua. Com a IA inativa a conversa é da equipe e o texto fixo espera a
+  // próxima abertura, composto com as duas de cima (um adiamento só).
+  const horarioDaIa = await horarioDaIaDaReguaViaSupabase(admin, entrada.organizationId, entrada.enrollmentId);
+
   let instante = agora;
   let motivo: string | null = null;
   let antesDaAberturaDoCanal = agora;
@@ -184,6 +192,13 @@ export async function decidirAdiamentoPorJanela(
     if (aberturaDaFaixa !== null) {
       instante = aberturaDaFaixa;
       motivo = "followup_send_window";
+      continue;
+    }
+    // FORK MIA (.85): o mesmo código de motivo do caminho do worker.
+    const aberturaDaIa = aberturaDoToque(horarioDaIa, instante);
+    if (aberturaDaIa !== null) {
+      instante = aberturaDaIa;
+      motivo = "horario_da_ia";
       continue;
     }
     if (motivo === null) return null;
