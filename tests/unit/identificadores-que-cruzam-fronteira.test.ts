@@ -207,6 +207,11 @@ const SITES: { arquivo: string; fronteira: string; papel?: "gerador" | "validado
   // privado `mia-obrigacoes`: `<org>/<obrigacao>/<uuid>.<ext>`, com a extensão
   // tirada de uma lista fechada. Só hexadecimal, hífen, ponto e barra.
   { arquivo: "lib/obrigacoes/arquivo.ts", fronteira: "storage.chave-de-objeto" },
+  // FORK MIA (.88) — o print do chamado do assistente da MIA (docs/fork/assistente.md),
+  // no bucket privado `mia-assistente`: `<org>/<chamado>/<uuid>.<ext>`, dois uuids do
+  // servidor e a extensão tirada de uma lista fechada (png, jpg, webp). Só
+  // hexadecimal, hífen, ponto e barra.
+  { arquivo: "lib/assistente/print.ts", fronteira: "storage.chave-de-objeto" },
   // Chave de idempotência: os geradores (manda UUID) e os validadores (exige UUID).
   { arquivo: "app/onboarding/connect-whatsapp/_client.tsx", fronteira: "api.idempotency-key", papel: "gerador" },
   { arquivo: "components/extensions/ExtensionsManager.tsx", fronteira: "api.idempotency-key", papel: "gerador" },
