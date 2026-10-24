@@ -129,7 +129,10 @@ export async function encerrarTurnoSeIaInativa(
       },
       pedidoDeParar: detectAmbiguousOptOut,
       // O registro do turno ativo, sem `avisarLeadDaEscalacao`: com a IA
-      // inativa nenhuma mensagem automática sai (a conversa é da equipe).
+      // inativa nenhuma mensagem automática sai (a conversa é da equipe). O
+      // desfecho "não avisado" é DECLARADO em `avisoAoLead`, e é ele que faz a
+      // Central dizer a quem assume que o cliente não recebeu resposta nenhuma
+      // (a cerca `handoff-avisa-o-lead` cobra a declaração).
       registrarPedidoDeParar: async (pendentes) => {
         const briefing = montarBriefingDaPassagem({
           checkpoint: await latestCheckpoint(pool, tenantId, leadId),
@@ -144,6 +147,7 @@ export async function encerrarTurnoSeIaInativa(
             conversationSummary: briefing.body,
             inboxTitle: "Suspeita de opt-out — confirmar bloqueio do contato no CRM",
             passagem: { origem: "opt_out_provavel", motivoCodigo: "suspected_optout", briefing },
+            avisoAoLead: { avisado: false, porque: "ia_inativa_no_horario" },
             log,
           },
         );

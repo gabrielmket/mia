@@ -78,6 +78,10 @@ const FONTES = [
   // FORK MIA — a rede de segurança da passagem prometida: o aviso ao cliente é a
   // própria resposta que prometeu a passagem, declarado em `avisoAoLead`.
   "lib/agent-engine/agent/passagem-prometida-no-turno.ts",
+  // FORK MIA (.85) — o pedido de parar que chega com a IA INATIVA no horário
+  // dela: a passagem sai sem mensagem automática (a conversa é da equipe), e o
+  // desfecho "não avisado" é declarado em `avisoAoLead`.
+  "lib/agent-engine/agent/horario-da-ia-no-motor.ts",
 ] as const;
 
 /**

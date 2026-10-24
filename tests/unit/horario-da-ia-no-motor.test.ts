@@ -227,8 +227,8 @@ describe("a fiação do turno inbound (encerrarTurnoSeIaInativa)", () => {
     const [, ids, opcoes] = performHumanHandoff.mock.calls[0] as unknown as [unknown, unknown, Record<string, unknown>];
     expect(ids).toEqual({ tenantId: ORG, leadId: LEAD, conversationId: CONVERSA });
     expect(opcoes.reason).toBe("suspected_optout");
-    // O turno ativo passa o desfecho do aviso; aqui não houve aviso nenhum.
-    expect(opcoes).not.toHaveProperty("avisoAoLead");
+    // Nenhuma mensagem saiu: o desfecho "não avisado" é declarado, e a Central diz isso a quem assume.
+    expect(opcoes.avisoAoLead).toEqual({ avisado: false, porque: "ia_inativa_no_horario" });
   });
 
   it("ativa: segue o turno, sem ler o contexto", async () => {
