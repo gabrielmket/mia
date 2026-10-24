@@ -14,6 +14,10 @@
 type Traducoes = Record<string, { es: string }>;
 
 export const DICIONARIO_DAS_CONVERSOES_DA_META: Traducoes = {
+  // ─── o cadastro incorporado da Meta (admin da plataforma) ───────────────────
+  // O upstream tirou "Link" do dicionário dele (v1.87/v1.88); o campo do link do cadastro
+  // incorporado (components/admin/cadastro-incorporado) é nosso e continua.
+  "Link": { es: "Enlace" },
   // ─── o que cada etapa informa à Meta ───────────────────────────────────────
   "O que cada etapa do funil informa à Meta": { es: "Lo que cada etapa del embudo informa a Meta" },
   "Crie um funil com etapas para escolher o que cada etapa informa à Meta.": {
