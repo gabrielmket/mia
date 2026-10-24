@@ -87,13 +87,38 @@ de antes: o clique no cartão e o endereço `/app/leads/<id>`.
 | Barra de etapas | as etapas do funil com os **dias em cada uma**; clicar numa etapa move o negócio pelo MESMO caminho do arrasto (inclusive a recusa de campos obrigatórios) | atividades `stage_changed` (`lib/cartoes/etapas.ts`) |
 | Foco | lead esperando resposta; proposta da IA ("Aprovar e criar tarefa", dizendo para quem e com que prazo antes do clique); próximo compromisso; tarefa atrasada ou a mais próxima ("Concluir"). Compositor: Nota (com "fixar no topo"), Tarefa (título, prazo, responsável), Mensagem e Agendar (levam à conversa e à agenda) | conversa, `lead_state`, agenda, `crm_tasks` |
 | Resumo da IA | estágio, quer, orçamento e pagamento, quem decide, prazo, objeções **abertas e respondidas**, prometido, próxima ação com Aprovar/Descartar, resumo do último turno | `lead_state` (BANT), `lead_checkpoints` (retratos, declaração) |
-| Pessoas | contato principal e as pessoas envolvidas com o **papel neste negócio** (incluir/tirar), outros negócios da pessoa, "ligar este negócio à empresa" quando a pessoa tem empresa, e os dados do contato (componente do upstream) | `crm_lead_links` (contact, `envolvido`, `metadata.papel`) |
+| Pessoas | contato principal e as pessoas envolvidas com o **papel neste negócio** (incluir/tirar), outros negócios da pessoa, "ligar este negócio à empresa" quando a pessoa tem empresa, e os dados do contato (componente do upstream) | `crm_lead_links` (contact, `envolvido`, `metadata.papel`); desde a .87 também as pessoas que entraram pelo dossiê do upstream (`related`, papel livre), lidas juntas: seção 2.1 |
 | Empresa | nome (leva à ficha), CNPJ, telefone, site; tirar a empresa do negócio | `companies` e `mia_companies_extra` (empresa única, .79: [`empresa-unica.md`](empresa-unica.md)) |
 | Histórico de compras | ver a seção 3 | |
 | Origem e atribuição | canal, campanha, conjunto, anúncio, 1ª mensagem (sem os códigos de rastreio), 1º toque, respostas do formulário da Meta e, por plataforma, o que foi informado à Meta e ao Google e quando ("Agendou informado à Meta em 29/09 · R$ 150") ou por que não foi ([`conversoes-da-meta.md`](conversoes-da-meta.md)) | lead e contato, `ad_conversion_dispatches` |
 | Campos do funil | os campos do funil com a marca **"veio da conversa"** no que a IA preencheu e ninguém confirmou ("Confirmar"), e "obrigatório para <próxima etapa>"; "Editar campos" abre o formulário do upstream | `lead_edited.payload.custom_field_keys` + ator |
 | Agenda, Tarefas, Propostas | os compromissos do negócio (próximos e passados, com comparecimento), as tarefas (concluir/reabrir) e as propostas (componente do upstream) | agenda, `crm_tasks`, propostas |
 | Histórico | filtros **Importante** (padrão), **Tudo**, **Conversas** (com as últimas mensagens) e **Tarefas**. Em Importante, a nota fixada vai ao topo e a rotina da IA de um mesmo dia vira uma linha ("A IA fez 14 ações · 12 decisões de não enviar") — continua tudo registrado | `useLeadTimeline` (vivo) + mensagens |
+
+### 2.1 As pessoas do negócio nos dois modelos (.87)
+
+O dossiê do upstream (v1.88, #1506 e #3083) passou a gravar as pessoas do negócio na
+mesma tabela, com `link_kind = 'related'` e o papel em texto livre. Decisão de
+24/10/2026: o modelo do fork FICA (o `envolvido`, a lista fechada de cinco papéis, esta
+tela) e nenhum dado é convertido; o que entra é a leitura que une os dois
+(`lib/leads/pessoas-do-negocio.ts`):
+
+- o cartão aberto, a ficha do contato e o "+N contatos" do quadro leem os dois tipos;
+  o dossiê do upstream (a rota `/api/v1/leads/[id]/contatos-relacionados`, com três
+  trechos `FORK MIA`) também, e mostra o papel do fork pelo rótulo ("Financeiro");
+- o texto do dossiê que é um dos cinco papéis ("Financeiro", "usuário", "Otro") é lido
+  como o papel da lista (`papelDoTexto`, `lib/cartoes/papel.ts`); o que não é ("Pagante")
+  aparece no seletor da pessoa como foi escrito, e escolher um dos cinco troca por ele;
+- as regras do leitor do upstream valem nas duas telas: a lápide de uma fusão de
+  contatos aparece pelo vencedor, contato de outra organização não aparece, o
+  principal não é participante, e cada pessoa aparece uma vez (vale o vínculo mais
+  antigo);
+- quem grava um tipo tira o outro do mesmo contato no mesmo negócio (a pessoa fica com
+  um vínculo só, e vale o papel de quem gravou por último); tirar a pessoa, em qualquer
+  das duas telas, tira os dois, e pelo cartão também o vínculo que ficou na lápide.
+
+Provado em `tests/unit/pessoas-do-negocio-dos-dois-modelos.test.ts` (e o teste do
+upstream da rota, `contatos-relacionados-nao-vaza-outra-org`, segue intacto e verde).
 
 **Convivência com o upstream:** o `LeadDossier` continua no repositório; o quadro
 abre o cartão aberto (`components/cartoes/aberto/CartaoAberto.tsx`), que reusa as
