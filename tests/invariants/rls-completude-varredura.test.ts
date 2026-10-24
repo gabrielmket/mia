@@ -426,6 +426,8 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     "mia_assistente_mensagens",
     "mia_assistente_preferencias",
     "mia_chamados",
+    // 9052: o índice dos contatos citados, só do servidor.
+    "mia_assistente_citacoes",
   ].map((tabela) => ({
     tabela,
     razao:

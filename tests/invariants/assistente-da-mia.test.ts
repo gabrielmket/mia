@@ -20,7 +20,9 @@ import { countAs, lastLine, sql } from "./gov-helpers";
  *   - o chamado nasce da própria pessoa, "novo", sem resposta e sem print, e a
  *     marca de demonstração vem da EMPRESA (o pedido não decide);
  *   - a retenção apaga o vencido e deixa o recente; o print sai para a fila;
- *   - anonimizar o contato apaga o texto das mensagens que o citam, e só delas.
+ *   - anonimizar o contato apaga o texto das mensagens que o citam, e só delas;
+ *   - (9052) a lista `contatos` vira o índice `mia_assistente_citacoes`, por
+ *     igualdade, que o acesso do titular lê; só o servidor o lê.
  */
 
 const ORG_A = "90509050-0000-4000-8000-00000000000a";
@@ -126,6 +128,7 @@ describe("9050 · o histórico: cada pessoa vê o seu; o administrador, só a pe
 
   it("anon não lê nenhuma tabela do assistente", () => {
     for (const tabela of [
+      "mia_assistente_citacoes",
       "mia_assistente_config",
       "mia_assistente_conhecimento",
       "mia_assistente_conversas",
@@ -135,6 +138,24 @@ describe("9050 · o histórico: cada pessoa vê o seu; o administrador, só a pe
     ]) {
       expect(executar("anon", `perform 1 from public.${tabela} limit 1`), tabela).toBe("42501");
     }
+  });
+});
+
+describe("9052 · as citações: o índice da lista de contatos, só do servidor", () => {
+  it("cada contato da lista vira uma citação, pelo gatilho", () => {
+    expect(valor(`select count(*) from public.mia_assistente_citacoes where mensagem_id = '${MSG_RESPOSTA}' and contact_id = '${TITULAR}';`)).toBe("1");
+    expect(valor(`select count(*) from public.mia_assistente_citacoes where mensagem_id = '${MSG_PERGUNTA_OK}' and contact_id = '${VIZINHO}';`)).toBe("1");
+  });
+
+  it("mudar a lista muda as citações; um id de outra empresa não vira linha", () => {
+    sql(`update public.mia_assistente_mensagens set contatos = '{${VIZINHO},90509050-4444-4000-8000-0000000000ff}' where id = '${MSG_PERGUNTA_SEM}';`);
+    expect(valor(`select count(*) from public.mia_assistente_citacoes where mensagem_id = '${MSG_PERGUNTA_SEM}';`)).toBe("1");
+    sql(`update public.mia_assistente_mensagens set contatos = '{}' where id = '${MSG_PERGUNTA_SEM}';`);
+    expect(valor(`select count(*) from public.mia_assistente_citacoes where mensagem_id = '${MSG_PERGUNTA_SEM}';`)).toBe("0");
+  });
+
+  it("a sessão não lê as citações, nem quem perguntou", () => {
+    expect(executar(AT1, `perform 1 from public.mia_assistente_citacoes limit 1`)).toBe("42501");
   });
 });
 
@@ -286,6 +307,7 @@ describe("9050 e 9051 · as migrations são idempotentes", () => {
     for (const nome of [
       "20261024200000_9050_assistente_da_mia.sql",
       "20261024200100_9051_assistente_na_lgpd_e_na_retencao.sql",
+      "20261024230000_9052_citacoes_do_assistente_por_igualdade.sql",
     ]) {
       const migration = readFileSync(path.join(pasta, nome), "utf8");
       sql(migration);
@@ -305,6 +327,9 @@ describe("9051 · anonimizar o contato alcança o histórico do assistente", () 
       `select texto || '|' || (array_length(contatos, 1) is null)::text from public.mia_assistente_mensagens where id = '${MSG_RESPOSTA}';`,
     );
     expect(depois).toBe("Conteúdo removido: um contato citado aqui foi anonimizado.|true");
+    // (9052) a citação do titular sai junto; a do vizinho fica.
+    expect(valor(`select count(*) from public.mia_assistente_citacoes where contact_id = '${TITULAR}';`)).toBe("0");
+    expect(valor(`select count(*) from public.mia_assistente_citacoes where contact_id = '${VIZINHO}';`)).toBe("1");
     expect(valor(`select texto from public.mia_assistente_mensagens where id = '${MSG_PERGUNTA_OK}';`)).toBe("E o Vizinho Sintético?");
   });
 });

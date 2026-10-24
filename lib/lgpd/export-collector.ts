@@ -921,8 +921,8 @@ export interface ExportPayload {
     ferramentas: unknown;
   }>;
   /**
-   * FORK MIA (9050/9051) — as mensagens do assistente da MIA que citam o
-   * titular (`mia_assistente_mensagens.contatos`): a pergunta de alguém da
+   * FORK MIA (9050/9051/9052) — as mensagens do assistente da MIA que citam o
+   * titular (`mia_assistente_citacoes`, o índice da lista `contatos`): a pergunta de alguém da
    * equipe e a resposta do assistente, com a data e a tela. A anonimização
    * (9051) apaga esse texto; o que se apaga a pedido dele é o que se entrega a
    * pedido dele (Art. 18 II). É conversa interna da equipe com a IA, como a do
@@ -1985,24 +1985,38 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
-  // FORK MIA (9050/9051) — o histórico do assistente da MIA que cita o titular,
-  // pelo MESMO alcance da anonimização (a lista `contatos` da mensagem). É a
-  // outra metade do par que `tests/unit/lgpd-exporta-o-que-redige.test.ts`
-  // deriva da fonte.
+  // FORK MIA (9050, 9051, 9052) — o histórico do assistente da MIA que cita o
+  // titular, pelo MESMO alcance da anonimização: as citações dele
+  // (`mia_assistente_citacoes`, o índice da lista `contatos` da mensagem), por
+  // igualdade de `contact_id` como toda outra seção deste coletor, e depois as
+  // mensagens citadas. É a outra metade do par que
+  // `tests/unit/lgpd-exporta-o-que-redige.test.ts` deriva da fonte.
   const assistente_da_mia: NonNullable<ExportPayload["assistente_da_mia"]> = [];
   if (contactId) {
-    const { data, error } = await admin
-      .from("mia_assistente_mensagens")
-      .select("tipo, texto, tela, created_at")
+    const citacoes = await admin
+      .from("mia_assistente_citacoes")
+      .select("mensagem_id")
       .eq("organization_id", organizationId)
-      .contains("contatos", [contactId])
-      .order("created_at", { ascending: true })
+      .eq("contact_id", contactId)
       .limit(500);
-    if (error) {
-      logger.warn("[lgpd-export-worker] assistente_da_mia load failed", { request_id: requestId, error: error.message });
-    } else {
+    if (citacoes.error) {
+      logger.warn("[lgpd-export-worker] assistente_da_mia citacoes load failed", { request_id: requestId, error: citacoes.error.message });
+    }
+    const idsCitados = [...new Set(((citacoes.data ?? []) as Array<{ mensagem_id: string }>).map((c) => c.mensagem_id))];
+    for (let batch = 0; batch < idsCitados.length; batch += 100) {
+      const { data, error } = await admin
+        .from("mia_assistente_mensagens")
+        .select("tipo, texto, tela, created_at")
+        .eq("organization_id", organizationId)
+        .in("id", idsCitados.slice(batch, batch + 100))
+        .order("created_at", { ascending: true });
+      if (error) {
+        logger.warn("[lgpd-export-worker] assistente_da_mia load failed", { request_id: requestId, error: error.message });
+        break;
+      }
       assistente_da_mia.push(...((data ?? []) as NonNullable<ExportPayload["assistente_da_mia"]>));
     }
+    assistente_da_mia.sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
   }
 
   // FORK MIA — documentos e obrigações (migration 9018). O MESMO escopo que o

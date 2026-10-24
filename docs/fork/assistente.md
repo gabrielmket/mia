@@ -42,7 +42,7 @@ de modelo (telemetria e orçamento em `llm_calls`, `lib/assistente/modelo.ts`).
 | os chamados do lado da Time | `/admin/chamados` e `app/api/v1/admin/chamados/*` |
 | o resumo da manhã e a retenção | `lib/assistente/resumo-da-manha.ts`, cron `assistente-resumo-da-manha` |
 | o MCP de plataforma | `lib/mcp-plataforma/ferramentas/assistente.ts` ([`mcp-de-implantacao.md`](mcp-de-implantacao.md)) |
-| o schema | 9050 (tabelas, RLS, bucket, gatilhos) e 9051 (LGPD e retenção) |
+| o schema | 9050 (tabelas, RLS, bucket, gatilhos), 9051 (LGPD e retenção) e 9052 (o índice dos contatos citados) |
 
 ## 3. O que o assistente lê (ferramentas só de leitura)
 
@@ -92,6 +92,11 @@ o vê, no `plataforma_ver_assistente`; o cliente não.
   texto dela (bloco 6 de `fn_redigir_o_que_sobrou_do_contato_anonimizado`, 9051), e o
   acesso do titular a coleta (`assistente_da_mia`, seção da equipe: vai no relatório e
   não no arquivo dele, como a conversa com a IA sobre o caso).
+- O acesso do titular procura por IGUALDADE, como toda outra seção do coletor: a lista
+  vira o índice `mia_assistente_citacoes` (9052, mantido por gatilho, só do servidor), e
+  o coletor lê as citações pelo `contact_id` e depois as mensagens. A primeira versão
+  usava "contém" (`cs`) e reprovou no CI: nenhum dublê do coletor nem ponte SQL dos
+  invariantes responde esse operador.
 - O resumo da manhã nasce desligado; cada pessoa liga o seu. Em dia útil (sem sábado,
   domingo e feriado nacional), às 8h no fuso da empresa, o cron escreve o plano do dia
   sem IA nenhuma (as mesmas leituras e a mesma ordem) e avisa no sino.
