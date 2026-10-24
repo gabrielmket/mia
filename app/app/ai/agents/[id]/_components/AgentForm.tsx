@@ -45,6 +45,9 @@ import { bloqueioDePublicacao } from "@/lib/ai/agents/bloqueio-de-publicacao";
 import { mesmoRascunho } from "@/lib/ai/agents/mesmo-rascunho";
 import { ToolPicker } from "./ToolPicker";
 import { TriggerEditor, type TriggerValue } from "./TriggerEditor";
+// FORK MIA (.85): o horário de atendimento da IA.
+import { HorarioDaIaEditor } from "./HorarioDaIaEditor";
+import { FUSO_PADRAO } from "@/lib/tempo/fusos";
 import { HandoffKeywordsInput } from "./HandoffKeywordsInput";
 import { LimiarDeSentimento } from "./LimiarDeSentimento";
 import { FollowupFlowPicker } from "./FollowupFlowPicker";
@@ -1357,6 +1360,17 @@ export function AgentForm(props: Props) {
               onChange={(v) => patch({ trigger_config: v })}
               disabled={disabled}
               organizationTimezone={props.organizationTimezone}
+              // FORK MIA (.85): o horário de atendimento da IA no lugar do horário antigo.
+              horarioDaIa={
+                <HorarioDaIaEditor
+                  value={form.trigger_config}
+                  onChange={(v) => patch({ trigger_config: v })}
+                  disabled={disabled}
+                  organizationTimezone={props.organizationTimezone ?? FUSO_PADRAO}
+                  channelSessionId={form.channel_session_id}
+                  podeAbrirJanela={!readOnly}
+                />
+              }
             />
           </Card>
 

@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
 import { FUSO_PADRAO } from "@/lib/tempo/fusos";
+// FORK MIA (.85): o tipo do horário de atendimento da IA.
+import type { HorarioDaIaGravado } from "@/lib/agent-engine/agent/horario-da-ia";
 
 export interface BusinessHoursValue {
   timezone: string;
@@ -35,6 +37,11 @@ export interface TriggerValue {
     ignore_self: boolean;
     keyword_regex: string | null;
     business_hours: BusinessHoursValue | null;
+    /**
+     * FORK MIA (.85) — o horário de atendimento da IA (`lib/agent-engine/agent/horario-da-ia.ts`).
+     * Opcional: versão que nunca o teve não tem a chave.
+     */
+    horario_da_ia?: HorarioDaIaGravado | null;
   };
   concurrency: "one_per_conversation" | "one_per_contact";
 }
@@ -44,6 +51,13 @@ interface Props {
   onChange: (v: TriggerValue) => void;
   disabled?: boolean;
   organizationTimezone?: string;
+  /**
+   * FORK MIA (.85) — o editor do horário de atendimento da IA. Quando vem, ele
+   * toma o lugar do "Só atender em horário de funcionamento" (o horário antigo,
+   * que adiava a resposta): a tela do fork mostra só o editor novo. Sem ele, o
+   * componente segue como o upstream o escreveu.
+   */
+  horarioDaIa?: React.ReactNode;
 }
 
 const WEEKDAYS = [
@@ -56,7 +70,7 @@ const WEEKDAYS = [
   { id: 6, label: "Sáb" },
 ];
 
-export function TriggerEditor({ value, onChange, disabled, organizationTimezone }: Props) {
+export function TriggerEditor({ value, onChange, disabled, organizationTimezone, horarioDaIa }: Props) {
   const t = useT();
   const defaultTimezone = organizationTimezone ?? FUSO_PADRAO;
 
@@ -183,6 +197,8 @@ export function TriggerEditor({ value, onChange, disabled, organizationTimezone 
         </Select>
       </div>
 
+      {/* FORK MIA (.85): com o horário da IA, o editor antigo sai da tela. */}
+      {horarioDaIa ?? (
       <div className="space-y-2 rounded-md border border-border/60 p-3">
         <div className="flex items-center gap-2">
           <Switch
@@ -271,6 +287,7 @@ export function TriggerEditor({ value, onChange, disabled, organizationTimezone 
           </div>
         ) : null}
       </div>
+      )}
     </div>
   );
 }
