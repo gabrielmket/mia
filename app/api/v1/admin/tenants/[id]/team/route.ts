@@ -16,7 +16,7 @@
 import { randomUUID } from "node:crypto";
 
 import { ok, fail } from "@/lib/api/wrappers";
-import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { falhaDaEscritaDePlatformAdmin, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -29,8 +29,9 @@ export async function GET(_req: Request, ctx: Ctx): Promise<Response> {
   const requestId = randomUUID();
   try {
     await requirePlatformAdmin();
-  } catch {
-    return fail("forbidden", "Platform admin required", 403, { requestId });
+  } catch (err) {
+    // v1.88 (#3207): `mfa_required` chega como ele é; o resto segue no 403 `forbidden`.
+    return falhaDaEscritaDePlatformAdmin(err, requestId);
   }
   const { id } = await ctx.params;
 

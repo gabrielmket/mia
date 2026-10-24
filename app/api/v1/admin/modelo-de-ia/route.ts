@@ -45,11 +45,13 @@ const corpoSchema = z.object({
   model_id: z.string().min(1).max(200).nullable(),
 });
 
-async function exigirPlataforma() {
+async function exigirPlataforma(requestId: string) {
   try {
-    return await requirePlatformAdmin();
-  } catch {
-    return null;
+    return { ok: true as const, ctx: await requirePlatformAdmin() };
+  } catch (err) {
+    // v1.88 (#3207): a recusa nomeada do guarda (`mfa_required`) chega como ela é; o
+    // resto (quem não é da plataforma) segue no 403 `forbidden` de antes.
+    return { ok: false as const, resposta: falhaDaEscritaDePlatformAdmin(err, requestId) };
   }
 }
 
@@ -68,8 +70,8 @@ async function exigirPlataformaParaEscrever(requestId: string) {
 
 export async function GET(): Promise<Response> {
   const requestId = randomUUID();
-  const ctx = await exigirPlataforma();
-  if (!ctx) return fail("forbidden", "Platform admin required", 403, { requestId });
+  const acessoDaPlataforma = await exigirPlataforma(requestId);
+  if (!acessoDaPlataforma.ok) return acessoDaPlataforma.resposta;
 
   const admin = createAdminClient();
 

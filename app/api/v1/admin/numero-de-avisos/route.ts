@@ -56,13 +56,15 @@ const corpoSchema = z.object({
   channel_session_id: z.string().uuid().nullable(),
 });
 
-async function exigirPlataforma() {
+async function exigirPlataforma(requestId: string) {
   try {
-    return await requirePlatformAdmin();
-  } catch {
+    return { ok: true as const, ctx: await requirePlatformAdmin() };
+  } catch (err) {
     // 403 e não 401: quem chega aqui está autenticado, só não é da plataforma.
     // Um número que fala com TODOS os clientes não é configuração de tenant.
-    return null;
+    // v1.88 (#3207): a recusa nomeada do guarda (`mfa_required`) chega como ela é; o
+    // resto (quem não é da plataforma) segue no 403 `forbidden` de antes.
+    return { ok: false as const, resposta: falhaDaEscritaDePlatformAdmin(err, requestId) };
   }
 }
 
@@ -90,8 +92,8 @@ type LinhaDeSessao = ChannelSessionRef & {
 
 export async function GET(): Promise<Response> {
   const requestId = randomUUID();
-  const ctx = await exigirPlataforma();
-  if (!ctx) return fail("forbidden", "Platform admin required", 403, { requestId });
+  const acessoDaPlataforma = await exigirPlataforma(requestId);
+  if (!acessoDaPlataforma.ok) return acessoDaPlataforma.resposta;
 
   const admin = createAdminClient();
 

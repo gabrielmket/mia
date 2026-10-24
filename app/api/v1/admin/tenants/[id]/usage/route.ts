@@ -20,7 +20,7 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
-import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { falhaDaEscritaDePlatformAdmin, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { calcularCusto, type ContagemPorCategoria } from "@/lib/channels/meta/custo-da-conversa";
 import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -46,8 +46,9 @@ export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
   const requestId = randomUUID();
   try {
     await requirePlatformAdmin();
-  } catch {
-    return fail("forbidden", "Platform admin required", 403, { requestId });
+  } catch (err) {
+    // v1.88 (#3207): `mfa_required` chega como ele é; o resto segue no 403 `forbidden`.
+    return falhaDaEscritaDePlatformAdmin(err, requestId);
   }
   const { id } = await ctx.params;
 

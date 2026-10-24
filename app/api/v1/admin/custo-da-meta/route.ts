@@ -50,11 +50,13 @@ const precosSchema = z.object({
     .max(20),
 });
 
-async function exigirPlataforma() {
+async function exigirPlataforma(requestId: string) {
   try {
-    return await requirePlatformAdmin();
-  } catch {
-    return null;
+    return { ok: true as const, ctx: await requirePlatformAdmin() };
+  } catch (err) {
+    // v1.88 (#3207): a recusa nomeada do guarda (`mfa_required`) chega como ela é; o
+    // resto (quem não é da plataforma) segue no 403 `forbidden` de antes.
+    return { ok: false as const, resposta: falhaDaEscritaDePlatformAdmin(err, requestId) };
   }
 }
 
@@ -73,8 +75,8 @@ async function exigirPlataformaParaEscrever(requestId: string) {
 
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
-  const ctx = await exigirPlataforma();
-  if (!ctx) return fail("forbidden", "Platform admin required", 403, { requestId });
+  const acessoDaPlataforma = await exigirPlataforma(requestId);
+  if (!acessoDaPlataforma.ok) return acessoDaPlataforma.resposta;
 
   /**
    * O período é o MÊS, e o padrão é o mês corrente.

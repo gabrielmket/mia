@@ -57,11 +57,13 @@ const precoSchema = z.object({
   alerta_saldo_cents: z.number().int().min(0).max(1_000_000_00).nullable().optional(),
 });
 
-async function exigirPlataforma() {
+async function exigirPlataforma(requestId: string) {
   try {
-    return await requirePlatformAdmin();
-  } catch {
-    return null;
+    return { ok: true as const, ctx: await requirePlatformAdmin() };
+  } catch (err) {
+    // v1.88 (#3207): a recusa nomeada do guarda (`mfa_required`) chega como ela é; o
+    // resto (quem não é da plataforma) segue no 403 `forbidden` de antes.
+    return { ok: false as const, resposta: falhaDaEscritaDePlatformAdmin(err, requestId) };
   }
 }
 
@@ -80,8 +82,8 @@ async function exigirPlataformaParaEscrever(requestId: string) {
 
 export async function GET(req: NextRequest) {
   const requestId = randomUUID();
-  const ctx = await exigirPlataforma();
-  if (!ctx) return fail("forbidden", "Platform admin required", 403, { requestId });
+  const acessoDaPlataforma = await exigirPlataforma(requestId);
+  if (!acessoDaPlataforma.ok) return acessoDaPlataforma.resposta;
 
   const orgId = req.nextUrl.searchParams.get("organization_id");
   if (!orgId) return fail("validation_failed", "organization_id é obrigatório.", 422, { requestId });

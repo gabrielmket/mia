@@ -12,7 +12,7 @@
  */
 import { NextResponse } from "next/server";
 
-import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { falhaDaEscritaDePlatformAdmin, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -20,8 +20,9 @@ export const dynamic = "force-dynamic";
 export async function GET(): Promise<Response> {
   try {
     await requirePlatformAdmin();
-  } catch {
-    return new NextResponse(null, { status: 403 });
+  } catch (err) {
+    // v1.88 (#3207): `mfa_required` chega como ele é; o resto segue no 403.
+    return falhaDaEscritaDePlatformAdmin(err);
   }
 
   const admin = createAdminClient();
