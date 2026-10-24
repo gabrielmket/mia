@@ -102,7 +102,11 @@ beforeEach(() => {
 
 describe("a lista: 69 ferramentas, e os tipos de ação seguem os do upstream", () => {
   it("as v1.87 e v1.88 não acrescentaram ferramenta (69)", () => {
-    expect(FERRAMENTAS).toHaveLength(69);
+    // A contagem mora no teste da entrega mais nova: o assistente da MIA (.88)
+    // acrescentou cinco (tests/unit/mcp-de-implantacao-assistente.test.ts). Aqui
+    // fica o que as v1.87 e v1.88 do upstream deixaram: nenhuma das 69 sumiu.
+    const doAssistente = FERRAMENTAS.filter((f) => /assistente|chamado/.test(f.name));
+    expect(FERRAMENTAS.length - doAssistente.length).toBe(69);
   });
 
   it("⭐ os tipos de ação são EXATAMENTE os do upstream: a v1.88 trouxe `notify_team` (#2642)", () => {

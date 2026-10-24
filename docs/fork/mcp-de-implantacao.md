@@ -187,8 +187,12 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **69** ferramentas no servidor: as 61 desta página e as 8 da migração
-([`mcp-de-migracao.md`](mcp-de-migracao.md)). A fusão das v1.87 e v1.88 (.86) não pediu
+São **74** ferramentas no servidor: as 66 desta página e as 8 da migração
+([`mcp-de-migracao.md`](mcp-de-migracao.md)). As cinco mais novas (.88) são as do
+assistente da MIA ([`assistente.md`](assistente.md)): `plataforma_configurar_assistente`,
+`plataforma_garantir_conhecimento_do_assistente`, `plataforma_ver_assistente`,
+`plataforma_ver_chamados` e `plataforma_responder_chamado` (veja "O assistente da MIA
+(.88)", nesta seção). A fusão das v1.87 e v1.88 (.86) não pediu
 ferramenta nova, só campos e regras novas (veja "O que chegou do upstream 1.87 e 1.88",
 nesta seção). A mais nova (.84, a fusão do upstream
 v1.86) é `plataforma_copiar_followup`: a exportação e a importação de fluxo da tela,
@@ -574,6 +578,23 @@ e vale ao publicar; a régua está em `lib/agent-engine/agent/horario-da-ia.ts`.
 | A leitura | `plataforma_ver_agentes` devolve, por agente, `horario_de_atendimento` da versão PUBLICADA: `faixas`, `fuso`, `ativa_agora`, `proxima_troca` (`em`, `texto` como "hoje às 17:30", `fica`), `janela_de_resposta_do_numero` e `fora_da_janela_de_resposta_do_numero`. Com `agente`, a versão vigente traz o horário dela (o rascunho, se houver) | |
 | A janela de RESPOSTA do número | campo novo `janela_de_resposta: { inicio_hora, fim_hora }` (0 a 24; `null` volta a seguir a janela de disparo) em `plataforma_configurar_canal`, pela régua de `PUT /api/v1/ai/pacing`: grava só `resposta_start_hour`/`resposta_end_hour`, reprograma os turnos que esperavam a janela e audita `ai.pacing_knobs_updated`. Disparo, retomada e prospecção não mudam. `plataforma_ver_configuracao`, seção `canais`, devolve a janela | `implantar_configuracao` |
 
+### O assistente da MIA (.88)
+
+Função do fork ([`assistente.md`](assistente.md)), e entra no MCP na mesma versão. A
+prova está em `tests/unit/mcp-de-implantacao-assistente.test.ts`, que guarda a
+CONTAGEM da lista (74). Uma operação nova, `responder_chamados`: responder FALA, em nome
+da Time Company, com a equipe do cliente (no assistente, no sino e por e-mail), e isso
+não é montagem. O token que já existe não a tem: para usar
+`plataforma_responder_chamado`, marque a caixinha nova em Admin › Tokens de plataforma.
+
+| ferramenta | o que faz | operação | reexecução |
+|---|---|---|---|
+| `plataforma_configurar_assistente` | liga e desliga o assistente na empresa (`ligado`), diz quais papéis usam (`papeis`), o limite de perguntas por pessoa por dia (padrão 50, até 1000) e se o resumo da manhã nasce ligado (`resumo_da_manha_padrao`, padrão desligado). Só o que vier no pedido muda; devolve o antes e o depois | `implantar_configuracao` | mesma resposta, sem efeito novo |
+| `plataforma_garantir_conhecimento_do_assistente` | a base própria da empresa ("como trabalhamos aqui"), por TÍTULO (sem diferença de maiúscula): cria, atualiza ou tira (`remover`). Até 30 itens, texto de até 2000 caracteres | `implantar_configuracao` | o título repetido atualiza em vez de duplicar (`iguais` quando nada mudou) |
+| `plataforma_ver_assistente` | a configuração, o uso dos últimos 30 dias por papel (perguntas e pessoas), as perguntas sem resposta (o texto e quantas vezes, nunca a conversa), os itens da base própria e o custo do mês (chamadas e centavos, de `llm_calls` com `purpose = 'assistente'`) | leitura | |
+| `plataforma_ver_chamados` | os chamados de uma empresa ou de todas (sem `organization_id`), com o contexto que o assistente juntou; por padrão só os abertos. Os da empresa de demonstração não entram | leitura | |
+| `plataforma_responder_chamado` | responde e muda a situação de um chamado pelo NÚMERO; com resposta nova ou ao resolver, quem abriu recebe no assistente, no sino e no e-mail. Recusa o chamado da demonstração | `responder_chamados` | a mesma resposta não entrega de novo |
+
 ### O que chegou do upstream 1.85 (.83)
 
 Mesma regra, na fusão da v1.85. A prova de cada linha está em
@@ -748,6 +769,7 @@ Testes:
 
 | arquivo | o que mede |
 |---|---|
+| `tests/unit/mcp-de-implantacao-assistente.test.ts` | as cinco ferramentas do assistente da MIA (.88): o que gravam, a reexecução, a operação própria do responder, a entrega da resposta no assistente, no sino e no e-mail, a recusa do chamado da demonstração, e a CONTAGEM da lista (74) |
 | `tests/unit/mcp-de-implantacao-ferramentas.test.ts` | o catálogo: descrições, exemplos que passam no próprio esquema, a guarda da operação, organização inexistente, recusa que ensina, auditoria |
 | `tests/unit/mcp-de-implantacao-operacoes.test.ts` | cada ferramenta: o que grava, a reexecução, as recusas e a empresa de demonstração |
 | `tests/unit/mcp-de-implantacao-conversoes.test.ts` | as seis ferramentas de conversões: o que gravam, que montar não liga, a reexecução, as recusas, a resposta sem segredo e a empresa de demonstração |

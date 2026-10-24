@@ -29,6 +29,8 @@
  * fez" tem as duas metades: a pessoa responsável e a chave usada.
  */
 import { FERRAMENTAS_DE_AGENTE } from "./ferramentas/agente";
+// FORK MIA (.88): o assistente da MIA (docs/fork/assistente.md).
+import { FERRAMENTAS_DO_ASSISTENTE } from "./ferramentas/assistente";
 import { FERRAMENTAS_DE_AUTOMACAO_E_AGENDA } from "./ferramentas/automacoes-e-agenda";
 import { FERRAMENTAS_DE_CANAIS_E_INTEGRACOES } from "./ferramentas/canais-e-integracoes";
 import { FERRAMENTAS_DO_CHECKLIST } from "./ferramentas/checklist";
@@ -81,6 +83,7 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DE_IMPORTACAO,
   // as empresas de demonstração por segmento (docs/fork/cliente-modelo.md)
   ...FERRAMENTAS_DE_DEMONSTRACAO,
+  ...FERRAMENTAS_DO_ASSISTENTE,
 ];
 
 export const FERRAMENTA_POR_NOME = new Map(FERRAMENTAS.map((f) => [f.name, f]));
