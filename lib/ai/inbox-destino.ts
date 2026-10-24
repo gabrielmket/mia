@@ -43,6 +43,17 @@ export const REFERENCIAS_DE_AVISO = {
   // `lib/tarefas/criar-tarefa.ts`). Sem referência o botão cairia na Central,
   // meio caminho — quem recebe o aviso já está nela.
   task: { tabela: "crm_tasks", papel: "agent", rotulo: "Abrir tarefa", href: () => "/app/tasks" },
+  // FORK MIA (.88): o assistente da MIA (`lib/assistente/`). A resposta da Time a
+  // um chamado e o resumo da manhã chegam no sino de UMA pessoa
+  // (`para_user_id`), e o botão leva ao assistente. A tabela é lida pela sessão
+  // de quem recebe: o chamado e a conversa são dela (RLS da 9050).
+  mia_chamado: { tabela: "mia_chamados", papel: "viewer", rotulo: "Ver a resposta", href: () => "/app/assistente?aba=chamados" },
+  mia_assistente_resumo: {
+    tabela: "mia_assistente_conversas",
+    papel: "viewer",
+    rotulo: "Abrir o resumo",
+    href: (id: string) => `/app/assistente?conversa=${id}`,
+  },
 } satisfies Record<string, Alvo>;
 
 export type InboxRefKind = keyof typeof REFERENCIAS_DE_AVISO | "organization" | "ai_budget" | "plano" | "job_queue" | "cron_jobs";
@@ -193,7 +204,8 @@ export const POLITICAS_DE_AVISO = {
   // `agent_case`: o caso que a IA abriu, na Central no instante da abertura
   // (`lib/escalacao/caso-na-central.handler.ts`). FORK MIA:
   // `mia_leads_da_meta_formulario`, o formulário da Meta cuja leitura parou.
-  other: { refs: ["agenda_reminder_sender", "lead", "channel_session", "appointment", "ai_agent", "ai_provider_credential", "agent_case", "mia_leads_da_meta_formulario"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
+  // FORK MIA (.88): `mia_chamado` e `mia_assistente_resumo`, do assistente da MIA.
+  other: { refs: ["agenda_reminder_sender", "lead", "channel_session", "appointment", "ai_agent", "ai_provider_credential", "agent_case", "mia_leads_da_meta_formulario", "mia_chamado", "mia_assistente_resumo"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
 } satisfies Record<InboxKind, Politica>;
 
 /**

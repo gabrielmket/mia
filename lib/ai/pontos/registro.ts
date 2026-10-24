@@ -357,6 +357,24 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
       "Quem vai decidir o caso pergunta e não recebe resposta — decide sem o contexto, ou larga o caso na fila.",
     registraEm: "llm_calls",
   },
+  // FORK MIA (.88) — o assistente da MIA (docs/fork/assistente.md), a fase 1 do
+  // agente interno da spec do upstream (#2860). A IA é da plataforma: o ponto
+  // segue a escolha do painel (ou o padrão da organização), e o gasto entra no
+  // consumo de IA da empresa. Ferramentas só de leitura, com o cliente da sessão.
+  {
+    id: "assistente",
+    rotulo: "Responder a equipe no assistente",
+    oQueFaz:
+      "Responde às perguntas da equipe no assistente da MIA: a rotina do dia, as prioridades, os leads, a performance e como usar o sistema, " +
+      "com os mesmos números das telas e só o que cada pessoa já vê. Nunca fala com o cliente nem muda nada no sistema.",
+    papel: "entender",
+    // `tools`: o turno lê o CRM pelas ferramentas de leitura (lib/assistente/ferramentas.ts).
+    exige: { tools: true },
+    emissor: "lib/assistente/modelo.ts",
+    sintomaDeFalha:
+      "A pessoa pergunta ao assistente e recebe só o aviso de que ele não conseguiu responder agora; os números continuam nas telas.",
+    registraEm: "llm_calls",
+  },
   {
     id: "sentiment_classify",
     rotulo: "Medir o clima da conversa",

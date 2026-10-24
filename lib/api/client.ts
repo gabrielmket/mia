@@ -1,6 +1,7 @@
 import type { ZodSchema } from "zod";
 
 import { ApiError, type ApiErrorBody } from "@/lib/api/types";
+import { anotarRecusaDoServidor } from "@/lib/assistente/ultima-recusa"; // FORK MIA (.88)
 import { mostrarAvisoOrgDivergente } from "@/lib/auth/aviso-org-divergente";
 import { CODIGO_ORG_DIVERGENTE, HEADER_ORG_DA_ABA, orgDaAba } from "@/lib/auth/org-da-aba";
 import { randomId } from "@/lib/random-id";
@@ -353,6 +354,9 @@ async function request<T>(
             idioma: aba?.idioma ?? null,
           });
         }
+        // FORK MIA (.88): a "mensagem do sistema" que o assistente da MIA junta
+        // ao chamado e confere antes de abrir um Erro (lib/assistente/ultima-recusa.ts).
+        anotarRecusaDoServidor({ mensagem: e.message, codigo: e.code ?? null, status: res.status, rota: path });
         throw new ApiError(
           res.status,
           e.code ?? synthesizeCode(res.status),

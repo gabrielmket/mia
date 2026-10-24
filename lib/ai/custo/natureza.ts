@@ -64,6 +64,10 @@ const DO_SISTEMA = new Set<string>([
   "proposal_assistant",
   "proposal_fill_from_conversation",
   "case_chat",
+  // FORK MIA (.88): o assistente da MIA responde à EQUIPE (a rotina, os números,
+  // o uso do sistema), num dia em que o cliente pode nem ter escrito. Não há
+  // conversa com cliente na linha: é sistema, como `case_chat`.
+  "assistente",
   // Ler o valor da venda na conversa (upstream 1.70): roda no dreno de eventos
   // quando um negócio vindo de anúncio é GANHO sem valor, para a compra seguir
   // à Meta. Varia com venda fechada, não com mensagem do cliente, e acontece no
