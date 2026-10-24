@@ -900,6 +900,26 @@ export interface ExportPayload {
    * Opcional como `conversation_notes`: o tipo é montado à mão nos testes de PDF.
    */
   obrigacoes?: ObrigacaoExportada[];
+  /**
+   * FORK MIA (9047) — o traço de cada turno do agente com o titular (0721 do
+   * upstream): quando, qual agente e modelo, como terminou, quantas mensagens
+   * saíram e as ferramentas chamadas, com o texto de erro do turno e de cada
+   * ferramenta. A anonimização (9047) apaga esses textos de erro; o que se
+   * apaga a pedido dele é o que se entrega a pedido dele (Art. 18 II). Pelo
+   * contato e pelas conversas dele, como a redação. Opcional como
+   * `obrigacoes`: o tipo é montado à mão nos testes de PDF.
+   */
+  tracos_do_turno?: Array<{
+    id: string;
+    created_at: string | null;
+    agent_id: string | null;
+    model: string | null;
+    status: string;
+    abort_reason: string | null;
+    error_message: string | null;
+    messages_sent: number;
+    ferramentas: unknown;
+  }>;
   /** Por qual anúncio ela chegou — ver `AdClickRow`. */
   cliques_de_anuncio: AdClickRow[];
   appointment_notices: AppointmentNoticeRow[];
@@ -2339,6 +2359,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   // ferramentas, que pode trazer dado de outras pessoas (`toolCallsParaOTitular`).
   const lead_notes: NonNullable<ExportPayload["lead_notes"]> = [];
   const ai_agent_runs: NonNullable<ExportPayload["ai_agent_runs"]> = [];
+  const tracos_do_turno: NonNullable<ExportPayload["tracos_do_turno"]> = [];
   const lead_state: NonNullable<ExportPayload["lead_state"]> = [];
   if (contactId) {
     // A tabela entra por `.from("<nome>")` literal em quem chama, não por
@@ -2411,6 +2432,27 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     // O teto e a ordem de antes: os 500 atendimentos mais recentes.
     ai_runs.sort((a, b) => (a.started_at < b.started_at ? 1 : a.started_at > b.started_at ? -1 : 0));
     ai_runs.splice(500);
+    // FORK MIA (9047): o traço do turno, com o MESMO alcance da redação (o
+    // contato e as conversas dele). Só turno real: a prévia (`is_dry_run`) é o
+    // teste do agente pela equipe, não atendimento a ele.
+    for (const traco of await lePaginado((de, ate) => {
+      const q = admin
+        .from("agent_turn_traces")
+        .select("id, created_at, agent_id, model, status, abort_reason, error_message, messages_sent, ferramentas")
+        .eq("organization_id", organizationId)
+        .eq("is_dry_run", false);
+      return (
+        idsDeConversaDoTitular.length > 0
+          ? q.or(
+              `contact_id.eq.${contactId},conversation_id.in.(${idsDeConversaDoTitular.join(",")})`,
+            )
+          : q.eq("contact_id", contactId)
+      )
+        .order("id")
+        .range(de, ate);
+    })) {
+      tracos_do_turno.push(traco as NonNullable<ExportPayload["tracos_do_turno"]>[number]);
+    }
     for (const estado of await lePaginado((de, ate) =>
       admin
         .from("lead_state")
@@ -2791,6 +2833,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     contact_field_proposals,
     lead_notes,
     ai_agent_runs,
+    tracos_do_turno,
     lead_state,
     b2b,
   };

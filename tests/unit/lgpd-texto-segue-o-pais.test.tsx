@@ -193,14 +193,15 @@ async function dataJson(country: string | null, timezone: string, pais?: string 
  * sobe é `copiaDoTitular(data)` (`lgpd-copia-do-titular.test.ts`); estes
  * fixtures travam o payload de onde saem o PDF e essa cópia.
  */
-// FORK MIA: as quatro seções que o fork acrescenta ao payload (0266, 9018) saem
-// antes da comparação com as fixtures do upstream; a cópia do titular e o PDF
-// que as entregam têm testes próprios.
+// FORK MIA: as cinco seções que o fork acrescenta ao payload (0266, 9018, 9047)
+// saem antes da comparação com as fixtures do upstream; a cópia do titular e o
+// PDF que as entregam têm testes próprios.
 const semAsSecoesDoFork = ({
   ai_runs: _a,
   broadcasts_recebidos: _b,
   cliques_de_anuncio: _c,
   obrigacoes: _o,
+  tracos_do_turno: _t,
   ...resto
 }: ExportPayload) => resto;
 const comoGravado = (p: ExportPayload) =>
