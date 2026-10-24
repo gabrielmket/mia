@@ -1064,6 +1064,21 @@ export const NAV_CATALOG = [
     minRole: "manager",
   },
   {
+    // FORK MIA (.89): a configuração do disparo de e-mail marketing (domínio,
+    // remetentes, rodapé, ritmo, aquecimento, supressão e os textos de
+    // consentimento). Vizinha de Créditos porque o custo sai da mesma carteira.
+    // Some para quem não contratou o módulo `email_marketing`
+    // (lib/modulos/vendaveis.ts). manager+ vê; só o admin muda (a rota recusa).
+    // As CAMPANHAS de e-mail não moram aqui: são o terceiro caminho do Broadcast.
+    href: "/app/settings/email-marketing",
+    label: "E-mail marketing",
+    description: "Domínio, remetentes, rodapé, ritmo e lista de supressão das campanhas de e-mail.",
+    icon: "PaperPlaneTilt",
+    group: "organizacao",
+    section: "Sua empresa",
+    minRole: "manager",
+  },
+  {
     href: "/app/team",
     label: "Equipe",
     description: "Quem trabalha aqui, com qual papel e quanta conversa cada um aguenta.",

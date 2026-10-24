@@ -4,7 +4,7 @@ import { ROLE_RANK, type Role } from "@/lib/auth/types";
 import type { ModuloOpcional } from "@/lib/instalacao/modulos";
 import type { CapacidadeDaOrganizacao } from "@/lib/organizacao/capacidades";
 import { NAV_CATALOG, type NavMetadata, type NavDestinationId } from "./catalogo";
-import { moduloDaTela } from "@/lib/modulos/vendaveis";
+import { modulosQueAbremATela } from "@/lib/modulos/vendaveis";
 import {
   mostraEmpresas,
   TELA_DE_EMPRESAS,
@@ -279,10 +279,12 @@ export function destinosDaInterface(
     // que os módulos já aplicam logo abaixo.
     if (semEmpresas && d.href === TELA_DE_EMPRESAS && !platform) return false;
     if (contratados) {
-      const exigido = moduloDaTela(d.href);
+      // FORK MIA (.89): uma tela pode abrir para mais de um módulo (o Broadcast e
+      // a carteira servem também ao e-mail marketing — `TELAS_TAMBEM_DE`).
+      const exigidos = modulosQueAbremATela(d.href);
       // Admin de plataforma enxerga tudo: é ele quem libera, e precisa achar a
       // tela para conferir o que o cliente vê.
-      if (exigido && !contratados.has(exigido) && !platform) return false;
+      if (exigidos.length > 0 && !exigidos.some((m) => contratados.has(m)) && !platform) return false;
     }
     return (
       essencial(d, role, platform) ||

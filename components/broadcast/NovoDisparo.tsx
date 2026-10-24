@@ -39,6 +39,8 @@ import { formatCentsBRL } from "@/lib/money";
 import { ArrowBendUpLeft, QrCode, ShieldCheck, Warning } from "@/lib/ui/icons";
 
 import { FormularioDoOficial } from "./FormularioDoOficial";
+// FORK MIA (.89): o terceiro caminho, e-mail (docs/fork/email-marketing.md).
+import { CartaoDoEmail } from "@/components/email-marketing/CartaoDoEmail";
 
 export function NovoDisparo({
   canais,
@@ -74,7 +76,7 @@ export function NovoDisparo({
         </p>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label={t("Por onde sai")}>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" role="group" aria-label={t("Por onde sai")}>
         <Card
           className={`flex flex-col gap-3 p-4 ${escolhido === "oficial" ? "border-accent ring-1 ring-accent" : ""}`}
           data-canal="oficial"
@@ -129,12 +131,21 @@ export function NovoDisparo({
               ? t("Nenhum número por QR conectado. Conecte um em Conexões.")
               : `${t("No formulário, escolha um destes números:")} ${porQr.map((n) => channelLabel(n, t)).join(", ")}`}
           </p>
-          {/* Sempre liberado quando esta tela abre (`decidirAcesso`): sem o QR
-              não sobra canal, e a página diz "não contratado" antes. */}
-          <Button className="mt-auto" variant="outline" asChild>
-            <Link href="/app/campaigns/new">{t("Usar o número por QR")}</Link>
-          </Button>
+          {/* FORK MIA (.89): desde o e-mail, esta tela abre também para quem só
+              contratou o e-mail marketing; aí o QR aparece como não contratado. */}
+          {canais.qr ? (
+            <Button className="mt-auto" variant="outline" asChild>
+              <Link href="/app/campaigns/new">{t("Usar o número por QR")}</Link>
+            </Button>
+          ) : (
+            <Button className="mt-auto" variant="outline" disabled title={t("O número por QR não foi contratado para esta empresa.")}>
+              {t("Não contratado")}
+            </Button>
+          )}
         </Card>
+
+        {/* FORK MIA (.89): o terceiro caminho. Nada do que existia sai daqui. */}
+        <CartaoDoEmail liberado={canais.email === true} />
       </div>
 
       {escolhido === "oficial" ? <FormularioDoOficial /> : null}

@@ -23,6 +23,7 @@ import { createClient } from "@/lib/supabase/server";
 import { moduloLiberado } from "@/lib/modulos/liberacao";
 import { lerSaldoDaCarteira } from "@/lib/carteira/ler-saldo";
 import { creditoAcabando, podeDisparar } from "@/lib/carteira/saldo";
+import { PRECO_PADRAO_POR_EMAIL_CENTS } from "@/lib/email-marketing/regras";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,13 @@ export async function GET(_req: NextRequest) {
   // recusar: link antigo, favorito e chamada direta continuam chegando aqui.
   // Crédito só existe para gastar no disparador — mostrar saldo a quem não
   // contratou seria vender por acidente.
-  if (!(await moduloLiberado(db, org.orgId, "disparador"))) {
+  // FORK MIA (.89): a carteira é a MESMA do disparo de e-mail marketing, e
+  // abre também para quem só contratou ele (lib/modulos/vendaveis.ts, TELAS_TAMBEM_DE).
+  const [doBroadcast, doEmail] = await Promise.all([
+    moduloLiberado(db, org.orgId, "disparador"),
+    moduloLiberado(db, org.orgId, "email_marketing"),
+  ]);
+  if (!doBroadcast && !doEmail) {
     return fail("forbidden", "Módulo não contratado.", 403, { requestId });
   }
 
@@ -65,7 +72,7 @@ export async function GET(_req: NextRequest) {
     lerSaldoDaCarteira(db, org.orgId),
     db
       .from("tenant_broadcast_pricing")
-      .select("preco_por_mensagem_cents, alerta_saldo_cents")
+      .select("preco_por_mensagem_cents, alerta_saldo_cents, preco_por_email_cents")
       .eq("organization_id", org.orgId)
       .maybeSingle(),
   ]);
@@ -104,6 +111,12 @@ export async function GET(_req: NextRequest) {
       // NULL aqui não é "ilimitado": é "ninguém combinou preço ainda", e a tela
       // tem de dizer isso, porque é o motivo pelo qual o disparo vai recusar.
       mensagens_que_cabem: capacidade.mensagens_que_cabem,
+      // FORK MIA (.89): o preço por e-mail de marketing (nulo = o padrão de R$ 0,02).
+      preco_por_email_cents:
+        (precoRes.data as { preco_por_email_cents?: number | null } | null)?.preco_por_email_cents ??
+        PRECO_PADRAO_POR_EMAIL_CENTS,
+      email_marketing: doEmail,
+      disparador: doBroadcast,
       credito_acabando: creditoAcabando(saldo.saldo_cents, alerta),
       alerta_saldo_cents: alerta,
       extrato: (extratoRes.data ?? []).map((l) => ({

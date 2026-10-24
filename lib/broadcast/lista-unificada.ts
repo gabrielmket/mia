@@ -16,7 +16,8 @@
  */
 import type { StatusDaCampanha } from "@/lib/campanhas/tipos";
 
-export type CanalDoDisparo = "oficial" | "qr";
+// FORK MIA (.89): o terceiro caminho, e-mail (docs/fork/email-marketing.md).
+export type CanalDoDisparo = "oficial" | "qr" | "email";
 
 export type StatusDoBroadcast =
   | "rascunho"
@@ -62,6 +63,20 @@ export interface DisparoOficialNaEntrada {
   andamento: { total: number; enviada?: number; entregue?: number; lida?: number; falhou?: number };
 }
 
+/** O que a lista precisa de uma campanha de e-mail (a linha de `GET /api/v1/email-marketing/campanhas`). */
+export interface CampanhaDeEmailNaEntrada {
+  id: string;
+  nome: string;
+  status: StatusDoBroadcast;
+  agendada_para: string | null;
+  iniciada_em: string | null;
+  concluida_em: string | null;
+  total_previsto: number | null;
+  preco_cents: number | null;
+  created_at: string;
+  andamento: Record<string, number> | null;
+}
+
 /** Qual data importa agora — mostrar "criada em" num disparo que já terminou é ruído. */
 export type Quando =
   | { tipo: "comeca"; em: string }
@@ -71,6 +86,7 @@ export type Quando =
 
 export type ResumoDaLinha =
   | { canal: "qr"; naLista: number; fora: number }
+  | { canal: "email"; naLista: number; saiu: number; custoCents: number | null }
   | {
       canal: "oficial";
       naLista: number;
@@ -152,6 +168,24 @@ export function doDisparoOficial(b: DisparoOficialNaEntrada): DisparoNaLista {
   };
 }
 
+/** FORK MIA (.89): uma campanha de e-mail na lista do Broadcast. */
+export function daCampanhaDeEmail(c: CampanhaDeEmailNaEntrada): DisparoNaLista {
+  const status = STATUS_DO_BROADCAST_NA_LISTA[c.status] ?? "draft";
+  const a = c.andamento ?? {};
+  const saiu = (a.enviado ?? 0) + (a.entregue ?? 0) + (a.rejeitado ?? 0) + (a.reclamacao ?? 0);
+  const naLista = c.total_previsto ?? 0;
+  return {
+    id: c.id,
+    canal: "email",
+    nome: c.nome,
+    status,
+    criadoEm: c.created_at,
+    quando: quando(status, { agendada: c.agendada_para, comecou: c.iniciada_em, terminou: c.concluida_em, criada: c.created_at }),
+    resumo: { canal: "email", naLista, saiu, custoCents: c.preco_cents === null ? null : c.preco_cents * saiu },
+    href: `/app/broadcast/email/${c.id}`,
+  };
+}
+
 export interface FiltrosDaLista {
   /** Vazio = todas as situações. No vocabulário das Campanhas. */
   status?: StatusDaCampanha | "";
@@ -174,24 +208,27 @@ export interface FiltrosDaLista {
 export function mesclarDisparos(
   qr: readonly CampanhaQrNaEntrada[],
   oficiais: readonly DisparoOficialNaEntrada[],
-  opcoes: { qrTemMais: boolean; filtros?: FiltrosDaLista } = { qrTemMais: false },
+  opcoes: { qrTemMais: boolean; filtros?: FiltrosDaLista; email?: readonly CampanhaDeEmailNaEntrada[] } = { qrTemMais: false },
 ): DisparoNaLista[] {
   const filtros = opcoes.filtros ?? {};
   // O filtro de QR que vale é o de fora da lista, e a API já filtra, então aqui a
   // lista chega recortada. Filtrar de novo é idempotente e deixa a função honesta
   // para quem a chamar com a lista inteira.
   const noFiltro = (d: DisparoNaLista) => !filtros.status || d.status === filtros.status;
-  const deQr = (filtros.canal === "oficial" ? [] : qr.map(daCampanhaQr)).filter(noFiltro);
-  let deOficial = (filtros.canal === "qr" ? [] : oficiais.map(doDisparoOficial)).filter(noFiltro);
+  const deQr = (filtros.canal === "oficial" || filtros.canal === "email" ? [] : qr.map(daCampanhaQr)).filter(noFiltro);
+  let deOficial = (filtros.canal === "qr" || filtros.canal === "email" ? [] : oficiais.map(doDisparoOficial)).filter(noFiltro);
+  // FORK MIA (.89): o e-mail vem de uma vez, como o oficial.
+  let deEmail = (filtros.canal && filtros.canal !== "email" ? [] : (opcoes.email ?? []).map(daCampanhaDeEmail)).filter(noFiltro);
 
   // O piso é medido na página de QR que CHEGOU, antes de qualquer filtro de canal:
   // com o filtro "só oficial", não há página de QR em jogo e nada espera.
-  if (opcoes.qrTemMais && filtros.canal !== "oficial" && qr.length > 0) {
+  if (opcoes.qrTemMais && filtros.canal !== "oficial" && filtros.canal !== "email" && qr.length > 0) {
     const piso = Math.min(...qr.map((c) => Date.parse(c.created_at)));
     deOficial = deOficial.filter((d) => Date.parse(d.criadoEm) >= piso);
+    deEmail = deEmail.filter((d) => Date.parse(d.criadoEm) >= piso);
   }
 
-  return [...deQr, ...deOficial].sort((a, b) => {
+  return [...deQr, ...deOficial, ...deEmail].sort((a, b) => {
     const diferenca = Date.parse(b.criadoEm) - Date.parse(a.criadoEm);
     if (diferenca !== 0) return diferenca;
     return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;

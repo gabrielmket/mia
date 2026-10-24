@@ -63,6 +63,12 @@ export interface CanaisLiberados {
   oficial: boolean;
   /** Número por QR: exige o módulo só com o interruptor ligado. */
   qr: boolean;
+  /**
+   * FORK MIA (.89): o terceiro caminho, E-MAIL (docs/fork/email-marketing.md).
+   * Exige o módulo `email_marketing`, que se vende à parte do `disparador`.
+   * Ausente = quem montou o acesso não perguntou (lido como "não").
+   */
+  email?: boolean;
 }
 
 /**
@@ -96,11 +102,14 @@ export function decidirAcesso(entrada: {
   papelSuficiente: boolean;
   contratado: boolean;
   qrExigeOModulo?: boolean;
+  /** FORK MIA (.89): o módulo `email_marketing`. Ausente = não perguntado. */
+  emailContratado?: boolean;
 }): AcessoAoBroadcast {
   if (!entrada.temOrganizacao) return { estado: "sem_organizacao" };
   if (!entrada.papelSuficiente) return { estado: "sem_papel" };
-  const canais = canaisLiberados(entrada.contratado, entrada.qrExigeOModulo ?? QR_EXIGE_O_MODULO);
-  if (!canais.oficial && !canais.qr) return { estado: "nao_contratado" };
+  const canais: CanaisLiberados = canaisLiberados(entrada.contratado, entrada.qrExigeOModulo ?? QR_EXIGE_O_MODULO);
+  if (entrada.emailContratado !== undefined) canais.email = entrada.emailContratado;
+  if (!canais.oficial && !canais.qr && !canais.email) return { estado: "nao_contratado" };
   return { estado: "liberado", canais };
 }
 

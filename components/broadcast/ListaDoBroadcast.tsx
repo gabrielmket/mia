@@ -26,7 +26,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCampanhas } from "@/hooks/campanhas/useCampanhas";
+// FORK MIA (.89): as campanhas de e-mail, o terceiro caminho.
+import { useCampanhasDeEmail } from "@/hooks/useEmailMarketing";
+import { useCampanhasDoQr } from "@/hooks/useCampanhasDoQr";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { useBroadcasts } from "@/hooks/useBroadcasts";
@@ -39,7 +41,7 @@ import {
 } from "@/lib/broadcast/lista-unificada";
 import { STATUS_DA_CAMPANHA, type StatusDaCampanha } from "@/lib/campanhas/tipos";
 import { formatCentsBRL } from "@/lib/money";
-import { Megaphone, Plus, QrCode, ShieldCheck, Warning } from "@/lib/ui/icons";
+import { EnvelopeSimple, Megaphone, Plus, QrCode, ShieldCheck, Warning } from "@/lib/ui/icons";
 
 import { rotuloDaSituacao } from "./textos";
 
@@ -53,21 +55,23 @@ export function ListaDoBroadcast({ canais }: { canais: CanaisLiberados }) {
   // (`decidirAcesso`: sem o QR não sobra canal, e a página diz "não
   // contratado"). Por isso a consulta das campanhas não tem interruptor.
   const filtrosQr = useMemo(() => ({ status: status || undefined, limit: 30 }), [status]);
-  const qr = useCampanhas(filtrosQr);
+  const qr = useCampanhasDoQr(filtrosQr, canais.qr);
   const oficiais = useBroadcasts({ habilitado: canais.oficial });
-  const carteira = useCarteira({ habilitado: canais.oficial });
+  const carteira = useCarteira({ habilitado: canais.oficial || canais.email === true });
+  const emails = useCampanhasDeEmail(canais.email === true);
 
   const campanhasQr = useMemo(() => qr.data?.pages.flatMap((p) => p.data) ?? [], [qr.data]);
   const disparos = useMemo(
     () =>
-      mesclarDisparos(campanhasQr, canais.oficial ? (oficiais.data ?? []) : [], {
-        qrTemMais: !!qr.hasNextPage,
+      mesclarDisparos(canais.qr ? campanhasQr : [], canais.oficial ? (oficiais.data ?? []) : [], {
+        qrTemMais: canais.qr && !!qr.hasNextPage,
         filtros: { status, canal },
+        email: canais.email ? (emails.data ?? []).map((e) => ({ ...e, status: e.status as "rascunho" })) : [],
       }),
-    [campanhasQr, oficiais.data, canais.oficial, qr.hasNextPage, status, canal],
+    [campanhasQr, oficiais.data, canais.oficial, canais.qr, canais.email, emails.data, qr.hasNextPage, status, canal],
   );
 
-  const carregando = qr.isLoading || (canais.oficial && oficiais.isLoading);
+  const carregando = (canais.qr && qr.isLoading) || (canais.oficial && oficiais.isLoading) || (canais.email === true && emails.isLoading);
 
   return (
     <div className="space-y-4 p-6">
@@ -86,7 +90,7 @@ export function ListaDoBroadcast({ canais }: { canais: CanaisLiberados }) {
         </Button>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className={`grid gap-3 sm:grid-cols-2 ${canais.email ? "lg:grid-cols-3" : ""}`}>
         <Card className="space-y-2 p-4" data-canal="oficial">
           <div className="flex items-center gap-2">
             <ShieldCheck size={18} aria-hidden />
@@ -130,6 +134,26 @@ export function ListaDoBroadcast({ canais }: { canais: CanaisLiberados }) {
             <Link href="/app/campaigns/settings">{t("Configuração")}</Link>
           </Button>
         </Card>
+        {canais.email ? (
+          // FORK MIA (.89): o terceiro caminho, e-mail.
+          <Card className="space-y-2 p-4" data-canal="email">
+            <div className="flex items-center gap-2">
+              <EnvelopeSimple size={18} aria-hidden />
+              <h2 className="font-medium">{t("E-mail")}</h2>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {t("Pelo domínio da empresa, só para quem tem base legal. Cada e-mail aceito é cobrado do seu crédito.")}
+            </p>
+            {carteira.data?.preco_por_email_cents != null ? (
+              <p className="text-sm">
+                {`${t("Saldo:")} ${formatCentsBRL(carteira.data.saldo_cents)} · ${formatCentsBRL(carteira.data.preco_por_email_cents)} ${t("por e-mail")}`}
+              </p>
+            ) : null}
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/app/settings/email-marketing">{t("Configuração")}</Link>
+            </Button>
+          </Card>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2">
@@ -160,11 +184,12 @@ export function ListaDoBroadcast({ canais }: { canais: CanaisLiberados }) {
         >
           <option value="">{t("Todos")}</option>
           {canais.oficial ? <option value="oficial">{t("Número oficial (Meta)")}</option> : null}
-          <option value="qr">{t("Número por QR")}</option>
+          {canais.qr ? <option value="qr">{t("Número por QR")}</option> : null}
+          {canais.email ? <option value="email">{t("E-mail")}</option> : null}
         </select>
       </div>
 
-      {qr.isError || (canais.oficial && oficiais.isError) ? (
+      {(canais.qr && qr.isError) || (canais.oficial && oficiais.isError) ? (
         <Card className="space-y-2 p-4">
           <p className="text-sm text-error-fg">
             {qr.isError
@@ -250,6 +275,11 @@ function LinhaDoDisparo({
                 <ShieldCheck size={12} weight="bold" aria-hidden />
                 {t("Oficial")}
               </>
+            ) : d.canal === "email" ? (
+              <>
+                <EnvelopeSimple size={12} weight="bold" aria-hidden />
+                {t("E-mail")}
+              </>
             ) : (
               <>
                 <QrCode size={12} weight="bold" aria-hidden />
@@ -271,6 +301,11 @@ function LinhaDoDisparo({
 /** O que decide o próximo clique: quantos, e — no oficial — quanto custa. */
 function resumo(d: DisparoNaLista, t: (texto: string) => string): string {
   const r = d.resumo;
+  if (r.canal === "email") {
+    // FORK MIA (.89): quantos na lista, quantos saíram e o que já custou.
+    const partes = [`${r.naLista} ${t("na lista")}`, `${r.saiu} ${t("enviados")}`, ...(r.custoCents !== null && r.saiu > 0 ? [formatCentsBRL(r.custoCents)] : [])];
+    return partes.join(" · ");
+  }
   if (r.canal === "qr") {
     const base = r.naLista > 0 ? `${r.naLista} ${t("contatos na lista")}` : t("lista ainda não preparada");
     return r.fora > 0 ? `${base} · ${r.fora} ${t("fora")}` : base;

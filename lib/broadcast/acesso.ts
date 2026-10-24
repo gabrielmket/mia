@@ -26,12 +26,17 @@ export async function acessoAoBroadcast(): Promise<{ user: AuthUser; acesso: Ace
   const org = await resolveActiveOrg(user);
   const papelSuficiente = !!org && roleAtLeast(org.role, "manager");
   // Só pergunta ao banco quando a resposta muda alguma coisa.
-  const contratado =
-    !!org && papelSuficiente
-      ? await moduloLiberado(await createClient(), org.orgId, MODULO_DO_BROADCAST)
-      : false;
+  const db = !!org && papelSuficiente ? await createClient() : null;
+  const [contratado, emailContratado] =
+    db && org
+      ? await Promise.all([
+          moduloLiberado(db, org.orgId, MODULO_DO_BROADCAST),
+          // FORK MIA (.89): o terceiro caminho, e-mail (docs/fork/email-marketing.md).
+          moduloLiberado(db, org.orgId, "email_marketing"),
+        ])
+      : [false, false];
   return {
     user,
-    acesso: decidirAcesso({ temOrganizacao: !!org, papelSuficiente, contratado }),
+    acesso: decidirAcesso({ temOrganizacao: !!org, papelSuficiente, contratado, emailContratado }),
   };
 }

@@ -47,6 +47,8 @@ import { CartaoDaCarteira } from "@/components/contacts/CartaoDaCarteira";
 import { AnonymizeDialog } from "@/components/contacts/AnonymizeDialog";
 import { PropostasDeDado } from "@/components/contacts/PropostasDeDado";
 import { RoteirosDoContato } from "@/components/contacts/RoteirosDoContato";
+// FORK MIA (.89): o consentimento de e-mail marketing na ficha.
+import { ConsentimentoNaFicha } from "@/components/email-marketing/ConsentimentoNaFicha";
 import { UltimasComprasDoContato } from "@/components/contacts/UltimasCompras";
 import { ConversaNoDossie } from "@/components/kanban/ConversaNoDossie";
 import { rotuloParaAEquipe } from "@/lib/contacts/rotulo-do-contato";
@@ -524,6 +526,13 @@ export function ContactDetailClient({ contactId, paineisDeModulo = [] }: Props) 
           <div className="mt-4">
             <RoteirosDoContato contactId={contactId} />
           </div>
+          {/* FORK MIA (.89): o consentimento de e-mail marketing (aceite com evidência,
+              recusa que entra na supressão). Atendente para cima: é o piso da rota. */}
+          {activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent && !contact.is_anonymized ? (
+            <div className="mt-4">
+              <ConsentimentoNaFicha contactId={contactId} podeRegistrar />
+            </div>
+          ) : null}
           {/* AS ÚLTIMAS COMPRAS (issue #3179): a MESMA seção do painel do Inbox,
               na ficha do contato — negócios ganhos em todos os funis, com data,
               título, valor, campos escolhidos pela organização e atalho. */}

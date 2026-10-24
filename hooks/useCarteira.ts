@@ -39,6 +39,10 @@ export interface Carteira {
    * o saldo é a soma só dos lançamentos mais recentes. A tela avisa.
    */
   saldo_truncado: boolean;
+  /** FORK MIA (.89): o preço por e-mail de marketing (já com o padrão aplicado). */
+  preco_por_email_cents?: number;
+  email_marketing?: boolean;
+  disparador?: boolean;
 }
 
 /**
