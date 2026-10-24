@@ -90,6 +90,14 @@ const DIVIDA_LGPD_CONHECIDA: Record<string, string> = {
     "`fn_lgpd_cascade_redact_contact` é do upstream, e redefini-la no baseline-mia.sql desfaria em " +
     "silêncio toda melhoria futura dele (docs/FORK-MIA.md, regra 3). Sai no dia em que " +
     "`tabelasNaCascata()` passar a ler os gatilhos de `contacts`.",
+  mia_email_destinatarios:
+    "Fork MIA (.89, migration 9062, supabase/baseline-mia.sql). Guarda `email`, o endereço COPIADO de cada " +
+    "destinatário de uma campanha de e-mail. ⚠️ ELA JÁ ESTÁ PROTEGIDA, pelo desenho de broadcast_recipients: o " +
+    "gatilho `trg_mia_email_marketing_contato_anonimizado` (9064) apaga o endereço e solta o contato na transição " +
+    "is_anonymized false → true (o hash fica, para o veto da supressão sobreviver), e " +
+    "`tests/invariants/email-marketing.test.ts` prova o efeito pelo comportamento. A entrada existe porque este " +
+    "instrumento lê UMA função, do upstream, que o fork não redefine (docs/FORK-MIA.md, regra 3). Sai no dia em que " +
+    "`tabelasNaCascata()` passar a ler os gatilhos de `contacts`.",
 };
 
 /** Tabelas no escopo: FK para contacts E coluna de conteúdo pessoal. */

@@ -134,6 +134,11 @@ export const O_QUE_FICA = {
     "os documentos e as obrigações dele e dos negócios dele, com o histórico de cada ciclo e as propostas feitas a partir de arquivos que ele mandou (o arquivo vai como nome e formato)",
   cliques_de_anuncio:
     "por qual anúncio ele chegou, com a query string crua da página (pode ter o e-mail e o nome dele: é o que a anonimização apaga)",
+  // FORK MIA (.89): o e-mail marketing.
+  emails_de_marketing:
+    "os e-mails de marketing que chegaram a ele: a campanha, o assunto, se foi entregue, aberto (estimativa), clicado e em quais links, e o descadastro",
+  consentimentos_de_email:
+    "cada aceite e recusa de e-mail marketing dele: quando, de onde, o texto aceito e a evidência (quem registrou fica de fora: é pessoa da equipe)",
   // FORK MIA (9047, fusão da .86): o traço do turno do agente (0721 do upstream).
   tracos_do_turno:
     "cada turno da IA na conversa com ele: quando, qual agente e modelo, como terminou e as ações chamadas, com o texto de erro (pode repetir o que ele disse: é o que a anonimização apaga)",

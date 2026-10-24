@@ -81,8 +81,10 @@ const SEM_FILTRO: Record<string, string> = {
   "webhook-log-retention": "retenção do arquivo de webhook: obrigação, nunca bloqueada",
   "webhook-replay": "reprocessa ENTRADA do WAHA; mensagem que chega continua gravada (spec §1.3)",
   // FORK MIA — as rotas de cron do fork (docs/FORK-MIA.md), com o mesmo critério.
-  // O motor do Broadcast (`broadcast-worker`) e o aviso das obrigações
-  // (`obrigacoes-avisos`) USAM a régua e não estão aqui.
+  // O motor do Broadcast (`broadcast-worker`), o aviso das obrigações
+  // (`obrigacoes-avisos`) e, desde a .89, o motor do disparo de e-mail
+  // (`email-marketing`, que filtra pelo status embutido e por `ehOperante` em
+  // lib/email-marketing/motor.ts) USAM a régua e não estão aqui.
   "agenda-microsoft-assinaturas":
     "FORK MIA: renova a assinatura de avisos do Outlook, o par do agenda-google-refresh; deliberadamente não gatilhada (spec §4)",
   "agenda-microsoft-push":

@@ -398,6 +398,30 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "lê e não grava, o catálogo é de manager, aviso só o servidor grava, e " +
       "item de negócio que a pessoa não enxerga não aparece para ela.",
   })),
+  // Fork MIA, 9060 a 9062 — o disparo de e-mail marketing (.89).
+  ...[
+    "mia_email_config",
+    "mia_email_dominios",
+    "mia_email_remetentes",
+    "mia_email_textos_de_consentimento",
+    "mia_email_consentimentos",
+    "mia_segmentos",
+    "mia_email_modelos",
+    "mia_email_campanhas",
+    "mia_email_testes",
+    "mia_email_destinatarios",
+    "mia_email_links",
+    "mia_email_cliques",
+    "mia_email_eventos",
+  ].map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/email-marketing.test.ts — dois tenants reais por JWT " +
+      "(manager): leitura positiva local e ZERO do vizinho nas duas direções, a " +
+      "tabela inteira sem filtro igual à própria, anon recusado; authenticated " +
+      "sem privilégio de escrita nem na própria organização (só o servidor grava); " +
+      "o consentimento é lido por atendente, o resto por gestor.",
+  })),
   // Fork MIA, 9040 — o montador de relatórios: relatórios salvos, painéis do
   // usuário e os itens, o registro das exportações e o funil dos prontos.
   ...[

@@ -63,6 +63,12 @@ it("todo handler mutante do app declara guarda de suporte ou é infraestrutura i
   // o acompanhamento só-leitura PRECISA vê-los. As rotas que escrevem
   // (`/relatorios`, `/relatorios/[id]`, `/exportar`, `/paineis/**`) têm a guarda.
   if(["app/api/v1/relatorios/calcular/route.ts","app/api/v1/relatorios/lista/route.ts","app/api/v1/relatorios/valores/route.ts"].includes(path))continue;
+  // FORK MIA (.89) — o disparo de e-mail LÊ por POST em dois lugares: a contagem
+  // do público (o corpo leva o recorte inteiro, que não cabe numa query string) e
+  // a conferência da campanha (o corpo leva o "quando", o ritmo e os dias úteis
+  // para montar o plano). Nenhuma das duas grava; as que gravam
+  // (`/campanhas/**`, `/configuracao`, `/dominio`, `/supressao/**`...) têm a guarda.
+  if(["app/api/v1/email-marketing/publico/route.ts","app/api/v1/email-marketing/campanhas/[id]/conferencia/route.ts"].includes(path))continue;
   const source=ts.createSourceFile(path,readFileSync(path,"utf8"),ts.ScriptTarget.Latest,true);
   // DUAS FORMAS de exportar um handler, e o gate precisa das duas. A varredura
   // só enxergava `export async function POST`; `export const PATCH = async () => {}`

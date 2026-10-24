@@ -766,6 +766,40 @@ export interface ObrigacaoExportada extends Omit<LinhaDeObrigacaoExportada, "con
 }
 
 /**
+ * FORK MIA (.89) — um e-mail de marketing que chegou (ou foi tentado) ao
+ * titular (migration 9062), com a campanha, o que aconteceu e os cliques de
+ * gente (o do robô de segurança fica de fora, como na tela).
+ */
+export interface EmailDeMarketingExportado {
+  campanha: string | null;
+  assunto: string | null;
+  email: string | null;
+  status: string;
+  motivo: string | null;
+  enviado_em: string | null;
+  entregue_em: string | null;
+  rejeitado_em: string | null;
+  rejeicao_tipo: string | null;
+  reclamacao_em: string | null;
+  primeira_abertura_em: string | null;
+  aberturas: number;
+  descadastrado_em: string | null;
+  cliques: Array<{ url: string | null; clicado_em: string }>;
+}
+
+/** FORK MIA (.89) — um aceite ou uma recusa de e-mail marketing do titular (migration 9061). */
+export interface ConsentimentoDeEmailExportado {
+  tipo: string;
+  ocorrido_em: string;
+  origem: string | null;
+  versao_do_texto: string | null;
+  texto_aceito: string | null;
+  aceitou_medicao: boolean | null;
+  evidencia: string | null;
+  registrado_pelo: string;
+}
+
+/**
  * O que o relatório entrega além do corpo do documento — o art. 15.º, n.º 1
  * alínea a alínea (issue #2340). Os valores VARIÁVEIS moram aqui; o texto fixo
  * da lei (al. e) e a linha do n.º 3 vêm de `lib/legal/art15.ts` no render.
@@ -900,6 +934,15 @@ export interface ExportPayload {
    * Opcional como `conversation_notes`: o tipo é montado à mão nos testes de PDF.
    */
   obrigacoes?: ObrigacaoExportada[];
+  /**
+   * FORK MIA (.89) — os e-mails de marketing que chegaram a ele e o registro de
+   * cada aceite e recusa (migrations 9061 e 9062). A anonimização (9064) apaga o
+   * endereço legível e a origem e a evidência dos registros; o que se apaga a
+   * pedido dele é o que se entrega a pedido dele (Art. 18 II). Opcionais como
+   * `obrigacoes`: o tipo é montado à mão nos testes de PDF.
+   */
+  emails_de_marketing?: EmailDeMarketingExportado[];
+  consentimentos_de_email?: ConsentimentoDeEmailExportado[];
   /**
    * FORK MIA (9047) — o traço de cada turno do agente com o titular (0721 do
    * upstream): quando, qual agente e modelo, como terminou, quantas mensagens
@@ -2051,6 +2094,100 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // FORK MIA (.89) — o e-mail marketing (migrations 9061 e 9062). O MESMO escopo
+  // do gatilho de anonimização (`fn_mia_redigir_email_marketing_do_contato_anonimizado`):
+  // as linhas com o `contact_id` do titular. A campanha vem pelo nome e o
+  // clique pelo endereço do link; quem registrou (o id da pessoa da equipe) não sai.
+  const emails_de_marketing: EmailDeMarketingExportado[] = [];
+  const consentimentos_de_email: ConsentimentoDeEmailExportado[] = [];
+  if (contactId) {
+    const recebidos = await admin
+      .from("mia_email_destinatarios")
+      .select(
+        "id, campanha_id, email, status, motivo, enviado_em, entregue_em, rejeitado_em, rejeicao_tipo, reclamacao_em, primeira_abertura_em, aberturas, descadastrado_em, created_at",
+      )
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (recebidos.error) {
+      logger.warn("[lgpd-export-worker] emails de marketing load failed", { request_id: requestId, error: recebidos.error.message });
+    } else {
+      const linhas = (recebidos.data ?? []) as Array<Record<string, unknown>>;
+      const idsDasCampanhas = [...new Set(linhas.map((l) => String(l.campanha_id)))];
+      const idsDosEnvios = linhas.map((l) => String(l.id));
+      const campanhas = new Map<string, { nome: string | null; assunto: string | null }>();
+      if (idsDasCampanhas.length > 0) {
+        const { data } = await admin
+          .from("mia_email_campanhas")
+          .select("id, nome, assunto")
+          .eq("organization_id", organizationId)
+          .in("id", idsDasCampanhas.slice(0, 500));
+        for (const c of (data ?? []) as Array<{ id: string; nome: string | null; assunto: string | null }>) {
+          campanhas.set(c.id, { nome: c.nome, assunto: c.assunto });
+        }
+      }
+      const cliquesPorEnvio = new Map<string, Array<{ link_id: string; clicado_em: string }>>();
+      for (let batch = 0; batch < idsDosEnvios.length; batch += 100) {
+        const { data, error } = await admin
+          .from("mia_email_cliques")
+          .select("destinatario_id, link_id, clicado_em")
+          .eq("organization_id", organizationId)
+          .eq("robo", false)
+          .in("destinatario_id", idsDosEnvios.slice(batch, batch + 100))
+          .limit(1000);
+        if (error) {
+          logger.warn("[lgpd-export-worker] cliques de e-mail load failed", { request_id: requestId, error: error.message });
+          break;
+        }
+        for (const c of (data ?? []) as Array<{ destinatario_id: string; link_id: string; clicado_em: string }>) {
+          cliquesPorEnvio.set(c.destinatario_id, [...(cliquesPorEnvio.get(c.destinatario_id) ?? []), c]);
+        }
+      }
+      const idsDosLinks = [...new Set([...cliquesPorEnvio.values()].flat().map((c) => c.link_id))];
+      const urlDoLink = new Map<string, string>();
+      if (idsDosLinks.length > 0) {
+        const { data } = await admin
+          .from("mia_email_links")
+          .select("id, url")
+          .eq("organization_id", organizationId)
+          .in("id", idsDosLinks.slice(0, 500));
+        for (const l of (data ?? []) as Array<{ id: string; url: string }>) urlDoLink.set(l.id, l.url);
+      }
+      for (const l of linhas) {
+        const campanha = campanhas.get(String(l.campanha_id));
+        emails_de_marketing.push({
+          campanha: campanha?.nome ?? null,
+          assunto: campanha?.assunto ?? null,
+          email: (l.email as string | null) ?? null,
+          status: String(l.status),
+          motivo: (l.motivo as string | null) ?? null,
+          enviado_em: (l.enviado_em as string | null) ?? null,
+          entregue_em: (l.entregue_em as string | null) ?? null,
+          rejeitado_em: (l.rejeitado_em as string | null) ?? null,
+          rejeicao_tipo: (l.rejeicao_tipo as string | null) ?? null,
+          reclamacao_em: (l.reclamacao_em as string | null) ?? null,
+          primeira_abertura_em: (l.primeira_abertura_em as string | null) ?? null,
+          aberturas: Number(l.aberturas ?? 0),
+          descadastrado_em: (l.descadastrado_em as string | null) ?? null,
+          cliques: (cliquesPorEnvio.get(String(l.id)) ?? []).map((c) => ({ url: urlDoLink.get(c.link_id) ?? null, clicado_em: c.clicado_em })),
+        });
+      }
+    }
+    const registros = await admin
+      .from("mia_email_consentimentos")
+      .select("tipo, ocorrido_em, origem, versao_do_texto, texto_aceito, aceitou_medicao, evidencia, registrado_pelo")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("ocorrido_em", { ascending: true })
+      .limit(500);
+    if (registros.error) {
+      logger.warn("[lgpd-export-worker] consentimentos de email load failed", { request_id: requestId, error: registros.error.message });
+    } else {
+      consentimentos_de_email.push(...((registros.data ?? []) as ConsentimentoDeEmailExportado[]));
+    }
+  }
+
   // Cliques em anúncio — a pergunta do outro lado do disparo: não "o que vocês
   // me mandaram", mas "por qual anúncio vocês me acharam, e o que guardaram".
   // Dois blocos e não um laço: a catraca lgpd-exporta-o-que-redige reconhece a
@@ -2814,6 +2951,8 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     ai_runs,
     broadcasts_recebidos,
     obrigacoes,
+    emails_de_marketing,
+    consentimentos_de_email,
     cliques_de_anuncio,
     appointment_notices,
     voice_calls,
