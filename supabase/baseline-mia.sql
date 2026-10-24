@@ -1908,7 +1908,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261023200000_9047_traco_do_turno_entra_na_anonimizacao', now())
+values (1, '20261024200100_9051_assistente_na_lgpd_e_na_retencao', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -15527,6 +15527,833 @@ update public.agent_turn_traces t
           else t.ferramentas is not null
         end
    );
+
+
+-- ─── 9050 · o assistente da MIA ───
+--
+-- Espelho EXATO da migration 9050 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9050 · o assistente da MIA
+--
+-- `mia`: só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: `create
+-- table if not exists`, constraints dentro de `do` que conferem o catálogo,
+-- `create index if not exists`, `drop trigger/policy if exists`.
+--
+-- ── A regra que o produto inteiro depende ───────────────────────────────────
+--
+-- O assistente NÃO tem acesso próprio. O turno lê o CRM com o cliente da SESSÃO
+-- de quem perguntou (lib/assistente/turno.ts), e a RLS de cada tabela de origem
+-- filtra como filtra nas telas. Estas tabelas guardam só o que é DO assistente:
+-- o histórico, a configuração e os chamados. Nenhuma delas abre leitura de
+-- dado do CRM a ninguém.
+--
+-- ── Quem vê e quem faz (as 18 regras do protótipo) ──────────────────────────
+--
+--   histórico        cada pessoa, o seu; o administrador, só as perguntas sem
+--                    resposta (a pergunta, nunca a resposta nem o resto)
+--   base própria     todos leem (o assistente usa nas respostas de todos); o
+--                    administrador escreve
+--   configuração     todos leem a da sua empresa; quem grava é o servidor (a
+--                    tela do administrador e o MCP de plataforma)
+--   chamado          quem abriu e o administrador da empresa leem; quem abre é
+--                    a pessoa; quem responde é só a plataforma (service_role)
+--   resumo da manhã  cada pessoa liga o seu; quem escreve o resumo é o cron
+
+-- ── 1. a configuração da empresa ────────────────────────────────────────────
+
+create table if not exists public.mia_assistente_config (
+  organization_id              uuid primary key references public.organizations(id) on delete cascade,
+  ligado                       boolean not null default true,
+  papeis                       text[] not null default array['viewer', 'agent', 'manager', 'admin']::text[],
+  perguntas_por_pessoa_por_dia integer not null default 50,
+  resumo_da_manha_padrao       boolean not null default false,
+  updated_by                   uuid references auth.users(id) on delete set null,
+  updated_at                   timestamptz not null default now()
+);
+
+comment on table public.mia_assistente_config is
+  'MIA (9050): o assistente da MIA numa empresa. Sem linha vale o padrao (ligado, todos os papeis, 50 perguntas por pessoa por dia, resumo da manha desligado). Le quem e da empresa; grava so o servidor (a tela do administrador e plataforma_configurar_assistente).';
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_config_limite') then
+    alter table public.mia_assistente_config
+      add constraint mia_assistente_config_limite check (perguntas_por_pessoa_por_dia between 1 and 1000);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_config_papeis') then
+    alter table public.mia_assistente_config
+      add constraint mia_assistente_config_papeis
+      check (papeis <@ array['viewer', 'agent', 'manager', 'admin']::text[]);
+  end if;
+end $$;
+
+-- ── 2. a base própria da empresa ────────────────────────────────────────────
+
+create table if not exists public.mia_assistente_conhecimento (
+  id              uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  titulo          text not null,
+  texto           text not null,
+  ativo           boolean not null default true,
+  criado_via      text not null default 'tela',
+  created_by      uuid references auth.users(id) on delete set null,
+  updated_by      uuid references auth.users(id) on delete set null,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+comment on table public.mia_assistente_conhecimento is
+  'MIA (9050): a base propria da empresa para o assistente ("como trabalhamos aqui", ex.: "proposta acima de R$ 10 mil passa pela gestora"). Um titulo por empresa, sem duplicar. Todos da empresa leem; o administrador escreve; a implantacao garante por plataforma_garantir_conhecimento_do_assistente.';
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_conhecimento_titulo') then
+    alter table public.mia_assistente_conhecimento
+      add constraint mia_assistente_conhecimento_titulo check (length(btrim(titulo)) between 1 and 120);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_conhecimento_texto') then
+    alter table public.mia_assistente_conhecimento
+      add constraint mia_assistente_conhecimento_texto check (length(btrim(texto)) between 1 and 2000);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_conhecimento_via') then
+    alter table public.mia_assistente_conhecimento
+      add constraint mia_assistente_conhecimento_via check (criado_via in ('tela', 'mcp_plataforma'));
+  end if;
+end $$;
+
+create unique index if not exists mia_assistente_conhecimento_titulo_idx
+  on public.mia_assistente_conhecimento (organization_id, lower(btrim(titulo)));
+
+-- ── 3. as conversas e as mensagens de cada pessoa ───────────────────────────
+
+create table if not exists public.mia_assistente_conversas (
+  id              uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  user_id         uuid not null references auth.users(id) on delete cascade,
+  titulo          text not null,
+  origem          text not null default 'pergunta',
+  created_at      timestamptz not null default now(),
+  ultima_em       timestamptz not null default now()
+);
+
+comment on table public.mia_assistente_conversas is
+  'MIA (9050): uma conversa de uma pessoa com o assistente da MIA. origem = pergunta (aberta por ela), resumo_da_manha (o plano do dia que o cron escreve) ou chamado (a resposta da Time a um chamado sem conversa). Cada pessoa ve so as suas. Guardada por 90 dias (fn_mia_expurgar_assistente_vencido, 9051).';
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_conversas_org_id_key') then
+    alter table public.mia_assistente_conversas
+      add constraint mia_assistente_conversas_org_id_key unique (organization_id, id);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_conversas_titulo') then
+    alter table public.mia_assistente_conversas
+      add constraint mia_assistente_conversas_titulo check (length(btrim(titulo)) between 1 and 160);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_conversas_origem') then
+    alter table public.mia_assistente_conversas
+      add constraint mia_assistente_conversas_origem check (origem in ('pergunta', 'resumo_da_manha', 'chamado'));
+  end if;
+end $$;
+
+create index if not exists mia_assistente_conversas_pessoa_idx
+  on public.mia_assistente_conversas (organization_id, user_id, ultima_em desc);
+
+create table if not exists public.mia_assistente_mensagens (
+  id              uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  conversa_id     uuid not null,
+  user_id         uuid not null references auth.users(id) on delete cascade,
+  -- pergunta (a pessoa), resposta (o assistente), resumo_da_manha (o cron) e
+  -- resposta_do_chamado (a Time Company, pela plataforma).
+  tipo            text not null,
+  texto           text not null,
+  -- Idempotência do clique duplo: a mesma pergunta não paga duas chamadas.
+  turn_id         uuid,
+  -- Em que tela a pessoa estava (o caminho, nunca a query string).
+  tela            text,
+  -- "De onde veio": as fontes que as ferramentas do turno de fato leram.
+  fontes          text[] not null default '{}'::text[],
+  -- Os botões da resposta ("Me leva lá", "Pedir à pessoa", "Mandar ao suporte").
+  acoes           jsonb not null default '[]'::jsonb,
+  -- A pergunta que o assistente não soube responder: a única coisa do
+  -- histórico de alguém que o administrador enxerga.
+  sem_resposta    boolean not null default false,
+  erro            text,
+  -- Os contatos que a pergunta ou a resposta citam (LGPD, 9051): é o que deixa
+  -- a anonimização e o acesso do titular alcançarem o histórico.
+  contatos        uuid[] not null default '{}'::uuid[],
+  llm_call_id     uuid,
+  created_at      timestamptz not null default now()
+);
+
+comment on table public.mia_assistente_mensagens is
+  'MIA (9050): cada mensagem de uma conversa com o assistente. tipo = pergunta | resposta | resumo_da_manha | resposta_do_chamado. fontes = o que as ferramentas do turno leram (o "de onde veio"); acoes = os botoes; contatos = os contatos citados, para a anonimizacao e o acesso do titular (9051). A pessoa ve as suas; o administrador ve so as perguntas com sem_resposta. Guardada por 90 dias.';
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_mensagens_conversa') then
+    alter table public.mia_assistente_mensagens
+      add constraint mia_assistente_mensagens_conversa
+      foreign key (organization_id, conversa_id)
+      references public.mia_assistente_conversas (organization_id, id) on delete cascade;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_mensagens_tipo') then
+    alter table public.mia_assistente_mensagens
+      add constraint mia_assistente_mensagens_tipo
+      check (tipo in ('pergunta', 'resposta', 'resumo_da_manha', 'resposta_do_chamado'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_mensagens_texto') then
+    alter table public.mia_assistente_mensagens
+      add constraint mia_assistente_mensagens_texto check (length(texto) between 1 and 20000);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_mensagens_acoes') then
+    alter table public.mia_assistente_mensagens
+      add constraint mia_assistente_mensagens_acoes check (jsonb_typeof(acoes) = 'array');
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_mensagens_turno') then
+    alter table public.mia_assistente_mensagens
+      add constraint mia_assistente_mensagens_turno unique (organization_id, user_id, turn_id, tipo);
+  end if;
+end $$;
+
+create index if not exists mia_assistente_mensagens_conversa_idx
+  on public.mia_assistente_mensagens (conversa_id, created_at);
+-- O limite do dia conta as perguntas de hoje de uma pessoa.
+create index if not exists mia_assistente_mensagens_do_dia_idx
+  on public.mia_assistente_mensagens (organization_id, user_id, created_at desc)
+  where tipo = 'pergunta';
+create index if not exists mia_assistente_mensagens_sem_resposta_idx
+  on public.mia_assistente_mensagens (organization_id, created_at desc)
+  where sem_resposta;
+create index if not exists mia_assistente_mensagens_contatos_idx
+  on public.mia_assistente_mensagens using gin (contatos);
+create index if not exists mia_assistente_mensagens_vencidas_idx
+  on public.mia_assistente_mensagens (created_at);
+
+-- ── 4. o resumo da manhã de cada pessoa ─────────────────────────────────────
+
+create table if not exists public.mia_assistente_preferencias (
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  user_id          uuid not null references auth.users(id) on delete cascade,
+  resumo_da_manha  boolean not null,
+  -- O dia (no fuso da empresa) do último resumo escrito: a trava de um por dia.
+  ultimo_resumo_em date,
+  updated_at       timestamptz not null default now(),
+  primary key (organization_id, user_id)
+);
+
+comment on table public.mia_assistente_preferencias is
+  'MIA (9050): o resumo da manha de cada pessoa. Sem linha vale o padrao da empresa (mia_assistente_config.resumo_da_manha_padrao, desligado). ultimo_resumo_em e a trava de um resumo por dia, gravada pelo cron.';
+
+-- ── 5. os chamados para a Time Company ──────────────────────────────────────
+
+create sequence if not exists public.mia_chamados_numero_seq start with 1001;
+
+create table if not exists public.mia_chamados (
+  id              uuid primary key default gen_random_uuid(),
+  numero          bigint not null default nextval('public.mia_chamados_numero_seq'),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  user_id         uuid references auth.users(id) on delete set null,
+  tipo            text not null,
+  texto           text not null,
+  -- tela, hora, versão, navegador, mensagem do sistema: o que o assistente
+  -- juntou. Nunca telefone, e-mail ou documento de contato.
+  contexto        jsonb not null default '{}'::jsonb,
+  print_path      text,
+  situacao        text not null default 'novo',
+  resposta        text,
+  respondido_por  uuid references auth.users(id) on delete set null,
+  respondido_em   timestamptz,
+  -- Empresa de demonstração: o chamado fica no assistente e não sai para a Time.
+  demonstracao    boolean not null default false,
+  conversa_id     uuid references public.mia_assistente_conversas(id) on delete set null,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+comment on table public.mia_chamados is
+  'MIA (9050): erro, duvida ou pedido para a Time Company, aberto pelo assistente da MIA. contexto = tela, hora, versao, navegador e mensagem do sistema; print_path = o print opcional no bucket privado mia-assistente. situacao novo | em_analise | resolvido; a resposta chega a quem abriu no assistente e no e-mail. Quem abriu e o administrador da empresa leem; so a plataforma responde. Na empresa de demonstracao (demonstracao = true) o chamado nao sai.';
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'mia_chamados_numero_key') then
+    alter table public.mia_chamados add constraint mia_chamados_numero_key unique (numero);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_chamados_tipo') then
+    alter table public.mia_chamados
+      add constraint mia_chamados_tipo check (tipo in ('erro', 'duvida', 'pedido'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_chamados_texto') then
+    alter table public.mia_chamados
+      add constraint mia_chamados_texto check (length(btrim(texto)) between 3 and 4000);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_chamados_contexto') then
+    alter table public.mia_chamados
+      add constraint mia_chamados_contexto
+      check (jsonb_typeof(contexto) = 'object' and octet_length(contexto::text) <= 16000);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_chamados_situacao') then
+    alter table public.mia_chamados
+      add constraint mia_chamados_situacao check (situacao in ('novo', 'em_analise', 'resolvido'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_chamados_resposta') then
+    alter table public.mia_chamados
+      add constraint mia_chamados_resposta check (resposta is null or length(resposta) between 1 and 8000);
+  end if;
+  -- O print mora na pasta da empresa: `<org>/<chamado>/<arquivo>`.
+  if not exists (select 1 from pg_constraint where conname = 'mia_chamados_print_da_empresa') then
+    alter table public.mia_chamados
+      add constraint mia_chamados_print_da_empresa
+      check (print_path is null or split_part(print_path, '/', 1) = organization_id::text);
+  end if;
+end $$;
+
+create index if not exists mia_chamados_org_idx on public.mia_chamados (organization_id, created_at desc);
+create index if not exists mia_chamados_pessoa_idx on public.mia_chamados (organization_id, user_id, created_at desc);
+create index if not exists mia_chamados_fila_idx on public.mia_chamados (situacao, created_at desc) where not demonstracao;
+
+-- ── 6. o chamado nasce como a plataforma espera ─────────────────────────────
+--
+-- Pela sessão, quem abre é a própria pessoa, e o chamado nasce "novo", sem
+-- resposta e sem print (o print entra pelo servidor, depois de guardado). A
+-- marca de demonstração não vem do pedido: vem da empresa. Sem isto, um pedido
+-- direto ao PostgREST abriria um chamado "respondido" ou tiraria a marca de
+-- demonstração do chamado da empresa fictícia.
+create or replace function public.fn_mia_chamado_nasce()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $f$
+begin
+  new.demonstracao := coalesce(
+    (select o.demonstracao from public.organizations o where o.id = new.organization_id),
+    false
+  );
+  if auth.uid() is not null then
+    new.user_id := auth.uid();
+    new.situacao := 'novo';
+    new.resposta := null;
+    new.respondido_por := null;
+    new.respondido_em := null;
+    new.print_path := null;
+    -- O número é da sequência, nunca do pedido: um número escolhido à mão
+    -- colidiria, mais tarde, com o de outra empresa.
+    new.numero := nextval('public.mia_chamados_numero_seq');
+    new.created_at := now();
+    new.updated_at := now();
+  end if;
+  return new;
+end
+$f$;
+
+comment on function public.fn_mia_chamado_nasce() is
+  'MIA (9050): o chamado aberto pela sessao nasce da propria pessoa, novo, sem resposta e sem print; a marca de demonstracao sai da empresa, nunca do pedido.';
+
+revoke all on function public.fn_mia_chamado_nasce() from public;
+revoke execute on function public.fn_mia_chamado_nasce() from anon, authenticated;
+
+drop trigger if exists trg_mia_chamado_nasce on public.mia_chamados;
+create trigger trg_mia_chamado_nasce
+  before insert on public.mia_chamados
+  for each row execute function public.fn_mia_chamado_nasce();
+
+-- O print que nada mais aponta vai para a fila de remoção do upstream
+-- (`storage_redaction_queue`, a mesma da 9018): o chamado apagado (retenção) ou
+-- o print trocado. Organização sendo apagada: a fila referencia a organização,
+-- e os arquivos saem com o espaço dela.
+create or replace function public.fn_mia_chamado_print_sai()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $f$
+begin
+  if old.print_path is null then
+    return old;
+  end if;
+  if tg_op = 'UPDATE' and new.print_path is not distinct from old.print_path then
+    return new;
+  end if;
+  if not exists (select 1 from public.organizations g where g.id = old.organization_id) then
+    return old;
+  end if;
+  insert into public.storage_redaction_queue (organization_id, bucket, object_path)
+  values (old.organization_id, 'mia-assistente', old.print_path)
+  on conflict (bucket, object_path) do update
+    set status = 'pending',
+        attempts = 0,
+        enqueued_at = now(),
+        processed_at = null,
+        error_message = null
+    where storage_redaction_queue.status in ('deleted', 'skipped');
+  return case when tg_op = 'DELETE' then old else new end;
+end
+$f$;
+
+comment on function public.fn_mia_chamado_print_sai() is
+  'MIA (9050): o print de um chamado que saiu (retencao) ou foi trocado entra em storage_redaction_queue com o bucket mia-assistente.';
+
+revoke all on function public.fn_mia_chamado_print_sai() from public;
+revoke execute on function public.fn_mia_chamado_print_sai() from anon, authenticated;
+
+drop trigger if exists trg_mia_chamado_print_sai on public.mia_chamados;
+create trigger trg_mia_chamado_print_sai
+  after delete or update of print_path on public.mia_chamados
+  for each row execute function public.fn_mia_chamado_print_sai();
+
+-- ── 7. a área privada dos prints ────────────────────────────────────────────
+--
+-- Sem policy em `storage.objects`, como `mia-obrigacoes` e `internal-media`: só
+-- o servidor (service_role) lê e grava; a tela recebe link assinado. 10 MB: é
+-- um print de tela.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('mia-assistente', 'mia-assistente', false, 10485760)
+on conflict (id) do update
+  set public = excluded.public,
+      file_size_limit = excluded.file_size_limit;
+
+-- ── 8. permissões e RLS ─────────────────────────────────────────────────────
+
+alter table public.mia_assistente_config enable row level security;
+alter table public.mia_assistente_conhecimento enable row level security;
+alter table public.mia_assistente_conversas enable row level security;
+alter table public.mia_assistente_mensagens enable row level security;
+alter table public.mia_assistente_preferencias enable row level security;
+alter table public.mia_chamados enable row level security;
+
+revoke all on table public.mia_assistente_config from public, anon, authenticated;
+revoke all on table public.mia_assistente_conhecimento from public, anon, authenticated;
+revoke all on table public.mia_assistente_conversas from public, anon, authenticated;
+revoke all on table public.mia_assistente_mensagens from public, anon, authenticated;
+revoke all on table public.mia_assistente_preferencias from public, anon, authenticated;
+revoke all on table public.mia_chamados from public, anon, authenticated;
+revoke all on sequence public.mia_chamados_numero_seq from public, anon, authenticated;
+
+-- A configuração: só leitura pela sessão.
+grant select on table public.mia_assistente_config to authenticated;
+-- A base própria: o administrador escreve pela sessão (a RLS decide quem).
+grant select, insert, update, delete on table public.mia_assistente_conhecimento to authenticated;
+-- O histórico: a pessoa cria o seu e marca a pergunta sem resposta. Ninguém
+-- apaga pela sessão: o limite do dia conta as perguntas, e a retenção é do
+-- servidor.
+grant select, insert on table public.mia_assistente_conversas to authenticated;
+grant update (titulo, ultima_em) on table public.mia_assistente_conversas to authenticated;
+grant select, insert on table public.mia_assistente_mensagens to authenticated;
+grant update (sem_resposta, contatos) on table public.mia_assistente_mensagens to authenticated;
+-- O resumo da manhã: a pessoa liga e desliga o seu; a trava do dia é do cron.
+grant select, insert on table public.mia_assistente_preferencias to authenticated;
+grant update (resumo_da_manha, updated_at) on table public.mia_assistente_preferencias to authenticated;
+-- O chamado: a pessoa abre; responder é da plataforma. O insert é da tabela
+-- inteira (é o que faz as travas do suporte a alcançarem), e quem decide o que
+-- nasce é o gatilho `fn_mia_chamado_nasce`: autor, número, situação, resposta e
+-- print não vêm do pedido.
+grant select, insert on table public.mia_chamados to authenticated;
+grant usage on sequence public.mia_chamados_numero_seq to authenticated;
+
+grant all on table public.mia_assistente_config to service_role;
+grant all on table public.mia_assistente_conhecimento to service_role;
+grant all on table public.mia_assistente_conversas to service_role;
+grant all on table public.mia_assistente_mensagens to service_role;
+grant all on table public.mia_assistente_preferencias to service_role;
+grant all on table public.mia_chamados to service_role;
+grant all on sequence public.mia_chamados_numero_seq to service_role;
+
+drop policy if exists "mia_assistente_config_select" on public.mia_assistente_config;
+create policy "mia_assistente_config_select" on public.mia_assistente_config
+  for select using (organization_id in (select public.fn_user_org_ids()));
+
+drop policy if exists "mia_assistente_conhecimento_select" on public.mia_assistente_conhecimento;
+drop policy if exists "mia_assistente_conhecimento_insert" on public.mia_assistente_conhecimento;
+drop policy if exists "mia_assistente_conhecimento_update" on public.mia_assistente_conhecimento;
+drop policy if exists "mia_assistente_conhecimento_delete" on public.mia_assistente_conhecimento;
+create policy "mia_assistente_conhecimento_select" on public.mia_assistente_conhecimento
+  for select using (organization_id in (select public.fn_user_org_ids()));
+create policy "mia_assistente_conhecimento_insert" on public.mia_assistente_conhecimento
+  for insert with check (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'admin')
+  );
+create policy "mia_assistente_conhecimento_update" on public.mia_assistente_conhecimento
+  for update using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'admin')
+  ) with check (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'admin')
+  );
+create policy "mia_assistente_conhecimento_delete" on public.mia_assistente_conhecimento
+  for delete using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'admin')
+  );
+
+drop policy if exists "mia_assistente_conversas_select" on public.mia_assistente_conversas;
+drop policy if exists "mia_assistente_conversas_insert" on public.mia_assistente_conversas;
+drop policy if exists "mia_assistente_conversas_update" on public.mia_assistente_conversas;
+create policy "mia_assistente_conversas_select" on public.mia_assistente_conversas
+  for select using (
+    organization_id in (select public.fn_user_org_ids())
+    and user_id = auth.uid()
+  );
+create policy "mia_assistente_conversas_insert" on public.mia_assistente_conversas
+  for insert with check (
+    organization_id in (select public.fn_user_org_ids())
+    and user_id = auth.uid()
+    and origem = 'pergunta'
+  );
+create policy "mia_assistente_conversas_update" on public.mia_assistente_conversas
+  for update using (
+    organization_id in (select public.fn_user_org_ids())
+    and user_id = auth.uid()
+  ) with check (
+    organization_id in (select public.fn_user_org_ids())
+    and user_id = auth.uid()
+  );
+
+drop policy if exists "mia_assistente_mensagens_select" on public.mia_assistente_mensagens;
+drop policy if exists "mia_assistente_mensagens_sem_resposta" on public.mia_assistente_mensagens;
+drop policy if exists "mia_assistente_mensagens_insert" on public.mia_assistente_mensagens;
+drop policy if exists "mia_assistente_mensagens_update" on public.mia_assistente_mensagens;
+create policy "mia_assistente_mensagens_select" on public.mia_assistente_mensagens
+  for select using (
+    organization_id in (select public.fn_user_org_ids())
+    and user_id = auth.uid()
+  );
+-- O administrador vê a PERGUNTA sem resposta, e só ela: a linha da resposta e
+-- as outras perguntas da pessoa continuam só dela.
+create policy "mia_assistente_mensagens_sem_resposta" on public.mia_assistente_mensagens
+  for select using (
+    organization_id in (select public.fn_user_org_ids())
+    and tipo = 'pergunta'
+    and sem_resposta
+    and public.fn_role_at_least(organization_id, 'admin')
+  );
+create policy "mia_assistente_mensagens_insert" on public.mia_assistente_mensagens
+  for insert with check (
+    organization_id in (select public.fn_user_org_ids())
+    and user_id = auth.uid()
+    and tipo in ('pergunta', 'resposta')
+    and exists (
+      select 1 from public.mia_assistente_conversas c
+       where c.id = conversa_id
+         and c.organization_id = mia_assistente_mensagens.organization_id
+         and c.user_id = auth.uid()
+    )
+  );
+create policy "mia_assistente_mensagens_update" on public.mia_assistente_mensagens
+  for update using (
+    organization_id in (select public.fn_user_org_ids())
+    and user_id = auth.uid()
+  ) with check (
+    organization_id in (select public.fn_user_org_ids())
+    and user_id = auth.uid()
+  );
+
+drop policy if exists "mia_assistente_preferencias_select" on public.mia_assistente_preferencias;
+drop policy if exists "mia_assistente_preferencias_insert" on public.mia_assistente_preferencias;
+drop policy if exists "mia_assistente_preferencias_update" on public.mia_assistente_preferencias;
+create policy "mia_assistente_preferencias_select" on public.mia_assistente_preferencias
+  for select using (
+    organization_id in (select public.fn_user_org_ids())
+    and user_id = auth.uid()
+  );
+create policy "mia_assistente_preferencias_insert" on public.mia_assistente_preferencias
+  for insert with check (
+    organization_id in (select public.fn_user_org_ids())
+    and user_id = auth.uid()
+  );
+create policy "mia_assistente_preferencias_update" on public.mia_assistente_preferencias
+  for update using (
+    organization_id in (select public.fn_user_org_ids())
+    and user_id = auth.uid()
+  ) with check (
+    organization_id in (select public.fn_user_org_ids())
+    and user_id = auth.uid()
+  );
+
+drop policy if exists "mia_chamados_select" on public.mia_chamados;
+drop policy if exists "mia_chamados_insert" on public.mia_chamados;
+create policy "mia_chamados_select" on public.mia_chamados
+  for select using (
+    organization_id in (select public.fn_user_org_ids())
+    and (user_id = auth.uid() or public.fn_role_at_least(organization_id, 'admin'))
+  );
+create policy "mia_chamados_insert" on public.mia_chamados
+  for insert with check (
+    organization_id in (select public.fn_user_org_ids())
+    and (conversa_id is null or exists (
+      select 1 from public.mia_assistente_conversas c
+       where c.id = conversa_id
+         and c.organization_id = mia_chamados.organization_id
+         and c.user_id = auth.uid()
+    ))
+  );
+
+-- ── 9. as travas do suporte somente leitura ─────────────────────────────────
+--
+-- A regra é a do upstream (0274): tabela com RLS, `organization_id` e escrita
+-- para `authenticated` ganha as três políticas restritivas; a de só leitura
+-- (`mia_assistente_config`) fica sem nenhuma.
+do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9051 · o assistente da MIA na LGPD e na retenção ───
+--
+-- Espelho EXATO da migration 9051 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9051 · o assistente da MIA na LGPD e na retenção
+--
+-- Só a função NOSSA é redefinida (docs/FORK-MIA.md, regra 3). Idempotente:
+-- `create or replace`, e a cura só toca mensagem que ainda cita alguém já
+-- anonimizado.
+--
+-- ── Por que o histórico do assistente guarda os contatos citados ────────────
+--
+-- A resposta do assistente pode dizer "a Helena espera desde as 18h". O
+-- histórico é da PESSOA da equipe, não do contato, mas o nome dele está ali.
+-- Sem a lista `contatos`, anonimizar a Helena deixaria o nome dela no histórico
+-- de quem perguntou por até 90 dias, e o acesso do titular não o entregaria. A
+-- lista é preenchida pelo turno com os contatos que as ferramentas leram (a
+-- mais, nunca a menos), e é por ela que este bloco e o acesso do titular
+-- (lib/lgpd/export-collector.ts) alcançam a mensagem.
+
+create or replace function public.fn_redigir_o_que_sobrou_do_contato_anonimizado()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rotulo text := 'Contato anonimizado';
+begin
+  -- 1 · ai_agent_runs, o rastro da IA sobre esta pessoa. Redige como a 0494
+  --     do upstream (preserva o nome da ferramenta) e alcança também as
+  --     execuções ligadas pela conversa.
+  update public.ai_agent_runs
+     set tool_calls    = case
+                           when jsonb_typeof(tool_calls) = 'array'
+                             then public.fn_lgpd_redigir_tool_calls(tool_calls)
+                           else '[]'::jsonb
+                         end,
+         error_message = null
+   where organization_id = new.organization_id
+     and (
+       contact_id = new.id
+       or conversation_id in (
+         select id from public.conversations
+          where organization_id = new.organization_id
+            and contact_id = new.id
+       )
+     )
+     and (
+       error_message is not null
+       or case
+            when jsonb_typeof(tool_calls) = 'array' then exists (
+              select 1 from jsonb_array_elements(tool_calls) s
+               where coalesce(s->>'redacted', 'false')::boolean is not true
+            )
+            else tool_calls is not null
+          end
+     );
+
+  -- 2 · demandas, o problema dela, escrito à mão.
+  update public.demandas
+     set assunto       = null,
+         proximo_passo = null
+   where organization_id = new.organization_id
+     and contact_id = new.id
+     and (assunto is not null or proximo_passo is not null);
+
+  -- 3 · broadcast_recipients: rótulo, não `null`. A coluna é `not null` e a
+  --     linha precisa continuar contável para o relatório do disparo.
+  update public.broadcast_recipients
+     set phone_e164 = v_rotulo,
+         valores    = '{}'::jsonb
+   where organization_id = new.organization_id
+     and contact_id = new.id
+     and (phone_e164 <> v_rotulo or valores <> '{}'::jsonb);
+
+  -- 4 · google_ads_click_refs e meta_ads_click_refs, do upstream (0306 dele).
+  --     O perigo é `query_raw`, a query string CRUA da landing page.
+  update public.google_ads_click_refs
+     set query_raw  = '{}'::jsonb,
+         contact_id = null
+   where organization_id = new.organization_id
+     and contact_id = new.id;
+
+  update public.meta_ads_click_refs
+     set query_raw  = '{}'::jsonb,
+         contact_id = null
+   where organization_id = new.organization_id
+     and contact_id = new.id;
+
+  -- 5 · 9047 · agent_turn_traces, o traço do turno (0721 do upstream). Sai o
+  --     texto de erro do turno e o de cada ferramenta; ficam o nome, o estado
+  --     e a duração. Alcança também os turnos ligados pela conversa, como o 1.
+  --     Uma lista que não seja lista (nunca deveria existir) vira `[]`, em vez
+  --     de derrubar a anonimização inteira.
+  update public.agent_turn_traces
+     set error_message = null,
+         ferramentas   = case
+                           when jsonb_typeof(ferramentas) = 'array' then coalesce(
+                             (select jsonb_agg(
+                                       case
+                                         when jsonb_typeof(f.item) = 'object' and f.item ? 'erro'
+                                           then jsonb_set(f.item, '{erro}', 'null'::jsonb)
+                                         else f.item
+                                       end
+                                       order by f.ordem)
+                                from jsonb_array_elements(ferramentas) with ordinality as f(item, ordem)),
+                             '[]'::jsonb)
+                           else '[]'::jsonb
+                         end
+   where organization_id = new.organization_id
+     and (
+       contact_id = new.id
+       or conversation_id in (
+         select id from public.conversations
+          where organization_id = new.organization_id
+            and contact_id = new.id
+       )
+     )
+     and (
+       error_message is not null
+       or case
+            when jsonb_typeof(ferramentas) = 'array' then exists (
+              select 1 from jsonb_array_elements(ferramentas) f
+               where jsonb_typeof(f) = 'object' and f ? 'erro' and jsonb_typeof(f->'erro') <> 'null'
+            )
+            else ferramentas is not null
+          end
+     );
+
+
+  -- 6 · 9051 · mia_assistente_mensagens, o histórico do assistente da MIA. A
+  --     pergunta e a resposta que citam este contato perdem o texto e os
+  --     botões; o id dele sai da lista. O resto da conversa da pessoa fica.
+  update public.mia_assistente_mensagens
+     set texto    = 'Conteúdo removido: um contato citado aqui foi anonimizado.',
+         acoes    = '[]'::jsonb,
+         contatos = array_remove(contatos, new.id)
+   where organization_id = new.organization_id
+     and contatos @> array[new.id];
+
+  return new;
+end $$;
+
+comment on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() is
+  'MIA (0266, 9007, 9047, 9051): redige o que o gatilho do upstream nao alcanca quando o contato e anonimizado. ai_agent_runs: redige tool_calls com fn_lgpd_redigir_tool_calls (a mesma do upstream, 0494, que preserva o nome da ferramenta) tambem nas execucoes ligadas pela conversa, e apaga error_message. demandas (assunto, proximo_passo), broadcast_recipients (telefone copiado), query_raw dos cliques de anuncio, desde a 9047 agent_turn_traces (0721): error_message e o erro de cada ferramenta, guardando nome, estado e duracao; e desde a 9051 o historico do assistente da MIA (mia_assistente_mensagens que citam o contato perdem texto e botoes).';
+
+revoke all on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from public;
+revoke execute on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from anon;
+revoke execute on function public.fn_redigir_o_que_sobrou_do_contato_anonimizado() from authenticated;
+
+-- Quem JÁ foi anonimizado e ainda é citado no histórico do assistente.
+update public.mia_assistente_mensagens m
+   set texto    = 'Conteúdo removido: um contato citado aqui foi anonimizado.',
+       acoes    = '[]'::jsonb,
+       contatos = (
+         select coalesce(array_agg(x), '{}'::uuid[])
+           from unnest(m.contatos) as x
+          where not exists (
+            select 1 from public.contacts c
+             where c.id = x and c.organization_id = m.organization_id and c.is_anonymized
+          )
+       )
+ where exists (
+   select 1 from public.contacts c
+    where c.organization_id = m.organization_id
+      and c.is_anonymized
+      and m.contatos @> array[c.id]
+ );
+
+-- ── A retenção do assistente ────────────────────────────────────────────────
+--
+-- O histórico é guardado por 90 dias (regra "Histórico" do protótipo), com o
+-- piso de 30 dentro do corpo, como as `fn_expurgar_*` do upstream (0587): um
+-- valor errado vindo de fora nunca apaga o mês corrente. As conversas que
+-- ficaram sem mensagem saem junto. O chamado resolvido sai 365 dias depois da
+-- resposta (piso de 180): é o registro do que a Time respondeu, e um ano cobre
+-- a pergunta "isso já tinha acontecido?". O chamado aberto nunca sai.
+--
+-- Em lotes (`p_limite`), para o cron nunca segurar a tabela inteira. O nome
+-- diz "expurgar", e não "apagar": é retenção por idade, não o caminho da
+-- anonimização (este fica no bloco 6 acima).
+create or replace function public.fn_mia_expurgar_assistente_vencido(
+  p_retencao_dias integer default 90,
+  p_limite integer default 5000
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $f$
+declare
+  v_dias integer := greatest(coalesce(p_retencao_dias, 90), 30);
+  v_limite integer := least(greatest(coalesce(p_limite, 5000), 1), 50000);
+  v_mensagens integer := 0;
+  v_conversas integer := 0;
+  v_chamados integer := 0;
+begin
+  with vencidas as (
+    select id from public.mia_assistente_mensagens
+     where created_at < now() - make_interval(days => v_dias)
+     order by created_at
+     limit v_limite
+  )
+  delete from public.mia_assistente_mensagens m
+   using vencidas v
+   where m.id = v.id;
+  get diagnostics v_mensagens = row_count;
+
+  with vazias as (
+    select c.id from public.mia_assistente_conversas c
+     where c.ultima_em < now() - make_interval(days => v_dias)
+       and not exists (select 1 from public.mia_assistente_mensagens m where m.conversa_id = c.id)
+     order by c.ultima_em
+     limit v_limite
+  )
+  delete from public.mia_assistente_conversas c
+   using vazias v
+   where c.id = v.id;
+  get diagnostics v_conversas = row_count;
+
+  with resolvidos as (
+    select id from public.mia_chamados
+     where situacao = 'resolvido'
+       and coalesce(respondido_em, updated_at) < now() - make_interval(days => 365)
+     order by coalesce(respondido_em, updated_at)
+     limit v_limite
+  )
+  delete from public.mia_chamados ch
+   using resolvidos r
+   where ch.id = r.id;
+  get diagnostics v_chamados = row_count;
+
+  return jsonb_build_object(
+    'mensagens', v_mensagens,
+    'conversas', v_conversas,
+    'chamados', v_chamados,
+    'retencao_dias', v_dias
+  );
+end
+$f$;
+
+comment on function public.fn_mia_expurgar_assistente_vencido(integer, integer) is
+  'MIA (9051): a retencao do assistente da MIA. Apaga, em lotes, as mensagens com mais de p_retencao_dias (90 por padrao, piso de 30), as conversas que ficaram vazias e os chamados resolvidos ha mais de 365 dias (o print vai para storage_redaction_queue pelo gatilho da 9050). Chamada pelo cron do resumo da manha. So o servidor executa.';
+
+revoke all on function public.fn_mia_expurgar_assistente_vencido(integer, integer) from public;
+revoke execute on function public.fn_mia_expurgar_assistente_vencido(integer, integer) from anon, authenticated;
+grant execute on function public.fn_mia_expurgar_assistente_vencido(integer, integer) to service_role;
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
