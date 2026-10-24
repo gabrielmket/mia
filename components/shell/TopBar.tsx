@@ -1,4 +1,5 @@
 "use client";
+import { BotaoDoAssistente } from "@/components/assistente/BotaoDoAssistente"; // FORK MIA (.88)
 import { AlertsBell } from "./AlertsBell";
 import { AvisoDePropostaEmDestaque } from "./AvisoDePropostaEmDestaque";
 import { MobileSidebar } from "./MobileSidebar";
@@ -17,6 +18,8 @@ export function TopBar() {
         <SearchTrigger />
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        {/* FORK MIA (.88): o assistente da MIA, ao lado do sino (docs/fork/assistente.md). */}
+        <BotaoDoAssistente />
         <AlertsBell />
         <AvisoDePropostaEmDestaque />
         <UserMenu />

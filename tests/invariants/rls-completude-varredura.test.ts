@@ -441,6 +441,27 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "painel e nunca cruza empresa; a exportação é de gestor, cada um a sua, " +
       "e ninguém altera nem apaga.",
   })),
+  // Fork MIA, 9050 — o assistente da MIA: a configuração, a base própria, o
+  // histórico de cada pessoa, o resumo da manhã e os chamados para a Time.
+  ...[
+    "mia_assistente_config",
+    "mia_assistente_conhecimento",
+    "mia_assistente_conversas",
+    "mia_assistente_mensagens",
+    "mia_assistente_preferencias",
+    "mia_chamados",
+    // 9052: o índice dos contatos citados, só do servidor.
+    "mia_assistente_citacoes",
+  ].map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/assistente-da-mia.test.ts — controle positivo e negativo " +
+      "por papel e por empresa: cada pessoa vê só o próprio histórico, o " +
+      "administrador vê só a pergunta sem resposta, outra empresa vê zero, anon " +
+      "recebe permission denied; a configuração é só leitura pela sessão; a base " +
+      "própria só o administrador escreve; o chamado nasce da própria pessoa, " +
+      "novo e sem resposta, e a marca de demonstração vem da empresa.",
+  })),
   // Fork MIA, 9031 — o link dos painéis para o dono do negócio.
   {
     tabela: "mia_paineis_links",

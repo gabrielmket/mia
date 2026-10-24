@@ -157,6 +157,17 @@ describe("a sétima cópia não nasce", () => {
    * último caso), para não sobrar autorização em nome de código que sumiu.
    */
   const LEITURAS_LEGITIMAS: ReadonlyArray<{ arquivo: string; trecho: string; motivo: string }> = [
+    // ── FORK MIA (.88): assistente da MIA, nenhuma destas é nome de CONTATO ──
+    {
+      arquivo: "app/api/v1/assistente/chat/route.ts",
+      trecho: "return { fuso: fusoUtilizavel(linha?.timezone), nome: linha?.display_name ?? null };",
+      motivo: "nome da ORGANIZAÇÃO (organizations.display_name) para o contexto do turno, não de contato",
+    },
+    {
+      arquivo: "lib/assistente/leituras/rotina.ts",
+      trecho: 'nome: (s.display_name ?? "").trim() || "Número sem nome",',
+      motivo: "rótulo do NÚMERO conectado (channel_sessions) no aviso de conexão caída, não de contato",
+    },
     // ── prospecção (PR #963): nenhuma destas é nome de CONTATO ──────────────
     {
       arquivo: "app/app/prospecting/_client.tsx",

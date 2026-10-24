@@ -93,6 +93,12 @@ abertos:
   por etapa da Meta o upstream fez (0524) e a MIA adotou na .72; o "todo evento de
   etapa lê Compra" ele consertou no mesmo lançamento. Da régua dele faltam, se
   fizerem falta: valor por etapa e canal de entrada
+- as pessoas relacionadas do negócio (v1.88, #3083): o leitor
+  (`GET /api/v1/leads/[id]/contatos-relacionados`) mostra a lápide de uma fusão de
+  contatos pelo VENCEDOR, mas o `DELETE` apaga só o vínculo cujo `target_id` é o id
+  que a tela manda (o do vencedor): a pessoa que entrou antes da fusão não sai pelo
+  "Remover", e a resposta diz `removido: false`. O fork tira pelo cartão também o
+  vínculo da lápide (`alvosDoContato`, `lib/leads/pessoas-do-negocio.ts`, .87)
 
 ## Como fazer uma sincronização
 
@@ -136,12 +142,22 @@ npx vitest run
   rotas do upstream de onde ele tirou a lógica para uma função compartilhada, e as
   rotas que ele espelha, estão em
   [`docs/fork/mcp-de-implantacao.md`](fork/mcp-de-implantacao.md), seção 5.
+  O assistente da MIA (.88) mora em `lib/assistente/`, `components/assistente/` e
+  `app/app/assistente/`, e a lista fechada dos pontos de ligação dele no código do
+  upstream está em [`docs/fork/assistente.md`](fork/assistente.md), seção 7.
 - **Funcionalidade duplicada.** Os dois lados construíram, na mesma semana, o
   cadastro incorporado da Meta, o disparo em massa e o aviso no WhatsApp. A decisão
   de ficar com um, com o outro ou com os dois é de produto. Para o **disparo em
   massa** ela foi tomada na .58: os dois ficam, como UM produto chamado Broadcast
   (as Campanhas dele são o caminho "número por QR"), com os motores separados por
   baixo — ver [`docs/fork/broadcast-unificado.md`](fork/broadcast-unificado.md).
+  As **pessoas do negócio** (o `envolvido` do cartão do fork, com a lista fechada de
+  papéis, e o `related` do dossiê do upstream, v1.88, com papel livre) tiveram a
+  decisão na .87 (Gabriel, 24/10/2026): os dois ficam, sem converter dado, e uma
+  leitura une os dois (`lib/leads/pessoas-do-negocio.ts`). Os pontos de ligação no
+  código do upstream são os três trechos `FORK MIA` da rota
+  `app/api/v1/leads/[id]/contatos-relacionados/route.ts` (ver
+  [`docs/fork/cartoes-e-fichas.md`](fork/cartoes-e-fichas.md), seção 2.1).
   As outras duas continuam abertas.
 - **A voz precisa de fiação.** O agente de voz é uma quarta imagem e um quinto
   contêiner (`asterisk`); o `docker-compose.easypanel.yml` é nosso e não recebe isso

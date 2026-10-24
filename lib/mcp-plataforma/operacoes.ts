@@ -95,7 +95,10 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "coluna do cliente no banco externo, os dias da prospecção e guardar o histórico " +
       "de um número; e a pausa agendada, que cala um número (ou todos) por até 24 horas. " +
       "E os relatórios e o painel do segmento (montador de relatórios), compartilhados com a " +
-      "equipe do cliente: toda a equipe passa a ver aqueles números, cada um só com o que já vê no CRM.",
+      "equipe do cliente: toda a equipe passa a ver aqueles números, cada um só com o que já vê no CRM. " +
+      // FORK MIA (.88): o assistente da MIA.
+      "E o assistente da MIA: ligar e desligar por empresa e por papel, o limite de perguntas por dia e a base " +
+      "própria, que toda a equipe do cliente passa a ler nas respostas do assistente.",
   },
   {
     chave: "colocar_no_ar",
@@ -138,6 +141,18 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "conversa de cliente sai por ele, mas o faturamento e a meta saem, se o link mostrar valores: um token " +
       "vazado gera um link dos números de qualquer empresa, e quem o receber vê até a validade acabar ou " +
       "alguém revogar.",
+  },
+  // FORK MIA (.88): responder os chamados do assistente da MIA. Chave própria,
+  // e não `implantar_configuracao`, porque o estrago é outro: não muda a
+  // configuração de ninguém, mas FALA, em nome da Time Company, com a equipe do
+  // cliente (no assistente, no sino e por e-mail).
+  {
+    chave: "responder_chamados",
+    rotulo: "Responder os chamados do assistente",
+    raio:
+      "Responde e muda a situação dos chamados que as equipes de QUALQUER cliente abriram pelo assistente da MIA. " +
+      "A resposta chega a quem abriu no assistente, no sino e por e-mail, em nome da Time Company: um token vazado " +
+      "manda a qualquer pessoa que abriu chamado o texto que quiser, e marca como resolvido o que não foi.",
   },
   ...OPERACOES_DE_IMPORTACAO,
   // FORK MIA (.89): o disparo de e-mail marketing (docs/fork/email-marketing.md).

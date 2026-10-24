@@ -12,7 +12,9 @@
  *   tarefas ...... o resumo do upstream (`lead.tarefas`, v1.81: a rota do quadro
  *                  já leu `crm_tasks` em `withTarefas`), só para a URGÊNCIA
  *   compras ...... negócios ganhos + orders do contato/empresa            → compras-servidor.ts
- *   pessoa ....... contacts (cargo) + crm_lead_links (contatos envolvidos)
+ *   pessoa ....... contacts (cargo) + crm_lead_links (contatos envolvidos: o
+ *                  `envolvido` do cartão e, desde a .87, o `related` do dossiê
+ *                  do upstream → lib/leads/pessoas-do-negocio.ts)
  *   obrigação .... mia_obrigacoes do negócio, da empresa e do contato      → lib/obrigacoes/sinais.ts
  *
  * ⚠️ NUNCA DERRUBA O QUADRO. Falha de qualquer leitura daqui devolve os
@@ -34,6 +36,7 @@ import { escolherProximoCompromisso, type CompromissoDoCartao } from "@/lib/cart
 import { contarComprasParaOQuadro } from "@/lib/cartoes/compras-servidor";
 import type { SinaisDoCartao } from "@/lib/cartoes/tipos";
 import { avisosDeObrigacaoDoQuadro } from "@/lib/obrigacoes/sinais";
+import { ALVO_DA_PESSOA_DO_NEGOCIO, VINCULOS_DA_PESSOA_DO_NEGOCIO } from "@/lib/leads/pessoas-do-negocio";
 
 type Db = SupabaseClient;
 
@@ -155,7 +158,9 @@ async function montar(
         .from("crm_lead_links")
         .select("lead_id, target_id", contagem)
         .eq("organization_id", org)
-        .eq("target_kind", "contact")
+        .eq("target_kind", ALVO_DA_PESSOA_DO_NEGOCIO)
+        // Só as pessoas do negócio (os dois modelos), nunca outro vínculo de contato.
+        .in("link_kind", [...VINCULOS_DA_PESSOA_DO_NEGOCIO])
         .in("lead_id", lote),
     ),
     contarComprasParaOQuadro(db, org, { contatoIds, empresaIds }),

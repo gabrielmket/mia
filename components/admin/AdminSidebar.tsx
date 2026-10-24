@@ -84,6 +84,9 @@ const NAV_ITEMS: NavItem[] = [
   // painel da plataforma porque a causa é quase sempre uma só para vários
   // clientes — rate limit, chave expirada, número caído.
   { href: "/admin/fila-morta", label: "Trabalho parado", icon: Warning },
+  // FORK MIA (.88) — os chamados que as equipes dos clientes abrem pelo assistente
+  // da MIA (docs/fork/assistente.md): erro, dúvida ou pedido para a Time.
+  { href: "/admin/chamados", label: "Chamados do assistente", icon: ChatsCircle },
   // O preço de CUSTO do que o cliente comprou — fica aqui pelo mesmo motivo
   // do custo de IA: mostrar ao cliente seria mostrar a margem.
   { href: "/admin/custo-da-meta", label: "Custo das mensagens", icon: Receipt },

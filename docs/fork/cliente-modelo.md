@@ -29,7 +29,10 @@ empresas do admin, o mesmo selo aparece ao lado do nome.
 As quatro têm a mesma estrutura: funis com campos personalizados, probabilidade e
 prazo por etapa e **pelo menos um negócio em cada etapa**; contatos e empresas;
 conversas com a IA (a qualificação, a ficha e a passagem para uma pessoa); agenda
-passada e futura (com uma falta e um cancelamento); tarefas (uma atrasada);
+passada e futura (com uma falta e um cancelamento); tarefas (uma atrasada); pessoas
+nos negócios além do contato principal, com o papel de cada uma (.87: o RH que decide o
+plano empresa, o financeiro do convênio, a corretora parceira, o analista de crédito, o
+comprador e o financeiro do cliente da fábrica);
 documentos e obrigações do segmento; os **quatro follow-ups do segmento publicados**,
 com inscrições andando e terminadas; produtos e serviços no catálogo; quatro pessoas
 fictícias na equipe; e um **agente de IA com persona do segmento**, sem versão
@@ -131,6 +134,7 @@ Musculação, funcional, pilates e aulas coletivas. Agente: **Duda**.
 | funis | 9 funis. Seis saem dos quadros prontos do onboarding: clínica, imobiliária, serviços B2B, cursos, loja e geral (este é o padrão). Os outros três são automotivo, academia e o **Comercial**, que recebe o que a IA passa. Todos têm campos personalizados, motivos de perda com categoria e motivos de ganho, e **pelo menos um negócio em cada etapa** |
 | negócios | 62 negócios, cada um com valor, dono (pessoa ou a IA "Sofia"), origem, próxima ação (uma tarefa com prazo ligada ao card) e histórico na timeline. As origens são cinco: formulário da Meta, clique para o WhatsApp, Google, site e indicação |
 | contatos e empresas | 55 contatos, com e sem empresa. As 5 empresas têm várias pessoas, no cadastro único (`companies`, `people` e `company_people` com o papel, desde a .79). Uma pessoa está em duas empresas (a contadora externa) e uma tem dois números |
+| pessoas do negócio (.87) | dois negócios de empresa com outras pessoas além do contato principal, cada uma com o papel NESTE negócio (decisor, financeiro, usuário, influenciador), como o cartão aberto grava (`crm_lead_links`, `envolvido`). O dossiê do upstream também as mostra ([`cartoes-e-fichas.md`](cartoes-e-fichas.md), seção 2.1) |
 | atendimento com a IA | 8 conversas fictícias (47 mensagens). Em cada uma entram a qualificação da IA (`lead_state`), a ficha (`lead_notes`) e, quando houver, a passagem para uma pessoa e o card no Comercial |
 | follow-ups | os 28 modelos por segmento (geral, clínica, imobiliário, automotivo, academia, serviços B2B e indústria). Os que estão em uso ficam publicados, com inscrições em andamento e terminadas e o registro de cada passo. Os demais ficam em rascunho |
 | agenda | 13 compromissos: passados (feito, faltou, cancelado) e futuros (confirmado, pendente), com o lembrete desligado |

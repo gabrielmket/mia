@@ -1473,6 +1473,20 @@ export const AUDIT_ACTIONS = [
   // papel — nunca o texto do papel, que é livre.
   "lead.participant_added",
   "lead.participant_removed",
+  // FORK MIA (.88): o assistente da MIA (`lib/assistente/`, 9050). A pergunta
+  // leva só o que rodou (as ferramentas, se ficou sem resposta, o id da chamada
+  // de modelo), NUNCA o texto da pergunta nem o da resposta: esta tabela não sai
+  // pela cascata da LGPD. O chamado leva o número e o tipo, nunca o texto. O
+  // pedido à pessoa leva para quem; a configuração e a base própria, o que mudou
+  // e por onde (tela ou MCP de plataforma). O resumo da manhã é uma linha por
+  // rodada do cron que escreveu algum, com as contagens.
+  "assistente.perguntado",
+  "assistente.chamado_aberto",
+  "assistente.chamado_respondido",
+  "assistente.pedido_enviado",
+  "assistente.configurado",
+  "assistente.conhecimento_alterado",
+  "assistente.resumo_da_manha_gerado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

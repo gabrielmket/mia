@@ -58,6 +58,9 @@ export const SECOES_DA_EQUIPE = {
   conversation_notes:
     "nota interna: o que a equipe anotou para a equipe na conversa, com o nome de quem escreveu e o caminho do anexo no armazenamento (em Portugal, o texto e a data voltam: `NOTAS_SOBRE_O_TITULAR`)",
   case_chat_messages: "a conversa interna da equipe com a IA sobre o caso",
+  // FORK MIA (9050/9051): o histórico do assistente da MIA que cita o titular.
+  assistente_da_mia:
+    "a conversa interna de alguém da equipe com o assistente da MIA que cita o contato (como a conversa com a IA sobre o caso): vai no relatório, e a anonimização apaga o texto",
   appointment_notices:
     "aviso da Central PARA a equipe sobre o compromisso (registrar desfecho, revisar recuperação): tarefa interna, não dado dele",
 } as const satisfies Partial<Record<keyof ExportPayload, string>>;

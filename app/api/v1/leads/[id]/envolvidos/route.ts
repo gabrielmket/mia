@@ -13,6 +13,13 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * POST inclui ou troca o papel (a chave única do vínculo é negócio + alvo +
  * tipo); DELETE `?contact_id=` retira. As duas entram na linha do tempo do
  * negócio e na auditoria.
+ *
+ * .87 — o dossiê do upstream (v1.88) grava as pessoas do negócio na mesma
+ * tabela, com `link_kind = 'related'` e papel livre. Os dois modelos ficam e são
+ * lidos juntos (lib/leads/pessoas-do-negocio.ts): o POST tira o vínculo do
+ * upstream do mesmo contato (a pessoa fica com um só, e vale o papel escolhido
+ * aqui), e o DELETE tira os dois, também o que aponta para a lápide de uma
+ * fusão de contatos.
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
@@ -25,6 +32,12 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { createClient } from "@/lib/supabase/server";
 import { VINCULO_DE_ENVOLVIDO } from "@/lib/cartoes/cartao-aberto-servidor";
+import {
+  ALVO_DA_PESSOA_DO_NEGOCIO,
+  alvosDoContato,
+  tirarOOutroVinculo,
+  VINCULOS_DA_PESSOA_DO_NEGOCIO,
+} from "@/lib/leads/pessoas-do-negocio";
 import { PAPEIS } from "@/lib/cartoes/papel";
 
 export const dynamic = "force-dynamic";
@@ -98,6 +111,15 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     { onConflict: "lead_id,target_kind,target_id,link_kind" },
   );
   if (error) return fail("internal_error", error.message, 500, { requestId });
+  // .87: se a pessoa estava no negócio pelo dossiê do upstream (`related`), ela
+  // fica com um vínculo só, este. Falhar aqui não desfaz a escrita: a leitura
+  // mostra a pessoa uma vez.
+  await tirarOOutroVinculo(supabase, {
+    organizationId: authz.org.orgId,
+    leadId: lead.id,
+    contatoId: contact_id,
+    fica: VINCULO_DE_ENVOLVIDO,
+  });
 
   await emitLeadActivity(supabase, {
     organizationId: authz.org.orgId,
@@ -134,14 +156,18 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx): Promise<Response>
   const alvo = z.string().uuid().safeParse(new URL(req.url).searchParams.get("contact_id"));
   if (!alvo.success) return fail("validation_failed", t("Diga qual pessoa tirar do negócio."), 422, { requestId });
 
+  // .87: os dois vínculos (o do cartão e o do dossiê do upstream), e também o
+  // que ficou apontando para a lápide de uma fusão: a leitura mostra a pessoa
+  // pelo vencedor, e é o id dele que a tela manda.
+  const alvos = await alvosDoContato(supabase, authz.org.orgId, alvo.data);
   const { data: apagados, error } = await supabase
     .from("crm_lead_links")
     .delete()
     .eq("organization_id", authz.org.orgId)
     .eq("lead_id", lead.id)
-    .eq("target_kind", "contact")
-    .eq("target_id", alvo.data)
-    .eq("link_kind", VINCULO_DE_ENVOLVIDO)
+    .eq("target_kind", ALVO_DA_PESSOA_DO_NEGOCIO)
+    .in("target_id", alvos)
+    .in("link_kind", [...VINCULOS_DA_PESSOA_DO_NEGOCIO])
     .select("id");
   if (error) return fail("internal_error", error.message, 500, { requestId });
   if (!apagados || apagados.length === 0) {

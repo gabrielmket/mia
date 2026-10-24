@@ -378,6 +378,33 @@ describe("o que a demonstração precisa mostrar", () => {
     expect(await valor<number>(`select count(*)::int from public.crm_empresas where organization_id = $1`)).toBe(0);
   });
 
+  it(".87 · pessoas do negócio no modelo do fork: papel da lista, nunca o principal, sempre contato da empresa", async () => {
+    expect(
+      await valor<number>(`select count(*)::int from public.crm_lead_links where organization_id = $1 and target_kind = 'contact' and link_kind = 'envolvido'`),
+    ).toBeGreaterThanOrEqual(4);
+    // O papel é um dos cinco do fork (lib/cartoes/papel.ts), gravado como código.
+    expect(
+      await valor<number>(`select count(*)::int from public.crm_lead_links where organization_id = $1 and link_kind = 'envolvido'
+                              and coalesce(metadata->>'papel', '') not in ('decisor', 'financeiro', 'usuario', 'influenciador', 'outro')`),
+    ).toBe(0);
+    // As duas recusas do upstream valem na semente: o principal não participa de si
+    // mesmo, e o contato é da mesma organização do negócio.
+    expect(
+      await valor<number>(`select count(*)::int from public.crm_lead_links l join public.crm_leads ld on ld.id = l.lead_id
+                            where l.organization_id = $1 and l.target_kind = 'contact' and l.target_id = ld.contact_id`),
+    ).toBe(0);
+    expect(
+      await valor<number>(`select count(*)::int from public.crm_lead_links l
+                            where l.organization_id = $1 and l.target_kind = 'contact'
+                              and not exists (select 1 from public.contacts c where c.id = l.target_id and c.organization_id = l.organization_id)`),
+    ).toBe(0);
+    // Um negócio de empresa com duas pessoas além do principal (o protótipo de 15/10).
+    expect(
+      await valor<number>(`select max(n)::int from (select count(*) as n from public.crm_lead_links
+                            where organization_id = $1 and target_kind = 'contact' group by lead_id) x`),
+    ).toBeGreaterThanOrEqual(2);
+  });
+
   it("⭐ conversa com a IA: qualificação, ficha, passagem para o comercial", async () => {
     expect(await valor<number>(`select count(*)::int from public.messages where organization_id = $1 and sent_via = 'ai'`)).toBeGreaterThan(10);
     expect(await valor<number>(`select count(*)::int from public.lead_state where organization_id = $1 and stage = 'qualified' and qualification ? 'budget'`)).toBeGreaterThan(1);

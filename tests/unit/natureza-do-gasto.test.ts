@@ -115,6 +115,8 @@ describe("de que natureza é cada ponto", () => {
       "proposal_fill_from_conversation",
       "case_chat",
       "conversion_value_from_conversation",
+      // FORK MIA (.88): o assistente da MIA responde à equipe; sistema, como case_chat.
+      "assistente",
     ]);
     const novos = PONTOS_DE_IA.map((p) => p.id).filter((id) => !classificados.has(id));
     expect(novos, "pontos de IA sem natureza decidida").toEqual([]);

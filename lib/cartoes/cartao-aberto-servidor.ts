@@ -31,11 +31,16 @@ import {
 import { UTM_SOURCES_DA_META } from "@/lib/conversoes/leitura-da-atribuicao";
 import { rotuloDoEnvioDaMeta } from "@/lib/conversoes-meta/rotulo";
 import { formatarCnpj, lerEmpresa } from "@/lib/empresas/fonte-unica";
+import { lerPessoasDoNegocio, VINCULO_DO_FORK } from "@/lib/leads/pessoas-do-negocio";
 
 type Db = SupabaseClient;
 
-/** O vínculo "contato envolvido neste negócio" em `crm_lead_links`. */
-export const VINCULO_DE_ENVOLVIDO = "envolvido";
+/**
+ * O vínculo "contato envolvido neste negócio" em `crm_lead_links` (o do fork).
+ * Desde a .87 a leitura une este e o `related` do dossiê do upstream
+ * (lib/leads/pessoas-do-negocio.ts).
+ */
+export const VINCULO_DE_ENVOLVIDO = VINCULO_DO_FORK;
 
 interface LinhaDoNegocio {
   id: string;
@@ -149,15 +154,10 @@ export async function montarCartaoAberto(
             } | null,
           )
         : Promise.resolve(null),
-      seguro(
-        db
-          .from("crm_lead_links")
-          .select("target_id, metadata")
-          .eq("organization_id", org)
-          .eq("lead_id", leadId)
-          .eq("target_kind", "contact"),
-        [] as Array<{ target_id: string; metadata: Record<string, unknown> | null }>,
-      ),
+      // .87: as pessoas do negócio dos DOIS modelos (o `envolvido` deste cartão e o
+      // `related` do dossiê do upstream), pelo vencedor da fusão e sem o principal.
+      // Nunca lança: falha volta vazia.
+      lerPessoasDoNegocio(db, org, leadId, contatoId),
       contatoId
         ? seguro(
             db
@@ -257,21 +257,10 @@ export async function montarCartaoAberto(
   }
 
   // ─── pessoas (principal + envolvidas) ──────────────────────────────────────
-  const idsEnvolvidos = envolvidos.map((e) => e.target_id).filter((id) => id !== contatoId);
-  const idsDasPessoas = [...new Set([...(contatoId ? [contatoId] : []), ...idsEnvolvidos])];
-  const [pessoasBrutas, conversasDasPessoas] = await Promise.all([
-    idsEnvolvidos.length > 0
-      ? seguro(
-          db
-            .from("contacts")
-            .select("id, name, display_name, phone_number, cargo, is_anonymized")
-            .eq("organization_id", org)
-            .in("id", idsEnvolvidos),
-          [] as Array<{ id: string; name: string | null; display_name: string | null; phone_number: string | null; cargo: string | null; is_anonymized: boolean }>,
-        )
-      : Promise.resolve([]),
+  const idsDasPessoas = [...new Set([...(contatoId ? [contatoId] : []), ...envolvidos.map((e) => e.contatoId)])];
+  const conversasDasPessoas =
     idsDasPessoas.length > 0
-      ? seguro(
+      ? await seguro(
           db
             .from("conversations")
             .select("id, contact_id")
@@ -280,14 +269,9 @@ export async function montarCartaoAberto(
             .order("last_message_at", { ascending: false, nullsFirst: false }),
           [] as Array<{ id: string; contact_id: string }>,
         )
-      : Promise.resolve([]),
-  ]);
+      : [];
   const conversaDe = new Map<string, string>();
   for (const c of conversasDasPessoas) if (!conversaDe.has(c.contact_id)) conversaDe.set(c.contact_id, c.id);
-  const papelNoNegocio = new Map(
-    envolvidos.map((e) => [e.target_id, typeof e.metadata?.papel === "string" ? (e.metadata.papel as string) : null]),
-  );
-
   const pessoas: PessoaDoNegocio[] = [];
   if (contato) {
     pessoas.push({
@@ -295,20 +279,26 @@ export async function montarCartaoAberto(
       nome: contato.is_anonymized ? null : nomeDoContato(contato),
       telefone: contato.is_anonymized ? null : contato.phone_number,
       cargo: contato.is_anonymized ? null : contato.cargo,
-      papel: papelNoNegocio.get(contato.id) ?? null,
+      // O principal não é participante (a regra das duas telas): papel no
+      // negócio, só das outras pessoas.
+      papel: null,
+      papelLivre: null,
       principal: true,
       conversaId: conversaDe.get(contato.id) ?? null,
     });
   }
-  for (const p of pessoasBrutas) {
+  for (const e of envolvidos) {
+    const p = e.contato;
     pessoas.push({
-      contatoId: p.id,
+      contatoId: e.contatoId,
       nome: p.is_anonymized ? null : nomeDoContato(p),
       telefone: p.is_anonymized ? null : p.phone_number,
       cargo: p.is_anonymized ? null : p.cargo,
-      papel: papelNoNegocio.get(p.id) ?? null,
+      papel: e.papel,
+      // O texto do dossiê do upstream que não é um dos cinco ("Pagante").
+      papelLivre: p.is_anonymized ? null : e.papelLivre,
       principal: false,
-      conversaId: conversaDe.get(p.id) ?? null,
+      conversaId: conversaDe.get(e.contatoId) ?? null,
     });
   }
 

@@ -159,13 +159,35 @@ a semente das demonstrações (esta grava direto, como serviço, nas mesmas tabe
 | `tests/unit/mcp-de-migracao-vinculos.test.ts` | a ferramenta nova do MCP |
 | `tests/unit/fichas-conectadas-mia.test.tsx` | a ficha do contato com várias empresas e números |
 
-## 8. O que fica para a parte 5
+## 8. A parte 5 (.87) e o que ficou
 
-- As pessoas do NEGÓCIO alinhadas com o upstream (#1506): hoje o papel no negócio é o
-  nosso (`lib/cartoes/papel.ts`).
-- Tirar `crm_empresas` de vez (com o de-para guardado), e o espelho do contato, quando
-  nenhuma leitura depender dele.
+A parte 5 previa alinhar as pessoas do negócio com o upstream, tirar `crm_empresas` e
+o espelho do contato. Em 24/10/2026 o Gabriel decidiu outra coisa: **o modelo do fork
+fica** ("o jeito que a gente está associando a empresa está muito bacana"), e da v1.88
+entra só o que soma ao nosso, sem trocar a tela.
+
+**O que entrou na .87:**
+
+- As pessoas do negócio dos DOIS modelos (o `envolvido` do cartão, com a lista fechada,
+  e o `related` do dossiê do upstream, com papel livre) são lidas juntas, sem converter
+  dado: o cartão aberto, a ficha do contato, o quadro e o dossiê do upstream veem as
+  mesmas pessoas. O desenho está em
+  [`cartoes-e-fichas.md`](cartoes-e-fichas.md), seção 2.1, e o código em
+  `lib/leads/pessoas-do-negocio.ts`.
+- As demonstrações ganharam pessoas nos negócios (no modelo do fork), para o bloco
+  "Pessoas do negócio" não abrir vazio ([`cliente-modelo.md`](cliente-modelo.md)).
+
+**O que fica como está, por decisão:** `crm_empresas` (aposentada para escrita desde a
+9033, com os dados), o espelho do contato (`contacts.empresa_id`, `cargo`, `setor`,
+`papel_na_empresa`, `principal_na_empresa`, mantido pelos gatilhos da 9034) e o
+`link_kind = 'envolvido'`. Nenhuma migration nesta versão.
+
+**Ainda aberto:**
+
 - A coluna "Responsável" da lista do protótipo: a empresa não tem dono no cadastro
   do upstream.
 - Os outros telefones da linha na importação de contatos (hoje um número por linha;
   juntar é pela ferramenta de vínculos).
+- As pessoas do negócio pelo MCP de plataforma (importar e ler): nenhuma ferramenta
+  grava nem lê `envolvido` hoje; é peça nova, e fica para quando for pedida.
+

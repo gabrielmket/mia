@@ -188,10 +188,14 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **78** ferramentas no servidor: as 70 desta página e as 8 da migração
+São **83** ferramentas no servidor: as 75 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). As nove mais novas (.89) são as do disparo de
 e-mail marketing ([`email-marketing.md`](email-marketing.md); veja "O disparo de e-mail
-marketing (.89)", nesta seção). A fusão das v1.87 e v1.88 (.86) não pediu
+marketing (.89)", nesta seção). As cinco de antes delas (.88) são as do
+assistente da MIA ([`assistente.md`](assistente.md)): `plataforma_configurar_assistente`,
+`plataforma_garantir_conhecimento_do_assistente`, `plataforma_ver_assistente`,
+`plataforma_ver_chamados` e `plataforma_responder_chamado` (veja "O assistente da MIA
+(.88)", nesta seção). A fusão das v1.87 e v1.88 (.86) não pediu
 ferramenta nova, só campos e regras novas (veja "O que chegou do upstream 1.87 e 1.88",
 nesta seção). A mais nova (.84, a fusão do upstream
 v1.86) é `plataforma_copiar_followup`: a exportação e a importação de fluxo da tela,
@@ -347,7 +351,7 @@ funciona com os dados fictícios e a página avisa que é demonstração.
 Função do fork, e entra no MCP na mesma versão. Desenho e passo a passo da Amazon em
 [`email-marketing.md`](email-marketing.md); a prova está em
 `tests/unit/mcp-de-implantacao-email-marketing.test.ts` (a CONTAGEM da lista mora ali
-desde a .89: 78).
+desde a .89: 83).
 
 **O MCP nunca dispara.** Ele monta tudo e manda o TESTE; quem envia é uma pessoa da
 empresa (gestor para cima), na tela da campanha, com a declaração da base legal
@@ -609,6 +613,23 @@ e vale ao publicar; a régua está em `lib/agent-engine/agent/horario-da-ia.ts`.
 | A leitura | `plataforma_ver_agentes` devolve, por agente, `horario_de_atendimento` da versão PUBLICADA: `faixas`, `fuso`, `ativa_agora`, `proxima_troca` (`em`, `texto` como "hoje às 17:30", `fica`), `janela_de_resposta_do_numero` e `fora_da_janela_de_resposta_do_numero`. Com `agente`, a versão vigente traz o horário dela (o rascunho, se houver) | |
 | A janela de RESPOSTA do número | campo novo `janela_de_resposta: { inicio_hora, fim_hora }` (0 a 24; `null` volta a seguir a janela de disparo) em `plataforma_configurar_canal`, pela régua de `PUT /api/v1/ai/pacing`: grava só `resposta_start_hour`/`resposta_end_hour`, reprograma os turnos que esperavam a janela e audita `ai.pacing_knobs_updated`. Disparo, retomada e prospecção não mudam. `plataforma_ver_configuracao`, seção `canais`, devolve a janela | `implantar_configuracao` |
 
+### O assistente da MIA (.88)
+
+Função do fork ([`assistente.md`](assistente.md)), e entra no MCP na mesma versão. A
+prova está em `tests/unit/mcp-de-implantacao-assistente.test.ts`, que guarda a
+CONTAGEM da lista (74). Uma operação nova, `responder_chamados`: responder FALA, em nome
+da Time Company, com a equipe do cliente (no assistente, no sino e por e-mail), e isso
+não é montagem. O token que já existe não a tem: para usar
+`plataforma_responder_chamado`, marque a caixinha nova em Admin › Tokens de plataforma.
+
+| ferramenta | o que faz | operação | reexecução |
+|---|---|---|---|
+| `plataforma_configurar_assistente` | liga e desliga o assistente na empresa (`ligado`), diz quais papéis usam (`papeis`), o limite de perguntas por pessoa por dia (padrão 50, até 1000) e se o resumo da manhã nasce ligado (`resumo_da_manha_padrao`, padrão desligado). Só o que vier no pedido muda; devolve o antes e o depois | `implantar_configuracao` | mesma resposta, sem efeito novo |
+| `plataforma_garantir_conhecimento_do_assistente` | a base própria da empresa ("como trabalhamos aqui"), por TÍTULO (sem diferença de maiúscula): cria, atualiza ou tira (`remover`). Até 30 itens, texto de até 2000 caracteres | `implantar_configuracao` | o título repetido atualiza em vez de duplicar (`iguais` quando nada mudou) |
+| `plataforma_ver_assistente` | a configuração, o uso dos últimos 30 dias por papel (perguntas e pessoas), as perguntas sem resposta (o texto e quantas vezes, nunca a conversa), os itens da base própria e o custo do mês (chamadas e centavos, de `llm_calls` com `purpose = 'assistente'`) | leitura | |
+| `plataforma_ver_chamados` | os chamados de uma empresa ou de todas (sem `organization_id`), com o contexto que o assistente juntou; por padrão só os abertos. Os da empresa de demonstração não entram | leitura | |
+| `plataforma_responder_chamado` | responde e muda a situação de um chamado pelo NÚMERO; com resposta nova ou ao resolver, quem abriu recebe no assistente, no sino e no e-mail. Recusa o chamado da demonstração | `responder_chamados` | a mesma resposta não entrega de novo |
+
 ### O que chegou do upstream 1.85 (.83)
 
 Mesma regra, na fusão da v1.85. A prova de cada linha está em
@@ -783,7 +804,8 @@ Testes:
 
 | arquivo | o que mede |
 |---|---|
-| `tests/unit/mcp-de-implantacao-email-marketing.test.ts` | as nove ferramentas do e-mail marketing (.89) e a CONTAGEM da lista (78): leitura livre e as duas caixinhas novas, o MCP que nunca dispara (pelo código-fonte e pelo banco: rascunho, ninguém na fila), o teste só para a equipe, a demonstração e o módulo que recusam o teste, a configuração que não duplica, a supressão que só acrescenta, o preço por e-mail que não mexe no da mensagem e a área nova do checklist |
+| `tests/unit/mcp-de-implantacao-assistente.test.ts` | as cinco ferramentas do assistente da MIA (.88): o que gravam, a reexecução, a operação própria do responder, a entrega da resposta no assistente, no sino e no e-mail, a recusa do chamado da demonstração, e as cinco dele (a CONTAGEM da lista mora no teste do e-mail marketing) |
+| `tests/unit/mcp-de-implantacao-email-marketing.test.ts` | as nove ferramentas do e-mail marketing (.89) e a CONTAGEM da lista (83): leitura livre e as duas caixinhas novas, o MCP que nunca dispara (pelo código-fonte e pelo banco: rascunho, ninguém na fila), o teste só para a equipe, a demonstração e o módulo que recusam o teste, a configuração que não duplica, a supressão que só acrescenta, o preço por e-mail que não mexe no da mensagem e a área nova do checklist |
 | `tests/invariants/email-marketing.test.ts` | as tabelas do e-mail (9060 a 9065) no Postgres de verdade: isolamento por empresa e papel, só o servidor grava, a demonstração que não envia, a supressão que só acrescenta, a anonimização que apaga o legível e mantém o veto, o débito por lote e a fila do worker |
 | `tests/unit/mcp-de-implantacao-ferramentas.test.ts` | o catálogo: descrições, exemplos que passam no próprio esquema, a guarda da operação, organização inexistente, recusa que ensina, auditoria |
 | `tests/unit/mcp-de-implantacao-operacoes.test.ts` | cada ferramenta: o que grava, a reexecução, as recusas e a empresa de demonstração |

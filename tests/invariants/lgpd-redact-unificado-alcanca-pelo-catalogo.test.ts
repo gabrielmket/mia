@@ -277,6 +277,21 @@ const DECISOES: Record<string, Decisao> = {
     caminho: "gatilho",
     razao: "Fork MIA, 9018 (documentos e obrigações): o item ligado À PESSOA (contact_id) é APAGADO na virada de is_anonymized por fn_mia_obrigacoes_do_contato_anonimizado, com o histórico de ciclos (cascata da chave) e as propostas; o item dos NEGÓCIOS dela fica como registro do negócio, sem arquivo e sem observação. Todo arquivo (o do ciclo em vigor e os do histórico) entra em storage_redaction_queue com o bucket mia-obrigacoes, na mesma transação. Gatilho, e não cascata, porque a cascata é do upstream e o fork estende sem redefinir. Provado em tests/invariants/obrigacoes.test.ts.",
   },
+  mia_assistente_citacoes: {
+    decidida: "redigir",
+    caminho: "gatilho",
+    razao: "Fork MIA, 9052 (assistente da MIA, .88): o índice relacional dos contatos que uma pergunta ou resposta do assistente cita. Só guarda ids (mensagem, contato, empresa), sem texto. Na virada de is_anonymized, o bloco 6b da fn_redigir_o_que_sobrou_do_contato_anonimizado apaga a citação, e o bloco 6 (9051) apaga o texto das mensagens que citavam o contato. Provado em tests/invariants/assistente-da-mia.test.ts.",
+  },
+  mia_email_destinatarios: {
+    decidida: "redigir",
+    caminho: "gatilho",
+    razao: "Fork MIA, 9062/9064 (disparo de e-mail marketing, .89): guarda o e-mail COPIADO de cada destinatário da campanha. Na virada de is_anonymized, fn_mia_redigir_email_marketing_do_contato_anonimizado apaga o endereço e solta o contato; o hash fica, porque é ele que faz o veto da supressão sobreviver (quem pediu para sair não volta por um cadastro novo). A LINHA fica: o resultado da campanha e o débito da carteira apontam para ela. Gatilho, e não cascata, porque a cascata é do upstream. Provado em tests/invariants/email-marketing.test.ts.",
+  },
+  mia_email_consentimentos: {
+    decidida: "redigir",
+    caminho: "gatilho",
+    razao: "Fork MIA, 9061/9064 (.89): o registro de cada aceite e recusa de e-mail marketing. Na virada de is_anonymized, a mesma função apaga a origem, a evidência e o texto aceito e solta o contato; ficam o tipo, a data e o hash, que é a prova de que a escolha da pessoa foi respeitada. Provado em tests/invariants/email-marketing.test.ts.",
+  },
   mia_obrigacoes_propostas: {
     decidida: "redigir",
     caminho: "gatilho",

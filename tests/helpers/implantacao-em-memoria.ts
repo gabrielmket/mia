@@ -37,6 +37,8 @@ export const TODAS_AS_OPERACOES = [
   "convidar_equipe",
   // FORK MIA (.79): o link dos painéis para o dono do negócio.
   "compartilhar_paineis",
+  // FORK MIA (.88): responder os chamados do assistente da MIA.
+  "responder_chamados",
   // FORK MIA (.89): o e-mail marketing (aceites importados e o rascunho com teste).
   "importar_consentimentos",
   "criar_campanha_de_email",
