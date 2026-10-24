@@ -85,8 +85,11 @@ abertos:
 - `contacts.social_identity` não é anonimizada por nenhum caminho, nem exportada
 - `google_ads_click_refs` / `meta_ads_click_refs` guardam `query_raw` e nada as alcança
 - a rota direta de anonimização não zera `consent`, `tags`, `source_metadata`
-- o diagnóstico da Meta (o par do `lerDiagnosticoGoogle`), e o link do negócio na
-  lista de pendências da tela de Conversões, que para na lista de funis. A régua
+- `agent_turn_traces` (0721, o traço do turno do agente) guarda o texto de erro do
+  turno e de cada ferramenta e nenhum caminho de anonimização dele o alcança; o fork
+  redige pela 9047 e entrega no acesso do titular (achado da catraca na fusão da .86)
+- o diagnóstico da Meta (o par do `lerDiagnosticoGoogle`). O link do negócio na
+  lista de pendências da tela de Conversões o upstream consertou na v1.88. A régua
   por etapa da Meta o upstream fez (0524) e a MIA adotou na .72; o "todo evento de
   etapa lê Compra" ele consertou no mesmo lançamento. Da régua dele faltam, se
   fizerem falta: valor por etapa e canal de entrada

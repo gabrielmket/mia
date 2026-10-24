@@ -188,7 +188,9 @@ ferramenta (desliga, ajusta, religa), como as automações.
 ## 3. Todas as ferramentas
 
 São **69** ferramentas no servidor: as 61 desta página e as 8 da migração
-([`mcp-de-migracao.md`](mcp-de-migracao.md)). A mais nova (.84, a fusão do upstream
+([`mcp-de-migracao.md`](mcp-de-migracao.md)). A fusão das v1.87 e v1.88 (.86) não pediu
+ferramenta nova, só campos e regras novas (veja "O que chegou do upstream 1.87 e 1.88",
+nesta seção). A mais nova (.84, a fusão do upstream
 v1.86) é `plataforma_copiar_followup`: a exportação e a importação de fluxo da tela,
 de outra empresa ou de um `.fluxo.json` (veja "O que chegou do upstream 1.86", nesta
 seção). As fusões da v1.84 (.82) e da v1.85 (.83) não pediram ferramenta nova, só campos
@@ -254,7 +256,7 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 | ferramenta | o que faz | chave natural | teto por chamada |
 |---|---|---|---|
 | `plataforma_configurar_empresa` | nome, razão social, CNPJ, país (desde a .82, trocar o país sem mandar `fuso` leva o fuso sugerido do país, como a tela), fuso, idioma, moeda, modo de venda, retenção de mídia, a limpeza automática de mídia antiga (ligada, apaga sem volta), encarregado e política de privacidade; e, desde a .79, a **meta do mês** (`meta_do_mes`: o faturamento dos ganhos da empresa inteira, em centavos, no mês corrente ou no `mes` pedido), pelo mesmo upsert da tela de Desempenho (`lib/crm/metas/gravar.ts`). É ela que vira a barra do painel "Meta do mês" | a organização; a meta, pelo mês | só os campos que vieram mudam |
-| `plataforma_configurar_atendimento` | modo de distribuição (manual, rodízio ou menor carga; desde a .83 vale para os números SEM regra própria), visibilidade das conversas, devolução para a IA, quanto a IA espera depois de uma resposta pelo celular, o nome de quem fala (atendente ou IA) em negrito na mensagem, o freio da empresa para o passo "a IA decide" das automações e, desde a .81, as duas opções da agenda (atendentes mexem na agenda dos colegas; Google Meet com acesso aberto) | a organização | idem |
+| `plataforma_configurar_atendimento` | modo de distribuição (manual, rodízio ou menor carga; desde a .83 vale para os números SEM regra própria), visibilidade das conversas, devolução para a IA, quanto a IA espera depois de uma resposta pelo celular, o nome de quem fala (atendente ou IA) em negrito na mensagem (desde a .86, também o nome de cada agente), o freio da empresa para o passo "a IA decide" das automações, desde a .81 as duas opções da agenda (atendentes mexem na agenda dos colegas; Google Meet com acesso aberto) e, desde a .86, a devolução à fila da conversa do rodízio sem resposta, o telefone que entra sozinho na ficha sem número e as etiquetas de contato interno | a organização | idem |
 | `plataforma_garantir_funil` | funil, etapas na ordem, passo do agente por etapa, probabilidade, janela de esfriando (`prazo_esperado_horas`, pela régua da tela: 1 a 8760 horas inteiras) e cor, campos personalizados (com obrigatoriedade por etapa; desde a .84, de quem é o campo, `escopo` negócio ou contato, só no funil padrão, e a lista pesquisável `searchable_select` com `aliases` e `allow_new`), motivos de perda e de ganho, vocabulário (desde a .79 também `compromisso` e `compromisso_plural`, como o segmento chama o que a agenda marca: o plural é o título do painel pronto de agenda) | nome do funil; nome da etapa; `key` do campo; rótulo do motivo | 20 etapas |
 | `plataforma_garantir_produtos` | catálogo em lote, com preço em centavos ou em texto (`"R$ 189,90"`); item com problema é recusado com motivo e não derruba os outros | código do produto (sem código, o nome) | 200 produtos |
 | `plataforma_garantir_etiquetas` | etiquetas no vocabulário, com cor e descrição | nome da etiqueta, sem diferenciar maiúscula | 50 etiquetas |
@@ -262,7 +264,7 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 | `plataforma_garantir_conhecimento` | material por **texto**: perguntas e respostas, ou documento | nome do material | 200 perguntas; 200 mil caracteres |
 | `plataforma_garantir_followup` | instala um fluxo a partir de um modelo e ajusta textos, esperas, etapa do gatilho e política; no gatilho de silêncio, o teto do silêncio e a pausa antes de recomeçar; e garante as caixas que mexem no negócio sem falar com o cliente (`mover_no_funil` e `etiquetar`), antes de um nó do fluxo; desde a .83, a `midia` do passo de texto fixo (imagem ou PDF por endereço, com o texto de legenda); desde a .84, no gatilho de silêncio, `so_se_a_equipe_respondeu` e `repeticoes_por_contato` | nome do fluxo; a caixa, pelo lugar onde está | um fluxo; 10 caixas de cada tipo |
 | `plataforma_copiar_followup` | (.84) copia um fluxo de follow-up de OUTRA EMPRESA da plataforma (`de_outra_empresa`) ou de um `.fluxo.json` exportado pela tela (`arquivo`), pelo caminho da importação do upstream (#3056): nasce RASCUNHO; etapas, modelos, responsáveis e próximos fluxos casam por id ou por nome, e o que não casa volta em `pendencias` (com a frase da tela e se bloqueia a publicação). Não copia roteiro de atendimento | o NOME no cliente: nome que já existe responde `ja_estava` e nada é copiado | um fluxo |
-| `plataforma_garantir_agente` | cria ou altera o **rascunho** do agente: prompt, capacidades por pacote, funis, materiais, follow-ups, palavras de passagem, passagem por assunto jurídico, o horário de atendimento da IA (faixas por dia; desde a .85), número. O limiar de sentimento é do cadastro e vale na hora; o bloqueio de afirmação clínica é da EMPRESA (todos os agentes) e vale na hora | nome do agente | um agente |
+| `plataforma_garantir_agente` | cria ou altera o **rascunho** do agente: prompt, capacidades por pacote, funis, materiais, follow-ups, palavras de passagem, passagem por assunto jurídico, o horário de atendimento da IA (faixas por dia; desde a .85), o filtro de palavras (desde a .86), número. O limiar de sentimento é do cadastro e vale na hora; o bloqueio de afirmação clínica é da EMPRESA (todos os agentes) e vale na hora | nome do agente | um agente |
 | `plataforma_garantir_roteador` | cria ou ajusta o roteador de intenção de um número, **desligado**: nome, número, agente reserva, a janela de contexto do classificador (0 a 16 mensagens, 8 no roteador novo) e as intenções, cada uma com o agente e o funil (e a etapa) de destino do negócio | nome do roteador; nome da intenção | 20 intenções |
 | `plataforma_garantir_automacao` | cria ou ajusta uma regra de automação, **desligada**. É também o webhook de saída: os gatilhos de ganho, perda, reabertura e troca de responsável com a ação `call_webhook`. Aceita o passo "a IA decide" (`ai_decide`, com as ações das opções conferidas pela mesma régua), aplicar um plano de tarefas, etiqueta no contato, o recorte por fonte de formulário e o funil e a etapa dos gatilhos de tempo; desde a .83, a `media_url` da mensagem de WhatsApp (imagem ou PDF, conferida antes de gravar); desde a .84, o RODÍZIO da ação atribuir (`{ "modo": "rodizio", "fila": [...] }`, cada pessoa conferida contra a equipe) e a recusa do gatilho por data num campo do contato | nome da regra | uma regra |
 | `plataforma_garantir_planos_de_tarefa` | os planos de tarefa (a sequência de tarefas que uma automação aplica ao negócio), com título, prazo, prioridade e responsável de cada passo | o `id` do plano, ou o nome | 50 planos; 30 passos por plano |
@@ -507,6 +509,50 @@ inteiro (o número da equipe que recebe o caso) não tem ferramenta: a porta do
 upstream (`fn_definir_aviso_de_caso`) exige uma pessoa admin com verificação em
 duas etapas, o número passa a ser INTERNO (o que chega dele deixa de virar
 contato), e a resposta dele retoma a IA com o cliente. Veja a seção 4.
+
+### O que chegou do upstream 1.87 e 1.88 (.86)
+
+Mesma regra, na fusão das v1.87 e v1.88. A prova de cada linha está em
+`tests/unit/mcp-de-implantacao-novidades-do-upstream-188.test.ts` (que agora
+guarda a contagem: 69, nenhuma ferramenta nova).
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| Fonte de webhook com assinatura reaproveita o card ABERTO do contato no funil (`webhook_sources.reuse_open_lead_on_capture`, 0722, #3101) | 1.88 | campo novo `reaproveitar_card_aberto` em `plataforma_garantir_fonte_de_formulario`, a régua da opção irmã: só no ajuste, recusa sem a assinatura com a frase própria (`opcaoSemAssinatura` = `reuse_lead`), avisa que a edição manual pode ser sobrescrita; a leitura devolve a opção | `implantar_configuracao` |
+| A assinatura da IA com o nome de CADA agente (`assinatura_mensagens.por_agente`, #3318) | 1.88 | campo novo `assinatura.nome_de_cada_agente` em `plataforma_configurar_atendimento`. O espelho passou a MANTER o gravado quando o campo não vem (a régua da rota): antes, mexer só no nome apagaria a escolha feita na tela | `implantar_configuracao` |
+| A conversa do rodízio sem resposta humana volta para a fila (`routing.unanswered_return_minutes`, #2988, cron novo `rodizio-devolucao`) | 1.88 | campo novo `devolver_a_fila_sem_resposta_minutos` (5 min a 24 h; `null` desliga) em `plataforma_configurar_atendimento`, pela mescla do upstream (`mesclarSettingsDeAtendimento`) e a auditoria `routing.config_changed`. Sem tela no upstream | `implantar_configuracao` |
+| O telefone dito na conversa entra sozinho na ficha SEM número (`settings.crm.telefone_de_ficha_vazia`, #2593) | 1.87 | campo novo `telefone_de_ficha_vazia` em `plataforma_configurar_atendimento`, a mescla da ação da tela e a auditoria `crm.telefone_de_ficha_vazia_alterado` | `implantar_configuracao` |
+| Etiquetas de CONTATO INTERNO: o contato com uma delas não vira card e a IA não responde (`settings.crm.internal_contact_tags`, refs #2353) | 1.88 | campo novo `etiquetas_de_contato_interno` (a lista inteira, normalizada como a tela) em `plataforma_configurar_atendimento`, com a auditoria `crm.tags_internas_alteradas` | `implantar_configuracao` |
+| O FILTRO DE PALAVRAS do agente passou a VALER (`trigger_config.filters.keyword_regex`, #2696): sem uma das palavras, a IA não responde | 1.87 | campo novo `filtro_de_palavras` em `plataforma_garantir_agente` (a expressão que não compila é recusada, `null` tira); `plataforma_ver_agentes` devolve `filtro_de_palavras` de cada agente e da versão vigente | `implantar_configuracao` |
+| Condições das automações: "não contém", "está vazio", "está preenchido", maior/menor (número ou data) e o grupo "qualquer uma" (`OPS_DE_CONDICAO`, `{ any: [...] }`, #2727) | 1.87 | `condicoes[].op` de `plataforma_garantir_automacao` passa a ser a lista do upstream (o `value` fica opcional no "está vazio"/"está preenchido") e o campo novo `combinar_condicoes` ("todas", o padrão, ou "qualquer"); a descrição ensina a mudança do `neq` em campo ausente | `implantar_configuracao` |
+| Automação "Mensagem para a equipe" (`notify_team`, #2642) e o e-mail para uma PESSOA da equipe (`send_email` com `membro_da_equipe` e `{{resumo}}`) | 1.88 | `notify_team` entra nos tipos de ação (a lista segue EXATAMENTE a do upstream); `plataforma_listar_modelos` ensina que ela sai pelo número do aviso de caso (que uma pessoa cadastra); o `membro_id` do e-mail é conferido contra a equipe | `implantar_configuracao` |
+| Agenda por SERVIÇO, com turmas, capacidade e calendários compartilhados (0716, #3132) | 1.87 | campo novo `servico_em_rascunho` em `plataforma_garantir_tipos_de_agendamento` (só no tipo novo, como a tela: serviço desativado e sem responsável); a leitura (`plataforma_ver_configuracao`, seção `agenda`) devolve o `servico` de cada tipo. A PROGRAMAÇÃO e a ativação ficam na tela (veja abaixo) | `implantar_configuracao` |
+| Receitas prontas do banco externo: produtos do WooCommerce (0706, #3096) e conteúdo do WordPress (#3213), no MySQL | 1.87 e 1.88 | campo novo `receitas` em `plataforma_configurar_banco_externo` (a lista inteira), pelo caminho de `PUT .../recipes`: `atualizarReceitasSchema`, `validarFixosDaReceita` (a recusa diz o campo), receita contra o motor da conexão, auditoria `external_db_recipes.updated`; a resposta e a leitura dizem quantas receitas há | `implantar_configuracao` |
+| A ORDEM das respostas prontas (`message_templates.ordem`, 0729, #3244) | 1.88 | `plataforma_garantir_respostas_prontas` grava as NOVAS no topo, na ordem do pedido (a rota grava a nova no topo); a que já existe não muda de lugar | `implantar_configuracao` |
+| Regras de "negócio criado" passam a rodar para o negócio da Prospecção; o eco da mensagem enviada não pausa a IA; transferir a conversa leva o negócio; "PARAR" encerra as demandas | 1.88 | nada a configurar: comportamento do motor (ver os riscos da .86) | |
+| App no celular, MFA com dispositivo confiável, últimas compras no Inbox, encaminhar mensagem, traço do turno, mediana da 1ª resposta | 1.87 e 1.88 | nada a configurar pela implantação: escolha de cada pessoa ou leitura | |
+
+Ficou de fora desta fusão, por decisão:
+
+- o AVISO DE AGENDAMENTO no WhatsApp do dono (0753): a porta do upstream
+  (`fn_definir_aviso_de_agendamento`) exige uma pessoa admin com a verificação em duas
+  etapas provada na sessão, e o número escolhido vira INTERNO (o que chega dele deixa de
+  virar atendimento). É a mesma razão do aviso de caso (.84). Configurações › Sua
+  empresa › Aviso de agendamento;
+- a PROGRAMAÇÃO do serviço da agenda (0716: individual por profissional ou turma com
+  capacidade, horários, exceções, profissionais, recursos, bloqueios e o calendário
+  Google de destino): a porta (`fn_calendar_service_configure`) confere o ator como
+  MEMBRO gerente da empresa ou token dela, e a programação depende das agendas Google de
+  cada pessoa. O MCP cria o serviço em rascunho e a pessoa programa e ativa na tela;
+- a CAMPANHA pelo número oficial com modelo aprovado (0710) e a saída configurável da
+  prospecção (0705): são campanhas, operação do dia a dia, e o MCP não monta campanha;
+- a RESPOSTA PRONTA de ÁUDIO (#2833): o MCP segue recebendo imagens; o áudio sobe pela
+  tela (Respostas rápidas), que confere os bytes;
+- o nome e o "responder para" do e-mail das automações (Configurações › Marca, #3312):
+  no fork a marca é da plataforma (`MARCA_DA_ORGANIZACAO=travada`), e a ação da tela
+  recusa os dois campos junto com a marca;
+- caixa de mensagem bloqueada até assumir e os três campos das últimas compras
+  (Configurações › Empresa): preferência de operação da equipe, sem efeito na montagem.
 
 ### O horário de atendimento da IA (.85)
 
