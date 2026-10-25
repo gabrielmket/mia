@@ -188,8 +188,10 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **83** ferramentas no servidor: as 75 desta página e as 8 da migração
-([`mcp-de-migracao.md`](mcp-de-migracao.md)). As nove mais novas (.89) são as do disparo de
+São **92** ferramentas no servidor: as 84 desta página e as 8 da migração
+([`mcp-de-migracao.md`](mcp-de-migracao.md)). As nove mais novas (.90) são as da cobrança da
+jornada de assinatura ([`jornada-de-assinatura.md`](jornada-de-assinatura.md); veja "A cobrança
+da jornada de assinatura (.90)", nesta seção). As nove de antes delas (.89) são as do disparo de
 e-mail marketing ([`email-marketing.md`](email-marketing.md); veja "O disparo de e-mail
 marketing (.89)", nesta seção). As cinco de antes delas (.88) são as do
 assistente da MIA ([`assistente.md`](assistente.md)): `plataforma_configurar_assistente`,
@@ -350,8 +352,8 @@ funciona com os dados fictícios e a página avisa que é demonstração.
 
 Função do fork, e entra no MCP na mesma versão. Desenho e passo a passo da Amazon em
 [`email-marketing.md`](email-marketing.md); a prova está em
-`tests/unit/mcp-de-implantacao-email-marketing.test.ts` (a CONTAGEM da lista mora ali
-desde a .89: 83).
+`tests/unit/mcp-de-implantacao-email-marketing.test.ts` (a CONTAGEM da lista morou ali
+na .89, com 83; desde a .90 mora no teste da cobrança).
 
 **O MCP nunca dispara.** Ele monta tudo e manda o TESTE; quem envia é uma pessoa da
 empresa (gestor para cima), na tela da campanha, com a declaração da base legal
@@ -375,6 +377,43 @@ envio para pessoas (o aceite importado é o que prova o consentimento), e
 `criar_campanha_de_email` manda e-mail pelo domínio do cliente (o teste, só para a
 equipe). A área nova do checklist (`email_marketing`, em `plataforma_ver_implantacao`) é
 opcional sem o módulo e nunca conta o envio como pendência do implantador.
+
+### A cobrança da jornada de assinatura (.90)
+
+Função do fork, e entra no MCP na mesma versão. Desenho e passo a passo para ligar em
+[`jornada-de-assinatura.md`](jornada-de-assinatura.md); a prova está em
+`tests/unit/mcp-de-implantacao-cobranca.test.ts` (a CONTAGEM da lista mora ali desde a .90:
+92). Os valores vão em **reais**; o teto de IA é o único em dólar, e só a plataforma o vê.
+
+**O MCP não** conecta nem troca a chave do provedor (só pela tela, cifrada), não marca nada
+como pago (o pagamento só vem do aviso do provedor e da releitura), não cancela a
+assinatura do cliente (é decisão dele, na tela dele), não muda o modo do cadastro (abre ou
+fecha a porta da instalação, em `/admin/cadastro`) e não arquiva plano. Com a cobrança
+desligada, as escritas recusam com o caminho para ligar.
+
+| ferramenta | operação | o que faz | reexecução |
+|---|---|---|---|
+| `plataforma_ver_cobranca` | leitura | a cobrança da instalação: ligada ou não, provedor e modo, se o aviso de pagamento chega, a régua, o que falta para a primeira cobrança, os planos (limites, módulos, preço do Broadcast, conversas estimadas, quantas empresas assinam), as empresas por situação, os pacotes de crédito e o modo do cadastro. A chave nunca sai | leitura |
+| `plataforma_garantir_planos` | `gerir_planos` | os planos pelo nome (preço, intervalo, teste, pessoas, números, teto de IA, módulos, preço do Broadcast, frase e selo, oferecido ou escondido, o do cadastro) e os `pacotes_de_creditos`. Plano assinado não muda de preço nem perde módulo: a resposta manda arquivar e criar outro | pelo nome; o igual volta em `sem_mudanca` |
+| `plataforma_listar_assinaturas` | leitura | as empresas por situação, com plano, agendado, origem, fim do teste, o próximo aviso da régua, a suspensão prevista, o link em aberto e os passos feitos; filtro `so_cadastro_proprio` | leitura |
+| `plataforma_ver_assinatura` | leitura | uma empresa: plano, situação, datas, a régua ponto a ponto, quem administra (e-mail mascarado), os passos e os módulos com a origem | leitura |
+| `plataforma_atribuir_plano` | `gerir_cobranca` | atribui ou troca o plano como o dono no card Cobrança: a isenta passa a pagar em teste; no teste a troca vale na hora, depois fica para a renovação (plano negociado não paga diferença). Aceita plano escondido | o mesmo plano responde `mudou: false` |
+| `plataforma_gerar_link_de_pagamento` | `gerir_cobranca` | o mesmo botão do card: devolve o link em aberto ou cria um; no Asaas, a primeira vez pede o `documento` de quem paga, que vai direto ao Asaas e não fica guardado (nem na auditoria) | devolve o link em aberto |
+| `plataforma_ajustar_cobranca` | `gerir_cobranca` | `dar_prazo` (até 60 dias), `isentar` (recusa com assinatura viva no provedor) ou `voltar_a_cobranca` (com o `plano`). Prazo e isenção reativam quem foi suspenso por pagamento | o mesmo pedido regrava a mesma situação (`mudou: false` no isentar) |
+| `plataforma_listar_pedidos_de_cadastro` | leitura | os pedidos esperando aprovação: empresa, quem pediu (mascarado), plano escolhido e o que a empresa faz | leitura |
+| `plataforma_decidir_pedido_de_cadastro` | `decidir_cadastro` | aprova (a empresa nasce no plano escolhido, pelo mesmo caminho do cadastro) ou recusa com o `motivo`, que vai por e-mail a quem pediu | o pedido decidido devolve a decisão anterior |
+
+As três caixinhas novas do token, e o raio de cada uma: `gerir_planos` mexe no preço e nos
+módulos de TODO cliente novo (um plano de R$ 5 como padrão do cadastro), `gerir_cobranca`
+isenta ou troca o plano de qualquer empresa, e `decidir_cadastro` deixa entrar quem a Time
+não conferiu, gastando IA no teste. Marque só no token de quem cuida da cobrança.
+
+Três ferramentas de antes crescem: `plataforma_ver_cliente` devolve `cobranca` (plano,
+situação, datas) e `modulos_com_origem` (pelo plano, pela Time); `plataforma_criar_cliente`
+aceita `plano` (com a cobrança ligada) ou `isenta`, e grava a origem `implantacao`;
+`plataforma_liberar_modulo` aceita `crm_b2b`, devolve a origem "pela Time" e avisa quando o
+plano já liga o módulo (e quando, tirada a liberação, ele continua ligado pelo plano).
+`plataforma_ver_implantacao` não mudou.
 
 ### Recusas
 
@@ -805,7 +844,8 @@ Testes:
 | arquivo | o que mede |
 |---|---|
 | `tests/unit/mcp-de-implantacao-assistente.test.ts` | as cinco ferramentas do assistente da MIA (.88): o que gravam, a reexecução, a operação própria do responder, a entrega da resposta no assistente, no sino e no e-mail, a recusa do chamado da demonstração, e as cinco dele (a CONTAGEM da lista mora no teste do e-mail marketing) |
-| `tests/unit/mcp-de-implantacao-email-marketing.test.ts` | as nove ferramentas do e-mail marketing (.89) e a CONTAGEM da lista (83): leitura livre e as duas caixinhas novas, o MCP que nunca dispara (pelo código-fonte e pelo banco: rascunho, ninguém na fila), o teste só para a equipe, a demonstração e o módulo que recusam o teste, a configuração que não duplica, a supressão que só acrescenta, o preço por e-mail que não mexe no da mensagem e a área nova do checklist |
+| `tests/unit/mcp-de-implantacao-cobranca.test.ts` | as nove ferramentas da cobrança da jornada de assinatura (.90) e a CONTAGEM da lista (92): as três caixinhas novas e o raio de cada uma, os exemplos que passam no esquema, o que o MCP não faz (pelo código-fonte: chave do provedor, marcar pago, cancelar, modo do cadastro), a cobrança desligada que recusa, o `criar_cliente` isento e com a origem, e o `liberar_modulo` que cresce |
+| `tests/unit/mcp-de-implantacao-email-marketing.test.ts` | as nove ferramentas do e-mail marketing (.89): leitura livre e as duas caixinhas novas, o MCP que nunca dispara (pelo código-fonte e pelo banco: rascunho, ninguém na fila), o teste só para a equipe, a demonstração e o módulo que recusam o teste, a configuração que não duplica, a supressão que só acrescenta, o preço por e-mail que não mexe no da mensagem e a área nova do checklist |
 | `tests/invariants/email-marketing.test.ts` | as tabelas do e-mail (9060 a 9065) no Postgres de verdade: isolamento por empresa e papel, só o servidor grava, a demonstração que não envia, a supressão que só acrescenta, a anonimização que apaga o legível e mantém o veto, o débito por lote e a fila do worker |
 | `tests/unit/mcp-de-implantacao-ferramentas.test.ts` | o catálogo: descrições, exemplos que passam no próprio esquema, a guarda da operação, organização inexistente, recusa que ensina, auditoria |
 | `tests/unit/mcp-de-implantacao-operacoes.test.ts` | cada ferramenta: o que grava, a reexecução, as recusas e a empresa de demonstração |

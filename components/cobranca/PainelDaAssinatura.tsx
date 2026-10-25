@@ -83,7 +83,7 @@ export function PainelDaAssinatura({ dados, idioma }: { dados: DadosDoPainel; id
         </p>
       ) : pctIa !== null && pctIa >= AVISO_DA_IA_EM_PERCENTUAL ? (
         <p className="rounded-md border bg-warning-bg p-3 text-sm text-warning-fg" role="status" data-uso-ia="aviso">
-          {t("Você usou {pct}% da IA incluída no mês. Em 100%, a IA para até o mês virar e as conversas novas vão para a equipe. Subir de plano vale na hora.").replace("{pct}", String(pctIa))}
+          {t("Você usou {pct}% da IA incluída no mês. Em 100%, a IA para até o mês virar e as conversas novas vão para a equipe. Subir de plano vale na hora, depois do pagamento da diferença.").replace("{pct}", String(pctIa))}
         </p>
       ) : null}
     </Card>

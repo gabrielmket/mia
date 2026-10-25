@@ -203,9 +203,9 @@ export const DICIONARIO_DA_JORNADA_MIA: Traducoes = {
     {
       es: "La IA se detuvo: el plan llegó al límite del mes. Las conversaciones nuevas están en la cola del equipo; no se perdió nada. Vuelve al cambiar el mes o al subir de plan.",
     },
-  "Você usou {pct}% da IA incluída no mês. Em 100%, a IA para até o mês virar e as conversas novas vão para a equipe. Subir de plano vale na hora.":
+  "Você usou {pct}% da IA incluída no mês. Em 100%, a IA para até o mês virar e as conversas novas vão para a equipe. Subir de plano vale na hora, depois do pagamento da diferença.":
     {
-      es: "Usaste el {pct}% de la IA incluida en el mes. Al 100%, la IA se detiene hasta que cambie el mes y las conversaciones nuevas pasan al equipo. Subir de plan vale al instante.",
+      es: "Usaste el {pct}% de la IA incluida en el mes. Al 100%, la IA se detiene hasta que cambie el mes y las conversaciones nuevas pasan al equipo. Subir de plan vale al instante, después del pago de la diferencia.",
     },
   "números sem limite": { es: "números sin límite" },
   "1 número": { es: "1 número" },
