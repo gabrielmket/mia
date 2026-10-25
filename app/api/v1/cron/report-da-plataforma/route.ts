@@ -46,6 +46,8 @@ import { vigiarBackup } from "@/lib/backup/aviso-do-backup";
 import { avaliarBackup, leituraDoRpc } from "@/lib/backup/estado-do-backup";
 import { alertaDoSchema, CARIMBO_DO_SCHEMA, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
+// FORK MIA (.90): os recados da jornada de assinatura no mesmo grupo.
+import { mandarRecadosDaJornada } from "@/lib/planos-mia/recados";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   excluirDemonstracao,
@@ -311,6 +313,16 @@ async function handle(req: NextRequest): Promise<Response> {
     });
     if (saiu) enviados.push("resumo_diario");
   }
+
+  // ── 5. A jornada de assinatura (FORK MIA .90) ───────────────────────────
+  //
+  // Pedido novo de cadastro e número oficial esperando: toda rodada (leituras
+  // pequenas). O teste que acaba amanhã sem assinatura e a véspera da suspensão
+  // de quem entrou sozinho leem todas as empresas: a cada 15 minutos. Cada
+  // recado tem chave própria e sai uma vez só (lib/planos-mia/recados.ts).
+  enviados.push(
+    ...(await mandarRecadosDaJornada(admin, { completo: new Date().getUTCMinutes() % 15 === 0 })),
+  );
 
   return ok({ enviados: enviados.length, chaves: enviados, backup }, { requestId });
 }

@@ -87,6 +87,9 @@ const NAV_ITEMS: NavItem[] = [
   // FORK MIA (.88) — os chamados que as equipes dos clientes abrem pelo assistente
   // da MIA (docs/fork/assistente.md): erro, dúvida ou pedido para a Time.
   { href: "/admin/chamados", label: "Chamados do assistente", icon: ChatsCircle },
+  // FORK MIA (.90) — as empresas que entraram sozinhas pelo cadastro: situação,
+  // plano, primeiros passos, pedidos e números esperando (docs/fork/jornada-de-assinatura.md).
+  { href: "/admin/empresas-do-cadastro", label: "Empresas do cadastro", icon: Buildings },
   // O preço de CUSTO do que o cliente comprou — fica aqui pelo mesmo motivo
   // do custo de IA: mostrar ao cliente seria mostrar a margem.
   { href: "/admin/custo-da-meta", label: "Custo das mensagens", icon: Receipt },
