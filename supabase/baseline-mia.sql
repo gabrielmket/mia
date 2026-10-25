@@ -17644,10 +17644,13 @@ notify pgrst, 'reload schema';
 --
 -- 9065 · as imagens das campanhas de e-mail
 --
--- Só objeto NOSSO (docs/FORK-MIA.md, regra 3).
+-- Só objeto NOSSO (docs/FORK-MIA.md, regra 3). O bucket é PRIVADO: o único
+-- bucket público da instalação é o `brand-logos` do upstream (tests/invariants/
+-- marca-logo.test.ts). O e-mail aponta para a rota pública nossa que lê daqui
+-- (`/api/v1/webhooks/email-marketing/imagem/<empresa>/<uuid>.<ext>`).
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('email-marketing-imagens', 'email-marketing-imagens', true, 1048576, array['image/png', 'image/jpeg', 'image/gif'])
+values ('email-marketing-imagens', 'email-marketing-imagens', false, 1048576, array['image/png', 'image/jpeg', 'image/gif'])
 on conflict (id) do update
   set public             = excluded.public,
       file_size_limit    = excluded.file_size_limit,

@@ -282,9 +282,12 @@ cron), `app/app/contacts/[id]/_client.tsx` (o consentimento na ficha) e
 - **Tópicos de assunto** na página de preferências (o protótipo tinha caixinhas por
   assunto): as campanhas não têm tópico, então a página oferece sair de tudo e
   voltar. Entra quando a campanha ganhar tópico.
-- **Imagem** do bloco vai para um bucket público (`email-marketing-imagens`, 1 MB,
-  PNG/JPEG/GIF): é o que o e-mail precisa para abrir em qualquer caixa. Imagem
-  apagada da campanha não é apagada do bucket.
+- **Imagem** do bloco vai para o bucket PRIVADO `email-marketing-imagens` (1 MB,
+  PNG/JPEG/GIF; o único bucket público da instalação é o `brand-logos` do
+  upstream). O e-mail a mostra pela rota pública
+  `GET /api/v1/webhooks/email-marketing/imagem/<empresa>/<uuid>.<ext>`, que lê do
+  bucket e devolve com cache longo; o uuid sorteado no envio é o que não se
+  adivinha. Imagem apagada da campanha não é apagada do bucket.
 - **Domínio por empresa é um só** (o protótipo também): remetentes diferentes usam
   o mesmo domínio verificado.
 - **A Amazon nunca foi chamada de verdade** no desenvolvimento: o transporte é

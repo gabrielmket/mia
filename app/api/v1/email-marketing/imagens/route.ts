@@ -2,10 +2,12 @@
  * FORK MIA (.89) — POST /api/v1/email-marketing/imagens: a imagem de um bloco
  * de campanha. Até 1 MB, PNG, JPEG ou GIF.
  *
- * Mora no bucket PÚBLICO `email-marketing-imagens` (9065): a imagem de um
- * e-mail é aberta pelo programa de e-mail de quem recebe, sem sessão e por
- * anos, e um link assinado venceria. Por isso só entra material de campanha:
- * nada de contato, nada de conversa. O caminho é `<empresa>/<uuid>.<ext>`.
+ * Mora no bucket PRIVADO `email-marketing-imagens` (9065), e o e-mail a
+ * mostra pela rota pública `GET /api/v1/webhooks/email-marketing/imagem/...`,
+ * que lê dali e devolve com cache longo (o programa de e-mail de quem recebe a
+ * abre sem sessão e por anos, e um link assinado venceria). Só entra material de
+ * campanha: nada de contato, nada de conversa. O caminho é `<empresa>/<uuid>.<ext>`,
+ * e o uuid sorteado aqui é o que não se adivinha.
  */
 import { randomUUID } from "node:crypto";
 
@@ -15,11 +17,11 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { env } from "@/lib/env";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { BUCKET_DAS_IMAGENS, urlDaImagem } from "@/lib/email-marketing/imagens";
 import { portaDoEmail, respostaDoErro } from "@/lib/email-marketing/rota";
 
 export const dynamic = "force-dynamic";
 
-const BUCKET_DAS_IMAGENS = "email-marketing-imagens";
 const TAMANHO_MAXIMO = 1024 * 1024;
 const TIPOS: Record<string, string> = {
   "image/png": "png",
@@ -68,7 +70,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       return fail("upload_failed", "Não consegui guardar a imagem.", 500, {
         requestId: porta.requestId,
       });
-    const url = `${env.NEXT_PUBLIC_SUPABASE_URL.replace(/\/+$/, "")}/storage/v1/object/public/${BUCKET_DAS_IMAGENS}/${caminho}`;
+    const url = urlDaImagem(env.NEXT_PUBLIC_APP_URL, caminho);
     void audit({
       action: "email_marketing.imagem_enviada",
       actorUserId: porta.user.id,

@@ -58,6 +58,7 @@ const descadastro = await import("@/app/api/v1/webhooks/email-marketing/descadas
 const preferencias =
   await import("@/app/api/v1/webhooks/email-marketing/preferencias/[token]/route");
 const avisos = await import("@/app/api/v1/webhooks/email-marketing/amazon/route");
+const imagem = await import("@/app/api/v1/webhooks/email-marketing/imagem/[org]/[arquivo]/route");
 const { assinarToken } = await import("@/lib/email-marketing/token");
 const { hashDoEmail } = await import("@/lib/email-marketing/endereco");
 const { aplicarAviso } = await import("@/lib/email-marketing/eventos");
@@ -469,5 +470,56 @@ describe("a empresa de demonstração não manda nada", () => {
     );
     expect(r).toMatchObject({ ok: true, messageId: "ses-novo" });
     expect(rede).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a imagem da campanha: bucket privado, rota pública", () => {
+  const ARQ = "0f000000-0000-4000-8000-000000000001.png";
+
+  function comStorage(existe: boolean) {
+    const baixados: Array<{ bucket: string; caminho: string }> = [];
+    estado.cliente = {
+      storage: {
+        from: (bucket: string) => ({
+          download: async (caminho: string) => {
+            baixados.push({ bucket, caminho });
+            return existe ? { data: new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])]), error: null } : { data: null, error: { message: "not found" } };
+          },
+        }),
+      },
+    };
+    return baixados;
+  }
+  const pedir = (org: string, arquivo: string) =>
+    imagem.GET(new NextRequest("https://app.exemplo.invalid/x"), { params: Promise.resolve({ org, arquivo }) });
+
+  it("⭐ lê do bucket PRIVADO e devolve a imagem com cache longo", async () => {
+    const baixados = comStorage(true);
+    const r = await pedir(ORG, ARQ);
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toBe("image/png");
+    expect(r.headers.get("cache-control")).toContain("max-age=31536000");
+    expect(r.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(baixados).toEqual([{ bucket: "email-marketing-imagens", caminho: `${ORG}/${ARQ}` }]);
+  });
+
+  it("caminho fora da forma (outra pasta, outra extensão, sem uuid) é 404 sem ir ao storage", async () => {
+    const baixados = comStorage(true);
+    for (const [org, arquivo] of [
+      [ORG, "../segredo.png"],
+      [ORG, "0f000000-0000-4000-8000-000000000001.svg"],
+      [ORG, "logo.png"],
+      ["nao-e-uuid", ARQ],
+    ] as const) {
+      expect((await pedir(org, arquivo)).status, `${org}/${arquivo}`).toBe(404);
+    }
+    expect(baixados).toEqual([]);
+  });
+
+  it("arquivo que não existe: 404, sem cache", async () => {
+    comStorage(false);
+    const r = await pedir(ORG, ARQ);
+    expect(r.status).toBe(404);
+    expect(r.headers.get("cache-control")).toBe("no-store");
   });
 });

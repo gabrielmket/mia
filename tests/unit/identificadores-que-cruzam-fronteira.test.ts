@@ -212,6 +212,11 @@ const SITES: { arquivo: string; fronteira: string; papel?: "gerador" | "validado
   // servidor e a extensão tirada de uma lista fechada (png, jpg, webp). Só
   // hexadecimal, hífen, ponto e barra.
   { arquivo: "lib/assistente/print.ts", fronteira: "storage.chave-de-objeto" },
+  // FORK MIA (.89) — a imagem de um bloco de campanha de e-mail
+  // (docs/fork/email-marketing.md), no bucket privado `email-marketing-imagens`:
+  // `<org>/<uuid>.<ext>`, o uuid do servidor e a extensão tirada dos primeiros
+  // bytes do arquivo (png, jpg, gif). Só hexadecimal, hífen, ponto e barra.
+  { arquivo: "app/api/v1/email-marketing/imagens/route.ts", fronteira: "storage.chave-de-objeto" },
   // Chave de idempotência: os geradores (manda UUID) e os validadores (exige UUID).
   { arquivo: "app/onboarding/connect-whatsapp/_client.tsx", fronteira: "api.idempotency-key", papel: "gerador" },
   { arquivo: "components/extensions/ExtensionsManager.tsx", fronteira: "api.idempotency-key", papel: "gerador" },
