@@ -70,6 +70,10 @@ describe("as telas e o Me leva lá", () => {
     expect(hrefDoApp("/app/../admin")).toBeNull();
     expect(hrefDoApp("//exemplo.invalid/app")).toBeNull();
     expect(hrefDoApp("/app/tasks")).toBe("/app/tasks");
+    // FORK MIA (.91): os seis passos do passo a passo, por nome, e nada além deles.
+    expect(hrefDoApp("/onboarding/connect-whatsapp")).toBe("/onboarding/connect-whatsapp");
+    expect(hrefDoApp("/onboarding/done")).toBeNull();
+    expect(hrefDoApp("/onboarding/../admin")).toBeNull();
   });
 
   it("buscar telas acha a conexão pelo assunto", () => {

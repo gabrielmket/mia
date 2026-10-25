@@ -151,7 +151,8 @@ export const ROTULO_DA_FONTE: Record<string, string> = {
 export function caminhoDaTela(bruto: string | null | undefined): string | null {
   if (typeof bruto !== "string") return null;
   const caminho = bruto.split(/[?#]/)[0]?.trim() ?? "";
-  if (!caminho.startsWith("/app") && !caminho.startsWith("/admin")) return null;
+  // FORK MIA (.91): o passo a passo de entrada também, onde o painel aparece ao lado.
+  if (!caminho.startsWith("/app") && !caminho.startsWith("/admin") && !caminho.startsWith("/onboarding")) return null;
   if (caminho.length > 300) return caminho.slice(0, 300);
   return caminho;
 }

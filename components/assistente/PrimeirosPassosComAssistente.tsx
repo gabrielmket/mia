@@ -61,40 +61,40 @@ export function PrimeirosPassosComAssistente({ children }: { children?: ReactNod
         ) : null}
       </div>
       {aparece ? (
-      <aside
-        className="flex h-[70vh] min-h-[420px] flex-col rounded-lg border bg-background p-3 lg:sticky lg:top-4"
-        aria-label={t("Assistente da MIA")}
-      >
-        <h2 className="mb-2 text-sm font-semibold">{t("Assistente da MIA")}</h2>
-        <PainelDoAssistente
-          caminho={caminho}
-          conversaId={conversaId}
-          aoMudarConversa={setConversaId}
-          sugestoes={SUGESTOES_DOS_PRIMEIROS_PASSOS}
-          perguntaExterna={pergunta}
-          saudacao={
-            <>
-              <p>
-                {primeiroNome ? `${t("Olá")}, ${primeiroNome}. ` : `${t("Olá")}. `}
-                {t("Eu sou o assistente da MIA.")}{" "}
-                {faltam !== null && faltam > 0 ? (
-                  <>
-                    {t("Faltam")} <strong>{faltam}</strong> {t("coisas para")} {agente ?? t("seu funcionário")} {t("atender por conta própria.")}
-                  </>
-                ) : null}
-              </p>
-              <p className="mt-1">
-                {administra
-                  ? t("Número, pagamento e convite só você faz. O agente, o funil e o follow-up eu preparo para você aprovar.")
-                  : t("Número, pagamento e convite são de quem administra. Eu preparo o agente, o funil e o follow-up; quem aprova é quem administra.")}
-              </p>
-              <p className="mt-1 text-xs text-text-muted">
-                {t("Leio só o que você vê. Não conecto número, não pago, não convido e não publico.")}
-              </p>
-            </>
-          }
-        />
-      </aside>
+        <aside
+          className="flex h-[70vh] min-h-[420px] flex-col rounded-lg border bg-background p-3 lg:sticky lg:top-4"
+          aria-label={t("Assistente da MIA")}
+        >
+          <h2 className="mb-2 text-sm font-semibold">{t("Assistente da MIA")}</h2>
+          <PainelDoAssistente
+            caminho={caminho}
+            conversaId={conversaId}
+            aoMudarConversa={setConversaId}
+            sugestoes={SUGESTOES_DOS_PRIMEIROS_PASSOS}
+            perguntaExterna={pergunta}
+            saudacao={
+              <>
+                <p>
+                  {primeiroNome ? `${t("Olá")}, ${primeiroNome}. ` : `${t("Olá")}. `}
+                  {t("Eu sou o assistente da MIA.")}{" "}
+                  {faltam !== null && faltam > 0 ? (
+                    <>
+                      {t("Faltam")} <strong>{faltam}</strong> {t("coisas para")} {agente ?? t("seu funcionário")} {t("atender por conta própria.")}
+                    </>
+                  ) : null}
+                </p>
+                <p className="mt-1">
+                  {administra
+                    ? t("Número, pagamento e convite só você faz. O agente, o funil e o follow-up eu preparo para você aprovar.")
+                    : t("Número, pagamento e convite são de quem administra. Eu preparo o agente, o funil e o follow-up; quem aprova é quem administra.")}
+                </p>
+                <p className="mt-1 text-xs text-text-muted">
+                  {t("Leio só o que você vê. Não conecto número, não pago, não convido e não publico.")}
+                </p>
+              </>
+            }
+          />
+        </aside>
       ) : null}
     </div>
   );
