@@ -127,6 +127,7 @@ export function OQueFalta({
                       variant="outline"
                       className="h-11 lg:h-8"
                       disabled={Boolean(i.depende_de)}
+                      title={i.depende_de ? frase(i.depende_de.texto) : undefined}
                       onClick={() => aoPedirAoAssistente(t(PEDIDO_DA_PROPOSTA[i.proposta!]))}
                     >
                       {t("Pedir ao assistente")}
@@ -134,7 +135,14 @@ export function OQueFalta({
                   ) : null}
                   {i.ir && (i.quem === "voce" || i.coluna !== "preciso_confirmar") ? (
                     i.depende_de ? (
-                      <Button type="button" size="sm" variant="outline" className="h-11 lg:h-8" disabled>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-11 lg:h-8"
+                        disabled
+                        title={frase(i.depende_de.texto)}
+                      >
                         {t(i.ir.rotulo)}
                       </Button>
                     ) : (
