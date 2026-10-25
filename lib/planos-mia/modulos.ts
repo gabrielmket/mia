@@ -19,6 +19,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { moduloLigado } from "@/lib/instalacao/modulos";
 import { logger } from "@/lib/logger";
 
 import { ehModuloDoPlano, MODULOS_DO_PLANO, type ModuloDoPlano } from "./catalogo";
@@ -134,6 +135,59 @@ export async function crmB2bForaDoPlano(
     return true;
   }
 }
+
+/**
+ * Para as ROTINAS (o motor do Broadcast, o do e-mail marketing): o módulo SAIU
+ * desta empresa pelo plano? `true` só quando as quatro coisas são lidas e certas:
+ * a cobrança está ligada, a empresa tem assinatura (não é isenta), a Time não o
+ * liberou à mão e o plano atual não o liga. Aí a rotina pausa a campanha com o
+ * motivo `modulo_nao_contratado` (os dados ficam; o gestor retoma quando o
+ * módulo voltar).
+ *
+ * Qualquer leitura que falhe diz `false`: a rotina segue como sempre. O lado
+ * oposto ao de `moduloLiberado` DE PROPÓSITO: lá a pergunta é "posso começar a
+ * gastar?" (recusar é seguro); aqui é "paro o que o gestor já mandou sair?", e
+ * pausar uma campanha paga por uma oscilação do banco seria o erro visível.
+ * Com a cobrança desligada, nada muda: a resposta é sempre `false`.
+ */
+export async function moduloSaiuPeloPlano(
+  admin: SupabaseClient,
+  orgId: string,
+  modulo: Exclude<ModuloDoPlano, "crm_b2b">,
+  deps: { cobrancaLigada?: () => Promise<boolean> } = {},
+): Promise<boolean> {
+  try {
+    const ligada = await (deps.cobrancaLigada ?? (() => moduloLigado(admin, "cobranca")))();
+    if (!ligada) return false;
+    const { data: assinatura, error } = await admin
+      .from("cobranca_assinaturas")
+      .select("organization_id")
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (error || !assinatura) return false;
+    const { data: aMao, error: erroDaMao } = await admin
+      .from("organization_modules")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("modulo", modulo)
+      .is("revoked_at", null)
+      .maybeSingle();
+    if (erroDaMao || aMao) return false;
+    const { data: doPlano, error: erroDoPlano } = await admin.rpc("fn_mia_modulos_do_plano", { p_org: orgId });
+    if (erroDoPlano || !Array.isArray(doPlano)) return false;
+    return !(doPlano as unknown[]).includes(modulo);
+  } catch (erro) {
+    logger.warn("planos-mia: a rotina não leu se o módulo saiu — segue como sempre", {
+      organization_id: orgId,
+      modulo,
+      detalhe: erro instanceof Error ? erro.message : String(erro),
+    });
+    return false;
+  }
+}
+
+/** O motivo da pausa que a rotina grava quando o módulo saiu pelo plano. */
+export const MOTIVO_MODULO_FORA_DO_PLANO = "modulo_nao_contratado" as const;
 
 /**
  * A lista dos módulos da INSTALAÇÃO que o menu desta empresa enxerga: a mesma da

@@ -357,4 +357,12 @@ export const DICIONARIO_DA_JORNADA_MIA: Traducoes = {
     es: "Leads de los formularios de Meta y conversiones",
   },
   "Relatórios, painéis e o assistente": { es: "Informes, paneles y el asistente" },
+
+  // a campanha que a rotina pausou porque o módulo saiu do plano
+  "O Broadcast não faz parte do plano atual da empresa. A lista e os números ficam guardados.": {
+    es: "El Broadcast no forma parte del plan actual de la empresa. La lista y los números quedan guardados.",
+  },
+  "Pausada: o e-mail marketing não faz parte do plano atual da empresa. A lista e os números ficam guardados.": {
+    es: "Pausada: el email marketing no forma parte del plan actual de la empresa. La lista y los números quedan guardados.",
+  },
 };

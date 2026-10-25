@@ -30,6 +30,8 @@ export const ROTULO_DA_PAUSA: Record<string, string> = {
   amazon_desligada: "Pausada: o envio pela Amazon foi desligado no servidor.",
   dominio_nao_verificado: "Pausada: o domínio deixou de estar verificado.",
   amazon_pausou_a_conta: "Pausada: a Amazon pausou o envio da conta.",
+  // FORK MIA (.90): o módulo saiu do plano da empresa (jornada de assinatura).
+  modulo_nao_contratado: "Pausada: o e-mail marketing não faz parte do plano atual da empresa. A lista e os números ficam guardados.",
 };
 
 /**

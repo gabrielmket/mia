@@ -60,6 +60,9 @@ export function fraseDoMotivo(
       return t("Nenhum contato entrou na lista.");
     case "saldo_acabou":
       return t("O crédito acabou no meio do disparo.");
+    // FORK MIA (.90): o Broadcast saiu do plano da empresa (jornada de assinatura).
+    case "modulo_nao_contratado":
+      return t("O Broadcast não faz parte do plano atual da empresa. A lista e os números ficam guardados.");
     default:
       return seDesconhecido ?? t("Não dá para disparar ainda.");
   }
