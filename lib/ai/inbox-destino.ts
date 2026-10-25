@@ -205,7 +205,9 @@ export const POLITICAS_DE_AVISO = {
   // (`lib/escalacao/caso-na-central.handler.ts`). FORK MIA:
   // `mia_leads_da_meta_formulario`, o formulário da Meta cuja leitura parou.
   // FORK MIA (.88): `mia_chamado` e `mia_assistente_resumo`, do assistente da MIA.
-  other: { refs: ["agenda_reminder_sender", "lead", "channel_session", "appointment", "ai_agent", "ai_provider_credential", "agent_case", "mia_leads_da_meta_formulario", "mia_chamado", "mia_assistente_resumo"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
+  // FORK MIA (.90): "plano" — o módulo que ligou ou desligou pelo plano e a véspera
+  // da descida (lib/planos-mia/seguir-o-plano.ts) levam a Plano e cobrança.
+  other: { refs: ["agenda_reminder_sender", "lead", "channel_session", "appointment", "ai_agent", "ai_provider_credential", "agent_case", "mia_leads_da_meta_formulario", "mia_chamado", "mia_assistente_resumo", "plano"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
 } satisfies Record<InboxKind, Politica>;
 
 /**

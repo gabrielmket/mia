@@ -32,6 +32,8 @@
  * do que estava.
  */
 import type { Idioma } from "./idiomas";
+// FORK MIA (.90): a jornada de assinatura (a cobrança), num arquivo nosso.
+import { DICIONARIO_DA_JORNADA_MIA } from "./dicionario-mia-jornada";
 import { DICIONARIO_CARTOES_MIA } from "./dicionario-cartoes-mia";
 // FORK MIA (9011+): as frases da agenda do Outlook moram num arquivo à parte.
 import { DICIONARIO_DA_AGENDA_MICROSOFT } from "./dicionario-mia-agenda-microsoft";
@@ -63,6 +65,7 @@ type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>
 
 export const DICIONARIO: Traducoes = {
   // FORK MIA: primeiro, para que uma chave igual do upstream prevaleça.
+  ...DICIONARIO_DA_JORNADA_MIA,
   ...DICIONARIO_DA_AGENDA_MICROSOFT,
   ...DICIONARIO_DAS_CONVERSOES_DA_META,
   ...DICIONARIO_DOS_PAINEIS_MIA,

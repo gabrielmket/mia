@@ -11,6 +11,8 @@
  */
 import type { EventHandler, EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { createAdminClient } from "@/lib/supabase/admin";
+// FORK MIA (.90): créditos por Pix (docs/fork/jornada-de-assinatura.md).
+import { relerComprasEmAberto } from "@/lib/carteira/compra-pelo-asaas";
 
 import { sincronizar } from "./sincronizar";
 
@@ -38,6 +40,9 @@ async function handle(row: EventRow): Promise<HandlerResult> {
     return { consumer_key: CONSUMER_KEY, status: "retry", retry_at: new Date(desde + JANELA_DO_COALESCER_MS).toISOString(), detail: "coalescer" };
   }
   const r = await sincronizar(admin, row.organization_id);
+  // FORK MIA (.90): o mesmo aviso do Asaas acorda as compras de crédito por Pix
+  // desta empresa (relidas no Asaas, nunca pelo corpo do aviso). Nunca lança.
+  await relerComprasEmAberto(admin, { orgId: row.organization_id });
   // Só o transitório vale retry. Chave quebrada ou leitura inválida não se curam
   // repetindo, e no teto o dreno abriria `event_dead` na Central DA EMPRESA por um
   // problema do dono (§2.5). O `ultimo_erro` já ficou gravado: a Visão geral o
