@@ -98,6 +98,19 @@ raiz de `/app` (o login cai no Início), `/app/inicio` (redireciona quem não te
 critério para a tela inicial de sempre), a faixa do topo de `/app` e a rota
 `/api/v1/assistente/o-que-falta`. O MCP devolve `aparece_no_inicio` e o motivo.
 
+**O passo a passo do upstream vem antes.** A raiz de `/app` só manda ao Início quem
+já TERMINOU o passo a passo (`onde = "inicio"`); quem ainda está nele segue para ele,
+como no upstream, e o Início devolve ao `/onboarding` quem chegar lá antes da hora
+(`tests/unit/raiz-do-app-respeita-o-passo-a-passo.test.ts`).
+
+**O passo não mexe enquanto a pessoa preenche.** A coluna do assistente nasce com a
+página (o critério que o servidor já leu, `apareceInicial`), e a resposta da rota só
+preenche o bloco; e o painel rola só a própria lista de mensagens, nunca a janela. As
+duas coisas juntas derrubaram o e2e do upstream no passo "Seu negócio" (o fuso abria
+fora da tela). As boas-vindas funcionam sozinhas: nome, fuso, termos e "Continuar",
+com um checkbox só; o segmento só soma, e um valor ausente ou estranho deixa de ser
+gravado em vez de travar o passo (`tests/unit/welcome-do-upstream-funciona-sozinho.test.tsx`).
+
 ## 5. As propostas do assistente
 
 Fase 2 do desenho do upstream (#2860), só para as três peças do modelo: veja a seção 9
@@ -137,12 +150,25 @@ agente publicado.
 | `lib/audit/actions.ts`, `lib/i18n/dicionario.ts` | os códigos e o dicionário |
 | `tests/e2e/wizard-do-funcionario.spec.ts` | a tela do funil aceita "Comecei por um quadro pronto" (a "Clínica Bem Viver" é lida como clínica) |
 
-## 8. O que fica para depois, de propósito
+## 8. Ligado à jornada de assinatura (.90)
+
+A .91 sobe por cima da .90, e as duas leem a mesma coisa do mesmo lugar:
+
+| o quê | como |
+|---|---|
+| a área `plano_e_cobranca` | decide pela situação da tela da Time (`situacaoDaEmpresa`, `lib/planos-mia/situacao.ts`): em teste, em dia, em atraso, no prazo extra, suspensa, cancelada ou isenta. O teste com a assinatura já feita no provedor conta como assinado; o teste vencido sem pagamento pede "assinar", e quem já pagou e atrasou, "regularizar". Para o MCP, a área traz os módulos que o plano liga (`mia_plano_modulos`, 9070) e a origem da empresa (`mia_origem_da_empresa`, 9071, só do servidor: pela sessão vem `null`). Nenhum item do "o que falta" depende de módulo do plano |
+| a tela da Time (`/admin/empresas-do-cadastro`) | ao lado dos passos do upstream, "faltam M de N" do retrato mais novo de cada empresa; no detalhe, a conta de agora (`lerOQueFalta` com o papel de quem administra), item a item, com quem faz e a dependência; no cartão dos números oficiais, as empresas que esperam a Time |
+| o MCP da cobrança | `plataforma_listar_assinaturas` devolve `o_que_falta` (o retrato), `plataforma_ver_assinatura` devolve `o_que_falta_agora` e `plataforma_listar_pedidos_de_cadastro` devolve `empresas_esperando_o_numero` (nenhuma ferramenta nova: 94 no total) |
+| o recado no zap | "número oficial esperando ligação" sai também para a EMPRESA no `esperando_a_time`, uma vez por empresa e dia, e cala quando o número dela aparece conectado (a mesma regra da área `primeiros_passos`) |
+
+A leitura das empresas esperando, a dos retratos e a conta de agora moram em
+`lib/onboarding/primeiros-passos-para-a-time.ts`; quem chama é a tela, o MCP e os recados
+da .90, com o cliente de serviço depois de conferir o admin de plataforma.
+
+## 9. O que fica para depois, de propósito
 
 - **O número oficial "esperando a Time" só nasce no passo a passo.** Quem entra com o
   Facebook depois, pela tela de Conexões, não grava o estado (o componente é o mesmo,
   mas só o passo a passo passa o aviso).
-- **O recado no zap da Time** a cada número oficial esperando é da tela da Time
-  (`empresas-do-cadastro`, .90), que pode ler `whatsapp.status = "esperando_a_time"`.
 - **O laço de retorno** (fase 4 do #2860): a telemetria de aprovação e de recusa das
   propostas no `/app/ai/evolution`.

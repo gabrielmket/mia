@@ -34,6 +34,8 @@ export default async function InicioPage() {
     papel: activeOrg.role,
     suporte: Boolean(user.support),
   }).catch(() => null);
+  // Quem ainda está no passo a passo continua nele (o bloco aparece ao lado do passo).
+  if (criterio?.onde === "passo_a_passo") redirect("/onboarding");
   if (!criterio?.aparece) {
     redirect(homeDaInterface(activeOrg.interface_settings, user.is_platform_admin && !user.support, activeOrg.role ?? null));
   }
@@ -49,7 +51,7 @@ export default async function InicioPage() {
           )}
         </p>
       </header>
-      <PrimeirosPassosComAssistente />
+      <PrimeirosPassosComAssistente apareceInicial />
     </div>
   );
 }

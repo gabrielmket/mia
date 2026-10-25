@@ -122,7 +122,7 @@ export default async function OnboardingLayout({ children }: { children: React.R
           // FORK MIA (.91): o passo, o "o que falta" e o painel do assistente da .88.
           <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
             <AuthProvider user={user} activeOrg={activeOrg}>
-              <PrimeirosPassosComAssistente>
+              <PrimeirosPassosComAssistente apareceInicial>
                 <div className="mx-auto w-full max-w-3xl">{children}</div>
               </PrimeirosPassosComAssistente>
             </AuthProvider>

@@ -33,7 +33,19 @@ export const SUGESTOES_DOS_PRIMEIROS_PASSOS: ReadonlyArray<{ texto: string }> = 
   { texto: "Por que a IA não respondeu?" },
 ];
 
-export function PrimeirosPassosComAssistente({ children }: { children?: ReactNode }) {
+export function PrimeirosPassosComAssistente({
+  children,
+  apareceInicial = false,
+}: {
+  children?: ReactNode;
+  /**
+   * O critério que o SERVIDOR já leu (o layout do passo a passo, o Início). A
+   * coluna do painel nasce com a página, e a resposta da rota só preenche:
+   * antes, a grade surgia quando a resposta chegava e o passo mudava de largura
+   * no meio do preenchimento (o fuso do "Seu negócio" abria fora da tela).
+   */
+  apareceInicial?: boolean;
+}) {
   const t = useT();
   const caminho = usePathname() ?? "/app/inicio";
   const { user, activeOrg } = useAuth();
@@ -41,7 +53,7 @@ export function PrimeirosPassosComAssistente({ children }: { children?: ReactNod
   const estado = useOQueFalta({ guardar: administra && !user.support });
   const [conversaId, setConversaId] = useState<string | null>(null);
   const [pergunta, setPergunta] = useState<{ id: number; texto: string } | null>(null);
-  const aparece = estado.data?.criterio.aparece === true;
+  const aparece = estado.data ? estado.data.criterio.aparece === true : apareceInicial;
   const primeiroNome = (user.full_name ?? "").trim().split(/\s+/)[0] ?? "";
   const faltam = estado.data?.rotulo?.contas.faltam ?? null;
   const agente = estado.data?.rotulo?.agente ?? null;

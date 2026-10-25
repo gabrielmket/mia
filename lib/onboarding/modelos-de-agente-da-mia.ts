@@ -44,6 +44,16 @@ export function ehSegmentoDoOnboarding(valor: unknown): valor is SegmentoDoOnboa
   return typeof valor === "string" && (SEGMENTOS_DO_ONBOARDING as readonly string[]).includes(valor);
 }
 
+/**
+ * O segmento que veio do formulário das boas-vindas, ou `undefined`. O segmento
+ * só SOMA ao passo do upstream: vazio ou fora da lista não vira erro de
+ * validação (que travaria nome, fuso e termos), só deixa de ser gravado.
+ */
+export function segmentoDoFormulario(valor: unknown): SegmentoDoOnboarding | undefined {
+  const limpo = typeof valor === "string" ? valor.trim() : "";
+  return ehSegmentoDoOnboarding(limpo) ? limpo : undefined;
+}
+
 export interface ModeloDeAgente {
   segmento: SegmentoDoOnboarding;
   /** Como o dono reconhece o próprio negócio na lista. */

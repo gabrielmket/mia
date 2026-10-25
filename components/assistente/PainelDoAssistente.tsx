@@ -67,7 +67,10 @@ export function PainelDoAssistente({
   const perguntar = usePerguntar();
   const [texto, setTexto] = useState("");
   const [pendente, setPendente] = useState<string | null>(null);
-  const fim = useRef<HTMLDivElement | null>(null);
+  // A LISTA das mensagens, não a página: o painel mora ao lado do passo a passo
+  // (.91) e um `scrollIntoView` rolava a JANELA junto, no meio do que a pessoa
+  // preenchia (o fuso do passo "Seu negócio" abria fora da tela). Rola só aqui.
+  const lista = useRef<HTMLDivElement | null>(null);
 
   const papel = (activeOrg?.role ?? "viewer") as Role;
   const primeiroNome = (user.full_name ?? "").trim().split(/\s+/)[0] ?? "";
@@ -75,7 +78,8 @@ export function PainelDoAssistente({
   const mensagens: Mensagem[] = useMemo(() => estado.data?.mensagens ?? [], [estado.data?.mensagens]);
 
   useEffect(() => {
-    fim.current?.scrollIntoView({ block: "end" });
+    const el = lista.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [mensagens.length, pendente]);
 
   function enviar(pergunta: string) {
@@ -125,7 +129,7 @@ export function PainelDoAssistente({
         ) : null}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-3" aria-live="polite">
+      <div ref={lista} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-3" aria-live="polite">
         {mensagens.length === 0 && !pendente && saudacao ? (
           <div className="flex justify-start">
             <div className="max-w-[92%] rounded-2xl rounded-bl-sm border bg-surface-muted px-3 py-2 text-sm">{saudacao}</div>
@@ -157,7 +161,6 @@ export function PainelDoAssistente({
             <p className="text-xs text-text-muted">{t("Consultando o sistema com o seu acesso…")}</p>
           </>
         ) : null}
-        <div ref={fim} />
       </div>
 
       {!disponivel ? (

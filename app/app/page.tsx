@@ -18,7 +18,9 @@ export default async function AppHome() {
       papel: org.role,
       suporte: false,
     }).catch(() => null);
-    if (criterio?.aparece) redirect("/app/inicio");
+    // Só DEPOIS do passo a passo: quem ainda não terminou segue para ele, como
+    // no upstream (o layout de /app manda para /onboarding).
+    if (criterio?.aparece && criterio.onde === "inicio") redirect("/app/inicio");
   }
   redirect(
     homeDaInterface(
