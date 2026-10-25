@@ -462,6 +462,18 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "própria só o administrador escreve; o chamado nasce da própria pessoa, " +
       "novo e sem resposta, e a marca de demonstração vem da empresa.",
   })),
+  // Fork MIA, 9080 e 9081 — as propostas do assistente e o retrato do "o que
+  // falta" (.91, os primeiros passos).
+  ...["mia_assistente_propostas", "mia_assistente_retratos"].map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/primeiros-passos-do-assistente.test.ts — controle positivo e " +
+      "negativo por papel e por empresa: gestor e administrador leem, o atendente vê " +
+      "zero, outra empresa vê zero, anon recebe permission denied; a proposta nasce " +
+      "pendente e da própria pessoa pela sessão, ninguém aprova, aplica, rejeita nem " +
+      "apaga pela sessão, e nem o servidor aplica sem aprovar (sabotagem); o retrato " +
+      "só o administrador grava e ninguém altera nem apaga pela sessão.",
+  })),
   // Fork MIA, 9031 — o link dos painéis para o dono do negócio.
   {
     tabela: "mia_paineis_links",
