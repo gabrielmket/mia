@@ -25,15 +25,17 @@ export const generateMetadata = () => tituloDaTelaPublica((t) => t("Preços"));
  * (`/signup?plano=`). Mudou o plano no painel ou pelo MCP, a página muda junto:
  * nada de preço no código.
  */
-const EM_TODOS_OS_PLANOS = [
-  "Agente de IA no WhatsApp, 24 horas por dia",
-  "CRM com funis, contatos e tarefas",
-  "Agenda: o agente marca, remarca e confirma",
-  "Follow-up com modelos por segmento",
-  "Passagem para a equipe com a ficha do cliente",
-  "Leads dos formulários da Meta e conversões",
-  "Relatórios, painéis e o assistente",
-] as const;
+const EM_TODOS_OS_PLANOS = {
+  agente: "Agente de IA no WhatsApp, 24 horas por dia",
+  crm: "CRM com funis, contatos e tarefas",
+  agenda: "Agenda: o agente marca, remarca e confirma",
+  followup: "Follow-up com modelos por segmento",
+  passagem: "Passagem para a equipe com a ficha do cliente",
+  meta: "Leads dos formulários da Meta e conversões",
+  relatorios: "Relatórios, painéis e o assistente",
+} as const;
+type ItemDeTodosOsPlanos = keyof typeof EM_TODOS_OS_PLANOS;
+const ITENS_DE_TODOS_OS_PLANOS = Object.keys(EM_TODOS_OS_PLANOS) as ItemDeTodosOsPlanos[];
 
 export default async function PrecosPage() {
   const idioma = await idiomaDoVisitante(null);
@@ -253,9 +255,9 @@ export default async function PrecosPage() {
                         </td>
                       ))}
                     </tr>
-                    {EM_TODOS_OS_PLANOS.map((_, i) => (
-                      <tr key={EM_TODOS_OS_PLANOS[i]} className="border-b">
-                        <td className="py-2 pr-4">{t(EM_TODOS_OS_PLANOS[i])}</td>
+                    {ITENS_DE_TODOS_OS_PLANOS.map((item) => (
+                      <tr key={item} className="border-b">
+                        <td className="py-2 pr-4">{t(EM_TODOS_OS_PLANOS[item])}</td>
                         {planos.map((p) => (
                           <td key={p.id} className="py-2 pr-4">
                             ✓
