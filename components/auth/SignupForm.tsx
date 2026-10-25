@@ -20,6 +20,9 @@ import { signUp } from "@/app/actions/auth/signUp";
 import { Eye, EyeSlash } from "@/lib/ui/icons";
 import { PasswordStrength } from "@/components/auth/PasswordStrength";
 import type { PlanoDoCadastro } from "@/lib/cobranca/cadastro";
+// FORK MIA (.90): os planos em cartões e o que a empresa faz (docs/fork/jornada-de-assinatura.md).
+import { CartoesDoPlano } from "@/components/planos-mia/CartoesDoPlano";
+import type { CartaoDoPlano } from "@/lib/planos-mia/cadastro";
 
 /**
  * Convite em curso: a conta está sendo criada para ACEITAR um convite, não para
@@ -36,11 +39,17 @@ export function SignupForm({
   convite,
   planos = [],
   planoInicial,
+  cartoes = [],
+  planoVeioDoLink = false,
 }: {
   convite?: ConviteDoSignup;
   planos?: readonly PlanoDoCadastro[];
   /** O plano padrão quando ele é oferecido — "sem mexer, vale o padrão" —, senão o primeiro. */
   planoInicial?: string;
+  /** FORK MIA (.90): os mesmos planos em cartões, com limites e módulos. Vazio = o seletor do upstream. */
+  cartoes?: readonly CartaoDoPlano[];
+  /** FORK MIA (.90): o plano marcado veio do "?plano=" da página de preços. */
+  planoVeioDoLink?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -56,7 +65,7 @@ export function SignupForm({
     handleSubmit,
     control,
     formState: { errors },
-  } = useForm<SignupInput & { full_name: string }>({
+  } = useForm<SignupInput & { full_name: string; mia_o_que_faz?: string }>({
     // O formulário tem UM tipo e DOIS contratos, e agora os dois contratos têm
     // um campo que o outro não tem: `org_name` só no caminho de quem abre
     // empresa, `full_name` só no de quem foi convidado. O resolver troca; o
@@ -71,6 +80,7 @@ export function SignupForm({
       full_name: "",
       org_name: "",
       cobranca_plan_id: planoInicial,
+      mia_o_que_faz: "",
       email: convite?.email ?? "",
       password: "",
       password_confirm: "",
@@ -230,7 +240,24 @@ export function SignupForm({
           )}
         </div>
       )}
-      {!convite && planos.length > 0 && (
+      {/* FORK MIA (.90): o que a empresa faz, opcional — vai na linha do pedido que a Time aprova. */}
+      {!convite && (
+        <div className="space-y-1.5">
+          <Label htmlFor="mia_o_que_faz">{t("O que a sua empresa faz (opcional)")}</Label>
+          <Input
+            id="mia_o_que_faz"
+            type="text"
+            maxLength={200}
+            placeholder={t("Ex.: clínica odontológica com avaliação e limpeza")}
+            {...register("mia_o_que_faz")}
+          />
+        </div>
+      )}
+      {/* FORK MIA (.90): com os cartões, eles tomam o lugar do seletor (o mesmo campo). */}
+      {!convite && cartoes.length > 0 && (
+        <CartoesDoPlano cartoes={cartoes} registro={register("cobranca_plan_id")} veioDoLink={planoVeioDoLink} />
+      )}
+      {!convite && planos.length > 0 && cartoes.length === 0 && (
         <div className="space-y-1.5">
           <Label htmlFor="cobranca_plan_id">{t("Plano")}</Label>
           <select id="cobranca_plan_id" className="h-10 w-full rounded-md border bg-background px-3 text-sm" {...register("cobranca_plan_id")}>

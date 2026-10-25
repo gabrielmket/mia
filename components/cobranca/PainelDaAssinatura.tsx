@@ -4,6 +4,8 @@ import { formatadorDeData } from "@/lib/cobranca/fuso";
 import { ROTULO_DO_ESTADO } from "@/lib/cobranca/rotulos";
 import { traduzir } from "@/lib/i18n/dicionario";
 import type { Idioma } from "@/lib/i18n/idiomas";
+// FORK MIA (.90): o uso de IA em % do incluído, nunca dólar (lib/ai/custo-e-da-plataforma.ts).
+import { AVISO_DA_IA_EM_PERCENTUAL, conversasEstimadas, percentualDaIa } from "@/lib/planos-mia/catalogo";
 
 /**
  * O resumo de assinatura da empresa (spec da cobrança §9).
@@ -13,7 +15,6 @@ export function PainelDaAssinatura({ dados, idioma }: { dados: DadosDoPainel; id
   const t = (texto: string) => traduzir(texto, idioma);
   const data = formatadorDeData(idioma, dados.fuso, { dateStyle: "short" });
   const brl = new Intl.NumberFormat(idioma, { style: "currency", currency: "BRL" });
-  const usd = new Intl.NumberFormat(idioma, { style: "currency", currency: "USD" });
   // "2 de 3"; sem teto, "2 · sem limite" (e não "2 de sem limite").
   const deLimite = (usados: string, limite: string | null) =>
     limite === null
@@ -35,6 +36,7 @@ export function PainelDaAssinatura({ dados, idioma }: { dados: DadosDoPainel; id
   const { assinatura: a, plano: p, uso } = dados;
   const dia = (v: string | null) => (v ? data.format(new Date(v)) : "");
   const situacao = situacaoDaAssinatura(a, t, dia);
+  const pctIa = percentualDaIa(dados.gastoIaUsdCents, p.teto_ia_usd_cents);
 
   return (
     <Card className="max-w-xl space-y-4 p-6">
@@ -64,13 +66,26 @@ export function PainelDaAssinatura({ dados, idioma }: { dados: DadosDoPainel; id
         <dt>{t("Números conectados")}</dt>
         <dd data-uso="canais">{deLimite(String(uso.canais), limite(p.max_canais))}</dd>
         <dt>{t("Uso de IA no mês")}</dt>
+        {/* FORK MIA (.90): porcentagem do que o plano inclui; o dólar é da plataforma. */}
         <dd data-uso="ia">
-          {deLimite(
-            usd.format(dados.gastoIaUsdCents / 100),
-            p.teto_ia_usd_cents === null ? null : usd.format(p.teto_ia_usd_cents / 100),
-          )}
+          {pctIa === null ? t("sem limite") : t("{pct}% do incluído").replace("{pct}", String(pctIa))}
         </dd>
       </dl>
+      {/* FORK MIA (.90): o aviso em 80% e a parada em 100% (a rodada e o motor do upstream). */}
+      {pctIa !== null && (
+        <p className="text-xs text-muted-foreground" data-uso-ia="conversas">
+          {t("Cerca de {n} conversas por mês. Aviso em 80%.").replace("{n}", new Intl.NumberFormat(idioma).format(conversasEstimadas(p.teto_ia_usd_cents) ?? 0))}
+        </p>
+      )}
+      {pctIa !== null && pctIa >= 100 ? (
+        <p className="rounded-md border bg-error-bg p-3 text-sm text-error-fg" role="alert" data-uso-ia="parou">
+          {t("A IA parou: o plano chegou ao limite do mês. As conversas novas estão na fila da equipe; nada se perdeu. Volta na virada do mês ou ao subir de plano.")}
+        </p>
+      ) : pctIa !== null && pctIa >= AVISO_DA_IA_EM_PERCENTUAL ? (
+        <p className="rounded-md border bg-warning-bg p-3 text-sm text-warning-fg" role="status" data-uso-ia="aviso">
+          {t("Você usou {pct}% da IA incluída no mês. Em 100%, a IA para até o mês virar e as conversas novas vão para a equipe. Subir de plano vale na hora.").replace("{pct}", String(pctIa))}
+        </p>
+      ) : null}
     </Card>
   );
 }

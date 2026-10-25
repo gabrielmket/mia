@@ -35,18 +35,15 @@ import { ErroDoProvedor } from "@/lib/cobranca/provedores/contrato";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { logger } from "@/lib/logger";
 
+import { FRASE_SEM_COMPRA, type MotivoSemCompra as MotivoDaFrase } from "./frases-da-compra";
+
 export interface PacoteDeCreditos {
   id: string;
   valor_cents: number;
   ordem: number;
 }
 
-export type MotivoSemCompra =
-  | "cobranca_desligada"
-  | "sem_assinatura"
-  | "sem_cliente_no_asaas"
-  | "provedor_nao_e_asaas"
-  | "sem_chave";
+export type MotivoSemCompra = Exclude<MotivoDaFrase, "sem_pacotes">;
 
 export interface CompraDeCreditos {
   id: string;
@@ -167,14 +164,7 @@ export async function podeComprarCreditos(
   return { pode: true, clienteRef: a.provedor_cliente_id };
 }
 
-/** A frase de cada recusa (chave de `t()` da tela; também vai na resposta do MCP). */
-export const FRASE_SEM_COMPRA: Record<MotivoSemCompra, string> = {
-  cobranca_desligada: "A compra de créditos por Pix não está ligada nesta instalação. Fale com a Time Company para recarregar.",
-  sem_assinatura: "Sua empresa recebe créditos pela Time Company. Fale com a Time para recarregar.",
-  sem_cliente_no_asaas: "Assine o plano em Plano e cobrança antes de comprar créditos: o Pix sai no mesmo cadastro do pagamento.",
-  provedor_nao_e_asaas: "A compra de créditos por Pix é só pelo Asaas. Fale com a Time Company para recarregar.",
-  sem_chave: "A compra por Pix está indisponível agora. Tente de novo mais tarde ou fale com a Time Company.",
-};
+export { FRASE_SEM_COMPRA } from "./frases-da-compra";
 
 function paraCompra(l: Record<string, unknown>): CompraDeCreditos {
   return {

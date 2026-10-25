@@ -238,7 +238,12 @@ export async function signUp(
             invite_token: convite,
             full_name: (parsed.data as SignupComConviteInput).full_name,
           }
-        : { org_name: (parsed.data as SignupInput).org_name, ...(planoEscolhido ? { cobranca_plan_id: planoEscolhido } : {}) },
+        : {
+            org_name: (parsed.data as SignupInput).org_name,
+            ...(planoEscolhido ? { cobranca_plan_id: planoEscolhido } : {}),
+            // FORK MIA (.90): o que a empresa faz, para a linha do pedido da Time (opcional).
+            ...((parsed.data as SignupInput).mia_o_que_faz ? { mia_o_que_faz: (parsed.data as SignupInput).mia_o_que_faz } : {}),
+          },
     },
   });
 

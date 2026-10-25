@@ -36,7 +36,7 @@ export const ROTULO_DO_MODULO_DO_PLANO: Record<ModuloDoPlano, { rotulo: string; 
   },
   crm_b2b: {
     rotulo: "Vendas B2B",
-    descricao: "Empresas por CNPJ, decisores, planilha e propostas com PDF.",
+    descricao: "Pessoas que decidem nas empresas, consulta de CNPJ e importação de planilha.",
   },
 };
 

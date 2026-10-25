@@ -22,8 +22,8 @@ export const DICIONARIO_DA_JORNADA_MIA: Traducoes = {
     es: "Campañas desde el dominio de la empresa, con baja y supresión.",
   },
   "Vendas B2B": { es: "Ventas B2B" },
-  "Empresas por CNPJ, decisores, planilha e propostas com PDF.": {
-    es: "Empresas por CNPJ, tomadores de decisión, planilla y propuestas con PDF.",
+  "Pessoas que decidem nas empresas, consulta de CNPJ e importação de planilha.": {
+    es: "Personas que deciden en las empresas, consulta de CNPJ e importación de planillas.",
   },
   "pelo plano": { es: "por el plan" },
   "pela Time": { es: "por el equipo de Time" },
