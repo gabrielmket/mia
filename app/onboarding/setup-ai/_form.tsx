@@ -12,6 +12,8 @@ import { createDefaultAgent, skipAi } from "@/app/actions/onboarding/createDefau
 import type { PromptTemplate } from "@/lib/schemas/onboarding";
 import { cn } from "@/lib/utils";
 import { PROVEDOR_POR_ID } from "@/lib/ai/pontos/provedores";
+// FORK MIA (.91): o agente parte do modelo do segmento.
+import type { ModeloNaTela } from "./_modelo";
 
 /**
  * O jeito de falar, não o "estilo de prompt".
@@ -79,12 +81,19 @@ interface Props {
    * quem esquecer de passar mostra o texto do cliente, nunca o caminho da chave.
    */
   podeConfigurar?: boolean;
+  /**
+   * FORK MIA (.91): o modelo do segmento confirmado no passo "Seu negócio". Com
+   * ele, o nome e o jeito começam os do agente de exemplo da demonstração, e o
+   * campo das regras mostra as do segmento como EXEMPLO (nunca como valor: uma
+   * regra inventada iria para a memória de uma empresa de verdade).
+   */
+  modelo?: ModeloNaTela | null;
 }
 
-export function SetupAiForm({ capacidades, conferencias, podeConfigurar = false }: Props) {
+export function SetupAiForm({ capacidades, conferencias, podeConfigurar = false, modelo = null }: Props) {
   const t = useT();
-  const [name, setName] = useState("Atendente IA");
-  const [jeito, setJeito] = useState<PromptTemplate>("ecommerce_friendly");
+  const [name, setName] = useState(modelo?.nome ?? "Atendente IA");
+  const [jeito, setJeito] = useState<PromptTemplate>(modelo?.jeito ?? "ecommerce_friendly");
   const [regras, setRegras] = useState("");
   const [naoPublicado, setNaoPublicado] = useState<string | null>(null);
   const [causa, setCausa] = useState<"canal" | "modelo" | "chave" | null>(null);
@@ -195,7 +204,9 @@ export function SetupAiForm({ capacidades, conferencias, podeConfigurar = false 
             rows={5}
             maxLength={20000}
             placeholder={
-              `${t("Nunca prometa desconto sem confirmar com uma pessoa.")}\n` +
+              modelo
+                ? modelo.regrasDeExemplo.map((r) => t(r)).join("\n")
+                : `${t("Nunca prometa desconto sem confirmar com uma pessoa.")}\n` +
               `${t("Horário de atendimento: 9h às 18h, de segunda a sexta.")}\n` +
               t("Sempre chame o cliente pelo primeiro nome.")
             }

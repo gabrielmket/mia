@@ -44,6 +44,9 @@ import { listarConexoesCaidas, type ConexaoCaida } from "@/lib/channels/health";
 import { VoiceCallProvider } from "@/components/voice/VoiceCallContext";
 import { ProvedorDaOcupacaoDoRodape } from "@/lib/ui/rodape-ocupado";
 import { acessoFoiRevogado } from "@/lib/auth/vinculo-revogado";
+// FORK MIA (.91): a faixa dos primeiros passos da empresa nova (até zerar).
+import { FaixaDosPrimeirosPassos } from "@/components/assistente/FaixaDosPrimeirosPassos";
+import { segmentoDoEstado } from "@/lib/onboarding/modelos-de-agente-da-mia";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await loadAuthUser();
@@ -87,6 +90,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let orgFuso: string | null = null;
   let enrolled = false;
   let needsMfaGate = false;
+  // FORK MIA (.91): a empresa nova que passou pelo passo a passo desta versão.
+  let faixaDosPrimeirosPassos = false;
 
   if (activeOrg) {
     const admin = createAdminClient();
@@ -132,7 +137,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     const [orgRes, conexoes, isEnrolled, mfaRequired, ligadosNaInstalacao, demonstracao] = await Promise.all([
       admin
         .from("organizations")
-        .select("onboarded_at, status, settings, timezone")
+        .select("onboarded_at, status, settings, timezone, onboarding_state")
         .eq("id", activeOrg.orgId)
         .maybeSingle(),
       listarConexoesCaidas(admin, activeOrg.orgId),
@@ -164,6 +169,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // onboarding ia para `/onboarding` e escapava da tela da suspensão.
     if (!ehOperante(orgRow?.status)) redirect("/account-suspended");
     if (orgRow && !orgRow.onboarded_at && !user.support) redirect("/onboarding");
+    // FORK MIA (.91): só monta a faixa quem pode ver o "o que falta" de uma
+    // empresa nova (o segmento gravado só existe para quem passou pelo passo a
+    // passo desta versão); a rota confere o resto e diz quantos faltam.
+    faixaDosPrimeirosPassos =
+      !user.support &&
+      !emDemonstracao &&
+      roleAtLeast(activeOrg.role, "manager") &&
+      segmentoDoEstado((orgRow as { onboarding_state?: unknown } | null)?.onboarding_state) !== null;
     // G4-02: expõe visibility_mode ao client (inbox decide visões visíveis).
     // Fonte confiável (admin client, org do cookie validado) — nunca do body.
     const mode = (orgRow?.settings as { visibility_mode?: VisibilityMode } | null)
@@ -357,6 +370,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {/* FORK MIA (9010): o selo da empresa de demonstração. */}
           <SeloDeDemonstracao ligado={emDemonstracao} />
           {faixa !== null && <FaixaDaCobranca faixa={faixa} fuso={orgFuso} />}
+          {/* FORK MIA (.91): os primeiros passos da empresa nova, até zerar. */}
+          {faixaDosPrimeirosPassos ? <FaixaDosPrimeirosPassos /> : null}
         </FaixasDeCima>
         {needsMfaGate ? (
           // Gate always mounted for MFA-required roles; it latches the blocking

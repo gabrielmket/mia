@@ -32,6 +32,8 @@ export async function acceptWelcome(formData: FormData): Promise<AcceptWelcomeRe
   const raw = {
     display_name: String(formData.get("display_name") ?? "").trim(),
     o_que_faz: String(formData.get("o_que_faz") ?? "").trim() || undefined,
+    // FORK MIA (.91): o segmento confirmado ("A MIA leu como").
+    segmento: String(formData.get("segmento") ?? "").trim() || undefined,
     timezone: String(formData.get("timezone") ?? "America/Sao_Paulo"),
     accepted_terms_at: new Date().toISOString(),
   };
@@ -55,6 +57,8 @@ export async function acceptWelcome(formData: FormData): Promise<AcceptWelcomeRe
           timezone: input.timezone,
           display_name: input.display_name,
           ...(input.o_que_faz ? { o_que_faz: input.o_que_faz } : {}),
+          // FORK MIA (.91): o modelo do agente, do funil e do follow-up sai daqui.
+          ...(input.segmento ? { segmento: input.segmento } : {}),
         },
       },
       { display_name: input.display_name, timezone: input.timezone },

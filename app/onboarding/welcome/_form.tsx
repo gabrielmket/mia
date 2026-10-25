@@ -16,14 +16,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FUSO_PADRAO, FUSOS_DO_ONBOARDING } from "@/lib/tempo/fusos";
+// FORK MIA (.91): o segmento que a MIA lê e a pessoa confirma.
+import {
+  MODELOS_DE_AGENTE,
+  SEGMENTOS_DO_ONBOARDING,
+  sugerirSegmento,
+  type SegmentoDoOnboarding,
+} from "@/lib/onboarding/modelos-de-agente-da-mia";
+import { cn } from "@/lib/utils";
 
 
 export function WelcomeForm({
   defaultOrgName,
   orgId,
+  segmentoInicial = null,
 }: {
   defaultOrgName: string;
   orgId: string;
+  /** FORK MIA (.91): o segmento já confirmado, para quem volta a este passo. */
+  segmentoInicial?: SegmentoDoOnboarding | null;
 }) {
   const t = useT();
   const [displayName, setDisplayName] = useState(defaultOrgName);
@@ -31,6 +42,9 @@ export function WelcomeForm({
   const [timezone, setTimezone] = useState(FUSO_PADRAO);
   const [accepted, setAccepted] = useState(false);
   const [pending, startTransition] = useTransition();
+  // FORK MIA (.91): a leitura acompanha o que a pessoa escreve até ela escolher.
+  const [segmentoEscolhido, setSegmentoEscolhido] = useState<SegmentoDoOnboarding | null>(segmentoInicial);
+  const segmento = segmentoEscolhido ?? sugerirSegmento(`${displayName} ${oQueFaz}`);
 
   return (
     <form
@@ -87,6 +101,37 @@ export function WelcomeForm({
           )}
         </p>
       </div>
+
+      {/*
+        FORK MIA (.91): "A MIA leu como". Cada segmento traz o agente de exemplo
+        das demonstrações, o quadro pronto do funil e o follow-up do modelo. A
+        leitura é só o ponto de partida: a pessoa confirma ou troca, e o
+        escolhido vai junto no envio.
+      */}
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">{t("A MIA leu como")}</legend>
+        <div className="flex flex-wrap gap-2" role="group" aria-label={t("Segmento")}>
+          {SEGMENTOS_DO_ONBOARDING.map((s) => (
+            <button
+              key={s}
+              type="button"
+              id={`segmento-${s}`}
+              aria-pressed={segmento === s}
+              onClick={() => setSegmentoEscolhido(s)}
+              className={cn(
+                "min-h-11 rounded-full border px-3 py-1.5 text-sm transition-colors sm:min-h-9",
+                segmento === s ? "border-primary bg-primary/5 font-medium" : "hover:bg-muted/40",
+              )}
+            >
+              {t(MODELOS_DE_AGENTE[s].rotulo)}
+            </button>
+          ))}
+        </div>
+        <input type="hidden" name="segmento" value={segmento} />
+        <p className="text-xs text-muted-foreground">
+          {t("Confirme ou troque. Cada segmento traz o agente de exemplo das demonstrações, o quadro pronto e o follow-up do modelo.")}
+        </p>
+      </fieldset>
 
       <div className="space-y-2">
         <Label htmlFor="timezone">{t("Onde você atende")}</Label>

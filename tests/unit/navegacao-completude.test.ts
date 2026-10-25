@@ -69,6 +69,8 @@ const NAV_ALLOWLIST: Record<string, string> = {
     "FORK MIA (.80): os painéis montados pelo usuário, alcançados de dentro de /app/relatorios e pelo \"Adicionar a um painel\" do editor",
   "/app/relatorios/exportacoes":
     "FORK MIA (.80): o registro de exportações (só gestor e administrador), alcançado de dentro de /app/relatorios",
+  "/app/inicio":
+    "FORK MIA (.91): o Início da empresa nova (o \"o que falta\" e o assistente ao lado), que só existe até zerar e só para gestor e administrador; alcançado pela raiz de /app (o login) e pela faixa \"Primeiros passos\" do topo. Para os outros redireciona para a tela inicial de sempre, então não cabe no menu",
 };
 
 /** Deriva as rotas estáticas a partir dos arquivos de página que existem. */

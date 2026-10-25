@@ -22,9 +22,12 @@ import type { Sugestao } from "@/lib/onboarding/sugerir-funil";
 export function QuadroClient({
   atual,
   sugestao,
+  modeloDoSegmento,
 }: {
   atual: QuadroAtual | null;
   sugestao: Sugestao;
+  /** FORK MIA (.91): o quadro partiu do modelo do segmento confirmado. */
+  modeloDoSegmento?: { rotulo: string; curto: string; agente: string };
 }) {
   const t = useT();
   const inicial: PropostaDeFunil =
@@ -85,7 +88,13 @@ export function QuadroClient({
         de que ela não está funcionando — descoberta que, calada, só chegaria com
         o primeiro cliente real.
       */}
-      {sugestao.origem === "ia" ? (
+      {modeloDoSegmento ? (
+        // FORK MIA (.91): o quadro pronto do segmento, o mesmo das demonstrações.
+        <p className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm" data-testid="quadro-do-segmento">
+          {t("Comecei por um quadro pronto de")} <strong>{t(modeloDoSegmento.curto)}</strong>.{" "}
+          {t("Seu funcionário move o cliente entre as colunas. Ajuste o que quiser.")}
+        </p>
+      ) : sugestao.origem === "ia" ? (
         <p className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm">
           {t(
             "Seu funcionário montou este quadro olhando o que você me contou sobre o negócio. Ajuste o que quiser.",

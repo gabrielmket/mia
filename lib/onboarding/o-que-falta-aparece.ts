@@ -9,7 +9,10 @@
  * Sai do ESTADO DE CONCLUSÃO do `/onboarding` do upstream
  * (`organizations.onboarded_at` e `organizations.onboarding_state`):
  *
- *   1. a empresa passou pelo passo "Seu negócio" DESTA versão: o
+ *   1. a empresa ainda está no passo a passo (`onboarded_at` nulo): toda
+ *      empresa que entra no passo a passo é nova (a que já roda tem
+ *      `onboarded_at`, ou não entraria em `/app`). Ou, depois de terminar,
+ *      passou pelo passo "Seu negócio" DESTA versão: o
  *      `onboarding_state.welcome.segmento` existe. Só o passo da .91 grava o
  *      segmento, então:
  *        - quem foi implantado pela Time (MCP de plataforma, carga, SQL) nunca
@@ -62,9 +65,9 @@ export interface Criterio {
 export function oQueFaltaAparece(e: EntradaDoCriterio): Criterio {
   if (e.suporte) return { aparece: false, onde: null, motivo: "suporte" };
   if (e.demonstracao) return { aparece: false, onde: null, motivo: "demonstracao" };
-  if (!segmentoDoEstado(e.onboardingState)) return { aparece: false, onde: null, motivo: "sem_o_passo_a_passo_desta_versao" };
   if (!e.papel || !roleAtLeast(e.papel, "manager")) return { aparece: false, onde: null, motivo: "papel_sem_os_primeiros_passos" };
   if (!e.onboardedAt) return { aparece: true, onde: "passo_a_passo", motivo: "empresa_nova_no_passo_a_passo" };
+  if (!segmentoDoEstado(e.onboardingState)) return { aparece: false, onde: null, motivo: "sem_o_passo_a_passo_desta_versao" };
   if (e.zerou) return { aparece: false, onde: null, motivo: "ja_zerou" };
   return { aparece: true, onde: "inicio", motivo: "empresa_nova_ate_zerar" };
 }

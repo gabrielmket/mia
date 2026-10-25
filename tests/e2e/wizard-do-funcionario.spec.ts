@@ -293,7 +293,10 @@ test.describe("o wizard monta um funcionário", () => {
     await expect(
       corpo,
       "a tela precisa dizer se a sugestão veio da IA ou de um modelo pronto",
-    ).toContainText(/montou este quadro|não consegui pedir uma sugestão/i);
+      // FORK MIA (.91): "Clínica Bem Viver" é lida como clínica no passo "Seu
+      // negócio", e o segmento confirmado começa do quadro pronto dele (o das
+      // demonstrações), dizendo isso na tela.
+    ).toContainText(/montou este quadro|não consegui pedir uma sugestão|comecei por um quadro pronto/i);
 
     // O quadro está lá, montado, com o destino de cada coluna visível — que é a
     // metade invisível do defeito: medido, 312 etapas no banco e 4 com destino,

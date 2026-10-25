@@ -62,7 +62,15 @@ function ParaColar({
   );
 }
 
-export function CanalOficialClient() {
+export function CanalOficialClient({
+  aoEntrarComOFacebook,
+}: {
+  /**
+   * FORK MIA (.91): o passo a passo de entrada anota que a pessoa entrou com o
+   * Facebook (o passo fica "esperando a Time"). Na tela de Conexões não vem.
+   */
+  aoEntrarComOFacebook?: () => void;
+} = {}) {
   const t = useT();
   const { data, isPending } = useOfficialChannel();
   const conectar = useConnectOfficialChannel();
@@ -264,7 +272,13 @@ export function CanalOficialClient() {
               "O jeito rápido: você entra com a conta do Facebook da sua empresa e escolhe o número por lá. Nada para copiar e colar.",
             )}
           </p>
-          <Button className="mt-3" onClick={() => window.open(estado.embedded_signup_url ?? "", "_blank", "noopener")}>
+          <Button
+            className="mt-3"
+            onClick={() => {
+              window.open(estado.embedded_signup_url ?? "", "_blank", "noopener");
+              aoEntrarComOFacebook?.();
+            }}
+          >
             {t("Entrar com o Facebook")}
           </Button>
           <p className="mt-2 text-xs text-muted-foreground">

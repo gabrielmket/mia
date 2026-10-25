@@ -12,6 +12,13 @@ import { audit } from "@/lib/audit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { aiAgentDefaultSchema, type PromptTemplate } from "@/lib/schemas/onboarding";
 import { publicarMemoriaDaOrg } from "@/lib/ai/memoria-da-org";
+// FORK MIA (.91): o agente do modelo do segmento.
+import {
+  personaDoNome,
+  promptDoModelo,
+  segmentoDoEstado,
+  type SegmentoDoOnboarding,
+} from "@/lib/onboarding/modelos-de-agente-da-mia";
 import {
   requireOnboardingCtx,
   patchOnboardingState,
@@ -135,14 +142,27 @@ export async function createDefaultAgent(formData: FormData): Promise<CreateAgen
   // passo: o funcionário nasce sem essa frase, que é degradação honesta — o
   // contrário seria travar a contratação por causa de um adjetivo.
   let oQueFaz: string | undefined;
+  // FORK MIA (.91): o segmento confirmado no passo "Seu negócio".
+  let segmento: SegmentoDoOnboarding | null = null;
   try {
     const { state } = await loadOnboardingState(ctx.orgId);
     oQueFaz = state.welcome?.o_que_faz;
+    segmento = segmentoDoEstado(state);
   } catch {
     oQueFaz = undefined;
   }
 
-  const systemPrompt = PROMPT_BODIES[input.prompt_template](ondeTrabalha(ctx.orgName, oQueFaz));
+  // FORK MIA (.91): com o segmento, o texto parte do agente de exemplo da
+  // demonstração daquele segmento (lib/onboarding/modelos-de-agente-da-mia.ts),
+  // no jeito que a pessoa escolheu; sem ele, o texto do upstream, como antes.
+  const systemPrompt = segmento
+    ? promptDoModelo(segmento, {
+        persona: personaDoNome(input.name, segmento),
+        negocio: ctx.orgName,
+        oQueFaz,
+        jeito: input.prompt_template,
+      })
+    : PROMPT_BODIES[input.prompt_template](ondeTrabalha(ctx.orgName, oQueFaz));
 
   // O agente padrão do onboarding é UM por organização, e o banco já garante
   // isso: `ai_agents_one_default_per_org` é índice único parcial em
