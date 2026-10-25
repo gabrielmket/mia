@@ -16,6 +16,7 @@ import { provedorDaInstalacao } from "@/lib/cobranca/configuracao";
 import { exigeDocumento, sugestaoDoCadastro } from "@/lib/cobranca/documento";
 import type { ProvedorDeCobranca } from "@/lib/cobranca/vocabulario";
 import { moduloLigado } from "@/lib/instalacao/modulos";
+import { tipoDaSuspensao } from "@/lib/organizacao/operante";
 
 export interface DadosDoCardDeCobranca {
   planos: PlanoDoCard[];
@@ -70,8 +71,10 @@ export async function lerCardDeCobranca(
       (org.data as { cnpj?: string | null } | null)?.cnpj ?? null,
     ),
     suspensaPorCobranca:
-      (org.data as { status?: string } | null)?.status === "suspended" &&
-      (org.data as { suspended_kind?: string | null } | null)?.suspended_kind === "cobranca",
+      tipoDaSuspensao(
+        (org.data as { status?: string } | null)?.status,
+        (org.data as { suspended_kind?: string | null } | null)?.suspended_kind,
+      ) === "cobranca",
     rotuloAntigo: typeof rotulo === "string" && rotulo !== "" ? rotulo : null,
   };
 }

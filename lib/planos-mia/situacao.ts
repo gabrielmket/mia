@@ -12,6 +12,7 @@
  */
 import { PISO_DA_TOLERANCIA_DIAS } from "@/lib/cobranca/regua";
 import type { AvisoDaRegua, EstadoDaAssinatura } from "@/lib/cobranca/vocabulario";
+import { tipoDaSuspensao } from "@/lib/organizacao/operante";
 
 const HORA_MS = 3_600_000;
 const DIA_MS = 24 * HORA_MS;
@@ -57,7 +58,7 @@ export function situacaoDaEmpresa(
   agora: Date,
 ): SituacaoDaEmpresa {
   if (!a) return "isenta";
-  if (org.status === "suspended") return "suspensa";
+  if (tipoDaSuspensao(org.status, org.suspended_kind) !== null) return "suspensa";
   const t = agora.getTime();
   if (a.estado === "em_atraso") {
     const prazo = em(a.prazo_extra_ate);

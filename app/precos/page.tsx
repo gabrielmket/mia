@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { emailDeSuporte, marcaDaSaida } from "@/lib/branding/saida";
+import { marcaDaSaida } from "@/lib/branding/saida";
+import { emailDeSuporte } from "@/lib/branding/saida";
 import { provedorDaInstalacao } from "@/lib/cobranca/configuracao";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";

@@ -22,6 +22,7 @@ import { toleranciaDias } from "@/lib/cobranca/configuracao";
 import { env } from "@/lib/env";
 import { maskEmail, maskPhone } from "@/lib/lgpd/mask";
 import { passosVisiveis } from "@/lib/onboarding/passos";
+import { ehOperante, tipoDaSuspensao } from "@/lib/organizacao/operante";
 import type { OnboardingState } from "@/lib/schemas/onboarding";
 
 import { lerPlanosComModulos, type PlanoComModulos } from "./leitura";
@@ -172,7 +173,7 @@ export async function lerEmpresasDoCadastro(
       demonstracao: boolean | null;
     }>
   )
-    .filter((o) => o.demonstracao !== true && o.status !== "archived" && o.status !== "redacted")
+    .filter((o) => o.demonstracao !== true && (ehOperante(o.status) || tipoDaSuspensao(o.status, o.suspended_kind) !== null))
     .map((o) =>
       linhaDe(
         o,

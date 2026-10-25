@@ -3,8 +3,9 @@
  * PLATAFORMA (regra do dono do produto: toda função nova entra no MCP na mesma
  * versão). docs/fork/email-marketing.md e docs/fork/mcp-de-implantacao.md.
  *
- * A CONTAGEM da lista mora aqui desde a .89: 83 (as 69 da .86, as cinco do
- * assistente da .88 e as nove do e-mail). E a regra que não pode virar: o MCP NUNCA dispara. Ele monta o
+ * A CONTAGEM da lista morou aqui na .89 (83: as 69 da .86, as cinco do
+ * assistente da .88 e as nove do e-mail); desde a .90 ela mora em
+ * `mcp-de-implantacao-cobranca.test.ts` (92). E a regra que não pode virar: o MCP NUNCA dispara. Ele monta o
  * rascunho e manda o teste, só para a equipe do cliente; quem envia é uma
  * pessoa da empresa, pela tela, com a declaração da base legal.
  *
@@ -114,9 +115,8 @@ beforeEach(() => {
   vi.mocked(ses.enviarPelaAmazon).mockClear();
 });
 
-describe("a lista: 83 ferramentas, nove delas do e-mail", () => {
-  it("83 = as 69 da .86 + as cinco do assistente (.88) + as nove do e-mail marketing (.89)", () => {
-    expect(FERRAMENTAS).toHaveLength(83);
+describe("a lista: nove ferramentas do e-mail (a contagem total mora no teste da cobrança, .90)", () => {
+  it("as nove do e-mail marketing (.89) e as cinco do assistente (.88) continuam na lista", () => {
     expect(FERRAMENTAS_DE_EMAIL_MARKETING).toHaveLength(9);
     expect(FERRAMENTAS.filter((f) => /assistente|chamado/.test(f.name))).toHaveLength(5);
   });

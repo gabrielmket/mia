@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -27,6 +28,8 @@ interface Compra {
   modo: "teste" | "producao" | null;
   criada_em: string;
 }
+const CHAVE_DAS_COMPRAS = ["carteira", "compras-de-creditos"];
+
 interface Leitura {
   pacotes: Array<{ valor_cents: number }>;
   pode_comprar: boolean;
@@ -43,27 +46,25 @@ export function ComprarCreditos({
   const idioma = useIdioma();
   const brl = new Intl.NumberFormat(idioma, { style: "currency", currency: "BRL" });
   const numero = new Intl.NumberFormat(idioma);
-  const [leitura, setLeitura] = useState<Leitura | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
-  const [escolhido, setEscolhido] = useState<number | null>(null);
-  const [aberta, setAberta] = useState<Compra | null>(null);
+  const queryClient = useQueryClient();
+  const consulta = useQuery({
+    queryKey: CHAVE_DAS_COMPRAS,
+    queryFn: async () => (await apiClient.get<{ data: Leitura }>("/api/v1/carteira/compras")).data,
+    staleTime: 10_000,
+  });
+  const leitura = consulta.data ?? null;
+  const erro = consulta.isError ? t("Não consegui carregar a compra de créditos agora.") : null;
+  const [escolhidoNaTela, setEscolhido] = useState<number | null>(null);
+  const escolhido = escolhidoNaTela ?? leitura?.pacotes[0]?.valor_cents ?? null;
+  // `undefined` = segue a compra em aberto que o servidor devolveu.
+  const [abertaNaTela, setAberta] = useState<Compra | null | undefined>(undefined);
+  const aberta =
+    abertaNaTela === undefined
+      ? (leitura?.compras.find((c) => c.status === "aguardando") ?? null)
+      : abertaNaTela;
   const [ocupado, setOcupado] = useState(false);
   const [recado, setRecado] = useState<string | null>(null);
-
-  const ler = useCallback(async () => {
-    try {
-      const r = await apiClient.get<{ data: Leitura }>("/api/v1/carteira/compras");
-      setLeitura(r.data);
-      setEscolhido((atual) => atual ?? r.data.pacotes[0]?.valor_cents ?? null);
-      setAberta(r.data.compras.find((c) => c.status === "aguardando") ?? null);
-    } catch {
-      setErro(t("Não consegui carregar a compra de créditos agora."));
-    }
-  }, [t]);
-
-  useEffect(() => {
-    void ler();
-  }, [ler]);
+  const ler = () => queryClient.invalidateQueries({ queryKey: CHAVE_DAS_COMPRAS });
 
   async function gerar() {
     if (escolhido === null) return;
