@@ -105,7 +105,10 @@ describe("rodadaDaCobranca", () => {
     const r = await rodar();
     const avisos = banco.rpcs.filter((x) => x.nome === "fn_cobranca_avisar_teto_de_ia");
     expect(avisos.map((a) => a.args.p_org)).toEqual(["A"]);
-    expect(String(avisos[0]?.args.p_corpo)).toContain("US$ 8.50 de US$ 10.00");
+    // FORK MIA (.90): o aviso diz a porcentagem do incluído, nunca dólar
+    // (lib/ai/custo-e-da-plataforma.ts).
+    expect(String(avisos[0]?.args.p_corpo)).toContain("85%");
+    expect(String(avisos[0]?.args.p_corpo)).not.toContain("US$");
     expect(r.avisosDeIa).toBe(1);
   });
 });

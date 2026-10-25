@@ -44,6 +44,8 @@ import { listarConexoesCaidas, type ConexaoCaida } from "@/lib/channels/health";
 import { VoiceCallProvider } from "@/components/voice/VoiceCallContext";
 import { ProvedorDaOcupacaoDoRodape } from "@/lib/ui/rodape-ocupado";
 import { acessoFoiRevogado } from "@/lib/auth/vinculo-revogado";
+// FORK MIA (.90): Vendas B2B segue o plano (docs/fork/jornada-de-assinatura.md).
+import { crmB2bForaDoPlano, ligadosNaInstalacaoParaAEmpresa } from "@/lib/planos-mia/modulos";
 // FORK MIA (.91): a faixa dos primeiros passos da empresa nova (até zerar).
 import { FaixaDosPrimeirosPassos } from "@/components/assistente/FaixaDosPrimeirosPassos";
 import { segmentoDoEstado } from "@/lib/onboarding/modelos-de-agente-da-mia";
@@ -196,7 +198,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       cliente_pela_agenda: clientePelaAgendaLigado(orgRow?.settings),
       modulos,
       modo_de_venda: modoDeVenda,
-      modulos_ligados: ligadosNaInstalacao,
+      // FORK MIA (.90): com a cobrança ligada, Vendas B2B some do menu da empresa
+      // num plano que não o tem (lib/planos-mia/modulos.ts). Desligada, é a lista de sempre.
+      modulos_ligados: ligadosNaInstalacaoParaAEmpresa(
+        ligadosNaInstalacao,
+        ligadosNaInstalacao.includes("crm_b2b") &&
+          !(user.is_platform_admin && !user.support) &&
+          (await crmB2bForaDoPlano(admin, activeOrg.orgId, ligadosNaInstalacao.includes("cobranca"))),
+      ),
       // Mesma linha de `settings` já lida acima — nenhuma consulta a mais.
       // ⚠️ `ligadosNaInstalacao`, e não `modulos`: no upstream a variável da
       // INSTALAÇÃO se chama `modulos`, aqui ela é `ligadosNaInstalacao` e

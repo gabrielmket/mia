@@ -10,6 +10,10 @@ import { lerPainelDaAssinatura } from "@/lib/cobranca/painel";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { createAdminClient } from "@/lib/supabase/admin";
+// FORK MIA (.90): os módulos do plano, os créditos por Pix e o plano sem dólar (docs/fork/jornada-de-assinatura.md).
+import { ComprarCreditos } from "@/components/planos-mia/ComprarCreditos";
+import { ModulosDoPlano } from "@/components/planos-mia/ModulosDoPlano";
+import { lerCreditosDoPainel, lerModulosDoPainel, semDolar } from "@/lib/planos-mia/painel-da-empresa";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +39,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     ? await lerPainelDaAssinatura(admin, activeOrg.orgId)
     : null;
   const suporte = painel ? null : await emailDeSuporte();
+  // FORK MIA (.90): só com a cobrança ligada (o painel existe) e a empresa num plano.
+  const modulosDoPlano = painel?.assinatura ? await lerModulosDoPainel(admin, activeOrg.orgId) : null;
+  const creditos = painel ? await lerCreditosDoPainel(admin, activeOrg.orgId) : null;
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
@@ -47,6 +54,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       {painel ? (
         <>
           <PainelDaAssinatura dados={painel} idioma={idioma} />
+          {modulosDoPlano && <ModulosDoPlano modulos={modulosDoPlano} idioma={idioma} fuso={painel.fuso} />}
+          {creditos?.temCarteira && <ComprarCreditos precoPorMensagemCents={creditos.precoPorMensagemCents} />}
           {painel.assinatura && (
             <AcoesDaAssinatura
               estado={painel.assinatura.estado}
@@ -54,8 +63,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               assinaturasVivas={painel.assinatura.assinaturas_vivas}
               linkDePagamento={painel.assinatura.link_de_pagamento}
               cancelaNoFim={painel.assinatura.cancela_no_fim}
-              planosParaTroca={painel.planosParaTroca}
-              planoAtual={painel.plano ? { id: painel.plano.id, nome: painel.plano.nome, preco_cents: painel.plano.preco_cents, intervalo: painel.plano.intervalo, max_assentos: painel.plano.max_assentos, max_canais: painel.plano.max_canais, teto_ia_usd_cents: painel.plano.teto_ia_usd_cents } : null}
+              // FORK MIA (.90): o teto em dólar não vai ao navegador; vai a estimativa de conversas.
+              planosParaTroca={painel.planosParaTroca.map(semDolar)}
+              planoAtual={painel.plano ? semDolar({ id: painel.plano.id, nome: painel.plano.nome, preco_cents: painel.plano.preco_cents, intervalo: painel.plano.intervalo, max_assentos: painel.plano.max_assentos, max_canais: painel.plano.max_canais, teto_ia_usd_cents: painel.plano.teto_ia_usd_cents }) : null}
               periodoPagoDesde={painel.assinatura.periodo_pago_desde}
               proximoVencimento={painel.assinatura.proximo_vencimento}
               trocaPagamentoUrl={painel.assinatura.troca_pagamento_url}

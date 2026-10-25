@@ -271,6 +271,15 @@ export const AUDIT_ACTIONS = [
   "email_marketing.aviso_da_amazon",
   "email_marketing.rodada",
   "email_marketing.imagem_enviada",
+  // FORK MIA (.90) — a jornada de assinatura (docs/fork/jornada-de-assinatura.md):
+  // o plano que liga e desliga módulo (e a véspera da descida), os planos e os
+  // pacotes de crédito garantidos pela plataforma, e a compra de créditos por Pix.
+  "planos_mia.modulos_seguiram_o_plano",
+  "planos_mia.aviso_de_modulo_saindo",
+  "planos_mia.planos_garantidos",
+  "planos_mia.pacotes_garantidos",
+  "carteira.compra_iniciada",
+  "carteira.compra_confirmada",
   // FORK MIA (.60) — leads dos formulários da Meta: quem ligou a importação, que
   // formulário vai para qual funil, quem pediu leitura na hora, e a rodada do
   // relógio que trouxe lead ou deu erro (a vazia não audita).

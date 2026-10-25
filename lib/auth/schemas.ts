@@ -23,6 +23,8 @@ export const signupSchema = z
   .object({
     org_name: organizationNameSchema,
     cobranca_plan_id: z.string().uuid().optional(),
+    // FORK MIA (.90): o que a empresa faz, opcional — a Time lê na linha do pedido.
+    mia_o_que_faz: z.string().trim().max(200).optional(),
     email: z.string().email("Email inválido"),
     password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
     password_confirm: z.string(),

@@ -139,15 +139,14 @@ async function avisarTetoDeIa(admin: SupabaseClient): Promise<number> {
     const gasto = Number(gastoLido ?? 0);
     if (gasto < teto * LIMIAR_DO_AVISO_DE_IA || gasto >= teto) continue;
     const t = (s: string) => traduzir(s, idioma);
-    const usd = (centavos: number) => (centavos / 100).toFixed(2);
+    // FORK MIA (.90): o custo da IA é número da PLATAFORMA (lib/ai/custo-e-da-plataforma.ts):
+    // o aviso diz a porcentagem do que o plano inclui, nunca dólar.
     const { data: ganhou, error: erroDoAviso } = await admin.rpc("fn_cobranca_avisar_teto_de_ia", {
       p_org: org,
       p_titulo: t("O uso de IA do plano chegou a 80%"),
       p_corpo: t(
-        "Neste mês a empresa já usou US$ {gasto} de US$ {teto} incluídos no plano. Ao chegar ao limite, as conversas passam para a equipe. Para aumentar, troque de plano em Plano e cobrança.",
-      )
-        .replace("{gasto}", usd(gasto))
-        .replace("{teto}", usd(teto)),
+        "Neste mês a empresa já usou {pct}% da IA incluída no plano. Em 100%, a IA para até o mês virar e as conversas novas vão para a equipe. Para aumentar, troque de plano em Plano e cobrança.",
+      ).replace("{pct}", String(Math.floor((gasto / teto) * 100))),
     });
     if (erroDoAviso) {
       logger.warn("cobranca.aviso_de_ia_nao_registrado", { organization_id: org, codigo: erroDoAviso.code ?? null });

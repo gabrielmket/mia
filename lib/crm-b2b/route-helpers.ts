@@ -9,6 +9,8 @@ import { fail, ok } from "@/lib/api/wrappers";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
 import type { RoleCheck } from "@/lib/auth/require-role";
 import { moduloLigado } from "@/lib/instalacao/modulos";
+// FORK MIA (.90): Vendas B2B segue o plano (docs/fork/jornada-de-assinatura.md).
+import { crmB2bForaDoPlanoDaSessao } from "@/lib/planos-mia/crm-b2b-da-sessao";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -19,7 +21,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * `/api/v1/external-db`.
  */
 export async function seModuloB2bDesligado(requestId: string): Promise<Response | null> {
-  if (await moduloLigado(createAdminClient(), "crm_b2b")) return null;
+  if (await moduloLigado(createAdminClient(), "crm_b2b")) {
+    // FORK MIA (.90): com a cobrança ligada, a empresa num plano sem Vendas B2B
+    // não usa o módulo (lib/planos-mia/crm-b2b-da-sessao.ts). Desligada, não muda nada.
+    if (await crmB2bForaDoPlanoDaSessao()) {
+      return fail("modulo_nao_contratado", "Vendas B2B não está no plano desta empresa.", 403, { requestId });
+    }
+    return null;
+  }
   return fail("not_found", "Not found.", 404, { requestId });
 }
 

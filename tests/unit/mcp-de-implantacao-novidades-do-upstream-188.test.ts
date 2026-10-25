@@ -7,9 +7,10 @@
  * O molde é o de `mcp-de-implantacao-novidades-do-upstream-186.test.ts`: um
  * bloco por novidade, e o que se mede é o BANCO, não a resposta.
  *
- * A CONTAGEM da lista morava aqui até a .86: 69. Desde a .89 ela mora em
+ * A CONTAGEM da lista morava aqui até a .86: 69. Na .89 ela foi para
  * `mcp-de-implantacao-email-marketing.test.ts` (83: as 69, as cinco do assistente
- * da .88 e as nove do e-mail). As v1.87 e v1.88 não
+ * da .88 e as nove do e-mail) e, desde a .90, mora em
+ * `mcp-de-implantacao-cobranca.test.ts` (92: mais as nove da cobrança). As v1.87 e v1.88 não
  * pediram ferramenta nova, só campos: o reaproveitamento do card aberto na
  * fonte (0722), a assinatura com o nome de cada agente (#3318), a devolução à
  * fila da conversa do rodízio sem resposta (#2988), o telefone que entra
@@ -49,6 +50,7 @@ vi.mock("@/lib/ai/embeddings/chave", () => ({ temChaveDeEmbedding: vi.fn(async (
 
 const { criarServidorDePlataforma } = await import("@/lib/mcp-plataforma/servidor");
 const { FERRAMENTAS } = await import("@/lib/mcp-plataforma/ferramentas");
+const { FERRAMENTAS_DE_COBRANCA } = await import("@/lib/mcp-plataforma/ferramentas/cobranca");
 const { TIPOS_DE_ACAO } = await import("@/lib/mcp-plataforma/ferramentas/automacoes-e-agenda");
 const { audit } = await import("@/lib/audit");
 
@@ -104,11 +106,15 @@ beforeEach(() => {
 
 describe("a lista: 69 ferramentas, e os tipos de ação seguem os do upstream", () => {
   it("as v1.87 e v1.88 não acrescentaram ferramenta (69)", () => {
-    // A contagem total mora no teste da entrega mais nova (o e-mail marketing,
-    // .89: tests/unit/mcp-de-implantacao-email-marketing.test.ts). Aqui fica o
-    // que as v1.87 e v1.88 do upstream deixaram: nenhuma das 69 sumiu, tirando as
-    // cinco do assistente da MIA (.88) e as nove do e-mail marketing (.89).
-    const doFork = FERRAMENTAS.filter((f) => /assistente|chamado|email|supressao|consentimentos|segmentos/.test(f.name));
+    // A contagem total mora no teste da entrega mais nova (a cobrança da jornada,
+    // .90: tests/unit/mcp-de-implantacao-cobranca.test.ts). Aqui fica o que as
+    // v1.87 e v1.88 do upstream deixaram: nenhuma das 69 sumiu, tirando as cinco
+    // do assistente da MIA (.88), as nove do e-mail marketing (.89) e as nove da
+    // cobrança (.90).
+    const daCobranca = new Set(FERRAMENTAS_DE_COBRANCA.map((f) => f.name));
+    const doFork = FERRAMENTAS.filter(
+      (f) => daCobranca.has(f.name) || /assistente|chamado|email|supressao|consentimentos|segmentos/.test(f.name),
+    );
     expect(FERRAMENTAS.length - doFork.length).toBe(69);
   });
 

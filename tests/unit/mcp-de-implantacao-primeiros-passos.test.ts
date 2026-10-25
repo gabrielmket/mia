@@ -9,7 +9,7 @@
  *     sem gravar a peça), decidir pelo MCP (`plataforma_decidir_proposta_do_
  *     assistente`) e ver a peça nascer em rascunho;
  *   - o follow-up proposto sai JUNTO com o agente publicado, e só com ele;
- *   - as duas ferramentas novas: 83 + 2 = 85.
+ *   - as duas ferramentas novas (a contagem total, 94, mora no teste da cobrança).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -82,7 +82,7 @@ afterEach(() => {
   delete process.env.OPENAI_API_KEY;
 });
 
-describe("a lista: 83 + 2", () => {
+describe("a lista: as duas das propostas", () => {
   it("as duas ferramentas novas: ver (leitura livre) e decidir (implantar_configuracao)", () => {
     const novas = FERRAMENTAS.filter((f) => /propostas?_do_assistente/.test(f.name)).map((f) => [f.name, f.operacao]);
     expect(Object.fromEntries(novas)).toEqual({
