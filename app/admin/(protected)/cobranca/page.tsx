@@ -19,6 +19,9 @@ import { ConexaoDaCobranca } from "./_conexao";
 import { PlanosDaInstalacao, type PlanoDaTela } from "./_planos";
 import { ReguaDaCobranca } from "./_regua";
 import { FaixaDoModoDeTeste, VisaoGeral } from "./_visao-geral";
+// FORK MIA (.90): o plano libera módulo (docs/fork/jornada-de-assinatura.md).
+import { ModulosDosPlanos } from "@/components/planos-mia/ModulosDosPlanos";
+import { lerPainelDosPlanos } from "@/lib/planos-mia/painel-dos-planos";
 
 export const metadata = { title: "Cobrança — Admin Plataforma" };
 export const dynamic = "force-dynamic";
@@ -57,7 +60,7 @@ export default async function CobrancaPage({ searchParams }: { searchParams: Pro
   const { aba } = await searchParams;
   const inicial: AbaDaCobranca = ABAS_DA_COBRANCA.find((a) => a === aba) ?? "visao-geral";
 
-  const [planos, clientes, visao, tolerancia] = await Promise.all([
+  const [planos, clientes, visao, tolerancia, painelDosPlanos] = await Promise.all([
     admin.from("cobranca_planos").select(COLUNAS_DO_PLANO).order("nome"),
     admin
       .from("organizations")
@@ -67,6 +70,7 @@ export default async function CobrancaPage({ searchParams }: { searchParams: Pro
       .order("display_name"),
     lerVisaoGeral(admin),
     toleranciaDias(),
+    lerPainelDosPlanos(admin),
   ]);
   if (planos.error || clientes.error) {
     throw new Error(`cobrança: leitura falhou (${planos.error?.code ?? clientes.error?.code})`);
@@ -141,7 +145,13 @@ export default async function CobrancaPage({ searchParams }: { searchParams: Pro
           "visao-geral": <VisaoGeral dados={visao} checklist={montarChecklist(visao)} idioma={idioma} agora={agora} />,
           conexao: <ConexaoDaCobranca provedor={visao.provedor} modo={visao.modo} last4={visao.chaveLast4} urlDoWebhook={visao.urlDoWebhook} />,
           regua: <ReguaDaCobranca tolerancia={tolerancia} />,
-          planos: <PlanosDaInstalacao planos={lista} />,
+          // FORK MIA (.90): os módulos e o Broadcast de cada plano, numa tabela ao lado (docs/fork/jornada-de-assinatura.md).
+          planos: (
+            <div className="space-y-6">
+              <PlanosDaInstalacao planos={lista} />
+              <ModulosDosPlanos {...painelDosPlanos} />
+            </div>
+          ),
           clientes: clientesDaTela,
         }}
       />
