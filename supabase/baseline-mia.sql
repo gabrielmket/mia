@@ -1908,7 +1908,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261025100500_9065_imagens_das_campanhas_de_email', now())
+values (1, '20261025200200_9082_retencao_das_propostas_e_dos_retratos', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -17655,6 +17655,518 @@ on conflict (id) do update
   set public             = excluded.public,
       file_size_limit    = excluded.file_size_limit,
       allowed_mime_types = excluded.allowed_mime_types;
+
+
+
+-- ─── 9080 · as propostas do assistente da MIA ───
+--
+-- Espelho EXATO da migration 9080 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9080 · as propostas do assistente da MIA
+--
+-- `mia`: só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: `create
+-- table if not exists`, constraints dentro de `do` que conferem o catálogo,
+-- `create index if not exists`, `drop trigger/policy if exists`.
+--
+-- ── As regras do desenho do upstream (#2860, fase 2) que viram banco ───────
+--
+--   1 proposta = 1 peça        `tipo` é uma peça só, e o `pedido` é dela
+--   nada antes de aprovar      a proposta guarda o pedido; o rascunho da peça
+--                              nasce no aplicar, pelo servidor
+--   nada crítico é proposto    `risco` só aceita seguro e atenção
+--   aplicar exige aprovar      a ordem das situações é do banco, não da rota
+--   aplicar é do administrador a sessão não atualiza a linha; a rota que
+--                              aplica confere o papel e grava o registro
+
+create table if not exists public.mia_assistente_propostas (
+  id                     uuid primary key default gen_random_uuid(),
+  organization_id        uuid not null references public.organizations(id) on delete cascade,
+  -- A conversa em que o assistente propôs (o histórico da pessoa, 9050).
+  conversa_id            uuid references public.mia_assistente_conversas(id) on delete set null,
+  criada_por             uuid references auth.users(id) on delete set null,
+  -- agente (do modelo do segmento), funil (do quadro pronto), followup (do modelo)
+  tipo                   text not null,
+  risco                  text not null default 'atencao',
+  titulo                 text not null,
+  -- O que muda, para o cartão da proposta: [{ "rotulo": "...", "valor": "..." }].
+  mudancas               jsonb not null default '[]'::jsonb,
+  -- O que o aplicar monta (o segmento, o nome, o quadro, o modelo). Nunca dado
+  -- de contato: a peça é configuração da empresa.
+  pedido                 jsonb not null default '{}'::jsonb,
+  situacao               text not null default 'pendente',
+  aprovada_por           uuid references auth.users(id) on delete set null,
+  aprovada_em            timestamptz,
+  aplicada_por           uuid references auth.users(id) on delete set null,
+  aplicada_em            timestamptz,
+  rejeitada_por          uuid references auth.users(id) on delete set null,
+  rejeitada_em           timestamptz,
+  -- Os ids da peça que o aplicar criou (agente, funil, fluxo de follow-up).
+  resultado              jsonb,
+  -- Por que o último aplicar não terminou (a proposta continua aprovada).
+  erro                   text,
+  -- Só follow-up: quando ele saiu junto com o agente publicado.
+  saiu_com_o_agente_em   timestamptz,
+  expira_em              timestamptz not null default (now() + interval '30 days'),
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
+);
+
+comment on table public.mia_assistente_propostas is
+  'MIA (9080): uma proposta do assistente da MIA = uma peca (agente do modelo do segmento, funil do quadro pronto ou follow-up do modelo). mudancas = o que o cartao mostra; pedido = o que o aplicar monta. Nada e criado antes de aprovar. situacao pendente -> aprovada -> aplicada, ou rejeitada / expirada (a ordem e do gatilho fn_mia_proposta_segue_a_ordem). Gestor em diante le e propoe pela sessao; aprovar, aplicar e rejeitar sao do servidor (aplicar so administrador). Risco critico nao e proposto.';
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_propostas_tipo') then
+    alter table public.mia_assistente_propostas
+      add constraint mia_assistente_propostas_tipo check (tipo in ('agente', 'funil', 'followup'));
+  end if;
+  -- O crítico (canal, número, cobrança, usuários, convite, chave, exclusão) não
+  -- é proposto: vira "preciso confirmar" no "o que falta", com o botão da tela.
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_propostas_risco') then
+    alter table public.mia_assistente_propostas
+      add constraint mia_assistente_propostas_risco check (risco in ('seguro', 'atencao'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_propostas_situacao') then
+    alter table public.mia_assistente_propostas
+      add constraint mia_assistente_propostas_situacao
+      check (situacao in ('pendente', 'aprovada', 'aplicada', 'rejeitada', 'expirada'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_propostas_titulo') then
+    alter table public.mia_assistente_propostas
+      add constraint mia_assistente_propostas_titulo check (length(btrim(titulo)) between 1 and 200);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_propostas_mudancas') then
+    alter table public.mia_assistente_propostas
+      add constraint mia_assistente_propostas_mudancas
+      check (jsonb_typeof(mudancas) = 'array' and octet_length(mudancas::text) <= 8000);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_propostas_pedido') then
+    alter table public.mia_assistente_propostas
+      add constraint mia_assistente_propostas_pedido
+      check (jsonb_typeof(pedido) = 'object' and octet_length(pedido::text) <= 32000);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_propostas_erro') then
+    alter table public.mia_assistente_propostas
+      add constraint mia_assistente_propostas_erro check (erro is null or length(erro) <= 1000);
+  end if;
+  -- Aplicada é sempre aprovada antes: as duas datas existem.
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_propostas_aplicada_foi_aprovada') then
+    alter table public.mia_assistente_propostas
+      add constraint mia_assistente_propostas_aplicada_foi_aprovada
+      check (situacao <> 'aplicada' or (aprovada_em is not null and aplicada_em is not null));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_propostas_aprovada_tem_data') then
+    alter table public.mia_assistente_propostas
+      add constraint mia_assistente_propostas_aprovada_tem_data
+      check (situacao <> 'aprovada' or aprovada_em is not null);
+  end if;
+end $$;
+
+-- Uma pendente por peça e empresa: pedir de novo devolve a mesma proposta.
+create unique index if not exists mia_assistente_propostas_uma_pendente_idx
+  on public.mia_assistente_propostas (organization_id, tipo)
+  where situacao = 'pendente';
+create index if not exists mia_assistente_propostas_org_idx
+  on public.mia_assistente_propostas (organization_id, created_at desc);
+-- O follow-up aplicado que espera o agente ser publicado.
+create index if not exists mia_assistente_propostas_esperando_o_agente_idx
+  on public.mia_assistente_propostas (organization_id)
+  where tipo = 'followup' and situacao = 'aplicada' and saiu_com_o_agente_em is null;
+
+-- ── a proposta nasce pendente, da própria pessoa ────────────────────────────
+--
+-- Pela sessão, quem propõe é a própria pessoa (o assistente propõe em nome de
+-- quem pergunta), e a proposta nasce pendente, sem aprovação, sem resultado e
+-- com 30 dias para vencer. Sem isto, um pedido direto ao PostgREST criaria uma
+-- proposta já "aplicada" ou aprovada por outra pessoa.
+create or replace function public.fn_mia_proposta_nasce()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $f$
+begin
+  if auth.uid() is not null then
+    new.criada_por := auth.uid();
+    new.situacao := 'pendente';
+    new.aprovada_por := null;
+    new.aprovada_em := null;
+    new.aplicada_por := null;
+    new.aplicada_em := null;
+    new.rejeitada_por := null;
+    new.rejeitada_em := null;
+    new.resultado := null;
+    new.erro := null;
+    new.saiu_com_o_agente_em := null;
+    new.expira_em := now() + interval '30 days';
+    new.created_at := now();
+    new.updated_at := now();
+  end if;
+  return new;
+end
+$f$;
+
+comment on function public.fn_mia_proposta_nasce() is
+  'MIA (9080): a proposta criada pela sessao nasce pendente, da propria pessoa, sem aprovacao, sem resultado e com 30 dias para vencer.';
+
+revoke all on function public.fn_mia_proposta_nasce() from public;
+revoke execute on function public.fn_mia_proposta_nasce() from anon, authenticated;
+
+drop trigger if exists trg_mia_proposta_nasce on public.mia_assistente_propostas;
+create trigger trg_mia_proposta_nasce
+  before insert on public.mia_assistente_propostas
+  for each row execute function public.fn_mia_proposta_nasce();
+
+-- ── a ordem das situações ───────────────────────────────────────────────────
+--
+-- Vale para QUALQUER escrita, inclusive a do servidor: a rota que aplica não
+-- consegue pular o aprovar nem reabrir uma proposta decidida. É a sabotagem que
+-- o desenho do upstream pede ("aplicar pendente reprova").
+create or replace function public.fn_mia_proposta_segue_a_ordem()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $f$
+begin
+  if new.organization_id is distinct from old.organization_id
+     or new.tipo is distinct from old.tipo
+     or new.pedido is distinct from old.pedido
+     or new.created_at is distinct from old.created_at then
+    raise exception 'proposta_imutavel'
+      using errcode = '23514',
+            detail = 'A peça de uma proposta não muda depois de criada: proponha de novo.';
+  end if;
+
+  if old.situacao in ('rejeitada', 'expirada') then
+    raise exception 'proposta_ja_decidida'
+      using errcode = '23514',
+            detail = format('A proposta está %s e não muda mais.', old.situacao);
+  end if;
+
+  if old.situacao = 'pendente' and new.situacao not in ('pendente', 'aprovada', 'rejeitada', 'expirada') then
+    raise exception 'proposta_sem_aprovacao'
+      using errcode = '23514',
+            detail = 'Uma proposta pendente precisa ser aprovada antes de ser aplicada.';
+  end if;
+
+  if old.situacao = 'aprovada' and new.situacao not in ('aprovada', 'aplicada', 'rejeitada') then
+    raise exception 'proposta_transicao_invalida'
+      using errcode = '23514',
+            detail = format('De aprovada não se vai para %s.', new.situacao);
+  end if;
+
+  if old.situacao = 'aplicada' then
+    if new.situacao <> 'aplicada'
+       or new.resultado is distinct from old.resultado
+       or new.aplicada_em is distinct from old.aplicada_em
+       or new.aprovada_em is distinct from old.aprovada_em then
+      raise exception 'proposta_ja_aplicada'
+        using errcode = '23514',
+              detail = 'A proposta já foi aplicada: só a saída junto com o agente ainda é anotada.';
+    end if;
+  end if;
+
+  new.updated_at := now();
+  return new;
+end
+$f$;
+
+comment on function public.fn_mia_proposta_segue_a_ordem() is
+  'MIA (9080): a ordem das situacoes da proposta (pendente -> aprovada -> aplicada, ou rejeitada / expirada). Recusa (23514) aplicar sem aprovar, mudar a peca depois de criada e mexer em proposta decidida, para qualquer escrita.';
+
+revoke all on function public.fn_mia_proposta_segue_a_ordem() from public;
+revoke execute on function public.fn_mia_proposta_segue_a_ordem() from anon, authenticated;
+
+drop trigger if exists trg_mia_proposta_segue_a_ordem on public.mia_assistente_propostas;
+create trigger trg_mia_proposta_segue_a_ordem
+  before update on public.mia_assistente_propostas
+  for each row execute function public.fn_mia_proposta_segue_a_ordem();
+
+-- ── permissões e RLS ────────────────────────────────────────────────────────
+
+alter table public.mia_assistente_propostas enable row level security;
+
+revoke all on table public.mia_assistente_propostas from public, anon, authenticated;
+-- Propor é pela sessão (o insert da tabela inteira é o que faz as travas do
+-- suporte a alcançarem); quem decide o que nasce é o gatilho. Aprovar, aplicar
+-- e rejeitar são do servidor: a sessão não atualiza nem apaga.
+grant select, insert on table public.mia_assistente_propostas to authenticated;
+grant all on table public.mia_assistente_propostas to service_role;
+
+drop policy if exists "mia_assistente_propostas_select" on public.mia_assistente_propostas;
+drop policy if exists "mia_assistente_propostas_insert" on public.mia_assistente_propostas;
+create policy "mia_assistente_propostas_select" on public.mia_assistente_propostas
+  for select using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'manager')
+  );
+create policy "mia_assistente_propostas_insert" on public.mia_assistente_propostas
+  for insert with check (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'manager')
+    and (conversa_id is null or exists (
+      select 1 from public.mia_assistente_conversas c
+       where c.id = conversa_id
+         and c.organization_id = mia_assistente_propostas.organization_id
+         and c.user_id = auth.uid()
+    ))
+  );
+
+-- ── as travas do suporte somente leitura ────────────────────────────────────
+--
+-- A regra é a do upstream (0274): tabela com RLS, `organization_id` e escrita
+-- para `authenticated` ganha as três políticas restritivas.
+do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9081 · o retrato do "o que falta" ───
+--
+-- Espelho EXATO da migration 9081 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9081 · o retrato do "o que falta"
+--
+-- `mia`: só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente.
+
+create table if not exists public.mia_assistente_retratos (
+  id                 uuid primary key default gen_random_uuid(),
+  organization_id    uuid not null references public.organizations(id) on delete cascade,
+  rodada_em          timestamptz not null default now(),
+  faltam             integer not null,
+  total              integer not null,
+  preenchido         integer not null default 0,
+  posso_completar    integer not null default 0,
+  preciso_confirmar  integer not null default 0,
+  nao_se_aplica      integer not null default 0,
+  -- A coluna de cada item: [{ "chave": "whatsapp", "coluna": "preciso_confirmar" }].
+  itens              jsonb not null default '[]'::jsonb,
+  calculado_por      uuid references auth.users(id) on delete set null,
+  origem             text not null default 'tela'
+);
+
+comment on table public.mia_assistente_retratos is
+  'MIA (9081): o retrato de cada rodada do "o que falta" de uma empresa nova (a regua do checklist do MCP no rotulo do cliente). faltam = itens que nao estao preenchidos; itens = a coluna de cada item, sem dado pessoal. Mostra a evolucao ("ao entrar faltavam N, agora faltam M") e diz quando a empresa zerou. Gestor em diante le; o administrador grava pela sessao; ninguem altera nem apaga pela sessao.';
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_retratos_contas') then
+    alter table public.mia_assistente_retratos
+      add constraint mia_assistente_retratos_contas
+      check (
+        total between 0 and 200
+        and faltam between 0 and total
+        and preenchido >= 0 and posso_completar >= 0 and preciso_confirmar >= 0 and nao_se_aplica >= 0
+        and preenchido + posso_completar + preciso_confirmar = total
+        and posso_completar + preciso_confirmar = faltam
+      );
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_retratos_itens') then
+    alter table public.mia_assistente_retratos
+      add constraint mia_assistente_retratos_itens
+      check (jsonb_typeof(itens) = 'array' and octet_length(itens::text) <= 16000);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_assistente_retratos_origem') then
+    alter table public.mia_assistente_retratos
+      add constraint mia_assistente_retratos_origem check (origem in ('tela', 'assistente'));
+  end if;
+end $$;
+
+create index if not exists mia_assistente_retratos_org_idx
+  on public.mia_assistente_retratos (organization_id, rodada_em desc);
+
+-- Pela sessão, a hora e quem calculou não vêm do pedido.
+create or replace function public.fn_mia_retrato_nasce()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $f$
+begin
+  if auth.uid() is not null then
+    new.calculado_por := auth.uid();
+    new.rodada_em := now();
+  end if;
+  return new;
+end
+$f$;
+
+comment on function public.fn_mia_retrato_nasce() is
+  'MIA (9081): o retrato gravado pela sessao leva a hora do banco e quem calculou, nunca o que veio no pedido.';
+
+revoke all on function public.fn_mia_retrato_nasce() from public;
+revoke execute on function public.fn_mia_retrato_nasce() from anon, authenticated;
+
+drop trigger if exists trg_mia_retrato_nasce on public.mia_assistente_retratos;
+create trigger trg_mia_retrato_nasce
+  before insert on public.mia_assistente_retratos
+  for each row execute function public.fn_mia_retrato_nasce();
+
+alter table public.mia_assistente_retratos enable row level security;
+
+revoke all on table public.mia_assistente_retratos from public, anon, authenticated;
+grant select, insert on table public.mia_assistente_retratos to authenticated;
+grant all on table public.mia_assistente_retratos to service_role;
+
+drop policy if exists "mia_assistente_retratos_select" on public.mia_assistente_retratos;
+drop policy if exists "mia_assistente_retratos_insert" on public.mia_assistente_retratos;
+create policy "mia_assistente_retratos_select" on public.mia_assistente_retratos
+  for select using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'manager')
+  );
+-- O retrato é a régua do administrador (é ele que enxerga a empresa inteira,
+-- inclusive o plano): gestor lê a evolução, mas não grava a dele.
+create policy "mia_assistente_retratos_insert" on public.mia_assistente_retratos
+  for insert with check (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'admin')
+  );
+
+do $f$ begin perform public.fn_aplicar_travas_de_suporte(); end $f$;
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9082 · a retenção das propostas e dos retratos do assistente ───
+--
+-- Espelho EXATO da migration 9082 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9082 · a retenção das propostas e dos retratos do assistente
+--
+-- Só a função NOSSA é redefinida (docs/FORK-MIA.md, regra 3). Idempotente:
+-- `create or replace`.
+
+create or replace function public.fn_mia_expurgar_assistente_vencido(
+  p_retencao_dias integer default 90,
+  p_limite integer default 5000
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $f$
+declare
+  v_dias integer := greatest(coalesce(p_retencao_dias, 90), 30);
+  v_limite integer := least(greatest(coalesce(p_limite, 5000), 1), 50000);
+  v_mensagens integer := 0;
+  v_conversas integer := 0;
+  v_chamados integer := 0;
+  -- 9082
+  v_propostas_vencidas integer := 0;
+  v_propostas integer := 0;
+  v_retratos integer := 0;
+begin
+  with vencidas as (
+    select id from public.mia_assistente_mensagens
+     where created_at < now() - make_interval(days => v_dias)
+     order by created_at
+     limit v_limite
+  )
+  delete from public.mia_assistente_mensagens m
+   using vencidas v
+   where m.id = v.id;
+  get diagnostics v_mensagens = row_count;
+
+  with vazias as (
+    select c.id from public.mia_assistente_conversas c
+     where c.ultima_em < now() - make_interval(days => v_dias)
+       and not exists (select 1 from public.mia_assistente_mensagens m where m.conversa_id = c.id)
+     order by c.ultima_em
+     limit v_limite
+  )
+  delete from public.mia_assistente_conversas c
+   using vazias v
+   where c.id = v.id;
+  get diagnostics v_conversas = row_count;
+
+  with resolvidos as (
+    select id from public.mia_chamados
+     where situacao = 'resolvido'
+       and coalesce(respondido_em, updated_at) < now() - make_interval(days => 365)
+     order by coalesce(respondido_em, updated_at)
+     limit v_limite
+  )
+  delete from public.mia_chamados ch
+   using resolvidos r
+   where ch.id = r.id;
+  get diagnostics v_chamados = row_count;
+
+  -- 9082 · as propostas do assistente (9080): a pendente que passou do prazo
+  --        vence (a pessoa pede de novo, se ainda quiser); a rejeitada ou
+  --        vencida há mais de 180 dias e a aplicada há mais de 365 saem. A
+  --        peça que a proposta criou não é tocada: ela é da empresa.
+  with vencidas as (
+    select id from public.mia_assistente_propostas
+     where situacao = 'pendente'
+       and expira_em < now()
+     order by expira_em
+     limit v_limite
+  )
+  update public.mia_assistente_propostas p
+     set situacao = 'expirada'
+    from vencidas v
+   where p.id = v.id;
+  get diagnostics v_propostas_vencidas = row_count;
+
+  with decididas as (
+    select id from public.mia_assistente_propostas
+     where (situacao in ('rejeitada', 'expirada') and updated_at < now() - make_interval(days => 180))
+        or (situacao = 'aplicada' and updated_at < now() - make_interval(days => 365))
+     order by updated_at
+     limit v_limite
+  )
+  delete from public.mia_assistente_propostas p
+   using decididas d
+   where p.id = d.id;
+  get diagnostics v_propostas = row_count;
+
+  -- 9082 · os retratos do "o que falta" (9081): ficam um ano. O primeiro de
+  --        cada empresa (o "ao entrar faltavam N") e o mais novo ficam sempre.
+  with velhos as (
+    select r.id from public.mia_assistente_retratos r
+     where r.rodada_em < now() - make_interval(days => 365)
+       and r.id <> (select p.id from public.mia_assistente_retratos p
+                     where p.organization_id = r.organization_id
+                     order by p.rodada_em asc, p.id asc limit 1)
+       and r.id <> (select u.id from public.mia_assistente_retratos u
+                     where u.organization_id = r.organization_id
+                     order by u.rodada_em desc, u.id desc limit 1)
+     order by r.rodada_em
+     limit v_limite
+  )
+  delete from public.mia_assistente_retratos r
+   using velhos v
+   where r.id = v.id;
+  get diagnostics v_retratos = row_count;
+
+  return jsonb_build_object(
+    'mensagens', v_mensagens,
+    'conversas', v_conversas,
+    'chamados', v_chamados,
+    'retencao_dias', v_dias,
+    'propostas_vencidas', v_propostas_vencidas,
+    'propostas', v_propostas,
+    'retratos', v_retratos
+  );
+end
+$f$;
+
+comment on function public.fn_mia_expurgar_assistente_vencido(integer, integer) is
+  'MIA (9051, 9082): a retencao do assistente da MIA. Apaga, em lotes, as mensagens com mais de p_retencao_dias (90 por padrao, piso de 30), as conversas que ficaram vazias e os chamados resolvidos ha mais de 365 dias (o print vai para storage_redaction_queue pelo gatilho da 9050). Desde a 9082: vence a proposta pendente que passou do prazo, apaga a rejeitada ou vencida ha mais de 180 dias e a aplicada ha mais de 365 (a peca criada fica), e apaga o retrato do o-que-falta com mais de 365 dias, guardando o primeiro e o mais novo de cada empresa. Chamada pelo cron do resumo da manha. So o servidor executa.';
+
+revoke all on function public.fn_mia_expurgar_assistente_vencido(integer, integer) from public;
+revoke execute on function public.fn_mia_expurgar_assistente_vencido(integer, integer) from anon, authenticated;
+grant execute on function public.fn_mia_expurgar_assistente_vencido(integer, integer) to service_role;
+
+notify pgrst, 'reload schema';
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
