@@ -17,6 +17,7 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as ModulosDoPlano from "@/lib/planos-mia/modulos";
 import { argumentosLivres, bancoLivre, operacaoLivre, type CadeiaLivre } from "@/tests/helpers/banco-livre";
 
 const ORG = "00000000-0000-4000-8000-0000000000e9";
@@ -42,7 +43,7 @@ vi.mock("@/lib/email-marketing/campanhas", () => ({
   nomesDasEmpresas: vi.fn(),
 }));
 vi.mock("@/lib/planos-mia/modulos", async (original) => {
-  const real = await original<typeof import("@/lib/planos-mia/modulos")>();
+  const real = await original<typeof ModulosDoPlano>();
   return { ...real, moduloSaiuPeloPlano: vi.fn(async () => h.saiu) };
 });
 
@@ -50,7 +51,7 @@ import { GET as workerDoBroadcast } from "@/app/api/v1/cron/broadcast-worker/rou
 import { rodarUmaCampanha } from "@/lib/email-marketing/motor";
 import * as modulos from "@/lib/planos-mia/modulos";
 
-const { moduloSaiuPeloPlano: real } = await vi.importActual<typeof import("@/lib/planos-mia/modulos")>(
+const { moduloSaiuPeloPlano: real } = await vi.importActual<typeof ModulosDoPlano>(
   "@/lib/planos-mia/modulos",
 );
 
