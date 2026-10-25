@@ -175,6 +175,31 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "daquele cliente ou de quem criou o token) pelo domínio verificado da empresa, com [TESTE] no assunto. Não dispara a " +
       "campanha: o envio é só pela tela, com a declaração da base legal assinada por uma pessoa da empresa.",
   },
+  // FORK MIA (.90): a cobrança da jornada de assinatura (docs/fork/jornada-de-assinatura.md).
+  // Três chaves, pelo estrago: mexer no que TODOS pagam (os planos), no que UMA
+  // empresa paga (atribuir, link, prazo, isenção) e em QUEM ENTRA (os pedidos).
+  {
+    chave: "gerir_planos",
+    rotulo: "Criar e ajustar os planos e os pacotes de crédito",
+    raio:
+      "Cria e ajusta os planos de QUALQUER cliente novo: preço, teste, limites, teto de IA, os módulos que cada plano liga, o preço do Broadcast, qual é o " +
+      "do cadastro e quais aparecem na página de preços; e os pacotes de crédito por Pix. Ligar módulo num plano liga para todas as empresas dele na hora. " +
+      "Um token vazado põe um plano de R$ 5 como padrão do cadastro ou dá Broadcast a quem não pagou por ele. Plano já assinado não muda de preço nem perde módulo.",
+  },
+  {
+    chave: "gerir_cobranca",
+    rotulo: "Atribuir plano, gerar link, dar prazo e isentar",
+    raio:
+      "Atribui e troca o plano de QUALQUER empresa (inclusive o escondido, negociado), gera o link de pagamento dela, dá prazo de até 60 dias e torna isenta " +
+      "(não paga e não tem limites). Um token vazado isenta todo mundo ou põe uma empresa num plano que ela não contratou. Não marca nada como pago.",
+  },
+  {
+    chave: "decidir_cadastro",
+    rotulo: "Aprovar e recusar pedidos de cadastro",
+    raio:
+      "Aprova pedidos de cadastro (a empresa nasce e quem pediu vira administrador dela, com o teste começando) e recusa com o motivo, que vai por e-mail " +
+      "a quem pediu. Um token vazado deixa entrar quem a Time não conferiu, gastando IA da plataforma no teste.",
+  },
 ] as const;
 
 const POR_CHAVE = new Map(OPERACOES.map((o) => [o.chave, o]));

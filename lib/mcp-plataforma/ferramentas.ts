@@ -33,6 +33,8 @@ import { FERRAMENTAS_DE_AGENTE } from "./ferramentas/agente";
 import { FERRAMENTAS_DO_ASSISTENTE } from "./ferramentas/assistente";
 import { FERRAMENTAS_DE_AUTOMACAO_E_AGENDA } from "./ferramentas/automacoes-e-agenda";
 import { FERRAMENTAS_DE_CANAIS_E_INTEGRACOES } from "./ferramentas/canais-e-integracoes";
+// FORK MIA (.90): a jornada de assinatura, a cobrança (docs/fork/jornada-de-assinatura.md).
+import { FERRAMENTAS_DE_COBRANCA } from "./ferramentas/cobranca";
 import { FERRAMENTAS_DO_CHECKLIST } from "./ferramentas/checklist";
 import { FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP } from "./ferramentas/conhecimento-e-followup";
 import { FERRAMENTAS_DE_CONVERSOES } from "./ferramentas/conversoes";
@@ -87,6 +89,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DO_ASSISTENTE,
   // FORK MIA (.89): o disparo de e-mail marketing, do domínio ao rascunho; o MCP nunca dispara (docs/fork/email-marketing.md)
   ...FERRAMENTAS_DE_EMAIL_MARKETING,
+  // FORK MIA (.90): a cobrança da jornada de assinatura: planos, assinaturas, link, prazo, isenção e os pedidos de cadastro (docs/fork/jornada-de-assinatura.md)
+  ...FERRAMENTAS_DE_COBRANCA,
 ];
 
 export const FERRAMENTA_POR_NOME = new Map(FERRAMENTAS.map((f) => [f.name, f]));
