@@ -34,6 +34,7 @@ import { toleranciaDias } from "@/lib/cobranca/configuracao";
 import { emailDoAdminDaEmpresa } from "@/lib/cobranca/emails";
 import { urlDoPainelDaEmpresa } from "@/lib/cobranca/url";
 import { lerVisaoGeral, montarChecklist } from "@/lib/cobranca/visao-geral";
+import { organizacaoDaImplantacao } from "@/lib/implantacao/base";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { atribuirOuTrocarPlano, darPrazo, tornarIsenta } from "@/lib/planos-mia/acoes-do-dono";
 import { conversasEstimadas, MODULOS_DO_PLANO } from "@/lib/planos-mia/catalogo";
@@ -222,6 +223,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       "empresas assinam cada um, quantas empresas há em cada situação, os pacotes de crédito por Pix e o modo do cadastro. A chave do provedor nunca sai. " +
       "O QUE NÃO FAZ: não conecta nem troca a chave do provedor (só pela tela, cifrada).",
     inputSchema: {},
+    exemplo: {},
     operacao: null,
     handler: async (ctx) => {
       const ligada = await moduloLigado(ctx.admin, "cobranca");
@@ -380,6 +382,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
     exemplo: { organization_id: ORG_DE_EXEMPLO },
     operacao: null,
     handler: async (ctx, args) => {
+      await organizacaoDaImplantacao(ctx.admin, String(args.organization_id));
       const d = await lerDetalheDaEmpresa(ctx.admin, String(args.organization_id));
       if (!d) recusar("empresa não encontrada. Use plataforma_listar_clientes para achar o id.");
       return {
@@ -397,7 +400,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
   {
     name: "plataforma_atribuir_plano",
     description:
-      "Atribui ou troca o PLANO de uma empresa como o dono: empresa isenta passa a pagar (nasce em teste com os dias do plano); quem já tem plano troca — no " +
+      "Atribui ou troca o PLANO de uma empresa como o dono: empresa isenta passa a pagar (nasce em teste com os dias do plano); quem já tem plano troca: no " +
       "teste vale na hora; depois do teste fica agendado para a renovação (plano negociado não paga diferença). Aceita plano escondido. Recusa com a lista " +
       "do que tirar quando o uso (pessoas, números) não cabe. Os módulos seguem o plano no dia em que ele vale. " +
       "O QUE NÃO FAZ: não cancela a assinatura (é decisão do cliente, na tela dele) nem marca como pago.",
@@ -413,6 +416,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
     exemplo: { organization_id: ORG_DE_EXEMPLO, plano: "Profissional" },
     operacao: OPERACAO_GERIR_COBRANCA,
     handler: async (ctx, args) => {
+      await organizacaoDaImplantacao(ctx.admin, String(args.organization_id));
       await exigirCobrancaLigada(ctx);
       const plano = await acharPlano(ctx, String(args.plano));
       const r = await atribuirOuTrocarPlano(
@@ -462,6 +466,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       documento: args.documento ? "informado" : "ausente",
     }),
     handler: async (ctx, args) => {
+      await organizacaoDaImplantacao(ctx.admin, String(args.organization_id));
       await exigirCobrancaLigada(ctx);
       const orgId = String(args.organization_id);
       const email = await emailDoAdminDaEmpresa(ctx.admin, orgId);
@@ -497,7 +502,9 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       "por falta de pagamento. O QUE NÃO FAZ: não cancela no provedor nem marca como pago.",
     inputSchema: {
       organization_id: ORGANIZACAO,
-      acao: z.enum(["dar_prazo", "isentar", "voltar_a_cobranca"]),
+      acao: z
+        .enum(["dar_prazo", "isentar", "voltar_a_cobranca"])
+        .describe("dar_prazo (com o campo ate), isentar, ou voltar_a_cobranca (com o campo plano)."),
       ate: z
         .string()
         .regex(/^\d{4}-\d{2}-\d{2}$/, 'use "AAAA-MM-DD"')
@@ -514,6 +521,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
     exemplo: { organization_id: ORG_DE_EXEMPLO, acao: "dar_prazo", ate: "2026-11-15" },
     operacao: OPERACAO_GERIR_COBRANCA,
     handler: async (ctx, args) => {
+      await organizacaoDaImplantacao(ctx.admin, String(args.organization_id));
       await exigirCobrancaLigada(ctx);
       const orgId = String(args.organization_id);
       if (args.acao === "dar_prazo") {
@@ -555,6 +563,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       'Os PEDIDOS DE CADASTRO esperando aprovação (modo do cadastro "com aprovação"): a empresa, quem pediu (e-mail mascarado), o plano escolhido ' +
       "(sem escolha, o do cadastro) e o que a empresa faz. Para aprovar ou recusar, plataforma_decidir_pedido_de_cadastro.",
     inputSchema: {},
+    exemplo: {},
     operacao: null,
     handler: async (ctx) => {
       const [pedidos, modo] = await Promise.all([
@@ -586,7 +595,9 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
         .string()
         .uuid()
         .describe("O id do pedido (plataforma_listar_pedidos_de_cadastro)."),
-      decisao: z.enum(["aprovar", "recusar"]),
+      decisao: z
+        .enum(["aprovar", "recusar"])
+        .describe("aprovar (a empresa nasce no plano escolhido) ou recusar (com o motivo, que vai por e-mail)."),
       motivo: z
         .string()
         .trim()

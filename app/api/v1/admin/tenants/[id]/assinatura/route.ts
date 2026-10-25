@@ -38,8 +38,6 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-// FORK MIA (.90): os módulos seguem o plano (docs/fork/jornada-de-assinatura.md).
-import { seguirOPlano } from "@/lib/planos-mia/seguir-o-plano";
 
 const corpoSchema = z.strictObject({ plano_id: z.string().uuid() });
 const DIA_MS = 86_400_000;
@@ -122,8 +120,6 @@ export async function POST(req: NextRequest, rota: Rota) {
   if (error || !linha) return fail("internal_error", "Não foi possível atribuir o plano", 500, { requestId });
 
   auditar(a, "cobranca.plano_trocado", { de: null, para: plano.id, quando: "atribuido" });
-  // FORK MIA (.90): os módulos do plano seguem a atribuição (lib/planos-mia/). Nunca lança.
-  await seguirOPlano(admin, tenantId, "atribuicao");
   return ok(linha, { status: 201, requestId });
 }
 
@@ -216,8 +212,6 @@ export async function DELETE(_req: NextRequest, rota: Rota) {
     return fail("internal_error", "A reativação da empresa falhou. Tente de novo.", 500, { requestId });
   }
   const changed = !!apagada || reativacao.reativada;
-  // FORK MIA (.90): isenta não ganha módulo de plano; o registro e o aviso seguem (lib/planos-mia/).
-  if (apagada) await seguirOPlano(admin, tenantId, "isencao");
   if (changed) {
     auditar(a, "cobranca.isencao_definida", { plano_id: apagada?.plano_id ?? null, reativada: reativacao.reativada });
   }

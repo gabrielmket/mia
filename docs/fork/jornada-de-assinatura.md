@@ -85,9 +85,12 @@ lista, campanhas, números. Voltando o módulo, tudo está lá.
 
 O histórico do que ligou e desligou pelo plano fica em `mia_modulos_do_plano_registro`
 (gravado só por `fn_mia_seguir_o_plano`, que não repete). Cada mudança deixa aviso na
-Central da empresa e a auditoria `planos_mia.modulos_seguiram_o_plano`. A rodada de hora em
-hora da cobrança (`app/api/v1/cron/cobranca`) segue o plano em todas as empresas, como
-rede de segurança.
+Central da empresa e a auditoria `planos_mia.modulos_seguiram_o_plano`. O registro sai na
+hora quando a mudança passa pelo nosso código (a releitura do pagamento, a troca no teste, o
+MCP, a aba Planos) e, nas ações do card Cobrança do upstream (atribuir e isentar pela tela,
+cuja rota ficou intocada), na rodada de hora em hora da cobrança
+(`app/api/v1/cron/cobranca`), que segue o plano em todas as empresas. O módulo em si vale
+na hora em todos os casos: quem decide é a função do banco, não o registro.
 
 ### 2.1 A rotina pula a empresa
 
@@ -235,8 +238,6 @@ Uma vez, na plataforma inteira. Antes, os requisitos do upstream (`docs/saas/cob
 - `components/auth/SignupForm.tsx`, `app/(public)/signup/page.tsx`, `lib/auth/schemas.ts`,
   `app/actions/auth/signUp.ts`: os cartões, o `?plano=` e o "o que a empresa faz".
 - `app/actions/registration/decide.ts`: o e-mail para quem pediu.
-- `app/api/v1/admin/tenants/[id]/assinatura/route.ts`: os módulos seguem ao atribuir e ao
-  isentar.
 - `components/cobranca/PainelDaAssinatura.tsx`, `components/cobranca/AcoesDaAssinatura.tsx`,
   `app/app/settings/billing/page.tsx`, `app/account-suspended/page.tsx`: sem dólar, a IA
   em %, os módulos e o crédito por Pix.
