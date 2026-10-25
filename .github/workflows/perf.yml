@@ -43,6 +43,9 @@ jobs:
           # com aspas vazias ela não era alcançada — o build seguia com o DSN
           # padrão embutido.
           SENTRY_DSN: "off"
+          # FORK MIA (.91): mesmo motivo do build do e2e.yml, a checagem de
+          # tipos do `next build` passou do heap padrão com a .88 a .91 juntas.
+          NODE_OPTIONS: --max-old-space-size=8192
 
       - name: Report bundle sizes
         run: |
