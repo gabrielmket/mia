@@ -263,8 +263,11 @@ jobs:
         # com Mark-Compact em 4028 MB, e a rodada seguinte da mesma árvore
         # passou. O runner público tem 16 GB; 6 GB dá folga sem esconder
         # crescimento — se voltar a estourar, é o tsconfig que cresceu.
+        # FORK MIA (.89): cresceu. A junção do assistente da MIA (.88) com o
+        # disparo de e-mail (.89) estourou os 6 GB neste passo ("JavaScript heap
+        # out of memory", PR #61). 8 GB, ainda com folga nos 16 GB do runner.
         env:
-          NODE_OPTIONS: --max-old-space-size=6144
+          NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm typecheck
 
       # Na parte 2, não na 1: o porquê e a conta estão no cabeçalho do job.
