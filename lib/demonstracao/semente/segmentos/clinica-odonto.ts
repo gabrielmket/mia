@@ -21,6 +21,7 @@
  * Nenhum texto de follow-up nomeia procedimento (é o modelo do produto).
  */
 import { MODULO_DOS_LEADS_DA_META } from "@/lib/leads-da-meta/modulo";
+import { promptDoModelo } from "@/lib/onboarding/modelos-de-agente-da-mia";
 
 import type { SementeDeDemonstracao } from "../tipos";
 import { cnpjFalso, escolha } from "./comum";
@@ -54,8 +55,16 @@ export const CLINICA_ODONTO: SementeDeDemonstracao = {
     nome: "Clara · Recepção da clínica (demonstração)",
     descricao:
       "Agente de exemplo da clínica de demonstração. Não tem versão publicada e o canal está arquivado: não atende ninguém de verdade.",
-    prompt:
-      "Você é a Clara, da recepção da Clínica Odontológica Modelo. Atende pelo WhatsApp quem quer marcar avaliação, tirar dúvida de tratamento ou remarcar. Entende o que a pessoa procura e oferece a avaliação com a dentista, que é o primeiro passo de todo tratamento. Fala o preço de referência da avaliação, da limpeza e do clareamento, que estão no catálogo; preço de implante, prótese e aparelho só depois da avaliação. Não dá diagnóstico e não promete resultado. Marca na agenda e passa para a coordenadora de orçamentos quem já fez a avaliação.",
+    // FORK MIA (.91): o texto sai do modelo do segmento (lib/onboarding/modelos-de-agente-da-mia.ts),
+    // o mesmo de onde parte o agente de quem entra sozinho; aqui entram só os fatos da empresa fictícia.
+    prompt: promptDoModelo("clinica", {
+      persona: "Clara",
+      negocio: "Clínica Odontológica Modelo",
+      extras: [
+        "Na clínica, o preço de referência da avaliação, da limpeza e do clareamento está no catálogo; implante, prótese e aparelho, só depois da avaliação com a dentista.",
+        "Quem já fez a avaliação vai para a coordenadora de orçamentos.",
+      ],
+    }),
   },
   modulos: ["disparador", MODULO_DOS_LEADS_DA_META],
   empresas: [

@@ -25,6 +25,7 @@
  * Telefone do DDD 00, e-mail `.invalid`, CNPJ que não existe.
  */
 import { MODULO_DOS_LEADS_DA_META } from "@/lib/leads-da-meta/modulo";
+import { promptDoModelo } from "@/lib/onboarding/modelos-de-agente-da-mia";
 
 import type { SementeDeDemonstracao } from "../tipos";
 import { cnpjFalso, escolha } from "./comum";
@@ -65,8 +66,17 @@ export const INDUSTRIA: SementeDeDemonstracao = {
     nome: "Bento · Atendimento comercial (demonstração)",
     descricao:
       "Agente de exemplo da indústria de demonstração. Não tem versão publicada e o canal está arquivado: não atende ninguém de verdade.",
-    prompt:
-      "Você é o Bento, do atendimento comercial da Indústria Modelo, fabricante de materiais elétricos e iluminação. Atende pelo WhatsApp revendas, distribuidores, instaladores e construtoras. Entende quem é o cliente (revenda, distribuidor, instalador ou construtora), a cidade, as linhas de interesse e o volume, consulta o catálogo pelo código e passa para o representante da região quem quer cotar. O preço do catálogo é a tabela revenda: distribuidor tem 12% de desconto sobre ela, e instalador ou construtora compram pela tabela profissional, 8% acima. O pedido mínimo para faturar é de R$ 1.500; abaixo disso, indique a revenda mais próxima. Nunca prometa prazo de entrega nem estoque sem confirmar com o comercial.",
+    // FORK MIA (.91): o texto sai do modelo do segmento (lib/onboarding/modelos-de-agente-da-mia.ts),
+    // o mesmo de onde parte o agente de quem entra sozinho; aqui entram só os fatos da empresa fictícia.
+    prompt: promptDoModelo("industria", {
+      persona: "Bento",
+      negocio: "Indústria Modelo",
+      extras: [
+        "A Indústria Modelo fabrica materiais elétricos e iluminação.",
+        "O preço do catálogo é a tabela revenda: distribuidor tem 12% de desconto sobre ela, e instalador ou construtora compram pela tabela profissional, 8% acima.",
+        "O pedido mínimo para faturar é de R$ 1.500; abaixo disso, indique a revenda mais próxima.",
+      ],
+    }),
   },
   modulos: ["disparador", MODULO_DOS_LEADS_DA_META],
   empresas: [
