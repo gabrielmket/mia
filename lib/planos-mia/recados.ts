@@ -13,11 +13,14 @@
  * `jornada:zap:`), com janela de um ano: o mesmo recado não sai duas vezes.
  * Só o nome da empresa e o que fazer — nunca dado do cliente final, nem nome ou
  * e-mail de quem administra. Sem grupo escolhido, cala (a regra do `reportar`).
+ * Com a cobrança DESLIGADA, cala também: tudo sai desligado, e ligar a cobrança
+ * é o que acende os recados (pedido e número parados de antes saem uma vez).
  * Nunca lança: o vigia que derruba a rodada leva junto os outros avisos.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { reportar } from "@/lib/avisos/report-da-plataforma";
+import { moduloLigado } from "@/lib/instalacao/modulos";
 import { logger } from "@/lib/logger";
 
 import {
@@ -103,10 +106,12 @@ export function recadosPendentes(entrada: {
  */
 export async function mandarRecadosDaJornada(
   admin: SupabaseClient,
-  opcoes: { agora?: Date; completo?: boolean } = {},
+  opcoes: { agora?: Date; completo?: boolean; cobrancaLigada?: () => Promise<boolean> } = {},
 ): Promise<string[]> {
   const agora = opcoes.agora ?? new Date();
   try {
+    const ligada = await (opcoes.cobrancaLigada ?? (() => moduloLigado(admin, "cobranca")))();
+    if (!ligada) return [];
     const [pedidos, numeros, empresas] = await Promise.all([
       lerPedidosDeCadastro(admin).catch(() => []),
       lerNumerosEsperando(admin).catch(() => []),
