@@ -55,6 +55,8 @@ import { DICIONARIO_DO_HORARIO_DA_IA } from "./dicionario-mia-horario-da-ia";
 import { DICIONARIO_DO_ASSISTENTE_MIA } from "./dicionario-mia-assistente";
 // FORK MIA (.89): o disparo de e-mail marketing, idem.
 import { DICIONARIO_DO_EMAIL_MARKETING } from "./dicionario-mia-email-marketing";
+// FORK MIA (.91): os primeiros passos (o segmento, o "o que falta" e as propostas), idem.
+import { DICIONARIO_DOS_PRIMEIROS_PASSOS_MIA } from "./dicionario-mia-primeiros-passos";
 import { TEXTOS_AGENDA_CONFIGURACAO } from "./agenda-configuracao";
 import { TEXTOS_AGENDA_SERVICOS } from "./agenda-servicos";
 
@@ -70,6 +72,7 @@ export const DICIONARIO: Traducoes = {
   ...DICIONARIO_DO_HORARIO_DA_IA,
   ...DICIONARIO_DO_ASSISTENTE_MIA,
   ...DICIONARIO_DO_EMAIL_MARKETING,
+  ...DICIONARIO_DOS_PRIMEIROS_PASSOS_MIA,
   // Encaminhar mensagem (#2835) — botão na bolha do chat e o diálogo de destino.
   "Encaminhar": { es: "Reenviar" },
   "Encaminhar mensagem": { es: "Reenviar mensaje" },

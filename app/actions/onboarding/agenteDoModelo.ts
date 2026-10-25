@@ -25,17 +25,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import { OnboardingError, patchOnboardingState, requireOnboardingCtx } from "./_shared";
 
-export type ResultadoDaPublicacao = { ok: true } | { ok: false; erro: string };
+/** Por que não publicou: a tela escreve a frase de cada motivo. */
+export type MotivoDoNaoPublicou = "sem_numero" | "ia_da_plataforma" | "nao_deu" | "sessao" | "papel" | "registro";
 
-/** O que impede publicar, dito para quem não opera a plataforma. */
-function fraseDoBloqueio(mensagem: string): string {
-  if (/número|numero|conectad/i.test(mensagem)) {
-    return "Ele ainda não tem um número de WhatsApp conectado. Conecte o número no passo \"O telefone dele\" (ou em Conexões) e publique de novo, ou siga sem publicar.";
-  }
-  if (/chave|IA|modelo/i.test(mensagem)) {
-    return "A inteligência dele é configurada pela nossa equipe e ainda não está pronta nesta conta. Pode seguir; se ele não entrar no ar, fale com o suporte.";
-  }
-  return "Ainda não deu para publicar. Pode seguir e publicar depois em Agente MIA › Agentes.";
+export type ResultadoDaPublicacao = { ok: true } | { ok: false; motivo: MotivoDoNaoPublicou };
+
+/** O que impede publicar, para quem não opera a plataforma. */
+function motivoDoBloqueio(mensagem: string): MotivoDoNaoPublicou {
+  if (/número|numero|conectad/i.test(mensagem)) return "sem_numero";
+  if (/chave|IA|modelo/i.test(mensagem)) return "ia_da_plataforma";
+  return "nao_deu";
 }
 
 export async function publicarAgenteDoModelo(agenteId: string): Promise<ResultadoDaPublicacao> {
@@ -43,23 +42,23 @@ export async function publicarAgenteDoModelo(agenteId: string): Promise<Resultad
   try {
     ctx = await requireOnboardingCtx();
   } catch (err) {
-    if (err instanceof OnboardingError) return { ok: false, erro: "Sua sessão expirou. Entre de novo." };
+    if (err instanceof OnboardingError) return { ok: false, motivo: "sessao" };
     throw err;
   }
-  if (ctx.role !== "admin") return { ok: false, erro: "Publicar o agente é de quem administra a empresa." };
+  if (ctx.role !== "admin") return { ok: false, motivo: "papel" };
 
   const requestId = randomUUID();
   try {
     await publicarAgente({ admin: createAdminClient(), orgId: ctx.orgId, autorUserId: ctx.userId, requestId }, { agente: agenteId });
   } catch (err) {
-    if (err instanceof Recusa) return { ok: false, erro: fraseDoBloqueio(err.message) };
-    return { ok: false, erro: "Ainda não deu para publicar. Tente de novo em instantes." };
+    if (err instanceof Recusa) return { ok: false, motivo: motivoDoBloqueio(err.message) };
+    return { ok: false, motivo: "nao_deu" };
   }
 
   try {
     await patchOnboardingState(ctx.orgId, { ai: { agent_id: agenteId, prompt_template: "modelo_do_segmento" } });
   } catch (err) {
-    if (err instanceof OnboardingError) return { ok: false, erro: "Publiquei o agente, mas não consegui registrar o passo. Tente continuar de novo." };
+    if (err instanceof OnboardingError) return { ok: false, motivo: "registro" };
     throw err;
   }
   void audit({

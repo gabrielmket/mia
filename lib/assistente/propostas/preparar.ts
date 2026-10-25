@@ -56,10 +56,12 @@ export async function lerEmpresaParaOModelo(
   if (!data) return null;
   const linha = data as { display_name?: string | null; onboarding_state?: { welcome?: { o_que_faz?: string } } | null };
   const oQueFaz = linha.onboarding_state?.welcome?.o_que_faz?.trim() || null;
+  // O nome da EMPRESA (não de contato): a régua `nomeDoContato` não se aplica.
+  const nomeDaEmpresa = typeof linha.display_name === "string" ? linha.display_name.trim() : "";
   const segmento: SegmentoDoOnboarding = ehSegmentoDoOnboarding(segmentoPedido)
     ? segmentoPedido
-    : (segmentoDoEstado(linha.onboarding_state) ?? sugerirSegmento(`${linha.display_name ?? ""} ${oQueFaz ?? ""}`));
-  return { nome: (linha.display_name ?? "").trim() || "a empresa", segmento, oQueFaz };
+    : (segmentoDoEstado(linha.onboarding_state) ?? sugerirSegmento(`${nomeDaEmpresa} ${oQueFaz ?? ""}`));
+  return { nome: nomeDaEmpresa || "a empresa", segmento, oQueFaz };
 }
 
 interface AgenteLido {

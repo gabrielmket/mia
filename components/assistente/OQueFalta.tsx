@@ -58,10 +58,10 @@ export function OQueFalta({
   const estado = useOQueFalta({ guardar: administra });
   const dados = estado.data;
 
-  /** O texto da tela: a frase traduzida, com os nomes encaixados. */
+  /** O texto da tela: a frase traduzida, com os nomes (dado) encaixados como estão. */
   const frase = (f: Frase) => {
     let texto = t(f.texto);
-    for (const [nome, valor] of Object.entries(f.vars ?? {})) texto = texto.split(`{${nome}}`).join(t(valor));
+    for (const [nome, valor] of Object.entries(f.vars ?? {})) texto = texto.split(`{${nome}}`).join(valor);
     return texto;
   };
   const data = (iso: string) =>

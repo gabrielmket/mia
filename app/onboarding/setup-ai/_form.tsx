@@ -205,7 +205,8 @@ export function SetupAiForm({ capacidades, conferencias, podeConfigurar = false,
             maxLength={20000}
             placeholder={
               modelo
-                ? modelo.regrasDeExemplo.map((r) => t(r)).join("\n")
+                ? // FORK MIA (.91): o exemplo é texto que iria para a memória (em português), não interface.
+                  modelo.regrasDeExemplo.join("\n")
                 : `${t("Nunca prometa desconto sem confirmar com uma pessoa.")}\n` +
               `${t("Horário de atendimento: 9h às 18h, de segunda a sexta.")}\n` +
               t("Sempre chame o cliente pelo primeiro nome.")

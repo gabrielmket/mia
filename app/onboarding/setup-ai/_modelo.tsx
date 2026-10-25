@@ -9,6 +9,9 @@
  * (lib/onboarding/modelos-de-agente-da-mia.ts): a tela não promete o que o
  * texto não diz. As conferências antes de cada mensagem continuam no bloco do
  * upstream ("E nunca vai fazer"), que vem do runtime.
+ *
+ * As frases do modelo saem como estão, sem `t()`: são o texto que vai para o
+ * agente (em português, a língua em que ele atende), e não interface.
  */
 import Link from "next/link";
 
@@ -53,12 +56,12 @@ export function OQueOModeloEnsina({ modelo }: { modelo: ModeloNaTela }) {
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
         <ul className="space-y-1 text-xs text-muted-foreground">
           {modelo.faz.map((f) => (
-            <li key={f}>· {t(f)}</li>
+            <li key={f}>· {f}</li>
           ))}
         </ul>
         <ul className="space-y-1 text-xs text-muted-foreground">
           {modelo.naoFaz.map((f) => (
-            <li key={f}>· {t(f)}</li>
+            <li key={f}>· {f}</li>
           ))}
         </ul>
       </div>

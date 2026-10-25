@@ -10,17 +10,21 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { publicarAgenteDoModelo, seguirComORascunhoDoModelo } from "@/app/actions/onboarding/agenteDoModelo";
+import {
+  publicarAgenteDoModelo,
+  seguirComORascunhoDoModelo,
+  type MotivoDoNaoPublicou,
+} from "@/app/actions/onboarding/agenteDoModelo";
 import { useT } from "@/hooks/i18n/useT";
 
 export function RascunhoDoModelo({ agenteId, nome, administra }: { agenteId: string; nome: string; administra: boolean }) {
   const t = useT();
   const [pending, startTransition] = useTransition();
-  const [erro, setErro] = useState<string | null>(null);
+  const [motivo, setMotivo] = useState<MotivoDoNaoPublicou | null>(null);
 
   return (
     <div className="space-y-4 rounded-lg border bg-background p-6" data-testid="rascunho-do-modelo">
-      <div role="status" className="rounded-md border border-warning-fg/40 bg-warning-bg p-4 text-sm text-warning-fg">
+      <div className="rounded-md border border-warning-fg/40 bg-warning-bg p-4 text-sm text-warning-fg">
         <p>
           <strong>{nome}</strong> {t("já existe em rascunho, pela proposta do assistente. Rascunho não responde ninguém: publicar põe no ar.")}
         </p>
@@ -29,9 +33,19 @@ export function RascunhoDoModelo({ agenteId, nome, administra }: { agenteId: str
         </p>
       </div>
 
-      {erro ? (
+      {motivo ? (
         <p role="alert" className="rounded-md bg-muted p-3 text-sm">
-          {t(erro)}
+          {motivo === "sem_numero"
+            ? t("Ele ainda não tem um número de WhatsApp conectado. Conecte o número no passo \"O telefone dele\" (ou em Conexões) e publique de novo, ou siga sem publicar.")
+            : motivo === "ia_da_plataforma"
+              ? t("A inteligência dele é configurada pela nossa equipe e ainda não está pronta nesta conta. Pode seguir; se ele não entrar no ar, fale com o suporte.")
+              : motivo === "sessao"
+                ? t("Sua sessão expirou. Entre de novo.")
+                : motivo === "papel"
+                  ? t("Publicar o agente é de quem administra a empresa.")
+                  : motivo === "registro"
+                    ? t("Publiquei o agente, mas não consegui registrar o passo. Tente continuar de novo.")
+                    : t("Ainda não deu para publicar. Pode seguir e publicar depois em Agente MIA › Agentes.")}
         </p>
       ) : null}
 
@@ -50,10 +64,10 @@ export function RascunhoDoModelo({ agenteId, nome, administra }: { agenteId: str
           title={administra ? undefined : t("Só quem administra a empresa publica.")}
           onClick={() =>
             startTransition(async () => {
-              setErro(null);
+              setMotivo(null);
               const r = await publicarAgenteDoModelo(agenteId);
               if (r && !r.ok) {
-                setErro(r.erro);
+                setMotivo(r.motivo);
                 toast.warning(t("Ainda não está no ar."));
               }
             })
