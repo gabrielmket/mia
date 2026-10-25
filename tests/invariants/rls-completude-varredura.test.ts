@@ -462,6 +462,16 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "própria só o administrador escreve; o chamado nasce da própria pessoa, " +
       "novo e sem resposta, e a marca de demonstração vem da empresa.",
   })),
+  // Fork MIA, 9070 a 9072 — a jornada de assinatura: o registro do módulo que o
+  // plano ligou, a origem da empresa e as compras de crédito por Pix.
+  ...["mia_modulos_do_plano_registro", "mia_origem_da_empresa", "mia_compras_de_creditos"].map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/jornada-de-assinatura.test.ts — exclusivas do servidor: " +
+      "RLS ligada com ZERO políticas, e o administrador da PRÓPRIA empresa e anon " +
+      "recebem permission denied (42501); as funções que gravam (seguir o plano, " +
+      "confirmar a compra) não são da sessão; a compra paga lança uma vez só.",
+  })),
   // Fork MIA, 9031 — o link dos painéis para o dono do negócio.
   {
     tabela: "mia_paineis_links",
