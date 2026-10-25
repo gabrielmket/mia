@@ -114,11 +114,12 @@ beforeEach(() => {
   vi.mocked(ses.enviarPelaAmazon).mockClear();
 });
 
-describe("a lista: 83 ferramentas, nove delas do e-mail", () => {
-  it("83 = as 69 da .86 + as cinco do assistente (.88) + as nove do e-mail marketing (.89)", () => {
-    expect(FERRAMENTAS).toHaveLength(83);
+describe("a lista: 85 ferramentas, nove delas do e-mail", () => {
+  it("85 = as 69 da .86 + as cinco do assistente (.88) + as nove do e-mail marketing (.89) + as duas das propostas do assistente (.91)", () => {
+    expect(FERRAMENTAS).toHaveLength(85);
     expect(FERRAMENTAS_DE_EMAIL_MARKETING).toHaveLength(9);
-    expect(FERRAMENTAS.filter((f) => /assistente|chamado/.test(f.name))).toHaveLength(5);
+    // FORK MIA (.91): + plataforma_ver_propostas_do_assistente e plataforma_decidir_proposta_do_assistente
+    expect(FERRAMENTAS.filter((f) => /assistente|chamado/.test(f.name))).toHaveLength(7);
   });
 
   it("leitura livre, escrita nomeada: duas chaves novas, e nenhuma delas dispara", () => {
