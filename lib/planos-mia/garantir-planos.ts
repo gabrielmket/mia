@@ -2,7 +2,7 @@
  * FORK MIA (.90) — CRIAR E AJUSTAR OS PLANOS COM O QUE É NOSSO AO LADO.
  *
  * Dois caminhos usam isto: o MCP de plataforma (`plataforma_garantir_planos`) e
- * a aba Planos do painel (o bloco "Módulos e Broadcast", rota
+ * a página dos módulos dos planos no painel (rota
  * `PUT /api/v1/admin/planos-mia/[id]`). A parte do UPSTREAM (`cobranca_planos`)
  * passa pela MESMA régua da tela dele (`novoPlanoSchema`/`edicaoDoPlanoSchema`
  * e a trava de preço do plano assinado); a nossa (`mia_plano_modulos`) tem a

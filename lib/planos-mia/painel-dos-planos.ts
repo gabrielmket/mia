@@ -1,6 +1,6 @@
 /**
- * FORK MIA (.90) — os dados do bloco "Módulos e Broadcast de cada plano" da aba
- * Planos do painel (`components/planos-mia/ModulosDosPlanos.tsx`): os planos com
+ * FORK MIA (.90) — os dados da página "Módulos e Broadcast de cada plano" do
+ * painel (`/admin/cobranca/modulos-dos-planos`, `ModulosDosPlanos.tsx`): os planos com
  * o lado nosso, quantas empresas assinam cada um (é o que trava tirar módulo) e
  * a estimativa de conversas. O dólar do teto fica no formulário do upstream,
  * que é do dono da instalação. LANÇA na falha.

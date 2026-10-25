@@ -358,6 +358,12 @@ export const DICIONARIO_DA_JORNADA_MIA: Traducoes = {
   },
   "Relatórios, painéis e o assistente": { es: "Informes, paneles y el asistente" },
 
+  // a página própria dos módulos de cada plano (/admin/cobranca/modulos-dos-planos)
+  "Voltar aos planos": { es: "Volver a los planes" },
+  "Ainda não há plano ativo. Crie o primeiro na aba Planos da Cobrança.": {
+    es: "Todavía no hay un plan activo. Crea el primero en la pestaña Planes de Cobro.",
+  },
+
   // a campanha que a rotina pausou porque o módulo saiu do plano
   "O Broadcast não faz parte do plano atual da empresa. A lista e os números ficam guardados.": {
     es: "El Broadcast no forma parte del plan actual de la empresa. La lista y los números quedan guardados.",

@@ -17,7 +17,8 @@ desligada. O que é nosso fica ao lado: schema nas migrations **9070 a 9072**, c
 
 > **Plano e preço são DADO, nunca código.** Os valores do protótipo (R$ 297, 597 e 990,
 > os pacotes de crédito, os 14 dias de teste) são exemplos. Quem cria os planos é a Time,
-> pela aba Planos do painel ou pelo MCP (`plataforma_garantir_planos`).
+> pela aba Planos do painel (os módulos de cada plano, em `/admin/cobranca/modulos-dos-planos`)
+> ou pelo MCP (`plataforma_garantir_planos`).
 
 ---
 
@@ -87,7 +88,7 @@ O histórico do que ligou e desligou pelo plano fica em `mia_modulos_do_plano_re
 (gravado só por `fn_mia_seguir_o_plano`, que não repete). Cada mudança deixa aviso na
 Central da empresa e a auditoria `planos_mia.modulos_seguiram_o_plano`. O registro sai na
 hora quando a mudança passa pelo nosso código (a releitura do pagamento, a troca no teste, o
-MCP, a aba Planos) e, nas ações do card Cobrança do upstream (atribuir e isentar pela tela,
+MCP, a página dos módulos dos planos) e, nas ações do card Cobrança do upstream (atribuir e isentar pela tela,
 cuja rota ficou intocada), na rodada de hora em hora da cobrança
 (`app/api/v1/cron/cobranca`), que segue o plano em todas as empresas. O módulo em si vale
 na hora em todos os casos: quem decide é a função do banco, não o registro.
@@ -241,8 +242,10 @@ Uma vez, na plataforma inteira. Antes, os requisitos do upstream (`docs/saas/cob
 - `components/cobranca/PainelDaAssinatura.tsx`, `components/cobranca/AcoesDaAssinatura.tsx`,
   `app/app/settings/billing/page.tsx`, `app/account-suspended/page.tsx`: sem dólar, a IA
   em %, os módulos e o crédito por Pix.
-- `app/admin/(protected)/cobranca/page.tsx` e `components/admin/AdminSidebar.tsx`: o bloco
-  dos módulos na aba Planos e o item Empresas do cadastro.
+- `app/admin/(protected)/cobranca/page.tsx` e `components/admin/AdminSidebar.tsx`: o link
+  da aba Planos para a página própria dos módulos (`/admin/cobranca/modulos-dos-planos`) e o
+  item Empresas do cadastro. A aba não lê nada a mais nem repete o nome de plano nenhum ao lado
+  da lista do upstream (o e2e dele acha o plano pelo nome).
 - `lib/auth/public-paths.ts`: `/precos` e a rota pública.
 - `lib/audit/actions.ts`, `lib/i18n/dicionario.ts`, `lib/mcp-plataforma/ferramentas.ts`,
   `lib/mcp-plataforma/operacoes.ts`, `lib/mcp-plataforma/ferramentas/plataforma.ts`.

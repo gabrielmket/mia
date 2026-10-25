@@ -19,9 +19,6 @@ import { ConexaoDaCobranca } from "./_conexao";
 import { PlanosDaInstalacao, type PlanoDaTela } from "./_planos";
 import { ReguaDaCobranca } from "./_regua";
 import { FaixaDoModoDeTeste, VisaoGeral } from "./_visao-geral";
-// FORK MIA (.90): o plano libera módulo (docs/fork/jornada-de-assinatura.md).
-import { ModulosDosPlanos } from "@/components/planos-mia/ModulosDosPlanos";
-import { lerPainelDosPlanos } from "@/lib/planos-mia/painel-dos-planos";
 
 export const metadata = { title: "Cobrança — Admin Plataforma" };
 export const dynamic = "force-dynamic";
@@ -60,7 +57,7 @@ export default async function CobrancaPage({ searchParams }: { searchParams: Pro
   const { aba } = await searchParams;
   const inicial: AbaDaCobranca = ABAS_DA_COBRANCA.find((a) => a === aba) ?? "visao-geral";
 
-  const [planos, clientes, visao, tolerancia, painelDosPlanos] = await Promise.all([
+  const [planos, clientes, visao, tolerancia] = await Promise.all([
     admin.from("cobranca_planos").select(COLUNAS_DO_PLANO).order("nome"),
     admin
       .from("organizations")
@@ -70,7 +67,6 @@ export default async function CobrancaPage({ searchParams }: { searchParams: Pro
       .order("display_name"),
     lerVisaoGeral(admin),
     toleranciaDias(),
-    lerPainelDosPlanos(admin),
   ]);
   if (planos.error || clientes.error) {
     throw new Error(`cobrança: leitura falhou (${planos.error?.code ?? clientes.error?.code})`);
@@ -145,11 +141,22 @@ export default async function CobrancaPage({ searchParams }: { searchParams: Pro
           "visao-geral": <VisaoGeral dados={visao} checklist={montarChecklist(visao)} idioma={idioma} agora={agora} />,
           conexao: <ConexaoDaCobranca provedor={visao.provedor} modo={visao.modo} last4={visao.chaveLast4} urlDoWebhook={visao.urlDoWebhook} />,
           regua: <ReguaDaCobranca tolerancia={tolerancia} />,
-          // FORK MIA (.90): os módulos e o Broadcast de cada plano, numa tabela ao lado (docs/fork/jornada-de-assinatura.md).
+          // FORK MIA (.90): os módulos e o Broadcast de cada plano moram numa página
+          // própria (docs/fork/jornada-de-assinatura.md); aqui, só o link, sem ler nada
+          // a mais e sem repetir o nome de plano nenhum ao lado da lista do upstream.
           planos: (
             <div className="space-y-6">
               <PlanosDaInstalacao planos={lista} />
-              <ModulosDosPlanos {...painelDosPlanos} />
+              <Link
+                href="/admin/cobranca/modulos-dos-planos"
+                className="block rounded-md border p-4 text-sm hover:bg-muted"
+                data-planos-mia
+              >
+                <span className="font-medium">{t("Módulos e Broadcast de cada plano")}</span>
+                <span className="mt-1 block text-muted-foreground">
+                  {t("Ligar um módulo num plano liga para todas as empresas dele na hora. Tirar de um plano que alguém usa não vale: arquive e crie outro, como o preço.")}
+                </span>
+              </Link>
             </div>
           ),
           clientes: clientesDaTela,
