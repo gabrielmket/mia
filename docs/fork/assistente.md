@@ -1,4 +1,4 @@
-# O assistente da MIA (.88)
+# O assistente da MIA (.88, e .91 nos primeiros passos)
 
 O chat que a equipe de cada cliente usa dentro do sistema: a rotina do dia ("como
 está minha rotina hoje?", "por onde eu começo?"), os números ("como estão meus
@@ -8,8 +8,11 @@ Company; erro e pedido viram **chamado**.
 
 Protótipo aprovado em 24/10/2026 (8 telas, 18 regras). É a **fase 1** da spec do
 upstream (#2860, "agente interno de configuração e rotina", fechada sem código): o
-chat de leitura. As propostas de configuração com aprovação (fase 2), a auditoria do
-tenant (fase 3) e o laço de retorno (fase 4) ficam para depois.
+chat de leitura. Na .91 (jornada de assinatura, protótipo aprovado em 25/10/2026) ele
+ganhou a parte da **fase 2** (propostas com aprovação, só três peças) e da **fase 3**
+(a auditoria da empresa, "o que falta", com retrato guardado) que serve à entrada de um
+cliente novo: veja a seção 9 e [`primeiros-passos.md`](primeiros-passos.md). O laço de
+retorno (fase 4) fica para depois.
 
 ## 1. A regra que não se dobra
 
@@ -55,6 +58,10 @@ de modelo (telemetria e orçamento em `llm_calls`, `lib/assistente/modelo.ts`).
 | `ver_por_que_a_ia_nao_respondeu` | a conversa pela sessão (o atendente só acha as suas), o opt-out, quem está com a conversa, o número, o agente no ar, o horário da IA (.85) e `agent_turn_traces` (v1.88) |
 | `buscar_ajuda` | o catálogo de navegação, os manuais (`lib/assistente/manuais.ts`) e a base própria da empresa |
 | `ver_contato` | o nome; telefone e e-mail só quando a pessoa pediu |
+
+Desde a .91, mais quatro (seção 9): `ver_o_que_falta` (leitura) e as três propostas,
+`propor_agente_do_modelo`, `propor_funil_do_pacote` e `propor_followup_do_modelo`, que
+PREPARAM a peça sem gravar nada no turno.
 
 E quatro que só põem botão na resposta: `mostrar_me_leva_la` (só tela que a pessoa
 abre), `oferecer_pedir_a_pessoa`, `registrar_que_nao_sei` (vira "Mandar ao suporte" e
@@ -115,6 +122,7 @@ o vê, no `plataforma_ver_assistente`; o cliente não.
 | `lib/i18n/dicionario.ts` | o dicionário do assistente |
 | `components/admin/AdminSidebar.tsx` | a porta dos chamados |
 | `docker/scheduler/entrypoint.sh` | o cron |
+| `lib/ai/agents/publish.ts` (.91) | o follow-up proposto sai junto com o agente publicado (import dinâmico de `lib/assistente/propostas/sai-com-o-agente.ts`) |
 
 ## 8. Para voltar ao upstream
 
@@ -122,3 +130,59 @@ O desenho e os nomes seguem a spec #2860 (o turno sem `send_message`, as ferrame
 leitura, o ponto próprio no registro, a porta no topo junto do sino). As tabelas levam
 o prefixo `mia_` para não colidir com as `config_threads`/`config_messages` que a spec
 propõe: no dia em que o upstream construir a fase 1, a troca é de nome, não de forma.
+
+## 9. Os primeiros passos (.91): "o que falta" e as propostas
+
+O assistente aparece como painel ao lado nos primeiros passos (o `/onboarding` do
+upstream e o Início, `/app/inicio`), o MESMO `PainelDoAssistente` desta página, com as
+sugestões e a saudação do contexto. Quem vê, e por quê, está em
+[`primeiros-passos.md`](primeiros-passos.md).
+
+**`ver_o_que_falta`.** O "o que falta" é o checklist do MCP
+(`plataforma_ver_implantacao`), avaliado com o cliente da SESSÃO
+(`lib/assistente/leituras/o-que-falta.ts` → `avaliarAreas`) e lido no rótulo do cliente
+(`lib/mcp-plataforma/checklist/rotulo-do-cliente.ts`): preenchido, posso completar,
+preciso confirmar e não se aplica, com a dependência de cada item. Não existe segunda
+régua. A área que o papel não lê fica "não medida" e o item dela sai do rótulo, em vez
+de virar uma pendência que não é verdade. A única coisa da instalação que a sessão não
+lê, a chave da cobrança, a rota lê fora do turno (como o layout de `/app`) e passa pronta.
+
+**As três propostas.** Uma proposta é UMA peça (`lib/assistente/propostas/`):
+
+| ferramenta | a peça | nasce como |
+|---|---|---|
+| `propor_agente_do_modelo` | o agente de exemplo da demonstração do segmento (`lib/onboarding/modelos-de-agente-da-mia.ts`), com o nome e o texto do modelo | RASCUNHO; vira o agente padrão se a empresa não tem um |
+| `propor_funil_do_pacote` | o quadro pronto do segmento, no lugar do quadro de e-commerce que veio com a empresa | o funil padrão da empresa |
+| `propor_followup_do_modelo` | o follow-up do modelo do segmento, armado no rascunho do agente, só em horário comercial (8h às 19h, dia útil) | rascunho; SAI JUNTO com o agente publicado |
+
+- **Propor não cria nada.** O turno só LÊ (com a sessão) e junta a proposta no coletor;
+  a rota do chat grava a linha PENDENTE em `mia_assistente_propostas` (9080), pela
+  sessão, e põe o cartão na resposta (`AcaoDoAssistente` do tipo `proposta`). Pedir de
+  novo a mesma peça devolve a mesma pendente (uma por peça e empresa).
+- **Quem pede:** gestor e administrador. O atendente recebe a recusa com quem pode.
+- **Quem aplica:** só o administrador, no cartão ("Aprovar e aplicar", desabilitado
+  para os outros, com o porquê ao lado). `POST /api/v1/assistente/propostas/[id]`
+  exige o papel de administrador para `aplicar` (gestor para `rejeitar`), passa pela
+  guarda do suporte e grava o registro (`assistente.proposta_aplicada`,
+  `_rejeitada`, `_falhou`). A peça nasce pelo caminho da implantação
+  (`garantirAgente`, `garantirFunil`, `garantirFollowup`), o mesmo do MCP.
+- **A ordem é do banco:** pendente → aprovada → aplicada (ou rejeitada, expirada). O
+  gatilho `fn_mia_proposta_segue_a_ordem` recusa aplicar sem aprovar, mesmo pelo
+  servidor (a sabotagem que o desenho do upstream pede, provada em
+  `tests/invariants/primeiros-passos-do-assistente.test.ts`).
+- **Nada crítico é proposto.** Canal, número, cobrança, usuários, convite, chave e
+  exclusão não têm ferramenta, e o banco recusa o risco `critico`: no "o que falta"
+  eles são "preciso confirmar", com o botão da tela.
+- **O follow-up sai junto com o agente publicado.** Publicar o agente (pela tela, pelo
+  passo a passo ou pelo MCP) passa por `publishAgentVersion`; o gancho
+  `publicarFollowupsQueSaemComOAgente` publica o fluxo proposto que a versão publicada
+  carrega armado, e anota `saiu_com_o_agente_em`. Sem quem publicou, não sai.
+
+**O retrato** (`mia_assistente_retratos`, 9081): a cada rodada do "o que falta" de quem
+administra, o servidor guarda as contas e a coluna de cada item, só quando algo mudou.
+É o "ao entrar faltavam N, agora faltam M" e o "zerou" que tira o bloco do Início.
+
+**No MCP** (seção .91 de [`mcp-de-implantacao.md`](mcp-de-implantacao.md)):
+`plataforma_ver_implantacao` devolve o rótulo do cliente; a Time vê as propostas de uma
+empresa com `plataforma_ver_propostas_do_assistente` e decide com
+`plataforma_decidir_proposta_do_assistente`.
