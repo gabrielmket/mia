@@ -31,6 +31,8 @@
 import { FERRAMENTAS_DE_AGENTE } from "./ferramentas/agente";
 // FORK MIA (.88): o assistente da MIA (docs/fork/assistente.md).
 import { FERRAMENTAS_DO_ASSISTENTE } from "./ferramentas/assistente";
+// FORK MIA (.91): as propostas do assistente (docs/fork/primeiros-passos.md).
+import { FERRAMENTAS_DAS_PROPOSTAS_DO_ASSISTENTE } from "./ferramentas/propostas-do-assistente";
 import { FERRAMENTAS_DE_AUTOMACAO_E_AGENDA } from "./ferramentas/automacoes-e-agenda";
 import { FERRAMENTAS_DE_CANAIS_E_INTEGRACOES } from "./ferramentas/canais-e-integracoes";
 import { FERRAMENTAS_DO_CHECKLIST } from "./ferramentas/checklist";
@@ -85,6 +87,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   // as empresas de demonstração por segmento (docs/fork/cliente-modelo.md)
   ...FERRAMENTAS_DE_DEMONSTRACAO,
   ...FERRAMENTAS_DO_ASSISTENTE,
+  // FORK MIA (.91): ver e decidir as propostas do assistente de uma empresa
+  ...FERRAMENTAS_DAS_PROPOSTAS_DO_ASSISTENTE,
   // FORK MIA (.89): o disparo de e-mail marketing, do domínio ao rascunho; o MCP nunca dispara (docs/fork/email-marketing.md)
   ...FERRAMENTAS_DE_EMAIL_MARKETING,
 ];

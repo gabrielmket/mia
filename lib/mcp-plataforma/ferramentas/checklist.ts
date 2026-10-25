@@ -4,27 +4,37 @@
  * É a ferramenta que o agente implantador chama no começo (para saber por onde
  * começar) e no fim (para provar que terminou, e para dizer ao humano o que
  * ficou com ele). Ela não conhece área nenhuma: percorre a lista
- * `AREAS_DO_CHECKLIST` e junta as respostas.
+ * `AREAS_DO_CHECKLIST` e junta as respostas (`avaliarAreas`).
+ *
+ * FORK MIA (.91): devolve também o RÓTULO DO CLIENTE, o mesmo "o que falta"
+ * que a empresa nova vê no passo a passo e no Início e que o assistente da MIA
+ * lê (`ver_o_que_falta`): preenchido, posso completar, preciso confirmar e não
+ * se aplica, com a dependência de cada item, e a evolução dos retratos.
  */
-import { AREAS_DO_CHECKLIST } from "../checklist/areas";
-import type { PelaTela, Pendencia } from "../checklist/tipos";
+import { lerEvolucao } from "@/lib/assistente/retratos";
+import { followupsQueSaemComOAgente } from "@/lib/assistente/leituras/o-que-falta";
+import { oQueFaltaAparece } from "@/lib/onboarding/o-que-falta-aparece";
+
+import { avaliarAreas } from "../checklist/avaliar";
+import { rotuloDoCliente, rotuloEmTexto } from "../checklist/rotulo-do-cliente";
 import type { FerramentaDePlataforma } from "../tipos";
 import { alvo, ORGANIZACAO, ORG_DE_EXEMPLO } from "./comum";
-
-type SituacaoDaArea = "pronto" | "falta" | "com_o_humano" | "nao_medida";
 
 export const FERRAMENTAS_DO_CHECKLIST: readonly FerramentaDePlataforma[] = [
   {
     name: "plataforma_ver_implantacao",
     description:
-      "O CHECKLIST da implantação de um cliente. Devolve, área por área (empresa, módulos, números de WhatsApp, funis, catálogo, " +
-      "etiquetas, memória, conhecimento, agentes, follow-ups, automações, agenda, equipe, distribuição, mensagens, conversões), " +
+      "O CHECKLIST da implantação de um cliente. Devolve, área por área (empresa, primeiros passos, módulos, números de WhatsApp, funis, catálogo, " +
+      "etiquetas, memória, conhecimento, agentes, follow-ups, automações, agenda, equipe, distribuição, mensagens, conversões, plano e cobrança), " +
       "o que está PRONTO, o que FALTA (com a ferramenta que resolve) e o que SÓ UMA PESSOA faz pela tela (com o caminho da tela e o porquê). " +
       "QUANDO USAR: no começo de toda implantação, para saber por onde começar, e no fim, para conferir. " +
       "Chame de novo depois de cada bloco de trabalho: é barato e não escreve nada. " +
       "COMO LER: `proximos_passos` é a fila do que VOCÊ ainda pode fazer; `com_o_humano` é o que você deve pedir à pessoa, com a tela certa. " +
       "`resumo.pode_atender` só fica verdadeiro com um agente publicado num número conectado. " +
-      "O QUE NÃO FAZ: não grava nada, e não mostra o conteúdo (prompt, produtos, textos). Para o conteúdo, use plataforma_ver_funis, " +
+      "`rotulo_do_cliente` é o \"o que falta\" que a empresa nova vê no Início e o assistente dela lê (preenchido, posso completar, preciso confirmar, " +
+      "não se aplica), com `aparece_no_inicio` (só para empresa que passou pelo passo a passo desta versão, até zerar) e a evolução dos retratos; " +
+      "o número oficial que espera a Time ligar aparece ali com quem faz: Time Company. " +
+      "O QUE NÃO FAZ: não grava nada (nem retrato), e não mostra o conteúdo (prompt, produtos, textos). Para o conteúdo, use plataforma_ver_funis, " +
       "plataforma_ver_agentes, plataforma_ver_catalogo e plataforma_ver_configuracao.",
     inputSchema: {
       organization_id: ORGANIZACAO,
@@ -34,28 +44,7 @@ export const FERRAMENTAS_DO_CHECKLIST: readonly FerramentaDePlataforma[] = [
     handler: async (ctx, args) => {
       const { org } = await alvo(ctx, args);
 
-      const areas = await Promise.all(
-        AREAS_DO_CHECKLIST.map(async (area) => {
-          try {
-            const r = await area.avaliar(ctx, org);
-            const pendenteNaTela = r.so_pela_tela.some((p) => p.situacao === "pendente");
-            const situacao: SituacaoDaArea = r.falta.length > 0 ? "falta" : pendenteNaTela ? "com_o_humano" : "pronto";
-            return { area: area.chave, titulo: area.titulo, situacao, ...r };
-          } catch (err) {
-            // Uma área que não deu para medir não derruba as outras, e não se
-            // passa por "pronta": diz que não foi medida, e por quê.
-            return {
-              area: area.chave,
-              titulo: area.titulo,
-              situacao: "nao_medida" as SituacaoDaArea,
-              pronto: [] as string[],
-              falta: [] as Pendencia[],
-              so_pela_tela: [] as PelaTela[],
-              erro: err instanceof Error ? err.message : "erro desconhecido",
-            };
-          }
-        }),
-      );
+      const areas = await avaliarAreas(ctx, org);
 
       const agentes = areas.find((a) => a.area === "agentes");
       const noAr = ((agentes && "dados" in agentes ? (agentes.dados as { agentes?: Array<{ situacao: string }> } | undefined)?.agentes : undefined) ?? []).filter(
@@ -65,6 +54,21 @@ export const FERRAMENTAS_DO_CHECKLIST: readonly FerramentaDePlataforma[] = [
       const numerosConectados = (
         (canais && "dados" in canais ? (canais.dados as { numeros?: Array<{ conectado: boolean }> } | undefined)?.numeros : undefined) ?? []
       ).filter((n) => n.conectado).length;
+
+      // FORK MIA (.91): o rótulo do cliente, na régua de quem administra (a da Time).
+      const [saemJunto, evolucao, estado] = await Promise.all([
+        followupsQueSaemComOAgente(ctx.admin, org.id),
+        lerEvolucao(ctx.admin, org.id).catch(() => null),
+        ctx.admin.from("organizations").select("onboarding_state").eq("id", org.id).maybeSingle(),
+      ]);
+      const rotulo = rotuloDoCliente(areas, { papel: "admin", followupsQueSaemComOAgente: saemJunto });
+      const criterio = oQueFaltaAparece({
+        onboardingState: (estado.data as { onboarding_state?: unknown } | null)?.onboarding_state ?? null,
+        onboardedAt: org.onboarded_at,
+        papel: "admin",
+        zerou: evolucao?.zerou ?? false,
+        demonstracao: org.demonstracao,
+      });
 
       return {
         organizacao: { id: org.id, nome: org.display_name, demonstracao: org.demonstracao },
@@ -81,6 +85,14 @@ export const FERRAMENTAS_DO_CHECKLIST: readonly FerramentaDePlataforma[] = [
         com_o_humano: areas.flatMap((a) =>
           a.so_pela_tela.filter((p) => p.situacao === "pendente").map((p) => ({ area: a.area, ...p })),
         ),
+        rotulo_do_cliente: {
+          aparece_no_inicio: criterio.aparece,
+          por_que: criterio.motivo,
+          ...rotuloEmTexto(rotulo),
+          evolucao: evolucao
+            ? { ao_entrar: evolucao.ao_entrar, ao_entrar_em: evolucao.ao_entrar_em, ultimo_retrato: evolucao.ultimo, zerou_em: evolucao.zerou_em }
+            : null,
+        },
         areas,
       };
     },

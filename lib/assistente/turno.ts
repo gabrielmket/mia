@@ -78,6 +78,8 @@ export interface EntradaDoTurno {
   historico: ReadonlyArray<{ tipo: string; texto: string }>;
   pergunta: string;
   ultimaRecusa: { mensagem: string | null; codigo: string | null; status: number | null } | null;
+  /** FORK MIA (.91): a chave da cobrança da instalação, lida pela rota (a sessão não lê). */
+  cobrancaLigada?: boolean;
 }
 
 export interface DepsDoTurno {
@@ -122,6 +124,7 @@ export async function responderNoAssistente(entrada: EntradaDoTurno, deps: DepsD
       equipe: entrada.equipe,
       base,
       ultimaRecusa: entrada.ultimaRecusa,
+      cobrancaLigada: entrada.cobrancaLigada === true,
     },
     coletor,
   );
@@ -161,6 +164,7 @@ export async function responderNoAssistente(entrada: EntradaDoTurno, deps: DepsD
     semResposta: coletor.semResposta,
     contatos: [...coletor.contatos],
     ferramentas: [...new Set(coletor.ferramentas)],
+    propostas: [...coletor.propostas],
     llmCallId: callId,
   };
 }

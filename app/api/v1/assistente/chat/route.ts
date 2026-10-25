@@ -47,6 +47,10 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
+// FORK MIA (.91): a chave da cobrança da instalação e as propostas do turno.
+import { createAdminClient } from "@/lib/supabase/admin";
+import { modulosLigados } from "@/lib/instalacao/modulos";
+import { gravarPropostasDoTurno } from "@/lib/assistente/propostas/gravar";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
 
 export const dynamic = "force-dynamic";
@@ -303,6 +307,11 @@ export async function POST(req: NextRequest): Promise<Response> {
   try {
     const deps = requestTurnDeps();
     const equipe = await diretorioDaEquipe(orgId);
+    // FORK MIA (.91): a chave da cobrança é da INSTALAÇÃO e a sessão não a lê;
+    // lida aqui, FORA do turno, como o layout de `/app` faz.
+    const cobrancaLigada = await modulosLigados(createAdminClient())
+      .then((m) => m.includes("cobranca"))
+      .catch(() => false);
     const telas = telasParaOPapel({
       papel,
       interfaceSettings: authz.org.interface_settings,
@@ -331,6 +340,7 @@ export async function POST(req: NextRequest): Promise<Response> {
               status: parsed.data.ultima_recusa.status ?? null,
             }
           : null,
+        cobrancaLigada,
       },
       { chamarModelo: chamadaDoAssistente(getRequestPool(), deps.llmCfg, { registry: deps.registry, log: deps.log }) },
     );
@@ -350,6 +360,20 @@ export async function POST(req: NextRequest): Promise<Response> {
       ? t("A IA do assistente ainda não está configurada nesta instalação. Avise a Time Company.")
       : t("Não consegui responder agora. Tente de novo em instantes; os números continuam nas telas."));
 
+  // FORK MIA (.91): as propostas do turno viram linhas PENDENTES, pela sessão
+  // (a RLS da 9080 decide quem propõe), e o cartão de cada uma entra nos botões
+  // da resposta. Nada da peça é criado aqui: ela nasce no aplicar.
+  const acoesDaProposta =
+    resposta && resposta.propostas.length > 0
+      ? await gravarPropostasDoTurno(db, {
+          organizationId: orgId,
+          userId,
+          conversaId,
+          requestId,
+          propostas: resposta.propostas,
+        })
+      : [];
+
   const { data: respostaGravada } = await db
     .from("mia_assistente_mensagens")
     .insert({
@@ -361,7 +385,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       turn_id: turnId,
       tela: caminho,
       fontes: resposta?.fontes ?? [],
-      acoes: resposta?.acoes ?? [],
+      acoes: [...acoesDaProposta, ...(resposta?.acoes ?? [])],
       erro: erroCodigo,
       contatos: resposta?.contatos ?? [],
       llm_call_id: resposta?.llmCallId ?? null,

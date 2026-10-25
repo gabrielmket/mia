@@ -20,6 +20,12 @@ export const welcomeSchema = z.object({
    * o próprio negócio em uma linha. Quem pula recebe o quadro genérico.
    */
   o_que_faz: z.string().max(280).optional(),
+  /**
+   * FORK MIA (.91): o segmento que a MIA leu e a pessoa confirmou ("A MIA leu
+   * como"). É dele que saem o agente, o funil e o follow-up do modelo
+   * (lib/onboarding/modelos-de-agente-da-mia.ts). Só este passo o grava.
+   */
+  segmento: z.enum(["clinica", "academia", "imobiliaria", "industria", "outro"]).optional(),
   timezone: z.string().min(1).default("America/Sao_Paulo"),
   accepted_terms_at: z.string().datetime().optional(),
 });
@@ -66,6 +72,8 @@ export const onboardingStateSchema = z.object({
       display_name: z.string(),
       /** O ramo, na palavra do dono. Alimenta o prompt e o quadro de clientes. */
       o_que_faz: z.string().optional(),
+      /** FORK MIA (.91): o segmento confirmado (o modelo do agente, do funil e do follow-up). */
+      segmento: z.string().optional(),
     })
     .optional(),
   whatsapp: z
@@ -74,6 +82,12 @@ export const onboardingStateSchema = z.object({
       session_name: z.string().optional(),
       status: z.string(),
       skipped: z.boolean().optional(),
+      /**
+       * FORK MIA (.91): quando a pessoa entrou com o Facebook (número oficial).
+       * O passo fica "esperando a Time" (`status: "esperando_a_time"`): a ligação
+       * do número à empresa continua à mão, como no upstream.
+       */
+      entrou_com_facebook_em: z.string().optional(),
     })
     .optional(),
   nuvemshop: z

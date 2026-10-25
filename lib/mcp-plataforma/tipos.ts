@@ -16,6 +16,14 @@ export interface ContextoDaFerramenta {
   tokenId: string;
   /** Correlação da chamada, a mesma que vai para a auditoria. */
   requestId: string;
+  /**
+   * FORK MIA (.91): o que a INSTALAÇÃO já sabe e quem chama passa pronto. O
+   * "o que falta" do assistente roda as áreas do checklist com o cliente da
+   * SESSÃO, que não lê `platform_config`; a rota lê a chave da cobrança com o
+   * cliente de serviço (como o layout de `/app` faz) e passa aqui. Ausente, a
+   * área lê do banco, como no MCP.
+   */
+  instalacao?: { cobrancaLigada?: boolean };
 }
 
 export interface FerramentaDePlataforma {

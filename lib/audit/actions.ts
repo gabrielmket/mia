@@ -1487,6 +1487,18 @@ export const AUDIT_ACTIONS = [
   "assistente.configurado",
   "assistente.conhecimento_alterado",
   "assistente.resumo_da_manha_gerado",
+  // FORK MIA (.91): as propostas do assistente (9080) e os primeiros passos. A
+  // proposta leva o tipo, por onde (tela ou MCP) e os ids da peça criada, nunca
+  // o texto do agente; o follow-up que saiu com o agente, o fluxo e o agente.
+  // O número oficial "esperando a Time" leva só que a pessoa entrou com o
+  // Facebook (a conta da Meta é ligada à mão, pela Time).
+  "assistente.proposta_criada",
+  "assistente.proposta_aplicada",
+  "assistente.proposta_rejeitada",
+  "assistente.proposta_falhou",
+  "assistente.followup_saiu_com_o_agente",
+  "onboarding.numero_oficial_esperando_a_time",
+  "onboarding.agente_do_modelo_publicado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

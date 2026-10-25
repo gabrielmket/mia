@@ -33,14 +33,26 @@ import { z } from "zod";
 import { roleAtLeast, ROTULO_DO_PAPEL, type Role } from "@/lib/auth/types";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 
+import { SEGMENTOS_DO_ONBOARDING } from "@/lib/onboarding/modelos-de-agente-da-mia";
+import { rotuloEmTexto } from "@/lib/mcp-plataforma/checklist/rotulo-do-cliente";
+
 import { pareceValidacaoDeCampo } from "./chamado";
 import { buscarAjuda, type ItemDaBaseDaEmpresa } from "./leituras/ajuda";
 import { escopoDoPapel, type PessoaDaEquipe } from "./leituras/comum";
 import { lerLeads } from "./leituras/leads";
+import { lerOQueFalta } from "./leituras/o-que-falta";
 import { lerPerformance, type PeriodoDaPerformance } from "./leituras/performance";
 import { explicarSilencioDaIa } from "./leituras/por-que-a-ia-nao-respondeu";
 import { lerRotinaDoDia } from "./leituras/rotina";
 import { prioridadesDoDia } from "./prioridades";
+import {
+  prepararAgenteDoModelo,
+  prepararFollowupDoModelo,
+  prepararFunilDoPacote,
+  type Preparacao,
+} from "./propostas/preparar";
+import type { PropostaDoTurno } from "./propostas/tipos";
+import { lerEvolucao } from "./retratos";
 import type { TelaConhecida } from "./telas";
 import { hrefDoApp, type AcaoDoAssistente, type TipoDeChamado } from "./tipos";
 
@@ -58,6 +70,11 @@ export interface ContextoDasFerramentas {
   base: readonly ItemDaBaseDaEmpresa[];
   /** A última recusa do servidor que a tela viu (a "mensagem do sistema"). */
   ultimaRecusa: { mensagem: string | null; codigo: string | null; status: number | null } | null;
+  /**
+   * FORK MIA (.91): a chave da cobrança da INSTALAÇÃO, que a sessão não lê
+   * (`platform_config`). A rota a lê como o layout de `/app` e passa pronta.
+   */
+  cobrancaLigada?: boolean;
 }
 
 /** O que o turno junta enquanto as ferramentas rodam. */
@@ -66,6 +83,8 @@ export class ColetorDoTurno {
   readonly contatos = new Set<string>();
   readonly ferramentas: string[] = [];
   readonly acoes: AcaoDoAssistente[] = [];
+  /** FORK MIA (.91): as propostas preparadas no turno (uma por peça); a rota grava. */
+  readonly propostas: PropostaDoTurno[] = [];
   semResposta = false;
   foraDaPermissao = false;
 
@@ -73,6 +92,11 @@ export class ColetorDoTurno {
     this.ferramentas.push(nome);
     for (const f of fontes) this.fontes.add(f);
     for (const c of contatos) this.contatos.add(c);
+  }
+
+  proposta(p: PropostaDoTurno): void {
+    if (this.propostas.some((x) => x.tipo === p.tipo)) return;
+    this.propostas.push(p);
   }
 
   acao(a: AcaoDoAssistente): void {
@@ -136,6 +160,71 @@ export function destinoPermitido(telas: readonly TelaConhecida[], href: string):
     }
   }
   return melhor;
+}
+
+/** FORK MIA (.91): de onde vem o "o que falta" (as áreas do checklist que ele lê). */
+const FONTES_DO_QUE_FALTA = [
+  "Dados da empresa",
+  "Números de WhatsApp",
+  "Agentes de IA",
+  "Funis",
+  "Follow-ups",
+  "Equipe",
+  "Plano e cobrança",
+] as const;
+
+const FONTES_DA_PROPOSTA: Record<PropostaDoTurno["tipo"], readonly string[]> = {
+  agente: ["Dados da empresa", "Agentes de IA", "Modelos do segmento"],
+  funil: ["Funis", "Quadros prontos"],
+  followup: ["Agentes de IA", "Follow-ups", "Modelos de follow-up"],
+};
+
+/**
+ * FORK MIA (.91): preparar uma proposta. Só lê (com a sessão); a rota grava a
+ * linha pendente. Gestor e administrador pedem; quem APLICA é só a
+ * administradora, no cartão. Canal, número, cobrança, convite, chave e
+ * exclusão não têm ferramenta aqui, de propósito.
+ */
+async function propor(
+  ctx: ContextoDasFerramentas,
+  coletor: ColetorDoTurno,
+  nome: string,
+  tipo: PropostaDoTurno["tipo"],
+  preparar: () => Promise<Preparacao>,
+) {
+  if (!roleAtLeast(ctx.papel, "manager")) {
+    coletor.anotar(nome);
+    return recusaDePermissao(ctx, coletor, "admin", "preparar o agente, o funil ou o follow-up da empresa");
+  }
+  return protegido(async () => {
+    const r = await preparar();
+    coletor.anotar(nome, FONTES_DA_PROPOSTA[tipo]);
+    if (!r.ok) {
+      if (r.href) {
+        const tela = destinoPermitido(ctx.telas, r.href);
+        if (tela) coletor.acao({ tipo: "ir", rotulo: "Me leva lá", href: hrefDoApp(r.href)! });
+      }
+      return {
+        ok: false,
+        motivo: r.motivo,
+        mensagem: r.mensagem,
+        orientacao:
+          r.motivo === "depende"
+            ? "Diga que essa peça depende de outra antes, e ofereça preparar a que falta."
+            : "Diga o que já existe e onde mexer, sem preparar outra proposta.",
+      };
+    }
+    coletor.proposta(r.proposta);
+    const administra = roleAtLeast(ctx.papel, "admin");
+    return {
+      ok: true,
+      proposta: { titulo: r.proposta.titulo, o_que_muda: r.proposta.mudancas },
+      quem_aplica: administra ? "a própria pessoa" : quemTemOPapel(ctx.equipe, "admin").map((p) => p.nome),
+      orientacao: administra
+        ? "Diga em uma ou duas frases que preparou a proposta, que nada muda até ela clicar em Aprovar e aplicar no cartão logo abaixo, e que a peça nasce em rascunho."
+        : "Diga que preparou a proposta e que quem aplica é quem administra a empresa (diga o nome que veio em quem_aplica). Não ofereça aplicar.",
+    };
+  });
 }
 
 const PERIODO = z
@@ -349,6 +438,81 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
             })),
           };
         }),
+    }),
+
+    // ── FORK MIA (.91): o "o que falta" e as três propostas ──────────────────
+
+    ver_o_que_falta: tool({
+      description:
+        "O QUE FALTA para a empresa ficar pronta: o mesmo checklist que a Time vê, com cada item numa coluna. " +
+        "preenchido (já está de pé), posso_completar (você prepara como proposta: o agente, o funil e o follow-up do modelo do segmento) " +
+        "e preciso_confirmar (só uma pessoa faz pela tela: conectar o número, publicar, convidar, pagar, o ensaio; ou a Time Company faz: ligar o número oficial). " +
+        'Cada item diz quem faz e do que depende ("Depende do agente"), e vem o que não se aplica agora e a evolução (ao entrar faltavam N, agora faltam M). ' +
+        'Use para "o que falta", "por onde começo" na montagem da empresa e "já está tudo pronto?". Só gestor e administrador veem.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        if (!roleAtLeast(ctx.papel, "manager")) {
+          coletor.anotar("ver_o_que_falta");
+          return recusaDePermissao(ctx, coletor, "admin", "o que falta para a empresa ficar pronta");
+        }
+        return protegido(async () => {
+          const lido = await lerOQueFalta(ctx.db, {
+            organizationId: ctx.organizationId,
+            papel: ctx.papel,
+            cobrancaLigada: ctx.cobrancaLigada === true,
+          });
+          const evolucao = await lerEvolucao(ctx.db, ctx.organizationId).catch(() => null);
+          coletor.anotar("ver_o_que_falta", FONTES_DO_QUE_FALTA);
+          const primeiro = lido.rotulo.itens.find(
+            (i) => i.coluna === "preciso_confirmar" && i.quem === "voce" && i.ir && !i.depende_de && hrefDoApp(i.ir.href),
+          );
+          if (primeiro?.ir) coletor.acao({ tipo: "ir", rotulo: "Me leva lá", href: primeiro.ir.href });
+          return {
+            ...rotuloEmTexto(lido.rotulo),
+            evolucao: evolucao ? { ao_entrar_faltavam: evolucao.ao_entrar, ultimo_retrato: evolucao.ultimo } : null,
+            orientacao:
+              "Diga quantos faltam. Separe o que só a pessoa faz (preciso_confirmar, com quem faz) do que você prepara (posso_completar) e ofereça preparar a primeira peça que você completa. " +
+              "Respeite depende_de: não ofereça o que depende de outra peça antes dela. Número, pagamento, convite e chave você nunca faz.",
+          };
+        });
+      },
+    }),
+
+    propor_agente_do_modelo: tool({
+      description:
+        "PREPARA a proposta de criar o agente do modelo do segmento da empresa (o agente de exemplo das demonstrações: quem ele é, o que faz e o que nunca faz). " +
+        "Nada é criado agora: a resposta ganha um cartão com o que muda, e a administradora clica em Aprovar e aplicar; o agente nasce em RASCUNHO e só vai ao ar quando alguém publicar. " +
+        "Use quando a pessoa pedir para montar o agente e a empresa ainda não tiver nenhum.",
+      inputSchema: z.object({
+        segmento: z
+          .enum(SEGMENTOS_DO_ONBOARDING)
+          .optional()
+          .describe("Só se a pessoa pediu outro segmento: clinica, academia, imobiliaria, industria ou outro. Sem ele, o confirmado no passo a passo."),
+      }),
+      execute: async ({ segmento }) =>
+        propor(ctx, coletor, "propor_agente_do_modelo", "agente", () => prepararAgenteDoModelo(ctx.db, ctx.organizationId, segmento)),
+    }),
+
+    propor_funil_do_pacote: tool({
+      description:
+        "PREPARA a proposta de montar o funil do quadro pronto do segmento (as etapas com o passo do agente em cada uma), no lugar do quadro de e-commerce que veio com a empresa. " +
+        "Nada muda agora: o cartão mostra as etapas e a administradora aprova. Use quando a pessoa pedir o funil e a empresa ainda não tiver um próprio.",
+      inputSchema: z.object({
+        segmento: z.enum(SEGMENTOS_DO_ONBOARDING).optional().describe("Só se a pessoa pediu outro segmento."),
+      }),
+      execute: async ({ segmento }) =>
+        propor(ctx, coletor, "propor_funil_do_pacote", "funil", () => prepararFunilDoPacote(ctx.db, ctx.organizationId, segmento)),
+    }),
+
+    propor_followup_do_modelo: tool({
+      description:
+        "PREPARA a proposta de ligar o follow-up do modelo do segmento (retomar quem parou de responder), em RASCUNHO e armado no agente, só em horário comercial: ele sai junto quando o agente for publicado. " +
+        "Depende do agente: sem agente, volta que depende, e você oferece preparar o agente antes.",
+      inputSchema: z.object({
+        segmento: z.enum(SEGMENTOS_DO_ONBOARDING).optional().describe("Só se a pessoa pediu outro segmento."),
+      }),
+      execute: async ({ segmento }) =>
+        propor(ctx, coletor, "propor_followup_do_modelo", "followup", () => prepararFollowupDoModelo(ctx.db, ctx.organizationId, segmento)),
     }),
 
     mostrar_me_leva_la: tool({
