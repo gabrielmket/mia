@@ -50,14 +50,14 @@ function Medidor({ rotulo, pct, trava }: { rotulo: string; pct: number; trava: n
         </span>
       </div>
       <div
-        className="h-2 w-full rounded bg-surface-elevated"
+        className="h-2 w-full rounded-full bg-surface-elevated"
         role="meter"
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={trava}
         aria-label={rotulo}
       >
-        <div className={`h-2 rounded ${cor}`} style={{ width: `${largura}%` }} />
+        <div className={`h-2 rounded-full ${cor}`} style={{ width: `${largura}%` }} />
       </div>
     </div>
   );

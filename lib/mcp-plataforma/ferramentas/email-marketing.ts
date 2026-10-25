@@ -148,7 +148,7 @@ export const FERRAMENTAS_DE_EMAIL_MARKETING: readonly FerramentaDePlataforma[] =
         .max(253)
         .optional()
         .describe(
-          "O domínio da empresa, como exemplo.com.br. Ausente: confere o domínio já cadastrado.",
+          "O domínio da empresa, sem www (o que vem depois do @ do e-mail dela). Ausente: confere o domínio já cadastrado.",
         ),
       subdominio_de_retorno: z
         .string()
@@ -157,7 +157,7 @@ export const FERRAMENTAS_DE_EMAIL_MARKETING: readonly FerramentaDePlataforma[] =
         .optional()
         .describe('O subdomínio do MAIL FROM (o retorno das rejeições). Padrão: "envio".'),
     },
-    exemplo: { organization_id: ORG_DE_EXEMPLO, dominio: "exemplo.com.br" },
+    exemplo: { organization_id: ORG_DE_EXEMPLO, dominio: "empresa-exemplo.example" },
     operacao: "implantar_configuracao",
     handler: async (ctx, args) => {
       const { org } = await alvo(ctx, args);

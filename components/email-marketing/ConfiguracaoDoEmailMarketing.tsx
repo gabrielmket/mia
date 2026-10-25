@@ -393,7 +393,7 @@ function Configuracao({ r }: { r: Retrato }) {
               value={form.rodape_privacidade_url}
               onChange={campo("rodape_privacidade_url")}
               disabled={!pode}
-              placeholder="https://exemplo.com.br/privacidade"
+              placeholder="https://…/privacidade"
             />
           </div>
           <label className={`flex items-start gap-3 ${TOQUE}`}>
@@ -507,7 +507,7 @@ function Dominio({ r, pode }: { r: Retrato; pode: boolean }) {
             value={dominio}
             onChange={(e) => setDominio(e.target.value)}
             disabled={!pode}
-            placeholder="exemplo.com.br"
+            placeholder={t("o domínio da empresa, sem www")}
           />
         </div>
         <div className="space-y-1">

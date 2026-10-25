@@ -1174,6 +1174,141 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "agregador de bio-links: marca agregador sem fetch. Nunca chamado, nunca exibido.",
   },
+  // FORK MIA (.89) — decisão escrita: os provedores de e-mail gratuitos que o
+  // disparo de e-mail marketing RECUSA como domínio de remetente
+  // (docs/fork/email-marketing.md). O código só compara o domínio digitado com a
+  // lista; nunca fala com esses hosts nem os mostra na tela (a recusa diz "use o
+  // domínio da empresa"). RECONHECIMENTO, como as assinaturas do raio-X do site.
+  "gmail.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "googlemail.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "hotmail.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "hotmail.com.br": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "outlook.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "outlook.com.br": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "live.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "msn.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "yahoo.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "yahoo.com.br": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "ymail.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "icloud.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "me.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "mac.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "aol.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "bol.com.br": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "uol.com.br": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "terra.com.br": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "ig.com.br": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "zipmail.com.br": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "protonmail.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "proton.me": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "gmx.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "mail.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "zoho.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
+  "yandex.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "provedor de e-mail gratuito na lista de RECUSA do disparo de e-mail marketing (`PROVEDORES_GRATUITOS` em lib/email-marketing/regras.ts): o domínio do remetente é comparado com ela e recusado, porque e-mail de campanha sai pelo domínio da EMPRESA. Nunca chamado, nunca exibido.",
+  },
   "sites.google.com": {
     categoria: "RECONHECIMENTO",
     motivo:
@@ -1344,6 +1479,9 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // Decisão escrita (spec 24, auditoria de site): agregador de bio-links,
       // marca agregador sem fetch — nunca chamado, nunca exibido.
       "allmylinks.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "aol.com",
       // Decisão escrita (spec 24, auditoria de site): assinatura de
       // reconhecimento comparada no HTML baixado — nunca chamada, nunca exibida.
       "api.whatsapp.com",
@@ -1356,6 +1494,9 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // Decisão escrita (spec 24, auditoria de site): agregador de bio-links,
       // marca agregador sem fetch — nunca chamado, nunca exibido.
       "beacons.ai",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "bol.com.br",
       // Decisão escrita (spec 24, auditoria de site): assinatura de construtor
       // (Canva) — nunca chamada, nunca exibida.
       "canva.site",
@@ -1374,10 +1515,31 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // como link social no raio-X — nunca chamada, nunca exibida (a tela mostra
       // o rótulo traduzido).
       "facebook.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "gmail.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "gmx.com",
       // Decisão escrita (spec 24, auditoria de site): substring `google.com/maps`
       // comparada no HTML para detectar endereço/mapa — nunca chamada por causa
       // desta regra, nunca exibida.
       "google.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "googlemail.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "hotmail.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "hotmail.com.br",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "icloud.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "ig.com.br",
       // Decisão escrita (spec 24, auditoria de site): marca agregador e conta
       // como link social no raio-X — nunca chamada, nunca exibida (a tela mostra
       // o rótulo traduzido).
@@ -1385,10 +1547,22 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // Decisão escrita (spec 24, auditoria de site): agregador de bio-links,
       // marca agregador sem fetch — nunca chamado, nunca exibido.
       "linkbio.co",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "live.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "mac.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "mail.com",
       // Link que abre o pino que o CLIENTE mandou (`lib/messaging/localizacao.ts`).
       // Mesma natureza do `wa.me` abaixo: o produto não fala com o host, quem
       // abre é o celular do atendente. Crescimento escrito, como a regra pede.
       "maps.google.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "me.com",
       "meet.google.com",
       // Decisão escrita, #2441: a origem do Jitsi aparece como EXEMPLO na
       // mensagem do Zod de `JITSI_SERVER_URL`, no `comoLigar` do catálogo de
@@ -1398,14 +1572,29 @@ describe("catraca de host de terceiro no código que embarca", () => {
       "meet.jit.si",
       "meusistema.com",
       "mi-gateway.ejemplo.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "msn.com",
       // Decisão escrita: a política de privacidade (`app/legal/privacy/page.tsx`) manda a
       // pessoa revogar o acesso ao Google em `/permissions`, que é onde o Google exige
       // que o texto aponte. O produto não fala com o host — quem abre o link é a pessoa
       // — e o endereço é do Google, não nosso. Crescimento escrito, como a regra pede.
       "myaccount.google.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "outlook.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "outlook.com.br",
       "partners.tiendanube.com",
       "platform.deepseek.com",
       "platform.openai.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "proton.me",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "protonmail.com",
       // Decisão escrita, que é o que esta lista cobra: `s.whatsapp.net` é o
       // sufixo do JID do WhatsApp, lido em `lib/waha/resolve-contact-whatsapp-id.ts`
       // desde antes desta régua. Não é destino de chamada (o código fala com o
@@ -1428,7 +1617,13 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // é o lead.
       "teams.live.com",
       "teams.microsoft.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "terra.com.br",
       "tusitio.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "uol.com.br",
       // Exemplo de link do WhatsApp gerado pela tela de Conversões (#924). Está
       // aqui, e não em FORNECEDOR, porque o produto NÃO fala com esse host: quem
       // abre o link é o visitante do site. Crescimento escrito, como a regra pede.
@@ -1441,6 +1636,24 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // AUTORIDADE, porque não é painel, amostra nem plataforma: é o endereço
       // a que a lei manda o titular ir. País novo com lei revisada traz a sua.
       "www.cnpd.pt",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "yahoo.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "yahoo.com.br",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "yandex.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "ymail.com",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "zipmail.com.br",
+      // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
+      // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
+      "zoho.com",
     ]);
   });
 

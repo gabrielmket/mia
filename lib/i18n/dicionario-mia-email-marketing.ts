@@ -108,6 +108,7 @@ export const DICIONARIO_DO_EMAIL_MARKETING: Traducoes = {
   },
   "Domínio do remetente": { es: "Dominio del remitente" },
   "Domínio da empresa": { es: "Dominio de la empresa" },
+  "o domínio da empresa, sem www": { es: "el dominio de la empresa, sin www" },
   "Subdomínio de retorno": { es: "Subdominio de retorno" },
   "Conferir agora": { es: "Verificar ahora" },
   "Criar e conferir": { es: "Crear y verificar" },

@@ -306,6 +306,10 @@ vi.mock("@/components/voice/DialButton", () => ({ DialButton: () => null }));
 // teste mede a seção das últimas compras; o dublê de `get` daqui responde o
 // resumo para toda rota, e a ficha conectada tem testes próprios.
 vi.mock("@/components/cartoes/fichas/FichaConectadaDoContato", () => ({ FichaConectadaDoContato: () => null }));
+// FORK MIA (.89): a Visão geral ganhou o consentimento de e-mail marketing, que
+// lê a rota própria `/consentimento-de-email` e tem testes próprios
+// (tests/unit/email-marketing-*.test.ts). Fora daqui pelo mesmo motivo da ficha conectada.
+vi.mock("@/components/email-marketing/ConsentimentoNaFicha", () => ({ ConsentimentoNaFicha: () => null }));
 
 const conversa = {
   id: "cv-1",

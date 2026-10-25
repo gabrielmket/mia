@@ -125,6 +125,11 @@ export const SEGMENTOS_DE_NEGOCIO = [
 ] as const;
 export type SegmentoDeNegocio = (typeof SEGMENTOS_DE_NEGOCIO)[number];
 
+/**
+ * O botão de cada modelo nasce com `https://` e nada mais: o endereço é da
+ * empresa, e a conferência trava até alguém escrevê-lo ("Há botão sem endereço
+ * válido"). Um domínio de exemplo aqui sairia num e-mail de verdade.
+ */
 export interface ModeloDoCatalogo {
   chave: string;
   nome: string;
@@ -160,7 +165,7 @@ export const CATALOGO_DE_MODELOS: readonly ModeloDoCatalogo[] = [
       b("k1", {
         tipo: "botao",
         texto: "Ver as novidades",
-        url: "https://exemplo.com.br/novidades",
+        url: "https://",
       }),
       b("d1", { tipo: "divisor" }),
       b("x3", { tipo: "texto", texto: "Ficou alguma dúvida? É só responder este e-mail." }),
@@ -179,7 +184,7 @@ export const CATALOGO_DE_MODELOS: readonly ModeloDoCatalogo[] = [
         texto:
           "Oi, {{primeiro_nome}}! Como você já é cliente, preparamos uma condição especial. Descreva aqui a oferta e até quando vale.",
       }),
-      b("k1", { tipo: "botao", texto: "Quero aproveitar", url: "https://exemplo.com.br/oferta" }),
+      b("k1", { tipo: "botao", texto: "Quero aproveitar", url: "https://" }),
     ],
   },
   {
@@ -195,7 +200,7 @@ export const CATALOGO_DE_MODELOS: readonly ModeloDoCatalogo[] = [
         texto:
           "Oi, {{primeiro_nome}}! Vamos fazer um encontro e gostaríamos da sua presença. Escreva aqui o dia, o horário e o endereço.",
       }),
-      b("k1", { tipo: "botao", texto: "Confirmar presença", url: "https://exemplo.com.br/evento" }),
+      b("k1", { tipo: "botao", texto: "Confirmar presença", url: "https://" }),
     ],
   },
   {
@@ -211,7 +216,7 @@ export const CATALOGO_DE_MODELOS: readonly ModeloDoCatalogo[] = [
         texto:
           "Oi, {{primeiro_nome}}! Faz um tempo desde o seu último atendimento. Que tal agendar o retorno?",
       }),
-      b("k1", { tipo: "botao", texto: "Agendar retorno", url: "https://exemplo.com.br/agendar" }),
+      b("k1", { tipo: "botao", texto: "Agendar retorno", url: "https://" }),
     ],
   },
   {
@@ -228,7 +233,7 @@ export const CATALOGO_DE_MODELOS: readonly ModeloDoCatalogo[] = [
         texto:
           "Oi, {{primeiro_nome}}! As peças novas acabaram de chegar. Veja antes de todo mundo.",
       }),
-      b("k1", { tipo: "botao", texto: "Ver a coleção", url: "https://exemplo.com.br/colecao" }),
+      b("k1", { tipo: "botao", texto: "Ver a coleção", url: "https://" }),
     ],
   },
   {
@@ -247,7 +252,7 @@ export const CATALOGO_DE_MODELOS: readonly ModeloDoCatalogo[] = [
       b("k1", {
         tipo: "botao",
         texto: "Marcar a conversa",
-        url: "https://exemplo.com.br/conversa",
+        url: "https://",
       }),
     ],
   },
@@ -265,7 +270,7 @@ export const CATALOGO_DE_MODELOS: readonly ModeloDoCatalogo[] = [
         texto:
           "Oi, {{primeiro_nome}}! Escreva aqui o bairro, as plantas e as condições do lançamento.",
       }),
-      b("k1", { tipo: "botao", texto: "Agendar uma visita", url: "https://exemplo.com.br/visita" }),
+      b("k1", { tipo: "botao", texto: "Agendar uma visita", url: "https://" }),
     ],
   },
   {
@@ -281,7 +286,7 @@ export const CATALOGO_DE_MODELOS: readonly ModeloDoCatalogo[] = [
         texto:
           "Oi, {{primeiro_nome}}! As vagas para a próxima turma estão abertas. Escreva aqui as turmas e os horários.",
       }),
-      b("k1", { tipo: "botao", texto: "Garantir a vaga", url: "https://exemplo.com.br/matricula" }),
+      b("k1", { tipo: "botao", texto: "Garantir a vaga", url: "https://" }),
     ],
   },
 ];

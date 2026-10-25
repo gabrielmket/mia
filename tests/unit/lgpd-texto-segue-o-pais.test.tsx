@@ -196,7 +196,9 @@ async function dataJson(country: string | null, timezone: string, pais?: string 
 // FORK MIA: as seis seções que o fork acrescenta ao payload (0266, 9018, 9047,
 // 9050) saem antes da comparação com as fixtures do upstream; a cópia do titular
 // e o PDF que as entregam têm testes próprios (a do assistente da MIA, 9050:
-// tests/invariants/assistente-da-mia.test.ts e lgpd-copia-do-titular).
+// tests/invariants/assistente-da-mia.test.ts e lgpd-copia-do-titular). As duas do
+// e-mail marketing (.89, 9061 e 9062: os e-mails que chegaram e os consentimentos)
+// também: o efeito delas está em tests/invariants/email-marketing.test.ts.
 const semAsSecoesDoFork = ({
   ai_runs: _a,
   broadcasts_recebidos: _b,
@@ -204,6 +206,8 @@ const semAsSecoesDoFork = ({
   obrigacoes: _o,
   tracos_do_turno: _t,
   assistente_da_mia: _m,
+  emails_de_marketing: _e,
+  consentimentos_de_email: _ce,
   ...resto
 }: ExportPayload) => resto;
 const comoGravado = (p: ExportPayload) =>
