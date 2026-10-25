@@ -6,6 +6,8 @@ import { Card } from "@/components/ui/card";
 import { loadAuthUser } from "@/lib/auth/server";
 import { modoDeCadastro } from "@/lib/auth/politica-de-cadastro";
 import { traduzir } from "@/lib/i18n/dicionario";
+// FORK MIA (.91): o "o que falta" e a empresa que espera o número, pela fonte do Início do cliente.
+import { lerEmpresasEsperandoONumero } from "@/lib/onboarding/primeiros-passos-para-a-time";
 import { lerCardDeCobranca } from "@/lib/planos-mia/card-de-cobranca";
 import {
   lerDetalheDaEmpresa,
@@ -67,6 +69,18 @@ const CLASSE_DA_SITUACAO: Record<SituacaoDaEmpresa, string> = {
   isenta: "bg-muted text-muted-foreground",
 };
 
+/** FORK MIA (.91): o nome de cada item do "o que falta" (as chaves do rótulo do cliente). */
+const ROTULO_DO_ITEM: Record<string, string> = {
+  dados_da_empresa: "Dados da empresa",
+  whatsapp: "Número de WhatsApp",
+  agente: "Agente de IA",
+  funil: "Funil de vendas",
+  followup: "Follow-up",
+  ensaio: "Ensaio",
+  equipe: "Equipe",
+  plano: "Plano e cobrança",
+};
+
 function noFiltro(l: LinhaDaEmpresa, filtro: string): boolean {
   if (filtro === "todas") return true;
   if (filtro === "atraso") return l.situacao === "atraso" || l.situacao === "prazo";
@@ -88,12 +102,13 @@ export default async function Page({
 
   const admin = createAdminClient();
   const agora = new Date();
-  const [linhas, pedidos, numeros, modo, recados] = await Promise.all([
+  const [linhas, pedidos, numeros, modo, recados, empresasEsperando] = await Promise.all([
     lerEmpresasDoCadastro(admin, agora),
     lerPedidosDeCadastro(admin),
     lerNumerosEsperando(admin),
     modoDeCadastro(),
     ultimosRecados(admin),
+    lerEmpresasEsperandoONumero(admin).catch(() => []),
   ]);
   const base = soQuemEntrouSozinho ? linhas.filter((l) => l.origem === "cadastro") : linhas;
   const lista = base.filter((l) => noFiltro(l, filtro));
@@ -277,6 +292,13 @@ export default async function Page({
                       </td>
                       <td className="px-3 py-2">
                         {l.passos.feitos}/{l.passos.de}
+                        {l.o_que_falta ? (
+                          <span className="block text-xs text-muted-foreground">
+                            {t("faltam {n} de {m}")
+                              .replace("{n}", String(l.o_que_falta.faltam))
+                              .replace("{m}", String(l.o_que_falta.total))}
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-3 py-2 text-xs">{proximo(l)}</td>
                     </tr>
@@ -290,6 +312,21 @@ export default async function Page({
 
           <Card className="space-y-3 p-4" data-jornada="numeros-oficiais">
             <h2 className="text-sm font-semibold">{t("Números oficiais esperando ligação")}</h2>
+            {empresasEsperando.length > 0 ? (
+              <ul className="space-y-2 text-sm" data-jornada="empresas-esperando-o-numero">
+                {empresasEsperando.map((e) => (
+                  <li key={e.organization_id} className="rounded-md border border-dashed p-3">
+                    <span className="block font-medium">{e.nome}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t("Empresa esperando a Time ligar o número")}
+                      {e.desde
+                        ? ` · ${t("Entrou com o Facebook em {data}").replace("{data}", dataHora.format(new Date(e.desde)))}`
+                        : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {numeros.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("Nenhum número esperando.")}</p>
             ) : (
@@ -365,6 +402,38 @@ export default async function Page({
                     {t("{n} de {m}")
                       .replace("{n}", String(detalhe.passos.feitos))
                       .replace("{m}", String(detalhe.passos.de))}
+                  </dd>
+                  <dt className="text-muted-foreground">{t("O que falta")}</dt>
+                  <dd data-jornada="o-que-falta-da-empresa">
+                    {detalhe.o_que_falta_agora === null ? (
+                      t("não deu para contar agora")
+                    ) : detalhe.o_que_falta_agora.faltam === 0 ? (
+                      t("não falta nada")
+                    ) : (
+                      <>
+                        {t("faltam {n} de {m}")
+                          .replace("{n}", String(detalhe.o_que_falta_agora.faltam))
+                          .replace("{m}", String(detalhe.o_que_falta_agora.total))}
+                        {detalhe.o_que_falta
+                          ? ` (${t("ao entrar, {n}").replace("{n}", String(detalhe.o_que_falta.ao_entrar))})`
+                          : ""}
+                        <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                          {detalhe.o_que_falta_agora.itens.map((i) => (
+                            <li key={i.chave}>
+                              {t(ROTULO_DO_ITEM[i.chave] ?? "Follow-up")} ·{" "}
+                              {i.coluna === "posso_completar"
+                                ? t("o assistente prepara")
+                                : i.quem === "time_company"
+                                  ? t("a Time faz")
+                                  : t("o cliente faz")}
+                              {i.depende_de
+                                ? ` · ${t("depois de: {item}").replace("{item}", t(ROTULO_DO_ITEM[i.depende_de] ?? "Agente de IA"))}`
+                                : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
                   </dd>
                   <dt className="text-muted-foreground">{t("Módulos")}</dt>
                   <dd>

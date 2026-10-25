@@ -371,7 +371,14 @@ export function rotuloDoCliente(areas: readonly AreaAvaliada[], ctx: Contexto): 
   if (!administra) {
     naoSeAplica.push({ chave: "plano", titulo: frase("Plano e cobrança"), porque: frase("é de quem administra a empresa") });
   } else if (plano.medida) {
-    const p = plano.dados as { aplica?: boolean; motivo?: string; assinou?: boolean; plano?: string | null; teste_ate?: string | null; estado?: string } | undefined;
+    const p = plano.dados as
+      | { aplica?: boolean; motivo?: string; assinou?: boolean; ja_pagou?: boolean; situacao?: string; plano?: string | null; teste_ate?: string | null; estado?: string }
+      | undefined;
+    // Desde a fusão com a .90, a área decide pela situação da tela da Time
+    // (`situacaoDaEmpresa`): `assinou` já diz em dia. Sem `situacao` (leitura
+    // antiga), vale a regra de antes.
+    const emDia = p?.situacao !== undefined ? p.assinou === true : p?.assinou === true && p?.estado !== "em_atraso";
+    const regularizar = p?.situacao !== undefined ? p.ja_pagou === true : p?.assinou === true;
     if (!p?.aplica) {
       naoSeAplica.push({
         chave: "plano",
@@ -383,7 +390,7 @@ export function rotuloDoCliente(areas: readonly AreaAvaliada[], ctx: Contexto): 
               ? frase("empresa de demonstração")
               : frase("a empresa é isenta"),
       });
-    } else if (p.assinou && p.estado !== "em_atraso") {
+    } else if (emDia) {
       itens.push({
         chave: "plano",
         coluna: "preenchido",
@@ -394,10 +401,10 @@ export function rotuloDoCliente(areas: readonly AreaAvaliada[], ctx: Contexto): 
       itens.push({
         chave: "plano",
         coluna: "preciso_confirmar",
-        titulo: p.assinou ? frase("Regularizar o pagamento") : frase("Assinar o plano"),
+        titulo: regularizar ? frase("Regularizar o pagamento") : frase("Assinar o plano"),
         detalhe: frase("Pagamento é coisa que só você faz."),
         quem: "voce",
-        quando: p.assinou ? null : (p.teste_ate ?? null),
+        quando: regularizar ? null : (p.teste_ate ?? null),
         ir: { rotulo: "Abrir Plano e cobrança", href: "/app/settings/billing" },
       });
     }

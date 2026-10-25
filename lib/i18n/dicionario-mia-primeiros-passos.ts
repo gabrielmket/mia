@@ -144,4 +144,14 @@ export const DICIONARIO_DOS_PRIMEIROS_PASSOS_MIA: Traducoes = {
   "não há conta de anúncios ligada": { es: "no hay cuenta de anuncios conectada" },
   "Base importada": { es: "Base importada" },
   "começar vazio não é pendência": { es: "empezar vacío no es pendiente" },
+  // A tela da Time (Admin › Empresas do cadastro, .90) com o "o que falta" da .91.
+  "faltam {n} de {m}": { es: "faltan {n} de {m}" },
+  "ao entrar, {n}": { es: "al entrar, {n}" },
+  "Empresa esperando a Time ligar o número": { es: "Empresa esperando que Time conecte el número" },
+  "não deu para contar agora": { es: "no se pudo contar ahora" },
+  "não falta nada": { es: "no falta nada" },
+  "o assistente prepara": { es: "lo prepara el asistente" },
+  "a Time faz": { es: "lo hace Time" },
+  "o cliente faz": { es: "lo hace el cliente" },
+  "depois de: {item}": { es: "después de: {item}" },
 };

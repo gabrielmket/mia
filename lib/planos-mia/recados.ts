@@ -5,7 +5,12 @@
  * pelo número de avisos da plataforma (`reportar`, lib/avisos/report-da-plataforma.ts).
  * Quatro momentos em que uma pessoa da Time precisa agir:
  *   1. pedido novo de cadastro, com o plano escolhido (aprovar);
- *   2. número oficial esperando ligação (amarrar à empresa certa);
+ *   2. número oficial esperando ligação (amarrar à empresa certa). Desde a .91
+ *      são dois lados do mesmo caso: o número que chegou da Meta sem empresa
+ *      (`meta_onboardings`) e a EMPRESA que entrou com o Facebook no passo do
+ *      telefone e espera a Time (`whatsapp.status = "esperando_a_time"`, a
+ *      área `primeiros_passos` do checklist). Com os dois, a Time sabe a conta
+ *      da Meta E a empresa, e liga uma à outra;
  *   3. o teste acaba amanhã sem assinatura (falar com quem administra);
  *   4. um dia antes de suspender quem entrou sozinho (ligar para salvar a conta).
  *
@@ -22,6 +27,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { reportar } from "@/lib/avisos/report-da-plataforma";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { logger } from "@/lib/logger";
+// FORK MIA (.91): a empresa que entrou com o Facebook e espera a Time ligar o número.
+import { lerEmpresasEsperandoONumero } from "@/lib/onboarding/primeiros-passos-para-a-time";
 
 import {
   lerEmpresasDoCadastro,
@@ -44,6 +51,8 @@ const dia = (iso: string) => iso.slice(0, 10);
 export function recadosPendentes(entrada: {
   pedidos: Array<{ id: string; empresa: string; plano: string | null }>;
   numeros: Array<{ id: string; conta: string | null }>;
+  /** FORK MIA (.91): as empresas no "esperando a Time" do passo do telefone. */
+  empresasEsperandoONumero?: Array<{ organization_id: string; nome: string; desde: string | null }>;
   empresas: Array<{
     id: string;
     nome: string;
@@ -70,6 +79,16 @@ export function recadosPendentes(entrada: {
       texto:
         `*Número oficial esperando ligação*\n${n.conta ?? "Conta da Meta sem nome"}.\n` +
         "Confira a conta e ligue à empresa certa em Admin › Cadastro incorporado.",
+    });
+  }
+  for (const e of entrada.empresasEsperandoONumero ?? []) {
+    recados.push({
+      chave: `${PREFIXO_DOS_RECADOS}numero_da_empresa:${e.organization_id}${e.desde ? `:${dia(e.desde)}` : ""}`,
+      texto:
+        `*Número oficial esperando ligação*
+${e.nome || "Empresa sem nome"} entrou com o Facebook${e.desde ? ` em ${dia(e.desde)}` : ""} e espera a Time.
+` +
+        "Ache a conta da Meta dela e ligue em Admin › Cadastro incorporado.",
     });
   }
   for (const e of entrada.empresas) {
@@ -112,13 +131,14 @@ export async function mandarRecadosDaJornada(
   try {
     const ligada = await (opcoes.cobrancaLigada ?? (() => moduloLigado(admin, "cobranca")))();
     if (!ligada) return [];
-    const [pedidos, numeros, empresas] = await Promise.all([
+    const [pedidos, numeros, empresasEsperandoONumero, empresas] = await Promise.all([
       lerPedidosDeCadastro(admin).catch(() => []),
       lerNumerosEsperando(admin).catch(() => []),
+      lerEmpresasEsperandoONumero(admin).catch(() => []),
       opcoes.completo ? lerEmpresasDoCadastro(admin, agora).catch(() => []) : Promise.resolve([]),
     ]);
     const enviados: string[] = [];
-    for (const r of recadosPendentes({ pedidos, numeros, empresas, agora })) {
+    for (const r of recadosPendentes({ pedidos, numeros, empresasEsperandoONumero, empresas, agora })) {
       const saiu = await reportar(admin, {
         chave: r.chave,
         horas: UM_ANO_EM_HORAS,

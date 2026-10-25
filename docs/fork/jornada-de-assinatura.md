@@ -165,8 +165,14 @@ faz; aprovar e recusar com o motivo, que vai por e-mail), os números oficiais e
 ligação e o detalhe da empresa com a régua ponto a ponto e o card Cobrança. A empresa de
 demonstração fica de fora. As escritas seguem `falhaDaEscritaDePlatformAdmin` (MFA).
 
-Os passos contam os primeiros passos do upstream (`passosVisiveis`); quando a .91 entrar,
-a contagem passa a ser a dela.
+Os passos contam os primeiros passos do upstream (`passosVisiveis`). Desde a .91, ao lado
+deles vem o "o que falta" pela MESMA fonte do bloco do cliente
+(`lib/onboarding/primeiros-passos-para-a-time.ts`, veja [`primeiros-passos.md`](primeiros-passos.md)):
+na tabela, "faltam M de N" do retrato mais novo (a rodada que o cliente viu no Início; sem
+retrato, ficam só os passos); no detalhe, a conta de agora, item a item, com quem faz (o
+cliente, o assistente ou a Time) e a dependência. No cartão dos números oficiais entram
+também as EMPRESAS que entraram com o Facebook no passo do telefone e esperam a Time
+(`whatsapp.status = "esperando_a_time"`): a Time sabe a conta da Meta e a empresa.
 
 ## 8. Os recados no zap da Time
 
@@ -174,7 +180,9 @@ O mesmo grupo interno dos chamados do assistente (.88), pelo `reportar`
 (`lib/planos-mia/recados.ts`, no cron `report-da-plataforma`). Quatro momentos:
 
 1. pedido novo de cadastro, com o plano escolhido;
-2. número oficial esperando ligação;
+2. número oficial esperando ligação: o número que chegou da Meta sem empresa e, desde a
+   .91, a empresa que entrou com o Facebook e espera a Time (chave
+   `jornada:zap:numero_da_empresa:<empresa>:<dia>`);
 3. o teste acaba amanhã sem assinatura;
 4. um dia antes de suspender quem entrou sozinho.
 
@@ -183,7 +191,7 @@ tem chave própria (`jornada:zap:...`) e sai uma vez. **Com a cobrança desligad
 
 ## 9. Pelo MCP de plataforma
 
-Nove ferramentas novas (`lib/mcp-plataforma/ferramentas/cobranca.ts`; a lista vai a 92),
+Nove ferramentas novas (`lib/mcp-plataforma/ferramentas/cobranca.ts`; a lista vai a 92, e a 94 com as duas das propostas do assistente da .91),
 descritas em [`mcp-de-implantacao.md`](mcp-de-implantacao.md), "A cobrança da jornada de
 assinatura (.90)". Três caixinhas novas no token: `gerir_planos`, `gerir_cobranca` e
 `decidir_cadastro`. Crescem três: `plataforma_ver_cliente` (a cobrança e os módulos com a

@@ -277,4 +277,31 @@ describe("9080 a 9082 · as migrations são idempotentes", () => {
       "3",
     );
   });
+
+  it("com a .90 por baixo: 9070 a 9072 e 9080 a 9082 juntas, na ordem, duas vezes, sem erro", () => {
+    // A .91 sobe por cima da .90: quem atualiza recebe as seis em sequência, e
+    // uma segunda passada (o deploy que repete) não pode quebrar nem duplicar.
+    const pasta = path.resolve(__dirname, "../../supabase/migrations-mia");
+    const seis = [
+      "20261025104713_9070_plano_libera_modulo.sql",
+      "20261025104727_9071_origem_da_empresa.sql",
+      "20261025104741_9072_creditos_por_pix.sql",
+      "20261025200000_9080_propostas_do_assistente.sql",
+      "20261025200100_9081_retratos_do_que_falta.sql",
+      "20261025200200_9082_retencao_das_propostas_e_dos_retratos.sql",
+    ];
+    for (let passada = 0; passada < 2; passada += 1) {
+      for (const nome of seis) sql(readFileSync(path.join(pasta, nome), "utf8"));
+    }
+    expect(
+      valor(
+        `select count(*) from pg_tables where schemaname = 'public' and tablename in ` +
+          `('mia_plano_modulos', 'mia_modulos_do_plano_registro', 'mia_origem_da_empresa', 'mia_compras_de_creditos', ` +
+          `'mia_assistente_propostas', 'mia_assistente_retratos') and rowsecurity;`,
+      ),
+    ).toBe("6");
+    expect(valor(`select count(*) from pg_policies where tablename = 'mia_assistente_propostas' and policyname like 'mia_%';`)).toBe("2");
+    // A retenção (9082, a nossa redefinição da 9051) continua uma função só.
+    expect(valor(`select count(*) from pg_proc where proname = 'fn_mia_expurgar_assistente_vencido';`)).toBe("1");
+  });
 });

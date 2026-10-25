@@ -13,6 +13,11 @@
  * (o cadastro incorporado, `meta_onboardings` sem empresa). A empresa de
  * demonstração fica de fora: não é cliente.
  *
+ * FORK MIA (.91): o "o que falta" de cada empresa sai da MESMA fonte do bloco
+ * do cliente (`lib/onboarding/primeiros-passos-para-a-time.ts`): o retrato
+ * mais novo na lista e a conta de agora no detalhe, ao lado dos passos do
+ * `/onboarding` do upstream.
+ *
  * Nada de dado do cliente final: só a empresa, o plano e quem a administra
  * (e-mail mascarado).
  */
@@ -22,6 +27,13 @@ import { toleranciaDias } from "@/lib/cobranca/configuracao";
 import { env } from "@/lib/env";
 import { maskEmail, maskPhone } from "@/lib/lgpd/mask";
 import { passosVisiveis } from "@/lib/onboarding/passos";
+// FORK MIA (.91): o "o que falta" pela mesma fonte do Início do cliente.
+import {
+  lerRetratosDasEmpresas,
+  oQueFaltaAgora,
+  type OQueFaltaAgora,
+  type OQueFaltaNaLista,
+} from "@/lib/onboarding/primeiros-passos-para-a-time";
 import { ehOperante, tipoDaSuspensao } from "@/lib/organizacao/operante";
 import type { OnboardingState } from "@/lib/schemas/onboarding";
 
@@ -50,6 +62,11 @@ export interface LinhaDaEmpresa {
   teste_ate: string | null;
   proximo: ProximoPasso;
   passos: { feitos: number; de: number };
+  /**
+   * FORK MIA (.91): o "o que falta" do retrato mais novo (a rodada que o
+   * cliente viu no Início). `null` = a empresa nunca abriu o bloco.
+   */
+  o_que_falta: OQueFaltaNaLista | null;
   /** A cobrança que o upstream já deixou pronta (o link da fatura em aberto). */
   link_de_pagamento: string | null;
 }
@@ -101,6 +118,7 @@ function linhaDe(
   planos: Map<string, PlanoComModulos>,
   agora: Date,
   tolerancia: number,
+  retratos: ReadonlyMap<string, OQueFaltaNaLista> = new Map(),
 ): LinhaDaEmpresa {
   const plano = a ? (planos.get(a.plano_id) ?? null) : null;
   const agendado = a?.plano_agendado_id ? (planos.get(a.plano_agendado_id) ?? null) : null;
@@ -123,6 +141,7 @@ function linhaDe(
     teste_ate: a?.trial_ate ?? null,
     proximo: proximoDaRegua(a, orgLida, agora, tolerancia),
     passos: passosFeitos(org.onboarding_state as OnboardingState | null),
+    o_que_falta: retratos.get(org.id) ?? null,
     link_de_pagamento: a?.link_de_pagamento ?? null,
   };
 }
@@ -132,7 +151,7 @@ export async function lerEmpresasDoCadastro(
   admin: SupabaseClient,
   agora: Date = new Date(),
 ): Promise<LinhaDaEmpresa[]> {
-  const [orgs, assinaturas, origens, planos, tolerancia] = await Promise.all([
+  const [orgs, assinaturas, origens, planos, tolerancia, retratos] = await Promise.all([
     admin
       .from("organizations")
       .select(
@@ -144,6 +163,7 @@ export async function lerEmpresasDoCadastro(
     admin.from("mia_origem_da_empresa").select("organization_id, origem").limit(5000),
     lerPlanosComModulos(admin),
     toleranciaDias(),
+    lerRetratosDasEmpresas(admin),
   ]);
   if (orgs.error) throw new Error(`empresas: leitura falhou (${orgs.error.code ?? "sem_codigo"})`);
   if (assinaturas.error)
@@ -182,6 +202,7 @@ export async function lerEmpresasDoCadastro(
         planosPorId,
         agora,
         tolerancia,
+        retratos,
       ),
     );
 }
@@ -301,6 +322,8 @@ export async function lerNumerosEsperando(admin: SupabaseClient): Promise<Numero
 }
 
 export interface DetalheDaEmpresa extends LinhaDaEmpresa {
+  /** FORK MIA (.91): o "o que falta" de AGORA, com o papel de quem administra. `null` = não deu para contar. */
+  o_que_falta_agora: OQueFaltaAgora | null;
   administra: { nome: string | null; email: string | null } | null;
   modulos: OrigemDoModulo[];
   regua: PontoDaRegua[];
@@ -312,7 +335,7 @@ export async function lerDetalheDaEmpresa(
   orgId: string,
   agora: Date = new Date(),
 ): Promise<DetalheDaEmpresa | null> {
-  const [org, assinatura, origem, planos, tolerancia, admins] = await Promise.all([
+  const [org, assinatura, origem, planos, tolerancia, admins, retratos] = await Promise.all([
     admin
       .from("organizations")
       .select("id, display_name, created_at, status, suspended_kind, onboarding_state")
@@ -335,6 +358,7 @@ export async function lerDetalheDaEmpresa(
       .eq("provisional_until_handover", false)
       .order("created_at")
       .limit(1),
+    lerRetratosDasEmpresas(admin, [orgId]),
   ]);
   if (org.error || assinatura.error || origem.error || admins.error)
     throw new Error("empresa: leitura falhou");
@@ -355,6 +379,7 @@ export async function lerDetalheDaEmpresa(
     new Map(planos.map((p) => [p.id, p])),
     agora,
     tolerancia,
+    retratos,
   );
   const primeiro = ((admins.data ?? []) as Array<{ user_id: string }>)[0]?.user_id ?? null;
   let administra: DetalheDaEmpresa["administra"] = null;
@@ -368,6 +393,7 @@ export async function lerDetalheDaEmpresa(
   }
   return {
     ...linha,
+    o_que_falta_agora: await oQueFaltaAgora(admin, orgId),
     administra,
     modulos: await origemDosModulos(admin, orgId),
     regua: reguaDaEmpresa(

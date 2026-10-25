@@ -36,6 +36,8 @@ import { urlDoPainelDaEmpresa } from "@/lib/cobranca/url";
 import { lerVisaoGeral, montarChecklist } from "@/lib/cobranca/visao-geral";
 import { organizacaoDaImplantacao } from "@/lib/implantacao/base";
 import { moduloLigado } from "@/lib/instalacao/modulos";
+// FORK MIA (.91): as empresas que esperam a Time ligar o número oficial.
+import { lerEmpresasEsperandoONumero } from "@/lib/onboarding/primeiros-passos-para-a-time";
 import { atribuirOuTrocarPlano, darPrazo, tornarIsenta } from "@/lib/planos-mia/acoes-do-dono";
 import { conversasEstimadas, MODULOS_DO_PLANO } from "@/lib/planos-mia/catalogo";
 import {
@@ -97,6 +99,8 @@ function linhaParaAPlataforma(l: LinhaDaEmpresa) {
     suspensao_em: l.proximo.suspensao_em,
     link_de_pagamento: l.link_de_pagamento ? "aberto" : null,
     primeiros_passos: l.passos,
+    // FORK MIA (.91): o "o que falta" do retrato mais novo (o que o cliente viu no Início).
+    o_que_falta: l.o_que_falta,
   };
 }
 
@@ -355,8 +359,9 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
     name: "plataforma_listar_assinaturas",
     description:
       "As EMPRESAS POR SITUAÇÃO (em teste, em dia, em atraso, com prazo, suspensa, cancelada, isenta), com plano e plano agendado, origem (cadastro próprio " +
-      "ou implantação), fim do teste, o próximo aviso da régua e a data prevista da suspensão, se há link de pagamento em aberto e quantos primeiros passos " +
-      "foram feitos. A empresa de demonstração fica de fora. Para os pedidos que ainda não viraram empresa, use plataforma_listar_pedidos_de_cadastro.",
+      "ou implantação), fim do teste, o próximo aviso da régua e a data prevista da suspensão, se há link de pagamento em aberto, quantos primeiros passos " +
+      "foram feitos e, desde a .91, o \"o que falta\" do último retrato (faltam, total e quantos faltavam ao entrar, a mesma conta do Início do cliente; " +
+      "null quando a empresa nunca abriu o bloco). A empresa de demonstração fica de fora. Para os pedidos que ainda não viraram empresa, use plataforma_listar_pedidos_de_cadastro.",
     inputSchema: {
       situacao: z.enum(SITUACOES).optional().describe("Filtra por situação. Ausente: todas."),
       so_cadastro_proprio: z
@@ -377,7 +382,8 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
     name: "plataforma_ver_assinatura",
     description:
       "UMA EMPRESA na cobrança: plano e plano agendado, situação, datas (fim do teste, próxima cobrança, prazo), se há link de pagamento em aberto, a régua " +
-      "ponto a ponto (o que já foi e o que vem), quem administra (e-mail mascarado), os primeiros passos e os módulos com a origem (pelo plano ou pela Time).",
+      "ponto a ponto (o que já foi e o que vem), quem administra (e-mail mascarado), os primeiros passos e os módulos com a origem (pelo plano ou pela Time). " +
+      "Desde a .91, o \"o que falta\" de AGORA (o_que_falta_agora: as contas e cada item com a coluna e quem faz, a mesma régua do Início do cliente).",
     inputSchema: { organization_id: ORGANIZACAO },
     exemplo: { organization_id: ORG_DE_EXEMPLO },
     operacao: null,
@@ -394,6 +400,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
           pela_time: m.pela_time,
         })),
         regua: d.regua,
+        o_que_falta_agora: d.o_que_falta_agora,
       };
     },
   },
@@ -561,14 +568,18 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
     name: "plataforma_listar_pedidos_de_cadastro",
     description:
       'Os PEDIDOS DE CADASTRO esperando aprovação (modo do cadastro "com aprovação"): a empresa, quem pediu (e-mail mascarado), o plano escolhido ' +
-      "(sem escolha, o do cadastro) e o que a empresa faz. Para aprovar ou recusar, plataforma_decidir_pedido_de_cadastro.",
+      "(sem escolha, o do cadastro) e o que a empresa faz. Para aprovar ou recusar, plataforma_decidir_pedido_de_cadastro. " +
+      "Desde a .91, também as EMPRESAS que entraram com o Facebook no passo do telefone e esperam a Time ligar o número oficial " +
+      "(empresas_esperando_o_numero; a ligação continua à mão, em Admin › Cadastro incorporado).",
     inputSchema: {},
     exemplo: {},
     operacao: null,
     handler: async (ctx) => {
-      const [pedidos, modo] = await Promise.all([
+      const [pedidos, modo, esperando] = await Promise.all([
         lerPedidosDeCadastro(ctx.admin),
         modoDeCadastro(),
+        // FORK MIA (.91): a empresa no "esperando a Time" do passo do telefone.
+        lerEmpresasEsperandoONumero(ctx.admin),
       ]);
       return {
         modo_do_cadastro: modo,
@@ -580,6 +591,11 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
           plano: p.plano,
           o_que_faz: p.o_que_faz,
           pedido_em: p.criado_em,
+        })),
+        empresas_esperando_o_numero: esperando.map((e) => ({
+          organization_id: e.organization_id,
+          nome: e.nome,
+          entrou_com_facebook_em: e.desde,
         })),
       };
     },
