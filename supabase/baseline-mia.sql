@@ -1908,7 +1908,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261025100500_9065_imagens_das_campanhas_de_email', now())
+values (1, '20261025104741_9072_creditos_por_pix', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -17655,6 +17655,418 @@ on conflict (id) do update
   set public             = excluded.public,
       file_size_limit    = excluded.file_size_limit,
       allowed_mime_types = excluded.allowed_mime_types;
+
+
+-- ─── 9070 · o plano libera módulo ───
+--
+-- Espelho EXATO da migration 9070 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9070 · o plano libera módulo
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: `create table if
+-- not exists`, `create or replace` e `drop trigger if exists`. Desenho em
+-- docs/fork/jornada-de-assinatura.md.
+
+-- ── 1. os módulos de cada plano ─────────────────────────────────────────────
+create table if not exists public.mia_plano_modulos (
+  plano_id uuid primary key references public.cobranca_planos(id) on delete cascade,
+  -- As chaves vendáveis que um plano pode ligar (lib/planos-mia/catalogo.ts,
+  -- `MODULOS_DO_PLANO`). O par TypeScript é vigiado por
+  -- tests/unit/planos-mia-vocabulario.test.ts.
+  modulos text[] not null default '{}'::text[],
+  -- O preço de cada mensagem do Broadcast para quem está no plano, em centavos.
+  -- Nulo = o plano não diz (vale o preço combinado com a empresa, se houver).
+  preco_por_mensagem_cents integer,
+  -- O que o cartão da página de preços mostra. Dado, nunca código.
+  frase text,
+  destaque boolean not null default false,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id) on delete set null,
+  constraint mia_plano_modulos_chaves
+    check (modulos <@ array['disparador', 'email_marketing', 'crm_b2b']::text[]),
+  constraint mia_plano_modulos_preco
+    check (preco_por_mensagem_cents is null or preco_por_mensagem_cents between 0 and 100000),
+  constraint mia_plano_modulos_frase
+    check (frase is null or char_length(frase) <= 160)
+);
+
+comment on table public.mia_plano_modulos is
+  'MIA (9070): o que cada plano de cobranca_planos liga alem dos limites do upstream: os modulos vendaveis, o preco por mensagem do Broadcast e o texto do cartao da pagina de precos. Tabela AO LADO: cobranca_planos e do upstream e nao muda. So o servidor le e escreve.';
+
+alter table public.mia_plano_modulos enable row level security;
+revoke all on public.mia_plano_modulos from anon, authenticated;
+grant select, insert, update, delete on public.mia_plano_modulos to service_role;
+
+-- ── 2. tirar módulo de plano assinado é recusado ─────────────────────────────
+-- Mesmo motivo de o upstream travar o preço do plano assinado: não mudar o que
+-- alguém comprou sem ele pedir. LIGAR um módulo num plano sempre pode (vale na
+-- hora para as empresas dele). O preço por mensagem trava como o preço do plano.
+create or replace function public.fn_mia_plano_modulos_trava_assinantes()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_plano uuid := coalesce(old.plano_id, new.plano_id);
+  v_tira boolean;
+begin
+  if tg_op = 'DELETE' then
+    v_tira := cardinality(old.modulos) > 0 or old.preco_por_mensagem_cents is not null;
+  else
+    v_tira := not (old.modulos <@ new.modulos)
+              or new.preco_por_mensagem_cents is distinct from old.preco_por_mensagem_cents
+              or new.plano_id is distinct from old.plano_id;
+  end if;
+  if v_tira and exists (
+    select 1 from public.cobranca_assinaturas a
+     where a.plano_id = v_plano or a.plano_agendado_id = v_plano or a.plano_troca_pendente_id = v_plano
+  ) then
+    raise exception 'plano_com_assinantes'
+      using errcode = '23514',
+            hint = 'Este plano tem assinantes: os modulos so crescem e o preco por mensagem nao muda. Arquive o plano e crie outro.';
+  end if;
+  return coalesce(new, old);
+end;
+$$;
+
+revoke execute on function public.fn_mia_plano_modulos_trava_assinantes() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_plano_modulos_trava_assinantes on public.mia_plano_modulos;
+create trigger trg_mia_plano_modulos_trava_assinantes
+  before update or delete on public.mia_plano_modulos
+  for each row execute function public.fn_mia_plano_modulos_trava_assinantes();
+
+drop trigger if exists trg_mia_plano_modulos_touch on public.mia_plano_modulos;
+create trigger trg_mia_plano_modulos_touch
+  before update on public.mia_plano_modulos
+  for each row execute function public.fn_touch_updated_at();
+
+-- ── 3. a pergunta: o que o plano desta empresa liga agora ───────────────────
+-- Vazio quando: a cobrança está desligada; a empresa não tem assinatura
+-- (isenta); o plano não tem linha aqui; ou quem pergunta não é da empresa.
+-- `crm_b2b` só entra com o módulo da instalação ligado. Lê `plano_id`, nunca o
+-- agendado: é o upstream quem decide quando a troca vale, e o módulo segue.
+-- `auth.uid()` nulo = o servidor (service_role); a sessão só pergunta da
+-- própria empresa (fn_user_org_ids), ou é admin de plataforma.
+create or replace function public.fn_mia_modulos_do_plano(p_org uuid)
+returns text[]
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce(
+    (select array(
+        select m.modulo
+          from unnest(pm.modulos) as m(modulo)
+         where m.modulo <> 'crm_b2b'
+            or exists (select 1 from public.platform_config c
+                        where c.chave = 'MODULO_CRM_B2B' and c.valor = 'ligado')
+         order by m.modulo)
+       from public.cobranca_assinaturas a
+       join public.mia_plano_modulos pm on pm.plano_id = a.plano_id
+      where a.organization_id = p_org
+        and public.fn_cobranca_ligada()
+        and (auth.uid() is null
+             or p_org in (select public.fn_user_org_ids())
+             or public.fn_is_platform_admin())),
+    '{}'::text[]);
+$$;
+
+revoke execute on function public.fn_mia_modulos_do_plano(uuid) from public, anon;
+grant execute on function public.fn_mia_modulos_do_plano(uuid) to authenticated, service_role;
+
+-- ── 4. o histórico do que ligou e desligou pelo plano ───────────────────────
+create table if not exists public.mia_modulos_do_plano_registro (
+  id bigint generated always as identity primary key,
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  modulo text not null,
+  acao text not null,
+  plano_id uuid references public.cobranca_planos(id) on delete set null,
+  -- De onde veio a mudança: `releitura`, `troca`, `renovacao`, `plano_editado`,
+  -- `atribuicao`, `rodada`... (lib/planos-mia/seguir-o-plano.ts).
+  motivo text not null,
+  em timestamptz not null default now(),
+  constraint mia_modulos_do_plano_registro_modulo
+    check (modulo in ('disparador', 'email_marketing', 'crm_b2b')),
+  constraint mia_modulos_do_plano_registro_acao
+    check (acao in ('ligou', 'desligou')),
+  constraint mia_modulos_do_plano_registro_motivo
+    check (char_length(motivo) between 1 and 60)
+);
+
+comment on table public.mia_modulos_do_plano_registro is
+  'MIA (9070): o historico, por empresa, do modulo que LIGOU ou DESLIGOU pelo plano (a origem "pelo plano"). A ultima linha de cada modulo diz o que a empresa ja sabe; quem decide se o modulo vale e fn_mia_modulos_do_plano, na hora. Gravada so por fn_mia_seguir_o_plano. Desligar nao apaga dado de ninguem.';
+
+create index if not exists idx_mia_modulos_do_plano_registro_org
+  on public.mia_modulos_do_plano_registro (organization_id, modulo, em desc, id desc);
+
+alter table public.mia_modulos_do_plano_registro enable row level security;
+revoke all on public.mia_modulos_do_plano_registro from anon, authenticated;
+grant select, insert on public.mia_modulos_do_plano_registro to service_role;
+grant usage, select on sequence public.mia_modulos_do_plano_registro_id_seq to service_role;
+
+-- ── 5. seguir o plano: grava a diferença entre o que vale e o que foi dito ───
+-- Devolve as mudanças (`[{"modulo":..,"acao":"ligou"|"desligou"}]`) para quem
+-- chama avisar a empresa. Trava por empresa: dois ganchos ao mesmo tempo (o
+-- aviso do provedor e a rodada de 6 h) não gravam a mesma mudança duas vezes.
+create or replace function public.fn_mia_seguir_o_plano(p_org uuid, p_motivo text)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_desejados text[];
+  v_plano uuid;
+  v_mudancas jsonb;
+begin
+  if p_motivo is null or char_length(p_motivo) not between 1 and 60 then
+    raise exception 'motivo_invalido' using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_org::text, 9070));
+  v_desejados := public.fn_mia_modulos_do_plano(p_org);
+  select a.plano_id into v_plano from public.cobranca_assinaturas a where a.organization_id = p_org;
+
+  with ultimo as (
+    select distinct on (r.modulo) r.modulo, r.acao
+      from public.mia_modulos_do_plano_registro r
+     where r.organization_id = p_org
+     order by r.modulo, r.em desc, r.id desc
+  ), mudancas as (
+    select d.m as modulo, 'ligou'::text as acao
+      from unnest(v_desejados) as d(m)
+     where not exists (select 1 from ultimo u where u.modulo = d.m and u.acao = 'ligou')
+    union all
+    select u.modulo, 'desligou'::text
+      from ultimo u
+     where u.acao = 'ligou' and not (u.modulo = any (v_desejados))
+  ), gravadas as (
+    insert into public.mia_modulos_do_plano_registro (organization_id, modulo, acao, plano_id, motivo)
+    select p_org, x.modulo, x.acao, v_plano, p_motivo from mudancas x
+    returning modulo, acao
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('modulo', g.modulo, 'acao', g.acao) order by g.modulo), '[]'::jsonb)
+    into v_mudancas
+    from gravadas g;
+
+  return v_mudancas;
+end;
+$$;
+
+revoke execute on function public.fn_mia_seguir_o_plano(uuid, text) from public, anon, authenticated;
+grant execute on function public.fn_mia_seguir_o_plano(uuid, text) to service_role;
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9071 · a origem da empresa ───
+--
+-- Espelho EXATO da migration 9071 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9071 · a origem da empresa
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3): o gatilho é pendurado ao lado
+-- dos do upstream em `organizations`, como `trg_contacts_anonimizado_limpa_mia`.
+-- Idempotente: `create table if not exists`, `on conflict do nothing`,
+-- `create or replace` e `drop trigger if exists`.
+
+create table if not exists public.mia_origem_da_empresa (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  origem text not null,
+  registrada_em timestamptz not null default now(),
+  constraint mia_origem_da_empresa_origem check (origem in ('cadastro', 'implantacao'))
+);
+
+comment on table public.mia_origem_da_empresa is
+  'MIA (9071): por onde a empresa nasceu. cadastro = a propria pessoa (signup, pedido aprovado); implantacao = a Time (painel, MCP, demonstracao) ou empresa anterior a 9071. Gravada no nascimento pelo gatilho trg_mia_origem_da_empresa. So o servidor le e escreve.';
+
+alter table public.mia_origem_da_empresa enable row level security;
+revoke all on public.mia_origem_da_empresa from anon, authenticated;
+grant select, insert, update on public.mia_origem_da_empresa to service_role;
+
+-- As que já existem entram como implantação. ANTES do gatilho, para a
+-- reaplicação também não mexer em nada (on conflict do nothing).
+insert into public.mia_origem_da_empresa (organization_id, origem)
+select o.id, 'implantacao' from public.organizations o
+on conflict (organization_id) do nothing;
+
+create or replace function public.fn_mia_origem_da_empresa()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  begin
+    insert into public.mia_origem_da_empresa (organization_id, origem)
+    values (
+      new.id,
+      case
+        when new.created_by is null then 'implantacao'
+        when exists (select 1 from public.platform_admins pa
+                      where pa.user_id = new.created_by and pa.revoked_at is null) then 'implantacao'
+        else 'cadastro'
+      end
+    )
+    on conflict (organization_id) do nothing;
+  exception when others then
+    -- A origem é informação: perder uma linha aqui é melhor que impedir a
+    -- empresa de nascer. A tela mostra "origem desconhecida".
+    raise warning 'mia_origem_da_empresa: origem nao gravada para % (%)', new.id, sqlstate;
+  end;
+  return null;
+end;
+$$;
+
+revoke execute on function public.fn_mia_origem_da_empresa() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_origem_da_empresa on public.organizations;
+create trigger trg_mia_origem_da_empresa
+  after insert on public.organizations
+  for each row execute function public.fn_mia_origem_da_empresa();
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9072 · créditos por Pix ───
+--
+-- Espelho EXATO da migration 9072 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9072 · créditos por Pix
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente.
+
+-- ── 1. os pacotes à venda ───────────────────────────────────────────────────
+create table if not exists public.mia_pacotes_de_creditos (
+  id uuid primary key default gen_random_uuid(),
+  valor_cents bigint not null,
+  ativo boolean not null default true,
+  ordem integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id) on delete set null,
+  constraint mia_pacotes_de_creditos_valor check (valor_cents between 500 and 10000000)
+);
+
+comment on table public.mia_pacotes_de_creditos is
+  'MIA (9072): os pacotes de credito (Broadcast e e-mail) que a empresa compra por Pix pelo Asaas da instalacao. Valor e dado, configurado pelo MCP. Desativar tira da tela e nao mexe em compra feita.';
+
+create unique index if not exists uq_mia_pacotes_de_creditos_valor_ativo
+  on public.mia_pacotes_de_creditos (valor_cents) where ativo;
+
+alter table public.mia_pacotes_de_creditos enable row level security;
+revoke all on public.mia_pacotes_de_creditos from anon, authenticated;
+grant select, insert, update on public.mia_pacotes_de_creditos to service_role;
+
+drop trigger if exists trg_mia_pacotes_de_creditos_touch on public.mia_pacotes_de_creditos;
+create trigger trg_mia_pacotes_de_creditos_touch
+  before update on public.mia_pacotes_de_creditos
+  for each row execute function public.fn_touch_updated_at();
+
+-- ── 2. cada compra ──────────────────────────────────────────────────────────
+create table if not exists public.mia_compras_de_creditos (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  valor_cents bigint not null,
+  provedor text not null default 'asaas',
+  modo text,
+  -- A cobrança avulsa no Asaas (`pay_...`). Nula só no instante entre a reserva
+  -- e a resposta do provedor (`criando`).
+  pagamento_ref text,
+  link text,
+  pix_copia_e_cola text,
+  status text not null default 'criando',
+  criada_por uuid references auth.users(id) on delete set null,
+  criada_em timestamptz not null default now(),
+  paga_em timestamptz,
+  encerrada_em timestamptz,
+  relida_em timestamptz,
+  updated_at timestamptz not null default now(),
+  constraint mia_compras_de_creditos_valor check (valor_cents between 500 and 10000000),
+  constraint mia_compras_de_creditos_provedor check (provedor in ('asaas')),
+  constraint mia_compras_de_creditos_modo check (modo is null or modo in ('teste', 'producao')),
+  constraint mia_compras_de_creditos_status
+    check (status in ('criando', 'aguardando', 'paga', 'cancelada', 'expirada')),
+  constraint mia_compras_de_creditos_ref_quando_aguarda
+    check (status = 'criando' or status in ('cancelada', 'expirada') or pagamento_ref is not null)
+);
+
+comment on table public.mia_compras_de_creditos is
+  'MIA (9072): cada compra de credito por Pix. O valor entra na carteira (tenant_wallet_ledger, ref_kind compra_pix) so quando a releitura no Asaas diz pago, por fn_mia_confirmar_compra_de_creditos. Nenhum dado do pagador fica aqui: o CPF/CNPJ esta so no Asaas. So o servidor le e escreve.';
+
+create unique index if not exists uq_mia_compras_de_creditos_ref
+  on public.mia_compras_de_creditos (pagamento_ref) where pagamento_ref is not null;
+create index if not exists idx_mia_compras_de_creditos_org
+  on public.mia_compras_de_creditos (organization_id, criada_em desc);
+create index if not exists idx_mia_compras_de_creditos_aguardando
+  on public.mia_compras_de_creditos (status, criada_em) where status in ('criando', 'aguardando');
+
+alter table public.mia_compras_de_creditos enable row level security;
+revoke all on public.mia_compras_de_creditos from anon, authenticated;
+grant select, insert, update on public.mia_compras_de_creditos to service_role;
+
+drop trigger if exists trg_mia_compras_de_creditos_touch on public.mia_compras_de_creditos;
+create trigger trg_mia_compras_de_creditos_touch
+  before update on public.mia_compras_de_creditos
+  for each row execute function public.fn_touch_updated_at();
+
+-- ── 3. confirmar: o lançamento e a marca numa transação só ──────────────────
+-- Chamada DEPOIS de a releitura no Asaas dizer pago (lib/carteira/compra-pelo-asaas.ts).
+-- Trava a linha; compra já paga devolve a mesma resposta sem lançar de novo; o
+-- índice único da carteira (organization_id, ref_kind, ref_id) é a segunda trava.
+create or replace function public.fn_mia_confirmar_compra_de_creditos(p_compra uuid, p_pago_em timestamptz)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v public.mia_compras_de_creditos%rowtype;
+  v_lancamento uuid;
+begin
+  select * into v from public.mia_compras_de_creditos where id = p_compra for update;
+  if not found then
+    raise exception 'compra_inexistente' using errcode = '22023';
+  end if;
+  if v.status = 'paga' then
+    return jsonb_build_object('mudou', false, 'status', 'paga', 'organization_id', v.organization_id);
+  end if;
+  if v.status not in ('aguardando', 'criando', 'expirada', 'cancelada') or v.pagamento_ref is null then
+    raise exception 'compra_sem_pagamento' using errcode = '22023';
+  end if;
+
+  insert into public.tenant_wallet_ledger (organization_id, tipo, amount_cents, currency, occurred_at, ref_kind, ref_id, note)
+  values (v.organization_id, 'credito', v.valor_cents, 'BRL', coalesce(p_pago_em, now()), 'compra_pix', v.id::text,
+          'Créditos comprados por Pix')
+  on conflict (organization_id, ref_kind, ref_id) where ref_kind is not null and ref_id is not null do nothing
+  returning id into v_lancamento;
+
+  update public.mia_compras_de_creditos
+     set status = 'paga', paga_em = coalesce(p_pago_em, now()), relida_em = now()
+   where id = v.id;
+
+  return jsonb_build_object('mudou', true, 'status', 'paga', 'organization_id', v.organization_id,
+                            'lancou', v_lancamento is not null, 'valor_cents', v.valor_cents);
+end;
+$$;
+
+revoke execute on function public.fn_mia_confirmar_compra_de_creditos(uuid, timestamptz) from public, anon, authenticated;
+grant execute on function public.fn_mia_confirmar_compra_de_creditos(uuid, timestamptz) to service_role;
+
+notify pgrst, 'reload schema';
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
