@@ -57,7 +57,8 @@ export const OPERACAO_GERIR_COBRANCA = "gerir_cobranca";
 export const OPERACAO_DECIDIR_CADASTRO = "decidir_cadastro";
 
 const reais = (cents: number | null) => (cents === null ? null : Math.round(cents) / 100);
-const centavos = (r: number | null | undefined) => (r === null || r === undefined ? r : Math.round(r * 100));
+const centavos = (r: number | null | undefined) =>
+  r === null || r === undefined ? r : Math.round(r * 100);
 
 function planoParaAPlataforma(p: PlanoComModulos, assinantes: number) {
   return {
@@ -102,7 +103,9 @@ function linhaParaAPlataforma(l: LinhaDaEmpresa) {
 async function acharPlano(ctx: ContextoDaFerramenta, valor: string): Promise<PlanoComModulos> {
   const planos = (await lerPlanosComModulos(ctx.admin)).filter((p) => p.arquivado_em === null);
   const v = valor.trim().toLocaleLowerCase("pt-BR");
-  const achado = planos.find((p) => p.id === valor.trim()) ?? planos.find((p) => p.nome.toLocaleLowerCase("pt-BR") === v);
+  const achado =
+    planos.find((p) => p.id === valor.trim()) ??
+    planos.find((p) => p.nome.toLocaleLowerCase("pt-BR") === v);
   if (!achado) {
     recusar(
       `plano não encontrado: "${valor}". Os planos ativos são: ${planos.map((p) => p.nome).join(", ") || "nenhum"}. ` +
@@ -121,27 +124,93 @@ async function exigirCobrancaLigada(ctx: ContextoDaFerramenta): Promise<void> {
   }
 }
 
-const ator = (ctx: ContextoDaFerramenta) => ({ userId: ctx.autorUserId, tokenId: ctx.tokenId, requestId: ctx.requestId });
+const ator = (ctx: ContextoDaFerramenta) => ({
+  userId: ctx.autorUserId,
+  tokenId: ctx.tokenId,
+  requestId: ctx.requestId,
+});
 
 const PLANO_PEDIDO = z.object({
-  nome: z.string().trim().min(1).max(60).describe("O nome do plano (é a chave: chamar de novo com o mesmo nome ajusta, não duplica)."),
-  preco: z.number().min(5).max(1_000_000).describe("Preço por período, em REAIS (ex.: 297). Mínimo R$ 5,00. Não muda depois que alguém assina."),
-  intervalo: z.enum(["mes", "ano"]).optional().describe('"mes" (padrão) ou "ano". Não muda depois que alguém assina.'),
-  teste_dias: z.number().int().min(0).max(90).optional().describe("Dias de teste grátis (0 a 90; padrão 14; 0 = entrada paga)."),
-  pessoas: z.number().int().min(1).nullable().optional().describe("Máximo de pessoas na equipe. null = sem limite."),
-  numeros: z.number().int().min(1).nullable().optional().describe("Máximo de números conectados. null = sem limite."),
+  nome: z
+    .string()
+    .trim()
+    .min(1)
+    .max(60)
+    .describe("O nome do plano (é a chave: chamar de novo com o mesmo nome ajusta, não duplica)."),
+  preco: z
+    .number()
+    .min(5)
+    .max(1_000_000)
+    .describe(
+      "Preço por período, em REAIS (ex.: 297). Mínimo R$ 5,00. Não muda depois que alguém assina.",
+    ),
+  intervalo: z
+    .enum(["mes", "ano"])
+    .optional()
+    .describe('"mes" (padrão) ou "ano". Não muda depois que alguém assina.'),
+  teste_dias: z
+    .number()
+    .int()
+    .min(0)
+    .max(90)
+    .optional()
+    .describe("Dias de teste grátis (0 a 90; padrão 14; 0 = entrada paga)."),
+  pessoas: z
+    .number()
+    .int()
+    .min(1)
+    .nullable()
+    .optional()
+    .describe("Máximo de pessoas na equipe. null = sem limite."),
+  numeros: z
+    .number()
+    .int()
+    .min(1)
+    .nullable()
+    .optional()
+    .describe("Máximo de números conectados. null = sem limite."),
   teto_ia_usd: z
     .number()
     .min(1)
     .nullable()
     .optional()
-    .describe("Teto de uso de IA por mês, em DÓLAR (só a plataforma vê; o cliente vê cerca de N conversas). null = sem teto."),
-  modulos: z.array(z.enum(MODULOS_DO_PLANO)).max(3).optional().describe('Os módulos que o plano liga: "disparador" (Broadcast), "email_marketing", "crm_b2b" (Vendas B2B, exige o módulo da instalação).'),
-  preco_broadcast: z.number().min(0).max(1000).nullable().optional().describe("Preço de cada mensagem do Broadcast, em REAIS (ex.: 0.12). Não muda depois que alguém assina."),
-  frase: z.string().trim().max(160).nullable().optional().describe("A frase do cartão na página de preços."),
+    .describe(
+      "Teto de uso de IA por mês, em DÓLAR (só a plataforma vê; o cliente vê cerca de N conversas). null = sem teto.",
+    ),
+  modulos: z
+    .array(z.enum(MODULOS_DO_PLANO))
+    .max(3)
+    .optional()
+    .describe(
+      'Os módulos que o plano liga: "disparador" (Broadcast), "email_marketing", "crm_b2b" (Vendas B2B, exige o módulo da instalação).',
+    ),
+  preco_broadcast: z
+    .number()
+    .min(0)
+    .max(1000)
+    .nullable()
+    .optional()
+    .describe(
+      "Preço de cada mensagem do Broadcast, em REAIS (ex.: 0.12). Não muda depois que alguém assina.",
+    ),
+  frase: z
+    .string()
+    .trim()
+    .max(160)
+    .nullable()
+    .optional()
+    .describe("A frase do cartão na página de preços."),
   destaque: z.boolean().optional().describe('O selo "Mais escolhido" no cartão.'),
-  oferecido: z.boolean().optional().describe("true (padrão): aparece na página de preços e no cadastro. false: plano escondido, só a Time atribui."),
-  padrao_no_cadastro: z.boolean().optional().describe("O plano em que nasce quem não escolhe (entrada pelo Google). Só um."),
+  oferecido: z
+    .boolean()
+    .optional()
+    .describe(
+      "true (padrão): aparece na página de preços e no cadastro. false: plano escondido, só a Time atribui.",
+    ),
+  padrao_no_cadastro: z
+    .boolean()
+    .optional()
+    .describe("O plano em que nasce quem não escolhe (entrada pelo Google). Só um."),
 });
 
 export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
@@ -163,8 +232,11 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
         lerPacotesAtivos(ctx.admin),
       ]);
       const assinantes = new Map<string, number>();
-      for (const l of empresas) if (l.plano) assinantes.set(l.plano.id, (assinantes.get(l.plano.id) ?? 0) + 1);
-      const porSituacao = Object.fromEntries(SITUACOES.map((s) => [s, empresas.filter((l) => l.situacao === s).length]));
+      for (const l of empresas)
+        if (l.plano) assinantes.set(l.plano.id, (assinantes.get(l.plano.id) ?? 0) + 1);
+      const porSituacao = Object.fromEntries(
+        SITUACOES.map((s) => [s, empresas.filter((l) => l.situacao === s).length]),
+      );
       const base = {
         ligada,
         modo_do_cadastro: modo,
@@ -179,7 +251,8 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       if (!ligada) {
         return {
           ...base,
-          aviso: "A cobrança está desligada: toda empresa é isenta, os planos não valem e nenhum módulo vem pelo plano. Quem liga é uma pessoa, em Admin › Recursos opcionais.",
+          aviso:
+            "A cobrança está desligada: toda empresa é isenta, os planos não valem e nenhum módulo vem pelo plano. Quem liga é uma pessoa, em Admin › Recursos opcionais.",
         };
       }
       const visao = await lerVisaoGeral(ctx.admin);
@@ -211,11 +284,22 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
         .array(z.number().min(5).max(100_000))
         .max(10)
         .optional()
-        .describe("Os valores dos pacotes de crédito por Pix, em reais (ex.: [100, 250, 500]). Ausente: os pacotes ficam como estão."),
+        .describe(
+          "Os valores dos pacotes de crédito por Pix, em reais (ex.: [100, 250, 500]). Ausente: os pacotes ficam como estão.",
+        ),
     },
     exemplo: {
       planos: [
-        { nome: "Essencial", preco: 297, teste_dias: 14, pessoas: 3, numeros: 1, teto_ia_usd: 15, modulos: [], oferecido: true },
+        {
+          nome: "Essencial",
+          preco: 297,
+          teste_dias: 14,
+          pessoas: 3,
+          numeros: 1,
+          teto_ia_usd: 15,
+          modulos: [],
+          oferecido: true,
+        },
         {
           nome: "Profissional",
           preco: 597,
@@ -252,8 +336,15 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       const r = await garantirPlanos(ctx.admin, pedidos, ator(ctx));
       let pacotes: { ativos: number[]; desativados: number[] } | null = null;
       if (Array.isArray(args.pacotes_de_creditos) && r.recusas.every((x) => x.plano !== "*")) {
-        const g = await garantirPacotesDeCreditos(ctx.admin, (args.pacotes_de_creditos as number[]).map((v) => Math.round(v * 100)), ator(ctx));
-        pacotes = { ativos: g.ativos.map((v) => v / 100), desativados: g.desativados.map((v) => v / 100) };
+        const g = await garantirPacotesDeCreditos(
+          ctx.admin,
+          (args.pacotes_de_creditos as number[]).map((v) => Math.round(v * 100)),
+          ator(ctx),
+        );
+        pacotes = {
+          ativos: g.ativos.map((v) => v / 100),
+          desativados: g.desativados.map((v) => v / 100),
+        };
       }
       return { ...r, ...(pacotes ? { pacotes_de_creditos: pacotes } : {}) };
     },
@@ -266,7 +357,10 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       "foram feitos. A empresa de demonstração fica de fora. Para os pedidos que ainda não viraram empresa, use plataforma_listar_pedidos_de_cadastro.",
     inputSchema: {
       situacao: z.enum(SITUACOES).optional().describe("Filtra por situação. Ausente: todas."),
-      so_cadastro_proprio: z.boolean().optional().describe("true: só quem entrou sozinho pelo cadastro (esconde as implantadas pela Time)."),
+      so_cadastro_proprio: z
+        .boolean()
+        .optional()
+        .describe("true: só quem entrou sozinho pelo cadastro (esconde as implantadas pela Time)."),
     },
     exemplo: { situacao: "atraso", so_cadastro_proprio: true },
     operacao: null,
@@ -291,7 +385,11 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       return {
         ...linhaParaAPlataforma(d),
         administra: d.administra,
-        modulos: d.modulos.map((m) => ({ modulo: m.modulo, pelo_plano: m.pelo_plano, pela_time: m.pela_time })),
+        modulos: d.modulos.map((m) => ({
+          modulo: m.modulo,
+          pelo_plano: m.pelo_plano,
+          pela_time: m.pela_time,
+        })),
         regua: d.regua,
       };
     },
@@ -305,21 +403,35 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       "O QUE NÃO FAZ: não cancela a assinatura (é decisão do cliente, na tela dele) nem marca como pago.",
     inputSchema: {
       organization_id: ORGANIZACAO,
-      plano: z.string().trim().min(1).max(80).describe("O nome do plano (ou o id). Veja os planos em plataforma_ver_cobranca."),
+      plano: z
+        .string()
+        .trim()
+        .min(1)
+        .max(80)
+        .describe("O nome do plano (ou o id). Veja os planos em plataforma_ver_cobranca."),
     },
     exemplo: { organization_id: ORG_DE_EXEMPLO, plano: "Profissional" },
     operacao: OPERACAO_GERIR_COBRANCA,
     handler: async (ctx, args) => {
       await exigirCobrancaLigada(ctx);
       const plano = await acharPlano(ctx, String(args.plano));
-      const r = await atribuirOuTrocarPlano(ctx.admin, String(args.organization_id), plano.id, ator(ctx));
+      const r = await atribuirOuTrocarPlano(
+        ctx.admin,
+        String(args.organization_id),
+        plano.id,
+        ator(ctx),
+      );
       if (!r.ok) {
-        const oQueTirar = (r.details as { o_que_tirar?: Record<string, number> } | undefined)?.o_que_tirar;
+        const oQueTirar = (r.details as { o_que_tirar?: Record<string, number> } | undefined)
+          ?.o_que_tirar;
         if (r.code === "uso_acima_do_plano" && oQueTirar) {
           return {
             ok: false,
             erro: "uso_acima_do_plano",
-            o_que_tirar: Object.entries(oQueTirar).map(([recurso, n]) => ({ recurso: recurso === "assentos" ? "pessoas" : "numeros", tirar: n })),
+            o_que_tirar: Object.entries(oQueTirar).map(([recurso, n]) => ({
+              recurso: recurso === "assentos" ? "pessoas" : "numeros",
+              tirar: n,
+            })),
             mensagem: `O uso atual não cabe no ${plano.nome}. Revogue acesso em Equipe ou exclua números em Conexões e tente de novo.`,
           };
         }
@@ -336,11 +448,19 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       "administra a empresa. O QUE NÃO FAZ: não marca como pago; o pagamento só vem do aviso do provedor e da releitura.",
     inputSchema: {
       organization_id: ORGANIZACAO,
-      documento: z.string().trim().max(32).optional().describe("CPF ou CNPJ de quem paga, com ou sem máscara. Só na primeira vez, no Asaas."),
+      documento: z
+        .string()
+        .trim()
+        .max(32)
+        .optional()
+        .describe("CPF ou CNPJ de quem paga, com ou sem máscara. Só na primeira vez, no Asaas."),
     },
     exemplo: { organization_id: ORG_DE_EXEMPLO },
     operacao: OPERACAO_GERIR_COBRANCA,
-    redigirParaAuditoria: (args) => ({ organization_id: args.organization_id, documento: args.documento ? "informado" : "ausente" }),
+    redigirParaAuditoria: (args) => ({
+      organization_id: args.organization_id,
+      documento: args.documento ? "informado" : "ausente",
+    }),
     handler: async (ctx, args) => {
       await exigirCobrancaLigada(ctx);
       const orgId = String(args.organization_id);
@@ -359,9 +479,12 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       const vivo = (r.details as { link_de_pagamento?: unknown } | undefined)?.link_de_pagamento;
       if (r.code === "pagamento_em_andamento" && typeof vivo === "string") return { url: vivo };
       const frases: Record<string, string> = {
-        not_found: "Esta empresa é isenta: atribua um plano (plataforma_atribuir_plano) antes de gerar o link.",
-        provedor_nao_conectado: "O provedor de pagamento não está conectado: uma pessoa conecta em Admin › Cobrança › Conexão.",
-        documento_obrigatorio: "No Asaas a primeira cobrança pede o CPF ou CNPJ de quem paga: passe `documento`.",
+        not_found:
+          "Esta empresa é isenta: atribua um plano (plataforma_atribuir_plano) antes de gerar o link.",
+        provedor_nao_conectado:
+          "O provedor de pagamento não está conectado: uma pessoa conecta em Admin › Cobrança › Conexão.",
+        documento_obrigatorio:
+          "No Asaas a primeira cobrança pede o CPF ou CNPJ de quem paga: passe `documento`.",
       };
       recusar(frases[r.code] ?? r.message);
     },
@@ -375,8 +498,18 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
     inputSchema: {
       organization_id: ORGANIZACAO,
       acao: z.enum(["dar_prazo", "isentar", "voltar_a_cobranca"]),
-      ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'use "AAAA-MM-DD"').optional().describe("Com dar_prazo: o último dia do prazo (até 60 dias)."),
-      plano: z.string().trim().min(1).max(80).optional().describe("Com voltar_a_cobranca: o nome do plano."),
+      ate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, 'use "AAAA-MM-DD"')
+        .optional()
+        .describe("Com dar_prazo: o último dia do prazo (até 60 dias)."),
+      plano: z
+        .string()
+        .trim()
+        .min(1)
+        .max(80)
+        .optional()
+        .describe("Com voltar_a_cobranca: o nome do plano."),
     },
     exemplo: { organization_id: ORG_DE_EXEMPLO, acao: "dar_prazo", ate: "2026-11-15" },
     operacao: OPERACAO_GERIR_COBRANCA,
@@ -386,7 +519,12 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       if (args.acao === "dar_prazo") {
         if (typeof args.ate !== "string") recusar('dar_prazo precisa de `ate` ("AAAA-MM-DD").');
         // O fim daquele dia em São Paulo, como o card faz no fuso de quem clica.
-        const r = await darPrazo(ctx.admin, orgId, new Date(`${args.ate}T23:59:59-03:00`), ator(ctx));
+        const r = await darPrazo(
+          ctx.admin,
+          orgId,
+          new Date(`${args.ate}T23:59:59-03:00`),
+          ator(ctx),
+        );
         if (!r.ok) recusar(r.message);
         return r;
       }
@@ -396,8 +534,15 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
         return r;
       }
       if (typeof args.plano !== "string") recusar("voltar_a_cobranca precisa de `plano`.");
-      const { data: tem } = await ctx.admin.from("cobranca_assinaturas").select("organization_id").eq("organization_id", orgId).maybeSingle();
-      if (tem) recusar("esta empresa já está na cobrança. Para trocar o plano, use plataforma_atribuir_plano.");
+      const { data: tem } = await ctx.admin
+        .from("cobranca_assinaturas")
+        .select("organization_id")
+        .eq("organization_id", orgId)
+        .maybeSingle();
+      if (tem)
+        recusar(
+          "esta empresa já está na cobrança. Para trocar o plano, use plataforma_atribuir_plano.",
+        );
       const plano = await acharPlano(ctx, args.plano);
       const r = await atribuirOuTrocarPlano(ctx.admin, orgId, plano.id, ator(ctx));
       if (!r.ok) recusar(r.message);
@@ -407,16 +552,26 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
   {
     name: "plataforma_listar_pedidos_de_cadastro",
     description:
-      "Os PEDIDOS DE CADASTRO esperando aprovação (modo do cadastro \"com aprovação\"): a empresa, quem pediu (e-mail mascarado), o plano escolhido " +
+      'Os PEDIDOS DE CADASTRO esperando aprovação (modo do cadastro "com aprovação"): a empresa, quem pediu (e-mail mascarado), o plano escolhido ' +
       "(sem escolha, o do cadastro) e o que a empresa faz. Para aprovar ou recusar, plataforma_decidir_pedido_de_cadastro.",
     inputSchema: {},
     operacao: null,
     handler: async (ctx) => {
-      const [pedidos, modo] = await Promise.all([lerPedidosDeCadastro(ctx.admin), modoDeCadastro()]);
+      const [pedidos, modo] = await Promise.all([
+        lerPedidosDeCadastro(ctx.admin),
+        modoDeCadastro(),
+      ]);
       return {
         modo_do_cadastro: modo,
         total: pedidos.length,
-        pedidos: pedidos.map((p) => ({ pedido_id: p.id, empresa: p.empresa, email: p.email, plano: p.plano, o_que_faz: p.o_que_faz, pedido_em: p.criado_em })),
+        pedidos: pedidos.map((p) => ({
+          pedido_id: p.id,
+          empresa: p.empresa,
+          email: p.email,
+          plano: p.plano,
+          o_que_faz: p.o_que_faz,
+          pedido_em: p.criado_em,
+        })),
       };
     },
   },
@@ -427,16 +582,28 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       "e-mail para quem pediu. Rodar de novo num pedido decidido devolve a decisão anterior. A conta precisa ter confirmado o e-mail para ser aprovada. " +
       "O QUE NÃO FAZ: não muda o modo do cadastro (fica em /admin/cadastro, porque abre ou fecha a porta da instalação).",
     inputSchema: {
-      pedido_id: z.string().uuid().describe("O id do pedido (plataforma_listar_pedidos_de_cadastro)."),
+      pedido_id: z
+        .string()
+        .uuid()
+        .describe("O id do pedido (plataforma_listar_pedidos_de_cadastro)."),
       decisao: z.enum(["aprovar", "recusar"]),
-      motivo: z.string().trim().max(300).optional().describe("Com recusar: o motivo, que vai no e-mail para quem pediu."),
+      motivo: z
+        .string()
+        .trim()
+        .max(300)
+        .optional()
+        .describe("Com recusar: o motivo, que vai no e-mail para quem pediu."),
     },
     exemplo: { pedido_id: "00000000-0000-4000-8000-0000000000aa", decisao: "aprovar" },
     operacao: OPERACAO_DECIDIR_CADASTRO,
     handler: async (ctx, args) => {
       const r = await decidirPedidoDeCadastro(
         ctx.admin,
-        { pedidoId: String(args.pedido_id), decisao: args.decisao as "aprovar" | "recusar", motivo: typeof args.motivo === "string" ? args.motivo : null },
+        {
+          pedidoId: String(args.pedido_id),
+          decisao: args.decisao as "aprovar" | "recusar",
+          motivo: typeof args.motivo === "string" ? args.motivo : null,
+        },
         ator(ctx),
       );
       if (!r.ok) recusar(r.message);

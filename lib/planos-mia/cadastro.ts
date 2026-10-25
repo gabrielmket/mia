@@ -66,7 +66,8 @@ export async function lerCadastroEmCartoes(
   planoInicialDoUpstream: string | undefined,
   planoDoLinkPedido: string | null | undefined,
 ): Promise<CadastroEmCartoes> {
-  if (oferecidos.length === 0) return { cartoes: [], planoMarcado: planoInicialDoUpstream, linkSemPlano: false };
+  if (oferecidos.length === 0)
+    return { cartoes: [], planoMarcado: planoInicialDoUpstream, linkSemPlano: false };
   let planos: PlanoComModulos[];
   try {
     planos = await lerPlanosComModulos(admin);

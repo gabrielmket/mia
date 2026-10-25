@@ -24,13 +24,23 @@ const ERROS: Record<string, string> = {
  * empresa no plano escolhido e o teste começa; recusar é final. O motivo por
  * e-mail sai pelo MCP (`plataforma_decidir_pedido_de_cadastro`).
  */
-export function PedidosDoCadastro({ pedidos, modoComAprovacao }: { pedidos: readonly PedidoDeCadastro[]; modoComAprovacao: boolean }) {
+export function PedidosDoCadastro({
+  pedidos,
+  modoComAprovacao,
+}: {
+  pedidos: readonly PedidoDeCadastro[];
+  modoComAprovacao: boolean;
+}) {
   const t = useT();
   const idioma = useIdioma();
   const [erro, setErro] = useState<string | null>(null);
   const [emCurso, startTransition] = useTransition();
   const router = useRouter();
-  const quando = new Intl.DateTimeFormat(idioma, { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" });
+  const quando = new Intl.DateTimeFormat(idioma, {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/Sao_Paulo",
+  });
 
   function decidir(requestId: string, decision: "approve" | "reject") {
     setErro(null);
@@ -47,7 +57,9 @@ export function PedidosDoCadastro({ pedidos, modoComAprovacao }: { pedidos: read
       <h2 className="text-sm font-semibold">{t("Pedidos aguardando aprovação")}</h2>
       {!modoComAprovacao && (
         <p className="text-xs text-muted-foreground">
-          {t("O cadastro desta instalação não está no modo com aprovação: pedido novo não entra nesta fila.")}
+          {t(
+            "O cadastro desta instalação não está no modo com aprovação: pedido novo não entra nesta fila.",
+          )}
         </p>
       )}
       {pedidos.length === 0 ? (
@@ -55,18 +67,33 @@ export function PedidosDoCadastro({ pedidos, modoComAprovacao }: { pedidos: read
       ) : (
         <ul className="space-y-2">
           {pedidos.map((p) => (
-            <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3" data-pedido={p.id}>
+            <li
+              key={p.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+              data-pedido={p.id}
+            >
               <div className="min-w-0 space-y-0.5 text-sm">
                 <p className="font-medium">{p.empresa}</p>
                 <p className="text-xs text-muted-foreground">
-                  {[p.email ?? "—", p.plano ? t("plano {plano}").replace("{plano}", p.plano) : t("plano padrão")].join(" · ")}
+                  {[
+                    p.email ?? "—",
+                    p.plano ? t("plano {plano}").replace("{plano}", p.plano) : t("plano padrão"),
+                  ].join(" · ")}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {[p.o_que_faz ?? t("não disse o que a empresa faz"), quando.format(new Date(p.criado_em))].join(" · ")}
+                  {[
+                    p.o_que_faz ?? t("não disse o que a empresa faz"),
+                    quando.format(new Date(p.criado_em)),
+                  ].join(" · ")}
                 </p>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={emCurso} onClick={() => decidir(p.id, "reject")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={emCurso}
+                  onClick={() => decidir(p.id, "reject")}
+                >
                   {t("Recusar")}
                 </Button>
                 <Button size="sm" disabled={emCurso} onClick={() => decidir(p.id, "approve")}>
@@ -83,7 +110,9 @@ export function PedidosDoCadastro({ pedidos, modoComAprovacao }: { pedidos: read
         </p>
       )}
       <p className="text-xs text-muted-foreground">
-        {t("Aprovar cria a empresa no plano escolhido e o teste começa; recusar é final para aquela conta.")}
+        {t(
+          "Aprovar cria a empresa no plano escolhido e o teste começa; recusar é final para aquela conta.",
+        )}
       </p>
     </Card>
   );

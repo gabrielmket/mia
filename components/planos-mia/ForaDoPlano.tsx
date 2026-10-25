@@ -14,14 +14,26 @@ import { ROTULO_DO_MODULO_DO_PLANO, type ModuloDoPlano } from "@/lib/planos-mia/
  * guardados: voltar ao plano devolve tudo. Desenhada pelo servidor, no idioma
  * de quem abriu; o botão de trocar de plano só para quem administra.
  */
-export function ForaDoPlano({ modulo, idioma, administra }: { modulo: ModuloDoPlano; idioma: Idioma; administra: boolean }) {
+export function ForaDoPlano({
+  modulo,
+  idioma,
+  administra,
+}: {
+  modulo: ModuloDoPlano;
+  idioma: Idioma;
+  administra: boolean;
+}) {
   const t = (s: string) => traduzir(s, idioma);
   const nome = t(ROTULO_DO_MODULO_DO_PLANO[modulo].rotulo);
   return (
     <div className="p-6">
       <Card className="max-w-xl space-y-3 p-6" data-fora-do-plano={modulo}>
-        <h1 className="text-lg font-semibold">{t("{modulo} não está no plano da sua empresa").replace("{modulo}", nome)}</h1>
-        <p className="text-sm text-muted-foreground">{t(ROTULO_DO_MODULO_DO_PLANO[modulo].descricao)}</p>
+        <h1 className="text-lg font-semibold">
+          {t("{modulo} não está no plano da sua empresa").replace("{modulo}", nome)}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {t(ROTULO_DO_MODULO_DO_PLANO[modulo].descricao)}
+        </p>
         <p className="text-sm text-muted-foreground">
           {t("O que já foi feito aqui continua guardado e volta quando o módulo voltar.")}
         </p>

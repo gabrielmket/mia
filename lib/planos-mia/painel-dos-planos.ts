@@ -13,16 +13,28 @@ import { modulosLigados } from "@/lib/instalacao/modulos";
 import { conversasEstimadas } from "./catalogo";
 import { lerPlanosComModulos } from "./leitura";
 
-export async function lerPainelDosPlanos(admin: SupabaseClient): Promise<{ planos: PlanoComLado[]; crmB2bNaInstalacao: boolean }> {
+export async function lerPainelDosPlanos(
+  admin: SupabaseClient,
+): Promise<{ planos: PlanoComLado[]; crmB2bNaInstalacao: boolean }> {
   const [planos, assinaturas, ligados] = await Promise.all([
     lerPlanosComModulos(admin),
-    admin.from("cobranca_assinaturas").select("plano_id, plano_agendado_id, plano_troca_pendente_id").limit(10_000),
+    admin
+      .from("cobranca_assinaturas")
+      .select("plano_id, plano_agendado_id, plano_troca_pendente_id")
+      .limit(10_000),
     modulosLigados(admin),
   ]);
-  if (assinaturas.error) throw new Error(`assinaturas: leitura falhou (${assinaturas.error.code ?? "sem_codigo"})`);
+  if (assinaturas.error)
+    throw new Error(`assinaturas: leitura falhou (${assinaturas.error.code ?? "sem_codigo"})`);
   const conta = new Map<string, number>();
-  for (const a of (assinaturas.data ?? []) as Array<{ plano_id: string; plano_agendado_id: string | null; plano_troca_pendente_id: string | null }>) {
-    for (const id of new Set([a.plano_id, a.plano_agendado_id, a.plano_troca_pendente_id].filter((x): x is string => !!x))) {
+  for (const a of (assinaturas.data ?? []) as Array<{
+    plano_id: string;
+    plano_agendado_id: string | null;
+    plano_troca_pendente_id: string | null;
+  }>) {
+    for (const id of new Set(
+      [a.plano_id, a.plano_agendado_id, a.plano_troca_pendente_id].filter((x): x is string => !!x),
+    )) {
       conta.set(id, (conta.get(id) ?? 0) + 1);
     }
   }

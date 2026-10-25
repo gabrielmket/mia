@@ -26,7 +26,11 @@ export interface PrecoPorMensagem {
 export async function precoDoPlano(admin: SupabaseClient, orgId: string): Promise<number | null> {
   try {
     if (!(await moduloLigado(admin, "cobranca"))) return null;
-    const { data: a } = await admin.from("cobranca_assinaturas").select("plano_id").eq("organization_id", orgId).maybeSingle();
+    const { data: a } = await admin
+      .from("cobranca_assinaturas")
+      .select("plano_id")
+      .eq("organization_id", orgId)
+      .maybeSingle();
     const planoId = (a as { plano_id?: string } | null)?.plano_id;
     if (!planoId) return null;
     const { data: lado } = await admin
@@ -34,7 +38,8 @@ export async function precoDoPlano(admin: SupabaseClient, orgId: string): Promis
       .select("preco_por_mensagem_cents")
       .eq("plano_id", planoId)
       .maybeSingle();
-    const v = (lado as { preco_por_mensagem_cents?: number | null } | null)?.preco_por_mensagem_cents;
+    const v = (lado as { preco_por_mensagem_cents?: number | null } | null)
+      ?.preco_por_mensagem_cents;
     return v === null || v === undefined ? null : Number(v);
   } catch {
     return null;

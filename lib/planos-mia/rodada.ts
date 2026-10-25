@@ -24,14 +24,23 @@ export interface ResumoDaJornada {
   comprasLancadas: number;
 }
 
-export async function rodadaDaJornada(admin: SupabaseClient, agora: Date = new Date()): Promise<ResumoDaJornada> {
-  const resumo: ResumoDaJornada = { empresasComModuloMudado: 0, avisosDeModuloSaindo: 0, comprasLancadas: 0 };
+export async function rodadaDaJornada(
+  admin: SupabaseClient,
+  agora: Date = new Date(),
+): Promise<ResumoDaJornada> {
+  const resumo: ResumoDaJornada = {
+    empresasComModuloMudado: 0,
+    avisosDeModuloSaindo: 0,
+    comprasLancadas: 0,
+  };
   try {
     resumo.empresasComModuloMudado = await seguirOPlanoEmTodas(admin);
     resumo.avisosDeModuloSaindo = await avisarModulosQueSaem(admin, agora);
     resumo.comprasLancadas = await relerComprasEmAberto(admin, { limite: 50 });
   } catch (erro) {
-    logger.warn("planos-mia: rodada da jornada falhou", { detalhe: erro instanceof Error ? erro.message : String(erro) });
+    logger.warn("planos-mia: rodada da jornada falhou", {
+      detalhe: erro instanceof Error ? erro.message : String(erro),
+    });
   }
   return resumo;
 }

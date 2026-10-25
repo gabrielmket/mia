@@ -26,30 +26,49 @@ export interface DadosDoCardDeCobranca {
   rotuloAntigo: string | null;
 }
 
-export async function lerCardDeCobranca(admin: SupabaseClient, orgId: string): Promise<DadosDoCardDeCobranca | null> {
+export async function lerCardDeCobranca(
+  admin: SupabaseClient,
+  orgId: string,
+): Promise<DadosDoCardDeCobranca | null> {
   if (!(await moduloLigado(admin, "cobranca"))) return null;
   const [planos, assinatura, org, daInstalacao] = await Promise.all([
     admin.from("cobranca_planos").select("id, nome, arquivado_em").order("nome"),
     admin
       .from("cobranca_assinaturas")
-      .select("plano_id, estado, trial_ate, prazo_extra_ate, provedor, plano_agendado_id, proximo_vencimento, provedor_cliente_id")
+      .select(
+        "plano_id, estado, trial_ate, prazo_extra_ate, provedor, plano_agendado_id, proximo_vencimento, provedor_cliente_id",
+      )
       .eq("organization_id", orgId)
       .maybeSingle(),
-    admin.from("organizations").select("status, suspended_kind, settings, cnpj").eq("id", orgId).maybeSingle(),
+    admin
+      .from("organizations")
+      .select("status, suspended_kind, settings, cnpj")
+      .eq("id", orgId)
+      .maybeSingle(),
     provedorDaInstalacao(),
   ]);
   if (planos.error || assinatura.error || org.error) {
-    throw new Error(`card de cobrança: leitura falhou (${planos.error?.code ?? assinatura.error?.code ?? org.error?.code})`);
+    throw new Error(
+      `card de cobrança: leitura falhou (${planos.error?.code ?? assinatura.error?.code ?? org.error?.code})`,
+    );
   }
   const rotulo = (org.data?.settings as { plan?: unknown } | null)?.plan;
-  const { provedor_cliente_id: clienteNoProvedor, ...semIdDoProvedor } = (assinatura.data ?? { provedor_cliente_id: null }) as Record<string, unknown> & {
+  const { provedor_cliente_id: clienteNoProvedor, ...semIdDoProvedor } = (assinatura.data ?? {
+    provedor_cliente_id: null,
+  }) as Record<string, unknown> & {
     provedor_cliente_id: string | null;
   };
   return {
     planos: (planos.data ?? []) as PlanoDoCard[],
     assinatura: (assinatura.data ? semIdDoProvedor : null) as AssinaturaDoCard | null,
-    pedeDocumento: exigeDocumento(((assinatura.data as { provedor?: string } | null)?.provedor ?? daInstalacao) as ProvedorDeCobranca | null, clienteNoProvedor !== null),
-    documentoDoCadastro: sugestaoDoCadastro((org.data as { cnpj?: string | null } | null)?.cnpj ?? null),
+    pedeDocumento: exigeDocumento(
+      ((assinatura.data as { provedor?: string } | null)?.provedor ??
+        daInstalacao) as ProvedorDeCobranca | null,
+      clienteNoProvedor !== null,
+    ),
+    documentoDoCadastro: sugestaoDoCadastro(
+      (org.data as { cnpj?: string | null } | null)?.cnpj ?? null,
+    ),
     suspensaPorCobranca:
       (org.data as { status?: string } | null)?.status === "suspended" &&
       (org.data as { suspended_kind?: string | null } | null)?.suspended_kind === "cobranca",

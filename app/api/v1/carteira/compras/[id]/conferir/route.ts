@@ -26,7 +26,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const authz = await requireRole("manager", { requestId, resource: "carteira" });
   if (!authz.ok) return authz.response;
   const { id } = await params;
-  if (!z.string().uuid().safeParse(id).success) return fail("not_found", "Compra não encontrada.", 404, { requestId });
+  if (!z.string().uuid().safeParse(id).success)
+    return fail("not_found", "Compra não encontrada.", 404, { requestId });
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("mia_compras_de_creditos")
@@ -40,7 +41,12 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const r = await conferirCompra(admin, id);
     return ok({ status: r.status, lancou: r.lancou }, { requestId });
   } catch (erro) {
-    logger.warn("[carteira/compras] conferência falhou", { requestId, detalhe: erro instanceof Error ? erro.message : String(erro) });
-    return fail("internal_error", "Não foi possível conferir o pagamento agora.", 500, { requestId });
+    logger.warn("[carteira/compras] conferência falhou", {
+      requestId,
+      detalhe: erro instanceof Error ? erro.message : String(erro),
+    });
+    return fail("internal_error", "Não foi possível conferir o pagamento agora.", 500, {
+      requestId,
+    });
   }
 }

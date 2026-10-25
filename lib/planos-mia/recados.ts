@@ -20,7 +20,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { reportar } from "@/lib/avisos/report-da-plataforma";
 import { logger } from "@/lib/logger";
 
-import { lerEmpresasDoCadastro, lerNumerosEsperando, lerPedidosDeCadastro } from "./empresas-do-cadastro";
+import {
+  lerEmpresasDoCadastro,
+  lerNumerosEsperando,
+  lerPedidosDeCadastro,
+} from "./empresas-do-cadastro";
 
 const UM_ANO_EM_HORAS = 24 * 365;
 const DIA_MS = 86_400_000;
@@ -75,7 +79,11 @@ export function recadosPendentes(entrada: {
         });
       }
     }
-    if (e.origem === "cadastro" && (e.situacao === "atraso" || e.situacao === "prazo") && e.proximo.suspensao_em) {
+    if (
+      e.origem === "cadastro" &&
+      (e.situacao === "atraso" || e.situacao === "prazo") &&
+      e.proximo.suspensao_em
+    ) {
       const falta = Date.parse(e.proximo.suspensao_em) - t;
       if (falta > 0 && falta <= DIA_MS) {
         recados.push({
@@ -106,18 +114,28 @@ export async function mandarRecadosDaJornada(
     ]);
     const enviados: string[] = [];
     for (const r of recadosPendentes({ pedidos, numeros, empresas, agora })) {
-      const saiu = await reportar(admin, { chave: r.chave, horas: UM_ANO_EM_HORAS, texto: r.texto, detalhe: { texto: r.texto } });
+      const saiu = await reportar(admin, {
+        chave: r.chave,
+        horas: UM_ANO_EM_HORAS,
+        texto: r.texto,
+        detalhe: { texto: r.texto },
+      });
       if (saiu) enviados.push(r.chave);
     }
     return enviados;
   } catch (erro) {
-    logger.warn("planos-mia: recados da jornada falharam", { detalhe: erro instanceof Error ? erro.message : String(erro) });
+    logger.warn("planos-mia: recados da jornada falharam", {
+      detalhe: erro instanceof Error ? erro.message : String(erro),
+    });
     return [];
   }
 }
 
 /** Os últimos recados que saíram (para a tela da Time). Nunca lança. */
-export async function ultimosRecados(admin: SupabaseClient, limite = 8): Promise<Array<{ texto: string; enviado_em: string }>> {
+export async function ultimosRecados(
+  admin: SupabaseClient,
+  limite = 8,
+): Promise<Array<{ texto: string; enviado_em: string }>> {
   try {
     const { data, error } = await admin
       .from("platform_avisos_enviados")
@@ -126,10 +144,12 @@ export async function ultimosRecados(admin: SupabaseClient, limite = 8): Promise
       .order("enviado_em", { ascending: false })
       .limit(limite);
     if (error) return [];
-    return ((data ?? []) as Array<{ enviado_em: string; detalhe: { texto?: unknown } | null }>).map((l) => ({
-      texto: typeof l.detalhe?.texto === "string" ? l.detalhe.texto : "",
-      enviado_em: l.enviado_em,
-    }));
+    return ((data ?? []) as Array<{ enviado_em: string; detalhe: { texto?: unknown } | null }>).map(
+      (l) => ({
+        texto: typeof l.detalhe?.texto === "string" ? l.detalhe.texto : "",
+        enviado_em: l.enviado_em,
+      }),
+    );
   } catch {
     return [];
   }

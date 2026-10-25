@@ -37,7 +37,13 @@ export type ResultadoDaDecisao =
       ok: true;
       decisao: "aprovado" | "recusado";
       ja_decidido: boolean;
-      organizacao?: { id: string; nome: string; plano: string | null; teste_ate: string | null; modulos: string[] };
+      organizacao?: {
+        id: string;
+        nome: string;
+        plano: string | null;
+        teste_ate: string | null;
+        modulos: string[];
+      };
       aviso?: string;
     }
   | { ok: false; code: string; message: string };
@@ -53,10 +59,24 @@ export async function decidirPedidoDeCadastro(
     .eq("id", p.pedidoId)
     .maybeSingle();
   if (error) throw new Error(`pedido ilegível (${error.code ?? "sem_codigo"})`);
-  if (!pedido) return { ok: false, code: "not_found", message: "Pedido não encontrado. Veja os pendentes em plataforma_listar_pedidos_de_cadastro." };
-  const linha = pedido as { id: string; user_id: string; requested_organization_name: string; status: string };
+  if (!pedido)
+    return {
+      ok: false,
+      code: "not_found",
+      message: "Pedido não encontrado. Veja os pendentes em plataforma_listar_pedidos_de_cadastro.",
+    };
+  const linha = pedido as {
+    id: string;
+    user_id: string;
+    requested_organization_name: string;
+    status: string;
+  };
   if (linha.status !== "pending") {
-    return { ok: true, decisao: linha.status === "approved" ? "aprovado" : "recusado", ja_decidido: true };
+    return {
+      ok: true,
+      decisao: linha.status === "approved" ? "aprovado" : "recusado",
+      ja_decidido: true,
+    };
   }
 
   const { data: conta } = await admin.auth.admin.getUserById(linha.user_id);
@@ -65,7 +85,12 @@ export async function decidirPedidoDeCadastro(
   if (aprovar) {
     // Sem confirmação pelo provedor de auth, o endereço não foi provado (a mesma régua do upstream).
     if (!conta.user || !conta.user.email_confirmed_at) {
-      return { ok: false, code: "account_unavailable", message: "A conta deste pedido não existe mais ou ainda não confirmou o e-mail. Peça à pessoa para confirmar e tente de novo." };
+      return {
+        ok: false,
+        code: "account_unavailable",
+        message:
+          "A conta deste pedido não existe mais ou ainda não confirmou o e-mail. Peça à pessoa para confirmar e tente de novo.",
+      };
     }
     const provisionado = await ensureTenantForUser(
       {
@@ -85,12 +110,17 @@ export async function decidirPedidoDeCadastro(
 
   const { data: gravou, error: erroDaGravacao } = await admin
     .from("registration_requests")
-    .update({ status: aprovar ? "approved" : "rejected", decided_by: ator.userId, decided_at: new Date().toISOString() })
+    .update({
+      status: aprovar ? "approved" : "rejected",
+      decided_by: ator.userId,
+      decided_at: new Date().toISOString(),
+    })
     .eq("id", linha.id)
     .eq("status", "pending")
     .select("id")
     .maybeSingle();
-  if (erroDaGravacao) throw new Error(`decisão não gravada (${erroDaGravacao.code ?? "sem_codigo"})`);
+  if (erroDaGravacao)
+    throw new Error(`decisão não gravada (${erroDaGravacao.code ?? "sem_codigo"})`);
   if (!gravou) return { ok: true, decisao: aprovar ? "aprovado" : "recusado", ja_decidido: true };
 
   void audit({
@@ -105,13 +135,23 @@ export async function decidirPedidoDeCadastro(
     metadata: { via: "mcp_de_plataforma", motivo_enviado: !aprovar && !!p.motivo },
   });
 
-  const aviso = await avisarQuemPediu(admin, { email: conta.user?.email ?? null, empresa: linha.requested_organization_name, aprovado: aprovar, motivo: p.motivo ?? null });
-  if (!aprovar) return { ok: true, decisao: "recusado", ja_decidido: false, ...(aviso ? { aviso } : {}) };
+  const aviso = await avisarQuemPediu(admin, {
+    email: conta.user?.email ?? null,
+    empresa: linha.requested_organization_name,
+    aprovado: aprovar,
+    motivo: p.motivo ?? null,
+  });
+  if (!aprovar)
+    return { ok: true, decisao: "recusado", ja_decidido: false, ...(aviso ? { aviso } : {}) };
 
   if (!organizationId) return { ok: true, decisao: "aprovado", ja_decidido: false };
   await seguirOPlano(admin, organizationId, "cadastro");
   const [{ data: a }, planos, modulos, { data: org }] = await Promise.all([
-    admin.from("cobranca_assinaturas").select("plano_id, trial_ate").eq("organization_id", organizationId).maybeSingle(),
+    admin
+      .from("cobranca_assinaturas")
+      .select("plano_id, trial_ate")
+      .eq("organization_id", organizationId)
+      .maybeSingle(),
     lerPlanosComModulos(admin),
     modulosPeloPlano(admin, organizationId),
     admin.from("organizations").select("display_name").eq("id", organizationId).maybeSingle(),
@@ -123,8 +163,12 @@ export async function decidirPedidoDeCadastro(
     ja_decidido: false,
     organizacao: {
       id: organizationId,
-      nome: (org as { display_name?: string } | null)?.display_name ?? linha.requested_organization_name,
-      plano: assinatura?.plano_id ? planos.find((x) => x.id === assinatura.plano_id)?.nome ?? null : null,
+      nome:
+        (org as { display_name?: string } | null)?.display_name ??
+        linha.requested_organization_name,
+      plano: assinatura?.plano_id
+        ? (planos.find((x) => x.id === assinatura.plano_id)?.nome ?? null)
+        : null,
       teste_ate: assinatura?.trial_ate ?? null,
       modulos,
     },
@@ -145,7 +189,7 @@ export async function avisarQuemPediu(
   if (!p.email) return undefined;
   try {
     const marca = await marcaDaSaida(null);
-    const base = (env.NEXT_PUBLIC_APP_URL ?? "").replace(//+$/, "");
+    const base = (env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
     const msg = p.aprovado
       ? buildEmailDaCobranca({
           titulo: "Sua empresa está pronta",
@@ -166,12 +210,21 @@ export async function avisarQuemPediu(
           botao: { rotulo: "Entrar", href: `${base}/login` },
           rodape: "Você recebe este e-mail porque pediu um cadastro.",
         });
-    const r = await sendEmail({ to: p.email, subject: msg.subject, html: msg.html, text: msg.text, fromName: marca.nome, tags: [{ name: "tipo", value: "cadastro" }] });
+    const r = await sendEmail({
+      to: p.email,
+      subject: msg.subject,
+      html: msg.html,
+      text: msg.text,
+      fromName: marca.nome,
+      tags: [{ name: "tipo", value: "cadastro" }],
+    });
     return r.ok
       ? `e-mail de ${p.aprovado ? "liberação" : "recusa"} enviado a ${maskEmail(p.email)}`
       : "o e-mail não saiu (confira o envio de e-mail da instalação)";
   } catch (e) {
-    logger.warn("planos-mia: e-mail do pedido de cadastro falhou", { detalhe: e instanceof Error ? e.message : String(e) });
+    logger.warn("planos-mia: e-mail do pedido de cadastro falhou", {
+      detalhe: e instanceof Error ? e.message : String(e),
+    });
     return "o e-mail não saiu";
   }
 }
@@ -185,8 +238,15 @@ export async function avisarQuemPediuPeloId(
 ): Promise<void> {
   try {
     const { data } = await admin.auth.admin.getUserById(userId);
-    await avisarQuemPediu(admin, { email: data.user?.email ?? null, empresa, aprovado, motivo: null });
+    await avisarQuemPediu(admin, {
+      email: data.user?.email ?? null,
+      empresa,
+      aprovado,
+      motivo: null,
+    });
   } catch (e) {
-    logger.warn("planos-mia: aviso do pedido de cadastro falhou", { detalhe: e instanceof Error ? e.message : String(e) });
+    logger.warn("planos-mia: aviso do pedido de cadastro falhou", {
+      detalhe: e instanceof Error ? e.message : String(e),
+    });
   }
 }

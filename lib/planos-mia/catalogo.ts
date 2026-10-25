@@ -25,7 +25,10 @@ export function ehModuloDoPlano(chave: string): chave is ModuloDoPlano {
  * mostram (chaves de `t()`). `crm_b2b` é o módulo DA INSTALAÇÃO do upstream
  * (`MODULO_CRM_B2B`): o plano que o vende só o entrega com ele ligado.
  */
-export const ROTULO_DO_MODULO_DO_PLANO: Record<ModuloDoPlano, { rotulo: string; descricao: string }> = {
+export const ROTULO_DO_MODULO_DO_PLANO: Record<
+  ModuloDoPlano,
+  { rotulo: string; descricao: string }
+> = {
   disparador: {
     rotulo: "Broadcast",
     descricao: "Mensagem para uma lista, pelo número oficial ou pelo QR, com créditos.",
@@ -69,13 +72,16 @@ export function conversasEstimadas(tetoIaUsdCents: number | null): number | null
  * upstream para mudar preço) mantém o link do site funcionando.
  */
 export function slugDoPlano(nome: string): string {
-  return nome
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
+  return (
+    nome
+      .normalize("NFD")
+      // Tira os acentos: no NFD eles viram as marcas combinantes U+0300 a U+036F.
+      .replace(/\p{Diacritic}/gu, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60)
+  );
 }
 
 /** Uso de IA do mês em % do incluído, para o cliente. `null` = sem teto. Nunca negativo. */

@@ -18,7 +18,11 @@ import {
 import { ROTULO_DO_MODULO_DO_PLANO } from "@/lib/planos-mia/catalogo";
 import { rotuloDaOrigem } from "@/lib/planos-mia/modulos";
 import { ultimosRecados } from "@/lib/planos-mia/recados";
-import { FRASE_DO_PROXIMO_PASSO, ROTULO_DA_SITUACAO, type SituacaoDaEmpresa } from "@/lib/planos-mia/situacao";
+import {
+  FRASE_DO_PROXIMO_PASSO,
+  ROTULO_DA_SITUACAO,
+  type SituacaoDaEmpresa,
+} from "@/lib/planos-mia/situacao";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { PedidosDoCadastro } from "./_pedidos";
@@ -41,15 +45,17 @@ export const dynamic = "force-dynamic";
  * O layout de `(protected)` já roda `requirePlatformAdmin()`; o gate local fica
  * porque um layout pode ser movido (mesma decisão de `/admin/cadastro`).
  */
-const FILTROS: Array<[string, string]> = [
-  ["todas", "Todas"],
-  ["teste", "Em teste"],
-  ["emdia", "Em dia"],
-  ["atraso", "Em atraso"],
-  ["suspensa", "Suspensas"],
-  ["cancelada", "Canceladas"],
-  ["isenta", "Isentas"],
-];
+const ROTULO_DO_FILTRO = {
+  todas: "Todas",
+  teste: "Em teste",
+  emdia: "Em dia",
+  atraso: "Em atraso",
+  suspensa: "Suspensas",
+  cancelada: "Canceladas",
+  isenta: "Isentas",
+} as const;
+type Filtro = keyof typeof ROTULO_DO_FILTRO;
+const FILTROS = Object.keys(ROTULO_DO_FILTRO) as Filtro[];
 
 const CLASSE_DA_SITUACAO: Record<SituacaoDaEmpresa, string> = {
   teste: "bg-info-bg text-info-fg",
@@ -67,13 +73,17 @@ function noFiltro(l: LinhaDaEmpresa, filtro: string): boolean {
   return l.situacao === filtro;
 }
 
-export default async function Page({ searchParams }: { searchParams: Promise<{ filtro?: string; todas?: string; empresa?: string }> }) {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ filtro?: string; todas?: string; empresa?: string }>;
+}) {
   const usuario = await loadAuthUser();
   if (!usuario?.is_platform_admin) notFound();
   const idioma = usuario.idioma;
   const t = (s: string) => traduzir(s, idioma);
   const sp = await searchParams;
-  const filtro = FILTROS.some(([k]) => k === sp.filtro) ? (sp.filtro as string) : "todas";
+  const filtro: Filtro = FILTROS.find((k) => k === sp.filtro) ?? "todas";
   const soQuemEntrouSozinho = sp.todas !== "1";
 
   const admin = createAdminClient();
@@ -88,20 +98,45 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ f
   const base = soQuemEntrouSozinho ? linhas.filter((l) => l.origem === "cadastro") : linhas;
   const lista = base.filter((l) => noFiltro(l, filtro));
   const topo = numerosDoTopo(base, pedidos.length, agora);
-  const escolhida = lista.find((l) => l.id === sp.empresa)?.id ?? linhas.find((l) => l.id === sp.empresa)?.id ?? lista[0]?.id ?? null;
+  const escolhida =
+    lista.find((l) => l.id === sp.empresa)?.id ??
+    linhas.find((l) => l.id === sp.empresa)?.id ??
+    lista[0]?.id ??
+    null;
   const [detalhe, card] = escolhida
-    ? await Promise.all([lerDetalheDaEmpresa(admin, escolhida, agora), lerCardDeCobranca(admin, escolhida)])
+    ? await Promise.all([
+        lerDetalheDaEmpresa(admin, escolhida, agora),
+        lerCardDeCobranca(admin, escolhida),
+      ])
     : [null, null];
 
-  const data = new Intl.DateTimeFormat(idioma, { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" });
-  const dataHora = new Intl.DateTimeFormat(idioma, { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" });
-  const brl = new Intl.NumberFormat(idioma, { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+  const data = new Intl.DateTimeFormat(idioma, {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  });
+  const dataHora = new Intl.DateTimeFormat(idioma, {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/Sao_Paulo",
+  });
+  const brl = new Intl.NumberFormat(idioma, {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  });
   const fmt = (iso: string | null) => (iso ? data.format(new Date(iso)) : "—");
   const proximo = (l: LinhaDaEmpresa) =>
-    t(FRASE_DO_PROXIMO_PASSO[l.proximo.tipo]).replace("{data}", fmt(l.proximo.em)).replace("{suspensao}", fmt(l.proximo.suspensao_em));
+    t(FRASE_DO_PROXIMO_PASSO[l.proximo.tipo])
+      .replace("{data}", fmt(l.proximo.em))
+      .replace("{suspensao}", fmt(l.proximo.suspensao_em));
   const link = (mudar: Record<string, string | null>) => {
     const p = new URLSearchParams();
-    const atual: Record<string, string | null> = { filtro, todas: soQuemEntrouSozinho ? null : "1", empresa: escolhida };
+    const atual: Record<string, string | null> = {
+      filtro,
+      todas: soQuemEntrouSozinho ? null : "1",
+      empresa: escolhida,
+    };
     for (const [k, v] of Object.entries({ ...atual, ...mudar })) if (v) p.set(k, v);
     const q = p.toString();
     return `/admin/empresas-do-cadastro${q ? `?${q}` : ""}`;
@@ -112,7 +147,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ f
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">{t("Empresas do cadastro")}</h1>
         <p className="text-sm text-muted-foreground">
-          {t("Quem entrou sozinho pela página de preços e pelo cadastro: situação, plano, primeiros passos e o próximo passo da régua.")}
+          {t(
+            "Quem entrou sozinho pela página de preços e pelo cadastro: situação, plano, primeiros passos e o próximo passo da régua.",
+          )}
         </p>
       </div>
 
@@ -121,7 +158,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ f
           <p className="text-xs text-muted-foreground">{t("Aguardando aprovação")}</p>
           <p className="text-2xl font-semibold">{topo.aguardando}</p>
           <p className="text-xs text-muted-foreground">
-            {modo === "com_aprovacao" ? t("modo com aprovação") : modo === "aberto" ? t("modo aberto") : t("modo só por convite")}
+            {modo === "com_aprovacao"
+              ? t("modo com aprovação")
+              : modo === "aberto"
+                ? t("modo aberto")
+                : t("modo só por convite")}
           </p>
         </Card>
         <Card className="p-4">
@@ -149,19 +190,28 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ f
         </Card>
       </section>
 
-      <nav className="flex flex-wrap items-center gap-2 text-sm" aria-label={t("Filtros")} data-jornada="filtros">
-        {FILTROS.map(([k, rotulo]) => (
+      <nav
+        className="flex flex-wrap items-center gap-2 text-sm"
+        aria-label={t("Filtros")}
+        data-jornada="filtros"
+      >
+        {FILTROS.map((k) => (
           <Link
             key={k}
             href={link({ filtro: k, empresa: null })}
             aria-current={filtro === k ? "page" : undefined}
             className={`rounded-md border px-3 py-1 ${filtro === k ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
           >
-            {t(rotulo)}
+            {t(ROTULO_DO_FILTRO[k])}
           </Link>
         ))}
-        <Link href={link({ todas: soQuemEntrouSozinho ? "1" : null, empresa: null })} className="ml-auto rounded-md border px-3 py-1 hover:bg-muted">
-          {soQuemEntrouSozinho ? t("Mostrar também as implantadas pela Time") : t("Só quem entrou sozinho")}
+        <Link
+          href={link({ todas: soQuemEntrouSozinho ? "1" : null, empresa: null })}
+          className="ml-auto rounded-md border px-3 py-1 hover:bg-muted"
+        >
+          {soQuemEntrouSozinho
+            ? t("Mostrar também as implantadas pela Time")
+            : t("Só quem entrou sozinho")}
         </Link>
       </nav>
 
@@ -169,7 +219,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ f
         <div className="space-y-6">
           <Card className="overflow-x-auto p-0" data-jornada="empresas">
             {lista.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">{t("Nenhuma empresa nesta situação.")}</p>
+              <p className="p-4 text-sm text-muted-foreground">
+                {t("Nenhuma empresa nesta situação.")}
+              </p>
             ) : (
               <table className="w-full text-sm">
                 <thead>
@@ -185,26 +237,43 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ f
                 </thead>
                 <tbody>
                   {lista.map((l) => (
-                    <tr key={l.id} className={`border-b align-top ${l.id === escolhida ? "bg-muted" : ""}`} data-empresa={l.id}>
+                    <tr
+                      key={l.id}
+                      className={`border-b align-top ${l.id === escolhida ? "bg-muted" : ""}`}
+                      data-empresa={l.id}
+                    >
                       <td className="px-3 py-2">
-                        <Link href={link({ empresa: l.id })} className="font-medium underline-offset-2 hover:underline">
+                        <Link
+                          href={link({ empresa: l.id })}
+                          className="font-medium underline-offset-2 hover:underline"
+                        >
                           {l.nome}
                         </Link>
                       </td>
                       <td className="px-3 py-2">{fmt(l.entrou)}</td>
                       <td className="px-3 py-2">
-                        {l.origem === "cadastro" ? t("cadastro próprio") : l.origem === "implantacao" ? t("implantação") : "—"}
+                        {l.origem === "cadastro"
+                          ? t("cadastro próprio")
+                          : l.origem === "implantacao"
+                            ? t("implantação")
+                            : "—"}
                       </td>
                       <td className="px-3 py-2">
                         {l.plano?.nome ?? "—"}
                         {l.plano_agendado && (
                           <span className="block text-xs text-muted-foreground">
-                            {t("vira {plano} em {data}").replace("{plano}", l.plano_agendado.nome).replace("{data}", fmt(l.plano_agendado.em))}
+                            {t("vira {plano} em {data}")
+                              .replace("{plano}", l.plano_agendado.nome)
+                              .replace("{data}", fmt(l.plano_agendado.em))}
                           </span>
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <span className={`rounded-md px-2 py-0.5 text-xs ${CLASSE_DA_SITUACAO[l.situacao]}`}>{t(ROTULO_DA_SITUACAO[l.situacao])}</span>
+                        <span
+                          className={`rounded-md px-2 py-0.5 text-xs ${CLASSE_DA_SITUACAO[l.situacao]}`}
+                        >
+                          {t(ROTULO_DA_SITUACAO[l.situacao])}
+                        </span>
                       </td>
                       <td className="px-3 py-2">
                         {l.passos.feitos}/{l.passos.de}
@@ -227,9 +296,15 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ f
               <ul className="space-y-2 text-sm">
                 {numeros.map((n) => (
                   <li key={n.id} className="rounded-md border p-3">
-                    <span className="block font-medium">{n.conta ?? t("Conta da Meta sem nome")}</span>
+                    <span className="block font-medium">
+                      {n.conta ?? t("Conta da Meta sem nome")}
+                    </span>
                     <span className="block text-xs text-muted-foreground">
-                      {t("Entrou com o Facebook em {data}").replace("{data}", dataHora.format(new Date(n.chegou)))} · {n.waba}
+                      {t("Entrou com o Facebook em {data}").replace(
+                        "{data}",
+                        dataHora.format(new Date(n.chegou)),
+                      )}{" "}
+                      · {n.waba}
                       {n.numero ? ` · ${n.numero}` : ""}
                     </span>
                   </li>
@@ -237,7 +312,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ f
               </ul>
             )}
             <p className="text-xs text-muted-foreground">
-              {t("Confira o nome da conta da Meta antes de ligar: ligar errado faz a conversa de um cliente sair pelo número de outro. A ligação é à mão, de propósito.")}{" "}
+              {t(
+                "Confira o nome da conta da Meta antes de ligar: ligar errado faz a conversa de um cliente sair pelo número de outro. A ligação é à mão, de propósito.",
+              )}{" "}
               <Link href="/admin/cadastro-incorporado" className="underline underline-offset-2">
                 {t("Abrir o cadastro incorporado")}
               </Link>
@@ -253,13 +330,21 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ f
               <>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="text-lg font-semibold">{detalhe.nome}</h2>
-                  <span className={`rounded-md px-2 py-0.5 text-xs ${CLASSE_DA_SITUACAO[detalhe.situacao]}`}>
+                  <span
+                    className={`rounded-md px-2 py-0.5 text-xs ${CLASSE_DA_SITUACAO[detalhe.situacao]}`}
+                  >
                     {t(ROTULO_DA_SITUACAO[detalhe.situacao])}
                   </span>
                 </div>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
                   <dt className="text-muted-foreground">{t("Quem administra")}</dt>
-                  <dd>{detalhe.administra ? [detalhe.administra.nome, detalhe.administra.email].filter(Boolean).join(" · ") : "—"}</dd>
+                  <dd>
+                    {detalhe.administra
+                      ? [detalhe.administra.nome, detalhe.administra.email]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : "—"}
+                  </dd>
                   <dt className="text-muted-foreground">{t("Plano")}</dt>
                   <dd>
                     {detalhe.plano
@@ -269,34 +354,54 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ f
                   <dt className="text-muted-foreground">{t("Entrou")}</dt>
                   <dd>
                     {fmt(detalhe.entrou)} ·{" "}
-                    {detalhe.origem === "cadastro" ? t("cadastro próprio") : detalhe.origem === "implantacao" ? t("implantação pela Time") : "—"}
+                    {detalhe.origem === "cadastro"
+                      ? t("cadastro próprio")
+                      : detalhe.origem === "implantacao"
+                        ? t("implantação pela Time")
+                        : "—"}
                   </dd>
                   <dt className="text-muted-foreground">{t("Primeiros passos")}</dt>
                   <dd>
-                    {t("{n} de {m}").replace("{n}", String(detalhe.passos.feitos)).replace("{m}", String(detalhe.passos.de))}
+                    {t("{n} de {m}")
+                      .replace("{n}", String(detalhe.passos.feitos))
+                      .replace("{m}", String(detalhe.passos.de))}
                   </dd>
                   <dt className="text-muted-foreground">{t("Módulos")}</dt>
                   <dd>
                     {detalhe.modulos.length === 0
                       ? t("nenhum")
-                      : detalhe.modulos.map((m) => `${t(ROTULO_DO_MODULO_DO_PLANO[m.modulo].rotulo)} (${t(rotuloDaOrigem(m))})`).join(", ")}
+                      : detalhe.modulos
+                          .map(
+                            (m) =>
+                              `${t(ROTULO_DO_MODULO_DO_PLANO[m.modulo].rotulo)} (${t(rotuloDaOrigem(m))})`,
+                          )
+                          .join(", ")}
                   </dd>
                   <dt className="text-muted-foreground">{t("Próximo da régua")}</dt>
                   <dd>{proximo(detalhe)}</dd>
                 </dl>
                 {detalhe.regua.length > 0 && (
                   <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">{t("A régua desta empresa")}</p>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {t("A régua desta empresa")}
+                    </p>
                     <ol className="space-y-1 text-sm">
                       {detalhe.regua.map((p) => (
-                        <li key={`${p.em}-${p.titulo}`} className={p.estado === "depois" ? "text-muted-foreground" : ""} data-ponto={p.estado}>
+                        <li
+                          key={`${p.em}-${p.titulo}`}
+                          className={p.estado === "depois" ? "text-muted-foreground" : ""}
+                          data-ponto={p.estado}
+                        >
                           {fmt(p.em)} · {t(p.titulo)}
                         </li>
                       ))}
                     </ol>
                   </div>
                 )}
-                <Link href={`/admin/tenants/${detalhe.id}`} className="text-sm underline underline-offset-2">
+                <Link
+                  href={`/admin/tenants/${detalhe.id}`}
+                  className="text-sm underline underline-offset-2"
+                >
                   {t("Abrir no painel da empresa")}
                 </Link>
               </>
@@ -312,15 +417,22 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ f
             ) : (
               <ul className="space-y-2 text-sm">
                 {recados.map((r) => (
-                  <li key={`${r.enviado_em}-${r.texto}`} className="whitespace-pre-line rounded-md border p-2">
+                  <li
+                    key={`${r.enviado_em}-${r.texto}`}
+                    className="rounded-md border p-2 whitespace-pre-line"
+                  >
                     {r.texto.replace(/\*/g, "")}
-                    <span className="block text-xs text-muted-foreground">{dataHora.format(new Date(r.enviado_em))}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {dataHora.format(new Date(r.enviado_em))}
+                    </span>
                   </li>
                 ))}
               </ul>
             )}
             <p className="text-xs text-muted-foreground">
-              {t("O mesmo grupo interno que recebe os chamados do assistente. Só o nome da empresa e o que fazer, nunca dado do cliente final.")}
+              {t(
+                "O mesmo grupo interno que recebe os chamados do assistente. Só o nome da empresa e o que fazer, nunca dado do cliente final.",
+              )}
             </p>
           </Card>
         </div>

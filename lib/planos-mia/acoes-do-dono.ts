@@ -44,7 +44,12 @@ const recusa = (code: string, message: string, details?: unknown): ResultadoDoDo
   ...(details === undefined ? {} : { details }),
 });
 
-function auditar(ator: Ator, orgId: string, action: "cobranca.plano_trocado" | "cobranca.isencao_definida" | "cobranca.prazo_concedido", metadata: Record<string, unknown>) {
+function auditar(
+  ator: Ator,
+  orgId: string,
+  action: "cobranca.plano_trocado" | "cobranca.isencao_definida" | "cobranca.prazo_concedido",
+  metadata: Record<string, unknown>,
+) {
   void audit({
     action,
     actorUserId: ator.userId,
@@ -64,18 +69,38 @@ function auditar(ator: Ator, orgId: string, action: "cobranca.plano_trocado" | "
  * troca o de quem já tem (a regra do dono do upstream). Aceita plano escondido.
  * Recusa com a lista do que tirar quando o uso não cabe.
  */
-export async function atribuirOuTrocarPlano(admin: SupabaseClient, orgId: string, planoId: string, ator: Ator): Promise<ResultadoDoDono> {
+export async function atribuirOuTrocarPlano(
+  admin: SupabaseClient,
+  orgId: string,
+  planoId: string,
+  ator: Ator,
+): Promise<ResultadoDoDono> {
   if (!(await moduloLigado(admin, "cobranca"))) {
-    return recusa("cobranca_desligada", "A cobrança está desligada nesta instalação: toda empresa é isenta. Ligue em Admin › Recursos opcionais antes.");
+    return recusa(
+      "cobranca_desligada",
+      "A cobrança está desligada nesta instalação: toda empresa é isenta. Ligue em Admin › Recursos opcionais antes.",
+    );
   }
   const org = await lerOrgDoTenant(admin, orgId);
   if (org === "erro") throw new Error("empresa ilegível");
-  if (!org) return recusa("not_found", "Empresa não encontrada. Use plataforma_listar_clientes para achar o id.");
+  if (!org)
+    return recusa(
+      "not_found",
+      "Empresa não encontrada. Use plataforma_listar_clientes para achar o id.",
+    );
   const plano = await lerPlano(admin, planoId);
   if (plano === "erro") throw new Error("plano ilegível");
-  if (!plano || plano.arquivado_em !== null) return recusa("plano_invalido", "Plano não encontrado ou arquivado. Veja os planos em plataforma_ver_cobranca.");
+  if (!plano || plano.arquivado_em !== null)
+    return recusa(
+      "plano_invalido",
+      "Plano não encontrado ou arquivado. Veja os planos em plataforma_ver_cobranca.",
+    );
 
-  const { data: tem, error: erroDaLeitura } = await admin.from("cobranca_assinaturas").select("organization_id").eq("organization_id", orgId).maybeSingle();
+  const { data: tem, error: erroDaLeitura } = await admin
+    .from("cobranca_assinaturas")
+    .select("organization_id")
+    .eq("organization_id", orgId)
+    .maybeSingle();
   if (erroDaLeitura) throw new Error("assinatura ilegível");
 
   if (!tem) {
@@ -85,7 +110,9 @@ export async function atribuirOuTrocarPlano(admin: SupabaseClient, orgId: string
     if (uso) {
       const excedente = excedenteDoPlano(uso, plano);
       if (Object.keys(excedente).length > 0) {
-        return recusa("uso_acima_do_plano", "O uso atual não cabe no plano escolhido.", { o_que_tirar: excedente });
+        return recusa("uso_acima_do_plano", "O uso atual não cabe no plano escolhido.", {
+          o_que_tirar: excedente,
+        });
       }
     }
     const { error } = await admin.from("cobranca_assinaturas").insert({
@@ -94,11 +121,24 @@ export async function atribuirOuTrocarPlano(admin: SupabaseClient, orgId: string
       estado: "trial",
       trial_ate: new Date(Date.now() + plano.trial_dias * DIA_MS).toISOString(),
     });
-    if (error?.code === "23505") return recusa("state_conflict", "A empresa ganhou assinatura no meio. Tente de novo: agora é troca.");
+    if (error?.code === "23505")
+      return recusa(
+        "state_conflict",
+        "A empresa ganhou assinatura no meio. Tente de novo: agora é troca.",
+      );
     if (error) throw new Error(`plano não atribuído (${error.code ?? "sem_codigo"})`);
-    auditar(ator, orgId, "cobranca.plano_trocado", { de: null, para: plano.id, quando: "atribuido" });
+    auditar(ator, orgId, "cobranca.plano_trocado", {
+      de: null,
+      para: plano.id,
+      quando: "atribuido",
+    });
     const modulos = await seguirOPlano(admin, orgId, "atribuicao");
-    return { ok: true, quando: "atribuido", teste_dias: plano.trial_dias, modulos_mudaram: modulos };
+    return {
+      ok: true,
+      quando: "atribuido",
+      teste_dias: plano.trial_dias,
+      modulos_mudaram: modulos,
+    };
   }
 
   const r = await trocarPlanoDaOrg(admin, orgId, plano.id, { origem: "dono" });
@@ -108,7 +148,8 @@ export async function atribuirOuTrocarPlano(admin: SupabaseClient, orgId: string
       ? recusa("uso_acima_do_plano", r.message, { o_que_tirar: excedente })
       : recusa(r.code, r.message, r.details);
   }
-  if (r.changed) auditar(ator, orgId, "cobranca.plano_trocado", { de: r.de, para: plano.id, quando: r.quando });
+  if (r.changed)
+    auditar(ator, orgId, "cobranca.plano_trocado", { de: r.de, para: plano.id, quando: r.quando });
   const modulos = await seguirOPlano(admin, orgId, "troca");
   return {
     ok: true,
@@ -120,7 +161,12 @@ export async function atribuirOuTrocarPlano(admin: SupabaseClient, orgId: string
 }
 
 /** Dar prazo até uma data (até 60 dias): reativa na hora quem foi suspenso por falta de pagamento. */
-export async function darPrazo(admin: SupabaseClient, orgId: string, ate: Date, ator: Ator): Promise<ResultadoDoDono> {
+export async function darPrazo(
+  admin: SupabaseClient,
+  orgId: string,
+  ate: Date,
+  ator: Ator,
+): Promise<ResultadoDoDono> {
   const agora = Date.now();
   if (!(ate.getTime() > agora && ate.getTime() <= agora + PRAZO_MAXIMO_MS)) {
     return recusa("validation_failed", "O prazo precisa estar entre agora e 60 dias.");
@@ -135,15 +181,27 @@ export async function darPrazo(admin: SupabaseClient, orgId: string, ate: Date, 
     .select("organization_id")
     .maybeSingle();
   if (error) throw new Error(`prazo não gravado (${error.code ?? "sem_codigo"})`);
-  if (!linha) return recusa("not_found", "Esta empresa não tem assinatura (é isenta): não há o que prorrogar.");
+  if (!linha)
+    return recusa(
+      "not_found",
+      "Esta empresa não tem assinatura (é isenta): não há o que prorrogar.",
+    );
   const reativacao = await reativarSeSuspensaPorCobranca(admin, org, ator.userId);
-  auditar(ator, orgId, "cobranca.prazo_concedido", { ate: ate.toISOString(), reativada: reativacao?.reativada ?? false });
-  if (!reativacao) return recusa("internal_error", "O prazo foi gravado, mas a reativação falhou. Tente de novo.");
+  auditar(ator, orgId, "cobranca.prazo_concedido", {
+    ate: ate.toISOString(),
+    reativada: reativacao?.reativada ?? false,
+  });
+  if (!reativacao)
+    return recusa("internal_error", "O prazo foi gravado, mas a reativação falhou. Tente de novo.");
   return { ok: true, prazo_ate: ate.toISOString(), reativada: reativacao.reativada };
 }
 
 /** Tornar isenta: só sem assinatura viva no provedor; reativa quem foi suspenso por cobrança. */
-export async function tornarIsenta(admin: SupabaseClient, orgId: string, ator: Ator): Promise<ResultadoDoDono> {
+export async function tornarIsenta(
+  admin: SupabaseClient,
+  orgId: string,
+  ator: Ator,
+): Promise<ResultadoDoDono> {
   const org = await lerOrgDoTenant(admin, orgId);
   if (org === "erro") throw new Error("empresa ilegível");
   if (!org) return recusa("not_found", "Empresa não encontrada.");
@@ -153,25 +211,44 @@ export async function tornarIsenta(admin: SupabaseClient, orgId: string, ator: A
     .eq("organization_id", orgId)
     .maybeSingle();
   if (erroDeLeitura) throw new Error("assinatura ilegível");
-  const linha = lida as { plano_id: string; provedor: ProvedorDeCobranca | null; provedor_cliente_id: string | null } | null;
+  const linha = lida as {
+    plano_id: string;
+    provedor: ProvedorDeCobranca | null;
+    provedor_cliente_id: string | null;
+  } | null;
   let apagada: { plano_id: string } | null = null;
   if (linha) {
     let alvo: { provedor: ProvedorDeCobranca; clienteId: string } | null = null;
     if (linha.provedor && linha.provedor_cliente_id) {
       let vivas: number;
       try {
-        vivas = (await adaptador(linha.provedor).lerSituacao({ clienteRef: linha.provedor_cliente_id })).assinaturasVivas;
+        vivas = (
+          await adaptador(linha.provedor).lerSituacao({ clienteRef: linha.provedor_cliente_id })
+        ).assinaturasVivas;
       } catch (e) {
-        logger.warn("cobranca.isencao_sem_leitura", { organization_id: orgId, erro: e instanceof Error ? e.message : "desconhecido" });
-        return recusa("provedor_indisponivel", "Não foi possível confirmar com o provedor se ainda há cobrança. Nada foi apagado; tente de novo.");
+        logger.warn("cobranca.isencao_sem_leitura", {
+          organization_id: orgId,
+          erro: e instanceof Error ? e.message : "desconhecido",
+        });
+        return recusa(
+          "provedor_indisponivel",
+          "Não foi possível confirmar com o provedor se ainda há cobrança. Nada foi apagado; tente de novo.",
+        );
       }
       if (vivas > 0) {
-        return recusa("assinatura_viva_no_provedor", "Esta empresa ainda tem assinatura ativa no provedor de pagamento. Cancele lá antes de isentar.");
+        return recusa(
+          "assinatura_viva_no_provedor",
+          "Esta empresa ainda tem assinatura ativa no provedor de pagamento. Cancele lá antes de isentar.",
+        );
       }
       alvo = { provedor: linha.provedor, clienteId: linha.provedor_cliente_id };
     }
     const base = admin.from("cobranca_assinaturas").delete().eq("organization_id", orgId);
-    const { data, error } = await (alvo ? base.eq("provedor", alvo.provedor).eq("provedor_cliente_id", alvo.clienteId) : base.is("provedor", null))
+    const { data, error } = await (
+      alvo
+        ? base.eq("provedor", alvo.provedor).eq("provedor_cliente_id", alvo.clienteId)
+        : base.is("provedor", null)
+    )
       .select("plano_id")
       .maybeSingle();
     if (error) throw new Error(`isenção não gravada (${error.code ?? "sem_codigo"})`);
@@ -180,9 +257,18 @@ export async function tornarIsenta(admin: SupabaseClient, orgId: string, ator: A
   }
   const reativacao = await reativarSeSuspensaPorCobranca(admin, org, ator.userId);
   if (apagada || reativacao?.reativada) {
-    auditar(ator, orgId, "cobranca.isencao_definida", { plano_id: apagada?.plano_id ?? null, reativada: reativacao?.reativada ?? false });
+    auditar(ator, orgId, "cobranca.isencao_definida", {
+      plano_id: apagada?.plano_id ?? null,
+      reativada: reativacao?.reativada ?? false,
+    });
   }
-  if (!reativacao) return recusa("internal_error", "A reativação da empresa falhou. Tente de novo.");
+  if (!reativacao)
+    return recusa("internal_error", "A reativação da empresa falhou. Tente de novo.");
   const modulos = await seguirOPlano(admin, orgId, "isencao");
-  return { ok: true, mudou: !!apagada || reativacao.reativada, reativada: reativacao.reativada, modulos_mudaram: modulos };
+  return {
+    ok: true,
+    mudou: !!apagada || reativacao.reativada,
+    reativada: reativacao.reativada,
+    modulos_mudaram: modulos,
+  };
 }

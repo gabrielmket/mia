@@ -32,18 +32,24 @@ export interface ModuloNoPainel {
   desligado_na_instalacao: boolean;
 }
 
-export async function lerModulosDoPainel(admin: SupabaseClient, orgId: string): Promise<ModuloNoPainel[]> {
+export async function lerModulosDoPainel(
+  admin: SupabaseClient,
+  orgId: string,
+): Promise<ModuloNoPainel[]> {
   const [origens, planos, lidaA, ligadosNaInstalacao] = await Promise.all([
     origemDosModulos(admin, orgId),
     lerPlanosComModulos(admin),
     admin
       .from("cobranca_assinaturas")
-      .select("plano_id, plano_agendado_id, proximo_vencimento, plano_troca_pendente_id, troca_status")
+      .select(
+        "plano_id, plano_agendado_id, proximo_vencimento, plano_troca_pendente_id, troca_status",
+      )
       .eq("organization_id", orgId)
       .maybeSingle(),
     modulosLigados(admin),
   ]);
-  if (lidaA.error) throw new Error(`assinatura: leitura falhou (${lidaA.error.code ?? "sem_codigo"})`);
+  if (lidaA.error)
+    throw new Error(`assinatura: leitura falhou (${lidaA.error.code ?? "sem_codigo"})`);
   const a = lidaA.data as {
     plano_id: string;
     plano_agendado_id: string | null;
@@ -52,17 +58,23 @@ export async function lerModulosDoPainel(admin: SupabaseClient, orgId: string): 
     troca_status: string | null;
   } | null;
   const porId = new Map(planos.map((p) => [p.id, p]));
-  const atual = a ? porId.get(a.plano_id) ?? null : null;
-  const agendado = a?.plano_agendado_id ? porId.get(a.plano_agendado_id) ?? null : null;
-  const pendente = a?.plano_troca_pendente_id && a.troca_status === "aguardando_pagamento" ? porId.get(a.plano_troca_pendente_id) ?? null : null;
+  const atual = a ? (porId.get(a.plano_id) ?? null) : null;
+  const agendado = a?.plano_agendado_id ? (porId.get(a.plano_agendado_id) ?? null) : null;
+  const pendente =
+    a?.plano_troca_pendente_id && a.troca_status === "aguardando_pagamento"
+      ? (porId.get(a.plano_troca_pendente_id) ?? null)
+      : null;
   const origemDe = new Map(origens.map((o) => [o.modulo, o]));
   const b2bNaInstalacao = ligadosNaInstalacao.includes("crm_b2b");
-  const ofertados = planosOferecidos(planos).filter((p) => !atual || p.intervalo === atual.intervalo);
+  const ofertados = planosOferecidos(planos).filter(
+    (p) => !atual || p.intervalo === atual.intervalo,
+  );
 
   return MODULOS_DO_PLANO.map((m) => {
     const o = origemDe.get(m);
     const ligado = !!o;
-    const saiNaDescida = ligado && !!agendado && o!.pelo_plano && !o!.pela_time && !agendado.modulos.includes(m);
+    const saiNaDescida =
+      ligado && !!agendado && o!.pelo_plano && !o!.pela_time && !agendado.modulos.includes(m);
     const acima = ofertados
       .filter((p) => p.modulos.includes(m) && (!atual || p.preco_cents > atual.preco_cents))
       .sort((x, y) => x.preco_cents - y.preco_cents)[0];
@@ -91,15 +103,31 @@ export async function lerCreditosDoPainel(
   const [doBroadcast, doEmail, combinado] = await Promise.all([
     moduloLiberado(admin, orgId, "disparador"),
     moduloLiberado(admin, orgId, "email_marketing"),
-    admin.from("tenant_broadcast_pricing").select("preco_por_mensagem_cents").eq("organization_id", orgId).maybeSingle(),
+    admin
+      .from("tenant_broadcast_pricing")
+      .select("preco_por_mensagem_cents")
+      .eq("organization_id", orgId)
+      .maybeSingle(),
   ]);
-  if (combinado.error) throw new Error(`preço: leitura falhou (${combinado.error.code ?? "sem_codigo"})`);
-  const v = (combinado.data as { preco_por_mensagem_cents?: number | null } | null)?.preco_por_mensagem_cents;
-  const preco = await precoPorMensagemDaEmpresa(admin, orgId, v === null || v === undefined ? null : Number(v));
+  if (combinado.error)
+    throw new Error(`preço: leitura falhou (${combinado.error.code ?? "sem_codigo"})`);
+  const v = (combinado.data as { preco_por_mensagem_cents?: number | null } | null)
+    ?.preco_por_mensagem_cents;
+  const preco = await precoPorMensagemDaEmpresa(
+    admin,
+    orgId,
+    v === null || v === undefined ? null : Number(v),
+  );
   return { temCarteira: doBroadcast || doEmail, precoPorMensagemCents: preco.cents };
 }
 
 /** O plano como a tela da EMPRESA o recebe: o teto em dólar sai, a estimativa de conversas entra. */
-export function semDolar<T extends { teto_ia_usd_cents: number | null }>(plano: T): T & { conversas_estimadas: number | null } {
-  return { ...plano, teto_ia_usd_cents: null, conversas_estimadas: conversasEstimadas(plano.teto_ia_usd_cents) };
+export function semDolar<T extends { teto_ia_usd_cents: number | null }>(
+  plano: T,
+): T & { conversas_estimadas: number | null } {
+  return {
+    ...plano,
+    teto_ia_usd_cents: null,
+    conversas_estimadas: conversasEstimadas(plano.teto_ia_usd_cents),
+  };
 }

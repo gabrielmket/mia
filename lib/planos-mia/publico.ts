@@ -65,7 +65,11 @@ export function planoPublico(p: PlanoComModulos): PlanoPublico {
     pessoas: p.max_assentos,
     numeros: p.max_canais,
     conversas_estimadas: conversasEstimadas(p.teto_ia_usd_cents),
-    modulos: p.modulos.map((m) => ({ chave: m, nome: ROTULO_DO_MODULO_DO_PLANO[m].rotulo, descricao: ROTULO_DO_MODULO_DO_PLANO[m].descricao })),
+    modulos: p.modulos.map((m) => ({
+      chave: m,
+      nome: ROTULO_DO_MODULO_DO_PLANO[m].rotulo,
+      descricao: ROTULO_DO_MODULO_DO_PLANO[m].descricao,
+    })),
     preco_por_mensagem_cents: p.modulos.includes("disparador") ? p.preco_por_mensagem_cents : null,
     cadastro: `/signup?plano=${encodeURIComponent(p.slug || p.id)}`,
   };

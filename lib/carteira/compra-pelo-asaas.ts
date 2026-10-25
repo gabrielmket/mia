@@ -29,7 +29,12 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit";
 import { chaveDoProvedor } from "@/lib/cobranca/configuracao";
-import { ASAAS_API_BASE, dataCivilEmSaoPaulo, erroDoAsaas, modoDaChaveAsaas } from "@/lib/cobranca/provedores/asaas";
+import {
+  ASAAS_API_BASE,
+  dataCivilEmSaoPaulo,
+  erroDoAsaas,
+  modoDaChaveAsaas,
+} from "@/lib/cobranca/provedores/asaas";
 import { baseDeTesteDaCobranca } from "@/lib/cobranca/provedores/base-de-teste";
 import { ErroDoProvedor } from "@/lib/cobranca/provedores/contrato";
 import { moduloLigado } from "@/lib/instalacao/modulos";
@@ -63,7 +68,8 @@ export interface DependenciasDaCompra {
   cobrancaLigada?: () => Promise<boolean>;
 }
 
-const COLUNAS_DA_COMPRA = "id, valor_cents, status, link, pix_copia_e_cola, modo, criada_em, paga_em";
+const COLUNAS_DA_COMPRA =
+  "id, valor_cents, status, link, pix_copia_e_cola, modo, criada_em, paga_em";
 const PAGO = new Set(["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]);
 const PENDENTE = new Set(["PENDING", "OVERDUE", "AWAITING_RISK_ANALYSIS"]);
 const TEMPO_LIMITE_MS = 20_000;
@@ -92,22 +98,41 @@ function linkSeguro(u: string | null | undefined, loopback: boolean): string | n
 function cliente(deps: DependenciasDaCompra) {
   const buscar = deps.fetch ?? fetch;
   const teste = baseDeTesteDaCobranca();
-  async function credencial(): Promise<{ chave: string; base: string; modo: "teste" | "producao" }> {
+  async function credencial(): Promise<{
+    chave: string;
+    base: string;
+    modo: "teste" | "producao";
+  }> {
     const chave = await (deps.lerChave ?? (() => chaveDoProvedor("asaas")))();
     const modo = chave === null ? null : modoDaChaveAsaas(chave);
     if (chave === null || modo === null) throw new ErroDoProvedor(null, "sem_chave", false, true);
     if (teste === null) return { chave, base: ASAAS_API_BASE[modo], modo };
-    if (modo === "producao") throw new ErroDoProvedor(null, "chave_real_fora_do_asaas", false, true);
+    if (modo === "producao")
+      throw new ErroDoProvedor(null, "chave_real_fora_do_asaas", false, true);
     return { chave, base: `${teste}/v3`, modo };
   }
-  async function chamar(metodo: "GET" | "POST" | "DELETE", caminho: string, corpo?: Record<string, unknown>): Promise<unknown> {
+  async function chamar(
+    metodo: "GET" | "POST" | "DELETE",
+    caminho: string,
+    corpo?: Record<string, unknown>,
+  ): Promise<unknown> {
     const { chave, base } = await credencial();
-    const headers: Record<string, string> = { access_token: chave, accept: "application/json", "user-agent": "creditos-da-carteira/mia" };
+    const headers: Record<string, string> = {
+      access_token: chave,
+      accept: "application/json",
+      "user-agent": "creditos-da-carteira/mia",
+    };
     const body = corpo === undefined ? undefined : JSON.stringify(corpo);
     if (body !== undefined) headers["content-type"] = "application/json";
     let r: Response;
     try {
-      r = await buscar(`${base}${caminho}`, { method: metodo, headers, body, cache: "no-store", signal: AbortSignal.timeout(TEMPO_LIMITE_MS) });
+      r = await buscar(`${base}${caminho}`, {
+        method: metodo,
+        headers,
+        body,
+        cache: "no-store",
+        signal: AbortSignal.timeout(TEMPO_LIMITE_MS),
+      });
     } catch {
       throw new ErroDoProvedor(null, "sem_resposta", true);
     }
@@ -133,11 +158,13 @@ export async function lerPacotesAtivos(admin: SupabaseClient): Promise<PacoteDeC
     .order("ordem", { ascending: true })
     .order("valor_cents", { ascending: true });
   if (error) throw new Error(`pacotes de crédito: leitura falhou (${error.code ?? "sem_codigo"})`);
-  return ((data ?? []) as Array<{ id: string; valor_cents: number | string; ordem: number }>).map((p) => ({
-    id: p.id,
-    valor_cents: Number(p.valor_cents),
-    ordem: p.ordem,
-  }));
+  return ((data ?? []) as Array<{ id: string; valor_cents: number | string; ordem: number }>).map(
+    (p) => ({
+      id: p.id,
+      valor_cents: Number(p.valor_cents),
+      ordem: p.ordem,
+    }),
+  );
 }
 
 /**
@@ -159,8 +186,10 @@ export async function podeComprarCreditos(
   if (error) throw new Error(`assinatura: leitura falhou (${error.code ?? "sem_codigo"})`);
   const a = data as { provedor: string | null; provedor_cliente_id: string | null } | null;
   if (!a) return { pode: false, motivo: "sem_assinatura" };
-  if (a.provedor !== null && a.provedor !== "asaas") return { pode: false, motivo: "provedor_nao_e_asaas" };
-  if (a.provedor === null || a.provedor_cliente_id === null) return { pode: false, motivo: "sem_cliente_no_asaas" };
+  if (a.provedor !== null && a.provedor !== "asaas")
+    return { pode: false, motivo: "provedor_nao_e_asaas" };
+  if (a.provedor === null || a.provedor_cliente_id === null)
+    return { pode: false, motivo: "sem_cliente_no_asaas" };
   return { pode: true, clienteRef: a.provedor_cliente_id };
 }
 
@@ -180,7 +209,10 @@ function paraCompra(l: Record<string, unknown>): CompraDeCreditos {
 }
 
 /** As compras recentes da empresa (as 20 mais novas). LANÇA na falha. */
-export async function lerComprasDaEmpresa(admin: SupabaseClient, orgId: string): Promise<CompraDeCreditos[]> {
+export async function lerComprasDaEmpresa(
+  admin: SupabaseClient,
+  orgId: string,
+): Promise<CompraDeCreditos[]> {
   const { data, error } = await admin
     .from("mia_compras_de_creditos")
     .select(COLUNAS_DA_COMPRA)
@@ -195,7 +227,12 @@ export type ResultadoDaCompra =
   | { ok: true; compra: CompraDeCreditos; reaproveitada: boolean }
   | { ok: false; status: number; code: string; message: string };
 
-const recusa = (status: number, code: string, message: string): ResultadoDaCompra => ({ ok: false, status, code, message });
+const recusa = (status: number, code: string, message: string): ResultadoDaCompra => ({
+  ok: false,
+  status,
+  code,
+  message,
+});
 
 /**
  * Cria a cobrança por Pix de um pacote. Uma compra em aberto do MESMO valor é
@@ -225,21 +262,32 @@ export async function iniciarCompraDeCreditos(
     .limit(1)
     .maybeSingle();
   if (erroDaAberta) return recusa(500, "internal_error", "Não foi possível ler as compras.");
-  if (aberta) return { ok: true, compra: paraCompra(aberta as Record<string, unknown>), reaproveitada: true };
+  if (aberta)
+    return { ok: true, compra: paraCompra(aberta as Record<string, unknown>), reaproveitada: true };
 
   const { data: reserva, error: erroDaReserva } = await admin
     .from("mia_compras_de_creditos")
-    .insert({ organization_id: p.orgId, valor_cents: p.valorCents, status: "criando", criada_por: p.userId })
+    .insert({
+      organization_id: p.orgId,
+      valor_cents: p.valorCents,
+      status: "criando",
+      criada_por: p.userId,
+    })
     .select("id")
     .single();
-  if (erroDaReserva || !reserva) return recusa(500, "internal_error", "Não foi possível registrar a compra.");
+  if (erroDaReserva || !reserva)
+    return recusa(500, "internal_error", "Não foi possível registrar a compra.");
   const compraId = String((reserva as { id: string }).id);
   const externalReference = `creditos:${p.orgId}:${compraId}`;
 
   const api = cliente(deps);
   try {
     const { modo } = await api.credencial();
-    const consulta = new URLSearchParams({ customer: pode.clienteRef, externalReference, limit: "5" });
+    const consulta = new URLSearchParams({
+      customer: pode.clienteRef,
+      externalReference,
+      limit: "5",
+    });
     const existentes = api.ler(listaAsaas, await api.chamar("GET", `/payments?${consulta}`)).data;
     const venceEm = new Date(agora.getTime() + DIAS_PARA_PAGAR * 86_400_000);
     const pagamento =
@@ -257,20 +305,34 @@ export async function iniciarCompraDeCreditos(
       );
     let pix: string | null = null;
     try {
-      pix = api.ler(pixAsaas, await api.chamar("GET", `/payments/${encodeURIComponent(pagamento.id)}/pixQrCode`)).payload ?? null;
+      pix =
+        api.ler(
+          pixAsaas,
+          await api.chamar("GET", `/payments/${encodeURIComponent(pagamento.id)}/pixQrCode`),
+        ).payload ?? null;
     } catch {
       // Sem o copia e cola, o link da fatura também tem o Pix.
     }
     const link = linkSeguro(pagamento.invoiceUrl, api.loopback);
     const { data: gravada, error: erroDaGravacao } = await admin
       .from("mia_compras_de_creditos")
-      .update({ status: "aguardando", pagamento_ref: pagamento.id, link, pix_copia_e_cola: pix, modo })
+      .update({
+        status: "aguardando",
+        pagamento_ref: pagamento.id,
+        link,
+        pix_copia_e_cola: pix,
+        modo,
+      })
       .eq("id", compraId)
       .eq("status", "criando")
       .select(COLUNAS_DA_COMPRA)
       .maybeSingle();
     if (erroDaGravacao || !gravada) {
-      return recusa(500, "pagamento_nao_registrado", "O Pix foi gerado, mas não conseguimos registrar a compra. Tente de novo em alguns minutos.");
+      return recusa(
+        500,
+        "pagamento_nao_registrado",
+        "O Pix foi gerado, mas não conseguimos registrar a compra. Tente de novo em alguns minutos.",
+      );
     }
     void audit({
       action: "carteira.compra_iniciada",
@@ -281,7 +343,11 @@ export async function iniciarCompraDeCreditos(
       requestId: p.requestId ?? null,
       metadata: { valor_cents: p.valorCents, modo },
     });
-    return { ok: true, compra: paraCompra(gravada as Record<string, unknown>), reaproveitada: false };
+    return {
+      ok: true,
+      compra: paraCompra(gravada as Record<string, unknown>),
+      reaproveitada: false,
+    };
   } catch (e) {
     await admin
       .from("mia_compras_de_creditos")
@@ -289,9 +355,17 @@ export async function iniciarCompraDeCreditos(
       .eq("id", compraId)
       .eq("status", "criando");
     if (e instanceof ErroDoProvedor) {
-      logger.warn("carteira.compra_pelo_asaas_falhou", { organization_id: p.orgId, status: e.status, codigo: e.codigo });
+      logger.warn("carteira.compra_pelo_asaas_falhou", {
+        organization_id: p.orgId,
+        status: e.status,
+        codigo: e.codigo,
+      });
       if (e.codigo === "sem_chave") return recusa(409, "sem_chave", FRASE_SEM_COMPRA.sem_chave);
-      return recusa(e.transitorio ? 503 : 502, "provedor_recusou", "O Asaas não gerou o Pix agora. Tente de novo em alguns minutos.");
+      return recusa(
+        e.transitorio ? 503 : 502,
+        "provedor_recusou",
+        "O Asaas não gerou o Pix agora. Tente de novo em alguns minutos.",
+      );
     }
     throw e;
   }
@@ -313,11 +387,22 @@ export async function conferirCompra(
     .eq("id", compraId)
     .maybeSingle();
   if (error || !data) throw new Error("compra de crédito ilegível");
-  const c = data as { id: string; organization_id: string; status: CompraDeCreditos["status"]; pagamento_ref: string | null; criada_em: string; valor_cents: number };
+  const c = data as {
+    id: string;
+    organization_id: string;
+    status: CompraDeCreditos["status"];
+    pagamento_ref: string | null;
+    criada_em: string;
+    valor_cents: number;
+  };
   if (c.status === "paga") return { status: "paga", lancou: false };
   if (c.pagamento_ref === null) {
     if (c.status === "criando" && agora.getTime() - Date.parse(c.criada_em) > CRIANDO_MORTA_MS) {
-      await admin.from("mia_compras_de_creditos").update({ status: "cancelada", encerrada_em: agora.toISOString() }).eq("id", c.id).eq("status", "criando");
+      await admin
+        .from("mia_compras_de_creditos")
+        .update({ status: "cancelada", encerrada_em: agora.toISOString() })
+        .eq("id", c.id)
+        .eq("status", "criando");
       return { status: "cancelada", lancou: false };
     }
     return { status: c.status, lancou: false };
@@ -325,7 +410,10 @@ export async function conferirCompra(
   const api = cliente(deps);
   let pagamento: z.infer<typeof cobrancaAsaas>;
   try {
-    pagamento = api.ler(cobrancaAsaas, await api.chamar("GET", `/payments/${encodeURIComponent(c.pagamento_ref)}`));
+    pagamento = api.ler(
+      cobrancaAsaas,
+      await api.chamar("GET", `/payments/${encodeURIComponent(c.pagamento_ref)}`),
+    );
   } catch (e) {
     logger.warn("carteira.releitura_da_compra_falhou", {
       organization_id: c.organization_id,
@@ -335,11 +423,18 @@ export async function conferirCompra(
   }
   if (PAGO.has(pagamento.status)) {
     const pagoEm = pagamento.clientPaymentDate ?? pagamento.paymentDate ?? null;
-    const { data: r, error: erroDoLancamento } = await admin.rpc("fn_mia_confirmar_compra_de_creditos", {
-      p_compra: c.id,
-      p_pago_em: pagoEm && /^\d{4}-\d{2}-\d{2}$/.test(pagoEm) ? `${pagoEm}T12:00:00-03:00` : agora.toISOString(),
-    });
-    if (erroDoLancamento) throw new Error(`a compra paga não foi lançada (${erroDoLancamento.code ?? "sem_codigo"})`);
+    const { data: r, error: erroDoLancamento } = await admin.rpc(
+      "fn_mia_confirmar_compra_de_creditos",
+      {
+        p_compra: c.id,
+        p_pago_em:
+          pagoEm && /^\d{4}-\d{2}-\d{2}$/.test(pagoEm)
+            ? `${pagoEm}T12:00:00-03:00`
+            : agora.toISOString(),
+      },
+    );
+    if (erroDoLancamento)
+      throw new Error(`a compra paga não foi lançada (${erroDoLancamento.code ?? "sem_codigo"})`);
     const lancou = (r as { lancou?: boolean; mudou?: boolean } | null)?.mudou === true;
     if (lancou) {
       void audit({
@@ -357,12 +452,19 @@ export async function conferirCompra(
   if (!PENDENTE.has(pagamento.status)) {
     await admin
       .from("mia_compras_de_creditos")
-      .update({ status: "cancelada", encerrada_em: agora.toISOString(), relida_em: agora.toISOString() })
+      .update({
+        status: "cancelada",
+        encerrada_em: agora.toISOString(),
+        relida_em: agora.toISOString(),
+      })
       .eq("id", c.id)
       .in("status", ["aguardando", "criando"]);
     return { status: "cancelada", lancou: false };
   }
-  await admin.from("mia_compras_de_creditos").update({ relida_em: agora.toISOString() }).eq("id", c.id);
+  await admin
+    .from("mia_compras_de_creditos")
+    .update({ relida_em: agora.toISOString() })
+    .eq("id", c.id);
   return { status: c.status, lancou: false };
 }
 
@@ -390,7 +492,10 @@ export async function relerComprasEmAberto(
       try {
         if ((await conferirCompra(admin, id, deps)).lancou) lancadas += 1;
       } catch (e) {
-        logger.warn("carteira.compra_nao_conferida", { compra: id, detalhe: e instanceof Error ? e.message : String(e) });
+        logger.warn("carteira.compra_nao_conferida", {
+          compra: id,
+          detalhe: e instanceof Error ? e.message : String(e),
+        });
       }
     }
     return lancadas;

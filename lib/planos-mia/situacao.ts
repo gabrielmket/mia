@@ -16,7 +16,15 @@ import type { AvisoDaRegua, EstadoDaAssinatura } from "@/lib/cobranca/vocabulari
 const HORA_MS = 3_600_000;
 const DIA_MS = 24 * HORA_MS;
 
-export const SITUACOES = ["teste", "emdia", "atraso", "prazo", "suspensa", "cancelada", "isenta"] as const;
+export const SITUACOES = [
+  "teste",
+  "emdia",
+  "atraso",
+  "prazo",
+  "suspensa",
+  "cancelada",
+  "isenta",
+] as const;
 export type SituacaoDaEmpresa = (typeof SITUACOES)[number];
 
 export interface AssinaturaLida {
@@ -43,7 +51,11 @@ export interface OrgLida {
 
 const em = (v: string | null) => (v === null ? null : Date.parse(v));
 
-export function situacaoDaEmpresa(a: AssinaturaLida | null, org: OrgLida, agora: Date): SituacaoDaEmpresa {
+export function situacaoDaEmpresa(
+  a: AssinaturaLida | null,
+  org: OrgLida,
+  agora: Date,
+): SituacaoDaEmpresa {
   if (!a) return "isenta";
   if (org.status === "suspended") return "suspensa";
   const t = agora.getTime();
@@ -80,43 +92,64 @@ export interface ProximoPasso {
   suspensao_em: string | null;
 }
 
-const iso = (ms: number | null) => (ms === null || !Number.isFinite(ms) ? null : new Date(ms).toISOString());
+const iso = (ms: number | null) =>
+  ms === null || !Number.isFinite(ms) ? null : new Date(ms).toISOString();
 
 /** A previsão da suspensão de quem está em dívida (as regras de `decidirRegua`). */
-export function previsaoDaSuspensao(a: AssinaturaLida, agora: Date, toleranciaDias: number): { avisoFinalEm: number | null; suspensaoEm: number } {
+export function previsaoDaSuspensao(
+  a: AssinaturaLida,
+  agora: Date,
+  toleranciaDias: number,
+): { avisoFinalEm: number | null; suspensaoEm: number } {
   const t = agora.getTime();
   const debito = em(a.vencida_desde) ?? em(a.trial_ate) ?? t;
   const fimDoTeste = em(a.trial_ate);
   const dividaDoTeste =
     !a.pagamento_inicial_pendente &&
-    (a.provedor === null || (a.assinaturas_vivas === 0 && fimDoTeste !== null && debito === fimDoTeste));
+    (a.provedor === null ||
+      (a.assinaturas_vivas === 0 && fimDoTeste !== null && debito === fimDoTeste));
   const tolerancia = Math.max(PISO_DA_TOLERANCIA_DIAS, Math.trunc(toleranciaDias)) * DIA_MS;
   const limite = Math.max(debito + (dividaDoTeste ? 0 : tolerancia), em(a.prazo_extra_ate) ?? 0);
   const avisoEm = em(a.ultimo_aviso_em);
   const avisoFinalDado =
-    (a.ultimo_aviso === "suspende_em_breve" || a.ultimo_aviso === "suspensa") && avisoEm !== null && avisoEm >= debito;
-  if (avisoFinalDado) return { avisoFinalEm: avisoEm, suspensaoEm: Math.max(limite, avisoEm + 48 * HORA_MS) };
+    (a.ultimo_aviso === "suspende_em_breve" || a.ultimo_aviso === "suspensa") &&
+    avisoEm !== null &&
+    avisoEm >= debito;
+  if (avisoFinalDado)
+    return { avisoFinalEm: avisoEm, suspensaoEm: Math.max(limite, avisoEm + 48 * HORA_MS) };
   const avisoFinalEm = Math.max(limite - 2 * DIA_MS, t);
   return { avisoFinalEm, suspensaoEm: Math.max(limite, avisoFinalEm + 48 * HORA_MS) };
 }
 
-export function proximoDaRegua(a: AssinaturaLida | null, org: OrgLida, agora: Date, toleranciaDias: number): ProximoPasso {
+export function proximoDaRegua(
+  a: AssinaturaLida | null,
+  org: OrgLida,
+  agora: Date,
+  toleranciaDias: number,
+): ProximoPasso {
   const s = situacaoDaEmpresa(a, org, agora);
-  const nada = (tipo: TipoDoProximoPasso, quando: number | null): ProximoPasso => ({ tipo, em: iso(quando), suspensao_em: null });
+  const nada = (tipo: TipoDoProximoPasso, quando: number | null): ProximoPasso => ({
+    tipo,
+    em: iso(quando),
+    suspensao_em: null,
+  });
   if (!a || s === "isenta") return nada("sem_cobranca", null);
   const t = agora.getTime();
   switch (s) {
     case "teste": {
       const fim = em(a.trial_ate);
       const aviso = fim === null ? null : fim - 3 * DIA_MS;
-      if (aviso !== null && aviso > t && a.assinaturas_vivas === 0 && a.ultimo_aviso === null) return nada("aviso_3_dias", aviso);
+      if (aviso !== null && aviso > t && a.assinaturas_vivas === 0 && a.ultimo_aviso === null)
+        return nada("aviso_3_dias", aviso);
       return nada(a.assinaturas_vivas > 0 ? "primeira_fatura" : "fim_do_teste", fim);
     }
     case "atraso":
     case "prazo": {
       const p = previsaoDaSuspensao(a, agora, toleranciaDias);
-      if (s === "prazo") return { tipo: "fim_do_prazo", em: a.prazo_extra_ate, suspensao_em: iso(p.suspensaoEm) };
-      const avisoFinalDado = a.ultimo_aviso === "suspende_em_breve" || a.ultimo_aviso === "suspensa";
+      if (s === "prazo")
+        return { tipo: "fim_do_prazo", em: a.prazo_extra_ate, suspensao_em: iso(p.suspensaoEm) };
+      const avisoFinalDado =
+        a.ultimo_aviso === "suspende_em_breve" || a.ultimo_aviso === "suspensa";
       return avisoFinalDado
         ? { tipo: "suspensao", em: iso(p.suspensaoEm), suspensao_em: iso(p.suspensaoEm) }
         : { tipo: "aviso_final", em: iso(p.avisoFinalEm), suspensao_em: iso(p.suspensaoEm) };
@@ -181,14 +214,26 @@ export function reguaDaEmpresa(
   const naoAssinou = a.assinaturas_vivas === 0 && a.provedor === null;
   if (s === "teste" || (naoAssinou && (s === "atraso" || s === "suspensa" || s === "prazo"))) {
     pontos.push({ em: em(entrou), titulo: "Entrou; o teste começou" });
-    if (fim !== null) pontos.push({ em: fim - 3 * DIA_MS, titulo: "Aviso: o teste termina em 3 dias" });
-    pontos.push({ em: fim, titulo: a.assinaturas_vivas > 0 ? "1ª fatura vence" : "Fim do teste sem assinatura: aviso final" });
+    if (fim !== null)
+      pontos.push({ em: fim - 3 * DIA_MS, titulo: "Aviso: o teste termina em 3 dias" });
+    pontos.push({
+      em: fim,
+      titulo:
+        a.assinaturas_vivas > 0 ? "1ª fatura vence" : "Fim do teste sem assinatura: aviso final",
+    });
     if (a.assinaturas_vivas === 0) {
-      const p = previsaoDaSuspensao({ ...a, vencida_desde: a.vencida_desde ?? a.trial_ate }, agora, toleranciaDias);
+      const p = previsaoDaSuspensao(
+        { ...a, vencida_desde: a.vencida_desde ?? a.trial_ate },
+        agora,
+        toleranciaDias,
+      );
       pontos.push({ em: p.suspensaoEm, titulo: "Suspensão, 48 horas depois do aviso final" });
     }
   } else if (s === "emdia" || s === "cancelada") {
-    pontos.push({ em: em(a.proximo_vencimento), titulo: s === "cancelada" ? "Fim do período pago" : "Próxima cobrança" });
+    pontos.push({
+      em: em(a.proximo_vencimento),
+      titulo: s === "cancelada" ? "Fim do período pago" : "Próxima cobrança",
+    });
   } else {
     const p = previsaoDaSuspensao(a, agora, toleranciaDias);
     pontos.push({ em: em(a.vencida_desde), titulo: "Pagamento não identificado" });

@@ -37,7 +37,14 @@ export async function GET(): Promise<Response> {
       { requestId, headers: CABECALHOS },
     );
   } catch (erro) {
-    logger.warn("[publico/planos] leitura falhou", { detalhe: erro instanceof Error ? erro.message : String(erro) });
-    return fail("indisponivel", "Os planos não puderam ser lidos agora. Tente de novo em instantes.", 503, { requestId });
+    logger.warn("[publico/planos] leitura falhou", {
+      detalhe: erro instanceof Error ? erro.message : String(erro),
+    });
+    return fail(
+      "indisponivel",
+      "Os planos não puderam ser lidos agora. Tente de novo em instantes.",
+      503,
+      { requestId },
+    );
   }
 }

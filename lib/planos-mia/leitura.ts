@@ -89,11 +89,18 @@ export function juntarPlano(p: PlanoDoUpstream, lado: LadoDoPlano | undefined): 
  */
 export async function lerPlanosComModulos(admin: SupabaseClient): Promise<PlanoComModulos[]> {
   const [planos, lados] = await Promise.all([
-    admin.from("cobranca_planos").select(COLUNAS_DO_UPSTREAM).order("preco_cents", { ascending: true }),
-    admin.from("mia_plano_modulos").select("plano_id, modulos, preco_por_mensagem_cents, frase, destaque"),
+    admin
+      .from("cobranca_planos")
+      .select(COLUNAS_DO_UPSTREAM)
+      .order("preco_cents", { ascending: true }),
+    admin
+      .from("mia_plano_modulos")
+      .select("plano_id, modulos, preco_por_mensagem_cents, frase, destaque"),
   ]);
-  if (planos.error) throw new Error(`planos: leitura falhou (${planos.error.code ?? "sem_codigo"})`);
-  if (lados.error) throw new Error(`módulos dos planos: leitura falhou (${lados.error.code ?? "sem_codigo"})`);
+  if (planos.error)
+    throw new Error(`planos: leitura falhou (${planos.error.code ?? "sem_codigo"})`);
+  if (lados.error)
+    throw new Error(`módulos dos planos: leitura falhou (${lados.error.code ?? "sem_codigo"})`);
   const porPlano = new Map(((lados.data ?? []) as LadoDoPlano[]).map((l) => [l.plano_id, l]));
   return ((planos.data ?? []) as PlanoDoUpstream[]).map((p) => juntarPlano(p, porPlano.get(p.id)));
 }
@@ -109,15 +116,23 @@ export function planosOferecidos(planos: readonly PlanoComModulos[]): PlanoComMo
  * nome: o de menor preço, a mesma ordem da página. `null` = não achou, e o
  * cadastro fica no padrão.
  */
-export function planoDoLink(planos: readonly PlanoComModulos[], valor: string | null | undefined): PlanoComModulos | null {
+export function planoDoLink(
+  planos: readonly PlanoComModulos[],
+  valor: string | null | undefined,
+): PlanoComModulos | null {
   const v = (valor ?? "").trim();
   if (!v || v.length > 80) return null;
   const ofertados = planosOferecidos(planos);
-  return ofertados.find((p) => p.id === v) ?? ofertados.find((p) => p.slug === slugDoPlano(v)) ?? null;
+  return (
+    ofertados.find((p) => p.id === v) ?? ofertados.find((p) => p.slug === slugDoPlano(v)) ?? null
+  );
 }
 
 /** A linha nossa de um plano. `null` = o plano não tem linha (nenhum módulo). LANÇA na falha. */
-export async function lerLadoDoPlano(admin: SupabaseClient, planoId: string): Promise<LadoDoPlano | null> {
+export async function lerLadoDoPlano(
+  admin: SupabaseClient,
+  planoId: string,
+): Promise<LadoDoPlano | null> {
   const { data, error } = await admin
     .from("mia_plano_modulos")
     .select("plano_id, modulos, preco_por_mensagem_cents, frase, destaque")

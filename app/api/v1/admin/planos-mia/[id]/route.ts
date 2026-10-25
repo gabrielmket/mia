@@ -56,14 +56,30 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
   const corpo = corpoSchema.safeParse(await req.json().catch(() => null));
   if (!corpo.success) {
-    return fail("validation_failed", "Pedido inválido", 400, { requestId, details: corpo.error.flatten() });
+    return fail("validation_failed", "Pedido inválido", 400, {
+      requestId,
+      details: corpo.error.flatten(),
+    });
   }
-  const { data: plano, error } = await admin.from("cobranca_planos").select("id").eq("id", id).maybeSingle();
+  const { data: plano, error } = await admin
+    .from("cobranca_planos")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
   if (error) return fail("internal_error", "Não foi possível ler o plano", 500, { requestId });
   if (!plano) return fail("not_found", "Plano não encontrado", 404, { requestId });
 
-  const frase = corpo.data.frase === undefined ? undefined : corpo.data.frase === "" ? null : corpo.data.frase;
-  const r = await salvarLadoDoPlano(admin, id, { ...corpo.data, frase }, { userId: adminCtx.user.id, requestId });
+  const frase =
+    corpo.data.frase === undefined ? undefined : corpo.data.frase === "" ? null : corpo.data.frase;
+  const r = await salvarLadoDoPlano(
+    admin,
+    id,
+    { ...corpo.data, frase },
+    { userId: adminCtx.user.id, requestId },
+  );
   if (!r.ok) return fail("plano_com_assinantes", r.motivo, 409, { requestId });
-  return ok({ mudou: r.mudou, ligou: r.ligou, empresas_com_modulo_novo: r.empresas }, { requestId });
+  return ok(
+    { mudou: r.mudou, ligou: r.ligou, empresas_com_modulo_novo: r.empresas },
+    { requestId },
+  );
 }

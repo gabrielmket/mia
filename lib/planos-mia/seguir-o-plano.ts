@@ -30,17 +30,16 @@ import { normalizarIdioma, type Idioma } from "@/lib/i18n/idiomas";
 import { logger } from "@/lib/logger";
 import { ehOperante } from "@/lib/organizacao/operante";
 
-import { ehModuloDoPlano, MODULOS_DO_PLANO, ROTULO_DO_MODULO_DO_PLANO, type ModuloDoPlano } from "./catalogo";
+import {
+  ehModuloDoPlano,
+  MODULOS_DO_PLANO,
+  ROTULO_DO_MODULO_DO_PLANO,
+  type ModuloDoPlano,
+} from "./catalogo";
 
 /** De onde veio a mudança (a coluna `motivo` do registro). */
 export type MotivoDaMudanca =
-  | "releitura"
-  | "troca"
-  | "rodada"
-  | "plano_editado"
-  | "atribuicao"
-  | "isencao"
-  | "cadastro";
+  "releitura" | "troca" | "rodada" | "plano_editado" | "atribuicao" | "isencao" | "cadastro";
 
 export interface MudancaDeModulo {
   modulo: ModuloDoPlano;
@@ -59,19 +58,32 @@ interface OrgDoAviso {
 }
 
 async function lerOrg(admin: SupabaseClient, orgId: string): Promise<OrgDoAviso | null> {
-  const { data } = await admin.from("organizations").select("id, locale, timezone, status").eq("id", orgId).maybeSingle();
+  const { data } = await admin
+    .from("organizations")
+    .select("id, locale, timezone, status")
+    .eq("id", orgId)
+    .maybeSingle();
   return (data as OrgDoAviso | null) ?? null;
 }
 
 async function nomeDoPlanoDaEmpresa(admin: SupabaseClient, orgId: string): Promise<string | null> {
-  const { data: a } = await admin.from("cobranca_assinaturas").select("plano_id").eq("organization_id", orgId).maybeSingle();
+  const { data: a } = await admin
+    .from("cobranca_assinaturas")
+    .select("plano_id")
+    .eq("organization_id", orgId)
+    .maybeSingle();
   const planoId = (a as { plano_id?: string } | null)?.plano_id;
   if (!planoId) return null;
-  const { data: p } = await admin.from("cobranca_planos").select("nome").eq("id", planoId).maybeSingle();
+  const { data: p } = await admin
+    .from("cobranca_planos")
+    .select("nome")
+    .eq("id", planoId)
+    .maybeSingle();
   return (p as { nome?: string } | null)?.nome ?? null;
 }
 
-const nomeDoModulo = (m: ModuloDoPlano, idioma: Idioma) => traduzir(ROTULO_DO_MODULO_DO_PLANO[m].rotulo, idioma);
+const nomeDoModulo = (m: ModuloDoPlano, idioma: Idioma) =>
+  traduzir(ROTULO_DO_MODULO_DO_PLANO[m].rotulo, idioma);
 
 /** O texto de cada mudança, no idioma da empresa. Puro; exportado para os testes. */
 export function textoDaMudanca(
@@ -83,8 +95,13 @@ export function textoDaMudanca(
   const nome = nomeDoModulo(m.modulo, idioma);
   if (m.acao === "ligou") {
     return {
-      titulo: t("{modulo} ligado pelo plano {plano}").replace("{modulo}", nome).replace("{plano}", plano ?? t("da empresa")),
-      corpo: t("O {modulo} entrou no plano da empresa e já aparece no menu.").replace("{modulo}", nome),
+      titulo: t("{modulo} ligado pelo plano {plano}")
+        .replace("{modulo}", nome)
+        .replace("{plano}", plano ?? t("da empresa")),
+      corpo: t("O {modulo} entrou no plano da empresa e já aparece no menu.").replace(
+        "{modulo}",
+        nome,
+      ),
     };
   }
   return {
@@ -112,7 +129,11 @@ async function avisarNaCentral(
     ref_kind: "plano",
     ref_id: orgId,
   });
-  if (error) logger.warn("planos-mia: aviso da Central não gravado", { organization_id: orgId, codigo: error.code ?? null });
+  if (error)
+    logger.warn("planos-mia: aviso da Central não gravado", {
+      organization_id: orgId,
+      codigo: error.code ?? null,
+    });
 }
 
 /**
@@ -126,20 +147,39 @@ export async function seguirOPlano(
   motivo: MotivoDaMudanca,
 ): Promise<MudancaDeModulo[]> {
   try {
-    const { data, error } = await admin.rpc("fn_mia_seguir_o_plano", { p_org: orgId, p_motivo: motivo });
+    const { data, error } = await admin.rpc("fn_mia_seguir_o_plano", {
+      p_org: orgId,
+      p_motivo: motivo,
+    });
     if (error) {
-      logger.warn("planos-mia: seguir o plano falhou", { organization_id: orgId, motivo, codigo: error.code ?? null });
+      logger.warn("planos-mia: seguir o plano falhou", {
+        organization_id: orgId,
+        motivo,
+        codigo: error.code ?? null,
+      });
       return [];
     }
-    const mudancas = (Array.isArray(data) ? (data as Array<{ modulo?: unknown; acao?: unknown }>) : [])
-      .filter((x): x is MudancaDeModulo => typeof x.modulo === "string" && ehModuloDoPlano(x.modulo) && (x.acao === "ligou" || x.acao === "desligou"));
+    const mudancas = (
+      Array.isArray(data) ? (data as Array<{ modulo?: unknown; acao?: unknown }>) : []
+    ).filter(
+      (x): x is MudancaDeModulo =>
+        typeof x.modulo === "string" &&
+        ehModuloDoPlano(x.modulo) &&
+        (x.acao === "ligou" || x.acao === "desligou"),
+    );
     if (mudancas.length === 0) return [];
 
-    const [org, plano] = await Promise.all([lerOrg(admin, orgId), nomeDoPlanoDaEmpresa(admin, orgId)]);
+    const [org, plano] = await Promise.all([
+      lerOrg(admin, orgId),
+      nomeDoPlanoDaEmpresa(admin, orgId),
+    ]);
     const idioma = normalizarIdioma(org?.locale ?? null);
     for (const m of mudancas) {
       const texto = textoDaMudanca(m, plano, idioma);
-      await avisarNaCentral(admin, orgId, { ...texto, severidade: m.acao === "desligou" ? "warn" : "info" });
+      await avisarNaCentral(admin, orgId, {
+        ...texto,
+        severidade: m.acao === "desligou" ? "warn" : "info",
+      });
     }
     void audit({
       action: "planos_mia.modulos_seguiram_o_plano",
@@ -170,12 +210,20 @@ export async function seguirOPlanoEmTodas(admin: SupabaseClient): Promise<number
   try {
     const [assinaturas, registro] = await Promise.all([
       admin.from("cobranca_assinaturas").select("organization_id").limit(10_000),
-      admin.from("mia_modulos_do_plano_registro").select("organization_id").eq("acao", "ligou").limit(10_000),
+      admin
+        .from("mia_modulos_do_plano_registro")
+        .select("organization_id")
+        .eq("acao", "ligou")
+        .limit(10_000),
     ]);
     if (assinaturas.error || registro.error) return 0;
     const orgs = new Set<string>([
-      ...((assinaturas.data ?? []) as Array<{ organization_id: string }>).map((l) => l.organization_id),
-      ...((registro.data ?? []) as Array<{ organization_id: string }>).map((l) => l.organization_id),
+      ...((assinaturas.data ?? []) as Array<{ organization_id: string }>).map(
+        (l) => l.organization_id,
+      ),
+      ...((registro.data ?? []) as Array<{ organization_id: string }>).map(
+        (l) => l.organization_id,
+      ),
     ]);
     let mudaram = 0;
     for (const org of orgs) {
@@ -200,7 +248,9 @@ export function modulosQueSaem(
   doAgendado: readonly ModuloDoPlano[],
   aMao: ReadonlySet<string>,
 ): ModuloDoPlano[] {
-  return MODULOS_DO_PLANO.filter((m) => doAtual.includes(m) && !doAgendado.includes(m) && !aMao.has(m));
+  return MODULOS_DO_PLANO.filter(
+    (m) => doAtual.includes(m) && !doAgendado.includes(m) && !aMao.has(m),
+  );
 }
 
 /**
@@ -208,9 +258,14 @@ export function modulosQueSaem(
  * quem administra e aviso na Central, uma vez por troca agendada (a trava é a
  * chave em `platform_avisos_enviados`). Devolve quantos avisos saíram. Nunca lança.
  */
-export async function avisarModulosQueSaem(admin: SupabaseClient, agora: Date = new Date()): Promise<number> {
+export async function avisarModulosQueSaem(
+  admin: SupabaseClient,
+  agora: Date = new Date(),
+): Promise<number> {
   try {
-    const limite = new Date(agora.getTime() + ANTECEDENCIA_DO_AVISO_DE_SAIDA_DIAS * DIA_MS).toISOString();
+    const limite = new Date(
+      agora.getTime() + ANTECEDENCIA_DO_AVISO_DE_SAIDA_DIAS * DIA_MS,
+    ).toISOString();
     const { data, error } = await admin
       .from("cobranca_assinaturas")
       .select("organization_id, plano_id, plano_agendado_id, proximo_vencimento")
@@ -233,7 +288,9 @@ export async function avisarModulosQueSaem(admin: SupabaseClient, agora: Date = 
         (l.modulos ?? []).filter(ehModuloDoPlano),
       ]),
     );
-    const nomeDe = new Map(((nomes.data ?? []) as Array<{ id: string; nome: string }>).map((p) => [p.id, p.nome]));
+    const nomeDe = new Map(
+      ((nomes.data ?? []) as Array<{ id: string; nome: string }>).map((p) => [p.id, p.nome]),
+    );
 
     let avisos = 0;
     for (const c of candidatas) {
@@ -249,7 +306,11 @@ export async function avisarModulosQueSaem(admin: SupabaseClient, agora: Date = 
       );
       if (saem.length === 0) continue;
       const chave = `jornada:modulos_saem:${c.organization_id}:${c.plano_agendado_id}:${c.proximo_vencimento.slice(0, 10)}`;
-      const { data: ja } = await admin.from("platform_avisos_enviados").select("chave").eq("chave", chave).maybeSingle();
+      const { data: ja } = await admin
+        .from("platform_avisos_enviados")
+        .select("chave")
+        .eq("chave", chave)
+        .maybeSingle();
       if (ja) continue;
       const org = await lerOrg(admin, c.organization_id);
       if (!org || !ehOperante(org.status)) continue;
@@ -258,7 +319,9 @@ export async function avisarModulosQueSaem(admin: SupabaseClient, agora: Date = 
       const nomesDosModulos = saem.map((m) => nomeDoModulo(m, idioma)).join(", ");
       const dia = diaEMes(new Date(c.proximo_vencimento), idioma, org.timezone);
       const texto = {
-        titulo: t("Sai do plano em {data}: {modulos}").replace("{modulos}", nomesDosModulos).replace("{data}", dia),
+        titulo: t("Sai do plano em {data}: {modulos}")
+          .replace("{modulos}", nomesDosModulos)
+          .replace("{data}", dia),
         corpo: t(
           "A troca para o plano {plano} vale na renovação, em {data}. Nesse dia sai do plano: {modulos}. Os dados ficam guardados. Para manter, fique no plano atual em Plano e cobrança.",
         )
@@ -270,7 +333,11 @@ export async function avisarModulosQueSaem(admin: SupabaseClient, agora: Date = 
       // A trava ANTES do envio: na dúvida entre avisar duas vezes e uma, uma.
       const { error: erroDaTrava } = await admin
         .from("platform_avisos_enviados")
-        .insert({ chave, enviado_em: agora.toISOString(), detalhe: { organizacao: c.organization_id, modulos: saem } });
+        .insert({
+          chave,
+          enviado_em: agora.toISOString(),
+          detalhe: { organizacao: c.organization_id, modulos: saem },
+        });
       if (erroDaTrava) continue;
       await avisarNaCentral(admin, c.organization_id, texto);
       await enviarAvisoAosAdmins(admin, { id: c.organization_id, idioma }, texto, null);
@@ -281,13 +348,19 @@ export async function avisarModulosQueSaem(admin: SupabaseClient, agora: Date = 
         organizationId: c.organization_id,
         resourceType: "cobranca_assinatura",
         resourceId: c.organization_id,
-        metadata: { modulos: saem, plano_agendado_id: c.plano_agendado_id, vale_em: c.proximo_vencimento },
+        metadata: {
+          modulos: saem,
+          plano_agendado_id: c.plano_agendado_id,
+          vale_em: c.proximo_vencimento,
+        },
       });
       avisos += 1;
     }
     return avisos;
   } catch (erro) {
-    logger.warn("planos-mia: aviso dos 7 dias falhou", { detalhe: erro instanceof Error ? erro.message : String(erro) });
+    logger.warn("planos-mia: aviso dos 7 dias falhou", {
+      detalhe: erro instanceof Error ? erro.message : String(erro),
+    });
     return 0;
   }
 }

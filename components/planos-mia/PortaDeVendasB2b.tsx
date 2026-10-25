@@ -16,5 +16,11 @@ export async function PortaDeVendasB2b({ children }: { children: ReactNode }) {
   if (!(await crmB2bForaDoPlanoDaSessao())) return children;
   const user = await loadAuthUser();
   const org = user ? await orgAtivaSemPortao(user) : null;
-  return <ForaDoPlano modulo="crm_b2b" idioma={user?.idioma ?? "pt-BR"} administra={org?.role === "admin"} />;
+  return (
+    <ForaDoPlano
+      modulo="crm_b2b"
+      idioma={user?.idioma ?? "pt-BR"}
+      administra={org?.role === "admin"}
+    />
+  );
 }

@@ -70,7 +70,10 @@ export async function GET(_req: NextRequest) {
       { requestId },
     );
   } catch (erro) {
-    logger.warn("[carteira/compras] leitura falhou", { requestId, detalhe: erro instanceof Error ? erro.message : String(erro) });
+    logger.warn("[carteira/compras] leitura falhou", {
+      requestId,
+      detalhe: erro instanceof Error ? erro.message : String(erro),
+    });
     return fail("internal_error", "Não foi possível ler as compras.", 500, { requestId });
   }
 }
@@ -93,5 +96,8 @@ export async function POST(req: NextRequest) {
     requestId,
   });
   if (!r.ok) return fail(r.code, r.message, r.status, { requestId });
-  return ok({ compra: r.compra, reaproveitada: r.reaproveitada }, { requestId, status: r.reaproveitada ? 200 : 201 });
+  return ok(
+    { compra: r.compra, reaproveitada: r.reaproveitada },
+    { requestId, status: r.reaproveitada ? 200 : 201 },
+  );
 }

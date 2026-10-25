@@ -27,15 +27,25 @@ import { ehModuloDoPlano, MODULOS_DO_PLANO, type ModuloDoPlano } from "./catalog
  * Os módulos que o plano da empresa liga agora. Aceita o cliente da sessão (a
  * função confere que a empresa é de quem pergunta) ou o de serviço. NUNCA LANÇA.
  */
-export async function modulosPeloPlano(db: SupabaseClient, orgId: string): Promise<ModuloDoPlano[]> {
+export async function modulosPeloPlano(
+  db: SupabaseClient,
+  orgId: string,
+): Promise<ModuloDoPlano[]> {
   try {
     if (typeof (db as { rpc?: unknown }).rpc !== "function") return [];
     const { data, error } = await db.rpc("fn_mia_modulos_do_plano", { p_org: orgId });
     if (error) {
-      logger.warn("planos-mia: módulos do plano ilegíveis — nenhum pelo plano", { organization_id: orgId, codigo: error.code ?? null });
+      logger.warn("planos-mia: módulos do plano ilegíveis — nenhum pelo plano", {
+        organization_id: orgId,
+        codigo: error.code ?? null,
+      });
       return [];
     }
-    return Array.isArray(data) ? (data as unknown[]).filter((m): m is ModuloDoPlano => typeof m === "string" && ehModuloDoPlano(m)) : [];
+    return Array.isArray(data)
+      ? (data as unknown[]).filter(
+          (m): m is ModuloDoPlano => typeof m === "string" && ehModuloDoPlano(m),
+        )
+      : [];
   } catch (erro) {
     logger.warn("planos-mia: módulos do plano falharam — nenhum pelo plano", {
       organization_id: orgId,
@@ -57,12 +67,20 @@ export interface OrigemDoModulo {
  * isto vai decidir (liberar, trocar plano) e não pode decidir sobre um "nenhum"
  * que ninguém leu.
  */
-export async function origemDosModulos(admin: SupabaseClient, orgId: string): Promise<OrigemDoModulo[]> {
+export async function origemDosModulos(
+  admin: SupabaseClient,
+  orgId: string,
+): Promise<OrigemDoModulo[]> {
   const [pelaTime, peloPlano] = await Promise.all([
-    admin.from("organization_modules").select("modulo").eq("organization_id", orgId).is("revoked_at", null),
+    admin
+      .from("organization_modules")
+      .select("modulo")
+      .eq("organization_id", orgId)
+      .is("revoked_at", null),
     modulosPeloPlano(admin, orgId),
   ]);
-  if (pelaTime.error) throw new Error(`módulos liberados: leitura falhou (${pelaTime.error.code ?? "sem_codigo"})`);
+  if (pelaTime.error)
+    throw new Error(`módulos liberados: leitura falhou (${pelaTime.error.code ?? "sem_codigo"})`);
   const aMao = new Set(((pelaTime.data ?? []) as Array<{ modulo: string }>).map((l) => l.modulo));
   const doPlano = new Set<string>(peloPlano);
   return MODULOS_DO_PLANO.filter((m) => aMao.has(m) || doPlano.has(m)).map((m) => ({
@@ -88,7 +106,11 @@ export function rotuloDaOrigem(o: Pick<OrigemDoModulo, "pelo_plano" | "pela_time
  * "não contratado", rota recusada. Leitura que falha com a cobrança ligada
  * RECUSA (o mesmo contrato do módulo vendável).
  */
-export async function crmB2bForaDoPlano(admin: SupabaseClient, orgId: string, cobrancaLigada: boolean): Promise<boolean> {
+export async function crmB2bForaDoPlano(
+  admin: SupabaseClient,
+  orgId: string,
+  cobrancaLigada: boolean,
+): Promise<boolean> {
   if (!cobrancaLigada) return false;
   try {
     const { data: assinatura, error } = await admin
@@ -117,6 +139,9 @@ export async function crmB2bForaDoPlano(admin: SupabaseClient, orgId: string, co
  * A lista dos módulos da INSTALAÇÃO que o menu desta empresa enxerga: a mesma da
  * instalação, menos `crm_b2b` quando o plano da empresa não o tem. Pura.
  */
-export function ligadosNaInstalacaoParaAEmpresa<T extends string>(ligados: readonly T[], crmB2bFora: boolean): T[] {
+export function ligadosNaInstalacaoParaAEmpresa<T extends string>(
+  ligados: readonly T[],
+  crmB2bFora: boolean,
+): T[] {
   return crmB2bFora ? ligados.filter((m) => m !== "crm_b2b") : [...ligados];
 }

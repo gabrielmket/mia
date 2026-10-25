@@ -34,7 +34,11 @@ interface Leitura {
   compras: Compra[];
 }
 
-export function ComprarCreditos({ precoPorMensagemCents }: { precoPorMensagemCents: number | null }) {
+export function ComprarCreditos({
+  precoPorMensagemCents,
+}: {
+  precoPorMensagemCents: number | null;
+}) {
   const t = useT();
   const idioma = useIdioma();
   const brl = new Intl.NumberFormat(idioma, { style: "currency", currency: "BRL" });
@@ -66,10 +70,14 @@ export function ComprarCreditos({ precoPorMensagemCents }: { precoPorMensagemCen
     setOcupado(true);
     setRecado(null);
     try {
-      const r = await apiClient.post<{ data: { compra: Compra } }>("/api/v1/carteira/compras", { valor_cents: escolhido });
+      const r = await apiClient.post<{ data: { compra: Compra } }>("/api/v1/carteira/compras", {
+        valor_cents: escolhido,
+      });
       setAberta(r.data.compra);
     } catch (e) {
-      setRecado(e instanceof ApiError ? e.message : t("Não foi possível gerar o Pix. Tente de novo."));
+      setRecado(
+        e instanceof ApiError ? e.message : t("Não foi possível gerar o Pix. Tente de novo."),
+      );
     } finally {
       setOcupado(false);
     }
@@ -79,7 +87,10 @@ export function ComprarCreditos({ precoPorMensagemCents }: { precoPorMensagemCen
     setOcupado(true);
     setRecado(null);
     try {
-      const r = await apiClient.post<{ data: { status: Compra["status"] } }>(`/api/v1/carteira/compras/${compra.id}/conferir`, {});
+      const r = await apiClient.post<{ data: { status: Compra["status"] } }>(
+        `/api/v1/carteira/compras/${compra.id}/conferir`,
+        {},
+      );
       if (r.data.status === "paga") {
         setRecado(t("Pagamento confirmado. Os créditos já estão na carteira."));
         setAberta(null);
@@ -88,7 +99,11 @@ export function ComprarCreditos({ precoPorMensagemCents }: { precoPorMensagemCen
         setRecado(t("Este Pix não vale mais. Gere outro."));
         setAberta(null);
       } else {
-        setRecado(t("Ainda não identificamos o pagamento. Pix confirma em minutos; tente de novo daqui a pouco."));
+        setRecado(
+          t(
+            "Ainda não identificamos o pagamento. Pix confirma em minutos; tente de novo daqui a pouco.",
+          ),
+        );
       }
     } catch {
       setRecado(t("Não foi possível conferir o pagamento agora."));
@@ -103,14 +118,15 @@ export function ComprarCreditos({ precoPorMensagemCents }: { precoPorMensagemCen
       <p className="text-sm text-muted-foreground">
         {precoPorMensagemCents === null
           ? t("O preço por mensagem do Broadcast ainda não foi definido para a sua empresa.")
-          : t("Mensagem do Broadcast a {preco} no seu plano. Mensagem que falha não é cobrada.").replace(
-              "{preco}",
-              brl.format(precoPorMensagemCents / 100),
-            )}
+          : t(
+              "Mensagem do Broadcast a {preco} no seu plano. Mensagem que falha não é cobrada.",
+            ).replace("{preco}", brl.format(precoPorMensagemCents / 100))}
       </p>
       {erro && <p className="text-sm text-error-fg">{erro}</p>}
       {leitura && !leitura.pode_comprar && (
-        <p className="text-sm">{t(fraseSemCompra(leitura.motivo) ?? FRASE_SEM_COMPRA.sem_pacotes)}</p>
+        <p className="text-sm">
+          {t(fraseSemCompra(leitura.motivo) ?? FRASE_SEM_COMPRA.sem_pacotes)}
+        </p>
       )}
       {leitura && leitura.pode_comprar && !aberta && (
         <fieldset className="space-y-2">
@@ -138,7 +154,11 @@ export function ComprarCreditos({ precoPorMensagemCents }: { precoPorMensagemCen
           <p className="text-xs text-muted-foreground">
             {t("Pix pelo Asaas. Entra na carteira quando o Asaas confirma; a nota sai pelo Asaas.")}
           </p>
-          <Button type="button" onClick={() => void gerar()} disabled={ocupado || escolhido === null}>
+          <Button
+            type="button"
+            onClick={() => void gerar()}
+            disabled={ocupado || escolhido === null}
+          >
             {t("Gerar o Pix")}
           </Button>
         </fieldset>
@@ -148,15 +168,27 @@ export function ComprarCreditos({ precoPorMensagemCents }: { precoPorMensagemCen
           <p className="text-sm font-medium">
             {t("Pix de {valor} gerado.").replace("{valor}", brl.format(aberta.valor_cents / 100))}
           </p>
-          {aberta.modo === "teste" && <p className="text-xs text-warning-fg">{t("Modo de teste: nenhum pagamento aqui é real.")}</p>}
+          {aberta.modo === "teste" && (
+            <p className="text-xs text-warning-fg">
+              {t("Modo de teste: nenhum pagamento aqui é real.")}
+            </p>
+          )}
           {aberta.pix_copia_e_cola && (
             <div className="space-y-1">
-              <p className="break-all rounded-md bg-muted p-2 font-mono text-xs">{aberta.pix_copia_e_cola}</p>
+              <p className="rounded-md bg-muted p-2 font-mono text-xs break-all">
+                {aberta.pix_copia_e_cola}
+              </p>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={async () => setRecado((await copyToClipboard(aberta.pix_copia_e_cola ?? "")) ? t("Pix copiado.") : t("Não deu para copiar."))}
+                onClick={async () =>
+                  setRecado(
+                    (await copyToClipboard(aberta.pix_copia_e_cola ?? ""))
+                      ? t("Pix copiado.")
+                      : t("Não deu para copiar."),
+                  )
+                }
               >
                 {t("Copiar o Pix")}
               </Button>
@@ -170,7 +202,13 @@ export function ComprarCreditos({ precoPorMensagemCents }: { precoPorMensagemCen
                 </a>
               </Button>
             )}
-            <Button type="button" variant="outline" size="sm" onClick={() => void conferir(aberta)} disabled={ocupado}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void conferir(aberta)}
+              disabled={ocupado}
+            >
               {t("Já paguei")}
             </Button>
           </div>

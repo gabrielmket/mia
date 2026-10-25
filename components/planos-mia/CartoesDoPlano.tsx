@@ -24,7 +24,11 @@ export function CartoesDoPlano({
 }) {
   const t = useT();
   const idioma = useIdioma();
-  const brl = new Intl.NumberFormat(idioma, { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+  const brl = new Intl.NumberFormat(idioma, {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  });
   const numero = new Intl.NumberFormat(idioma);
   return (
     <fieldset className="space-y-2" aria-describedby="planos-do-cadastro-ajuda">
@@ -37,7 +41,9 @@ export function CartoesDoPlano({
               : c.numeros === 1
                 ? t("1 número")
                 : t("{n} números").replace("{n}", String(c.numeros)),
-            c.pessoas === null ? t("pessoas sem limite") : t("até {n} pessoas").replace("{n}", String(c.pessoas)),
+            c.pessoas === null
+              ? t("pessoas sem limite")
+              : t("até {n} pessoas").replace("{n}", String(c.pessoas)),
             c.conversas === null
               ? t("conversas com IA sem limite")
               : t("cerca de {n} conversas").replace("{n}", numero.format(c.conversas)),
@@ -53,9 +59,15 @@ export function CartoesDoPlano({
               <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-2 text-sm font-semibold">
                   {c.nome}
-                  {c.padrao && <span className="rounded-md border px-1.5 text-xs font-normal text-muted-foreground">{t("padrão")}</span>}
+                  {c.padrao && (
+                    <span className="rounded-md border px-1.5 text-xs font-normal text-muted-foreground">
+                      {t("padrão")}
+                    </span>
+                  )}
                   {c.destaque && !c.padrao && (
-                    <span className="rounded-md border px-1.5 text-xs font-normal text-muted-foreground">{t("Mais escolhido")}</span>
+                    <span className="rounded-md border px-1.5 text-xs font-normal text-muted-foreground">
+                      {t("Mais escolhido")}
+                    </span>
                   )}
                 </span>
                 {c.frase && <span className="block text-xs text-muted-foreground">{c.frase}</span>}
@@ -63,9 +75,13 @@ export function CartoesDoPlano({
               </span>
               <span className="shrink-0 text-right text-sm font-semibold">
                 {brl.format(c.preco_cents / 100)}
-                <span className="block text-xs font-normal text-muted-foreground">{c.intervalo === "ano" ? t("/ano") : t("/mês")}</span>
                 <span className="block text-xs font-normal text-muted-foreground">
-                  {c.trial_dias > 0 ? t("{n} dias de teste").replace("{n}", String(c.trial_dias)) : t("entrada paga")}
+                  {c.intervalo === "ano" ? t("/ano") : t("/mês")}
+                </span>
+                <span className="block text-xs font-normal text-muted-foreground">
+                  {c.trial_dias > 0
+                    ? t("{n} dias de teste").replace("{n}", String(c.trial_dias))
+                    : t("entrada paga")}
                 </span>
               </span>
             </label>
@@ -74,7 +90,9 @@ export function CartoesDoPlano({
       </div>
       <p id="planos-do-cadastro-ajuda" className="text-xs text-muted-foreground">
         {veioDoLink
-          ? t("Veio da página de preços com o plano marcado. Dá para trocar aqui ou depois, no teste.")
+          ? t(
+              "Veio da página de preços com o plano marcado. Dá para trocar aqui ou depois, no teste.",
+            )
           : t("Dá para trocar de plano depois, inclusive durante o teste.")}
       </p>
     </fieldset>
