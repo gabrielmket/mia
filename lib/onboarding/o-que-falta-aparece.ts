@@ -19,8 +19,8 @@
  *          passou pelo passo a passo e não tem `welcome`;
  *        - quem passou pelo passo a passo ANTES da .91 tem `welcome` sem
  *          `segmento`.
- *      Nos dois casos, nada muda: a empresa que já roda (Ultra Sorriso, JHS e
- *      as outras) não vê bloco novo em lugar nenhum;
+ *      Nos dois casos, nada muda: toda empresa que já roda (as implantadas
+ *      antes da .91) não vê bloco novo em lugar nenhum;
  *   2. quem olha administra ou gere a empresa (`admin` ou `manager`): o
  *      atendente e o somente leitura não veem (o protótipo: "os primeiros
  *      passos são da administradora"). Aplicar proposta continua só do

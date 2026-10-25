@@ -19,7 +19,7 @@ import {
   type SegmentoDoOnboarding,
 } from "@/lib/onboarding/modelos-de-agente-da-mia";
 import { roleAtLeast } from "@/lib/auth/types";
-import { AvisoDoModelo, OQueOModeloEnsina, type ModeloNaTela } from "./_modelo";
+import { AvisoDoModelo, EnsinoDoModelo, type ModeloNaTela } from "./_modelo";
 import { RascunhoDoModelo } from "./_rascunho-do-modelo";
 
 /** FORK MIA (.91): o modelo do segmento, do jeito que a tela mostra. */
@@ -146,7 +146,7 @@ export default async function SetupAiPage() {
       ) : (
         <SetupAiForm capacidades={capacidades} conferencias={conferencias} podeConfigurar={podeConfigurar} modelo={modelo} />
       )}
-      {modelo ? <OQueOModeloEnsina modelo={modelo} /> : null}
+      {modelo ? <EnsinoDoModelo modelo={modelo} /> : null}
     </div>
   );
 }

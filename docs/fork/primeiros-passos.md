@@ -87,8 +87,8 @@ conclusão do `/onboarding` do upstream** (`organizations.onboarded_at` e
 2. **Depois do passo a passo:** só se a empresa passou pelo passo "Seu negócio" DESTA
    versão (`welcome.segmento`, que só a .91 grava), e até zerar. A empresa implantada
    pela Time (MCP, carga, SQL) nunca passou pelo passo a passo, e a que passou antes da
-   .91 tem `welcome` sem segmento: nas duas, nada muda, e a empresa que já roda (Ultra
-   Sorriso, JHS e as outras) não vê bloco novo, nem faixa, nem é mandada ao Início.
+   .91 tem `welcome` sem segmento: nas duas, nada muda, e toda empresa que já roda (as
+   implantadas antes da .91) não vê bloco novo, nem faixa, nem é mandada ao Início.
 3. **Só administrador e gestor.** O atendente e o somente leitura veem o passo a passo
    do upstream sem mudança. Aplicar proposta é só do administrador.
 4. **Nunca** na empresa de demonstração nem no acompanhamento do suporte.

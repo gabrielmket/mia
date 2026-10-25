@@ -46,7 +46,7 @@ export function AvisoDoModelo({ modelo }: { modelo: ModeloNaTela }) {
   );
 }
 
-export function OQueOModeloEnsina({ modelo }: { modelo: ModeloNaTela }) {
+export function EnsinoDoModelo({ modelo }: { modelo: ModeloNaTela }) {
   const t = useT();
   return (
     <section className="rounded-lg border bg-background p-4">
