@@ -209,16 +209,32 @@ describe("perguntas reais acham a ajuda certa entre as primeiras", () => {
     expect(achados.nada_encontrado).toBe(false);
   });
 
-  it("a mesma pergunta em API Tokens traz o MCP da MIA primeiro, citando o servidor externo", () => {
+  it("a mesma pergunta em API Tokens traz o MCP da MIA primeiro, com o endereço do navegador, citando o servidor externo", () => {
     const achados = buscarAjuda({
       pergunta: "como eu uso o mcp aqui",
       papel: "admin",
       telas: telasParaOPapel({ papel: "admin" }),
       base: [],
       caminho: "/app/settings/api-tokens",
+      enderecoDoSistema: "https://app.iamia.com.br",
     });
     expect(achados.manuais[0]?.id).toBe("mcp-da-mia");
+    expect(achados.manuais[0]?.voce_pode).toBe(true);
+    expect(achados.manuais[0]?.passos.join(" ")).toContain("https://app.iamia.com.br/api/mcp");
+    expect(achados.manuais[0]?.passos.join(" ")).not.toContain("{endereco_do_sistema}");
     expect(achados.manuais[0]?.veja_tambem.map((v) => v.href)).toContain("/app/settings/servidor-mcp-externo");
+  });
+
+  it("o MCP da MIA é do administrador: o atendente ouve quem pode", () => {
+    const achados = buscarAjuda({
+      pergunta: "como ligo o claude no crm pelo mcp",
+      papel: "agent",
+      telas: telasParaOPapel({ papel: "agent" }),
+      base: [],
+    });
+    const daMia = achados.manuais.find((m) => m.id === "mcp-da-mia" || m.id === "roteiro-ligar-claude");
+    expect(daMia?.voce_pode).toBe(false);
+    expect(daMia?.quem_pode).toBe("Administrador");
   });
 
   it("o servidor externo é do dono da instalação: para o administrador da empresa, quem pode é a Time Company", () => {

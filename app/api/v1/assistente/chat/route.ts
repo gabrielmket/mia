@@ -30,6 +30,7 @@ import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 
+import { origemPublicaDoPedido } from "@/lib/agenda/microsoft/config";
 import { requestTurnDeps } from "@/lib/agent-engine/agent/request-deps";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { LlmNotConfiguredError } from "@/lib/agent-engine/edge/llm/credentials";
@@ -324,6 +325,8 @@ export async function POST(req: NextRequest): Promise<Response> {
         // FORK MIA (.89): quem opera a plataforma abre as telas do dono da instalação
         // (servidor MCP externo, atualização), e a ajuda diz "você pode" para ele.
         daPlataforma: authz.user.is_platform_admin && !authz.user.support,
+        // O endereço que a pessoa usa no navegador: o passo do MCP da MIA cita "<endereço>/api/mcp".
+        enderecoDoSistema: origemPublicaDoPedido(req.headers),
         equipe,
         historico,
         pergunta,

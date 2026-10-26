@@ -79,7 +79,8 @@ describe("a ajuda do assistente cobre todas as telas", () => {
     expect(daMia?.href).toBe("/app/settings/api-tokens");
     expect(daMia?.papelMinimo).toBe("admin");
     expect(daMia?.vejaTambem).toContain("servidor-mcp-externo");
-    expect(daMia?.passos.join(" ")).toContain("https://app.iamia.com.br/api/mcp");
+    // O endereço não é escrito no manual: a busca põe o que a pessoa usa no navegador.
+    expect(daMia?.passos.join(" ")).toContain("{endereco_do_sistema}/api/mcp");
     expect(daMia?.passos.join(" ")).toMatch(/LER o CRM \(MCP\)/);
     expect(daMia?.passos.join(" ")).toMatch(/AGIR no CRM \(MCP\)/);
   });

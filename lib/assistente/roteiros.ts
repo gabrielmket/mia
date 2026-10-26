@@ -82,7 +82,7 @@ export const ROTEIROS: readonly Manual[] = [
     passos: [
       "1. Em Configurações › API Tokens, use Criar token, dê um Nome e marque Agentes de IA podem LER o CRM (MCP) e, para agir, Agentes de IA podem AGIR no CRM (MCP).",
       "2. Clique em Criar e copie o token na hora: ele aparece uma vez só.",
-      "3. No Claude, adicione um conector MCP personalizado com o endereço https://app.iamia.com.br/api/mcp e o token como chave de acesso (Authorization: Bearer e o token).",
+      "3. No Claude, adicione um conector MCP personalizado com o endereço {endereco_do_sistema}/api/mcp e o token como chave de acesso (Authorization: Bearer e o token).",
       "4. Pergunte ao Claude algo como \"liste meus negócios abertos\" para conferir.",
     ],
     observacao: "Só o administrador cria token, e o token enxerga só esta empresa. Para desligar, use Revogar em API Tokens. O contrário, a IA da MIA consultar um sistema seu, é o Servidor MCP externo.",

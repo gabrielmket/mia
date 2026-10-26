@@ -48,7 +48,7 @@ const MCP: Manual[] = [
       "Em Escopos, marque Agentes de IA podem LER o CRM (MCP). Se a ferramenta também vai criar e mudar registros, marque Agentes de IA podem AGIR no CRM (MCP). Para criar negócios e atribuir conversas, marque ainda Tratar o token como gerente.",
       "Se quiser um prazo, preencha Expira em (dias). Clique em Criar.",
       "Copie o token na hora com Copiar para clipboard: ele aparece uma vez só.",
-      "Na ferramenta de fora, adicione um conector MCP com o endereço https://app.iamia.com.br/api/mcp e use o token como chave de acesso (no cabeçalho Authorization, como Bearer seguido do token).",
+      "Na ferramenta de fora, adicione um conector MCP com o endereço {endereco_do_sistema}/api/mcp e use o token como chave de acesso (no cabeçalho Authorization, como Bearer seguido do token).",
     ],
     observacao:
       "Só o administrador cria e revoga token. O token enxerga só esta empresa e age com o papel marcado; sem marcar papel, ele age como atendente. Para cortar o acesso, use Revogar na lista. Se a ideia é o contrário, a IA da MIA consultar um sistema seu, isso é o Servidor MCP externo.",

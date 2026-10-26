@@ -20,9 +20,6 @@
  */
 import { createHash } from "node:crypto";
 
-/** A pasta do guia, a partir da raiz do repositório. */
-export const PASTA_DO_GUIA = ".claude/skills/deskcomm-operacao";
-
 export interface TrechoDoGuia {
   /** Estável entre gerações enquanto o título e a seção não mudam. */
   id: string;
@@ -256,15 +253,19 @@ export function trechosDoGuia(arquivos: Readonly<Record<string, string>>): Trech
   return trechos;
 }
 
-/** O módulo TypeScript que o gerador grava. Determinístico: mesma fonte, mesmos bytes. */
-export function moduloDoGuia(arquivos: Readonly<Record<string, string>>): string {
+/**
+ * O módulo TypeScript que o gerador grava. Determinístico: mesma fonte, mesmos bytes.
+ * `pasta` é a pasta do guia a partir da raiz: quem chama sabe (o nome dela leva a
+ * marca do upstream, que a cerca `branding` não deixa no código de `lib/`).
+ */
+export function moduloDoGuia(arquivos: Readonly<Record<string, string>>, pasta: string): string {
   const trechos = trechosDoGuia(arquivos);
   const nomes = Object.keys(arquivos).sort();
   const linhas = trechos.map((t) => `  ${JSON.stringify(t)},`);
   return [
     "/**",
     " * GERADO por `scripts/gerar-guia-de-operacao.ts` a partir do guia de operação do",
-    ` * upstream (\`${PASTA_DO_GUIA}/\`). NÃO EDITE À MÃO.`,
+    ` * upstream (\`${pasta}/\`). NÃO EDITE À MÃO.`,
     " *",
     " * Para regerar depois de uma fusão que mudou o guia:",
     " *   npx tsx scripts/gerar-guia-de-operacao.ts",

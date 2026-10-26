@@ -58,6 +58,8 @@ export interface ContextoDasFerramentas {
   tela?: TelaDaPergunta | null;
   /** Quem pergunta opera a plataforma (abre as telas do dono da instalação)? */
   daPlataforma?: boolean;
+  /** O endereço que a pessoa usa no navegador, para o passo que o cita (o MCP da MIA). */
+  enderecoDoSistema?: string | null;
   equipe: readonly PessoaDaEquipe[];
   base: readonly ItemDaBaseDaEmpresa[];
   /** A última recusa do servidor que a tela viu (a "mensagem do sistema"). */
@@ -321,6 +323,7 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
           base: ctx.base,
           caminho: ctx.tela?.caminho ?? null,
           daPlataforma: ctx.daPlataforma ?? false,
+          enderecoDoSistema: ctx.enderecoDoSistema ?? null,
         });
         coletor.anotar("buscar_ajuda", achados.fontes);
         return achados;

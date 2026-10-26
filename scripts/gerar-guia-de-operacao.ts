@@ -12,7 +12,10 @@
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { PASTA_DO_GUIA, moduloDoGuia } from "../lib/assistente/guia-de-operacao/ler-o-guia";
+import { moduloDoGuia } from "../lib/assistente/guia-de-operacao/ler-o-guia";
+
+/** A pasta do guia de operação do upstream, a partir da raiz do repositório. */
+export const PASTA_DO_GUIA = ".claude/skills/deskcomm-operacao";
 
 const RAIZ = join(__dirname, "..");
 const PASTA = join(RAIZ, PASTA_DO_GUIA);
@@ -37,7 +40,7 @@ export function lerArquivosDoGuia(pasta: string = PASTA): Record<string, string>
 }
 
 function principal(): void {
-  const novo = moduloDoGuia(lerArquivosDoGuia());
+  const novo = moduloDoGuia(lerArquivosDoGuia(), PASTA_DO_GUIA);
   const conferir = process.argv.includes("--conferir");
   let atual = "";
   try {

@@ -53,7 +53,7 @@ de modelo (telemetria e orçamento em `llm_calls`, `lib/assistente/modelo.ts`).
 | `ver_meus_leads` | `crm_leads` abertos por dono e o Radar (`carregaRadarDeRisco`, a mesma função da tela) |
 | `ver_minha_performance` / `ver_numeros_da_equipe` | o motor de relatórios do fork (`fn_mia_relatorio`, `security invoker`) e a meta (`lerMetasDoMes`, a MESMA leitura do `GET /api/v1/metas`) |
 | `ver_por_que_a_ia_nao_respondeu` | a conversa pela sessão (o atendente só acha as suas), o opt-out, quem está com a conversa, o número, o agente no ar, o horário da IA (.85) e `agent_turn_traces` (v1.88) |
-| `buscar_ajuda` | o catálogo de navegação, os manuais (`lib/assistente/manuais.ts`) e a base própria da empresa |
+| `buscar_ajuda` | os manuais e roteiros do fork, o guia de operação do upstream, o catálogo de navegação e a base própria da empresa (seção 9) |
 | `ver_contato` | o nome; telefone e e-mail só quando a pessoa pediu |
 
 E quatro que só põem botão na resposta: `mostrar_me_leva_la` (só tela que a pessoa
@@ -122,3 +122,38 @@ O desenho e os nomes seguem a spec #2860 (o turno sem `send_message`, as ferrame
 leitura, o ponto próprio no registro, a porta no topo junto do sino). As tabelas levam
 o prefixo `mia_` para não colidir com as `config_threads`/`config_messages` que a spec
 propõe: no dia em que o upstream construir a fase 1, a troca é de nome, não de forma.
+
+## 9. A ajuda de uso cobre todas as telas (.89)
+
+Em 26/10/2026 o Gabriel perguntou, na tela "Servidor MCP externo", "como eu uso o mcp
+aqui", e o assistente respondeu que não sabia: os manuais tinham 19 assuntos e nenhum
+falava da tela. A causa era cobertura. Desde então o `buscar_ajuda` lê quatro fontes,
+todas pela mesma régua (`lib/assistente/busca-da-ajuda.ts`):
+
+| fonte | onde | "de onde veio" |
+|---|---|---|
+| manuais das telas e do dia a dia | `lib/assistente/manuais.ts`, `manuais-das-telas.ts` | Manual do sistema |
+| roteiros (tarefas que cruzam telas: começar a atender, campanha, a IA está vendendo, ligar o Claude) | `lib/assistente/roteiros.ts` | Manual do sistema |
+| o guia de operação do upstream, tela a tela | `lib/assistente/guia-de-operacao.gen.ts` (gerado) e `guia-de-operacao.ts` | Guia de operação |
+| o mapa das telas e a base da empresa | `NAV_CATALOG` e `mia_assistente_conhecimento` | Mapa das telas, Como trabalhamos aqui |
+
+- **A busca:** sem acento e sem maiúscula; um radical leve que não junta "conversa" com
+  "conversão"; sinônimos do jeito que a equipe fala (MCP, token e chave, número e
+  WhatsApp, follow-up e retomada); palavra rara pesa mais. A tela em que a pessoa está
+  pesa: "como uso isso aqui" traz a ajuda dela primeiro. Volta no máximo 3 manuais, 3
+  trechos curtos do guia e 3 telas.
+- **MCP é duas coisas.** O Servidor MCP externo (a IA da empresa consulta um sistema de
+  fora; tela do dono da instalação) e o MCP da MIA (`/api/mcp`, token criado em API
+  Tokens pelo administrador, com `mcp:read` e `mcp:write`). Cada manual traz o outro em
+  `veja_tambem`, e o assistente responde pela tela em que a pessoa está.
+- **O guia do upstream** mora em `.claude/skills/deskcomm-operacao/`, que a imagem não
+  leva. `scripts/gerar-guia-de-operacao.ts` gera o módulo; a cerca
+  `assistente-guia-de-operacao` fica vermelha quando a fusão trouxer o guia novo. Onde o
+  código da MIA desmente o guia (o MCP externo tem tela; modelo, chave e marca são da
+  plataforma), a correção é `SUPERADOS_PELO_CODIGO`, nunca o guia nem o gerado.
+- **As cercas:** `assistente-ajuda-cobre-todas-as-telas` (toda tela principal do app,
+  inclusive cada subpágina de Configurações, tem ajuda própria; toda subpágina é
+  alcançada) e `assistente-perguntas-reais` (uma pergunta por tela e por roteiro, com a
+  tela de onde veio; o trecho certo entre os 3 primeiros, sem IA).
+- **Tela nova:** escreva o manual em `manuais-das-telas.ts` lendo o código da tela e
+  acrescente a pergunta em `assistente-perguntas-reais`. Sem isso o CI reprova.

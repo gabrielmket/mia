@@ -23,7 +23,7 @@ import { roleAtLeast, type Role } from "@/lib/auth/types";
 
 import { buscar, indexar, mesmaTela, type DocumentoDeBusca, type Indice } from "../busca-da-ajuda";
 import { TRECHOS_DA_MIA, type TrechoDaMia } from "../guia-de-operacao";
-import { MANUAIS, type Manual } from "../manuais";
+import { MANUAIS, comEnderecoDoSistema, type Manual } from "../manuais";
 import { destinoDaTela, quemAbre, type TelaConhecida } from "../telas";
 
 export interface ItemDaBaseDaEmpresa {
@@ -162,6 +162,8 @@ export function buscarAjuda(entrada: {
   caminho?: string | null;
   /** Quem pergunta opera a plataforma: abre as telas do dono da instalação. */
   daPlataforma?: boolean;
+  /** O endereço que a pessoa usa no navegador (`https://...`), para o passo que o cita. */
+  enderecoDoSistema?: string | null;
 }): AchadosDaAjuda {
   const caminho = entrada.caminho ?? null;
   const porHref = new Map(entrada.telas.map((t) => [t.href, t]));
@@ -192,8 +194,8 @@ export function buscarAjuda(entrada: {
       manuais.push({
         id: m.id,
         titulo: m.titulo,
-        passos: m.passos,
-        observacao: m.observacao ?? null,
+        passos: m.passos.map((p) => comEnderecoDoSistema(p, entrada.enderecoDoSistema)),
+        observacao: m.observacao ? comEnderecoDoSistema(m.observacao, entrada.enderecoDoSistema) : null,
         tela: rotuloDe(m.href),
         href: m.href,
         voce_pode: m.soDaPlataforma ? !!entrada.daPlataforma : roleAtLeast(entrada.papel, m.papelMinimo),

@@ -75,6 +75,8 @@ export interface EntradaDoTurno {
   telas: readonly TelaConhecida[];
   /** Quem pergunta opera a plataforma (abre as telas do dono da instalação)? */
   daPlataforma?: boolean;
+  /** O endereço que a pessoa usa no navegador (`https://...`). */
+  enderecoDoSistema?: string | null;
   /** O diretório da equipe (nome e papel), resolvido pela rota como em `/team/assignable`. */
   equipe: readonly PessoaDaEquipe[];
   historico: ReadonlyArray<{ tipo: string; texto: string }>;
@@ -123,6 +125,7 @@ export async function responderNoAssistente(entrada: EntradaDoTurno, deps: DepsD
       telas: entrada.telas,
       tela: entrada.tela,
       daPlataforma: entrada.daPlataforma ?? false,
+      enderecoDoSistema: entrada.enderecoDoSistema ?? null,
       equipe: entrada.equipe,
       base,
       ultimaRecusa: entrada.ultimaRecusa,

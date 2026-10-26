@@ -16,7 +16,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { PASTA_DO_GUIA, moduloDoGuia, trechosDoGuia } from "@/lib/assistente/guia-de-operacao/ler-o-guia";
+import { moduloDoGuia, trechosDoGuia } from "@/lib/assistente/guia-de-operacao/ler-o-guia";
 import { TRECHOS_DO_GUIA } from "@/lib/assistente/guia-de-operacao.gen";
 import { EQUIVALENCIAS_DO_FORK, SUPERADOS_PELO_CODIGO, TRECHOS_DA_MIA } from "@/lib/assistente/guia-de-operacao";
 import { MANUAIS } from "@/lib/assistente/manuais";
@@ -25,6 +25,8 @@ import { NAV_CATALOG } from "@/lib/navigation/catalogo";
 import { rotasDoApp } from "./helpers/telas-do-app";
 
 const RAIZ = join(__dirname, "..", "..");
+/** A pasta do guia (a mesma de scripts/gerar-guia-de-operacao.ts). */
+const PASTA_DO_GUIA = ".claude/skills/deskcomm-operacao";
 const PASTA = join(RAIZ, PASTA_DO_GUIA);
 const GERADO = join(RAIZ, "lib", "assistente", "guia-de-operacao.gen.ts");
 
@@ -51,7 +53,7 @@ describe("o guia de operação gerado", () => {
   });
 
   it("o módulo gravado é o que a fonte gera hoje (senão: npx tsx scripts/gerar-guia-de-operacao.ts)", () => {
-    const esperado = moduloDoGuia(arquivosDoGuia());
+    const esperado = moduloDoGuia(arquivosDoGuia(), PASTA_DO_GUIA);
     const gravado = readFileSync(GERADO, "utf8").replace(/\r\n/g, "\n");
     expect(
       gravado === esperado,

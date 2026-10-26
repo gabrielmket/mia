@@ -68,6 +68,23 @@ export interface Manual {
   soDaPlataforma?: boolean;
 }
 
+/**
+ * O endereço do sistema dentro de um passo (o MCP da MIA é `<endereço>/api/mcp`).
+ * O manual não escreve domínio: a busca troca pelo endereço que a pessoa está
+ * usando no navegador (`origemPublicaDoPedido`), e o produto segue sem marca
+ * fixa no código (cerca `branding`).
+ */
+export const ENDERECO_DO_SISTEMA = "{endereco_do_sistema}";
+
+/** O passo com o endereço do sistema no lugar do marcador. */
+export function comEnderecoDoSistema(texto: string, endereco: string | null | undefined): string {
+  if (!texto.includes(ENDERECO_DO_SISTEMA)) return texto;
+  const limpo = (endereco ?? "").trim().replace(/\/+$/, "");
+  return texto
+    .split(ENDERECO_DO_SISTEMA)
+    .join(limpo || "o endereço do sistema (o mesmo do navegador)");
+}
+
 export const MANUAIS_DO_DIA_A_DIA: readonly Manual[] = [
   {
     id: "agente",
