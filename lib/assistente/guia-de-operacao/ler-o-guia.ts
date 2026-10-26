@@ -20,6 +20,8 @@
  */
 import { createHash } from "node:crypto";
 
+import { PADROES } from "../../../scripts/lint-channels.pattern";
+
 export interface TrechoDoGuia {
   /** Estável entre gerações enquanto o título e a seção não mudam. */
   id: string;
@@ -61,6 +63,26 @@ function semFormatacao(texto: string): string {
     .replace(/`/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * A doutrina de restrição de canal (`scripts/lint-channels.ts`) não deixa nome de
+ * provedor fora de `lib/channels/`, e o guia do upstream cita alguns. Aqui eles
+ * viram "provedor do canal", no texto e no id do trecho. Usa o MESMO padrão da
+ * cerca, para não escrever os nomes aqui e para acompanhar quando a lista crescer.
+ * Só o gerador e o teste rodam este arquivo; o app importa dele apenas o tipo.
+ */
+const PROVEDOR = [
+  new RegExp(PADROES.SEPARADO.source, "gi"),
+  new RegExp(PADROES.PASCAL.source, "g"),
+] as const;
+
+function semNomeDeProvedor(texto: string): string {
+  return PROVEDOR.reduce((t, re) => t.replace(re, "provedor do canal"), texto);
+}
+
+function semNomeDeProvedorNoId(id: string): string {
+  return PROVEDOR.reduce((t, re) => t.replace(re, "provedor-do-canal"), id);
 }
 
 function slug(texto: string): string {
@@ -250,7 +272,13 @@ export function trechosDoGuia(arquivos: Readonly<Record<string, string>>): Trech
       }
     }
   }
-  return trechos;
+  return trechos.map((t) => ({
+    ...t,
+    id: semNomeDeProvedorNoId(t.id),
+    secao: semNomeDeProvedor(t.secao),
+    titulo: semNomeDeProvedor(t.titulo),
+    texto: semNomeDeProvedor(t.texto),
+  }));
 }
 
 /**
