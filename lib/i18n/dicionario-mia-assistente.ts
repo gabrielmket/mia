@@ -199,10 +199,12 @@ export const DICIONARIO_DO_ASSISTENTE_MIA: Traducoes = {
   'Religar o número "{nome}": enquanto ele estiver desconectado, nada que chega por ele é visto.': {
     es: 'Reconectar el número "{nome}": mientras esté desconectado, nada de lo que llega por él se ve.',
   },
-  "{n} conversas esperam resposta; a mais antiga, de {contato}, há {horas} h.": {
-    es: "{n} conversaciones esperan respuesta; la más antigua, de {contato}, hace {horas} h.",
+  "{n} conversas esperam resposta; a mais antiga, de {contato}, há {tempo}.": {
+    es: "{n} conversaciones esperan respuesta; la más antigua, de {contato}, hace {tempo}.",
   },
-  "Responder {contato}: espera há {horas} h.": { es: "Responder a {contato}: espera hace {horas} h." },
+  "Responder {contato}: espera há {tempo}.": { es: "Responder a {contato}: espera hace {tempo}." },
+  "{n} h": { es: "{n} h" },
+  "{n} dias": { es: "{n} días" },
   "Dar dono às {n} conversas abertas sem ninguém responsável.": {
     es: "Asignar responsable a las {n} conversaciones abiertas sin nadie a cargo.",
   },

@@ -52,6 +52,8 @@ export interface ConversaEsperando {
   contato: string;
   esperando_desde: string;
   horas: number;
+  /** As mesmas horas em dias inteiros: acima de 48 h, é o que a pessoa lê ("há 35 dias", não "836 horas"). */
+  dias: number;
   responsavel: string | null;
 }
 
@@ -285,6 +287,7 @@ export async function lerRotinaDoDia(
         contato: nomes.get(c.contact_id) ?? "Contato sem nome",
         esperando_desde: desdeDe(c),
         horas: horasEntre(desdeDe(c), agora),
+        dias: Math.floor(horasEntre(desdeDe(c), agora) / 24),
         responsavel: proprio ? null : nomeDaPessoa(entrada.equipe, c.assigned_to_user_id),
       })),
     },

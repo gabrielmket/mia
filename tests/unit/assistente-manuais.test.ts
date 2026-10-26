@@ -121,7 +121,7 @@ describe("a ordem do dia (determinística, a do resumo da manhã)", () => {
       na_fila: null,
       sem_dono: null,
       mais_antigas: [
-        { conversation_id: "c1", contact_id: "x", contato: "Helena", esperando_desde: "", horas: 3, responsavel: null },
+        { conversation_id: "c1", contact_id: "x", contato: "Helena", esperando_desde: "", horas: 3, dias: 0, responsavel: null },
       ],
     },
     numeros_desconectados: [{ id: "n1", nome: "Suporte", desde: null }],
