@@ -19,6 +19,7 @@ import { hrefDoApp, ROTULO_DA_FONTE, type AcaoDoAssistente, type MensagemDoAssis
 import { cn } from "@/lib/utils";
 
 import { CartaoDoChamado } from "./CartaoDoChamado";
+import { TextoDoAssistente } from "./TextoDoAssistente";
 
 export function MensagemDoAssistente({
   mensagem,
@@ -66,7 +67,7 @@ export function MensagemDoAssistente({
             {t("Resumo da manhã")}
           </Badge>
         ) : null}
-        <p className="whitespace-pre-wrap">{mensagem.texto}</p>
+        <TextoDoAssistente texto={mensagem.texto} />
 
         {acoes.length > 0 ? (
           <div className="flex flex-col gap-2">

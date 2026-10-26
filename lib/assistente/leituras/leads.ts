@@ -25,7 +25,15 @@ export interface LeadsDaPessoa {
   em_risco: number;
   criticos: number;
   /** Os primeiros em risco, para o "Ver os 3". Título do negócio e o nome do contato. */
-  em_risco_itens: Array<{ lead_id: string; titulo: string; contato: string | null; horas_parado: number; dono: string | null }>;
+  em_risco_itens: Array<{
+    lead_id: string;
+    titulo: string;
+    contato: string | null;
+    horas_parado: number;
+    /** As mesmas horas em dias inteiros, para a resposta falar em dias acima de 48 h. */
+    dias_parado: number;
+    dono: string | null;
+  }>;
   /** Só no escopo da equipe. */
   por_dono: Array<{ user_id: string | null; nome: string; abertos: number; em_risco: number }> | null;
   /** Negócios abertos sem dono (só no escopo da equipe). */
@@ -124,6 +132,7 @@ export async function lerLeads(
       titulo: i.title,
       contato: i.contact_name,
       horas_parado: i.hours_since_activity,
+      dias_parado: Math.floor(i.hours_since_activity / 24),
       dono: proprio ? null : nomeDaPessoa(entrada.equipe, i.owner_user_id),
     })),
     por_dono: porDono,

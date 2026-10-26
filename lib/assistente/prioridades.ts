@@ -30,6 +30,12 @@ function preencher(modelo: string, valores: Record<string, string | number>): st
   return modelo.replace(/\{(\w+)\}/g, (_, chave: string) => String(valores[chave] ?? ""));
 }
 
+/** Até 48 h, em horas; acima, em dias ("há 35 dias", não "há 836 h"). */
+export function tempoDeEspera(horas: number, t: Traduzir = (x) => x): string {
+  if (horas < 48) return preencher(t("{n} h"), { n: horas });
+  return preencher(t("{n} dias"), { n: Math.floor(horas / 24) });
+}
+
 export function prioridadesDoDia(
   entrada: {
     rotina: RotinaDoDia;
@@ -57,12 +63,12 @@ export function prioridadesDoDia(
   if (esperando) {
     lista.push({
       texto: equipe
-        ? preencher(t("{n} conversas esperam resposta; a mais antiga, de {contato}, há {horas} h."), {
+        ? preencher(t("{n} conversas esperam resposta; a mais antiga, de {contato}, há {tempo}."), {
             n: rotina.conversas.esperando_resposta,
             contato: esperando.contato,
-            horas: esperando.horas,
+            tempo: tempoDeEspera(esperando.horas, t),
           })
-        : preencher(t("Responder {contato}: espera há {horas} h."), { contato: esperando.contato, horas: esperando.horas }),
+        : preencher(t("Responder {contato}: espera há {tempo}."), { contato: esperando.contato, tempo: tempoDeEspera(esperando.horas, t) }),
       href: `/app/inbox?id=${esperando.conversation_id}`,
       rotulo: t("Abrir conversa"),
     });
