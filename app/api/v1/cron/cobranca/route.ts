@@ -17,6 +17,8 @@ import { autorizaCron } from "@/lib/auth/cron-auth";
 import { rodadaDaCobranca } from "@/lib/cobranca/rodada";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { logger } from "@/lib/logger";
+// FORK MIA (.90): a jornada de assinatura (docs/fork/jornada-de-assinatura.md).
+import { rodadaDaJornada } from "@/lib/planos-mia/rodada";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +42,11 @@ async function handle(req: NextRequest) {
     });
   }
   if (resumo.falhas > 0) logger.warn("cobranca.rodada_com_falhas", { falhas: resumo.falhas });
+  // FORK MIA (.90): a jornada de assinatura na mesma rodada — os módulos seguem o
+  // plano em todas as empresas, o aviso de 7 dias antes de uma descida desligar
+  // módulo e a releitura das compras de crédito por Pix. Cada passo audita o seu
+  // efeito; nunca lança (lib/planos-mia/rodada.ts).
+  await rodadaDaJornada(admin);
   return ok(resumo, { requestId });
 }
 

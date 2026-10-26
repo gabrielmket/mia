@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { skipWhatsapp, markWhatsappConfigured } from "@/app/actions/onboarding/skipWhatsapp";
 import { CanalOficialClient } from "@/components/connections/CanalOficialClient";
 import { CanalParceiroClient } from "@/components/connections/CanalParceiroClient";
+// FORK MIA (.91): o número oficial pelo Facebook fica "esperando a Time".
+import { marcarNumeroOficialEsperandoATime, seguirDepoisDoFacebook } from "@/app/actions/onboarding/numeroOficial";
 
 interface Props {
   wahaConfigured: boolean;
@@ -236,6 +238,8 @@ export function ConnectWhatsappClient({
   const [qrTick, setQrTick] = useState(0);
   const [qrFailed, setQrFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  // FORK MIA (.91): a pessoa entrou com o Facebook; a Time liga o número.
+  const [esperandoATime, setEsperandoATime] = useState(false);
 
   const status = info.status;
 
@@ -438,7 +442,38 @@ export function ConnectWhatsappClient({
         {/* Os mesmos componentes da tela de Conexões, inteiros. Reescrevê-los
             aqui criaria uma segunda cópia de um formulário que valida credencial
             contra o outro lado ANTES de gravar — e duas cópias divergem. */}
-        {forma === "oficial" ? <CanalOficialClient /> : <CanalParceiroClient />}
+        {forma === "oficial" ? (
+          <CanalOficialClient
+            aoEntrarComOFacebook={() => {
+              setEsperandoATime(true);
+              void marcarNumeroOficialEsperandoATime();
+            }}
+          />
+        ) : (
+          <CanalParceiroClient />
+        )}
+
+        {/*
+          FORK MIA (.91): depois de entrar com o Facebook, a ligação do número à
+          empresa é à mão, pela Time Company, como no upstream (o aviso da Meta
+          não diz de qual empresa é o número). O passo fica esperando a Time, e
+          o "o que falta" mostra isso com quem faz.
+        */}
+        {forma === "oficial" && esperandoATime ? (
+          <div role="status" className="space-y-3 rounded-md border border-warning-fg/40 bg-warning-bg p-4 text-sm text-warning-fg">
+            <p>
+              <strong>{t("Pronto do seu lado.")}</strong>{" "}
+              {t(
+                "Agora a Time Company liga o número à sua empresa, em até 1 dia útil. O aviso da Meta não diz de qual empresa é o número, e ligar errado faria a conversa de um cliente sair pelo número de outro: por isso é à mão.",
+              )}
+            </p>
+            <div className="flex sm:justify-end">
+              <Button type="button" onClick={() => startTransition(() => void seguirDepoisDoFacebook())} disabled={pending}>
+                {t("Continuar")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         <Saidas status={status} sessionName={info.session ?? ""} />
       </div>

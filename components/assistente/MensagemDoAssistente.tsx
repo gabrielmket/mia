@@ -19,6 +19,8 @@ import { hrefDoApp, ROTULO_DA_FONTE, type AcaoDoAssistente, type MensagemDoAssis
 import { cn } from "@/lib/utils";
 
 import { CartaoDoChamado } from "./CartaoDoChamado";
+// FORK MIA (.91): o cartão da proposta do assistente.
+import { CartaoDaProposta } from "./CartaoDaProposta";
 import { TextoDoAssistente } from "./TextoDoAssistente";
 
 export function MensagemDoAssistente({
@@ -112,6 +114,11 @@ function Acao({
 
   if (acao.tipo === "chamado") {
     return <CartaoDoChamado rascunho={acao.rascunho} caminho={caminho} conversaId={conversaId} />;
+  }
+
+  // FORK MIA (.91): a proposta de uma peça, com "Aprovar e aplicar" e "Recusar".
+  if (acao.tipo === "proposta") {
+    return <CartaoDaProposta propostaId={acao.proposta_id} titulo={acao.titulo} mudancas={acao.mudancas} />;
   }
 
   if (acao.tipo === "ir") {

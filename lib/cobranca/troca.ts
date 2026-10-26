@@ -38,6 +38,8 @@ import { excedenteDoPlano, lerUsoDaOrganizacao } from "@/lib/cobranca/uso";
 import { calcularAjusteProporcional, SEM_TROCA } from "@/lib/cobranca/prorata";
 import { urlDoPainelDaEmpresa } from "@/lib/cobranca/url";
 import type { EstadoDaAssinatura, Intervalo, ProvedorDeCobranca } from "@/lib/cobranca/vocabulario";
+// FORK MIA (.90): os módulos seguem o plano (docs/fork/jornada-de-assinatura.md).
+import { seguirOPlano } from "@/lib/planos-mia/seguir-o-plano";
 
 export type ResultadoDaTroca =
   | {
@@ -403,6 +405,9 @@ export async function trocarPlanoDaOrg(
       : recusa(409, "state_conflict", `A assinatura mudou enquanto você trocava o plano. Recarregue e tente de novo.${aviso}`);
   }
 
+  // FORK MIA (.90): no teste grátis a troca vale na hora, e os módulos do plano
+  // novo também (lib/planos-mia/seguir-o-plano.ts). Nunca lança.
+  if (emTeste) await seguirOPlano(admin, orgId, "troca");
   return emTeste
     ? { ok: true, changed: true, quando: "imediato", planoId: novo.id, planoAgendadoId: null, valeAPartirDe: null, de: atual.plano_id }
     : {

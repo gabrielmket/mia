@@ -10,6 +10,8 @@ import type { RecusaDeEscritaDeAdmin } from "@/lib/auth/recusa-de-escrita-de-adm
 import { ensureTenantForUser } from "@/lib/auth/provision";
 import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import { createAdminClient } from "@/lib/supabase/admin";
+// FORK MIA (.90): o e-mail para quem pediu o cadastro (docs/fork/jornada-de-assinatura.md).
+import { avisarQuemPediuPeloId } from "@/lib/planos-mia/pedidos-de-cadastro";
 
 const entradaSchema = z.object({
   requestId: z.string().uuid(),
@@ -98,6 +100,9 @@ export async function decideRegistrationRequest(
     .eq("id", pedido.id)
     .eq("status", "pending");
   if (gravacao) return { ok: false, error: "write_failed" };
+  // FORK MIA (.90): quem pediu fica sabendo por e-mail, aprovado ou recusado
+  // (lib/planos-mia/pedidos-de-cadastro.ts). Melhor esforço, fora do caminho.
+  void avisarQuemPediuPeloId(admin, pedido.user_id, pedido.requested_organization_name, aprovar);
 
   const hdrs = await headers();
   await audit({

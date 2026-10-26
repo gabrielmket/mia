@@ -30,6 +30,8 @@ import { registrarNaConversa } from "@/lib/broadcast/registro-na-conversa";
 import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-session";
 import { logger } from "@/lib/logger";
 import { ehOperante, STATUS_OPERANTE, statusDaOrgEmbutida } from "@/lib/organizacao/operante";
+// FORK MIA (.90): a rotina pula a empresa cujo módulo saiu pelo plano.
+import { moduloSaiuPeloPlano, MOTIVO_MODULO_FORA_DO_PLANO } from "@/lib/planos-mia/modulos";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -69,6 +71,17 @@ async function handler(req: NextRequest): Promise<Response> {
     (c) => ehOperante(statusDaOrgEmbutida(c.organizations as Parameters<typeof statusDaOrgEmbutida>[0])),
   );
   if (!alvo) return ok({ rodou: false, motivo: "nada_na_fila" }, { requestId });
+
+  // FORK MIA (.90): o Broadcast que saiu do plano da empresa (docs/fork/
+  // jornada-de-assinatura.md) pausa a campanha com o motivo na tela; os dados
+  // ficam. Com a cobrança desligada, ou isenta, ou liberado pela Time, não pausa.
+  if (await moduloSaiuPeloPlano(admin, alvo.organization_id, "disparador")) {
+    await admin
+      .from("broadcasts")
+      .update({ status: "pausada", motivo_da_parada: MOTIVO_MODULO_FORA_DO_PLANO, updated_at: agora })
+      .eq("id", alvo.id);
+    return ok({ rodou: false, motivo: MOTIVO_MODULO_FORA_DO_PLANO }, { requestId });
+  }
 
   const creds = await credenciaisDaOrg(alvo.organization_id);
   if (!creds) {

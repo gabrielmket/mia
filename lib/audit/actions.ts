@@ -271,6 +271,15 @@ export const AUDIT_ACTIONS = [
   "email_marketing.aviso_da_amazon",
   "email_marketing.rodada",
   "email_marketing.imagem_enviada",
+  // FORK MIA (.90) — a jornada de assinatura (docs/fork/jornada-de-assinatura.md):
+  // o plano que liga e desliga módulo (e a véspera da descida), os planos e os
+  // pacotes de crédito garantidos pela plataforma, e a compra de créditos por Pix.
+  "planos_mia.modulos_seguiram_o_plano",
+  "planos_mia.aviso_de_modulo_saindo",
+  "planos_mia.planos_garantidos",
+  "planos_mia.pacotes_garantidos",
+  "carteira.compra_iniciada",
+  "carteira.compra_confirmada",
   // FORK MIA (.60) — leads dos formulários da Meta: quem ligou a importação, que
   // formulário vai para qual funil, quem pediu leitura na hora, e a rodada do
   // relógio que trouxe lead ou deu erro (a vazia não audita).
@@ -1487,6 +1496,18 @@ export const AUDIT_ACTIONS = [
   "assistente.configurado",
   "assistente.conhecimento_alterado",
   "assistente.resumo_da_manha_gerado",
+  // FORK MIA (.91): as propostas do assistente (9080) e os primeiros passos. A
+  // proposta leva o tipo, por onde (tela ou MCP) e os ids da peça criada, nunca
+  // o texto do agente; o follow-up que saiu com o agente, o fluxo e o agente.
+  // O número oficial "esperando a Time" leva só que a pessoa entrou com o
+  // Facebook (a conta da Meta é ligada à mão, pela Time).
+  "assistente.proposta_criada",
+  "assistente.proposta_aplicada",
+  "assistente.proposta_rejeitada",
+  "assistente.proposta_falhou",
+  "assistente.followup_saiu_com_o_agente",
+  "onboarding.numero_oficial_esperando_a_time",
+  "onboarding.agente_do_modelo_publicado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

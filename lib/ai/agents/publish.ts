@@ -99,6 +99,22 @@ export async function publishAgentVersion(
     quemPublicou: params.quemPublicou,
   });
 
+  // FORK MIA (.91): o follow-up que o assistente propôs, aplicado em rascunho e
+  // armado neste agente, sai junto com o agente publicado. Nunca lança; import
+  // dinâmico para não fechar ciclo com lib/implantacao (docs/fork/primeiros-passos.md).
+  try {
+    const { publicarFollowupsQueSaemComOAgente } = await import("@/lib/assistente/propostas/sai-com-o-agente");
+    await publicarFollowupsQueSaemComOAgente(admin, {
+      orgId: params.orgId,
+      agentId: params.agentId,
+      versionId: row.version_id,
+      actorUserId: params.quemPublicou?.actorUserId ?? null,
+      requestId: params.quemPublicou?.requestId ?? null,
+    });
+  } catch {
+    // o agente já está no ar; o follow-up segue no "o que falta"
+  }
+
   return {
     ok: true,
     agent_id: row.agent_id,

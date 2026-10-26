@@ -13,6 +13,8 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { lerCadastroNaTela, planoInicialDoSeletor } from "@/lib/cobranca/cadastro";
 import { tituloDaTelaPublica } from "@/lib/i18n/titulo-da-tela-publica";
+// FORK MIA (.90): os planos em cartões e o "?plano=" da página de preços.
+import { lerCadastroEmCartoes } from "@/lib/planos-mia/cadastro";
 
 // A aba no idioma do visitante, como o corpo (`lib/i18n/titulo-da-tela-publica.ts`).
 export const generateMetadata = () => tituloDaTelaPublica((t) => t("Criar conta"));
@@ -42,9 +44,9 @@ export const generateMetadata = () => tituloDaTelaPublica((t) => t("Criar conta"
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ invite?: string }>;
+  searchParams: Promise<{ invite?: string; plano?: string }>;
 }) {
-  const { invite } = await searchParams;
+  const { invite, plano: planoDoLink } = await searchParams;
   const payload = invite ? verifyInviteToken(invite) : null;
   const convite = invite && payload ? { token: invite, email: payload.email } : undefined;
   const conviteExpirado = Boolean(invite) && !payload;
@@ -69,6 +71,14 @@ export default async function SignupPage({
   const cadastro = convite ? null : await lerCadastroNaTela(createAdminClient());
   const planos = cadastro?.oferecidos ?? [];
   const googleSemPlano = cadastro?.exigeEscolha ?? false;
+  // FORK MIA (.90): os mesmos planos em cartões (limites, módulos, conversas) e o
+  // plano marcado pelo link da página de preços. Sem planos, nada muda.
+  const emCartoes = await lerCadastroEmCartoes(
+    createAdminClient(),
+    planos,
+    planoInicialDoSeletor(planos, cadastro?.padraoId ?? null),
+    typeof planoDoLink === "string" ? planoDoLink : null,
+  );
 
   // Convite VÁLIDO passa em qualquer modo — é o ponto inteiro do convite.
   const modo = convite ? null : await modoDeCadastro();
@@ -125,7 +135,13 @@ export default async function SignupPage({
         </p>
       )}
 
-      <SignupForm convite={convite} planos={planos} planoInicial={planoInicialDoSeletor(planos, cadastro?.padraoId ?? null)} />
+      <SignupForm
+        convite={convite}
+        planos={planos}
+        planoInicial={emCartoes.planoMarcado}
+        cartoes={emCartoes.cartoes}
+        planoVeioDoLink={emCartoes.planoMarcado !== undefined && !emCartoes.linkSemPlano && typeof planoDoLink === "string"}
+      />
       {/* O convite atravessa o Google na URL de retorno: sem ele, quem foi
           convidado e cria a conta com Google ganharia uma empresa própria. */}
       {/* FORK MIA (.64): só com o Google ligado no GoTrue desta instalação; os

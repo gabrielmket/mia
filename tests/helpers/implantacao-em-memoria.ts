@@ -42,6 +42,10 @@ export const TODAS_AS_OPERACOES = [
   // FORK MIA (.89): o e-mail marketing (aceites importados e o rascunho com teste).
   "importar_consentimentos",
   "criar_campanha_de_email",
+  // FORK MIA (.90): a cobrança da jornada de assinatura.
+  "gerir_planos",
+  "gerir_cobranca",
+  "decidir_cadastro",
 ];
 
 /** O funil de e-commerce que o gatilho de seed entrega a toda organização nova. */

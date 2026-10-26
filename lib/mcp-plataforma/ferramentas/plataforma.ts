@@ -30,6 +30,14 @@ import { iaDecideLigadaNa } from "@/lib/implantacao/empresa";
 import { lePlanosDoSettings } from "@/lib/tarefas/plano";
 
 import type { FerramentaDePlataforma } from "../tipos";
+// FORK MIA (.90): a jornada de assinatura (docs/fork/jornada-de-assinatura.md).
+import { moduloLigado } from "@/lib/instalacao/modulos";
+import { MODULO_QUE_EXIGE_A_INSTALACAO } from "@/lib/planos-mia/catalogo";
+import { lerDetalheDaEmpresa } from "@/lib/planos-mia/empresas-do-cadastro";
+import { lerPlanosComModulos } from "@/lib/planos-mia/leitura";
+import { modulosPeloPlano } from "@/lib/planos-mia/modulos";
+import { seguirOPlano } from "@/lib/planos-mia/seguir-o-plano";
+import { recusar } from "../recusa";
 
 /**
  * A chave do CPF está semeada? Só sim ou não, e o VALOR nunca sai.
@@ -99,7 +107,11 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       "carteira, números de WhatsApp conectados e, em `configuracao`, os interruptores " +
       "da empresa: a limpeza automática de mídia antiga (e em quantos dias), o freio do " +
       "passo \"a IA decide\" das automações, o bloqueio de afirmação clínica dos agentes " +
-      "e quantos planos de tarefa existem.",
+      "e quantos planos de tarefa existem. " +
+      // FORK MIA (.90): a cobrança e a origem.
+      "Desde a .90, em `cobranca`: o plano, a situação da cobrança (em teste, em dia, em atraso, suspensa, isenta...), o próximo passo da régua e a " +
+      "ORIGEM da empresa (cadastro próprio ou implantação); e em `modulos_com_origem` cada módulo ligado com a origem (pelo plano ou pela Time). " +
+      "`modulos` continua sendo só o que a Time liberou à mão.",
     inputSchema: {
       organization_id: z.string().uuid().describe("O id do cliente."),
     },
@@ -143,8 +155,24 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       // Leitura que falha não derruba o retrato: diz que não leu.
       const camada = await lerCamadaClinica(admin, id).catch(() => null);
 
+      // FORK MIA (.90): a cobrança, a origem e a origem de cada módulo. Leitura que
+      // falha não derruba o retrato: diz que não leu.
+      const jornada = await lerDetalheDaEmpresa(admin, id).catch(() => null);
+
       return {
         cliente: org.data,
+        cobranca: jornada
+          ? {
+              ligada: await moduloLigado(admin, "cobranca"),
+              plano: jornada.plano?.nome ?? null,
+              plano_agendado: jornada.plano_agendado,
+              situacao: jornada.situacao,
+              teste_ate: jornada.teste_ate,
+              proximo_aviso: { tipo: jornada.proximo.tipo, em: jornada.proximo.em },
+              origem: jornada.origem,
+            }
+          : "nao_lido",
+        modulos_com_origem: jornada ? jornada.modulos : "nao_lido",
         // Os interruptores da empresa que chegaram do upstream 1.74 a 1.80.
         configuracao: {
           limpeza_automatica_de_midia: {
@@ -279,7 +307,11 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
     name: "plataforma_criar_cliente",
     description:
       "Cria uma organização nova e o acesso do dono dela. Idempotente pela " +
-      "chave informada: repetir a chamada com a mesma chave não cria duas.",
+      "chave informada: repetir a chamada com a mesma chave não cria duas. " +
+      // FORK MIA (.90): o plano negociado e a origem.
+      "A empresa nasce com a origem `implantacao` (a Time implantou). Sem `plano`, nasce ISENTA, como sempre; com `plano` (o nome ou o id, inclusive " +
+      "o plano escondido, negociado), nasce na cobrança, em teste com os dias do plano, e os módulos do plano ligam. `isenta: true` diz isso por extenso. " +
+      "Plano só com a cobrança ligada.",
     inputSchema: {
       display_name: z.string().trim().min(1).max(120).describe("Nome do cliente."),
       slug: z
@@ -297,13 +329,41 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
           "Chave de idempotência (uuid). Invente uma por cliente e repita-a se " +
             "precisar tentar de novo.",
         ),
+      // FORK MIA (.90): o plano negociado (escondido) ou a isenção por extenso.
+      plano: z
+        .string()
+        .trim()
+        .min(1)
+        .max(80)
+        .optional()
+        .describe("O plano em que a empresa nasce (nome ou id, inclusive o escondido). Ausente: isenta, como sempre."),
+      isenta: z.boolean().optional().describe("true: nasce isenta (não paga e não tem limites). É o padrão sem `plano`."),
     },
     operacao: "criar_cliente",
     handler: async ({ admin, autorUserId }, args) => {
+      // FORK MIA (.90): o plano, pelo nome ou id, inclusive o escondido.
+      if (typeof args.plano === "string" && args.isenta === true) {
+        recusar("escolha: `plano` (a empresa paga) ou `isenta: true` (não paga). Os dois juntos se contradizem.");
+      }
+      let planoId: string | null = null;
+      if (typeof args.plano === "string") {
+        if (!(await moduloLigado(admin, "cobranca"))) {
+          recusar(
+            "a cobrança está desligada nesta instalação: a empresa só pode nascer isenta. Tire `plano`, ou peça a uma pessoa para ligar a cobrança em Admin › Recursos opcionais.",
+          );
+        }
+        const alvo = String(args.plano).trim().toLocaleLowerCase("pt-BR");
+        const achado = (await lerPlanosComModulos(admin)).find(
+          (p) => p.arquivado_em === null && (p.id === String(args.plano).trim() || p.nome.toLocaleLowerCase("pt-BR") === alvo),
+        );
+        if (!achado) recusar(`plano não encontrado: "${String(args.plano)}". Veja os planos em plataforma_ver_cobranca.`);
+        planoId = achado.id;
+      }
       const pedido = {
         display_name: String(args.display_name).trim(),
         slug: String(args.slug).trim(),
         owner_email: String(args.owner_email).trim().toLowerCase(),
+        ...(planoId ? { plano_id: planoId } : {}),
       };
       // O `p_hash` é o que faz a idempotência RECUSAR em vez de devolver o
       // resultado antigo quando a mesma chave chega com dados diferentes —
@@ -323,6 +383,13 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         }
         throw new Error(`não consegui criar o cliente: ${error.message}`);
       }
+      // FORK MIA (.90): a origem por extenso (o gatilho da 9071 já grava "implantacao"
+      // quando quem cria é admin de plataforma) e os módulos do plano, se houver.
+      const novoId = (data as { id?: string } | null)?.id;
+      if (novoId) {
+        await admin.from("mia_origem_da_empresa").upsert({ organization_id: novoId, origem: "implantacao" }, { onConflict: "organization_id" });
+        if (planoId) await seguirOPlano(admin, novoId, "atribuicao");
+      }
       return data;
     },
   },
@@ -331,7 +398,11 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
     description:
       "Libera um módulo vendido para um cliente. Passe `liberar: false` para tirar. " +
       // FORK MIA (.89): o e-mail marketing é módulo vendido.
-      "`email_marketing` libera o disparo de e-mail marketing (a tela de configuração, o caminho E-mail no Broadcast e a cobrança por e-mail).",
+      "`email_marketing` libera o disparo de e-mail marketing (a tela de configuração, o caminho E-mail no Broadcast e a cobrança por e-mail). " +
+      // FORK MIA (.90): a origem "pela Time" e o módulo que o plano também liga.
+      "A liberação daqui é a origem \"pela Time\": fica mesmo quando a empresa troca de plano. Se o plano da empresa já liga o mesmo módulo, a resposta " +
+      "avisa. `crm_b2b` (Vendas B2B) também se libera aqui: vale para a empresa que está num plano sem ele (com a cobrança ligada); para a isenta, quem " +
+      "decide é o módulo da instalação.",
     inputSchema: {
       organization_id: z.string().uuid(),
       modulo: z.string().trim().min(1).max(60).describe("A chave do módulo."),
@@ -341,7 +412,8 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
     operacao: "liberar_modulo",
     handler: async ({ admin, autorUserId }, args) => {
       const chave = String(args.modulo);
-      if (!MODULOS.some((m) => m.chave === chave)) {
+      // FORK MIA (.90): Vendas B2B também se libera à mão (a origem "pela Time" sobre o plano).
+      if (!MODULOS.some((m) => m.chave === chave) && chave !== MODULO_QUE_EXIGE_A_INSTALACAO) {
         // Recusar o desconhecido, e não gravá-lo: um módulo escrito errado
         // ficaria na tabela sem destravar nada, e o sintoma seria "liberei e
         // o cliente não vê" — com a linha lá, dizendo que está liberado.
@@ -363,7 +435,14 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
           .eq("modulo", chave)
           .is("revoked_at", null);
         if (error) throw new Error(`não consegui tirar o módulo: ${error.message}`);
-        return { modulo: chave, liberado: false };
+        // FORK MIA (.90): o plano pode continuar ligando o mesmo módulo.
+        const doPlano = (await modulosPeloPlano(admin, orgId)).some((m) => m === chave);
+        return {
+          modulo: chave,
+          liberado: false,
+          origem: "pela Time",
+          ...(doPlano ? { aviso: "A liberação pela Time saiu, mas o plano da empresa liga este módulo: ele continua ligado pelo plano." } : {}),
+        };
       }
 
       // INSERT e não upsert: o índice único parcial já recusa uma segunda
@@ -375,11 +454,20 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         granted_by: autorUserId,
         note: typeof args.motivo === "string" ? args.motivo : null,
       });
+      // FORK MIA (.90): a origem e o aviso de quando o plano já liga o mesmo módulo.
+      const doPlano = (await modulosPeloPlano(admin, orgId)).some((m) => m === chave);
+      const avisos = [
+        ...(doPlano ? ["O plano da empresa já liga este módulo. A liberação pela Time fica junto e não sai com troca de plano."] : []),
+        ...(chave === MODULO_QUE_EXIGE_A_INSTALACAO
+          ? ["Vendas B2B à mão só faz diferença para empresa num plano sem ele, com a cobrança ligada; e só vale com o módulo da instalação ligado."]
+          : []),
+      ];
+      const extra = { origem: "pela Time", ...(avisos.length > 0 ? { avisos } : {}) };
       if (error) {
-        if (error.code === "23505") return { modulo: chave, liberado: true, ja_estava: true };
+        if (error.code === "23505") return { modulo: chave, liberado: true, ja_estava: true, ...extra };
         throw new Error(`não consegui liberar o módulo: ${error.message}`);
       }
-      return { modulo: chave, liberado: true };
+      return { modulo: chave, liberado: true, ...extra };
     },
   },
   {

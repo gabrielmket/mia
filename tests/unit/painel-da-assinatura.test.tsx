@@ -39,7 +39,20 @@ describe("PainelDaAssinatura", () => {
     expect(screen.getByText(/^Teste grátis até /)).toBeTruthy();
     expect(container.querySelector('[data-uso="assentos"]')?.textContent).toBe("1 de 1");
     expect(container.querySelector('[data-uso="canais"]')?.textContent).toBe("2 · sem limite");
-    expect(container.querySelector('[data-uso="ia"]')?.textContent).toContain("US$");
+    // FORK MIA (.90): o uso de IA em % do incluído, nunca dólar (lib/ai/custo-e-da-plataforma.ts).
+    expect(container.querySelector('[data-uso="ia"]')?.textContent).toBe("24% do incluído");
+    expect(container.textContent).not.toContain("US$");
+  });
+
+  it("FORK MIA (.90): em 80% avisa, em 100% diz que a IA parou e a conversa vai para a equipe — sem dólar", () => {
+    const { container, unmount } = render(<PainelDaAssinatura dados={{ ...EM_TESTE, gastoIaUsdCents: 425 }} idioma="pt-BR" />);
+    expect(container.querySelector('[data-uso-ia="aviso"]')?.textContent).toContain("85%");
+    expect(container.querySelector('[data-uso-ia="parou"]')).toBeNull();
+    expect(container.textContent).not.toContain("US$");
+    unmount();
+    const parou = render(<PainelDaAssinatura dados={{ ...EM_TESTE, gastoIaUsdCents: 500 }} idioma="pt-BR" />);
+    expect(parou.container.querySelector('[data-uso-ia="parou"]')?.textContent).toContain("fila da equipe");
+    expect(parou.container.textContent).not.toContain("US$");
   });
 
   it("primeiro pagamento pendente é separado do atraso de renovação", () => {

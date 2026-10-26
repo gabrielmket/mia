@@ -37,6 +37,8 @@ import type { AvisoDaRegua, ErroDeLeitura, EstadoDaAssinatura } from "@/lib/cobr
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { logger } from "@/lib/logger";
 import type { TipoDeSuspensao } from "@/lib/organizacao/operante";
+// FORK MIA (.90): os módulos seguem o plano (docs/fork/jornada-de-assinatura.md).
+import { seguirOPlano } from "@/lib/planos-mia/seguir-o-plano";
 
 export interface DependenciasDaCobranca {
   adaptador?: (id: ProvedorDeCobranca) => AdaptadorDeCobranca;
@@ -282,6 +284,9 @@ export async function sincronizar(
         precoDoProvedor: situacao.precoCents,
         assinaturaRef: situacao.assinaturaRef,
       });
+      // FORK MIA (.90): os módulos do plano seguem a releitura — o upgrade pago e
+      // a renovação que aplica o agendado mudam `plano_id` (lib/planos-mia/). Nunca lança.
+      await seguirOPlano(admin, orgId, "releitura");
       return { tipo: "aplicada", estado: r.estado, mudou: r.mudouEstado, acao: await aplicarRegua(admin, orgId, deps) };
     }
     if (tentativa === 2) return { tipo: "descartada" };

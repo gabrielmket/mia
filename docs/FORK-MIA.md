@@ -145,6 +145,11 @@ npx vitest run
   O assistente da MIA (.88) mora em `lib/assistente/`, `components/assistente/` e
   `app/app/assistente/`, e a lista fechada dos pontos de ligação dele no código do
   upstream está em [`docs/fork/assistente.md`](fork/assistente.md), seção 7.
+  A cobrança da jornada de assinatura (.90) mora em `lib/planos-mia/`,
+  `components/planos-mia/` e `lib/carteira/compra-pelo-asaas.ts`, ao lado da
+  cobrança do upstream; os pontos de ligação estão em
+  [`docs/fork/jornada-de-assinatura.md`](fork/jornada-de-assinatura.md), seção 11, e
+  os espelhos das rotas do card Cobrança, na seção 6.
 - **Funcionalidade duplicada.** Os dois lados construíram, na mesma semana, o
   cadastro incorporado da Meta, o disparo em massa e o aviso no WhatsApp. A decisão
   de ficar com um, com o outro ou com os dois é de produto. Para o **disparo em

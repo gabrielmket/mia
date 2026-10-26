@@ -32,6 +32,8 @@
  * do que estava.
  */
 import type { Idioma } from "./idiomas";
+// FORK MIA (.90): a jornada de assinatura (a cobrança), num arquivo nosso.
+import { DICIONARIO_DA_JORNADA_MIA } from "./dicionario-mia-jornada";
 import { DICIONARIO_CARTOES_MIA } from "./dicionario-cartoes-mia";
 // FORK MIA (9011+): as frases da agenda do Outlook moram num arquivo à parte.
 import { DICIONARIO_DA_AGENDA_MICROSOFT } from "./dicionario-mia-agenda-microsoft";
@@ -55,6 +57,8 @@ import { DICIONARIO_DO_HORARIO_DA_IA } from "./dicionario-mia-horario-da-ia";
 import { DICIONARIO_DO_ASSISTENTE_MIA } from "./dicionario-mia-assistente";
 // FORK MIA (.89): o disparo de e-mail marketing, idem.
 import { DICIONARIO_DO_EMAIL_MARKETING } from "./dicionario-mia-email-marketing";
+// FORK MIA (.91): os primeiros passos (o segmento, o "o que falta" e as propostas), idem.
+import { DICIONARIO_DOS_PRIMEIROS_PASSOS_MIA } from "./dicionario-mia-primeiros-passos";
 import { TEXTOS_AGENDA_CONFIGURACAO } from "./agenda-configuracao";
 import { TEXTOS_AGENDA_SERVICOS } from "./agenda-servicos";
 
@@ -63,6 +67,7 @@ type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>
 
 export const DICIONARIO: Traducoes = {
   // FORK MIA: primeiro, para que uma chave igual do upstream prevaleça.
+  ...DICIONARIO_DA_JORNADA_MIA,
   ...DICIONARIO_DA_AGENDA_MICROSOFT,
   ...DICIONARIO_DAS_CONVERSOES_DA_META,
   ...DICIONARIO_DOS_PAINEIS_MIA,
@@ -70,6 +75,7 @@ export const DICIONARIO: Traducoes = {
   ...DICIONARIO_DO_HORARIO_DA_IA,
   ...DICIONARIO_DO_ASSISTENTE_MIA,
   ...DICIONARIO_DO_EMAIL_MARKETING,
+  ...DICIONARIO_DOS_PRIMEIROS_PASSOS_MIA,
   // Encaminhar mensagem (#2835) — botão na bolha do chat e o diálogo de destino.
   "Encaminhar": { es: "Reenviar" },
   "Encaminhar mensagem": { es: "Reenviar mensaje" },

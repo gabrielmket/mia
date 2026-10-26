@@ -19,6 +19,7 @@
  * existe.
  */
 import { MODULO_DOS_LEADS_DA_META } from "@/lib/leads-da-meta/modulo";
+import { promptDoModelo } from "@/lib/onboarding/modelos-de-agente-da-mia";
 
 import type { SementeDeDemonstracao } from "../tipos";
 import { cnpjFalso, escolha } from "./comum";
@@ -54,8 +55,16 @@ export const ACADEMIA: SementeDeDemonstracao = {
     nome: "Duda · Atendimento da academia (demonstração)",
     descricao:
       "Agente de exemplo da academia de demonstração. Não tem versão publicada e o canal está arquivado: não atende ninguém de verdade.",
-    prompt:
-      "Você é a Duda, do atendimento da Academia Modelo. Responde pelo WhatsApp quem quer conhecer a academia, saber de planos e horários ou voltar a treinar. Entende o objetivo, a rotina e a modalidade, oferece a aula experimental gratuita e marca na agenda. Fala dos planos e valores do catálogo, sem prometer resultado de treino e sem comentar o corpo ou a saúde de ninguém. Quem já escolheu o plano vai para a consultora fechar a matrícula.",
+    // FORK MIA (.91): o texto sai do modelo do segmento (lib/onboarding/modelos-de-agente-da-mia.ts),
+    // o mesmo de onde parte o agente de quem entra sozinho; aqui entram só os fatos da empresa fictícia.
+    prompt: promptDoModelo("academia", {
+      persona: "Duda",
+      negocio: "Academia Modelo",
+      extras: [
+        "A aula experimental é gratuita.",
+        "Quem já escolheu o plano vai para a consultora fechar a matrícula.",
+      ],
+    }),
   },
   modulos: ["disparador", MODULO_DOS_LEADS_DA_META],
   empresas: [

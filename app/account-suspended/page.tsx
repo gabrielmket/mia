@@ -6,6 +6,8 @@ import { LgpdRequestDetail } from "@/app/app/lgpd/requests/[id]/_client";
 import { RequestsTable } from "@/app/app/lgpd/requests/RequestsTable";
 import { OutrasOrganizacoes } from "@/app/onboarding/_components/OutrasOrganizacoes";
 import { AcoesDaAssinatura } from "@/components/cobranca/AcoesDaAssinatura";
+// FORK MIA (.90): o plano sem dólar para a tela da empresa.
+import { semDolar } from "@/lib/planos-mia/painel-da-empresa";
 import { PainelDaAssinatura } from "@/components/cobranca/PainelDaAssinatura";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -153,7 +155,8 @@ export default async function AccountSuspendedPage({
               linkDePagamento={painel.assinatura.link_de_pagamento}
               cancelaNoFim={painel.assinatura.cancela_no_fim}
               planosParaTroca={[]}
-              planoAtual={painel.plano ? { id: painel.plano.id, nome: painel.plano.nome, preco_cents: painel.plano.preco_cents, intervalo: painel.plano.intervalo, max_assentos: painel.plano.max_assentos, max_canais: painel.plano.max_canais, teto_ia_usd_cents: painel.plano.teto_ia_usd_cents } : null}
+              // FORK MIA (.90): o teto em dólar não vai ao navegador (lib/planos-mia/painel-da-empresa.ts).
+              planoAtual={painel.plano ? semDolar({ id: painel.plano.id, nome: painel.plano.nome, preco_cents: painel.plano.preco_cents, intervalo: painel.plano.intervalo, max_assentos: painel.plano.max_assentos, max_canais: painel.plano.max_canais, teto_ia_usd_cents: painel.plano.teto_ia_usd_cents }) : null}
               periodoPagoDesde={painel.assinatura.periodo_pago_desde}
               proximoVencimento={painel.assinatura.proximo_vencimento}
               trocaPagamentoUrl={painel.assinatura.troca_pagamento_url}

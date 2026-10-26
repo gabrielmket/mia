@@ -1958,6 +1958,10 @@ jobs:
         run: pnpm e2e:build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+          # FORK MIA (.91): a checagem de tipos do `next build` passou do heap
+          # padrão (~4 GB) com a .88 a .91 juntas ("JavaScript heap out of
+          # memory", PR #63). 8 GB, como o typecheck do ci.yml; o runner tem 16.
+          NODE_OPTIONS: --max-old-space-size=8192
           # `off`, NÃO vazio. Vazio seleciona o Sentry DA COMUNIDADE — está
           # escrito em lib/sentry/dsn.ts:8-10, e é o default de propósito num
           # produto self-host. Só "off" desliga.

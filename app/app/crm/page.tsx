@@ -8,7 +8,8 @@ import { loadCrmExtensions } from "@/lib/extensions/service";
 import { logger } from "@/lib/logger";
 import type { ExtensionGuideView } from "@/lib/extensions/view";
 import { traduzir } from "@/lib/i18n/dicionario";
-import { modulosLigados } from "@/lib/instalacao/modulos";
+// FORK MIA (.90): Vendas B2B segue o plano (docs/fork/jornada-de-assinatura.md).
+import { modulosLigadosParaASessao } from "@/lib/planos-mia/crm-b2b-da-sessao";
 import { capacidadesDaOrganizacao } from "@/lib/organizacao/capacidades";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -77,7 +78,8 @@ export default async function CrmHubPage() {
       interfaceSettings={activeOrg?.interface_settings}
       modulos={modulos}
       modoDeVenda={modoDeVenda}
-      modulosLigados={await modulosLigados(createAdminClient())}
+      // FORK MIA (.90): Vendas B2B fora do plano some do inventário (lib/planos-mia/).
+      modulosLigados={await modulosLigadosParaASessao()}
       title={traduzir("CRM", idioma)}
       subtitle={traduzir(
         "Onde a venda acontece — e o que você define uma vez para ela funcionar.",

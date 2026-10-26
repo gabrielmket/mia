@@ -10,6 +10,8 @@
  * Módulo PURO: sem banco, sem `next/*`. A tela importa daqui.
  */
 
+import type { PropostaDoTurno } from "./propostas/tipos";
+
 /** Os papéis HUMANOS que usam o assistente (o `ai_operator` não é pessoa). */
 export const PAPEIS_DO_ASSISTENTE = ["viewer", "agent", "manager", "admin"] as const;
 export type PapelDoAssistente = (typeof PAPEIS_DO_ASSISTENTE)[number];
@@ -22,6 +24,19 @@ export type AcaoDoAssistente =
   | { tipo: "pedir"; rotulo: string; para_user_id: string; para_nome: string; pedido: string }
   /** "Mandar ao suporte": vira chamado do tipo Dúvida. */
   | { tipo: "suporte"; rotulo: string; pergunta: string }
+  /**
+   * FORK MIA (.91): a PROPOSTA de uma peça (o agente, o funil ou o follow-up do
+   * modelo do segmento), já gravada pendente. O cartão mostra o que muda, e
+   * "Aprovar e aplicar" é só de quem administra (`/api/v1/assistente/propostas`).
+   */
+  | {
+      tipo: "proposta";
+      rotulo: string;
+      proposta_id: string;
+      proposta_tipo: "agente" | "funil" | "followup";
+      titulo: string;
+      mudancas: Array<{ rotulo: string; valor: string }>;
+    }
   /** O rascunho do chamado, que a pessoa confere antes de abrir. */
   | {
       tipo: "chamado";
@@ -72,6 +87,8 @@ export interface RespostaDoAssistente {
   contatos: string[];
   /** As ferramentas que rodaram, só o nome (vai para a auditoria, nunca o conteúdo). */
   ferramentas: string[];
+  /** FORK MIA (.91): as propostas que o turno preparou; a rota as grava pendentes. */
+  propostas: PropostaDoTurno[];
   llmCallId: string | null;
 }
 
@@ -119,13 +136,24 @@ export const ROTULO_DA_FONTE: Record<string, string> = {
   "Mapa das telas": "Mapa das telas",
   "Como trabalhamos aqui": "Como trabalhamos aqui",
   "Registro do que a IA fez em cada mensagem": "Registro do que a IA fez em cada mensagem",
+  // FORK MIA (.91): o "o que falta" e as propostas.
+  "Dados da empresa": "Dados da empresa",
+  "Números de WhatsApp": "Números de WhatsApp",
+  "Agentes de IA": "Agentes de IA",
+  "Follow-ups": "Follow-ups",
+  Equipe: "Equipe",
+  "Plano e cobrança": "Plano e cobrança",
+  "Modelos do segmento": "Modelos do segmento",
+  "Quadros prontos": "Quadros prontos",
+  "Modelos de follow-up": "Modelos de follow-up",
 };
 
 /** O caminho de uma tela, sem query string nem fragmento, e só dentro do app. */
 export function caminhoDaTela(bruto: string | null | undefined): string | null {
   if (typeof bruto !== "string") return null;
   const caminho = bruto.split(/[?#]/)[0]?.trim() ?? "";
-  if (!caminho.startsWith("/app") && !caminho.startsWith("/admin")) return null;
+  // FORK MIA (.91): o passo a passo de entrada também, onde o painel aparece ao lado.
+  if (!caminho.startsWith("/app") && !caminho.startsWith("/admin") && !caminho.startsWith("/onboarding")) return null;
   if (caminho.length > 300) return caminho.slice(0, 300);
   return caminho;
 }
@@ -137,6 +165,9 @@ export function caminhoDaTela(bruto: string | null | undefined): string | null {
  */
 export function hrefDoApp(href: unknown): string | null {
   if (typeof href !== "string") return null;
+  // FORK MIA (.91): os passos do passo a passo de entrada, para o "Me leva lá"
+  // do assistente nos primeiros passos. Só os seis do upstream, por nome.
+  if (/^\/onboarding\/(welcome|connect-whatsapp|setup-ai|funil|testar|invite-team)$/.test(href)) return href;
   if (!/^\/app(\/[A-Za-z0-9_\-./]*)?(\?[A-Za-z0-9_\-=&.%]*)?$/.test(href)) return null;
   if (href.includes("..") || href.includes("//")) return null;
   return href;

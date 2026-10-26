@@ -161,6 +161,25 @@ const META_E_GOOGLE: Manual[] = [
 
 const OPERACAO_DO_FORK: Manual[] = [
   {
+    id: "inicio-o-que-falta",
+    titulo: "Início: o que falta para a empresa ficar pronta",
+    palavras: [
+      "inicio", "o que falta", "falta", "pronta", "pendencia", "pendencias", "primeiros passos", "por onde comeco",
+      "comecar", "montar a empresa", "checklist",
+    ],
+    href: "/app/inicio",
+    papelMinimo: "manager",
+    passos: [
+      "Abra o Início. O bloco O que falta mostra três colunas: Preenchido, Posso completar (o assistente prepara para aprovar) e Preciso confirmar (só você faz, pela tela).",
+      "Em cada item de Preciso confirmar, use Me leva lá para abrir a tela certa. Um item com Depende de... só libera depois do item de que ele depende.",
+      "Em Posso completar, clique em Pedir ao assistente: ele prepara o agente, o funil ou o follow-up do modelo do seu segmento num cartão, e quem administra aprova.",
+      "Em cima, Ao entrar faltavam N, agora faltam M mostra o quanto você já andou. O bloco some quando não falta mais nada.",
+    ],
+    observacao:
+      "O Início aparece para quem administra ou gere uma empresa que ainda está montando, pelo passo a passo. A linha Não se aplica agora lista o que não vale para a sua empresa, como conversões sem conta de anúncios.",
+    vejaTambem: ["assistente-usar"],
+  },
+  {
     id: "obrigacoes-criar",
     titulo: "Cadastrar um documento ou atividade com vencimento (Obrigações)",
     palavras: [

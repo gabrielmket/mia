@@ -82,6 +82,7 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "como monto um checklist de tarefas para todo negócio", sobre: "/app/tasks/planos", espera: "planos-de-tarefa" },
   { pergunta: "como cadastro um documento com vencimento", sobre: "/app/obrigacoes", espera: "obrigacoes-criar" },
   { pergunta: "como marco que o documento chegou", sobre: "/app/obrigacoes", espera: "obrigacoes-receber" },
+  { pergunta: "o que falta para a minha empresa ficar pronta", sobre: "/app/inicio", espera: "inicio-o-que-falta" },
   { pergunta: "como uso o assistente", sobre: "/app/assistente", espera: "assistente-usar" },
   { pergunta: "encontrei um erro, como abro um chamado", sobre: "/app/assistente", espera: "assistente-chamado" },
   { pergunta: "como faço uma ligação com a IA", sobre: "/app/calls", espera: "chamadas" },

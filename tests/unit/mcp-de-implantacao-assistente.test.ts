@@ -55,8 +55,8 @@ beforeEach(() => {
 });
 
 describe("a lista", () => {
-  it("são 5 as ferramentas do assistente (o total, 83, mora no teste do e-mail marketing)", () => {
-    const doAssistente = FERRAMENTAS.filter((f) => /assistente|chamado/.test(f.name)).map((f) => [f.name, f.operacao]);
+  it("são 5 as ferramentas do assistente da .88 (o total, 85, mora no teste do e-mail marketing; as duas das propostas, .91, no dos primeiros passos)", () => {
+    const doAssistente = FERRAMENTAS.filter((f) => /assistente|chamado/.test(f.name) && !/propostas?_do_assistente/.test(f.name)).map((f) => [f.name, f.operacao]);
     expect(Object.fromEntries(doAssistente)).toEqual({
       plataforma_configurar_assistente: "implantar_configuracao",
       plataforma_garantir_conhecimento_do_assistente: "implantar_configuracao",

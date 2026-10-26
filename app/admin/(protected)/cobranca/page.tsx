@@ -141,7 +141,24 @@ export default async function CobrancaPage({ searchParams }: { searchParams: Pro
           "visao-geral": <VisaoGeral dados={visao} checklist={montarChecklist(visao)} idioma={idioma} agora={agora} />,
           conexao: <ConexaoDaCobranca provedor={visao.provedor} modo={visao.modo} last4={visao.chaveLast4} urlDoWebhook={visao.urlDoWebhook} />,
           regua: <ReguaDaCobranca tolerancia={tolerancia} />,
-          planos: <PlanosDaInstalacao planos={lista} />,
+          // FORK MIA (.90): os módulos e o Broadcast de cada plano moram numa página
+          // própria (docs/fork/jornada-de-assinatura.md); aqui, só o link, sem ler nada
+          // a mais e sem repetir o nome de plano nenhum ao lado da lista do upstream.
+          planos: (
+            <div className="space-y-6">
+              <PlanosDaInstalacao planos={lista} />
+              <Link
+                href="/admin/cobranca/modulos-dos-planos"
+                className="block rounded-md border p-4 text-sm hover:bg-muted"
+                data-planos-mia
+              >
+                <span className="font-medium">{t("Módulos e Broadcast de cada plano")}</span>
+                <span className="mt-1 block text-muted-foreground">
+                  {t("Ligar um módulo num plano liga para todas as empresas dele na hora. Tirar de um plano que alguém usa não vale: arquive e crie outro, como o preço.")}
+                </span>
+              </Link>
+            </div>
+          ),
           clientes: clientesDaTela,
         }}
       />

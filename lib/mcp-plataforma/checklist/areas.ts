@@ -46,6 +46,9 @@ import { conversoes } from "./area-das-conversoes";
 // FORK MIA (.89): o e-mail marketing.
 import { emailMarketing } from "./area-do-email-marketing";
 import { migracao } from "./area-da-migracao";
+// FORK MIA (.91): o passo a passo de entrada e o plano (a jornada de assinatura).
+import { primeirosPassos } from "./area-dos-primeiros-passos";
+import { planoECobranca } from "./area-do-plano-e-cobranca";
 import { obrigacoes } from "./area-das-obrigacoes";
 import type { AreaDoChecklist, ResultadoDaArea } from "./tipos";
 
@@ -199,6 +202,9 @@ const funis: AreaDoChecklist = {
           padrao: f.is_default,
           etapas: doFunil.length,
           etapas_com_passo_do_agente: doFunil.filter((e) => e.agent_stage_hint).length,
+          // FORK MIA (.91): o de e-commerce que nasce com a organização (o "o que falta" do cliente lê isto).
+          de_e_commerce: f.slug === "pedidos" && doFunil.some((e) => e.slug === "carrinho_abandonado"),
+          com_ganho_e_perda: doFunil.some((e) => e.is_won) && doFunil.some((e) => e.is_lost),
           campos: Array.isArray(f.settings?.fields) ? (f.settings.fields as unknown[]).length : 0,
           motivos_de_perda: Array.isArray(f.settings?.lost_reasons) ? (f.settings.lost_reasons as unknown[]).length : 0,
         };
@@ -879,6 +885,8 @@ const plataforma: AreaDoChecklist = {
  */
 export const AREAS_DO_CHECKLIST: readonly AreaDoChecklist[] = [
   empresa,
+  // FORK MIA (.91): onde a empresa está no passo a passo de entrada, e o número oficial que espera a Time
+  primeirosPassos,
   modulos,
   canais,
   funis,
@@ -900,5 +908,7 @@ export const AREAS_DO_CHECKLIST: readonly AreaDoChecklist[] = [
   conversoes,
   // FORK MIA (.89): o e-mail marketing; opcional sem o módulo, nunca conta o envio como pendência
   emailMarketing,
+  // FORK MIA (.91): assinou ou não; com a cobrança desligada ou a empresa isenta, não se aplica
+  planoECobranca,
   plataforma,
 ];

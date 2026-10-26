@@ -28,6 +28,8 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
 import { moduloLiberado } from "@/lib/modulos/liberacao";
 import { createAdminClient } from "@/lib/supabase/admin";
+// FORK MIA (.90): o preço por mensagem do plano (docs/fork/jornada-de-assinatura.md).
+import { precoPorMensagemDaEmpresa } from "@/lib/planos-mia/preco-por-mensagem";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -178,10 +180,17 @@ export async function POST(req: NextRequest): Promise<Response> {
       .maybeSingle(),
   ]);
   const saldo = saldoLido.saldo_cents;
-  const precoCents =
-    preco?.preco_por_mensagem_cents === null || preco?.preco_por_mensagem_cents === undefined
-      ? null
-      : Number(preco.preco_por_mensagem_cents);
+  // FORK MIA (.90): sem preço combinado com a empresa, vale o do plano dela
+  // (lib/planos-mia/preco-por-mensagem.ts). Sem nenhum dos dois, recusa, como sempre.
+  const precoCents = (
+    await precoPorMensagemDaEmpresa(
+      createAdminClient(),
+      authz.org.orgId,
+      preco?.preco_por_mensagem_cents === null || preco?.preco_por_mensagem_cents === undefined
+        ? null
+        : Number(preco.preco_por_mensagem_cents),
+    )
+  ).cents;
 
   const veredicto = podeComecar({
     destinatarios: peneira.enviar.length,

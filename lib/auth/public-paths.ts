@@ -95,6 +95,13 @@ export const PUBLIC_PATHS: RegExp[] = [
   // segmento só, na forma do token (`<corpo>.<assinatura>` em base64url), com
   // âncora `$`: nada abaixo dele nasce público de carona.
   /^\/preferencias\/[A-Za-z0-9_-]{20,400}\.[A-Za-z0-9_-]{43}$/,
+  // FORK MIA (.90): a página de preços (`app/precos/page.tsx`) e a leitura dela
+  // (`app/api/v1/publico/planos/route.ts`). Quem abre é o visitante do site, sem
+  // conta. As duas SÓ LEEM os planos oferecidos, sem o dólar do teto de IA
+  // (`lib/planos-mia/publico.ts`); nenhuma escreve nada. Âncora `$`: nada abaixo
+  // delas nasce público de carona.
+  /^\/precos$/,
+  /^\/api\/v1\/publico\/planos$/,
   // Volta do consentimento do Google Ads. Mesma natureza das duas linhas
   // acima: a identidade vem do `state` assinado
   // (`lib/plataformas-de-anuncio/google/estado.ts`), não da sessão — quem

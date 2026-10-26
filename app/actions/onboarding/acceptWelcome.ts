@@ -11,6 +11,8 @@ import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { welcomeSchema } from "@/lib/schemas/onboarding";
 import { requireOnboardingCtx, patchOnboardingState, OnboardingError } from "./_shared";
+// FORK MIA (.91): o segmento que a pessoa confirmou, quando é um segmento.
+import { segmentoDoFormulario } from "@/lib/onboarding/modelos-de-agente-da-mia";
 
 export type AcceptWelcomeResult =
   | { ok: true }
@@ -32,6 +34,10 @@ export async function acceptWelcome(formData: FormData): Promise<AcceptWelcomeRe
   const raw = {
     display_name: String(formData.get("display_name") ?? "").trim(),
     o_que_faz: String(formData.get("o_que_faz") ?? "").trim() || undefined,
+    // FORK MIA (.91): o segmento confirmado ("A MIA leu como"). Só SOMA: sem
+    // ele, ou com um valor que não é segmento, as boas-vindas do upstream seguem
+    // como sempre (nome, fuso e termos), sem o segmento gravado.
+    segmento: segmentoDoFormulario(formData.get("segmento")),
     timezone: String(formData.get("timezone") ?? "America/Sao_Paulo"),
     accepted_terms_at: new Date().toISOString(),
   };
@@ -55,6 +61,8 @@ export async function acceptWelcome(formData: FormData): Promise<AcceptWelcomeRe
           timezone: input.timezone,
           display_name: input.display_name,
           ...(input.o_que_faz ? { o_que_faz: input.o_que_faz } : {}),
+          // FORK MIA (.91): o modelo do agente, do funil e do follow-up sai daqui.
+          ...(input.segmento ? { segmento: input.segmento } : {}),
         },
       },
       { display_name: input.display_name, timezone: input.timezone },

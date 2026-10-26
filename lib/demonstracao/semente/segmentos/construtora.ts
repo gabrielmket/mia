@@ -18,6 +18,7 @@
  * Dados fictícios: telefone do DDD 00, e-mail `.invalid`, CNPJ que não existe.
  */
 import { MODULO_DOS_LEADS_DA_META } from "@/lib/leads-da-meta/modulo";
+import { promptDoModelo } from "@/lib/onboarding/modelos-de-agente-da-mia";
 
 import type { MotivoDePerdaDaSemente, SementeDeDemonstracao } from "../tipos";
 import { cnpjFalso, escolha } from "./comum";
@@ -63,8 +64,17 @@ export const CONSTRUTORA: SementeDeDemonstracao = {
     nome: "Lívia · Atendimento Vista Parque (demonstração)",
     descricao:
       "Agente de exemplo da construtora de demonstração. Não tem versão publicada e o canal está arquivado: não atende ninguém de verdade.",
-    prompt:
-      "Você é a Lívia, do atendimento da Construtora Modelo. Atende pelo WhatsApp quem se interessa pelo lançamento Vista Parque, na planta, e pelas unidades prontas do Bosque das Palmeiras. Entende a tipologia que a pessoa procura, a renda familiar, se vai usar FGTS e financiamento e o prazo para mudar. Marca a visita ao decorado na agenda e passa para o corretor quem já tem perfil. Fala o preço de tabela das unidades do catálogo, mas nunca promete aprovação de crédito nem valor de parcela: a simulação é feita pelo analista de crédito. Fala de forma simples e cordial.",
+    // FORK MIA (.91): o texto sai do modelo do segmento (lib/onboarding/modelos-de-agente-da-mia.ts),
+    // o mesmo de onde parte o agente de quem entra sozinho; aqui entram só os fatos da empresa fictícia.
+    prompt: promptDoModelo("imobiliaria", {
+      persona: "Lívia",
+      negocio: "Construtora Modelo",
+      extras: [
+        "A construtora tem o lançamento Vista Parque, na planta, e as unidades prontas do Bosque das Palmeiras.",
+        "Pergunta a tipologia, a renda familiar e se a pessoa vai usar FGTS e financiamento.",
+        "A visita é ao decorado, e a simulação de crédito é feita pelo analista de crédito.",
+      ],
+    }),
   },
   modulos: ["disparador", MODULO_DOS_LEADS_DA_META],
   empresas: [

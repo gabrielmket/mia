@@ -14,6 +14,10 @@ import { baseDoStorage } from "@/lib/branding/logo";
 import { passosVisiveis } from "@/lib/onboarding/passos";
 import { env } from "@/lib/env";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
+// FORK MIA (.91): o "o que falta" e o assistente ao lado, nos primeiros passos.
+import { AuthProvider } from "@/hooks/auth/AuthProvider";
+import { PrimeirosPassosComAssistente } from "@/components/assistente/PrimeirosPassosComAssistente";
+import { oQueFaltaAparece } from "@/lib/onboarding/o-que-falta-aparece";
 
 export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
   const user = await requireAuth();
@@ -38,6 +42,17 @@ export default async function OnboardingLayout({ children }: { children: React.R
     rotulo: p.rotulo,
     cumprido: p.cumprido(state),
   }));
+
+  // FORK MIA (.91): quem administra ou gere a empresa nova vê o "o que falta"
+  // e o assistente ao lado (lib/onboarding/o-que-falta-aparece.ts). O atendente
+  // e o somente leitura veem o passo a passo do upstream, sem mudança.
+  const comAssistente = oQueFaltaAparece({
+    onboardingState: state,
+    onboardedAt: onboardedAt,
+    papel: activeOrg.role,
+    zerou: false,
+    suporte: Boolean(user.support),
+  }).aparece;
 
   const isDev = process.env.NODE_ENV !== "production";
   // Ícone pequeno de REFORÇO, nunca o logotipo completo: o nome já é escrito
@@ -103,7 +118,18 @@ export default async function OnboardingLayout({ children }: { children: React.R
             <Stepper passos={passos} />
           </div>
         </header>
-        <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">{children}</main>
+        {comAssistente ? (
+          // FORK MIA (.91): o passo, o "o que falta" e o painel do assistente da .88.
+          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+            <AuthProvider user={user} activeOrg={activeOrg}>
+              <PrimeirosPassosComAssistente apareceInicial>
+                <div className="mx-auto w-full max-w-3xl">{children}</div>
+              </PrimeirosPassosComAssistente>
+            </AuthProvider>
+          </main>
+        ) : (
+          <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">{children}</main>
+        )}
       </div>
     </IdiomaProvider>
   );

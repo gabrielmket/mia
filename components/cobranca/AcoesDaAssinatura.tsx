@@ -19,6 +19,8 @@ import { abrirNoNavegador } from "@/lib/cobranca/navegar";
 import type { PlanoParaTroca } from "@/lib/cobranca/painel";
 import type { EstadoDaAssinatura, ProvedorDeCobranca } from "@/lib/cobranca/vocabulario";
 import { useIdioma } from "@/lib/i18n/IdiomaProvider";
+// FORK MIA (.90): conversas no lugar do dólar (docs/fork/jornada-de-assinatura.md).
+import { conversasEstimadas } from "@/lib/planos-mia/catalogo";
 
 export interface PropsDasAcoes {
   estado: EstadoDaAssinatura;
@@ -114,7 +116,14 @@ export function AcoesDaAssinatura(p: PropsDasAcoes) {
         agora: new Date(p.instanteCalculo),
       });
   const reais = (centavos: number) => new Intl.NumberFormat(idioma, { style: "currency", currency: "BRL" }).format(centavos / 100);
-  const dolares = (centavos: number) => new Intl.NumberFormat(idioma, { style: "currency", currency: "USD" }).format(centavos / 100);
+  // FORK MIA (.90): o teto de IA vira "cerca de N conversas"; o dólar é da plataforma
+  // (lib/ai/custo-e-da-plataforma.ts). A página de cobrança já manda a estimativa no
+  // lugar do teto (`conversas_estimadas`); sem ela, a conta é feita aqui.
+  const conversasDoPlano = (plano: PlanoParaTroca) => {
+    const estimadas = (plano as PlanoParaTroca & { conversas_estimadas?: number | null }).conversas_estimadas;
+    const n = estimadas !== undefined ? estimadas : conversasEstimadas(plano.teto_ia_usd_cents);
+    return n === null ? t("sem limite") : t("cerca de {n} conversas").replace("{n}", new Intl.NumberFormat(idioma).format(n));
+  };
 
   const emDivida = p.estado === "em_atraso" || p.estado === "cancelada";
   const podeAssinar = p.assinaturasVivas === 0 && p.estado !== "ativa";
@@ -346,7 +355,7 @@ export function AcoesDaAssinatura(p: PropsDasAcoes) {
                   <ul className="mt-2 space-y-1 text-muted-foreground">
                     <li>{t("Pessoas")}: {plano.max_assentos ?? t("sem limite")}</li>
                     <li>{t("Números conectados")}: {plano.max_canais ?? t("sem limite")}</li>
-                    <li>{t("IA por mês")}: {plano.teto_ia_usd_cents === null ? t("sem limite") : dolares(plano.teto_ia_usd_cents)}</li>
+                    <li>{t("Conversas com IA por mês")}: {conversasDoPlano(plano)}</li>
                   </ul>
                 </section>
               ))}

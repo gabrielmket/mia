@@ -24,6 +24,8 @@ import {
 } from "@/lib/onboarding/proposta-de-funil";
 import { escolherPacotePorTexto, sugerirFunil, type Sugestao } from "@/lib/onboarding/sugerir-funil";
 import { requireOnboardingCtx, patchOnboardingState, loadOnboardingState, OnboardingError } from "./_shared";
+// FORK MIA (.91): o quadro pronto do segmento confirmado.
+import { modeloDoSegmento, pacoteDoSegmento, segmentoDoEstado } from "@/lib/onboarding/modelos-de-agente-da-mia";
 
 /** O funil que o gatilho semeou — o que a pessoa tem antes deste passo. */
 export interface QuadroAtual {
@@ -117,6 +119,11 @@ async function carregarQuadroAtual(
 export interface DadosDoPasso {
   atual: QuadroAtual | null;
   sugestao: Sugestao;
+  /**
+   * FORK MIA (.91): o quadro partiu do modelo do segmento confirmado (não da IA
+   * nem do plano B). A tela diz isso no lugar do aviso de "não consegui pedir".
+   */
+  modeloDoSegmento?: { rotulo: string; curto: string; agente: string };
 }
 
 /**
@@ -131,11 +138,25 @@ export async function dadosDoPasso(orgId: string, negocio: string): Promise<Dado
   const atual = await carregarQuadroAtual(admin, orgId);
 
   let oQueFaz = "";
+  let segmento: ReturnType<typeof segmentoDoEstado> = null;
   try {
     const { state } = await loadOnboardingState(orgId);
     oQueFaz = state.welcome?.o_que_faz ?? "";
+    segmento = segmentoDoEstado(state);
   } catch {
     oQueFaz = "";
+  }
+
+  // FORK MIA (.91): segmento confirmado (fora "outro") começa do quadro pronto
+  // dele, o mesmo das demonstrações, sem pedir à IA. "Outro" segue o caminho do
+  // upstream: a sugestão do funcionário, e o plano B quando ela não vem.
+  if (segmento && segmento !== "outro") {
+    const m = modeloDoSegmento(segmento);
+    return {
+      atual,
+      sugestao: { origem: "pacote", pacote: pacoteDoSegmento(segmento), porque: "" },
+      modeloDoSegmento: { rotulo: m.rotulo, curto: m.curto, agente: m.persona },
+    };
   }
 
   const ctx = { nome: negocio, oQueFaz };

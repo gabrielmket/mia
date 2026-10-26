@@ -9,7 +9,7 @@
  * pergunta: o assistente responde "onde fica" a partir dali, e o chamado leva
  * a tela no contexto.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -42,12 +42,24 @@ export function PainelDoAssistente({
   aoMudarConversa,
   aoNavegar,
   ativo = true,
+  sugestoes = SUGESTOES,
+  saudacao,
+  perguntaExterna = null,
 }: {
   caminho: string;
   conversaId: string | null;
   aoMudarConversa: (id: string | null) => void;
   aoNavegar?: () => void;
   ativo?: boolean;
+  /** FORK MIA (.91): as sugestões do contexto (nos primeiros passos, as do "o que falta"). */
+  sugestoes?: ReadonlyArray<{ texto: string }>;
+  /** FORK MIA (.91): a saudação do contexto, no lugar da padrão. */
+  saudacao?: ReactNode;
+  /**
+   * FORK MIA (.91): uma pergunta que vem de fora do painel (o botão "Pedir ao
+   * assistente" do bloco "O que falta"). Cada `id` novo é enviado uma vez.
+   */
+  perguntaExterna?: { id: number; texto: string } | null;
 }) {
   const t = useT();
   const { user, activeOrg } = useAuth();
@@ -55,7 +67,10 @@ export function PainelDoAssistente({
   const perguntar = usePerguntar();
   const [texto, setTexto] = useState("");
   const [pendente, setPendente] = useState<string | null>(null);
-  const fim = useRef<HTMLDivElement | null>(null);
+  // A LISTA das mensagens, não a página: o painel mora ao lado do passo a passo
+  // (.91) e um `scrollIntoView` rolava a JANELA junto, no meio do que a pessoa
+  // preenchia (o fuso do passo "Seu negócio" abria fora da tela). Rola só aqui.
+  const lista = useRef<HTMLDivElement | null>(null);
 
   const papel = (activeOrg?.role ?? "viewer") as Role;
   const primeiroNome = (user.full_name ?? "").trim().split(/\s+/)[0] ?? "";
@@ -63,7 +78,8 @@ export function PainelDoAssistente({
   const mensagens: Mensagem[] = useMemo(() => estado.data?.mensagens ?? [], [estado.data?.mensagens]);
 
   useEffect(() => {
-    fim.current?.scrollIntoView({ block: "end" });
+    const el = lista.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [mensagens.length, pendente]);
 
   function enviar(pergunta: string) {
@@ -86,6 +102,16 @@ export function PainelDoAssistente({
     );
   }
 
+  // FORK MIA (.91): a pergunta que chegou do bloco "O que falta".
+  const ultimaExterna = useRef<number | null>(null);
+  useEffect(() => {
+    if (!perguntaExterna || ultimaExterna.current === perguntaExterna.id) return;
+    ultimaExterna.current = perguntaExterna.id;
+    enviar(perguntaExterna.texto);
+    // `enviar` muda a cada render; a chave é o id da pergunta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [perguntaExterna?.id]);
+
   const uso = estado.data?.uso;
   const disponivel = estado.data?.disponivel ?? true;
 
@@ -103,8 +129,13 @@ export function PainelDoAssistente({
         ) : null}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-3" aria-live="polite">
-        {mensagens.length === 0 && !pendente ? (
+      <div ref={lista} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-3" aria-live="polite">
+        {mensagens.length === 0 && !pendente && saudacao ? (
+          <div className="flex justify-start">
+            <div className="max-w-[92%] rounded-2xl rounded-bl-sm border bg-surface-muted px-3 py-2 text-sm">{saudacao}</div>
+          </div>
+        ) : null}
+        {mensagens.length === 0 && !pendente && !saudacao ? (
           <div className="flex justify-start">
             <div className="max-w-[92%] rounded-2xl rounded-bl-sm border bg-surface-muted px-3 py-2 text-sm">
               <p>
@@ -130,7 +161,6 @@ export function PainelDoAssistente({
             <p className="text-xs text-text-muted">{t("Consultando o sistema com o seu acesso…")}</p>
           </>
         ) : null}
-        <div ref={fim} />
       </div>
 
       {!disponivel ? (
@@ -140,7 +170,7 @@ export function PainelDoAssistente({
       ) : (
         <>
           <div className="flex gap-2 overflow-x-auto pb-2" data-testid="sugestoes-do-assistente">
-            {SUGESTOES.map((sugestao) => (
+            {sugestoes.map((sugestao) => (
               <button
                 key={sugestao.texto}
                 type="button"

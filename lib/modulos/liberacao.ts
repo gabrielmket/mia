@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
 import { liberacoesDaInstalacao, type ChaveDeModulo } from "@/lib/modulos/vendaveis";
+// FORK MIA (.90): o módulo que vem pelo PLANO da assinatura (docs/fork/jornada-de-assinatura.md).
+import { modulosPeloPlano } from "@/lib/planos-mia/modulos";
 
 /**
  * "Esta organização contratou este módulo?"
@@ -28,7 +30,11 @@ export async function moduloLiberado(
     .is("revoked_at", null)
     .maybeSingle();
   if (error) return false;
-  return !!data;
+  if (data) return true;
+  // FORK MIA (.90): sem liberação à mão, o plano da assinatura pode ligar o
+  // módulo. Vazio com a cobrança desligada e para a empresa isenta, então nada
+  // muda para quem não tem plano; leitura que falha também é vazio (recusa).
+  return (await modulosPeloPlano(db, organizationId)).some((m) => m === modulo);
 }
 
 /**
@@ -55,10 +61,13 @@ export async function modulosDaOrganizacao(
       .is("revoked_at", null);
     // Mesmo critério do singular: erro não vira liberação.
     if (error) return new Set();
+    // FORK MIA (.90): o que o plano da assinatura liga entra junto (a origem
+    // "pelo plano"); vazio sem cobrança ligada e para a isenta.
+    const peloPlano = await modulosPeloPlano(db, organizationId);
     // As chaves que a INSTALAÇÃO libera (não se compram) entram junto: é esta a
     // lista que o menu e os hubs leem. Hoje só a tela de marca por empresa,
     // que some quando a marca está travada — ver `TELAS_DA_INSTALACAO`.
-    return new Set([...(data ?? []).map((l) => l.modulo as string), ...liberacoesDaInstalacao()]);
+    return new Set([...(data ?? []).map((l) => l.modulo as string), ...peloPlano, ...liberacoesDaInstalacao()]);
   } catch (erro) {
     logger.warn("módulos da organização: leitura falhou — tratando todos como não contratados", {
       detalhe: erro instanceof Error ? erro.message : String(erro),

@@ -110,11 +110,19 @@ describe("a lista de ferramentas", () => {
     const semOrganizacao = NOVAS.filter((f) => !("organization_id" in f.inputSchema)).map((f) => f.name);
     // Só o catálogo de modelos não depende de cliente. E as demonstrações, que são
     // achadas pelo SEGMENTO: a empresa delas é a semente que cria (docs/fork/cliente-modelo.md).
+    // .90: a cobrança da INSTALAÇÃO (os planos valem para todos), a lista das
+    // empresas por situação e os pedidos de cadastro, que ainda não são empresa
+    // (docs/fork/jornada-de-assinatura.md).
     expect(semOrganizacao).toEqual([
       "plataforma_listar_modelos",
       "plataforma_listar_demonstracoes",
       "plataforma_criar_demonstracao",
       "plataforma_reaplicar_demonstracao",
+      "plataforma_ver_cobranca",
+      "plataforma_garantir_planos",
+      "plataforma_listar_assinaturas",
+      "plataforma_listar_pedidos_de_cadastro",
+      "plataforma_decidir_pedido_de_cadastro",
     ]);
   });
 

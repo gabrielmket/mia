@@ -37,6 +37,8 @@ import {
 } from "@/lib/email/ses";
 import { logger } from "@/lib/logger";
 import { ehOperante, STATUS_OPERANTE, statusDaOrgEmbutida } from "@/lib/organizacao/operante";
+// FORK MIA (.90): a rotina pula a empresa cujo módulo saiu pelo plano.
+import { moduloSaiuPeloPlano, MOTIVO_MODULO_FORA_DO_PLANO } from "@/lib/planos-mia/modulos";
 
 import { lerSupressoesDeEmail, type DominioDoEmail } from "./banco";
 import { lerCampanha, nomesDasEmpresas, type CampanhaDeEmail } from "./campanhas";
@@ -67,6 +69,8 @@ export interface DependenciasDoMotor {
   espacar?: (ms: number) => Promise<void>;
   /** Teto de tempo da rodada inteira. */
   prazoMs?: number;
+  /** FORK MIA (.90): a chave da cobrança, para o teste (padrão: a da instalação). */
+  cobrancaLigada?: () => Promise<boolean>;
 }
 
 export interface ResultadoDaCampanhaNaRodada {
@@ -202,6 +206,12 @@ export async function rodarUmaCampanha(
   if (trava.travado) {
     await pausar(db, c, "organizacao_de_demonstracao", agora);
     return { ...r, parou: "organizacao_de_demonstracao" };
+  }
+  // FORK MIA (.90): o e-mail marketing que saiu do plano da empresa pausa com o
+  // motivo; os dados ficam. Desligada a cobrança, isenta ou liberado pela Time: segue.
+  if (await moduloSaiuPeloPlano(db, orgId, "email_marketing", deps.cobrancaLigada ? { cobrancaLigada: deps.cobrancaLigada } : {})) {
+    await pausar(db, c, MOTIVO_MODULO_FORA_DO_PLANO, agora);
+    return { ...r, parou: MOTIVO_MODULO_FORA_DO_PLANO };
   }
   if (!configuracaoDaAmazon(deps.amazon?.ambiente).configurado) {
     await pausar(db, c, "amazon_desligada", agora);
