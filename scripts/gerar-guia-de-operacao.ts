@@ -53,11 +53,11 @@ function principal(): void {
       console.error("guia-de-operacao.gen.ts está desatualizado. Rode: npx tsx scripts/gerar-guia-de-operacao.ts");
       process.exit(1);
     }
-    console.log("guia-de-operacao.gen.ts em dia.");
+    console.info("guia-de-operacao.gen.ts em dia.");
     return;
   }
   writeFileSync(DESTINO, novo, "utf8");
-  console.log(`Gravado ${DESTINO.slice(RAIZ.length + 1)}.`);
+  console.info(`Gravado ${DESTINO.slice(RAIZ.length + 1)}.`);
 }
 
 if (require.main === module) principal();
