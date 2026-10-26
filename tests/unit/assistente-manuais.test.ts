@@ -17,16 +17,30 @@ import { anotarRecusaDoServidor, esquecerRecusas, ultimaRecusaDoServidor } from 
 import type { RotinaDoDia } from "@/lib/assistente/leituras/rotina";
 import { NAV_CATALOG } from "@/lib/navigation/catalogo";
 
+import { rotasDoApp } from "./helpers/telas-do-app";
+
 describe("os manuais do sistema", () => {
-  it("todo manual aponta para uma tela do catálogo de navegação", () => {
+  it("todo manual aponta para uma tela que existe: porta do catálogo ou página do app", () => {
     const hrefs = new Set((NAV_CATALOG as ReadonlyArray<{ href: string }>).map((d) => d.href));
-    const quebrados = MANUAIS.filter((m) => !hrefs.has(m.href)).map((m) => `${m.id} → ${m.href}`);
+    const rotas = new Set(rotasDoApp());
+    const quebrados = MANUAIS.filter((m) => !hrefs.has(m.href) && !rotas.has(m.href)).map((m) => `${m.id} → ${m.href}`);
     expect(quebrados).toEqual([]);
   });
 
-  it("ids únicos, e cada manual tem passos", () => {
-    expect(new Set(MANUAIS.map((m) => m.id)).size).toBe(MANUAIS.length);
-    for (const m of MANUAIS) expect(m.passos.length, m.id).toBeGreaterThan(0);
+  it("ids únicos, cada manual tem passos, e veja também aponta para manual que existe", () => {
+    const ids = new Set(MANUAIS.map((m) => m.id));
+    expect(ids.size).toBe(MANUAIS.length);
+    for (const m of MANUAIS) {
+      expect(m.passos.length, m.id).toBeGreaterThan(0);
+      for (const outro of m.vejaTambem ?? []) expect(ids.has(outro), `${m.id} → ${outro}`).toBe(true);
+    }
+  });
+
+  it("o texto do manual é para o cliente: sem travessão", () => {
+    const comTravessao = MANUAIS.filter((m) =>
+      /[—–]/.test([m.titulo, ...m.passos, m.observacao ?? ""].join(" ")),
+    ).map((m) => m.id);
+    expect(comTravessao).toEqual([]);
   });
 
   it("a pergunta do horário da IA acha o manual, e diz que só o administrador muda", () => {

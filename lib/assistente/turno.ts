@@ -73,6 +73,8 @@ export interface EntradaDoTurno {
   agora: Date;
   tela: TelaDaPergunta;
   telas: readonly TelaConhecida[];
+  /** Quem pergunta opera a plataforma (abre as telas do dono da instalação)? */
+  daPlataforma?: boolean;
   /** O diretório da equipe (nome e papel), resolvido pela rota como em `/team/assignable`. */
   equipe: readonly PessoaDaEquipe[];
   historico: ReadonlyArray<{ tipo: string; texto: string }>;
@@ -119,6 +121,8 @@ export async function responderNoAssistente(entrada: EntradaDoTurno, deps: DepsD
       fuso: entrada.fuso,
       agora: entrada.agora,
       telas: entrada.telas,
+      tela: entrada.tela,
+      daPlataforma: entrada.daPlataforma ?? false,
       equipe: entrada.equipe,
       base,
       ultimaRecusa: entrada.ultimaRecusa,

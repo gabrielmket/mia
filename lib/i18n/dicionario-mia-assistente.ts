@@ -76,6 +76,7 @@ export const DICIONARIO_DO_ASSISTENTE_MIA: Traducoes = {
   "Relatórios: meus negócios": { es: "Informes: mis negocios" },
   "Relatórios: negócios por responsável": { es: "Informes: negocios por responsable" },
   "Manual do sistema": { es: "Manual del sistema" },
+  "Guia de operação": { es: "Guía de operación" },
   "Mapa das telas": { es: "Mapa de las pantallas" },
   "Como trabalhamos aqui": { es: "Cómo trabajamos aquí" },
   "Registro do que a IA fez em cada mensagem": { es: "Registro de lo que hizo la IA en cada mensaje" },

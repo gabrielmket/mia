@@ -42,7 +42,7 @@ import { explicarSilencioDaIa } from "./leituras/por-que-a-ia-nao-respondeu";
 import { lerRotinaDoDia } from "./leituras/rotina";
 import { prioridadesDoDia } from "./prioridades";
 import type { TelaConhecida } from "./telas";
-import { hrefDoApp, type AcaoDoAssistente, type TipoDeChamado } from "./tipos";
+import { hrefDoApp, type AcaoDoAssistente, type TelaDaPergunta, type TipoDeChamado } from "./tipos";
 
 export interface ContextoDasFerramentas {
   /** O cliente da SESSÃO de quem perguntou. */
@@ -54,6 +54,10 @@ export interface ContextoDasFerramentas {
   fuso: string;
   agora: Date;
   telas: readonly TelaConhecida[];
+  /** A tela em que a pessoa perguntou: a ajuda dela pesa mais no "como uso isso aqui". */
+  tela?: TelaDaPergunta | null;
+  /** Quem pergunta opera a plataforma (abre as telas do dono da instalação)? */
+  daPlataforma?: boolean;
   equipe: readonly PessoaDaEquipe[];
   base: readonly ItemDaBaseDaEmpresa[];
   /** A última recusa do servidor que a tela viu (a "mensagem do sistema"). */
@@ -300,13 +304,24 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
 
     buscar_ajuda: tool({
       description:
-        "Como fazer algo no sistema e onde fica: procura nos manuais do sistema, no mapa das telas e na base da própria empresa (como trabalhamos aqui). " +
-        "Cada achado diz se a pessoa abre a tela e quem pode. Use antes de explicar qualquer passo; nunca invente um caminho.",
+        "Como fazer algo no sistema e onde fica: procura nos manuais do sistema (passo a passo das telas e roteiros que cruzam telas), " +
+        "no guia de operação, no mapa das telas e na base da própria empresa (como trabalhamos aqui). Cobre todas as telas do sistema. " +
+        "A tela em que a pessoa está pesa mais: \"como uso isso aqui\" traz a ajuda dela primeiro (desta_tela = true). " +
+        "Cada achado diz se a pessoa abre a tela e quem pode. Use antes de explicar qualquer passo; nunca invente um caminho. " +
+        "Responda pelo primeiro manual; se ele trouxer veja_tambem, cite a outra possibilidade em uma frase (MCP, por exemplo, é duas coisas). " +
+        "Só diga que não sabe se nada voltar.",
       inputSchema: z.object({
         pergunta: z.string().trim().min(2).max(300).describe("A dúvida, nas palavras da pessoa."),
       }),
       execute: async ({ pergunta }) => {
-        const achados = buscarAjuda({ pergunta, papel: ctx.papel, telas: ctx.telas, base: ctx.base });
+        const achados = buscarAjuda({
+          pergunta,
+          papel: ctx.papel,
+          telas: ctx.telas,
+          base: ctx.base,
+          caminho: ctx.tela?.caminho ?? null,
+          daPlataforma: ctx.daPlataforma ?? false,
+        });
         coletor.anotar("buscar_ajuda", achados.fontes);
         return achados;
       },

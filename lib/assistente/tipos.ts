@@ -115,6 +115,7 @@ export const ROTULO_DA_FONTE: Record<string, string> = {
   "Relatórios: meus negócios": "Relatórios: meus negócios",
   "Relatórios: negócios por responsável": "Relatórios: negócios por responsável",
   "Manual do sistema": "Manual do sistema",
+  "Guia de operação": "Guia de operação",
   "Mapa das telas": "Mapa das telas",
   "Como trabalhamos aqui": "Como trabalhamos aqui",
   "Registro do que a IA fez em cada mensagem": "Registro do que a IA fez em cada mensagem",
