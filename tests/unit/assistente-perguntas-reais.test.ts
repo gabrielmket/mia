@@ -198,12 +198,12 @@ describe("perguntas reais acham a ajuda certa entre as primeiras", () => {
       telas: telasParaOPapel({ papel: "admin" }),
       base: [],
       caminho: "/app/settings/servidor-mcp-externo",
-      daPlataforma: true,
     });
     expect(achados.tela_atual).toBe("Servidor MCP externo");
     expect(achados.manuais[0]?.id).toBe("servidor-mcp-externo");
     expect(achados.manuais[0]?.desta_tela).toBe(true);
-    expect(achados.manuais[0]?.voce_pode).toBe(true);
+    expect(achados.manuais[0]?.quem_pode).toMatch(/Time Company/);
+    expect(achados.manuais[0]?.passos.join(" ")).toMatch(/Testar conexão/);
     expect(achados.manuais[0]?.veja_tambem.map((v) => v.href)).toContain("/app/settings/api-tokens");
     expect(achados.fontes).toContain("Manual do sistema");
     expect(achados.nada_encontrado).toBe(false);

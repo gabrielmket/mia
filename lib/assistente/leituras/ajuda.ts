@@ -160,8 +160,6 @@ export function buscarAjuda(entrada: {
   base: readonly ItemDaBaseDaEmpresa[];
   /** A tela em que a pessoa está (`/app/...`, sem query string). */
   caminho?: string | null;
-  /** Quem pergunta opera a plataforma: abre as telas do dono da instalação. */
-  daPlataforma?: boolean;
   /** O endereço que a pessoa usa no navegador (`https://...`), para o passo que o cita. */
   enderecoDoSistema?: string | null;
 }): AchadosDaAjuda {
@@ -198,8 +196,10 @@ export function buscarAjuda(entrada: {
         observacao: m.observacao ? comEnderecoDoSistema(m.observacao, entrada.enderecoDoSistema) : null,
         tela: rotuloDe(m.href),
         href: m.href,
-        voce_pode: m.soDaPlataforma ? !!entrada.daPlataforma : roleAtLeast(entrada.papel, m.papelMinimo),
-        quem_pode: m.soDaPlataforma ? "a Time Company (dona da plataforma)" : quemAbre(m.papelMinimo),
+        // A tela do dono da instalação não é de papel da empresa. A rota do chat não lê a
+        // marca de plataforma (cerca admin-escrita-exige-scope-full): o manual diz quem faz.
+        voce_pode: m.soDaPlataforma ? false : roleAtLeast(entrada.papel, m.papelMinimo),
+        quem_pode: m.soDaPlataforma ? "o dono da instalação (na MIA, a Time Company)" : quemAbre(m.papelMinimo),
         roteiro: m.tipo === "roteiro",
         desta_tela: a.daTela,
         veja_tambem: vejaTambem,

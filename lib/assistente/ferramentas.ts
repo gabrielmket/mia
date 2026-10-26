@@ -56,8 +56,6 @@ export interface ContextoDasFerramentas {
   telas: readonly TelaConhecida[];
   /** A tela em que a pessoa perguntou: a ajuda dela pesa mais no "como uso isso aqui". */
   tela?: TelaDaPergunta | null;
-  /** Quem pergunta opera a plataforma (abre as telas do dono da instalação)? */
-  daPlataforma?: boolean;
   /** O endereço que a pessoa usa no navegador, para o passo que o cita (o MCP da MIA). */
   enderecoDoSistema?: string | null;
   equipe: readonly PessoaDaEquipe[];
@@ -322,7 +320,6 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
           telas: ctx.telas,
           base: ctx.base,
           caminho: ctx.tela?.caminho ?? null,
-          daPlataforma: ctx.daPlataforma ?? false,
           enderecoDoSistema: ctx.enderecoDoSistema ?? null,
         });
         coletor.anotar("buscar_ajuda", achados.fontes);

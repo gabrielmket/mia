@@ -322,9 +322,6 @@ export async function POST(req: NextRequest): Promise<Response> {
         agora,
         tela,
         telas,
-        // FORK MIA (.89): quem opera a plataforma abre as telas do dono da instalação
-        // (servidor MCP externo, atualização), e a ajuda diz "você pode" para ele.
-        daPlataforma: authz.user.is_platform_admin && !authz.user.support,
         // O endereço que a pessoa usa no navegador: o passo do MCP da MIA cita "<endereço>/api/mcp".
         enderecoDoSistema: origemPublicaDoPedido(req.headers),
         equipe,
