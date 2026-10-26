@@ -70,6 +70,24 @@ export interface Manual {
 
 export const MANUAIS_DO_DIA_A_DIA: readonly Manual[] = [
   {
+    id: "agente",
+    titulo: "Criar ou ajustar o agente de IA",
+    palavras: [
+      "agente", "agentes", "criar agente", "novo agente", "instrucoes", "prompt", "editar agente", "publicar agente",
+      "testar agente", "o que o agente pode fazer", "passar para uma pessoa", "pausar agente",
+    ],
+    href: "/app/ai/agents",
+    papelMinimo: "admin",
+    passos: [
+      "Abra Agentes (no grupo Agente MIA) e use Novo agente, ou escolha o agente que já existe.",
+      "Na aba Conversa com o cliente, preencha Quem é este agente, Por qual número ele atende, As instruções dele e Estilo de resposta.",
+      "Em O que o agente pode fazer, ligue o que ele pode fazer sozinho (agendar, mover o negócio, consultar o catálogo). Em O que ele consulta antes de responder, marque os materiais. Em Passar para uma pessoa, diga quando ele chama a equipe.",
+      "Use Teste para conversar com ele antes. Depois, Salvar rascunho e Publicar: só a versão publicada atende.",
+    ],
+    observacao:
+      "Gerente vê o agente e só o administrador muda. A aba Organiza o sistema diz em que funis ele mexe, e Confere antes de enviar mostra as checagens de cada mensagem. A inteligência (modelo e chave) é da Time Company. Para parar o agente, use Pausar.",
+  },
+  {
     id: "horario-da-ia",
     titulo: "Horário de atendimento da IA",
     palavras: ["horario", "hora", "expediente", "noite", "madrugada", "fim de semana", "ativa", "inativa", "ia responde", "24 horas", "horario comercial"],
@@ -224,7 +242,7 @@ export const MANUAIS_DO_DIA_A_DIA: readonly Manual[] = [
   {
     id: "followup",
     titulo: "Criar ou mudar um follow-up (retomada de quem parou de responder)",
-    palavras: ["follow", "followup", "retomada", "regua", "cadencia", "mensagem", "sumiu", "parou de responder", "silencio"],
+    palavras: ["follow", "followup", "retomada", "regua", "cadencia", "mensagem", "texto do followup", "sumiu", "parou de responder", "silencio"],
     href: "/app/ai/followups",
     papelMinimo: "manager",
     passos: [
@@ -256,9 +274,11 @@ export const MANUAIS_DO_DIA_A_DIA: readonly Manual[] = [
     href: "/app/metrics",
     papelMinimo: "manager",
     passos: [
-      "Abra Desempenho e vá até as metas do mês.",
-      "Defina a meta da empresa ou de cada pessoa. O progresso é calculado pelo próprio funil.",
+      "Abra Desempenho (no MIA Insights) e vá até Metas do mês. Escolha o Mês e use Definir meta.",
+      "Em O que medir, escolha Reuniões marcadas, Reuniões realizadas, Receita total, Receita recorrente, Receita avulsa ou Receita originada.",
+      "Em De quem é a meta, escolha Da empresa inteira ou uma pessoa, preencha o Alvo e clique em Salvar.",
     ],
+    observacao: "O progresso sai do funil e da agenda; ninguém digita. A meta de Receita originada pede uma pessoa.",
   },
   {
     id: "etiquetas",

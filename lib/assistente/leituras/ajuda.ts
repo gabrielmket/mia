@@ -107,7 +107,8 @@ function documentoDoManual(m: Manual): DocumentoDeBusca<FonteDaAjuda> {
     chaves: m.palavras.join(" "),
     corpo: `${m.passos.join(" ")} ${m.observacao ?? ""}`,
     telas: telasDoManual(m),
-    peso: m.tipo === "roteiro" ? 1.3 : 1.4,
+    // O roteiro desempata a favor de si: a pergunta geral ("como faço uma campanha") é a tarefa inteira.
+    peso: m.tipo === "roteiro" ? 1.45 : 1.4,
   };
 }
 

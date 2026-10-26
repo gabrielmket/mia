@@ -75,7 +75,7 @@ export function radical(palavra: string): string {
   else if (p.endsWith("s") && !p.endsWith("ss") && p.length > 4) p = p.slice(0, -1);
   if (p.endsWith("ao")) return p;
   for (const s of SUFIXOS_VERBAIS) {
-    if (p.endsWith(s) && p.length - s.length >= 4) return p.slice(0, -s.length);
+    if (p.endsWith(s) && p.length - s.length >= 3) return p.slice(0, -s.length);
   }
   return p;
 }
@@ -261,9 +261,14 @@ export function buscar<T>(
     let casadas = 0;
     for (const { r, peso, sinonimos } of consulta) {
       let melhor = 0;
-      if (contem(d.titulo, r)) melhor = 3;
-      else if (contem(d.chaves, r)) melhor = 2.5;
-      else if (contem(d.corpo, r)) melhor = 1;
+      const noTitulo = contem(d.titulo, r);
+      const nasChaves = contem(d.chaves, r);
+      const noCorpo = contem(d.corpo, r);
+      if (noTitulo) melhor = 3;
+      else if (nasChaves) melhor = 2.5;
+      else if (noCorpo) melhor = 1;
+      // O documento que fala do assunto em mais de um lugar é mais "sobre" ele.
+      if (melhor > 0) melhor += 0.25 * (Number(noTitulo) + Number(nasChaves) + Number(noCorpo) - 1);
       if (melhor === 0) {
         for (const s of sinonimos) {
           if (contem(d.titulo, s)) melhor = Math.max(melhor, 1.8);
@@ -278,7 +283,12 @@ export function buscar<T>(
     pontos *= d.doc.peso;
 
     const daTela = telaAtual !== null && d.doc.telas.includes(telaAtual);
-    if (daTela) pontos = apontaATela ? pontos + 8 * d.doc.peso : pontos * 1.25 + 0.5;
+    if (daTela) {
+      // Em "como uso isso aqui", a ajuda cuja tela PRINCIPAL é esta vem antes da
+      // que só passa por ela (o roteiro que cruza várias telas).
+      const principal = d.doc.telas[0] === telaAtual;
+      pontos = apontaATela ? pontos + (principal ? 9 : 7) : pontos * 1.25 + 0.5;
+    }
     if (pontos <= 0) continue;
     achados.push({ item: d.doc.item, pontos, daTela });
   }
