@@ -236,7 +236,7 @@ export function ferramentasDoDiaADia(ctx: ContextoDoDiaADia, coletor: ColetorDoD
           "Nasce em rascunho: nenhuma mensagem sai até alguém publicar na tela. Aprova gestor ou administrador. Para o follow-up PRONTO do modelo do segmento, use propor_followup_do_modelo.",
         inputSchema: z.object({
           nome: z.string().trim().min(3).max(80).describe('O nome do fluxo, ex.: "Orçamento · retomar quem pediu e sumiu".'),
-          mensagens: z.array(z.string().trim().min(1).max(1000)).length(3).describe("As três mensagens, na ordem. Pode usar {nome}."),
+          mensagens: z.array(z.string().trim().min(1).max(1000)).length(3).describe("As três mensagens, na ordem. Para o nome da pessoa, use {{primeiro_nome}}."),
           esperas_dias: z
             .array(z.number().int().min(1).max(14))
             .length(2)

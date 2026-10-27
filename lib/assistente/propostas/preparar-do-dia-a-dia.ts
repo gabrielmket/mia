@@ -361,6 +361,15 @@ export function esperasValidas(esperas: readonly number[] | null | undefined): [
 
 export const OPCOES_DE_ESPERA = ESPERAS_PERMITIDAS;
 
+/**
+ * O nome do contato como o motor do follow-up entende (`{{primeiro_nome}}`,
+ * `lib/followup/engine.ts`): "{nome}" e "{primeiro_nome}", do jeito que a pessoa
+ * escreve, viram a variável de verdade.
+ */
+export function comAVariavelDoNome(texto: string): string {
+  return texto.replace(/(?<!\{)\{\s*(nome|primeiro_nome|primeiro nome)\s*\}(?!\})/gi, "{{primeiro_nome}}");
+}
+
 export interface EntradaDeRascunhoDeFollowup {
   nome: string;
   mensagens: readonly string[];
@@ -370,7 +379,7 @@ export interface EntradaDeRascunhoDeFollowup {
 export async function prepararRascunhoDeFollowup(c: ContextoDaPreparacao, e: EntradaDeRascunhoDeFollowup): Promise<Preparacao> {
   const nome = e.nome.trim().replace(/\s+/g, " ");
   if (nome.length < 3 || nome.length > 80) return recusa("O nome do follow-up tem de ter de 3 a 80 caracteres.");
-  const mensagens = e.mensagens.map((m) => m.trim()).filter(Boolean);
+  const mensagens = e.mensagens.map((m) => comAVariavelDoNome(m.trim())).filter(Boolean);
   if (mensagens.length !== 3) {
     return recusa("O follow-up do sistema é uma escada de TRÊS mensagens: escreva as três (a 2ª e a 3ª só saem se a pessoa não responder).");
   }

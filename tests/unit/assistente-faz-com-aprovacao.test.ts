@@ -300,6 +300,9 @@ describe("preparar: o cartão nasce da leitura, sem gravar nada", () => {
       esperas_dias: [1, 3],
     });
     expect(r.ok && r.proposta.pedido).toMatchObject({ modelo: "clinica-consulta-retomada", esperas_dias: [1, 3] });
+    // o "{nome}" de quem escreve vira a variável que o motor do follow-up entende
+    expect(r.ok && (r.proposta.pedido as { mensagens: string[] }).mensagens[0]).toBe("Oi, {{primeiro_nome}}! Ficou alguma dúvida?");
+    expect(preparar.comAVariavelDoNome("{{nome}} e { primeiro nome }")).toBe("{{nome}} e {{primeiro_nome}}");
   });
 
   it("item de conhecimento: entra no material que o agente no ar já lê, e o cartão diz isso", async () => {
