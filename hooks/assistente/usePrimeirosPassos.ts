@@ -12,7 +12,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api/client";
-import type { PropostaLida } from "@/lib/assistente/propostas/tipos";
+import type { PropostaLida, PropostaNoCartao } from "@/lib/assistente/propostas/tipos";
 import type { Evolucao } from "@/lib/assistente/retratos";
 import type { RotuloDoCliente } from "@/lib/mcp-plataforma/checklist/rotulo-do-cliente";
 import type { Criterio } from "@/lib/onboarding/o-que-falta-aparece";
@@ -26,7 +26,7 @@ export interface EstadoDoQueFalta {
 }
 
 export const CHAVE_DO_QUE_FALTA = ["o-que-falta"] as const;
-const CHAVE_DAS_PROPOSTAS = ["assistente", "propostas"] as const;
+export const CHAVE_DAS_PROPOSTAS = ["assistente", "propostas"] as const;
 
 export function useOQueFalta(opcoes: { guardar: boolean; ativo?: boolean }) {
   return useQuery({
@@ -48,7 +48,7 @@ export function usePropostas(ids: readonly string[]) {
     queryKey: [...CHAVE_DAS_PROPOSTAS, lista.join(",")],
     queryFn: () =>
       apiClient
-        .get<{ data: { propostas: PropostaLida[]; pode_aplicar: boolean } }>(
+        .get<{ data: { propostas: PropostaNoCartao[]; pode_aplicar: boolean } }>(
           `/api/v1/assistente/propostas?ids=${encodeURIComponent(lista.join(","))}`,
         )
         .then((r) => r.data),

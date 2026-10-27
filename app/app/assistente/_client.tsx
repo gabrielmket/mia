@@ -7,6 +7,8 @@
  *   Resumo da manhã   o interruptor de cada pessoa e como ele funciona
  *   Chamados          os chamados dela para a Time, com a situação e a resposta
  *   (administrador)   como trabalhamos aqui, quem usa, perguntas sem resposta
+ *   Propostas (.94)   pedidos esperando você, seus pedidos e o que o assistente
+ *                     fez, com o "Desfazer" (`?aba=propostas`, o botão do aviso)
  *
  * `?conversa=<id>` abre uma conversa (o botão do aviso do resumo da manhã) e
  * `?aba=chamados` abre os chamados (o botão do aviso da resposta).
@@ -16,6 +18,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { PainelDoAssistente } from "@/components/assistente/PainelDoAssistente";
+// FORK MIA (.94): a aba das propostas (o assistente faz com aprovação).
+import { PropostasDoAssistente } from "@/components/assistente/PropostasDoAssistente";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -34,7 +38,7 @@ import { PAPEIS_DO_ASSISTENTE, ROTULO_DA_SITUACAO, ROTULO_DO_TIPO_DE_CHAMADO } f
 import { ROTULO_DO_PAPEL, roleAtLeast } from "@/lib/auth/types";
 import { cn } from "@/lib/utils";
 
-type Aba = "conversas" | "resumo" | "chamados" | "empresa";
+type Aba = "conversas" | "resumo" | "chamados" | "empresa" | "propostas";
 
 export function AssistenteClient() {
   const t = useT();
@@ -44,9 +48,13 @@ export function AssistenteClient() {
   const params = useSearchParams();
   const { activeOrg } = useAuth();
   const ehAdmin = roleAtLeast(activeOrg?.role ?? null, "admin");
+  // FORK MIA (.94): quem propõe (atendente em diante) vê a aba das propostas.
+  const propoe = roleAtLeast(activeOrg?.role ?? null, "agent");
 
   const abaInicial = (params?.get("aba") as Aba | null) ?? "conversas";
-  const [aba, setAba] = useState<Aba>(abaInicial === "empresa" && !ehAdmin ? "conversas" : abaInicial);
+  const [aba, setAba] = useState<Aba>(
+    (abaInicial === "empresa" && !ehAdmin) || (abaInicial === "propostas" && !propoe) ? "conversas" : abaInicial,
+  );
   const [conversaId, setConversaId] = useState<string | null>(params?.get("conversa") ?? null);
   const estado = useAssistente(conversaId);
   const resumo = useResumoDaManha();
@@ -55,6 +63,7 @@ export function AssistenteClient() {
     { id: "conversas", rotulo: "Conversas" },
     { id: "resumo", rotulo: "Resumo da manhã" },
     { id: "chamados", rotulo: "Chamados" },
+    ...(propoe ? [{ id: "propostas" as const, rotulo: "Propostas" }] : []),
     ...(ehAdmin ? [{ id: "empresa" as const, rotulo: "Na empresa" }] : []),
   ];
 
@@ -190,6 +199,8 @@ export function AssistenteClient() {
       ) : null}
 
       {aba === "empresa" && ehAdmin ? <NaEmpresa /> : null}
+
+      {aba === "propostas" && propoe ? <PropostasDoAssistente papel={activeOrg?.role ?? null} /> : null}
     </div>
   );
 }
