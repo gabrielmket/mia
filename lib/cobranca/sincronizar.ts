@@ -37,6 +37,14 @@ import type { AvisoDaRegua, ErroDeLeitura, EstadoDaAssinatura } from "@/lib/cobr
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { logger } from "@/lib/logger";
 import type { TipoDeSuspensao } from "@/lib/organizacao/operante";
+// FORK MIA (.95): a entrada paga ainda não paga não recebe "suspensa", e a
+// liberação dela tem a frase própria (lib/planos-mia/entrada-paga.ts).
+import {
+  BOTAO_DE_ENTRAR,
+  calaOAvisoDaEntradaPaga,
+  ehLiberacaoDaEntradaPaga,
+  textoDaLiberacaoDaEntradaPaga,
+} from "@/lib/planos-mia/entrada-paga";
 // FORK MIA (.90): os módulos seguem o plano (docs/fork/jornada-de-assinatura.md).
 import { seguirOPlano } from "@/lib/planos-mia/seguir-o-plano";
 
@@ -367,11 +375,18 @@ export async function aplicarRegua(
   if (!linha) return "nada";
   const { data: orgLida, error: erroDaOrg } = await admin
     .from("organizations")
-    .select("status, suspended_kind, locale, timezone")
+    // FORK MIA (.95): + suspended_reason, que diz se a liberação é a da entrada paga.
+    .select("status, suspended_kind, suspended_reason, locale, timezone")
     .eq("id", orgId)
     .maybeSingle();
   if (erroDaOrg) throw new Error(`cobranca: leitura da empresa falhou (${erroDaOrg.code ?? "sem_codigo"})`);
-  const org = orgLida as { status: string; suspended_kind: string | null; locale: string | null; timezone: string | null } | null;
+  const org = orgLida as {
+    status: string;
+    suspended_kind: string | null;
+    suspended_reason?: string | null;
+    locale: string | null;
+    timezone: string | null;
+  } | null;
   if (!org) return "nada";
 
   const decisao = decidirRegua(
@@ -430,6 +445,12 @@ export async function aplicarRegua(
       if (error) throw new Error(`cobranca: reativação falhou (${error.code ?? "sem_codigo"})`);
       if (!mudou(data)) return "nada";
       auditar("cobranca.org_reativada", orgId, { motivo: "pagamento_confirmado" });
+      // FORK MIA (.95): no primeiro pagamento da entrada paga não houve suspensão
+      // de uso: "Pagamento confirmado: a sua conta está liberada", com o botão Entrar.
+      if (ehLiberacaoDaEntradaPaga(org.suspended_reason)) {
+        await enviar(admin, { id: orgId, idioma }, textoDaLiberacaoDaEntradaPaga(idioma), null, BOTAO_DE_ENTRAR);
+        return "reativar";
+      }
       await enviar(admin, { id: orgId, idioma }, textoDoAviso("liberada", { ...contexto, data: null, origem: "atraso" }), null);
       return "reativar";
     }
@@ -445,6 +466,8 @@ export async function aplicarRegua(
       auditar("cobranca.org_suspensa", orgId, { debito_desde: acao.debitoDesde.toISOString() });
       // A origem importa aqui: quem foi suspenso no fim do teste grátis não tem
       // pagamento esperando, e a frase diz "assine", não "aguarde a confirmação".
+      // FORK MIA (.95): a entrada paga ainda não paga não recebe "suspensa".
+      if (calaOAvisoDaEntradaPaga("suspensa", linha.pagamento_inicial_pendente)) return "suspender";
       const texto = textoDoAviso("suspensa", { ...contexto, data: null, origem: acao.origem });
       if (await registrarAviso(admin, orgId, "suspensa", acao.debitoDesde, texto)) {
         await enviar(admin, { id: orgId, idioma }, texto, linha.link_de_pagamento);
@@ -452,6 +475,10 @@ export async function aplicarRegua(
       return "suspender";
     }
     case "avisar": {
+      // FORK MIA (.95): nem o "suspensa" nem o lembrete semanal dele para quem
+      // acabou de assinar um plano de entrada paga e ainda não pagou a primeira vez
+      // (lib/planos-mia/entrada-paga.ts). Nem e-mail, nem Central.
+      if (calaOAvisoDaEntradaPaga(acao.aviso, linha.pagamento_inicial_pendente)) return "nada";
       const texto = textoDoAviso(acao.aviso, { ...contexto, data: acao.data, origem: acao.origem });
       if (!(await registrarAviso(admin, orgId, acao.aviso, acao.debitoDesde, texto))) return "nada";
       await enviar(admin, { id: orgId, idioma }, texto, linha.link_de_pagamento);

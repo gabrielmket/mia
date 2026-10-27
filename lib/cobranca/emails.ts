@@ -97,6 +97,9 @@ export async function enviarAvisoAosAdmins(
   org: { id: string; idioma: Idioma },
   texto: TextoDoAviso,
   linkDePagamento: string | null,
+  // FORK MIA (.95): o botão próprio de um aviso (a liberação da entrada paga leva
+  // a "Entrar"; lib/planos-mia/entrada-paga.ts). Ausente, o botão de sempre.
+  botao?: { rotulo: string; caminho: string },
 ): Promise<void> {
   try {
     const para = await emailsDosAdmins(admin, org.id);
@@ -108,9 +111,11 @@ export async function enviarAvisoAosAdmins(
       corpo: texto.corpo,
       marca,
       idioma: org.idioma,
-      botao: linkDePagamento
-        ? { rotulo: t("Pagar agora"), href: linkDePagamento }
-        : { rotulo: t("Abrir plano e cobrança"), href: `${base()}/app/settings/billing` },
+      botao: botao
+        ? { rotulo: t(botao.rotulo), href: `${base()}${botao.caminho}` }
+        : linkDePagamento
+          ? { rotulo: t("Pagar agora"), href: linkDePagamento }
+          : { rotulo: t("Abrir plano e cobrança"), href: `${base()}/app/settings/billing` },
       rodape: t("Você recebe este aviso porque administra esta empresa."),
     });
     await enviarParaCada(para, email, marca.nome, { organization_id: org.id });
