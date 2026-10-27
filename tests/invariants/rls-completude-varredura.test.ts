@@ -462,6 +462,18 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "própria só o administrador escreve; o chamado nasce da própria pessoa, " +
       "novo e sem resposta, e a marca de demonstração vem da empresa.",
   })),
+  // Fork MIA, 9090 — as trilhas do "Me mostra como" (.93, o assistente ensina):
+  // o progresso de cada pessoa e a configuração das trilhas na empresa.
+  ...["mia_assistente_trilhas", "mia_assistente_trilhas_config"].map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/trilhas-do-assistente.test.ts — controle positivo e negativo " +
+      "por pessoa, papel e empresa: cada um grava e lê a própria linha, gestor e " +
+      "administrador leem as da empresa, o atendente não vê a dos outros, outra " +
+      "empresa vê zero, anon recebe permission denied; a linha nasce da própria " +
+      "pessoa com a hora do banco e ninguém apaga pela sessão; a configuração a " +
+      "empresa lê e a sessão não grava (nem o administrador).",
+  })),
   // Fork MIA, 9070 a 9072 — a jornada de assinatura: o registro do módulo que o
   // plano ligou, a origem da empresa e as compras de crédito por Pix.
   ...["mia_modulos_do_plano_registro", "mia_origem_da_empresa", "mia_compras_de_creditos"].map((tabela) => ({
