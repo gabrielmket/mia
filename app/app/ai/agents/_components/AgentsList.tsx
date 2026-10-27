@@ -49,7 +49,11 @@ export function AgentsList({ initialData, canWrite }: Props) {
         </p>
         {canWrite && (
           <Link href="/app/ai/agents/new">
-            <Button className="mt-1">
+            <Button
+              className="mt-1"
+              // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+              data-testid="novo-agente"
+            >
               <Plus size={14} aria-hidden className="mr-2" /> {t("Criar novo")}
             </Button>
           </Link>
@@ -71,7 +75,10 @@ export function AgentsList({ initialData, canWrite }: Props) {
         />
         {canWrite && (
           <Link href="/app/ai/agents/new">
-            <Button>
+            <Button
+              // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+              data-testid="novo-agente"
+            >
               <Plus size={14} aria-hidden className="mr-2" /> {t("Criar novo")}
             </Button>
           </Link>

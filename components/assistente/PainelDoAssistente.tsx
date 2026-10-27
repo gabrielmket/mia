@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useAssistente, usePerguntar } from "@/hooks/assistente/useAssistente";
+import { contarPerguntaNaTrilha } from "@/hooks/assistente/useTrilhas"; // FORK MIA (.93): a pergunta feita durante um passo
 import { useT } from "@/hooks/i18n/useT";
 import { oQueOPapelVe } from "@/lib/assistente/prompt";
 import { destinoDaTela } from "@/lib/assistente/telas";
@@ -23,6 +24,8 @@ import type { MensagemDoAssistente as Mensagem } from "@/lib/assistente/tipos";
 import { ROTULO_DO_PAPEL, type Role } from "@/lib/auth/types";
 
 import { MensagemDoAssistente } from "./MensagemDoAssistente";
+// FORK MIA (.93): o "Me mostra como" na abertura da conversa.
+import { MeMostraComoNoPainel } from "./trilhas/MeMostraComoNoPainel";
 
 /** As perguntas do protótipo, para começar sem saber o que perguntar. */
 export const SUGESTOES: ReadonlyArray<{ texto: string }> = [
@@ -87,6 +90,7 @@ export function PainelDoAssistente({
     if (limpa.length < 2 || perguntar.isPending) return;
     setPendente(limpa);
     setTexto("");
+    contarPerguntaNaTrilha(); // FORK MIA (.93): só a contagem do passo, para a Time ver onde travam.
     perguntar.mutate(
       { pergunta: limpa, conversaId, caminho },
       {
@@ -148,6 +152,8 @@ export function PainelDoAssistente({
             </div>
           </div>
         ) : null}
+        {/* FORK MIA (.93): a trilha pausada ou a recomendada, e as que andam nesta tela. */}
+        {mensagens.length === 0 && !pendente ? <MeMostraComoNoPainel caminho={caminho} aoComecar={aoNavegar} /> : null}
         {mensagens.map((m) => (
           <MensagemDoAssistente key={m.id} mensagem={m} caminho={caminho} conversaId={conversaId} aoNavegar={aoNavegar} />
         ))}

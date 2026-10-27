@@ -24,6 +24,7 @@ import { destinosDaInterface } from "@/lib/navigation/interface";
 import { Sparkle } from "@/lib/ui/icons";
 
 import { PainelDoAssistente } from "./PainelDoAssistente";
+import { GuiaNaTela } from "./trilhas/GuiaNaTela";
 
 export function BotaoDoAssistente() {
   const { user, activeOrg } = useAuth();
@@ -45,38 +46,42 @@ function BotaoVisivel() {
   const [conversaId, setConversaId] = useState<string | null>(null);
 
   return (
-    <Sheet open={aberto} onOpenChange={setAberto}>
-      <button
-        type="button"
-        onClick={() => setAberto(true)}
-        aria-label={t("Assistente")}
-        title={t("Assistente")}
-        data-testid="botao-do-assistente"
-        className="relative inline-flex h-11 items-center justify-center gap-1.5 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:h-9"
-      >
-        <Sparkle size={18} aria-hidden />
-        <span className="hidden xl:inline">{t("Assistente")}</span>
-      </button>
-      <SheetContent side="right" className="flex w-full flex-col gap-3 sm:max-w-md">
-        <SheetHeader>
-          <SheetTitle>{t("Assistente")}</SheetTitle>
-          <SheetDescription>
-            {t("Sua rotina, seus números e como usar o sistema, com o que você já pode ver.")}{" "}
-            <Link href="/app/assistente" className="underline" onClick={() => setAberto(false)}>
-              {t("Abrir o histórico")}
-            </Link>
-          </SheetDescription>
-        </SheetHeader>
-        <div className="min-h-0 flex-1">
-          <PainelDoAssistente
-            caminho={caminho}
-            conversaId={conversaId}
-            aoMudarConversa={setConversaId}
-            aoNavegar={() => setAberto(false)}
-            ativo={aberto}
-          />
-        </div>
-      </SheetContent>
-    </Sheet>
+    <>
+      {/* FORK MIA (.93): a guia do "Me mostra como"; a gaveta sai da frente pelo aoNavegar do painel. */}
+      <GuiaNaTela />
+      <Sheet open={aberto} onOpenChange={setAberto}>
+        <button
+          type="button"
+          onClick={() => setAberto(true)}
+          aria-label={t("Assistente")}
+          title={t("Assistente")}
+          data-testid="botao-do-assistente"
+          className="relative inline-flex h-11 items-center justify-center gap-1.5 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:h-9"
+        >
+          <Sparkle size={18} aria-hidden />
+          <span className="hidden xl:inline">{t("Assistente")}</span>
+        </button>
+        <SheetContent side="right" className="flex w-full flex-col gap-3 sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>{t("Assistente")}</SheetTitle>
+            <SheetDescription>
+              {t("Sua rotina, seus números e como usar o sistema, com o que você já pode ver.")}{" "}
+              <Link href="/app/assistente" className="underline" onClick={() => setAberto(false)}>
+                {t("Abrir o histórico")}
+              </Link>
+            </SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1">
+            <PainelDoAssistente
+              caminho={caminho}
+              conversaId={conversaId}
+              aoMudarConversa={setConversaId}
+              aoNavegar={() => setAberto(false)}
+              ativo={aberto}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

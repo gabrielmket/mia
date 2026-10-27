@@ -35,7 +35,8 @@ export function CartaoDoEmail({ liberado }: { liberado: boolean }) {
   const preco = carteira.data?.preco_por_email_cents ?? PRECO_PADRAO_POR_EMAIL_CENTS;
 
   return (
-    <Card className="flex flex-col gap-3 p-4" data-canal="email">
+    // .93: o marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+    <Card className="flex flex-col gap-3 p-4" data-canal="email" data-testid="cartao-do-email">
       <div className="flex items-center gap-2">
         <EnvelopeSimple size={20} aria-hidden />
         <h2 className="font-medium">{t("E-mail")}</h2>

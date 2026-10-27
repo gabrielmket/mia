@@ -150,7 +150,8 @@ export function LoseLeadDialog({
 
         <div className="grid gap-3">
           <Label>{t("Motivo")}</Label>
-          <div className="grid grid-cols-1 gap-1.5">
+          {/* FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts). */}
+          <div className="grid grid-cols-1 gap-1.5" data-testid="motivo-da-perda">
             {opcoes.map((opcao) => (
               <label
                 key={opcao.valor}
@@ -224,7 +225,12 @@ export function LoseLeadDialog({
           >
             {t("Cancelar")}
           </Button>
-          <Button onClick={handleSubmit} disabled={disabled}>
+          <Button
+            onClick={handleSubmit}
+            disabled={disabled}
+            // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+            data-testid="confirmar-perda"
+          >
             {emVoo ? t("Salvando...") : t("Confirmar")}
           </Button>
         </DialogFooter>

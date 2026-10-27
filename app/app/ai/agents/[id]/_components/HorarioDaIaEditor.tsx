@@ -221,6 +221,8 @@ export function HorarioDaIaEditor({
           aria-pressed={grade.modo === "horario"}
           disabled={disabled}
           onClick={() => emitir({ ...grade, modo: "horario" })}
+          // .93: o marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+          data-testid="horario-so-no-horario"
         >
           {t("Ativa só no horário abaixo")}
         </Button>
@@ -254,7 +256,8 @@ export function HorarioDaIaEditor({
             </div>
           </div>
 
-          <div className="space-y-2">
+          {/* .93: o marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts). */}
+          <div className="space-y-2" data-testid="horario-dias">
             {ORDEM_DA_SEMANA.map((d) => {
               const dia = grade.dias[d]!;
               const analise = analisarDia(dia.faixas);

@@ -140,6 +140,8 @@ export function ListaDeRelatorios({ prontos, relatorios, permissoes }: Props) {
           ) : null}
           <Link
             href="/app/relatorios/novo"
+            // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+            data-testid="novo-relatorio"
             className="inline-flex min-h-11 items-center rounded-sm bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 lg:min-h-9"
           >
             {t("Novo relatório")}

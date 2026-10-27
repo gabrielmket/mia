@@ -57,7 +57,13 @@ export default async function TeamPage({
         </div>
         {isAdmin ? (
           <Button asChild className="shrink-0">
-            <Link href="/app/team/invite">{t("Convidar membros")}</Link>
+            <Link
+              href="/app/team/invite"
+              // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+              data-testid="convidar-membros"
+            >
+              {t("Convidar membros")}
+            </Link>
           </Button>
         ) : null}
       </header>

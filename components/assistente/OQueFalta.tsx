@@ -23,7 +23,10 @@ import { Button } from "@/components/ui/button";
 import { useOQueFalta } from "@/hooks/assistente/usePrimeirosPassos";
 import { useT } from "@/hooks/i18n/useT";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
+import { TRILHA_DO_ITEM_DO_QUE_FALTA } from "@/lib/assistente/trilhas/catalogo";
 import type { ColunaDoRotulo, Frase, ItemDoRotulo } from "@/lib/mcp-plataforma/checklist/rotulo-do-cliente";
+
+import { BotaoMeMostraComo } from "./trilhas/BotaoMeMostraComo";
 
 /** O que o "Pedir ao assistente" de cada peça pergunta. */
 export const PEDIDO_DA_PROPOSTA: Record<"agente" | "funil" | "followup", string> = {
@@ -119,6 +122,10 @@ export function OQueFalta({
                     <p className="text-xs">
                       {t("Quem faz:")} <strong>{t(QUEM[i.quem])}</strong>
                     </p>
+                  ) : null}
+                  {/* FORK MIA (.93): todo "preciso confirmar" ganha o botão da trilha que ensina. */}
+                  {i.coluna === "preciso_confirmar" && TRILHA_DO_ITEM_DO_QUE_FALTA[i.chave] && !i.depende_de ? (
+                    <BotaoMeMostraComo trilha={TRILHA_DO_ITEM_DO_QUE_FALTA[i.chave]!} />
                   ) : null}
                   {i.proposta && aoPedirAoAssistente ? (
                     <Button

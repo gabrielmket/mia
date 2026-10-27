@@ -357,6 +357,8 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
               <Label htmlFor="tpl-body">{t("Mensagem")}</Label>
               <Textarea
                 id="tpl-body"
+                // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+                data-testid="texto-da-resposta"
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 placeholder={t("Oi {{primeiro_nome}}, tudo bem?")}
@@ -401,6 +403,8 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
             <Label htmlFor="tpl-shortcut">{t("Atalho (opcional)")}</Label>
             <Input
               id="tpl-shortcut"
+              // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+              data-testid="atalho-da-resposta"
               value={shortcut}
               onChange={(e) => setShortcut(e.target.value)}
               placeholder={t("oi")}
@@ -499,7 +503,12 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               {t("Cancelar")}
             </Button>
-            <Button type="submit" disabled={pending || (tipo === "texto" && estourou)}>
+            <Button
+              type="submit"
+              disabled={pending || (tipo === "texto" && estourou)}
+              // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+              data-testid="salvar-resposta-rapida"
+            >
               {isEdit ? t("Salvar") : t("Criar resposta rápida")}
             </Button>
           </DialogFooter>

@@ -780,7 +780,12 @@ export function AgentForm(props: Props) {
               {t("Descartar alterações")}
             </Button>
           ) : null}
-          <Button onClick={handleSave} disabled={(!dirty && isEdit) || disabled || !isValid}>
+          <Button
+            onClick={handleSave}
+            disabled={(!dirty && isEdit) || disabled || !isValid}
+            // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+            data-testid="salvar-agente"
+          >
             {saving ? t("Salvando…") : isEdit ? t("Salvar rascunho") : t("Criar agente")}
           </Button>
           {isEdit ? (
@@ -788,6 +793,8 @@ export function AgentForm(props: Props) {
               <Button
                 variant="default"
                 onClick={() => setConfirmOpen(true)}
+                // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+                data-testid="publicar-agente"
                 disabled={disabled || publishBlockReason !== null}
                 aria-describedby={publishBlockReason ? ID_DO_MOTIVO_DO_PUBLICAR : undefined}
               >
@@ -908,6 +915,8 @@ export function AgentForm(props: Props) {
               <Label htmlFor="name">{t("Nome")}</Label>
               <Input
                 id="name"
+                // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+                data-testid="nome-do-agente"
                 value={form.name}
                 onChange={(e) => patch({ name: e.target.value })}
                 disabled={disabled}
@@ -1262,6 +1271,8 @@ export function AgentForm(props: Props) {
               </div>
             </div>
             <Textarea
+              // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+              data-testid="instrucoes-do-agente"
               value={form.system_prompt}
               onChange={(e) => patch({ system_prompt: e.target.value })}
               disabled={disabled}

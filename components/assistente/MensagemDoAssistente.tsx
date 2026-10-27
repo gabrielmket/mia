@@ -22,6 +22,8 @@ import { CartaoDoChamado } from "./CartaoDoChamado";
 // FORK MIA (.91): o cartão da proposta do assistente.
 import { CartaoDaProposta } from "./CartaoDaProposta";
 import { TextoDoAssistente } from "./TextoDoAssistente";
+// FORK MIA (.93): o "Me mostra como" (docs/fork/assistente.md, seção 11).
+import { AcaoMeMostraComo } from "./trilhas/AcaoMeMostraComo";
 
 export function MensagemDoAssistente({
   mensagem,
@@ -119,6 +121,11 @@ function Acao({
   // FORK MIA (.91): a proposta de uma peça, com "Aprovar e aplicar" e "Recusar".
   if (acao.tipo === "proposta") {
     return <CartaoDaProposta propostaId={acao.proposta_id} titulo={acao.titulo} mudancas={acao.mudancas} />;
+  }
+
+  // FORK MIA (.93): o "Me mostra como" da trilha, ou do guia curto do manual.
+  if (acao.tipo === "me_mostra_como") {
+    return <AcaoMeMostraComo acao={acao} aoComecar={aoNavegar} />;
   }
 
   if (acao.tipo === "ir") {

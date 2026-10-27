@@ -152,6 +152,8 @@ export function KanbanCard({
           // aninhar dois controles — nada de aria-hidden nem de suprimir regra.
           role="group"
           aria-label={`${t("Lead")}: ${card.title}`}
+          // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+          data-testid="cartao-do-negocio"
           onClick={handleClick}
           // Tags saem do card (Lei A): ficam a um hover, sem ocupar altura.
           title={card.tags.length > 0 ? `Tags: ${card.tags.join(", ")}` : undefined}

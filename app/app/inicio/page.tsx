@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { PrimeirosPassosComAssistente } from "@/components/assistente/PrimeirosPassosComAssistente";
+import { TrilhaRecomendada } from "@/components/assistente/trilhas/TrilhaRecomendada";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { homeDaInterface } from "@/lib/navigation/interface";
@@ -51,6 +52,8 @@ export default async function InicioPage() {
           )}
         </p>
       </header>
+      {/* FORK MIA (.93): o Início recomenda uma trilha do "Me mostra como". */}
+      <TrilhaRecomendada />
       <PrimeirosPassosComAssistente apareceInicial />
     </div>
   );
