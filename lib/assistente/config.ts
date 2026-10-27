@@ -23,6 +23,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
 
+import { ehTipoDeProposta, type TipoDeProposta } from "./propostas/tipos";
 import { PAPEIS_DO_ASSISTENTE, type PapelDoAssistente } from "./tipos";
 
 export const LIMITE_PADRAO_POR_DIA = 50;
@@ -33,6 +34,10 @@ export interface ConfigDoAssistente {
   papeis: PapelDoAssistente[];
   perguntasPorPessoaPorDia: number;
   resumoDaManhaPadrao: boolean;
+  /** FORK MIA (.94): os tipos de proposta ligados (`null` = todos, o padrão). */
+  tiposDePropostas: TipoDeProposta[] | null;
+  /** FORK MIA (.94): quem não aprova pode pedir a quem aprova, com o cartão pronto. */
+  podePedir: boolean;
   /** `false` = ninguém gravou ainda; vale o padrão. */
   gravada: boolean;
 }
@@ -42,12 +47,17 @@ export const CONFIG_PADRAO: ConfigDoAssistente = {
   papeis: [...PAPEIS_DO_ASSISTENTE],
   perguntasPorPessoaPorDia: LIMITE_PADRAO_POR_DIA,
   resumoDaManhaPadrao: false,
+  tiposDePropostas: null,
+  podePedir: true,
   gravada: false,
 };
 
 function ehPapel(valor: unknown): valor is PapelDoAssistente {
   return typeof valor === "string" && (PAPEIS_DO_ASSISTENTE as readonly string[]).includes(valor);
 }
+
+/** As colunas da configuração (as da .94 são `tipos_de_proposta` e `pode_pedir`). */
+export const COLUNAS_DA_CONFIG = "ligado, papeis, perguntas_por_pessoa_por_dia, resumo_da_manha_padrao, tipos_de_proposta, pode_pedir";
 
 /** A linha do banco na forma do código; linha ausente é o padrão. */
 export function configDaLinha(linha: Record<string, unknown> | null | undefined): ConfigDoAssistente {
@@ -60,6 +70,8 @@ export function configDaLinha(linha: Record<string, unknown> | null | undefined)
     perguntasPorPessoaPorDia:
       Number.isInteger(limite) && limite >= 1 && limite <= LIMITE_MAXIMO_POR_DIA ? limite : LIMITE_PADRAO_POR_DIA,
     resumoDaManhaPadrao: linha.resumo_da_manha_padrao === true,
+    tiposDePropostas: Array.isArray(linha.tipos_de_proposta) ? linha.tipos_de_proposta.filter(ehTipoDeProposta) : null,
+    podePedir: linha.pode_pedir !== false,
     gravada: true,
   };
 }
@@ -74,7 +86,7 @@ export async function lerConfigDoAssistente(
 ): Promise<ConfigDoAssistente> {
   const { data, error } = await db
     .from("mia_assistente_config")
-    .select("ligado, papeis, perguntas_por_pessoa_por_dia, resumo_da_manha_padrao")
+    .select(COLUNAS_DA_CONFIG)
     .eq("organization_id", organizationId)
     .maybeSingle();
   if (error) return { ...CONFIG_PADRAO, papeis: [...CONFIG_PADRAO.papeis] };

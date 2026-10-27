@@ -613,6 +613,36 @@ const TELAS_DO_UPSTREAM: Manual[] = [
       "Em Quem usa, ligue ou desligue o assistente por papel. Em Perguntas que ficaram sem resposta, veja o que a equipe perguntou e ele não soube.",
     ],
   },
+  // FORK MIA (.94): o assistente faz com aprovação (protótipo "ensina e faz", telas 3 a 5).
+  {
+    id: "assistente-propostas",
+    titulo: "Pedir ao assistente para fazer uma mudança, aprovar e desfazer",
+    palavras: [
+      "assistente faz",
+      "faz para mim",
+      "pedir ao assistente",
+      "aprovar e aplicar",
+      "aprovar",
+      "desfazer",
+      "desfaz",
+      "pedidos esperando",
+      "seus pedidos",
+      "o que o assistente fez",
+      "pedir a gestora",
+      "ajustar o cartao",
+      "criar etapa pelo assistente",
+    ],
+    href: "/app/assistente",
+    papelMinimo: "agent",
+    passos: [
+      "No Assistente, peça a mudança do seu jeito: Cria uma etapa Pediu orçamento antes de Quer agendar, Cria uma resposta rápida com o endereço, Me lembra de ligar para o Rogério amanhã às 10h.",
+      "Ele prepara um cartão com o que vai mudar. Nada muda antes do Aprovar e aplicar; use Ajustar para trocar o texto antes.",
+      "Se o cartão diz que quem aprova é outra pessoa, clique em Pedir a: o cartão vai pronto para ela, no assistente e no sino, e o resultado volta para você.",
+      "Depois de aplicado, o Desfazer fica no cartão e na aba Propostas da página Assistente (O que o assistente fez), enquanto nada depende da mudança.",
+    ],
+    observacao:
+      "Ele prepara: etapa do funil (criar ou renomear), resposta rápida, etiqueta, tarefa, rascunho de follow-up, item de conhecimento, relatório e meta do mês (só o administrador aprova a meta). Aprova quem pode fazer a mesma coisa na tela. Número, cobrança, convite, papéis, chaves, apagar, publicar agente e mensagem a cliente ele nunca faz: explica e leva até a tela. Tudo fica no Audit Log como via assistente.",
+  },
   {
     id: "abrir-funil",
     titulo: "Abrir um funil e mover os negócios de etapa",

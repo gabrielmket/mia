@@ -1,11 +1,11 @@
 /**
- * FORK MIA (.91) — GRAVAR as propostas do turno: uma linha PENDENTE por peça,
- * pela SESSÃO de quem perguntou (a RLS da 9080: gestor em diante propõe), e o
- * cartão de cada uma para os botões da resposta.
+ * FORK MIA (.91, .94) — GRAVAR as propostas do turno: uma linha PENDENTE por
+ * peça, pela SESSÃO de quem perguntou (a RLS da 9100: atendente em diante
+ * propõe), e o cartão de cada uma para os botões da resposta.
  *
- * Pedir de novo a mesma peça não duplica: o banco tem uma pendente por peça e
- * empresa, e a pendente que já existe volta no lugar de uma nova. Nada da peça
- * é criado aqui.
+ * Pedir de novo a mesma peça não duplica: o banco tem uma pendente por PEÇA e
+ * empresa (a `chave`, 9100), e a pendente que já existe volta no lugar de uma
+ * nova. Nada da peça é criado aqui. O risco vem do banco, pelo tipo.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -29,9 +29,10 @@ export async function gravarPropostasDoTurno(
         organization_id: entrada.organizationId,
         conversa_id: entrada.conversaId,
         tipo: p.tipo,
-        titulo: p.titulo,
+        titulo: p.titulo.slice(0, 200),
         mudancas: p.mudancas,
         pedido: p.pedido,
+        chave: p.chave ?? "",
       })
       .select("id")
       .single();
@@ -44,7 +45,7 @@ export async function gravarPropostasDoTurno(
         resourceType: "mia_assistente_propostas",
         resourceId: id,
         requestId: entrada.requestId,
-        metadata: { tipo: p.tipo },
+        metadata: { tipo: p.tipo, via_assistente: true },
       });
     } else if ((error as { code?: string } | null)?.code === "23505") {
       // Já há uma pendente desta peça: o cartão é o dela.
@@ -53,6 +54,7 @@ export async function gravarPropostasDoTurno(
         .select("id, titulo, mudancas")
         .eq("organization_id", entrada.organizationId)
         .eq("tipo", p.tipo)
+        .eq("chave", p.chave ?? "")
         .eq("situacao", "pendente")
         .maybeSingle();
       const linha = pendente as { id: string; titulo: string; mudancas: PropostaDoTurno["mudancas"] } | null;

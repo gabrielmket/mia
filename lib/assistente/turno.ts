@@ -25,7 +25,7 @@ import type { ModelMessage } from "ai";
 
 import type { Role } from "@/lib/auth/types";
 
-import { ColetorDoTurno, ferramentasDoAssistente } from "./ferramentas";
+import { ColetorDoTurno, ferramentasDoAssistente, type ContextoDasFerramentas } from "./ferramentas";
 import { lerBaseDaEmpresa, type ItemDaBaseDaEmpresa } from "./leituras/ajuda";
 import type { PessoaDaEquipe } from "./leituras/comum";
 import type { ChamarModelo } from "./modelo";
@@ -82,6 +82,8 @@ export interface EntradaDoTurno {
   ultimaRecusa: { mensagem: string | null; codigo: string | null; status: number | null } | null;
   /** FORK MIA (.91): a chave da cobrança da instalação, lida pela rota (a sessão não lê). */
   cobrancaLigada?: boolean;
+  /** FORK MIA (.94): os tipos de proposta ligados na empresa (`null` = todos). */
+  tiposDePropostas?: ContextoDasFerramentas["tiposDePropostas"];
 }
 
 export interface DepsDoTurno {
@@ -129,6 +131,7 @@ export async function responderNoAssistente(entrada: EntradaDoTurno, deps: DepsD
       base,
       ultimaRecusa: entrada.ultimaRecusa,
       cobrancaLigada: entrada.cobrancaLigada === true,
+      tiposDePropostas: entrada.tiposDePropostas ?? null,
     },
     coletor,
   );

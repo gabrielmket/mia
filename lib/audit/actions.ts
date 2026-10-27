@@ -1506,6 +1506,15 @@ export const AUDIT_ACTIONS = [
   "assistente.proposta_rejeitada",
   "assistente.proposta_falhou",
   "assistente.followup_saiu_com_o_agente",
+  // FORK MIA (.94): o assistente faz com aprovação. O pedido a quem aprova (com
+  // o cartão pronto), o ajuste antes de aprovar e o desfazer, todos "via
+  // assistente": quem pediu, quem aprovou e quem desfez vão no metadata, com o
+  // tipo e os ids da peça, nunca o texto dela. O desfazer recusado pela trava
+  // de uso também fica registrado.
+  "assistente.proposta_pedida",
+  "assistente.proposta_ajustada",
+  "assistente.proposta_desfeita",
+  "assistente.desfazer_travado",
   "onboarding.numero_oficial_esperando_a_time",
   "onboarding.agente_do_modelo_publicado",
 ] as const;

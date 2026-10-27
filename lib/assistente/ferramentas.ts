@@ -51,7 +51,10 @@ import {
   prepararFunilDoPacote,
   type Preparacao,
 } from "./propostas/preparar";
-import type { PropostaDoTurno } from "./propostas/tipos";
+import type { PropostaDoTurno, TipoDeProposta } from "./propostas/tipos";
+// FORK MIA (.94): as nove peças do dia a dia, com aprovação (protótipo "ensina e faz", tela 3).
+import { ferramentasDoDiaADia, tipoLigado } from "./propostas/ferramentas-do-dia-a-dia";
+import { podePropor } from "./propostas/quem-aprova";
 import { lerEvolucao } from "./retratos";
 import type { TelaConhecida } from "./telas";
 import { hrefDoApp, type AcaoDoAssistente, type TelaDaPergunta, type TipoDeChamado } from "./tipos";
@@ -79,6 +82,11 @@ export interface ContextoDasFerramentas {
    * (`platform_config`). A rota a lê como o layout de `/app` e passa pronta.
    */
   cobrancaLigada?: boolean;
+  /**
+   * FORK MIA (.94): os tipos de proposta ligados na empresa
+   * (`mia_assistente_config.tipos_de_proposta`); ausente ou `null` = todos.
+   */
+  tiposDePropostas?: readonly TipoDeProposta[] | null;
 }
 
 /** O que o turno junta enquanto as ferramentas rodam. */
@@ -99,7 +107,8 @@ export class ColetorDoTurno {
   }
 
   proposta(p: PropostaDoTurno): void {
-    if (this.propostas.some((x) => x.tipo === p.tipo)) return;
+    // FORK MIA (.94): uma por PEÇA (o tipo e a chave): três etapas são três cartões.
+    if (this.propostas.some((x) => x.tipo === p.tipo && (x.chave ?? "") === (p.chave ?? ""))) return;
     this.propostas.push(p);
   }
 
@@ -177,7 +186,7 @@ const FONTES_DO_QUE_FALTA = [
   "Plano e cobrança",
 ] as const;
 
-const FONTES_DA_PROPOSTA: Record<PropostaDoTurno["tipo"], readonly string[]> = {
+const FONTES_DA_PROPOSTA: Record<"agente" | "funil" | "followup", readonly string[]> = {
   agente: ["Dados da empresa", "Agentes de IA", "Modelos do segmento"],
   funil: ["Funis", "Quadros prontos"],
   followup: ["Agentes de IA", "Follow-ups", "Modelos de follow-up"],
@@ -193,10 +202,16 @@ async function propor(
   ctx: ContextoDasFerramentas,
   coletor: ColetorDoTurno,
   nome: string,
-  tipo: PropostaDoTurno["tipo"],
+  tipo: "agente" | "funil" | "followup",
   preparar: () => Promise<Preparacao>,
 ) {
-  if (!roleAtLeast(ctx.papel, "manager")) {
+  // FORK MIA (.94): o atendente também prepara (e pede ao administrador com o
+  // cartão pronto); o somente leitura não. A empresa pode desligar o tipo.
+  if (!tipoLigado(ctx, tipo)) {
+    coletor.anotar(nome);
+    return { ok: false, motivo: "desligado", orientacao: "Diga que nesta empresa o assistente não prepara isso, e leve até a tela com mostrar_me_leva_la." };
+  }
+  if (!podePropor(tipo, ctx.papel)) {
     coletor.anotar(nome);
     return recusaDePermissao(ctx, coletor, "admin", "preparar o agente, o funil ou o follow-up da empresa");
   }
@@ -226,7 +241,7 @@ async function propor(
       quem_aplica: administra ? "a própria pessoa" : quemTemOPapel(ctx.equipe, "admin").map((p) => p.nome),
       orientacao: administra
         ? "Diga em uma ou duas frases que preparou a proposta, que nada muda até ela clicar em Aprovar e aplicar no cartão logo abaixo, e que a peça nasce em rascunho."
-        : "Diga que preparou a proposta e que quem aplica é quem administra a empresa (diga o nome que veio em quem_aplica). Não ofereça aplicar.",
+        : 'Diga que preparou a proposta e que quem aplica é quem administra a empresa (diga o nome que veio em quem_aplica); a pessoa pode clicar em "Pedir a" no cartão, que vai pronto. Não ofereça aplicar.',
     };
   });
 }
@@ -618,5 +633,8 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
         };
       },
     }),
+
+    // FORK MIA (.94): as nove peças do dia a dia, com aprovação de quem pode.
+    ...ferramentasDoDiaADia(ctx, coletor),
   };
 }

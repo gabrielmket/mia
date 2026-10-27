@@ -11,6 +11,8 @@ import { ROTULO_DO_PAPEL, type Role } from "@/lib/auth/types";
 import { renderAgora } from "@/lib/tempo/agora";
 
 import type { ItemDaBaseDaEmpresa } from "./leituras/ajuda";
+// FORK MIA (.94): o "faz com aprovação" e a lista fechada do "nunca".
+import { REGRAS_DO_FAZ } from "./regras-do-faz";
 import type { TelaConhecida } from "./telas";
 import type { TelaDaPergunta } from "./tipos";
 
@@ -82,6 +84,7 @@ export function montarSystemDoAssistente(entrada: {
 
   return [
     REGRAS,
+    REGRAS_DO_FAZ,
     `\nResponda sempre em ${idioma}.`,
     `\n## Quem pergunta\n${entrada.primeiroNome}, ${ROTULO_DO_PAPEL[entrada.papel]}${
       entrada.nomeDaEmpresa ? ` na empresa ${entrada.nomeDaEmpresa}` : ""

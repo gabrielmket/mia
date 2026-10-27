@@ -344,6 +344,8 @@ export async function POST(req: NextRequest): Promise<Response> {
             }
           : null,
         cobrancaLigada,
+        // FORK MIA (.94): os tipos de proposta ligados na empresa.
+        tiposDePropostas: config.tiposDePropostas,
       },
       { chamarModelo: chamadaDoAssistente(getRequestPool(), deps.llmCfg, { registry: deps.registry, log: deps.log }) },
     );

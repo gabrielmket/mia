@@ -10,7 +10,7 @@
  * Módulo PURO: sem banco, sem `next/*`. A tela importa daqui.
  */
 
-import type { PropostaDoTurno } from "./propostas/tipos";
+import type { PropostaDoTurno, TipoDeProposta } from "./propostas/tipos";
 
 /** Os papéis HUMANOS que usam o assistente (o `ai_operator` não é pessoa). */
 export const PAPEIS_DO_ASSISTENTE = ["viewer", "agent", "manager", "admin"] as const;
@@ -25,15 +25,16 @@ export type AcaoDoAssistente =
   /** "Mandar ao suporte": vira chamado do tipo Dúvida. */
   | { tipo: "suporte"; rotulo: string; pergunta: string }
   /**
-   * FORK MIA (.91): a PROPOSTA de uma peça (o agente, o funil ou o follow-up do
-   * modelo do segmento), já gravada pendente. O cartão mostra o que muda, e
-   * "Aprovar e aplicar" é só de quem administra (`/api/v1/assistente/propostas`).
+   * FORK MIA (.91, .94): a PROPOSTA de uma peça (as três do modelo do segmento
+   * e as nove do dia a dia), já gravada pendente. O cartão mostra o que muda, e
+   * "Aprovar e aplicar" é de quem pode fazer o mesmo na tela
+   * (`/api/v1/assistente/propostas`).
    */
   | {
       tipo: "proposta";
       rotulo: string;
       proposta_id: string;
-      proposta_tipo: "agente" | "funil" | "followup";
+      proposta_tipo: TipoDeProposta;
       titulo: string;
       mudancas: Array<{ rotulo: string; valor: string }>;
     }
@@ -146,6 +147,12 @@ export const ROTULO_DA_FONTE: Record<string, string> = {
   "Modelos do segmento": "Modelos do segmento",
   "Quadros prontos": "Quadros prontos",
   "Modelos de follow-up": "Modelos de follow-up",
+  // FORK MIA (.94): as peças do dia a dia.
+  "Etapas do funil": "Etapas do funil",
+  "Respostas rápidas": "Respostas rápidas",
+  Etiquetas: "Etiquetas",
+  Conhecimento: "Conhecimento",
+  Relatórios: "Relatórios",
 };
 
 /** O caminho de uma tela, sem query string nem fragmento, e só dentro do app. */

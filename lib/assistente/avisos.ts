@@ -6,7 +6,8 @@
  * Central para UMA pessoa (`agent_inbox_items.para_user_id`, 0689), `kind`
  * `other`, que é como o fork pendura aviso próprio sem reconstruir a constraint
  * do upstream (docs/FORK-MIA.md, regra 3). O botão sai de
- * `REFERENCIAS_DE_AVISO` (`mia_chamado`, `mia_assistente_resumo`).
+ * `REFERENCIAS_DE_AVISO` (`mia_chamado`, `mia_assistente_resumo` e, desde a .94,
+ * `mia_assistente_proposta`: o pedido com o cartão pronto e o resultado dele).
  *
  * O aviso `other` não vai ao celular sozinho (`sons-da-org.ts`): quando o
  * momento pede, o push sai pela porta única (`enviarPushAoUsuario`).
@@ -27,7 +28,7 @@ export async function avisarNoSino(
     paraUserId: string;
     titulo: string;
     corpo: string | null;
-    refKind: "mia_chamado" | "mia_assistente_resumo" | null;
+    refKind: "mia_chamado" | "mia_assistente_resumo" | "mia_assistente_proposta" | null;
     refId: string | null;
     severidade?: "info" | "warn";
     /** Também no celular, pela porta única do push. */

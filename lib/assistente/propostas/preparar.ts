@@ -34,7 +34,7 @@ const ROTULO_DO_JEITO = {
 
 export type Preparacao =
   | { ok: true; proposta: PropostaDoTurno }
-  | { ok: false; motivo: "ja_existe" | "depende" | "sem_empresa"; mensagem: string; href?: string };
+  | { ok: false; motivo: "ja_existe" | "depende" | "sem_empresa" | "invalido"; mensagem: string; href?: string };
 
 interface EmpresaLida {
   nome: string;

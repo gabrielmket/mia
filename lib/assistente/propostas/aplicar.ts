@@ -69,7 +69,61 @@ async function marcarPassoDoFunil(
     .is("onboarded_at", null);
 }
 
-export async function aplicarPeca(c: Implantacao, org: OrganizacaoDaImplantacao, proposta: PedidoDaProposta): Promise<PecaAplicada> {
+/** Uma etapa como o quadro do onboarding a grava (`fn_aplicar_quadro_do_onboarding`). */
+export interface EtapaDoRetrato {
+  nome: string;
+  slug: string;
+  position: number;
+  is_won: boolean;
+  is_lost: boolean;
+  agent_stage_hint: string | null;
+}
+
+/**
+ * FORK MIA (.94): o funil padrão que o quadro pronto vai adotar (nenhum funil
+ * tem o nome pedido), com as etapas ativas. `null` quando nada será adotado.
+ */
+async function retratoDoFunilAdotado(
+  c: Implantacao,
+  nomePedido: string,
+): Promise<{ id: string; nome: string; slug: string; etapas: EtapaDoRetrato[] } | null> {
+  const { data: funis } = await c.admin
+    .from("crm_pipelines")
+    .select("id, name, slug, is_default")
+    .eq("organization_id", c.orgId)
+    .eq("is_archived", false);
+  const lista = (funis ?? []) as Array<{ id: string; name: string; slug: string; is_default: boolean }>;
+  const chave = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (lista.some((f) => chave(f.name) === chave(nomePedido))) return null;
+  const padrao = lista.find((f) => f.is_default);
+  if (!padrao) return null;
+  const { data: etapas } = await c.admin
+    .from("crm_stages")
+    .select("name, slug, position, is_won, is_lost, agent_stage_hint")
+    .eq("organization_id", c.orgId)
+    .eq("pipeline_id", padrao.id)
+    .eq("is_archived", false)
+    .order("position", { ascending: true });
+  return {
+    id: padrao.id,
+    nome: padrao.name,
+    slug: padrao.slug,
+    etapas: ((etapas ?? []) as Array<Record<string, unknown>>).map((e) => ({
+      nome: String(e.name),
+      slug: String(e.slug),
+      position: Number(e.position),
+      is_won: e.is_won === true,
+      is_lost: e.is_lost === true,
+      agent_stage_hint: typeof e.agent_stage_hint === "string" ? e.agent_stage_hint : null,
+    })),
+  };
+}
+
+export async function aplicarPeca(
+  c: Implantacao,
+  org: OrganizacaoDaImplantacao,
+  proposta: Extract<PedidoDaProposta, { tipo: "agente" | "funil" | "followup" }>,
+): Promise<PecaAplicada> {
   if (proposta.tipo === "agente") {
     const p = proposta.pedido;
     const funil = await funilPadrao(c);
@@ -95,12 +149,22 @@ export async function aplicarPeca(c: Implantacao, org: OrganizacaoDaImplantacao,
 
   if (proposta.tipo === "funil") {
     const p = proposta.pedido;
+    // FORK MIA (.94): o retrato do funil que o quadro pronto vai ADOTAR, antes
+    // de trocar as etapas. É ele que o desfazer devolve (`desfazer.ts`).
+    const antes = await retratoDoFunilAdotado(c, p.nome);
     const g = await garantirFunil(c, { nome: p.nome, etapas: p.etapas, adotar_funil_padrao: true, padrao: true });
     await marcarPassoDoFunil(c.admin as ReturnType<typeof createAdminClient>, c.orgId, {
       pipelineId: g.funil.id,
       etapas: g.etapas.length,
     });
-    return { resultado: { funil_id: g.funil.id, funil_nome: g.funil.nome }, avisos: g.avisos };
+    return {
+      resultado: {
+        funil_id: g.funil.id,
+        funil_nome: g.funil.nome,
+        ...(antes && antes.id === g.funil.id ? { antes: { nome: antes.nome, slug: antes.slug, etapas: antes.etapas } } : {}),
+      },
+      avisos: g.avisos,
+    };
   }
 
   const p = proposta.pedido;

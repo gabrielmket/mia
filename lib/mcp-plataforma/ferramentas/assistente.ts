@@ -4,8 +4,10 @@
  *
  *   plataforma_configurar_assistente                `implantar_configuracao`: liga
  *                                                   e desliga por empresa e por
- *                                                   papel, o limite do dia e o
- *                                                   resumo da manhã padrão
+ *                                                   papel, o limite do dia, o
+ *                                                   resumo da manhã padrão e (.94)
+ *                                                   os tipos de proposta e o
+ *                                                   "pode pedir"
  *   plataforma_garantir_conhecimento_do_assistente  `implantar_configuracao`: a
  *                                                   base própria, por título
  *   plataforma_ver_assistente                       leitura: uso, perguntas sem
@@ -22,7 +24,9 @@
 import { z } from "zod";
 
 import { listarChamadosDaPlataforma, RecusaDoChamado, responderChamado } from "@/lib/assistente/chamados-da-plataforma";
-import { configDaLinha, LIMITE_MAXIMO_POR_DIA } from "@/lib/assistente/config";
+import { COLUNAS_DA_CONFIG, configDaLinha, LIMITE_MAXIMO_POR_DIA } from "@/lib/assistente/config";
+// FORK MIA (.94): os tipos de proposta ligados e o "pode pedir".
+import { TIPOS_DE_PROPOSTA } from "@/lib/assistente/propostas/tipos";
 import { garantirConhecimento, TETO_DE_ITENS, TETO_DO_TEXTO } from "@/lib/assistente/conhecimento";
 import { PAPEIS_DO_ASSISTENTE, SITUACOES_DE_CHAMADO } from "@/lib/assistente/tipos";
 import { audit } from "@/lib/audit";
@@ -46,8 +50,10 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
       "Configura o ASSISTENTE DA MIA de um cliente: o chat que a equipe dele usa dentro do sistema para a rotina do dia, os números e as dúvidas de uso. " +
       "Liga ou desliga a empresa inteira (`ligado`), diz quais papéis usam (`papeis`: viewer, agent, manager, admin), o limite de perguntas por pessoa por dia " +
       "(padrão 50; a IA é da plataforma e o gasto entra no consumo de IA da empresa) e se o resumo da manhã nasce ligado para quem não escolheu (`resumo_da_manha_padrao`, padrão desligado). " +
+      "Desde a .94, também os TIPOS DE PROPOSTA que o assistente prepara na empresa (`tipos_de_proposta`: as três do modelo e as nove do dia a dia; null volta a todos) " +
+      "e se quem não aprova pode PEDIR a quem aprova com o cartão pronto (`pode_pedir`, padrão ligado). " +
       "Só o que vier no pedido muda; o resto continua. Pode ser chamada de novo sem efeito colateral. " +
-      "O QUE NÃO FAZ: não escreve a base própria (isso é plataforma_garantir_conhecimento_do_assistente) e não muda o resumo de quem já escolheu o seu.",
+      "O QUE NÃO FAZ: não escreve a base própria (isso é plataforma_garantir_conhecimento_do_assistente), não muda o resumo de quem já escolheu o seu e não liga nada da lista do \"nunca\" (número, cobrança, convite, usuários, chaves, apagar, publicar, mensagem a cliente).",
     inputSchema: {
       organization_id: ORGANIZACAO,
       ligado: z.boolean().optional().describe("Liga (true) ou desliga (false) o assistente na empresa inteira."),
@@ -67,6 +73,18 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
         .boolean()
         .optional()
         .describe("true: o resumo da manhã das 8h nasce ligado para quem não escolheu. Cada pessoa continua podendo desligar o seu."),
+      tipos_de_proposta: z
+        .array(z.enum(TIPOS_DE_PROPOSTA))
+        .max(TIPOS_DE_PROPOSTA.length)
+        .nullable()
+        .optional()
+        .describe(
+          'Os tipos de proposta que o assistente prepara na empresa: "agente", "funil", "followup" (os do modelo) e "etapa_criar", "etapa_renomear", "resposta", "etiqueta", "tarefa", "rascunho_de_followup", "conhecimento", "relatorio", "meta". null = todos. Lista vazia = nenhum.',
+        ),
+      pode_pedir: z
+        .boolean()
+        .optional()
+        .describe("true (padrão): quem não aprova manda o cartão pronto a quem aprova, no assistente e no sino. false: o assistente só diz quem pode."),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,
@@ -74,13 +92,15 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
       papeis: ["admin", "manager", "agent"],
       perguntas_por_pessoa_por_dia: 50,
       resumo_da_manha_padrao: false,
+      tipos_de_proposta: null,
+      pode_pedir: true,
     },
     operacao: "implantar_configuracao",
     handler: async (ctx, args) => {
       const { c } = await alvo(ctx, args);
       const { data: atual } = await c.admin
         .from("mia_assistente_config")
-        .select("ligado, papeis, perguntas_por_pessoa_por_dia, resumo_da_manha_padrao")
+        .select(COLUNAS_DA_CONFIG)
         .eq("organization_id", c.orgId)
         .maybeSingle();
       const antes = configDaLinha(atual as Record<string, unknown> | null);
@@ -91,6 +111,13 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
           typeof args.perguntas_por_pessoa_por_dia === "number" ? args.perguntas_por_pessoa_por_dia : antes.perguntasPorPessoaPorDia,
         resumo_da_manha_padrao:
           typeof args.resumo_da_manha_padrao === "boolean" ? args.resumo_da_manha_padrao : antes.resumoDaManhaPadrao,
+        tipos_de_proposta:
+          args.tipos_de_proposta === null
+            ? null
+            : Array.isArray(args.tipos_de_proposta)
+              ? [...new Set(args.tipos_de_proposta as string[])]
+              : antes.tiposDePropostas,
+        pode_pedir: typeof args.pode_pedir === "boolean" ? args.pode_pedir : antes.podePedir,
       };
       const { error } = await c.admin.from("mia_assistente_config").upsert(
         {
@@ -111,7 +138,17 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
         requestId: c.requestId,
         metadata: { ...depois, via: "mcp_plataforma" },
       });
-      return { configuracao: depois, antes: { ligado: antes.ligado, papeis: antes.papeis, perguntas_por_pessoa_por_dia: antes.perguntasPorPessoaPorDia, resumo_da_manha_padrao: antes.resumoDaManhaPadrao } };
+      return {
+        configuracao: depois,
+        antes: {
+          ligado: antes.ligado,
+          papeis: antes.papeis,
+          perguntas_por_pessoa_por_dia: antes.perguntasPorPessoaPorDia,
+          resumo_da_manha_padrao: antes.resumoDaManhaPadrao,
+          tipos_de_proposta: antes.tiposDePropostas,
+          pode_pedir: antes.podePedir,
+        },
+      };
     },
   },
   {
@@ -179,7 +216,8 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
     description:
       "O assistente da MIA de um cliente, do lado da plataforma: a configuração (ligado, papéis, limite do dia, resumo da manhã padrão), " +
       "o USO nos últimos 30 dias por papel (perguntas e pessoas), as perguntas que ficaram SEM RESPOSTA (o texto da pergunta e quantas vezes, nunca a conversa), " +
-      "quantos itens tem a base própria e o CUSTO do assistente no mês (chamadas e centavos, de llm_calls). " +
+      "quantos itens tem a base própria, o CUSTO do assistente no mês (chamadas e centavos, de llm_calls) e (.94) as PROPOSTAS dos últimos 30 dias por tipo: " +
+      "preparadas, pedidas a quem aprova, aplicadas, desfeitas, recusadas e vencidas (proposta muito desfeita é proposta ruim). " +
       "QUANDO USAR: para conferir a implantação e para decidir o que escrever na base própria.",
     inputSchema: { organization_id: ORGANIZACAO },
     exemplo: { organization_id: ORG_DE_EXEMPLO },
@@ -188,10 +226,10 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
       const { c, org } = await alvo(ctx, args);
       const agora = new Date();
       const desde = new Date(agora.getTime() - 30 * 86_400_000).toISOString();
-      const [config, perguntas, semResposta, base, vinculos, custo] = await Promise.all([
+      const [config, perguntas, semResposta, base, vinculos, custo, propostas] = await Promise.all([
         c.admin
           .from("mia_assistente_config")
-          .select("ligado, papeis, perguntas_por_pessoa_por_dia, resumo_da_manha_padrao")
+          .select(COLUNAS_DA_CONFIG)
           .eq("organization_id", c.orgId)
           .maybeSingle(),
         c.admin
@@ -219,6 +257,13 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
           .eq("purpose", "assistente")
           .gte("created_at", inicioDoMes(agora))
           .limit(20_000),
+        // FORK MIA (.94): as propostas dos últimos 30 dias, por tipo e situação.
+        c.admin
+          .from("mia_assistente_propostas")
+          .select("tipo, situacao, pedida_em")
+          .eq("organization_id", c.orgId)
+          .gte("created_at", desde)
+          .limit(5_000),
       ]);
       const papelDe = new Map(((vinculos.data ?? []) as Array<{ user_id: string; role: string }>).map((v) => [v.user_id, v.role]));
       const porPapel: Record<string, { perguntas: number; pessoas: Set<string> }> = {};
@@ -246,8 +291,24 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
             papeis: cfg.papeis,
             perguntas_por_pessoa_por_dia: cfg.perguntasPorPessoaPorDia,
             resumo_da_manha_padrao: cfg.resumoDaManhaPadrao,
+            tipos_de_proposta: cfg.tiposDePropostas,
+            pode_pedir: cfg.podePedir,
             gravada: cfg.gravada,
           };
+        })(),
+        propostas_30_dias: (() => {
+          const porTipo: Record<string, Record<string, number>> = {};
+          for (const p of (propostas.data ?? []) as Array<{ tipo: string; situacao: string; pedida_em: string | null }>) {
+            const t = (porTipo[p.tipo] ??= { preparadas: 0, pedidas: 0, aplicadas: 0, desfeitas: 0, recusadas: 0, vencidas: 0, pendentes: 0 });
+            t.preparadas = (t.preparadas ?? 0) + 1;
+            if (p.pedida_em) t.pedidas = (t.pedidas ?? 0) + 1;
+            if (p.situacao === "aplicada" || p.situacao === "desfeita") t.aplicadas = (t.aplicadas ?? 0) + 1;
+            if (p.situacao === "desfeita") t.desfeitas = (t.desfeitas ?? 0) + 1;
+            if (p.situacao === "rejeitada") t.recusadas = (t.recusadas ?? 0) + 1;
+            if (p.situacao === "expirada") t.vencidas = (t.vencidas ?? 0) + 1;
+            if (p.situacao === "pendente" || p.situacao === "aprovada") t.pendentes = (t.pendentes ?? 0) + 1;
+          }
+          return porTipo;
         })(),
         uso_30_dias: Object.fromEntries(
           Object.entries(porPapel).map(([papel, v]) => [papel, { perguntas: v.perguntas, pessoas: v.pessoas.size }]),
