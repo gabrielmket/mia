@@ -155,6 +155,12 @@ npx vitest run
   `lib/dados-fiscais/`, `lib/asaas-mia/`, `lib/pagamento-inicial/` e
   `components/pagamento-inicial/`; os pontos de ligação no código do upstream estão em
   [`docs/fork/pagamento-no-inicio.md`](fork/pagamento-no-inicio.md), seção 10.
+  A área de cobrança e o lado da Time (.96, segunda frente: as cobranças com a nota e o
+  recibo, a troca do cartão, os dados fiscais, "A nota saiu errada", o funil e "Apagar o
+  cadastro" em Empresas do cadastro) moram em `lib/area-de-cobranca/`,
+  `components/area-de-cobranca/` e `lib/pagamento-inicial/` (`situacao-na-lista.ts` e
+  `cadastro-sem-pagamento.ts`); os pontos de ligação estão em
+  [`docs/fork/area-de-cobranca.md`](fork/area-de-cobranca.md), seção 7.
 - **Funcionalidade duplicada.** Os dois lados construíram, na mesma semana, o
   cadastro incorporado da Meta, o disparo em massa e o aviso no WhatsApp. A decisão
   de ficar com um, com o outro ou com os dois é de produto. Para o **disparo em
