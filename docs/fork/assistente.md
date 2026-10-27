@@ -162,13 +162,14 @@ lê, a chave da cobrança, a rota lê fora do turno (como o layout de `/app`) e 
   a rota do chat grava a linha PENDENTE em `mia_assistente_propostas` (9080), pela
   sessão, e põe o cartão na resposta (`AcaoDoAssistente` do tipo `proposta`). Pedir de
   novo a mesma peça devolve a mesma pendente (uma por peça e empresa).
-- **Quem pede:** gestor e administrador. O atendente recebe a recusa com quem pode.
-- **Quem aplica:** só o administrador, no cartão ("Aprovar e aplicar", desabilitado
-  para os outros, com o porquê ao lado). `POST /api/v1/assistente/propostas/[id]`
-  exige o papel de administrador para `aplicar` (gestor para `rejeitar`), passa pela
-  guarda do suporte e grava o registro (`assistente.proposta_aplicada`,
-  `_rejeitada`, `_falhou`). A peça nasce pelo caminho da implantação
-  (`garantirAgente`, `garantirFunil`, `garantirFollowup`), o mesmo do MCP.
+- **Quem pede:** gestor e administrador; desde a .94 também o atendente, que manda o cartão pronto ao administrador ("Pedir a", seção 11). O somente leitura recebe a recusa com quem pode.
+- **Quem aplica:** só o administrador, no cartão ("Aprovar e aplicar"; desde a .94 os
+  outros veem "Pedir a" no lugar). `POST /api/v1/assistente/propostas/[id]` confere no
+  servidor quem aprova aquela peça (desde a .94, `quem-aprova.ts`; para estas três, o
+  administrador), passa pela guarda do suporte e grava o registro
+  (`assistente.proposta_aplicada`, `_rejeitada`, `_falhou`). A peça nasce pelo caminho
+  da implantação (`garantirAgente`, `garantirFunil`, `garantirFollowup`), o mesmo do MCP.
+  Desde a .94 as três também se desfazem (seção 11).
 - **A ordem é do banco:** pendente → aprovada → aplicada (ou rejeitada, expirada). O
   gatilho `fn_mia_proposta_segue_a_ordem` recusa aplicar sem aprovar, mesmo pelo
   servidor (a sabotagem que o desenho do upstream pede, provada em
