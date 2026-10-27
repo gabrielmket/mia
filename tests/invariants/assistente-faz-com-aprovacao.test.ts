@@ -99,6 +99,9 @@ describe("9100 · as doze peças, e o nunca não cabe", () => {
       expect(executar(GESTOR_A, PROPOR(ORG_A, tipo, `x-${tipo}`)), tipo).toBe("23514");
     }
     expect(executar("servidor", `update public.mia_assistente_propostas set risco = 'critico' where organization_id = '${ORG_A}' and tipo = 'meta'`)).toBe("23514");
+    expect(
+      executar(GESTOR_A, PROPOR(ORG_A, "tarefa", "critica").replace("(organization_id,", "(risco, organization_id,").replace("values (", "values ('critico', ")),
+    ).toBe("23514");
   });
 
   it("o risco vem do tipo: a etapa nova é segura e a meta pede atenção, por mais que a sessão mande outra coisa", () => {

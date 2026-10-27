@@ -18722,11 +18722,15 @@ begin
     new.created_at := now();
     new.updated_at := now();
   end if;
-  -- 9100: o risco é do TIPO, não de quem propõe. O crítico nem existe aqui.
-  new.risco := case
-    when new.tipo in ('etapa_criar', 'resposta', 'etiqueta', 'tarefa', 'relatorio') then 'seguro'
-    else 'atencao'
-  end;
+  -- 9100: o risco é do TIPO, não de quem propõe. Um risco fora dos dois (o
+  -- crítico) passa intacto, para a constraint da 9080 o recusar com todas as
+  -- letras (23514), em vez de ser trocado em silêncio.
+  if new.risco is null or new.risco in ('seguro', 'atencao') then
+    new.risco := case
+      when new.tipo in ('etapa_criar', 'resposta', 'etiqueta', 'tarefa', 'relatorio') then 'seguro'
+      else 'atencao'
+    end;
+  end if;
   return new;
 end
 $f$;

@@ -477,9 +477,10 @@ const PROVA_PROPRIA: readonly Excecao[] = [
   ...["mia_assistente_propostas", "mia_assistente_retratos"].map((tabela) => ({
     tabela,
     razao:
-      "tests/invariants/primeiros-passos-do-assistente.test.ts — controle positivo e " +
+      "tests/invariants/primeiros-passos-do-assistente.test.ts e (9100, .94) " +
+      "assistente-faz-com-aprovacao.test.ts — controle positivo e " +
       "negativo por papel e por empresa: gestor e administrador leem, o atendente vê " +
-      "zero, outra empresa vê zero, anon recebe permission denied; a proposta nasce " +
+      "só as que ele fez, o somente leitura não propõe, outra empresa vê zero, anon recebe permission denied; a proposta nasce " +
       "pendente e da própria pessoa pela sessão, ninguém aprova, aplica, rejeita nem " +
       "apaga pela sessão, e nem o servidor aplica sem aprovar (sabotagem); o retrato " +
       "só o administrador grava e ninguém altera nem apaga pela sessão.",
