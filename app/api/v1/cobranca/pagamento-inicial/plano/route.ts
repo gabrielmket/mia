@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.96) · POST /api/v1/pagamento-inicial/plano: "Trocar de plano" no
+ * FORK MIA (.96) · POST /api/v1/cobranca/pagamento-inicial/plano: "Trocar de plano" no
  * passo do pagamento, antes de pagar (decisão 7). Entre os planos visíveis às
  * empresas; a cobrança gerada é cancelada no Asaas e a próxima sai no plano novo.
  */
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
   // A guarda de efeito do acompanhamento, antes de tudo (cerca suporte-cobertura-de-efeitos).
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
-  const acesso = await acessoDeEscrita();
+  const acesso = await acessoDeEscrita({ permiteOrgSuspensa: true });
   if (acesso instanceof Response) return acesso;
   const corpo = corpoSchema.safeParse(await corpoJson(req));
   if (!corpo.success) return fail("validation_failed", "Escolha um plano.", 400, { requestId: acesso.requestId });

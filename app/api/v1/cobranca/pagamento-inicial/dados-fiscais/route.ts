@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.96) · POST /api/v1/pagamento-inicial/dados-fiscais: o "Corrigir"
+ * FORK MIA (.96) · POST /api/v1/cobranca/pagamento-inicial/dados-fiscais: o "Corrigir"
  * do passo do pagamento. Antes do primeiro pagamento, os dados fiscais mudam
  * inteiros (inclusive o CPF ou CNPJ de quem errou um número no cadastro); o
  * cliente do Asaas recebe na hora, se já existe.
@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   // A guarda de efeito do acompanhamento, antes de tudo (cerca suporte-cobertura-de-efeitos).
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
-  const acesso = await acessoDeEscrita();
+  const acesso = await acessoDeEscrita({ permiteOrgSuspensa: true });
   if (acesso instanceof Response) return acesso;
   const corpo = await corpoJson(req);
   if (corpo === null || typeof corpo !== "object") {

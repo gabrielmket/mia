@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.96) · POST /api/v1/pagamento-inicial/cartao: o cartão digitado na
+ * FORK MIA (.96) · POST /api/v1/cobranca/pagamento-inicial/cartao: o cartão digitado na
  * tela, pelo checkout transparente do Asaas (decisão 2a do protótipo
  * "Pagamento no início").
  *   - entrada paga (e o bloqueio no fim do teste): paga a cobrança em aberto e
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
   // A guarda de efeito do acompanhamento, antes de tudo (cerca suporte-cobertura-de-efeitos).
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
-  const acesso = await acessoDeEscrita();
+  const acesso = await acessoDeEscrita({ permiteOrgSuspensa: true });
   if (acesso instanceof Response) return acesso;
   const conferido = conferirCartao(await corpoJson(req), new Date());
   if (!conferido.ok) {

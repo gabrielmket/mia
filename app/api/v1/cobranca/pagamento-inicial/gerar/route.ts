@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.96) · POST /api/v1/pagamento-inicial/gerar: a escolha do Pix ou do
+ * FORK MIA (.96) · POST /api/v1/cobranca/pagamento-inicial/gerar: a escolha do Pix ou do
  * boleto no passo "Pagamento" do início.
  *   - entrada paga: gera a cobrança (o Pix com QR, ou o boleto com a linha
  *     digitável e o PDF). Sair do boleto já gerado cancela o boleto no Asaas;
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   // A guarda de efeito do acompanhamento, antes de tudo (cerca suporte-cobertura-de-efeitos).
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
-  const acesso = await acessoDeEscrita();
+  const acesso = await acessoDeEscrita({ permiteOrgSuspensa: true });
   if (acesso instanceof Response) return acesso;
   const corpo = corpoSchema.safeParse(await corpoJson(req));
   if (!corpo.success) return fail("validation_failed", "Escolha Pix ou boleto.", 400, { requestId: acesso.requestId });

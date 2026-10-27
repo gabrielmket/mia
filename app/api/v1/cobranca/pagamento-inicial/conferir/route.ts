@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.96) · POST /api/v1/pagamento-inicial/conferir: a conferência da
+ * FORK MIA (.96) · POST /api/v1/cobranca/pagamento-inicial/conferir: a conferência da
  * tela, ao abrir e a cada poucos segundos com ela aberta. Lê a cobrança direto
  * no Asaas, no máximo uma vez a cada poucos segundos por empresa; paga, roda a
  * releitura do upstream, que libera a conta. Quem não administra só lê.

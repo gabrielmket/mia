@@ -131,5 +131,5 @@ export function bancoDoPagamento(estado: EstadoDoPagamento, agora: () => Date = 
   }
 
   const banco = bancoLivre(responder, responderRpc);
-  return { cliente: banco.cliente, cadeias: banco.cadeias, escritas, rpcs };
+  return { cliente: banco.cliente, cadeias: banco.cadeias, escritas, rpcs, estado: () => estado };
 }

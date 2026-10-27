@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.96) · A ROTA DO CARTÃO (`POST /api/v1/pagamento-inicial/cartao`) e o
+ * FORK MIA (.96) · A ROTA DO CARTÃO (`POST /api/v1/cobranca/pagamento-inicial/cartao`) e o
  * passo do pagamento por trás dela: o número do cartão e o código de segurança
  * NUNCA aparecem em log, Sentry, auditoria, escrita no banco nem na resposta
  * (decisão 2a do protótipo "Pagamento no início").
@@ -49,7 +49,7 @@ vi.mock("@/lib/pagamento-inicial/rota", async () => {
   };
 });
 
-import { POST } from "@/app/api/v1/pagamento-inicial/cartao/route";
+import { POST } from "@/app/api/v1/cobranca/pagamento-inicial/cartao/route";
 import { asaasFalso } from "@/tests/helpers/asaas-falso";
 import { bancoDoPagamento, type EstadoDoPagamento } from "@/tests/helpers/banco-do-pagamento";
 
@@ -115,7 +115,7 @@ function estado(modo: "entrada_paga" | "teste"): EstadoDoPagamento {
 }
 
 async function postar(corpo: string): Promise<{ status: number; texto: string }> {
-  const req = new Request("http://localhost/api/v1/pagamento-inicial/cartao", {
+  const req = new Request("http://localhost/api/v1/cobranca/pagamento-inicial/cartao", {
     method: "POST",
     headers: { "content-type": "application/json", "x-forwarded-for": "200.1.2.3" },
     body: corpo,

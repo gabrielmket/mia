@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.96) · GET /api/v1/pagamento-inicial: o passo "Pagamento" do início
+ * FORK MIA (.96) · GET /api/v1/cobranca/pagamento-inicial: o passo "Pagamento" do início
  * da empresa da sessão (docs/fork/pagamento-no-inicio.md). Só lê. Todo membro
  * vê se a empresa espera o primeiro pagamento; os dados fiscais e os botões só
  * vão a quem administra. A empresa parada também lê (é ela quem paga).

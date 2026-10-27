@@ -92,7 +92,7 @@ e `trg_mia_pagamento_inicial_sai_com_a_empresa_redigida`. Prova em
 `mia_pagamento_inicial` é o retrato do passo, nos dois modos (`entrada_paga` e `teste`): a
 forma, a cobrança no Asaas, o Pix copia e cola, a linha e o PDF do boleto, do cartão só o
 final e a bandeira, as recusas, a última conferência e o lembrete. O serviço é
-`lib/pagamento-inicial/servico.ts`; as rotas, `app/api/v1/pagamento-inicial/**`.
+`lib/pagamento-inicial/servico.ts`; as rotas, `app/api/v1/cobranca/pagamento-inicial/**`.
 
 - **Por baixo é a cobrança do upstream.** Gerar = garantir o cliente do Asaas com os dados
   fiscais (`notificationDisabled: true`), depois `gerarLinkDePagamento` (a assinatura
@@ -102,7 +102,7 @@ final e a bandeira, as recusas, a última conferência e o lembrete. O serviço 
   Ela desliga `pagamento_inicial_pendente` e reativa a empresa; a linha do passo é marcada
   depois (`marcarPagoSeLiberou`), pelo aviso do Asaas (`lib/cobranca/sinal.handler.ts`), pela
   conferência da tela e pela rodada.
-- **A conferência da tela**: `POST /api/v1/pagamento-inicial/conferir`, ao abrir e a cada 5
+- **A conferência da tela**: `POST /api/v1/cobranca/pagamento-inicial/conferir`, ao abrir e a cada 5
   s. Lê a cobrança direto no Asaas no máximo uma vez a cada 8 s por empresa (`conferido_em`).
 - **O boleto** que venceria hoje ganha 3 dias (o prazo da compensação). **Sair do boleto já
   gerado** para o Pix ou o cartão cancela a assinatura no Asaas (o boleto deixa de valer) e

@@ -92,7 +92,7 @@ export function PassoDoPagamento({ inicial, marca }: { inicial: Passo; marca: st
     let vivo = true;
     const conferir = async () => {
       try {
-        const r = await chamar("/api/v1/pagamento-inicial/conferir");
+        const r = await chamar("/api/v1/cobranca/pagamento-inicial/conferir");
         if (vivo && r.ok && r.corpo.data?.passo) setPasso(r.corpo.data.passo);
       } catch {
         // A próxima volta tenta de novo.
@@ -127,7 +127,7 @@ export function PassoDoPagamento({ inicial, marca }: { inicial: Passo; marca: st
     setErrosFiscais({});
     let campos: Record<string, string> | undefined;
     const r = await executar(async () => {
-      const resposta = await chamar("/api/v1/pagamento-inicial/dados-fiscais", fiscais);
+      const resposta = await chamar("/api/v1/cobranca/pagamento-inicial/dados-fiscais", fiscais);
       campos = resposta.corpo.error?.details?.campos;
       return resposta;
     });
@@ -145,7 +145,7 @@ export function PassoDoPagamento({ inicial, marca }: { inicial: Passo; marca: st
       validade: String(dados.get("validade") ?? ""),
       cvv: String(dados.get("cvv") ?? ""),
     };
-    await executar(() => chamar("/api/v1/pagamento-inicial/cartao", cartao));
+    await executar(() => chamar("/api/v1/cobranca/pagamento-inicial/cartao", cartao));
     // O código de segurança nunca fica na tela depois do envio; o número, só se recusado.
     const cvv = form.elements.namedItem("cvv");
     if (cvv instanceof HTMLInputElement) cvv.value = "";
@@ -157,7 +157,7 @@ export function PassoDoPagamento({ inicial, marca }: { inicial: Passo; marca: st
 
   async function trocarPlano() {
     if (!planoNovo) return;
-    const r = await executar(() => chamar("/api/v1/pagamento-inicial/plano", { plano_id: planoNovo }));
+    const r = await executar(() => chamar("/api/v1/cobranca/pagamento-inicial/plano", { plano_id: planoNovo }));
     if (r) {
       setTrocandoPlano(false);
       setPlanoNovo(null);
@@ -383,7 +383,7 @@ export function PassoDoPagamento({ inicial, marca }: { inicial: Passo; marca: st
                 <p className="text-sm text-muted-foreground">
                   {t("Nada é cobrado hoje. 3 dias antes do fim do teste, mandamos por e-mail o Pix da primeira mensalidade. Sem o pagamento, a conta fica bloqueada no fim do teste até o Pix ser confirmado.")}
                 </p>
-                <Button disabled={ocupado} onClick={() => void executar(() => chamar("/api/v1/pagamento-inicial/gerar", { forma: "pix" }))}>
+                <Button disabled={ocupado} onClick={() => void executar(() => chamar("/api/v1/cobranca/pagamento-inicial/gerar", { forma: "pix" }))}>
                   {t("Escolher o Pix")}
                 </Button>
               </div>
@@ -409,7 +409,7 @@ export function PassoDoPagamento({ inicial, marca }: { inicial: Passo; marca: st
                   </div>
                 </div>
               ) : (
-                <Button disabled={ocupado} onClick={() => void executar(() => chamar("/api/v1/pagamento-inicial/gerar", { forma: "pix" }))}>
+                <Button disabled={ocupado} onClick={() => void executar(() => chamar("/api/v1/cobranca/pagamento-inicial/gerar", { forma: "pix" }))}>
                   {valor !== null ? t("Gerar o Pix de {valor}").replace("{valor}", brl.format(valor / 100)) : t("Gerar o Pix")}
                 </Button>
               )
@@ -498,14 +498,14 @@ export function PassoDoPagamento({ inicial, marca }: { inicial: Passo; marca: st
                     disabled={ocupado}
                     onClick={() => {
                       setForma("pix");
-                      void executar(() => chamar("/api/v1/pagamento-inicial/gerar", { forma: "pix" }));
+                      void executar(() => chamar("/api/v1/cobranca/pagamento-inicial/gerar", { forma: "pix" }));
                     }}
                   >
                     {t("Pagar por Pix em vez do boleto")}
                   </Button>
                 </div>
               ) : (
-                <Button disabled={ocupado} onClick={() => void executar(() => chamar("/api/v1/pagamento-inicial/gerar", { forma: "boleto" }))}>
+                <Button disabled={ocupado} onClick={() => void executar(() => chamar("/api/v1/cobranca/pagamento-inicial/gerar", { forma: "boleto" }))}>
                   {t("Gerar o boleto")}
                 </Button>
               )
