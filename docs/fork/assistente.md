@@ -1,4 +1,4 @@
-# O assistente da MIA (.88, e .91 nos primeiros passos)
+# O assistente da MIA (.88, .91 nos primeiros passos e .94 no faz com aprovação)
 
 O chat que a equipe de cada cliente usa dentro do sistema: a rotina do dia ("como
 está minha rotina hoje?", "por onde eu começo?"), os números ("como estão meus
@@ -123,6 +123,9 @@ o vê, no `plataforma_ver_assistente`; o cliente não.
 | `components/admin/AdminSidebar.tsx` | a porta dos chamados |
 | `docker/scheduler/entrypoint.sh` | o cron |
 | `lib/ai/agents/publish.ts` (.91) | o follow-up proposto sai junto com o agente publicado (import dinâmico de `lib/assistente/propostas/sai-com-o-agente.ts`) |
+| `lib/ai/inbox-destino.ts` (.94) | a referência `mia_assistente_proposta` (o pedido com o cartão pronto e o resultado dele) |
+| `lib/audit/actions.ts` (.94) | `assistente.proposta_pedida`, `_ajustada`, `_desfeita` e `assistente.desfazer_travado` |
+| `lib/i18n/dicionario.ts` (.94) | o dicionário do faz com aprovação (`dicionario-mia-assistente-faz.ts`) |
 
 ## 8. Para voltar ao upstream
 
@@ -221,3 +224,118 @@ todas pela mesma régua (`lib/assistente/busca-da-ajuda.ts`):
   tela de onde veio; o trecho certo entre os 3 primeiros, sem IA).
 - **Tela nova:** escreva o manual em `manuais-das-telas.ts` lendo o código da tela e
   acrescente a pergunta em `assistente-perguntas-reais`. Sem isso o CI reprova.
+
+## 11. O assistente faz com aprovação (.94)
+
+Protótipo "ensina e faz" aprovado pelo Gabriel em 26/10/2026, sem mudanças (telas 3, 4, 5 e
+7; as 13 decisões da tela 8). É a fase 2 do desenho do upstream (#2860) crescendo na MESMA
+tabela da .91 (`mia_assistente_propostas`, 9080 e 9100), sem duplicar. A parte de ENSINAR
+(as trilhas e o "Me mostra como", telas 1, 2 e 6) é de outra frente.
+
+### As peças
+
+Nove novas e as três da .91 (`lib/assistente/propostas/catalogo.ts`). Um cartão é uma peça:
+três etapas são três cartões, e pedir de novo a mesma peça devolve o mesmo cartão (a
+`chave` da peça, uma pendente por peça e empresa).
+
+| peça | ferramenta do assistente | nasce pelo caminho de | quem aprova | desfaz enquanto |
+|---|---|---|---|---|
+| criar etapa do funil (antes de outra) | `propor_etapa_do_funil` | `criarEtapa` e `atualizarEtapa({ depois_de })` (Etapas do funil) | gestor ou administrador | a etapa estiver vazia (nenhum negócio, nenhuma entrada automática); sai ARQUIVADA, como na tela |
+| renomear etapa | `propor_renomear_etapa` | `atualizarEtapa({ name })` | gestor ou administrador | ninguém renomear de novo: volta o nome antigo |
+| resposta rápida | `propor_resposta_rapida` | o insert de `POST /api/v1/message-templates` | a sua: quem pediu; a da equipe: gestor ou administrador | ninguém editar |
+| etiqueta | `propor_etiqueta` | `fn_vocabulario_de_tags_operar` (a função da tela de Etiquetas, com a verificação em duas etapas) | gestor ou administrador | nenhum contato, negócio ou conversa a tiver |
+| tarefa | `propor_tarefa` | o insert de `POST /api/v1/tasks` | para si: quem pediu, ou gestor e administrador; para outra pessoa: gestor ou administrador | não for concluída nem cancelada |
+| rascunho de follow-up | `propor_rascunho_de_followup` | o modelo de retomada do segmento, em rascunho, com as três mensagens escritas | gestor ou administrador | continuar rascunho, sem ninguém na régua e sem agente que o arme |
+| item de conhecimento | `propor_item_de_conhecimento` | `garantirConhecimento`, no material de perguntas que o agente no ar já lê (ou em "Respostas do dia a dia") | gestor ou administrador | sempre: o item sai (o material novo, vazio, é arquivado) |
+| relatório | `propor_relatorio` | `criarRelatorio` (o montador) | o seu: quem pediu; o da equipe: gestor ou administrador | não estiver num painel |
+| meta do mês | `propor_meta_do_mes` | `gravarMeta` (Desempenho) | só o administrador (decisão 2) | ninguém mudar a meta: volta a anterior |
+| agente do modelo (.91) | `propor_agente_do_modelo` | `garantirAgente` | só o administrador | nunca ter sido publicado e nenhum follow-up proposto depender dele: é arquivado e o nome fica livre |
+| funil do quadro pronto (.91) | `propor_funil_do_pacote` | `garantirFunil` | só o administrador | nenhum negócio entrar: o funil volta ao quadro de antes (o retrato que o aplicar guarda; nas propostas aplicadas na .91, o quadro que veio com a empresa) |
+| follow-up do modelo (.91) | `propor_followup_do_modelo` | `garantirFollowup` armado no agente | só o administrador | não sair com o agente publicado: sai do rascunho do agente e é apagado |
+
+### As regras
+
+- **Nada muda antes do "Aprovar e aplicar".** A ferramenta só LÊ com a sessão
+  (`preparar-do-dia-a-dia.ts`); a rota do chat grava a linha pendente; a peça nasce no
+  aplicar (`aplicar-do-dia-a-dia.ts`). O pedido é conferido no servidor antes do aplicar
+  (`validar.ts`): a linha nasce pela sessão, e um pedido forjado no PostgREST é recusado.
+- **Com o login de quem aprova.** Pelo cartão, a peça do dia a dia nasce com a SESSÃO de
+  quem clicou e pela mesma função da tela, então a RLS vale como no clique. A linha da
+  proposta continua escrita só pelo servidor (a sessão não a atualiza). As três da .91
+  seguem pelo caminho da implantação, como antes.
+- **Quem aprova é quem pode fazer o mesmo na tela** (decisão 1, `quem-aprova.ts`). As
+  exceções são mais fechadas que a tela: a meta e as três peças da .91, só o administrador
+  (decisão 2). Também fecha a tarefa para outra pessoa (gestor), como a tabela do protótipo.
+  Desfazer é de quem aprova aquele tipo. Propor é de atendente em diante; a meta, de gestor
+  em diante (o atendente não vê a meta da equipe pelo assistente).
+- **Pedir com o cartão pronto** (decisão 5, `pedir.ts`). Quem não aprova clica em "Pedir
+  a <nome>": a proposta continua pendente, ganha `pedida_a`, o aviso chega no sino de quem
+  aprova (`mia_assistente_proposta` em `REFERENCIAS_DE_AVISO`) e o cartão aparece em
+  "Pedidos esperando você". Quando outra pessoa aplica, recusa ou desfaz, o resultado volta
+  para quem pediu, no mesmo cartão e no sino. A empresa pode desligar o pedido
+  (`pode_pedir`).
+- **Ajustar antes de aprovar** (`ajustar.ts`). O servidor manda os campos do cartão; o
+  ajuste prepara de novo com o que mudou e regrava o cartão, que continua pendente. O
+  gatilho da 9100 só deixa a peça mudar assim (pendente que continua pendente).
+- **Desfazer não é apagar** (decisões 4 e 6, `desfazer.ts`). Desfaz só o que a própria
+  proposta fez, e só enquanto nada depende disso: a trava é o USO, sem prazo, contada pelo
+  servidor na empresa inteira. Travado, o cartão diz o porquê e leva até a tela. A peça que
+  alguém já tirou pela tela deixa a proposta desfeita, com o aviso. Desfazer de novo devolve
+  `ja_estava`.
+- **Conhecimento entra ligado** (decisão 3). O item vai para o material de perguntas que o
+  agente no ar já lê, e o cartão avisa que ele passa a usar na próxima conversa. Sem esse
+  material, vai para "Respostas do dia a dia", e o cartão avisa que escolher o material no
+  agente e publicar é na tela de Agentes.
+- **Rascunho de campanha fica fora** (decisão 7): o assistente escreve o texto na conversa e
+  a pessoa cola na campanha.
+- **A lista fechada do "nunca"** (`lib/assistente/nunca.ts`, tela 4): número e canal,
+  cobrança e plano, convite, usuários e papéis, chaves e tokens, apagar, publicar agente e
+  mensagem a cliente. Não existe ferramenta para eles (a cerca reprova quem criar), o tipo
+  é uma lista fechada no banco e o risco crítico não cabe (9080). O assistente diz o porquê
+  em uma frase e leva até a tela, ou oferece pedir a quem pode; para mensagem a cliente ele
+  escreve o texto, mas não envia. As regras entram no system por `lib/assistente/regras-do-faz.ts`.
+- **Tudo registrado como "via assistente".** `assistente.proposta_criada`, `_pedida`,
+  `_ajustada`, `_aplicada`, `_rejeitada`, `_falhou`, `_desfeita` e `assistente.desfazer_travado`,
+  com quem pediu, quem aprovou e quem desfez no metadata (nunca o texto da peça); o registro
+  da própria peça (`pipeline.stage_created`, `template.created`, `crm_task.created`...) leva o
+  ator de quem aprovou.
+
+### As telas
+
+- **O cartão** (`components/assistente/CartaoDaProposta.tsx`): o que muda, o aviso, quem
+  aprova e até quando desfaz; "Aprovar e aplicar", "Pedir a", "Ajustar" e "Recusar"; depois,
+  "Aplicada por" com "Ver na tela" e "Desfazer", ou "Não dá mais para desfazer" com o porquê.
+  Permissão e trava vêm do servidor (`leitura.ts`); o cartão não decide nada.
+- **A aba Propostas** da página do assistente (`components/assistente/PropostasDoAssistente.tsx`,
+  `?aba=propostas`, o botão do aviso): pedidos esperando você (quem aprova), seus pedidos e o
+  que o assistente fez.
+- **As rotas**: `GET /api/v1/assistente/propostas` (`?ids`, `?lista=pedidos|meus_pedidos|feitas`),
+  `POST .../[id]` (aplicar e recusar), `.../[id]/desfazer`, `.../[id]/pedir` e `.../[id]/ajustar`.
+
+### O banco (9100 e 9101)
+
+A 9100 estende a tabela da 9080 (as peças novas no `tipo`, a situação `desfeita`, `chave`,
+`pedida_a`/`pedida_em`, `ajustada_por`/`ajustada_em`, `desfeita_por`/`desfeita_em`), redefine
+as duas funções NOSSAS da 9080 (`fn_mia_proposta_nasce`: o risco vem do tipo, e pedido, ajuste
+e desfazer não nascem pela sessão; `fn_mia_proposta_segue_a_ordem`: aplicada vira desfeita
+só com a data, desfeita não muda, a peça só muda no ajuste da pendente) e troca a RLS (o
+atendente propõe e lê as dele). O índice "uma pendente" mantém o NOME da 9080 com a definição
+por peça: todo deploy reaplica o baseline inteiro, e o bloco da 9080 roda antes. A 9100 também
+conserta um defeito da 9080: a referência que some (a conversa expurgada pela retenção, a
+pessoa removida) vira nulo pela chave estrangeira em qualquer situação, e o expurgo da conversa
+citada por uma proposta recusada parava. `mia_assistente_config` ganha `tipos_de_proposta` e
+`pode_pedir`. A 9101 leva a desfeita na retenção como a aplicada (365 dias). Provado em
+`tests/invariants/assistente-faz-com-aprovacao.test.ts`.
+
+### No MCP
+
+`plataforma_desfazer_proposta_do_assistente` (nova; o mesmo caminho do botão, as mesmas
+travas, "já estava" na repetição) e quatro que crescem: `plataforma_ver_propostas_do_assistente`,
+`plataforma_decidir_proposta_do_assistente`, `plataforma_configurar_assistente` e
+`plataforma_ver_assistente` ([`mcp-de-implantacao.md`](mcp-de-implantacao.md), seção .94). A
+lista vai a 95.
+
+### O que fica para depois, de propósito
+
+Aprovar em lote; rascunho de campanha no "faz" (se a decisão 7 mudar); e o laço de retorno
+por empresa (fase 4 do desenho do upstream).

@@ -188,8 +188,12 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **94** ferramentas no servidor: as 86 desta página e as 8 da migração
-([`mcp-de-migracao.md`](mcp-de-migracao.md)). As duas mais novas (.91) são as das
+São **95** ferramentas no servidor: as 87 desta página e as 8 da migração
+([`mcp-de-migracao.md`](mcp-de-migracao.md)). A mais nova (.94) é
+`plataforma_desfazer_proposta_do_assistente`, do assistente que faz com aprovação
+([`assistente.md`](assistente.md), seção 11; veja "O assistente faz com aprovação (.94)",
+nesta seção), e `plataforma_ver_propostas_do_assistente`, `plataforma_decidir_proposta_do_assistente`,
+`plataforma_configurar_assistente` e `plataforma_ver_assistente` cresceram. As duas de antes dela (.91) são as das
 propostas do assistente nos primeiros passos ([`primeiros-passos.md`](primeiros-passos.md)):
 `plataforma_ver_propostas_do_assistente` e `plataforma_decidir_proposta_do_assistente`
 (veja "Os primeiros passos e as propostas do assistente (.91)", nesta seção), e
@@ -690,6 +694,26 @@ como `plataforma_garantir_agente`, e usa `implantar_configuracao`.
 O MCP não PROPÕE: propor é do assistente, na conversa de quem administra ou gere a
 empresa.
 
+### O assistente faz com aprovação (.94)
+
+Função do fork ([`assistente.md`](assistente.md), seção 11; protótipo "ensina e faz"
+aprovado em 26/10/2026, tela 7), e entra no MCP na mesma versão. A prova está em
+`tests/unit/mcp-de-implantacao-assistente-faz.test.ts` (o caminho de uma peça do dia a dia
+no banco em memória: preparar, aplicar pelo MCP, travar, desfazer e "já estava") e a
+CONTAGEM (95) no teste da cobrança. Nenhuma operação nova: desfazer tira configuração que a
+própria proposta criou, como o decidir, e usa `implantar_configuracao`.
+
+| ferramenta | o que faz | operação | reexecução |
+|---|---|---|---|
+| `plataforma_desfazer_proposta_do_assistente` (nova) | desfaz uma proposta APLICADA pelo MESMO caminho do botão Desfazer do cartão, com as mesmas travas de uso (a etapa com negócio, a etiqueta em uso, a resposta editada, a tarefa concluída, o rascunho publicado, o relatório em painel, a meta mudada, o agente já publicado, o funil com negócio, o follow-up que saiu com o agente). Travada devolve `ok: false`, `desfecho: "travada"` e a frase do porquê, sem mexer em nada. Quem pediu recebe o aviso | `implantar_configuracao` | desfeita de novo devolve `ja_estava`; pendente ou recusada devolve `nao_aplicada` |
+| `plataforma_ver_propostas_do_assistente` (cresce) | as nove peças do dia a dia, `tipo` como filtro, quem pediu, a quem foi pedida, quem aprovou e quem desfez (pelo nome), quem aprova aquele tipo, `pedidos_esperando` e, na aplicada, `da_para_desfazer` e `trava_do_desfazer` | leitura | |
+| `plataforma_decidir_proposta_do_assistente` (cresce) | aceita as nove peças: a etapa, a resposta rápida, a etiqueta, a tarefa, o rascunho de follow-up, o item de conhecimento, o relatório e a meta nascem pela função da tela, com o cliente de serviço e quem criou o token como ator; a peça "só de quem pediu" continua dela | `implantar_configuracao` | aplicada de novo devolve `ja_estava` |
+| `plataforma_configurar_assistente` (cresce) | `tipos_de_proposta` (os tipos que o assistente prepara na empresa; `null` = todos) e `pode_pedir` (quem não aprova manda o cartão pronto a quem aprova; padrão ligado) | `implantar_configuracao` | mesma resposta, sem efeito novo |
+| `plataforma_ver_assistente` (cresce) | `propostas_30_dias`: por tipo, preparadas, pedidas, aplicadas, desfeitas, recusadas, vencidas e pendentes | leitura | |
+
+O MCP continua sem propor, sem publicar e sem nada da lista do "nunca" (número, cobrança,
+convite, usuários e papéis, chaves, apagar, publicar agente, mensagem a cliente).
+
 ### O que chegou do upstream 1.85 (.83)
 
 Mesma regra, na fusão da v1.85. A prova de cada linha está em
@@ -865,7 +889,7 @@ Testes:
 | arquivo | o que mede |
 |---|---|
 | `tests/unit/mcp-de-implantacao-assistente.test.ts` | as cinco ferramentas do assistente da MIA (.88): o que gravam, a reexecução, a operação própria do responder, a entrega da resposta no assistente, no sino e no e-mail, a recusa do chamado da demonstração, e as cinco dele (a CONTAGEM da lista mora no teste do e-mail marketing) |
-| `tests/unit/mcp-de-implantacao-cobranca.test.ts` | as nove ferramentas da cobrança da jornada de assinatura (.90) e a CONTAGEM da lista (94 desde a .91): as três caixinhas novas e o raio de cada uma, os exemplos que passam no esquema, o que o MCP não faz (pelo código-fonte: chave do provedor, marcar pago, cancelar, modo do cadastro), a cobrança desligada que recusa, o `criar_cliente` isento e com a origem, e o `liberar_modulo` que cresce |
+| `tests/unit/mcp-de-implantacao-cobranca.test.ts` | as nove ferramentas da cobrança da jornada de assinatura (.90) e a CONTAGEM da lista (95 desde a .94): as três caixinhas novas e o raio de cada uma, os exemplos que passam no esquema, o que o MCP não faz (pelo código-fonte: chave do provedor, marcar pago, cancelar, modo do cadastro), a cobrança desligada que recusa, o `criar_cliente` isento e com a origem, e o `liberar_modulo` que cresce |
 | `tests/unit/mcp-de-implantacao-email-marketing.test.ts` | as nove ferramentas do e-mail marketing (.89): leitura livre e as duas caixinhas novas, o MCP que nunca dispara (pelo código-fonte e pelo banco: rascunho, ninguém na fila), o teste só para a equipe, a demonstração e o módulo que recusam o teste, a configuração que não duplica, a supressão que só acrescenta, o preço por e-mail que não mexe no da mensagem e a área nova do checklist |
 | `tests/unit/mcp-de-implantacao-primeiros-passos.test.ts` | as duas ferramentas das propostas do assistente (.91) e o rótulo do cliente em `plataforma_ver_implantacao`: a empresa nova com as três colunas e o que não se aplica, o número oficial que espera a Time, a empresa que já roda que não aparece no Início, e o caminho inteiro de uma proposta (preparar não grava a peça, aplicar adota o quadro e cria em rascunho, recusar não cria nada, o token sem a operação não decide, e o follow-up sai junto com o agente publicado) |
 | `tests/invariants/email-marketing.test.ts` | as tabelas do e-mail (9060 a 9065) no Postgres de verdade: isolamento por empresa e papel, só o servidor grava, a demonstração que não envia, a supressão que só acrescenta, a anonimização que apaga o legível e mantém o veto, o débito por lote e a fila do worker |
