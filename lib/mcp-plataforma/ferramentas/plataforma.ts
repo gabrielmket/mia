@@ -554,7 +554,10 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       "Passe `null` para devolver o cliente ao estado 'sem preço acordado', em " +
       "que o disparador recusa. " +
       // FORK MIA (.89): o preço por e-mail do disparo de e-mail marketing.
-      "Também define o preço por E-MAIL aceito pela Amazon (`preco_por_email_cents`; `null` volta ao padrão de R$ 0,02). " +
+      "Também define o preço por E-MAIL aceito pela Amazon (`preco_por_email_cents`). " +
+      // FORK MIA (.95): o preço desta ferramenta é o DEFINIDO À MÃO e vence o do plano.
+      "Os dois são o preço definido à mão para esta empresa e vencem o do plano dela (plataforma_garantir_planos); " +
+      "`null` tira o definido à mão: vale o do plano e, sem plano, a mensagem fica sem preço e o e-mail volta ao padrão de R$ 0,02. " +
       "Campo ausente fica como está.",
     inputSchema: {
       organization_id: z.string().uuid(),
@@ -575,7 +578,7 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         .max(10_000)
         .nullable()
         .optional()
-        .describe("Centavos por e-mail de marketing aceito pela Amazon. `null` = o padrão (2 centavos). Ausente: fica como está."),
+        .describe("Centavos por e-mail de marketing aceito pela Amazon. `null` = sem preço à mão (vale o do plano, senão o padrão de 2 centavos). Ausente: fica como está."),
       alerta_saldo_cents: z
         .number()
         .int()

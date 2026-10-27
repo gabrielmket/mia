@@ -162,6 +162,12 @@ Provedor gratuito (gmail.com, hotmail.com...) não serve de remetente.
 - Preço por e-mail em `tenant_broadcast_pricing.preco_por_email_cents` (coluna nova,
   9060); nulo = o padrão de 2 centavos (`PRECO_PADRAO_POR_EMAIL_CENTS`). O preço é
   CONGELADO na campanha na confirmação.
+- Desde a .95 o plano também tem o preço por e-mail
+  (`mia_plano_modulos.preco_por_email_cents`, 9110), pelo mesmo caminho do preço da
+  mensagem: o definido à mão para a empresa vence; sem ele, o do plano atual da
+  assinatura (com a cobrança ligada); sem nenhum, o padrão. `lerPrecoPorEmail` devolve
+  a `origem` (`combinado`, `plano` ou `padrao`). Desenho em
+  [`jornada-de-assinatura.md`](jornada-de-assinatura.md), seção 2.2.
 - O saldo é conferido na confirmação e no começo de cada rodada; sem saldo, a
   campanha pausa ("o crédito acabou").
 - O débito sai da `tenant_wallet_ledger` **por lote** enviado (`ref_kind

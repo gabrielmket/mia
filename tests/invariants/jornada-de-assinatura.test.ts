@@ -13,7 +13,7 @@ import { lastLine, sql } from "./gov-helpers";
  *     nem para a empresa que tem assinatura; a isenta nunca ganha módulo de plano;
  *   - ligada, o plano liga os módulos da linha `mia_plano_modulos`, e Vendas B2B
  *     só com o módulo da instalação ligado; a sessão só pergunta da própria empresa;
- *   - tirar módulo (ou mudar o preço por mensagem) de plano assinado é recusado
+ *   - tirar módulo (ou mudar o preço por mensagem ou, desde a 9110, o por e-mail) de plano assinado é recusado
  *     no banco; acrescentar pode; plano sem assinante muda à vontade;
  *   - seguir o plano grava a diferença uma vez só (rodar de novo não repete), e
  *     desligar a cobrança registra o "desligou";
@@ -141,6 +141,10 @@ describe("plano assinado não perde módulo nem muda o preço por mensagem", () 
     expect(como("postgres", `update public.mia_plano_modulos set preco_por_mensagem_cents = 9 where plano_id = '${PRO}' returning 'ok'`)).toBe(
       "erro:23514",
     );
+    // FORK MIA (.95, 9110): o preço por e-mail trava como o por mensagem.
+    expect(como("postgres", `update public.mia_plano_modulos set preco_por_email_cents = 4 where plano_id = '${PRO}' returning 'ok'`)).toBe(
+      "erro:23514",
+    );
     expect(como("postgres", `delete from public.mia_plano_modulos where plano_id = '${PRO}' returning 'ok'`)).toBe("erro:23514");
     expect(
       como("postgres", `update public.mia_plano_modulos set modulos = array['disparador'] where plano_id = '${ESS}' returning 'ok'`),
@@ -152,6 +156,11 @@ describe("plano assinado não perde módulo nem muda o preço por mensagem", () 
       "ok",
     );
     expect(como("postgres", `update public.mia_plano_modulos set modulos = array['prospeccao'] where plano_id = '${NOVO}' returning 'ok'`)).toBe(
+      "erro:23514",
+    );
+    // FORK MIA (.95, 9110): o preço por e-mail muda à vontade sem assinante; fora da faixa, o CHECK recusa.
+    expect(como("postgres", `update public.mia_plano_modulos set preco_por_email_cents = 3 where plano_id = '${NOVO}' returning 'ok'`)).toBe("ok");
+    expect(como("postgres", `update public.mia_plano_modulos set preco_por_email_cents = -1 where plano_id = '${NOVO}' returning 'ok'`)).toBe(
       "erro:23514",
     );
   });

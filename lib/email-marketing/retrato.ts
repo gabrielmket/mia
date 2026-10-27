@@ -103,7 +103,7 @@ export async function retratoDaConfiguracao(db: SupabaseClient, orgId: string) {
       falta: estado.amazon.falta,
       regiao: estado.amazon.regiao,
     },
-    preco: { por_email_cents: preco.cents, padrao: preco.padrao },
+    preco: { por_email_cents: preco.cents, padrao: preco.padrao, origem: preco.origem },
     saldo_cents: saldo.saldo_cents,
     dominio: d
       ? {

@@ -7,7 +7,8 @@
  * `MODULO_COBRANCA` não for ligada:
  *   - o módulo liberado à mão continua liberado, e o não liberado continua não;
  *   - Vendas B2B segue a instalação, sem ler assinatura;
- *   - o preço por mensagem é o combinado de sempre (nenhum vem de plano);
+ *   - o preço por mensagem é o combinado de sempre (nenhum vem de plano), e o
+ *     por e-mail também, ou o padrão de R$ 0,02 (.95);
  *   - a página de preços e a rota pública dizem "indisponível", sem plano;
  *   - o cadastro não mostra cartões (fica o seletor do upstream, que some sem planos);
  *   - os recados da jornada calam (nem pedido, nem número, nem régua);
@@ -26,6 +27,7 @@ import { podeComprarCreditos } from "@/lib/carteira/compra-pelo-asaas";
 import { moduloLiberado, modulosDaOrganizacao } from "@/lib/modulos/liberacao";
 import { lerCadastroEmCartoes } from "@/lib/planos-mia/cadastro";
 import { crmB2bForaDoPlano } from "@/lib/planos-mia/modulos";
+import { precoPorEmailDaEmpresa } from "@/lib/planos-mia/preco-por-email";
 import { precoPorMensagemDaEmpresa } from "@/lib/planos-mia/preco-por-mensagem";
 import { lerPlanosPublicos } from "@/lib/planos-mia/publico";
 import { mandarRecadosDaJornada } from "@/lib/planos-mia/recados";
@@ -79,6 +81,14 @@ describe("o preço por mensagem: o combinado de sempre", () => {
     const b = banco();
     expect(await precoPorMensagemDaEmpresa(b.cliente as never, ORG, null)).toEqual({ cents: null, origem: null });
     expect(tabelasLidas(b).has("cobranca_assinaturas")).toBe(false);
+  });
+
+  it("⭐ o preço por e-mail (.95): o definido à mão, senão o padrão de R$ 0,02, sem ler plano", async () => {
+    expect(await precoPorEmailDaEmpresa(banco().cliente as never, ORG, 4)).toEqual({ cents: 4, origem: "combinado" });
+    const b = banco();
+    expect(await precoPorEmailDaEmpresa(b.cliente as never, ORG, null)).toEqual({ cents: 2, origem: "padrao" });
+    expect(tabelasLidas(b).has("cobranca_assinaturas")).toBe(false);
+    expect(tabelasLidas(b).has("mia_plano_modulos")).toBe(false);
   });
 });
 

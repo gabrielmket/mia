@@ -15,6 +15,7 @@ import { moduloLiberado } from "@/lib/modulos/liberacao";
 import { conversasEstimadas, MODULOS_DO_PLANO, type ModuloDoPlano } from "./catalogo";
 import { lerPlanosComModulos, planosOferecidos } from "./leitura";
 import { origemDosModulos } from "./modulos";
+import { precoPorEmailDaEmpresa } from "./preco-por-email";
 import { precoPorMensagemDaEmpresa } from "./preco-por-mensagem";
 
 export interface ModuloNoPainel {
@@ -94,18 +95,25 @@ export async function lerModulosDoPainel(
 /**
  * O bloco Créditos do Plano e cobrança: aparece para a empresa que tem o módulo
  * que usa a carteira (Broadcast ou e-mail marketing), com o preço por mensagem
- * que vale para ela (o combinado, senão o do plano). LANÇA na falha.
+ * que vale para ela (o combinado, senão o do plano) e, desde a .95, o preço por
+ * e-mail de quem tem o e-mail marketing (o definido à mão, senão o do plano,
+ * senão o padrão). LANÇA na falha.
  */
 export async function lerCreditosDoPainel(
   admin: SupabaseClient,
   orgId: string,
-): Promise<{ temCarteira: boolean; precoPorMensagemCents: number | null }> {
+): Promise<{
+  temCarteira: boolean;
+  precoPorMensagemCents: number | null;
+  /** `null` = a empresa não tem o e-mail marketing. */
+  precoPorEmailCents: number | null;
+}> {
   const [doBroadcast, doEmail, combinado] = await Promise.all([
     moduloLiberado(admin, orgId, "disparador"),
     moduloLiberado(admin, orgId, "email_marketing"),
     admin
       .from("tenant_broadcast_pricing")
-      .select("preco_por_mensagem_cents")
+      .select("preco_por_mensagem_cents, preco_por_email_cents")
       .eq("organization_id", orgId)
       .maybeSingle(),
   ]);
@@ -118,7 +126,20 @@ export async function lerCreditosDoPainel(
     orgId,
     v === null || v === undefined ? null : Number(v),
   );
-  return { temCarteira: doBroadcast || doEmail, precoPorMensagemCents: preco.cents };
+  const emailAMao = (combinado.data as { preco_por_email_cents?: number | null } | null)
+    ?.preco_por_email_cents;
+  const precoPorEmail = doEmail
+    ? await precoPorEmailDaEmpresa(
+        admin,
+        orgId,
+        emailAMao === null || emailAMao === undefined ? null : Number(emailAMao),
+      )
+    : null;
+  return {
+    temCarteira: doBroadcast || doEmail,
+    precoPorMensagemCents: preco.cents,
+    precoPorEmailCents: precoPorEmail?.cents ?? null,
+  };
 }
 
 /** O plano como a tela da EMPRESA o recebe: o teto em dólar sai, a estimativa de conversas entra. */

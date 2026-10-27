@@ -108,7 +108,8 @@ export const FERRAMENTAS_DE_EMAIL_MARKETING: readonly FerramentaDePlataforma[] =
       "O RETRATO do e-mail marketing de um cliente: se o módulo está contratado, se a Amazon está ligada no servidor (só sim ou não, nunca a chave), " +
       'o domínio e os seis registros de DNS (3 DKIM, MX e SPF do subdomínio de retorno, DMARC) com o que falta, os remetentes, o "responder para", ' +
       "o rodapé obrigatório, o ritmo, a janela, o degrau do aquecimento (14 degraus), a saúde dos últimos 30 dias (rejeição e reclamação), " +
-      "o preço por e-mail, o saldo, o tamanho da lista de supressão, os textos de consentimento e as PENDÊNCIAS para o primeiro envio. " +
+      "o preço por e-mail (e, desde a .95, de onde ele vem: definido à mão para a empresa, o plano dela ou o padrão), o saldo, o tamanho da lista de supressão, " +
+      "os textos de consentimento e as PENDÊNCIAS para o primeiro envio. " +
       "QUANDO USAR: no começo e no fim da implantação do e-mail, e para dizer ao cliente o que falta.",
     inputSchema: { organization_id: ORGANIZACAO },
     exemplo: { organization_id: ORG_DE_EXEMPLO },
@@ -125,8 +126,10 @@ export const FERRAMENTAS_DE_EMAIL_MARKETING: readonly FerramentaDePlataforma[] =
         segmentos: segmentos.map((s) => ({ id: s.id, nome: s.nome, base_legal: s.base_legal })),
         modelos,
         como_seguir:
-          "Libere o módulo com plataforma_liberar_modulo (modulo email_marketing), o preço com plataforma_definir_preco (preco_por_email_cents), " +
+          "Libere o módulo com plataforma_liberar_modulo (modulo email_marketing), " +
           "o domínio com plataforma_verificar_dominio_de_email, remetentes e rodapé com plataforma_configurar_email_marketing. " +
+          "O preço por e-mail vem do plano da empresa (plataforma_garantir_planos, preco_email) ou, só para ela, " +
+          "de plataforma_definir_preco (preco_por_email_cents), que vence o do plano. " +
           "A campanha nasce em rascunho com plataforma_criar_campanha_de_email; o envio é SÓ pela tela.",
       };
     },

@@ -8,6 +8,8 @@ import { OutrasOrganizacoes } from "@/app/onboarding/_components/OutrasOrganizac
 import { AcoesDaAssinatura } from "@/components/cobranca/AcoesDaAssinatura";
 // FORK MIA (.90): o plano sem dólar para a tela da empresa.
 import { semDolar } from "@/lib/planos-mia/painel-da-empresa";
+// FORK MIA (.95): a entrada paga ainda não paga não é "conta suspensa".
+import { esperaOPrimeiroPagamento, temPedidoDeLgpd } from "@/lib/planos-mia/entrada-paga";
 import { PainelDaAssinatura } from "@/components/cobranca/PainelDaAssinatura";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -108,15 +110,34 @@ export default async function AccountSuspendedPage({
     .filter((o) => o.organization_id !== ativa.orgId && ehOperante(statusDe.get(o.organization_id)))
     .map((o) => ({ id: o.organization_id, nome: o.organization_name }));
   const pedidoAberto = administra ? pedidoValido : undefined;
+  // FORK MIA (.95): a empresa que nasceu num plano de entrada paga e ainda não
+  // pagou a primeira vez vê "Falta só o primeiro pagamento", não "Conta suspensa"
+  // (lib/planos-mia/entrada-paga.ts). Só quando o que se mostra é o
+  // pagamento, ou o aviso a quem não administra: o "fale com o suporte" fica como
+  // está. A LGPD dessa empresa nova só aparece se houver pedido (ou o link de um).
+  const entradaPendente =
+    (mostra === "pagamento" || mostra === "avise_o_admin") &&
+    (await esperaOPrimeiroPagamento(admin, ativa.orgId, tipoDaAtiva));
+  const mostraLgpd =
+    administra && (!entradaPendente || !!pedidoAberto || (await temPedidoDeLgpd(admin, ativa.orgId)));
 
   return (
     <IdiomaProvider locale={idioma}>
       <main className="flex min-h-screen flex-col items-center gap-8 p-4 sm:p-8">
         <Card className="w-full max-w-md space-y-4 p-8 text-center">
-          <h1 className="text-2xl font-semibold">{t("Conta suspensa")}</h1>
+          <h1 className="text-2xl font-semibold">
+            {entradaPendente ? t("Falta só o primeiro pagamento") : t("Conta suspensa")}
+          </h1>
           {/* Quem participa de várias empresas precisa saber QUAL parou. Dado, não interface: sem t(). */}
           <p className="text-base font-medium">{ativa.name}</p>
-          {mostra === "pagamento" ? (
+          {entradaPendente ? (
+            // FORK MIA (.95): o texto da entrada paga ainda não paga.
+            <p className="text-sm text-muted-foreground">
+              {administra
+                ? t("Assim que o pagamento for confirmado, a sua conta é liberada na hora.")
+                : t("A conta é liberada assim que o primeiro pagamento for confirmado. Avise o administrador da sua empresa.")}
+            </p>
+          ) : mostra === "pagamento" ? (
             <p className="text-sm text-muted-foreground">
               {t("A conta foi suspensa por falta de pagamento. Assim que o pagamento for confirmado, tudo volta a funcionar na hora.")}
             </p>
@@ -178,7 +199,8 @@ export default async function AccountSuspendedPage({
             />
           </section>
         )}
-        {administra && (
+        {/* FORK MIA (.95): na entrada paga ainda não paga, só com pedido. */}
+        {mostraLgpd && (
           <section aria-labelledby="lgpd-no-hub" className="w-full max-w-5xl space-y-4">
             <header className="space-y-1">
               <h2 id="lgpd-no-hub" className="text-lg font-semibold">

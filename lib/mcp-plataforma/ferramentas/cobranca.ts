@@ -22,6 +22,12 @@
  *
  * O dólar do teto de IA só aparece aqui (é a Time quem lê); para o cliente ele
  * vira "cerca de N conversas".
+ *
+ * Desde a .95 o plano tem também o preço por E-MAIL (`preco_email`, em reais;
+ * 9110), ao lado do preço do Broadcast, com as mesmas regras: vale para as
+ * empresas do plano sem preço definido à mão, segue o plano na troca e não muda
+ * em plano assinado. A leitura da assinatura devolve os dois preços que valem e
+ * de onde vem cada um.
  */
 import { randomUUID } from "node:crypto";
 
@@ -34,6 +40,7 @@ import { toleranciaDias } from "@/lib/cobranca/configuracao";
 import { emailDoAdminDaEmpresa } from "@/lib/cobranca/emails";
 import { urlDoPainelDaEmpresa } from "@/lib/cobranca/url";
 import { lerVisaoGeral, montarChecklist } from "@/lib/cobranca/visao-geral";
+import { PRECO_PADRAO_POR_EMAIL_CENTS } from "@/lib/email-marketing/regras";
 import { organizacaoDaImplantacao } from "@/lib/implantacao/base";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 // FORK MIA (.91): as empresas que esperam a Time ligar o número oficial.
@@ -49,6 +56,7 @@ import {
 import { garantirPacotesDeCreditos, garantirPlanos } from "@/lib/planos-mia/garantir-planos";
 import { lerPlanosComModulos, type PlanoComModulos } from "@/lib/planos-mia/leitura";
 import { decidirPedidoDeCadastro } from "@/lib/planos-mia/pedidos-de-cadastro";
+import { lerPrecosDaEmpresa } from "@/lib/planos-mia/preco-por-email";
 import { SITUACOES } from "@/lib/planos-mia/situacao";
 
 import { recusar } from "../recusa";
@@ -76,12 +84,33 @@ function planoParaAPlataforma(p: PlanoComModulos, assinantes: number) {
     conversas_estimadas: conversasEstimadas(p.teto_ia_usd_cents),
     modulos: p.modulos,
     preco_broadcast: reais(p.preco_por_mensagem_cents),
+    // FORK MIA (.95): o preço por e-mail do plano; null = o padrão (preco_email_padrao).
+    preco_email: reais(p.preco_por_email_cents),
     frase: p.frase,
     destaque: p.destaque,
     oferecido: p.oferecido_ao_cliente,
     padrao_no_cadastro: p.padrao_no_cadastro,
     arquivado: p.arquivado_em !== null,
     assinantes,
+  };
+}
+
+const ORIGEM_DO_PRECO = { combinado: "definido_a_mao", plano: "plano", padrao: "padrao" } as const;
+
+/** FORK MIA (.95): os preços da empresa em reais, com a origem de cada um. */
+function precosParaAPlataforma(p: Awaited<ReturnType<typeof lerPrecosDaEmpresa>>) {
+  return {
+    plano: p.plano,
+    mensagem: {
+      preco: reais(p.mensagem.cents),
+      origem: p.mensagem.origem === null ? null : ORIGEM_DO_PRECO[p.mensagem.origem],
+      definido_a_mao: reais(p.mensagem.combinado_cents),
+    },
+    email: {
+      preco: reais(p.email.cents),
+      origem: ORIGEM_DO_PRECO[p.email.origem],
+      definido_a_mao: reais(p.email.combinado_cents),
+    },
   };
 }
 
@@ -198,6 +227,17 @@ const PLANO_PEDIDO = z.object({
     .describe(
       "Preço de cada mensagem do Broadcast, em REAIS (ex.: 0.12). Não muda depois que alguém assina.",
     ),
+  // FORK MIA (.95): o preço por e-mail do plano (9110), ao lado do do Broadcast.
+  preco_email: z
+    .number()
+    .min(0)
+    .max(1000)
+    .nullable()
+    .optional()
+    .describe(
+      "Preço de cada e-mail de marketing aceito pela Amazon, em REAIS (ex.: 0.03). null ou ausente = o padrão do sistema (R$ 0,02). " +
+        "Vale para as empresas do plano sem preço definido à mão (plataforma_definir_preco vence). Não muda depois que alguém assina.",
+    ),
   frase: z
     .string()
     .trim()
@@ -223,7 +263,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
     name: "plataforma_ver_cobranca",
     description:
       "A COBRANÇA DA INSTALAÇÃO numa resposta: se está ligada, o provedor (Asaas ou Stripe) e o modo (teste ou produção), se o aviso de pagamento chega, " +
-      "a régua (dias de tolerância), o que falta para a primeira cobrança, os planos com limites, módulos, preço do Broadcast, conversas estimadas e quantas " +
+      "a régua (dias de tolerância), o que falta para a primeira cobrança, os planos com limites, módulos, preço do Broadcast, preço por e-mail (desde a .95), conversas estimadas e quantas " +
       "empresas assinam cada um, quantas empresas há em cada situação, os pacotes de crédito por Pix e o modo do cadastro. A chave do provedor nunca sai. " +
       "O QUE NÃO FAZ: não conecta nem troca a chave do provedor (só pela tela, cifrada).",
     inputSchema: {},
@@ -246,6 +286,8 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       const base = {
         ligada,
         modo_do_cadastro: modo,
+        // FORK MIA (.95): o que vale para o plano que não diz o preço por e-mail.
+        preco_email_padrao: reais(PRECO_PADRAO_POR_EMAIL_CENTS),
         planos: planos.map((p) => planoParaAPlataforma(p, assinantes.get(p.id) ?? 0)),
         empresas_por_situacao: porSituacao,
         empresas_por_origem: {
@@ -280,8 +322,9 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
     name: "plataforma_garantir_planos",
     description:
       "Garante os PLANOS pelo nome: preço (em reais), intervalo, dias de teste, pessoas, números, teto de IA (em dólar, só a plataforma vê), módulos " +
-      "(disparador, email_marketing, crm_b2b), preço do Broadcast, frase e selo do cartão, oferecido ou escondido, e qual é o do cadastro. " +
-      "Rodar de novo não duplica. Plano assinado não muda de preço nem perde módulo (nem muda o preço do Broadcast): a resposta manda arquivar e criar outro. " +
+      "(disparador, email_marketing, crm_b2b), preço do Broadcast, preço por e-mail (preco_email, desde a .95; ausente = o padrão de R$ 0,02), " +
+      "frase e selo do cartão, oferecido ou escondido, e qual é o do cadastro. " +
+      "Rodar de novo não duplica. Plano assinado não muda de preço nem perde módulo (nem muda o preço do Broadcast ou o por e-mail): a resposta manda arquivar e criar outro. " +
       "Ligar um módulo num plano vale na hora para as empresas dele. Aceita `pacotes_de_creditos` (em reais): os pacotes da compra de créditos por Pix; " +
       "os que não vierem deixam de ser oferecidos. Precisa da cobrança ligada. O QUE NÃO FAZ: não arquiva plano (arquivar é pela aba Planos do painel).",
     inputSchema: {
@@ -315,6 +358,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
           teto_ia_usd: 40,
           modulos: ["disparador", "email_marketing"],
           preco_broadcast: 0.12,
+          preco_email: 0.03,
           oferecido: true,
           padrao_no_cadastro: true,
           destaque: true,
@@ -334,6 +378,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
         teto_ia_usd_cents: centavos(p.teto_ia_usd),
         modulos: p.modulos,
         preco_por_mensagem_cents: centavos(p.preco_broadcast),
+        preco_por_email_cents: centavos(p.preco_email),
         frase: p.frase,
         destaque: p.destaque,
         oferecido_ao_cliente: p.oferecido,
@@ -383,7 +428,9 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
     description:
       "UMA EMPRESA na cobrança: plano e plano agendado, situação, datas (fim do teste, próxima cobrança, prazo), se há link de pagamento em aberto, a régua " +
       "ponto a ponto (o que já foi e o que vem), quem administra (e-mail mascarado), os primeiros passos e os módulos com a origem (pelo plano ou pela Time). " +
-      "Desde a .91, o \"o que falta\" de AGORA (o_que_falta_agora: as contas e cada item com a coluna e quem faz, a mesma régua do Início do cliente).",
+      "Desde a .91, o \"o que falta\" de AGORA (o_que_falta_agora: as contas e cada item com a coluna e quem faz, a mesma régua do Início do cliente). " +
+      "Desde a .95, os PREÇOS que valem para a empresa (precos: o da mensagem do Broadcast e o por e-mail, em reais, cada um com a origem: " +
+      "definido à mão, o plano ou, no e-mail, o padrão; e o definido à mão, se houver).",
     inputSchema: { organization_id: ORGANIZACAO },
     exemplo: { organization_id: ORG_DE_EXEMPLO },
     operacao: null,
@@ -401,6 +448,8 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
         })),
         regua: d.regua,
         o_que_falta_agora: d.o_que_falta_agora,
+        // FORK MIA (.95): os dois preços que valem, com a origem de cada um.
+        precos: precosParaAPlataforma(await lerPrecosDaEmpresa(ctx.admin, String(args.organization_id))),
       };
     },
   },

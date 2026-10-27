@@ -66,7 +66,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <>
           <PainelDaAssinatura dados={painel} idioma={idioma} />
           {modulosDoPlano && <ModulosDoPlano modulos={modulosDoPlano} idioma={idioma} fuso={painel.fuso} />}
-          {creditos?.temCarteira && <ComprarCreditos precoPorMensagemCents={creditos.precoPorMensagemCents} />}
+          {creditos?.temCarteira && (
+            <ComprarCreditos
+              precoPorMensagemCents={creditos.precoPorMensagemCents}
+              precoPorEmailCents={creditos.precoPorEmailCents}
+            />
+          )}
           {painel.assinatura && (
             <AcoesDaAssinatura
               estado={painel.assinatura.estado}

@@ -45,8 +45,8 @@ Provas: `tests/unit/jornada-tudo-desligado.test.ts` (peça por peça),
 
 Cada plano de `cobranca_planos` (do upstream, intocado) ganha uma linha ao lado em
 **`mia_plano_modulos`** (9070): os módulos vendáveis que ele liga (`disparador`,
-`email_marketing`, `crm_b2b`), o preço por mensagem do Broadcast, a frase e o selo do
-cartão da página de preços.
+`email_marketing`, `crm_b2b`), o preço por mensagem do Broadcast, o preço por e-mail
+(desde a .95, 9110; seção 2.2), a frase e o selo do cartão da página de preços.
 
 **Duas origens** para um módulo numa empresa:
 
@@ -77,7 +77,8 @@ lista, campanhas, números. Voltando o módulo, tudo está lá.
 **Regras do banco** (9070):
 
 - plano com assinante (atual, agendado ou troca pendente) **não perde módulo nem muda o
-  preço por mensagem**: o gatilho recusa com `plano_com_assinantes` (23514). Acrescentar
+  preço por mensagem nem, desde a 9110, o preço por e-mail**: o gatilho recusa com
+  `plano_com_assinantes` (23514). Acrescentar
   módulo pode, e vale na hora para as empresas do plano. Para tirar, arquiva-se o plano e
   cria-se outro;
 - **Vendas B2B** só vem pelo plano com o módulo da instalação (`MODULO_CRM_B2B`) ligado.
@@ -102,6 +103,72 @@ sem liberação da Time e plano atual sem o módulo. Leitura que falha segue com
 pergunta aqui é "paro o que o gestor já mandou sair?", e pausar campanha paga por uma
 oscilação do banco seria o erro visível.
 
+### 2.2 O preço do e-mail por plano (.95)
+
+Pedido do Gabriel em 27/10/2026: "o valor do disparo de WhatsApp e do e-mail é
+diferente". O plano tem dois preços, lado a lado em `/admin/cobranca/modulos-dos-planos`
+("Mensagem do Broadcast (R$)" e "E-mail (R$)") e no MCP (`preco_broadcast` e
+`preco_email`, em reais): `mia_plano_modulos.preco_por_mensagem_cents` e
+`preco_por_email_cents` (9110).
+
+O preço por e-mail chega à empresa pelo **mesmo caminho** do preço por mensagem
+(`lib/planos-mia/preco-por-email.ts` e `preco-por-mensagem.ts`, uma leitura só do
+plano, `precoDoPlanoDaEmpresa`), perguntado na hora e nunca copiado para a empresa:
+
+| degrau | mensagem do Broadcast | e-mail |
+|---|---|---|
+| 1. definido à mão para a empresa (`tenant_broadcast_pricing`, pela carteira do painel ou `plataforma_definir_preco`) | vence | vence |
+| 2. o do plano ATUAL da assinatura, com a cobrança ligada | vale | vale |
+| 3. sem nenhum dos dois | o disparo recusa | o padrão de R$ 0,02 |
+
+- **Empresa nova** num plano: paga o preço do plano desde o primeiro envio (não há
+  preço definido à mão).
+- **Empresa que já está no plano**: o preço do plano assinado não muda (a trava do
+  banco); para mudar, arquiva-se o plano e cria-se outro, como o preço da mensalidade.
+  Plano sem assinante muda à vontade, e vale na hora para quem entrar nele.
+- **Troca de plano**: o preço segue o `plano_id`, no dia em que a troca vale (no
+  teste na hora, subindo quando a diferença é paga, descendo na renovação).
+- **Isenta** (sem assinatura) e **cobrança desligada**: não há plano; vale o definido
+  à mão ou o padrão, como antes da .95.
+- **Definido à mão vence o plano.** Campo vazio na carteira (ou `null` no
+  `plataforma_definir_preco`) tira o definido à mão, e a empresa volta a seguir o plano.
+- A **campanha já confirmada** não muda: o preço dela é congelado na confirmação
+  (`mia_email_campanhas.preco_cents`).
+- A leitura do plano que falha **lança** no e-mail (cobrar o padrão de quem tem outro
+  preço seria cobrar errado calado) e vira "sem preço" na mensagem (o disparo recusa),
+  como sempre.
+
+Onde aparece: a carteira de cada empresa no painel (`CarteiraDoTenant`: os dois preços,
+o que vale e de onde vem, "pelo plano X", "definido à mão para esta empresa" ou "o padrão
+do sistema", e os campos para definir à mão), Configurações › E-mail marketing ("(pelo
+plano)"), o bloco Créditos do Plano e cobrança, a lista do Broadcast, a página de preços
+e a rota pública (seção 4).
+
+### 2.3 A entrada paga ainda não paga (.95)
+
+Teste do Gabriel em produção, 27/10/2026. A empresa que nasce num plano de **entrada paga**
+(0 dia de teste) fica suspensa até o primeiro pagamento, pela regra do upstream (0679:
+`pagamento_inicial_pendente = true` na assinatura e a suspensão do tipo `cobranca` com o
+motivo "Aguardando o primeiro pagamento"). Para quem acabou de assinar, o upstream dizia
+"Conta suspensa" e mandava "Conta suspensa por falta de pagamento". O fork
+(`lib/planos-mia/entrada-paga.ts`):
+
+- **a tela** `/account-suspended`: o topo diz "Falta só o primeiro pagamento" e "Assim que o
+  pagamento for confirmado, a sua conta é liberada na hora" (o cartão do plano logo abaixo
+  diz "Aguardando o primeiro pagamento"); o bloco "Solicitações LGPD" só aparece se houver
+  pedido (ou o link de um). Quem não administra lê que falta o primeiro pagamento e que
+  avise quem administra;
+- **os avisos**: nenhum "suspensa" (nem o lembrete semanal), nem por e-mail nem na
+  Central, enquanto `pagamento_inicial_pendente` for verdadeiro; no primeiro pagamento, a
+  liberação diz "Pagamento confirmado: a sua conta está liberada", com o botão **Entrar**
+  (o sinal é o motivo da suspensão que vai ser desfeita: a releitura já desligou a
+  pendência antes de aplicar a régua).
+
+A suspensão por **atraso** de quem já pagou fica como o upstream escreveu: "Conta
+suspensa", a LGPD sempre (o prazo corre durante a suspensão), o aviso de "suspensa" e a
+liberação com "tudo voltou a funcionar". Nenhum e-mail novo de boas-vindas nem lembrete
+(fica para o passo do pagamento no início, em protótipo).
+
 ## 3. A origem da empresa
 
 `mia_origem_da_empresa` (9071) diz por onde a empresa nasceu: **`cadastro`** (a própria
@@ -118,13 +185,21 @@ entraram como `implantacao`. O `plataforma_criar_cliente` grava `implantacao` ta
   empresa entra no plano padrão do cadastro (a regra do upstream). Um campo novo, opcional,
   "o que a empresa faz" (até 200 caracteres), vai no pedido para a Time ler antes de
   aprovar.
-- **Página de preços**: `https://app.iamia.com.br/precos` (`app/precos/page.tsx`).
+- **Página de preços**: `https://app.iamia.com.br/precos` (`app/precos/page.tsx`). Desde a
+  .95, o cartão diz "E-mail marketing, com e-mail a R$ X" e a comparação tem a linha do
+  preço por e-mail. O selo do topo ("14 dias grátis, sem cartão") só aparece quando
+  **todo** plano oferecido tem teste (`seloDoTesteGratis`): com plano de entrada paga na
+  lista, não há selo, e cada cartão diz o seu ("Assinar" e "Entrada paga"); com testes de
+  tamanhos diferentes, "Teste grátis em todos os planos". A pergunta "O que acontece no fim
+  do teste?" some quando nenhum plano tem teste. A rota pública não muda por isso: ela já
+  devolve `trial_dias` de cada plano, e o site faz a mesma conta.
 - **Rota pública** para o site da iamia: `GET https://app.iamia.com.br/api/v1/publico/planos`.
   Sem sessão, CORS aberto, cache curto. Devolve `disponivel` e os planos oferecidos com
   `slug`, `nome`, `frase`, `destaque`, `padrao`, `preco_cents`, `intervalo`, `trial_dias`,
   `pessoas`, `numeros`, `conversas_estimadas`, `modulos` (chave, nome, descrição),
-  `preco_por_mensagem_cents` (só com Broadcast) e `cadastro` (o link absoluto com o plano
-  marcado). **Nunca o teto de IA em dólar**: no lugar dele, "cerca de N conversas por mês"
+  `preco_por_mensagem_cents` (só com Broadcast), `preco_por_email_cents` (desde a .95,
+  só com e-mail marketing; o plano que não diz mostra o padrão de R$ 0,02, que é o que a
+  empresa paga nele) e `cadastro` (o link absoluto com o plano marcado). **Nunca o teto de IA em dólar**: no lugar dele, "cerca de N conversas por mês"
   (`conversasEstimadas`: teto ÷ US$ 0,048 por conversa, arredondado a 50).
 
 ## 5. O dinheiro na tela da empresa
@@ -132,7 +207,9 @@ entraram como `implantacao`. O `plataforma_criar_cliente` grava `implantacao` ta
 - **Painel da assinatura** (Configurações › Plano e cobrança): a IA em **porcentagem do
   incluído**, nunca em dólar. Em 80%, aviso; em 100%, a IA para até o mês virar e as
   conversas novas vão para a equipe (o teto do plano do upstream, que agora vale também
-  para quem não tem chave própria). Os módulos do plano com a origem.
+  para quem não tem chave própria). Os módulos do plano com a origem. No bloco Créditos,
+  o preço da mensagem do Broadcast e, desde a .95, o preço por e-mail de quem tem e-mail
+  marketing.
 - **Créditos por Pix** (`lib/carteira/compra-pelo-asaas.ts`, 9072): a empresa com plano no
   Asaas compra um pacote (`mia_pacotes_de_creditos`) por Pix, pelo mesmo Asaas da
   cobrança. O valor entra na carteira **só quando a releitura no Asaas diz pago**, pela
@@ -199,6 +276,14 @@ origem), `plataforma_criar_cliente` (`plano` ou `isenta`, e a origem implantaç�
 `plataforma_liberar_modulo` (aceita `crm_b2b`, diz a origem "pela Time" e avisa o que o
 plano já liga). `plataforma_ver_implantacao` não mudou.
 
+A .95 não pediu ferramenta nova (a lista segue em 99): `plataforma_garantir_planos` aceita
+`preco_email` (em reais; ausente ou `null` = o padrão de R$ 0,02), `plataforma_ver_cobranca`
+devolve `preco_email` de cada plano e `preco_email_padrao`, `plataforma_ver_assinatura`
+devolve `precos` (os dois preços que valem para a empresa, em reais, com a origem:
+`definido_a_mao`, `plano` ou `padrao`), `plataforma_ver_email_marketing` diz a origem do
+preço, e `plataforma_definir_preco` explica que o preço dele é o definido à mão, que vence
+o do plano.
+
 **O MCP não** conecta nem troca a chave do provedor, não marca nada como pago, não cancela
 a assinatura do cliente, não muda o modo do cadastro e não arquiva plano.
 
@@ -216,8 +301,8 @@ Uma vez, na plataforma inteira. Antes, os requisitos do upstream (`docs/saas/cob
    sandbox (`$aact_hmlg_...`) e **Testar e conectar**. Se aparecer "Falta um passo", cadastre
    o aviso de pagamento no Asaas como o quadro mostra. A chave nunca passa pelo MCP.
 4. **Planos pelo MCP.** `plataforma_garantir_planos` com os planos de verdade (preço em
-   reais, dias de teste, pessoas, números, teto de IA, módulos, preço do Broadcast, frase,
-   qual é o do cadastro) e os `pacotes_de_creditos`. Confira em `/precos`.
+   reais, dias de teste, pessoas, números, teto de IA, módulos, preço do Broadcast, preço
+   por e-mail, frase, qual é o do cadastro) e os `pacotes_de_creditos`. Confira em `/precos`.
 5. **Testar.** Uma empresa de teste com outro e-mail, o plano escolhido no cadastro,
    assinar e pagar no sandbox, comprar um pacote de crédito por Pix, e ver em Empresas do
    cadastro. A régua e os recados aparecem no zap da Time.
@@ -235,7 +320,11 @@ Uma vez, na plataforma inteira. Antes, os requisitos do upstream (`docs/saas/cob
 
 - `lib/modulos/liberacao.ts`: `moduloLiberado` e `modulosDaOrganizacao` somam o plano.
 - `lib/cobranca/sincronizar.ts` (depois da releitura aplicada) e `lib/cobranca/troca.ts`
-  (troca no teste): os módulos seguem o plano.
+  (troca no teste): os módulos seguem o plano. Desde a .95, `aplicarRegua` cala o
+  "suspensa" da entrada paga ainda não paga e manda a liberação dela com a frase própria
+  (seção 2.3), e `lib/cobranca/emails.ts` aceita o botão próprio do aviso ("Entrar"). O
+  caso do upstream em `lib/cobranca/sincronizar.test.ts` que esperava o lembrete de
+  "suspensa" para quem aguarda a entrada foi trocado pela regra do fork (marcado `FORK MIA`).
 - `lib/cobranca/sinal.handler.ts`: o aviso do Asaas também relê as compras de crédito da
   empresa.
 - `lib/cobranca/rodada.ts`: o aviso de 80% em porcentagem, sem dólar.
@@ -249,7 +338,8 @@ Uma vez, na plataforma inteira. Antes, os requisitos do upstream (`docs/saas/cob
 - `app/actions/registration/decide.ts`: o e-mail para quem pediu.
 - `components/cobranca/PainelDaAssinatura.tsx`, `components/cobranca/AcoesDaAssinatura.tsx`,
   `app/app/settings/billing/page.tsx`, `app/account-suspended/page.tsx`: sem dólar, a IA
-  em %, os módulos e o crédito por Pix.
+  em %, os módulos e o crédito por Pix; desde a .95, o hub da entrada paga ainda não paga
+  (seção 2.3).
 - `app/admin/(protected)/cobranca/page.tsx` e `components/admin/AdminSidebar.tsx`: o link
   da aba Planos para a página própria dos módulos (`/admin/cobranca/modulos-dos-planos`) e o
   item Empresas do cadastro. A aba não lê nada a mais nem repete o nome de plano nenhum ao lado
@@ -260,7 +350,9 @@ Uma vez, na plataforma inteira. Antes, os requisitos do upstream (`docs/saas/cob
 
 Do fork (não do upstream), também tocados: o Broadcast (`app/api/v1/broadcasts/*`,
 `app/api/v1/carteira/route.ts`, o worker e `components/broadcast/textos.ts`: o preço do
-plano e a pausa), o e-mail marketing (`lib/email-marketing/motor.ts` e `rotulos.ts`) e o
+plano e a pausa), a carteira do painel (`app/api/v1/admin/carteira/route.ts`,
+`components/admin/tenants/CarteiraDoTenant.tsx`: os dois preços com a origem, .95), a
+leitura do preço por e-mail (`lib/email-marketing/banco.ts`, `lerPrecoPorEmail`, .95), o e-mail marketing (`lib/email-marketing/motor.ts` e `rotulos.ts`) e o
 `report-da-plataforma` (os recados).
 
 ### LGPD
@@ -273,12 +365,15 @@ servidor (RLS ligada, sem política, `authenticated` e `anon` recebem permission
 
 | arquivo | o que prova |
 |---|---|
-| `tests/invariants/jornada-de-assinatura.test.ts` | o banco: módulo pelo plano (desligado, isenta, B2B, sessão), a trava do plano assinado, seguir o plano sem repetir, a origem, a compra paga que lança uma vez, as tabelas só do servidor |
+| `tests/invariants/jornada-de-assinatura.test.ts` | o banco: módulo pelo plano (desligado, isenta, B2B, sessão), a trava do plano assinado (com o preço por e-mail desde a 9110), seguir o plano sem repetir, a origem, a compra paga que lança uma vez, as tabelas só do servidor |
 | `tests/unit/jornada-tudo-desligado.test.ts` | nada muda com a cobrança desligada |
 | `tests/unit/planos-mia-regras.test.ts` | o catálogo, as conversas estimadas, o `?plano=`, a vitrine sem dólar, a situação, a régua e os recados |
 | `tests/unit/rotina-pula-modulo-fora-do-plano.test.ts` | as rotinas do Broadcast e do e-mail |
 | `tests/unit/compra-de-creditos-pelo-asaas.test.ts` | o Pix: quem compra, a cobrança avulsa, a releitura |
-| `tests/unit/mcp-de-implantacao-cobranca.test.ts` | as nove ferramentas, a contagem (92) e o que o MCP não faz |
+| `tests/unit/mcp-de-implantacao-cobranca.test.ts` | as nove ferramentas, a contagem (99 desde a .94) e o que o MCP não faz; o `preco_email` dos planos (.95) |
+| `tests/unit/preco-do-email-por-plano.test.ts` | o preço por e-mail: os três degraus, a isenta, a cobrança desligada, a origem, a vitrine, o selo do teste e o espelho da 9110 |
+| `tests/unit/entrada-paga-sem-aviso-de-suspensa.test.ts` | a entrada paga ainda não paga e o atraso, para o aviso de "suspensa" e o da liberação |
+| `tests/unit/hub-da-entrada-paga.test.tsx` | o topo do `/account-suspended` e a LGPD só com pedido, na entrada paga; o atraso como o upstream |
 | `tests/unit/painel-da-assinatura.test.tsx` | a IA em %, o aviso de 80% e a parada de 100% |
 
 ### Lacunas conhecidas

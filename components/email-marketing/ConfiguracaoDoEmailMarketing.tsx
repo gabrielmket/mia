@@ -213,6 +213,8 @@ function Configuracao({ r }: { r: Retrato }) {
             <dd>
               <b>{formatCentsBRL(r.preco.por_email_cents)}</b> {t("por e-mail aceito pela Amazon")}
               {r.preco.padrao ? ` (${t("o padrão")})` : ""}
+              {/* FORK MIA (.95): o preço que veio do plano da empresa diz isso. */}
+              {r.preco.origem === "plano" ? ` (${t("pelo plano")})` : ""}
             </dd>
             <dt className="text-muted-foreground">{t("Carteira")}</dt>
             <dd>
