@@ -45,6 +45,9 @@ export const DICIONARIO_DO_ASSISTENTE_FAZ_MIA: Traducoes = {
   "Nada mudou.": { es: "Nada cambió." },
   "Venceu sem decisão. Nada mudou.": { es: "Venció sin decisión. Nada cambió." },
 
+  // o botão do aviso na Central (`mia_assistente_proposta`, lib/ai/inbox-destino.ts)
+  "Abrir o pedido": { es: "Abrir el pedido" },
+
   // o que muda (os rótulos que o servidor manda)
   Antes: { es: "Antes" },
   Depois: { es: "Después" },
