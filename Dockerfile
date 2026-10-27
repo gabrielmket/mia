@@ -31,13 +31,19 @@ ARG NEXT_PUBLIC_ADMIN_URL=https://placeholder.invalid
 # caminho normal do self-hoster é `docker compose pull`, e o install.sh não
 # builda o app. Buildar na VPS é o override opcional de docker-compose.build.yml,
 # e é lá que o requisito de RAM de build se aplica (docs/runbooks/deploy.md §4).
+#
+# FORK MIA (.94): 8 GB, não 4. A checagem de tipos do `next build` passou dos
+# 4 GB com o assistente que faz com aprovação ("JavaScript heap out of memory"
+# em `imagem-do-app-sobe`, amd64 e arm64), como o e2e e o perf já tinham
+# passado na .91 (`.github/workflows/e2e.yml` e `perf.yml` usam 8 GB). Os
+# executores do GitHub têm 16 GB.
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
     NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
     NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
     NEXT_PUBLIC_ADMIN_URL=$NEXT_PUBLIC_ADMIN_URL \
     NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
-    NODE_OPTIONS=--max-old-space-size=4096
+    NODE_OPTIONS=--max-old-space-size=8192
 
 # Turbopack (`pnpm build`): ~4min vs ~34min do webpack num VPS. O bloco `webpack:`
 # do Sentry (tree-shake + upload de sourcemap em build-time) é ignorado, mas o
