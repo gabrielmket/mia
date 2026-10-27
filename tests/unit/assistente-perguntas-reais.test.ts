@@ -85,6 +85,10 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "o que falta para a minha empresa ficar pronta", sobre: "/app/inicio", espera: "inicio-o-que-falta" },
   { pergunta: "como uso o assistente", sobre: "/app/assistente", espera: "assistente-usar" },
   { pergunta: "encontrei um erro, como abro um chamado", sobre: "/app/assistente", espera: "assistente-chamado" },
+  // FORK MIA (.94): o assistente faz com aprovação, e desfaz.
+  { pergunta: "como desfaço o que o assistente fez", sobre: "/app/assistente", espera: "assistente-propostas" },
+  { pergunta: "o assistente pode criar uma etapa para mim?", sobre: "/app/assistente", espera: "assistente-propostas" },
+  { pergunta: "onde aprovo o pedido que a atendente mandou pelo assistente", sobre: "/app/assistente", espera: "assistente-propostas" },
   { pergunta: "como faço uma ligação com a IA", sobre: "/app/calls", espera: "chamadas" },
   { pergunta: "como cadastro um produto com preço", sobre: "/app/products", espera: "produtos" },
   { pergunta: "como importo empresas de uma planilha", sobre: "/app/imports", espera: "importacoes" },

@@ -4,7 +4,8 @@
  * versão; protótipo de 25/10/2026, tela 8). docs/fork/jornada-de-assinatura.md.
  *
  * A CONTAGEM da lista mora aqui desde a .90: 92 (as 83 da .89 e as nove da
- * cobrança). E as regras que não podem virar: o MCP não conecta a chave do
+ * cobrança), 94 com as duas das propostas do assistente (.91) e 95 com o
+ * desfazer da proposta (.94). E as regras que não podem virar: o MCP não conecta a chave do
  * provedor, não marca como pago, não cancela a assinatura do cliente, não muda
  * o modo do cadastro; plano assinado não muda de preço nem perde módulo; com a
  * cobrança desligada, nada de plano.
@@ -72,9 +73,9 @@ const banco = () =>
     return {};
   });
 
-describe("a lista: 94 ferramentas, nove delas da cobrança", () => {
-  it("94 = as 83 da .89 + as nove da cobrança (.90) + as duas das propostas do assistente (.91)", () => {
-    expect(FERRAMENTAS).toHaveLength(94);
+describe("a lista: 95 ferramentas, nove delas da cobrança", () => {
+  it("95 = as 83 da .89 + as nove da cobrança (.90) + as duas das propostas do assistente (.91) + o desfazer da proposta (.94)", () => {
+    expect(FERRAMENTAS).toHaveLength(95);
     expect(FERRAMENTAS_DE_COBRANCA).toHaveLength(9);
     expect(new Set(FERRAMENTAS.map((f) => f.name)).size).toBe(FERRAMENTAS.length);
   });

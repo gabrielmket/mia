@@ -6,7 +6,9 @@
  *     no coletor, uma por peça; nada da peça é escrito no turno;
  *   - o follow-up depende do agente: sem agente, volta "depende" e nenhuma
  *     proposta de follow-up nasce;
- *   - o atendente recebe a recusa com quem pode, e nenhuma proposta;
+ *   - (.94) o atendente prepara o cartão e o pede ao administrador (ele não
+ *     aplica); o "o que falta" continua de gestor em diante; o somente leitura
+ *     recebe a recusa com quem pode, e nenhuma proposta;
  *   - o cliente de serviço nunca nasce no turno (a regra da .88);
  *   - o crítico não tem ferramenta: nenhuma ferramenta do turno conecta
  *     número, paga, convida, mexe em chave ou exclui.
@@ -85,7 +87,7 @@ const EMPRESA_NOVA: Record<string, Linha[]> = {
   followup_flow_pointers: [],
 };
 
-function entrada(db: unknown, papel: "manager" | "agent" | "admin") {
+function entrada(db: unknown, papel: "manager" | "agent" | "admin" | "viewer") {
   return {
     db: db as never,
     organizationId: ORG,
@@ -152,16 +154,32 @@ describe("as propostas no turno", () => {
     expect(r.propostas).toEqual([]);
   });
 
-  it("o atendente recebe a recusa com quem pode, e nenhuma proposta nasce", async () => {
+  it("(.94) o atendente prepara o cartão para pedir ao administrador; o \"o que falta\" continua fora dele", async () => {
+    const { db } = sessao(EMPRESA_NOVA);
+    const resultados: Record<string, unknown> = {};
+    const modelo = vi.fn(async (pedido: { tools: Ferramentas }) => {
+      for (const nome of ["propor_agente_do_modelo", "propor_funil_do_pacote", "ver_o_que_falta"]) {
+        resultados[nome] = await pedido.tools[nome]!.execute?.({}, { toolCallId: nome, messages: [] });
+      }
+      return { texto: "Preparei; quem aplica é o administrador.", callId: null };
+    });
+    const r = await responderNoAssistente(entrada(db, "agent"), { chamarModelo: modelo as never });
+    expect(resultados.propor_agente_do_modelo).toMatchObject({ ok: true, quem_aplica: ["Juliana Prado"] });
+    expect(resultados.propor_funil_do_pacote).toMatchObject({ ok: true });
+    expect(resultados.ver_o_que_falta).toMatchObject({ fora_da_permissao: true, quem_pode: [{ nome: "Juliana Prado" }] });
+    expect(r.propostas.map((p) => p.tipo).sort()).toEqual(["agente", "funil"]);
+  });
+
+  it("o somente leitura recebe a recusa com quem pode, e nenhuma proposta nasce", async () => {
     const { db } = sessao(EMPRESA_NOVA);
     const resultados: unknown[] = [];
     const modelo = vi.fn(async (pedido: { tools: Ferramentas }) => {
-      for (const nome of ["propor_agente_do_modelo", "propor_funil_do_pacote", "propor_followup_do_modelo", "ver_o_que_falta"]) {
+      for (const nome of ["propor_agente_do_modelo", "propor_funil_do_pacote", "propor_followup_do_modelo"]) {
         resultados.push(await pedido.tools[nome]!.execute?.({}, { toolCallId: nome, messages: [] }));
       }
       return { texto: "Você não tem acesso.", callId: null };
     });
-    const r = await responderNoAssistente(entrada(db, "agent"), { chamarModelo: modelo as never });
+    const r = await responderNoAssistente(entrada(db, "viewer"), { chamarModelo: modelo as never });
     for (const x of resultados) expect(x).toMatchObject({ fora_da_permissao: true, quem_pode: [{ nome: "Juliana Prado" }] });
     expect(r.propostas).toEqual([]);
   });

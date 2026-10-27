@@ -82,6 +82,9 @@ describe("plataforma_configurar_assistente", () => {
       papeis: ["admin", "manager"],
       perguntas_por_pessoa_por_dia: 20,
       resumo_da_manha_padrao: false,
+      // FORK MIA (.94): os tipos de proposta (null = todos) e o "pode pedir" ficam como estavam.
+      tipos_de_proposta: null,
+      pode_pedir: true,
     });
     const linha = c.banco.tabela("mia_assistente_config")[0]!;
     expect(linha).toMatchObject({ organization_id: ORG, papeis: ["admin", "manager"], perguntas_por_pessoa_por_dia: 20 });

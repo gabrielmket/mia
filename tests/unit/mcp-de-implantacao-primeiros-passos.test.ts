@@ -82,12 +82,13 @@ afterEach(() => {
   delete process.env.OPENAI_API_KEY;
 });
 
-describe("a lista: as duas das propostas", () => {
-  it("as duas ferramentas novas: ver (leitura livre) e decidir (implantar_configuracao)", () => {
+describe("a lista: as três das propostas", () => {
+  it("ver (leitura livre), decidir e, desde a .94, desfazer (implantar_configuracao)", () => {
     const novas = FERRAMENTAS.filter((f) => /propostas?_do_assistente/.test(f.name)).map((f) => [f.name, f.operacao]);
     expect(Object.fromEntries(novas)).toEqual({
       plataforma_ver_propostas_do_assistente: null,
       plataforma_decidir_proposta_do_assistente: "implantar_configuracao",
+      plataforma_desfazer_proposta_do_assistente: "implantar_configuracao",
     });
   });
 });
