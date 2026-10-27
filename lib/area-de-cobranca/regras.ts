@@ -83,14 +83,21 @@ export const notaErradaSchema = z
 
 export type EntradaDaNotaErrada = z.infer<typeof notaErradaSchema>;
 
-/** "Outubro de 2026" a partir de AAAA-MM-DD, sempre em português (o chamado é lido pela Time). */
+/**
+ * Os meses do texto do chamado. Fixos de propósito: o chamado é lido pela Time,
+ * em português, qualquer que seja o idioma de quem pediu (a tela formata pelo
+ * idioma de quem olha).
+ */
+const MESES_DO_CHAMADO = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+] as const;
+
+/** "Outubro de 2026" a partir de AAAA-MM-DD, para o texto do chamado. */
 export function mesPorExtenso(dataCivil: string): string {
   const m = /^(\d{4})-(\d{2})-\d{2}/.exec(dataCivil);
-  if (!m) return dataCivil;
-  const nome = new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" }).format(
-    new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 15)),
-  );
-  return `${nome.charAt(0).toUpperCase()}${nome.slice(1)} de ${m[1]}`;
+  const nome = m ? MESES_DO_CHAMADO[Number(m[2]) - 1] : undefined;
+  return m && nome ? `${nome} de ${m[1]}` : dataCivil;
 }
 
 /**

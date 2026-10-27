@@ -63,7 +63,9 @@ function rodar(caso: string, passadas: Record<number, string>) {
   writeFileSync(join(dir, "baseline-mia.sql"), "select 1;\n");
   // O bootstrap usa caminhos fixos da imagem (/deskcomm, /tmp): a cópia aponta para a pasta do caso.
   const original = readFileSync(join(RAIZ, "easypanel", "bootstrap.sh"), "utf8");
-  const copia = original.replaceAll("/deskcomm/", `${paraSh(dir)}/`).replaceAll("/tmp/", `${paraSh(dir)}/`);
+  // Uma passada só: a pasta do caso mora em /tmp no Linux, e trocar em duas passadas
+  // trocaria de novo o /tmp/ que a primeira acabou de escrever.
+  const copia = original.replace(/\/(deskcomm|tmp)\//g, `${paraSh(dir)}/`);
   expect(copia, "o bootstrap mudou de forma: a cópia ainda aponta para /deskcomm").not.toContain("/deskcomm/");
   writeFileSync(join(dir, "bootstrap.sh"), copia);
   const dubleDoPsql = [
