@@ -67,6 +67,8 @@ export const emailMarketing: AreaDoChecklist = {
       rodape_completo: estado.rodapeCompleto,
       preco_por_email_cents: preco.cents,
       preco_padrao: preco.padrao,
+      // FORK MIA (.95): de onde vem o preço (definido à mão, o plano ou o padrão).
+      preco_origem: preco.origem,
       campanhas,
       aceites_registrados: consentimentos,
       enderecos_suprimidos: supressoes,
