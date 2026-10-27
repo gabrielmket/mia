@@ -495,6 +495,15 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "zero, a plataforma lê, anon recebe permission denied e a sessão não escreve " +
       "(nem o administrador); a nota da assinatura é só do servidor (42501).",
   })),
+  // Fork MIA, 9125 · a área de cobrança (.96, segunda frente): o cartão que o
+  // administrador pôs para as próximas mensalidades.
+  {
+    tabela: "mia_cartao_das_mensalidades",
+    razao:
+      "tests/invariants/area-de-cobranca.test.ts · só do servidor: o administrador da " +
+      "própria empresa e anon recebem permission denied (42501), o servidor lê; o CHECK " +
+      "recusa mais que o final de 4 números e a empresa redigida perde a linha.",
+  },
   // Fork MIA, 9080 e 9081 — as propostas do assistente e o retrato do "o que
   // falta" (.91, os primeiros passos).
   ...["mia_assistente_propostas", "mia_assistente_retratos"].map((tabela) => ({
