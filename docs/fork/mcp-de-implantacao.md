@@ -754,6 +754,22 @@ cadastro sem pagamento fica na tela, com a verificação em duas etapas. A prova
 O MCP não paga, não gera cobrança, não cadastra cartão, não muda os dados fiscais e não lê o
 cartão (o número nunca é gravado).
 
+### A área de cobrança (.96, segunda frente)
+
+Função do fork ([`area-de-cobranca.md`](area-de-cobranca.md); protótipo "Pagamento no início",
+telas 3 e 4), e entra no MCP na mesma versão, **sem ferramenta nova** (a lista segue com 99): baixar
+a nota, trocar o cartão e corrigir os dados fiscais são do cliente, na tela; apagar um cadastro sem
+pagamento é da Time, na tela, com a verificação em duas etapas. A prova está em
+`tests/unit/mcp-de-implantacao-area-de-cobranca.test.ts`.
+
+| ferramenta | o que muda | operação |
+|---|---|---|
+| `plataforma_ver_cliente` (cresce) | `cobrancas`: as cobranças da empresa no Asaas (as 24 mais novas), cada uma com `cobranca` (`pay_...`), `vencimento`, `valor_cents`, `forma`, `situacao` (`paga`, `aberta`, `vencida`, `cancelada`...), `paga_em`, se é mensalidade, o **número da nota fiscal** (`nota_numero`), a situação dela e o **link do PDF** (`nota_pdf_url`), para mandar a nota a quem pedir, e `correcao_pedida` (o chamado "A nota saiu errada" e a situação dele). `null` = a empresa não tem cobrança pelo Asaas; `"nao_lido"` = o Asaas não respondeu (o resto do retrato sai igual) | leitura |
+
+O pedido "A nota saiu errada" chega como chamado (tipo pedido, com a cobrança, a nota e o motivo no
+texto) e se responde com `plataforma_responder_chamado`, que já existe. O MCP não troca cartão,
+não muda dados fiscais, não cancela nota e não apaga cadastro.
+
 ### O que chegou do upstream 1.85 (.83)
 
 Mesma regra, na fusão da v1.85. A prova de cada linha está em
