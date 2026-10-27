@@ -23,9 +23,10 @@ import { createClient } from "@/lib/supabase/server";
 import { moduloLiberado } from "@/lib/modulos/liberacao";
 import { lerSaldoDaCarteira } from "@/lib/carteira/ler-saldo";
 import { creditoAcabando, podeDisparar } from "@/lib/carteira/saldo";
-import { PRECO_PADRAO_POR_EMAIL_CENTS } from "@/lib/email-marketing/regras";
 // FORK MIA (.90): o preço por mensagem do plano (docs/fork/jornada-de-assinatura.md).
 import { precoPorMensagemDaEmpresa } from "@/lib/planos-mia/preco-por-mensagem";
+// FORK MIA (.95): o preço por e-mail segue o plano pelo mesmo caminho.
+import { precoPorEmailDaEmpresa } from "@/lib/planos-mia/preco-por-email";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -93,6 +94,25 @@ export async function GET(_req: NextRequest) {
         : Number(precoRes.data.preco_por_mensagem_cents),
     )
   ).cents;
+  // FORK MIA (.95): o preço por e-mail é o definido à mão, senão o do plano,
+  // senão o padrão (lib/planos-mia/preco-por-email.ts). A leitura do plano que
+  // falha não vira o padrão calado: a tela recebe o erro.
+  const emailAMao = (precoRes.data as { preco_por_email_cents?: number | null } | null)
+    ?.preco_por_email_cents;
+  let precoPorEmail: number;
+  try {
+    precoPorEmail = (
+      await precoPorEmailDaEmpresa(
+        createAdminClient(),
+        org.orgId,
+        emailAMao === null || emailAMao === undefined ? null : Number(emailAMao),
+      )
+    ).cents;
+  } catch (erro) {
+    return fail("query_failed", erro instanceof Error ? erro.message : "preço por e-mail", 500, {
+      requestId,
+    });
+  }
   const alerta =
     precoRes.data?.alerta_saldo_cents === null || precoRes.data?.alerta_saldo_cents === undefined
       ? null
@@ -119,10 +139,9 @@ export async function GET(_req: NextRequest) {
       // NULL aqui não é "ilimitado": é "ninguém combinou preço ainda", e a tela
       // tem de dizer isso, porque é o motivo pelo qual o disparo vai recusar.
       mensagens_que_cabem: capacidade.mensagens_que_cabem,
-      // FORK MIA (.89): o preço por e-mail de marketing (nulo = o padrão de R$ 0,02).
-      preco_por_email_cents:
-        (precoRes.data as { preco_por_email_cents?: number | null } | null)?.preco_por_email_cents ??
-        PRECO_PADRAO_POR_EMAIL_CENTS,
+      // FORK MIA (.89): o preço por e-mail de marketing. Desde a .95, o definido à
+      // mão, senão o do plano, senão o padrão de R$ 0,02.
+      preco_por_email_cents: precoPorEmail,
       email_marketing: doEmail,
       disparador: doBroadcast,
       credito_acabando: creditoAcabando(saldo.saldo_cents, alerta),

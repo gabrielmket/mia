@@ -13,6 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { remetenteDaOrganizacaoDeSettings } from "@/lib/email/remetente-da-organizacao";
 import { configuracaoDaAmazon, type ConfiguracaoDaAmazon } from "@/lib/email/ses";
 import { moduloLiberado } from "@/lib/modulos/liberacao";
+import { precoPorEmailDaEmpresa, type OrigemDoPrecoPorEmail } from "@/lib/planos-mia/preco-por-email";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
 
 import { rodapeCompleto, type RodapeDoEmail } from "./blocos";
@@ -23,11 +24,7 @@ import {
   type SituacaoDosRegistros,
 } from "./dominio";
 import type { MotivoDaSupressao } from "./elegibilidade";
-import {
-  CONFIGURACAO_PADRAO,
-  MODULO_EMAIL_MARKETING,
-  PRECO_PADRAO_POR_EMAIL_CENTS,
-} from "./regras";
+import { CONFIGURACAO_PADRAO, MODULO_EMAIL_MARKETING } from "./regras";
 
 type Db = Pick<SupabaseClient, "from" | "rpc">;
 
@@ -217,11 +214,15 @@ export async function lerRemetentes(db: Db, orgId: string): Promise<RemetenteDoE
   }));
 }
 
-/** O preço por e-mail desta empresa, em centavos. Sem preço gravado, o padrão (R$ 0,02). */
+/**
+ * O preço por e-mail desta empresa, em centavos. FORK MIA (.95): o definido à
+ * mão para a empresa; senão, o do plano da assinatura; senão, o padrão
+ * (R$ 0,02). `origem` diz qual dos três (lib/planos-mia/preco-por-email.ts).
+ */
 export async function lerPrecoPorEmail(
   db: Db,
   orgId: string,
-): Promise<{ cents: number; padrao: boolean }> {
+): Promise<{ cents: number; padrao: boolean; origem: OrigemDoPrecoPorEmail }> {
   const { data, error } = await db
     .from("tenant_broadcast_pricing")
     .select("preco_por_email_cents")
@@ -229,9 +230,14 @@ export async function lerPrecoPorEmail(
     .maybeSingle();
   if (error) throw new Error(`não consegui ler o preço por e-mail: ${error.message}`);
   const v = (data as { preco_por_email_cents?: number | null } | null)?.preco_por_email_cents;
-  return v === null || v === undefined
-    ? { cents: PRECO_PADRAO_POR_EMAIL_CENTS, padrao: true }
-    : { cents: Number(v), padrao: false };
+  // Quem chama passa o cliente de serviço (o cabeçalho deste arquivo): o plano e
+  // a assinatura são só do servidor.
+  const preco = await precoPorEmailDaEmpresa(
+    db as SupabaseClient,
+    orgId,
+    v === null || v === undefined ? null : Number(v),
+  );
+  return { cents: preco.cents, padrao: preco.origem === "padrao", origem: preco.origem };
 }
 
 /** Todas as supressões de e-mail da empresa: hash → motivo. Paginado (sem teto de 1000). */

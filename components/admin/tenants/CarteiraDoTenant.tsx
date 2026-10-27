@@ -14,6 +14,12 @@
  *    número cobraria o que ninguém acordou.
  *  - não há botão de apagar lançamento. Extrato que se edita não é extrato: um
  *    crédito errado se corrige com um estorno, que aparece para o cliente.
+ *
+ * FORK MIA (.95): os DOIS preços, o da mensagem e o do e-mail, cada um com o
+ * que vale hoje e de onde vem: "definido à mão para esta empresa", "pelo plano"
+ * (o da assinatura, desde a .90) ou, no e-mail, "o padrão do sistema"
+ * (R$ 0,02). Os campos abrem com o que está definido à mão: salvar sem mexer
+ * não apaga nada, e campo vazio tira o definido à mão (vale o plano).
  */
 import { useState } from "react";
 
@@ -30,6 +36,10 @@ import {
   type LinhaDoExtrato,
 } from "@/hooks/useCarteiraDoTenant";
 
+/** Centavos no formato do campo ("0,12"); vazio quando não há valor. */
+const campoDeReais = (cents: number | null) =>
+  cents === null ? "" : (cents / 100).toFixed(2).replace(".", ",");
+
 const ROTULO_DO_TIPO: Record<LinhaDoExtrato["tipo"], string> = {
   credito: "Crédito",
   debito: "Consumo",
@@ -45,8 +55,10 @@ export function CarteiraDoTenant({ organizationId }: { organizationId: string })
 
   const [valor, setValor] = useState("");
   const [nota, setNota] = useState("");
-  const [preco, setPreco] = useState("");
-  const [alerta, setAlerta] = useState("");
+  // `null` = a pessoa não mexeu: o campo mostra o que está definido à mão.
+  const [precoDigitado, setPreco] = useState<string | null>(null);
+  const [precoEmailDigitado, setPrecoEmail] = useState<string | null>(null);
+  const [alertaDigitado, setAlerta] = useState<string | null>(null);
 
   if (isLoading) return <p className="text-sm text-text-muted">{t("Carregando…")}</p>;
   if (error || !data) {
@@ -62,15 +74,37 @@ export function CarteiraDoTenant({ organizationId }: { organizationId: string })
     );
   };
 
+  const preco = precoDigitado ?? campoDeReais(data.preco_por_mensagem_cents);
+  const precoEmail = precoEmailDigitado ?? campoDeReais(data.preco_por_email_cents);
+  const alerta = alertaDigitado ?? campoDeReais(data.alerta_saldo_cents);
+
   const gravarPreco = () => {
     const precoCents = preco.trim() === "" ? null : parseReaisToCents(preco.trim());
     // Campo digitado que não vira número não pode virar "sem preço acordado" em
     // silêncio: seria desligar o disparador do cliente por causa de um typo.
     if (preco.trim() !== "" && precoCents === null) return;
+    const emailCents = precoEmail.trim() === "" ? null : parseReaisToCents(precoEmail.trim());
+    if (precoEmail.trim() !== "" && emailCents === null) return;
     const alertaCents = alerta.trim() === "" ? null : parseReaisToCents(alerta.trim());
     if (alerta.trim() !== "" && alertaCents === null) return;
-    definirPreco.mutate({ preco_por_mensagem_cents: precoCents, alerta_saldo_cents: alertaCents });
+    definirPreco.mutate(
+      {
+        preco_por_mensagem_cents: precoCents,
+        alerta_saldo_cents: alertaCents,
+        preco_por_email_cents: emailCents,
+      },
+      {
+        onSuccess: () => {
+          setPreco(null);
+          setPrecoEmail(null);
+          setAlerta(null);
+        },
+      },
+    );
   };
+
+  const plano = data.plano ?? "";
+  const vigenteMensagem = data.preco_por_mensagem_vigente_cents;
 
   return (
     <div className="space-y-6">
@@ -139,10 +173,25 @@ export function CarteiraDoTenant({ organizationId }: { organizationId: string })
 
       <section className="space-y-3 rounded-md border border-border p-4">
         <h3 className="text-sm font-medium">{t("Preço acordado")}</h3>
-        <p className="text-xs text-text-muted">
-          {data.preco_por_mensagem_cents === null
+        <p className="text-xs text-text-muted" data-preco-mensagem={data.preco_por_mensagem_origem ?? "nenhum"}>
+          {vigenteMensagem === null
             ? t("Sem preço acordado — o disparador RECUSA até alguém definir, em vez de supor.")
-            : `${t("Hoje:")} ${formatCentsBRL(data.preco_por_mensagem_cents)} ${t("por mensagem")}`}
+            : data.preco_por_mensagem_origem === "plano"
+              ? t("Mensagem: {preco}, pelo plano {plano}.")
+                  .replace("{preco}", formatCentsBRL(vigenteMensagem))
+                  .replace("{plano}", plano)
+              : t("Mensagem: {preco}, definido à mão para esta empresa.").replace(
+                  "{preco}",
+                  formatCentsBRL(vigenteMensagem),
+                )}
+        </p>
+        <p className="text-xs text-text-muted" data-preco-email={data.preco_por_email_origem}>
+          {(data.preco_por_email_origem === "plano"
+            ? t("E-mail: {preco}, pelo plano {plano}.").replace("{plano}", plano)
+            : data.preco_por_email_origem === "combinado"
+              ? t("E-mail: {preco}, definido à mão para esta empresa.")
+              : t("E-mail: {preco}, o padrão do sistema.")
+          ).replace("{preco}", formatCentsBRL(data.preco_por_email_vigente_cents))}
         </p>
         {/* O CUSTO, ao lado do preço. Sem ele, "margem" é chute — e o chute
             mais caro é o de supor que a Meta dá mensagem de marketing de graça
@@ -154,23 +203,22 @@ export function CarteiraDoTenant({ organizationId }: { organizationId: string })
         ) : (
           <p
             className={
-              data.preco_por_mensagem_cents !== null &&
-              data.preco_por_mensagem_cents < data.custo_da_meta_cents
+              vigenteMensagem !== null && vigenteMensagem < data.custo_da_meta_cents
                 ? "text-xs text-error-fg"
                 : "text-xs text-text-muted"
             }
           >
             {t("A Meta cobra")} {formatCentsBRL(data.custo_da_meta_cents)} {t("por mensagem")}
-            {data.preco_por_mensagem_cents !== null
-              ? data.preco_por_mensagem_cents < data.custo_da_meta_cents
+            {vigenteMensagem !== null
+              ? vigenteMensagem < data.custo_da_meta_cents
                 ? ` — ${t("este preço está ABAIXO do custo.")}`
                 : ` — ${t("margem de")} ${formatCentsBRL(
-                    data.preco_por_mensagem_cents - data.custo_da_meta_cents,
+                    vigenteMensagem - data.custo_da_meta_cents,
                   )} ${t("por mensagem")}.`
               : ""}
           </p>
         )}
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-1">
             <Label htmlFor="carteira-preco">{t("Preço por mensagem (R$)")}</Label>
             <Input
@@ -179,6 +227,16 @@ export function CarteiraDoTenant({ organizationId }: { organizationId: string })
               placeholder="0,12"
               value={preco}
               onChange={(e) => setPreco(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="carteira-preco-email">{t("Preço por e-mail (R$)")}</Label>
+            <Input
+              id="carteira-preco-email"
+              inputMode="decimal"
+              placeholder="0,02"
+              value={precoEmail}
+              onChange={(e) => setPrecoEmail(e.target.value)}
             />
           </div>
           <div className="space-y-1">
@@ -192,6 +250,11 @@ export function CarteiraDoTenant({ organizationId }: { organizationId: string })
             />
           </div>
         </div>
+        <p className="text-xs text-text-muted">
+          {t(
+            "Campo de preço vazio tira o definido à mão: a mensagem segue o plano (sem plano, o disparo recusa) e o e-mail segue o plano ou o padrão de R$ 0,02.",
+          )}
+        </p>
         <Button onClick={gravarPreco} disabled={definirPreco.isPending}>
           {t("Salvar preço")}
         </Button>

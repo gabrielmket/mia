@@ -14,6 +14,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { PRECO_PADRAO_POR_EMAIL_CENTS } from "@/lib/email-marketing/regras";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 
 import { conversasEstimadas, ROTULO_DO_MODULO_DO_PLANO, type ModuloDoPlano } from "./catalogo";
@@ -46,6 +47,12 @@ export interface PlanoPublico {
   modulos: ModuloPublico[];
   /** Só quando o plano tem Broadcast. Em centavos. */
   preco_por_mensagem_cents: number | null;
+  /**
+   * FORK MIA (.95): só quando o plano tem e-mail marketing. Em centavos. O plano
+   * que não diz o preço mostra o padrão do sistema (R$ 0,02), que é o que a
+   * empresa paga nele.
+   */
+  preco_por_email_cents: number | null;
   /** O caminho do cadastro com o plano marcado (relativo ao endereço do sistema). */
   cadastro: string;
 }
@@ -71,6 +78,9 @@ export function planoPublico(p: PlanoComModulos): PlanoPublico {
       descricao: ROTULO_DO_MODULO_DO_PLANO[m].descricao,
     })),
     preco_por_mensagem_cents: p.modulos.includes("disparador") ? p.preco_por_mensagem_cents : null,
+    preco_por_email_cents: p.modulos.includes("email_marketing")
+      ? (p.preco_por_email_cents ?? PRECO_PADRAO_POR_EMAIL_CENTS)
+      : null,
     cadastro: `/signup?plano=${encodeURIComponent(p.slug || p.id)}`,
   };
 }
@@ -90,4 +100,18 @@ export async function lerPlanosPublicos(admin: SupabaseClient): Promise<PlanosPu
   if (!(await moduloLigado(admin, "cobranca"))) return { disponivel: false, planos: [] };
   const planos = planosOferecidos(await lerPlanosComModulos(admin));
   return { disponivel: true, planos: planos.map(planoPublico) };
+}
+
+/**
+ * FORK MIA (.95) · o selo do topo da página de preços. Só promete teste grátis
+ * quando TODOS os planos oferecidos têm teste (o de entrada paga começa pagando):
+ * os dias, quando todos têm os mesmos; `"todos"`, quando todos têm teste mas de
+ * tamanhos diferentes; `null` (sem selo) quando há mistura ou nenhum plano. Puro.
+ */
+export function seloDoTesteGratis(
+  planos: ReadonlyArray<Pick<PlanoPublico, "trial_dias">>,
+): number | "todos" | null {
+  if (planos.length === 0 || planos.some((p) => p.trial_dias <= 0)) return null;
+  const dias = new Set(planos.map((p) => p.trial_dias));
+  return dias.size === 1 ? (planos[0]?.trial_dias ?? null) : "todos";
 }

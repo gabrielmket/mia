@@ -8,7 +8,7 @@ import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";
 import { tituloDaTelaPublica } from "@/lib/i18n/titulo-da-tela-publica";
 import { logger } from "@/lib/logger";
 import { MODULOS_DO_PLANO, ROTULO_DO_MODULO_DO_PLANO } from "@/lib/planos-mia/catalogo";
-import { lerPlanosPublicos, type PlanoPublico } from "@/lib/planos-mia/publico";
+import { lerPlanosPublicos, seloDoTesteGratis, type PlanoPublico } from "@/lib/planos-mia/publico";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -62,8 +62,10 @@ export default async function PrecosPage() {
   });
   const brlCentavos = new Intl.NumberFormat(idioma, { style: "currency", currency: "BRL" });
   const numero = new Intl.NumberFormat(idioma);
-  const destaque = planos.find((p) => p.destaque) ?? planos.find((p) => p.padrao) ?? null;
-  const diasDeTeste = (destaque ?? planos[0])?.trial_dias ?? 0;
+  // FORK MIA (.95): o selo só promete teste grátis quando todo plano oferecido
+  // tem teste; com plano de entrada paga na lista, não há selo (cada cartão diz o seu).
+  const selo = seloDoTesteGratis(planos);
+  const algumTemTeste = planos.some((p) => p.trial_dias > 0);
 
   const linhas = (p: PlanoPublico): string[] => [
     p.numeros === null
@@ -101,9 +103,11 @@ export default async function PrecosPage() {
 
       <main className="mx-auto w-full max-w-5xl space-y-10 px-6 py-12">
         <section className="space-y-3 text-center">
-          {diasDeTeste > 0 && (
-            <p className="text-sm font-medium text-muted-foreground">
-              {t("{n} dias grátis, sem cartão").replace("{n}", String(diasDeTeste))}
+          {selo !== null && (
+            <p className="text-sm font-medium text-muted-foreground" data-precos="selo">
+              {selo === "todos"
+                ? t("Teste grátis em todos os planos, sem cartão")
+                : t("{n} dias grátis, sem cartão").replace("{n}", String(selo))}
             </p>
           )}
           <h1 className="text-3xl font-semibold tracking-tight">
@@ -174,6 +178,10 @@ export default async function PrecosPage() {
                         ✓ {t(ROTULO_DO_MODULO_DO_PLANO[m.chave].rotulo)}
                         {m.chave === "disparador" && p.preco_por_mensagem_cents !== null
                           ? `, ${t("com mensagem a {preco}").replace("{preco}", brlCentavos.format(p.preco_por_mensagem_cents / 100))}`
+                          : ""}
+                        {/* FORK MIA (.95): o preço por e-mail do plano. */}
+                        {m.chave === "email_marketing" && p.preco_por_email_cents !== null
+                          ? `, ${t("com e-mail a {preco}").replace("{preco}", brlCentavos.format(p.preco_por_email_cents / 100))}`
                           : ""}
                       </li>
                     ))}
@@ -280,7 +288,7 @@ export default async function PrecosPage() {
                         ))}
                       </tr>
                     ))}
-                    <tr>
+                    <tr className="border-b">
                       <td className="py-2 pr-4">
                         {t("Mensagem do Broadcast")}
                         <span className="block text-xs text-muted-foreground">
@@ -292,6 +300,21 @@ export default async function PrecosPage() {
                           {p.preco_por_mensagem_cents === null
                             ? t("não")
                             : brlCentavos.format(p.preco_por_mensagem_cents / 100)}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr data-precos="email">
+                      <td className="py-2 pr-4">
+                        {t("E-mail marketing, por e-mail")}
+                        <span className="block text-xs text-muted-foreground">
+                          {t("pré-pago, pelos créditos; cobrado só o e-mail aceito")}
+                        </span>
+                      </td>
+                      {planos.map((p) => (
+                        <td key={p.id} className="py-2 pr-4">
+                          {p.preco_por_email_cents === null
+                            ? t("não")
+                            : brlCentavos.format(p.preco_por_email_cents / 100)}
                         </td>
                       ))}
                     </tr>
@@ -332,16 +355,19 @@ export default async function PrecosPage() {
                   )}
             </p>
           </details>
-          <details className="rounded-md border bg-background p-4">
-            <summary className="cursor-pointer text-sm font-medium">
-              {t("O que acontece no fim do teste?")}
-            </summary>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {t(
-                "Três dias antes avisamos por e-mail. Se você não assinar, a conta é suspensa dois dias depois do fim do teste: a IA para de responder e nada do que você montou se perde. Assinou, volta na hora.",
-              )}
-            </p>
-          </details>
+          {/* FORK MIA (.95): sem plano com teste, a pergunta do fim do teste não cabe. */}
+          {(algumTemTeste || planos.length === 0) && (
+            <details className="rounded-md border bg-background p-4">
+              <summary className="cursor-pointer text-sm font-medium">
+                {t("O que acontece no fim do teste?")}
+              </summary>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {t(
+                  "Três dias antes avisamos por e-mail. Se você não assinar, a conta é suspensa dois dias depois do fim do teste: a IA para de responder e nada do que você montou se perde. Assinou, volta na hora.",
+                )}
+              </p>
+            </details>
+          )}
           <details className="rounded-md border bg-background p-4">
             <summary className="cursor-pointer text-sm font-medium">
               {t("O que conta como conversa?")}

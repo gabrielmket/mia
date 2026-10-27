@@ -25,6 +25,8 @@ export interface PlanoComLado {
   conversas: number | null;
   modulos: ModuloDoPlano[];
   preco_por_mensagem_cents: number | null;
+  /** FORK MIA (.95): o preço por e-mail do plano. `null` = o padrão do sistema. */
+  preco_por_email_cents: number | null;
   frase: string | null;
   destaque: boolean;
 }
@@ -32,18 +34,25 @@ export interface PlanoComLado {
 interface Rascunho {
   modulos: ModuloDoPlano[];
   preco: string;
+  precoEmail: string;
   frase: string;
   destaque: boolean;
 }
+
+/** Centavos no formato do campo ("0,12"); vazio quando o plano não diz. */
+const campoDeReais = (cents: number | null) =>
+  cents === null ? "" : (cents / 100).toFixed(2).replace(".", ",");
+
+/** O campo em centavos: vazio = `null`; `NaN` = inválido. */
+const centavosDoCampo = (campo: string) =>
+  campo.trim() === "" ? null : Math.round(Number(campo.trim().replace(",", ".")) * 100);
 
 /** O rascunho de um plano a partir do que veio do servidor. */
 function rascunhoDe(p: PlanoComLado): Rascunho {
   return {
     modulos: p.modulos,
-    preco:
-      p.preco_por_mensagem_cents === null
-        ? ""
-        : (p.preco_por_mensagem_cents / 100).toFixed(2).replace(".", ","),
+    preco: campoDeReais(p.preco_por_mensagem_cents),
+    precoEmail: campoDeReais(p.preco_por_email_cents),
     frase: p.frase ?? "",
     destaque: p.destaque,
   };
@@ -52,7 +61,8 @@ function rascunhoDe(p: PlanoComLado): Rascunho {
 /**
  * FORK MIA (.90) — as colunas NOSSAS dos planos (protótipo, tela 4: "Painel ›
  * Cobrança › Planos"): os módulos que cada plano liga, o preço por mensagem do
- * Broadcast, a frase e o selo do cartão da página de preços. Mora numa tabela ao
+ * Broadcast, o preço por e-mail (.95; vazio = o padrão de R$ 0,02), a frase e o
+ * selo do cartão da página de preços. Mora numa tabela ao
  * lado (`mia_plano_modulos`) e numa página própria
  * (`/admin/cobranca/modulos-dos-planos`); o plano em si continua no formulário
  * do upstream, na aba Planos, que só leva o link para cá. Ligar um módulo vale na hora para as empresas do plano; tirar de
@@ -84,10 +94,14 @@ export function ModulosDosPlanos({
     const plano = ativos.find((p) => p.id === id);
     if (!plano) return;
     const r = doPlano(plano);
-    const preco =
-      r.preco.trim() === "" ? null : Math.round(Number(r.preco.replace(",", ".")) * 100);
+    const preco = centavosDoCampo(r.preco);
     if (preco !== null && (!Number.isFinite(preco) || preco < 0)) {
       toast.error(t("Preço por mensagem inválido."));
+      return;
+    }
+    const precoEmail = centavosDoCampo(r.precoEmail);
+    if (precoEmail !== null && (!Number.isFinite(precoEmail) || precoEmail < 0)) {
+      toast.error(t("Preço por e-mail inválido."));
       return;
     }
     setOcupado(id);
@@ -95,6 +109,7 @@ export function ModulosDosPlanos({
       await apiClient.put(`/api/v1/admin/planos-mia/${id}`, {
         modulos: r.modulos,
         preco_por_mensagem_cents: preco,
+        preco_por_email_cents: precoEmail,
         frase: r.frase.trim() === "" ? null : r.frase.trim(),
         destaque: r.destaque,
       });
@@ -115,6 +130,11 @@ export function ModulosDosPlanos({
         <p className="text-sm text-muted-foreground">
           {t(
             "Ligar um módulo num plano liga para todas as empresas dele na hora. Tirar de um plano que alguém usa não vale: arquive e crie outro, como o preço.",
+          )}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          {t(
+            "O preço do e-mail vale para as empresas do plano que não têm preço definido à mão. Vazio é o padrão de R$ 0,02.",
           )}
         </p>
         {!crmB2bNaInstalacao && (
@@ -163,7 +183,7 @@ export function ModulosDosPlanos({
                   );
                 })}
               </div>
-              <div className="grid gap-2 sm:grid-cols-[160px_1fr]">
+              <div className="grid gap-2 sm:grid-cols-[160px_160px_1fr]">
                 <label className="block space-y-1 text-xs">
                   <span className="block text-muted-foreground">
                     {t("Mensagem do Broadcast (R$)")}
@@ -173,6 +193,15 @@ export function ModulosDosPlanos({
                     value={r.preco}
                     placeholder="0,12"
                     onChange={(e) => muda({ preco: e.target.value })}
+                  />
+                </label>
+                <label className="block space-y-1 text-xs">
+                  <span className="block text-muted-foreground">{t("E-mail (R$)")}</span>
+                  <Input
+                    inputMode="decimal"
+                    value={r.precoEmail}
+                    placeholder="0,02"
+                    onChange={(e) => muda({ precoEmail: e.target.value })}
                   />
                 </label>
                 <label className="block space-y-1 text-xs">

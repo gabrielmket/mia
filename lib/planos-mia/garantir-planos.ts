@@ -7,7 +7,7 @@
  * passa pela MESMA régua da tela dele (`novoPlanoSchema`/`edicaoDoPlanoSchema`
  * e a trava de preço do plano assinado); a nossa (`mia_plano_modulos`) tem a
  * trava no banco (9070: módulo só cresce e o preço por mensagem não muda em
- * plano assinado). Ligar um módulo num plano vale na hora para as empresas dele
+ * plano assinado; desde a 9110, o preço por e-mail também não). Ligar um módulo num plano vale na hora para as empresas dele
  * (a pergunta ao banco é a verdade); aqui só se registra e avisa
  * (`seguirOPlano`).
  *
@@ -34,6 +34,8 @@ export interface PlanoPedido {
   teto_ia_usd_cents?: number | null;
   modulos?: ModuloDoPlano[];
   preco_por_mensagem_cents?: number | null;
+  /** FORK MIA (.95): o preço por e-mail de marketing. `null` = o padrão do sistema. */
+  preco_por_email_cents?: number | null;
   frase?: string | null;
   destaque?: boolean;
   oferecido_ao_cliente?: boolean;
@@ -43,6 +45,7 @@ export interface PlanoPedido {
 export interface LadoPedido {
   modulos?: ModuloDoPlano[];
   preco_por_mensagem_cents?: number | null;
+  preco_por_email_cents?: number | null;
   frase?: string | null;
   destaque?: boolean;
 }
@@ -76,6 +79,8 @@ export function mudancasDoLado(
   atual: {
     modulos: readonly ModuloDoPlano[];
     preco_por_mensagem_cents: number | null;
+    /** Ausente = nulo (o lado lido antes da 9110). */
+    preco_por_email_cents?: number | null;
     frase: string | null;
     destaque: boolean;
   } | null,
@@ -84,6 +89,7 @@ export function mudancasDoLado(
   const base = atual ?? {
     modulos: [],
     preco_por_mensagem_cents: null,
+    preco_por_email_cents: null,
     frase: null,
     destaque: false,
   };
@@ -98,6 +104,12 @@ export function mudancasDoLado(
   ) {
     campos.preco_por_mensagem_cents = pedido.preco_por_mensagem_cents;
   }
+  if (
+    pedido.preco_por_email_cents !== undefined &&
+    pedido.preco_por_email_cents !== (base.preco_por_email_cents ?? null)
+  ) {
+    campos.preco_por_email_cents = pedido.preco_por_email_cents;
+  }
   if (pedido.frase !== undefined && (pedido.frase ?? null) !== base.frase)
     campos.frase = pedido.frase ?? null;
   if (pedido.destaque !== undefined && pedido.destaque !== base.destaque)
@@ -107,10 +119,11 @@ export function mudancasDoLado(
 
 /** A recusa da trava de 9070 em linguagem de quem opera. */
 const FRASE_DA_TRAVA =
-  "Este plano tem assinantes: os módulos só crescem e o preço por mensagem não muda. Arquive o plano e crie outro.";
+  "Este plano tem assinantes: os módulos só crescem e os preços por mensagem e por e-mail não mudam. Arquive o plano e crie outro.";
 
 /**
- * Grava a linha nossa de UM plano (módulos, preço por mensagem, frase, selo).
+ * Grava a linha nossa de UM plano (módulos, preço por mensagem, preço por
+ * e-mail, frase, selo).
  * Devolve `{ ok: false, motivo }` na recusa da trava; LANÇA em erro inesperado.
  */
 export async function salvarLadoDoPlano(
@@ -130,6 +143,10 @@ export async function salvarLadoDoPlano(
           atualLido.preco_por_mensagem_cents === null
             ? null
             : Number(atualLido.preco_por_mensagem_cents),
+        preco_por_email_cents:
+          atualLido.preco_por_email_cents === null || atualLido.preco_por_email_cents === undefined
+            ? null
+            : Number(atualLido.preco_por_email_cents),
         frase: atualLido.frase ?? null,
         destaque: atualLido.destaque === true,
       }
@@ -270,6 +287,7 @@ export async function garantirPlanos(
     const lado: LadoPedido = {
       modulos: p.modulos ?? [],
       preco_por_mensagem_cents: p.preco_por_mensagem_cents ?? null,
+      preco_por_email_cents: p.preco_por_email_cents ?? null,
       frase: p.frase ?? null,
       destaque: p.destaque ?? false,
     };

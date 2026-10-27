@@ -1,6 +1,7 @@
 /**
  * FORK MIA (.90) — os planos com o que é NOSSO ao lado: os módulos, o preço por
- * mensagem do Broadcast e o texto do cartão (`mia_plano_modulos`, 9070).
+ * mensagem do Broadcast, o preço por e-mail (.95, 9110) e o texto do cartão
+ * (`mia_plano_modulos`, 9070).
  *
  * `cobranca_planos` é do upstream e não muda; esta leitura junta as duas tabelas
  * pelo id. Plano sem linha nossa é plano sem módulo (e sem preço por mensagem):
@@ -28,6 +29,8 @@ export interface PlanoComModulos {
   arquivado_em: string | null;
   modulos: ModuloDoPlano[];
   preco_por_mensagem_cents: number | null;
+  /** FORK MIA (.95): o preço por e-mail de marketing. `null` = o plano não diz (vale o padrão). */
+  preco_por_email_cents: number | null;
   frase: string | null;
   destaque: boolean;
 }
@@ -50,9 +53,15 @@ export interface LadoDoPlano {
   plano_id: string;
   modulos: string[] | null;
   preco_por_mensagem_cents: number | null;
+  /** FORK MIA (.95, 9110). Opcional: a linha montada antes dela (e nos dublês) não o traz. */
+  preco_por_email_cents?: number | null;
   frase: string | null;
   destaque: boolean | null;
 }
+
+/** As colunas da linha nossa (`mia_plano_modulos`). */
+const COLUNAS_DO_LADO =
+  "plano_id, modulos, preco_por_mensagem_cents, preco_por_email_cents, frase, destaque";
 
 const COLUNAS_DO_UPSTREAM =
   "id, nome, preco_cents, intervalo, trial_dias, max_assentos, max_canais, teto_ia_usd_cents, padrao_no_cadastro, oferecido_ao_cliente, arquivado_em";
@@ -77,6 +86,10 @@ export function juntarPlano(p: PlanoDoUpstream, lado: LadoDoPlano | undefined): 
       lado?.preco_por_mensagem_cents === null || lado?.preco_por_mensagem_cents === undefined
         ? null
         : Number(lado.preco_por_mensagem_cents),
+    preco_por_email_cents:
+      lado?.preco_por_email_cents === null || lado?.preco_por_email_cents === undefined
+        ? null
+        : Number(lado.preco_por_email_cents),
     frase: lado?.frase ?? null,
     destaque: lado?.destaque === true,
   };
@@ -95,7 +108,7 @@ export async function lerPlanosComModulos(admin: SupabaseClient): Promise<PlanoC
       .order("preco_cents", { ascending: true }),
     admin
       .from("mia_plano_modulos")
-      .select("plano_id, modulos, preco_por_mensagem_cents, frase, destaque"),
+      .select(COLUNAS_DO_LADO),
   ]);
   if (planos.error)
     throw new Error(`planos: leitura falhou (${planos.error.code ?? "sem_codigo"})`);
@@ -135,7 +148,7 @@ export async function lerLadoDoPlano(
 ): Promise<LadoDoPlano | null> {
   const { data, error } = await admin
     .from("mia_plano_modulos")
-    .select("plano_id, modulos, preco_por_mensagem_cents, frase, destaque")
+    .select(COLUNAS_DO_LADO)
     .eq("plano_id", planoId)
     .maybeSingle();
   if (error) throw new Error(`módulos do plano: leitura falhou (${error.code ?? "sem_codigo"})`);

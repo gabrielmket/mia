@@ -30,7 +30,18 @@ export interface CarteiraDoTenant {
   creditado_cents: number;
   debitado_cents: number;
   estornado_cents: number;
+  /** O preço por mensagem definido à mão. NULO = ninguém definiu (pode valer o do plano). */
   preco_por_mensagem_cents: number | null;
+  /** FORK MIA (.95): o plano da assinatura (o atual). NULO = isenta. */
+  plano: string | null;
+  /** FORK MIA (.95): o preço por mensagem que VALE: o definido à mão, senão o do plano. */
+  preco_por_mensagem_vigente_cents: number | null;
+  preco_por_mensagem_origem: "combinado" | "plano" | null;
+  /** FORK MIA (.95): o preço por e-mail definido à mão. NULO = ninguém definiu. */
+  preco_por_email_cents: number | null;
+  /** FORK MIA (.95): o preço por e-mail que VALE: o definido à mão, senão o do plano, senão o padrão. */
+  preco_por_email_vigente_cents: number;
+  preco_por_email_origem: "combinado" | "plano" | "padrao";
   alerta_saldo_cents: number | null;
   credito_acabando: boolean;
   /** O que a META cobra por mensagem de marketing. NULO = tarifa não cadastrada. */
@@ -76,6 +87,8 @@ export function useDefinirPrecoDoTenant(organizationId: string) {
     mutationFn: async (input: {
       preco_por_mensagem_cents: number | null;
       alerta_saldo_cents: number | null;
+      /** FORK MIA (.95): ausente fica como está; NULO tira o definido à mão. */
+      preco_por_email_cents?: number | null;
     }) => apiClient.patch("/api/v1/admin/carteira", { organization_id: organizationId, ...input }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "carteira", organizationId] });
