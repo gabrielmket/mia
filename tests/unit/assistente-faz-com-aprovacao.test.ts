@@ -110,7 +110,7 @@ describe("o catálogo das peças (tela 3)", () => {
     expect(TIPOS_DO_DIA_A_DIA).toHaveLength(9);
     expect(TIPOS_DA_NOVENTA_E_UM).toEqual(["agente", "funil", "followup"]);
     expect(Object.keys(CATALOGO_DAS_PECAS).sort()).toEqual([...TIPOS_DE_PROPOSTA].sort());
-    const portas = new Set(NAV_CATALOG.map((n) => n.href));
+    const portas = new Set<string>(NAV_CATALOG.map((n) => n.href));
     for (const tipo of TIPOS_DE_PROPOSTA) {
       const p = CATALOGO_DAS_PECAS[tipo];
       expect(p.rotulo.length, tipo).toBeGreaterThan(3);

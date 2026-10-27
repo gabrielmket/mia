@@ -116,10 +116,11 @@ beforeEach(() => {
 });
 
 describe("a lista: nove ferramentas do e-mail (a contagem total mora no teste da cobrança, .90)", () => {
-  it("as nove do e-mail marketing (.89), as cinco do assistente (.88) e as duas das propostas (.91) continuam na lista", () => {
+  it("as nove do e-mail marketing (.89), as cinco do assistente (.88) e as três das propostas (.91 e .94) continuam na lista", () => {
     expect(FERRAMENTAS_DE_EMAIL_MARKETING).toHaveLength(9);
     // FORK MIA (.91): + plataforma_ver_propostas_do_assistente e plataforma_decidir_proposta_do_assistente
-    expect(FERRAMENTAS.filter((f) => /assistente|chamado/.test(f.name))).toHaveLength(7);
+    // FORK MIA (.94): + plataforma_desfazer_proposta_do_assistente
+    expect(FERRAMENTAS.filter((f) => /assistente|chamado/.test(f.name))).toHaveLength(8);
   });
 
   it("leitura livre, escrita nomeada: duas chaves novas, e nenhuma delas dispara", () => {

@@ -38,6 +38,7 @@ import {
 } from "./preparar-do-dia-a-dia";
 import { podeAprovar, regraDeAprovacao } from "./quem-aprova";
 import {
+  chaveNoBanco,
   COLUNAS_DA_PROPOSTA,
   TIPOS_DO_DIA_A_DIA,
   type CampoDeAjuste,
@@ -320,7 +321,7 @@ export async function ajustarProposta(q: QuemAjusta, propostaId: string, campos:
       pedido: r.proposta.pedido,
       titulo: r.proposta.titulo.slice(0, 200),
       mudancas: r.proposta.mudancas,
-      chave: r.proposta.chave ?? "",
+      chave: chaveNoBanco(proposta.tipo, proposta.criada_por, r.proposta.chave),
       ajustada_por: q.userId,
       ajustada_em: new Date().toISOString(),
     })

@@ -242,6 +242,19 @@ export interface CampoDeAjuste {
   opcoes?: Array<{ valor: string; rotulo: string }>;
 }
 
+/**
+ * A chave como o banco a guarda (9100: uma pendente por tipo e chave). As três
+ * da .91 são uma por empresa (chave vazia, como na .91). As nove do dia a dia
+ * são por PESSOA: quem não enxerga a pendente de outra pessoa (o atendente, pela
+ * RLS) receberia o "já existe" sem cartão nenhum; assim cada um recebe o seu, e
+ * pedir de novo a mesma peça devolve o mesmo cartão. Se duas pessoas pedem a
+ * mesma peça, a segunda a ser aplicada esbarra no "já existe" da própria tela.
+ */
+export function chaveNoBanco(tipo: TipoDeProposta, criadaPor: string | null, chave: string | null | undefined): string {
+  if ((TIPOS_DA_NOVENTA_E_UM as readonly string[]).includes(tipo) || !chave) return chave ?? "";
+  return `${criadaPor ?? "sem-dono"}|${chave}`.slice(0, 300);
+}
+
 /** O que trava o desfazer de uma aplicada (`null` = dá para desfazer). */
 export interface TravaDoDesfazer {
   motivo: string;

@@ -12,7 +12,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { audit } from "@/lib/audit";
 
 import type { AcaoDoAssistente } from "../tipos";
-import type { PropostaDoTurno } from "./tipos";
+import { chaveNoBanco, type PropostaDoTurno } from "./tipos";
 
 export async function gravarPropostasDoTurno(
   db: SupabaseClient,
@@ -32,7 +32,7 @@ export async function gravarPropostasDoTurno(
         titulo: p.titulo.slice(0, 200),
         mudancas: p.mudancas,
         pedido: p.pedido,
-        chave: p.chave ?? "",
+        chave: chaveNoBanco(p.tipo, entrada.userId, p.chave),
       })
       .select("id")
       .single();
@@ -54,7 +54,7 @@ export async function gravarPropostasDoTurno(
         .select("id, titulo, mudancas")
         .eq("organization_id", entrada.organizationId)
         .eq("tipo", p.tipo)
-        .eq("chave", p.chave ?? "")
+        .eq("chave", chaveNoBanco(p.tipo, entrada.userId, p.chave))
         .eq("situacao", "pendente")
         .maybeSingle();
       const linha = pendente as { id: string; titulo: string; mudancas: PropostaDoTurno["mudancas"] } | null;

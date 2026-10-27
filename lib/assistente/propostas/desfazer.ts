@@ -388,11 +388,12 @@ async function tirarPeca(q: QuemDesfaz, proposta: PropostaLida & { pedido: unkno
       return avisos;
     }
     case "resposta": {
+      const respostaId = texto(r, "resposta_id")!;
       const { data, error } = await q.db
         .from("message_templates")
         .delete()
         .eq("organization_id", q.orgId)
-        .eq("id", texto(r, "resposta_id")!)
+        .eq("id", respostaId)
         .select("id")
         .maybeSingle();
       if (error) {
@@ -410,7 +411,7 @@ async function tirarPeca(q: QuemDesfaz, proposta: PropostaLida & { pedido: unkno
         actorUserId: q.userId,
         organizationId: q.orgId,
         resourceType: "message_template",
-        resourceId: texto(r, "resposta_id"),
+        resourceId: respostaId,
         requestId: q.requestId,
         metadata: { via: "assistente" },
       });
@@ -452,11 +453,12 @@ async function tirarPeca(q: QuemDesfaz, proposta: PropostaLida & { pedido: unkno
       return avisos;
     }
     case "tarefa": {
+      const tarefaId = texto(r, "tarefa_id")!;
       const { data, error } = await q.db
         .from("crm_tasks")
         .delete()
         .eq("organization_id", q.orgId)
-        .eq("id", texto(r, "tarefa_id")!)
+        .eq("id", tarefaId)
         .select("id")
         .maybeSingle();
       if (error) throw new Error(`não consegui tirar a tarefa: ${error.message}`);
@@ -469,7 +471,7 @@ async function tirarPeca(q: QuemDesfaz, proposta: PropostaLida & { pedido: unkno
         actorUserId: q.userId,
         organizationId: q.orgId,
         resourceType: "crm_task",
-        resourceId: texto(r, "tarefa_id"),
+        resourceId: tarefaId,
         requestId: q.requestId,
         metadata: { via: "assistente" },
       });
@@ -477,7 +479,8 @@ async function tirarPeca(q: QuemDesfaz, proposta: PropostaLida & { pedido: unkno
     }
     case "rascunho_de_followup":
     case "followup": {
-      const fluxo = texto(r, "fluxo_id")!;
+      const fluxoId = texto(r, "fluxo_id")!;
+      const fluxo = fluxoId;
       // O follow-up do modelo (.91) está armado no rascunho do agente: sai de lá antes.
       if (proposta.tipo === "followup") {
         const agenteId = texto(r, "agente_id");
@@ -528,7 +531,7 @@ async function tirarPeca(q: QuemDesfaz, proposta: PropostaLida & { pedido: unkno
         actorUserId: q.userId,
         organizationId: q.orgId,
         resourceType: "followup_flow_pointer",
-        resourceId: fluxo,
+        resourceId: fluxoId,
         requestId: q.requestId,
         metadata: { via: "assistente" },
       });
