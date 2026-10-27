@@ -484,6 +484,17 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "recebem permission denied (42501); as funções que gravam (seguir o plano, " +
       "confirmar a compra) não são da sessão; a compra paga lança uma vez só.",
   })),
+  // Fork MIA, 9120 e 9121 — o pagamento no início (.96): os dados fiscais, o
+  // retrato do primeiro pagamento e a nota fiscal pedida na confirmação.
+  ...["mia_dados_fiscais", "mia_pagamento_inicial", "mia_nota_da_assinatura"].map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/pagamento-no-inicio.test.ts · controle positivo e negativo " +
+      "por papel e por empresa: o administrador lê os dados fiscais e o retrato do " +
+      "pagamento da PRÓPRIA empresa e zero do vizinho, o gestor da mesma empresa lê " +
+      "zero, a plataforma lê, anon recebe permission denied e a sessão não escreve " +
+      "(nem o administrador); a nota da assinatura é só do servidor (42501).",
+  })),
   // Fork MIA, 9080 e 9081 — as propostas do assistente e o retrato do "o que
   // falta" (.91, os primeiros passos).
   ...["mia_assistente_propostas", "mia_assistente_retratos"].map((tabela) => ({

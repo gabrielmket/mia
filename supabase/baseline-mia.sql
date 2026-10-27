@@ -1908,7 +1908,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261027200100_9101_retencao_das_propostas_desfeitas', now())
+values (1, '20261029100100_9121_pagamento_inicial', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -19374,6 +19374,332 @@ comment on function public.fn_mia_expurgar_assistente_vencido(integer, integer) 
 revoke all on function public.fn_mia_expurgar_assistente_vencido(integer, integer) from public;
 revoke execute on function public.fn_mia_expurgar_assistente_vencido(integer, integer) from anon, authenticated;
 grant execute on function public.fn_mia_expurgar_assistente_vencido(integer, integer) to service_role;
+
+notify pgrst, 'reload schema';
+
+-- ─── 9120 · os dados fiscais ───
+--
+-- Espelho EXATO da migration 9120 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9120 · os dados fiscais
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: aplicar duas vezes dá zero erro.
+
+-- ── 1. os dados fiscais de cada empresa ─────────────────────────────────────
+create table if not exists public.mia_dados_fiscais (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  -- 'pj' = empresa (CNPJ); 'pf' = pessoa física (CPF).
+  tipo text not null,
+  -- Só os caracteres do documento: CPF com 11 dígitos; CNPJ com 14 (12 dígitos ou
+  -- letras maiúsculas e 2 dígitos verificadores, o CNPJ alfanumérico da Receita).
+  documento text not null,
+  -- PJ: a razão social. PF: o nome completo. É o nome que sai na nota.
+  razao_social text not null,
+  cep text not null,
+  logradouro text not null,
+  numero text not null,
+  complemento text,
+  bairro text not null,
+  cidade text not null,
+  uf text not null,
+  inscricao_municipal text,
+  inscricao_estadual text,
+  -- O WhatsApp de quem assina, só dígitos com o país (o Asaas pede um telefone
+  -- para o pagamento com cartão).
+  telefone text,
+  -- Quando o cliente no Asaas recebeu ESTA versão dos dados. Nulo ou mais velho
+  -- que `updated_at` = a próxima rodada leva ao Asaas (as próximas notas saem certas).
+  asaas_sincronizado_em timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id) on delete set null,
+  constraint mia_dados_fiscais_tipo check (tipo in ('pj', 'pf')),
+  constraint mia_dados_fiscais_documento check (
+    (tipo = 'pf' and documento ~ '^[0-9]{11}$')
+    or (tipo = 'pj' and documento ~ '^[0-9A-Z]{12}[0-9]{2}$')
+  ),
+  constraint mia_dados_fiscais_razao check (char_length(btrim(razao_social)) between 2 and 120),
+  constraint mia_dados_fiscais_cep check (cep ~ '^[0-9]{8}$'),
+  constraint mia_dados_fiscais_uf check (uf ~ '^[A-Z]{2}$'),
+  constraint mia_dados_fiscais_tamanhos check (
+    char_length(btrim(logradouro)) between 1 and 120
+    and char_length(btrim(numero)) between 1 and 20
+    and char_length(coalesce(complemento, '')) <= 80
+    and char_length(btrim(bairro)) between 1 and 80
+    and char_length(btrim(cidade)) between 1 and 80
+    and char_length(coalesce(inscricao_municipal, '')) <= 30
+    and char_length(coalesce(inscricao_estadual, '')) <= 30
+  ),
+  constraint mia_dados_fiscais_telefone check (telefone is null or telefone ~ '^[0-9]{10,15}$')
+);
+
+comment on table public.mia_dados_fiscais is
+  'MIA (9120): em nome de quem sai a cobranca e a nota fiscal do Asaas (CNPJ ou CPF, razao social ou nome, endereco, inscricoes, WhatsApp de quem assina). Le: admin da empresa e a plataforma. Escreve: so o servidor (lib/dados-fiscais). LGPD: cascata com a empresa e apagado quando a empresa e redigida.';
+
+alter table public.mia_dados_fiscais enable row level security;
+drop policy if exists mia_dados_fiscais_admin_le on public.mia_dados_fiscais;
+create policy mia_dados_fiscais_admin_le on public.mia_dados_fiscais
+  for select to authenticated
+  using (public.fn_role_at_least(organization_id, 'admin') or public.fn_is_platform_admin());
+revoke all on public.mia_dados_fiscais from anon, authenticated;
+grant select on public.mia_dados_fiscais to authenticated;
+grant select, insert, update, delete on public.mia_dados_fiscais to service_role;
+
+drop trigger if exists trg_mia_dados_fiscais_touch on public.mia_dados_fiscais;
+create trigger trg_mia_dados_fiscais_touch
+  before update on public.mia_dados_fiscais
+  for each row execute function public.fn_touch_updated_at();
+
+-- ── 2. a passagem do cadastro público ───────────────────────────────────────
+-- A conta existe (GoTrue) e a empresa ainda não: os dados esperam pelo usuário.
+create table if not exists public.mia_dados_fiscais_do_cadastro (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  tipo text not null,
+  documento text not null,
+  razao_social text not null,
+  cep text not null,
+  logradouro text not null,
+  numero text not null,
+  complemento text,
+  bairro text not null,
+  cidade text not null,
+  uf text not null,
+  inscricao_municipal text,
+  inscricao_estadual text,
+  telefone text,
+  created_at timestamptz not null default now(),
+  constraint mia_dados_fiscais_do_cadastro_tipo check (tipo in ('pj', 'pf')),
+  constraint mia_dados_fiscais_do_cadastro_documento check (
+    (tipo = 'pf' and documento ~ '^[0-9]{11}$')
+    or (tipo = 'pj' and documento ~ '^[0-9A-Z]{12}[0-9]{2}$')
+  ),
+  constraint mia_dados_fiscais_do_cadastro_razao check (char_length(btrim(razao_social)) between 2 and 120),
+  constraint mia_dados_fiscais_do_cadastro_cep check (cep ~ '^[0-9]{8}$'),
+  constraint mia_dados_fiscais_do_cadastro_uf check (uf ~ '^[A-Z]{2}$'),
+  constraint mia_dados_fiscais_do_cadastro_tamanhos check (
+    char_length(btrim(logradouro)) between 1 and 120
+    and char_length(btrim(numero)) between 1 and 20
+    and char_length(coalesce(complemento, '')) <= 80
+    and char_length(btrim(bairro)) between 1 and 80
+    and char_length(btrim(cidade)) between 1 and 80
+    and char_length(coalesce(inscricao_municipal, '')) <= 30
+    and char_length(coalesce(inscricao_estadual, '')) <= 30
+  ),
+  constraint mia_dados_fiscais_do_cadastro_telefone check (telefone is null or telefone ~ '^[0-9]{10,15}$')
+);
+
+comment on table public.mia_dados_fiscais_do_cadastro is
+  'MIA (9120): os dados fiscais do cadastro publico esperando a empresa nascer. O gatilho trg_mia_dados_fiscais_nascem_com_a_empresa os leva para mia_dados_fiscais e apaga a linha; com mais de 30 dias, sai. So o servidor.';
+
+alter table public.mia_dados_fiscais_do_cadastro enable row level security;
+revoke all on public.mia_dados_fiscais_do_cadastro from anon, authenticated;
+grant select, insert, update, delete on public.mia_dados_fiscais_do_cadastro to service_role;
+
+-- ── 3. a empresa nasce com os dados do cadastro ─────────────────────────────
+-- AFTER INSERT em organizations, pendurado AO LADO do gatilho da entrada paga do
+-- upstream (0679), nunca dentro dele. Quem criou é o `created_by` (o cadastro
+-- aberto, a aprovação da Time e a recuperação em /get-started gravam o próprio
+-- usuário). A razão social vira o `legal_name` quando ele ainda é o nome fantasia.
+create or replace function public.fn_mia_dados_fiscais_nascem_com_a_empresa()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v public.mia_dados_fiscais_do_cadastro%rowtype;
+begin
+  if new.created_by is null then
+    return null;
+  end if;
+  delete from public.mia_dados_fiscais_do_cadastro
+   where created_at < now() - interval '30 days';
+  select * into v from public.mia_dados_fiscais_do_cadastro where user_id = new.created_by;
+  if not found then
+    return null;
+  end if;
+  insert into public.mia_dados_fiscais
+    (organization_id, tipo, documento, razao_social, cep, logradouro, numero, complemento,
+     bairro, cidade, uf, inscricao_municipal, inscricao_estadual, telefone, updated_by)
+  values
+    (new.id, v.tipo, v.documento, v.razao_social, v.cep, v.logradouro, v.numero, v.complemento,
+     v.bairro, v.cidade, v.uf, v.inscricao_municipal, v.inscricao_estadual, v.telefone, new.created_by)
+  on conflict (organization_id) do nothing;
+  delete from public.mia_dados_fiscais_do_cadastro where user_id = new.created_by;
+  update public.organizations
+     set legal_name = v.razao_social
+   where id = new.id
+     and (legal_name is null or legal_name = display_name);
+  return null;
+end;
+$$;
+
+revoke execute on function public.fn_mia_dados_fiscais_nascem_com_a_empresa() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_dados_fiscais_nascem_com_a_empresa on public.organizations;
+create trigger trg_mia_dados_fiscais_nascem_com_a_empresa
+  after insert on public.organizations
+  for each row execute function public.fn_mia_dados_fiscais_nascem_com_a_empresa();
+
+-- ── 4. LGPD: a empresa redigida perde os dados fiscais ──────────────────────
+-- A anonimização da empresa inteira (lgpd-redact-worker, pedido `store_redact`)
+-- termina trocando `organizations.status` para 'redacted'. O que é dela aqui sai
+-- na mesma escrita. Apagar a empresa ou o usuário já leva tudo (cascade).
+create or replace function public.fn_mia_dados_fiscais_saem_com_a_empresa_redigida()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.status = 'redacted' and old.status is distinct from 'redacted' then
+    delete from public.mia_dados_fiscais where organization_id = new.id;
+  end if;
+  return null;
+end;
+$$;
+
+revoke execute on function public.fn_mia_dados_fiscais_saem_com_a_empresa_redigida() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_dados_fiscais_saem_com_a_empresa_redigida on public.organizations;
+create trigger trg_mia_dados_fiscais_saem_com_a_empresa_redigida
+  after update of status on public.organizations
+  for each row execute function public.fn_mia_dados_fiscais_saem_com_a_empresa_redigida();
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9121 · o passo do pagamento ───
+--
+-- Espelho EXATO da migration 9121 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9121 · o passo do pagamento
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: aplicar duas vezes dá zero erro.
+
+-- ── 1. o primeiro pagamento da entrada paga ─────────────────────────────────
+create table if not exists public.mia_pagamento_inicial (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  -- O plano com que a cobrança foi gerada. Trocar de plano antes de pagar (decisão 7)
+  -- cancela a cobrança no Asaas e refaz.
+  plano_id uuid references public.cobranca_planos(id) on delete set null,
+  situacao text not null default 'sem_cobranca',
+  forma text,
+  -- A cobrança no Asaas (`pay_...`, a primeira da assinatura) e a assinatura (`sub_...`).
+  pagamento_ref text,
+  assinatura_ref text,
+  valor_cents integer,
+  vence_em date,
+  fatura_url text,
+  pix_copia_e_cola text,
+  pix_gerado_em timestamptz,
+  boleto_linha text,
+  boleto_url text,
+  boleto_gerado_em timestamptz,
+  -- Do cartão, só o que o Asaas devolve depois de cobrar: os 4 últimos números e a bandeira.
+  cartao_final text,
+  cartao_bandeira text,
+  cartao_recusas integer not null default 0,
+  cartao_recusado_em timestamptz,
+  -- As próximas mensalidades caem no cartão? 'ok' ou 'falhou' (a pessoa troca depois).
+  cartao_recorrente text,
+  -- A reserva curta de quem está gerando ou cobrando agora (dois cliques, duas abas).
+  reserva_ate timestamptz,
+  gerada_em timestamptz,
+  pago_em timestamptz,
+  forma_paga text,
+  -- A última leitura DIRETA no Asaas pela tela (a trava: no máximo uma a cada poucos segundos).
+  conferido_em timestamptz,
+  lembrete_enviado_em timestamptz,
+  cobrancas_refeitas integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint mia_pagamento_inicial_situacao
+    check (situacao in ('sem_cobranca', 'aguardando', 'em_analise', 'recusado', 'pago')),
+  constraint mia_pagamento_inicial_forma check (forma is null or forma in ('pix', 'cartao', 'boleto')),
+  constraint mia_pagamento_inicial_forma_paga check (forma_paga is null or forma_paga in ('pix', 'cartao', 'boleto', 'outra')),
+  constraint mia_pagamento_inicial_cartao_final check (cartao_final is null or cartao_final ~ '^[0-9]{4}$'),
+  constraint mia_pagamento_inicial_cartao_bandeira check (cartao_bandeira is null or cartao_bandeira ~ '^[A-Z_]{2,30}$'),
+  constraint mia_pagamento_inicial_cartao_recorrente check (cartao_recorrente is null or cartao_recorrente in ('ok', 'falhou')),
+  constraint mia_pagamento_inicial_ref_quando_aguarda
+    check (situacao in ('sem_cobranca', 'pago') or pagamento_ref is not null),
+  constraint mia_pagamento_inicial_valor check (valor_cents is null or valor_cents > 0)
+);
+
+comment on table public.mia_pagamento_inicial is
+  'MIA (9121): o primeiro pagamento da entrada paga (o passo Pagamento do inicio). Guarda a cobranca no Asaas, o Pix copia e cola, a linha do boleto e, do cartao, so os 4 ultimos numeros e a bandeira devolvidos pelo Asaas. O numero e o codigo de seguranca nunca sao gravados. Le: admin da empresa e a plataforma. Escreve: so o servidor.';
+
+create index if not exists idx_mia_pagamento_inicial_aguardando
+  on public.mia_pagamento_inicial (situacao, gerada_em)
+  where situacao in ('aguardando', 'em_analise', 'recusado');
+
+alter table public.mia_pagamento_inicial enable row level security;
+drop policy if exists mia_pagamento_inicial_admin_le on public.mia_pagamento_inicial;
+create policy mia_pagamento_inicial_admin_le on public.mia_pagamento_inicial
+  for select to authenticated
+  using (public.fn_role_at_least(organization_id, 'admin') or public.fn_is_platform_admin());
+revoke all on public.mia_pagamento_inicial from anon, authenticated;
+grant select on public.mia_pagamento_inicial to authenticated;
+grant select, insert, update, delete on public.mia_pagamento_inicial to service_role;
+
+drop trigger if exists trg_mia_pagamento_inicial_touch on public.mia_pagamento_inicial;
+create trigger trg_mia_pagamento_inicial_touch
+  before update on public.mia_pagamento_inicial
+  for each row execute function public.fn_touch_updated_at();
+
+-- ── 2. a nota fiscal pedida na confirmação do pagamento ─────────────────────
+create table if not exists public.mia_nota_da_assinatura (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  -- A assinatura do Asaas (`sub_...`) para a qual a configuração foi gravada.
+  assinatura_ref text not null,
+  configurada_em timestamptz,
+  tentativas integer not null default 0,
+  -- Só o código do Asaas, nunca a descrição.
+  ultimo_erro text,
+  updated_at timestamptz not null default now(),
+  constraint mia_nota_da_assinatura_erro check (ultimo_erro is null or char_length(ultimo_erro) <= 80)
+);
+
+comment on table public.mia_nota_da_assinatura is
+  'MIA (9121): para qual assinatura do Asaas o fork ja pediu a nota fiscal na confirmacao do pagamento (invoiceSettings ON_PAYMENT_CONFIRMATION). Assinatura nova (troca de plano, cobranca refeita) e configurada de novo pela rodada. So o servidor.';
+
+alter table public.mia_nota_da_assinatura enable row level security;
+revoke all on public.mia_nota_da_assinatura from anon, authenticated;
+grant select, insert, update, delete on public.mia_nota_da_assinatura to service_role;
+
+drop trigger if exists trg_mia_nota_da_assinatura_touch on public.mia_nota_da_assinatura;
+create trigger trg_mia_nota_da_assinatura_touch
+  before update on public.mia_nota_da_assinatura
+  for each row execute function public.fn_touch_updated_at();
+
+-- ── 3. LGPD: a empresa redigida perde o retrato do pagamento ────────────────
+create or replace function public.fn_mia_pagamento_inicial_sai_com_a_empresa_redigida()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.status = 'redacted' and old.status is distinct from 'redacted' then
+    delete from public.mia_pagamento_inicial where organization_id = new.id;
+    delete from public.mia_nota_da_assinatura where organization_id = new.id;
+  end if;
+  return null;
+end;
+$$;
+
+revoke execute on function public.fn_mia_pagamento_inicial_sai_com_a_empresa_redigida() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_pagamento_inicial_sai_com_a_empresa_redigida on public.organizations;
+create trigger trg_mia_pagamento_inicial_sai_com_a_empresa_redigida
+  after update of status on public.organizations
+  for each row execute function public.fn_mia_pagamento_inicial_sai_com_a_empresa_redigida();
 
 notify pgrst, 'reload schema';
 
