@@ -230,8 +230,8 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 
 | ferramenta | o que devolve | reexecução |
 |---|---|---|
-| `plataforma_listar_clientes` | as organizações da instalação, com busca por nome | leitura |
-| `plataforma_ver_cliente` | o retrato de um cliente: módulos, números, saldo e, em `configuracao`, a limpeza automática de mídia, o freio do passo "a IA decide", o bloqueio de afirmação clínica e quantos planos de tarefa existem | leitura |
+| `plataforma_listar_clientes` | as organizações da instalação, com busca por nome; desde a .96, `situacao_do_pagamento: "aguardando_primeiro_pagamento"` traz só quem espera o primeiro pagamento, com a forma escolhida, a situação e desde quando | leitura |
+| `plataforma_ver_cliente` | o retrato de um cliente: módulos, números, saldo e, em `configuracao`, a limpeza automática de mídia, o freio do passo "a IA decide", o bloqueio de afirmação clínica e quantos planos de tarefa existem; desde a .96, em `pagamento_inicial`, o passo "Pagamento" do início | leitura |
 | `plataforma_listar_modulos` | os módulos que se vendem separado | leitura |
 | `plataforma_ver_saude` | o estado da instalação, e se a chave que cifra o CPF dos contatos está semeada (só sim ou não; o valor nunca sai) | leitura |
 | `plataforma_ver_implantacao` | o **checklist**: por área, o que está pronto, o que falta (com a ferramenta) e o que é com uma pessoa (com a tela). Desde a .91, as áreas `primeiros_passos` (onde a empresa está no passo a passo e o número oficial que espera a Time) e `plano_e_cobranca` (assinou ou não, das tabelas de assinatura do upstream), e o `rotulo_do_cliente`: o "o que falta" que a empresa nova vê | leitura |
@@ -737,6 +737,22 @@ própria proposta criou, como o decidir, e usa `implantar_configuracao`.
 
 O MCP continua sem propor, sem publicar e sem nada da lista do "nunca" (número, cobrança,
 convite, usuários e papéis, chaves, apagar, publicar agente, mensagem a cliente).
+
+### O pagamento no início (.96)
+
+Função do fork ([`pagamento-no-inicio.md`](pagamento-no-inicio.md), seção 8; protótipo "Pagamento
+no início" aprovado em 27/10/2026), e entra no MCP na mesma versão, **sem ferramenta nova** (a lista
+segue com 99): pagar, escolher a forma e cadastrar o cartão são sempre do cliente, e apagar um
+cadastro sem pagamento fica na tela, com a verificação em duas etapas. A prova está em
+`tests/unit/mcp-de-implantacao-pagamento-inicial.test.ts`.
+
+| ferramenta | o que muda | operação |
+|---|---|---|
+| `plataforma_listar_clientes` (cresce) | `situacao_do_pagamento: "aguardando_primeiro_pagamento"`: só as empresas que esperam o primeiro pagamento (a entrada paga, ou o teste que acabou sem a primeira mensalidade), cada uma com `pagamento_inicial`: `forma` escolhida, `situacao` (`sem_cobranca`, `aguardando`, `em_analise`, `recusado`), `modo`, `desde` (a cobrança gerada, ou o cadastro) e `fim_do_teste` | leitura |
+| `plataforma_ver_cliente` (cresce) | `pagamento_inicial`: o modo (`entrada_paga` ou `teste`), se espera o primeiro pagamento, a situação (Pix gerado, boleto, cartão recusado, pago, forma escolhida no teste), a forma, o plano, o valor, a cobrança no Asaas (`pay_...`), o vencimento, quando foi gerada, quantas vezes foi refeita, do cartão só o final e a bandeira, se as próximas mensalidades caem nele, o fim do teste e a primeira cobrança, quando pagou e como, o lembrete e os dados fiscais RESUMIDOS (tipo, documento mascarado, razão social, cidade, se o Asaas já os tem). `null` = a empresa não tem o passo; `"nao_lido"` = a leitura falhou | leitura |
+
+O MCP não paga, não gera cobrança, não cadastra cartão, não muda os dados fiscais e não lê o
+cartão (o número nunca é gravado).
 
 ### O que chegou do upstream 1.85 (.83)
 

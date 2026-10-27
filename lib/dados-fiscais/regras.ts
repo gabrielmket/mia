@@ -81,7 +81,7 @@ const textoOpcional = (max: number) =>
     .nullish()
     .transform((v) => (v ? v : null));
 
-/** A entrada crua (da tela, com máscara) — o que o formulário manda. */
+/** A entrada crua (da tela, com máscara): o que o formulário manda. */
 export const entradaFiscalSchema = z.object({
   tipo: z.enum(["pj", "pf"]),
   documento: z.string().max(32),
@@ -179,7 +179,7 @@ export function conferirDadosFiscais(
   };
 }
 
-/** "Falta preencher: CNPJ válido, CEP" — a lista dos campos ruins, na ordem da tela. */
+/** "Falta preencher: CNPJ válido, CEP": a lista dos campos ruins, na ordem da tela. */
 export function faltasDosDadosFiscais(campos: Partial<Record<keyof DadosFiscais, string>>): string[] {
   const ordem: Array<keyof DadosFiscais> = [
     "tipo", "documento", "razao_social", "cep", "logradouro", "numero", "bairro", "cidade", "uf",

@@ -39,6 +39,8 @@ import { logger } from "@/lib/logger";
 import type { TipoDeSuspensao } from "@/lib/organizacao/operante";
 // FORK MIA (.90): os módulos seguem o plano (docs/fork/jornada-de-assinatura.md).
 import { seguirOPlano } from "@/lib/planos-mia/seguir-o-plano";
+// FORK MIA (.96): o fim do teste sem a primeira mensalidade paga (docs/fork/pagamento-no-inicio.md).
+import { antesDaRegua } from "@/lib/pagamento-inicial/fim-do-teste";
 
 export interface DependenciasDaCobranca {
   adaptador?: (id: ProvedorDeCobranca) => AdaptadorDeCobranca;
@@ -363,6 +365,9 @@ export async function aplicarRegua(
   deps: DependenciasDaCobranca = {},
 ): Promise<AcaoDaRegua["tipo"]> {
   const agora = (deps.agora ?? (() => new Date()))();
+  // FORK MIA (.96): antes da régua, o fim do teste de quem nunca pagou: o Pix 3 dias
+  // antes e o bloqueio na hora, como a entrada paga (lib/pagamento-inicial/fim-do-teste.ts).
+  await antesDaRegua(admin, orgId, agora);
   const linha = await lerLinha(admin, orgId);
   if (!linha) return "nada";
   const { data: orgLida, error: erroDaOrg } = await admin

@@ -561,6 +561,28 @@ const OPERACAO_DO_FORK: Manual[] = [
       "Para achar qualquer tela pelo nome, use a busca (Ctrl+K) ou pergunte aqui no assistente.",
     ],
   },
+  // FORK MIA (.96): o passo "Pagamento" do início (docs/fork/pagamento-no-inicio.md).
+  {
+    id: "pagamento-no-inicio",
+    titulo: "Pagamento no início: pagar a entrada ou escolher como pagar depois do teste",
+    palavras: [
+      "pagamento", "pagar", "primeiro pagamento", "entrada paga", "pix", "cartao", "cartao de credito", "boleto",
+      "qr code", "copia e cola", "linha digitavel", "teste gratis", "depois do teste", "nada e cobrado hoje",
+      "conta bloqueada", "falta so o pagamento", "dados fiscais", "nota fiscal", "cnpj", "cpf", "trocar de plano",
+      "cartao recusado", "pagamento confirmado",
+    ],
+    href: "/app/settings/billing",
+    papelMinimo: "admin",
+    passos: [
+      "O passo Pagamento vem logo depois do cadastro, antes do Seu negócio. Confira o plano e, em Cobrança e nota em nome de, os dados da empresa; para mudar algo, use Corrigir.",
+      "Num plano que se paga na entrada, escolha em Como você quer pagar: Pix (Gerar o Pix, e pague pelo QR ou pelo copia e cola), Cartão de crédito (digite o cartão e clique em Pagar) ou Boleto (Gerar o boleto, e copie a linha digitável ou abra o boleto). A tela confere sozinha e mostra Pagamento confirmado; depois, Continuar.",
+      "Num plano com teste grátis, nada é cobrado hoje: escolha Cartão de crédito (Cadastrar o cartão; a primeira mensalidade é debitada sozinha no fim do teste) ou Pix (Escolher o Pix; ele chega por e-mail 3 dias antes do fim do teste). Depois, Continuar: Seu negócio.",
+      "Para mudar de plano antes de pagar, use Trocar de plano, escolha o plano e Trocar para este plano. Uma cobrança já gerada é cancelada e a próxima sai no plano novo.",
+    ],
+    observacao:
+      "Só quem administra a empresa paga e escolhe a forma. Os dados do cartão vão direto para o Asaas e não ficam guardados. O boleto compensa em 1 a 3 dias úteis; para começar na hora, pague por Pix (o boleto gerado é cancelado). No fim do teste sem a primeira mensalidade paga, ou com o cartão recusado, a conta fica bloqueada até o pagamento confirmar, e a tela volta a este passo, com Pix ou outro cartão. A nota fiscal sai pelo Asaas quando o pagamento confirma.",
+    vejaTambem: ["plano-e-cobranca"],
+  },
 ];
 
 const TELAS_DO_UPSTREAM: Manual[] = [

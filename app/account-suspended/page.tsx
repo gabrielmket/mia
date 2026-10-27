@@ -20,6 +20,8 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { ehOperante, tipoDaSuspensao } from "@/lib/organizacao/operante";
 import { createAdminClient } from "@/lib/supabase/admin";
+// FORK MIA (.96): quem espera o primeiro pagamento vai ao passo "Pagamento" do início.
+import { CAMINHO_DO_PASSO_DO_PAGAMENTO, vaiAoPassoDoPagamento } from "@/lib/pagamento-inicial/destino";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +85,12 @@ export default async function AccountSuspendedPage({
   const pedidoValido = PEDIDO.safeParse(pedido).success ? pedido : undefined;
   if (ehOperante(ativa.org_status) && ehOperante(statusDe.get(ativa.orgId))) {
     redirect(pedidoValido ? `/app/lgpd/requests/${pedidoValido}` : "/app");
+  }
+  // FORK MIA (.96): a empresa que espera o primeiro pagamento (a entrada paga, ou o
+  // fim do teste sem pagamento) não está "suspensa por falta de pagamento": o lugar
+  // dela é o passo "Pagamento" do início. O link de um pedido de LGPD fica aqui.
+  if (!pedidoValido && (await vaiAoPassoDoPagamento(ativa.orgId, tipoDaAtiva, admin))) {
+    redirect(CAMINHO_DO_PASSO_DO_PAGAMENTO);
   }
 
   const idioma = user.idioma;

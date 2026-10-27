@@ -7,7 +7,10 @@
  *      ganchos da releitura e da troca);
  *   2. o aviso de 7 dias antes de uma descida de plano desligar módulo;
  *   3. a releitura das compras de crédito por Pix em aberto (o aviso do Asaas
- *      que se perdeu).
+ *      que se perdeu);
+ *   4. (.96) o pagamento no início: o primeiro pagamento já liberado, o lembrete
+ *      do dia seguinte, a nota fiscal na confirmação e os dados fiscais no Asaas
+ *      (lib/pagamento-inicial/rodada.ts).
  * Cada passo audita o próprio efeito e nada lança: a rodada do upstream já
  * respondeu, e a jornada não pode derrubá-la.
  */
@@ -15,6 +18,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { relerComprasEmAberto } from "@/lib/carteira/compra-pelo-asaas";
 import { logger } from "@/lib/logger";
+import { rodadaDoPagamentoInicial, type ResumoDoPagamentoInicial } from "@/lib/pagamento-inicial/rodada";
 
 import { avisarModulosQueSaem, seguirOPlanoEmTodas } from "./seguir-o-plano";
 
@@ -22,6 +26,8 @@ export interface ResumoDaJornada {
   empresasComModuloMudado: number;
   avisosDeModuloSaindo: number;
   comprasLancadas: number;
+  /** FORK MIA (.96): o pagamento no início. */
+  pagamentoInicial?: ResumoDoPagamentoInicial;
 }
 
 export async function rodadaDaJornada(
@@ -37,6 +43,7 @@ export async function rodadaDaJornada(
     resumo.empresasComModuloMudado = await seguirOPlanoEmTodas(admin);
     resumo.avisosDeModuloSaindo = await avisarModulosQueSaem(admin, agora);
     resumo.comprasLancadas = await relerComprasEmAberto(admin, { limite: 50 });
+    resumo.pagamentoInicial = await rodadaDoPagamentoInicial(admin, agora);
   } catch (erro) {
     logger.warn("planos-mia: rodada da jornada falhou", {
       detalhe: erro instanceof Error ? erro.message : String(erro),

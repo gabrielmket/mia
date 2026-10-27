@@ -150,6 +150,11 @@ npx vitest run
   cobrança do upstream; os pontos de ligação estão em
   [`docs/fork/jornada-de-assinatura.md`](fork/jornada-de-assinatura.md), seção 11, e
   os espelhos das rotas do card Cobrança, na seção 6.
+  O pagamento no início (.96: o cadastro da entrada paga, os dados fiscais, o passo
+  "Pagamento" com Pix, cartão e boleto, o modo teste e o bloqueio no fim do teste) mora em
+  `lib/dados-fiscais/`, `lib/asaas-mia/`, `lib/pagamento-inicial/` e
+  `components/pagamento-inicial/`; os pontos de ligação no código do upstream estão em
+  [`docs/fork/pagamento-no-inicio.md`](fork/pagamento-no-inicio.md), seção 10.
 - **Funcionalidade duplicada.** Os dois lados construíram, na mesma semana, o
   cadastro incorporado da Meta, o disparo em massa e o aviso no WhatsApp. A decisão
   de ficar com um, com o outro ou com os dois é de produto. Para o **disparo em

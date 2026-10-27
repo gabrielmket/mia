@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { exigirProvaDeMfa, requireAuth, resolveActiveOrg } from "@/lib/auth/server";
+import { exigirProvaDeMfa, orgAtivaSemPortao, requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { loadOnboardingState } from "@/app/actions/onboarding/_shared";
 import { Stepper } from "./_components/Stepper";
 import { OutrasOrganizacoes } from "./_components/OutrasOrganizacoes";
@@ -18,9 +18,47 @@ import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 import { AuthProvider } from "@/hooks/auth/AuthProvider";
 import { PrimeirosPassosComAssistente } from "@/components/assistente/PrimeirosPassosComAssistente";
 import { oQueFaltaAparece } from "@/lib/onboarding/o-que-falta-aparece";
+// FORK MIA (.96): o passo "Pagamento" do início (docs/fork/pagamento-no-inicio.md).
+import { ehOperante } from "@/lib/organizacao/operante";
+import { vaiAoPassoDoPagamento } from "@/lib/pagamento-inicial/destino";
+import { situacaoDoPassoNoInicio } from "@/lib/pagamento-inicial/servico";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { SoOPassoDoPagamento } from "./_components/SoOPassoDoPagamento";
 
 export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
   const user = await requireAuth();
+  // FORK MIA (.96): a empresa que espera o primeiro pagamento (a entrada paga, ou o
+  // fim do teste sem pagamento) está parada: só o passo "Pagamento", sem o resto do
+  // início e sem o assistente (o passo não gasta IA). `resolveActiveOrg` a mandaria
+  // ao passo de novo; daqui ela não passa.
+  if (!user.support) {
+    const parada = await orgAtivaSemPortao(user);
+    if (parada && !ehOperante(parada.org_status) && (await vaiAoPassoDoPagamento(parada.orgId, parada.suspended_kind))) {
+      const marcaDoPasso = await marcaDaSaida(null);
+      return (
+        <IdiomaProvider locale={user.idioma}>
+          <div className="flex min-h-screen flex-col bg-muted/40">
+            <header className="border-b bg-background">
+              <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-6 py-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">{marcaDoPasso.nome}</p>
+                  <h1 className="text-lg font-semibold tracking-tight">{parada.name}</h1>
+                </div>
+                <OutrasOrganizacoes
+                  outras={user.organizations
+                    .filter((o) => o.organization_id !== parada.orgId)
+                    .map((o) => ({ id: o.organization_id, nome: o.organization_name }))}
+                />
+              </div>
+            </header>
+            <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
+              <SoOPassoDoPagamento>{children}</SoOPassoDoPagamento>
+            </main>
+          </div>
+        </IdiomaProvider>
+      );
+    }
+  }
   const activeOrg = await resolveActiveOrg(user);
   // Acompanhamento observa a organização incompleta no shell com saída explícita.
   if (user.support) redirect("/app/inbox");
@@ -37,11 +75,18 @@ export default async function OnboardingLayout({ children }: { children: React.R
 
   // Os passos que ESTA instalação oferece, com o que já foi resolvido. O
   // indicador não decide mais nada sozinho — ele desenha o que recebe.
-  const passos = passosVisiveis({ lojaLigada: env.NUVEMSHOP_ENABLED }).map((p) => ({
+  const passosDoUpstream = passosVisiveis({ lojaLigada: env.NUVEMSHOP_ENABLED }).map((p) => ({
     segmento: p.segmento,
     rotulo: p.rotulo,
     cumprido: p.cumprido(state),
   }));
+  // FORK MIA (.96): o passo "Pagamento" vem antes do "Seu negócio", na entrada paga e
+  // no plano com teste (lib/pagamento-inicial/servico.ts, `situacaoDoPassoNoInicio`).
+  const pagamento = await situacaoDoPassoNoInicio(createAdminClient(), activeOrg.orgId);
+  const passos =
+    pagamento.modo === null
+      ? passosDoUpstream
+      : [{ segmento: "pagamento", rotulo: "Pagamento", cumprido: pagamento.cumprido }, ...passosDoUpstream];
 
   // FORK MIA (.91): quem administra ou gere a empresa nova vê o "o que falta"
   // e o assistente ao lado (lib/onboarding/o-que-falta-aparece.ts). O atendente

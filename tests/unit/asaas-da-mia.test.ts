@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.96) — a camada do Asaas das cobranças (lib/asaas-mia/). Asaas
+ * FORK MIA (.96) · a camada do Asaas das cobranças (lib/asaas-mia/). Asaas
  * dublado: nenhuma chamada sai daqui. O que se prova:
  *   - o cliente do Asaas recebe os dados fiscais com os avisos do Asaas
  *     DESLIGADOS (`notificationDisabled`), achado pela `externalReference` antes

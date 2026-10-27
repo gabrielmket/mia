@@ -38,6 +38,8 @@ import { lerPlanosComModulos } from "@/lib/planos-mia/leitura";
 import { modulosPeloPlano } from "@/lib/planos-mia/modulos";
 import { seguirOPlano } from "@/lib/planos-mia/seguir-o-plano";
 import { recusar } from "../recusa";
+// FORK MIA (.96): o passo "Pagamento" do início (docs/fork/pagamento-no-inicio.md).
+import { empresasEsperandoOPrimeiroPagamento, passoDoPagamentoParaATime } from "@/lib/pagamento-inicial/para-a-time";
 
 /**
  * A chave do CPF está semeada? Só sim ou não, e o VALOR nunca sai.
@@ -77,7 +79,11 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
     description:
       "Lista as organizações desta instalação, com situação e data de entrada. " +
       "Use para achar o id de um cliente antes de qualquer outra operação. " +
-      "`demonstracao: true` é a empresa de demonstração (dados fictícios, nada sai dela): não é cliente.",
+      "`demonstracao: true` é a empresa de demonstração (dados fictícios, nada sai dela): não é cliente. " +
+      // FORK MIA (.96): o filtro do primeiro pagamento.
+      "Desde a .96, `situacao_do_pagamento: \"aguardando_primeiro_pagamento\"` devolve só quem espera o primeiro pagamento " +
+      "(a entrada paga, ou o teste que acabou sem pagamento), cada um com `pagamento_inicial`: a forma escolhida, a situação " +
+      "(Pix gerado, boleto, cartão recusado...), o modo e desde quando.",
     inputSchema: {
       busca: z
         .string()
@@ -85,6 +91,10 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         .max(120)
         .optional()
         .describe("Filtra por parte do nome. Sem isto, devolve todas."),
+      situacao_do_pagamento: z
+        .enum(["aguardando_primeiro_pagamento"])
+        .optional()
+        .describe("Só as empresas que esperam o primeiro pagamento (entrada paga, ou o fim do teste sem pagamento)."),
     },
     operacao: null,
     handler: async ({ admin }, args) => {
@@ -95,8 +105,22 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         .limit(TETO_DA_LISTA);
       const busca = typeof args.busca === "string" ? args.busca.trim() : "";
       if (busca) q = q.ilike("display_name", `%${busca}%`);
+      // FORK MIA (.96): só quem espera o primeiro pagamento, com o passo dele.
+      const esperando = args.situacao_do_pagamento === "aguardando_primeiro_pagamento" ? await empresasEsperandoOPrimeiroPagamento(admin) : null;
+      if (esperando) {
+        if (esperando.size === 0) return { clientes: [] };
+        q = q.in("id", [...esperando.keys()]);
+      }
       const { data, error } = await q;
       if (error) throw new Error(`não consegui listar os clientes: ${error.message}`);
+      if (esperando) {
+        return {
+          clientes: (data ?? []).map((c) => {
+            const { organization_id: _id, ...pagamento } = esperando.get((c as { id: string }).id) ?? ({} as Record<string, unknown>);
+            return { ...(c as Record<string, unknown>), pagamento_inicial: pagamento };
+          }),
+        };
+      }
       return { clientes: data ?? [] };
     },
   },
@@ -111,7 +135,11 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       // FORK MIA (.90): a cobrança e a origem.
       "Desde a .90, em `cobranca`: o plano, a situação da cobrança (em teste, em dia, em atraso, suspensa, isenta...), o próximo passo da régua e a " +
       "ORIGEM da empresa (cadastro próprio ou implantação); e em `modulos_com_origem` cada módulo ligado com a origem (pelo plano ou pela Time). " +
-      "`modulos` continua sendo só o que a Time liberou à mão.",
+      "`modulos` continua sendo só o que a Time liberou à mão. " +
+      // FORK MIA (.96): o passo do pagamento.
+      "Desde a .96, em `pagamento_inicial`: o passo \"Pagamento\" do início (modo entrada paga ou teste; Pix gerado, boleto, cartão recusado ou pago, " +
+      "com a data; a cobrança no Asaas; o final do cartão; o fim do teste) e os dados fiscais resumidos, com o documento mascarado. " +
+      "`null` = a empresa não tem o passo.",
     inputSchema: {
       organization_id: z.string().uuid().describe("O id do cliente."),
     },
@@ -158,6 +186,8 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       // FORK MIA (.90): a cobrança, a origem e a origem de cada módulo. Leitura que
       // falha não derruba o retrato: diz que não leu.
       const jornada = await lerDetalheDaEmpresa(admin, id).catch(() => null);
+      // FORK MIA (.96): o passo do pagamento. Leitura que falha diz "nao_lido".
+      const pagamentoInicial = await passoDoPagamentoParaATime(admin, id);
 
       return {
         cliente: org.data,
@@ -173,6 +203,7 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
             }
           : "nao_lido",
         modulos_com_origem: jornada ? jornada.modulos : "nao_lido",
+        pagamento_inicial: pagamentoInicial,
         // Os interruptores da empresa que chegaram do upstream 1.74 a 1.80.
         configuracao: {
           limpeza_automatica_de_midia: {

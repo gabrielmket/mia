@@ -19,6 +19,9 @@ import { modoDeCadastro } from "@/lib/auth/politica-de-cadastro";
 import { audit, hashEmail } from "@/lib/audit";
 import { authRateLimited, AUTH_LIMITS } from "@/lib/auth/rate-limit";
 import { env } from "@/lib/env";
+// FORK MIA (.96): o cadastro da entrada paga (docs/fork/pagamento-no-inicio.md).
+import { conferirCadastroDaEntradaPaga, type ConferenciaDaEntradaPaga } from "@/lib/pagamento-inicial/cadastro";
+import { guardarDadosDoCadastro } from "@/lib/dados-fiscais/banco";
 
 export type SignUpResult =
   | {
@@ -164,6 +167,15 @@ export async function signUp(
     }
   }
 
+  // FORK MIA (.96): no plano de ENTRADA PAGA, quem assina e os dados da empresa para a
+  // cobrança e a nota fiscal são obrigatórios, conferidos de novo aqui (a tela é
+  // adulterável). Plano com teste segue o cadastro de hoje.
+  let entradaPaga: ConferenciaDaEntradaPaga = { ok: true, entradaPaga: false };
+  if (!convite) {
+    entradaPaga = await conferirCadastroDaEntradaPaga(createAdminClient(), planoEscolhido, parsed.data as SignupInput);
+    if (!entradaPaga.ok) return { ok: false, error: "validation_error", details: entradaPaga.details };
+  }
+
   // ── O GoTrue com o cadastro público FECHADO (#1653) ──────────────────────────
   //
   // Com `disable_signup` ligado no GoTrue — é o que fecha `POST /auth/v1/signup`
@@ -243,6 +255,8 @@ export async function signUp(
             ...(planoEscolhido ? { cobranca_plan_id: planoEscolhido } : {}),
             // FORK MIA (.90): o que a empresa faz, para a linha do pedido da Time (opcional).
             ...((parsed.data as SignupInput).mia_o_que_faz ? { mia_o_que_faz: (parsed.data as SignupInput).mia_o_que_faz } : {}),
+            // FORK MIA (.96): o nome de quem assina a entrada paga (o mesmo campo do convite).
+            ...(entradaPaga.ok && entradaPaga.entradaPaga ? { full_name: entradaPaga.nome } : {}),
           },
     },
   });
@@ -300,6 +314,13 @@ export async function signUp(
     // existe recebe sucesso ofuscado sem e-mail, então nunca chega aqui.
     if (/error sending/i.test(error.message)) return { ok: false, error: "email_indisponivel" };
     return { ok: false, error: "signup_failed" };
+  }
+
+  // FORK MIA (.96): os dados fiscais esperam a empresa nascer (o gatilho da 9120 os
+  // leva para ela). Conta que já existia devolve um usuário ofuscado: a gravação
+  // falha calada, e a resposta continua igual (anti-enumeração).
+  if (entradaPaga.ok && entradaPaga.entradaPaga && data.user?.id) {
+    await guardarDadosDoCadastro(createAdminClient(), data.user.id, entradaPaga.dados);
   }
 
   await audit({

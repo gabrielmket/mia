@@ -1908,7 +1908,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261029100100_9121_pagamento_inicial', now())
+values (1, '20261029100200_9122_bloqueio_no_fim_do_teste', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -19586,6 +19586,8 @@ notify pgrst, 'reload schema';
 -- ── 1. o primeiro pagamento da entrada paga ─────────────────────────────────
 create table if not exists public.mia_pagamento_inicial (
   organization_id uuid primary key references public.organizations(id) on delete cascade,
+  -- 'entrada_paga' (paga antes de usar) ou 'teste' (escolhe como paga depois do teste).
+  modo text not null default 'entrada_paga',
   -- O plano com que a cobrança foi gerada. Trocar de plano antes de pagar (decisão 7)
   -- cancela a cobrança no Asaas e refaz.
   plano_id uuid references public.cobranca_planos(id) on delete set null,
@@ -19594,6 +19596,8 @@ create table if not exists public.mia_pagamento_inicial (
   -- A cobrança no Asaas (`pay_...`, a primeira da assinatura) e a assinatura (`sub_...`).
   pagamento_ref text,
   assinatura_ref text,
+  -- No modo teste: o dia da primeira cobrança (o fim do teste; com o cartão, o dia do débito).
+  primeira_cobranca_em date,
   valor_cents integer,
   vence_em date,
   fatura_url text,
@@ -19602,7 +19606,7 @@ create table if not exists public.mia_pagamento_inicial (
   boleto_linha text,
   boleto_url text,
   boleto_gerado_em timestamptz,
-  -- Do cartão, só o que o Asaas devolve depois de cobrar: os 4 últimos números e a bandeira.
+  -- Do cartão, só os 4 últimos números e a bandeira. O número inteiro e o código de segurança nunca.
   cartao_final text,
   cartao_bandeira text,
   cartao_recusas integer not null default 0,
@@ -19621,19 +19625,20 @@ create table if not exists public.mia_pagamento_inicial (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint mia_pagamento_inicial_situacao
-    check (situacao in ('sem_cobranca', 'aguardando', 'em_analise', 'recusado', 'pago')),
+    check (situacao in ('sem_cobranca', 'aguardando', 'em_analise', 'recusado', 'pago', 'escolhida')),
+  constraint mia_pagamento_inicial_modo check (modo in ('entrada_paga', 'teste')),
   constraint mia_pagamento_inicial_forma check (forma is null or forma in ('pix', 'cartao', 'boleto')),
   constraint mia_pagamento_inicial_forma_paga check (forma_paga is null or forma_paga in ('pix', 'cartao', 'boleto', 'outra')),
   constraint mia_pagamento_inicial_cartao_final check (cartao_final is null or cartao_final ~ '^[0-9]{4}$'),
   constraint mia_pagamento_inicial_cartao_bandeira check (cartao_bandeira is null or cartao_bandeira ~ '^[A-Z_]{2,30}$'),
   constraint mia_pagamento_inicial_cartao_recorrente check (cartao_recorrente is null or cartao_recorrente in ('ok', 'falhou')),
   constraint mia_pagamento_inicial_ref_quando_aguarda
-    check (situacao in ('sem_cobranca', 'pago') or pagamento_ref is not null),
+    check (situacao in ('sem_cobranca', 'pago', 'escolhida') or pagamento_ref is not null),
   constraint mia_pagamento_inicial_valor check (valor_cents is null or valor_cents > 0)
 );
 
 comment on table public.mia_pagamento_inicial is
-  'MIA (9121): o primeiro pagamento da entrada paga (o passo Pagamento do inicio). Guarda a cobranca no Asaas, o Pix copia e cola, a linha do boleto e, do cartao, so os 4 ultimos numeros e a bandeira devolvidos pelo Asaas. O numero e o codigo de seguranca nunca sao gravados. Le: admin da empresa e a plataforma. Escreve: so o servidor.';
+  'MIA (9121): o passo Pagamento do inicio, nos modos entrada_paga (paga antes de usar) e teste (escolhe como paga depois do teste; com cartao, ele fica na assinatura do Asaas e debita no fim do teste). Guarda a cobranca no Asaas, o Pix copia e cola, a linha do boleto e, do cartao, so os 4 ultimos numeros e a bandeira devolvidos pelo Asaas. O numero e o codigo de seguranca nunca sao gravados. Le: admin da empresa e a plataforma. Escreve: so o servidor.';
 
 create index if not exists idx_mia_pagamento_inicial_aguardando
   on public.mia_pagamento_inicial (situacao, gerada_em)
@@ -19700,6 +19705,71 @@ drop trigger if exists trg_mia_pagamento_inicial_sai_com_a_empresa_redigida on p
 create trigger trg_mia_pagamento_inicial_sai_com_a_empresa_redigida
   after update of status on public.organizations
   for each row execute function public.fn_mia_pagamento_inicial_sai_com_a_empresa_redigida();
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9122 · o bloqueio no fim do teste ───
+--
+-- Espelho EXATO da migration 9122 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9122 · o bloqueio no fim do teste
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: `create or replace`
+-- de função nossa.
+
+create or replace function public.fn_mia_bloquear_fim_do_teste(p_org uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v public.cobranca_assinaturas%rowtype;
+  v_status text;
+begin
+  if not public.fn_cobranca_ligada() then
+    return jsonb_build_object('mudou', false, 'motivo', 'cobranca_desligada');
+  end if;
+  select * into v from public.cobranca_assinaturas where organization_id = p_org for update;
+  if not found then
+    return jsonb_build_object('mudou', false, 'motivo', 'isenta');
+  end if;
+  if v.pagamento_inicial_pendente then
+    return jsonb_build_object('mudou', false, 'motivo', 'ja_espera_o_pagamento');
+  end if;
+  if v.estado not in ('trial', 'em_atraso') or v.trial_ate is null or v.trial_ate > now() then
+    return jsonb_build_object('mudou', false, 'motivo', 'teste_em_curso');
+  end if;
+  if v.proximo_vencimento is not null or v.periodo_pago_desde is not null then
+    return jsonb_build_object('mudou', false, 'motivo', 'ja_pagou');
+  end if;
+  if v.prazo_extra_ate is not null and v.prazo_extra_ate > now() then
+    return jsonb_build_object('mudou', false, 'motivo', 'com_prazo_da_time');
+  end if;
+  select o.status into v_status from public.organizations o where o.id = p_org for update;
+  if v_status is distinct from 'active' then
+    return jsonb_build_object('mudou', false, 'motivo', 'empresa_parada');
+  end if;
+
+  update public.cobranca_assinaturas
+     set pagamento_inicial_pendente = true, updated_at = now()
+   where organization_id = p_org;
+  perform public.fn_suspender_organizacao(p_org, 'cobranca', 'Aguardando o primeiro pagamento', null);
+  return jsonb_build_object('mudou', true, 'motivo', 'fim_do_teste_sem_pagamento');
+end;
+$$;
+
+comment on function public.fn_mia_bloquear_fim_do_teste(uuid) is
+  'MIA (9122): o teste gratis acabou e nenhuma mensalidade foi paga: liga pagamento_inicial_pendente e suspende como a entrada paga do upstream (cobranca, Aguardando o primeiro pagamento). A releitura do upstream libera quando pagar. So o servidor.';
+
+revoke all on function public.fn_mia_bloquear_fim_do_teste(uuid) from public;
+revoke execute on function public.fn_mia_bloquear_fim_do_teste(uuid) from anon, authenticated;
+grant execute on function public.fn_mia_bloquear_fim_do_teste(uuid) to service_role;
 
 notify pgrst, 'reload schema';
 

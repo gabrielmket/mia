@@ -280,6 +280,22 @@ export const AUDIT_ACTIONS = [
   "planos_mia.pacotes_garantidos",
   "carteira.compra_iniciada",
   "carteira.compra_confirmada",
+  // FORK MIA (.96) · o pagamento no início (docs/fork/pagamento-no-inicio.md): a
+  // cobrança gerada (forma), a refeita (troca do boleto ou de plano), a tentativa
+  // no cartão (só o resultado, NUNCA o cartão), a confirmação, a troca de plano
+  // antes de pagar, a forma escolhida no teste, o bloqueio no fim do teste sem
+  // pagamento, o lembrete do dia seguinte, os dados fiscais gravados e a
+  // configuração da nota fiscal pelo Asaas.
+  "pagamento_inicial.cobranca_gerada",
+  "pagamento_inicial.cobranca_refeita",
+  "pagamento_inicial.cartao_tentado",
+  "pagamento_inicial.confirmado",
+  "pagamento_inicial.plano_trocado",
+  "pagamento_inicial.forma_escolhida",
+  "pagamento_inicial.fim_do_teste_bloqueou",
+  "pagamento_inicial.lembrete_enviado",
+  "dados_fiscais.gravados",
+  "cobranca.nota_fiscal_configurada",
   // FORK MIA (.60) — leads dos formulários da Meta: quem ligou a importação, que
   // formulário vai para qual funil, quem pediu leitura na hora, e a rodada do
   // relógio que trouxe lead ou deu erro (a vazia não audita).

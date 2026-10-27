@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.96) — O CARTÃO PASSA PELO SERVIDOR SÓ PARA CHEGAR AO ASAAS (decisão
+ * FORK MIA (.96) · O CARTÃO PASSA PELO SERVIDOR SÓ PARA CHEGAR AO ASAAS (decisão
  * 2a do protótipo "Pagamento no início", aprovado em 27/10/2026).
  *
  * Este arquivo REPROVA a versão se o número do cartão ou o código de segurança

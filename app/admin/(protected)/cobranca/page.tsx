@@ -19,6 +19,9 @@ import { ConexaoDaCobranca } from "./_conexao";
 import { PlanosDaInstalacao, type PlanoDaTela } from "./_planos";
 import { ReguaDaCobranca } from "./_regua";
 import { FaixaDoModoDeTeste, VisaoGeral } from "./_visao-geral";
+// FORK MIA (.96): a nota fiscal pelo Asaas na confirmação e o lembrete do painel dele.
+import { NotaFiscalDoAsaas } from "@/components/admin/cobranca/NotaFiscalDoAsaas";
+import { lerConfiguracaoDaNota } from "@/lib/asaas-mia/nota";
 
 export const metadata = { title: "Cobrança — Admin Plataforma" };
 export const dynamic = "force-dynamic";
@@ -57,6 +60,7 @@ export default async function CobrancaPage({ searchParams }: { searchParams: Pro
   const { aba } = await searchParams;
   const inicial: AbaDaCobranca = ABAS_DA_COBRANCA.find((a) => a === aba) ?? "visao-geral";
 
+  const notaDoAsaas = await lerConfiguracaoDaNota(admin);
   const [planos, clientes, visao, tolerancia] = await Promise.all([
     admin.from("cobranca_planos").select(COLUNAS_DO_PLANO).order("nome"),
     admin
@@ -139,7 +143,13 @@ export default async function CobrancaPage({ searchParams }: { searchParams: Pro
         inicial={inicial}
         paineis={{
           "visao-geral": <VisaoGeral dados={visao} checklist={montarChecklist(visao)} idioma={idioma} agora={agora} />,
-          conexao: <ConexaoDaCobranca provedor={visao.provedor} modo={visao.modo} last4={visao.chaveLast4} urlDoWebhook={visao.urlDoWebhook} />,
+          // FORK MIA (.96): abaixo da Conexão do upstream, a nota pelo Asaas (decisão 8).
+          conexao: (
+            <div className="space-y-6">
+              <ConexaoDaCobranca provedor={visao.provedor} modo={visao.modo} last4={visao.chaveLast4} urlDoWebhook={visao.urlDoWebhook} />
+              <NotaFiscalDoAsaas inicial={notaDoAsaas} ehAsaas={visao.provedor === "asaas" || visao.provedor === null} />
+            </div>
+          ),
           regua: <ReguaDaCobranca tolerancia={tolerancia} />,
           // FORK MIA (.90): os módulos e o Broadcast de cada plano moram numa página
           // própria (docs/fork/jornada-de-assinatura.md); aqui, só o link, sem ler nada

@@ -23,6 +23,9 @@ import type { PlanoDoCadastro } from "@/lib/cobranca/cadastro";
 // FORK MIA (.90): os planos em cartões e o que a empresa faz (docs/fork/jornada-de-assinatura.md).
 import { CartoesDoPlano } from "@/components/planos-mia/CartoesDoPlano";
 import type { CartaoDoPlano } from "@/lib/planos-mia/cadastro";
+// FORK MIA (.96): na entrada paga, quem assina e os dados fiscais (docs/fork/pagamento-no-inicio.md).
+import { CamposFiscais, FISCAIS_VAZIOS, type ValoresFiscais } from "@/components/pagamento-inicial/CamposFiscais";
+import { conferirDadosFiscais, faltasDosDadosFiscais } from "@/lib/dados-fiscais/regras";
 
 /**
  * Convite em curso: a conta está sendo criada para ACEITAR um convite, não para
@@ -59,11 +62,19 @@ export function SignupForm({
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
+  // FORK MIA (.96): os campos da entrada paga, fora do react-hook-form (a régua é a de
+  // lib/dados-fiscais/regras.ts, a mesma da action).
+  const [miaNome, setMiaNome] = useState("");
+  const [miaWhatsapp, setMiaWhatsapp] = useState("");
+  const [miaFiscais, setMiaFiscais] = useState<ValoresFiscais>(FISCAIS_VAZIOS);
+  const [miaErrosFiscais, setMiaErrosFiscais] = useState<Record<string, string>>({});
 
   const {
     register,
     handleSubmit,
     control,
+    getValues,
+    setValue,
     formState: { errors },
   } = useForm<SignupInput & { full_name: string; mia_o_que_faz?: string }>({
     // O formulário tem UM tipo e DOIS contratos, e agora os dois contratos têm
@@ -87,12 +98,29 @@ export function SignupForm({
     },
   });
   const password = useWatch({ control, name: "password" });
+  // FORK MIA (.96): o plano marcado é de entrada paga (0 dia de teste)?
+  const planoMarcado = useWatch({ control, name: "cobranca_plan_id" });
+  const entradaPaga =
+    !convite &&
+    (cartoes.find((c) => c.id === planoMarcado)?.trial_dias ?? planos.find((p) => p.id === planoMarcado)?.trial_dias) === 0;
 
   const onSubmit = (values: SignupInput & { full_name: string }) => {
     setServerError(null);
     startTransition(async () => {
       // No modo convite o e-mail do formulário é readonly, e readonly no
       // cliente não vale nada: quem confere de novo é o servidor.
+      // FORK MIA (.96): na entrada paga, quem assina e os dados fiscais vão junto,
+      // conferidos aqui e de novo na action.
+      if (entradaPaga) {
+        const conferido = conferirDadosFiscais({ ...miaFiscais, telefone: miaWhatsapp }, { exigeTelefone: true });
+        const faltas = conferido.ok ? [] : faltasDosDadosFiscais(conferido.campos);
+        if (miaNome.trim().length < 2) faltas.unshift("seu nome");
+        setMiaErrosFiscais(conferido.ok ? {} : (conferido.campos as Record<string, string>));
+        if (faltas.length > 0) {
+          setServerError(`${t("Falta preencher:")} ${faltas.map((f) => t(f)).join(", ")}.`);
+          return;
+        }
+      }
       const entrada: SignupInput | SignupComConviteInput = convite
         ? {
             full_name: values.full_name,
@@ -100,7 +128,9 @@ export function SignupForm({
             password: values.password,
             password_confirm: values.password_confirm,
           }
-        : values;
+        : entradaPaga
+          ? { ...values, mia_nome: miaNome, mia_fiscal: { ...miaFiscais, telefone: miaWhatsapp } }
+          : values;
       const res = await signUp(entrada, convite?.token);
       if (res.ok) {
         /**
@@ -133,6 +163,12 @@ export function SignupForm({
       } else if (res.error === "validation_error") {
         // As recusas do plano dizem o que fazer: "confira os campos" não diz.
         const recusaDoPlano = (res.details?.cobranca_plan_id as string[] | undefined)?.[0];
+        // FORK MIA (.96): o que falta da entrada paga, pela régua do servidor.
+        const faltasDoServidor = res.details?.mia_fiscal as string[] | undefined;
+        if (faltasDoServidor && faltasDoServidor.length > 0) {
+          setServerError(`${t("Falta preencher:")} ${faltasDoServidor.map((f) => t(f)).join(", ")}.`);
+          return;
+        }
         setServerError(
           t(
             recusaDoPlano === "plano_indisponivel"
@@ -224,9 +260,33 @@ export function SignupForm({
           )}
         </div>
       )}
+      {/* FORK MIA (.96): na entrada paga, quem assina (o nome e o WhatsApp). */}
+      {entradaPaga && (
+        <div className="grid gap-3 sm:grid-cols-2" data-pagamento="quem-assina">
+          <div className="space-y-1.5">
+            <Label htmlFor="mia_nome">{t("Seu nome")}</Label>
+            <Input id="mia_nome" type="text" autoComplete="name" maxLength={120} value={miaNome} onChange={(ev) => setMiaNome(ev.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="mia_whatsapp">{t("WhatsApp")}</Label>
+            <Input
+              id="mia_whatsapp"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              maxLength={32}
+              value={miaWhatsapp}
+              aria-invalid={miaErrosFiscais.telefone ? true : undefined}
+              onChange={(ev) => setMiaWhatsapp(ev.target.value)}
+            />
+          </div>
+        </div>
+      )}
       {!convite && (
         <div className="space-y-1.5">
-          <Label htmlFor="org_name">{t("Nome da empresa")}</Label>
+          <Label htmlFor="org_name">
+            {t(entradaPaga ? (miaFiscais.tipo === "pf" ? "Nome do negócio" : "Nome fantasia") : "Nome da empresa")}
+          </Label>
           <Input
             id="org_name"
             type="text"
@@ -268,6 +328,21 @@ export function SignupForm({
               </option>
             ))}
           </select>
+        </div>
+      )}
+      {/* FORK MIA (.96): na entrada paga, os dados da empresa para a cobrança e a nota fiscal. */}
+      {entradaPaga && (
+        <div className="rounded-md border p-3">
+          <CamposFiscais
+            valores={miaFiscais}
+            aoMudar={setMiaFiscais}
+            erros={miaErrosFiscais}
+            prefixo="cadastro-fiscal"
+            nomeFantasia={{ valor: getValues("org_name") ?? "", aoMudar: (v) => setValue("org_name", v) }}
+          />
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t("Os dados fiscais ficam guardados na sua conta, visíveis só para quem administra a empresa.")}
+          </p>
         </div>
       )}
       <div className="space-y-1.5">
@@ -357,7 +432,7 @@ export function SignupForm({
         </div>
       )}
       <Button type="submit" className="w-full" disabled={isPending}>
-        {isPending ? t("Criando conta...") : t("Criar conta")}
+        {isPending ? t("Criando conta...") : entradaPaga ? t("Criar conta e ir para o pagamento") : t("Criar conta")}
       </Button>
     </form>
   );

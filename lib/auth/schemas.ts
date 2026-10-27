@@ -25,6 +25,11 @@ export const signupSchema = z
     cobranca_plan_id: z.string().uuid().optional(),
     // FORK MIA (.90): o que a empresa faz, opcional — a Time lê na linha do pedido.
     mia_o_que_faz: z.string().trim().max(200).optional(),
+    // FORK MIA (.96): na ENTRADA PAGA, quem assina e os dados da empresa para a
+    // cobrança e a nota fiscal. Quem confere é a action, pela régua de
+    // lib/dados-fiscais/regras.ts (o plano escolhido decide se é obrigatório).
+    mia_nome: z.string().trim().max(120).optional(),
+    mia_fiscal: z.record(z.string(), z.string().max(160)).optional(),
     email: z.string().email("Email inválido"),
     password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
     password_confirm: z.string(),

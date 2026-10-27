@@ -102,6 +102,12 @@ export const PUBLIC_PATHS: RegExp[] = [
   // delas nasce público de carona.
   /^\/precos$/,
   /^\/api\/v1\/publico\/planos$/,
+  // FORK MIA (.96): o "Preencher pelo CNPJ" e o "Buscar" do CEP do cadastro
+  // (`app/api/v1/publico/cnpj` e `/cep`). Quem preenche ainda não tem conta. Só
+  // leem dado público (Receita e Correios, pela BrasilAPI), com teto por IP;
+  // nenhuma escreve nada. Âncora `$`.
+  /^\/api\/v1\/publico\/cnpj$/,
+  /^\/api\/v1\/publico\/cep$/,
   // Volta do consentimento do Google Ads. Mesma natureza das duas linhas
   // acima: a identidade vem do `state` assinado
   // (`lib/plataformas-de-anuncio/google/estado.ts`), não da sessão — quem

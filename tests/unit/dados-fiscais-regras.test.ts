@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.96) — as regras dos dados fiscais (lib/dados-fiscais/regras.ts):
+ * FORK MIA (.96) · as regras dos dados fiscais (lib/dados-fiscais/regras.ts):
  * em nome de quem sai a cobrança e a nota. O que se prova:
  *   - empresa (CNPJ, inclusive o alfanumérico) e pessoa física (CPF), com o
  *     dígito verificador conferido e o tamanho do tipo;

@@ -3,6 +3,9 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { loadOnboardingState } from "@/app/actions/onboarding/_shared";
 import { proximoPasso } from "@/lib/onboarding/passos";
 import { env } from "@/lib/env";
+// FORK MIA (.96): o passo "Pagamento" do início (docs/fork/pagamento-no-inicio.md).
+import { situacaoDoPassoNoInicio } from "@/lib/pagamento-inicial/servico";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +25,10 @@ export default async function OnboardingIndex() {
 
   const { state, onboardedAt } = await loadOnboardingState(activeOrg.orgId);
   if (onboardedAt) redirect("/app/inbox");
+
+  // FORK MIA (.96): na entrada paga e no plano com teste, o "Pagamento" vem primeiro.
+  const pagamento = await situacaoDoPassoNoInicio(createAdminClient(), activeOrg.orgId);
+  if (pagamento.modo !== null && !pagamento.cumprido) redirect("/onboarding/pagamento");
 
   const passo = proximoPasso(state, { lojaLigada: env.NUVEMSHOP_ENABLED });
   redirect(passo ? `/onboarding/${passo.segmento}` : "/onboarding/done");

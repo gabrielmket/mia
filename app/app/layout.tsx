@@ -49,6 +49,8 @@ import { crmB2bForaDoPlano, ligadosNaInstalacaoParaAEmpresa } from "@/lib/planos
 // FORK MIA (.91): a faixa dos primeiros passos da empresa nova (até zerar).
 import { FaixaDosPrimeirosPassos } from "@/components/assistente/FaixaDosPrimeirosPassos";
 import { segmentoDoEstado } from "@/lib/onboarding/modelos-de-agente-da-mia";
+// FORK MIA (.96): o passo "Pagamento" do início (docs/fork/pagamento-no-inicio.md).
+import { destinoDaEmpresaParada } from "@/lib/pagamento-inicial/destino";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await loadAuthUser();
@@ -169,7 +171,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
     // Suspensão ANTES de onboarding: a org suspensa que nunca terminou o
     // onboarding ia para `/onboarding` e escapava da tela da suspensão.
-    if (!ehOperante(orgRow?.status)) redirect("/account-suspended");
+    // FORK MIA (.96): a entrada paga que espera o primeiro pagamento vai ao passo "Pagamento".
+    if (!ehOperante(orgRow?.status)) redirect(await destinoDaEmpresaParada({ orgId: activeOrg.orgId, suspended_kind: activeOrg.suspended_kind }, admin));
     if (orgRow && !orgRow.onboarded_at && !user.support) redirect("/onboarding");
     // FORK MIA (.91): só monta a faixa quem pode ver o "o que falta" de uma
     // empresa nova (o segmento gravado só existe para quem passou pelo passo a

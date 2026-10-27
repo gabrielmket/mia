@@ -484,7 +484,7 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "recebem permission denied (42501); as funções que gravam (seguir o plano, " +
       "confirmar a compra) não são da sessão; a compra paga lança uma vez só.",
   })),
-  // Fork MIA, 9120 e 9121 — o pagamento no início (.96): os dados fiscais, o
+  // Fork MIA, 9120 e 9121 · o pagamento no início (.96): os dados fiscais, o
   // retrato do primeiro pagamento e a nota fiscal pedida na confirmação.
   ...["mia_dados_fiscais", "mia_pagamento_inicial", "mia_nota_da_assinatura"].map((tabela) => ({
     tabela,

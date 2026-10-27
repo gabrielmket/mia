@@ -1,4 +1,4 @@
--- manifest: O PAGAMENTO NO INÍCIO, PARTE 2 (.96): O PASSO "PAGAMENTO" DA ENTRADA PAGA. `mia_pagamento_inicial` é o retrato do primeiro pagamento de uma empresa que nasceu num plano de entrada paga (0 dia de teste, `cobranca_assinaturas.pagamento_inicial_pendente` do upstream): o plano da cobrança gerada, a forma escolhida (Pix, cartão digitado na tela pelo checkout transparente do Asaas, boleto), a cobrança no Asaas (a primeira da assinatura, `pagamento_ref`), o Pix copia e cola, a linha digitável e o PDF do boleto, os 4 últimos números e a bandeira do cartão (devolvidos pelo Asaas; o número inteiro e o código de segurança NUNCA são gravados), as recusas do cartão, a última leitura direta no Asaas (a trava das releituras da tela) e o lembrete do dia seguinte (um só, decisão 6). Quem decide que pagou continua sendo a releitura do upstream (`sincronizar`), nunca o corpo do aviso. `mia_nota_da_assinatura` diz para qual assinatura do Asaas o fork já pediu a nota fiscal NA CONFIRMAÇÃO do pagamento (`invoiceSettings` com `ON_PAYMENT_CONFIRMATION`, decisão 8): Pix vencido, boleto cancelado e cobrança refeita nunca geram nota. As duas são só do servidor; o administrador da empresa e a plataforma leem a primeira. LGPD: cascata com a empresa, e a empresa redigida perde as duas pelo gatilho `trg_mia_pagamento_inicial_sai_com_a_empresa_redigida`. Só objetos nossos.
+-- manifest: O PAGAMENTO NO INÍCIO, PARTE 2 (.96): O PASSO "PAGAMENTO" DO INÍCIO. `mia_pagamento_inicial` é o retrato do passo de cada empresa nova, nos dois modos: `entrada_paga` (plano com 0 dia de teste, `cobranca_assinaturas.pagamento_inicial_pendente` do upstream: paga antes de usar) e `teste` (plano com teste grátis: nada é cobrado hoje, a pessoa escolhe como paga depois do teste; com o cartão, ele fica cadastrado na assinatura do Asaas, que debita sozinha no fim do teste, decisão 12 revista em 27/10/2026). Guarda o plano da cobrança gerada, a forma escolhida (Pix, cartão digitado na tela pelo checkout transparente do Asaas, boleto), a cobrança no Asaas (a primeira da assinatura, `pagamento_ref`), o Pix copia e cola, a linha digitável e o PDF do boleto, os 4 últimos números e a bandeira do cartão (devolvidos pelo Asaas; o número inteiro e o código de segurança NUNCA são gravados), as recusas do cartão, a última leitura direta no Asaas (a trava das releituras da tela) e o lembrete do dia seguinte (um só, decisão 6). Quem decide que pagou continua sendo a releitura do upstream (`sincronizar`), nunca o corpo do aviso. `mia_nota_da_assinatura` diz para qual assinatura do Asaas o fork já pediu a nota fiscal NA CONFIRMAÇÃO do pagamento (`invoiceSettings` com `ON_PAYMENT_CONFIRMATION`, decisão 8): Pix vencido, boleto cancelado e cobrança refeita nunca geram nota. As duas são só do servidor; o administrador da empresa e a plataforma leem a primeira. LGPD: cascata com a empresa, e a empresa redigida perde as duas pelo gatilho `trg_mia_pagamento_inicial_sai_com_a_empresa_redigida`. Só objetos nossos.
 --
 -- 9121 · o passo do pagamento
 --
@@ -7,6 +7,8 @@
 -- ── 1. o primeiro pagamento da entrada paga ─────────────────────────────────
 create table if not exists public.mia_pagamento_inicial (
   organization_id uuid primary key references public.organizations(id) on delete cascade,
+  -- 'entrada_paga' (paga antes de usar) ou 'teste' (escolhe como paga depois do teste).
+  modo text not null default 'entrada_paga',
   -- O plano com que a cobrança foi gerada. Trocar de plano antes de pagar (decisão 7)
   -- cancela a cobrança no Asaas e refaz.
   plano_id uuid references public.cobranca_planos(id) on delete set null,
@@ -15,6 +17,8 @@ create table if not exists public.mia_pagamento_inicial (
   -- A cobrança no Asaas (`pay_...`, a primeira da assinatura) e a assinatura (`sub_...`).
   pagamento_ref text,
   assinatura_ref text,
+  -- No modo teste: o dia da primeira cobrança (o fim do teste; com o cartão, o dia do débito).
+  primeira_cobranca_em date,
   valor_cents integer,
   vence_em date,
   fatura_url text,
@@ -23,7 +27,7 @@ create table if not exists public.mia_pagamento_inicial (
   boleto_linha text,
   boleto_url text,
   boleto_gerado_em timestamptz,
-  -- Do cartão, só o que o Asaas devolve depois de cobrar: os 4 últimos números e a bandeira.
+  -- Do cartão, só os 4 últimos números e a bandeira. O número inteiro e o código de segurança nunca.
   cartao_final text,
   cartao_bandeira text,
   cartao_recusas integer not null default 0,
@@ -42,19 +46,20 @@ create table if not exists public.mia_pagamento_inicial (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint mia_pagamento_inicial_situacao
-    check (situacao in ('sem_cobranca', 'aguardando', 'em_analise', 'recusado', 'pago')),
+    check (situacao in ('sem_cobranca', 'aguardando', 'em_analise', 'recusado', 'pago', 'escolhida')),
+  constraint mia_pagamento_inicial_modo check (modo in ('entrada_paga', 'teste')),
   constraint mia_pagamento_inicial_forma check (forma is null or forma in ('pix', 'cartao', 'boleto')),
   constraint mia_pagamento_inicial_forma_paga check (forma_paga is null or forma_paga in ('pix', 'cartao', 'boleto', 'outra')),
   constraint mia_pagamento_inicial_cartao_final check (cartao_final is null or cartao_final ~ '^[0-9]{4}$'),
   constraint mia_pagamento_inicial_cartao_bandeira check (cartao_bandeira is null or cartao_bandeira ~ '^[A-Z_]{2,30}$'),
   constraint mia_pagamento_inicial_cartao_recorrente check (cartao_recorrente is null or cartao_recorrente in ('ok', 'falhou')),
   constraint mia_pagamento_inicial_ref_quando_aguarda
-    check (situacao in ('sem_cobranca', 'pago') or pagamento_ref is not null),
+    check (situacao in ('sem_cobranca', 'pago', 'escolhida') or pagamento_ref is not null),
   constraint mia_pagamento_inicial_valor check (valor_cents is null or valor_cents > 0)
 );
 
 comment on table public.mia_pagamento_inicial is
-  'MIA (9121): o primeiro pagamento da entrada paga (o passo Pagamento do inicio). Guarda a cobranca no Asaas, o Pix copia e cola, a linha do boleto e, do cartao, so os 4 ultimos numeros e a bandeira devolvidos pelo Asaas. O numero e o codigo de seguranca nunca sao gravados. Le: admin da empresa e a plataforma. Escreve: so o servidor.';
+  'MIA (9121): o passo Pagamento do inicio, nos modos entrada_paga (paga antes de usar) e teste (escolhe como paga depois do teste; com cartao, ele fica na assinatura do Asaas e debita no fim do teste). Guarda a cobranca no Asaas, o Pix copia e cola, a linha do boleto e, do cartao, so os 4 ultimos numeros e a bandeira devolvidos pelo Asaas. O numero e o codigo de seguranca nunca sao gravados. Le: admin da empresa e a plataforma. Escreve: so o servidor.';
 
 create index if not exists idx_mia_pagamento_inicial_aguardando
   on public.mia_pagamento_inicial (situacao, gerada_em)

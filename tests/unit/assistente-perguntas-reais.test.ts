@@ -164,6 +164,9 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "como uso isso aqui", em: "/app/settings/leads-da-meta", sobre: "/app/settings/leads-da-meta", espera: "leads-formulario-meta" },
   { pergunta: "como mudo a logo e a cor da marca", sobre: "/app/settings/marca", espera: "marca" },
   { pergunta: "como pago a fatura da mensalidade", sobre: "/app/settings/billing", espera: "plano-e-cobranca" },
+  // FORK MIA (.96): o passo "Pagamento" do início (entrada paga e plano com teste).
+  { pergunta: "como pago com pix para liberar a conta", sobre: "/app/settings/billing", espera: "pagamento-no-inicio" },
+  { pergunta: "vou ser cobrado no teste grátis? como cadastro o cartão", sobre: "/app/settings/billing", espera: "pagamento-no-inicio" },
   { pergunta: "como atender um pedido de exclusão de dados lgpd", sobre: "/app/lgpd/requests", espera: "lgpd" },
   { pergunta: "como configuro o trunk sip", sobre: "/app/settings/voip-trunk", espera: "trunk-sip" },
   { pergunta: "como atualizo o sistema para a nova versão", sobre: "/app/settings/atualizacao", espera: "atualizacao" },

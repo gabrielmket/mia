@@ -63,6 +63,8 @@ import { DICIONARIO_DOS_PRIMEIROS_PASSOS_MIA } from "./dicionario-mia-primeiros-
 import { DICIONARIO_DO_ASSISTENTE_FAZ_MIA } from "./dicionario-mia-assistente-faz";
 // FORK MIA (.93): o "Me mostra como" (as trilhas) e onde os clientes travam, idem.
 import { DICIONARIO_DAS_TRILHAS_MIA } from "./dicionario-mia-trilhas";
+// FORK MIA (.96): o pagamento no início (o cadastro da entrada paga, o passo Pagamento e a nota), idem.
+import { DICIONARIO_DO_PAGAMENTO_MIA } from "./dicionario-mia-pagamento";
 import { TEXTOS_AGENDA_CONFIGURACAO } from "./agenda-configuracao";
 import { TEXTOS_AGENDA_SERVICOS } from "./agenda-servicos";
 
@@ -82,6 +84,7 @@ export const DICIONARIO: Traducoes = {
   ...DICIONARIO_DOS_PRIMEIROS_PASSOS_MIA,
   ...DICIONARIO_DO_ASSISTENTE_FAZ_MIA,
   ...DICIONARIO_DAS_TRILHAS_MIA,
+  ...DICIONARIO_DO_PAGAMENTO_MIA,
   // Encaminhar mensagem (#2835) — botão na bolha do chat e o diálogo de destino.
   "Encaminhar": { es: "Reenviar" },
   "Encaminhar mensagem": { es: "Reenviar mensaje" },

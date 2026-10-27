@@ -284,6 +284,15 @@ export function asaasDaMia(deps: DependenciasDoAsaasDaMia = {}) {
     return paraLida(api, api.ler(cobrancaDoAsaas, await api.chamar("PUT", `/payments/${ref(pagamentoRef)}`, { dueDate: dataCivil })));
   }
 
+  /**
+   * Muda a forma de uma cobrança em aberto (PUT `/payments/{id}`): "PIX" tira o
+   * boleto da fatura (a primeira mensalidade depois do teste não aceita boleto) e
+   * deixa o Pix pagar uma cobrança que estava no cartão recusado.
+   */
+  async function mudarFormaDaCobranca(pagamentoRef: string, forma: "PIX" | "UNDEFINED"): Promise<CobrancaLida> {
+    return paraLida(api, api.ler(cobrancaDoAsaas, await api.chamar("PUT", `/payments/${ref(pagamentoRef)}`, { billingType: forma })));
+  }
+
   /** Apaga a cobrança em aberto (o boleto deixa de valer). 404 = já apagada: o efeito desejado. */
   async function cancelarCobranca(pagamentoRef: string): Promise<void> {
     try {
@@ -366,6 +375,7 @@ export function asaasDaMia(deps: DependenciasDoAsaasDaMia = {}) {
     lerPix,
     lerLinhaDigitavel,
     mudarVencimento,
+    mudarFormaDaCobranca,
     cancelarCobranca,
     cancelarAssinatura,
     listarNotas,

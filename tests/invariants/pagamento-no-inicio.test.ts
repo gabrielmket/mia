@@ -1,10 +1,10 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { criarOrg, criarPlano, criarUsuarios, tornarPlatformAdmin, valor } from "./cobranca-helpers";
 import { lastLine, sql } from "./gov-helpers";
 
 /**
- * FORK MIA (9120 e 9121) — O PAGAMENTO NO INÍCIO NO BANCO (.96).
+ * FORK MIA (9120 a 9122) · O PAGAMENTO NO INÍCIO NO BANCO (.96).
  *
  * Contra o Postgres de verdade, com o papel `authenticated` e o JWT de cada
  * pessoa, como o PostgREST faz:
@@ -159,5 +159,51 @@ describe("LGPD: a empresa redigida perde os dados fiscais e o retrato do pagamen
     expect(valor(`select count(*) from public.mia_dados_fiscais where organization_id = '${ORG_B}';`)).toBe("0");
     expect(valor(`select count(*) from public.mia_pagamento_inicial where organization_id = '${ORG_B}';`)).toBe("0");
     expect(valor(`select count(*) from public.mia_dados_fiscais where organization_id = '${ORG_A}';`)).toBe("1");
+  });
+});
+
+describe("9122: o fim do teste sem pagamento bloqueia como a entrada paga", () => {
+  const TESTE_VENCIDO = "91229122-0000-4000-8000-00000000000a";
+  const JA_PAGOU = "91229122-0000-4000-8000-00000000000b";
+  const EM_TESTE = "91229122-0000-4000-8000-00000000000c";
+  const PLANO_TESTE = "91229122-2222-4000-8000-000000000001";
+  const bloquear = (org: string) => valor(`set role service_role; select public.fn_mia_bloquear_fim_do_teste('${org}')->>'motivo';`);
+
+  beforeAll(() => {
+    // `created_by` nulo: o gatilho da entrada paga do upstream não cria assinatura sozinho.
+    criarOrg(TESTE_VENCIDO, "fim-do-teste-a", null);
+    criarOrg(JA_PAGOU, "fim-do-teste-b", null);
+    criarOrg(EM_TESTE, "fim-do-teste-c", null);
+    criarPlano({ id: PLANO_TESTE, nome: "Com teste (inv 9122)", trialDias: 14 });
+    sql(`insert into public.cobranca_assinaturas (organization_id, plano_id, estado, trial_ate, proximo_vencimento) values
+           ('${TESTE_VENCIDO}', '${PLANO_TESTE}', 'trial', now() - interval '1 hour', null),
+           ('${JA_PAGOU}', '${PLANO_TESTE}', 'em_atraso', now() - interval '40 days', now() - interval '5 days'),
+           ('${EM_TESTE}', '${PLANO_TESTE}', 'trial', now() + interval '3 days', null)
+         on conflict (organization_id) do nothing;`);
+    sql(`insert into public.platform_config (chave, valor) values ('MODULO_COBRANCA', 'ligado')
+           on conflict (chave) do update set valor = 'ligado';`);
+  });
+  afterAll(() => {
+    sql(`delete from public.platform_config where chave = 'MODULO_COBRANCA';`);
+  });
+
+  it("⭐ teste vencido e nunca pago: liga a pendência e suspende com o motivo da entrada paga; de novo, não repete", () => {
+    expect(bloquear(TESTE_VENCIDO)).toBe("fim_do_teste_sem_pagamento");
+    expect(valor(`select pagamento_inicial_pendente::text from public.cobranca_assinaturas where organization_id = '${TESTE_VENCIDO}';`)).toBe("true");
+    expect(valor(`select status || '|' || suspended_kind || '|' || suspended_reason from public.organizations where id = '${TESTE_VENCIDO}';`)).toBe(
+      "suspended|cobranca|Aguardando o primeiro pagamento",
+    );
+    expect(bloquear(TESTE_VENCIDO)).toBe("ja_espera_o_pagamento");
+  });
+
+  it("quem já pagou uma mensalidade e quem ainda está no teste seguem a régua de hoje", () => {
+    expect(bloquear(JA_PAGOU)).toBe("ja_pagou");
+    expect(bloquear(EM_TESTE)).toBe("teste_em_curso");
+    expect(valor(`select status from public.organizations where id = '${JA_PAGOU}';`)).toBe("active");
+  });
+
+  it("só o servidor executa: a sessão e anon recebem permission denied", () => {
+    expect(como(ADMIN_A, `select public.fn_mia_bloquear_fim_do_teste('${EM_TESTE}')::text`)).toBe("erro:42501");
+    expect(como("anon", `select public.fn_mia_bloquear_fim_do_teste('${EM_TESTE}')::text`)).toBe("erro:42501");
   });
 });

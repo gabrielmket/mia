@@ -13,6 +13,8 @@ import type { EventHandler, EventRow, HandlerResult } from "@/lib/event-log/disp
 import { createAdminClient } from "@/lib/supabase/admin";
 // FORK MIA (.90): créditos por Pix (docs/fork/jornada-de-assinatura.md).
 import { relerComprasEmAberto } from "@/lib/carteira/compra-pelo-asaas";
+// FORK MIA (.96): o primeiro pagamento da entrada paga (docs/fork/pagamento-no-inicio.md).
+import { marcarPagoPeloAviso } from "@/lib/pagamento-inicial/servico";
 
 import { sincronizar } from "./sincronizar";
 
@@ -43,6 +45,9 @@ async function handle(row: EventRow): Promise<HandlerResult> {
   // FORK MIA (.90): o mesmo aviso do Asaas acorda as compras de crédito por Pix
   // desta empresa (relidas no Asaas, nunca pelo corpo do aviso). Nunca lança.
   await relerComprasEmAberto(admin, { orgId: row.organization_id });
+  // FORK MIA (.96): a linha do passo "Pagamento" sabe que pagou (para a tela, o
+  // MCP e o lembrete). Quem liberou foi a releitura acima. Nunca lança.
+  await marcarPagoPeloAviso(admin, row.organization_id);
   // Só o transitório vale retry. Chave quebrada ou leitura inválida não se curam
   // repetindo, e no teto o dreno abriria `event_dead` na Central DA EMPRESA por um
   // problema do dono (§2.5). O `ultimo_erro` já ficou gravado: a Visão geral o

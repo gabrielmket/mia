@@ -25,6 +25,8 @@ import {
 } from "@/lib/auth/politica-mfa";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { STATUS_OPERANTE, ehOperante } from "@/lib/organizacao/operante";
+// FORK MIA (.96): para onde vai a empresa parada (o passo do pagamento ou o hub).
+import { destinoDaEmpresaParada } from "@/lib/pagamento-inicial/destino";
 import type { AuthUser, Role, UserOrgMembership, ActiveOrg } from "./types";
 
 const ACTIVE_ORG_COOKIE = "active_org";
@@ -400,7 +402,9 @@ export const orgAtivaSemPortao = cache(async (authUser: AuthUser): Promise<Activ
  */
 export const resolveActiveOrg = cache(async (authUser: AuthUser): Promise<ActiveOrg | null> => {
   const org = await orgAtivaSemPortao(authUser);
-  if (org && !ehOperante(org.org_status)) redirect("/account-suspended");
+  // FORK MIA (.96): a empresa que espera o primeiro pagamento (entrada paga, ou o fim
+  // do teste sem pagamento) vai ao passo "Pagamento" do início; o resto, ao hub.
+  if (org && !ehOperante(org.org_status)) redirect(await destinoDaEmpresaParada(org));
   return org;
 });
 
