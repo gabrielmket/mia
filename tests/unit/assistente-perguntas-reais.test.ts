@@ -164,6 +164,10 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "como uso isso aqui", em: "/app/settings/leads-da-meta", sobre: "/app/settings/leads-da-meta", espera: "leads-formulario-meta" },
   { pergunta: "como mudo a logo e a cor da marca", sobre: "/app/settings/marca", espera: "marca" },
   { pergunta: "como pago a fatura da mensalidade", sobre: "/app/settings/billing", espera: "plano-e-cobranca" },
+  // .95: o preço do e-mail por plano e a entrada paga ainda não paga
+  { pergunta: "quanto custa cada e-mail do e-mail marketing", sobre: "/app/settings/email-marketing", espera: "email-marketing-configurar" },
+  { pergunta: "qual o preço por e-mail no meu plano", sobre: "/app/settings/billing", espera: "plano-e-cobranca" },
+  { pergunta: "assinei o plano e a conta está esperando o primeiro pagamento", sobre: "/app/settings/billing", espera: "plano-e-cobranca" },
   { pergunta: "como atender um pedido de exclusão de dados lgpd", sobre: "/app/lgpd/requests", espera: "lgpd" },
   { pergunta: "como configuro o trunk sip", sobre: "/app/settings/voip-trunk", espera: "trunk-sip" },
   { pergunta: "como atualizo o sistema para a nova versão", sobre: "/app/settings/atualizacao", espera: "atualizacao" },

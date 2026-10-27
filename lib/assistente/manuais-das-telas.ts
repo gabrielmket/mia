@@ -393,7 +393,10 @@ const OPERACAO_DO_FORK: Manual[] = [
   {
     id: "email-marketing-configurar",
     titulo: "Configurar o e-mail marketing (domínio, remetente e supressão)",
-    palavras: ["email marketing", "dominio", "dns", "remetente", "verificar dominio", "supressao", "aquecimento", "consentimento", "rodape"],
+    palavras: [
+      "email marketing", "dominio", "dns", "remetente", "verificar dominio", "supressao", "aquecimento", "consentimento", "rodape",
+      "preco do email", "preco por email", "quanto custa cada email", "custo do email",
+    ],
     href: "/app/settings/email-marketing",
     papelMinimo: "admin",
     passos: [
@@ -404,7 +407,7 @@ const OPERACAO_DO_FORK: Manual[] = [
       "Confira o Ritmo padrão, o Rodapé com a identificação da empresa e clique em Salvar configuração.",
     ],
     observacao:
-      "Gerente vê e só o administrador muda. Gmail, Hotmail e outros e-mails gratuitos não servem de remetente. O aquecimento começa com 200 e-mails por dia. Na Lista de supressão dá para Acrescentar à mão ou Importar da ferramenta anterior. Se aparecer O disparo por e-mail é vendido à parte, fale com a Time Company.",
+      "Gerente vê e só o administrador muda. Gmail, Hotmail e outros e-mails gratuitos não servem de remetente. O aquecimento começa com 200 e-mails por dia. Na Lista de supressão dá para Acrescentar à mão ou Importar da ferramenta anterior. Se aparecer O disparo por e-mail é vendido à parte, fale com a Time Company. Em Módulo e carteira, o Preço por e-mail é o do plano da empresa (pelo plano), o que a Time Company combinou com ela ou o padrão de R$ 0,02 (o padrão); só o e-mail aceito pela Amazon é cobrado, do mesmo crédito do número oficial.",
   },
   {
     id: "email-marketing-campanha",
@@ -767,15 +770,20 @@ const TELAS_DO_UPSTREAM: Manual[] = [
   {
     id: "plano-e-cobranca",
     titulo: "Plano e cobrança: faturas, troca de plano e cancelamento",
-    palavras: ["fatura", "boleto", "pix", "pagar", "plano", "trocar plano", "cancelar assinatura", "mensalidade", "cobranca"],
+    palavras: [
+      "fatura", "boleto", "pix", "pagar", "plano", "trocar plano", "cancelar assinatura", "mensalidade", "cobranca",
+      "preco do plano", "preco da mensagem", "preco por email", "o que o plano inclui", "primeiro pagamento", "entrada paga",
+    ],
     href: "/app/settings/billing",
     papelMinimo: "admin",
     passos: [
       "Abra Configurações › Plano e cobrança.",
       "Para pagar, use Pagar agora (a fatura abre no Asaas; Pix confirma em minutos, boleto em até 1 dia útil). Depois de pagar, Já paguei.",
       "Para mudar, use Trocar de plano, escolha o Novo plano e Confirmar troca. Para sair, Cancelar assinatura e Confirmar cancelamento.",
+      "No bloco Créditos ficam o preço da mensagem do Broadcast e, para quem tem e-mail marketing, o preço por e-mail do seu plano.",
     ],
-    observacao: "Se a tela mostrar Em breve, a cobrança pela tela ainda não está ligada para a sua empresa: fale com a Time Company.",
+    observacao:
+      "Se a tela mostrar Em breve, a cobrança pela tela ainda não está ligada para a sua empresa: fale com a Time Company. Os preços da mensagem e do e-mail mudam junto com o plano, no dia em que a troca vale. Num plano de entrada paga, a conta fica esperando o primeiro pagamento e é liberada assim que ele é confirmado.",
   },
   {
     id: "trunk-sip",
