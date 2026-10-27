@@ -33,6 +33,8 @@ import { FERRAMENTAS_DE_AGENTE } from "./ferramentas/agente";
 import { FERRAMENTAS_DO_ASSISTENTE } from "./ferramentas/assistente";
 // FORK MIA (.91): as propostas do assistente (docs/fork/primeiros-passos.md).
 import { FERRAMENTAS_DAS_PROPOSTAS_DO_ASSISTENTE } from "./ferramentas/propostas-do-assistente";
+// FORK MIA (.93): o "Me mostra como" e onde os clientes travam (docs/fork/assistente.md, seção 11).
+import { FERRAMENTAS_DAS_TRILHAS_DO_ASSISTENTE } from "./ferramentas/trilhas-do-assistente";
 import { FERRAMENTAS_DE_AUTOMACAO_E_AGENDA } from "./ferramentas/automacoes-e-agenda";
 import { FERRAMENTAS_DE_CANAIS_E_INTEGRACOES } from "./ferramentas/canais-e-integracoes";
 // FORK MIA (.90): a jornada de assinatura, a cobrança (docs/fork/jornada-de-assinatura.md).
@@ -91,6 +93,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DO_ASSISTENTE,
   // FORK MIA (.91): ver e decidir as propostas do assistente de uma empresa
   ...FERRAMENTAS_DAS_PROPOSTAS_DO_ASSISTENTE,
+  // FORK MIA (.93): as trilhas do "Me mostra como", onde os clientes travam e a lista de melhorias do produto
+  ...FERRAMENTAS_DAS_TRILHAS_DO_ASSISTENTE,
   // FORK MIA (.89): o disparo de e-mail marketing, do domínio ao rascunho; o MCP nunca dispara (docs/fork/email-marketing.md)
   ...FERRAMENTAS_DE_EMAIL_MARKETING,
   // FORK MIA (.90): a cobrança da jornada de assinatura: planos, assinaturas, link, prazo, isenção e os pedidos de cadastro (docs/fork/jornada-de-assinatura.md)

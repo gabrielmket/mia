@@ -118,6 +118,9 @@ describe("a lista de ferramentas", () => {
       "plataforma_listar_demonstracoes",
       "plataforma_criar_demonstracao",
       "plataforma_reaplicar_demonstracao",
+      // .93: o painel da Time cruza TODAS as empresas, e a lista de melhorias é do produto.
+      "plataforma_ver_onde_os_clientes_travam",
+      "plataforma_anotar_melhoria_do_produto",
       "plataforma_ver_cobranca",
       "plataforma_garantir_planos",
       "plataforma_listar_assinaturas",

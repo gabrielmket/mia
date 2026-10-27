@@ -72,9 +72,9 @@ const banco = () =>
     return {};
   });
 
-describe("a lista: 94 ferramentas, nove delas da cobrança", () => {
-  it("94 = as 83 da .89 + as nove da cobrança (.90) + as duas das propostas do assistente (.91)", () => {
-    expect(FERRAMENTAS).toHaveLength(94);
+describe("a lista: 98 ferramentas, nove delas da cobrança", () => {
+  it("98 = as 83 da .89 + as nove da cobrança (.90) + as duas das propostas do assistente (.91) + as quatro das trilhas e de onde os clientes travam (.93)", () => {
+    expect(FERRAMENTAS).toHaveLength(98);
     expect(FERRAMENTAS_DE_COBRANCA).toHaveLength(9);
     expect(new Set(FERRAMENTAS.map((f) => f.name)).size).toBe(FERRAMENTAS.length);
   });
