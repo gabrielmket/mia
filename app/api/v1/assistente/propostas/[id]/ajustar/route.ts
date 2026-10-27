@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — POST /api/v1/assistente/propostas/[id]/ajustar: o "Ajustar"
+ * FORK MIA (.94) · POST /api/v1/assistente/propostas/[id]/ajustar: o "Ajustar"
  * do cartão, antes de aprovar (protótipo "ensina e faz", tela 3).
  *
  * `{ campos: { <campo>: <valor> } }`, os campos que o próprio cartão recebeu do

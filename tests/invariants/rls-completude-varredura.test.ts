@@ -478,7 +478,7 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     tabela,
     razao:
       "tests/invariants/primeiros-passos-do-assistente.test.ts e (9100, .94) " +
-      "assistente-faz-com-aprovacao.test.ts — controle positivo e " +
+      "assistente-faz-com-aprovacao.test.ts · controle positivo e " +
       "negativo por papel e por empresa: gestor e administrador leem, o atendente vê " +
       "só as que ele fez, o somente leitura não propõe, outra empresa vê zero, anon recebe permission denied; a proposta nasce " +
       "pendente e da própria pessoa pela sessão, ninguém aprova, aplica, rejeita nem " +

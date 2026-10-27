@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.91, .94) — POST /api/v1/assistente/propostas/[id]: decidir uma
+ * FORK MIA (.91, .94) · POST /api/v1/assistente/propostas/[id]: decidir uma
  * proposta do assistente. `{ decisao: "aplicar" | "rejeitar" }`.
  *
  *   aplicar   quem pode fazer o mesmo na tela (protótipo "ensina e faz",

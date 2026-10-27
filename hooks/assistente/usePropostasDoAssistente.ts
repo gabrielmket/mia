@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * FORK MIA (.94) — os ganchos do "faz com aprovação": as listas da página do
+ * FORK MIA (.94) · os ganchos do "faz com aprovação": as listas da página do
  * assistente (pedidos esperando você, seus pedidos, o que o assistente fez) e
  * as ações do cartão (pedir, ajustar, desfazer). Aprovar e recusar continuam em
  * `usePrimeirosPassos` (`useDecidirProposta`), que a .91 já usava.

@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — PEDIR a quem aprova, com o cartão pronto (protótipo "ensina
+ * FORK MIA (.94) · PEDIR a quem aprova, com o cartão pronto (protótipo "ensina
  * e faz", tela 5, decisão 5), e AVISAR quem pediu do resultado.
  *
  * Quem não aprova a peça pode pedir: a proposta continua PENDENTE e ganha a

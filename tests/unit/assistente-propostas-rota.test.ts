@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.91, .94) — as rotas do cartão da proposta: quem decide, desfaz,
+ * FORK MIA (.91, .94) · as rotas do cartão da proposta: quem decide, desfaz,
  * pede e ajusta.
  *
  *   - a guarda do suporte vem PRIMEIRO: o acompanhamento somente leitura não

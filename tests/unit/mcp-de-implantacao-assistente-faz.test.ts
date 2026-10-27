@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — O ASSISTENTE FAZ COM APROVAÇÃO no MCP de plataforma, pelo
+ * FORK MIA (.94) · O ASSISTENTE FAZ COM APROVAÇÃO no MCP de plataforma, pelo
  * protocolo, contra o banco em memória (Empresa Modelo fictícia):
  *
  *   - o caminho inteiro de uma peça do dia a dia: preparar (o que o assistente

@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — POST /api/v1/assistente/propostas/[id]/desfazer: o
+ * FORK MIA (.94) · POST /api/v1/assistente/propostas/[id]/desfazer: o
  * "Desfazer" do cartão (protótipo "ensina e faz", tela 3, decisões 4 e 6).
  *
  * Desfaz só o que a própria proposta fez, e só enquanto nada depende disso (a

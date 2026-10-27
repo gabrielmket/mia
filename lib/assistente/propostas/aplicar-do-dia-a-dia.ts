@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — APLICAR as nove peças do dia a dia: é aqui, e só aqui, que
+ * FORK MIA (.94) · APLICAR as nove peças do dia a dia: é aqui, e só aqui, que
  * a peça nasce.
  *
  * ── Com o login de quem aprova ──────────────────────────────────────────────

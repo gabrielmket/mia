@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — DESFAZER uma proposta aplicada (protótipo "ensina e faz",
+ * FORK MIA (.94) · DESFAZER uma proposta aplicada (protótipo "ensina e faz",
  * tela 3, decisões 4 e 6).
  *
  * ── Desfazer não é apagar ───────────────────────────────────────────────────

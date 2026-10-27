@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — o contexto das rotas das propostas do assistente
+ * FORK MIA (.94) · o contexto das rotas das propostas do assistente
  * (`/api/v1/assistente/propostas/**`): a SESSÃO de quem clicou (com ela a peça
  * nasce e sai, pela função da tela), o cliente de serviço (só a linha da
  * proposta, que a sessão não escreve, e as contagens das travas), a equipe, o

@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — PREPARAR as nove peças do dia a dia (protótipo "ensina e
+ * FORK MIA (.94) · PREPARAR as nove peças do dia a dia (protótipo "ensina e
  * faz", tela 3): ler o que existe com o cliente de QUEM CHAMA (a sessão, no
  * turno e no ajuste) e montar o cartão, sem gravar nada.
  *

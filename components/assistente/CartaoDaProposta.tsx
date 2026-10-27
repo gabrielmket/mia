@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * FORK MIA (.91, .94) — O CARTÃO DA PROPOSTA do assistente (fase 2 do desenho
+ * FORK MIA (.91, .94) · O CARTÃO DA PROPOSTA do assistente (fase 2 do desenho
  * do upstream, #2860; protótipo "ensina e faz", telas 3 e 5): uma peça, o que
  * muda, e a decisão.
  *

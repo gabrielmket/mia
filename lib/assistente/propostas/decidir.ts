@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.91, .94) — DECIDIR uma proposta: aprovar e aplicar, ou rejeitar.
+ * FORK MIA (.91, .94) · DECIDIR uma proposta: aprovar e aplicar, ou rejeitar.
  *
  * Um caminho só para a rota da tela (`/api/v1/assistente/propostas/[id]`) e
  * para o MCP de plataforma (`plataforma_decidir_proposta_do_assistente`).

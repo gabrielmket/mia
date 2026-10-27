@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — POST /api/v1/assistente/propostas/[id]/pedir: o "Pedir a
+ * FORK MIA (.94) · POST /api/v1/assistente/propostas/[id]/pedir: o "Pedir a
  * <nome>" do cartão (protótipo "ensina e faz", tela 5, decisão 5).
  *
  * Quem não aprova a peça manda o cartão pronto a quem aprova: a proposta

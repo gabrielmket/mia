@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.91, .94) — GET /api/v1/assistente/propostas: as propostas do
+ * FORK MIA (.91, .94) · GET /api/v1/assistente/propostas: as propostas do
  * assistente (9080, 9100), para o cartão mostrar a situação e a página do
  * assistente mostrar as listas.
  *

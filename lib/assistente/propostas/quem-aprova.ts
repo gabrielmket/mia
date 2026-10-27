@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — QUEM APROVA O QUÊ (protótipo "ensina e faz", tela 5). Puro.
+ * FORK MIA (.94) · QUEM APROVA O QUÊ (protótipo "ensina e faz", tela 5). Puro.
  *
  * A regra em uma frase (decisão 1): pelo assistente, aprova quem pode fazer a
  * mesma coisa na tela. Ninguém ganha poder por causa do assistente, e ninguém

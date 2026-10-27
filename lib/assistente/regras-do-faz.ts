@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — O QUE O ASSISTENTE SABE DO "FAZ COM APROVAÇÃO" antes de
+ * FORK MIA (.94) · O QUE O ASSISTENTE SABE DO "FAZ COM APROVAÇÃO" antes de
  * cada pergunta (protótipo "ensina e faz", telas 3 a 5). Puro.
  *
  * Mora fora de `prompt.ts` de propósito: o bloco entra no system por uma linha

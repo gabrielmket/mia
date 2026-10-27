@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.91, .94) — as PROPOSTAS DO ASSISTENTE no MCP de plataforma
+ * FORK MIA (.91, .94) · as PROPOSTAS DO ASSISTENTE no MCP de plataforma
  * (docs/fork/primeiros-passos.md e docs/fork/assistente.md). Três, e a operação
  * do token segue o estrago:
  *

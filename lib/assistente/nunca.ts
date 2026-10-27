@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — A LISTA FECHADA DO "NUNCA" (protótipo "ensina e faz", tela
+ * FORK MIA (.94) · A LISTA FECHADA DO "NUNCA" (protótipo "ensina e faz", tela
  * 4). Puro.
  *
  * Número e canal, cobrança e plano, convite, usuários e papéis, chaves e

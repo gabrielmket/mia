@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — O CARTÃO de cada proposta, montado no SERVIDOR: os nomes de
+ * FORK MIA (.94) · O CARTÃO de cada proposta, montado no SERVIDOR: os nomes de
  * quem pediu, de quem aprovou e de quem desfez, quem aprova aquele tipo, o que
  * a pessoa que olha pode fazer (aprovar, pedir, ajustar, desfazer) e, na
  * aplicada, o que trava o desfazer.

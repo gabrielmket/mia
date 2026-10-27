@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — as frases do "FAZ COM APROVAÇÃO" do assistente (o cartão
+ * FORK MIA (.94) · as frases do "FAZ COM APROVAÇÃO" do assistente (o cartão
  * da proposta, a aba Propostas e o catálogo das peças), em espanhol.
  *
  * Moram num arquivo NOSSO, espalhado no `DICIONARIO` do upstream por uma linha

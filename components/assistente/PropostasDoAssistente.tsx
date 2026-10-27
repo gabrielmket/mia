@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * FORK MIA (.94) — A ABA "PROPOSTAS" da página do assistente (protótipo
+ * FORK MIA (.94) · A ABA "PROPOSTAS" da página do assistente (protótipo
  * "ensina e faz", telas 3 e 5).
  *
  *   Pedidos esperando você   (quem aprova) os cartões que alguém pediu, prontos

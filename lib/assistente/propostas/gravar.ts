@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.91, .94) — GRAVAR as propostas do turno: uma linha PENDENTE por
+ * FORK MIA (.91, .94) · GRAVAR as propostas do turno: uma linha PENDENTE por
  * peça, pela SESSÃO de quem perguntou (a RLS da 9100: atendente em diante
  * propõe), e o cartão de cada uma para os botões da resposta.
  *

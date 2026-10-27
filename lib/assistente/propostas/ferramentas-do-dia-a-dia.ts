@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — AS NOVE FERRAMENTAS DO "FAZ COM APROVAÇÃO" (protótipo
+ * FORK MIA (.94) · AS NOVE FERRAMENTAS DO "FAZ COM APROVAÇÃO" (protótipo
  * "ensina e faz", tela 3). Cada uma PREPARA o cartão de uma peça, lendo com a
  * SESSÃO de quem pergunta, e não grava nada: a rota grava a linha pendente, e a
  * peça nasce no "Aprovar e aplicar" de quem pode.

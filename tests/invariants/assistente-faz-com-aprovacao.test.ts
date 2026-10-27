@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { countAs, lastLine, sql } from "./gov-helpers";
 
 /**
- * FORK MIA (9100, 9101) — O ASSISTENTE FAZ COM APROVAÇÃO, NO BANCO.
+ * FORK MIA (9100, 9101) · O ASSISTENTE FAZ COM APROVAÇÃO, NO BANCO.
  *
  * Contra o Postgres de verdade, com o papel `authenticated` e o JWT de cada
  * pessoa, como o PostgREST faz (Empresa Modelo fictícia):

@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — O CATÁLOGO DAS PEÇAS que o assistente faz com aprovação
+ * FORK MIA (.94) · O CATÁLOGO DAS PEÇAS que o assistente faz com aprovação
  * (protótipo "ensina e faz", tela 3: "O que ele faz com aprovação · 9 novas e
  * as 3 da .91"). Puro: a tela, o servidor, o MCP e os testes leem daqui.
  *

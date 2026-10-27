@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.91, .94) — AS PROPOSTAS DO ASSISTENTE: as formas (módulo puro).
+ * FORK MIA (.91, .94) · AS PROPOSTAS DO ASSISTENTE: as formas (módulo puro).
  *
  * Fase 2 do desenho do upstream (#2860): o assistente PROPÕE e quem pode
  * aprova. Uma proposta é UMA peça. Na .91 cabiam três, as do modelo do

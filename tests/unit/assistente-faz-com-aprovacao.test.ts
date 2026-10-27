@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — O ASSISTENTE FAZ COM APROVAÇÃO (protótipo "ensina e faz",
+ * FORK MIA (.94) · O ASSISTENTE FAZ COM APROVAÇÃO (protótipo "ensina e faz",
  * aprovado em 26/10/2026, telas 3 a 5). A cerca da frente:
  *
  *   - o catálogo: nove peças novas e as três da .91, cada uma com onde mora,

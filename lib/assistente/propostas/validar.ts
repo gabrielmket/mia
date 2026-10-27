@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — A FORMA DO PEDIDO de cada peça do dia a dia, conferida no
+ * FORK MIA (.94) · A FORMA DO PEDIDO de cada peça do dia a dia, conferida no
  * servidor antes do aplicar.
  *
  * A linha da proposta nasce pela SESSÃO (RLS da 9100): quem chama o PostgREST

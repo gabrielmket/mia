@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.94) — AJUSTAR o cartão antes de aprovar (protótipo "ensina e
+ * FORK MIA (.94) · AJUSTAR o cartão antes de aprovar (protótipo "ensina e
  * faz", tela 3: "Use Ajustar no cartão do follow-up antes de aprovar").
  *
  * "O que o cartão mostra é exatamente o que vai ser gravado." O ajuste não
