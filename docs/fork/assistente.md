@@ -1,4 +1,4 @@
-# O assistente da MIA (.88, e .91 nos primeiros passos)
+# O assistente da MIA (.88, .91 nos primeiros passos e .93 o assistente ensina)
 
 O chat que a equipe de cada cliente usa dentro do sistema: a rotina do dia ("como
 está minha rotina hoje?", "por onde eu começo?"), os números ("como estão meus
@@ -123,6 +123,8 @@ o vê, no `plataforma_ver_assistente`; o cliente não.
 | `components/admin/AdminSidebar.tsx` | a porta dos chamados |
 | `docker/scheduler/entrypoint.sh` | o cron |
 | `lib/ai/agents/publish.ts` (.91) | o follow-up proposto sai junto com o agente publicado (import dinâmico de `lib/assistente/propostas/sai-com-o-agente.ts`) |
+| `components/admin/AdminSidebar.tsx` (.93) | a porta "Assistente nos clientes" (`/admin/assistente`) |
+| as telas do upstream das trilhas (.93) | um `data-testid` por elemento que a trilha destaca, onde faltava (seção 11) |
 
 ## 8. Para voltar ao upstream
 
@@ -221,3 +223,93 @@ todas pela mesma régua (`lib/assistente/busca-da-ajuda.ts`):
   tela de onde veio; o trecho certo entre os 3 primeiros, sem IA).
 - **Tela nova:** escreva o manual em `manuais-das-telas.ts` lendo o código da tela e
   acrescente a pergunta em `assistente-perguntas-reais`. Sem isso o CI reprova.
+
+## 11. O assistente ensina (.93): "Me mostra como", as trilhas e onde os clientes travam
+
+Protótipo aprovado em 26/10/2026, sem mudanças (`Prototipo-assistente-ensina-e-faz-2026-10-26.html`,
+telas 1, 2, 6 e 7 e as decisões 8 a 13). Esta entrega é a parte ENSINAR; a parte "fazer com
+aprovação" (telas 3 a 5) é da .94.
+
+**A regra que não se dobra continua: ele nunca clica pela pessoa.** O "Me mostra como" destaca o
+elemento de cada passo na tela de verdade, espera a pessoa fazer e confere no sistema, com o login de
+quem usa. A única coisa que a guia faz sozinha é levar até a tela do passo ("Me leva até lá").
+`tests/unit/assistente-trilhas-marcadores.test.ts` reprova se a guia passar a clicar ou disparar evento.
+
+| peça | onde |
+|---|---|
+| o catálogo: 12 trilhas e o guia curto do negócio perdido, cada passo com a tela, o marcador, o que confere e de onde retoma | `lib/assistente/trilhas/catalogo.ts` (módulo puro) |
+| as leituras que conferem (o número conectado, o funil salvo, a versão publicada...), pela SESSÃO | `lib/assistente/trilhas/leituras.ts` |
+| o progresso por pessoa, "feita" só depois de o sistema conferir, o "já fiz", a contagem por passo | `lib/assistente/trilhas/progresso.ts`, `estado.ts` |
+| a rota da sessão (`GET` a situação de cada trilha; `POST` começar, retomar, avançar, pausar, conferir, já fiz, pergunta) | `app/api/v1/assistente/trilhas/route.ts` |
+| a guia na tela (o recorte e o balão, por cima da janela aberta, sem roubar o foco dela) | `components/assistente/trilhas/GuiaNaTela.tsx`, montada ao lado do botão do topo (`BotaoDoAssistente`) |
+| a aba Trilhas (tela 2), o botão "Me mostra como", a abertura do painel, a recomendada no Início | `TrilhasDoAssistente.tsx`, `BotaoMeMostraComo.tsx`, `MeMostraComoNoPainel.tsx`, `TrilhaRecomendada.tsx` |
+| o "Me mostra como" na resposta de "como faço" | `lib/assistente/trilhas/da-ajuda.ts`, chamado por `buscar_ajuda` (ação `me_mostra_como`) |
+| o lembrete da pausa no resumo da manhã e a retenção | `lib/assistente/trilhas/lembrete.ts`, chamado por `resumo-da-manha.ts` |
+| onde os clientes travam (tela 6) e a lista de melhorias | `lib/assistente/trilhas/onde-travam.ts`, `melhorias.ts`, `/admin/assistente`, `app/api/v1/admin/assistente/*` |
+| o MCP de plataforma | `lib/mcp-plataforma/ferramentas/trilhas-do-assistente.ts` (seção .93 de [`mcp-de-implantacao.md`](mcp-de-implantacao.md)) |
+| o schema | 9090 (`mia_assistente_trilhas`, `mia_assistente_trilhas_config`, a retenção) e 9091 (`mia_melhorias_do_produto`) |
+
+**As trilhas.** Pôr de pé: ligar o primeiro número, montar o agente, criar um funil, configurar o
+follow-up, o horário da IA e convidar a equipe. Vender mais: montar um relatório, campanha de
+Broadcast, campanha de e-mail e importar contatos. Dia a dia (decisão 8): criar uma resposta rápida e
+assumir e devolver uma conversa para a IA. E o guia curto "Marcar um negócio como perdido". O papel
+mínimo de cada uma é o MESMO da tela: quem não faz lê os passos e pede a quem pode.
+
+**Como confere.** Os passos que abrem uma tela ou uma janela conferem o que está na tela (a rota, o
+marcador apareceu, o campo preenchido, a opção escolhida). Os que gravam conferem no banco, pela rota
+das trilhas, com a sessão: a guia pergunta de 4 em 4 segundos enquanto a aba está à vista, e "Pronto,
+confere" pergunta na hora. As trilhas da empresa (número, agente, horário da IA, convite) olham o
+estado de agora; as de cada pessoa contam o que apareceu DEPOIS que ela começou (`comecou_em`, que é
+o banco que grava). "Já fiz por outro caminho" confere o objetivo inteiro; se não confere, conta no
+passo (a Time vê). Não existe botão de concluir: o último passo de toda trilha é uma leitura do sistema
+(a cerca cobra).
+
+**Pausar e retomar.** O passo fica no banco, por pessoa (o "onde parei" de uma pessoa não muda o de
+ninguém). Retomar volta ao passo que abre o que se perdeu (`retomaEm`: a janela que estava aberta) e
+leva até a tela. Dentro da mesma aba, a guia sobrevive à navegação (`sessionStorage`).
+
+**Onde o destaque se prende.** Nos `data-testid` que o sistema-base usa nos testes; onde faltava,
+entrou um marcador nosso, de uma linha, com o comentário `FORK MIA (.93)` (lista abaixo).
+`tests/unit/assistente-trilhas-marcadores.test.ts` reprova a versão quando um passo aponta para um
+marcador que sumiu do código ou para uma tela que não existe mais, com a sabotagem que prova o dente.
+
+**O guia curto de qualquer manual.** Toda resposta de "como faço" que tem tela ganha o "Me mostra
+como": se o manual que responde tem trilha, o botão começa a trilha; se não, começa o guia curto do
+manual (abrir a tela, conferida, e os passos do manual, um a um). O guia curto do manual não grava
+progresso.
+
+**As decisões adotadas.**
+
+- 8: as duas trilhas do dia a dia entraram.
+- 9: todas as empresas e todos os papéis veem as trilhas, cada um as suas; o "o que falta" continua só
+  da empresa nova, e cada item "preciso confirmar" dele ganhou o botão da trilha que ensina.
+- 10: funciona na demonstração; `plataforma_reaplicar_demonstracao` (a semente,
+  `lib/demonstracao/semente/aplicar.ts`) apaga o progresso das trilhas e as propostas da empresa de
+  demonstração.
+- 11: a trilha pausada é lembrada UMA vez, no resumo da manhã seguinte, só para quem tem o resumo
+  ligado (a pausa é de antes do dia e de até 4 dias atrás, por causa do fim de semana); o resumo mora
+  no assistente e no sino, nunca no WhatsApp. O gatilho da 9090 zera a marca a cada pausa nova, e a
+  sessão não a escreve.
+- 12: a Time vê números juntados por tema, trilha, passo e proposta, e o texto só das perguntas sem
+  resposta, sem quem perguntou (e-mail, telefone e documento mascarados). O tema de cada pergunta é o
+  manual que a MESMA busca do "como faço" traria, sem IA. As empresas de demonstração não entram.
+- 13: a lista de melhorias mora em `/admin/assistente` (9091), com o MCP lendo e escrevendo; o título
+  é a chave.
+
+**Não gasta IA.** Começar, andar, conferir e terminar uma trilha não passa pelo modelo e não conta no
+limite de perguntas do dia. Só a conversa livre conta. Durante um passo, a pergunta feita ao
+assistente soma 1 no passo (só o número).
+
+**Os marcadores novos no código do upstream** (uma linha cada, `FORK MIA (.93)`): Conexões
+(`ConnectionsClient`, `PairingOptions`, `RenomearConexao`), Agentes (`AgentsList`, `AgentCard`,
+`AgentForm`, `AgentTabs`), Follow-ups (`FlowsList`), Equipe (`team/page`, `InviteForm`), Contatos
+(`contacts/_client`, `ImportContactsDialog`), Respostas rápidas (`TemplatesClient`,
+`TemplateFormDialog`), Inbox (`InboxFilters`, `ConversationListItem`, `ConversationHeader`,
+`Composer`), funil (`KanbanCard`, `CartaoAberto`, `LoseLeadDialog`) e Broadcast (`ListaDoBroadcast`,
+`NovoDisparo`, `FormularioDoOficial`). Nos arquivos do fork: `HorarioDaIaEditor`, o montador de
+relatórios e o cartão do e-mail. E, na lista fechada da seção 7: `components/admin/AdminSidebar.tsx`
+(a porta "Assistente nos clientes"), `lib/audit/actions.ts` (`assistente.trilhas_configuradas` e
+`assistente.melhoria_anotada`) e `lib/i18n/dicionario.ts` (`dicionario-mia-trilhas.ts`).
+
+**O que fica para depois, de propósito** (do protótipo): aprovar em lote, trilha escrita pela própria
+empresa, vídeo curto em cada passo e o laço de retorno por empresa em Evolução da IA.
