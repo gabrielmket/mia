@@ -58,6 +58,7 @@ export function CamposFiscais({
   comTelefone = false,
   nomeFantasia,
   prefixo = "fiscal",
+  documentoTravado = false,
 }: {
   valores: ValoresFiscais;
   aoMudar: (proximos: ValoresFiscais) => void;
@@ -67,6 +68,11 @@ export function CamposFiscais({
   /** O campo do nome fantasia é o do cadastro (o nome da empresa); aqui só para preencher pela Receita. */
   nomeFantasia?: { valor: string; aoMudar: (v: string) => void };
   prefixo?: string;
+  /**
+   * FORK MIA (.96, área de cobrança): o tipo e o CPF ou CNPJ só aparecem, sem
+   * mudar (decisão 10: trocar o titular é pedido à Time). O servidor confere de novo.
+   */
+  documentoTravado?: boolean;
 }) {
   const t = useT();
   const [buscando, setBuscando] = useState<"cnpj" | "cep" | null>(null);
@@ -157,6 +163,16 @@ export function CamposFiscais({
   return (
     <fieldset className="space-y-3" data-pagamento="dados-fiscais">
       <legend className="text-sm font-semibold">{t("Dados da empresa para a cobrança e a nota fiscal")}</legend>
+      {documentoTravado ? (
+        <div className="space-y-1.5" data-pagamento="documento-travado">
+          <Label htmlFor={id("documento")}>{pj ? t("CNPJ") : t("CPF")}</Label>
+          <Input id={id("documento")} value={valores.documento} readOnly disabled aria-readonly />
+          <p className="text-xs text-muted-foreground">
+            {t("O CNPJ ou CPF não muda por aqui: trocar o titular é pedido à Time.")}
+          </p>
+        </div>
+      ) : (
+      <>
       <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t("Empresa ou pessoa física")}>
         {(
           [
@@ -198,6 +214,8 @@ export function CamposFiscais({
         {pj ? <p className="text-xs text-muted-foreground">{t("Buscamos a razão social e o endereço na Receita. Confira antes de seguir.")}</p> : null}
         {erro("documento")}
       </div>
+      </>
+      )}
       {campo("razao_social", pj ? t("Razão social") : t("Nome completo"), { maxLength: 120, autoComplete: pj ? "organization" : "name" })}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">

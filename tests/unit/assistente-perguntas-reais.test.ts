@@ -167,6 +167,11 @@ const PERGUNTAS: Pergunta[] = [
   // FORK MIA (.96): o passo "Pagamento" do início (entrada paga e plano com teste).
   { pergunta: "como pago com pix para liberar a conta", sobre: "/app/settings/billing", espera: "pagamento-no-inicio" },
   { pergunta: "vou ser cobrado no teste grátis? como cadastro o cartão", sobre: "/app/settings/billing", espera: "pagamento-no-inicio" },
+  // FORK MIA (.96, segunda frente): a área de cobrança (a nota, o cartão, a nota errada).
+  { pergunta: "como baixo a nota fiscal do mês", sobre: "/app/settings/billing", espera: "area-de-cobranca" },
+  { pergunta: "como troco o cartão das mensalidades", em: "/app/settings/billing", sobre: "/app/settings/billing", espera: "area-de-cobranca" },
+  { pergunta: "a nota saiu errada, como peço a correção", sobre: "/app/settings/billing", espera: "area-de-cobranca" },
+  { pergunta: "onde pego o recibo do pagamento", sobre: "/app/settings/billing", espera: "area-de-cobranca" },
   { pergunta: "como atender um pedido de exclusão de dados lgpd", sobre: "/app/lgpd/requests", espera: "lgpd" },
   { pergunta: "como configuro o trunk sip", sobre: "/app/settings/voip-trunk", espera: "trunk-sip" },
   { pergunta: "como atualizo o sistema para a nova versão", sobre: "/app/settings/atualizacao", espera: "atualizacao" },

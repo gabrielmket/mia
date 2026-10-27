@@ -581,7 +581,30 @@ const OPERACAO_DO_FORK: Manual[] = [
     ],
     observacao:
       "Só quem administra a empresa paga e escolhe a forma. Os dados do cartão vão direto para o Asaas e não ficam guardados. O boleto compensa em 1 a 3 dias úteis; para começar na hora, pague por Pix (o boleto gerado é cancelado). No fim do teste sem a primeira mensalidade paga, ou com o cartão recusado, a conta fica bloqueada até o pagamento confirmar, e a tela volta a este passo, com Pix ou outro cartão. A nota fiscal sai pelo Asaas quando o pagamento confirma.",
-    vejaTambem: ["plano-e-cobranca"],
+    vejaTambem: ["plano-e-cobranca", "area-de-cobranca"],
+  },
+  // FORK MIA (.96, segunda frente): a área de cobrança (docs/fork/area-de-cobranca.md).
+  {
+    id: "area-de-cobranca",
+    titulo: "Área de cobrança: baixar a nota fiscal e o recibo, trocar o cartão e corrigir os dados fiscais",
+    palavras: [
+      "nota fiscal", "nota", "baixar a nota", "nota pdf", "xml", "recibo", "comprovante", "segunda via",
+      "historico de cobrancas", "cobrancas", "trocar o cartao", "trocar cartao", "cartao novo", "cadastrar cartao",
+      "nota saiu errada", "nota errada", "corrigir a nota", "dados fiscais", "razao social", "endereco da nota",
+      "inscricao municipal", "cnpj da nota",
+    ],
+    href: "/app/settings/billing",
+    papelMinimo: "admin",
+    passos: [
+      "Abra Configurações › Plano e cobrança e desça até Cobranças: cada mês aparece com o valor e a situação.",
+      "Para baixar a nota fiscal de um mês pago, use Nota PDF ou XML na linha dele; o comprovante do pagamento é o Recibo. Num mês em aberto, use Pagar agora ou Segunda via.",
+      "Para trocar o cartão das próximas mensalidades, em Forma de pagamento use Trocar o cartão (ou Cadastrar um cartão), digite o cartão novo e clique em Usar este cartão. Nada é cobrado na hora.",
+      "Para corrigir a razão social, o endereço ou a inscrição municipal, em Dados fiscais use Editar e depois Salvar. A mudança vale para as próximas notas.",
+      "Se uma nota já emitida saiu errada, use A nota saiu errada na linha do mês, escolha o que está errado, conte o que precisa mudar e clique em Pedir a correção. Vira um chamado para a Time, e a linha mostra correção pedida com o número do chamado.",
+    ],
+    observacao:
+      "Só quem administra a empresa vê as cobranças, baixa as notas, troca o cartão e edita os dados fiscais. O CNPJ ou CPF não muda por aqui: trocar o titular é pedido à Time. A nota de cada mês sai pelo Asaas quando o pagamento confirma; a Time cancela a nota errada e emite outra, dentro do prazo da prefeitura. Os dados do cartão vão direto para o Asaas e não ficam guardados.",
+    vejaTambem: ["pagamento-no-inicio", "plano-e-cobranca"],
   },
 ];
 

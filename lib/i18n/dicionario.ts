@@ -65,6 +65,8 @@ import { DICIONARIO_DO_ASSISTENTE_FAZ_MIA } from "./dicionario-mia-assistente-fa
 import { DICIONARIO_DAS_TRILHAS_MIA } from "./dicionario-mia-trilhas";
 // FORK MIA (.96): o pagamento no início (o cadastro da entrada paga, o passo Pagamento e a nota), idem.
 import { DICIONARIO_DO_PAGAMENTO_MIA } from "./dicionario-mia-pagamento";
+// FORK MIA (.96, segunda frente): a área de cobrança e o lado da Time, idem.
+import { DICIONARIO_DA_AREA_DE_COBRANCA_MIA } from "./dicionario-mia-area-de-cobranca";
 import { TEXTOS_AGENDA_CONFIGURACAO } from "./agenda-configuracao";
 import { TEXTOS_AGENDA_SERVICOS } from "./agenda-servicos";
 
@@ -85,6 +87,7 @@ export const DICIONARIO: Traducoes = {
   ...DICIONARIO_DO_ASSISTENTE_FAZ_MIA,
   ...DICIONARIO_DAS_TRILHAS_MIA,
   ...DICIONARIO_DO_PAGAMENTO_MIA,
+  ...DICIONARIO_DA_AREA_DE_COBRANCA_MIA,
   // Encaminhar mensagem (#2835) — botão na bolha do chat e o diálogo de destino.
   "Encaminhar": { es: "Reenviar" },
   "Encaminhar mensagem": { es: "Reenviar mensaje" },
