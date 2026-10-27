@@ -9,7 +9,7 @@
  *     sem gravar a peça), decidir pelo MCP (`plataforma_decidir_proposta_do_
  *     assistente`) e ver a peça nascer em rascunho;
  *   - o follow-up proposto sai JUNTO com o agente publicado, e só com ele;
- *   - as duas ferramentas novas (a contagem total, 94, mora no teste da cobrança).
+ *   - as duas ferramentas novas (a contagem total, 98 desde a .93, mora no teste da cobrança).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

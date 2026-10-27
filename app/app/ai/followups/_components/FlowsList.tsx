@@ -79,6 +79,8 @@ export function FlowsList({ initialData, canWrite, surface }: Props) {
       onClick={() => setDialogOpen(true)}
       variant={deAtendimento ? "default" : "outline"}
       className="w-full sm:w-auto"
+      // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+      data-testid="novo-fluxo"
     >
       <Plus size={14} aria-hidden className="mr-2" />
       {deAtendimento ? t("Novo fluxo de atendimento") : t("Novo fluxo")}
@@ -160,7 +162,12 @@ export function FlowsList({ initialData, canWrite, surface }: Props) {
         {flows.map((flow) => (
           <li key={flow.id}>
             <Card className="flex h-full flex-col gap-3 p-4 transition-colors hover:border-accent-400">
-              <Link href={`${baseHref}/${flow.id}`} className="flex flex-1 flex-col gap-3">
+              <Link
+                href={`${baseHref}/${flow.id}`}
+                className="flex flex-1 flex-col gap-3"
+                // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+                data-testid={`abrir-fluxo-${flow.id}`}
+              >
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="min-w-0 flex-1 truncate font-medium" title={flow.name}>
                     {flow.name}

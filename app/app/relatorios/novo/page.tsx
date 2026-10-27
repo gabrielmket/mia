@@ -49,7 +49,8 @@ export default async function NovoRelatorioPage() {
         </Link>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {/* FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts). */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-testid="fontes-do-relatorio">
         {FONTES.map((fonte) => {
           const F = FONTES_DO_MONTADOR[fonte];
           const fechada = F.soGestor && !anuncios;

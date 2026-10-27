@@ -153,4 +153,6 @@ export const DICIONARIO_DO_ASSISTENTE_FAZ_MIA: Traducoes = {
   'Tudo o que for aplicado aparece aqui, com quem aprovou e o "Desfazer". Fica também no Audit Log, como "via assistente".': {
     es: 'Todo lo que se aplique aparece aquí, con quién lo aprobó y el "Deshacer". También queda en el Audit Log, como "vía asistente".',
   },
+  // A junção com a .93: o painel "onde os clientes travam" conta as desfeitas por peça.
+  desfeitas: { es: "deshechas" },
 };

@@ -920,6 +920,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           )}
           <textarea
             ref={taRef}
+            // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+            data-testid="campo-da-mensagem"
             value={text}
             onChange={(e) => {
               setText(e.target.value);

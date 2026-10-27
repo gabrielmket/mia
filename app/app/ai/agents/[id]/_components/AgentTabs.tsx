@@ -60,7 +60,12 @@ export function AgentTabs(props: Props) {
     >
       <TabsList>
         <TabsTrigger value="configuration">{t("Configuração")}</TabsTrigger>
-        <TabsTrigger value="test" disabled={!hasVersion}>
+        <TabsTrigger
+          value="test"
+          disabled={!hasVersion}
+          // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+          data-testid="aba-teste-do-agente"
+        >
           {t("Teste")}
         </TabsTrigger>
         <TabsTrigger value="capacidades">{t("Capacidades")}</TabsTrigger>

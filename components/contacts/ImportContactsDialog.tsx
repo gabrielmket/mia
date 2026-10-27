@@ -80,6 +80,8 @@ export function ImportContactsDialog({ open, onOpenChange }: Props) {
                 <Label htmlFor="csv-file">{t("Arquivo CSV")}</Label>
                 <Input
                   id="csv-file"
+                  // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+                  data-testid="arquivo-de-contatos"
                   ref={inputRef}
                   type="file"
                   accept=".csv,text/csv"
@@ -100,7 +102,12 @@ export function ImportContactsDialog({ open, onOpenChange }: Props) {
                 >
                   {t("Cancelar")}
                 </Button>
-                <Button type="submit" disabled={!file || importar.isPending}>
+                <Button
+                  type="submit"
+                  disabled={!file || importar.isPending}
+                  // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+                  data-testid="confirmar-importacao"
+                >
                   {importar.isPending ? t("Importando…") : t("Importar")}
                 </Button>
               </DialogFooter>

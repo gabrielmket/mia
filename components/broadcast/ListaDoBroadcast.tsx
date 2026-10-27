@@ -83,7 +83,11 @@ export function ListaDoBroadcast({ canais }: { canais: CanaisLiberados }) {
           </p>
         </div>
         <Button asChild className="shrink-0">
-          <Link href="/app/broadcast/novo">
+          <Link
+            href="/app/broadcast/novo"
+            // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+            data-testid="novo-disparo"
+          >
             <Plus size={16} weight="bold" aria-hidden />
             <span>{t("Novo disparo")}</span>
           </Link>

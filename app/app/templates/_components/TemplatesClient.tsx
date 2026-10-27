@@ -176,7 +176,13 @@ export function TemplatesClient({ canShare, currentUserId }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex sm:justify-end">
-        <Button type="button" onClick={openNew} className="w-full sm:w-auto">
+        <Button
+          type="button"
+          onClick={openNew}
+          className="w-full sm:w-auto"
+          // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+          data-testid="nova-resposta-rapida"
+        >
           <Plus /> {t("Nova resposta rápida")}
         </Button>
       </div>

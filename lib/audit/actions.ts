@@ -1496,6 +1496,11 @@ export const AUDIT_ACTIONS = [
   "assistente.configurado",
   "assistente.conhecimento_alterado",
   "assistente.resumo_da_manha_gerado",
+  // FORK MIA (.93): as trilhas do "Me mostra como" (9090) e a lista de melhorias
+  // do produto (9091). A configuração leva o que mudou e por onde; a melhoria, o
+  // título e a situação (é texto da Time, nunca de cliente).
+  "assistente.trilhas_configuradas",
+  "assistente.melhoria_anotada",
   // FORK MIA (.91): as propostas do assistente (9080) e os primeiros passos. A
   // proposta leva o tipo, por onde (tela ou MCP) e os ids da peça criada, nunca
   // o texto do agente; o follow-up que saiu com o agente, o fluxo e o agente.

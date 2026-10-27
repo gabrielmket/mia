@@ -46,6 +46,8 @@ import { lerPerformance } from "./leituras/performance";
 import { lerRotinaDoDia } from "./leituras/rotina";
 import { prioridadesDoDia, textoDoResumoDaManha } from "./prioridades";
 import type { AcaoDoAssistente } from "./tipos";
+// FORK MIA (.93): a trilha pausada no resumo e a retenção das trilhas.
+import { expurgarTrilhasVencidas, lembreteDaTrilhaPausada } from "./trilhas/lembrete";
 
 export const HORA_DO_RESUMO = 8;
 /** Teto de pessoas por rodada: o que passar fica para a próxima hora, no mesmo dia não. */
@@ -183,10 +185,19 @@ export async function escreverResumosDaManha(admin: SupabaseClient, agora: Date)
           ]);
           const prioridades = prioridadesDoDia({ rotina, leads, performance, idioma }, t);
           const primeiroNome = (equipe.find((p) => p.user_id === c.userId)?.nome ?? "").split(/\s+/)[0] ?? "";
-          const texto = textoDoResumoDaManha({ primeiroNome, rotina, prioridades }, t);
-          const acoes: AcaoDoAssistente[] = prioridades
-            .slice(0, 4)
-            .map((p) => ({ tipo: "ir" as const, rotulo: p.rotulo, href: p.href }));
+          // FORK MIA (.93): a trilha pausada, lembrada uma vez (decisão 11; nunca no WhatsApp).
+          const lembrete = await lembreteDaTrilhaPausada(admin, {
+            organizationId: org.id,
+            userId: c.userId,
+            inicioDoDia: inicio,
+            t,
+          }).catch(() => null);
+          const resumo = textoDoResumoDaManha({ primeiroNome, rotina, prioridades }, t);
+          const texto = lembrete ? `${resumo}\n\n${lembrete.texto}` : resumo;
+          const acoes: AcaoDoAssistente[] = [
+            ...prioridades.slice(0, 4).map((p) => ({ tipo: "ir" as const, rotulo: p.rotulo, href: p.href })),
+            ...(lembrete ? [lembrete.acao] : []),
+          ];
 
           const { data: conversa } = await admin
             .from("mia_assistente_conversas")
@@ -213,6 +224,7 @@ export async function escreverResumosDaManha(admin: SupabaseClient, agora: Date)
             acoes,
             contatos: [...new Set([...rotina.contatos, ...(leads?.contatos ?? [])])],
           });
+          if (lembrete) await lembrete.marcar().catch(() => undefined);
           await admin
             .from("mia_assistente_preferencias")
             .update({ ultimo_resumo_em: dia })
@@ -253,6 +265,9 @@ export async function expurgarAssistenteVencido(
     logger.warn("[assistente] a retenção do assistente falhou", { erro: error.message });
     return null;
   }
+  // FORK MIA (.93): o progresso das trilhas parado há mais de um ano (9090).
+  const trilhas = await expurgarTrilhasVencidas(admin).catch(() => null);
+  if (trilhas === null) logger.warn("[assistente] a retenção das trilhas falhou");
   const r = (data ?? {}) as { mensagens?: number; conversas?: number; chamados?: number };
   return { mensagens: r.mensagens ?? 0, conversas: r.conversas ?? 0, chamados: r.chamados ?? 0 };
 }

@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { PainelDoAssistente } from "@/components/assistente/PainelDoAssistente";
 // FORK MIA (.94): a aba das propostas (o assistente faz com aprovação).
 import { PropostasDoAssistente } from "@/components/assistente/PropostasDoAssistente";
+import { TrilhasDoAssistente } from "@/components/assistente/trilhas/TrilhasDoAssistente";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -38,7 +39,9 @@ import { PAPEIS_DO_ASSISTENTE, ROTULO_DA_SITUACAO, ROTULO_DO_TIPO_DE_CHAMADO } f
 import { ROTULO_DO_PAPEL, roleAtLeast } from "@/lib/auth/types";
 import { cn } from "@/lib/utils";
 
-type Aba = "conversas" | "resumo" | "chamados" | "empresa" | "propostas";
+// FORK MIA (.93): "trilhas", o "Me mostra como" (components/assistente/trilhas/).
+// FORK MIA (.94): "propostas", o assistente faz com aprovação.
+type Aba = "conversas" | "trilhas" | "resumo" | "chamados" | "empresa" | "propostas";
 
 export function AssistenteClient() {
   const t = useT();
@@ -58,9 +61,17 @@ export function AssistenteClient() {
   const [conversaId, setConversaId] = useState<string | null>(params?.get("conversa") ?? null);
   const estado = useAssistente(conversaId);
   const resumo = useResumoDaManha();
+  // FORK MIA (.93): o "Ver as trilhas" da guia abre a aba mesmo com a página já aberta.
+  const abaPedida = params?.get("aba") ?? null;
+  const [abaPedidaVista, setAbaPedidaVista] = useState(abaPedida);
+  if (abaPedida !== abaPedidaVista) {
+    setAbaPedidaVista(abaPedida);
+    if (abaPedida === "trilhas") setAba("trilhas");
+  }
 
   const abas: Array<{ id: Aba; rotulo: string }> = [
     { id: "conversas", rotulo: "Conversas" },
+    { id: "trilhas", rotulo: "Trilhas" },
     { id: "resumo", rotulo: "Resumo da manhã" },
     { id: "chamados", rotulo: "Chamados" },
     ...(propoe ? [{ id: "propostas" as const, rotulo: "Propostas" }] : []),
@@ -136,6 +147,8 @@ export function AssistenteClient() {
           </section>
         </div>
       ) : null}
+
+      {aba === "trilhas" ? <TrilhasDoAssistente /> : null}
 
       {aba === "resumo" ? (
         <section className="flex max-w-2xl flex-col gap-3" data-testid="resumo-da-manha">

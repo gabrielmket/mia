@@ -188,12 +188,16 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **95** ferramentas no servidor: as 87 desta página e as 8 da migração
-([`mcp-de-migracao.md`](mcp-de-migracao.md)). A mais nova (.94) é
-`plataforma_desfazer_proposta_do_assistente`, do assistente que faz com aprovação
-([`assistente.md`](assistente.md), seção 11; veja "O assistente faz com aprovação (.94)",
-nesta seção), e `plataforma_ver_propostas_do_assistente`, `plataforma_decidir_proposta_do_assistente`,
-`plataforma_configurar_assistente` e `plataforma_ver_assistente` cresceram. As duas de antes dela (.91) são as das
+São **99** ferramentas no servidor: as 91 desta página e as 8 da migração
+([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .94 juntou as duas partes do assistente que ensina e
+faz. A mais nova é `plataforma_desfazer_proposta_do_assistente`, do assistente que faz com aprovação
+([`assistente.md`](assistente.md), seção 12; veja "O assistente faz com aprovação (.94)", nesta
+seção). As quatro de antes dela (.93) são as do "Me mostra como" e de onde os clientes travam
+([`assistente.md`](assistente.md), seção 11): `plataforma_ver_trilhas`, `plataforma_configurar_trilhas`,
+`plataforma_ver_onde_os_clientes_travam` e `plataforma_anotar_melhoria_do_produto` (veja "O assistente
+ensina (.93)", nesta seção). Cresceram `plataforma_ver_propostas_do_assistente`,
+`plataforma_decidir_proposta_do_assistente`, `plataforma_configurar_assistente`,
+`plataforma_ver_assistente` e `plataforma_ver_implantacao`. As duas de antes delas (.91) são as das
 propostas do assistente nos primeiros passos ([`primeiros-passos.md`](primeiros-passos.md)):
 `plataforma_ver_propostas_do_assistente` e `plataforma_decidir_proposta_do_assistente`
 (veja "Os primeiros passos e as propostas do assistente (.91)", nesta seção), e
@@ -694,13 +698,33 @@ como `plataforma_garantir_agente`, e usa `implantar_configuracao`.
 O MCP não PROPÕE: propor é do assistente, na conversa de quem administra ou gere a
 empresa.
 
+### O assistente ensina (.93)
+
+Função do fork ([`assistente.md`](assistente.md), seção 11), e entra no MCP na mesma versão. A
+prova está em `tests/unit/mcp-de-implantacao-trilhas.test.ts` e a CONTAGEM (98 na .93, 99 com a .94) no teste da
+cobrança. Nenhuma operação nova: configurar trilhas é montagem (`implantar_configuracao`), e anotar
+uma melhoria do produto é a Time falando do produto (`responder_chamados`, a mesma caixinha de
+responder chamado).
+
+| ferramenta | o que faz | operação | reexecução |
+|---|---|---|---|
+| `plataforma_ver_trilhas` | o catálogo das trilhas (passos, o que cada passo confere, o papel) e o progresso de uma empresa por pessoa: nome, feita ou pausada em qual passo, desde quando; as da empresa com `feita_na_empresa` lida agora; a configuração e a recomendada no Início. Sem conversa nenhuma | leitura | |
+| `plataforma_configurar_trilhas` | `desligar` e `ligar` trilhas, `recomendada` (ou `null` para a régua padrão) e `recomecar_progresso` (`"todas"` ou o e-mail de uma pessoa: útil na demonstração). Recusa recomendar a desligada | `implantar_configuracao` | mesma resposta, sem efeito novo |
+| `plataforma_ver_onde_os_clientes_travam` | o painel de `/admin/assistente`, de todas as empresas: temas mais perguntados (pelo manual que responderia, e se já há trilha ou guia curto), em que passo cada trilha para (% por passo, a maior queda, perguntas e "Já fiz" que não conferiram por passo), trilhas abandonadas, propostas desfeitas por tipo, perguntas sem resposta (só o texto, mascarado) e a lista de melhorias. Por `periodo_dias` (7, 30, 90) e `segmento`. A demonstração não entra | leitura | |
+| `plataforma_anotar_melhoria_do_produto` | anota ou atualiza uma melhoria (`titulo`, `evidencia`, `situacao`: anotada, em_desenvolvimento, no_ar; `origem`). O título é a chave, sem diferença de maiúscula | `responder_chamados` | o mesmo título atualiza (`igual` quando nada mudou) |
+| `plataforma_ver_assistente` (cresce) | `trilhas`: começadas, feitas, pausadas e abandonadas (pausadas há mais de 7 dias), no total e por trilha | leitura | |
+| `plataforma_ver_implantacao` (cresce) | `rotulo_do_cliente.trilhas_que_ensinam`: a trilha que ensina cada item "preciso confirmar" (o número, o agente, a equipe) | leitura | |
+| `plataforma_configurar_assistente` (cresce) | `me_mostra_como`: liga ou desliga a guia na tela; devolve o antes e o depois, sem mexer nas trilhas desligadas | `implantar_configuracao` | |
+
+O MCP não marca trilha como feita (feita vem do estado do sistema), não lê a conversa de ninguém com
+o assistente e não toca em nada da lista do "nunca".
 ### O assistente faz com aprovação (.94)
 
-Função do fork ([`assistente.md`](assistente.md), seção 11; protótipo "ensina e faz"
+Função do fork ([`assistente.md`](assistente.md), seção 12; protótipo "ensina e faz"
 aprovado em 26/10/2026, tela 7), e entra no MCP na mesma versão. A prova está em
 `tests/unit/mcp-de-implantacao-assistente-faz.test.ts` (o caminho de uma peça do dia a dia
 no banco em memória: preparar, aplicar pelo MCP, travar, desfazer e "já estava") e a
-CONTAGEM (95) no teste da cobrança. Nenhuma operação nova: desfazer tira configuração que a
+CONTAGEM (99, com a .93) no teste da cobrança. Nenhuma operação nova: desfazer tira configuração que a
 própria proposta criou, como o decidir, e usa `implantar_configuracao`.
 
 | ferramenta | o que faz | operação | reexecução |
@@ -889,9 +913,10 @@ Testes:
 | arquivo | o que mede |
 |---|---|
 | `tests/unit/mcp-de-implantacao-assistente.test.ts` | as cinco ferramentas do assistente da MIA (.88): o que gravam, a reexecução, a operação própria do responder, a entrega da resposta no assistente, no sino e no e-mail, a recusa do chamado da demonstração, e as cinco dele (a CONTAGEM da lista mora no teste do e-mail marketing) |
-| `tests/unit/mcp-de-implantacao-cobranca.test.ts` | as nove ferramentas da cobrança da jornada de assinatura (.90) e a CONTAGEM da lista (95 desde a .94): as três caixinhas novas e o raio de cada uma, os exemplos que passam no esquema, o que o MCP não faz (pelo código-fonte: chave do provedor, marcar pago, cancelar, modo do cadastro), a cobrança desligada que recusa, o `criar_cliente` isento e com a origem, e o `liberar_modulo` que cresce |
+| `tests/unit/mcp-de-implantacao-cobranca.test.ts` | as nove ferramentas da cobrança da jornada de assinatura (.90) e a CONTAGEM da lista (99 desde a .94, com a .93): as três caixinhas novas e o raio de cada uma, os exemplos que passam no esquema, o que o MCP
 | `tests/unit/mcp-de-implantacao-email-marketing.test.ts` | as nove ferramentas do e-mail marketing (.89): leitura livre e as duas caixinhas novas, o MCP que nunca dispara (pelo código-fonte e pelo banco: rascunho, ninguém na fila), o teste só para a equipe, a demonstração e o módulo que recusam o teste, a configuração que não duplica, a supressão que só acrescenta, o preço por e-mail que não mexe no da mensagem e a área nova do checklist |
 | `tests/unit/mcp-de-implantacao-primeiros-passos.test.ts` | as duas ferramentas das propostas do assistente (.91) e o rótulo do cliente em `plataforma_ver_implantacao`: a empresa nova com as três colunas e o que não se aplica, o número oficial que espera a Time, a empresa que já roda que não aparece no Início, e o caminho inteiro de uma proposta (preparar não grava a peça, aplicar adota o quadro e cria em rascunho, recusar não cria nada, o token sem a operação não decide, e o follow-up sai junto com o agente publicado) |
+| `tests/unit/mcp-de-implantacao-trilhas.test.ts` | as quatro ferramentas do "Me mostra como" e de onde os clientes travam (.93) e as três que crescem: o progresso por pessoa sem conversa, desligar e recomendar com a recusa da desligada, recomeçar o progresso por e-mail, o painel sem quem perguntou, a melhoria que não duplica pelo título, e as caixinhas de cada escrita |
 | `tests/invariants/email-marketing.test.ts` | as tabelas do e-mail (9060 a 9065) no Postgres de verdade: isolamento por empresa e papel, só o servidor grava, a demonstração que não envia, a supressão que só acrescenta, a anonimização que apaga o legível e mantém o veto, o débito por lote e a fila do worker |
 | `tests/unit/mcp-de-implantacao-ferramentas.test.ts` | o catálogo: descrições, exemplos que passam no próprio esquema, a guarda da operação, organização inexistente, recusa que ensina, auditoria |
 | `tests/unit/mcp-de-implantacao-operacoes.test.ts` | cada ferramenta: o que grava, a reexecução, as recusas e a empresa de demonstração |

@@ -79,6 +79,8 @@ export function PairingOptions({
           type="button"
           variant={mode === "qr" ? "default" : "outline"}
           aria-pressed={mode === "qr"}
+          // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+          data-testid="forma-qr-code"
           disabled={busy}
           onClick={() => {
             setMode("qr");

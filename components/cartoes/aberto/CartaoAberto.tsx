@@ -233,6 +233,8 @@ export function CartaoAberto({
                     variant="outline"
                     className="h-7 border-error-fg/40 text-xs text-error-fg"
                     onClick={() => setPerdendo(true)}
+                    // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+                    data-testid="marcar-perdido"
                   >
                     {t("Perdido")}
                   </Button>

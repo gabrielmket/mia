@@ -4,6 +4,8 @@ import { usePathname } from "next/navigation";
 import {
   Gauge,
   ChatsCircle,
+  // FORK MIA (.93): a porta de onde os clientes travam com o assistente.
+  Lightbulb,
   Brain,
   Buildings,
   ClipboardText,
@@ -87,6 +89,9 @@ const NAV_ITEMS: NavItem[] = [
   // FORK MIA (.88) — os chamados que as equipes dos clientes abrem pelo assistente
   // da MIA (docs/fork/assistente.md): erro, dúvida ou pedido para a Time.
   { href: "/admin/chamados", label: "Chamados do assistente", icon: ChatsCircle },
+  // FORK MIA (.93) — onde os clientes travam com o assistente (temas, o passo onde cada
+  // trilha para, propostas desfeitas) e a lista de melhorias do produto (docs/fork/assistente.md).
+  { href: "/admin/assistente", label: "Assistente nos clientes", icon: Lightbulb },
   // FORK MIA (.90) — as empresas que entraram sozinhas pelo cadastro: situação,
   // plano, primeiros passos, pedidos e números esperando (docs/fork/jornada-de-assinatura.md).
   { href: "/admin/empresas-do-cadastro", label: "Empresas do cadastro", icon: Buildings },

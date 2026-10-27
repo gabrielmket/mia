@@ -29,6 +29,8 @@ import { COLUNAS_DA_CONFIG, configDaLinha, LIMITE_MAXIMO_POR_DIA } from "@/lib/a
 import { TIPOS_DE_PROPOSTA } from "@/lib/assistente/propostas/tipos";
 import { garantirConhecimento, TETO_DE_ITENS, TETO_DO_TEXTO } from "@/lib/assistente/conhecimento";
 import { PAPEIS_DO_ASSISTENTE, SITUACOES_DE_CHAMADO } from "@/lib/assistente/tipos";
+// FORK MIA (.93): o "Me mostra como" e as trilhas na leitura do assistente.
+import { definirMeMostraComo, resumoDasTrilhasDaEmpresa } from "@/lib/assistente/trilhas/progresso";
 import { audit } from "@/lib/audit";
 
 import { Recusa } from "../recusa";
@@ -53,7 +55,9 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
       "Desde a .94, também os TIPOS DE PROPOSTA que o assistente prepara na empresa (`tipos_de_proposta`: as três do modelo e as nove do dia a dia; null volta a todos) " +
       "e se quem não aprova pode PEDIR a quem aprova com o cartão pronto (`pode_pedir`, padrão ligado). " +
       "Só o que vier no pedido muda; o resto continua. Pode ser chamada de novo sem efeito colateral. " +
-      "O QUE NÃO FAZ: não escreve a base própria (isso é plataforma_garantir_conhecimento_do_assistente), não muda o resumo de quem já escolheu o seu e não liga nada da lista do \"nunca\" (número, cobrança, convite, usuários, chaves, apagar, publicar, mensagem a cliente).",
+      "Desde a .93, `me_mostra_como` liga ou desliga a guia que destaca cada passo na tela (as trilhas; padrão ligado). " +
+      "O QUE NÃO FAZ: não escreve a base própria (isso é plataforma_garantir_conhecimento_do_assistente), não muda o resumo de quem já escolheu o seu, " +
+      "não liga nem desliga uma trilha só (isso é plataforma_configurar_trilhas) e não liga nada da lista do \"nunca\" (número, cobrança, convite, usuários, chaves, apagar, publicar, mensagem a cliente).",
     inputSchema: {
       organization_id: ORGANIZACAO,
       ligado: z.boolean().optional().describe("Liga (true) ou desliga (false) o assistente na empresa inteira."),
@@ -85,6 +89,11 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
         .boolean()
         .optional()
         .describe("true (padrão): quem não aprova manda o cartão pronto a quem aprova, no assistente e no sino. false: o assistente só diz quem pode."),
+      // FORK MIA (.93): o "Me mostra como" (as trilhas que andam na tela; docs/fork/assistente.md, seção 11).
+      me_mostra_como: z
+        .boolean()
+        .optional()
+        .describe('O "Me mostra como": a guia que destaca cada passo na tela e confere no sistema. Padrão ligado; desligado, o assistente só explica.'),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,
@@ -94,6 +103,7 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
       resumo_da_manha_padrao: false,
       tipos_de_proposta: null,
       pode_pedir: true,
+      me_mostra_como: true,
     },
     operacao: "implantar_configuracao",
     handler: async (ctx, args) => {
@@ -129,6 +139,8 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
         { onConflict: "organization_id" },
       );
       if (error) throw new Error(`não consegui gravar a configuração do assistente: ${error.message}`);
+      // FORK MIA (.93): o "Me mostra como" mora na configuração das trilhas (9090).
+      const meMostraComo = await definirMeMostraComo(c.admin, { organizationId: c.orgId, valor: args.me_mostra_como, autorUserId: c.autorUserId });
       void audit({
         actorUserId: c.autorUserId,
         action: "assistente.configurado",
@@ -136,7 +148,7 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
         resourceType: "mia_assistente_config",
         resourceId: c.orgId,
         requestId: c.requestId,
-        metadata: { ...depois, via: "mcp_plataforma" },
+        metadata: { ...depois, me_mostra_como: meMostraComo.depois, via: "mcp_plataforma" },
       });
       return {
         configuracao: depois,
@@ -148,6 +160,7 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
           tipos_de_proposta: antes.tiposDePropostas,
           pode_pedir: antes.podePedir,
         },
+        me_mostra_como: meMostraComo,
       };
     },
   },
@@ -216,6 +229,7 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
     description:
       "O assistente da MIA de um cliente, do lado da plataforma: a configuração (ligado, papéis, limite do dia, resumo da manhã padrão), " +
       "o USO nos últimos 30 dias por papel (perguntas e pessoas), as perguntas que ficaram SEM RESPOSTA (o texto da pergunta e quantas vezes, nunca a conversa), " +
+      "as TRILHAS do Me mostra como (começadas, feitas, pausadas e abandonadas, no total e por trilha; desde a .93), " +
       "quantos itens tem a base própria, o CUSTO do assistente no mês (chamadas e centavos, de llm_calls) e (.94) as PROPOSTAS dos últimos 30 dias por tipo: " +
       "preparadas, pedidas a quem aprova, aplicadas, desfeitas, recusadas e vencidas (proposta muito desfeita é proposta ruim). " +
       "QUANDO USAR: para conferir a implantação e para decidir o que escrever na base própria.",
@@ -281,6 +295,8 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
         grupos.set(chave, g);
       }
       const chamadas = (custo.data ?? []) as Array<{ cost_cents: number | string | null }>;
+      // FORK MIA (.93): as trilhas do "Me mostra como": começadas, feitas e abandonadas.
+      const trilhas = await resumoDasTrilhasDaEmpresa(c.admin, c.orgId, agora).catch(() => null);
       const centavos = chamadas.reduce((soma, l) => soma + (l.cost_cents === null ? 0 : Number(l.cost_cents)), 0);
       return {
         organizacao: { id: org.id, nome: org.display_name, demonstracao: org.demonstracao },
@@ -315,6 +331,7 @@ export const FERRAMENTAS_DO_ASSISTENTE: readonly FerramentaDePlataforma[] = [
         ),
         sem_resposta: [...grupos.values()].sort((a, b) => b.vezes - a.vezes).slice(0, 20),
         base_propria_itens: base.count ?? 0,
+        trilhas,
         custo_do_mes: {
           chamadas: chamadas.length,
           centavos_usd: Math.round(centavos * 100) / 100,

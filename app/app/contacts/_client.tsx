@@ -215,7 +215,12 @@ export function ContactsListClient() {
             <UsersThree size={16} weight="bold" aria-hidden />
             <span>{t("Duplicados")}</span>
           </Button>
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
+          <Button
+            variant="outline"
+            onClick={() => setImportOpen(true)}
+            // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+            data-testid="importar-contatos"
+          >
             <UploadSimple size={16} weight="bold" aria-hidden />
             <span>{t("Importar CSV")}</span>
           </Button>

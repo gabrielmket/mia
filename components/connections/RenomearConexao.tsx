@@ -63,7 +63,13 @@ export function RenomearConexao({
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={abrirDialogo}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={abrirDialogo}
+        // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+        data-testid="renomear-numero"
+      >
         <PencilSimple size={14} aria-hidden />
         {t("Renomear")}
       </Button>
@@ -82,6 +88,8 @@ export function RenomearConexao({
             <Label htmlFor={`connection-name-${channelId}`}>{t("Nome interno")}</Label>
             <Input
               id={`connection-name-${channelId}`}
+              // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+              data-testid="nome-do-numero"
               value={name}
               maxLength={80}
               autoFocus

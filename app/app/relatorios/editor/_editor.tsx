@@ -291,7 +291,13 @@ export function EditorDeRelatorio({ inicio, funis, funilPadrao, permissoes }: Pr
           <Secao titulo={t("O que medir")}>
             <label className="flex flex-col gap-1 text-sm">
               <span className="sr-only">{t("Medida")}</span>
-              <select className={CAMPO} value={config.medida} onChange={(e) => mudar({ medida: e.target.value as MedidaDoMontador })}>
+              <select
+                className={CAMPO}
+                value={config.medida}
+                onChange={(e) => mudar({ medida: e.target.value as MedidaDoMontador })}
+                // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+                data-testid="medida-do-relatorio"
+              >
                 {medidas.map((m) => (
                   <option key={m} value={m} disabled={MEDIDAS_DO_MONTADOR[m].valor && !permissoes.valores}>
                     {rotuloDaMedida(m, config.fonte, t)}
@@ -459,7 +465,12 @@ export function EditorDeRelatorio({ inicio, funis, funilPadrao, permissoes }: Pr
               </label>
             ) : null}
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => void salvar()} disabled={salvando}>
+              <Button
+                onClick={() => void salvar()}
+                disabled={salvando}
+                // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+                data-testid="salvar-relatorio"
+              >
                 {vaiSerCopia ? t("Salvar como cópia") : t("Salvar")}
               </Button>
               <Button variant="secondary" onClick={() => setPainel(true)}>

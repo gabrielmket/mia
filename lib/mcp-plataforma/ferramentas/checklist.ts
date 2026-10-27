@@ -14,6 +14,8 @@
 import { lerEvolucao } from "@/lib/assistente/retratos";
 import { followupsQueSaemComOAgente } from "@/lib/assistente/leituras/o-que-falta";
 import { oQueFaltaAparece } from "@/lib/onboarding/o-que-falta-aparece";
+// FORK MIA (.93): a trilha que ensina cada item "preciso confirmar".
+import { TRILHA_DO_ITEM_DO_QUE_FALTA, trilhaPorId } from "@/lib/assistente/trilhas/catalogo";
 
 import { avaliarAreas } from "../checklist/avaliar";
 import { rotuloDoCliente, rotuloEmTexto } from "../checklist/rotulo-do-cliente";
@@ -34,6 +36,7 @@ export const FERRAMENTAS_DO_CHECKLIST: readonly FerramentaDePlataforma[] = [
       "`rotulo_do_cliente` é o \"o que falta\" que a empresa nova vê no Início e o assistente dela lê (preenchido, posso completar, preciso confirmar, " +
       "não se aplica), com `aparece_no_inicio` (só para empresa que passou pelo passo a passo desta versão, até zerar) e a evolução dos retratos; " +
       "o número oficial que espera a Time ligar aparece ali com quem faz: Time Company. " +
+      "Desde a .93, `rotulo_do_cliente.trilhas_que_ensinam` diz a trilha do Me mostra como que ensina cada item preciso confirmar (o número, o agente, a equipe). " +
       "O QUE NÃO FAZ: não grava nada (nem retrato), e não mostra o conteúdo (prompt, produtos, textos). Para o conteúdo, use plataforma_ver_funis, " +
       "plataforma_ver_agentes, plataforma_ver_catalogo e plataforma_ver_configuracao.",
     inputSchema: {
@@ -89,6 +92,13 @@ export const FERRAMENTAS_DO_CHECKLIST: readonly FerramentaDePlataforma[] = [
           aparece_no_inicio: criterio.aparece,
           por_que: criterio.motivo,
           ...rotuloEmTexto(rotulo),
+          // FORK MIA (.93): o "Me mostra como" de cada item que só uma pessoa faz.
+          trilhas_que_ensinam: rotulo.itens
+            .filter((i) => i.coluna === "preciso_confirmar" && TRILHA_DO_ITEM_DO_QUE_FALTA[i.chave])
+            .map((i) => {
+              const t = trilhaPorId(TRILHA_DO_ITEM_DO_QUE_FALTA[i.chave]!)!;
+              return { item: i.chave, trilha: t.id, titulo: t.titulo, passos: t.passos.length };
+            }),
           evolucao: evolucao
             ? { ao_entrar: evolucao.ao_entrar, ao_entrar_em: evolucao.ao_entrar_em, ultimo_retrato: evolucao.ultimo, zerou_em: evolucao.zerou_em }
             : null,

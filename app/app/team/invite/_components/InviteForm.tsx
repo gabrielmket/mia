@@ -82,6 +82,8 @@ export function InviteForm() {
           <Label htmlFor="emails">Emails</Label>
           <Textarea
             id="emails"
+            // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+            data-testid="emails-do-convite"
             value={emailsRaw}
             onChange={(e) => setEmailsRaw(e.target.value)}
             rows={8}
@@ -91,7 +93,11 @@ export function InviteForm() {
         <div className="space-y-2">
           <Label htmlFor="role">{t("Papel")}</Label>
           <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-            <SelectTrigger id="role">
+            <SelectTrigger
+              id="role"
+              // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+              data-testid="papel-do-convite"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -111,6 +117,8 @@ export function InviteForm() {
         />
         <Button
           type="submit"
+          // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+          data-testid="enviar-convites"
           disabled={
             invite.isPending ||
             !interfaceSettingsSchema.safeParse(settings).success ||

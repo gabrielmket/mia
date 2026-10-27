@@ -77,6 +77,8 @@ import {
   type Escritor,
   type Valor,
 } from "./escritor";
+// FORK MIA (.94): o "recomeçar" desfaz também as peças das propostas (decisão 10).
+import { sqlDeRecomecarOAssistente } from "./recomecar-o-assistente";
 
 // ─── os ids ─────────────────────────────────────────────────────────────────
 
@@ -342,6 +344,11 @@ async function passos(e: Escritor, opcoes: OpcoesDaSemente, avisos: string[]): P
   await conferirQueOEspacoEDaSemente(e, c);
   await gravarEquipe(e, c);
   await gravarEmpresa(e, c);
+  // FORK MIA (.93, .94): "recomeçar" a demonstração limpa o assistente (decisão 10): as
+  // peças das propostas aplicadas, as propostas e as trilhas. Logo depois da empresa (a
+  // marca já está gravada) e ANTES das gravações da semente, que regravam o que é dela
+  // por cima do que foi desfeito.
+  await recomecarOAssistente(e, c);
   await gravarAcesso(e, c, opcoes, avisos);
   await gravarModulos(e, c);
   await gravarCanalEAgente(e, c);
@@ -357,6 +364,20 @@ async function passos(e: Escritor, opcoes: OpcoesDaSemente, avisos: string[]): P
   await gravarObrigacoes(e, c);
   await gravarRelatorios(e, c);
   await neutralizarOsEventos(e, c);
+}
+
+/**
+ * FORK MIA (.93, .94) · a demonstração recomeçada volta sem o progresso das
+ * trilhas do "Me mostra como" (9090), sem as propostas do assistente (9080) e
+ * (.94) sem as PEÇAS que as propostas aplicadas criaram: a etapa, a resposta, a
+ * etiqueta, a tarefa, o follow-up, o item de conhecimento, o relatório, a meta e
+ * as três da .91 (decisão 10). Quem apresenta mostra o sistema se ensinando e
+ * fazendo do zero. Só em empresa de demonstração (a marca da 9010), e sem as
+ * tabelas (banco antes da 9080/9090), nada a limpar. O SQL mora em
+ * `recomecar-o-assistente.ts`, o mesmo que o invariante executa.
+ */
+async function recomecarOAssistente(e: Escritor, { org }: Contexto): Promise<void> {
+  await e.executar(sqlDeRecomecarOAssistente(org));
 }
 
 /** Grava direto, conectada ao Postgres, numa transação só. */

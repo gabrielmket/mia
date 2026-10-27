@@ -107,7 +107,13 @@ export function AgentCard({ agent, canWrite }: Props) {
       </dl>
       <div className="mt-auto pt-2">
         <Link href={`/app/ai/agents/${agent.id}`}>
-          <Button variant="outline" size="sm" className="w-full">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+            data-testid="editar-agente"
+          >
             {canWrite ? t("Editar") : t("Visualizar")}
           </Button>
         </Link>

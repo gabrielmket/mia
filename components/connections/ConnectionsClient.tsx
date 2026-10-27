@@ -453,7 +453,13 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
               os três são a mesma escrita (`metadata.disabled`), e a diferença é
               quando — agora, ou quando o operador escolher. */}
           <AgendaDePausa canais={list} />
-          <Button size="sm" disabled={creating || !wahaConfigured} onClick={handleConnectNew}>
+          <Button
+            size="sm"
+            disabled={creating || !wahaConfigured}
+            onClick={handleConnectNew}
+            // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+            data-testid="conectar-novo-whatsapp"
+          >
             {creating ? (
               <CircleNotch size={14} className="animate-spin" aria-hidden />
             ) : (
@@ -954,7 +960,8 @@ function QrDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      {/* FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts). */}
+      <DialogContent className="sm:max-w-md" data-testid="janela-conectar-whatsapp">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
@@ -974,6 +981,8 @@ function QrDialog({
               src={`/api/v1/channel-sessions/${sessionId}/qr?t=${tick}`}
               alt={t("QR Code para conectar WhatsApp")}
               className="h-64 w-64 rounded-md border bg-white p-2"
+              // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+              data-testid="qr-code-do-whatsapp"
             />
             } />
           ) : status === "WORKING" ? (

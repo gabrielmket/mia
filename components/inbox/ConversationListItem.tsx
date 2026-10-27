@@ -305,6 +305,8 @@ export function ConversationListItem({
       <button
         type="button"
         data-conversation-id={conversation.id}
+        // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+        data-testid="conversa-da-lista"
         onClick={() => onSelect(conversation.id)}
         className={cn(
           "group relative flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-elevated",

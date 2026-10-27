@@ -389,6 +389,8 @@ export function ConversationHeader({
             // dita: desde a 0173 assumir também para o atendimento automático, e
             // um botão que muda duas coisas precisa anunciar as duas.
             title={t("Você passa a responder esta conversa e o atendimento automático para aqui.")}
+            // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+            data-testid="assumir-conversa"
             onClick={() =>
               claim.mutate({
                 conversation_id: conversation.id,

@@ -244,7 +244,8 @@ export function FormularioDoOficial() {
   }
 
   return (
-    <div className="space-y-4">
+    // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
+    <div className="space-y-4" data-testid="formulario-do-oficial">
       <Card className="space-y-4 p-4">
         <h2 className="font-medium">{t("Informações")}</h2>
         <div className="space-y-2">
