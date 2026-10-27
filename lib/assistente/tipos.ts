@@ -37,6 +37,17 @@ export type AcaoDoAssistente =
       titulo: string;
       mudancas: Array<{ rotulo: string; valor: string }>;
     }
+  /**
+   * FORK MIA (.93): o "Me mostra como": a trilha que ensina o que a pessoa
+   * perguntou (`trilha_id`, lib/assistente/trilhas/catalogo.ts), ou o guia curto
+   * do manual que tem tela (`guia`). A guia anda na tela; ela nunca clica.
+   */
+  | {
+      tipo: "me_mostra_como";
+      rotulo: string;
+      trilha_id?: string;
+      guia?: { id: string; titulo: string; href: string; passos: string[] };
+    }
   /** O rascunho do chamado, que a pessoa confere antes de abrir. */
   | {
       tipo: "chamado";

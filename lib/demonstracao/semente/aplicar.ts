@@ -356,7 +356,29 @@ async function passos(e: Escritor, opcoes: OpcoesDaSemente, avisos: string[]): P
   await gravarTarefasSoltas(e, c);
   await gravarObrigacoes(e, c);
   await gravarRelatorios(e, c);
+  // FORK MIA (.93): "recomeçar" a demonstração limpa as trilhas e as propostas do assistente (decisão 10).
+  await recomecarOAssistente(e, c);
   await neutralizarOsEventos(e, c);
+}
+
+/**
+ * FORK MIA (.93) — a demonstração recomeçada volta sem o progresso das trilhas
+ * do "Me mostra como" (9090) e sem as propostas do assistente (9080): quem
+ * apresenta mostra o sistema se ensinando do zero. A peça que uma proposta
+ * criou e a semente não conhece continua lá (a semente não apaga o que foi
+ * feito à mão). Sem as tabelas (banco antes da 9080/9090), nada a limpar.
+ */
+async function recomecarOAssistente(e: Escritor, { org }: Contexto): Promise<void> {
+  await e.executar(`do $semente$
+begin
+  if to_regclass('public.mia_assistente_trilhas') is not null then
+    delete from public.mia_assistente_trilhas where organization_id = ${literal(org)}::uuid;
+  end if;
+  if to_regclass('public.mia_assistente_propostas') is not null then
+    delete from public.mia_assistente_propostas where organization_id = ${literal(org)}::uuid;
+  end if;
+end
+$semente$`);
 }
 
 /** Grava direto, conectada ao Postgres, numa transação só. */

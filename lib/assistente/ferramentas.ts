@@ -53,6 +53,8 @@ import {
 } from "./propostas/preparar";
 import type { PropostaDoTurno } from "./propostas/tipos";
 import { lerEvolucao } from "./retratos";
+// FORK MIA (.93): o "Me mostra como" da resposta de "como faço" (docs/fork/assistente.md, seção 11).
+import { acaoMeMostraComo } from "./trilhas/da-ajuda";
 import type { TelaConhecida } from "./telas";
 import { hrefDoApp, type AcaoDoAssistente, type TelaDaPergunta, type TipoDeChamado } from "./tipos";
 
@@ -412,7 +414,10 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
           enderecoDoSistema: ctx.enderecoDoSistema ?? null,
         });
         coletor.anotar("buscar_ajuda", achados.fontes);
-        return achados;
+        // FORK MIA (.93): toda resposta de "como faço" que tem tela ganha o "Me mostra como".
+        const meMostra = acaoMeMostraComo(achados, ctx.papel);
+        if (meMostra && !coletor.acoes.some((a) => a.tipo === "me_mostra_como")) coletor.acao(meMostra);
+        return meMostra ? { ...achados, me_mostra_como: "a resposta já traz o botão Me mostra como, que destaca cada passo na tela" } : achados;
       },
     }),
 

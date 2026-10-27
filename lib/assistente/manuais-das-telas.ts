@@ -601,6 +601,25 @@ const TELAS_DO_UPSTREAM: Manual[] = [
     passos: ["Abra a página Assistente, aba Resumo da manhã, e ligue a chave Resumo da manhã."],
     observacao: "Vem desligado. Sai em dia útil, às 8h, com o plano do dia, e avisa no sino.",
   },
+  // FORK MIA (.93): as trilhas do "Me mostra como" (components/assistente/trilhas/).
+  {
+    id: "assistente-trilhas",
+    titulo: "Aprender a usar o sistema passo a passo (Me mostra como e as trilhas)",
+    palavras: [
+      "me mostra como", "mostra como", "trilha", "trilhas", "passo a passo", "aprender", "ensinar", "tutorial", "guia",
+      "onde parei", "continuar de onde parei", "retomar", "pausar trilha",
+    ],
+    href: "/app/assistente",
+    papelMinimo: "viewer",
+    passos: [
+      "Abra a página Assistente, aba Trilhas. Cada trilha é um objetivo (Ligar o primeiro número, Criar um funil, Criar uma resposta rápida) com os passos e o que o assistente confere em cada um.",
+      "Clique em Me mostra como. O assistente destaca na tela o botão ou o campo do passo, espera você fazer e confere no sistema. Quem clica é sempre você.",
+      "Use Pausar quando precisar parar. Depois, Continuar de onde parei volta ao passo certo. Se você fez por outro caminho, use Já fiz por outro caminho.",
+      "No painel do assistente, ao abrir, aparece a trilha recomendada e as que andam na tela em que você está. Quando você pergunta como faço, a resposta também traz o Me mostra como.",
+    ],
+    observacao:
+      "A trilha fica feita quando o objetivo aparece no sistema, não por um clique em concluir. As de pôr de pé (número, agente, horário da IA, convite) valem para a empresa toda; as outras, para cada pessoa. Trilha de outro papel aparece para ler os passos e pedir a quem pode. A trilha pausada é lembrada uma vez no resumo da manhã de quem o tem ligado. Trilha não gasta pergunta do dia.",
+  },
   {
     id: "assistente-na-empresa",
     titulo: "Ensinar ao assistente como a empresa trabalha",
