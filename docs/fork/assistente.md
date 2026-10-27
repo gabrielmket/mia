@@ -236,7 +236,7 @@ tabela da .91 (`mia_assistente_propostas`, 9080 e 9100), sem duplicar. A parte d
 
 Nove novas e as três da .91 (`lib/assistente/propostas/catalogo.ts`). Um cartão é uma peça:
 três etapas são três cartões, e pedir de novo a mesma peça devolve o mesmo cartão (a
-`chave` da peça, uma pendente por peça e empresa).
+`chave` da peça). Nas nove do dia a dia a chave é por pessoa (`chaveNoBanco`): o atendente não enxerga a pendente de outra pessoa, e assim cada um recebe o seu cartão; se duas pessoas pedem a mesma peça, quem aprova vê os dois cartões, e a segunda a ser aplicada esbarra no "já existe" quando a peça não pode repetir (etapa, atalho, etiqueta, follow-up, item de conhecimento). As três da .91 continuam uma por empresa.
 
 | peça | ferramenta do assistente | nasce pelo caminho de | quem aprova | desfaz enquanto |
 |---|---|---|---|---|
