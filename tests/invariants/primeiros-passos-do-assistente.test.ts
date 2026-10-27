@@ -11,8 +11,9 @@ import { countAs, lastLine, sql } from "./gov-helpers";
  * Contra o Postgres de verdade (o molde do baseline + baseline-mia), com o papel
  * `authenticated` e o JWT de cada pessoa, como o PostgREST faz:
  *
- *   - a proposta: gestor e administrador leem e propõem; atendente não vê nem
- *     propõe; outra empresa vê zero; anon nada;
+ *   - a proposta: gestor e administrador leem e propõem; o atendente não vê a
+ *     dos outros e, desde a 9100 (.94), propõe e lê a dele; outra empresa vê
+ *     zero; anon nada (o resto da 9100 está em assistente-faz-com-aprovacao);
  *   - a proposta pela sessão nasce PENDENTE e da própria pessoa, sem aprovação
  *     nem resultado, por mais que o pedido mande outra coisa;
  *   - pela sessão ninguém aprova, aplica, rejeita nem apaga;
@@ -105,9 +106,11 @@ describe("9080 · quem vê e quem propõe", () => {
     expect(executar("anon", `perform 1 from public.mia_assistente_retratos limit 1`)).toBe("42501");
   });
 
-  it("o gestor propõe pela sessão; o atendente e a outra empresa, não", () => {
+  it("o gestor propõe pela sessão; (9100) o atendente também, e lê só a dele; a outra empresa, não", () => {
     expect(executar(GESTOR_A, PROPOR(ORG_A))).toBe("n:1");
-    expect(executar(AT_A, PROPOR(ORG_A, "followup"))).toBe("42501");
+    expect(executar(AT_A, PROPOR(ORG_A, "followup"))).toBe("n:1");
+    expect(countAs(AT_A, `select count(*) from public.mia_assistente_propostas;`)).toBe(1);
+    sql(`delete from public.mia_assistente_propostas where criada_por = '${AT_A}';`);
     expect(executar(ADMIN_B, PROPOR(ORG_A, "followup"))).toBe("42501");
   });
 
