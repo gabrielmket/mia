@@ -1908,7 +1908,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261029100200_9122_bloqueio_no_fim_do_teste', now())
+values (1, '20261030100200_9132_comissoes_e_repasses', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -19770,6 +19770,630 @@ comment on function public.fn_mia_bloquear_fim_do_teste(uuid) is
 revoke all on function public.fn_mia_bloquear_fim_do_teste(uuid) from public;
 revoke execute on function public.fn_mia_bloquear_fim_do_teste(uuid) from anon, authenticated;
 grant execute on function public.fn_mia_bloquear_fim_do_teste(uuid) to service_role;
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9130 · os parceiros e os cupons ───
+--
+-- Espelho EXATO da migration 9130 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+-- 9130 · os parceiros e os cupons
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: aplicar duas vezes dá zero erro.
+
+-- ── 1. os parceiros ─────────────────────────────────────────────────────────
+create table if not exists public.mia_parceiros (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  -- 'cpf' (recibo) ou 'cnpj' (nota). Nulo só no parceiro anonimizado.
+  tipo_documento text,
+  -- Só os caracteres: CPF com 11 dígitos; CNPJ com 14 (o alfanumérico da Receita).
+  documento text,
+  -- Para onde vai o extrato do mês.
+  email text,
+  chave_pix text,
+  -- A comissão da MENSALIDADE: o percentual e por quantos meses de cada cliente
+  -- (6, 12 ou 24); nulo = enquanto o cliente pagar.
+  comissao_pct numeric(5,2) not null,
+  comissao_meses integer,
+  -- A comissão do SETUP de implantação: venda única, paga uma vez.
+  comissao_setup_pct numeric(5,2) not null default 0,
+  ativo boolean not null default true,
+  anonimizado_em timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  created_by uuid references auth.users(id) on delete set null,
+  updated_by uuid references auth.users(id) on delete set null,
+  constraint mia_parceiros_nome check (char_length(btrim(nome)) between 2 and 120),
+  constraint mia_parceiros_dados check (
+    anonimizado_em is not null
+    or (
+      ((tipo_documento = 'cpf' and documento ~ '^[0-9]{11}$')
+        or (tipo_documento = 'cnpj' and documento ~ '^[0-9A-Z]{12}[0-9]{2}$'))
+      and email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'
+      and char_length(email) <= 160
+      and char_length(btrim(coalesce(chave_pix, ''))) between 1 and 140
+    )
+  ),
+  constraint mia_parceiros_comissao check (comissao_pct >= 0 and comissao_pct <= 100),
+  constraint mia_parceiros_comissao_setup check (comissao_setup_pct >= 0 and comissao_setup_pct <= 100),
+  constraint mia_parceiros_meses check (comissao_meses is null or comissao_meses in (6, 12, 24))
+);
+
+comment on table public.mia_parceiros is
+  'MIA (9130): quem indica clientes pelos cupons. Nome, CPF ou CNPJ, e-mail do extrato, chave Pix, comissao da mensalidade (% e meses; nulo = enquanto pagar) e do setup (%, venda unica). So a plataforma (RLS sem politica, service_role). LGPD: fn_mia_anonimizar_parceiro.';
+
+-- Um parceiro por documento: é a chave do "garantir" do MCP.
+create unique index if not exists mia_parceiros_documento
+  on public.mia_parceiros (documento) where documento is not null;
+
+alter table public.mia_parceiros enable row level security;
+revoke all on public.mia_parceiros from anon, authenticated;
+grant select, insert, update, delete on public.mia_parceiros to service_role;
+
+drop trigger if exists trg_mia_parceiros_touch on public.mia_parceiros;
+create trigger trg_mia_parceiros_touch
+  before update on public.mia_parceiros
+  for each row execute function public.fn_touch_updated_at();
+
+-- ── 2. os cupons ────────────────────────────────────────────────────────────
+create table if not exists public.mia_cupons (
+  id uuid primary key default gen_random_uuid(),
+  -- Letras e números, sem espaço: é o que vai no link do parceiro.
+  codigo text not null,
+  -- 'pct' (desconto em %), 'reais' (desconto em R$) ou 'dias' (dias grátis).
+  beneficio text not null,
+  -- O percentual, os reais ou os dias.
+  valor numeric(10,2) not null,
+  -- Por quantas mensalidades vale o desconto (1, 3, 6 ou 12); nulo = todas. Nulo nos dias grátis.
+  meses integer,
+  -- O desconto no SETUP de implantação, separado do da mensalidade.
+  setup_tipo text not null default 'nenhum',
+  setup_valor numeric(10,2) not null default 0,
+  -- Os planos em que vale (ids de cobranca_planos).
+  planos uuid[] not null,
+  -- Vale até este dia, inclusive (dia civil de São Paulo). Nulo = sem prazo.
+  vale_ate date,
+  -- Quantas empresas podem usar. Nulo = sem limite.
+  limite_de_usos integer,
+  parceiro_id uuid references public.mia_parceiros(id) on delete restrict,
+  -- A comissão deste cupom; nula = a do parceiro.
+  comissao_pct numeric(5,2),
+  -- Pausado = false. Cupom não se apaga.
+  ativo boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  created_by uuid references auth.users(id) on delete set null,
+  updated_by uuid references auth.users(id) on delete set null,
+  constraint mia_cupons_codigo check (codigo ~ '^[A-Z0-9]{3,20}$'),
+  constraint mia_cupons_beneficio check (beneficio in ('pct', 'reais', 'dias')),
+  constraint mia_cupons_valor check (
+    (beneficio = 'pct' and valor > 0 and valor < 100)
+    or (beneficio = 'reais' and valor > 0 and valor <= 100000)
+    or (beneficio = 'dias' and valor >= 1 and valor <= 365 and valor = trunc(valor))
+  ),
+  constraint mia_cupons_meses check (
+    (beneficio = 'dias' and meses is null)
+    or (beneficio <> 'dias' and (meses is null or meses in (1, 3, 6, 12)))
+  ),
+  constraint mia_cupons_setup check (
+    (setup_tipo = 'nenhum' and setup_valor = 0)
+    or (setup_tipo = 'pct' and setup_valor > 0 and setup_valor <= 100)
+    or (setup_tipo = 'reais' and setup_valor > 0 and setup_valor <= 1000000)
+  ),
+  constraint mia_cupons_planos check (cardinality(planos) between 1 and 50),
+  constraint mia_cupons_limite check (limite_de_usos is null or limite_de_usos >= 1),
+  constraint mia_cupons_comissao check (
+    comissao_pct is null or (parceiro_id is not null and comissao_pct >= 0 and comissao_pct <= 100)
+  )
+);
+
+comment on table public.mia_cupons is
+  'MIA (9130): os cupons de assinatura. Desconto em % ou R$ por N mensalidades (nulo = todas) ou dias gratis; desconto no setup; planos; validade; limite de usos; parceiro e comissao propria. Nao se apaga: pausa (ativo = false). So a plataforma.';
+
+create unique index if not exists mia_cupons_codigo_unico on public.mia_cupons (codigo);
+
+alter table public.mia_cupons enable row level security;
+revoke all on public.mia_cupons from anon, authenticated;
+grant select, insert, update, delete on public.mia_cupons to service_role;
+
+drop trigger if exists trg_mia_cupons_touch on public.mia_cupons;
+create trigger trg_mia_cupons_touch
+  before update on public.mia_cupons
+  for each row execute function public.fn_touch_updated_at();
+
+-- ── 3. o cupom de cada empresa ──────────────────────────────────────────────
+create table if not exists public.mia_cupom_da_empresa (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  -- Cupom usado nunca se apaga: a FK recusa.
+  cupom_id uuid not null references public.mia_cupons(id) on delete restrict,
+  -- O parceiro do cliente: vem do cupom e não muda sozinho (a Time troca na ficha).
+  parceiro_id uuid references public.mia_parceiros(id) on delete restrict,
+  -- O COMBINADO no dia em que o cupom entrou: o cliente fica com ele mesmo que o
+  -- cupom mude ou pause depois.
+  codigo text not null,
+  beneficio text not null,
+  valor numeric(10,2) not null,
+  meses integer,
+  setup_tipo text not null,
+  setup_valor numeric(10,2) not null,
+  planos uuid[] not null,
+  -- A COMISSÃO, fixada no primeiro pagamento (mensalidade ou setup).
+  comissao_pct numeric(5,2),
+  comissao_meses integer,
+  comissao_setup_pct numeric(5,2),
+  termos_fixados_em timestamptz,
+  -- O vencimento da primeira mensalidade paga: o início da janela da comissão.
+  primeira_mensalidade_em date,
+  origem text not null,
+  aplicado_em timestamptz not null default now(),
+  aplicado_por uuid references auth.users(id) on delete set null,
+  -- Os dias grátis que o cupom deu (o maior entre o teste do plano e o cupom).
+  dias_aplicados integer,
+  -- O desconto no Asaas: a última conferência e quando acabou (o preço cheio voltou).
+  desconto_conferido_em timestamptz,
+  desconto_encerrado_em timestamptz,
+  -- A última leitura das cobranças para a comissão.
+  comissoes_lidas_em timestamptz,
+  updated_at timestamptz not null default now(),
+  constraint mia_cupom_da_empresa_origem check (origem in ('cadastro', 'pagamento', 'time')),
+  constraint mia_cupom_da_empresa_beneficio check (beneficio in ('pct', 'reais', 'dias')),
+  constraint mia_cupom_da_empresa_setup check (setup_tipo in ('nenhum', 'pct', 'reais'))
+);
+
+comment on table public.mia_cupom_da_empresa is
+  'MIA (9130): o cupom de cada empresa (um por cliente) e o parceiro ligado a ela, com o retrato do desconto combinado e a comissao fixada no primeiro pagamento. So o servidor (RLS sem politica). Escrita pela fn_mia_aplicar_cupom e pela Time (ficha da empresa, com MFA e Audit Log).';
+
+create index if not exists mia_cupom_da_empresa_cupom on public.mia_cupom_da_empresa (cupom_id);
+create index if not exists mia_cupom_da_empresa_parceiro on public.mia_cupom_da_empresa (parceiro_id) where parceiro_id is not null;
+
+alter table public.mia_cupom_da_empresa enable row level security;
+revoke all on public.mia_cupom_da_empresa from anon, authenticated;
+grant select, insert, update, delete on public.mia_cupom_da_empresa to service_role;
+
+drop trigger if exists trg_mia_cupom_da_empresa_touch on public.mia_cupom_da_empresa;
+create trigger trg_mia_cupom_da_empresa_touch
+  before update on public.mia_cupom_da_empresa
+  for each row execute function public.fn_touch_updated_at();
+
+-- ── 4. a passagem do cadastro público ───────────────────────────────────────
+-- A conta existe (GoTrue) e a empresa ainda não: o código espera pelo usuário.
+create table if not exists public.mia_cupom_do_cadastro (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  codigo text not null,
+  created_at timestamptz not null default now(),
+  constraint mia_cupom_do_cadastro_codigo check (codigo ~ '^[A-Z0-9]{3,20}$')
+);
+
+comment on table public.mia_cupom_do_cadastro is
+  'MIA (9130): o cupom do cadastro publico esperando a empresa nascer. O gatilho adiado trg_mia_cupom_nasce_com_a_empresa aplica e apaga a linha; com mais de 30 dias, sai. So o servidor.';
+
+alter table public.mia_cupom_do_cadastro enable row level security;
+revoke all on public.mia_cupom_do_cadastro from anon, authenticated;
+grant select, insert, update, delete on public.mia_cupom_do_cadastro to service_role;
+
+-- ── 5. a régua única de aplicar um cupom ────────────────────────────────────
+-- Devolve {ok, motivo, ...}. Motivos: cobranca_desligada, inexistente, pausado,
+-- vencido, isenta, ja_tem_cupom, ja_pagou, plano_escondido, fora_do_plano,
+-- esgotado. A linha do cupom é travada (`for update`): duas empresas usando o
+-- último uso ao mesmo tempo, uma leva e a outra recebe "esgotado".
+-- `p_origem = 'time'` (a ficha da empresa) troca o cupom de quem já tem e vale
+-- depois do primeiro pagamento; o cadastro e o passo do pagamento, não.
+-- Dias grátis: o MESMO teste do plano (estado trial até `trial_ate`), vale o
+-- maior, sem somar. Só para quem nunca pagou e ainda não tem assinatura no
+-- Asaas (o servidor cancela a cobrança em aberto antes de chamar).
+create or replace function public.fn_mia_aplicar_cupom(p_org uuid, p_codigo text, p_origem text, p_ator uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_codigo text := upper(btrim(coalesce(p_codigo, '')));
+  c public.mia_cupons%rowtype;
+  a public.cobranca_assinaturas%rowtype;
+  v_oferecido boolean;
+  v_usos integer;
+  v_atual public.mia_cupom_da_empresa%rowtype;
+  v_tinha boolean := false;
+  v_inicio timestamptz;
+  v_fim timestamptz;
+  v_dias integer := null;
+  v_status text;
+  v_kind text;
+  v_hoje date := (now() at time zone 'America/Sao_Paulo')::date;
+begin
+  if p_origem is null or p_origem not in ('cadastro', 'pagamento', 'time') then
+    raise exception 'origem_invalida' using errcode = '22023';
+  end if;
+  if not public.fn_cobranca_ligada() then
+    return jsonb_build_object('ok', false, 'motivo', 'cobranca_desligada');
+  end if;
+  select * into c from public.mia_cupons where codigo = v_codigo for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'motivo', 'inexistente', 'codigo', v_codigo);
+  end if;
+  if not c.ativo then
+    return jsonb_build_object('ok', false, 'motivo', 'pausado', 'codigo', c.codigo);
+  end if;
+  if c.vale_ate is not null and c.vale_ate < v_hoje then
+    return jsonb_build_object('ok', false, 'motivo', 'vencido', 'codigo', c.codigo, 'vale_ate', c.vale_ate);
+  end if;
+  select * into a from public.cobranca_assinaturas where organization_id = p_org for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'motivo', 'isenta', 'codigo', c.codigo);
+  end if;
+  select * into v_atual from public.mia_cupom_da_empresa where organization_id = p_org for update;
+  if found then
+    v_tinha := true;
+    if v_atual.cupom_id = c.id then
+      return jsonb_build_object('ok', true, 'ja_estava', true, 'codigo', c.codigo, 'beneficio', c.beneficio);
+    end if;
+    if p_origem <> 'time' then
+      return jsonb_build_object('ok', false, 'motivo', 'ja_tem_cupom', 'codigo', c.codigo, 'atual', v_atual.codigo);
+    end if;
+  end if;
+  if p_origem <> 'time' and (a.proximo_vencimento is not null or a.periodo_pago_desde is not null) then
+    return jsonb_build_object('ok', false, 'motivo', 'ja_pagou', 'codigo', c.codigo);
+  end if;
+  select p.oferecido_ao_cliente into v_oferecido from public.cobranca_planos p where p.id = a.plano_id;
+  if not coalesce(v_oferecido, false) then
+    return jsonb_build_object('ok', false, 'motivo', 'plano_escondido', 'codigo', c.codigo);
+  end if;
+  if not (a.plano_id = any (c.planos)) then
+    return jsonb_build_object('ok', false, 'motivo', 'fora_do_plano', 'codigo', c.codigo, 'planos', to_jsonb(c.planos));
+  end if;
+  select count(*) into v_usos from public.mia_cupom_da_empresa u where u.cupom_id = c.id;
+  if c.limite_de_usos is not null and v_usos >= c.limite_de_usos then
+    return jsonb_build_object('ok', false, 'motivo', 'esgotado', 'codigo', c.codigo);
+  end if;
+
+  if v_tinha then
+    delete from public.mia_cupom_da_empresa where organization_id = p_org;
+  end if;
+  insert into public.mia_cupom_da_empresa
+    (organization_id, cupom_id, parceiro_id, codigo, beneficio, valor, meses, setup_tipo, setup_valor,
+     planos, origem, aplicado_por,
+     comissao_pct, comissao_meses, comissao_setup_pct, termos_fixados_em, primeira_mensalidade_em)
+  values
+    (p_org, c.id, c.parceiro_id, c.codigo, c.beneficio, c.valor, c.meses, c.setup_tipo, c.setup_valor,
+     c.planos, p_origem, p_ator,
+     -- A troca pela Time depois do primeiro pagamento mantém o início da janela.
+     null, null, null, null,
+     case when v_tinha then v_atual.primeira_mensalidade_em else null end);
+
+  -- Dias grátis: o mesmo teste do plano; vale o maior, sem somar.
+  if c.beneficio = 'dias'
+     and a.proximo_vencimento is null and a.periodo_pago_desde is null
+     and a.provedor_assinatura_id is null then
+    -- A entrada paga conta os dias de agora (ainda não usou nada); o plano com
+    -- teste conta do começo do teste, e fica o fim que for maior.
+    v_inicio := case when a.pagamento_inicial_pendente then now() else a.created_at end;
+    v_fim := v_inicio + make_interval(days => c.valor::integer);
+    if v_fim > now() and (a.pagamento_inicial_pendente or a.trial_ate is null or v_fim > a.trial_ate) then
+      update public.cobranca_assinaturas
+         set estado = 'trial',
+             trial_ate = v_fim,
+             pagamento_inicial_pendente = false,
+             vencida_desde = null,
+             ultimo_aviso = null,
+             ultimo_aviso_em = null,
+             updated_at = now()
+       where organization_id = p_org;
+      v_dias := c.valor::integer;
+      update public.mia_cupom_da_empresa set dias_aplicados = v_dias where organization_id = p_org;
+      select o.status, o.suspended_kind into v_status, v_kind from public.organizations o where o.id = p_org;
+      if v_status = 'suspended' and v_kind = 'cobranca' then
+        perform public.fn_reativar_organizacao(p_org, 'cobranca', p_ator);
+      end if;
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'ja_estava', false,
+    'codigo', c.codigo,
+    'beneficio', c.beneficio,
+    'parceiro_id', c.parceiro_id,
+    'trocou', v_tinha,
+    'dias_aplicados', v_dias
+  );
+end;
+$$;
+
+comment on function public.fn_mia_aplicar_cupom(uuid, text, text, uuid) is
+  'MIA (9130): a regua unica do cupom (inexistente, pausado, vencido, esgotado, fora do plano, plano escondido, um por cliente, ja pagou) e o retrato do combinado. Dias gratis: o teste do plano, vale o maior. So o servidor.';
+
+revoke all on function public.fn_mia_aplicar_cupom(uuid, text, text, uuid) from public;
+revoke execute on function public.fn_mia_aplicar_cupom(uuid, text, text, uuid) from anon, authenticated;
+grant execute on function public.fn_mia_aplicar_cupom(uuid, text, text, uuid) to service_role;
+
+-- ── 6. a empresa nasce com o cupom do cadastro ──────────────────────────────
+-- Gatilho ADIADO (constraint trigger, initially deferred): roda no fim da
+-- transação que cria a empresa, DEPOIS de o gatilho da entrada paga do upstream
+-- (`trg_trial_na_criacao_da_org`, 0679) criar a assinatura e, no plano sem teste,
+-- parar a empresa. Pendurado ao lado, nunca dentro dele. O cupom que não vale
+-- mais (pausado, vencido, esgotado entre o cadastro e a confirmação) só sai da
+-- passagem: a empresa nasce sem cupom, nunca é recusada por ele.
+create or replace function public.fn_mia_cupom_nasce_com_a_empresa()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_codigo text;
+begin
+  if new.created_by is null then
+    return null;
+  end if;
+  delete from public.mia_cupom_do_cadastro where created_at < now() - interval '30 days';
+  select codigo into v_codigo from public.mia_cupom_do_cadastro where user_id = new.created_by;
+  if not found then
+    return null;
+  end if;
+  delete from public.mia_cupom_do_cadastro where user_id = new.created_by;
+  begin
+    perform public.fn_mia_aplicar_cupom(new.id, v_codigo, 'cadastro', new.created_by);
+  exception when others then
+    raise warning 'mia: cupom do cadastro nao aplicado (%)', sqlstate;
+  end;
+  return null;
+end;
+$$;
+
+revoke execute on function public.fn_mia_cupom_nasce_com_a_empresa() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_cupom_nasce_com_a_empresa on public.organizations;
+create constraint trigger trg_mia_cupom_nasce_com_a_empresa
+  after insert on public.organizations
+  deferrable initially deferred
+  for each row execute function public.fn_mia_cupom_nasce_com_a_empresa();
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9131 · o setup de implantação ───
+--
+-- Espelho EXATO da migration 9131 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+-- 9131 · o setup de implantação
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: aplicar duas vezes dá zero erro.
+
+-- ── 1. o preço do setup de cada plano ───────────────────────────────────────
+create table if not exists public.mia_plano_setup (
+  plano_id uuid primary key references public.cobranca_planos(id) on delete cascade,
+  -- O preço cheio do setup, em centavos. Sem linha (ou zero) = o plano não oferece setup.
+  preco_cents integer not null,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id) on delete set null,
+  constraint mia_plano_setup_preco check (preco_cents >= 0 and preco_cents <= 100000000)
+);
+
+comment on table public.mia_plano_setup is
+  'MIA (9131): o preco do setup de implantacao de cada plano (venda unica e opcional, no passo do pagamento). Da INSTALACAO: so a plataforma (RLS sem politica).';
+
+alter table public.mia_plano_setup enable row level security;
+revoke all on public.mia_plano_setup from anon, authenticated;
+grant select, insert, update, delete on public.mia_plano_setup to service_role;
+
+drop trigger if exists trg_mia_plano_setup_touch on public.mia_plano_setup;
+create trigger trg_mia_plano_setup_touch
+  before update on public.mia_plano_setup
+  for each row execute function public.fn_touch_updated_at();
+
+-- ── 2. o setup vendido a cada empresa ───────────────────────────────────────
+create table if not exists public.mia_setup_da_empresa (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  plano_id uuid references public.cobranca_planos(id) on delete set null,
+  -- O preço cheio do plano no pedido, o desconto do cupom e o que foi cobrado.
+  preco_cents integer not null,
+  desconto_cents integer not null default 0,
+  valor_cents integer not null,
+  -- 'aguardando' (cobrança aberta), 'pago', 'cortesia' (o desconto zerou o
+  -- valor: nada a cobrar), 'cancelado' (desistiu antes de pagar) ou 'estornado'.
+  situacao text not null,
+  -- A cobrança avulsa no Asaas (pay_...) e a fatura dela.
+  pagamento_ref text,
+  fatura_url text,
+  pix_copia_e_cola text,
+  pix_gerado_em timestamptz,
+  pedido_em timestamptz not null default now(),
+  pedido_por uuid references auth.users(id) on delete set null,
+  pago_em timestamptz,
+  forma_paga text,
+  -- A nota do setup, pedida ao Asaas quando o pagamento confirma.
+  nota_ref text,
+  nota_pedida_em timestamptz,
+  nota_tentativas integer not null default 0,
+  nota_erro text,
+  conferido_em timestamptz,
+  updated_at timestamptz not null default now(),
+  constraint mia_setup_da_empresa_situacao check (situacao in ('aguardando', 'pago', 'cortesia', 'cancelado', 'estornado')),
+  constraint mia_setup_da_empresa_valores check (
+    preco_cents >= 0 and desconto_cents >= 0 and valor_cents >= 0 and valor_cents = preco_cents - desconto_cents
+  ),
+  constraint mia_setup_da_empresa_cobranca check (situacao <> 'aguardando' or pagamento_ref is not null),
+  constraint mia_setup_da_empresa_nota_erro check (nota_erro is null or char_length(nota_erro) <= 80)
+);
+
+comment on table public.mia_setup_da_empresa is
+  'MIA (9131): o setup de implantacao vendido a cada empresa (venda unica): preco cheio, desconto do cupom, valor cobrado, a cobranca avulsa no Asaas, a situacao, o pagamento e a nota do servico do setup. So o servidor (RLS sem politica).';
+
+alter table public.mia_setup_da_empresa enable row level security;
+revoke all on public.mia_setup_da_empresa from anon, authenticated;
+grant select, insert, update, delete on public.mia_setup_da_empresa to service_role;
+
+drop trigger if exists trg_mia_setup_da_empresa_touch on public.mia_setup_da_empresa;
+create trigger trg_mia_setup_da_empresa_touch
+  before update on public.mia_setup_da_empresa
+  for each row execute function public.fn_touch_updated_at();
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9132 · as comissões e os repasses ───
+--
+-- Espelho EXATO da migration 9132 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+-- 9132 · as comissões e os repasses
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: aplicar duas vezes dá zero erro.
+
+-- ── 1. o repasse do mês de cada parceiro ────────────────────────────────────
+create table if not exists public.mia_repasses (
+  id uuid primary key default gen_random_uuid(),
+  parceiro_id uuid not null references public.mia_parceiros(id) on delete restrict,
+  -- O mês fechado: o primeiro dia dele.
+  competencia date not null,
+  total_cents integer not null,
+  fechado_em timestamptz not null default now(),
+  -- O extrato por e-mail ao parceiro.
+  extrato_enviado_em timestamptz,
+  extrato_erro text,
+  -- A nota (CNPJ) ou o recibo (CPF) que o parceiro manda e a Time anexa.
+  anexo_path text,
+  anexo_nome text,
+  anexo_tipo text,
+  anexo_em timestamptz,
+  anexo_por uuid references auth.users(id) on delete set null,
+  -- LGPD: o anexo do parceiro anonimizado sai (o registro do repasse fica).
+  anexo_removido_em timestamptz,
+  -- O Pix feito por fora pela Time.
+  pago_em timestamptz,
+  pago_por uuid references auth.users(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  constraint mia_repasses_competencia check (extract(day from competencia) = 1),
+  constraint mia_repasses_um_por_mes unique (parceiro_id, competencia),
+  constraint mia_repasses_total check (total_cents > 0),
+  -- Sem a nota ou o recibo, o repasse fica "aguardando nota" e não vira pago.
+  constraint mia_repasses_pago_com_anexo check (pago_em is null or anexo_em is not null),
+  constraint mia_repasses_extrato_erro check (extrato_erro is null or char_length(extrato_erro) <= 80)
+);
+
+comment on table public.mia_repasses is
+  'MIA (9132): o repasse do mes de cada parceiro: total, extrato por e-mail, anexo da nota ou recibo (bucket privado mia-repasses) e o Pix marcado como pago (data e quem marcou). Sem anexo nao vira pago (CHECK). So a plataforma.';
+
+create index if not exists mia_repasses_competencia_idx on public.mia_repasses (competencia);
+
+alter table public.mia_repasses enable row level security;
+revoke all on public.mia_repasses from anon, authenticated;
+grant select, insert, update, delete on public.mia_repasses to service_role;
+
+drop trigger if exists trg_mia_repasses_touch on public.mia_repasses;
+create trigger trg_mia_repasses_touch
+  before update on public.mia_repasses
+  for each row execute function public.fn_touch_updated_at();
+
+-- ── 2. a comissão de cada cobrança paga ─────────────────────────────────────
+create table if not exists public.mia_comissoes (
+  id uuid primary key default gen_random_uuid(),
+  parceiro_id uuid not null references public.mia_parceiros(id) on delete restrict,
+  -- A empresa que pagou. Apagada a empresa, o lançamento fica (é registro financeiro).
+  organization_id uuid references public.organizations(id) on delete set null,
+  -- 'mensalidade', 'setup' ou 'estorno' (negativo, de um lançamento anterior).
+  tipo text not null,
+  -- A cobrança no Asaas (pay_...).
+  pagamento_ref text not null,
+  estorno_de uuid references public.mia_comissoes(id) on delete restrict,
+  -- O dia do pagamento (ou do estorno), em São Paulo, e o mês em que ele conta.
+  pago_em date not null,
+  competencia date not null,
+  -- A conta inteira, gravada no dia (o extrato mostra; mudar a alíquota depois não mexe).
+  valor_pago_cents integer not null,
+  aliquota_pct numeric(5,2) not null,
+  imposto_cents integer not null,
+  taxa_cents integer not null,
+  liquido_cents integer not null,
+  comissao_pct numeric(5,2) not null,
+  comissao_cents integer not null,
+  repasse_id uuid references public.mia_repasses(id) on delete set null,
+  criado_em timestamptz not null default now(),
+  constraint mia_comissoes_tipo check (tipo in ('mensalidade', 'setup', 'estorno')),
+  constraint mia_comissoes_uma_por_cobranca unique (pagamento_ref, tipo),
+  constraint mia_comissoes_competencia check (extract(day from competencia) = 1),
+  constraint mia_comissoes_estorno check ((tipo = 'estorno') = (estorno_de is not null)),
+  constraint mia_comissoes_sinal check (
+    (tipo = 'estorno' and comissao_cents <= 0) or (tipo <> 'estorno' and comissao_cents >= 0)
+  ),
+  constraint mia_comissoes_percentuais check (
+    aliquota_pct >= 0 and aliquota_pct <= 100 and comissao_pct >= 0 and comissao_pct <= 100
+  )
+);
+
+comment on table public.mia_comissoes is
+  'MIA (9132): a comissao de cada cobranca paga de cliente de parceiro (mensalidade no prazo e setup), sobre o LIQUIDO: valor pago com desconto, menos o imposto (aliquota do Simples vigente), menos a taxa real do Asaas (valor - netValue). Estorno ou chargeback vira lancamento negativo. Uma por cobranca e tipo. So a plataforma.';
+
+create index if not exists mia_comissoes_parceiro_aberto on public.mia_comissoes (parceiro_id, competencia) where repasse_id is null;
+create index if not exists mia_comissoes_org on public.mia_comissoes (organization_id);
+create index if not exists mia_comissoes_repasse on public.mia_comissoes (repasse_id) where repasse_id is not null;
+
+alter table public.mia_comissoes enable row level security;
+revoke all on public.mia_comissoes from anon, authenticated;
+grant select, insert, update, delete on public.mia_comissoes to service_role;
+
+-- ── 3. a área privada dos anexos ────────────────────────────────────────────
+-- Sem policy em `storage.objects`, como `mia-obrigacoes`: só o servidor
+-- (service_role) lê e grava; a tela recebe link assinado. 10 MB: nota em PDF,
+-- XML ou a foto do recibo.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('mia-repasses', 'mia-repasses', false, 10485760)
+on conflict (id) do update
+  set public = excluded.public,
+      file_size_limit = excluded.file_size_limit;
+
+-- ── 4. LGPD: o parceiro anonimizado ─────────────────────────────────────────
+-- O pedido do titular (o parceiro é uma pessoa: CPF, e-mail, Pix). Os números do
+-- repasse e das comissões ficam (registro financeiro, sem dado da pessoa); o
+-- anexo (nota ou recibo) sai: o servidor apaga o arquivo do armazenamento ANTES
+-- e esta função tira a referência. Devolve quantos repasses perderam o anexo.
+create or replace function public.fn_mia_anonimizar_parceiro(p_parceiro uuid, p_ator uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_anexos integer := 0;
+begin
+  perform 1 from public.mia_parceiros where id = p_parceiro for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'motivo', 'nao_encontrado');
+  end if;
+  update public.mia_parceiros
+     set nome = 'Parceiro anonimizado',
+         tipo_documento = null,
+         documento = null,
+         email = null,
+         chave_pix = null,
+         ativo = false,
+         anonimizado_em = coalesce(anonimizado_em, now()),
+         updated_by = p_ator
+   where id = p_parceiro;
+  update public.mia_repasses
+     set anexo_path = null, anexo_nome = null, anexo_removido_em = now()
+   where parceiro_id = p_parceiro and anexo_path is not null;
+  get diagnostics v_anexos = row_count;
+  return jsonb_build_object('ok', true, 'anexos_removidos', v_anexos);
+end;
+$$;
+
+comment on function public.fn_mia_anonimizar_parceiro(uuid, uuid) is
+  'MIA (9132): LGPD do parceiro. Apaga nome, documento, e-mail e chave Pix, pausa o parceiro e tira o anexo dos repasses (o servidor apaga o arquivo antes). Os valores ficam (registro financeiro). So o servidor.';
+
+revoke all on function public.fn_mia_anonimizar_parceiro(uuid, uuid) from public;
+revoke execute on function public.fn_mia_anonimizar_parceiro(uuid, uuid) from anon, authenticated;
+grant execute on function public.fn_mia_anonimizar_parceiro(uuid, uuid) to service_role;
 
 notify pgrst, 'reload schema';
 

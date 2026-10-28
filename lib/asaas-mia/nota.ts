@@ -27,26 +27,59 @@ export const CHAVE_DA_NOTA = "MIA_NOTA_FISCAL_DO_ASAAS";
 
 const percentual = z.number().min(0).max(100);
 
+const impostosSchema = z.object({
+  reterIss: z.boolean(),
+  iss: percentual,
+  pis: percentual,
+  cofins: percentual,
+  csll: percentual,
+  inss: percentual,
+  ir: percentual,
+});
+
+/**
+ * FORK MIA (.97): o serviço e os impostos do SETUP de implantação, separados
+ * dos da mensalidade (o Gabriel usa o item 17.06 a 2% para "Setup de
+ * implementação"). Opcional: sem ele, a nota do setup não sai sozinha e a
+ * Conexão avisa (docs/fork/cupons-e-parceiros.md).
+ */
+const servicoDoSetupSchema = z
+  .object({
+    servicoMunicipalId: z.string().trim().max(60).nullish().transform((v) => v || null),
+    servicoMunicipalCodigo: z.string().trim().max(60).nullish().transform((v) => v || null),
+    servicoMunicipalNome: z.string().trim().max(250).nullish().transform((v) => v || null),
+    observacoes: z.string().trim().max(1000).nullish().transform((v) => v || null),
+    impostos: impostosSchema,
+  })
+  .refine((c) => Boolean(c.servicoMunicipalId || c.servicoMunicipalCodigo), {
+    path: ["servicoMunicipalCodigo"],
+    message: "servico_obrigatorio",
+  });
+
 export const configuracaoDaNotaSchema = z
   .object({
     servicoMunicipalId: z.string().trim().max(60).nullish().transform((v) => v || null),
     servicoMunicipalCodigo: z.string().trim().max(60).nullish().transform((v) => v || null),
     servicoMunicipalNome: z.string().trim().max(250).nullish().transform((v) => v || null),
     observacoes: z.string().trim().max(1000).nullish().transform((v) => v || null),
-    impostos: z.object({
-      reterIss: z.boolean(),
-      iss: percentual,
-      pis: percentual,
-      cofins: percentual,
-      csll: percentual,
-      inss: percentual,
-      ir: percentual,
-    }),
+    impostos: impostosSchema,
+    // FORK MIA (.97): a nota do setup, com o serviço próprio.
+    setup: servicoDoSetupSchema.nullish().transform((v) => v ?? null),
   })
   .refine((c) => Boolean(c.servicoMunicipalId || c.servicoMunicipalCodigo), {
     path: ["servicoMunicipalCodigo"],
     message: "servico_obrigatorio",
   });
+
+/**
+ * FORK MIA (.97): a configuração da nota do SETUP, no formato da nota (o mesmo
+ * corpo que o Asaas recebe), ou `null` quando a Time ainda não configurou.
+ */
+export function configuracaoDaNotaDoSetup(config: ConfiguracaoDaNota | null): ConfiguracaoDaNota | null {
+  const s = config?.setup ?? null;
+  if (!s) return null;
+  return { ...s, setup: null };
+}
 
 /** A configuração gravada, ou `null` (ausente ou ilegível: nenhuma nota é pedida). Nunca lança. */
 export async function lerConfiguracaoDaNota(admin: SupabaseClient): Promise<ConfiguracaoDaNota | null> {

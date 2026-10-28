@@ -177,6 +177,8 @@ export interface ConfiguracaoDaNota {
   servicoMunicipalNome: string | null;
   observacoes: string | null;
   impostos: ImpostosDaNota;
+  /** FORK MIA (.97): o serviço e os impostos do setup de implantação (nulo = sem nota automática do setup). */
+  setup?: Omit<ConfiguracaoDaNota, "setup"> | null;
 }
 
 /** O telefone para o Asaas: o número nacional, sem o 55. */
