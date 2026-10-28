@@ -232,7 +232,8 @@ export function AreaDeCobranca({ area }: { area: Area }) {
       return (
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            {c.pagar_url ? <LinkDoAsaas href={c.pagar_url}>{t("Pagar agora")}</LinkDoAsaas> : null}
+            {/* "Pagar esta cobrança", e não "Pagar agora": o nome do upstream já é o do link da assinatura na mesma página, e dois iguais quebram o e2e do link pelo dono. */}
+            {c.pagar_url ? <LinkDoAsaas href={c.pagar_url}>{t("Pagar esta cobrança")}</LinkDoAsaas> : null}
             {c.segunda_via_url ? <LinkDoAsaas href={c.segunda_via_url}>{t("Segunda via")}</LinkDoAsaas> : null}
           </div>
           {c.forma === "cartao" && c.situacao === "aberta" ? (

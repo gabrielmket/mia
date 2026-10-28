@@ -34,6 +34,7 @@ export const DICIONARIO_DA_AREA_DE_COBRANCA_MIA: Traducoes = {
   "correção pedida · chamado nº {n}": { es: "corrección solicitada · ticket n.º {n}" },
   "correção respondida · chamado nº {n}": { es: "corrección respondida · ticket n.º {n}" },
   "Segunda via": { es: "Segunda vía" },
+  "Pagar esta cobrança": { es: "Pagar este cobro" },
   "Cai sozinho no cartão final {final} em {data}.": { es: "Se cobra solo en la tarjeta terminada en {final} el {data}." },
   "Cai sozinho no cartão em {data}.": { es: "Se cobra solo en la tarjeta el {data}." },
   "Cobrança que não foi paga e foi cancelada. Não gera nota.": { es: "Cobro que no se pagó y se canceló. No genera factura." },

@@ -600,7 +600,7 @@ const OPERACAO_DO_FORK: Manual[] = [
     papelMinimo: "admin",
     passos: [
       "Abra Configurações › Plano e cobrança e desça até Cobranças: cada mês aparece com o valor e a situação.",
-      "Para baixar a nota fiscal de um mês pago, use Nota PDF ou XML na linha dele; o comprovante do pagamento é o Recibo. Num mês em aberto, use Pagar agora ou Segunda via.",
+      "Para baixar a nota fiscal de um mês pago, use Nota PDF ou XML na linha dele; o comprovante do pagamento é o Recibo. Num mês em aberto, use Pagar esta cobrança ou Segunda via.",
       "Para trocar o cartão das próximas mensalidades, em Forma de pagamento use Trocar o cartão (ou Cadastrar um cartão), digite o cartão novo e clique em Usar este cartão. Nada é cobrado na hora.",
       "Para corrigir a razão social, o endereço ou a inscrição municipal, em Dados fiscais use Editar e depois Salvar. A mudança vale para as próximas notas.",
       "Se uma nota já emitida saiu errada, use A nota saiu errada na linha do mês, escolha o que está errado, conte o que precisa mudar e clique em Pedir a correção. Vira um chamado para a Time, e a linha mostra correção pedida com o número do chamado.",
