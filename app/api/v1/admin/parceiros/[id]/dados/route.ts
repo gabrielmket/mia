@@ -13,7 +13,7 @@ import { fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { falhaDaEscritaDePlatformAdmin, requirePlatformAdminEscrita } from "@/lib/auth/requirePlatformAdmin";
 import { moduloLigado } from "@/lib/instalacao/modulos";
-import { exportarDadosDoParceiro } from "@/lib/parceiros/banco";
+import { exportarDadosDoParceiro } from "@/lib/lgpd/export-collector";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";

@@ -126,6 +126,14 @@ describe("a lista de ferramentas", () => {
       "plataforma_listar_assinaturas",
       "plataforma_listar_pedidos_de_cadastro",
       "plataforma_decidir_pedido_de_cadastro",
+      // .98: cupons, parceiros e repasses são da instalação, não de uma empresa
+      // (docs/fork/cupons-e-parceiros.md).
+      "plataforma_garantir_parceiro",
+      "plataforma_ver_parceiros",
+      "plataforma_garantir_cupom",
+      "plataforma_ver_cupons",
+      "plataforma_ver_repasses",
+      "plataforma_marcar_repasse_pago",
     ]);
   });
 

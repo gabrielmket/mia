@@ -49,6 +49,8 @@ let m: { linha: Record<string, unknown> | null; reservaOk: boolean };
 function responder(c: Cadeia): Resposta {
   if (c.tabela === "organizations") return { data: { legal_name: "Loja Legal Ltda", display_name: "Loja" } };
   if (c.tabela === "cobranca_planos") return { data: { id: "plano-a", nome: "Essencial", preco_cents: 4990, intervalo: "mes" } };
+  // FORK MIA (.98): sem cupom, o desconto não lê nem escreve nada no provedor.
+  if (c.tabela === "mia_cupom_da_empresa") return { data: null };
   if (operacao(c) === "select") return { data: m.linha };
   if (filtros(c).some((f) => f[0] === "or")) return m.reservaOk ? { data: { organization_id: TENANT } } : { data: null };
   return { data: { organization_id: TENANT } };

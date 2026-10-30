@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PagamentoDoCliente } from "@/lib/asaas-mia/pagamentos";
+import { exportarDadosDoParceiro } from "@/lib/lgpd/export-collector";
 import { lancarComissoesDoCliente, ehMensalidade } from "@/lib/parceiros/comissoes";
 import { montarExtrato, mandarExtratos } from "@/lib/parceiros/extrato";
 import { anexarAoRepasse, competenciaParaFechar, fecharMes, marcarRepassePago, planilhaDoMes, prazosDoRepasse, situacaoDoRepasse, totaisDosLancamentos, type LancamentoDoRepasse } from "@/lib/parceiros/repasses";
@@ -324,6 +325,40 @@ describe("o anexo e o pago", () => {
     expect(situacaoDoRepasse({ anexo_em: null, pago_em: null })).toBe("aguardando_nota");
     expect(situacaoDoRepasse({ anexo_em: "x", pago_em: null })).toBe("pronto_para_pagar");
     expect(situacaoDoRepasse({ anexo_em: "x", pago_em: "y" })).toBe("pago");
+  });
+
+  it("LGPD: a cópia do parceiro leva o cadastro, as comissões e um link de cada anexo, sem o caminho do arquivo", async () => {
+    const b = banco({ comissoes: [{ id: "c1", parceiro_id: PARCEIRO, organization_id: ORG, tipo: "mensalidade", pago_em: "2026-10-05T12:00:00Z", comissao_cents: 1_000 }] });
+    b.db.mia_repasses = [
+      repasse({ anexo_path: `${PARCEIRO}/2026-10/a.pdf`, anexo_nome: "recibo.pdf", anexo_em: "2026-11-02T00:00:00Z" }),
+      repasse({ id: "r2", competencia: "2026-11-01" }),
+    ];
+    const assinados: Array<[string, number]> = [];
+    const cliente = {
+      ...b.cliente,
+      from: b.cliente.from,
+      storage: {
+        from: () => ({
+          createSignedUrl: async (caminho: string, validade: number) => {
+            assinados.push([caminho, validade]);
+            return { data: { signedUrl: "https://arquivos.exemplo.com.br/assinado" } };
+          },
+        }),
+      },
+    };
+    const copia = (await exportarDadosDoParceiro(cliente as never, PARCEIRO)) as Record<string, unknown> & {
+      parceiro: Record<string, unknown>;
+      comissoes: Array<Record<string, unknown>>;
+      repasses: Array<Record<string, unknown>>;
+    };
+    expect(copia.parceiro).toMatchObject({ nome: "João Mendes", documento: "52998224725", chave_pix: "joao@exemplo.com.br" });
+    expect(copia.comissoes[0]).toMatchObject({ empresa: "Clínica Bem Viver", comissao_cents: 1_000 });
+    expect(copia.repasses[0]).toMatchObject({ anexo_nome: "recibo.pdf", anexo_link: "https://arquivos.exemplo.com.br/assinado" });
+    expect(copia.repasses[1]).toMatchObject({ anexo_link: null });
+    // O link vale um dia, só o anexo que existe é assinado, e o caminho interno não sai.
+    expect(assinados).toEqual([[`${PARCEIRO}/2026-10/a.pdf`, 86_400]]);
+    expect(JSON.stringify(copia)).not.toContain("anexo_path");
+    expect(await exportarDadosDoParceiro(cliente as never, "99999999-9999-4999-8999-999999999999")).toBeNull();
   });
 });
 

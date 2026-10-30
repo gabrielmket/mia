@@ -125,7 +125,7 @@ export function CupomEParceiroDoTenant({
       </dl>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <label htmlFor="ficha-cupom" className="text-xs font-medium">
+          <label htmlFor="ficha-cupom" className="block text-xs font-medium">
             {c ? t("Trocar o cupom") : t("Aplicar um cupom")}
           </label>
           <div className="flex gap-2">
@@ -136,7 +136,7 @@ export function CupomEParceiroDoTenant({
           </div>
         </div>
         <div className="space-y-1.5">
-          <label htmlFor="ficha-parceiro" className="text-xs font-medium">
+          <label htmlFor="ficha-parceiro" className="block text-xs font-medium">
             {t("Trocar o parceiro")}
           </label>
           <div className="flex gap-2">

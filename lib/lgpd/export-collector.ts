@@ -6,6 +6,8 @@
  * (admin client bypasses RLS). PII is NEVER logged — only ids and counts.
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 import { agenteAtende } from "@/lib/ai/agents/no-ar";
 import {
@@ -21,6 +23,7 @@ import {
 } from "@/lib/legal/perfil-do-pais";
 import { logger } from "@/lib/logger";
 import { textoLegivelDeMencao } from "@/lib/notifications/mentions";
+import { clientesDoParceiro } from "@/lib/parceiros/banco";
 import { camposLegiveis, perguntasDosGrafos, type CampoLegivel } from "@/lib/lgpd/campos-personalizados";
 import { maskPhone } from "@/lib/lgpd/mask";
 import { phoneLookupVariants } from "@/lib/channels/phone-variants";
@@ -3212,5 +3215,59 @@ function emptyPayload(
     lead_notes: [],
     ai_agent_runs: [],
     lead_state: [],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// FORK MIA (.98): o parceiro de indicação (docs/fork/cupons-e-parceiros.md)
+// ---------------------------------------------------------------------------
+
+/** O link de cada anexo vale um dia: a Time baixa os arquivos e entrega ao parceiro. */
+const VALIDADE_DO_LINK_DO_ANEXO_S = 24 * 60 * 60;
+
+/**
+ * A cópia dos dados do parceiro (o acesso do titular). Ele é uma pessoa e não é um
+ * contato: não há `organization_id` aqui porque o parceiro é da instalação, e só a
+ * Time chega nesta leitura. Mora neste arquivo porque a cerca
+ * `lgpd-exporta-o-que-redige` confere aqui as tabelas que `fn_mia_anonimizar_parceiro`
+ * limpa. Os anexos saem com um link assinado: a anonimização apaga os arquivos, então
+ * a cópia entrega os arquivos, e não só o nome deles.
+ */
+export async function exportarDadosDoParceiro(admin: SupabaseClient, parceiroId: string): Promise<Record<string, unknown> | null> {
+  const { data: lido } = await admin
+    .from("mia_parceiros")
+    .select("nome, tipo_documento, documento, email, chave_pix, comissao_pct, comissao_meses, comissao_setup_pct, ativo, anonimizado_em, created_at")
+    .eq("id", parceiroId)
+    .maybeSingle();
+  if (!lido) return null;
+  const { created_at: cadastradoEm, ...parceiro } = lido as Record<string, unknown>;
+  const [cupons, clientes, comissoes, repasses] = await Promise.all([
+    admin.from("mia_cupons").select("codigo, beneficio, valor, meses, setup_tipo, setup_valor, vale_ate, comissao_pct, ativo, created_at").eq("parceiro_id", parceiroId),
+    clientesDoParceiro(admin, parceiroId),
+    admin
+      .from("mia_comissoes")
+      .select("tipo, pago_em, competencia, valor_pago_cents, aliquota_pct, imposto_cents, taxa_cents, liquido_cents, comissao_pct, comissao_cents, organization_id")
+      .eq("parceiro_id", parceiroId)
+      .order("pago_em"),
+    admin.from("mia_repasses").select("competencia, total_cents, fechado_em, extrato_enviado_em, anexo_path, anexo_nome, anexo_em, pago_em").eq("parceiro_id", parceiroId).order("competencia"),
+  ]);
+  const nomeDa = new Map(clientes.map((c) => [c.organization_id, c.nome]));
+  const linhasDosRepasses = await Promise.all(
+    ((repasses.data ?? []) as Array<Record<string, unknown>>).map(async ({ anexo_path: caminho, ...resto }) => {
+      if (typeof caminho !== "string" || caminho === "") return { ...resto, anexo_link: null };
+      const { data: assinado } = await admin.storage.from("mia-repasses").createSignedUrl(caminho, VALIDADE_DO_LINK_DO_ANEXO_S);
+      return { ...resto, anexo_link: assinado?.signedUrl ?? null };
+    }),
+  );
+  return {
+    gerado_em: new Date().toISOString(),
+    parceiro: { ...parceiro, cadastrado_em: cadastradoEm },
+    cupons: cupons.data ?? [],
+    clientes: clientes.map((c) => ({ empresa: c.nome, cupom: c.codigo, entrou_em: c.entrou_em, plano: c.plano })),
+    comissoes: ((comissoes.data ?? []) as Array<Record<string, unknown>>).map(({ organization_id, ...resto }) => ({
+      ...resto,
+      empresa: organization_id ? (nomeDa.get(String(organization_id)) ?? null) : null,
+    })),
+    repasses: linhasDosRepasses,
   };
 }

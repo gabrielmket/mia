@@ -175,8 +175,9 @@ mensalidade do cliente.
 **LGPD.** O parceiro é uma pessoa e não é um contato, então as catracas do catálogo de `contacts` não o alcançam;
 as duas pontas estão em Admin › Parceiros, com a verificação em duas etapas:
 
-- **Exportação:** "Baixar os dados dele", o JSON com o cadastro, os cupons, as empresas, as comissões e os repasses
-  (`exportarDadosDoParceiro`).
+- **Exportação:** "Baixar os dados dele", o JSON com o cadastro, os cupons, as empresas, as comissões e os repasses,
+  com um link de cada anexo que vale um dia, para a Time baixar os arquivos e entregar
+  (`exportarDadosDoParceiro`, em `lib/lgpd/export-collector.ts`, onde a cerca da LGPD confere as tabelas).
 - **Anonimização:** "Anonimizar" apaga o arquivo de cada anexo do armazenamento e, só então, `fn_mia_anonimizar_parceiro`
   apaga nome, documento, e-mail e Pix, pausa o parceiro e tira a referência do anexo. Os valores ficam, como registro
   financeiro. Se um arquivo não sai, nada é apagado e o pedido pode ser repetido. Se a nota for necessária para o

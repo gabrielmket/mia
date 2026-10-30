@@ -129,7 +129,8 @@ export const FERRAMENTAS_DE_CUPONS_E_PARCEIROS: readonly FerramentaDePlataforma[
     name: "plataforma_garantir_parceiro",
     description:
       "Cria ou muda um PARCEIRO (quem indica clientes pelos cupons). A chave é o CPF ou CNPJ: a mesma entrada não regrava. Comissão da mensalidade (% e por quantos meses de cada cliente: 6, 12, 24 ou null = enquanto pagar) e do setup de implantação (%, venda única). " +
-      "A comissão é sobre o LÍQUIDO: valor pago, menos o imposto (a alíquota de Admin › Cobrança), menos a taxa real do Asaas. Mudar a comissão vale só para os clientes novos: quem já pagou a primeira vez fica com a dele. Depois, crie o cupom com plataforma_garantir_cupom.",
+      "A comissão é sobre o LÍQUIDO: valor pago, menos o imposto (a alíquota de Admin › Cobrança), menos a taxa real do Asaas. Mudar a comissão vale só para os clientes novos: quem já pagou a primeira vez fica com a dele. Depois, crie o cupom com plataforma_garantir_cupom. " +
+      "O QUE NÃO FAZ: não troca o parceiro de um cliente (isso é na ficha da empresa, com a verificação em duas etapas), não anonimiza e não manda dinheiro.",
     inputSchema: {
       nome: z.string().trim().min(2).max(120).describe("O nome do parceiro."),
       documento: z.string().trim().min(11).max(20).describe("CPF (recibo) ou CNPJ (nota), com ou sem máscara. É a chave."),
@@ -175,6 +176,7 @@ export const FERRAMENTAS_DE_CUPONS_E_PARCEIROS: readonly FerramentaDePlataforma[
     inputSchema: {
       parceiro_id: z.string().uuid().optional().describe("Só este parceiro, com os clientes dele."),
     },
+    exemplo: {},
     operacao: null,
     handler: async (ctx, args) => {
       await exigirCobrancaLigada(ctx);
@@ -191,7 +193,8 @@ export const FERRAMENTAS_DE_CUPONS_E_PARCEIROS: readonly FerramentaDePlataforma[
     name: "plataforma_garantir_cupom",
     description:
       "Cria, muda ou pausa um CUPOM pelo CÓDIGO (a mesma entrada não regrava). Dá desconto em % ou em R$ por 1, 3, 6 ou 12 mensalidades (`meses`; null = todas), ou dias grátis (`beneficio: \"dias\"`: o mesmo teste do plano; com plano que já tem teste, vale o maior, sem somar). O desconto no SETUP é separado (`setup_tipo`). `planos`: nomes ou ids. `parceiro_id` é opcional; `comissao_pct` substitui a do parceiro neste cupom. " +
-      "`ativo: false` pausa: cupom não se apaga. Mudar um cupom já usado vale para quem entrar daqui para a frente. O link que o parceiro divulga vem na resposta.",
+      "`ativo: false` pausa: cupom não se apaga. Mudar um cupom já usado vale para quem entrar daqui para a frente. O link que o parceiro divulga vem na resposta. " +
+      "O QUE NÃO FAZ: não aplica o cupom em um cliente (o cliente usa pelo link ou digita; depois de pago, só a Time troca, na ficha da empresa).",
     inputSchema: {
       codigo: z.string().trim().min(3).max(20).describe("Letras e números, sem espaço. Ex.: JOAO10."),
       beneficio: z.enum(["pct", "reais", "dias"]).describe("pct = desconto em %; reais = desconto em R$; dias = dias grátis."),
@@ -265,6 +268,7 @@ export const FERRAMENTAS_DE_CUPONS_E_PARCEIROS: readonly FerramentaDePlataforma[
     inputSchema: {
       codigo: z.string().trim().max(40).optional().describe("Só este cupom."),
     },
+    exemplo: { codigo: "JOAO10" },
     operacao: null,
     handler: async (ctx, args) => {
       await exigirCobrancaLigada(ctx);
@@ -284,6 +288,7 @@ export const FERRAMENTAS_DE_CUPONS_E_PARCEIROS: readonly FerramentaDePlataforma[
     inputSchema: {
       competencia: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("O mês, AAAA-MM. Ex.: 2026-10."),
     },
+    exemplo: { competencia: "2026-10" },
     operacao: null,
     handler: async (ctx, args) => {
       await exigirCobrancaLigada(ctx);
@@ -331,7 +336,8 @@ export const FERRAMENTAS_DE_CUPONS_E_PARCEIROS: readonly FerramentaDePlataforma[
   {
     name: "plataforma_marcar_repasse_pago",
     description:
-      "Marca um repasse como pago, depois que a Time fez o Pix por fora: grava a data e quem respondeu pelo token. O sistema nunca manda dinheiro. Sem a nota (CNPJ) ou o recibo (CPF) anexado, recusa: o anexo entra só pela tela, em Admin › Parceiros › Repasses do mês. O `repasse_id` vem de plataforma_ver_repasses. Marcar de novo não muda nada.",
+      "Marca um repasse como pago, depois que a Time fez o Pix por fora: grava a data e quem respondeu pelo token. Sem a nota (CNPJ) ou o recibo (CPF) anexado, recusa: o anexo entra só pela tela, em Admin › Parceiros › Repasses do mês. O `repasse_id` vem de plataforma_ver_repasses. Marcar de novo não muda nada. " +
+      "O QUE NÃO FAZ: o sistema nunca manda dinheiro: o Pix é feito por fora, antes de marcar.",
     inputSchema: {
       repasse_id: z.string().uuid().describe("O id do repasse (plataforma_ver_repasses)."),
     },
