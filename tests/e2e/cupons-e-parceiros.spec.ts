@@ -113,7 +113,8 @@ test("[P0] cupom do parceiro: criado no Admin, desconto no link e guardado até 
     po.on("pageerror", (e) => errosDePagina.push(e.message));
     await po.goto(`/precos?cupom=NAOEXISTE${sufixo.toUpperCase()}`);
     await expect(po.getByText(PLANO).first()).toBeVisible();
-    await expect(po.getByText(/R\$\s*100,00/).first()).toBeVisible();
+    // Sem cupom, o preço do cartão sai sem os centavos.
+    await expect(po.getByText(/R\$\s*100(?![\d.])/).first()).toBeVisible();
     await expect(po.getByText(/R\$\s*80,00/)).toHaveCount(0);
 
     // ── 5. As outras telas abrem sem erro ───────────────────────────────
