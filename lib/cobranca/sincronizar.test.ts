@@ -415,12 +415,15 @@ describe("sincronizar — entrada paga (plano sem dias de teste)", () => {
     expect(m.linha).toMatchObject({ pagamento_inicial_pendente: true });
   });
 
-  it("o lembrete de quem aguarda a entrada não fala em teste grátis: nunca houve teste", async () => {
+  // FORK MIA (.95): quem aguarda a entrada paga não recebe "suspensa" nenhum, nem
+  // e-mail nem Central (lib/planos-mia/entrada-paga.ts; teste do Gabriel em
+  // produção, 27/10/2026). O upstream lembrava com "Conta suspensa por falta de
+  // pagamento" quem tinha acabado de assinar. O atraso segue avisando.
+  it("FORK MIA (.95): quem aguarda a entrada não recebe aviso de suspensa (nem fala em teste grátis)", async () => {
     ler.mockResolvedValue(situacao({ existe: false, jaPagou: false, assinaturasVivas: 1, proximoVencimento: null, statusBruto: "ACTIVE:sem_pagamento" }));
     await rodar();
-    const aviso = rpcs("fn_cobranca_registrar_aviso")[0]?.args;
-    expect(aviso).toMatchObject({ p_aviso: "suspensa" });
-    expect(`${aviso?.p_titulo} ${aviso?.p_corpo}`).not.toContain("teste grátis");
+    expect(rpcs("fn_cobranca_registrar_aviso")).toEqual([]);
+    expect(enviarAviso).not.toHaveBeenCalled();
   });
 
   it("pagamento confirmado: a entrada deixa de estar pendente e o acesso volta", async () => {

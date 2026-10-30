@@ -104,6 +104,23 @@ if [ "${existentes:-0}" -gt 0 ]; then
   # arquivos, senão uma migration nossa que falhe fica fora da saúde.
   psql "$DB" -q -f "$BASELINE_MIA" >> /tmp/baseline.log 2>&1 || true
   inesperados="$(grep -iE 'ERROR|FATAL' /tmp/baseline.log | grep -viE "$BENIGNOS" || true)"
+  # FORK MIA (.96): a implantação reaplica o schema com o app ANTIGO ainda
+  # atendendo, e um `drop trigger if exists` / `create policy` esbarra num lock
+  # dele e perde por `deadlock detected`. Aconteceu em três implantações e
+  # deixou a saúde com `erros: 1` à toa: o comando que perdeu fica de fora até o
+  # próximo deploy. Quando TODOS os erros inesperados são essa disputa, os dois
+  # arquivos são aplicados mais UMA vez (o schema é idempotente: reaplicar é o
+  # que todo deploy já faz) e o veredito é o da segunda passada, que é o que fica
+  # no banco. Erro de outra natureza não repete: repetir daria o mesmo erro.
+  # Prova: tests/unit/bootstrap-reaplica-no-deadlock.test.ts (docs/fork/area-de-cobranca.md).
+  if [ -n "$inesperados" ] && ! printf '%s\n' "$inesperados" | grep -viq 'deadlock detected'; then
+    log "o schema esbarrou num lock do app ainda no ar (deadlock detected): aplicando de novo, uma vez (é seguro)"
+    printf '%s\n' "$inesperados" | head -5
+    mv /tmp/baseline.log /tmp/baseline-passada-1.log
+    psql "$DB" -q -f "$BASELINE" > /tmp/baseline.log 2>&1 || true
+    psql "$DB" -q -f "$BASELINE_MIA" >> /tmp/baseline.log 2>&1 || true
+    inesperados="$(grep -iE 'ERROR|FATAL' /tmp/baseline.log | grep -viE "$BENIGNOS" || true)"
+  fi
   if [ -n "$inesperados" ]; then
     log "AVISO: erros que não são os esperados (o app sobe mesmo assim):"
     printf '%s\n' "$inesperados" | head -20

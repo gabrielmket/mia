@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
-import { ROLE_RANK } from "@/lib/auth/types";
+import { ROLE_RANK, roleAtLeast } from "@/lib/auth/types";
 import { emailDeSuporte } from "@/lib/branding/saida";
 import { Card } from "@/components/ui/card";
 import { AcoesDaAssinatura } from "@/components/cobranca/AcoesDaAssinatura";
@@ -14,6 +14,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ComprarCreditos } from "@/components/planos-mia/ComprarCreditos";
 import { ModulosDoPlano } from "@/components/planos-mia/ModulosDoPlano";
 import { lerCreditosDoPainel, lerModulosDoPainel, semDolar } from "@/lib/planos-mia/painel-da-empresa";
+// FORK MIA (.96): a área de cobrança, só do administrador (docs/fork/area-de-cobranca.md).
+import { AreaDeCobranca } from "@/components/area-de-cobranca/AreaDeCobranca";
+import { lerAreaDeCobranca } from "@/lib/area-de-cobranca/leitura";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +45,14 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   // FORK MIA (.90): só com a cobrança ligada (o painel existe) e a empresa num plano.
   const modulosDoPlano = painel?.assinatura ? await lerModulosDoPainel(admin, activeOrg.orgId) : null;
   const creditos = painel ? await lerCreditosDoPainel(admin, activeOrg.orgId) : null;
+  // FORK MIA (.96): o histórico das cobranças, a nota e o recibo, o cartão e os
+  // dados fiscais. Só o ADMINISTRADOR (decisão 11; a página inteira já é dele,
+  // a conferência fica explícita para a área não vazar se a página abrir a outros).
+  // Leitura que falha não derruba a página: a área some.
+  const area =
+    painel && roleAtLeast(activeOrg.role, "admin")
+      ? await lerAreaDeCobranca(admin, activeOrg.orgId).catch(() => null)
+      : null;
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
@@ -55,7 +66,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <>
           <PainelDaAssinatura dados={painel} idioma={idioma} />
           {modulosDoPlano && <ModulosDoPlano modulos={modulosDoPlano} idioma={idioma} fuso={painel.fuso} />}
-          {creditos?.temCarteira && <ComprarCreditos precoPorMensagemCents={creditos.precoPorMensagemCents} />}
+          {creditos?.temCarteira && (
+            <ComprarCreditos
+              precoPorMensagemCents={creditos.precoPorMensagemCents}
+              precoPorEmailCents={creditos.precoPorEmailCents}
+            />
+          )}
           {painel.assinatura && (
             <AcoesDaAssinatura
               estado={painel.assinatura.estado}
@@ -78,6 +94,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               fuso={painel.fuso}
             />
           )}
+          {/* FORK MIA (.96): a área de cobrança, depois do plano e da troca de plano. */}
+          {area && <AreaDeCobranca area={area} />}
         </>
       ) : (
         <Card className="max-w-xl p-6">

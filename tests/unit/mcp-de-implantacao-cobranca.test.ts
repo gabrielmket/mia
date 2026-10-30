@@ -6,7 +6,9 @@
  * A CONTAGEM da lista mora aqui desde a .90: 92 (as 83 da .89 e as nove da
  * cobrança), 94 com as duas das propostas do assistente (.91), 98 com as
  * quatro das trilhas (.93) e 99 com o
- * desfazer da proposta (.94). E as regras que não podem virar: o MCP não conecta a chave do
+ * desfazer da proposta (.94); a .95 (o preço do e-mail por plano) não pediu
+ * ferramenta nova, só o campo `preco_email` nos planos e os preços na leitura da
+ * assinatura. E as regras que não podem virar: o MCP não conecta a chave do
  * provedor, não marca como pago, não cancela a assinatura do cliente, não muda
  * o modo do cadastro; plano assinado não muda de preço nem perde módulo; com a
  * cobrança desligada, nada de plano.
@@ -27,7 +29,7 @@ import { FERRAMENTAS, FERRAMENTA_POR_NOME } from "@/lib/mcp-plataforma/ferrament
 import { FERRAMENTAS_DE_COBRANCA } from "@/lib/mcp-plataforma/ferramentas/cobranca";
 import { OPERACOES } from "@/lib/mcp-plataforma/operacoes";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
-import { bancoLivre, filtroLivre, operacaoLivre, type CadeiaLivre } from "@/tests/helpers/banco-livre";
+import { argumentosLivres, bancoLivre, filtroLivre, operacaoLivre, type CadeiaLivre } from "@/tests/helpers/banco-livre";
 
 const ORG = "00000000-0000-4000-8000-0000000000d1";
 const AUTOR = "00000000-0000-4000-8000-0000000000d2";
@@ -196,5 +198,58 @@ describe("liberar_modulo cresce: a origem pela Time e o aviso do plano", () => {
     await expect(chamar("plataforma_liberar_modulo", banco(), { organization_id: ORG, modulo: "prospeccao", liberar: true })).rejects.toThrow(
       /módulo desconhecido/,
     );
+  });
+});
+
+describe("o preço por e-mail do plano (.95): nenhuma ferramenta nova, o campo nas que existem", () => {
+  const PLANO = "00000000-0000-4000-8000-0000000000d7";
+  const LINHA_DO_PLANO = {
+    id: PLANO, nome: "Profissional", preco_cents: 59700, intervalo: "mes", trial_dias: 14, max_assentos: 8,
+    max_canais: 2, teto_ia_usd_cents: 4000, padrao_no_cadastro: false, oferecido_ao_cliente: true, arquivado_em: null,
+  };
+
+  it("⭐ garantir_planos leva preco_email (em reais) ao lado do plano, em centavos", async () => {
+    e.cobrancaLigada = true;
+    const b = bancoLivre((c) => {
+      if (c.tabela === "cobranca_planos" && operacaoLivre(c) === "insert") return { data: { id: PLANO } };
+      if (c.tabela === "mia_plano_modulos" && c.passos.some((x) => x.metodo === "maybeSingle")) return { data: null };
+      return responder(c);
+    });
+    const r = (await chamar("plataforma_garantir_planos", b, {
+      planos: [{ nome: "Profissional", preco: 597, modulos: ["email_marketing"], preco_broadcast: 0.12, preco_email: 0.03 }],
+    })) as { ok: boolean; criados: string[] };
+    expect(r).toMatchObject({ ok: true, criados: ["Profissional"] });
+    const gravado = b.cadeias.find((c) => c.tabela === "mia_plano_modulos" && operacaoLivre(c) === "upsert");
+    expect(argumentosLivres(gravado!, "upsert")?.[0]).toMatchObject({
+      plano_id: PLANO,
+      modulos: ["email_marketing"],
+      preco_por_mensagem_cents: 12,
+      preco_por_email_cents: 3,
+    });
+  });
+
+  it("⭐ ver_cobranca devolve o preço por e-mail de cada plano e o padrão do sistema", async () => {
+    const b = bancoLivre((c) => {
+      if (c.tabela === "cobranca_planos") return { data: [LINHA_DO_PLANO] };
+      if (c.tabela === "mia_plano_modulos")
+        return { data: [{ plano_id: PLANO, modulos: ["email_marketing"], preco_por_mensagem_cents: null, preco_por_email_cents: 3, frase: null, destaque: false }] };
+      return responder(c);
+    });
+    const r = (await chamar("plataforma_ver_cobranca", b, {})) as { planos: Array<Record<string, unknown>>; preco_email_padrao: number };
+    expect(r.planos[0]).toMatchObject({ nome: "Profissional", preco_email: 0.03, preco_broadcast: null });
+    expect(r.preco_email_padrao).toBe(0.02);
+  });
+
+  it("o exemplo e a descrição de garantir_planos falam do preço por e-mail", () => {
+    const f = FERRAMENTA_POR_NOME.get("plataforma_garantir_planos")!;
+    expect(f.description).toContain("preco_email");
+    expect(JSON.stringify(f.exemplo)).toContain("preco_email");
+    expect(z.object(f.inputSchema).safeParse({ planos: [{ nome: "X", preco: 10, preco_email: null }] }).success).toBe(true);
+    expect(z.object(f.inputSchema).safeParse({ planos: [{ nome: "X", preco: 10, preco_email: -1 }] }).success).toBe(false);
+  });
+
+  it("ver_assinatura descreve os preços que valem, com a origem", () => {
+    const f = FERRAMENTA_POR_NOME.get("plataforma_ver_assinatura")!;
+    expect(f.description).toMatch(/PREÇOS que valem/);
   });
 });

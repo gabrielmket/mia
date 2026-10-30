@@ -189,7 +189,10 @@ ferramenta (desliga, ajusta, religa), como as automações.
 ## 3. Todas as ferramentas
 
 São **99** ferramentas no servidor: as 91 desta página e as 8 da migração
-([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .94 juntou as duas partes do assistente que ensina e
+([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
+ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
+`plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
+cobrança da jornada de assinatura (.90)", nesta seção). A .94 juntou as duas partes do assistente que ensina e
 faz. A mais nova é `plataforma_desfazer_proposta_do_assistente`, do assistente que faz com aprovação
 ([`assistente.md`](assistente.md), seção 12; veja "O assistente faz com aprovação (.94)", nesta
 seção). As quatro de antes dela (.93) são as do "Me mostra como" e de onde os clientes travam
@@ -247,7 +250,7 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | `plataforma_diagnosticar_conversoes_da_meta` | o diagnóstico da Meta, o mesmo do botão "Testar conexão": token, destino, permissão, último envio aceito, recusas em 7 dias e modo de teste. Faz três leituras na Meta com o token do cliente; nenhum evento é enviado | leitura |
 | `plataforma_ver_paineis` | os doze PAINÉIS PRONTOS de um cliente (resultado do mês, meta do mês, funil, de onde vêm, por que perdemos, atendimento, tempo de resposta, agenda, follow-up, anúncios, previsão, assuntos), com os números do motor de conta no banco (`fn_mia_relatorio`, 9030): todas as linhas do período, no fuso e na moeda da empresa. Período 7, 30 ou 90 dias, ou o mês; funil opcional; com ou sem valores em reais. Nada de custo de IA, gasto com anúncio, nome ou contato | leitura |
 | `plataforma_ver_relatorios` | o MONTADOR DE RELATÓRIOS de um cliente (.80): os doze relatórios prontos e o funil a que estão ligados, os relatórios e os painéis da equipe (compartilhados ou criados pela implantação) com o que cada um mede e agrupa, e quantos são só de quem criou (esses não são listados: o "só para mim" não aparece para ninguém). Com `numeros: true`, calcula cada relatório dos painéis no banco (`fn_mia_relatorio`) e devolve total e maiores grupos; diz qual relatório fica fora do link do dono por mostrar pessoa da equipe | leitura |
-| `plataforma_ver_email_marketing` | o RETRATO do e-mail marketing (.89): módulo, Amazon ligada no servidor (só sim ou não, nunca a chave), o domínio e os seis registros com o que falta, os remetentes, o "responder para", o rodapé, o ritmo e a janela, o degrau do aquecimento, a saúde dos 30 dias, o preço por e-mail, o saldo, a supressão, os textos de consentimento, os segmentos, os modelos e as PENDÊNCIAS para o primeiro envio | leitura |
+| `plataforma_ver_email_marketing` | o RETRATO do e-mail marketing (.89): módulo, Amazon ligada no servidor (só sim ou não, nunca a chave), o domínio e os seis registros com o que falta, os remetentes, o "responder para", o rodapé, o ritmo e a janela, o degrau do aquecimento, a saúde dos 30 dias, o preço por e-mail (desde a .95, com a origem: definido à mão, o plano ou o padrão), o saldo, a supressão, os textos de consentimento, os segmentos, os modelos e as PENDÊNCIAS para o primeiro envio | leitura |
 | `plataforma_ver_campanhas_de_email` | as campanhas de e-mail (.89): situação, por que pausou, o andamento e, com `campanha_id`, os resultados (entregues, aberturas como estimativa, cliques únicos sem robô, descadastros, rejeições, reclamações, cobrado e cliques por link) | leitura |
 | `plataforma_ver_links_do_dono` | os links para o dono do negócio de um cliente: para quem, o endereço, a situação (ativo, vencido, revogado), os painéis, o período, se mostra valores, a validade, o último acesso e quantos acessos | leitura |
 
@@ -258,7 +261,7 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | `plataforma_criar_cliente` | `criar_cliente` | cria a organização; quem criou o token entra como admin | a mesma `chave` devolve a mesma organização |
 | `plataforma_liberar_modulo` | `liberar_modulo` | libera ou tira um módulo vendido (desde a .89, também `email_marketing`) | liberar de novo não duplica |
 | `plataforma_lancar_credito` | `lancar_credito` | lança crédito ou estorno na carteira de disparo | **não** é reexecutável: cada chamada lança |
-| `plataforma_definir_preco` | `definir_preco` | define o preço por mensagem de disparo e, desde a .89, o preço por e-mail (`preco_por_email_cents`; `null` volta ao padrão de 2 centavos). Os dois são opcionais: o ausente fica como está | grava o mesmo valor |
+| `plataforma_definir_preco` | `definir_preco` | define o preço por mensagem de disparo e, desde a .89, o preço por e-mail (`preco_por_email_cents`). Os dois são opcionais: o ausente fica como está. Desde a .95, deixa claro que são o preço DEFINIDO À MÃO para a empresa, que vence o do plano; `null` tira o definido à mão (vale o do plano e, sem plano, a mensagem fica sem preço e o e-mail volta ao padrão de 2 centavos) | grava o mesmo valor |
 
 ### Empresas de demonstração por segmento
 
@@ -396,6 +399,10 @@ Função do fork, e entra no MCP na mesma versão. Desenho e passo a passo para 
 [`jornada-de-assinatura.md`](jornada-de-assinatura.md); a prova está em
 `tests/unit/mcp-de-implantacao-cobranca.test.ts` (a CONTAGEM da lista mora ali desde a .90:
 92, e 94 com a .91). Os valores vão em **reais**; o teto de IA é o único em dólar, e só a plataforma o vê.
+Desde a .95, o plano tem o preço por e-mail ao lado do preço do Broadcast (`preco_email`, 9110;
+ausente ou `null` = o padrão de R$ 0,02), com as mesmas regras: vale para as empresas do plano
+sem preço definido à mão, segue o plano na troca e não muda em plano assinado. A prova está no
+mesmo teste e em `tests/unit/preco-do-email-por-plano.test.ts`.
 
 **O MCP não** conecta nem troca a chave do provedor (só pela tela, cifrada), não marca nada
 como pago (o pagamento só vem do aviso do provedor e da releitura), não cancela a
@@ -405,10 +412,10 @@ desligada, as escritas recusam com o caminho para ligar.
 
 | ferramenta | operação | o que faz | reexecução |
 |---|---|---|---|
-| `plataforma_ver_cobranca` | leitura | a cobrança da instalação: ligada ou não, provedor e modo, se o aviso de pagamento chega, a régua, o que falta para a primeira cobrança, os planos (limites, módulos, preço do Broadcast, conversas estimadas, quantas empresas assinam), as empresas por situação, os pacotes de crédito e o modo do cadastro. A chave nunca sai | leitura |
-| `plataforma_garantir_planos` | `gerir_planos` | os planos pelo nome (preço, intervalo, teste, pessoas, números, teto de IA, módulos, preço do Broadcast, frase e selo, oferecido ou escondido, o do cadastro) e os `pacotes_de_creditos`. Plano assinado não muda de preço nem perde módulo: a resposta manda arquivar e criar outro | pelo nome; o igual volta em `sem_mudanca` |
+| `plataforma_ver_cobranca` | leitura | a cobrança da instalação: ligada ou não, provedor e modo, se o aviso de pagamento chega, a régua, o que falta para a primeira cobrança, os planos (limites, módulos, preço do Broadcast, preço por e-mail `preco_email` desde a .95 com o `preco_email_padrao`, conversas estimadas, quantas empresas assinam), as empresas por situação, os pacotes de crédito e o modo do cadastro. A chave nunca sai | leitura |
+| `plataforma_garantir_planos` | `gerir_planos` | os planos pelo nome (preço, intervalo, teste, pessoas, números, teto de IA, módulos, preço do Broadcast, preço por e-mail `preco_email` desde a .95, frase e selo, oferecido ou escondido, o do cadastro) e os `pacotes_de_creditos`. Plano assinado não muda de preço nem perde módulo (nem muda o preço do Broadcast ou o por e-mail): a resposta manda arquivar e criar outro | pelo nome; o igual volta em `sem_mudanca` |
 | `plataforma_listar_assinaturas` | leitura | as empresas por situação, com plano, agendado, origem, fim do teste, o próximo aviso da régua, a suspensão prevista, o link em aberto e os passos feitos; filtro `so_cadastro_proprio` | leitura |
-| `plataforma_ver_assinatura` | leitura | uma empresa: plano, situação, datas, a régua ponto a ponto, quem administra (e-mail mascarado), os passos e os módulos com a origem | leitura |
+| `plataforma_ver_assinatura` | leitura | uma empresa: plano, situação, datas, a régua ponto a ponto, quem administra (e-mail mascarado), os passos e os módulos com a origem; desde a .95, `precos`: o da mensagem do Broadcast e o por e-mail que valem, em reais, cada um com a origem (`definido_a_mao`, `plano` ou `padrao`) e o definido à mão | leitura |
 | `plataforma_atribuir_plano` | `gerir_cobranca` | atribui ou troca o plano como o dono no card Cobrança: a isenta passa a pagar em teste; no teste a troca vale na hora, depois fica para a renovação (plano negociado não paga diferença). Aceita plano escondido | o mesmo plano responde `mudou: false` |
 | `plataforma_gerar_link_de_pagamento` | `gerir_cobranca` | o mesmo botão do card: devolve o link em aberto ou cria um; no Asaas, a primeira vez pede o `documento` de quem paga, que vai direto ao Asaas e não fica guardado (nem na auditoria) | devolve o link em aberto |
 | `plataforma_ajustar_cobranca` | `gerir_cobranca` | `dar_prazo` (até 60 dias), `isentar` (recusa com assinatura viva no provedor) ou `voltar_a_cobranca` (com o `plano`). Prazo e isenção reativam quem foi suspenso por pagamento | o mesmo pedido regrava a mesma situação (`mudou: false` no isentar) |
@@ -753,6 +760,22 @@ cadastro sem pagamento fica na tela, com a verificação em duas etapas. A prova
 
 O MCP não paga, não gera cobrança, não cadastra cartão, não muda os dados fiscais e não lê o
 cartão (o número nunca é gravado).
+
+### A área de cobrança (.96, segunda frente)
+
+Função do fork ([`area-de-cobranca.md`](area-de-cobranca.md); protótipo "Pagamento no início",
+telas 3 e 4), e entra no MCP na mesma versão, **sem ferramenta nova** (a lista segue com 99): baixar
+a nota, trocar o cartão e corrigir os dados fiscais são do cliente, na tela; apagar um cadastro sem
+pagamento é da Time, na tela, com a verificação em duas etapas. A prova está em
+`tests/unit/mcp-de-implantacao-area-de-cobranca.test.ts`.
+
+| ferramenta | o que muda | operação |
+|---|---|---|
+| `plataforma_ver_cliente` (cresce) | `cobrancas`: as cobranças da empresa no Asaas (as 24 mais novas), cada uma com `cobranca` (`pay_...`), `vencimento`, `valor_cents`, `forma`, `situacao` (`paga`, `aberta`, `vencida`, `cancelada`...), `paga_em`, se é mensalidade, o **número da nota fiscal** (`nota_numero`), a situação dela e o **link do PDF** (`nota_pdf_url`), para mandar a nota a quem pedir, e `correcao_pedida` (o chamado "A nota saiu errada" e a situação dele). `null` = a empresa não tem cobrança pelo Asaas; `"nao_lido"` = o Asaas não respondeu (o resto do retrato sai igual) | leitura |
+
+O pedido "A nota saiu errada" chega como chamado (tipo pedido, com a cobrança, a nota e o motivo no
+texto) e se responde com `plataforma_responder_chamado`, que já existe. O MCP não troca cartão,
+não muda dados fiscais, não cancela nota e não apaga cadastro.
 
 ### O que chegou do upstream 1.85 (.83)
 

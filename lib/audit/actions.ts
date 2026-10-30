@@ -1538,6 +1538,14 @@ export const AUDIT_ACTIONS = [
   "assistente.desfazer_travado",
   "onboarding.numero_oficial_esperando_a_time",
   "onboarding.agente_do_modelo_publicado",
+  // FORK MIA (.96, segunda frente) · a área de cobrança e o lado da Time
+  // (docs/fork/area-de-cobranca.md): o cartão trocado para as próximas
+  // mensalidades (só o resultado, NUNCA o cartão), o pedido "A nota saiu
+  // errada" (o número do chamado, o motivo e a cobrança, nunca o texto) e o
+  // cadastro sem pagamento apagado pela Time (os dias e o plano).
+  "area_de_cobranca.cartao_trocado",
+  "area_de_cobranca.nota_errada_pedida",
+  "pagamento_inicial.cadastro_apagado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

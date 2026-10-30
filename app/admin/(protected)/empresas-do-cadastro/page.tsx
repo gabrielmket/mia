@@ -26,7 +26,15 @@ import {
   type SituacaoDaEmpresa,
 } from "@/lib/planos-mia/situacao";
 import { createAdminClient } from "@/lib/supabase/admin";
+// FORK MIA (.96, segunda frente): quem se cadastrou e não pagou (docs/fork/area-de-cobranca.md).
+import { funilDoCadastro, situacoesDoPagamento } from "@/lib/pagamento-inicial/cadastro-sem-pagamento";
+import {
+  ROTULO_DA_SITUACAO_DO_PAGAMENTO,
+  type ChaveDaSituacaoNaLista,
+  type SituacaoDoPagamentoNaLista,
+} from "@/lib/pagamento-inicial/situacao-na-lista";
 
+import { ApagarCadastro } from "./_apagar";
 import { PedidosDoCadastro } from "./_pedidos";
 
 export const metadata = { title: "Empresas do cadastro" };
@@ -81,6 +89,20 @@ const ROTULO_DO_ITEM: Record<string, string> = {
   plano: "Plano e cobrança",
 };
 
+/** FORK MIA (.96): a cor de cada situação do pagamento. */
+const CLASSE_DO_PAGAMENTO: Record<ChaveDaSituacaoNaLista, string> = {
+  pago: "bg-success-bg text-success-fg",
+  pix_gerado: "bg-info-bg text-info-fg",
+  boleto_em_compensacao: "bg-warning-bg text-warning-fg",
+  cartao_recusado: "bg-error-bg text-error-fg",
+  cartao_em_analise: "bg-info-bg text-info-fg",
+  aguardando: "bg-info-bg text-info-fg",
+  sem_cobranca: "bg-muted text-muted-foreground",
+  sem_pagamento_ha_dias: "bg-muted text-muted-foreground",
+  teste_cartao: "bg-info-bg text-info-fg",
+  teste_pix: "bg-info-bg text-info-fg",
+};
+
 function noFiltro(l: LinhaDaEmpresa, filtro: string): boolean {
   if (filtro === "todas") return true;
   if (filtro === "atraso") return l.situacao === "atraso" || l.situacao === "prazo";
@@ -102,16 +124,34 @@ export default async function Page({
 
   const admin = createAdminClient();
   const agora = new Date();
-  const [linhas, pedidos, numeros, modo, recados, empresasEsperando] = await Promise.all([
+  const [linhas, pedidos, numeros, modo, recados, empresasEsperando, funil] = await Promise.all([
     lerEmpresasDoCadastro(admin, agora),
     lerPedidosDeCadastro(admin),
     lerNumerosEsperando(admin),
     modoDeCadastro(),
     ultimosRecados(admin),
     lerEmpresasEsperandoONumero(admin).catch(() => []),
+    // FORK MIA (.96): o funil dos últimos 30 dias.
+    funilDoCadastro(admin, agora),
   ]);
   const base = soQuemEntrouSozinho ? linhas.filter((l) => l.origem === "cadastro") : linhas;
   const lista = base.filter((l) => noFiltro(l, filtro));
+  // FORK MIA (.96): a situação do pagamento de cada empresa e o nome curto de quem
+  // pode ser apagada (a confirmação do "Apagar o cadastro"). Leitura que falha
+  // deixa a coluna vazia, sem derrubar a tela.
+  const pagamentos: Map<string, SituacaoDoPagamentoNaLista> = await situacoesDoPagamento(
+    admin,
+    lista.map((l) => ({ id: l.id, entrou: l.entrou })),
+    agora,
+  ).catch(() => new Map());
+  const apagaveis = lista.filter((l) => pagamentos.get(l.id)?.pode_apagar).map((l) => l.id);
+  const slugs = new Map<string, string>(
+    apagaveis.length > 0
+      ? (((await admin.from("organizations").select("id, slug").in("id", apagaveis)).data ?? []) as Array<{ id: string; slug: string }>).map(
+          (o) => [o.id, o.slug],
+        )
+      : [],
+  );
   const topo = numerosDoTopo(base, pedidos.length, agora);
   const escolhida =
     lista.find((l) => l.id === sp.empresa)?.id ??
@@ -205,6 +245,34 @@ export default async function Page({
         </Card>
       </section>
 
+      {/* FORK MIA (.96): o funil do cadastro (protótipo "Pagamento no início", tela 4). */}
+      <section className="space-y-2" data-jornada="funil-do-cadastro">
+        <h2 className="text-sm font-semibold">{t("Funil do cadastro, últimos 30 dias")}</h2>
+        {funil === null ? (
+          <p className="text-sm text-muted-foreground">{t("Não deu para contar o funil agora.")}</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {(
+              [
+                [funil.escolheram_plano, t("escolheram um plano no site")],
+                [funil.criaram_conta, t("criaram a conta")],
+                [funil.pagaram, t("pagaram")],
+                [funil.esperando_pagamento, t("esperando o pagamento")],
+                [funil.sem_pagamento_ha_mais_de_30_dias, t("sem pagamento há mais de 30 dias")],
+              ] as const
+            ).map(([n, rotulo], i) => (
+              <Card key={i} className="p-4">
+                <p className="text-2xl font-semibold tabular-nums">{n}</p>
+                <p className="text-xs text-muted-foreground">{rotulo}</p>
+              </Card>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          {t("Nada é apagado sozinho: o cadastro sem pagamento há mais de 30 dias ganha o botão Apagar o cadastro, com a verificação em duas etapas.")}
+        </p>
+      </section>
+
       <nav
         className="flex flex-wrap items-center gap-2 text-sm"
         aria-label={t("Filtros")}
@@ -246,6 +314,7 @@ export default async function Page({
                     <th className="px-3 py-2 font-medium">{t("Origem")}</th>
                     <th className="px-3 py-2 font-medium">{t("Plano")}</th>
                     <th className="px-3 py-2 font-medium">{t("Situação")}</th>
+                    <th className="px-3 py-2 font-medium">{t("Situação do pagamento")}</th>
                     <th className="px-3 py-2 font-medium">{t("Primeiros passos")}</th>
                     <th className="px-3 py-2 font-medium">{t("Próximo da régua")}</th>
                   </tr>
@@ -289,6 +358,45 @@ export default async function Page({
                         >
                           {t(ROTULO_DA_SITUACAO[l.situacao])}
                         </span>
+                      </td>
+                      <td className="px-3 py-2" data-pagamento-na-lista={pagamentos.get(l.id)?.chave ?? "nenhum"}>
+                        {(() => {
+                          const p = pagamentos.get(l.id);
+                          if (!p) return <span className="text-muted-foreground">—</span>;
+                          const forma =
+                            p.forma === "pix" ? t("Pix") : p.forma === "cartao" ? t("cartão") : p.forma === "boleto" ? t("boleto") : null;
+                          const detalhe =
+                            p.chave === "pago"
+                              ? p.pago_em
+                                ? t("pago em {data}").replace("{data}", fmt(p.pago_em))
+                                : null
+                              : p.chave === "boleto_em_compensacao" && p.vence_em
+                                ? t("vence em {data}").replace("{data}", fmt(`${p.vence_em}T12:00:00-03:00`))
+                                : p.chave === "cartao_recusado"
+                                  ? t("tentou {n} vezes").replace("{n}", String(p.recusas))
+                                  : p.chave === "pix_gerado" && p.gerada_em
+                                    ? t("gerado em {data}").replace("{data}", fmt(p.gerada_em))
+                                    : p.chave === "sem_pagamento_ha_dias"
+                                      ? p.gerada_em
+                                        ? t("cobrança gerada em {data}").replace("{data}", fmt(p.gerada_em))
+                                        : t("nunca gerou cobrança")
+                                      : null;
+                          return (
+                            <>
+                              <span className={`rounded-md px-2 py-0.5 text-xs ${CLASSE_DO_PAGAMENTO[p.chave]}`}>
+                                {t(ROTULO_DA_SITUACAO_DO_PAGAMENTO[p.chave]).replace("{dias}", String(p.dias))}
+                                {p.chave === "pago" && forma ? ` · ${forma}` : ""}
+                              </span>
+                              {detalhe ? <span className="block text-xs text-muted-foreground">{detalhe}</span> : null}
+                              {p.fim_do_teste ? (
+                                <span className="block text-xs text-muted-foreground">{t("o teste acabou sem pagamento")}</span>
+                              ) : null}
+                              {p.pode_apagar && slugs.get(l.id) ? (
+                                <ApagarCadastro orgId={l.id} nome={l.nome} slug={slugs.get(l.id)!} dias={p.dias} />
+                              ) : null}
+                            </>
+                          );
+                        })()}
                       </td>
                       <td className="px-3 py-2">
                         {l.passos.feitos}/{l.passos.de}

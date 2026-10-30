@@ -28,6 +28,7 @@ const ESSENCIAL: PlanoComLado = {
   conversas: 300,
   modulos: [],
   preco_por_mensagem_cents: null,
+  preco_por_email_cents: null,
   frase: null,
   destaque: false,
 };

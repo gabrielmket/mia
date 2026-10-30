@@ -371,4 +371,52 @@ export const DICIONARIO_DA_JORNADA_MIA: Traducoes = {
   "Pausada: o e-mail marketing não faz parte do plano atual da empresa. A lista e os números ficam guardados.": {
     es: "Pausada: el email marketing no forma parte del plan actual de la empresa. La lista y los números quedan guardados.",
   },
+  // ── .95: o preço do e-mail por plano ──
+  // a página dos módulos dos planos (components/planos-mia/ModulosDosPlanos.tsx)
+  "E-mail (R$)": { es: "E-mail (R$)" },
+  "Preço por e-mail inválido.": { es: "Precio por e-mail inválido." },
+  "O preço do e-mail vale para as empresas do plano que não têm preço definido à mão. Vazio é o padrão de R$ 0,02.": {
+    es: "El precio del e-mail vale para las empresas del plan que no tienen un precio definido a mano. Vacío es el estándar de R$ 0,02.",
+  },
+  // a carteira de cada empresa no painel da Time (components/admin/tenants/CarteiraDoTenant.tsx)
+  "Mensagem: {preco}, pelo plano {plano}.": { es: "Mensaje: {preco}, por el plan {plano}." },
+  "Mensagem: {preco}, definido à mão para esta empresa.": {
+    es: "Mensaje: {preco}, definido a mano para esta empresa.",
+  },
+  "E-mail: {preco}, pelo plano {plano}.": { es: "E-mail: {preco}, por el plan {plano}." },
+  "E-mail: {preco}, definido à mão para esta empresa.": {
+    es: "E-mail: {preco}, definido a mano para esta empresa.",
+  },
+  "E-mail: {preco}, o padrão do sistema.": { es: "E-mail: {preco}, el estándar del sistema." },
+  "Preço por e-mail (R$)": { es: "Precio por e-mail (R$)" },
+  "Campo de preço vazio tira o definido à mão: a mensagem segue o plano (sem plano, o disparo recusa) e o e-mail segue o plano ou o padrão de R$ 0,02.": {
+    es: "Un campo de precio vacío quita el definido a mano: el mensaje sigue el plan (sin plan, el envío se rechaza) y el e-mail sigue el plan o el estándar de R$ 0,02.",
+  },
+  // o bloco Créditos do Plano e cobrança (components/planos-mia/ComprarCreditos.tsx)
+  "E-mail marketing a {preco} por e-mail aceito pela Amazon.": {
+    es: "Email marketing a {preco} por e-mail aceptado por Amazon.",
+  },
+  // a página de preços (app/precos/page.tsx)
+  "com e-mail a {preco}": { es: "con e-mail a {preco}" },
+  "E-mail marketing, por e-mail": { es: "Email marketing, por e-mail" },
+  "pré-pago, pelos créditos; cobrado só o e-mail aceito": {
+    es: "prepago, con créditos; solo se cobra el e-mail aceptado",
+  },
+  "Teste grátis em todos os planos, sem cartão": {
+    es: "Prueba gratis en todos los planes, sin tarjeta",
+  },
+
+  // ── .95: o hub da entrada paga ainda não paga (app/account-suspended/page.tsx) ──
+  "Falta só o primeiro pagamento": { es: "Solo falta el primer pago" },
+  "Assim que o pagamento for confirmado, a sua conta é liberada na hora.": {
+    es: "En cuanto se confirme el pago, tu cuenta se habilita al instante.",
+  },
+  "A conta é liberada assim que o primeiro pagamento for confirmado. Avise o administrador da sua empresa.": {
+    es: "La cuenta se habilita en cuanto se confirme el primer pago. Avisa al administrador de tu empresa.",
+  },
+  // ── .95: a liberação no primeiro pagamento da entrada paga (lib/planos-mia/entrada-paga.ts) ──
+  "Pagamento confirmado: a sua conta está liberada": { es: "Pago confirmado: tu cuenta está habilitada" },
+  "Recebemos o primeiro pagamento. Entre para começar a usar.": {
+    es: "Recibimos el primer pago. Entra para empezar a usarla.",
+  },
 };

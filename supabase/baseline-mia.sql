@@ -19377,6 +19377,87 @@ grant execute on function public.fn_mia_expurgar_assistente_vencido(integer, int
 
 notify pgrst, 'reload schema';
 
+
+-- ─── 9110 · o preço do e-mail por plano ───
+--
+-- Espelho EXATO da migration 9110 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9110 · o preço do e-mail por plano
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: `add column if
+-- not exists`, a constraint dentro de um `do` que confere antes, `comment on` e
+-- `create or replace` da função nossa da 9070.
+
+-- ── 1. a coluna ao lado do preço por mensagem ───────────────────────────────
+alter table public.mia_plano_modulos
+  add column if not exists preco_por_email_cents integer;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'mia_plano_modulos_preco_email'
+       and conrelid = 'public.mia_plano_modulos'::regclass
+  ) then
+    alter table public.mia_plano_modulos
+      add constraint mia_plano_modulos_preco_email
+      check (preco_por_email_cents is null or preco_por_email_cents between 0 and 100000);
+  end if;
+end $$;
+
+comment on column public.mia_plano_modulos.preco_por_email_cents is
+  'MIA (9110): o preco de cada e-mail de marketing aceito pela Amazon para quem esta no plano, em centavos. Nulo = o plano nao diz: vale o padrao de R$ 0,02 do codigo. O preco definido a mao para a empresa (tenant_broadcast_pricing.preco_por_email_cents) vence o do plano. Nao muda em plano assinado.';
+
+comment on table public.mia_plano_modulos is
+  'MIA (9070, 9110): o que cada plano de cobranca_planos liga alem dos limites do upstream: os modulos vendaveis, o preco por mensagem do Broadcast, o preco por e-mail de marketing e o texto do cartao da pagina de precos. Tabela AO LADO: cobranca_planos e do upstream e nao muda. So o servidor le e escreve.';
+
+-- ── 2. a trava de 9070 leva o preço por e-mail ──────────────────────────────
+-- Mesmo motivo de o upstream travar o preço do plano assinado: não mudar o que
+-- alguém comprou sem ele pedir. LIGAR um módulo num plano sempre pode (vale na
+-- hora para as empresas dele). Os dois preços travam como o preço do plano.
+create or replace function public.fn_mia_plano_modulos_trava_assinantes()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_plano uuid := coalesce(old.plano_id, new.plano_id);
+  v_tira boolean;
+begin
+  if tg_op = 'DELETE' then
+    v_tira := cardinality(old.modulos) > 0
+              or old.preco_por_mensagem_cents is not null
+              or old.preco_por_email_cents is not null;
+  else
+    v_tira := not (old.modulos <@ new.modulos)
+              or new.preco_por_mensagem_cents is distinct from old.preco_por_mensagem_cents
+              or new.preco_por_email_cents is distinct from old.preco_por_email_cents
+              or new.plano_id is distinct from old.plano_id;
+  end if;
+  if v_tira and exists (
+    select 1 from public.cobranca_assinaturas a
+     where a.plano_id = v_plano or a.plano_agendado_id = v_plano or a.plano_troca_pendente_id = v_plano
+  ) then
+    raise exception 'plano_com_assinantes'
+      using errcode = '23514',
+            hint = 'Este plano tem assinantes: os modulos so crescem e os precos por mensagem e por e-mail nao mudam. Arquive o plano e crie outro.';
+  end if;
+  return coalesce(new, old);
+end;
+$$;
+
+revoke execute on function public.fn_mia_plano_modulos_trava_assinantes() from public, anon, authenticated;
+
+comment on function public.fn_mia_plano_modulos_trava_assinantes() is
+  'MIA (9070, 9110): recusa (plano_com_assinantes, 23514) tirar modulo, mudar o preco por mensagem ou o preco por e-mail, ou apagar a linha de um plano que alguem assina (atual, agendado ou troca pendente). Acrescentar modulo pode.';
+
+notify pgrst, 'reload schema';
+
+
 -- ─── 9120 · os dados fiscais ───
 --
 -- Espelho EXATO da migration 9120 (supabase/migrations-mia/), onde está o porquê
@@ -19774,6 +19855,205 @@ grant execute on function public.fn_mia_bloquear_fim_do_teste(uuid) to service_r
 notify pgrst, 'reload schema';
 
 
+-- ─── 9125 · o cartão das mensalidades ───
+--
+-- Espelho EXATO da migration 9125 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9125 · o cartão das mensalidades
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: aplicar duas vezes dá zero erro.
+
+create table if not exists public.mia_cartao_das_mensalidades (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  -- Do cartão, só os 4 últimos números e a bandeira. O número inteiro e o código de segurança nunca.
+  cartao_final text not null,
+  cartao_bandeira text,
+  -- A assinatura do Asaas (`sub_...`) que recebeu o cartão. Assinatura nova (troca
+  -- de plano, cobrança refeita) não herda a linha: a tela só a mostra para a atual.
+  assinatura_ref text not null,
+  trocado_em timestamptz not null default now(),
+  trocado_por uuid references auth.users(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  constraint mia_cartao_das_mensalidades_final check (cartao_final ~ '^[0-9]{4}$'),
+  constraint mia_cartao_das_mensalidades_bandeira check (cartao_bandeira is null or cartao_bandeira ~ '^[A-Z_]{2,30}$'),
+  constraint mia_cartao_das_mensalidades_assinatura check (char_length(assinatura_ref) between 3 and 80)
+);
+
+comment on table public.mia_cartao_das_mensalidades is
+  'MIA (9125): o cartao que o administrador pos para as proximas mensalidades em Plano e cobranca (Trocar o cartao, checkout transparente do Asaas, sem cobrar na hora). So os 4 ultimos numeros e a bandeira, a assinatura do Asaas, quando e por quem. O numero e o codigo de seguranca nunca sao gravados. So o servidor.';
+
+alter table public.mia_cartao_das_mensalidades enable row level security;
+revoke all on public.mia_cartao_das_mensalidades from anon, authenticated;
+grant select, insert, update, delete on public.mia_cartao_das_mensalidades to service_role;
+
+drop trigger if exists trg_mia_cartao_das_mensalidades_touch on public.mia_cartao_das_mensalidades;
+create trigger trg_mia_cartao_das_mensalidades_touch
+  before update on public.mia_cartao_das_mensalidades
+  for each row execute function public.fn_touch_updated_at();
+
+-- LGPD: a empresa redigida perde o cartão das mensalidades.
+create or replace function public.fn_mia_cartao_das_mensalidades_sai_com_a_empresa_redigida()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.status = 'redacted' and old.status is distinct from 'redacted' then
+    delete from public.mia_cartao_das_mensalidades where organization_id = new.id;
+  end if;
+  return null;
+end;
+$$;
+
+revoke execute on function public.fn_mia_cartao_das_mensalidades_sai_com_a_empresa_redigida() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_cartao_das_mensalidades_sai_com_a_empresa_redigida on public.organizations;
+create trigger trg_mia_cartao_das_mensalidades_sai_com_a_empresa_redigida
+  after update of status on public.organizations
+  for each row execute function public.fn_mia_cartao_das_mensalidades_sai_com_a_empresa_redigida();
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9126 · o funil do cadastro e o cadastro sem pagamento ───
+--
+-- Espelho EXATO da migration 9126 (supabase/migrations-mia/), onde está o porquê
+-- inteiro (a linha `-- manifest:`). Idempotente, como todo o apêndice. Vai antes
+-- da varredura anon, que fecha o arquivo.
+--
+--
+-- 9126 · o funil do cadastro e o cadastro sem pagamento
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3). Idempotente: `create or replace`
+-- de função nossa.
+
+-- ── 1. o funil dos números do topo ──────────────────────────────────────────
+create or replace function public.fn_mia_funil_do_cadastro(p_desde timestamptz)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  with empresas as (
+    select o.id, o.created_at,
+           coalesce(a.pagamento_inicial_pendente, false) as pendente,
+           (a.proximo_vencimento is not null
+             or a.periodo_pago_desde is not null
+             or coalesce(p.situacao = 'pago', false)) as pagou
+      from public.organizations o
+      join public.mia_origem_da_empresa m on m.organization_id = o.id and m.origem = 'cadastro'
+      left join public.cobranca_assinaturas a on a.organization_id = o.id
+      left join public.mia_pagamento_inicial p on p.organization_id = o.id
+     where not o.demonstracao
+       and o.status <> 'redacted'
+  )
+  select jsonb_build_object(
+    'escolheram_plano', (
+      select count(*) from auth.users u
+       where u.created_at >= p_desde
+         and coalesce(u.raw_user_meta_data ->> 'cobranca_plan_id', '') <> ''),
+    'criaram_conta', (select count(*) from empresas where created_at >= p_desde),
+    'pagaram', (select count(*) from empresas where created_at >= p_desde and pagou),
+    'esperando_pagamento', (select count(*) from empresas where created_at >= p_desde and pendente and not pagou),
+    'sem_pagamento_ha_mais_de_30_dias', (
+      select count(*) from empresas
+       where pendente and not pagou and created_at < now() - interval '30 days')
+  );
+$$;
+
+comment on function public.fn_mia_funil_do_cadastro(timestamptz) is
+  'MIA (9126): o funil do cadastro desde p_desde (escolheram um plano no site, criaram a conta, pagaram, esperam o pagamento) e as empresas sem pagamento ha mais de 30 dias. So le. So o servidor.';
+
+revoke all on function public.fn_mia_funil_do_cadastro(timestamptz) from public;
+revoke execute on function public.fn_mia_funil_do_cadastro(timestamptz) from anon, authenticated;
+grant execute on function public.fn_mia_funil_do_cadastro(timestamptz) to service_role;
+
+-- ── 2. o cadastro sem pagamento fica pronto para a exclusão do upstream ─────
+create or replace function public.fn_mia_cadastro_sem_pagamento_para_apagar(
+  p_org uuid,
+  p_ator uuid,
+  p_dias integer default 30
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  c_motivo constant text := 'Cadastro sem pagamento: apagado pela Time';
+  v_org record;
+  v public.cobranca_assinaturas%rowtype;
+begin
+  if auth.uid() is not null then
+    raise exception 'cadastro_sem_pagamento_so_pelo_servidor' using errcode = '42501';
+  end if;
+  if p_dias is null or p_dias < 30 then
+    raise exception 'cadastro_sem_pagamento_prazo_minimo' using errcode = '22023';
+  end if;
+
+  select o.id, o.created_at, o.status, coalesce(o.suspended_kind, 'administrativa') as tipo,
+         o.suspended_reason, o.demonstracao
+    into v_org
+    from public.organizations o
+   where o.id = p_org
+     for update;
+  if not found then
+    return jsonb_build_object('pode', false, 'motivo', 'nao_existe');
+  end if;
+  if v_org.demonstracao then
+    return jsonb_build_object('pode', false, 'motivo', 'demonstracao');
+  end if;
+
+  select * into v from public.cobranca_assinaturas where organization_id = p_org for update;
+  if not found then
+    return jsonb_build_object('pode', false, 'motivo', 'sem_assinatura');
+  end if;
+  if not v.pagamento_inicial_pendente then
+    return jsonb_build_object('pode', false, 'motivo', 'nao_espera_pagamento');
+  end if;
+  if v.proximo_vencimento is not null or v.periodo_pago_desde is not null
+     or exists (select 1 from public.mia_pagamento_inicial p where p.organization_id = p_org and p.situacao = 'pago') then
+    return jsonb_build_object('pode', false, 'motivo', 'ja_pagou');
+  end if;
+  if v_org.created_at > now() - make_interval(days => p_dias) then
+    return jsonb_build_object('pode', false, 'motivo', 'antes_do_prazo');
+  end if;
+  if v_org.status <> 'suspended' then
+    return jsonb_build_object('pode', false, 'motivo', 'nao_esta_parada');
+  end if;
+  -- Já preparada numa tentativa anterior (a exclusão não terminou): segue.
+  if v_org.tipo = 'administrativa' and v_org.suspended_reason = c_motivo then
+    return jsonb_build_object('pode', true, 'motivo', 'ja_preparada');
+  end if;
+  -- Parada à mão pela Time por outro motivo: quem decide é a exclusão do painel da empresa.
+  if v_org.tipo <> 'cobranca' then
+    return jsonb_build_object('pode', false, 'motivo', 'parada_pela_time');
+  end if;
+
+  -- A suspensão de cobrança vira uma ADMINISTRATIVA nova, pelas funções do
+  -- upstream, na mesma transação: ninguém vê a empresa ativa no meio.
+  perform public.fn_reativar_organizacao(p_org, 'cobranca', p_ator);
+  perform public.fn_suspender_organizacao(p_org, 'administrativa', c_motivo, p_ator);
+  return jsonb_build_object('pode', true, 'motivo', 'preparada');
+end;
+$$;
+
+comment on function public.fn_mia_cadastro_sem_pagamento_para_apagar(uuid, uuid, integer) is
+  'MIA (9126): Apagar o cadastro (Empresas do cadastro). So a empresa que espera o primeiro pagamento, nunca pagou, nasceu ha p_dias (30 ou mais), nao e a demonstracao e esta parada pela cobranca: a suspensao de cobranca vira uma administrativa nova (fn_reativar_organizacao e fn_suspender_organizacao do upstream) para a exclusao do upstream aceitar. Quem chama cancela a cobranca no Asaas antes. So o servidor.';
+
+revoke all on function public.fn_mia_cadastro_sem_pagamento_para_apagar(uuid, uuid, integer) from public;
+revoke execute on function public.fn_mia_cadastro_sem_pagamento_para_apagar(uuid, uuid, integer) from anon, authenticated;
+grant execute on function public.fn_mia_cadastro_sem_pagamento_para_apagar(uuid, uuid, integer) to service_role;
+
+notify pgrst, 'reload schema';
+
+
 -- ─── 9130 · os parceiros e os cupons ───
 --
 -- Espelho EXATO da migration 9130 (supabase/migrations-mia/), onde está o porquê
@@ -19912,6 +20192,9 @@ create table if not exists public.mia_cupom_da_empresa (
   cupom_id uuid not null references public.mia_cupons(id) on delete restrict,
   -- O parceiro do cliente: vem do cupom e não muda sozinho (a Time troca na ficha).
   parceiro_id uuid references public.mia_parceiros(id) on delete restrict,
+  -- Desde quando o parceiro é deste cliente: só os pagamentos a partir deste dia
+  -- geram comissão para ele (a troca pela Time não paga o passado ao novo).
+  parceiro_desde timestamptz not null default now(),
   -- O COMBINADO no dia em que o cupom entrou: o cliente fica com ele mesmo que o
   -- cupom mude ou pause depois.
   codigo text not null,
@@ -20112,6 +20395,58 @@ revoke all on function public.fn_mia_aplicar_cupom(uuid, text, text, uuid) from 
 revoke execute on function public.fn_mia_aplicar_cupom(uuid, text, text, uuid) from anon, authenticated;
 grant execute on function public.fn_mia_aplicar_cupom(uuid, text, text, uuid) to service_role;
 
+-- ── 5b. tirar o cupom antes de pagar ────────────────────────────────────────
+-- "Tirar o cupom" no passo do pagamento: só antes do primeiro pagamento (depois,
+-- só a Time troca). O cupom de dias grátis que mudou o teste devolve a empresa
+-- ao plano: com teste, o fim do teste do plano; sem teste (entrada paga), a
+-- espera do primeiro pagamento, parada como o upstream faz no cadastro (0679).
+-- O servidor cancela antes a cobrança em aberto no Asaas.
+create or replace function public.fn_mia_tirar_cupom(p_org uuid, p_ator uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  u public.mia_cupom_da_empresa%rowtype;
+  a public.cobranca_assinaturas%rowtype;
+  v_trial integer;
+begin
+  select * into a from public.cobranca_assinaturas where organization_id = p_org for update;
+  select * into u from public.mia_cupom_da_empresa where organization_id = p_org for update;
+  if not found then
+    return jsonb_build_object('ok', true, 'mudou', false);
+  end if;
+  if a.organization_id is not null and (a.proximo_vencimento is not null or a.periodo_pago_desde is not null) then
+    return jsonb_build_object('ok', false, 'motivo', 'ja_pagou');
+  end if;
+  delete from public.mia_cupom_da_empresa where organization_id = p_org;
+  if u.dias_aplicados is not null and a.organization_id is not null and a.provedor_assinatura_id is null then
+    select p.trial_dias into v_trial from public.cobranca_planos p where p.id = a.plano_id;
+    if coalesce(v_trial, 0) = 0 then
+      update public.cobranca_assinaturas
+         set estado = 'trial', trial_ate = now(), pagamento_inicial_pendente = true,
+             vencida_desde = null, ultimo_aviso = null, ultimo_aviso_em = null, updated_at = now()
+       where organization_id = p_org;
+      perform public.fn_suspender_organizacao(p_org, 'cobranca', 'Aguardando o primeiro pagamento', p_ator);
+    else
+      update public.cobranca_assinaturas
+         set estado = 'trial', trial_ate = a.created_at + make_interval(days => v_trial), updated_at = now()
+       where organization_id = p_org;
+    end if;
+  end if;
+  return jsonb_build_object('ok', true, 'mudou', true, 'codigo', u.codigo, 'tinha_dias', u.dias_aplicados is not null);
+end;
+$$;
+
+comment on function public.fn_mia_tirar_cupom(uuid, uuid) is
+  'MIA (9130): tira o cupom da empresa antes do primeiro pagamento; o cupom de dias gratis devolve a empresa ao teste do plano (ou a entrada paga). So o servidor.';
+
+revoke all on function public.fn_mia_tirar_cupom(uuid, uuid) from public;
+revoke execute on function public.fn_mia_tirar_cupom(uuid, uuid) from anon, authenticated;
+grant execute on function public.fn_mia_tirar_cupom(uuid, uuid) to service_role;
+
 -- ── 6. a empresa nasce com o cupom do cadastro ──────────────────────────────
 -- Gatilho ADIADO (constraint trigger, initially deferred): roda no fim da
 -- transação que cria a empresa, DEPOIS de o gatilho da entrada paga do upstream
@@ -20200,7 +20535,8 @@ create table if not exists public.mia_setup_da_empresa (
   -- 'aguardando' (cobrança aberta), 'pago', 'cortesia' (o desconto zerou o
   -- valor: nada a cobrar), 'cancelado' (desistiu antes de pagar) ou 'estornado'.
   situacao text not null,
-  -- A cobrança avulsa no Asaas (pay_...) e a fatura dela.
+  -- O cliente no Asaas (cus_...) e a cobrança avulsa (pay_...) com a fatura dela.
+  cliente_ref text,
   pagamento_ref text,
   fatura_url text,
   pix_copia_e_cola text,

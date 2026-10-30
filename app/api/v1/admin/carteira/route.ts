@@ -8,7 +8,13 @@
  *
  * GET  → saldo e extrato de UMA organização (`?organization_id=`).
  * POST → lança crédito ou estorno.
- * PATCH→ define o preço por mensagem e o piso de aviso.
+ * PATCH→ define o preço por mensagem e o piso de aviso. FORK MIA (.95): e o
+ *        preço por e-mail, opcional (ausente fica como está).
+ *
+ * FORK MIA (.95): o GET devolve também o preço que VALE para cada um (o
+ * definido à mão, senão o do plano da assinatura; no e-mail, senão o padrão) e
+ * de onde ele vem, para a tela dizer "pelo plano" ou "definido à mão"
+ * (lib/planos-mia/preco-por-email.ts).
  *
  * Não há DELETE, e não é esquecimento: extrato que se apaga não é extrato. Um
  * crédito lançado errado se corrige com um lançamento de sinal contrário, que é
@@ -28,6 +34,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { lerSaldoDaCarteira } from "@/lib/carteira/ler-saldo";
 import { creditoAcabando } from "@/lib/carteira/saldo";
 import { pisoDoPreco } from "@/lib/broadcast/margem";
+import { lerPrecosDaEmpresa } from "@/lib/planos-mia/preco-por-email";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +62,12 @@ const precoSchema = z.object({
    */
   preco_por_mensagem_cents: z.number().int().min(0).max(100_000).nullable(),
   alerta_saldo_cents: z.number().int().min(0).max(1_000_000_00).nullable().optional(),
+  /**
+   * FORK MIA (.95): o preço por e-mail definido à mão para esta empresa. `null`
+   * tira o definido à mão (vale o do plano, senão o padrão de R$ 0,02); ausente
+   * fica como está.
+   */
+  preco_por_email_cents: z.number().int().min(0).max(100_000).nullable().optional(),
 });
 
 async function exigirPlataforma(requestId: string) {
@@ -91,7 +104,7 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient();
   // FORK MIA: o saldo sai do extrato INTEIRO, paginado. O `.limit(100_000)`
   // que estava aqui trazia no máximo 1000 linhas (o teto do PostgREST).
-  const [saldo, extratoRes, precoRes] = await Promise.all([
+  const [saldo, extratoRes, precoRes, precos] = await Promise.all([
     lerSaldoDaCarteira(admin, orgId),
     admin
       .from("tenant_wallet_ledger")
@@ -104,9 +117,11 @@ export async function GET(req: NextRequest) {
       .select("preco_por_mensagem_cents, alerta_saldo_cents, updated_at")
       .eq("organization_id", orgId)
       .maybeSingle(),
+    // FORK MIA (.95): os dois preços que valem, com a origem. `null` = a leitura falhou.
+    lerPrecosDaEmpresa(admin, orgId).catch(() => null),
   ]);
 
-  if (saldo.erro) return fail("db_error", "Falha ao ler a carteira.", 500, { requestId });
+  if (saldo.erro || !precos) return fail("db_error", "Falha ao ler a carteira.", 500, { requestId });
   const alerta =
     precoRes.data?.alerta_saldo_cents === null || precoRes.data?.alerta_saldo_cents === undefined
       ? null
@@ -156,6 +171,13 @@ export async function GET(req: NextRequest) {
         precoRes.data?.preco_por_mensagem_cents === undefined
           ? null
           : Number(precoRes.data.preco_por_mensagem_cents),
+      // FORK MIA (.95): o que vale e de onde vem (definido à mão, o plano, o padrão).
+      plano: precos.plano,
+      preco_por_mensagem_vigente_cents: precos.mensagem.cents,
+      preco_por_mensagem_origem: precos.mensagem.origem,
+      preco_por_email_cents: precos.email.combinado_cents,
+      preco_por_email_vigente_cents: precos.email.cents,
+      preco_por_email_origem: precos.email.origem,
       alerta_saldo_cents: alerta,
       credito_acabando: creditoAcabando(saldo.saldo_cents, alerta),
       // O extrato passou do teto de leitura e a soma é parcial: a tela avisa.
@@ -251,6 +273,10 @@ export async function PATCH(req: NextRequest) {
       organization_id: parsed.data.organization_id,
       preco_por_mensagem_cents: parsed.data.preco_por_mensagem_cents,
       alerta_saldo_cents: parsed.data.alerta_saldo_cents ?? null,
+      // FORK MIA (.95): só entra quando veio; ausente, a coluna fica como está.
+      ...(parsed.data.preco_por_email_cents !== undefined
+        ? { preco_por_email_cents: parsed.data.preco_por_email_cents }
+        : {}),
       updated_at: new Date().toISOString(),
       updated_by: ctx.user.id,
     },
@@ -268,6 +294,9 @@ export async function PATCH(req: NextRequest) {
     metadata: {
       preco_por_mensagem_cents: parsed.data.preco_por_mensagem_cents,
       alerta_saldo_cents: parsed.data.alerta_saldo_cents ?? null,
+      ...(parsed.data.preco_por_email_cents !== undefined
+        ? { preco_por_email_cents: parsed.data.preco_por_email_cents }
+        : {}),
     },
   });
 

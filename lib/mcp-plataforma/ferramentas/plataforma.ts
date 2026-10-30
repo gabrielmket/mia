@@ -40,6 +40,8 @@ import { seguirOPlano } from "@/lib/planos-mia/seguir-o-plano";
 import { recusar } from "../recusa";
 // FORK MIA (.96): o passo "Pagamento" do início (docs/fork/pagamento-no-inicio.md).
 import { empresasEsperandoOPrimeiroPagamento, passoDoPagamentoParaATime } from "@/lib/pagamento-inicial/para-a-time";
+// FORK MIA (.96, segunda frente): as cobranças com a nota fiscal (docs/fork/area-de-cobranca.md).
+import { cobrancasParaATime } from "@/lib/area-de-cobranca/para-a-time";
 
 /**
  * A chave do CPF está semeada? Só sim ou não, e o VALOR nunca sai.
@@ -139,7 +141,11 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       // FORK MIA (.96): o passo do pagamento.
       "Desde a .96, em `pagamento_inicial`: o passo \"Pagamento\" do início (modo entrada paga ou teste; Pix gerado, boleto, cartão recusado ou pago, " +
       "com a data; a cobrança no Asaas; o final do cartão; o fim do teste) e os dados fiscais resumidos, com o documento mascarado. " +
-      "`null` = a empresa não tem o passo.",
+      "`null` = a empresa não tem o passo. " +
+      // FORK MIA (.96, segunda frente): as cobranças com a nota.
+      "Em `cobrancas`: as cobranças da empresa no Asaas (as mais novas), com a situação, o número da nota fiscal e o link do PDF da nota, " +
+      "para mandar a nota a quem pedir, e o chamado \"A nota saiu errada\" de cada uma (responda com `plataforma_responder_chamado`). " +
+      "`null` = a empresa não tem cobrança pelo Asaas; \"nao_lido\" = o Asaas não respondeu.",
     inputSchema: {
       organization_id: z.string().uuid().describe("O id do cliente."),
     },
@@ -188,6 +194,8 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       const jornada = await lerDetalheDaEmpresa(admin, id).catch(() => null);
       // FORK MIA (.96): o passo do pagamento. Leitura que falha diz "nao_lido".
       const pagamentoInicial = await passoDoPagamentoParaATime(admin, id);
+      // FORK MIA (.96, segunda frente): as cobranças e a nota. Leitura que falha diz "nao_lido".
+      const cobrancas = await cobrancasParaATime(admin, id);
 
       return {
         cliente: org.data,
@@ -204,6 +212,7 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
           : "nao_lido",
         modulos_com_origem: jornada ? jornada.modulos : "nao_lido",
         pagamento_inicial: pagamentoInicial,
+        cobrancas,
         // Os interruptores da empresa que chegaram do upstream 1.74 a 1.80.
         configuracao: {
           limpeza_automatica_de_midia: {
@@ -545,7 +554,10 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       "Passe `null` para devolver o cliente ao estado 'sem preço acordado', em " +
       "que o disparador recusa. " +
       // FORK MIA (.89): o preço por e-mail do disparo de e-mail marketing.
-      "Também define o preço por E-MAIL aceito pela Amazon (`preco_por_email_cents`; `null` volta ao padrão de R$ 0,02). " +
+      "Também define o preço por E-MAIL aceito pela Amazon (`preco_por_email_cents`). " +
+      // FORK MIA (.95): o preço desta ferramenta é o DEFINIDO À MÃO e vence o do plano.
+      "Os dois são o preço definido à mão para esta empresa e vencem o do plano dela (plataforma_garantir_planos); " +
+      "`null` tira o definido à mão: vale o do plano e, sem plano, a mensagem fica sem preço e o e-mail volta ao padrão de R$ 0,02. " +
       "Campo ausente fica como está.",
     inputSchema: {
       organization_id: z.string().uuid(),
@@ -566,7 +578,7 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         .max(10_000)
         .nullable()
         .optional()
-        .describe("Centavos por e-mail de marketing aceito pela Amazon. `null` = o padrão (2 centavos). Ausente: fica como está."),
+        .describe("Centavos por e-mail de marketing aceito pela Amazon. `null` = sem preço à mão (vale o do plano, senão o padrão de 2 centavos). Ausente: fica como está."),
       alerta_saldo_cents: z
         .number()
         .int()

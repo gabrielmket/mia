@@ -1,7 +1,7 @@
 /**
  * FORK MIA (.90) — os dados da página "Módulos e Broadcast de cada plano" do
  * painel (`/admin/cobranca/modulos-dos-planos`, `ModulosDosPlanos.tsx`): os planos com
- * o lado nosso, quantas empresas assinam cada um (é o que trava tirar módulo) e
+ * o lado nosso (desde a .95, com o preço por e-mail), quantas empresas assinam cada um (é o que trava tirar módulo) e
  * a estimativa de conversas. O dólar do teto fica no formulário do upstream,
  * que é do dono da instalação. LANÇA na falha.
  */
@@ -48,6 +48,7 @@ export async function lerPainelDosPlanos(
       conversas: conversasEstimadas(p.teto_ia_usd_cents),
       modulos: p.modulos,
       preco_por_mensagem_cents: p.preco_por_mensagem_cents,
+      preco_por_email_cents: p.preco_por_email_cents,
       frase: p.frase,
       destaque: p.destaque,
     })),

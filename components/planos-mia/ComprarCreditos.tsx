@@ -39,8 +39,11 @@ interface Leitura {
 
 export function ComprarCreditos({
   precoPorMensagemCents,
+  precoPorEmailCents = null,
 }: {
   precoPorMensagemCents: number | null;
+  /** FORK MIA (.95): o preço por e-mail de quem tem o e-mail marketing. `null` = não tem. */
+  precoPorEmailCents?: number | null;
 }) {
   const t = useT();
   const idioma = useIdioma();
@@ -123,6 +126,14 @@ export function ComprarCreditos({
               "Mensagem do Broadcast a {preco} no seu plano. Mensagem que falha não é cobrada.",
             ).replace("{preco}", brl.format(precoPorMensagemCents / 100))}
       </p>
+      {precoPorEmailCents !== null && (
+        <p className="text-sm text-muted-foreground" data-preco-por-email>
+          {t("E-mail marketing a {preco} por e-mail aceito pela Amazon.").replace(
+            "{preco}",
+            brl.format(precoPorEmailCents / 100),
+          )}
+        </p>
+      )}
       {erro && <p className="text-sm text-error-fg">{erro}</p>}
       {leitura && !leitura.pode_comprar && (
         <p className="text-sm">
