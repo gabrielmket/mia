@@ -6,7 +6,7 @@
  * A CONTAGEM da lista mora aqui desde a .90: 92 (as 83 da .89 e as nove da
  * cobrança), 94 com as duas das propostas do assistente (.91), 98 com as
  * quatro das trilhas (.93) e 99 com o
- * desfazer da proposta (.94), 105 com as seis de cupons, parceiros e repasses (.98); a .95 (o preço do e-mail por plano) não pediu
+ * desfazer da proposta (.94), 100 com a de etiquetar os contatos (.97), 106 com as seis de cupons, parceiros e repasses (.98); a .95 (o preço do e-mail por plano) não pediu
  * ferramenta nova, só o campo `preco_email` nos planos e os preços na leitura da
  * assinatura. E as regras que não podem virar: o MCP não conecta a chave do
  * provedor, não marca como pago, não cancela a assinatura do cliente, não muda
@@ -76,9 +76,9 @@ const banco = () =>
     return {};
   });
 
-describe("a lista: 105 ferramentas, nove delas da cobrança", () => {
-  it("105 = as 83 da .89 + as nove da cobrança (.90) + as duas das propostas do assistente (.91) + as quatro das trilhas e de onde os clientes travam (.93) + o desfazer da proposta (.94) + as seis de cupons, parceiros e repasses (.98)", () => {
-    expect(FERRAMENTAS).toHaveLength(105);
+describe("a lista: 106 ferramentas, nove delas da cobrança", () => {
+  it("106 = as 83 da .89 + as nove da cobrança (.90) + as duas das propostas do assistente (.91) + as quatro das trilhas e de onde os clientes travam (.93) + o desfazer da proposta (.94) + a de etiquetar os contatos (.97) + as seis de cupons, parceiros e repasses (.98)", () => {
+    expect(FERRAMENTAS).toHaveLength(106);
     expect(FERRAMENTAS_DE_COBRANCA).toHaveLength(9);
     expect(new Set(FERRAMENTAS.map((f) => f.name)).size).toBe(FERRAMENTAS.length);
   });

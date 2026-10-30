@@ -202,7 +202,7 @@ telas do `/admin` não têm manual do assistente; o manual do passo "Pagamento" 
 
 ## 10. Pelo MCP de plataforma
 
-Seis ferramentas novas (a lista vai de 99 a 105), e `plataforma_ver_cliente` ganha `cupom_e_parceiro`. Detalhes em
+Seis ferramentas novas (com a de etiquetar da .97, a lista vai de 100 a 106), e `plataforma_ver_cliente` ganha `cupom_e_parceiro`. Detalhes em
 [`mcp-de-implantacao.md`](mcp-de-implantacao.md), "Cupons, parceiros e comissão (.98)". O MCP não manda dinheiro, não
 anexa a nota, não troca o parceiro de um cliente e não anonimiza.
 

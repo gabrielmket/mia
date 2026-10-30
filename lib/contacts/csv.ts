@@ -150,6 +150,17 @@ export const CSV_MAX_BYTES = 5 * 1024 * 1024;
 /** Teto de linhas de dados por importação (protege o round-trip do handler). */
 export const CSV_MAX_DATA_ROWS = 500;
 
+/**
+ * FORK MIA (.97): o teto da planilha de CONTATOS.
+ *
+ * A planilha que achou o defeito do telefone tinha 565 linhas, e os 500 de cima
+ * recusariam o arquivo inteiro. Linha de contato custa um INSERT e um
+ * `emit_event`: 2.000 linhas ficam na casa de meio minuto, dentro do que um
+ * pedido aguenta. O teto de 500 segue valendo para negócios e produtos, onde
+ * cada linha custa bem mais.
+ */
+export const CSV_MAX_CONTATOS_POR_ARQUIVO = 2000;
+
 const DELIMITERS = [",", ";", "\t"] as const;
 
 /**
@@ -248,10 +259,32 @@ function detectDelimiter(text: string): string {
  * tela de importação promete a quem a usa nesse idioma.
  */
 const HEADER_ALIASES: Record<string, readonly string[]> = {
-  name: ["name", "nome", "cliente", "nombre"],
+  // FORK MIA (.97): os nomes em inglês e os que o formulário de captação já
+  // aceita (`DEFAULT_FIELD_MAP` em lib/webhooks/inbound.ts). `phone` faltava: a
+  // planilha `name,phone,email` perdia o telefone sem dizer nada, e a linha só
+  // com telefone virava "linha sem telefone nem e-mail".
+  name: ["name", "nome", "cliente", "nombre", "full_name", "fullname", "nome_completo"],
   display_name: ["display_name", "apelido", "nome_de_exibicao", "apodo", "nombre_para_mostrar"],
-  email: ["email", "e_mail", "correo", "correo_electronico"],
-  phone_number: ["phone_number", "telefone", "whatsapp", "celular", "fone", "telefono", "movil"],
+  email: ["email", "e_mail", "correo", "correo_electronico", "mail"],
+  phone_number: [
+    "phone_number",
+    "telefone",
+    "whatsapp",
+    "celular",
+    "fone",
+    "telefono",
+    "movil",
+    // FORK MIA (.97)
+    "phone",
+    "tel",
+    "telephone",
+    "mobile",
+    "mobile_phone",
+    "cell",
+    "cellphone",
+    "telefone_celular",
+    "wpp",
+  ],
   cpf: ["cpf"],
   birthdate: [
     "birthdate",
@@ -312,6 +345,18 @@ export function mapHeader(
     indices,
     motivo: temIdentificador ? null : _t("cabeçalho sem coluna de telefone nem e-mail"),
   };
+}
+
+/**
+ * FORK MIA (.97): as colunas do arquivo que a importação NÃO lê.
+ *
+ * Coluna ignorada em silêncio foi o defeito: a tela dizia "332 importados" e o
+ * telefone tinha ficado na planilha. Com o nome das colunas no resumo, quem
+ * importa vê na hora o que não entrou, inclusive o que ninguém previu aqui.
+ */
+export function colunasIgnoradas(header: string[], indices: Record<string, number>): string[] {
+  const lidas = new Set(Object.values(indices));
+  return header.map((c, i) => (lidas.has(i) ? "" : c.trim())).filter((c) => c !== "");
 }
 
 // ---------------------------------------------------------------------------

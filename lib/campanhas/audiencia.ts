@@ -26,6 +26,7 @@
  * por Zod, e cada campo dele vira um predicado escrito aqui.
  */
 import { z } from "zod";
+import { normalizarTag } from "@/lib/contacts/tag-normalizada";
 
 /** Estados em que uma campanha ainda pretende falar com a lista dela. */
 export const CAMPANHAS_VIVAS = [
@@ -40,11 +41,14 @@ export const CAMPANHAS_VIVAS = [
 export const filtroDeAudienciaSchema = z
   .strictObject({
     /** Contato precisa ter TODAS estas etiquetas. */
-    com_todas_tags: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
+    // FORK MIA (.97): a etiqueta casa pela regra da escrita (`contacts.tags` é gravado
+    // em minúsculas). Digitar "VIP" aqui dava lista vazia, e em `sem_tags` era pior:
+    // quem devia ficar de fora entrava. Candidato a ir para o upstream.
+    com_todas_tags: z.array(z.string().trim().min(1).max(40).transform(normalizarTag)).max(10).default([]),
     /** Contato precisa ter PELO MENOS UMA destas. */
-    com_alguma_tag: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
+    com_alguma_tag: z.array(z.string().trim().min(1).max(40).transform(normalizarTag)).max(10).default([]),
     /** Contato não pode ter NENHUMA destas. */
-    sem_tags: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
+    sem_tags: z.array(z.string().trim().min(1).max(40).transform(normalizarTag)).max(10).default([]),
 
     /** Tem negócio aberto em algum destes funis. */
     funis: z.array(z.string().uuid()).max(20).default([]),

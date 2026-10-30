@@ -44,6 +44,10 @@ export function ImportContactsDialog({ open, onOpenChange }: Props) {
       const r = await importar.mutateAsync(file);
       setResumo(r);
       if (r.imported > 0) toast.success(`${r.imported} ${t("contato(s) importado(s)")}`);
+      // FORK MIA (.97): a reimportação que só completou também é resultado.
+      if (r.imported === 0 && r.telefones_completados > 0) {
+        toast.success(`${r.telefones_completados} ${t("telefone(s) completado(s)")}`);
+      }
       if (r.errors.length > 0) toast.warning(`${r.errors.length} ${t("linha(s) com problema")}`);
     } catch (err) {
       // Falha de requisição (arquivo grande, formato errado…): mostra no rodapé.
@@ -68,7 +72,7 @@ export function ImportContactsDialog({ open, onOpenChange }: Props) {
           <DialogTitle>{t("Importar contatos de planilha")}</DialogTitle>
           <DialogDescription>
             {t(
-              "Envie um arquivo .csv com cabeçalho — colunas reconhecidas: nome, telefone, email, cpf, nascimento, tags. Excel: use “Salvar como” → “CSV UTF-8”. Máximo de 500 linhas por arquivo.",
+              "Envie um arquivo .csv com cabeçalho. Colunas reconhecidas: nome, telefone, email, cpf, nascimento, tags. Quem já está na base não é duplicado: a importação só completa o telefone ou o e-mail que faltar. Excel: use “Salvar como” → “CSV UTF-8”. Máximo de 2000 linhas por arquivo.",
             )}
           </DialogDescription>
         </DialogHeader>
@@ -133,7 +137,56 @@ export function ImportContactsDialog({ open, onOpenChange }: Props) {
                     {resumo.errors.length} {t("com erro")}
                   </span>
                 )}
+                {/* FORK MIA (.97): o que aconteceu com o telefone. */}
+                {resumo.telefones_completados > 0 && (
+                  <span className="rounded-md bg-surface px-2 py-1">
+                    {resumo.telefones_completados} {t("telefone(s) completado(s)")}
+                  </span>
+                )}
+                {resumo.emails_completados > 0 && (
+                  <span className="rounded-md bg-surface px-2 py-1">
+                    {resumo.emails_completados} {t("e-mail(s) completado(s)")}
+                  </span>
+                )}
+                {resumo.linhas_sem_telefone > 0 && (
+                  <span className="rounded-md px-2 py-1 font-medium" data-testid="importacao-sem-telefone">
+                    {resumo.linhas_sem_telefone} {t("sem telefone")}
+                  </span>
+                )}
               </div>
+
+              {/*
+                FORK MIA (.97): a planilha de 565 linhas entrou sem nenhum telefone
+                e a tela disse só "332 importados". Quem vem sem telefone entra na
+                base e não recebe WhatsApp: isso precisa estar escrito aqui, e a
+                coluna que ninguém leu também.
+              */}
+              {resumo.sem_coluna_de_telefone && (
+                <p className="text-sm text-warning-fg" data-testid="importacao-sem-coluna-de-telefone">
+                  {t(
+                    "Nenhuma coluna desta planilha foi reconhecida como telefone. Use um destes nomes no cabeçalho: telefone, celular, whatsapp ou phone, e importe de novo: quem já entrou é completado, sem duplicar.",
+                  )}
+                </p>
+              )}
+              {!resumo.sem_coluna_de_telefone && resumo.linhas_sem_telefone > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {t("Contato sem telefone fica na base, mas não recebe WhatsApp nem disparo.")}
+                </p>
+              )}
+              {resumo.colunas_ignoradas.length > 0 && (
+                <p className="text-sm text-muted-foreground" data-testid="importacao-colunas-ignoradas">
+                  {t("Colunas ignoradas:")} {resumo.colunas_ignoradas.join(", ")}
+                </p>
+              )}
+              {resumo.avisos.length > 0 && (
+                <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border p-2 text-sm">
+                  {resumo.avisos.map((aviso) => (
+                    <p key={aviso.linha}>
+                      {t("Linha")} {aviso.linha}: {aviso.motivo}
+                    </p>
+                  ))}
+                </div>
+              )}
 
               {resumo.errors.length > 0 && (
                 <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border p-2 text-sm">

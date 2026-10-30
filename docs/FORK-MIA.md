@@ -164,6 +164,12 @@ npx vitest run
   `components/area-de-cobranca/` e `lib/pagamento-inicial/` (`situacao-na-lista.ts` e
   `cadastro-sem-pagamento.ts`); os pontos de ligação estão em
   [`docs/fork/area-de-cobranca.md`](fork/area-de-cobranca.md), seção 7.
+  Os contatos em massa (.97: o telefone na importação por planilha, o "Selecionar todos
+  os N contatos deste filtro" e a conferência do Broadcast que explica a lista vazia) moram
+  em `lib/contacts/completar-na-importacao.ts`, `lib/contacts/lote-em-partes.ts`,
+  `app/api/v1/contacts/bulk/filtro/` e `lib/implantacao/etiquetar-contatos.ts`; os pontos de
+  ligação no código do upstream estão em
+  [`docs/fork/contatos-em-massa.md`](fork/contatos-em-massa.md), seção 5.
 - **Funcionalidade duplicada.** Os dois lados construíram, na mesma semana, o
   cadastro incorporado da Meta, o disparo em massa e o aviso no WhatsApp. A decisão
   de ficar com um, com o outro ou com os dois é de produto. Para o **disparo em

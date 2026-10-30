@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **105** ferramentas no servidor: as 97 desta página e as 8 da migração
+São **106** ferramentas no servidor: as 98 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -286,6 +286,7 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 | `plataforma_garantir_funil` | funil, etapas na ordem, passo do agente por etapa, probabilidade, janela de esfriando (`prazo_esperado_horas`, pela régua da tela: 1 a 8760 horas inteiras) e cor, campos personalizados (com obrigatoriedade por etapa; desde a .84, de quem é o campo, `escopo` negócio ou contato, só no funil padrão, e a lista pesquisável `searchable_select` com `aliases` e `allow_new`), motivos de perda e de ganho, vocabulário (desde a .79 também `compromisso` e `compromisso_plural`, como o segmento chama o que a agenda marca: o plural é o título do painel pronto de agenda) | nome do funil; nome da etapa; `key` do campo; rótulo do motivo | 20 etapas |
 | `plataforma_garantir_produtos` | catálogo em lote, com preço em centavos ou em texto (`"R$ 189,90"`); item com problema é recusado com motivo e não derruba os outros | código do produto (sem código, o nome) | 200 produtos |
 | `plataforma_garantir_etiquetas` | etiquetas no vocabulário, com cor e descrição | nome da etiqueta, sem diferenciar maiúscula | 50 etiquetas |
+| `plataforma_etiquetar_contatos` (.97) | põe ou tira uma etiqueta em todos os contatos de um filtro, sem disparar automação; `apenas_contar` confere antes (operação `importar_base`, ver [`contatos-em-massa.md`](contatos-em-massa.md)) | etiqueta por contato: repetir não duplica | 1000 contatos por chamada, com `cursor` |
 | `plataforma_gravar_memoria` | as regras da casa (documento que todos os agentes seguem) e as anotações | o documento é um só; anotação pelo título | 50 anotações |
 | `plataforma_garantir_conhecimento` | material por **texto**: perguntas e respostas, ou documento | nome do material | 200 perguntas; 200 mil caracteres |
 | `plataforma_garantir_followup` | instala um fluxo a partir de um modelo e ajusta textos, esperas, etapa do gatilho e política; no gatilho de silêncio, o teto do silêncio e a pausa antes de recomeçar; e garante as caixas que mexem no negócio sem falar com o cliente (`mover_no_funil` e `etiquetar`), antes de um nó do fluxo; desde a .83, a `midia` do passo de texto fixo (imagem ou PDF por endereço, com o texto de legenda); desde a .84, no gatilho de silêncio, `so_se_a_equipe_respondeu` e `repeticoes_por_contato` | nome do fluxo; a caixa, pelo lugar onde está | um fluxo; 10 caixas de cada tipo |
@@ -764,7 +765,7 @@ cartão (o número nunca é gravado).
 ### Cupons, parceiros e comissão (.98)
 
 Função do fork ([`cupons-e-parceiros.md`](cupons-e-parceiros.md); protótipo aprovado em 27/10/2026), e entra no MCP na
-mesma versão: **seis ferramentas novas** (a lista vai de 99 a 105). A prova está em
+mesma versão: **seis ferramentas novas** (com a de etiquetar da .97, a lista vai de 100 a 106). A prova está em
 `tests/unit/mcp-de-implantacao-cupons-e-parceiros.test.ts`, e a CONTAGEM no teste da cobrança. Nenhuma operação nova: o
 cupom é do catálogo comercial (`gerir_planos`), o parceiro e o repasse são da cobrança (`gerir_cobranca`).
 
@@ -972,7 +973,7 @@ Testes:
 | arquivo | o que mede |
 |---|---|
 | `tests/unit/mcp-de-implantacao-assistente.test.ts` | as cinco ferramentas do assistente da MIA (.88): o que gravam, a reexecução, a operação própria do responder, a entrega da resposta no assistente, no sino e no e-mail, a recusa do chamado da demonstração, e as cinco dele (a CONTAGEM da lista mora no teste do e-mail marketing) |
-| `tests/unit/mcp-de-implantacao-cobranca.test.ts` | as nove ferramentas da cobrança da jornada de assinatura (.90) e a CONTAGEM da lista (105 desde a .98): as três caixinhas novas e o raio de cada uma, os exemplos que passam no esquema, o que o MCP
+| `tests/unit/mcp-de-implantacao-cobranca.test.ts` | as nove ferramentas da cobrança da jornada de assinatura (.90) e a CONTAGEM da lista (106 desde a .98): as três caixinhas novas e o raio de cada uma, os exemplos que passam no esquema, o que o MCP
 | `tests/unit/mcp-de-implantacao-email-marketing.test.ts` | as nove ferramentas do e-mail marketing (.89): leitura livre e as duas caixinhas novas, o MCP que nunca dispara (pelo código-fonte e pelo banco: rascunho, ninguém na fila), o teste só para a equipe, a demonstração e o módulo que recusam o teste, a configuração que não duplica, a supressão que só acrescenta, o preço por e-mail que não mexe no da mensagem e a área nova do checklist |
 | `tests/unit/mcp-de-implantacao-primeiros-passos.test.ts` | as duas ferramentas das propostas do assistente (.91) e o rótulo do cliente em `plataforma_ver_implantacao`: a empresa nova com as três colunas e o que não se aplica, o número oficial que espera a Time, a empresa que já roda que não aparece no Início, e o caminho inteiro de uma proposta (preparar não grava a peça, aplicar adota o quadro e cria em rascunho, recusar não cria nada, o token sem a operação não decide, e o follow-up sai junto com o agente publicado) |
 | `tests/unit/mcp-de-implantacao-trilhas.test.ts` | as quatro ferramentas do "Me mostra como" e de onde os clientes travam (.93) e as três que crescem: o progresso por pessoa sem conversa, desligar e recomendar com a recusa da desligada, recomeçar o progresso por e-mail, o painel sem quem perguntou, a melhoria que não duplica pelo título, e as caixinhas de cada escrita |

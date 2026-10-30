@@ -55,6 +55,8 @@ const criarSchema = z.object({
    * mostra, e o que responde "os que pediram orçamento E são VIP".
    */
   etapas: z.array(z.string().uuid()).max(20).default([]),
+  /** FORK MIA (.97): o funil, quando a etapa é "Qualquer etapa". */
+  funil: z.string().uuid().nullish(),
   /**
    * A variável que recebe o nome do contato. `null` = nenhuma.
    * É a única personalização por pessoa da primeira versão — e é a que importa.
@@ -146,6 +148,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   const lista = await quemEntraNaLista(db, authz.org.orgId, {
     tags: dados.tags,
     etapas: dados.etapas,
+    funil: dados.funil,
   });
   if (!lista.ok) {
     // Lista acima do teto não é falha do banco: é pedido que tem de ser
@@ -263,6 +266,16 @@ export async function POST(req: NextRequest): Promise<Response> {
       broadcast_id: campanha.id,
       destinatarios: peneira.enviar.length,
       template: dados.template_name,
+      // FORK MIA (.97): a pergunta que produziu a lista e quem ficou de fora. Sem
+      // isto, um "0 destinatários" de ontem não tem como ser explicado hoje.
+      filtro: { etiquetas: dados.tags, etapas: dados.etapas, ...(dados.funil ? { funil: dados.funil } : {}) },
+      fora: {
+        sem_telefone: peneira.semTelefone,
+        repetidos: peneira.repetidos,
+        pediram_para_sair: peneira.semConsentimento,
+        pessoais: peneira.pessoais,
+        sem_negocio_na_etapa: lista.semNegocioNaEtapa ?? 0,
+      },
     },
   });
 
@@ -277,6 +290,8 @@ export async function POST(req: NextRequest): Promise<Response> {
         repetidos: peneira.repetidos,
         pediram_para_sair: peneira.semConsentimento,
         pessoais: peneira.pessoais,
+        // FORK MIA (.97): a etiqueta achou a pessoa, e a etapa a tirou.
+        sem_negocio_na_etapa: lista.semNegocioNaEtapa ?? 0,
       },
       pode_disparar: veredicto.pode,
       motivo: veredicto.motivo,

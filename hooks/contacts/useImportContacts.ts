@@ -15,6 +15,13 @@ export interface ImportContactsResult {
   imported: number;
   skipped_duplicates: number;
   errors: Array<{ linha: number; motivo: string }>;
+  // FORK MIA (.97): o que aconteceu com o telefone (ver a rota).
+  telefones_completados: number;
+  emails_completados: number;
+  linhas_sem_telefone: number;
+  sem_coluna_de_telefone: boolean;
+  colunas_ignoradas: string[];
+  avisos: Array<{ linha: number; motivo: string }>;
 }
 
 async function importarCsv(file: File): Promise<ImportContactsResult> {

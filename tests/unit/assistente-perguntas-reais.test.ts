@@ -74,6 +74,9 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "como marco um negócio como perdido", sobre: "/app/kanban", espera: "marcar-perdido" },
   { pergunta: "como movo o negócio de etapa", sobre: "/app/kanban", espera: "abrir-funil" },
   { pergunta: "como importo contatos de uma planilha", sobre: "/app/contacts", espera: "importar-contatos" },
+  // FORK MIA (.97): o filtro inteiro, sem o teto de 100.
+  { pergunta: "como etiqueto todos os contatos de uma vez", sobre: "/app/contacts", espera: "contatos-em-massa" },
+  { pergunta: "como seleciono todos os contatos do filtro", sobre: "/app/contacts", espera: "contatos-em-massa" },
   { pergunta: "como cadastro uma empresa com cnpj", sobre: "/app/companies", espera: "empresas-cadastrar" },
   { pergunta: "como junto duas empresas duplicadas", sobre: "/app/companies", espera: "empresas-mesclar" },
   { pergunta: "como uso isso aqui", em: "/app/empresas", sobre: "/app/empresas" },
@@ -99,6 +102,8 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "como busco empresas para prospectar", sobre: "/app/prospecting", espera: "prospeccao" },
   { pergunta: "como abro uma comanda", sobre: "/app/comandas", espera: "comandas" },
   { pergunta: "como disparo um template pelo número oficial", sobre: "/app/broadcast", espera: "broadcast-oficial" },
+  // FORK MIA (.97): a conferência que diz por que a lista ficou vazia.
+  { pergunta: "por que meu disparo deu 0 destinatários", sobre: "/app/broadcast", espera: "broadcast-oficial" },
   { pergunta: "como mando campanha pelo número do qr", sobre: "/app/campaigns", espera: "broadcast-qr" },
 
   // ── Agente MIA ──

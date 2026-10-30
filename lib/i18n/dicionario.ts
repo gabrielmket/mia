@@ -69,6 +69,8 @@ import { DICIONARIO_DO_PAGAMENTO_MIA } from "./dicionario-mia-pagamento";
 import { DICIONARIO_DOS_CUPONS_MIA } from "./dicionario-mia-cupons";
 // FORK MIA (.96, segunda frente): a área de cobrança e o lado da Time, idem.
 import { DICIONARIO_DA_AREA_DE_COBRANCA_MIA } from "./dicionario-mia-area-de-cobranca";
+// FORK MIA (.97): os contatos em massa (o telefone na importação, o filtro inteiro e a conferência), idem.
+import { DICIONARIO_DOS_CONTATOS_EM_MASSA } from "./dicionario-mia-contatos-em-massa";
 import { TEXTOS_AGENDA_CONFIGURACAO } from "./agenda-configuracao";
 import { TEXTOS_AGENDA_SERVICOS } from "./agenda-servicos";
 
@@ -91,6 +93,7 @@ export const DICIONARIO: Traducoes = {
   ...DICIONARIO_DO_PAGAMENTO_MIA,
   ...DICIONARIO_DOS_CUPONS_MIA,
   ...DICIONARIO_DA_AREA_DE_COBRANCA_MIA,
+  ...DICIONARIO_DOS_CONTATOS_EM_MASSA,
   // Encaminhar mensagem (#2835) — botão na bolha do chat e o diálogo de destino.
   "Encaminhar": { es: "Reenviar" },
   "Encaminhar mensagem": { es: "Reenviar mensaje" },

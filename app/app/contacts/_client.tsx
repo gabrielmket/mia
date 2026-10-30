@@ -20,6 +20,10 @@ import {
 import { useContactList } from "@/hooks/contacts/useContactList";
 import { useBulkContacts, type AcaoEmLoteDeContatos } from "@/hooks/contacts/useBulkContacts";
 import { useSelecaoEmLote } from "@/hooks/contacts/useSelecaoEmLote";
+// FORK MIA (.97): "Selecionar todos os N contatos deste filtro" (docs/fork/contatos-em-massa.md).
+import { useTotalDeContatos } from "@/hooks/contacts/useTotalDeContatos";
+import { FaixaDeSelecaoDoFiltro } from "@/components/contacts/FaixaDeSelecaoDoFiltro";
+import type { FiltroDoLote } from "@/lib/contacts/lote-em-partes";
 import { ContactsTable } from "@/components/contacts/ContactsTable";
 import { BarraDeContatosEmLote } from "@/components/contacts/BarraDeContatosEmLote";
 import { PontoDaEtiqueta } from "@/components/tags/PontoDaEtiqueta";
@@ -108,26 +112,59 @@ export function ContactsListClient() {
   const selecao = useSelecaoEmLote();
   const lote = useBulkContacts();
 
+  const allContacts = useMemo(
+    () => q.data?.pages.flatMap((p) => p.data) ?? [],
+    [q.data],
+  );
+
+  // FORK MIA (.97): "Selecionar todos os N contatos deste filtro". O estado guarda
+  // QUAL filtro foi marcado, e não um sim ou não: mudar o filtro depois de marcar
+  // nunca pode fazer a ação valer para outra lista.
+  const filtroDoLote = useMemo<FiltroDoLote>(
+    () => ({
+      ...(search ? { search } : {}),
+      ...(tags.length > 0 ? { tag: tags } : {}),
+      ...(tagMode === "ou" ? { modo: "ou" as const } : {}),
+      ...(source ? { source } : {}),
+      ...(soPessoais ? { pessoais: true } : {}),
+    }),
+    [search, tags, tagMode, source, soPessoais],
+  );
+  const chaveDoFiltro = useMemo(() => JSON.stringify(filtroDoLote), [filtroDoLote]);
+  const [filtroMarcado, setFiltroMarcado] = useState<string | null>(null);
+  const todosDoFiltro = filtroMarcado === chaveDoFiltro;
+  const todosVisiveisMarcados =
+    allContacts.length > 0 && allContacts.every((c) => selecao.selecionados.has(c.id));
+  // Só faz sentido oferecer quando há mais do que está carregado na tela.
+  const mostrarFaixa = podeAgirEmLote && (todosDoFiltro || (todosVisiveisMarcados && q.hasNextPage === true));
+  const totalDoFiltro = useTotalDeContatos(filtroDoLote, mostrarFaixa);
+  const total = totalDoFiltro.data ?? null;
+
+  const limparSelecao = useCallback(() => {
+    setFiltroMarcado(null);
+    selecao.limpar();
+  }, [selecao]);
+
+  // O filtro mudou com a seleção de filtro inteiro ligada: ela sai toda, porque
+  // as linhas marcadas eram da lista anterior e nem estão mais na tela. É durante
+  // a renderização de propósito: um efeito pintaria uma vez a barra com a seleção velha.
+  if (filtroMarcado !== null && filtroMarcado !== chaveDoFiltro) limparSelecao();
+
   const rodarLote = useCallback(
     (args: AcaoEmLoteDeContatos) => {
       const ids = Array.from(selecao.selecionados);
-      if (ids.length === 0) return;
+      if (!todosDoFiltro && ids.length === 0) return;
       lote.mutate(
-        { ids, ...args },
+        todosDoFiltro ? { filtro: filtroDoLote, total, ...args } : { ids, ...args },
         {
           // A seleção é limpa depois do lote, aconteça o que acontecer: manter
           // marcados os contatos recusados (de outra organização, inexistentes)
           // deixaria a barra no lugar mensageando um lote que não existe mais.
-          onSuccess: () => selecao.limpar(),
+          onSuccess: () => limparSelecao(),
         },
       );
     },
-    [lote, selecao],
-  );
-
-  const allContacts = useMemo(
-    () => q.data?.pages.flatMap((p) => p.data) ?? [],
-    [q.data],
+    [lote, selecao.selecionados, todosDoFiltro, filtroDoLote, total, limparSelecao],
   );
 
   const tagOptions = useMemo(() => {
@@ -416,8 +453,10 @@ export function ContactsListClient() {
 
       {podeAgirEmLote && (
         <BarraDeContatosEmLote
-          quantidade={selecao.quantidade}
+          quantidade={todosDoFiltro ? (total ?? selecao.quantidade) : selecao.quantidade}
           pendente={lote.isPending}
+          deFiltroInteiro={todosDoFiltro}
+          progresso={lote.progresso}
           onAdicionarEtiqueta={(tag) => rodarLote({ action: "tag", op: "add", tag })}
           onRemoverEtiqueta={(tag) => rodarLote({ action: "tag", op: "remove", tag })}
           onMudarResponsavel={
@@ -427,7 +466,18 @@ export function ContactsListClient() {
               : undefined
           }
           onPreencherCampo={(chave, valor) => rodarLote({ action: "custom-field", chave, valor })}
-          onLimpar={selecao.limpar}
+          onLimpar={limparSelecao}
+        />
+      )}
+
+      {mostrarFaixa && (
+        <FaixaDeSelecaoDoFiltro
+          visiveis={allContacts.length}
+          total={total}
+          todosDoFiltro={todosDoFiltro}
+          pendente={lote.isPending}
+          onSelecionarTodos={() => setFiltroMarcado(chaveDoFiltro)}
+          onLimpar={limparSelecao}
         />
       )}
 
@@ -476,8 +526,23 @@ export function ContactsListClient() {
               // Sem `contact.update` não há barra, então as caixas seriam um
               // controle que marca e não leva a nada: a tabela só as desenha
               // quando recebe `onAlternarSelecao`.
-              selecionados={podeAgirEmLote ? selecao.selecionados : undefined}
-              onAlternarSelecao={podeAgirEmLote ? selecao.alternar : undefined}
+              // FORK MIA (.97): no filtro inteiro, a linha que "Carregar mais" trouxe também está dentro.
+              selecionados={
+                podeAgirEmLote
+                  ? todosDoFiltro
+                    ? new Set(allContacts.map((c) => c.id))
+                    : selecao.selecionados
+                  : undefined
+              }
+              onAlternarSelecao={
+                podeAgirEmLote
+                  ? (id) => {
+                      // FORK MIA (.97): desmarcar uma linha sai do "filtro inteiro".
+                      setFiltroMarcado(null);
+                      selecao.alternar(id);
+                    }
+                  : undefined
+              }
               onSelecionarTodosVisiveis={
                 podeAgirEmLote
                   ? () => selecao.selecionarTodos(allContacts.map((c) => c.id))

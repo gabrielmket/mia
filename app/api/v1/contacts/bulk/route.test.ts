@@ -8,6 +8,8 @@ import { requireRole } from "@/lib/auth/require-role";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createClient } from "@/lib/supabase/server";
 
+import { TAMANHO_DA_PARTE } from "@/lib/contacts/lote-em-partes";
+
 import { POST, TETO_DO_LOTE } from "./route";
 
 /**
@@ -398,6 +400,11 @@ describe("POST /api/v1/contacts/bulk", () => {
     expect(estado.contatos.find((c) => c.id === CONTATO_A)?.custom_fields).toEqual({
       Andamento: "negociando",
     });
+  });
+
+  // FORK MIA (.97): quem usa não tem teto porque a tela reparte por este número.
+  it("a parte da tela é o teto da rota", () => {
+    expect(TAMANHO_DA_PARTE).toBe(TETO_DO_LOTE);
   });
 
   it(`teto: acima de ${TETO_DO_LOTE} ids a CHAMADA é recusada com 422 e nada é tocado`, async () => {

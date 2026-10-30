@@ -25,11 +25,30 @@ interface Resumo {
   imported: number;
   skipped_duplicates: number;
   errors: Array<{ linha: number; motivo: string }>;
+  // FORK MIA (.97)
+  telefones_completados: number;
+  emails_completados: number;
+  linhas_sem_telefone: number;
+  sem_coluna_de_telefone: boolean;
+  colunas_ignoradas: string[];
+  avisos: Array<{ linha: number; motivo: string }>;
+}
+
+/** FORK MIA (.97): o contato que o dublê devolve da leitura de quem já existe. */
+interface Existente {
+  id?: string;
+  phone_number?: string | null;
+  email_normalized?: string | null;
+  is_anonymized?: boolean;
 }
 
 /** Só as fronteiras externas são dubladas; multipart, CSV e schemas são reais. */
 function banco(opcoes: {
-  existentes?: Array<{ phone_number?: string; email_normalized?: string }>;
+  existentes?: Existente[];
+  /** FORK MIA (.97): a leitura de quem já existe falha. */
+  leituraFalha?: boolean;
+  /** FORK MIA (.97): a gravação do que faltava é recusada. */
+  falhaAoCompletar?: { code: string; message: string };
   falhas?: Array<{ code: string; message: string } | null>;
   /** O país declarado pela organização; ausente/`null` é o Brasil. */
   pais?: string | null;
@@ -37,6 +56,8 @@ function banco(opcoes: {
   cifraIndisponivel?: boolean;
 } = {}) {
   const tentativas: Record<string, unknown>[] = [];
+  const completados: Array<{ id: unknown; campos: Record<string, unknown> }> = [];
+  const lotesLidos: string[][] = [];
   // `encrypt_cpf` (migration 0597) devolve o ciphertext; sem ele,
   // `camposCpfParaGravar` grava a linha SEM CPF. `cifraIndisponivel` encena o
   // banco em que a RPC ainda não existe ou a chave não foi semeada (#2522).
@@ -57,14 +78,42 @@ function banco(opcoes: {
       };
     }
     expect(tabela).toBe("contacts");
+    let mudanca: Record<string, unknown> | null = null;
+    let alvo: unknown = null;
     const consulta = {
       select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
+      eq: vi.fn((coluna: string, valor: unknown) => {
+        if (coluna === "id") alvo = valor;
+        return consulta;
+      }),
       not: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
       in: vi.fn(async (coluna: "phone_number" | "email_normalized", valores: string[]) => {
         expect(consulta.eq).toHaveBeenCalledWith("organization_id", ORG);
+        expect(consulta.is).toHaveBeenCalledWith("is_merged_into", null);
+        lotesLidos.push(valores);
+        if (opcoes.leituraFalha) return { data: null, error: { message: "fetch failed" } };
         return {
           data: (opcoes.existentes ?? []).filter((r) => valores.includes(r[coluna] ?? "")),
+          error: null,
+        };
+      }),
+      update: vi.fn((linha: Record<string, unknown>) => {
+        mudanca = linha;
+        return consulta;
+      }),
+      maybeSingle: vi.fn(async () => {
+        if (opcoes.falhaAoCompletar) return { data: null, error: opcoes.falhaAoCompletar };
+        const { updated_at: _quando, ...campos } = mudanca ?? {};
+        completados.push({ id: alvo, campos });
+        const antes = (opcoes.existentes ?? []).find((r) => r.id === alvo);
+        return {
+          data: {
+            ...antes,
+            ...campos,
+            email_normalized:
+              typeof campos.email === "string" ? campos.email.toLowerCase() : (antes?.email_normalized ?? null),
+          },
           error: null,
         };
       }),
@@ -80,13 +129,13 @@ function banco(opcoes: {
     return consulta;
   });
   vi.mocked(createClient).mockResolvedValue({ from, rpc } as never);
-  return { tentativas, rpc };
+  return { tentativas, rpc, completados, lotesLidos };
 }
 
-async function importar(linhas: string[]): Promise<Resumo> {
+async function importar(linhas: string[], cabecalho = "nome,telefone,email"): Promise<Resumo> {
   const form = new FormData();
   form.set("file", new File(
-    [["nome,telefone,email", ...linhas].join("\n")],
+    [[cabecalho, ...linhas].join("\n")],
     "contatos.csv",
     { type: "text/csv" },
   ));
@@ -130,7 +179,7 @@ describe("POST /api/v1/contacts/import — desfecho por linha", () => {
     const db = banco();
     const resumo = await importar(linhas);
 
-    expect(resumo).toEqual({ total_linhas: 3, imported: 1, skipped_duplicates: 2, errors: [] });
+    expect(resumo).toMatchObject({ total_linhas: 3, imported: 1, skipped_duplicates: 2, errors: [] });
     expect(db.tentativas).toHaveLength(1);
     expect(db.tentativas[0]).toMatchObject({
       organization_id: ORG, created_by_user_id: USER, source: "import_csv",
@@ -141,7 +190,7 @@ describe("POST /api/v1/contacts/import — desfecho por linha", () => {
     expect(audit).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
       action: "contacts.imported",
       organizationId: ORG,
-      metadata: { actor_type: "user", total_linhas: 3, imported: 1, skipped_duplicates: 2, erros: 0 },
+      metadata: expect.objectContaining({ actor_type: "user", total_linhas: 3, imported: 1, skipped_duplicates: 2, erros: 0 }),
     }));
   });
 
@@ -152,7 +201,7 @@ describe("POST /api/v1/contacts/import — desfecho por linha", () => {
       `Corrigida,${PHONE},ana.silva@example.com`,
     ]);
 
-    expect(resumo).toEqual({
+    expect(resumo).toMatchObject({
       total_linhas: 2, imported: 1, skipped_duplicates: 0,
       errors: [{ linha: 2, motivo: expect.any(String) }],
     });
@@ -165,7 +214,7 @@ describe("POST /api/v1/contacts/import — desfecho por linha", () => {
     const db = banco({ falhas: [{ code: "23514", message: "Falha de gravação" }, null] });
     const resumo = await importar([`Primeira,${PHONE},`, `Segunda,${PHONE},`]);
 
-    expect(resumo).toEqual({
+    expect(resumo).toMatchObject({
       total_linhas: 2, imported: 1, skipped_duplicates: 0,
       errors: [{ linha: 2, motivo: "Falha de gravação" }],
     });
@@ -177,13 +226,17 @@ describe("POST /api/v1/contacts/import — desfecho por linha", () => {
   });
 
   it("pular e-mail existente não reserva um telefone que ainda não foi importado", async () => {
-    const db = banco({ existentes: [{ email_normalized: "existente@example.com" }] });
+    // FORK MIA (.97): o contato do e-mail já tem OUTRO telefone. Sem nenhum, a
+    // linha agora completa o dele (caso próprio, no fim deste arquivo).
+    const db = banco({
+      existentes: [{ id: "c-1", email_normalized: "existente@example.com", phone_number: "+5531999990000" }],
+    });
     const resumo = await importar([
       `Existente,${PHONE},existente@example.com`,
       `Nova,${PHONE},nova@example.com`,
     ]);
 
-    expect(resumo).toEqual({ total_linhas: 2, imported: 1, skipped_duplicates: 1, errors: [] });
+    expect(resumo).toMatchObject({ total_linhas: 2, imported: 1, skipped_duplicates: 1, errors: [] });
     expect(db.tentativas).toHaveLength(1);
     expect(db.tentativas[0]).toMatchObject({ name: "Nova", email: "nova@example.com" });
   });
@@ -192,7 +245,7 @@ describe("POST /api/v1/contacts/import — desfecho por linha", () => {
     const db = banco({ existentes: [{ phone_number: PHONE }] });
     const resumo = await importar([`Ana,${PHONE},`, `Ana,${PHONE},`]);
 
-    expect(resumo).toEqual({ total_linhas: 2, imported: 0, skipped_duplicates: 2, errors: [] });
+    expect(resumo).toMatchObject({ total_linhas: 2, imported: 0, skipped_duplicates: 2, errors: [] });
     expect(db.tentativas).toHaveLength(0);
     expect(db.rpc).not.toHaveBeenCalled();
   });
@@ -201,7 +254,7 @@ describe("POST /api/v1/contacts/import — desfecho por linha", () => {
     const db = banco({ falhas: [{ code: "23505", message: "Conflito" }, null] });
     const resumo = await importar([`Ana,${PHONE},`, "Bia,+5521999998888,"]);
 
-    expect(resumo).toEqual({ total_linhas: 2, imported: 1, skipped_duplicates: 1, errors: [] });
+    expect(resumo).toMatchObject({ total_linhas: 2, imported: 1, skipped_duplicates: 1, errors: [] });
     expect(db.tentativas).toHaveLength(2);
     expect(db.rpc).toHaveBeenCalledTimes(1);
   });
@@ -266,7 +319,7 @@ describe("POST /api/v1/contacts/import — a planilha segue o PAÍS da organiza�
     const { status, corpo } = await importarCom("nome,telefone,bilhete", [`Ana,${PHONE},123456789xi000`]);
 
     expect(status).toBe(200);
-    expect(corpo.data).toEqual({ total_linhas: 1, imported: 1, skipped_duplicates: 0, errors: [] });
+    expect(corpo.data).toMatchObject({ total_linhas: 1, imported: 1, skipped_duplicates: 0, errors: [] });
     // O documento não é gravado em claro: o que prova o valor (e a normalização
     // do país) é o hash — `hashCpf("123456789XI000")`, com o valor já em
     // maiúsculas e sem o que não é dígito nem letra.
@@ -280,7 +333,7 @@ describe("POST /api/v1/contacts/import — a planilha segue o PAÍS da organiza�
     const db = banco({ pais: "XI" });
     const { corpo } = await importarCom("nome,telefone,bilhete", [`Ana,${PHONE},123`]);
 
-    expect(corpo.data).toEqual({
+    expect(corpo.data).toMatchObject({
       total_linhas: 1,
       imported: 0,
       skipped_duplicates: 0,
@@ -322,7 +375,7 @@ describe("POST /api/v1/contacts/import — o CPF grava os DOIS campos ou nenhum 
     const { status, corpo } = await importarCpf([`Ana,${PHONE},${CPF}`]);
 
     expect(status).toBe(200);
-    expect(corpo.data).toEqual({ total_linhas: 1, imported: 1, skipped_duplicates: 0, errors: [] });
+    expect(corpo.data).toMatchObject({ total_linhas: 1, imported: 1, skipped_duplicates: 0, errors: [] });
     expect(db.tentativas[0]).toMatchObject({
       cpf_hash: hashCpf(CPF),
       cpf_encrypted: expect.anything(),
@@ -336,9 +389,172 @@ describe("POST /api/v1/contacts/import — o CPF grava os DOIS campos ou nenhum 
     // O defeito reportado: a linha voltava em `errors` com
     // `violates check constraint "contacts_cpf_consistency"`. Agora ela entra.
     expect(status).toBe(200);
-    expect(corpo.data).toEqual({ total_linhas: 1, imported: 1, skipped_duplicates: 0, errors: [] });
+    expect(corpo.data).toMatchObject({ total_linhas: 1, imported: 1, skipped_duplicates: 0, errors: [] });
     // Os DOIS ausentes: é a paridade que o CHECK cobra.
     expect(db.tentativas[0]).not.toHaveProperty("cpf_hash");
     expect(db.tentativas[0]).not.toHaveProperty("cpf_encrypted");
+  });
+});
+
+/**
+ * FORK MIA (.97) — o defeito vivido em produção em 29/10/2026 e a reimportação
+ * que o conserta. Telefones e e-mails fictícios.
+ */
+describe("POST /api/v1/contacts/import — a planilha name,phone,email", () => {
+  const CABECALHO = "name,phone,email";
+
+  it("grava telefone e e-mail, e a linha só com telefone entra", async () => {
+    const db = banco();
+    const resumo = await importar(
+      [
+        "Ana,+5511900000001,ana@example.invalid",
+        'Bia,+55 (31) 900000002,',
+        "Caio,,caio@example.invalid",
+      ],
+      CABECALHO,
+    );
+
+    expect(resumo).toMatchObject({
+      total_linhas: 3,
+      imported: 3,
+      errors: [],
+      linhas_sem_telefone: 1,
+      sem_coluna_de_telefone: false,
+      colunas_ignoradas: [],
+    });
+    expect(db.tentativas.map((t) => t.phone_number)).toEqual(["+5511900000001", "+5531900000002", null]);
+    expect(db.tentativas.map((t) => t.email)).toEqual(["ana@example.invalid", null, "caio@example.invalid"]);
+  });
+
+  it("reimportar completa o telefone de quem já existe pelo e-mail, sem duplicar", async () => {
+    const db = banco({ existentes: [{ id: "c-1", email_normalized: "ana@example.invalid", phone_number: null }] });
+    const resumo = await importar(["Ana,+5511900000001,ANA@example.invalid"], CABECALHO);
+
+    expect(resumo).toMatchObject({ imported: 0, skipped_duplicates: 0, telefones_completados: 1, errors: [] });
+    expect(db.tentativas).toHaveLength(0);
+    expect(db.completados).toEqual([{ id: "c-1", campos: { phone_number: "+5511900000001" } }]);
+    // Auditoria L-06 do contato, e sem o evento que dispara automação.
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "contact.updated",
+        resourceId: "c-1",
+        metadata: expect.objectContaining({ old_phone_number: null, new_phone_number: "+5511900000001" }),
+      }),
+    );
+    const eventos = (db.rpc.mock.calls as unknown as Array<[string, { p_event_type: string }]>).map((c) => c[1].p_event_type);
+    expect(eventos).toEqual(["contact.updated"]);
+  });
+
+  it("reimportar a mesma planilha duas vezes na mesma leitura conta a segunda como repetida", async () => {
+    const db = banco({ existentes: [{ id: "c-1", email_normalized: "ana@example.invalid", phone_number: null }] });
+    const resumo = await importar(
+      ["Ana,+5511900000001,ana@example.invalid", "Ana,+5511900000001,ana@example.invalid"],
+      CABECALHO,
+    );
+
+    expect(resumo).toMatchObject({ telefones_completados: 1, skipped_duplicates: 1 });
+    expect(db.completados).toHaveLength(1);
+  });
+
+  it("completa o e-mail de quem já existe pelo telefone", async () => {
+    const db = banco({ existentes: [{ id: "c-2", phone_number: "+5511900000001", email_normalized: null }] });
+    const resumo = await importar(["Ana,+5511900000001,ana@example.invalid"], CABECALHO);
+
+    expect(resumo).toMatchObject({ emails_completados: 1, telefones_completados: 0 });
+    expect(db.completados).toEqual([{ id: "c-2", campos: { email: "ana@example.invalid" } }]);
+  });
+
+  it("nunca troca o telefone de quem já tem um: conta como repetido e avisa", async () => {
+    const db = banco({
+      existentes: [{ id: "c-1", email_normalized: "ana@example.invalid", phone_number: "+5531900000009" }],
+    });
+    const resumo = await importar(["Ana,+5511900000001,ana@example.invalid"], CABECALHO);
+
+    expect(resumo).toMatchObject({
+      skipped_duplicates: 1,
+      telefones_completados: 0,
+      avisos: [{ linha: 2, motivo: "O contato deste e-mail já tem outro telefone, e ele foi mantido." }],
+    });
+    expect(db.completados).toHaveLength(0);
+  });
+
+  it("telefone de um contato e e-mail de outro: nada muda, e a linha avisa", async () => {
+    const db = banco({
+      existentes: [
+        { id: "c-1", email_normalized: "ana@example.invalid", phone_number: null },
+        { id: "c-2", email_normalized: null, phone_number: "+5511900000001" },
+      ],
+    });
+    const resumo = await importar(["Ana,+5511900000001,ana@example.invalid"], CABECALHO);
+
+    expect(resumo.skipped_duplicates).toBe(1);
+    expect(resumo.avisos[0]?.motivo).toContain("Duplicados");
+    expect(db.completados).toHaveLength(0);
+    expect(db.tentativas).toHaveLength(0);
+  });
+
+  it("contato anonimizado não é completado (LGPD)", async () => {
+    const db = banco({
+      existentes: [{ id: "c-1", email_normalized: "ana@example.invalid", phone_number: null, is_anonymized: true }],
+    });
+    const resumo = await importar(["Ana,+5511900000001,ana@example.invalid"], CABECALHO);
+
+    expect(resumo).toMatchObject({ skipped_duplicates: 1, telefones_completados: 0 });
+    expect(db.completados).toHaveLength(0);
+  });
+
+  it("o telefone que outro contato pegou no meio (23505) conta como repetido", async () => {
+    banco({
+      existentes: [{ id: "c-1", email_normalized: "ana@example.invalid", phone_number: null }],
+      falhaAoCompletar: { code: "23505", message: "uniq_contacts_org_phone" },
+    });
+    const resumo = await importar(["Ana,+5511900000001,ana@example.invalid"], CABECALHO);
+
+    expect(resumo).toMatchObject({ skipped_duplicates: 1, telefones_completados: 0, errors: [] });
+  });
+
+  it("sem coluna de telefone: o resumo diz, e nomeia as colunas ignoradas", async () => {
+    banco();
+    const resumo = await importar(["Ana,+5511900000001,ana@example.invalid"], "nome,fone do trabalho,email");
+
+    expect(resumo).toMatchObject({
+      imported: 1,
+      linhas_sem_telefone: 1,
+      sem_coluna_de_telefone: true,
+      colunas_ignoradas: ["fone do trabalho"],
+    });
+  });
+
+  it("as 565 linhas da planilha entram, e a leitura de quem existe vai em lotes", async () => {
+    const db = banco();
+    const linhas = Array.from({ length: 565 }, (_, i) => {
+      const n = String(i).padStart(8, "0");
+      return `Pessoa ${i},+55119${n},pessoa${i}@example.invalid`;
+    });
+    const resumo = await importar(linhas, CABECALHO);
+
+    expect(resumo).toMatchObject({ total_linhas: 565, imported: 565, errors: [] });
+    expect(db.lotesLidos.every((lote) => lote.length <= 100)).toBe(true);
+  });
+
+  it("acima do teto de contatos, o arquivo inteiro é recusado com o número", async () => {
+    banco();
+    const form = new FormData();
+    const linhas = Array.from({ length: 2001 }, (_, i) => `P,,p${i}@example.invalid`);
+    form.set("file", new File([[CABECALHO, ...linhas].join("\n")], "c.csv", { type: "text/csv" }));
+    const resposta = await POST(new NextRequest("http://localhost/api/v1/contacts/import", { method: "POST", body: form }));
+
+    expect(resposta.status).toBe(422);
+    expect(await resposta.text()).toContain("2000");
+  });
+
+  it("a leitura de quem existe falha: recusa antes de gravar a primeira linha", async () => {
+    const db = banco({ leituraFalha: true });
+    const form = new FormData();
+    form.set("file", new File([[CABECALHO, "Ana,+5511900000001,"].join("\n")], "c.csv", { type: "text/csv" }));
+    const resposta = await POST(new NextRequest("http://localhost/api/v1/contacts/import", { method: "POST", body: form }));
+
+    expect(resposta.status).toBe(500);
+    expect(db.tentativas).toHaveLength(0);
   });
 });

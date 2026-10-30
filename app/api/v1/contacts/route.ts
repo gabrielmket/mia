@@ -139,7 +139,9 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
 
   try {
-    const { contacts, cursor, has_more } = await listContactsHandler(
+    // FORK MIA (.97): `?com_total=true` traz o tamanho do filtro em `meta.total`.
+    const comTotal = url.searchParams.get("com_total") === "true";
+    const { contacts, cursor, has_more, total } = await listContactsHandler(
       supabase,
       {
         organization_id: organizationId,
@@ -148,8 +150,10 @@ export async function GET(req: NextRequest): Promise<Response> {
         idioma,
       },
       qsParsed.data,
+      undefined,
+      comTotal ? { comTotal } : undefined,
     );
-    return ok(contacts, { requestId, meta: { cursor, has_more } });
+    return ok(contacts, { requestId, meta: { cursor, has_more, ...(comTotal ? { total } : {}) } });
   } catch (err) {
     if (err instanceof ApiError) {
       return fail(err.code, err.message, err.status, { requestId });

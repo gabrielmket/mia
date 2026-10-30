@@ -11,7 +11,7 @@
  */
 import type { TrechoDoGuia } from "./guia-de-operacao/ler-o-guia";
 
-export const ASSINATURA_DO_GUIA = "0f08236a289f56dbc275a771ab9c92bb929281caf73d2edc4f944d86cfa88626";
+export const ASSINATURA_DO_GUIA = "d03414fbed142fa5df33a6335b70b45a2ed8f4ce3253d43f19972ab68b1e0d21";
 
 export const ARQUIVOS_DO_GUIA: readonly string[] = ["SKILL.md","references/funcionalidades/admin-e-plataforma.md","references/funcionalidades/analise.md","references/funcionalidades/atendimento.md","references/funcionalidades/canais.md","references/funcionalidades/citado-e-nao-encontrado.md","references/funcionalidades/crm.md","references/funcionalidades/ia.md","references/funcionalidades/organizacao.md","references/funcionalidades/so-api-ou-sem-tela.md","references/mapa-da-interface.md"];
 
@@ -154,7 +154,7 @@ export const TRECHOS_DO_GUIA: readonly TrechoDoGuia[] = [
   {"id":"crm/crm-contatos/juntar-duplicados","arquivo":"references/funcionalidades/crm.md","tipo":"funcionalidade","secao":"CRM → Contatos","titulo":"Juntar duplicados","texto":"Botão Duplicados compara lado a lado e junta sem perder histórico nem recriar. Onde: CRM → Contatos → Duplicados.","desde":"1.15.0","href":"/app/contacts"},
   {"id":"crm/crm-contatos/campos-do-nicho-no-contato","arquivo":"references/funcionalidades/crm.md","tipo":"funcionalidade","secao":"CRM → Contatos","titulo":"Campos do nicho no contato","texto":"Campos do funil aparecem no Editar contato e saem na anonimização. Onde: CRM → Contatos → Editar.","desde":"1.14.0","href":"/app/contacts"},
   {"id":"crm/crm-contatos/recusa-vira-evento","arquivo":"references/funcionalidades/crm.md","tipo":"funcionalidade","secao":"CRM → Contatos","titulo":"Recusa vira evento","texto":"Não aceitar mensagens aparece na linha do tempo em vez de silêncio. Onde: CRM → Contatos → ficha.","desde":"1.6.0","href":"/app/contacts"},
-  {"id":"crm/crm-contatos/importar-contatos-csv","arquivo":"references/funcionalidades/crm.md","tipo":"funcionalidade","secao":"CRM → Contatos","titulo":"Importar contatos CSV","texto":"Botão sobe CSV com relatório por linha e até 500 por vez. Onde: CRM → Contatos → Importar.","desde":"1.4.0","href":"/app/contacts"},
+  {"id":"crm/crm-contatos/importar-contatos-csv","arquivo":"references/funcionalidades/crm.md","tipo":"funcionalidade","secao":"CRM → Contatos","titulo":"Importar contatos CSV","texto":"Botão sobe CSV com relatório por linha e até 2000 por vez. Onde: CRM → Contatos → Importar.","desde":"1.4.0","href":"/app/contacts"},
   {"id":"crm/crm-contatos/origem-do-anuncio-guardada","arquivo":"references/funcionalidades/crm.md","tipo":"funcionalidade","secao":"CRM → Contatos","titulo":"Origem do anúncio guardada","texto":"Ficha guarda campanha e negócio nasce etiquetado no primeiro toque. Onde: CRM → Contatos → origem.","desde":"1.4.0","href":"/app/contacts"},
   {"id":"crm/crm-contatos/contato-abre-conversa","arquivo":"references/funcionalidades/crm.md","tipo":"funcionalidade","secao":"CRM → Contatos","titulo":"Contato abre conversa","texto":"Lista e ficha ganham botão que leva direto ao Inbox sem procurar. Onde: CRM → Contatos → conversa.","desde":"1.4.0","href":"/app/contacts"},
   {"id":"crm/crm-contatos/dado-proposto-espera","arquivo":"references/funcionalidades/crm.md","tipo":"funcionalidade","secao":"CRM → Contatos","titulo":"Dado proposto espera","texto":"Telefone, e-mail e nome aguardam confirmação humana sem gravar. Onde: CRM → Contatos → proposta.","desde":"1.2.0","href":"/app/contacts"},

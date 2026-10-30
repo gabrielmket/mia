@@ -34,7 +34,7 @@ O menu e o código mandam sobre este arquivo; para ver o que mudou depois, use
 - **Juntar duplicados** — Botão Duplicados compara lado a lado e junta sem perder histórico nem recriar. Onde: CRM → Contatos → Duplicados. _(desde 1.15.0)_
 - **Campos do nicho no contato** — Campos do funil aparecem no Editar contato e saem na anonimização. Onde: CRM → Contatos → Editar. _(desde 1.14.0)_
 - **Recusa vira evento** — Não aceitar mensagens aparece na linha do tempo em vez de silêncio. Onde: CRM → Contatos → ficha. _(desde 1.6.0)_
-- **Importar contatos CSV** — Botão sobe CSV com relatório por linha e até 500 por vez. Onde: CRM → Contatos → Importar. _(desde 1.4.0)_
+- **Importar contatos CSV** — Botão sobe CSV com relatório por linha e até 2000 por vez. Onde: CRM → Contatos → Importar. _(desde 1.4.0)_
 - **Origem do anúncio guardada** — Ficha guarda campanha e negócio nasce etiquetado no primeiro toque. Onde: CRM → Contatos → origem. _(desde 1.4.0)_
 - **Contato abre conversa** — Lista e ficha ganham botão que leva direto ao Inbox sem procurar. Onde: CRM → Contatos → conversa. _(desde 1.4.0)_
 - **Dado proposto espera** — Telefone, e-mail e nome aguardam confirmação humana sem gravar. Onde: CRM → Contatos → proposta. _(desde 1.2.0)_
