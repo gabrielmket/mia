@@ -84,8 +84,9 @@ function responder(c: CadeiaLivre) {
 const ctx = (banco: ReturnType<typeof bancoLivre>) => ({ admin: banco.cliente as never, autorUserId: "a", tokenId: "t", requestId: "r", escopos: [] });
 
 describe("o passo do pagamento no MCP de plataforma", () => {
-  it("nenhuma ferramenta nova: a lista segue com 99", () => {
-    expect(FERRAMENTAS).toHaveLength(99);
+  // FORK MIA (.97): 100 com `plataforma_etiquetar_contatos`; o passo do pagamento não somou nenhuma.
+  it("nenhuma ferramenta nova: a lista segue com 100", () => {
+    expect(FERRAMENTAS).toHaveLength(100);
   });
 
   it("⭐ listar_clientes com o filtro: só quem espera o primeiro pagamento, com a forma e a situação", async () => {

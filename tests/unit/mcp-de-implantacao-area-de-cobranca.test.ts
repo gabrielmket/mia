@@ -55,8 +55,9 @@ function responder(c: CadeiaLivre) {
 const ctx = (banco: ReturnType<typeof bancoLivre>) => ({ admin: banco.cliente as never, autorUserId: "a", tokenId: "t", requestId: "r", escopos: [] });
 
 describe("as cobranças no MCP de plataforma", () => {
-  it("nenhuma ferramenta nova: a lista segue com 99, e a descrição de ver_cliente cita as cobranças e a nota", () => {
-    expect(FERRAMENTAS).toHaveLength(99);
+  // FORK MIA (.97): 100 com `plataforma_etiquetar_contatos`; as cobranças não somaram nenhuma.
+  it("nenhuma ferramenta nova: a lista segue com 100, e a descrição de ver_cliente cita as cobranças e a nota", () => {
+    expect(FERRAMENTAS).toHaveLength(100);
     const d = FERRAMENTA_POR_NOME.get("plataforma_ver_cliente")!.description;
     expect(d).toContain("`cobrancas`");
     expect(d).toContain("número da nota fiscal");

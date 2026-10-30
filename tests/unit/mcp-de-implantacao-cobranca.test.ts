@@ -78,7 +78,8 @@ const banco = () =>
 
 describe("a lista: 99 ferramentas, nove delas da cobrança", () => {
   it("99 = as 83 da .89 + as nove da cobrança (.90) + as duas das propostas do assistente (.91) + as quatro das trilhas e de onde os clientes travam (.93) + o desfazer da proposta (.94)", () => {
-    expect(FERRAMENTAS).toHaveLength(99);
+    // FORK MIA (.97): 100 com `plataforma_etiquetar_contatos`.
+    expect(FERRAMENTAS).toHaveLength(100);
     expect(FERRAMENTAS_DE_COBRANCA).toHaveLength(9);
     expect(new Set(FERRAMENTAS.map((f) => f.name)).size).toBe(FERRAMENTAS.length);
   });

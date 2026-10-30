@@ -109,6 +109,8 @@ export interface ListContactsResult {
   contacts: Contact[];
   cursor: string | null;
   has_more: boolean;
+  /** FORK MIA (.97): quantos o filtro tem ao todo, só quando `comTotal` foi pedido. */
+  total?: number | null;
 }
 
 export async function listContactsHandler(
@@ -121,6 +123,11 @@ export async function listContactsHandler(
    * antes do limite.
    */
   soContato?: string,
+  /**
+   * FORK MIA (.97): conta o filtro inteiro junto da página, para o "Selecionar
+   * todos os N contatos deste filtro" (o mesmo WHERE, então o N bate com a lista).
+   */
+  opcoes?: { comTotal?: boolean },
 ): Promise<ListContactsResult> {
   const q: ContactListQuery = contactListQuerySchema.parse(raw);
 
@@ -144,7 +151,7 @@ export async function listContactsHandler(
   // `"(a"` consultar `%a%` — a lista inteira de volta pela porta do parêntese.
   const termoDeTexto = q.search ? q.search.replace(/[()]/g, " ") : undefined;
   if (termoDeTexto !== undefined && !buscaValeConsulta(termoDeTexto)) {
-    return { contacts: [], cursor: null, has_more: false };
+    return { contacts: [], cursor: null, has_more: false, ...(opcoes?.comTotal ? { total: 0 } : {}) };
   }
 
   const sortCol = q.order_by;
@@ -152,7 +159,7 @@ export async function listContactsHandler(
 
   let query = supabase
     .from("contacts")
-    .select(SELECT_COLS)
+    .select(SELECT_COLS, opcoes?.comTotal ? { count: "exact" } : undefined)
     .eq("organization_id", ctx.organization_id)
     // O placeholder de GRUPO (`kind='whatsapp_group'`) não é uma pessoa da
     // base: é o registro técnico que a conversa do grupo pendura para caber no
@@ -314,7 +321,7 @@ export async function listContactsHandler(
     }
   }
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) {
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, error.message);
   }
@@ -336,7 +343,12 @@ export async function listContactsHandler(
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, convErr);
   }
 
-  return { contacts, cursor: nextCursor, has_more: hasMore };
+  return {
+    contacts,
+    cursor: nextCursor,
+    has_more: hasMore,
+    ...(opcoes?.comTotal ? { total: count ?? null } : {}),
+  };
 }
 
 /**

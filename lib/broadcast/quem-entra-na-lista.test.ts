@@ -47,6 +47,10 @@ function contato(i: number, over: Linha = {}): Linha {
     is_blocked: false,
     consent: null,
     tags: [],
+    // FORK MIA (.97): a lista tem o recorte do seletor (`fn_contact_tags`).
+    kind: "person",
+    is_anonymized: false,
+    is_merged_into: null,
     created_at: new Date(Date.parse("2026-01-01T12:00:00.000Z") + i * 1_000).toISOString(),
     ...over,
   };
@@ -63,8 +67,8 @@ function negocio(i: number, contactId: string, over: Linha = {}): Linha {
   };
 }
 
-const ler = (banco: ReturnType<typeof postgrestComTeto>, filtro: { tags?: string[]; etapas?: string[] }) =>
-  quemEntraNaLista(banco.cliente as never, ORG, { tags: filtro.tags ?? [], etapas: filtro.etapas ?? [] });
+const ler = (banco: ReturnType<typeof postgrestComTeto>, filtro: { tags?: string[]; etapas?: string[]; funil?: string }) =>
+  quemEntraNaLista(banco.cliente as never, ORG, { tags: filtro.tags ?? [], etapas: filtro.etapas ?? [], funil: filtro.funil });
 
 const ids = (contatos: unknown[]) => contatos.map((c) => (c as { id: string }).id);
 
@@ -232,5 +236,128 @@ describe("quem entra na lista do disparo", () => {
     const lista = await ler(banco, {});
 
     expect(lista).toEqual({ ok: false, erro: "canceling statement due to statement timeout" });
+  });
+
+  // ── FORK MIA (.97): "0 destinatários · 0 sem telefone" com 25 contatos na etiqueta ──
+  describe("a etiqueta casa sem olhar maiúscula, e a lista é a do seletor", () => {
+    const comAEtiqueta = (i: number, over: Linha = {}) =>
+      contato(i, { tags: ["lista de outubro"], phone_number: null, ...over });
+
+    it("a grafia com que a etiqueta nasceu acha os gravados em minúsculas", async () => {
+      const banco = postgrestComTeto({ contacts: Array.from({ length: 25 }, (_, i) => comAEtiqueta(i)) });
+
+      const lista = await ler(banco, { tags: ["Lista de Outubro"] });
+
+      expect(lista.ok).toBe(true);
+      if (!lista.ok) return;
+      expect(lista.contatos).toHaveLength(25);
+      // E a peneira conta os 25: é o número que a conferência tinha de mostrar.
+      const peneira = peneirar(lista.contatos as ContatoParaDisparo[], () => ({}));
+      expect(peneira.enviar).toHaveLength(0);
+      expect(peneira.semTelefone).toBe(25);
+    });
+
+    it("a minúscula acha também o que ficou gravado em caixa mista", async () => {
+      const banco = postgrestComTeto({
+        contacts: [comAEtiqueta(0), comAEtiqueta(1, { tags: ["Lista de Outubro"] }), contato(2, { tags: ["outra"] })],
+      });
+
+      const lista = await ler(banco, { tags: ["lista de outubro"] });
+
+      expect(lista.ok && ids(lista.contatos)).toEqual([idDoContato(0), idDoContato(1)]);
+    });
+
+    it("etiqueta com vírgula é UMA etiqueta", async () => {
+      const banco = postgrestComTeto({ contacts: [contato(0, { tags: ["a,b"] }), contato(1, { tags: ["a"] })] });
+
+      const lista = await ler(banco, { tags: ["a,b"] });
+
+      expect(lista.ok && ids(lista.contatos)).toEqual([idDoContato(0)]);
+    });
+
+    it("anonimizado, ficha absorvida e grupo não entram: o número bate com o do seletor", async () => {
+      const banco = postgrestComTeto({
+        contacts: [
+          comAEtiqueta(0),
+          comAEtiqueta(1, { is_anonymized: true }),
+          comAEtiqueta(2, { is_merged_into: idDoContato(0) }),
+          comAEtiqueta(3, { kind: "whatsapp_group" }),
+        ],
+      });
+
+      const lista = await ler(banco, { tags: ["lista de outubro"] });
+
+      expect(lista.ok && ids(lista.contatos)).toEqual([idDoContato(0)]);
+    });
+
+    it("etiqueta E etapa: quem tem a etiqueta e não tem negócio aberto é contado", async () => {
+      const banco = postgrestComTeto({
+        contacts: Array.from({ length: 25 }, (_, i) => comAEtiqueta(i)),
+        crm_leads: [negocio(0, idDoContato(0))],
+      });
+
+      const lista = await ler(banco, { tags: ["lista de outubro"], etapas: [ETAPA_ORCAMENTO] });
+
+      expect(lista).toMatchObject({ ok: true, semNegocioNaEtapa: 24 });
+      expect(lista.ok && lista.contatos).toHaveLength(1);
+    });
+
+    it("etiqueta E etapa sem negócio nenhum: lista vazia, com os 25 contados", async () => {
+      const banco = postgrestComTeto({
+        contacts: Array.from({ length: 25 }, (_, i) => comAEtiqueta(i)),
+        crm_leads: [],
+      });
+
+      const lista = await ler(banco, { tags: ["lista de outubro"], etapas: [ETAPA_ORCAMENTO] });
+
+      expect(lista).toEqual({ ok: true, contatos: [], semNegocioNaEtapa: 25 });
+    });
+
+    it("a leitura do vocabulário falha: erro, e não uma lista por uma grafia só", async () => {
+      const banco = postgrestComTeto(
+        { contacts: [comAEtiqueta(0)] },
+        { rpc: () => ({ data: null, error: { message: "fn_contact_tags indisponível" } }) },
+      );
+
+      expect(await ler(banco, { tags: ["lista de outubro"] })).toEqual({ ok: false, erro: "fn_contact_tags indisponível" });
+    });
+  });
+});
+
+describe("FORK MIA (.97): funil com \"Qualquer etapa\"", () => {
+  const FUNIL = "11111111-1111-4111-8111-111111111111";
+  const OUTRO_FUNIL = "22222222-2222-4222-8222-222222222222";
+  const ETAPA_DE_OUTRO_FUNIL = "33333333-3333-4333-8333-333333333333";
+
+  it("⭐ só quem tem negócio aberto em alguma etapa DESTE funil, e não a base inteira", async () => {
+    const banco = postgrestComTeto({
+      contacts: [contato(1), contato(2), contato(3)],
+      crm_stages: [
+        { id: ETAPA_ORCAMENTO, organization_id: ORG, pipeline_id: FUNIL },
+        { id: ETAPA_PROPOSTA, organization_id: ORG, pipeline_id: FUNIL },
+        { id: ETAPA_DE_OUTRO_FUNIL, organization_id: ORG, pipeline_id: OUTRO_FUNIL },
+      ],
+      crm_leads: [
+        negocio(1, idDoContato(1), { stage_id: ETAPA_ORCAMENTO }),
+        negocio(2, idDoContato(2), { stage_id: ETAPA_PROPOSTA }),
+        negocio(3, idDoContato(3), { stage_id: ETAPA_DE_OUTRO_FUNIL }),
+      ],
+    });
+
+    const lista = await ler(banco, { funil: FUNIL });
+
+    expect(lista.ok).toBe(true);
+    if (!lista.ok) return;
+    expect(ids(lista.contatos).sort()).toEqual([idDoContato(1), idDoContato(2)]);
+  });
+
+  it("⭐ funil sem etapa nenhuma é ninguém, nunca a base inteira", async () => {
+    const banco = postgrestComTeto({ contacts: [contato(1)], crm_stages: [], crm_leads: [] });
+
+    const lista = await ler(banco, { funil: FUNIL });
+
+    expect(lista.ok).toBe(true);
+    if (!lista.ok) return;
+    expect(lista.contatos).toHaveLength(0);
   });
 });

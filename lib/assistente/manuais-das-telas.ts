@@ -429,7 +429,7 @@ const OPERACAO_DO_FORK: Manual[] = [
   {
     id: "broadcast-oficial",
     titulo: "Disparar uma campanha pelo número oficial (modelo aprovado)",
-    palavras: ["broadcast", "disparo", "campanha", "disparo em massa", "lista de transmissao", "template", "modelo aprovado", "numero oficial", "agendar disparo"],
+    palavras: ["broadcast", "disparo", "campanha", "disparo em massa", "lista de transmissao", "template", "modelo aprovado", "numero oficial", "agendar disparo", "zero destinatarios", "0 destinatarios", "ficaram de fora", "sem telefone", "lista vazia"],
     href: "/app/broadcast",
     papelMinimo: "manager",
     passos: [
@@ -438,7 +438,8 @@ const OPERACAO_DO_FORK: Manual[] = [
       "Em Mensagem, escolha o Template aprovado e clique em Montar lista.",
       "Em Confira antes de disparar, clique em Disparar agora. Para mais tarde, abra a campanha e use Agendar.",
     ],
-    observacao: "Só sai modelo aprovado pela Meta, e cada mensagem é cobrada do crédito (veja em Créditos). Sem preço por mensagem acordado, o disparo é recusado. Nada sai antes da conferência da lista.",
+    observacao: "Só sai modelo aprovado pela Meta, e cada mensagem é cobrada do crédito (veja em Créditos). Sem preço por mensagem acordado, o disparo é recusado. Nada sai antes da conferência da lista. A conferência diz quem ficou de fora: sem telefone, repetidos, quem pediu para sair, contatos pessoais e, com etiqueta e etapa juntas, quem não tem negócio aberto na etapa. Se o filtro não achou ninguém, ela diz o que conferir. Para etiquetar a lista antes, veja Etiquetar muitos contatos de uma vez.",
+    vejaTambem: ["contatos-em-massa"],
   },
   {
     id: "broadcast-qr",

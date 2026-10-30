@@ -32,7 +32,14 @@ export interface Campanha {
 export interface CampanhaCriada {
   id: string;
   destinatarios: number;
-  fora: { sem_telefone: number; repetidos: number; pediram_para_sair: number; pessoais: number };
+  fora: {
+    sem_telefone: number;
+    repetidos: number;
+    pediram_para_sair: number;
+    pessoais: number;
+    /** FORK MIA (.97): tem a etiqueta e não tem negócio aberto na etapa escolhida. */
+    sem_negocio_na_etapa?: number;
+  };
   pode_disparar: boolean;
   motivo: string | null;
   falta_cents: number | null;
@@ -68,6 +75,8 @@ export function useCriarCampanha() {
       tags: string[];
       /** Etapas do funil cujos negócios ABERTOS entram. Vazio = não filtra. */
       etapas?: string[];
+      /** FORK MIA (.97): o funil, quando a etapa é "Qualquer etapa". */
+      funil?: string | null;
       variavel_do_nome: string | null;
     }) => apiClient.post<{ data: CampanhaCriada }>("/api/v1/broadcasts", input),
     onSuccess: () => {
@@ -136,6 +145,8 @@ export function useEditarCampanha() {
        * rota remontaria ignorando a etapa e a lista cresceria em silêncio.
        */
       etapas?: string[];
+      /** FORK MIA (.97): o funil, quando a etapa é "Qualquer etapa". */
+      funil?: string | null;
     }) => {
       const { id, ...resto } = input;
       return apiClient.patch<{ data: { id: string; peneira: unknown } }>(

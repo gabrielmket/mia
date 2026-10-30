@@ -5,13 +5,56 @@
 import { z } from "zod";
 
 import { garantirEtiquetas, TETO_DE_ETIQUETAS, type EtiquetaPedida } from "@/lib/implantacao/etiquetas";
+import { etiquetarContatos, TETO_POR_CHAMADA, type PedidoDeEtiquetagem } from "@/lib/implantacao/etiquetar-contatos";
 import { gravarMemoria, TETO_DE_ANOTACOES, type PedidoDeMemoria } from "@/lib/implantacao/memoria";
+import { OPERACAO_IMPORTAR_BASE } from "@/lib/mcp-plataforma/importacao/operacoes";
 import { recusar } from "@/lib/mcp-plataforma/recusa";
 
 import type { FerramentaDePlataforma } from "../tipos";
 import { alvo, ORGANIZACAO, ORG_DE_EXEMPLO } from "./comum";
 
 export const FERRAMENTAS_DE_ETIQUETAS_E_MEMORIA: readonly FerramentaDePlataforma[] = [
+  {
+    // FORK MIA (.97): o "Selecionar todos os N contatos deste filtro" da tela de Contatos.
+    name: "plataforma_etiquetar_contatos",
+    description:
+      "Põe ou tira UMA etiqueta em TODOS os contatos de um filtro de um cliente, sem o teto de 100 da tela: é o \"Selecionar todos os N contatos deste filtro\" de Contatos. " +
+      "O filtro é o da lista de Contatos: busca (nome, e-mail ou telefone), etiquetas (com modo e ou ou), origem (como import_csv) e pessoais. " +
+      `Cada chamada anda até ${TETO_POR_CHAMADA} contatos. Se a resposta vier com continua: true, repita com o cursor que ela trouxe, até continua: false. Repetir não duplica: quem já tem a etiqueta fica como está. ` +
+      "ANTES DE GRAVAR, chame com apenas_contar: true para ver o total_do_filtro, e confira com quem pediu. " +
+      "O QUE NÃO FAZ: não envia mensagem, não dispara automação (nem a de etiqueta nova, de propósito), não abre conversa e não toca contato anonimizado. " +
+      "Sem filtro ela recusa: a base inteira só com toda_a_base: true. Para pôr a etiqueta no vocabulário (nome, cor e descrição), a ferramenta é plataforma_garantir_etiquetas.",
+    inputSchema: {
+      organization_id: ORGANIZACAO,
+      etiqueta: z.string().trim().min(1).max(60).describe("A etiqueta, como aparece no chip. Maiúsculas não mudam a etiqueta: ela é gravada em minúsculas."),
+      acao: z.enum(["adicionar", "remover"]).optional().describe('"adicionar" (padrão) ou "remover".'),
+      filtro: z
+        .object({
+          busca: z.string().optional().describe("Nome, e-mail ou telefone, como a busca da tela."),
+          etiquetas: z.array(z.string()).max(20).optional().describe("Só quem tem estas etiquetas."),
+          modo: z.enum(["e", "ou"]).optional().describe('Entre as etiquetas: "e" (padrão, todas) ou "ou" (qualquer uma).'),
+          origem: z.string().optional().describe('Só desta origem, como "import_csv", "whatsapp" ou "manual".'),
+          pessoais: z.boolean().optional().describe("true = só os contatos pessoais. Sem o campo, eles ficam de fora."),
+        })
+        .strict()
+        .optional()
+        .describe("Quem recebe a etiqueta. Sem ele, a chamada recusa, salvo com toda_a_base: true."),
+      toda_a_base: z.boolean().optional().describe("true confirma que a etiqueta vale para a base inteira do cliente, sem filtro."),
+      apenas_contar: z.boolean().optional().describe("true só devolve o total_do_filtro, sem gravar nada."),
+      cursor: z.string().optional().describe("O cursor da resposta anterior, quando ela veio com continua: true."),
+    },
+    exemplo: {
+      organization_id: ORG_DE_EXEMPLO,
+      etiqueta: "Lista de outubro",
+      filtro: { origem: "import_csv" },
+      apenas_contar: true,
+    },
+    operacao: OPERACAO_IMPORTAR_BASE,
+    handler: async (ctx, args) => {
+      const { c } = await alvo(ctx, args);
+      return etiquetarContatos(c, args as unknown as PedidoDeEtiquetagem);
+    },
+  },
   {
     name: "plataforma_garantir_etiquetas",
     description:

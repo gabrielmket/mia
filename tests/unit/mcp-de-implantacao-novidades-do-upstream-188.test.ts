@@ -114,7 +114,8 @@ describe("a lista: 69 ferramentas, e os tipos de ação seguem os do upstream", 
     const daCobranca = new Set(FERRAMENTAS_DE_COBRANCA.map((f) => f.name));
     const doFork = FERRAMENTAS.filter(
       // .93: as quatro das trilhas do "Me mostra como" e de onde os clientes travam.
-      (f) => daCobranca.has(f.name) || /assistente|chamado|email|supressao|consentimentos|segmentos|trilhas|travam|melhoria_do_produto/.test(f.name),
+      // .97: etiquetar os contatos de um filtro.
+      (f) => daCobranca.has(f.name) || /etiquetar_contatos|assistente|chamado|email|supressao|consentimentos|segmentos|trilhas|travam|melhoria_do_produto/.test(f.name),
     );
     expect(FERRAMENTAS.length - doFork.length).toBe(69);
   });

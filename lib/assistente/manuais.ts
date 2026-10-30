@@ -218,10 +218,33 @@ export const MANUAIS_DO_DIA_A_DIA: readonly Manual[] = [
     href: "/app/contacts",
     papelMinimo: "agent",
     passos: [
-      "Abra Contatos e use Importar (Importar contatos de planilha).",
-      "Escolha a planilha e diga qual coluna é o quê (nome, telefone, e-mail).",
-      "Confira o resumo e confirme. Nenhuma mensagem sai na importação.",
+      "Abra Contatos e use Importar CSV (Importar contatos de planilha).",
+      "Escolha um arquivo .csv com cabeçalho, com colunas como nome, telefone (ou celular, whatsapp, phone) e e-mail. O formato do número pode ser +5511999998888 ou +55 (31) 999998888.",
+      "Clique em Importar e confira o resumo: ele diz quantos entraram, quantos já existiam, quantos vieram sem telefone e quais colunas foram ignoradas. Nenhuma mensagem sai na importação.",
     ],
+    observacao:
+      "Se a planilha entrou sem telefone, acerte o cabeçalho e importe de novo: quem já existe pelo e-mail ganha o telefone que faltava, sem duplicar. Telefone que já existe nunca é trocado. Contato sem telefone fica na base, mas não recebe WhatsApp nem disparo. Máximo de 2000 linhas por arquivo.",
+  },
+  {
+    // FORK MIA (.97): a seleção que vale para o filtro inteiro.
+    id: "contatos-em-massa",
+    titulo: "Etiquetar muitos contatos de uma vez",
+    palavras: [
+      "etiquetar", "etiqueta em massa", "em massa", "em lote", "selecionar todos", "todos os contatos",
+      "marcar todos", "varios contatos", "muitos contatos", "filtro inteiro", "responsavel em massa",
+    ],
+    href: "/app/contacts",
+    papelMinimo: "agent",
+    passos: [
+      "Abra Contatos e filtre quem você quer: busca, Tag, origem (como Importado (CSV)) ou Pessoais.",
+      "Marque a caixa do cabeçalho da tabela. No celular, use Selecionar todos os contatos visíveis.",
+      "Na faixa que aparece, clique em Selecionar todos os contatos deste filtro. A faixa mostra o total.",
+      "Em Mais ações, escolha Adicionar etiqueta, Remover etiqueta, Mudar responsável ou Preencher campo personalizado, e confirme.",
+      "Espere terminar sem fechar a tela: a barra mostra quantos já foram, e no fim o aviso diz quantos deram certo e quantos foram recusados.",
+    ],
+    observacao:
+      "A ação vale para todos do filtro, não só para os da tela. Se uma automação olha a etiqueta nova, ela roda para cada contato. Se a tela fechar no meio, filtre de novo e repita: quem já tem a etiqueta fica como está.",
+    vejaTambem: ["importar-contatos"],
   },
   {
     id: "tarefas",

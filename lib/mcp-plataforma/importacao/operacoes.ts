@@ -22,6 +22,7 @@ export const OPERACOES_DE_IMPORTACAO: readonly OperacaoDePlataforma[] = [
       "Um token vazado enche a base de um cliente com gente que não é dele, ou mistura " +
       "pessoas: quem tem o mesmo telefone ou e-mail recebe os dados que vierem na lista. " +
       "Também grava o vendedor dono de cada contato: o negócio novo daquele cliente nasce com ele. " +
+      "E põe ou tira uma etiqueta em todos os contatos de um filtro, o que muda quem entra nos próximos disparos. " +
       "Não tem botão de desfazer; o conserto é registro por registro. Nenhuma mensagem " +
       "sai pela importação, mas quem entra na base passa a poder receber as próximas.",
   },

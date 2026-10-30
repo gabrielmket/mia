@@ -77,6 +77,10 @@ function contato(i: number): Linha {
     is_blocked: false,
     consent: null,
     tags: [],
+    // FORK MIA (.97): a lista tem o recorte do seletor (`fn_contact_tags`).
+    kind: "person",
+    is_anonymized: false,
+    is_merged_into: null,
     created_at: new Date(Date.parse("2026-01-01T12:00:00.000Z") + i * 1_000).toISOString(),
   };
 }
