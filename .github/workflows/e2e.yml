@@ -1473,9 +1473,12 @@ jobs:
       # `prova-painel-provedores` (da 6) lê o catálogo da OpenRouter que o
       # passo `seed-e2e-catalogo-openrouter` semeia em toda parte comum.
       # Nenhuma cita WAHA, Graph ou webhook.
+      # FORK MIA (.98): `cupons-e-parceiros` entra aqui porque não usa serviço
+      # do job e esta é a parte comum com mais folga no teto de 30 min.
       SPECS_PARTE_7: >-
         agente-novo-e-uso.spec.ts
         capacidades-do-agente.spec.ts
+        cupons-e-parceiros.spec.ts
         extensoes-versao.spec.ts
         prova-painel-provedores.spec.ts
 
