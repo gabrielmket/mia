@@ -28,7 +28,7 @@ interface Resumo {
   // FORK MIA (.97)
   telefones_completados: number;
   emails_completados: number;
-  sem_telefone: number;
+  linhas_sem_telefone: number;
   sem_coluna_de_telefone: boolean;
   colunas_ignoradas: string[];
   avisos: Array<{ linha: number; motivo: string }>;
@@ -418,7 +418,7 @@ describe("POST /api/v1/contacts/import — a planilha name,phone,email", () => {
       total_linhas: 3,
       imported: 3,
       errors: [],
-      sem_telefone: 1,
+      linhas_sem_telefone: 1,
       sem_coluna_de_telefone: false,
       colunas_ignoradas: [],
     });
@@ -519,7 +519,7 @@ describe("POST /api/v1/contacts/import — a planilha name,phone,email", () => {
 
     expect(resumo).toMatchObject({
       imported: 1,
-      sem_telefone: 1,
+      linhas_sem_telefone: 1,
       sem_coluna_de_telefone: true,
       colunas_ignoradas: ["fone do trabalho"],
     });

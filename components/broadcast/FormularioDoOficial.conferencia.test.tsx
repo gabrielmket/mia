@@ -65,7 +65,7 @@ async function montar() {
 
 beforeEach(() => {
   resposta = base;
-  filtroDaTela = { tags: ["leads odonto jhs"], etapas: [] };
+  filtroDaTela = { tags: ["lista de outubro"], etapas: [] };
 });
 
 describe("a conferência do disparo", () => {
@@ -86,7 +86,7 @@ describe("a conferência do disparo", () => {
   });
 
   it("etiqueta e etapa: conta quem ficou de fora pela etapa", async () => {
-    filtroDaTela = { tags: ["leads odonto jhs"], etapas: ["e-1"] };
+    filtroDaTela = { tags: ["lista de outubro"], etapas: ["e-1"] };
     resposta = { ...base, fora: { ...base.fora, sem_negocio_na_etapa: 25 } };
     await montar();
 

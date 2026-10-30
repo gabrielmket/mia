@@ -18,7 +18,7 @@ export interface ImportContactsResult {
   // FORK MIA (.97): o que aconteceu com o telefone (ver a rota).
   telefones_completados: number;
   emails_completados: number;
-  sem_telefone: number;
+  linhas_sem_telefone: number;
   sem_coluna_de_telefone: boolean;
   colunas_ignoradas: string[];
   avisos: Array<{ linha: number; motivo: string }>;

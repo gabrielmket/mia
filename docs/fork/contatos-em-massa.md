@@ -8,7 +8,7 @@ para etiquetar e disparar uma campanha. Sem migration: o carimbo do schema não 
 **Causa.** `phone` não estava em `HEADER_ALIASES` (`lib/contacts/csv.ts`). A coluna era
 ignorada em silêncio: a linha com e-mail entrava sem o número, e a linha só com telefone
 virava "linha sem telefone nem e-mail". O formato do número não tinha culpa:
-`+55 (31) 991580789` passa pela `normalizePhoneBR` sem problema.
+`+55 (31) 900000002` passa pela `normalizePhoneBR` sem problema.
 
 **Conserto.**
 
@@ -67,8 +67,8 @@ Na conferência saiu "0 destinatários · 0 sem telefone · 0 repetidos · 0 ped
 **O que foi medido.** A peneira conta certo: com a lista certa, os 25 viram "25 sem
 telefone" (`tests/unit/disparo-conferencia-do-filtro.test.ts`). Quatro zeros querem dizer
 que **a lista veio vazia**, porque a peneira só vê quem passou no filtro. Contra o PostgREST
-real (v14.14), etiqueta com espaço casa, e o `ov` compara byte a byte: `Leads Odonto JHS`
-**não** acha `leads odonto jhs`. Isso reproduz a tela exata.
+real (v14.14), etiqueta com espaço casa, e o `ov` compara byte a byte: `Lista de Outubro`
+**não** acha `lista de outubro`. Isso reproduz a tela exata.
 
 **O que não dá para saber sem olhar a produção.** O seletor oferece a grafia gravada, então
 por ele a caixa não erra. Por ele, a lista só sai vazia com **etiqueta E etapa juntas** em

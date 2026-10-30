@@ -205,6 +205,7 @@ export function FormularioDoOficial() {
         ),
         tags,
         etapas,
+        funil,
         variavel_do_nome: "1",
       },
       {
@@ -241,7 +242,7 @@ export function FormularioDoOficial() {
         </p>
         {/* FORK MIA (.97): o zero em tudo não é "ninguém ficou de fora": é o filtro
             que não achou ninguém, e a tela precisa dizer o que conferir. */}
-        {recemCriada.destinatarios === 0 && fraseDaListaSemNinguem(recemCriada, tags, etapas, t)}
+        {recemCriada.destinatarios === 0 && fraseDaListaSemNinguem(recemCriada, tags, funil ? [funil, ...etapas] : etapas, t)}
         {recemCriada.custo_estimado_cents !== null ? (
           <p className="text-sm">
             {t("Custo estimado:")}{" "}

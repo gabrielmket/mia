@@ -28,7 +28,7 @@ const base: ImportContactsResult = {
   errors: [],
   telefones_completados: 0,
   emails_completados: 0,
-  sem_telefone: 0,
+  linhas_sem_telefone: 0,
   sem_coluna_de_telefone: false,
   colunas_ignoradas: [],
   avisos: [],
@@ -47,7 +47,7 @@ beforeEach(() => {
 
 describe("o resumo da importação", () => {
   it("diz quantos vieram sem telefone, e o que isso quer dizer", async () => {
-    resumo = { ...base, sem_telefone: 33 };
+    resumo = { ...base, linhas_sem_telefone: 33 };
     await importar();
 
     expect(screen.getByTestId("importacao-sem-telefone")).toHaveTextContent("33 sem telefone");
@@ -63,7 +63,7 @@ describe("o resumo da importação", () => {
   });
 
   it("sem coluna de telefone: ensina o nome, e nomeia a coluna que ficou de fora", async () => {
-    resumo = { ...base, sem_telefone: 3, sem_coluna_de_telefone: true, colunas_ignoradas: ["fone do trabalho"] };
+    resumo = { ...base, linhas_sem_telefone: 3, sem_coluna_de_telefone: true, colunas_ignoradas: ["fone do trabalho"] };
     await importar();
 
     expect(screen.getByTestId("importacao-sem-coluna-de-telefone")).toHaveTextContent("telefone, celular, whatsapp ou phone");

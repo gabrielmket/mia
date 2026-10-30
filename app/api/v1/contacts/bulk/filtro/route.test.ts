@@ -70,7 +70,7 @@ function relatorio(ids: string[], recusados: string[] = []): Response {
   });
 }
 
-const ETIQUETAR = { action: "tag", op: "add", tag: "Leads Odonto JHS" };
+const ETIQUETAR = { action: "tag", op: "add", tag: "Lista de Outubro" };
 
 beforeEach(() => {
   vi.clearAllMocks();

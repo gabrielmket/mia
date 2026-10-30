@@ -50,13 +50,13 @@ beforeEach(() => {
 
 describe("plataforma_etiquetar_contatos", () => {
   it("põe a etiqueta em minúsculas, sem repetir em quem já tem", async () => {
-    const { banco, c } = cenario([contato("c-1", ["vip"]), contato("c-2", ["leads odonto jhs"])]);
+    const { banco, c } = cenario([contato("c-1", ["vip"]), contato("c-2", ["lista de outubro"])]);
 
-    const r = await etiquetarContatos(c, { etiqueta: "Leads Odonto JHS", filtro: { origem: "import_csv" } });
+    const r = await etiquetarContatos(c, { etiqueta: "Lista de Outubro", filtro: { origem: "import_csv" } });
 
     expect(r).toMatchObject({ total_do_filtro: 2, processados: 2, alterados: 1, ja_estavam: 1, continua: false });
-    expect(tagsDe(banco, "c-1")).toEqual(["vip", "leads odonto jhs"]);
-    expect(tagsDe(banco, "c-2")).toEqual(["leads odonto jhs"]);
+    expect(tagsDe(banco, "c-1")).toEqual(["vip", "lista de outubro"]);
+    expect(tagsDe(banco, "c-2")).toEqual(["lista de outubro"]);
   });
 
   it("repetir não muda nada", async () => {

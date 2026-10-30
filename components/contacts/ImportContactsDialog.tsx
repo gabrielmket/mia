@@ -148,9 +148,9 @@ export function ImportContactsDialog({ open, onOpenChange }: Props) {
                     {resumo.emails_completados} {t("e-mail(s) completado(s)")}
                   </span>
                 )}
-                {resumo.sem_telefone > 0 && (
+                {resumo.linhas_sem_telefone > 0 && (
                   <span className="rounded-md px-2 py-1 font-medium" data-testid="importacao-sem-telefone">
-                    {resumo.sem_telefone} {t("sem telefone")}
+                    {resumo.linhas_sem_telefone} {t("sem telefone")}
                   </span>
                 )}
               </div>
@@ -168,7 +168,7 @@ export function ImportContactsDialog({ open, onOpenChange }: Props) {
                   )}
                 </p>
               )}
-              {!resumo.sem_coluna_de_telefone && resumo.sem_telefone > 0 && (
+              {!resumo.sem_coluna_de_telefone && resumo.linhas_sem_telefone > 0 && (
                 <p className="text-sm text-muted-foreground">
                   {t("Contato sem telefone fica na base, mas não recebe WhatsApp nem disparo.")}
                 </p>

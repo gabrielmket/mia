@@ -59,6 +59,8 @@ const edicaoSchema = z
      * e a mensagem sairia para quem não deveria recebê-la.
      */
     etapas: z.array(z.string().uuid()).max(20).optional(),
+    /** FORK MIA (.97): o funil, quando a etapa é "Qualquer etapa". */
+    funil: z.string().uuid().nullish(),
     variavel_do_nome: z.string().min(1).max(10).nullish(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Nada para mudar." })
@@ -286,13 +288,14 @@ export async function PATCH(
    */
   let contatosDaListaNova: unknown[] | null = null;
   let semNegocioNaEtapa = 0;
-  if (dados.tags !== undefined || dados.etapas !== undefined) {
+  if (dados.tags !== undefined || dados.etapas !== undefined || dados.funil !== undefined) {
     // Qualquer um dos dois filtros remonta a lista, e os dois vão juntos para o
     // mesmo lugar que a criação usa, para não existir uma segunda regra sobre
     // quem entra na campanha.
     const lista = await quemEntraNaLista(db, authz.org.orgId, {
       tags: dados.tags ?? [],
       etapas: dados.etapas ?? [],
+      funil: dados.funil,
     });
     if (!lista.ok) {
       // Mesma recusa da criação: lista acima do teto não remonta cortada.

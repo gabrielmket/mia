@@ -45,7 +45,7 @@
  * FORK MIA (.97). "0 destinatários · 0 sem telefone · 0 repetidos" é o que sai
  * quando o filtro não acha NINGUÉM, e foi o que uma campanha real mostrou com 25
  * contatos na etiqueta. Medido contra o PostgREST de verdade (v14.14): o `ov`
- * compara byte a byte, e `Leads Odonto JHS` não acha `leads odonto jhs`. O
+ * compara byte a byte, e `Lista de Outubro` não acha `lista de outubro`. O
  * `contacts.tags` é gravado em minúsculas (`normalizarTags`), mas a etiqueta nasce
  * com a grafia de quem a criou (o vocabulário a guarda assim) e o corpo desta
  * rota não normalizava. Agora o filtro procura todas as grafias da mesma etiqueta.
@@ -90,6 +90,11 @@ const IDS_POR_LEVA = 1000;
 export interface FiltroDaLista {
   tags: string[];
   etapas: string[];
+  /**
+   * FORK MIA (.97): o funil escolhido com "Qualquer etapa". Sem etapa marcada, vale
+   * toda etapa DESTE funil. Sem isto a lista ignorava o funil e saía para a base.
+   */
+  funil?: string | null;
 }
 
 export type ResultadoDaLista =
@@ -164,7 +169,21 @@ export async function quemEntraNaLista(
     return q;
   };
 
-  if (filtro.etapas.length > 0) {
+  // FORK MIA (.97): "Qualquer etapa" manda `etapas: []`. Funil sem etapa nenhuma é
+  // ninguém, e sai aqui: `.in()` vazio devolveria a base inteira (veja abaixo).
+  let etapasDoFiltro = filtro.etapas;
+  if (etapasDoFiltro.length === 0 && filtro.funil) {
+    const { data, error } = await db
+      .from("crm_stages")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("pipeline_id", filtro.funil);
+    if (error) return { ok: false, erro: error.message };
+    etapasDoFiltro = ((data ?? []) as Array<{ id: string }>).map((e) => e.id);
+    if (etapasDoFiltro.length === 0) return { ok: true, contatos: [] };
+  }
+
+  if (etapasDoFiltro.length > 0) {
     /**
      * `status = 'open'` de propósito.
      *
@@ -180,7 +199,7 @@ export async function quemEntraNaLista(
           .from("crm_leads")
           .select("contact_id", pedirContagem ? { count: "exact" } : undefined)
           .eq("organization_id", organizationId)
-          .in("stage_id", filtro.etapas)
+          .in("stage_id", etapasDoFiltro)
           .eq("status", "open")
           .not("contact_id", "is", null)
           // Ordem única: paginar por `range` só é correto assim.

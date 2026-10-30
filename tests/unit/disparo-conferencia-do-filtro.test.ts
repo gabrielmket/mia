@@ -41,7 +41,7 @@ function contato(i: number, over: Linha = {}): Linha {
     is_blocked: false,
     is_personal: false,
     consent: null,
-    tags: ["leads odonto jhs"],
+    tags: ["lista de outubro"],
     kind: "person",
     is_anonymized: false,
     is_merged_into: null,
@@ -108,7 +108,7 @@ describe("a conferência conta quem ficou de fora", () => {
   it("o que o seletor oferece: os 25 sem telefone aparecem como 25 sem telefone", async () => {
     ligar(VINTE_E_CINCO);
 
-    const c = await montar({ tags: ["leads odonto jhs"] });
+    const c = await montar({ tags: ["lista de outubro"] });
 
     expect(c.destinatarios).toBe(0);
     expect(c.fora).toMatchObject({ sem_telefone: 25, repetidos: 0, pediram_para_sair: 0, pessoais: 0 });
@@ -118,7 +118,7 @@ describe("a conferência conta quem ficou de fora", () => {
   it("A TELA DO DEFEITO: a grafia com que a etiqueta nasceu não dá mais quatro zeros", async () => {
     ligar(VINTE_E_CINCO);
 
-    const c = await montar({ tags: ["Leads Odonto JHS"] });
+    const c = await montar({ tags: ["Lista de Outubro"] });
 
     expect(c.fora).toMatchObject({ sem_telefone: 25 });
   });
@@ -126,7 +126,7 @@ describe("a conferência conta quem ficou de fora", () => {
   it("etiqueta E etapa, nenhum negócio aberto: os 25 são contados pela etapa", async () => {
     ligar(VINTE_E_CINCO);
 
-    const c = await montar({ tags: ["leads odonto jhs"], etapas: [ETAPA] });
+    const c = await montar({ tags: ["lista de outubro"], etapas: [ETAPA] });
 
     expect(c.destinatarios).toBe(0);
     expect(c.fora).toEqual({ ...QUATRO_ZEROS, sem_negocio_na_etapa: 25 });
@@ -154,7 +154,7 @@ describe("a conferência conta quem ficou de fora", () => {
       contato(3, { is_merged_into: "contato-000000" }),
     ]);
 
-    const c = await montar({ tags: ["leads odonto jhs"] });
+    const c = await montar({ tags: ["lista de outubro"] });
 
     expect(c.destinatarios).toBe(1);
     expect(c.fora).toMatchObject({ sem_telefone: 1 });
@@ -166,13 +166,13 @@ describe("as Campanhas por QR (o campo de texto do upstream)", () => {
     const { filtroDeAudienciaSchema } = await import("@/lib/campanhas/audiencia");
 
     const filtro = filtroDeAudienciaSchema.parse({
-      com_alguma_tag: ["Leads Odonto JHS"],
+      com_alguma_tag: ["Lista de Outubro"],
       com_todas_tags: ["  VIP "],
       sem_tags: ["Pediu Para Sair"],
     });
 
     expect(filtro).toMatchObject({
-      com_alguma_tag: ["leads odonto jhs"],
+      com_alguma_tag: ["lista de outubro"],
       com_todas_tags: ["vip"],
       sem_tags: ["pediu para sair"],
     });
@@ -189,7 +189,7 @@ describe("remontar a lista pela edição", () => {
     const res = await PATCH(
       new NextRequest("http://localhost/api/v1/broadcasts/disparo-1", {
         method: "PATCH",
-        body: JSON.stringify({ tags: ["Leads Odonto JHS"], etapas: [] }),
+        body: JSON.stringify({ tags: ["Lista de Outubro"], etapas: [] }),
       }),
       { params: Promise.resolve({ id: "disparo-1" }) },
     );

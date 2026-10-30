@@ -70,7 +70,7 @@ interface ImportSummary {
   /** Contatos que já existiam e ganharam o e-mail que faltava. */
   emails_completados: number;
   /** Linhas válidas sem telefone: entram na base e não recebem WhatsApp. */
-  sem_telefone: number;
+  linhas_sem_telefone: number;
   /** Nenhuma coluna do arquivo foi reconhecida como telefone. */
   sem_coluna_de_telefone: boolean;
   /** As colunas do arquivo que a importação não leu. */
@@ -197,7 +197,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   // FORK MIA (.97): o que o resumo diz sobre o arquivo, com ou sem gravação.
   const sobreOArquivo = {
-    sem_telefone: candidatos.filter((c) => !c.contato.phone_number).length,
+    linhas_sem_telefone: candidatos.filter((c) => !c.contato.phone_number).length,
     sem_coluna_de_telefone: indices.phone_number === undefined,
     colunas_ignoradas: colunasIgnoradas(header, indices),
   };
@@ -424,7 +424,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       // FORK MIA (.97)
       telefones_completados: telefonesCompletados,
       emails_completados: emailsCompletados,
-      sem_telefone: sobreOArquivo.sem_telefone,
+      linhas_sem_telefone: sobreOArquivo.linhas_sem_telefone,
     },
   });
 

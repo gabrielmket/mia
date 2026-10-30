@@ -286,6 +286,7 @@ export function AcoesDoOficial({
                   template_language: idioma,
                   tags: edicao.tags,
                   etapas: edicao.etapas,
+                  funil: edicao.funil,
                 },
                 {
                   onSuccess: (r) => {

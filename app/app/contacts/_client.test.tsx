@@ -174,13 +174,13 @@ describe("selecionar todos do filtro", () => {
     await user.click(screen.getByTestId("lote-mais-acoes"));
     await user.click(await screen.findByTestId("lote-adicionar-etiqueta"));
     expect(await screen.findByTestId("lote-alcance-do-filtro")).toBeInTheDocument();
-    await user.type(screen.getByTestId("lote-tag-input"), "Leads Odonto JHS");
+    await user.type(screen.getByTestId("lote-tag-input"), "Lista de Outubro");
     await user.click(screen.getByTestId("lote-tag-confirmar"));
 
     await waitFor(() => expect(apiClient.post).toHaveBeenCalled());
     expect(apiClient.post).toHaveBeenCalledWith(
       "/api/v1/contacts/bulk/filtro",
-      expect.objectContaining({ action: "tag", op: "add", tag: "Leads Odonto JHS", filtro: {} }),
+      expect.objectContaining({ action: "tag", op: "add", tag: "Lista de Outubro", filtro: {} }),
     );
     // No fim a seleção sai toda, e a faixa junto.
     await waitFor(() => expect(screen.queryByTestId("faixa-selecao-do-filtro")).toBeNull());
