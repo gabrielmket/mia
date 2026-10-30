@@ -273,8 +273,19 @@ export function postgrestComTeto(
         const conjunto = new Set(vs);
         return filtrar("in", c, vs, (l) => conjunto.has(l[c]));
       },
-      overlaps: (c: string, vs: unknown[]) =>
-        filtrar("overlaps", c, vs, (l) => Array.isArray(l[c]) && (l[c] as unknown[]).some((x) => vs.includes(x))),
+      // O elemento pode vir entre aspas, como o literal de array do Postgres lê
+      // (`{"a,b","c"}`): sem isto, o dublê acharia menos do que o banco acha.
+      overlaps: (c: string, vs: unknown[]) => {
+        const valores = vs.map((v) =>
+          typeof v === "string" && /^".*"$/s.test(v) ? v.slice(1, -1).replace(/\\(.)/g, "$1") : v,
+        );
+        return filtrar(
+          "overlaps",
+          c,
+          vs,
+          (l) => Array.isArray(l[c]) && (l[c] as unknown[]).some((x) => valores.includes(x)),
+        );
+      },
       gte: (c: string, v: unknown) => filtrar("gte", c, v, (l) => l[c] != null && comparar(l[c], v) >= 0),
       gt: (c: string, v: unknown) => filtrar("gt", c, v, (l) => l[c] != null && comparar(l[c], v) > 0),
       lt: (c: string, v: unknown) => filtrar("lt", c, v, (l) => l[c] != null && comparar(l[c], v) < 0),
@@ -310,6 +321,16 @@ export function postgrestComTeto(
     cliente: {
       from: (tabela: string) => consulta(tabela),
       rpc: async (nome: string, args: Record<string, unknown> = {}) => {
+        // FORK MIA (.97): o vocabulário real de `contacts.tags`, a mesma conta da
+        // função do banco, para quem usa a lista do disparo não ter de dublá-la.
+        if (!opcoes.rpc && nome === "fn_contact_tags") {
+          const contagem = new Map<string, number>();
+          for (const c of tabelas.contacts ?? []) {
+            if (c.organization_id !== args.p_org || c.is_anonymized || c.is_merged_into) continue;
+            for (const tag of (c.tags as string[] | null) ?? []) contagem.set(tag, (contagem.get(tag) ?? 0) + 1);
+          }
+          return { data: [...contagem].map(([tag, quantos]) => ({ tag, quantos })), error: null };
+        }
         if (!opcoes.rpc) throw new Error(`dublê: rpc("${nome}") sem opcoes.rpc`);
         memoria.clear();
         return opcoes.rpc(nome, args, tabelas, escritas);

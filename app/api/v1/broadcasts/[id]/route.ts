@@ -285,6 +285,7 @@ export async function PATCH(
    * deixaria o nome e o template trocados com a lista velha.
    */
   let contatosDaListaNova: unknown[] | null = null;
+  let semNegocioNaEtapa = 0;
   if (dados.tags !== undefined || dados.etapas !== undefined) {
     // Qualquer um dos dois filtros remonta a lista, e os dois vão juntos para o
     // mesmo lugar que a criação usa, para não existir uma segunda regra sobre
@@ -301,6 +302,7 @@ export async function PATCH(
       return fail("query_failed", lista.erro, 500, { requestId });
     }
     contatosDaListaNova = lista.contatos;
+    semNegocioNaEtapa = lista.semNegocioNaEtapa ?? 0;
   }
 
   const admin = createAdminClient();
@@ -321,6 +323,7 @@ export async function PATCH(
     repetidos: number;
     semConsentimento: number;
     pessoais: number;
+    semNegocioNaEtapa: number;
   } | null = null;
 
   if (contatosDaListaNova !== null) {
@@ -393,6 +396,7 @@ export async function PATCH(
       repetidos: peneira.repetidos,
       semConsentimento: peneira.semConsentimento,
       pessoais: peneira.pessoais,
+      semNegocioNaEtapa,
     };
   }
 

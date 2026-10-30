@@ -263,6 +263,16 @@ export async function POST(req: NextRequest): Promise<Response> {
       broadcast_id: campanha.id,
       destinatarios: peneira.enviar.length,
       template: dados.template_name,
+      // FORK MIA (.97): a pergunta que produziu a lista e quem ficou de fora. Sem
+      // isto, um "0 destinatários" de ontem não tem como ser explicado hoje.
+      filtro: { etiquetas: dados.tags, etapas: dados.etapas },
+      fora: {
+        sem_telefone: peneira.semTelefone,
+        repetidos: peneira.repetidos,
+        pediram_para_sair: peneira.semConsentimento,
+        pessoais: peneira.pessoais,
+        sem_negocio_na_etapa: lista.semNegocioNaEtapa ?? 0,
+      },
     },
   });
 
@@ -277,6 +287,8 @@ export async function POST(req: NextRequest): Promise<Response> {
         repetidos: peneira.repetidos,
         pediram_para_sair: peneira.semConsentimento,
         pessoais: peneira.pessoais,
+        // FORK MIA (.97): a etiqueta achou a pessoa, e a etapa a tirou.
+        sem_negocio_na_etapa: lista.semNegocioNaEtapa ?? 0,
       },
       pode_disparar: veredicto.pode,
       motivo: veredicto.motivo,

@@ -290,9 +290,22 @@ export function AcoesDoOficial({
                 {
                   onSuccess: (r) => {
                     setEdicao(null);
-                    const p = (r as { data?: { peneira?: { enviar: number } | null } })?.data?.peneira;
+                    const p = (
+                      r as {
+                        data?: {
+                          peneira?: { enviar: number; semTelefone?: number; semNegocioNaEtapa?: number } | null;
+                        };
+                      }
+                    )?.data?.peneira;
+                    // FORK MIA (.97): o toast dizia só "0 destinatários", sem o porquê.
+                    const motivos = [
+                      p?.semTelefone ? `${p.semTelefone} ${t("sem telefone")}` : null,
+                      p?.semNegocioNaEtapa ? `${p.semNegocioNaEtapa} ${t("sem negócio aberto na etapa")}` : null,
+                    ].filter(Boolean);
                     toast.success(
-                      p ? `${t("Lista remontada:")} ${p.enviar} ${t("destinatários")}` : t("Campanha atualizada."),
+                      p
+                        ? `${t("Lista remontada:")} ${p.enviar} ${t("destinatários")}${motivos.length > 0 ? ` · ${t("Ficaram de fora:")} ${motivos.join(", ")}` : ""}`
+                        : t("Campanha atualizada."),
                     );
                   },
                   onError: (e: unknown) =>

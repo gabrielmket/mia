@@ -32,7 +32,14 @@ export interface Campanha {
 export interface CampanhaCriada {
   id: string;
   destinatarios: number;
-  fora: { sem_telefone: number; repetidos: number; pediram_para_sair: number; pessoais: number };
+  fora: {
+    sem_telefone: number;
+    repetidos: number;
+    pediram_para_sair: number;
+    pessoais: number;
+    /** FORK MIA (.97): tem a etiqueta e não tem negócio aberto na etapa escolhida. */
+    sem_negocio_na_etapa?: number;
+  };
   pode_disparar: boolean;
   motivo: string | null;
   falta_cents: number | null;

@@ -47,6 +47,10 @@ function contato(i: number, over: Linha = {}): Linha {
     is_blocked: false,
     consent: null,
     tags: [],
+    // FORK MIA (.97): a lista tem o recorte do seletor (`fn_contact_tags`).
+    kind: "person",
+    is_anonymized: false,
+    is_merged_into: null,
     created_at: new Date(Date.parse("2026-01-01T12:00:00.000Z") + i * 1_000).toISOString(),
     ...over,
   };
@@ -232,5 +236,90 @@ describe("quem entra na lista do disparo", () => {
     const lista = await ler(banco, {});
 
     expect(lista).toEqual({ ok: false, erro: "canceling statement due to statement timeout" });
+  });
+
+  // ── FORK MIA (.97): "0 destinatários · 0 sem telefone" com 25 contatos na etiqueta ──
+  describe("a etiqueta casa sem olhar maiúscula, e a lista é a do seletor", () => {
+    const comAEtiqueta = (i: number, over: Linha = {}) =>
+      contato(i, { tags: ["leads odonto jhs"], phone_number: null, ...over });
+
+    it("a grafia com que a etiqueta nasceu acha os gravados em minúsculas", async () => {
+      const banco = postgrestComTeto({ contacts: Array.from({ length: 25 }, (_, i) => comAEtiqueta(i)) });
+
+      const lista = await ler(banco, { tags: ["Leads Odonto JHS"] });
+
+      expect(lista.ok).toBe(true);
+      if (!lista.ok) return;
+      expect(lista.contatos).toHaveLength(25);
+      // E a peneira conta os 25: é o número que a conferência tinha de mostrar.
+      const peneira = peneirar(lista.contatos as ContatoParaDisparo[], () => ({}));
+      expect(peneira.enviar).toHaveLength(0);
+      expect(peneira.semTelefone).toBe(25);
+    });
+
+    it("a minúscula acha também o que ficou gravado em caixa mista", async () => {
+      const banco = postgrestComTeto({
+        contacts: [comAEtiqueta(0), comAEtiqueta(1, { tags: ["Leads Odonto JHS"] }), contato(2, { tags: ["outra"] })],
+      });
+
+      const lista = await ler(banco, { tags: ["leads odonto jhs"] });
+
+      expect(lista.ok && ids(lista.contatos)).toEqual([idDoContato(0), idDoContato(1)]);
+    });
+
+    it("etiqueta com vírgula é UMA etiqueta", async () => {
+      const banco = postgrestComTeto({ contacts: [contato(0, { tags: ["a,b"] }), contato(1, { tags: ["a"] })] });
+
+      const lista = await ler(banco, { tags: ["a,b"] });
+
+      expect(lista.ok && ids(lista.contatos)).toEqual([idDoContato(0)]);
+    });
+
+    it("anonimizado, ficha absorvida e grupo não entram: o número bate com o do seletor", async () => {
+      const banco = postgrestComTeto({
+        contacts: [
+          comAEtiqueta(0),
+          comAEtiqueta(1, { is_anonymized: true }),
+          comAEtiqueta(2, { is_merged_into: idDoContato(0) }),
+          comAEtiqueta(3, { kind: "whatsapp_group" }),
+        ],
+      });
+
+      const lista = await ler(banco, { tags: ["leads odonto jhs"] });
+
+      expect(lista.ok && ids(lista.contatos)).toEqual([idDoContato(0)]);
+    });
+
+    it("etiqueta E etapa: quem tem a etiqueta e não tem negócio aberto é contado", async () => {
+      const banco = postgrestComTeto({
+        contacts: Array.from({ length: 25 }, (_, i) => comAEtiqueta(i)),
+        crm_leads: [negocio(0, idDoContato(0))],
+      });
+
+      const lista = await ler(banco, { tags: ["leads odonto jhs"], etapas: [ETAPA_ORCAMENTO] });
+
+      expect(lista).toMatchObject({ ok: true, semNegocioNaEtapa: 24 });
+      expect(lista.ok && lista.contatos).toHaveLength(1);
+    });
+
+    it("etiqueta E etapa sem negócio nenhum: lista vazia, com os 25 contados", async () => {
+      const banco = postgrestComTeto({
+        contacts: Array.from({ length: 25 }, (_, i) => comAEtiqueta(i)),
+        crm_leads: [],
+      });
+
+      const lista = await ler(banco, { tags: ["leads odonto jhs"], etapas: [ETAPA_ORCAMENTO] });
+
+      expect(lista).toEqual({ ok: true, contatos: [], semNegocioNaEtapa: 25 });
+    });
+
+    it("a leitura do vocabulário falha: erro, e não uma lista por uma grafia só", async () => {
+      const banco = postgrestComTeto(
+        { contacts: [comAEtiqueta(0)] },
+        { rpc: () => ({ data: null, error: { message: "fn_contact_tags indisponível" } }) },
+      );
+
+      expect(await ler(banco, { tags: ["leads odonto jhs"] })).toEqual({ ok: false, erro: "fn_contact_tags indisponível" });
+    });
   });
 });

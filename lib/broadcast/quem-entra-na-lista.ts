@@ -39,9 +39,28 @@
  * a frase ANTES de criar ou remontar o disparo. Nas outras telas um total
  * parcial sai com aviso; aqui o "parcial" seriam mensagens que não saem para
  * quem a pessoa escolheu, e ninguém confere 50 mil nomes para descobrir.
+ *
+ * ─── A etiqueta casa sem olhar maiúscula, e a lista é a do seletor ─────────
+ *
+ * FORK MIA (.97). "0 destinatários · 0 sem telefone · 0 repetidos" é o que sai
+ * quando o filtro não acha NINGUÉM, e foi o que uma campanha real mostrou com 25
+ * contatos na etiqueta. Medido contra o PostgREST de verdade (v14.14): o `ov`
+ * compara byte a byte, e `Leads Odonto JHS` não acha `leads odonto jhs`. O
+ * `contacts.tags` é gravado em minúsculas (`normalizarTags`), mas a etiqueta nasce
+ * com a grafia de quem a criou (o vocabulário a guarda assim) e o corpo desta
+ * rota não normalizava. Agora o filtro procura todas as grafias da mesma etiqueta.
+ *
+ * Etiqueta com vírgula também dava zero: o `overlaps` do supabase-js monta
+ * `{a,b}` sem aspas, e a vírgula virava separador. As aspas vão por `citar`.
+ *
+ * E a lista passou a ter o mesmo WHERE do seletor (`fn_contact_tags`): sem
+ * anonimizado e sem ficha absorvida por mesclagem, que contavam como "sem
+ * telefone" gente que não está mais na base. O seletor dizia 25, e a conferência
+ * podia dizer 26.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { normalizarTag } from "@/lib/contacts/tag-normalizada";
 import { lerTodasAsPaginas, TAMANHO_DA_PAGINA } from "@/lib/leitura/todas-as-paginas";
 import { buscaEmLotes } from "@/lib/supabase/em-lotes";
 
@@ -74,7 +93,16 @@ export interface FiltroDaLista {
 }
 
 export type ResultadoDaLista =
-  | { ok: true; contatos: unknown[] }
+  | {
+      ok: true;
+      contatos: unknown[];
+      /**
+       * FORK MIA (.97): quem tem a etiqueta e não tem negócio aberto na etapa. Só
+       * com os dois filtros juntos: é o que explica uma lista vazia que a peneira,
+       * que só vê quem passou no filtro, não tem como explicar.
+       */
+      semNegocioNaEtapa?: number;
+    }
   | {
       ok: false;
       erro: string;
@@ -87,11 +115,55 @@ export type ResultadoDaLista =
 
 const ACIMA_DO_TETO: ResultadoDaLista = { ok: false, erro: LISTA_ACIMA_DO_TETO, acimaDoTeto: true };
 
+/** Aspas do literal de array do Postgres: vírgula no nome não vira outro elemento. */
+function citar(valor: string): string {
+  return `"${valor.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/**
+ * FORK MIA (.97): todas as grafias gravadas das etiquetas pedidas.
+ *
+ * `fn_contact_tags` é a função do seletor: ela diz o que está gravado, e a régua
+ * da comparação é a mesma da escrita (`normalizarTag`). A pedida e a minúscula
+ * entram mesmo sem aparecer ali: a lista de grafias só pode crescer o filtro.
+ */
+async function grafiasDasEtiquetas(
+  db: SupabaseClient,
+  organizationId: string,
+  pedidas: string[],
+): Promise<{ ok: true; grafias: string[] } | { ok: false; erro: string }> {
+  if (pedidas.length === 0) return { ok: true, grafias: [] };
+  const { data, error } = await db.rpc("fn_contact_tags", { p_org: organizationId });
+  if (error) return { ok: false, erro: error.message };
+  const chaves = new Set(pedidas.map(normalizarTag));
+  const gravadas = ((data ?? []) as Array<{ tag: string }>)
+    .map((l) => l.tag)
+    .filter((tag) => chaves.has(normalizarTag(tag)));
+  return { ok: true, grafias: [...new Set([...pedidas, ...chaves, ...gravadas])].map(citar) };
+}
+
 export async function quemEntraNaLista(
   db: SupabaseClient,
   organizationId: string,
   filtro: FiltroDaLista,
 ): Promise<ResultadoDaLista> {
+  const etiquetas = await grafiasDasEtiquetas(db, organizationId, filtro.tags);
+  if (!etiquetas.ok) return { ok: false, erro: etiquetas.erro };
+  const grafias = etiquetas.grafias;
+
+  /** O mesmo recorte do seletor (`fn_contact_tags`): quem ainda é contato vivo. */
+  const consultaDeContatos = (colunas: string, opcoes?: { count: "exact"; head?: boolean }) => {
+    let q = db
+      .from("contacts")
+      .select(colunas, opcoes)
+      .eq("organization_id", organizationId)
+      .eq("kind", "person")
+      .eq("is_anonymized", false)
+      .is("is_merged_into", null);
+    if (grafias.length > 0) q = q.overlaps("tags", grafias);
+    return q;
+  };
+
   if (filtro.etapas.length > 0) {
     /**
      * `status = 'open'` de propósito.
@@ -137,43 +209,47 @@ export async function quemEntraNaLista(
      * ninguém viraria uma campanha para todos, que é o defeito mais caro que
      * esta função pode ter.
      */
-    if (unicos.length === 0) return { ok: true, contatos: [] };
+    /**
+     * FORK MIA (.97): etiqueta E etapa, quantos têm a etiqueta ao todo. Quem a tem
+     * e não está na lista ficou de fora pela etapa, e a tela precisa dizer isso:
+     * sem o número, "25 na etiqueta e nenhum negócio aberto" vira um zero mudo.
+     */
+    const foraPelaEtapa = async (naLista: number): Promise<{ semNegocioNaEtapa?: number }> => {
+      if (grafias.length === 0) return {};
+      const { count } = await consultaDeContatos("id", { count: "exact", head: true });
+      return { semNegocioNaEtapa: Math.max((count ?? naLista) - naLista, 0) };
+    };
+
+    if (unicos.length === 0) return { ok: true, contatos: [], ...(await foraPelaEtapa(0)) };
 
     const contatos: unknown[] = [];
     for (let i = 0; i < unicos.length; i += IDS_POR_LEVA) {
-      const leva = await buscaEmLotes<unknown>(unicos.slice(i, i + IDS_POR_LEVA), (lote) => {
-        let q = db
-          .from("contacts")
+      const leva = await buscaEmLotes<unknown>(unicos.slice(i, i + IDS_POR_LEVA), (lote) =>
+        consultaDeContatos(COLUNAS_DO_CONTATO)
           // A MESMA régua de consentimento da automação (guarda-do-contato.ts):
           // recusa REGISTRADA, não ausência de consentimento.
-          .select(COLUNAS_DO_CONTATO)
-          .eq("organization_id", organizationId)
-          .in("id", lote);
-        if (filtro.tags.length > 0) q = q.overlaps("tags", filtro.tags);
-        // Cada lote devolve no máximo 100 linhas (o `id` é único), então aqui o
-        // teto de 1000 do PostgREST não alcança.
-        return q.order("id", { ascending: true });
-      });
+          .in("id", lote)
+          // Cada lote devolve no máximo 100 linhas (o `id` é único), então aqui o
+          // teto de 1000 do PostgREST não alcança.
+          .order("id", { ascending: true }),
+      );
       if (leva.error) return { ok: false, erro: leva.error.message };
       contatos.push(...leva.data);
     }
-    return { ok: true, contatos };
+    return { ok: true, contatos, ...(await foraPelaEtapa(contatos.length)) };
   }
 
   const contatos = await lerTodasAsPaginas<unknown>(
-    (de, ate, pedirContagem) => {
-      let q = db
-        .from("contacts")
-        // A MESMA régua de consentimento da automação (guarda-do-contato.ts):
-        // recusa REGISTRADA, não ausência de consentimento.
-        .select(COLUNAS_DO_CONTATO, pedirContagem ? { count: "exact" } : undefined)
-        .eq("organization_id", organizationId);
-      if (filtro.tags.length > 0) q = q.overlaps("tags", filtro.tags);
-      // Do mais antigo para o mais novo, com `id` de desempate: ordem única
-      // entre as páginas, e a mesma em toda remontagem (a peneira descarta
-      // telefone repetido ficando com o primeiro que aparece).
-      return q.order("created_at", { ascending: true }).order("id", { ascending: true }).range(de, ate);
-    },
+    (de, ate, pedirContagem) =>
+      // A MESMA régua de consentimento da automação (guarda-do-contato.ts):
+      // recusa REGISTRADA, não ausência de consentimento.
+      consultaDeContatos(COLUNAS_DO_CONTATO, pedirContagem ? { count: "exact" } : undefined)
+        // Do mais antigo para o mais novo, com `id` de desempate: ordem única
+        // entre as páginas, e a mesma em toda remontagem (a peneira descarta
+        // telefone repetido ficando com o primeiro que aparece).
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(de, ate),
     { paginasMaximas: PAGINAS_MAXIMAS },
   );
   if (contatos.erro) return { ok: false, erro: contatos.erro };

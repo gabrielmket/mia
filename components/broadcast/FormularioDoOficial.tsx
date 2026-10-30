@@ -116,6 +116,37 @@ function SeletorDeArquivo({ onEnviado }: { onEnviado: (valor: string) => void })
   );
 }
 
+/**
+ * FORK MIA (.97): nenhum destinatário e nenhum descartado. A peneira só vê quem
+ * passou no filtro, então os quatro zeros querem dizer que o filtro não achou
+ * ninguém. Sem esta frase, a conferência parece dizer que está tudo certo.
+ */
+function fraseDaListaSemNinguem(
+  c: CampanhaCriada,
+  tags: string[],
+  etapas: string[],
+  t: (texto: string) => string,
+) {
+  const descartados =
+    c.fora.sem_telefone +
+    c.fora.repetidos +
+    c.fora.pediram_para_sair +
+    c.fora.pessoais +
+    (c.fora.sem_negocio_na_etapa ?? 0);
+  if (descartados > 0) return null;
+  return (
+    <p className="text-sm text-warning-fg" data-testid="filtro-sem-ninguem">
+      {tags.length > 0 && etapas.length > 0
+        ? t("Nenhum contato tem esta etiqueta e negócio aberto nesta etapa. Volte e confira as etiquetas e a etapa marcadas.")
+        : tags.length > 0
+          ? t("Nenhum contato tem esta etiqueta. Volte e confira a etiqueta marcada.")
+          : etapas.length > 0
+            ? t("Nenhum contato tem negócio aberto nesta etapa. Volte e confira a etapa marcada.")
+            : t("A empresa ainda não tem contatos.")}
+    </p>
+  );
+}
+
 export function FormularioDoOficial() {
   const t = useT();
   const router = useRouter();
@@ -201,7 +232,16 @@ export function FormularioDoOficial() {
           {t("Ficaram de fora:")} {recemCriada.fora.sem_telefone} {t("sem telefone")} ·{" "}
           {recemCriada.fora.repetidos} {t("repetidos")} · {recemCriada.fora.pediram_para_sair}{" "}
           {t("pediram para sair")} · {recemCriada.fora.pessoais} {t("contatos pessoais")}
+          {recemCriada.fora.sem_negocio_na_etapa ? (
+            <>
+              {" · "}
+              {recemCriada.fora.sem_negocio_na_etapa} {t("sem negócio aberto na etapa")}
+            </>
+          ) : null}
         </p>
+        {/* FORK MIA (.97): o zero em tudo não é "ninguém ficou de fora": é o filtro
+            que não achou ninguém, e a tela precisa dizer o que conferir. */}
+        {recemCriada.destinatarios === 0 && fraseDaListaSemNinguem(recemCriada, tags, etapas, t)}
         {recemCriada.custo_estimado_cents !== null ? (
           <p className="text-sm">
             {t("Custo estimado:")}{" "}
