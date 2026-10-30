@@ -40,6 +40,8 @@ import { seguirOPlano } from "@/lib/planos-mia/seguir-o-plano";
 import { recusar } from "../recusa";
 // FORK MIA (.96): o passo "Pagamento" do início (docs/fork/pagamento-no-inicio.md).
 import { empresasEsperandoOPrimeiroPagamento, passoDoPagamentoParaATime } from "@/lib/pagamento-inicial/para-a-time";
+// FORK MIA (.98): o cupom e o parceiro do cliente (docs/fork/cupons-e-parceiros.md).
+import { lerCupomEParceiroDaEmpresa } from "@/lib/cupons/na-ficha";
 // FORK MIA (.96, segunda frente): as cobranças com a nota fiscal (docs/fork/area-de-cobranca.md).
 import { cobrancasParaATime } from "@/lib/area-de-cobranca/para-a-time";
 
@@ -145,7 +147,10 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       // FORK MIA (.96, segunda frente): as cobranças com a nota.
       "Em `cobrancas`: as cobranças da empresa no Asaas (as mais novas), com a situação, o número da nota fiscal e o link do PDF da nota, " +
       "para mandar a nota a quem pedir, e o chamado \"A nota saiu errada\" de cada uma (responda com `plataforma_responder_chamado`). " +
-      "`null` = a empresa não tem cobrança pelo Asaas; \"nao_lido\" = o Asaas não respondeu.",
+      "`null` = a empresa não tem cobrança pelo Asaas; \"nao_lido\" = o Asaas não respondeu. " +
+      // FORK MIA (.98): o cupom e o parceiro.
+      "Desde a .98, em `cupom_e_parceiro`: o cupom da empresa (o que dá, desde quando, se o desconto já acabou), o parceiro ligado a ela e a comissão fixada, " +
+      "o setup de implantação vendido e o total das comissões lançadas. Sem documento nem Pix do parceiro.",
     inputSchema: {
       organization_id: z.string().uuid().describe("O id do cliente."),
     },
@@ -212,6 +217,8 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
           : "nao_lido",
         modulos_com_origem: jornada ? jornada.modulos : "nao_lido",
         pagamento_inicial: pagamentoInicial,
+        // FORK MIA (.98): leitura que falha diz "nao_lido".
+        cupom_e_parceiro: await lerCupomEParceiroDaEmpresa(admin, id).catch(() => "nao_lido" as const),
         cobrancas,
         // Os interruptores da empresa que chegaram do upstream 1.74 a 1.80.
         configuracao: {

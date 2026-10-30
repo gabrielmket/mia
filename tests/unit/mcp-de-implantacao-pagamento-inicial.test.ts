@@ -1,7 +1,7 @@
 /**
  * FORK MIA (.96) · o passo "Pagamento" do início no MCP de plataforma
  * (docs/fork/mcp-de-implantacao.md, "O pagamento no início (.96)"). O que se prova:
- *   - nenhuma ferramenta nova: a lista segue com 99;
+ *   - nenhuma ferramenta nova nesta peça (a contagem da lista mora no teste da cobrança);
  *   - `plataforma_listar_clientes` filtra quem espera o primeiro pagamento e devolve
  *     a forma, a situação, o modo e desde quando;
  *   - `plataforma_ver_cliente` mostra o passo com o documento MASCARADO e, do
@@ -84,8 +84,8 @@ function responder(c: CadeiaLivre) {
 const ctx = (banco: ReturnType<typeof bancoLivre>) => ({ admin: banco.cliente as never, autorUserId: "a", tokenId: "t", requestId: "r", escopos: [] });
 
 describe("o passo do pagamento no MCP de plataforma", () => {
-  it("nenhuma ferramenta nova: a lista segue com 99", () => {
-    expect(FERRAMENTAS).toHaveLength(99);
+  it("o passo não trouxe ferramenta nova: a lista tem as 99 de antes e as 6 de cupons da .98", () => {
+    expect(FERRAMENTAS).toHaveLength(105);
   });
 
   it("⭐ listar_clientes com o filtro: só quem espera o primeiro pagamento, com a forma e a situação", async () => {

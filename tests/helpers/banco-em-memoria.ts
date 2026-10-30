@@ -166,6 +166,18 @@ export function bancoEmMemoria(
         filtros.push((l) => (l[c] as string | number) <= (v as string | number)),
         q
       ),
+      // `or("a.is.null,a.lt.\"x\"")`: as duas formas que o passo do pagamento usa (FORK MIA, .98).
+      or: (expr: string) => (
+        filtros.push((l) =>
+          expr.split(",").some((parte) => {
+            const nulo = /^(\w+)\.is\.null$/.exec(parte);
+            if (nulo) return (l[nulo[1] as string] ?? null) === null;
+            const menor = /^(\w+)\.lt\."?([^"]+)"?$/.exec(parte);
+            return menor ? (l[menor[1] as string] as string) < (menor[2] as string) : false;
+          }),
+        ),
+        q
+      ),
       order: (col: string, o?: { ascending?: boolean }) => (
         ordens.push({ col, asc: o?.ascending !== false }),
         q

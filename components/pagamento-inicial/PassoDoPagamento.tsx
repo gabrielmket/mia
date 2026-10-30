@@ -13,6 +13,9 @@ import { useIdioma } from "@/lib/i18n/IdiomaProvider";
 import type { FormaDoPagamento, PassoDoPagamento as Passo, PlanoDoPasso } from "@/lib/pagamento-inicial/tipos";
 
 import { CamposFiscais, valoresDe, type ValoresFiscais } from "./CamposFiscais";
+// FORK MIA (.98): o cupom e o setup de implantação no passo (docs/fork/cupons-e-parceiros.md).
+import { CupomNoPasso } from "@/components/cupons/CupomNoPasso";
+import { SetupNoPasso } from "@/components/cupons/SetupNoPasso";
 
 /** A conferência da tela: a cada poucos segundos enquanto espera (o servidor trava as leituras do Asaas). */
 const INTERVALO_DA_CONFERENCIA_MS = 5_000;
@@ -75,6 +78,8 @@ export function PassoDoPagamento({ inicial, marca }: { inicial: Passo; marca: st
     iso ? new Intl.DateTimeFormat(idioma, { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" }).format(new Date(iso)) : "";
   const valor = passo.valor_cents ?? passo.plano?.preco_cents ?? null;
   const teste = passo.modo === "teste";
+  // FORK MIA (.98): no cartão, a mensalidade e o setup pedido saem juntos.
+  const setupEmAberto = !teste && passo.setup?.situacao === "aguardando" ? passo.setup.valor_cents : 0;
   const nomeDaForma = (f: string | null) =>
     f === "pix" ? t("Pix") : f === "cartao" ? t("Cartão de crédito") : f === "boleto" ? t("Boleto") : t("Outra forma");
 
@@ -208,6 +213,10 @@ export function PassoDoPagamento({ inicial, marca }: { inicial: Passo; marca: st
         <p className="text-xs text-muted-foreground">
           {t("A nota fiscal sai pelo Asaas com a confirmação do pagamento, em nome dos dados fiscais da empresa, e chega no seu e-mail junto com o recibo.")}
         </p>
+        {/* FORK MIA (.98): o setup que ainda falta pagar não segura a empresa. */}
+        <div className="text-left">
+          <SetupNoPasso passo={passo} aoAtualizar={setPasso} teste={false} />
+        </div>
         <Button onClick={continuar}>{t("Continuar")}</Button>
       </Card>
     );
@@ -232,6 +241,7 @@ export function PassoDoPagamento({ inicial, marca }: { inicial: Passo; marca: st
         <p className="text-xs text-muted-foreground">
           {t("Sem o pagamento no fim do teste, a conta fica bloqueada até ele ser confirmado.")}
         </p>
+        <SetupNoPasso passo={passo} aoAtualizar={setPasso} teste />
         <div className="flex flex-wrap gap-2">
           <Button onClick={continuar}>{t("Continuar: Seu negócio")}</Button>
           <Button variant="outline" onClick={() => setPasso({ ...passo, cumprido: false, situacao: "sem_cobranca" })}>
@@ -285,6 +295,9 @@ export function PassoDoPagamento({ inicial, marca }: { inicial: Passo; marca: st
             ) : null}
           </div>
         </div>
+
+        {/* FORK MIA (.98): o selo do cupom, ou o campo "Tenho um cupom". */}
+        <CupomNoPasso passo={passo} aoAtualizar={setPasso} />
 
         {trocandoPlano ? (
           <div className="space-y-2 rounded-md border p-3" data-pagamento="planos">
@@ -353,6 +366,9 @@ export function PassoDoPagamento({ inicial, marca }: { inicial: Passo; marca: st
             </Button>
           </div>
         ) : null}
+
+        {/* FORK MIA (.98): "Quero que a Time implante para mim", venda única e opcional. */}
+        {!corrigindo && passo.fiscais ? <SetupNoPasso passo={passo} aoAtualizar={setPasso} teste={teste} /> : null}
 
         {/* As formas. */}
         {!corrigindo && passo.fiscais ? (
@@ -451,7 +467,7 @@ export function PassoDoPagamento({ inicial, marca }: { inicial: Passo; marca: st
                       : teste
                         ? t("Cadastrar o cartão")
                         : valor !== null
-                          ? t("Pagar {valor}").replace("{valor}", brl.format(valor / 100))
+                          ? t("Pagar {valor}").replace("{valor}", brl.format((valor + setupEmAberto) / 100))
                           : t("Pagar")}
                   </Button>
                   <p className="text-xs text-muted-foreground">

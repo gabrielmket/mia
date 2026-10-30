@@ -24,6 +24,8 @@ import { ErroDoProvedor } from "@/lib/cobranca/provedores/contrato";
 import { desistirDoAjuste } from "@/lib/cobranca/troca";
 import type { EstadoDaAssinatura, Intervalo, ProvedorDeCobranca } from "@/lib/cobranca/vocabulario";
 import { logger } from "@/lib/logger";
+// FORK MIA (.98): o desconto do cupom na assinatura recém-criada (docs/fork/cupons-e-parceiros.md).
+import { garantirDescontoNoAsaas } from "@/lib/cupons/desconto-no-asaas";
 
 const RESERVA_MS = 2 * 60_000;
 const VALIDADE_PADRAO_MS = 24 * 3_600_000;
@@ -252,6 +254,11 @@ async function gerarCheckout(
     urlDeVolta: quem.urlDeVolta,
     chaveIdempotencia: quem.chaveIdempotencia,
   });
+  // FORK MIA (.98): a primeira cobrança já sai com o desconto do cupom, antes de o link
+  // chegar a quem paga. Vale para todo caminho que abre assinatura. Nunca lança.
+  if (provedor === "asaas" && inicio.assinaturaRef) {
+    await garantirDescontoNoAsaas(admin, orgId, { assinaturaRef: inicio.assinaturaRef, clienteRef });
+  }
   const modo = await modoDoProvedor(provedor);
   const { data: gravada, error } = await admin
     .from("cobranca_assinaturas")

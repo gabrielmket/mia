@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.97) · O QUE A PÁGINA DE PREÇOS, O CADASTRO E O PASSO DO PAGAMENTO
+ * FORK MIA (.98) · O QUE A PÁGINA DE PREÇOS, O CADASTRO E O PASSO DO PAGAMENTO
  * PODEM SABER DE UM CUPOM (protótipo "Cupons e parceiros", tela 1).
  *
  * Leitura PÚBLICA (quem chega pelo link ainda não tem conta), então mora aqui a

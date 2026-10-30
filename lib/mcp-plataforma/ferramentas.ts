@@ -39,6 +39,8 @@ import { FERRAMENTAS_DE_AUTOMACAO_E_AGENDA } from "./ferramentas/automacoes-e-ag
 import { FERRAMENTAS_DE_CANAIS_E_INTEGRACOES } from "./ferramentas/canais-e-integracoes";
 // FORK MIA (.90): a jornada de assinatura, a cobrança (docs/fork/jornada-de-assinatura.md).
 import { FERRAMENTAS_DE_COBRANCA } from "./ferramentas/cobranca";
+// FORK MIA (.98): cupons, parceiros e repasses (docs/fork/cupons-e-parceiros.md).
+import { FERRAMENTAS_DE_CUPONS_E_PARCEIROS } from "./ferramentas/cupons-e-parceiros";
 import { FERRAMENTAS_DO_CHECKLIST } from "./ferramentas/checklist";
 import { FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP } from "./ferramentas/conhecimento-e-followup";
 import { FERRAMENTAS_DE_CONVERSOES } from "./ferramentas/conversoes";
@@ -99,6 +101,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DE_EMAIL_MARKETING,
   // FORK MIA (.90): a cobrança da jornada de assinatura: planos, assinaturas, link, prazo, isenção e os pedidos de cadastro (docs/fork/jornada-de-assinatura.md)
   ...FERRAMENTAS_DE_COBRANCA,
+  // FORK MIA (.98): os cupons, os parceiros e os repasses do mês; o MCP nunca manda dinheiro (docs/fork/cupons-e-parceiros.md)
+  ...FERRAMENTAS_DE_CUPONS_E_PARCEIROS,
 ];
 
 export const FERRAMENTA_POR_NOME = new Map(FERRAMENTAS.map((f) => [f.name, f]));

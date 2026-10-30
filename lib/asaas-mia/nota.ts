@@ -38,7 +38,7 @@ const impostosSchema = z.object({
 });
 
 /**
- * FORK MIA (.97): o serviço e os impostos do SETUP de implantação, separados
+ * FORK MIA (.98): o serviço e os impostos do SETUP de implantação, separados
  * dos da mensalidade (o Gabriel usa o item 17.06 a 2% para "Setup de
  * implementação"). Opcional: sem ele, a nota do setup não sai sozinha e a
  * Conexão avisa (docs/fork/cupons-e-parceiros.md).
@@ -63,7 +63,7 @@ export const configuracaoDaNotaSchema = z
     servicoMunicipalNome: z.string().trim().max(250).nullish().transform((v) => v || null),
     observacoes: z.string().trim().max(1000).nullish().transform((v) => v || null),
     impostos: impostosSchema,
-    // FORK MIA (.97): a nota do setup, com o serviço próprio.
+    // FORK MIA (.98): a nota do setup, com o serviço próprio.
     setup: servicoDoSetupSchema.nullish().transform((v) => v ?? null),
   })
   .refine((c) => Boolean(c.servicoMunicipalId || c.servicoMunicipalCodigo), {
@@ -72,7 +72,7 @@ export const configuracaoDaNotaSchema = z
   });
 
 /**
- * FORK MIA (.97): a configuração da nota do SETUP, no formato da nota (o mesmo
+ * FORK MIA (.98): a configuração da nota do SETUP, no formato da nota (o mesmo
  * corpo que o Asaas recebe), ou `null` quando a Time ainda não configurou.
  */
 export function configuracaoDaNotaDoSetup(config: ConfiguracaoDaNota | null): ConfiguracaoDaNota | null {

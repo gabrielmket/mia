@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.97) · A COMISSÃO DE CADA COBRANÇA PAGA (decisões 1, 4, 10 e 11;
+ * FORK MIA (.98) · A COMISSÃO DE CADA COBRANÇA PAGA (decisões 1, 4, 10 e 11;
  * docs/fork/cupons-e-parceiros.md, seção 5).
  *
  * A comissão NASCE quando a cobrança é PAGA, lida no Asaas (nunca pelo corpo do
@@ -35,7 +35,7 @@ import { hojeEmSaoPaulo } from "@/lib/cupons/regras";
 import { logger } from "@/lib/logger";
 
 import { lerConfiguracaoDaComissao } from "./configuracao";
-import { competenciaDe, contaDaComissao, mensalidadeNoPrazo } from "./regras";
+import { competenciaDe, contaDaComissao, mensalidadeNoPrazo, referenciaDoSetup } from "./regras";
 
 export interface ResumoDasComissoes {
   lancadas: number;
@@ -45,7 +45,6 @@ export interface ResumoDasComissoes {
 
 /** A referência externa do ajuste proporcional do upstream: `upgrade:<org>:<chave>`. */
 const ehAjusteProporcional = (p: PagamentoDoCliente, orgId: string) => p.referenciaExterna?.startsWith(`upgrade:${orgId}:`) === true;
-export const referenciaDoSetup = (orgId: string) => `setup:${orgId}`;
 
 /** É mensalidade (assinatura ou ajuste proporcional)? Puro. */
 export function ehMensalidade(p: PagamentoDoCliente, orgId: string): boolean {
@@ -85,16 +84,19 @@ async function termosDoCliente(
   if (!cupom.parceiro_id) return null;
   const [{ data: parceiro }, { data: doCupom }] = await Promise.all([
     admin.from("mia_parceiros").select("comissao_pct, comissao_meses, comissao_setup_pct").eq("id", cupom.parceiro_id).maybeSingle(),
-    admin.from("mia_cupons").select("comissao_pct").eq("id", cupom.cupom_id).maybeSingle(),
+    admin.from("mia_cupons").select("comissao_pct, parceiro_id").eq("id", cupom.cupom_id).maybeSingle(),
   ]);
   const p = parceiro as { comissao_pct: number; comissao_meses: number | null; comissao_setup_pct: number } | null;
   if (!p) return null;
-  const propria = (doCupom as { comissao_pct: number | null } | null)?.comissao_pct;
+  // A comissão própria do cupom é a do parceiro DELE: trocado o parceiro pela Time, vale a do novo.
+  const c = doCupom as { comissao_pct: number | null; parceiro_id: string | null } | null;
+  const propria = c?.parceiro_id === cupom.parceiro_id ? c?.comissao_pct : null;
+  const inicio = cupom.primeira_mensalidade_em ?? primeiraMensalidade;
   const termos = {
     pct: propria === null || propria === undefined ? Number(p.comissao_pct) : Number(propria),
     meses: p.comissao_meses === null ? null : Number(p.comissao_meses),
     setupPct: Number(p.comissao_setup_pct ?? 0),
-    inicio: primeiraMensalidade,
+    inicio,
   };
   await admin
     .from("mia_cupom_da_empresa")
@@ -103,7 +105,7 @@ async function termosDoCliente(
       comissao_meses: termos.meses,
       comissao_setup_pct: termos.setupPct,
       termos_fixados_em: agora.toISOString(),
-      primeira_mensalidade_em: primeiraMensalidade,
+      primeira_mensalidade_em: inicio,
     })
     .eq("organization_id", cupom.organization_id)
     .is("termos_fixados_em", null);

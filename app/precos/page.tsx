@@ -10,6 +10,11 @@ import { logger } from "@/lib/logger";
 import { MODULOS_DO_PLANO, ROTULO_DO_MODULO_DO_PLANO } from "@/lib/planos-mia/catalogo";
 import { lerPlanosPublicos, seloDoTesteGratis, type PlanoPublico } from "@/lib/planos-mia/publico";
 import { createAdminClient } from "@/lib/supabase/admin";
+// FORK MIA (.98): o cupom do link, ou o guardado no navegador (docs/fork/cupons-e-parceiros.md).
+import { cookies } from "next/headers";
+import { CupomNaPaginaDePrecos } from "@/components/cupons/CupomNaPaginaDePrecos";
+import { lerCupomPublico } from "@/lib/cupons/publico";
+import { COOKIE_DO_CUPOM, mensalidadeComCupom, textoDoPeriodo } from "@/lib/cupons/regras";
 
 export const dynamic = "force-dynamic";
 export const generateMetadata = () => tituloDaTelaPublica((t) => t("Preços"));
@@ -37,7 +42,7 @@ const EM_TODOS_OS_PLANOS = {
 type ItemDeTodosOsPlanos = keyof typeof EM_TODOS_OS_PLANOS;
 const ITENS_DE_TODOS_OS_PLANOS = Object.keys(EM_TODOS_OS_PLANOS) as ItemDeTodosOsPlanos[];
 
-export default async function PrecosPage() {
+export default async function PrecosPage({ searchParams }: { searchParams?: Promise<{ cupom?: string }> }) {
   const idioma = await idiomaDoVisitante(null);
   const t = (s: string) => traduzir(s, idioma);
   const marca = await marcaDaSaida(null);
@@ -55,6 +60,13 @@ export default async function PrecosPage() {
     provedorDaInstalacao().catch(() => null),
   ]);
   const planos = leitura?.planos ?? [];
+  // FORK MIA (.98): o link manda ("?cupom=" vazio tira); sem ele, o que ficou no navegador.
+  // O guardado que não vale mais só some; o do link diz por quê.
+  const cupomDoLink = (await searchParams)?.cupom;
+  const codigoDoCupom = typeof cupomDoLink === "string" ? cupomDoLink : ((await cookies()).get(COOKIE_DO_CUPOM)?.value ?? "");
+  const cupomLido = planos.length > 0 && codigoDoCupom ? await lerCupomPublico(admin, codigoDoCupom) : null;
+  const cupom = cupomLido && (cupomLido.valido || typeof cupomDoLink === "string") ? cupomLido : null;
+  const cupomValido = cupom?.valido === true ? cupom : null;
   const brl = new Intl.NumberFormat(idioma, {
     style: "currency",
     currency: "BRL",
@@ -120,6 +132,8 @@ export default async function PrecosPage() {
           </p>
         </section>
 
+        {planos.length > 0 && <CupomNaPaginaDePrecos cupom={cupom} />}
+
         {planos.length === 0 ? (
           <section
             className="mx-auto max-w-xl rounded-md border bg-background p-6 text-center"
@@ -161,6 +175,33 @@ export default async function PrecosPage() {
                     <h2 className="text-lg font-semibold">{p.nome}</h2>
                     {p.frase && <p className="text-sm text-muted-foreground">{p.frase}</p>}
                   </div>
+                  {/* FORK MIA (.98): o preço com o cupom, ou o aviso de que ele não vale neste plano. */}
+                  {cupomValido && cupomValido.beneficio !== null && !cupomValido.planos.includes(p.id) ? (
+                    <p className="text-xs text-muted-foreground" data-cupom="fora-do-plano">
+                      {t("O cupom não vale neste plano")}
+                    </p>
+                  ) : null}
+                  {cupomValido?.beneficio === "dias" && cupomValido.planos.includes(p.id) ? (
+                    <p>
+                      <span className="text-3xl font-semibold">{t("{n} dias grátis").replace("{n}", String(cupomValido.valor))}</span>
+                      <span className="block text-sm text-muted-foreground">
+                        {t("depois {preco} por mês").replace("{preco}", brlCentavos.format(p.preco_cents / 100))}
+                      </span>
+                    </p>
+                  ) : cupomValido && cupomValido.beneficio !== null && cupomValido.planos.includes(p.id) ? (
+                    <p>
+                      <span className="text-3xl font-semibold">
+                        {brlCentavos.format(mensalidadeComCupom(p.preco_cents, { beneficio: cupomValido.beneficio, valor: cupomValido.valor ?? 0 }) / 100)}
+                      </span>{" "}
+                      <span className="text-sm text-muted-foreground">
+                        {p.intervalo === "ano" ? t("por ano") : t("por mês")}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        <span className="line-through">{brlCentavos.format(p.preco_cents / 100)}</span>{" "}
+                        {textoDoPeriodo({ beneficio: cupomValido.beneficio, meses: cupomValido.meses }, t)}
+                      </span>
+                    </p>
+                  ) : (
                   <p>
                     <span className="text-3xl font-semibold">
                       {brl.format(p.preco_cents / 100)}
@@ -169,6 +210,7 @@ export default async function PrecosPage() {
                       {p.intervalo === "ano" ? t("por ano") : t("por mês")}
                     </span>
                   </p>
+                  )}
                   <ul className="space-y-1.5 text-sm">
                     {linhas(p).map((l) => (
                       <li key={l}>✓ {l}</li>
@@ -193,7 +235,7 @@ export default async function PrecosPage() {
                   </ul>
                   <div className="mt-auto space-y-2">
                     <Link
-                      href={p.cadastro}
+                      href={cupomValido?.planos.includes(p.id) ? `${p.cadastro}&cupom=${encodeURIComponent(cupomValido.codigo)}` : p.cadastro}
                       className={`block rounded-md px-4 py-2 text-center text-sm font-medium ${
                         p.destaque ? "bg-primary text-primary-foreground" : "border hover:bg-muted"
                       }`}

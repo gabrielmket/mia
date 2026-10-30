@@ -160,6 +160,10 @@ const NAV_ITEMS: NavItem[] = [
   // chave `cobranca` ligada — desligada, `/admin/cobranca` responde 404 e o
   // menu do dono segue igual.
   { href: "/admin/cobranca", label: "Cobrança", icon: Receipt, modulo: "cobranca" },
+  // FORK MIA (.98) · cupons, parceiros e comissão (docs/fork/cupons-e-parceiros.md): só
+  // existem com a cobrança ligada. Os repasses do mês moram dentro de Parceiros.
+  { href: "/admin/cupons", label: "Cupons", icon: Receipt, modulo: "cobranca" },
+  { href: "/admin/parceiros", label: "Parceiros", icon: Users, modulo: "cobranca" },
 ];
 
 interface AdminSidebarProps {

@@ -573,6 +573,8 @@ const OPERACAO_DO_FORK: Manual[] = [
       "qr code", "copia e cola", "linha digitavel", "teste gratis", "depois do teste", "nada e cobrado hoje",
       "conta bloqueada", "falta so o pagamento", "dados fiscais", "nota fiscal", "cnpj", "cpf", "trocar de plano",
       "cartao recusado", "pagamento confirmado",
+      // FORK MIA (.98): o cupom e o setup.
+      "cupom", "desconto", "tenho um cupom", "dias gratis", "setup", "implantacao", "time implante",
     ],
     href: "/app/settings/billing",
     papelMinimo: "admin",
@@ -581,6 +583,9 @@ const OPERACAO_DO_FORK: Manual[] = [
       "Num plano que se paga na entrada, escolha em Como você quer pagar: Pix (Gerar o Pix, e pague pelo QR ou pelo copia e cola), Cartão de crédito (digite o cartão e clique em Pagar) ou Boleto (Gerar o boleto, e copie a linha digitável ou abra o boleto). A tela confere sozinha e mostra Pagamento confirmado; depois, Continuar.",
       "Num plano com teste grátis, nada é cobrado hoje: escolha Cartão de crédito (Cadastrar o cartão; a primeira mensalidade é debitada sozinha no fim do teste) ou Pix (Escolher o Pix; ele chega por e-mail 3 dias antes do fim do teste). Depois, Continuar: Seu negócio.",
       "Para mudar de plano antes de pagar, use Trocar de plano, escolha o plano e Trocar para este plano. Uma cobrança já gerada é cancelada e a próxima sai no plano novo.",
+      // FORK MIA (.98): o cupom e o setup.
+      "Se você tem um cupom, digite em Tenho um cupom e clique em Aplicar; o desconto já sai na cobrança e na nota. Um cupom de dias grátis faz você entrar sem pagar e escolher como paga depois. Depois de pagar, o cupom só muda com a Time.",
+      "Para a Time montar tudo para você, marque Quero que a Time implante para mim, quando o plano oferecer: é um pagamento único, separado da mensalidade.",
     ],
     observacao:
       "Só quem administra a empresa paga e escolhe a forma. Os dados do cartão vão direto para o Asaas e não ficam guardados. O boleto compensa em 1 a 3 dias úteis; para começar na hora, pague por Pix (o boleto gerado é cancelado). No fim do teste sem a primeira mensalidade paga, ou com o cartão recusado, a conta fica bloqueada até o pagamento confirmar, e a tela volta a este passo, com Pix ou outro cartão. A nota fiscal sai pelo Asaas quando o pagamento confirma.",

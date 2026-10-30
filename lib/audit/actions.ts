@@ -296,6 +296,34 @@ export const AUDIT_ACTIONS = [
   "pagamento_inicial.lembrete_enviado",
   "dados_fiscais.gravados",
   "cobranca.nota_fiscal_configurada",
+  // FORK MIA (.98) · cupons, parceiros e comissão (docs/fork/cupons-e-parceiros.md):
+  // o cupom criado, mudado, pausado, aplicado, tirado e trocado pela Time; o parceiro
+  // criado, mudado, exportado e anonimizado (LGPD), a troca do parceiro de um cliente;
+  // o setup de implantação (pedido, cancelado, pago, estornado, o preço do plano); o
+  // mês fechado, o anexo, o pago e os extratos do repasse. Nunca documento nem Pix.
+  "cupom.criado",
+  "cupom.alterado",
+  "cupom.pausado",
+  "cupom.ativado",
+  "cupom.aplicado",
+  "cupom.tirado",
+  "cupom.trocado_pela_time",
+  "parceiro.criado",
+  "parceiro.alterado",
+  "parceiro.exportado",
+  "parceiro.anonimizado",
+  "parceiro.trocado_no_cliente",
+  "parceiros.rodada",
+  "parceiros.configuracao_gravada",
+  "setup.pedido",
+  "setup.cancelado",
+  "setup.pago",
+  "setup.estornado",
+  "setup.preco_do_plano",
+  "repasse.mes_fechado",
+  "repasse.anexo_gravado",
+  "repasse.marcado_pago",
+  "repasse.extratos_enviados",
   // FORK MIA (.60) — leads dos formulários da Meta: quem ligou a importação, que
   // formulário vai para qual funil, quem pediu leitura na hora, e a rodada do
   // relógio que trouxe lead ou deu erro (a vazia não audita).

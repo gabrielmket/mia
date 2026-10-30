@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.97) · A RÉGUA DOS CUPONS, PURA (protótipo "Cupons e parceiros",
+ * FORK MIA (.98) · A RÉGUA DOS CUPONS, PURA (protótipo "Cupons e parceiros",
  * aprovado em 27/10/2026, versão 9; docs/fork/cupons-e-parceiros.md).
  *
  * Sem servidor e sem banco: a página de preços, o cadastro, o passo do

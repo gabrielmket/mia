@@ -108,6 +108,9 @@ export const PUBLIC_PATHS: RegExp[] = [
   // nenhuma escreve nada. Âncora `$`.
   /^\/api\/v1\/publico\/cnpj$/,
   /^\/api\/v1\/publico\/cep$/,
+  // FORK MIA (.98): o "Aplicar" do cupom na página de preços e no cadastro. Só lê o que
+  // o selo mostra, com teto por IP. Âncora `$`.
+  /^\/api\/v1\/publico\/cupom$/,
   // Volta do consentimento do Google Ads. Mesma natureza das duas linhas
   // acima: a identidade vem do `state` assinado
   // (`lib/plataformas-de-anuncio/google/estado.ts`), não da sessão — quem

@@ -48,6 +48,9 @@ import { conferirDadosFiscais, enderecoEmUmaLinha, formatarDocumento } from "@/l
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { logger } from "@/lib/logger";
 import { seguirOPlano } from "@/lib/planos-mia/seguir-o-plano";
+// FORK MIA (.98): o cupom e o setup no passo (docs/fork/cupons-e-parceiros.md).
+import { diasDoCupomNoPlano, extrasDoPasso } from "@/lib/cupons/extras-do-passo";
+import { pagarSetupComOMesmoCartao } from "@/lib/setup-de-implantacao/servico";
 
 import { MOTIVO_DA_ENTRADA_PAGA } from "./destino";
 import type { FiscaisDoPasso, FormaDoPagamento, ModoDoPasso, PassoDoPagamento, PlanoDoPasso, SituacaoDoPagamento } from "./tipos";
@@ -126,7 +129,7 @@ const recusa = (status: number, code: string, message: string, details?: unknown
   ...(details === undefined ? {} : { details }),
 });
 
-async function lerAssinatura(admin: SupabaseClient, orgId: string): Promise<Assinatura | null> {
+export async function lerAssinatura(admin: SupabaseClient, orgId: string): Promise<Assinatura | null> {
   const { data, error } = await admin.from("cobranca_assinaturas").select(COLUNAS_DA_ASSINATURA).eq("organization_id", orgId).maybeSingle();
   if (error) throw new Error(`pagamento inicial: assinatura ilegível (${error.code ?? "sem_codigo"})`);
   return (data as unknown as Assinatura | null) ?? null;
@@ -154,7 +157,7 @@ function upstreamRegistrouPagamento(
  * upstream já registrou o pagamento (o aviso chegou antes de a linha ser marcada).
  * Quem trocou para um plano com teste, ou escolheu no teste, não pagou nada.
  */
-function pagouAPrimeira(
+export function pagouAPrimeira(
   linha: Pick<LinhaDoPagamento, "situacao" | "pagamento_ref"> | null,
   assinatura: Pick<Assinatura, "pagamento_inicial_pendente" | "proximo_vencimento" | "estado"> | null,
 ): boolean {
@@ -318,8 +321,12 @@ export async function lerPassoDoPagamento(
   const mesmaCobranca = linha !== null && linha.pagamento_ref !== null;
   const testeAte = modo === "teste" ? (assinatura?.trial_ate ?? null) : null;
   const fimDoTeste = veioDoFimDoTeste(linha, assinatura);
+  // FORK MIA (.98): o cupom e o setup. Nunca lança: na falha, os blocos somem.
+  const extras = await extrasDoPasso(admin, orgId, doPlano);
   return {
     modo,
+    cupom: extras.cupom,
+    setup: extras.setup,
     fim_do_teste: fimDoTeste,
     formas: formasDoPasso(modo, fimDoTeste),
     espera,
@@ -332,7 +339,7 @@ export async function lerPassoDoPagamento(
     plano: doPlano,
     planosParaTrocar: ((visiveis.data ?? []) as Array<Record<string, unknown>>).map(paraPlano),
     fiscais: fiscais ? paraFiscais(fiscais) : null,
-    valor_cents: linha?.valor_cents ?? doPlano?.preco_cents ?? null,
+    valor_cents: linha?.valor_cents ?? extras.primeiraMensalidadeCents ?? doPlano?.preco_cents ?? null,
     vence_em: linha?.vence_em ?? null,
     pix:
       modo === "entrada_paga" && mesmaCobranca && linha.pix_copia_e_cola
@@ -364,7 +371,7 @@ async function qrDoPix(copiaECola: string): Promise<string | null> {
 }
 
 /** Reserva a linha (cria se faltar). `null` = outra requisição está no meio. */
-async function reservar(admin: SupabaseClient, orgId: string, planoId: string, agora: Date): Promise<{ marca: string; linha: LinhaDoPagamento } | null> {
+export async function reservar(admin: SupabaseClient, orgId: string, planoId: string, agora: Date): Promise<{ marca: string; linha: LinhaDoPagamento } | null> {
   await admin
     .from("mia_pagamento_inicial")
     .upsert({ organization_id: orgId, plano_id: planoId }, { onConflict: "organization_id", ignoreDuplicates: true });
@@ -380,7 +387,7 @@ async function reservar(admin: SupabaseClient, orgId: string, planoId: string, a
   return { marca, linha: data as unknown as LinhaDoPagamento };
 }
 
-async function soltar(admin: SupabaseClient, orgId: string, marca: string): Promise<void> {
+export async function soltar(admin: SupabaseClient, orgId: string, marca: string): Promise<void> {
   try {
     await admin.from("mia_pagamento_inicial").update({ reserva_ate: null }).eq("organization_id", orgId).eq("reserva_ate", marca);
   } catch {
@@ -389,8 +396,10 @@ async function soltar(admin: SupabaseClient, orgId: string, marca: string): Prom
 }
 
 /** Os campos de uma cobrança que deixou de valer (cancelada, refeita, trocada de plano). */
-const SEM_COBRANCA = {
+export const SEM_COBRANCA = {
   situacao: "sem_cobranca",
+  // FORK MIA (.98): sem a cobrança, o valor volta a ser o do plano com o cupom, não o da que saiu.
+  valor_cents: null,
   pagamento_ref: null,
   assinatura_ref: null,
   fatura_url: null,
@@ -410,7 +419,7 @@ const SEM_COBRANCA = {
  * próximo "gerar" criar outra. Só na empresa que ainda espera o primeiro
  * pagamento (entrada paga) ou que ainda está no teste sem ter pago nada (teste).
  */
-async function cancelarCobrancaAtual(
+export async function cancelarCobrancaAtual(
   admin: SupabaseClient,
   orgId: string,
   linha: LinhaDoPagamento,
@@ -709,6 +718,8 @@ export async function pagarComCartaoNoPasso(
           })
           .eq("organization_id", p.orgId);
         if (!recorrente.ok) logger.warn("pagamento_inicial.cartao_nao_ficou_na_assinatura", { organization_id: p.orgId, codigo: recorrente.codigo });
+        // FORK MIA (.98): o setup pedido sai no mesmo cartão, na mesma requisição. Recusado, a tela segue com o Pix dele.
+        await pagarSetupComOMesmoCartao(admin, { orgId: p.orgId, cartao: p.cartao, titular }, deps.asaas);
       } else if (r.tipo === "recusado") {
         await admin
           .from("mia_pagamento_inicial")
@@ -835,7 +846,7 @@ export async function conferirPagamento(
 }
 
 /** O que o passo precisa ler para decidir uma escrita. */
-async function lerParaEscrever(admin: SupabaseClient, orgId: string, deps: DependenciasDoPasso) {
+export async function lerParaEscrever(admin: SupabaseClient, orgId: string, deps: DependenciasDoPasso) {
   const ligada = await (deps.cobrancaLigada ?? (() => moduloLigado(admin, "cobranca")))();
   const [assinatura, linha, org] = await Promise.all([
     ligada ? lerAssinatura(admin, orgId) : Promise.resolve(null),
@@ -895,12 +906,14 @@ export async function trocarPlanoAntesDePagar(
     }
     const cobrancaCancelada = Boolean(reserva.linha.pagamento_ref || assinatura.provedor_assinatura_id);
     if (cobrancaCancelada) await cancelarCobrancaAtual(admin, p.orgId, reserva.linha, assinatura, asaas, modo);
-    const vaiParaTeste = novo.trial_dias > 0;
+    // FORK MIA (.98): o cupom de dias grátis que cobre o plano novo mantém o teste.
+    const diasDoCupom = await diasDoCupomNoPlano(admin, p.orgId, novo.id);
+    const vaiParaTeste = novo.trial_dias > 0 || diasDoCupom > 0;
     const campos: Record<string, unknown> = { plano_id: novo.id, plano_agendado_id: null, updated_at: agora.toISOString() };
     if (modo === "entrada_paga" && vaiParaTeste) {
       Object.assign(campos, {
         estado: "trial",
-        trial_ate: new Date(agora.getTime() + novo.trial_dias * 86_400_000).toISOString(),
+        trial_ate: new Date(agora.getTime() + Math.max(novo.trial_dias, diasDoCupom) * 86_400_000).toISOString(),
         pagamento_inicial_pendente: false,
         vencida_desde: null,
         ultimo_aviso: null,
@@ -1190,6 +1203,8 @@ export async function cadastrarCartaoNoTeste(
         })
         .eq("organization_id", p.orgId);
       resultado = "cadastrado";
+      // FORK MIA (.98): o setup pedido é cobrado agora, no mesmo cartão (a mensalidade, só no fim do teste).
+      await pagarSetupComOMesmoCartao(admin, { orgId: p.orgId, cartao: p.cartao, titular }, deps.asaas);
     }
   } catch (e) {
     return falhaDoAsaas(e, p.orgId, "teste_cartao");

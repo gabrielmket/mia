@@ -41,6 +41,21 @@ export function NotaFiscalDoAsaas({ inicial, ehAsaas }: { inicial: ConfiguracaoD
     inss: String(inicial?.impostos.inss ?? 0),
     ir: String(inicial?.impostos.ir ?? 0),
   });
+  // FORK MIA (.98): o serviço e os impostos do setup de implantação, separados da mensalidade.
+  const doSetup = inicial?.setup ?? null;
+  const [s, setS] = useState({
+    servicoMunicipalId: doSetup?.servicoMunicipalId ?? "",
+    servicoMunicipalCodigo: doSetup?.servicoMunicipalCodigo ?? "",
+    servicoMunicipalNome: doSetup?.servicoMunicipalNome ?? "",
+    observacoes: doSetup?.observacoes ?? "",
+    reterIss: doSetup?.impostos.reterIss ?? false,
+    iss: String(doSetup?.impostos.iss ?? 0),
+    pis: String(doSetup?.impostos.pis ?? 0),
+    cofins: String(doSetup?.impostos.cofins ?? 0),
+    csll: String(doSetup?.impostos.csll ?? 0),
+    inss: String(doSetup?.impostos.inss ?? 0),
+    ir: String(doSetup?.impostos.ir ?? 0),
+  });
   const [salvo, setSalvo] = useState(inicial !== null);
   const [msg, setMsg] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -68,6 +83,25 @@ export function NotaFiscalDoAsaas({ inicial, ehAsaas }: { inicial: ConfiguracaoD
             inss: numero(c.inss),
             ir: numero(c.ir),
           },
+          // FORK MIA (.98): sem código e sem id, o setup fica sem nota automática.
+          setup:
+            s.servicoMunicipalCodigo.trim() || s.servicoMunicipalId.trim()
+              ? {
+                  servicoMunicipalId: s.servicoMunicipalId,
+                  servicoMunicipalCodigo: s.servicoMunicipalCodigo,
+                  servicoMunicipalNome: s.servicoMunicipalNome,
+                  observacoes: s.observacoes,
+                  impostos: {
+                    reterIss: s.reterIss,
+                    iss: numero(s.iss),
+                    pis: numero(s.pis),
+                    cofins: numero(s.cofins),
+                    csll: numero(s.csll),
+                    inss: numero(s.inss),
+                    ir: numero(s.ir),
+                  },
+                }
+              : null,
         }),
       });
       const corpo = (await r.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
@@ -134,6 +168,43 @@ export function NotaFiscalDoAsaas({ inicial, ehAsaas }: { inicial: ConfiguracaoD
           {t("Observações da nota")} <span className="font-normal text-muted-foreground">{t("(opcional)")}</span>
         </Label>
         <Input id="nota-observacoes" value={c.observacoes} onChange={(e) => setC({ ...c, observacoes: e.target.value })} />
+      </div>
+      {/* FORK MIA (.98): a nota do setup de implantação, com o serviço próprio. */}
+      <div className="space-y-3 rounded-md border p-3" data-cupons="nota-do-setup">
+        <div className="space-y-1">
+          <p className="text-sm font-medium">{t("Nota do setup de implantação")}</p>
+          <p className="text-xs text-muted-foreground">
+            {t("O setup é uma cobrança avulsa e a nota dele usa um serviço próprio, separado da mensalidade (por exemplo, o item 17.06). Sem o código, a nota do setup não sai sozinha.")}
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="nota-setup-codigo">{t("Código do serviço na prefeitura")}</Label>
+            <Input id="nota-setup-codigo" value={s.servicoMunicipalCodigo} onChange={(e) => setS({ ...s, servicoMunicipalCodigo: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="nota-setup-id">
+              {t("Id do serviço no Asaas")} <span className="font-normal text-muted-foreground">{t("(opcional)")}</span>
+            </Label>
+            <Input id="nota-setup-id" value={s.servicoMunicipalId} onChange={(e) => setS({ ...s, servicoMunicipalId: e.target.value })} />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="nota-setup-nome">{t("Descrição do serviço")}</Label>
+          <Input id="nota-setup-nome" placeholder={t("Setup de implementação")} value={s.servicoMunicipalNome} onChange={(e) => setS({ ...s, servicoMunicipalNome: e.target.value })} />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {IMPOSTOS.map(([k, rotulo]) => (
+            <div key={k} className="space-y-1.5">
+              <Label htmlFor={`nota-setup-${k}`}>{rotulo}</Label>
+              <Input id={`nota-setup-${k}`} inputMode="decimal" value={s[k]} onChange={(e) => setS({ ...s, [k]: e.target.value })} />
+            </div>
+          ))}
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={s.reterIss} onChange={(e) => setS({ ...s, reterIss: e.target.checked })} />
+          {t("Reter o ISS")}
+        </label>
       </div>
       <Button size="sm" disabled={ocupado} onClick={() => void salvar()}>
         {t("Salvar a nota fiscal")}

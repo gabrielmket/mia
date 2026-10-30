@@ -7,6 +7,9 @@ import { loadAuthUser } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { lerPainelDosPlanos } from "@/lib/planos-mia/painel-dos-planos";
+// FORK MIA (.98): o preço do setup de implantação de cada plano (docs/fork/cupons-e-parceiros.md).
+import { PrecoDoSetupDosPlanos } from "@/components/admin/parceiros/PrecoDoSetupDosPlanos";
+import { lerPrecosDoSetup } from "@/lib/setup-de-implantacao/servico";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata = { title: "Módulos dos planos" };
@@ -31,6 +34,7 @@ export default async function Page() {
   if (!(await moduloLigado(admin, "cobranca"))) notFound();
   const painel = await lerPainelDosPlanos(admin);
   const ativos = painel.planos.filter((p) => !p.arquivado).length;
+  const precosDoSetup = await lerPrecosDoSetup(admin);
 
   return (
     <div className="space-y-4 p-6">
@@ -44,6 +48,11 @@ export default async function Page() {
       ) : (
         <ContornoDoBloco>
           <ModulosDosPlanos {...painel} />
+          <div className="mt-4">
+            <PrecoDoSetupDosPlanos
+              planos={painel.planos.filter((p) => !p.arquivado).map((p) => ({ id: p.id, nome: p.nome, setup_cents: precosDoSetup.get(p.id) ?? null }))}
+            />
+          </div>
         </ContornoDoBloco>
       )}
     </div>

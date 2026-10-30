@@ -4,6 +4,9 @@
  * Puro (sem servidor): a página, as rotas e o MCP falam esta língua. Do cartão
  * só existe o final de 4 números e a bandeira devolvidos pelo Asaas.
  */
+import type { CupomDoPasso } from "@/lib/cupons/extras-do-passo";
+import type { SetupDoPasso } from "@/lib/setup-de-implantacao/servico";
+
 export type FormaDoPagamento = "pix" | "cartao" | "boleto";
 export const FORMAS_DO_PAGAMENTO: readonly FormaDoPagamento[] = ["pix", "cartao", "boleto"] as const;
 
@@ -95,6 +98,9 @@ export interface PassoDoPagamento {
   proxima_cobranca: string | null;
   /** Só quem administra paga, troca o plano e corrige os dados. */
   pode_pagar: boolean;
+  /** FORK MIA (.98): o cupom da empresa (o selo) e o setup de implantação. */
+  cupom?: CupomDoPasso | null;
+  setup?: SetupDoPasso | null;
 }
 
 /** As recusas que a tela traduz. Nunca carregam valor digitado. */

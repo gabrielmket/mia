@@ -49,6 +49,8 @@ import {
 import { seguirOPlano } from "@/lib/planos-mia/seguir-o-plano";
 // FORK MIA (.96): o fim do teste sem a primeira mensalidade paga (docs/fork/pagamento-no-inicio.md).
 import { antesDaRegua } from "@/lib/pagamento-inicial/fim-do-teste";
+// FORK MIA (.98): o preço do cupom não é preço divergente (docs/fork/cupons-e-parceiros.md).
+import { precoDoProvedorEhODoCupom } from "@/lib/cupons/desconto-no-asaas";
 
 export interface DependenciasDaCobranca {
   adaptador?: (id: ProvedorDeCobranca) => AdaptadorDeCobranca;
@@ -325,6 +327,8 @@ async function conferirPreco(
   if (error || !data) return;
   const precoDoPlano = (data as { preco_cents: number }).preco_cents;
   if (precoDoPlano === p.precoDoProvedor) return;
+  // FORK MIA (.98): com o cupom valendo, a diferença é o combinado, não drift.
+  if (await precoDoProvedorEhODoCupom(admin, orgId, p.planoId, p.precoDoProvedor)) return;
   auditar("cobranca.preco_divergente", orgId, {
     plano_id: p.planoId,
     preco_plano_cents: precoDoPlano,

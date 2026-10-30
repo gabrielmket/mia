@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.97) · O EXTRATO DO MÊS AO PARCEIRO (decisões 2 e 9; protótipo, tela 4).
+ * FORK MIA (.98) · O EXTRATO DO MÊS AO PARCEIRO (decisões 2 e 9; protótipo, tela 4).
  *
  * Um e-mail por parceiro, no fechamento do mês: os clientes dele pelo nome da
  * empresa, o que pagaram, o imposto, as taxas do Asaas, o líquido, a comissão

@@ -2,7 +2,7 @@
  * FORK MIA (.96, segunda frente) · as cobranças da empresa no MCP de plataforma
  * (docs/fork/mcp-de-implantacao.md, "A área de cobrança (.96, segunda frente)").
  * O que se prova:
- *   - nenhuma ferramenta nova: a lista segue com 99;
+ *   - nenhuma ferramenta nova nesta peça (a contagem da lista mora no teste da cobrança);
  *   - `plataforma_ver_cliente` traz, em `cobrancas`, cada cobrança com a
  *     situação, o número da nota fiscal e o link do PDF, e o chamado "A nota saiu
  *     errada" dela; a descrição da ferramenta diz isso;
@@ -55,8 +55,8 @@ function responder(c: CadeiaLivre) {
 const ctx = (banco: ReturnType<typeof bancoLivre>) => ({ admin: banco.cliente as never, autorUserId: "a", tokenId: "t", requestId: "r", escopos: [] });
 
 describe("as cobranças no MCP de plataforma", () => {
-  it("nenhuma ferramenta nova: a lista segue com 99, e a descrição de ver_cliente cita as cobranças e a nota", () => {
-    expect(FERRAMENTAS).toHaveLength(99);
+  it("nenhuma ferramenta nova nesta peça (99 + as 6 de cupons da .98), e a descrição de ver_cliente cita as cobranças e a nota", () => {
+    expect(FERRAMENTAS).toHaveLength(105);
     const d = FERRAMENTA_POR_NOME.get("plataforma_ver_cliente")!.description;
     expect(d).toContain("`cobrancas`");
     expect(d).toContain("número da nota fiscal");

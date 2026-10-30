@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.97) · OS PARCEIROS NO BANCO (migration 9130; docs/fork/cupons-e-parceiros.md).
+ * FORK MIA (.98) · OS PARCEIROS NO BANCO (migration 9130; docs/fork/cupons-e-parceiros.md).
  *
  * Os dados do parceiro (CPF ou CNPJ, e-mail, Pix) só a Time vê: a tabela não
  * tem política, e quem lê é o servidor com o cliente de serviço (Admin ›

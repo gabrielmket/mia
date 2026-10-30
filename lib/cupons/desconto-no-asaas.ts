@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.97) · O DESCONTO DO CUPOM NO ASAAS (docs/fork/cupons-e-parceiros.md, seção 3).
+ * FORK MIA (.98) · O DESCONTO DO CUPOM NO ASAAS (docs/fork/cupons-e-parceiros.md, seção 3).
  *
  * A cobrança e a nota já saem com o valor com desconto. O Asaas não tem desconto
  * por número de ciclos: o `discount` da assinatura é desconto por pagamento

@@ -10,6 +10,10 @@ import { exigeDocumento, sugestaoDoCadastro } from "@/lib/cobranca/documento";
 import type { ProvedorDeCobranca } from "@/lib/cobranca/vocabulario";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { createAdminClient } from "@/lib/supabase/admin";
+// FORK MIA (.98): o cupom e o parceiro na ficha (docs/fork/cupons-e-parceiros.md).
+import { CupomEParceiroDoTenant } from "@/components/admin/tenants/CupomEParceiroDoTenant";
+import { lerCupomEParceiroDaEmpresa } from "@/lib/cupons/na-ficha";
+import { lerParceiros } from "@/lib/parceiros/banco";
 
 import { TenantOverviewClient } from "./_client";
 
@@ -24,7 +28,21 @@ export default async function TenantDetailPage({ params }: TenantDetailPageProps
     <div className="space-y-6">
       <TenantOverviewClient id={id} cobrancaLigada={cobranca !== null} />
       {cobranca && <CardDeCobranca orgId={id} {...cobranca} />}
+      {cobranca && <CupomEParceiro orgId={id} />}
     </div>
+  );
+}
+
+/** FORK MIA (.98): o card do cupom e do parceiro, só com a cobrança ligada. */
+async function CupomEParceiro({ orgId }: { orgId: string }) {
+  const admin = createAdminClient();
+  const [dados, parceiros] = await Promise.all([lerCupomEParceiroDaEmpresa(admin, orgId), lerParceiros(admin)]);
+  return (
+    <CupomEParceiroDoTenant
+      orgId={orgId}
+      dados={dados}
+      parceiros={parceiros.filter((p) => !p.anonimizado_em).map((p) => ({ id: p.id, nome: p.nome }))}
+    />
   );
 }
 

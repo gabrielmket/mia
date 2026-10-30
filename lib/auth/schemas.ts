@@ -30,6 +30,8 @@ export const signupSchema = z
     // lib/dados-fiscais/regras.ts (o plano escolhido decide se é obrigatório).
     mia_nome: z.string().trim().max(120).optional(),
     mia_fiscal: z.record(z.string(), z.string().max(160)).optional(),
+    // FORK MIA (.98): o cupom do link ou digitado. Quem confere é a action.
+    mia_cupom: z.string().trim().max(40).optional(),
     email: z.string().email("Email inválido"),
     password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
     password_confirm: z.string(),

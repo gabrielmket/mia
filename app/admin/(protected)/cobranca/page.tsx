@@ -22,6 +22,9 @@ import { FaixaDoModoDeTeste, VisaoGeral } from "./_visao-geral";
 // FORK MIA (.96): a nota fiscal pelo Asaas na confirmação e o lembrete do painel dele.
 import { NotaFiscalDoAsaas } from "@/components/admin/cobranca/NotaFiscalDoAsaas";
 import { lerConfiguracaoDaNota } from "@/lib/asaas-mia/nota";
+// FORK MIA (.98): a alíquota e os dias do calendário do repasse dos parceiros.
+import { ImpostoECalendarioDoRepasse } from "@/components/admin/parceiros/ImpostoECalendarioDoRepasse";
+import { lerConfiguracaoDaComissao } from "@/lib/parceiros/configuracao";
 
 export const metadata = { title: "Cobrança — Admin Plataforma" };
 export const dynamic = "force-dynamic";
@@ -61,6 +64,7 @@ export default async function CobrancaPage({ searchParams }: { searchParams: Pro
   const inicial: AbaDaCobranca = ABAS_DA_COBRANCA.find((a) => a === aba) ?? "visao-geral";
 
   const notaDoAsaas = await lerConfiguracaoDaNota(admin);
+  const comissaoDosParceiros = await lerConfiguracaoDaComissao(admin);
   const [planos, clientes, visao, tolerancia] = await Promise.all([
     admin.from("cobranca_planos").select(COLUNAS_DO_PLANO).order("nome"),
     admin
@@ -148,6 +152,7 @@ export default async function CobrancaPage({ searchParams }: { searchParams: Pro
             <div className="space-y-6">
               <ConexaoDaCobranca provedor={visao.provedor} modo={visao.modo} last4={visao.chaveLast4} urlDoWebhook={visao.urlDoWebhook} />
               <NotaFiscalDoAsaas inicial={notaDoAsaas} ehAsaas={visao.provedor === "asaas" || visao.provedor === null} />
+              <ImpostoECalendarioDoRepasse inicial={comissaoDosParceiros} />
             </div>
           ),
           regua: <ReguaDaCobranca tolerancia={tolerancia} />,

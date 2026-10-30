@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.97) · A CONFIGURAÇÃO DA COMISSÃO DOS PARCEIROS: a alíquota do
+ * FORK MIA (.98) · A CONFIGURAÇÃO DA COMISSÃO DOS PARCEIROS: a alíquota do
  * Simples (um campo só, para todo o sistema) e os dias do calendário do repasse
  * (fecha no dia 1, nota até o dia 5, Pix até o dia 10). Da INSTALAÇÃO: mora em
  * `platform_config` (`MIA_COMISSAO_DOS_PARCEIROS`, texto JSON, não é segredo),

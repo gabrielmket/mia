@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.97) · O REPASSE DO MÊS (decisões 2 e 3; docs/fork/cupons-e-parceiros.md, seção 6).
+ * FORK MIA (.98) · O REPASSE DO MÊS (decisões 2 e 3; docs/fork/cupons-e-parceiros.md, seção 6).
  *
  * O calendário, com os dias configuráveis em Admin › Cobrança:
  *   - dia 1: o sistema FECHA o mês anterior (as comissões ainda sem repasse, de
@@ -237,6 +237,7 @@ export async function anexarAoRepasse(
   if (!atual) return { ok: false, motivo: "nao_encontrado" };
   const repasse = atual as Record<string, unknown>;
   if (repasse.pago_em) return { ok: false, motivo: "ja_pago" };
+  const anterior = typeof repasse.anexo_path === "string" && repasse.anexo_path ? repasse.anexo_path : null;
   const caminho = `${String(repasse.parceiro_id)}/${String(repasse.competencia).slice(0, 7)}/${randomUUID()}.${EXTENSAO[p.tipo] ?? "bin"}`;
   const { error: erroDoArquivo } = await admin.storage.from("mia-repasses").upload(caminho, p.arquivo, { contentType: p.tipo, upsert: false });
   if (erroDoArquivo) return { ok: false, motivo: "falha_no_armazenamento" };
@@ -252,7 +253,7 @@ export async function anexarAoRepasse(
     await admin.storage.from("mia-repasses").remove([caminho]);
     return { ok: false, motivo: erroDaLinha ? "falha_no_banco" : "ja_pago" };
   }
-  if (typeof repasse.anexo_path === "string" && repasse.anexo_path) await admin.storage.from("mia-repasses").remove([repasse.anexo_path]);
+  if (anterior) await admin.storage.from("mia-repasses").remove([anterior]);
   return { ok: true, repasse: paraRepasse(gravado as Record<string, unknown>) };
 }
 

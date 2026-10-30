@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.97) · OS CUPONS NO BANCO (migration 9130; docs/fork/cupons-e-parceiros.md).
+ * FORK MIA (.98) · OS CUPONS NO BANCO (migration 9130; docs/fork/cupons-e-parceiros.md).
  *
  * Quem escreve é o servidor, com o cliente de serviço: a tela da Time (Admin ›
  * Cupons, com a verificação em duas etapas), o MCP de plataforma e o passo do

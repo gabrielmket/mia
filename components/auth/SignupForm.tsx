@@ -26,6 +26,9 @@ import type { CartaoDoPlano } from "@/lib/planos-mia/cadastro";
 // FORK MIA (.96): na entrada paga, quem assina e os dados fiscais (docs/fork/pagamento-no-inicio.md).
 import { CamposFiscais, FISCAIS_VAZIOS, type ValoresFiscais } from "@/components/pagamento-inicial/CamposFiscais";
 import { conferirDadosFiscais, faltasDosDadosFiscais } from "@/lib/dados-fiscais/regras";
+// FORK MIA (.98): o cupom do link ou digitado (docs/fork/cupons-e-parceiros.md).
+import { CupomNoCadastro } from "@/components/cupons/CupomNoCadastro";
+import type { CupomPublico } from "@/lib/cupons/publico";
 
 /**
  * Convite em curso: a conta está sendo criada para ACEITAR um convite, não para
@@ -44,6 +47,7 @@ export function SignupForm({
   planoInicial,
   cartoes = [],
   planoVeioDoLink = false,
+  cupomInicial = null,
 }: {
   convite?: ConviteDoSignup;
   planos?: readonly PlanoDoCadastro[];
@@ -53,6 +57,8 @@ export function SignupForm({
   cartoes?: readonly CartaoDoPlano[];
   /** FORK MIA (.90): o plano marcado veio do "?plano=" da página de preços. */
   planoVeioDoLink?: boolean;
+  /** FORK MIA (.98): o cupom do link ("?cupom=") ou guardado no navegador. */
+  cupomInicial?: CupomPublico | null;
 }) {
   const t = useT();
   const router = useRouter();
@@ -68,6 +74,9 @@ export function SignupForm({
   const [miaWhatsapp, setMiaWhatsapp] = useState("");
   const [miaFiscais, setMiaFiscais] = useState<ValoresFiscais>(FISCAIS_VAZIOS);
   const [miaErrosFiscais, setMiaErrosFiscais] = useState<Record<string, string>>({});
+  // FORK MIA (.98): o cupom em vigor na tela (válido no plano marcado, ou nulo).
+  const [miaCupom, setMiaCupom] = useState<CupomPublico | null>(cupomInicial);
+  const [miaCupomErro, setMiaCupomErro] = useState<string | null>(null);
 
   const {
     register,
@@ -100,8 +109,11 @@ export function SignupForm({
   const password = useWatch({ control, name: "password" });
   // FORK MIA (.96): o plano marcado é de entrada paga (0 dia de teste)?
   const planoMarcado = useWatch({ control, name: "cobranca_plan_id" });
+  // FORK MIA (.98): o cupom de dias grátis, válido no plano, faz o cadastro ser o do teste.
+  const cupomDeDiasNoPlano = miaCupom?.valido === true && miaCupom.beneficio === "dias" && typeof planoMarcado === "string" && miaCupom.planos.includes(planoMarcado);
   const entradaPaga =
     !convite &&
+    !cupomDeDiasNoPlano &&
     (cartoes.find((c) => c.id === planoMarcado)?.trial_dias ?? planos.find((p) => p.id === planoMarcado)?.trial_dias) === 0;
 
   const onSubmit = (values: SignupInput & { full_name: string }) => {
@@ -121,6 +133,9 @@ export function SignupForm({
           return;
         }
       }
+      // FORK MIA (.98): o cupom vai junto só quando vale no plano marcado.
+      const comCupom =
+        miaCupom?.valido === true && typeof values.cobranca_plan_id === "string" && miaCupom.planos.includes(values.cobranca_plan_id) ? { mia_cupom: miaCupom.codigo } : {};
       const entrada: SignupInput | SignupComConviteInput = convite
         ? {
             full_name: values.full_name,
@@ -129,8 +144,8 @@ export function SignupForm({
             password_confirm: values.password_confirm,
           }
         : entradaPaga
-          ? { ...values, mia_nome: miaNome, mia_fiscal: { ...miaFiscais, telefone: miaWhatsapp } }
-          : values;
+          ? { ...values, ...comCupom, mia_nome: miaNome, mia_fiscal: { ...miaFiscais, telefone: miaWhatsapp } }
+          : { ...values, ...comCupom };
       const res = await signUp(entrada, convite?.token);
       if (res.ok) {
         /**
@@ -165,6 +180,13 @@ export function SignupForm({
         const recusaDoPlano = (res.details?.cobranca_plan_id as string[] | undefined)?.[0];
         // FORK MIA (.96): o que falta da entrada paga, pela régua do servidor.
         const faltasDoServidor = res.details?.mia_fiscal as string[] | undefined;
+        // FORK MIA (.98): a recusa do cupom diz o motivo (vencido, esgotado, fora do plano).
+        const recusaDoCupom = (res.details?.mia_cupom as string[] | undefined)?.[0];
+        if (recusaDoCupom) {
+          setMiaCupomErro(recusaDoCupom);
+          setServerError(recusaDoCupom);
+          return;
+        }
         if (faltasDoServidor && faltasDoServidor.length > 0) {
           setServerError(`${t("Falta preencher:")} ${faltasDoServidor.map((f) => t(f)).join(", ")}.`);
           return;
@@ -329,6 +351,19 @@ export function SignupForm({
             ))}
           </select>
         </div>
+      )}
+      {/* FORK MIA (.98): o selo do cupom ou o campo "Tenho um cupom". */}
+      {!convite && planos.length > 0 && (
+        <CupomNoCadastro
+          cupom={miaCupom}
+          planoId={typeof planoMarcado === "string" ? planoMarcado : null}
+          planos={planos}
+          erroDoServidor={miaCupomErro}
+          aoMudar={(c) => {
+            setMiaCupom(c);
+            setMiaCupomErro(null);
+          }}
+        />
       )}
       {/* FORK MIA (.96): na entrada paga, os dados da empresa para a cobrança e a nota fiscal. */}
       {entradaPaga && (

@@ -15,6 +15,10 @@ import { lerCadastroNaTela, planoInicialDoSeletor } from "@/lib/cobranca/cadastr
 import { tituloDaTelaPublica } from "@/lib/i18n/titulo-da-tela-publica";
 // FORK MIA (.90): os planos em cartões e o "?plano=" da página de preços.
 import { lerCadastroEmCartoes } from "@/lib/planos-mia/cadastro";
+// FORK MIA (.98): o cupom do link, ou o guardado no navegador por 30 dias.
+import { cookies } from "next/headers";
+import { COOKIE_DO_CUPOM } from "@/lib/cupons/regras";
+import { lerCupomPublico } from "@/lib/cupons/publico";
 
 // A aba no idioma do visitante, como o corpo (`lib/i18n/titulo-da-tela-publica.ts`).
 export const generateMetadata = () => tituloDaTelaPublica((t) => t("Criar conta"));
@@ -44,9 +48,9 @@ export const generateMetadata = () => tituloDaTelaPublica((t) => t("Criar conta"
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ invite?: string; plano?: string }>;
+  searchParams: Promise<{ invite?: string; plano?: string; cupom?: string }>;
 }) {
-  const { invite, plano: planoDoLink } = await searchParams;
+  const { invite, plano: planoDoLink, cupom: cupomDoLink } = await searchParams;
   const payload = invite ? verifyInviteToken(invite) : null;
   const convite = invite && payload ? { token: invite, email: payload.email } : undefined;
   const conviteExpirado = Boolean(invite) && !payload;
@@ -79,6 +83,11 @@ export default async function SignupPage({
     planoInicialDoSeletor(planos, cadastro?.padraoId ?? null),
     typeof planoDoLink === "string" ? planoDoLink : null,
   );
+
+  // FORK MIA (.98): o cupom do link vale; sem link, o guardado no navegador. Só o que vale aparece.
+  const codigoDoCupom = typeof cupomDoLink === "string" ? cupomDoLink : (await cookies()).get(COOKIE_DO_CUPOM)?.value ?? null;
+  const cupomLido = !convite && planos.length > 0 && codigoDoCupom ? await lerCupomPublico(createAdminClient(), codigoDoCupom) : null;
+  const cupomInicial = cupomLido && (cupomLido.valido || typeof cupomDoLink === "string") ? cupomLido : null;
 
   // Convite VÁLIDO passa em qualquer modo — é o ponto inteiro do convite.
   const modo = convite ? null : await modoDeCadastro();
@@ -141,6 +150,7 @@ export default async function SignupPage({
         planoInicial={emCartoes.planoMarcado}
         cartoes={emCartoes.cartoes}
         planoVeioDoLink={emCartoes.planoMarcado !== undefined && !emCartoes.linkSemPlano && typeof planoDoLink === "string"}
+        cupomInicial={cupomInicial}
       />
       {/* O convite atravessa o Google na URL de retorno: sem ele, quem foi
           convidado e cria a conta com Google ganharia uma empresa própria. */}

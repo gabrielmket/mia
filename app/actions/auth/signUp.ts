@@ -22,6 +22,9 @@ import { env } from "@/lib/env";
 // FORK MIA (.96): o cadastro da entrada paga (docs/fork/pagamento-no-inicio.md).
 import { conferirCadastroDaEntradaPaga, type ConferenciaDaEntradaPaga } from "@/lib/pagamento-inicial/cadastro";
 import { guardarDadosDoCadastro } from "@/lib/dados-fiscais/banco";
+// FORK MIA (.98): o cupom do cadastro (docs/fork/cupons-e-parceiros.md).
+import { guardarCupomDoCadastro } from "@/lib/cupons/banco";
+import { conferirCupomDoCadastro, type ConferenciaDoCupomDoCadastro } from "@/lib/cupons/cadastro";
 
 export type SignUpResult =
   | {
@@ -170,8 +173,15 @@ export async function signUp(
   // FORK MIA (.96): no plano de ENTRADA PAGA, quem assina e os dados da empresa para a
   // cobrança e a nota fiscal são obrigatórios, conferidos de novo aqui (a tela é
   // adulterável). Plano com teste segue o cadastro de hoje.
-  let entradaPaga: ConferenciaDaEntradaPaga = { ok: true, entradaPaga: false };
+  // FORK MIA (.98): o cupom é conferido antes de criar a conta, com a frase certa. O de
+  // dias grátis faz o plano de entrada paga nascer no teste: o cadastro é o do teste.
+  let cupomDoCadastro: ConferenciaDoCupomDoCadastro = { ok: true, codigo: null, diasGratis: false };
   if (!convite) {
+    cupomDoCadastro = await conferirCupomDoCadastro(createAdminClient(), planoEscolhido, (parsed.data as SignupInput).mia_cupom);
+    if (!cupomDoCadastro.ok) return { ok: false, error: "validation_error", details: { mia_cupom: [cupomDoCadastro.mensagem] } };
+  }
+  let entradaPaga: ConferenciaDaEntradaPaga = { ok: true, entradaPaga: false };
+  if (!convite && !(cupomDoCadastro.ok && cupomDoCadastro.diasGratis)) {
     entradaPaga = await conferirCadastroDaEntradaPaga(createAdminClient(), planoEscolhido, parsed.data as SignupInput);
     if (!entradaPaga.ok) return { ok: false, error: "validation_error", details: entradaPaga.details };
   }
@@ -321,6 +331,10 @@ export async function signUp(
   // falha calada, e a resposta continua igual (anti-enumeração).
   if (entradaPaga.ok && entradaPaga.entradaPaga && data.user?.id) {
     await guardarDadosDoCadastro(createAdminClient(), data.user.id, entradaPaga.dados);
+  }
+  // FORK MIA (.98): o cupom espera a empresa nascer (o gatilho adiado da 9130 o aplica).
+  if (cupomDoCadastro.ok && cupomDoCadastro.codigo && data.user?.id) {
+    await guardarCupomDoCadastro(createAdminClient(), data.user.id, cupomDoCadastro.codigo);
   }
 
   await audit({

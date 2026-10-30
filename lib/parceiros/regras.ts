@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.97) · A RÉGUA DOS PARCEIROS, DA COMISSÃO E DO REPASSE, PURA
+ * FORK MIA (.98) · A RÉGUA DOS PARCEIROS, DA COMISSÃO E DO REPASSE, PURA
  * (protótipo "Cupons e parceiros", decisões 1 a 4, 10 e 11; docs/fork/cupons-e-parceiros.md).
  *
  * A comissão é sobre o LÍQUIDO (decisão 1): o valor pago (já com o desconto do
@@ -13,6 +13,8 @@ import { z } from "zod";
 import { documentoDoPagador } from "@/lib/cobranca/documento";
 
 export const MESES_DA_COMISSAO = [6, 12, 24] as const;
+/** A referência externa da cobrança avulsa do setup no Asaas. */
+export const referenciaDoSetup = (orgId: string) => `setup:${orgId}`;
 export type TipoDeDocumento = "cpf" | "cnpj";
 
 export interface ContaDaComissao {

@@ -155,6 +155,9 @@ npx vitest run
   `lib/dados-fiscais/`, `lib/asaas-mia/`, `lib/pagamento-inicial/` e
   `components/pagamento-inicial/`; os pontos de ligação no código do upstream estão em
   [`docs/fork/pagamento-no-inicio.md`](fork/pagamento-no-inicio.md), seção 10.
+  Os cupons, os parceiros e a comissão (.98: o desconto no Asaas, o setup de implantação, os repasses do mês) moram em
+  `lib/cupons/`, `lib/parceiros/`, `lib/setup-de-implantacao/` e `components/cupons/`; os pontos de ligação no código do
+  upstream estão em [`docs/fork/cupons-e-parceiros.md`](fork/cupons-e-parceiros.md), seção 12.
   A área de cobrança e o lado da Time (.96, segunda frente: as cobranças com a nota e o
   recibo, a troca do cartão, os dados fiscais, "A nota saiu errada", o funil e "Apagar o
   cadastro" em Empresas do cadastro) moram em `lib/area-de-cobranca/`,

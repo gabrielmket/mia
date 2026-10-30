@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **99** ferramentas no servidor: as 91 desta página e as 8 da migração
+São **105** ferramentas no servidor: as 97 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -761,6 +761,26 @@ cadastro sem pagamento fica na tela, com a verificação em duas etapas. A prova
 O MCP não paga, não gera cobrança, não cadastra cartão, não muda os dados fiscais e não lê o
 cartão (o número nunca é gravado).
 
+### Cupons, parceiros e comissão (.98)
+
+Função do fork ([`cupons-e-parceiros.md`](cupons-e-parceiros.md); protótipo aprovado em 27/10/2026), e entra no MCP na
+mesma versão: **seis ferramentas novas** (a lista vai de 99 a 105). A prova está em
+`tests/unit/mcp-de-implantacao-cupons-e-parceiros.test.ts`, e a CONTAGEM no teste da cobrança. Nenhuma operação nova: o
+cupom é do catálogo comercial (`gerir_planos`), o parceiro e o repasse são da cobrança (`gerir_cobranca`).
+
+| ferramenta | o que faz | operação |
+|---|---|---|
+| `plataforma_garantir_parceiro` | cria ou muda pelo CPF ou CNPJ: nome, e-mail do extrato, chave Pix, comissão da mensalidade (% e meses: 6, 12, 24 ou `null` = enquanto pagar) e do setup (%). Mudar a comissão vale só para os clientes novos. A mesma entrada não regrava | `gerir_cobranca` |
+| `plataforma_ver_parceiros` | as comissões, os cupons, quantos clientes, o que pagaram no mês, o que entra no próximo fechamento; com `parceiro_id`, os clientes com a comissão fixada. Documento e Pix mascarados | leitura |
+| `plataforma_garantir_cupom` | cria, muda ou pausa pelo código: desconto em % ou R$ por 1, 3, 6, 12 ou todas as mensalidades, ou dias grátis; desconto no setup; planos (nome ou id); validade; limite; parceiro; comissão própria; `ativo`. Devolve o link que o parceiro divulga | `gerir_planos` |
+| `plataforma_ver_cupons` | o que dá, o setup, os planos, a validade, os usos, a situação (`ativo`, `pausado`, `vencido`, `esgotado`), o parceiro e o link | leitura |
+| `plataforma_ver_repasses` | o mês (`competencia: "AAAA-MM"`; sem ela, o último fechado), por parceiro: mensalidades e setups separados (pago, imposto, taxa, líquido, comissão), estornos, total, extrato, anexo e o que já foi pago; `situacao` é `aguardando_nota`, `pronto_para_pagar` ou `pago` | leitura |
+| `plataforma_marcar_repasse_pago` | marca o Pix feito por fora, com a data e o autor do token. Sem a nota ou o recibo anexado, recusa. Repetir não muda | `gerir_cobranca` |
+| `plataforma_ver_cliente` (cresce) | `cupom_e_parceiro`: o cupom (o que dá, desde quando, se o desconto acabou), o parceiro e a comissão fixada, o setup vendido e o total das comissões. Sem documento nem Pix | leitura |
+
+O MCP não manda dinheiro, não anexa a nota ou o recibo (só pela tela, com o arquivo), não põe nem troca o cupom ou o parceiro de
+um cliente (na ficha da empresa, com a verificação em duas etapas) e não anonimiza parceiro.
+
 ### A área de cobrança (.96, segunda frente)
 
 Função do fork ([`area-de-cobranca.md`](area-de-cobranca.md); protótipo "Pagamento no início",
@@ -952,7 +972,7 @@ Testes:
 | arquivo | o que mede |
 |---|---|
 | `tests/unit/mcp-de-implantacao-assistente.test.ts` | as cinco ferramentas do assistente da MIA (.88): o que gravam, a reexecução, a operação própria do responder, a entrega da resposta no assistente, no sino e no e-mail, a recusa do chamado da demonstração, e as cinco dele (a CONTAGEM da lista mora no teste do e-mail marketing) |
-| `tests/unit/mcp-de-implantacao-cobranca.test.ts` | as nove ferramentas da cobrança da jornada de assinatura (.90) e a CONTAGEM da lista (99 desde a .94, com a .93): as três caixinhas novas e o raio de cada uma, os exemplos que passam no esquema, o que o MCP
+| `tests/unit/mcp-de-implantacao-cobranca.test.ts` | as nove ferramentas da cobrança da jornada de assinatura (.90) e a CONTAGEM da lista (105 desde a .98): as três caixinhas novas e o raio de cada uma, os exemplos que passam no esquema, o que o MCP
 | `tests/unit/mcp-de-implantacao-email-marketing.test.ts` | as nove ferramentas do e-mail marketing (.89): leitura livre e as duas caixinhas novas, o MCP que nunca dispara (pelo código-fonte e pelo banco: rascunho, ninguém na fila), o teste só para a equipe, a demonstração e o módulo que recusam o teste, a configuração que não duplica, a supressão que só acrescenta, o preço por e-mail que não mexe no da mensagem e a área nova do checklist |
 | `tests/unit/mcp-de-implantacao-primeiros-passos.test.ts` | as duas ferramentas das propostas do assistente (.91) e o rótulo do cliente em `plataforma_ver_implantacao`: a empresa nova com as três colunas e o que não se aplica, o número oficial que espera a Time, a empresa que já roda que não aparece no Início, e o caminho inteiro de uma proposta (preparar não grava a peça, aplicar adota o quadro e cria em rascunho, recusar não cria nada, o token sem a operação não decide, e o follow-up sai junto com o agente publicado) |
 | `tests/unit/mcp-de-implantacao-trilhas.test.ts` | as quatro ferramentas do "Me mostra como" e de onde os clientes travam (.93) e as três que crescem: o progresso por pessoa sem conversa, desligar e recomendar com a recusa da desligada, recomeçar o progresso por e-mail, o painel sem quem perguntou, a melhoria que não duplica pelo título, e as caixinhas de cada escrita |

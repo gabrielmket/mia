@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.97) · AS COBRANÇAS DO CLIENTE PARA O CUPOM, A COMISSÃO E O SETUP
+ * FORK MIA (.98) · AS COBRANÇAS DO CLIENTE PARA O CUPOM, A COMISSÃO E O SETUP
  * (docs/fork/cupons-e-parceiros.md).
  *
  * Ao lado de `./cobrancas.ts` (.96), com as mesmas regras de `./api.ts`: a chave

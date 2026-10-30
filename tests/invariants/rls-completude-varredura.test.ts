@@ -484,6 +484,16 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "recebem permission denied (42501); as funções que gravam (seguir o plano, " +
       "confirmar a compra) não são da sessão; a compra paga lança uma vez só.",
   })),
+  // Fork MIA, 9130 a 9132 · cupons, parceiros e comissão (.98): o cupom da empresa, o
+  // setup vendido e as comissões. Só o servidor; nem o administrador da empresa lê.
+  ...["mia_cupom_da_empresa", "mia_setup_da_empresa", "mia_comissoes"].map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/cupons-e-parceiros.test.ts · RLS ligada e nenhuma política: anon e a " +
+      "sessão recebem permission denied, inclusive o administrador da própria empresa, com o " +
+      "controle positivo (a linha existe para o servidor). A tela do cliente lê pelo servidor, " +
+      "com a organização da sessão.",
+  })),
   // Fork MIA, 9120 e 9121 · o pagamento no início (.96): os dados fiscais, o
   // retrato do primeiro pagamento e a nota fiscal pedida na confirmação.
   ...["mia_dados_fiscais", "mia_pagamento_inicial", "mia_nota_da_assinatura"].map((tabela) => ({

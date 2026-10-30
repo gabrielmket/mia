@@ -180,18 +180,18 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
   // empresa paga (atribuir, link, prazo, isenção) e em QUEM ENTRA (os pedidos).
   {
     chave: "gerir_planos",
-    rotulo: "Criar e ajustar os planos e os pacotes de crédito",
+    rotulo: "Criar e ajustar os planos, os pacotes de crédito e os cupons",
     raio:
       "Cria e ajusta os planos de QUALQUER cliente novo: preço, teste, limites, teto de IA, os módulos que cada plano liga, o preço do Broadcast, qual é o " +
-      "do cadastro e quais aparecem na página de preços; e os pacotes de crédito por Pix. Ligar módulo num plano liga para todas as empresas dele na hora. " +
+      "do cadastro e quais aparecem na página de preços; os pacotes de crédito por Pix; e os cupons de desconto ou de dias grátis (.98). Ligar módulo num plano liga para todas as empresas dele na hora. " +
       "Um token vazado põe um plano de R$ 5 como padrão do cadastro ou dá Broadcast a quem não pagou por ele. Plano já assinado não muda de preço nem perde módulo.",
   },
   {
     chave: "gerir_cobranca",
-    rotulo: "Atribuir plano, gerar link, dar prazo e isentar",
+    rotulo: "Atribuir plano, gerar link, dar prazo, isentar, parceiros e repasses",
     raio:
       "Atribui e troca o plano de QUALQUER empresa (inclusive o escondido, negociado), gera o link de pagamento dela, dá prazo de até 60 dias e torna isenta " +
-      "(não paga e não tem limites). Um token vazado isenta todo mundo ou põe uma empresa num plano que ela não contratou. Não marca nada como pago.",
+      "(não paga e não tem limites). Desde a .98, cadastra parceiros e marca como pago o repasse que a Time já fez por fora, se a nota ou o recibo estiver anexado. Um token vazado isenta todo mundo ou põe uma empresa num plano que ela não contratou. Não marca mensalidade como paga e não manda dinheiro.",
   },
   {
     chave: "decidir_cadastro",
