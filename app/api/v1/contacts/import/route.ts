@@ -10,7 +10,9 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * Desfecho POR LINHA, nunca do lote inteiro:
  *   - linha inválida é pulada com motivo nominal (vem no response);
  *   - contato que já existe (telefone/e-mail/CPF da org) é contado como
- *     duplicado, não como erro;
+ *     duplicado, não como erro. FORK MIA (.97): antes de contar, ele ganha o
+ *     telefone ou o e-mail que lhe faltava, se a linha traz e é livre
+ *     (`lib/contacts/completar-na-importacao.ts`);
  *   - as demais linhas seguem mesmo se uma falhar — uma planilha de 400 nomes
  *     não pode morrer inteira pelo telefone malformado da linha 7.
  *
@@ -27,8 +29,16 @@ import { audit } from "@/lib/audit";
 import { camposCpfParaGravar } from "@/lib/contacts/cpf";
 import { traduzir } from "@/lib/i18n/dicionario";
 import {
+  COLUNAS_DO_CONTATO_NA_BASE,
+  ContatosConhecidos,
+  decidirLinha,
+  fraseDoAviso,
+  type ContatoNaBase,
+} from "@/lib/contacts/completar-na-importacao";
+import {
+  colunasIgnoradas,
   CSV_MAX_BYTES,
-  CSV_MAX_DATA_ROWS,
+  CSV_MAX_CONTATOS_POR_ARQUIVO,
   decodificarCsv,
   mapHeader,
   mapLinha,
@@ -37,6 +47,7 @@ import {
 import { contactCreateSchemaDoPais } from "@/lib/schemas";
 import { perfilDaOrganizacao } from "@/lib/legal/perfil-do-pais";
 import { phoneLookupVariants } from "@/lib/channels/phone-variants";
+import { buscaEmLotes } from "@/lib/supabase/em-lotes";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +64,19 @@ interface ImportSummary {
   imported: number;
   skipped_duplicates: number;
   errors: LinhaErro[];
+  // FORK MIA (.97): o resumo diz o que aconteceu com o telefone.
+  /** Contatos que já existiam e ganharam o telefone que faltava. */
+  telefones_completados: number;
+  /** Contatos que já existiam e ganharam o e-mail que faltava. */
+  emails_completados: number;
+  /** Linhas válidas sem telefone: entram na base e não recebem WhatsApp. */
+  sem_telefone: number;
+  /** Nenhuma coluna do arquivo foi reconhecida como telefone. */
+  sem_coluna_de_telefone: boolean;
+  /** As colunas do arquivo que a importação não leu. */
+  colunas_ignoradas: string[];
+  /** O que não é erro, mas quem importa precisa saber (por linha). */
+  avisos: LinhaErro[];
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
@@ -134,10 +158,11 @@ export async function POST(req: NextRequest): Promise<Response> {
   const indices = mapeado.indices;
 
   const dataRows = rows.slice(1);
-  if (dataRows.length > CSV_MAX_DATA_ROWS) {
+  // FORK MIA (.97): o teto próprio dos contatos (ver a constante).
+  if (dataRows.length > CSV_MAX_CONTATOS_POR_ARQUIVO) {
     return fail(
       "validation_failed",
-      `${t("Máximo de")} ${CSV_MAX_DATA_ROWS} ${t("linhas por importação — divida a planilha.")}`,
+      `${t("Máximo de")} ${CSV_MAX_CONTATOS_POR_ARQUIVO} ${t("linhas por importação — divida a planilha.")}`,
       422,
       { requestId },
     );
@@ -170,12 +195,23 @@ export async function POST(req: NextRequest): Promise<Response> {
     candidatos.push({ linha, contato: parsed.data as Record<string, unknown> });
   }
 
+  // FORK MIA (.97): o que o resumo diz sobre o arquivo, com ou sem gravação.
+  const sobreOArquivo = {
+    sem_telefone: candidatos.filter((c) => !c.contato.phone_number).length,
+    sem_coluna_de_telefone: indices.phone_number === undefined,
+    colunas_ignoradas: colunasIgnoradas(header, indices),
+  };
+
   if (candidatos.length === 0) {
     const resumo: ImportSummary = {
       total_linhas: dataRows.length,
       imported: 0,
       skipped_duplicates: 0,
       errors,
+      telefones_completados: 0,
+      emails_completados: 0,
+      avisos: [],
+      ...sobreOArquivo,
     };
     return ok(resumo, { requestId });
   }
@@ -192,45 +228,118 @@ export async function POST(req: NextRequest): Promise<Response> {
     .map((c) => c.contato.email as string | undefined)
     .filter((e): e is string => typeof e === "string");
 
-  const existentes = new Set<string>();
-  if (phones.length > 0) {
-    const lookup = [...new Set(phones.flatMap((p) => phoneLookupVariants(p)))];
-    const { data } = await supabase
-      .from("contacts")
-      .select("phone_number")
-      .eq("organization_id", orgId)
-      .not("phone_number", "is", null)
-      .in("phone_number", lookup);
-    for (const r of data ?? []) {
-      for (const v of phoneLookupVariants((r as { phone_number: string }).phone_number)) {
-        existentes.add(`tel:${v}`);
-      }
+  // FORK MIA (.97): a leitura traz o CONTATO, e não só o identificador, porque
+  // quem já existe pode ser completado. E vem em LOTES: planilha de 500 e-mails
+  // num `.in()` só passa do teto da URL (`lib/supabase/em-lotes.ts`), e o erro
+  // era ignorado aqui: todos caíam no 23505 e viravam duplicado sem nada completar.
+  // Sem saber quem existe não há como decidir, então a leitura que falha recusa
+  // antes de gravar a primeira linha.
+  //
+  // `is_merged_into` é o conserto do upstream (#3620, EPIC-05): ficha absorvida
+  // por mesclagem não é contato vivo, e o índice único também não a conta.
+  const conhecidos = new ContatosConhecidos();
+  const lidos = await Promise.all([
+    buscaEmLotes<ContatoNaBase>([...new Set(phones.flatMap((p) => phoneLookupVariants(p)))], (lote) =>
+      supabase
+        .from("contacts")
+        .select(COLUNAS_DO_CONTATO_NA_BASE)
+        .eq("organization_id", orgId)
+        .is("is_merged_into", null)
+        .not("phone_number", "is", null)
+        .in("phone_number", lote),
+    ),
+    buscaEmLotes<ContatoNaBase>([...new Set(emails.map((e) => e.toLowerCase()))], (lote) =>
+      supabase
+        .from("contacts")
+        .select(COLUNAS_DO_CONTATO_NA_BASE)
+        .eq("organization_id", orgId)
+        .is("is_merged_into", null)
+        .in("email_normalized", lote),
+    ),
+  ]);
+  for (const leitura of lidos) {
+    if (leitura.error) {
+      return fail("query_failed", t("Não consegui conferir quem já está na base. Tente de novo."), 500, {
+        requestId,
+      });
     }
-  }
-  if (emails.length > 0) {
-    const { data } = await supabase
-      .from("contacts")
-      .select("email_normalized")
-      .eq("organization_id", orgId)
-      .in("email_normalized", emails.map((e) => e.toLowerCase()));
-    for (const r of data ?? []) existentes.add(`email:${(r as { email_normalized: string }).email_normalized}`);
+    for (const contato of leitura.data) conhecidos.lembrar(contato);
   }
 
   // ─── Insert linha a linha com desfecho individual ─────────────────────────
   let imported = 0;
   let skippedDuplicates = 0;
+  let telefonesCompletados = 0;
+  let emailsCompletados = 0;
+  const avisos: LinhaErro[] = [];
 
   for (const { linha, contato } of candidatos) {
     const phone = contato.phone_number as string | undefined;
     const email = contato.email as string | undefined;
-    // Só contatos existentes ou gravados com sucesso reservam identificadores.
+    // Só contatos existentes ou gravados com sucesso são conhecidos.
     // Cada repetição chega aqui para ter desfecho; uma linha inválida ou que
     // falhou no insert não pode descartar outra válida do mesmo arquivo.
-    if (
-      (phone && phoneLookupVariants(phone).some((v) => existentes.has(`tel:${v}`))) ||
-      (email && existentes.has(`email:${email.toLowerCase()}`))
-    ) {
+    const desfecho = decidirLinha({ phone, email }, conhecidos);
+    if (desfecho.tipo !== "criar" && desfecho.aviso) {
+      avisos.push({ linha, motivo: fraseDoAviso(desfecho.aviso, t) });
+    }
+    if (desfecho.tipo === "duplicado") {
       skippedDuplicates += 1;
+      continue;
+    }
+    if (desfecho.tipo === "completar") {
+      // FORK MIA (.97): só o que estava vazio, e sem `contact.phone_added`: a
+      // importação não dispara a automação de "ganhou um telefone", para não
+      // virar um disparo em massa.
+      const { data: completado, error: erroAoCompletar } = await supabase
+        .from("contacts")
+        .update({ ...desfecho.campos, updated_at: new Date().toISOString() })
+        .eq("organization_id", orgId)
+        .eq("id", desfecho.contato.id)
+        .select(COLUNAS_DO_CONTATO_NA_BASE)
+        .maybeSingle();
+      if (erroAoCompletar?.code === "23505" || (!erroAoCompletar && !completado)) {
+        // Outro contato pegou o dado entre a leitura e a gravação.
+        skippedDuplicates += 1;
+        continue;
+      }
+      if (erroAoCompletar) {
+        errors.push({ linha, motivo: erroAoCompletar.message });
+        continue;
+      }
+      conhecidos.lembrar(completado as ContatoNaBase);
+      if (desfecho.campos.phone_number) telefonesCompletados += 1;
+      if (desfecho.campos.email) emailsCompletados += 1;
+      // A régua L-06 da edição pela ficha: quem, o quê e de quê para quê.
+      await audit({
+        action: "contact.updated",
+        actorUserId: user.id,
+        organizationId: orgId,
+        resourceType: "contact",
+        resourceId: desfecho.contato.id,
+        requestId,
+        metadata: {
+          actor_type: "user",
+          origem: SOURCE_IMPORT_CSV,
+          fields: Object.keys(desfecho.campos),
+          ...(desfecho.campos.phone_number
+            ? { old_phone_number: null, new_phone_number: desfecho.campos.phone_number }
+            : {}),
+          ...(desfecho.campos.email ? { old_email: null, new_email: desfecho.campos.email } : {}),
+        },
+      });
+      await supabase
+        .rpc("emit_event", {
+          p_event_type: "contact.updated",
+          p_entity_kind: "contact",
+          p_entity_id: desfecho.contato.id,
+          p_payload: { fields: Object.keys(desfecho.campos) },
+          p_metadata: { request_id: requestId, actor_type: "user", source: SOURCE_IMPORT_CSV },
+          p_organization_id: orgId,
+        })
+        .then(({ error }) => {
+          if (error) console.error("[contacts.import] emit_event failed", error.message);
+        });
       continue;
     }
 
@@ -272,8 +381,11 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
 
     imported += 1;
-    if (phone) existentes.add(`tel:${phone}`);
-    if (email) existentes.add(`email:${email.toLowerCase()}`);
+    conhecidos.lembrar({
+      id: (criado as { id: string }).id,
+      phone_number: phone ?? null,
+      email_normalized: email?.toLowerCase() ?? null,
+    });
 
     // Mesmo evento do create unitário — quem consome `contact.created`
     // (workers, métricas) trata importado e manual igual.
@@ -309,6 +421,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       imported,
       skipped_duplicates: skippedDuplicates,
       erros: errors.length,
+      // FORK MIA (.97)
+      telefones_completados: telefonesCompletados,
+      emails_completados: emailsCompletados,
+      sem_telefone: sobreOArquivo.sem_telefone,
     },
   });
 
@@ -317,6 +433,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     imported,
     skipped_duplicates: skippedDuplicates,
     errors,
+    telefones_completados: telefonesCompletados,
+    emails_completados: emailsCompletados,
+    avisos,
+    ...sobreOArquivo,
   };
   return ok(resumo, { requestId });
 }
