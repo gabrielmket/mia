@@ -5,14 +5,22 @@
  * controle que não leva a nada.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ContactsListClient } from "@/app/app/contacts/_client";
+import { apiClient } from "@/lib/api/client";
 import type { Contact } from "@/lib/types/contacts";
 
 let podeEditar = true;
+// FORK MIA (.97): a lista tem mais do que o carregado.
+let temMais = false;
+
+vi.mock("@/lib/api/client", () => ({
+  apiClient: { get: vi.fn(async () => ({ data: [], meta: { total: 565 } })), post: vi.fn() },
+}));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 vi.mock("@/hooks/auth/AuthProvider", () => ({
   useActiveOrg: () => ({ orgId: "org-1", role: "viewer", cliente_pela_agenda: false }),
@@ -66,7 +74,7 @@ vi.mock("@/hooks/contacts/useContactList", () => ({
     isLoading: false,
     isError: false,
     data: { pages: [{ data: [CONTATO, { ...CONTATO, id: "c-2", name: "Rui Lima" }] }] },
-    hasNextPage: false,
+    hasNextPage: temMais,
   }),
 }));
 
@@ -83,6 +91,8 @@ const caixas = () => screen.queryAllByRole("checkbox", { name: /^Selecionar/ });
 
 beforeEach(() => {
   podeEditar = true;
+  temMais = false;
+  vi.mocked(apiClient.post).mockReset();
 });
 
 describe("caixas de seleção da lista de contatos", () => {
@@ -111,3 +121,83 @@ describe("caixas de seleção da lista de contatos", () => {
     for (const caixa of caixas()) expect(caixa).toHaveAttribute("aria-checked", "true");
   });
 });
+
+/**
+ * FORK MIA (.97) — "Selecionar todos os N contatos deste filtro".
+ *
+ * Etiquetar parava em 100: a seleção alcançava só o que estava na tela.
+ */
+describe("selecionar todos do filtro", () => {
+  const marcarVisiveis = async (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(screen.getByRole("button", { name: "Selecionar todos os contatos visíveis" }));
+
+  it("com tudo carregado, não há o que estender: nenhuma faixa", async () => {
+    const user = userEvent.setup();
+    renderLista();
+    await marcarVisiveis(user);
+    expect(screen.queryByTestId("faixa-selecao-do-filtro")).toBeNull();
+  });
+
+  it("sem marcar a página, a faixa não aparece, e a conta não é pedida", () => {
+    temMais = true;
+    vi.mocked(apiClient.get).mockClear();
+    renderLista();
+    expect(screen.queryByTestId("faixa-selecao-do-filtro")).toBeNull();
+    expect(apiClient.get).not.toHaveBeenCalledWith(expect.stringContaining("com_total"));
+  });
+
+  it("marca a página, oferece estender com o total, e a barra passa a dizer o total", async () => {
+    temMais = true;
+    const user = userEvent.setup();
+    renderLista();
+    await marcarVisiveis(user);
+
+    expect(screen.getByText("Os 2 contatos carregados estão selecionados.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(apiClient.get).toHaveBeenCalledWith(expect.stringMatching(/\/api\/v1\/contacts\?limit=1&com_total=true/)),
+    );
+    await user.click(await screen.findByTestId("selecionar-todos-do-filtro"));
+
+    expect(screen.getByText("565 contatos selecionados")).toBeInTheDocument();
+    expect(screen.getByText("Todos os 565 contatos deste filtro estão selecionados.")).toBeInTheDocument();
+  });
+
+  it("etiquetar o filtro inteiro manda o filtro, e não os ids da tela", async () => {
+    temMais = true;
+    vi.mocked(apiClient.post).mockResolvedValue({
+      data: { feitos: 565, recusados: 0, recusas: [], processados: 565, cursor: null, has_more: false },
+    });
+    const user = userEvent.setup();
+    renderLista();
+    await marcarVisiveis(user);
+    await user.click(await screen.findByTestId("selecionar-todos-do-filtro"));
+    await user.click(screen.getByTestId("lote-mais-acoes"));
+    await user.click(await screen.findByTestId("lote-adicionar-etiqueta"));
+    expect(await screen.findByTestId("lote-alcance-do-filtro")).toBeInTheDocument();
+    await user.type(screen.getByTestId("lote-tag-input"), "Leads Odonto JHS");
+    await user.click(screen.getByTestId("lote-tag-confirmar"));
+
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalled());
+    expect(apiClient.post).toHaveBeenCalledWith(
+      "/api/v1/contacts/bulk/filtro",
+      expect.objectContaining({ action: "tag", op: "add", tag: "Leads Odonto JHS", filtro: {} }),
+    );
+    // No fim a seleção sai toda, e a faixa junto.
+    await waitFor(() => expect(screen.queryByTestId("faixa-selecao-do-filtro")).toBeNull());
+  });
+
+  it("desmarcar uma linha sai do filtro inteiro", async () => {
+    temMais = true;
+    const user = userEvent.setup();
+    renderLista();
+    await marcarVisiveis(user);
+    await user.click(await screen.findByTestId("selecionar-todos-do-filtro"));
+    expect(screen.getByText("Todos os 565 contatos deste filtro estão selecionados.")).toBeInTheDocument();
+
+    await user.click(caixas()[1]!);
+
+    expect(screen.queryByText("Todos os 565 contatos deste filtro estão selecionados.")).toBeNull();
+    expect(screen.getByText("1 contato selecionado")).toBeInTheDocument();
+  });
+});
+

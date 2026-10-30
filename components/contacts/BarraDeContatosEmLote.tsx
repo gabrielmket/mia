@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useT } from "@/hooks/i18n/useT";
+import type { ProgressoDoLote } from "@/lib/contacts/lote-em-partes";
 import { Check, PencilSimple, Tag, Users, X } from "@/lib/ui/icons";
 
 interface Props {
@@ -46,6 +47,10 @@ interface Props {
   onMudarResponsavel?: (donoUserId: string) => void;
   onPreencherCampo: (chave: string, valor: string) => void;
   onLimpar: () => void;
+  /** FORK MIA (.97): a seleção vale para o filtro inteiro, e não só para as linhas marcadas. */
+  deFiltroInteiro?: boolean;
+  /** FORK MIA (.97): a ação em partes está andando. */
+  progresso?: ProgressoDoLote | null;
 }
 
 /**
@@ -72,6 +77,8 @@ export function BarraDeContatosEmLote({
   onMudarResponsavel,
   onPreencherCampo,
   onLimpar,
+  deFiltroInteiro = false,
+  progresso = null,
 }: Props) {
   const t = useT();
   /** Um diálogo só para as duas faces da etiqueta: `add` ou `remove`. */
@@ -130,6 +137,18 @@ export function BarraDeContatosEmLote({
           ? t("1 contato selecionado")
           : `${quantidade} ${t("contatos selecionados")}`}
       </span>
+      {/* FORK MIA (.97): a ação em partes diz até onde foi; fechar a tela para o que falta. */}
+      {progresso && (
+        <span className="text-xs text-muted-foreground" role="status" data-testid="lote-progresso">
+          {progresso.total === null
+            ? t("{n} contatos já processados").replace("{n}", String(progresso.processados))
+            : t("{n} de {total} contatos já processados")
+                .replace("{n}", String(progresso.processados))
+                .replace("{total}", String(progresso.total))}
+          {" · "}
+          {t("Não feche esta tela até terminar.")}
+        </span>
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button size="sm" variant="outline" disabled={pendente} data-testid="lote-mais-acoes">
@@ -197,6 +216,14 @@ export function BarraDeContatosEmLote({
               {etiquetaAberta === "remove"
                 ? t("A etiqueta sai dos contatos selecionados pelo mesmo caminho da edição individual, com auditoria por contato.")
                 : t("A etiqueta entra nos contatos selecionados pelo mesmo caminho da edição individual, com auditoria por contato.")}
+              {/* FORK MIA (.97): o alcance dito antes do clique. */}
+              {deFiltroInteiro && (
+                <span className="mt-2 block font-medium text-foreground" data-testid="lote-alcance-do-filtro">
+                  {t("Vale para {n} contatos deste filtro, e não só para os da tela.").replace("{n}", String(quantidade))}{" "}
+                  {etiquetaAberta !== "remove" &&
+                    t("Automação que olha a etiqueta nova roda para cada um.")}
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
@@ -236,6 +263,11 @@ export function BarraDeContatosEmLote({
             <DialogTitle>{t("Mudar responsável")}</DialogTitle>
             <DialogDescription>
               {t("Cada contato é posto na carteira pelo mesmo caminho da ficha, e o dono é validado um a um.")}
+              {deFiltroInteiro && (
+                <span className="mt-2 block font-medium text-foreground">
+                  {t("Vale para {n} contatos deste filtro, e não só para os da tela.").replace("{n}", String(quantidade))}
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
@@ -283,6 +315,11 @@ export function BarraDeContatosEmLote({
             <DialogTitle>{t("Preencher campo personalizado")}</DialogTitle>
             <DialogDescription>
               {t("O campo é gravado no mesmo caminho da edição individual; os outros campos do contato permanecem.")}
+              {deFiltroInteiro && (
+                <span className="mt-2 block font-medium text-foreground">
+                  {t("Vale para {n} contatos deste filtro, e não só para os da tela.").replace("{n}", String(quantidade))}
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
