@@ -268,7 +268,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       template: dados.template_name,
       // FORK MIA (.97): a pergunta que produziu a lista e quem ficou de fora. Sem
       // isto, um "0 destinatários" de ontem não tem como ser explicado hoje.
-      filtro: { etiquetas: dados.tags, etapas: dados.etapas, funil: dados.funil ?? null },
+      filtro: { etiquetas: dados.tags, etapas: dados.etapas, ...(dados.funil ? { funil: dados.funil } : {}) },
       fora: {
         sem_telefone: peneira.semTelefone,
         repetidos: peneira.repetidos,
