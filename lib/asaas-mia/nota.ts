@@ -39,8 +39,7 @@ const impostosSchema = z.object({
 
 /**
  * FORK MIA (.98): o serviço e os impostos do SETUP de implantação, separados
- * dos da mensalidade (o Gabriel usa o item 17.06 a 2% para "Setup de
- * implementação"). Opcional: sem ele, a nota do setup não sai sozinha e a
+ * dos da mensalidade. Opcional: sem ele, a nota do setup não sai sozinha e a
  * Conexão avisa (docs/fork/cupons-e-parceiros.md).
  */
 const servicoDoSetupSchema = z

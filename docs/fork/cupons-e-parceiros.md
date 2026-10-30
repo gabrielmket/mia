@@ -104,7 +104,7 @@ mensalidade não se desfaz. Desmarcar antes de pagar cancela a cobrança. O desc
 
 A nota do setup é pedida na confirmação do pagamento, com o **serviço e os impostos próprios**: a
 configuração da nota da Conexão ganhou o bloco "Nota do setup de implantação" (`setup` dentro de
-`MIA_NOTA_FISCAL_DO_ASAAS`; o Gabriel usa o item 17.06 a 2%). Sem ele, a nota do setup não sai sozinha, e
+`MIA_NOTA_FISCAL_DO_ASAAS`). Sem ele, a nota do setup não sai sozinha, e
 a ficha da empresa avisa. Falhas são repetidas até 5 vezes pela rodada.
 
 ## 5. A comissão, sobre o líquido
