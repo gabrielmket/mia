@@ -337,7 +337,7 @@ export function SignupForm({
       )}
       {/* FORK MIA (.90): com os cartões, eles tomam o lugar do seletor (o mesmo campo). */}
       {!convite && cartoes.length > 0 && (
-        <CartoesDoPlano cartoes={cartoes} registro={register("cobranca_plan_id")} veioDoLink={planoVeioDoLink} />
+        <CartoesDoPlano cartoes={cartoes} registro={register("cobranca_plan_id")} veioDoLink={planoVeioDoLink} cupom={miaCupom} />
       )}
       {!convite && planos.length > 0 && cartoes.length === 0 && (
         <div className="space-y-1.5">

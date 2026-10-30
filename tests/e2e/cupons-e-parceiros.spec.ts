@@ -104,6 +104,9 @@ test("[P0] cupom do parceiro: criado no Admin, desconto no link e guardado até 
     }).toBe(true);
     await pv.goto(`/signup?plano=${planoId}`);
     await expect(pv.getByText(CODIGO).first(), "o cupom guardado não chegou ao cadastro").toBeVisible();
+    const cartaoDoPlano = pv.locator(`[data-plano-do-cadastro="${planoId}"]`);
+    await expect(cartaoDoPlano.getByText(/R\$\s*80,00/), "o cartão do plano sem o preço com o cupom").toBeVisible();
+    await expect(cartaoDoPlano.locator(".line-through", { hasText: /R\$\s*100,00/ }), "o cartão do plano sem o preço cheio riscado").toBeVisible();
     await pv.screenshot({ path: `${EVIDENCIA}/4-cadastro-com-cupom.png`, fullPage: true });
 
     // ── 4. Cupom que não existe não dá desconto nem derruba a página ────

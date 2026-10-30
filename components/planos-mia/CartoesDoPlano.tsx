@@ -3,6 +3,8 @@
 import type { UseFormRegisterReturn } from "react-hook-form";
 
 import { useT } from "@/hooks/i18n/useT";
+import type { CupomPublico } from "@/lib/cupons/publico";
+import { mensalidadeComCupom, textoDoPeriodo } from "@/lib/cupons/regras";
 import { useIdioma } from "@/lib/i18n/IdiomaProvider";
 import { ROTULO_DO_MODULO_DO_PLANO } from "@/lib/planos-mia/catalogo";
 import type { CartaoDoPlano } from "@/lib/planos-mia/cadastro";
@@ -12,15 +14,20 @@ import type { CartaoDoPlano } from "@/lib/planos-mia/cadastro";
  * tela 2): limites, módulos e "cerca de N conversas", nunca dólar. O valor
  * escolhido é o mesmo campo `cobranca_plan_id` do seletor do upstream, e quem o
  * confere é a action do cadastro.
+ *
+ * FORK MIA (.98): com cupom que vale no plano, o cartão mostra o preço com o
+ * desconto e o cheio riscado, ou os dias grátis (vale o maior, sem somar).
  */
 export function CartoesDoPlano({
   cartoes,
   registro,
   veioDoLink,
+  cupom = null,
 }: {
   cartoes: readonly CartaoDoPlano[];
   registro: UseFormRegisterReturn<"cobranca_plan_id">;
   veioDoLink: boolean;
+  cupom?: CupomPublico | null;
 }) {
   const t = useT();
   const idioma = useIdioma();
@@ -29,6 +36,7 @@ export function CartoesDoPlano({
     currency: "BRL",
     maximumFractionDigits: 0,
   });
+  const brlCentavos = new Intl.NumberFormat(idioma, { style: "currency", currency: "BRL" });
   const numero = new Intl.NumberFormat(idioma);
   return (
     <fieldset className="space-y-2" aria-describedby="planos-do-cadastro-ajuda">
@@ -49,6 +57,9 @@ export function CartoesDoPlano({
               : t("cerca de {n} conversas").replace("{n}", numero.format(c.conversas)),
             ...c.modulos.map((m) => t(ROTULO_DO_MODULO_DO_PLANO[m].rotulo)),
           ];
+          const beneficio = cupom?.valido && cupom.planos.includes(c.id) ? cupom.beneficio : null;
+          const valorDoCupom = cupom?.valor ?? 0;
+          const diasDoCupom = beneficio === "dias" ? valorDoCupom : 0;
           return (
             <label
               key={c.id}
@@ -74,14 +85,24 @@ export function CartoesDoPlano({
                 <span className="block text-xs text-muted-foreground">{detalhes.join(" · ")}</span>
               </span>
               <span className="shrink-0 text-right text-sm font-semibold">
-                {brl.format(c.preco_cents / 100)}
+                {beneficio && beneficio !== "dias"
+                  ? brlCentavos.format(mensalidadeComCupom(c.preco_cents, { beneficio, valor: valorDoCupom }) / 100)
+                  : brl.format(c.preco_cents / 100)}
                 <span className="block text-xs font-normal text-muted-foreground">
                   {c.intervalo === "ano" ? t("/ano") : t("/mês")}
                 </span>
+                {beneficio && beneficio !== "dias" && (
+                  <span className="block text-xs font-normal text-muted-foreground" data-cupom="preco-no-cartao">
+                    <span className="line-through">{brlCentavos.format(c.preco_cents / 100)}</span>{" "}
+                    {textoDoPeriodo({ beneficio, meses: cupom?.meses ?? null }, t)}
+                  </span>
+                )}
                 <span className="block text-xs font-normal text-muted-foreground">
-                  {c.trial_dias > 0
-                    ? t("{n} dias de teste").replace("{n}", String(c.trial_dias))
-                    : t("entrada paga")}
+                  {diasDoCupom > 0 && diasDoCupom >= c.trial_dias
+                    ? t("{n} dias grátis").replace("{n}", String(diasDoCupom))
+                    : c.trial_dias > 0
+                      ? t("{n} dias de teste").replace("{n}", String(c.trial_dias))
+                      : t("entrada paga")}
                 </span>
               </span>
             </label>
