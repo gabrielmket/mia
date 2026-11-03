@@ -4671,6 +4671,7 @@ export const DICIONARIO: Traducoes = {
   "Este template está aprovado. Ao editar, ele volta para análise da Meta e não pode ser disparado até ser aprovado de novo.": { es: "Esta plantilla está aprobada. Al editarla, vuelve al análisis de Meta y no puede dispararse hasta ser aprobada de nuevo." },
   "As variáveis continuam sendo {{1}}, {{2}}… Mudar quantas existem faz a Meta pedir exemplos novos.": { es: "Las variables siguen siendo {{1}}, {{2}}… Cambiar cuántas existen hace que Meta pida ejemplos nuevos." },
   "Salvar na Meta": { es: "Guardar en Meta" },
+  "Editar o texto": { es: "Editar el texto" },
 
   // ---- tela da campanha: os estados do destinatário ----
   "Não consegui carregar a campanha agora.": { es: "No pude cargar la campaña ahora." },
@@ -11109,6 +11110,10 @@ export const DICIONARIO: Traducoes = {
   // não diz ONDE se cadastra um motivo novo.
   "Para usar um motivo que não está aqui, cadastre em CRM › Ver tudo em CRM › Etapas do funil.": {
     es: "Para usar un motivo que no está aquí, agrégalo en CRM › Ver todo en CRM › Etapas del embudo.",
+  },
+  // FORK MIA: o mesmo aviso com os nomes do menu da MIA.
+  "Para usar um motivo que não está aqui, cadastre em MIA CRM › Ver tudo no CRM › Etapas do funil.": {
+    es: "Para usar un motivo que no está aquí, agrégalo en MIA CRM › Ver todo en el CRM › Etapas del embudo.",
   },
   "Ex: Cliente desistiu por X motivo": { es: "Ej: El cliente desistió por X motivo" },
   "Confirmar": { es: "Confirmar" },

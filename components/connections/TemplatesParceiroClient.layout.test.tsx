@@ -44,6 +44,10 @@ vi.mock("@/hooks/channels/useTemplates", () => ({
     data: { data: { waba: "1029384756", templates: [] } },
   }),
   useSyncTemplates: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  // FORK MIA (.71): o criar, editar e excluir do fork na mesma tela (TemplatesClient).
+  useCriarTemplate: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useEditarTemplate: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useExcluirTemplate: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useSaveTemplateValues: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 

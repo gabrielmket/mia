@@ -39,6 +39,7 @@ import {
   linhasDoModeloNaConexao,
   type EscopoDaGestao,
 } from "@/lib/channels/gestao-de-modelos";
+import { resolveMetaCreds } from "@/lib/channels/meta/credentials";
 import { metaSessionForOrg } from "@/lib/channels/meta/session";
 import { metaCloudTemplateOps } from "@/lib/channels/meta/templates";
 import { normalizeRejectedReason } from "@/lib/channels/meta/webhook";
@@ -315,7 +316,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return fail("invalid_request", "no_meta_channel", 400, { requestId });
   }
 
-  const creds = await credenciaisDaOrg(r.orgId);
+  // Upstream v1.9x (#3635): com a WABA na linha da sessão, a credencial é a DESSA
+  // sessão (`resolveMetaCreds`, com o ambiente como reserva), a mesma porta do envio.
+  // FORK MIA: sem WABA na linha (a instalação de número único com `META_WABA_ID` no
+  // ambiente), segue `credenciaisDaOrg`, que cai no ambiente.
+  const creds = sessao.wabaId
+    ? await (async () => {
+        const daSessao = await resolveMetaCreds(createAdminClient(), {
+          organizationId: r.orgId,
+          phoneNumberId: sessao.phoneNumberId ?? "",
+        });
+        return daSessao
+          ? { wabaId: sessao.wabaId as string, token: daSessao.token, graphVersion: daSessao.graphVersion }
+          : null;
+      })()
+    : await credenciaisDaOrg(r.orgId);
   if (!creds) return fail("invalid_request", "missing_meta_token", 400, { requestId });
 
   // O corpo é validado ANTES de falar com a plataforma: um `acao` inventado não
@@ -350,7 +365,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         orgId: r.orgId,
         sessionId: sessao.id,
         sessionRef: sessao.phoneNumberId ?? "",
-        wabaOficial: sessao.wabaId,
+        wabaOficial: sessao.wabaId ?? undefined,
       };
       // A plataforma acha o modelo pelo NOME dentro da WABA oficial. Um homônimo
       // de outra conexão (o parceiro) listado no espelho não pode virar edição —

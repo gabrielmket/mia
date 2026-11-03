@@ -71,12 +71,16 @@ vi.mock("@/lib/supabase/server", () => ({
           }),
         }),
       }),
+      // FORK MIA: a gravação mora em lib/pipelines/pipeline-config.ts (compartilhada
+      // com o MCP) e filtra por funil E organização: dois `.eq` encadeados.
       update: (valores: Record<string, unknown>) => ({
-        eq: async () => {
-          h.gravacoes += 1;
-          void valores;
-          return { error: h.erroDaGravacao };
-        },
+        eq: () => ({
+          eq: async () => {
+            h.gravacoes += 1;
+            void valores;
+            return { error: h.erroDaGravacao };
+          },
+        }),
       }),
     }),
   }),

@@ -308,9 +308,15 @@ describe("o schema depois da 9019", () => {
 describe("⭐ A REGRA DA CASA: um movimento de etapa, no máximo UMA ida à Meta", () => {
   it("o registro tem os três consumidores de etapa do upstream e o nosso dos formulários; o nosso de etapa da .70 saiu", () => {
     const chaves = consumidoresDeConversao().map((h) => h.key).sort();
+    // .100 (upstream v1.91): `clique_meta` e `nascimento_meta` reportam o NASCIMENTO
+    // do lead que veio de clique para o WhatsApp (LeadSubmitted, com prova causal do
+    // ctwa_clid). Não leem movimento de etapa, então a regra da casa segue valendo:
+    // um movimento de etapa, no máximo uma ida à Meta.
     expect(chaves).toEqual([
+      "conversoes.clique_meta",
       "conversoes.etapa_meta",
       "conversoes.meta_formulario",
+      "conversoes.nascimento_meta",
       "conversoes.qualificacao",
       "conversoes.venda",
     ]);

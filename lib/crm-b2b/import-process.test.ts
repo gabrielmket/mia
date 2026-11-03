@@ -13,6 +13,11 @@ type Consulta = {
   update(dados: Record<string, unknown>): Consulta;
   select(): Consulta;
   eq(): Consulta;
+  // FORK MIA (.79, empresa única): sem CNPJ, a importação procura a empresa de
+  // mesmo nome no cadastro (`or` + `order` + `limit`).
+  or(): Consulta;
+  order(): Consulta;
+  limit(): Consulta;
   maybeSingle(): Promise<{ data: null; error: null }>;
   single(): Promise<{ data: { id: string }; error: null }>;
   then(resolve: (valor: { data: null; error: null }) => unknown): Promise<unknown>;
@@ -37,6 +42,15 @@ function banco() {
           return consulta;
         },
         eq() {
+          return consulta;
+        },
+        or() {
+          return consulta;
+        },
+        order() {
+          return consulta;
+        },
+        limit() {
           return consulta;
         },
         maybeSingle: async () => ({ data: null, error: null }),

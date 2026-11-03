@@ -268,6 +268,32 @@ const CLASSIFICACAO: Record<string, Classificacao> = {
   // pode ser um apelido interno). Sai no relatório de acesso (export-collector)
   // e o gatilho do upstream `fn_contato_anonimizado_esquece_a_agenda` o zera.
   address_book_name: { tipo: "pessoal" },
+  // ── Colunas que o upstream acrescentou, classificadas na fusão de 03/11/2026
+  //    (v1.89 a v1.99, .100) ──
+  // O endereço da pessoa física (#3670): sai no relatório de acesso (o coletor
+  // seleciona as sete) e a anonimização apaga (o gatilho do upstream zera).
+  zip_code: { tipo: "pessoal" },
+  street: { tipo: "pessoal" },
+  number: { tipo: "pessoal" },
+  complement: { tipo: "pessoal" },
+  district: { tipo: "pessoal" },
+  city: { tipo: "pessoal" },
+  state: { tipo: "pessoal" },
+  phone_type: {
+    tipo: "nao_pessoal",
+    porque:
+      "o TIPO do telefone principal (fixo, celular, outro), sem o número; é atributo do canal, e a anonimização do upstream o zera junto com o número (Spec 31, B1)",
+  },
+  phone_whatsapp: {
+    tipo: "nao_pessoal",
+    porque:
+      "se o telefone principal tem WhatsApp (sim, não, não sei), sem o número; é atributo do canal, e a anonimização do upstream o zera junto com o número (Spec 31, B1)",
+  },
+  contact_type: {
+    tipo: "nao_pessoal",
+    porque:
+      "o papel comercial da ficha para a empresa (cliente ou fornecedor), escolhido por quem opera; não identifica nem descreve a pessoa (0763)",
+  },
   name_lookup_at: {
     tipo: "nao_pessoal",
     porque:

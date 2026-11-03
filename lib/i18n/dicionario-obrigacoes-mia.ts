@@ -148,7 +148,6 @@ export const DICIONARIO_OBRIGACOES_MIA: Traducoes = {
   "não recebido": { es: "no recibido" },
   "Quem entrega": { es: "Quién entrega" },
   Recorrência: { es: "Recurrencia" },
-  arquivo: { es: "archivo" },
   "sem arquivo": { es: "sin archivo" },
   "Área privada; apagado junto com o contato num pedido de esquecimento.": {
     es: "Área privada; se elimina junto con el contacto en una solicitud de olvido.",

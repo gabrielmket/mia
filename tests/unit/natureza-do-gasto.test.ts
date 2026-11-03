@@ -101,6 +101,9 @@ describe("de que natureza é cada ponto", () => {
       "checkpoint",
       "embedding_consultar",
       "transcricao_de_audio",
+      // .100 (upstream v1.9x, 9052): a resposta do agente em ÁUDIO, dentro da conversa
+      // com o cliente, como a transcrição: atendimento.
+      "sintese_de_voz",
       "visao_de_imagem",
       "agent_preview",
       "teste_de_agente",

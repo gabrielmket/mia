@@ -118,6 +118,12 @@ function fakePool(escolha: string | null) {
     if (/from calendar_appointments/.test(sql)) return { rows: [COMPROMISSO_VIVO] };
     if (/select settings from organizations/.test(sql)) return { rows: [{ settings: { agenda: null } }] };
     if (/left join channel_knobs/.test(sql)) return { rows: [KNOBS] };
+    // FORK MIA: antes de a IA rodar o passo, o fork confere se a janela de 24 h está
+    // aberta (followup-turn.ts, "a IA não roda quando nada do que ela escrever pode sair").
+    // Aqui a janela está aberta: o cliente escreveu agora há pouco.
+    if (/from channel_sessions s/.test(sql) && /last_inbound_at/.test(sql)) {
+      return { rows: [{ provider: "waha", last_inbound_at: new Date() }] };
+    }
     if (/from conversations/.test(sql)) return { rows: [{ id: CONVERSA, channel_session_id: CANAL, archived_at: null }] };
     return { rows: [] };
   });

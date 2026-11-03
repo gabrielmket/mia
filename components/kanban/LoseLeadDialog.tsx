@@ -210,7 +210,8 @@ export function LoseLeadDialog({
               */}
               {(funilConfigurado || outroRecusado) && (
                 <p className="text-xs text-muted-foreground">
-                  {t("Para usar um motivo que não está aqui, cadastre em CRM › Ver tudo em CRM › Etapas do funil.")}
+                  {/* FORK MIA: o caminho com os nomes do menu da MIA (lib/navigation/catalogo.ts). */}
+                  {t("Para usar um motivo que não está aqui, cadastre em MIA CRM › Ver tudo no CRM › Etapas do funil.")}
                 </p>
               )}
             </div>

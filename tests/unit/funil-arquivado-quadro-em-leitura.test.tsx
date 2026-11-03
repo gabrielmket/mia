@@ -55,6 +55,14 @@ vi.mock("@/components/kanban/LeadDossier", () => ({
     return <div data-testid="dossie-aberto" />;
   },
 }));
+// FORK MIA: no fork o quadro abre o cartão aberto (`CartaoAberto`) no lugar do
+// dossiê (tests/unit/cartao-aberto-mia.test.tsx). Conta do mesmo jeito.
+vi.mock("@/components/cartoes/aberto/CartaoAberto", () => ({
+  CartaoAberto: () => {
+    dossies.abertos += 1;
+    return <div data-testid="dossie-aberto" />;
+  },
+}));
 /**
  * O `AuthProvider` inteiro NÃO é dublado campo a campo: o card puxa permissão,
  * organização, moeda e usuário de hooks diferentes do mesmo módulo, e um mock

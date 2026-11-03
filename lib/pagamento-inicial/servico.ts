@@ -31,6 +31,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import QRCode from "qrcode";
 
 import { audit } from "@/lib/audit";
+import { invalidarOrg } from "@/lib/auth/cache-curto";
 import type { DependenciasDoAsaasDaMia } from "@/lib/asaas-mia/api";
 import { codigoDoErro } from "@/lib/asaas-mia/api";
 import { cartaoNaAssinatura, pagarComCartao, type TitularDoCartao } from "@/lib/asaas-mia/cartao";
@@ -938,6 +939,9 @@ export async function trocarPlanoAntesDePagar(
     if (modo === "entrada_paga" && vaiParaTeste) {
       const { error: erroDaVolta } = await admin.rpc("fn_reativar_organizacao", { p_org: p.orgId, p_kind_exigido: "cobranca", p_ator: p.userId });
       if (erroDaVolta) logger.warn("pagamento_inicial.reativacao_do_teste_falhou", { organization_id: p.orgId, codigo: erroDaVolta.code ?? null });
+      // Upstream (cerca acesso-revogado-nao-espera-o-cache): quem reativa derruba o cache
+      // curto do estado da empresa, senão quem voltou fica até o TTL na tela de suspensa.
+      invalidarOrg(p.orgId);
     } else if (modo === "teste" && !vaiParaTeste) {
       // O mesmo bloqueio que o gatilho da entrada paga do upstream (0679) põe no cadastro.
       const { error: erroDaParada } = await admin.rpc("fn_suspender_organizacao", {
@@ -947,6 +951,7 @@ export async function trocarPlanoAntesDePagar(
         p_ator: p.userId,
       });
       if (erroDaParada) logger.warn("pagamento_inicial.parada_da_entrada_paga_falhou", { organization_id: p.orgId, codigo: erroDaParada.code ?? null });
+      invalidarOrg(p.orgId);
     }
     const novoModo: ModoDoPasso = vaiParaTeste ? "teste" : "entrada_paga";
     await admin

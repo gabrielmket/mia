@@ -76,7 +76,8 @@ vi.mock("next/navigation", () => ({
   },
 }));
 vi.mock("next/headers", () => ({
-  cookies: async () => ({ get: () => undefined }),
+  // FORK MIA (.100): `getAll`/`set` também, para o cliente da sessão que o layout monta.
+  cookies: async () => ({ get: () => undefined, getAll: () => [], set: () => undefined }),
 }));
 vi.mock("@/lib/branding/instalacao", () => ({ marcaDaInstalacao: async () => ({}) }));
 vi.mock("@/lib/branding/organizacao", () => ({
@@ -224,7 +225,7 @@ describe("o Novo Lead com a empresa (dentro do provedor)", () => {
     await screen.findByRole("combobox", { name: "Empresa" });
     escolherEmpresa(EMPRESA);
     await user.type(screen.getByLabelText("Título"), "Pedido de pães");
-    await user.click(screen.getByRole("button", { name: "Criar lead" }));
+    await user.click(screen.getByRole("button", { name: "Criar negócio" }));
 
     await waitFor(() => expect(criarLead).toHaveBeenCalledTimes(1));
     expect(criarLead.mock.calls[0]?.[0]).toMatchObject({ empresa_id: EMPRESA });
@@ -244,7 +245,7 @@ describe("o Novo Lead com a empresa (dentro do provedor)", () => {
     rerender(dialogo(true, "b2b"));
 
     await user.type(await screen.findByLabelText("Título"), "Outro assunto");
-    await user.click(screen.getByRole("button", { name: "Criar lead" }));
+    await user.click(screen.getByRole("button", { name: "Criar negócio" }));
 
     await waitFor(() => expect(criarLead).toHaveBeenCalledTimes(1));
     expect(criarLead.mock.calls[0]?.[0]).not.toHaveProperty("empresa_id");

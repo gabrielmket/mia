@@ -325,14 +325,15 @@ describe("searchable", () => {
 describe("capacidade da organização (#1290): Chamadas só com a telefonia em uso", () => {
   /** As três projeções que desenham menu, com a lista de capacidades da organização. */
   function menu(capacidades: readonly CapacidadeDaOrganizacao[]) {
+    // FORK MIA: eixos na ordem do fork (contratados, modo de venda, ligados na instalação, capacidades).
     return {
-      sidebar: sidebarGroups(true, null, undefined, [], capacidades).flatMap((g) =>
+      sidebar: sidebarGroups(true, null, undefined, undefined, undefined, [], capacidades).flatMap((g) =>
         g.items.map((i) => i.href),
       ),
-      hub: hubSections("crm", true, null, undefined, [], capacidades).flatMap((s) =>
+      hub: hubSections("crm", true, null, undefined, undefined, undefined, [], capacidades).flatMap((s) =>
         s.items.map((i) => i.href),
       ),
-      busca: searchable(true, null, undefined, [], capacidades).map((d) => d.href),
+      busca: searchable(true, null, undefined, undefined, undefined, [], capacidades).map((d) => d.href),
     };
   }
 
@@ -370,7 +371,7 @@ describe("capacidade da organização (#1290): Chamadas só com a telefonia em u
     // Medição, não escolha nova: `permitidos()` aplica `capacidade` DEPOIS de
     // `canSee()`, que é o único ponto com bypass de plataforma. Bypass é para
     // PAPEL; módulo desligado esconde para todos.
-    const doAdminDaPlataforma = searchable(true, null, undefined, [], []).map((d) => d.href);
+    const doAdminDaPlataforma = searchable(true, null, undefined, undefined, undefined, [], []).map((d) => d.href);
     expect(doAdminDaPlataforma).not.toContain("/app/calls");
   });
 

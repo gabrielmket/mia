@@ -1,5 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { tagDeIdioma } from "@/lib/i18n/datas";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { loadAuthUser } from "@/lib/auth/server";
 import { CARIMBO_DO_SCHEMA, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
@@ -69,7 +70,7 @@ export async function SaudeDoSchema() {
   // Fuso fixo pelo mesmo motivo do alarme da marca: a coluna é da INSTALAÇÃO,
   // e nesta tela não há organização resolvida de onde tirar um.
   const quando = linha.aplicado_em
-    ? new Date(linha.aplicado_em).toLocaleString(idioma === "es" ? "es" : "pt-BR", {
+    ? new Date(linha.aplicado_em).toLocaleString(tagDeIdioma(idioma), {
         timeZone: "America/Sao_Paulo",
         dateStyle: "short",
         timeStyle: "short",

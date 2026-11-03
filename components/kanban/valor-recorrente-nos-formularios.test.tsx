@@ -34,6 +34,9 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/hooks/auth/AuthProvider", () => ({
   useActiveOrg: () => ({ currency: "BRL", country: null, role: "agent", orgId: "org-1" }),
   useAuth: () => ({ user: { id: "usuario-eu" }, activeOrg: null }),
+  // FORK MIA: o diálogo do funil usa o LeadFieldsForm, e quem monta lê se a pessoa
+  // vê a equipe (usePodeVerEquipe → usePermission).
+  usePermission: () => false,
 }));
 vi.mock("sonner", () => ({ toast: toastMock }));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));

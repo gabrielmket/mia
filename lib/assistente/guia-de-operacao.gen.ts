@@ -11,7 +11,7 @@
  */
 import type { TrechoDoGuia } from "./guia-de-operacao/ler-o-guia";
 
-export const ASSINATURA_DO_GUIA = "d03414fbed142fa5df33a6335b70b45a2ed8f4ce3253d43f19972ab68b1e0d21";
+export const ASSINATURA_DO_GUIA = "e3a635813a98e199b481fabcd5cd72033c14888c4ed16d9f7f770b0ac730e390";
 
 export const ARQUIVOS_DO_GUIA: readonly string[] = ["SKILL.md","references/funcionalidades/admin-e-plataforma.md","references/funcionalidades/analise.md","references/funcionalidades/atendimento.md","references/funcionalidades/canais.md","references/funcionalidades/citado-e-nao-encontrado.md","references/funcionalidades/crm.md","references/funcionalidades/ia.md","references/funcionalidades/organizacao.md","references/funcionalidades/so-api-ou-sem-tela.md","references/mapa-da-interface.md"];
 
@@ -488,4 +488,5 @@ export const TRECHOS_DO_GUIA: readonly TrechoDoGuia[] = [
   {"id":"mapa-da-interface/organizacao/api-tokens","arquivo":"references/mapa-da-interface.md","tipo":"mapa","secao":"Organização","titulo":"API Tokens","texto":"Serve para: Chaves para outro sistema conversar com o seu CRM. Caminho: Organização → Hub \"Configurações\" → API Tokens /app/settings/api-tokens. Quem vê: administrador.","desde":null,"href":"/app/settings/api-tokens"},
   {"id":"mapa-da-interface/organizacao/trunk-sip","arquivo":"references/mapa-da-interface.md","tipo":"mapa","secao":"Organização","titulo":"Trunk SIP","texto":"Serve para: Credenciais do provedor SIP para chamadas de voz por IA. Caminho: Organização → Hub \"Configurações\" → Trunk SIP /app/settings/voip-trunk. Quem vê: administrador.","desde":null,"href":"/app/settings/voip-trunk"},
   {"id":"mapa-da-interface/organizacao/dados-externos","arquivo":"references/mapa-da-interface.md","tipo":"mapa","secao":"Organização","titulo":"Dados externos","texto":"Serve para: Conecte um banco de dados de outro sistema para o agente consultar em tempo real. Caminho: Organização → Hub \"Configurações\" → Dados externos /app/integracao-dados. Quem vê: todos. Só aparece se o módulo banco_externo estiver ligado.","desde":null,"href":"/app/integracao-dados"},
+  {"id":"mapa-da-interface/organizacao/ajuda","arquivo":"references/mapa-da-interface.md","tipo":"mapa","secao":"Organização","titulo":"Ajuda","texto":"Serve para: O caminho para cada tarefa e uma linha dizendo quando procurar cada tela. Caminho: Organização → rodapé do menu → Ajuda /app/ajuda. Quem vê: todos. Último item do rodapé, fora do scroll. O bloco \"Para quem instala e mantém\" só aparece para quem instalou o servidor (is_platform_admin).","desde":null,"href":"/app/ajuda"},
 ];

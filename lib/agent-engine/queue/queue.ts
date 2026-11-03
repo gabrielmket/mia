@@ -64,7 +64,9 @@ export interface JobRow {
   max_attempts: number;
   last_error: string | null;
   /** Ver `MotivoDeAdiamento`. NULL = este job nunca foi adiado. */
-  deferred_reason: MotivoDeAdiamento | null;
+  // FORK MIA (0251): opcional no tipo, para as linhas montadas à mão (testes do
+  // upstream) não precisarem da coluna do fork; o banco sempre a devolve.
+  deferred_reason?: MotivoDeAdiamento | null;
   locked_by: string | null;
   locked_at: Date | null;
   /** Texto original da aquisição; Date do driver perde microssegundos. */

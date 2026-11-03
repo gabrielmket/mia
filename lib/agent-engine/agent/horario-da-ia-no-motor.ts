@@ -145,7 +145,9 @@ export async function encerrarTurnoSeIaInativa(
           {
             reason: "suspected_optout",
             conversationSummary: briefing.body,
-            inboxTitle: "Suspeita de opt-out — confirmar bloqueio do contato no CRM",
+            // O mesmo título do turno (TITULO_DO_HANDOFF_POR_SUSPEITA_DE_OPT_OUT, inbound-turn.ts,
+            // upstream #1713): a equipe assume e pede a palavra que a regra reconhece.
+            inboxTitle: "Suspeita de opt-out — assumir a conversa e pedir ao cliente a palavra que a regra reconhece",
             passagem: { origem: "opt_out_provavel", motivoCodigo: "suspected_optout", briefing },
             avisoAoLead: { avisado: false, porque: "ia_inativa_no_horario" },
             log,

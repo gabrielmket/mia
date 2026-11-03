@@ -235,7 +235,9 @@ export interface SilenceSweepDb {
    * Antes das duas travas, em set/2026, 22 contatos somaram 14.389 enrollments e
    * ~3.400 turnos de IA por dia. Ver `jaInscritosNesteSilencio`.
    */
-  loadJaInscritosNesteSilencio(orgId: string, pointerId: string, contactIds: string[]): Promise<Set<string>>;
+  // FORK MIA: opcional no tipo, para os dublês dos testes do upstream não
+  // precisarem dele; o banco de verdade (abaixo) sempre o tem.
+  loadJaInscritosNesteSilencio?(orgId: string, pointerId: string, contactIds: string[]): Promise<Set<string>>;
   /**
    * Dos `contactIds`, os que AINDA NÃO FORAM RESPONDIDOS: na conversa que guarda
    * o inbound mais recente, não há outbound depois dele.
@@ -454,7 +456,9 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
             new Map(contactIds.map((id) => [id, teto])))
           : new Map<string, number>();
       const comInscricaoViva = await db.loadContatosComInscricaoViva(pointer.organization_id, contactIds);
-      const jaInscritos = await db.loadJaInscritosNesteSilencio(pointer.organization_id, pointer.id, contactIds);
+      const jaInscritos = db.loadJaInscritosNesteSilencio
+        ? await db.loadJaInscritosNesteSilencio(pointer.organization_id, pointer.id, contactIds)
+        : new Set<string>();
 
       for (const contactId of contactIds) {
         if (comRetorno.has(contactId)) {

@@ -65,6 +65,25 @@ export const COMO_FECHA = {
     quando: "a sessão do canal voltou a WORKING",
     tetoEmDias: null,
   },
+  // .100 (upstream v1.9x): os dois avisos da recuperação das conversas da queda
+  // (9033, Spec 32) e o da assinatura de IA desconectada (9027). Quem fecha é o
+  // código do upstream (lib/channels/historico/avisos-da-queda.ts e
+  // lib/ai/credenciais/assinatura-desconectada.ts), quando a condição some.
+  recuperacao_da_queda: {
+    modo: "condicao",
+    quando: "a conexão deixou de precisar do resumo: a recuperação terminou ou uma queda nova assumiu o lugar dele",
+    tetoEmDias: 30,
+  },
+  cliente_sem_resposta_na_queda: {
+    modo: "condicao",
+    quando: "alguém respondeu o cliente na conversa recuperada da queda",
+    tetoEmDias: 30,
+  },
+  assinatura_desconectada: {
+    modo: "condicao",
+    quando: "o login da conta que paga a assinatura de IA voltou (IA › Credenciais)",
+    tetoEmDias: null,
+  },
   channel_number_alert: {
     modo: "condicao",
     quando: "o número saiu do estado que gerou o aviso",

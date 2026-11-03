@@ -6,7 +6,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   aplicarSemente,
-  CONSUMIDOR_DA_SEMENTE,
   contarDaSemente,
   gerarSqlDaSemente,
   ID_DA_EMPRESA,
@@ -273,12 +272,9 @@ describe("a empresa nasce travada", () => {
     expect(
       await valor(`select count(*)::text from public.event_log where organization_id = $1 and status in ('pending', 'processing')`),
     ).toBe("0");
-    expect(
-      await valor<number>(
-        `select count(*)::int from public.event_log where organization_id = $1 and $2 = any(consumed_by)`,
-        [ID_DA_EMPRESA, CONSUMIDOR_DA_SEMENTE],
-      ),
-    ).toBeGreaterThan(0);
+    // .100: desde a 0760 do upstream (v1.89, #999) a mensagem com `historico_importado`
+    // (é assim que a semente grava as dela) não emite evento nenhum, e a carga pode não
+    // deixar evento para neutralizar. O que a cerca guarda é o de cima: nada pendente.
   });
 
   it("nenhum trabalho de fila nem disparo agendado nasceu para a empresa de demonstração", async () => {
@@ -682,9 +678,9 @@ describe.each(DEMONSTRACOES)("a demonstração %s, no banco", (segmento) => {
 
   it("⭐ nada enfileirado: os eventos da carga estão consumidos, sem trabalho, cron, aviso nem regra ligada", async () => {
     expect(await naOrg(`select count(*)::text from public.event_log where organization_id = $1 and status in ('pending', 'processing')`)).toBe("0");
-    expect(
-      await naOrg<number>(`select count(*)::int from public.event_log where organization_id = $1 and $2 = any(consumed_by)`, [CONSUMIDOR_DA_SEMENTE]),
-    ).toBeGreaterThan(0);
+    // .100: desde a 0760 do upstream (v1.89, #999) a mensagem com `historico_importado`
+    // (é assim que a semente grava as dela) não emite evento nenhum, e a carga pode não
+    // deixar evento para neutralizar. O que a cerca guarda é o de cima: nada pendente.
     expect(await naOrg(`select count(*)::text from public.job_queue where organization_id = $1 and status in ('pending', 'running')`)).toBe("0");
     expect(await naOrg(`select count(*)::text from public.cron_jobs where organization_id = $1 and enabled`)).toBe("0");
     expect(await naOrg(`select count(*)::text from public.mia_obrigacoes_avisos where organization_id = $1`)).toBe("0");

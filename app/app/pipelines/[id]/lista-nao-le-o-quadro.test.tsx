@@ -89,6 +89,13 @@ vi.mock("@/components/kanban/FilterBar", () => ({
 vi.mock("@/components/kanban/NewLeadDialog", () => ({ NewLeadDialog: () => null }));
 vi.mock("@/components/kanban/BulkActionBar", () => ({ BulkActionBar: () => null }));
 vi.mock("@/components/kanban/LeadDossier", () => ({ LeadDossier: () => null }));
+// FORK MIA: a tela do funil lê quem está olhando (useUser) para a bola do cartão,
+// e desenha os filtros do cartão do fork.
+vi.mock("@/hooks/auth/AuthProvider", async (original) => ({
+  ...(await original<typeof import("@/hooks/auth/AuthProvider")>()),
+  useUser: () => ({ id: "u-1", is_platform_admin: false, support: false }),
+}));
+vi.mock("@/components/cartoes/FiltrosDoCartao", () => ({ FiltrosDoCartao: () => null }));
 vi.mock("@/hooks/inbox/useAssignableMembers", () => ({
   useAssignableMembers: () => ({ data: [] }),
 }));

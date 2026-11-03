@@ -1,7 +1,7 @@
 {
   "id": "campanhas",
   "titulo": "Campanhas",
-  "tela": "/app/campaigns",
+  "tela": "/app/broadcast",
   "resumo": "Mande uma mensagem de WhatsApp para uma lista de contatos que você escolhe, no ritmo do número, e acompanhe quem recebeu e quem respondeu.",
   "licoes": [
     {

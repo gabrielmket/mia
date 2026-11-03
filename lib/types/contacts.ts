@@ -79,10 +79,10 @@ export interface Contact {
   source_metadata: Record<string, unknown>;
   custom_fields: Record<string, unknown>;
   /** De qual EMPRESA essa pessoa é (migration 0255). `null` = autônomo/sem vínculo. */
-  empresa_id: string | null;
+  empresa_id?: string | null;
   /** O cargo desta pessoa na empresa dela, e o setor. */
-  cargo: string | null;
-  setor: string | null;
+  cargo?: string | null;
+  setor?: string | null;
   /** FORK MIA (9013): o papel na empresa e se é o contato principal dela. */
   papel_na_empresa?: string | null;
   principal_na_empresa?: boolean;

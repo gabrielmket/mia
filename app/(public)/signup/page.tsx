@@ -85,8 +85,15 @@ export default async function SignupPage({
   );
 
   // FORK MIA (.98): o cupom do link vale; sem link, o guardado no navegador. Só o que vale aparece.
-  const codigoDoCupom = typeof cupomDoLink === "string" ? cupomDoLink : (await cookies()).get(COOKIE_DO_CUPOM)?.value ?? null;
-  const cupomLido = !convite && planos.length > 0 && codigoDoCupom ? await lerCupomPublico(createAdminClient(), codigoDoCupom) : null;
+  // O cookie só é lido quando o cupom pode valer (sem convite e com plano): quem vem
+  // por convite não tem cupom, e a página dele não precisa do escopo de requisição.
+  const cupomPodeValer = !convite && planos.length > 0;
+  const codigoDoCupom = !cupomPodeValer
+    ? null
+    : typeof cupomDoLink === "string"
+      ? cupomDoLink
+      : ((await cookies()).get(COOKIE_DO_CUPOM)?.value ?? null);
+  const cupomLido = codigoDoCupom ? await lerCupomPublico(createAdminClient(), codigoDoCupom) : null;
   const cupomInicial = cupomLido && (cupomLido.valido || typeof cupomDoLink === "string") ? cupomLido : null;
 
   // Convite VÁLIDO passa em qualquer modo — é o ponto inteiro do convite.

@@ -397,8 +397,10 @@ export function TemplatesClient() {
                   </Badge>
                 ) : null}
                 <span className="ml-auto flex items-center gap-2">
+                  {/* FORK MIA: "Editar o texto" (só o corpo, pelo diálogo do fork), para não
+                      se confundir com o "Editar" do upstream, que abre a definição inteira. */}
                   <Button variant="secondary" onClick={() => setEditandoNoFork(tpl)}>
-                    {t("Editar")}
+                    {t("Editar o texto")}
                   </Button>
                   <Button
                     variant="secondary"

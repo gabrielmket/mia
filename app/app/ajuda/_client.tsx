@@ -16,6 +16,9 @@ export function AjudaConteudo() {
     activeOrg?.interface_settings,
     user.is_platform_admin && !user.support,
     activeOrg?.role ?? null,
+    // FORK MIA: os eixos na ordem do fork (lib/navigation/interface.ts), os mesmos do Sidebar.
+    activeOrg?.modulos,
+    activeOrg?.modo_de_venda,
     activeOrg?.modulos_ligados ?? [],
     activeOrg?.capacidades_ligadas ?? [],
   );

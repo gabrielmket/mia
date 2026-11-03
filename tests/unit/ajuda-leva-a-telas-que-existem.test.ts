@@ -84,7 +84,7 @@ describe("a ajuda dentro do produto", () => {
   });
 
   it("o bloco de quem instala só aparece para o dono do servidor", () => {
-    const destinos = destinosDaInterface(undefined, false, "admin", [], []);
+    const destinos = destinosDaInterface(undefined, false, "admin", undefined, undefined, [], []);
     const paraQuemUsa = blocosVisiveis(false, destinos).map((b) => b.titulo);
     const paraQuemInstala = blocosVisiveis(true, destinos).map((b) => b.titulo);
 
@@ -97,7 +97,7 @@ describe("a ajuda dentro do produto", () => {
   it("admin de tenant com interface completa mantém as jornadas do produto", () => {
     // Guarda contra o hub esvaziar: um `soParaQuemInstala` mal copiado em todos
     // os blocos deixaria a tela vazia para atendente, gerente e admin.
-    const destinos = destinosDaInterface(undefined, false, "admin", [], []);
+    const destinos = destinosDaInterface(undefined, false, "admin", undefined, undefined, [], []);
     expect(blocosVisiveis(false, destinos).flatMap((b) => b.itens).length).toBe(9);
   });
 });

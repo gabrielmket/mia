@@ -15,7 +15,7 @@ const instalacao = "/app/settings/atualizacao";
 function blocos(role: Role, settings?: unknown, plataforma = false, suporte = false) {
   return blocosVisiveis(
     plataforma,
-    destinosDaInterface(settings, plataforma && !suporte, role, [], []),
+    destinosDaInterface(settings, plataforma && !suporte, role, undefined, undefined, [], []),
   );
 }
 function hrefs(value: ReturnType<typeof blocosVisiveis>) {

@@ -20,6 +20,8 @@ vi.mock("@/hooks/auth/AuthProvider", () => ({
   useActiveOrg: () => ({ role: "agent" }),
   usePermission: () => false,
 }));
+// FORK MIA: o LeadFieldsForm lista a equipe para o "Originado por (SDR)" (useAssignableMembers).
+vi.mock("@/hooks/inbox/useAssignableMembers", () => ({ useAssignableMembers: () => ({ data: [] }) }));
 vi.mock("@/hooks/leads/useLeadTimeline", () => ({
   useLeadTimeline: () => ({
     itens: [],
