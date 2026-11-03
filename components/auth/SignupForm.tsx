@@ -335,9 +335,16 @@ export function SignupForm({
           />
         </div>
       )}
-      {/* FORK MIA (.90): com os cartões, eles tomam o lugar do seletor (o mesmo campo). */}
+      {/* FORK MIA (.90): com os cartões, eles tomam o lugar do seletor (o mesmo campo).
+          FORK MIA (.99): a frase de ajuda segue o plano marcado, com teste ou de entrada paga. */}
       {!convite && cartoes.length > 0 && (
-        <CartoesDoPlano cartoes={cartoes} registro={register("cobranca_plan_id")} veioDoLink={planoVeioDoLink} cupom={miaCupom} />
+        <CartoesDoPlano
+          cartoes={cartoes}
+          registro={register("cobranca_plan_id")}
+          veioDoLink={planoVeioDoLink}
+          cupom={miaCupom}
+          semTeste={entradaPaga}
+        />
       )}
       {!convite && planos.length > 0 && cartoes.length === 0 && (
         <div className="space-y-1.5">

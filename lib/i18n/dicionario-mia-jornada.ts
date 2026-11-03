@@ -222,6 +222,13 @@ export const DICIONARIO_DA_JORNADA_MIA: Traducoes = {
   "Dá para trocar de plano depois, inclusive durante o teste.": {
     es: "Puedes cambiar de plan después, incluso durante la prueba.",
   },
+  // FORK MIA (.99): as mesmas duas frases no plano de entrada paga (sem teste).
+  "Veio da página de preços com o plano marcado. Dá para trocar aqui, na hora de pagar ou depois.": {
+    es: "Viniste de la página de precios con el plan marcado. Puedes cambiarlo aquí, al momento de pagar o después.",
+  },
+  "Dá para trocar de plano na hora de pagar ou depois.": {
+    es: "Puedes cambiar de plan al momento de pagar o después.",
+  },
   "Não consegui carregar a compra de créditos agora.": {
     es: "No pude cargar la compra de créditos ahora.",
   },
