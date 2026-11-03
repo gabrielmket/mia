@@ -438,6 +438,10 @@ test.describe("Campanhas — número oficial manda modelo aprovado", () => {
 
 
 test("campanha de texto prepara a reserva e o dado preenchido pelo mesmo fluxo da tela", async ({ page }) => {
+  // FORK MIA (.58, docs/fork/broadcast-unificado.md): no fork as Campanhas são o
+  // caminho "número por QR" do Broadcast, atrás do módulo `disparador`, e
+  // /app/campaigns/new leva ao Broadcast. Mesmo motivo do describe acima.
+  test.skip(true, "no fork a campanha sai pelo Broadcast (docs/fork/broadcast-unificado.md)");
   test.setTimeout(150_000);
   const { randomUUID } = await import("node:crypto");
   const { credenciaisSupabaseDeTeste } = await import("../../scripts/lib/env-de-teste");

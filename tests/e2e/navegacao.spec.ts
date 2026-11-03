@@ -348,7 +348,8 @@ test.describe("navegação agrupada", () => {
       fullPage: true,
     });
 
-    await sidebar(page).getByRole("link", { name: "Ver tudo em Análise", exact: true }).click();
+    // FORK MIA: o hub do grupo se chama "Ver tudo no Insights" (lib/navigation/catalogo.ts).
+    await sidebar(page).getByRole("link", { name: "Ver tudo no Insights", exact: true }).click();
     await expect(page).toHaveURL(/\/app\/analise$/);
     const relatorioRecebido = page.waitForResponse(
       (r) =>

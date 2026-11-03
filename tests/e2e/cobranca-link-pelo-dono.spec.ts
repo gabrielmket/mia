@@ -19,7 +19,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 
-import { test, expect, type BrowserContext, type Page } from "./helpers/test";
+import { test, expect, esperarARevelacao, type BrowserContext, type Page } from "./helpers/test";
 import {
   assinaturaDe, criarPessoa, db, drenarAte, entrar, fotografarChaves, inserir, restaurarChaves, type FotoDasChaves,
 } from "./helpers/cobranca";
@@ -184,6 +184,11 @@ test("[P0] o dono gera o link de pagamento pelo card do tenant (Asaas) e a empre
     pB.setDefaultTimeout(20_000);
     await entrar(pB, adminB.email);
     await pB.goto("/app/settings/billing");
+    // FORK MIA (.100): `pB` nasce de `browser.newContext()`, fora do `context` da suíte,
+    // então o `goto` dela não espera o streaming revelar a página (helpers/test.ts).
+    // Lida no meio da revelação, a página tem duas cópias (a escondida em `S:N`) e o
+    // getByText reprova por strict mode. Espera-se aqui, como em atendimento-conjunto.
+    await esperarARevelacao(pB);
     await expect(pB.getByText(/1ª cobrança agendada/)).toBeVisible();
     await expect(pB.getByRole("link", { name: "Pagar agora" })).toHaveAttribute("href", link);
     await expect(pB.getByRole("button", { name: "Assinar", exact: true })).toHaveCount(0);

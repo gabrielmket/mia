@@ -5,6 +5,7 @@
 import { test, expect } from "./helpers/test";
 
 import { lerCreds, loginComoDono } from "./helpers/login-admin";
+import { afirmarDonoDoServidor } from "./utils/precondicao";
 
 let creds = lerCreds();
 
@@ -17,6 +18,9 @@ test.describe("Chaves de acesso à IA", () => {
     // Fork MIA: só a PLATAFORMA cadastra chave de IA (lib/ai/custo-e-da-plataforma.ts;
     // tests/unit/credenciais-so-a-plataforma-cria.test.ts). O admin do cliente recebe
     // 403 na rota e /403 na tela; quem cola a chave é o dono do servidor.
+    // .100: a spec não depende de uma vizinha da parte ter promovido o dono a admin
+    // da plataforma; a precondição o garante (e falha alto se não conseguir).
+    await afirmarDonoDoServidor(creds.users.dono!.email);
     creds = await loginComoDono(page, creds);
     await page.goto("/app/ai/credentials");
 

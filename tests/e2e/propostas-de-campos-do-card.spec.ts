@@ -133,9 +133,12 @@ async function abrir(page: Page, titulo: string): Promise<Locator> {
   await expect(card).toBeVisible();
   await card.getByRole("button", { name: titulo, exact: true }).click();
   const dialog = page.getByRole("dialog");
-  const secao = dialog.getByRole("button", { name: /Dados do negócio/ });
-  if (await secao.getAttribute("aria-expanded") === "false") await secao.click();
+  // FORK MIA: o quadro abre o CARTÃO ABERTO do fork, que não tem a seção recolhível
+  // "Dados do negócio" do dossiê: a revisão do documento fica antes dos campos, e o
+  // formulário dos campos abre por "Editar campos" (quem não edita não tem o botão).
   await expect(dialog.locator('[data-peca="revisao-do-documento"]')).toBeVisible();
+  const editar = dialog.getByRole("button", { name: "Editar campos", exact: true });
+  if (await editar.isVisible()) await editar.click();
   return dialog;
 }
 
