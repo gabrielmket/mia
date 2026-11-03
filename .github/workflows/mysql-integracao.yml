@@ -64,5 +64,8 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: "1"
           SENTRY_DSN: "off"
+          # FORK MIA (.100): mesmo motivo do build do e2e.yml e do perf.yml, a checagem
+          # de tipos do `next build` passa do heap padrão com as peças do fork.
+          NODE_OPTIONS: --max-old-space-size=8192
       - name: O standalone leva o mysql2 completo?
         run: node scripts/verificar-standalone-mysql.mjs

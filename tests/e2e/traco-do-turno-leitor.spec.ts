@@ -60,7 +60,8 @@ test("API parcial: gerente lê só seu tenant, viewer é recusado e o recibo nã
     );
     const cookies = new Map<string, string>();
     const auth = createServerClient(c.url, c.anonKey, {
-      cookieOptions: { name: "sb-deskcomm-auth", secure: false, sameSite: "strict", path: "/" },
+      // FORK MIA: o cookie de sessão desta árvore é `sb-mia-auth` (lib/supabase/server.ts).
+      cookieOptions: { name: "sb-mia-auth", secure: false, sameSite: "strict", path: "/" },
       cookies: {
         getAll: () => [...cookies].map(([name, value]) => ({ name, value })),
         setAll: (novos: { name: string; value: string; options: CookieOptions }[]) => {
