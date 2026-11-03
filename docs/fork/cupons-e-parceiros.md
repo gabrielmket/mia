@@ -30,6 +30,18 @@ recusam, e nenhuma linha é lida do Asaas. Schema nas migrations **9130 a 9132**
    do e-mail, aprovação da Time ou recuperação), o gatilho ADIADO
    `trg_mia_cupom_nasce_com_a_empresa` aplica o cupom. Cupom que deixou de valer nesse meio tempo
    só some: a empresa nasce sem ele, nunca é recusada por isso.
+
+   **Pelo "Entrar com Google" (.99).** Não há formulário, então quem guarda é a volta do Google
+   (`app/auth/callback/route.ts`, `FORK MIA (.99)`): ela lê o cupom do cookie `mia_cupom` e, para
+   quem está criando a conta (sem empresa e sem convite), faz o mesmo que a action do e-mail
+   (`lib/cupons/entrada-com-google.ts`): confere pela mesma régua, no **plano padrão** do cadastro
+   (o Google não leva a escolha do plano, e a empresa dele nasce no padrão), e guarda em
+   `mia_cupom_do_cadastro` **antes** de a empresa nascer, ali mesmo no cadastro aberto ou na
+   aprovação da Time. O gatilho da 9130 aplica o cupom e liga o parceiro, como no e-mail. Sem tela
+   para a frase, o cupom que não vale só não é guardado (a empresa nasce sem ele) e nada muda o
+   destino da volta. O cookie é do domínio em que a pessoa navega, e a volta do Google cai no
+   domínio em que ela clicou (`lib/auth/dominio-do-retorno-do-google.ts`). Antes da .99 o cupom se perdia
+   no cadastro pelo Google, e o parceiro ficava sem a comissão.
 4. No passo "Pagamento", antes de pagar, dá para pôr e tirar o cupom. Depois de pago, só a Time
    troca, na ficha da empresa.
 
@@ -220,6 +232,7 @@ desconto para cliente que já assina (renovação).
 - `lib/cobranca/sinal.handler.ts`: o aviso do Asaas confere o cliente.
 - `components/auth/SignupForm.tsx`, `lib/auth/schemas.ts`, `app/actions/auth/signUp.ts`, `app/(public)/signup/page.tsx`:
   o cupom no cadastro.
+- `app/auth/callback/route.ts` (`FORK MIA (.99)`): o cupom do navegador no cadastro pelo Google.
 - `lib/auth/public-paths.ts`: a consulta pública do cupom.
 - `components/admin/AdminSidebar.tsx`, `app/admin/(protected)/cobranca/page.tsx`,
   `app/admin/(protected)/tenants/[id]/page.tsx`.
@@ -238,6 +251,7 @@ Do fork: `lib/pagamento-inicial/servico.ts` e `tipos.ts`, `components/pagamento-
 | `tests/unit/cupons-regras.test.ts` | os motivos e as frases, os valores com desconto, a conta do líquido com os números do protótipo, o prazo |
 | `tests/unit/cupons-desconto-no-asaas.test.ts` | cada cobrança na ordem dela, a assinatura, a nota agendada, o encerramento, plano fora do cupom, Asaas fora do ar |
 | `tests/unit/cupons-no-passo-e-setup.test.ts` | o cupom no passo (com a cobrança refeita), no cadastro; o setup: cobrança avulsa, cortesia, nota com o serviço próprio, o mesmo cartão |
+| `tests/unit/cupom-no-cadastro-pelo-google.test.ts` | (.99) a volta do Google guarda o cupom do navegador antes de a empresa nascer, no cadastro aberto e no com aprovação; sem cookie, com empresa ou com convite, nada; o cupom que não vale no plano padrão não é guardado e não muda o destino |
 | `tests/unit/parceiros-comissao-e-repasse.test.ts` | a comissão de cada cobrança, o que não entra, o prazo, os termos fixados, os estornos, o fechamento, o anexo, o extrato, a planilha |
 | `tests/unit/mcp-de-implantacao-cupons-e-parceiros.test.ts` | as seis ferramentas, a máscara, a idempotência, a recusa sem anexo |
 
