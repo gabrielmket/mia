@@ -133,7 +133,7 @@ export async function SaudeDoSchema() {
             esconde qual linha do baseline falhou. `break-all` porque mensagem de
             Postgres traz nomes longos sem espaço.
           */}
-          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border bg-surface-2 p-2 font-mono text-[11px]">
+          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border bg-surface-elevated p-2 font-mono text-[11px]">
             {linha.erros_amostra ?? t("(sem amostra gravada)")}
           </pre>
         </div>

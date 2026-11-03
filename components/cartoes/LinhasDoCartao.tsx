@@ -243,7 +243,7 @@ export function SeloDaBola({ bola }: { bola: Bola }) {
       }
       className={cn(
         "shrink-0 whitespace-nowrap rounded-full px-1.5 text-[10px] font-medium",
-        nos ? "bg-warning-bg text-warning-fg" : "bg-surface-muted text-text-muted",
+        nos ? "bg-warning-bg text-warning-fg" : "bg-surface-elevated text-text-muted",
       )}
     >
       {t("bola")}: {nos ? t("nós") : t("cliente")}

@@ -130,7 +130,7 @@ export function HistoricoDeCompras({
         </div>
 
         {r.habito.oQue || r.habito.pagamento || r.habito.finalidade ? (
-          <div className="rounded-md bg-surface-muted/60 px-2 py-1.5">
+          <div className="rounded-md bg-surface-elevated/60 px-2 py-1.5">
             <p className="text-[11px] text-text-muted">
               {t("Hábito")} · {t("derivado das compras e dos campos dos negócios; não é um cadastro")}
             </p>

@@ -142,7 +142,7 @@ export function NovaEmpresa({ aoFechar }: { aoFechar: () => void }) {
           </div>
 
           {receita ? (
-            <div className="rounded-md border border-border bg-surface-muted p-3 text-xs" data-testid="veio-da-receita">
+            <div className="rounded-md border border-border bg-surface-elevated p-3 text-xs" data-testid="veio-da-receita">
               <p className="font-medium text-text">{t("Veio da Receita")}</p>
               <p className="mt-1 text-text">
                 {[texto("legal_name"), texto("registration_status"), texto("opened_at") ? `${t("aberta em")} ${texto("opened_at")}` : null]

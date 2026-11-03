@@ -92,7 +92,7 @@ const COR_DO_TOM = {
   alerta: "bg-warning-bg text-warning-fg",
   perigo: "bg-error-bg text-error-fg",
   info: "bg-accent/10 text-accent",
-  neutro: "bg-surface-muted text-text-muted",
+  neutro: "bg-surface-elevated text-text-muted",
 } as const;
 
 function tresAvisos(avisos: readonly number[]): [string, string, string] {

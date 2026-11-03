@@ -201,7 +201,7 @@ export function AssistenteClient() {
                 </div>
                 <p className="whitespace-pre-wrap">{c.texto}</p>
                 {c.resposta ? (
-                  <p className="rounded-md bg-surface-muted p-2 whitespace-pre-wrap">
+                  <p className="rounded-md bg-surface-elevated p-2 whitespace-pre-wrap">
                     <span className="font-medium">{t("Resposta da Time Company")}:</span> {c.resposta}
                   </p>
                 ) : null}

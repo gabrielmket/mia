@@ -39,7 +39,9 @@ describe("conteúdo da Ajuda acompanha o contexto do menu", () => {
       modulos_ligados: modulos, capacidades_ligadas: capacidades };
     const filtro = vi.spyOn(navegacao, "destinosDaInterface"); // delega ao original
     render(<AjudaConteudo />);
-    expect(filtro).toHaveBeenLastCalledWith(settings, false, "manager", modulos, capacidades);
+    // FORK MIA: os eixos na ordem do fork, os mesmos do Sidebar (contratados, modo de
+    // venda, ligados na instalação, capacidades; lib/navigation/interface.ts).
+    expect(filtro).toHaveBeenLastCalledWith(settings, false, "manager", undefined, undefined, modulos, capacidades);
     expect(urls()).toEqual(["/app/contacts"]);
   });
 
@@ -71,7 +73,7 @@ describe("conteúdo da Ajuda acompanha o contexto do menu", () => {
     authRef.activeOrg!.role = "viewer";
     const filtro = vi.spyOn(navegacao, "destinosDaInterface");
     render(<AjudaConteudo />);
-    expect(filtro).toHaveBeenLastCalledWith(undefined, false, "viewer", [], []);
+    expect(filtro).toHaveBeenLastCalledWith(undefined, false, "viewer", undefined, undefined, [], []);
     expect(urls()).toEqual(["/app/contacts", "/app/inbox", "/app/kanban", "/app/settings/atualizacao", "/app/team"]);
   });
 

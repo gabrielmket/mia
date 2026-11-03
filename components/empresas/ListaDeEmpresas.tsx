@@ -189,7 +189,7 @@ function NomeDaLinha({ empresa: e }: { empresa: EmpresaNaLista }) {
           </span>
         ) : null}
         {!e.cnpj ? (
-          <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] text-text-muted">{t("Sem CNPJ")}</span>
+          <span className="rounded-full bg-surface-elevated px-2 py-0.5 text-[11px] text-text-muted">{t("Sem CNPJ")}</span>
         ) : null}
       </div>
     </div>

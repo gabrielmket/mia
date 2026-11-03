@@ -106,18 +106,6 @@ export function LeadFieldsForm({
   const moedaDoValor = lead.currency ?? org?.currency ?? MOEDA_PADRAO;
   const edit = useEditLead(pipelineId);
   const [customFields, setCustomFields] = useState<Record<string, unknown>>(lead.custom_fields ?? {});
-  // Mesmo picker da reatribuição (spec 13 §4: escrita no funil é agent+): um
-  // viewer não veria a lista, e a rota também a negaria. A permissão chega por
-  // `podeVerEquipe` (ver a prop).
-  const { data: membros } = useAssignableMembers(podeVerEquipe);
-  /**
-   * Quem originou pode já ter saído do time — a lista só traz membro ATIVO.
-   * Sem esta checagem o select abriria vazio e o salvamento apagaria, calado, a
-   * origem de uma venda já fechada.
-   */
-  const origemForaDaLista =
-    !!lead.originated_by_user_id &&
-    !(membros ?? []).some((m) => m.user_id === lead.originated_by_user_id);
   // A RÉGUA do diff (issue #2132): o valor carregado ao abrir. Só o que a
   // pessoa mudar daqui vai viajar — devolver o objeto inteiro sobrescrevia o
   // que outra pessoa (ou o MCP `crm_update_lead`) mudou com a ficha aberta.
@@ -322,16 +310,14 @@ export function LeadFieldsForm({
             {...form.register("originated_by_user_id")}
           >
             <option value="">{t("Ninguém")}</option>
-            {(membros ?? []).map((m) => (
-              <option key={m.user_id} value={m.user_id}>
-                {m.full_name ?? t("Sem nome")}
-              </option>
-            ))}
-            {origemForaDaLista && (
-              <option value={lead.originated_by_user_id ?? ""}>
-                {t("Fora da equipe atual")}
-              </option>
-            )}
+            {/* A lista da equipe só é lida por quem a vê: sem a permissão, o
+                componente nem monta a leitura (e o formulário do upstream não
+                passa a exigir a consulta em toda tela que o usa). */}
+            {podeVerEquipe ? (
+              <OpcoesDaEquipe originadoPor={lead.originated_by_user_id ?? null} />
+            ) : lead.originated_by_user_id ? (
+              <option value={lead.originated_by_user_id}>{t("Fora da equipe atual")}</option>
+            ) : null}
           </select>
         </div>
 
@@ -416,5 +402,28 @@ export function LeadFieldsForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * FORK MIA (metas, 0243) — as opções do "Originado por (SDR)": a equipe que pode
+ * receber negócio (o mesmo picker da reatribuição, spec 13 §4). Quem originou pode
+ * já ter saído do time, e a lista só traz membro ATIVO: sem a opção de reserva o
+ * select abriria vazio e o salvamento apagaria, calado, a origem de uma venda
+ * já fechada.
+ */
+function OpcoesDaEquipe({ originadoPor }: { originadoPor: string | null }) {
+  const t = useT();
+  const { data: membros } = useAssignableMembers(true);
+  const foraDaLista = !!originadoPor && !(membros ?? []).some((m) => m.user_id === originadoPor);
+  return (
+    <>
+      {(membros ?? []).map((m) => (
+        <option key={m.user_id} value={m.user_id}>
+          {m.full_name ?? t("Sem nome")}
+        </option>
+      ))}
+      {foraDaLista && <option value={originadoPor ?? ""}>{t("Fora da equipe atual")}</option>}
+    </>
   );
 }

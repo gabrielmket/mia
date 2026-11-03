@@ -57,7 +57,7 @@ export function MensagemDoAssistente({
     <div className="flex justify-start" data-testid="mensagem-do-assistente" data-tipo={mensagem.tipo}>
       <div
         className={cn(
-          "flex max-w-[92%] flex-col gap-2 rounded-2xl rounded-bl-sm border bg-surface-muted px-3 py-2 text-sm",
+          "flex max-w-[92%] flex-col gap-2 rounded-2xl rounded-bl-sm border bg-surface-elevated px-3 py-2 text-sm",
           mensagem.erro ? "border-warning-fg/40" : "",
         )}
       >

@@ -100,17 +100,17 @@ export function FolhaDaObrigacao({ pedido, aoFechar }: { pedido: PedidoDeFolha |
             <nav aria-label={t("Ligado a")} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-muted">
               <span>{t("Ligado a")}</span>
               {item.vinculos.negocio ? (
-                <Link href={`/app/leads/${item.vinculos.negocio.id}`} className="rounded-full bg-surface-muted px-2 py-0.5 hover:text-text">
+                <Link href={`/app/leads/${item.vinculos.negocio.id}`} className="rounded-full bg-surface-elevated px-2 py-0.5 hover:text-text">
                   {t("Negócio")} · {item.vinculos.negocio.titulo}
                 </Link>
               ) : null}
               {item.vinculos.empresa ? (
-                <Link href={`/app/companies/${item.vinculos.empresa.id}`} className="rounded-full bg-surface-muted px-2 py-0.5 hover:text-text">
+                <Link href={`/app/companies/${item.vinculos.empresa.id}`} className="rounded-full bg-surface-elevated px-2 py-0.5 hover:text-text">
                   {t("Empresa")} · {item.vinculos.empresa.nome}
                 </Link>
               ) : null}
               {item.vinculos.contato ? (
-                <Link href={`/app/contacts/${item.vinculos.contato.id}`} className="rounded-full bg-surface-muted px-2 py-0.5 hover:text-text">
+                <Link href={`/app/contacts/${item.vinculos.contato.id}`} className="rounded-full bg-surface-elevated px-2 py-0.5 hover:text-text">
                   {t("Contato")} · {item.vinculos.contato.nome}
                 </Link>
               ) : null}
@@ -290,7 +290,7 @@ function TrilhaDaSituacao({ item, hoje }: { item: ObrigacaoNaTela; hoje: Dia }) 
             aria-current={s === atual ? "step" : undefined}
             className={cn(
               "rounded-full px-2 py-0.5",
-              s === atual ? "bg-accent/10 font-medium text-accent" : "bg-surface-muted text-text-muted",
+              s === atual ? "bg-accent/10 font-medium text-accent" : "bg-surface-elevated text-text-muted",
             )}
           >
             {t(ROTULO_DA_SITUACAO[s])}
@@ -300,7 +300,7 @@ function TrilhaDaSituacao({ item, hoje }: { item: ObrigacaoNaTela; hoje: Dia }) 
       {item.categoria === "documento" ? (
         <li className="flex items-center gap-1">
           <span aria-hidden className="text-text-muted">↺</span>
-          <span className={cn("rounded-full px-2 py-0.5", item.renovado_em ? "bg-success-bg text-success-fg" : "bg-surface-muted text-text-muted")}>
+          <span className={cn("rounded-full px-2 py-0.5", item.renovado_em ? "bg-success-bg text-success-fg" : "bg-surface-elevated text-text-muted")}>
             {t("renovado (novo ciclo)")}
           </span>
         </li>

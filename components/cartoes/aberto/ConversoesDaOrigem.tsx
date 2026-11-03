@@ -83,7 +83,7 @@ const COR: Record<Situacao, string> = {
   enviada: "bg-success-bg text-success-fg",
   aguardando: "bg-info-bg text-info-fg",
   falha: "bg-error-bg text-error-fg",
-  nao_enviada: "bg-surface-muted text-text-muted",
+  nao_enviada: "bg-surface-elevated text-text-muted",
 };
 
 export function ConversoesDaOrigem({ origem }: { origem: CartaoAberto["origem"] }) {

@@ -216,7 +216,7 @@ export function Foco({ lead, pipelineId }: { lead: Lead; pipelineId: string }) {
                   i.tom === "alerta" && "bg-warning-bg text-warning-fg",
                   i.tom === "acento" && "bg-accent/10 text-accent",
                   i.tom === "perigo" && "bg-error-bg text-error-fg",
-                  i.tom === "neutro" && "bg-surface-muted text-text-muted",
+                  i.tom === "neutro" && "bg-surface-elevated text-text-muted",
                   i.tom === "ok" && "bg-success-bg text-success-fg",
                 )}
               >
@@ -272,7 +272,7 @@ function Compositor({ lead }: { lead: Lead }) {
             onClick={() => setAba(a)}
             className={cn(
               "rounded-md px-2 py-1 text-xs",
-              aba === a ? "bg-accent/10 font-medium text-accent" : "text-text-muted hover:bg-surface-muted hover:text-text",
+              aba === a ? "bg-accent/10 font-medium text-accent" : "text-text-muted hover:bg-surface-elevated hover:text-text",
             )}
           >
             {t(ROTULO_DA_ABA[a])}

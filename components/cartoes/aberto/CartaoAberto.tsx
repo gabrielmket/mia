@@ -324,7 +324,7 @@ export function CartaoAberto({
                   className={cn(
                     "rounded-md border px-2 py-1 text-[11px] transition-colors",
                     atual && "border-accent bg-accent/10 font-medium text-accent",
-                    feita && !atual && "border-border bg-surface-muted text-text",
+                    feita && !atual && "border-border bg-surface-elevated text-text",
                     !atual && !feita && "border-dashed border-border text-text-muted",
                     aberto && !atual && onMoverEtapa && "hover:border-accent hover:text-text",
                   )}

@@ -72,7 +72,7 @@ export function ChamadosDaPlataforma() {
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-sm">
-              <thead className="bg-surface-muted text-left text-xs text-text-muted">
+              <thead className="bg-surface-elevated text-left text-xs text-text-muted">
                 <tr>
                   <th className="p-2">#</th>
                   <th className="p-2">{t("Empresa")}</th>
@@ -151,7 +151,7 @@ function DetalheDoChamado({ chamado }: { chamado: ChamadoDaPlataforma }) {
         {chamado.empresa ?? "-"} · {chamado.quem_abriu ?? "-"}
       </p>
       <p className="text-sm whitespace-pre-wrap">{chamado.texto}</p>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-md bg-surface-muted p-3 text-xs">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-md bg-surface-elevated p-3 text-xs">
         <dt className="text-text-muted">{t("Tela")}</dt>
         <dd>{contexto.tela?.rotulo ?? contexto.tela?.caminho ?? "-"}</dd>
         <dt className="text-text-muted">{t("Hora")}</dt>

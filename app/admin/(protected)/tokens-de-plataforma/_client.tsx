@@ -110,7 +110,7 @@ export function TokensDePlataforma({
               "Só o resumo criptográfico fica gravado. Se perder, a saída é revogar este e emitir outro.",
             )}
           </p>
-          <pre className="overflow-auto rounded-md border border-border bg-surface-2 p-2 font-mono text-xs">
+          <pre className="overflow-auto rounded-md border border-border bg-surface-elevated p-2 font-mono text-xs">
             {recemCriado}
           </pre>
           <Button variant="outline" size="sm" onClick={() => setRecemCriado(null)}>
@@ -212,7 +212,7 @@ export function TokensDePlataforma({
                       <span className="text-sm font-medium">{tk.name}</span>
                       <span className="font-mono text-xs text-text-muted">{tk.prefix}…</span>
                       {!vivo ? (
-                        <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-text-muted">
+                        <span className="rounded-full bg-surface-elevated px-2 py-0.5 text-xs text-text-muted">
                           {t("revogado")}
                         </span>
                       ) : null}

@@ -215,7 +215,7 @@ export function ObrigacoesClient() {
 
           <div className="min-h-0 overflow-x-auto rounded-lg border border-border">
             <table className="w-full min-w-[900px] text-left text-xs">
-              <thead className="bg-surface-muted text-[11px] text-text-muted">
+              <thead className="bg-surface-elevated text-[11px] text-text-muted">
                 <tr>
                   <th className="px-3 py-2 font-medium">{t("Item")}</th>
                   <th className="px-3 py-2 font-medium">{t("Ligado a")}</th>
@@ -239,7 +239,7 @@ export function ObrigacoesClient() {
                   </tr>
                 ) : (
                   visiveis.map((item) => (
-                    <tr key={item.id} data-obrigacao={item.id} className="align-top hover:bg-surface-muted">
+                    <tr key={item.id} data-obrigacao={item.id} className="align-top hover:bg-surface-elevated">
                       <td className="px-3 py-2">
                         <Link href={destinoDoItem(item)} className="font-medium text-text hover:underline">
                           {item.nome}

@@ -350,6 +350,14 @@ function conteudoDa(versao: Record<string, unknown>): Record<string, unknown> {
   // A coluna nasceu na 0616 com padrão LIGADO: versão gravada antes dela (ou lida
   // sem a coluna) vale como ligada, e é assim que a comparação a lê.
   if (typeof conteudo.handoff_legal_enabled !== "boolean") conteudo.handoff_legal_enabled = true;
+  // .100 (upstream v1.99, #3722): o gatilho ganhou as quatro listas do público do
+  // agente, com padrão vazio. A versão gravada antes delas (ou com o gatilho padrão
+  // do banco) é lida com os padrões do MESMO schema que monta a desejada; senão toda
+  // versão antiga pareceria mudada e cada chamada abriria um rascunho à toa.
+  if (conteudo.trigger_config !== null && typeof conteudo.trigger_config === "object") {
+    const lido = versionCreateSchema.shape.trigger_config.safeParse(conteudo.trigger_config);
+    if (lido.success && lido.data !== undefined) conteudo.trigger_config = lido.data;
+  }
   return conteudo;
 }
 

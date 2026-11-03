@@ -139,7 +139,7 @@ function Ciclo({ estagio, temCompra }: { estagio: string | null; temCompra: bool
           className={cn(
             "rounded-md border px-2 py-0.5 text-[11px]",
             i === atual && "border-accent bg-accent/10 font-medium text-accent",
-            i < atual && "border-border bg-surface-muted text-text",
+            i < atual && "border-border bg-surface-elevated text-text",
             i > atual && "border-dashed border-border text-text-muted",
           )}
         >

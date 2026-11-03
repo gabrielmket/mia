@@ -74,7 +74,7 @@ export function SecaoDeObrigacoes({
     <div data-grupo-de-obrigacoes={titulo}>
       <h4 className="mb-0.5 mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-text-muted">
         <span className="min-w-0 break-words">{titulo}</span>
-        {herdado ? <span className="rounded-full bg-surface-muted px-1.5 text-[10px] font-normal">{t("herdado")}</span> : null}
+        {herdado ? <span className="rounded-full bg-surface-elevated px-1.5 text-[10px] font-normal">{t("herdado")}</span> : null}
       </h4>
       {itens.length === 0 ? (
         <p className="text-xs text-text-muted">{vazio}</p>

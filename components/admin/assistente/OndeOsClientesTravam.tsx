@@ -221,7 +221,7 @@ export function OndeOsClientesTravam() {
                             <span className="w-64 shrink-0 truncate" title={t(doCatalogo.passos[i]?.texto ?? "")}>
                               {t("Passo")} {i + 1} · {t(doCatalogo.passos[i]?.texto ?? "")}
                             </span>
-                            <span className="h-2 flex-1 overflow-hidden rounded-full bg-surface-muted" aria-hidden>
+                            <span className="h-2 flex-1 overflow-hidden rounded-full bg-surface-elevated" aria-hidden>
                               <span className={cn("block h-full", queda ? "bg-warning-fg" : "bg-primary")} style={{ width: `${v}%` }} />
                             </span>
                             <span className="w-12 text-right">{v}%</span>
@@ -231,7 +231,7 @@ export function OndeOsClientesTravam() {
                       })}
                     </ul>
                     {trilha.maior_queda ? (
-                      <div className="space-y-1 rounded-md bg-surface-muted p-3 text-sm">
+                      <div className="space-y-1 rounded-md bg-surface-elevated p-3 text-sm">
                         <p>
                           <strong>
                             {t("No passo")} {trilha.maior_queda.passo}
@@ -405,7 +405,7 @@ function Barras({ linhas }: { linhas: Array<[string, number]> }) {
       {linhas.map(([rotulo, v]) => (
         <li key={rotulo} className="flex items-center gap-2 text-sm">
           <span className="w-48 shrink-0 truncate">{rotulo}</span>
-          <span className="h-2 flex-1 overflow-hidden rounded-full bg-surface-muted" aria-hidden>
+          <span className="h-2 flex-1 overflow-hidden rounded-full bg-surface-elevated" aria-hidden>
             <span className="block h-full bg-primary" style={{ width: `${Math.min(100, v)}%` }} />
           </span>
           <span className="w-12 text-right">{v}%</span>

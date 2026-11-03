@@ -34,7 +34,7 @@ export function MeMostraComoNoPainel({ caminho, aoComecar }: { caminho: string; 
   if (!trilha && daTela.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-2 rounded-2xl rounded-bl-sm border bg-surface-muted px-3 py-2 text-sm" data-testid="me-mostra-como-no-painel">
+    <div className="flex flex-col gap-2 rounded-2xl rounded-bl-sm border bg-surface-elevated px-3 py-2 text-sm" data-testid="me-mostra-como-no-painel">
       {trilha && recomendada ? (
         <>
           <p>

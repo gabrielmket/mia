@@ -136,12 +136,12 @@ export function PainelDoAssistente({
       <div ref={lista} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-3" aria-live="polite">
         {mensagens.length === 0 && !pendente && saudacao ? (
           <div className="flex justify-start">
-            <div className="max-w-[92%] rounded-2xl rounded-bl-sm border bg-surface-muted px-3 py-2 text-sm">{saudacao}</div>
+            <div className="max-w-[92%] rounded-2xl rounded-bl-sm border bg-surface-elevated px-3 py-2 text-sm">{saudacao}</div>
           </div>
         ) : null}
         {mensagens.length === 0 && !pendente && !saudacao ? (
           <div className="flex justify-start">
-            <div className="max-w-[92%] rounded-2xl rounded-bl-sm border bg-surface-muted px-3 py-2 text-sm">
+            <div className="max-w-[92%] rounded-2xl rounded-bl-sm border bg-surface-elevated px-3 py-2 text-sm">
               <p>
                 {primeiroNome ? `${t("Olá")}, ${primeiroNome}. ` : `${t("Olá")}. `}
                 {t("Sou o assistente da MIA. Posso te mostrar sua rotina e seus números, e te ajudar a usar o sistema.")}

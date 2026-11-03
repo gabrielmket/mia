@@ -292,7 +292,7 @@ export function PessoasDoNegocio({
                 type="button"
                 disabled={incluir.isPending}
                 onClick={() => incluir.mutate({ contactId: p.contatoId, papel: ehPapel(p.papel) ? p.papel : null })}
-                className="min-h-11 rounded-full border border-border px-3 text-base text-text hover:bg-surface-muted lg:min-h-0 lg:py-0.5 lg:text-[11px]"
+                className="min-h-11 rounded-full border border-border px-3 text-base text-text hover:bg-surface-elevated lg:min-h-0 lg:py-0.5 lg:text-[11px]"
               >
                 + {p.nome ?? t("Contato")}
                 {ehPapel(p.papel) ? ` · ${t(ROTULO_DO_PAPEL[p.papel]).toLowerCase()}` : ""}

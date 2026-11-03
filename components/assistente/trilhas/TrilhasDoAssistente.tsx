@@ -239,13 +239,13 @@ function CartaoDaTrilha({
         <span className="text-xs text-text-muted">{estado}</span>
       </div>
       {s.estado === "pausada" || s.estado === "andando" ? (
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-muted" aria-hidden>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-elevated" aria-hidden>
           <div className="h-full bg-primary" style={{ width: `${Math.round((((s.passo ?? 0) + 0.5) / s.de) * 100)}%` }} />
         </div>
       ) : null}
 
       {aberta ? (
-        <div className="flex flex-col gap-2 rounded-md bg-surface-muted p-3 text-sm">
+        <div className="flex flex-col gap-2 rounded-md bg-surface-elevated p-3 text-sm">
           <ol className="list-decimal space-y-1 pl-5">
             {trilha.passos.map((p, i) => (
               <li key={i}>

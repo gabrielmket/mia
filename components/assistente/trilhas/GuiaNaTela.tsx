@@ -518,7 +518,7 @@ function GuiaAndando({ guia }: { guia: GuiaAtiva }) {
           <>
             {guia.feitos[guia.passo - 1] ? <p className="text-xs text-success-fg">✓ {guia.feitos[guia.passo - 1]}</p> : null}
             <p className="text-base leading-snug">{t(passo.texto)}</p>
-            {passo.fora ? <p className="rounded-md bg-surface-muted p-2 text-xs">{t(passo.fora)}</p> : null}
+            {passo.fora ? <p className="rounded-md bg-surface-elevated p-2 text-xs">{t(passo.fora)}</p> : null}
             {passo.soVoce ? <p className="text-xs text-text-muted">{t("Esse clique é só seu: eu não faço.")}</p> : null}
             {foraDaTela && guia.passo > 0 ? (
               <p className="rounded-md bg-warning-bg p-2 text-xs text-warning-fg">
@@ -535,7 +535,7 @@ function GuiaAndando({ guia }: { guia: GuiaAtiva }) {
               {temSistema && guia.trilha ? ` · ${t("no sistema, com o seu login")}` : ""}
               {conferindo ? ` · ${t("conferindo…")}` : ""}
             </p>
-            {recado ? <p className="rounded-md bg-surface-muted p-2 text-xs">{recado}</p> : null}
+            {recado ? <p className="rounded-md bg-surface-elevated p-2 text-xs">{recado}</p> : null}
             <div className="flex flex-wrap gap-2">
               {foraDaTela && (irDoPasso(passo) || guia.passo > 0) ? (
                 <Button type="button" size="sm" className="h-11 lg:h-8" onMouseDown={(e) => e.preventDefault()} onClick={meLeva}>

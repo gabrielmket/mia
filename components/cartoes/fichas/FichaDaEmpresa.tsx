@@ -142,7 +142,7 @@ export function FichaDaEmpresa({ empresaId }: { empresaId: string }) {
               </a>
             ) : null}
             {(e.tags ?? []).map((tag) => (
-              <span key={tag} className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] text-text-muted">
+              <span key={tag} className="rounded-full bg-surface-elevated px-2 py-0.5 text-[11px] text-text-muted">
                 {tag}
               </span>
             ))}
