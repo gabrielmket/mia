@@ -22,6 +22,8 @@
  */
 import type pg from 'pg';
 
+import { adiadoPelaJanelaDeResposta } from '../../pacing/adiados-da-janela';
+
 /**
  * Job pendente do contato cuja janela ainda não venceu — a carona desta
  * mensagem.
@@ -57,7 +59,7 @@ import type pg from 'pg';
  * As cercas moram NA consulta, não num filtro depois dela: com `limit 1`, um
  * filtro posterior recusaria o job errado sem enxergar o certo ao lado.
  */
-const SQL_JOB_PARA_COALESCER = `select id from job_queue
+const SQL_JOB_PARA_COALESCER = `select id, payload from job_queue
  where organization_id = $1 and contact_id = $2
    and kind = 'inbound_turn' and status = 'pending' and run_after > now()
    and not (payload ? 'held_run_after')
@@ -68,7 +70,16 @@ const SQL_JOB_PARA_COALESCER = `select id from job_queue
 /** O que fazer com a mensagem que acabou de chegar. */
 export type DecisaoDeRajada =
   | { tipo: 'coalescido'; jobId: string }
-  | { tipo: 'enfileirar'; runAfter: Date | undefined };
+  | {
+      tipo: 'enfileirar';
+      runAfter: Date | undefined;
+      /**
+       * Job que ERA o candidato natural à carona mas está adiado pela JANELA DE
+       * RESPOSTA que já ABRIU (#3383): não recebe a mensagem, e quem acorda o
+       * adiado é quem chama (`drain.ts` — ver `soltarAdiadoPelaJanela`).
+       */
+      caronaRecusadaEm?: string;
+    };
 
 /**
  * Quem recebe a mensagem: o contato E a conversa em que ela chegou (a cerca
@@ -81,18 +92,26 @@ export interface AlvoDaRajada {
 }
 
 /** Job pendente do contato que pode receber a mensagem de carona. */
+export interface CandidatoDeCarona {
+  id: string;
+  /** `true` quando o job espera a ABERTURA da janela de resposta (rastro do #3383). */
+  adiadoPelaJanelaDeResposta: boolean;
+}
+
 export async function buscarJobParaCoalescer(
   pool: pg.Pool,
   alvo: AlvoDaRajada,
   debounceMs: number,
-): Promise<string | undefined> {
-  const { rows } = await pool.query<{ id: string }>(SQL_JOB_PARA_COALESCER, [
+): Promise<CandidatoDeCarona | undefined> {
+  const { rows } = await pool.query<{ id: string; payload: unknown }>(SQL_JOB_PARA_COALESCER, [
     alvo.organizationId,
     alvo.contactId,
     debounceMs,
     alvo.conversationId,
   ]);
-  return rows[0]?.id;
+  const row = rows[0];
+  if (row === undefined) return undefined;
+  return { id: row.id, adiadoPelaJanelaDeResposta: adiadoPelaJanelaDeResposta(row.payload) };
 }
 
 /**
@@ -129,16 +148,42 @@ export function debounceEfetivo(
   return Math.min(Math.max(0, configurado), TETO_DEBOUNCE_MS);
 }
 
-/** Decide entre carona em job existente e janela nova. */
+/**
+ * Decide entre carona em job existente e janela nova.
+ *
+ * `janelaDeRespostaAberta` (#3383) é opcional e SÓ é consultada quando o
+ * candidato carrega o rastro `adiado_por_janela` — job de debounce (8 s), cap,
+ * saldo ou sessão não pagam a leitura e continuam exatamente como antes.
+ *
+ * Com a janela ABERTA, o job adiado pela janela não recebe carona: a mensagem
+ * nova enfileira o próprio turno (e o chamador acorda o adiado, que senão
+ * dormiria até o horário antigo). Com a janela FECHADA o comportamento é o de
+ * sempre — a mensagem viaja de carona e os dois respondem juntos às 7h.
+ * Sem o quinto argumento (todos os chamadores antigos), nada muda.
+ */
 export async function decidirRajada(
   pool: pg.Pool,
   alvo: AlvoDaRajada,
   debounceMs: number,
   agora: number = Date.now(),
+  janelaDeRespostaAberta?: () => Promise<boolean>,
 ): Promise<DecisaoDeRajada> {
   if (debounceMs > 0) {
-    const jobId = await buscarJobParaCoalescer(pool, alvo, debounceMs);
-    if (jobId !== undefined) return { tipo: 'coalescido', jobId };
+    const candidato = await buscarJobParaCoalescer(pool, alvo, debounceMs);
+    if (candidato !== undefined) {
+      if (
+        candidato.adiadoPelaJanelaDeResposta &&
+        janelaDeRespostaAberta !== undefined &&
+        (await janelaDeRespostaAberta())
+      ) {
+        return {
+          tipo: 'enfileirar',
+          runAfter: janelaDeRajada(debounceMs, agora),
+          caronaRecusadaEm: candidato.id,
+        };
+      }
+      return { tipo: 'coalescido', jobId: candidato.id };
+    }
   }
   return { tipo: 'enfileirar', runAfter: janelaDeRajada(debounceMs, agora) };
 }

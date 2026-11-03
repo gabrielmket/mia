@@ -55,6 +55,17 @@ export class ContatosConhecidos {
     if (contato.email_normalized) this.porEmail.set(contato.email_normalized.toLowerCase(), contato);
   }
 
+  /**
+   * A ficha dona de um número EXTRA (`contact_phones`, upstream v1.95): a linha
+   * da planilha com esse número cai nela, como cairia no principal. Não pisa no
+   * principal de outra ficha já lembrada pelo mesmo número.
+   */
+  lembrarPeloExtra(numero: string, contato: ContatoNaBase): void {
+    for (const v of phoneLookupVariants(numero)) {
+      if (!this.porTelefone.has(v)) this.porTelefone.set(v, contato);
+    }
+  }
+
   doTelefone(telefone: string): ContatoNaBase | null {
     for (const v of phoneLookupVariants(telefone)) {
       const achado = this.porTelefone.get(v);

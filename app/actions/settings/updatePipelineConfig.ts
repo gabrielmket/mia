@@ -6,11 +6,12 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { audit } from "@/lib/audit";
+import { respostaParaOperador } from "@/lib/erros/para-operador";
 import {
   pipelineConfigPatchSchema,
   type PipelineConfigPatch,
 } from "@/lib/schemas/settings";
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { gravarConfiguracaoDoFunil } from "@/lib/pipelines/pipeline-config";
 import { podeAdministrarEmpresa } from "@/lib/auth/pode-administrar-empresa";
 
@@ -38,6 +39,7 @@ export async function updatePipelineConfig(
   if (!podeAdministrarEmpresa(authUser, activeOrg)) {
     return { ok: false, error: "forbidden_role" };
   }
+  if (await mfaEmDivida()) return { ok: false, error: "mfa_required" };
 
   const supabase = await createClient();
   const hdrs = await headers();
@@ -53,7 +55,21 @@ export async function updatePipelineConfig(
     patch: parsed.data,
     idioma: authUser.idioma,
   });
-  if (!gravado.ok) return { ok: false, error: gravado.error };
+  if (!gravado.ok) {
+    // Upstream v1.98 (#3747): a frase da tela vem do mapeador; o texto do
+    // Postgres fica no log.
+    if (gravado.falhaDoBanco) {
+      return respostaParaOperador(gravado.falhaDoBanco.erro, {
+        contexto:
+          gravado.falhaDoBanco.etapa === "ler"
+            ? "[pipeline.config] falha ao ler o pipeline"
+            : "[pipeline.config] falha ao gravar a configuração do pipeline",
+        idioma: authUser.idioma,
+        campos: { pipeline_id: pipelineId },
+      });
+    }
+    return { ok: false, error: gravado.error };
+  }
 
   await audit({
     action: "pipeline.config_updated",
@@ -69,6 +85,15 @@ export async function updatePipelineConfig(
       won_reasons_count: parsed.data.won_reasons?.length ?? null,
       won_reason_required: parsed.data.won_reason_required ?? null,
       reabertura: parsed.data.reabertura ?? null,
+      entrada_do_inbox_ativa: parsed.data.entrada_do_inbox?.ativa ?? null,
+      // #2995: quantos cards o quadro deixa de mostrar é decisão de quem opera
+      // — a auditoria registra o número (ou `0`, o desligamento).
+      ocultar_encerrados_dias: parsed.data.ocultar_encerrados_dias ?? null,
+      // #3487: quantos atalhos o funil passa a oferecer. O CONTEÚDO não entra
+      // na auditoria de propósito — o link montado carrega dado do cliente, e a
+      // auditoria é lida por quem administra, não necessariamente por quem vê o
+      // contato.
+      atalhos_count: parsed.data.atalhos?.length ?? null,
     },
   });
 

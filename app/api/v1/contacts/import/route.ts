@@ -27,6 +27,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { audit } from "@/lib/audit";
 import { camposCpfParaGravar } from "@/lib/contacts/cpf";
+import { abrirConversaDoContatoNovo } from "@/lib/contacts/conversa-ao-criar";
 import { traduzir } from "@/lib/i18n/dicionario";
 import {
   COLUNAS_DO_CONTATO_NA_BASE,
@@ -46,6 +47,7 @@ import {
 } from "@/lib/contacts/csv";
 import { contactCreateSchemaDoPais } from "@/lib/schemas";
 import { perfilDaOrganizacao } from "@/lib/legal/perfil-do-pais";
+import { contatosDonosDosExtras } from "@/lib/channels/contato-por-telefone";
 import { phoneLookupVariants } from "@/lib/channels/phone-variants";
 import { buscaEmLotes } from "@/lib/supabase/em-lotes";
 import { createClient } from "@/lib/supabase/server";
@@ -218,7 +220,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   // ─── Pré-filtro de duplicados contra o banco (uma query por identificador) ──
   //
-  // Os índices únicos são parciais (excluem mesclados/anonimizados), então a
+  // Os índices únicos são parciais (excluem mesclados), então a
   // busca espelha o WHERE do índice — filtrar pelo que o índice não cobre
   // produziria "duplicado" imaginário.
   const phones = candidatos
@@ -264,6 +266,46 @@ export async function POST(req: NextRequest): Promise<Response> {
       });
     }
     for (const contato of leitura.data) conhecidos.lembrar(contato);
+  }
+
+  // O conserto do upstream (v1.95, vários telefones na ficha): número que é
+  // EXTRA de uma ficha viva já é contato da org, e não pode chegar ao insert e
+  // cair no 23505 do banco. FORK MIA (.97): aqui a ficha dona entra nos
+  // CONHECIDOS por aquele número, e a linha segue a mesma régua das outras (um
+  // e-mail que faltava na ficha dona é completado; o resto é duplicado). Em
+  // lotes, pelo mesmo teto da URL de cima, e a leitura que falha recusa antes
+  // de gravar a primeira linha.
+  const numerosDaPlanilha = [...new Set(phones.flatMap((p) => phoneLookupVariants(p)))];
+  const donosDosExtras = new Map<string, string>();
+  try {
+    for (let inicio = 0; inicio < numerosDaPlanilha.length; inicio += 100) {
+      const achados = await contatosDonosDosExtras(supabase, orgId, numerosDaPlanilha.slice(inicio, inicio + 100));
+      for (const [numero, dono] of achados) donosDosExtras.set(numero, dono);
+    }
+  } catch {
+    return fail("query_failed", t("Não consegui conferir quem já está na base. Tente de novo."), 500, {
+      requestId,
+    });
+  }
+  if (donosDosExtras.size > 0) {
+    const fichasDonas = await buscaEmLotes<ContatoNaBase>([...new Set(donosDosExtras.values())], (lote) =>
+      supabase
+        .from("contacts")
+        .select(COLUNAS_DO_CONTATO_NA_BASE)
+        .eq("organization_id", orgId)
+        .is("is_merged_into", null)
+        .in("id", lote),
+    );
+    if (fichasDonas.error) {
+      return fail("query_failed", t("Não consegui conferir quem já está na base. Tente de novo."), 500, {
+        requestId,
+      });
+    }
+    const porId = new Map(fichasDonas.data.map((c) => [c.id, c]));
+    for (const [numero, dono] of donosDosExtras) {
+      const ficha = porId.get(dono);
+      if (ficha) conhecidos.lembrarPeloExtra(numero, ficha);
+    }
   }
 
   // ─── Insert linha a linha com desfecho individual ─────────────────────────
@@ -385,6 +427,33 @@ export async function POST(req: NextRequest): Promise<Response> {
       id: (criado as { id: string }).id,
       phone_number: phone ?? null,
       email_normalized: email?.toLowerCase() ?? null,
+    });
+
+    // ── CRIAR CONTATO ABRE CONVERSA? AQUI, NÃO (#3718) ─────────────────────
+    //
+    // A criação unitária abre a conversa do contato novo; esta porta não abre, e
+    // isso é REGRA, não esquecimento. A decisão é uma só e mora em
+    // `lib/contacts/conversa-ao-criar.ts` — as duas portas chamam a MESMA
+    // função e só declaram qual porta são; aqui o desfecho é `porta_nao_abre`.
+    //
+    // O preço, medido: o arquivo aceita até `CSV_MAX_DATA_ROWS` (500) contatos.
+    // Abrir conversa para todos seria, por linha, `sessaoProntaParaEnvio` (1–2
+    // SELECT em `channel_sessions`) + RPC `fn_service_begin` (advisory lock +
+    // SELECT em `contacts` + SELECT … FOR NO KEY UPDATE em `conversations` +
+    // SELECT em `channel_sessions` + INSERT em `conversations`) — ~2.500
+    // statements neste request, que já faz 500 INSERTs e 500 `emit_event`. E o
+    // que sobra não é o custo: é a caixa de entrada com 500 conversas `open`
+    // que ninguém pediu e ninguém vai atender.
+    //
+    // A chamada é por linha de propósito (uma porta, um lugar para a regra), mas
+    // ela responde ANTES de qualquer leitura: zero consulta ao banco por este
+    // caminho, medido em `./route.test.ts`.
+    await abrirConversaDoContatoNovo(supabase, {
+      porta: "importacao_csv",
+      organizationId: orgId,
+      contactId: (criado as { id: string }).id,
+      phoneNumber: phone ?? null,
+      requestId,
     });
 
     // Mesmo evento do create unitário — quem consome `contact.created`

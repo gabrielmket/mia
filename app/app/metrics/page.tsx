@@ -23,7 +23,7 @@ export default async function MetricsPage() {
   const t = (texto: string) => traduzir(texto, idioma);
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6 md:p-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">{t("Desempenho")}</h1>

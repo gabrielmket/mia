@@ -29,6 +29,12 @@ linhas. Com esta separação, na medição seguinte (479 commits depois), deu **
 `9001`, `9002`, ... O upstream está passando de `0390` e cresce. As nossas `0239..0272`
 mantêm o número porque são história — o código as cita por ele — mas na pasta delas.
 
+⚠️ Desde a v1.91 o upstream também numera na faixa 9000 (na v1.99 ele vai de
+9016 a 9083, em `supabase/migrations/`). Os nomes não colidem porque o prefixo de
+timestamp é outro e as pastas são separadas (o carimbo lê só `migrations-mia/`),
+mas o número deixou de dizer de quem é a migration. Na .100 a faixa reservada
+para o fork passou a ser a 9160-9169; a próxima escolha de faixa é do dono.
+
 Desde a 9019 (.72) a descrição de migration nova mora no PRÓPRIO arquivo, numa
 linha `-- manifest: <o quê e por quê>`, como o upstream passou a fazer na 1.70
 (#2149): duas frentes em paralelo acrescentando linha no fim do mesmo MANIFEST
@@ -184,6 +190,20 @@ npx vitest run
   `app/api/v1/leads/[id]/contatos-relacionados/route.ts` (ver
   [`docs/fork/cartoes-e-fichas.md`](fork/cartoes-e-fichas.md), seção 2.1).
   As outras duas continuam abertas.
+  A **recorrência do negócio** (.100) é uma coluna dos dois: as metas do fork
+  (0243) gravavam `crm_leads.recurring_months` como "meses de contrato" com a
+  mensalidade em `value_cents`; a v1.99 (#3602, migration 9028 do upstream) usa a
+  MESMA coluna como duração, ao lado de `recurring_value_cents` e
+  `recurring_period`, com o CHECK `crm_leads_recorrencia_coerente` (duração só com
+  mensalidade). Na fusão: o formulário do negócio tem UM campo para a coluna (o
+  "Duração (meses)" do upstream, junto do "Valor recorrente (mensal)"); "Tipo de
+  receita" e "Originado por (SDR)" do fork ficam; a gravação passa pelo trio
+  coerente do upstream; e as metas e o relatório de vendas leem as duas formas
+  (`lib/crm/metas/partes-da-venda.ts`). O CHECK do fork
+  (`crm_leads_recurring_months_check`, até 120 meses) continua e é mais estreito que
+  o do upstream (até 600). Negócio antigo com duração e sem mensalidade faz o CHECK
+  novo do upstream falhar na implantação (o bootstrap conta o erro e o app sobe).
+  Converter esses dados, ou trocar o CHECK do fork, é decisão do dono.
 - **A voz precisa de fiação.** O agente de voz é uma quarta imagem e um quinto
   contêiner (`asterisk`); o `docker-compose.easypanel.yml` é nosso e não recebe isso
   da fusão.

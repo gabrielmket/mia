@@ -388,6 +388,7 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
       // Classe A: há organização, então o e-mail diz quem PROCESSOU — a marca
       // resolvida da org, e não a nossa. O PDF em anexo continua nomeando o
       // controlador legal, de propósito (ver `lib/lgpd/pdf-renderer.tsx`).
+      const marca = await marcaDaSaida(orgId, { semMemo: true });
       const sent = await sendExportEmail({
         to: deliveryEmail,
         requestId,

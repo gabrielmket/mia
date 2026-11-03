@@ -17,6 +17,7 @@ import {
   mensagemDasRegrasQuePerdemOCampo,
   regrasDeDataQuePerdemOCampo,
 } from "@/lib/automation/campo-do-gatilho-de-data";
+import type { ErroDoBanco } from "@/lib/erros/para-operador";
 import { IDIOMA_PADRAO, type Idioma } from "@/lib/i18n/idiomas";
 import type { PipelineConfigPatch } from "@/lib/schemas/settings";
 
@@ -31,6 +32,12 @@ export type ResultadoDaConfiguracaoDoFunil =
        * o MCP de plataforma devolve como recusa, não como falha interna.
        */
       regrasQuePerdemOCampo?: string[];
+      /**
+       * Upstream v1.98 (#3747): a leitura ou a gravação falhou no banco. A tela
+       * mostra a frase do mapeador (`respostaParaOperador`) e o texto do
+       * Postgres fica no log; o MCP de plataforma segue lendo `error`.
+       */
+      falhaDoBanco?: { etapa: "ler" | "gravar"; erro: ErroDoBanco };
     };
 
 /** Texto canônico (chaves ordenadas) para comparar dois jsonb sem depender da ordem. */
@@ -67,7 +74,7 @@ export async function gravarConfiguracaoDoFunil(
     .select("vocabulary, settings, organization_id")
     .eq("id", pipelineId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return { ok: false, error: readErr.message, falhaDoBanco: { etapa: "ler", erro: readErr } };
   if (!row) return { ok: false, error: "not_found" };
   if (row.organization_id !== organizationId) return { ok: false, error: "forbidden_tenant" };
 
@@ -95,6 +102,20 @@ export async function gravarConfiguracaoDoFunil(
   // Ver `lib/crm/metas/progresso.ts`: ausente = vencer aqui é receita.
   if (patch.vitoria_e_receita !== undefined) {
     nextSettings.vitoria_e_receita = patch.vitoria_e_receita;
+  }
+  // Upstream v1.95+ (#3011): a ETAPA em que a conversa nova do Inbox vira card
+  // neste funil. O bloco inteiro, porque `ativa` e `stage_id` são uma decisão só.
+  if (patch.entrada_do_inbox !== undefined) {
+    nextSettings.entrada_do_inbox = patch.entrada_do_inbox;
+  }
+  // Upstream (#2995): o recorte de encerrados antigos do quadro. `0` é "desliguei"
+  // e é gravado como veio.
+  if (patch.ocultar_encerrados_dias !== undefined) {
+    nextSettings.ocultar_encerrados_dias = patch.ocultar_encerrados_dias;
+  }
+  // Upstream (#3487): os atalhos do card, inclusive a lista VAZIA ("apaguei todos").
+  if (patch.atalhos !== undefined) {
+    nextSettings.atalhos = patch.atalhos;
   }
 
   // Upstream v1.86 (#2791): campo que passa a ser do Contato e que uma regra
@@ -131,7 +152,7 @@ export async function gravarConfiguracaoDoFunil(
     // Redundante com a conferência acima quando o client é o da sessão (a RLS já
     // recorta); obrigatório quando é o `service_role` do MCP de plataforma.
     .eq("organization_id", organizationId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: error.message, falhaDoBanco: { etapa: "gravar", erro: error } };
 
   return { ok: true, mudou };
 }

@@ -44,6 +44,7 @@ interface VendaGanhaLida {
   value_cents: number | string | null;
   revenue_kind: string | null;
   recurring_months: number | null;
+  recurring_value_cents: number | string | null;
   owner_user_id: string | null;
   originated_by_user_id: string | null;
   closed_at: string | null;
@@ -108,7 +109,7 @@ export async function lerMetasDoMes(
         db
           .from("crm_leads")
           .select(
-            "status, value_cents, revenue_kind, recurring_months, owner_user_id, originated_by_user_id, closed_at, pipeline_id",
+            "status, value_cents, revenue_kind, recurring_months, recurring_value_cents, owner_user_id, originated_by_user_id, closed_at, pipeline_id",
             pedirContagem ? { count: "exact" } : undefined,
           )
           .eq("organization_id", organizationId)
@@ -175,6 +176,7 @@ export async function lerMetasDoMes(
     value_cents: l.value_cents === null ? null : Number(l.value_cents),
     revenue_kind: (l.revenue_kind as "recorrente" | "avulso" | null) ?? null,
     recurring_months: l.recurring_months ?? null,
+    recurring_value_cents: l.recurring_value_cents === null || l.recurring_value_cents === undefined ? null : Number(l.recurring_value_cents),
     owner_user_id: l.owner_user_id ?? null,
     originated_by_user_id: l.originated_by_user_id ?? null,
     closed_at: l.closed_at ?? null,

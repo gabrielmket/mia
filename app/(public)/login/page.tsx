@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { EntrarComGoogleSeLigado } from "@/components/auth/EntrarComGoogleSeLigado";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { fachadaMostraAMarca } from "@/lib/branding/fachada";
+import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { marcaDaSaida } from "@/lib/branding/saida";
 import { createClient } from "@/lib/supabase/server";
 import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";
@@ -19,6 +20,8 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string; reset?: string; error?: string }>;
 }) {
   const { next, reset, error } = await searchParams;
+  const invite = typeof next === "string" ? next.match(/^\/team\/accept-invite\/([^/?#]+)$/)?.[1] : undefined;
+  const convite = invite ? verifyInviteToken(invite) : null;
   // Fora da árvore de `app/app/layout.tsx` — sem `IdiomaProvider` do lado do
   // servidor (o cliente já tem o seu, montado em `app/(public)/layout.tsx`).
   // Quase nunca há sessão aqui (é a própria tela de entrar), mas resolve do
@@ -150,7 +153,7 @@ export default async function LoginPage({
           )}
         </div>
       )}
-      <LoginForm next={next} />
+      <LoginForm next={next} email={convite?.email} />
       {/* FORK MIA (.64): o botão só existe com o Google ligado no GoTrue desta
           instalação; lido no servidor, sem segurar o formulário acima. */}
       <Suspense fallback={null}>
@@ -167,7 +170,10 @@ export default async function LoginPage({
         </p>
         <p className="text-muted-foreground">
           {t("Não tem conta?")}{" "}
-          <Link href="/signup" className="font-medium text-foreground underline underline-offset-4">
+          <Link
+            href={convite && invite ? `/signup?invite=${encodeURIComponent(invite)}` : "/signup"}
+            className="font-medium text-foreground underline underline-offset-4"
+          >
             {t("Criar conta")}
           </Link>
         </p>

@@ -6,14 +6,17 @@ import { useT } from "@/hooks/i18n/useT";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { chaveDoQuadro, useBoard } from "@/hooks/kanban/useBoard";
-import { useMoveCard, type RecusaDeCampos, type RetomadaPendente } from "@/hooks/kanban/useMoveCard";
+import { useMoveCard, type MoveArgs, type RecusaDeCampos, type RetomadaPendente } from "@/hooks/kanban/useMoveCard";
 import { useRenameStage } from "@/hooks/kanban/useRenameStage";
 import { CamposObrigatoriosDialog } from "./CamposObrigatoriosDialog";
+import { LoseLeadDialog } from "./LoseLeadDialog";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAtRiskLeads } from "@/hooks/leads/useAtRiskLeads";
 import { useReactivations } from "@/hooks/leads/useReactivations";
 import { midpoint } from "@/lib/kanban/fractional-indexing";
-import { proximoNaEtapaInteira } from "@/lib/kanban/vizinho-na-etapa";
+import { posicaoNoFimDaEtapa, proximoNaEtapaInteira } from "@/lib/kanban/vizinho-na-etapa";
+import { compararNaEtapa, posicaoNoTopoDaEtapa } from "@/lib/kanban/entrada-na-etapa";
+import { decideMotivoDaPerda } from "@/lib/leads/motivo-da-perda";
 import type { Lead } from "@/lib/types/leads";
 import type { BoardData, Pipeline, Stage } from "@/lib/kanban/types";
 import { StageColumn } from "./StageColumn";
@@ -21,6 +24,7 @@ import { StageColumn } from "./StageColumn";
 // estreito; ele reusa as peças do dossiê (components/cartoes/aberto/).
 import { CartaoAberto } from "@/components/cartoes/aberto/CartaoAberto";
 import { RetomarComoNovoNegocioDialog } from "./RetomarComoNovoNegocioDialog";
+import { atalhosDoFunil } from "@/lib/leads/atalhos-do-card";
 import { camposDoFunil, camposPorEscopo } from "@/lib/leads/campos-do-funil";
 // FORK MIA — a ordem da coluna (urgência, quentes, valor, manual) e o contexto
 // das linhas do cartão (quem está olhando, nome de cada pessoa da equipe).
@@ -61,6 +65,14 @@ interface KanbanBoardProps {
   ordem?: OrdemDoQuadro;
   /** FORK MIA — quem está olhando: a bola diz "Você" quando foi esta pessoa. */
   usuarioAtualId?: string | null;
+  /** Densidade compacta dos cards (issue #3461, item 2), escolhida na página. */
+  denso?: boolean;
+  /**
+   * Quadro de funil ARQUIVADO (#1298): abre para OLHAR, e nada aqui grava —
+   * sem arrastar card, sem menu de ações, sem seleção em lote e sem dossiê.
+   * É a razão de o funil arquivado ser abrível sem desarquivar.
+   */
+  somenteLeitura?: boolean;
 }
 
 function groupLeadsByStage(stages: Stage[], leads: Lead[]): Map<string, Lead[]> {
@@ -70,9 +82,12 @@ function groupLeadsByStage(stages: Stage[], leads: Lead[]): Map<string, Lead[]> 
     const bucket = map.get(lead.stage_id);
     if (bucket) bucket.push(lead);
   }
-  // Already ordered by position_in_stage at fetch time, but be defensive.
+  // A rota já devolve `position_in_stage, id` — este sort repete a MESMA régua
+  // (com o desempate por `id`) para a tela não depender da ordem de chegada:
+  // sem o desempate, dois cards empatados trocavam de lugar a cada render
+  // (#3461).
   for (const list of map.values()) {
-    list.sort((a, b) => a.position_in_stage - b.position_in_stage);
+    list.sort(compararNaEtapa);
   }
   return map;
 }
@@ -83,7 +98,7 @@ function BoardSkeleton() {
       {[0, 1, 2].map((c) => (
         <div
           key={c}
-          className="flex w-80 shrink-0 flex-col gap-2 rounded-lg border border-border bg-surface-muted/40 p-3"
+          className="flex w-80 shrink-0 flex-col gap-2 rounded-lg border border-border bg-surface-elevated/40 p-3"
         >
           <Skeleton className="h-5 w-32" />
           {[0, 1, 2, 3].map((i) => (
@@ -107,6 +122,8 @@ export function KanbanBoard({
   podeRenomearEtapa = false,
   ordem = "manual",
   usuarioAtualId = null,
+  denso = false,
+  somenteLeitura = false,
 }: KanbanBoardProps) {
   const t = useT();
   const useExternal = stagesProp !== undefined && leadsProp !== undefined;
@@ -122,6 +139,7 @@ export function KanbanBoard({
   // esta opção só troca o destino do erro.
   const [recusaDeCampos, setRecusaDeCampos] = useState<RecusaDeCampos | null>(null);
   const [retomada, setRetomada] = useState<RetomadaPendente | null>(null);
+  const [perdaPendente, setPerdaPendente] = useState<MoveArgs | null>(null);
   const moveCard = useMoveCard(pipelineId, {
     onCamposFaltando: setRecusaDeCampos,
     onRetomada: setRetomada,
@@ -185,9 +203,12 @@ export function KanbanBoard({
   const isError = useExternal ? false : queryResult.isError;
   const error = useExternal ? null : queryResult.error;
 
-  const leadDoDossie = dossieId
-    ? (data?.leads.find((l) => l.id === dossieId) ?? null)
-    : null;
+  // Funil arquivado (#1298): o deep link `?lead=` também não abre o dossiê —
+  // ele tem ações de escrita, e o quadro em leitura não as oferece.
+  const leadDoDossie =
+    dossieId && !somenteLeitura
+      ? (data?.leads.find((l) => l.id === dossieId) ?? null)
+      : null;
 
   const grouped = useMemo(() => {
     if (!data) return null;
@@ -225,8 +246,51 @@ export function KanbanBoard({
     [onSelectionChange, selectedLeadIds],
   );
 
+  // Arrastar e "Mover para…" passam por aqui. A etapa de perda sem motivo abre a
+  // janela do motivo ANTES do move, com a mesma regra que a rota aplica: sem
+  // isso o move ia sem `lost_reason` e voltava como toast.
+  const moverPara = useCallback(
+    (args: MoveArgs) => {
+      const etapa = data?.stages.find((s) => s.id === args.stageId);
+      const lead = data?.leads.find((l) => l.id === args.leadId);
+      // O motivo na linha só vale para o card que JÁ está perdido (reordenar na
+      // coluna de perda). O reaberto volta a `open` com o `lost_reason` da perda
+      // anterior — `fn_crm_lead_close_on_stage` não o limpa —, e reaproveitá-lo
+      // gravaria a perda nova com a causa da antiga.
+      const motivoAtual =
+        lead && (lead.status === "lost" || lead.stage_id === args.stageId) ? lead.lost_reason : null;
+      if (!decideMotivoDaPerda({ etapaDeDestino: etapa, motivoAtual }).ok) {
+        setPerdaPendente(args);
+        return;
+      }
+      moveCard.mutate(args);
+    },
+    [data, moveCard],
+  );
+
+  // O menu não tem ponto de soltura. Quem CHEGA a outra etapa entra no TOPO,
+  // a mesma regra do `moveLeadHandler` sem posição (#3461); a mesma etapa é
+  // reordenação e segue para o fim. As duas pontas leem a etapa INTEIRA (cache
+  // do quadro, sem o filtro da página — #2545).
+  const aoMoverPelaLista = useCallback(
+    (lead: Lead, stageId: string) => {
+      const funil = qc.getQueryData<BoardData>(chaveDoQuadro(pipelineId))?.leads ?? data?.leads ?? [];
+      const etapa = funil.filter((l) => l.stage_id === stageId);
+      moverPara({
+        leadId: lead.id,
+        stageId,
+        positionInStage:
+          stageId === lead.stage_id ? posicaoNoFimDaEtapa(etapa, lead.id) : posicaoNoTopoDaEtapa(etapa, lead.id),
+        expectedUpdatedAt: lead.updated_at,
+      });
+    },
+    [qc, pipelineId, data, moverPara],
+  );
+
   const handleDragEnd = useCallback(
     (result: DropResult) => {
+      // Funil arquivado é leitura: soltar um card não move nada (#1298).
+      if (somenteLeitura) return;
       if (!data || !grouped) return;
       const { source, destination, draggableId } = result;
       if (!destination) return;
@@ -298,14 +362,14 @@ export function KanbanBoard({
         return;
       }
 
-      moveCard.mutate({
+      moverPara({
         leadId: lead.id,
         stageId: destStageId,
         positionInStage: newPosition,
         expectedUpdatedAt: lead.updated_at,
       });
     },
-    [data, grouped, moveCard, ordem, qc, pipelineId],
+    [data, grouped, moverPara, ordem, qc, pipelineId, somenteLeitura],
   );
 
   if (isLoading) {
@@ -328,7 +392,7 @@ export function KanbanBoard({
   if (data.stages.length === 0) {
     return (
       <Card className="m-4 p-6 text-sm text-text-muted">
-        {t("Nenhum lead nesta pipeline ainda.")}
+        {t("Nenhum negócio neste funil ainda.")}
       </Card>
     );
   }
@@ -383,8 +447,12 @@ export function KanbanBoard({
               selectedLeadIds={selectedLeadIds}
               onSelectMany={handleSelectMany}
               onOpen={setDossieId}
+              etapas={data.stages}
+              onMoverPara={aoMoverPelaLista}
               podeRenomear={podeRenomearEtapa}
               onRenomear={(nome) => renameStage.mutate({ stageId: stage.id, name: nome })}
+              denso={denso}
+              somenteLeitura={somenteLeitura}
             />
           ))}
         </div>
@@ -402,21 +470,14 @@ export function KanbanBoard({
             data.stages.find((s) => s.id === leadDoDossie.stage_id)?.name ?? "—"
           }
           ownerNames={ownerNames}
-          onMoverEtapa={(stageId) => {
-            // O mesmo caminho do arrasto (e da recusa de campos obrigatórios):
-            // o negócio entra no FIM da etapa de destino.
-            const destino = grouped?.get(stageId) ?? [];
-            const ultimo = destino.reduce<Lead | null>(
-              (maior, l) => (!maior || l.position_in_stage > maior.position_in_stage ? l : maior),
-              null,
-            );
-            moveCard.mutate({
-              leadId: leadDoDossie.id,
-              stageId,
-              positionInStage: midpoint(ultimo?.position_in_stage ?? null, null),
-              expectedUpdatedAt: leadDoDossie.updated_at,
-            });
-          }}
+          // FORK MIA — a barra de etapas do cartão aberto move pelo MESMO caminho do
+          // "Mover para…" do upstream (`aoMoverPelaLista`): a janela do motivo da
+          // perda antes do move e a regra de posição dele (quem chega a outra etapa
+          // entra no topo, #3461).
+          onMoverEtapa={(stageId) => aoMoverPelaLista(leadDoDossie, stageId)}
+          // Os atalhos do card (#3487) saem do `settings` do funil que este
+          // quadro já carregou — nenhuma chamada nova.
+          atalhos={atalhosDoFunil(data.pipeline.settings ?? null)}
         />
       )}
 
@@ -436,6 +497,22 @@ export function KanbanBoard({
             customFields,
             ...(wonReason !== undefined ? { wonReason } : {}),
           });
+        }}
+      />
+      {/* Uma instância para o quadro todo: a `key` a remonta a cada pendência,
+          senão o motivo escolhido e cancelado num negócio voltava marcado no próximo. */}
+      <LoseLeadDialog
+        key={perdaPendente?.leadId ?? "fechado"}
+        open={perdaPendente !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setPerdaPendente(null);
+        }}
+        pipelineId={pipelineId}
+        submitting={moveCard.isPending}
+        onConfirm={(lostReason) => {
+          if (!perdaPendente) return;
+          setPerdaPendente(null);
+          moveCard.mutate({ ...perdaPendente, lostReason });
         }}
       />
       {retomada && (

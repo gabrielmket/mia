@@ -37,7 +37,7 @@ export function EditLeadDialog({ open, onOpenChange, lead, pipelineId }: Props) 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t("Editar lead")}</DialogTitle>
+          <DialogTitle>{t("Editar negócio")}</DialogTitle>
           <DialogDescription>
             {t("Atualize os campos. Mover de etapa ou marcar ganho/perdido tem opções próprias.")}
           </DialogDescription>

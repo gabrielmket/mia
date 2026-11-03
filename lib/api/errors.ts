@@ -12,6 +12,11 @@ export const ApiErrorCodes = {
   invalid_request: "invalid_request",
   validation_failed: "validation_failed", // Zod retornou erros de schema (422 também aceita)
   invalid_cursor: "invalid_cursor",
+  // POST /api/v1/avisos (#1418): `publicar_em` no futuro é recusado
+  // porque nada publica o aviso depois — gravar seria criar um recado que
+  // nunca chega. Código próprio para a tela distinguir de "corpo inválido" e
+  // oferecer o caminho: publicar agora ou enviar sem data.
+  aviso_agendado_nao_suportado: "aviso_agendado_nao_suportado",
 
   // Configuração de agentes: validação/estado ou indisponibilidade do provedor.
   prospecting_agent_session_failed: "prospecting_agent_session_failed",
@@ -119,6 +124,9 @@ export const ApiErrorCodes = {
   // (índice uniq_contacts_org_phone). O corpo traz `details.contact_id` para a
   // tela oferecer o contato existente em vez de só mostrar que deu erro.
   contact_exists: "contact_exists",
+  // POST/PATCH /api/v1/attendants/sectors com nome que já existe na organização
+  // (índice attendant_sectors_org_name_unique, migration 0801).
+  sector_name_taken: "sector_name_taken",
   duplicate_external_id: "duplicate_external_id",
   event_gone: "event_gone", // resend de run cujo event_log original foi apagado (on delete set null)
   no_actions_to_resend: "no_actions_to_resend", // resend de regra que não tem mais nenhuma ação de webhook — reenviar nada não é sucesso
@@ -352,6 +360,8 @@ export const ApiErrorCodes = {
   campanha_modelo_inexistente: "campanha_modelo_inexistente", // 422: o modelo não existe neste número
   campanha_modelo_nao_aprovado: "campanha_modelo_nao_aprovado", // 422: modelo pausado, recusado ou em análise
   campanha_modelo_variaveis: "campanha_modelo_variaveis", // 422: variável sem origem, ou origem que não serve
+  // Migration 0711: envio rápido (rajada) só pelo número oficial, com modelo aprovado.
+  campanha_velocidade_do_canal: "campanha_velocidade_do_canal", // 422: envio rápido pedido num número por QR
 
   // 500 / upstream
   internal_error: "internal_error",

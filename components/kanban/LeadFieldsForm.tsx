@@ -2,8 +2,8 @@
 
 import { useActiveOrg } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
-import { useEffect, useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { useEffect, useImperativeHandle, useState, type Ref } from "react";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,9 @@ import { MOEDA_PADRAO, parseReaisToCents, simboloDaMoeda } from "@/lib/money";
 import { soChavesAlteradas } from "@/lib/leads/custom-fields-so-diff";
 import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 import { ContactTagsEditor } from "@/components/inbox/ContactTagsEditor";
+import { lerRecorrenciaDoFormulario } from "@/lib/leads/valor-recorrente";
 import { EcoDoValor } from "./EcoDoValor";
+import type { CampoConfirmadoDoDocumento } from "./RevisaoDoDocumento";
 
 /**
  * As etiquetas do negócio SAÍRAM deste formulário (#2979): quem as edita é o
@@ -31,13 +33,18 @@ interface FormShape {
   title: string;
   description: string;
   valueReais: string;
+  /** Mensalidade e duração do contrato (fatia 1 da #3602), em texto. */
+  valorRecorrenteReais: string;
+  recorrenciaMeses: string;
   expected_close_date: string;
   /** "", "recorrente" ou "avulso" — vazio é NÃO classificado, e é legítimo. */
   revenue_kind: string;
-  /** Meses de contrato, como texto (o input devolve string). */
-  recurring_months: string;
   /** user_id de quem ORIGINOU a venda. "" = ninguém, e é o caso comum. */
   originated_by_user_id: string;
+}
+
+export interface ControleDosCamposDoNegocio {
+  confirmarCampo: (confirmado: CampoConfirmadoDoDocumento) => void;
 }
 
 interface Props {
@@ -60,11 +67,18 @@ interface Props {
    * gravado continua aparecendo pela opção de reserva.
    */
   podeVerEquipe?: boolean;
+  /** Confirmação externa do próprio card: preserva os outros campos em edição. */
+  controle?: Ref<ControleDosCamposDoNegocio>;
 }
 
 function centsToReais(cents: number | null | undefined): string {
   if (cents === null || cents === undefined) return "";
   return (cents / 100).toFixed(2).replace(".", ",");
+}
+
+/** Duração em meses como texto (`null` = sem prazo, que é o campo vazio). */
+function mesesComoTexto(meses: number | null | undefined): string {
+  return meses === null || meses === undefined ? "" : String(meses);
 }
 
 /**
@@ -83,6 +97,7 @@ export function LeadFieldsForm({
   onSaved,
   onCancel,
   podeVerEquipe = false,
+  controle,
 }: Props) {
   const t = useT();
   const org = useActiveOrg();
@@ -116,18 +131,12 @@ export function LeadFieldsForm({
       description: lead.description ?? "",
       valueReais: centsToReais(lead.value_cents),
       revenue_kind: lead.revenue_kind ?? "",
-      recurring_months: lead.recurring_months ? String(lead.recurring_months) : "",
       originated_by_user_id: lead.originated_by_user_id ?? "",
+      valorRecorrenteReais: centsToReais(lead.recurring_value_cents),
+      recorrenciaMeses: mesesComoTexto(lead.recurring_months),
       expected_close_date: lead.expected_close_date ?? "",
     },
   });
-
-  /**
-   * `useWatch` e não `form.watch()` no render: o segundo devolve uma função
-   * que o React Compiler não consegue memoizar, e ele desiste de otimizar o
-   * formulário inteiro (mesmo motivo documentado no EcoDoValor).
-   */
-  const tipoDeReceita = useWatch({ control: form.control, name: "revenue_kind" });
 
   useEffect(() => {
     form.reset({
@@ -135,8 +144,9 @@ export function LeadFieldsForm({
       description: lead.description ?? "",
       valueReais: centsToReais(lead.value_cents),
       revenue_kind: lead.revenue_kind ?? "",
-      recurring_months: lead.recurring_months ? String(lead.recurring_months) : "",
       originated_by_user_id: lead.originated_by_user_id ?? "",
+      valorRecorrenteReais: centsToReais(lead.recurring_value_cents),
+      recorrenciaMeses: mesesComoTexto(lead.recurring_months),
       expected_close_date: lead.expected_close_date ?? "",
     });
     setCustomFields(lead.custom_fields ?? {});
@@ -144,29 +154,65 @@ export function LeadFieldsForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id]);
 
+  useImperativeHandle(controle, () => ({
+    confirmarCampo(confirmacao) {
+      // A confirmação pode terminar depois de a pessoa abrir outro card.
+      if (confirmacao.leadId !== lead.id) return;
+      const { campo, valor } = confirmacao;
+      // O evento já gravou este valor: atualiza o campo e a régua do diff,
+      // preservando os outros rascunhos. Não remonta o formulário (#2132).
+      setCustomFields((atuais) => ({ ...atuais, [campo]: valor }));
+      setCamposCarregados((atuais) => ({ ...atuais, [campo]: valor }));
+    },
+  }), [lead.id]);
+
   async function onSubmit(values: FormShape) {
     const reais = values.valueReais.trim();
     let valueCents: number | null = null;
     if (reais.length > 0) {
-      valueCents = parseReaisToCents(reais);
+      // A MESMA moeda que o rótulo do campo mostra ao lado («Valor ($)»): é ela
+      // que decide se a vírgula é decimal ou separador de milhar (#3331).
+      valueCents = parseReaisToCents(reais, moedaDoValor);
       if (valueCents === null) {
         form.setError("valueReais", { message: t("Valor inválido") });
         return;
       }
     }
 
+    // O RECORRENTE (fatia 1 da #3602) — a régua compartilhada com o diálogo de
+    // criação e com o de edição; aqui também vai sempre, para apagar o campo
+    // significar "não tem mais mensalidade".
+    // Apagar a mensalidade de um negócio que a TINHA leva a duração junto: é a
+    // regra 1 do trio, a mesma do servidor (`recorrenciaParaGravar`). Duração
+    // digitada num negócio que nunca teve mensalidade segue sendo recusa.
+    const apagouAMensalidade =
+      lead.recurring_value_cents != null && values.valorRecorrenteReais.trim() === "";
+    const leitura = lerRecorrenciaDoFormulario(
+      values.valorRecorrenteReais,
+      apagouAMensalidade ? "" : values.recorrenciaMeses,
+      moedaDoValor,
+    );
+    if (!leitura.ok) {
+      form.setError(leitura.campo === "valor" ? "valorRecorrenteReais" : "recorrenciaMeses", {
+        message:
+          leitura.motivo === "valor_invalido"
+            ? t("Valor inválido")
+            : leitura.motivo === "duracao_invalida"
+              ? t("Duração inválida")
+              : t("Informe a mensalidade para usar a duração"),
+      });
+      return;
+    }
+
     const patch: Record<string, unknown> = {
       title: values.title.trim(),
       description: values.description.trim() ? values.description.trim() : null,
       value_cents: valueCents,
+      ...leitura.trio,
       expected_close_date: values.expected_close_date || null,
       // Vazio volta a NULO de propósito: "não classificado" é um estado, e não
       // a ausência de uma escolha que o sistema deveria ter chutado.
       revenue_kind: values.revenue_kind ? values.revenue_kind : null,
-      recurring_months:
-        values.revenue_kind === "recorrente" && values.recurring_months
-          ? Number(values.recurring_months)
-          : null,
       // Vazio volta a NULO: "não teve SDR" é resposta, e é a mais frequente
       // quando quem prospecta é quem fecha.
       originated_by_user_id: values.originated_by_user_id ? values.originated_by_user_id : null,
@@ -191,7 +237,7 @@ export function LeadFieldsForm({
       // O que acabou de gravar vira a nova régua: o segundo salvamento não
       // reenvia o primeiro, e uma limpeza alheia no intervalo não é atropelada.
       setCamposCarregados({ ...customFields });
-      toast.success(t("Lead atualizado"));
+      toast.success(t("Negócio atualizado"));
       onSaved?.();
     } catch {
       // toast already shown
@@ -242,7 +288,11 @@ export function LeadFieldsForm({
           </div>
         </div>
 
-        {/* A natureza da receita é o que separa mensalidade de projeto no
+        {/* FORK MIA (metas, 0243). A duração do contrato é a coluna
+            `recurring_months`, que o upstream passou a editar no bloco da
+            mensalidade logo abaixo ("Duração (meses)", v1.99): o campo "Meses
+            de contrato" do fork virou esse, para a coluna ter um campo só.
+            A natureza da receita é o que separa mensalidade de projeto no
             relatório do mês. Vazio continua sendo uma resposta: a tela de metas
             mostra quantas vendas ficaram sem classificar, em vez de somá-las
             para um lado e inventar a divisão. */}
@@ -259,17 +309,6 @@ export function LeadFieldsForm({
               <option value="avulso">{t("Avulso (projeto, setup)")}</option>
             </select>
           </div>
-          {tipoDeReceita === "recorrente" ? (
-            <div className="space-y-2">
-              <Label htmlFor="recurring_months">{t("Meses de contrato")}</Label>
-              <Input
-                id="recurring_months"
-                inputMode="numeric"
-                placeholder="12"
-                {...form.register("recurring_months")}
-              />
-            </div>
-          ) : null}
         </div>
 
         {/* Quem ORIGINOU: o SDR que marcou a reunião, quando não é quem
@@ -296,6 +335,48 @@ export function LeadFieldsForm({
           </select>
         </div>
 
+        {/* A MENSALIDADE (fatia 1 da #3602) no dossiê: o mesmo par de campos do
+            diálogo do funil, com a mesma leitura — quem edita o negócio da
+            conversa não deveria precisar abrir o quadro para corrigir o
+            contrato. */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="valorRecorrenteReais">
+              {t("Valor recorrente (mensal)")} ({simboloDaMoeda(moedaDoValor)})
+            </Label>
+            <Input
+              id="valorRecorrenteReais"
+              inputMode="decimal"
+              placeholder="0,00"
+              {...form.register("valorRecorrenteReais")}
+            />
+            <EcoDoValor
+              control={form.control}
+              moeda={moedaDoValor}
+              campo="valorRecorrenteReais"
+            />
+            {form.formState.errors.valorRecorrenteReais && (
+              <p className="text-xs text-error-fg">
+                {form.formState.errors.valorRecorrenteReais.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="recorrenciaMeses">{t("Duração (meses)")}</Label>
+            <Input
+              id="recorrenciaMeses"
+              inputMode="numeric"
+              placeholder={t("sem prazo")}
+              {...form.register("recorrenciaMeses")}
+            />
+            {form.formState.errors.recorrenciaMeses && (
+              <p className="text-xs text-error-fg">
+                {form.formState.errors.recorrenciaMeses.message}
+              </p>
+            )}
+          </div>
+        </div>
+
         <div className="space-y-2">
           {/* A etiqueta do NEGÓCIO (#2979): o MESMO editor do Inbox, gravando
               na OUTRA caixa — `crm_leads.tags` por `PATCH /api/v1/leads/{id}`,
@@ -319,6 +400,7 @@ export function LeadFieldsForm({
               value={customFields}
               onChange={setCustomFields}
               mode="lead"
+              leadId={lead.id}
             />
           </div>
         )}

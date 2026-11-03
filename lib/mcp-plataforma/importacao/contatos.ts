@@ -54,7 +54,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit";
-import { escolherContatoCanonico } from "@/lib/channels/contato-por-telefone";
+import { contatosDonosDosExtras, escolherContatoCanonico } from "@/lib/channels/contato-por-telefone";
 import { phoneLookupVariants } from "@/lib/channels/phone-variants";
 import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { papelContaDeCarteira } from "@/lib/carteira/dono";
@@ -186,7 +186,24 @@ export async function acharContatoPorTelefone(
     .is("is_merged_into", null)
     .limit(4);
   if (error) throw new Error(`não consegui procurar o contato pelo telefone: ${error.message}`);
-  return escolherContatoCanonico((data ?? []) as unknown as ContatoNaBase[], telefone);
+  const peloPrincipal = escolherContatoCanonico((data ?? []) as unknown as ContatoNaBase[], telefone);
+  if (peloPrincipal) return peloPrincipal;
+  // Upstream v1.95 (vários telefones na ficha): o número pode ser EXTRA de uma
+  // ficha viva (`contact_phones`). Sem esta busca a importação tentava criar a
+  // ficha, o banco recusava com 23505 e a recusa mandava "repetir a chamada",
+  // que nunca acharia o contato.
+  const donos = await contatosDonosDosExtras(admin, orgId, variantes);
+  const donoId = [...donos.values()][0];
+  if (!donoId) return null;
+  const { data: dona, error: erroDaDona } = await admin
+    .from("contacts")
+    .select(COLUNAS)
+    .eq("organization_id", orgId)
+    .eq("id", donoId)
+    .is("is_merged_into", null)
+    .maybeSingle();
+  if (erroDaDona) throw new Error(`não consegui procurar o contato pelo telefone: ${erroDaDona.message}`);
+  return (dona as unknown as ContatoNaBase | null) ?? null;
 }
 
 /** O contato VIVO que tem este e-mail, sem diferenciar maiúsculas. */

@@ -8,7 +8,8 @@ import { z } from "zod";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/audit";
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
+import { invalidarOrg } from "@/lib/auth/cache-curto";
 import { podeAdministrarEmpresa } from "@/lib/auth/pode-administrar-empresa";
 import {
   interfaceSettingsSchema,
@@ -44,6 +45,7 @@ export async function atualizarInterfaceDaEmpresa(input: InterfaceSettings): Pro
   if (!podeAdministrarEmpresa(authUser, activeOrg)) {
     return { ok: false, error: "forbidden_role" };
   }
+  if (await mfaEmDivida()) return { ok: false, error: "mfa_required" };
 
   // Mesma guarda da escolha por vínculo: recusa a seleção que deixaria a empresa
   // sem NENHUMA área além das essenciais. As essenciais continuariam aparecendo
@@ -85,6 +87,7 @@ export async function atualizarBloqueioAteAssumir(ligado: boolean): Promise<Inte
   if (!podeAdministrarEmpresa(authUser, activeOrg)) {
     return { ok: false, error: "forbidden_role" };
   }
+  if (await mfaEmDivida()) return { ok: false, error: "mfa_required" };
 
   return gravarInterface(activeOrg.orgId, authUser.id, (gravada) => {
     const { bloquearAteAssumir: _anterior, ...menu } = lerInterface(gravada).settings;
@@ -127,11 +130,18 @@ async function gravarInterface(
   if (erroLeitura) return { ok: false, error: "internal_error" };
   const novo = mesclar(atual?.interface_settings);
 
+  // #3696: `interface_settings` da empresa viaja DENTRO do snapshot de
+  // permissões de CADA membro (o menu lateral inteiro sai dele) — e o cache
+  // curto é por usuário. `invalidarOrg` é o único jeito de derrubar o menu de
+  // todos de uma vez. Antes e depois da escrita: antes, para a tela que já está
+  // aberta não regravar o valor velho no meio do UPDATE; depois, para o commit.
+  invalidarOrg(orgId);
   const { error } = await supabase
     .from("organizations")
     .update({ interface_settings: novo })
     .eq("id", orgId);
   if (error) return { ok: false, error: "internal_error" };
+  invalidarOrg(orgId);
 
   await audit({
     action: "org.interface_changed",

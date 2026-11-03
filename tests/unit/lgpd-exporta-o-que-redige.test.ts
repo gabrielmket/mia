@@ -195,6 +195,18 @@ describe("LGPD: nenhuma tabela com contact_id fica fora da anonimização", () =
    * `tests/unit/lgpd-as-duas-pontas.test.ts`.
    */
   const NAO_SE_REDIGE: Record<string, string> = {
+    // Do upstream (0733 e 0740, #2974: "no máximo uma vez por contato"),
+    // declaradas na fusão de 03/11/2026 (.100). Candidatas a PR ao upstream.
+    automation_rule_runs:
+      "É o RECIBO da execução da automação. `actions_result` e `error` passam " +
+      "por `lib/automation/resultado-para-recibo.ts`, que só deixa sair código do " +
+      "vocabulário dos executores, nunca texto do provedor nem da pessoa; o " +
+      "`contact_id` aponta para a ficha já anonimizada e vira nulo se ela for " +
+      "apagada (on delete set null).",
+    automation_rule_contact_claims:
+      "Só a RESERVA (regra, contato) da opção \"no máximo uma vez por contato\": " +
+      "ids, nenhum dado da pessoa. O `contact_id` aponta para a ficha já " +
+      "anonimizada e a linha some com ela (on delete cascade).",
     lgpd_requests:
       "É o REGISTRO do pedido — a prova de que o direito foi exercido, e o que " +
       "responde ao prazo legal. Apagá-la apagaria o recibo da própria exclusão.",

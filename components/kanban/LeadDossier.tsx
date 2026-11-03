@@ -4,22 +4,27 @@ import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useEffect, useRef, useState } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
-import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
+import { useActiveOrg, usePermission, useUser } from "@/hooks/auth/AuthProvider";
 import { usePodeVerEquipe } from "@/hooks/kanban/usePodeVerEquipe";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useLeadTimeline } from "@/hooks/leads/useLeadTimeline";
 import type { Lead } from "@/lib/types/leads";
+import type { Stage } from "@/lib/kanban/types";
 import { ContatoDoNegocio } from "./ContatoDoNegocio";
+import { AtalhosDoNegocio } from "./AtalhosDoCard";
 import { ConversaNoDossie } from "./ConversaNoDossie";
-import { LeadFieldsForm } from "./LeadFieldsForm";
+import { LeadFieldsForm, type ControleDosCamposDoNegocio } from "./LeadFieldsForm";
+import { RevisaoDoDocumento } from "./RevisaoDoDocumento";
 import { ScoreSlot } from "./ScoreSlot";
 import { LeadTimeline } from "./LeadTimeline";
 import { PropostasDoNegocio } from "./PropostasDoNegocio";
 import { TarefasDoNegocio } from "./TarefasDoNegocio";
 import { OwnerBadge } from "./OwnerBadge";
+import { EtapaNoDossie } from "./EtapaNoDossie";
 import { SecaoDoDossie, useSecoesRecolhidas } from "./SecaoDoDossie";
 import { resolveLeadOwner } from "@/lib/kanban/owner";
+import type { AtalhoDoCard } from "@/lib/leads/atalhos-do-card";
 import { formatValorDoNegocio, MOEDA_PADRAO } from "@/lib/money";
 import type { CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 
@@ -31,6 +36,21 @@ interface Props {
   fieldDefs?: CustomFieldDef[];
   stageName: string;
   ownerNames?: Map<string, string | null>;
+  /**
+   * As etapas do funil e quem move. Presentes (o quadro passa), o cabeçalho
+   * troca o nome da etapa por um seletor — ver `EtapaNoDossie`. Ausentes (o
+   * calendário, por enquanto), fica o texto de antes.
+   */
+  etapas?: Pick<Stage, "id" | "name">[];
+  onMudarEtapa?: (stageId: string) => void;
+  /**
+   * OS ATALHOS DO CARD (#3487): o que está em `crm_pipelines.settings.atalhos`,
+   * já lido por `atalhosDoFunil`. Quem monta o dossiê tem o funil em mão — o
+   * quadro, a lista e o calendário recebem `pipeline`/`funil` inteiros —, então
+   * a lista vem por prop em vez de o dossiê sair buscando por conta própria.
+   * Ausente = nenhum botão, que é o comportamento de antes da entrega.
+   */
+  atalhos?: AtalhoDoCard[];
 }
 
 function formatValor(cents: number | null, currency: string | null): string {
@@ -86,10 +106,20 @@ export function LeadDossier({
   fieldDefs = [],
   stageName,
   ownerNames,
+  etapas,
+  onMudarEtapa,
+  atalhos,
 }: Props) {
   const tagDoIdioma = useTagDeIdioma();
   const t = useT();
+  // Sem prop, nenhum botão: quem abre o dossiê TEM o funil em mão (o quadro, a
+  // lista e o calendário passam `atalhos`) e é de lá que sai o `settings`. Ler
+  // o cache do react-query aqui dentro custaria um `QueryClientProvider`
+  // obrigatório em todo teste que monta o dossiê — inclusive os que existiam
+  // antes desta entrega — para economizar uma prop que o chamador já tem.
+  const atalhosDoCard = atalhos ?? [];
   const campos = useRef<HTMLDivElement | null>(null);
+  const formulario = useRef<ControleDosCamposDoNegocio | null>(null);
   const timeline = useLeadTimeline(open ? lead.id : null, lead.contact_id);
   const { fechadas, alternar, abrir } = useSecoesRecolhidas();
   const timelineRecolhida = fechadas.has("linha-do-tempo");
@@ -118,11 +148,17 @@ export function LeadDossier({
   // FORK MIA: a permissão do seletor de "quem originou" é lida aqui e descida
   // ao formulário. Ver `podeVerEquipe` no LeadFieldsForm.
   const podeVerEquipe = usePodeVerEquipe();
+  // A MESMA régua do arrasto e do "Mover para…" do card (`KanbanCardActions`).
+  const podeMoverCard = usePermission("pipeline.move_card");
   // Tarefas são `agent`+, a mesma régua da tela de Tarefas e da rota — e o
   // suporte temporário só lê, como lá (`requireSupportWrite`).
   const podeEditarTarefas =
     (user.is_platform_admin && !user.support) ||
     (activeOrg ? ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent : false);
+  // Confirmar o que o documento disse é EDITAR O CARD: `agent`+, a MESMA régua
+  // que a rota de decisão exige (`requireRole("agent")`). Abaixo disso a fila
+  // ainda aparece — ler o que a IA leu é informação —, mas sem os botões.
+  const podeConfirmarDoDocumento = podeEditarTarefas;
 
   /**
    * As props da linha do tempo, montadas UMA vez e usadas nos dois estados da
@@ -165,7 +201,16 @@ export function LeadDossier({
           <span className="font-medium tabular-nums text-text">
             {formatValor(lead.value_cents, lead.currency)}
           </span>
-          <span className="text-text-muted">{stageName}</span>
+          {etapas && onMudarEtapa ? (
+            <EtapaNoDossie
+              etapaAtual={lead.stage_id}
+              etapas={etapas}
+              podeMover={podeMoverCard}
+              onMudar={onMudarEtapa}
+            />
+          ) : (
+            <span className="text-text-muted">{stageName}</span>
+          )}
           <OwnerBadge
             ownerKind={owner.kind}
             ownerName={owner.name}
@@ -211,6 +256,17 @@ export function LeadDossier({
           </p>
         )}
 
+        {/* OS ATALHOS DO CARD (#3487) — logo abaixo do cabeçalho, ANTES de
+            tudo que rola. A entrega inteira existe para o atendente não sair do
+            card: um botão que exige rolar até o fim é o mesmo que copiar o
+            telefone e colar no softphone. Sem atalho configurado, nada é
+            desenhado — nem separador, nem faixa vazia. */}
+        <AtalhosDoNegocio
+          atalhos={atalhosDoCard}
+          lead={lead}
+          contactId={lead.contact_id}
+        />
+
         <ConversaNoDossie
           conversa={lead.conversa}
           contactId={lead.contact_id}
@@ -242,8 +298,24 @@ export function LeadDossier({
           aoAlternar={alternar}
         >
           <div ref={campos}>
+            {/* ⚠️ A REVISÃO FICA AQUI, dentro do card, e é esta linha que o
+                mantenedor cobrou no #3415: a fila existia como API e não tinha
+                consumidor na tela — o mesmo que não existir. Acima do
+                formulário porque é o histórico do que o documento disse, e o
+                formulário é o destino do que for confirmado. */}
+            <RevisaoDoDocumento
+              leadId={lead.id}
+              podeDecidir={podeConfirmarDoDocumento}
+              aoDecidir={(confirmado) => formulario.current?.confirmarCampo(confirmado)}
+            />
             {/* FORK MIA: o seletor de "quem originou" respeita quem pode ver a equipe. */}
-            <LeadFieldsForm lead={lead} pipelineId={pipelineId} fieldDefs={fieldDefs} podeVerEquipe={podeVerEquipe} />
+            <LeadFieldsForm
+              lead={lead}
+              pipelineId={pipelineId}
+              fieldDefs={fieldDefs}
+              controle={formulario}
+              podeVerEquipe={podeVerEquipe}
+            />
           </div>
         </SecaoDoDossie>
 

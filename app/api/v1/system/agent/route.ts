@@ -20,11 +20,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { CHANGELOG_MAX_BYTES } from "@/lib/system/changelog";
 import { canTransition, type RunStatus } from "@/lib/system/update-run";
 import { logger } from "@/lib/logger";
+import { runtimeConfirmationSchema, supportsForcedUpdate } from "@/lib/system/runtime-identity";
 
 export const dynamic = "force-dynamic";
 
 const heartbeat = z.object({
   kind: z.literal("heartbeat"),
+  // Só o código do agente que consome o booleano anuncia esta capacidade.
+  supports_forced_update: z.boolean().optional().default(false),
   current_version: z.string().max(64),
   current_sha: z.string().max(64),
   off_release: z.boolean(),
@@ -43,6 +46,7 @@ const heartbeat = z.object({
   // "nunca houve release" para todo mundo.
   has_known_release: z.boolean().optional().default(true),
   changelog: z.string().max(CHANGELOG_MAX_BYTES),
+  runtime_confirmation: runtimeConfirmationSchema.nullable().optional(),
 });
 
 const runProgress = z.object({
@@ -76,11 +80,21 @@ const runResult = z.object({
  * `returned_to` é a versão em que o sistema ESTÁ agora; `failed_version` é a
  * que não respondeu. Os dois nomes são explícitos de propósito: "de/para" é
  * ambíguo numa volta (de qual lado?), e foi assim que esta rota já errou antes.
+ *
+ * `ok` é o DESFECHO da volta (#3271) — `true` quando o `update.sh --to` da
+ * volta terminou com código 0. Ele não existia, e por isso o painel tratava
+ * igual a volta que terminou bem e a que falhou: a tela dizia "é a que está no
+ * ar agora" nos dois casos e oferecia o botão de voltar apontando para a versão
+ * que já estava rodando. O campo é OPCIONAL por compatibilidade (o container do
+ * app atualiza antes do script do host — ver `compare_failed`), e ausente quer
+ * dizer "ninguém mediu o desfecho"; a rota trata isso como não terminado, para
+ * não afirmar o que ninguém provou (ver o ramo `rollback` no `POST`).
  */
 const rollback = z.object({
   kind: z.literal("rollback"),
   returned_to: z.string().min(1).max(64),
   failed_version: z.string().min(1).max(64),
+  ok: z.boolean().optional(),
   reason: z.string().max(2_000),
 });
 
@@ -155,9 +169,15 @@ export async function POST(req: NextRequest): Promise<Response> {
   const payload = parsed.data;
 
   if (payload.kind === "heartbeat") {
+    const recebidoEm = new Date().toISOString();
+    const observacao = payload.runtime_confirmation
+      ? { ...payload.runtime_confirmation, supports_forced_update: payload.supports_forced_update }
+      : null;
     const { error } = await db
       .from("system_version")
       .update({
+        // An old heartbeat must invalidate earlier evidence, never refresh it.
+        runtime_confirmation: observacao,
         current_version: payload.current_version,
         current_sha: payload.current_sha,
         off_release: payload.off_release,
@@ -165,8 +185,8 @@ export async function POST(req: NextRequest): Promise<Response> {
         compare_failed: payload.compare_failed,
         has_known_release: payload.has_known_release,
         changelog_raw: payload.changelog,
-        agent_last_seen_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        agent_last_seen_at: recebidoEm,
+        updated_at: recebidoEm,
       })
       .eq("id", 1);
     if (error) {
@@ -196,7 +216,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     // `update_requested: false` otimista.
     const { data: run, error: runLookupError } = await db
       .from("system_update_runs")
-      .select("id, status, to_version")
+      .select("id, status, to_version, force_requested")
       .eq("status", "dispatched")
       .order("dispatched_at", { ascending: false })
       .limit(1)
@@ -209,31 +229,80 @@ export async function POST(req: NextRequest): Promise<Response> {
       return fail("internal_error", "Não consegui checar o pedido de atualização.", 500);
     }
 
+    // Um agente antigo pode assumir um pedido aceito por uma execução nova.
+    // Não entregar uma força que ele ignoraria e reportaria como sucesso normal.
+    if (run?.force_requested === true && !supportsForcedUpdate(observacao, recebidoEm)) {
+      const { data: encerrado, error: encerramentoError } = await db
+        .from("system_update_runs")
+        .update({
+          status: "failed",
+          finished_at: recebidoEm,
+          log_tail:
+            "O agente do servidor ainda não confirmou suporte para refazer a atualização pela tela.",
+        })
+        .eq("id", run.id)
+        .eq("status", "dispatched")
+        .select("id")
+        .maybeSingle();
+      if (encerramentoError) {
+        logger.error("[system/agent] não consegui recusar o pedido de força sem suporte", {
+          error: encerramentoError.message,
+        });
+        return fail("internal_error", "Não consegui encerrar o pedido de atualização.", 500);
+      }
+      if (encerrado)
+        await audit({
+          action: "system.update_finished",
+          resourceType: "system_update_run",
+          resourceId: run.id,
+          metadata: { status: "failed", reason: "forced_update_not_supported" },
+          actingAsPlatformAdmin: true,
+        });
+      return ok({ update_requested: false, run_id: null, to_version: "", force_requested: false });
+    }
+
     return ok({
       update_requested: Boolean(run),
       run_id: run?.id ?? null,
       // Vazio = sem alvo nomeado no run (rota anterior a #2757, ou run sem
       // `to_version`): o agente cai no de sempre, a última release publicada.
       to_version: run?.to_version ?? "",
+      force_requested: run?.force_requested === true,
     });
   }
 
   // ── A volta automática (#2757) ────────────────────────────────────────────
   // Ela não tem `run_id`: ninguém pediu pela tela, então não existe run em
   // `dispatched` para fechar. O recado VIRA uma linha de run já fechada, com o
-  // mesmo vocabulário das outras (`failed_rolled_back`, `from_version` = onde
-  // o sistema ficou, `to_version` = a versão que falhou), porque é isso que a
-  // tela de Atualização já sabe ler — e `requested_by` fica NULO, que é a
-  // marca de "ninguém pediu isto" usada pela tela para dizer "sozinho".
+  // mesmo vocabulário das outras (`failed_rolled_back` quando a volta
+  // terminou, `failed` quando não — ver abaixo), porque é isso que a tela de
+  // Atualização já sabe ler — e `requested_by` fica NULO, que é a marca de
+  // "ninguém pediu isto" usada pela tela para dizer "sozinho".
   //
   // Antes do lookup de run pendente de propósito: esta mensagem não pergunta
   // nada, só conta um fato.
   if (payload.kind === "rollback") {
     const agora = new Date().toISOString();
+    // O DESFECHO decide o status, e é o único lugar onde isso é decidido
+    // (#3271). `failed_rolled_back` é a volta que TERMINOU: o `update.sh --to`
+    // deu código 0, a versão anterior subiu, e a tela pode afirmar que é ela
+    // que está no ar e dispensar o botão de voltar (que ali apontaria para a
+    // versão que já roda). Quando a volta NÃO terminou, as duas frases deixam
+    // de se sustentar — a linha vai como `failed`, o desfecho em que a tela
+    // diz que não sabe o que está rodando e mantém a saída de um clique.
+    //
+    // `ok` ausente = agente anterior a este contrato (o app atualiza antes do
+    // script do host — o mesmo bootstrap do `compare_failed` no heartbeat).
+    // Sem o campo não há prova de que a volta terminou, e gravar
+    // `failed_rolled_back` seria afirmar o que ninguém mediu: vale o lado
+    // conservador, que erra para o de fazer conferir e não para o de
+    // tranquilizar sem base.
+    const voltouBem = payload.ok === true;
+    const desfechoDaVolta = voltouBem ? "failed_rolled_back" : "failed";
     const { error } = await db.from("system_update_runs").insert({
       from_version: payload.returned_to,
       to_version: payload.failed_version,
-      status: "failed_rolled_back",
+      status: desfechoDaVolta,
       requested_by: null,
       dispatched_at: agora,
       finished_at: agora,
@@ -252,7 +321,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       resourceType: "system_update_run",
       // Sem id: a linha não foi pedida por ninguém e o insert não a devolve.
       metadata: {
-        status: "failed_rolled_back",
+        status: desfechoDaVolta,
         volta_automatica: true,
         de: payload.failed_version,
         para: payload.returned_to,
@@ -290,7 +359,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       .update({ last_step: payload.step })
       .eq("id", payload.run_id);
     if (error) {
-      logger.error("[system/agent] run_progress falhou", { error: error.message, runId: payload.run_id });
+      logger.error("[system/agent] run_progress falhou", {
+        error: error.message,
+        runId: payload.run_id,
+      });
       return fail("internal_error", "Não consegui gravar o passo.", 500);
     }
     return ok({ update_requested: false, run_id: payload.run_id });

@@ -45,6 +45,8 @@ vi.mock("@/hooks/i18n/useLocaleDeData", () => ({ useTagDeIdioma: () => "pt-BR" }
 vi.mock("@/hooks/auth/AuthProvider", () => ({
   useUser: () => ({ id: "u1", is_platform_admin: false, support: false }),
   useActiveOrg: () => ({ role: "agent" }),
+  // O seletor de etapa do cabeçalho (#3272) lê a régua de mover card.
+  usePermission: () => false,
 }));
 // FORK MIA: o dossiê do fork lê quem pode ver a equipe (`usePodeVerEquipe`, que
 // desce ao formulário do negócio o seletor de "quem originou"), e o hook pergunta

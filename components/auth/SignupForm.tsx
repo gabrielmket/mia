@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useTransition, useState } from "react";
+import { useState } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
 import {
@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { signUp } from "@/app/actions/auth/signUp";
 import { Eye, EyeSlash } from "@/lib/ui/icons";
 import { PasswordStrength } from "@/components/auth/PasswordStrength";
+import { AvisoSemResposta, useEnvioComTeto } from "@/components/auth/teto-da-espera";
 import type { PlanoDoCadastro } from "@/lib/cobranca/cadastro";
 // FORK MIA (.90): os planos em cartões e o que a empresa faz (docs/fork/jornada-de-assinatura.md).
 import { CartoesDoPlano } from "@/components/planos-mia/CartoesDoPlano";
@@ -62,7 +63,7 @@ export function SignupForm({
 }) {
   const t = useT();
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { pendente: isPending, semResposta, enviar } = useEnvioComTeto();
   const [serverError, setServerError] = useState<string | null>(null);
   const [contaExistente, setContaExistente] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -118,35 +119,34 @@ export function SignupForm({
 
   const onSubmit = (values: SignupInput & { full_name: string }) => {
     setServerError(null);
-    startTransition(async () => {
-      // No modo convite o e-mail do formulário é readonly, e readonly no
-      // cliente não vale nada: quem confere de novo é o servidor.
-      // FORK MIA (.96): na entrada paga, quem assina e os dados fiscais vão junto,
-      // conferidos aqui e de novo na action.
-      if (entradaPaga) {
-        const conferido = conferirDadosFiscais({ ...miaFiscais, telefone: miaWhatsapp }, { exigeTelefone: true });
-        const faltas = conferido.ok ? [] : faltasDosDadosFiscais(conferido.campos);
-        if (miaNome.trim().length < 2) faltas.unshift("seu nome");
-        setMiaErrosFiscais(conferido.ok ? {} : (conferido.campos as Record<string, string>));
-        if (faltas.length > 0) {
-          setServerError(`${t("Falta preencher:")} ${faltas.map((f) => t(f)).join(", ")}.`);
-          return;
-        }
+    // FORK MIA (.96): na entrada paga, quem assina e os dados fiscais vão junto,
+    // conferidos aqui e de novo na action.
+    if (entradaPaga) {
+      const conferido = conferirDadosFiscais({ ...miaFiscais, telefone: miaWhatsapp }, { exigeTelefone: true });
+      const faltas = conferido.ok ? [] : faltasDosDadosFiscais(conferido.campos);
+      if (miaNome.trim().length < 2) faltas.unshift("seu nome");
+      setMiaErrosFiscais(conferido.ok ? {} : (conferido.campos as Record<string, string>));
+      if (faltas.length > 0) {
+        setServerError(`${t("Falta preencher:")} ${faltas.map((f) => t(f)).join(", ")}.`);
+        return;
       }
-      // FORK MIA (.98): o cupom vai junto só quando vale no plano marcado.
-      const comCupom =
-        miaCupom?.valido === true && typeof values.cobranca_plan_id === "string" && miaCupom.planos.includes(values.cobranca_plan_id) ? { mia_cupom: miaCupom.codigo } : {};
-      const entrada: SignupInput | SignupComConviteInput = convite
-        ? {
-            full_name: values.full_name,
-            email: convite.email,
-            password: values.password,
-            password_confirm: values.password_confirm,
-          }
-        : entradaPaga
-          ? { ...values, ...comCupom, mia_nome: miaNome, mia_fiscal: { ...miaFiscais, telefone: miaWhatsapp } }
-          : { ...values, ...comCupom };
-      const res = await signUp(entrada, convite?.token);
+    }
+    // FORK MIA (.98): o cupom vai junto só quando vale no plano marcado.
+    const comCupom =
+      miaCupom?.valido === true && typeof values.cobranca_plan_id === "string" && miaCupom.planos.includes(values.cobranca_plan_id) ? { mia_cupom: miaCupom.codigo } : {};
+    // No modo convite o e-mail do formulário é readonly, e readonly no
+    // cliente não vale nada: quem confere de novo é o servidor.
+    const entrada: SignupInput | SignupComConviteInput = convite
+      ? {
+          full_name: values.full_name,
+          email: convite.email,
+          password: values.password,
+          password_confirm: values.password_confirm,
+        }
+      : entradaPaga
+        ? { ...values, ...comCupom, mia_nome: miaNome, mia_fiscal: { ...miaFiscais, telefone: miaWhatsapp } }
+        : { ...values, ...comCupom };
+    void enviar(() => signUp(entrada, convite?.token), (res) => {
       if (res.ok) {
         /**
          * ⚠️ O PROVEDOR JÁ DEIXOU A PESSOA ENTRAR — não existe e-mail para ela
@@ -466,6 +466,7 @@ export function SignupForm({
           {serverError}
         </div>
       )}
+      {semResposta && <AvisoSemResposta />}
       <Button type="submit" className="w-full" disabled={isPending}>
         {isPending ? t("Criando conta...") : entradaPaga ? t("Criar conta e ir para o pagamento") : t("Criar conta")}
       </Button>

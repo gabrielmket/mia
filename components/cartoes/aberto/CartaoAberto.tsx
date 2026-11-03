@@ -66,6 +66,13 @@ import {
 import { TarefasDoNegocio } from "@/components/kanban/TarefasDoNegocio";
 import { HistoricoDoNegocio } from "./HistoricoDoNegocio";
 import { SecaoDeObrigacoes } from "@/components/obrigacoes/SecaoDeObrigacoes";
+// Upstream v1.9x: os atalhos do card (#3487) e a revisão do que o documento
+// disse (#3415) também moram no cartão aberto, como no dossiê. A confirmação
+// da revisão chega ao formulário de campos pelo mesmo controle do dossiê.
+import { AtalhosDoNegocio } from "@/components/kanban/AtalhosDoCard";
+import { RevisaoDoDocumento } from "@/components/kanban/RevisaoDoDocumento";
+import { type ControleDosCamposDoNegocio } from "@/components/kanban/LeadFieldsForm";
+import type { AtalhoDoCard } from "@/lib/leads/atalhos-do-card";
 
 const CHAVE_DA_TELA_CHEIA = "mia.cartao-aberto.tela-cheia";
 
@@ -97,6 +104,8 @@ interface Props {
   ownerNames?: Map<string, string | null>;
   /** Mover pela barra de etapas: o MESMO caminho do arrasto do quadro. */
   onMoverEtapa?: (stageId: string) => void;
+  /** Os atalhos do card (upstream #3487), do `settings` do funil que o quadro já leu. */
+  atalhos?: AtalhoDoCard[];
 }
 
 export function CartaoAberto({
@@ -110,6 +119,7 @@ export function CartaoAberto({
   stageName,
   ownerNames,
   onMoverEtapa,
+  atalhos,
 }: Props) {
   const t = useT();
   const user = useUser();
@@ -122,6 +132,7 @@ export function CartaoAberto({
     (user.is_platform_admin && !user.support) ||
     (activeOrg ? ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent : false);
   const timeline = useLeadTimeline(open ? lead.id : null, lead.contact_id);
+  const formulario = useRef<ControleDosCamposDoNegocio | null>(null);
   const cartao = useCartaoAberto(open ? lead.id : null);
   const ganhar = useWinLead(pipelineId);
   const [perdendo, setPerdendo] = useState(false);
@@ -335,6 +346,7 @@ export function CartaoAberto({
           <div className="min-w-0 lg:order-1">
             {/* Upstream 1.71 (#2207): sem conversa e com contato, vira o botão
                 "Abrir conversa" (a mesma rota da tabela de contatos). */}
+            <AtalhosDoNegocio atalhos={atalhos} lead={lead} contactId={lead.contact_id} />
             <ConversaNoDossie conversa={lead.conversa} contactId={lead.contact_id} phone={lead.contact_phone} />
             {cartao.isLoading ? (
               <p className="py-3 text-xs text-text-muted">{t("Carregando…")}</p>
@@ -355,7 +367,15 @@ export function CartaoAberto({
                   <HistoricoDeCompras resumo={dados.compras} modo="negocio" id="compras-do-negocio" />
                 </div>
                 <OrigemDoNegocio lead={lead} origem={dados.origem} camposDoFunil={fieldDefs} />
+                {/* Upstream (#3415): a fila do que o documento disse, ANTES dos campos,
+                    que são o destino do que for confirmado. */}
+                <RevisaoDoDocumento
+                  leadId={lead.id}
+                  podeDecidir={podeEditarTarefas}
+                  aoDecidir={(confirmado) => formulario.current?.confirmarCampo(confirmado)}
+                />
                 <CamposDoSegmento
+                  controle={formulario}
                   lead={lead}
                   pipelineId={pipelineId}
                   camposDoFunil={fieldDefs}

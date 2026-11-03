@@ -94,20 +94,37 @@ post() {  # post <json> → corpo da resposta em 2xx; VAZIO em qualquer falha
 # só o fato (de qual versão para qual, por quê) —, pela mesma regra do resto da
 # rota: o que atravessa a fronteira é informação, nunca instrução.
 #
+# O recado leva o DESFECHO da volta (#3271), num campo próprio (`ok`). Sem ele
+# o painel tratava igual a volta que terminou bem e a que falhou: a tela
+# afirmava "está no ar agora" nos dois casos e ainda oferecia o botão de voltar
+# apontando para a versão que já estava rodando. O motivo continua no `reason`
+# (é o texto que quem lê entende), mas quem decide o desfecho é o campo: código
+# 0 = a volta terminou; qualquer outro = não terminou.
+#
 # Falha aqui NÃO derruba nada: a volta já aconteceu, e o pior desfecho de um
 # aviso que não passa é o `.update-agent.log` de sempre.
 avisar_volta_no_painel() {  # avisar_volta_no_painel <para onde voltou> <versão que não respondeu> <falhas> <rc da volta>
-  local para="${1:-}" falhou="${2:-}" falhas="${3:-}" rc="${4:-0}" motivo corpo
+  local para="${1:-}" falhou="${2:-}" falhas="${3:-}" rc="${4:-0}" ok motivo corpo
   [ -n "$para" ] || return 0
   motivo="o site não respondeu em ${falhas:-2} healthchecks seguidos logo depois da atualização"
-  [ "${rc:-0}" = "0" ] || motivo="$motivo (a volta terminou com código $rc)"
-  corpo="{\"kind\":\"rollback\",\"returned_to\":\"$(esc "$para")\",\"failed_version\":\"$(esc "$falhou")\",\"reason\":\"$(esc "$motivo")\"}"
+  if [ "${rc:-0}" = "0" ]; then
+    ok="true"
+  else
+    ok="false"
+    motivo="$motivo (a volta terminou com código $rc)"
+  fi
+  corpo="{\"kind\":\"rollback\",\"returned_to\":\"$(esc "$para")\",\"failed_version\":\"$(esc "$falhou")\",\"ok\":$ok,\"reason\":\"$(esc "$motivo")\"}"
   post "$corpo" >/dev/null 2>&1 || true
   return 0
 }
 
 json_field() {  # json_field <corpo> <campo> — sem jq, que pode não existir no VPS
   printf '%s' "$1" | tr ',' '\n' | grep -o "\"$2\":[^,}]*" | head -1 | cut -d: -f2- | tr -d '" '
+}
+
+# Não confunde o booleano JSON true com a string "true" ou outro valor.
+json_bool_true() {
+  printf '%s' "$1" | LC_ALL=C grep -E "\"$2\"[[:space:]]*:[[:space:]]*true([[:space:]]*[,}]|[[:space:]]*$)" >/dev/null
 }
 
 # Escapa texto pra caber dentro de uma string JSON, sem depender de jq:
@@ -174,6 +191,21 @@ else
   CURRENT="$CURRENT_SHA";  OFF_RELEASE=true
 fi
 
+# The checkout still supplies release notes and update scripts; it does not
+# identify containers. An old kit remains compatible, with explicit legacy
+# status on the API, until this collector is installed alongside the agent.
+RUNTIME_CONFIRMATION=null
+RUNTIME_CONFIRMED=false
+if [ -f "$(dirname "$0")/_runtime.sh" ]; then
+  source "$(dirname "$0")/_runtime.sh"
+  collect_runtime_confirmation
+  if [ "$RUNTIME_CONFIRMED" = true ]; then
+    CURRENT="v$RUNTIME_VERSION"; CURRENT_SHA="$RUNTIME_REVISION"
+    CURRENT_TAG="$CURRENT"
+    if [ "$RUNTIME_REVISION" = "$RUNTIME_BASE" ]; then OFF_RELEASE=false; else OFF_RELEASE=true; fi
+  fi
+fi
+
 # Tag que já está CONTIDA no que roda aqui não é atualização — é retrocesso, e
 # o update.sh recusa instalar (sem --force). Anunciá-la mesmo assim acenderia
 # na tela um botão que o agente é obrigado a recusar depois: o mesmo teste de
@@ -190,7 +222,14 @@ fi
 # atrasada. Por isso o "não sei" viaja explícito no heartbeat.
 COMPARE_FAILED=false
 if [ -n "$LATEST_TAG" ]; then
-  is_already_in_head "$LATEST_TAG" && CONTIDA=0 || CONTIDA=$?
+  if [ "$RUNTIME_CONFIRMED" = true ]; then
+    git merge-base --is-ancestor "$LATEST_TAG" "$RUNTIME_REVISION" 2>/dev/null && CONTIDA=0 || CONTIDA=$?
+  elif [ "$RUNTIME_CONFIRMATION" != null ]; then
+    CONTIDA=2
+  else
+    is_already_in_head "$LATEST_TAG" && CONTIDA=0 || CONTIDA=$?
+  fi
+  case "$CONTIDA" in 0|1) ;; *) CONTIDA=2 ;; esac
   [ "$CONTIDA" = 2 ] && COMPARE_FAILED=true
   [ "$CONTIDA" = 1 ] || LATEST_TAG=""   # 0 = retrocesso, 2 = não sei: nos dois, não anuncia
 fi
@@ -362,7 +401,7 @@ if [ -n "$DE_VOLTA" ]; then
   fi
 fi
 
-BODY="{\"kind\":\"heartbeat\",\"current_version\":\"${CURRENT}\",\"current_sha\":\"${CURRENT_SHA}\",\"off_release\":${OFF_RELEASE},\"latest_version\":\"${LATEST_TAG}\",\"compare_failed\":${COMPARE_FAILED},\"has_known_release\":${HAS_KNOWN_RELEASE},\"changelog\":\"$(esc "$CHANGELOG")\"}" || true
+BODY="{\"kind\":\"heartbeat\",\"supports_forced_update\":true,\"current_version\":\"${CURRENT}\",\"current_sha\":\"${CURRENT_SHA}\",\"off_release\":${OFF_RELEASE},\"latest_version\":\"${LATEST_TAG}\",\"compare_failed\":${COMPARE_FAILED},\"has_known_release\":${HAS_KNOWN_RELEASE},\"changelog\":\"$(esc "$CHANGELOG")\",\"runtime_confirmation\":$RUNTIME_CONFIRMATION}" || true
 
 # Só no log do host, de propósito. Mandar isto no heartbeat seria inútil: o
 # schema da rota é `z.object` sem `.strict()`, então o Zod DESCARTA chave
@@ -377,6 +416,16 @@ RESP="$(post "$BODY")"
 [ "$(json_field "$RESP" update_requested)" = "true" ] || exit 0
 RUN_ID="$(json_field "$RESP" run_id)" || true
 [ -n "$RUN_ID" ] || exit 0
+
+# Revalida também pedidos antigos. Força nunca usa o fallback legado sem
+# observação: o helper pode ter sumido depois de o app aceitar o pedido.
+FORCA_PEDIDA=""
+json_bool_true "$RESP" force_requested && FORCA_PEDIDA=1
+if { [ "$RUNTIME_CONFIRMATION" != null ] || [ -n "$FORCA_PEDIDA" ]; } &&
+   { [ "$RUNTIME_CONFIRMATION" = null ] || ! runtime_can_install_release; }; then
+  post "{\"kind\":\"run_result\",\"run_id\":\"${RUN_ID}\",\"status\":\"failed\",\"log_tail\":\"A execução está incompleta ou personalizada. Concilie e confirme os serviços antes de instalar imagens de uma release pública.\"}" >/dev/null || true
+  exit 0
+fi
 
 # ── 4. Alguém pediu. Uma atualização por vez. ───────────────────────────────
 # (o cadeado já está na mão desde a seção 2 — a vigência também dispara
@@ -438,6 +487,12 @@ export API SECRET ERRLOG RUN_ID
 # à tela pelo log_tail, em vez de o run sumir sem explicação).
 ALVO="$(json_field "$RESP" to_version)" || ALVO=""
 [ -n "$ALVO" ] || ALVO="$LATEST_TAG"
+# O alvo vem da rota autenticada, mas o host mantém o vocabulário restrito.
+if [ -n "$ALVO" ] && ! [[ "$ALVO" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  log_err "pedido de atualização recusado: alvo não é uma tag de versão publicada"
+  post "{\"kind\":\"run_result\",\"run_id\":\"${RUN_ID}\",\"status\":\"failed\",\"log_tail\":\"O alvo do pedido não é uma versão publicada válida. Nenhuma atualização foi executada.\"}" >/dev/null || true
+  exit 0
+fi
 UPDATE_ARGS=()
 [ -n "$ALVO" ] && UPDATE_ARGS=(--to "$ALVO")
 # A MESMA guarda do update.sh contra "versão ANTERIOR à já instalada"
@@ -450,7 +505,7 @@ if [ -n "$ALVO" ] && [ "$ALVO" != "$CURRENT_TAG" ]; then
   is_already_in_head "$ALVO" && CONTIDA=0 || CONTIDA=$?
   [ "$CONTIDA" = 0 ] && VOLTA_NO_TEMPO=1
 fi
-[ -n "$VOLTA_NO_TEMPO" ] && UPDATE_ARGS+=(--force)
+if [ -n "$VOLTA_NO_TEMPO" ] || [ -n "$FORCA_PEDIDA" ]; then UPDATE_ARGS+=(--force); fi
 
 # Cada execução do agente começa sem medição nenhuma do banco: o arquivo da
 # rodada é desta rodada, e resíduo da execução anterior não pode virar história

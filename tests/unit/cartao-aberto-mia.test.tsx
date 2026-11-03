@@ -337,7 +337,10 @@ describe("convivência com o dossiê do upstream", () => {
     // campos do negócio ANTES da linha do tempo — ele já faz (os campos do
     // segmento vêm no corpo e o histórico no fim). É moldura, não conteúdo:
     // nenhuma informação do dossiê some do cartão.
-    const substituidas = new Set(["LeadTimeline", "SecaoDoDossie", "useSecoesRecolhidas"]);
+    // O seletor de etapa do cabeçalho do dossiê (`EtapaNoDossie`, upstream v1.9x)
+    // também é substituído: o cartão aberto tem a BARRA DE ETAPAS, que move pelo
+    // mesmo caminho do "Mover para…" do quadro (`aoMoverPelaLista`).
+    const substituidas = new Set(["LeadTimeline", "SecaoDoDossie", "useSecoesRecolhidas", "EtapaNoDossie"]);
     const faltando = pecas.filter((p) => !substituidas.has(p) && !cartao.includes(p));
     expect(faltando, "peça do dossiê do upstream que sumiu do cartão aberto").toEqual([]);
     expect(pecas.length).toBeGreaterThan(4);

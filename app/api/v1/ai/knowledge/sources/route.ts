@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, fail } from "@/lib/api/wrappers";
+import { audit } from "@/lib/audit";
 import { loadAuthUser } from "@/lib/auth/server";
 import { orgAtivaDaApi, requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
@@ -132,6 +133,19 @@ export async function POST(req: NextRequest): Promise<Response> {
     parsed.data,
   );
   if (!criado.ok) return fail(criado.code, t(criado.message), criado.status, { requestId });
+
+  // Upstream (v1.9x): quem pôs este material no acervo? A trilha responde — com
+  // tipo e contagem, nunca com o texto (a tabela é append-only e a cascata da
+  // LGPD não a alcança).
+  void audit({
+    action: "ai.knowledge_source_created",
+    actorUserId: authz.user.id,
+    organizationId: activeOrg.orgId,
+    resourceType: "ai_knowledge_source",
+    resourceId: criado.id,
+    requestId,
+    metadata: { source_type: parsed.data.source_type, items_count: criado.items_count },
+  });
 
   return ok(
     { id: criado.id, items_count: criado.items_count, indexacao_habilitada: criado.indexacao_habilitada },

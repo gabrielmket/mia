@@ -29,6 +29,7 @@ import {
   crmUpdateLead,
   crmMoveLeadStage,
   crmRetomarLead,
+  crmProposeLeadFieldsFromDocument,
 } from "./leads";
 import { crmGetPipelineForecast, crmListPipelines } from "./pipelines";
 import { crmSendWhatsappMessage } from "./messages";
@@ -59,6 +60,7 @@ import { crmGetHonorariosContrato, crmListHonorariosParcelas } from "./honorario
 import { crmDescribeExternalData, crmQueryExternalData } from "./dados-externos";
 import { crmConsultarReceita } from "./receitas-externas";
 import { crmListPrivacyRequests } from "./privacidade";
+import { crmGetProspectingSiteAudit } from "./prospeccao-site";
 import {
   crmArchiveStage,
   crmCreateStage,
@@ -140,6 +142,7 @@ export const allTools: ReadonlyArray<McpToolDefinition> = [
   crmQueryExternalData,
   crmConsultarReceita,
   crmListPrivacyRequests,
+  crmGetProspectingSiteAudit,
   // read — organizar a operação (W4)
   crmListStages,
   crmListTags,
@@ -168,6 +171,7 @@ export const allTools: ReadonlyArray<McpToolDefinition> = [
   crmUpdateLead,
   crmMoveLeadStage,
   crmRetomarLead,
+  crmProposeLeadFieldsFromDocument,
   crmSendWhatsappMessage,
   crmStartConversationAndSend,
   crmCreateConversationDraft,

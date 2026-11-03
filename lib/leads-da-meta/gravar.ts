@@ -415,7 +415,10 @@ export async function gravarLeadDaMeta(
       // O lead do formulário da Meta é captação, como o webhook de entrada do
       // upstream: entra na etapa configurada mesmo que ela exija um campo que o
       // formulário não mandou (a isenção é a mesma da rota de captação, #2295).
-      { exigirCamposDaEtapa: false },
+      // E, desde a v1.97 (#3508), a resposta que não é uma das opções de um
+      // campo de seleção do funil entra como veio, como no webhook de captação:
+      // recusar perderia o lead do formulário.
+      { exigirCamposDaEtapa: false, manterForaDaLista: true },
     );
   } catch (erro) {
     if (!(erro instanceof ApiError)) throw erro;

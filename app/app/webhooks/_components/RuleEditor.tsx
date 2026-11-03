@@ -35,9 +35,15 @@ import {
   configDoSilencio,
   type DirecaoDoSilencio,
 } from "@/lib/automation/gatilhos-de-tempo";
+import {
+  DIAS_DE_ANTECEDENCIA_MAX,
+  configDoAniversario,
+} from "@/lib/automation/aniversario-do-contato";
 import { configAoSalvarDaTela } from "@/lib/automation/config-ao-salvar";
 import {
+  CONDICOES_DO_CONTATO,
   OPERADORES_SEM_VALOR,
+  valorPadraoDoCampo,
   type ConditionNode,
   type ConditionOp,
   type Conditions,
@@ -52,6 +58,7 @@ import { usePipelines, usePipelineStages, useWebhookSources } from "@/hooks/webh
 import { TRIGGER_LABELS, ACTION_LABELS, type TriggerEvent, type ActionType } from "./labels";
 import { ActionConfigForm, defaultActionConfig, type ActionItem } from "./ActionConfigForm";
 import { EtapaDeQualquerFunil } from "./EtapaDeQualquerFunil";
+import { ValorDaCondicaoDoContato } from "./CondicaoDoContato";
 import { useT } from "@/hooks/i18n/useT";
 // FORK MIA — os cinco gatilhos de documentos e obrigações (docs/fork/obrigacoes.md).
 import {
@@ -92,7 +99,12 @@ export interface CuratedField {
   value: string;
   label: string;
   op: Op;
-  kind?: "stage";
+  /**
+   * Como o campo pede o valor: `stage` desenha o seletor de etapas; `sim_nao`
+   * é a condição do contato (#3814) — sim/não, com prazo e tipo na de agenda
+   * (`ValorDaCondicaoDoContato`). Ausente = texto livre.
+   */
+  kind?: "stage" | "sim_nao";
   /**
    * O campo guarda uma LISTA (tags). Em lista, `contains` é pertinência — a tag
    * inteira, sem diferenciar caixa (decisão do dono, #956) —, e chamar isso de
@@ -342,6 +354,23 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
     stage_id: "",
   });
   const [webhookSourceId, setWebhookSourceId] = React.useState(QUALQUER_FONTE);
+  /**
+   * "Dias de antecedência" do aniversário (#3726), como TEXTO.
+   *
+   * Texto porque o campo vazio precisa virar `NaN` (recusado pelo schema) e não
+   * um `0` silencioso — o mesmo cuidado dos outros N da tela. `"0"` é o
+   * comportamento histórico: avisar no próprio dia.
+   */
+  const [antecedenciaDoAniversario, setAntecedenciaDoAniversario] = React.useState("0");
+  /**
+   * "No máximo uma vez por contato" (#2974), do gatilho de contato novo.
+   *
+   * A opção é gravada LIGADA ou DESLIGADA (o schema recusa qualquer outra
+   * coisa), então o estado é booleano e o `false` também vai para a API: sem
+   * isso o `merge` do `configAoSalvarDaTela` faria um `true` guardado
+   * sobreviver, e o operador não conseguiria desligar.
+   */
+  const [umaVezPorContato, setUmaVezPorContato] = React.useState(false);
 
   // FORK MIA — o X (dias) e o filtro por tipo dos gatilhos de obrigação.
   const [configDaObrigacao, setConfigDaObrigacao] = React.useState<RascunhoDoGatilhoDeObrigacao>({
@@ -380,6 +409,12 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
     setActions((rule?.actions as ActionItem[] | undefined) ?? []);
     const sourceId = rule?.trigger_config?.webhook_source_id;
     setWebhookSourceId(typeof sourceId === "string" ? sourceId : QUALQUER_FONTE);
+    setUmaVezPorContato(rule?.trigger_config?.uma_vez_por_contato === true);
+    // #3726 — o leitor é o MESMO da varredura. Regra antiga (sem a chave) abre
+    // com 0, que é o comportamento que ela já tem no banco.
+    setAntecedenciaDoAniversario(
+      String(configDoAniversario(rule?.trigger_config)?.dias_antecedencia ?? 0),
+    );
     // A configuração salva volta pelo MESMO leitor que a varredura usa: se ela
     // não reconhece o que está guardado, a tela não inventa nada e o operador
     // reescolhe — em vez de a tela mostrar um funil que o cron ignora.
@@ -413,13 +448,19 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
     });
   }, [open, rule]);
 
-  const curatedFields = triggerEvent ? CURATED_FIELDS[triggerEvent] : [];
+  // As duas condições do contato valem em QUALQUER gatilho: elas perguntam pelo
+  // contato do evento, não pelo evento. Por isso entram depois das do gatilho,
+  // e não na tabela de cada um (que é por tipo de evento).
+  const curatedFields: CuratedField[] = triggerEvent
+    ? [...CURATED_FIELDS[triggerEvent], ...CONDICOES_DO_CONTATO]
+    : [];
   const ehGatilhoDeData = triggerEvent === GATILHO_DE_DATA_DO_FUNIL;
   const ehGatilhoDeTempo =
     triggerEvent === GATILHO_SILENCIO || triggerEvent === GATILHO_ETAPA_PARADA;
   const ehGatilhoDeNovoContato = triggerEvent === "lead.created";
   // FORK MIA
   const ehDeObrigacao = ehGatilhoDeObrigacao(triggerEvent);
+  const ehGatilhoDoAniversario = triggerEvent === "contact.birthday";
   const camposDeData = camposDeDataDoNegocio(
     (pipelinesRes?.data ?? []).find((p) => p.id === configDaData.pipeline_id)?.settings ?? null,
   );
@@ -523,6 +564,10 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                 gatilhoDaTela: triggerEvent,
                 configDaTela: {
                   webhook_source_id: webhookSourceId === QUALQUER_FONTE ? null : webhookSourceId,
+                  // Ligado OU desligado, sempre gravado (#2974): omitir o
+                  // `false` faria o merge abaixo manter um `true` guardado e a
+                  // opção não poderia ser desligada pela tela.
+                  uma_vez_por_contato: umaVezPorContato,
                 },
               })
             : ehDeObrigacao
@@ -535,7 +580,35 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                     : {}),
                   ...(configDaObrigacao.tipo.trim() ? { tipo: configDaObrigacao.tipo.trim() } : {}),
                 }
-              : {},
+              : ehGatilhoDoAniversario
+              ? configAoSalvarDaTela({
+                  gatilhoDaRegra: rule?.trigger_event,
+                  configDaRegra: rule?.trigger_config,
+                  gatilhoDaTela: triggerEvent,
+                  configDaTela: {
+                    // #3726 — o N de antecedência é a ÚNICA configuração deste
+                    // gatilho. Campo vazio vira NaN, que o safeParse desta tela
+                    // recusa antes de qualquer envio, em vez de gravar 0 calado.
+                    // Pela API é outra conta: `null` NÃO é recusado — o
+                    // `configDoAniversario` o lê como 0 (no dia).
+                    dias_antecedencia:
+                      antecedenciaDoAniversario.trim() === ""
+                        ? Number.NaN
+                        : Number(antecedenciaDoAniversario),
+                  },
+                })
+              : // Gatilho sem configuração própria: `configDaTela` vazio devolve o
+              // que está guardado quando o gatilho não mudou — é assim que uma
+              // opção gravada pela API (o "uma vez por contato", #2974, cujo
+              // controle só é desenhado no gatilho de contato novo) sobrevive a
+              // abrir e salvar nesta gaveta em vez de sumir. Trocando o gatilho,
+              // o resultado é `{}`, como sempre foi.
+              configAoSalvarDaTela({
+                gatilhoDaRegra: rule?.trigger_event,
+                configDaRegra: rule?.trigger_config,
+                gatilhoDaTela: triggerEvent,
+                configDaTela: {},
+              }),
     };
     const parsed = createAutomationRuleSchema.safeParse(payload);
     if (!parsed.success) {
@@ -631,11 +704,50 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                 <p className="text-xs text-muted-foreground">
                   {t("Escolha uma fonte para limitar esta automação a um formulário. Qualquer fonte mantém o comportamento geral.")}
                 </p>
+                {/* #2974 — o limite por contato. Fica no gatilho de contato novo,
+                    que é o caso relatado (o lead volta pelo mesmo anúncio e
+                    recebia a sequência inteira outra vez). */}
+                <label className="mt-3 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={umaVezPorContato}
+                    onChange={(e) => setUmaVezPorContato(e.target.checked)}
+                  />
+                  {t("Rodar no máximo uma vez por contato")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {t("Ligado, esta automação roda uma única vez para cada contato: se ele voltar pelo mesmo anúncio, a sequência não repete. A execução fica registrada na aba Atividade, e a próxima entrada deste contato só registra que a regra foi pulada.")}
+                </p>
               </div>
             ) : null}
 
-            {/* O gatilho de DATA só sabe onde olhar se a regra disser o funil e o
-                campo: o campo de data pertence a UM funil. Sem esta escolha a
+            {/* #3726 — o aniversário pode avisar ANTES do dia. O 0 é o
+                comportamento histórico (no próprio dia, às 9h locais) e é o que
+                toda regra gravada antes desta versão tem no banco. */}
+            {ehGatilhoDoAniversario ? (
+              <div className="space-y-2 rounded-sm border border-border p-3">
+                <div className="w-40 space-y-1">
+                  <Label htmlFor="dias-de-antecedencia">{t("Dias de antecedência")}</Label>
+                  <Input
+                    id="dias-de-antecedencia"
+                    type="number"
+                    inputMode="numeric"
+                    value={antecedenciaDoAniversario}
+                    min={0}
+                    max={DIAS_DE_ANTECEDENCIA_MAX}
+                    onChange={(e) => setAntecedenciaDoAniversario(e.target.value)}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    "O aviso sai N dias antes da data de nascimento, sempre às 9h no fuso da organização. Deixe 0 para avisar no próprio dia. Cada contato recebe um aviso por ano, por automação.",
+                  )}
+                </p>
+              </div>
+            ) : null}
+
+            {/* O gatilho de DATA só sabe onde olhar se a regra disser o funil e
+                o campo: o campo de data pertence a UM funil. Sem esta escolha a
                 regra é salva e nunca dispara — por isso o schema da API também
                 a recusa. */}
             {ehGatilhoDeData ? (
@@ -914,7 +1026,16 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                         value={cond.field}
                         onValueChange={(v) => {
                           const f = curatedFields.find((cf) => cf.value === v);
-                          updateCondition(idx, { field: v, op: f?.op ?? "eq" });
+                          // Condição do contato nasce com um valor que a porta
+                          // aceita ("sim"), senão a linha recém-escolhida seria
+                          // recusada por "escolha sim ou não" antes de a pessoa
+                          // tocar no campo de valor.
+                          const padrao = valorPadraoDoCampo(v, cond.value);
+                          updateCondition(idx, {
+                            field: v,
+                            op: f?.op ?? "eq",
+                            ...(padrao === null ? {} : { value: padrao }),
+                          });
                         }}
                       >
                         <SelectTrigger className="flex-1 basis-40">
@@ -951,6 +1072,12 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                     {OPS_SEM_VALOR.has(cond.op) ? null : curated?.kind === "stage" ? (
                       <EtapaDeQualquerFunil
                         value={cond.value}
+                        onChange={(v) => updateCondition(idx, { value: v })}
+                      />
+                    ) : curated?.kind === "sim_nao" ? (
+                      <ValorDaCondicaoDoContato
+                        campo={cond.field}
+                        valor={cond.value}
                         onChange={(v) => updateCondition(idx, { value: v })}
                       />
                     ) : (

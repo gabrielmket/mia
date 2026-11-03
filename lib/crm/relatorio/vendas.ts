@@ -20,6 +20,7 @@
  */
 
 import { mesNoFuso } from "@/lib/crm/metas/fuso";
+import { partesDaVenda } from "@/lib/crm/metas/partes-da-venda";
 
 export interface LeadDoRelatorio {
   status: string;
@@ -27,6 +28,8 @@ export interface LeadDoRelatorio {
   value_cents: number | null;
   revenue_kind: "recorrente" | "avulso" | null;
   recurring_months: number | null;
+  /** FORK MIA: a mensalidade do upstream (v1.99); ver `lib/crm/metas/partes-da-venda.ts`. */
+  recurring_value_cents?: number | null;
   lost_reason: string | null;
   created_at: string;
   closed_at: string | null;
@@ -177,11 +180,12 @@ export function historico(
       continue;
     }
     if (l.status !== "won" || !contaComoReceita(l, funis)) continue;
-    const valor = l.value_cents ?? 0;
-    alvo.receitaCents += valor;
+    // FORK MIA (upstream v1.99): a mensalidade pode estar na coluna própria.
+    const partes = partesDaVenda(l);
+    alvo.receitaCents += partes.recorrente + partes.avulso + partes.naoClassificada;
     alvo.vendas += 1;
-    if (l.revenue_kind === "recorrente") alvo.recorrenteCents += valor;
-    else if (l.revenue_kind === "avulso") alvo.avulsoCents += valor;
+    alvo.recorrenteCents += partes.recorrente;
+    alvo.avulsoCents += partes.avulso;
   }
 
   return [...linha.values()];

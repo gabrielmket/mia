@@ -200,6 +200,25 @@ export const createLeadSchema = z.object({
   empresa_id: z.string().uuid().nullable().optional(),
   value_cents: z.coerce.number().int().nonnegative().nullable().optional(),
   /**
+   * O VALOR RECORRENTE, ao lado do valor único (fatia 1 da #3602).
+   *
+   * `nonnegative` é a MESMA régua do `value_cents`: mensalidade negativa é dado
+   * impossível, e o CHECK da migration 9028 repete a regra no banco para quem
+   * escreve por fora do schema (psql, import, integração).
+   */
+  recurring_value_cents: z.coerce.number().int().nonnegative().nullable().optional(),
+  /**
+   * A periodicidade. `literal("monthly")` e não `z.string()`: a v1 conhece UMA,
+   * e aceitar texto livre deixaria "yearly" gravado sem nenhuma régua que o
+   * multiplique — o painel da fatia 2 somaria mensalidade com anualidade.
+   */
+  recurring_period: z.literal("monthly").nullable().optional(),
+  /**
+   * A duração em meses; ausente/nula = sem prazo. Zero não é "sem prazo" — é
+   * contrato que não dura nada, e quem divide pelo prazo dividiria por ele.
+   */
+  recurring_months: z.coerce.number().int().min(1).max(600).nullable().optional(),
+  /**
    * Sem `default`, e isso É o conserto.
    *
    * Com `.default("BRL")` o campo nunca chegava ausente ao handler: quem
@@ -258,6 +277,25 @@ export const updateLeadSchema = z.object({
    */
   empresa_id: z.string().uuid().nullable().optional(),
   value_cents: z.coerce.number().int().nonnegative().nullable().optional(),
+  /**
+   * O VALOR RECORRENTE, ao lado do valor único (fatia 1 da #3602).
+   *
+   * `nonnegative` é a MESMA régua do `value_cents`: mensalidade negativa é dado
+   * impossível, e o CHECK da migration 9028 repete a regra no banco para quem
+   * escreve por fora do schema (psql, import, integração).
+   */
+  recurring_value_cents: z.coerce.number().int().nonnegative().nullable().optional(),
+  /**
+   * A periodicidade. `literal("monthly")` e não `z.string()`: a v1 conhece UMA,
+   * e aceitar texto livre deixaria "yearly" gravado sem nenhuma régua que o
+   * multiplique — o painel da fatia 2 somaria mensalidade com anualidade.
+   */
+  recurring_period: z.literal("monthly").nullable().optional(),
+  /**
+   * A duração em meses; ausente/nula = sem prazo. Zero não é "sem prazo" — é
+   * contrato que não dura nada, e quem divide pelo prazo dividiria por ele.
+   */
+  recurring_months: z.coerce.number().int().min(1).max(600).nullable().optional(),
   currency: z.string().length(3).optional(),
   owner_user_id: z.string().uuid().nullable().optional(),
   /**
@@ -286,8 +324,9 @@ export const updateLeadSchema = z.object({
    * em vez de empurrá-las para um lado e inventar a divisão do relatório.
    */
   revenue_kind: z.enum(["recorrente", "avulso"]).nullable().optional(),
-  /** Duração do contrato, em meses. Com ela a mensalidade vira valor de contrato. */
-  recurring_months: z.coerce.number().int().min(1).max(120).nullable().optional(),
+  // FORK MIA (metas, 0243): a duração do contrato é o `recurring_months` do
+  // upstream (v1.99, acima), a mesma coluna: uma chave só, gravada no trio
+  // coerente (`recorrenciaParaGravar`).
 });
 export type UpdateLeadInput = z.infer<typeof updateLeadSchema>;
 

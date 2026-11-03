@@ -10,7 +10,7 @@
  * `lib/cartoes/`; aqui é só desenho.
  */
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type Ref } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
@@ -21,7 +21,7 @@ import { useEditLead } from "@/hooks/kanban/useUpdateLead";
 import { useConfirmarCampo, useEnvolvidosDoNegocio } from "@/hooks/cartoes/useCartaoAberto";
 import { SeletorDeContato } from "@/components/kanban/SeletorDeContato";
 import { ContatoDoNegocio } from "@/components/kanban/ContatoDoNegocio";
-import { LeadFieldsForm } from "@/components/kanban/LeadFieldsForm";
+import { LeadFieldsForm, type ControleDosCamposDoNegocio } from "@/components/kanban/LeadFieldsForm";
 import type { CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -514,6 +514,7 @@ function valorLegivel(v: unknown, def: CustomFieldDef, t: (x: string) => string)
 }
 
 export function CamposDoSegmento({
+  controle,
   lead,
   pipelineId,
   camposDoFunil,
@@ -529,6 +530,8 @@ export function CamposDoSegmento({
   proximaEtapa: { id: string; nome: string } | null;
   timeline: TimelineItemView[];
   podeVerEquipe: boolean;
+  /** Upstream (#3415): a revisão do documento confirma um campo no formulário aberto. */
+  controle?: Ref<ControleDosCamposDoNegocio>;
 }) {
   const t = useT();
   const confirmar = useConfirmarCampo(lead.id);
@@ -598,7 +601,13 @@ export function CamposDoSegmento({
       ) : null}
       {editando ? (
         <div className="mt-3 border-t border-border pt-3">
-          <LeadFieldsForm lead={lead} pipelineId={pipelineId} fieldDefs={camposDoFunil} podeVerEquipe={podeVerEquipe} />
+          <LeadFieldsForm
+            lead={lead}
+            pipelineId={pipelineId}
+            fieldDefs={camposDoFunil}
+            podeVerEquipe={podeVerEquipe}
+            controle={controle}
+          />
         </div>
       ) : null}
     </Secao>

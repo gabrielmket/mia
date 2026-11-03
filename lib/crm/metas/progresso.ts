@@ -53,6 +53,7 @@
  * funil que "não é receita" zeraria a meta dele.
  */
 
+import { partesDaVenda } from "./partes-da-venda";
 import { FUSO_PADRAO, mesNoFuso } from "./fuso";
 
 export type MetricaDeMeta =
@@ -274,6 +275,8 @@ export function resumoDasReunioes(
 
 export interface LeadFechadoComPrazo extends LeadFechado {
   recurring_months: number | null;
+  /** FORK MIA: a mensalidade do upstream (v1.99); ver `partes-da-venda.ts`. */
+  recurring_value_cents?: number | null;
 }
 
 /**
@@ -300,18 +303,16 @@ export function resumoDoMes(
   let vendasSemClassificacao = 0;
 
   for (const l of ganhas) {
-    const valor = l.value_cents ?? 0;
-    if (l.revenue_kind === "recorrente") {
-      recorrente += valor;
-      if (l.recurring_months && l.recurring_months > 0) {
-        contratoRecorrenteCents += valor * l.recurring_months;
-      }
-    } else if (l.revenue_kind === "avulso") {
-      avulso += valor;
-    } else {
-      naoClassificada += valor;
-      vendasSemClassificacao++;
+    // FORK MIA (upstream v1.99): a mensalidade pode estar na coluna própria
+    // (`recurring_value_cents`); a régua das duas leituras é `partesDaVenda`.
+    const partes = partesDaVenda(l);
+    recorrente += partes.recorrente;
+    avulso += partes.avulso;
+    naoClassificada += partes.naoClassificada;
+    if (partes.mensalidade !== null && l.recurring_months && l.recurring_months > 0) {
+      contratoRecorrenteCents += partes.mensalidade * l.recurring_months;
     }
+    if (l.revenue_kind === null) vendasSemClassificacao++;
   }
 
   return {

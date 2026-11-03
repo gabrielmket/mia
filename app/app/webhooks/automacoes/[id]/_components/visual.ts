@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import {
   Bell,
   Brain,
+  CalendarCheck,
   EnvelopeSimple,
   FlowArrow,
   Funnel,
@@ -58,6 +59,10 @@ export const VISUAL_DA_ACAO: Record<ActionType, VisualDaCaixa> = {
   apply_task_plan: { icon: ListChecks, paleta: "Plano de tarefas", ...AVISO },
   // FORK MIA: o aviso ao time num grupo do WhatsApp (`notify_group`, lib/avisos/).
   notify_group: { icon: UsersThree, paleta: "Aviso no grupo", ...AVISO },
+  // #3727 — a caixa que grava um dado em vez de falar: CalendarCheck porque o
+  // dado é a data do COMPARECIMENTO, e INFO porque é escrita no card, não
+  // mensagem (mesma família do "Criar/mover lead").
+  set_lead_date_field: { icon: CalendarCheck, paleta: "Data do atendimento", ...INFO },
   // #2642 — o único destino que não é o lead: a EQUIPE. UsersThree porque quem
   // recebe é gente da casa (o WhatsApp cadastrado em Avisos), e SUCESSO
   // porque a caixa envia, como as

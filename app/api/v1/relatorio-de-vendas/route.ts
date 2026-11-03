@@ -57,7 +57,7 @@ const MESES_DA_SERIE = 6;
  */
 const PAGINAS_MAXIMAS = 50;
 const COLUNAS_DO_NEGOCIO =
-  "status, pipeline_id, value_cents, revenue_kind, recurring_months, lost_reason, created_at, closed_at";
+  "status, pipeline_id, value_cents, revenue_kind, recurring_months, recurring_value_cents, lost_reason, created_at, closed_at";
 
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
