@@ -14,6 +14,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { CupomEParceiroDoTenant } from "@/components/admin/tenants/CupomEParceiroDoTenant";
 import { lerCupomEParceiroDaEmpresa } from "@/lib/cupons/na-ficha";
 import { lerParceiros } from "@/lib/parceiros/banco";
+// FORK MIA (.99): a cópia dos dados de cobrança (LGPD) na ficha (docs/fork/pagamento-no-inicio.md).
+import { DadosDeCobrancaDoTenant } from "@/components/admin/tenants/DadosDeCobrancaDoTenant";
 
 import { TenantOverviewClient } from "./_client";
 
@@ -29,6 +31,7 @@ export default async function TenantDetailPage({ params }: TenantDetailPageProps
       <TenantOverviewClient id={id} cobrancaLigada={cobranca !== null} />
       {cobranca && <CardDeCobranca orgId={id} {...cobranca} />}
       {cobranca && <CupomEParceiro orgId={id} />}
+      {cobranca && <DadosDeCobrancaDoTenant orgId={id} />}
     </div>
   );
 }

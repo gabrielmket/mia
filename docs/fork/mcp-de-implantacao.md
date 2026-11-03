@@ -798,6 +798,14 @@ O pedido "A nota saiu errada" chega como chamado (tipo pedido, com a cobrança, 
 texto) e se responde com `plataforma_responder_chamado`, que já existe. O MCP não troca cartão,
 não muda dados fiscais, não cancela nota e não apaga cadastro.
 
+**A cópia dos dados de cobrança (LGPD, .99) fica fora do MCP, de propósito** (a lista segue com
+106). Ela leva o CPF ou CNPJ inteiro, o endereço e o WhatsApp de quem assina, e por isso sai só
+em Admin › Tenants › a empresa, com a verificação em duas etapas e o Audit Log
+(`GET /api/v1/admin/tenants/[id]/dados-de-cobranca`, [`pagamento-no-inicio.md`](pagamento-no-inicio.md),
+seção 2). O MCP mostra os dados fiscais só resumidos e com o documento mascarado
+(`plataforma_ver_cliente`, `pagamento_inicial.dados_fiscais`). É a mesma regra da cópia do
+parceiro (.98), que também não tem ferramenta.
+
 ### O que chegou do upstream 1.85 (.83)
 
 Mesma regra, na fusão da v1.85. A prova de cada linha está em

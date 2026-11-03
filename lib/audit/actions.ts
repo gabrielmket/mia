@@ -1574,6 +1574,9 @@ export const AUDIT_ACTIONS = [
   "area_de_cobranca.cartao_trocado",
   "area_de_cobranca.nota_errada_pedida",
   "pagamento_inicial.cadastro_apagado",
+  // FORK MIA (.99) · a cópia dos dados de cobrança da empresa baixada pela Time
+  // (LGPD, o acesso do titular): só quem baixou e a empresa, nunca o conteúdo.
+  "area_de_cobranca.dados_exportados",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
