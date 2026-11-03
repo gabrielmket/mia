@@ -125,7 +125,7 @@ const COLUNAS_DO_AGENTE =
   "id, organization_id, name, description, kind, priority, is_active, is_default, published_version_id, paused_at, archived_at, config, created_at";
 
 const COLUNAS_DA_VERSAO =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, handoff_legal_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, created_at, pipeline_ids, knowledge_source_ids, inbound_debounce_ms";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, handoff_legal_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, created_at, pipeline_ids, knowledge_source_ids, inbound_debounce_ms, voz_enabled, voz_quando";
 
 /** Os campos de conteúdo de uma versão: é sobre eles que se pergunta "mudou?". */
 const CAMPOS_DA_VERSAO = [
@@ -157,6 +157,10 @@ const CAMPOS_DA_VERSAO = [
   "operator_tool_ids",
   "pipeline_ids",
   "knowledge_source_ids",
+  // upstream 1.9x (9052, "o agente aprende a falar"): responder em áudio, por
+  // versão. Na lista para a versão nova herdar o valor da de referência, como a rota.
+  "voz_enabled",
+  "voz_quando",
 ] as const;
 
 const ROTULO_DO_CAMPO: Record<string, string> = {
@@ -870,6 +874,9 @@ async function inserirVersao(
         operator_enabled: v.operator_enabled,
         operator_model: v.operator_model,
         operator_tool_ids: v.operator_tool_ids,
+        // Upstream 1.9x (9052): a rota copia a resposta em áudio na versão nova.
+        voz_enabled: v.voz_enabled,
+        voz_quando: v.voz_quando,
         pipeline_ids: v.pipeline_ids,
         knowledge_source_ids: v.knowledge_source_ids,
         status: "draft",

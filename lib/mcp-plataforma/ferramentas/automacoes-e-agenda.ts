@@ -48,6 +48,8 @@ export const TIPOS_DE_ACAO = [
   "notify_group",
   // upstream 1.88 (#2642): o resumo do negócio no WhatsApp da equipe (o número de Avisos)
   "notify_team",
+  // upstream 1.99 (#3727): grava a data do comparecimento num campo de DATA do negócio
+  "set_lead_date_field",
   "call_webhook",
   // upstream 1.74 (#1970): a IA escolhe uma entre as opções da regra
   "ai_decide",

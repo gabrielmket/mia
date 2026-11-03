@@ -41,6 +41,7 @@
  * por `mudarSettingsDaOrganizacao`, que não pisa em quem gravou no meio.
  */
 import { audit } from "@/lib/audit";
+import { invalidarOrg } from "@/lib/auth/cache-curto";
 import { AI_DECIDE_PADRAO, CHAVE_DAS_AUTOMACOES } from "@/lib/automation/ai-decide-da-org";
 import { gravarMeta } from "@/lib/crm/metas/gravar";
 import { lerModoDeVenda } from "@/lib/empresas/modo-de-venda";
@@ -201,6 +202,10 @@ export async function configurarEmpresa(
   if (modoMudou) mudancas.push(ROTULO.modo_de_venda!);
 
   if (mudancas.length > 0) {
+    // Upstream v1.9x (updateTenant): o cache curto do estado da organização cai
+    // antes e depois da gravação, para nenhuma requisição deste processo seguir
+    // com o nome, o fuso ou o país de antes até o TTL.
+    invalidarOrg(c.orgId);
     try {
       await mudarSettingsDaOrganizacao(
         c.admin,
@@ -214,6 +219,7 @@ export async function configurarEmpresa(
       if ((err as { code?: string } | null)?.code === "23505") throw new Recusa(`${FRASE_DO_CNPJ_EM_USO} Confira o número e chame de novo.`);
       throw err instanceof Error ? err : new Error(`não consegui gravar os dados da empresa: ${(err as { message?: string })?.message ?? "erro"}`);
     }
+    invalidarOrg(c.orgId);
     if (fusoDoPais !== undefined && colunas.timezone === fusoDoPais) {
       avisos.push(
         `O país mudou e o fuso acompanhou: ${fusoDoPais} (o sugerido para o país, como na tela). ` +

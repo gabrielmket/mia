@@ -42,6 +42,9 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "onde vejo as conversões da meta", sobre: "/app/settings/conversoes", espera: "conversoes-meta" },
   { pergunta: "como mando e-mail marketing", sobre: "/app/broadcast", espera: "email-marketing-campanha" },
   { pergunta: "como convido alguém", sobre: "/app/team", espera: "convidar-equipe" },
+  // .100 — as telas que o upstream trouxe na v1.89 e na v1.97.
+  { pergunta: "onde acho o manual de cada tarefa", sobre: "/app/ajuda", espera: "ajuda-do-menu" },
+  { pergunta: "como defino a meta de vendas do mês", sobre: "/app/settings/metas", espera: "meta-de-vendas" },
 
   // ── Os roteiros (tarefas que cruzam telas) ──
   { pergunta: "como coloco um cliente novo para atender", sobre: "/app/connections", espera: "roteiro-comecar-a-atender" },

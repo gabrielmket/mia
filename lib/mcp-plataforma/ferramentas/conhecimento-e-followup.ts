@@ -75,7 +75,7 @@ export const FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP: readonly FerramentaDePlataf
       "quem parou de responder, faltou, ou entrou numa etapa do funil. " +
       "INSTALAR: informe `modelo` (o id, de plataforma_listar_modelos, seção followup). O fluxo nasce RASCUNHO, com os textos do modelo, e NÃO manda mensagem para ninguém. " +
       "Modelo que dispara por etapa pede `etapa` (funil e etapa pelo nome). " +
-      "AJUSTAR: `textos` troca o texto de uma mensagem pelo id do nó (veja os nós em plataforma_ver_followup) e, no texto fixo, a `midia` (imagem ou PDF que sai com o texto de legenda); `esperas` troca os minutos de uma espera; " +
+      "AJUSTAR: `textos` troca o texto de uma mensagem pelo id do nó (veja os nós em plataforma_ver_followup) e, no texto fixo, a `midia` (imagem, vídeo, áudio ou documento que sai com o texto de legenda); `esperas` troca os minutos de uma espera; " +
       "`silencio_minutos`, `silencio_maximo_minutos`, `pausa_para_recomecar_minutos`, `so_se_a_equipe_respondeu`, `repeticoes_por_contato`, `etapa` e `numero` ajustam o gatilho. " +
       "MEXER NO NEGÓCIO SEM FALAR COM O CLIENTE: `mover_no_funil` garante uma caixa que leva o card para uma etapa, e `etiquetar` uma caixa que grava etiquetas. " +
       "Cada uma entra ANTES de um nó (`antes_de`): antes do fim «sem resposta» para marcar quem não respondeu, antes de uma mensagem para mover na hora em que ela sai. " +

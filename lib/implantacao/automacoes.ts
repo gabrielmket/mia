@@ -130,9 +130,17 @@ async function conferirAcao(c: Implantacao, acao: Acao, onde: string, planos: ()
   const atribuir = acao.config.atribuir_a;
   // .86 (upstream 1.88, #2642): o e-mail para uma PESSOA da equipe
   // (`send_email` com `destinatario: "membro_da_equipe"`) leva `membro_id`.
+  // .100 (upstream 1.99, #3804): o DESTINO DINÂMICO da ação atribuir tem um
+  // `fallback` obrigatório, uma pessoa fixa ou um rodízio, conferidos igual.
+  const reserva =
+    acao.type === "assign_owner" && acao.config.modo === "destino" && acao.config.fallback && typeof acao.config.fallback === "object"
+      ? (acao.config.fallback as { modo?: unknown; user_id?: unknown; fila?: unknown })
+      : undefined;
   const pessoa =
     typeof acao.config.user_id === "string"
       ? acao.config.user_id
+      : reserva?.modo === "fixo" && typeof reserva.user_id === "string"
+        ? reserva.user_id
       : acao.type === "send_email" && typeof acao.config.membro_id === "string"
         ? acao.config.membro_id
         : atribuir && typeof atribuir === "object"
@@ -155,8 +163,8 @@ async function conferirAcao(c: Implantacao, acao: Acao, onde: string, planos: ()
   // .84 — upstream 1.86 (#2041, 0692): o RODÍZIO da ação atribuir. A função do
   // banco pula, a cada lead, quem saiu da equipe ou só lê; na tela a fila só
   // oferece quem atende. Aqui a fila chega como texto: cada pessoa é conferida.
-  const fila = (acao.config as { modo?: unknown; fila?: unknown }).fila;
-  if (acao.type === "assign_owner" && acao.config.modo === "rodizio" && Array.isArray(fila)) {
+  const fila = reserva?.modo === "rodizio" ? reserva.fila : (acao.config as { modo?: unknown; fila?: unknown }).fila;
+  if (acao.type === "assign_owner" && (acao.config.modo === "rodizio" || reserva?.modo === "rodizio") && Array.isArray(fila)) {
     const ids = fila
       .map((p) => (p && typeof p === "object" ? (p as { user_id?: unknown }).user_id : undefined))
       .filter((id): id is string => typeof id === "string");
@@ -185,15 +193,16 @@ async function conferirAcao(c: Implantacao, acao: Acao, onde: string, planos: ()
       }
     }
   }
-  // .83 — upstream 1.85 (#2734): a mídia da mensagem de WhatsApp (imagem ou PDF por
-  // endereço, com o texto como legenda). A tela grava qualquer URL e o envio
+  // .83 — upstream 1.85 (#2734): a mídia da mensagem de WhatsApp (por endereço, com
+  // o texto como legenda). Desde a v1.9x a régua do envio aceita também vídeo, áudio
+  // e documento (docx, xlsx, zip…); o que não tem tipo reconhecível continua recusado. A tela grava qualquer URL e o envio
   // recusa o que não é imagem nem PDF a cada execução; aqui a recusa vem antes,
   // pela MESMA régua do envio (`classificarMidiaComLegenda`).
   if (acao.type === "send_whatsapp_message" && typeof acao.config.media_url === "string" && acao.config.media_url.trim() !== "") {
     const midia = classificarMidiaComLegenda(acao.config.media_url.trim());
     if (!midia.ok) {
       throw new Recusa(
-        `${onde}.config.media_url: ${midia.motivo} O endereço precisa terminar na extensão do arquivo (.jpg, .png, .webp, .gif ou .pdf); link sem extensão, como os do Google Drive, não serve.`,
+        `${onde}.config.media_url: ${midia.motivo} O endereço precisa terminar na extensão do arquivo (imagem, vídeo, áudio ou documento, como .jpg, .mp4, .mp3, .pdf ou .docx); link sem extensão, como os do Google Drive, não serve.`,
       );
     }
   }

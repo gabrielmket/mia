@@ -315,11 +315,14 @@ describe("plataforma_garantir_automacao · `media_url` na mensagem de WhatsApp (
     expect(c.banco.escritas.length).toBe(antes);
   });
 
-  it("o que não é imagem nem PDF, e o link sem extensão, são recusados ANTES de gravar (a tela só recusaria a cada envio)", async () => {
+  // .100 — desde a v1.9x a régua do envio (`classificarMidiaComLegenda`) aceita
+  // vídeo, áudio e documento (docx, xlsx, zip…): o que é recusado é o arquivo sem
+  // tipo reconhecível.
+  it("o arquivo sem tipo reconhecível, e o link sem extensão, são recusados ANTES de gravar (a tela só recusaria a cada envio)", async () => {
     const c = await preparar({ comNumero: true });
-    const docx = await recusa(c, "plataforma_garantir_automacao", regra("https://exemplo.invalid/arquivos/proposta.docx"));
+    const docx = await recusa(c, "plataforma_garantir_automacao", regra("https://exemplo.invalid/arquivos/proposta.xyz"));
     expect(docx).toContain("acoes[0].config.media_url");
-    expect(docx).toContain("imagem (jpg, png, webp, gif) ou um PDF");
+    expect(docx).toContain("um documento com extensão conhecida");
     const drive = await recusa(c, "plataforma_garantir_automacao", regra("https://exemplo.invalid/file/d/abc123/view"));
     expect(drive).toContain("Google Drive");
     expect(c.tabela("automation_rules")).toEqual([]);
@@ -357,10 +360,10 @@ describe("plataforma_garantir_followup · `midia` no passo de TEXTO FIXO (upstre
     expect(noDoRascunho(c, "msg-1").config.media_url).toBeUndefined();
   });
 
-  it("a mídia que não é imagem nem PDF é recusada pela régua do envio, e o rascunho fica como estava", async () => {
+  it("a mídia sem tipo reconhecível é recusada pela régua do envio, e o rascunho fica como estava", async () => {
     const c = await preparar();
     await ok(c, "plataforma_garantir_followup", { modelo: "geral-retomada" });
-    const texto = await recusa(c, "plataforma_garantir_followup", { nome: FLUXO, textos: [{ no: "msg-1", midia: "https://exemplo.invalid/planilha.xlsx" }] });
+    const texto = await recusa(c, "plataforma_garantir_followup", { nome: FLUXO, textos: [{ no: "msg-1", midia: "https://exemplo.invalid/planilha.xyz" }] });
     expect(texto).toContain("A mídia do nó «msg-1»");
     expect(noDoRascunho(c, "msg-1").config.media_url).toBeUndefined();
   });

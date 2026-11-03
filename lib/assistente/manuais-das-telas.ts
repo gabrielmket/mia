@@ -618,6 +618,38 @@ const OPERACAO_DO_FORK: Manual[] = [
 ];
 
 const TELAS_DO_UPSTREAM: Manual[] = [
+  // .100 (upstream v1.97, #3572): o índice da ajuda no rodapé do menu. Convive com o
+  // assistente: a Ajuda é o índice por jornada; o assistente responde e leva à tela.
+  {
+    id: "ajuda-do-menu",
+    titulo: "Ajuda: o índice de tarefas no rodapé do menu",
+    palavras: ["ajuda", "indice", "onde fica", "como faço", "manual", "tutorial", "rodape do menu", "jornada"],
+    href: "/app/ajuda",
+    papelMinimo: "viewer",
+    passos: [
+      "No menu lateral, desça até o rodapé e clique em Ajuda.",
+      "Escolha a jornada: conversas, funil, contatos, canais, agente de IA ou equipe. Cada tarefa traz o caminho e quando procurá-la.",
+      "Clique na tarefa para abrir a tela dela.",
+    ],
+    observacao: "Para uma dúvida que a Ajuda não responde, pergunte ao Assistente, no topo, ao lado do sino: ele explica e leva à tela certa.",
+    vejaTambem: ["assistente-usar"],
+  },
+  // .100 (upstream v1.89, #3025): a meta de vendas da empresa, que aparece no topo do
+  // Desempenho. É do upstream e convive com as metas comerciais do fork (sales_targets).
+  {
+    id: "meta-de-vendas",
+    titulo: "Meta de vendas: quantas vendas ganhas a empresa espera no mês",
+    palavras: ["meta", "meta de vendas", "meta do mes", "alvo", "objetivo", "vendas ganhas", "quanto falta"],
+    href: "/app/settings/metas",
+    papelMinimo: "manager",
+    passos: [
+      "Abra Configurações › Meta de vendas.",
+      "Escolha o Mês e informe Vendas ganhas no mês.",
+      "Clique em Salvar meta. Salvar de novo no mesmo mês corrige a meta, sem duplicar.",
+      "Acompanhe em Desempenho, no painel Meta do mês: quanto já foi feito, o percentual e quanto falta.",
+    ],
+    observacao: "A meta vale do dia 1º ao último dia do mês escolhido e conta as vendas fechadas como ganho. Só gerente ou administrador define a meta.",
+  },
   {
     id: "assistente-usar",
     titulo: "Usar o assistente",

@@ -124,7 +124,9 @@ const ACOES_DE_AUTOMACAO = [
       "Uma regra tem no máximo um rodízio, como ação direta (nunca dentro de um `ai_decide`).",
     config:
       '{ "user_id": "<id da pessoa da equipe>" } ou { "modo": "rodizio", "fila": [{ "user_id": "<id>", "pausado": false }, { "user_id": "<id>", "pausado": false }] } ' +
-      "(a ordem da fila é a ordem do rodízio; cada pessoa entra uma vez só)",
+      "(a ordem da fila é a ordem do rodízio; cada pessoa entra uma vez só). " +
+      'Upstream 1.99 (#3804), o DESTINO DINÂMICO: { "modo": "destino", "destinos": ["responsavel_do_negocio", "dono_da_carteira"], "fallback": { "modo": "fixo", "user_id": "<id>" } } ' +
+      "entrega o negócio a quem já está com ele (o responsável e, sem ele, o dono da carteira do cliente); o fallback (uma pessoa fixa ou um rodízio) é obrigatório.",
   },
   { type: "create_task", o_que_faz: "Cria uma tarefa para a equipe. Nunca fala com o cliente.", config: '{ "titulo": "Ligar para {{contact.name}}", "vence_em_dias": 1, "atribuir_a": "dono_do_lead" | { "usuario_id": "<id>" }, "prioridade": "low" | "medium" | "high" | "urgent" }' },
   {
@@ -151,8 +153,8 @@ const ACOES_DE_AUTOMACAO = [
   {
     type: "send_whatsapp_message",
     o_que_faz:
-      "Manda um texto fixo pelo WhatsApp. FALA COM O CLIENTE. Com `media_url` (upstream 1.85), manda uma IMAGEM ou um PDF e o texto vira a legenda: " +
-      "o endereço tem de terminar na extensão (.jpg, .png, .webp, .gif ou .pdf); no número oficial, fora da janela de 24 horas, nem a mídia nem o texto saem.",
+      "Manda um texto fixo pelo WhatsApp. FALA COM O CLIENTE. Com `media_url` (upstream 1.85), manda o ARQUIVO (imagem, vídeo, áudio ou documento, desde a v1.9x) e o texto vira a legenda: " +
+      "o endereço tem de terminar na extensão do arquivo (.jpg, .mp4, .mp3, .pdf, .docx…); no número oficial, fora da janela de 24 horas, nem a mídia nem o texto saem.",
     config:
       '{ "channel_session_id": "<id do número>", "template": "Olá, {{primeiro_nome}}! Recebemos seu pedido de {{servico}}.", "media_url": "https://.../tabela.pdf" (opcional) } ' +
       "(marcações: {{nome}}, {{primeiro_nome}}, {{telefone}}, {{email}}, e a CHAVE de qualquer campo do funil, ex. {{servico}}, que é o campo que o formulário de captação mandou)",
@@ -165,6 +167,12 @@ const ACOES_DE_AUTOMACAO = [
       "Manda ao WhatsApp da EQUIPE (o número do aviso de caso, em Configurações › Avisos, que uma pessoa cadastra) um resumo do negócio, lido na hora: sem o título nem a conversa (upstream 1.88, #2642). " +
       "Não escolhe destinatário nem texto. Sem o número do aviso de caso cadastrado e ligado, nada sai. O limite de envios por organização vale igual.",
     config: '{ "canal": "whatsapp" }',
+  },
+  {
+    type: "set_lead_date_field",
+    o_que_faz:
+      "Grava a data do atendimento (o comparecimento) num campo de DATA do negócio (upstream 1.99, #3727). Não fala com ninguém: é a regra de data do funil que manda a mensagem N dias depois.",
+    config: '{ "pipeline_id": "<id do funil dono do campo>", "campo": "<chave do campo de data em settings.fields>" }',
   },
   {
     type: "call_webhook",

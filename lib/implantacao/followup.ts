@@ -425,7 +425,7 @@ function ajustarGrafo(grafo: FlowGraph, pedido: PedidoDeFollowup): { grafo: Flow
             const midia = classificarMidiaComLegenda(url);
             if (!midia.ok) {
               throw new Recusa(
-                `A mídia do nó «${no.id}»: ${midia.motivo} O endereço precisa terminar na extensão do arquivo (.jpg, .png, .webp, .gif ou .pdf); link sem extensão, como os do Google Drive, não serve.`,
+                `A mídia do nó «${no.id}»: ${midia.motivo} O endereço precisa terminar na extensão do arquivo (imagem, vídeo, áudio ou documento, como .jpg, .mp4, .mp3, .pdf ou .docx); link sem extensão, como os do Google Drive, não serve.`,
               );
             }
             if (atual !== url) {

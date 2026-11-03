@@ -55,6 +55,8 @@ import { audit } from "@/lib/audit";
 import { instanteDe } from "@/lib/agenda/fuso";
 import { effectiveKnobs, pacingKnobsUpdateSchema, windowIsValid, type ChannelKnobsRow } from "@/lib/ai/pacing-knobs";
 import { reprogramarTurnosAdiadosPelaJanela } from "@/lib/ai/pacing/reprogramar-adiados";
+import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
+import { soltarAdiadosDaSessao } from "@/lib/agent-engine/pacing/adiados-da-janela";
 import { lerGuardarHistorico, salvarAcervoDoCanal } from "@/lib/channels/acervo-do-historico";
 import { nomeDoCanal } from "@/lib/channels/estado";
 import { conexaoGuardaHistorico } from "@/lib/channels/conexao-guarda-historico";
@@ -708,6 +710,14 @@ async function ajustarJanelaDeResposta(
   if (erroAoGravar) throw new Error(`não consegui gravar a janela de resposta: ${erroAoGravar.message}`);
   // O laço da rota: quem esperava a janela abrir é reavaliado com a janela nova.
   const turnosReprogramados = await reprogramarTurnosAdiadosPelaJanela({ organizationId: c.orgId, channelSessionId: canal.id });
+  // Upstream v1.97 (#3383): a rota também solta quem tem o rastro `adiado_por_janela`
+  // no payload, quando a janela de resposta que acabou de mudar já está aberta.
+  // Falha aqui não desfaz o que foi gravado: a rota só registra, e o espelho também.
+  try {
+    await soltarAdiadosDaSessao(getRequestPool(), { organizationId: c.orgId, channelSessionId: canal.id });
+  } catch {
+    avisos.push("A janela foi gravada, mas não consegui reavaliar os turnos que esperavam a abertura dela: eles saem na abertura de antes.");
+  }
   void audit({
     action: "ai.pacing_knobs_updated",
     actorUserId: c.autorUserId,

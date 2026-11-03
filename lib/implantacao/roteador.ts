@@ -61,6 +61,7 @@ import type { PoolClient } from "pg";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { estadoDoAgente } from "@/lib/ai/agents/no-ar";
 import { writeRouterMembers, type RouterMemberInput } from "@/lib/ai/agents/router-members";
+import { senderRoutesSchema } from "@/lib/ai/agents/sender-routes";
 import { replaceRouterMembersHttp } from "@/lib/ai/agents/router-members-http";
 import { CLASSIFIER_CONTEXT_MESSAGES, MAX_CLASSIFIER_CONTEXT_MESSAGES, NEW_ROUTER_CONTEXT_MESSAGES } from "@/lib/ai/classifier-context";
 import { configDoRoteador } from "@/lib/ai/trava-da-ia";
@@ -512,6 +513,18 @@ export async function garantirRoteador(c: Implantacao, pedido: PedidoDeRoteador)
       const atual = (existente.config ?? {}) as Record<string, unknown>;
       patch.config = { ...atual, ...configDoRoteador(QUEM_NAO_ESCOLHE_IA, { context_message_count: pedido.mensagens_de_contexto }, atual) };
       mudancas.push("mensagens de contexto do classificador");
+    }
+    // Upstream v1.9x (agente por número do remetente, `config.sender_routes`): com
+    // regra por remetente gravada pela tela, o agente reserva tem de ser um agente
+    // PÚBLICO, fora dos reservados. A mesma recusa da rota PATCH, com a frase dela.
+    if (patch.fallback_agent_id !== undefined) {
+      const rotas = senderRoutesSchema.safeParse(((existente.config ?? {}) as Record<string, unknown>).sender_routes ?? []);
+      const novo = patch.fallback_agent_id as string | null;
+      if (rotas.success && rotas.data.length > 0 && (!novo || rotas.data.some((r) => r.agent_id === novo))) {
+        throw new Recusa(
+          `O roteador «${existente.name}» tem regras por número do remetente: escolha um agente reserva público, diferente dos agentes reservados nessas regras.`,
+        );
+      }
     }
     if (Object.keys(patch).length > 0) {
       if (existente.is_active) recusaDeRoteadorLigado(existente.name);
