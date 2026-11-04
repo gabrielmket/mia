@@ -3474,3 +3474,87 @@ export async function exportarDadosDoParceiro(admin: SupabaseClient, parceiroId:
     repasses: linhasDosRepasses,
   };
 }
+
+// ---------------------------------------------------------------------------
+// FORK MIA (.99): os dados de cobrança da empresa cliente (docs/fork/pagamento-no-inicio.md, seção 2)
+// ---------------------------------------------------------------------------
+
+/** O que sai de cada tabela na cópia. O `select` lê o mesmo (mais as datas), e só isto vai ao arquivo. */
+const FISCAIS_DA_COPIA = [
+  "tipo", "documento", "razao_social", "cep", "logradouro", "numero", "complemento", "bairro", "cidade", "uf",
+  "inscricao_municipal", "inscricao_estadual", "telefone",
+] as const;
+const PASSO_DA_COPIA = [
+  "modo", "situacao", "forma", "valor_cents", "primeira_cobranca_em", "vence_em", "cartao_final", "cartao_bandeira",
+  "cartao_recusas", "cartao_recusado_em", "cartao_recorrente", "gerada_em", "pago_em", "forma_paga", "lembrete_enviado_em",
+] as const;
+const CARTAO_DA_COPIA = ["cartao_final", "cartao_bandeira", "trocado_em"] as const;
+
+/** Só as chaves pedidas, mesmo que a linha traga mais. */
+function soAsColunas(linha: Record<string, unknown>, colunas: readonly string[]): Record<string, unknown> {
+  return Object.fromEntries(colunas.map((c) => [c, linha[c] ?? null]));
+}
+
+/**
+ * A cópia dos dados de cobrança de uma empresa cliente (o acesso do titular, LGPD art.
+ * 18, II e V): os dados fiscais por inteiro (na pessoa física, o CPF, o nome completo, o
+ * endereço e o WhatsApp de quem assina), o passo "Pagamento" do início, o cartão das
+ * mensalidades (só o final e a bandeira) e quando esses dados foram ao Asaas, que emite a
+ * cobrança e a nota. O titular não é um contato, é quem assina a MIA: as catracas do
+ * catálogo de `contacts` não o alcançam, e só a Time chega nesta leitura
+ * (`GET /api/v1/admin/tenants/[id]/dados-de-cobranca`, com a verificação em duas etapas).
+ *
+ * Mora neste arquivo porque a cerca `lgpd-empresa-redigida-exporta` confere aqui as
+ * tabelas que os gatilhos da empresa redigida (9120, 9121, 9125) apagam: o que sai a
+ * pedido do titular é o que se entrega a pedido dele. Até a .98 a anonimização alcançava
+ * estes dados e a cópia não.
+ *
+ * Fica fora o que é instrumento de pagamento e não diz nada da pessoa: o Pix copia e cola,
+ * a linha e o link do boleto, o link da fatura e os ids internos do Asaas. Leitura que
+ * falha LANÇA: uma cópia incompleta entregue como completa é pior que nenhuma.
+ */
+export async function exportarDadosDeCobrancaDaEmpresa(
+  admin: SupabaseClient,
+  orgId: string,
+): Promise<Record<string, unknown> | null> {
+  const empresa = await admin.from("organizations").select("display_name, legal_name, cnpj, created_at").eq("id", orgId).maybeSingle();
+  if (empresa.error) throw new Error(`dados de cobrança: leitura da empresa falhou (${empresa.error.code ?? "sem_codigo"})`);
+  if (!empresa.data) return null;
+  const [fiscais, pagamento, cartao, nota] = await Promise.all([
+    admin
+      .from("mia_dados_fiscais")
+      .select(
+        "tipo, documento, razao_social, cep, logradouro, numero, complemento, bairro, cidade, uf, inscricao_municipal, inscricao_estadual, telefone, asaas_sincronizado_em, created_at, updated_at",
+      )
+      .eq("organization_id", orgId)
+      .maybeSingle(),
+    admin
+      .from("mia_pagamento_inicial")
+      .select(
+        "modo, situacao, forma, valor_cents, primeira_cobranca_em, vence_em, cartao_final, cartao_bandeira, cartao_recusas, cartao_recusado_em, cartao_recorrente, gerada_em, pago_em, forma_paga, lembrete_enviado_em, created_at",
+      )
+      .eq("organization_id", orgId)
+      .maybeSingle(),
+    admin.from("mia_cartao_das_mensalidades").select("cartao_final, cartao_bandeira, trocado_em").eq("organization_id", orgId).maybeSingle(),
+    admin.from("mia_nota_da_assinatura").select("configurada_em").eq("organization_id", orgId).maybeSingle(),
+  ]);
+  const falha = [fiscais, pagamento, cartao, nota].find((r) => r.error);
+  if (falha?.error) throw new Error(`dados de cobrança: leitura falhou (${falha.error.code ?? "sem_codigo"})`);
+
+  const e = empresa.data as { display_name: string | null; legal_name: string | null; cnpj: string | null; created_at: string };
+  const f = fiscais.data as Record<string, unknown> | null;
+  const p = pagamento.data as Record<string, unknown> | null;
+  const c = cartao.data as Record<string, unknown> | null;
+  return {
+    gerado_em: new Date().toISOString(),
+    empresa: { nome: e.display_name, razao_social: e.legal_name, cnpj_no_cadastro: e.cnpj, criada_em: e.created_at },
+    dados_fiscais: f ? { ...soAsColunas(f, FISCAIS_DA_COPIA), gravados_em: f.created_at ?? null, mudaram_em: f.updated_at ?? null } : null,
+    pagamento_do_inicio: p ? { ...soAsColunas(p, PASSO_DA_COPIA), desde: p.created_at ?? null } : null,
+    cartao_das_mensalidades: c ? soAsColunas(c, CARTAO_DA_COPIA) : null,
+    // Com quem os dados foram compartilhados (art. 18, VII): o Asaas, que cobra e emite a nota.
+    compartilhado_com_o_asaas: {
+      dados_fiscais_enviados_em: f?.asaas_sincronizado_em ?? null,
+      nota_fiscal_pedida_em: (nota.data as { configurada_em: string | null } | null)?.configurada_em ?? null,
+    },
+  };
+}

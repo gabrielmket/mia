@@ -13,6 +13,10 @@ import { invalidarUsuario } from "@/lib/auth/cache-curto";
 import { audit } from "@/lib/audit";
 import { marcaDaSaida } from "@/lib/branding/saida";
 import { env } from "@/lib/env";
+// FORK MIA (.99): o cupom guardado no navegador vale no cadastro pelo Google (docs/fork/cupons-e-parceiros.md).
+import { guardarCupomDaEntradaComGoogle } from "@/lib/cupons/entrada-com-google";
+import { COOKIE_DO_CUPOM } from "@/lib/cupons/regras";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * GET /auth/callback — a VOLTA da entrada com Google (issue #1388).
@@ -262,6 +266,13 @@ export async function GET(request: NextRequest) {
     });
     return redirectTo("/login?error=cadastro_por_convite");
   }
+
+  // FORK MIA (.99): o cupom que o navegador guardou (`mia_cupom`, 30 dias) espera a
+  // empresa nascer, como no cadastro por e-mail: o gatilho adiado da 9130 o aplica,
+  // e o parceiro dele, quando a empresa nasce (aqui embaixo, ou na aprovação da Time).
+  // Antes dos dois caminhos que criam a empresa; nunca lança nem muda o destino.
+  const cupomDoNavegador = request.cookies.get(COOKIE_DO_CUPOM)?.value;
+  if (cupomDoNavegador) await guardarCupomDaEntradaComGoogle(createAdminClient(), usuario.id, cupomDoNavegador);
 
   // COM APROVAÇÃO (migration 0383): a empresa NÃO nasce aqui. O pedido é
   // enviado em `/get-started`, que é onde já chega quem ficou sem empresa por

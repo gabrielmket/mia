@@ -79,13 +79,30 @@ cadastro.** O cadastro dele segue o de hoje, curto. Os dados são pedidos no pas
 porque a nota do fim do teste sai com eles.
 
 **LGPD.** Os dados fiscais são da empresa cliente (na pessoa física, de quem assina), não de
-um contato: as catracas de LGPD do fork (`lgpd-*`, catálogo de FKs para `contacts`) não os
-alcançam, e o acesso do titular é a própria tela (o administrador vê e corrige). O que se
-garante: apagar a empresa ou o usuário leva junto (cascade), e a empresa **redigida**
-(`organizations.status = 'redacted'`, a anonimização da empresa inteira) perde os dados
-fiscais e o retrato do pagamento pelos gatilhos `trg_mia_dados_fiscais_saem_com_a_empresa_redigida`
-e `trg_mia_pagamento_inicial_sai_com_a_empresa_redigida`. Prova em
-`tests/invariants/pagamento-no-inicio.test.ts`.
+um contato: as catracas de LGPD do catálogo de `contacts` não os alcançam. O administrador vê e
+corrige os dados na própria tela. As duas pontas da LGPD:
+
+- **Anonimização.** Apagar a empresa ou o usuário leva junto (cascade), e a empresa **redigida**
+  (`organizations.status = 'redacted'`, a anonimização da empresa inteira) perde os dados
+  fiscais, o retrato do pagamento e o cartão das mensalidades pelos gatilhos
+  `trg_mia_dados_fiscais_saem_com_a_empresa_redigida`, `trg_mia_pagamento_inicial_sai_com_a_empresa_redigida`
+  e `trg_mia_cartao_das_mensalidades_sai_com_a_empresa_redigida` (9125). Prova em
+  `tests/invariants/pagamento-no-inicio.test.ts`.
+- **Cópia (o acesso do titular, desde a .99).** Em Admin › Tenants › a empresa, o card "Dados de
+  cobrança (LGPD)" baixa o JSON com os dados fiscais **inteiros** (documento, nome ou razão
+  social, endereço, inscrições, WhatsApp), o passo do pagamento (modo, situação, forma, valor,
+  datas, do cartão só o final e a bandeira), o cartão das mensalidades e quando os dados foram ao
+  Asaas (art. 18, VII). Fica fora o instrumento de pagamento (Pix copia e cola, linha e link do
+  boleto, link da fatura) e os ids do Asaas. A rota é `GET /api/v1/admin/tenants/[id]/dados-de-cobranca`
+  (`exportarDadosDeCobrancaDaEmpresa`, em `lib/lgpd/export-collector.ts`), com a verificação em
+  duas etapas e a auditoria `area_de_cobranca.dados_exportados` (sem o conteúdo), como a cópia do
+  parceiro (.98). Até a .98 a anonimização alcançava estes dados e a cópia não: a catraca do
+  upstream (`lgpd-exporta-o-que-redige`) acha a limpeza pelo nome (`redigir`), e os gatilhos do
+  fork se chamam `..._empresa_redigida`. A cerca nossa `tests/unit/lgpd-empresa-redigida-exporta.test.ts`
+  fecha isso: toda tabela que uma função do schema da MIA apaga quando a empresa é redigida tem
+  de ser lida pela cópia. O conteúdo é provado em `tests/unit/lgpd-dados-de-cobranca-da-empresa.test.ts`.
+  A cópia não entra no MCP de plataforma: o MCP mostra os dados fiscais só resumidos e com o
+  documento mascarado (`plataforma_ver_cliente`), a mesma regra da cópia do parceiro.
 
 ## 3. O passo "Pagamento" (9121)
 
@@ -248,6 +265,10 @@ Nenhuma ferramenta nova (a lista segue com 99): pagar é sempre do cliente.
 - `app/admin/(protected)/cobranca/page.tsx`: a nota na aba Conexão.
 - `lib/auth/public-paths.ts`: as duas consultas públicas.
 - `lib/audit/actions.ts`, `lib/i18n/dicionario.ts`, `lib/mcp-plataforma/ferramentas/plataforma.ts`.
+- `FORK MIA (.99)`, a cópia dos dados de cobrança (seção 2): `lib/lgpd/export-collector.ts`
+  (`exportarDadosDeCobrancaDaEmpresa`, um bloco no fim), `app/admin/(protected)/tenants/[id]/page.tsx`
+  (o card) e `lib/audit/actions.ts`. Do fork: a rota `app/api/v1/admin/tenants/[id]/dados-de-cobranca`
+  e `components/admin/tenants/DadosDeCobrancaDoTenant.tsx`.
 
 Do fork: `lib/planos-mia/rodada.ts` (a rodada do passo, depois da da jornada) e o
 manual `pagamento-no-inicio` em `lib/assistente/manuais-das-telas.ts`.
@@ -262,6 +283,8 @@ manual `pagamento-no-inicio` em `lib/assistente/manuais-das-telas.ts`.
 | `tests/unit/pagamento-inicial-servico.test.ts` | o passo: Pix, boleto, sair do boleto cancela, reserva, conferência, cartão, troca de plano, modo teste |
 | `tests/unit/pagamento-inicial-fim-do-teste.test.ts` | o Pix 3 dias antes, o bloqueio na hora, quem segue a régua de hoje |
 | `tests/unit/cartao-fora-dos-registros.test.ts` e `pagamento-inicial-cartao-rota.test.ts` | o cartão fora de todo registro |
+| `tests/unit/lgpd-empresa-redigida-exporta.test.ts` | (.99) a cerca: toda tabela que a empresa redigida perde é lida pela cópia dos dados de cobrança |
+| `tests/unit/lgpd-dados-de-cobranca-da-empresa.test.ts` | (.99) a cópia: o documento inteiro, o endereço, o cartão e o Asaas, nada do Pix nem do boleto, uma empresa só; a rota com a verificação em duas etapas, o 404 e a auditoria sem o conteúdo |
 
 ### Lacunas conhecidas
 

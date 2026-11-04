@@ -144,4 +144,11 @@ export const DICIONARIO_DA_AREA_DE_COBRANCA_MIA: Traducoes = {
   "Para confirmar, digite o nome curto da empresa": { es: "Para confirmar, escribe el nombre corto de la empresa" },
   "Apagando...": { es: "Borrando..." },
   "Não deu para apagar agora. Tente de novo em instantes.": { es: "No fue posible borrar ahora. Inténtalo de nuevo en unos instantes." },
+  // ── FORK MIA (.99): a cópia dos dados de cobrança na ficha da empresa (LGPD) ──
+  "Dados de cobrança (LGPD)": { es: "Datos de cobro (LGPD)" },
+  "A cópia do que a empresa guarda para a cobrança e a nota fiscal, para atender o pedido do titular: os dados fiscais inteiros (na pessoa física, o CPF, o endereço e o WhatsApp de quem assina), o passo do pagamento e o final do cartão.": {
+    es: "La copia de lo que la empresa guarda para el cobro y la factura fiscal, para atender la solicitud del titular: los datos fiscales completos (en la persona física, el CPF, la dirección y el WhatsApp de quien firma), el paso del pago y el final de la tarjeta.",
+  },
+  "Baixar os dados de cobrança": { es: "Descargar los datos de cobro" },
+  "Pede a verificação em duas etapas e fica no Audit Log.": { es: "Pide la verificación en dos pasos y queda en el Audit Log." },
 };

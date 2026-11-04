@@ -1705,6 +1705,9 @@ export const AUDIT_ACTIONS = [
   // Aviso escrito pelo admin da empresa e empurrado para a equipe (#1418). O
   // metadata leva só a janela de publicação; título e corpo ficam em `avisos`.
   "aviso.created",
+  // FORK MIA (.99) · a cópia dos dados de cobrança da empresa baixada pela Time
+  // (LGPD, o acesso do titular): só quem baixou e a empresa, nunca o conteúdo.
+  "area_de_cobranca.dados_exportados",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

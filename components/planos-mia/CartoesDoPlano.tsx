@@ -17,17 +17,24 @@ import type { CartaoDoPlano } from "@/lib/planos-mia/cadastro";
  *
  * FORK MIA (.98): com cupom que vale no plano, o cartão mostra o preço com o
  * desconto e o cheio riscado, ou os dias grátis (vale o maior, sem somar).
+ *
+ * FORK MIA (.99): a frase de ajuda só fala do teste quando o plano marcado tem
+ * teste. No de entrada paga (0 dia, e sem cupom de dias nele) não há teste: a
+ * troca é no passo do pagamento, antes de pagar, ou depois, em Plano e cobrança.
  */
 export function CartoesDoPlano({
   cartoes,
   registro,
   veioDoLink,
   cupom = null,
+  semTeste = false,
 }: {
   cartoes: readonly CartaoDoPlano[];
   registro: UseFormRegisterReturn<"cobranca_plan_id">;
   veioDoLink: boolean;
   cupom?: CupomPublico | null;
+  /** O plano marcado é de entrada paga (a mesma régua do cadastro: 0 dia de teste e sem cupom de dias). */
+  semTeste?: boolean;
 }) {
   const t = useT();
   const idioma = useIdioma();
@@ -111,10 +118,14 @@ export function CartoesDoPlano({
       </div>
       <p id="planos-do-cadastro-ajuda" className="text-xs text-muted-foreground">
         {veioDoLink
-          ? t(
-              "Veio da página de preços com o plano marcado. Dá para trocar aqui ou depois, no teste.",
-            )
-          : t("Dá para trocar de plano depois, inclusive durante o teste.")}
+          ? semTeste
+            ? t("Veio da página de preços com o plano marcado. Dá para trocar aqui, na hora de pagar ou depois.")
+            : t(
+                "Veio da página de preços com o plano marcado. Dá para trocar aqui ou depois, no teste.",
+              )
+          : semTeste
+            ? t("Dá para trocar de plano na hora de pagar ou depois.")
+            : t("Dá para trocar de plano depois, inclusive durante o teste.")}
       </p>
     </fieldset>
   );
