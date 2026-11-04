@@ -1498,11 +1498,14 @@ jobs:
       # semeia em toda parte comum), e nenhuma cita WAHA, Graph ou webhook.
       # FORK MIA (.98): `cupons-e-parceiros` entra aqui porque não usa serviço
       # do job e esta é a parte comum com mais folga no teto de 30 min.
+      # FORK MIA (.101): `raio-x-do-atendimento` também: o dublê do leitor ela
+      # mesma sobe (porta 3994), como a do Jev sobe o dela.
       SPECS_PARTE_7: >-
         celular-toque-nos-controles.spec.ts
         agente-novo-e-uso.spec.ts
         capacidades-do-agente.spec.ts
         cupons-e-parceiros.spec.ts
+        raio-x-do-atendimento.spec.ts
         equipe-no-celular.spec.ts
         extensoes-versao.spec.ts
         ia-no-celular.spec.ts

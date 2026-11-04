@@ -174,6 +174,11 @@ JEV_API_BASE_URL=http://127.0.0.1:3996
 # e do next start.
 COBRANCA_API_BASE_URL_TESTE=http://127.0.0.1:3995
 
+# FORK MIA (.101): o LEITOR do raio-X do atendimento fala com o dublê que a spec
+# raio-x-do-atendimento sobe nesta porta, vizinha da do provedor de cobrança.
+# Fora daquela spec nada escuta aqui, e não precisa: sem raio-X, ninguém chama.
+RAIO_X_LEITOR_URL=http://127.0.0.1:3994
+
 # Placeholders: 'next start' roda em NODE_ENV=production, e lib/env.ts exige
 # estas vars em produção. As specs não exercitam os serviços por trás delas.
 # Local e CI falham pelos mesmos motivos porque leem ESTE arquivo: o workflow
