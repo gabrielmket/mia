@@ -45,7 +45,7 @@ export function textoDoTermo(d: DadosDoTermo): string {
     "",
     `6. Prazos. ${conexao} As conversas lidas são apagadas dos servidores da Time ${DIAS_ATE_APAGAR_AS_CONVERSAS} dias depois do relatório (ou do encerramento, se ele vier antes). O relatório fica guardado, sem o telefone e sem o nome dos clientes, que aparecem só por um número de ordem, para comparar com o próximo raio-X e mostrar a evolução.`,
     "",
-    "7. Segurança. Só a equipe da Time acessa as conversas e o relatório antes de ele ser entregue. O acesso é registrado. O relatório da Empresa abre por um link próprio, com validade, que a Time pode desligar.",
+    "7. Segurança. Só a equipe da Time acessa as conversas e o relatório antes de ele ser entregue, e o que ela faz no raio-X (revisar, publicar, desconectar, encerrar) fica registrado. O relatório da Empresa abre por um link próprio, com validade, que a Time pode desligar.",
     "",
     "8. Direitos dos clientes da Empresa. Os pedidos dos titulares (acesso, correção, eliminação) são respondidos pela Empresa, como controladora. A Time apoia e apaga as conversas antes do prazo se a Empresa pedir.",
     "",

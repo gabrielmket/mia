@@ -176,6 +176,12 @@ npx vitest run
   `app/api/v1/contacts/bulk/filtro/` e `lib/implantacao/etiquetar-contatos.ts`; os pontos de
   ligação no código do upstream estão em
   [`docs/fork/contatos-em-massa.md`](fork/contatos-em-massa.md), seção 5.
+  O raio-X do atendimento (.101: a leitura só-leitura do WhatsApp comercial de uma
+  empresa, num contêiner próprio do leitor, e o relatório para o dono) mora em
+  `lib/raio-x/`, `lib/channels/raio-x/`, `components/raio-x/` e `app/raio-x/`, com o
+  schema na 9150; os pontos de ligação no código do upstream estão em
+  [`docs/fork/raio-x-do-atendimento.md`](fork/raio-x-do-atendimento.md), seção 11.
+  A faixa 9150-9159 ficou para ele (a 9140-9149 segue reservada e vazia).
 - **Funcionalidade duplicada.** Os dois lados construíram, na mesma semana, o
   cadastro incorporado da Meta, o disparo em massa e o aviso no WhatsApp. A decisão
   de ficar com um, com o outro ou com os dois é de produto. Para o **disparo em
