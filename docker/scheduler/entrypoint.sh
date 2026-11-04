@@ -180,6 +180,14 @@ CRONS="
 # prazo da chamada (45 s, lib/channels/historico/prazo.ts) com folga para o
 # banco; tests/unit/historico-cron.test.ts recusa se os dois se aproximarem.
 * * * * *|60|api/v1/cron/historico-import
+# O RAIO-X DO ATENDIMENTO (fork MIA, docs/fork/raio-x-do-atendimento.md): lê as
+# conversas do WhatsApp que o dono conectou, transcreve, classifica e gera o
+# relatório, em rodadas curtas com cursor firme, e cumpre os prazos (desconectar
+# em 7 dias, apagar as conversas em 30, o mensal no dia 1). A cada minuto pelo
+# mesmo motivo da importação do histórico: quem conectou está olhando o
+# andamento. Mesmo prazo por chamada (45 s), e o -m (60) acima dele. Barato
+# quando não há raio-X andando: quatro leituras pequenas e nada mais.
+* * * * *|60|api/v1/cron/raio-x
 17 * * * *|60|api/v1/cron/contact-proposals-watcher
 23 * * * *|60|api/v1/cron/followup-sem-agente
 # O ANIVERSÁRIO. De hora em hora, e não uma vez ao dia, porque quem decide o
