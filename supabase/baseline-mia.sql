@@ -21222,7 +21222,7 @@ grant execute on function public.fn_mia_raio_x_link_acessado(uuid) to service_ro
 -- referência cifrada vai junto) e carimba. O relatório, o aceite e o gasto FICAM.
 -- Com `p_antes_de`, apaga só as mensagens anteriores a ele (o mensal, que segue
 -- conectado), e as conversas ficam para o número de ordem continuar o mesmo.
-create or replace function public.fn_mia_raio_x_apagar_conversas(p_raio_x uuid, p_antes_de timestamptz default null)
+create or replace function public.fn_mia_raio_x_expurgar_conversas(p_raio_x uuid, p_antes_de timestamptz default null)
 returns jsonb
 language plpgsql
 volatile
@@ -21250,12 +21250,12 @@ begin
 end;
 $$;
 
-comment on function public.fn_mia_raio_x_apagar_conversas(uuid, timestamptz) is
+comment on function public.fn_mia_raio_x_expurgar_conversas(uuid, timestamptz) is
   'MIA (9150): apaga as mensagens e as conversas lidas de um raio-X (prazo de 30 dias; o relatorio, o aceite e o gasto ficam). Com p_antes_de, so as mensagens anteriores (o mensal). Execucao so para service_role.';
 
-revoke all on function public.fn_mia_raio_x_apagar_conversas(uuid, timestamptz) from public;
-revoke execute on function public.fn_mia_raio_x_apagar_conversas(uuid, timestamptz) from anon, authenticated;
-grant execute on function public.fn_mia_raio_x_apagar_conversas(uuid, timestamptz) to service_role;
+revoke all on function public.fn_mia_raio_x_expurgar_conversas(uuid, timestamptz) from public;
+revoke execute on function public.fn_mia_raio_x_expurgar_conversas(uuid, timestamptz) from anon, authenticated;
+grant execute on function public.fn_mia_raio_x_expurgar_conversas(uuid, timestamptz) to service_role;
 
 notify pgrst, 'reload schema';
 

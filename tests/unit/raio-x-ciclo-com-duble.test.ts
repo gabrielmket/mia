@@ -208,7 +208,7 @@ async function rodada(banco: ReturnType<typeof bancoEmMemoria>, leitor: LeitorDo
 
 describe("o ciclo do raio-X, de ponta a ponta", () => {
   it("conecta, estabiliza, lê, analisa, gera o relatório e cumpre os prazos", async () => {
-    const banco = bancoEmMemoria({ mia_raio_x: [raioX()] }, { fn_mia_raio_x_conversa: rpcConversa, fn_mia_raio_x_apagar_conversas: rpcApagar });
+    const banco = bancoEmMemoria({ mia_raio_x: [raioX()] }, { fn_mia_raio_x_conversa: rpcConversa, fn_mia_raio_x_expurgar_conversas: rpcApagar });
     const { leitor, chamadas } = leitorDuble("5531900001101");
     const { chamar, pedidos } = modeloDuble();
     const r = () => banco.db.mia_raio_x![0]!;

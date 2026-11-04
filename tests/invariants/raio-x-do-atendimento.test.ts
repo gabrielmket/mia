@@ -116,7 +116,7 @@ describe("só o servidor lê e escreve, nas sete tabelas", () => {
     for (const f of [
       "fn_mia_raio_x_conversa(uuid, text, text, timestamptz)",
       "fn_mia_raio_x_link_acessado(uuid)",
-      "fn_mia_raio_x_apagar_conversas(uuid, timestamptz)",
+      "fn_mia_raio_x_expurgar_conversas(uuid, timestamptz)",
     ]) {
       expect(lastLine(sql(`select has_function_privilege('anon', 'public.${f}', 'execute')::text;`)), f).toBe("false");
       expect(lastLine(sql(`select has_function_privilege('authenticated', 'public.${f}', 'execute')::text;`)), f).toBe("false");
@@ -193,7 +193,7 @@ describe("apagar as conversas (30 dias depois do relatório)", () => {
       insert into public.mia_raio_x_mensagens (raio_x_id, conversa_id, marca, da_loja, enviada_em, tipo, texto)
         values ('${RX}', '${conversa}', '${H("7")}', false, now() - interval '2 days', 'texto', 'Oi, ainda tem o carro?');
     `);
-    const r = lastLine(sql(`select public.fn_mia_raio_x_apagar_conversas('${RX}')::text;`));
+    const r = lastLine(sql(`select public.fn_mia_raio_x_expurgar_conversas('${RX}')::text;`));
     expect(JSON.parse(r)).toMatchObject({ mensagens: 1 });
     expect(lastLine(sql(`select count(*) from public.mia_raio_x_mensagens where raio_x_id = '${RX}';`))).toBe("0");
     expect(lastLine(sql(`select count(*) from public.mia_raio_x_conversas where raio_x_id = '${RX}';`))).toBe("0");
@@ -210,7 +210,7 @@ describe("apagar as conversas (30 dias depois do relatório)", () => {
         ('${RX_2}', '${conversa}', '${H("8")}', false, now() - interval '60 days', 'texto', 'antiga'),
         ('${RX_2}', '${conversa}', '${H("6")}', false, now() - interval '1 day', 'texto', 'nova');
     `);
-    sql(`select public.fn_mia_raio_x_apagar_conversas('${RX_2}', now() - interval '30 days');`);
+    sql(`select public.fn_mia_raio_x_expurgar_conversas('${RX_2}', now() - interval '30 days');`);
     expect(lastLine(sql(`select string_agg(texto, ',') from public.mia_raio_x_mensagens where conversa_id = '${conversa}';`))).toBe("nova");
     expect(lastLine(sql(`select count(*) from public.mia_raio_x_conversas where id = '${conversa}';`))).toBe("1");
   });

@@ -33,9 +33,9 @@ export default async function RaioXPage() {
       </header>
       <RaioXDaTime
         lista={lista}
-        empresas={((empresas.data ?? []) as Array<{ id: string; display_name: string | null; legal_name: string | null }>).map((e) => ({
-          id: e.id,
-          nome: e.display_name || e.legal_name || e.id,
+        empresas={((empresas.data ?? []) as Array<{ id: string; display_name: string | null; legal_name: string | null }>).map((org) => ({
+          id: org.id,
+          nome: org.display_name || org.legal_name || org.id,
         }))}
       />
     </div>

@@ -255,7 +255,8 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
     exemplo: { raio_x_id: "00000000-0000-4000-8000-000000000101" },
     operacao: OPERACAO,
     handler: async (ctx, args) => {
-      const r = await acaoEncerrar(ctx.admin, String(args.raio_x_id), ctx.autorUserId);
+      const raioXId = String(args.raio_x_id);
+      const r = await acaoEncerrar(ctx.admin, raioXId, ctx.autorUserId);
       if (!r.ok) recusar(fraseDaRecusa(r));
       if (!r.jaEstava) {
         void audit({
@@ -263,7 +264,7 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
           actorUserId: ctx.autorUserId,
           actingAsPlatformAdmin: true,
           resourceType: "mia_raio_x",
-          resourceId: String(args.raio_x_id),
+          resourceId: raioXId,
           requestId: ctx.requestId,
           metadata: { falha_no_leitor: r.falhaNoLeitor, apagar_conversas_em: r.apagarConversasEm, via: "mcp", token_id: ctx.tokenId },
         });

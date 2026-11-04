@@ -111,7 +111,7 @@ Sete tabelas nossas, todas só do servidor (RLS ligada sem política, grants rev
 
 Funções, só para `service_role`: `fn_mia_raio_x_conversa` (acha ou cria a conversa e dá o
 número de ordem, com trava por raio-X), `fn_mia_raio_x_link_acessado` (conta o acesso em
-link vivo) e `fn_mia_raio_x_apagar_conversas` (o prazo de 30 dias; com corte, só as
+link vivo) e `fn_mia_raio_x_expurgar_conversas` (o prazo de 30 dias; com corte, só as
 mensagens antigas do mensal). Carimbo: `20261104120000_9150_raio_x_do_atendimento`.
 
 ### 2.4 A leitura em segundo plano
@@ -277,6 +277,13 @@ novo grava outro).
 | foto, vídeo e documento | nunca são guardados: só contados (o banco recusa referência de arquivo fora do áudio) |
 | o relatório | FICA, sem telefone e sem nome de cliente (número de ordem), para comparar com o próximo |
 | o aceite e o gasto | ficam (prova do consentimento e registro financeiro) |
+
+**O pedido do titular.** Os clientes do dono não são contatos da MIA: nenhuma tabela do raio-X tem
+`contact_id`, e o acesso e a anonimização por contato (`lib/lgpd/`) não as alcançam, de propósito. O pedido
+de um cliente do dono vai ao dono (o controlador), e a Time atende encerrando o raio-X e, se preciso,
+antecipando o expurgo (`fn_mia_raio_x_expurgar_conversas`). O nome da função é "expurgar", e não
+"apagar", porque é o PRAZO de retenção, e não a anonimização a pedido do titular que a cerca
+`lgpd-exporta-o-que-redige` vigia.
 
 Os clientes aparecem por número de ordem ("Cliente 0187"), nunca por telefone ou nome. Os
 trechos do relatório são curtos (180 caracteres, até 4 balões), sem telefone, e-mail ou

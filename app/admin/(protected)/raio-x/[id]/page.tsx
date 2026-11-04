@@ -125,9 +125,9 @@ export default async function DetalheDoRaioXPage({ params, searchParams }: PageP
           conectado={conectado}
           organizationId={r.organizationId}
           tetoCentavos={r.tetoCentavos}
-          empresas={((empresas ?? []) as Array<{ id: string; display_name: string | null; legal_name: string | null }>).map((e) => ({
-            id: e.id,
-            nome: e.display_name || e.legal_name || e.id,
+          empresas={((empresas ?? []) as Array<{ id: string; display_name: string | null; legal_name: string | null }>).map((org) => ({
+            id: org.id,
+            nome: org.display_name || org.legal_name || org.id,
           }))}
         />
       </section>

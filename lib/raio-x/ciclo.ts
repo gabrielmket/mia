@@ -118,7 +118,7 @@ export async function rodarOCiclo(dep: Dependencias): Promise<ResumoDoCiclo> {
       .limit(20),
   );
   for (const r of aApagar) {
-    const { data, error } = await dep.admin.rpc("fn_mia_raio_x_apagar_conversas", { p_raio_x: r.id });
+    const { data, error } = await dep.admin.rpc("fn_mia_raio_x_expurgar_conversas", { p_raio_x: r.id });
     if (error) {
       resumo.falhas += 1;
       continue;
@@ -169,7 +169,7 @@ export async function rodarOCiclo(dep: Dependencias): Promise<ResumoDoCiclo> {
       .maybeSingle();
     const corte = (velho as { periodo_fim?: string } | null)?.periodo_fim;
     if (corte) {
-      const { data, error } = await dep.admin.rpc("fn_mia_raio_x_apagar_conversas", { p_raio_x: r.id, p_antes_de: corte });
+      const { data, error } = await dep.admin.rpc("fn_mia_raio_x_expurgar_conversas", { p_raio_x: r.id, p_antes_de: corte });
       const mensagens = Number((data as { mensagens?: number } | null)?.mensagens) || 0;
       if (!error && mensagens > 0) {
         resumo.efeitos.push({ acao: "raio_x.conversas_apagadas", raioXId: r.id, mensagens, conversas: 0, parcial: true });
