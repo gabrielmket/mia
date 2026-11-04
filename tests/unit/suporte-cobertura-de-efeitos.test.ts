@@ -69,6 +69,13 @@ it("todo handler mutante do app declara guarda de suporte ou é infraestrutura i
   // para montar o plano). Nenhuma das duas grava; as que gravam
   // (`/campanhas/**`, `/configuracao`, `/dominio`, `/supressao/**`...) têm a guarda.
   if(["app/api/v1/email-marketing/publico/route.ts","app/api/v1/email-marketing/campanhas/[id]/conferencia/route.ts"].includes(path))continue;
+  // FORK MIA (.101) — a página pública de CONEXÃO do raio-X do atendimento: quem
+  // chama é o dono da empresa, SEM conta e sem cookie de sessão (o link vai pelo
+  // WhatsApp). A identidade é o código do link (HMAC, 48 h, teto por IP), e o
+  // efeito é na tabela da plataforma (`mia_raio_x*`), nunca numa empresa da MIA.
+  // Não há sessão de suporte para a guarda ler; chamá-la seria um no-op que
+  // devolve 503 quando o GoTrue oscila, a mesma razão do provisionamento acima.
+  if(["app/api/v1/publico/raio-x/[codigo]/aceite/route.ts","app/api/v1/publico/raio-x/[codigo]/codigo/route.ts"].includes(path))continue;
   const source=ts.createSourceFile(path,readFileSync(path,"utf8"),ts.ScriptTarget.Latest,true);
   // DUAS FORMAS de exportar um handler, e o gate precisa das duas. A varredura
   // só enxergava `export async function POST`; `export const PATCH = async () => {}`
