@@ -65,6 +65,10 @@ services:
       # Valor fixo, sem `${}`: é decisão da MIA, não de quem edita o Environment.
       # Ver lib/branding/marca-da-organizacao-no-fork.ts.
       MARCA_DA_ORGANIZACAO: travada
+      # FORK MIA (.101): o endereço INTERNO do leitor do raio-X (serviço
+      # raio-x-leitor, abaixo). Não é segredo; a chave é a WAHA_API_KEY do .env.
+      # Só lib/channels/raio-x/leitor.ts lê esta variável.
+      RAIO_X_LEITOR_URL: http://raio-x-leitor:3000
     depends_on:
       bootstrap:
         condition: service_completed_successfully
@@ -148,6 +152,44 @@ services:
     volumes:
       - waha-data:/app/.sessions
       - waha-media:/app/.media
+    logging: *default-logging
+
+  # ── O leitor do RAIO-X DO ATENDIMENTO (fork MIA .101) ─────────────────────
+  #
+  # Um contêiner PRÓPRIO, separado do `waha` dos clientes, para o raio-X
+  # (docs/fork/raio-x-do-atendimento.md, seção 2): um número com muito histórico
+  # sincronizando não pesa no canal de quem está atendendo, e nenhum caminho de
+  # envio do atendimento conhece este contêiner. O app fala com ele só por
+  # `lib/channels/raio-x/leitor.ts`, que não tem método de envio.
+  #
+  #  - mesma imagem e a MESMA chave (`WAHA_API_KEY`, pelo env_file): nenhuma
+  #    linha nova no Environment do EasyPanel;
+  #  - SEM webhook: `WHATSAPP_HOOK_URL` vazio por cima do .env, e cada sessão
+  #    nasce com `webhooks: []`; o contêiner não manda nada ao app;
+  #  - volumes próprios (sessões e mídia); apagar `raio-x-data` desconecta
+  #    todos os raio-X (o acervo de cada um some junto);
+  #  - só na rede padrão do projeto, sem porta publicada e sem domínio. Ele
+  #    precisa sair para a internet (o WhatsApp), e por isso não é `internal`;
+  #  - o nome no celular do dono: "Raio-X Time Company" (também por sessão).
+  raio-x-leitor:
+    mem_limit: 1024m
+    image: ${WAHA_IMAGE:-devlikeapro/waha:latest-2026.7.2}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WHATSAPP_HOOK_URL: ""
+      WHATSAPP_HOOK_EVENTS: ""
+      WHATSAPP_DEFAULT_ENGINE: NOWEB
+      WAHA_DASHBOARD_ENABLED: "false"
+      # O mensal fica conectado: depois de reiniciar, as sessões voltam sozinhas.
+      WHATSAPP_RESTART_ALL_SESSIONS: "True"
+      WAHA_CLIENT_DEVICE_NAME: "Raio-X Time Company"
+      WAHA_CLIENT_BROWSER_NAME: Chrome
+      # O áudio baixado para a transcrição sai do disco em 3 minutos (o padrão).
+      WHATSAPP_FILES_LIFETIME: "180"
+    volumes:
+      - raio-x-data:/app/.sessions
+      - raio-x-media:/app/.media
     logging: *default-logging
 
   # ── Chamada de voz do WhatsApp (WaCalls, spec 18) ─────────────────────────
@@ -295,6 +337,9 @@ services:
 volumes:
   waha-data:
   waha-media:
+  # FORK MIA (.101): o leitor do raio-X do atendimento (o acervo de cada raio-X).
+  raio-x-data:
+  raio-x-media:
   wacalls-data:
   caddy-data:
   caddy-config:

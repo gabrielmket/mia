@@ -313,6 +313,14 @@ export const ADMIN_DESTINATIONS: readonly AdminDestination[] = [
     group: "clientes",
     icon: Buildings,
   },
+  // FORK MIA (.101): o raio-X do atendimento (docs/fork/raio-x-do-atendimento.md).
+  {
+    href: "/admin/raio-x",
+    label: "Raio-X do atendimento",
+    description: "O WhatsApp comercial de cada empresa, lido e analisado: tempo de resposta, quem ficou sem resposta, origem e nota",
+    group: "clientes",
+    icon: ChartBar,
+  },
   {
     href: "/admin/custo-da-meta",
     label: "Custo das mensagens",
