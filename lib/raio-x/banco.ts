@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { leitorDoRaioX } from "@/lib/channels/raio-x/leitor";
+import { leitorDoRaioX, type LeitorDoRaioX } from "@/lib/channels/raio-x/leitor";
 
 import { compararComOAnterior, mesmaEmpresa, type Comparacao } from "./comparacao";
 import { prazosDoEncerramento, validadeDoLinkDeConexao, linkDeConexaoVivo } from "./prazos";
@@ -609,10 +609,14 @@ export type ResultadoDaDesconexao = { desconectou: boolean; falhaNoLeitor: boole
  * Sem relatório e com leitura em andamento, a leitura para; o que já foi lido
  * vira relatório com o que há (situação "analisando").
  */
-export async function desconectarAgora(admin: SupabaseClient, r: LinhaDoRaioX, agora: Date = new Date()): Promise<ResultadoDaDesconexao> {
+export async function desconectarAgora(
+  admin: SupabaseClient,
+  r: LinhaDoRaioX,
+  agora: Date = new Date(),
+  leitor: LeitorDoRaioX | null = leitorDoRaioX(),
+): Promise<ResultadoDaDesconexao> {
   let falhaNoLeitor = false;
   if (r.sessao && !r.desconectado_em) {
-    const leitor = leitorDoRaioX();
     try {
       if (leitor) await leitor.desconectar(r.sessao);
       else falhaNoLeitor = true;

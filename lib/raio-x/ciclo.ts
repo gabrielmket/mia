@@ -29,6 +29,7 @@ import {
   rodadaDeAnalise,
   transcritorDaPlataforma,
   type ChamarOModelo,
+  type ModeloDaAnalise,
 } from "./analise";
 import { COLUNAS_DO_RAIO_X, desconectarAgora, type LinhaDoRaioX } from "./banco";
 import { estadoInicial, lerEstado, rodadaDeLeitura } from "./leitura";
@@ -58,8 +59,10 @@ interface Dependencias {
   leitor: LeitorDoRaioX | null;
   prazo: number;
   agora?: () => number;
-  /** Para o teste: o modelo de IA dublado. */
+  /** Para o teste: o modelo de IA, a chamada e o transcritor dublados. */
+  modelo?: ModeloDaAnalise | null;
   chamar?: ChamarOModelo | null;
+  transcritor?: ReturnType<typeof transcritorDaPlataforma>;
 }
 
 async function travar(admin: SupabaseClient, r: LinhaDoRaioX, agora: number): Promise<boolean> {
@@ -102,7 +105,7 @@ export async function rodarOCiclo(dep: Dependencias): Promise<ResumoDoCiclo> {
   );
   for (const r of aDesconectar) {
     if (!venceu(r.desconectar_em, new Date(agora()))) continue;
-    await desconectarAgora(dep.admin, r, new Date(agora()));
+    await desconectarAgora(dep.admin, r, new Date(agora()), dep.leitor);
     resumo.efeitos.push({ acao: "raio_x.desconectado", raioXId: r.id, motivo: "prazo" });
   }
 
@@ -183,9 +186,9 @@ export async function rodarOCiclo(dep: Dependencias): Promise<ResumoDoCiclo> {
       .order("updated_at", { ascending: true })
       .limit(20),
   );
-  const modelo = modeloDaAnalise();
+  const modelo = dep.modelo !== undefined ? dep.modelo : modeloDaAnalise();
   const chamar = dep.chamar !== undefined ? dep.chamar : modelo ? chamadaDaPlataforma(modelo) : null;
-  const transcritor = transcritorDaPlataforma();
+  const transcritor = dep.transcritor !== undefined ? dep.transcritor : transcritorDaPlataforma();
 
   for (const r of andando) {
     if (dep.prazo - agora() < 20_000) break;
