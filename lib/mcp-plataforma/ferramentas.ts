@@ -41,6 +41,8 @@ import { FERRAMENTAS_DE_CANAIS_E_INTEGRACOES } from "./ferramentas/canais-e-inte
 import { FERRAMENTAS_DE_COBRANCA } from "./ferramentas/cobranca";
 // FORK MIA (.98): cupons, parceiros e repasses (docs/fork/cupons-e-parceiros.md).
 import { FERRAMENTAS_DE_CUPONS_E_PARCEIROS } from "./ferramentas/cupons-e-parceiros";
+// FORK MIA (.101): o raio-X do atendimento (docs/fork/raio-x-do-atendimento.md).
+import { FERRAMENTAS_DO_RAIO_X } from "./ferramentas/raio-x";
 import { FERRAMENTAS_DO_CHECKLIST } from "./ferramentas/checklist";
 import { FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP } from "./ferramentas/conhecimento-e-followup";
 import { FERRAMENTAS_DE_CONVERSOES } from "./ferramentas/conversoes";
@@ -103,6 +105,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DE_COBRANCA,
   // FORK MIA (.98): os cupons, os parceiros e os repasses do mês; o MCP nunca manda dinheiro (docs/fork/cupons-e-parceiros.md)
   ...FERRAMENTAS_DE_CUPONS_E_PARCEIROS,
+  // FORK MIA (.101): o raio-X do atendimento: criar, ver, publicar para o dono e encerrar (docs/fork/raio-x-do-atendimento.md)
+  ...FERRAMENTAS_DO_RAIO_X,
 ];
 
 export const FERRAMENTA_POR_NOME = new Map(FERRAMENTAS.map((f) => [f.name, f]));

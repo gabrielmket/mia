@@ -116,7 +116,8 @@ describe("a lista: 69 ferramentas, e os tipos de ação seguem os do upstream", 
       // .93: as quatro das trilhas do "Me mostra como" e de onde os clientes travam.
       // .97: etiquetar os contatos de um filtro.
       // .98: as seis dos cupons, dos parceiros e dos repasses.
-      (f) => daCobranca.has(f.name) || /etiquetar_contatos|assistente|chamado|email|supressao|consentimentos|segmentos|trilhas|travam|melhoria_do_produto|parceiro|cupo[mn]|repasse/.test(f.name),
+      // .101: as quatro do raio-X do atendimento.
+      (f) => daCobranca.has(f.name) || /etiquetar_contatos|assistente|chamado|email|supressao|consentimentos|segmentos|trilhas|travam|melhoria_do_produto|parceiro|cupo[mn]|repasse|raio_x/.test(f.name),
     );
     expect(FERRAMENTAS.length - doFork.length).toBe(69);
   });

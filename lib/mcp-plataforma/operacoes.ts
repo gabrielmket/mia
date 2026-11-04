@@ -200,6 +200,19 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "Aprova pedidos de cadastro (a empresa nasce e quem pediu vira administrador dela, com o teste começando) e recusa com o motivo, que vai por e-mail " +
       "a quem pediu. Um token vazado deixa entrar quem a Time não conferiu, gastando IA da plataforma no teste.",
   },
+  // FORK MIA (.101): o raio-X do atendimento (docs/fork/raio-x-do-atendimento.md).
+  // Chave própria: não mexe em cliente nenhum da MIA, mas gera o link que conecta
+  // o WhatsApp de uma empresa à leitura da Time, publica o relatório para o dono e
+  // derruba a conexão.
+  {
+    chave: "gerir_raio_x",
+    rotulo: "Criar, publicar e encerrar o raio-X do atendimento",
+    raio:
+      "Cadastra raio-X de QUALQUER empresa e devolve o link que, aceito pelo dono, conecta o WhatsApp comercial dela à leitura da Time " +
+      "(só leitura, mas a Time passa a ler as conversas dos clientes dela). Marca o relatório como revisado e gera o link do dono, que mostra " +
+      "os números do atendimento a quem o tiver, sem login, até vencer ou ser revogado. E encerra: derruba a conexão e agenda a exclusão das " +
+      "conversas. Um token vazado gera links de conexão em nome da Time e publica relatório que ninguém revisou de verdade.",
+  },
 ] as const;
 
 const POR_CHAVE = new Map(OPERACOES.map((o) => [o.chave, o]));

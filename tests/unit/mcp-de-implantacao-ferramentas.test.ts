@@ -134,6 +134,10 @@ describe("a lista de ferramentas", () => {
       "plataforma_ver_cupons",
       "plataforma_ver_repasses",
       "plataforma_marcar_repasse_pago",
+      // .101: o raio-X é da plataforma e a empresa da MIA é opcional (só o criar a recebe).
+      "plataforma_ver_raio_x",
+      "plataforma_publicar_raio_x",
+      "plataforma_encerrar_raio_x",
     ]);
   });
 
@@ -156,7 +160,10 @@ describe("as operações do token", () => {
   });
 
   it("MONTAR não põe nada no ar: publicar, ligar e submeter exigem `colocar_no_ar`", () => {
-    const doAr = FERRAMENTAS.filter((f) => /publicar|pausar|ligar|submeter/.test(f.name)).map((f) => [f.name, f.operacao]);
+    // FORK MIA (.101): `plataforma_publicar_raio_x` publica o RELATÓRIO para o dono
+    // da empresa (um link de leitura), não põe nada que fale com o cliente final no
+    // ar; tem a chave própria `gerir_raio_x` (lib/mcp-plataforma/operacoes.ts).
+    const doAr = FERRAMENTAS.filter((f) => /publicar|pausar|ligar|submeter/.test(f.name) && f.name !== "plataforma_publicar_raio_x").map((f) => [f.name, f.operacao]);
     expect(doAr.length).toBeGreaterThanOrEqual(6);
     for (const [nome, operacao] of doAr) expect(operacao, `${nome} deveria exigir colocar_no_ar`).toBe("colocar_no_ar");
     // E nenhuma ferramenta de montagem carrega um desses verbos.
