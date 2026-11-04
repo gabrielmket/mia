@@ -612,7 +612,13 @@ jobs:
     # medido — não há Docker onde esta matriz foi escrita —, e existe para o
     # vermelho continuar falando de schema: mantido em 20, a perna morreria por
     # relógio no meio da segunda passada.
-    timeout-minutes: 30
+    #
+    # FORK MIA (.101): 45, MEDIDO. Na ponta da .100 (09878e103) a perna do pg15
+    # levou 28,5 min, a um minuto e meio do teto; no PR da .101 ela morreu por
+    # relógio duas vezes seguidas, com 523 dos 597 arquivos verdes e nenhum
+    # vermelho, enquanto a do pg17 passou inteira. O teto existia para o vermelho
+    # falar de schema, e no 30 ele passou a falar do executor hospedado.
+    timeout-minutes: 45
     # Executor próprio para trabalho nosso quando EXECUTOR_PROPRIO=ligado; o
     # porquê e a guarda contra fork: comentário do e2e-parte no e2e.yml.
     runs-on: ${{ vars.EXECUTOR_PROPRIO == 'ligado' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'deskcomm-proprio' || 'ubuntu-latest' }}
