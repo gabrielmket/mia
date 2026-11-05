@@ -144,7 +144,9 @@ test("[P0] raio-X do atendimento: criar, aceitar, revisar, link do dono e encerr
     // O código de 8 letras.
     await paginaDoDono.locator('[data-raio-x="gerar-codigo"]').click();
     await expect(paginaDoDono.locator('[data-raio-x="codigo-do-whatsapp"]')).toHaveText("K7PQ-2M9X");
-    expect(pedidos.find((p) => p.caminho.endsWith("/auth/request-code"))?.corpo).toEqual({ phoneNumber: "5531900001101" });
+    // FORK MIA (.103): o código vai para o número da CONTA do WhatsApp, que no
+    // DDD 31 fica sem o nono dígito (o cadastro segue com ele, linha acima).
+    expect(pedidos.find((p) => p.caminho.endsWith("/auth/request-code"))?.corpo).toEqual({ phoneNumber: "553100001101" });
     await paginaDoDono.screenshot({ path: `${EVIDENCIA}/2-conexao.png`, fullPage: true });
 
     // ── 3. O relatório (montado das conversas fictícias fixas) no Admin ─
