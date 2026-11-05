@@ -134,8 +134,8 @@ describe("a lista de ferramentas", () => {
       "plataforma_ver_cupons",
       "plataforma_ver_repasses",
       "plataforma_marcar_repasse_pago",
-      // .101: o raio-X é da plataforma e a empresa da MIA é opcional (só o criar a recebe).
-      "plataforma_ver_raio_x",
+      // .101: o raio-X é da plataforma e a empresa da MIA é opcional (o criar a recebe;
+      // desde a .102, o ver também, para mostrar o que dá para ler da conta do cliente ativo).
       "plataforma_publicar_raio_x",
       "plataforma_encerrar_raio_x",
     ]);

@@ -50,3 +50,36 @@ describe("as quatro do raio-X", () => {
     expect(JSON.stringify(red)).not.toMatch(/Ricardo|90000/);
   });
 });
+
+// ── FORK MIA (.102) · o raio-X do cliente ativo no MCP ───────────────────────
+describe("o cliente ativo nas mesmas quatro ferramentas", () => {
+  it("a lista continua com 110: nenhuma ferramenta nova, as mesmas quatro do raio-X", () => {
+    expect(FERRAMENTAS.filter((f) => f.name.endsWith("_raio_x")).map((f) => f.name).sort()).toEqual([...NOMES].sort());
+  });
+
+  it("criar aceita a fonte, a empresa da MIA e os números; o WhatsApp vira opcional", () => {
+    const criar = FERRAMENTA_POR_NOME.get("plataforma_criar_raio_x")!;
+    expect(Object.keys(criar.inputSchema)).toEqual(expect.arrayContaining(["fonte", "organization_id", "numeros", "whatsapp"]));
+    expect(criar.description).toMatch(/conversas_da_mia/);
+    expect(criar.description).toMatch(/AUTORIZAÇÃO/);
+  });
+
+  it("a fonte da MIA sem a conta e sem os números é recusada antes do banco, com os campos", async () => {
+    const semBanco = new Proxy({}, { get: () => { throw new Error("tocou no banco"); } });
+    const criar = FERRAMENTA_POR_NOME.get("plataforma_criar_raio_x")!;
+    await expect(
+      criar.handler(
+        { admin: semBanco as never, autorUserId: "a", tokenId: "t", requestId: "r" },
+        { fonte: "conversas_da_mia", empresa: "Garagem Modelo Veículos", segmento: "revenda_de_veiculos" },
+      ),
+    ).rejects.toThrow(/organization_id, numeros/);
+  });
+
+  it("ver mostra a fonte e o aceite, e lê a conta pelo organization_id", () => {
+    const ver = FERRAMENTA_POR_NOME.get("plataforma_ver_raio_x")!;
+    expect(Object.keys(ver.inputSchema)).toEqual(expect.arrayContaining(["raio_x_id", "organization_id", "periodo_dias"]));
+    expect(ver.description).toMatch(/FONTE/);
+    expect(ver.description).toMatch(/ACEITE \(nome completo, e-mail mascarado/);
+    expect(ver.operacao).toBeNull();
+  });
+});

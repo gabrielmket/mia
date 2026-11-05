@@ -13,11 +13,20 @@
  * ciclo. Publicar é o passo do meio, e o mais sensível (é o que o dono vê).
  *
  * Tudo passa por `lib/raio-x/acoes.ts`, o mesmo caminho da tela.
+ *
+ * FORK MIA (.102) · o raio-X do CLIENTE ATIVO (protótipo de 05/11/2026): o
+ * criar aceita a `fonte` "conversas_da_mia", o `organization_id` e os
+ * `numeros` da conta; o ver mostra a fonte e o aceite (nome completo, e-mail
+ * mascarado, data e versão do termo) e, com `organization_id` sem
+ * `raio_x_id`, o que dá para ler daquela conta (os números com os ids, o
+ * período, a estimativa e se a empresa conta como cliente ativo). Nenhuma
+ * ferramenta nova: são as mesmas quatro.
  */
 import { z } from "zod";
 
 import { audit } from "@/lib/audit";
 import { organizacaoDaImplantacao } from "@/lib/implantacao/base";
+import { maskEmail } from "@/lib/lgpd/mask";
 import {
   acaoCriar,
   acaoEncerrar,
@@ -28,8 +37,9 @@ import {
   fraseDaRecusa,
 } from "@/lib/raio-x/acoes";
 import { listarRaioX, type LinhaDoRelatorio } from "@/lib/raio-x/banco";
+import { contaParaORaioX } from "@/lib/raio-x/conta";
 import { reaisParaLer } from "@/lib/raio-x/custo";
-import { QUEM_ATENDE, SEGMENTOS, TIPOS } from "@/lib/raio-x/regras";
+import { FONTES, NUMEROS_POR_RAIO_X, QUEM_ATENDE, SEGMENTOS, TIPOS } from "@/lib/raio-x/regras";
 import { ROTULO_DO_INDICADOR } from "@/lib/raio-x/comparacao";
 
 import { recusar } from "../recusa";
@@ -66,7 +76,21 @@ function resumoDoRelatorio(r: LinhaDoRelatorio, comMia: boolean) {
     nota: d.notas,
     recomendacoes: d.recomendacoes.map((x) => ({ codigo: x.codigo, valores: x.valores })),
     exemplos: { boas: d.exemplos.bons.map((e) => `Cliente ${e.ordem}`), ruins: d.exemplos.ruins.map((e) => `Cliente ${e.ordem}`) },
-    ...(comMia ? { o_que_a_mia_resolveria: d.mia } : {}),
+    fonte: d.fonte ?? "conexao",
+    // FORK MIA (.102): o cliente ativo tem o bloco próprio no lugar do "o que a MIA resolveria".
+    ...(d.clienteAtivo
+      ? {
+          cliente_ativo: {
+            numeros: d.clienteAtivo.numeros,
+            quem_respondeu_primeiro: d.clienteAtivo.quemRespondeu,
+            depois_da_passagem: d.clienteAtivo.passagem,
+            no_que_virou: d.clienteAtivo.funil,
+            onde_ainda_da_para_ganhar: d.clienteAtivo.ondeGanhar.map((x) => ({ codigo: x.codigo, valores: x.valores })),
+          },
+        }
+      : comMia
+        ? { o_que_a_mia_resolveria: d.mia }
+        : {}),
     analise: d.analise,
     custo: { reais: reaisParaLer(Number(r.custo_centavos)), usd_centavos: Math.round(Number(r.custo_usd_centavos) * 100) / 100 },
     evolucao: r.comparacao
@@ -93,14 +117,29 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
   {
     name: "plataforma_criar_raio_x",
     description:
-      "Cadastra o RAIO-X DO ATENDIMENTO de uma empresa (que NÃO precisa ser cliente da MIA: é a isca comercial) e devolve o link de conexão, que vale 48 horas, e a mensagem pronta para mandar ao dono. " +
+      "Cadastra o RAIO-X DO ATENDIMENTO de uma empresa e devolve o link, que vale 48 horas, e a mensagem pronta para mandar ao dono. Duas FONTES (`fonte`): " +
+      "\"conexao\" (o padrão) para quem ainda NÃO é cliente da MIA (é a isca comercial): o link é de conexão e o dono conecta o WhatsApp; " +
+      "\"conversas_da_mia\" para CLIENTE ATIVO (a empresa opera e está em dia, em teste ou isenta; a demonstração também entra): nada é conectado e o leitor não é usado, o link é só de AUTORIZAÇÃO, e o raio-X lê as conversas que a conta já tem nos `numeros` escolhidos (`channel_session_id`, inclusive da API oficial), no período escolhido e nunca antes da primeira conversa da conta; exige `organization_id` e `numeros` (veja os números, o período e a estimativa com plataforma_ver_raio_x e o `organization_id`), e o `whatsapp` sai do primeiro número. O relatório do cliente ativo soma quem respondeu primeiro, a espera depois da passagem para a equipe, no que virou no funil da conta e onde ainda dá para ganhar. " +
+      "Na conexão: " +
       "O dono abre o link sem login, aceita o termo (fica registrado com nome, data, hora e versão) e conecta o WhatsApp comercial pelo código de 8 letras, com o QR como alternativa. O sistema lê só para leitura as conversas 1:1 do período, transcreve os áudios e gera o relatório em RASCUNHO. " +
       "`segmento` muda o que o relatório procura nas conversas; o horário comercial separa o que chegou com a loja aberta e fechada; `tipo` unico desconecta 7 dias depois do relatório e mensal fica conectado e gera um relatório no dia 1 de cada mês; `teto_centavos` é o teto de custo da análise (padrão 4000 = R$ 40). " +
-      "ANTES DE criar, confira com o dono que o número é o aplicativo do WhatsApp (comum ou Business): número na API oficial não conecta assim. O QUE NÃO FAZ: não manda a mensagem a ninguém (quem manda é a Time) e não lê nada antes do aceite.",
+      "ANTES DE criar pela conexão, confira com o dono que o número é o aplicativo do WhatsApp (comum ou Business): número na API oficial não conecta assim (no cliente ativo, entra). O QUE NÃO FAZ: não manda a mensagem a ninguém (quem manda é a Time), não lê nada antes do aceite (o dono aceita com nome completo e e-mail) e não envia mensagem nenhuma pela conta.",
     inputSchema: {
+      fonte: z.enum(FONTES).optional().describe("De onde vêm as conversas: conexao (padrão, quem ainda não é cliente) ou conversas_da_mia (cliente ativo)."),
       empresa: z.string().trim().min(1).max(120).describe("O nome da empresa, como vai no relatório."),
       segmento: z.enum(SEGMENTOS).describe("O segmento: revenda_de_veiculos, clinica_odontologica, clinica_de_estetica, academia, imobiliaria, loja_e_varejo ou outro."),
-      whatsapp: z.string().trim().min(8).max(32).describe("O WhatsApp COMERCIAL que vai ser lido. Do Brasil, com DDD: (31) 90000-1101; de fora, com +."),
+      whatsapp: z
+        .string()
+        .trim()
+        .min(8)
+        .max(32)
+        .optional()
+        .describe("Na conexão (obrigatório): o WhatsApp COMERCIAL que vai ser lido. Do Brasil, com DDD: (31) 90000-1101; de fora, com +. No cliente ativo, ignorado."),
+      numeros: z
+        .array(z.string().uuid())
+        .max(NUMEROS_POR_RAIO_X)
+        .optional()
+        .describe("No cliente ativo (obrigatório): os ids dos números da conta (channel_session_id) a ler, de plataforma_ver_raio_x com o organization_id."),
       responsavel_nome: z.string().trim().max(120).nullable().optional().describe("Quem autoriza (o dono ou responsável). Vai na mensagem pronta."),
       responsavel_contato: z.string().trim().max(160).nullable().optional().describe("WhatsApp ou e-mail de quem autoriza, para a Time mandar o link."),
       quem_atende: z.enum(QUEM_ATENDE).optional().describe("Quem atende hoje: humano (pessoas da loja), agente (automático) ou misto. Padrão humano."),
@@ -109,7 +148,12 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
       abre: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("Abre às, de segunda a sexta (HH:MM). Padrão 08:00."),
       fecha: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("Fecha às, de segunda a sexta (HH:MM). Padrão 18:00."),
       sabado_ate: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional().describe("Até que horas abre no sábado (HH:MM); null = não abre. Padrão 13:00."),
-      organization_id: z.string().uuid().nullable().optional().describe("A empresa da MIA, quando ela já é cliente (opcional; dá para ligar depois pela tela)."),
+      organization_id: z
+        .string()
+        .uuid()
+        .nullable()
+        .optional()
+        .describe("A empresa da MIA. Obrigatório no cliente ativo (conversas_da_mia); na conexão, opcional (dá para ligar depois pela tela)."),
       teto_centavos: z.number().int().min(500).max(50000).optional().describe("O teto de custo da análise, em centavos de real. Padrão 4000 (R$ 40)."),
     },
     exemplo: {
@@ -123,6 +167,7 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
     operacao: OPERACAO,
     // O contato de quem autoriza é pessoa: fica fora da trilha.
     redigirParaAuditoria: (args) => ({ ...args, responsavel_nome: args.responsavel_nome ? "[redigido]" : null, responsavel_contato: args.responsavel_contato ? "[redigido]" : null }),
+    // (os `numeros` são ids de canal da EMPRESA, não de pessoa: ficam.)
     handler: async (ctx, args) => {
       // A empresa da MIA, quando vem, existe: a recusa ensina a achar o id certo.
       if (typeof args.organization_id === "string") await organizacaoDaImplantacao(ctx.admin, args.organization_id);
@@ -135,28 +180,59 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
         resourceType: "mia_raio_x",
         resourceId: r.id,
         requestId: ctx.requestId,
-        metadata: { via: "mcp", token_id: ctx.tokenId },
+        metadata: { via: "mcp", token_id: ctx.tokenId, fonte: r.fonte },
       });
-      return { raio_x_id: r.id, empresa: r.empresa, link: r.link, link_vale_ate: r.expiraEm, mensagem_pronta: r.mensagem };
+      return { raio_x_id: r.id, empresa: r.empresa, fonte: r.fonte, link: r.link, link_vale_ate: r.expiraEm, mensagem_pronta: r.mensagem };
     },
   },
   {
     name: "plataforma_ver_raio_x",
     description:
-      "Os raio-X do atendimento. Sem `raio_x_id`: a lista (empresa, situação, andamento, se há relatório e se é o 2º da mesma empresa). Com `raio_x_id`: a situação da conexão (aguardando o dono, conectando, lendo, analisando, pronto, encerrado), o andamento da leitura, o aceite, o link de conexão vigente, o custo medido e o teto, " +
+      "Os raio-X do atendimento. Sem `raio_x_id`: a lista (empresa, FONTE, situação, andamento, se há relatório e se é o 2º da mesma empresa). Com `raio_x_id`: a fonte, a situação (aguardando o dono, conectando, lendo, analisando, pronto, encerrado), o andamento da leitura, o ACEITE (nome completo, e-mail mascarado, data e hora, versão do termo), o link vigente (de conexão ou, no cliente ativo, de autorização), o custo medido e o teto, " +
       "os relatórios com os números (velocidade da primeira resposta com a loja aberta e fechada, sem resposta, sumiram sem retorno, origem, assuntos, desfecho, nota nos cinco critérios, recomendações e o bloco do que a MIA resolveria), a EVOLUÇÃO em proporção desde o raio-X anterior da mesma empresa, e os links do dono. " +
-      "Os clientes aparecem só por número de ordem, nunca por telefone ou nome; os trechos de conversa ficam na tela de Admin.",
+      "Os clientes aparecem só por número de ordem, nunca por telefone ou nome; os trechos de conversa ficam na tela de Admin. " +
+      "FORK MIA (.102): com `organization_id` e sem `raio_x_id`, o que dá para ler daquela CONTA para o raio-X do cliente ativo: se ela conta como cliente ativo, os números de WhatsApp com o id (channel_session_id), se são da API oficial e as mensagens no período, o período (os N dias inteiros antes de hoje, nunca antes da primeira conversa), o segmento e o horário da conta, quem administra e a estimativa de custo; e os raio-X dessa empresa. No relatório do cliente ativo, quem respondeu primeiro, a espera depois da passagem, no que virou e onde ainda dá para ganhar.",
     inputSchema: {
       raio_x_id: z.string().uuid().optional().describe("Só este raio-X, com o detalhe e os relatórios."),
+      organization_id: z.string().uuid().optional().describe("Sem raio_x_id: o que dá para ler desta conta da MIA para o raio-X do cliente ativo, e os raio-X dela."),
+      periodo_dias: z.union([z.literal(30), z.literal(60), z.literal(90)]).optional().describe("Com organization_id: o período da estimativa (30, 60 ou 90 dias; padrão 60)."),
     },
     exemplo: {},
     operacao: null,
     handler: async (ctx, args) => {
       if (typeof args.raio_x_id !== "string") {
-        const lista = await listarRaioX(ctx.admin);
+        const orgId = typeof args.organization_id === "string" ? args.organization_id : null;
+        if (orgId) await organizacaoDaImplantacao(ctx.admin, orgId);
+        const lista = (await listarRaioX(ctx.admin)).filter((x) => !orgId || x.organizationId === orgId);
+        const conta = orgId ? await contaParaORaioX(ctx.admin, orgId, typeof args.periodo_dias === "number" ? args.periodo_dias : 60) : null;
         return {
+          ...(conta
+            ? {
+                conta: {
+                  empresa: conta.empresa,
+                  cliente_ativo: conta.ativo.ativo,
+                  situacao_na_cobranca: conta.ativo.situacao,
+                  demonstracao: conta.ativo.demonstracao,
+                  cliente_desde: conta.clienteDesde,
+                  segmento_da_conta: conta.segmento,
+                  horario_da_conta: conta.horario,
+                  quem_administra: conta.responsavel ? { nome: conta.responsavel.nome, email: maskEmail(conta.responsavel.email) } : null,
+                  numeros: conta.numeros.map((n) => ({ channel_session_id: n.id, rotulo: n.rotulo, api_oficial: n.oficial, arquivado: n.arquivado, mensagens_no_periodo: n.mensagens })),
+                  periodo: conta.periodo,
+                  estimativa: {
+                    conversas: conta.estimativa.conversas,
+                    audios_sem_transcricao: conta.estimativa.audios,
+                    reais: reaisParaLer(conta.estimativa.totalCentavos),
+                    analise: reaisParaLer(conta.estimativa.analiseCentavos),
+                    audios: reaisParaLer(conta.estimativa.audiosCentavos),
+                  },
+                },
+              }
+            : {}),
           raio_x: lista.map((x) => ({
             id: x.id,
+            fonte: x.fonte,
+            numeros: x.numeros,
             empresa: x.empresa,
             segmento: x.segmento,
             whatsapp: x.whatsappParaLer,
@@ -175,8 +251,11 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
       if (!d) recusar(`raio-X não encontrado: ${args.raio_x_id}. Veja a lista com plataforma_ver_raio_x, sem o id.`);
       return {
         raio_x: d.raioX,
+        fonte: d.raioX.fonte,
         conexao: d.conexao ? { link: d.conexao.link, vale_ate: d.conexao.expiraEm, vivo: d.conexao.vivo, mensagem_pronta: d.conexao.mensagem } : null,
-        aceite: d.aceite,
+        // FORK MIA (.102): o e-mail de quem aceitou é dado de pessoa: sai mascarado (a tela de Admin mostra inteiro).
+        aceite: d.aceite ? { ...d.aceite, email: maskEmail(d.aceite.email) } : null,
+        andamento_da_analise: d.analiseDaConta,
         andamento: d.andamento,
         custo: { reais: reaisParaLer(d.custo.centavos), teto: reaisParaLer(d.custo.tetoCentavos), usd_centavos: d.custo.usdCentavos },
         relatorios: d.relatorios.map((r) => resumoDoRelatorio(r, true)),

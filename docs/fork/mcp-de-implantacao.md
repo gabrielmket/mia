@@ -816,8 +816,8 @@ relatório para o dono. As ferramentas passam pelo mesmo caminho da tela (`lib/r
 
 | ferramenta | o que faz | operação |
 |---|---|---|
-| `plataforma_criar_raio_x` | cadastra o raio-X (empresa, segmento, WhatsApp comercial, quem autoriza, período 30/60/90, único ou mensal, horário comercial, empresa da MIA opcional, teto de custo) e devolve o link de conexão (48 h) e a mensagem pronta | `gerir_raio_x` |
-| `plataforma_ver_raio_x` | sem `raio_x_id`, a lista; com ele, a situação, o andamento da leitura, o aceite, o link vigente, o custo e o teto, os relatórios com os números, a evolução desde o anterior da mesma empresa e os links do dono. Sem telefone de cliente nem trechos de conversa | leitura |
+| `plataforma_criar_raio_x` | cadastra o raio-X (empresa, segmento, WhatsApp comercial, quem autoriza, período 30/60/90, único ou mensal, horário comercial, empresa da MIA opcional, teto de custo) e devolve o link de conexão (48 h) e a mensagem pronta. Desde a .102, `fonte: "conversas_da_mia"` com `organization_id` e `numeros` (os `channel_session_id` da conta) cria o raio-X do CLIENTE ATIVO, sem conexão: o link é só de autorização | `gerir_raio_x` |
+| `plataforma_ver_raio_x` | sem `raio_x_id`, a lista; com ele, a situação, o andamento da leitura, o aceite, o link vigente, o custo e o teto, os relatórios com os números, a evolução desde o anterior da mesma empresa e os links do dono. Desde a .102, a fonte e o aceite (nome completo, e-mail mascarado, data, versão do termo), o bloco do cliente ativo no relatório e, com `organization_id` sem `raio_x_id`, o que dá para ler da conta (números com o id, período, estimativa, se é cliente ativo). Sem telefone de cliente nem trechos de conversa | leitura |
 | `plataforma_publicar_raio_x` | marca o rascunho como revisado (com as anotações da Time) e gera o link do dono (7, 30 ou 90 dias); com `revogar_link_id`, revoga um link | `gerir_raio_x` |
 | `plataforma_encerrar_raio_x` | derruba a conexão, para a leitura e a análise e agenda a exclusão das conversas (30 dias). O relatório fica | `gerir_raio_x` |
 
