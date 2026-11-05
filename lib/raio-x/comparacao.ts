@@ -11,6 +11,7 @@
  * sem "melhorou/piorou" (comparar notas de réguas diferentes seria inventar
  * evolução).
  */
+import { samePhone } from "@/lib/channels/phone-variants";
 
 export const INDICADORES = [
   "medianaPrimeiraRespostaMin",
@@ -115,11 +116,14 @@ export function compararComOAnterior(atual: RelatorioParaComparar, anterior: Rel
   };
 }
 
-/** "Mesma empresa" (decisão 13): o mesmo WhatsApp normalizado, ou a mesma conta da MIA. */
+/**
+ * "Mesma empresa" (decisão 13): o mesmo WhatsApp (com ou sem o nono dígito,
+ * `samePhone`), ou a mesma conta da MIA.
+ */
 export function mesmaEmpresa(
   a: { whatsapp: string; organization_id: string | null },
   b: { whatsapp: string; organization_id: string | null },
 ): boolean {
-  if (a.whatsapp && a.whatsapp === b.whatsapp) return true;
+  if (a.whatsapp && b.whatsapp && samePhone(a.whatsapp, b.whatsapp)) return true;
   return Boolean(a.organization_id && a.organization_id === b.organization_id);
 }

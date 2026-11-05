@@ -20,6 +20,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { samePhone } from "@/lib/channels/phone-variants";
 import type { LeitorDoRaioX } from "@/lib/channels/raio-x/leitor";
 import { logger } from "@/lib/logger";
 
@@ -206,8 +207,10 @@ export async function rodarOCiclo(dep: Dependencias): Promise<ResumoDoCiclo> {
           continue;
         }
         resumo.rodadas += 1;
-        // O termo é do número cadastrado: outro número não é lido.
-        if (estado.numero && estado.numero !== r.whatsapp) {
+        // O termo é do número cadastrado: outro número não é lido. A comparação
+        // é pelo nono dígito (`samePhone`): o WhatsApp de muito celular brasileiro
+        // se identifica SEM o 9 (553198966398), e o cadastro guarda com ele.
+        if (estado.numero && !samePhone(estado.numero, r.whatsapp)) {
           await dep.leitor.desconectar(r.sessao).catch(() => undefined);
           await gravar(dep.admin, r.id, { leitura: { erro: "numero_diferente" }, numero_conectado: null });
           resumo.efeitos.push({ acao: "raio_x.numero_diferente", raioXId: r.id });

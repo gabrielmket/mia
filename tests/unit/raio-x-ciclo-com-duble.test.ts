@@ -287,6 +287,18 @@ describe("o ciclo do raio-X, de ponta a ponta", () => {
     expect((banco.db.mia_raio_x![0]!.leitura as { erro: string }).erro).toBe("numero_diferente");
   });
 
+  it("o mesmo celular sem o nono dígito É o número cadastrado: conecta e começa a ler", async () => {
+    // O WhatsApp de muito celular brasileiro se identifica com 12 dígitos
+    // (553190001101); o cadastro guarda com o 9 (5531990001101).
+    const banco = bancoEmMemoria({ mia_raio_x: [raioX({ whatsapp: "5531990001101" })] }, { fn_mia_raio_x_conversa: rpcConversa });
+    const { leitor, chamadas } = leitorDuble("553190001101");
+    const r = await rodada(banco, leitor, T0, modeloDuble().chamar);
+    expect(r.efeitos.map((e) => e.acao)).toContain("raio_x.conectado");
+    expect(r.efeitos.map((e) => e.acao)).not.toContain("raio_x.numero_diferente");
+    expect(chamadas).not.toContain("desconectar");
+    expect(banco.db.mia_raio_x![0]!.situacao).not.toBe("conectando");
+  });
+
   it("o teto de custo para a análise: nada é chamado, e o relatório sai parcial", async () => {
     const lido = raioX({
       situacao: "analisando",

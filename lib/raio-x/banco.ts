@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { phoneLookupVariants } from "@/lib/channels/phone-variants";
 import { leitorDoRaioX, type LeitorDoRaioX } from "@/lib/channels/raio-x/leitor";
 
 import { compararComOAnterior, mesmaEmpresa, type Comparacao } from "./comparacao";
@@ -435,10 +436,14 @@ export async function relatorioAnterior(
   r: Pick<LinhaDoRaioX, "id" | "whatsapp" | "organization_id">,
   antesDe: string,
 ): Promise<LinhaDoRelatorio | null> {
+  // As duas grafias do nono dígito: o mesmo celular pode ter sido cadastrado
+  // com 12 dígitos num raio-X e com 13 no outro.
+  const grafias = phoneLookupVariants(r.whatsapp).map((v) => v.replace(/\D/g, ""));
+  if (!grafias.includes(r.whatsapp)) grafias.push(r.whatsapp);
   let filtro = admin.from("mia_raio_x").select("id, whatsapp, organization_id");
   filtro = r.organization_id
-    ? filtro.or(`whatsapp.eq.${r.whatsapp},organization_id.eq.${r.organization_id}`)
-    : filtro.eq("whatsapp", r.whatsapp);
+    ? filtro.or(`whatsapp.in.(${grafias.join(",")}),organization_id.eq.${r.organization_id}`)
+    : filtro.in("whatsapp", grafias);
   const { data: irmaos, error } = await filtro;
   if (error) falhou("raio-X da mesma empresa", error);
   const ids = ((irmaos ?? []) as Array<{ id: string; whatsapp: string; organization_id: string | null }>)

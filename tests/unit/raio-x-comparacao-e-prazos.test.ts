@@ -81,6 +81,8 @@ describe("a comparação com o anterior", () => {
     expect(mesmaEmpresa({ whatsapp: "5531900001101", organization_id: null }, { whatsapp: "5531900001101", organization_id: null })).toBe(true);
     expect(mesmaEmpresa({ whatsapp: "5531900001101", organization_id: "o" }, { whatsapp: "5531900002202", organization_id: "o" })).toBe(true);
     expect(mesmaEmpresa({ whatsapp: "5531900001101", organization_id: null }, { whatsapp: "5531900002202", organization_id: null })).toBe(false);
+    // O mesmo celular com e sem o nono dígito.
+    expect(mesmaEmpresa({ whatsapp: "5531990001101", organization_id: null }, { whatsapp: "553190001101", organization_id: null })).toBe(true);
   });
 });
 
