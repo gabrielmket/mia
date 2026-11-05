@@ -1,10 +1,12 @@
 /**
  * 9150 · O RAIO-X DO ATENDIMENTO no Postgres de verdade (.101,
- * docs/fork/raio-x-do-atendimento.md).
+ * docs/fork/raio-x-do-atendimento.md), e a 9151 · o raio-X do CLIENTE ATIVO
+ * (FORK MIA .102: a fonte "conversas da MIA", os números da conta e o e-mail no
+ * aceite).
  *
  * ─── O que se mede, e por quê ───────────────────────────────────────────────
  *
- * 1. SÓ O SERVIDOR, nas sete tabelas: RLS ligada e NENHUMA política;
+ * 1. SÓ O SERVIDOR, nas oito tabelas (a 9151 soma `mia_raio_x_numeros`): RLS ligada e NENHUMA política;
  *    `authenticated` (o administrador da PRÓPRIA empresa ligada ao raio-X) e
  *    `anon` recebem `permission denied` (42501), não zero linhas. CONTROLE: o
  *    `service_role` grava e lê. É a prova que `rls-completude-varredura` cobra.
@@ -41,6 +43,8 @@ const TABELAS = [
   "mia_raio_x_relatorios",
   "mia_raio_x_links",
   "mia_raio_x_gastos",
+  // FORK MIA (.102), 9151: os números da conta do raio-X do cliente ativo.
+  "mia_raio_x_numeros",
 ];
 
 function tentar(papel: "postgres" | "service_role" | "authenticated" | "anon", comando: string): string {
@@ -86,7 +90,7 @@ beforeAll(() => {
   `);
 });
 
-describe("só o servidor lê e escreve, nas sete tabelas", () => {
+describe("só o servidor lê e escreve, nas oito tabelas", () => {
   it("RLS ligada e nenhuma política em cada uma", () => {
     for (const t of TABELAS) {
       expect(lastLine(sql(`select relrowsecurity::text from pg_class where oid = 'public.${t}'::regclass;`)), t).toBe("true");
@@ -222,5 +226,58 @@ describe("o acesso ao link do dono", () => {
     expect(lastLine(sql(`select public.fn_mia_raio_x_link_acessado('${LINK_REVOGADO}')::text;`))).toBe("false");
     expect(lastLine(sql(`select acessos from public.mia_raio_x_links where id = '${LINK}';`))).toBe("1");
     expect(lastLine(sql(`select acessos from public.mia_raio_x_links where id = '${LINK_REVOGADO}';`))).toBe("0");
+  });
+});
+
+// ── FORK MIA (.102) · 9151, o raio-X do cliente ativo ─────────────────────────
+describe("9151 · a fonte \"conversas da MIA\", os números e o aceite com e-mail", () => {
+  const RX_MIA = "e9150e90-2222-4000-8000-000000000151";
+
+  it("a fonte é fechada, e a da MIA nunca tem sessão no leitor (23514)", () => {
+    expect(tentar("postgres", raioX("e9150e90-2222-4000-8000-0000000001f1", "fonte='celular'"))).toBe("23514");
+    expect(
+      tentar("postgres", raioX("e9150e90-2222-4000-8000-0000000001f2", "fonte, sessao='conversas_da_mia', 'raiox_e9150e9022224000800001'")),
+    ).toBe("23514");
+    // CONTROLE: a fonte da MIA sem sessão grava; o padrão continua sendo a conexão.
+    expect(tentar("postgres", raioX(RX_MIA, "fonte='conversas_da_mia'"))).toBe("passou");
+    expect(lastLine(sql(`select fonte from public.mia_raio_x where id = '${RX}';`))).toBe("conexao");
+  });
+
+  it("o número da conta guarda o telefone COMERCIAL só em dígitos, e um por canal", () => {
+    expect(
+      tentar(
+        "postgres",
+        `insert into public.mia_raio_x_numeros (raio_x_id, rotulo, telefone) values ('${RX_MIA}', 'Vendas', '(31) 90000-0101')`,
+      ),
+    ).toBe("23514");
+    expect(
+      tentar(
+        "postgres",
+        `insert into public.mia_raio_x_numeros (raio_x_id, rotulo, telefone, oficial) values ('${RX_MIA}', 'Vendas', '5531900000101', false)`,
+      ),
+    ).toBe("passou");
+    expect(tentar("postgres", `insert into public.mia_raio_x_numeros (raio_x_id, rotulo) values ('${RX_MIA}', '')`)).toBe("23514");
+  });
+
+  it("o aceite com e-mail exige o formato do e-mail e o nome com sobrenome (23514)", () => {
+    const aceite = (nome: string, email: string) =>
+      `insert into public.mia_raio_x_aceites (raio_x_id, nome, email, termo_versao, termo_texto, termo_hash)
+         values ('${RX_MIA}', '${nome}', '${email}', 'cliente_ativo_v1', 'TERMO cliente ativo v1', '${H("c")}')`;
+    expect(tentar("postgres", aceite("Dono Modelo da Silva", "dono-arroba-garagemmodelo"))).toBe("23514");
+    expect(tentar("postgres", aceite("Dono", "dono@garagemmodelo.com.br"))).toBe("23514");
+    expect(tentar("postgres", aceite("Dono Modelo da Silva", "dono@garagemmodelo.com.br"))).toBe("passou");
+    // O aceite da .101, sem e-mail, segue valendo com o nome só.
+    expect(
+      tentar(
+        "postgres",
+        `insert into public.mia_raio_x_aceites (raio_x_id, nome, termo_versao, termo_texto, termo_hash)
+           values ('${RX_MIA}', 'Ricardo', 'v1', 'TERMO v1', '${H("c")}')`,
+      ),
+    ).toBe("passou");
+  });
+
+  it("apagar o raio-X leva os números junto (cascata)", () => {
+    sql(`delete from public.mia_raio_x where id = '${RX_MIA}';`);
+    expect(lastLine(sql(`select count(*) from public.mia_raio_x_numeros where raio_x_id = '${RX_MIA}';`))).toBe("0");
   });
 });
