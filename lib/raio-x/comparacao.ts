@@ -13,7 +13,10 @@
  */
 import { samePhone } from "@/lib/channels/phone-variants";
 
-export const INDICADORES = [
+import type { FonteDoRaioX } from "./regras";
+
+/** Os sete indicadores da .101: todo relatório guardado os tem. */
+export const INDICADORES_DA_V1 = [
   "medianaPrimeiraRespostaMin",
   "medianaComALojaFechadaMin",
   "proporcaoSemResposta",
@@ -22,6 +25,30 @@ export const INDICADORES = [
   "proporcaoAgendou",
   "notaMedia",
 ] as const;
+export type IndicadorDaV1 = (typeof INDICADORES_DA_V1)[number];
+
+/**
+ * FORK MIA (.102): os indicadores do "antes e depois" do protótipo de
+ * 05/11/2026 (tela 6). Os relatórios da .101 não os têm: do lado deles a linha
+ * vem sem valor e sem direção, e a espera depois da passagem, que só o cliente
+ * ativo mede, sai como "novo".
+ */
+export const INDICADORES_NOVOS = ["proporcaoSemRespostaOuRetorno", "proporcaoRespondidoForaDoHorario", "medianaEsperaDaPassagemMin"] as const;
+export type IndicadorNovo = (typeof INDICADORES_NOVOS)[number];
+
+/** A ordem da tabela (a do protótipo de 05/11/2026, com os da .101 no meio). */
+export const INDICADORES = [
+  "proporcaoSemResposta",
+  "proporcaoSemRespostaOuRetorno",
+  "medianaPrimeiraRespostaMin",
+  "medianaComALojaFechadaMin",
+  "proporcaoRespondidoForaDoHorario",
+  "proporcaoSumiuSemRetorno",
+  "proporcaoPediuValorSemReceber",
+  "proporcaoAgendou",
+  "medianaEsperaDaPassagemMin",
+  "notaMedia",
+] as const satisfies readonly (IndicadorDaV1 | IndicadorNovo)[];
 export type Indicador = (typeof INDICADORES)[number];
 
 /** Menor é melhor em tempo e nos desfechos ruins; maior é melhor no resto. */
@@ -31,6 +58,8 @@ const MENOR_E_MELHOR: ReadonlySet<Indicador> = new Set([
   "proporcaoSemResposta",
   "proporcaoSumiuSemRetorno",
   "proporcaoPediuValorSemReceber",
+  "proporcaoSemRespostaOuRetorno",
+  "medianaEsperaDaPassagemMin",
 ]);
 
 export const ROTULO_DO_INDICADOR: Record<Indicador, string> = {
@@ -41,9 +70,13 @@ export const ROTULO_DO_INDICADOR: Record<Indicador, string> = {
   proporcaoPediuValorSemReceber: "Pediram o valor e não receberam",
   proporcaoAgendou: "Agendaram o próximo passo",
   notaMedia: "Nota do atendimento",
+  proporcaoSemRespostaOuRetorno: "Sem resposta ou sumiu sem retorno",
+  proporcaoRespondidoForaDoHorario: "Respondido fora do horário",
+  medianaEsperaDaPassagemMin: "Espera depois de passar para um vendedor (mediana)",
 };
 
-export type Indicadores = Record<Indicador, number | null>;
+/** Os da .101 sempre; os novos (.102), quando o relatório os tem. */
+export type Indicadores = Record<IndicadorDaV1, number | null> & Partial<Record<IndicadorNovo, number | null>>;
 
 export type Direcao = "melhor" | "pior" | "igual";
 
@@ -53,7 +86,8 @@ export interface LinhaDaComparacao {
   agora: number | null;
   /** `null` = sem dado de um dos lados, ou critérios diferentes na nota. */
   direcao: Direcao | null;
-  aviso: "criterios_diferentes" | null;
+  /** FORK MIA (.102): `novo` = o anterior não media isso (a espera depois da passagem). */
+  aviso: "criterios_diferentes" | "novo" | null;
 }
 
 export interface Comparacao {
@@ -67,6 +101,11 @@ export interface Comparacao {
   melhorou: number;
   piorou: number;
   comparaveis: number;
+  /** FORK MIA (.102): os períodos e as fontes dos dois lados (ausentes nas comparações da .101). */
+  anteriorPeriodo?: { inicio: string; fim: string };
+  agoraPeriodo?: { inicio: string; fim: string };
+  anteriorFonte?: FonteDoRaioX;
+  fonte?: FonteDoRaioX;
 }
 
 /** Diferença que não conta como mudança, por natureza do indicador. */
@@ -91,6 +130,9 @@ export interface RelatorioParaComparar {
   criteriosVersao: string;
   conversas: number;
   indicadores: Indicadores;
+  /** FORK MIA (.102). */
+  periodo?: { inicio: string; fim: string };
+  fonte?: FonteDoRaioX;
 }
 
 export function compararComOAnterior(atual: RelatorioParaComparar, anterior: RelatorioParaComparar): Comparacao {
@@ -100,6 +142,9 @@ export function compararComOAnterior(atual: RelatorioParaComparar, anterior: Rel
     const agora = atual.indicadores[indicador] ?? null;
     if (indicador === "notaMedia" && !criteriosIguais) {
       return { indicador, anterior: antes, agora, direcao: null, aviso: "criterios_diferentes" };
+    }
+    if (indicador === "medianaEsperaDaPassagemMin" && antes === null && agora !== null) {
+      return { indicador, anterior: null, agora, direcao: null, aviso: "novo" };
     }
     return { indicador, anterior: antes, agora, direcao: direcaoDoIndicador(indicador, antes, agora), aviso: null };
   });
@@ -113,6 +158,10 @@ export function compararComOAnterior(atual: RelatorioParaComparar, anterior: Rel
     melhorou: linhas.filter((l) => l.direcao === "melhor").length,
     piorou: linhas.filter((l) => l.direcao === "pior").length,
     comparaveis: linhas.filter((l) => l.direcao !== null).length,
+    ...(anterior.periodo ? { anteriorPeriodo: anterior.periodo } : {}),
+    ...(atual.periodo ? { agoraPeriodo: atual.periodo } : {}),
+    ...(anterior.fonte ? { anteriorFonte: anterior.fonte } : {}),
+    ...(atual.fonte ? { fonte: atual.fonte } : {}),
   };
 }
 

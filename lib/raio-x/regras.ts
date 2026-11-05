@@ -53,6 +53,22 @@ export const QUEM_ATENDE = ["humano", "agente", "misto"] as const;
 export type QuemAtende = (typeof QUEM_ATENDE)[number];
 
 /**
+ * FORK MIA (.102) · DE ONDE VÊM AS CONVERSAS (protótipo de 05/11/2026, tela 2).
+ *
+ *   conexao           quem ainda não é cliente: o dono autoriza e conecta o
+ *                     WhatsApp ao leitor do raio-X (a .101, sem mudança);
+ *   conversas_da_mia  cliente ativo: nada é conectado e o leitor não é usado;
+ *                     o raio-X lê as conversas que a conta já tem na MIA, nos
+ *                     números escolhidos (inclusive da API oficial), e o dono
+ *                     só autoriza pelo link.
+ */
+export const FONTES = ["conexao", "conversas_da_mia"] as const;
+export type FonteDoRaioX = (typeof FONTES)[number];
+
+/** Quantos números da conta um raio-X do cliente ativo lê, no máximo. */
+export const NUMEROS_POR_RAIO_X = 20;
+
+/**
  * A situação do raio-X, na ordem em que ela anda:
  *
  *   aguardando  link mandado, ninguém autorizou ainda
@@ -128,9 +144,14 @@ const opcional = (max: number) =>
 
 export const esquemaDoNovoRaioX = z
   .object({
+    /** FORK MIA (.102): de onde vêm as conversas. Padrão: a conexão (a .101). */
+    fonte: z.enum(FONTES).default("conexao"),
     empresa: textoCurto(120),
     segmento: z.enum(SEGMENTOS),
-    whatsapp: z.string().trim().min(8).max(32),
+    /** Na conexão, obrigatório. Na fonte da MIA, ignorado: sai dos números escolhidos. */
+    whatsapp: z.string().trim().min(8).max(32).optional().nullable(),
+    /** FORK MIA (.102): os números da conta (`channel_sessions.id`), só na fonte da MIA. */
+    numeros: z.array(z.string().uuid()).max(NUMEROS_POR_RAIO_X).optional().default([]),
     responsavel_nome: opcional(120),
     responsavel_contato: opcional(160),
     quem_atende: z.enum(QUEM_ATENDE).default("humano"),
@@ -154,9 +175,14 @@ export const esquemaDoNovoRaioX = z
 export type NovoRaioXBruto = z.input<typeof esquemaDoNovoRaioX>;
 
 export interface NovoRaioX {
+  /** FORK MIA (.102). */
+  fonte: FonteDoRaioX;
   empresa: string;
   segmento: Segmento;
-  whatsapp: string;
+  /** Na fonte da MIA, `null` até a ação preencher com o telefone do primeiro número. */
+  whatsapp: string | null;
+  /** FORK MIA (.102): os `channel_sessions.id` escolhidos (vazio na conexão). */
+  numeros: string[];
   responsavel_nome: string | null;
   responsavel_contato: string | null;
   quem_atende: QuemAtende;
@@ -179,8 +205,18 @@ export function validarNovoRaioX(bruto: unknown): ResultadoDoCadastro {
   if (!r.success) {
     return { ok: false, campos: [...new Set(r.error.issues.map((i) => String(i.path[0] ?? "corpo")))] };
   }
-  const whatsapp = normalizarWhatsapp(r.data.whatsapp);
-  if (!whatsapp) return { ok: false, campos: ["whatsapp"] };
+  let whatsapp: string | null = null;
+  const numeros = [...new Set(r.data.numeros ?? [])];
+  if (r.data.fonte === "conexao") {
+    whatsapp = normalizarWhatsapp(r.data.whatsapp);
+    if (!whatsapp) return { ok: false, campos: ["whatsapp"] };
+  } else {
+    // FORK MIA (.102): o cliente ativo é uma conta da MIA, e lê ao menos um número dela.
+    const faltam = [!r.data.organization_id ? "organization_id" : null, numeros.length === 0 ? "numeros" : null].filter(
+      (c): c is string => c !== null,
+    );
+    if (faltam.length > 0) return { ok: false, campos: faltam };
+  }
   const abre = minutosDoHorario(r.data.abre)!;
   const fecha = minutosDoHorario(r.data.fecha)!;
   if (fecha <= abre) return { ok: false, campos: ["fecha"] };
@@ -191,6 +227,7 @@ export function validarNovoRaioX(bruto: unknown): ResultadoDoCadastro {
     valor: {
       ...r.data,
       whatsapp,
+      numeros: r.data.fonte === "conexao" ? [] : numeros,
       periodo_dias: r.data.periodo_dias as PeriodoEmDias,
       organization_id: r.data.organization_id ?? null,
     },

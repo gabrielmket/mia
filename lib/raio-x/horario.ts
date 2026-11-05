@@ -74,6 +74,29 @@ export function lojaAberta(momento: MomentoLocal, horario: HorarioComercial): bo
   return momento.minutos >= horario.abre && momento.minutos < horario.fecha;
 }
 
+/**
+ * FORK MIA (.102) · A próxima vez que a loja ABRE depois de `instante` (epoch
+ * ms), pelo horário comercial; `null` quando ela não abre em dia nenhum da
+ * semana (não acontece: segunda a sexta sempre abrem). É o que separa "a
+ * resposta veio com a loja ainda fechada" de "veio quando a loja abriu", para
+ * o "respondido fora do horário" do relatório. Feriado não entra, como em
+ * `lojaAberta`.
+ */
+export function proximaAbertura(instante: number, horario: HorarioComercial): number | null {
+  const hoje = momentoLocal(instante);
+  const [ano, mes, dia] = hoje.data.split("-").map(Number) as [number, number, number];
+  for (let d = 0; d <= 7; d += 1) {
+    const data = new Date(Date.UTC(ano, mes - 1, dia + d, 12, 0, 0));
+    const meiaNoite = meiaNoiteLocal(data.getUTCFullYear(), data.getUTCMonth() + 1, data.getUTCDate());
+    const diaDaSemana = momentoLocal(meiaNoite.getTime() + 12 * 3_600_000).dia;
+    if (diaDaSemana === 6) continue;
+    if (diaDaSemana === 5 && horario.sabadoAte === null) continue;
+    const abre = meiaNoite.getTime() + horario.abre * 60_000;
+    if (abre > instante) return abre;
+  }
+  return null;
+}
+
 /** O primeiro dia (00:00 no fuso) do mês de `instante`, como instante UTC. */
 export function inicioDoMesLocal(instante: Date): Date {
   const m = momentoLocal(instante);

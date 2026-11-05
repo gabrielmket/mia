@@ -30,8 +30,15 @@
  * 12 horas ou mais depois da primeira que ficou sem resposta. "Sumiu e a loja
  * não voltou" é o sumiu sem esse retorno.
  */
-import { FAIXAS, faixaDoMinuto, lojaAberta, momentoLocal, type DiaDaSemana, type Faixa } from "./horario";
+import { FAIXAS, faixaDoMinuto, lojaAberta, momentoLocal, proximaAbertura, type DiaDaSemana, type Faixa } from "./horario";
 import type { HorarioComercial } from "./regras";
+
+/**
+ * FORK MIA (.102) · quem mandou a mensagem da loja, na fonte "conversas da
+ * MIA" (pelo `messages.sent_via`; `lib/raio-x/quem-respondeu.ts`). Na fonte
+ * "conexão" não se sabe: fica ausente.
+ */
+export type QuemDaLoja = "ia" | "equipe" | "celular" | "automacao";
 
 const HORA = 3_600_000;
 /** Silêncio que abre um trecho novo da conversa. */
@@ -47,6 +54,8 @@ export interface MensagemParaMedir {
   daLoja: boolean;
   /** Instante em milissegundos (epoch). */
   em: number;
+  /** FORK MIA (.102): quem da loja mandou (só na fonte "conversas da MIA"). */
+  quem?: QuemDaLoja | null;
 }
 
 export interface EpisodioMedido {
@@ -58,6 +67,13 @@ export interface EpisodioMedido {
   /** `null` = a loja não respondeu (ou ainda está no prazo). */
   primeiraRespostaMs: number | null;
   desfecho: "respondido" | "sem_resposta" | "em_aberto";
+  /** FORK MIA (.102): quem deu a primeira resposta (fonte "conversas da MIA"); `null` = não se sabe ou ninguém. */
+  primeiraRespostaQuem?: QuemDaLoja | null;
+  /**
+   * FORK MIA (.102): o cliente escreveu com a loja FECHADA e a primeira resposta
+   * veio antes de a loja abrir de novo. `false` com a loja aberta ou sem resposta.
+   */
+  respondidoComALojaFechada?: boolean;
 }
 
 export interface ConversaMedida {
@@ -133,13 +149,21 @@ export function medirConversa(
       const ultimaDoCliente = trecho[trecho.length - 1]!.em;
       desfecho = fimDoPeriodo - ultimaDoCliente >= SEM_RESPOSTA_APOS_MS ? "sem_resposta" : "em_aberto";
     }
+    const aberta = lojaAberta(local, horario);
+    let respondidoComALojaFechada = false;
+    if (resposta && !aberta) {
+      const abre = proximaAbertura(primeira.em, horario);
+      respondidoComALojaFechada = abre === null || resposta.em < abre;
+    }
     medida.episodios.push({
       inicio: primeira.em,
       dia: local.dia,
       faixa: faixaDoMinuto(local.minutos),
-      aberta: lojaAberta(local, horario),
+      aberta,
       primeiraRespostaMs: resposta ? resposta.em - primeira.em : null,
       desfecho,
+      primeiraRespostaQuem: resposta?.quem ?? null,
+      respondidoComALojaFechada,
     });
   }
 
@@ -211,6 +235,19 @@ export interface MetricasDeTempo {
   mapa: CelulaDoMapa[][];
   /** A célula com mais episódios (o pico), para a recomendação. */
   pico: { dia: DiaDaSemana; faixa: Faixa; episodios: number; medianaMin: number | null } | null;
+  /**
+   * FORK MIA (.102): as mesmas medianas em SEGUNDOS (a IA responde em segundos,
+   * e "0 min" não diz nada). Ausentes nos relatórios da .101.
+   */
+  medianaPrimeiraRespostaSeg?: number | null;
+  medianaComALojaAbertaSeg?: number | null;
+  medianaComALojaFechadaSeg?: number | null;
+  /**
+   * FORK MIA (.102): dos episódios que chegaram com a loja fechada (sem os em
+   * aberto), quantos tiveram a primeira resposta ANTES de a loja abrir de novo.
+   */
+  respondidosComALojaFechada?: number;
+  proporcaoRespondidoComALojaFechada?: number | null;
 }
 
 const proporcao = (parte: number, todo: number) => (todo > 0 ? parte / todo : null);
@@ -242,6 +279,12 @@ export function agregarMetricas(conversas: readonly ConversaMedida[]): MetricasD
   );
   const sumicos = conversas.reduce((s, c) => s + c.sumicos, 0);
   const sumicosSemRetorno = conversas.reduce((s, c) => s + (c.sumicos - c.sumicosComRetorno), 0);
+  const segundos = (lista: readonly EpisodioMedido[]) => {
+    const m = mediana(lista.flatMap((e) => (e.primeiraRespostaMs === null ? [] : [e.primeiraRespostaMs])));
+    return m === null ? null : Math.round(m / 1000);
+  };
+  const fechadosSemEmAberto = fechados.filter((e) => e.desfecho !== "em_aberto");
+  const respondidosComALojaFechada = fechadosSemEmAberto.filter((e) => e.respondidoComALojaFechada === true).length;
   return {
     conversasDeCliente: conversas.filter((c) => c.doCliente).length,
     episodios: episodios.length,
@@ -259,5 +302,10 @@ export function agregarMetricas(conversas: readonly ConversaMedida[]): MetricasD
     proporcaoSumiuSemRetorno: proporcao(sumicosSemRetorno, respondidos.length),
     mapa,
     pico,
+    medianaPrimeiraRespostaSeg: segundos(episodios),
+    medianaComALojaAbertaSeg: segundos(episodios.filter((e) => e.aberta)),
+    medianaComALojaFechadaSeg: segundos(fechados),
+    respondidosComALojaFechada,
+    proporcaoRespondidoComALojaFechada: proporcao(respondidosComALojaFechada, fechadosSemEmAberto.length),
   };
 }

@@ -17,8 +17,18 @@
 import { balaoAnonimizado } from "./anonimizar";
 import type { Indicadores } from "./comparacao";
 import { FAIXAS, momentoLocal, type DiaDaSemana, type Faixa } from "./horario";
-import { agregarMetricas, notaDeRapidez, type ConversaMedida, type MetricasDeTempo } from "./metricas";
-import { ordemFormatada, type Segmento, type TipoDoRaioX } from "./regras";
+import { agregarMetricas, notaDeRapidez, type ConversaMedida, type MetricasDeTempo, type QuemDaLoja } from "./metricas";
+import {
+  passagemLenta,
+  resumirFunil,
+  resumirPassagens,
+  type FunilDaConversa,
+  type PassagemMedida,
+  type ResumoDasPassagens,
+  type ResumoDoFunil,
+} from "./passagem";
+import { medirQuemRespondeu, type QuemRespondeu } from "./quem-respondeu";
+import { ordemFormatada, type FonteDoRaioX, type Segmento, type TipoDoRaioX } from "./regras";
 import {
   CRITERIOS,
   CRITERIOS_VERSAO,
@@ -54,6 +64,8 @@ export interface MensagemDoRelatorio {
   em: number;
   tipo: string;
   texto: string | null;
+  /** FORK MIA (.102): quem da loja mandou (só na fonte "conversas da MIA"). */
+  quem?: QuemDaLoja | null;
 }
 
 export interface ConversaParaORelatorio {
@@ -66,6 +78,12 @@ export interface ConversaParaORelatorio {
   mensagens: MensagemDoRelatorio[];
   /** O nome de perfil do cliente, só para tirá-lo dos trechos. Nunca vai ao relatório. */
   nomes: string[];
+  /** FORK MIA (.102), fonte "conversas da MIA": o rótulo do número da conta em que a conversa aconteceu. */
+  numero?: string | null;
+  /** FORK MIA (.102): a primeira passagem para a equipe no período, medida (`passagem.ts`). */
+  passagem?: PassagemMedida | null;
+  /** FORK MIA (.102): no que a conversa virou no funil da própria conta. */
+  funil?: FunilDaConversa | null;
 }
 
 export interface Balao {
@@ -74,6 +92,36 @@ export interface Balao {
   dia: DiaDaSemana;
   hora: string;
   audio: boolean;
+  /** FORK MIA (.102): quem da loja mandou (fonte "conversas da MIA"). */
+  quem?: QuemDaLoja | null;
+}
+
+/**
+ * FORK MIA (.102) · o trecho anonimizado de uma passagem que demorou (o
+ * protótipo mostra o de sábado à noite): as mensagens até a passagem, a espera
+ * e o que veio depois.
+ */
+export interface TrechoDaPassagem {
+  ordem: string;
+  dia: DiaDaSemana;
+  hora: string;
+  /** Minutos até alguém assumir; `null` = ninguém assumiu. */
+  esperaMin: number | null;
+  /** Os balões até a passagem (inclusive). */
+  antes: Balao[];
+  /** Os balões depois da espera (até dois). */
+  depois: Balao[];
+}
+
+/** FORK MIA (.102) · o que só o raio-X do cliente ativo tem (protótipo de 05/11/2026, tela 5). */
+export interface BlocoDoClienteAtivo {
+  numeros: Array<{ rotulo: string; oficial: boolean }>;
+  quemRespondeu: QuemRespondeu;
+  passagem: ResumoDasPassagens;
+  funil: ResumoDoFunil;
+  /** "Onde ainda dá para ganhar": substitui o "o que a MIA resolveria" (que não faz sentido para quem já é cliente). */
+  ondeGanhar: Recomendacao[];
+  trechoDaPassagem: TrechoDaPassagem | null;
 }
 
 export interface Exemplo {
@@ -93,7 +141,11 @@ export type CodigoDaRecomendacao =
   | "mandar_o_valor"
   | "sem_resposta"
   | "pico"
-  | "primeira_resposta_lenta";
+  | "primeira_resposta_lenta"
+  // FORK MIA (.102): "onde ainda dá para ganhar", só no raio-X do cliente ativo.
+  | "passagem_lenta"
+  | "respondidas_pelo_celular"
+  | "numero_sem_followup";
 
 export interface Recomendacao {
   codigo: CodigoDaRecomendacao;
@@ -104,6 +156,10 @@ export interface Recomendacao {
 
 export interface DadosDoRelatorio {
   versao: 1;
+  /** FORK MIA (.102): de onde vieram as conversas. Ausente nos relatórios da .101 (= conexão). */
+  fonte?: FonteDoRaioX;
+  /** FORK MIA (.102): só na fonte "conversas da MIA". */
+  clienteAtivo?: BlocoDoClienteAtivo;
   criteriosVersao: string;
   empresa: string;
   segmento: Segmento;
@@ -192,12 +248,17 @@ function baloesDoExemplo(c: ConversaParaORelatorio): Balao[] {
     .filter((m) => m.texto && m.texto.trim().length > 0 && (inicio === null || m.em >= inicio))
     .sort((a, b) => a.em - b.em)
     .slice(0, BALOES_POR_EXEMPLO);
-  return daConversa.map((m) => ({
+  return daConversa.map((m) => balaoDe(m, c.nomes));
+}
+
+function balaoDe(m: MensagemDoRelatorio, nomes: readonly string[]): Balao {
+  return {
     daLoja: m.daLoja,
-    texto: balaoAnonimizado(m.texto ?? "", c.nomes),
+    texto: balaoAnonimizado(m.texto ?? "", nomes),
     audio: m.tipo === "audio",
     ...horaLocal(m.em),
-  }));
+    ...(m.quem ? { quem: m.quem } : {}),
+  };
 }
 
 function exemploDe(c: ConversaParaORelatorio, segmento: Segmento): Exemplo | null {
@@ -302,6 +363,95 @@ export interface EntradaDoRelatorio {
   tipo: TipoDoRaioX;
   periodo: { inicio: Date; fim: Date };
   conversas: ConversaParaORelatorio[];
+  /** FORK MIA (.102): ausente = conexão (a .101). */
+  fonte?: FonteDoRaioX;
+  /** FORK MIA (.102), fonte "conversas da MIA": os números lidos. */
+  numeros?: Array<{ rotulo: string; oficial: boolean }>;
+}
+
+// ─── FORK MIA (.102) · o bloco do cliente ativo ─────────────────────────────
+
+/** Sumiços sem retorno a partir dos quais o número sem follow-up vira ponto. */
+const SUMICOS_PARA_O_FOLLOWUP = 3;
+
+/** "Onde ainda dá para ganhar", em ordem de peso. Só no raio-X do cliente ativo. */
+export function ondeAindaDaParaGanhar(
+  conversas: readonly ConversaParaORelatorio[],
+  passagem: ResumoDasPassagens,
+  quem: QuemRespondeu,
+  numeros: readonly string[],
+): Recomendacao[] {
+  const lista: Recomendacao[] = [];
+  if (passagem.lentas > 0) {
+    lista.push({
+      codigo: "passagem_lenta",
+      peso: passagem.lentas,
+      valores: {
+        n: passagem.lentas,
+        passadas: passagem.conversas,
+        // Mais da metade com a loja fechada: o plantão da noite e do fim de semana.
+        fora: passagem.lentasComALojaFechada * 2 > passagem.lentas ? 1 : 0,
+      },
+    });
+  }
+  const pelo = quem.linhas.find((l) => l.quem === "celular")?.conversas ?? 0;
+  if (pelo > 0) lista.push({ codigo: "respondidas_pelo_celular", peso: pelo, valores: { n: pelo } });
+  for (const numero of numeros) {
+    const doNumero = conversas.filter((c) => c.numero === numero && c.medida.doCliente);
+    if (doNumero.length === 0) continue;
+    const temFollowup = doNumero.some((c) => c.mensagens.some((m) => m.daLoja && m.quem === "automacao"));
+    const semRetorno = doNumero.filter((c) => !c.medida.semResposta && c.medida.sumicos > c.medida.sumicosComRetorno).length;
+    if (!temFollowup && semRetorno >= SUMICOS_PARA_O_FOLLOWUP) {
+      lista.push({ codigo: "numero_sem_followup", peso: semRetorno, valores: { numero, n: semRetorno } });
+    }
+  }
+  return lista.sort((a, b) => b.peso - a.peso);
+}
+
+const BALOES_ANTES_DA_PASSAGEM = 2;
+const BALOES_DEPOIS_DA_PASSAGEM = 2;
+
+/** O trecho da passagem que mais demorou (ninguém assumiu conta como a maior espera). */
+export function trechoDaPassagemMaisLenta(conversas: readonly ConversaParaORelatorio[]): TrechoDaPassagem | null {
+  const lentas = conversas
+    .filter((c) => c.passagem && passagemLenta(c.passagem))
+    .sort((a, b) => {
+      const ea = a.passagem!.esperaMs ?? Number.POSITIVE_INFINITY;
+      const eb = b.passagem!.esperaMs ?? Number.POSITIVE_INFINITY;
+      return eb - ea || a.numeroOrdem - b.numeroOrdem;
+    });
+  for (const c of lentas) {
+    const p = c.passagem!;
+    const comTexto = c.mensagens.filter((m) => m.texto && m.texto.trim().length > 0).sort((a, b) => a.em - b.em);
+    const antes = comTexto.filter((m) => m.em <= p.em + 1000).slice(-BALOES_ANTES_DA_PASSAGEM);
+    if (antes.length === 0) continue;
+    const depois = comTexto.filter((m) => m.em > p.em + 1000).slice(0, BALOES_DEPOIS_DA_PASSAGEM);
+    return {
+      ordem: ordemFormatada(c.numeroOrdem),
+      ...horaLocal(p.em),
+      esperaMin: p.esperaMs === null ? null : Math.round(p.esperaMs / 60_000),
+      antes: antes.map((m) => balaoDe(m, c.nomes)),
+      depois: depois.map((m) => balaoDe(m, c.nomes)),
+    };
+  }
+  return null;
+}
+
+export function blocoDoClienteAtivo(
+  doCliente: readonly ConversaParaORelatorio[],
+  numeros: ReadonlyArray<{ rotulo: string; oficial: boolean }>,
+): BlocoDoClienteAtivo {
+  const quemRespondeu = medirQuemRespondeu(doCliente.map((c) => c.medida));
+  const passagens = doCliente.flatMap((c) => (c.passagem ? [c.passagem] : []));
+  const passagem = resumirPassagens(passagens);
+  return {
+    numeros: numeros.map((n) => ({ rotulo: n.rotulo, oficial: n.oficial })),
+    quemRespondeu,
+    passagem,
+    funil: resumirFunil(doCliente.map((c) => ({ passagem: c.passagem ?? null, funil: c.funil ?? null }))),
+    ondeGanhar: ondeAindaDaParaGanhar(doCliente, passagem, quemRespondeu, numeros.map((n) => n.rotulo)),
+    trechoDaPassagem: trechoDaPassagemMaisLenta(doCliente),
+  };
 }
 
 export function montarRelatorio(entrada: EntradaDoRelatorio): DadosDoRelatorio {
@@ -359,8 +509,15 @@ export function montarRelatorio(entrada: EntradaDoRelatorio): DadosDoRelatorio {
 
   const contar = (tipo: string) => entrada.conversas.reduce((s, c) => s + c.mensagens.filter((m) => m.tipo === tipo).length, 0);
 
+  // FORK MIA (.102): o que só o cliente ativo tem, e os indicadores novos da comparação.
+  const fonte: FonteDoRaioX = entrada.fonte ?? "conexao";
+  const clienteAtivo = fonte === "conversas_da_mia" ? blocoDoClienteAtivo(doCliente, entrada.numeros ?? []) : undefined;
+  const emMinutos = (seg: number | null | undefined) => (seg === null || seg === undefined ? null : Math.round((seg / 60) * 100) / 100);
+
   return {
     versao: 1,
+    fonte,
+    ...(clienteAtivo ? { clienteAtivo } : {}),
     criteriosVersao: CRITERIOS_VERSAO,
     empresa: entrada.empresa,
     segmento: entrada.segmento,
@@ -398,13 +555,18 @@ export function montarRelatorio(entrada: EntradaDoRelatorio): DadosDoRelatorio {
     },
     semRespostaOuRetorno: comSemResposta + comSumicoSemRetorno,
     indicadores: {
-      medianaPrimeiraRespostaMin: tempo.medianaPrimeiraRespostaMin,
-      medianaComALojaFechadaMin: tempo.medianaComALojaFechadaMin,
+      // FORK MIA (.102): o tempo sai dos SEGUNDOS, em minutos com fração (9 s = 0,15 min):
+      // a mesma unidade da .101, sem arredondar a resposta da IA para "0 min".
+      medianaPrimeiraRespostaMin: emMinutos(tempo.medianaPrimeiraRespostaSeg) ?? tempo.medianaPrimeiraRespostaMin,
+      medianaComALojaFechadaMin: emMinutos(tempo.medianaComALojaFechadaSeg) ?? tempo.medianaComALojaFechadaMin,
       proporcaoSemResposta: tempo.proporcaoSemResposta,
       proporcaoSumiuSemRetorno: tempo.proporcaoSumiuSemRetorno,
       proporcaoPediuValorSemReceber: analisadas.length ? pediuValorSemReceber / analisadas.length : null,
       proporcaoAgendou: analisadas.length ? agendou / analisadas.length : null,
       notaMedia,
+      proporcaoSemRespostaOuRetorno: doCliente.length ? (comSemResposta + comSumicoSemRetorno) / doCliente.length : null,
+      proporcaoRespondidoForaDoHorario: tempo.proporcaoRespondidoComALojaFechada ?? null,
+      medianaEsperaDaPassagemMin: clienteAtivo ? clienteAtivo.passagem.medianaMin : null,
     },
     analise: {
       analisadas: analisadas.length,

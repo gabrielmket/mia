@@ -55,6 +55,48 @@ export function textoDoTermo(d: DadosDoTermo): string {
   ].join("\n");
 }
 
+// ─── FORK MIA (.102) · o termo "cliente ativo" ──────────────────────────────
+
+/**
+ * A versão do termo do raio-X do CLIENTE ATIVO (fonte "conversas da MIA").
+ * ⚠️ RASCUNHO PARA O ADVOGADO, junto com o termo v1 (protótipo de 05/11/2026,
+ * tela 3). Mudou uma vírgula? Suba para `cliente_ativo_v2` e mantenha este
+ * texto: o aceite guarda a versão e o texto INTEIRO que a pessoa leu.
+ */
+export const VERSAO_DO_TERMO_CLIENTE_ATIVO = "cliente_ativo_v1";
+
+export interface DadosDoTermoDoClienteAtivo {
+  empresa: string;
+  /** Os rótulos dos números escolhidos ("Vendas", "Pós-venda"), na ordem do cadastro. */
+  numeros: readonly string[];
+  /** O período, já em "dd/mm" no fuso (`diaEMes`). */
+  inicio: string;
+  fim: string;
+  tipo: TipoDoRaioX;
+}
+
+/** "Vendas", "Vendas e Pós-venda", "Vendas, Pós-venda e Loja 2". */
+export function listaDeNumeros(rotulos: readonly string[]): string {
+  const limpos = rotulos.map((r) => r.trim()).filter(Boolean);
+  if (limpos.length <= 1) return limpos[0] ?? "";
+  return `${limpos.slice(0, -1).join(", ")} e ${limpos[limpos.length - 1]}`;
+}
+
+/** O texto do termo "cliente ativo" v1, já com a empresa, os números e o período. É o que vai gravado no aceite. */
+export function textoDoTermoDoClienteAtivo(d: DadosDoTermoDoClienteAtivo): string {
+  const plural = d.numeros.length > 1;
+  const numeros = `${plural ? "dos números" : "do número"} ${listaDeNumeros(d.numeros)}`;
+  const mensal =
+    d.tipo === "mensal"
+      ? " e, no acompanhamento mensal, as do mês anterior no dia 1 de cada mês, até eu ou a Time Company encerrarmos,"
+      : "";
+  return [
+    "TERMO DE AUTORIZAÇÃO · RAIO-X DO ATENDIMENTO · CLIENTE ATIVO · versão 1",
+    "",
+    `Eu, responsável pela conta ${d.empresa} na MIA, autorizo a Time Company a analisar as conversas de WhatsApp ${numeros} já registradas na MIA, de ${d.inicio} a ${d.fim}${mensal || ","} só para medir o atendimento e gerar o relatório do raio-X. Nenhuma mensagem é enviada em meu nome. Os trechos de conversa do relatório não levam nome, telefone ou documento dos clientes. O relatório fica guardado para comparar com o próximo raio-X. Posso cancelar esta autorização falando com a Time Company.`,
+  ].join("\n");
+}
+
 /** SHA-256 em hex do texto aceito: a prova de qual texto a pessoa leu. */
 export function hashDoTermo(texto: string): string {
   return createHash("sha256").update(texto, "utf8").digest("hex");

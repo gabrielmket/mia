@@ -127,6 +127,24 @@ export function textoDaRecomendacao(r: Recomendacao, { t }: Comum): { titulo: st
           .replace("{n}", String(v.episodios ?? ""))
           .replace("{m}", minutosParaLer(v.mediana as number | null)),
       };
+    // FORK MIA (.102): "onde ainda dá para ganhar", só no raio-X do cliente ativo.
+    case "passagem_lenta":
+      return {
+        titulo: t("{n} clientes esperaram mais de 2 h depois da passagem, ou ninguém assumiu.").replace("{n}", n),
+        corpo: v.fora
+          ? t("Ligar o aviso no celular do vendedor de plantão à noite e no fim de semana.")
+          : t("Ligar o aviso no celular do vendedor quando a MIA passa a conversa."),
+      };
+    case "respondidas_pelo_celular":
+      return {
+        titulo: t("{n} conversas foram respondidas pelo celular.").replace("{n}", n),
+        corpo: t("Elas ficam fora do funil: responder pela MIA para o negócio e o histórico ficarem completos."),
+      };
+    case "numero_sem_followup":
+      return {
+        titulo: t("O número {numero} não faz follow-up.").replace("{numero}", String(v.numero ?? "")),
+        corpo: t("{n} clientes sumiram sem receber retorno. Ligar o follow-up desse número.").replace("{n}", n),
+      };
   }
 }
 
