@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # História inteira: sem ela não existe merge-base, e a medição mentiria
           # dizendo "zero commits novos".
