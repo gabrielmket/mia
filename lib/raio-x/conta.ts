@@ -98,10 +98,10 @@ export async function listarEmpresasAtivas(admin: SupabaseClient, agora: Date = 
       suspended_kind: string | null;
       demonstracao: boolean | null;
     }>
-  ).flatMap((o) => {
-    const c = ehClienteAtivo(o, porOrg.get(o.id) ?? null, agora);
+  ).flatMap((org) => {
+    const c = ehClienteAtivo(org, porOrg.get(org.id) ?? null, agora);
     if (!c.ativo) return [];
-    return [{ id: o.id, nome: o.display_name || o.legal_name || o.id, clienteDesde: o.created_at, situacao: c.situacao, demonstracao: c.demonstracao }];
+    return [{ id: org.id, nome: org.display_name || org.legal_name || org.id, clienteDesde: org.created_at, situacao: c.situacao, demonstracao: c.demonstracao }];
   });
 }
 
@@ -121,7 +121,7 @@ export async function clienteAtivoDaConta(
   ]);
   if (org.error) falhou("empresa ilegível", org.error);
   if (assinatura.error) falhou("assinatura ilegível", assinatura.error);
-  const o = org.data as {
+  const linhaDaOrg = org.data as {
     id: string;
     display_name: string | null;
     legal_name: string | null;
@@ -131,12 +131,12 @@ export async function clienteAtivoDaConta(
     demonstracao: boolean | null;
     onboarding_state: unknown;
   } | null;
-  if (!o) return null;
+  if (!linhaDaOrg) return null;
   return {
-    ...ehClienteAtivo(o, (assinatura.data as AssinaturaLida | null) ?? null, agora),
-    nome: o.display_name || o.legal_name || o.id,
-    clienteDesde: o.created_at,
-    onboardingState: o.onboarding_state,
+    ...ehClienteAtivo(linhaDaOrg, (assinatura.data as AssinaturaLida | null) ?? null, agora),
+    nome: linhaDaOrg.display_name || linhaDaOrg.legal_name || linhaDaOrg.id,
+    clienteDesde: linhaDaOrg.created_at,
+    onboardingState: linhaDaOrg.onboarding_state,
   };
 }
 
@@ -162,10 +162,11 @@ export async function numerosDaConta(admin: SupabaseClient, orgId: string): Prom
   if (error) falhou("números ilegíveis", error);
   return ((data ?? []) as Array<{ id: string; display_name: string | null; phone_number: string | null; provider: string; archived_at: string | null }>)
     .filter((c) => ehNumeroDeWhatsapp(c.provider))
-    .map((c) => {
-      const telefone = c.phone_number ? normalizarWhatsapp(c.phone_number.startsWith("+") ? c.phone_number : `+${c.phone_number}`) : null;
-      const rotulo = (c.display_name?.trim() || (telefone ? whatsappParaLer(telefone) : "Número sem nome")).slice(0, 80);
-      return { id: c.id, rotulo, telefone, oficial: ehApiOficial(c.provider), arquivado: c.archived_at !== null };
+    .map((session) => {
+      const telefone = session.phone_number ? normalizarWhatsapp(session.phone_number.startsWith("+") ? session.phone_number : `+${session.phone_number}`) : null;
+      // O nome do CANAL (channel_sessions.display_name), não de pessoa.
+      const rotulo = (session.display_name?.trim() || (telefone ? whatsappParaLer(telefone) : "Número sem nome")).slice(0, 80);
+      return { id: session.id, rotulo, telefone, oficial: ehApiOficial(session.provider), arquivado: session.archived_at !== null };
     });
 }
 

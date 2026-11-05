@@ -122,8 +122,8 @@ export async function elegiveis(
   admin: SupabaseClient,
   orgId: string,
   contactIds: readonly string[],
-): Promise<Map<string, { anuncio: boolean; nome: string | null }>> {
-  const saida = new Map<string, { anuncio: boolean; nome: string | null }>();
+): Promise<Map<string, { anuncio: boolean; nomes: string[] }>> {
+  const saida = new Map<string, { anuncio: boolean; nomes: string[] }>();
   const ids = [...new Set(contactIds)];
   if (ids.length === 0) return saida;
   const [contatos, pedidos, internos] = await Promise.all([
@@ -144,8 +144,11 @@ export async function elegiveis(
     if (comPedido.has(c.id)) continue;
     const digitos = (c.phone_number ?? "").replace(/\D/g, "");
     if (digitos && internos.has(digitos)) continue;
-    // O nome só serve para tirá-lo dos trechos do relatório; nunca é gravado.
-    saida.set(c.id, { anuncio: veioDeAnuncio(c.source_metadata), nome: c.display_name?.trim() || c.name?.trim() || null });
+    // Os nomes (o cadastrado e o do perfil) só servem para tirá-los dos trechos
+    // do relatório; nunca são gravados. Os dois, e não um ou outro: anonimizar
+    // tira todos.
+    const nomes = [c.name, c.display_name].flatMap((n) => (typeof n === "string" && n.trim() ? [n.trim()] : []));
+    saida.set(c.id, { anuncio: veioDeAnuncio(c.source_metadata), nomes });
   }
   return saida;
 }

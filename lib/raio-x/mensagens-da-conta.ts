@@ -269,11 +269,10 @@ export async function lerConversasDaConta(
     }
 
     for (const c of lidas) {
-      const nome = podem.get(c.contact_id)?.nome ?? null;
       saida.set(doRaioX.get(c.id)!, {
         conversaId: doRaioX.get(c.id)!,
         numero: rotuloDoCanal.get(c.channel_session_id) ?? null,
-        nomes: nome ? [nome] : [],
+        nomes: podem.get(c.contact_id)?.nomes ?? [],
         mensagens: (porConversa.get(c.id) ?? []).sort((a, b) => a.em - b.em),
         passagem: passagens.get(c.id) ?? null,
         funil: opcoes.extras ? (funis.get(c.id) ?? null) : null,
