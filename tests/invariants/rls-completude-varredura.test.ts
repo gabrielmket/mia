@@ -533,6 +533,17 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "apaga pela sessão, e nem o servidor aplica sem aprovar (sabotagem); o retrato " +
       "só o administrador grava e ninguém altera nem apaga pela sessão.",
   })),
+  // Fork MIA, 9150 (.101) · o raio-X do atendimento. Só `mia_raio_x` tem
+  // `organization_id` (a empresa da MIA, OPCIONAL: o raio-X não depende de a
+  // empresa ser cliente); as outras seis tabelas do raio-X não têm.
+  {
+    tabela: "mia_raio_x",
+    razao:
+      "tests/invariants/raio-x-do-atendimento.test.ts · exclusiva do servidor: RLS ligada " +
+      "com ZERO políticas, o administrador da PRÓPRIA empresa ligada e anon recebem " +
+      "`permission denied` (42501) em select, insert, update e delete por JWT, nas sete " +
+      "tabelas do raio-X; o service_role grava e lê (controle positivo).",
+  },
   // Fork MIA, 9031 — o link dos painéis para o dono do negócio.
   {
     tabela: "mia_paineis_links",

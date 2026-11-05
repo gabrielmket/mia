@@ -1,0 +1,56 @@
+/**
+ * FORK MIA (.101) · O QUE A PÁGINA PÚBLICA DE CONEXÃO MOSTRA (/raio-x/<código>).
+ *
+ * Quem abre é o dono, sem conta. A página só vê esta forma: a empresa, o número
+ * (o que ele vai autorizar), o período, a etapa e o andamento. Nada de custo,
+ * de relatório ou de dado de cliente.
+ */
+import type { LinhaDoRaioX } from "./banco";
+import { andamentoDaLeitura, podeConectar, termoDoRaioX } from "./banco";
+import { whatsappParaLer } from "./regras";
+
+/** As cercas de quem pede código e QR (a página e as três rotas públicas). */
+export const ROTULO_DO_LIMITE_DA_PAGINA = "raio_x_conexao";
+export const LIMITE_DA_PAGINA = { ip: 60, windowSec: 600 } as const;
+export const ROTULO_DO_LIMITE_DO_CODIGO = "raio_x_codigo";
+/** O código do WhatsApp vale ~3 minutos: 1 pedido a cada 30 s por raio-X, 10 por IP em 10 min. */
+export const LIMITE_DO_CODIGO = { ip: 10, id: 6, windowSec: 600 } as const;
+
+export type EtapaPublica = "termo" | "conectar" | "numero_diferente" | "lendo" | "pronto" | "vencido";
+
+export interface SituacaoPublica {
+  empresa: string;
+  whatsapp: string;
+  periodoDias: number;
+  tipo: "unico" | "mensal";
+  etapa: EtapaPublica;
+  /** Só na etapa do termo: o texto da versão em vigor, que o aceite grava. */
+  termo: string | null;
+  percentual: number | null;
+  sincronizando: boolean;
+  conversasLidas: number;
+  linkExpiraEm: string | null;
+}
+
+export function situacaoPublica(r: LinhaDoRaioX, agora: Date = new Date()): SituacaoPublica {
+  const leitura = r.leitura as { fase?: string; conversas_lidas?: number; erro?: string | null };
+  let etapa: EtapaPublica;
+  if (r.situacao === "aguardando") etapa = podeConectar(r, agora) ? "termo" : "vencido";
+  else if (r.situacao === "conectando") {
+    if (!podeConectar(r, agora)) etapa = "vencido";
+    else etapa = leitura.erro === "numero_diferente" ? "numero_diferente" : "conectar";
+  } else if (r.situacao === "lendo") etapa = "lendo";
+  else etapa = "pronto";
+  return {
+    empresa: r.empresa,
+    whatsapp: whatsappParaLer(r.whatsapp),
+    periodoDias: r.periodo_dias,
+    tipo: r.tipo,
+    etapa,
+    termo: etapa === "termo" ? termoDoRaioX(r) : null,
+    percentual: andamentoDaLeitura(r),
+    sincronizando: r.situacao === "lendo" && leitura.fase === "sincronizando",
+    conversasLidas: Number(leitura.conversas_lidas) || 0,
+    linkExpiraEm: r.conexao_expira_em,
+  };
+}

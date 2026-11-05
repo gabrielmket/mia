@@ -46,6 +46,8 @@ export const TODAS_AS_OPERACOES = [
   "gerir_planos",
   "gerir_cobranca",
   "decidir_cadastro",
+  // FORK MIA (.101): o raio-X do atendimento.
+  "gerir_raio_x",
 ];
 
 /** O funil de e-commerce que o gatilho de seed entrega a toda organização nova. */

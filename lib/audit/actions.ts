@@ -1708,6 +1708,25 @@ export const AUDIT_ACTIONS = [
   // FORK MIA (.99) · a cópia dos dados de cobrança da empresa baixada pela Time
   // (LGPD, o acesso do titular): só quem baixou e a empresa, nunca o conteúdo.
   "area_de_cobranca.dados_exportados",
+  // FORK MIA (.101) · o raio-X do atendimento (docs/fork/raio-x-do-atendimento.md).
+  // O metadata leva ids, situação, contagens e prazos: nunca telefone de cliente,
+  // texto de conversa nem o código ou o token dos links.
+  "raio_x.criado",
+  "raio_x.link_de_conexao_gerado",
+  "raio_x.aceite",
+  "raio_x.conectado",
+  "raio_x.numero_diferente",
+  "raio_x.leitura_concluida",
+  "raio_x.relatorio_gerado",
+  "raio_x.relatorio_revisado",
+  "raio_x.link_do_dono_gerado",
+  "raio_x.link_do_dono_revogado",
+  "raio_x.link_do_dono_acessado",
+  "raio_x.desconectado",
+  "raio_x.encerrado",
+  "raio_x.conversas_apagadas",
+  "raio_x.mes_aberto",
+  "raio_x.alterado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

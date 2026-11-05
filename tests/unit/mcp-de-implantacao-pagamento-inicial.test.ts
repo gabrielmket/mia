@@ -84,8 +84,8 @@ function responder(c: CadeiaLivre) {
 const ctx = (banco: ReturnType<typeof bancoLivre>) => ({ admin: banco.cliente as never, autorUserId: "a", tokenId: "t", requestId: "r", escopos: [] });
 
 describe("o passo do pagamento no MCP de plataforma", () => {
-  it("o passo não trouxe ferramenta nova: a lista tem as 99 de antes, a de etiquetar da .97 e as 6 de cupons da .98", () => {
-    expect(FERRAMENTAS).toHaveLength(106);
+  it("o passo não trouxe ferramenta nova: a lista tem as 99 de antes, a de etiquetar da .97, as 6 de cupons da .98 e as 4 do raio-X da .101", () => {
+    expect(FERRAMENTAS).toHaveLength(110);
   });
 
   it("⭐ listar_clientes com o filtro: só quem espera o primeiro pagamento, com a forma e a situação", async () => {

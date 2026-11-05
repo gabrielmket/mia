@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **106** ferramentas no servidor: as 98 desta página e as 8 da migração
+São **110** ferramentas no servidor: as 102 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -805,6 +805,26 @@ em Admin › Tenants › a empresa, com a verificação em duas etapas e o Audit
 seção 2). O MCP mostra os dados fiscais só resumidos e com o documento mascarado
 (`plataforma_ver_cliente`, `pagamento_inicial.dados_fiscais`). É a mesma regra da cópia do
 parceiro (.98), que também não tem ferramenta.
+
+### O raio-X do atendimento (.101)
+
+Função do fork ([`raio-x-do-atendimento.md`](raio-x-do-atendimento.md); protótipo aprovado em 04/11/2026), e entra no MCP na
+mesma versão: **quatro ferramentas novas** (a lista vai de 106 a 110). A prova está em
+`tests/unit/mcp-de-implantacao-raio-x.test.ts`, e a CONTAGEM no teste da cobrança. Operação nova, `gerir_raio_x`: o raio-X
+não mexe em cliente nenhum da MIA, mas gera o link que conecta o WhatsApp de uma empresa à leitura da Time e publica o
+relatório para o dono. As ferramentas passam pelo mesmo caminho da tela (`lib/raio-x/acoes.ts`).
+
+| ferramenta | o que faz | operação |
+|---|---|---|
+| `plataforma_criar_raio_x` | cadastra o raio-X (empresa, segmento, WhatsApp comercial, quem autoriza, período 30/60/90, único ou mensal, horário comercial, empresa da MIA opcional, teto de custo) e devolve o link de conexão (48 h) e a mensagem pronta | `gerir_raio_x` |
+| `plataforma_ver_raio_x` | sem `raio_x_id`, a lista; com ele, a situação, o andamento da leitura, o aceite, o link vigente, o custo e o teto, os relatórios com os números, a evolução desde o anterior da mesma empresa e os links do dono. Sem telefone de cliente nem trechos de conversa | leitura |
+| `plataforma_publicar_raio_x` | marca o rascunho como revisado (com as anotações da Time) e gera o link do dono (7, 30 ou 90 dias); com `revogar_link_id`, revoga um link | `gerir_raio_x` |
+| `plataforma_encerrar_raio_x` | derruba a conexão, para a leitura e a análise e agenda a exclusão das conversas (30 dias). O relatório fica | `gerir_raio_x` |
+
+A quarta (publicar) existe porque a revisão (decisão 10) e o link do dono não cabem nas três do protótipo: ver é leitura, e
+criar e encerrar são as pontas do ciclo. O nome tem o verbo "publicar", que a cerca do MCP amarra a `colocar_no_ar`; a
+exceção está nomeada no teste: publicar o relatório ao dono não põe no ar nada que fale com cliente final. O MCP não manda
+a mensagem nem o link a ninguém (quem manda é a Time) e não mostra os trechos de conversa (ficam na tela de Admin).
 
 ### O que chegou do upstream 1.85 (.83)
 

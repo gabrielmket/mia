@@ -100,6 +100,17 @@ export const PUBLIC_PATHS: RegExp[] = [
   // segmento só, na forma do token (`<corpo>.<assinatura>` em base64url), com
   // âncora `$`: nada abaixo dele nasce público de carona.
   /^\/preferencias\/[A-Za-z0-9_-]{20,400}\.[A-Za-z0-9_-]{43}$/,
+  // FORK MIA (.101): o raio-X do atendimento (docs/fork/raio-x-do-atendimento.md).
+  // Quem abre é o DONO da empresa, sem conta: a página de conexão
+  // (`app/raio-x/[codigo]/page.tsx`, código de 8 letras, 48 h) e as quatro rotas
+  // dela (andamento, aceite, código de pareamento e QR), com a identidade no
+  // código e teto por IP; e o link do relatório (`app/raio-x/relatorio/[token]`,
+  // o molde do link dos painéis). Âncora `$` em todas: nada abaixo nasce público
+  // de carona.
+  /^\/raio-x\/[A-Za-z0-9]{8}$/,
+  /^\/raio-x\/relatorio\/[a-z0-9]{24}$/,
+  /^\/api\/v1\/publico\/raio-x\/[A-Za-z0-9]{8}$/,
+  /^\/api\/v1\/publico\/raio-x\/[A-Za-z0-9]{8}\/(aceite|codigo|qr)$/,
   // FORK MIA (.90): a página de preços (`app/precos/page.tsx`) e a leitura dela
   // (`app/api/v1/publico/planos/route.ts`). Quem abre é o visitante do site, sem
   // conta. As duas SÓ LEEM os planos oferecidos, sem o dólar do teto de IA
