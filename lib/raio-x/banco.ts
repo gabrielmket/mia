@@ -11,22 +11,30 @@ import { randomUUID } from "node:crypto";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { phoneLookupVariants } from "@/lib/channels/phone-variants";
+import { phoneLookupVariants, samePhone } from "@/lib/channels/phone-variants";
 import { leitorDoRaioX, type LeitorDoRaioX } from "@/lib/channels/raio-x/leitor";
 
 import { compararComOAnterior, mesmaEmpresa, type Comparacao } from "./comparacao";
-import { prazosDoEncerramento, validadeDoLinkDeConexao, linkDeConexaoVivo } from "./prazos";
+import { estadoInicialDaConta } from "./leitura-da-conta";
+import { diaEMes, prazosDoEncerramento, validadeDoLinkDeConexao, linkDeConexaoVivo } from "./prazos";
 import {
   VALIDADE_PADRAO_DO_LINK_DO_DONO,
   VALIDADES_DO_LINK_DO_DONO,
   whatsappParaLer,
+  type FonteDoRaioX,
   type NovoRaioX,
   type SituacaoDoRaioX,
   type TipoDoRaioX,
   type ValidadeDoLinkDoDono,
 } from "./regras";
 import type { DadosDoRelatorio } from "./relatorio";
-import { hashDoTermo, textoDoTermo, VERSAO_DO_TERMO } from "./termo";
+import {
+  hashDoTermo,
+  textoDoTermo,
+  textoDoTermoDoClienteAtivo,
+  VERSAO_DO_TERMO,
+  VERSAO_DO_TERMO_CLIENTE_ATIVO,
+} from "./termo";
 import {
   codigoDaConexao,
   enderecoDaConexao,
@@ -42,6 +50,10 @@ import {
 
 export interface LinhaDoRaioX {
   id: string;
+  /** FORK MIA (.102): de onde vêm as conversas (9151). */
+  fonte: FonteDoRaioX;
+  /** FORK MIA (.102): na fonte da MIA, a primeira conversa da conta nos números escolhidos. */
+  primeira_conversa_em: string | null;
   empresa: string;
   segmento: string;
   whatsapp: string;
@@ -82,7 +94,7 @@ export interface LinhaDoRaioX {
 }
 
 export const COLUNAS_DO_RAIO_X =
-  "id, empresa, segmento, whatsapp, responsavel_nome, responsavel_contato, quem_atende, periodo_dias, tipo, abre, fecha, sabado_ate, organization_id, teto_centavos, situacao, conexao_versao, conexao_expira_em, sessao, conectado_em, numero_conectado, ciclo, periodo_inicio, periodo_fim, competencia, leitura, leitura_concluida_em, analise, trava_ate, ultimo_relatorio_em, desconectar_em, desconectado_em, apagar_conversas_em, conversas_apagadas_em, encerrado_em, criado_por, criado_via, created_at, updated_at";
+  "id, fonte, primeira_conversa_em, empresa, segmento, whatsapp, responsavel_nome, responsavel_contato, quem_atende, periodo_dias, tipo, abre, fecha, sabado_ate, organization_id, teto_centavos, situacao, conexao_versao, conexao_expira_em, sessao, conectado_em, numero_conectado, ciclo, periodo_inicio, periodo_fim, competencia, leitura, leitura_concluida_em, analise, trava_ate, ultimo_relatorio_em, desconectar_em, desconectado_em, apagar_conversas_em, conversas_apagadas_em, encerrado_em, criado_por, criado_via, created_at, updated_at";
 
 export interface LinhaDoRelatorio {
   id: string;
@@ -139,9 +151,20 @@ export interface RaioXCriado {
 }
 
 /** A mensagem pronta que a Time manda ao dono (o protótipo, tela 2). */
-export function mensagemPronta(r: Pick<LinhaDoRaioX, "empresa" | "responsavel_nome">, link: string): string {
+export function mensagemPronta(r: Pick<LinhaDoRaioX, "empresa" | "responsavel_nome"> & { fonte?: FonteDoRaioX }, link: string): string {
   const nome = r.responsavel_nome?.trim() || "tudo bem";
   const saudacao = r.responsavel_nome?.trim() ? `Oi, ${nome}!` : "Oi, tudo bem?";
+  if (r.fonte === "conversas_da_mia") {
+    // FORK MIA (.102): o cliente ativo só autoriza; não há nada para conectar.
+    return [
+      `${saudacao} Como combinamos, vamos fazer o raio-X do atendimento da ${r.empresa} com as conversas que vocês já têm na MIA.`,
+      "",
+      "É só abrir o link, ler a autorização e autorizar (leva 1 minuto). Não precisa conectar nada:",
+      link,
+      "",
+      "A gente só lê as conversas que já estão na sua conta, nenhuma mensagem é enviada, e o relatório não leva o telefone dos seus clientes. O link vale por 48 horas.",
+    ].join("\n");
+  }
   return [
     `${saudacao} Como combinamos, vamos fazer o raio-X do atendimento do WhatsApp da ${r.empresa}.`,
     "",
@@ -152,19 +175,37 @@ export function mensagemPronta(r: Pick<LinhaDoRaioX, "empresa" | "responsavel_no
   ].join("\n");
 }
 
+/** FORK MIA (.102): o que a criação do cliente ativo leva além do cadastro (`conta.ts` monta). */
+export interface ContaDoNovoRaioX {
+  numeros: Array<{ id: string; rotulo: string; telefone: string | null; oficial: boolean }>;
+  periodo: { inicio: Date; fim: Date };
+  primeiraConversaEm: Date | null;
+}
+
 export async function criarRaioX(
   admin: SupabaseClient,
-  entrada: NovoRaioX,
+  entrada: NovoRaioX & { whatsapp: string },
   ator: string | null,
   via: "tela" | "mcp_plataforma",
   agora: Date = new Date(),
+  conta: ContaDoNovoRaioX | null = null,
 ): Promise<RaioXCriado> {
   const id = randomUUID();
   const codigo = codigoDaConexao(id, 1);
+  const daMia = entrada.fonte === "conversas_da_mia" && conta !== null;
   const { data, error } = await admin
     .from("mia_raio_x")
     .insert({
       id,
+      fonte: daMia ? "conversas_da_mia" : "conexao",
+      // FORK MIA (.102): o período do cliente ativo é fixado agora, para o termo dizer as datas.
+      ...(daMia
+        ? {
+            periodo_inicio: conta.periodo.inicio.toISOString(),
+            periodo_fim: conta.periodo.fim.toISOString(),
+            primeira_conversa_em: conta.primeiraConversaEm ? conta.primeiraConversaEm.toISOString() : null,
+          }
+        : {}),
       empresa: entrada.empresa,
       segmento: entrada.segmento,
       whatsapp: entrada.whatsapp,
@@ -188,8 +229,42 @@ export async function criarRaioX(
     .single();
   if (error || !data) falhou("cadastro não gravou", error);
   const raioX = data as unknown as LinhaDoRaioX;
+  if (daMia) {
+    const { error: erroDosNumeros } = await admin.from("mia_raio_x_numeros").insert(
+      conta.numeros.map((n) => ({ raio_x_id: id, channel_session_id: n.id, rotulo: n.rotulo, telefone: n.telefone, oficial: n.oficial })),
+    );
+    if (erroDosNumeros) {
+      // Sem os números não há o que ler: o cadastro não fica pela metade.
+      await admin.from("mia_raio_x").delete().eq("id", id);
+      falhou("os números não gravaram", erroDosNumeros);
+    }
+  }
   const link = enderecoDaConexao(codigo);
   return { raioX, codigo, link, mensagem: mensagemPronta(raioX, link) };
+}
+
+// ─── FORK MIA (.102) · os números da conta do raio-X ─────────────────────────
+
+export interface NumeroDoRaioX {
+  channelSessionId: string | null;
+  rotulo: string;
+  telefone: string | null;
+  oficial: boolean;
+}
+
+export async function lerNumerosDoRaioX(admin: SupabaseClient, raioXId: string): Promise<NumeroDoRaioX[]> {
+  const { data, error } = await admin
+    .from("mia_raio_x_numeros")
+    .select("channel_session_id, rotulo, telefone, oficial, created_at")
+    .eq("raio_x_id", raioXId)
+    .order("created_at", { ascending: true });
+  if (error) falhou("números do raio-X", error);
+  return ((data ?? []) as Array<{ channel_session_id: string | null; rotulo: string; telefone: string | null; oficial: boolean }>).map((n) => ({
+    channelSessionId: n.channel_session_id,
+    rotulo: n.rotulo,
+    telefone: n.telefone,
+    oficial: n.oficial,
+  }));
 }
 
 /** O código e o link vigentes (para "Copiar o link de novo"). */
@@ -249,55 +324,108 @@ export function podeConectar(r: LinhaDoRaioX, agora: Date = new Date()): boolean
 
 // ─── O aceite ───────────────────────────────────────────────────────────────
 
-export function termoDoRaioX(r: Pick<LinhaDoRaioX, "empresa" | "whatsapp" | "periodo_dias" | "tipo">): string {
+/**
+ * O texto do termo que o dono lê. Na conexão, o v1 (a .101). FORK MIA (.102):
+ * no cliente ativo, o "cliente ativo" v1, com os rótulos dos números e as
+ * datas fixadas na criação (`periodo_fim` é exclusivo: o último dia é a véspera).
+ */
+export function termoDoRaioX(
+  r: Pick<LinhaDoRaioX, "empresa" | "whatsapp" | "periodo_dias" | "tipo"> & Partial<Pick<LinhaDoRaioX, "fonte" | "periodo_inicio" | "periodo_fim">>,
+  numeros: readonly string[] = [],
+): string {
+  if (r.fonte === "conversas_da_mia" && r.periodo_inicio && r.periodo_fim) {
+    return textoDoTermoDoClienteAtivo({
+      empresa: r.empresa,
+      numeros,
+      inicio: diaEMes(new Date(r.periodo_inicio)),
+      fim: diaEMes(new Date(Date.parse(r.periodo_fim) - 1)),
+      tipo: r.tipo,
+    });
+  }
   return textoDoTermo({ empresa: r.empresa, whatsapp: r.whatsapp, periodoDias: r.periodo_dias, tipo: r.tipo });
 }
 
+/** A versão do termo de cada fonte. */
+export function versaoDoTermo(r: Pick<LinhaDoRaioX, "fonte">): string {
+  return r.fonte === "conversas_da_mia" ? VERSAO_DO_TERMO_CLIENTE_ATIVO : VERSAO_DO_TERMO;
+}
+
 /**
- * Grava o aceite (nome, data e hora, versão, texto inteiro e hash) e passa o
- * raio-X para "conectando", com a sessão do leitor nomeada. Repetir o aceite
- * (o dono voltou à página) grava outro: cada aceite é um registro.
+ * Grava o aceite (nome completo e e-mail desde a .102, data e hora, versão,
+ * texto inteiro e hash). Na conexão, passa o raio-X para "conectando", com a
+ * sessão do leitor nomeada. FORK MIA (.102): no cliente ativo não há o que
+ * conectar, e a leitura começa AGORA (situação "lendo"). Repetir o aceite (o
+ * dono voltou à página) grava outro: cada aceite é um registro.
  */
 export async function registrarAceite(
   admin: SupabaseClient,
   r: LinhaDoRaioX,
-  nome: string,
-): Promise<{ aceiteId: string; sessao: string }> {
-  const texto = termoDoRaioX(r);
+  pessoa: { nome: string; email: string },
+): Promise<{ aceiteId: string; sessao: string | null; termoVersao: string }> {
+  const daMia = r.fonte === "conversas_da_mia";
+  const numeros = daMia ? (await lerNumerosDoRaioX(admin, r.id)).map((n) => n.rotulo) : [];
+  const texto = termoDoRaioX(r, numeros);
+  const termoVersao = versaoDoTermo(r);
   const { data, error } = await admin
     .from("mia_raio_x_aceites")
-    .insert({ raio_x_id: r.id, nome: nome.trim(), termo_versao: VERSAO_DO_TERMO, termo_texto: texto, termo_hash: hashDoTermo(texto) })
+    .insert({
+      raio_x_id: r.id,
+      nome: pessoa.nome.trim(),
+      email: pessoa.email.trim().toLowerCase(),
+      termo_versao: termoVersao,
+      termo_texto: texto,
+      termo_hash: hashDoTermo(texto),
+    })
     .select("id")
     .single();
   if (error || !data) falhou("o aceite não gravou", error);
+  if (daMia) {
+    if (r.situacao === "aguardando") {
+      const { error: erroDaLeitura } = await admin
+        .from("mia_raio_x")
+        .update({ situacao: "lendo", leitura: estadoInicialDaConta(), conexao_expira_em: new Date().toISOString() })
+        .eq("id", r.id);
+      if (erroDaLeitura) falhou("a leitura não começou", erroDaLeitura);
+    }
+    return { aceiteId: (data as { id: string }).id, sessao: null, termoVersao };
+  }
   const sessao = r.sessao ?? nomeDaSessao(r.id);
   const { error: erroDaSituacao } = await admin
     .from("mia_raio_x")
     .update({ situacao: r.situacao === "aguardando" ? "conectando" : r.situacao, sessao })
     .eq("id", r.id);
   if (erroDaSituacao) falhou("a situação não gravou", erroDaSituacao);
-  return { aceiteId: (data as { id: string }).id, sessao };
+  return { aceiteId: (data as { id: string }).id, sessao, termoVersao };
 }
 
 export async function ultimoAceite(
   admin: SupabaseClient,
   raioXId: string,
-): Promise<{ nome: string; aceito_em: string; termo_versao: string } | null> {
+): Promise<{ nome: string; email: string | null; aceito_em: string; termo_versao: string } | null> {
   const { data, error } = await admin
     .from("mia_raio_x_aceites")
-    .select("nome, aceito_em, termo_versao")
+    .select("nome, email, aceito_em, termo_versao")
     .eq("raio_x_id", raioXId)
     .order("aceito_em", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) falhou("leitura do aceite", error);
-  return (data as { nome: string; aceito_em: string; termo_versao: string } | null) ?? null;
+  return (data as { nome: string; email: string | null; aceito_em: string; termo_versao: string } | null) ?? null;
 }
 
 // ─── A lista ────────────────────────────────────────────────────────────────
 
 export interface RaioXNaLista {
   id: string;
+  /** FORK MIA (.102): o chip da fonte e a situação "aguardando autorização". */
+  fonte: FonteDoRaioX;
+  /** FORK MIA (.102): quantos números da conta (fonte da MIA). */
+  numeros: number;
+  /** FORK MIA (.102): quando a conta nasceu na MIA, se o raio-X é de uma conta. */
+  clienteDesde: string | null;
+  periodoDias: number;
+  periodoInicio: string | null;
+  periodoFim: string | null;
   empresa: string;
   segmento: string;
   whatsapp: string;
@@ -325,6 +453,8 @@ export function andamentoDaLeitura(r: Pick<LinhaDoRaioX, "situacao" | "leitura">
   if (r.situacao === "analisando" || r.situacao === "pronto") return 100;
   if (r.situacao !== "lendo") return null;
   const l = r.leitura as { fase?: string; conversas_lidas?: number; total?: number };
+  // FORK MIA (.102): a leitura da conta não tem total de antemão; anda em minutos.
+  if (l.fase === "lendo_a_conta") return 10;
   if (l.fase !== "lendo" && l.fase !== "conferindo") return 0;
   const total = Number(l.total) || 0;
   const lidas = Number(l.conversas_lidas) || 0;
@@ -343,14 +473,21 @@ export async function listarRaioX(admin: SupabaseClient, agora: Date = new Date(
   if (error) falhou("a lista não leu", error);
   const linhas = (data ?? []) as unknown as LinhaDoRaioX[];
   const ids = linhas.map((l) => l.id);
-  const [relatorios, gastos] = ids.length
+  const orgIds = [...new Set(linhas.flatMap((l) => (l.organization_id ? [l.organization_id] : [])))];
+  const [relatorios, gastos, numeros, orgs] = ids.length
     ? await Promise.all([
         admin.from("mia_raio_x_relatorios").select("id, raio_x_id, situacao, created_at, sequencia").in("raio_x_id", ids),
         admin.from("mia_raio_x_gastos").select("raio_x_id, custo_centavos").in("raio_x_id", ids),
+        admin.from("mia_raio_x_numeros").select("raio_x_id").in("raio_x_id", ids),
+        orgIds.length ? admin.from("organizations").select("id, created_at").in("id", orgIds) : Promise.resolve({ data: [], error: null }),
       ])
-    : [{ data: [], error: null }, { data: [], error: null }];
+    : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
   if (relatorios.error) falhou("relatórios da lista", relatorios.error);
   if (gastos.error) falhou("gastos da lista", gastos.error);
+  if (numeros.error) falhou("números da lista", numeros.error);
+  const numerosPorRaioX = new Map<string, number>();
+  for (const n of (numeros.data ?? []) as Array<{ raio_x_id: string }>) numerosPorRaioX.set(n.raio_x_id, (numerosPorRaioX.get(n.raio_x_id) ?? 0) + 1);
+  const clienteDesde = new Map(((orgs.data ?? []) as Array<{ id: string; created_at: string }>).map((o) => [o.id, o.created_at]));
   const ultimoPorRaioX = new Map<string, { id: string; situacao: "rascunho" | "revisado"; criadoEm: string; sequencia: number }>();
   for (const rel of (relatorios.data ?? []) as Array<{ id: string; raio_x_id: string; situacao: "rascunho" | "revisado"; created_at: string; sequencia: number }>) {
     const atual = ultimoPorRaioX.get(rel.raio_x_id);
@@ -370,6 +507,12 @@ export async function listarRaioX(admin: SupabaseClient, agora: Date = new Date(
     const leitura = l.leitura as { conversas_lidas?: number };
     return {
       id: l.id,
+      fonte: l.fonte ?? "conexao",
+      numeros: numerosPorRaioX.get(l.id) ?? 0,
+      clienteDesde: l.organization_id ? (clienteDesde.get(l.organization_id) ?? null) : null,
+      periodoDias: l.periodo_dias,
+      periodoInicio: l.periodo_inicio,
+      periodoFim: l.periodo_fim,
       empresa: l.empresa,
       segmento: l.segmento,
       whatsapp: l.whatsapp,
@@ -435,11 +578,13 @@ export async function relatorioAnterior(
   admin: SupabaseClient,
   r: Pick<LinhaDoRaioX, "id" | "whatsapp" | "organization_id">,
   antesDe: string,
+  /** FORK MIA (.102): os outros telefones da empresa (os números da conta do cliente ativo). */
+  telefones: readonly string[] = [],
 ): Promise<LinhaDoRelatorio | null> {
   // As duas grafias do nono dígito: o mesmo celular pode ter sido cadastrado
   // com 12 dígitos num raio-X e com 13 no outro.
-  const grafias = phoneLookupVariants(r.whatsapp).map((v) => v.replace(/\D/g, ""));
-  if (!grafias.includes(r.whatsapp)) grafias.push(r.whatsapp);
+  const daEmpresa = [...new Set([r.whatsapp, ...telefones])];
+  const grafias = [...new Set(daEmpresa.flatMap((t) => [t, ...phoneLookupVariants(t).map((v) => v.replace(/\D/g, ""))]))];
   let filtro = admin.from("mia_raio_x").select("id, whatsapp, organization_id");
   filtro = r.organization_id
     ? filtro.or(`whatsapp.in.(${grafias.join(",")}),organization_id.eq.${r.organization_id}`)
@@ -447,7 +592,7 @@ export async function relatorioAnterior(
   const { data: irmaos, error } = await filtro;
   if (error) falhou("raio-X da mesma empresa", error);
   const ids = ((irmaos ?? []) as Array<{ id: string; whatsapp: string; organization_id: string | null }>)
-    .filter((o) => mesmaEmpresa(o, r))
+    .filter((o) => mesmaEmpresa(o, r) || daEmpresa.some((t) => samePhone(t, o.whatsapp)))
     .map((o) => o.id);
   if (!ids.includes(r.id)) ids.push(r.id);
   const { data, error: erroRel } = await admin
@@ -463,15 +608,29 @@ export async function relatorioAnterior(
   return (data as unknown as LinhaDoRelatorio | null) ?? null;
 }
 
-export function compararRelatorios(atual: { id: string; criadoEm: string; dados: DadosDoRelatorio }, anterior: LinhaDoRelatorio): Comparacao {
+export function compararRelatorios(
+  atual: { id: string; criadoEm: string; dados: DadosDoRelatorio; periodo?: { inicio: string; fim: string } },
+  anterior: LinhaDoRelatorio,
+): Comparacao {
   return compararComOAnterior(
-    { id: atual.id, criadoEm: atual.criadoEm, criteriosVersao: atual.dados.criteriosVersao, conversas: atual.dados.numeros.conversas, indicadores: atual.dados.indicadores },
+    {
+      id: atual.id,
+      criadoEm: atual.criadoEm,
+      criteriosVersao: atual.dados.criteriosVersao,
+      conversas: atual.dados.numeros.conversas,
+      indicadores: atual.dados.indicadores,
+      fonte: atual.dados.fonte ?? "conexao",
+      ...(atual.periodo ? { periodo: atual.periodo } : {}),
+    },
     {
       id: anterior.id,
       criadoEm: anterior.created_at,
       criteriosVersao: anterior.criterios_versao,
       conversas: anterior.conversas,
       indicadores: anterior.dados.indicadores,
+      // FORK MIA (.102): o relatório da .101 não tem fonte: é o da conexão.
+      fonte: anterior.dados.fonte ?? "conexao",
+      periodo: { inicio: anterior.periodo_inicio, fim: anterior.periodo_fim },
     },
   );
 }

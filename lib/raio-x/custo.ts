@@ -71,6 +71,42 @@ export function cabeNoTeto(gastoCentavos: number, estimativaCentavos: number, te
   return { pode: gastoCentavos + estimativaCentavos <= tetoCentavos, sobra: Math.max(0, sobra) };
 }
 
+// ─── FORK MIA (.102) · a estimativa do raio-X do cliente ativo ──────────────
+
+/**
+ * O modelo da estimativa: o preferido da análise (`MODELO_PREFERIDO` em
+ * `analise.ts`, conferido no teste). Mora aqui porque este módulo é puro e a
+ * tela do "Novo raio-X" usa a estimativa.
+ */
+export const MODELO_DA_ESTIMATIVA = "gpt-6-luna";
+/** Por conversa, do lado conservador: o teto de texto (3.500 caracteres), a parte do pedido do sistema no lote e os fatos. */
+export const TOKENS_DE_ENTRADA_POR_CONVERSA = 1_100;
+/** A saída cheia por conversa (450) mais a parte da folga do lote. */
+export const TOKENS_DE_SAIDA_POR_CONVERSA = 500;
+/** Um minuto por áudio: o mesmo piso que o teto usa antes de cada transcrição. */
+export const SEGUNDOS_POR_AUDIO_NA_ESTIMATIVA = 60;
+
+export interface EstimativaDoRaioX {
+  conversas: number;
+  audios: number;
+  analiseCentavos: number;
+  audiosCentavos: number;
+  totalCentavos: number;
+}
+
+/**
+ * Quanto o raio-X deve custar, em centavos de real, ANTES de começar (a tela
+ * do "Novo raio-X" e o MCP). Conservadora como o teto: cada conversa com o
+ * texto no limite e a saída cheia, cada áudio com um minuto. O custo de
+ * verdade é medido e gravado em `mia_raio_x_gastos`.
+ */
+export function estimativaDoRaioX(conversas: number, audios: number, cotacao: number, modelo: string = MODELO_DA_ESTIMATIVA): EstimativaDoRaioX {
+  const porConversa = estimativaDaChamadaUsdCentavos(modelo, TOKENS_DE_ENTRADA_POR_CONVERSA, TOKENS_DE_SAIDA_POR_CONVERSA) ?? 0;
+  const analiseCentavos = Math.ceil(centavosEmReais(porConversa * Math.max(0, conversas), cotacao));
+  const audiosCentavos = Math.ceil(centavosEmReais(custoDoAudioUsdCentavos(SEGUNDOS_POR_AUDIO_NA_ESTIMATIVA) * Math.max(0, audios), cotacao));
+  return { conversas, audios, analiseCentavos, audiosCentavos, totalCentavos: analiseCentavos + audiosCentavos };
+}
+
 /** R$ 21,40 — para o MCP e para a mensagem; a tela formata pelo idioma. */
 export function reaisParaLer(centavos: number): string {
   return `R$ ${(Math.round(centavos) / 100).toFixed(2).replace(".", ",")}`;

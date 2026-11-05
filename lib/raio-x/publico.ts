@@ -7,7 +7,8 @@
  */
 import type { LinhaDoRaioX } from "./banco";
 import { andamentoDaLeitura, podeConectar, termoDoRaioX } from "./banco";
-import { whatsappParaLer } from "./regras";
+import { diaEMes } from "./prazos";
+import { whatsappParaLer, type FonteDoRaioX } from "./regras";
 
 /** As cercas de quem pede código e QR (a página e as três rotas públicas). */
 export const ROTULO_DO_LIMITE_DA_PAGINA = "raio_x_conexao";
@@ -19,6 +20,12 @@ export const LIMITE_DO_CODIGO = { ip: 10, id: 6, windowSec: 600 } as const;
 export type EtapaPublica = "termo" | "conectar" | "numero_diferente" | "lendo" | "pronto" | "vencido";
 
 export interface SituacaoPublica {
+  /** FORK MIA (.102): o cliente ativo só autoriza (duas etapas: autorizar e pronto). */
+  fonte: FonteDoRaioX;
+  /** FORK MIA (.102): os rótulos dos números da conta (fonte da MIA). */
+  numeros: string[];
+  /** FORK MIA (.102): o período fixado, "dd/mm" no fuso (fonte da MIA). */
+  periodo: { inicio: string; fim: string } | null;
   empresa: string;
   whatsapp: string;
   periodoDias: number;
@@ -32,8 +39,9 @@ export interface SituacaoPublica {
   linkExpiraEm: string | null;
 }
 
-export function situacaoPublica(r: LinhaDoRaioX, agora: Date = new Date()): SituacaoPublica {
+export function situacaoPublica(r: LinhaDoRaioX, agora: Date = new Date(), numeros: readonly string[] = []): SituacaoPublica {
   const leitura = r.leitura as { fase?: string; conversas_lidas?: number; erro?: string | null };
+  if (r.fonte === "conversas_da_mia") return situacaoDoClienteAtivo(r, agora, numeros);
   let etapa: EtapaPublica;
   if (r.situacao === "aguardando") etapa = podeConectar(r, agora) ? "termo" : "vencido";
   else if (r.situacao === "conectando") {
@@ -42,6 +50,9 @@ export function situacaoPublica(r: LinhaDoRaioX, agora: Date = new Date()): Situ
   } else if (r.situacao === "lendo") etapa = "lendo";
   else etapa = "pronto";
   return {
+    fonte: "conexao",
+    numeros: [],
+    periodo: null,
     empresa: r.empresa,
     whatsapp: whatsappParaLer(r.whatsapp),
     periodoDias: r.periodo_dias,
@@ -50,6 +61,38 @@ export function situacaoPublica(r: LinhaDoRaioX, agora: Date = new Date()): Situ
     termo: etapa === "termo" ? termoDoRaioX(r) : null,
     percentual: andamentoDaLeitura(r),
     sincronizando: r.situacao === "lendo" && leitura.fase === "sincronizando",
+    conversasLidas: Number(leitura.conversas_lidas) || 0,
+    linkExpiraEm: r.conexao_expira_em,
+  };
+}
+
+/**
+ * FORK MIA (.102) · a página do dono no cliente ativo: autorizar e pronto. Não
+ * há conexão: depois do aceite a etapa é "lendo" (a leitura da conta e a
+ * análise) até o rascunho sair, e "pronto" depois.
+ */
+function situacaoDoClienteAtivo(r: LinhaDoRaioX, agora: Date, numeros: readonly string[]): SituacaoPublica {
+  const leitura = r.leitura as { conversas_lidas?: number };
+  let etapa: EtapaPublica;
+  if (r.situacao === "aguardando") etapa = podeConectar(r, agora) ? "termo" : "vencido";
+  else if (r.situacao === "lendo" || r.situacao === "analisando" || r.situacao === "conectando") etapa = "lendo";
+  else etapa = "pronto";
+  const periodo =
+    r.periodo_inicio && r.periodo_fim
+      ? { inicio: diaEMes(new Date(r.periodo_inicio)), fim: diaEMes(new Date(Date.parse(r.periodo_fim) - 1)) }
+      : null;
+  return {
+    fonte: "conversas_da_mia",
+    numeros: [...numeros],
+    periodo,
+    empresa: r.empresa,
+    whatsapp: whatsappParaLer(r.whatsapp),
+    periodoDias: r.periodo_dias,
+    tipo: r.tipo,
+    etapa,
+    termo: etapa === "termo" ? termoDoRaioX(r, numeros) : null,
+    percentual: r.situacao === "lendo" ? 25 : r.situacao === "analisando" ? 60 : etapa === "pronto" ? 100 : null,
+    sincronizando: false,
     conversasLidas: Number(leitura.conversas_lidas) || 0,
     linkExpiraEm: r.conexao_expira_em,
   };

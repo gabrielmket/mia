@@ -26,7 +26,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";
 import { ehVisitaDePrevia } from "@/lib/paineis/link";
-import { raioXPeloCodigo } from "@/lib/raio-x/banco";
+import { lerNumerosDoRaioX, raioXPeloCodigo } from "@/lib/raio-x/banco";
 import { LIMITE_DA_PAGINA, ROTULO_DO_LIMITE_DA_PAGINA, situacaoPublica } from "@/lib/raio-x/publico";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -66,11 +66,14 @@ export default async function ConexaoDoRaioXPage({ params }: PageProps) {
     );
   }
   if (!isServiceRoleConfigured()) notFound();
-  const r = await raioXPeloCodigo(createAdminClient(), codigo);
+  const admin = createAdminClient();
+  const r = await raioXPeloCodigo(admin, codigo);
   if (!r) notFound();
+  // FORK MIA (.102): no cliente ativo, os números da conta entram no termo e na página.
+  const numeros = r.fonte === "conversas_da_mia" ? (await lerNumerosDoRaioX(admin, r.id)).map((n) => n.rotulo) : [];
   return (
     <IdiomaProvider locale={idioma}>
-      <ConexaoDoDono codigo={codigo.toUpperCase()} inicial={situacaoPublica(r)} />
+      <ConexaoDoDono codigo={codigo.toUpperCase()} inicial={situacaoPublica(r, new Date(), numeros)} />
     </IdiomaProvider>
   );
 }

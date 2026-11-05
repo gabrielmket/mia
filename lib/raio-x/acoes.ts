@@ -15,6 +15,7 @@ import {
   gastoDoRaioX,
   gerarOutroLinkDeConexao,
   lerLinksDoDono,
+  lerNumerosDoRaioX,
   lerRaioX,
   lerRelatorio,
   lerRelatorios,
@@ -31,7 +32,8 @@ import {
   type LinhaDoRelatorio,
   type LinkDoDono,
 } from "./banco";
-import { TETO_MAXIMO_CENTAVOS, TETO_MINIMO_CENTAVOS, validarNovoRaioX, whatsappParaLer } from "./regras";
+import { prepararONovoRaioXDaConta } from "./conta";
+import { TETO_MAXIMO_CENTAVOS, TETO_MINIMO_CENTAVOS, validarNovoRaioX, whatsappParaLer, type FonteDoRaioX } from "./regras";
 import { ROTULO_DO_SEGMENTO } from "./segmentos";
 import type { Segmento } from "./regras";
 
@@ -44,7 +46,13 @@ export type Recusa =
   | { ok: false; motivo: "ja_conectado" }
   | { ok: false; motivo: "encerrado" }
   | { ok: false; motivo: "nao_revisado" }
-  | { ok: false; motivo: "relatorio_de_outro_raio_x" };
+  | { ok: false; motivo: "relatorio_de_outro_raio_x" }
+  // FORK MIA (.102): o cliente ativo.
+  | { ok: false; motivo: "empresa_nao_ativa" }
+  | { ok: false; motivo: "numero_de_outra_empresa" }
+  | { ok: false; motivo: "numero_sem_telefone" }
+  | { ok: false; motivo: "sem_conversas" }
+  | { ok: false; motivo: "ja_autorizado" };
 
 // ─── Criar ──────────────────────────────────────────────────────────────────
 
@@ -53,18 +61,28 @@ export async function acaoCriar(
   bruto: unknown,
   ator: string | null,
   via: Via,
-): Promise<{ ok: true; id: string; empresa: string; link: string; expiraEm: string; mensagem: string } | Recusa> {
+  agora: Date = new Date(),
+): Promise<{ ok: true; id: string; empresa: string; fonte: FonteDoRaioX; link: string; expiraEm: string; mensagem: string } | Recusa> {
   const v = validarNovoRaioX(bruto);
   if (!v.ok) return { ok: false, motivo: "invalido", campos: v.campos };
   if (v.valor.organization_id) {
     const { data, error } = await admin.from("organizations").select("id").eq("id", v.valor.organization_id).maybeSingle();
     if (error || !data) return { ok: false, motivo: "empresa_inexistente" };
   }
-  const criado = await criarRaioX(admin, v.valor, ator, via);
+  let criado;
+  if (v.valor.fonte === "conversas_da_mia") {
+    // FORK MIA (.102): o cliente ativo. A conta, os números e o período conferidos AGORA.
+    const p = await prepararONovoRaioXDaConta(admin, v.valor, agora);
+    if (!p.ok) return { ok: false, motivo: p.motivo };
+    criado = await criarRaioX(admin, { ...v.valor, whatsapp: p.whatsapp }, ator, via, agora, p.conta);
+  } else {
+    criado = await criarRaioX(admin, { ...v.valor, whatsapp: v.valor.whatsapp! }, ator, via, agora);
+  }
   return {
     ok: true,
     id: criado.raioX.id,
     empresa: criado.raioX.empresa,
+    fonte: criado.raioX.fonte ?? v.valor.fonte,
     link: criado.link,
     expiraEm: criado.raioX.conexao_expira_em ?? "",
     mensagem: criado.mensagem,
@@ -76,6 +94,11 @@ export async function acaoCriar(
 export interface DetalheDoRaioX {
   raioX: {
     id: string;
+    /** FORK MIA (.102). */
+    fonte: FonteDoRaioX;
+    /** FORK MIA (.102): os números da conta lidos (fonte da MIA). */
+    numeros: Array<{ rotulo: string; telefoneParaLer: string | null; oficial: boolean }>;
+    primeiraConversaEm: string | null;
     empresa: string;
     segmento: Segmento;
     segmentoRotulo: string;
@@ -106,7 +129,7 @@ export interface DetalheDoRaioX {
   };
   /** O link de conexão vigente, quando ainda deixa conectar. */
   conexao: { link: string; expiraEm: string | null; vivo: boolean; mensagem: string } | null;
-  aceite: { nome: string; aceito_em: string; termo_versao: string } | null;
+  aceite: { nome: string; email: string | null; aceito_em: string; termo_versao: string } | null;
   andamento: {
     percentual: number | null;
     fase: string | null;
@@ -123,11 +146,17 @@ export interface DetalheDoRaioX {
 export async function acaoVer(admin: SupabaseClient, id: string): Promise<DetalheDoRaioX | null> {
   const r = await lerRaioX(admin, id);
   if (!r) return null;
-  const [aceite, relatorios, custo] = await Promise.all([ultimoAceite(admin, id), lerRelatorios(admin, id), gastoDoRaioX(admin, id)]);
+  const [aceite, relatorios, custo, numeros] = await Promise.all([
+    ultimoAceite(admin, id),
+    lerRelatorios(admin, id),
+    gastoDoRaioX(admin, id),
+    r.fonte === "conversas_da_mia" ? lerNumerosDoRaioX(admin, id) : Promise.resolve([]),
+  ]);
   const links = await lerLinksDoDono(admin, relatorios.map((x) => x.id));
   const leitura = r.leitura as { fase?: string; conversas_lidas?: number; mensagens_lidas?: number; total?: number; erro?: string | null };
   const vivo = podeConectar(r);
-  const conexao = r.situacao === "aguardando" || r.situacao === "conectando"
+  // FORK MIA (.102): no cliente ativo, o link é só de autorização, e morre quando o dono autoriza.
+  const conexao = r.situacao === "aguardando" || (r.situacao === "conectando" && r.fonte !== "conversas_da_mia")
     ? (() => {
         const atual = linkDeConexaoAtual(r);
         return { link: atual.link, expiraEm: r.conexao_expira_em, vivo, mensagem: mensagemPronta(r, atual.link) };
@@ -136,6 +165,9 @@ export async function acaoVer(admin: SupabaseClient, id: string): Promise<Detalh
   return {
     raioX: {
       id: r.id,
+      fonte: r.fonte ?? "conexao",
+      numeros: numeros.map((n) => ({ rotulo: n.rotulo, telefoneParaLer: n.telefone ? whatsappParaLer(n.telefone) : null, oficial: n.oficial })),
+      primeiraConversaEm: r.primeira_conversa_em ?? null,
       empresa: r.empresa,
       segmento: r.segmento as Segmento,
       segmentoRotulo: ROTULO_DO_SEGMENTO[r.segmento as Segmento] ?? r.segmento,
@@ -214,6 +246,8 @@ export async function acaoGerarOutroLink(
 ): Promise<{ ok: true; link: string; expiraEm: string; mensagem: string } | Recusa> {
   const r = await lerRaioX(admin, id);
   if (!r) return { ok: false, motivo: "nao_encontrado" };
+  // FORK MIA (.102): depois de autorizado, o cliente ativo já está sendo lido.
+  if (r.fonte === "conversas_da_mia" && r.situacao !== "aguardando" && r.situacao !== "encerrado") return { ok: false, motivo: "ja_autorizado" };
   const g = await gerarOutroLinkDeConexao(admin, r);
   if (!g.ok) return { ok: false, motivo: g.motivo };
   return { ok: true, link: g.link, expiraEm: g.expiraEm, mensagem: g.mensagem };
@@ -322,11 +356,29 @@ export function fraseDaRecusa(r: Recusa): string {
       return "O relatório ainda é rascunho: alguém da Time precisa revisá-lo antes de gerar o link do dono.";
     case "relatorio_de_outro_raio_x":
       return "Esse relatório não é deste raio-X.";
+    case "empresa_nao_ativa":
+      return "Essa empresa não é cliente ativo da MIA (precisa operar e estar em dia, em teste ou isenta; a demonstração também entra). Para quem ainda não é cliente, use a conexão do WhatsApp.";
+    case "numero_de_outra_empresa":
+      return "Um dos números escolhidos não é um número de WhatsApp desta empresa.";
+    case "numero_sem_telefone":
+      return "Nenhum dos números escolhidos tem o telefone na conta: escolha um que tenha.";
+    case "sem_conversas":
+      return "A conta ainda não tem um dia inteiro de conversas nesses números para ler.";
+    case "ja_autorizado":
+      return "O dono já autorizou: o raio-X está lendo as conversas da conta, e não há link novo a gerar.";
   }
 }
 
 export function statusDaRecusa(r: Recusa): number {
   if (r.motivo === "nao_encontrado") return 404;
-  if (r.motivo === "invalido" || r.motivo === "empresa_inexistente") return 400;
+  if (
+    r.motivo === "invalido" ||
+    r.motivo === "empresa_inexistente" ||
+    r.motivo === "empresa_nao_ativa" ||
+    r.motivo === "numero_de_outra_empresa" ||
+    r.motivo === "numero_sem_telefone" ||
+    r.motivo === "sem_conversas"
+  )
+    return 400;
   return 409;
 }

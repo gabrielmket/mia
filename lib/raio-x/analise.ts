@@ -46,8 +46,8 @@ import { createDefaultRegistry } from "@/lib/agent-engine/edge/llm/providers";
 import { apiTranscriptionProvider, modeloDeTranscricaoEmVigor, type TranscriptionProvider } from "@/lib/messaging/media/transcription";
 
 import type { LinhaDoRaioX } from "./banco";
-import { compararRelatorios, gastoDoRaioX, relatorioAnterior } from "./banco";
-import { decifrarReferencia, decifrarTexto } from "./cifra";
+import { compararRelatorios, gastoDoRaioX, lerNumerosDoRaioX, relatorioAnterior } from "./banco";
+import { cifrarTexto, decifrarReferencia, decifrarTexto } from "./cifra";
 import {
   COTACAO_DE_RESERVA,
   cabeNoTeto,
@@ -57,12 +57,19 @@ import {
   segundosDoAudio,
   tokensEstimados,
 } from "./custo";
-import { momentoLocal } from "./horario";
+import { lojaAberta, momentoLocal } from "./horario";
+import { audiosSemTranscricao, baixarAudioDaConta, lerConversasDaConta } from "./mensagens-da-conta";
 import { medirConversa } from "./metricas";
+import { medirPassagem } from "./passagem";
+import { ehPessoa } from "./quem-respondeu";
 import { prazosDoRelatorio } from "./prazos";
 import { horarioDoRaioX, ordemFormatada, type Segmento } from "./regras";
 import { montarRelatorio, type AnaliseDaConversa, type ConversaParaORelatorio, type MensagemDoRelatorio } from "./relatorio";
 import { DESFECHOS, ORIGENS, ROTULO_DA_ORIGEM, definicaoDoSegmento } from "./segmentos";
+import { marcaDaMensagem } from "./tokens";
+
+/** FORK MIA (.102): o raio-X do cliente ativo lê as conversas da conta, não as do leitor. */
+const daConta = (r: Pick<LinhaDoRaioX, "fonte">) => r.fonte === "conversas_da_mia";
 
 // ─── O modelo e a transcrição da plataforma ────────────────────────────────
 
@@ -288,6 +295,8 @@ interface Ambiente {
   transcritor: { provider: TranscriptionProvider; modelo: string } | null;
   prazo: number;
   agora: () => number;
+  /** FORK MIA (.102), para o teste: o arquivo do áudio da conta (sem ele, o storage da conta). */
+  baixarDaConta?: (mensagemId: string) => Promise<{ bytes: Buffer; mime: string } | null>;
 }
 
 interface LinhaDaMensagem {
@@ -347,6 +356,71 @@ const paraMensagem = (m: LinhaDaMensagem): MensagemDoRelatorio => ({
   texto: m.texto,
 });
 
+/**
+ * As mensagens de cada conversa pedida. Na conexão, as que o leitor gravou
+ * (a .101, sem mudança); FORK MIA (.102) no cliente ativo, as da própria conta
+ * (`mensagens-da-conta.ts`): a conversa cujo contato deixou de poder ser lido
+ * não volta, e é tratada como "sem mensagem do cliente".
+ */
+async function mensagensPorConversa(admin: SupabaseClient, r: LinhaDoRaioX, conversas: LinhaDaConversa[]): Promise<Map<string, MensagemDoRelatorio[]>> {
+  if (daConta(r)) {
+    const lidas = await lerConversasDaConta(admin, r, conversas, { extras: false });
+    return new Map([...lidas].map(([id, c]) => [id, c.mensagens]));
+  }
+  const mensagens = await mensagensDoPeriodo(admin, r, conversas.map((c) => c.id));
+  const porConversa = new Map<string, MensagemDoRelatorio[]>();
+  for (const m of mensagens) {
+    const lista = porConversa.get(m.conversa_id) ?? [];
+    lista.push(paraMensagem(m));
+    porConversa.set(m.conversa_id, lista);
+  }
+  return porConversa;
+}
+
+/**
+ * FORK MIA (.102) · os áudios do cliente ativo que a MIA ainda não transcreveu
+ * viram linhas PENDENTES em `mia_raio_x_mensagens` (só a marca, o id da
+ * mensagem cifrado e, depois, a transcrição), uma vez por ciclo. O resto do
+ * caminho é o da .101: o teto antes de cada áudio, o gasto gravado, e o
+ * arquivo descartado (aqui ele vem do storage da conta, não do leitor).
+ */
+async function prepararAudiosDaConta(amb: Ambiente, r: LinhaDoRaioX): Promise<void> {
+  const conversas: Array<{ id: string; referencia: string | null }> = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await amb.admin
+      .from("mia_raio_x_conversas")
+      .select("id, referencia")
+      .eq("raio_x_id", r.id)
+      .order("numero_ordem", { ascending: true })
+      .range(de, de + 999);
+    if (error) throw new Error(`raio-x: conversas do raio-X (${error.code ?? "sem_codigo"})`);
+    const pagina = (data ?? []) as Array<{ id: string; referencia: string | null }>;
+    conversas.push(...pagina);
+    if (pagina.length < 1000) break;
+  }
+  const audios = await audiosSemTranscricao(amb.admin, r, conversas);
+  for (let i = 0; i < audios.length; i += 500) {
+    const linhas = audios.slice(i, i + 500).map((a) => ({
+      raio_x_id: r.id,
+      conversa_id: a.conversaId,
+      marca: marcaDaMensagem(r.id, a.mensagemId),
+      da_loja: a.daLoja,
+      enviada_em: a.em,
+      tipo: "audio",
+      texto: null,
+      segundos: null,
+      midia: cifrarTexto(a.mensagemId),
+      transcricao: "pendente",
+    }));
+    const { error } = await amb.admin.from("mia_raio_x_mensagens").upsert(linhas, { onConflict: "raio_x_id,marca", ignoreDuplicates: true });
+    if (error) throw new Error(`raio-x: áudios da conta (${error.code ?? "sem_codigo"})`);
+  }
+  const analise = { ...r.analise, audios_preparados: true };
+  const { error } = await amb.admin.from("mia_raio_x").update({ analise }).eq("id", r.id);
+  if (error) throw new Error(`raio-x: andamento da análise (${error.code ?? "sem_codigo"})`);
+  r.analise = analise;
+}
+
 function temTempo(amb: Ambiente, folga = MARGEM_PARA_CHAMADA_MS): boolean {
   return amb.prazo - amb.agora() >= folga;
 }
@@ -382,10 +456,13 @@ async function transcrever(amb: Ambiente, r: LinhaDoRaioX, cotacao: number): Pro
     await marcarTodos("sem_servico");
     return "pronto";
   }
-  if (!amb.leitor || !r.sessao || r.desconectado_em) {
+  // FORK MIA (.102): o cliente ativo não tem leitor; o áudio vem do storage da própria conta.
+  if (!daConta(r) && (!amb.leitor || !r.sessao || r.desconectado_em)) {
     await marcarTodos("falhou");
     return "pronto";
   }
+  const baixarDaConta =
+    amb.baixarDaConta ?? ((mensagemId: string) => (r.organization_id ? baixarAudioDaConta(amb.admin, r.organization_id, mensagemId) : Promise.resolve(null)));
   const referencias = new Map<string, string | null>();
   let andou = false;
   for (const p of pendentes) {
@@ -396,16 +473,18 @@ async function transcrever(amb: Ambiente, r: LinhaDoRaioX, cotacao: number): Pro
       await marcarTodos("fora_do_teto");
       return "pronto";
     }
-    if (!referencias.has(p.conversa_id)) {
+    if (!daConta(r) && !referencias.has(p.conversa_id)) {
       const { data: c } = await amb.admin.from("mia_raio_x_conversas").select("referencia").eq("id", p.conversa_id).maybeSingle();
       referencias.set(p.conversa_id, decifrarReferencia((c as { referencia?: string | null } | null)?.referencia)?.chatId ?? null);
     }
-    const chatId = referencias.get(p.conversa_id);
+    const chatId = daConta(r) ? null : referencias.get(p.conversa_id);
     const mensagemId = decifrarTexto(p.midia);
     let resultado: { transcricao: string; texto: string | null } = { transcricao: "falhou", texto: null };
-    if (chatId && mensagemId) {
+    if (mensagemId && (chatId || daConta(r))) {
       try {
-        const audio = await amb.leitor.baixarAudio(r.sessao, chatId, mensagemId, TETO_DO_DOWNLOAD_MS);
+        const audio = daConta(r)
+          ? await baixarDaConta(mensagemId)
+          : await amb.leitor!.baixarAudio(r.sessao!, chatId!, mensagemId, TETO_DO_DOWNLOAD_MS);
         if (audio) {
           const segundos = segundosDoAudio(p.segundos, audio.bytes.byteLength);
           const medido = amb.transcritor.provider.transcribeMedindo
@@ -459,13 +538,7 @@ async function classificar(amb: Ambiente, r: LinhaDoRaioX, cotacao: number): Pro
     if (e) throw new Error(`raio-x: marcar conversas (${e.code ?? "sem_codigo"})`);
   };
 
-  const mensagens = await mensagensDoPeriodo(amb.admin, r, pendentes.map((c) => c.id));
-  const porConversa = new Map<string, MensagemDoRelatorio[]>();
-  for (const m of mensagens) {
-    const lista = porConversa.get(m.conversa_id) ?? [];
-    lista.push(paraMensagem(m));
-    porConversa.set(m.conversa_id, lista);
-  }
+  const porConversa = await mensagensPorConversa(amb.admin, r, pendentes);
   // Sem mensagem do cliente no período: nada a classificar (campanha da loja, ou fora do mês).
   const semCliente = pendentes.filter((c) => !(porConversa.get(c.id) ?? []).some((m) => !m.daLoja));
   await marcar(semCliente.map((c) => c.id), { analise: null, analise_ciclo: r.ciclo });
@@ -565,39 +638,70 @@ export async function gerarRelatorio(admin: SupabaseClient, r: LinhaDoRaioX, ago
     .select("id, numero_ordem, anuncio, referencia, analise, analise_ciclo, fora_do_teto")
     .eq("raio_x_id", r.id);
   if (error) throw new Error(`raio-x: conversas do relatório (${error.code ?? "sem_codigo"})`);
-  const mensagens = await mensagensDoPeriodo(admin, r);
-  const porConversa = new Map<string, MensagemDoRelatorio[]>();
-  for (const m of mensagens) {
-    const lista = porConversa.get(m.conversa_id) ?? [];
-    lista.push(paraMensagem(m));
-    porConversa.set(m.conversa_id, lista);
-  }
   const horario = horarioDoRaioX(r);
   const fimMs = Date.parse(fim);
-  const paraORelatorio: ConversaParaORelatorio[] = ((conversas ?? []) as unknown as LinhaDaConversa[])
-    .filter((c) => porConversa.has(c.id))
-    .map((c) => {
-      const msgs = porConversa.get(c.id)!.sort((a, b) => a.em - b.em);
-      const ref = decifrarReferencia(c.referencia);
-      return {
-        numeroOrdem: c.numero_ordem,
-        anuncio: c.anuncio,
-        medida: medirConversa(msgs.map((m) => ({ daLoja: m.daLoja, em: m.em })), horario, fimMs),
-        analise: c.analise_ciclo === r.ciclo ? c.analise : null,
-        foraDoTeto: c.fora_do_teto,
-        mensagens: msgs,
-        nomes: ref?.nome ? [ref.nome] : [],
-      };
+  const linhasDasConversas = (conversas ?? []) as unknown as LinhaDaConversa[];
+  let paraORelatorio: ConversaParaORelatorio[];
+  // FORK MIA (.102): o número da conta é dado da empresa, e entra na busca do raio-X anterior.
+  const numeros = daConta(r) ? await lerNumerosDoRaioX(admin, r.id) : [];
+  if (daConta(r)) {
+    // FORK MIA (.102): as conversas da própria conta, com quem respondeu, a passagem e o funil.
+    const lidas = await lerConversasDaConta(admin, r, linhasDasConversas, { extras: true });
+    paraORelatorio = linhasDasConversas.flatMap((c) => {
+      const l = lidas.get(c.id);
+      if (!l || l.mensagens.length === 0) return [];
+      const msgs = l.mensagens;
+      const pessoas = msgs.filter((m) => ehPessoa(m.quem)).map((m) => m.em);
+      return [
+        {
+          numeroOrdem: c.numero_ordem,
+          anuncio: c.anuncio,
+          medida: medirConversa(msgs.map((m) => ({ daLoja: m.daLoja, em: m.em, quem: m.quem ?? null })), horario, fimMs),
+          analise: c.analise_ciclo === r.ciclo ? c.analise : null,
+          foraDoTeto: c.fora_do_teto,
+          mensagens: msgs,
+          nomes: l.nomes,
+          numero: l.numero,
+          passagem: l.passagem ? medirPassagem(l.passagem, pessoas, fimMs, lojaAberta(momentoLocal(l.passagem.em), horario)) : null,
+          funil: l.funil,
+        },
+      ];
     });
+  } else {
+    const mensagens = await mensagensDoPeriodo(admin, r);
+    const porConversa = new Map<string, MensagemDoRelatorio[]>();
+    for (const m of mensagens) {
+      const lista = porConversa.get(m.conversa_id) ?? [];
+      lista.push(paraMensagem(m));
+      porConversa.set(m.conversa_id, lista);
+    }
+    paraORelatorio = linhasDasConversas
+      .filter((c) => porConversa.has(c.id))
+      .map((c) => {
+        const msgs = porConversa.get(c.id)!.sort((a, b) => a.em - b.em);
+        const ref = decifrarReferencia(c.referencia);
+        return {
+          numeroOrdem: c.numero_ordem,
+          anuncio: c.anuncio,
+          medida: medirConversa(msgs.map((m) => ({ daLoja: m.daLoja, em: m.em })), horario, fimMs),
+          analise: c.analise_ciclo === r.ciclo ? c.analise : null,
+          foraDoTeto: c.fora_do_teto,
+          mensagens: msgs,
+          nomes: ref?.nome ? [ref.nome] : [],
+        };
+      });
+  }
   const dados = montarRelatorio({
     empresa: r.empresa,
     segmento: r.segmento as Segmento,
     tipo: r.tipo,
     periodo: { inicio: new Date(inicio), fim: new Date(fim) },
     conversas: paraORelatorio,
+    fonte: daConta(r) ? "conversas_da_mia" : "conexao",
+    ...(daConta(r) ? { numeros: numeros.map((n) => ({ rotulo: n.rotulo, oficial: n.oficial })) } : {}),
   });
   const criadoEm = agora.toISOString();
-  const anterior = await relatorioAnterior(admin, r, criadoEm);
+  const anterior = await relatorioAnterior(admin, r, criadoEm, numeros.flatMap((n) => (n.telefone ? [n.telefone] : [])));
   const { data: ultima } = await admin
     .from("mia_raio_x_relatorios")
     .select("sequencia")
@@ -608,7 +712,7 @@ export async function gerarRelatorio(admin: SupabaseClient, r: LinhaDoRaioX, ago
   const sequencia = Number((ultima as { sequencia?: number } | null)?.sequencia ?? 0) + 1;
   const custo = await gastoDoRaioX(admin, r.id, r.ciclo);
   const id = randomUUID();
-  const comparacao = anterior ? compararRelatorios({ id, criadoEm, dados }, anterior) : null;
+  const comparacao = anterior ? compararRelatorios({ id, criadoEm, dados, periodo: { inicio, fim } }, anterior) : null;
   const { error: erroDoInsert } = await admin.from("mia_raio_x_relatorios").insert({
     id,
     raio_x_id: r.id,
@@ -635,7 +739,9 @@ export async function gerarRelatorio(admin: SupabaseClient, r: LinhaDoRaioX, ago
       ultimo_relatorio_em: criadoEm,
       analise: {},
       // O diagnóstico único cai 7 dias depois do PRIMEIRO relatório; desconectado, não há o que derrubar.
-      desconectar_em: r.tipo === "unico" && primeiro && !r.desconectado_em ? prazos.desconectarEm!.toISOString() : r.desconectar_em,
+      // FORK MIA (.102): o cliente ativo não tem conexão nenhuma para cair.
+      desconectar_em:
+        !daConta(r) && r.tipo === "unico" && primeiro && !r.desconectado_em ? prazos.desconectarEm!.toISOString() : r.desconectar_em,
       // O mensal apaga mês a mês (o ciclo); o único, 30 dias depois do relatório.
       apagar_conversas_em: r.tipo === "unico" || r.desconectado_em ? (r.apagar_conversas_em ?? prazos.apagarConversasEm.toISOString()) : r.apagar_conversas_em,
     })
@@ -649,6 +755,7 @@ export type DesfechoDaAnalise = { tipo: "andou" } | { tipo: "parou" } | { tipo: 
 /** UMA rodada da análise: áudio, depois classificação, depois relatório. */
 export async function rodadaDeAnalise(amb: Ambiente, r: LinhaDoRaioX): Promise<DesfechoDaAnalise> {
   const cotacao = await cotacaoDoDia(amb.admin);
+  if (daConta(r) && !(r.analise as { audios_preparados?: boolean }).audios_preparados) await prepararAudiosDaConta(amb, r);
   const audio = await transcrever(amb, r, cotacao);
   if (audio !== "pronto") return { tipo: audio };
   for (let i = 0; i < 4; i += 1) {

@@ -17,6 +17,11 @@
  *
  * O raio-X é da plataforma, não de uma empresa da MIA: não há "empresa parada"
  * a respeitar aqui (a empresa ligada é opcional e só serve para comparar).
+ *
+ * FORK MIA (.102): o raio-X do CLIENTE ATIVO (fonte "conversas da MIA") não
+ * tem conexão: depois da autorização ele já nasce "lendo", e a rodada de
+ * leitura é a da conta (`leitura-da-conta.ts`), sem o leitor. O resto (a
+ * análise, o relatório, os 30 dias para apagar e o mensal) é o mesmo.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -34,6 +39,7 @@ import {
 } from "./analise";
 import { COLUNAS_DO_RAIO_X, desconectarAgora, type LinhaDoRaioX } from "./banco";
 import { estadoInicial, lerEstado, rodadaDeLeitura } from "./leitura";
+import { lerEstadoDaConta, rodadaDeLeituraDaConta } from "./leitura-da-conta";
 import { relatorioMensalDevido, venceu } from "./prazos";
 
 export type EfeitoDoCiclo =
@@ -64,6 +70,8 @@ interface Dependencias {
   modelo?: ModeloDaAnalise | null;
   chamar?: ChamarOModelo | null;
   transcritor?: ReturnType<typeof transcritorDaPlataforma>;
+  /** FORK MIA (.102), para o teste: o arquivo do áudio da conta (sem ele, o storage da conta). */
+  baixarDaConta?: (mensagemId: string) => Promise<{ bytes: Buffer; mime: string } | null>;
 }
 
 async function travar(admin: SupabaseClient, r: LinhaDoRaioX, agora: number): Promise<boolean> {
@@ -199,6 +207,8 @@ export async function rodarOCiclo(dep: Dependencias): Promise<ResumoDoCiclo> {
     }
     try {
       if (r.situacao === "conectando") {
+        // FORK MIA (.102): o cliente ativo não conecta nada.
+        if (r.fonte === "conversas_da_mia") continue;
         if (!r.sessao || !dep.leitor) continue;
         const estado = await dep.leitor.estado(r.sessao);
         if (estado.estado !== "conectado") continue;
@@ -228,6 +238,28 @@ export async function rodarOCiclo(dep: Dependencias): Promise<ResumoDoCiclo> {
           conexao_expira_em: agoraIso(),
         });
         resumo.efeitos.push({ acao: "raio_x.conectado", raioXId: r.id });
+        continue;
+      }
+
+      if (r.situacao === "lendo" && r.fonte === "conversas_da_mia") {
+        // FORK MIA (.102): a leitura das conversas da própria conta, sem leitor.
+        if (!(await travar(dep.admin, r, agora()))) {
+          resumo.puladas += 1;
+          continue;
+        }
+        resumo.rodadas += 1;
+        const rodada = await rodadaDeLeituraDaConta({ admin: dep.admin, raioX: r, prazo: dep.prazo, agora }, lerEstadoDaConta(r.leitura));
+        if (rodada.concluiu) {
+          await gravar(dep.admin, r.id, { leitura: rodada.estado, leitura_concluida_em: agoraIso(), situacao: "analisando" });
+          resumo.efeitos.push({
+            acao: "raio_x.leitura_concluida",
+            raioXId: r.id,
+            conversas: rodada.estado.conversas_lidas,
+            mensagens: rodada.estado.mensagens_lidas,
+          });
+          continue;
+        }
+        await gravar(dep.admin, r.id, { leitura: rodada.estado });
         continue;
       }
 
@@ -284,7 +316,16 @@ export async function rodarOCiclo(dep: Dependencias): Promise<ResumoDoCiclo> {
         }
         resumo.rodadas += 1;
         const desfecho = await rodadaDeAnalise(
-          { admin: dep.admin, leitor: dep.leitor, modelo, chamar, transcritor, prazo: dep.prazo, agora },
+          {
+            admin: dep.admin,
+            leitor: dep.leitor,
+            modelo,
+            chamar,
+            transcritor,
+            prazo: dep.prazo,
+            agora,
+            ...(dep.baixarDaConta ? { baixarDaConta: dep.baixarDaConta } : {}),
+          },
           r,
         );
         // `gerarRelatorio` já gravou a situação; aqui só solta a trava.

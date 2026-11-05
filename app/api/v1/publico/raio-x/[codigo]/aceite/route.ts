@@ -4,30 +4,29 @@
  * nome, a data e a hora, a versão e o texto INTEIRO que ele leu. Depois, o
  * leitor prepara a sessão do raio-X para o pareamento (código ou QR).
  *
+ * FORK MIA (.102): o aceite pede NOME COMPLETO e E-MAIL nas duas fontes
+ * (`lib/raio-x/aceite.ts`; o e-mail não é usado para enviar nada). No cliente
+ * ativo ("conversas da MIA") não há leitor nem pareamento: o aceite começa a
+ * leitura das conversas da conta, e a página mostra o andamento.
+ *
  * Público: a identidade é o código do link (48 h). Teto por IP. Sem efeito em
  * empresa nenhuma da MIA.
  */
 import { randomUUID } from "node:crypto";
 
 import type { NextRequest } from "next/server";
-import { z } from "zod";
 
 import { leitorDoRaioX } from "@/lib/channels/raio-x/leitor";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { authRateLimited } from "@/lib/auth/rate-limit";
 import { logger } from "@/lib/logger";
+import { fraseDaRecusaDoAceite, validarAceite } from "@/lib/raio-x/aceite";
 import { podeConectar, raioXPeloCodigo, registrarAceite } from "@/lib/raio-x/banco";
 import { LIMITE_DA_PAGINA, ROTULO_DO_LIMITE_DA_PAGINA } from "@/lib/raio-x/publico";
-import { VERSAO_DO_TERMO } from "@/lib/raio-x/termo";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
-
-const corpoSchema = z.strictObject({
-  nome: z.string().trim().min(2).max(120),
-  aceito: z.literal(true),
-});
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ codigo: string }> }): Promise<Response> {
   const requestId = randomUUID();
@@ -39,10 +38,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const r = await raioXPeloCodigo(admin, codigo);
   if (!r) return fail("not_found", "Link inválido ou encerrado.", 404, { requestId });
   if (!podeConectar(r)) return fail("conflict", "Este link venceu. Peça um novo à Time Company.", 409, { requestId });
-  const corpo = corpoSchema.safeParse(await req.json().catch(() => null));
-  if (!corpo.success) return fail("validation_failed", "Escreva o seu nome e marque a autorização.", 400, { requestId });
+  const corpo = validarAceite(await req.json().catch(() => null));
+  if (!corpo.ok) {
+    return fail("validation_failed", fraseDaRecusaDoAceite(corpo.campos), 400, { requestId, details: { campos: corpo.campos } });
+  }
 
-  const { aceiteId, sessao } = await registrarAceite(admin, r, corpo.data.nome);
+  const { aceiteId, sessao, termoVersao } = await registrarAceite(admin, r, { nome: corpo.nome, email: corpo.email });
   void audit({
     action: "raio_x.aceite",
     actorUserId: null,
@@ -50,9 +51,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
     resourceType: "mia_raio_x",
     resourceId: r.id,
     requestId,
-    // O nome de quem aceitou mora em mia_raio_x_aceites; a trilha guarda só a referência.
-    metadata: { aceite_id: aceiteId, termo_versao: VERSAO_DO_TERMO },
+    // O nome e o e-mail de quem aceitou moram em mia_raio_x_aceites; a trilha guarda só a referência.
+    metadata: { aceite_id: aceiteId, termo_versao: termoVersao, fonte: r.fonte ?? "conexao" },
   });
+
+  // FORK MIA (.102): o cliente ativo não conecta nada; a leitura da conta já começou.
+  if (!sessao) return ok({ aceito: true, pronto_para_parear: false, fonte: "conversas_da_mia" }, { requestId });
 
   const leitor = leitorDoRaioX();
   if (!leitor) return ok({ aceito: true, pronto_para_parear: false, motivo: "leitor_indisponivel" }, { requestId });

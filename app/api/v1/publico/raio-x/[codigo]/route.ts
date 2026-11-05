@@ -11,7 +11,7 @@ import type { NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { authRateLimited } from "@/lib/auth/rate-limit";
-import { raioXPeloCodigo } from "@/lib/raio-x/banco";
+import { lerNumerosDoRaioX, raioXPeloCodigo } from "@/lib/raio-x/banco";
 import { LIMITE_DA_PAGINA, ROTULO_DO_LIMITE_DA_PAGINA, situacaoPublica } from "@/lib/raio-x/publico";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -23,9 +23,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cod
     return fail("rate_limited", "Muitas consultas seguidas. Aguarde alguns minutos.", 429, { requestId, headers: { "Retry-After": "600" } });
   }
   const { codigo } = await params;
-  const r = await raioXPeloCodigo(createAdminClient(), codigo);
+  const admin = createAdminClient();
+  const r = await raioXPeloCodigo(admin, codigo);
   if (!r) return fail("not_found", "Link inválido ou encerrado.", 404, { requestId });
-  const s = situacaoPublica(r);
+  // FORK MIA (.102): no cliente ativo, a página diz os números da conta.
+  const numeros = r.fonte === "conversas_da_mia" ? (await lerNumerosDoRaioX(admin, r.id)).map((n) => n.rotulo) : [];
+  const s = situacaoPublica(r, new Date(), numeros);
   // O termo só vai na carga da página; aqui vai o andamento.
   return ok({ ...s, termo: null }, { requestId, headers: { "Cache-Control": "no-store" } });
 }
