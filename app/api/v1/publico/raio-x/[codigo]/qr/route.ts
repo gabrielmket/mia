@@ -32,9 +32,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cod
   const leitor = leitorDoRaioX();
   if (!leitor) return fail("upstream_unavailable", "A conexão não está disponível agora.", 503, { requestId });
   try {
-    await leitor.preparar(r.sessao);
+    const preparada = await leitor.preparar(r.sessao);
     const png = await leitor.qr(r.sessao);
-    if (!png) return fail("not_ready", "O QR ainda não está pronto.", 409, { requestId });
+    // FORK MIA (.104): a etapa neutra (iniciando, parado…) diz por que o QR não saiu.
+    if (!png) return fail("not_ready", "O QR ainda não está pronto.", 409, { requestId, details: { estado: preparada.estado } });
     return new Response(new Uint8Array(png), {
       status: 200,
       headers: { "Content-Type": "image/png", "Cache-Control": "no-store", "X-Request-Id": requestId },

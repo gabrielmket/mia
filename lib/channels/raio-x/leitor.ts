@@ -53,8 +53,6 @@ const ROTAS: ReadonlyArray<{ metodo: "GET" | "POST" | "DELETE"; caminho: RegExp;
   { metodo: "GET", caminho: new RegExp(`^/api/sessions/${SEGMENTO}$`), para: "ler o estado da sessão" },
   { metodo: "POST", caminho: /^\/api\/sessions$/, para: "criar a sessão do raio-X" },
   { metodo: "POST", caminho: new RegExp(`^/api/sessions/${SEGMENTO}/start$`), para: "iniciar a sessão" },
-  // FORK MIA (.103): parar é o que religa a sessão que falhou (ver `preparar`).
-  { metodo: "POST", caminho: new RegExp(`^/api/sessions/${SEGMENTO}/stop$`), para: "parar a sessão que falhou, para religar" },
   { metodo: "POST", caminho: new RegExp(`^/api/sessions/${SEGMENTO}/logout$`), para: "desconectar o aparelho" },
   { metodo: "DELETE", caminho: new RegExp(`^/api/sessions/${SEGMENTO}$`), para: "apagar a sessão e o acervo" },
   { metodo: "GET", caminho: new RegExp(`^/api/${SEGMENTO}/auth/qr$`), para: "o QR do pareamento" },
@@ -299,6 +297,17 @@ export function criarLeitor(baseUrl: string, chave: string, fetchImpl: typeof fe
 
     async preparar(sessao) {
       let corpo = await lerSessao(sessao);
+      // FORK MIA (.104): a sessão que FALHOU na etapa de conectar é apagada e
+      // nasce de novo, limpa. Religar não basta (a .103 parava e iniciava): o
+      // pedido do código de 8 letras grava o número na credencial antes do
+      // pareamento, e cada religada tenta entrar com essa credencial pela
+      // metade, o WhatsApp recusa e ela falha de novo, sem QR nem código.
+      // Apagar não perde nada: quem chama o `preparar` é só a etapa de conectar
+      // (aceite, código e QR), antes de qualquer pareamento ou leitura.
+      if (corpo?.status === "FAILED") {
+        await apagar(sessao);
+        corpo = null;
+      }
       if (!corpo) {
         const criada = await chamar("POST", "/api/sessions", {
           name: sessao,
@@ -319,15 +328,7 @@ export function criarLeitor(baseUrl: string, chave: string, fetchImpl: typeof fe
         await apagar(sessao).catch(() => undefined);
         throw new LeitorRecusou("leitor_config_recusada");
       }
-      // FORK MIA (.103): a sessão que FALHOU (o QR ou o código venceu sem ninguém
-      // conectar) não volta com `start`: o contêiner responde 422 ("já iniciada")
-      // e ela ficava FAILED para sempre, sem QR nem código. Parar antes de iniciar
-      // é o que a religa, sem apagar o pareamento nem o acervo.
-      if (corpo.status === "FAILED") {
-        const parada = await chamar("POST", `/api/sessions/${s(sessao)}/stop`, {});
-        if (!parada.ok && parada.status !== 404) throw new LeitorRecusou(`leitor_parar_${parada.status}`);
-      }
-      if (corpo.status === "STOPPED" || corpo.status === "FAILED") {
+      if (corpo.status === "STOPPED") {
         const r = await chamar("POST", `/api/sessions/${s(sessao)}/start`, {});
         if (!r.ok && r.status !== 422) throw new LeitorRecusou(`leitor_iniciar_${r.status}`);
         corpo = (await lerSessao(sessao)) ?? corpo;

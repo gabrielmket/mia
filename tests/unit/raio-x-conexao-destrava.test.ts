@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.103) · A CONEXÃO DO RAIO-X NÃO TRAVA.
+ * FORK MIA (.103, .104) · A CONEXÃO DO RAIO-X NÃO TRAVA.
  *
  * O primeiro raio-X de verdade (05/11/2026) travou na etapa de conectar por três
  * defeitos da .101, um em cada `describe`:
@@ -9,7 +9,9 @@
  *     celular respondia "Não foi possível conectar o dispositivo";
  *  2. a SESSÃO que falhou (QR ou código vencido sem ninguém conectar) nunca
  *     voltava: `start` numa sessão FAILED responde 422 e ela ficava FAILED, sem
- *     QR nem código, para sempre;
+ *     QR nem código, para sempre. A .103 parava e iniciava, e não bastou: o
+ *     pedido do código grava o número na credencial antes do pareamento, e a
+ *     sessão religada falha de novo. A .104 apaga e cria a sessão limpa;
  *  3. a CERCA da página contava os pedidos que a própria página repete (o
  *     andamento a cada 5 s, o QR a cada 20 s): com ~4 minutos de tela aberta o
  *     dono era barrado e o QR virava imagem quebrada.
@@ -34,13 +36,15 @@ interface Pedido {
 }
 
 /**
- * Um contêiner de mentira que se comporta como o de verdade numa sessão FAILED:
- * `start` responde 422 e não muda nada; `stop` a deixa STOPPED, e aí `start` a
- * religa.
+ * Um contêiner de mentira que se comporta como o de verdade numa sessão que
+ * falhou depois de um pedido de código: `start` responde 422; parar e iniciar
+ * só a devolve a FAILED (a credencial pela metade é recusada). Apagada e criada
+ * de novo, ela nasce parada e o `start` a leva a esperar o pareamento.
  */
 function conteinerComSessaoQueFalhou(statusInicial: "FAILED" | "STOPPED" | "SCAN_QR_CODE" = "FAILED") {
   const pedidos: Pedido[] = [];
-  let status: string = statusInicial;
+  let status: string | null = statusInicial;
+  let credencialPelaMetade = statusInicial === "FAILED";
   const fetchDuble = (async (url: string | URL, init?: RequestInit) => {
     const u = new URL(String(url));
     const metodo = (init?.method ?? "GET").toUpperCase();
@@ -48,14 +52,23 @@ function conteinerComSessaoQueFalhou(statusInicial: "FAILED" | "STOPPED" | "SCAN
     pedidos.push({ metodo, caminho: u.pathname, corpo });
     const json = (codigo: number, b: unknown) => new Response(JSON.stringify(b), { status: codigo, headers: { "content-type": "application/json" } });
     const sessao = () => ({ name: SESSAO, status, config: CONFIG_CERTA, me: null });
-    if (/^\/api\/sessions\/[^/]+$/.test(u.pathname) && metodo === "GET") return json(200, sessao());
+    if (/^\/api\/sessions\/[^/]+$/.test(u.pathname) && metodo === "GET") return status ? json(200, sessao()) : json(404, {});
+    if (/^\/api\/sessions\/[^/]+$/.test(u.pathname) && metodo === "DELETE") {
+      status = null;
+      credencialPelaMetade = false;
+      return json(200, {});
+    }
+    if (u.pathname === "/api/sessions" && metodo === "POST") {
+      status = "STOPPED";
+      return json(201, sessao());
+    }
     if (/\/stop$/.test(u.pathname)) {
       status = "STOPPED";
       return json(201, sessao());
     }
     if (/\/start$/.test(u.pathname)) {
       if (status !== "STOPPED") return json(422, { message: `Session '${SESSAO}' is already started.` });
-      status = "SCAN_QR_CODE";
+      status = credencialPelaMetade ? "FAILED" : "SCAN_QR_CODE";
       return json(201, sessao());
     }
     if (/\/auth\/request-code$/.test(u.pathname)) return json(200, { code: "K7PQ2M9X" });
@@ -86,17 +99,28 @@ describe("1. o código de 8 letras vai para o número da conta do WhatsApp", () 
   });
 });
 
-describe("2. a sessão que falhou é religada", () => {
-  it("preparar uma sessão FAILED para e inicia: ela volta a esperar o pareamento", async () => {
+describe("2. a sessão que falhou nasce de novo, limpa", () => {
+  it("preparar uma sessão FAILED a apaga, cria e inicia: ela volta a esperar o pareamento", async () => {
     const c = conteinerComSessaoQueFalhou("FAILED");
     const leitor = criarLeitor("http://leitor.teste:3000", "chave-de-teste", c.fetchDuble);
     const preparado = await leitor.preparar(SESSAO);
     expect(preparado.estado).toBe("esperando_pareamento");
-    const ordem = c.pedidos.filter((p) => p.metodo === "POST").map((p) => p.caminho.split("/").at(-1));
-    expect(ordem).toEqual(["stop", "start"]);
-    // Nada fora da lista fechada, e nada apagado: o pareamento e o acervo ficam.
+    const mudancas = c.pedidos.filter((p) => p.metodo !== "GET").map((p) => `${p.metodo} ${p.caminho.replace(SESSAO, "<s>")}`);
+    expect(mudancas).toEqual(["DELETE /api/sessions/<s>", "POST /api/sessions", "POST /api/sessions/<s>/start"]);
+    // A sessão nova nasce do jeito certo, e nada sai da lista fechada.
+    const criacao = c.pedidos.find((p) => p.metodo === "POST" && p.caminho === "/api/sessions")!.corpo as {
+      config: { noweb: { markOnline: boolean }; webhooks: unknown[] };
+    };
+    expect(criacao.config.noweb.markOnline).toBe(false);
+    expect(criacao.config.webhooks).toEqual([]);
     for (const p of c.pedidos) expect(rotaPermitida(p.metodo, p.caminho), `${p.metodo} ${p.caminho}`).toBe(true);
-    expect(c.pedidos.some((p) => p.metodo === "DELETE")).toBe(false);
+  });
+
+  it("CONTROLE: só parar e iniciar (o conserto da .103) devolve a sessão a FAILED", async () => {
+    const c = conteinerComSessaoQueFalhou("FAILED");
+    await c.fetchDuble(`http://leitor.teste:3000/api/sessions/${SESSAO}/stop`, { method: "POST", body: "{}" });
+    await c.fetchDuble(`http://leitor.teste:3000/api/sessions/${SESSAO}/start`, { method: "POST", body: "{}" });
+    expect(c.status()).toBe("FAILED");
   });
 
   it("CONTROLE: a sessão parada só inicia, sem parar antes", async () => {
@@ -113,10 +137,8 @@ describe("2. a sessão que falhou é religada", () => {
     expect(c.pedidos.some((p) => p.metodo === "POST")).toBe(false);
   });
 
-  it("parar entra na lista fechada; parar qualquer outra coisa, não", () => {
-    expect(rotaPermitida("POST", `/api/sessions/${SESSAO}/stop`)).toBe(true);
-    expect(rotaPermitida("POST", "/api/sessions/stop")).toBe(false);
-    expect(rotaPermitida("POST", `/api/${SESSAO}/stop`)).toBe(false);
+  it("a lista fechada não ganhou rota: parar segue de fora", () => {
+    expect(rotaPermitida("POST", `/api/sessions/${SESSAO}/stop`)).toBe(false);
   });
 });
 
