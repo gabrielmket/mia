@@ -53,6 +53,8 @@ const ROTAS: ReadonlyArray<{ metodo: "GET" | "POST" | "DELETE"; caminho: RegExp;
   { metodo: "GET", caminho: new RegExp(`^/api/sessions/${SEGMENTO}$`), para: "ler o estado da sessão" },
   { metodo: "POST", caminho: /^\/api\/sessions$/, para: "criar a sessão do raio-X" },
   { metodo: "POST", caminho: new RegExp(`^/api/sessions/${SEGMENTO}/start$`), para: "iniciar a sessão" },
+  // FORK MIA (.103): parar é o que religa a sessão que falhou (ver `preparar`).
+  { metodo: "POST", caminho: new RegExp(`^/api/sessions/${SEGMENTO}/stop$`), para: "parar a sessão que falhou, para religar" },
   { metodo: "POST", caminho: new RegExp(`^/api/sessions/${SEGMENTO}/logout$`), para: "desconectar o aparelho" },
   { metodo: "DELETE", caminho: new RegExp(`^/api/sessions/${SEGMENTO}$`), para: "apagar a sessão e o acervo" },
   { metodo: "GET", caminho: new RegExp(`^/api/${SEGMENTO}/auth/qr$`), para: "o QR do pareamento" },
@@ -67,6 +69,22 @@ const ROTAS: ReadonlyArray<{ metodo: "GET" | "POST" | "DELETE"; caminho: RegExp;
 export function rotaPermitida(metodo: string, caminho: string): boolean {
   const so = caminho.split("?")[0] ?? "";
   return ROTAS.some((r) => r.metodo === metodo.toUpperCase() && r.caminho.test(so));
+}
+
+/**
+ * FORK MIA (.103) · O NÚMERO COMO A CONTA DO WHATSAPP ESTÁ REGISTRADA, para o
+ * código de 8 letras. O código só vale para o número EXATO da conta: pedido
+ * para outra grafia, o celular responde "Não foi possível conectar o
+ * dispositivo. Confira se você inseriu o número de telefone correto". No
+ * Brasil, a conta de celular de DDD 31 a 99 fica registrada SEM o nono dígito
+ * (553184025321); de DDD 11 a 28, COM ele. O cadastro guarda com o 9, então
+ * aqui ele sai do DDD 31 em diante. Fixo, celular já sem o 9 e número de fora
+ * do Brasil passam como vieram. O QR não depende disto.
+ */
+export function numeroDaContaDoWhatsapp(digitos: string): string {
+  const m = /^55(\d{2})9(\d{8})$/.exec(digitos);
+  if (!m) return digitos;
+  return Number(m[1]) >= 31 ? `55${m[1]}${m[2]}` : digitos;
 }
 
 export class LeitorRecusou extends Error {
@@ -301,6 +319,14 @@ export function criarLeitor(baseUrl: string, chave: string, fetchImpl: typeof fe
         await apagar(sessao).catch(() => undefined);
         throw new LeitorRecusou("leitor_config_recusada");
       }
+      // FORK MIA (.103): a sessão que FALHOU (o QR ou o código venceu sem ninguém
+      // conectar) não volta com `start`: o contêiner responde 422 ("já iniciada")
+      // e ela ficava FAILED para sempre, sem QR nem código. Parar antes de iniciar
+      // é o que a religa, sem apagar o pareamento nem o acervo.
+      if (corpo.status === "FAILED") {
+        const parada = await chamar("POST", `/api/sessions/${s(sessao)}/stop`, {});
+        if (!parada.ok && parada.status !== 404) throw new LeitorRecusou(`leitor_parar_${parada.status}`);
+      }
       if (corpo.status === "STOPPED" || corpo.status === "FAILED") {
         const r = await chamar("POST", `/api/sessions/${s(sessao)}/start`, {});
         if (!r.ok && r.status !== 422) throw new LeitorRecusou(`leitor_iniciar_${r.status}`);
@@ -315,7 +341,7 @@ export function criarLeitor(baseUrl: string, chave: string, fetchImpl: typeof fe
       const atual = paraEstado(await lerSessao(sessao));
       if (atual.estado === "conectado") throw new LeitorRecusou("ja_conectado");
       if (atual.estado !== "esperando_pareamento") throw new LeitorRecusou("ainda_nao_pronto");
-      const r = await chamar("POST", `/api/${s(sessao)}/auth/request-code`, { phoneNumber: numero.data });
+      const r = await chamar("POST", `/api/${s(sessao)}/auth/request-code`, { phoneNumber: numeroDaContaDoWhatsapp(numero.data) });
       if (!r.ok) throw new LeitorRecusou("codigo_recusado");
       const corpo = (await r.json().catch(() => null)) as { code?: unknown } | null;
       const code = typeof corpo?.code === "string" ? corpo.code.toUpperCase().replace(/-/g, "") : "";

@@ -345,6 +345,10 @@ export const DICIONARIO_DO_RAIO_X_MIA: Traducoes = {
   },
   "Aponte a câmera para o QR.": { es: "Apunte la cámara al QR." },
   "O QR se renova sozinho a cada 20 segundos.": { es: "El QR se renueva solo cada 20 segundos." },
+  "Preparando o QR… ele aparece em alguns segundos.": { es: "Preparando el QR… aparece en unos segundos." },
+  "O WhatsApp disse que não foi possível conectar? Gere outro código ou abra este link no computador e use o QR.": {
+    es: "¿WhatsApp dijo que no fue posible conectar? Genere otro código o abra este enlace en la computadora y use el QR.",
+  },
   "Aguardando a conexão…": { es: "Esperando la conexión…" },
   "Conectado. Lendo as conversas dos últimos {n} dias": { es: "Conectado. Leyendo las conversaciones de los últimos {n} días" },
   "O WhatsApp está mandando o histórico em partes. Isso leva alguns minutos.": {

@@ -13,6 +13,15 @@ import { whatsappParaLer, type FonteDoRaioX } from "./regras";
 /** As cercas de quem pede código e QR (a página e as três rotas públicas). */
 export const ROTULO_DO_LIMITE_DA_PAGINA = "raio_x_conexao";
 export const LIMITE_DA_PAGINA = { ip: 60, windowSec: 600 } as const;
+/**
+ * FORK MIA (.103) · A cerca do que a PRÓPRIA página repete sozinha: o andamento
+ * (a cada 5 s) e o QR (a cada 20 s), ~150 pedidos em 10 minutos de tela aberta.
+ * Na cerca da página (60), o dono era barrado depois de ~4 minutos esperando, e
+ * o QR virava imagem quebrada. 400 cobre duas abas abertas com folga; adivinhar
+ * um código de 40 bits a esse ritmo continua fora de alcance.
+ */
+export const ROTULO_DO_LIMITE_DO_ANDAMENTO = "raio_x_andamento";
+export const LIMITE_DO_ANDAMENTO = { ip: 400, windowSec: 600 } as const;
 export const ROTULO_DO_LIMITE_DO_CODIGO = "raio_x_codigo";
 /** O código do WhatsApp vale ~3 minutos: 1 pedido a cada 30 s por raio-X, 10 por IP em 10 min. */
 export const LIMITE_DO_CODIGO = { ip: 10, id: 6, windowSec: 600 } as const;

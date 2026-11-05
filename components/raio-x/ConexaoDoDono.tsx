@@ -83,6 +83,9 @@ export function ConexaoDoDono({ codigo, inicial }: { codigo: string; inicial: Si
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [rodadaDoQr, setRodadaDoQr] = useState(0);
+  // FORK MIA (.103): enquanto o WhatsApp prepara (ou religa) a sessão, o QR
+  // ainda não existe. Em vez da imagem quebrada, a página avisa e tenta de novo.
+  const [qrPreparando, setQrPreparando] = useState(false);
   const base = `/api/v1/publico/raio-x/${codigo}`;
 
   const atualizar = useCallback(async () => {
@@ -314,6 +317,7 @@ export function ConexaoDoDono({ codigo, inicial }: { codigo: string; inicial: Si
                 {codigoDoWhatsapp ? t("Gerar outro código") : t("Gerar o código")}
               </Button>
               <p className="text-xs text-text-muted">{t("O código vale por cerca de 3 minutos. Se vencer, gere outro.")}</p>
+              <p className="text-xs text-text-muted">{t("O WhatsApp disse que não foi possível conectar? Gere outro código ou abra este link no computador e use o QR.")}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -323,8 +327,18 @@ export function ConexaoDoDono({ codigo, inicial }: { codigo: string; inicial: Si
                 alt={t("QR para conectar o WhatsApp")}
                 width={220}
                 height={220}
-                className="mx-auto rounded-md border border-border bg-white p-2"
+                className={`mx-auto rounded-md border border-border bg-white p-2 ${qrPreparando ? "hidden" : ""}`}
+                onLoad={() => setQrPreparando(false)}
+                onError={() => {
+                  setQrPreparando(true);
+                  window.setTimeout(() => setRodadaDoQr((n) => n + 1), 5_000);
+                }}
               />
+              {qrPreparando ? (
+                <p className="mx-auto flex h-[220px] w-[220px] items-center justify-center rounded-md border border-border p-4 text-center text-sm text-text-muted" aria-live="polite" data-raio-x="qr-preparando">
+                  {t("Preparando o QR… ele aparece em alguns segundos.")}
+                </p>
+              ) : null}
               <ol className="list-decimal space-y-1 pl-5 text-sm">
                 <li>{t("No celular do número, abra o WhatsApp.")}</li>
                 <li>{t("Toque em Configurações › Aparelhos conectados › Conectar aparelho.")}</li>

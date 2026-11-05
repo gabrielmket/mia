@@ -12,14 +12,15 @@ import { leitorDoRaioX } from "@/lib/channels/raio-x/leitor";
 import { fail } from "@/lib/api/wrappers";
 import { authRateLimited } from "@/lib/auth/rate-limit";
 import { podeConectar, raioXPeloCodigo } from "@/lib/raio-x/banco";
-import { LIMITE_DA_PAGINA, ROTULO_DO_LIMITE_DA_PAGINA } from "@/lib/raio-x/publico";
+import { LIMITE_DO_ANDAMENTO, ROTULO_DO_LIMITE_DO_ANDAMENTO } from "@/lib/raio-x/publico";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ codigo: string }> }): Promise<Response> {
   const requestId = randomUUID();
-  if (await authRateLimited(ROTULO_DO_LIMITE_DA_PAGINA, null, LIMITE_DA_PAGINA)) {
+  // FORK MIA (.103): a cerca do andamento, que a página repete a cada 20 s.
+  if (await authRateLimited(ROTULO_DO_LIMITE_DO_ANDAMENTO, null, LIMITE_DO_ANDAMENTO)) {
     return fail("rate_limited", "Muitas consultas seguidas. Aguarde alguns minutos.", 429, { requestId, headers: { "Retry-After": "600" } });
   }
   const { codigo } = await params;
