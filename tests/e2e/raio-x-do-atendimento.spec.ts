@@ -7,7 +7,7 @@
  *
  *   1. a Time cria o raio-X no Admin e recebe o link de conexão e a mensagem;
  *   2. o dono abre o link SEM login, aceita o termo (fica gravado com o texto
- *      inteiro) e pede o código de 8 letras;
+ *      inteiro; desde a .102, com nome completo e e-mail) e pede o código de 8 letras;
  *   3. o relatório, montado das conversas fictícias fixas, aparece no Admin;
  *   4. a Time revisa e gera o link do dono;
  *   5. o dono abre o link SEM login: sem o bloco da MIA e sem custo;
@@ -118,6 +118,8 @@ test("[P0] raio-X do atendimento: criar, aceitar, revisar, link do dono e encerr
     if (criado.error) throw criado.error;
     raioXId = (criado.data as { id: string }).id;
     expect(criado.data).toMatchObject({ situacao: "aguardando", whatsapp: "5531900001101" });
+    // FORK MIA (.102): sem escolher a fonte, o raio-X continua sendo o da conexão.
+    expect((await db.from("mia_raio_x").select("fonte").eq("id", raioXId).single()).data).toMatchObject({ fonte: "conexao" });
     await page.screenshot({ path: `${EVIDENCIA}/1-novo-raio-x.png`, fullPage: true });
 
     // ── 2. O dono abre o link sem login e aceita o termo ────────────────
@@ -126,12 +128,14 @@ test("[P0] raio-X do atendimento: criar, aceitar, revisar, link do dono e encerr
     await paginaDoDono.goto(new URL(linkDeConexao).pathname);
     await expect(paginaDoDono.locator('[data-raio-x-etapa="termo"]')).toContainText(EMPRESA);
     await paginaDoDono.locator("#raio-x-nome").fill("Ricardo Exemplo");
+    // FORK MIA (.102): o aceite pede também o e-mail, nas duas fontes.
+    await paginaDoDono.locator("#raio-x-email").fill("ricardo@garagemmodelo.com.br");
     await paginaDoDono.locator('[data-raio-x="aceite"]').check();
     await paginaDoDono.locator('[data-raio-x="autorizar"]').click();
     await expect(paginaDoDono.locator('[data-raio-x-etapa="conectar"]')).toBeVisible();
-    const aceite = await db.from("mia_raio_x_aceites").select("nome, termo_versao, termo_texto, termo_hash").eq("raio_x_id", raioXId).single();
+    const aceite = await db.from("mia_raio_x_aceites").select("nome, email, termo_versao, termo_texto, termo_hash").eq("raio_x_id", raioXId).single();
     if (aceite.error) throw aceite.error;
-    expect(aceite.data).toMatchObject({ nome: "Ricardo Exemplo", termo_versao: "v1" });
+    expect(aceite.data).toMatchObject({ nome: "Ricardo Exemplo", email: "ricardo@garagemmodelo.com.br", termo_versao: "v1" });
     expect((aceite.data as { termo_texto: string }).termo_texto).toContain("TERMO DE AUTORIZAÇÃO");
     // A sessão do leitor nasceu com o acervo, sem o "online" e sem webhook.
     const criacao = pedidos.find((p) => p.metodo === "POST" && p.caminho === "/api/sessions");

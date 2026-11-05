@@ -1500,12 +1500,15 @@ jobs:
       # do job e esta é a parte comum com mais folga no teto de 30 min.
       # FORK MIA (.101): `raio-x-do-atendimento` também: o dublê do leitor ela
       # mesma sobe (porta 3994), como a do Jev sobe o dela.
+      # FORK MIA (.102): `raio-x-cliente-ativo` também: não usa leitor nem IA,
+      # semeia a conta que lê e chama o cron do raio-X com o segredo interno.
       SPECS_PARTE_7: >-
         celular-toque-nos-controles.spec.ts
         agente-novo-e-uso.spec.ts
         capacidades-do-agente.spec.ts
         cupons-e-parceiros.spec.ts
         raio-x-do-atendimento.spec.ts
+        raio-x-cliente-ativo.spec.ts
         equipe-no-celular.spec.ts
         extensoes-versao.spec.ts
         ia-no-celular.spec.ts

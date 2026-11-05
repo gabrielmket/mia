@@ -1,4 +1,4 @@
-# O raio-X do atendimento (.101)
+# O raio-X do atendimento (.101, e o cliente ativo na .102)
 
 Ferramenta da Time Company, dentro do sistema MIA, na área da plataforma (só quem
 administra a plataforma usa). A Time cadastra o raio-X de uma empresa, manda um link,
@@ -441,3 +441,223 @@ O raio-X mora em `lib/raio-x/`, `lib/channels/raio-x/`, `components/raio-x/`,
 | `tests/unit/mcp-de-implantacao-raio-x.test.ts` | as quatro ferramentas, a operação e a redação da auditoria |
 | `tests/invariants/raio-x-do-atendimento.test.ts` | no Postgres: só o servidor nas sete tabelas, os CHECKs, o número de ordem, apagar as conversas e o acesso ao link |
 | `tests/e2e/raio-x-do-atendimento.spec.ts` | pelo navegador: criar no Admin, aceitar o termo na página pública, relatório fictício renderizado, revisar, gerar o link do dono, abrir sem login, encerrar |
+
+---
+
+## 13. O raio-X do CLIENTE ATIVO (.102)
+
+Protótipo aprovado: `Projeto sistema MIA/Produto/Prototipo-raio-x-cliente-ativo-2026-11-05.html`
+(as 8 telas). A primeira pergunta do Novo raio-X passa a ser **de onde vêm as conversas**:
+
+| fonte (`mia_raio_x.fonte`) | para quem | como lê |
+|---|---|---|
+| `conexao` (o padrão) | quem ainda não é cliente | a .101 sem mudança: o dono autoriza e conecta o WhatsApp ao leitor |
+| `conversas_da_mia` | cliente ativo da MIA | nada é conectado e o leitor não é usado: o raio-X lê `conversations` e `messages` da própria organização, nos números escolhidos, inclusive os da API oficial |
+
+### 13.1 O fluxo
+
+| passo | quem | onde |
+|---|---|---|
+| escolher "Conversas que já estão na MIA" e a empresa; o segmento, os números, o período, o horário, quem autoriza e a estimativa vêm da conta | a Time | Admin › Raio-X do atendimento › Novo raio-X (`GET /api/v1/admin/raio-x/conta`), ou `plataforma_ver_raio_x` com `organization_id` |
+| "Criar e gerar o link de autorização" (vale 48 h) e a mensagem pronta | a Time | a mesma tela, ou `plataforma_criar_raio_x` com `fonte`, `organization_id` e `numeros` |
+| ler o termo "cliente ativo" v1 e autorizar com nome completo e e-mail (duas etapas: autorizar e pronto) | o dono, sem conta | `/raio-x/<código>` |
+| a leitura começa NA HORA da autorização (situação "lendo") | o servidor | o cron de minuto, `lib/raio-x/leitura-da-conta.ts` |
+| transcrever o áudio que a MIA ainda não transcreveu, classificar, gerar o rascunho | o servidor | o mesmo cron, `lib/raio-x/analise.ts` |
+| revisar e gerar o link do dono | a Time | o detalhe, ou `plataforma_publicar_raio_x` (como na .101) |
+| as transcrições e a análise de cada conversa apagam 30 dias depois do relatório | o servidor | o cron (`fn_mia_raio_x_expurgar_conversas`, da 9150) |
+
+Não há conexão para cair: o cliente ativo nunca tem `sessao` nem `desconectar_em` (o CHECK
+`mia_raio_x_fonte_sem_sessao` garante a primeira). O mensal existe para o cliente ativo e nasce
+DESLIGADO (o tipo padrão é o único; a Time escolhe "Mensal · todo dia 1" por cliente).
+
+### 13.2 As regras escolhidas
+
+**Empresa ativa** (`lib/raio-x/conta.ts`, `ehClienteAtivo`): a mesma leitura de "Empresas do cadastro"
+e do `plataforma_listar_assinaturas` (`lib/planos-mia/situacao.ts`, `situacaoDaEmpresa`, sobre
+`cobranca_assinaturas` e o status da organização). Entra a organização que OPERA
+(`organizations.status = 'active'`) e cuja situação na cobrança é **em dia, em teste ou isenta**.
+Isenta é a empresa sem assinatura no sistema: a implantada pela Time, que paga por fora, é o cliente de
+hoje. Em atraso (com ou sem prazo), suspensa e cancelada não entram: o raio-X é gasto da Time. A
+**demonstração** (`organizations.demonstracao`) entra se opera, qualquer que seja a cobrança, para dar
+para mostrar. A criação confere de novo (a lista da tela pode estar velha).
+
+**Os números**: os canais da conta com endereço de telefone (`PROVIDERS_DE_TELEFONE`; rede social e voz
+ficam de fora), com o rótulo, o telefone comercial e se é API oficial (`lib/channels/raio-x/numeros-da-conta.ts`,
+que mora em `lib/channels/` porque só ali se nomeia o transporte). O `whatsapp` do raio-X é o
+telefone do primeiro número escolhido: é a chave de "mesma empresa".
+
+**O período**: os N dias INTEIROS antes do dia da criação (no fuso de São Paulo), e nunca antes do dia
+da primeira conversa da conta nos números escolhidos (`mia_raio_x.primeira_conversa_em`). É fixado na
+criação, para o termo dizer as datas que o dono autoriza ("de 06/09 a 04/11"). `periodo_fim` é
+exclusivo (a meia-noite do dia da criação).
+
+**O que fica de fora** (`elegiveis` em `leitura-da-conta.ts`, conferido de novo na análise e no relatório):
+
+| o quê | como o fork marca |
+|---|---|
+| grupo | `conversations.is_group` e o contato `kind = 'whatsapp_group'` |
+| conversa interna ou da equipe | o contato pessoal (`contacts.is_personal`, a vida pessoal de alguém da equipe, escondida da operação) e o número interno dos avisos (`config_aviso_de_caso.telefone_destino` e o do aviso de agendamento, quando é outro) |
+| contato com pedido de exclusão (LGPD) | já anonimizado (`contacts.is_anonymized`) ou com pedido de anonimização em `lgpd_requests` (`request_type = 'redact'`, qualquer situação) |
+| mensagem apagada | `messages.revoked_at` (o "apagar para todos"; não existe `redacted_at` em `messages`: a anonimização LGPD reescreve a linha e marca o contato) |
+| reação e linha de sistema | `messages.type` em `reaction` e `system` |
+
+**Quem respondeu** (`lib/raio-x/quem-respondeu.ts`): pelo `messages.sent_via`, e a direção separa o
+cliente (a ingestão carimba `external_device` também na mensagem que chega):
+
+| `direction` + `sent_via` | quem |
+|---|---|
+| `inbound` | o cliente |
+| `outbound` + `ai` | a IA |
+| `outbound` + `user` ou `crm` | a equipe pela MIA |
+| `outbound` + `external_device` | o celular do número (fora da MIA: sem quem respondeu e sem o funil) |
+| `outbound` + `automation` ou `system` | follow-up, automação ou integração |
+
+A conta é por CONVERSA: o primeiro episódio do período que o cliente abriu (a definição da seção 4) e
+quem deu a primeira resposta nele. A mediana da primeira resposta é em SEGUNDOS. "Fora do horário" é
+quantas dessas conversas chegaram com a loja fechada. O indicador novo "Respondido fora do horário" é,
+dos episódios que chegaram com a loja fechada, quantos tiveram a primeira resposta ANTES de a loja abrir
+de novo (`proximaAbertura` em `horario.ts`).
+
+**A passagem para humano** (`lib/raio-x/passagem.ts`): `passagens_de_atendimento` (upstream, 0291), uma
+linha por vez que o atendimento saiu do automático (`criado_em`), reconhecida (`reconhecido_em`) quando
+alguém assume a conversa (`fn_conversation_assign`) ou a devolve ao automático (0293). A conversa que
+passou antes de a tabela ter escritor só tem `conversations.last_handoff_at`, que vale como passagem sem
+reconhecimento. **Alguém assumiu** = o que vier primeiro: o reconhecimento, ou a primeira mensagem de uma
+pessoa (equipe pela MIA ou celular) depois da passagem. Por conversa, a PRIMEIRA passagem do período, nas
+faixas até 15 min, de 15 min a 2 h, mais de 2 h e ninguém assumiu ("ninguém" só com 2 h no relógio até o
+fim do período; menos é "em aberto", fora das faixas). As medianas separam a passagem com a loja aberta e
+fechada.
+
+**No que virou** (o funil da própria conta, `mensagens-da-conta.ts`): o contato da conversa teve um
+negócio (`crm_leads`) vivo no período (nasceu antes do fim e não estava fechado antes do começo), um
+agendamento (`calendar_appointments`) criado no período, e uma venda ganha (`crm_leads.status = 'won'`,
+fechada no período). O bloco mostra as conversas passadas para a equipe e, das que esperaram mais de 2 h
+ou que ninguém assumiu, quantas viraram visita.
+
+**A transcrição**: reaproveitada quando a MIA já tem (`messages.media_derived_text` com
+`media_derived_status = 'ready'`). A que falta é baixada do storage da PRÓPRIA conta (`whatsapp-media`,
+`messages.media_storage_path`) e transcrita pelo transcritor da plataforma (o mesmo da .101), com o teto
+conferido antes de cada áudio e o gasto gravado. Ela é o único texto guardado fora das tabelas da conta:
+uma linha transitória em `mia_raio_x_mensagens` (só a marca, o id da mensagem cifrado e o texto), que
+apaga com as conversas em 30 dias. O raio-X NÃO escreve na conta (nem a transcrição em
+`media_derived_text`): o termo promete só leitura.
+
+**O que é guardado**: a conversa do raio-X (`mia_raio_x_conversas`: a marca HMAC do id da conversa, o
+número de ordem, a referência CIFRADA com o id da conversa e a análise do modelo, sem texto) e o
+relatório (números somados e trechos anonimizados). As mensagens são lidas da conta na hora da análise e
+do relatório. Nenhuma mensagem é enviada: o módulo só faz `select` nas tabelas da conta.
+
+### 13.3 O aceite (nas duas fontes)
+
+A página do dono pede **nome completo** (nome e sobrenome: duas palavras, cada uma com letra) e
+**e-mail** num formato válido (`lib/raio-x/aceite.ts`), na conexão também. O aceite grava nome completo,
+e-mail, data e hora, versão e o texto inteiro do termo (`mia_raio_x_aceites.email`, 9151; o CHECK exige o
+nome completo quando há e-mail, e os aceites antigos, sem e-mail, ficam como foram gravados). **O e-mail
+não é usado para mandar nada**: o serviço de envio ainda não está configurado.
+
+O termo "cliente ativo" v1 (`lib/raio-x/termo.ts`, `VERSAO_DO_TERMO_CLIENTE_ATIVO = "cliente_ativo_v1"`):
+
+> ⚠️ **PRECISA PASSAR POR ADVOGADO, JUNTO COM O TERMO V1.** Mudou uma vírgula, é outra versão.
+
+```
+TERMO DE AUTORIZAÇÃO · RAIO-X DO ATENDIMENTO · CLIENTE ATIVO · versão 1
+
+Eu, responsável pela conta Garagem Modelo Veículos na MIA, autorizo a Time Company a analisar as conversas de WhatsApp dos números Vendas e Pós-venda já registradas na MIA, de 06/09 a 04/11, só para medir o atendimento e gerar o relatório do raio-X. Nenhuma mensagem é enviada em meu nome. Os trechos de conversa do relatório não levam nome, telefone ou documento dos clientes. O relatório fica guardado para comparar com o próximo raio-X. Posso cancelar esta autorização falando com a Time Company.
+```
+
+No mensal, depois do período entra: "e, no acompanhamento mensal, as do mês anterior no dia 1 de cada
+mês, até eu ou a Time Company encerrarmos,".
+
+### 13.4 O relatório, o antes e depois e o link do dono
+
+O mesmo relatório da .101, mais `dados.fonte` e `dados.clienteAtivo` (`BlocoDoClienteAtivo` em
+`relatorio.ts`): quem respondeu primeiro, depois da passagem (faixas, medianas e o trecho anonimizado da
+passagem que mais demorou), no que virou, e **"onde ainda dá para ganhar"** no lugar do "o que a MIA
+resolveria" (a passagem lenta, as conversas respondidas pelo celular e o número sem follow-up com sumiços
+sem retorno). Os trechos seguem anonimizados (`anonimizar.ts`, com o nome do contato lido da conta só para
+tirá-lo).
+
+O **antes e depois** é a comparação da .101 (decisão 13), agora buscando o anterior da mesma empresa por
+`organization_id` OU por qualquer telefone dos números da conta (`samePhone`): o raio-X por conexão feito
+antes de virar cliente é achado sozinho. Indicadores novos (opcionais, ausentes nos relatórios da .101):
+"Sem resposta ou sumiu sem retorno", "Respondido fora do horário" e "Espera depois de passar para um
+vendedor", que contra o raio-X por conexão sai "não existia" com o selo "novo". O tempo dos relatórios
+novos vai em minutos com fração (9 s = 0,15 min), na mesma unidade da .101. A linha que nenhum dos dois
+mede some da tabela.
+
+O link do dono do cliente ativo mostra o resultado da MIA e onde a equipe ainda perde (tela 7), sem custo e
+sem as anotações da Time.
+
+### 13.5 O que mudou no MCP
+
+As mesmas quatro ferramentas (seguem **110** no total): `plataforma_criar_raio_x` aceita `fonte`,
+`organization_id` e `numeros`; `plataforma_ver_raio_x` mostra a fonte e o aceite (e-mail mascarado), o
+andamento da análise e o bloco do cliente ativo e, com `organization_id` sem `raio_x_id`, o que dá para
+ler da conta (os números com o `channel_session_id`, o período, a estimativa e se é cliente ativo).
+
+### 13.6 Decisões (as recomendações do protótipo, tela 8)
+
+- Só a Time gera o raio-X do cliente ativo (Admin e MCP); nada na tela do cliente.
+- O dono autoriza pelo link também no cliente ativo (decidido em 05/11).
+- O mensal existe e nasce desligado.
+- Sem cobrança no código: só o teto e a estimativa (`estimativaDoRaioX` em `custo.ts`, conservadora como o
+  teto: cada conversa com o texto no limite e a saída cheia, cada áudio com um minuto; o custo real fica
+  gravado).
+
+### 13.7 A compatibilidade com a .101
+
+O raio-X criado na .101 segue funcionando depois da .102, e `tests/unit/raio-x-compatibilidade-com-a-101.test.ts` prova:
+
+- os códigos e tokens são os mesmos para o mesmo id e versão: `lib/raio-x/tokens.ts` não mudou (o teste
+  confere contra valores calculados fora do repositório pelo algoritmo da .101);
+- a linha antiga ganha a fonte `conexao` pelo DEFAULT da 9151 (provado no Postgres pela invariante) e é
+  tratada como conexão na lista, no detalhe e na página pública; o raio-X "aguardando" abre a página com o
+  formulário novo (nome completo e e-mail) e segue as três etapas;
+- o aceite antigo, sem e-mail, é lido sem erro;
+- o cursor de leitura da .101 (`leitura`, que não mudou de formato) é retomado de onde parou.
+
+### 13.8 Limites e o que ficou de fora
+
+- O horário "da conta" sai do "Só atender em horário de funcionamento" de um agente publicado; sem ele, o
+  padrão do raio-X (a tela avisa e a Time ajusta).
+- O segmento "da conta" sai do passo "Seu negócio" do onboarding (clínica vira clínica odontológica;
+  indústria e outro viram outro).
+- O funil é por CONTATO: o contato com conversa em dois números conta nos dois.
+- Feriado continua fora da conta de loja aberta ou fechada.
+- Não medido com IA de verdade nem com conta real: o custo estimado é a tabela de preço, e o real fica
+  gravado no primeiro uso.
+
+### 13.9 O roteiro de implantação
+
+1. **Backup do banco** antes (a 9151 só ACRESCENTA: duas colunas em `mia_raio_x`, uma em
+   `mia_raio_x_aceites`, os CHECKs novos e a tabela `mia_raio_x_numeros`).
+2. Implantar a versão pela compose do EasyPanel. **Nenhuma variável nova** e nenhum serviço novo: o
+   cliente ativo não usa o `raio-x-leitor`. O agendador não muda (a linha do cron é a da .101).
+3. Conferir a saúde: `/api/v1/health` com o carimbo `20261105120000_9151_raio_x_do_cliente_ativo` e zero
+   erros.
+4. Conferir o raio-X que já existia (o mensal "aguardando" da .101): o link mandado ao dono ainda abre, com
+   o formulário novo (nome completo e e-mail) e as três etapas; na lista ele aparece como "Conexão do
+   WhatsApp".
+5. **Primeiro teste com a Empresa Modelo** (demonstração, dado inventado): Admin › Novo raio-X ›
+   "Conversas que já estão na MIA", a demonstração, os números, 30 dias, teto de R$ 10. Abrir o link de
+   autorização num navegador sem login, autorizar com nome completo e e-mail, e acompanhar o andamento no
+   detalhe ("Autorizado por …", "Leu as conversas da conta" em segundos ou minutos). Conferir no rascunho:
+   quem respondeu primeiro, a passagem, no que virou, os trechos (nenhum telefone, nomes como [nome]) e o
+   custo gravado; e que a conta não recebeu mensagem nenhuma.
+6. Depois, com um cliente ativo de verdade e o termo "cliente ativo" revisado pelo advogado: o raio-X
+   anterior por conexão da mesma empresa, se houver, aparece sozinho no antes e depois.
+
+Para desfazer: voltar a imagem anterior. As colunas e a tabela novas ficam (são aditivas) e o raio-X do
+cliente ativo para de andar; o da conexão segue como na .101.
+
+### 13.10 O que prova o quê (.102)
+
+| teste | prova |
+|---|---|
+| `tests/unit/raio-x-cliente-ativo-regras.test.ts` | a classificação por `sent_via`, quem respondeu primeiro (segundos, fora do horário), respondido com a loja fechada, a próxima abertura, as faixas da espera e "alguém assumiu", o funil, o nome completo e o e-mail, o termo "cliente ativo" v1, o cadastro da fonte nova e o "novo" do antes e depois |
+| `tests/unit/raio-x-cliente-ativo-ciclo-com-duble.test.ts` | o ciclo inteiro sem leitor, com o banco em memória: cria (empresa ativa, números, período limitado), autoriza, lê a conta deixando de fora grupo, pessoal, interno e pedido de exclusão, reaproveita e faz a transcrição, classifica, gera o relatório com quem respondeu, a passagem e o funil, e não escreve na conta; recusa número de outra empresa e empresa que não é cliente ativo |
+| `tests/unit/raio-x-compatibilidade-com-a-101.test.ts` | a seção 13.7 |
+| `tests/unit/mcp-de-implantacao-raio-x.test.ts` | o criar com a fonte, a conta e os números; o ver com a fonte e o aceite; seguem 110 |
+| `tests/invariants/raio-x-do-atendimento.test.ts` | no Postgres: as oito tabelas só do servidor (com `mia_raio_x_numeros`), a fonte fechada e sem sessão, o telefone comercial só em dígitos, o e-mail e o nome completo no aceite, a cascata dos números |
+| `tests/e2e/raio-x-cliente-ativo.spec.ts` | pelo navegador: criar pelo Admin com a conta, autorizar sem conectar (o nome só não passa), o cron lê a conta e gera o rascunho, o detalhe com "Autorizado por" e quem respondeu, nenhuma mensagem nova |
+| `tests/e2e/raio-x-do-atendimento.spec.ts` | a conexão da .101 com o aceite novo (nome completo e e-mail) |
