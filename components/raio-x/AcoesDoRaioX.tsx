@@ -46,12 +46,15 @@ export function ConexaoDoRaioX({
   mensagem,
   vivo,
   expiraEm,
+  autorizacao = false,
 }: {
   raioXId: string;
   link: string;
   mensagem: string;
   vivo: boolean;
   expiraEm: string | null;
+  /** FORK MIA (.102): no cliente ativo o link é só de AUTORIZAÇÃO (nada é conectado). */
+  autorizacao?: boolean;
 }) {
   const t = useT();
   const tag = tagDeIdioma(useIdioma());
@@ -84,7 +87,7 @@ export function ConexaoDoRaioX({
   return (
     <div className="space-y-3" data-raio-x="conexao">
       <div className="flex flex-wrap gap-2">
-        <Input readOnly value={atual.link} className="flex-1" aria-label={t("Link de conexão")} data-raio-x="link-de-conexao" />
+        <Input readOnly value={atual.link} className="flex-1" aria-label={autorizacao ? t("Link de autorização") : t("Link de conexão")} data-raio-x="link-de-conexao" />
         <Button type="button" variant="outline" onClick={() => copiar(atual.link, t("Link copiado."))} disabled={!atual.vivo}>
           {t("Copiar o link")}
         </Button>

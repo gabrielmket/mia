@@ -842,3 +842,48 @@ export async function mudarTeto(admin: SupabaseClient, raioXId: string, tetoCent
   const { error } = await admin.from("mia_raio_x").update({ teto_centavos: tetoCentavos }).eq("id", raioXId);
   if (error) falhou("o teto não gravou", error);
 }
+
+// ─── FORK MIA (.102) · o andamento da análise do cliente ativo ───────────────
+
+export interface AndamentoDaAnaliseDaConta {
+  conversas: number;
+  analisadas: number;
+  audios: number;
+  audiosTranscritos: number;
+  audiosPendentes: number;
+  custoTranscricaoCentavos: number;
+  custoAnaliseCentavos: number;
+}
+
+/** O que o detalhe do Admin mostra nos passos "transcreveu os áudios" e "analisando" (o ciclo vigente). */
+export async function andamentoDaAnaliseDaConta(admin: SupabaseClient, r: Pick<LinhaDoRaioX, "id" | "ciclo">): Promise<AndamentoDaAnaliseDaConta> {
+  const contar = async (consulta: PromiseLike<{ count: number | null; error: { code?: string } | null }>) => {
+    const { count, error } = await consulta;
+    if (error) falhou("andamento da análise", error);
+    return count ?? 0;
+  };
+  const [conversas, analisadas, audios, transcritos, pendentes, gastos] = await Promise.all([
+    contar(admin.from("mia_raio_x_conversas").select("id", { count: "exact", head: true }).eq("raio_x_id", r.id)),
+    contar(admin.from("mia_raio_x_conversas").select("id", { count: "exact", head: true }).eq("raio_x_id", r.id).eq("analise_ciclo", r.ciclo)),
+    contar(admin.from("mia_raio_x_mensagens").select("id", { count: "exact", head: true }).eq("raio_x_id", r.id).eq("tipo", "audio")),
+    contar(admin.from("mia_raio_x_mensagens").select("id", { count: "exact", head: true }).eq("raio_x_id", r.id).eq("tipo", "audio").eq("transcricao", "feita")),
+    contar(admin.from("mia_raio_x_mensagens").select("id", { count: "exact", head: true }).eq("raio_x_id", r.id).eq("transcricao", "pendente")),
+    admin.from("mia_raio_x_gastos").select("proposito, custo_centavos").eq("raio_x_id", r.id).eq("ciclo", r.ciclo),
+  ]);
+  if (gastos.error) falhou("gastos da análise", gastos.error);
+  let custoTranscricaoCentavos = 0;
+  let custoAnaliseCentavos = 0;
+  for (const g of (gastos.data ?? []) as Array<{ proposito: string; custo_centavos: number | string }>) {
+    if (g.proposito === "raio_x_transcricao") custoTranscricaoCentavos += Number(g.custo_centavos);
+    else custoAnaliseCentavos += Number(g.custo_centavos);
+  }
+  return {
+    conversas,
+    analisadas,
+    audios,
+    audiosTranscritos: transcritos,
+    audiosPendentes: pendentes,
+    custoTranscricaoCentavos: Math.round(custoTranscricaoCentavos * 100) / 100,
+    custoAnaliseCentavos: Math.round(custoAnaliseCentavos * 100) / 100,
+  };
+}

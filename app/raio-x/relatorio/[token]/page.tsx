@@ -87,7 +87,9 @@ export default async function RelatorioDoDonoPage({ params }: PageProps) {
         <RelatorioDoDono dados={dadosParaODono(resolvido.relatorio.dados)} comparacao={resolvido.relatorio.comparacao} t={t} tag={tag} />
         <footer className="mt-auto border-t border-border pt-4 text-center text-xs text-text-muted">
           {t("Link válido até")} {validoAte}.{" "}
-          {t("Os seus clientes aparecem só por número de ordem. As conversas são apagadas dos servidores da Time em 30 dias; o relatório fica guardado para comparar com o próximo.")}
+          {resolvido.relatorio.dados.fonte === "conversas_da_mia"
+            ? t("Os seus clientes aparecem só por número de ordem. As conversas continuam só na sua conta da MIA; o relatório fica guardado para comparar com o próximo.")
+            : t("Os seus clientes aparecem só por número de ordem. As conversas são apagadas dos servidores da Time em 30 dias; o relatório fica guardado para comparar com o próximo.")}
         </footer>
       </main>
     </IdiomaProvider>

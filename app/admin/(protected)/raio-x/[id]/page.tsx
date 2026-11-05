@@ -26,6 +26,11 @@ interface PageProps {
  * da leitura, o link de conexão, o aceite, o relatório em rascunho com a revisão
  * e o link do dono, a evolução desde o anterior e as ações (desconectar agora,
  * encerrar). `?relatorio=` escolhe outro relatório do mesmo raio-X.
+ *
+ * FORK MIA (.102): no CLIENTE ATIVO o andamento são os passos do protótipo de
+ * 05/11/2026 (tela 4): "Autorizado por …", "Leu as conversas da conta",
+ * "Transcreveu os áudios", "Analisando as conversas" e "Rascunho pronto". Não
+ * há conexão: o link é só de autorização.
  */
 export default async function DetalheDoRaioXPage({ params, searchParams }: PageProps) {
   const { user } = await requirePlatformAdmin();
@@ -45,6 +50,11 @@ export default async function DetalheDoRaioXPage({ params, searchParams }: PageP
   const data = (iso: string | null) =>
     iso ? new Intl.DateTimeFormat(tag, { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(new Date(iso)) : "·";
   const conectado = Boolean(r.conectadoEm && !r.desconectadoEm);
+  const daMia = r.fonte === "conversas_da_mia";
+  const dia = (iso: string | null, menosUmMs = false) =>
+    iso ? new Intl.DateTimeFormat(tag, { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" }).format(new Date(Date.parse(iso) - (menosUmMs ? 1 : 0))) : "·";
+  const reais = (centavos: number) => new Intl.NumberFormat(tag, { style: "currency", currency: "BRL" }).format(centavos / 100);
+  const versaoDoTermo = (v: string) => (v === "cliente_ativo_v1" ? t("termo “cliente ativo” v1") : `${t("termo")} ${v}`);
 
   return (
     <div className="space-y-6">
@@ -55,10 +65,18 @@ export default async function DetalheDoRaioXPage({ params, searchParams }: PageP
           </Link>
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">{r.empresa}</h1>
-        <p className="text-sm text-text-muted">
-          {t(r.segmentoRotulo)} · {r.whatsappParaLer} · {t(ROTULO_DO_TIPO[r.tipo])} · {t("últimos {n} dias").replace("{n}", String(r.periodoDias))} ·{" "}
-          {t(ROTULO_DE_QUEM_ATENDE[r.quemAtende as keyof typeof ROTULO_DE_QUEM_ATENDE] ?? ROTULO_DE_QUEM_ATENDE.humano)}
-        </p>
+        {daMia ? (
+          <p className="text-sm text-text-muted" data-raio-x="cabecalho-da-mia">
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">{t("Conversas da MIA")}</span> · {t(r.segmentoRotulo)} ·{" "}
+            {r.numeros.map((n) => `${n.rotulo}${n.oficial ? ` (${t("API oficial")})` : ""}`).join(", ")} · {t(ROTULO_DO_TIPO[r.tipo])} ·{" "}
+            {dia(r.periodoInicio)} {t("a")} {dia(r.periodoFim, true)}
+          </p>
+        ) : (
+          <p className="text-sm text-text-muted">
+            {t(r.segmentoRotulo)} · {r.whatsappParaLer} · {t(ROTULO_DO_TIPO[r.tipo])} · {t("últimos {n} dias").replace("{n}", String(r.periodoDias))} ·{" "}
+            {t(ROTULO_DE_QUEM_ATENDE[r.quemAtende as keyof typeof ROTULO_DE_QUEM_ATENDE] ?? ROTULO_DE_QUEM_ATENDE.humano)}
+          </p>
+        )}
         <p className="text-sm">
           <span className="rounded-full bg-surface-elevated px-2 py-0.5 text-xs" data-raio-x-situacao={r.situacao}>
             {t(ROTULO_DA_SITUACAO[r.situacao])}
@@ -72,6 +90,84 @@ export default async function DetalheDoRaioXPage({ params, searchParams }: PageP
         </p>
       ) : null}
 
+      {daMia ? (
+        <section className="space-y-3 rounded-lg border border-border bg-surface p-5" data-raio-x="andamento-da-mia">
+          <h2 className="text-base font-semibold">{t("Andamento")}</h2>
+          {d.conexao ? (
+            <ConexaoDoRaioX raioXId={r.id} link={d.conexao.link} mensagem={d.conexao.mensagem} vivo={d.conexao.vivo} expiraEm={d.conexao.expiraEm} autorizacao />
+          ) : null}
+          <ol className="space-y-2 text-sm">
+            {(() => {
+              const a = d.analiseDaConta;
+              const leu = r.situacao === "analisando" || r.situacao === "pronto" || (r.situacao === "encerrado" && Boolean(a?.conversas));
+              const transcreveu = leu && (a?.audiosPendentes ?? 0) === 0 && (r.situacao === "pronto" || (a?.analisadas ?? 0) > 0);
+              const pronto = d.relatorios.length > 0;
+              const passos: Array<{ feito: boolean; agora: boolean; titulo: string; detalhe: string }> = [
+                {
+                  feito: Boolean(d.aceite),
+                  agora: !d.aceite,
+                  titulo: d.aceite ? t("Autorizado por {nome}").replace("{nome}", d.aceite.nome) : t("Aguardando o dono autorizar"),
+                  detalhe: d.aceite
+                    ? [d.aceite.email, data(d.aceite.aceito_em), versaoDoTermo(d.aceite.termo_versao)].filter(Boolean).join(" · ")
+                    : t("O link vale 48 horas."),
+                },
+                {
+                  feito: leu,
+                  agora: r.situacao === "lendo",
+                  titulo: t("Leu as conversas da conta"),
+                  detalhe: t("{c} conversas com clientes, {m} mensagens, {n} números")
+                    .replace("{c}", String(d.andamento.conversasLidas))
+                    .replace("{m}", String(d.andamento.mensagensLidas))
+                    .replace("{n}", String(r.numeros.length)),
+                },
+                {
+                  feito: transcreveu,
+                  agora: leu && !transcreveu && !pronto,
+                  titulo: t("Transcreveu os áudios"),
+                  detalhe: t("{n} áudios · {r}").replace("{n}", String(a?.audiosTranscritos ?? 0)).replace("{r}", reais(a?.custoTranscricaoCentavos ?? 0)),
+                },
+                {
+                  feito: pronto,
+                  agora: r.situacao === "analisando" && transcreveu,
+                  titulo: t("Analisando as conversas"),
+                  detalhe: t("{x} de {y} · {r} até agora, teto {teto}")
+                    .replace("{x}", String(a?.analisadas ?? 0))
+                    .replace("{y}", String(a?.conversas ?? 0))
+                    .replace("{r}", reais(d.custo.centavos))
+                    .replace("{teto}", reais(d.custo.tetoCentavos)),
+                },
+                {
+                  feito: pronto,
+                  agora: false,
+                  titulo: t("Rascunho pronto para a Time revisar"),
+                  detalhe: t("o link do dono só sai depois da revisão"),
+                },
+              ];
+              return passos.map((p, i) => (
+                <li key={p.titulo} className="flex gap-3" data-raio-x-passo={i + 1} data-raio-x-passo-feito={p.feito ? "sim" : "nao"}>
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs ${p.feito ? "bg-success-bg text-success-fg" : p.agora ? "bg-primary text-primary-foreground" : "bg-surface-elevated text-text-muted"}`}
+                    aria-hidden="true"
+                  >
+                    {p.feito ? "✓" : i + 1}
+                  </span>
+                  <span>
+                    <b>{p.titulo}</b>
+                    <span className="block text-xs text-text-muted">{p.detalhe}</span>
+                  </span>
+                </li>
+              ));
+            })()}
+          </ol>
+          <p className="text-xs text-text-muted">
+            {r.conversasApagadasEm
+              ? `${t("Transcrições e análise apagadas em")} ${data(r.conversasApagadasEm)}`
+              : r.apagarConversasEm
+                ? `${t("Transcrições e análise apagam em")} ${data(r.apagarConversasEm)}`
+                : t("Nada é conectado: as conversas ficam na conta, e o raio-X guarda só os números e os trechos anonimizados.")}
+          </p>
+        </section>
+      ) : (
       <section className="space-y-3 rounded-lg border border-border bg-surface p-5">
         <h2 className="text-base font-semibold">{t("Conexão")}</h2>
         {d.conexao ? (
@@ -81,7 +177,7 @@ export default async function DetalheDoRaioXPage({ params, searchParams }: PageP
           <li>
             {t("Autorização:")}{" "}
             {d.aceite
-              ? `${d.aceite.nome} · ${data(d.aceite.aceito_em)} · ${t("termo")} ${d.aceite.termo_versao}`
+              ? [d.aceite.nome, d.aceite.email, data(d.aceite.aceito_em), versaoDoTermo(d.aceite.termo_versao)].filter(Boolean).join(" · ")
               : t("ainda não aceita")}
           </li>
           <li>
@@ -111,6 +207,7 @@ export default async function DetalheDoRaioXPage({ params, searchParams }: PageP
           </div>
         ) : null}
       </section>
+      )}
 
       <section className="space-y-3 rounded-lg border border-border bg-surface p-5">
         <h2 className="text-base font-semibold">{t("Ajustes")}</h2>
@@ -153,7 +250,10 @@ export default async function DetalheDoRaioXPage({ params, searchParams }: PageP
               </nav>
             ) : null}
             {anterior ? (
-              <p className="text-sm">
+              <p className="flex flex-wrap gap-3 text-sm">
+                <a href="#evolucao" className="underline" data-raio-x="ver-antes-e-depois">
+                  {t("Ver antes e depois")}
+                </a>
                 <Link href={`/admin/raio-x/${anterior.raio_x_id}?relatorio=${anterior.id}`} className="underline" data-raio-x="relatorio-anterior">
                   {t("Ver o relatório anterior")}
                 </Link>

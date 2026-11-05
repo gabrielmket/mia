@@ -12,7 +12,10 @@
  */
 import { createHash } from "node:crypto";
 
-import { DIAS_ATE_APAGAR_AS_CONVERSAS, DIAS_ATE_DESCONECTAR, whatsappParaLer, type TipoDoRaioX } from "./regras";
+import { DIAS_ATE_APAGAR_AS_CONVERSAS, DIAS_ATE_DESCONECTAR, listaDeNumeros, whatsappParaLer, type TipoDoRaioX } from "./regras";
+
+// FORK MIA (.102): mora em `regras.ts` (puro, sem `node:crypto`) porque a página do dono também a usa.
+export { listaDeNumeros };
 
 export const VERSAO_DO_TERMO = "v1";
 
@@ -73,13 +76,6 @@ export interface DadosDoTermoDoClienteAtivo {
   inicio: string;
   fim: string;
   tipo: TipoDoRaioX;
-}
-
-/** "Vendas", "Vendas e Pós-venda", "Vendas, Pós-venda e Loja 2". */
-export function listaDeNumeros(rotulos: readonly string[]): string {
-  const limpos = rotulos.map((r) => r.trim()).filter(Boolean);
-  if (limpos.length <= 1) return limpos[0] ?? "";
-  return `${limpos.slice(0, -1).join(", ")} e ${limpos[limpos.length - 1]}`;
 }
 
 /** O texto do termo "cliente ativo" v1, já com a empresa, os números e o período. É o que vai gravado no aceite. */

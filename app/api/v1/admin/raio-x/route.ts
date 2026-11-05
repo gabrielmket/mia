@@ -50,7 +50,8 @@ export async function POST(req: Request) {
     resourceType: "mia_raio_x",
     resourceId: r.id,
     requestId,
-    metadata: { via: "tela" },
+    // FORK MIA (.102): a fonte vai na trilha (o resto do cadastro fica no raio-X).
+    metadata: { via: "tela", fonte: r.fonte },
   });
-  return ok({ id: r.id, link: r.link, expira_em: r.expiraEm, mensagem: r.mensagem }, { requestId, status: 201 });
+  return ok({ id: r.id, fonte: r.fonte, link: r.link, expira_em: r.expiraEm, mensagem: r.mensagem }, { requestId, status: 201 });
 }

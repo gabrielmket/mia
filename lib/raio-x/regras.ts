@@ -243,6 +243,13 @@ export function horarioDoRaioX(linha: { abre: string; fecha: string; sabado_ate:
   };
 }
 
+/** FORK MIA (.102) · "Vendas", "Vendas e Pós-venda", "Vendas, Pós-venda e Loja 2". */
+export function listaDeNumeros(rotulos: readonly string[]): string {
+  const limpos = rotulos.map((r) => r.trim()).filter(Boolean);
+  if (limpos.length <= 1) return limpos[0] ?? "";
+  return `${limpos.slice(0, -1).join(", ")} e ${limpos[limpos.length - 1]}`;
+}
+
 /** "0187": o número de ordem com quatro dígitos. */
 export function ordemFormatada(numero: number): string {
   return String(Math.max(0, Math.trunc(numero))).padStart(4, "0");

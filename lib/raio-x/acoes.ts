@@ -7,6 +7,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  andamentoDaAnaliseDaConta,
   andamentoDaLeitura,
   criarLinkDoDono,
   criarRaioX,
@@ -30,6 +31,7 @@ import {
   validadeDoLinkDoDono,
   type LinhaDoRaioX,
   type LinhaDoRelatorio,
+  type AndamentoDaAnaliseDaConta,
   type LinkDoDono,
 } from "./banco";
 import { prepararONovoRaioXDaConta } from "./conta";
@@ -141,6 +143,8 @@ export interface DetalheDoRaioX {
   custo: { centavos: number; usdCentavos: number; tetoCentavos: number };
   relatorios: LinhaDoRelatorio[];
   links: LinkDoDono[];
+  /** FORK MIA (.102): os passos "transcreveu os áudios" e "analisando" do cliente ativo. */
+  analiseDaConta: AndamentoDaAnaliseDaConta | null;
 }
 
 export async function acaoVer(admin: SupabaseClient, id: string): Promise<DetalheDoRaioX | null> {
@@ -152,7 +156,10 @@ export async function acaoVer(admin: SupabaseClient, id: string): Promise<Detalh
     gastoDoRaioX(admin, id),
     r.fonte === "conversas_da_mia" ? lerNumerosDoRaioX(admin, id) : Promise.resolve([]),
   ]);
-  const links = await lerLinksDoDono(admin, relatorios.map((x) => x.id));
+  const [links, analiseDaConta] = await Promise.all([
+    lerLinksDoDono(admin, relatorios.map((x) => x.id)),
+    r.fonte === "conversas_da_mia" ? andamentoDaAnaliseDaConta(admin, r) : Promise.resolve(null),
+  ]);
   const leitura = r.leitura as { fase?: string; conversas_lidas?: number; mensagens_lidas?: number; total?: number; erro?: string | null };
   const vivo = podeConectar(r);
   // FORK MIA (.102): no cliente ativo, o link é só de autorização, e morre quando o dono autoriza.
@@ -209,6 +216,7 @@ export async function acaoVer(admin: SupabaseClient, id: string): Promise<Detalh
     custo: { centavos: Math.round(custo.centavos * 100) / 100, usdCentavos: Math.round(custo.usdCentavos * 100) / 100, tetoCentavos: r.teto_centavos },
     relatorios,
     links,
+    analiseDaConta,
   };
 }
 

@@ -3,6 +3,7 @@ import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { listarRaioX } from "@/lib/raio-x/banco";
+import { listarEmpresasAtivas } from "@/lib/raio-x/conta";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata = { title: "Raio-X do atendimento" };
@@ -13,14 +14,18 @@ export const dynamic = "force-dynamic";
  * docs/fork/raio-x-do-atendimento.md). A Time cria o raio-X, manda o link para o
  * dono, ele conecta o WhatsApp comercial e o sistema lê as conversas. As
  * escritas pedem a verificação em duas etapas nas rotas.
+ *
+ * FORK MIA (.102): o "Novo raio-X" pergunta de onde vêm as conversas. Para o
+ * cliente ativo, a lista de empresas é a das ATIVAS (`listarEmpresasAtivas`).
  */
 export default async function RaioXPage() {
   const { user } = await requirePlatformAdmin();
   const t = (s: string) => traduzir(s, normalizarIdioma((user.user_metadata?.locale as string | undefined) ?? null));
   const admin = createAdminClient();
-  const [lista, empresas] = await Promise.all([
+  const [lista, empresas, ativas] = await Promise.all([
     listarRaioX(admin),
     admin.from("organizations").select("id, display_name, legal_name").order("display_name").limit(1000),
+    listarEmpresasAtivas(admin),
   ]);
   if (empresas.error) throw new Error(`raio-x: empresas ilegíveis (${empresas.error.code ?? "sem_codigo"})`);
   return (
@@ -30,6 +35,9 @@ export default async function RaioXPage() {
         <p className="text-sm text-muted-foreground">
           {t("A Time cria o raio-X, manda o link para o dono, ele conecta o WhatsApp comercial e o sistema lê as conversas do período. O relatório sai como rascunho e só vai para o dono depois da revisão da Time.")}
         </p>
+        <p className="text-sm text-muted-foreground">
+          {t("Quem já é cliente da MIA não conecta nada: o dono só autoriza pelo link, e o raio-X lê as conversas que a conta já tem, inclusive dos números da API oficial.")}
+        </p>
       </header>
       <RaioXDaTime
         lista={lista}
@@ -37,6 +45,7 @@ export default async function RaioXPage() {
           id: org.id,
           nome: org.display_name || org.legal_name || org.id,
         }))}
+        ativas={ativas.map((e) => ({ id: e.id, nome: e.nome, clienteDesde: e.clienteDesde, demonstracao: e.demonstracao }))}
       />
     </div>
   );

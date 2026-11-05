@@ -94,3 +94,44 @@ export const CLASSE_DO_TOM = {
   danger: "bg-error-bg text-error-fg",
   vazio: "bg-surface-elevated text-text-muted",
 } as const;
+
+// ─── FORK MIA (.102) · o raio-X do cliente ativo ─────────────────────────────
+
+/** Quem respondeu (as linhas de "quem respondeu primeiro"). */
+export const ROTULO_DE_QUEM = {
+  ia: "IA",
+  equipe: "Equipe pela MIA",
+  celular: "Celular do número",
+  automacao: "Follow-up e automação",
+} as const;
+
+/** As faixas da espera depois da passagem para um vendedor. */
+export const ROTULO_DA_FAIXA_DA_ESPERA = {
+  ate_15_min: "Até 15 min",
+  de_15_min_a_2_h: "De 15 min a 2 h",
+  mais_de_2_h: "Mais de 2 h",
+  ninguem: "Ninguém assumiu",
+} as const;
+
+/** "9 s", "14 min", "2 h 05 min": o tempo em SEGUNDOS, como o protótipo escreve. */
+export function segundosParaLer(s: number | null | undefined): string {
+  if (s === null || s === undefined || !Number.isFinite(s)) return "·";
+  const v = Math.max(0, Math.round(s));
+  if (v < 60) return `${v} s`;
+  const min = Math.round(v / 60);
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const resto = min % 60;
+  return resto ? `${h} h ${String(resto).padStart(2, "0")} min` : `${h} h`;
+}
+
+/**
+ * O tempo de um indicador em minutos. Os relatórios da .102 guardam a fração
+ * (9 s = 0,15 min); os da .101, minutos inteiros. Menos de 1 minuto com fração
+ * sai em segundos; o resto, como `minutosParaLer`.
+ */
+export function minutosOuSegundosParaLer(m: number | null | undefined): string {
+  if (m === null || m === undefined || !Number.isFinite(m)) return "·";
+  if (m < 1 && !Number.isInteger(m)) return segundosParaLer(m * 60);
+  return minutosParaLer(m);
+}
