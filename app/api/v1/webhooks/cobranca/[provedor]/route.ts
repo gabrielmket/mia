@@ -24,6 +24,8 @@ import type { SinalDoWebhook } from "@/lib/cobranca/provedores/contrato";
 import { PROVEDORES_DE_COBRANCA, type ProvedorDeCobranca } from "@/lib/cobranca/vocabulario";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { logger } from "@/lib/logger";
+// FORK MIA (.106): o pedido de nova análise do raio-X por cadastro.
+import { contaDoRaioXPeloClienteDoAsaas, relerPedidosDaConta } from "@/lib/raio-x/pedidos";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -102,7 +104,11 @@ export async function POST(req: NextRequest, { params }: Rota) {
     : { data: null, error: null };
   if (erroDaDona) return fail("internal_error", "Não foi possível identificar a empresa.", 500, { requestId });
   const org = (dona as { organization_id: string } | null)?.organization_id ?? null;
-  if (!org && provedor === "asaas") {
+  // FORK MIA (.106): o cliente pode ser de uma CONTA do raio-X por cadastro (a
+  // nova análise paga). Ele não é empresa da MIA; o aviso só acorda a releitura
+  // dos pedidos dela no Asaas (`lib/raio-x/pedidos.ts`), como o resto daqui.
+  const contaDoRaioX = !org && provedor === "asaas" && sinal.clienteRef ? await contaDoRaioXPeloClienteDoAsaas(admin, sinal.clienteRef) : null;
+  if (!org && !contaDoRaioX && provedor === "asaas") {
     // O token do Asaas é estático: vazado, ele assina avisos de clientes que não
     // existem, e cada um viraria uma linha nova. Acima do balde, 200 SEM gravar:
     // 429 faria o Asaas interromper a fila, e com ela os avisos verdadeiros; o
@@ -118,6 +124,16 @@ export async function POST(req: NextRequest, { params }: Rota) {
   const linha = await gravarPonteiro(admin, provedor, sinal, assinatura);
   if (linha === "erro") return fail("internal_error", "Não foi possível registrar o aviso.", 500, { requestId });
   if (linha.status === "processed") return ok({ duplicado: true }, { requestId });
+  if (!org && contaDoRaioX) {
+    // FORK MIA (.106): relê no Asaas os pedidos em aberto da conta (nunca lança).
+    const relido = await relerPedidosDaConta(admin, contaDoRaioX);
+    await admin
+      .from("webhook_events_log")
+      .update(relido.falhas > 0 ? { status: "error", error_message: "raio_x_releitura_falhou", processed_at: agora } : { status: "processed", processed_at: agora })
+      .eq("id", linha.id)
+      .is("organization_id", null);
+    return ok({ recebido: true, raio_x: true }, { requestId });
+  }
   if (!org) {
     await admin
       .from("webhook_events_log")
