@@ -97,25 +97,11 @@ export function CadastroGratis({ inicial }: { inicial: InicialDoCadastro }) {
         <p className="text-sm text-text-muted">
           {t("Conecte o WhatsApp da empresa por alguns minutos e receba um relatório com o tempo da primeira resposta, quem ficou sem resposta, quem sumiu sem retorno e o que dá para ganhar. Só leitura: nenhuma mensagem sai do seu número.")}
         </p>
+        {/* Ajuste do dono em 06/11/2026 (tela 1): uma linha só, no lugar dos três cartões. */}
+        <p className="text-sm" data-raio-x="linha-do-gratis">
+          <b>{t("A primeira análise é grátis")}</b> {t("(últimos 30 dias de conversas) e o relatório chega no seu e-mail em cerca de 1 hora.")}
+        </p>
       </header>
-
-      <section className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <p className="text-xs text-text-muted">{t("Primeira análise")}</p>
-          <p className="text-2xl font-semibold">{t("R$ 0")}</p>
-          <p className="text-xs text-text-muted">{t("Os últimos 30 dias de conversas.")}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <p className="text-xs text-text-muted">{t("Tempo")}</p>
-          <p className="text-2xl font-semibold">{t("~1 h")}</p>
-          <p className="text-xs text-text-muted">{t("Do cadastro ao relatório, sem precisar ficar na tela.")}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <p className="text-xs text-text-muted">{t("Depois")}</p>
-          <p className="text-2xl font-semibold">{t("Você escolhe")}</p>
-          <p className="text-xs text-text-muted">{t("Uma nova análise avulsa ou o acompanhamento mensal.")}</p>
-        </div>
-      </section>
 
       {/* O formulário funciona sem JavaScript: o POST é o mesmo do site. */}
       <form method="post" action="/api/v1/publico/raio-x/cadastro" onSubmit={enviar} className="space-y-5" data-raio-x="cadastro" noValidate>

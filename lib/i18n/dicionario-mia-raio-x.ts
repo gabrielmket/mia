@@ -754,14 +754,10 @@ export const DICIONARIO_DO_RAIO_X_MIA: Traducoes = {
   "Conecte o WhatsApp da empresa por alguns minutos e receba um relatório com o tempo da primeira resposta, quem ficou sem resposta, quem sumiu sem retorno e o que dá para ganhar. Só leitura: nenhuma mensagem sai do seu número.": {
     es: "Conecta el WhatsApp de la empresa por unos minutos y recibe un informe con el tiempo de la primera respuesta, quién quedó sin respuesta, quién desapareció sin retorno y lo que se puede ganar. Solo lectura: ningún mensaje sale de tu número.",
   },
-  "Primeira análise": { es: "Primer análisis" },
-  "R$ 0": { es: "R$ 0" },
-  "Os últimos 30 dias de conversas.": { es: "Los últimos 30 días de conversaciones." },
-  "Tempo": { es: "Tiempo" },
-  "~1 h": { es: "~1 h" },
-  "Do cadastro ao relatório, sem precisar ficar na tela.": { es: "Del registro al informe, sin necesidad de quedarte en la pantalla." },
-  "Você escolhe": { es: "Tú eliges" },
-  "Uma nova análise avulsa ou o acompanhamento mensal.": { es: "Un nuevo análisis suelto o el seguimiento mensual." },
+  "A primeira análise é grátis": { es: "El primer análisis es gratis" },
+  "(últimos 30 dias de conversas) e o relatório chega no seu e-mail em cerca de 1 hora.": {
+    es: "(últimos 30 días de conversaciones) y el informe llega a tu correo en aproximadamente 1 hora.",
+  },
   "Não preencha este campo": { es: "No llenes este campo" },
   "Seus dados": { es: "Tus datos" },
   "Quem autoriza a leitura. Fica registrado no aceite.": { es: "Quien autoriza la lectura. Queda registrado en la aceptación." },
