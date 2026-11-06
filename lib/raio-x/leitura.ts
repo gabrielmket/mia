@@ -16,7 +16,8 @@
  *                 do aparelho). Cada rodada conta as conversas do período; a
  *                 leitura só começa quando a conta fica PARADA por 5 minutos
  *                 (e 5 minutos depois de conectar), ou depois de 40 minutos,
- *                 o que vier primeiro.
+ *                 o que vier primeiro. Parada em ZERO não conta (.105): espera
+ *                 os 40 minutos.
  *  lendo          a passada inteira, conversa a conversa, do mais antigo ao
  *                 mais novo dentro do período.
  *  conferindo     uma segunda volta na lista: lê de novo só a conversa que
@@ -108,6 +109,11 @@ export function sincroniaEstavel(
   agora: number,
 ): boolean {
   if (agora - conectadoEm >= ESPERA_MAXIMA_DA_SINCRONIA_MS) return true;
+  // FORK MIA (.105): contagem PARADA EM ZERO não é sincronia pronta, é o
+  // histórico que ainda não chegou. O 1º raio-X real (05/11/2026) leu 0
+  // conversas 7 minutos depois de conectar e fechou um relatório vazio. Em
+  // zero, a leitura espera a espera máxima.
+  if (sinc.conversas === 0) return false;
   return agora - conectadoEm >= ESTABILIZA_EM_MS && agora - Date.parse(sinc.estavel_desde) >= ESTABILIZA_EM_MS;
 }
 

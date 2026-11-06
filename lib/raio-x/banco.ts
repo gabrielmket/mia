@@ -15,6 +15,7 @@ import { phoneLookupVariants, samePhone } from "@/lib/channels/phone-variants";
 import { leitorDoRaioX, type LeitorDoRaioX } from "@/lib/channels/raio-x/leitor";
 
 import { compararComOAnterior, mesmaEmpresa, type Comparacao } from "./comparacao";
+import { estadoInicial } from "./leitura";
 import { estadoInicialDaConta } from "./leitura-da-conta";
 import { diaEMes, prazosDoEncerramento, validadeDoLinkDeConexao, linkDeConexaoVivo } from "./prazos";
 import {
@@ -808,6 +809,46 @@ export async function desconectarAgora(
   const { error } = await admin.from("mia_raio_x").update(proxima).eq("id", r.id);
   if (error) falhou("a desconexão não gravou", error);
   return { desconectou: Boolean(r.sessao && !r.desconectado_em), falhaNoLeitor };
+}
+
+/**
+ * FORK MIA (.105) · LER DE NOVO um raio-X pronto que AINDA está conectado: o
+ * rascunho deste período sai (não foi entregue a ninguém) e a leitura volta ao
+ * começo, com a espera da sincronia. As conversas já guardadas ficam: a marca
+ * única não deixa repetir, e a análise já feita neste ciclo é reaproveitada.
+ * No mês novo do mensal (ciclo > 1) a janela fica a do mês e a leitura começa
+ * direto, como na abertura do mês. Quem confere se pode é `acaoLerDeNovo`.
+ */
+export async function voltarALer(admin: SupabaseClient, r: LinhaDoRaioX, agora: Date = new Date()): Promise<{ descartados: number }> {
+  const inicio = new Date(r.periodo_inicio ?? agora.getTime() - r.periodo_dias * 86_400_000);
+  const doMes = r.ciclo > 1 && r.periodo_fim !== null;
+  // Primeiro a situação, com a trava em "pronto": se o raio-X mudou no meio,
+  // nada é apagado.
+  const { data: voltou, error } = await admin
+    .from("mia_raio_x")
+    .update({
+      situacao: "lendo",
+      periodo_inicio: inicio.toISOString(),
+      periodo_fim: doMes ? r.periodo_fim : null,
+      leitura: estadoInicial(inicio, doMes ? new Date(r.periodo_fim!) : null, doMes ? "lendo" : "sincronizando"),
+      leitura_concluida_em: null,
+      analise: {},
+    })
+    .eq("id", r.id)
+    .eq("situacao", "pronto")
+    .select("id");
+  if (error) falhou("a leitura não voltou", error);
+  if ((voltou ?? []).length === 0) falhou("a leitura não voltou (o raio-X mudou de situação)", null);
+  if (!r.periodo_inicio) return { descartados: 0 };
+  const { data: saiu, error: erroDoRascunho } = await admin
+    .from("mia_raio_x_relatorios")
+    .delete()
+    .eq("raio_x_id", r.id)
+    .eq("situacao", "rascunho")
+    .eq("periodo_inicio", r.periodo_inicio)
+    .select("id");
+  if (erroDoRascunho) falhou("o rascunho não saiu", erroDoRascunho);
+  return { descartados: (saiu ?? []).length };
 }
 
 /** Encerrar: desconecta, para tudo e agenda a exclusão das conversas. O relatório fica. */

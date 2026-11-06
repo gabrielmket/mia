@@ -223,6 +223,7 @@ export function AjustesDoRaioX({
   raioXId,
   encerrado,
   conectado,
+  podeLerDeNovo = false,
   organizationId,
   tetoCentavos,
   empresas,
@@ -230,6 +231,8 @@ export function AjustesDoRaioX({
   raioXId: string;
   encerrado: boolean;
   conectado: boolean;
+  /** FORK MIA (.105): pronto, pela conexão, conectado e sem relatório revisado no período. */
+  podeLerDeNovo?: boolean;
   organizationId: string | null;
   tetoCentavos: number;
   empresas: Array<{ id: string; nome: string }>;
@@ -253,7 +256,7 @@ export function AjustesDoRaioX({
     router.refresh();
   }
 
-  async function acao(caminho: "desconectar" | "encerrar", pergunta: string, feito: string) {
+  async function acao(caminho: "desconectar" | "encerrar" | "ler-de-novo", pergunta: string, feito: string) {
     if (!window.confirm(pergunta)) return;
     setOcupado(true);
     const r = await gravar(`/api/v1/admin/raio-x/${raioXId}/${caminho}`, "POST", {}, t);
@@ -289,6 +292,23 @@ export function AjustesDoRaioX({
         <Button type="button" variant="outline" onClick={salvar} disabled={ocupado}>
           {t("Salvar")}
         </Button>
+        {podeLerDeNovo ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={ocupado}
+            data-raio-x="ler-de-novo"
+            onClick={() =>
+              acao(
+                "ler-de-novo",
+                t("Ler de novo? O rascunho deste período sai e as conversas do WhatsApp conectado são lidas outra vez (sem pedir nada ao dono). Depois vem um rascunho novo."),
+                t("Lendo de novo. O andamento aparece aqui em alguns minutos."),
+              )
+            }
+          >
+            {t("Ler de novo")}
+          </Button>
+        ) : null}
         {!encerrado && conectado ? (
           <Button
             type="button"

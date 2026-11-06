@@ -675,3 +675,16 @@ Na página: enquanto o QR não existe (sessão iniciando ou religando), aparece 
 | teste | prova |
 |---|---|
 | `tests/unit/raio-x-conexao-destrava.test.ts` | o número sem o 9 por DDD (31, 99, 11, 28, já sem o 9, fixo, fora do Brasil) e o pedido do código com ele; a sessão FAILED é apagada, criada e iniciada (e só parar e iniciar a devolve a FAILED; STOPPED só inicia, SCAN_QR_CODE não é mexida), só por rotas da lista; a cerca do andamento cabe duas abas e só vale para o andamento e o QR; a página troca a imagem quebrada pelo aviso |
+
+## 15. Ler de novo, e a sincronia que não para em zero (.105)
+
+O primeiro raio-X real pela conexão (05/11/2026, número da própria Time) conectou às 20:42 UTC, contou 0 conversas por 5 minutos e fechou a leitura às 20:49: o rascunho saiu com 0 conversas e custo zero, com o WhatsApp ainda conectado. A regra da seção de leitura tratava a contagem PARADA EM ZERO como sincronia pronta.
+
+1. **Zero não é sincronia pronta.** `sincroniaEstavel` (`lib/raio-x/leitura.ts`): com 0 conversas, a leitura espera a espera máxima (40 minutos). Parada num número, continuam valendo os 5 minutos.
+2. **Ler de novo.** `acaoLerDeNovo` (`lib/raio-x/acoes.ts`) e `voltarALer` (`lib/raio-x/banco.ts`): um raio-X PRONTO, pela conexão, com o WhatsApp ainda conectado (o leitor o vê conectado) e SEM relatório revisado no período volta a "lendo", desde a sincronia; o rascunho do período sai. No mês novo do mensal (ciclo > 1), a janela do mês fica e a leitura começa direto. As conversas já guardadas não se repetem (marca única) e a análise já feita no ciclo é reaproveitada. Recusa: cliente ativo, desconectado, encerrado, em andamento e período já revisado (aí é encerrar e criar outro). Na tela, o botão **Ler de novo** nos ajustes do detalhe (`POST /api/v1/admin/raio-x/<id>/ler-de-novo`); no MCP, `plataforma_reler_raio_x` (111 ferramentas). Auditoria `raio_x.relido`.
+3. **O aparelho agora.** `acaoVerAparelho`: a etapa da sessão no leitor e quantas conversas individuais ele mostra neste momento (até 1.000), sem abrir nenhuma. Sai no `plataforma_ver_raio_x` com `raio_x_id`, como `aparelho`. É o que diz se o histórico chegou ao leitor: com `conversas_agora` em 0, ler de novo não adianta.
+
+| teste | prova |
+|---|---|
+| `tests/unit/raio-x-ler-de-novo.test.ts` | zero parado não é sincronia pronta (até os 40 minutos), um número parado continua valendo, e a rodada com a lista vazia aos 7 minutos segue sincronizando; ler de novo volta a ler e tira o rascunho do período (e, no mensal, mantém a janela do mês e o revisado anterior); as recusas (em andamento, encerrado, cliente ativo, desconectado, sem sessão, aparelho fora, sem leitor, período revisado) não mexem em nada; o aparelho agora conta página a página, para em mil, diz zero e não pergunta sem conexão |
+| `tests/unit/mcp-de-implantacao-raio-x.test.ts` | as cinco do raio-X, reler exige `gerir_raio_x`; seguem 111 |

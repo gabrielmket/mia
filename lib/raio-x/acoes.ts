@@ -6,6 +6,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { leitorDoRaioX, type LeitorDoRaioX } from "@/lib/channels/raio-x/leitor";
+
 import {
   andamentoDaAnaliseDaConta,
   andamentoDaLeitura,
@@ -29,6 +31,7 @@ import {
   revogarLinkDoDono,
   ultimoAceite,
   validadeDoLinkDoDono,
+  voltarALer,
   type LinhaDoRaioX,
   type LinhaDoRelatorio,
   type AndamentoDaAnaliseDaConta,
@@ -54,7 +57,13 @@ export type Recusa =
   | { ok: false; motivo: "numero_de_outra_empresa" }
   | { ok: false; motivo: "numero_sem_telefone" }
   | { ok: false; motivo: "sem_conversas" }
-  | { ok: false; motivo: "ja_autorizado" };
+  | { ok: false; motivo: "ja_autorizado" }
+  // FORK MIA (.105): ler de novo.
+  | { ok: false; motivo: "nao_esta_pronto" }
+  | { ok: false; motivo: "do_cliente_ativo" }
+  | { ok: false; motivo: "desconectado" }
+  | { ok: false; motivo: "ja_revisado" }
+  | { ok: false; motivo: "leitor_indisponivel" };
 
 // ─── Criar ──────────────────────────────────────────────────────────────────
 
@@ -347,6 +356,63 @@ export async function acaoEncerrar(
   return { ok: true, ...e, jaEstava: false };
 }
 
+/**
+ * FORK MIA (.105) · O APARELHO AGORA: a etapa da sessão no leitor e quantas
+ * conversas individuais ele mostra neste momento (até 1.000). É o que diz se o
+ * histórico chegou ao leitor, sem abrir nenhuma conversa. `null` quando não há
+ * o que perguntar (cliente ativo, sem sessão, desconectado ou sem leitor).
+ */
+export async function acaoVerAparelho(
+  admin: SupabaseClient,
+  id: string,
+  leitor: LeitorDoRaioX | null = leitorDoRaioX(),
+): Promise<{ estado: string; conversas: number | null; mais: boolean } | null> {
+  const r = await lerRaioX(admin, id);
+  if (!r || r.fonte === "conversas_da_mia" || !r.sessao || r.desconectado_em || !leitor) return null;
+  try {
+    const { estado } = await leitor.estado(r.sessao);
+    if (estado !== "conectado") return { estado, conversas: null, mais: false };
+    let conversas = 0;
+    for (let pagina = 0; pagina < 10; pagina += 1) {
+      const p = await leitor.paginaDeConversas(r.sessao, { limit: 100, offset: pagina * 100 });
+      conversas += p.conversas.length;
+      if (p.lidas < 100) return { estado, conversas, mais: false };
+    }
+    return { estado, conversas, mais: true };
+  } catch {
+    return { estado: "sem_resposta", conversas: null, mais: false };
+  }
+}
+
+/**
+ * FORK MIA (.105) · LER DE NOVO um raio-X pronto cujo WhatsApp segue
+ * conectado (o 1º raio-X real leu 0 conversas antes de o histórico chegar). O
+ * rascunho deste período sai; o relatório revisado, não (aí é outro raio-X).
+ */
+export async function acaoLerDeNovo(
+  admin: SupabaseClient,
+  id: string,
+  leitor: LeitorDoRaioX | null = leitorDoRaioX(),
+): Promise<{ ok: true; descartados: number } | Recusa> {
+  const r = await lerRaioX(admin, id);
+  if (!r) return { ok: false, motivo: "nao_encontrado" };
+  if (r.situacao === "encerrado") return { ok: false, motivo: "encerrado" };
+  if (r.fonte === "conversas_da_mia") return { ok: false, motivo: "do_cliente_ativo" };
+  if (r.situacao !== "pronto") return { ok: false, motivo: "nao_esta_pronto" };
+  if (!r.sessao || r.desconectado_em) return { ok: false, motivo: "desconectado" };
+  if (!leitor) return { ok: false, motivo: "leitor_indisponivel" };
+  const aparelho = await leitor.estado(r.sessao).catch(() => null);
+  if (!aparelho) return { ok: false, motivo: "leitor_indisponivel" };
+  if (aparelho.estado !== "conectado") return { ok: false, motivo: "desconectado" };
+  const inicio = r.periodo_inicio ? Date.parse(r.periodo_inicio) : null;
+  const relatorios = await lerRelatorios(admin, id);
+  if (inicio !== null && relatorios.some((x) => x.situacao === "revisado" && Date.parse(x.periodo_inicio) === inicio)) {
+    return { ok: false, motivo: "ja_revisado" };
+  }
+  const v = await voltarALer(admin, r);
+  return { ok: true, descartados: v.descartados };
+}
+
 /** A frase de cada recusa, para a rota e o MCP dizerem o mesmo. */
 export function fraseDaRecusa(r: Recusa): string {
   switch (r.motivo) {
@@ -374,6 +440,16 @@ export function fraseDaRecusa(r: Recusa): string {
       return "A conta ainda não tem um dia inteiro de conversas nesses números para ler.";
     case "ja_autorizado":
       return "O dono já autorizou: o raio-X está lendo as conversas da conta, e não há link novo a gerar.";
+    case "nao_esta_pronto":
+      return "Só dá para ler de novo um raio-X pronto: este ainda está aguardando, conectando, lendo ou analisando.";
+    case "do_cliente_ativo":
+      return "O raio-X do cliente ativo lê as conversas da conta, que não mudam com uma segunda leitura: crie outro raio-X para outro período.";
+    case "desconectado":
+      return "O WhatsApp deste raio-X não está mais conectado: para ler de novo, gere outro link de conexão.";
+    case "ja_revisado":
+      return "O relatório deste período já foi revisado (e pode ter ido ao dono): ler de novo o substituiria. Encerre e crie outro raio-X.";
+    case "leitor_indisponivel":
+      return "O leitor do raio-X não respondeu agora. Tente de novo em alguns minutos.";
   }
 }
 

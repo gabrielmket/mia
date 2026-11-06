@@ -21,6 +21,11 @@
  * `raio_x_id`, o que dá para ler daquela conta (os números com os ids, o
  * período, a estimativa e se a empresa conta como cliente ativo). Nenhuma
  * ferramenta nova: são as mesmas quatro.
+ *
+ * FORK MIA (.105) · a quinta, `plataforma_reler_raio_x`: lê de novo um
+ * raio-X pronto que segue conectado (o 1º real fechou com 0 conversas antes de
+ * o histórico chegar). E o ver, com `raio_x_id`, diz o `aparelho`: a etapa da
+ * sessão no leitor e quantas conversas ele mostra agora.
  */
 import { z } from "zod";
 
@@ -31,9 +36,11 @@ import {
   acaoCriar,
   acaoEncerrar,
   acaoGerarLinkDoDono,
+  acaoLerDeNovo,
   acaoRevisar,
   acaoRevogarLinkDoDono,
   acaoVer,
+  acaoVerAparelho,
   fraseDaRecusa,
 } from "@/lib/raio-x/acoes";
 import { listarRaioX, type LinhaDoRelatorio } from "@/lib/raio-x/banco";
@@ -249,7 +256,10 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
       }
       const d = await acaoVer(ctx.admin, args.raio_x_id);
       if (!d) recusar(`raio-X não encontrado: ${args.raio_x_id}. Veja a lista com plataforma_ver_raio_x, sem o id.`);
+      // FORK MIA (.105): o que o leitor vê AGORA no WhatsApp conectado (só a contagem).
+      const aparelho = await acaoVerAparelho(ctx.admin, args.raio_x_id);
       return {
+        aparelho: aparelho ? { etapa: aparelho.estado, conversas_agora: aparelho.conversas, mais_de_mil: aparelho.mais } : null,
         raio_x: d.raioX,
         fonte: d.raioX.fonte,
         conexao: d.conexao ? { link: d.conexao.link, vale_ate: d.conexao.expiraEm, vivo: d.conexao.vivo, mensagem_pronta: d.conexao.mensagem } : null,
@@ -354,6 +364,38 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
         desconectou: r.desconectou,
         aviso: r.falhaNoLeitor ? "O leitor não respondeu ao desconectar: o dono pode tirar o aparelho em WhatsApp › Aparelhos conectados." : null,
         conversas_apagam_em: r.apagarConversasEm,
+      };
+    },
+  },
+  // FORK MIA (.105) · ler de novo.
+  {
+    name: "plataforma_reler_raio_x",
+    description:
+      "Lê DE NOVO um raio-X pronto cujo WhatsApp continua conectado (pela conexão; o diagnóstico único fica conectado 7 dias depois do relatório): o rascunho deste período sai e a leitura volta ao começo, esperando o histórico do aparelho, e depois vem a análise e um rascunho novo. " +
+      "Serve quando a leitura fechou antes de o histórico chegar (o relatório veio com 0 ou poucas conversas). ANTES DE reler, veja em plataforma_ver_raio_x o `aparelho.conversas_agora`: se o leitor ainda mostra 0 conversas, reler não adianta. " +
+      "O QUE NÃO FAZ: não relê raio-X do cliente ativo, desconectado, encerrado, ainda em andamento, nem período cujo relatório já foi revisado (aí é encerrar e criar outro); não pede nada ao dono; não envia mensagem. As conversas já guardadas não se repetem e a análise já feita é reaproveitada.",
+    inputSchema: {
+      raio_x_id: z.string().uuid().describe("O raio-X a ler de novo."),
+    },
+    exemplo: { raio_x_id: "00000000-0000-4000-8000-000000000101" },
+    operacao: OPERACAO,
+    handler: async (ctx, args) => {
+      const raioXId = String(args.raio_x_id);
+      const r = await acaoLerDeNovo(ctx.admin, raioXId);
+      if (!r.ok) recusar(fraseDaRecusa(r));
+      void audit({
+        action: "raio_x.relido",
+        actorUserId: ctx.autorUserId,
+        actingAsPlatformAdmin: true,
+        resourceType: "mia_raio_x",
+        resourceId: raioXId,
+        requestId: ctx.requestId,
+        metadata: { rascunhos_descartados: r.descartados, via: "mcp", token_id: ctx.tokenId },
+      });
+      return {
+        relendo: true,
+        rascunhos_descartados: r.descartados,
+        proximo: "A leitura recomeça na próxima rodada do agendador (a cada minuto). Acompanhe com plataforma_ver_raio_x.",
       };
     },
   },

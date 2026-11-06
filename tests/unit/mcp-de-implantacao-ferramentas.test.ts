@@ -138,6 +138,8 @@ describe("a lista de ferramentas", () => {
       // desde a .102, o ver também, para mostrar o que dá para ler da conta do cliente ativo).
       "plataforma_publicar_raio_x",
       "plataforma_encerrar_raio_x",
+      // .105: ler de novo é do raio-X, que já sabe a empresa.
+      "plataforma_reler_raio_x",
     ]);
   });
 

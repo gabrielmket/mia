@@ -1727,6 +1727,8 @@ export const AUDIT_ACTIONS = [
   "raio_x.conversas_apagadas",
   "raio_x.mes_aberto",
   "raio_x.alterado",
+  // FORK MIA (.105): ler de novo um raio-X pronto e ainda conectado.
+  "raio_x.relido",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

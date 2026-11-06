@@ -346,6 +346,11 @@ export const DICIONARIO_DO_RAIO_X_MIA: Traducoes = {
   "Aponte a câmera para o QR.": { es: "Apunte la cámara al QR." },
   "O QR se renova sozinho a cada 20 segundos.": { es: "El QR se renueva solo cada 20 segundos." },
   "Preparando o QR… ele aparece em alguns segundos.": { es: "Preparando el QR… aparece en unos segundos." },
+  "Ler de novo": { es: "Leer de nuevo" },
+  "Ler de novo? O rascunho deste período sai e as conversas do WhatsApp conectado são lidas outra vez (sem pedir nada ao dono). Depois vem um rascunho novo.": {
+    es: "¿Leer de nuevo? El borrador de este período se descarta y las conversaciones del WhatsApp conectado se leen otra vez (sin pedirle nada al dueño). Después llega un borrador nuevo.",
+  },
+  "Lendo de novo. O andamento aparece aqui em alguns minutos.": { es: "Leyendo de nuevo. El avance aparece aquí en unos minutos." },
   "O WhatsApp disse que não foi possível conectar? Gere outro código ou abra este link no computador e use o QR.": {
     es: "¿WhatsApp dijo que no fue posible conectar? Genere otro código o abra este enlace en la computadora y use el QR.",
   },

@@ -220,6 +220,14 @@ export default async function DetalheDoRaioXPage({ params, searchParams }: PageP
           raioXId={r.id}
           encerrado={r.situacao === "encerrado"}
           conectado={conectado}
+          // FORK MIA (.105): ler de novo = pronto, pela conexão, conectado e sem
+          // relatório revisado deste período (a ação confere tudo de novo).
+          podeLerDeNovo={
+            r.situacao === "pronto" &&
+            r.fonte === "conexao" &&
+            conectado &&
+            !d.relatorios.some((x) => x.situacao === "revisado" && r.periodoInicio !== null && Date.parse(x.periodo_inicio) === Date.parse(r.periodoInicio))
+          }
           organizationId={r.organizationId}
           tetoCentavos={r.tetoCentavos}
           empresas={((empresas ?? []) as Array<{ id: string; display_name: string | null; legal_name: string | null }>).map((org) => ({

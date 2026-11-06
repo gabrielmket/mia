@@ -12,17 +12,17 @@ import { describe, expect, it } from "vitest";
 import { FERRAMENTA_POR_NOME, FERRAMENTAS } from "@/lib/mcp-plataforma/ferramentas";
 import { operacaoPorChave } from "@/lib/mcp-plataforma/operacoes";
 
-const NOMES = ["plataforma_criar_raio_x", "plataforma_ver_raio_x", "plataforma_publicar_raio_x", "plataforma_encerrar_raio_x"];
+const NOMES = ["plataforma_criar_raio_x", "plataforma_ver_raio_x", "plataforma_publicar_raio_x", "plataforma_encerrar_raio_x", "plataforma_reler_raio_x"];
 
-describe("as quatro do raio-X", () => {
-  it("estão na lista, e a lista tem 110", () => {
+describe("as cinco do raio-X", () => {
+  it("estão na lista, e a lista tem 111 (a quinta, reler, é da .105)", () => {
     for (const n of NOMES) expect(FERRAMENTA_POR_NOME.has(n), n).toBe(true);
-    expect(FERRAMENTAS).toHaveLength(110);
+    expect(FERRAMENTAS).toHaveLength(111);
   });
 
-  it("ver é leitura; as outras três exigem gerir_raio_x", () => {
+  it("ver é leitura; as outras quatro exigem gerir_raio_x", () => {
     expect(FERRAMENTA_POR_NOME.get("plataforma_ver_raio_x")!.operacao).toBeNull();
-    for (const n of ["plataforma_criar_raio_x", "plataforma_publicar_raio_x", "plataforma_encerrar_raio_x"]) {
+    for (const n of ["plataforma_criar_raio_x", "plataforma_publicar_raio_x", "plataforma_encerrar_raio_x", "plataforma_reler_raio_x"]) {
       expect(FERRAMENTA_POR_NOME.get(n)!.operacao, n).toBe("gerir_raio_x");
     }
     const op = operacaoPorChave("gerir_raio_x");
@@ -53,7 +53,7 @@ describe("as quatro do raio-X", () => {
 
 // ── FORK MIA (.102) · o raio-X do cliente ativo no MCP ───────────────────────
 describe("o cliente ativo nas mesmas quatro ferramentas", () => {
-  it("a lista continua com 110: nenhuma ferramenta nova, as mesmas quatro do raio-X", () => {
+  it("o cliente ativo não trouxe ferramenta nova (a quinta, reler, é da .105)", () => {
     expect(FERRAMENTAS.filter((f) => f.name.endsWith("_raio_x")).map((f) => f.name).sort()).toEqual([...NOMES].sort());
   });
 
