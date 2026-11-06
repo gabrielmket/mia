@@ -431,19 +431,20 @@ export async function confirmarPagamento(admin: SupabaseClient, p: LinhaDoPedido
   // O WhatsApp do anterior ainda está conectado: a conexão passa para o novo
   // (a mesma sessão no leitor, sem conectar de novo). O anterior fica com o
   // relatório e o prazo das conversas; o prazo de derrubar a conexão sai dele.
-  const conectado = Boolean(anterior.sessao && anterior.conectado_em && !anterior.desconectado_em);
+  const sessaoDoAnterior = anterior.sessao;
+  const conectado = Boolean(sessaoDoAnterior && anterior.conectado_em && !anterior.desconectado_em);
   let novo: LinhaDoRaioX = criado.raioX;
   if (conectado) {
+    // Primeiro solta a sessão do anterior (o índice único da sessão), depois o aceite a grava no novo.
     await admin.from("mia_raio_x").update({ sessao: null, desconectar_em: null, desconectado_em: agora.toISOString() }).eq("id", anterior.id);
-    novo = { ...criado.raioX, sessao: anterior.sessao };
+    novo = { ...criado.raioX, sessao: sessaoDoAnterior };
   }
   const aceite = await registrarAceite(admin, novo, { nome: conta.nome, email: conta.email });
-  let linkDeConexao: string | null = conectado ? null : criado.link;
+  const linkDeConexao: string | null = conectado ? null : criado.link;
   if (!conectado && aceite.sessao) {
     const leitor = deps.leitor !== undefined ? deps.leitor : leitorDoRaioX();
     await leitor?.preparar(aceite.sessao).catch(() => undefined);
   }
-  if (conectado) linkDeConexao = null;
 
   await enviarEmailDoRaioX(
     conta.email,

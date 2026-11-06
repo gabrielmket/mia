@@ -252,7 +252,7 @@ export async function criarRaioX(
       criado_por: ator,
       criado_via: via,
       // FORK MIA (.106): o cadastro (a grátis e a paga da área).
-      ...(opcoes.origem === "cadastro" ? { origem: "cadastro", gratis: opcoes.gratis === true, conta_id: opcoes.contaId ?? null } : {}),
+      ...(opcoes.origem === "cadastro" ? { situacao: "aguardando", origem: "cadastro", gratis: opcoes.gratis === true, conta_id: opcoes.contaId ?? null } : {}),
     })
     .select(COLUNAS_DO_RAIO_X)
     .single();

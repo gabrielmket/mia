@@ -148,6 +148,7 @@ export async function criarCodigoDeAcesso(
     conta_id: conta.id,
     codigo_hash: hashDoCodigoDeAcesso(conta.id, codigo),
     expira_em: new Date(agora.getTime() + VALIDADE_DO_CODIGO_MS).toISOString(),
+    tentativas: 0,
     created_at: agora.toISOString(),
   });
   if (error) falhou("o código não gravou", error);
