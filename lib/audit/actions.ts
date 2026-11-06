@@ -1729,6 +1729,18 @@ export const AUDIT_ACTIONS = [
   "raio_x.alterado",
   // FORK MIA (.105): ler de novo um raio-X pronto e ainda conectado.
   "raio_x.relido",
+  // FORK MIA (.106) · o raio-X grátis por cadastro: a grátis pedida de novo, a
+  // entrada na área (o código no e-mail), o relatório entregue direto, a leitura
+  // sem histórico (a grátis não conta), os pedidos de nova análise e os preços.
+  // Nunca o código de acesso, o cookie, o CPF ou o CNPJ de quem paga.
+  "raio_x.cadastro_repetido",
+  "raio_x.entrou_na_area",
+  "raio_x.relatorio_entregue",
+  "raio_x.sem_historico",
+  "raio_x.pedido_criado",
+  "raio_x.pedido_pago",
+  "raio_x.pedido_cancelado",
+  "raio_x.precos_alterados",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

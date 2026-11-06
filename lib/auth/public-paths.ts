@@ -111,6 +111,15 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/raio-x\/relatorio\/[a-z0-9]{24}$/,
   /^\/api\/v1\/publico\/raio-x\/[A-Za-z0-9]{8}$/,
   /^\/api\/v1\/publico\/raio-x\/[A-Za-z0-9]{8}\/(aceite|codigo|qr)$/,
+  // FORK MIA (.106): o raio-X grátis por cadastro. O cadastro (o formulário do
+  // site e a página do sistema), a entrada sem senha (o código no e-mail) e a
+  // área da pessoa, que confere o cookie ASSINADO dela em cada página e rota
+  // (`lib/raio-x/acesso.ts`): público aqui quer dizer "sem login do produto",
+  // não "sem identidade". Âncora `$` em todas.
+  /^\/raio-x\/(gratis|entrar|minha-area)$/,
+  /^\/raio-x\/minha-area\/(nova|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/,
+  /^\/api\/v1\/publico\/raio-x\/(cadastro|entrar|entrar\/confirmar|sair)$/,
+  /^\/api\/v1\/publico\/raio-x\/minha-area\/(nova|conexao)$/,
   // FORK MIA (.90): a página de preços (`app/precos/page.tsx`) e a leitura dela
   // (`app/api/v1/publico/planos/route.ts`). Quem abre é o visitante do site, sem
   // conta. As duas SÓ LEEM os planos oferecidos, sem o dólar do teto de IA

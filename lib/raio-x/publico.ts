@@ -31,6 +31,8 @@ export type EtapaPublica = "termo" | "conectar" | "numero_diferente" | "lendo" |
 export interface SituacaoPublica {
   /** FORK MIA (.102): o cliente ativo só autoriza (duas etapas: autorizar e pronto). */
   fonte: FonteDoRaioX;
+  /** FORK MIA (.106): o raio-X do cadastro (o relatório chega no e-mail, sem a Time no meio). */
+  origem?: "time" | "cadastro";
   /** FORK MIA (.102): os rótulos dos números da conta (fonte da MIA). */
   numeros: string[];
   /** FORK MIA (.102): o período fixado, "dd/mm" no fuso (fonte da MIA). */
@@ -60,6 +62,7 @@ export function situacaoPublica(r: LinhaDoRaioX, agora: Date = new Date(), numer
   else etapa = "pronto";
   return {
     fonte: "conexao",
+    origem: r.origem === "cadastro" ? "cadastro" : "time",
     numeros: [],
     periodo: null,
     empresa: r.empresa,
@@ -92,6 +95,7 @@ function situacaoDoClienteAtivo(r: LinhaDoRaioX, agora: Date, numeros: readonly 
       : null;
   return {
     fonte: "conversas_da_mia",
+    origem: "time",
     numeros: [...numeros],
     periodo,
     empresa: r.empresa,

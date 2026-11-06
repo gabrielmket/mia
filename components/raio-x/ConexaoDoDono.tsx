@@ -11,6 +11,10 @@
  * só duas etapas, autorizar e pronto: nada é conectado, e a leitura das
  * conversas da conta começa quando o dono autoriza (protótipo de 05/11/2026,
  * tela 3).
+ *
+ * FORK MIA (.106): o raio-X do CADASTRO grátis abre direto na etapa de conectar
+ * (o aceite foi no formulário) e diz que o relatório chega no e-mail, com a
+ * entrada na área; o link vencido se renova na área, sem pedir à Time.
  */
 import { useCallback, useEffect, useState } from "react";
 
@@ -76,6 +80,8 @@ export function ConexaoDoDono({ codigo, inicial }: { codigo: string; inicial: Si
   const [tocou, setTocou] = useState<{ nome: boolean; email: boolean; aceite: boolean }>({ nome: false, email: false, aceite: false });
   const [aceite, setAceite] = useState(false);
   const daMia = s.fonte === "conversas_da_mia";
+  // FORK MIA (.106): o raio-X do cadastro grátis (o relatório chega no e-mail).
+  const doCadastro = s.origem === "cadastro";
   const nomeOk = ehNomeCompleto(nome);
   const emailOk = ehEmailValido(email);
   const [forma, setForma] = useState<"codigo" | "qr">("codigo");
@@ -173,7 +179,17 @@ export function ConexaoDoDono({ codigo, inicial }: { codigo: string; inicial: Si
       {s.etapa === "vencido" ? (
         <section className="space-y-2 rounded-lg border border-border bg-surface p-6" data-raio-x-etapa="vencido">
           <h1 className="text-xl font-semibold">{t("Este link venceu")}</h1>
-          <p className="text-sm text-text-muted">{t("O link de conexão vale 48 horas. Peça um novo à Time Company.")}</p>
+          {/* FORK MIA (.106): quem se cadastrou gera o link novo na própria área. */}
+          {doCadastro ? (
+            <p className="text-sm text-text-muted">
+              {t("O link de conexão vale 48 horas.")}{" "}
+              <a href="/raio-x/entrar" className="underline">
+                {t("Entre na sua área para gerar um link novo.")}
+              </a>
+            </p>
+          ) : (
+            <p className="text-sm text-text-muted">{t("O link de conexão vale 48 horas. Peça um novo à Time Company.")}</p>
+          )}
         </section>
       ) : null}
 
@@ -377,8 +393,13 @@ export function ConexaoDoDono({ codigo, inicial }: { codigo: string; inicial: Si
             {s.sincronizando
               ? t("O WhatsApp está mandando o histórico em partes. Isso leva alguns minutos.")
               : t("{p}% · {n} conversas lidas.").replace("{p}", String(s.percentual ?? 0)).replace("{n}", String(s.conversasLidas))}{" "}
-            {t("Pode fechar esta página: a leitura continua sozinha.")}
+            {doCadastro
+              ? t("A leitura começa quando as conversas param de chegar e leva até uma hora no total. Pode fechar esta página: o relatório chega no seu e-mail.")
+              : t("Pode fechar esta página: a leitura continua sozinha.")}
           </p>
+          {doCadastro ? (
+            <p className="text-sm text-text-muted">{t("Se o histórico não chegar (0 conversas depois de 40 minutos), a análise não conta como a grátis: o Raio-X avisa e você conecta de novo.")}</p>
+          ) : null}
           <p className="text-sm text-text-muted">
             {t("No seu celular aparece \"Raio-X Time Company\" na lista de aparelhos conectados. O WhatsApp continua funcionando normal para você.")}
           </p>
@@ -391,8 +412,17 @@ export function ConexaoDoDono({ codigo, inicial }: { codigo: string; inicial: Si
           <p className="text-sm text-text-muted">
             {daMia
               ? t("A Time vai revisar o relatório e mandar o link para você. Nenhuma mensagem foi enviada.")
-              : t("A Time vai preparar o relatório e mandar o link para você. Se quiser desconectar antes: WhatsApp › Aparelhos conectados › Raio-X Time Company › Desconectar.")}
+              : doCadastro
+                ? t("O relatório vai para o seu e-mail. Para ver, entre na sua área com o e-mail do cadastro e o código que mandamos, sem senha.")
+                : t("A Time vai preparar o relatório e mandar o link para você. Se quiser desconectar antes: WhatsApp › Aparelhos conectados › Raio-X Time Company › Desconectar.")}
           </p>
+          {doCadastro ? (
+            <p className="text-sm">
+              <a href="/raio-x/entrar" className="underline" data-raio-x="ir-para-a-area">
+                {t("Entrar na minha área")}
+              </a>
+            </p>
+          ) : null}
         </section>
       ) : null}
     </main>
