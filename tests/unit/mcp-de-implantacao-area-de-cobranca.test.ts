@@ -55,8 +55,8 @@ function responder(c: CadeiaLivre) {
 const ctx = (banco: ReturnType<typeof bancoLivre>) => ({ admin: banco.cliente as never, autorUserId: "a", tokenId: "t", requestId: "r", escopos: [] });
 
 describe("as cobranças no MCP de plataforma", () => {
-  it("nenhuma ferramenta nova nesta peça (99 + a de etiquetar da .97 + as 6 de cupons da .98 + as 4 do raio-X da .101 + a de reler da .105), e a descrição de ver_cliente cita as cobranças e a nota", () => {
-    expect(FERRAMENTAS).toHaveLength(111);
+  it("nenhuma ferramenta nova nesta peça (99 + a de etiquetar da .97 + as 6 de cupons da .98 + as 4 do raio-X da .101 + a de reler da .105 + a dos preços do raio-X da .106), e a descrição de ver_cliente cita as cobranças e a nota", () => {
+    expect(FERRAMENTAS).toHaveLength(112);
     const d = FERRAMENTA_POR_NOME.get("plataforma_ver_cliente")!.description;
     expect(d).toContain("`cobrancas`");
     expect(d).toContain("número da nota fiscal");

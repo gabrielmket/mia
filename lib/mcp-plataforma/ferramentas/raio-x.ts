@@ -26,12 +26,17 @@
  * raio-X pronto que segue conectado (o 1º real fechou com 0 conversas antes de
  * o histórico chegar). E o ver, com `raio_x_id`, diz o `aparelho`: a etapa da
  * sessão no leitor e quantas conversas ele mostra agora.
+ *
+ * FORK MIA (.106) · o raio-X GRÁTIS POR CADASTRO: o ver mostra a ORIGEM (Time,
+ * cadastro grátis, avulsa, mensal), a CONTA de quem se cadastrou (nome, e-mail e
+ * WhatsApp mascarados) e os PEDIDOS de nova análise; e a sexta,
+ * `plataforma_precos_do_raio_x`, vê e define o preço da nova análise (112).
  */
 import { z } from "zod";
 
 import { audit } from "@/lib/audit";
 import { organizacaoDaImplantacao } from "@/lib/implantacao/base";
-import { maskEmail } from "@/lib/lgpd/mask";
+import { maskEmail, maskPhone } from "@/lib/lgpd/mask";
 import {
   acaoCriar,
   acaoEncerrar,
@@ -44,6 +49,7 @@ import {
   fraseDaRecusa,
 } from "@/lib/raio-x/acoes";
 import { listarRaioX, type LinhaDoRelatorio } from "@/lib/raio-x/banco";
+import { definirPreco, lerPrecos, type LinhaDoPedido } from "@/lib/raio-x/pedidos";
 import { contaParaORaioX } from "@/lib/raio-x/conta";
 import { reaisParaLer } from "@/lib/raio-x/custo";
 import { FONTES, NUMEROS_POR_RAIO_X, QUEM_ATENDE, SEGMENTOS, TIPOS } from "@/lib/raio-x/regras";
@@ -117,6 +123,21 @@ function resumoDoRelatorio(r: LinhaDoRelatorio, comMia: boolean) {
         }
       : null,
     notas_da_time: r.notas_da_time,
+  };
+}
+
+/** FORK MIA (.106): o pedido de nova análise como o MCP mostra (sem link de pagamento nem referência do Asaas). */
+function resumoDoPedido(p: LinhaDoPedido) {
+  return {
+    id: p.id,
+    tipo: p.tipo,
+    situacao: p.situacao,
+    reais: p.valor_centavos === null ? null : reaisParaLer(p.valor_centavos),
+    criado_em: p.created_at,
+    pago_em: p.pago_em,
+    cancelado_em: p.cancelado_em,
+    raio_x_do_pedido: p.raio_x_id,
+    erro: p.erro,
   };
 }
 
@@ -198,7 +219,8 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
       "Os raio-X do atendimento. Sem `raio_x_id`: a lista (empresa, FONTE, situação, andamento, se há relatório e se é o 2º da mesma empresa). Com `raio_x_id`: a fonte, a situação (aguardando o dono, conectando, lendo, analisando, pronto, encerrado), o andamento da leitura, o ACEITE (nome completo, e-mail mascarado, data e hora, versão do termo), o link vigente (de conexão ou, no cliente ativo, de autorização), o custo medido e o teto, " +
       "os relatórios com os números (velocidade da primeira resposta com a loja aberta e fechada, sem resposta, sumiram sem retorno, origem, assuntos, desfecho, nota nos cinco critérios, recomendações e o bloco do que a MIA resolveria), a EVOLUÇÃO em proporção desde o raio-X anterior da mesma empresa, e os links do dono. " +
       "Os clientes aparecem só por número de ordem, nunca por telefone ou nome; os trechos de conversa ficam na tela de Admin. " +
-      "FORK MIA (.102): com `organization_id` e sem `raio_x_id`, o que dá para ler daquela CONTA para o raio-X do cliente ativo: se ela conta como cliente ativo, os números de WhatsApp com o id (channel_session_id), se são da API oficial e as mensagens no período, o período (os N dias inteiros antes de hoje, nunca antes da primeira conversa), o segmento e o horário da conta, quem administra e a estimativa de custo; e os raio-X dessa empresa. No relatório do cliente ativo, quem respondeu primeiro, a espera depois da passagem, no que virou e onde ainda dá para ganhar.",
+      "FORK MIA (.102): com `organization_id` e sem `raio_x_id`, o que dá para ler daquela CONTA para o raio-X do cliente ativo: se ela conta como cliente ativo, os números de WhatsApp com o id (channel_session_id), se são da API oficial e as mensagens no período, o período (os N dias inteiros antes de hoje, nunca antes da primeira conversa), o segmento e o horário da conta, quem administra e a estimativa de custo; e os raio-X dessa empresa. No relatório do cliente ativo, quem respondeu primeiro, a espera depois da passagem, no que virou e onde ainda dá para ganhar. " +
+      "FORK MIA (.106): a ORIGEM de cada raio-X (time = criado pela Time, com revisão; cadastro_gratis = a pessoa se cadastrou no site ou em /raio-x/gratis e o relatório foi direto para ela; avulsa e mensal = a nova análise paga na área), a CONTA de quem se cadastrou (nome, e-mail e WhatsApp da pessoa mascarados, e se o lead entrou no CRM da Time), quando o relatório foi entregue, se fechou sem histórico (a grátis não contou), os PEDIDOS de nova análise (interesse, aguardando o pagamento, pago, cancelado) e, na lista, o preço da nova análise.",
     inputSchema: {
       raio_x_id: z.string().uuid().optional().describe("Só este raio-X, com o detalhe e os relatórios."),
       organization_id: z.string().uuid().optional().describe("Sem raio_x_id: o que dá para ler desta conta da MIA para o raio-X do cliente ativo, e os raio-X dela."),
@@ -236,9 +258,15 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
                 },
               }
             : {}),
+          // FORK MIA (.106): o preço da nova análise do cadastro (vazio = só interesse).
+          precos_da_nova_analise: (await lerPrecos(ctx.admin)).map((p) => ({ tipo: p.tipo, reais: reaisParaLer(Number(p.valor_centavos)), ativo: p.ativo })),
           raio_x: lista.map((x) => ({
             id: x.id,
             fonte: x.fonte,
+            origem: x.origemNaLista ?? "time",
+            conta: x.conta ? { nome: x.conta.nome, email: maskEmail(x.conta.email), whatsapp: maskPhone(x.conta.telefone) } : null,
+            relatorio_entregue_em: x.entregueEm ?? null,
+            sem_historico_em: x.semHistoricoEm ?? null,
             numeros: x.numeros,
             empresa: x.empresa,
             segmento: x.segmento,
@@ -262,6 +290,19 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
         aparelho: aparelho ? { etapa: aparelho.estado, conversas_agora: aparelho.conversas, mais_de_mil: aparelho.mais } : null,
         raio_x: d.raioX,
         fonte: d.raioX.fonte,
+        // FORK MIA (.106): de onde veio, quem se cadastrou (mascarado) e os pedidos.
+        origem: d.origem,
+        conta: d.conta
+          ? {
+              nome: d.conta.nome,
+              email: maskEmail(d.conta.email),
+              whatsapp: maskPhone(d.conta.telefone),
+              lead_no_crm_da_time: d.conta.crmLeadId ? { lead_id: d.conta.crmLeadId, enviado_em: d.conta.crmEnviadoEm } : { erro: d.conta.crmErro ?? "ainda_nao" },
+            }
+          : null,
+        relatorio_entregue_em: d.entregueEm,
+        sem_historico_em: d.semHistoricoEm,
+        pedidos: d.pedidos.map(resumoDoPedido),
         conexao: d.conexao ? { link: d.conexao.link, vale_ate: d.conexao.expiraEm, vivo: d.conexao.vivo, mensagem_pronta: d.conexao.mensagem } : null,
         // FORK MIA (.102): o e-mail de quem aceitou é dado de pessoa: sai mascarado (a tela de Admin mostra inteiro).
         aceite: d.aceite ? { ...d.aceite, email: maskEmail(d.aceite.email) } : null,
@@ -397,6 +438,43 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
         rascunhos_descartados: r.descartados,
         proximo: "A leitura recomeça na próxima rodada do agendador (a cada minuto). Acompanhe com plataforma_ver_raio_x.",
       };
+    },
+  },
+  // FORK MIA (.106) · o preço da nova análise do raio-X por cadastro.
+  {
+    name: "plataforma_precos_do_raio_x",
+    description:
+      "Vê e define o PREÇO da NOVA ANÁLISE do raio-X por cadastro (a primeira é sempre grátis). Dois tipos: avulsa (uma análise dos últimos 30 dias, paga uma vez, cobrança única no Asaas da MIA) e mensal (assinatura: uma análise todo dia 1, com a evolução). " +
+      "Sem `tipo`: só mostra os preços. Com `tipo` e `valor_centavos` (de 500 a 1000000, isto é, de R$ 5 a R$ 10 mil): define o preço; `ativo` false guarda o preço sem vender; `valor_centavos` null tira o preço. " +
+      "Sem preço ativo, quem pede a nova análise na área vira INTERESSE (o lead no CRM da Time e o aviso dizem que a pessoa quer, e a equipe fala com ela). Com preço, a área cria a cobrança (avulsa) ou a assinatura (mensal) no Asaas e manda a pessoa para a fatura (Pix, boleto ou cartão). " +
+      "ANTES DE definir, confira o custo medido dos raio-X (plataforma_ver_raio_x, o custo de cada um) e se o Asaas da MIA já está em produção: com a chave de teste, a cobrança sai no sandbox. O QUE NÃO FAZ: não cria cobrança, não cobra ninguém e não muda pedido que já existe (o pedido guarda o valor de quando foi feito).",
+    inputSchema: {
+      tipo: z.enum(["avulsa", "mensal"]).optional().describe("O tipo cujo preço muda: avulsa ou mensal. Sem ele, só mostra os preços."),
+      valor_centavos: z.number().int().min(500).max(1_000_000).nullable().optional().describe("O preço em centavos de real (7900 = R$ 79). null tira o preço do tipo."),
+      ativo: z.boolean().optional().describe("false guarda o preço sem vender (o pedido vira interesse). Padrão true."),
+    },
+    exemplo: { tipo: "avulsa", valor_centavos: 7900, ativo: true },
+    operacao: OPERACAO,
+    handler: async (ctx, args) => {
+      const mostrar = (precos: Awaited<ReturnType<typeof lerPrecos>>) =>
+        (["avulsa", "mensal"] as const).map((tipo) => {
+          const p = precos.find((x) => x.tipo === tipo);
+          return { tipo, reais: p ? reaisParaLer(Number(p.valor_centavos)) : null, valor_centavos: p ? Number(p.valor_centavos) : null, vendendo: Boolean(p?.ativo) };
+        });
+      if (typeof args.tipo !== "string") return { precos: mostrar(await lerPrecos(ctx.admin)) };
+      if (args.valor_centavos === undefined) recusar("Para mudar o preço, mande valor_centavos (ou null para tirar o preço).");
+      const r = await definirPreco(ctx.admin, { tipo: args.tipo, valor_centavos: args.valor_centavos, ...(typeof args.ativo === "boolean" ? { ativo: args.ativo } : {}) }, ctx.autorUserId);
+      if (!r.ok) recusar(`Confira os campos: ${r.campos.join(", ")}.`);
+      void audit({
+        action: "raio_x.precos_alterados",
+        actorUserId: ctx.autorUserId,
+        actingAsPlatformAdmin: true,
+        resourceType: "mia_raio_x_precos",
+        resourceId: null,
+        requestId: ctx.requestId,
+        metadata: { via: "mcp", token_id: ctx.tokenId, tipo: args.tipo, valor_centavos: args.valor_centavos, ativo: args.ativo ?? true },
+      });
+      return { definido: true, precos: mostrar(r.precos) };
     },
   },
 ];

@@ -32,7 +32,7 @@ import type { ContaParaORaioX } from "@/lib/raio-x/conta";
 import { ROTULO_DO_SEGMENTO } from "@/lib/raio-x/segmentos";
 import { SEGMENTOS, whatsappParaLer } from "@/lib/raio-x/regras";
 
-import { ROTULO_DA_SITUACAO, ROTULO_DE_QUEM_ATENDE, ROTULO_DO_TIPO } from "./rotulos";
+import { ROTULO_DA_ORIGEM_NA_LISTA, ROTULO_DA_SITUACAO, ROTULO_DE_QUEM_ATENDE, ROTULO_DO_TIPO } from "./rotulos";
 
 const SELECT = "h-10 w-full rounded-md border border-border bg-background px-3 text-sm";
 const FUSO = "America/Sao_Paulo";
@@ -543,6 +543,22 @@ export function RaioXDaTime({ lista, empresas, ativas = [] }: { lista: RaioXNaLi
                 <tr key={x.id} className="border-t border-border align-top" data-raio-x-linha={x.empresa} data-raio-x-fonte-da-linha={x.fonte}>
                   <td className="p-3">
                     <b>{x.empresa}</b>
+                    {/* FORK MIA (.106): de onde veio (a Time ou o cadastro) e quem se cadastrou. */}
+                    <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
+                      <span
+                        className={`rounded-full px-2 py-0.5 ${x.origemNaLista && x.origemNaLista !== "time" ? "bg-primary/10 text-primary" : "bg-surface-elevated"}`}
+                        data-raio-x-origem={x.origemNaLista ?? "time"}
+                      >
+                        {t(ROTULO_DA_ORIGEM_NA_LISTA[x.origemNaLista ?? "time"])}
+                      </span>
+                      {x.semHistoricoEm ? <span className="text-text-muted">{t("sem histórico (a grátis não contou)")}</span> : null}
+                      {x.entregueEm ? <span className="text-text-muted">{t("enviado")}</span> : null}
+                    </div>
+                    {x.conta ? (
+                      <div className="text-xs text-text-muted" data-raio-x="conta-da-lista">
+                        {x.conta.nome} · {x.conta.email} · {whatsappParaLer(x.conta.telefone)}
+                      </div>
+                    ) : null}
                     <div className="text-xs text-text-muted">
                       {daMia
                         ? t("cliente desde {data}").replace("{data}", dataLonga(x.clienteDesde))

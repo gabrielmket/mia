@@ -29,15 +29,19 @@ import {
   podeConectar,
   revisarRelatorio,
   revogarLinkDoDono,
+  origemNaLista,
   ultimoAceite,
   validadeDoLinkDoDono,
   voltarALer,
   type LinhaDoRaioX,
+  type OrigemNaLista,
   type LinhaDoRelatorio,
   type AndamentoDaAnaliseDaConta,
   type LinkDoDono,
 } from "./banco";
 import { prepararONovoRaioXDaConta } from "./conta";
+import { lerConta } from "./contas";
+import { pedidosDoRaioX, type LinhaDoPedido } from "./pedidos";
 import { TETO_MAXIMO_CENTAVOS, TETO_MINIMO_CENTAVOS, validarNovoRaioX, whatsappParaLer, type FonteDoRaioX } from "./regras";
 import { ROTULO_DO_SEGMENTO } from "./segmentos";
 import type { Segmento } from "./regras";
@@ -154,6 +158,21 @@ export interface DetalheDoRaioX {
   links: LinkDoDono[];
   /** FORK MIA (.102): os passos "transcreveu os áudios" e "analisando" do cliente ativo. */
   analiseDaConta: AndamentoDaAnaliseDaConta | null;
+  /** FORK MIA (.106): de onde veio, quem se cadastrou e os pedidos de nova análise. */
+  origem: OrigemNaLista;
+  conta: {
+    id: string;
+    nome: string;
+    email: string;
+    telefone: string;
+    telefoneParaLer: string;
+    crmLeadId: string | null;
+    crmEnviadoEm: string | null;
+    crmErro: string | null;
+  } | null;
+  pedidos: LinhaDoPedido[];
+  entregueEm: string | null;
+  semHistoricoEm: string | null;
 }
 
 export async function acaoVer(admin: SupabaseClient, id: string): Promise<DetalheDoRaioX | null> {
@@ -165,9 +184,12 @@ export async function acaoVer(admin: SupabaseClient, id: string): Promise<Detalh
     gastoDoRaioX(admin, id),
     r.fonte === "conversas_da_mia" ? lerNumerosDoRaioX(admin, id) : Promise.resolve([]),
   ]);
-  const [links, analiseDaConta] = await Promise.all([
+  const [links, analiseDaConta, conta, pedidos] = await Promise.all([
     lerLinksDoDono(admin, relatorios.map((x) => x.id)),
     r.fonte === "conversas_da_mia" ? andamentoDaAnaliseDaConta(admin, r) : Promise.resolve(null),
+    // FORK MIA (.106): a conta de quem se cadastrou e os pedidos ligados a este raio-X.
+    r.conta_id ? lerConta(admin, r.conta_id) : Promise.resolve(null),
+    r.origem === "cadastro" ? pedidosDoRaioX(admin, r.id) : Promise.resolve([] as LinhaDoPedido[]),
   ]);
   const leitura = r.leitura as { fase?: string; conversas_lidas?: number; mensagens_lidas?: number; total?: number; erro?: string | null };
   const vivo = podeConectar(r);
@@ -226,6 +248,22 @@ export async function acaoVer(admin: SupabaseClient, id: string): Promise<Detalh
     relatorios,
     links,
     analiseDaConta,
+    origem: origemNaLista(r),
+    conta: conta
+      ? {
+          id: conta.id,
+          nome: conta.nome,
+          email: conta.email,
+          telefone: conta.telefone,
+          telefoneParaLer: whatsappParaLer(conta.telefone),
+          crmLeadId: conta.crm_lead_id,
+          crmEnviadoEm: conta.crm_enviado_em,
+          crmErro: conta.crm_erro,
+        }
+      : null,
+    pedidos,
+    entregueEm: r.entregue_em ?? null,
+    semHistoricoEm: r.sem_historico_em ?? null,
   };
 }
 

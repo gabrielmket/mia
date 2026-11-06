@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { AjustesDoRaioX, ConexaoDoRaioX, RevisaoDoRelatorio } from "@/components/raio-x/AcoesDoRaioX";
 import { RelatorioDaTime } from "@/components/raio-x/RelatorioDoRaioX";
-import { ROTULO_DA_FASE, ROTULO_DA_SITUACAO, ROTULO_DE_QUEM_ATENDE, ROTULO_DO_TIPO } from "@/components/raio-x/rotulos";
+import { ROTULO_DA_FASE, ROTULO_DA_ORIGEM_NA_LISTA, ROTULO_DA_SITUACAO, ROTULO_DA_SITUACAO_DO_PEDIDO, ROTULO_DE_QUEM_ATENDE, ROTULO_DO_TIPO } from "@/components/raio-x/rotulos";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { tagDeIdioma } from "@/lib/i18n/datas";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -83,6 +83,84 @@ export default async function DetalheDoRaioXPage({ params, searchParams }: PageP
           </span>
         </p>
       </header>
+
+      {/* FORK MIA (.106): o raio-X do cadastro (quem pediu, o lead no CRM da Time, a entrega e os pedidos). */}
+      {d.origem !== "time" || d.conta ? (
+        <section className="space-y-3 rounded-lg border border-border bg-surface p-5" data-raio-x="quem-pediu">
+          <h2 className="text-base font-semibold">
+            {t("Quem pediu")}{" "}
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-normal text-primary" data-raio-x-origem={d.origem}>
+              {t(ROTULO_DA_ORIGEM_NA_LISTA[d.origem])}
+            </span>
+          </h2>
+          {d.conta ? (
+            <ul className="space-y-1 text-sm">
+              <li>
+                {d.conta.nome} · {d.conta.email} · {t("WhatsApp da pessoa:")} {d.conta.telefoneParaLer}
+              </li>
+              <li className="text-text-muted">
+                {t("Lead no CRM da Time:")}{" "}
+                {d.conta.crmLeadId
+                  ? `${t("criado em")} ${data(d.conta.crmEnviadoEm)}`
+                  : d.conta.crmErro === "sem_fonte"
+                    ? t("não entrou: falta a variável RAIO_X_FONTE_DO_CRM")
+                    : d.conta.crmErro
+                      ? `${t("não entrou")} (${d.conta.crmErro})`
+                      : t("ainda não")}
+              </li>
+            </ul>
+          ) : (
+            <p className="text-sm text-text-muted">{t("A conta de quem pediu foi apagada.")}</p>
+          )}
+          <p className="text-sm text-text-muted">
+            {d.semHistoricoEm
+              ? `${t("Fechou sem histórico em")} ${data(d.semHistoricoEm)} · ${t("a grátis não contou")}`
+              : d.entregueEm
+                ? `${t("Relatório enviado direto para a pessoa em")} ${data(d.entregueEm)} · ${t("sem a revisão da Time")}`
+                : t("O relatório do cadastro sai revisado e vai direto para a pessoa; a Time é avisada.")}
+          </p>
+          {d.pedidos.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[520px] text-sm" data-raio-x="pedidos">
+                <thead>
+                  <tr className="text-left text-text-muted">
+                    <th className="p-2 font-medium">{t("Pedido")}</th>
+                    <th className="p-2 font-medium">{t("Valor")}</th>
+                    <th className="p-2 font-medium">{t("Situação")}</th>
+                    <th className="p-2 font-medium">{t("Raio-X")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.pedidos.map((p) => (
+                    <tr key={p.id} className="border-t border-border">
+                      <td className="p-2">
+                        {data(p.created_at)} · {t(p.tipo === "mensal" ? "mensal" : "avulsa")}
+                      </td>
+                      <td className="p-2">{p.valor_centavos === null ? t("sem preço") : reais(p.valor_centavos)}</td>
+                      <td className="p-2">
+                        {t(ROTULO_DA_SITUACAO_DO_PEDIDO[p.situacao])}
+                        {p.pago_em ? ` · ${data(p.pago_em)}` : ""}
+                        {p.erro ? ` · ${p.erro}` : ""}
+                      </td>
+                      <td className="p-2">
+                        {p.raio_x_id && p.raio_x_id !== r.id ? (
+                          <Link href={`/admin/raio-x/${p.raio_x_id}`} className="underline">
+                            {t("o raio-X do pedido")}
+                          </Link>
+                        ) : p.raio_x_id === r.id ? (
+                          t("este")
+                        ) : (
+                          "·"
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {r.numeroDiferente ? (
         <p className="rounded-md bg-error-bg p-3 text-sm text-error-fg">
