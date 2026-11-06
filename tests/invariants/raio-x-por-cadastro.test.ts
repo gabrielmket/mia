@@ -201,6 +201,19 @@ describe("o raio-X do cadastro", () => {
     ).toBe("passou");
   });
 
+  it("o link do dono aceita o canal 'cadastro' (o relatório do cadastro o gera sozinho)", () => {
+    sql(`
+      insert into public.mia_raio_x_relatorios (id, raio_x_id, sequencia, periodo_inicio, periodo_fim, criterios_versao, dados, situacao, revisado_em, notas_da_time)
+        values ('e9152e90-3333-4000-8000-000000000001', '${RX_TIME}', 1, now() - interval '30 days', now(), '2026-11-v1', '{"versao":1}'::jsonb, 'revisado', now(), 'automático: cadastro');
+    `);
+    const link = (via: string, token: string) =>
+      `insert into public.mia_raio_x_links (relatorio_id, token_hash, created_via) values ('e9152e90-3333-4000-8000-000000000001', '${H(token)}', '${via}')`;
+    expect(tentar("postgres", link("cadastro", "5"))).toBe("passou");
+    expect(tentar("postgres", link("site", "6"))).toBe("23514");
+    // O revisado do cadastro não tem quem revisou (sai sozinho) e passa.
+    expect(lastLine(sql(`select coalesce(revisado_por::text, 'sem ator') from public.mia_raio_x_relatorios where id = 'e9152e90-3333-4000-8000-000000000001';`))).toBe("sem ator");
+  });
+
   it("apagar a conta solta o raio-X (o relatório fica)", () => {
     sql(`
       ${conta("e9152e90-5555-4000-8000-0000000000aa", "solta@garagemmodelo.com.br")};

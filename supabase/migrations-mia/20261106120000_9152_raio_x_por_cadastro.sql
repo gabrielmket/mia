@@ -1,4 +1,4 @@
--- manifest: O RAIO-X GRÁTIS POR CADASTRO (.106, protótipo aprovado em 06/11/2026; docs/fork/raio-x-do-atendimento.md, seção 16). FORK MIA (.106): quem quer o raio-X do próprio atendimento se cadastra sozinho (o formulário do site iamia.com.br ou a página /raio-x/gratis do sistema), recebe a PRIMEIRA análise grátis direto no e-mail, sem a revisão da Time, e entra numa área própria sem senha (e-mail + código de 6 números). As próximas análises são avulsa ou mensal, pagas pelo Asaas. Estende a 9150 e a 9151 sem redefinir nada do upstream: `mia_raio_x` ganha `conta_id` (a conta de quem se cadastrou), `origem` ('time', o padrão, que é o raio-X de sempre, com revisão; ou 'cadastro'), `gratis`, `sem_historico_em` (a leitura fechou com 0 conversas: a grátis NÃO conta) e `entregue_em` (o relatório foi mandado para a pessoa); a CHECK `mia_raio_x_criado_via` (nossa, da 9150) passa a aceitar 'cadastro'. Quatro tabelas NOVAS, todas só do servidor como as outras oito (RLS ligada SEM política e grants revogados de anon e authenticated): `mia_raio_x_contas` (quem se cadastrou: e-mail único em minúsculas, nome completo, o WhatsApp da pessoa em dígitos, a referência ao negócio no CRM da Time e ao cliente no Asaas); `mia_raio_x_codigos_de_acesso` (o código de 6 números da entrada sem senha: só o HASH, 15 minutos, as tentativas); `mia_raio_x_pedidos` (a nova análise pedida na área: avulsa ou mensal, o valor, a situação e as referências do Asaas); `mia_raio_x_precos` (o preço de cada tipo; nasce VAZIA, e sem preço não há venda: o pedido vira interesse). A regra da grátis (uma por número analisado, pelas duas grafias do nono dígito, e uma por conta) é do código (`lib/raio-x/cadastro.ts`); o banco segura a mesma grafia e a mesma conta com dois índices únicos parciais. Provado em tests/invariants/raio-x-por-cadastro.test.ts.
+-- manifest: O RAIO-X GRÁTIS POR CADASTRO (.106, protótipo aprovado em 06/11/2026; docs/fork/raio-x-do-atendimento.md, seção 16). FORK MIA (.106): quem quer o raio-X do próprio atendimento se cadastra sozinho (o formulário do site iamia.com.br ou a página /raio-x/gratis do sistema), recebe a PRIMEIRA análise grátis direto no e-mail, sem a revisão da Time, e entra numa área própria sem senha (e-mail + código de 6 números). As próximas análises são avulsa ou mensal, pagas pelo Asaas. Estende a 9150 e a 9151 sem redefinir nada do upstream: `mia_raio_x` ganha `conta_id` (a conta de quem se cadastrou), `origem` ('time', o padrão, que é o raio-X de sempre, com revisão; ou 'cadastro'), `gratis`, `sem_historico_em` (a leitura fechou com 0 conversas: a grátis NÃO conta) e `entregue_em` (o relatório foi mandado para a pessoa); as CHECKs `mia_raio_x_criado_via` e `mia_raio_x_links_created_via` (nossas, da 9150) passam a aceitar 'cadastro' (o relatório do cadastro gera sozinho o link do dono, que vai ao lead da Time). Quatro tabelas NOVAS, todas só do servidor como as outras oito (RLS ligada SEM política e grants revogados de anon e authenticated): `mia_raio_x_contas` (quem se cadastrou: e-mail único em minúsculas, nome completo, o WhatsApp da pessoa em dígitos, a referência ao negócio no CRM da Time e ao cliente no Asaas); `mia_raio_x_codigos_de_acesso` (o código de 6 números da entrada sem senha: só o HASH, 15 minutos, as tentativas); `mia_raio_x_pedidos` (a nova análise pedida na área: avulsa ou mensal, o valor, a situação e as referências do Asaas); `mia_raio_x_precos` (o preço de cada tipo; nasce VAZIA, e sem preço não há venda: o pedido vira interesse). A regra da grátis (uma por número analisado, pelas duas grafias do nono dígito, e uma por conta) é do código (`lib/raio-x/cadastro.ts`); o banco segura a mesma grafia e a mesma conta com dois índices únicos parciais. Provado em tests/invariants/raio-x-por-cadastro.test.ts.
 --
 -- 9152 · o raio-X grátis por cadastro
 --
@@ -116,6 +116,19 @@ begin
   end if;
   if not exists (select 1 from pg_constraint where conname = 'mia_raio_x_criado_via') then
     alter table public.mia_raio_x add constraint mia_raio_x_criado_via check (criado_via in ('tela', 'mcp_plataforma', 'cadastro'));
+  end if;
+  -- O link do dono do relatório do cadastro nasce sozinho (o que vai ao lead da
+  -- Time): a CHECK do canal do link também é NOSSA (9150) e ganha 'cadastro'.
+  if exists (
+    select 1 from pg_constraint
+     where conname = 'mia_raio_x_links_created_via'
+       and conrelid = 'public.mia_raio_x_links'::regclass
+       and pg_get_constraintdef(oid) not like '%cadastro%'
+  ) then
+    alter table public.mia_raio_x_links drop constraint mia_raio_x_links_created_via;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_raio_x_links_created_via') then
+    alter table public.mia_raio_x_links add constraint mia_raio_x_links_created_via check (created_via in ('tela', 'mcp_plataforma', 'cadastro'));
   end if;
 end $$;
 

@@ -21495,6 +21495,19 @@ begin
   if not exists (select 1 from pg_constraint where conname = 'mia_raio_x_criado_via') then
     alter table public.mia_raio_x add constraint mia_raio_x_criado_via check (criado_via in ('tela', 'mcp_plataforma', 'cadastro'));
   end if;
+  -- O link do dono do relatório do cadastro nasce sozinho (o que vai ao lead da
+  -- Time): a CHECK do canal do link também é NOSSA (9150) e ganha 'cadastro'.
+  if exists (
+    select 1 from pg_constraint
+     where conname = 'mia_raio_x_links_created_via'
+       and conrelid = 'public.mia_raio_x_links'::regclass
+       and pg_get_constraintdef(oid) not like '%cadastro%'
+  ) then
+    alter table public.mia_raio_x_links drop constraint mia_raio_x_links_created_via;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_raio_x_links_created_via') then
+    alter table public.mia_raio_x_links add constraint mia_raio_x_links_created_via check (created_via in ('tela', 'mcp_plataforma', 'cadastro'));
+  end if;
 end $$;
 
 comment on column public.mia_raio_x.origem is
