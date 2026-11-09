@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · POST /api/v1/publico/raio-x/sair — sai da área do Raio-X:
+ * FORK MIA (.107) · POST /api/v1/publico/raio-x/sair — sai da área do Raio-X:
  * apaga o cookie da sessão. Formulário: 303 para `/raio-x/entrar`; `fetch`: 200.
  * Só a própria página chama (o `Origin` é conferido).
  */

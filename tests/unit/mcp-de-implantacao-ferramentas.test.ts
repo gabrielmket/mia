@@ -140,7 +140,7 @@ describe("a lista de ferramentas", () => {
       "plataforma_encerrar_raio_x",
       // .105: ler de novo é do raio-X, que já sabe a empresa.
       "plataforma_reler_raio_x",
-      // .106: o preço da nova análise do raio-X por cadastro é da instalação.
+      // .107: o preço da nova análise do raio-X por cadastro é da instalação.
       "plataforma_precos_do_raio_x",
     ]);
   });

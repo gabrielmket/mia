@@ -34,7 +34,7 @@ export const ROTULO_DA_SITUACAO: Record<SituacaoDoRaioX, string> = {
   encerrado: "encerrado",
 };
 
-/** FORK MIA (.106): de onde veio o raio-X (a lista e o detalhe do Admin). */
+/** FORK MIA (.107): de onde veio o raio-X (a lista e o detalhe do Admin). */
 export const ROTULO_DA_ORIGEM_NA_LISTA = {
   time: "Time",
   cadastro_gratis: "cadastro grátis",
@@ -42,7 +42,7 @@ export const ROTULO_DA_ORIGEM_NA_LISTA = {
   mensal: "mensal",
 } as const;
 
-/** FORK MIA (.106): a situação do pedido de nova análise. */
+/** FORK MIA (.107): a situação do pedido de nova análise. */
 export const ROTULO_DA_SITUACAO_DO_PEDIDO = {
   interesse: "interesse (sem pagamento)",
   aguardando: "aguardando o pagamento",

@@ -630,13 +630,13 @@ async function classificar(amb: Ambiente, r: LinhaDoRaioX, cotacao: number): Pro
   return "andou";
 }
 
-/** FORK MIA (.106): a nota da Time no relatório do cadastro, que sai revisado sem ninguém revisar. */
+/** FORK MIA (.107): a nota da Time no relatório do cadastro, que sai revisado sem ninguém revisar. */
 export const NOTA_DO_CADASTRO = "automático: cadastro";
 
 /**
  * 3. O relatório, quando não falta nada. Devolve o id do relatório criado.
  *
- * FORK MIA (.106): o raio-X do CADASTRO (origem 'cadastro') sai REVISADO, sem
+ * FORK MIA (.107): o raio-X do CADASTRO (origem 'cadastro') sai REVISADO, sem
  * ator e com a nota "automático: cadastro": vai direto para quem pediu, e a
  * Time é avisada (`entrega.ts`). O da Time continua saindo em rascunho. E o
  * GRÁTIS que chega aqui sem nenhuma conversa de cliente não gera relatório
@@ -711,7 +711,7 @@ export async function gerarRelatorio(admin: SupabaseClient, r: LinhaDoRaioX, ago
     fonte: daConta(r) ? "conversas_da_mia" : "conexao",
     ...(daConta(r) ? { numeros: numeros.map((n) => ({ rotulo: n.rotulo, oficial: n.oficial })) } : {}),
   });
-  // FORK MIA (.106): a grátis sem conversa nenhuma não vira relatório nem gasta a grátis.
+  // FORK MIA (.107): a grátis sem conversa nenhuma não vira relatório nem gasta a grátis.
   if (r.gratis === true && dados.numeros.conversas === 0) return null;
   const criadoEm = agora.toISOString();
   const anterior = await relatorioAnterior(admin, r, criadoEm, numeros.flatMap((n) => (n.telefone ? [n.telefone] : [])));
@@ -741,7 +741,7 @@ export async function gerarRelatorio(admin: SupabaseClient, r: LinhaDoRaioX, ago
     conversas: dados.numeros.conversas,
     custo_usd_centavos: custo.usdCentavos,
     custo_centavos: custo.centavos,
-    // FORK MIA (.106): o do cadastro sai revisado, sem quem revisou.
+    // FORK MIA (.107): o do cadastro sai revisado, sem quem revisou.
     ...(r.origem === "cadastro" ? { situacao: "revisado", revisado_por: null, revisado_em: criadoEm, notas_da_time: NOTA_DO_CADASTRO } : {}),
   });
   if (erroDoInsert) throw new Error(`raio-x: relatório não gravou (${erroDoInsert.code ?? "sem_codigo"})`);
@@ -769,7 +769,7 @@ export type DesfechoDaAnalise =
   | { tipo: "andou" }
   | { tipo: "parou" }
   | { tipo: "relatorio"; relatorioId: string }
-  // FORK MIA (.106): a grátis fechou sem nenhuma conversa de cliente.
+  // FORK MIA (.107): a grátis fechou sem nenhuma conversa de cliente.
   | { tipo: "sem_historico" };
 
 /** UMA rodada da análise: áudio, depois classificação, depois relatório. */

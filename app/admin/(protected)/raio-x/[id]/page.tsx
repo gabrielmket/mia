@@ -84,7 +84,7 @@ export default async function DetalheDoRaioXPage({ params, searchParams }: PageP
         </p>
       </header>
 
-      {/* FORK MIA (.106): o raio-X do cadastro (quem pediu, o lead no CRM da Time, a entrega e os pedidos). */}
+      {/* FORK MIA (.107): o raio-X do cadastro (quem pediu, o lead no CRM da Time, a entrega e os pedidos). */}
       {d.origem !== "time" || d.conta ? (
         <section className="space-y-3 rounded-lg border border-border bg-surface p-5" data-raio-x="quem-pediu">
           <h2 className="text-base font-semibold">

@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
  * FORK MIA (.102): o "Novo raio-X" pergunta de onde vêm as conversas. Para o
  * cliente ativo, a lista de empresas é a das ATIVAS (`listarEmpresasAtivas`).
  *
- * FORK MIA (.106): a lista mostra a ORIGEM (Time, cadastro grátis, avulsa,
+ * FORK MIA (.107): a lista mostra a ORIGEM (Time, cadastro grátis, avulsa,
  * mensal) e quem se cadastrou, e o preço da nova análise do cadastro fica aqui.
  */
 export default async function RaioXPage() {
@@ -31,7 +31,7 @@ export default async function RaioXPage() {
     listarRaioX(admin),
     admin.from("organizations").select("id, display_name, legal_name").order("display_name").limit(1000),
     listarEmpresasAtivas(admin),
-    // FORK MIA (.106): o preço da nova análise do cadastro.
+    // FORK MIA (.107): o preço da nova análise do cadastro.
     lerPrecos(admin),
   ]);
   if (empresas.error) throw new Error(`raio-x: empresas ilegíveis (${empresas.error.code ?? "sem_codigo"})`);

@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · POST /api/v1/publico/raio-x/entrar — "Mandar o código"
+ * FORK MIA (.107) · POST /api/v1/publico/raio-x/entrar — "Mandar o código"
  * (protótipo de 06/11/2026, tela 5). A pessoa digita o e-mail do cadastro e
  * recebe um código de 6 números, que vale 15 minutos (`lib/raio-x/acesso.ts`).
  *

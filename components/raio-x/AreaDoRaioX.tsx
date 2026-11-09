@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * FORK MIA (.106) · AS PEÇAS DE TELA DA ÁREA DO RAIO-X (protótipo de
+ * FORK MIA (.107) · AS PEÇAS DE TELA DA ÁREA DO RAIO-X (protótipo de
  * 06/11/2026, telas 5, 6 e 8): entrar com o código no e-mail, sair, conectar e
  * desconectar o número, e pedir a nova análise. A identidade é o cookie da
  * sessão (o servidor confere em cada rota); estas peças só chamam as rotas.

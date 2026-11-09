@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · POST /api/v1/publico/raio-x/entrar/confirmar — o código de
+ * FORK MIA (.107) · POST /api/v1/publico/raio-x/entrar/confirmar — o código de
  * 6 números do e-mail. Certo: grava o cookie da área (HttpOnly, Secure,
  * SameSite=Lax, assinado com o segredo do servidor, 30 dias) e manda para
  * `/raio-x/minha-area`. Errado, vencido, esgotado ou e-mail sem conta: a MESMA

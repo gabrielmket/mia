@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) — /raio-x/entrar: a entrada SEM SENHA na área do Raio-X
+ * FORK MIA (.107) — /raio-x/entrar: a entrada SEM SENHA na área do Raio-X
  * (protótipo aprovado em 06/11/2026, tela 5). E-mail → código de 6 números no
  * e-mail → a área. Quem já tem a sessão vai direto para a área.
  *

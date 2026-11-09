@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · OS E-MAILS DO RAIO-X POR CADASTRO, todos pelo roteador de
+ * FORK MIA (.107) · OS E-MAILS DO RAIO-X POR CADASTRO, todos pelo roteador de
  * e-mail da instalação (`lib/email/roteador.ts`: SMTP ou Resend, o que estiver
  * configurado; o remetente é o da instalação, hoje naoresponda@iamia.com.br).
  *

@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) — /raio-x/minha-area: a ÁREA de quem pediu o Raio-X
+ * FORK MIA (.107) — /raio-x/minha-area: a ÁREA de quem pediu o Raio-X
  * (protótipo aprovado em 06/11/2026, tela 6). Os raio-X da conta (análise,
  * período, conversas, nota, situação, abrir), a conexão do número (desconectar
  * agora, só do raio-X dela; conectar o que ainda espera) e "Pedir nova análise".

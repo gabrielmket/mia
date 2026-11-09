@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) — /raio-x/minha-area/<id>: o RELATÓRIO na área de quem pediu
+ * FORK MIA (.107) — /raio-x/minha-area/<id>: o RELATÓRIO na área de quem pediu
  * (protótipo aprovado em 06/11/2026, tela 7). É o MESMO relatório do link do
  * dono (`RelatorioDoDono` com `dadosParaODono`): sem custo, sem as anotações
  * da Time e sem o bloco "o que a MIA resolveria". Os clientes aparecem só por

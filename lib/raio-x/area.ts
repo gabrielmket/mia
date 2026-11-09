@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · A ÁREA DO RAIO-X (protótipo de 06/11/2026, telas 6 a 8): o
+ * FORK MIA (.107) · A ÁREA DO RAIO-X (protótipo de 06/11/2026, telas 6 a 8): o
  * que a pessoa vê depois de entrar com o código no e-mail. Servidor.
  *
  * A identidade é o cookie ASSINADO (`acesso.ts`): a conta vem dele, nunca da

@@ -15,7 +15,7 @@ import { operacaoPorChave } from "@/lib/mcp-plataforma/operacoes";
 const NOMES = ["plataforma_criar_raio_x", "plataforma_ver_raio_x", "plataforma_publicar_raio_x", "plataforma_encerrar_raio_x", "plataforma_reler_raio_x", "plataforma_precos_do_raio_x"];
 
 describe("as seis do raio-X", () => {
-  it("estão na lista, e a lista tem 112 (a quinta, reler, é da .105; a sexta, os preços, da .106)", () => {
+  it("estão na lista, e a lista tem 112 (a quinta, reler, é da .105; a sexta, os preços, da .107)", () => {
     for (const n of NOMES) expect(FERRAMENTA_POR_NOME.has(n), n).toBe(true);
     expect(FERRAMENTAS).toHaveLength(112);
   });
@@ -53,7 +53,7 @@ describe("as seis do raio-X", () => {
 
 // ── FORK MIA (.102) · o raio-X do cliente ativo no MCP ───────────────────────
 describe("o cliente ativo nas mesmas quatro ferramentas", () => {
-  it("o cliente ativo não trouxe ferramenta nova (a quinta, reler, é da .105; a sexta, os preços, da .106)", () => {
+  it("o cliente ativo não trouxe ferramenta nova (a quinta, reler, é da .105; a sexta, os preços, da .107)", () => {
     expect(FERRAMENTAS.filter((f) => f.name.endsWith("_raio_x")).map((f) => f.name).sort()).toEqual([...NOMES].sort());
   });
 

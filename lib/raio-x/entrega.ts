@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · A ENTREGA DO RAIO-X DO CADASTRO (decisão 2 de 06/11/2026:
+ * FORK MIA (.107) · A ENTREGA DO RAIO-X DO CADASTRO (decisão 2 de 06/11/2026:
  * o relatório vai DIRETO para quem pediu, sem a revisão da Time; a Time é
  * avisada). O ciclo chama isto quando o relatório nasce (`ciclo.ts`):
  *

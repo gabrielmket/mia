@@ -51,7 +51,7 @@ export type EfeitoDoCiclo =
   | { acao: "raio_x.desconectado"; raioXId: string; motivo: "prazo" | "aparelho" }
   | { acao: "raio_x.conversas_apagadas"; raioXId: string; mensagens: number; conversas: number; parcial: boolean }
   | { acao: "raio_x.mes_aberto"; raioXId: string; competencia: string }
-  // FORK MIA (.106): o relatório do cadastro foi direto para quem pediu, e a grátis sem histórico.
+  // FORK MIA (.107): o relatório do cadastro foi direto para quem pediu, e a grátis sem histórico.
   | { acao: "raio_x.relatorio_entregue"; raioXId: string; relatorioId: string; email: boolean; lead: string; central: boolean }
   | { acao: "raio_x.sem_historico"; raioXId: string; email: boolean };
 
@@ -76,7 +76,7 @@ interface Dependencias {
   transcritor?: ReturnType<typeof transcritorDaPlataforma>;
   /** FORK MIA (.102), para o teste: o arquivo do áudio da conta (sem ele, o storage da conta). */
   baixarDaConta?: (mensagemId: string) => Promise<{ bytes: Buffer; mime: string } | null>;
-  /** FORK MIA (.106), para o teste: o e-mail, o lead e o aviso da entrega do cadastro. */
+  /** FORK MIA (.107), para o teste: o e-mail, o lead e o aviso da entrega do cadastro. */
   entrega?: DependenciasDaEntrega;
 }
 
@@ -338,7 +338,7 @@ export async function rodarOCiclo(dep: Dependencias): Promise<ResumoDoCiclo> {
         await dep.admin.from("mia_raio_x").update({ trava_ate: null }).eq("id", r.id);
         if (desfecho.tipo === "relatorio") {
           resumo.efeitos.push({ acao: "raio_x.relatorio_gerado", raioXId: r.id, relatorioId: desfecho.relatorioId });
-          // FORK MIA (.106): o do cadastro já saiu revisado; vai direto para quem pediu.
+          // FORK MIA (.107): o do cadastro já saiu revisado; vai direto para quem pediu.
           if (r.origem === "cadastro") {
             const e = await entregarRelatorioDoCadastro(dep.admin, r, desfecho.relatorioId, new Date(agora()), dep.entrega);
             resumo.efeitos.push({
@@ -351,7 +351,7 @@ export async function rodarOCiclo(dep: Dependencias): Promise<ResumoDoCiclo> {
             });
           }
         }
-        // FORK MIA (.106): a grátis sem conversa nenhuma fecha sem relatório e não gasta a grátis.
+        // FORK MIA (.107): a grátis sem conversa nenhuma fecha sem relatório e não gasta a grátis.
         if (desfecho.tipo === "sem_historico") {
           const s = await fecharSemHistorico(dep.admin, r, new Date(agora()), dep.leitor, dep.entrega);
           resumo.efeitos.push({ acao: "raio_x.sem_historico", raioXId: r.id, email: s.emailSaiu });

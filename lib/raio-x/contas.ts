@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · A CONTA DE QUEM SE CADASTROU NO RAIO-X: o banco da conta,
+ * FORK MIA (.107) · A CONTA DE QUEM SE CADASTROU NO RAIO-X: o banco da conta,
  * a regra da grátis, o código de acesso e o que a área mostra.
  *
  * Tudo com o cliente de serviço: as tabelas do raio-X são só do servidor
@@ -55,7 +55,7 @@ export async function contaPeloEmail(admin: SupabaseClient, email: string): Prom
 
 /**
  * Acha a conta pelo e-mail ou cria. Achou: atualiza o nome e o WhatsApp da
- * pessoa com o que ela acabou de mandar (decisão do brief da .106). Dois
+ * pessoa com o que ela acabou de mandar (decisão do brief da .107). Dois
  * cadastros do mesmo e-mail ao mesmo tempo: o segundo cai no `unique` e relê.
  */
 export async function acharOuCriarConta(admin: SupabaseClient, p: { email: string; nome: string; telefone: string }): Promise<LinhaDaConta> {

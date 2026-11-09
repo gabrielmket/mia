@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · GET e PUT /api/v1/admin/raio-x/precos — o preço da NOVA
+ * FORK MIA (.107) · GET e PUT /api/v1/admin/raio-x/precos — o preço da NOVA
  * ANÁLISE do raio-X por cadastro (avulsa e mensal). Sem preço ativo não há
  * venda: o pedido na área vira interesse. Corpo do PUT:
  * `{ tipo: "avulsa" | "mensal", valor_centavos: number | null, ativo?: boolean }`

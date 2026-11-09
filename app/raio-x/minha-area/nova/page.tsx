@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) — /raio-x/minha-area/nova: a NOVA ANÁLISE (protótipo aprovado
+ * FORK MIA (.107) — /raio-x/minha-area/nova: a NOVA ANÁLISE (protótipo aprovado
  * em 06/11/2026, tela 8). Avulsa (paga uma vez) ou mensal (todo dia 1), com o
  * preço que a Time definiu; sem preço ativo, o pedido vira interesse e a equipe
  * fala com a pessoa. O pagamento é a fatura do Asaas (Pix, boleto ou cartão).

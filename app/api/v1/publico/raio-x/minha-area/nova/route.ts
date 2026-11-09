@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · POST /api/v1/publico/raio-x/minha-area/nova — "Pedir nova
+ * FORK MIA (.107) · POST /api/v1/publico/raio-x/minha-area/nova — "Pedir nova
  * análise" (protótipo de 06/11/2026, tela 8). Corpo: `{ tipo: "avulsa" |
  * "mensal", aceite: true, documento? }`.
  *

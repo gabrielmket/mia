@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · A ENTRADA SEM SENHA NA ÁREA DO RAIO-X: o código de 6
+ * FORK MIA (.107) · A ENTRADA SEM SENHA NA ÁREA DO RAIO-X: o código de 6
  * números e o cookie da sessão. Servidor (`node:crypto`).
  *
  * Por que não o login do produto: quem pede o raio-X grátis NÃO é usuário da

@@ -1502,7 +1502,7 @@ jobs:
       # mesma sobe (porta 3994), como a do Jev sobe o dela.
       # FORK MIA (.102): `raio-x-cliente-ativo` também: não usa leitor nem IA,
       # semeia a conta que lê e chama o cron do raio-X com o segredo interno.
-      # FORK MIA (.106): `raio-x-por-cadastro` também: sobe o dublê do leitor
+      # FORK MIA (.107): `raio-x-por-cadastro` também: sobe o dublê do leitor
       # (3994, como a do atendimento; o worker é um só) e um dublê de SMTP
       # (3993), e devolve o SMTP da instalação como achou.
       SPECS_PARTE_7: >-

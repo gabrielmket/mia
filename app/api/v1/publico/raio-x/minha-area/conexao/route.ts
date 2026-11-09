@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · POST /api/v1/publico/raio-x/minha-area/conexao — a conexão
+ * FORK MIA (.107) · POST /api/v1/publico/raio-x/minha-area/conexao — a conexão
  * do número na área do Raio-X (protótipo de 06/11/2026, tela 6). Corpo:
  * `{ raio_x_id, acao: "desconectar" | "conectar" }`.
  *

@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · POST /api/v1/publico/raio-x/cadastro — o cadastro do
+ * FORK MIA (.107) · POST /api/v1/publico/raio-x/cadastro — o cadastro do
  * RAIO-X GRÁTIS (protótipo aprovado em 06/11/2026, tela 1).
  *
  * Quem chama é o formulário do SITE (iamia.com.br, outro repositório) ou a
