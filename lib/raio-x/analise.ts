@@ -64,6 +64,7 @@ import { medirPassagem } from "./passagem";
 import { ehPessoa } from "./quem-respondeu";
 import { prazosDoRelatorio } from "./prazos";
 import { horarioDoRaioX, ordemFormatada, type Segmento } from "./regras";
+import { cabeAChamada, comTeto, TETO_DA_CLASSIFICACAO_MS } from "./relogio-da-analise";
 import { montarRelatorio, type AnaliseDaConversa, type ConversaParaORelatorio, type MensagemDoRelatorio } from "./relatorio";
 import { DESFECHOS, ORIGENS, ROTULO_DA_ORIGEM, definicaoDoSegmento } from "./segmentos";
 import { marcaDaMensagem } from "./tokens";
@@ -274,7 +275,8 @@ export function chamadaDaPlataforma(m: ModeloDaAnalise): ChamarOModelo {
       system: sistema,
       prompt: texto,
       maxOutputTokens: tetoDeSaida,
-      abortSignal: AbortSignal.timeout(40_000),
+      // FORK MIA (.106): o mesmo teto que decide se a chamada cabe no prazo (relogio-da-analise.ts).
+      abortSignal: AbortSignal.timeout(TETO_DA_CLASSIFICACAO_MS),
     });
     return {
       texto: r.text ?? "",
@@ -423,6 +425,15 @@ async function prepararAudiosDaConta(amb: Ambiente, r: LinhaDoRaioX): Promise<vo
 
 function temTempo(amb: Ambiente, folga = MARGEM_PARA_CHAMADA_MS): boolean {
   return amb.prazo - amb.agora() >= folga;
+}
+
+/**
+ * FORK MIA (.106) · cabe começar uma chamada de até `tetoMs`? A .101 pedia
+ * 45 s pela frente para chamar o modelo, numa chamada de cron de 45 s: nunca
+ * cabia (relogio-da-analise.ts conta o defeito e a regra).
+ */
+function cabe(amb: Ambiente, tetoMs: number): boolean {
+  return cabeAChamada(amb.prazo, amb.agora(), tetoMs);
 }
 
 /** 1. Os áudios pendentes do período, até o prazo da chamada. */
@@ -591,11 +602,12 @@ async function classificar(amb: Ambiente, r: LinhaDoRaioX, cotacao: number): Pro
       .gte("ultima_em", inicio);
     return "pronto";
   }
-  if (!temTempo(amb, 45_000)) return "parou";
+  // FORK MIA (.106): era `temTempo(amb, 45_000)`, que numa chamada de 45 s nunca passava.
+  if (!cabe(amb, TETO_DA_CLASSIFICACAO_MS)) return "parou";
 
   let resposta: Awaited<ReturnType<ChamarOModelo>>;
   try {
-    resposta = await amb.chamar({ sistema, texto, tetoDeSaida });
+    resposta = await comTeto(amb.chamar({ sistema, texto, tetoDeSaida }), TETO_DA_CLASSIFICACAO_MS);
   } catch {
     // Falha do provedor: conta e tenta de novo na rodada seguinte; na terceira, segue sem.
     const falhas = Number((r.analise as { falhas?: number }).falhas ?? 0) + 1;
@@ -764,7 +776,8 @@ export async function rodadaDeAnalise(amb: Ambiente, r: LinhaDoRaioX): Promise<D
       const relatorioId = await gerarRelatorio(amb.admin, r, new Date(amb.agora()));
       return { tipo: "relatorio", relatorioId };
     }
-    if (passo === "parou" || !temTempo(amb, 45_000)) return { tipo: passo };
+    // FORK MIA (.106): o mesmo portão da classificação (era `temTempo(amb, 45_000)`).
+    if (passo === "parou" || !cabe(amb, TETO_DA_CLASSIFICACAO_MS)) return { tipo: passo };
   }
   return { tipo: "andou" };
 }
