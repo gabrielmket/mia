@@ -28,7 +28,7 @@ void env;
 import { PRAZO_DA_CHAMADA_MS } from "@/lib/channels/historico/prazo";
 import type { EstadoDaSessao, LeitorDoRaioX } from "@/lib/channels/raio-x/leitor";
 import type { ChamarOModelo } from "@/lib/raio-x/analise";
-import { rodarOCiclo } from "@/lib/raio-x/ciclo";
+import { emRodizio, rodarOCiclo } from "@/lib/raio-x/ciclo";
 import { cifrarReferencia, cifrarTexto } from "@/lib/raio-x/cifra";
 import {
   cabeAChamada,
@@ -295,5 +295,32 @@ describe(".106 · a causa: o portão de 45 s numa chamada de 45 s", () => {
     expect(situacao(b, RX_B)).toBe("pronto");
     expect(b.db.mia_raio_x_relatorios).toHaveLength(1);
     expect(b.db.mia_raio_x_conversas!.every((c) => c.analise_ciclo === 1 && c.analise !== null)).toBe(true);
+  });
+});
+
+describe(".106 · o rodízio dos que andam", () => {
+  it("o ponto de partida gira a cada minuto", () => {
+    expect(emRodizio(["a", "b", "c"], 0)).toEqual(["a", "b", "c"]);
+    expect(emRodizio(["a", "b", "c"], MIN)).toEqual(["b", "c", "a"]);
+    expect(emRodizio(["a", "b", "c"], 2 * MIN + 59_999)).toEqual(["c", "a", "b"]);
+    expect(emRodizio(["a", "b", "c"], 3 * MIN)).toEqual(["a", "b", "c"]);
+    expect(emRodizio(["a"], 7 * MIN)).toEqual(["a"]);
+  });
+
+  it("com o modelo lento, o primeiro da fila não toma todos os minutos: o outro também termina", async () => {
+    const rel = relogio();
+    // A é o mais velho por updated_at: sem rodízio, ele seria sempre o primeiro.
+    const b = banco(
+      [raioX(RX_A, { updated_at: new Date(T0 - 5 * DIA).toISOString() }), raioX(RX_B)],
+      [conversasDe(RX_A, 60), conversasDe(RX_B, 9)],
+    );
+    const { leitor } = leitorDuble(rel);
+    // 20 s por lote: cada minuto só cabe UMA chamada, a do primeiro da fila.
+    const { chamar } = modeloDuble(rel, 20_000);
+    const analisadas = (rx: string) => b.db.mia_raio_x_conversas!.filter((c) => c.raio_x_id === rx && c.analise_ciclo === 1).length;
+    for (let k = 0; k < 6; k += 1) await minuto(b, rel, T0 + k * MIN, { leitor, chamar, transcritor: null });
+    expect(situacao(b, RX_B)).toBe("pronto");
+    expect(analisadas(RX_A)).toBeGreaterThan(0);
+    expect(situacao(b, RX_A)).toBe("analisando");
   });
 });

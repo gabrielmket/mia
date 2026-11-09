@@ -90,6 +90,18 @@ async function gravar(admin: SupabaseClient, id: string, valores: Record<string,
   if (error) throw new Error(`raio-x: gravar o andamento (${error.code ?? "sem_codigo"})`);
 }
 
+/**
+ * FORK MIA (.106) · O RODÍZIO: a lista dos que andam começa num ponto que gira
+ * a cada minuto. A ordem por `updated_at` sozinha deixava sempre o mesmo na
+ * frente quando ele não era gravado (o "conectando" que só pergunta ao leitor,
+ * por exemplo), e o primeiro da fila gasta o prazo da chamada.
+ */
+export function emRodizio<T>(lista: T[], agoraMs: number): T[] {
+  if (lista.length < 2) return lista;
+  const inicio = Math.floor(agoraMs / 60_000) % lista.length;
+  return [...lista.slice(inicio), ...lista.slice(0, inicio)];
+}
+
 async function linhas(consulta: PromiseLike<{ data: unknown; error: { code?: string } | null }>): Promise<LinhaDoRaioX[]> {
   const { data, error } = await consulta;
   if (error) throw new Error(`raio-x: leitura do ciclo (${error.code ?? "sem_codigo"})`);
@@ -199,7 +211,7 @@ export async function rodarOCiclo(dep: Dependencias): Promise<ResumoDoCiclo> {
   const chamar = dep.chamar !== undefined ? dep.chamar : modelo ? chamadaDaPlataforma(modelo) : null;
   const transcritor = dep.transcritor !== undefined ? dep.transcritor : transcritorDaPlataforma();
 
-  for (const r of andando) {
+  for (const r of emRodizio(andando, agora())) {
     if (dep.prazo - agora() < 20_000) break;
     if (!livre(r)) {
       resumo.puladas += 1;
