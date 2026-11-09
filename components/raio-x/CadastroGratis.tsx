@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * FORK MIA (.106) · O CADASTRO DO RAIO-X GRÁTIS na página do sistema
+ * FORK MIA (.107) · O CADASTRO DO RAIO-X GRÁTIS na página do sistema
  * (`/raio-x/gratis`; protótipo aprovado em 06/11/2026, tela 1). É o MESMO
  * formulário do site iamia.com.br: os mesmos campos, postando no mesmo endereço
  * (`POST /api/v1/publico/raio-x/cadastro`).
@@ -9,6 +9,10 @@
  * Sem JavaScript, ele é um `<form>` comum: o servidor responde com 303 para a
  * página de conexão (ou de volta aqui com `?erro=`). Com JavaScript, manda por
  * `fetch` em JSON e mostra os erros sem perder o que foi digitado.
+ *
+ * Ajuste do dono em 06/11/2026: o cadastro ficou mais curto. Quem atende e o
+ * horário SAÍRAM daqui (a rota segue aceitando, opcionais, para o site); a
+ * página de conexão pergunta, opcional, enquanto o histórico chega.
  */
 import { useState, type FormEvent } from "react";
 
@@ -17,11 +21,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/hooks/i18n/useT";
 import { CAMPOS_DE_ORIGEM, FRASE_DO_CAMPO, PAGINA_DO_CADASTRO, validarCadastro, type CampoDoCadastro } from "@/lib/raio-x/cadastro";
-import { QUEM_ATENDE, SEGMENTOS } from "@/lib/raio-x/regras";
+import { SEGMENTOS } from "@/lib/raio-x/regras";
 import { ROTULO_DO_SEGMENTO } from "@/lib/raio-x/segmentos";
 
 const SELECT = "h-10 w-full rounded-md border border-border bg-background px-3 text-sm";
-const ROTULO_DE_QUEM = { humano: "Pessoas", agente: "Robô", misto: "Os dois" } as const;
 
 export interface InicialDoCadastro {
   email: string;
@@ -39,10 +42,6 @@ export function CadastroGratis({ inicial }: { inicial: InicialDoCadastro }) {
     whatsapp: "",
     empresa: "",
     segmento: "revenda_de_veiculos",
-    quem_atende: "humano",
-    abre: "08:00",
-    fecha: "18:00",
-    sabado_ate: "13:00",
   });
   const [aceite, setAceite] = useState(false);
   const [erros, setErros] = useState<CampoDoCadastro[]>(inicial.erros);
@@ -155,32 +154,6 @@ export function CadastroGratis({ inicial }: { inicial: InicialDoCadastro }) {
                 ))}
               </select>
               {erro("segmento")}
-            </div>
-            <fieldset className="space-y-1">
-              <legend className="text-sm font-medium">{t("Quem atende hoje")}</legend>
-              <input type="hidden" name="quem_atende" value={v.quem_atende} />
-              <div className="flex flex-wrap gap-2" role="group" aria-label={t("Quem atende hoje")}>
-                {QUEM_ATENDE.map((q) => (
-                  <Button key={q} type="button" size="sm" variant={v.quem_atende === q ? "default" : "outline"} aria-pressed={v.quem_atende === q} onClick={() => set("quem_atende", q)}>
-                    {t(ROTULO_DE_QUEM[q])}
-                  </Button>
-                ))}
-              </div>
-              {erro("quem_atende")}
-            </fieldset>
-            <div className="space-y-1">
-              <span className="text-sm font-medium">{t("Horário de atendimento")}</span>
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <Input className="w-24" name="abre" aria-label={t("Abre às")} value={v.abre} onChange={(e) => set("abre", e.target.value)} />
-                <span className="text-text-muted">{t("às")}</span>
-                <Input className="w-24" name="fecha" aria-label={t("Fecha às")} value={v.fecha} onChange={(e) => set("fecha", e.target.value)} />
-                <span className="text-text-muted">{t("sábado até")}</span>
-                <Input className="w-24" name="sabado_ate" aria-label={t("Sábado até")} value={v.sabado_ate} onChange={(e) => set("sabado_ate", e.target.value)} placeholder={t("fechado")} />
-              </div>
-              <p className="text-xs text-text-muted">{t("Para separar a demora com a loja aberta da demora fora do horário. Sábado vazio = não abre.")}</p>
-              {erro("abre")}
-              {erro("fecha")}
-              {erro("sabado_ate")}
             </div>
           </div>
         </section>

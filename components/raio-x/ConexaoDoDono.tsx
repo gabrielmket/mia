@@ -12,12 +12,13 @@
  * conversas da conta começa quando o dono autoriza (protótipo de 05/11/2026,
  * tela 3).
  *
- * FORK MIA (.106): o raio-X do CADASTRO grátis abre direto na etapa de conectar
+ * FORK MIA (.107): o raio-X do CADASTRO grátis abre direto na etapa de conectar
  * (o aceite foi no formulário) e diz que o relatório chega no e-mail, com a
  * entrada na área; o link vencido se renova na área, sem pedir à Time.
  */
 import { useCallback, useEffect, useState } from "react";
 
+import { DuasPerguntas } from "@/components/raio-x/DuasPerguntas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -80,7 +81,7 @@ export function ConexaoDoDono({ codigo, inicial }: { codigo: string; inicial: Si
   const [tocou, setTocou] = useState<{ nome: boolean; email: boolean; aceite: boolean }>({ nome: false, email: false, aceite: false });
   const [aceite, setAceite] = useState(false);
   const daMia = s.fonte === "conversas_da_mia";
-  // FORK MIA (.106): o raio-X do cadastro grátis (o relatório chega no e-mail).
+  // FORK MIA (.107): o raio-X do cadastro grátis (o relatório chega no e-mail).
   const doCadastro = s.origem === "cadastro";
   const nomeOk = ehNomeCompleto(nome);
   const emailOk = ehEmailValido(email);
@@ -179,7 +180,7 @@ export function ConexaoDoDono({ codigo, inicial }: { codigo: string; inicial: Si
       {s.etapa === "vencido" ? (
         <section className="space-y-2 rounded-lg border border-border bg-surface p-6" data-raio-x-etapa="vencido">
           <h1 className="text-xl font-semibold">{t("Este link venceu")}</h1>
-          {/* FORK MIA (.106): quem se cadastrou gera o link novo na própria área. */}
+          {/* FORK MIA (.107): quem se cadastrou gera o link novo na própria área. */}
           {doCadastro ? (
             <p className="text-sm text-text-muted">
               {t("O link de conexão vale 48 horas.")}{" "}
@@ -405,6 +406,9 @@ export function ConexaoDoDono({ codigo, inicial }: { codigo: string; inicial: Si
           </p>
         </section>
       ) : null}
+
+      {/* FORK MIA (.107): enquanto o histórico chega, o cadastro pergunta quem atende e o horário. */}
+      {s.etapa === "lendo" && !daMia && doCadastro && s.podeMudarOHorario && s.horario ? <DuasPerguntas codigo={codigo} inicial={s.horario} /> : null}
 
       {s.etapa === "pronto" ? (
         <section className="space-y-2 rounded-lg border border-border bg-surface p-6 text-center" data-raio-x-etapa="pronto">

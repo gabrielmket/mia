@@ -110,8 +110,9 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/raio-x\/[A-Za-z0-9]{8}$/,
   /^\/raio-x\/relatorio\/[a-z0-9]{24}$/,
   /^\/api\/v1\/publico\/raio-x\/[A-Za-z0-9]{8}$/,
-  /^\/api\/v1\/publico\/raio-x\/[A-Za-z0-9]{8}\/(aceite|codigo|qr)$/,
-  // FORK MIA (.106): o raio-X grátis por cadastro. O cadastro (o formulário do
+  // FORK MIA (.107): `horario`, as "duas perguntas" da página de conexão do cadastro.
+  /^\/api\/v1\/publico\/raio-x\/[A-Za-z0-9]{8}\/(aceite|codigo|qr|horario)$/,
+  // FORK MIA (.107): o raio-X grátis por cadastro. O cadastro (o formulário do
   // site e a página do sistema), a entrada sem senha (o código no e-mail) e a
   // área da pessoa, que confere o cookie ASSINADO dela em cada página e rota
   // (`lib/raio-x/acesso.ts`): público aqui quer dizer "sem login do produto",

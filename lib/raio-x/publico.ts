@@ -26,13 +26,36 @@ export const ROTULO_DO_LIMITE_DO_CODIGO = "raio_x_codigo";
 /** O código do WhatsApp vale ~3 minutos: 1 pedido a cada 30 s por raio-X, 10 por IP em 10 min. */
 export const LIMITE_DO_CODIGO = { ip: 10, id: 6, windowSec: 600 } as const;
 
+/** FORK MIA (.107): as "duas perguntas" da página de conexão (quem atende e o horário). */
+export const ROTULO_DO_LIMITE_DO_HORARIO = "raio_x_horario";
+export const LIMITE_DO_HORARIO = { ip: 30, windowSec: 600 } as const;
+
+/**
+ * FORK MIA (.107) · A pessoa do cadastro ainda pode dizer quem atende e o
+ * horário? Só no raio-X do CADASTRO (o da Time tem o horário que a Time
+ * combinou), pela conexão, e só ANTES do relatório: a análise lê o horário do
+ * banco na hora de analisar, então o que for salvo antes vale para ele.
+ */
+export function podeMudarOHorario(r: Pick<LinhaDoRaioX, "origem" | "fonte" | "situacao" | "ultimo_relatorio_em">): boolean {
+  if (r.origem !== "cadastro" || r.fonte === "conversas_da_mia") return false;
+  if (r.ultimo_relatorio_em) return false;
+  return r.situacao === "aguardando" || r.situacao === "conectando" || r.situacao === "lendo" || r.situacao === "analisando";
+}
+
 export type EtapaPublica = "termo" | "conectar" | "numero_diferente" | "lendo" | "pronto" | "vencido";
 
 export interface SituacaoPublica {
   /** FORK MIA (.102): o cliente ativo só autoriza (duas etapas: autorizar e pronto). */
   fonte: FonteDoRaioX;
-  /** FORK MIA (.106): o raio-X do cadastro (o relatório chega no e-mail, sem a Time no meio). */
+  /** FORK MIA (.107): o raio-X do cadastro (o relatório chega no e-mail, sem a Time no meio). */
   origem?: "time" | "cadastro";
+  /**
+   * FORK MIA (.107): quem atende e o horário que o relatório vai usar, e se a
+   * página ainda pode perguntar ("Enquanto isso: duas perguntas", só no cadastro
+   * e só antes do relatório).
+   */
+  horario?: { quemAtende: string; abre: string; fecha: string; sabadoAte: string | null; domingoAte: string | null };
+  podeMudarOHorario?: boolean;
   /** FORK MIA (.102): os rótulos dos números da conta (fonte da MIA). */
   numeros: string[];
   /** FORK MIA (.102): o período fixado, "dd/mm" no fuso (fonte da MIA). */
@@ -63,6 +86,14 @@ export function situacaoPublica(r: LinhaDoRaioX, agora: Date = new Date(), numer
   return {
     fonte: "conexao",
     origem: r.origem === "cadastro" ? "cadastro" : "time",
+    horario: {
+      quemAtende: r.quem_atende,
+      abre: r.abre.slice(0, 5),
+      fecha: r.fecha.slice(0, 5),
+      sabadoAte: r.sabado_ate ? r.sabado_ate.slice(0, 5) : null,
+      domingoAte: r.domingo_ate ? r.domingo_ate.slice(0, 5) : null,
+    },
+    podeMudarOHorario: podeMudarOHorario(r),
     numeros: [],
     periodo: null,
     empresa: r.empresa,

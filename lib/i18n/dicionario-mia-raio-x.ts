@@ -640,7 +640,7 @@ export const DICIONARIO_DO_RAIO_X_MIA: Traducoes = {
   "Trechos de conversa sem nome, telefone ou documento.": { es: "Fragmentos de conversación sin nombre, teléfono ni documento." },
   "Onde a equipe pode ganhar": { es: "Dónde el equipo puede ganar" },
 
-  // ── FORK MIA (.106) · o raio-X grátis por cadastro: o cadastro, a área e o Admin ──
+  // ── FORK MIA (.107) · o raio-X grátis por cadastro: o cadastro, a área e o Admin ──
   "Quem pediu": { es: "Quién lo pidió" },
   "WhatsApp da pessoa:": { es: "WhatsApp de la persona:" },
   "Lead no CRM da Time:": { es: "Lead en el CRM de Time:" },
@@ -769,12 +769,7 @@ export const DICIONARIO_DO_RAIO_X_MIA: Traducoes = {
   },
   "Robô": { es: "Robot" },
   "Horário de atendimento": { es: "Horario de atención" },
-  "sábado até": { es: "sábado hasta" },
   "Sábado até": { es: "Sábado hasta" },
-  "fechado": { es: "cerrado" },
-  "Para separar a demora com a loja aberta da demora fora do horário. Sábado vazio = não abre.": {
-    es: "Para separar la demora con la tienda abierta de la demora fuera del horario. Sábado vacío = no abre.",
-  },
   "Autorização": { es: "Autorización" },
   "O que você autoriza:": { es: "Lo que autorizas:" },
   "a Time Company lê, só para este relatório, as conversas dos últimos 30 dias do número acima. Nada é enviado do seu número e ninguém da Time responde por ele. Os trechos que aparecem no relatório vão sem nome, telefone ou documento dos seus clientes. A conexão cai sozinha 7 dias depois do relatório, e as conversas lidas são apagadas em 30 dias.": {
@@ -823,4 +818,18 @@ export const DICIONARIO_DO_RAIO_X_MIA: Traducoes = {
   "O horário de fechar precisa ser depois do de abrir.": { es: "El horario de cierre tiene que ser después del de apertura." },
   "O horário do sábado precisa ser depois do de abrir.": { es: "El horario del sábado tiene que ser después del de apertura." },
   "Não deu para receber o cadastro. Tente de novo.": { es: "No se pudo recibir el registro. Inténtalo de nuevo." },
+  // ── FORK MIA (.107) · o domingo e as duas perguntas da página de conexão ──
+  "Salvo. O relatório vai usar este horário.": { es: "Guardado. El informe va a usar este horario." },
+  "Não deu para salvar agora. Tente de novo.": { es: "No se pudo guardar ahora. Inténtalo de nuevo." },
+  "Enquanto isso: duas perguntas (opcional)": { es: "Mientras tanto: dos preguntas (opcional)" },
+  "Segunda a sexta": { es: "Lunes a viernes" },
+  "Fechado": { es: "Cerrado" },
+  "Aberto até": { es: "Abierto hasta" },
+  "Domingo até": { es: "Domingo hasta" },
+  "Se não responder, o relatório usa segunda a sexta das 8h às 18h, sábado até 13h e domingo fechado.": {
+    es: "Si no respondes, el informe usa lunes a viernes de 8h a 18h, sábado hasta las 13h y domingo cerrado.",
+  },
+  "Abre no domingo?": { es: "¿Abre el domingo?" },
+  "Até que horas no domingo": { es: "Hasta qué hora el domingo" },
+  "O horário do domingo precisa ser depois do de abrir.": { es: "El horario del domingo tiene que ser después del de apertura." },
 };
