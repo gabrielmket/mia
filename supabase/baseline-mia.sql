@@ -21373,14 +21373,14 @@ notify pgrst, 'reload schema';
 
 -- ─── 9152 · o raio-X grátis por cadastro ───
 --
--- FORK MIA (.106). Espelho EXATO da migration 9152 (supabase/migrations-mia/), onde
+-- FORK MIA (.107). Espelho EXATO da migration 9152 (supabase/migrations-mia/), onde
 -- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
 -- apêndice. Vai antes da varredura anon, que fecha o arquivo.
 --
 --
 -- 9152 · o raio-X grátis por cadastro
 --
--- FORK MIA (.106). Só objetos NOSSOS (docs/FORK-MIA.md, regra 3), e só
+-- FORK MIA (.107). Só objetos NOSSOS (docs/FORK-MIA.md, regra 3), e só
 -- ESTENDE a 9150/9151: colunas novas com `add column if not exists`,
 -- constraints novas dentro de `do` que confere o catálogo, tabelas novas.
 -- A única constraint trocada é a `mia_raio_x_criado_via`, que é NOSSA (9150):
@@ -21469,9 +21469,17 @@ alter table public.mia_raio_x
 -- O relatório do cadastro foi mandado para a pessoa (e-mail, aviso à Time, lead).
 alter table public.mia_raio_x
   add column if not exists entregue_em timestamptz;
+-- O domingo no horário comercial (ajuste de 06/11/2026), com a regra do sábado:
+-- abre no horário da semana e vai até aqui; nulo = fechado (todo raio-X de antes).
+alter table public.mia_raio_x
+  add column if not exists domingo_ate time;
 
 do $$
 begin
+  if not exists (select 1 from pg_constraint where conname = 'mia_raio_x_domingo') then
+    -- Como o sábado (a CHECK mia_raio_x_horario da 9150): fecha depois de abrir.
+    alter table public.mia_raio_x add constraint mia_raio_x_domingo check (domingo_ate is null or domingo_ate > abre);
+  end if;
   if not exists (select 1 from pg_constraint where conname = 'mia_raio_x_origem') then
     alter table public.mia_raio_x add constraint mia_raio_x_origem check (origem in ('time', 'cadastro'));
   end if;

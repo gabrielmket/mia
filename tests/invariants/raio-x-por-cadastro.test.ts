@@ -1,5 +1,5 @@
 /**
- * 9152 · O RAIO-X GRÁTIS POR CADASTRO no Postgres de verdade (FORK MIA .106,
+ * 9152 · O RAIO-X GRÁTIS POR CADASTRO no Postgres de verdade (FORK MIA .107,
  * docs/fork/raio-x-do-atendimento.md, seção 16).
  *
  * ─── O que se mede, e por quê ───────────────────────────────────────────────
@@ -199,6 +199,12 @@ describe("o raio-X do cadastro", () => {
     expect(
       tentar("postgres", raioX("e9152e90-2222-4000-8000-0000000000f8", "5531900001101", { origem: "'cadastro'", conta_id: `'${CONTA}'` })),
     ).toBe("passou");
+  });
+
+  it("o domingo, como o sábado: nulo (o padrão) é fechado, e aberto fecha depois de abrir (23514)", () => {
+    expect(lastLine(sql(`select coalesce(domingo_ate::text, 'fechado') from public.mia_raio_x where id = '${RX_TIME}';`))).toBe("fechado");
+    expect(tentar("postgres", raioX("e9152e90-2222-4000-8000-0000000000e1", "5531900001121", { domingo_ate: "'07:00'" }))).toBe("23514");
+    expect(tentar("postgres", raioX("e9152e90-2222-4000-8000-0000000000e2", "5531900001122", { domingo_ate: "'12:00'" }))).toBe("passou");
   });
 
   it("o link do dono aceita o canal 'cadastro' (o relatório do cadastro o gera sozinho)", () => {

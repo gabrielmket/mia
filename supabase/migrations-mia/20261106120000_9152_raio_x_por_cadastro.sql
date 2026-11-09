@@ -1,8 +1,8 @@
--- manifest: O RAIO-X GRÁTIS POR CADASTRO (.106, protótipo aprovado em 06/11/2026; docs/fork/raio-x-do-atendimento.md, seção 16). FORK MIA (.106): quem quer o raio-X do próprio atendimento se cadastra sozinho (o formulário do site iamia.com.br ou a página /raio-x/gratis do sistema), recebe a PRIMEIRA análise grátis direto no e-mail, sem a revisão da Time, e entra numa área própria sem senha (e-mail + código de 6 números). As próximas análises são avulsa ou mensal, pagas pelo Asaas. Estende a 9150 e a 9151 sem redefinir nada do upstream: `mia_raio_x` ganha `conta_id` (a conta de quem se cadastrou), `origem` ('time', o padrão, que é o raio-X de sempre, com revisão; ou 'cadastro'), `gratis`, `sem_historico_em` (a leitura fechou com 0 conversas: a grátis NÃO conta) e `entregue_em` (o relatório foi mandado para a pessoa); as CHECKs `mia_raio_x_criado_via` e `mia_raio_x_links_created_via` (nossas, da 9150) passam a aceitar 'cadastro' (o relatório do cadastro gera sozinho o link do dono, que vai ao lead da Time). Quatro tabelas NOVAS, todas só do servidor como as outras oito (RLS ligada SEM política e grants revogados de anon e authenticated): `mia_raio_x_contas` (quem se cadastrou: e-mail único em minúsculas, nome completo, o WhatsApp da pessoa em dígitos, a referência ao negócio no CRM da Time e ao cliente no Asaas); `mia_raio_x_codigos_de_acesso` (o código de 6 números da entrada sem senha: só o HASH, 15 minutos, as tentativas); `mia_raio_x_pedidos` (a nova análise pedida na área: avulsa ou mensal, o valor, a situação e as referências do Asaas); `mia_raio_x_precos` (o preço de cada tipo; nasce VAZIA, e sem preço não há venda: o pedido vira interesse). A regra da grátis (uma por número analisado, pelas duas grafias do nono dígito, e uma por conta) é do código (`lib/raio-x/cadastro.ts`); o banco segura a mesma grafia e a mesma conta com dois índices únicos parciais. Provado em tests/invariants/raio-x-por-cadastro.test.ts.
+-- manifest: O RAIO-X GRÁTIS POR CADASTRO (.107, protótipo aprovado em 06/11/2026; docs/fork/raio-x-do-atendimento.md, seção 16). FORK MIA (.107): quem quer o raio-X do próprio atendimento se cadastra sozinho (o formulário do site iamia.com.br ou a página /raio-x/gratis do sistema), recebe a PRIMEIRA análise grátis direto no e-mail, sem a revisão da Time, e entra numa área própria sem senha (e-mail + código de 6 números). As próximas análises são avulsa ou mensal, pagas pelo Asaas. Estende a 9150 e a 9151 sem redefinir nada do upstream: `mia_raio_x` ganha `conta_id` (a conta de quem se cadastrou), `origem` ('time', o padrão, que é o raio-X de sempre, com revisão; ou 'cadastro'), `gratis`, `sem_historico_em` (a leitura fechou com 0 conversas: a grátis NÃO conta), `entregue_em` (o relatório foi mandado para a pessoa) e `domingo_ate` (o domingo no horário comercial, com a regra do sábado: abre no horário da semana, vai até `domingo_ate`, nulo = fechado, o de sempre); as CHECKs `mia_raio_x_criado_via` e `mia_raio_x_links_created_via` (nossas, da 9150) passam a aceitar 'cadastro' (o relatório do cadastro gera sozinho o link do dono, que vai ao lead da Time). Quatro tabelas NOVAS, todas só do servidor como as outras oito (RLS ligada SEM política e grants revogados de anon e authenticated): `mia_raio_x_contas` (quem se cadastrou: e-mail único em minúsculas, nome completo, o WhatsApp da pessoa em dígitos, a referência ao negócio no CRM da Time e ao cliente no Asaas); `mia_raio_x_codigos_de_acesso` (o código de 6 números da entrada sem senha: só o HASH, 15 minutos, as tentativas); `mia_raio_x_pedidos` (a nova análise pedida na área: avulsa ou mensal, o valor, a situação e as referências do Asaas); `mia_raio_x_precos` (o preço de cada tipo; nasce VAZIA, e sem preço não há venda: o pedido vira interesse). A regra da grátis (uma por número analisado, pelas duas grafias do nono dígito, e uma por conta) é do código (`lib/raio-x/cadastro.ts`); o banco segura a mesma grafia e a mesma conta com dois índices únicos parciais. Provado em tests/invariants/raio-x-por-cadastro.test.ts.
 --
 -- 9152 · o raio-X grátis por cadastro
 --
--- FORK MIA (.106). Só objetos NOSSOS (docs/FORK-MIA.md, regra 3), e só
+-- FORK MIA (.107). Só objetos NOSSOS (docs/FORK-MIA.md, regra 3), e só
 -- ESTENDE a 9150/9151: colunas novas com `add column if not exists`,
 -- constraints novas dentro de `do` que confere o catálogo, tabelas novas.
 -- A única constraint trocada é a `mia_raio_x_criado_via`, que é NOSSA (9150):
@@ -91,9 +91,17 @@ alter table public.mia_raio_x
 -- O relatório do cadastro foi mandado para a pessoa (e-mail, aviso à Time, lead).
 alter table public.mia_raio_x
   add column if not exists entregue_em timestamptz;
+-- O domingo no horário comercial (ajuste de 06/11/2026), com a regra do sábado:
+-- abre no horário da semana e vai até aqui; nulo = fechado (todo raio-X de antes).
+alter table public.mia_raio_x
+  add column if not exists domingo_ate time;
 
 do $$
 begin
+  if not exists (select 1 from pg_constraint where conname = 'mia_raio_x_domingo') then
+    -- Como o sábado (a CHECK mia_raio_x_horario da 9150): fecha depois de abrir.
+    alter table public.mia_raio_x add constraint mia_raio_x_domingo check (domingo_ate is null or domingo_ate > abre);
+  end if;
   if not exists (select 1 from pg_constraint where conname = 'mia_raio_x_origem') then
     alter table public.mia_raio_x add constraint mia_raio_x_origem check (origem in ('time', 'cadastro'));
   end if;
