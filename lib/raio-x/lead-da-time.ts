@@ -189,16 +189,64 @@ export async function enviarAoCrm(
 }
 
 /**
- * O que acontece DEPOIS do cadastro vai por cima do negócio: os campos (merge
- * atômico) e uma nota na linha do tempo. Sem negócio ainda (a fonte faltou no
- * cadastro), manda o cadastro de novo primeiro. Nunca lança.
+ * O negócio da conta: o que JÁ existe (`crm_lead_id`) é usado como está, sem
+ * mandar o cadastro de novo (o reenvio poderia reescrever o contato). Sem
+ * negócio ainda (a fonte faltou antes, ou o negócio foi apagado), manda o
+ * cadastro com os dados GUARDADOS da conta. Nunca lança.
+ */
+export async function garantirLead(
+  admin: SupabaseClient,
+  conta: ContaDoLead,
+  raioX: RaioXDoLead | null,
+  deps: DependenciasDoLead = {},
+): Promise<ResultadoDoLead> {
+  if (!conta.crm_lead_id) return enviarAoCrm(admin, { conta, raioX }, deps);
+  const id = idDaFonte(deps);
+  if (!id) return { ok: false, motivo: "sem_fonte" };
+  try {
+    const fonte = await lerFonte(admin, id);
+    if (!fonte) return { ok: false, motivo: "fonte_inexistente" };
+    return { ok: true, leadId: conta.crm_lead_id, organizationId: fonte.organizationId };
+  } catch {
+    return { ok: false, motivo: "falhou" };
+  }
+}
+
+/** Uma nota na linha do tempo do negócio, e nada mais (o contato não muda). Nunca lança. */
+export async function notarNoLead(
+  admin: SupabaseClient,
+  entrada: { conta: ContaDoLead; raioXId?: string | null; nota: string },
+  deps: DependenciasDoLead = {},
+): Promise<ResultadoDoLead> {
+  const lead = await garantirLead(admin, entrada.conta, null, deps);
+  if (!lead.ok) return lead;
+  try {
+    await emitLeadActivity(admin, {
+      organizationId: lead.organizationId,
+      leadId: lead.leadId,
+      type: "note",
+      sourceModule: "raio_x",
+      sourceId: entrada.raioXId ?? null,
+      actor: { type: "api_token", id: "raio_x" },
+      reason: entrada.nota.slice(0, 500),
+    });
+  } catch (erro) {
+    logger.warn("[raio-x] a nota do lead falhou", { contaId: entrada.conta.id, detail: erro instanceof Error ? erro.message : "erro" });
+  }
+  return lead;
+}
+
+/**
+ * O que acontece DEPOIS do cadastro vai por cima do negócio: os campos do
+ * raio-X (merge atômico) e uma nota na linha do tempo. O contato do negócio não
+ * é tocado (`garantirLead`). Nunca lança.
  */
 export async function anotarNoLead(
   admin: SupabaseClient,
   entrada: { conta: ContaDoLead; raioX: RaioXDoLead | null; raioXId?: string | null; campos: Record<string, string | number | null>; nota: string },
   deps: DependenciasDoLead = {},
 ): Promise<ResultadoDoLead> {
-  const enviado = await enviarAoCrm(admin, { conta: entrada.conta, raioX: entrada.raioX }, deps);
+  const enviado = await garantirLead(admin, entrada.conta, entrada.raioX, deps);
   if (!enviado.ok) return enviado;
   try {
     const { error } = await admin.rpc("fn_lead_anotar_campos", { p_org: enviado.organizationId, p_lead: enviado.leadId, p_campos: entrada.campos });

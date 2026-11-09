@@ -234,6 +234,38 @@ describe("uma grátis por número e por conta", () => {
     expect(m.banco.db.mia_raio_x).toHaveLength(1);
   });
 
+  it("⭐ o 2º cadastro com o MESMO e-mail e outro telefone não muda a conta nem o contato do lead: só a nota, mascarada", async () => {
+    const m = mundo();
+    const um = await cadastrar(admin(m), dados(), m.deps);
+    if (um.tipo !== "criado") throw new Error("não criou");
+    const contaAntes = structuredClone(m.banco.db.mia_raio_x_contas);
+    // A grátis anterior não contou: o segundo cadastro cria outro raio-X (com o WhatsApp e a empresa DELE).
+    Object.assign(m.banco.db.mia_raio_x![0]!, { situacao: "encerrado", sem_historico_em: T0.toISOString() });
+    const dois = await cadastrar(
+      admin(m),
+      dados({ nome: "Outro Nome Modelo", telefone: "(31) 90000-2299", whatsapp: "(31) 90000-1188", empresa: "Garagem Modelo Dois" }),
+      m.deps,
+    );
+    expect(dois.tipo).toBe("criado");
+    // A conta ficou como estava, e o cadastro não foi de novo à fonte (o contato do lead não muda).
+    expect(m.banco.db.mia_raio_x_contas).toEqual(contaAntes);
+    expect(m.capturas).toHaveLength(1);
+    // O raio-X novo guarda o que o formulário mandou.
+    expect(m.banco.db.mia_raio_x![1]).toMatchObject({ whatsapp: "5531900001188", empresa: "Garagem Modelo Dois", conta_id: um.conta.id });
+    // O lead ganha só a nota, com os telefones mascarados.
+    const nota = m.banco.db.crm_lead_activities!.at(-1)!;
+    expect(nota).toMatchObject({ lead_id: LEAD, type: "note" });
+    expect(String(nota.reason)).toContain("Novo cadastro com o mesmo e-mail");
+    expect(String(nota.reason)).toContain("2299");
+    expect(String(nota.reason)).not.toMatch(/90000-?2299|5531900002299/);
+    expect(m.banco.chamadasRpc.filter((c) => c.nome === "fn_lead_anotar_campos")).toHaveLength(0);
+    // E a grátis já usada, com o mesmo e-mail: também só a nota, e a conta segue igual.
+    const tres = await cadastrar(admin(m), dados({ telefone: "(31) 90000-2277" }), m.deps);
+    expect(tres.tipo).toBe("ja_usou");
+    expect(m.banco.db.mia_raio_x_contas).toEqual(contaAntes);
+    expect(m.capturas).toHaveLength(1);
+  });
+
   it("a grátis que fechou sem histórico não conta: o mesmo número cadastra de novo", async () => {
     const m = mundo();
     const um = await cadastrar(admin(m), dados(), m.deps);

@@ -3,7 +3,10 @@
  * `POST /api/v1/publico/raio-x/cadastro` chama isto depois de validar).
  *
  * Na ordem do brief da .107:
- *   1. acha ou cria a CONTA pelo e-mail (atualiza o nome e o WhatsApp da pessoa);
+ *   1. acha ou cria a CONTA pelo e-mail. O cadastro é SEM login: a conta que já
+ *      existe NUNCA muda (nome, telefone); o raio-X novo, quando permitido,
+ *      guarda o WhatsApp e a empresa do formulário NELE, e o lead só ganha a
+ *      nota "novo cadastro com o mesmo e-mail", com o telefone mascarado;
  *   2. confere a GRÁTIS: uma por número analisado (as duas grafias do nono
  *      dígito) e uma por conta. Já usada: não cria nada grátis, e o lead da Time
  *      é atualizado mesmo assim;
@@ -22,13 +25,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { leitorDoRaioX, type LeitorDoRaioX } from "@/lib/channels/raio-x/leitor";
+import { maskPhone } from "@/lib/lgpd/mask";
 import { logger } from "@/lib/logger";
 
 import { criarRaioX, lerRaioX, registrarAceite, type LinhaDoRaioX } from "./banco";
 import { PERIODO_DO_GRATIS, TETO_DO_GRATIS_CENTAVOS, type CadastroValido } from "./cadastro";
 import { acharOuCriarConta, gratisUsada, type LinhaDaConta } from "./contas";
 import { emailDeComecou, enviarEmailDoRaioX, type EnviarEmail } from "./emails";
-import { anotarNoLead, enviarAoCrm, type DependenciasDoLead, type ResultadoDoLead } from "./lead-da-time";
+import { anotarNoLead, enviarAoCrm, notarNoLead, type DependenciasDoLead, type ResultadoDoLead } from "./lead-da-time";
 
 export interface DependenciasDoCadastro {
   /** O leitor do raio-X (o padrão é o do ambiente; `null` = sem leitor). */
@@ -57,21 +61,32 @@ const ehDuplicado = (e: unknown) => e instanceof Error && e.message.includes("(2
 
 export async function cadastrar(admin: SupabaseClient, v: CadastroValido, deps: DependenciasDoCadastro = {}): Promise<DesfechoDoCadastro> {
   const agora = deps.agora ?? new Date();
-  const conta = await acharOuCriarConta(admin, { email: v.email, nome: v.nome, telefone: v.telefone });
+  const { conta, nova } = await acharOuCriarConta(admin, { email: v.email, nome: v.nome, telefone: v.telefone });
   const raioXDoLead = { empresa: v.empresa, segmento: v.segmento, whatsapp: v.whatsapp, quem_atende: v.quem_atende };
+  /** A nota do e-mail que já tinha conta: o que veio no formulário, com os telefones mascarados. */
+  const notaDoMesmoEmail = (desfecho: string) =>
+    `Novo cadastro com o mesmo e-mail: ${v.empresa}, WhatsApp informado ${maskPhone(v.telefone)}, analisado ${maskPhone(v.whatsapp)}. ${desfecho} Os dados da conta e do contato não mudaram.`;
 
   const jaUsou = async (raioXId: string): Promise<DesfechoDoCadastro> => {
-    const lead = await anotarNoLead(
-      admin,
-      {
-        conta,
-        raioX: raioXDoLead,
-        raioXId,
-        campos: { raio_x_situacao: "pediu a grátis de novo (já usada)" },
-        nota: `Pediu o Raio-X grátis de novo para ${v.empresa}, mas a análise grátis deste número ou desta conta já foi usada. Bom momento para oferecer a nova análise.`,
-      },
-      deps.lead,
-    );
+    if (!nova) {
+      const lead = await notarNoLead(admin, { conta, raioXId, nota: notaDoMesmoEmail("A análise grátis já foi usada: bom momento para oferecer a nova análise.") }, deps.lead);
+      return { tipo: "ja_usou", conta, raioXId, lead };
+    }
+    // E-mail novo com um número que já usou a grátis: a pessoa nova vira lead, com a nota.
+    const criado = await enviarAoCrm(admin, { conta, raioX: raioXDoLead, origem: v.origem, extras: { raio_x_situacao: "pediu a grátis de novo (já usada)" } }, deps.lead);
+    const lead = criado.ok
+      ? await anotarNoLead(
+          admin,
+          {
+            conta: { ...conta, crm_lead_id: criado.leadId },
+            raioX: raioXDoLead,
+            raioXId,
+            campos: { raio_x_situacao: "pediu a grátis de novo (já usada)" },
+            nota: `Pediu o Raio-X grátis de novo para ${v.empresa}, mas a análise grátis deste número já foi usada. Bom momento para oferecer a nova análise.`,
+          },
+          deps.lead,
+        )
+      : criado;
     return { tipo: "ja_usou", conta, raioXId, lead };
   };
 
@@ -129,11 +144,10 @@ export async function cadastrar(admin: SupabaseClient, v: CadastroValido, deps: 
   }
   const raioX = (await lerRaioX(admin, criado.raioX.id)) ?? criado.raioX;
 
-  const lead = await enviarAoCrm(
-    admin,
-    { conta, raioX: raioXDoLead, origem: v.origem, extras: { raio_x_situacao: "cadastrado, aguardando conectar" } },
-    deps.lead,
-  );
+  // A conta nova vira lead com os dados do formulário; a que já existia só ganha a nota.
+  const lead = nova
+    ? await enviarAoCrm(admin, { conta, raioX: raioXDoLead, origem: v.origem, extras: { raio_x_situacao: "cadastrado, aguardando conectar" } }, deps.lead)
+    : await notarNoLead(admin, { conta, raioXId: criado.raioX.id, nota: notaDoMesmoEmail("Um Raio-X grátis novo foi criado (o anterior não chegou a contar).") }, deps.lead);
   const emailSaiu = await enviarEmailDoRaioX(
     conta.email,
     (marca) => emailDeComecou({ nome: conta.nome, empresa: v.empresa, whatsapp: v.whatsapp, linkDeConexao: criado.link, email: conta.email }, marca),

@@ -810,8 +810,12 @@ Exemplo mínimo do formulário do site (dados fictícios):
 
 ### 17.4 A conta, a entrada sem senha e a área
 
-- **A conta** (`mia_raio_x_contas`): o e-mail é a identidade (único, minúsculo). O cadastro acha a conta pelo e-mail ou cria, e
-  atualiza o nome e o WhatsApp da pessoa com o que acabou de chegar (decisão do brief; ver 17.12).
+- **A conta** (`mia_raio_x_contas`): o e-mail é a identidade (único, minúsculo). O cadastro é SEM login, então NUNCA altera
+  uma conta que já existe (decisão do dono, 09/11/2026). E-mail novo: cria a conta com os dados do formulário. E-mail que já
+  existe: a conta fica como está (nome e telefone); o raio-X novo, quando permitido (a grátis ainda não usada, por exemplo a
+  anterior terminou sem histórico), guarda o WhatsApp e a empresa do formulário NO PRÓPRIO raio-X; e o lead recebe só uma nota
+  "Novo cadastro com o mesmo e-mail", com os telefones informados mascarados, sem trocar o contato. Atualizar os dados da
+  pessoa, se um dia for preciso, fica dentro da área, depois do código (não construído).
 - **A grátis** (`lib/raio-x/contas.ts`, `gratisUsada`): uma por número analisado, pelas DUAS grafias do nono dígito
   (`phoneLookupVariants`), e uma por conta. Não conta a que fechou sem histórico. O banco segura a mesma grafia e a mesma conta
   com dois índices únicos parciais; a corrida de dois cadastros iguais cai neles e vira "já usou".
@@ -852,8 +856,10 @@ classificação inicial e pelos eventos das automações da Time.
 - **O corpo:** `external_id` = `raiox-conta-<id da conta>` (estável: o mesmo cadastro cai no mesmo negócio), `nome`,
   `telefone` (o da PESSOA, `+55...`), `email`, `empresa`, `segmento` (o rótulo), `whatsapp_analisado` (com nome próprio, para
   não ser lido como telefone), `origem = raio-x-gratis`, `origem_do_site`, `utm_*`, `gclid`, `fbclid` e `raio_x_situacao`.
-- **Depois do cadastro** (já usou, relatório pronto, sem histórico, nova análise, pagamento): o cadastro é reenviado (cai no
-  mesmo negócio) e o negócio ganha os campos pelo merge atômico (`fn_lead_anotar_campos`: `raio_x_situacao`, `raio_x_nota`,
+- **O e-mail que já tinha conta** não vai de novo à fonte: o negócio existente ganha só a nota (17.4), e o contato não muda.
+- **Depois do cadastro** (já usou, relatório pronto, sem histórico, nova análise, pagamento): o negócio JÁ criado
+  (`crm_lead_id` da conta) é usado como está, sem reenviar o cadastro; só quando ainda não há negócio (a fonte faltou antes, ou
+  ele foi apagado) o cadastro vai à fonte com os dados guardados da conta. O negócio ganha os campos pelo merge atômico (`fn_lead_anotar_campos`: `raio_x_situacao`, `raio_x_nota`,
   `raio_x_sem_resposta`, `raio_x_conversas`, `raio_x_relatorio` = o link do dono, `raio_x_pedido`) e uma NOTA na linha do
   tempo (`crm_lead_activities`, tipo `note`, ator sistema). Nunca telefone nem texto de cliente do dono. O `crm_lead_id`
   fica na conta.
@@ -964,8 +970,8 @@ Para desfazer: voltar a imagem. As tabelas e colunas ficam (são aditivas); o ra
 - **Verificação contra robô**: só a armadilha `site` e os tetos por IP e por e-mail; não há captcha.
 - **Aviso por WhatsApp**: só e-mail (decisão 3 do protótipo: o WhatsApp oficial da MIA ainda não existe).
 - **"Falar com a equipe"**: não há número da Time configurado; a área diz para falar pelo WhatsApp do cadastro.
-- **O nome e o WhatsApp da conta** são atualizados por qualquer cadastro com o mesmo e-mail (como o brief pede). Quem souber o
-  e-mail de outra pessoa pode trocar o telefone que vai ao lead; a área e os relatórios só abrem com o código no e-mail.
+- **Os dados da pessoa não se editam** em lugar nenhum por enquanto: o cadastro sem login não muda a conta (17.4), e a área
+  ainda não tem a tela de editar.
 - **O "valor volta como crédito"** da tela 8, quando o histórico não chega na análise paga: não há crédito no código; a tela
   diz que a equipe combina uma nova tentativa.
 - **O e2e** foi escrito no molde da spec do raio-X (entra na parte 7), mas não rodou nesta máquina (sem a pilha do e2e).
@@ -975,7 +981,7 @@ Para desfazer: voltar a imagem. As tabelas e colunas ficam (são aditivas); o ra
 | teste | prova |
 |---|---|
 | `tests/unit/raio-x-cadastro-regras.test.ts` | a validação do cadastro (campos, recusa pelos campos, opcionais e padrões, o domingo), a armadilha, o `retorno_erro` só do site, o código (hash amarrado à conta), o cookie (assinatura, validade, adulterado) e a origem dos POST |
-| `tests/unit/raio-x-cadastro-com-duble.test.ts` | o cadastro de ponta a ponta no banco em memória; o lead pela chamada interna da fonte com os campos certos e sem a variável não quebra; a grátis pelas duas grafias e por conta; o sem histórico não conta; o código (15 min, 5 tentativas, e-mail sem conta); a área só vê o que é da conta; o ciclo publica direto o do cadastro e NÃO o da Time; 0 conversas não gasta a grátis; sem preço vira interesse; com preço a cobrança no Asaas; pago cria o raio-X novo uma vez só e passa a conexão; cancelado marca |
+| `tests/unit/raio-x-cadastro-com-duble.test.ts` | o cadastro de ponta a ponta no banco em memória; o lead pela chamada interna da fonte com os campos certos e sem a variável não quebra; o 2º cadastro com o mesmo e-mail e outro telefone não muda a conta nem o contato do lead (só a nota, mascarada); a grátis pelas duas grafias e por conta; o sem histórico não conta; o código (15 min, 5 tentativas, e-mail sem conta); a área só vê o que é da conta; o ciclo publica direto o do cadastro e NÃO o da Time; 0 conversas não gasta a grátis; sem preço vira interesse; com preço a cobrança no Asaas; pago cria o raio-X novo uma vez só e passa a conexão; cancelado marca |
 | `tests/unit/raio-x-rotas-do-cadastro.test.ts` | o 303, 201, 409 e 400 do cadastro, o CORS do site, a armadilha, entrar com a resposta igual, o cookie HttpOnly/Secure/Lax, a área sem cookie e de fora |
 | `tests/unit/raio-x-webhook-do-pedido.test.ts` | o aviso do Asaas de um pedido acorda a releitura, e o cliente de empresa e o desconhecido seguem como antes |
 | `tests/unit/raio-x-domingo-e-duas-perguntas.test.ts` | o domingo aberto e fechado em `lojaAberta` e `proximaAbertura`, o horário da conta, o Novo raio-X; o endpoint do horário aceita antes do relatório, recusa depois, valida, recusa o da Time e de fora |

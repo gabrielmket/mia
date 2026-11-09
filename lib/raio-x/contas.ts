@@ -54,23 +54,20 @@ export async function contaPeloEmail(admin: SupabaseClient, email: string): Prom
 }
 
 /**
- * Acha a conta pelo e-mail ou cria. Achou: atualiza o nome e o WhatsApp da
- * pessoa com o que ela acabou de mandar (decisão do brief da .107). Dois
- * cadastros do mesmo e-mail ao mesmo tempo: o segundo cai no `unique` e relê.
+ * Acha a conta pelo e-mail ou cria. O cadastro é SEM login, então ele NUNCA
+ * altera a conta que já existe (decisão do dono, 09/11/2026): achou, devolve
+ * como está (`nova: false`); quem souber o e-mail de outra pessoa não troca o
+ * nome nem o telefone dela. E-mail novo: cria com o que o formulário mandou.
+ * Dois cadastros do mesmo e-mail ao mesmo tempo: o segundo cai no `unique` e
+ * relê.
  */
-export async function acharOuCriarConta(admin: SupabaseClient, p: { email: string; nome: string; telefone: string }): Promise<LinhaDaConta> {
+export async function acharOuCriarConta(
+  admin: SupabaseClient,
+  p: { email: string; nome: string; telefone: string },
+): Promise<{ conta: LinhaDaConta; nova: boolean }> {
   const email = limparEmail(p.email);
   const existente = await contaPeloEmail(admin, email);
-  if (existente) {
-    const { data, error } = await admin
-      .from("mia_raio_x_contas")
-      .update({ nome: p.nome, telefone: p.telefone })
-      .eq("id", existente.id)
-      .select(COLUNAS_DA_CONTA)
-      .maybeSingle();
-    if (error) falhou("a conta não atualizou", error);
-    return ((data as unknown as LinhaDaConta | null) ?? { ...existente, nome: p.nome, telefone: p.telefone });
-  }
+  if (existente) return { conta: existente, nova: false };
   const { data, error } = await admin
     .from("mia_raio_x_contas")
     .insert({ email, nome: p.nome, telefone: p.telefone })
@@ -78,10 +75,10 @@ export async function acharOuCriarConta(admin: SupabaseClient, p: { email: strin
     .single();
   if (error?.code === "23505") {
     const outra = await contaPeloEmail(admin, email);
-    if (outra) return outra;
+    if (outra) return { conta: outra, nova: false };
   }
   if (error || !data) falhou("a conta não gravou", error);
-  return data as unknown as LinhaDaConta;
+  return { conta: data as unknown as LinhaDaConta, nova: true };
 }
 
 /** As duas grafias do nono dígito de um número (com e sem o 9), em dígitos. */
