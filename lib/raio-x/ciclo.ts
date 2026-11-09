@@ -22,6 +22,12 @@
  * tem conexão: depois da autorização ele já nasce "lendo", e a rodada de
  * leitura é a da conta (`leitura-da-conta.ts`), sem o leitor. O resto (a
  * análise, o relatório, os 30 dias para apagar e o mensal) é o mesmo.
+ *
+ * FORK MIA (.106): os que andam entram em RODÍZIO (`emRodizio`, o ponto de
+ * partida gira a cada minuto). A rodada da análise que lança deixa o último
+ * erro e as falhas seguidas em `mia_raio_x.analise` antes de chegar ao
+ * `catch` daqui, e o item que falha três rodadas seguidas sai do caminho
+ * (`analise.ts`); aqui só se conta a falha e se solta a trava, como antes.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 

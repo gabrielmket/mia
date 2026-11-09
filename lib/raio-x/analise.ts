@@ -32,6 +32,15 @@
  * para ouvir o cliente), com o serviço da instalação (`TRANSCRIPTION_API_KEY`)
  * ou a chave da OpenAI com `whisper-1`, em português. O arquivo é baixado do
  * leitor, transcrito e descartado: só o texto fica, até as conversas apagarem.
+ *
+ * ─── O relógio e as falhas (FORK MIA .106) ──────────────────────────────────
+ *
+ * Toda chamada para fora (download, transcrição, modelo) tem teto, e só começa
+ * se termina antes do corte do agendador (`relogio-da-analise.ts`, com o
+ * defeito da .101 que prendia a análise: o modelo só era chamado com 45 s
+ * pela frente numa chamada de 45 s). Os áudios vão de 4 em 4. A exceção que se
+ * repete no mesmo item fica em `analise.ultimo_erro` e, na terceira rodada
+ * seguida, o item sai do caminho (`registrarFalha`): nada prende o raio-X.
  */
 import { createHash, randomUUID } from "node:crypto";
 
