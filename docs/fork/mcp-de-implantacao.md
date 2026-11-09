@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **110** ferramentas no servidor: as 102 desta página e as 8 da migração
+São **112** ferramentas no servidor (a .105 somou a de ler o raio-X de novo e a .107 a dos preços do raio-X): as 104 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -817,10 +817,11 @@ relatório para o dono. As ferramentas passam pelo mesmo caminho da tela (`lib/r
 | ferramenta | o que faz | operação |
 |---|---|---|
 | `plataforma_criar_raio_x` | cadastra o raio-X (empresa, segmento, WhatsApp comercial, quem autoriza, período 30/60/90, único ou mensal, horário comercial, empresa da MIA opcional, teto de custo) e devolve o link de conexão (48 h) e a mensagem pronta. Desde a .102, `fonte: "conversas_da_mia"` com `organization_id` e `numeros` (os `channel_session_id` da conta) cria o raio-X do CLIENTE ATIVO, sem conexão: o link é só de autorização | `gerir_raio_x` |
-| `plataforma_ver_raio_x` | sem `raio_x_id`, a lista; com ele, a situação, o andamento da leitura, o aceite, o link vigente, o custo e o teto, os relatórios com os números, a evolução desde o anterior da mesma empresa e os links do dono. Desde a .102, a fonte e o aceite (nome completo, e-mail mascarado, data, versão do termo), o bloco do cliente ativo no relatório e, com `organization_id` sem `raio_x_id`, o que dá para ler da conta (números com o id, período, estimativa, se é cliente ativo). Sem telefone de cliente nem trechos de conversa | leitura |
+| `plataforma_ver_raio_x` | sem `raio_x_id`, a lista; com ele, a situação, o andamento da leitura, o aceite, o link vigente, o custo e o teto, os relatórios com os números, a evolução desde o anterior da mesma empresa e os links do dono. Desde a .102, a fonte e o aceite (nome completo, e-mail mascarado, data, versão do termo), o bloco do cliente ativo no relatório e, com `organization_id` sem `raio_x_id`, o que dá para ler da conta (números com o id, período, estimativa, se é cliente ativo). Desde a .107, a `origem` (time, cadastro_gratis, avulsa, mensal), a `conta` de quem se cadastrou (nome, e-mail e WhatsApp da pessoa MASCARADOS, e se o lead entrou no CRM da Time), quando o relatório foi entregue, se fechou sem histórico, os `pedidos` de nova análise e, na lista, os preços. Sem telefone de cliente nem trechos de conversa | leitura |
 | `plataforma_publicar_raio_x` | marca o rascunho como revisado (com as anotações da Time) e gera o link do dono (7, 30 ou 90 dias); com `revogar_link_id`, revoga um link | `gerir_raio_x` |
 | `plataforma_encerrar_raio_x` | derruba a conexão, para a leitura e a análise e agenda a exclusão das conversas (30 dias). O relatório fica | `gerir_raio_x` |
 | `plataforma_reler_raio_x` | (.105) lê de novo um raio-X pronto cujo WhatsApp segue conectado: o rascunho do período sai e a leitura recomeça, esperando o histórico. Recusa cliente ativo, desconectado, encerrado, em andamento e período com relatório revisado. Antes, ver `aparelho.conversas_agora` no `plataforma_ver_raio_x` (também da .105) | `gerir_raio_x` |
+| `plataforma_precos_do_raio_x` | (.107) vê e define o preço da NOVA ANÁLISE do raio-X por cadastro (avulsa e mensal; a primeira é sempre grátis). Sem `tipo`, só mostra; com `tipo` e `valor_centavos` (500 a 1000000) define, `ativo: false` guarda sem vender, `valor_centavos: null` tira. Sem preço ativo, o pedido na área vira interesse. Não cria cobrança nem muda pedido que já existe. Audita `raio_x.precos_alterados` | `gerir_raio_x` |
 
 A quarta (publicar) existe porque a revisão (decisão 10) e o link do dono não cabem nas três do protótipo: ver é leitura, e
 criar e encerrar são as pontas do ciclo. O nome tem o verbo "publicar", que a cerca do MCP amarra a `colocar_no_ar`; a
