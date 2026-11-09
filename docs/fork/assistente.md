@@ -458,3 +458,19 @@ percentual de desfeitas por peça, com o nome de cada uma vindo do catálogo das
 
 Aprovar em lote; rascunho de campanha no "faz" (se a decisão 7 mudar); e o laço de retorno
 por empresa (fase 4 do desenho do upstream).
+
+## 13. Qualquer período, a meta do mês e a tela sem conexão (.106)
+
+Dois casos reais de 09/11/2026 motivaram:
+
+1. **"E a semana passada?"**: o assistente respondia "não consigo consultar exatamente a semana passada". `ver_minha_performance` e `ver_numeros_da_equipe` só aceitavam `mes`, `mesp`, `7` e `30`, embora o motor de relatórios (`fn_mia_relatorio`) já faça qualquer intervalo e a comparação com o período anterior. Nos últimos 7 dias ele também dizia "meta não definida para o período", porque a meta só era lida em `mes` e `mesp`.
+2. **"Fala que não está integrada com o Facebook"**: a gerente de um cliente pediu os números das campanhas, o assistente indicou Análise › Meta Ads, e a tela abriu "Nenhuma conta de anúncios conectada", porque a empresa não tinha a conta da Meta ligada. O mapa de telas do assistente não sabia que essa tela depende de conexão.
+
+**O conserto:**
+
+- **Período livre** (`lib/assistente/ferramentas.ts`, `periodoPedido`): `periodo` aceita `hoje`, `7`, `30`, `90`, `mes`, `mesp` e `pers`. Com `pers`, as datas vêm em `de` e `ate` (AAAA-MM-DD, no fuso da empresa). Uma data só vale para as duas pontas (o "ontem"). Datas trocadas ou faltando voltam com o motivo, para o modelo refazer. `comparar: true` pede ao motor o período anterior de mesmo tamanho, que volta em `anterior` (ganhos, valor, perdidos, abertos e taxa). Nada é recalculado: os números são os do motor, os mesmos das telas.
+- **A meta em qualquer período** (`lib/assistente/leituras/performance.ts`, `mesDaMeta`): o mês da meta é o mês passado em `mesp`, o mês das datas em `pers` quando o intervalo cabe num mês só, e o mês de agora nos outros casos. Fora de `mes` e `mesp`, um aviso diz que o realizado é o do mês inteiro. Sem meta cadastrada, o aviso diz isso com o mês.
+- **Tela sem conexão** (`lib/assistente/telas.ts`, `TELAS_QUE_DEPENDEM_DE_CONEXAO`): a rota do chat lê se a empresa tem a conta de anúncios da Meta ligada, pela mesma checagem da página (`existeConexaoDeLeitura`, sem ler o token). A tela de Meta Ads entra no mapa do prompt com `[SEM CONEXÃO: ...]`, e o "Me leva lá" devolve `sem_conexao`. Se não der para saber, nada é marcado.
+- **Regras 12 e 13 do prompt**: não indicar tela sem conexão como caminho para ver números (diga o que falta ligar, quem liga e o que funciona agora: as ferramentas de números ou Relatórios, com os negócios por origem); e qualquer período, com "semana passada" de segunda a domingo da semana anterior. Nunca dizer que um período não dá para ver.
+
+Provado em `tests/unit/assistente-periodo-livre.test.ts`. A lista de ferramentas do assistente e o MCP de plataforma não mudam.

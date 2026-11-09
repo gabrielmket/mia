@@ -26,6 +26,35 @@ export interface TelaConhecida {
   papelMinimo: Role;
   /** A pessoa que perguntou abre esta tela? */
   abre: boolean;
+  /**
+   * FORK MIA (.106): a tela só mostra algo com uma conexão que ESTA empresa não
+   * tem (abre vazia). O texto diz o que falta e quem liga. Nulo: não depende de
+   * conexão, ou ela está ligada, ou não deu para saber.
+   */
+  semConexao?: string | null;
+}
+
+/**
+ * FORK MIA (.106): as telas que dependem de uma conexão para mostrar alguma
+ * coisa. O caso que motivou: o assistente mandou a gerente de um cliente para
+ * Meta Ads atrás dos números das campanhas, e a tela respondeu "Nenhuma conta
+ * de anúncios conectada", porque a empresa não tinha a conta da Meta ligada.
+ */
+export const TELAS_QUE_DEPENDEM_DE_CONEXAO: Readonly<Record<string, { conexao: "meta_ads"; falta: string }>> = {
+  "/app/ads/meta": {
+    conexao: "meta_ads",
+    falta:
+      'nesta empresa não há conta de anúncios da Meta ligada, então a tela abre vazia ("Nenhuma conta de anúncios conectada"); quem liga é quem administra a empresa, em Configurações › Meta Ads',
+  },
+};
+
+/** As conexões da empresa que mudam o que uma tela mostra. Ausente = não se sabe. */
+export type ConexoesDaEmpresa = Partial<Record<"meta_ads", boolean>>;
+
+function faltaConexao(href: string, conexoes: ConexoesDaEmpresa | undefined): string | null {
+  const regra = TELAS_QUE_DEPENDEM_DE_CONEXAO[href];
+  if (!regra || !conexoes) return null;
+  return conexoes[regra.conexao] === false ? regra.falta : null;
 }
 
 const TODAS: readonly NavMetadata[] = NAV_CATALOG as readonly NavMetadata[];
@@ -42,6 +71,8 @@ export function telasParaOPapel(entrada: {
   papel: Role;
   interfaceSettings?: unknown;
   modulos?: string[];
+  /** FORK MIA (.106): o que a empresa tem ligado (Meta Ads). Sem isto, nenhuma tela é marcada. */
+  conexoes?: ConexoesDaEmpresa;
 }): TelaConhecida[] {
   const abertas = new Set(
     destinosDaInterface(entrada.interfaceSettings, false, entrada.papel, entrada.modulos).map((d) => d.href),
@@ -53,6 +84,7 @@ export function telasParaOPapel(entrada: {
     grupo: rotuloDoGrupo(d.group),
     papelMinimo: d.minRole ?? "viewer",
     abre: abertas.has(d.href),
+    semConexao: faltaConexao(d.href, entrada.conexoes),
   }));
 }
 
