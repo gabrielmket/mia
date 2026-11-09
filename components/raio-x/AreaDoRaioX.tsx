@@ -6,6 +6,7 @@
  * desconectar o número, e pedir a nova análise. A identidade é o cookie da
  * sessão (o servidor confere em cada rota); estas peças só chamam as rotas.
  */
+import Link from "next/link";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -108,9 +109,9 @@ export function EntrarNaArea({ emailInicial, jaUsou }: { emailInicial: string; j
       </section>
       <p className="text-sm text-text-muted">
         {t("Ainda não tem o Raio-X?")}{" "}
-        <a href="/raio-x/gratis" className="underline">
+        <Link href="/raio-x/gratis" className="underline">
           {t("Fazer o cadastro grátis")}
-        </a>
+        </Link>
       </p>
     </main>
   );

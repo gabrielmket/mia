@@ -16,6 +16,7 @@
  * (o aceite foi no formulário) e diz que o relatório chega no e-mail, com a
  * entrada na área; o link vencido se renova na área, sem pedir à Time.
  */
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { DuasPerguntas } from "@/components/raio-x/DuasPerguntas";
@@ -184,9 +185,9 @@ export function ConexaoDoDono({ codigo, inicial }: { codigo: string; inicial: Si
           {doCadastro ? (
             <p className="text-sm text-text-muted">
               {t("O link de conexão vale 48 horas.")}{" "}
-              <a href="/raio-x/entrar" className="underline">
+              <Link href="/raio-x/entrar" className="underline">
                 {t("Entre na sua área para gerar um link novo.")}
-              </a>
+              </Link>
             </p>
           ) : (
             <p className="text-sm text-text-muted">{t("O link de conexão vale 48 horas. Peça um novo à Time Company.")}</p>
@@ -422,9 +423,9 @@ export function ConexaoDoDono({ codigo, inicial }: { codigo: string; inicial: Si
           </p>
           {doCadastro ? (
             <p className="text-sm">
-              <a href="/raio-x/entrar" className="underline" data-raio-x="ir-para-a-area">
+              <Link href="/raio-x/entrar" className="underline" data-raio-x="ir-para-a-area">
                 {t("Entrar na minha área")}
-              </a>
+              </Link>
             </p>
           ) : null}
         </section>

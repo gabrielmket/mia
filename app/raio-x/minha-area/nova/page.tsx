@@ -67,9 +67,9 @@ export default async function NovaAnalisePage() {
           </section>
         ) : (
           <p className="text-sm">
-            <a href="/raio-x/gratis" className="underline">
+            <Link href="/raio-x/gratis" className="underline">
               {t("Fazer o cadastro grátis")}
-            </a>
+            </Link>
           </p>
         )}
       </main>

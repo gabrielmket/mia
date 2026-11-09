@@ -107,9 +107,9 @@ export default async function MinhaAreaPage() {
         ) : (
           <p className="rounded-lg border border-border bg-surface p-5 text-sm text-text-muted">
             {t("Ainda não há um Raio-X nesta conta.")}{" "}
-            <a href="/raio-x/gratis" className="underline">
+            <Link href="/raio-x/gratis" className="underline">
               {t("Fazer o cadastro grátis")}
-            </a>
+            </Link>
           </p>
         )}
 
