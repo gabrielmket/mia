@@ -66,6 +66,8 @@ export interface LinhaDoRaioX {
   abre: string;
   fecha: string;
   sabado_ate: string | null;
+  /** FORK MIA (.107): até que horas o domingo vai; `null` = fechado (9152). */
+  domingo_ate?: string | null;
   organization_id: string | null;
   teto_centavos: number;
   situacao: SituacaoDoRaioX;
@@ -92,25 +94,25 @@ export interface LinhaDoRaioX {
   criado_via: string;
   created_at: string;
   updated_at: string;
-  /** FORK MIA (.106): a conta de quem se cadastrou (9152). */
+  /** FORK MIA (.107): a conta de quem se cadastrou (9152). */
   conta_id?: string | null;
-  /** FORK MIA (.106): 'time' (o de sempre, com revisão) ou 'cadastro' (direto para a pessoa). */
+  /** FORK MIA (.107): 'time' (o de sempre, com revisão) ou 'cadastro' (direto para a pessoa). */
   origem?: OrigemDoRaioX;
-  /** FORK MIA (.106): a primeira análise grátis do cadastro. */
+  /** FORK MIA (.107): a primeira análise grátis do cadastro. */
   gratis?: boolean;
-  /** FORK MIA (.106): a leitura fechou com 0 conversas; a grátis não conta. */
+  /** FORK MIA (.107): a leitura fechou com 0 conversas; a grátis não conta. */
   sem_historico_em?: string | null;
-  /** FORK MIA (.106): o relatório do cadastro foi mandado para a pessoa. */
+  /** FORK MIA (.107): o relatório do cadastro foi mandado para a pessoa. */
   entregue_em?: string | null;
 }
 
-/** FORK MIA (.106): de onde veio o raio-X. */
+/** FORK MIA (.107): de onde veio o raio-X. */
 export type OrigemDoRaioX = "time" | "cadastro";
 
 export const COLUNAS_DO_RAIO_X =
-  "id, fonte, primeira_conversa_em, empresa, segmento, whatsapp, responsavel_nome, responsavel_contato, quem_atende, periodo_dias, tipo, abre, fecha, sabado_ate, organization_id, teto_centavos, situacao, conexao_versao, conexao_expira_em, sessao, conectado_em, numero_conectado, ciclo, periodo_inicio, periodo_fim, competencia, leitura, leitura_concluida_em, analise, trava_ate, ultimo_relatorio_em, desconectar_em, desconectado_em, apagar_conversas_em, conversas_apagadas_em, encerrado_em, criado_por, criado_via, created_at, updated_at, conta_id, origem, gratis, sem_historico_em, entregue_em";
+  "id, fonte, primeira_conversa_em, empresa, segmento, whatsapp, responsavel_nome, responsavel_contato, quem_atende, periodo_dias, tipo, abre, fecha, sabado_ate, domingo_ate, organization_id, teto_centavos, situacao, conexao_versao, conexao_expira_em, sessao, conectado_em, numero_conectado, ciclo, periodo_inicio, periodo_fim, competencia, leitura, leitura_concluida_em, analise, trava_ate, ultimo_relatorio_em, desconectar_em, desconectado_em, apagar_conversas_em, conversas_apagadas_em, encerrado_em, criado_por, criado_via, created_at, updated_at, conta_id, origem, gratis, sem_historico_em, entregue_em";
 
-/** FORK MIA (.106): o raio-X é do cadastro (o relatório sai direto para a pessoa)? */
+/** FORK MIA (.107): o raio-X é do cadastro (o relatório sai direto para a pessoa)? */
 export function doCadastro(r: Pick<LinhaDoRaioX, "origem">): boolean {
   return r.origem === "cadastro";
 }
@@ -201,7 +203,7 @@ export interface ContaDoNovoRaioX {
   primeiraConversaEm: Date | null;
 }
 
-/** FORK MIA (.106): o que o raio-X do cadastro leva além do de sempre. */
+/** FORK MIA (.107): o que o raio-X do cadastro leva além do de sempre. */
 export interface OpcoesDoNovoRaioX {
   origem?: OrigemDoRaioX;
   gratis?: boolean;
@@ -244,6 +246,7 @@ export async function criarRaioX(
       abre: entrada.abre,
       fecha: entrada.fecha,
       sabado_ate: entrada.sabado_ate,
+      domingo_ate: entrada.domingo_ate ?? null,
       organization_id: entrada.organization_id,
       teto_centavos: entrada.teto_centavos,
       conexao_codigo_hash: hashDoCodigo(codigo),
@@ -251,7 +254,7 @@ export async function criarRaioX(
       conexao_expira_em: validadeDoLinkDeConexao(agora).toISOString(),
       criado_por: ator,
       criado_via: via,
-      // FORK MIA (.106): o cadastro (a grátis e a paga da área).
+      // FORK MIA (.107): o cadastro (a grátis e a paga da área).
       ...(opcoes.origem === "cadastro" ? { situacao: "aguardando", origem: "cadastro", gratis: opcoes.gratis === true, conta_id: opcoes.contaId ?? null } : {}),
     })
     .select(COLUNAS_DO_RAIO_X)
@@ -475,16 +478,16 @@ export interface RaioXNaLista {
   /** O raio-X anterior da MESMA empresa (decisão 13), se houver. */
   anterior: { id: string; criadoEm: string } | null;
   custoCentavos: number;
-  /** FORK MIA (.106): de onde veio (a Time, o cadastro grátis, a avulsa ou a mensal paga). */
+  /** FORK MIA (.107): de onde veio (a Time, o cadastro grátis, a avulsa ou a mensal paga). */
   origemNaLista?: OrigemNaLista;
-  /** FORK MIA (.106): quem se cadastrou (nome, e-mail e o WhatsApp da pessoa). */
+  /** FORK MIA (.107): quem se cadastrou (nome, e-mail e o WhatsApp da pessoa). */
   conta?: { id: string; nome: string; email: string; telefone: string } | null;
-  /** FORK MIA (.106): o relatório do cadastro já foi para a pessoa. */
+  /** FORK MIA (.107): o relatório do cadastro já foi para a pessoa. */
   entregueEm?: string | null;
   semHistoricoEm?: string | null;
 }
 
-/** FORK MIA (.106): a origem como o Admin e o MCP mostram. */
+/** FORK MIA (.107): a origem como o Admin e o MCP mostram. */
 export type OrigemNaLista = "time" | "cadastro_gratis" | "avulsa" | "mensal";
 
 export function origemNaLista(r: Pick<LinhaDoRaioX, "origem" | "gratis" | "tipo">): OrigemNaLista {
@@ -527,7 +530,7 @@ export async function listarRaioX(admin: SupabaseClient, agora: Date = new Date(
         orgIds.length ? admin.from("organizations").select("id, created_at").in("id", orgIds) : Promise.resolve({ data: [], error: null }),
       ])
     : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
-  // FORK MIA (.106): quem se cadastrou, para a lista mostrar a pessoa.
+  // FORK MIA (.107): quem se cadastrou, para a lista mostrar a pessoa.
   const contaIds = [...new Set(linhas.flatMap((l) => (l.conta_id ? [l.conta_id] : [])))];
   const contas = contaIds.length
     ? await admin.from("mia_raio_x_contas").select("id, nome, email, telefone").in("id", contaIds)

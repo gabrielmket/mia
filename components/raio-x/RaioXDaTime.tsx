@@ -61,6 +61,9 @@ interface Rascunho {
   fecha: string;
   sabado: "sim" | "nao";
   sabado_ate: string;
+  /** FORK MIA (.107): o domingo, com a regra do sábado. */
+  domingo: "sim" | "nao";
+  domingo_ate: string;
   organization_id: string;
   teto_reais: string;
 }
@@ -78,6 +81,8 @@ const VAZIO: Rascunho = {
   fecha: "18:00",
   sabado: "sim",
   sabado_ate: "13:00",
+  domingo: "nao",
+  domingo_ate: "12:00",
   organization_id: "",
   teto_reais: "40",
 };
@@ -157,6 +162,8 @@ export function RaioXDaTime({ lista, empresas, ativas = [] }: { lista: RaioXNaLi
             fecha: c.horario.fecha,
             sabado: c.horario.sabadoAte ? "sim" : "nao",
             sabado_ate: c.horario.sabadoAte ?? x.sabado_ate,
+            domingo: c.horario.domingoAte ? "sim" : "nao",
+            domingo_ate: c.horario.domingoAte ?? x.domingo_ate,
             responsavel_nome: c.responsavel?.nome ?? "",
             responsavel_contato: c.responsavel?.email ?? "",
           }));
@@ -197,6 +204,7 @@ export function RaioXDaTime({ lista, empresas, ativas = [] }: { lista: RaioXNaLi
       abre: r.abre,
       fecha: r.fecha,
       sabado_ate: r.sabado === "sim" ? r.sabado_ate : null,
+      domingo_ate: r.domingo === "sim" ? r.domingo_ate : null,
       organization_id: r.organization_id || null,
       teto_centavos: Number.isFinite(teto) ? teto : 4000,
     };
@@ -543,7 +551,7 @@ export function RaioXDaTime({ lista, empresas, ativas = [] }: { lista: RaioXNaLi
                 <tr key={x.id} className="border-t border-border align-top" data-raio-x-linha={x.empresa} data-raio-x-fonte-da-linha={x.fonte}>
                   <td className="p-3">
                     <b>{x.empresa}</b>
-                    {/* FORK MIA (.106): de onde veio (a Time ou o cadastro) e quem se cadastrou. */}
+                    {/* FORK MIA (.107): de onde veio (a Time ou o cadastro) e quem se cadastrou. */}
                     <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
                       <span
                         className={`rounded-full px-2 py-0.5 ${x.origemNaLista && x.origemNaLista !== "time" ? "bg-primary/10 text-primary" : "bg-surface-elevated"}`}
@@ -666,6 +674,17 @@ function Horario({
             <option value="nao">{t("Não")}</option>
           </select>
           <Input type="time" value={r.sabado_ate} disabled={r.sabado === "nao"} onChange={(e) => set("sabado_ate", e.target.value)} aria-label={t("Até que horas no sábado")} />
+        </div>
+      </div>
+      {/* FORK MIA (.107): o domingo, com a regra do sábado (abre no horário da semana). */}
+      <div className="space-y-1">
+        <Label htmlFor="raio-x-domingo">{t("Abre no domingo?")}</Label>
+        <div className="grid grid-cols-2 gap-2">
+          <select id="raio-x-domingo" className={SELECT} value={r.domingo} onChange={(e) => set("domingo", e.target.value as Rascunho["domingo"])}>
+            <option value="sim">{t("Sim, até")}</option>
+            <option value="nao">{t("Não")}</option>
+          </select>
+          <Input type="time" value={r.domingo_ate} disabled={r.domingo === "nao"} onChange={(e) => set("domingo_ate", e.target.value)} aria-label={t("Até que horas no domingo")} />
         </div>
       </div>
     </>

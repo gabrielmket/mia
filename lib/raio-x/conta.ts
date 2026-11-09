@@ -236,11 +236,13 @@ export interface HorarioDaConta {
   abre: string;
   fecha: string;
   sabadoAte: string | null;
+  /** FORK MIA (.107): `null` = fechado no domingo. */
+  domingoAte: string | null;
   /** `true` = veio do horário de funcionamento de um agente publicado da conta; `false` = o padrão do raio-X. */
   daConta: boolean;
 }
 
-export const HORARIO_PADRAO: HorarioDaConta = { abre: "08:00", fecha: "18:00", sabadoAte: "13:00", daConta: false };
+export const HORARIO_PADRAO: HorarioDaConta = { abre: "08:00", fecha: "18:00", sabadoAte: "13:00", domingoAte: null, daConta: false };
 
 /**
  * O horário comercial "da conta": o "Só atender em horário de funcionamento"
@@ -261,7 +263,14 @@ export async function horarioDaConta(admin: SupabaseClient, orgId: string): Prom
   for (const v of (versoes ?? []) as Array<{ trigger_config: unknown }>) {
     const janela = lerJanelaDeAtendimento(v.trigger_config);
     if (!janela) continue;
-    return { abre: janela.start, fecha: janela.end, sabadoAte: janela.weekdays.includes(6) ? janela.end : null, daConta: true };
+    // A janela do agente conta 0 = domingo e 6 = sábado.
+    return {
+      abre: janela.start,
+      fecha: janela.end,
+      sabadoAte: janela.weekdays.includes(6) ? janela.end : null,
+      domingoAte: janela.weekdays.includes(0) ? janela.end : null,
+      daConta: true,
+    };
   }
   return HORARIO_PADRAO;
 }

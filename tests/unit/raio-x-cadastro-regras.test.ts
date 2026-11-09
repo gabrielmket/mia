@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · O CADASTRO DO RAIO-X GRÁTIS: as regras puras
+ * FORK MIA (.107) · O CADASTRO DO RAIO-X GRÁTIS: as regras puras
  * (`lib/raio-x/cadastro.ts`) e a entrada sem senha (`lib/raio-x/acesso.ts`).
  *
  *  1. a VALIDAÇÃO do formulário do site: cada campo, os padrões, a recusa pelos
@@ -74,10 +74,19 @@ describe("a validação do cadastro", () => {
     expect(validarCadastro({ ...CERTO, telefone: CERTO.whatsapp }).ok).toBe(true);
   });
 
-  it("os padrões: quem atende humano, 08:00 às 18:00, sábado vazio = não abre", () => {
+  it("⭐ quem atende e o horário são OPCIONAIS: ausentes, seg-sex 8h às 18h, sábado até 13h, domingo fechado", () => {
     const { quem_atende: _q, abre: _a, fecha: _f, sabado_ate: _s, ...sem } = CERTO;
     const r = validarCadastro(sem);
-    expect(r.ok && r.valor).toMatchObject({ quem_atende: "humano", abre: "08:00", fecha: "18:00", sabado_ate: null });
+    expect(r.ok && r.valor).toMatchObject({ quem_atende: "humano", abre: "08:00", fecha: "18:00", sabado_ate: "13:00", domingo_ate: null });
+  });
+
+  it("sábado e domingo VAZIOS são fechado; o domingo aberto fecha depois de abrir, como o sábado", () => {
+    const vazio = validarCadastro({ ...CERTO, sabado_ate: "", domingo_ate: "" });
+    expect(vazio.ok && vazio.valor).toMatchObject({ sabado_ate: null, domingo_ate: null });
+    const aberto = validarCadastro({ ...CERTO, domingo_ate: "12:00" });
+    expect(aberto.ok && aberto.valor.domingo_ate).toBe("12:00");
+    const cedo = validarCadastro({ ...CERTO, domingo_ate: "07:00" });
+    expect(!cedo.ok && cedo.campos).toEqual(["domingo_ate"]);
   });
 
   it("⭐ a recusa diz os CAMPOS, todos de uma vez, e nunca o valor", () => {

@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · O CADASTRO DO RAIO-X GRÁTIS: as regras, PURAS.
+ * FORK MIA (.107) · O CADASTRO DO RAIO-X GRÁTIS: as regras, PURAS.
  *
  * Quem quer o raio-X do próprio atendimento preenche o formulário do SITE
  * (iamia.com.br, outro repositório) ou a página do sistema (`/raio-x/gratis`).
@@ -15,9 +15,14 @@
  *   whatsapp      o WhatsApp que vai ser ANALISADO (o comercial; pode ser o mesmo)
  *   empresa       o nome da empresa, como vai no relatório
  *   segmento      um de `SEGMENTOS` (`regras.ts`)
- *   quem_atende   um de `QUEM_ATENDE` (padrão humano)
- *   abre, fecha   o horário de segunda a sexta, HH:MM (padrão 08:00 e 18:00)
- *   sabado_ate    opcional: até que horas abre no sábado (vazio = não abre)
+ *   quem_atende   OPCIONAL: um de `QUEM_ATENDE` (padrão humano)
+ *   abre, fecha   OPCIONAIS: o horário de segunda a sexta, HH:MM (padrão 08:00 e 18:00)
+ *   sabado_ate    OPCIONAL: até que horas abre no sábado (ausente = 13:00; vazio = fechado)
+ *   domingo_ate   OPCIONAL: até que horas abre no domingo (ausente ou vazio = fechado)
+ *
+ * O formulário do sistema não pede mais quem atende nem o horário (ajuste do dono
+ * em 06/11/2026): a página de conexão pergunta, opcional, enquanto o histórico
+ * chega (`POST /api/v1/publico/raio-x/<código>/horario`). O site ainda pode mandar.
  *   aceite        'sim' (ou true): li e autorizo o termo v1
  *   site          a ARMADILHA: precisa vir vazio (robô preenche tudo)
  *   utm_*, gclid, fbclid, origem   de onde a pessoa veio (vão ao lead da Time)
@@ -51,6 +56,7 @@ export const CAMPOS_DO_CADASTRO = [
   "abre",
   "fecha",
   "sabado_ate",
+  "domingo_ate",
   "aceite",
   "site",
 ] as const;
@@ -69,6 +75,8 @@ export interface CadastroValido {
   abre: string;
   fecha: string;
   sabado_ate: string | null;
+  /** FORK MIA (.107): `null` = fechado no domingo. */
+  domingo_ate: string | null;
   /** De onde a pessoa veio: só o que chegou preenchido. */
   origem: Partial<Record<CampoDeOrigem, string>>;
   /** Para onde o erro volta (já conferido), ou `null`. */
@@ -124,6 +132,47 @@ function campoDeOrigem(nome: CampoDeOrigem, v: unknown): string | null {
   return s.slice(0, nome === "gclid" || nome === "fbclid" ? 500 : 200);
 }
 
+export type CampoDoHorario = "quem_atende" | "abre" | "fecha" | "sabado_ate" | "domingo_ate";
+
+export interface HorarioDoFormulario {
+  quem_atende: QuemAtende;
+  abre: string;
+  fecha: string;
+  sabado_ate: string | null;
+  domingo_ate: string | null;
+}
+
+/** O horário que vale quando a pessoa não diz nada: seg-sex 8h às 18h, sábado até 13h, domingo fechado. */
+export const HORARIO_SEM_RESPOSTA: HorarioDoFormulario = { quem_atende: "humano", abre: "08:00", fecha: "18:00", sabado_ate: "13:00", domingo_ate: null };
+
+/**
+ * FORK MIA (.107) · Quem atende e o horário, do cadastro OU das "duas perguntas"
+ * da página de conexão (a mesma régua nos dois). Tudo opcional: o campo AUSENTE
+ * fica com `HORARIO_SEM_RESPOSTA`; o sábado e o domingo VAZIOS são fechado. O
+ * sábado e o domingo abrem no horário da semana e fecham depois de abrir.
+ */
+export function lerHorario(c: Record<string, unknown>): { ok: true; valor: HorarioDoFormulario } | { ok: false; campos: CampoDoHorario[] } {
+  const campos: CampoDoHorario[] = [];
+  const quem = texto(c.quem_atende) || HORARIO_SEM_RESPOSTA.quem_atende;
+  if (!(QUEM_ATENDE as readonly string[]).includes(quem)) campos.push("quem_atende");
+  const abre = texto(c.abre) || HORARIO_SEM_RESPOSTA.abre;
+  const fecha = texto(c.fecha) || HORARIO_SEM_RESPOSTA.fecha;
+  if (!HORA.test(abre)) campos.push("abre");
+  if (!HORA.test(fecha)) campos.push("fecha");
+  else if (HORA.test(abre) && minutosDoHorario(fecha)! <= minutosDoHorario(abre)!) campos.push("fecha");
+  const fimDeSemana = (nome: "sabado_ate" | "domingo_ate", padrao: string | null): string | null => {
+    // Ausente: o padrão. Presente e vazio: fechado.
+    const v = c[nome] === undefined || c[nome] === null ? (padrao ?? "") : texto(c[nome]);
+    if (!v) return null;
+    if (!HORA.test(v) || (HORA.test(abre) && minutosDoHorario(v)! <= minutosDoHorario(abre)!)) campos.push(nome);
+    return v;
+  };
+  const sabado = fimDeSemana("sabado_ate", HORARIO_SEM_RESPOSTA.sabado_ate);
+  const domingo = fimDeSemana("domingo_ate", HORARIO_SEM_RESPOSTA.domingo_ate);
+  if (campos.length > 0) return { ok: false, campos };
+  return { ok: true, valor: { quem_atende: quem as QuemAtende, abre, fecha, sabado_ate: sabado, domingo_ate: domingo } };
+}
+
 /**
  * Valida e normaliza o corpo do cadastro (form ou JSON). A recusa diz os
  * CAMPOS, nunca o valor. Campo que o formulário mandar a mais é ignorado.
@@ -145,20 +194,10 @@ export function validarCadastro(bruto: unknown): ResultadoDoCadastro {
   if (empresa.length < 1 || empresa.length > 120) campos.push("empresa");
   const segmento = texto(c.segmento);
   if (!(SEGMENTOS as readonly string[]).includes(segmento)) campos.push("segmento");
-  const quem = texto(c.quem_atende) || "humano";
-  if (!(QUEM_ATENDE as readonly string[]).includes(quem)) campos.push("quem_atende");
-  const abre = texto(c.abre) || "08:00";
-  const fecha = texto(c.fecha) || "18:00";
-  const sabado = texto(c.sabado_ate);
-  if (!HORA.test(abre)) campos.push("abre");
-  if (!HORA.test(fecha)) campos.push("fecha");
-  else if (HORA.test(abre) && minutosDoHorario(fecha)! <= minutosDoHorario(abre)!) campos.push("fecha");
-  if (sabado) {
-    if (!HORA.test(sabado)) campos.push("sabado_ate");
-    else if (HORA.test(abre) && minutosDoHorario(sabado)! <= minutosDoHorario(abre)!) campos.push("sabado_ate");
-  }
+  const horario = lerHorario(c);
+  if (!horario.ok) campos.push(...horario.campos);
   if (!aceitou(c.aceite)) campos.push("aceite");
-  if (campos.length > 0) return { ok: false, campos, armadilha: false, retornoErro };
+  if (campos.length > 0 || !horario.ok) return { ok: false, campos, armadilha: false, retornoErro };
 
   const origem: Partial<Record<CampoDeOrigem, string>> = {};
   for (const nome of CAMPOS_DE_ORIGEM) {
@@ -174,10 +213,7 @@ export function validarCadastro(bruto: unknown): ResultadoDoCadastro {
       whatsapp: whatsapp!,
       empresa,
       segmento: segmento as Segmento,
-      quem_atende: quem as QuemAtende,
-      abre,
-      fecha,
-      sabado_ate: sabado || null,
+      ...horario.valor,
       origem,
       retornoErro,
     },
@@ -196,6 +232,7 @@ export const FRASE_DO_CAMPO: Record<CampoDoCadastro, string> = {
   abre: "Confira o horário de abertura (HH:MM).",
   fecha: "O horário de fechar precisa ser depois do de abrir.",
   sabado_ate: "O horário do sábado precisa ser depois do de abrir.",
+  domingo_ate: "O horário do domingo precisa ser depois do de abrir.",
   aceite: "Marque a autorização para continuar.",
   site: "Não deu para receber o cadastro. Tente de novo.",
 };

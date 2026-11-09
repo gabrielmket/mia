@@ -27,7 +27,7 @@
  * o histórico chegar). E o ver, com `raio_x_id`, diz o `aparelho`: a etapa da
  * sessão no leitor e quantas conversas ele mostra agora.
  *
- * FORK MIA (.106) · o raio-X GRÁTIS POR CADASTRO: o ver mostra a ORIGEM (Time,
+ * FORK MIA (.107) · o raio-X GRÁTIS POR CADASTRO: o ver mostra a ORIGEM (Time,
  * cadastro grátis, avulsa, mensal), a CONTA de quem se cadastrou (nome, e-mail e
  * WhatsApp mascarados) e os PEDIDOS de nova análise; e a sexta,
  * `plataforma_precos_do_raio_x`, vê e define o preço da nova análise (112).
@@ -126,7 +126,7 @@ function resumoDoRelatorio(r: LinhaDoRelatorio, comMia: boolean) {
   };
 }
 
-/** FORK MIA (.106): o pedido de nova análise como o MCP mostra (sem link de pagamento nem referência do Asaas). */
+/** FORK MIA (.107): o pedido de nova análise como o MCP mostra (sem link de pagamento nem referência do Asaas). */
 function resumoDoPedido(p: LinhaDoPedido) {
   return {
     id: p.id,
@@ -150,7 +150,7 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
       "\"conversas_da_mia\" para CLIENTE ATIVO (a empresa opera e está em dia, em teste ou isenta; a demonstração também entra): nada é conectado e o leitor não é usado, o link é só de AUTORIZAÇÃO, e o raio-X lê as conversas que a conta já tem nos `numeros` escolhidos (`channel_session_id`, inclusive da API oficial), no período escolhido e nunca antes da primeira conversa da conta; exige `organization_id` e `numeros` (veja os números, o período e a estimativa com plataforma_ver_raio_x e o `organization_id`), e o `whatsapp` sai do primeiro número. O relatório do cliente ativo soma quem respondeu primeiro, a espera depois da passagem para a equipe, no que virou no funil da conta e onde ainda dá para ganhar. " +
       "Na conexão: " +
       "O dono abre o link sem login, aceita o termo (fica registrado com nome, data, hora e versão) e conecta o WhatsApp comercial pelo código de 8 letras, com o QR como alternativa. O sistema lê só para leitura as conversas 1:1 do período, transcreve os áudios e gera o relatório em RASCUNHO. " +
-      "`segmento` muda o que o relatório procura nas conversas; o horário comercial separa o que chegou com a loja aberta e fechada; `tipo` unico desconecta 7 dias depois do relatório e mensal fica conectado e gera um relatório no dia 1 de cada mês; `teto_centavos` é o teto de custo da análise (padrão 4000 = R$ 40). " +
+      "`segmento` muda o que o relatório procura nas conversas; o horário comercial (segunda a sexta, `sabado_ate` e, desde a .107, `domingo_ate`, os dois abrindo no horário da semana) separa o que chegou com a loja aberta e fechada; `tipo` unico desconecta 7 dias depois do relatório e mensal fica conectado e gera um relatório no dia 1 de cada mês; `teto_centavos` é o teto de custo da análise (padrão 4000 = R$ 40). " +
       "ANTES DE criar pela conexão, confira com o dono que o número é o aplicativo do WhatsApp (comum ou Business): número na API oficial não conecta assim (no cliente ativo, entra). O QUE NÃO FAZ: não manda a mensagem a ninguém (quem manda é a Time), não lê nada antes do aceite (o dono aceita com nome completo e e-mail) e não envia mensagem nenhuma pela conta.",
     inputSchema: {
       fonte: z.enum(FONTES).optional().describe("De onde vêm as conversas: conexao (padrão, quem ainda não é cliente) ou conversas_da_mia (cliente ativo)."),
@@ -176,6 +176,8 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
       abre: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("Abre às, de segunda a sexta (HH:MM). Padrão 08:00."),
       fecha: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("Fecha às, de segunda a sexta (HH:MM). Padrão 18:00."),
       sabado_ate: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional().describe("Até que horas abre no sábado (HH:MM); null = não abre. Padrão 13:00."),
+      // FORK MIA (.107): o domingo, com a regra do sábado.
+      domingo_ate: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional().describe("Até que horas abre no domingo (HH:MM), abrindo no horário da semana; null = não abre. Padrão null (fechado)."),
       organization_id: z
         .string()
         .uuid()
@@ -220,7 +222,7 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
       "os relatórios com os números (velocidade da primeira resposta com a loja aberta e fechada, sem resposta, sumiram sem retorno, origem, assuntos, desfecho, nota nos cinco critérios, recomendações e o bloco do que a MIA resolveria), a EVOLUÇÃO em proporção desde o raio-X anterior da mesma empresa, e os links do dono. " +
       "Os clientes aparecem só por número de ordem, nunca por telefone ou nome; os trechos de conversa ficam na tela de Admin. " +
       "FORK MIA (.102): com `organization_id` e sem `raio_x_id`, o que dá para ler daquela CONTA para o raio-X do cliente ativo: se ela conta como cliente ativo, os números de WhatsApp com o id (channel_session_id), se são da API oficial e as mensagens no período, o período (os N dias inteiros antes de hoje, nunca antes da primeira conversa), o segmento e o horário da conta, quem administra e a estimativa de custo; e os raio-X dessa empresa. No relatório do cliente ativo, quem respondeu primeiro, a espera depois da passagem, no que virou e onde ainda dá para ganhar. " +
-      "FORK MIA (.106): a ORIGEM de cada raio-X (time = criado pela Time, com revisão; cadastro_gratis = a pessoa se cadastrou no site ou em /raio-x/gratis e o relatório foi direto para ela; avulsa e mensal = a nova análise paga na área), a CONTA de quem se cadastrou (nome, e-mail e WhatsApp da pessoa mascarados, e se o lead entrou no CRM da Time), quando o relatório foi entregue, se fechou sem histórico (a grátis não contou), os PEDIDOS de nova análise (interesse, aguardando o pagamento, pago, cancelado) e, na lista, o preço da nova análise.",
+      "FORK MIA (.107): a ORIGEM de cada raio-X (time = criado pela Time, com revisão; cadastro_gratis = a pessoa se cadastrou no site ou em /raio-x/gratis e o relatório foi direto para ela; avulsa e mensal = a nova análise paga na área), a CONTA de quem se cadastrou (nome, e-mail e WhatsApp da pessoa mascarados, e se o lead entrou no CRM da Time), quando o relatório foi entregue, se fechou sem histórico (a grátis não contou), os PEDIDOS de nova análise (interesse, aguardando o pagamento, pago, cancelado) e, na lista, o preço da nova análise.",
     inputSchema: {
       raio_x_id: z.string().uuid().optional().describe("Só este raio-X, com o detalhe e os relatórios."),
       organization_id: z.string().uuid().optional().describe("Sem raio_x_id: o que dá para ler desta conta da MIA para o raio-X do cliente ativo, e os raio-X dela."),
@@ -258,7 +260,7 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
                 },
               }
             : {}),
-          // FORK MIA (.106): o preço da nova análise do cadastro (vazio = só interesse).
+          // FORK MIA (.107): o preço da nova análise do cadastro (vazio = só interesse).
           precos_da_nova_analise: (await lerPrecos(ctx.admin)).map((p) => ({ tipo: p.tipo, reais: reaisParaLer(Number(p.valor_centavos)), ativo: p.ativo })),
           raio_x: lista.map((x) => ({
             id: x.id,
@@ -290,7 +292,7 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
         aparelho: aparelho ? { etapa: aparelho.estado, conversas_agora: aparelho.conversas, mais_de_mil: aparelho.mais } : null,
         raio_x: d.raioX,
         fonte: d.raioX.fonte,
-        // FORK MIA (.106): de onde veio, quem se cadastrou (mascarado) e os pedidos.
+        // FORK MIA (.107): de onde veio, quem se cadastrou (mascarado) e os pedidos.
         origem: d.origem,
         conta: d.conta
           ? {
@@ -440,7 +442,7 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
       };
     },
   },
-  // FORK MIA (.106) · o preço da nova análise do raio-X por cadastro.
+  // FORK MIA (.107) · o preço da nova análise do raio-X por cadastro.
   {
     name: "plataforma_precos_do_raio_x",
     description:

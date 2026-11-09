@@ -62,11 +62,16 @@ export function faixaDoMinuto(minutos: number): Faixa {
 
 /**
  * A loja estava aberta? Segunda a sexta de `abre` até `fecha`; sábado de `abre`
- * até `sabadoAte` (nulo = fechado); domingo fechado. Feriado não entra (a
- * conta não sabe o feriado da cidade da loja), e a doc diz isso.
+ * até `sabadoAte` (nulo = fechado); domingo de `abre` até `domingoAte` (FORK
+ * MIA .107; nulo ou ausente = fechado, o de antes). Feriado não entra (a conta
+ * não sabe o feriado da cidade da loja), e a doc diz isso.
  */
 export function lojaAberta(momento: MomentoLocal, horario: HorarioComercial): boolean {
-  if (momento.dia === 6) return false;
+  if (momento.dia === 6) {
+    const domingoAte = horario.domingoAte ?? null;
+    if (domingoAte === null) return false;
+    return momento.minutos >= horario.abre && momento.minutos < domingoAte;
+  }
   if (momento.dia === 5) {
     if (horario.sabadoAte === null) return false;
     return momento.minutos >= horario.abre && momento.minutos < horario.sabadoAte;
@@ -89,7 +94,7 @@ export function proximaAbertura(instante: number, horario: HorarioComercial): nu
     const data = new Date(Date.UTC(ano, mes - 1, dia + d, 12, 0, 0));
     const meiaNoite = meiaNoiteLocal(data.getUTCFullYear(), data.getUTCMonth() + 1, data.getUTCDate());
     const diaDaSemana = momentoLocal(meiaNoite.getTime() + 12 * 3_600_000).dia;
-    if (diaDaSemana === 6) continue;
+    if (diaDaSemana === 6 && (horario.domingoAte ?? null) === null) continue;
     if (diaDaSemana === 5 && horario.sabadoAte === null) continue;
     const abre = meiaNoite.getTime() + horario.abre * 60_000;
     if (abre > instante) return abre;

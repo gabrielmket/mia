@@ -1,5 +1,5 @@
 /**
- * FORK MIA (.106) · A NOVA ANÁLISE E O PAGAMENTO (protótipo de 06/11/2026,
+ * FORK MIA (.107) · A NOVA ANÁLISE E O PAGAMENTO (protótipo de 06/11/2026,
  * tela 8; decisões 1 e 7). A primeira análise é grátis; as próximas são
  * AVULSA (paga uma vez, diagnóstico único) ou MENSAL (assinatura: uma análise
  * todo dia 1, com a evolução), à escolha de quem pede, na área dela.
@@ -417,6 +417,7 @@ export async function confirmarPagamento(admin: SupabaseClient, p: LinhaDoPedido
       abre: anterior.abre.slice(0, 5),
       fecha: anterior.fecha.slice(0, 5),
       sabado_ate: anterior.sabado_ate ? anterior.sabado_ate.slice(0, 5) : null,
+      domingo_ate: anterior.domingo_ate ? anterior.domingo_ate.slice(0, 5) : null,
       organization_id: anterior.organization_id,
       teto_centavos: TETO_PADRAO_CENTAVOS,
     },

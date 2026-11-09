@@ -128,6 +128,11 @@ export interface HorarioComercial {
   fecha: number;
   /** Até que horas o sábado vai (a abertura é a mesma da semana); `null` = não abre. */
   sabadoAte: number | null;
+  /**
+   * FORK MIA (.107) · Até que horas o DOMINGO vai, com a mesma regra do sábado
+   * (abre no horário da semana); `null` ou ausente = fechado (o de sempre).
+   */
+  domingoAte?: number | null;
 }
 
 // ─── O cadastro ─────────────────────────────────────────────────────────────
@@ -161,6 +166,8 @@ export const esquemaDoNovoRaioX = z
     fecha: z.string().trim().regex(HORA).default("18:00"),
     /** `null` = não abre no sábado. */
     sabado_ate: z.string().trim().regex(HORA).nullable().default("13:00"),
+    /** FORK MIA (.107): `null` (o padrão) = não abre no domingo. */
+    domingo_ate: z.string().trim().regex(HORA).nullable().default(null),
     /** A empresa da MIA, quando já é cliente (opcional; dá para ligar depois). */
     organization_id: z.string().uuid().nullable().optional().default(null),
     teto_centavos: z.coerce
@@ -191,6 +198,8 @@ export interface NovoRaioX {
   abre: string;
   fecha: string;
   sabado_ate: string | null;
+  /** FORK MIA (.107): `null` = fechado no domingo. */
+  domingo_ate: string | null;
   organization_id: string | null;
   teto_centavos: number;
 }
@@ -222,6 +231,9 @@ export function validarNovoRaioX(bruto: unknown): ResultadoDoCadastro {
   if (fecha <= abre) return { ok: false, campos: ["fecha"] };
   const sabado = r.data.sabado_ate === null ? null : minutosDoHorario(r.data.sabado_ate);
   if (sabado !== null && sabado <= abre) return { ok: false, campos: ["sabado_ate"] };
+  // FORK MIA (.107): o domingo, com a mesma regra do sábado.
+  const domingo = r.data.domingo_ate === null ? null : minutosDoHorario(r.data.domingo_ate);
+  if (domingo !== null && domingo <= abre) return { ok: false, campos: ["domingo_ate"] };
   return {
     ok: true,
     valor: {
@@ -235,11 +247,13 @@ export function validarNovoRaioX(bruto: unknown): ResultadoDoCadastro {
 }
 
 /** O horário comercial de um raio-X gravado ("HH:MM" ou "HH:MM:SS" do Postgres). */
-export function horarioDoRaioX(linha: { abre: string; fecha: string; sabado_ate: string | null }): HorarioComercial {
+export function horarioDoRaioX(linha: { abre: string; fecha: string; sabado_ate: string | null; domingo_ate?: string | null }): HorarioComercial {
   return {
     abre: minutosDoHorario(linha.abre) ?? 8 * 60,
     fecha: minutosDoHorario(linha.fecha) ?? 18 * 60,
     sabadoAte: linha.sabado_ate ? minutosDoHorario(linha.sabado_ate) : null,
+    // FORK MIA (.107): o raio-X de antes da 9152 não tem a coluna: domingo fechado.
+    domingoAte: linha.domingo_ate ? minutosDoHorario(linha.domingo_ate) : null,
   };
 }
 

@@ -124,7 +124,7 @@ export interface DetalheDoRaioX {
     quemAtende: string;
     periodoDias: number;
     tipo: "unico" | "mensal";
-    horario: { abre: string; fecha: string; sabadoAte: string | null };
+    horario: { abre: string; fecha: string; sabadoAte: string | null; domingoAte: string | null };
     organizationId: string | null;
     tetoCentavos: number;
     situacao: LinhaDoRaioX["situacao"];
@@ -158,7 +158,7 @@ export interface DetalheDoRaioX {
   links: LinkDoDono[];
   /** FORK MIA (.102): os passos "transcreveu os áudios" e "analisando" do cliente ativo. */
   analiseDaConta: AndamentoDaAnaliseDaConta | null;
-  /** FORK MIA (.106): de onde veio, quem se cadastrou e os pedidos de nova análise. */
+  /** FORK MIA (.107): de onde veio, quem se cadastrou e os pedidos de nova análise. */
   origem: OrigemNaLista;
   conta: {
     id: string;
@@ -187,7 +187,7 @@ export async function acaoVer(admin: SupabaseClient, id: string): Promise<Detalh
   const [links, analiseDaConta, conta, pedidos] = await Promise.all([
     lerLinksDoDono(admin, relatorios.map((x) => x.id)),
     r.fonte === "conversas_da_mia" ? andamentoDaAnaliseDaConta(admin, r) : Promise.resolve(null),
-    // FORK MIA (.106): a conta de quem se cadastrou e os pedidos ligados a este raio-X.
+    // FORK MIA (.107): a conta de quem se cadastrou e os pedidos ligados a este raio-X.
     r.conta_id ? lerConta(admin, r.conta_id) : Promise.resolve(null),
     r.origem === "cadastro" ? pedidosDoRaioX(admin, r.id) : Promise.resolve([] as LinhaDoPedido[]),
   ]);
@@ -216,7 +216,7 @@ export async function acaoVer(admin: SupabaseClient, id: string): Promise<Detalh
       quemAtende: r.quem_atende,
       periodoDias: r.periodo_dias,
       tipo: r.tipo,
-      horario: { abre: r.abre.slice(0, 5), fecha: r.fecha.slice(0, 5), sabadoAte: r.sabado_ate ? r.sabado_ate.slice(0, 5) : null },
+      horario: { abre: r.abre.slice(0, 5), fecha: r.fecha.slice(0, 5), sabadoAte: r.sabado_ate ? r.sabado_ate.slice(0, 5) : null, domingoAte: r.domingo_ate ? r.domingo_ate.slice(0, 5) : null },
       organizationId: r.organization_id,
       tetoCentavos: r.teto_centavos,
       situacao: r.situacao,

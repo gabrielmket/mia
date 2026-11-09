@@ -1,8 +1,8 @@
 /**
- * FORK MIA (.106) · O CADASTRO DO RAIO-X GRÁTIS, de ponta a ponta (a rota
+ * FORK MIA (.107) · O CADASTRO DO RAIO-X GRÁTIS, de ponta a ponta (a rota
  * `POST /api/v1/publico/raio-x/cadastro` chama isto depois de validar).
  *
- * Na ordem do brief da .106:
+ * Na ordem do brief da .107:
  *   1. acha ou cria a CONTA pelo e-mail (atualiza o nome e o WhatsApp da pessoa);
  *   2. confere a GRÁTIS: uma por número analisado (as duas grafias do nono
  *      dígito) e uma por conta. Já usada: não cria nada grátis, e o lead da Time
@@ -96,6 +96,7 @@ export async function cadastrar(admin: SupabaseClient, v: CadastroValido, deps: 
         abre: v.abre,
         fecha: v.fecha,
         sabado_ate: v.sabado_ate,
+        domingo_ate: v.domingo_ate,
         organization_id: null,
         teto_centavos: TETO_DO_GRATIS_CENTAVOS,
       },
