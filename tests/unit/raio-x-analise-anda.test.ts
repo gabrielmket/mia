@@ -715,3 +715,36 @@ describe(".106 · o rodízio dos que andam", () => {
     expect(situacao(b, RX_A)).toBe("analisando");
   });
 });
+
+describe(".106 · a visibilidade", () => {
+  it("o detalhe da conexão em 'analisando' traz os áudios, as conversas analisadas e o último erro", async () => {
+    const rel = relogio();
+    const semente = conversasDe(RX_B, 4, 1);
+    const b = banco([raioX(RX_B)], [semente]);
+    const { leitor } = leitorDuble(rel);
+    const { transcritor } = transcritorDuble(rel);
+    // Transcreve os quatro, e a gravação da 2ª conversa falha: a rodada lança e o erro fica.
+    const SEGUNDA = `${RX_B.slice(-2)}-conversa-2`;
+    const regra: RegraDeFalha = (tabela, ch) =>
+      tabela === "mia_raio_x_conversas" &&
+      ch.some(([m, a]) => m === "update" && (a[0] as Linha).analise) &&
+      ch.some(([m, a]) => m === "eq" && a[0] === "id" && a[1] === SEGUNDA)
+        ? "22P05"
+        : null;
+    const { chamar } = modeloDuble(rel);
+    await minuto(b, rel, T0, { leitor, chamar, transcritor, regra });
+    const { acaoVer } = await import("@/lib/raio-x/acoes");
+    const d = await acaoVer(b.cliente as never, RX_B);
+    expect(d!.raioX.fonte).toBe("conexao");
+    expect(d!.analiseDaConta).toMatchObject({
+      audios: 4,
+      audiosTranscritos: 4,
+      audiosPendentes: 0,
+      conversas: 4,
+      analisadas: 1,
+      falhasSeguidas: 1,
+      ultimoErro: { etapa: "classificacao", mensagem: "raio-x: análise não gravou (22P05)", pulou: false },
+    });
+    expect(JSON.stringify(d!.analiseDaConta)).not.toMatch(/Ainda tem|anúncio|5531900/);
+  });
+});

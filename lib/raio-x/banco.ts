@@ -885,6 +885,17 @@ export async function mudarTeto(admin: SupabaseClient, raioXId: string, tetoCent
 }
 
 // ─── FORK MIA (.102) · o andamento da análise do cliente ativo ───────────────
+// FORK MIA (.106): vale para TODA fonte (a conexão também), e traz o último erro.
+
+/** FORK MIA (.106): o último erro da rodada da análise (`analise.ultimo_erro`, gravado por `lib/raio-x/analise.ts`). */
+export interface UltimoErroNoAndamento {
+  quando: string;
+  etapa: string;
+  /** Curta e sem dado de cliente: o código nosso, ou só o nome e o status do erro de fora. */
+  mensagem: string;
+  /** O item que falhou três vezes seguidas saiu do caminho (o áudio virou "falhou", a conversa foi sem análise). */
+  pulou: boolean;
+}
 
 export interface AndamentoDaAnaliseDaConta {
   conversas: number;
@@ -894,10 +905,28 @@ export interface AndamentoDaAnaliseDaConta {
   audiosPendentes: number;
   custoTranscricaoCentavos: number;
   custoAnaliseCentavos: number;
+  /** FORK MIA (.106) */
+  ultimoErro: UltimoErroNoAndamento | null;
+  /** FORK MIA (.106): rodadas seguidas que lançaram no mesmo item (zera quando a análise anda). */
+  falhasSeguidas: number;
 }
 
-/** O que o detalhe do Admin mostra nos passos "transcreveu os áudios" e "analisando" (o ciclo vigente). */
-export async function andamentoDaAnaliseDaConta(admin: SupabaseClient, r: Pick<LinhaDoRaioX, "id" | "ciclo">): Promise<AndamentoDaAnaliseDaConta> {
+/** FORK MIA (.106): o último erro guardado em `analise`, se for um de verdade. */
+export function ultimoErroDaAnalise(analise: Record<string, unknown> | null | undefined): UltimoErroNoAndamento | null {
+  const e = analise?.ultimo_erro as Record<string, unknown> | undefined;
+  if (!e || typeof e.quando !== "string" || typeof e.etapa !== "string" || typeof e.mensagem !== "string") return null;
+  return { quando: e.quando, etapa: e.etapa, mensagem: e.mensagem.slice(0, 200), pulou: e.pulou === true };
+}
+
+/**
+ * O que o detalhe do Admin mostra nos passos "transcreveu os áudios" e "analisando" (o ciclo vigente).
+ * FORK MIA (.106): em toda fonte; na conexão, a linha "Áudios: X de Y transcritos · Conversas
+ * analisadas: A de B" e o último erro.
+ */
+export async function andamentoDaAnaliseDaConta(
+  admin: SupabaseClient,
+  r: Pick<LinhaDoRaioX, "id" | "ciclo"> & { analise?: Record<string, unknown> | null },
+): Promise<AndamentoDaAnaliseDaConta> {
   const contar = async (consulta: PromiseLike<{ count: number | null; error: { code?: string } | null }>) => {
     const { count, error } = await consulta;
     if (error) falhou("andamento da análise", error);
@@ -926,5 +955,7 @@ export async function andamentoDaAnaliseDaConta(admin: SupabaseClient, r: Pick<L
     audiosPendentes: pendentes,
     custoTranscricaoCentavos: Math.round(custoTranscricaoCentavos * 100) / 100,
     custoAnaliseCentavos: Math.round(custoAnaliseCentavos * 100) / 100,
+    ultimoErro: ultimoErroDaAnalise(r.analise),
+    falhasSeguidas: Math.max(0, Number(r.analise?.falhas_seguidas) || 0),
   };
 }

@@ -152,7 +152,11 @@ export interface DetalheDoRaioX {
   custo: { centavos: number; usdCentavos: number; tetoCentavos: number };
   relatorios: LinhaDoRelatorio[];
   links: LinkDoDono[];
-  /** FORK MIA (.102): os passos "transcreveu os áudios" e "analisando" do cliente ativo. */
+  /**
+   * FORK MIA (.102): os passos "transcreveu os áudios" e "analisando" do cliente ativo.
+   * FORK MIA (.106): em TODA fonte (na conexão, os áudios e as conversas analisadas), com o último
+   * erro da análise. O nome ficou o da .102 para a tela e o MCP não mudarem de campo.
+   */
   analiseDaConta: AndamentoDaAnaliseDaConta | null;
 }
 
@@ -167,7 +171,7 @@ export async function acaoVer(admin: SupabaseClient, id: string): Promise<Detalh
   ]);
   const [links, analiseDaConta] = await Promise.all([
     lerLinksDoDono(admin, relatorios.map((x) => x.id)),
-    r.fonte === "conversas_da_mia" ? andamentoDaAnaliseDaConta(admin, r) : Promise.resolve(null),
+    andamentoDaAnaliseDaConta(admin, r),
   ]);
   const leitura = r.leitura as { fase?: string; conversas_lidas?: number; mensagens_lidas?: number; total?: number; erro?: string | null };
   const vivo = podeConectar(r);
