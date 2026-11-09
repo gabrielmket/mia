@@ -8,6 +8,7 @@
  *   1. a Time cria o raio-X no Admin e recebe o link de conexão e a mensagem;
  *   2. o dono abre o link SEM login, aceita o termo (fica gravado com o texto
  *      inteiro; desde a .102, com nome completo e e-mail) e pede o código de 8 letras;
+ *   2b. (.106) em "analisando", o detalhe mostra os áudios, as conversas analisadas e o último erro;
  *   3. o relatório, montado das conversas fictícias fixas, aparece no Admin;
  *   4. a Time revisa e gera o link do dono;
  *   5. o dono abre o link SEM login: sem o bloco da MIA e sem custo;
@@ -148,6 +149,24 @@ test("[P0] raio-X do atendimento: criar, aceitar, revisar, link do dono e encerr
     // DDD 31 fica sem o nono dígito (o cadastro segue com ele, linha acima).
     expect(pedidos.find((p) => p.caminho.endsWith("/auth/request-code"))?.corpo).toEqual({ phoneNumber: "553100001101" });
     await paginaDoDono.screenshot({ path: `${EVIDENCIA}/2-conexao.png`, fullPage: true });
+
+    // ── 2b. FORK MIA (.106): em "analisando", o andamento da análise e o último erro ─
+    const analisando = await db
+      .from("mia_raio_x")
+      .update({
+        situacao: "analisando",
+        analise: {
+          ultimo_erro: { quando: new Date().toISOString(), etapa: "classificacao", mensagem: "raio-x: análise não gravou (22P05)", chave: "0".repeat(16), itens: 1 },
+          falhas_seguidas: 2,
+        },
+      })
+      .eq("id", raioXId);
+    if (analisando.error) throw analisando.error;
+    await page.goto(`/admin/raio-x/${raioXId}`);
+    await expect(page.locator('[data-raio-x="andamento-da-analise"]')).toContainText("Áudios: 0 de 0 transcritos · Conversas analisadas: 0 de 0");
+    await expect(page.locator('[data-raio-x="ultimo-erro"]')).toContainText("análise das conversas");
+    await expect(page.locator('[data-raio-x="ultimo-erro"]')).toContainText("raio-x: análise não gravou (22P05)");
+    await expect(page.locator('[data-raio-x="ultimo-erro"]')).toContainText("2 rodadas seguidas no mesmo ponto");
 
     // ── 3. O relatório (montado das conversas fictícias fixas) no Admin ─
     const dados = montarRelatorio({
