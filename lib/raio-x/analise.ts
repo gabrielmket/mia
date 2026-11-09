@@ -33,13 +33,12 @@
  * ou a chave da OpenAI com `whisper-1`, em português. O arquivo é baixado do
  * leitor, transcrito e descartado: só o texto fica, até as conversas apagarem.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { generateText } from "ai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
-import { MARGEM_PARA_CHAMADA_MS, TETO_DO_DOWNLOAD_MS } from "@/lib/channels/historico/prazo";
 import type { LeitorDoRaioX } from "@/lib/channels/raio-x/leitor";
 import { costCents } from "@/lib/agent-engine/edge/llm/pricing";
 import { createDefaultRegistry } from "@/lib/agent-engine/edge/llm/providers";
@@ -64,7 +63,17 @@ import { medirPassagem } from "./passagem";
 import { ehPessoa } from "./quem-respondeu";
 import { prazosDoRelatorio } from "./prazos";
 import { horarioDoRaioX, ordemFormatada, type Segmento } from "./regras";
-import { cabeAChamada, comTeto, TETO_DA_CLASSIFICACAO_MS } from "./relogio-da-analise";
+import {
+  AUDIOS_EM_PARALELO,
+  cabeAChamada,
+  comTeto,
+  FALHAS_DE_DOWNLOAD_PARA_DESISTIR,
+  FALHAS_SEGUIDAS_PARA_PULAR,
+  TETO_DA_CLASSIFICACAO_MS,
+  TETO_DA_FASE_DE_AUDIOS_MS,
+  TETO_DA_TRANSCRICAO_MS,
+  TETO_DO_DOWNLOAD_DO_RAIO_X_MS,
+} from "./relogio-da-analise";
 import { montarRelatorio, type AnaliseDaConversa, type ConversaParaORelatorio, type MensagemDoRelatorio } from "./relatorio";
 import { DESFECHOS, ORIGENS, ROTULO_DA_ORIGEM, definicaoDoSegmento } from "./segmentos";
 import { marcaDaMensagem } from "./tokens";
@@ -91,18 +100,29 @@ export function modeloDaAnalise(ambiente: NodeJS.ProcessEnv = process.env): Mode
   return null;
 }
 
+/**
+ * FORK MIA (.106): o pedido ao serviço de transcrição com teto. O transcritor do
+ * upstream não passa sinal nenhum ao `fetch`; o nosso passa, e o pedido que
+ * não responde é cancelado em vez de ficar pendurado. A corrida com o mesmo
+ * teto em `transcrever` cobre qualquer outro transcritor (e o dublê do teste).
+ */
+const fetchComTetoDaTranscricao: typeof fetch = (entrada, init) => fetch(entrada, { ...init, signal: AbortSignal.timeout(TETO_DA_TRANSCRICAO_MS) });
+
 export function transcritorDaPlataforma(ambiente: NodeJS.ProcessEnv = process.env): { provider: TranscriptionProvider; modelo: string } | null {
   const doServico = ambiente.TRANSCRIPTION_API_KEY?.trim();
   const base = ambiente.TRANSCRIPTION_BASE_URL?.trim() || undefined;
   const modeloDoAmbiente = ambiente.TRANSCRIPTION_MODEL?.trim() || undefined;
   if (doServico) {
     const modelo = modeloDoAmbiente ?? "whisper-1";
-    return { provider: apiTranscriptionProvider({ apiKey: doServico, baseUrl: base, model: modelo, languages: ["pt"] }), modelo };
+    return {
+      provider: apiTranscriptionProvider({ apiKey: doServico, baseUrl: base, model: modelo, languages: ["pt"] }, fetchComTetoDaTranscricao),
+      modelo,
+    };
   }
   const openai = ambiente.OPENAI_API_KEY?.trim();
   if (!openai) return null;
   const modelo = modeloDeTranscricaoEmVigor({ model: modeloDoAmbiente, apiKey: undefined, baseUrl: base });
-  return { provider: apiTranscriptionProvider({ apiKey: openai, model: modelo, languages: ["pt"] }), modelo };
+  return { provider: apiTranscriptionProvider({ apiKey: openai, model: modelo, languages: ["pt"] }, fetchComTetoDaTranscricao), modelo };
 }
 
 export async function cotacaoDoDia(admin: SupabaseClient): Promise<number> {
@@ -251,7 +271,7 @@ export function lerRespostaDoModelo(texto: string, segmento: Segmento): Map<stri
       recebeu_valor: p.data.recebeu_valor,
       desfecho: p.data.desfecho,
       notas: p.data.notas,
-      comentario: p.data.comentario.slice(0, 160),
+      comentario: semNulo(p.data.comentario).slice(0, 160),
     });
   }
   return saida;
@@ -299,6 +319,102 @@ interface Ambiente {
   agora: () => number;
   /** FORK MIA (.102), para o teste: o arquivo do áudio da conta (sem ele, o storage da conta). */
   baixarDaConta?: (mensagemId: string) => Promise<{ bytes: Buffer; mime: string } | null>;
+  /** FORK MIA (.106): onde a rodada está agora (a etapa e os itens), para contar as falhas seguidas. */
+  rastro?: Rastro;
+}
+
+// ─── FORK MIA (.106) · as falhas seguidas e o último erro ───────────────────
+
+export type EtapaDaAnalise = "preparo" | "transcricao" | "classificacao" | "relatorio";
+
+/** A etapa e os itens em curso: ids internos (mensagem, conversa), nunca dado de cliente. */
+interface Rastro {
+  etapa: EtapaDaAnalise;
+  itens: Array<string | number>;
+}
+
+/** O que fica em `mia_raio_x.analise.ultimo_erro` (a tela e o MCP mostram). */
+export interface UltimoErroDaAnalise {
+  quando: string;
+  etapa: EtapaDaAnalise;
+  mensagem: string;
+  /** Resumo da etapa e dos itens: a mesma chave em rodadas seguidas é "o mesmo item". */
+  chave: string;
+  /** Quantos itens estavam em curso. */
+  itens: number;
+  /** Na N-ésima falha seguida, o item foi deixado de lado (o áudio vira "falhou", a conversa vai sem análise). */
+  pulou?: boolean;
+}
+
+/**
+ * As mensagens que são NOSSAS (códigos, sem conteúdo de conversa) passam
+ * inteiras; a de fora (provedor, rede) vira só o nome e o status: ela pode
+ * trazer pedaço do pedido ou da chave.
+ */
+const MENSAGEM_NOSSA = /^(raio-x: [^\n]{1,150}|sem_resposta|transcription_\d{3}|leitor_[a-z0-9_]{1,40}|rota_nao_permitida)$/;
+
+export function mensagemCurtaDoErro(erro: unknown): string {
+  if (!(erro instanceof Error)) return "erro";
+  if (MENSAGEM_NOSSA.test(erro.message)) return erro.message;
+  const bruto = erro as { statusCode?: unknown; status?: unknown };
+  const status = typeof bruto.statusCode === "number" ? bruto.statusCode : typeof bruto.status === "number" ? bruto.status : null;
+  return `${(erro.name || "Error").slice(0, 60)}${status !== null ? ` ${status}` : ""}`;
+}
+
+/** O Postgres recusa o caractere nulo em texto e em jsonb: sai antes de gravar. */
+const semNulo = (texto: string) => texto.replace(/\u0000/g, "");
+
+/** Junta `patch` ao `analise` do raio-X, no banco e na linha em memória. */
+async function gravarNaAnalise(admin: SupabaseClient, r: LinhaDoRaioX, patch: Record<string, unknown>): Promise<void> {
+  const analise = { ...r.analise, ...patch };
+  const { error } = await admin.from("mia_raio_x").update({ analise }).eq("id", r.id);
+  if (error) throw new Error(`raio-x: andamento da análise (${error.code ?? "sem_codigo"})`);
+  r.analise = analise;
+}
+
+/** Deixa de lado o item que falhou N vezes seguidas. Devolve se pulou alguma coisa. */
+async function pularOItem(admin: SupabaseClient, r: LinhaDoRaioX, rastro: Rastro): Promise<boolean> {
+  // O relatório sai sem a comparação; na conta, o preparo dos áudios é dado por feito. Na conexão não há preparo.
+  if (rastro.etapa === "relatorio") return true;
+  if (rastro.etapa === "preparo") return daConta(r);
+  if (rastro.itens.length === 0) return false;
+  const { error } =
+    rastro.etapa === "transcricao"
+      ? await admin.from("mia_raio_x_mensagens").update({ transcricao: "falhou", texto: null, midia: null }).eq("raio_x_id", r.id).in("id", rastro.itens)
+      : await admin.from("mia_raio_x_conversas").update({ analise: null, analise_ciclo: r.ciclo }).eq("raio_x_id", r.id).in("id", rastro.itens);
+  if (error) throw new Error(`raio-x: pular o item (${error.code ?? "sem_codigo"})`);
+  return true;
+}
+
+/**
+ * Conta a falha da rodada no item em curso. A mesma chave da rodada anterior
+ * soma; outra recomeça em 1. Na `FALHAS_SEGUIDAS_PARA_PULAR`-ésima, o item sai
+ * do caminho: o áudio vira "falhou", a conversa vai sem análise
+ * (`analise: null` no ciclo), o relatório sai sem a comparação com o anterior,
+ * e o preparo dos áudios da conta é dado por feito. Nada disso para o raio-X.
+ */
+async function registrarFalha(admin: SupabaseClient, r: LinhaDoRaioX, rastro: Rastro, erro: unknown, agora: number): Promise<void> {
+  const chave = createHash("sha256").update(`${rastro.etapa}:${rastro.itens.join(",")}`).digest("hex").slice(0, 16);
+  const anterior = r.analise.ultimo_erro as Partial<UltimoErroDaAnalise> | undefined;
+  const seguidas = anterior?.chave === chave ? (Number(r.analise.falhas_seguidas) || 0) + 1 : 1;
+  const ultimo: UltimoErroDaAnalise = {
+    quando: new Date(agora).toISOString(),
+    etapa: rastro.etapa,
+    mensagem: mensagemCurtaDoErro(erro),
+    chave,
+    itens: rastro.itens.length,
+  };
+  if (seguidas < FALHAS_SEGUIDAS_PARA_PULAR) {
+    await gravarNaAnalise(admin, r, { ultimo_erro: ultimo, falhas_seguidas: seguidas });
+    return;
+  }
+  const pulou = await pularOItem(admin, r, rastro).catch(() => false);
+  await gravarNaAnalise(admin, r, {
+    ultimo_erro: { ...ultimo, pulou },
+    falhas_seguidas: pulou ? 0 : seguidas,
+    ...(pulou && rastro.etapa === "relatorio" ? { relatorio_sem_comparacao: true } : {}),
+    ...(pulou && rastro.etapa === "preparo" && daConta(r) ? { audios_preparados: true } : {}),
+  });
 }
 
 interface LinhaDaMensagem {
@@ -417,14 +533,7 @@ async function prepararAudiosDaConta(amb: Ambiente, r: LinhaDoRaioX): Promise<vo
     const { error } = await amb.admin.from("mia_raio_x_mensagens").upsert(linhas, { onConflict: "raio_x_id,marca", ignoreDuplicates: true });
     if (error) throw new Error(`raio-x: áudios da conta (${error.code ?? "sem_codigo"})`);
   }
-  const analise = { ...r.analise, audios_preparados: true };
-  const { error } = await amb.admin.from("mia_raio_x").update({ analise }).eq("id", r.id);
-  if (error) throw new Error(`raio-x: andamento da análise (${error.code ?? "sem_codigo"})`);
-  r.analise = analise;
-}
-
-function temTempo(amb: Ambiente, folga = MARGEM_PARA_CHAMADA_MS): boolean {
-  return amb.prazo - amb.agora() >= folga;
+  await gravarNaAnalise(amb.admin, r, { audios_preparados: true });
 }
 
 /**
@@ -436,23 +545,57 @@ function cabe(amb: Ambiente, tetoMs: number): boolean {
   return cabeAChamada(amb.prazo, amb.agora(), tetoMs);
 }
 
-/** 1. Os áudios pendentes do período, até o prazo da chamada. */
+interface AudioPendente {
+  id: number;
+  conversa_id: string;
+  segundos: number | null;
+  midia: string | null;
+}
+
+/** `baixou`: true = o arquivo chegou; false = o download falhou (conta para a desistência); null = nem tentou. */
+interface ResultadoDoAudio {
+  id: number;
+  transcricao: "feita" | "falhou";
+  texto: string | null;
+  baixou: boolean | null;
+}
+
+/**
+ * 1. Os áudios pendentes do período, até o prazo da chamada.
+ *
+ * FORK MIA (.106): de `AUDIOS_EM_PARALELO` em `AUDIOS_EM_PARALELO` (cada um
+ * baixa e transcreve por conta, `Promise.allSettled`), com o teto de custo
+ * conferido para o LOTE antes. O download tem teto próprio
+ * (`TETO_DO_DOWNLOAD_DO_RAIO_X_MS`, 10 s) e a transcrição também
+ * (`TETO_DA_TRANSCRICAO_MS`, 30 s, por `Promise.race` aqui: o transcritor do
+ * upstream não tem). Desiste, e o que falta vira "falhou", com
+ * `FALHAS_DE_DOWNLOAD_PARA_DESISTIR` downloads falhando em sequência (o áudio
+ * antigo que o WhatsApp não entrega mais) ou passados
+ * `TETO_DA_FASE_DE_AUDIOS_MS` de `analise.audios_desde`. Áudio sem resposta
+ * vira "falhou" e a fila segue.
+ */
 async function transcrever(amb: Ambiente, r: LinhaDoRaioX, cotacao: number): Promise<"pronto" | "andou" | "parou"> {
+  const rastro: Rastro = amb.rastro ?? { etapa: "transcricao", itens: [] };
+  rastro.etapa = "transcricao";
+  rastro.itens = [];
   const { inicio, fim } = periodo(r);
-  const { data, error } = await amb.admin
-    .from("mia_raio_x_mensagens")
-    .select("id, conversa_id, segundos, midia")
-    .eq("raio_x_id", r.id)
-    .eq("transcricao", "pendente")
-    .gte("enviada_em", inicio)
-    .lte("enviada_em", fim)
-    .order("id", { ascending: true })
-    .limit(8);
-  if (error) throw new Error(`raio-x: áudios pendentes (${error.code ?? "sem_codigo"})`);
-  const pendentes = (data ?? []) as Array<{ id: number; conversa_id: string; segundos: number | null; midia: string | null }>;
+  const lerPendentes = async (): Promise<AudioPendente[]> => {
+    const { data, error } = await amb.admin
+      .from("mia_raio_x_mensagens")
+      .select("id, conversa_id, segundos, midia")
+      .eq("raio_x_id", r.id)
+      .eq("transcricao", "pendente")
+      .gte("enviada_em", inicio)
+      .lte("enviada_em", fim)
+      .order("id", { ascending: true })
+      .limit(AUDIOS_EM_PARALELO * 4);
+    if (error) throw new Error(`raio-x: áudios pendentes (${error.code ?? "sem_codigo"})`);
+    return (data ?? []) as AudioPendente[];
+  };
+  let pendentes = await lerPendentes();
   if (pendentes.length === 0) return "pronto";
 
-  const marcarTodos = async (transcricao: string) => {
+  const marcarTodos = async (transcricao: "sem_servico" | "falhou" | "fora_do_teto") => {
     const { error: e } = await amb.admin
       .from("mia_raio_x_mensagens")
       .update({ transcricao, midia: null })
@@ -463,7 +606,8 @@ async function transcrever(amb: Ambiente, r: LinhaDoRaioX, cotacao: number): Pro
     if (e) throw new Error(`raio-x: marcar áudios (${e.code ?? "sem_codigo"})`);
   };
   // Sem serviço de transcrição, ou sem o leitor (desconectado): o áudio é só contado.
-  if (!amb.transcritor) {
+  const transcritor = amb.transcritor;
+  if (!transcritor) {
     await marcarTodos("sem_servico");
     return "pronto";
   }
@@ -472,63 +616,136 @@ async function transcrever(amb: Ambiente, r: LinhaDoRaioX, cotacao: number): Pro
     await marcarTodos("falhou");
     return "pronto";
   }
+  // FORK MIA (.106): a fase de áudios tem teto de relógio, contado da primeira rodada que transcreveu.
+  const desde = Date.parse(typeof r.analise.audios_desde === "string" ? r.analise.audios_desde : "");
+  if (Number.isFinite(desde) && amb.agora() - desde >= TETO_DA_FASE_DE_AUDIOS_MS) {
+    await marcarTodos("falhou");
+    return "pronto";
+  }
+  const tetoDoAudio = TETO_DO_DOWNLOAD_DO_RAIO_X_MS + TETO_DA_TRANSCRICAO_MS;
+  if (!cabe(amb, tetoDoAudio)) return "parou";
+  if (!Number.isFinite(desde)) await gravarNaAnalise(amb.admin, r, { audios_desde: new Date(amb.agora()).toISOString() });
+
   const baixarDaConta =
     amb.baixarDaConta ?? ((mensagemId: string) => (r.organization_id ? baixarAudioDaConta(amb.admin, r.organization_id, mensagemId) : Promise.resolve(null)));
-  const referencias = new Map<string, string | null>();
+  const referencias = new Map<string, Promise<string | null>>();
+  const referenciaDe = (conversaId: string): Promise<string | null> => {
+    let ref = referencias.get(conversaId);
+    if (!ref) {
+      ref = Promise.resolve(amb.admin.from("mia_raio_x_conversas").select("referencia").eq("id", conversaId).maybeSingle()).then(
+        ({ data: c }) => decifrarReferencia((c as { referencia?: string | null } | null)?.referencia)?.chatId ?? null,
+        () => null,
+      );
+      referencias.set(conversaId, ref);
+    }
+    return ref;
+  };
+
+  const transcreverUm = async (p: AudioPendente): Promise<ResultadoDoAudio> => {
+    const falhou = (baixou: boolean | null): ResultadoDoAudio => ({ id: p.id, transcricao: "falhou", texto: null, baixou });
+    const mensagemId = decifrarTexto(p.midia);
+    const chatId = daConta(r) ? null : await referenciaDe(p.conversa_id);
+    if (!mensagemId || (!daConta(r) && !chatId)) return falhou(null);
+    let audio: { bytes: Buffer; mime: string } | null;
+    try {
+      audio = await comTeto(
+        daConta(r) ? baixarDaConta(mensagemId) : amb.leitor!.baixarAudio(r.sessao!, chatId!, mensagemId, TETO_DO_DOWNLOAD_DO_RAIO_X_MS),
+        TETO_DO_DOWNLOAD_DO_RAIO_X_MS,
+      );
+    } catch {
+      return falhou(false);
+    }
+    if (!audio) return falhou(false);
+    try {
+      const segundos = segundosDoAudio(p.segundos, audio.bytes.byteLength);
+      const medido = await comTeto<{ texto: string; custoCents?: number | null }>(
+        transcritor.provider.transcribeMedindo
+          ? transcritor.provider.transcribeMedindo(audio.bytes, audio.mime)
+          : transcritor.provider.transcribe(audio.bytes, audio.mime).then((texto) => ({ texto, custoCents: null })),
+        TETO_DA_TRANSCRICAO_MS,
+      );
+      const usd = typeof medido.custoCents === "number" ? medido.custoCents : custoDoAudioUsdCentavos(segundos);
+      await registrarGasto(amb.admin, r, {
+        proposito: "raio_x_transcricao",
+        modelo: transcritor.modelo,
+        segundos,
+        usdCentavos: usd,
+        estimado: typeof medido.custoCents !== "number",
+        cotacao,
+      });
+      const texto = semNulo(medido.texto ?? "").trim();
+      return { id: p.id, transcricao: texto ? "feita" : "falhou", texto: texto ? texto.slice(0, 4000) : null, baixou: true };
+    } catch {
+      return falhou(true);
+    }
+  };
+
+  let downloadsQueFalharam = Number(r.analise.falhas_de_download_seguidas) || 0;
   let andou = false;
-  for (const p of pendentes) {
-    if (!temTempo(amb, TETO_DO_DOWNLOAD_MS + 15_000)) return andou ? "andou" : "parou";
+  while (pendentes.length > 0) {
+    if (!cabe(amb, tetoDoAudio)) return andou ? "andou" : "parou";
+    const proximos = pendentes.slice(0, AUDIOS_EM_PARALELO);
+    pendentes = pendentes.slice(proximos.length);
+    rastro.itens = proximos.map((p) => p.id);
+    // O teto de custo do LOTE, antes de qualquer chamada: entra o que couber, na ordem.
     const gasto = await gastoDoRaioX(amb.admin, r.id, r.ciclo);
-    const estimativa = centavosEmReais(custoDoAudioUsdCentavos(Math.max(60, p.segundos ?? 60)), cotacao);
-    if (!cabeNoTeto(gasto.centavos, estimativa, r.teto_centavos).pode) {
+    const lote: AudioPendente[] = [];
+    let estimativa = 0;
+    for (const p of proximos) {
+      const desteAudio = centavosEmReais(custoDoAudioUsdCentavos(Math.max(60, p.segundos ?? 60)), cotacao);
+      if (!cabeNoTeto(gasto.centavos, estimativa + desteAudio, r.teto_centavos).pode) break;
+      estimativa += desteAudio;
+      lote.push(p);
+    }
+    if (lote.length === 0) {
       await marcarTodos("fora_do_teto");
       return "pronto";
     }
-    if (!daConta(r) && !referencias.has(p.conversa_id)) {
-      const { data: c } = await amb.admin.from("mia_raio_x_conversas").select("referencia").eq("id", p.conversa_id).maybeSingle();
-      referencias.set(p.conversa_id, decifrarReferencia((c as { referencia?: string | null } | null)?.referencia)?.chatId ?? null);
+    rastro.itens = lote.map((p) => p.id);
+    const resultados = await Promise.allSettled(lote.map(transcreverUm));
+    const saida: ResultadoDoAudio[] = resultados.map((x, i) =>
+      x.status === "fulfilled" ? x.value : { id: lote[i]!.id, transcricao: "falhou", texto: null, baixou: null },
+    );
+    const antes = downloadsQueFalharam;
+    for (const s of saida) {
+      if (s.baixou === false) downloadsQueFalharam += 1;
+      else if (s.baixou === true) downloadsQueFalharam = 0;
     }
-    const chatId = daConta(r) ? null : referencias.get(p.conversa_id);
-    const mensagemId = decifrarTexto(p.midia);
-    let resultado: { transcricao: string; texto: string | null } = { transcricao: "falhou", texto: null };
-    if (mensagemId && (chatId || daConta(r))) {
-      try {
-        const audio = daConta(r)
-          ? await baixarDaConta(mensagemId)
-          : await amb.leitor!.baixarAudio(r.sessao!, chatId!, mensagemId, TETO_DO_DOWNLOAD_MS);
-        if (audio) {
-          const segundos = segundosDoAudio(p.segundos, audio.bytes.byteLength);
-          const medido = amb.transcritor.provider.transcribeMedindo
-            ? await amb.transcritor.provider.transcribeMedindo(audio.bytes, audio.mime)
-            : { texto: await amb.transcritor.provider.transcribe(audio.bytes, audio.mime), custoCents: null };
-          const usd = typeof medido.custoCents === "number" ? medido.custoCents : custoDoAudioUsdCentavos(segundos);
-          await registrarGasto(amb.admin, r, {
-            proposito: "raio_x_transcricao",
-            modelo: amb.transcritor.modelo,
-            segundos,
-            usdCentavos: usd,
-            estimado: typeof medido.custoCents !== "number",
-            cotacao,
-          });
-          const texto = medido.texto.trim();
-          resultado = { transcricao: texto ? "feita" : "falhou", texto: texto ? texto.slice(0, 4000) : null };
-        }
-      } catch {
-        resultado = { transcricao: "falhou", texto: null };
+    // Grava todos; o que não gravou é o item da falha (a rodada seguinte o pega de novo).
+    const naoGravaram: number[] = [];
+    let codigo = "sem_codigo";
+    for (const s of saida) {
+      const { error: e } = await amb.admin
+        .from("mia_raio_x_mensagens")
+        .update({ transcricao: s.transcricao, texto: s.texto, midia: null })
+        .eq("id", s.id);
+      if (e) {
+        naoGravaram.push(s.id);
+        codigo = e.code ?? "sem_codigo";
       }
     }
-    const { error: e } = await amb.admin
-      .from("mia_raio_x_mensagens")
-      .update({ transcricao: resultado.transcricao, texto: resultado.texto, midia: null })
-      .eq("id", p.id);
-    if (e) throw new Error(`raio-x: transcrição não gravou (${e.code ?? "sem_codigo"})`);
+    if (naoGravaram.length > 0) {
+      rastro.itens = naoGravaram;
+      throw new Error(`raio-x: transcrição não gravou (${codigo})`);
+    }
     andou = true;
+    if (downloadsQueFalharam !== antes) await gravarNaAnalise(amb.admin, r, { falhas_de_download_seguidas: downloadsQueFalharam });
+    if (downloadsQueFalharam >= FALHAS_DE_DOWNLOAD_PARA_DESISTIR || lote.length < proximos.length) {
+      // Dez downloads seguidos sem o arquivo: o que falta do período não vai chegar. Ou o teto acabou no meio do lote.
+      await marcarTodos(lote.length < proximos.length ? "fora_do_teto" : "falhou");
+      return "pronto";
+    }
+    if (pendentes.length === 0) pendentes = await lerPendentes();
   }
-  return "andou";
+  return "pronto";
 }
 
 /** 2. A classificação das conversas, em lote. */
 async function classificar(amb: Ambiente, r: LinhaDoRaioX, cotacao: number): Promise<"pronto" | "andou" | "parou"> {
+  // FORK MIA (.106): o rastro diz em que conversa a rodada estava se ela lançar.
+  const rastro: Rastro = amb.rastro ?? { etapa: "classificacao", itens: [] };
+  rastro.etapa = "classificacao";
+  rastro.itens = [];
   const { inicio } = periodo(r);
   const { data, error } = await amb.admin
     .from("mia_raio_x_conversas")
@@ -542,6 +759,7 @@ async function classificar(amb: Ambiente, r: LinhaDoRaioX, cotacao: number): Pro
   if (error) throw new Error(`raio-x: conversas pendentes (${error.code ?? "sem_codigo"})`);
   const pendentes = (data ?? []) as unknown as LinhaDaConversa[];
   if (pendentes.length === 0) return "pronto";
+  rastro.itens = pendentes.map((c) => c.id);
 
   const marcar = async (ids: string[], valores: Record<string, unknown>) => {
     if (ids.length === 0) return;
@@ -567,6 +785,7 @@ async function classificar(amb: Ambiente, r: LinhaDoRaioX, cotacao: number): Pro
   const lote: Array<{ conversa: LinhaDaConversa; paraOModelo: ConversaParaOModelo }> = [];
   let tamanho = 0;
   for (const c of aClassificar) {
+    rastro.itens = [c.id];
     const msgs = (porConversa.get(c.id) ?? []).sort((a, b) => a.em - b.em);
     const medida = medirConversa(msgs.map((m) => ({ daLoja: m.daLoja, em: m.em })), horario, fimMs);
     const fatos = [
@@ -582,6 +801,7 @@ async function classificar(amb: Ambiente, r: LinhaDoRaioX, cotacao: number): Pro
     lote.push({ conversa: c, paraOModelo });
     tamanho += peso;
   }
+  rastro.itens = lote.map((x) => x.conversa.id);
 
   const sistema = sistemaDoModelo(r.segmento as Segmento);
   const texto = pedidoDoLote(lote.map((x) => x.paraOModelo));
@@ -608,11 +828,11 @@ async function classificar(amb: Ambiente, r: LinhaDoRaioX, cotacao: number): Pro
   let resposta: Awaited<ReturnType<ChamarOModelo>>;
   try {
     resposta = await comTeto(amb.chamar({ sistema, texto, tetoDeSaida }), TETO_DA_CLASSIFICACAO_MS);
-  } catch {
-    // Falha do provedor: conta e tenta de novo na rodada seguinte; na terceira, segue sem.
-    const falhas = Number((r.analise as { falhas?: number }).falhas ?? 0) + 1;
-    await amb.admin.from("mia_raio_x").update({ analise: { ...r.analise, falhas } }).eq("id", r.id);
-    if (falhas >= 3) await marcar(lote.map((x) => x.conversa.id), { analise: null, analise_ciclo: r.ciclo });
+  } catch (erro) {
+    // Falha do provedor: conta e tenta de novo na rodada seguinte; na terceira SEGUIDA no mesmo
+    // lote, o lote segue sem análise. FORK MIA (.106): a mesma conta das exceções (registrarFalha),
+    // que zera quando a análise anda; antes o contador nunca zerava.
+    await registrarFalha(amb.admin, r, { etapa: "classificacao", itens: [...rastro.itens] }, erro, amb.agora());
     return "parou";
   }
   const usd = costCents(amb.modelo.modelo, {
@@ -632,6 +852,7 @@ async function classificar(amb: Ambiente, r: LinhaDoRaioX, cotacao: number): Pro
   });
   const lidas = lerRespostaDoModelo(resposta.texto, r.segmento as Segmento);
   for (const { conversa, paraOModelo } of lote) {
+    rastro.itens = [conversa.id];
     const analise = lidas.get(paraOModelo.id) ?? null;
     const { error: e } = await amb.admin
       .from("mia_raio_x_conversas")
@@ -713,7 +934,9 @@ export async function gerarRelatorio(admin: SupabaseClient, r: LinhaDoRaioX, ago
     ...(daConta(r) ? { numeros: numeros.map((n) => ({ rotulo: n.rotulo, oficial: n.oficial })) } : {}),
   });
   const criadoEm = agora.toISOString();
-  const anterior = await relatorioAnterior(admin, r, criadoEm, numeros.flatMap((n) => (n.telefone ? [n.telefone] : [])));
+  // FORK MIA (.106): a comparação que falhou três rodadas seguidas fica de fora, e o relatório sai.
+  const semComparacao = (r.analise as { relatorio_sem_comparacao?: boolean }).relatorio_sem_comparacao === true;
+  const anterior = semComparacao ? null : await relatorioAnterior(admin, r, criadoEm, numeros.flatMap((n) => (n.telefone ? [n.telefone] : [])));
   const { data: ultima } = await admin
     .from("mia_raio_x_relatorios")
     .select("sequencia")
@@ -764,8 +987,8 @@ export async function gerarRelatorio(admin: SupabaseClient, r: LinhaDoRaioX, ago
 
 export type DesfechoDaAnalise = { tipo: "andou" } | { tipo: "parou" } | { tipo: "relatorio"; relatorioId: string };
 
-/** UMA rodada da análise: áudio, depois classificação, depois relatório. */
-export async function rodadaDeAnalise(amb: Ambiente, r: LinhaDoRaioX): Promise<DesfechoDaAnalise> {
+/** Os passos de UMA rodada: áudio, depois classificação, depois relatório. */
+async function passosDaRodada(amb: Ambiente & { rastro: Rastro }, r: LinhaDoRaioX): Promise<DesfechoDaAnalise> {
   const cotacao = await cotacaoDoDia(amb.admin);
   if (daConta(r) && !(r.analise as { audios_preparados?: boolean }).audios_preparados) await prepararAudiosDaConta(amb, r);
   const audio = await transcrever(amb, r, cotacao);
@@ -773,6 +996,8 @@ export async function rodadaDeAnalise(amb: Ambiente, r: LinhaDoRaioX): Promise<D
   for (let i = 0; i < 4; i += 1) {
     const passo = await classificar(amb, r, cotacao);
     if (passo === "pronto") {
+      amb.rastro.etapa = "relatorio";
+      amb.rastro.itens = [];
       const relatorioId = await gerarRelatorio(amb.admin, r, new Date(amb.agora()));
       return { tipo: "relatorio", relatorioId };
     }
@@ -780,4 +1005,24 @@ export async function rodadaDeAnalise(amb: Ambiente, r: LinhaDoRaioX): Promise<D
     if (passo === "parou" || !cabe(amb, TETO_DA_CLASSIFICACAO_MS)) return { tipo: passo };
   }
   return { tipo: "andou" };
+}
+
+/**
+ * UMA rodada da análise. FORK MIA (.106): a exceção não sai sem deixar rastro.
+ * Antes de subir para o ciclo (que conta a falha e solta a trava), ela vira o
+ * `ultimo_erro` em `mia_raio_x.analise` e soma em `falhas_seguidas` quando é
+ * no MESMO item da rodada anterior; na terceira, o item sai do caminho
+ * (`registrarFalha`). A rodada que anda zera a conta.
+ */
+export async function rodadaDeAnalise(amb: Ambiente, r: LinhaDoRaioX): Promise<DesfechoDaAnalise> {
+  const rastro: Rastro = { etapa: "preparo", itens: [] };
+  let desfecho: DesfechoDaAnalise;
+  try {
+    desfecho = await passosDaRodada({ ...amb, rastro }, r);
+  } catch (erro) {
+    await registrarFalha(amb.admin, r, rastro, erro, amb.agora()).catch(() => undefined);
+    throw erro;
+  }
+  if (desfecho.tipo === "andou" && (Number(r.analise.falhas_seguidas) || 0) > 0) await gravarNaAnalise(amb.admin, r, { falhas_seguidas: 0 });
+  return desfecho;
 }
