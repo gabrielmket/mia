@@ -2392,7 +2392,8 @@ async function executarTurnoDoAgente(
   // F4-06 (acceptance 2): lead em handoff humano → NO-OP no INÍCIO do turno, antes de
   // qualquer chamada de modelo/CRM. O bot silenciou (bot_silenced_until='infinity', cache
   // do force_human do CRM) e só o humano/CRM libera — o agente nunca reassume (regra dura 2).
-  if (!preview && (await isLeadInHandoff(pool, tenantId, leadId))) {
+  // FORK MIA (.107): no turno de mensagem, só o silêncio DESTA conversa conta (ver isLeadInHandoff).
+  if (!preview && (await isLeadInHandoff(pool, tenantId, leadId, liveJob().kind === 'inbound_turn' ? input.conversationId : null))) {
     runLog.info('turno pulado — lead em handoff humano (bot silenciado)', { kind: liveJob().kind });
     return;
   }
@@ -6739,7 +6740,8 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
     // ponytail: o caminho automático refaz as duas em `runAgentTurn` (que
     // também serve follow-up e caso) — duas consultas a mais por turno, contra
     // a IA de sempre e o Jev que elas poupam numa conversa calada.
-    if (await isLeadInHandoff(pool, job.organization_id, job.contact_id)) {
+    // FORK MIA (.107): a conversa desta mensagem; o silêncio de outra conversa do contato não cala esta.
+    if (await isLeadInHandoff(pool, job.organization_id, job.contact_id, payload.conversation_id)) {
       deps.log.info('turno pulado — lead em handoff humano (bot silenciado)', {
         job_id: job.id,
         conversation_id: payload.conversation_id,
