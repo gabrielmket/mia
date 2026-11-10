@@ -45,6 +45,15 @@ A regra veio da fusão (Fase 0), quando `bot_silenced_until` era um espelho do
 `force_human` do contato. Hoje a coluna também guarda silêncios de uma conversa só:
 "Assumir", os 5 min da tela, o celular, "Pausar o automático" e o `#off`.
 
+**A decisão (dono do produto, 10/11/2026): "calada em todos, mas avisando".** A regra
+fica: se uma pessoa assumiu QUALQUER conversa do contato, a IA se cala em todos os
+números dele. Isso protege o cliente que fala com dois números da empresa
+(pré-atendimento com IA e comercial com gente): ele não recebe a IA num número enquanto
+negocia com o vendedor no outro. O defeito era a pausa não aparecer em lugar nenhum, e é
+isso que a .107 conserta (seção 2.4). Uma primeira versão desta branch fez o veto do
+turno contar só a conversa dele; ela foi revertida (commit `323e2097f`) e o upstream
+voltou a ser exatamente o que era.
+
 ## 2. O conserto
 
 ### 2.1 A função única: `lib/escalacao/mensagem-pendente.ts`
@@ -134,20 +143,39 @@ do fim do silêncio, sem saída depois. Na primeira rodada depois da implantaç�
 alcance é o de qualquer rodada: só o que venceu no último quarto de hora. Conversa
 parada há horas não passa.
 
-### 2.4 O veto do turno conta só a conversa dele (caso 2)
+### 2.4 Calada em todos, mas avisando (caso 2)
 
-`isLeadInHandoff` ganhou a conversa, opcional. Com ela, o silêncio que conta é só o
-daquela conversa; sem ela, vale a régua do lead, como antes. Os dois pontos do turno de
-MENSAGEM passam a conversa (`inbound-turn.ts`: o handler do job e `runAgentTurn` quando
-o job é `inbound_turn`). Follow-up, operador e "pessoa no comando" seguem pela régua do
-lead. `force_human` (o handoff formal grava no contato), `ai_opt_out` e contato interno
-continuam valendo pelo contato inteiro.
+O veto do turno é o do upstream, sem mudança: `isLeadInHandoff` conta toda conversa do
+contato. O que muda é que a pausa aparece em três lugares, e que a função A não pede
+turno que o motor pula.
 
-Efeito: com uma pessoa atendendo o contato no número B, a IA responde no número A
-quando a conversa de A está em "Automático", que é o que a tela, o gate e o drain já
-diziam. Se a empresa preferir que a conversa assumida num número cale a IA em todos, a
-regra certa é o handoff formal (que grava `force_human`) ou "Marcar como pessoal", e
-não um silêncio de conversa que a tela não mostra.
+- **A função A** (`pedirTurnoDaMensagemPendente`) chama o próprio `isLeadInHandoff`
+  (pelo pool do processo, `getRequestPool`, com import dinâmico para não fechar o ciclo
+  `human-handoff`, `handoff-tecnico`, `retomada`, `mensagem-pendente`). Com o
+  contato calado, recusa por `contato_em_handoff`: a devolução e o cron não pedem um
+  turno que o motor jogaria fora. A regra é a mesma função, não uma cópia.
+- **O registro.** Quando o turno de mensagem pula no handler (`inbound-turn.ts`, logo
+  depois de `isLeadInHandoff`) e a causa é OUTRA conversa do contato (com pessoa ou
+  calada; esta sem silêncio próprio; o contato sem `force_human`, `ai_opt_out` nem
+  etiqueta de contato interno), `registrarPausaPorOutraConversa` grava a linha em
+  `agent_turn_traces` com `status = 'aborted'` e `abort_reason =
+  'contato_com_pessoa_em_outra_conversa'`, e um log estruturado com a outra conversa.
+  A tabela já aceitava `aborted` com motivo: sem migration. A tela de Execuções
+  (`/api/v1/ai/turn-traces`) e o assistente leem essa linha.
+- **O assistente** diz "Outra conversa deste contato está com (pessoa) no número
+  (número) desde (hora)", explica a decisão e o conserto: devolver aquela conversa
+  para a IA, ou fechá-la. A ação "Abrir aquela conversa" vai junto.
+- **A tela.** Com a conversa em "Automático" e o contato com alguém noutra conversa, o
+  cabeçalho mostra a faixa "IA pausada: (Pessoa) está atendendo este contato no número
+  (Número)." com o botão "Abrir aquela conversa"
+  (`components/inbox/FaixaDaPausaPorOutraConversa.tsx`). O dado vem da consulta que o
+  selo do horário da conversa já faz (`/api/v1/ai/horario-da-ia?conversa=`), com o
+  campo novo `pausa_por_outra_conversa`: nenhuma requisição a mais. Frases em pt e es
+  (`lib/i18n/dicionario-mia-ia-pendente.ts`).
+
+`lib/escalacao/pausa-por-outra-conversa.ts` só NOMEIA a outra conversa (quem, que número,
+desde quando); nada ali decide se a IA fala. O assistente e a faixa leem pela SESSÃO:
+quem não veria aquela conversa no Inbox (modo "Só os seus") não vê a faixa nem o nome.
 
 ### 2.5 O assistente
 
@@ -178,9 +206,13 @@ depois de o silêncio acabar.
   próxima mensagem, como antes.
 - **A conversa do caso real de 09/11.** O silêncio dela venceu há muito mais de 15 min e
   a mensagem tem mais de 30: a varredura não a acorda. Precisa de resposta da equipe.
-- **Pulo sem rastro.** O turno que volta no início (handoff, gate) continua sem linha em
-  `agent_turn_traces`; só o log do worker diz. Gravar esse rastro é mudança no upstream
-  maior que esta entrega.
+- **Rastro só para a outra conversa.** O turno que volta no início por outro motivo
+  (`force_human`, `ai_opt_out`, contato interno, gate do número) continua sem linha em
+  `agent_turn_traces`; só o log do worker diz.
+- **A faixa e o atendente do modo "Só os seus".** A outra conversa é lida pela sessão; se
+  ela é de outro atendente e o modo esconde, a faixa não aparece para ele (gestor e
+  administrador veem). A faixa acompanha o selo do horário, que guarda o dado por 60 s:
+  depois de devolver a outra conversa, ela pode levar até um minuto para sumir.
 - **Corrida de dois chamadores no mesmo instante.** Os dois leem "nenhum pedido" e
   emitem; o drain coalesce e o turno não responde duas vezes a mesma mensagem.
 
@@ -199,11 +231,17 @@ depois de o silêncio acabar.
   50 e não pede de novo na rodada seguinte; o cron está no agendador;
 - o assistente explica o silêncio vencido, o silêncio em vigor, o infinito e o modo de
   teste;
-- `isLeadInHandoff` com conversa conta só a dela; os dois pontos do turno passam a
-  conversa.
+- a função recusa (`contato_em_handoff`) quando o motor cala o contato, pelo
+  `isLeadInHandoff` de verdade sobre um pool de mentira; a devolução e a varredura não
+  pedem nesse caso;
+- o veto do turno segue contando toda conversa do contato, e o turno que pula por outra
+  conversa grava o rastro `aborted` com `contato_com_pessoa_em_outra_conversa` (e não
+  grava quando a causa é outra);
+- o assistente diz quem, em que número, desde quando, e o conserto.
 
-O invariante `tests/invariants/comando-da-conversa-espelha-o-ts.test.ts` (banco real)
-recorta o SQL do veto do fonte; ele passou a ler o `$3` como nulo, que é a régua do lead.
+`tests/unit/ia-responde-pendente-faixa.test.tsx`: a faixa em pt e es, só em
+"Automático", com e sem dono na outra conversa, com o link para ela; e o cabeçalho a
+monta com o comando da conversa.
 
 ## 5. Pontos de ligação no código do upstream
 
@@ -214,15 +252,20 @@ Todos com o comentário `FORK MIA (.107)`:
 - `app/api/v1/conversations/[id]/release/route.ts`: a chamada da função;
 - `app/api/v1/conversations/[id]/close/route.ts`: `responderPendente: false`;
 - `lib/escalacao/handoff-tecnico.ts`: `responderPendente: false`;
-- `lib/agent-engine/agent/human-handoff.ts`: a conversa opcional de `isLeadInHandoff`;
-- `lib/agent-engine/agent/inbound-turn.ts`: os dois pontos do veto passam a conversa;
+- `lib/agent-engine/agent/inbound-turn.ts`: uma chamada a `registrarPausaPorOutraConversa`
+  no pulo do handler, e o import;
+- `components/inbox/ConversationHeader.tsx`: a faixa, e o import;
+- `lib/i18n/dicionario.ts`: o espalhamento do dicionário nosso;
 - `lib/audit/actions.ts`: a ação `conversation.pending_reply_requested_run`;
-- `docker/scheduler/entrypoint.sh`: a linha do cron;
-- `tests/invariants/comando-da-conversa-espelha-o-ts.test.ts`: o recorte do `$3`;
-- `lib/agent-engine/agent/roteiro-no-turno.test.ts`: procura o começo da chamada do veto,
-  que ganhou o 4º argumento.
+- `docker/scheduler/entrypoint.sh`: a linha do cron.
 
-Arquivos nossos: `lib/escalacao/mensagem-pendente.ts`,
-`app/api/v1/cron/ia-pendente/route.ts`, `tests/unit/ia-responde-pendente.test.ts` e o
+`human-handoff.ts`, o resto de `inbound-turn.ts`, `roteiro-no-turno.test.ts` e o
+invariante `comando-da-conversa-espelha-o-ts` estão como no upstream.
+
+Arquivos nossos: `lib/escalacao/mensagem-pendente.ts`, `lib/escalacao/pausa-por-outra-conversa.ts`,
+`app/api/v1/cron/ia-pendente/route.ts`, `components/inbox/FaixaDaPausaPorOutraConversa.tsx`,
+`lib/i18n/dicionario-mia-ia-pendente.ts`, a rota e o hook do horário da IA
+(`app/api/v1/ai/horario-da-ia/route.ts`, `hooks/ai/useHorarioDaIa.ts`, do fork desde a .85),
+`tests/unit/ia-responde-pendente.test.ts`, `tests/unit/ia-responde-pendente-faixa.test.tsx` e o
 assistente (`lib/assistente/leituras/por-que-a-ia-nao-respondeu.ts` e a descrição da
 ferramenta em `lib/assistente/ferramentas.ts`, do fork desde a .88).
