@@ -244,12 +244,13 @@ export async function explicarSilencioDaIa(
   }
 
   // 3 · número desconectado
-  let s: {
+  type SessaoLida = {
     status?: string;
     display_name?: string | null;
     last_status_change_at?: string | null;
     metadata?: unknown;
-  } | null = null;
+  };
+  let s = null as SessaoLida | null;
   if (conversa.channel_session_id) {
     const { data: sessao } = await db
       .from("channel_sessions")
@@ -257,7 +258,7 @@ export async function explicarSilencioDaIa(
       .eq("organization_id", org)
       .eq("id", conversa.channel_session_id)
       .maybeSingle();
-    s = sessao as typeof s;
+    s = (sessao ?? null) as SessaoLida | null;
     if (s && s.status && s.status !== "WORKING") {
       const desde = s.last_status_change_at ? ` desde ${rotuloLocal(new Date(s.last_status_change_at), entrada.fuso)}` : "";
       fatos.push(`O número${s.display_name ? ` "${s.display_name}"` : ""} está desconectado${desde}.`);
