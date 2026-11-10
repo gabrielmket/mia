@@ -10,14 +10,17 @@
  * em memória, e o que fica gravado na conversa. Nenhum id, nome ou telefone
  * daqui existe fora deste arquivo.
  *
- * Mais o 2º caso (28 min depois, sem silêncio na conversa): o veto do turno
- * (`isLeadInHandoff`) contava o silêncio de OUTRA conversa do contato, noutro
- * número, assumida por uma pessoa. No turno de mensagem, conta só a desta.
+ * Mais o 2º caso (28 min depois, sem silêncio na conversa): outra conversa do
+ * contato, noutro número, estava assumida por uma pessoa. Decisão do dono do
+ * produto (10/11): "calada em todos, mas avisando". O veto do turno
+ * (`isLeadInHandoff`) continua contando toda conversa do contato; a função A
+ * recusa pela mesma régua; e o turno, o assistente e a faixa da tela dizem o
+ * motivo.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { bancoEmMemoria, type Linha } from "@/tests/helpers/banco-em-memoria";
 import {
@@ -31,8 +34,31 @@ import {
 import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
 import { explicarSilencioDaIa } from "@/lib/assistente/leituras/por-que-a-ia-nao-respondeu";
 import { isLeadInHandoff } from "@/lib/agent-engine/agent/human-handoff";
+import {
+  MOTIVO_DA_PAUSA_POR_OUTRA_CONVERSA,
+  registrarPausaPorOutraConversa,
+} from "@/lib/escalacao/pausa-por-outra-conversa";
 
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
+
+/**
+ * O pool do processo, de mentira: a função A chama o `isLeadInHandoff` DE VERDADE
+ * (a régua do motor, sem cópia), e é este pool que responde a pergunta dele.
+ */
+const motor = vi.hoisted(() => ({ handoff: false, chamadas: [] as Array<{ sql: string; params: unknown[] }> }));
+vi.mock("@/lib/agent-engine/db/request-pool", () => ({
+  getRequestPool: () => ({
+    query: async (sql: string, params: unknown[]) => {
+      motor.chamadas.push({ sql, params });
+      return { rows: [{ handoff: motor.handoff }] };
+    },
+  }),
+}));
+
+beforeEach(() => {
+  motor.handoff = false;
+  motor.chamadas = [];
+});
 
 const RAIZ = join(__dirname, "..", "..");
 
@@ -46,6 +72,8 @@ const ENTRADA = "0f0f0f0f-6666-4666-8666-000000000006";
 const SAIDA = "0f0f0f0f-7777-4777-8777-000000000007";
 const AGENTE = "0f0f0f0f-8888-4888-8888-000000000008";
 const VERSAO = "0f0f0f0f-9999-4999-8999-000000000009";
+const OUTRA_CONVERSA = "0f0f0f0f-1212-4212-8212-000000000012";
+const OUTRO_NUMERO = "0f0f0f0f-1313-4313-8313-000000000013";
 
 const AGORA = new Date("2026-11-09T15:00:00.000Z");
 const ha = (ms: number, base: Date = AGORA) => new Date(base.getTime() - ms).toISOString();
@@ -299,6 +327,16 @@ describe("A · pedirTurnoDaMensagemPendente", () => {
     expect(pedidosDeTurno(banco)).toHaveLength(1);
   });
 
+  it("NÃO pede quando o motor cala o contato inteiro (outra conversa dele com uma pessoa)", async () => {
+    motor.handoff = true;
+    const banco = cenario();
+    expect(await pedir(banco)).toEqual({ pediu: false, porque: "contato_em_handoff" });
+    expect(pedidosDeTurno(banco)).toHaveLength(0);
+    // A pergunta foi a do motor, para o contato inteiro (sem recorte de conversa).
+    const doMotor = motor.chamadas.find((c) => c.sql.includes("as handoff"));
+    expect(doMotor?.params).toEqual([ORG, CONTATO]);
+  });
+
   it("erro do banco não lança: devolve 'erro' e não pede", async () => {
     const banco = cenario();
     const quebrado = {
@@ -350,6 +388,22 @@ describe("B · a devolução para a IA", () => {
     const args = pedidos[0]!.args as { p_entity_id: string; p_metadata: { source: string } };
     expect(args.p_entity_id).toBe(ENTRADA);
     expect(args.p_metadata.source).toBe("retomada_da_ia");
+  });
+
+  it("devolve, mas NÃO pede o turno quando outra conversa do contato está com uma pessoa", async () => {
+    motor.handoff = true;
+    const { banco } = cenarioDaDevolucao();
+    const r = await devolverAtendimentoAoAgente(
+      {
+        supabase: banco.cliente as never,
+        organizationId: ORG,
+        actor: { type: "user", id: PESSOA, role: "agent" },
+        requestId: "req-devolucao-calada",
+      },
+      { conversationId: CONV },
+    );
+    expect(r.ok).toBe(true);
+    expect(pedidosDeTurno(banco)).toHaveLength(0);
   });
 
   it("com responderPendente: false (fechar a conversa) devolve e NÃO pede o turno", async () => {
@@ -442,6 +496,14 @@ describe("C · a varredura do fim do silêncio", () => {
     });
     expect(segunda.pedidas).toBe(0);
     expect(pedidosDeTurno(banco)).toHaveLength(1);
+  });
+
+  it("a varredura também não pede quando o motor cala o contato", async () => {
+    motor.handoff = true;
+    const banco = cenario();
+    const r = await varrerFimDoSilencio(banco.cliente as never, { requestId: "req-cron-calado", agora: AGORA });
+    expect(r).toEqual({ examinadas: 1, candidatas: 1, pedidas: 0, falhas: 0 });
+    expect(pedidosDeTurno(banco)).toHaveLength(0);
   });
 
   it("o cron está no agendador, de minuto em minuto, e audita só com efeito", () => {
@@ -575,41 +637,116 @@ describe("D · o assistente explica", () => {
     );
     expect(r.motivo).not.toBe("numero_em_teste");
   });
+
+  it("outra conversa do contato com uma pessoa: diz quem, em que número, desde quando, e o conserto", async () => {
+    const tabelas = tabelasDoAssistente({ silencio: null });
+    // A conversa do comercial, noutro número, assumida por uma pessoa (Assumir grava infinity).
+    tabelas.conversations.push({
+      id: OUTRA_CONVERSA,
+      organization_id: ORG,
+      contact_id: CONTATO,
+      status: "claimed",
+      assigned_to_user_id: PESSOA,
+      assigned_to_user_name: "Pessoa Fictícia",
+      assigned_at: ha(2 * 60 * MIN),
+      last_handoff_at: null,
+      status_changed_at: ha(2 * 60 * MIN),
+      bot_silenced_until: "infinity",
+      channel_session_id: OUTRO_NUMERO,
+      active_ai_agent_id: null,
+      last_inbound_at: ha(3 * 60 * MIN),
+      last_outbound_at: ha(2 * 60 * MIN),
+      comando_da_conversa: "humano",
+    } as never);
+    tabelas.channel_sessions.push({
+      id: OUTRO_NUMERO,
+      organization_id: ORG,
+      status: "WORKING",
+      display_name: "Comercial Fictício",
+      last_status_change_at: null,
+      metadata: {},
+    });
+    const r = await explicar(tabelas);
+    expect(r.conversation_id).toBe(CONV);
+    expect(r.motivo).toBe("contato_com_pessoa_em_outra_conversa");
+    expect(r.fatos.join(" ")).toContain('Outra conversa deste contato está com Pessoa Fictícia no número "Comercial Fictício" desde');
+    expect(r.conserto).toContain("Devolver aquela conversa para a IA, ou fechá-la");
+    expect(r.link_da_outra_conversa).toBe(`/app/inbox?id=${OUTRA_CONVERSA}`);
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-describe("o 2º caso · o silêncio de OUTRA conversa do contato não cala o turno desta", () => {
-  function poolQueGrava() {
+describe("o 2º caso · calada em todos, mas avisando", () => {
+  it("a IA continua pulando: o veto do turno conta toda conversa do contato (a régua do upstream)", async () => {
     const chamadas: Array<{ sql: string; params: unknown[] }> = [];
     const pool = {
       query: async (sql: string, params: unknown[]) => {
         chamadas.push({ sql, params });
-        return { rows: [{ handoff: false }] };
+        return { rows: [{ handoff: true }] };
       },
     };
-    return { pool, chamadas };
-  }
-
-  it("com a conversa, o veto só conta o silêncio dela; sem, segue a régua do lead", async () => {
-    const { pool, chamadas } = poolQueGrava();
-    await isLeadInHandoff(pool as never, ORG, CONTATO, CONV);
-    await isLeadInHandoff(pool as never, ORG, CONTATO);
-    expect(chamadas[0]!.params).toEqual([ORG, CONTATO, CONV]);
-    expect(chamadas[1]!.params).toEqual([ORG, CONTATO, null]);
-    // A forma do recorte: nulo = qualquer conversa do contato (follow-up, operador).
-    expect(chamadas[0]!.sql).toMatch(/\(\$3::uuid is null or v\.id = \$3::uuid\)/);
-    // As travas do CONTATO seguem valendo nos dois casos.
-    expect(chamadas[0]!.sql).toContain("c.force_human");
-    expect(chamadas[0]!.sql).toContain("or c.ai_opt_out");
+    expect(await isLeadInHandoff(pool as never, ORG, CONTATO)).toBe(true);
+    expect(chamadas[0]!.params).toEqual([ORG, CONTATO]);
+    expect(chamadas[0]!.sql).toContain("where v.organization_id = $1 and v.contact_id = c.id");
+    expect(chamadas[0]!.sql).toContain("v.bot_silenced_until is not null and v.bot_silenced_until > now()");
+    expect(chamadas[0]!.sql).not.toContain("$3");
+    const fonte = readFileSync(join(RAIZ, "lib/agent-engine/agent/inbound-turn.ts"), "utf8");
+    expect(fonte).toContain("isLeadInHandoff(pool, job.organization_id, job.contact_id)");
+    expect(fonte).toContain("isLeadInHandoff(pool, tenantId, leadId)");
   });
 
-  it("os dois pontos do turno de mensagem passam a conversa", () => {
+  it("o turno que pula por isso grava o rastro (aborted, contato_com_pessoa_em_outra_conversa)", async () => {
     const fonte = readFileSync(join(RAIZ, "lib/agent-engine/agent/inbound-turn.ts"), "utf8");
-    expect(fonte).toContain(
-      "isLeadInHandoff(pool, job.organization_id, job.contact_id, payload.conversation_id)",
-    );
-    expect(fonte).toContain(
-      "isLeadInHandoff(pool, tenantId, leadId, liveJob().kind === 'inbound_turn' ? input.conversationId : null)",
-    );
+    const veto = fonte.indexOf("isLeadInHandoff(pool, job.organization_id, job.contact_id)");
+    const rastro = fonte.indexOf("registrarPausaPorOutraConversa(pool", veto);
+    expect(rastro).toBeGreaterThan(veto);
+    expect(fonte.slice(veto, rastro)).not.toContain("decidirElegibilidadeDaConversa");
+
+    const chamadas: Array<{ sql: string; params: unknown[] }> = [];
+    const pool = {
+      query: async (sql: string, params: unknown[]) => {
+        chamadas.push({ sql, params });
+        if (sql.includes("from conversations o")) {
+          return {
+            rows: [
+              {
+                id: OUTRA_CONVERSA,
+                assigned_to_user_id: PESSOA,
+                assigned_to_user_name: "Pessoa Fictícia",
+                desde: ha(2 * 60 * MIN),
+                numero: "Comercial Fictício",
+              },
+            ],
+          };
+        }
+        return { rows: [] };
+      },
+    };
+    const outra = await registrarPausaPorOutraConversa(pool as never, {
+      organizationId: ORG,
+      jobId: "0f0f0f0f-eeee-4eee-8eee-00000000000e",
+      contactId: CONTATO,
+      conversationId: CONV,
+    });
+    expect(outra).toMatchObject({ conversationId: OUTRA_CONVERSA, pessoaNome: "Pessoa Fictícia", numeroNome: "Comercial Fictício" });
+    const insercao = chamadas.find((c) => c.sql.includes("insert into public.agent_turn_traces"));
+    expect(insercao).toBeDefined();
+    expect(insercao!.params).toContain("aborted");
+    expect(insercao!.params).toContain(MOTIVO_DA_PAUSA_POR_OUTRA_CONVERSA);
+    expect(insercao!.params).toContain(CONV);
+  });
+
+  it("sem outra conversa como causa, não grava rastro nenhum", async () => {
+    const chamadas: string[] = [];
+    const pool = { query: async (sql: string) => (chamadas.push(sql), { rows: [] }) };
+    const outra = await registrarPausaPorOutraConversa(pool as never, {
+      organizationId: ORG,
+      jobId: "0f0f0f0f-eeee-4eee-8eee-00000000000e",
+      contactId: CONTATO,
+      conversationId: CONV,
+    });
+    expect(outra).toBeNull();
+    expect(chamadas.some((q) => q.includes("insert into public.agent_turn_traces"))).toBe(false);
   });
 });
+
