@@ -15,6 +15,7 @@ import { type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit";
 import { registrarTrocaDeComando } from "@/lib/inbox/atividade-de-comando";
+import { pedirTurnoDaMensagemPendente } from "@/lib/escalacao/mensagem-pendente"; // FORK MIA (.107)
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
@@ -84,6 +85,9 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
     // bloco "vocabulario de dominio persistido" em `lib/i18n/dicionario.ts`.
     motivo: "Liberou a conversa de volta para a fila",
   });
+
+  // FORK MIA (.107): liberar devolve ao automático; o cliente que escreveu antes é respondido.
+  await pedirTurnoDaMensagemPendente(supabase, { organizationId: conv.organization_id, conversationId: conv.id, origem: "retomada_da_ia", requestId });
 
   return ok(conv, { requestId });
 }
