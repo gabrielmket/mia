@@ -711,8 +711,7 @@ describe('ordem no turno (achado 5 da prova do #1130)', () => {
       'agentConfig.pausedAt',
       'detectHumanHandoffRequest(texto)',
       'detectAmbiguousOptOut(texto)',
-      // FORK MIA (.107): o veto ganhou a conversa do turno como 4º argumento.
-      'isLeadInHandoff(pool, tenantId, leadId',
+      'isLeadInHandoff(pool, tenantId, leadId)',
     ]) {
       const posicao = src.indexOf(trava);
       expect(posicao, trava).toBeGreaterThan(0);

@@ -333,16 +333,7 @@ export function detectAmbiguousOptOut(message: string): boolean {
  * e era por ali que o texto fixo continuava saindo para quem ganhou a etiqueta depois de
  * o card nascer.
  */
-export async function isLeadInHandoff(
-  db: pg.Pool,
-  tenantId: string,
-  leadId: string,
-  // FORK MIA (.107): o turno de mensagem passa a conversa dele, e o silêncio de OUTRA conversa
-  // (assumida, envio pela tela, celular, pausa noutro número) deixa de calar esta, como o gate e a
-  // tela já mediam. O handoff formal segue no contato (force_human). Sem conversa, vale o lead.
-  // (Sem crase neste trecho: o invariante comando-da-conversa-espelha-o-ts recorta o SQL pela 1ª.)
-  conversationId: string | null = null,
-): Promise<boolean> {
+export async function isLeadInHandoff(db: pg.Pool, tenantId: string, leadId: string): Promise<boolean> {
   const { rows } = await db.query<{ handoff: boolean }>(
     `select (
        c.force_human
@@ -354,13 +345,12 @@ export async function isLeadInHandoff(
        or exists (
          select 1 from conversations v
          where v.organization_id = $1 and v.contact_id = c.id
-           and ($3::uuid is null or v.id = $3::uuid)
            and v.bot_silenced_until is not null and v.bot_silenced_until > now()
        )
      ) as handoff
      from contacts c
      where c.organization_id = $1 and c.id = $2`,
-    [tenantId, leadId, conversationId],
+    [tenantId, leadId],
   );
   return rows[0]?.handoff === true;
 }

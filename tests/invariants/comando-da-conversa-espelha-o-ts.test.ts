@@ -253,13 +253,11 @@ describe("comando da conversa: o banco espelha o TypeScript", () => {
     // verde com o produto errado.
     const handoff = readFileSync(join(RAIZ, "lib/agent-engine/agent/human-handoff.ts"), "utf8");
     const corpo = handoff.slice(handoff.indexOf("export async function isLeadInHandoff"));
-    // FORK MIA (.107): o `$3` é a conversa do turno de mensagem; nulo é a régua do lead, a mais estrita.
-    const predicado = corpo.slice(corpo.indexOf("`") + 1, corpo.indexOf("[tenantId, leadId"));
+    const predicado = corpo.slice(corpo.indexOf("`") + 1, corpo.indexOf("[tenantId, leadId]"));
     const sqlDoMotor = predicado
       .slice(0, predicado.lastIndexOf("`"))
       .replace(/\$1/g, `'${ORG}'`)
       .replace(/\$2/g, "c.id")
-      .replace(/\$3::uuid/g, "null::uuid")
       .trim()
       .replace(/,\s*$/, "");
     expect(sqlDoMotor, "o SQL do motor não foi extraído — o formato do fonte mudou").toContain(
