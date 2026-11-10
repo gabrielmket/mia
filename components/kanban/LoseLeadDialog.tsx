@@ -16,6 +16,27 @@ import { useLoseLead } from "@/hooks/kanban/useUpdateLead";
 import { useMotivosDePerdaDoFunil } from "@/hooks/kanban/useMotivosDePerdaDoFunil";
 import { rotuloDoMotivoDePerda } from "@/lib/schemas/leads";
 import { OUTRO, motivoDePerdaAceito, opcoesDeMotivoDePerda } from "@/lib/leads/motivos-de-perda-do-funil";
+// FORK MIA (.107): o detalhe do "Outro motivo" vira nota pela rota de notas que já existe.
+import { toast } from "sonner";
+import { apiClient } from "@/lib/api/client";
+
+/**
+ * FORK MIA (.107): grava o detalhe do "Outro motivo" como nota do negócio. A
+ * perda já foi registrada: se a nota falhar, a perda fica e a pessoa é avisada.
+ */
+export async function anotarMotivoDaPerda(
+  leadId: string,
+  detalhe: string,
+  t: (texto: string) => string,
+): Promise<boolean> {
+  try {
+    await apiClient.post(`/api/v1/leads/${leadId}/notas`, { texto: `${t("Motivo da perda")}: ${detalhe}` });
+    return true;
+  } catch {
+    toast.warning(t("O negócio foi marcado como perdido, mas o detalhe não entrou no histórico."));
+    return false;
+  }
+}
 
 interface LoseLeadDialogProps {
   open: boolean;
@@ -32,7 +53,7 @@ interface LoseLeadDialogProps {
    * diálogo é o MESMO do card: uma segunda janela de motivo seria a mesma
    * pergunta com duas respostas possíveis, e o funil passaria a ter duas listas.
    */
-  onConfirm?: (lostReason: string) => void | Promise<void>;
+  onConfirm?: (lostReason: string, detalhe?: string) => void | Promise<void>;
   /**
    * Modo LOTE: quem chamou informa se a escrita em lote está em voo. Este
    * diálogo não conhece a mutação de lote (`useBulkAction`) — então não pode
@@ -88,7 +109,7 @@ export function LoseLeadDialog({
   // nenhuma: ou gravava um motivo errado, ou não fechava o negócio.
   //
   // O que CONTINUA recusado antes do clique é o texto digitado fora de
-  // canônico ∪ cadastrado (`outroRecusado` abaixo) — esse o trigger nega mesmo,
+  // canônico ∪ cadastrado — esse o trigger nega mesmo (FORK MIA .107: agora vira nota, abaixo),
   // com 22023, e é ele que a issue #918 pede para barrar na tela.
   //
   // ⚠️ A CHECAGEM VALE SEM FUNIL CONFIGURADO TAMBÉM. `fn_validate_lost_reason_
@@ -102,17 +123,24 @@ export function LoseLeadDialog({
   // motivos cadastrados (o caso comum, inclusive toda instalação nova), o
   // texto do "Detalhe" NUNCA era aceito pelo servidor, e a pessoa só descobria
   // depois de já ter clicado "Confirmar".
-  const outroRecusado =
+  //
+  // FORK MIA (.107): o texto fora da lista NÃO bloqueia mais. Abrir "Outro" e
+  // não conseguir registrar nada não fazia sentido (o dono do produto, 09/11/2026).
+  // O motivo grava `other` (canônico, que o trigger aceita em qualquer funil), e o
+  // texto vai para o histórico do negócio como NOTA, pela rota de notas que já
+  // existe. O relatório "Por que perdemos" conta "Outro motivo"; quem abre o
+  // negócio lê o porquê. Texto igual a um motivo da lista continua gravando o motivo.
+  const detalheVaiParaNota =
     reasonCode === OUTRO &&
     textoOutro.length > 0 &&
     !motivoDePerdaAceito(textoOutro, cadastrados);
 
-  const finalReason = reasonCode === OUTRO ? textoOutro || OUTRO : reasonCode;
+  const finalReason = reasonCode === OUTRO ? (detalheVaiParaNota ? OUTRO : textoOutro || OUTRO) : reasonCode;
+  const detalhe = detalheVaiParaNota ? textoOutro : undefined;
   const disabled =
     !reasonCode ||
     finalReason.length === 0 ||
     finalReason.length > MAX_LEN ||
-    outroRecusado ||
     emVoo;
 
   const handleSubmit = async () => {
@@ -123,9 +151,11 @@ export function LoseLeadDialog({
       // não há escrita nenhuma a fazer — o `disabled` já cobre o caso de uso,
       // e este guarda evita um clique pendurado em arranjo inválido.
       if (onConfirm) {
-        await onConfirm(finalReason);
+        await onConfirm(finalReason, detalhe);
       } else if (leadId) {
         await mutation.mutateAsync({ leadId, lostReason: finalReason });
+        // FORK MIA (.107): o detalhe do "Outro" vira nota no histórico do negócio.
+        if (detalhe) await anotarMotivoDaPerda(leadId, detalhe, t);
       } else {
         return;
       }
@@ -184,31 +214,19 @@ export function LoseLeadDialog({
               <div className="text-right text-[11px] text-muted-foreground tabular-nums">
                 {otherText.length}/{MAX_LEN}
               </div>
-              {outroRecusado && (
-                <p role="alert" className="text-xs text-destructive">
-                  {/*
-                    A MESMA frase do servidor, e não uma irmã: `lib/leads/motivo-da-perda.ts`
-                    (#935) já devolve este texto quando o motivo chega fora da lista pela
-                    API. Duas frases quase idênticas para a MESMA recusa fazem o operador
-                    achar que são dois problemas.
-                  */}
-                  {t(
-                    "Esse motivo de perda não está na lista deste funil — escolha um dos motivos configurados.",
-                  )}
+              {/* FORK MIA (.107): o texto fora da lista vai para o histórico, sem recusa. */}
+              {detalheVaiParaNota && (
+                <p className="text-xs text-muted-foreground" data-testid="detalhe-vira-nota">
+                  {t("O motivo fica como “Outro motivo” e este texto vai para o histórico do negócio.")}
                 </p>
               )}
               {/*
-                Com funil configurado é dica permanente (mostra assim que
-                "Outro" é escolhido, mesmo sem ter digitado nada) — é lá que o
-                texto livre é recusado, e quem quiser o motivo COM AS PRÓPRIAS
-                PALAVRAS precisa cadastrá-lo. Deixar o detalhe em branco continua
-                valendo — grava "Outro". SEM funil configurado o texto livre
-                também é recusado (`outroRecusado` acima, sem gate de
-                `funilConfigurado` — o servidor não abre exceção para funil
-                vazio), então a dica aparece assim que há o que corrigir, em vez
-                de ficar plantada antes de a pessoa digitar qualquer coisa.
+                FORK MIA (.107): com funil configurado, a dica de onde se
+                cadastra um motivo novo continua (para o motivo entrar na LISTA
+                e no relatório com o próprio nome). O texto livre não é mais
+                recusado: vira nota no histórico (ver `detalheVaiParaNota`).
               */}
-              {(funilConfigurado || outroRecusado) && (
+              {funilConfigurado && (
                 <p className="text-xs text-muted-foreground">
                   {/* FORK MIA: o caminho com os nomes do menu da MIA (lib/navigation/catalogo.ts). */}
                   {t("Para usar um motivo que não está aqui, cadastre em MIA CRM › Ver tudo no CRM › Etapas do funil.")}

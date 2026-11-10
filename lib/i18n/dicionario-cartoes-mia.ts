@@ -260,4 +260,11 @@ export const DICIONARIO_CARTOES_MIA: Traducoes = {
   "principal": { es: "principal" },
   "sem interação": { es: "sin interacción" },
   "Última interação": { es: "Última interacción" },
+  // ─── FORK MIA (.107): o detalhe do "Outro motivo" vira nota ────────────────
+  "O motivo fica como “Outro motivo” e este texto vai para o histórico do negócio.": {
+    es: "El motivo queda como “Otro motivo” y este texto va al historial del negocio.",
+  },
+  "O negócio foi marcado como perdido, mas o detalhe não entrou no histórico.": {
+    es: "El negocio se marcó como perdido, pero el detalle no entró en el historial.",
+  },
 };

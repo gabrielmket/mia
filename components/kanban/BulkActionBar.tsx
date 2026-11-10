@@ -28,7 +28,7 @@ import { ROLE_RANK } from "@/lib/auth/types";
 import { useBulkAction } from "@/hooks/kanban/useBulkAction";
 import { resolveVocabulary } from "@/lib/kanban/vocabulary";
 import type { PipelineVocabulary, Stage } from "@/lib/kanban/types";
-import { LoseLeadDialog } from "./LoseLeadDialog";
+import { LoseLeadDialog, anotarMotivoDaPerda } from "./LoseLeadDialog";
 import { rotuloDoMembro } from "@/lib/users/rotulo-do-atendente";
 
 interface BulkActionBarProps {
@@ -206,15 +206,18 @@ export function BulkActionBar({
   // `stages` que a barra já recebe diz quem é.
   const etapaDePerda = stages.find((s) => s.is_lost) ?? null;
 
-  const runLose = async (motivo: string) => {
+  // FORK MIA (.107): `detalhe` é o texto do "Outro motivo" fora da lista; vira nota em cada negócio.
+  const runLose = async (motivo: string, detalhe?: string) => {
     if (!etapaDePerda) return;
+    const ids = [...selectedIds];
     const res = await bulk.mutateAsync({
       action: "move",
-      lead_ids: selectedIds,
+      lead_ids: ids,
       params: { stage_id: etapaDePerda.id, lost_reason: motivo },
     });
     const n = res.data.updated_count;
     toast.success(`${n} ${t(n > 1 ? "marcados como perdidos." : "marcado como perdido.")}`);
+    if (detalhe) await Promise.allSettled(ids.map((id) => anotarMotivoDaPerda(id, detalhe, t)));
     onClear();
   };
 
