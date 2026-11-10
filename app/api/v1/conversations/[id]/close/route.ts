@@ -208,7 +208,8 @@ async function devolverAntesDeFechar(deps: {
       actor: deps.actor,
       requestId: deps.requestId,
     },
-    { conversationId: deps.conversationId, expectedAssignee: deps.expectedAssignee },
+    // FORK MIA (.107): fechar encerra o assunto; a IA responde a próxima mensagem, não a pendente.
+    { conversationId: deps.conversationId, expectedAssignee: deps.expectedAssignee, responderPendente: false },
   );
 
   if (resultado.ok) return { ok: true };

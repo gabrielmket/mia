@@ -1741,6 +1741,9 @@ export const AUDIT_ACTIONS = [
   "raio_x.pedido_pago",
   "raio_x.pedido_cancelado",
   "raio_x.precos_alterados",
+  // FORK MIA (.107): rodada do cron `ia-pendente` que pediu o turno da IA para a
+  // mensagem do cliente que chegou durante o silêncio (só quando pediu ou falhou).
+  "conversation.pending_reply_requested_run",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

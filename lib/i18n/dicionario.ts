@@ -74,6 +74,8 @@ import { DICIONARIO_DA_AREA_DE_COBRANCA_MIA } from "./dicionario-mia-area-de-cob
 import { DICIONARIO_DOS_CONTATOS_EM_MASSA } from "./dicionario-mia-contatos-em-massa";
 // FORK MIA (.101): o raio-X do atendimento (Admin, a página de conexão e o link do dono), idem.
 import { DICIONARIO_DO_RAIO_X_MIA } from "./dicionario-mia-raio-x";
+// FORK MIA (.107): a faixa da IA calada por outra conversa do contato, idem.
+import { DICIONARIO_DA_IA_PENDENTE } from "./dicionario-mia-ia-pendente";
 import { TEXTOS_AGENDA_CONFIGURACAO } from "./agenda-configuracao";
 import { TEXTOS_AGENDA_SERVICOS } from "./agenda-servicos";
 
@@ -98,6 +100,7 @@ export const DICIONARIO: Traducoes = {
   ...DICIONARIO_DA_AREA_DE_COBRANCA_MIA,
   ...DICIONARIO_DOS_CONTATOS_EM_MASSA,
   ...DICIONARIO_DO_RAIO_X_MIA,
+  ...DICIONARIO_DA_IA_PENDENTE,
   "Avisar também nas transferências para atendimento humano": { es: "Avisar también en las transferencias a atención humana" },
   "Cada transferência manda uma mensagem ao mesmo número e conta no limite diário dele. Desligue para receber só os avisos de casos.": { es: "Cada transferencia envía un mensaje al mismo número y cuenta en su límite diario. Desactívalo para recibir solo los avisos de casos." },
   "Também param de sair, até você cadastrar um número de novo: os avisos de transferência para atendimento humano, os avisos da Agenda que usam o mesmo número dos casos e as automações com a ação \"Mensagem para a equipe\".": { es: "También dejan de salir, hasta que registres otro número: los avisos de transferencia a atención humana, los avisos de la Agenda que usan el mismo número que los casos y las automatizaciones con la acción \"Mensaje para el equipo\"." },

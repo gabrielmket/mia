@@ -69,7 +69,8 @@ describe("GET /api/v1/ai/horario-da-ia", () => {
 
   it("a conversa: o publicado no número dela, no ar antes de pausado", async () => {
     const { corpo } = await pedir(`?conversa=${CONVERSA}`);
-    expect(corpo.data).toEqual({ agente: { id: "comhorario", nome: "Agente comhorario" }, horario: HORARIO });
+    // FORK MIA (.107): a rota também diz se outra conversa do contato cala esta (aqui, nenhuma).
+    expect(corpo.data).toEqual({ agente: { id: "comhorario", nome: "Agente comhorario" }, horario: HORARIO, pausa_por_outra_conversa: null });
   });
 
   it("a conversa grudada num agente é dele, mesmo com outro de prioridade maior no número", async () => {
@@ -86,7 +87,7 @@ describe("GET /api/v1/ai/horario-da-ia", () => {
       conversations: [{ id: CONVERSA, organization_id: ORG, channel_session_id: NUMERO, active_ai_agent_id: null }],
     }).cliente;
     // Sem grudar: vence a prioridade, e ele não tem horário: sem selo.
-    expect((await pedir(`?conversa=${CONVERSA}`)).corpo.data).toEqual({ agente: { id: "prioritario", nome: "Agente prioritario" }, horario: null });
+    expect((await pedir(`?conversa=${CONVERSA}`)).corpo.data).toEqual({ agente: { id: "prioritario", nome: "Agente prioritario" }, horario: null, pausa_por_outra_conversa: null });
   });
 
   it("conversa de outra organização não existe para quem pede; id torto é recusado", async () => {

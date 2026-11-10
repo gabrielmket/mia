@@ -182,6 +182,12 @@ npx vitest run
   schema na 9150; os pontos de ligação no código do upstream estão em
   [`docs/fork/raio-x-do-atendimento.md`](fork/raio-x-do-atendimento.md), seção 11.
   A faixa 9150-9159 ficou para ele (a 9140-9149 segue reservada e vazia).
+  A IA que responde a mensagem pendente do cliente (.107: o fim do silêncio, a devolução
+  para a IA e a pausa por outra conversa do contato, que fica e passa a aparecer) mora em
+  `lib/escalacao/mensagem-pendente.ts`, `lib/escalacao/pausa-por-outra-conversa.ts`,
+  `components/inbox/FaixaDaPausaPorOutraConversa.tsx` e `app/api/v1/cron/ia-pendente/`, sem migration; os
+  pontos de ligação no código do upstream estão em
+  [`docs/fork/ia-responde-pendente.md`](fork/ia-responde-pendente.md), seção 5.
 - **Funcionalidade duplicada.** Os dois lados construíram, na mesma semana, o
   cadastro incorporado da Meta, o disparo em massa e o aviso no WhatsApp. A decisão
   de ficar com um, com o outro ou com os dois é de produto. Para o **disparo em
