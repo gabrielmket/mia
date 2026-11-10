@@ -11,8 +11,14 @@
  *   3. o número está desconectado (`channel_sessions.status` fora de `WORKING`);
  *   4. nenhum agente no ar no número, ou o agente está pausado (a régua do
  *      motor: o agente grudado na conversa, senão o publicado no número);
+ *   4b. FORK MIA (.107): o número em modo de teste (só a lista de teste
+ *      recebe a IA) ou com a lista de autorização (allowlist), o gate de
+ *      `lib/ai/elegibilidade/gate.ts` e `pre-go-live.ts`;
  *   5. fora do horário da IA (.85): a mensagem chegou com a IA inativa;
- *   6. o turno da IA rodou e falhou, foi interrompido ou terminou sem enviar.
+ *   6. a IA silenciada na conversa; FORK MIA (.107): se o silêncio já acabou
+ *      sem a IA responder, a resposta diz isso e que, desde a .107, a IA
+ *      responde sozinha quando o silêncio acaba (`lib/escalacao/mensagem-pendente.ts`);
+ *   7. o turno da IA rodou e falhou, foi interrompido ou terminou sem enviar.
  *
  * ── Quem vê o quê ───────────────────────────────────────────────────────────
  *
@@ -25,6 +31,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ativaEm, lerHorarioDaIa } from "@/lib/agent-engine/agent/horario-da-ia";
+import { normalizarInstante, ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
+import { lerModoDeAcessoDaIa, lerNumerosDeTeste, numeroPodeTestar } from "@/lib/ai/elegibilidade/pre-go-live";
+import { JANELA_DA_MENSAGEM_PENDENTE_MS } from "@/lib/escalacao/mensagem-pendente";
 import { rotuloLocal } from "@/lib/tempo/agora";
 
 import { nomeDaPessoa, nomesDosContatos, type PessoaDaEquipe } from "./comum";
@@ -36,7 +45,10 @@ export type MotivoDoSilencio =
   | "sem_agente_no_ar"
   | "agente_pausado"
   | "fora_do_horario_da_ia"
+  | "numero_em_teste"
+  | "contato_sem_autorizacao"
   | "ia_silenciada"
+  | "silencio_acabou_sem_resposta"
   | "turno_falhou"
   | "turno_sem_envio"
   | "ia_respondeu"
@@ -84,9 +96,17 @@ const COLUNAS =
 
 export async function explicarSilencioDaIa(
   db: SupabaseClient,
-  entrada: { organizationId: string; contato: string; fuso: string; equipe: readonly PessoaDaEquipe[] },
+  entrada: {
+    organizationId: string;
+    contato: string;
+    fuso: string;
+    equipe: readonly PessoaDaEquipe[];
+    /** FORK MIA (.107): o relógio, injetável para o teste. */
+    agora?: Date;
+  },
 ): Promise<ExplicacaoDoSilencio> {
   const org = entrada.organizationId;
+  const agora = entrada.agora ?? new Date();
   const fontes = ["Caixa de entrada", "Registro do que a IA fez em cada mensagem"];
   const vazio = (motivo: MotivoDoSilencio, fatos: string[] = []): ExplicacaoDoSilencio => ({
     encontrado: false,
@@ -201,11 +221,16 @@ export async function explicarSilencioDaIa(
   // 1 · pediu para parar
   const { data: contatoBruto } = await db
     .from("contacts")
-    .select("is_blocked")
+    .select("is_blocked, phone_number, ai_authorized_at")
     .eq("organization_id", org)
     .eq("id", conversa.contact_id)
     .maybeSingle();
-  if ((contatoBruto as { is_blocked?: boolean } | null)?.is_blocked) {
+  const contatoLido = contatoBruto as {
+    is_blocked?: boolean;
+    phone_number?: string | null;
+    ai_authorized_at?: string | null;
+  } | null;
+  if (contatoLido?.is_blocked) {
     fatos.push("O contato pediu para parar de receber mensagens, e o sistema respeita o pedido.");
     return resposta("pediu_para_parar", "Só o próprio contato desfaz o pedido, voltando a falar com a empresa.");
   }
@@ -219,14 +244,20 @@ export async function explicarSilencioDaIa(
   }
 
   // 3 · número desconectado
+  let s: {
+    status?: string;
+    display_name?: string | null;
+    last_status_change_at?: string | null;
+    metadata?: unknown;
+  } | null = null;
   if (conversa.channel_session_id) {
     const { data: sessao } = await db
       .from("channel_sessions")
-      .select("status, display_name, last_status_change_at")
+      .select("status, display_name, last_status_change_at, metadata")
       .eq("organization_id", org)
       .eq("id", conversa.channel_session_id)
       .maybeSingle();
-    const s = sessao as { status?: string; display_name?: string | null; last_status_change_at?: string | null } | null;
+    s = sessao as typeof s;
     if (s && s.status && s.status !== "WORKING") {
       const desde = s.last_status_change_at ? ` desde ${rotuloLocal(new Date(s.last_status_change_at), entrada.fuso)}` : "";
       fatos.push(`O número${s.display_name ? ` "${s.display_name}"` : ""} está desconectado${desde}.`);
@@ -278,6 +309,36 @@ export async function explicarSilencioDaIa(
     return resposta("agente_pausado", "Retomar o agente em Agentes.");
   }
 
+  // 4b · FORK MIA (.107): o gate do número (modo de teste ou lista de
+  // autorização). A mesma leitura de `lib/ai/elegibilidade/gate.ts`: no modo de
+  // teste só a lista do número passa; no allowlist, só o contato autorizado e
+  // dentro da validade. Vem antes do silêncio: com o gate fechado a IA não
+  // responderia nem depois de o silêncio acabar.
+  const nomeDoNumero = s?.display_name ? ` "${s.display_name}"` : "";
+  const modoDeAcesso = lerModoDeAcessoDaIa(s?.metadata);
+  if (modoDeAcesso === "pre_go_live" && !numeroPodeTestar(contatoLido?.phone_number, lerNumerosDeTeste(s?.metadata))) {
+    fatos.push(
+      `O número${nomeDoNumero} está em modo de teste: a IA só responde os telefones da lista de teste dele, e o deste contato não está na lista.`,
+    );
+    return resposta(
+      "numero_em_teste",
+      "Para a IA atender todo mundo, ou para pôr este telefone na lista de teste: Conexões › o número › Configurar acesso da IA.",
+    );
+  }
+  if (modoDeAcesso === "allowlist") {
+    const autorizadoEm = contatoLido?.ai_authorized_at ? new Date(contatoLido.ai_authorized_at).getTime() : NaN;
+    const valida = Number.isFinite(autorizadoEm) && agora.getTime() - autorizadoEm <= ttlDaAutorizacaoMs(process.env);
+    if (!valida) {
+      fatos.push(
+        `O número${nomeDoNumero} só deixa a IA responder contatos autorizados (formulário, campanha, automação ou devolução pela tela), e este contato não está autorizado${contatoLido?.ai_authorized_at ? " (a autorização venceu)" : ""}.`,
+      );
+      return resposta(
+        "contato_sem_autorizacao",
+        "Devolver a conversa para a IA no cabeçalho da conversa autoriza o contato; para abrir o número a todos: Conexões › o número › Configurar acesso da IA.",
+      );
+    }
+  }
+
   // 5 · fora do horário da IA (.85), no instante em que a mensagem chegou
   const horario = lerHorarioDaIa(versaoDe(agente.published_version_id)?.trigger_config);
   if (horario && !ativaEm(horario, new Date(ultimaDoCliente))) {
@@ -285,13 +346,7 @@ export async function explicarSilencioDaIa(
     return resposta("fora_do_horario_da_ia", "Alguém da equipe responde; para mudar o horário, Agentes › Horário de atendimento da IA.");
   }
 
-  // 6 · a IA silenciada nesta conversa
-  if (conversa.bot_silenced_until && new Date(conversa.bot_silenced_until) > new Date(ultimaDoCliente)) {
-    fatos.push(`A IA estava silenciada nesta conversa até ${rotuloLocal(new Date(conversa.bot_silenced_until), entrada.fuso)}.`);
-    return resposta("ia_silenciada", "Devolver a conversa para a IA no cabeçalho da conversa.");
-  }
-
-  // 7 · o registro do que a IA fez nesta mensagem
+  // 7 · o registro do que a IA fez nesta mensagem (lido antes do 6: FORK MIA .107)
   const { data: tracosBrutos } = await db
     .from("agent_turn_traces")
     .select("status, abort_reason, error_code, messages_sent, created_at")
@@ -307,6 +362,35 @@ export async function explicarSilencioDaIa(
     error_code: string | null;
     messages_sent: number;
   }>)[0];
+
+  // 6 · a IA silenciada nesta conversa. FORK MIA (.107): `infinity` (handoff,
+  // pausa) é silêncio em vigor; e o silêncio que JÁ ACABOU sem turno nenhum
+  // depois da mensagem é o defeito da .107, dito com todas as letras.
+  const silencioAte = normalizarInstante(conversa.bot_silenced_until);
+  const silencioMs = silencioAte === null ? null : typeof silencioAte === "number" ? silencioAte : silencioAte.getTime();
+  if (silencioMs !== null && silencioMs > new Date(ultimaDoCliente).getTime()) {
+    if (silencioMs > agora.getTime()) {
+      fatos.push(
+        Number.isFinite(silencioMs)
+          ? `A IA está silenciada nesta conversa até ${rotuloLocal(new Date(silencioMs), entrada.fuso)}.`
+          : "A IA está pausada nesta conversa até alguém devolver a conversa para ela.",
+      );
+      return resposta("ia_silenciada", "Devolver a conversa para a IA no cabeçalho da conversa.");
+    }
+    if (!traco) {
+      fatos.push(
+        `A mensagem chegou com a IA silenciada nesta conversa, porque alguém da equipe tinha respondido pela tela ou pelo celular. O silêncio acabou ${rotuloLocal(new Date(silencioMs), entrada.fuso)} e a IA não respondeu depois: até a versão .106, ela só voltava a falar quando chegava mensagem nova do cliente.`,
+      );
+      fatos.push(
+        `A partir desta versão (.107), a IA responde sozinha quando o silêncio acaba, se a mensagem do cliente tiver chegado há até ${Math.round(JANELA_DA_MENSAGEM_PENDENTE_MS / 60_000)} minutos. Ela também responde na hora quando alguém devolve a conversa para ela.`,
+      );
+      return resposta(
+        "silencio_acabou_sem_resposta",
+        "Responder o cliente pelo Inbox agora; nas próximas vezes, a IA responde sozinha quando o silêncio acaba.",
+      );
+    }
+  }
+
   if (traco && traco.status !== "completed") {
     fatos.push(
       traco.status === "failed"
