@@ -27,6 +27,11 @@
  * o histórico chegar). E o ver, com `raio_x_id`, diz o `aparelho`: a etapa da
  * sessão no leitor e quantas conversas ele mostra agora.
  *
+ * FORK MIA (.106) · o ver, com `raio_x_id`, traz o `andamento_da_analise` em
+ * TODA fonte (na .102 era só no cliente ativo): os áudios transcritos e
+ * pendentes, as conversas analisadas, o custo por etapa e o `ultimoErro` da
+ * análise com as `falhasSeguidas`. Nenhuma ferramenta nova: seguem 111.
+ *
  * FORK MIA (.107) · o raio-X GRÁTIS POR CADASTRO: o ver mostra a ORIGEM (Time,
  * cadastro grátis, avulsa, mensal), a CONTA de quem se cadastrou (nome, e-mail e
  * WhatsApp mascarados) e os PEDIDOS de nova análise; e a sexta,
@@ -219,6 +224,7 @@ export const FERRAMENTAS_DO_RAIO_X: readonly FerramentaDePlataforma[] = [
     name: "plataforma_ver_raio_x",
     description:
       "Os raio-X do atendimento. Sem `raio_x_id`: a lista (empresa, FONTE, situação, andamento, se há relatório e se é o 2º da mesma empresa). Com `raio_x_id`: a fonte, a situação (aguardando o dono, conectando, lendo, analisando, pronto, encerrado), o andamento da leitura, o ACEITE (nome completo, e-mail mascarado, data e hora, versão do termo), o link vigente (de conexão ou, no cliente ativo, de autorização), o custo medido e o teto, " +
+      "o ANDAMENTO DA ANÁLISE em qualquer fonte (`andamento_da_analise`: áudios transcritos de quantos e os pendentes, conversas analisadas de quantas, o custo da transcrição e da análise, e o `ultimoErro` da análise, com quando, a etapa e uma mensagem curta sem dado de cliente, mais as `falhasSeguidas`; o item que falha três rodadas seguidas sai do caminho e a análise segue), " +
       "os relatórios com os números (velocidade da primeira resposta com a loja aberta e fechada, sem resposta, sumiram sem retorno, origem, assuntos, desfecho, nota nos cinco critérios, recomendações e o bloco do que a MIA resolveria), a EVOLUÇÃO em proporção desde o raio-X anterior da mesma empresa, e os links do dono. " +
       "Os clientes aparecem só por número de ordem, nunca por telefone ou nome; os trechos de conversa ficam na tela de Admin. " +
       "FORK MIA (.102): com `organization_id` e sem `raio_x_id`, o que dá para ler daquela CONTA para o raio-X do cliente ativo: se ela conta como cliente ativo, os números de WhatsApp com o id (channel_session_id), se são da API oficial e as mensagens no período, o período (os N dias inteiros antes de hoje, nunca antes da primeira conversa), o segmento e o horário da conta, quem administra e a estimativa de custo; e os raio-X dessa empresa. No relatório do cliente ativo, quem respondeu primeiro, a espera depois da passagem, no que virou e onde ainda dá para ganhar. " +

@@ -151,3 +151,15 @@ export function minutosOuSegundosParaLer(m: number | null | undefined): string {
   if (m < 1 && !Number.isInteger(m)) return segundosParaLer(m * 60);
   return minutosParaLer(m);
 }
+
+/** FORK MIA (.106): a etapa da análise em que o último erro aconteceu (`analise.ultimo_erro.etapa`). */
+export type EtapaDaAnaliseNaTela = "preparo" | "transcricao" | "classificacao" | "relatorio";
+export const ROTULO_DA_ETAPA_DA_ANALISE: Record<EtapaDaAnaliseNaTela, string> = {
+  preparo: "preparo dos áudios",
+  transcricao: "transcrição dos áudios",
+  classificacao: "análise das conversas",
+  relatorio: "montagem do relatório",
+};
+export function etapaDaAnalise(bruto: string): EtapaDaAnaliseNaTela {
+  return bruto in ROTULO_DA_ETAPA_DA_ANALISE ? (bruto as EtapaDaAnaliseNaTela) : "preparo";
+}

@@ -51,6 +51,8 @@ import { createClient } from "@/lib/supabase/server";
 // FORK MIA (.91): a chave da cobrança da instalação e as propostas do turno.
 import { createAdminClient } from "@/lib/supabase/admin";
 import { modulosLigados } from "@/lib/instalacao/modulos";
+// FORK MIA (.106): a tela de Meta Ads só serve com a conta de anúncios ligada.
+import { existeConexaoDeLeitura } from "@/lib/plataformas-de-anuncio/credenciais-de-leitura";
 import { gravarPropostasDoTurno } from "@/lib/assistente/propostas/gravar";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
 
@@ -313,10 +315,17 @@ export async function POST(req: NextRequest): Promise<Response> {
     const cobrancaLigada = await modulosLigados(createAdminClient())
       .then((m) => m.includes("cobranca"))
       .catch(() => false);
+    // FORK MIA (.106): a conta de anúncios da Meta ligada ou não. Sem ela, a
+    // tela de Meta Ads abre vazia e o assistente não manda ninguém para lá.
+    // A mesma checagem da página (`existeConexaoDeLeitura`), sem ler o token.
+    const metaAds = await existeConexaoDeLeitura(createAdminClient(), orgId, "meta_ads")
+      .then((c) => c.conectada)
+      .catch(() => null);
     const telas = telasParaOPapel({
       papel,
       interfaceSettings: authz.org.interface_settings,
       modulos: authz.org.modulos,
+      ...(metaAds === null ? {} : { conexoes: { meta_ads: metaAds } }),
     });
     resposta = await responderNoAssistente(
       {

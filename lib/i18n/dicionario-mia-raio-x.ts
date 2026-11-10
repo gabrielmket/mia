@@ -832,4 +832,17 @@ export const DICIONARIO_DO_RAIO_X_MIA: Traducoes = {
   "Abre no domingo?": { es: "¿Abre el domingo?" },
   "Até que horas no domingo": { es: "Hasta qué hora el domingo" },
   "O horário do domingo precisa ser depois do de abrir.": { es: "El horario del domingo tiene que ser después del de apertura." },
+  // ── FORK MIA (.106) · o andamento da análise e o último erro (detalhe do Admin, as duas fontes) ──
+  "Áudios: {x} de {y} transcritos · Conversas analisadas: {a} de {b}": {
+    es: "Audios: {x} de {y} transcritos · Conversaciones analizadas: {a} de {b}",
+  },
+  "Último erro ({d}, {e}): {m}": { es: "Último error ({d}, {e}): {m}" },
+  "depois de três tentativas seguidas, o item foi deixado de lado e a análise seguiu": {
+    es: "después de tres intentos seguidos, el elemento quedó de lado y el análisis siguió",
+  },
+  "{n} rodadas seguidas no mesmo ponto": { es: "{n} rondas seguidas en el mismo punto" },
+  "preparo dos áudios": { es: "preparación de los audios" },
+  "transcrição dos áudios": { es: "transcripción de los audios" },
+  "análise das conversas": { es: "análisis de las conversaciones" },
+  "montagem do relatório": { es: "armado del informe" },
 };

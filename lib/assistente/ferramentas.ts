@@ -248,10 +248,39 @@ async function propor(
   });
 }
 
-const PERIODO = z
-  .enum(["mes", "mesp", "7", "30"])
-  .optional()
-  .describe('"mes" (este mês, padrão), "mesp" (mês passado), "7" ou "30" (últimos dias).');
+// FORK MIA (.106): QUALQUER período, como o motor de relatórios já faz. Antes eram
+// só "mes", "mesp", "7" e "30", e o assistente respondia "não consigo consultar a
+// semana passada" (print de um sócio, 09/11/2026).
+const DIA = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "AAAA-MM-DD");
+const PERIODO = {
+  periodo: z
+    .enum(["hoje", "7", "30", "90", "mes", "mesp", "pers"])
+    .optional()
+    .describe(
+      '"mes" (este mês, padrão), "mesp" (mês passado), "hoje", "7", "30" ou "90" (últimos dias), ou "pers" com de e ate. ' +
+        '"Semana passada" = "pers" de segunda a domingo da semana anterior; "ontem" = "pers" com de igual a ate.',
+    ),
+  de: DIA.optional().describe('Com "pers": o primeiro dia, AAAA-MM-DD, no fuso da empresa.'),
+  ate: DIA.optional().describe('Com "pers": o último dia, AAAA-MM-DD, incluído.'),
+  comparar: z.boolean().optional().describe("true traz também o período anterior de mesmo tamanho, para comparar (\"e a semana anterior?\")."),
+};
+
+/** FORK MIA (.106): o período pedido, normalizado; "pers" sem as datas volta com o motivo. */
+export function periodoPedido(a: {
+  periodo?: PeriodoDaPerformance;
+  de?: string;
+  ate?: string;
+  comparar?: boolean;
+}): { ok: true; periodo: PeriodoDaPerformance; de: string | null; ate: string | null; comparar: boolean } | { ok: false; motivo: string } {
+  const periodo = a.periodo ?? (a.de || a.ate ? "pers" : "mes");
+  const comparar = Boolean(a.comparar);
+  if (periodo !== "pers") return { ok: true, periodo, de: null, ate: null, comparar };
+  const de = a.de ?? a.ate ?? null;
+  const ate = a.ate ?? a.de ?? null;
+  if (!de || !ate) return { ok: false, motivo: 'O período "pers" precisa de de e ate (AAAA-MM-DD). Calcule pela data de hoje e chame de novo.' };
+  if (de > ate) return { ok: false, motivo: "de precisa ser o mesmo dia ou antes de ate. Chame de novo com as datas na ordem." };
+  return { ok: true, periodo, de, ate, comparar };
+}
 
 export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: ColetorDoTurno): ToolSet {
   const escopo = escopoDoPapel(ctx.papel, ctx.userId);
@@ -336,15 +365,20 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
     ver_minha_performance: tool({
       description:
         "A PERFORMANCE de quem pergunta no período: ganhos (quantidade e valor), perdidos, taxa de ganho e a meta do mês. " +
-        "Para gestor e administrador é a da equipe, com cada pessoa. Valores em centavos da moeda informada.",
-      inputSchema: z.object({ periodo: PERIODO }),
-      execute: async ({ periodo }) =>
+        "Para gestor e administrador é a da equipe, com cada pessoa. Valores em centavos da moeda informada. " +
+        "Qualquer período (veja periodo); com comparar, vem o período anterior em `anterior`.",
+      inputSchema: z.object(PERIODO),
+      execute: async (pedido) =>
         protegido(async () => {
-          const p = (periodo ?? "mes") as PeriodoDaPerformance;
+          const p = periodoPedido(pedido);
+          if (!p.ok) return p;
           const perf = await lerPerformance(ctx.db, {
             organizationId: ctx.organizationId,
             escopo,
-            periodo: p,
+            periodo: p.periodo,
+            de: p.de,
+            ate: p.ate,
+            comparar: p.comparar,
             agora: ctx.agora,
             fuso: ctx.fuso,
             equipe: ctx.equipe,
@@ -357,18 +391,24 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
     ver_numeros_da_equipe: tool({
       description:
         "Os números da EQUIPE (quanto a equipe vendeu, ganhos por pessoa, meta da empresa). Só gestor e administrador veem; " +
-        "para os outros papéis volta quem pode ver, e você oferece pedir a essa pessoa.",
-      inputSchema: z.object({ periodo: PERIODO }),
-      execute: async ({ periodo }) => {
+        "para os outros papéis volta quem pode ver, e você oferece pedir a essa pessoa. " +
+        "Qualquer período (veja periodo); com comparar, vem o período anterior em `anterior`.",
+      inputSchema: z.object(PERIODO),
+      execute: async (pedido) => {
         if (!veEquipe) {
           coletor.anotar("ver_numeros_da_equipe");
           return recusaDePermissao(ctx, coletor, "manager", "os números da equipe");
         }
         return protegido(async () => {
+          const p = periodoPedido(pedido);
+          if (!p.ok) return p;
           const perf = await lerPerformance(ctx.db, {
             organizationId: ctx.organizationId,
             escopo,
-            periodo: (periodo ?? "mes") as PeriodoDaPerformance,
+            periodo: p.periodo,
+            de: p.de,
+            ate: p.ate,
+            comparar: p.comparar,
             agora: ctx.agora,
             fuso: ctx.fuso,
             equipe: ctx.equipe,
@@ -563,7 +603,8 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
           return { ok: false, motivo: "Essa tela não existe ou a pessoa não a abre. Não ponha o botão; diga quem pode." };
         }
         coletor.acao({ tipo: "ir", rotulo: rotulo ?? "Me leva lá", href: hrefDoApp(href)! });
-        return { ok: true, tela: tela.rotulo };
+        // FORK MIA (.106): a tela abre vazia nesta empresa; a resposta precisa dizer (regra 12).
+        return tela.semConexao ? { ok: true, tela: tela.rotulo, sem_conexao: tela.semConexao } : { ok: true, tela: tela.rotulo };
       },
     }),
 

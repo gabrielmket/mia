@@ -4,7 +4,17 @@ import { z } from "zod";
 
 import { AjustesDoRaioX, ConexaoDoRaioX, RevisaoDoRelatorio } from "@/components/raio-x/AcoesDoRaioX";
 import { RelatorioDaTime } from "@/components/raio-x/RelatorioDoRaioX";
-import { ROTULO_DA_FASE, ROTULO_DA_ORIGEM_NA_LISTA, ROTULO_DA_SITUACAO, ROTULO_DA_SITUACAO_DO_PEDIDO, ROTULO_DE_QUEM_ATENDE, ROTULO_DO_TIPO } from "@/components/raio-x/rotulos";
+import {
+  etapaDaAnalise,
+  ROTULO_DA_ETAPA_DA_ANALISE,
+  ROTULO_DA_FASE,
+  // FORK MIA (.107): a origem e o pedido do raio-X por cadastro.
+  ROTULO_DA_ORIGEM_NA_LISTA,
+  ROTULO_DA_SITUACAO,
+  ROTULO_DA_SITUACAO_DO_PEDIDO,
+  ROTULO_DE_QUEM_ATENDE,
+  ROTULO_DO_TIPO,
+} from "@/components/raio-x/rotulos";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { tagDeIdioma } from "@/lib/i18n/datas";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -31,6 +41,10 @@ interface PageProps {
  * 05/11/2026 (tela 4): "Autorizado por …", "Leu as conversas da conta",
  * "Transcreveu os áudios", "Analisando as conversas" e "Rascunho pronto". Não
  * há conexão: o link é só de autorização.
+ *
+ * FORK MIA (.106): na conexão em "analisando", a linha "Áudios: X de Y
+ * transcritos · Conversas analisadas: A de B"; nas duas fontes, o último erro
+ * da análise, quando houver (a mensagem é curta e sem dado de cliente).
  */
 export default async function DetalheDoRaioXPage({ params, searchParams }: PageProps) {
   const { user } = await requirePlatformAdmin();
@@ -55,6 +69,21 @@ export default async function DetalheDoRaioXPage({ params, searchParams }: PageP
     iso ? new Intl.DateTimeFormat(tag, { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" }).format(new Date(Date.parse(iso) - (menosUmMs ? 1 : 0))) : "·";
   const reais = (centavos: number) => new Intl.NumberFormat(tag, { style: "currency", currency: "BRL" }).format(centavos / 100);
   const versaoDoTermo = (v: string) => (v === "cliente_ativo_v1" ? t("termo “cliente ativo” v1") : `${t("termo")} ${v}`);
+  // FORK MIA (.106): o último erro da análise, nas duas fontes, enquanto ela anda.
+  const erroDaAnalise = r.situacao === "analisando" ? (d.analiseDaConta?.ultimoErro ?? null) : null;
+  const ultimoErro = erroDaAnalise ? (
+    <p className="rounded-md bg-warning-bg px-3 py-2 text-xs text-warning-fg" data-raio-x="ultimo-erro">
+      {t("Último erro ({d}, {e}): {m}")
+        .replace("{d}", data(erroDaAnalise.quando))
+        .replace("{e}", t(ROTULO_DA_ETAPA_DA_ANALISE[etapaDaAnalise(erroDaAnalise.etapa)]))
+        .replace("{m}", erroDaAnalise.mensagem)}
+      {erroDaAnalise.pulou
+        ? ` · ${t("depois de três tentativas seguidas, o item foi deixado de lado e a análise seguiu")}`
+        : (d.analiseDaConta?.falhasSeguidas ?? 0) > 1
+          ? ` · ${t("{n} rodadas seguidas no mesmo ponto").replace("{n}", String(d.analiseDaConta?.falhasSeguidas ?? 0))}`
+          : ""}
+    </p>
+  ) : null;
 
   return (
     <div className="space-y-6">
@@ -237,6 +266,7 @@ export default async function DetalheDoRaioXPage({ params, searchParams }: PageP
               ));
             })()}
           </ol>
+          {ultimoErro}
           <p className="text-xs text-text-muted">
             {r.conversasApagadasEm
               ? `${t("Transcrições e análise apagadas em")} ${data(r.conversasApagadasEm)}`
@@ -282,6 +312,16 @@ export default async function DetalheDoRaioXPage({ params, searchParams }: PageP
                 ? t("Leitura concluída. Transcrevendo os áudios e analisando as conversas.")
                 : `${t(ROTULO_DA_FASE[(d.andamento.fase ?? "sincronizando") as keyof typeof ROTULO_DA_FASE] ?? ROTULO_DA_FASE.sincronizando)} · ${d.andamento.conversasLidas} ${t("conversas lidas")} · ${d.andamento.mensagensLidas} ${t("mensagens")}`}
             </p>
+            {r.situacao === "analisando" && d.analiseDaConta ? (
+              <p className="text-sm text-text-muted" data-raio-x="andamento-da-analise">
+                {t("Áudios: {x} de {y} transcritos · Conversas analisadas: {a} de {b}")
+                  .replace("{x}", String(d.analiseDaConta.audiosTranscritos))
+                  .replace("{y}", String(d.analiseDaConta.audios))
+                  .replace("{a}", String(d.analiseDaConta.analisadas))
+                  .replace("{b}", String(d.analiseDaConta.conversas))}
+              </p>
+            ) : null}
+            {ultimoErro}
           </div>
         ) : null}
       </section>

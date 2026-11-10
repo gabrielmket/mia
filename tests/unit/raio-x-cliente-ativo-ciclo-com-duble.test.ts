@@ -295,11 +295,11 @@ describe("o raio-X do cliente ativo, de ponta a ponta", () => {
     expect(banco.db.mia_raio_x_conversas!.find((c) => c.numero_ordem === 1)?.anuncio).toBe(true);
 
     // 2. A análise: o áudio que a MIA já tinha transcrito é reaproveitado; o outro é transcrito
-    //    (uma rodada); depois a classificação e o relatório (a rodada seguinte).
+    //    ANTES da classificação (o pedido ao modelo leva a transcrição), e o relatório sai.
+    //    FORK MIA (.106): na mesma rodada; a transcrição que acaba os pendentes segue direto
+    //    para a classificação, sem esperar o minuto seguinte.
     const dois = await rodada(banco, T0 + 2 * 60_000, chamar);
-    expect(dois.efeitos.map((e) => e.acao)).not.toContain("raio_x.relatorio_gerado");
-    const tres = await rodada(banco, T0 + 3 * 60_000, chamar);
-    expect(tres.efeitos.map((e) => e.acao)).toContain("raio_x.relatorio_gerado");
+    expect(dois.efeitos.map((e) => e.acao)).toContain("raio_x.relatorio_gerado");
     const audios = banco.db.mia_raio_x_mensagens ?? [];
     expect(audios).toHaveLength(1);
     expect(audios[0]).toMatchObject({ tipo: "audio", transcricao: "feita", texto: "quero ver o carro amanhã cedo" });
@@ -313,7 +313,7 @@ describe("o raio-X do cliente ativo, de ponta a ponta", () => {
     expect(linha.situacao).toBe("pronto");
     // O cliente ativo não tem conexão para cair; as transcrições apagam em 30 dias.
     expect(linha.desconectar_em ?? null).toBeNull();
-    expect(Date.parse(String(linha.apagar_conversas_em)) - (T0 + 3 * 60_000)).toBe(30 * 86_400_000);
+    expect(Date.parse(String(linha.apagar_conversas_em)) - (T0 + 2 * 60_000)).toBe(30 * 86_400_000);
 
     const dados = banco.db.mia_raio_x_relatorios![0]!.dados as DadosDoRelatorio;
     expect(dados.fonte).toBe("conversas_da_mia");
