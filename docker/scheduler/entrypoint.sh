@@ -93,6 +93,13 @@ CRONS="
 */5 * * * *|25|api/v1/cron/snooze-watcher
 */5 * * * *|60|api/v1/cron/handoff-devolucao
 */5 * * * *|60|api/v1/cron/rodizio-devolucao
+# A IA RESPONDE A MENSAGEM PENDENTE (fork MIA .107, docs/fork/ia-responde-pendente.md).
+# A cada minuto: quando o silencio da IA numa conversa acaba (5 min do envio pela
+# tela, o prazo do atendimento pelo celular), a mensagem do cliente que chegou
+# durante ele e ficou sem resposta ganha o turno da IA. So olha silencio que
+# venceu nos ultimos 15 min e mensagem dos ultimos 30 min, no maximo 50 por
+# rodada; o handoff formal nunca vence e nunca entra.
+* * * * *|60|api/v1/cron/ia-pendente
 # A CAMPANHA. Minuto a minuto, e a rodada manda no máximo uma mensagem por
 # número: é o cron que dá a cadência base, e o ritmo da campanha e do canal
 # (channel_knobs + pacing_ledger) só sabem torná-la mais lenta.
