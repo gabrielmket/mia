@@ -37,6 +37,7 @@ import { usePauseAiAttendance } from "@/hooks/inbox/usePauseAiAttendance";
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { FaixaDaCarteira } from "@/components/inbox/FaixaDaCarteira";
+import { FaixaDaPausaPorOutraConversa } from "@/components/inbox/FaixaDaPausaPorOutraConversa"; // FORK MIA (.107)
 import { comandoDaConversa, ROTULO_DO_MOTIVO } from "@/lib/inbox/comando-da-conversa";
 import { ReassignDialog } from "@/components/inbox/ReassignDialog";
 import { SnoozeButton } from "@/components/inbox/SnoozeButton";
@@ -282,6 +283,9 @@ export function ConversationHeader({
       {c?.id && (
         <FaixaDaCarteira contactId={c.id} quemAtendeId={conversation.assigned_to_user_id} />
       )}
+      {/* FORK MIA (.107): "Automático", mas o contato está com alguém noutra conversa: a IA está calada. */}
+      <FaixaDaPausaPorOutraConversa conversationId={conversation.id} automatico={comando.quem === "automatico"} />
+
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-1.5">
           <ChannelLogo channel={conversation.channel_sessions} size={20} />

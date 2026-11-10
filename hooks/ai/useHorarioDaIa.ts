@@ -27,6 +27,18 @@ export function useHorariosDosAgentes() {
   });
 }
 
+/**
+ * FORK MIA (.107): a outra conversa do contato com uma pessoa (ou calada), que
+ * cala a IA nesta. A faixa do cabeçalho mostra quando a conversa está em
+ * "Automático" (`components/inbox/FaixaDaPausaPorOutraConversa.tsx`).
+ */
+export interface PausaPorOutraConversa {
+  conversation_id: string;
+  pessoa: string | null;
+  numero: string | null;
+  desde: string | null;
+}
+
 /** O agente que responde ESTA conversa e o horário dele (ou `null`s). */
 export function useHorarioDaIaDaConversa(conversationId: string | null | undefined) {
   return useQuery({
@@ -34,7 +46,13 @@ export function useHorarioDaIaDaConversa(conversationId: string | null | undefin
     enabled: typeof conversationId === "string" && conversationId !== "",
     queryFn: () =>
       apiClient
-        .get<{ data: { agente: { id: string; nome: string } | null; horario: HorarioDaIaGravado | null } }>(
+        .get<{
+          data: {
+            agente: { id: string; nome: string } | null;
+            horario: HorarioDaIaGravado | null;
+            pausa_por_outra_conversa?: PausaPorOutraConversa | null;
+          };
+        }>(
           `/api/v1/ai/horario-da-ia?conversa=${encodeURIComponent(conversationId ?? "")}`,
         )
         .then((r) => r.data),

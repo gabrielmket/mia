@@ -10,6 +10,10 @@
  *                          (`loadConversationAgentConfig`: a conversa grudada
  *                          num agente; senão o publicado no número dela, no ar
  *                          antes de pausado, maior prioridade, mais antigo).
+ *                          FORK MIA (.107): mais `pausa_por_outra_conversa`, a
+ *                          outra conversa do contato que cala esta (a faixa do
+ *                          cabeçalho), lida pela SESSÃO: só aparece se o Inbox
+ *                          mostraria aquela conversa a quem lê.
  *
  * Devolve o dado GRAVADO na forma canônica (`horarioGravadoDe`); o estado de
  * agora é calculado na tela, no relógio de quem lê. Só leitura, e de
@@ -24,6 +28,8 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { lerOutraConversaComPessoaViaSupabase } from "@/lib/escalacao/pausa-por-outra-conversa";
 
 export const dynamic = "force-dynamic";
 
@@ -101,23 +107,52 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (!UUID.test(conversa)) return fail("invalid_request", t("Conversa inválida."), 400, { requestId });
   const { data: linhaDaConversa, error: erroConversa } = await admin
     .from("conversations")
-    .select("channel_session_id, active_ai_agent_id")
+    .select("channel_session_id, active_ai_agent_id, contact_id")
     .eq("organization_id", orgId)
     .eq("id", conversa)
     .maybeSingle();
   if (erroConversa) return fail("internal_error", t("Não consegui ler a conversa."), 500, { requestId });
   if (!linhaDaConversa) return fail("not_found", t("Conversa não encontrada."), 404, { requestId });
-  const { channel_session_id: numero, active_ai_agent_id: grudado } = linhaDaConversa as {
+  const { channel_session_id: numero, active_ai_agent_id: grudado, contact_id: contato } = linhaDaConversa as {
     channel_session_id: string | null;
     active_ai_agent_id: string | null;
+    contact_id: string | null;
   };
+  const pausa_por_outra_conversa = contato ? await pausaPorOutraConversa(orgId, contato, conversa) : null;
 
   const doNumero = agentes.filter((a) => numero !== null && versaoDe(a)?.channel_session_id === numero).sort(ordemDoMotor);
   const quemResponde = (grudado ? agentes.find((a) => a.id === grudado) : undefined) ?? doNumero[0] ?? null;
   // Pausado não responde: sem selo, o resto da tela já diz que o agente parou.
-  if (!quemResponde || quemResponde.paused_at !== null) return ok({ agente: null, horario: null }, { requestId });
+  if (!quemResponde || quemResponde.paused_at !== null) {
+    return ok({ agente: null, horario: null, pausa_por_outra_conversa }, { requestId });
+  }
   return ok(
-    { agente: { id: quemResponde.id, nome: quemResponde.name }, horario: horarioDe(quemResponde) },
+    { agente: { id: quemResponde.id, nome: quemResponde.name }, horario: horarioDe(quemResponde), pausa_por_outra_conversa },
     { requestId },
   );
+}
+
+/**
+ * FORK MIA (.107): a outra conversa do contato com uma pessoa (ou calada), que
+ * cala a IA nesta (`isLeadInHandoff` conta toda conversa do contato). Pelo
+ * cliente da SESSÃO, para a RLS decidir se quem lê vê aquela conversa. Falha de
+ * leitura vira `null`: a faixa some, o selo do horário continua.
+ */
+async function pausaPorOutraConversa(
+  orgId: string,
+  contactId: string,
+  conversationId: string,
+): Promise<{ conversation_id: string; pessoa: string | null; numero: string | null; desde: string | null } | null> {
+  try {
+    const outra = await lerOutraConversaComPessoaViaSupabase(await createClient(), {
+      organizationId: orgId,
+      contactId,
+      conversationId,
+    });
+    return outra
+      ? { conversation_id: outra.conversationId, pessoa: outra.pessoaNome, numero: outra.numeroNome, desde: outra.desde }
+      : null;
+  } catch {
+    return null;
+  }
 }
