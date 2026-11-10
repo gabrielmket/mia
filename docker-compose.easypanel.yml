@@ -56,7 +56,7 @@ services:
     # puxada de novo. Voltar ao autor: trocar o dono gabrielmket por melgarafael
     # e a tag por 1.21.0 (o endereço inteiro do autor não pode ser escrito aqui:
     # tests/unit/namespace-das-imagens.test.ts só o aceita nos arquivos âncora).
-    image: ${APP_IMAGE:-ghcr.io/gabrielmket/mia-crm:1.21.0-mia.106}
+    image: ${APP_IMAGE:-ghcr.io/gabrielmket/mia-crm:1.21.0-mia.107}
     pull_policy: missing
     restart: unless-stopped
     env_file: .env
@@ -72,6 +72,10 @@ services:
       # FORK MIA (.107): as origens do site que podem postar o cadastro do raio-X
       # grátis (CORS e o retorno do erro), em lib/raio-x/cadastro.ts. Não é segredo.
       RAIO_X_SITE_ORIGENS: https://iamia.com.br,https://www.iamia.com.br
+      # FORK MIA (.107): a fonte de formulário "Site · pedido de Raio-X" no CRM da
+      # Time (lib/raio-x/lead-da-time.ts). É o id da fonte, não o segredo dela.
+      # Sem ela, o cadastro segue e o lead não entra no CRM.
+      RAIO_X_FONTE_DO_CRM: ad93ec12-c233-48c0-8528-724089bb22db
     depends_on:
       bootstrap:
         condition: service_completed_successfully
@@ -96,7 +100,7 @@ services:
 
   worker:
     mem_limit: 512m
-    image: ${WORKER_IMAGE:-ghcr.io/gabrielmket/mia-worker:1.21.0-mia.106}
+    image: ${WORKER_IMAGE:-ghcr.io/gabrielmket/mia-worker:1.21.0-mia.107}
     pull_policy: missing
     restart: unless-stopped
     env_file: .env
@@ -308,7 +312,7 @@ services:
     logging: *default-logging
 
   scheduler:
-    image: ${SCHEDULER_IMAGE:-ghcr.io/gabrielmket/mia-scheduler:1.21.0-mia.106}
+    image: ${SCHEDULER_IMAGE:-ghcr.io/gabrielmket/mia-scheduler:1.21.0-mia.107}
     pull_policy: missing
     restart: unless-stopped
     depends_on:
