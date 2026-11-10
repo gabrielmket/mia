@@ -28,6 +28,9 @@
  *   - a conversa não é grupo, não está encerrada e tem canal e contato;
  *   - não está com uma PESSOA (`assignee_kind <> 'user'`);
  *   - o contato não está bloqueado, não é pessoal e não está com `force_human`;
+ *   - o motor não cala o contato inteiro: `isLeadInHandoff`, a MESMA função do
+ *     turno, chamada aqui (pessoa ou silêncio em OUTRA conversa do contato,
+ *     `ai_opt_out`, contato interno; ver `pausa-por-outra-conversa.ts`);
  *   - a conversa não está silenciada AGORA (qualquer silêncio em vigor, o
  *     `infinity` do handoff inclusive);
  *   - a última mensagem do cliente não é reação nem histórico importado, e não
@@ -140,6 +143,8 @@ export type MotivoDaRecusa =
   | "contato_bloqueado"
   | "contato_pessoal"
   | "force_human"
+  /** `isLeadInHandoff`: pessoa ou silêncio em OUTRA conversa do contato, `ai_opt_out` ou contato interno. */
+  | "contato_em_handoff"
   | "silenciada_agora"
   | "sem_mensagem_do_cliente"
   | "nao_e_fala"
@@ -262,6 +267,27 @@ export interface PedidoDeTurnoPendente {
   chegouAte?: Date | null;
 }
 
+export interface DependenciasDoPedido {
+  /**
+   * O veto do turno para o contato inteiro. Padrão: `isLeadInHandoff`, pelo pool
+   * do processo (`getRequestPool`). Injetável para o teste.
+   */
+  contatoEmHandoff?: (organizationId: string, contactId: string) => Promise<boolean>;
+}
+
+/**
+ * `isLeadInHandoff` em pessoa, sem cópia da regra. O import é dinâmico de
+ * propósito: `human-handoff.ts` chega, por `handoff-tecnico.ts`, a `retomada.ts`,
+ * que importa este arquivo, e o ciclo estático ficaria a um `const` de quebrar.
+ */
+async function contatoEmHandoffPeloMotor(organizationId: string, contactId: string): Promise<boolean> {
+  const [{ isLeadInHandoff }, { getRequestPool }] = await Promise.all([
+    import("@/lib/agent-engine/agent/human-handoff"),
+    import("@/lib/agent-engine/db/request-pool"),
+  ]);
+  return isLeadInHandoff(getRequestPool(), organizationId, contactId);
+}
+
 /**
  * Pede o turno da IA para a última mensagem do cliente, se ela está pendente.
  *
@@ -273,6 +299,7 @@ export interface PedidoDeTurnoPendente {
 export async function pedirTurnoDaMensagemPendente(
   db: SupabaseClient,
   pedido: PedidoDeTurnoPendente,
+  deps: DependenciasDoPedido = {},
 ): Promise<DesfechoDoPedido> {
   const { organizationId, conversationId, origem, requestId } = pedido;
   const agora = pedido.agora ?? new Date();
@@ -300,6 +327,14 @@ export async function pedirTurnoDaMensagemPendente(
     if (erroContato) throw new Error(`contato: ${erroContato.message}`);
     const noContato = recusaDoContato((contatoLido ?? null) as ContatoDoPedido | null);
     if (noContato) return recusa(noContato);
+
+    // A RÉGUA DO MOTOR, a mesma função: com uma pessoa (ou um silêncio) em OUTRA
+    // conversa do contato, `isLeadInHandoff` cala o turno em todos os números
+    // (decisão de 10/11, "calada em todos, mas avisando"). Pedir aqui seria
+    // pedir um turno que o motor pula. Também cobre `ai_opt_out` e contato interno.
+    if (await (deps.contatoEmHandoff ?? contatoEmHandoffPeloMotor)(organizationId, contactId)) {
+      return recusa("contato_em_handoff");
+    }
 
     // A MESMA "última do cliente" do anti-backlog do drain: pedir o turno de
     // outra mensagem faria o drain descartá-lo como superado.
@@ -456,7 +491,7 @@ export interface ResultadoDoFimDoSilencio {
  */
 export async function varrerFimDoSilencio(
   admin: SupabaseClient,
-  entrada: { requestId: string; agora?: Date },
+  entrada: { requestId: string; agora?: Date; deps?: DependenciasDoPedido },
 ): Promise<ResultadoDoFimDoSilencio> {
   const agora = entrada.agora ?? new Date();
   const desde = new Date(agora.getTime() - JANELA_DO_FIM_DO_SILENCIO_MS).toISOString();
@@ -487,7 +522,7 @@ export async function varrerFimDoSilencio(
       requestId: entrada.requestId,
       agora,
       chegouAte: fimDoSilencio,
-    });
+    }, entrada.deps);
     if (r.pediu) pedidas++;
     else if (r.porque === "erro") falhas++;
   }
