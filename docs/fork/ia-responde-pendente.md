@@ -218,8 +218,11 @@ Todos com o comentário `FORK MIA (.107)`:
 - `lib/agent-engine/agent/inbound-turn.ts`: os dois pontos do veto passam a conversa;
 - `lib/audit/actions.ts`: a ação `conversation.pending_reply_requested_run`;
 - `docker/scheduler/entrypoint.sh`: a linha do cron;
-- `tests/invariants/comando-da-conversa-espelha-o-ts.test.ts`: o recorte do `$3`.
+- `tests/invariants/comando-da-conversa-espelha-o-ts.test.ts`: o recorte do `$3`;
+- `lib/agent-engine/agent/roteiro-no-turno.test.ts`: procura o começo da chamada do veto,
+  que ganhou o 4º argumento.
 
 Arquivos nossos: `lib/escalacao/mensagem-pendente.ts`,
 `app/api/v1/cron/ia-pendente/route.ts`, `tests/unit/ia-responde-pendente.test.ts` e o
-assistente (`lib/assistente/leituras/por-que-a-ia-nao-respondeu.ts`, do fork desde a .88).
+assistente (`lib/assistente/leituras/por-que-a-ia-nao-respondeu.ts` e a descrição da
+ferramenta em `lib/assistente/ferramentas.ts`, do fork desde a .88).
