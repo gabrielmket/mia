@@ -770,9 +770,11 @@ MIA. Todo cadastro vira LEAD no CRM da Time.
 **Endereço.** `POST https://app.iamia.com.br/api/v1/publico/raio-x/cadastro`
 
 **Corpo.** `application/x-www-form-urlencoded` (o `<form method="post">` comum), `multipart/form-data` ou `application/json`
-(o site com `fetch`). Campo que vier a mais é ignorado. Para JSON de outro domínio, o CORS só vale para
-`https://iamia.com.br` e `https://www.iamia.com.br` (o `OPTIONS` responde 204 com `Access-Control-Allow-Origin`); o POST de
-formulário não precisa de CORS.
+(o site com `fetch`). Campo que vier a mais é ignorado. Para JSON de outro domínio, o CORS só vale para as origens de
+`RAIO_X_SITE_ORIGENS` (separadas por vírgula, só https; na produção, `https://iamia.com.br,https://www.iamia.com.br`, no
+`docker-compose.easypanel.yml`). O `OPTIONS` responde 204 com `Access-Control-Allow-Origin`; o POST de formulário não precisa
+de CORS. O `retorno_erro` também só aceita essas origens. O domínio mora no ambiente, e não no código, porque é da instalação
+(a catraca de host de terceiro em `tests/unit/branding.test.ts`).
 
 | campo | obrigatório | valores aceitos |
 |---|---|---|
@@ -989,6 +991,8 @@ As quatro tabelas novas são só do servidor (RLS ligada SEM política, grants r
 1. **Backup do banco** antes (a 9152 só acrescenta).
 2. Implantar a imagem. **Variáveis novas, as duas opcionais:** `RAIO_X_FONTE_DO_CRM` (o id da fonte "Site · pedido de Raio-X"
    da Time) e `RAIO_X_AVISO_EMAIL` (o e-mail que recebe o aviso). Sem a primeira, o cadastro funciona e o lead não entra.
+   `RAIO_X_SITE_ORIGENS` já vem no `docker-compose.easypanel.yml` (não é segredo); sem ela, o site não consegue postar por JSON
+   nem receber o erro de volta.
 3. Saúde: `/api/v1/health` com o carimbo `20261106120000_9152_raio_x_por_cadastro` e zero erros.
 4. Conferir o envio de e-mail da instalação (o remetente `naoresponda@iamia.com.br`): sem e-mail, o cadastro funciona, mas o
    código de acesso e o "está pronto" não chegam.

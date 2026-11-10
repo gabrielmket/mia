@@ -2,7 +2,7 @@
  * FORK MIA (.107) · O CADASTRO DO RAIO-X GRÁTIS: as regras, PURAS.
  *
  * Quem quer o raio-X do próprio atendimento preenche o formulário do SITE
- * (iamia.com.br, outro repositório) ou a página do sistema (`/raio-x/gratis`).
+ * da instalação (outro repositório) ou a página do sistema (`/raio-x/gratis`).
  * Os dois mandam o MESMO corpo para `POST /api/v1/publico/raio-x/cadastro`
  * (o contrato inteiro está em docs/fork/raio-x-do-atendimento.md, seção 16).
  *
@@ -26,7 +26,7 @@
  *   aceite        'sim' (ou true): li e autorizo o termo v1
  *   site          a ARMADILHA: precisa vir vazio (robô preenche tudo)
  *   utm_*, gclid, fbclid, origem   de onde a pessoa veio (vão ao lead da Time)
- *   retorno_erro  a página para onde o erro volta (só iamia.com.br, ou a do sistema)
+ *   retorno_erro  a página para onde o erro volta (só o site, ou a do sistema)
  */
 import { ehEmailValido, ehNomeCompleto, limparEmail, limparNome } from "./aceite";
 import { minutosDoHorario, normalizarWhatsapp, QUEM_ATENDE, SEGMENTOS, type QuemAtende, type Segmento } from "./regras";
@@ -35,8 +35,22 @@ import { minutosDoHorario, normalizarWhatsapp, QUEM_ATENDE, SEGMENTOS, type Quem
 export const PERIODO_DO_GRATIS = 30;
 export const TETO_DO_GRATIS_CENTAVOS = 1000;
 
-/** Os domínios do site que podem mandar o cadastro por JSON (CORS) e receber o erro de volta. */
-export const ORIGENS_DO_SITE = ["https://iamia.com.br", "https://www.iamia.com.br"] as const;
+/**
+ * As origens do SITE que podem mandar o cadastro por JSON (CORS) e receber o erro
+ * de volta: `RAIO_X_SITE_ORIGENS`, separadas por vírgula, só https (ex.: a raiz e o
+ * www do site da instalação). O domínio é da INSTALAÇÃO, não do produto: escrito no
+ * código, ele viajaria na imagem de toda instalação (a catraca de host de terceiro,
+ * tests/unit/branding.test.ts). Sem a variável, só a página do próprio sistema.
+ */
+export function origensDoSite(ambiente: Record<string, string | undefined> = process.env): string[] {
+  return (ambiente.RAIO_X_SITE_ORIGENS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && URL.canParse(s))
+    .map((s) => new URL(s))
+    .filter((u) => u.protocol === "https:" && !u.username && !u.password && !u.port)
+    .map((u) => u.origin);
+}
 
 /** A página do próprio sistema (o mesmo formulário), aceita como `retorno_erro`. */
 export const PAGINA_DO_CADASTRO = "/raio-x/gratis";
@@ -102,7 +116,7 @@ export function aceitou(v: unknown): boolean {
 }
 
 /**
- * Para onde o erro volta. Só o site (https://iamia.com.br ou www, qualquer
+ * Para onde o erro volta. Só o site (uma das `origensDoSite()`, qualquer
  * caminho) ou a página do sistema (`/raio-x/gratis`, relativa). Qualquer outra
  * coisa vira `null`: o erro cai na página simples do sistema, e ninguém usa o
  * cadastro para mandar a pessoa a um endereço de fora.
@@ -114,7 +128,7 @@ export function retornoDeErroPermitido(bruto: unknown): string | null {
   if (!URL.canParse(v)) return null;
   const u = new URL(v);
   if (u.protocol !== "https:" || u.username || u.password || u.port) return null;
-  return (ORIGENS_DO_SITE as readonly string[]).includes(u.origin) ? u.toString() : null;
+  return origensDoSite().includes(u.origin) ? u.toString() : null;
 }
 
 /** O endereço do erro, com `?erro=<campos>` (a lista separada por vírgula). */

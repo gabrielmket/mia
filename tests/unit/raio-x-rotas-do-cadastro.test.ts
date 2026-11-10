@@ -19,6 +19,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => {
   process.env.INTERNAL_SECRET = "segredo-do-teste-do-raio-x";
+  // FORK MIA (.107): as origens do site vêm do ambiente (lib/raio-x/cadastro.ts, origensDoSite).
+  process.env.RAIO_X_SITE_ORIGENS = "https://iamia.com.br,https://www.iamia.com.br";
   return {
     banco: undefined as unknown as { cliente: unknown; db: Record<string, Array<Record<string, unknown>>> },
     desfecho: null as unknown,

@@ -2,7 +2,7 @@
  * FORK MIA (.107) · POST /api/v1/publico/raio-x/cadastro — o cadastro do
  * RAIO-X GRÁTIS (protótipo aprovado em 06/11/2026, tela 1).
  *
- * Quem chama é o formulário do SITE (iamia.com.br, outro repositório) ou a
+ * Quem chama é o formulário do SITE da instalação (outro repositório) ou a
  * página do próprio sistema (`/raio-x/gratis`). O contrato inteiro (endereço,
  * campos, valores, respostas) está em docs/fork/raio-x-do-atendimento.md,
  * seção 16. Duas formas, a mesma regra:
@@ -13,7 +13,7 @@
  *     já usou      303 para /raio-x/entrar?email=…&motivo=ja_usou
  *     inválido     303 de volta ao `retorno_erro` com ?erro=<campos>; sem ele,
  *                  uma página simples de erro do sistema (400)
- *   JSON (o site com fetch; CORS só para https://iamia.com.br e www)
+ *   JSON (o site com fetch; CORS só para as origens de RAIO_X_SITE_ORIGENS)
  *     criado 201 { raio_x_id, link, entrar } · já usou 409 { motivo: ja_usou }
  *     inválido 400 { campos } · muitas tentativas 429
  *
@@ -32,7 +32,7 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { limparEmail } from "@/lib/raio-x/aceite";
 import { cadastrar } from "@/lib/raio-x/cadastrar";
-import { enderecoDoErro, FRASE_DO_CAMPO, ORIGENS_DO_SITE, validarCadastro, type CampoDoCadastro } from "@/lib/raio-x/cadastro";
+import { enderecoDoErro, FRASE_DO_CAMPO, origensDoSite, validarCadastro, type CampoDoCadastro } from "@/lib/raio-x/cadastro";
 import { enderecoDeEntrar } from "@/lib/raio-x/emails";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -43,7 +43,7 @@ const LIMITE_DO_CADASTRO = { ip: 20, id: 5, windowSec: 3600 } as const;
 
 /** CORS só para o site (o formulário por `fetch`); o POST de formulário não precisa. */
 function cabecalhosDoSite(origem: string | null): Record<string, string> {
-  if (!origem || !(ORIGENS_DO_SITE as readonly string[]).includes(origem)) return {};
+  if (!origem || !origensDoSite().includes(origem)) return {};
   return {
     "Access-Control-Allow-Origin": origem,
     "Access-Control-Allow-Methods": "POST, OPTIONS",

@@ -17,6 +17,8 @@ import { describe, expect, it, vi } from "vitest";
 
 const env = vi.hoisted(() => {
   process.env.INTERNAL_SECRET = "segredo-do-teste-do-raio-x";
+  // FORK MIA (.107): as origens do site vêm do ambiente (lib/raio-x/cadastro.ts, origensDoSite).
+  process.env.RAIO_X_SITE_ORIGENS = "https://iamia.com.br,https://www.iamia.com.br";
   return {};
 });
 void env;
@@ -30,7 +32,7 @@ import {
   normalizarCodigoDeAcesso,
   veioDoProprioApp,
 } from "@/lib/raio-x/acesso";
-import { aceitou, camposDoErro, enderecoDoErro, retornoDeErroPermitido, validarCadastro } from "@/lib/raio-x/cadastro";
+import { aceitou, camposDoErro, enderecoDoErro, origensDoSite, retornoDeErroPermitido, validarCadastro } from "@/lib/raio-x/cadastro";
 
 const CERTO = {
   nome: "Ricardo Exemplo",
@@ -192,5 +194,20 @@ describe("o cookie da área", () => {
     expect(veioDoProprioApp(new Headers({ origin: "https://golpe.invalid" }), app)).toBe(false);
     expect(veioDoProprioApp(new Headers({ origin: "https://iamia.com.br" }), app)).toBe(false);
     expect(veioDoProprioApp(new Headers({}), app)).toBe(false);
+  });
+});
+
+// FORK MIA (.107): o domínio do site é da instalação e mora no ambiente, não no código.
+describe("as origens do site (RAIO_X_SITE_ORIGENS)", () => {
+  it("lê as origens https, sem caminho, e descarta o resto", () => {
+    expect(origensDoSite({ RAIO_X_SITE_ORIGENS: " https://site.example/pagina , https://www.site.example,http://inseguro.example,lixo,https://u:p@x.example" })).toEqual([
+      "https://site.example",
+      "https://www.site.example",
+    ]);
+  });
+
+  it("sem a variável, nenhuma origem: o cadastro só volta para a página do sistema", () => {
+    expect(origensDoSite({})).toEqual([]);
+    expect(origensDoSite({ RAIO_X_SITE_ORIGENS: "" })).toEqual([]);
   });
 });

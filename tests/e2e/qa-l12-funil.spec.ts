@@ -166,7 +166,8 @@ test.describe("Lote 12 — quadro do funil", () => {
   });
 
   // ══════════════════════════════════════════════════════════════════════════
-  test('#938 "Outro" — com detalhe fora da lista é RECUSADO antes do clique; sem detalhe passa', async ({
+  // FORK MIA (.107): era "RECUSADO antes do clique"; agora o detalhe fora da lista vira nota.
+  test('#938 "Outro" — com detalhe fora da lista vira nota, sem travar; sem detalhe passa', async ({
     page,
   }) => {
     await login(page, c.users.manager!.email, c.password);
@@ -182,12 +183,12 @@ test.describe("Lote 12 — quadro do funil", () => {
     await expect(page.getByText(/cadastre em MIA CRM › Ver tudo no CRM › Etapas do funil/)).toBeVisible();
 
     await page.getByLabel(/Detalhe \(opcional\)/).fill("Mudou de ideia");
-    await expect(page.getByRole("alert")).toBeVisible();
-    registra(
-      `#938 outro · com texto fora da lista: alerta="${await page.getByRole("alert").innerText()}" · Confirmar habilitado = ${await confirmar.isEnabled()}`,
-    );
-    expect(await confirmar.isEnabled()).toBe(false);
-    await captura(page, "938-03-outro-texto-recusado");
+    // FORK MIA (.107): o texto fora da lista não é mais recusado; vira nota no histórico.
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByTestId("detalhe-vira-nota")).toBeVisible();
+    registra(`#938 outro · com texto fora da lista: vira nota · Confirmar habilitado = ${await confirmar.isEnabled()}`);
+    expect(await confirmar.isEnabled()).toBe(true);
+    await captura(page, "938-03-outro-texto-vira-nota");
 
     // Vazio de novo: volta a ser o escape que o servidor aceita.
     await page.getByLabel(/Detalhe \(opcional\)/).fill("");

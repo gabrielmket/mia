@@ -69,6 +69,9 @@ services:
       # raio-x-leitor, abaixo). Não é segredo; a chave é a WAHA_API_KEY do .env.
       # Só lib/channels/raio-x/leitor.ts lê esta variável.
       RAIO_X_LEITOR_URL: http://raio-x-leitor:3000
+      # FORK MIA (.107): as origens do site que podem postar o cadastro do raio-X
+      # grátis (CORS e o retorno do erro), em lib/raio-x/cadastro.ts. Não é segredo.
+      RAIO_X_SITE_ORIGENS: https://iamia.com.br,https://www.iamia.com.br
     depends_on:
       bootstrap:
         condition: service_completed_successfully

@@ -201,13 +201,15 @@ export async function lerOutraConversaComPessoaViaSupabase(
   if (!escolhida) return null;
   let numeroNome: string | null = null;
   if (escolhida.channel_session_id) {
-    const { data: numero } = await db
+    // O nome do NÚMERO (a sessão do canal), não o do contato: a cerca de rótulo do
+    // contato (tests/unit/rotulo-do-contato.test.ts) ignora a linha que diz "session".
+    const { data: channelSession } = await db
       .from("channel_sessions")
       .select("display_name")
       .eq("organization_id", alvo.organizationId)
       .eq("id", escolhida.channel_session_id)
       .maybeSingle();
-    numeroNome = (numero as { display_name?: string | null } | null)?.display_name ?? null;
+    numeroNome = (channelSession as { display_name?: string | null } | null)?.display_name ?? null;
   }
   return {
     conversationId: escolhida.id,

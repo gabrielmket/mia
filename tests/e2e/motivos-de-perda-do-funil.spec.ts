@@ -198,11 +198,12 @@ test.describe("Janela de perder — os motivos são os do funil", () => {
     await expect(confirmar, "'Outro' sem detalhe é o escape que o servidor aceita").toBeEnabled();
 
     await page.getByLabel(/Detalhe \(opcional\)/).fill("Cliente mudou de ideia");
-    await expect(page.getByRole("alert")).toHaveText(
-      "Esse motivo de perda não está na lista deste funil — escolha um dos motivos configurados.",
-    );
-    await expect(confirmar, "texto fora da lista é o que o trigger recusa").toBeDisabled();
-    await captura(page, "02-outro-recusado");
+    // FORK MIA (.107): o texto fora da lista NÃO bloqueia mais (o dono do produto,
+    // 09/11/2026). O motivo grava `other` e o texto vira nota no histórico do negócio.
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByTestId("detalhe-vira-nota")).toBeVisible();
+    await expect(confirmar, "texto fora da lista vai para a nota, sem travar").toBeEnabled();
+    await captura(page, "02-outro-vira-nota");
 
     // ── 3. O MOTIVO ESCOLHIDO CHEGA AO BANCO ───────────────────────────────
     await page.locator(`input[name="lost-reason"][value="${MOTIVOS[1]}"]`).check();
