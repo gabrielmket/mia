@@ -140,6 +140,7 @@ import {
   isLeadInHandoff,
   performHumanHandoff,
 } from './human-handoff';
+import { registrarPausaPorOutraConversa } from '@/lib/escalacao/pausa-por-outra-conversa'; // FORK MIA (.107)
 import {
   maybeCompact,
   renderCompactedSummary,
@@ -6744,6 +6745,8 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
         job_id: job.id,
         conversation_id: payload.conversation_id,
       });
+      // FORK MIA (.107): calada por OUTRA conversa do contato deixa rastro (Execuções e assistente).
+      await registrarPausaPorOutraConversa(pool, { organizationId: job.organization_id, jobId: job.id, contactId: job.contact_id, conversationId: payload.conversation_id }, deps.log);
       return;
     }
     try {
