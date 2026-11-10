@@ -61,6 +61,7 @@ import { logger } from "@/lib/logger";
 import { autorizarContatoParaIA } from "@/lib/ai/elegibilidade/autorizacao";
 
 import { lerContinuidadeHumana, type ContinuidadeHumana } from "./continuidade";
+import { pedirTurnoDaMensagemPendente } from "./mensagem-pendente"; // FORK MIA (.107)
 
 export interface RetomadaDeps {
   /** Admin client (service role) OU client do request — os dois filtram org aqui. */
@@ -130,6 +131,8 @@ export async function devolverAtendimentoAoAgente(
     origem?: OrigemDaRetomada;
     /** Dono autorizado pela rota; ausente nos chamadores automáticos. null é uma precondição. */
     expectedAssignee?: string | null;
+    /** FORK MIA (.107): `false` não pede o turno da mensagem pendente (fechar; handoff-tecnico pede o seu). */
+    responderPendente?: boolean;
   },
 ): Promise<RetomadaResultado> {
   const { supabase, organizationId } = deps;
@@ -240,6 +243,8 @@ export async function devolverAtendimentoAoAgente(
   const { data: atualizada, error: updErr } = await supabase
     .from("conversations")
     .update({
+      // FORK MIA (.107): zera qualquer silêncio, os 5 min do envio pela tela inclusive, e a
+      // devolução vale na hora. O que cala de propósito mora fora desta coluna (ver mensagem-pendente.ts).
       bot_silenced_until: null,
       last_handoff_at: null,
       last_handoff_reason: null,
@@ -388,6 +393,11 @@ export async function devolverAtendimentoAoAgente(
       ...(input.origem ? { automatica: true, apos_minutos: input.origem.automatica.minutos } : {}),
     },
   });
+
+  // FORK MIA (.107): o cliente que escreveu enquanto a IA estava calada é respondido agora.
+  if (input.responderPendente !== false && (!jaEstavaComOAgente || travaEstavaLigada)) {
+    await pedirTurnoDaMensagemPendente(supabase, { organizationId, conversationId: input.conversationId, origem: "retomada_da_ia", requestId: deps.requestId });
+  }
 
   return { ok: true, conversationId: input.conversationId, jaEstavaComOAgente, continuidade };
 }

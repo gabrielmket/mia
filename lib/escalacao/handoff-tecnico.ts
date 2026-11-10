@@ -276,7 +276,8 @@ export async function reagirAConclusaoDeDerivacao(
       try {
         const r = await devolverAtendimentoAoAgente(
           { supabase: admin, organizationId, actor: ATOR, requestId },
-          { conversationId },
+          // FORK MIA (.107): o turno desta mensagem é pedido abaixo (`reenfileirarTurno`).
+          { conversationId, responderPendente: false },
         );
         devolvido = r.ok;
       } catch (erro) {
