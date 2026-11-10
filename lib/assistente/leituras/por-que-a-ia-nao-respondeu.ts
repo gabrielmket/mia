@@ -14,6 +14,9 @@
  *   4b. FORK MIA (.107): o número em modo de teste (só a lista de teste
  *      recebe a IA) ou com a lista de autorização (allowlist), o gate de
  *      `lib/ai/elegibilidade/gate.ts` e `pre-go-live.ts`;
+ *   4c. FORK MIA (.107): OUTRA conversa do contato está com uma pessoa (ou
+ *      calada): a IA se cala em todos os números (`isLeadInHandoff`, decisão de
+ *      10/11, "calada em todos, mas avisando");
  *   5. fora do horário da IA (.85): a mensagem chegou com a IA inativa;
  *   6. a IA silenciada na conversa; FORK MIA (.107): se o silêncio já acabou
  *      sem a IA responder, a resposta diz isso e que, desde a .107, a IA
@@ -34,6 +37,7 @@ import { ativaEm, lerHorarioDaIa } from "@/lib/agent-engine/agent/horario-da-ia"
 import { normalizarInstante, ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
 import { lerModoDeAcessoDaIa, lerNumerosDeTeste, numeroPodeTestar } from "@/lib/ai/elegibilidade/pre-go-live";
 import { JANELA_DA_MENSAGEM_PENDENTE_MS } from "@/lib/escalacao/mensagem-pendente";
+import { lerOutraConversaComPessoaViaSupabase } from "@/lib/escalacao/pausa-por-outra-conversa";
 import { rotuloLocal } from "@/lib/tempo/agora";
 
 import { nomeDaPessoa, nomesDosContatos, type PessoaDaEquipe } from "./comum";
@@ -46,6 +50,7 @@ export type MotivoDoSilencio =
   | "agente_pausado"
   | "fora_do_horario_da_ia"
   | "numero_em_teste"
+  | "contato_com_pessoa_em_outra_conversa"
   | "contato_sem_autorizacao"
   | "ia_silenciada"
   | "silencio_acabou_sem_resposta"
@@ -68,6 +73,8 @@ export interface ExplicacaoDoSilencio {
   /** O que resolve, em uma frase. */
   conserto: string | null;
   link_da_conversa: string | null;
+  /** FORK MIA (.107): a OUTRA conversa do contato que cala esta (com pessoa ou silenciada). */
+  link_da_outra_conversa?: string | null;
   contatos: string[];
   fontes: string[];
 }
@@ -337,6 +344,45 @@ export async function explicarSilencioDaIa(
         "contato_sem_autorizacao",
         "Devolver a conversa para a IA no cabeçalho da conversa autoriza o contato; para abrir o número a todos: Conexões › o número › Configurar acesso da IA.",
       );
+    }
+  }
+
+  // 4c · FORK MIA (.107): outra conversa do contato está com uma pessoa (ou calada).
+  // O motor (`isLeadInHandoff`) cala o turno em TODOS os números do contato, de
+  // propósito; o que faltava era dizer. Só quando esta conversa não está calada
+  // por si: aí o motivo é o silêncio dela, no passo 6.
+  const silencioDestaAgora = normalizarInstante(conversa.bot_silenced_until);
+  const destaCalada =
+    silencioDestaAgora !== null &&
+    (typeof silencioDestaAgora === "number" ? silencioDestaAgora : silencioDestaAgora.getTime()) > agora.getTime();
+  if (!destaCalada) {
+    const outra = await lerOutraConversaComPessoaViaSupabase(db, {
+      organizationId: org,
+      contactId: conversa.contact_id,
+      conversationId: conversa.id,
+      agora,
+    }).catch(() => null);
+    if (outra) {
+      const numero = outra.numeroNome ? ` no número "${outra.numeroNome}"` : " em outro número";
+      const desde = outra.desde ? ` desde ${rotuloLocal(new Date(outra.desde), entrada.fuso)}` : "";
+      const pessoa = outra.pessoaId
+        ? (entrada.equipe.find((p) => p.user_id === outra.pessoaId)?.nome ?? outra.pessoaNome ?? "alguém da equipe")
+        : null;
+      fatos.push(
+        pessoa
+          ? `Outra conversa deste contato está com ${pessoa}${numero}${desde}.`
+          : `Outra conversa deste contato${numero} está com a IA pausada${desde}.`,
+      );
+      fatos.push(
+        "Enquanto uma pessoa atende o contato em qualquer número, a IA fica calada em todos os números dele, de propósito: o cliente não recebe a IA num número enquanto fala com a equipe no outro.",
+      );
+      return {
+        ...resposta(
+          "contato_com_pessoa_em_outra_conversa",
+          "Devolver aquela conversa para a IA, ou fechá-la, no cabeçalho dela; aí a IA volta a responder aqui.",
+        ),
+        link_da_outra_conversa: `/app/inbox?id=${outra.conversationId}`,
+      };
     }
   }
 
