@@ -198,8 +198,9 @@ Três ferramentas (`lib/mcp-plataforma/ferramentas/trava-de-robo.ts`); a lista v
 As duas: RLS como as vizinhas do fork (as da conversão da Meta, 9017): gerente lê a própria empresa, o
 administrador de plataforma lê todas, só o servidor escreve. Nenhuma função criada, nenhum objeto do
 upstream tocado. O registro só tem ids, contagens e códigos (nunca texto de mensagem); está declarado em
-`NAO_SE_REDIGE` (`tests/unit/lgpd-exporta-o-que-redige.test.ts`) e o `contact_id` vira nulo se a ficha for
-apagada.
+`NAO_SE_REDIGE` (`tests/unit/lgpd-exporta-o-que-redige.test.ts`) e como `manter` no catálogo de FKs para
+`contacts` (`tests/invariants/lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts`), e o `contact_id` vira
+nulo se a ficha for apagada.
 
 ## 9. Testes
 
@@ -229,8 +230,8 @@ Todos com o comentário `FORK MIA (.108)`:
   `ai.trava_de_robo_configurada` e `ai.trava_de_robo_desfeita`;
 - `lib/mcp-plataforma/ferramentas.ts` e `lib/mcp-plataforma/operacoes.ts` (do fork): o registro das
   ferramentas e o raio das duas operações;
-- `tests/unit/lgpd-exporta-o-que-redige.test.ts`, `tests/invariants/rls-tabelas-da-mia.test.ts` e
-  `tests/invariants/rls-completude-varredura.test.ts`: as duas tabelas.
+- `tests/unit/lgpd-exporta-o-que-redige.test.ts`, `tests/invariants/lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts`,
+  `tests/invariants/rls-tabelas-da-mia.test.ts` e `tests/invariants/rls-completude-varredura.test.ts`: as duas tabelas.
 
 O assistente da MIA (do fork desde a .88): `lib/assistente/leituras/por-que-a-ia-nao-respondeu.ts` (o motivo
 `trava_de_robo`) e a descrição da ferramenta em `lib/assistente/ferramentas.ts`.
