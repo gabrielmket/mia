@@ -207,6 +207,12 @@ describe("LGPD: nenhuma tabela com contact_id fica fora da anonimização", () =
       "Só a RESERVA (regra, contato) da opção \"no máximo uma vez por contato\": " +
       "ids, nenhum dado da pessoa. O `contact_id` aponta para a ficha já " +
       "anonimizada e a linha some com ela (on delete cascade).",
+    // FORK MIA (.108): a trava de robô (migration 9154, docs/fork/trava-de-robo.md).
+    mia_travas_de_robo:
+      "É o RECIBO de cada vez que a trava de robô agiu, e a âncora da conta seguinte. Só guarda ids, " +
+      "contagens e códigos do vocabulário da trava: `sinais` tem o id da mensagem e o NOME do sinal " +
+      "(autodeclaracao, repeticao, velocidade), nunca o texto, e `falhas` são códigos curtos. O " +
+      "`contact_id` aponta para a ficha já anonimizada e vira nulo se ela for apagada (on delete set null).",
     lgpd_requests:
       "É o REGISTRO do pedido — a prova de que o direito foi exercido, e o que " +
       "responde ao prazo legal. Apagá-la apagaria o recibo da própria exclusão.",

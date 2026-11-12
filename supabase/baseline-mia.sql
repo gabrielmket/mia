@@ -1908,7 +1908,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261106120000_9152_raio_x_por_cadastro', now())
+values (1, '20261112120100_9154_registros_da_trava_de_robo', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -21670,6 +21670,198 @@ grant select, insert, update, delete on public.mia_raio_x_contas to service_role
 grant select, insert, update, delete on public.mia_raio_x_codigos_de_acesso to service_role;
 grant select, insert, update, delete on public.mia_raio_x_pedidos to service_role;
 grant select, insert, update, delete on public.mia_raio_x_precos to service_role;
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9153 · a configuração da trava de robô ───
+--
+-- FORK MIA (.108). Espelho EXATO da migration 9153 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+--
+-- 9153 · a configuração da trava de robô
+--
+-- FORK MIA (.108). Só objetos NOSSOS (docs/FORK-MIA.md, regra 3): uma tabela
+-- nova, constraints dela dentro de `do` que confere o catálogo, o gatilho de
+-- `updated_at` com a função de sempre do upstream (`fn_set_updated_at`, só
+-- CHAMADA). Nenhuma função criada.
+
+create table if not exists public.mia_trava_de_robo_config (
+  organization_id                    uuid primary key references public.organizations(id) on delete cascade,
+  -- A chave das DUAS proteções (o laço com robô e o teto de respostas).
+  ligada                             boolean not null default true,
+  -- A janela em que os giros do laço são contados.
+  janela_minutos                     integer not null default 15,
+  -- Quantos giros (mensagem de robô depois de uma resposta da IA) disparam a trava.
+  mensagens_para_disparar            integer not null default 3,
+  -- O sinal B (repetição) olha para trás até aqui...
+  repeticao_janela_minutos           integer not null default 120,
+  -- ...e conta a partir da (repeticoes_anteriores + 1)-ésima vez do mesmo texto.
+  repeticoes_anteriores              integer not null default 2,
+  -- O sinal C (velocidade): texto deste tamanho para cima...
+  velocidade_minimo_de_caracteres    integer not null default 80,
+  -- ...chegando a mais disto, em caracteres por segundo, depois de uma mensagem nossa.
+  velocidade_caracteres_por_segundo  integer not null default 15,
+  -- O teto: respostas (turnos) da IA na mesma conversa nesta janela.
+  teto_respostas                     integer not null default 30,
+  teto_janela_minutos                integer not null default 60,
+  updated_by_user_id                 uuid references auth.users(id) on delete set null,
+  created_at                         timestamptz not null default now(),
+  updated_at                         timestamptz not null default now()
+);
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'mia_trava_de_robo_config_janela') then
+    alter table public.mia_trava_de_robo_config add constraint mia_trava_de_robo_config_janela
+      check (janela_minutos between 1 and 240);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_trava_de_robo_config_mensagens') then
+    alter table public.mia_trava_de_robo_config add constraint mia_trava_de_robo_config_mensagens
+      check (mensagens_para_disparar between 2 and 20);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_trava_de_robo_config_repeticao_janela') then
+    alter table public.mia_trava_de_robo_config add constraint mia_trava_de_robo_config_repeticao_janela
+      check (repeticao_janela_minutos between 10 and 1440);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_trava_de_robo_config_repeticoes') then
+    alter table public.mia_trava_de_robo_config add constraint mia_trava_de_robo_config_repeticoes
+      check (repeticoes_anteriores between 1 and 10);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_trava_de_robo_config_velocidade_caracteres') then
+    alter table public.mia_trava_de_robo_config add constraint mia_trava_de_robo_config_velocidade_caracteres
+      check (velocidade_minimo_de_caracteres between 20 and 2000);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_trava_de_robo_config_velocidade_por_segundo') then
+    alter table public.mia_trava_de_robo_config add constraint mia_trava_de_robo_config_velocidade_por_segundo
+      check (velocidade_caracteres_por_segundo between 3 and 200);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_trava_de_robo_config_teto') then
+    alter table public.mia_trava_de_robo_config add constraint mia_trava_de_robo_config_teto
+      check (teto_respostas between 5 and 500);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_trava_de_robo_config_teto_janela') then
+    alter table public.mia_trava_de_robo_config add constraint mia_trava_de_robo_config_teto_janela
+      check (teto_janela_minutos between 5 and 1440);
+  end if;
+end $$;
+
+comment on table public.mia_trava_de_robo_config is
+  'MIA (9153): a trava de robo por empresa (docs/fork/trava-de-robo.md). ligada (padrao true) liga as duas protecoes: o laco com outro robo (mensagens_para_disparar mensagens automaticas em janela_minutos, cada uma depois de uma resposta da IA) e o teto (teto_respostas turnos da IA na conversa em teto_janela_minutos). Empresa sem linha usa o padrao do codigo (lib/trava-de-robo/config.ts). Sem tela: ajustada pelo MCP de plataforma. Gerente le a propria empresa; so o servidor escreve.';
+
+drop trigger if exists trg_mia_trava_de_robo_config_touch on public.mia_trava_de_robo_config;
+create trigger trg_mia_trava_de_robo_config_touch
+  before update on public.mia_trava_de_robo_config
+  for each row execute function public.fn_set_updated_at();
+
+-- ── RLS: gerente lê a própria empresa; só o servidor escreve ────────────────
+alter table public.mia_trava_de_robo_config enable row level security;
+
+drop policy if exists mia_trava_de_robo_config_select on public.mia_trava_de_robo_config;
+create policy mia_trava_de_robo_config_select on public.mia_trava_de_robo_config
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or (organization_id in (select public.fn_user_org_ids())
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+-- O default ACL do Supabase dá ALL a anon e authenticated em toda tabela nova;
+-- o `grant select` sozinho não o desfaz (lição da 9001).
+revoke all on public.mia_trava_de_robo_config from public, anon, authenticated;
+grant select on public.mia_trava_de_robo_config to authenticated;
+grant select, insert, update, delete on public.mia_trava_de_robo_config to service_role;
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9154 · o registro da trava de robô ───
+--
+-- FORK MIA (.108). Espelho EXATO da migration 9154 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+--
+-- 9154 · o registro da trava de robô
+--
+-- FORK MIA (.108). Só objetos NOSSOS (docs/FORK-MIA.md, regra 3): uma tabela
+-- nova, as constraints dela dentro de `do` que confere o catálogo e dois
+-- índices. Nenhuma função criada.
+
+create table if not exists public.mia_travas_de_robo (
+  id                    uuid primary key default gen_random_uuid(),
+  organization_id       uuid not null references public.organizations(id) on delete cascade,
+  -- O ponteiro para o contato e a conversa. Apagar a ficha ou a conversa solta a
+  -- referência e deixa o registro (é auditoria).
+  contact_id            uuid references public.contacts(id) on delete set null,
+  conversation_id       uuid references public.conversations(id) on delete set null,
+  -- O turno que disparou. Sem FK: a fila é podada e o registro fica.
+  job_id                uuid,
+  motivo                text not null,
+  -- [{ "mensagem_id": "<uuid>", "sinais": ["autodeclaracao", "repeticao", "velocidade"] }]
+  sinais                jsonb not null default '[]'::jsonb,
+  mensagens_de_robo     integer not null default 0,
+  respostas_da_ia       integer not null default 0,
+  duracao_segundos      integer not null default 0,
+  negocios_afetados     uuid[] not null default '{}'::uuid[],
+  conversa_encerrada    boolean not null default false,
+  etiqueta_aplicada     boolean not null default false,
+  followups_cancelados  integer not null default 0,
+  -- Códigos curtos do que não deu certo (ex.: 'conversa_nao_encerrada:PT409'). Nunca texto da conversa.
+  falhas                text[] not null default '{}'::text[],
+  desfeita_em           timestamptz,
+  desfeita_por_user_id  uuid references auth.users(id) on delete set null,
+  created_at            timestamptz not null default now()
+);
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'mia_travas_de_robo_motivo') then
+    alter table public.mia_travas_de_robo add constraint mia_travas_de_robo_motivo check (motivo in ('robo', 'teto'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_travas_de_robo_sinais') then
+    alter table public.mia_travas_de_robo add constraint mia_travas_de_robo_sinais check (jsonb_typeof(sinais) = 'array');
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_travas_de_robo_contagens') then
+    alter table public.mia_travas_de_robo add constraint mia_travas_de_robo_contagens
+      check (mensagens_de_robo >= 0 and respostas_da_ia >= 0 and duracao_segundos >= 0 and followups_cancelados >= 0);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_travas_de_robo_teto_nao_perde') then
+    -- O teto pausa SÓ a conversa: não perde negócio, não encerra e não etiqueta.
+    alter table public.mia_travas_de_robo add constraint mia_travas_de_robo_teto_nao_perde
+      check (motivo = 'robo' or (cardinality(negocios_afetados) = 0 and not conversa_encerrada and not etiqueta_aplicada));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_travas_de_robo_desfeita') then
+    alter table public.mia_travas_de_robo add constraint mia_travas_de_robo_desfeita
+      check (desfeita_em is null or desfeita_em >= created_at);
+  end if;
+end $$;
+
+comment on table public.mia_travas_de_robo is
+  'MIA (9154): cada vez que a trava de robo agiu (docs/fork/trava-de-robo.md). motivo robo = o laco com outro robo (a IA calou para o contato, negocios abertos perdidos, conversa encerrada); teto = respostas demais da IA na conversa (a IA pausou so ali). sinais guarda o id da mensagem e o nome do sinal, nunca o texto. E a ancora da conta: a avaliacao so conta o que chegou depois do ultimo registro da conversa. Gerente le a propria empresa; so o servidor escreve.';
+
+create index if not exists mia_travas_de_robo_org_idx on public.mia_travas_de_robo (organization_id, created_at desc);
+create index if not exists mia_travas_de_robo_conversa_idx on public.mia_travas_de_robo (conversation_id, created_at desc) where conversation_id is not null;
+
+-- ── RLS: gerente lê a própria empresa; só o servidor escreve ────────────────
+alter table public.mia_travas_de_robo enable row level security;
+
+drop policy if exists mia_travas_de_robo_select on public.mia_travas_de_robo;
+create policy mia_travas_de_robo_select on public.mia_travas_de_robo
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or (organization_id in (select public.fn_user_org_ids())
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+-- O default ACL do Supabase dá ALL a anon e authenticated em toda tabela nova;
+-- o `grant select` sozinho não o desfaz (lição da 9001).
+revoke all on public.mia_travas_de_robo from public, anon, authenticated;
+grant select on public.mia_travas_de_robo to authenticated;
+grant select, insert, update, delete on public.mia_travas_de_robo to service_role;
 
 notify pgrst, 'reload schema';
 
