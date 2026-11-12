@@ -120,8 +120,8 @@ perdido.
 
 A IA pausa SÓ naquela conversa, sem perder o negócio e sem encerrar: `bot_silenced_until = 'infinity'`
 com `last_handoff_at` (o mesmo silêncio do handoff e do "Pausar o automático"; com `last_handoff_at` ele
-sobrevive a um encerramento) e, se a conversa estava `ai_handling`, ela vai para `pending` (a fila da
-equipe). O contato não é tocado.
+sobrevive a um encerramento) e a conversa vai para `pending` (a fila da equipe), salvo se já estiver
+encerrada ou com alguém. O contato não é tocado.
 
 O aviso para a equipe vai na Central (`agent_inbox_items`, `kind = 'handoff'`, `severity = 'warn'`, na
 conversa): "IA pausada nesta conversa: limite de respostas atingido". A varredura de avisos fecha o aviso

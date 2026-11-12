@@ -32,7 +32,8 @@
  *
  * A IA pausa SÓ naquela conversa, pelo mesmo silêncio do "Pausar o automático"
  * e do handoff (`bot_silenced_until = 'infinity'`, com `last_handoff_at`, o que
- * faz o silêncio sobreviver a um encerramento). Sem perder negócio, sem
+ * faz o silêncio sobreviver a um encerramento), e a conversa vai para a fila da
+ * equipe (`pending`). Sem perder negócio, sem
  * encerrar, sem tocar no contato. Fica o aviso na Central (`kind = 'handoff'`
  * na conversa, que a varredura de avisos fecha quando a conversa sai da fila),
  * a nota, a linha do tempo e o registro.
@@ -73,6 +74,9 @@ export const TABELA_DOS_REGISTROS = "mia_travas_de_robo";
 
 /** Estados de uma régua que ainda pode mandar mensagem. */
 const REGUA_VIVA = ["active", "waiting_reply", "dormente", "paused_handoff", "paused_manual", "coletando"];
+
+/** No teto, a conversa nestes estados não vai para a fila: já encerrou, ou alguém já a tem. */
+const STATUS_QUE_FICAM: ReadonlySet<string> = new Set(["closed", "resolved", "archived", "claimed", "pending"]);
 
 /** Teto de motivos de perda por funil (o mesmo do PATCH do funil, `.max(50)`). */
 const TETO_DE_MOTIVOS_DO_FUNIL = 50;
@@ -454,7 +458,10 @@ export async function aplicarTetoDeRespostas(
       bot_silenced_until: "infinity",
       last_handoff_at: agora,
       last_handoff_reason: MOTIVO_DO_SILENCIO_DO_TETO,
-      ...(conversa.status === "ai_handling" ? { status: "pending" } : {}),
+      // A conversa vai para a fila da equipe (`pending`), que é o que mantém o aviso da
+      // Central aberto (a varredura de avisos o fecha quando a conversa sai da fila).
+      // Encerrada ou com alguém fica como está: o status é ciclo de vida, não quem manda.
+      ...(STATUS_QUE_FICAM.has(conversa.status ?? "") ? {} : { status: "pending" }),
     })
     .eq("organization_id", alvo.organizationId)
     .eq("id", alvo.conversationId);
