@@ -15,13 +15,11 @@ import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 
-import { TABELA_DOS_REGISTROS } from "./aplicar";
 import {
   CONFIG_PADRAO_DA_TRAVA,
   configDaLinha,
   lerConfigDaTrava,
   LIMITES_DA_TRAVA,
-  TABELA_DA_CONFIG,
   type ConfigDaTrava,
   type PedidoDeConfigDaTrava,
 } from "./config";
@@ -58,7 +56,7 @@ export async function listarTravas(
   admin: SupabaseClient,
   filtro: { organizationId?: string | null; desde: Date; motivo?: "robo" | "teto" | null; limite: number },
 ): Promise<Array<RegistroDaTrava & { telefone_final: string | null; empresa: string | null; link_da_conversa: string | null }>> {
-  let consulta = admin.from(TABELA_DOS_REGISTROS).select("*").gte("created_at", filtro.desde.toISOString());
+  let consulta = admin.from("mia_travas_de_robo").select("*").gte("created_at", filtro.desde.toISOString());
   if (filtro.organizationId) consulta = consulta.eq("organization_id", filtro.organizationId);
   if (filtro.motivo) consulta = consulta.eq("motivo", filtro.motivo);
   const { data, error } = await consulta.order("created_at", { ascending: false }).limit(filtro.limite);
@@ -96,7 +94,7 @@ export async function configurarTrava(
   const igual = depois.ligada === antes.ligada && LIMITES_DA_TRAVA.every((c) => depois[c] === antes[c]);
   if (igual && lida.gravada) return { config: depois, ja_estava: true, antes };
 
-  const { error } = await admin.from(TABELA_DA_CONFIG).upsert(
+  const { error } = await admin.from("mia_trava_de_robo_config").upsert(
     {
       organization_id: entrada.organizationId,
       ...depois,
@@ -133,7 +131,7 @@ export async function desfazerTrava(
   entrada: { organizationId: string; conversationId: string; autorUserId: string; requestId: string },
 ): Promise<DesfazimentoDaTrava> {
   const { data, error } = await admin
-    .from(TABELA_DOS_REGISTROS)
+    .from("mia_travas_de_robo")
     .select("*")
     .eq("organization_id", entrada.organizationId)
     .eq("conversation_id", entrada.conversationId)
@@ -187,7 +185,7 @@ export async function desfazerTrava(
   }
 
   await admin
-    .from(TABELA_DOS_REGISTROS)
+    .from("mia_travas_de_robo")
     .update({ desfeita_em: new Date().toISOString(), desfeita_por_user_id: entrada.autorUserId })
     .eq("organization_id", entrada.organizationId)
     .eq("id", registro.id);

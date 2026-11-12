@@ -280,7 +280,7 @@ async function registrar(
   linha: Record<string, unknown>,
 ): Promise<string | null> {
   const { data, error } = await deps.admin
-    .from(TABELA_DOS_REGISTROS)
+    .from("mia_travas_de_robo")
     .insert({
       organization_id: alvo.organizationId,
       contact_id: alvo.contactId,

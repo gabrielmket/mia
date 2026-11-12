@@ -30,7 +30,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   aplicarTetoDeRespostas,
   aplicarTravaDeRobo,
-  TABELA_DOS_REGISTROS,
   type DesfechoDaAplicacao,
   type LoggerDaTrava,
 } from "./aplicar";
@@ -123,7 +122,7 @@ export async function avaliarETravarNoTurno(
 
     // O último registro desta conversa: o que veio antes dele já foi contado.
     const { data: ultimo, error: erroDoUltimo } = await admin
-      .from(TABELA_DOS_REGISTROS)
+      .from("mia_travas_de_robo")
       .select("created_at")
       .eq("organization_id", alvo.organizationId)
       .eq("conversation_id", alvo.conversationId)

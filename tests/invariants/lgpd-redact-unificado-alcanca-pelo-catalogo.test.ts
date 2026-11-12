@@ -375,6 +375,12 @@ const DECISOES: Record<string, Decisao> = {
     decidida: "manter",
     razao: "Extrato de pontos (quantidade, reason em vocabulário, idempotency_key): dado do PROGRAMA de fidelidade, e o histórico de saldo precisa fechar. A pessoa por trás já está anônima na cascata.",
   },
+  // FORK MIA (.108): a trava de robô (migration 9154, docs/fork/trava-de-robo.md).
+  mia_travas_de_robo: {
+    decidida: "manter",
+    razao:
+      "Recibo de cada vez que a trava de robô agiu e a âncora da conta seguinte: só ids, contagens e códigos (os sinais guardam o id da mensagem e o NOME do sinal, nunca o texto; as falhas são códigos curtos). O dado pessoal mora em `contacts`, que a cascata anonimiza, e o `contact_id` vira nulo se a ficha for apagada (on delete set null).",
+  },
   meta_ads_click_refs: {
     decidida: "manter",
     razao: "token/utm/query de aterrissagem da Meta, mesmo motivo do gclid: identificador de campanha que só serve enquanto existir — apagar desfaz a atribuição sem proteger texto de ninguém.",

@@ -112,7 +112,7 @@ export async function lerConfigDaTrava(
   organizationId: string,
 ): Promise<{ config: ConfigDaTrava; gravada: boolean; lida: boolean; erro?: string }> {
   const { data, error } = await db
-    .from(TABELA_DA_CONFIG)
+    .from("mia_trava_de_robo_config")
     .select("*")
     .eq("organization_id", organizationId)
     .maybeSingle();
