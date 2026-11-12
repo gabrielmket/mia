@@ -48,9 +48,24 @@ export const MOTIVO_DO_SILENCIO_DO_TETO = "Teto de respostas da IA";
 /** Por que o follow-up foi desmarcado (`cron_jobs` e `followup_enrollments.cancel_reason`). */
 export const MOTIVO_DO_CANCELAMENTO_DO_FOLLOWUP = "Trava de robô: o outro lado é um robô.";
 
-/** Traduz e preenche `{chave}`. */
-export function frase(texto: string, idioma: Idioma, valores: Record<string, string | number> = {}): string {
-  let saida = traduzir(texto, idioma);
-  for (const [chave, valor] of Object.entries(valores)) saida = saida.split(`{${chave}}`).join(String(valor));
+/**
+ * As frases que saem gravadas no idioma da empresa, num conjunto FECHADO: quem
+ * chama escolhe a chave, nunca passa texto livre para o dicionário
+ * (`tests/unit/i18n-espanhol-cobre-a-tela.test.ts`, "parâmetro livre").
+ */
+export const FRASES_GRAVADAS = {
+  nota_do_robo_com_negocio: NOTA_DO_ROBO_COM_NEGOCIO,
+  nota_do_robo_sem_negocio: NOTA_DO_ROBO_SEM_NEGOCIO,
+  nota_do_teto: NOTA_DO_TETO,
+  titulo_do_aviso_do_teto: TITULO_DO_AVISO_DO_TETO,
+  corpo_do_aviso_do_teto: CORPO_DO_AVISO_DO_TETO,
+} as const;
+
+export type FraseGravada = keyof typeof FRASES_GRAVADAS;
+
+/** Traduz a frase da chave e preenche `{chave}`. */
+export function frase(chave: FraseGravada, idioma: Idioma, valores: Record<string, string | number> = {}): string {
+  let saida = traduzir(FRASES_GRAVADAS[chave], idioma);
+  for (const [nome, valor] of Object.entries(valores)) saida = saida.split(`{${nome}}`).join(String(valor));
   return saida;
 }

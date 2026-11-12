@@ -57,17 +57,12 @@ import { ETIQUETA_DE_ROBO } from "./etiqueta";
 import {
   AUTOR_DA_NOTA,
   CATEGORIA_DO_MOTIVO_DA_TRAVA,
-  CORPO_DO_AVISO_DO_TETO,
   LINHA_DO_TEMPO_DO_ROBO,
   LINHA_DO_TEMPO_DO_TETO,
   MOTIVO_DE_PERDA_DA_TRAVA,
   MOTIVO_DO_CANCELAMENTO_DO_FOLLOWUP,
   MOTIVO_DO_SILENCIO_DO_TETO,
-  NOTA_DO_ROBO_COM_NEGOCIO,
-  NOTA_DO_ROBO_SEM_NEGOCIO,
-  NOTA_DO_TETO,
   PERDA_NA_LINHA_DO_TEMPO,
-  TITULO_DO_AVISO_DO_TETO,
   frase,
 } from "./textos";
 
@@ -382,7 +377,7 @@ export async function aplicarTravaDeRobo(
   await notaNaConversa(
     deps,
     alvo,
-    frase(negocios.length > 0 ? NOTA_DO_ROBO_COM_NEGOCIO : NOTA_DO_ROBO_SEM_NEGOCIO, alvo.idioma, valores),
+    frase(negocios.length > 0 ? "nota_do_robo_com_negocio" : "nota_do_robo_sem_negocio", alvo.idioma, valores),
     falhas,
   );
 
@@ -485,8 +480,8 @@ export async function aplicarTetoDeRespostas(
       organization_id: alvo.organizationId,
       kind: "handoff",
       severity: "warn",
-      title: frase(TITULO_DO_AVISO_DO_TETO, alvo.idioma),
-      body: frase(CORPO_DO_AVISO_DO_TETO, alvo.idioma, valores),
+      title: frase("titulo_do_aviso_do_teto", alvo.idioma),
+      body: frase("corpo_do_aviso_do_teto", alvo.idioma, valores),
       ref_kind: "conversation",
       ref_id: alvo.conversationId,
     });
@@ -494,7 +489,7 @@ export async function aplicarTetoDeRespostas(
   }
 
   // 3 · a nota na conversa
-  await notaNaConversa(deps, alvo, frase(NOTA_DO_TETO, alvo.idioma, valores), falhas);
+  await notaNaConversa(deps, alvo, frase("nota_do_teto", alvo.idioma, valores), falhas);
 
   // 4 · a linha do tempo dos negócios abertos (nenhum muda de etapa)
   const { data: abertos } = await admin
