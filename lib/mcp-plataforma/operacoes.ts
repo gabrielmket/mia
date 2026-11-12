@@ -98,7 +98,10 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "equipe do cliente: toda a equipe passa a ver aqueles números, cada um só com o que já vê no CRM. " +
       // FORK MIA (.88): o assistente da MIA.
       "E o assistente da MIA: ligar e desligar por empresa e por papel, o limite de perguntas por dia e a base " +
-      "própria, que toda a equipe do cliente passa a ler nas respostas do assistente.",
+      "própria, que toda a equipe do cliente passa a ler nas respostas do assistente. " +
+      // FORK MIA (.108): a trava de robô.
+      "E a trava de robô e o teto de respostas da IA: desligar ou afrouxar deixa a IA responder outro robô sem parar, " +
+      "gastando IA, até alguém perceber.",
   },
   {
     chave: "colocar_no_ar",
@@ -111,7 +114,9 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "conversão por etapa e a volta dos leads de formulário: o sistema passa a mandar " +
       "evento com dado dos clientes do cliente para a Meta e o Google Ads. E liga o " +
       "roteador de intenção, que passa a escolher o agente a cada mensagem do número e " +
-      "a mover o negócio do cliente para o funil de destino da intenção.",
+      "a mover o negócio do cliente para o funil de destino da intenção. " +
+      // FORK MIA (.108): desfazer a trava de robô devolve a IA a um contato.
+      "E desfaz a trava de robô de uma conversa: a IA volta a mandar mensagem para aquele contato.",
   },
   {
     chave: "convidar_equipe",

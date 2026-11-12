@@ -43,6 +43,8 @@ import { FERRAMENTAS_DE_COBRANCA } from "./ferramentas/cobranca";
 import { FERRAMENTAS_DE_CUPONS_E_PARCEIROS } from "./ferramentas/cupons-e-parceiros";
 // FORK MIA (.101): o raio-X do atendimento (docs/fork/raio-x-do-atendimento.md).
 import { FERRAMENTAS_DO_RAIO_X } from "./ferramentas/raio-x";
+// FORK MIA (.108): a trava de robô (docs/fork/trava-de-robo.md).
+import { FERRAMENTAS_DA_TRAVA_DE_ROBO } from "./ferramentas/trava-de-robo";
 import { FERRAMENTAS_DO_CHECKLIST } from "./ferramentas/checklist";
 import { FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP } from "./ferramentas/conhecimento-e-followup";
 import { FERRAMENTAS_DE_CONVERSOES } from "./ferramentas/conversoes";
@@ -107,6 +109,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DE_CUPONS_E_PARCEIROS,
   // FORK MIA (.101): o raio-X do atendimento: criar, ver, publicar para o dono e encerrar (docs/fork/raio-x-do-atendimento.md)
   ...FERRAMENTAS_DO_RAIO_X,
+  // FORK MIA (.108): a trava de robô: ver os registros, configurar e desfazer (docs/fork/trava-de-robo.md)
+  ...FERRAMENTAS_DA_TRAVA_DE_ROBO,
 ];
 
 export const FERRAMENTA_POR_NOME = new Map(FERRAMENTAS.map((f) => [f.name, f]));
