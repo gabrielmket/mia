@@ -141,6 +141,7 @@ import {
   performHumanHandoff,
 } from './human-handoff';
 import { registrarPausaPorOutraConversa } from '@/lib/escalacao/pausa-por-outra-conversa'; // FORK MIA (.107)
+import { travaDeRoboNoTurno } from '@/lib/trava-de-robo/no-turno'; // FORK MIA (.108)
 import {
   maybeCompact,
   renderCompactedSummary,
@@ -6773,6 +6774,9 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
         error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
       });
     }
+    // FORK MIA (.108): a trava de robô e o teto de respostas (docs/fork/trava-de-robo.md). Antes de escolher o agente:
+    // no laço com outro robô o turno acaba aqui, sem roteador, sem modelo e sem envio.
+    if (await travaDeRoboNoTurno(pool, { organizationId: job.organization_id, conversationId: payload.conversation_id, contactId: job.contact_id, jobId: job.id, inboundMessageId: payload.inbound_message_id }, deps.log)) return;
     if (await escalarComercialAntesDoModelo(pool, deps, job, {
       leadId: job.contact_id,
       conversationId: payload.conversation_id,

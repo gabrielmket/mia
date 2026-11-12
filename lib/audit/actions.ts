@@ -1744,6 +1744,14 @@ export const AUDIT_ACTIONS = [
   // FORK MIA (.107): rodada do cron `ia-pendente` que pediu o turno da IA para a
   // mensagem do cliente que chegou durante o silêncio (só quando pediu ou falhou).
   "conversation.pending_reply_requested_run",
+  // FORK MIA (.108) · a trava de robô (docs/fork/trava-de-robo.md): a trava que
+  // disparou (o outro lado é um robô), o teto de respostas da IA na conversa, o
+  // ajuste da configuração pelo MCP e o desfazer. O metadata leva ids, contagens
+  // e os códigos do que falhou: nunca o texto das mensagens.
+  "ai.trava_de_robo_disparada",
+  "ai.trava_de_robo_teto",
+  "ai.trava_de_robo_configurada",
+  "ai.trava_de_robo_desfeita",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

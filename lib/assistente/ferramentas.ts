@@ -422,7 +422,7 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
     ver_por_que_a_ia_nao_respondeu: tool({
       description:
         "Por que a IA não respondeu um cliente: procura a conversa pelo NOME do contato entre as que a pessoa vê e lê o registro do que a IA fez " +
-        "(conversa com alguém da equipe, outra conversa do contato com uma pessoa, número desconectado, número em modo de teste, agente pausado, fora do horário da IA, IA silenciada ou silêncio que acabou sem resposta, pedido para parar, turno que falhou). " +
+        "(conversa com alguém da equipe, outra conversa do contato com uma pessoa, a trava de robô (o outro lado era um robô), número desconectado, número em modo de teste, agente pausado, fora do horário da IA, IA silenciada ou silêncio que acabou sem resposta, pedido para parar, turno que falhou). " +
         "Com mais de um contato com o nome, volta a lista para a pessoa escolher.",
       inputSchema: z.object({
         contato: z.string().trim().min(2).max(80).describe("O nome do contato, como a pessoa disse."),
