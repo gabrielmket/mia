@@ -63,6 +63,9 @@ const LIDAS_PELO_CLIENTE = [
   "mia_agenda_microsoft_compromissos",
   // 9015 — os tipos de agendamento que são reunião do Teams.
   "mia_agenda_tipos_com_teams",
+  // .108 — a trava de robô (9153, 9154): gerente lê, só o servidor escreve.
+  "mia_trava_de_robo_config",
+  "mia_travas_de_robo",
 ] as const;
 
 /**
@@ -92,6 +95,9 @@ const SO_A_PLATAFORMA_ESCREVE = [
   "mia_agenda_microsoft_compromissos",
   // 9015 — os tipos de agendamento que são reunião do Teams.
   "mia_agenda_tipos_com_teams",
+  // .108 — a trava de robô: a configuração é do MCP de plataforma e o registro, do motor.
+  "mia_trava_de_robo_config",
+  "mia_travas_de_robo",
   // .79 — empresa única: `crm_empresas` está APOSENTADA (9033: os dados foram para
   // `companies`, a sessão só lê até a entrega 5 tirá-la de vez), e as três tabelas
   // ao lado são escritas só pelas funções definer da 9034.
@@ -210,6 +216,11 @@ function semear(org: string, gestor: string, tag: string): string {
     )
     insert into public.mia_agenda_tipos_com_teams (event_type_id, organization_id)
       select tp.id, '${org}' from tp;
+    -- .108 (9153, 9154): a configuração da trava de robô e um registro dela.
+    insert into public.mia_trava_de_robo_config (organization_id, teto_respostas) values ('${org}', 40)
+      on conflict (organization_id) do nothing;
+    insert into public.mia_travas_de_robo (organization_id, motivo, mensagens_de_robo, respostas_da_ia)
+      values ('${org}', 'robo', 3, 3);
   `;
 }
 

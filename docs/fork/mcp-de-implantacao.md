@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **112** ferramentas no servidor (a .105 somou a de ler o raio-X de novo e a .107 a dos preços do raio-X): as 104 desta página e as 8 da migração
+São **115** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X e a .108 as três da trava de robô): as 107 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -827,6 +827,19 @@ A quarta (publicar) existe porque a revisão (decisão 10) e o link do dono não
 criar e encerrar são as pontas do ciclo. O nome tem o verbo "publicar", que a cerca do MCP amarra a `colocar_no_ar`; a
 exceção está nomeada no teste: publicar o relatório ao dono não põe no ar nada que fale com cliente final. O MCP não manda
 a mensagem nem o link a ninguém (quem manda é a Time) e não mostra os trechos de conversa (ficam na tela de Admin).
+
+### A trava de robô (.108)
+
+Função do fork ([`trava-de-robo.md`](trava-de-robo.md)), e entra no MCP na mesma versão: **três ferramentas novas** (a lista
+vai de 112 a 115). A prova está em `tests/unit/mcp-de-implantacao-trava-de-robo.test.ts`, e a CONTAGEM no teste da cobrança.
+Nenhuma operação nova: configurar é montagem (`implantar_configuracao`, vale na hora para todo contato do cliente) e desfazer
+põe a IA de volta no ar para um contato (`colocar_no_ar`). Toda a regra mora em `lib/trava-de-robo/`.
+
+| ferramenta | o que faz | operação |
+|---|---|---|
+| `plataforma_ver_travas_de_robo` | com `organization_id`, a configuração do cliente (o padrão quando não há linha) e os registros do período; sem ele, os registros de todos os clientes. `periodo_dias` (padrão 7, até 90), `motivo` (`robo` ou `teto`) e `limite`. Cada registro traz a conversa com o link do Inbox, os 4 últimos dígitos do telefone, os sinais (só o nome do sinal e o id da mensagem), as respostas da IA na janela, os negócios perdidos, o que falhou e se foi desfeito. Sem texto de mensagem | leitura |
+| `plataforma_configurar_trava_de_robo` | liga, desliga ou ajusta os limites; só o que vier muda; o mesmo pedido responde `ja_estava`. Audita `ai.trava_de_robo_configurada` com o antes e o depois | `implantar_configuracao` |
+| `plataforma_desfazer_trava_de_robo` | a mesma devolução do "Devolver ao automático" para a conversa, mais tirar a etiqueta "robô" e marcar o registro como desfeito. Não reabre negócio nem conversa, e não responde a mensagem pendente. Recusa conversa sem trava de pé e contato "sempre atendimento humano". Audita `ai.trava_de_robo_desfeita` | `colocar_no_ar` |
 
 ### O que chegou do upstream 1.85 (.83)
 

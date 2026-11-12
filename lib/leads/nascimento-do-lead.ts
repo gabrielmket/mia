@@ -65,6 +65,7 @@ import { ehIdentificadorTecnico, rotuloDoContato, SEM_NOME } from "@/lib/contact
 import { decidirPelaVenda, lerVendaAnterior } from "./cliente-pela-venda";
 import { emitLeadActivity } from "./activity-emitter";
 import { removerProvaMetaLeadSubmitted } from "./prova-meta-lead-submitted";
+import { contatoTravadoComoRobo } from "@/lib/trava-de-robo/etiqueta"; // FORK MIA (.108)
 
 /**
  * O rótulo que aparece no card do funil quando o lead nasceu de um clique em
@@ -113,6 +114,7 @@ export type MotivoSemLead =
   | "contato_bloqueado" // pediu para sair; criar oportunidade seria desrespeito registrado
   | "contato_pessoal" // marcado como pessoal (spec 21): não é oportunidade, nunca nasce
   | "contato_interno" // #2353: equipe/sócio/família/fornecedor — tag interna, não é negócio
+  | "contato_robo" // FORK MIA (.108): a trava de robô calou o contato (etiqueta "robô" + force_human)
   | "sem_funil_de_entrada" // a organização não tem funil padrão — falha de configuração, visível
   | "sem_etapa" // o funil existe e não tem etapa utilizável
   | "pos_venda" // #3644: comprou dentro da janela de pós-venda — a conversa não é demanda
@@ -370,7 +372,7 @@ export async function garantirLeadDaConversa(
     // `first_service_at` viaja no select que JÁ existe: decidir o funil não custa
     // uma consulta a mais no caminho quente da ingestão. É por isso que o fato
     // mora numa coluna de `contacts`, e não é derivado da agenda a cada inbound.
-    .select("is_blocked,is_personal,display_name,name,phone_number,source,source_metadata,first_service_at,tags")
+    .select("is_blocked,is_personal,display_name,name,phone_number,source,source_metadata,first_service_at,tags,force_human")
     .eq("organization_id", organizationId)
     .eq("id", contactId)
     .maybeSingle();
@@ -392,6 +394,12 @@ export async function garantirLeadDaConversa(
     if (ehContatoInterno(tagsDoContato, tagsInternas))
       return { criado: false, motivo: "contato_interno" };
   }
+
+  // FORK MIA (.108) · a trava de robô (docs/fork/trava-de-robo.md): o contato que ela
+  // marcou como robô não abre negócio novo a cada mensagem que o robô ainda manda.
+  // "Devolver ao automático" solta o `force_human`, e daí em diante ele nasce de novo.
+  if (contatoTravadoComoRobo(contato as { tags?: unknown; force_human?: unknown } | null))
+    return { criado: false, motivo: "contato_robo" };
 
   // 2 · já existe demanda aberta?
   const { data: existente } = await db

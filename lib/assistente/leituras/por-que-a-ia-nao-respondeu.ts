@@ -39,11 +39,14 @@ import { lerModoDeAcessoDaIa, lerNumerosDeTeste, numeroPodeTestar } from "@/lib/
 import { JANELA_DA_MENSAGEM_PENDENTE_MS } from "@/lib/escalacao/mensagem-pendente";
 import { lerOutraConversaComPessoaViaSupabase } from "@/lib/escalacao/pausa-por-outra-conversa";
 import { rotuloLocal } from "@/lib/tempo/agora";
+import { contatoTravadoComoRobo } from "@/lib/trava-de-robo/etiqueta"; // FORK MIA (.108)
 
 import { nomeDaPessoa, nomesDosContatos, type PessoaDaEquipe } from "./comum";
 
 export type MotivoDoSilencio =
   | "pediu_para_parar"
+  /** FORK MIA (.108): a trava de robô calou o contato (docs/fork/trava-de-robo.md). */
+  | "trava_de_robo"
   | "conversa_com_a_equipe"
   | "numero_desconectado"
   | "sem_agente_no_ar"
@@ -228,7 +231,7 @@ export async function explicarSilencioDaIa(
   // 1 · pediu para parar
   const { data: contatoBruto } = await db
     .from("contacts")
-    .select("is_blocked, phone_number, ai_authorized_at")
+    .select("is_blocked, phone_number, ai_authorized_at, force_human, tags")
     .eq("organization_id", org)
     .eq("id", conversa.contact_id)
     .maybeSingle();
@@ -236,10 +239,24 @@ export async function explicarSilencioDaIa(
     is_blocked?: boolean;
     phone_number?: string | null;
     ai_authorized_at?: string | null;
+    force_human?: boolean;
+    tags?: string[] | null;
   } | null;
   if (contatoLido?.is_blocked) {
     fatos.push("O contato pediu para parar de receber mensagens, e o sistema respeita o pedido.");
     return resposta("pediu_para_parar", "Só o próprio contato desfaz o pedido, voltando a falar com a empresa.");
+  }
+
+  // 1b · FORK MIA (.108): a trava de robô calou a IA para o contato (etiqueta "robô" e
+  // force_human). Vem antes de "com alguém da equipe", que é como o force_human aparece.
+  if (contatoTravadoComoRobo(contatoLido)) {
+    fatos.push(
+      "A trava de robô calou a IA para este contato: do outro lado havia um robô respondendo a cada mensagem da IA. O negócio aberto foi marcado como perdido e a conversa, encerrada.",
+    );
+    return resposta(
+      "trava_de_robo",
+      "Se do outro lado há uma pessoa, use Devolver ao automático no cabeçalho da conversa: a IA volta a responder a próxima mensagem.",
+    );
   }
 
   // 2 · com alguém da equipe

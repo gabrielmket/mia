@@ -369,6 +369,9 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     "mia_agenda_microsoft_compromissos",
     // 9015 — os tipos que são reunião do Teams.
     "mia_agenda_tipos_com_teams",
+    // .108 — a trava de robô (9153, 9154).
+    "mia_trava_de_robo_config",
+    "mia_travas_de_robo",
   ].map((tabela) => ({
     tabela,
     razao:
