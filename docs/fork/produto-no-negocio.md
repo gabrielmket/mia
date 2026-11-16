@@ -184,7 +184,6 @@ Todos com o comentário `FORK MIA (.109)`:
   comanda;
 - `lib/schemas/settings.ts`: `vocabulary.produto`, `pedir_produto_no_ganho` e
   `mostrar_valor_recorrente`;
-- `lib/kanban/types.ts`: `PipelineVocabulary.produto`;
 - `app/api/v1/leads/[id]/win/route.ts` e `app/api/v1/leads/[id]/move/route.ts`: a recusa do ganho
   sem item com a opção ligada;
 - `app/api/v1/proposals/[id]/send/route.ts`: o recálculo do valor depois do envio;
