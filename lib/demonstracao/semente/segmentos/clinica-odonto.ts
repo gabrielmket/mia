@@ -118,7 +118,9 @@ export const CLINICA_ODONTO: SementeDeDemonstracao = {
         { chave: "perdido", nome: "Não fechou", passo: "lost", fim: "lost" },
       ],
       nichoDeFollowup: "clinica",
-      vocabulario: { lead: "Paciente", lead_plural: "Pacientes", deal: "Tratamento", deal_plural: "Tratamentos", won: "Tratamento fechado", lost: "Não fechou", compromisso: "Avaliação", compromisso_plural: "Avaliações" },
+      // FORK MIA (.109): o modelo de clínica do produto no negócio (docs/fork/produto-no-negocio.md):
+      // o que se vende é o Tratamento, e o negócio passa a Plano de tratamento para não repetir.
+      vocabulario: { lead: "Paciente", lead_plural: "Pacientes", deal: "Plano de tratamento", deal_plural: "Planos de tratamento", produto: "Tratamento", won: "Tratamento fechado", lost: "Não fechou", compromisso: "Avaliação", compromisso_plural: "Avaliações" },
       campos: [
         escolha("procedimento", "Tratamento de interesse", [
           "Avaliação",

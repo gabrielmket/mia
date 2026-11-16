@@ -101,7 +101,10 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "própria, que toda a equipe do cliente passa a ler nas respostas do assistente. " +
       // FORK MIA (.108): a trava de robô.
       "E a trava de robô e o teto de respostas da IA: desligar ou afrouxar deixa a IA responder outro robô sem parar, " +
-      "gastando IA, até alguém perceber.",
+      "gastando IA, até alguém perceber. " +
+      // FORK MIA (.109): o produto no negócio.
+      "E a palavra do produto no negócio e as duas opções do funil: ligar \"pedir o produto no ganho\" faz a equipe deixar " +
+      "de fechar como ganho o negócio sem item, e esconder o valor recorrente passa a contar o funil como avulso nas metas.",
   },
   {
     chave: "colocar_no_ar",

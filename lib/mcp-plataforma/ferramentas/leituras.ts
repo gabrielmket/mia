@@ -30,6 +30,8 @@ import { horizonteDoModeloMs, MODELOS_DE_FOLLOWUP, ROTULO_DO_SEGMENTO, toquesDoM
 import { carregaEtapasCitadas } from "@/lib/followup/etapas-citadas";
 import { rascunhoDoFluxo } from "@/lib/followup/rascunho";
 import { acharPorNomeOuId } from "@/lib/implantacao/base";
+// FORK MIA (.109): a palavra e as opções do produto no negócio de cada funil.
+import { produtoNoNegocioDoFunil } from "./produto-no-negocio";
 import { lerAgentes, lerCamadaClinica, lerVersoes, limiarDeSentimentoDo, pendenciasDePublicacao } from "@/lib/implantacao/agente";
 import { lerTipos } from "@/lib/implantacao/agenda";
 import { lerConexoesDeBancoExterno, retratoDaConexao } from "@/lib/implantacao/banco-externo";
@@ -387,6 +389,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
     description:
       "Os funis de um cliente, inteiros: nome, se é o padrão, as etapas na ordem (id, nome, ganho/perda, passo do agente, probabilidade, " +
       "prazo esperado, cor), os campos personalizados, os motivos de perda e de ganho e o vocabulário. " +
+      // FORK MIA (.109)
+      "Traz também `produto_no_negocio`: a palavra com que o funil chama o que o negócio vende e as opções de pedir o item no ganho e de mostrar o valor recorrente. " +
       "QUANDO USAR: antes de plataforma_garantir_funil (para ver o que existe e não duplicar), e sempre que precisar do id de um funil ou etapa " +
       "(automações e follow-ups pedem esses ids). Com `funil`, devolve só aquele.",
     inputSchema: {
@@ -452,6 +456,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             motivo_de_ganho_obrigatorio: settings.won_reason_required === true,
             reabertura: settings.reabertura ?? "mesmo_registro",
             vocabulario: f.vocabulary ?? {},
+            // FORK MIA (.109): a palavra do que o negócio vende e as duas opções.
+            produto_no_negocio: produtoNoNegocioDoFunil({ id: String(f.id), vocabulary: f.vocabulary, settings: f.settings }),
           };
         }),
       };

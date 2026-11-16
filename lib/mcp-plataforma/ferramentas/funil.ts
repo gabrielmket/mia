@@ -189,18 +189,27 @@ export const FERRAMENTAS_DE_FUNIL: readonly FerramentaDePlataforma[] = [
           lost: z.string().min(1).max(40).optional(),
           compromisso: z.string().min(1).max(40).optional(),
           compromisso_plural: z.string().min(1).max(40).optional(),
+          // FORK MIA (.109): a palavra do produto no negócio ("" = o padrão do sistema).
+          produto: z.string().trim().max(40).optional(),
         })
         .strict()
         .optional()
         .describe(
           'Como este funil chama as coisas: { "lead": "Paciente", "deal": "Agendamento", "won": "Consulta marcada", "lost": "Não marcou", ' +
-            '"compromisso": "Avaliação", "compromisso_plural": "Avaliações" }. O compromisso é o que a agenda marca; o plural vira o título do painel pronto de agenda (e do link para o dono).',
+            '"compromisso": "Avaliação", "compromisso_plural": "Avaliações", "produto": "Tratamento" }. O compromisso é o que a agenda marca; o plural vira o título do painel pronto de agenda (e do link para o dono). ' +
+            '"produto" é como o funil chama o que o negócio vende (o bloco de itens, a janela de ganho e o relatório); "" volta ao padrão "Produto ou serviço".',
         ),
       reabertura: z
         .enum(["mesmo_registro", "novo_negocio"])
         .optional()
         .describe("O que acontece quando um negócio encerrado volta: reabre o mesmo, ou nasce um negócio novo."),
       vitoria_e_receita: z.boolean().optional().describe("false para funil em que vencer NÃO é dinheiro entrando (ex.: funil de pré-venda)."),
+      // FORK MIA (.109): as duas opções do produto no negócio.
+      pedir_produto_no_ganho: z.boolean().optional().describe("true: Marcar como ganho só confirma com pelo menos um item do negócio (o padrão é não pedir)."),
+      mostrar_valor_recorrente: z
+        .boolean()
+        .optional()
+        .describe("false: esconde o valor recorrente, a duração e o Tipo de receita do funil, que conta como avulso nas metas (o padrão é mostrar)."),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,

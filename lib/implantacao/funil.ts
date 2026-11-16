@@ -130,9 +130,14 @@ export interface PedidoDeFunil {
     /** FORK MIA (item 8): o compromisso da agenda, no singular e no plural (o título do painel de agenda). */
     compromisso?: string;
     compromisso_plural?: string;
+    /** FORK MIA (.109): como o funil chama o que o negócio vende ("" = o padrão do sistema). */
+    produto?: string;
   };
   reabertura?: "mesmo_registro" | "novo_negocio";
   vitoria_e_receita?: boolean;
+  /** FORK MIA (.109): as duas opções do produto no negócio (lib/produto-no-negocio/funil.ts). */
+  pedir_produto_no_ganho?: boolean;
+  mostrar_valor_recorrente?: boolean;
 }
 
 export interface EtapaGarantida {
@@ -648,6 +653,21 @@ function montarConfiguracao(
     patch.vitoria_e_receita = pedido.vitoria_e_receita;
     mudancas.push("vitória conta como receita");
   }
+  // FORK MIA (.109): as duas opções do produto no negócio (ausente = pedir desligado, recorrente ligado).
+  if (
+    pedido.pedir_produto_no_ganho !== undefined &&
+    (atual.settings.pedir_produto_no_ganho === true) !== pedido.pedir_produto_no_ganho
+  ) {
+    patch.pedir_produto_no_ganho = pedido.pedir_produto_no_ganho;
+    mudancas.push("pedir o produto no ganho");
+  }
+  if (
+    pedido.mostrar_valor_recorrente !== undefined &&
+    (atual.settings.mostrar_valor_recorrente !== false) !== pedido.mostrar_valor_recorrente
+  ) {
+    patch.mostrar_valor_recorrente = pedido.mostrar_valor_recorrente;
+    mudancas.push("mostrar o valor recorrente");
+  }
   if (pedido.vocabulario) {
     const novo = Object.fromEntries(
       Object.entries(pedido.vocabulario).filter(([chave, valor]) => valor !== undefined && atual.vocabulary[chave] !== valor),
@@ -823,7 +843,10 @@ export async function garantirFunil(c: Implantacao, pedido: PedidoDeFunil): Prom
     pedido.motivo_de_ganho_obrigatorio !== undefined ||
     pedido.vocabulario !== undefined ||
     pedido.reabertura !== undefined ||
-    pedido.vitoria_e_receita !== undefined;
+    pedido.vitoria_e_receita !== undefined ||
+    // FORK MIA (.109)
+    pedido.pedir_produto_no_ganho !== undefined ||
+    pedido.mostrar_valor_recorrente !== undefined;
   if (pediuConfiguracao) {
     const { data: linha, error } = await c.admin
       .from("crm_pipelines")

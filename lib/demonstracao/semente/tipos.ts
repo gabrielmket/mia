@@ -196,6 +196,8 @@ export interface FunilDaSemente {
      */
     compromisso?: string;
     compromisso_plural?: string;
+    /** FORK MIA (.109): como o segmento chama o que o negócio vende (lib/produto-no-negocio/funil.ts). */
+    produto?: string;
   };
   campos: CustomFieldDef[];
   motivosDePerda: MotivoDePerdaDaSemente[];
