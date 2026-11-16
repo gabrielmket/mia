@@ -5,8 +5,6 @@ export interface PipelineVocabulary {
   deal?: string;
   won?: string;
   lost?: string;
-  /** FORK MIA (.109): como o funil chama o que o negócio vende (lib/produto-no-negocio/funil.ts). */
-  produto?: string;
 }
 
 export interface Pipeline {
