@@ -195,6 +195,14 @@ npx vitest run
   `lib/mcp-plataforma/ferramentas/trava-de-robo.ts`, com o schema na 9153 e na 9154; os pontos
   de ligação no código do upstream estão em
   [`docs/fork/trava-de-robo.md`](fork/trava-de-robo.md), seção 10.
+  O produto ou serviço no negócio (.109: os itens do catálogo em cada negócio, com o preço
+  congelado e o valor que soma, a janela "Marcar como ganho" no botão e no arrasto, a palavra e as
+  duas opções por funil, os dois quadros do relatório de vendas, a comanda do ganho com uma linha
+  por item e o produto do negócio nos relatórios montados) mora em `lib/produto-no-negocio/`,
+  `components/produto-no-negocio/`, `hooks/produto-no-negocio/` e
+  `lib/mcp-plataforma/ferramentas/produto-no-negocio.ts`, com o schema na 9160 e na 9161, as duas
+  primeiras da faixa 9160-9169; os pontos de ligação no código do upstream estão em
+  [`docs/fork/produto-no-negocio.md`](fork/produto-no-negocio.md), seção 10.
 - **Funcionalidade duplicada.** Os dois lados construíram, na mesma semana, o
   cadastro incorporado da Meta, o disparo em massa e o aviso no WhatsApp. A decisão
   de ficar com um, com o outro ou com os dois é de produto. Para o **disparo em
