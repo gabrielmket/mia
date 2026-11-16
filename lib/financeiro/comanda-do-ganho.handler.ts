@@ -56,6 +56,8 @@ import { moduloLigado } from "@/lib/instalacao/modulos";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { comandaDoGanho, ORIGEM_DA_COMANDA_DO_GANHO } from "./comanda-do-ganho";
+// FORK MIA (.109): a comanda com uma linha por item do negócio (docs/fork/produto-no-negocio.md).
+import { linhasDaComandaDoNegocio } from "@/lib/produto-no-negocio/servidor";
 
 /** A chave do consumidor em `event_log.consumed_by`. */
 export const COMANDA_DO_GANHO_KEY = "financeiro.comanda-do-ganho.v1";
@@ -175,6 +177,10 @@ async function handle(row: EventRow): Promise<HandlerResult> {
     }
   }
 
+  // FORK MIA (.109): com itens no negócio, uma linha por item (que somam o valor
+  // do negócio). Sem item, ou se a leitura falhar, a linha única de sempre.
+  const linhas = await linhasDaComandaDoNegocio(admin, row.organization_id, leadId, negocio.value_cents);
+
   const desfecho = await comandaDoGanho(admin, {
     organizationId: row.organization_id,
     leadId,
@@ -185,6 +191,7 @@ async function handle(row: EventRow): Promise<HandlerResult> {
     // O `event_log` não tem ator (CR do mantenedor): o atendente é o dono do
     // negócio, que pode ser nulo — decisão do próprio CR, não aqui.
     userId: texto(negocio.owner_user_id),
+    linhas,
   });
 
   switch (desfecho.estado) {

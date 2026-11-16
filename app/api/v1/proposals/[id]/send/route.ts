@@ -22,6 +22,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { sePropostasDesligadas } from "@/lib/propostas/porta";
 import { resolverAvisoDeRevisaoSeProntaOuEncerrada } from "@/lib/propostas/aviso-de-revisao";
+// FORK MIA (.109): o valor do negócio com os itens do bloco (docs/fork/produto-no-negocio.md).
+import { recalcularValorDoNegocio } from "@/lib/produto-no-negocio/servidor";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -365,6 +367,10 @@ export async function POST(_req: NextRequest, ctx: Ctx): Promise<Response> {
   const valorAntes = lead?.value_cents ?? null;
   if (proposta.lead_id) {
     await admin.from("crm_leads").update({ value_cents: totalDoLead }).eq("organization_id", authz.org.orgId).eq("id", proposta.lead_id);
+    // FORK MIA (.109): os itens da proposta entram no bloco do negócio, e o valor
+    // volta a ser a SOMA (os do bloco e os da proposta). Sem item no bloco, a soma
+    // é o total da proposta que a linha de cima gravou. Nunca derruba o envio.
+    await recalcularValorDoNegocio(admin, authz.org.orgId, proposta.lead_id);
     await emitLeadActivity(admin, {
       organizationId: authz.org.orgId, leadId: proposta.lead_id, contactId: proposta.contact_id,
       type: "proposal_sent", sourceModule: "proposals", sourceId: propostaAlvo.id,

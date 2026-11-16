@@ -31,6 +31,7 @@ import {
   type ResumoDasReunioes,
   type ResumoDoMes,
 } from "./progresso";
+import { contarComoAvulso, funisSemRecorrente } from "@/lib/produto-no-negocio/metas";
 
 /**
  * O teto de cada leitura do mês: 10 páginas de 1000, as 10 mil linhas que o
@@ -171,7 +172,9 @@ export async function lerMetasDoMes(
       )
     : null;
 
-  const leads: LeadFechadoComPrazo[] = leadsRes.linhas.map((l) => ({
+  // FORK MIA (.109): no funil com "Mostrar valor recorrente" desligado a venda
+  // conta como avulso (decisão 2 do produto no negócio, lib/produto-no-negocio/metas.ts).
+  const leadsLidos: LeadFechadoComPrazo[] = leadsRes.linhas.map((l) => ({
     status: l.status,
     value_cents: l.value_cents === null ? null : Number(l.value_cents),
     revenue_kind: (l.revenue_kind as "recorrente" | "avulso" | null) ?? null,
@@ -182,6 +185,7 @@ export async function lerMetasDoMes(
     closed_at: l.closed_at ?? null,
     pipeline_id: l.pipeline_id,
   }));
+  const leads = contarComoAvulso(leadsLidos, funisSemRecorrente(funis as Array<{ id: string; settings: unknown }> | null));
 
   // Reunião CANCELADA não conta como marcada: a meta do SDR mede compromisso de
   // pé, e contar cancelamento premiaria quem marca por marcar.

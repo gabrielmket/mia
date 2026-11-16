@@ -87,6 +87,55 @@ export interface EntradaDaComandaDoGanho {
    * a comanda nasce sem atendente em vez de não nascer.
    */
   userId: string | null;
+  /**
+   * FORK MIA (.109): uma linha por item do negócio (`linhasDaComanda`,
+   * lib/produto-no-negocio/comanda.ts), que já somam o valor do negócio.
+   * Ausente ou vazia = a linha única de sempre, com `descricao` e o valor.
+   */
+  linhas?: ReadonlyArray<LinhaDaComandaDoGanho> | null;
+}
+
+/** FORK MIA (.109): uma linha da comanda vinda de um item do negócio. */
+export interface LinhaDaComandaDoGanho {
+  descricao: string;
+  quantidade: number;
+  precoUnitarioCents: number;
+  descontoCents: number;
+  totalCents: number;
+}
+
+/**
+ * FORK MIA (.109): as linhas por item, num INSERT só (todas ou nenhuma entram,
+ * o que mantém a regra da repetição de baixo: comanda com algum item já está
+ * completa). Sem linhas, `null`, e quem chama segue com a linha única.
+ */
+async function inserirLinhasDosItens(
+  supabase: SupabaseClient,
+  entrada: EntradaDaComandaDoGanho,
+  comandaId: string,
+): Promise<{ error: { message: string } | null } | null> {
+  if (!entrada.linhas || entrada.linhas.length === 0) return null;
+  const comissao = await percentualDoItem(supabase, entrada.organizationId, {
+    attendantUserId: entrada.userId,
+    eventTypeId: null,
+  });
+  const { error } = await supabase
+    .from("sale_items")
+    .insert(
+      entrada.linhas.map((l) => ({
+        organization_id: entrada.organizationId,
+        sale_id: comandaId,
+        description: l.descricao,
+        quantity: l.quantidade,
+        unit_price_cents: l.precoUnitarioCents,
+        discount_cents: l.descontoCents,
+        total_cents: l.totalCents,
+        attendant_user_id: entrada.userId,
+        commission_percent: comissao,
+      })),
+    )
+    .select("id");
+  return { error };
 }
 
 export type DesfechoDaComandaDoGanho =
@@ -177,6 +226,12 @@ export async function comandaDoGanho(
     if (status !== "open") return { estado: "ja_existia", comandaId: comandaVinculada };
     const numeroRecuperado = Number(numeroDaLinha);
 
+    // FORK MIA (.109): com itens no negócio, uma linha por item.
+    const porItem = await inserirLinhasDosItens(supabase, entrada, comandaVinculada);
+    if (porItem) {
+      if (porItem.error) return { estado: "falhou", erro: `itens (retry): ${porItem.error.message}` };
+      return { estado: "criado", comandaId: comandaVinculada, numero: numeroRecuperado, valorCents: valor };
+    }
     const { error: erroItemRetentado } = await supabase
       .from("sale_items")
       .insert({
@@ -317,6 +372,12 @@ export async function comandaDoGanho(
   // Se este insert falhar, o vínculo JÁ existe: é a comanda vazia que o bloco
   // acima descreve, e a próxima tentativa a completa (item 3, acima) — não abre
   // uma segunda.
+  // FORK MIA (.109): com itens no negócio, uma linha por item.
+  const porItem = await inserirLinhasDosItens(supabase, entrada, comandaId);
+  if (porItem) {
+    if (porItem.error) return { estado: "falhou", erro: `itens: ${porItem.error.message}` };
+    return { estado: "criado", comandaId, numero: numeroDaComanda, valorCents: valor };
+  }
   const { error: erroItem } = await supabase
     .from("sale_items")
     .insert({

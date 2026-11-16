@@ -22,6 +22,8 @@ import { useT } from "@/hooks/i18n/useT";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useRelatorioDeVendas } from "@/hooks/useRelatorioDeVendas";
 import { formatCentsBRL } from "@/lib/money";
+// FORK MIA (.109): os dois quadros do produto no negócio, antes de Taxa de ganho.
+import { CartaoDosVendidos, QuadrosDoProdutoNoRelatorio } from "@/components/produto-no-negocio/QuadrosDoRelatorio";
 
 /** Os motivos canônicos em português — o resto aparece como veio. */
 const MOTIVO: Record<string, string> = {
@@ -97,6 +99,8 @@ export function RelatorioDeVendas() {
               )}
             </p>
           ) : null}
+          {data.produto_no_negocio ? <QuadrosDoProdutoNoRelatorio dados={data.produto_no_negocio} /> : null}
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-md border p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -131,7 +135,9 @@ export function RelatorioDeVendas() {
               </p>
             </div>
 
-            <div className="rounded-md border p-4 sm:col-span-2">
+            {data.produto_no_negocio ? <CartaoDosVendidos dados={data.produto_no_negocio} /> : null}
+
+            <div className={`rounded-md border p-4 ${data.produto_no_negocio ? "" : "sm:col-span-2"}`}>
               <p className="text-xs uppercase tracking-wide text-muted-foreground">
                 {t("Receita do mês")}
               </p>

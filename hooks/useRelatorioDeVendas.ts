@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api/client";
+import type { ProdutoNoRelatorio } from "@/components/produto-no-negocio/QuadrosDoRelatorio";
 
 export interface RelatorioDeVendas {
   periodo: string;
@@ -23,6 +24,11 @@ export interface RelatorioDeVendas {
    * só os negócios fechados mais recentes. A tela avisa.
    */
   truncado: boolean;
+  /**
+   * FORK MIA (.109): vendidos no mês e tempo até fechar, por produto
+   * (docs/fork/produto-no-negocio.md). Nulo quando a leitura dos itens falhou.
+   */
+  produto_no_negocio?: ProdutoNoRelatorio | null;
 }
 
 export function useRelatorioDeVendas(periodo: string) {

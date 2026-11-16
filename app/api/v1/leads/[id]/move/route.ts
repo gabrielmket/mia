@@ -34,6 +34,8 @@ import {
   validaCamposExigidos,
 } from "@/lib/leads/campos-exigidos";
 import { traduzir } from "@/lib/i18n/dicionario";
+// FORK MIA (.109): "Pedir o produto ao marcar como ganho" (docs/fork/produto-no-negocio.md).
+import { recusaDoProdutoNoGanho } from "@/lib/produto-no-negocio/servidor";
 
 export const dynamic = "force-dynamic";
 
@@ -180,6 +182,17 @@ export async function POST(
 
   // O MOTIVO DE GANHO (issue #1536): vocabulário do funil quando há lista, e
   // obrigatoriedade opt-in (`settings.won_reason_required`) quando o funil pede.
+  // FORK MIA (.109): chegar à etapa de ganho com a opção ligada e sem item.
+  if (stage.is_won && !mesmaEtapa) {
+    const semProduto = await recusaDoProdutoNoGanho(supabase, {
+      organizationId: lead.organization_id,
+      leadId,
+      pipelineId: lead.pipeline_id,
+      idioma: user.idioma,
+    });
+    if (semProduto) return fail(semProduto.codigo, semProduto.mensagem, 422, { requestId });
+  }
+
   if (stage.is_won) {
     const recusaVocabulario = recusaDeMotivoDoGanho({
       motivo: input.won_reason,

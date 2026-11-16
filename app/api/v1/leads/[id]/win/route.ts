@@ -18,6 +18,8 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { encerraDemanda } from "@/lib/leads/encerramento";
 import { createClient } from "@/lib/supabase/server";
+// FORK MIA (.109): "Pedir o produto ao marcar como ganho" (docs/fork/produto-no-negocio.md).
+import { recusaDoProdutoNoGanho } from "@/lib/produto-no-negocio/servidor";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +46,16 @@ export async function POST(
     typeof (corpo as { won_reason?: unknown }).won_reason === "string"
       ? ((corpo as { won_reason: string }).won_reason as string)
       : null;
+
+  // FORK MIA (.109): com a opção ligada no funil, o botão Ganhar recusa o negócio
+  // sem item (nem do bloco, nem da proposta). A IA e as automações fecham por
+  // `encerraDemanda` direto e não passam por aqui.
+  const semProduto = await recusaDoProdutoNoGanho(supabase, {
+    organizationId: authz.org.orgId,
+    leadId,
+    idioma: authz.user.idioma,
+  });
+  if (semProduto) return fail(semProduto.codigo, semProduto.mensagem, 422, { requestId });
 
   try {
     const { lead } = await encerraDemanda(

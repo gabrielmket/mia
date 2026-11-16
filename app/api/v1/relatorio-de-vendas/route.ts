@@ -33,7 +33,7 @@ import { type NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
-import { FUSO_PADRAO, janelaDoMes } from "@/lib/crm/metas/fuso";
+import { FUSO_PADRAO, janelaDoMes, mesNoFuso } from "@/lib/crm/metas/fuso";
 import {
   cicloDeVenda,
   historico,
@@ -44,6 +44,13 @@ import {
 import { traduzir } from "@/lib/i18n/dicionario";
 import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { createClient } from "@/lib/supabase/server";
+// FORK MIA (.109): os dois quadros do produto no negócio e o funil sem valor
+// recorrente contando como avulso (docs/fork/produto-no-negocio.md).
+import { palavraGravada } from "@/lib/produto-no-negocio/funil";
+import { contarComoAvulso, funisSemRecorrente } from "@/lib/produto-no-negocio/metas";
+import { tempoAteFechar, vendidosNoMes, type VendaDoMes } from "@/lib/produto-no-negocio/relatorio";
+import { lerItensDosNegocios } from "@/lib/produto-no-negocio/servidor";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +64,7 @@ const MESES_DA_SERIE = 6;
  */
 const PAGINAS_MAXIMAS = 50;
 const COLUNAS_DO_NEGOCIO =
-  "status, pipeline_id, value_cents, revenue_kind, recurring_months, recurring_value_cents, lost_reason, created_at, closed_at";
+  "id, status, pipeline_id, value_cents, revenue_kind, recurring_months, recurring_value_cents, lost_reason, created_at, closed_at";
 
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
@@ -99,7 +106,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   // da série. `id` desempata, porque paginar por `range` só é correto sobre uma
   // ordem única.
   const [leadsRes, funisRes] = await Promise.all([
-    lerTodasAsPaginas<LeadDoRelatorio>(
+    lerTodasAsPaginas<LeadDoRelatorio & { id: string }>(
       (de, ate, pedirContagem) =>
         db
           .from("crm_leads")
@@ -113,7 +120,7 @@ export async function GET(req: NextRequest): Promise<Response> {
           .range(de, ate),
       { paginasMaximas: PAGINAS_MAXIMAS },
     ),
-    db.from("crm_pipelines").select("id, settings").eq("organization_id", org.orgId),
+    db.from("crm_pipelines").select("id, settings, vocabulary").eq("organization_id", org.orgId),
   ]);
   if (leadsRes.erro) return fail("query_failed", leadsRes.erro, 500, { requestId });
 
@@ -131,7 +138,12 @@ export async function GET(req: NextRequest): Promise<Response> {
       )
     : null;
 
-  const leads = leadsRes.linhas;
+  // FORK MIA (.109): no funil com "Mostrar valor recorrente" desligado a venda é avulsa.
+  const leads = contarComoAvulso(
+    leadsRes.linhas,
+    funisSemRecorrente(funisRes.data as Array<{ id: string; settings: unknown }> | null),
+  );
+  const produtoNoNegocio = await quadrosDoProduto(db, org.orgId, leads, periodo, fuso, funisDeReceita, funisRes.data);
 
   return ok(
     {
@@ -141,10 +153,60 @@ export async function GET(req: NextRequest): Promise<Response> {
       ciclo_de_venda: cicloDeVenda(leads, periodo, fuso, funisDeReceita),
       motivos_de_perda: motivosDePerda(leads, periodo, fuso),
       historico: historico(leads, periodo, MESES_DA_SERIE, fuso, funisDeReceita),
+      // FORK MIA (.109): vendidos no mês e tempo até fechar, por produto. Nulo
+      // quando a leitura dos itens falhou: a tela some com os dois quadros.
+      produto_no_negocio: produtoNoNegocio,
       // O período passou do teto de leitura: os números contam só os negócios
       // fechados mais recentes, e a tela tem de dizer.
       truncado: leadsRes.truncado,
     },
     { requestId },
   );
+}
+
+/**
+ * FORK MIA (.109) · os dois quadros do produto no negócio: as vendas do mês (a
+ * MESMA régua da receita: ganhas no mês, nos funis em que vencer é receita) e os
+ * itens de cada uma. A palavra é a dos funis dessas vendas quando todos usam a
+ * mesma; senão, o padrão do sistema (a tela traduz). Nunca derruba o relatório.
+ */
+async function quadrosDoProduto(
+  db: Awaited<ReturnType<typeof createClient>>,
+  org: string,
+  leads: ReadonlyArray<LeadDoRelatorio & { id: string }>,
+  periodo: string,
+  fuso: string,
+  funisDeReceita: ReadonlySet<string> | null,
+  funis: ReadonlyArray<{ id: unknown; vocabulary?: unknown }> | null,
+) {
+  const doMes = leads.filter(
+    (l) =>
+      l.status === "won" &&
+      (funisDeReceita === null || funisDeReceita.has(l.pipeline_id)) &&
+      mesNoFuso(l.closed_at, fuso) === periodo.slice(0, 7),
+  );
+  try {
+    const itens = await lerItensDosNegocios(db, org, doMes.map((l) => l.id), { nomeNoCatalogo: true });
+    const vendas: VendaDoMes[] = doMes.map((l) => ({
+      leadId: l.id,
+      valueCents: l.value_cents === null ? null : Number(l.value_cents),
+      recurringValueCents:
+        l.recurring_value_cents === null || l.recurring_value_cents === undefined ? null : Number(l.recurring_value_cents),
+      createdAt: l.created_at,
+      closedAt: l.closed_at,
+      itens: itens.get(l.id) ?? [],
+    }));
+    const usados = new Set(doMes.map((l) => l.pipeline_id));
+    const palavras = new Set(
+      (funis ?? []).filter((f) => usados.has(String(f.id))).map((f) => palavraGravada(f.vocabulary)),
+    );
+    const palavra = palavras.size === 1 ? ([...palavras][0] ?? null) : null;
+    return { palavra, vendidos: vendidosNoMes(vendas), tempo: tempoAteFechar(vendas) };
+  } catch (err) {
+    logger.warn("relatorio_de_vendas_itens_falhou", {
+      organization_id: org,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }
