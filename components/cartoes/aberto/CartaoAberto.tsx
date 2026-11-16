@@ -36,6 +36,8 @@ import { useCartaoAberto } from "@/hooks/cartoes/useCartaoAberto";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { resolveLeadOwner } from "@/lib/kanban/owner";
 import { formatValorDoNegocio, MOEDA_PADRAO } from "@/lib/money";
+import { ProdutosPorExtenso } from "@/components/produto-no-negocio/LinhaDoProduto";
+import { JanelaDoGanho } from "@/components/produto-no-negocio/JanelaDoGanho";
 import type { Lead } from "@/lib/types/leads";
 import type { Stage } from "@/lib/kanban/types";
 import type { CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
@@ -136,6 +138,9 @@ export function CartaoAberto({
   const cartao = useCartaoAberto(open ? lead.id : null);
   const ganhar = useWinLead(pipelineId);
   const [perdendo, setPerdendo] = useState(false);
+  // FORK MIA (.109): "Ganho" abre a janela de ganho com os itens do negócio, a
+  // mesma do menu do cartão e do arrasto (docs/fork/produto-no-negocio.md).
+  const [ganhando, setGanhando] = useState(false);
   // A escolha fica no navegador de quem olha (conveniência, não dado).
   const [telaCheia, setTelaCheia] = useState(lerTelaCheia);
   const compras = useRef<HTMLDivElement | null>(null);
@@ -235,7 +240,7 @@ export function CartaoAberto({
                     variant="outline"
                     className="h-7 border-success-fg/40 text-xs text-success-fg"
                     disabled={ganhar.isPending}
-                    onClick={() => ganhar.mutate({ leadId: lead.id })}
+                    onClick={() => setGanhando(true)}
                   >
                     {t("Ganho")}
                   </Button>
@@ -277,6 +282,8 @@ export function CartaoAberto({
               ? "—"
               : formatValorDoNegocio(lead.value_cents, lead.currency ?? MOEDA_PADRAO, { semCentavos: true })}
           </span>
+          {/* FORK MIA (.109): o que o negócio vendeu, por extenso. */}
+          <ProdutosPorExtenso sinais={lead.cartao} />
           <span className="text-text-muted">{stageName}</span>
           <OwnerBadge ownerKind={owner.kind} ownerName={owner.name} agentVersion={owner.agentVersion} />
           {score ? (
@@ -406,6 +413,21 @@ export function CartaoAberto({
         />
 
         <LoseLeadDialog open={perdendo} onOpenChange={setPerdendo} leadId={lead.id} pipelineId={pipelineId} />
+        {ganhando ? (
+          <JanelaDoGanho
+            open
+            onOpenChange={setGanhando}
+            lead={lead}
+            pipelineId={pipelineId}
+            enviando={ganhar.isPending}
+            onConfirmar={({ wonReason }) =>
+              ganhar.mutate(
+                { leadId: lead.id, ...(wonReason ? { wonReason } : {}) },
+                { onSuccess: () => setGanhando(false) },
+              )
+            }
+          />
+        ) : null}
       </SheetContent>
     </Sheet>
   );

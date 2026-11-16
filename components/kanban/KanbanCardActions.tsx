@@ -36,6 +36,9 @@ import { EditLeadDialog } from "./EditLeadDialog";
 import type { Lead } from "@/lib/types/leads";
 import type { Stage } from "@/lib/kanban/types";
 import { rotuloDoMembro } from "@/lib/users/rotulo-do-atendente";
+// FORK MIA (.109): "Marcar como ganho" abre a janela de ganho com os itens do
+// negócio (docs/fork/produto-no-negocio.md), em vez de fechar direto.
+import { JanelaDoGanho } from "@/components/produto-no-negocio/JanelaDoGanho";
 
 interface KanbanCardActionsProps {
   lead: Lead;
@@ -52,6 +55,7 @@ export function KanbanCardActions({ lead, pipelineId, etapas, onMoverPara }: Kan
   const [moveOpen, setMoveOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [ganhoOpen, setGanhoOpen] = useState(false);
   const winMutation = useWinLead(pipelineId);
   const editMutation = useEditLead(pipelineId);
   // Excluir um card é a mesma ação da barra de seleção, com um id só: mesma
@@ -179,7 +183,7 @@ export function KanbanCardActions({ lead, pipelineId, etapas, onMoverPara }: Kan
           <DropdownMenuItem
             disabled={winMutation.isPending}
             onSelect={() => {
-              winMutation.mutate({ leadId: lead.id });
+              setGanhoOpen(true);
             }}
           >
             {t("Marcar como ganho")}
@@ -308,6 +312,21 @@ export function KanbanCardActions({ lead, pipelineId, etapas, onMoverPara }: Kan
         lead={lead}
         pipelineId={pipelineId}
       />
+      {ganhoOpen && (
+        <JanelaDoGanho
+          open
+          onOpenChange={setGanhoOpen}
+          lead={lead}
+          pipelineId={pipelineId}
+          enviando={winMutation.isPending}
+          onConfirmar={({ wonReason }) => {
+            winMutation.mutate(
+              { leadId: lead.id, ...(wonReason ? { wonReason } : {}) },
+              { onSuccess: () => setGanhoOpen(false) },
+            );
+          }}
+        />
+      )}
     </span>
   );
 }

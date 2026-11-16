@@ -30,6 +30,10 @@ import { prefixoDoCartao } from "@/lib/cartoes/identidade";
 import { bandLabel } from "@/lib/kanban/score-band";
 import { ArquivosNoCard } from "./ArquivosNoCard";
 import { TarefasNoCard } from "./TarefasNoCard";
+// FORK MIA (.109): a linha do que o negócio vendeu e o recorrente conforme o funil
+// (docs/fork/produto-no-negocio.md).
+import { useContextoDoCartao } from "@/components/cartoes/ContextoDoCartao";
+import { LinhaDoProduto } from "@/components/produto-no-negocio/LinhaDoProduto";
 
 /** Os dois gestos de seleção que o card sabe relatar. */
 export type GestoDeSelecao = "alterna" | "intervalo";
@@ -128,12 +132,18 @@ export function KanbanCard({
    * recorrência). `semCentavos` acompanha o valor único: o card nunca mostrou
    * centavos, e a linha tem altura fixa.
    */
-  const recorrente = rotuloDaRecorrencia(
-    card.recurringValueCents,
-    card.recurringPeriod,
-    card.currency ?? MOEDA_PADRAO,
-    { semCentavos: true, sufixo: t("/mês") },
-  );
+  // FORK MIA (.109): com "Mostrar valor recorrente" desligado no funil, a
+  // mensalidade sai do cartão; o negócio que tem valor ali ganha a etiqueta.
+  const { funil: funilDoCartao } = useContextoDoCartao();
+  const recorrenteEscondido = !funilDoCartao.mostrarValorRecorrente && card.recurringValueCents != null;
+  const recorrente = funilDoCartao.mostrarValorRecorrente
+    ? rotuloDaRecorrencia(
+        card.recurringValueCents,
+        card.recurringPeriod,
+        card.currency ?? MOEDA_PADRAO,
+        { semCentavos: true, sufixo: t("/mês") },
+      )
+    : null;
   const state = resolveCardState(card, t);
   const age = stageAgeLabel(card.hoursInStage, t);
   // FORK MIA — "empresa quando existe, pessoa quando não": o prefixo do título.
@@ -345,6 +355,9 @@ export function KanbanCard({
             </p>
           ) : null}
 
+          {/* FORK MIA (.109): o que o negócio vendeu, logo acima do valor (tela 1). */}
+          <LinhaDoProduto sinais={sinais} denso={denso} />
+
           {/* ② valor — altura reservada mesmo sem valor, senão o card encolhe.
               `card-valor` é o observável do teste: o MESMO elemento carrega o
               valor único e a mensalidade, para nenhuma tela de teste achar que
@@ -368,6 +381,14 @@ export function KanbanCard({
               </span>
             )}
             {!value && !recorrente && "—"}
+            {recorrenteEscondido ? (
+              <span
+                className="shrink-0 rounded-full bg-warning-bg px-1.5 text-[10px] font-normal leading-4 text-warning-fg"
+                title={t("Este negócio tem valor no campo Valor recorrente, que este funil não usa")}
+              >
+                {t("valor no recorrente")}
+              </span>
+            ) : null}
           </p>
 
           {/* FORK MIA — o próximo compromisso (o quê · onde · quando) e, numa linha

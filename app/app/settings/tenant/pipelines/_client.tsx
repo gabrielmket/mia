@@ -52,6 +52,15 @@ import { CaretDown, Plus, Trash } from "@/lib/ui/icons";
 import { entradaDoInboxDeclarada } from "@/lib/leads/entrada-do-inbox";
 import { AgentMappingSection, ancoraDoMapeamento } from "./_mapping";
 import { StagesSection, ancoraDasEtapas } from "./_stages";
+// FORK MIA (.109): a palavra do que o negócio vende e as duas opções do funil
+// (docs/fork/produto-no-negocio.md, tela 4 do protótipo).
+import {
+  AjudaDaPalavraDoProduto,
+  CampoDaPalavraDoProduto,
+  FraseDaComandaPorItem,
+  OpcoesDoProdutoNoFunil,
+} from "@/components/produto-no-negocio/OpcoesDoFunil";
+import { mostrarValorRecorrente, pedirProdutoNoGanho } from "@/lib/produto-no-negocio/funil";
 
 export interface PipelineRow {
   id: string;
@@ -707,6 +716,11 @@ function PipelineEditor({
   const [deal, setDeal] = useState(v.deal ?? "Negócio");
   const [won, setWon] = useState(v.won ?? "Ganho");
   const [lost, setLost] = useState(v.lost ?? "Perdido");
+  // FORK MIA (.109): a palavra (vazia = o padrão do sistema) e as duas opções; os
+  // padrões são os de hoje (pedir desligado, recorrente ligado).
+  const [produto, setProduto] = useState(typeof v.produto === "string" ? v.produto : "");
+  const [pedirProduto, setPedirProduto] = useState(pedirProdutoNoGanho(pipeline.settings));
+  const [mostrarRecorrente, setMostrarRecorrente] = useState(mostrarValorRecorrente(pipeline.settings));
   const [reasonsText, setReasonsText] = useState(readLostReasons(pipeline.settings).join(", "));
   const [wonReasonsText, setWonReasonsText] = useState(readWonReasons(pipeline.settings).join(", "));
   const [categorias, setCategorias] = useState<Record<string, string>>(() =>
@@ -872,7 +886,9 @@ function PipelineEditor({
     }
 
     const patch: PipelineConfigPatch = {
-      vocabulary: { lead, deal, won, lost },
+      // FORK MIA (.109): a palavra só entra quando há o que dizer (escrita agora ou
+      // já gravada): o funil que nunca a teve continua sem a chave.
+      vocabulary: { lead, deal, won, lost, ...(produto.trim() || typeof v.produto === "string" ? { produto: produto.trim() } : {}) },
       fields: ok,
       lost_reasons: motivosComCategoria,
       won_reasons: wonReasons,
@@ -880,6 +896,11 @@ function PipelineEditor({
       comanda_no_ganho: comandaNoGanho,
       reabertura: retomaComoNovo ? "novo_negocio" : "mesmo_registro",
       vitoria_e_receita: ehReceita,
+      // FORK MIA (.109): as duas opções, também só quando há o que dizer.
+      ...(pedirProduto || "pedir_produto_no_ganho" in (pipeline.settings ?? {}) ? { pedir_produto_no_ganho: pedirProduto } : {}),
+      ...(!mostrarRecorrente || "mostrar_valor_recorrente" in (pipeline.settings ?? {})
+        ? { mostrar_valor_recorrente: mostrarRecorrente }
+        : {}),
       // A ENTRADA DAS CONVERSAS DO INBOX (#3011) vai no MESMO patch, pela
       // MESMA porta de escrita do settings — a gravação no banco já existe
       // (`updatePipelineConfig`), e a tela só passa a mandar a chave.
@@ -946,7 +967,7 @@ function PipelineEditor({
         {t("Como este funil chama o card nas telas (o Negócio). Ex.: numa loja, o Negócio pode se chamar Pedido.")}
       </p>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <div className="space-y-1">
           <Label className="text-xs">{t("Contato")}</Label>
           <Input value={lead} onChange={(e) => setLead(e.target.value)} />
@@ -963,7 +984,10 @@ function PipelineEditor({
           <Label className="text-xs">{t("Perdido")}</Label>
           <Input value={lost} onChange={(e) => setLost(e.target.value)} />
         </div>
+        {/* FORK MIA (.109): como o funil chama o que o negócio vende. */}
+        <CampoDaPalavraDoProduto valor={produto} onValor={setProduto} />
       </div>
+      <AjudaDaPalavraDoProduto />
 
       <div className="space-y-1">
         <Label className="text-xs">{t("Motivos de perda (separados por vírgula)")}</Label>
@@ -1065,6 +1089,15 @@ function PipelineEditor({
           </span>
         </label>
       </div>
+
+      {/* FORK MIA (.109): o que o negócio vendeu, as duas opções novas (tela 4). */}
+      <OpcoesDoProdutoNoFunil
+        palavra={produto}
+        pedir={pedirProduto}
+        onPedir={setPedirProduto}
+        mostrarRecorrente={mostrarRecorrente}
+        onMostrarRecorrente={setMostrarRecorrente}
+      />
 
       {/* ─── A ENTRADA DAS CONVERSAS DO INBOX (#3011) ─────────────────────
           O ajuste existia só no BANCO: a etapa declarada já valia, o fallback
@@ -1205,6 +1238,8 @@ function PipelineEditor({
             {t(
               "Desligado, ganhar não mexe no financeiro: loja com checkout, infoproduto e imobiliária não vivem de conta a receber. Ligado, o arrasto para a etapa de ganho e o botão Ganhar abrem uma comanda com o valor e o contato do negócio.",
             )}
+            {/* FORK MIA (.109): com itens, uma linha por item. */}
+            <FraseDaComandaPorItem palavra={produto} />
           </p>
         </div>
       )}

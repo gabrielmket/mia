@@ -36,6 +36,7 @@ import { escolherProximoCompromisso, type CompromissoDoCartao } from "@/lib/cart
 import { contarComprasParaOQuadro } from "@/lib/cartoes/compras-servidor";
 import type { SinaisDoCartao } from "@/lib/cartoes/tipos";
 import { avisosDeObrigacaoDoQuadro } from "@/lib/obrigacoes/sinais";
+import { itensDoQuadro } from "@/lib/produto-no-negocio/quadro";
 import { ALVO_DA_PESSOA_DO_NEGOCIO, VINCULOS_DA_PESSOA_DO_NEGOCIO } from "@/lib/leads/pessoas-do-negocio";
 
 type Db = SupabaseClient;
@@ -122,7 +123,7 @@ async function montar(
   ];
   const agoraIso = agora.toISOString();
 
-  const [contatos, conversas, sinais, agenda, envolvidos, compras, obrigacoes] = await Promise.all([
+  const [contatos, conversas, sinais, agenda, envolvidos, compras, obrigacoes, itens] = await Promise.all([
     buscaEmLotes(contatoIds, (lote) =>
       db.from("contacts").select(COLUNAS_DO_CONTATO_NO_CARTAO).eq("organization_id", org).in("id", lote),
     ),
@@ -166,6 +167,8 @@ async function montar(
     contarComprasParaOQuadro(db, org, { contatoIds, empresaIds }),
     // Nunca lança: falha na leitura das obrigações devolve o quadro sem aviso.
     avisosDeObrigacaoDoQuadro(db, org, leads, agora),
+    // FORK MIA (.109): o que cada negócio vendeu. Nunca lança: falha devolve `null` e a linha some.
+    itensDoQuadro(db, org, leadIds),
   ]);
   for (const r of [contatos, conversas, sinais, agenda, envolvidos]) {
     if (r.error) throw new Error(r.error.message);
@@ -307,6 +310,7 @@ async function montar(
       contatoNome: nome,
       chanceDaEtapa: chanceDaEtapa.get(lead.stage_id) ?? null,
       obrigacao: obrigacoes.get(lead.id) ?? null,
+      ...(itens ? { itens: itens.get(lead.id) ?? null } : {}),
     };
 
     return {

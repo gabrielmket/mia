@@ -17,13 +17,27 @@
  */
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
+/**
+ * FORK MIA (.109): o que o cartão precisa do FUNIL para a linha do item e o valor
+ * (docs/fork/produto-no-negocio.md): a palavra do que se vende e se o valor
+ * recorrente aparece. Sem provedor, o padrão do sistema e o recorrente à mostra,
+ * que é o cartão de antes.
+ */
+export interface FunilDoCartao {
+  palavra: string | null;
+  mostrarValorRecorrente: boolean;
+}
+
 export interface ContextoDoCartao {
   usuarioAtualId: string | null;
   nomeDoUsuario: (id: string) => string | null | undefined;
   agora: Date | null;
+  funil: FunilDoCartao;
 }
 
-const PADRAO: ContextoDoCartao = { usuarioAtualId: null, nomeDoUsuario: () => null, agora: null };
+const FUNIL_PADRAO: FunilDoCartao = { palavra: null, mostrarValorRecorrente: true };
+
+const PADRAO: ContextoDoCartao = { usuarioAtualId: null, nomeDoUsuario: () => null, agora: null, funil: FUNIL_PADRAO };
 
 const Contexto = createContext<ContextoDoCartao>(PADRAO);
 
@@ -33,10 +47,12 @@ const TIQUE_MS = 60_000;
 export function ProvedorDoCartao({
   usuarioAtualId,
   nomes,
+  funil,
   children,
 }: {
   usuarioAtualId: string | null;
   nomes: Map<string, string | null> | undefined;
+  funil?: FunilDoCartao;
   children: ReactNode;
 }) {
   const [agora, setAgora] = useState<Date>(() => new Date());
@@ -46,7 +62,7 @@ export function ProvedorDoCartao({
   }, []);
   return (
     <Contexto.Provider
-      value={{ usuarioAtualId, nomeDoUsuario: (id) => nomes?.get(id) ?? null, agora }}
+      value={{ usuarioAtualId, nomeDoUsuario: (id) => nomes?.get(id) ?? null, agora, funil: funil ?? FUNIL_PADRAO }}
     >
       {children}
     </Contexto.Provider>

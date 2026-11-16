@@ -30,6 +30,11 @@ import { camposDoFunil, camposPorEscopo } from "@/lib/leads/campos-do-funil";
 // das linhas do cartão (quem está olhando, nome de cada pessoa da equipe).
 import { ProvedorDoCartao } from "@/components/cartoes/ContextoDoCartao";
 import { ordenarColuna, type OrdemDoQuadro } from "@/lib/cartoes/urgencia";
+// FORK MIA (.109): o produto no negócio (docs/fork/produto-no-negocio.md): a
+// palavra e o recorrente no cartão, e a janela de ganho no arrasto até a etapa de ganho.
+import { JanelaDoGanho } from "@/components/produto-no-negocio/JanelaDoGanho";
+import { mostrarValorRecorrente, palavraGravada } from "@/lib/produto-no-negocio/funil";
+import { arrastoAbreJanelaDoGanho } from "@/lib/produto-no-negocio/regras";
 
 interface KanbanBoardProps {
   pipelineId: string;
@@ -140,6 +145,9 @@ export function KanbanBoard({
   const [recusaDeCampos, setRecusaDeCampos] = useState<RecusaDeCampos | null>(null);
   const [retomada, setRetomada] = useState<RetomadaPendente | null>(null);
   const [perdaPendente, setPerdaPendente] = useState<MoveArgs | null>(null);
+  // FORK MIA (.109): o arrasto (e o "Mover para…", e a barra de etapas do cartão
+  // aberto) até a etapa de ganho abre a janela de ganho antes do move.
+  const [ganhoPendente, setGanhoPendente] = useState<MoveArgs | null>(null);
   const moveCard = useMoveCard(pipelineId, {
     onCamposFaltando: setRecusaDeCampos,
     onRetomada: setRetomada,
@@ -257,6 +265,12 @@ export function KanbanBoard({
       // coluna de perda). O reaberto volta a `open` com o `lost_reason` da perda
       // anterior — `fn_crm_lead_close_on_stage` não o limpa —, e reaproveitá-lo
       // gravaria a perda nova com a causa da antiga.
+      // FORK MIA (.109): chegar à etapa de ganho passa pela janela de ganho (os
+      // itens, o valor e o motivo); quem já está ganho e só reordena, não.
+      if (arrastoAbreJanelaDoGanho({ etapaDeDestino: etapa, lead, stageId: args.stageId })) {
+        setGanhoPendente(args);
+        return;
+      }
       const motivoAtual =
         lead && (lead.status === "lost" || lead.stage_id === args.stageId) ? lead.lost_reason : null;
       if (!decideMotivoDaPerda({ etapaDeDestino: etapa, motivoAtual }).ok) {
@@ -398,7 +412,14 @@ export function KanbanBoard({
   }
 
   return (
-    <ProvedorDoCartao usuarioAtualId={usuarioAtualId} nomes={ownerNames}>
+    <ProvedorDoCartao
+      usuarioAtualId={usuarioAtualId}
+      nomes={ownerNames}
+      funil={{
+        palavra: palavraGravada(data.pipeline.vocabulary),
+        mostrarValorRecorrente: mostrarValorRecorrente(data.pipeline.settings),
+      }}
+    >
     <DragDropContext onDragEnd={handleDragEnd}>
       {/* UM contêiner de rolagem só, nos dois eixos. Rolar cada coluna por
           conta própria seria o desenho "Trello", mas o @hello-pangea/dnd não
@@ -515,6 +536,29 @@ export function KanbanBoard({
           moveCard.mutate({ ...perdaPendente, lostReason });
         }}
       />
+      {/* FORK MIA (.109): a janela de ganho do arrasto. Confirmar grava os itens
+          e o valor e só então move, com o motivo e o carimbo novo do negócio. */}
+      {ganhoPendente && (
+        <JanelaDoGanho
+          key={ganhoPendente.leadId}
+          open
+          onOpenChange={(aberto) => {
+            if (!aberto) setGanhoPendente(null);
+          }}
+          lead={data.leads.find((l) => l.id === ganhoPendente.leadId) ?? null}
+          pipelineId={pipelineId}
+          enviando={moveCard.isPending}
+          onConfirmar={({ wonReason, updatedAt }) => {
+            const args = ganhoPendente;
+            setGanhoPendente(null);
+            moveCard.mutate({
+              ...args,
+              ...(updatedAt ? { expectedUpdatedAt: updatedAt } : {}),
+              ...(wonReason ? { wonReason } : {}),
+            });
+          }}
+        />
+      )}
       {retomada && (
         <RetomarComoNovoNegocioDialog
           open

@@ -13,6 +13,7 @@
 import type { Bola } from "@/lib/cartoes/bola";
 import type { CompromissoDoCartao } from "@/lib/cartoes/compromisso";
 import type { AvisoDoCartao } from "@/lib/obrigacoes/situacao";
+import type { LinhaDoCartao } from "@/lib/produto-no-negocio/regras";
 
 /**
  * As siglas do canal de origem, na ordem em que o filtro as oferece.
@@ -102,4 +103,10 @@ export interface SinaisDoCartao {
    * cartão não mostra nada.
    */
   obrigacao?: AvisoDoCartao | null;
+  /**
+   * FORK MIA (.109): o que o negócio vendeu, já escrito para a linha do cartão
+   * (lib/produto-no-negocio/regras.ts, `linhaDoCartao`). Nulo = sem item, e o
+   * cartão diz "Sem <produto>"; ausente = a leitura dos itens falhou, e a linha some.
+   */
+  itens?: LinhaDoCartao | null;
 }

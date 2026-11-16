@@ -21,6 +21,12 @@ import { ContactTagsEditor } from "@/components/inbox/ContactTagsEditor";
 import { lerRecorrenciaDoFormulario } from "@/lib/leads/valor-recorrente";
 import { EcoDoValor } from "./EcoDoValor";
 import type { CampoConfirmadoDoDocumento } from "./RevisaoDoDocumento";
+// FORK MIA (.109): o bloco de itens do negócio e o valor que soma
+// (docs/fork/produto-no-negocio.md). O rascunho, o bloco e o campo moram no fork.
+import { BlocoDeItens } from "@/components/produto-no-negocio/BlocoDeItens";
+import { AvisoDoValorRecorrente, CampoDoValor } from "@/components/produto-no-negocio/CampoDoValor";
+import { useRascunhoDoNegocio } from "@/components/produto-no-negocio/useRascunhoDoNegocio";
+import { usePalavraDoProduto, useProdutoNoFunil } from "@/hooks/produto-no-negocio/useProdutoNoNegocio";
 
 /**
  * As etiquetas do negócio SAÍRAM deste formulário (#2979): quem as edita é o
@@ -105,6 +111,16 @@ export function LeadFieldsForm({
   // reescreve o que nasceu antes, e o cartão e o dossiê mostram a persistida.
   const moedaDoValor = lead.currency ?? org?.currency ?? MOEDA_PADRAO;
   const edit = useEditLead(pipelineId);
+  // FORK MIA (.109): os itens do negócio e as opções do funil. O bloco assume o
+  // Valor quando a leitura dos itens chega; até lá (e se ela falhar) vale o campo
+  // Valor de antes: a ficha nunca fica sem como editar o valor.
+  const funilDoProduto = useProdutoNoFunil(pipelineId).data;
+  const palavra = usePalavraDoProduto(funilDoProduto?.palavra);
+  const mostrarRecorrente = funilDoProduto?.mostrar_valor_recorrente ?? true;
+  const itens = useRascunhoDoNegocio(lead.id, pipelineId);
+  const usarBloco = itens.pronto;
+  const [apagarRecorrente, setApagarRecorrente] = useState(false);
+  const [blocoAssumiu, setBlocoAssumiu] = useState<string | null>(null);
   const [customFields, setCustomFields] = useState<Record<string, unknown>>(lead.custom_fields ?? {});
   // A RÉGUA do diff (issue #2132): o valor carregado ao abrir. Só o que a
   // pessoa mudar daqui vai viajar — devolver o objeto inteiro sobrescrevia o
@@ -142,6 +158,15 @@ export function LeadFieldsForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id]);
 
+  // FORK MIA (.109): quem digitou no campo Valor de antes enquanto os itens
+  // carregavam não perde o número: o bloco assume com o valor à mão digitado.
+  if (itens.pronto && itens.rascunho && blocoAssumiu !== lead.id) {
+    setBlocoAssumiu(lead.id);
+    if (form.getFieldState("valueReais").isDirty) {
+      itens.setRascunho({ ...itens.rascunho, modo: "a_mao", antigo: false, valorTexto: form.getValues("valueReais") });
+    }
+  }
+
   useImperativeHandle(controle, () => ({
     confirmarCampo(confirmacao) {
       // A confirmação pode terminar depois de a pessoa abrir outro card.
@@ -155,9 +180,17 @@ export function LeadFieldsForm({
   }), [lead.id]);
 
   async function onSubmit(values: FormShape) {
+    // FORK MIA (.109): com o bloco, o valor é do rascunho (a soma ou o digitado) e
+    // quem o grava é `PUT /api/v1/leads/[id]/itens`, antes do PATCH de sempre.
+    if (usarBloco) {
+      if (itens.valorAoSalvar === undefined) {
+        toast.error(t("Corrija o valor antes de salvar."));
+        return;
+      }
+    }
     const reais = values.valueReais.trim();
     let valueCents: number | null = null;
-    if (reais.length > 0) {
+    if (!usarBloco && reais.length > 0) {
       // A MESMA moeda que o rótulo do campo mostra ao lado («Valor ($)»): é ela
       // que decide se a vírgula é decimal ou separador de milhar (#3331).
       valueCents = parseReaisToCents(reais, moedaDoValor);
@@ -180,7 +213,10 @@ export function LeadFieldsForm({
       apagouAMensalidade ? "" : values.recorrenciaMeses,
       moedaDoValor,
     );
-    if (!leitura.ok) {
+    // FORK MIA (.109): com o par escondido pelo funil, o que está gravado nele não
+    // é validado (nem enviado): um negócio antigo com duração e sem mensalidade
+    // não pode travar o Salvar de um campo que a pessoa nem vê.
+    if (!leitura.ok && mostrarRecorrente) {
       form.setError(leitura.campo === "valor" ? "valorRecorrenteReais" : "recorrenciaMeses", {
         message:
           leitura.motivo === "valor_invalido"
@@ -195,12 +231,21 @@ export function LeadFieldsForm({
     const patch: Record<string, unknown> = {
       title: values.title.trim(),
       description: values.description.trim() ? values.description.trim() : null,
-      value_cents: valueCents,
-      ...leitura.trio,
+      // FORK MIA (.109): com o bloco, o valor vai pelo PUT dos itens.
+      ...(usarBloco ? {} : { value_cents: valueCents }),
+      // FORK MIA (.109): com "Mostrar valor recorrente" desligado os campos não
+      // aparecem e não viajam (o que está gravado fica), a não ser que a pessoa
+      // tenha pedido "Apagar o valor recorrente".
+      ...(mostrarRecorrente && leitura.ok
+        ? leitura.trio
+        : apagarRecorrente
+          ? { recurring_value_cents: null, recurring_period: null, recurring_months: null }
+          : {}),
       expected_close_date: values.expected_close_date || null,
       // Vazio volta a NULO de propósito: "não classificado" é um estado, e não
       // a ausência de uma escolha que o sistema deveria ter chutado.
-      revenue_kind: values.revenue_kind ? values.revenue_kind : null,
+      // FORK MIA (.109): o Tipo de receita some com o valor recorrente (decisão 2).
+      ...(mostrarRecorrente ? { revenue_kind: values.revenue_kind ? values.revenue_kind : null } : {}),
       // Vazio volta a NULO: "não teve SDR" é resposta, e é a mais frequente
       // quando quem prospecta é quem fecha.
       originated_by_user_id: values.originated_by_user_id ? values.originated_by_user_id : null,
@@ -218,10 +263,17 @@ export function LeadFieldsForm({
     }
 
     try {
+      // FORK MIA (.109): primeiro os itens e o valor; se a gravação recusar, o
+      // resto do formulário não sai (o erro já apareceu na tela).
+      if (usarBloco) {
+        const gravou = await itens.salvar();
+        if (!gravou.ok) return;
+      }
       await edit.mutateAsync({
         leadId: lead.id,
         patch: parsed.data as UpdateLeadInput,
       });
+      setApagarRecorrente(false);
       // O que acabou de gravar vira a nova régua: o segundo salvamento não
       // reenvia o primeiro, e uma limpeza alheia no intervalo não é atropelada.
       setCamposCarregados({ ...customFields });
@@ -248,7 +300,30 @@ export function LeadFieldsForm({
           <Textarea id="description" rows={3} {...form.register("description")} />
         </div>
 
+        {/* FORK MIA (.109): o bloco de itens do negócio (tela 2 do protótipo). */}
+        {usarBloco && itens.rascunho ? (
+          <BlocoDeItens
+            itens={itens.rascunho.itens}
+            onItens={(novos) => itens.setRascunho({ ...itens.rascunho!, itens: novos })}
+            palavra={palavra}
+            moeda={itens.moeda}
+            desabilitado={edit.isPending || itens.salvando}
+          />
+        ) : itens.carregando ? (
+          <div className="h-24 animate-pulse rounded-lg border border-border" aria-hidden />
+        ) : null}
+
         <div className="grid grid-cols-2 gap-3">
+          {/* FORK MIA (.109): com o bloco, o Valor é a soma (ou o digitado à mão). */}
+          {usarBloco && itens.rascunho ? (
+            <CampoDoValor
+              rascunho={itens.rascunho}
+              onRascunho={itens.setRascunho}
+              palavra={palavra}
+              moeda={itens.moeda}
+              desabilitado={edit.isPending || itens.salvando}
+            />
+          ) : (
           <div className="space-y-2">
             {/* O rótulo segue a moeda do NEGÓCIO (a organização é a reserva):
                   `R$` em duro mentia para quem opera em euro. */}
@@ -266,6 +341,7 @@ export function LeadFieldsForm({
               </p>
             )}
           </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="expected_close_date">{t("Fechamento previsto")}</Label>
             <Input
@@ -284,6 +360,8 @@ export function LeadFieldsForm({
             relatório do mês. Vazio continua sendo uma resposta: a tela de metas
             mostra quantas vendas ficaram sem classificar, em vez de somá-las
             para um lado e inventar a divisão. */}
+        {/* FORK MIA (.109): some com "Mostrar valor recorrente" desligado (decisão 2). */}
+        {mostrarRecorrente ? (
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
             <Label htmlFor="revenue_kind">{t("Tipo de receita")}</Label>
@@ -298,6 +376,7 @@ export function LeadFieldsForm({
             </select>
           </div>
         </div>
+        ) : null}
 
         {/* Quem ORIGINOU: o SDR que marcou a reunião, quando não é quem
             fecha. A participação dele na meta sai daqui — do mesmo lugar em
@@ -325,6 +404,19 @@ export function LeadFieldsForm({
             diálogo do funil, com a mesma leitura — quem edita o negócio da
             conversa não deveria precisar abrir o quadro para corrigir o
             contrato. */}
+        {/* FORK MIA (.109): com "Mostrar valor recorrente" desligado, o par some; o
+            negócio que tem valor ali ganha o aviso para corrigir (tela 2). */}
+        {!mostrarRecorrente ? (
+          lead.recurring_value_cents != null ? (
+            <AvisoDoValorRecorrente
+              valorCents={lead.recurring_value_cents}
+              moeda={moedaDoValor}
+              palavra={palavra}
+              apagado={apagarRecorrente}
+              onApagar={() => setApagarRecorrente(true)}
+            />
+          ) : null
+        ) : (
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
             <Label htmlFor="valorRecorrenteReais">
@@ -362,6 +454,7 @@ export function LeadFieldsForm({
             )}
           </div>
         </div>
+        )}
 
         <div className="space-y-2">
           {/* A etiqueta do NEGÓCIO (#2979): o MESMO editor do Inbox, gravando
@@ -393,12 +486,12 @@ export function LeadFieldsForm({
 
       <div className="flex justify-end gap-2">
         {onCancel && (
-          <Button type="button" variant="ghost" onClick={onCancel} disabled={edit.isPending}>
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={edit.isPending || itens.salvando}>
             {t("Cancelar")}
           </Button>
         )}
-        <Button type="submit" disabled={edit.isPending}>
-          {edit.isPending ? t("Salvando…") : t("Salvar")}
+        <Button type="submit" disabled={edit.isPending || itens.salvando}>
+          {edit.isPending || itens.salvando ? t("Salvando…") : t("Salvar")}
         </Button>
       </div>
     </form>

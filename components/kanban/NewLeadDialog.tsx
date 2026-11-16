@@ -46,6 +46,8 @@ import { AbrirConversaAposSalvar } from "@/components/channels/AbrirConversaApos
 import type { AlvoDeConversa } from "@/components/channels/SeletorDeCanalParaConversa";
 import { EcoDoValor } from "./EcoDoValor";
 import { SeletorDeContato } from "./SeletorDeContato";
+// FORK MIA (.109): a opção "Mostrar valor recorrente" do funil (docs/fork/produto-no-negocio.md).
+import { mostrarValorRecorrente } from "@/lib/produto-no-negocio/funil";
 
 interface FormShape {
   title: string;
@@ -595,7 +597,10 @@ export function NewLeadDialog({
               que se vende aqui (agência, clínica, escola, software), e era
               isso que ia para a descrição ou para uma etiqueta, onde nenhum
               relatório enxerga. Opcional: quem vende uma vez só não preenche
-              nada e a tela fica como era. */}
+              nada e a tela fica como era.
+              FORK MIA (.109): com "Mostrar valor recorrente" desligado no funil, o
+              par some (docs/fork/produto-no-negocio.md); vazios, nada viaja. */}
+          {mostrarValorRecorrente(settings) && (
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="valorRecorrenteReais">
@@ -635,6 +640,7 @@ export function NewLeadDialog({
               )}
             </div>
           </div>
+          )}
 
           {/* Item C2 — ver o comentario em EditContactDialog. */}
           {mostraEmpresa ? (

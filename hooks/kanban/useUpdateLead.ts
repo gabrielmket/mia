@@ -38,6 +38,8 @@ function gravaLeadNoQuadro(
 
 interface WinArgs {
   leadId: string;
+  /** FORK MIA (.109): o motivo escolhido na janela de ganho (a rota já aceitava `won_reason`). */
+  wonReason?: string;
 }
 interface LoseArgs {
   leadId: string;
@@ -48,9 +50,9 @@ export function useWinLead(pipelineId: string) {
   const qc = useQueryClient();
   const queryKey = ["board", pipelineId] as const;
   return useMutation({
-    mutationFn: async ({ leadId }: WinArgs) => {
+    mutationFn: async ({ leadId, wonReason }: WinArgs) => {
       marcarEcoLocal(leadId);
-      return apiClient.post<{ data: Lead }>(`/api/v1/leads/${leadId}/win`, {});
+      return apiClient.post<{ data: Lead }>(`/api/v1/leads/${leadId}/win`, wonReason ? { won_reason: wonReason } : {});
     },
     onSuccess: (res, { leadId }) => {
       gravaLeadNoQuadro(qc, queryKey, leadId, res?.data);
