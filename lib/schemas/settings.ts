@@ -389,6 +389,11 @@ export const pipelineConfigPatchSchema = z.object({
       // linhas a mescla da tela e do MCP descartaria a chave em silêncio.
       compromisso: z.string().min(1).max(40).optional(),
       compromisso_plural: z.string().min(1).max(40).optional(),
+      // FORK MIA (.109): como o funil chama o que o negócio vende ("Tratamento",
+      // "Produto", "Serviço"), a palavra do bloco do negócio, da janela de ganho e
+      // do relatório (lib/produto-no-negocio/funil.ts). VAZIO é aceito de
+      // propósito: é como a tela volta ao padrão do sistema, "Produto ou serviço".
+      produto: z.string().trim().max(40).optional(),
     })
     .optional(),
   fields: camposDoFunilPatchSchema.optional(),
@@ -451,6 +456,16 @@ export const pipelineConfigPatchSchema = z.object({
    * não entrou. Ver `lib/crm/metas/progresso.ts`.
    */
   vitoria_e_receita: z.boolean().optional(),
+  /**
+   * FORK MIA (.109) · o produto no negócio (lib/produto-no-negocio/funil.ts).
+   * `pedir_produto_no_ganho`: ligado, Marcar como ganho (o botão e o arrasto)
+   * só confirma com pelo menos um item; AUSENTE é desligado.
+   * `mostrar_valor_recorrente`: desligado, o valor recorrente, a duração e o
+   * Tipo de receita somem das telas do funil, e o funil conta como avulso nas
+   * metas; AUSENTE é ligado. Os dois ausentes são o comportamento de antes.
+   */
+  pedir_produto_no_ganho: z.boolean().optional(),
+  mostrar_valor_recorrente: z.boolean().optional(),
   /**
    * A ENTRADA DO INBOX — em que ETAPA deste funil a conversa nova vira card
    * (issue #3011, fatia 1).

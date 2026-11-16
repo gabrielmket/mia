@@ -1752,6 +1752,13 @@ export const AUDIT_ACTIONS = [
   "ai.trava_de_robo_teto",
   "ai.trava_de_robo_configurada",
   "ai.trava_de_robo_desfeita",
+  // FORK MIA (.109) · o produto no negócio (docs/fork/produto-no-negocio.md): a
+  // lista do bloco e o valor gravados (contagens, o modo do valor e o valor antes
+  // e depois), a palavra e as duas opções do funil pelo MCP de plataforma, e a
+  // palavra do segmento garantida na implantação.
+  "negocio.itens_alterados",
+  "funil.produto_no_negocio_configurado",
+  "funil.palavra_do_segmento_garantida",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

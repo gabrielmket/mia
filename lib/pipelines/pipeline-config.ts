@@ -103,6 +103,13 @@ export async function gravarConfiguracaoDoFunil(
   if (patch.vitoria_e_receita !== undefined) {
     nextSettings.vitoria_e_receita = patch.vitoria_e_receita;
   }
+  // FORK MIA (.109): as duas opções do produto no negócio (lib/produto-no-negocio/funil.ts).
+  if (patch.pedir_produto_no_ganho !== undefined) {
+    nextSettings.pedir_produto_no_ganho = patch.pedir_produto_no_ganho;
+  }
+  if (patch.mostrar_valor_recorrente !== undefined) {
+    nextSettings.mostrar_valor_recorrente = patch.mostrar_valor_recorrente;
+  }
   // Upstream v1.95+ (#3011): a ETAPA em que a conversa nova do Inbox vira card
   // neste funil. O bloco inteiro, porque `ativa` e `stage_id` são uma decisão só.
   if (patch.entrada_do_inbox !== undefined) {
