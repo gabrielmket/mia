@@ -1908,7 +1908,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261112120100_9154_registros_da_trava_de_robo', now())
+values (1, '20261116120100_9161_produto_do_negocio_nos_relatorios', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -21862,6 +21862,506 @@ create policy mia_travas_de_robo_select on public.mia_travas_de_robo
 revoke all on public.mia_travas_de_robo from public, anon, authenticated;
 grant select on public.mia_travas_de_robo to authenticated;
 grant select, insert, update, delete on public.mia_travas_de_robo to service_role;
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9160 · os itens do negócio ───
+--
+-- FORK MIA (.109). Espelho EXATO da migration 9160 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+--
+-- 9160 · os itens do negócio
+--
+-- FORK MIA (.109). Só objetos NOSSOS (docs/FORK-MIA.md, regra 3): uma tabela
+-- nova, as constraints dela dentro de `do` que confere o catálogo, uma função de
+-- gatilho com nome nosso (a empresa do item é a do negócio e a do produto), o
+-- gatilho de `updated_at` com a função de sempre do upstream
+-- (`fn_set_updated_at`, só CHAMADA) e uma coluna NOVA em `crm_leads`
+-- (acrescentada, como `originated_by_user_id` e `revenue_kind` da 0243).
+
+create table if not exists public.mia_itens_do_negocio (
+  id                    uuid primary key default gen_random_uuid(),
+  organization_id       uuid not null references public.organizations(id) on delete cascade,
+  lead_id               uuid not null references public.crm_leads(id) on delete cascade,
+  -- O produto do catálogo. Apagar o produto solta a referência e o item fica com
+  -- o nome e o preço de quando entrou: o negócio fechado não muda.
+  product_id            uuid references public.catalog_products(id) on delete set null,
+  -- Congelados na entrada (o "preço do dia").
+  nome                  text not null,
+  codigo                text,
+  preco_unitario_cents  bigint not null,
+  moeda                 text not null default 'BRL',
+  -- Do negócio.
+  quantidade            integer not null default 1,
+  desconto_cents        bigint not null default 0,
+  -- fractional indexing, igual position_in_stage: NUNCA int (CLAUDE.md).
+  position              numeric not null default 1000,
+  created_by_user_id    uuid references auth.users(id) on delete set null,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now()
+);
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'mia_itens_do_negocio_quantidade') then
+    alter table public.mia_itens_do_negocio add constraint mia_itens_do_negocio_quantidade
+      check (quantidade between 1 and 99);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_itens_do_negocio_preco') then
+    alter table public.mia_itens_do_negocio add constraint mia_itens_do_negocio_preco
+      check (preco_unitario_cents >= 0);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_itens_do_negocio_desconto') then
+    -- O desconto nunca passa do valor do item: o item não fica negativo.
+    alter table public.mia_itens_do_negocio add constraint mia_itens_do_negocio_desconto
+      check (desconto_cents >= 0 and desconto_cents <= preco_unitario_cents * quantidade);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_itens_do_negocio_nome') then
+    alter table public.mia_itens_do_negocio add constraint mia_itens_do_negocio_nome
+      check (length(btrim(nome)) between 1 and 300);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_itens_do_negocio_moeda') then
+    alter table public.mia_itens_do_negocio add constraint mia_itens_do_negocio_moeda
+      check (moeda ~ '^[A-Z]{3}$');
+  end if;
+end $$;
+
+comment on table public.mia_itens_do_negocio is
+  'MIA (9160): o que o negocio vendeu (docs/fork/produto-no-negocio.md). Cada linha e um produto do catalogo (catalog_products) com quantidade (1 a 99) e desconto do negocio, e com preco, nome e codigo CONGELADOS na entrada: mudar o catalogo depois nao mexe no negocio. Produto apagado deixa o item com o nome de quando entrou. O valor do negocio (crm_leads.value_cents) e a soma destes itens e dos itens da proposta enviada, a nao ser que crm_leads.valor_a_mao. Toda a equipe da empresa le; so o servidor escreve.';
+
+-- Um produto aparece uma vez por negócio: somar de novo aumenta a quantidade.
+create unique index if not exists mia_itens_do_negocio_produto_uidx
+  on public.mia_itens_do_negocio (lead_id, product_id)
+  where product_id is not null;
+create index if not exists mia_itens_do_negocio_lead_idx
+  on public.mia_itens_do_negocio (organization_id, lead_id, position);
+create index if not exists mia_itens_do_negocio_produto_idx
+  on public.mia_itens_do_negocio (organization_id, product_id)
+  where product_id is not null;
+
+-- ── a empresa do item é a do negócio e a do produto ─────────────────────────
+-- A escrita é do servidor (service_role, que ignora RLS): sem esta trava, um item
+-- com organization_id = A podia apontar para negócio ou produto de B. O mesmo
+-- desenho de `fn_verificar_org_do_item_da_proposta` (0464), com nome nosso.
+create or replace function public.fn_mia_item_do_negocio_coerente()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_org uuid;
+begin
+  select organization_id into v_org from public.crm_leads where id = new.lead_id;
+  if v_org is distinct from new.organization_id then
+    raise exception 'mia_item_do_negocio_org_do_negocio' using errcode = '23514';
+  end if;
+  if new.product_id is not null then
+    select organization_id into v_org from public.catalog_products where id = new.product_id;
+    if v_org is distinct from new.organization_id then
+      raise exception 'mia_item_do_negocio_org_do_produto' using errcode = '23514';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+-- Função de gatilho: não é RPC, mas nasce com EXECUTE para public e anon como
+-- qualquer função em public (CLAUDE.md, Migrations item 9).
+revoke execute on function public.fn_mia_item_do_negocio_coerente() from public, anon;
+
+drop trigger if exists trg_mia_itens_do_negocio_coerente on public.mia_itens_do_negocio;
+create trigger trg_mia_itens_do_negocio_coerente
+  before insert or update of organization_id, lead_id, product_id on public.mia_itens_do_negocio
+  for each row execute function public.fn_mia_item_do_negocio_coerente();
+
+drop trigger if exists trg_mia_itens_do_negocio_touch on public.mia_itens_do_negocio;
+create trigger trg_mia_itens_do_negocio_touch
+  before update on public.mia_itens_do_negocio
+  for each row execute function public.fn_set_updated_at();
+
+-- ── RLS: toda a equipe da empresa lê; só o servidor escreve ────────────────
+alter table public.mia_itens_do_negocio enable row level security;
+
+drop policy if exists mia_itens_do_negocio_select on public.mia_itens_do_negocio;
+create policy mia_itens_do_negocio_select on public.mia_itens_do_negocio
+  for select to authenticated
+  using (
+    public.fn_is_platform_admin()
+    or organization_id in (select public.fn_user_org_ids())
+  );
+
+-- O default ACL do Supabase dá ALL a anon e authenticated em toda tabela nova;
+-- o `grant select` sozinho não o desfaz (lição da 9001).
+revoke all on public.mia_itens_do_negocio from public, anon, authenticated;
+grant select on public.mia_itens_do_negocio to authenticated;
+grant select, insert, update, delete on public.mia_itens_do_negocio to service_role;
+
+-- ── o valor digitado à mão ───────────────────────────────────────────────────
+-- Acrescentada SEM default primeiro: os negócios que já existem ficam NULOS
+-- ("de antes dos itens"), sem nenhuma linha reescrita. O default FALSO vale só
+-- para o que nascer daqui em diante. Rodar de novo não muda nada.
+alter table public.crm_leads
+  add column if not exists valor_a_mao boolean;
+alter table public.crm_leads
+  alter column valor_a_mao set default false;
+
+comment on column public.crm_leads.valor_a_mao is
+  'MIA (9160): true = alguem digitou o valor do negocio a mao e ele parou de somar os itens (mia_itens_do_negocio) ate alguem pedir "Usar a soma". false = o valor e a soma. NULL = negocio de antes dos itens, que nao foi tocado: vale o value_cents que ja tinha. Quem grava e a rota dos itens; o resto do sistema continua lendo value_cents.';
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9161 · o produto do negócio nos relatórios montados ───
+--
+-- FORK MIA (.109). Espelho EXATO da migration 9161 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+--
+-- 9161 · o produto do negócio nos relatórios montados
+--
+-- `fn_mia_`: só objetos NOSSOS são redefinidos (docs/FORK-MIA.md, regra 3).
+-- Idempotente: `create or replace`, e as permissões reemitidas como na 9046. O
+-- corpo é o da última definição; o que muda está marcado "9161".
+
+create or replace function public.fn_mia_relatorio_linhas(
+  p_org uuid,
+  p_fonte text,
+  p_inicio timestamptz,
+  p_fim timestamptz,
+  p_filtros jsonb,
+  p_agora timestamptz,
+  p_fuso text
+) returns setof public.mia_relatorio_linha
+language plpgsql
+stable
+set search_path = ''
+as $f$
+declare
+  v_agora timestamptz := coalesce(p_agora, now());
+  v_hoje date := (coalesce(p_agora, now()) at time zone p_fuso)::date;
+  v_funil uuid := nullif(coalesce(p_filtros, '{}'::jsonb)->>'funil', '')::uuid;
+  v_so_receita boolean := coalesce((coalesce(p_filtros, '{}'::jsonb)->>'so_receita')::boolean, false);
+  v_tudo boolean := p_inicio = '-infinity'::timestamptz;
+  -- 9041: só calcula o caro quando o pedido usa (sem `__precisa`, calcula tudo).
+  v_precisa jsonb := coalesce(p_filtros, '{}'::jsonb) -> '__precisa';
+  v_produto boolean := v_precisa is null or v_precisa ? 'produto';
+  v_agente boolean := v_precisa is null or v_precisa ? 'resp';
+begin
+  if p_fonte = 'negocios' then
+    return query
+    with primeira as (
+      select st.pipeline_id, min(st.position) as posicao
+        from public.crm_stages st
+       where st.organization_id = p_org and not st.is_archived and not st.is_lost
+       group by st.pipeline_id
+    )
+    select
+      l.id,
+      case when l.status = 'open' then l.created_at else l.closed_at end,
+      jsonb_build_object(
+        'etapa', l.stage_id::text,
+        'situacao', case l.status when 'open' then 'aberto' when 'won' then 'ganho' else 'perdido' end,
+        'resp', l.owner_user_id::text,
+        'origem', nullif(btrim(l.source), ''),
+        'etiqueta', to_jsonb(coalesce(l.tags, '{}'::text[])),
+        -- 9041: os produtos do catálogo nas propostas do negócio; 9161: e os do próprio negócio.
+        'produto', coalesce(pd.produtos, '[]'::jsonb),
+        'motivo', case when l.status = 'lost' then nullif(btrim(l.lost_reason), '') end,
+        'previsto', to_char(l.expected_close_date, 'YYYY-MM'),
+        'funil', l.pipeline_id::text
+      ),
+      jsonb_build_object('etapa', s.name, 'funil', p.name, 'ordem_etapa', s.position),
+      l.value_cents,
+      nullif(btrim(l.currency), ''),
+      case l.status when 'open' then 'aberto' when 'won' then 'ganho' else 'perdido' end,
+      round((extract(epoch from (coalesce(l.closed_at, v_agora) - coalesce(l.stage_changed_at, l.created_at))) / 86400.0)::numeric, 2),
+      case when l.status = 'won'
+           then round((extract(epoch from (l.closed_at - l.created_at)) / 86400.0)::numeric, 2) end,
+      case
+        when l.status = 'won' then 1e12::numeric
+        when l.status = 'lost' then coalesce(lf.position, case when not s.is_lost then s.position end, pr.posicao)
+        else s.position
+      end,
+      case
+        when s.is_won then 100::numeric
+        when s.is_lost then 0::numeric
+        when (p.settings #>> '{previsao,fonte}') = 'ia_quando_houver' and sc.ai_probability is not null
+          then sc.ai_probability::numeric
+        else s.win_probability::numeric
+      end,
+      l.status = 'won'
+    from public.crm_leads l
+    join public.crm_stages s on s.id = l.stage_id and s.organization_id = l.organization_id
+    join public.crm_pipelines p on p.id = l.pipeline_id and p.organization_id = l.organization_id
+    left join public.crm_stages lf
+      on lf.id = l.lost_from_stage_id and lf.pipeline_id = l.pipeline_id
+    left join primeira pr on pr.pipeline_id = l.pipeline_id
+    left join public.crm_lead_scores sc
+      on sc.lead_id = l.id and sc.organization_id = l.organization_id
+    left join lateral (
+      -- O produto do negócio é o que foi proposto a ele: os itens com produto
+      -- do catálogo, menos as propostas canceladas e as substituídas por uma
+      -- versão nova (que traz os itens dela). Pelo NOME, como a etiqueta: é o
+      -- que a pessoa lê, e o filtro casa pelo mesmo texto.
+      -- 9161: e os itens do PRÓPRIO negócio (o bloco do negócio, 9160), para o
+      -- negócio sem proposta também cair no grupo do produto. Pelo nome do
+      -- catálogo de hoje, como a proposta; produto apagado fica com o nome de
+      -- quando entrou.
+      select jsonb_agg(distinct nm.nome) as produtos
+        from (
+          select btrim(cp.nome) as nome
+            from public.crm_proposals pp
+            join public.crm_proposal_items it
+              on it.proposal_id = pp.id and it.organization_id = pp.organization_id
+            join public.catalog_products cp
+              on cp.id = it.product_id and cp.organization_id = pp.organization_id
+           where v_produto
+             and pp.lead_id = l.id and pp.organization_id = p_org
+             and pp.status not in ('cancelada', 'substituida')
+             and nullif(btrim(cp.nome), '') is not null
+          union all
+          select btrim(coalesce(cpn.nome, ni.nome))
+            from public.mia_itens_do_negocio ni
+            left join public.catalog_products cpn
+              on cpn.id = ni.product_id and cpn.organization_id = ni.organization_id
+           where v_produto
+             and ni.lead_id = l.id and ni.organization_id = p_org
+             and nullif(btrim(coalesce(cpn.nome, ni.nome)), '') is not null
+        ) nm
+    ) pd on true
+    where l.organization_id = p_org
+      and coalesce(l.lost_reason, '') <> 'moved_to_another_pipeline'
+      and (v_funil is null or l.pipeline_id = v_funil)
+      and (not v_so_receita or coalesce((p.settings->>'vitoria_e_receita')::boolean, true))
+      and (
+        (l.status = 'open' and l.created_at >= p_inicio and l.created_at < p_fim)
+        or (l.status <> 'open' and l.closed_at >= p_inicio and l.closed_at < p_fim)
+      );
+
+  elsif p_fonte = 'conversas' then
+    -- 9041: o responsável é QUEM ATENDEU. A primeira pessoa que respondeu (a do
+    -- celular não tem usuário: fica com quem está atribuído); quando só o
+    -- agente respondeu, o agente, pelo nome (o ativo na conversa, ou o da
+    -- última invocação); sem resposta, quem está atribuído.
+    return query
+    select
+      c.id,
+      f.primeira_entrada,
+      jsonb_build_object(
+        'quem', case when r.primeira_humana is not null then 'equipe'
+                     when r.primeira_ia is not null then 'agente'
+                     else 'sem_resposta' end,
+        'canal', c.channel,
+        'resp', case
+                  when r.primeira_humana is not null then coalesce(r.humano, c.assigned_to_user_id)::text
+                  when r.primeira_ia is not null then 'ia:' || coalesce(ag.id::text, '')
+                  else c.assigned_to_user_id::text
+                end,
+        'etiqueta', to_jsonb(coalesce(c.tags, '{}'::text[]))
+      ),
+      jsonb_build_object('resp', ag.name),
+      null::bigint,
+      null::text,
+      null::text,
+      case
+        when r.primeira_humana is not null
+          then round(extract(epoch from (r.primeira_humana - f.primeira_entrada))::numeric)
+        when r.primeira_ia is not null
+          then round(extract(epoch from (r.primeira_ia - f.primeira_entrada))::numeric)
+      end,
+      null::numeric,
+      null::numeric,
+      null::numeric,
+      (r.primeira_humana is null and r.primeira_ia is not null)
+    from public.conversations c
+    cross join lateral (
+      select min(m.sent_at) as primeira_entrada
+        from public.messages m
+       where m.conversation_id = c.id
+         and m.direction = 'inbound'
+         and m.type <> 'reaction'  -- 9046: a reação não abre o relógio
+         and m.sent_at >= p_inicio and m.sent_at < p_fim
+    ) f
+    cross join lateral (
+      select
+        min(m.sent_at) filter (where m.sent_by_user_id is not null or m.sent_via = 'external_device') as primeira_humana,
+        (array_agg(m.sent_by_user_id order by m.sent_at) filter (where m.sent_by_user_id is not null))[1] as humano,
+        min(m.sent_at) filter (where m.sent_via = 'ai') as primeira_ia
+      from public.messages m
+      where m.conversation_id = c.id
+        and m.direction = 'outbound'
+        and m.type <> 'reaction'  -- 9046: reagir pelo celular não é responder
+        and m.sent_at >= f.primeira_entrada and m.sent_at < p_fim
+    ) r
+    left join lateral (
+      select a.id, a.name
+        from public.ai_agents a
+       where v_agente
+         and r.primeira_humana is null and r.primeira_ia is not null
+         and a.organization_id = p_org
+         and a.id = coalesce(c.active_ai_agent_id, (
+               select i.agent_id from public.ai_invocations i
+                where i.conversation_id = c.id and i.organization_id = p_org
+                order by i.created_at desc
+                limit 1))
+    ) ag on true
+    where c.organization_id = p_org
+      and not c.is_group
+      and greatest(c.last_inbound_at, c.last_message_at, c.created_at) >= p_inicio
+      and c.created_at < p_fim
+      and f.primeira_entrada is not null;
+
+  elsif p_fonte = 'contatos' then
+    return query
+    select
+      ct.id,
+      ct.created_at,
+      jsonb_build_object(
+        'origem', nullif(btrim(ct.source), ''),
+        'canal', cv.channel,
+        'etiqueta', to_jsonb(coalesce(ct.tags, '{}'::text[])),
+        'resp', ct.carteira_user_id::text
+      ),
+      '{}'::jsonb,
+      null::bigint, null::text, null::text,
+      null::numeric, null::numeric, null::numeric, null::numeric,
+      false
+    from public.contacts ct
+    left join lateral (
+      select c.channel from public.conversations c
+       where c.contact_id = ct.id and c.organization_id = p_org
+       order by c.created_at
+       limit 1
+    ) cv on true
+    where ct.organization_id = p_org
+      and ct.is_merged_into is null
+      and not ct.is_personal
+      and ct.kind = 'person'
+      and ct.created_at >= p_inicio and ct.created_at < p_fim;
+
+  elsif p_fonte = 'agenda' then
+    return query
+    select
+      a.id,
+      a.starts_at,
+      jsonb_build_object(
+        'situacao', case a.status when 'pending' then 'marcado' when 'confirmed' then 'confirmado'
+                                  when 'completed' then 'compareceu' when 'no_show' then 'faltou'
+                                  else 'desmarcou' end,
+        'tipo', a.event_type_id::text,
+        'prof', a.owner_user_id::text,
+        'resp', case when a.created_by_kind = 'ai' and a.created_by_agent_id is not null
+                     then 'ia:' || a.created_by_agent_id::text
+                     else a.created_by_user_id::text end
+      ),
+      jsonb_build_object(
+        'tipo', et.name,
+        'resp', case when a.created_by_kind = 'ai' then ag.name end
+      ),
+      null::bigint, null::text,
+      case a.status when 'pending' then 'marcado' when 'confirmed' then 'confirmado'
+                    when 'completed' then 'compareceu' when 'no_show' then 'faltou'
+                    else 'desmarcou' end,
+      null::numeric, null::numeric, null::numeric, null::numeric,
+      a.status = 'completed'
+    from public.calendar_appointments a
+    left join public.calendar_event_types et
+      on et.id = a.event_type_id and et.organization_id = a.organization_id
+    left join public.ai_agents ag
+      on ag.id = a.created_by_agent_id and ag.organization_id = a.organization_id
+    where a.organization_id = p_org
+      and a.starts_at >= p_inicio and a.starts_at < p_fim;
+
+  elsif p_fonte = 'followup' then
+    -- 9041: o responsável é o dono do contato (`carteira_user_id`), o mesmo
+    -- dos contatos.
+    return query
+    select
+      e.id,
+      e.started_at,
+      jsonb_build_object(
+        'resultado', case e.outcome
+                       when 'converted' then 'fechou'
+                       when 'replied' then 'respondeu'
+                       when 'opted_out' then 'parou'
+                       when 'handoff' then 'equipe'
+                       when 'exhausted' then 'sem_resposta'
+                       else case when e.status in ('completed', 'cancelled', 'dead') then 'encerrado'
+                                 else 'andamento' end
+                     end,
+        'fluxo', e.pointer_id::text,
+        'resp', ct.carteira_user_id::text
+      ),
+      jsonb_build_object('fluxo', fp.name),
+      null::bigint, null::text, e.outcome,
+      null::numeric, null::numeric, null::numeric, null::numeric,
+      coalesce(e.outcome in ('replied', 'converted'), false)
+    from public.followup_enrollments e
+    join public.followup_flow_pointers fp
+      on fp.id = e.pointer_id and fp.organization_id = e.organization_id and fp.surface = 'followup'
+    left join public.contacts ct
+      on ct.id = e.contact_id and ct.organization_id = e.organization_id
+    where e.organization_id = p_org
+      and e.started_at >= p_inicio and e.started_at < p_fim
+      and exists (
+        select 1 from public.followup_enrollment_events ev
+         where ev.enrollment_id = e.id and ev.event_type = 'action_sent'
+      );
+
+  elsif p_fonte = 'obrigacoes' then
+    return query
+    select
+      o.id,
+      case when v.vence is null then null
+           else (v.vence::timestamp at time zone p_fuso) end,
+      jsonb_build_object(
+        'situacao', v.sit,
+        'tipo', coalesce(o.tipo_id::text, 'nome:' || o.nome),
+        'resp', o.responsavel_user_id::text,
+        'categoria', o.categoria
+      ),
+      jsonb_build_object('tipo', coalesce(t.nome, o.nome)),
+      null::bigint, null::text, v.sit,
+      null::numeric, null::numeric, null::numeric, null::numeric,
+      v.sit in ('valido', 'recebido', 'feita')
+    from public.mia_obrigacoes o
+    left join public.mia_obrigacoes_tipos t
+      on t.id = o.tipo_id and t.organization_id = o.organization_id
+    cross join lateral (
+      select
+        case when o.categoria = 'atividade' then o.proxima_em else coalesce(o.valido_ate, o.prazo_em) end as vence,
+        public.fn_mia_obrigacao_situacao(o.categoria, o.proxima_em, o.feita_em, o.valido_ate,
+                                         o.recebido_em, o.pedido_em, o.avisos_dias, v_hoje) as sit
+    ) v
+    where o.organization_id = p_org
+      and o.arquivado_em is null
+      and (
+        (v_tudo and v.vence is null)
+        or (v.vence is not null
+            and (v.vence::timestamp at time zone p_fuso) >= p_inicio
+            and (v.vence::timestamp at time zone p_fuso) < p_fim)
+      );
+
+  elsif p_fonte = 'anuncios' then
+    return query
+    select * from public.fn_mia_relatorio_linhas_de_anuncios(p_org, p_inicio, p_fim);
+
+  else
+    raise exception 'fonte_desconhecida: %', p_fonte using errcode = '22023';
+  end if;
+end;
+$f$;
+
+comment on function public.fn_mia_relatorio_linhas(uuid, text, timestamptz, timestamptz, jsonb, timestamptz, text) is
+  'MIA (9030, 9041, 9046, 9161): as linhas de uma fonte do motor de relatorios no periodo [p_inicio, p_fim), com a regra de data do prototipo. security invoker: cada fonte le pela RLS de quem chama, e toda leitura filtra organization_id = p_org. 9041: produto nos negocios, quem atendeu (pessoa ou agente) nas conversas, dono do contato no follow-up; __precisa em p_filtros diz se vale buscar produto e agente. 9046: a reacao do WhatsApp (messages.type = reaction, upstream 0684) nao abre o relogio nem conta como resposta. 9161: o produto dos negocios inclui os itens do proprio negocio (mia_itens_do_negocio), nao so os da proposta.';
+
+revoke all on function public.fn_mia_relatorio_linhas(uuid, text, timestamptz, timestamptz, jsonb, timestamptz, text) from public;
+revoke execute on function public.fn_mia_relatorio_linhas(uuid, text, timestamptz, timestamptz, jsonb, timestamptz, text) from anon;
+grant execute on function public.fn_mia_relatorio_linhas(uuid, text, timestamptz, timestamptz, jsonb, timestamptz, text) to authenticated, service_role;
 
 notify pgrst, 'reload schema';
 

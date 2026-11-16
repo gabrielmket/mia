@@ -372,6 +372,8 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     // .108 — a trava de robô (9153, 9154).
     "mia_trava_de_robo_config",
     "mia_travas_de_robo",
+    // .109 — os itens do negócio (9160).
+    "mia_itens_do_negocio",
   ].map((tabela) => ({
     tabela,
     razao:

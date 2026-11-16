@@ -66,6 +66,8 @@ const LIDAS_PELO_CLIENTE = [
   // .108 — a trava de robô (9153, 9154): gerente lê, só o servidor escreve.
   "mia_trava_de_robo_config",
   "mia_travas_de_robo",
+  // .109 — os itens do negócio (9160): a equipe lê, só o servidor escreve.
+  "mia_itens_do_negocio",
 ] as const;
 
 /**
@@ -98,6 +100,8 @@ const SO_A_PLATAFORMA_ESCREVE = [
   // .108 — a trava de robô: a configuração é do MCP de plataforma e o registro, do motor.
   "mia_trava_de_robo_config",
   "mia_travas_de_robo",
+  // .109 — os itens do negócio: a rota grava pelo service_role, com a empresa da sessão.
+  "mia_itens_do_negocio",
   // .79 — empresa única: `crm_empresas` está APOSENTADA (9033: os dados foram para
   // `companies`, a sessão só lê até a entrega 5 tirá-la de vez), e as três tabelas
   // ao lado são escritas só pelas funções definer da 9034.
@@ -221,6 +225,26 @@ function semear(org: string, gestor: string, tag: string): string {
       on conflict (organization_id) do nothing;
     insert into public.mia_travas_de_robo (organization_id, motivo, mensagens_de_robo, respostas_da_ia)
       values ('${org}', 'robo', 3, 3);
+    -- .109 (9160): um item do catálogo num negócio.
+    with fn as (
+      insert into public.crm_pipelines (organization_id, name, slug)
+        values ('${org}', 'Funil 9160 ${tag}', 'funil-9160-${tag}')
+        returning id
+    ), et as (
+      insert into public.crm_stages (organization_id, pipeline_id, name, slug, position)
+        select '${org}', fn.id, 'Avaliação', 'avaliacao-9160-${tag}', 1000 from fn
+        returning id, pipeline_id
+    ), ld as (
+      insert into public.crm_leads (organization_id, pipeline_id, stage_id, title)
+        select '${org}', et.pipeline_id, et.id, 'Paciente Exemplo ${tag}' from et
+        returning id
+    ), pr as (
+      insert into public.catalog_products (organization_id, codigo, nome, preco_cents)
+        values ('${org}', 'LIM-${tag}', 'Limpeza ${tag}', 22000)
+        returning id
+    )
+    insert into public.mia_itens_do_negocio (organization_id, lead_id, product_id, nome, preco_unitario_cents)
+      select '${org}', ld.id, pr.id, 'Limpeza ${tag}', 22000 from ld, pr;
   `;
 }
 
