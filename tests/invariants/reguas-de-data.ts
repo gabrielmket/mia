@@ -59,6 +59,9 @@ import { diaDoValor } from "@/lib/followup/condicao-por-data";
 import { camposAlterados } from "@/lib/leads/campos-alterados";
 import { diaDoPrazo } from "@/lib/lgpd/sla";
 import { instanteDoBanco } from "@/lib/tempo/agora";
+// FORK MIA: as réguas de data do fork que entram na lista (fusão da v1.107).
+import { instanteDaMensagem } from "@/lib/agent-engine/agent/horario-da-ia-no-motor";
+import { linkDeConexaoVivo, venceu } from "@/lib/raio-x/prazos";
 
 /**
  * O instante de referência, com MILISSEGUNDO de propósito: é o pedaço que
@@ -248,6 +251,52 @@ export function reguasDeData(pool: pg.Pool): ReguaDeData[] {
           5 * 60_000,
         ) === false,
     },
+    // ─── FORK MIA: réguas de data do fork (fusão da v1.107) ─────────────────
+    {
+      nome: "instanteDaMensagem",
+      onde: "lib/agent-engine/agent/horario-da-ia-no-motor.ts:48",
+      // A hora em que a mensagem do job chegou, lida pelo pool do worker
+      // (`Date` em pg). É ela que decide se a IA estava fora do horário: recusar
+      // o `Date` faria o turno nunca saber a hora e responder fora do horário.
+      entrada: "consulta",
+      exercitar: async () => {
+        const { rows } = await pool.query<{ id: string }>(
+          `select id from messages
+            where organization_id = $1 and conversation_id = $2 and direction = 'inbound'
+            limit 1`,
+          [IDS_DO_CASO.organizacao, IDS_DO_CASO.conversa],
+        );
+        const id = rows[0]?.id;
+        if (id === undefined) return false;
+        const instante = await instanteDaMensagem(pool, {
+          tenantId: IDS_DO_CASO.organizacao,
+          conversationId: IDS_DO_CASO.conversa,
+          inboundMessageId: id,
+        });
+        return instante !== null && instante.getTime() === CHEGADA_MS;
+      },
+    },
+    {
+      nome: "linkDeConexaoVivo",
+      onde: "lib/raio-x/prazos.ts:25",
+      // A validade do link de conexão do raio-X (`conexao_expira_em`,
+      // timestamptz). Recusar o `Date` daria o link como morto sempre. As duas
+      // pontas (um milissegundo antes e o próprio instante) prendem o epoch.
+      entrada: "valor",
+      exercitar: (valorCru) =>
+        linkDeConexaoVivo(valorCru as string | Date | null, new Date(CHEGADA_MS - 1)) &&
+        !linkDeConexaoVivo(valorCru as string | Date | null, new Date(CHEGADA_MS)),
+    },
+    {
+      nome: "venceu",
+      onde: "lib/raio-x/prazos.ts:47",
+      // Os prazos do raio-X (desconectar, apagar as conversas). Recusar o
+      // `Date` faria nenhum prazo vencer. As duas pontas prendem o epoch.
+      entrada: "valor",
+      exercitar: (valorCru) =>
+        venceu(valorCru as string | Date | null | undefined, new Date(CHEGADA_MS)) &&
+        !venceu(valorCru as string | Date | null | undefined, new Date(CHEGADA_MS - 1)),
+    },
   ];
 }
 
@@ -299,6 +348,32 @@ export const FORA_DA_LISTA: readonly { arquivo: string; motivo: string }[] = [
     arquivo: "scripts/demandas-derivadas-de-arquivada.leitura.ts",
     motivo:
       "leitor de PLANILHA (CSV de importação), não de banco: o valor chega string e o `Date` é defensivo para quem chamar com uma célula já convertida",
+  },
+  // ─── FORK MIA: arquivos do fork fora da lista (fusão da v1.107) ───────────
+  {
+    arquivo: "lib/demonstracao/semente/escritor.ts",
+    motivo:
+      "é a ESCRITA da semente da empresa de demonstração (`literal` monta o texto SQL `'…'::timestamptz` a partir de um `Date` do próprio roteiro), não uma régua de leitura",
+  },
+  {
+    arquivo: "lib/escalacao/mensagem-pendente.ts",
+    motivo:
+      "consome `normalizarInstante` (lib/ai/elegibilidade/gate.ts, na lista) e só separa o `Date` que ele devolve do `infinity` e do nulo; não lê data crua",
+  },
+  {
+    arquivo: "lib/escalacao/pausa-por-outra-conversa.ts",
+    motivo:
+      "helper privado `comoIso` do adaptador `pg` da pausa por outra conversa: normaliza na leitura da linha para o contrato string `desde`, que só é mostrado (quem atende desde quando) e não decide nada",
+  },
+  {
+    arquivo: "lib/mcp-plataforma/importacao/negocios.ts",
+    motivo:
+      "helper privado `comoTexto` da reexecução da importação: iguala a forma de uma coluna `date` (e do `bigint`) entre PostgREST e `pg` só para comparar havia × veio; não é `timestamptz` nem decide prazo",
+  },
+  {
+    arquivo: "lib/raio-x/horario.ts",
+    motivo:
+      "`momentoLocal` é o formatador de fuso do raio-X: recebe instante já lido (a análise passa `Date.parse` de string, os prazos passam `Date`) e não responde à ausência; as réguas de leitura do raio-X são `linkDeConexaoVivo` e `venceu`, na lista",
   },
 ];
 
