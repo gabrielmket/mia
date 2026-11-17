@@ -66,6 +66,8 @@ mede todo dia útil e mantém **uma** issue atualizada com o veredito.
 
 Ele **não funde nada** — a fusão é decisão de gente.
 
+**Workflows só do fork** (a fusão nunca os apaga, e o upstream não os tem): `sincronizar-upstream.yml`, `acolhida.yml`, `relogio.yml`, `vigia-de-colisao.yml` e `ensaio-de-banco.yml`. Este último é o ensaio de banco do PR: sobe um Postgres descartável com o schema da versão que está no ar (a etiqueta do `docker-compose.easypanel.yml` da base), carrega as demonstrações, aplica a versão do PR duas vezes e reprova erro, perda de dado, coluna sumida ou objeto nosso que diminui. As conferências moram em `scripts/ensaio-de-banco.sh`, que também roda na máquina.
+
 ### 5. Armadilha conhecida vira teste
 
 Cada coisa que entrou quebrada **sem dar erro** na fusão de 23/09 virou teste que
