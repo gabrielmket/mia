@@ -124,7 +124,8 @@ describe("a volta do Google guarda o cupom do navegador antes de a empresa nasce
     const GET = await rota();
     const res = await GET(volta("mia_cupom=PARCEIRO10"));
 
-    expect(vi.mocked(ensureTenantForUser)).toHaveBeenCalledWith(USUARIO, { source: "signup" });
+    // Upstream 1.107: a criação da empresa leva também as `pistas` do navegador (fuso e idioma).
+    expect(vi.mocked(ensureTenantForUser)).toHaveBeenCalledWith(USUARIO, expect.objectContaining({ source: "signup" }));
     expect(passagemQuandoAEmpresaNasceu).toEqual([expect.objectContaining({ user_id: USUARIO.id, codigo: "PARCEIRO10" })]);
     // O destino não muda por causa do cupom.
     expect(res.headers.get("location")).toBeNull();

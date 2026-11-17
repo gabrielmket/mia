@@ -50,6 +50,13 @@ vi.mock("@/lib/api/auth-dual", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: deps.admin }));
 vi.mock("@/lib/audit", () => ({ audit: deps.audit }));
+// FORK MIA: a trava da IA (a IA do agente é a da plataforma, lib/ai/trava-da-ia.ts)
+// lê o par da plataforma antes de gravar. Ela tem teste próprio; aqui sai da conta,
+// para os casos do nome repetido (upstream 1.107) medirem só a gravação.
+vi.mock("@/lib/ai/trava-da-ia", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai/trava-da-ia")>()),
+  travarIaDaVersaoNova: async (_admin: unknown, _args: unknown, corpo: object) => ({ ok: true, corpo }),
+}));
 vi.mock("@/lib/ai/agents/escopo", () => ({
   validarEscopoDaVersao: deps.escopo,
   codigoDoEscopo: () => "validation_failed",

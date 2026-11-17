@@ -216,9 +216,11 @@ describe("Agenda — a janela da camada em qualquer fuso de navegador", () => {
         expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(fuso);
 
         montar(FUNIS);
-        // Quarta, 11/03/2026: a semana desenhada vai do domingo 08 ao sábado 14.
-        expect(screen.getByTestId("coluna-dia-2026-03-08")).toBeTruthy();
-        expect(screen.getByTestId("coluna-dia-2026-03-14")).toBeTruthy();
+        // Quarta, 11/03/2026: a semana desenhada vai da segunda 09 ao domingo 15.
+        // FORK MIA: no fork a semana começa na segunda (`INICIO_DA_SEMANA`,
+        // lib/agenda/inicio-da-semana.ts); no upstream, no domingo (08 a 14).
+        expect(screen.getByTestId("coluna-dia-2026-03-09")).toBeTruthy();
+        expect(screen.getByTestId("coluna-dia-2026-03-15")).toBeTruthy();
 
         await userEvent.click(screen.getByTestId("camada-datas-alternar"));
         await userEvent.click(screen.getByRole("combobox", { name: "Campo de data do negócio" }));
@@ -228,8 +230,8 @@ describe("Agenda — a janela da camada em qualquer fuso de navegador", () => {
           .mocked(fetch)
           .mock.calls.map(([alvo]) => String(alvo))
           .find((alvo) => alvo.includes("datas-dos-negocios"));
-        expect(url).toContain("de=2026-03-08");
-        expect(url).toContain("ate=2026-03-14");
+        expect(url).toContain("de=2026-03-09");
+        expect(url).toContain("ate=2026-03-15");
       } finally {
         cleanup();
         process.env.TZ = anterior;

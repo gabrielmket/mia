@@ -9,6 +9,11 @@ vi.mock("@/lib/instalacao/modulos", () => ({ moduloLigado: async () => true }));
 vi.mock("@/lib/cobranca/cadastro", () => ({ cadastroExigeEscolhaDePlano: () => false,
   lerPlanosDoCadastro: async () => ({ padraoId: h.plano, oferecidos: h.offered ? [{ id: h.plano, trial_dias: h.trial }] : [] }) }));
 vi.mock("@/lib/audit", () => ({ audit: h.audit, hashEmail: () => "hash-de-teste" }));
+// FORK MIA: o cupom (.98) e a entrada paga (.96) do fork leem o banco antes do
+// GoTrue. Os casos daqui são do "continuar para o pagamento" do upstream, e rodam
+// com os dois passos do fork fora (sem cupom, plano sem entrada paga do fork).
+vi.mock("@/lib/cupons/cadastro", () => ({ conferirCupomDoCadastro: async () => ({ ok: true, codigo: null, diasGratis: false }) }));
+vi.mock("@/lib/pagamento-inicial/cadastro", () => ({ conferirCadastroDaEntradaPaga: async () => ({ ok: true, entradaPaga: false }) }));
 import { signUp } from "./signUp";
 import { verificarIntencaoDeContratacao } from "@/lib/cobranca/intencao-assinada";
 const U = "22222222-2222-4222-8222-222222222222";

@@ -28,6 +28,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const enviado = vi.hoisted(() => ({ forms: [] as FormData[] }));
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }));
+// Upstream 1.107: o fuso vem do NAVEGADOR quando é um dos oferecidos. O navegador
+// daqui fica em São Paulo, para o envio ser o mesmo em qualquer máquina de CI.
+vi.mock("@/lib/tempo/fuso-do-navegador", () => ({ fusoDoNavegador: () => "America/Sao_Paulo" }));
 vi.mock("@/app/actions/onboarding/acceptWelcome", () => ({
   acceptWelcome: vi.fn(async (fd: FormData) => {
     enviado.forms.push(fd);
