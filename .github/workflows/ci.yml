@@ -651,7 +651,7 @@ jobs:
     # medido — não há Docker onde esta matriz foi escrita —, e existe para o
     # vermelho continuar falando de schema: mantido em 20, a perna morreria por
     # relógio no meio da segunda passada.
-    timeout-minutes: 45
+    timeout-minutes: 60
     # 30 → 45 em 10/11/2026 (doc de decisão 302): cortada por relógio aos 30 min
     # no pg15 e no pg17, também na `main`. Razão inteira em
     # tests/unit/preambulo-do-ci-nao-come-o-relogio.test.ts (TETOS).
@@ -662,6 +662,11 @@ jobs:
     # 523 dos 597 arquivos verdes e nenhum vermelho, enquanto a do pg17 passou
     # inteira. O teto existia para o vermelho falar de schema, e no 30 ele passou
     # a falar do executor hospedado.
+    # FORK MIA (.110): 60, MEDIDO, tempo do job em 17/11/2026. Na ponta do #86
+    # (d71628e7e) pg15 e pg17 levaram 36 min, na repetição; na main da .110
+    # (268f0552d) o pg15 passou com 44 min e o pg17 foi cortado aos 45; no PR #89
+    # o pg17 foi cortado aos 45 nas duas rodadas seguidas. Provisório até a fusão
+    # MIA-12.
     # Executor próprio para trabalho nosso quando EXECUTOR_PROPRIO=ligado; o
     # porquê e a guarda contra fork: comentário do e2e-parte no e2e.yml.
     runs-on: ${{ vars.EXECUTOR_PROPRIO == 'ligado' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'deskcomm-proprio' || 'ubuntu-latest' }}
