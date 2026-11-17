@@ -92,7 +92,7 @@ describe("plataforma_garantir_funil · CAMPO NOVO `reabrir_perdido_dias` (upstre
     await ok(c, "plataforma_garantir_funil", { ...base, reabrir_perdido_dias: 30 });
     expect(settingsDoFunil(c).reabrir_perdido_dias).toBe(30);
 
-    const lido = await ok(c, "plataforma_ver_configuracao", { secoes: ["funis"] });
+    const lido = await ok(c, "plataforma_ver_funis", { funil: "Vendas" });
     expect(JSON.stringify(lido.dados)).toContain('"reabrir_perdido_dias":30');
 
     await ok(c, "plataforma_garantir_funil", { ...base, reabrir_perdido_dias: 0 });
