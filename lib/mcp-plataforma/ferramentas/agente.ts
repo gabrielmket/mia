@@ -15,6 +15,7 @@ import { TAMANHO_MAXIMO_DO_TEXTO } from "@/lib/agent-engine/agent/aviso-fora-do-
 import { MAX_FAIXAS_POR_DIA } from "@/lib/agent-engine/agent/horario-da-ia";
 import { DEFAULT_SENTIMENT_THRESHOLD } from "@/lib/ai/prompts/sentiment";
 import { garantirAgente, pausarAgente, publicarAgente, type PedidoDeAgente } from "@/lib/implantacao/agente";
+import { TETO_DE_ETIQUETAS_DA_SKILL } from "@/lib/implantacao/skills-do-agente";
 import { PACOTES } from "@/lib/mcp/tools/pacotes";
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
 
@@ -73,9 +74,10 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
     name: "plataforma_garantir_agente",
     description:
       "Cria ou altera um AGENTE DE IA de um cliente: o nome, o PROMPT, as capacidades (por pacote), os funis em que ele pode mexer, os materiais que consulta, " +
-      "os follow-ups que arma, as palavras que passam a conversa para uma pessoa, se o assunto jurídico passa a conversa para uma pessoa, o HORÁRIO DE ATENDIMENTO DA IA (as faixas por dia em que ela fica ativa; fora delas ela não responde e a conversa é da equipe), o limiar de sentimento e o número de WhatsApp. " +
+      "os follow-ups que arma, as palavras que passam a conversa para uma pessoa, se o assunto jurídico passa a conversa para uma pessoa, o HORÁRIO DE ATENDIMENTO DA IA (as faixas por dia em que ela fica ativa; fora delas ela não responde e a conversa é da equipe), o limiar de sentimento, o número de WhatsApp, a PAUSA entre respostas, se ele VÊ AS FOTOS do cliente, QUAIS SKILLS ele usa e por quais ETIQUETAS cada skill entra. " +
       "O que esta ferramenta grava é um RASCUNHO: nada muda no atendimento até plataforma_publicar_agente. " +
       "As exceções são do CADASTRO do agente e valem na hora: `nome`, `descricao`, `prioridade`, `limiar_de_sentimento` e `servidor_mcp_externo.no_atendimento`. " +
+      "E `skills_por_etiqueta` é da SKILL: vale na hora para todo agente que usa a skill. " +
       "ATENÇÃO: `bloquear_afirmacao_clinica` é da EMPRESA, não do agente: liga ou desliga a proteção para TODOS os agentes do cliente, na hora. Só faz sentido em clínica e consultório. " +
       "GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é o NOME do agente. Agente novo nasce com a versão 1 em rascunho; " +
       "agente com rascunho tem o rascunho atualizado; agente só com versão publicada ganha um rascunho novo. " +
@@ -158,6 +160,53 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
         .nullable()
         .optional()
         .describe("Quanto esperar o cliente terminar de mandar várias mensagens seguidas antes de responder, em milissegundos. null = o padrão da instalação."),
+      // Upstream 1.101 a 1.107 (9101, 9107, 9108, 9230).
+      pausa_entre_respostas_segundos: z
+        .number()
+        .int()
+        .min(0)
+        .max(600)
+        .nullable()
+        .optional()
+        .describe(
+          "A PAUSA mínima, em segundos, entre uma resposta da IA e a próxima na MESMA conversa: o que o cliente escrever nesse meio-tempo é respondido junto. " +
+            "De 0 a 600 (10 minutos), como na tela. null ou 0 = sem pausa (o padrão). É do RASCUNHO: vale depois de publicar.",
+        ),
+      ver_fotos_do_cliente: z
+        .boolean()
+        .optional()
+        .describe(
+          "O agente VÊ as fotos que o cliente envia (entende o que a foto mostra). Padrão: sim. Cada foto descrita é uma chamada paga a um modelo de IA com visão. " +
+            "false: ele sabe que chegou uma foto, mas não vê o que ela mostra, e pode pedir que o cliente conte. PDF não muda. É do RASCUNHO.",
+        ),
+      skills: z
+        .array(z.string().trim().min(1).max(120))
+        .max(100)
+        .nullable()
+        .optional()
+        .describe(
+          "QUAIS skills este agente usa, pelo nome (a lista em plataforma_ver_agentes, `skills_da_empresa`). " +
+            "null = TODAS as da empresa e da plataforma (o padrão); [] = nenhuma; nomes = só estas. A lista vem INTEIRA. É do RASCUNHO: vale depois de publicar.",
+        ),
+      skills_por_etiqueta: z
+        .array(
+          z
+            .object({
+              skill: z.string().trim().min(1).max(120).describe("O nome de uma skill INSTALADA na empresa."),
+              etiquetas: z
+                .array(z.string().trim().min(1).max(40))
+                .max(TETO_DE_ETIQUETAS_DA_SKILL)
+                .describe("A lista INTEIRA de etiquetas que fazem a skill entrar ([] tira todas). Cada uma tem de existir na empresa."),
+            })
+            .strict(),
+        )
+        .max(50)
+        .optional()
+        .describe(
+          "Por quais ETIQUETAS cada skill entra: se a conversa ou o contato tiver uma delas, a skill entra mesmo sem a palavra-chave (serve para a prospecção, em que o cliente quase nunca escreve o nome do ramo). " +
+            "ATENÇÃO: é da SKILL, não do agente: vale NA HORA, sem publicar, para todo agente que usa a skill. " +
+            "A etiqueta tem de existir na empresa (crie antes com plataforma_garantir_etiquetas); a skill tem de estar instalada nela (a de plataforma se instala na tela Skills).",
+        ),
       horario_de_atendimento: z
         .union([horarioDaIa, faixaNoFormatoAntigo])
         .nullable()

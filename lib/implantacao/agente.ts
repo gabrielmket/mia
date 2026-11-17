@@ -109,6 +109,14 @@ import {
 } from "./base";
 import { capacidadesOferecidas, montarCapacidades } from "./capacidades";
 import { horarioDaIaDoPedido, type HorarioPedido } from "./horario-da-ia";
+import {
+  conferirSkillsDoAgente,
+  gravarSkillsPorEtiqueta,
+  lerSkillsDaEmpresa,
+  prepararSkillsPorEtiqueta,
+  type SkillPorEtiquetaGarantida,
+  type SkillPorEtiquetaPedida,
+} from "./skills-do-agente";
 import { temHorarioDaIaDeclarado } from "@/lib/agent-engine/agent/horario-da-ia";
 import { lerFiltroDePalavraChave } from "@/lib/agent-engine/agent/palavra-chave-do-gatilho";
 
@@ -186,8 +194,8 @@ const ROTULO_DO_CAMPO: Record<string, string> = {
   pipeline_ids: "funis",
   knowledge_source_ids: "materiais",
   skill_names: "skills",
-  image_vision_enabled: "leitura de imagem",
-  reply_min_interval_ms: "intervalo entre respostas",
+  image_vision_enabled: "ver as fotos do cliente",
+  reply_min_interval_ms: "pausa entre respostas",
   provider: "IA da plataforma",
   model: "IA da plataforma",
   credential_id: "IA da plataforma",
@@ -260,6 +268,31 @@ export interface PedidoDeAgente {
   tamanho_da_mensagem?: number;
   espera_por_rajada_ms?: number | null;
   /**
+   * Upstream 1.101 (9101): a PAUSA mínima entre uma resposta da IA e a próxima
+   * na mesma conversa, em SEGUNDOS como na tela (0 a 600; o banco guarda ms).
+   * `null` ou 0 = sem pausa. É do rascunho.
+   */
+  pausa_entre_respostas_segundos?: number | null;
+  /**
+   * Upstream 1.107 (9108): o agente VÊ as fotos que o cliente envia
+   * (`image_vision_enabled`). Ligado por padrão, como na tela; cada foto
+   * descrita é uma chamada paga. É do rascunho.
+   */
+  ver_fotos_do_cliente?: boolean;
+  /**
+   * Upstream 1.107 (9107): QUAIS skills o agente usa (`skill_names`), pelo nome.
+   * `null` = todas as da empresa e da plataforma (o padrão); `[]` = nenhuma. É
+   * do rascunho.
+   */
+  skills?: string[] | null;
+  /**
+   * Upstream 1.107 (9230): as ETIQUETAS pelas quais cada skill entra mesmo sem a
+   * palavra-chave (`matcher.any_tags`). É da SKILL: vale para todo agente que a
+   * usa, na hora. A lista de cada skill é INTEIRA ([] tira as etiquetas).
+   * Ver `./skills-do-agente.ts`.
+   */
+  skills_por_etiqueta?: SkillPorEtiquetaPedida[];
+  /**
    * .85 — o HORÁRIO DE ATENDIMENTO DA IA (`filters.horario_da_ia`): as faixas
    * por dia em que a IA fica ATIVA; fora delas ela não responde e a conversa é
    * da equipe. O formato antigo de uma faixa (`{ inicio, fim, dias }`) é
@@ -309,6 +342,8 @@ export interface AgenteGarantido {
   agente: { id: string; nome: string; desfecho: Desfecho; mudancas: string[] };
   /** A camada "não fazer afirmação clínica" da EMPRESA, quando o pedido a trouxe. */
   bloqueio_de_afirmacao_clinica?: { ligado: boolean; desfecho: Desfecho };
+  /** As etiquetas de cada skill, quando o pedido as trouxe (são da skill e valem na hora). */
+  skills_por_etiqueta?: SkillPorEtiquetaGarantida[];
   versao: {
     id: string;
     numero: number;
@@ -647,6 +682,17 @@ async function montarVersao(
   if (pedido.dividir_mensagens !== undefined) corpo.split_messages = pedido.dividir_mensagens;
   if (pedido.tamanho_da_mensagem !== undefined) corpo.split_max_chars = pedido.tamanho_da_mensagem;
   if (pedido.espera_por_rajada_ms !== undefined) corpo.inbound_debounce_ms = pedido.espera_por_rajada_ms;
+  // Upstream 1.101 a 1.107: a pausa (a tela fala em segundos, o banco em ms), a
+  // visão de foto e as skills do agente, pela mesma régua da tela.
+  if (pedido.pausa_entre_respostas_segundos !== undefined) {
+    corpo.reply_min_interval_ms =
+      pedido.pausa_entre_respostas_segundos === null ? null : Math.round(pedido.pausa_entre_respostas_segundos * 1000);
+  }
+  if (pedido.ver_fotos_do_cliente !== undefined) corpo.image_vision_enabled = pedido.ver_fotos_do_cliente;
+  if (pedido.skills !== undefined) {
+    corpo.skill_names =
+      pedido.skills === null ? null : pedido.skills.length === 0 ? [] : conferirSkillsDoAgente(pedido.skills, await lerSkillsDaEmpresa(c));
+  }
   if (pedido.max_passos !== undefined) corpo.max_steps = pedido.max_passos;
 
   if (pedido.horario_de_atendimento !== undefined) {
@@ -826,6 +872,8 @@ function recusaDoSchema(erro: { issues: Array<{ path: PropertyKey[]; message: st
       handoff_keywords: "`palavras_de_passagem` aceita até 20 expressões de 1 a 60 caracteres.",
       split_max_chars: "`tamanho_da_mensagem` vai de 80 a 4000 caracteres.",
       inbound_debounce_ms: "`espera_por_rajada_ms` vai de 0 a 60000.",
+      reply_min_interval_ms: "`pausa_entre_respostas_segundos` vai de 0 a 600 segundos (10 minutos). null ou 0 = sem pausa.",
+      skill_names: "`skills` aceita até 100 nomes, de 1 a 120 caracteres.",
       max_steps: "`max_passos` vai de 1 a 25.",
       name: "`nome` precisa de 1 a 120 caracteres.",
       priority: "`prioridade` vai de 0 a 1000.",
@@ -983,7 +1031,14 @@ export async function garantirAgente(
   org: OrganizacaoDaImplantacao,
   pedido: PedidoDeAgente,
 ): Promise<AgenteGarantido> {
-  const garantido = await garantirAgenteECadastro(c, org, pedido);
+  // Upstream 1.107 (9230): as etiquetas das skills são conferidas INTEIRAS antes
+  // de qualquer escrita (do agente ou da skill), e gravadas depois do rascunho.
+  const etiquetasDasSkills =
+    pedido.skills_por_etiqueta !== undefined && pedido.skills_por_etiqueta.length > 0
+      ? prepararSkillsPorEtiqueta(pedido.skills_por_etiqueta, await lerSkillsDaEmpresa(c), org.settings)
+      : null;
+  let garantido = await garantirAgenteECadastro(c, org, pedido);
+  if (etiquetasDasSkills) garantido = await comEtiquetasDasSkills(c, garantido, etiquetasDasSkills);
   if (pedido.bloquear_afirmacao_clinica === undefined) return garantido;
   const camada = await garantirCamadaClinica(c, pedido.bloquear_afirmacao_clinica);
   if (camada.desfecho !== "ja_estava") {
@@ -994,6 +1049,31 @@ export async function garantirAgente(
     );
   }
   return { ...garantido, bloqueio_de_afirmacao_clinica: camada };
+}
+
+async function comEtiquetasDasSkills(
+  c: Implantacao,
+  garantido: AgenteGarantido,
+  preparadas: ReturnType<typeof prepararSkillsPorEtiqueta>,
+): Promise<AgenteGarantido> {
+  const gravadas = await gravarSkillsPorEtiqueta(c, preparadas);
+  if (gravadas.some((g) => g.desfecho !== "ja_estava")) {
+    garantido.avisos.push(
+      "As etiquetas são da SKILL, não do agente: já valem na próxima mensagem para TODO agente que usa a skill, sem publicar.",
+    );
+  }
+  // O agente com lista própria de skills (`skills`) só recebe as que estão nela.
+  const versoes = await lerVersoes(c.admin, c.orgId, garantido.agente.id);
+  const lista = versoes.find((v) => v.id === garantido.versao.id)?.skill_names;
+  if (Array.isArray(lista)) {
+    const fora = gravadas.filter((g) => !lista.includes(g.skill)).map((g) => `«${g.skill}»`);
+    if (fora.length > 0) {
+      garantido.avisos.push(
+        `${fora.join(", ")} não ${fora.length === 1 ? "está" : "estão"} nas \`skills\` deste agente: ele não as usa, com etiqueta ou sem. Inclua em \`skills\` (ou mande \`skills: null\` para todas).`,
+      );
+    }
+  }
+  return { ...garantido, skills_por_etiqueta: gravadas };
 }
 
 async function garantirAgenteECadastro(

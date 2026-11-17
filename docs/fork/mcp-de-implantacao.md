@@ -656,7 +656,9 @@ Ficou de fora desta fusão, por decisão:
 
 Mesma regra, na fusão das v1.100 a v1.107. A prova de cada linha está em
 `tests/unit/mcp-de-implantacao-novidades-do-upstream-1107.test.ts` (as duas ações
-novas, nos testes da lista de tipos de ação). Nenhuma ferramenta nova, só campos.
+novas, nos testes da lista de tipos de ação); a dos campos novos do agente, em
+`tests/unit/mcp-de-implantacao-campos-novos-do-agente-1107.test.ts` (MIA-15).
+Nenhuma ferramenta nova, só campos.
 
 | novidade do upstream | versão | como o MCP alcança | operação |
 |---|---|---|---|
@@ -664,7 +666,11 @@ novas, nos testes da lista de tipos de ação). Nenhuma ferramenta nova, só cam
 | O evento do Google leva os dados do negócio na descrição (`calendar_event_types.levar_dados_do_negocio`, 9209, #4006) | 1.104 | campo novo `levar_dados_do_negocio` em `plataforma_garantir_tipos_de_agendamento` (nasce desligado, como na tela); a leitura (seção `agenda`) devolve o valor de cada tipo | `implantar_configuracao` |
 | A ação que TIRA etiquetas (`remove_tag`) e a que põe a conversa num setor (`define_sector`, #3881) | 1.104 e 1.103 | dois tipos novos em `plataforma_garantir_automacao` (a lista é a do `actionSchema` dele); o `sector_id` é conferido contra `attendant_sectors` da organização | `implantar_configuracao` |
 | Mover para etapa de PERDA pede o motivo na ação (`lost_reason`, #4297) | 1.107 | `plataforma_garantir_automacao` recusa como as rotas, com as mesmas funções (`motivo-da-perda-na-acao`), e o catálogo das ações descreve o campo | `implantar_configuracao` |
-| A versão do agente ganhou `skill_names`, `image_vision_enabled` e `reply_min_interval_ms` | 1.101 a 1.107 | `plataforma_garantir_agente` lê as três e a versão nova as HERDA da de referência, como a rota (sem isso, a versão aberta pela ferramenta as perderia); as skills passam pela conferência de escopo. Ligar ou mudar as três pela ferramenta continua na lista de baixo | `implantar_configuracao` |
+| A versão do agente ganhou `skill_names`, `image_vision_enabled` e `reply_min_interval_ms` | 1.101 a 1.107 | `plataforma_garantir_agente` lê as três e a versão nova as HERDA da de referência, como a rota (sem isso, a versão aberta pela ferramenta as perderia); as skills passam pela conferência de escopo. Mudar as três pela ferramenta: as três linhas abaixo | `implantar_configuracao` |
+| A pausa mínima entre uma resposta da IA e a próxima na mesma conversa (`reply_min_interval_ms`, 9101) | 1.101 | campo novo `pausa_entre_respostas_segundos` em `plataforma_garantir_agente`, em SEGUNDOS como na tela (0 a 600, inteiro; o banco guarda ms); `null` ou 0 = sem pausa. É do rascunho. A leitura (`plataforma_ver_agentes`) devolve `pausa_entre_respostas_segundos` da versão vigente | `implantar_configuracao` |
+| O agente vê as fotos que o cliente envia (`image_vision_enabled`, 9108) | 1.107 | campo novo `ver_fotos_do_cliente` (ligado por padrão, como na tela; cada foto descrita é uma chamada paga). É do rascunho. A leitura devolve `ver_fotos_do_cliente` | `implantar_configuracao` |
+| Quais skills o agente usa (`skill_names`, 9107) | 1.107 | campo novo `skills`: `null` = todas as da empresa e da plataforma (o padrão), `[]` = nenhuma, nomes = só estas. O nome que não existe na empresa (ou é de outra) é recusado com a lista do que existe, antes da conferência de escopo da rota. É do rascunho. A leitura devolve `skills` por agente e `skills_da_empresa` (nome, de onde vem, etiquetas), a mesma resolução da tela (`skillsDisponiveis`) | `implantar_configuracao` |
+| As etiquetas pelas quais a skill entra sem a palavra-chave (`matcher.any_tags`, 9230) | 1.107 | campo novo `skills_por_etiqueta: [{ skill, etiquetas }]` (a lista INTEIRA de cada skill; `[]` tira). É da SKILL, não do agente: vale NA HORA para todo agente que a usa. Grava pelo caminho do `PUT /api/v1/ai/skills/[name]` (versão nova da skill com manifesto e vínculo herdados, arquivos do pacote copiados antes do ponteiro, auditoria `ai.skill_saved`), em `lib/implantacao/skills-do-agente.ts`. Recusa, ANTES de qualquer escrita: a etiqueta que não existe no vocabulário da empresa, a skill de plataforma não instalada, a skill que não existe, a repetida e mais de 20 etiquetas. Etiquetas iguais às gravadas respondem `ja_estava` sem abrir versão. Avisa quando a skill não está nas `skills` do agente. A leitura (`skills_da_empresa`) devolve as etiquetas | `implantar_configuracao` |
 
 Falta no MCP (fica para uma tarefa própria, porque cada item pede ferramenta ou
 leitura nova, e não um campo):
@@ -672,9 +678,8 @@ leitura nova, e não um campo):
 - o lembrete da agenda por MODELO APROVADO da Meta (`reminder_meta_template_id`, 9092)
   e o aviso à equipe por modelo (9094, 9099): o MCP precisa achar o modelo aprovado
   do número, que ele ainda não lê;
-- os servidores MCP por agente com OAuth por contato (9095), a pausa mínima entre
-  respostas (9101), as skills por agente e por etiqueta (9107, 9230) e a visão de
-  foto por agente (9108): campos novos de `plataforma_garantir_agente`;
+- os servidores MCP por agente com OAuth por contato (9095): campo novo de
+  `plataforma_garantir_agente`, com tarefa própria;
 - as cadências de e-mail da empresa (9249, 9251, módulo opcional `cadencias`), a
   conta Resend da organização (0795), a ouvidoria (9040) e o link de pagamento na
   conversa (9312, módulo opcional): ferramentas novas, e as três primeiras encostam
