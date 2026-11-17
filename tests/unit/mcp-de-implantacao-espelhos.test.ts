@@ -172,6 +172,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/api/v1/settings/assinatura/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "9802b14502f9d3fa" },
   // Jornada de quem atende.
   { rota: "app/api/v1/attendants/availability/[user_id]/route.ts", espelho: "lib/implantacao/agenda.ts", impressao: "de0c21f50707a594" },
+  // Espelhado na MIA-18 (upstream 1.105, 9235, doc 208): os prazos e a chave da lista de espera. O espelho segue o PATCH: o mesmo configDaListaDeEsperaSchema, a mesma chave settings.lista_de_espera e a auditoria agenda.lista_de_espera_configurada; o módulo não instalado, que na rota é 404, vira a recusa "módulo não instalado". A inscrição (POST) fica na tela: pede o aceite da pessoa.
+  { rota: "app/api/v1/agenda/lista-de-espera/route.ts", espelho: "lib/implantacao/lista-de-espera.ts", impressao: "a5c4b357a7291be5" },
   // Respostas prontas e modelo oficial do WhatsApp.
   // Relido na .81 (upstream 1.81, #2526): `midias` nasce vazia no POST, o PATCH remove pela lista que fica (conferida, e o arquivo sai do bucket só depois da linha) e o upload é a rota /midias. O espelho ganhou `imagens`: a lista inteira por endereço, baixada e conferida pelos bytes, com o nome tirado do conteúdo (repetir não empilha), e as mesmas auditorias.
   // Relido na .86 (upstream 1.88, #3244, 0729; 1.87, #2833): a resposta nova nasce no TOPO (`ordem`, um passo acima da primeira) e a mídia pode ser áudio. O espelho grava a `ordem` das novas no topo, na ordem do pedido; as imagens seguem conferidas pelo farejador da imagem (áudio fica na tela).
