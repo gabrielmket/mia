@@ -25,6 +25,8 @@ import {
 import { drainEventLog } from "@/lib/event-log/drain";
 import { ensureHandlersRegistered } from "@/lib/event-log/register-handlers";
 import { pinoReintentoHandler } from "@/lib/channels/zernio/pino-reintento.handler";
+// FORK MIA — o lote do histórico da coexistência (docs/fork/coexistencia.md).
+import { loteDoHistoricoHandler } from "@/lib/channels/meta/coexistencia/lote.handler";
 import { reenvioDesaceleradoHandler } from "@/lib/messaging/reenvio-desacelerado.handler";
 import { automationRulesHandler } from "@/lib/automation/engine.handler";
 import { campanhaRespostaHandler } from "@/lib/campanhas/resposta.handler";
@@ -78,6 +80,9 @@ const RODA: EventHandler[] = [
   // e o lado SEGURO de uma organização parada (toque armado voltaria em rajada
   // na reativação, fora de contexto).
   followupSaidaDaEtapaHandler,
+  // FORK MIA — o histórico da coexistência é ENTRADA (a conversa que a empresa
+  // já teve): escrita interna, sem rede e sem custo.
+  loteDoHistoricoHandler,
 ];
 
 const PULA: EventHandler[] = [

@@ -47,11 +47,14 @@ import { parseMetaWebhook, verificationChallenge, verifyMetaSignature } from "@/
 import { aplicarDesfechoNaCampanha } from "@/lib/broadcast/desfecho-da-campanha";
 import { statusUpdate } from "@/lib/channels/meta/status-update";
 import {
-  ingestMetaAppContactSync,
   ingestMetaEcho,
   ingestMetaInbound,
   ingestMetaReaction,
 } from "@/lib/channels/meta/ingest";
+// FORK MIA: a coexistência (docs/fork/coexistencia.md). O histórico que a Meta
+// manda no campo `history` e a contagem dos contatos da agenda do app.
+import { ingerirContatoDoAppContando } from "@/lib/channels/meta/coexistencia/contatos";
+import { receberHistoricoDaMeta } from "@/lib/channels/meta/coexistencia/receber";
 import { donoDoEvento } from "@/lib/channels/meta/dono-do-evento";
 import { metaSessionByWabaId, metaSessionByWebhookToken } from "@/lib/channels/meta/session";
 import {
@@ -247,6 +250,16 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
    * indistinguível de "não chegou". Custou uma hora de diagnóstico no lugar errado.
    */
   const desfechos: string[] = [];
+  // FORK MIA: o histórico da coexistência (campo `history`, que o
+  // `parseMetaWebhook` ignora). Só guarda o lote e pede ao worker, que grava
+  // como histórico importado, sem disparar nada. Não lança: falha vira desfecho.
+  desfechos.push(
+    ...(await receberHistoricoDaMeta(admin, leitura.envelope, {
+      requestId,
+      sessionDoToken: session,
+      porWaba: (waba) => metaSessionByWabaId(waba),
+    })),
+  );
   /**
    * A pergunta do apagado a pedido é feita UMA vez por lote, não por contato
    * (`perguntarTitularesApagadosNoLote`, migration 9321). Estados:
@@ -398,7 +411,10 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
           });
         }
       }
-      const r = await ingestMetaAppContactSync(
+      // FORK MIA: o mesmo `ingestMetaAppContactSync`, embrulhado para somar o
+      // contato no pedido de contatos da coexistência quando ele nasce ou muda
+      // de nome (docs/fork/coexistencia.md).
+      const r = await ingerirContatoDoAppContando(
         admin,
         e,
         { organizationId: dono.organizationId },
