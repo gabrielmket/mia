@@ -69,12 +69,15 @@ async function atualizarPeloToken(
 
   try {
     const body = await req.json();
+    // FORK MIA (empresa única, R1 do catálogo): a demonstração não consulta a
+    // Receita, nem pelo token (o ramo de token chegou do upstream na 1.11x).
+    const semReceita = await receitaTravada(authz.supabase, authz.organizationId);
     const data = await patchCompanyHandler(
       authz.supabase,
       ctxDeToken(authz, requestId),
       autorDe(authz),
       id,
-      body,
+      semReceita ? { ...body, enrich: false } : body,
     );
     return ok(data, { requestId });
   } catch (e) {

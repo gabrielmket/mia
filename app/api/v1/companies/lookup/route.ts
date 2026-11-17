@@ -35,6 +35,11 @@ async function consultarPeloToken(req: NextRequest, requestId: string): Promise<
   if (teto) return teto;
 
   try {
+    // FORK MIA (empresa única, R1 do catálogo): a demonstração não consulta a
+    // Receita, nem pelo token (o ramo de token chegou do upstream na 1.11x).
+    if (await receitaTravada(authz.supabase, authz.organizationId)) {
+      return fail("organizacao_de_demonstracao", "Esta é a empresa de demonstração: a consulta à Receita fica desligada.", 403, { requestId });
+    }
     const cnpj = req.nextUrl.searchParams.get("cnpj") ?? "";
     const data = await lookupCompanyCnpjHandler(
       authz.supabase,

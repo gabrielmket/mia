@@ -74,7 +74,7 @@ function cookieDeSessao(): { name: string; value: string } {
   // que o `_isValidSession` do auth-js exige: access_token, refresh_token e
   // expires_at — sem qualquer um dos três, o cliente trata como "sem sessão".
   return {
-    name: "sb-deskcomm-auth",
+    name: "sb-mia-auth", // FORK MIA: o cookie de sessão do fork (lib/supabase/server.ts)
     value: `base64-${b64({
       access_token: token,
       refresh_token: "refresh-de-teste",

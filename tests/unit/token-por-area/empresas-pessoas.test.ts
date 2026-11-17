@@ -603,7 +603,14 @@ function tokenValido(o: { org: string; id: string; papel: string; escopos: strin
   } as never);
 }
 
-type OpcoesDoToken = { org?: string; papel?: string; escopos?: string[]; linhas?: Linhas };
+type OpcoesDoToken = {
+  org?: string;
+  papel?: string;
+  escopos?: string[];
+  linhas?: Linhas;
+  /** FORK MIA (empresa única): a organização do token é de demonstração. */
+  demonstracao?: boolean;
+};
 
 /** Chama o método com um Bearer; o cliente do banco é o falso, dono das `linhas`. */
 async function comoToken(c: Caso, o: OpcoesDoToken = {}) {
@@ -612,6 +619,8 @@ async function comoToken(c: Caso, o: OpcoesDoToken = {}) {
     orgDona: org,
     linhas: o.linhas ?? c.linhas,
     tabelasSemOrganizacao: SEM_ORGANIZACAO,
+    // FORK MIA (empresa única): a trava da demonstração pergunta ao banco antes da Receita.
+    rpc: { fn_mia_e_demonstracao: o.demonstracao ?? false },
   });
   vi.mocked(createAdminClient).mockReturnValue(falso.cliente as never);
   tokenValido({
@@ -631,6 +640,8 @@ async function comoSessao(c: Caso) {
     orgDona: ORG_A,
     linhas: c.linhas,
     tabelasSemOrganizacao: SEM_ORGANIZACAO,
+    // FORK MIA (empresa única): a trava da demonstração pergunta ao banco antes da Receita.
+    rpc: { fn_mia_e_demonstracao: false },
   });
   vi.mocked(createClient).mockImplementation(async () => falso.cliente as never);
   vi.mocked(createAdminClient).mockReturnValue(falso.cliente as never);
@@ -929,5 +940,31 @@ describe("PUBLIC_PATHS — as portas de empresas, pessoas e números", () => {
     `/api/v1/phone-numbers/${NUMERO_A}/x`,
   ])("não libera %s", (caminho) => {
     expect(isPublicPath(caminho)).toBe(false);
+  });
+});
+
+// ─── FORK MIA (empresa única, R1 do catálogo) ───────────────────────────────
+// A demonstração não consulta a Receita, nem pelo ramo de token que chegou do
+// upstream: a trava pergunta ao banco ANTES da BrasilAPI.
+
+describe("FORK MIA: o token da demonstração não consulta a Receita", () => {
+  const lookupCnpj = vi.fn(async () => RESPOSTA_BRASILAPI);
+  beforeEach(() => {
+    lookupCnpj.mockClear();
+    vi.mocked(createBrasilApiClient).mockReturnValue({ lookupCnpj } as never);
+  });
+
+  it.each([
+    ["GET", "/api/v1/companies/lookup"],
+    ["POST", `/api/v1/companies/${EMPRESA_A}/enrich`],
+  ])("%s %s: 403 e nada sai para a BrasilAPI", async (metodo, prefixo) => {
+    const c = CASOS.find((x) => x.metodo === metodo && x.caminho.startsWith(prefixo));
+    if (!c) throw new Error("caso ausente");
+    const { res, texto, falso } = await comoToken(c, { demonstracao: true });
+
+    expect(res.status, texto).toBe(403);
+    expect(texto).toContain("organizacao_de_demonstracao");
+    expect(lookupCnpj).not.toHaveBeenCalled();
+    expect(cadeiasDeEscrita(falso.cadeias)).toEqual([]);
   });
 });

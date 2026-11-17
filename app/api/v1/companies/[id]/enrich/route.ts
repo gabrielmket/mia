@@ -10,7 +10,6 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { enrichCompanyHandler } from "@/lib/crm-b2b/companies-handler";
 import {
   ctxFromAuthz,
-  fail,
   handleRouteError,
   ok,
   requestIdOf,
@@ -48,6 +47,11 @@ async function enriquecerPeloToken(
   }
 
   try {
+    // FORK MIA (empresa única, R1 do catálogo): a demonstração não consulta a
+    // Receita, nem pelo token (o ramo de token chegou do upstream na 1.11x).
+    if (await receitaTravada(authz.supabase, authz.organizationId)) {
+      return fail("organizacao_de_demonstracao", "Esta é a empresa de demonstração: a consulta à Receita fica desligada.", 403, { requestId });
+    }
     const data = await enrichCompanyHandler(
       authz.supabase,
       ctxDeToken(authz, requestId),

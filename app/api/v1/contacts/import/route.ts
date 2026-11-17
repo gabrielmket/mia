@@ -371,7 +371,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       // A régua L-06 da edição pela ficha: quem, o quê e de quê para quê.
       await audit({
         action: "contact.updated",
-        actorUserId: user.id,
+        actorUserId: authz.actor.type === "user" ? authz.actor.id : null,
+        actorApiTokenId: authz.apiTokenId ?? null,
         organizationId: orgId,
         resourceType: "contact",
         resourceId: desfecho.contato.id,

@@ -1045,31 +1045,28 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
     async loadJaInscritosNesteSilencio(orgId, pointerId, contactIds) {
       const LOTE = 100;
       const inscricoes: Array<{ contact_id: string; started_at: string }> = [];
-      const entradas: Array<{ contact_id: string; last_inbound_at: string | null }> = [];
       for (let i = 0; i < contactIds.length; i += LOTE) {
         const lote = contactIds.slice(i, i + LOTE);
-        const [ins, conv] = await Promise.all([
-          admin
-            .from("followup_enrollments")
-            .select("contact_id, started_at")
-            .eq("organization_id", orgId)
-            .eq("pointer_id", pointerId)
-            .in("status", INSCRICAO_ENCERRADA)
-            .in("contact_id", lote)
-            .order("started_at", { ascending: false })
-            .limit(1000),
-          admin
-            .from("conversations")
-            .select("contact_id, last_inbound_at")
-            .eq("organization_id", orgId)
-            .in("contact_id", lote)
-            .not("last_inbound_at", "is", null),
-        ]);
+        const ins = await admin
+          .from("followup_enrollments")
+          .select("contact_id, started_at")
+          .eq("organization_id", orgId)
+          .eq("pointer_id", pointerId)
+          .in("status", INSCRICAO_ENCERRADA)
+          .in("contact_id", lote)
+          .order("started_at", { ascending: false })
+          .limit(1000);
         if (ins.error) throw new Error(ins.error.message);
-        if (conv.error) throw new Error(conv.error.message);
         inscricoes.push(...((ins.data ?? []) as typeof inscricoes));
-        entradas.push(...((conv.data ?? []) as typeof entradas));
       }
+      // A última fala de cada contato sai das conversas que a própria varredura já
+      // leu (#4311: uma leitura por organização por varredura). É o MESMO retrato
+      // de onde o silêncio foi medido; até a fusão da v1.116 o fork relia as
+      // conversas aqui, uma vez por ponteiro, e devolvia o egress que o #4311 tirou.
+      const pedidos = new Set(contactIds);
+      const entradas = (await carregarConversas(orgId))
+        .filter((c) => pedidos.has(c.contact_id))
+        .map((c) => ({ contact_id: c.contact_id, last_inbound_at: c.last_inbound_at }));
       return jaInscritosNesteSilencio(inscricoes, entradas);
     },
 
