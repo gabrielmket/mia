@@ -128,6 +128,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/actions/settings/definirMeetAberto.ts", espelho: "lib/implantacao/empresa.ts", impressao: "62dbe5c947055ca7" },
   // Espelhado na .81 (upstream v1.83, #2147/#2948): o servidor MCP externo, com o guard anti-SSRF, a chave cifrada nas colunas e a auditoria só com o host. A recusa da demonstração é NOSSA nos dois lados.
   { rota: "app/actions/settings/definirServidorMcpExterno.ts", espelho: "lib/implantacao/servidor-mcp-externo.ts", impressao: "49a7cae71537b064" },
+  // Espelhado com a fusão 1.100 a 1.107 (upstream 9095): os servidores MCP por agente, com o OAuth por contato. O espelho é o `servidores_mcp` de plataforma_garantir_agente: as mesmas peças (cifra, `chave_last4`, revogação quando a origem dos tokens muda, slug estável, teto por agente) e as mesmas auditorias, só com o host.
+  { rota: "app/actions/agents/servidoresMcpDoAgente.ts", espelho: "lib/implantacao/servidores-mcp-do-agente.ts", impressao: "7746c0f49e6c8702" },
   // Espelhado na .76 (upstream 1.76, #2367): o freio do passo "a IA decide", com a mescla nos dois níveis de settings e a mesma auditoria.
   { rota: "app/actions/settings/definirAiDecideDaEmpresa.ts", espelho: "lib/implantacao/empresa.ts", impressao: "8168719014b15dca" },
   // Espelhado na .76 (upstream 1.77, #1752): os planos de tarefa, conferidos por planosSchema, em settings.task_plans.

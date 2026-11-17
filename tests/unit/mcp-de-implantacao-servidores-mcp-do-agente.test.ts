@@ -25,7 +25,13 @@ import type { Linha } from "@/tests/helpers/banco-em-memoria";
 const estado = vi.hoisted(() => {
   // Antes de qualquer import: `lib/env.ts` lê a chave que cifra a chave do servidor.
   process.env.AI_CRED_AES_KEY = "iBc1Z2gYaAH4rEHs1dHQ2dvNQ6t4OfrdE1/Y6OSvtZY=";
-  return { cliente: null as unknown, comRegistroAutomatico: true };
+  return {
+    cliente: null as unknown,
+    comRegistroAutomatico: true,
+    /** Cada revogação: o endereço do servidor recebido e o que estava NO BANCO naquele instante. */
+    revogacoes: [] as Array<{ servidorEndpoint: string; noBanco: unknown }>,
+    servidoresNoBanco: null as null | (() => Array<Record<string, unknown>>),
+  };
 });
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => estado.cliente }));
@@ -54,6 +60,16 @@ vi.mock("@/lib/mcp/servidor-externo/do-agente/oauth", async (importOriginal) => 
   registrarCliente: vi.fn(async () => "cliente-dinamico-ficticio"),
 }));
 
+// A revogação dos acessos dos contatos chama o sistema de fora: aqui ela só
+// anota o que recebeu e o endereço gravado no banco na hora da chamada.
+vi.mock("@/lib/mcp/servidor-externo/do-agente/revogacao", () => ({
+  revogarAcessosDoServidor: vi.fn(async (_db: unknown, servidor: { id: string; endpoint: string }) => {
+    const linhas = estado.servidoresNoBanco?.() ?? [];
+    estado.revogacoes.push({ servidorEndpoint: servidor.endpoint, noBanco: linhas.find((l) => l.id === servidor.id)?.endpoint });
+    return 2;
+  }),
+}));
+
 const { criarServidorDePlataforma } = await import("@/lib/mcp-plataforma/servidor");
 const { audit } = await import("@/lib/audit");
 const { registrarCliente } = await import("@/lib/mcp/servidor-externo/do-agente/oauth");
@@ -65,6 +81,7 @@ async function preparar(opcoes: OpcoesDoCenario & { semModulo?: boolean } = {}) 
     (cenario.banco.tabela("platform_config") as Linha[]).push({ chave: "MODULO_MCP_POR_AGENTE", valor: "ligado" });
   }
   estado.cliente = cenario.cliente;
+  estado.servidoresNoBanco = () => cenario.banco.tabela("ai_agent_mcp_servers") as Linha[];
   const mcp = await clienteMcp(criarServidorDePlataforma as never, TODAS_AS_OPERACOES);
   return { ...cenario, mcp, tabela: (nome: string) => cenario.banco.tabela(nome) as Linha[] };
 }
@@ -100,6 +117,7 @@ beforeEach(() => {
   process.env.OPENAI_API_KEY = "chave-ficticia-de-teste";
   vi.mocked(audit).mockClear();
   vi.mocked(registrarCliente).mockClear();
+  estado.revogacoes.length = 0;
   estado.comRegistroAutomatico = true;
 });
 
@@ -213,6 +231,17 @@ describe("plataforma_garantir_agente · `servidores_mcp` com chave estática: li
     const de_novo = await ok(c, "plataforma_garantir_agente", { nome: "Bia", servidores_mcp: [{ nome: "Pedidos", apagar: true }] });
     expect(de_novo.dados).toMatchObject({ agente: { desfecho: "ja_estava" }, servidores_mcp: [{ desfecho: "ja_estava" }] });
   });
+
+  it("agente que já existe: a versão recusada (teto de ferramentas) não deixa servidor gravado para trás", async () => {
+    const c = await preparar();
+    await ok(c, "plataforma_garantir_agente", { nome: "Bia", prompt: PROMPT });
+    const versoesAntes = JSON.stringify(c.tabela("ai_agent_versions"));
+    const muitas = Array.from({ length: 30 }, (_, i) => ({ nome: `ferramenta_${i + 1}` }));
+    await recusa(c, "plataforma_garantir_agente", { nome: "Bia", servidores_mcp: [{ ...PEDIDOS, ferramentas: muitas }] });
+    expect(servidores(c)).toEqual([]);
+    expect(JSON.stringify(c.tabela("ai_agent_versions"))).toBe(versoesAntes);
+    expect(auditoria()).not.toContain("agent.mcp_servidor_salvo");
+  });
 });
 
 describe("plataforma_garantir_agente · `servidores_mcp` com OAuth por contato: o passo humano volta como `com_o_humano`", () => {
@@ -260,5 +289,36 @@ describe("plataforma_garantir_agente · `servidores_mcp` com OAuth por contato: 
       servidores_mcp: [{ ...OAUTH, oauth_client_id: "cliente-registrado-a-mao", oauth_client_secret: SEGREDO }],
     });
     expect(r3.dados).toMatchObject({ servidores_mcp: [{ desfecho: "ja_estava" }] });
+  });
+
+  it("com registro automático, o pedido repetido responde `ja_estava` e não registra outro cliente", async () => {
+    const c = await preparar();
+    await ok(c, "plataforma_garantir_agente", { nome: "Bia", prompt: PROMPT, servidores_mcp: [OAUTH] });
+    expect(registrarCliente).toHaveBeenCalledTimes(1);
+    const antes = c.banco.escritas.length;
+    const r = await ok(c, "plataforma_garantir_agente", { nome: "Bia", servidores_mcp: [OAUTH] });
+    expect(r.dados).toMatchObject({ agente: { desfecho: "ja_estava" }, servidores_mcp: [{ desfecho: "ja_estava" }] });
+    expect(registrarCliente).toHaveBeenCalledTimes(1);
+    expect(c.banco.escritas.length).toBe(antes);
+    expect(estado.revogacoes).toEqual([]);
+  });
+
+  it("trocar o endereço de um servidor OAuth revoga os acessos dos contatos ANTES de gravar o endereço novo", async () => {
+    const c = await preparar();
+    await ok(c, "plataforma_garantir_agente", { nome: "Bia", prompt: PROMPT, servidores_mcp: [OAUTH] });
+    const novo = "https://conta-nova.example.com/mcp";
+    const r = await ok(c, "plataforma_garantir_agente", { nome: "Bia", servidores_mcp: [{ ...OAUTH, endereco: novo }] });
+    expect(estado.revogacoes).toEqual([{ servidorEndpoint: OAUTH.endereco, noBanco: OAUTH.endereco }]);
+    expect(servidores(c)[0]).toMatchObject({ endpoint: novo });
+    expect(r.dados).toMatchObject({ servidores_mcp: [{ desfecho: "atualizou", acessos_revogados: 2 }] });
+  });
+
+  it("tirar um servidor OAuth revoga os acessos dos contatos e diz quantos", async () => {
+    const c = await preparar();
+    await ok(c, "plataforma_garantir_agente", { nome: "Bia", prompt: PROMPT, servidores_mcp: [OAUTH] });
+    const r = await ok(c, "plataforma_garantir_agente", { nome: "Bia", servidores_mcp: [{ nome: OAUTH.nome, apagar: true }] });
+    expect(estado.revogacoes).toEqual([{ servidorEndpoint: OAUTH.endereco, noBanco: OAUTH.endereco }]);
+    expect(servidores(c)).toEqual([]);
+    expect(r.dados).toMatchObject({ servidores_mcp: [{ desfecho: "apagou", acessos_revogados: 2 }] });
   });
 });
