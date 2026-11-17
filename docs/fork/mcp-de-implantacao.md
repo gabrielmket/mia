@@ -657,8 +657,9 @@ Ficou de fora desta fusão, por decisão:
 Mesma regra, na fusão das v1.100 a v1.107. A prova de cada linha está em
 `tests/unit/mcp-de-implantacao-novidades-do-upstream-1107.test.ts` (as duas ações
 novas, nos testes da lista de tipos de ação); a dos campos novos do agente, em
-`tests/unit/mcp-de-implantacao-campos-novos-do-agente-1107.test.ts` (MIA-15).
-Nenhuma ferramenta nova, só campos.
+`tests/unit/mcp-de-implantacao-campos-novos-do-agente-1107.test.ts` (MIA-15); e a do
+modelo aprovado da agenda, em `tests/unit/mcp-de-implantacao-modelo-da-agenda.test.ts`
+(MIA-16). Nenhuma ferramenta nova, só campos e uma seção de leitura.
 
 | novidade do upstream | versão | como o MCP alcança | operação |
 |---|---|---|---|
@@ -671,13 +672,13 @@ Nenhuma ferramenta nova, só campos.
 | O agente vê as fotos que o cliente envia (`image_vision_enabled`, 9108) | 1.107 | campo novo `ver_fotos_do_cliente` (ligado por padrão, como na tela; cada foto descrita é uma chamada paga). É do rascunho. A leitura devolve `ver_fotos_do_cliente` | `implantar_configuracao` |
 | Quais skills o agente usa (`skill_names`, 9107) | 1.107 | campo novo `skills`: `null` = todas as da empresa e da plataforma (o padrão), `[]` = nenhuma, nomes = só estas. O nome que não existe na empresa (ou é de outra) é recusado com a lista do que existe, antes da conferência de escopo da rota. É do rascunho. A leitura devolve `skills` por agente e `skills_da_empresa` (nome, de onde vem, etiquetas), a mesma resolução da tela (`skillsDisponiveis`) | `implantar_configuracao` |
 | As etiquetas pelas quais a skill entra sem a palavra-chave (`matcher.any_tags`, 9230) | 1.107 | campo novo `skills_por_etiqueta: [{ skill, etiquetas }]` (a lista INTEIRA de cada skill; `[]` tira). É da SKILL, não do agente: vale NA HORA para todo agente que a usa. Grava pelo caminho do `PUT /api/v1/ai/skills/[name]` (versão nova da skill com manifesto e vínculo herdados, arquivos do pacote copiados antes do ponteiro, auditoria `ai.skill_saved`), em `lib/implantacao/skills-do-agente.ts`. Recusa, ANTES de qualquer escrita: a etiqueta que não existe no vocabulário da empresa, a skill de plataforma não instalada, a skill que não existe, a repetida e mais de 20 etiquetas. Etiquetas iguais às gravadas respondem `ja_estava` sem abrir versão. Avisa quando a skill não está nas `skills` do agente. A leitura (`skills_da_empresa`) devolve as etiquetas | `implantar_configuracao` |
+| O lembrete da agenda por MODELO APROVADO da Meta quando a janela de 24 h do cliente fechou (`calendar_event_types.reminder_meta_template_id`, 9092) | 1.100 | campo novo `modelo_do_lembrete` (id ou nome) em `plataforma_garantir_tipos_de_agendamento`, gravado pelo mesmo contrato da rota (`criarComRascunhoSchema`/`alterarSchema`); a conferência (`lib/implantacao/modelos-aprovados.ts`) usa as réguas do upstream (`isStatusSendable`, `variaveisQueOLembretePreenche`, o número dono da linha como o cron confere) e recusa o modelo não aprovado (a rota deixa para o cron; o MCP só escolhe entre aprovados), o de OUTRO número que o do lembrete e o de variável que o lembrete não preenche. `null` tira. A leitura (seção `agenda`) devolve `modelo_do_lembrete` de cada tipo, com `serve` e o porquê | `implantar_configuracao` |
+| Os modelos APROVADOS de cada número, para escolher | 1.100 | seção nova `modelos_aprovados` em `plataforma_ver_configuracao`: por número, os aprovados (`modelosDaConexao`, a mesma busca da tela do aviso) com id, nome, idioma, categoria, variáveis (onde, chave, o que espera), `serve_ao_lembrete` (com o porquê, quando não) e `serve_ao_aviso_da_equipe` (`avaliarModeloDoAviso`) | leitura |
+| O aviso à equipe por modelo aprovado (`config_aviso_de_caso.modelo_id`, 9094; o destino no WhatsApp de um membro, 9099) | 1.100 | SÓ LEITURA: `modelos_aprovados.aviso_da_equipe` devolve o número, o modelo escolhido e se ele ainda serve. Escolher fica na tela Aviso no WhatsApp (`/app/ai/cases/avisos`): a única porta que grava é `fn_definir_aviso_de_caso`, que exige pessoa logada (`auth.uid()`), papel admin e a verificação em duas etapas na sessão (`PUT /api/v1/ai/cases/alerta`). Um token não tem sessão, e gravar a coluna pelo cliente de serviço seria pular a porta (o mesmo motivo dos prazos da agenda) | leitura |
 
 Falta no MCP (fica para uma tarefa própria, porque cada item pede ferramenta ou
 leitura nova, e não um campo):
 
-- o lembrete da agenda por MODELO APROVADO da Meta (`reminder_meta_template_id`, 9092)
-  e o aviso à equipe por modelo (9094, 9099): o MCP precisa achar o modelo aprovado
-  do número, que ele ainda não lê;
 - os servidores MCP por agente com OAuth por contato (9095): campo novo de
   `plataforma_garantir_agente`, com tarefa própria;
 - as cadências de e-mail da empresa (9249, 9251, módulo opcional `cadencias`), a
