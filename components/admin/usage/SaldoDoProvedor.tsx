@@ -19,13 +19,13 @@ import { Input } from "@/components/ui/input";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import {
-import { diaLocal, momentoDoLancamento } from "@/lib/ai/custo/dia-do-lancamento";
   useAiSaldo,
   useApagarLancamento,
   useDefinirCotacao,
   useLancarSaldo,
   type SaldoDoProvedor as Saldo,
 } from "@/hooks/useAiSaldo";
+import { diaLocal, momentoDoLancamento } from "@/lib/ai/custo/dia-do-lancamento";
 
 /** O provedor cobra em dólar; o formato do NÚMERO segue o idioma de quem lê. */
 function usd(v: number, tag: string): string {
