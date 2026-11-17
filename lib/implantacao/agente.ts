@@ -161,7 +161,7 @@ const CAMPOS_DA_VERSAO = [
   // versão. Na lista para a versão nova herdar o valor da de referência, como a rota.
   "voz_enabled",
   "voz_quando",
-  // upstream 1.107: as skills marcadas, a leitura de imagem e o intervalo mínimo
+  // upstream 1.101 a 1.107: as skills marcadas, a leitura de imagem e o intervalo mínimo
   // entre respostas, por versão. Na lista para a versão nova herdar o valor da de
   // referência, como a rota; senão uma versão aberta pela ferramenta as perderia.
   "skill_names",
@@ -359,7 +359,7 @@ function conteudoDa(versao: Record<string, unknown>): Record<string, unknown> {
   // A coluna nasceu na 0616 com padrão LIGADO: versão gravada antes dela (ou lida
   // sem a coluna) vale como ligada, e é assim que a comparação a lê.
   if (typeof conteudo.handoff_legal_enabled !== "boolean") conteudo.handoff_legal_enabled = true;
-  // Upstream 1.107: as três colunas novas, com o padrão do banco (leitura de
+  // Upstream 1.101 a 1.107: as três colunas novas, com o padrão do banco (leitura de
   // imagem LIGADA; skills e intervalo nulos) para a versão lida sem elas.
   if (typeof conteudo.image_vision_enabled !== "boolean") conteudo.image_vision_enabled = true;
   if (conteudo.skill_names === undefined) conteudo.skill_names = null;
@@ -901,7 +901,7 @@ async function inserirVersao(
         voz_quando: v.voz_quando,
         pipeline_ids: v.pipeline_ids,
         knowledge_source_ids: v.knowledge_source_ids,
-        // Upstream 1.107: a rota copia as três na versão nova; o espelho grava junto.
+        // Upstream 1.101 a 1.107: a rota copia as três na versão nova; o espelho grava junto.
         skill_names: v.skill_names,
         image_vision_enabled: v.image_vision_enabled,
         reply_min_interval_ms: v.reply_min_interval_ms,
@@ -1227,7 +1227,7 @@ async function garantirAgenteECadastro(
       provider: desejada.provider,
       pipeline_ids: desejada.pipeline_ids,
       knowledge_source_ids: desejada.knowledge_source_ids,
-      // Upstream 1.107: as skills marcadas também são conferidas contra a organização.
+      // Upstream 1.101 a 1.107: as skills marcadas também são conferidas contra a organização.
       skill_names: desejada.skill_names,
       credential_id: desejada.credential_id,
       channel_session_id: desejada.channel_session_id,

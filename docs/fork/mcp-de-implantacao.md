@@ -655,13 +655,16 @@ Ficou de fora desta fusão, por decisão:
 ### O que chegou do upstream 1.100 a 1.107 (fusão de 17/11)
 
 Mesma regra, na fusão das v1.100 a v1.107. A prova de cada linha está em
-`tests/unit/mcp-de-implantacao-novidades-do-upstream-1107.test.ts`. Nenhuma
-ferramenta nova, só campos.
+`tests/unit/mcp-de-implantacao-novidades-do-upstream-1107.test.ts` (as duas ações
+novas, nos testes da lista de tipos de ação). Nenhuma ferramenta nova, só campos.
 
 | novidade do upstream | versão | como o MCP alcança | operação |
 |---|---|---|---|
-| O negócio PERDIDO de pouco tempo atrás volta a ser o mesmo card (`settings.reabrir_perdido_dias`, #4076) | 1.103 | campo novo `reabrir_perdido_dias` em `plataforma_garantir_funil` (0 desliga, teto `DIAS_MAXIMO_PARA_REABRIR` do domínio), pela mesma porta da tela (`gravarConfiguracaoDoFunil`); a leitura (`plataforma_ver_configuracao`, seção `funis`) devolve o valor | `implantar_configuracao` |
+| O negócio PERDIDO de pouco tempo atrás volta a ser o mesmo card (`settings.reabrir_perdido_dias`, #4076) | 1.103 | campo novo `reabrir_perdido_dias` em `plataforma_garantir_funil` (0 desliga, teto `DIAS_MAXIMO_PARA_REABRIR` do domínio), pela mesma porta da tela (`gravarConfiguracaoDoFunil`); a leitura (`plataforma_ver_funis`) devolve o valor | `implantar_configuracao` |
 | O evento do Google leva os dados do negócio na descrição (`calendar_event_types.levar_dados_do_negocio`, 9209, #4006) | 1.104 | campo novo `levar_dados_do_negocio` em `plataforma_garantir_tipos_de_agendamento` (nasce desligado, como na tela); a leitura (seção `agenda`) devolve o valor de cada tipo | `implantar_configuracao` |
+| A ação que TIRA etiquetas (`remove_tag`) e a que põe a conversa num setor (`define_sector`, #3881) | 1.104 e 1.103 | dois tipos novos em `plataforma_garantir_automacao` (a lista é a do `actionSchema` dele); o `sector_id` é conferido contra `attendant_sectors` da organização | `implantar_configuracao` |
+| Mover para etapa de PERDA pede o motivo na ação (`lost_reason`, #4297) | 1.107 | `plataforma_garantir_automacao` recusa como as rotas, com as mesmas funções (`motivo-da-perda-na-acao`), e o catálogo das ações descreve o campo | `implantar_configuracao` |
+| A versão do agente ganhou `skill_names`, `image_vision_enabled` e `reply_min_interval_ms` | 1.101 a 1.107 | `plataforma_garantir_agente` lê as três e a versão nova as HERDA da de referência, como a rota (sem isso, a versão aberta pela ferramenta as perderia); as skills passam pela conferência de escopo. Ligar ou mudar as três pela ferramenta continua na lista de baixo | `implantar_configuracao` |
 
 Falta no MCP (fica para uma tarefa própria, porque cada item pede ferramenta ou
 leitura nova, e não um campo):
@@ -677,7 +680,11 @@ leitura nova, e não um campo):
   conversa (9312, módulo opcional): ferramentas novas, e as três primeiras encostam
   no nosso e-mail marketing e na marca travada da plataforma;
 - a reserva com capacidade e a lista de espera da agenda (9224, 9235, 9242) e o
-  molde de IA das empresas novas (9096, que encosta no cliente-modelo).
+  molde de IA das empresas novas (9096, que encosta no cliente-modelo);
+- o "enviar mesmo com a conversa atribuída" do follow-up (`send_when_assigned`, #3974):
+  a régua do MCP nasce desligada, como na tela, mas a ferramenta não liga a chave;
+- a leitura dos setores (`attendant_sectors`): a ação `define_sector` já entra, mas o
+  id do setor ainda sai da tela.
 
 Nada a configurar pela implantação: o contrato do webhook da Meta (1.107), o CPF só
 como "preenchido" na API, o escopo de leitura do negócio, a exportação em PDF, a

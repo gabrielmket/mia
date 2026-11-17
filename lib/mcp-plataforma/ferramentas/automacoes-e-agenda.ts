@@ -36,10 +36,10 @@ import { alvo, DIA_DA_SEMANA, HORA, ORGANIZACAO, ORG_DE_EXEMPLO } from "./comum"
 export const TIPOS_DE_ACAO = [
   "create_or_move_lead",
   "add_tag",
-  // upstream 1.107: a irmã da `add_tag`, que TIRA etiquetas do card ou do contato
+  // upstream 1.104: a irmã da `add_tag`, que TIRA etiquetas do card ou do contato
   "remove_tag",
   "assign_owner",
-  // upstream 1.107 (#3881): põe a conversa num SETOR de atendimento
+  // upstream 1.103 (#3881): põe a conversa num SETOR de atendimento
   "define_sector",
   "create_task",
   // upstream 1.77 (#1752): aplica um plano de tarefas ao negócio

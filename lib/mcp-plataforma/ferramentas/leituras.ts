@@ -120,13 +120,13 @@ const ACOES_DE_AUTOMACAO = [
   },
   {
     type: "remove_tag",
-    o_que_faz: "Tira etiquetas do negócio (o padrão) ou do contato do negócio, com a mesma forma da `add_tag` (upstream 1.107).",
+    o_que_faz: "Tira etiquetas do negócio (o padrão) ou do contato do negócio, com a mesma forma da `add_tag` (upstream 1.104).",
     config: '{ "tags": ["Etiqueta"], "destino": "card" | "contato" (opcional, padrão "card") }',
   },
   {
     type: "define_sector",
     o_que_faz:
-      "Põe a conversa do negócio num SETOR de atendimento (upstream 1.107, #3881): a distribuição passa a mandar a conversa só para quem é do setor. Por padrão não troca um setor escolhido à mão por uma pessoa.",
+      "Põe a conversa do negócio num SETOR de atendimento (upstream 1.103, #3881): a distribuição passa a mandar a conversa só para quem é do setor. Por padrão não troca um setor escolhido à mão por uma pessoa.",
     config: '{ "sector_id": "<id do setor>", "sobrescrever_setor_manual": true | false (opcional) }',
   },
   {

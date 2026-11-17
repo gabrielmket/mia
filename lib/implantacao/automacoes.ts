@@ -116,7 +116,7 @@ const REFERENCIAS: Array<{ campo: string; tabela: string; oQue: string; ondeAcha
   { campo: "channel_session_id", tabela: "channel_sessions", oQue: "número", ondeAchar: "plataforma_ver_configuracao (seção canais)" },
   { campo: "agent_id", tabela: "ai_agents", oQue: "agente", ondeAchar: "plataforma_ver_agentes" },
   { campo: "flow_pointer_id", tabela: "followup_flow_pointers", oQue: "fluxo de follow-up", ondeAchar: "plataforma_ver_configuracao (seção followups)" },
-  // upstream 1.107 (#3881): o setor da ação `define_sector`. O MCP ainda não lista setores.
+  // upstream 1.103 (#3881): o setor da ação `define_sector`. O MCP ainda não lista setores.
   { campo: "sector_id", tabela: "attendant_sectors", oQue: "setor", ondeAchar: "Configurações › Setores, na tela do cliente" },
 ];
 
