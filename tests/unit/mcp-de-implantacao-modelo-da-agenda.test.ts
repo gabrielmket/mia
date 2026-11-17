@@ -74,7 +74,7 @@ async function preparar() {
     ...tabela("channel_sessions")[0]!,
     id: OUTRO_NUMERO,
     display_name: "Comercial",
-    phone_number: "+5500900000002",
+    phone_number: "+5531900000002",
   });
   tabela("meta_templates").push(
     modelo(MODELOS.lembrete, "lembrete_de_horario", { components: corpo("Olá, {{1}}! Seu horário é {{2}}: {{3}}.") }),
