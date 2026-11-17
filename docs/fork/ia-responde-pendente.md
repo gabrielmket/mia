@@ -156,6 +156,12 @@ com o contato, segue o escopo por conversa do upstream. A cerca está em
 `tests/unit/ia-responde-pendente.test.ts`. O que muda é que a pausa aparece em três lugares, e que a função A não pede
 turno que o motor pula.
 
+Exceção na régua: com a opção #3974 do fluxo ligada ("enviar mesmo com a conversa
+atribuída", `send_when_assigned`, nasce desligada), `liberaEnvioComODono` vence a posse
+e o envio fixo sai pelo número da régua com uma pessoa atendendo o contato, sem
+distinguir se ela está nesse número ou noutro. `force_human`, `ai_opt_out` e contato
+interno continuam vetando.
+
 - **A função A** (`pedirTurnoDaMensagemPendente`) chama o próprio `isLeadInHandoff`
   (pelo pool do processo, `getRequestPool`, com import dinâmico para não fechar o ciclo
   `human-handoff`, `handoff-tecnico`, `retomada`, `mensagem-pendente`). Com o
