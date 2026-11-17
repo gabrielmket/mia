@@ -43,7 +43,7 @@ import { retratoDosPlanos } from "@/lib/implantacao/planos-de-tarefa";
 import { lerRegras } from "@/lib/implantacao/automacoes";
 import { CONFIGURACAO_DOS_GATILHOS_DE_OBRIGACAO, modelosDeObrigacaoParaOAgente } from "@/lib/implantacao/obrigacoes";
 import { capacidadesOferecidas, catalogoServido, pacotesLigados } from "@/lib/implantacao/capacidades";
-import { lerConvites, lerMembros } from "@/lib/implantacao/equipe";
+import { lerConvites, lerMembros, lerSetores } from "@/lib/implantacao/equipe";
 import { GATILHOS_COM_MOTOR, lerFluxos, nosDoGrafo } from "@/lib/implantacao/followup";
 import { lerDocumentoDaMemoria } from "@/lib/implantacao/memoria";
 import { lerModelosOficiais, lerRespostasProntas } from "@/lib/implantacao/mensagens";
@@ -127,7 +127,7 @@ const ACOES_DE_AUTOMACAO = [
     type: "define_sector",
     o_que_faz:
       "Põe a conversa do negócio num SETOR de atendimento (upstream 1.103, #3881): a distribuição passa a mandar a conversa só para quem é do setor. Por padrão não troca um setor escolhido à mão por uma pessoa.",
-    config: '{ "sector_id": "<id do setor>", "sobrescrever_setor_manual": true | false (opcional) }',
+    config: '{ "sector_id": "<id do setor, de plataforma_ver_configuracao, seção equipe, em setores>", "sobrescrever_setor_manual": true | false (opcional) }',
   },
   {
     type: "assign_owner",
@@ -708,7 +708,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
     description:
       "O conteúdo do que já está configurado num cliente, por seção: `etiquetas` (o vocabulário com as cores), `memoria` (as regras da casa e as anotações), " +
       "`conhecimento` (os materiais e a situação da indexação), `followups` (os fluxos e se estão publicados), `automacoes` (as regras, com gatilho e ações), " +
-      "`agenda` (os tipos de agendamento e a jornada de cada pessoa), `equipe` (membros com id e e-mail, e convites), `canais` (os números com id e situação), " +
+      "`agenda` (os tipos de agendamento e a jornada de cada pessoa), `equipe` (membros com id e e-mail, convites e os setores de atendimento com id e nome), `canais` (os números com id e situação), " +
       "`atendimento` (a distribuição e o freio do passo \"a IA decide\"), `mensagens` (respostas prontas e modelos oficiais), " +
       "`planos_de_tarefa` (as sequências de tarefa com os passos), `fontes_de_formulario` (destino, perguntas, endereço de captação e a autorização de IA, sem o segredo) " +
       "e `banco_externo` (as conexões, só com o nome e a coluna do cliente; nunca endereço, usuário ou senha). " +
@@ -787,6 +787,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           situacao: f.status === "active" ? "publicado" : f.status === "disabled" ? "desligado" : "rascunho",
           gatilho: f.trigger_config ?? { kind: "manual" },
           quando_humano_assume: f.handoff_policy,
+          enviar_com_conversa_atribuida: f.send_when_assigned === true,
         }));
       }
 
@@ -859,6 +860,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             ativo: m.ativo,
           })),
           convites: await lerConvites(c.admin, c.orgId),
+          // Upstream 1.103 (#3881): os setores, com id e nome, para a ação `define_sector` das automações.
+          setores: await lerSetores(c.admin, c.orgId),
         };
       }
 
@@ -988,6 +991,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
         situacao: fluxo.status === "active" ? "publicado" : fluxo.status === "disabled" ? "desligado" : "rascunho",
         gatilho: fluxo.trigger_config ?? { kind: "manual" },
         quando_humano_assume: fluxo.handoff_policy,
+        // Upstream 1.107 (#3974): enviar mesmo com a conversa atribuída (plataforma_garantir_followup).
+        enviar_com_conversa_atribuida: fluxo.send_when_assigned === true,
         nos: nosDoGrafo(rascunho, nomeDaEtapa),
         // Por onde o fluxo anda: é o que diz ANTES de qual nó uma caixa cabe.
         setas: (rascunho?.edges ?? []).map((e) => ({

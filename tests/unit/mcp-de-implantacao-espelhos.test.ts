@@ -79,7 +79,7 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Follow-up.
   // Relido na .72 (upstream 1.70, #2028): só a autenticação mudou (sessão OU token dsk_, resolveAuthDual). Nenhuma regra nova para o espelho.
   { rota: "app/api/v1/ai/followup-flows/from-model/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "a0e03549e796bcf8" },
-  // Relido na fusão da 1.107 (#3974): a leitura ganhou `send_when_assigned` (enviar mesmo com a conversa atribuída). O espelho não grava a coluna, então a régua montada por ele nasce com o padrão do banco (desligado), como na tela. A chave pela ferramenta fica como falta no MCP.
+  // Relido na fusão da 1.107 (#3974): a leitura ganhou `send_when_assigned` (enviar mesmo com a conversa atribuída). Sem o campo, o espelho não grava a coluna, e a régua montada por ele nasce com o padrão do banco (desligado), como na tela. Desde a MIA-21 a ferramenta liga e desliga a chave (`enviar_com_conversa_atribuida`), com a mesma recusa do gatilho num fluxo publicado, e a cópia leva a chave, como a importação da tela.
   { rota: "app/api/v1/ai/followup-flows/[id]/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "b5771838c23bb67a" },
   // Relido na .84 (upstream 1.86, #3056 e #3048): a publicação confere os modelos de mensagem citados (carregaModelosCitados, modelo inexistente nesta conta é recusado) e devolve os AVISOS do gatilho de silêncio (avisosDoGatilho). O espelho (publicarFollowup) faz as duas coisas e devolve os avisos em `avisos`.
   { rota: "app/api/v1/ai/followup-flows/[id]/publish/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "c669f202a47bde3d" },

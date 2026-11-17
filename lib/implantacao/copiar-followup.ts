@@ -112,6 +112,8 @@ async function exportarDeOutraEmpresa(
       name: fluxo.name,
       surface: fluxo.surface ?? null,
       handoff_policy: fluxo.handoff_policy ?? "pause",
+      // Upstream 1.107 (#3974): a opção viaja no arquivo, como na exportação da tela.
+      send_when_assigned: fluxo.send_when_assigned === true,
       trigger_config: fluxo.trigger_config,
       graph: grafo.data,
     },
@@ -178,6 +180,8 @@ export async function copiarFollowup(c: Implantacao, pedido: PedidoDeCopiaDeFoll
       draft_graph: resultado.graph,
       trigger_config: resultado.trigger_config,
       handoff_policy: arquivo.flow.handoff_policy,
+      // Como a importação da tela: arquivo antigo, sem a opção, vale desligado.
+      send_when_assigned: arquivo.flow.send_when_assigned,
       surface: "followup",
     })
     .select("id, name, status")

@@ -77,6 +77,7 @@ export const FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP: readonly FerramentaDePlataf
       "Modelo que dispara por etapa pede `etapa` (funil e etapa pelo nome). " +
       "AJUSTAR: `textos` troca o texto de uma mensagem pelo id do nó (veja os nós em plataforma_ver_followup) e, no texto fixo, a `midia` (imagem, vídeo, áudio ou documento que sai com o texto de legenda); `esperas` troca os minutos de uma espera; " +
       "`silencio_minutos`, `silencio_maximo_minutos`, `pausa_para_recomecar_minutos`, `so_se_a_equipe_respondeu`, `repeticoes_por_contato`, `etapa` e `numero` ajustam o gatilho. " +
+      "`quando_humano_assume` e `enviar_com_conversa_atribuida` dizem o que o fluxo faz quando a conversa está com uma pessoa da equipe. " +
       "MEXER NO NEGÓCIO SEM FALAR COM O CLIENTE: `mover_no_funil` garante uma caixa que leva o card para uma etapa, e `etiquetar` uma caixa que grava etiquetas. " +
       "Cada uma entra ANTES de um nó (`antes_de`): antes do fim «sem resposta» para marcar quem não respondeu, antes de uma mensagem para mover na hora em que ela sai. " +
       "Com `no`, ajusta uma caixa que já existe (feita aqui ou na tela). " +
@@ -84,7 +85,7 @@ export const FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP: readonly FerramentaDePlataf
       "ORDEM: (1) esta ferramenta, (2) plataforma_garantir_agente com `followups` para ARMAR o fluxo no agente, (3) plataforma_publicar_followup, (4) plataforma_publicar_agente. " +
       "Fluxo com gatilho automático só inscreve alguém se um agente PUBLICADO o tem armado. " +
       "O QUE NÃO FAZ: não publica, não arma em agente, não tira caixa e não desenha fluxo do zero nem ramificação (isso é o construtor, na tela IA › Follow-ups). " +
-      "Num fluxo já publicado, textos, esperas e caixas mudam no rascunho; o gatilho não muda sem desligar o fluxo antes.",
+      "Num fluxo já publicado, textos, esperas e caixas mudam no rascunho; o gatilho, `quando_humano_assume` e `enviar_com_conversa_atribuida` não mudam sem desligar o fluxo antes.",
     inputSchema: {
       organization_id: ORGANIZACAO,
       modelo: z.string().trim().min(1).max(80).optional().describe("O id do modelo a instalar. Obrigatório quando o fluxo ainda não existe."),
@@ -140,6 +141,15 @@ export const FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP: readonly FerramentaDePlataf
         .enum(["pause", "cancel", "allow"])
         .optional()
         .describe('O que acontece com o fluxo quando uma pessoa da equipe assume a conversa: "pause" (espera), "cancel" (encerra) ou "allow" (segue).'),
+      // Upstream 1.107 (#3974): a coluna `send_when_assigned`, a mesma chave da tela.
+      enviar_com_conversa_atribuida: z
+        .boolean()
+        .optional()
+        .describe(
+          "true deixa o fluxo MANDAR a mensagem mesmo quando a conversa está atribuída a uma pessoa da equipe (o vendedor dono da conversa). " +
+            "Sem isto (o padrão, desligado), a conversa com dono para o fluxo pela regra de `quando_humano_assume`. " +
+            "Não vence a passagem pedida pela IA ou pelo cliente, o «sempre atendimento humano», o contato interno nem os horários, e não faz a IA responder. false desliga.",
+        ),
       silencio_maximo_minutos: z
         .number()
         .int()
