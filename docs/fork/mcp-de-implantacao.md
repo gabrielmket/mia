@@ -656,7 +656,9 @@ Ficou de fora desta fusão, por decisão:
 
 Mesma regra, na fusão das v1.100 a v1.107. A prova de cada linha está em
 `tests/unit/mcp-de-implantacao-novidades-do-upstream-1107.test.ts` (as duas ações
-novas, nos testes da lista de tipos de ação). Nenhuma ferramenta nova, só campos.
+novas, nos testes da lista de tipos de ação) e, a do modelo aprovado da agenda, em
+`tests/unit/mcp-de-implantacao-modelo-da-agenda.test.ts`. Nenhuma ferramenta nova,
+só campos e uma seção de leitura.
 
 | novidade do upstream | versão | como o MCP alcança | operação |
 |---|---|---|---|
@@ -664,14 +666,14 @@ novas, nos testes da lista de tipos de ação). Nenhuma ferramenta nova, só cam
 | O evento do Google leva os dados do negócio na descrição (`calendar_event_types.levar_dados_do_negocio`, 9209, #4006) | 1.104 | campo novo `levar_dados_do_negocio` em `plataforma_garantir_tipos_de_agendamento` (nasce desligado, como na tela); a leitura (seção `agenda`) devolve o valor de cada tipo | `implantar_configuracao` |
 | A ação que TIRA etiquetas (`remove_tag`) e a que põe a conversa num setor (`define_sector`, #3881) | 1.104 e 1.103 | dois tipos novos em `plataforma_garantir_automacao` (a lista é a do `actionSchema` dele); o `sector_id` é conferido contra `attendant_sectors` da organização | `implantar_configuracao` |
 | Mover para etapa de PERDA pede o motivo na ação (`lost_reason`, #4297) | 1.107 | `plataforma_garantir_automacao` recusa como as rotas, com as mesmas funções (`motivo-da-perda-na-acao`), e o catálogo das ações descreve o campo | `implantar_configuracao` |
+| O lembrete da agenda por MODELO APROVADO da Meta quando a janela de 24 h do cliente fechou (`calendar_event_types.reminder_meta_template_id`, 9092) | 1.100 | campo novo `modelo_do_lembrete` (id ou nome) em `plataforma_garantir_tipos_de_agendamento`, gravado pelo mesmo contrato da rota (`criarComRascunhoSchema`/`alterarSchema`); a conferência (`lib/implantacao/modelos-aprovados.ts`) usa as réguas do upstream (`isStatusSendable`, `variaveisQueOLembretePreenche`, o número dono da linha como o cron confere) e recusa o modelo não aprovado (a rota deixa para o cron; o MCP só escolhe entre aprovados), o de OUTRO número que o do lembrete e o de variável que o lembrete não preenche. `null` tira. A leitura (seção `agenda`) devolve `modelo_do_lembrete` de cada tipo, com `serve` e o porquê | `implantar_configuracao` |
+| Os modelos APROVADOS de cada número, para escolher | 1.100 | seção nova `modelos_aprovados` em `plataforma_ver_configuracao`: por número, os aprovados (`modelosDaConexao`, a mesma busca da tela do aviso) com id, nome, idioma, categoria, variáveis (onde, chave, o que espera), `serve_ao_lembrete` (com o porquê, quando não) e `serve_ao_aviso_da_equipe` (`avaliarModeloDoAviso`) | leitura |
+| O aviso à equipe por modelo aprovado (`config_aviso_de_caso.modelo_id`, 9094; o destino no WhatsApp de um membro, 9099) | 1.100 | SÓ LEITURA: `modelos_aprovados.aviso_da_equipe` devolve o número, o modelo escolhido e se ele ainda serve. Escolher fica na tela Aviso no WhatsApp (`/app/ai/cases/avisos`): a única porta que grava é `fn_definir_aviso_de_caso`, que exige pessoa logada (`auth.uid()`), papel admin e a verificação em duas etapas na sessão (`PUT /api/v1/ai/cases/alerta`). Um token não tem sessão, e gravar a coluna pelo cliente de serviço seria pular a porta (o mesmo motivo dos prazos da agenda) | leitura |
 | A versão do agente ganhou `skill_names`, `image_vision_enabled` e `reply_min_interval_ms` | 1.101 a 1.107 | `plataforma_garantir_agente` lê as três e a versão nova as HERDA da de referência, como a rota (sem isso, a versão aberta pela ferramenta as perderia); as skills passam pela conferência de escopo. Ligar ou mudar as três pela ferramenta continua na lista de baixo | `implantar_configuracao` |
 
 Falta no MCP (fica para uma tarefa própria, porque cada item pede ferramenta ou
 leitura nova, e não um campo):
 
-- o lembrete da agenda por MODELO APROVADO da Meta (`reminder_meta_template_id`, 9092)
-  e o aviso à equipe por modelo (9094, 9099): o MCP precisa achar o modelo aprovado
-  do número, que ele ainda não lê;
 - os servidores MCP por agente com OAuth por contato (9095), a pausa mínima entre
   respostas (9101), as skills por agente e por etiqueta (9107, 9230) e a visão de
   foto por agente (9108): campos novos de `plataforma_garantir_agente`;
