@@ -12,7 +12,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 
-import { test, expect, type BrowserContext } from "./helpers/test";
+import { esperarARevelacaoNasCargas, test, expect, type BrowserContext } from "./helpers/test";
 import { criarPessoa, db, entrar, fotografarChaves, inserir, restaurarChaves, type FotoDasChaves } from "./helpers/cobranca";
 import { gerarCnpj } from "./fixtures/provedor-de-cobranca-asaas";
 
@@ -88,6 +88,7 @@ test("[P0] cupom do parceiro: criado no Admin, desconto no link e guardado até 
 
     // ── 2. O visitante do link vê o desconto ────────────────────────────
     const visitante = await browser.newContext({ baseURL });
+    visitante.on("page", esperarARevelacaoNasCargas);
     contextos.push(visitante);
     const pv = await visitante.newPage();
     pv.on("pageerror", (e) => errosDePagina.push(e.message));
@@ -111,6 +112,7 @@ test("[P0] cupom do parceiro: criado no Admin, desconto no link e guardado até 
 
     // ── 4. Cupom que não existe não dá desconto nem derruba a página ────
     const outro = await browser.newContext({ baseURL });
+    outro.on("page", esperarARevelacaoNasCargas);
     contextos.push(outro);
     const po = await outro.newPage();
     po.on("pageerror", (e) => errosDePagina.push(e.message));

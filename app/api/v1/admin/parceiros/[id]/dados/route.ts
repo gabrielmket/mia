@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { fail } from "@/lib/api/wrappers";
+import { comIdDaRequisicao, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { falhaDaEscritaDePlatformAdmin, requirePlatformAdminEscrita } from "@/lib/auth/requirePlatformAdmin";
 import { moduloLigado } from "@/lib/instalacao/modulos";
@@ -41,11 +41,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     resourceId: id,
     requestId,
   });
-  return new Response(JSON.stringify(dados, null, 2), {
+  return comIdDaRequisicao(new Response(JSON.stringify(dados, null, 2), {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "content-disposition": `attachment; filename="parceiro-${id}.json"`,
       "cache-control": "no-store",
     },
-  });
+  }), _req);
 }

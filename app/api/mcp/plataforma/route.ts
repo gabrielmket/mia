@@ -29,10 +29,13 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-function erroJsonRpc(code: number, message: string, status: number): Response {
+// Upstream 1.107 (#4107): toda resposta montada à mão carimba o X-Request-Id.
+// O id é o MESMO que a rota já carimba na resposta de sucesso e que o servidor
+// MCP leva para a auditoria (`criarServidorDePlataforma(token, requestId)`).
+function erroJsonRpc(code: number, message: string, status: number, requestId: string): Response {
   return new Response(JSON.stringify({ jsonrpc: "2.0", error: { code, message }, id: null }), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "X-Request-Id": requestId },
   });
 }
 
@@ -44,9 +47,9 @@ async function atender(req: NextRequest): Promise<Response> {
     token = await validarTokenDePlataforma(req.headers.get("authorization"));
   } catch (err) {
     if (err instanceof ErroDeAutenticacao) {
-      return erroJsonRpc(err.mcpCode, err.message, err.httpStatus);
+      return erroJsonRpc(err.mcpCode, err.message, err.httpStatus, requestId);
     }
-    return erroJsonRpc(-32603, err instanceof Error ? err.message : "auth_failed", 500);
+    return erroJsonRpc(-32603, err instanceof Error ? err.message : "auth_failed", 500, requestId);
   }
 
   const transport = new WebStandardStreamableHTTPServerTransport({});
@@ -58,7 +61,7 @@ async function atender(req: NextRequest): Promise<Response> {
     resposta.headers.set("X-Request-Id", requestId);
     return resposta;
   } catch (err) {
-    return erroJsonRpc(-32603, err instanceof Error ? err.message : "transport_error", 500);
+    return erroJsonRpc(-32603, err instanceof Error ? err.message : "transport_error", 500, requestId);
   }
 }
 

@@ -15,6 +15,7 @@ import { apenasDeMembrosAtivos } from "@/lib/agenda/google/membros";
 import { precisaRenovar } from "@/lib/agenda/google/oauth";
 import { configuracaoDaMicrosoft } from "@/lib/agenda/microsoft/config";
 import { COLUNAS_DA_CONEXAO, renovarConexaoMicrosoft, type LinhaDaConexaoMicrosoft } from "@/lib/agenda/microsoft/conexao";
+import { comIdDaRequisicao } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { autorizaCron } from "@/lib/auth/cron-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -81,10 +82,10 @@ export async function renovarAgendasDaMicrosoft(
 
 async function executar(req: NextRequest): Promise<Response> {
   if (!autorizaCron(req)) {
-    return NextResponse.json({ error: { code: "unauthenticated", message: "cron secret inválido" } }, { status: 401 });
+    return comIdDaRequisicao(NextResponse.json({ error: { code: "unauthenticated", message: "cron secret inválido" } }, { status: 401 }), req);
   }
   const resumo = await renovarAgendasDaMicrosoft(createAdminClient(), { agora: new Date() });
-  return NextResponse.json({ data: resumo });
+  return comIdDaRequisicao(NextResponse.json({ data: resumo }), req);
 }
 
 export async function GET(req: NextRequest): Promise<Response> {

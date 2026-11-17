@@ -12,12 +12,13 @@
  */
 import { NextResponse } from "next/server";
 
+import { comIdDaRequisicao } from "@/lib/api/wrappers";
 import { falhaDaEscritaDePlatformAdmin, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(): Promise<Response> {
+export async function GET(req?: Request): Promise<Response> {
   try {
     await requirePlatformAdmin();
   } catch (err) {
@@ -38,26 +39,26 @@ export async function GET(): Promise<Response> {
     archived_at: string | null;
   } | null;
 
-  if (!sessao) return new NextResponse(null, { status: 404 });
+  if (!sessao) return comIdDaRequisicao(new NextResponse(null, { status: 404 }), req);
   // Corpo vazio e o motivo no cabeçalho: quem consome isto é um `<img>`, que não
   // lê JSON. O cabeçalho é para quem depura — e para a tela poder distinguir
   // "ainda não ficou pronto" de "não há o que parear".
   if (sessao.archived_at) {
-    return new NextResponse(null, { status: 409, headers: { "x-channel-state": "archived" } });
+    return comIdDaRequisicao(new NextResponse(null, { status: 409, headers: { "x-channel-state": "archived" } }), req);
   }
   if (!sessao.waha_session_name) {
-    return new NextResponse(null, { status: 409, headers: { "x-channel-state": "no-session" } });
+    return comIdDaRequisicao(new NextResponse(null, { status: 409, headers: { "x-channel-state": "no-session" } }), req);
   }
   // Já pareado: o QR do WAHA some quando a sessão conecta, e insistir nele
   // faria a tela piscar um erro em cima de um número que está funcionando.
   if (sessao.status === "WORKING") {
-    return new NextResponse(null, { status: 409, headers: { "x-channel-state": "working" } });
+    return comIdDaRequisicao(new NextResponse(null, { status: 409, headers: { "x-channel-state": "working" } }), req);
   }
 
   const baseUrl = process.env.WAHA_API_BASE_URL;
   const apiKey = process.env.WAHA_API_KEY;
   if (!baseUrl || !apiKey || apiKey === "dev_plaintext_change_me") {
-    return new NextResponse(null, { status: 503 });
+    return comIdDaRequisicao(new NextResponse(null, { status: 503 }), req);
   }
 
   const upstream = await fetch(
@@ -65,14 +66,14 @@ export async function GET(): Promise<Response> {
     { headers: { "X-Api-Key": apiKey }, cache: "no-store" },
   );
   if (!upstream.ok) {
-    return new NextResponse(null, {
+    return comIdDaRequisicao(new NextResponse(null, {
       status: upstream.status,
       headers: { "x-waha-status": String(upstream.status) },
-    });
+    }), req);
   }
 
   const corpo = await upstream.arrayBuffer();
-  return new NextResponse(corpo, {
+  return comIdDaRequisicao(new NextResponse(corpo, {
     status: 200,
     headers: {
       "content-type": upstream.headers.get("content-type") ?? "image/png",
@@ -80,5 +81,5 @@ export async function GET(): Promise<Response> {
       // mostrar um código morto, que o celular recusa sem dizer por quê.
       "cache-control": "no-store",
     },
-  });
+  }), req);
 }

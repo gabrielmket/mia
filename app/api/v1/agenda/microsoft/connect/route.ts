@@ -24,6 +24,7 @@ import {
   origemPublicaDoPedido,
 } from "@/lib/agenda/microsoft/config";
 import { montarUrlDeConsentimentoMicrosoft, verificadorPkce } from "@/lib/agenda/microsoft/oauth";
+import { comIdDaRequisicao } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { travaDaDemonstracao } from "@/lib/demonstracao/trava";
@@ -34,8 +35,8 @@ import { cookieSecure } from "@/lib/supabase/cookie-secure";
 
 export const dynamic = "force-dynamic";
 
-function voltarComErro(origem: string, codigo: string): NextResponse {
-  return NextResponse.redirect(new URL(`/app/agenda?ms_erro=${codigo}`, origem));
+function voltarComErro(req: NextRequest, origem: string, codigo: string): NextResponse {
+  return comIdDaRequisicao(NextResponse.redirect(new URL(`/app/agenda?ms_erro=${codigo}`, origem)), req);
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -54,11 +55,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // demonstração" confirmado barra: falha de leitura segue, e o banco decide.
   const trava = await travaDaDemonstracao(createAdminClient(), org.orgId);
   if (trava.travado && trava.motivo === "demonstracao") {
-    return voltarComErro(origem, "empresa_de_demonstracao");
+    return voltarComErro(req, origem, "empresa_de_demonstracao");
   }
 
   const app = await configuracaoDaMicrosoft();
-  if (!app) return voltarComErro(origem, "nao_configurado");
+  if (!app) return voltarComErro(req, origem, "nao_configurado");
 
   const nonce = randomBytes(16).toString("base64url");
   let state: string;
@@ -73,7 +74,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       organizationId: org.orgId,
       metadata: { reason: "segredo_de_state_indisponivel" },
     });
-    return voltarComErro(origem, "segredo_indisponivel");
+    return voltarComErro(req, origem, "segredo_indisponivel");
   }
 
   const url = montarUrlDeConsentimentoMicrosoft(
@@ -87,7 +88,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     metadata: { user_id: user.id },
   });
 
-  const resposta = NextResponse.redirect(url);
+  const resposta = comIdDaRequisicao(NextResponse.redirect(url), req);
   // `Lax` é o ponto deste cookie: é o que viaja na volta top-level GET vinda de
   // outro site. `secure` sai de `cookieSecure()` (self-host em http existe).
   resposta.cookies.set(NOME_DO_VINCULO, assinarVinculo(nonce, env.INTERNAL_SECRET), {

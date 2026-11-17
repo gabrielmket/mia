@@ -19,7 +19,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 
 import { criarPessoa, db, diasAtras, entrar, inserir } from "./helpers/cobranca";
-import { expect, test } from "./helpers/test";
+import { esperarARevelacaoNasCargas, expect, test } from "./helpers/test";
 
 const sufixo = randomUUID().slice(0, 8);
 const EVIDENCIA = "evidence/raio-x-cliente-ativo";
@@ -105,6 +105,7 @@ test("[P0] raio-X do cliente ativo: autorizar sem conectar, ler a conta e gerar 
 
     // ── 2. O dono autoriza, sem conectar nada ──
     const dono = await browser.newContext({ baseURL });
+    dono.on("page", esperarARevelacaoNasCargas);
     const paginaDoDono = await dono.newPage();
     await paginaDoDono.goto(new URL(link).pathname);
     const termo = paginaDoDono.locator('[data-raio-x-etapa="termo"][data-raio-x-fonte-da-pagina="conversas_da_mia"]');

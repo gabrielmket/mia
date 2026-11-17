@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 
 import { type NextRequest } from "next/server";
 
-import { fail } from "@/lib/api/wrappers";
+import { comIdDaRequisicao, fail } from "@/lib/api/wrappers";
 import { falhaDaEscritaDePlatformAdmin, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { lerRepassesParaATela } from "@/lib/parceiros/leitura";
@@ -29,11 +29,11 @@ export async function GET(req: NextRequest) {
     return fail("not_found", "Mês não encontrado.", 404, { requestId });
   }
   const { repasses } = await lerRepassesParaATela(admin, competencia);
-  return new Response(planilhaDoMes(repasses), {
+  return comIdDaRequisicao(new Response(planilhaDoMes(repasses), {
     headers: {
       "content-type": "text/csv; charset=utf-8",
       "content-disposition": `attachment; filename="repasses-${competencia.slice(0, 7)}.csv"`,
       "cache-control": "no-store",
     },
-  });
+  }), req);
 }

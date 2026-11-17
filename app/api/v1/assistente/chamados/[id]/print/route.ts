@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { fail } from "@/lib/api/wrappers";
+import { comIdDaRequisicao, fail } from "@/lib/api/wrappers";
 import { linkDoPrint } from "@/lib/assistente/print";
 import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -49,7 +49,7 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
 
   const link = await linkDoPrint(createAdminClient(), caminho);
   if (!link) return fail("internal_error", t("Erro ao abrir o print."), 500, { requestId });
-  const resposta = NextResponse.redirect(link, 302);
+  const resposta = comIdDaRequisicao(NextResponse.redirect(link, 302), _req);
   resposta.headers.set("X-Request-Id", requestId);
   resposta.headers.set("Cache-Control", "private, no-store");
   return resposta;

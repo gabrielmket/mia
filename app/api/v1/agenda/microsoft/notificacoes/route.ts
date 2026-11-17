@@ -18,6 +18,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { receberNotificacoes } from "@/lib/agenda/microsoft/notificacoes";
+import { comIdDaRequisicao } from "@/lib/api/wrappers";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -28,23 +29,23 @@ const TAMANHO_MAXIMO_DO_CORPO = 512 * 1024;
 export async function POST(req: NextRequest): Promise<Response> {
   const validacao = new URL(req.url).searchParams.get("validationToken");
   if (validacao !== null) {
-    if (validacao.length > 2048) return new Response("", { status: 400 });
-    return new Response(validacao, {
+    if (validacao.length > 2048) return comIdDaRequisicao(new Response("", { status: 400 }), req);
+    return comIdDaRequisicao(new Response(validacao, {
       status: 200,
       headers: { "content-type": "text/plain; charset=utf-8", "x-content-type-options": "nosniff" },
-    });
+    }), req);
   }
 
   const tamanho = Number(req.headers.get("content-length") ?? "0");
   if (Number.isFinite(tamanho) && tamanho > TAMANHO_MAXIMO_DO_CORPO) {
-    return NextResponse.json({ error: { code: "payload_too_large" } }, { status: 413 });
+    return comIdDaRequisicao(NextResponse.json({ error: { code: "payload_too_large" } }, { status: 413 }), req);
   }
 
   let corpo: unknown;
   try {
     corpo = await req.json();
   } catch {
-    return NextResponse.json({ error: { code: "validation_failed" } }, { status: 400 });
+    return comIdDaRequisicao(NextResponse.json({ error: { code: "validation_failed" } }, { status: 400 }), req);
   }
 
   try {
@@ -61,5 +62,5 @@ export async function POST(req: NextRequest): Promise<Response> {
       erro: e instanceof Error ? e.message : String(e),
     });
   }
-  return new Response(null, { status: 202 });
+  return comIdDaRequisicao(new Response(null, { status: 202 }), req);
 }

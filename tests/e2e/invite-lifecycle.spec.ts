@@ -579,6 +579,7 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
     browser,
   }) => {
     const adminCtx = await browser.newContext();
+    adminCtx.on("page", esperarARevelacaoNasCargas);
     const adminPage = await adminCtx.newPage();
     await loginAdminTotp(adminPage);
 
@@ -593,6 +594,7 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
 
     // Quem abre o link (ou o verificador do e-mail, ou a prévia do WhatsApp) cai no aceite, sem consumir nada.
     const anonimo = await browser.newContext();
+    anonimo.on("page", esperarARevelacaoNasCargas);
     const visita = await anonimo.newPage();
     await visita.goto(primeiro);
     await expect(visita).toHaveURL(/\/team\/accept-invite\//);

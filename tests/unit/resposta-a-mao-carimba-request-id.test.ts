@@ -152,6 +152,18 @@ const EXCECOES: Record<string, string> = {
     "Pixel 1x1 carregado pelo cliente de e-mail do lead: a rota não grava requestId em log nem em auditoria, e quem recebe a imagem não lê cabeçalho. Carimbar aqui publicaria um id sem registro — o defeito do #3971 ao contrário.",
   "app/api/v1/webhooks/cadencia-descadastro/[token]/route.ts":
     "Página pública de descadastro (GET/HEAD/POST sem sessão, token assinado como credencial): o audit `lgpd.consent_changed` não carrega requestId e as linhas de log da rota também não. Diferente dos exports e callbacks, não há registro com que correlacionar — carimbar seria um id órfão.",
+  // FORK MIA — as quatro rotas públicas do e-mail marketing do fork, declaradas
+  // na fusão da v1.107 com o MESMO critério das duas da cadência acima: quem
+  // chama é o cliente de e-mail ou o navegador do destinatário, e a rota não
+  // grava requestId em log nem em auditoria.
+  "app/api/v1/webhooks/email-marketing/abertura/[token]/route.ts":
+    "Pixel de abertura do e-mail marketing do fork, carregado pelo cliente de e-mail do destinatário: o log de falha não leva requestId e quem recebe a imagem não lê cabeçalho. Carimbar publicaria um id sem registro, como no pixel da cadência.",
+  "app/api/v1/webhooks/email-marketing/descadastro/[token]/route.ts":
+    "Descadastro de um clique do e-mail marketing do fork (página pública, token assinado como credencial): o log de falha não leva requestId. Sem registro com que correlacionar, como no descadastro da cadência.",
+  "app/api/v1/webhooks/email-marketing/clique/[token]/route.ts":
+    "Redirecionamento do link rastreado do e-mail marketing do fork, seguido pelo navegador do destinatário: o log de falha não leva requestId e o navegador não mostra cabeçalho. Carimbar seria um id órfão.",
+  "app/api/v1/webhooks/email-marketing/imagem/[org]/[arquivo]/route.ts":
+    "Imagem do corpo do e-mail marketing do fork, buscada pelo proxy de imagem do provedor de e-mail: a rota não grava log nem auditoria, e quem busca a imagem não lê cabeçalho. Carimbar seria um id órfão.",
 };
 
 function rotas(dir = join(RAIZ, "app", "api")): string[] {

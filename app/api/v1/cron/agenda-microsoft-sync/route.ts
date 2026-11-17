@@ -21,6 +21,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apenasDeMembrosAtivos } from "@/lib/agenda/google/membros";
 import { atualizarCatalogoMicrosoft, lerCalendarioMicrosoft } from "@/lib/agenda/microsoft/calendar-executor";
 import { compromissoDoEventoMicrosoft, reconciliarCompromissoMicrosoft } from "@/lib/agenda/microsoft/sync-executor";
+import { comIdDaRequisicao } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { autorizaCron } from "@/lib/auth/cron-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -52,7 +53,7 @@ interface ConexaoAtiva {
 
 async function executar(req: NextRequest) {
   if (!autorizaCron(req)) {
-    return NextResponse.json({ error: { code: "unauthenticated", message: "cron secret inválido" } }, { status: 401 });
+    return comIdDaRequisicao(NextResponse.json({ error: { code: "unauthenticated", message: "cron secret inválido" } }, { status: 401 }), req);
   }
   const db = createAdminClient();
   const agora = new Date();
@@ -64,10 +65,10 @@ async function executar(req: NextRequest) {
     .select("id, organization_id, user_id, catalogo_tentar_apos")
     .eq("status", "healthy");
   if (error) {
-    return NextResponse.json(
+    return comIdDaRequisicao(NextResponse.json(
       { error: { code: "internal_error", message: "Não foi possível ler as conexões do Outlook." } },
       { status: 500 },
-    );
+    ), req);
   }
   const conexoes = await apenasDeMembrosAtivos(db, (conexoesBrutas ?? []) as ConexaoAtiva[]);
   const ativas = new Set(conexoes.map((c) => c.id));
@@ -149,7 +150,7 @@ async function executar(req: NextRequest) {
       });
     }
   }
-  return NextResponse.json({ data: { conexoes: conexoes.length, calendarios: lidos, catalogos } });
+  return comIdDaRequisicao(NextResponse.json({ data: { conexoes: conexoes.length, calendarios: lidos, catalogos } }), req);
 }
 
 export async function GET(req: NextRequest) {

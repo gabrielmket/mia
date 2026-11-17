@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 
 import { NextResponse, type NextRequest } from "next/server";
 
-import { fail, ok } from "@/lib/api/wrappers";
+import { comIdDaRequisicao, fail, ok } from "@/lib/api/wrappers";
 import { env } from "@/lib/env";
 import { NOME_DO_COOKIE, opcoesDoCookieApagado, veioDoProprioApp } from "@/lib/raio-x/acesso";
 
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!veioDoProprioApp(req.headers)) return fail("forbidden", "Pedido de fora da página do Raio-X.", 403, { requestId });
   const formulario = (req.headers.get("content-type") ?? "").includes("application/x-www-form-urlencoded");
   const base = (env.NEXT_PUBLIC_APP_URL ?? "http://localhost").replace(/\/+$/, "");
-  const resposta = formulario ? NextResponse.redirect(`${base}/raio-x/entrar`, 303) : ok({ saiu: true }, { requestId });
+  const resposta = formulario ? comIdDaRequisicao(NextResponse.redirect(`${base}/raio-x/entrar`, 303), req) : ok({ saiu: true }, { requestId });
   resposta.cookies.set(NOME_DO_COOKIE, "", opcoesDoCookieApagado());
   return resposta;
 }

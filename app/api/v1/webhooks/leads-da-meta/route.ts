@@ -25,7 +25,7 @@ import { randomUUID } from "node:crypto";
 
 import { NextResponse, type NextRequest } from "next/server";
 
-import { fail } from "@/lib/api/wrappers";
+import { comIdDaRequisicao, fail } from "@/lib/api/wrappers";
 import { appDaMeta } from "@/lib/channels/meta/app";
 import { verificationChallenge, verifyMetaSignature } from "@/lib/channels/meta/webhook";
 import { avisosDoCorpo, receberAvisoDeLead } from "@/lib/leads-da-meta/tempo-real";
@@ -47,8 +47,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // verificação do webhook do WhatsApp. Nunca lança (`lib/channels/meta/app.ts`).
   const { verifyToken } = await appDaMeta();
   const challenge = verificationChallenge(req.nextUrl.searchParams, verifyToken ?? "");
-  if (challenge === null) return new NextResponse("forbidden", { status: 403 });
-  return new NextResponse(challenge, { status: 200, headers: { "content-type": "text/plain" } });
+  if (challenge === null) return comIdDaRequisicao(new NextResponse("forbidden", { status: 403 }), req);
+  return comIdDaRequisicao(new NextResponse(challenge, { status: 200, headers: { "content-type": "text/plain" } }), req);
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -92,5 +92,5 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   if (avisos.length > AVISOS_POR_ENTREGA) desfechos.push("excedente_fica_para_a_leitura");
 
-  return NextResponse.json({ received: avisos.length, outcomes: desfechos }, { status: 200 });
+  return comIdDaRequisicao(NextResponse.json({ received: avisos.length, outcomes: desfechos }, { status: 200 }), req);
 }

@@ -53,6 +53,21 @@ const AINDA_A_MAO = [
   "app/api/v1/voice/sessions/status/route.ts",
   "app/api/v1/webhooks/meta/[token]/route.ts",
   "app/email-templates/[modelo]/route.ts",
+  // FORK MIA — as rotas do fork que respondem erro à mão, declaradas na fusão
+  // da v1.107 (quando esta catraca chegou). São as irmãs das de cima: a agenda
+  // do Microsoft como a do Google, o QR do número de avisos como o do canal, o
+  // webhook dos leads da Meta como o da Meta, e as três do e-mail marketing que
+  // devolvem página, imagem ou redirecionamento (como o `avatar`).
+  "app/api/v1/admin/numero-de-avisos/qr/route.ts",
+  "app/api/v1/agenda/microsoft/notificacoes/route.ts",
+  "app/api/v1/cron/agenda-microsoft-assinaturas/route.ts",
+  "app/api/v1/cron/agenda-microsoft-push/route.ts",
+  "app/api/v1/cron/agenda-microsoft-refresh/route.ts",
+  "app/api/v1/cron/agenda-microsoft-sync/route.ts",
+  "app/api/v1/webhooks/email-marketing/clique/[token]/route.ts",
+  "app/api/v1/webhooks/email-marketing/descadastro/[token]/route.ts",
+  "app/api/v1/webhooks/email-marketing/imagem/[org]/[arquivo]/route.ts",
+  "app/api/v1/webhooks/leads-da-meta/route.ts",
 ];
 
 /** Todos os `route.ts` sob `app/`. */

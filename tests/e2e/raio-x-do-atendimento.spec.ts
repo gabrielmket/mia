@@ -24,7 +24,7 @@ import { montarRelatorio } from "@/lib/raio-x/relatorio";
 
 import { FIM_DA_GARAGEM, INICIO_DA_GARAGEM, conversasDaGaragemModelo } from "../fixtures/raio-x/garagem-modelo";
 import { criarPessoa, db, entrar, inserir } from "./helpers/cobranca";
-import { expect, test } from "./helpers/test";
+import { esperarARevelacaoNasCargas, expect, test } from "./helpers/test";
 
 const sufixo = randomUUID().slice(0, 8);
 const EVIDENCIA = "evidence/raio-x-do-atendimento";
@@ -125,6 +125,7 @@ test("[P0] raio-X do atendimento: criar, aceitar, revisar, link do dono e encerr
 
     // ── 2. O dono abre o link sem login e aceita o termo ────────────────
     const dono = await browser.newContext({ baseURL });
+    dono.on("page", esperarARevelacaoNasCargas);
     const paginaDoDono = await dono.newPage();
     await paginaDoDono.goto(new URL(linkDeConexao).pathname);
     await expect(paginaDoDono.locator('[data-raio-x-etapa="termo"]')).toContainText(EMPRESA);

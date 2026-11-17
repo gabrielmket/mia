@@ -13,6 +13,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apenasDeMembrosAtivos } from "@/lib/agenda/google/membros";
 import { rpcMicrosoft } from "@/lib/agenda/microsoft/calendar-executor";
 import { reconciliarCompromissoMicrosoft } from "@/lib/agenda/microsoft/sync-executor";
+import { comIdDaRequisicao } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { autorizaCron } from "@/lib/auth/cron-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -21,17 +22,17 @@ export const dynamic = "force-dynamic";
 
 async function executar(req: NextRequest) {
   if (!autorizaCron(req)) {
-    return NextResponse.json({ error: { code: "unauthenticated", message: "cron secret inválido" } }, { status: 401 });
+    return comIdDaRequisicao(NextResponse.json({ error: { code: "unauthenticated", message: "cron secret inválido" } }, { status: 401 }), req);
   }
   const db = createAdminClient();
   let candidatos: Array<{ id: string; organization_id: string; user_id: string }>;
   try {
     candidatos = ((await rpcMicrosoft(db, "fn_mia_agenda_microsoft_a_publicar", { p_limite: 50 })) ?? []) as typeof candidatos;
   } catch {
-    return NextResponse.json(
+    return comIdDaRequisicao(NextResponse.json(
       { error: { code: "internal_error", message: "Não foi possível ler os compromissos do Outlook." } },
       { status: 500 },
-    );
+    ), req);
   }
   const ativos = await apenasDeMembrosAtivos(db, candidatos);
 
@@ -68,7 +69,7 @@ async function executar(req: NextRequest) {
       });
     }
   }
-  return NextResponse.json({ data: { candidatos: candidatos.length, teams_sem_outlook: semOutlook, ...resumo } });
+  return comIdDaRequisicao(NextResponse.json({ data: { candidatos: candidatos.length, teams_sem_outlook: semOutlook, ...resumo } }), req);
 }
 
 export async function GET(req: NextRequest) {

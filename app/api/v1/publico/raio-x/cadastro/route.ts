@@ -25,7 +25,7 @@ import { randomUUID } from "node:crypto";
 
 import { NextResponse, type NextRequest } from "next/server";
 
-import { fail, ok } from "@/lib/api/wrappers";
+import { comIdDaRequisicao, fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { authRateLimited } from "@/lib/auth/rate-limit";
 import { env } from "@/lib/env";
@@ -63,7 +63,7 @@ const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;"
 const escapar = (s: string) => s.replace(/[&<>"']/g, (c) => ESCAPES[c] ?? c);
 
 /** A página simples de erro do sistema, para o formulário sem `retorno_erro`. */
-function paginaDeErro(status: number, titulo: string, linhas: string[]): Response {
+function paginaDeErro(req: NextRequest, status: number, titulo: string, linhas: string[]): Response {
   const html = `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Raio-X do atendimento</title></head>
 <body style="margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f3f6f4;color:#111513">
@@ -72,7 +72,7 @@ function paginaDeErro(status: number, titulo: string, linhas: string[]): Respons
 <ul style="margin:0 0 16px;padding-left:20px;line-height:1.6">${linhas.map((l) => `<li>${escapar(l)}</li>`).join("")}</ul>
 <p style="margin:0"><a href="/raio-x/gratis" style="color:#0a7a57;font-weight:700">Voltar ao cadastro</a></p>
 </main></body></html>`;
-  return new Response(html, { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+  return comIdDaRequisicao(new Response(html, { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } }), req);
 }
 
 async function lerCorpo(req: NextRequest): Promise<{ corpo: Record<string, unknown>; formulario: boolean } | null> {
@@ -93,7 +93,7 @@ async function lerCorpo(req: NextRequest): Promise<{ corpo: Record<string, unkno
 }
 
 export async function OPTIONS(req: NextRequest): Promise<Response> {
-  return new Response(null, { status: 204, headers: cabecalhosDoSite(req.headers.get("origin")) });
+  return comIdDaRequisicao(new Response(null, { status: 204, headers: cabecalhosDoSite(req.headers.get("origin")) }), req);
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   const { corpo, formulario } = lido;
 
   if (await authRateLimited(ROTULO_DO_LIMITE_DO_CADASTRO, limparEmail(corpo.email) || null, LIMITE_DO_CADASTRO)) {
-    if (formulario) return paginaDeErro(429, "Muitas tentativas seguidas", ["Aguarde alguns minutos e tente de novo."]);
+    if (formulario) return paginaDeErro(req, 429, "Muitas tentativas seguidas", ["Aguarde alguns minutos e tente de novo."]);
     return fail("rate_limited", "Muitas tentativas seguidas. Aguarde alguns minutos.", 429, { requestId, headers: { ...cors, "Retry-After": "600" } });
   }
 
@@ -112,8 +112,8 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!v.ok) {
     const frases = v.campos.map((c: CampoDoCadastro) => FRASE_DO_CAMPO[c]);
     if (formulario) {
-      if (v.retornoErro) return NextResponse.redirect(absoluto(enderecoDoErro(v.retornoErro, v.campos)), 303);
-      return paginaDeErro(400, "Confira o cadastro", frases);
+      if (v.retornoErro) return comIdDaRequisicao(NextResponse.redirect(absoluto(enderecoDoErro(v.retornoErro, v.campos)), 303), req);
+      return paginaDeErro(req, 400, "Confira o cadastro", frases);
     }
     return fail("validation_failed", frases.join(" "), 400, { requestId, headers: cors, details: { campos: v.campos } });
   }
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     desfecho = await cadastrar(createAdminClient(), v.valor);
   } catch (erro) {
     logger.warn("[raio-x] o cadastro falhou", { requestId, detail: erro instanceof Error ? erro.message : "erro" });
-    if (formulario) return paginaDeErro(500, "Não deu para criar o seu Raio-X agora", ["Tente de novo em alguns minutos."]);
+    if (formulario) return paginaDeErro(req, 500, "Não deu para criar o seu Raio-X agora", ["Tente de novo em alguns minutos."]);
     return fail("internal_error", "Não deu para criar o seu Raio-X agora. Tente de novo em alguns minutos.", 500, { requestId, headers: cors });
   }
 
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       metadata: { raio_x_id: desfecho.raioXId, lead: desfecho.lead.ok ? "atualizado" : desfecho.lead.motivo },
     });
     const entrar = `${enderecoDeEntrar(desfecho.conta.email)}&motivo=ja_usou`;
-    if (formulario) return NextResponse.redirect(absoluto(entrar), 303);
+    if (formulario) return comIdDaRequisicao(NextResponse.redirect(absoluto(entrar), 303), req);
     return fail("conflict", "A análise grátis deste número (ou deste e-mail) já foi usada. Entre na sua área para ver o Raio-X ou pedir uma nova análise.", 409, {
       requestId,
       headers: cors,
@@ -165,7 +165,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     // O nome e o e-mail de quem aceitou moram em mia_raio_x_aceites; a trilha guarda só a referência.
     metadata: { aceite_id: desfecho.aceiteId, termo_versao: desfecho.termoVersao, fonte: "conexao", via: "cadastro" },
   });
-  if (formulario) return NextResponse.redirect(desfecho.link, 303);
+  if (formulario) return comIdDaRequisicao(NextResponse.redirect(desfecho.link, 303), req);
   return ok(
     { raio_x_id: desfecho.raioX.id, link: desfecho.link, entrar: enderecoDeEntrar(desfecho.conta.email), pronto_para_parear: desfecho.prontoParaParear },
     { status: 201, requestId, headers: cors },

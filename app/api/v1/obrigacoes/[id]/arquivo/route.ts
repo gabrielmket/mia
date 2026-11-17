@@ -18,7 +18,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { fail, ok } from "@/lib/api/wrappers";
+import { comIdDaRequisicao, fail, ok } from "@/lib/api/wrappers";
 import {
   TETO_DO_ARQUIVO_EM_BYTES,
   descartarArquivo,
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     const link = await linkDoArquivo(rota.admin, caminho);
     if (!link) return fail("internal_error", rota.t("Erro ao abrir o arquivo."), 500, { requestId });
 
-    const resposta = NextResponse.redirect(link, 302);
+    const resposta = comIdDaRequisicao(NextResponse.redirect(link, 302), req);
     resposta.headers.set("X-Request-Id", requestId);
     // O link vale 60 s: guardá-lo no cache do navegador o tornaria longo na prática.
     resposta.headers.set("Cache-Control", "private, no-store");

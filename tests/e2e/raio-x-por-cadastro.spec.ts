@@ -28,7 +28,7 @@ import { montarRelatorio } from "@/lib/raio-x/relatorio";
 
 import { FIM_DA_GARAGEM, INICIO_DA_GARAGEM, conversasDaGaragemModelo } from "../fixtures/raio-x/garagem-modelo";
 import { db, inserir } from "./helpers/cobranca";
-import { expect, test } from "./helpers/test";
+import { esperarARevelacaoNasCargas, expect, test } from "./helpers/test";
 
 const sufixo = randomUUID().slice(0, 8);
 const EVIDENCIA = "evidence/raio-x-por-cadastro";
@@ -226,6 +226,7 @@ test("[P0] raio-X grátis por cadastro: o formulário, a conexão, o código no 
 
     // ── 3. Entrar com o código do e-mail ────────────────────────────────
     const pessoa = await browser.newContext({ baseURL });
+    pessoa.on("page", esperarARevelacaoNasCargas);
     const area = await pessoa.newPage();
     await area.goto(`/raio-x/entrar?email=${encodeURIComponent(EMAIL)}`);
     await expect(area.getByRole("heading", { name: "Entrar na área do Raio-X" })).toBeVisible();
@@ -261,6 +262,7 @@ test("[P0] raio-X grátis por cadastro: o formulário, a conexão, o código no 
     expect(outro?.status()).toBe(404);
     // Sem o cookie, a área manda para a entrada.
     const semSessao = await browser.newContext({ baseURL });
+    semSessao.on("page", esperarARevelacaoNasCargas);
     const deFora = await semSessao.newPage();
     await deFora.goto("/raio-x/minha-area");
     await deFora.waitForURL(/\/raio-x\/entrar$/);

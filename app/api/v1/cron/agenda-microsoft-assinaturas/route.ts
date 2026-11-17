@@ -13,6 +13,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apenasDeMembrosAtivos } from "@/lib/agenda/google/membros";
 import { tokenDaConexaoMicrosoft } from "@/lib/agenda/microsoft/conexao";
 import { garantirAssinaturas } from "@/lib/agenda/microsoft/notificacoes";
+import { comIdDaRequisicao } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { autorizaCron } from "@/lib/auth/cron-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -23,7 +24,7 @@ const TETO_DE_CONEXOES = 50;
 
 async function executar(req: NextRequest) {
   if (!autorizaCron(req)) {
-    return NextResponse.json({ error: { code: "unauthenticated", message: "cron secret inválido" } }, { status: 401 });
+    return comIdDaRequisicao(NextResponse.json({ error: { code: "unauthenticated", message: "cron secret inválido" } }, { status: 401 }), req);
   }
   const db = createAdminClient();
   const { data, error } = await db
@@ -33,7 +34,7 @@ async function executar(req: NextRequest) {
     .order("updated_at")
     .limit(TETO_DE_CONEXOES);
   if (error) {
-    return NextResponse.json({ error: { code: "internal_error", message: "Não foi possível ler as conexões." } }, { status: 500 });
+    return comIdDaRequisicao(NextResponse.json({ error: { code: "internal_error", message: "Não foi possível ler as conexões." } }, { status: 500 }), req);
   }
   const conexoes = await apenasDeMembrosAtivos(db, (data ?? []) as Array<{ id: string; organization_id: string; user_id: string }>);
 
@@ -54,7 +55,7 @@ async function executar(req: NextRequest) {
   if (total.criadas + total.renovadas + total.apagadas + total.falhas > 0) {
     await audit({ action: "agenda.microsoft.assinaturas_executadas", metadata: { conexoes: conexoes.length, ...total } });
   }
-  return NextResponse.json({ data: { conexoes: conexoes.length, ...total } });
+  return comIdDaRequisicao(NextResponse.json({ data: { conexoes: conexoes.length, ...total } }), req);
 }
 
 export async function GET(req: NextRequest) {
