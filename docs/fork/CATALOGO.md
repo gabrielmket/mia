@@ -585,7 +585,7 @@ compartilhada, e as rotas espelhadas (seção 5): a cerca dos espelhos guarda a 
 `lib/ai/trava-da-ia-na-rota.ts` (o token nunca escolhe IA) e o token `dsk_` do upstream
 (`resolveAuthDual`).
 
-**Protege.** `tests/unit/mcp-de-implantacao-ferramentas.test.ts`, `mcp-de-implantacao-espelhos.test.ts`, `mcp-de-implantacao-operacoes.test.ts`, `mcp-de-implantacao-ponta-a-ponta.test.ts`, `mcp-de-plataforma-escopo.test.ts`, `distribuicao-do-numero-pela-plataforma.test.ts`, `dono-do-contato-pela-plataforma.test.ts` e a família `mcp-de-implantacao-novidades-do-upstream-*.test.ts`.
+**Protege.** `tests/unit/mcp-de-implantacao-ferramentas.test.ts`, `mcp-de-implantacao-espelhos.test.ts`, `mcp-de-implantacao-operacoes.test.ts`, `mcp-de-implantacao-ponta-a-ponta.test.ts`, `mcp-de-plataforma-escopo.test.ts`, `distribuicao-do-numero-pela-plataforma.test.ts`, `dono-do-contato-pela-plataforma.test.ts`, `mcp-de-implantacao-servidores-mcp-do-agente.test.ts` (os servidores MCP por agente, 9095) e a família `mcp-de-implantacao-novidades-do-upstream-*.test.ts`.
 
 **Conferir.**
 1. `npx vitest run tests/unit/mcp-de-implantacao-espelhos.test.ts` (vermelho = o upstream mudou uma rota espelhada: releia o espelho e regrave a impressão).

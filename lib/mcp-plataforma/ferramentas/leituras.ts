@@ -50,6 +50,9 @@ import { lerDocumentoDaMemoria } from "@/lib/implantacao/memoria";
 import { lerModelosOficiais, lerRespostasProntas } from "@/lib/implantacao/mensagens";
 import { retratoDosRoteadores } from "@/lib/implantacao/roteador";
 import { lerSkillsDaEmpresa } from "@/lib/implantacao/skills-do-agente";
+import { servidoresNaLeitura } from "@/lib/implantacao/servidores-mcp-do-agente";
+import { moduloLigado } from "@/lib/instalacao/modulos";
+import { lerServidoresDoAgente, semSegredo } from "@/lib/mcp/servidor-externo/do-agente/registro";
 import { EXPLICACAO_DO_PASSO, ROTULO_DO_PASSO } from "@/lib/leads/agent-mapping";
 import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { configAssinatura } from "@/lib/messaging/assinatura";
@@ -493,6 +496,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
       "Devolve, da versão vigente de cada agente, a pausa entre respostas (`pausa_entre_respostas_segundos`), se ele vê as fotos do cliente (`ver_fotos_do_cliente`) e QUAIS skills usa (`skills`: null = todas); " +
       "e as skills da empresa com as ETIQUETAS pelas quais cada uma entra (`skills_da_empresa`). " +
       "Devolve ainda os ROTEADORES de intenção: o número, se está ligado, o agente reserva e cada intenção com o agente e o funil de destino. " +
+      "Devolve os SERVIDORES MCP DE CADA AGENTE (`servidores_mcp`): nome, host, autenticação, se está ativo, se a chave está configurada (com os 4 últimos caracteres) ou, no OAuth por contato, o client_id, se há segredo, se o registro foi automático e o endereço de retorno, e as ferramentas escolhidas na versão vigente. Chave e segredo nunca voltam. " +
       "QUANDO USAR: antes de plataforma_garantir_agente e de plataforma_garantir_roteador, e antes de publicar ou ligar. " +
       "Devolve ainda as capacidades que a tela oferece a ESTE cliente (módulos e modo de venda mudam a lista) quando `com_capacidades` é verdadeiro.",
     inputSchema: {
@@ -568,6 +572,12 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           followups_armados: (followup?.enabled ? (followup.flow_pointer_ids ?? []) : []).map(
             (id) => fluxos.find((f) => f.id === id)?.name ?? id,
           ),
+          // 9095 — os servidores MCP DESTE agente (o cadastro vale na hora), sem
+          // segredo, com as ferramentas escolhidas na versão vigente.
+          servidores_mcp: servidoresNaLeitura(
+            (await lerServidoresDoAgente(c.admin, c.orgId, agente.id)).map(semSegredo),
+            base ? ((base.tool_ids as string[] | null) ?? []) : [],
+          ),
           // .85 — o horário de atendimento da IA da versão PUBLICADA.
           horario_de_atendimento: {
             faixas: horario.horario_da_ia?.faixas ?? null,
@@ -613,6 +623,10 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           "com mais de um no mesmo número, o de maior prioridade (no empate, o mais antigo), a não ser que exista um roteador LIGADO naquele número, que escolhe pela intenção " +
           "(plataforma_garantir_roteador e plataforma_ligar_roteador; veja `roteadores` abaixo).",
         agentes,
+        // 9095 — o módulo opcional da instalação: desligado, a tela some e o turno não monta servidor do agente.
+        servidores_mcp_por_agente: {
+          modulo_ligado: await moduloLigado(c.admin, "mcp_por_agente"),
+        },
         // A camada da EMPRESA, que vale para todos os agentes (upstream 1.74, #2321).
         seguranca_da_empresa: {
           bloqueio_de_afirmacao_clinica: await lerCamadaClinica(c.admin, c.orgId),
