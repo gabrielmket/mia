@@ -18,6 +18,9 @@
  *    função do banco que os grava exige uma pessoa logada e com a verificação
  *    em duas etapas provada na sessão. Um token não tem sessão.
  *  - a conta Google ou Microsoft de quem atende: é acesso, não configuração.
+ *  - o MODELO do aviso à equipe (upstream 1.100, 9094): a função do banco que o
+ *    grava (`fn_definir_aviso_de_caso`) exige a mesma sessão com as duas etapas.
+ *    O modelo do LEMBRETE é do tipo e entra aqui (`modelo_do_lembrete`).
  *  - o tipo "Microsoft Teams": depende da conta Microsoft conectada.
  *  - desativar e reativar um tipo: têm rota própria e trilha própria na tela.
  *  - a PROGRAMAÇÃO do serviço (upstream 1.87, 0716, #3132: individual por
@@ -48,6 +51,7 @@ import { availabilityPatchSchema } from "@/lib/schemas/routing";
 import { chaveDoNome, mesmoConteudo, type Desfecho, type Implantacao } from "./base";
 import { acharCanal, lerCanais, type CanalDaEmpresa } from "./canal";
 import { acharMembro, lerMembros } from "./equipe";
+import { modeloDoLembretePedido } from "./modelos-aprovados";
 
 /** Quantos tipos de agendamento uma chamada aceita. */
 export const TETO_DE_TIPOS = 30;
@@ -88,10 +92,17 @@ export interface TipoPedido {
    * decide), como a chave da tela do tipo.
    */
   levar_dados_do_negocio?: boolean;
+  /**
+   * Upstream 1.100 (9092): o MODELO APROVADO da Meta que leva o lembrete quando a
+   * janela de 24 h do cliente fechou (`reminder_meta_template_id`). Id ou nome
+   * de um modelo APROVADO do número que manda o lembrete; `null` tira. Conferido
+   * em `modeloDoLembretePedido` (`lib/implantacao/modelos-aprovados.ts`).
+   */
+  modelo_do_lembrete?: string | null;
 }
 
 const COLUNAS_DO_TIPO =
-  "id, name, slug, description, category, duration_minutes, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, reminder_enabled, reminder_channel_session_id, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body, default_price_cents, service_enabled, booking_mode, service_capacity, levar_dados_do_negocio";
+  "id, name, slug, description, category, duration_minutes, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, reminder_enabled, reminder_channel_session_id, reminder_meta_template_id, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body, default_price_cents, service_enabled, booking_mode, service_capacity, levar_dados_do_negocio";
 
 export async function lerTipos(admin: SupabaseClient, orgId: string): Promise<Array<Record<string, unknown>>> {
   const { data, error } = await admin
@@ -119,6 +130,7 @@ const ROTULO_DO_CAMPO: Record<string, string> = {
   default_price_cents: "preço padrão",
   reminder_enabled: "lembrete",
   reminder_channel_session_id: "canal do lembrete",
+  reminder_meta_template_id: "modelo do lembrete",
   reminder_minutes_before: "antecedência do lembrete",
   reminder_extra_offsets_minutes: "lembretes extras",
   reminder_body: "mensagem do lembrete",
@@ -179,6 +191,33 @@ export async function garantirTiposDeAgendamento(
 
     const slug = slugDe(pedido.nome);
     const existente = existentes.find((t) => t.slug === slug || chaveDoNome(String(t.name)) === chaveDoNome(pedido.nome));
+
+    // Upstream 1.100 (9092): o modelo do lembrete, conferido contra o número que
+    // MANDA o lembrete deste tipo (o do pedido, o já gravado ou o único).
+    if (pedido.modelo_do_lembrete !== undefined) {
+      if (pedido.modelo_do_lembrete === null || pedido.modelo_do_lembrete.trim() === "") {
+        corpo.reminder_meta_template_id = null;
+      } else {
+        const canalDoTipo =
+          corpo.reminder_channel_session_id !== undefined
+            ? (corpo.reminder_channel_session_id as string | null)
+            : ((existente?.reminder_channel_session_id as string | null | undefined) ?? null);
+        const canalQueEnvia = canalDoTipo ?? (canais.length === 1 ? canais[0]!.id : null);
+        const modelo = await modeloDoLembretePedido(c.admin, c.orgId, canais, pedido.modelo_do_lembrete, canalQueEnvia);
+        corpo.reminder_meta_template_id = modelo.id;
+        if (!canalQueEnvia && canais.length >= 2) {
+          avisos.push(
+            `O tipo «${pedido.nome}» está com o número do lembrete no automático e a empresa tem ${canais.length} números: o modelo só sai quando o lembrete cair no número dono dele. ` +
+              "Diga `canal_do_lembrete` com esse número para o modelo valer sempre.",
+          );
+        }
+        if (existente?.reminder_enabled !== true) {
+          avisos.push(
+            `O modelo do lembrete de «${pedido.nome}» ficou guardado, mas só vale com o lembrete LIGADO (plataforma_ligar_lembrete).`,
+          );
+        }
+      }
+    }
 
     if (!existente) {
       const lido = criarComRascunhoSchema.safeParse({

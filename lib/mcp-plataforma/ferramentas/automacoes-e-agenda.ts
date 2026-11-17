@@ -243,7 +243,8 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
       "Toda organização nasce com três tipos de exemplo: confira em plataforma_ver_configuracao, seção agenda, antes de criar. " +
       "Categorias e locais aceitos: plataforma_listar_modelos, seção agenda. " +
       "`canal_do_lembrete` escolhe o NÚMERO que manda o lembrete do tipo: com 2 ou mais números na empresa, sem ele o lembrete de compromisso marcado sem conversa fica pendente (a resposta avisa). " +
-      "O QUE NÃO FAZ: não liga o lembrete (plataforma_ligar_lembrete), não desativa nem reativa tipo, não define a jornada de ninguém (plataforma_definir_jornada), " +
+      "`modelo_do_lembrete` escolhe o MODELO APROVADO da Meta que leva o lembrete quando a janela de 24 h do cliente fechou (número oficial): só entre os aprovados do número que manda o lembrete (plataforma_ver_configuracao, seção modelos_aprovados). " +
+      "O QUE NÃO FAZ: não liga o lembrete (plataforma_ligar_lembrete), não cria nem submete modelo à Meta, não escolhe o modelo do aviso à equipe (é pela tela Aviso no WhatsApp, que pede a verificação em duas etapas), não desativa nem reativa tipo, não define a jornada de ninguém (plataforma_definir_jornada), " +
       "não cria tipo com Microsoft Teams e não mexe nos prazos da agenda (esses são pela tela: Configurações › Agenda).",
     inputSchema: {
       organization_id: ORGANIZACAO,
@@ -291,6 +292,18 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
                 .describe(
                   "true: o evento do Google deste tipo leva na descrição os dados do negócio (contato, etapa, valor) para quem atende conferir. " +
                     "Nasce desligado: é dado do cliente indo ao Google, então só ligue com o combinado do cliente.",
+                ),
+              // Upstream 1.100 (9092): o lembrete por modelo aprovado fora da janela de 24 h.
+              modelo_do_lembrete: z
+                .string()
+                .trim()
+                .max(200)
+                .nullable()
+                .optional()
+                .describe(
+                  "Id ou nome de um modelo APROVADO do número que manda o lembrete: sai quando a janela de 24 h do cliente fechou (no número oficial, fora dela só modelo). " +
+                    "As variáveis do corpo recebem, nesta ordem: {{1}} primeiro nome, {{2}} dia e hora, {{3}} título, {{4}} endereço. null tira (fora da janela o lembrete não sai e a equipe é avisada). " +
+                    "Recusa modelo não aprovado, de outro número ou com variável que o lembrete não preenche.",
                 ),
             })
             .strict(),

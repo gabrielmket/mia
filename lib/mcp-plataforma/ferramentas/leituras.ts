@@ -34,6 +34,7 @@ import { acharPorNomeOuId } from "@/lib/implantacao/base";
 import { produtoNoNegocioDoFunil } from "./produto-no-negocio";
 import { lerAgentes, lerCamadaClinica, lerVersoes, limiarDeSentimentoDo, pendenciasDePublicacao } from "@/lib/implantacao/agente";
 import { lerTipos } from "@/lib/implantacao/agenda";
+import { lerModeloDoAvisoDaEquipe, lerModelosAprovados, lerModelosPorId, modeloDoLembreteLido } from "@/lib/implantacao/modelos-aprovados";
 import { lerConexoesDeBancoExterno, retratoDaConexao } from "@/lib/implantacao/banco-externo";
 import { diasDaProspeccaoDe, lerAjustesDosCanais, lerCanais, lerPausasAgendadas } from "@/lib/implantacao/canal";
 import { lerRegrasDosNumeros, retratoDaDistribuicao } from "@/lib/implantacao/distribuicao-do-numero";
@@ -97,6 +98,8 @@ const SECOES_DE_CONFIGURACAO = [
   "canais",
   "atendimento",
   "mensagens",
+  // upstream 1.100 (9092, 9094): os modelos aprovados de cada número, para o lembrete e o aviso à equipe
+  "modelos_aprovados",
   // upstream 1.74 a 1.80
   "planos_de_tarefa",
   "fontes_de_formulario",
@@ -710,6 +713,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
       "`conhecimento` (os materiais e a situação da indexação), `followups` (os fluxos e se estão publicados), `automacoes` (as regras, com gatilho e ações), " +
       "`agenda` (os tipos de agendamento e a jornada de cada pessoa), `equipe` (membros com id e e-mail, e convites), `canais` (os números com id e situação), " +
       "`atendimento` (a distribuição e o freio do passo \"a IA decide\"), `mensagens` (respostas prontas e modelos oficiais), " +
+      "`modelos_aprovados` (os modelos APROVADOS da Meta de cada número, com idioma, categoria e variáveis, se servem ao lembrete da agenda e ao aviso à equipe, e o modelo escolhido no aviso à equipe), " +
       "`planos_de_tarefa` (as sequências de tarefa com os passos), `fontes_de_formulario` (destino, perguntas, endereço de captação e a autorização de IA, sem o segredo) " +
       "e `banco_externo` (as conexões, só com o nome e a coluna do cliente; nunca endereço, usuário ou senha). " +
       "Em `canais`, cada número traz também os dias da prospecção, se guarda o histórico, se está pausado, as pausas agendadas e a distribuição do número (regra própria, modo, atendente padrão e responsáveis). " +
@@ -816,8 +820,15 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           .select("user_id, is_available, capacity, schedule")
           .eq("organization_id", c.orgId);
         if (error) throw new Error(`não consegui ler as jornadas: ${error.message}`);
+        const tiposDaAgenda = await lerTipos(c.admin, c.orgId);
+        // Upstream 1.100 (9092): o modelo do lembrete de cada tipo, e se ainda serve.
+        const modelosDoLembrete = await lerModelosPorId(
+          c.admin,
+          c.orgId,
+          [...new Set(tiposDaAgenda.map((t) => t.reminder_meta_template_id).filter((x): x is string => typeof x === "string"))],
+        );
         r.agenda = {
-          tipos: (await lerTipos(c.admin, c.orgId)).map((t) => ({
+          tipos: tiposDaAgenda.map((t) => ({
             id: t.id,
             nome: t.name,
             slug: t.slug,
@@ -830,6 +841,12 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             lembrete_minutos_antes: t.reminder_minutes_before ?? null,
             // .81: o número que manda o lembrete (upstream v1.83). null = automático.
             canal_do_lembrete_id: (t.reminder_channel_session_id as string | null | undefined) ?? null,
+            // Upstream 1.100 (9092): o modelo aprovado fora da janela de 24 h. null = nenhum.
+            modelo_do_lembrete: modeloDoLembreteLido(
+              modelosDoLembrete,
+              t.reminder_meta_template_id as string | null | undefined,
+              t.reminder_channel_session_id as string | null | undefined,
+            ),
             preco_padrao_cents: t.default_price_cents === null || t.default_price_cents === undefined ? null : Number(t.default_price_cents),
             // Upstream v1.104 (9209): o bloco do negócio no evento do Google.
             levar_dados_do_negocio: t.levar_dados_do_negocio === true,
@@ -933,6 +950,14 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           // .81: as duas opções da agenda do upstream (1.80 #978, 1.81 #2063).
           colegas_podem_mexer_na_agenda: colegasPodemMexerNaAgendaLigado(org.settings),
           google_meet_com_acesso_aberto: meetAbertoLigado(org.settings),
+        };
+      }
+
+      if (pedidas.has("modelos_aprovados")) {
+        r.modelos_aprovados = {
+          numeros: await lerModelosAprovados(c.admin, c.orgId),
+          // Só leitura: a escolha é de uma pessoa na tela (sessão com as duas etapas).
+          aviso_da_equipe: await lerModeloDoAvisoDaEquipe(c.admin, c.orgId),
         };
       }
 
