@@ -115,8 +115,10 @@ mensagem espera por ela até 30 minutos.
 | `mia_coexistencia_sincronizacoes` | os dois pedidos do ciclo; `unique (conexao_id, tipo)` é a trava do pedido único da S3 | a equipe da empresa |
 | `mia_coexistencia_lotes` | cada lote e cada mídia à parte, com o cru até ser gravado | só o administrador de plataforma |
 
-Só o servidor escreve. Sem FK para `contacts`; o dado pessoal fica em `messages` e `contacts`, que a cascata
-da LGPD já alcança.
+Só o servidor escreve. Sem FK para `contacts`; o dado pessoal gravado fica em `messages` e `contacts`, que a
+cascata da LGPD já alcança. A exceção é o lote cru em `mia_coexistencia_lotes.payload` enquanto o lote está em
+`recebido`: ele tem nome, telefone e texto, e a anonimização do titular não olha essa tabela. Vira nulo quando o
+lote é gravado ou desiste; o lote que nunca sai de `recebido` fica para a S3 (ver a seção 4).
 
 Quando o histórico chega e o número não tem ciclo vivo (conectado por fora do fluxo da S3), o ciclo nasce
 com `aberta_por = 'historico_sem_pedido'` e o pedido do histórico já `em_andamento`, sem `pedida_em`.
@@ -132,3 +134,8 @@ com `aberta_por = 'historico_sem_pedido'` e o pedido do histórico já `em_andam
   do primeiro mês contariam conversa velha. O corte espera a decisão do Gabriel.
 - Lote guardado sem o pedido ao worker (o `emit_event` falhou na rota) fica em `recebido` e vai ao log com o
   id; a varredura da S3 o retoma.
+- **Prazo do lote cru (S3, LGPD):** nesta etapa, um lote que nunca sai de `recebido` (worker parado, ou o
+  pedido ao worker perdido) guarda o `payload` sem prazo. A mesma varredura da S3 fecha isso: retoma o lote
+  parado e, passado o prazo (proposta: 7 dias), marca o lote `falhou` com `payload` nulo e conta a falha no
+  pedido. Até a S3 entrar, a MIA não abre a conexão pelo app: o histórico só chega se o número for conectado
+  por fora do fluxo. Apontado pelo Revisor no PR #92.
