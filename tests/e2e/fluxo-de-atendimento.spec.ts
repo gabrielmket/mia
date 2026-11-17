@@ -115,6 +115,10 @@ async function configurarPergunta(
   await painel.locator("#collect-key").fill(campo.chave);
   await painel.locator("#collect-type").click();
   await page.getByRole("option", { name: campo.tipo }).click();
+  // O Select do Radix só devolve o ponteiro ao `body` quando a lista termina
+  // de fechar (animação de saída). Sem esperar o desmonte, o passo seguinte
+  // encontra a página inteira com `pointer-events: none` (run 42983246434).
+  await expect(page.getByRole("listbox")).toHaveCount(0);
   if (campo.opcoes !== undefined) await painel.locator("#collect-options").fill(campo.opcoes);
 }
 
@@ -248,16 +252,35 @@ test("liga o módulo, cria um roteiro pela tela, o cliente responde pelo WhatsAp
       // Fecha o painel antes de ligar as caixas, como faz a jornada do follow-up.
       // O canto (20,20) ficou sob o header fixo no CI #3478. Ler a área
       // exposta evita force e conserva a ação real de fechar clicando no fundo.
-      const pontoLivre = await page.locator(".react-flow__pane").evaluate((pane) => {
-        const r = pane.getBoundingClientRect();
-        for (const fy of [0.6, 0.8, 0.4]) for (const fx of [0.4, 0.6, 0.2, 0.8]) {
-          const x = r.left + r.width * fx;
-          const y = r.top + r.height * fy;
-          if (document.elementFromPoint(x, y) === pane) return { x, y };
-        }
-        return null;
-      });
-      expect(pontoLivre, "o canvas precisa ter fundo exposto para fechar o painel").not.toBeNull();
+      //
+      // A sonda é REPETIDA até achar o fundo, e não lida uma vez só. Na run
+      // 42983246434 ela leu a tela 15 ms depois de escolher a opção do Select:
+      // o Radix ainda fechava a lista e o `body` estava com `pointer-events:
+      // none`, então `elementFromPoint` não devolvia o canvas em nenhum ponto.
+      // Os pontos ficam dentro da janela: fora dela `elementFromPoint` dá `null`.
+      const sondarPontoLivre = () =>
+        page.locator(".react-flow__pane").evaluate((pane) => {
+          const r = pane.getBoundingClientRect();
+          const esquerda = Math.max(r.left, 0);
+          const topo = Math.max(r.top, 0);
+          const largura = Math.min(r.right, window.innerWidth) - esquerda;
+          const altura = Math.min(r.bottom, window.innerHeight) - topo;
+          if (largura <= 0 || altura <= 0) return null;
+          for (const fy of [0.6, 0.8, 0.4]) for (const fx of [0.4, 0.6, 0.2, 0.8]) {
+            const x = esquerda + largura * fx;
+            const y = topo + altura * fy;
+            if (document.elementFromPoint(x, y) === pane) return { x, y };
+          }
+          return null;
+        });
+      // `as`: sem ele o TS estreita para `null`, porque não vê a atribuição no poll.
+      let pontoLivre = null as { x: number; y: number } | null;
+      await expect
+        .poll(async () => (pontoLivre = await sondarPontoLivre()), {
+          message: "o canvas precisa ter fundo exposto para fechar o painel",
+          timeout: 15_000,
+        })
+        .not.toBeNull();
       await page.mouse.click(pontoLivre!.x, pontoLivre!.y);
       await expect(page.getByTestId("node-config-sheet")).toHaveCount(0);
       await conectar(page, inicio, cpf);
