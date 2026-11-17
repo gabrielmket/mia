@@ -125,7 +125,7 @@ const COLUNAS_DO_AGENTE =
   "id, organization_id, name, description, kind, priority, is_active, is_default, published_version_id, paused_at, archived_at, config, created_at";
 
 const COLUNAS_DA_VERSAO =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, handoff_legal_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, created_at, pipeline_ids, knowledge_source_ids, inbound_debounce_ms, voz_enabled, voz_quando";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, handoff_legal_enabled, proposal_ai_draft_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, created_at, pipeline_ids, knowledge_source_ids, inbound_debounce_ms, voz_enabled, voz_quando, skill_names, image_vision_enabled, reply_min_interval_ms";
 
 /** Os campos de conteúdo de uma versão: é sobre eles que se pergunta "mudou?". */
 const CAMPOS_DA_VERSAO = [
@@ -161,6 +161,12 @@ const CAMPOS_DA_VERSAO = [
   // versão. Na lista para a versão nova herdar o valor da de referência, como a rota.
   "voz_enabled",
   "voz_quando",
+  // upstream 1.107: as skills marcadas, a leitura de imagem e o intervalo mínimo
+  // entre respostas, por versão. Na lista para a versão nova herdar o valor da de
+  // referência, como a rota; senão uma versão aberta pela ferramenta as perderia.
+  "skill_names",
+  "image_vision_enabled",
+  "reply_min_interval_ms",
 ] as const;
 
 const ROTULO_DO_CAMPO: Record<string, string> = {
@@ -179,6 +185,9 @@ const ROTULO_DO_CAMPO: Record<string, string> = {
   followup: "follow-ups",
   pipeline_ids: "funis",
   knowledge_source_ids: "materiais",
+  skill_names: "skills",
+  image_vision_enabled: "leitura de imagem",
+  reply_min_interval_ms: "intervalo entre respostas",
   provider: "IA da plataforma",
   model: "IA da plataforma",
   credential_id: "IA da plataforma",
@@ -350,6 +359,11 @@ function conteudoDa(versao: Record<string, unknown>): Record<string, unknown> {
   // A coluna nasceu na 0616 com padrão LIGADO: versão gravada antes dela (ou lida
   // sem a coluna) vale como ligada, e é assim que a comparação a lê.
   if (typeof conteudo.handoff_legal_enabled !== "boolean") conteudo.handoff_legal_enabled = true;
+  // Upstream 1.107: as três colunas novas, com o padrão do banco (leitura de
+  // imagem LIGADA; skills e intervalo nulos) para a versão lida sem elas.
+  if (typeof conteudo.image_vision_enabled !== "boolean") conteudo.image_vision_enabled = true;
+  if (conteudo.skill_names === undefined) conteudo.skill_names = null;
+  if (conteudo.reply_min_interval_ms === undefined) conteudo.reply_min_interval_ms = null;
   // .100 (upstream v1.99, #3722): o gatilho ganhou as quatro listas do público do
   // agente, com padrão vazio. A versão gravada antes delas (ou com o gatilho padrão
   // do banco) é lida com os padrões do MESMO schema que monta a desejada; senão toda
@@ -887,6 +901,10 @@ async function inserirVersao(
         voz_quando: v.voz_quando,
         pipeline_ids: v.pipeline_ids,
         knowledge_source_ids: v.knowledge_source_ids,
+        // Upstream 1.107: a rota copia as três na versão nova; o espelho grava junto.
+        skill_names: v.skill_names,
+        image_vision_enabled: v.image_vision_enabled,
+        reply_min_interval_ms: v.reply_min_interval_ms,
         status: "draft",
         created_by: c.autorUserId,
       })
@@ -1209,6 +1227,8 @@ async function garantirAgenteECadastro(
       provider: desejada.provider,
       pipeline_ids: desejada.pipeline_ids,
       knowledge_source_ids: desejada.knowledge_source_ids,
+      // Upstream 1.107: as skills marcadas também são conferidas contra a organização.
+      skill_names: desejada.skill_names,
       credential_id: desejada.credential_id,
       channel_session_id: desejada.channel_session_id,
     });

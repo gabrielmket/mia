@@ -64,19 +64,23 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Relido na .76 (upstream 1.74 a 1.80): só o GET mudou (busca e página no servidor). O POST, que o espelho segue, é o mesmo.
   // Relido na .100 (upstream 1.99, #3858): POST e PATCH aceitam `fotos` por URL (o servidor baixa e guarda). O espelho monta a linha campo a campo e não passa `fotos`; foto pelo MCP segue na plataforma_importar_fotos_de_produto. Nada a levar.
   { rota: "app/api/v1/products/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "0f62e6ba93ded775" },
-  { rota: "app/api/v1/products/[id]/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "3f68315e3e70ba05" },
+  // Relido na fusão da 1.107: o DELETE apaga também o áudio da apresentação do produto no bucket. O espelho não apaga produto: nada a levar.
+  { rota: "app/api/v1/products/[id]/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "06a9523d0656d7cd" },
   // Automações.
   // Relido na .76 (upstream 1.78): a fonte de formulário de `trigger_config.webhook_source_id` tem de ser da empresa. O espelho confere (conferirConfiguracaoDoGatilho), com a frase da rota; e também o funil e a etapa dos gatilhos de tempo.
   // Relido na .84 (upstream 1.86, #2791): o POST recusa o gatilho por data num campo do CONTATO (campoDoGatilhoDeDataEhDoContato, MENSAGEM_CAMPO_DE_DATA_DO_CONTATO). O espelho recusa com a mesma frase (recusarDataDoContato), ao criar e ao reescrever.
-  { rota: "app/api/v1/automation-rules/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "4473e2fcd29a5683" },
+  // Relido na fusão da 1.107 (#4297): criar regra que move para etapa de PERDA sem `lost_reason` é recusado. O espelho (garantirAutomacao) confere com as mesmas funções (`motivo-da-perda-na-acao`).
+  { rota: "app/api/v1/automation-rules/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "13aaed90a8901394" },
   // Relido na .72 (upstream 1.71, #2211): o PATCH parcial confere o laço de lead (acoesQueFechamLaco) contra a regra gravada. O espelho valida a regra INTEIRA com createAutomationRuleSchema, que já recusa o laço (recusarLacoDeLead): coberto.
   // Relido na .76 (upstream 1.78): a mesma conferência da fonte no PATCH. Coberta pelo mesmo conferirConfiguracaoDoGatilho, que roda antes de criar e de editar.
   // Relido na .84 (upstream 1.86, #2791): o PATCH recusa o mesmo campo do contato quando muda o gatilho, a configuração dele OU liga a regra. O espelho confere ao reescrever (garantirAutomacao) e ao ligar (ligarAutomacao); desligar e renomear seguem livres.
-  { rota: "app/api/v1/automation-rules/[id]/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "aed965ba98fa05c8" },
+  // Relido na fusão da 1.107 (#4297): editar as ações confere o motivo da perda, e a fonte do webhook é conferida antes. O espelho confere o motivo antes de criar e de atualizar.
+  { rota: "app/api/v1/automation-rules/[id]/route.ts", espelho: "lib/implantacao/automacoes.ts", impressao: "978eeb8d13ca7e99" },
   // Follow-up.
   // Relido na .72 (upstream 1.70, #2028): só a autenticação mudou (sessão OU token dsk_, resolveAuthDual). Nenhuma regra nova para o espelho.
   { rota: "app/api/v1/ai/followup-flows/from-model/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "a0e03549e796bcf8" },
-  { rota: "app/api/v1/ai/followup-flows/[id]/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "d7640ddfa33c7917" },
+  // Relido na fusão da 1.107 (#3974): a leitura ganhou `send_when_assigned` (enviar mesmo com a conversa atribuída). O espelho não grava a coluna, então a régua montada por ele nasce com o padrão do banco (desligado), como na tela. A chave pela ferramenta fica como falta no MCP.
+  { rota: "app/api/v1/ai/followup-flows/[id]/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "b5771838c23bb67a" },
   // Relido na .84 (upstream 1.86, #3056 e #3048): a publicação confere os modelos de mensagem citados (carregaModelosCitados, modelo inexistente nesta conta é recusado) e devolve os AVISOS do gatilho de silêncio (avisosDoGatilho). O espelho (publicarFollowup) faz as duas coisas e devolve os avisos em `avisos`.
   { rota: "app/api/v1/ai/followup-flows/[id]/publish/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "c669f202a47bde3d" },
   // Agente de IA.
@@ -84,19 +88,23 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Relido na .76 (upstream 1.74 e 1.79): o código do erro de escopo (provedor desligado) e a coluna handoff_legal_enabled na leitura. O espelho já passava a versão inteira à conferência de escopo; a recusa passou a usar mensagemDoEscopo.
   // Relido na .81 (upstream 1.81, #2955): o corpo legado sem modelo passa a resolver o par (provedor, modelo) pelo padrão da instalação e RECUSA par que o provedor não executa, antes do insert. O espelho não recebe modelo (a IA é da plataforma, travarIaDaVersaoNova), e passou a conferir o par que vai gravar com a MESMA régua (validarParProvedorModelo), recusando com "Nada foi criado".
   // Relido na .100 (upstream 1.9x, 9052): a versão ganhou `voz_enabled` e `voz_quando` (responder em áudio). O espelho lê as duas colunas e a versão nova as herda da de referência, como a rota.
-  { rota: "app/api/v1/ai/agents/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "03001b7e8fdc6f40" },
+  // Relido na fusão da 1.107: o nome repetido de agente responde 409 (`nome-repetido`) e a leitura da versão ganhou `skill_names`, `image_vision_enabled` e `reply_min_interval_ms`. O espelho já recusa o nome repetido (23505) com frase própria, lê as três colunas e a versão nova as herda da de referência.
+  { rota: "app/api/v1/ai/agents/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "626ddcfe8f277350" },
   // Relido na .72 (upstream 1.70, #2013 e #2028): a versão nova grava proposal_ai_draft_enabled; o espelho (inserirVersao) passou a gravar também. O resto é a autenticação por token.
   // Relido na .76 (upstream 1.74 e 1.79): a versão nova copia handoff_legal_enabled e o escopo confere provedor, chave e número. O espelho (inserirVersao e a conferência antes de gravar) faz os dois.
-  { rota: "app/api/v1/ai/agents/[id]/versions/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "31744f6e9d56fad7" },
+  // Relido na fusão da 1.107: a versão nova copia `skill_names`, `image_vision_enabled` e `reply_min_interval_ms`, e o escopo confere as skills. O espelho (inserirVersao e a conferência antes de gravar) faz os dois.
+  { rota: "app/api/v1/ai/agents/[id]/versions/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "cca535a84e9f3f5f" },
   // Relido na .76: token dsk_ (resolveAuthDual), handoff_legal_enabled no PATCH e a conferência de escopo antes de editar o rascunho. O espelho confere o escopo antes das duas gravações.
   // Relido na .81 (upstream 1.81): o PATCH do rascunho passa a GRAVAR pipeline_ids e knowledge_source_ids (antes só entravam no schema) e os confere no escopo. O espelho já gravava os dois e já os passava a validarEscopoDaVersao.
-  { rota: "app/api/v1/ai/agents/[id]/versions/[vid]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "4423816d5d32af95" },
+  // Relido na fusão da 1.107: o PATCH do rascunho grava as três colunas novas e confere as skills no escopo. O espelho edita o rascunho com as mesmas colunas (CAMPOS_DA_VERSAO) e passa as skills a validarEscopoDaVersao.
+  { rota: "app/api/v1/ai/agents/[id]/versions/[vid]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "f7e8d00fd301ba4d" },
   // Relido na .76 (upstream 1.79, #2156): publishAgentVersion recebe quemPublicou, e a mudança da chave jurídica sai como ai_agent.legal_handoff_changed com o ator. O espelho passa o autor do token. E a ferramenta de servidor MCP externo escolhida no agente conta como capacidade válida (`toolIdAceito`): o espelho usa a mesma régua ao publicar.
   { rota: "app/api/v1/ai/agents/[id]/publish/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "479026df35f97b55" },
   { rota: "app/api/v1/ai/agents/[id]/pause/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "6e42c31f7151ac42" },
   // Espelhado na .73 (upstream 1.71, #2216): o limiar de sentimento mora em `config` do cadastro. O espelho (configComLimiar) faz a mesma mescla do PATCH: padrões, o gravado e o pedido por cima, conferido por agentPatchSchema.
   // Relido na .76 (upstream 1.74): token dsk_ e a auditoria ai_agent.updated no PATCH do cadastro. O espelho deixa a mesma linha quando muda nome, descrição, prioridade ou limiar.
-  { rota: "app/api/v1/ai/agents/[id]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "e0f5fecd68174ac1" },
+  // Relido na fusão da 1.107: o nome repetido responde 409, e o agente de VOZ publicado pode mudar o cadastro. O espelho já recusa o nome repetido e não monta agente de voz: nada a levar.
+  { rota: "app/api/v1/ai/agents/[id]/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "039454176a58d78f" },
   // Roteador de intenção, espelhado na .73 (upstream 1.73, #2290: destino de funil por intenção). O espelho cria DESLIGADO de propósito; o resto segue a rota (número conferido, configDoRoteador, gravação das intenções pelas mesmas duas funções).
   // Relido na .76 (upstream 1.74, #2061): o roteador novo nasce com context_message_count 8, e a régua é 0 a 16. O espelho grava o mesmo e ganhou `mensagens_de_contexto`.
   // Relido na .82 (upstream 1.84, #2824): as três rotas do roteador passaram de requireRole para resolveAuthDual (token dsk_ com config:* e papel admin), e a auditoria leva o token. Nenhuma regra nova de gravação; a trava da IA nas rotas pergunta quem pede por quemPedeNaRota. O espelho não passa pela rota: nada a levar.
@@ -152,7 +160,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Espelhado na .76 (upstream 1.79, #2591): o dono do contato. A rota chama fn_definir_carteira_do_cliente; o MCP chama a cópia do fork (9022) e deixa a mesma auditoria.
   // Relido na .81 (upstream 1.81): a rota ganhou o GET (quem é o dono hoje, para a tela). O PATCH, que o espelho segue, é o mesmo.
   // Relido na .100 (upstream 1.9x, 9039): o PATCH registra na conversa a troca de número que a função do banco passou a fazer. A cópia do fork (9022) não move conversa (ver PORTA_DA_CARTEIRA abaixo), então não há troca a registrar.
-  { rota: "app/api/v1/contacts/[id]/carteira/route.ts", espelho: "lib/mcp-plataforma/importacao/contatos.ts", impressao: "25e9da21fb5a35fa" },
+  // Relido na fusão da 1.107 (#3746): o Atendente muda a carteira com escopo de posse (`conferirPosse`), e a leitura devolve `pode_alterar`. O espelho age pelo token de plataforma (9022), sem papel de usuário: nada a levar.
+  { rota: "app/api/v1/contacts/[id]/carteira/route.ts", espelho: "lib/mcp-plataforma/importacao/contatos.ts", impressao: "6ac922c06bb91175" },
   { rota: "app/api/v1/settings/routing/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "5141ab7ba6a82744" },
   // Espelhado na .83 (upstream 1.85, 0663, #2331): as regras de atendimento POR NÚMERO (responsáveis, modo do número e destino padrão), na mesma gravação. A rota chama fn_set_channel_routing; o MCP chama a cópia do fork (9045), com o token como ator, e deixa a mesma auditoria routing.config_changed.
   { rota: "app/api/v1/settings/routing/channels/route.ts", espelho: "lib/implantacao/distribuicao-do-numero.ts", impressao: "5b49c3b3a43fda9a" },
@@ -167,7 +176,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Relido na .100 (upstream 1.95): grupo (`grupo_id`, conferido contra a organização) e `mostrar_na_barra`, os dois opcionais; e o PATCH só troca as mídias se ainda forem as lidas. O espelho não usa grupo nem a chave da barra (a resposta nasce fora de grupo e na barra, o padrão) e grava a lista de imagens inteira; nada a levar.
   { rota: "app/api/v1/message-templates/route.ts", espelho: "lib/implantacao/mensagens.ts", impressao: "71a8d6ca0bbfb246" },
   { rota: "app/api/v1/message-templates/[id]/route.ts", espelho: "lib/implantacao/mensagens.ts", impressao: "43be819e74c0f976" },
-  { rota: "app/api/v1/message-templates/[id]/midias/route.ts", espelho: "lib/implantacao/mensagens.ts", impressao: "0beaad12ed11f1d8" },
+  // Relido na fusão da 1.107: o corpo do envio é lido com teto (`lerCorpoComTeto`) em vez do content-length declarado. O espelho baixa a mídia com o próprio teto (baixarArquivoPublico): nada a levar.
+  { rota: "app/api/v1/message-templates/[id]/midias/route.ts", espelho: "lib/implantacao/mensagens.ts", impressao: "6ab4ba495fdfc6a0" },
   { rota: "app/api/v1/channels/templates/criar/route.ts", espelho: "lib/implantacao/mensagens.ts", impressao: "42df61fe7056d0ea" },
   // Convite de equipe.
   // Relido na .75 (9020, mudança NOSSA na rota): convite que o banco não grava vira item de `failed` (`convite_nao_gravado`) e o lote segue, em vez de 500. O espelho faz o mesmo: desfecho `nao_gravou`, com aviso, e as outras pessoas seguem.
@@ -231,7 +241,11 @@ const PORTA_DA_CARTEIRA = {
   // o vendedor"). A cópia do fork (9022) NÃO leva a transferência nesta fusão: o MCP
   // define o dono ao importar a base, em geral antes de haver conversa, e mover
   // conversa pela plataforma pede uma migration nova do fork. Decisão do dono.
-  impressao: "1683d82dcb17adaa",
+  // Relida na fusão da 1.107: duas mudanças, nenhuma alcança a cópia. (1) O
+  // Atendente entra na porta com escopo de posse (#3746): na 9022 o ator é o
+  // token de plataforma, não um papel. (2) A transferência das conversas passa
+  // `p_negocio_so_sem_dono => true` (#4019): a 9022 não move conversa.
+  impressao: "2ef3619ccb65602a",
 };
 
 function impressaoDaFuncao(baseline: string, marca: string): string | null {

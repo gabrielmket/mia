@@ -68,6 +68,7 @@ import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { classificarMidiaComLegenda } from "@/lib/messaging/media/midia-com-legenda";
 import { autoriaDaMudanca } from "@/lib/operacao/autoria";
 import type { ConditionOp } from "@/lib/automation/conditions";
+import { acoesDePerdaSemMotivo, lerEtapasDasAcoes, mensagemDaEtapaDePerdaSemMotivo } from "@/lib/automation/motivo-da-perda-na-acao";
 import { createAutomationRuleSchema, updateAutomationRuleSchema } from "@/lib/schemas/webhooks";
 import { lePlanosDoSettings, type PlanoDeTarefas } from "@/lib/tarefas/plano";
 
@@ -378,6 +379,18 @@ export async function garantirAutomacao(
   if (!lido.success) recusaDoSchema(lido.error);
   const regra = lido.data;
   await conferirReferencias(c, regra.actions as Acao[]);
+  // Upstream 1.107 (#4297): as duas rotas recusam mover para uma etapa de PERDA
+  // sem o motivo (`lost_reason` na ação). Sem a mesma régua, a regra montada aqui
+  // falharia em toda execução (`lost_reason_required`).
+  const etapasDaRegra = await lerEtapasDasAcoes(c.admin, c.orgId, regra.actions);
+  if ("erro" in etapasDaRegra) throw new Error(`não consegui ler as etapas das ações: ${etapasDaRegra.erro}`);
+  const semMotivo = acoesDePerdaSemMotivo(regra.actions, etapasDaRegra.etapas);
+  if (semMotivo.length > 0) {
+    throw new Recusa(
+      `${mensagemDaEtapaDePerdaSemMotivo(semMotivo.map((achado) => achado.etapa), "pt-BR")} ` +
+        'Pela ferramenta: ponha `"lost_reason": "<um dos motivos de perda do funil>"` no `config` da ação `create_or_move_lead`.',
+    );
+  }
   await conferirConfiguracaoDoGatilho(c, regra.trigger_config);
   await recusarDataDoContato(c, regra.trigger_event, regra.trigger_config);
   if (tiposDasAcoes(regra.actions).includes("ai_decide")) {

@@ -111,7 +111,7 @@ function filtroDePalavrasDe(gatilho: unknown): string | null {
 }
 
 const ACOES_DE_AUTOMACAO = [
-  { type: "create_or_move_lead", o_que_faz: "Cria o negócio ou o move para uma etapa.", config: '{ "pipeline_id": "<id do funil>", "stage_id": "<id da etapa>", "quando_em_outro_funil": "recusar" | "abrir_novo_card" (opcional) }' },
+  { type: "create_or_move_lead", o_que_faz: "Cria o negócio ou o move para uma etapa.", config: '{ "pipeline_id": "<id do funil>", "stage_id": "<id da etapa>", "quando_em_outro_funil": "recusar" | "abrir_novo_card" (opcional), "lost_reason": "<motivo de perda do funil>" (obrigatório quando a etapa é de perda) }' },
   {
     type: "add_tag",
     o_que_faz:
