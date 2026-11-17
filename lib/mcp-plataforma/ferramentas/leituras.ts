@@ -34,6 +34,7 @@ import { acharPorNomeOuId } from "@/lib/implantacao/base";
 import { produtoNoNegocioDoFunil } from "./produto-no-negocio";
 import { lerAgentes, lerCamadaClinica, lerVersoes, limiarDeSentimentoDo, pendenciasDePublicacao } from "@/lib/implantacao/agente";
 import { lerTipos } from "@/lib/implantacao/agenda";
+import { lerLugaresPorTipo, lerListaDeEspera } from "@/lib/implantacao/lista-de-espera";
 import { lerConexoesDeBancoExterno, retratoDaConexao } from "@/lib/implantacao/banco-externo";
 import { diasDaProspeccaoDe, lerAjustesDosCanais, lerCanais, lerPausasAgendadas } from "@/lib/implantacao/canal";
 import { lerRegrasDosNumeros, retratoDaDistribuicao } from "@/lib/implantacao/distribuicao-do-numero";
@@ -708,7 +709,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
     description:
       "O conteúdo do que já está configurado num cliente, por seção: `etiquetas` (o vocabulário com as cores), `memoria` (as regras da casa e as anotações), " +
       "`conhecimento` (os materiais e a situação da indexação), `followups` (os fluxos e se estão publicados), `automacoes` (as regras, com gatilho e ações), " +
-      "`agenda` (os tipos de agendamento e a jornada de cada pessoa), `equipe` (membros com id e e-mail, e convites), `canais` (os números com id e situação), " +
+      "`agenda` (os tipos de agendamento, com os lugares e a capacidade de cada serviço, a lista de espera e a jornada de cada pessoa), `equipe` (membros com id e e-mail, e convites), `canais` (os números com id e situação), " +
       "`atendimento` (a distribuição e o freio do passo \"a IA decide\"), `mensagens` (respostas prontas e modelos oficiais), " +
       "`planos_de_tarefa` (as sequências de tarefa com os passos), `fontes_de_formulario` (destino, perguntas, endereço de captação e a autorização de IA, sem o segredo) " +
       "e `banco_externo` (as conexões, só com o nome e a coluna do cliente; nunca endereço, usuário ou senha). " +
@@ -816,6 +817,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           .select("user_id, is_available, capacity, schedule")
           .eq("organization_id", c.orgId);
         if (error) throw new Error(`não consegui ler as jornadas: ${error.message}`);
+        // Upstream 1.105 (9224): os lugares com capacidade de cada serviço.
+        const lugares = await lerLugaresPorTipo(c.admin, c.orgId);
         r.agenda = {
           tipos: (await lerTipos(c.admin, c.orgId)).map((t) => ({
             id: t.id,
@@ -836,9 +839,17 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             // .86 — a agenda por serviço (upstream 1.87, 0716): null quando o tipo não adotou a programação.
             servico:
               t.service_enabled === true
-                ? { modo_de_reserva: t.booking_mode ?? null, capacidade: t.service_capacity ?? null, em_rascunho: t.is_active === false }
+                ? {
+                    modo_de_reserva: t.booking_mode ?? null,
+                    capacidade: t.service_capacity ?? null,
+                    em_rascunho: t.is_active === false,
+                    // Upstream 1.105 (9224): o lugar que a reserva escolhe, com a capacidade em PESSOAS por período.
+                    lugares: lugares.get(String(t.id)) ?? [],
+                  }
                 : null,
           })),
+          // Upstream 1.105 (9235): módulo opcional; os prazos são da empresa.
+          lista_de_espera: await lerListaDeEspera(c.admin, org.settings),
           jornadas: ((jornadas ?? []) as Array<{ user_id: string; is_available: boolean; capacity: number; schedule: { timezone?: string; windows?: Array<{ dow: number; start: string; end: string }> } | null }>).map((j) => ({
             pessoa: membros.find((m) => m.user_id === j.user_id)?.email ?? j.user_id,
             disponivel: j.is_available,

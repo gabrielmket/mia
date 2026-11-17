@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **115** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X e a .108 as três da trava de robô): as 107 desta página e as 8 da migração
+São **118** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio e a MIA-18 a da lista de espera da agenda): as 110 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -320,6 +320,7 @@ Todas respondem `criou`, `atualizou` ou `ja_estava`, item a item quando a chamad
 | `plataforma_ligar_automacao` | liga ou desliga uma regra | mesmo estado, `ja_estava` |
 | `plataforma_ligar_roteador` | liga ou desliga o roteador de intenção: ligado, ele escolhe o agente a cada mensagem do número e as intenções com destino movem o negócio. Roteador sem intenção não liga, e só um fica ligado por número | mesmo estado, `ja_estava` |
 | `plataforma_ligar_lembrete` | liga o lembrete de um tipo de agendamento, com antecedência e texto | mesmo pedido, `ja_estava` |
+| `plataforma_configurar_lista_de_espera` | liga ou desliga a lista de espera da agenda da empresa e escolhe os três prazos da oferta (upstream 9235, módulo opcional): ligada, a vaga que abre é oferecida pelo WhatsApp a uma pessoa da fila por vez. Sem o módulo instalado, recusa com "módulo não instalado" e não instala | mesmo pedido, `ja_estava` |
 | `plataforma_submeter_modelo_whatsapp` | submete à Meta um modelo oficial de mensagem (só texto) | modelo que já existe na conta não é reenviado |
 | `plataforma_ligar_conversoes` | liga ou desliga as regras de conversão por etapa de um funil, na Meta ou no Google: o sistema passa a mandar evento de cliente para a plataforma de anúncio. Ligar não envia o passado | mesmo pedido, `ja_estava` |
 | `plataforma_ligar_leads_de_formulario_da_meta` | liga ou desliga a volta dos leads de formulário para a Meta | mesmo pedido, `ja_estava` |
@@ -656,7 +657,10 @@ Ficou de fora desta fusão, por decisão:
 
 Mesma regra, na fusão das v1.100 a v1.107. A prova de cada linha está em
 `tests/unit/mcp-de-implantacao-novidades-do-upstream-1107.test.ts` (as duas ações
-novas, nos testes da lista de tipos de ação). Nenhuma ferramenta nova, só campos.
+novas, nos testes da lista de tipos de ação). Na fusão, nenhuma ferramenta nova, só
+campos. Depois dela (MIA-18), a lista de espera da agenda ganhou uma ferramenta
+própria, `plataforma_configurar_lista_de_espera` (a lista vai de 117 a 118; a contagem
+mora no teste da cobrança).
 
 | novidade do upstream | versão | como o MCP alcança | operação |
 |---|---|---|---|
@@ -664,6 +668,9 @@ novas, nos testes da lista de tipos de ação). Nenhuma ferramenta nova, só cam
 | O evento do Google leva os dados do negócio na descrição (`calendar_event_types.levar_dados_do_negocio`, 9209, #4006) | 1.104 | campo novo `levar_dados_do_negocio` em `plataforma_garantir_tipos_de_agendamento` (nasce desligado, como na tela); a leitura (seção `agenda`) devolve o valor de cada tipo | `implantar_configuracao` |
 | A ação que TIRA etiquetas (`remove_tag`) e a que põe a conversa num setor (`define_sector`, #3881) | 1.104 e 1.103 | dois tipos novos em `plataforma_garantir_automacao` (a lista é a do `actionSchema` dele); o `sector_id` é conferido contra `attendant_sectors` da organização | `implantar_configuracao` |
 | Mover para etapa de PERDA pede o motivo na ação (`lost_reason`, #4297) | 1.107 | `plataforma_garantir_automacao` recusa como as rotas, com as mesmas funções (`motivo-da-perda-na-acao`), e o catálogo das ações descreve o campo | `implantar_configuracao` |
+| A LISTA DE ESPERA da agenda como módulo opcional (9235, #3414, doc 208): a vaga que abre é oferecida a uma pessoa da fila por vez, com três prazos escolhidos pela empresa | 1.105 | ferramenta nova `plataforma_configurar_lista_de_espera` (`ligada` e os três prazos), espelho de `PATCH /api/v1/agenda/lista-de-espera`: o mesmo `configDaListaDeEsperaSchema` (sem padrão: ligar pela primeira vez pede os três), a mesma chave `settings.lista_de_espera` e a mesma auditoria `agenda.lista_de_espera_configurada`. É por EMPRESA, não por tipo: o upstream guarda os prazos fora do tipo, e quem entra na fila escolhe o serviço na inscrição. Sem o módulo instalado, recusa com "módulo não instalado" e não instala. A leitura (seção `agenda`) devolve `lista_de_espera`: `modulo_instalado`, `ligada` e `prazos` | `colocar_no_ar` |
+| O LUGAR com capacidade por período (mesa, camarote, quadra: recurso `kind='space'`, `sector`, a reserva com `service_party_size`, 9224) | 1.105 | só a leitura: `plataforma_ver_configuracao`, seção `agenda`, devolve em `servico.lugares` de cada tipo o `nome`, a `area`, a `capacidade_de_pessoas` e se está `ativo`. Gravar fica na tela (veja abaixo) | |
+| O índice da mensagem que espera em `queued` (9242) | 1.105 | nada a configurar: índice do banco, sem opção | |
 | A versão do agente ganhou `skill_names`, `image_vision_enabled` e `reply_min_interval_ms` | 1.101 a 1.107 | `plataforma_garantir_agente` lê as três e a versão nova as HERDA da de referência, como a rota (sem isso, a versão aberta pela ferramenta as perderia); as skills passam pela conferência de escopo. Ligar ou mudar as três pela ferramenta continua na lista de baixo | `implantar_configuracao` |
 
 Falta no MCP (fica para uma tarefa própria, porque cada item pede ferramenta ou
@@ -679,12 +686,19 @@ leitura nova, e não um campo):
   conta Resend da organização (0795), a ouvidoria (9040) e o link de pagamento na
   conversa (9312, módulo opcional): ferramentas novas, e as três primeiras encostam
   no nosso e-mail marketing e na marca travada da plataforma;
-- a reserva com capacidade e a lista de espera da agenda (9224, 9235, 9242) e o
-  molde de IA das empresas novas (9096, que encosta no cliente-modelo);
+- o molde de IA das empresas novas (9096, que encosta no cliente-modelo);
 - o "enviar mesmo com a conversa atribuída" do follow-up (`send_when_assigned`, #3974):
   a régua do MCP nasce desligada, como na tela, mas a ferramenta não liga a chave;
 - a leitura dos setores (`attendant_sectors`): a ação `define_sector` já entra, mas o
   id do setor ainda sai da tela.
+
+Fica na tela, por decisão: CRIAR o lugar com capacidade e ligá-lo ao serviço (9224).
+A porta do upstream (`fn_calendar_service_resource`, e `fn_calendar_service_configure`
+para ligar o lugar ao serviço) confere o ator como gerente MEMBRO da empresa ou token
+DELA, e o token de plataforma não é nenhum dos dois. É a mesma razão da .86 para a
+programação do serviço, e o lugar ainda depende do módulo `reservas_de_lugar` da
+instalação. O MCP cria o serviço em rascunho, e a pessoa cria os lugares e programa
+em Configurações › Agenda › Configurar.
 
 Nada a configurar pela implantação: o contrato do webhook da Meta (1.107), o CPF só
 como "preenchido" na API, o escopo de leitura do negócio, a exportação em PDF, a
