@@ -918,6 +918,115 @@ const TELAS_DO_UPSTREAM: Manual[] = [
     ],
     observacao: "Ali também ficam Quando alguém responde, a conversa fica com essa pessoa? e Quando a pessoa some, a IA volta?.",
   },
+  // Telas que chegaram na fusão do upstream v1.100 a v1.107.
+  {
+    id: "lista-de-espera",
+    titulo: "Lista de espera: oferecer o horário que abriu a quem aceitou ser avisado",
+    palavras: [
+      "lista de espera", "fila de espera", "encaixe", "encaixar", "vaga", "horario que abriu", "desmarcou",
+      "desistencia", "avisar quando abrir", "oferta da vaga", "aceitou", "recusou", "tirar da fila",
+    ],
+    href: "/app/agenda/lista-de-espera",
+    papelMinimo: "agent",
+    passos: [
+      "Abra Lista de espera (no hub Ver tudo no CRM). Na primeira vez, o gerente preenche em Prazos desta organização o Prazo máximo da oferta (minutos), a Folga antes do horário (minutos) e o Prazo mínimo para oferecer (minutos), liga Ligar a lista de espera nesta organização e clica em Salvar.",
+      "Em Inscrever na lista, busque o Contato pelo nome ou telefone, escolha o Atendimento, marque A pessoa aceitou ser avisada quando abrir uma vaga e clique em Inscrever.",
+      "Quando um horário é desmarcado, a vaga é oferecida a uma pessoa por vez, na ordem da Fila, e a linha dela mostra Oferta até. Registre a resposta com Aceitou ou Recusou; para tirar alguém, use Tirar da fila.",
+    ],
+    observacao:
+      "A tela só aparece com o recurso Lista de espera da agenda instalado. Os prazos nascem em branco: a lista só liga depois de escolher os três, e só gerente ou administrador muda os prazos. Os atendimentos da lista são os Tipos de agendamento. Quem é Somente leitura vê a fila, mas não inscreve.",
+    vejaTambem: ["agenda", "tipos-de-agendamento"],
+  },
+  {
+    id: "cadencias-de-email",
+    titulo: "Cadências de e-mail: montar a sequência e inscrever os negócios",
+    palavras: [
+      "cadencia", "cadencias", "cadencia de email", "sequencia de email", "sequencia de emails", "email frio",
+      "segmento", "inscrever negocio", "janela de envio", "ramificacao", "abriu o email", "descadastro",
+    ],
+    href: "/app/cadencias",
+    papelMinimo: "manager",
+    passos: [
+      "Abra Cadências de e-mail (no hub Ver tudo no CRM) e use Nova cadência. Dê o Nome e o Segmento (tag) e clique em Criar e montar os passos.",
+      "Na aba Fluxo, use Adicionar passo e escolha Enviar e-mail, Aguardar, Ramificação se/então ou Criar tarefa. Clique no passo para preencher (no e-mail, Assunto e Mensagem, com as variáveis de Inserir:) e use Concluir.",
+      "Na aba Configurações, ajuste a Janela de envio (De, Até, Fuso horário e Dias da semana), o Limite desta cadência a cada 24 horas e Quando a cadência para. Depois, clique em Revisar e ativar.",
+      "Na aba Inscrições e atividade, busque o negócio pelo título, escolha em Negócio e clique em Inscrever. Ali ficam Enviados, Aberturas, Ver histórico e Retirar.",
+    ],
+    observacao:
+      "A tela só aparece com o recurso Cadências de e-mail instalado e ligado para a empresa em Configurar cadências. Só gerente ou administrador monta cadência. A inscrição é manual, um negócio por vez. Cadência ativa não se edita: use Pausar antes. O link de descadastro entra sozinho no fim de todo e-mail, e a cadência não percebe respostas nem e-mails que voltaram: isso a equipe acompanha.",
+    vejaTambem: ["cadencias-ligar", "followup"],
+  },
+  {
+    id: "cadencias-ligar",
+    titulo: "Ligar ou desligar as cadências de e-mail na empresa",
+    palavras: ["ligar cadencias", "ativar cadencias", "desligar cadencias", "configurar cadencias", "usar cadencias", "cadencia"],
+    href: "/app/settings/cadencias",
+    papelMinimo: "admin",
+    passos: [
+      "Abra Configurações › Configurar cadências.",
+      "Ligue Usar cadências nesta empresa. A mudança é salva na hora.",
+      "Com a chave ligada, use Abrir cadências para montar a primeira.",
+    ],
+    observacao:
+      "Só o administrador liga ou desliga. A tela só aparece com o recurso Cadências de e-mail instalado. Desligar guarda as cadências e as inscrições e impede novos envios; os links de descadastro continuam funcionando. Os e-mails saem pelo envio configurado pelo dono do servidor.",
+    vejaTambem: ["cadencias-de-email"],
+  },
+  {
+    id: "cold-call",
+    titulo: "Cold Call: ligar para uma lista de leads, um por vez, com roteiro",
+    palavras: [
+      "cold call", "coldcall", "fila de ligacoes", "lista de ligacoes", "ligar para a lista", "ligar para leads",
+      "discar", "discador", "roteiro de ligacao", "resultado da ligacao", "nao atendeu",
+    ],
+    href: "/app/cold-call",
+    papelMinimo: "agent",
+    passos: [
+      "Abra Cold Call (no hub Ver tudo no CRM). Na primeira vez, o gerente usa Criar funil de cold call: o funil já vem com as etapas e um roteiro.",
+      "Use Importar planilha para subir os leads: eles entram na etapa Na fila. Em Como configurar, veja como conectar o canal de voz em Conexões e liberar o microfone.",
+      "Clique em Vamos começar. Em cada lead, use Ligar, marque o resultado em Ações Rápidas (Não atendeu, Caixa postal, Follow-up, Pediu reunião, Não tem interesse ou Número errado), escreva a Anotação da ligação (opcional) e clique em Seguinte.",
+      "Para parar, use Pausar. Para mudar o texto da ligação, o gerente abre Roteiro e clica em Salvar.",
+    ],
+    observacao:
+      "A tela só aparece com o recurso Cold Call (fila de ligações) instalado. Sem o canal de voz conectado, Ligar abre o discador do aparelho. Todos ligam pelo mesmo número, então é uma ligação por vez. Quem pediu para não ser incomodado aparece como Não ligar. Não tem interesse e Número errado marcam o lead como perdido no funil.",
+    vejaTambem: ["chamadas"],
+  },
+  {
+    id: "ouvidoria",
+    titulo: "Ouvidoria: receber reclamações e denúncias com protocolo e acompanhar cada uma",
+    palavras: [
+      "ouvidoria", "manifestacao", "manifestacoes", "reclamacao", "reclamacoes", "denuncia", "elogio", "protocolo",
+      "relato", "reabrir manifestacao",
+    ],
+    href: "/app/ouvidoria",
+    papelMinimo: "admin",
+    passos: [
+      "Abra Configurações › Ouvidoria e ligue Receber manifestações nesta empresa.",
+      "Quem escreve no WhatsApp pedindo a ouvidoria (ou falando em reclamação, denúncia ou manifestação) manda o relato, responde PRONTO, confere o resumo e responde CONFIRMAR. Só então recebe o protocolo. A conversa não vira negócio no funil e o agente não responde.",
+      "Na lista, filtre por Todas, Recebidas, Em análise ou Concluídas e use Ver para abrir a manifestação, com o Protocolo, o Canal e o Relato.",
+      "Em Mudar status, escolha a próxima etapa e clique em Salvar. Para reabrir uma concluída, escreva o Motivo da mudança.",
+    ],
+    observacao:
+      "A tela só aparece com o recurso Ouvidoria instalado. Só o administrador lê o relato. O status anda um passo por vez: de Recebida para Em análise e depois Concluída. Desligar a chave fecha só a entrada: a lista continua aberta para leitura.",
+  },
+  {
+    id: "painel-de-atendimento",
+    titulo: "Painel de atendimento: quem espera, quem está em atendimento e quem foi atendido hoje",
+    palavras: [
+      "painel de atendimento", "aguardando atendimento", "esperando atendimento", "em atendimento", "atendidos hoje",
+      "quem esta esperando", "tempo de espera", "monitor", "televisao", "recepcao",
+    ],
+    href: "/app/painel",
+    papelMinimo: "viewer",
+    passos: [
+      "Abra Painel de atendimento (no hub Ver tudo no Insights).",
+      "Em Todos os números, escolha um número para ver só as conversas dele.",
+      "Acompanhe as três colunas: Aguardando atendimento (com o tempo de espera, em vermelho), Em atendimento e Atendidos hoje. Clique na conversa para abrir no Inbox.",
+      "O botão Casos da IA mostra quantos casos estão abertos e leva até eles.",
+    ],
+    observacao:
+      "A tela só aparece com o recurso Painel de atendimento instalado. Ela se atualiza sozinha, então serve para deixar aberta num monitor. O robô ao lado da conversa quer dizer que o automático está atendendo. Cada coluna mostra até 100 conversas.",
+    vejaTambem: ["inbox"],
+  },
 ];
 
 /**

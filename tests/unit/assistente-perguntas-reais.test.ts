@@ -45,6 +45,17 @@ const PERGUNTAS: Pergunta[] = [
   // .100 — as telas que o upstream trouxe na v1.89 e na v1.97.
   { pergunta: "onde acho o manual de cada tarefa", sobre: "/app/ajuda", espera: "ajuda-do-menu" },
   { pergunta: "como defino a meta de vendas do mês", sobre: "/app/settings/metas", espera: "meta-de-vendas" },
+  // As telas que chegaram na fusão do upstream v1.100 a v1.107.
+  { pergunta: "como coloco um cliente na lista de espera", sobre: "/app/agenda/lista-de-espera", espera: "lista-de-espera" },
+  { pergunta: "abriu um horario, como ofereco a vaga para quem estava esperando", sobre: "/app/agenda/lista-de-espera", espera: "lista-de-espera" },
+  { pergunta: "como crio uma cadencia de e-mail", sobre: "/app/cadencias", espera: "cadencias-de-email" },
+  { pergunta: "como monto uma sequencia de e-mails para um segmento", sobre: "/app/cadencias", espera: "cadencias-de-email" },
+  { pergunta: "como ligo as cadencias de e-mail na empresa", sobre: "/app/settings/cadencias", espera: "cadencias-ligar" },
+  { pergunta: "como ligo para uma lista de leads um por vez", sobre: "/app/cold-call", espera: "cold-call" },
+  { pergunta: "como marco que o lead nao atendeu no cold call", sobre: "/app/cold-call", espera: "cold-call" },
+  { pergunta: "onde vejo as reclamacoes que chegaram pela ouvidoria", sobre: "/app/ouvidoria", espera: "ouvidoria" },
+  { pergunta: "como mudo o status de uma manifestacao", sobre: "/app/ouvidoria", espera: "ouvidoria" },
+  { pergunta: "onde vejo quem esta esperando atendimento em cada numero", sobre: "/app/painel", espera: "painel-de-atendimento" },
 
   // ── Os roteiros (tarefas que cruzam telas) ──
   { pergunta: "como coloco um cliente novo para atender", sobre: "/app/connections", espera: "roteiro-comecar-a-atender" },
