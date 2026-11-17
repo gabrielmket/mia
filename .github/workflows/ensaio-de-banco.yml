@@ -24,9 +24,6 @@ on:
       - ".github/workflows/ensaio-de-banco.yml"
       - "scripts/ensaio-de-banco.sh"
   workflow_dispatch: {}
-  # TEMPORÁRIO: só para testar sem PR. Sai no último commit da branch.
-  push:
-    branches: [mia-ensaio-de-banco]
 
 permissions:
   contents: read
