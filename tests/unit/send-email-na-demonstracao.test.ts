@@ -25,6 +25,13 @@ vi.mock("@/lib/email/smtp", () => ({
   isSmtpConfigured: () => true,
   sendEmail: (...a: unknown[]) => enviarPorSmtp(...(a as [])),
 }));
+// Upstream 1.107 (#3287): a ação pergunta antes se a organização conectou a
+// conta Resend DELA. Aqui ela não conectou: o envio vai ao roteador, onde mora a
+// trava da demonstração. O caso da conta conectada está em send-email.test.ts.
+vi.mock("@/lib/email/resend-da-organizacao", () => ({
+  carregarContaResend: async () => null,
+  enviarPelaContaDaOrganizacao: vi.fn(),
+}));
 vi.mock("@/lib/email/resend", () => ({
   isEmailConfigured: async () => true,
   sendEmail: (...a: unknown[]) => enviarPelaResend(...(a as [])),

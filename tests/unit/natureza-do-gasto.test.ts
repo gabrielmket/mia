@@ -79,6 +79,9 @@ describe("de que natureza é cada ponto", () => {
     // escolha consciente de deixá-lo em atendimento) — e um caso aqui dizendo por quê.
     const classificados = new Set([
       "agent_turn",
+      // Upstream 1.107: o follow-up escrito pelo agente ganhou ponto próprio (antes
+      // ia como agent_turn). É mensagem ao cliente, dentro da conversa: atendimento.
+      "followup_turn",
       "operator_turn",
       "automation_ai_message",
       "draft_suggestion",

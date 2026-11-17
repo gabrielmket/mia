@@ -159,6 +159,11 @@ function montarDb(pointers: unknown[], conversas: unknown[] = CONVERSAS) {
   // o que a varredura ENTREGA ao insert (ponteiro, contato, versão, agente).
   const db: SilenceSweepDb = {
     ...adapter,
+    // FORK MIA: "uma inscrição por silêncio" lê as conversas do contato (também
+    // as encerradas) por ponteiro, de propósito, e tem teste próprio
+    // (`tests/unit/uma-inscricao-por-silencio.test.ts`). Fora daqui, para a conta
+    // medir só a leitura do silêncio que o #4311 passou a fazer uma vez por org.
+    loadJaInscritosNesteSilencio: undefined,
     insertEnrollment: async (input) => {
       efeitos.push({
         pointer_id: input.pointer_id,

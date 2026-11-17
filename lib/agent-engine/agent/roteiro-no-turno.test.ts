@@ -713,7 +713,10 @@ describe('ordem no turno (achado 5 da prova do #1130)', () => {
       'detectAmbiguousOptOut(texto)',
       // O 4º argumento (`conversationId`, #4146) entra depois: o que se pina aqui
       // é a CHAMADA, não a lista de parâmetros.
-      'isLeadInHandoff(pool, tenantId, leadId,',
+      // FORK MIA: no fork o veto do turno lê por CONTATO, sem o 4º argumento
+      // (decisão do dono de 10/11, docs/fork/ia-responde-pendente.md). O prefixo
+      // sem a vírgula pina a mesma chamada nos dois jeitos.
+      'isLeadInHandoff(pool, tenantId, leadId',
     ]) {
       const posicao = src.indexOf(trava);
       expect(posicao, trava).toBeGreaterThan(0);

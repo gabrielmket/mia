@@ -23,6 +23,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
+// FORK MIA: os sinais do cartão fechado (`lib/cartoes/sinais-do-quadro.ts`) são
+// uma camada do fork por cima do quadro, com leituras próprias UMA por quadro e
+// teste próprio (`lib/cartoes/servidor-do-cartao.test.ts`). Aqui eles saem da
+// medida: este teste confere o quadro do upstream, consulta por consulta.
+vi.mock("@/lib/cartoes/sinais-do-quadro", () => ({
+  comSinaisDoCartao: async (_db: unknown, _org: string, leads: unknown[]) => leads,
+}));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/auth/server", () => ({
   loadAuthUser: vi.fn(async () => ({
