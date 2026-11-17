@@ -1687,6 +1687,8 @@ export const DICIONARIO: Traducoes = {
   "Versão publicada": { es: "Versión publicada" },
   "Publicado em": { es: "Publicado el" },
   "Nenhum agente publicado": { es: "Ningún agente publicado" },
+  "o uso soma todos os agentes": { es: "el uso suma todos los agentes" },
+  "A data não pode ser depois de hoje.": { es: "La fecha no puede ser posterior a hoy." },
   "Não foi possível carregar o agente do tenant. Tente recarregar a página.": { es: "No se pudo cargar el agente del tenant. Intenta recargar la página." },
   "números de teste autorizados": { es: "números de prueba autorizados" },
   "1 número de teste autorizado": { es: "1 número de prueba autorizado" },

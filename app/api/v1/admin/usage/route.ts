@@ -43,6 +43,12 @@ export interface UsageTenantRow {
    * operador procura na carteira: cliente cujo agente não está no ar.
    */
   agent_name: string | null;
+  /**
+   * Quantos agentes publicados a organização tem. A linha soma o uso de TODOS
+   * eles (o filtro é a organização), mas mostra um nome só; sem a contagem, um
+   * cliente com duas Sofias parecia ter o custo de uma (Gabriel, 17/11/2026).
+   */
+  agents_published_count: number;
 }
 
 export interface DailyPoint {
@@ -273,6 +279,7 @@ export async function GET(req: NextRequest) {
   // prioridade entre os publicados. A lista completa vive na aba Agente do
   // cliente — aqui a pergunta é só "este cliente está atendendo?".
   const agentNamePorOrg: Record<string, string> = {};
+  const agentesPorOrg: Record<string, number> = {};
   if (orgIds.length > 0) {
     const { data: agentRows, error: agentErr } = await admin
       .from("ai_agents")
@@ -285,6 +292,7 @@ export async function GET(req: NextRequest) {
       for (const row of agentRows) {
         const oid = row.organization_id as string;
         if (!agentNamePorOrg[oid]) agentNamePorOrg[oid] = row.name as string;
+        agentesPorOrg[oid] = (agentesPorOrg[oid] ?? 0) + 1;
       }
     }
   }
@@ -304,6 +312,7 @@ export async function GET(req: NextRequest) {
         ai_unpriced_count: aiUnpricedMap.get(org.id) ?? 0,
         conversations_count: convsCountMap.get(org.id) ?? 0,
         agent_name: agentNamePorOrg[org.id] ?? null,
+        agents_published_count: agentesPorOrg[org.id] ?? 0,
       };
     })
     .sort(

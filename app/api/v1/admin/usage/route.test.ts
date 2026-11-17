@@ -214,6 +214,18 @@ describe("GET /api/v1/admin/usage — agente na carteira", () => {
     const corpo = await (await chamar()).json();
 
     expect(corpo.data.tenants[0].agent_name).toBe("Prioridade alta");
+    // A linha soma o uso dos dois; a contagem é o que avisa a tela disso.
+    expect(corpo.data.tenants[0].agents_published_count).toBe(2);
+  });
+
+  it("sem agente publicado a contagem é zero", async () => {
+    vi.mocked(createAdminClient).mockReturnValue(
+      dubleAdmin({ organizations: [org(ORG_A, "Cliente A")], ai_agents: [] }) as never,
+    );
+
+    const corpo = await (await chamar()).json();
+
+    expect(corpo.data.tenants[0].agents_published_count).toBe(0);
   });
 
   it("agente de outra organização não aparece na linha desta", async () => {
