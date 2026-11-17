@@ -87,6 +87,9 @@ function abrirCriacao() {
           ] as never
         }
         channelSessions={[{ id: CANAL, display_name: "WhatsApp da clínica", status: "WORKING" }] as never}
+        // FORK MIA: o caso escolhe modelo e chave, e o campo de modelo e o de chave
+        // só aparecem para quem escolhe a IA (a plataforma, `podeConfigurarChaveDeIa`).
+        podeEscolherIa
       />
     </QueryClientProvider>,
   );

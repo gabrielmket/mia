@@ -31,9 +31,20 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { esperarARevelacaoNasCargas, test, expect, esperarARevelacao, type Locator, type Page } from "./helpers/test";
+import {
+  esperarARevelacaoNasCargas,
+  test,
+  expect,
+  esperarARevelacao,
+  type Browser,
+  type Locator,
+  type Page,
+  type TestInfo,
+} from "./helpers/test";
 
 import { loginComoAdmin, lerCreds, type CredsE2E } from "./helpers/login-admin";
+// FORK MIA: o agente publicável nasce pelo dono da plataforma (ver `criarAgente`).
+import { comoDonoDaPlataforma, respostaLida } from "./helpers/ia-da-plataforma";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA =
@@ -70,9 +81,18 @@ async function foto(page: Page, nome: string): Promise<void> {
   await page.screenshot({ path: path.join(EVIDENCIA, `${nome}.png`), fullPage: true });
 }
 
-/** Agente publicável (credencial validada + número conectado), pela API real. */
-async function criarAgente(page: Page, nome: string): Promise<string> {
-  const r = await page.request.post("/api/v1/ai/agents", {
+/**
+ * Agente publicável (credencial validada + número conectado), pela API real.
+ *
+ * FORK MIA: provedor, modelo e chave são escolha da plataforma
+ * (`lib/ai/trava-da-ia.ts`). Pedido pelo admin da empresa, o agente nascia com
+ * "a chave desta instalação", que o e2e não tem, e o Publicar ficava travado.
+ * Quem cria é o dono da plataforma, como em `followup-journey.spec.ts`; a tela,
+ * o salvar, o publicar e todas as asserções seguem com o admin da empresa.
+ * Ver `tests/e2e/helpers/ia-da-plataforma.ts`.
+ */
+async function criarAgente(browser: Browser, testInfo: TestInfo, nome: string): Promise<string> {
+  const r = await comoDonoDaPlataforma(browser, testInfo, (req) => respostaLida(req.post("/api/v1/ai/agents", {
     data: {
       name: nome,
       version: {
@@ -83,7 +103,7 @@ async function criarAgente(page: Page, nome: string): Promise<string> {
         channel_session_id: PUBLICAVEL.channel_session_id,
       },
     },
-  });
+  })));
   expect(r.status(), `a fixture do agente não nasceu: ${await r.text()}`).toBe(201);
   return ((await r.json()) as { data: { agent: { id: string } } }).data.agent.id;
 }
@@ -136,13 +156,14 @@ function cabeSemRolar(m: Medida, onde: string): void {
 test.describe("Ver as fotos que o cliente envia, por agente", () => {
   test("nasce ligada, desligar + salvar + publicar sobrevive ao recarregar, e o Diff mostra a troca", async ({
     page,
-  }) => {
+    browser,
+  }, testInfo) => {
     // O padrão de quem cria pela tela.
     await page.goto("/app/ai/agents/new");
     await expect(page.locator("#image_vision_enabled")).toHaveAttribute("aria-checked", "true");
 
     const nome = `E2E Fotos ${Date.now()}`;
-    const agentId = await criarAgente(page, nome);
+    const agentId = await criarAgente(browser, testInfo, nome);
     try {
       await page.goto(`/app/ai/agents/${agentId}`);
       await expect(page.getByRole("heading", { name: nome })).toBeVisible();
@@ -325,9 +346,9 @@ test.describe("Limite do aviso de peso da Memória da IA", () => {
 });
 
 test.describe("Skills por agente", () => {
-  test("trocar para lista própria com uma skill marcada sobrevive ao recarregar", async ({ page }) => {
+  test("trocar para lista própria com uma skill marcada sobrevive ao recarregar", async ({ page, browser }, testInfo) => {
     const nome = `E2E Skills ${Date.now()}`;
-    const agentId = await criarAgente(page, nome);
+    const agentId = await criarAgente(browser, testInfo, nome);
     try {
       await page.goto(`/app/ai/agents/${agentId}`);
       await expect(page.getByRole("heading", { name: nome })).toBeVisible();

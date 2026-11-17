@@ -133,6 +133,9 @@ export const LEITORES_DA_DESCRICAO: Record<string, string> = {
   "app/api/v1/messages/_handler.ts": "token vivo | humano: só áudio",
   "lib/conversoes/valor-da-conversa.ts": "conexão de anúncio | venda pelo canal",
   "components/inbox/media/MediaRenderer.tsx": "humano: só áudio",
+  // FORK MIA: o raio-X do atendimento lê só a transcrição do áudio (`type = audio`
+  // nas duas leituras); a descrição de foto que a trava adia não entra nele.
+  "lib/raio-x/mensagens-da-conta.ts": "humano: só áudio",
   "lib/lgpd/export-collector.ts": "minimização",
   "lib/lgpd/pdf-renderer.tsx": "minimização",
   "app/api/v1/lgpd/requests/[id]/preview/route.ts": "minimização",

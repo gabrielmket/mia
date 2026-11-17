@@ -308,7 +308,10 @@ describe("FORK MIA: o primeiro pagamento é do passo \"Pagamento\" do fork", () 
   it("com o link de um pedido de LGPD, o botão de pagar leva ao passo do fork", async () => {
     cena.cobranca = true; cena.passoDoFork = true;
     await montar("22222222-2222-4222-8222-222222222222");
-    expect(screen.getByRole("heading", { level: 1, name: "Falta só o primeiro pagamento" })).toBeVisible();
+    // O painel aqui é nulo (o dublê dos casos do upstream), então o hub mostra
+    // "contato" e o título é o dele. O título do fork ("Falta só o primeiro
+    // pagamento"), com o painel da assinatura, está em tests/unit/hub-da-entrada-paga.test.tsx.
+    expect(screen.getByRole("heading", { level: 1, name: "Aguardando primeiro pagamento" })).toBeVisible();
     expect(screen.getByTestId("lgpd-pedido")).toBeVisible();
     expect(screen.getByRole("link", { name: "Continuar para pagamento" })).toHaveAttribute("href", "/onboarding/pagamento");
   });

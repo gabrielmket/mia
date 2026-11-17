@@ -157,9 +157,12 @@ describe("/account-suspended no atraso de quem já pagou", () => {
     cena.entradaPendente = false;
     await montar();
     expect(screen.getByRole("heading", { level: 1, name: "Conta suspensa" })).toBeVisible();
+    // O texto é o do upstream desde a v1.105 (22a6ece06): ele parou de prometer
+    // "na hora" para quem já está suspenso. A frase "na hora" do fork fica só na
+    // entrada paga ainda não paga, que é liberada na confirmação.
     expect(
       screen.getByText(
-        "A conta foi suspensa por falta de pagamento. Assim que o pagamento for confirmado, tudo volta a funcionar na hora.",
+        "A conta foi suspensa por falta de pagamento. O acesso é reavaliado após a confirmação do pagamento.",
       ),
     ).toBeVisible();
     expect(screen.getByTestId("lgpd-lista")).toBeVisible();
