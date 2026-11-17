@@ -652,6 +652,37 @@ Ficou de fora desta fusão, por decisão:
 - caixa de mensagem bloqueada até assumir e os três campos das últimas compras
   (Configurações › Empresa): preferência de operação da equipe, sem efeito na montagem.
 
+### O que chegou do upstream 1.100 a 1.107 (fusão de 17/11)
+
+Mesma regra, na fusão das v1.100 a v1.107. A prova de cada linha está em
+`tests/unit/mcp-de-implantacao-novidades-do-upstream-1107.test.ts`. Nenhuma
+ferramenta nova, só campos.
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| O negócio PERDIDO de pouco tempo atrás volta a ser o mesmo card (`settings.reabrir_perdido_dias`, #4076) | 1.103 | campo novo `reabrir_perdido_dias` em `plataforma_garantir_funil` (0 desliga, teto `DIAS_MAXIMO_PARA_REABRIR` do domínio), pela mesma porta da tela (`gravarConfiguracaoDoFunil`); a leitura (`plataforma_ver_configuracao`, seção `funis`) devolve o valor | `implantar_configuracao` |
+| O evento do Google leva os dados do negócio na descrição (`calendar_event_types.levar_dados_do_negocio`, 9209, #4006) | 1.104 | campo novo `levar_dados_do_negocio` em `plataforma_garantir_tipos_de_agendamento` (nasce desligado, como na tela); a leitura (seção `agenda`) devolve o valor de cada tipo | `implantar_configuracao` |
+
+Falta no MCP (fica para uma tarefa própria, porque cada item pede ferramenta ou
+leitura nova, e não um campo):
+
+- o lembrete da agenda por MODELO APROVADO da Meta (`reminder_meta_template_id`, 9092)
+  e o aviso à equipe por modelo (9094, 9099): o MCP precisa achar o modelo aprovado
+  do número, que ele ainda não lê;
+- os servidores MCP por agente com OAuth por contato (9095), a pausa mínima entre
+  respostas (9101), as skills por agente e por etiqueta (9107, 9230) e a visão de
+  foto por agente (9108): campos novos de `plataforma_garantir_agente`;
+- as cadências de e-mail da empresa (9249, 9251, módulo opcional `cadencias`), a
+  conta Resend da organização (0795), a ouvidoria (9040) e o link de pagamento na
+  conversa (9312, módulo opcional): ferramentas novas, e as três primeiras encostam
+  no nosso e-mail marketing e na marca travada da plataforma;
+- a reserva com capacidade e a lista de espera da agenda (9224, 9235, 9242) e o
+  molde de IA das empresas novas (9096, que encosta no cliente-modelo).
+
+Nada a configurar pela implantação: o contrato do webhook da Meta (1.107), o CPF só
+como "preenchido" na API, o escopo de leitura do negócio, a exportação em PDF, a
+menção em nota, as reações e os tiques do número oficial.
+
 ### O horário de atendimento da IA (.85)
 
 Função do fork, não do upstream, e entra no MCP na mesma versão. A prova está em

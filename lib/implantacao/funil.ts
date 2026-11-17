@@ -134,6 +134,8 @@ export interface PedidoDeFunil {
     produto?: string;
   };
   reabertura?: "mesmo_registro" | "novo_negocio";
+  /** Upstream v1.103 (#4076): a janela, em dias, em que o perdido recente volta a ser o MESMO card. `0` desliga. */
+  reabrir_perdido_dias?: number;
   vitoria_e_receita?: boolean;
   /** FORK MIA (.109): as duas opções do produto no negócio (lib/produto-no-negocio/funil.ts). */
   pedir_produto_no_ganho?: boolean;
@@ -647,6 +649,13 @@ function montarConfiguracao(
     mudancas.push("reabertura");
   }
   if (
+    pedido.reabrir_perdido_dias !== undefined &&
+    Number(atual.settings.reabrir_perdido_dias ?? 0) !== pedido.reabrir_perdido_dias
+  ) {
+    patch.reabrir_perdido_dias = pedido.reabrir_perdido_dias;
+    mudancas.push("janela do perdido recente");
+  }
+  if (
     pedido.vitoria_e_receita !== undefined &&
     (atual.settings.vitoria_e_receita !== false) !== pedido.vitoria_e_receita
   ) {
@@ -843,6 +852,7 @@ export async function garantirFunil(c: Implantacao, pedido: PedidoDeFunil): Prom
     pedido.motivo_de_ganho_obrigatorio !== undefined ||
     pedido.vocabulario !== undefined ||
     pedido.reabertura !== undefined ||
+    pedido.reabrir_perdido_dias !== undefined ||
     pedido.vitoria_e_receita !== undefined ||
     // FORK MIA (.109)
     pedido.pedir_produto_no_ganho !== undefined ||

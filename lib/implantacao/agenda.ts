@@ -82,10 +82,16 @@ export interface TipoPedido {
    * Só na criação, como a rota: o tipo que já existe não vira serviço por aqui.
    */
   servico_em_rascunho?: boolean;
+  /**
+   * Upstream v1.104 (9209, #4006): o bloco do negócio na descrição do evento do
+   * Google. Nasce desligado (dado do cliente só vai ao Google quando alguém
+   * decide), como a chave da tela do tipo.
+   */
+  levar_dados_do_negocio?: boolean;
 }
 
 const COLUNAS_DO_TIPO =
-  "id, name, slug, description, category, duration_minutes, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, reminder_enabled, reminder_channel_session_id, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body, default_price_cents, service_enabled, booking_mode, service_capacity";
+  "id, name, slug, description, category, duration_minutes, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, reminder_enabled, reminder_channel_session_id, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body, default_price_cents, service_enabled, booking_mode, service_capacity, levar_dados_do_negocio";
 
 export async function lerTipos(admin: SupabaseClient, orgId: string): Promise<Array<Record<string, unknown>>> {
   const { data, error } = await admin
@@ -116,6 +122,7 @@ const ROTULO_DO_CAMPO: Record<string, string> = {
   reminder_minutes_before: "antecedência do lembrete",
   reminder_extra_offsets_minutes: "lembretes extras",
   reminder_body: "mensagem do lembrete",
+  levar_dados_do_negocio: "dados do negócio no evento do Google",
 };
 
 function recusaDoTipo(posicao: number, erro: { issues: Array<{ path: PropertyKey[]; message: string }> }): never {
@@ -164,6 +171,7 @@ export async function garantirTiposDeAgendamento(
     if (pedido.antecedencia_minima_minutos !== undefined) corpo.minimum_notice_minutes = pedido.antecedencia_minima_minutos;
     if (pedido.janela_de_agendamento_dias !== undefined) corpo.booking_window_days = pedido.janela_de_agendamento_dias;
     if (pedido.preco_padrao_cents !== undefined) corpo.default_price_cents = pedido.preco_padrao_cents;
+    if (pedido.levar_dados_do_negocio !== undefined) corpo.levar_dados_do_negocio = pedido.levar_dados_do_negocio;
     if (pedido.canal_do_lembrete !== undefined) {
       corpo.reminder_channel_session_id =
         pedido.canal_do_lembrete === null ? null : await canalDoLembrete(c, canais, pedido.canal_do_lembrete);

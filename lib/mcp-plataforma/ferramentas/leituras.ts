@@ -455,6 +455,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             motivos_de_ganho: Array.isArray(settings.won_reasons) ? settings.won_reasons : [],
             motivo_de_ganho_obrigatorio: settings.won_reason_required === true,
             reabertura: settings.reabertura ?? "mesmo_registro",
+            reabrir_perdido_dias: typeof settings.reabrir_perdido_dias === "number" ? settings.reabrir_perdido_dias : 0,
             vocabulario: f.vocabulary ?? {},
             // FORK MIA (.109): a palavra do que o negócio vende e as duas opções.
             produto_no_negocio: produtoNoNegocioDoFunil({ id: String(f.id), vocabulary: f.vocabulary, settings: f.settings }),
@@ -819,6 +820,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             // .81: o número que manda o lembrete (upstream v1.83). null = automático.
             canal_do_lembrete_id: (t.reminder_channel_session_id as string | null | undefined) ?? null,
             preco_padrao_cents: t.default_price_cents === null || t.default_price_cents === undefined ? null : Number(t.default_price_cents),
+            // Upstream v1.104 (9209): o bloco do negócio no evento do Google.
+            levar_dados_do_negocio: t.levar_dados_do_negocio === true,
             // .86 — a agenda por serviço (upstream 1.87, 0716): null quando o tipo não adotou a programação.
             servico:
               t.service_enabled === true

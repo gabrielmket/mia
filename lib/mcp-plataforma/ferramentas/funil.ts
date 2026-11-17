@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { LEAD_STAGES } from "@/lib/agent-engine/agent/lead-state";
 import { garantirFunil, TETO_DE_ETAPAS, type PedidoDeFunil } from "@/lib/implantacao/funil";
+import { DIAS_MAXIMO_PARA_REABRIR } from "@/lib/leads/janela-do-perdido";
 import { mostrarQuandoSchema } from "@/lib/schemas/mostrar-quando";
 
 import type { FerramentaDePlataforma } from "../tipos";
@@ -203,6 +204,16 @@ export const FERRAMENTAS_DE_FUNIL: readonly FerramentaDePlataforma[] = [
         .enum(["mesmo_registro", "novo_negocio"])
         .optional()
         .describe("O que acontece quando um negócio encerrado volta: reabre o mesmo, ou nasce um negócio novo."),
+      // Upstream v1.103 (#4076).
+      reabrir_perdido_dias: z
+        .number()
+        .int()
+        .min(0)
+        .max(DIAS_MAXIMO_PARA_REABRIR)
+        .optional()
+        .describe(
+          "Por quantos dias um negócio PERDIDO volta a ser o mesmo card quando o contato reaparece (em vez de nascer um negócio novo). 0 desliga, que é o padrão.",
+        ),
       vitoria_e_receita: z.boolean().optional().describe("false para funil em que vencer NÃO é dinheiro entrando (ex.: funil de pré-venda)."),
       // FORK MIA (.109): as duas opções do produto no negócio.
       pedir_produto_no_ganho: z.boolean().optional().describe("true: Marcar como ganho só confirma com pelo menos um item do negócio (o padrão é não pedir)."),

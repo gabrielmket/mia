@@ -280,6 +280,14 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
                   "Só para tipo NOVO: true cria o tipo como SERVIÇO EM RASCUNHO (agenda por serviço: individual por profissional, ou turma com capacidade), desativado e sem responsável padrão. " +
                     "Nenhuma reserva é oferecida até uma pessoa configurar a programação (horários, profissionais, capacidade, recursos, calendário Google) e ATIVAR na tela, em Configurações › Agenda › Configurar.",
                 ),
+              // Upstream v1.104 (9209, #4006): o bloco do negócio no evento do Google.
+              levar_dados_do_negocio: z
+                .boolean()
+                .optional()
+                .describe(
+                  "true: o evento do Google deste tipo leva na descrição os dados do negócio (contato, etapa, valor) para quem atende conferir. " +
+                    "Nasce desligado: é dado do cliente indo ao Google, então só ligue com o combinado do cliente.",
+                ),
             })
             .strict(),
         )
