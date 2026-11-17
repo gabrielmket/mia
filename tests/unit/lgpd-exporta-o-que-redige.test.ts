@@ -232,6 +232,22 @@ describe("LGPD: nenhuma tabela com contact_id fica fora da anonimização", () =
       "aplicada pelo gatilho `trg_lgpd_secoes_de_modulo` (notes vira nulo; " +
       "cancel_reason e reverse_reason viram `[redigido]`). É dado, não SQL com o " +
       "nome da tabela — e o upstream a prova na invariante da 0620.",
+    // Do upstream (módulos opcionais `ouvidoria` e `cadencias`, v1.100 a v1.107),
+    // declaradas na fusão de 17/11/2026 com a decisão escrita por ele.
+    ouvidoria_manifestacoes:
+      "Decisão escrita do upstream (`lgpd-redact-unificado-alcanca-pelo-catalogo`, #3611): o " +
+      "RELATO é o documento da manifestação e responde ao protocolo já entregue a quem reclamou. " +
+      "A identificação sai com o contato: `contact_id` é `on delete set null`, e a linha fica " +
+      "legível só para os administradores (RLS da 9040). Redigir o texto é decisão de produto " +
+      "da gestão da ouvidoria. Módulo desligado no fork.",
+    email_cadence_suppressions:
+      "É a LISTA DE DESCADASTRO: guarda `email_hash` (irreversível) e a origem, nunca o e-mail. " +
+      "Apagá-la faria a pessoa que pediu para não receber voltar a receber; o upstream prova " +
+      "que ela sobrevive ao contato apagado (`cadencias-descadastro-e-visibilidade`).",
+    email_cadence_recipients:
+      "Só o destinatário da cadência por `email_hash` (irreversível) e ids, nenhum dado legível " +
+      "da pessoa. O `contact_id` aponta para a ficha já anonimizada e vira nulo se ela for " +
+      "apagada (on delete set null). Tabela só do servidor (RLS sem privilégio de sessão).",
   };
 
   /** Tabelas do baseline que têm uma coluna `contact_id`. */
@@ -308,6 +324,19 @@ describe("LGPD: nenhuma tabela com contact_id fica fora da anonimização", () =
     }
     colher(corpoDe("fn_lgpd_cascade_redact_contact"));
     colher(corpoDe("fn_lgpd_anonymize_contact"));
+
+    // Upstream 1.107 (ADR-0002, D8): o MÓDULO opcional declara a sua seção em
+    // `modulo_secoes_lgpd`, e `fn_lgpd_redigir_secoes_de_modulo` (gatilho
+    // `trg_lgpd_secoes_de_modulo` em contacts) a aplica com `execute`, sem um
+    // `update` literal para a varredura ver. A tabela declarada conta como
+    // alcançada, mas só se o gatilho que lê o catálogo existir.
+    if (/create trigger\s+trg_lgpd_secoes_de_modulo[\s\S]{0,200}?on public\.contacts[\s\S]{0,300}?execute function public\.fn_lgpd_redigir_secoes_de_modulo\(\)/i.test(BASELINE)) {
+      for (const bloco of BASELINE.matchAll(/insert into public\.modulo_secoes_lgpd[\s\S]*?on conflict/gi)) {
+        for (const secao of bloco[0].matchAll(/\(\s*'[a-z0-9_]+'\s*,\s*'([a-z0-9_]+)'/g)) {
+          if (secao[1]) alvos.add(secao[1]);
+        }
+      }
+    }
 
     for (const arq of ["lib/lgpd/redact-cascade.ts", "lib/lgpd/cascata.ts"]) {
       const caminho = path.join(RAIZ, arq);

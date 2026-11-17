@@ -299,6 +299,12 @@ const CLASSIFICACAO: Record<string, Classificacao> = {
     porque:
       "carimbo da última vez que o sistema PERGUNTOU ao canal o nome da agenda (0593); diz quando a fila da varredura girou, nada sobre a pessoa, e o nome em si é apagado",
   },
+  // ── Colunas que o upstream acrescentou, classificadas na fusão de 17/11/2026
+  //    (v1.100 a v1.107) ──
+  // A busca sem acento (9098 dele): GERADA a partir dos três campos de nome
+  // (`generated always as ... stored`). A anonimização zera os três, e esta
+  // zera junto, sem ninguém escrever nela.
+  busca_sem_acento: { tipo: "derivada", de: ["display_name", "name", "address_book_name"] },
 };
 
 /** Nomes capturados pelo primeiro grupo de um regex, já sem os `undefined`. */
