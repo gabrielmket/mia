@@ -119,6 +119,18 @@ describe("efeitos do worker de cadências", () => {
     expect(verifyCadenciaLink(url![2]!, "descadastro")).toEqual({ destinatario_id: DESTINATARIO });
     expect(mocks.enviar.mock.calls[0]![0].to).toBe("reservado@synthetic.test");
   });
+  // FORK MIA (cliente modelo, 9010): a cadência passa a organização ao roteador,
+  // que recusa a empresa de demonstração. Nada sai e a inscrição para com o motivo.
+  it("empresa de demonstração: o envio leva a organização e a recusa do roteador para a inscrição", async () => {
+    const b = bancada();
+    mocks.enviar.mockResolvedValue({ ok: false, error: "organizacao_de_demonstracao", via: "smtp" });
+    const r = await processarCadencias(b.admin, agora, "request-sintetico");
+    expect(mocks.enviar).toHaveBeenCalledTimes(1);
+    expect(mocks.enviar.mock.calls[0]![0].organizationId).toBe(id(2));
+    expect(r.emailsEnviados).toBe(0);
+    expect(b.eventos.some((e) => e.tipo === "email_enviado")).toBe(false);
+    expect(b.inscricao.status).toBe("parada"); expect(b.inscricao.ultimo_erro).toBe("organizacao_de_demonstracao");
+  });
   it("com autorização inclui pixel e dois tokens distintos", async () => {
     const b = bancada({ consentimento: true }); await processarCadencias(b.admin, agora, "request-sintetico");
     const html: string = mocks.enviar.mock.calls[0]![0].html;

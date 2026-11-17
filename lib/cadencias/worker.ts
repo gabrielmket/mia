@@ -201,6 +201,9 @@ async function executarPassoEmail(
       { name: "cadencia_id", value: inscricao.cadence_id },
       { name: "enrollment_id", value: inscricao.id },
     ],
+    // FORK MIA (cliente modelo, 9010): o roteador trava a empresa de demonstração.
+    // Sem a organização ele nem pergunta, e a cadência mandaria e-mail de verdade.
+    organizationId: inscricao.organization_id,
   });
 
   if (!resultado.ok) {
