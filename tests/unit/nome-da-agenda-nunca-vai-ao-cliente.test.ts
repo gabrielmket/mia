@@ -109,6 +109,8 @@ describe("controle: a equipe vê o nome", () => {
 const QUEM_LE_A_AGENDA: Record<string, string> = {
   "app/api/v1/cron/contact-names/route.ts": "a varredura que ESCREVE o campo",
   "lib/channels/meta/ingest.ts": "o app WhatsApp Business (coexistência) que ESCREVE o campo",
+  "lib/channels/meta/coexistencia/contatos.ts":
+    "FORK MIA: compara o nome da agenda antes e depois da gravação do upstream só para contar contato recebido; não monta mensagem",
   "lib/contacts/nome-da-agenda.ts": "decide o que a varredura grava",
   "lib/contacts/agenda-do-celular.ts":
     "o 'Sincronizar agenda' (#2776) que ESCREVE o campo no contato que acabou de nascer; não lê nem monta mensagem",
