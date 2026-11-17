@@ -1,0 +1,104 @@
+# FORK MIA: este workflow é só do fork (docs/FORK-MIA.md). O upstream não o tem e a
+# fusão do upstream nunca o apaga.
+#
+# ENSAIO DE BANCO. Em todo PR para a `main` que mexa no schema, sobe um Postgres
+# descartável com o banco da versão que está NO AR, carrega as demonstrações (dado
+# fictício), aplica a versão do PR duas vezes e reprova se algo der errado. É o que
+# a sessão dev fazia à mão, menos a parte que exige dado real (essa continua com ela).
+#
+# "No ar" = a etiqueta da imagem que o docker-compose.easypanel.yml da branch BASE
+# aponta (`ghcr.io/<namespace>/mia-crm:1.21.0-mia.NNN` vira a tag git
+# `v1.21.0-mia.NNN`). Cada lado gera as demonstrações com o PRÓPRIO código.
+#
+# Sem segredo nenhum: só `contents: read`, Postgres efêmero, dado fictício.
+# As conferências estão em scripts/ensaio-de-banco.sh.
+name: ensaio-de-banco
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/**"
+      - "easypanel/bootstrap.sh"
+      - "scripts/cliente-modelo*"
+      - ".github/workflows/ensaio-de-banco.yml"
+      - "scripts/ensaio-de-banco.sh"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  ensaio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      # O PR (ou a branch, em push e dispatch) fica na raiz do workspace.
+      - uses: actions/checkout@v7
+
+      # A base é onde mora a versão no ar. Em PR, a branch base do PR; fora dele, a
+      # `main`. A etiqueta vem do compose DESSA ref, nunca do PR.
+      - name: Descobrir a versão no ar (etiqueta do compose da base)
+        id: noar
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          etiqueta="$(git show "origin/${BASE_REF}:docker-compose.easypanel.yml" \
+            | sed -n 's#.*image: \${APP_IMAGE:-ghcr.io/[^:]*:\([0-9][^}]*\)}.*#\1#p' | head -1)"
+          if ! printf '%s' "$etiqueta" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-mia\.[0-9]+$'; then
+            echo "::error title=etiqueta no ar ilegível::o compose da base não aponta uma imagem 1.x.y-mia.N (li: '${etiqueta}')"
+            exit 1
+          fi
+          echo "etiqueta=${etiqueta}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${etiqueta}" >> "$GITHUB_OUTPUT"
+          echo "Versão no ar: ${etiqueta} (tag git v${etiqueta})"
+
+      - name: Checkout da versão no ar, em pasta separada
+        env:
+          TAG: ${{ steps.noar.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "+refs/tags/${TAG}:refs/tags/${TAG}"
+          git worktree add --detach no-ar "refs/tags/${TAG}"
+          test -s no-ar/supabase/baseline.sql
+
+      # Instala o pnpm e as dependências do lado do PR (a ação do fork, com cache).
+      - uses: ./.github/actions/preparar-node
+        timeout-minutes: 5
+
+      # O outro lado precisa das suas próprias dependências: a semente das
+      # demonstrações é código que muda de uma versão para outra.
+      - name: Dependências da versão no ar
+        working-directory: no-ar
+        timeout-minutes: 5
+        run: pnpm install --frozen-lockfile
+
+      - name: Gerar as demonstrações de cada lado, com o código de cada lado
+        run: |
+          set -euo pipefail
+          mkdir -p demos-no-ar demos-novo
+          for seg in bancada construtora clinica-odonto industria academia; do
+            (cd no-ar && pnpm exec tsx scripts/cliente-modelo.ts --segmento "$seg" --sql "../demos-no-ar/demo-$seg.sql")
+            pnpm exec tsx scripts/cliente-modelo.ts --segmento "$seg" --sql "demos-novo/demo-$seg.sql"
+          done
+          ls -l demos-no-ar demos-novo
+
+      # Mesma imagem do ensaio manual (Supabase de verdade: papéis, auth, extensões).
+      # Docker Hub primeiro; se não baixar, o espelho do Supabase no ECR público.
+      - name: Baixar a imagem do Postgres
+        run: |
+          set -u
+          img=supabase/postgres:17.6.1.084
+          for i in 1 2 3; do docker pull "$img" && exit 0; sleep $((i * 20)); done
+          echo "Docker Hub não respondeu; tentando o ECR público"
+          docker pull "public.ecr.aws/$img"
+          docker tag "public.ecr.aws/$img" "$img"
+
+      - name: Ensaio de banco
+        run: |
+          scripts/ensaio-de-banco.sh \
+            --no-ar no-ar/supabase --demos-no-ar demos-no-ar \
+            --novo supabase --demos-novo demos-novo \
+            --resumo "$GITHUB_STEP_SUMMARY"

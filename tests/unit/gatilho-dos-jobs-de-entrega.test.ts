@@ -283,6 +283,14 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
   // FORK: o upstream não tem este workflow. Gatilho: `schedule` (dia útil,
   // 12:00 UTC) e `workflow_dispatch`, sem `if:` de job — o `if:` que existe é
   // de STEP e só cala o aviso quando o veredito é "em dia".
+  "ensaio-de-banco.yml::ensaio": {
+    condicao: null,
+    efeito:
+      "Este job aplica a versão do PR em cima do banco da versão no ar, com as demonstrações " +
+      "carregadas, e reprova erro, perda de dado, coluna sumida e objeto nosso que diminui. " +
+      "Desligá-lo não fica vermelho em lugar nenhum: o ensaio volta a depender de alguém lembrar " +
+      "de fazê-lo à mão, e uma migration que perde dado chega ao deploy.",
+  },
   "sincronizar-upstream.yml::medir": {
     condicao: null,
     efeito:
