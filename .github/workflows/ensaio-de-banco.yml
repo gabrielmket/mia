@@ -7,7 +7,7 @@
 # a sessão dev fazia à mão, menos a parte que exige dado real (essa continua com ela).
 #
 # "No ar" = a etiqueta da imagem que o docker-compose.easypanel.yml da branch BASE
-# aponta (`ghcr.io/gabrielmket/mia-crm:1.21.0-mia.NNN` vira a tag git
+# aponta (`ghcr.io/<namespace>/mia-crm:1.21.0-mia.NNN` vira a tag git
 # `v1.21.0-mia.NNN`). Cada lado gera as demonstrações com o PRÓPRIO código.
 #
 # Sem segredo nenhum: só `contents: read`, Postgres efêmero, dado fictício.
