@@ -24,6 +24,9 @@ vi.mock("@/lib/instalacao/modulos", async (orig) => ({
   moduloLigado: vi.fn(async () => estado.modulo),
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn(() => ({})) }));
+// FORK MIA (.90): a porta do módulo também pergunta se Vendas B2B está no plano
+// da empresa da sessão; aqui a empresa tem o módulo no plano.
+vi.mock("@/lib/planos-mia/crm-b2b-da-sessao", () => ({ crmB2bForaDoPlanoDaSessao: vi.fn(async () => false) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(async () => ({})) }));
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));

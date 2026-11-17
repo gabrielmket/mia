@@ -24,6 +24,7 @@
  * fingir que oferece faria o operador apagar o espanhol junto com o português
  * sem ter pedido.
  */
+import { graphBaseUrl } from "@/lib/channels/meta/graph-base";
 
 export interface EditarTemplateInput {
   /** O id do template NA META (`meta_templates.meta_template_id`). */
@@ -42,7 +43,7 @@ export type ResultadoDaEdicao =
 export async function editarTemplate(input: EditarTemplateInput): Promise<ResultadoDaEdicao> {
   try {
     const res = await fetch(
-      `https://graph.facebook.com/${input.graphVersion}/${encodeURIComponent(input.templateId)}`,
+      `${graphBaseUrl(input.graphVersion)}/${encodeURIComponent(input.templateId)}`,
       {
         method: "POST",
         headers: {
@@ -92,7 +93,7 @@ export async function excluirTemplate(
 ): Promise<ResultadoDaEdicao> {
   try {
     const url =
-      `https://graph.facebook.com/${input.graphVersion}/${encodeURIComponent(input.wabaId)}` +
+      `${graphBaseUrl(input.graphVersion)}/${encodeURIComponent(input.wabaId)}` +
       `/message_templates?name=${encodeURIComponent(input.name)}`;
     const res = await fetch(url, {
       method: "DELETE",

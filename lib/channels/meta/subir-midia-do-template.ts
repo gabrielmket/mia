@@ -28,6 +28,7 @@
  * Confundir os dois é o que faz alguém esperar que trocar a foto do exemplo
  * mude o que o cliente vê.
  */
+import { graphBaseUrl, graphHost } from "@/lib/channels/meta/graph-base";
 
 export type MidiaDoCabecalho = "IMAGE" | "VIDEO" | "DOCUMENT";
 
@@ -68,7 +69,7 @@ export async function subirMidiaDoTemplate(
     file_length: String(input.bytes.byteLength),
     file_type: input.tipo,
   });
-  const urlSessao = `https://graph.facebook.com/${input.graphVersion}/${input.appId}/uploads?${qs}`;
+  const urlSessao = `${graphBaseUrl(input.graphVersion)}/${input.appId}/uploads?${qs}`;
 
   let sessaoRes: Response;
   try {
@@ -99,7 +100,7 @@ export async function subirMidiaDoTemplate(
   // e a versão NÃO se repete — ver o cabeçalho.
   let uploadRes: Response;
   try {
-    uploadRes = await fetch(`https://graph.facebook.com/${sessaoCorpo.id}`, {
+    uploadRes = await fetch(`${graphHost()}/${sessaoCorpo.id}`, {
       method: "POST",
       headers: {
         // OAuth, e não Bearer. Ver o cabeçalho: com Bearer a resposta é um 400

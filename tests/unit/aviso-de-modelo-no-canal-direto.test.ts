@@ -31,6 +31,9 @@ const SEGREDO = "segredo_do_app";
 
 vi.mock("@/lib/channels/meta/session", () => ({
   metaSessionByWebhookToken: vi.fn(async () => SESSAO),
+  // FORK MIA: com a WABA do corpo diferente da do token, a rota do fork procura o
+  // dono pela WABA (várias contas na mesma URL). Aqui nenhuma conexão nossa é dona.
+  metaSessionByWabaId: vi.fn(async () => null),
 }));
 vi.mock("@/lib/channels/meta/app", () => ({
   appDaMeta: vi.fn(async () => ({ appSecret: SEGREDO, verifyToken: "v" })),
@@ -337,7 +340,9 @@ describe("o aviso na Central, pelo webhook do canal oficial direto", () => {
     const r = await entregar(corpoDoModelo({ evento: "REJECTED", waba: "OUTRA_WABA" }));
 
     expect(r.status).toBe(200);
-    expect(r.body.outcomes).toEqual([]);
+    // FORK MIA: a rota do fork procura o dono pela WABA e, sem dono, registra o
+    // desfecho (no upstream a lista sai vazia). O que importa abaixo não muda.
+    expect(r.body.outcomes).toEqual(["waba_desconhecida"]);
     expect(banco.avisos).toHaveLength(0);
     expect(banco.patches).toHaveLength(0);
   });

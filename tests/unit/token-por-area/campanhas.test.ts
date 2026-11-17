@@ -196,6 +196,12 @@ const LINHAS = {
     { id: CANAL_B, organization_id: ORG_B, provider: "waha", status: "connected" },
   ],
   contacts: [CONTATO_DE_A, CONTATO_DE_B],
+  // FORK MIA (.58): as Campanhas ficam atrás do módulo `disparador`, também pelo
+  // token (lib/api/auth-dual.ts). As duas organizações o têm contratado.
+  organization_modules: [
+    { id: "mod-a", organization_id: ORG_A, modulo: "disparador", revoked_at: null },
+    { id: "mod-b", organization_id: ORG_B, modulo: "disparador", revoked_at: null },
+  ],
 };
 
 function novoFalso() {
@@ -300,7 +306,10 @@ function casosDeNegacao(cfg: {
     const res = await cfg.chamar(TOKEN_A);
     expect(res.status).toBe(429);
     expect(res.headers.get("Retry-After")).toBeTruthy();
-    expect(falso.cadeias).toEqual([]);
+    // FORK MIA (.58): a trava do módulo lê `organization_modules` ANTES do teto
+    // (lib/api/auth-dual.ts), de propósito: falha fechada mesmo em rota que
+    // esquecesse o teto. Nenhuma outra tabela é tocada.
+    expect(falso.cadeias.filter((c) => c.tabela !== "organization_modules")).toEqual([]);
     expect(audit).not.toHaveBeenCalled();
   });
 
@@ -852,5 +861,25 @@ describe("PUBLIC_PATHS — borda do proxy", () => {
   it("campaigns/[id]/[acao] fica de fora: o caminho de ação não ganha porta", () => {
     expect(isPublicPath(`/api/v1/campaigns/${CAMP_A}/iniciar`)).toBe(false);
     expect(isPublicPath(`/api/v1/campaigns/${CAMP_A}/testar`)).toBe(false);
+  });
+});
+
+// ─── FORK MIA (.58): o token não usa as Campanhas sem o módulo ───────────────
+
+describe("FORK MIA: as Campanhas pelo token exigem o módulo disparador", () => {
+  it("empresa sem o módulo: 403 antes do teto e de qualquer dado", async () => {
+    const falso = criarClienteAdminFalso({
+      orgDona: ORG_A,
+      linhas: { ...LINHAS, organization_modules: [] },
+    });
+    vi.mocked(createAdminClient).mockReturnValue(falso.cliente as never);
+    tokenDe(ORG_A, TOKEN_A, "manager");
+    const { GET } = await import("@/app/api/v1/campaigns/route");
+    const res = await GET(
+      new NextRequest("http://localhost/api/v1/campaigns", { headers: { authorization: `Bearer ${TOKEN_A}` } }),
+    );
+    expect(res.status).toBe(403);
+    expect(checkRateLimit).not.toHaveBeenCalled();
+    expect(falso.cadeias.filter((c) => c.tabela !== "organization_modules" && c.tabela !== "subscriptions")).toEqual([]);
   });
 });

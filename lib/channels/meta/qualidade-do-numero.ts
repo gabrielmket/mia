@@ -1,4 +1,5 @@
 import type { QualidadeDoNumero } from "@/lib/broadcast/plano";
+import { graphBaseUrl } from "@/lib/channels/meta/graph-base";
 
 /**
  * A nota de qualidade do número, perguntada à Meta.
@@ -21,7 +22,7 @@ export async function qualidadeDoNumero(input: {
   token: string;
   graphVersion: string;
 }): Promise<QualidadeDoNumero> {
-  const url = `https://graph.facebook.com/${input.graphVersion}/${input.phoneNumberId}?fields=quality_rating`;
+  const url = `${graphBaseUrl(input.graphVersion)}/${input.phoneNumberId}?fields=quality_rating`;
   try {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${input.token}` } });
     if (!res.ok) return "UNKNOWN";
