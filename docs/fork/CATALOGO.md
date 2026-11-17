@@ -776,6 +776,35 @@ o `git grep` acima é a conferência manual, e é o candidato a cerca.
 
 ---
 
+### 23. Coexistência do WhatsApp: o histórico da Meta · [`coexistencia.md`](coexistencia.md)
+**O que faz.** O número usado no app WhatsApp Business e na MIA ao mesmo tempo: o histórico de até 180 dias
+que a Meta manda no campo `history` entra como histórico importado (`metadata.historico_importado = 'true'`,
+o corte da 0760) e não dispara nada; os contatos da agenda do app somam no pedido de contatos. Etapa S2;
+conexão pelo app (S3) e saída e volta (S4) ainda não. **Migrations** 9162. **Mora em**
+`lib/channels/meta/coexistencia/` (`historico.ts`, `mapear.ts`, `estado.ts`, `receber.ts`, `contatos.ts`,
+`gravar-lote.ts`, `lote.handler.ts`).
+
+**Pontos de encaixe** (todos `FORK MIA`): `app/api/v1/webhooks/meta/[token]/route.ts` (a chamada a
+`receberHistoricoDaMeta` logo depois de nascer `desfechos`, e `ingerirContatoDoAppContando` no lugar de
+`ingestMetaAppContactSync`), `lib/channels/consumidores.ts` (o `loteDoHistoricoHandler`).
+
+**Protege.** Invariantes `coexistencia-historico-nao-dispara.test.ts` (nada dispara, nada muda na conversa
+e no negócio que já existiam, reentrega não duplica, com o controle), `historico-importado-nao-dispara.test.ts`
+(o corte da 0760), `rls-tabelas-da-mia.test.ts`, `rls-completude-varredura.test.ts`; unidade
+`coexistencia-historico-leitura.test.ts`, `dispatcher-org-parada.test.ts`, `evento-comando-tem-consumidor.test.ts`.
+
+**Conferir.**
+1. `git grep -n "receberHistoricoDaMeta\|ingerirContatoDoAppContando" "app/api/v1/webhooks/meta/[token]/route.ts"` (**as duas chamadas existem**; sem a primeira o histórico volta a ser ignorado em silêncio).
+2. `git grep -n "historico_importado" supabase/migrations/*0760*` e a mesma chave em `fn_emit_message_event` no `baseline.sql` (se o upstream mudar o corte, o histórico passa a acordar a IA).
+3. `npx vitest run tests/unit/coexistencia-historico-leitura.test.ts tests/unit/dispatcher-org-parada.test.ts`.
+4. MCP: nenhuma ferramenta nesta etapa (a leitura da sincronização entra na S3, com a tela).
+
+**Riscos.** Se o upstream passar a ler o campo `history` no `parseMetaWebhook` ou a gravar o histórico por
+`ingestMetaInbound`, o histórico entraria duas vezes ou como mensagem nova: conferir na fusão. Relatórios e
+raio-X do fork ainda contam o histórico importado (9163, espera a decisão D3).
+
+---
+
 ## Tabela final: por função, o documento, as migrations e os testes principais
 
 | # | função | documento | migrations | testes principais |
@@ -802,6 +831,7 @@ o `git grep` acima é a conferência manual, e é o candidato a cerca.
 | 20 | Produto no negócio | `produto-no-negocio.md` | 9160, 9161 | `produto-no-negocio-servidor.test.ts`, `produto-no-negocio-regras.test.ts` |
 | 21 | Raio-X do atendimento | `raio-x-do-atendimento.md` | 9150, 9151, 9152 | `raio-x-leitor-nao-envia.test.ts`, `raio-x-anonimizar.test.ts` |
 | 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
+| 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-historico-leitura.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.

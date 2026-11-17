@@ -6,9 +6,13 @@
  */
 import type { EventHandler } from "@/lib/event-log/dispatcher";
 
+import { loteDoHistoricoHandler } from "./meta/coexistencia/lote.handler";
 import { pinoReintentoHandler } from "./zernio/pino-reintento.handler";
 
 export const CONSUMIDORES_DOS_CANAIS: readonly EventHandler[] = [
   // O pino que entrou só com o marcador: a API do canal não respondeu a tempo.
   pinoReintentoHandler,
+  // FORK MIA: o lote do histórico que a Meta manda na coexistência, gravado
+  // como histórico importado (docs/fork/coexistencia.md).
+  loteDoHistoricoHandler,
 ];
