@@ -48,6 +48,7 @@ import { GATILHOS_COM_MOTOR, lerFluxos, nosDoGrafo } from "@/lib/implantacao/fol
 import { lerDocumentoDaMemoria } from "@/lib/implantacao/memoria";
 import { lerModelosOficiais, lerRespostasProntas } from "@/lib/implantacao/mensagens";
 import { retratoDosRoteadores } from "@/lib/implantacao/roteador";
+import { lerSkillsDaEmpresa } from "@/lib/implantacao/skills-do-agente";
 import { EXPLICACAO_DO_PASSO, ROTULO_DO_PASSO } from "@/lib/leads/agent-mapping";
 import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { configAssinatura } from "@/lib/messaging/assinatura";
@@ -486,6 +487,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
       "Com `agente`, devolve também o PROMPT e a configuração inteira da versão vigente (o rascunho, se houver; senão a publicada), com o horário de atendimento da IA dela. " +
       "Devolve o FILTRO DE PALAVRAS da versão vigente (`filtro_de_palavras`): desde a v1.87 do upstream, com ele preenchido a IA não responde a mensagem sem nenhuma das palavras. " +
       "Devolve a passagem por assunto jurídico de cada agente e, da EMPRESA, se o bloqueio de afirmação clínica está ligado (`seguranca_da_empresa`). " +
+      "Devolve, da versão vigente de cada agente, a pausa entre respostas (`pausa_entre_respostas_segundos`), se ele vê as fotos do cliente (`ver_fotos_do_cliente`) e QUAIS skills usa (`skills`: null = todas); " +
+      "e as skills da empresa com as ETIQUETAS pelas quais cada uma entra (`skills_da_empresa`). " +
       "Devolve ainda os ROTEADORES de intenção: o número, se está ligado, o agente reserva e cada intenção com o agente e o funil de destino. " +
       "QUANDO USAR: antes de plataforma_garantir_agente e de plataforma_garantir_roteador, e antes de publicar ou ligar. " +
       "Devolve ainda as capacidades que a tela oferece a ESTE cliente (módulos e modo de venda mudam a lista) quando `com_capacidades` é verdadeiro.",
@@ -553,6 +556,12 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           passagem_por_assunto_juridico: base ? base.handoff_legal_enabled !== false : null,
           // .86 — o filtro de palavras da versão vigente (upstream 1.87: ele VALE; null = sem filtro).
           filtro_de_palavras: base ? filtroDePalavrasDe(base.trigger_config) : null,
+          // Upstream 1.101 a 1.107 (9101, 9107, 9108), da versão vigente. A pausa em
+          // segundos, como na tela; a visão de foto ligada quando a coluna não diz o contrário.
+          pausa_entre_respostas_segundos:
+            base && typeof base.reply_min_interval_ms === "number" ? Math.round(base.reply_min_interval_ms / 1000) : null,
+          ver_fotos_do_cliente: base ? base.image_vision_enabled !== false : null,
+          skills: base ? ((base.skill_names as string[] | null | undefined) ?? null) : null,
           followups_armados: (followup?.enabled ? (followup.flow_pointer_ids ?? []) : []).map(
             (id) => fluxos.find((f) => f.id === id)?.name ?? id,
           ),
@@ -605,6 +614,14 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
         seguranca_da_empresa: {
           bloqueio_de_afirmacao_clinica: await lerCamadaClinica(c.admin, c.orgId),
         },
+        // Upstream 1.107 (9107, 9230): as skills que a empresa alcança, com as etiquetas
+        // de cada uma. Leitura que falha não derruba a dos agentes: diz que não leu.
+        ...(await lerSkillsDaEmpresa(c).then(
+          (skills) => ({
+            skills_da_empresa: skills.map((s) => ({ nome: s.nome, de: s.de, descricao: s.descricao, etiquetas: s.etiquetas })),
+          }),
+          (err: unknown) => ({ skills_nao_lidas: err instanceof Error ? err.message : "erro desconhecido" }),
+        )),
         // Os roteadores de intenção, com o agente e o destino de cada intenção
         // pelo nome. Leitura que falha não derruba a dos agentes: diz que não leu.
         ...(await retratoDosRoteadores(c.admin, c.orgId).then(

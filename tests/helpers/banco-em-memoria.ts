@@ -166,12 +166,16 @@ export function bancoEmMemoria(
         filtros.push((l) => (l[c] as string | number) <= (v as string | number)),
         q
       ),
-      // `or("a.is.null,a.lt.\"x\"")`: as duas formas que o passo do pagamento usa (FORK MIA, .98).
+      // `or("a.is.null,a.lt.\"x\"")`: as duas formas que o passo do pagamento usa (FORK MIA, .98),
+      // e `a.eq.x`.
       or: (expr: string) => (
         filtros.push((l) =>
           expr.split(",").some((parte) => {
             const nulo = /^(\w+)\.is\.null$/.exec(parte);
             if (nulo) return (l[nulo[1] as string] ?? null) === null;
+            // `a.eq.x`: a resolução das skills (a da empresa ou a de plataforma), upstream 1.107.
+            const igual = /^(\w+)\.eq\.(.+)$/.exec(parte);
+            if (igual) return String(l[igual[1] as string] ?? "") === igual[2];
             const menor = /^(\w+)\.lt\."?([^"]+)"?$/.exec(parte);
             return menor ? (l[menor[1] as string] as string) < (menor[2] as string) : false;
           }),
