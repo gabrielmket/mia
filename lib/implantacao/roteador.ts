@@ -496,7 +496,7 @@ export async function garantirRoteador(c: Implantacao, pedido: PedidoDeRoteador)
     linha = existente;
     if (pedido.numero !== undefined && acharNumero(numeros, pedido.numero).id !== existente.channel_session_id) {
       throw new Recusa(
-        `O roteador «${existente.name}» é de outro número, e o número de um roteador não se troca. Crie um roteador com outro nome para o número novo.`,
+        `O roteador «${existente.name}» é de outro número, e a ferramenta não troca o número de um roteador. Para mover, use a tela do roteador (ela confere que o número atual está desligado); ou crie um roteador com outro nome para o número novo.`,
       );
     }
     const patch: Record<string, unknown> = {};
