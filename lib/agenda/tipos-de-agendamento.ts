@@ -1,27 +1,79 @@
 /**
- * FORK MIA — o CONTRATO dos tipos de agendamento, fora do Route Handler.
+ * TIPOS DE AGENDAMENTO — alterar e desativar, a regra fora do route handler.
  *
- * As categorias, os locais, os campos com as faixas de cada um e a conta do
- * slug moravam dentro de `app/api/v1/agenda/tipos/route.ts`, e um arquivo de
- * rota não exporta nada além dos métodos HTTP. O MCP de plataforma cria e
- * altera tipos ao implantar um cliente e precisa validar com o MESMO contrato:
- * uma segunda cópia destas faixas é o caso clássico de a tela aceitar o que a
- * ferramenta recusa (ou o contrário). O bloco veio para cá sem mudar uma linha
- * das regras; a rota importa daqui.
+ * ─── Por que este módulo existe ──────────────────────────────────────────────
+ *
+ * A regra de `PATCH`/`DELETE /api/v1/agenda/tipos` nasceu inteira dentro de
+ * `app/api/v1/agenda/tipos/route.ts`. Quem não é a rota — o servidor MCP, uma
+ * automação, qualquer consumidor dentro do processo — precisava do MESMO
+ * comportamento para alterar ou desativar um tipo e só tinha dois caminhos
+ * ruins: chamar a própria API por HTTP, ou copiar a regra (e a cópia envelhece
+ * calada). Ver a issue #4688, e o desenho irmão em `./consulta.ts`
+ * (`listaTiposDeAtendimento`), que o `GET` já usa.
+ *
+ * O `POST` continua na rota: ele repete a conferência do canal e do modelo, e
+ * agora usa os mesmos ajudantes exportados daqui — mas o fluxo de criação fica
+ * fora deste pedido para o PR continuar pequeno.
+ *
+ * ─── Desativar, nunca apagar ─────────────────────────────────────────────────
+ *
+ * `calendar_appointments.event_type_id` aponta para `calendar_event_types`.
+ * Apagar o tipo levaria junto a história — que consulta foi feita, de que tipo,
+ * quanto durava. O `DELETE` grava `is_active = false`: some da tela de marcar e
+ * continua respondendo pelo passado. É o mesmo raciocínio do anti-pattern 7 da
+ * doutrina (cascade fantasma).
+ *
+ * ─── `is_active` está fora do PATCH DE PROPÓSITO ─────────────────────────────
+ *
+ * Aceitá-lo em `camposDoTipo` deixaria o mesmo pedido que muda a duração
+ * desligar o tipo, e a trilha registraria a religada como
+ * `agenda.tipo_alterado { campos: ["is_active"] }` — indistinguível de uma
+ * alteração de campo qualquer. A volta mora AO LADO, em
+ * `POST /api/v1/agenda/tipos/reativar`.
+ *
+ * ⚠️ Essa exclusão é silenciosa e já custou: Zod DESCARTA chave desconhecida sem
+ * dizer nada, então o botão "Reativar" da tela mandou `is_active` para cá
+ * durante toda a vida dele e recebeu 422 "Nenhum campo para alterar." — uma
+ * recusa que não nomeia o que foi descartado. Quem vigia a travessia hoje é
+ * `tests/unit/agenda-reativar-tipo.test.ts`.
+ *
+ * ─── A borda fica na rota ────────────────────────────────────────────────────
+ *
+ * `requireSupportWrite`, `resolveAuthDual`, `tetoDeEscritaDoToken`, o JSON, o
+ * Zod e a montagem de `ok()`/`fail()` com o `requestId`. Estas funções recebem o
+ * cliente de banco que a rota já usa, o `organizationId` resolvido e a entrada
+ * JÁ validada; devolvem resultado discriminado, sem `Response` e sem
+ * `NextRequest`.
+ *
+ * `ator.t` é o tradutor da borda (o mesmo `traduzir(texto, authz.idioma)`).
+ * Entra como dependência porque as mensagens daqui são literais de dicionário e
+ * o idioma é resolvido na rota; sem ele o padrão é identidade — pt-BR, que é o
+ * texto escrito abaixo.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
+import type { Actor } from "@/lib/api/handlers/types";
+import { audit } from "@/lib/audit";
 import { TETO_DE_LEMBRETES_EXTRAS } from "@/lib/agenda/lembretes";
+import { variaveisQueOLembretePreenche } from "@/lib/agenda/lembrete-por-modelo";
 import { transportaMensagem } from "@/lib/channels/capabilities";
 
 /** As dez do CHECK da tabela. Fora daqui o Postgres recusa — melhor recusar antes. */
-export const CATEGORIAS_DE_TIPO = [
-  "consulta", "procedimento", "retorno", "visita", "vistoria",
-  "reuniao", "call", "orcamento", "demonstracao", "outro",
+const CATEGORIAS = [
+  "consulta",
+  "procedimento",
+  "retorno",
+  "visita",
+  "vistoria",
+  "reuniao",
+  "call",
+  "orcamento",
+  "demonstracao",
+  "outro",
 ] as const;
 
-export const LOCAIS_DE_TIPO = ["in_person", "phone", "whatsapp", "video_link", "google_meet"] as const;
+const LOCAIS = ["in_person", "phone", "whatsapp", "video_link", "google_meet"] as const;
 
 /**
  * Os limites são os MESMOS do CHECK do banco, e isso é deliberado.
@@ -33,9 +85,9 @@ export const LOCAIS_DE_TIPO = ["in_person", "phone", "whatsapp", "video_link", "
  */
 export const camposDoTipo = {
   name: z.string().trim().min(2).max(80),
-  category: z.enum(CATEGORIAS_DE_TIPO),
+  category: z.enum(CATEGORIAS),
   duration_minutes: z.number().int().min(5).max(1440),
-  location_kind: z.enum(LOCAIS_DE_TIPO),
+  location_kind: z.enum(LOCAIS),
   description: z.string().trim().max(500).nullish(),
   location_details: z.string().trim().max(300).nullish(),
   default_owner_user_id: z.string().uuid().nullish(),
@@ -61,32 +113,31 @@ export const camposDoTipo = {
    */
   reminder_enabled: z.boolean().optional(),
   /**
-   * O BLOCO DO NEGÓCIO na descrição do evento do Google (upstream #4006, doc 272 = B).
+   * O BLOCO DO NEGÓCIO na descrição do evento do Google (#4006, doc 272 = B).
    *
    * Nasce desligado (default da coluna, migration 9209) e não tem `.default()`
    * aqui: no Google todo convidado lê a descrição, inclusive o cliente com
    * e-mail na ficha, e atualizar o sistema não pode mandar o nome, o telefone e
    * a etapa do funil para fora sem alguém decidir.
-   *
-   * FORK MIA: este contrato mora aqui (e não na rota, como no upstream) desde
-   * que o MCP de plataforma passou a usá-lo; campo novo da rota dele entra AQUI,
-   * senão o `z.object` o descarta calado.
    */
   levar_dados_do_negocio: z.boolean().optional(),
-  /**
-   * O NÚMERO que manda o lembrete (upstream v1.83, `calendar_event_types.
-   * reminder_channel_session_id`). Sem ele, compromisso sem conversa numa
-   * empresa com 2 ou mais números fica pendente como `remetente_ambiguo`.
-   * Quem grava confere antes, com `canalDoLembreteValido` abaixo.
-   */
   reminder_channel_session_id: z.string().uuid().nullish(),
   /**
    * O modelo aprovado que sai quando a janela de 24 h do cliente fechou
-   * (upstream 1.100, `lib/agenda/lembrete-por-modelo.ts`). Nulo = como antes:
-   * fora da janela o lembrete não sai e a equipe recebe o aviso. A rota confere
-   * em `recusaDoModeloDoLembrete` antes de gravar.
+   * (`lib/agenda/lembrete-por-modelo.ts`). Nulo = como antes: fora da janela o
+   * lembrete não sai e a equipe recebe o aviso. Conferido em
+   * `recusaDoModeloDoLembrete` antes de gravar.
    */
   reminder_meta_template_id: z.string().uuid().nullish(),
+  /**
+   * O PREÇO PADRÃO do serviço, em centavos.
+   *
+   * Opcional e sem default: nem todo negócio tem preço fixo, e obrigar um número
+   * faria quem cobra por hora inventar um. Vazio significa "digite na hora".
+   *
+   * É semente do item da comanda, nunca o preço dele — o item congela o seu.
+   */
+  default_price_cents: z.number().int().min(0).max(100_000_000).nullish(),
   /**
    * ⚠️ ESTA FAIXA É MAIS ESTREITA QUE O CHECK DO BANCO, E ISSO CONTRARIA O
    * PARÁGRAFO ACIMA DE PROPÓSITO.
@@ -109,15 +160,6 @@ export const camposDoTipo = {
    * o default da 0177 é 1440) segue valendo no banco e o cron a respeita: o que
    * ela perde é poder ser reenviada por esta rota sem entrar na faixa.
    */
-  /**
-   * O PREÇO PADRÃO do serviço, em centavos.
-   *
-   * Opcional e sem default: nem todo negócio tem preço fixo, e obrigar um número
-   * faria quem cobra por hora inventar um. Vazio significa "digite na hora".
-   *
-   * É semente do item da comanda, nunca o preço dele — o item congela o seu.
-   */
-  default_price_cents: z.number().int().min(0).max(100_000_000).nullish(),
   reminder_minutes_before: z
     .number()
     .int()
@@ -153,13 +195,9 @@ export const camposDoTipo = {
     .optional(),
 };
 
-export const criarSchema = z.object(camposDoTipo);
-// Somente a criação pode nascer como serviço em rascunho (v1.87, 0716). O PATCH legado não
-// ganha uma porta de ativação: a programação é validada pelo núcleo de serviços.
-export const criarComRascunhoSchema = criarSchema.extend({ service_draft: z.boolean().optional() });
 // `.partial()` em vez de repetir os doze campos como opcionais: repetir criaria
 // duas listas para manter em sincronia, e a segunda envelhece calada.
-export const alterarSchema = criarSchema.partial().extend({
+export const alterarSchema = z.object(camposDoTipo).partial().extend({
   id: z.string().uuid(),
   /**
    * O TEXTO que o cron manda. Vazio/nulo = a frase padrão. Distinto de
@@ -200,6 +238,251 @@ export const alterarSchema = criarSchema.partial().extend({
       return out;
     }),
 });
+
+export const desativarSchema = z.object({ id: z.string().uuid() });
+
+export type AtorDoTipoDeAgendamento = {
+  organizationId: string;
+  actor: Actor;
+  apiTokenId: string | null;
+  /** O tradutor da borda. Ausente = identidade (pt-BR). */
+  t?: (texto: string) => string;
+};
+
+export type RecusaDoTipoDeAgendamento = {
+  ok: false;
+  code: "validation_failed" | "not_found" | "internal_error";
+  status: 404 | 422 | 500;
+  message: string;
+};
+
+type CanalDoLembrete = { reminder_channel_session_id?: string | null };
+
+/**
+ * O CANAL DO LEMBRETE — conferido antes de gravar.
+ *
+ * Precisa existir, ser desta organização, não estar arquivado e transportar
+ * mensagem. Um canal de outro número gravaria uma configuração que o cron nunca
+ * usaria; um arquivado, idem. Devolve a recusa discriminada, ou `null`.
+ */
+export async function recusaDoCanalDoLembrete(
+  admin: SupabaseClient,
+  organizationId: string,
+  campos: CanalDoLembrete,
+  t: (texto: string) => string,
+): Promise<RecusaDoTipoDeAgendamento | null> {
+  if (!campos.reminder_channel_session_id) return null;
+  const { data: canal, error: erroCanal } = await admin
+    .from("channel_sessions")
+    .select("id, provider, archived_at")
+    .eq("organization_id", organizationId)
+    .eq("id", campos.reminder_channel_session_id)
+    .maybeSingle();
+  if (erroCanal) {
+    return {
+      ok: false,
+      code: "internal_error",
+      status: 500,
+      message: t("Não foi possível consultar o canal do lembrete."),
+    };
+  }
+  if (!canal || canal.archived_at || !transportaMensagem(canal.provider)) {
+    return {
+      ok: false,
+      code: "validation_failed",
+      status: 422,
+      message: t("Escolha um canal de mensagem não arquivado desta organização."),
+    };
+  }
+  return null;
+}
+
+/**
+ * O MODELO DO LEMBRETE FORA DA JANELA — conferido antes de gravar.
+ *
+ * Três recusas, cada uma com o que fazer, em vez do erro cru do banco:
+ *   - de outra organização (a FK composta da 9092 também recusaria, mas como 500);
+ *   - com variável que o lembrete não tem de onde preencher — o cron nunca o
+ *     mandaria, e a escolha ficaria gravada sem efeito;
+ *   - de OUTRO número que o escolhido no mesmo pedido: o modelo só sai pelo número
+ *     dono dele, e o lembrete nunca troca de número sozinho.
+ *
+ * O status (aprovado, pausado) NÃO é recusa aqui: muda depois da escolha, e quem
+ * confere na hora de mandar é o cron (`lerModeloDoLembrete`).
+ */
+export async function recusaDoModeloDoLembrete(
+  admin: SupabaseClient,
+  organizationId: string,
+  campos: {
+    reminder_meta_template_id?: string | null;
+    reminder_channel_session_id?: string | null;
+  },
+  t: (texto: string) => string,
+): Promise<RecusaDoTipoDeAgendamento | null> {
+  if (!campos.reminder_meta_template_id) return null;
+  const { data: modelo, error } = await admin
+    .from("meta_templates")
+    .select("id, name, language, channel_session_id, parameter_format, components")
+    .eq("organization_id", organizationId)
+    .eq("id", campos.reminder_meta_template_id)
+    .maybeSingle();
+  if (error) {
+    return {
+      ok: false,
+      code: "internal_error",
+      status: 500,
+      message: t("Não foi possível consultar o modelo do lembrete."),
+    };
+  }
+  if (!modelo) {
+    return {
+      ok: false,
+      code: "validation_failed",
+      status: 422,
+      message: t("Escolha um modelo aprovado desta organização."),
+    };
+  }
+  if (variaveisQueOLembretePreenche(modelo) === null) {
+    return {
+      ok: false,
+      code: "validation_failed",
+      status: 422,
+      message: t(
+        "Este modelo não serve para o lembrete: ele só pode ter variáveis de texto no corpo, de {{1}} a {{4}}, sem pular número.",
+      ),
+    };
+  }
+  if (
+    campos.reminder_channel_session_id &&
+    modelo.channel_session_id !== campos.reminder_channel_session_id
+  ) {
+    return {
+      ok: false,
+      code: "validation_failed",
+      status: 422,
+      message: t("O modelo escolhido é de outro número. Escolha um modelo do número que envia os lembretes."),
+    };
+  }
+  return null;
+}
+
+export async function alterarTipoDeAgendamento(
+  admin: SupabaseClient,
+  ator: AtorDoTipoDeAgendamento,
+  entrada: z.infer<typeof alterarSchema>,
+): Promise<{ ok: true; data: { id: string } } | RecusaDoTipoDeAgendamento> {
+  const t = ator.t ?? ((texto: string) => texto);
+  const { organizationId, actor, apiTokenId } = ator;
+  const { id, ...bruto } = entrada;
+  const campos = Object.fromEntries(Object.entries(bruto).filter(([, v]) => v !== undefined));
+  if (Object.keys(campos).length === 0) {
+    // Recusa em vez de UPDATE vazio: "alterei" sobre nada é a mesma família de
+    // mentira que o "Marcado ✓" sem linha no banco.
+    return {
+      ok: false,
+      code: "validation_failed",
+      status: 422,
+      message: t("Nenhum campo para alterar."),
+    };
+  }
+
+  const recusaDoCanal = await recusaDoCanalDoLembrete(admin, organizationId, entrada, t);
+  if (recusaDoCanal) return recusaDoCanal;
+  const recusaDoModelo = await recusaDoModeloDoLembrete(admin, organizationId, entrada, t);
+  if (recusaDoModelo) return recusaDoModelo;
+
+  const { data, error } = await admin
+    .from("calendar_event_types")
+    .update(campos)
+    .eq("id", id)
+    .eq("organization_id", organizationId)
+    .select("id")
+    .maybeSingle();
+
+  // Sem `t()`: é a mensagem crua do banco, como hoje.
+  if (error) {
+    return { ok: false, code: "internal_error", status: 500, message: error.message };
+  }
+  if (!data) {
+    return {
+      ok: false,
+      code: "not_found",
+      status: 404,
+      message: t("Tipo de agendamento não encontrado."),
+    };
+  }
+
+  await audit({
+    actorUserId: actor.type === "user" ? actor.id : null,
+    actorApiTokenId: apiTokenId ?? null,
+    action: "agenda.tipo_alterado",
+    organizationId,
+    resourceType: "calendar_event_types",
+    resourceId: id,
+    metadata: { campos: Object.keys(campos) },
+  });
+  return { ok: true, data: { id: data.id } };
+}
+
+export async function desativarTipoDeAgendamento(
+  admin: SupabaseClient,
+  ator: AtorDoTipoDeAgendamento,
+  entrada: { id: string },
+): Promise<{ ok: true; data: { id: string } } | RecusaDoTipoDeAgendamento> {
+  const t = ator.t ?? ((texto: string) => texto);
+  const { organizationId, actor, apiTokenId } = ator;
+
+  const { data, error } = await admin
+    .from("calendar_event_types")
+    .update({ is_active: false })
+    .eq("id", entrada.id)
+    .eq("organization_id", organizationId)
+    .select("id")
+    .maybeSingle();
+
+  // Sem `t()`: é a mensagem crua do banco, como hoje.
+  if (error) {
+    return { ok: false, code: "internal_error", status: 500, message: error.message };
+  }
+  if (!data) {
+    return {
+      ok: false,
+      code: "not_found",
+      status: 404,
+      message: t("Tipo de agendamento não encontrado."),
+    };
+  }
+
+  await audit({
+    actorUserId: actor.type === "user" ? actor.id : null,
+    actorApiTokenId: apiTokenId ?? null,
+    action: "agenda.tipo_desativado",
+    organizationId,
+    resourceType: "calendar_event_types",
+    resourceId: entrada.id,
+    metadata: {},
+  });
+  return { ok: true, data: { id: data.id } };
+}
+
+// ─── FORK MIA: o contrato que o MCP de plataforma e a criação pela rota usam ───
+//
+// O fork tirou este contrato da rota antes do upstream (para o MCP de plataforma
+// criar e alterar tipos ao implantar um cliente com as MESMAS faixas da tela). Na
+// v1.116 o upstream criou este mesmo arquivo para o alterar/desativar (#4688), e
+// o dele virou a base: as exportações abaixo são o que o fork usa além dele
+// (`lib/implantacao/agenda.ts`, `lib/mcp-plataforma/ferramentas/*` e o POST de
+// `app/api/v1/agenda/tipos/route.ts`). Campo novo do tipo entra em `camposDoTipo`
+// acima, que vale para os dois.
+export const CATEGORIAS_DE_TIPO = CATEGORIAS;
+export const LOCAIS_DE_TIPO = LOCAIS;
+
+export const criarSchema = z.object(camposDoTipo);
+// Somente a criação pode nascer como serviço em rascunho (v1.87, 0716). O PATCH legado não
+// ganha uma porta de ativação: a programação é validada pelo núcleo de serviços.
+export const criarComRascunhoSchema = criarSchema.extend({ service_draft: z.boolean().optional() });
+// `.partial()` em vez de repetir os doze campos como opcionais: repetir criaria
+// duas listas para manter em sincronia, e a segunda envelhece calada.
 
 /**
  * O slug sai do NOME, e é estável depois de criado.

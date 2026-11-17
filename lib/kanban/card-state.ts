@@ -101,6 +101,8 @@ export function buildCardInput(
     | "owner_agent"
     // O NOME resolvido pela rota do quadro, não uma coluna do lead.
     | "empresa_nome"
+    | "owner_user_name"
+    | "owner_user_removed"
     | "next_action"
     | "score"
   >,

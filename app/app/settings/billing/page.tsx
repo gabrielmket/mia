@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { CabecalhoDaSubTela } from "@/components/settings/CabecalhoDaSubTela";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK, roleAtLeast } from "@/lib/auth/types";
 import { emailDeSuporte } from "@/lib/branding/saida";
@@ -55,13 +56,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       : null;
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header>
-        {/* Mesmo nome do item de menu (catalogo.ts), ligada ou não. */}
-        <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Plano e cobrança", idioma)}</h1>
+      {/* Mesmo nome do item de menu (catalogo.ts), ligada ou não. */}
+      <CabecalhoDaSubTela titulo={traduzir("Plano e cobrança", idioma)} idioma={idioma}>
         <p className="text-sm text-muted-foreground">
           {traduzir("Planos, faturas e cobrança.", idioma)}
         </p>
-      </header>
+      </CabecalhoDaSubTela>
       {painel ? (
         <>
           <PainelDaAssinatura dados={painel} idioma={idioma} />
@@ -81,7 +81,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               cancelaNoFim={painel.assinatura.cancela_no_fim}
               // FORK MIA (.90): o teto em dólar não vai ao navegador; vai a estimativa de conversas.
               planosParaTroca={painel.planosParaTroca.map(semDolar)}
-              planoAtual={painel.plano ? semDolar({ id: painel.plano.id, nome: painel.plano.nome, preco_cents: painel.plano.preco_cents, intervalo: painel.plano.intervalo, max_assentos: painel.plano.max_assentos, max_canais: painel.plano.max_canais, teto_ia_usd_cents: painel.plano.teto_ia_usd_cents }) : null}
+              planoAtual={painel.plano ? semDolar({ id: painel.plano.id, nome: painel.plano.nome, preco_cents: painel.plano.preco_cents, moeda: painel.plano.moeda, intervalo: painel.plano.intervalo, max_assentos: painel.plano.max_assentos, max_canais: painel.plano.max_canais, teto_ia_usd_cents: painel.plano.teto_ia_usd_cents }) : null}
               periodoPagoDesde={painel.assinatura.periodo_pago_desde}
               proximoVencimento={painel.assinatura.proximo_vencimento}
               trocaPagamentoUrl={painel.assinatura.troca_pagamento_url}

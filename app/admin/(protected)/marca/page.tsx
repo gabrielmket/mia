@@ -5,6 +5,7 @@ import { TemaDaPlataforma } from "./_tema-da-plataforma";
 import { loadAuthUser } from "@/lib/auth/server";
 import {
   cssPersonalizadoDaInstalacao,
+  cssPersonalizadoEscuroDaInstalacao,
   validarCssPersonalizado,
 } from "@/lib/branding/css-personalizado";
 import { marcaDaInstalacao } from "@/lib/branding/instalacao";
@@ -73,13 +74,18 @@ export default async function Page() {
   if (!usuario?.is_platform_admin) notFound();
   const idioma = normalizarIdioma(usuario.locale);
 
-  const [linha, cssPersonalizado, temasInstalados, temaEscolhido] = await Promise.all([
-    marcaDaInstalacao(),
-    cssPersonalizadoDaInstalacao(),
-    temasInstaladosDaPlataforma(),
-    idDoTemaDaPlataforma(),
-  ]);
-  const validacaoCss = validarCssPersonalizado(cssPersonalizado);
+  const [linha, cssPersonalizado, cssPersonalizadoEscuro, temasInstalados, temaEscolhido] =
+    await Promise.all([
+      marcaDaInstalacao(),
+      cssPersonalizadoDaInstalacao(),
+      cssPersonalizadoEscuroDaInstalacao(),
+      temasInstaladosDaPlataforma(),
+      idDoTemaDaPlataforma(),
+    ]);
+  // Cada campo com o SEU escopo: é o mesmo prefixo que o layout aplica, então a
+  // tela relata exatamente o que está valendo (ou o erro do campo certo).
+  const validacaoCss = validarCssPersonalizado(cssPersonalizado, "claro");
+  const validacaoCssEscuro = validarCssPersonalizado(cssPersonalizadoEscuro, "escuro");
   // FORK MIA — o responsável legal. Leitura separada, e não um campo a mais em
   // `marcaDaInstalacao()`: aquela alimenta um memo com TTL lido a cada render de toda tela, e identidade
   // jurídica não deve viajar num cache de cor e logo.
@@ -146,7 +152,12 @@ export default async function Page() {
         }))}
         escolhido={temaEscolhido}
       />
-      <CssPersonalizado gravado={cssPersonalizado} erroAtual={validacaoCss.erro} />
+      <CssPersonalizado
+        gravado={cssPersonalizado}
+        gravadoEscuro={cssPersonalizadoEscuro}
+        erroAtual={validacaoCss.erro}
+        erroAtualEscuro={validacaoCssEscuro.erro}
+      />
 
       <ResponsavelLegal
         gravado={{

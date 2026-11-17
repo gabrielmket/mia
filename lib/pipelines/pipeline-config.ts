@@ -87,6 +87,12 @@ export async function gravarConfiguracaoDoFunil(
   const nextSettings: Record<string, unknown> = { ...currentSettings };
   if (patch.fields !== undefined) nextSettings.fields = patch.fields;
   if (patch.lost_reasons !== undefined) nextSettings.lost_reasons = patch.lost_reasons;
+  // #4437 (upstream v1.111) — as categorias PRÓPRIAS do funil. A chave é gravada
+  // como veio, inclusive a lista VAZIA: `[]` é "escondi todas", e pular o vazio
+  // faria a tela esconder na aparência e a de fábrica voltar na próxima abertura.
+  if (patch.lost_reason_categories !== undefined) {
+    nextSettings.lost_reason_categories = patch.lost_reason_categories;
+  }
   if (patch.won_reasons !== undefined) nextSettings.won_reasons = patch.won_reasons;
   if (patch.won_reason_required !== undefined) {
     nextSettings.won_reason_required = patch.won_reason_required;

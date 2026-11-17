@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
 import { useQueryClient } from "@tanstack/react-query";
 import { useT } from "@/hooks/i18n/useT";
@@ -56,6 +56,13 @@ interface KanbanBoardProps {
   onSelectionChange?: (ids: string[]) => void;
   /** Lead a abrir já na montagem (deep link `?lead=` — ver o dossiê abaixo). */
   leadInicial?: string | null;
+  /**
+   * O ENDEREÇO DA PÁGINA INTEIRA (#4151) — montado pela página do funil, que é
+   * quem tem `pathname`/`searchParams` na mão e sabe qual filtro está na URL.
+   * Presente, o dossiê ganha o botão "Expandir"; ausente (lista, calendário,
+   * quadro embutido), continua só o painel.
+   */
+  hrefDoNegocio?: (leadId: string) => string;
   /**
    * `manager`+ pode renomear a etapa direto no cabeçalho da coluna — mesmo
    * corte de papel da rota (`PATCH .../stages/:stageId`, `requireRole("manager")`).
@@ -125,6 +132,7 @@ export function KanbanBoard({
   pulses: pulsesProp,
   onSelectionChange,
   leadInicial,
+  hrefDoNegocio,
   podeRenomearEtapa = false,
   ordem = "manual",
   usuarioAtualId = null,
@@ -153,6 +161,8 @@ export function KanbanBoard({
     onCamposFaltando: setRecusaDeCampos,
     onRetomada: setRetomada,
   });
+  // `mutate` é estável; o objeto `moveCard` muda a cada render (#4788).
+  const mutarMove = moveCard.mutate;
   const { data: members } = useAssignableMembers(true);
   const ownerNames = useMemo(
     () => new Map((members ?? []).map((m) => [m.user_id, m.full_name])),
@@ -201,13 +211,31 @@ export function KanbanBoard({
     [selectedIds, internalSelected],
   );
 
-  const data = useExternal
-    ? {
-        pipeline: pipelineProp ?? ({} as Pipeline),
-        stages: stagesProp,
-        leads: leadsProp,
-      }
-    : queryResult.data;
+  // `useMemo` (#4788): um objeto novo a cada render invalidava o `grouped` e os
+  // callbacks que chegam aos cards — o quadro inteiro redesenhava.
+  const data = useMemo(
+    () =>
+      useExternal
+        ? {
+            pipeline: pipelineProp ?? ({} as Pipeline),
+            stages: stagesProp,
+            leads: leadsProp,
+          }
+        : queryResult.data,
+    [useExternal, pipelineProp, stagesProp, leadsProp, queryResult.data],
+  );
+  // Os callbacks que atravessam até os cards leem `data` e a seleção por ref
+  // (#4788): com eles nas dependências, cada move, evento de realtime ou clique
+  // de seleção trocava a função de todos os cards e redesenhava o quadro.
+  const dataAtual = useRef(data);
+  const selecaoAtual = useRef(selectedLeadIds);
+  useEffect(() => {
+    dataAtual.current = data;
+    selecaoAtual.current = selectedLeadIds;
+  }, [data, selectedLeadIds]);
+  // O último card solto pelo arraste fica visível mesmo além do corte de
+  // ganho/perda (`lib/kanban/limite-da-coluna.ts`).
+  const [soltoId, setSoltoId] = useState<string | null>(null);
 
   /**
    * As colunas do quadro, na ordem do funil (#3874).
@@ -264,12 +292,12 @@ export function KanbanBoard({
         return next;
       };
       if (onSelectionChange) {
-        onSelectionChange(Array.from(apply(selectedLeadIds)));
+        onSelectionChange(Array.from(apply(selecaoAtual.current)));
       } else {
         setInternalSelected((prev) => apply(prev));
       }
     },
-    [onSelectionChange, selectedLeadIds],
+    [onSelectionChange],
   );
 
   // Arrastar e "Mover para…" passam por aqui. A etapa de perda sem motivo abre a
@@ -277,8 +305,8 @@ export function KanbanBoard({
   // isso o move ia sem `lost_reason` e voltava como toast.
   const moverPara = useCallback(
     (args: MoveArgs) => {
-      const etapa = data?.stages.find((s) => s.id === args.stageId);
-      const lead = data?.leads.find((l) => l.id === args.leadId);
+      const etapa = dataAtual.current?.stages.find((s) => s.id === args.stageId);
+      const lead = dataAtual.current?.leads.find((l) => l.id === args.leadId);
       // FORK MIA (.109): chegar à etapa de ganho passa pela janela de ganho (os
       // itens, o valor e o motivo); quem já está ganho e só reordena, não.
       if (arrastoAbreJanelaDoGanho({ etapaDeDestino: etapa, lead, stageId: args.stageId })) {
@@ -295,9 +323,9 @@ export function KanbanBoard({
         setPerdaPendente(args);
         return;
       }
-      moveCard.mutate(args);
+      mutarMove(args);
     },
-    [data, moveCard],
+    [mutarMove],
   );
 
   // O menu não tem ponto de soltura. Quem CHEGA a outra etapa entra no TOPO,
@@ -306,7 +334,8 @@ export function KanbanBoard({
   // do quadro, sem o filtro da página — #2545).
   const aoMoverPelaLista = useCallback(
     (lead: Lead, stageId: string) => {
-      const funil = qc.getQueryData<BoardData>(chaveDoQuadro(pipelineId))?.leads ?? data?.leads ?? [];
+      const funil =
+        qc.getQueryData<BoardData>(chaveDoQuadro(pipelineId))?.leads ?? dataAtual.current?.leads ?? [];
       const etapa = funil.filter((l) => l.stage_id === stageId);
       moverPara({
         leadId: lead.id,
@@ -316,7 +345,7 @@ export function KanbanBoard({
         expectedUpdatedAt: lead.updated_at,
       });
     },
-    [qc, pipelineId, data, moverPara],
+    [qc, pipelineId, moverPara],
   );
 
   const handleDragEnd = useCallback(
@@ -394,6 +423,7 @@ export function KanbanBoard({
         return;
       }
 
+      setSoltoId(lead.id);
       moverPara({
         leadId: lead.id,
         stageId: destStageId,
@@ -490,6 +520,8 @@ export function KanbanBoard({
               onMoverPara={aoMoverPelaLista}
               podeRenomear={podeRenomearEtapa}
               onRenomear={(nome) => renameStage.mutate({ stageId: stage.id, name: nome })}
+              soltoId={soltoId}
+              abertoId={dossieId}
               denso={denso}
               somenteLeitura={somenteLeitura}
             />
@@ -502,6 +534,7 @@ export function KanbanBoard({
           onOpenChange={(v: boolean) => !v && setDossieId(null)}
           lead={leadDoDossie}
           pipelineId={pipelineId}
+          expandirHref={hrefDoNegocio?.(leadDoDossie.id)}
           fieldDefs={camposPorEscopo(camposDoFunil(data.pipeline.settings ?? null), "negocio")}
           settingsDoFunil={(data.pipeline.settings ?? null) as Record<string, unknown> | null}
           stages={etapasDoQuadro}

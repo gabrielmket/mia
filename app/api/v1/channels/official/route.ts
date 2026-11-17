@@ -32,6 +32,12 @@ import { CHANNEL_PROVIDER_META } from "@/lib/channels/capabilities";
 import { metaPodeReceber } from "@/lib/channels/meta/webhook";
 import { appDaMeta, appDaMetaDoAmbiente, fontesDoAppDaMeta } from "@/lib/channels/meta/app";
 import { metaGraphBase } from "@/lib/channels/meta/credentials";
+import {
+  ORIGEM_DO_TOKEN_MANUAL,
+  ROTULOS_DA_ORIGEM,
+  lerOrigemDaConexao,
+  registrarOrigemDaConexao,
+} from "@/lib/channels/meta/origem-da-conexao";
 import { validateMetaCredentials } from "@/lib/channels/meta/validate-credentials";
 import {
   COLUNAS_DO_DESFECHO_DO_WEBHOOK,
@@ -181,6 +187,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     linkDoCadastro = null;
   }
 
+  // Em consulta PRÓPRIA, pelo mesmo motivo do desfecho: um banco anterior à 9328
+  // recusaria o select inteiro ao ver a coluna da origem.
+  const origem = data?.id
+    ? await lerOrigemDaConexao(admin, { organizationId: orgId, channelSessionId: data.id })
+    : null;
   return ok({
     connected: Boolean(data),
     embedded_signup_url: linkDoCadastro,
@@ -188,6 +199,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // `hasToken` em vez do token: uma vez gravado, a tela mostra que EXISTE, nunca
     // qual é. Devolver o segredo para preencher o campo seria vazá-lo a cada render.
     hasToken: Boolean(data?.meta_token_encrypted),
+    /**
+     * DE ONDE veio esta conexão (#4074): `embedded_signup` ou `token_manual`.
+     * `null` = coluna ausente (banco anterior à 9328) ou valor desconhecido —
+     * a tela não rotula o que ninguém registrou. `inferida` marca as linhas
+     * anteriores à coluna, que só podiam ter nascido do formulário.
+     */
+    origem: origem?.ok
+      ? { valor: origem.origem, rotulo: origem.rotulo, inferida: origem.inferida }
+      : null,
     phoneNumberId: data?.meta_phone_number_id ?? null,
     wabaId: data?.meta_waba_id ?? null,
     /** Base pública da Graph API — para o operador reaproveitar em outro sistema. */
@@ -403,6 +423,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
   }
 
+  // ─── DE ONDE nasceu esta conexão (#4074) ──────────────────────────────────
+  // Esta rota é a porta do TOKEN COLADO À MÃO, e a origem dela é constante de
+  // código — nunca lida do corpo do request. Procedência que o cliente escolhe
+  // não é procedência: sem isso, a próxima porta (Embedded Signup) e esta
+  // ficariam indistinguíveis para a auditoria e para a tela.
+  //
+  // DEPOIS da gravação e best-effort: a coluna chega na migration 9328, e num
+  // banco anterior a ela o canal continua conectado (o desfecho vira
+  // `origemGravada: false`, não erro).
+  const origem =
+    idDaSessao !== null
+      ? await registrarOrigemDaConexao(admin, {
+          organizationId: orgId,
+          channelSessionId: idDaSessao,
+          origem: ORIGEM_DO_TOKEN_MANUAL,
+        })
+      : null;
+
   // ─── O webhook DESTE número, registrado pela própria instalação (fatia F1) ──
   // DEPOIS de gravar, nunca antes: o GET de verificação da Meta chega no instante
   // em que o override é registrado e procura a sessão pelo `webhook_path_token` —
@@ -429,6 +467,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     connected: true,
     displayName: linha.display_name,
     phoneNumber: linha.phone_number,
+    /** `false` não desfaz a conexão: banco anterior à 9328 não tem a coluna. */
+    origemGravada: Boolean(origem?.gravada),
+    origem: { valor: ORIGEM_DO_TOKEN_MANUAL, rotulo: ROTULOS_DA_ORIGEM[ORIGEM_DO_TOKEN_MANUAL] },
     /** `registrado: false` NÃO desfaz a conexão — o canal envia; falta a entrega. */
     webhookRegistro: webhook
       ? { registrado: webhook.registrado, url: webhook.url, erro: webhook.erro, em: webhook.em }

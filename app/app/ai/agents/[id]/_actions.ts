@@ -608,7 +608,7 @@ export async function revertToVersionAction(
     reply_min_interval_ms: number | null;
     followup: unknown;
     voz_enabled: boolean;
-    voz_quando: "nunca" | "espelhar" | "sempre";
+    voz_quando: "nunca" | "espelhar" | "sempre" | "quando_pede";
   };
   const src = source as unknown as SourceRow;
 

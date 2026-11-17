@@ -228,12 +228,18 @@ function rotuloDoCompromisso(
   pessoa: Pessoa | undefined,
   fuso: string,
   t: Traduzir,
+  convidados: Pessoa[] = [],
 ): string {
   const comeca = new Date(agendamento.comeca);
   const termina = new Date(agendamento.termina);
   return `${agendamento.titulo}, ${rotuloHora(comeca, fuso)} ${t("às")} ${rotuloHora(termina, fuso)}${
     agendamento.quemSeraAtendido ? `, ${t("com")} ${agendamento.quemSeraAtendido}` : ""
   }${pessoa ? `, ${t("atendido por")} ${pessoa.nome}` : ""}${
+    // A equipe entra no rótulo SEMPRE, inclusive no compromisso curto em que
+    // a linha visível não cabe: é a única pista de que este bloco não é só
+    // do responsável para quem lê a agenda com leitor de tela (upstream #4006).
+    convidados.length > 0 ? `, ${t("com a equipe")} ${convidados.map((p) => p.nome).join(", ")}` : ""
+  }${
     ehOcupacaoDeFora(agendamento) ? `, ${t("ocupado na agenda do Google")}` : ""
   }`;
 }
@@ -533,6 +539,7 @@ function FaixaFechada({
 function BlocoDeAgendamento({
   agendamento,
   pessoa,
+  convidados = [],
   onAbrir,
   fuso,
   coluna,
@@ -541,6 +548,15 @@ function BlocoDeAgendamento({
 }: {
   agendamento: Agendamento;
   pessoa: Pessoa | undefined;
+  /**
+   * QUEM MAIS FOI CONVIDADO (#4006) — pessoas da equipe, resolvidas pelo pai.
+   *
+   * O card responde de quem é o bloco (a faixa) e com quem é o atendimento (a
+   * segunda linha); sem esta linha, o compromisso em que a pessoa foi convidada
+   * era indistinguível de um compromisso dela. Vem como `Pessoa[]` já filtrada:
+   * id de quem saiu da equipe não vira nome inventado nem quebra o card.
+   */
+  convidados?: Pessoa[];
   onAbrir?: (id: string) => void;
   fuso: string;
   coluna: number;
@@ -601,7 +617,7 @@ function BlocoDeAgendamento({
       }
       // O porquê de cada pedaço do rótulo está em `rotuloDoCompromisso`, que o
       // chip do Mês também usa: o mesmo compromisso não pode ter dois nomes.
-      aria-label={rotuloDoCompromisso(agendamento, pessoa, fuso, t)}
+      aria-label={rotuloDoCompromisso(agendamento, pessoa, fuso, t, convidados)}
       className={cn(
         "absolute flex flex-col items-start overflow-hidden rounded-sm px-1.5 py-0.5 text-left",
         "border border-border/60 transition-colors duration-fast ease-out",
@@ -660,6 +676,17 @@ function BlocoDeAgendamento({
         <span className="ml-1 truncate text-[10px] leading-3 tabular-nums text-text-muted">
           {rotuloHora(comeca, fuso)}
           {agendamento.quemSeraAtendido ? ` · ${agendamento.quemSeraAtendido}` : ""}
+        </span>
+      )}
+      {convidados.length > 0 && duracao >= 60 && (
+        /* 60min = 48px: cabe a terceira linha (16 + 12 + 12 + padding). Abaixo
+           disso o `overflow-hidden` do card cortaria o nome ao meio, e um nome
+           cortado é pior que nenhum — o rótulo acessível leva a lista inteira. */
+        <span
+          data-testid={`convidados-do-compromisso-${agendamento.id}`}
+          className="ml-1 truncate text-[10px] leading-3 text-text-muted"
+        >
+          {t("Com a equipe:")} {convidados.map((p) => p.nome).join(", ")}
         </span>
       )}
     </button>
@@ -910,6 +937,9 @@ function ColunaDeDia({
             key={agendamento.id}
             agendamento={agendamento}
             pessoa={pessoas.find((p) => p.id === agendamento.responsavelId)}
+            convidados={(agendamento.convidadosDaEquipe ?? [])
+              .map((id) => pessoas.find((p) => p.id === id))
+              .filter((p): p is Pessoa => p !== undefined)}
             onAbrir={onAbrir}
             fuso={fuso}
             coluna={coluna}
