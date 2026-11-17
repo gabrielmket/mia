@@ -248,6 +248,14 @@ describe("LGPD: nenhuma tabela com contact_id fica fora da anonimização", () =
       "Só o destinatário da cadência por `email_hash` (irreversível) e ids, nenhum dado legível " +
       "da pessoa. O `contact_id` aponta para a ficha já anonimizada e vira nulo se ela for " +
       "apagada (on delete set null). Tabela só do servidor (RLS sem privilégio de sessão).",
+    // Do upstream (pesquisa de satisfação, 9352, módulo opcional), declarada na
+    // fusão de 17/11/2026 (v1.108 a v1.116). Candidata a PR ao upstream.
+    satisfacao_do_atendimento:
+      "Só o PEDIDO e a NOTA da pesquisa de satisfação: status do vocabulário fechado " +
+      "(aguardando, respondida, sem_nota), a nota de 1 a 5, carimbos e ids, nenhum texto. " +
+      "A resposta escrita é uma linha de `messages` (`mensagem_da_resposta_id`), redigida " +
+      "pelo caminho das mensagens. O `contact_id` aponta para a ficha já anonimizada e vira " +
+      "nulo se ela for apagada (on delete set null); a nota fica como estatística da empresa.",
   };
 
   /** Tabelas do baseline que têm uma coluna `contact_id`. */

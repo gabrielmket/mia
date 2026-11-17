@@ -690,6 +690,35 @@ Nada a configurar pela implantação: o contrato do webhook da Meta (1.107), o C
 como "preenchido" na API, o escopo de leitura do negócio, a exportação em PDF, a
 menção em nota, as reações e os tiques do número oficial.
 
+### O que chegou do upstream 1.108 a 1.116 (fusão de 17/11, segunda parte)
+
+Nesta fusão o MCP não ganhou ferramenta nem campo: a faixa é grande (9 versões) e o PR
+ficou só com a fusão. O que já alcança sem mudança:
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| As categorias de perda PRÓPRIAS do funil (`settings.lost_reason_categories`, #4437) | 1.111 | a porta compartilhada `gravarConfiguracaoDoFunil` (`lib/pipelines/pipeline-config.ts`) passou a gravar a chave, então a tela e o MCP gravam igual; falta o campo em `plataforma_garantir_funil` (abaixo) | `implantar_configuracao` |
+| O alterar e o desativar do tipo de agendamento saíram da rota (`lib/agenda/tipos-de-agendamento.ts`, #4688) | 1.116 | o módulo do upstream virou a base do contrato que o MCP já usava (`criarSchema`, `slugDe`, `canalDoLembreteValido`), sem mudar as faixas | `implantar_configuracao` |
+
+Falta no MCP (fica para uma tarefa própria):
+
+- o filtro de funil e etiqueta do gatilho "Lead criado" do follow-up (`params.pipeline_id`
+  e `params.tag`, #4587), ao lado do número da abordagem do fork;
+- o campo `lost_reason_categories` em `plataforma_garantir_funil`;
+- conferir se `plataforma_garantir_automacao` aceita os gatilhos novos "negócio alterado"
+  (`lead.updated`, 9383) e "ligação recebida não atendida" (`voice_call.missed`, #4365);
+- a pesquisa de satisfação (9352), a mensagem agendada na conversa (9336), o feriado
+  nacional do agente, o material da empresa enviado pela IA (9222, 9356), a tabela de
+  valores (9386), a tarefa recorrente (9369), o catálogo por feed (9382), os templates
+  de aparência (9388), criar pessoa com senha provisória (9380, 9381) e o plano de
+  cobrança em outra moeda (9332): ferramentas ou campos novos;
+- Agências (9373 a 9379) e o módulo Amigo (9392, 9393): módulos opcionais desligados no
+  fork; entram no MCP só se forem ligados.
+
+Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4590) é
+variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
+oficial (9328) é gravada pelo próprio cadastro.
+
 ### O horário de atendimento da IA (.85)
 
 Função do fork, não do upstream, e entra no MCP na mesma versão. A prova está em

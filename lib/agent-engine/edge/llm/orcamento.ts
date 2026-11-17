@@ -467,12 +467,15 @@ export const CORPO_TETO_DO_PLANO =
   'Troque de plano em Configurações › Plano e cobrança ou aguarde o próximo mês.';
 /** Os dois textos do teto do plano no idioma da organização (`pt-BR` = as constantes acima). */
 export function tituloDoTetoDoPlano(idioma: Idioma): string {
-  return traduzir(TITULO_TETO_DO_PLANO, idioma);
+  return traduzir('O uso de IA do plano acabou', idioma);
 }
 // FORK MIA: o corpo é o do fork (sem "cadastre uma chave de IA própria"), o mesmo
-// de `CORPO_TETO_DO_PLANO`; o dicionário tem a entrada desta frase.
+// texto de `CORPO_TETO_DO_PLANO`, escrito por extenso para a cerca do espanhol.
 export function corpoDoTetoDoPlano(idioma: Idioma): string {
-  return traduzir(CORPO_TETO_DO_PLANO, idioma);
+  return traduzir(
+    'O uso de IA incluído no plano acabou neste mês. As conversas foram para a equipe. Troque de plano em Configurações › Plano e cobrança ou aguarde o próximo mês.',
+    idioma,
+  );
 }
 /** Vai para `llm_calls.error_message` e para o `last_error` da fila — a instrução numa linha. */
 export const MOTIVO_TETO_DO_PLANO =

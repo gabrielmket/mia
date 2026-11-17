@@ -305,6 +305,26 @@ const CLASSIFICACAO: Record<string, Classificacao> = {
   // (`generated always as ... stored`). A anonimização zera os três, e esta
   // zera junto, sem ninguém escrever nela.
   busca_sem_acento: { tipo: "derivada", de: ["display_name", "name", "address_book_name"] },
+  // ── Colunas que o upstream acrescentou, classificadas na fusão de 17/11/2026
+  //    (v1.108 a v1.116) ──
+  // A busca do AGENTE sem acento e sem o nome da agenda (9325 dele): GERADA dos
+  // dois campos de nome, que a anonimização zera; esta zera junto.
+  busca_sem_acento_sem_agenda: { tipo: "derivada", de: ["display_name", "name"] },
+  company_id: {
+    tipo: "nao_pessoal",
+    porque:
+      "aponta para a EMPRESA (companies) com que a prospecção abriu o contato (9406): o telefone é o da recepção, e a linha da empresa é dado da organização. O uuid sozinho não identifica ninguém, como `person_id`",
+  },
+  personal_owner_user_id: {
+    tipo: "nao_pessoal",
+    porque:
+      "o USUÁRIO da equipe que marcou o contato como pessoal (#4434): como `carteira_user_id`, é dado de outra pessoa, e apagá-lo na exclusão do titular apagaria dado do funcionário",
+  },
+  phone_label: {
+    tipo: "nao_pessoal",
+    porque:
+      "o RÓTULO do telefone principal (\"casa\", \"trabalho\", 9354), sem o número; é atributo do canal, como `phone_type`, e o gatilho do upstream `trg_contacts_rotulo_sai_com_o_numero` o zera quando a anonimização zera o número",
+  },
 };
 
 /** Nomes capturados pelo primeiro grupo de um regex, já sem os `undefined`. */

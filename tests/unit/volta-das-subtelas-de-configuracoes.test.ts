@@ -49,6 +49,9 @@ const REDIRECIONAMENTOS: Record<string, string> = {
   "app/app/settings/canal-oficial/page.tsx": "conectar canal vive em Conexões",
   "app/app/settings/templates/page.tsx": "template é sub-aba do canal oficial",
   "app/app/settings/tenant/whatsapp/page.tsx": "gestão de conexões vive em Conexões",
+  // FORK MIA (.61): o endereço antigo dos formulários da Meta, que virou a aba
+  // "Formulários de leads" de Configurações › Meta Ads (docs/fork/leads-da-meta.md).
+  "app/app/settings/leads-da-meta/page.tsx": "formulários da Meta são aba de Meta Ads",
 };
 
 /** Todos os `page.tsx` sob as Configurações, em caminho relativo à raiz. */
