@@ -50,7 +50,7 @@ import { Recusa } from "@/lib/mcp-plataforma/recusa";
 import { autoriaDaMudanca } from "@/lib/operacao/autoria";
 import { etapasParaGravar } from "@/lib/onboarding/proposta-de-funil";
 import { gravarConfiguracaoDoFunil } from "@/lib/pipelines/pipeline-config";
-import type { MostrarQuando } from "@/lib/schemas/mostrar-quando";
+import { condicoesDeclaradas, type MostrarQuando } from "@/lib/schemas/mostrar-quando";
 import type { FunilEditavel } from "@/lib/pipelines/pipeline-editing";
 import {
   atualizarFunil,
@@ -561,16 +561,20 @@ function montarConfiguracao(
           : {}),
       };
       if (campo.mostrar_quando) {
-        const quemManda = campo.mostrar_quando.campo.trim().toLowerCase();
-        const existe =
-          porChave.has(quemManda) || pedido.campos.some((outro) => outro.key.toLowerCase() === quemManda);
-        if (quemManda === campo.key.toLowerCase() || !existe) {
-          throw new Recusa(
-            `O campo «${campo.label}» só aparece quando o campo «${campo.mostrar_quando.campo}» tem um valor, e ` +
-              (quemManda === campo.key.toLowerCase()
-                ? "um campo não pode depender dele mesmo."
-                : "este funil não tem um campo com essa chave. Mande o campo de quem ele depende na mesma chamada (ou antes)."),
-          );
+        // Upstream 1.107 (#4041): a condição pode ser uma só ou uma LISTA. Cada
+        // campo de que ele depende tem de existir e não pode ser ele mesmo.
+        for (const condicao of condicoesDeclaradas(campo.mostrar_quando)) {
+          const quemManda = condicao.campo.trim().toLowerCase();
+          const existe =
+            porChave.has(quemManda) || pedido.campos.some((outro) => outro.key.toLowerCase() === quemManda);
+          if (quemManda === campo.key.toLowerCase() || !existe) {
+            throw new Recusa(
+              `O campo «${campo.label}» só aparece quando o campo «${condicao.campo}» tem um valor, e ` +
+                (quemManda === campo.key.toLowerCase()
+                  ? "um campo não pode depender dele mesmo."
+                  : "este funil não tem um campo com essa chave. Mande o campo de quem ele depende na mesma chamada (ou antes)."),
+            );
+          }
         }
         definicao.mostrar_quando = campo.mostrar_quando as CustomFieldDef["mostrar_quando"];
       }

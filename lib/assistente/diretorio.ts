@@ -17,7 +17,7 @@
  * de dado do CRM, é a mesma lista de nomes que a tela já mostra.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
-import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
+import { nomesDosAtendentesCom } from "@/lib/users/nome-do-atendente";
 import type { Role } from "@/lib/auth/types";
 
 import type { PessoaDaEquipe } from "./leituras/comum";
@@ -42,7 +42,7 @@ export async function diretorioDaEquipe(organizationId: string, agora = Date.now
   if (error) return guardado?.equipe ?? [];
 
   const vinculos = ((data ?? []) as Array<{ user_id: string; role: string }>).filter((v) => PAPEIS_DE_GENTE.has(v.role));
-  const nomes = await nomesDosAtendentes(vinculos.map((v) => v.user_id));
+  const nomes = await nomesDosAtendentesCom(admin, organizationId, vinculos.map((v) => v.user_id));
   const equipe = vinculos.map((v) => ({
     user_id: v.user_id,
     nome: (nomes.get(v.user_id) ?? "").trim() || "Pessoa sem nome",

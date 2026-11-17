@@ -6,6 +6,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
+const { PORTA_DA_APLICACAO } = vi.hoisted(() => ({ PORTA_DA_APLICACAO: { porta: "da-aplicacao" } }));
+vi.mock("@/lib/db", () => ({ portaDaAplicacao: () => PORTA_DA_APLICACAO }));
 vi.mock("@/lib/tarefas/atividade", () => ({
   registraAtividadeDaTarefa: vi.fn(async () => ({ ok: true })),
 }));
@@ -218,8 +220,9 @@ describe("aprovar a próxima ação cria a tarefa", () => {
       source_kind: "next_action_approved",
     });
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "crm_task.created", organizationId: ORG }));
+    // Upstream 1.107: a atividade grava pela porta da aplicação, não pelo cliente do cartão.
     expect(registraAtividadeDaTarefa).toHaveBeenCalledWith(
-      b.cliente,
+      PORTA_DA_APLICACAO,
       expect.objectContaining({ tipo: "task_created", actor: { type: "user", id: "U-aprovou" } }),
     );
   });

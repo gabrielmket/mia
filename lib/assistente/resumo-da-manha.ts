@@ -36,7 +36,7 @@ import { perfilDoPais } from "@/lib/legal/perfil-do-pais";
 import { logger } from "@/lib/logger";
 import { ehOperante } from "@/lib/organizacao/operante";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
-import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
+import { nomesDosAtendentesCom } from "@/lib/users/nome-do-atendente";
 
 import { avisarNoSino } from "./avisos";
 import { configDaLinha, janelaDoDia, papelUsaOAssistente } from "./config";
@@ -145,7 +145,7 @@ export async function escreverResumosDaManha(admin: SupabaseClient, agora: Date)
       if (candidatos.length === 0) continue;
       empresas += 1;
 
-      const nomes = await nomesDosAtendentes(vinculos.map((v) => v.user_id));
+      const nomes = await nomesDosAtendentesCom(admin, org.id, vinculos.map((v) => v.user_id));
       const equipe: PessoaDaEquipe[] = vinculos.map((v) => ({
         user_id: v.user_id,
         nome: (nomes.get(v.user_id) ?? "").trim() || "Pessoa sem nome",

@@ -117,6 +117,7 @@ const campo = z
       .optional()
       .describe(
         'Mostrar o campo SÓ quando outro campo do funil tem um valor: { "campo": "<key do outro campo>", "operador": "igual" | "contem" | "maior_que", "valor": "..." }. ' +
+          "Ou uma LISTA (upstream 1.107): { \"modo\": \"qualquer\" | \"todas\", \"condicoes\": [ ...condições ] }. " +
           "Esconder nunca apaga o valor gravado. null tira a condição.",
       ),
   })

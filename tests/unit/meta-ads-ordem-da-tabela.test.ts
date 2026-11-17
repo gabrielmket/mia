@@ -28,6 +28,9 @@ function linha(id: string, ajustes: Partial<LinhaDeCampanha> = {}): LinhaDeCampa
     status: "ACTIVE",
     veiculacao: "ACTIVE",
     objetivo: null,
+    // Upstream 1.107: as datas da campanha (o "Ordenar por" dele desempata por elas).
+    criadaEm: null,
+    iniciadaEm: null,
     resultado: { valor: null, custoPorResultado: null, indicador: null },
     gasto: null,
     impressoes: null,

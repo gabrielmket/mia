@@ -283,7 +283,22 @@ export function cenarioDaImplantacao(opcoes: OpcoesDoCenario = {}) {
           ]
         : [],
     },
-    RPCS,
+    {
+      ...RPCS,
+      // Upstream 1.107 (#4326): o nome da equipe sai de UMA consulta a
+      // `fn_nomes_dos_membros`, só para quem tem (ou teve) vínculo com a
+      // organização. O nome vem do mesmo mapa que o GoTrue de mentira usa.
+      fn_nomes_dos_membros: (args, db) => {
+        const ids = new Set((args.p_ids as string[] | null) ?? []);
+        const membros = (db.user_organizations ?? []).filter((v) => v.organization_id === args.p_org && ids.has(v.user_id as string));
+        const data = [...new Set(membros.map((v) => v.user_id as string))].map((id) => ({
+          user_id: id,
+          full_name: usuarios.get(id)?.nome ?? null,
+          email: usuarios.get(id)?.email ?? null,
+        }));
+        return { data, error: null };
+      },
+    },
     { maxRows: opcoes.maxRows },
   );
 

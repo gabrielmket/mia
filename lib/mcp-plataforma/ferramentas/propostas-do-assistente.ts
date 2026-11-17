@@ -37,7 +37,7 @@ import {
   type PropostaLida,
 } from "@/lib/assistente/propostas/tipos";
 import { lerEvolucao } from "@/lib/assistente/retratos";
-import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
+import { nomesDosAtendentesCom } from "@/lib/users/nome-do-atendente";
 
 import { Recusa } from "../recusa";
 import type { FerramentaDePlataforma } from "../tipos";
@@ -76,7 +76,9 @@ export const FERRAMENTAS_DAS_PROPOSTAS_DO_ASSISTENTE: readonly FerramentaDePlata
       const { data, error } = await q;
       if (error) throw new Error(`não consegui ler as propostas: ${error.message}`);
       const linhas = (data ?? []) as Array<PropostaLida & { pedido: unknown }>;
-      const nomes = await nomesDosAtendentes(
+      const nomes = await nomesDosAtendentesCom(
+        c.admin,
+        c.orgId,
         linhas.flatMap((p) => [p.criada_por, p.pedida_a, p.aprovada_por, p.rejeitada_por, p.desfeita_por]),
       ).catch(() => new Map<string, string | null>());
       const nome = (id: string | null) => (id ? (nomes.get(id) ?? "alguém da equipe") : null);

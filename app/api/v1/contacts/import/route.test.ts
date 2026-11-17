@@ -621,7 +621,7 @@ describe("POST /api/v1/contacts/import — a planilha name,phone,email", () => {
     const form = new FormData();
     const linhas = Array.from({ length: 2001 }, (_, i) => `P,,p${i}@example.invalid`);
     form.set("file", new File([[CABECALHO, ...linhas].join("\n")], "c.csv", { type: "text/csv" }));
-    const resposta = await POST(new NextRequest("http://localhost/api/v1/contacts/import", { method: "POST", body: form }));
+    const resposta = await POST(await pedidoComTamanho("http://localhost/api/v1/contacts/import", { method: "POST", body: form }));
 
     expect(resposta.status).toBe(422);
     expect(await resposta.text()).toContain("2000");
@@ -631,7 +631,7 @@ describe("POST /api/v1/contacts/import — a planilha name,phone,email", () => {
     const db = banco({ leituraFalha: true });
     const form = new FormData();
     form.set("file", new File([[CABECALHO, "Ana,+5511900000001,"].join("\n")], "c.csv", { type: "text/csv" }));
-    const resposta = await POST(new NextRequest("http://localhost/api/v1/contacts/import", { method: "POST", body: form }));
+    const resposta = await POST(await pedidoComTamanho("http://localhost/api/v1/contacts/import", { method: "POST", body: form }));
 
     expect(resposta.status).toBe(500);
     expect(db.tentativas).toHaveLength(0);

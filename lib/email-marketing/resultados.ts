@@ -14,6 +14,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { portaDaAplicacao } from "@/lib/db";
 import { criarTarefaInterna } from "@/lib/tarefas/criar-tarefa";
 
 import { cliquesDoPrimeiroMinutoSaoDeRobo, ehAgenteDeRobo } from "./cliques";
@@ -395,7 +396,8 @@ export async function tarefasParaQuemClicou(
         ? (p.responsavelId ?? entrada.autorId)
         : entrada.paraQuem.usuario_id;
     if (entrada.paraQuem === "responsavel" && !p.responsavelId) r.semResponsavel += 1;
-    const t = await criarTarefaInterna(db, {
+    // Upstream 1.107: a tarefa interna grava pela porta da aplicação (pg), não pelo cliente.
+    const t = await criarTarefaInterna(portaDaAplicacao(), {
       organizationId: entrada.organizationId,
       titulo: entrada.titulo,
       venceEmDias: entrada.venceEmDias,

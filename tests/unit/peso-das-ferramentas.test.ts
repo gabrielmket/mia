@@ -43,7 +43,13 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
   "crm_list_appointments": { tokens: 1478, motivo: BASE },
   "crm_search_contacts": { tokens: 135, motivo: BASE },
   "crm_get_contact": { tokens: 188, motivo: BASE },
-  "crm_propose_contact_field": { tokens: 438, motivo: BASE },
+  // FORK MIA: o e-mail que o cliente informa grava direto na ficha (`gravado: true`).
+  "crm_propose_contact_field": { tokens: 471, motivo: "FORK MIA: +33 do e-mail gravado direto no cadastro (`gravado: true`), que a IA precisa saber para não dizer que alguém vai conferir" },
+  // FORK MIA: ferramentas só do fork (B2B, passagem ao comercial, obrigações, documentos).
+  "crm_registrar_empresa_do_contato": { tokens: 312, motivo: "FORK MIA: a empresa do contato (CRM B2B)" },
+  "crm_passar_para_o_comercial": { tokens: 682, motivo: "FORK MIA: a passagem do lead qualificado ao comercial, com o resumo da qualificação" },
+  "crm_listar_obrigacoes_pendentes": { tokens: 280, motivo: "FORK MIA: as obrigações pendentes do contato" },
+  "crm_propor_recebimento_de_documento": { tokens: 580, motivo: "FORK MIA: o documento recebido do contato vira proposta para a equipe conferir" },
   "crm_list_conversations": { tokens: 283, motivo: BASE },
   "crm_get_conversation": { tokens: 228, motivo: BASE },
   "crm_get_conversation_history": { tokens: 203, motivo: BASE },
@@ -85,8 +91,8 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
   "crm_list_available_attendants": { tokens: 179, motivo: BASE },
   "crm_list_human_cases": { tokens: 149, motivo: BASE },
   "crm_get_human_case": { tokens: 208, motivo: BASE },
-  "crm_find_and_book_appointment": { tokens: 1028, motivo: BASE },
-  "crm_book_appointment": { tokens: 1203, motivo: BASE },
+  "crm_find_and_book_appointment": { tokens: 1043, motivo: "FORK MIA: +15 do e-mail que o CLIENTE informa para o convite (vai para a ficha e para o Google)" },
+  "crm_book_appointment": { tokens: 1329, motivo: "FORK MIA: +126 do resumo da qualificação na anotação (o vendedor recebe o que a IA apurou) e do e-mail do cliente para o convite" },
   "crm_reschedule_appointment": { tokens: 572, motivo: BASE },
   "crm_cancel_appointment": { tokens: 275, motivo: BASE },
   "crm_confirm_appointment": { tokens: 318, motivo: BASE },
@@ -142,7 +148,9 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
 // modo `leitura_direta` — nunca junto de `search_knowledge`; +54 com `imagem_url`
 // no `send_message` (Spec 25 R4, #3276); +464 com `crm_publish_whatsapp_status`
 // (#3463), que só entra no catálogo com o módulo `status_whatsapp` ligado.
-const TETO_TOTAL = 30612;
+// FORK MIA: 32639 com as quatro ferramentas do fork (+1854) e as descrições que o
+// fork estende (+174, motivos nas linhas), medido na fusão da v1.107.
+const TETO_TOTAL = 32639;
 
 const VARIANTE = "schedule_followup (com negócio)";
 

@@ -239,7 +239,8 @@ describe("hubSections", () => {
 
   it("a lista de espera só tem porta com o módulo lista_de_espera instalado (doc 208)", () => {
     const hrefs = (modulos: readonly ModuloOpcional[]) =>
-      hubSections("crm", true, null, undefined, modulos).flatMap((s) => s.items.map((i) => i.href));
+      // FORK MIA: os módulos da instalação vêm em 7º (o 5º e o 6º são os nossos). Ver `hubSections`.
+      hubSections("crm", true, null, undefined, undefined, undefined, modulos).flatMap((s) => s.items.map((i) => i.href));
     expect(dest("/app/agenda/lista-de-espera").modulo).toBe("lista_de_espera");
     expect(hrefs([])).not.toContain("/app/agenda/lista-de-espera");
     expect(hrefs(["lista_de_espera"])).toContain("/app/agenda/lista-de-espera");

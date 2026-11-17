@@ -25,6 +25,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
+import { portaDaAplicacao } from "@/lib/db";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { registraAtividadeDaTarefa } from "@/lib/tarefas/atividade";
 import type { TaskSourceKind } from "@/lib/tarefas/vocabulario-de-origem";
@@ -122,7 +123,8 @@ export async function criarTarefaDaProximaAcao(
   });
 
   // A tarefa entra na linha do tempo do negócio como a criada pela tela.
-  await registraAtividadeDaTarefa(db, {
+  // Upstream 1.107: a linha do tempo da tarefa grava pela porta da aplicação (pg), não pelo cliente.
+  await registraAtividadeDaTarefa(portaDaAplicacao(), {
     organizationId: args.organizationId,
     tarefa,
     tipo: "task_created",

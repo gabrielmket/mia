@@ -29,7 +29,7 @@ import { anotarMelhoria, listarMelhorias, ORIGENS_DA_MELHORIA, RecusaDaMelhoria,
 import { ondeOsClientesTravam, SEGMENTOS_DO_PAINEL, type PeriodoDoPainel, type SegmentoDoPainel } from "@/lib/assistente/trilhas/onde-travam";
 import { lerConfigDasTrilhas, trilhasFeitasNaEmpresa } from "@/lib/assistente/trilhas/progresso";
 import { audit } from "@/lib/audit";
-import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
+import { nomesDosAtendentesCom } from "@/lib/users/nome-do-atendente";
 
 import { Recusa } from "../recusa";
 import type { FerramentaDePlataforma } from "../tipos";
@@ -73,7 +73,7 @@ export const FERRAMENTAS_DAS_TRILHAS_DO_ASSISTENTE: readonly FerramentaDePlatafo
       ]);
       if (linhas.error) throw new Error(`não consegui ler o progresso: ${linhas.error.message}`);
       const progresso = (linhas.data ?? []) as LinhaDoProgresso[];
-      const nomes = await nomesDosAtendentes(progresso.map((l) => l.user_id));
+      const nomes = await nomesDosAtendentesCom(c.admin, c.orgId, progresso.map((l) => l.user_id));
       const recomendada =
         trilhaRecomendada(
           situacoesDasTrilhas({ papel: "admin", progresso: [], feitasNaEmpresa, modulos: new Set(["disparador", "email_marketing"]), config }),
