@@ -118,7 +118,8 @@ async function configurarPergunta(
   // O Select do Radix só devolve o ponteiro ao `body` quando a lista termina
   // de fechar (animação de saída). Sem esperar o desmonte, o passo seguinte
   // encontra a página inteira com `pointer-events: none` (run 42983246434).
-  await expect(page.getByRole("listbox")).toHaveCount(0);
+  // O prazo é o mesmo da sonda do fundo do canvas, para não cair sob carga.
+  await expect(page.getByRole("listbox")).toHaveCount(0, { timeout: 15_000 });
   if (campo.opcoes !== undefined) await painel.locator("#collect-options").fill(campo.opcoes);
 }
 
