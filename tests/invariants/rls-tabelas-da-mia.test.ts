@@ -68,6 +68,10 @@ const LIDAS_PELO_CLIENTE = [
   "mia_travas_de_robo",
   // .109 — os itens do negócio (9160): a equipe lê, só o servidor escreve.
   "mia_itens_do_negocio",
+  // 9162 — a coexistência do WhatsApp: a equipe lê o ciclo e os pedidos da
+  // sincronização; o lote cru só a plataforma lê (não entra aqui).
+  "mia_coexistencia_conexoes",
+  "mia_coexistencia_sincronizacoes",
 ] as const;
 
 /**
@@ -102,6 +106,10 @@ const SO_A_PLATAFORMA_ESCREVE = [
   "mia_travas_de_robo",
   // .109 — os itens do negócio: a rota grava pelo service_role, com a empresa da sessão.
   "mia_itens_do_negocio",
+  // 9162 — a coexistência: quem grava é o webhook da Meta e o worker.
+  "mia_coexistencia_conexoes",
+  "mia_coexistencia_sincronizacoes",
+  "mia_coexistencia_lotes",
   // .79 — empresa única: `crm_empresas` está APOSENTADA (9033: os dados foram para
   // `companies`, a sessão só lê até a entrega 5 tirá-la de vez), e as três tabelas
   // ao lado são escritas só pelas funções definer da 9034.
@@ -245,6 +253,22 @@ function semear(org: string, gestor: string, tag: string): string {
     )
     insert into public.mia_itens_do_negocio (organization_id, lead_id, product_id, nome, preco_unitario_cents)
       select '${org}', ld.id, pr.id, 'Limpeza ${tag}', 22000 from ld, pr;
+    -- 9162: um ciclo da coexistência, o pedido do histórico e um lote.
+    with cs as (
+      insert into public.channel_sessions (organization_id, waha_session_name, webhook_secret_encrypted)
+        values ('${org}', 'mia-rls-coexistencia-${tag}', '\\x00'::bytea)
+        returning id
+    ), cx as (
+      insert into public.mia_coexistencia_conexoes (organization_id, channel_session_id, waba_id, phone_number_id)
+        select '${org}', cs.id, 'mia-rls-waba-coex-${tag}', 'mia-rls-numero-${tag}' from cs
+        returning id
+    ), sx as (
+      insert into public.mia_coexistencia_sincronizacoes (organization_id, conexao_id, tipo, estado)
+        select '${org}', cx.id, 'historico', 'em_andamento' from cx
+        returning id
+    )
+    insert into public.mia_coexistencia_lotes (organization_id, sincronizacao_id, tipo, chave, fase, ordem)
+      select '${org}', sx.id, 'mensagens', 'f0:o1', 0, 1 from sx;
   `;
 }
 
