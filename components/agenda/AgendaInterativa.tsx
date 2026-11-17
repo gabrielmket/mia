@@ -10,6 +10,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { useHorariosLivres } from "@/hooks/agenda/useHorariosLivres";
 import { useRemarcarAgendamento } from "@/hooks/agenda/useRemarcarAgendamento";
+import type { FechamentoDaGrade } from "@/lib/agenda/fechamentos-na-grade";
 import type { MotivoDaGradeTravada } from "@/lib/agenda/grade-interativa";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,7 @@ export function AgendaInterativa({
   fuso,
   pessoas,
   agendamentos,
+  fechamentos,
   recorte,
   tipos,
   tipo,
@@ -54,6 +56,7 @@ export function AgendaInterativa({
   onMarcarEm,
   onAbrirAgendamento,
   onAbrirDia,
+  donoId,
   className,
 }: {
   visao: VisaoDaAgenda;
@@ -67,6 +70,8 @@ export function AgendaInterativa({
   fuso: string;
   pessoas: Pessoa[];
   agendamentos: Agendamento[];
+  /** As faixas de "Dias fora da rotina", repassadas à grade como vieram. */
+  fechamentos?: FechamentoDaGrade[];
   /** A MESMA janela que a grade desenha — vem de quem já a calcula, sem recontá-la. */
   recorte: { de: string; ate: string };
   /**
@@ -108,12 +113,30 @@ export function AgendaInterativa({
   onAbrirAgendamento?: (id: string) => void;
   /** Abrir a visão Dia de uma data (`yyyy-MM-dd`) — ver o mesmo nome em `GradeDaAgenda`. */
   onAbrirDia?: (dia: string) => void;
+  /**
+   * O PROFISSIONAL ISOLADO no filtro da agenda (#4186) — `null` = "todos".
+   *
+   * A grade pergunta a disponibilidade de UM profissional (a rota recebe
+   * `event_type_id` e, opcionalmente, `owner_user_id`). Sem esta prop, isolar a
+   * Ana mostrava os blocos dela e pintava como "livre" a jornada do DONO DO TIPO
+   * — clicar ali abria o painel da Ana num horário que a Ana não atende, e o
+   * motor recusava a escrita. O filtro tem de governar os dois lados: o que se
+   * vê e o que se oferece clicar.
+   */
+  donoId?: string | null;
   className?: string;
 }) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const { data: horarios, isError: horariosFalharam } = useHorariosLivres(
-    tipo ? { event_type_id: tipo.id, de: recorte.de, ate: recorte.ate } : null,
+    tipo
+      ? {
+          event_type_id: tipo.id,
+          owner_user_id: donoId ?? undefined,
+          de: recorte.de,
+          ate: recorte.ate,
+        }
+      : null,
   );
 
   const horariosPorDia = React.useMemo(() => {
@@ -348,6 +371,7 @@ export function AgendaInterativa({
         fuso={fuso}
         pessoas={pessoas}
         agendamentos={desenhados}
+        fechamentos={fechamentos}
         onAbrirAgendamento={onAbrirAgendamento}
         onAbrirDia={onAbrirDia}
         className="min-h-0 flex-1"

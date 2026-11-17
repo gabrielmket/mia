@@ -99,6 +99,7 @@ interface SendArgs {
    * demonstração sem ninguém ter decidido isso.
    */
   excecaoDaTravaDaDemonstracao?: ExcecaoDaTravaDaDemonstracao;
+  headers?: Record<string, string>;
 }
 
 /** As exceções à trava de e-mail da empresa de demonstração. Uma só, e nomeada. */

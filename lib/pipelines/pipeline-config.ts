@@ -99,6 +99,11 @@ export async function gravarConfiguracaoDoFunil(
   if (patch.reabertura_campos !== undefined) {
     nextSettings.reabertura_campos = patch.reabertura_campos;
   }
+  // Upstream v1.103 (#4076): a janela em que o perdido recente volta a ser o
+  // MESMO card. `0` é o desligado e vai como veio.
+  if (patch.reabrir_perdido_dias !== undefined) {
+    nextSettings.reabrir_perdido_dias = patch.reabrir_perdido_dias;
+  }
   // Ver `lib/crm/metas/progresso.ts`: ausente = vencer aqui é receita.
   if (patch.vitoria_e_receita !== undefined) {
     nextSettings.vitoria_e_receita = patch.vitoria_e_receita;

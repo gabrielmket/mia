@@ -7,17 +7,13 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { audit } from "@/lib/audit";
 import { respostaParaOperador } from "@/lib/erros/para-operador";
-import {
-  pipelineConfigPatchSchema,
-  type PipelineConfigPatch,
-} from "@/lib/schemas/settings";
+import { pipelineConfigPatchSchema, type PipelineConfigPatch } from "@/lib/schemas/settings";
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { gravarConfiguracaoDoFunil } from "@/lib/pipelines/pipeline-config";
 import { podeAdministrarEmpresa } from "@/lib/auth/pode-administrar-empresa";
 
 export type UpdatePipelineConfigResult =
-  | { ok: true }
-  | { ok: false; error: string; details?: unknown };
+  { ok: true } | { ok: false; error: string; details?: unknown };
 
 export async function updatePipelineConfig(
   pipelineId: string,
@@ -85,6 +81,9 @@ export async function updatePipelineConfig(
       won_reasons_count: parsed.data.won_reasons?.length ?? null,
       won_reason_required: parsed.data.won_reason_required ?? null,
       reabertura: parsed.data.reabertura ?? null,
+      // #4076: a janela (ou `0`, o desligamento) — decisão de quem opera, e o
+      // efeito dela é reabrir card existente, então fica registrado.
+      reabrir_perdido_dias: parsed.data.reabrir_perdido_dias ?? null,
       entrada_do_inbox_ativa: parsed.data.entrada_do_inbox?.ativa ?? null,
       // #2995: quantos cards o quadro deixa de mostrar é decisão de quem opera
       // — a auditoria registra o número (ou `0`, o desligamento).

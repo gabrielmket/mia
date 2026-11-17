@@ -25,6 +25,7 @@ import { TOOLS_FUNIL } from "./funil";
 import { TOOLS_GOVERNANCA } from "./governanca";
 import { TOOLS_HONORARIOS } from "./honorarios";
 import { TOOLS_MIA } from "./mia";
+import { TOOLS_MARKETING } from "./marketing";
 import { TOOLS_OPERACAO } from "./operacao";
 import { TOOLS_RECEITAS_EXTERNAS } from "./receitas-externas";
 import { TOOLS_RETENCAO } from "./retencao";
@@ -44,6 +45,7 @@ export const TOOL_CATALOG: ReadonlyArray<McpToolCatalogEntry> = [
   ...TOOLS_DADOS_EXTERNOS,
   ...TOOLS_RECEITAS_EXTERNAS,
   ...TOOLS_HONORARIOS,
+  ...TOOLS_MARKETING,
   ...TOOLS_OPERACAO,
   ...TOOLS_RETENCAO,
   // FORK MIA — as capacidades do fork, num arquivo nosso.

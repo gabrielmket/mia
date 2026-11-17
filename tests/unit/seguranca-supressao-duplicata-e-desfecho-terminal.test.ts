@@ -58,6 +58,9 @@ describe("follow-up fixo não tem gate near-dup (decisão mantida e documentada)
     // O caminho fixo (handoff-skip → getLeadContext → cadeia → despacho) não
     // contém NENHUMA comparação de conteúdo: nada de supressão implícita entre
     // o texto escolhido pelo operador e o envio.
+    // FORK MIA (.110): o veto do envio fixo lê o contato inteiro, sem o 4º
+    // argumento do #4146 (docs/fork/ia-responde-pendente.md seção 2.4), então a
+    // âncora é a chamada de três argumentos.
     const iHandoff = followup.indexOf("isLeadInHandoff(pool, tenantId, leadId)");
     const iDespacho = followup.indexOf("const context = await getLeadContext(", iHandoff);
     expect(iHandoff).toBeGreaterThan(-1);

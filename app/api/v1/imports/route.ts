@@ -22,6 +22,7 @@ import {
 } from "@/lib/crm-b2b/route-helpers";
 import { createClient } from "@/lib/supabase/server";
 import { receitaTravada } from "@/lib/empresas/receita";
+import { lerCorpoComTeto } from "@/lib/api/corpo-com-teto";
 
 export const dynamic = "force-dynamic";
 
@@ -64,8 +65,16 @@ export async function POST(req: NextRequest): Promise<Response> {
   const authz = await requireRole("manager", { requestId, resource: "imports" });
   if (!authz.ok) return authz.response;
 
+  // 64 KB de folga para o envelope multipart e o campo `mapping`.
+  const corpo = await lerCorpoComTeto(req, IMPORT_MAX_BYTES + 64 * 1024, {
+    requestId,
+    idioma: authz.user.idioma,
+    acimaDoTeto: "Arquivo grande demais.",
+  });
+  if (!corpo.ok) return corpo.response;
+
   try {
-    const form = await req.formData();
+    const form = await corpo.corpo.formData();
     const file = form.get("file");
     if (!(file instanceof File)) {
       return fail("validation_failed", "Envie o arquivo no campo 'file'.", 422, { requestId });

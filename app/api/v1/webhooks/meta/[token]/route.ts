@@ -35,10 +35,14 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { fail } from "@/lib/api/wrappers";
+import { comIdDaRequisicao, fail } from "@/lib/api/wrappers";
 import { appDaMeta } from "@/lib/channels/meta/app";
 import { lerEnvelopeMeta } from "@/lib/channels/meta/envelope";
 import { guardarChegada, lerChegada } from "@/lib/channels/meta/chegada-do-cadastro";
+import {
+  MOTIVO_DO_CONTRATO_VIOLADO,
+  registrarRecusaDoWebhookMeta,
+} from "@/lib/channels/meta/recusa-do-webhook";
 import { parseMetaWebhook, verificationChallenge, verifyMetaSignature } from "@/lib/channels/meta/webhook";
 import { aplicarDesfechoNaCampanha } from "@/lib/broadcast/desfecho-da-campanha";
 import { statusUpdate } from "@/lib/channels/meta/status-update";
@@ -50,6 +54,12 @@ import {
 } from "@/lib/channels/meta/ingest";
 import { donoDoEvento } from "@/lib/channels/meta/dono-do-evento";
 import { metaSessionByWabaId, metaSessionByWebhookToken } from "@/lib/channels/meta/session";
+import {
+  MOTIVO_CONTATO_ANONIMIZADO,
+  MOTIVO_TITULAR_APAGADO,
+  perguntarTitularesApagadosNoLote,
+  type ApagadosNoLote,
+} from "@/lib/channels/meta/titular-apagado";
 import { logger } from "@/lib/logger";
 import {
   emitirFalhaDeEntrega,
@@ -68,7 +78,7 @@ interface RouteCtx {
 export async function GET(req: NextRequest, ctx: RouteCtx): Promise<NextResponse> {
   const { token } = await ctx.params;
   const session = await metaSessionByWebhookToken(token);
-  if (!session) return new NextResponse("not found", { status: 404 });
+  if (!session) return comIdDaRequisicao(new NextResponse("not found", { status: 404 }), req);
 
   // Do BANCO (platform_meta_app, migration 0257), com o `.env` como piso: é a
   // credencial da INSTALAÇÃO inteira, não da organização — e um clone que ainda
@@ -76,13 +86,13 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<NextResponse
   // a precedência e o porquê estão em `lib/channels/meta/app.ts`.
   const { verifyToken } = await appDaMeta();
   const challenge = verificationChallenge(req.nextUrl.searchParams, verifyToken ?? "");
-  if (challenge === null) return new NextResponse("forbidden", { status: 403 });
+  if (challenge === null) return comIdDaRequisicao(new NextResponse("forbidden", { status: 403 }), req);
 
   // Texto puro, sem wrapper — ver o cabeçalho.
-  return new NextResponse(challenge, {
+  return comIdDaRequisicao(new NextResponse(challenge, {
     status: 200,
     headers: { "content-type": "text/plain" },
-  });
+  }), req);
 }
 
 export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextResponse> {
@@ -115,6 +125,10 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   // `null` aqui deixou de ser fatal: o dono de cada evento é resolvido abaixo,
   // pela WABA que a Meta carimba.
   const session = await metaSessionByWebhookToken(token);
+  // O admin nasce ANTES da leitura do contrato porque a recusa também grava:
+  // ela arquiva o corpo cru em `webhook_events_log` (ver
+  // `lib/channels/meta/recusa-do-webhook.ts`).
+  const admin = createAdminClient();
 
   // ─── O contrato do fio, ANTES do parser ───────────────────────────────────
   //
@@ -124,28 +138,73 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   // try/catch em volta: a exceção subia sem ninguém tratá-la (o framework
   // responde 5xx) e a Meta reentregava em backoff um corpo que nunca melhora.
   //
-  // 400 e não 200: o 200 generoso desta rota existe para EVENTO QUE NÃO NOS
-  // INTERESSA (a Meta reentrega o que não recebe 2xx), e um payload fora do
-  // contrato não é isso — é o fio ter mudado, que ninguém pode descobrir tarde.
-  // O schema é loose e todo campo é opcional, então chegar aqui exige um campo
-  // que a gente LÊ vir com o tipo errado. Ver lib/channels/meta/envelope.ts.
+  // 200 e NÃO 400 (issue #290, item 3): o 4xx faz a Meta reentregar o MESMO
+  // corpo em backoff por horas — e reentrega em excesso é caminho para a WABA
+  // ser suspensa. Um corpo fora do contrato não melhora com reentrega: ele é o
+  // fio que mudou, e quem precisa saber disso é quem opera. Por isso o
+  // desfecho é o do canal por QR (que já está na main): 200, corpo cru
+  // arquivado com `status = 'error'` e o motivo, log estruturado e um aviso na
+  // Central. O corpo do 200 diz que houve recusa (`accepted: false`) — não
+  // finge que processou.
+  //
+  // O JSON quebrado continua 400 e é OUTRO caso: com HMAC válido ele só pode
+  // vir de quem assinou um corpo que nunca foi o protocolo (a Meta assina o
+  // que envia, e um proxy que mutile o corpo derruba a assinatura antes, em
+  // 401). Não é o fio mudando de forma — é um corpo que nunca chegou a ser
+  // payload.
   const leitura = lerEnvelopeMeta(rawBody);
   if (!leitura.ok) {
     if (leitura.motivo === "json_invalido") {
       return fail("invalid_request", "invalid_json", 400, { requestId });
     }
+    // FORK MIA: `session` pode ser `null` aqui (token órfão, ou a conta que só
+    // chega pela WABA, ver `donoDoEvento`), e o arquivo e o aviso da recusa são
+    // da organização do token. Sem ela, a recusa não tem onde morar: fica no log
+    // e a resposta diz `nao_arquivado`, sem fingir que existe linha.
+    const recusa = session
+      ? await registrarRecusaDoWebhookMeta(admin, {
+          sessao: session,
+          token,
+          rawBody,
+          headers: req.headers,
+          campos: leitura.campos,
+          requestId,
+        })
+      : ({ logId: null, arquivo: "falhou", aviso: "falhou" } as const);
     logger.error("[meta.webhook] payload fora do contrato do canal", {
       request_id: requestId,
+      estagio: "conteudo",
       campos: leitura.campos,
+      log_id: recusa.logId,
+      arquivo: recusa.arquivo,
+      aviso: recusa.aviso,
     });
-    return fail("validation_failed", "payload fora do contrato do canal", 400, {
-      requestId,
-      details: { campos: leitura.campos },
-    });
+    return NextResponse.json(
+      {
+        received: 0,
+        accepted: false,
+        outcomes: [`recusado:${MOTIVO_DO_CONTRATO_VIOLADO}`],
+        reason: "payload_fora_do_contrato",
+        // Mesma frase do dicionário: nada novo para traduzir, e o detalhe
+        // operacional vai nos campos de máquina abaixo.
+        detail: "payload fora do contrato do canal",
+        campos: leitura.campos,
+        // `error` = esta entrega acabou de ser arquivada; `ja_arquivado` = a
+        // Meta reentregou a mesma entrega; `nao_arquivado` = o banco recusou a
+        // escrita (e a resposta NÃO finge que existe linha). Nenhum dos três é
+        // "processado".
+        arquivo:
+          recusa.arquivo === "novo"
+            ? "error"
+            : recusa.arquivo === "ja_existia"
+              ? "ja_arquivado"
+              : "nao_arquivado",
+      },
+      { status: 200, headers: { "X-Request-Id": requestId } },
+    );
   }
 
   const eventos = parseMetaWebhook(leitura.envelope);
-  const admin = createAdminClient();
 
   /**
    * A CONTA QUE CHEGOU PELO CADASTRO INCORPORADO.
@@ -188,6 +247,21 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
    * indistinguível de "não chegou". Custou uma hora de diagnóstico no lugar errado.
    */
   const desfechos: string[] = [];
+  /**
+   * A pergunta do apagado a pedido é feita UMA vez por lote, não por contato
+   * (`perguntarTitularesApagadosNoLote`, migration 9321). Estados:
+   * `undefined` = ainda não perguntou; `null` = perguntou e FALHOU (cada evento
+   * cai na pergunta individual da ingestão, que falha fechada sem parar o lote).
+   */
+  //
+  // FORK MIA: por ORGANIZAÇÃO, e não uma variável só como veio do upstream
+  // (1.107): aqui uma entrega pode trazer eventos de mais de uma conta (o dono
+  // de cada evento é `donoDoEvento`), e a resposta de uma organização não vale
+  // para a outra. Sem chave no mapa = ainda não perguntou.
+  const apagadosPorOrganizacao = new Map<string, ApagadosNoLote | null>();
+  /** Quantos contatos da agenda ficaram de fora por LGPD — vai ao log no fim. */
+  let puladosPorTitularApagado = 0;
+  let puladosPorContatoAnonimizado = 0;
 
   for (const e of eventos) {
     /**
@@ -300,14 +374,43 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       // o nome do celular — sem conversa, sem mensagem e sem tocar na IA, porque
       // nada foi trocado (ver `ingestMetaAppContactSync`). Mesma política de
       // falha das outras duas: 2xx sempre, falha no log e no corpo.
+      // A pergunta do titular apagado a pedido é do LOTE: uma consulta para
+      // todos os contatos desta entrega, feita na primeira vez que um deles
+      // aparece. Se ela falhar (`null`), cada evento cai na pergunta individual
+      // da ingestão — falha fechada, e o lote continua.
       //
       // FORK MIA: `dono.organizationId`, e não `session.organizationId` como veio
-      // do upstream (1.72) — o mesmo motivo do eco acima: `session` pode ser
-      // `null`, e quem decide o tenant é `donoDoEvento`.
-      const r = await ingestMetaAppContactSync(admin, e, {
-        organizationId: dono.organizationId,
-      });
+      // do upstream (1.72 e 1.107): `session` pode ser `null`, e quem decide o
+      // tenant é `donoDoEvento`. O lote leva todos os telefones da entrega: os de
+      // outra conta só não acham ninguém nesta organização.
+      if (!apagadosPorOrganizacao.has(dono.organizationId)) {
+        const lote = await perguntarTitularesApagadosNoLote(
+          admin,
+          dono.organizationId,
+          eventos.filter((x) => x.kind === "app_contact_sync").map((x) => x.phone),
+        );
+        apagadosPorOrganizacao.set(dono.organizationId, lote.erro ? null : lote.apagados);
+        if (lote.erro) {
+          logger.error("[meta.ingest] a pergunta do titular apagado no lote falhou", {
+            request_id: requestId,
+            erro: lote.erro,
+            contatos_no_lote: eventos.filter((x) => x.kind === "app_contact_sync").length,
+          });
+        }
+      }
+      const r = await ingestMetaAppContactSync(
+        admin,
+        e,
+        { organizationId: dono.organizationId },
+        apagadosPorOrganizacao.get(dono.organizationId) ?? undefined,
+      );
       desfechos.push(`contato:${r.status}`);
+      if (r.status === "ignored" && r.reason === MOTIVO_TITULAR_APAGADO) {
+        puladosPorTitularApagado += 1;
+      }
+      if (r.status === "ignored" && r.reason === MOTIVO_CONTATO_ANONIMIZADO) {
+        puladosPorContatoAnonimizado += 1;
+      }
       if (r.status === "failed" || r.status === "no_session") {
         logger.error("[meta.ingest] contato do app não sincronizado", {
           request_id: requestId,
@@ -405,13 +508,34 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         });
       }
     } else {
+      // O evento inteiro vira colunas, não só `status`: quando a Meta ACEITA o
+      // template e reprova a entrega depois, o motivo só existe aqui. Ver
+      // `lib/channels/meta/status-update.ts`.
+      //
+      // O `delivered_at` como está no banco é lido ANTES: a hora da entrega é
+      // de uma vez só e o `read` chega depois do `delivered` — sem olhar a
+      // linha, ele reescrevia o instante em que a mensagem tocou o aparelho
+      // (#4316). Mesma guarda do `carimbarUmaVez` do canal não-oficial.
+      //
+      // FORK MIA: `dono.organizationId`, e não `session.organizationId`: `session`
+      // pode ser `null` aqui (token órfão ou de outro canal) desde que quem decide
+      // o tenant passou a ser `donoDoEvento`. Ler `session` direto voltaria a
+      // derrubar a rota justamente na instalação com duas contas. E o que a Meta
+      // cobrou (`pricing`, montado em `patchDaMensagem` acima) vai junto.
+      const { data: carimbos } = await admin
+        .from("messages")
+        .select("delivered_at")
+        .eq("organization_id", dono.organizationId)
+        .eq("external_id", e.externalId)
+        .maybeSingle();
+      const patchComCarimbos = statusUpdate(e, now, carimbos ?? {});
+      if (e.pricing) {
+        patchComCarimbos.meta_billable = e.pricing.billable;
+        patchComCarimbos.meta_pricing_category = e.pricing.category;
+      }
       await admin
         .from("messages")
-        .update(patchDaMensagem)
-        // `dono.organizationId`, e não `session.organizationId`: `session` pode
-        // ser `null` aqui (token órfão ou de outro canal) desde que quem decide
-        // o tenant passou a ser `donoDoEvento`. Ler `session` direto voltaria a
-        // derrubar a rota justamente na instalação com duas contas.
+        .update(patchComCarimbos)
         .eq("organization_id", dono.organizationId)
         .eq("external_id", e.externalId);
     }
@@ -440,13 +564,27 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     if (naCampanha !== "nao_e_disparo") desfechos.push(`broadcast:${naCampanha}`);
   }
 
+  // O que ficou de fora por LGPD NÃO pode sumir em silêncio: a rota responde 200
+  // e `outcomes` só diz `contato:ignored`. O contador diz QUANTOS (nunca o
+  // telefone: PII não vai para o log), e só aparece quando houve pulo.
+  if (puladosPorTitularApagado > 0 || puladosPorContatoAnonimizado > 0) {
+    logger.info("[meta.ingest] contatos da agenda não sincronizados por LGPD", {
+      request_id: requestId,
+      // FORK MIA: as organizações, e não `session.organizationId`: `session` pode
+      // ser `null`, e a entrega pode ser de mais de uma conta.
+      organization_ids: [...apagadosPorOrganizacao.keys()],
+      pulados_por_titular_apagado: puladosPorTitularApagado,
+      pulados_por_contato_anonimizado: puladosPorContatoAnonimizado,
+    });
+  }
+
   // 200 SEMPRE que a assinatura confere, inclusive para evento que não nos
   // interessa: a Meta re-entrega tudo que não recebe 2xx, e recusar o que
   // ignoramos vira re-tentativa em backoff por horas.
   // `outcomes` no corpo: quem depura vê o que aconteceu com cada evento em vez de
   // ler um contador que não distingue sucesso de falha.
-  return NextResponse.json(
+  return comIdDaRequisicao(NextResponse.json(
     { received: eventos.length, outcomes: desfechos },
     { status: 200 },
-  );
+  ), requestId);
 }

@@ -1,4 +1,4 @@
-import { addDays, addMonths, startOfDay, startOfMonth } from "date-fns";
+import { addDays, addMonths, format, startOfDay, startOfMonth, subDays } from "date-fns";
 
 import type { VisaoDaAgenda } from "@/components/agenda/tipos";
 
@@ -65,4 +65,16 @@ export function ancoraDoPeriodoVizinho(
 ): Date {
   if (visao === "mes") return addMonths(ancora, direcao);
   return addDays(ancora, visao === "semana" ? 7 * direcao : direcao);
+}
+
+/**
+ * O primeiro e o último dia que a grade desenha, em `YYYY-MM-DD`.
+ *
+ * É leitura LOCAL, como a chave das colunas da grade: a âncora já é o dia da
+ * organização posto ao meio-dia local (`ancoraLocalDoDia`). Passar esse recorte
+ * por outro fuso desloca o dia para quem abre a Agenda de fora dele.
+ */
+export function diasDoRecorte(visao: VisaoDaAgenda, ancora: Date): { de: string; ate: string } {
+  const { de, ate } = recorteDaGrade(visao, ancora);
+  return { de: format(de, "yyyy-MM-dd"), ate: format(subDays(ate, 1), "yyyy-MM-dd") };
 }

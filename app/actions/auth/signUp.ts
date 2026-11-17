@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { cadastroExigeEscolhaDePlano, lerPlanosDoCadastro } from "@/lib/cobranca/cadastro";
+import { criarIntencaoDeContratacao } from "@/lib/cobranca/intencao-assinada";
 import {
   signupSchema,
   signupComConviteSchema,
@@ -25,6 +26,20 @@ import { guardarDadosDoCadastro } from "@/lib/dados-fiscais/banco";
 // FORK MIA (.98): o cupom do cadastro (docs/fork/cupons-e-parceiros.md).
 import { guardarCupomDoCadastro } from "@/lib/cupons/banco";
 import { conferirCupomDoCadastro, type ConferenciaDoCupomDoCadastro } from "@/lib/cupons/cadastro";
+import {
+  CHAVE_FUSO_DO_CADASTRO,
+  CHAVE_IDIOMA_DO_CADASTRO,
+  pistasParaGuardar,
+} from "@/lib/auth/perfil-da-empresa-nova";
+
+/** As pistas saneadas, nas chaves que o provisionamento lê. */
+function metadadosDasPistas(pistas: { idioma?: string; fuso?: string } | undefined): Record<string, string> {
+  const limpas = pistasParaGuardar(pistas ?? {});
+  return {
+    ...(limpas.idioma ? { [CHAVE_IDIOMA_DO_CADASTRO]: limpas.idioma } : {}),
+    ...(limpas.fuso ? { [CHAVE_FUSO_DO_CADASTRO]: limpas.fuso } : {}),
+  };
+}
 
 export type SignUpResult =
   | {
@@ -94,6 +109,13 @@ export async function signUp(
    * token com o e-mail que o provedor de auth confirmou.
    */
   inviteToken?: string,
+  /**
+   * O idioma em que a tela de cadastro foi desenhada e o fuso do navegador.
+   * Viajam no `user_metadata` até `/auth/confirm`, onde a empresa NASCE com eles
+   * (`lib/auth/perfil-da-empresa-nova.ts`). São pistas, não autoridade: só
+   * idioma servido e fuso que o `Intl` reconhece passam do saneamento.
+   */
+  pistas?: { idioma?: string; fuso?: string },
 ): Promise<SignUpResult> {
   const temConvite = typeof inviteToken === "string" && inviteToken.trim() !== "";
   const parsed = temConvite
@@ -151,6 +173,7 @@ export async function signUp(
   }
 
   const planoEscolhido = !convite && "cobranca_plan_id" in parsed.data ? parsed.data.cobranca_plan_id : undefined;
+  let planoDaContratacao: string | null = null;
   if (!convite) {
     const admin = createAdminClient();
     if (await moduloLigado(admin, "cobranca")) {
@@ -166,6 +189,10 @@ export async function signUp(
         }
       } else if (!planos || cadastroExigeEscolhaDePlano(planos)) {
         return { ok: false, error: "validation_error", details: { cobranca_plan_id: ["plano_obrigatorio"] } };
+      }
+      if ("continuar_pagamento" in parsed.data && parsed.data.continuar_pagamento === true && planoEscolhido) {
+        const oferecido = planos?.oferecidos.find((p) => p.id === planoEscolhido);
+        if (oferecido?.trial_dias === 0) planoDaContratacao = oferecido.id;
       }
     }
   }
@@ -267,6 +294,7 @@ export async function signUp(
             ...((parsed.data as SignupInput).mia_o_que_faz ? { mia_o_que_faz: (parsed.data as SignupInput).mia_o_que_faz } : {}),
             // FORK MIA (.96): o nome de quem assina a entrada paga (o mesmo campo do convite).
             ...(entradaPaga.ok && entradaPaga.entradaPaga ? { full_name: entradaPaga.nome } : {}),
+            ...metadadosDasPistas(pistas),
           },
     },
   });
@@ -340,7 +368,14 @@ export async function signUp(
   await audit({
     action: "auth.signup_requested",
     actorUserId: data.user?.id ?? null,
-    metadata: { email_hash: hashEmail(parsed.data.email) },
+    metadata: {
+      email_hash: hashEmail(parsed.data.email),
+      // identities=[] é resposta ofuscada de conta existente, sem autorização
+      // para registrar intenção em nome daquela pessoa.
+      ...(planoDaContratacao && (data.user?.identities?.length ?? 0) > 0
+        ? { contratacao: criarIntencaoDeContratacao(data.user!.id, planoDaContratacao) }
+        : {}),
+    },
     requestId,
     ip,
     userAgent,

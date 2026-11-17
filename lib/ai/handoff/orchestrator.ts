@@ -33,6 +33,7 @@ import { assertServiceBoundarySupabase } from "@/lib/atendimento/origem";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 import { moverLeadParaEtapaDeHandoff } from "@/lib/leads/handoff-stage-move";
+import { camposDoCardDoLead } from "@/lib/leads/campos-do-resumo-da-passagem";
 import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
 import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
 
@@ -237,6 +238,22 @@ export async function triggerHandoff(
       if (elegib !== null && !elegib.permite) {
         return { triggered: false, reason: `nao_elegivel:${elegib.motivo}` };
       }
+      // #3534 — CONTATO DA EQUIPE NÃO É PASSADO POR CLIMA. A régua é a mesma
+      // que o turno já usa (`settings.crm.team_contact_tags`), que aqui chega
+      // junto da decisão: o contato é ELEGÍVEL (a IA atende), e é isso que faz
+      // o guarda de elegibilidade acima deixá-lo passar. Só que passar por
+      // `low_sentiment` é o que silencia a conversa (`bot_silenced_until =
+      // 'infinity'`) e manda "já acionei o time" para quem É o time. O evento
+      // pode chegar por um alerta antigo, pelo Jev ou por outra origem: a
+      // recusa fica AQUI também, onde o silêncio de fato acontece, para que
+      // nenhum caminho de clima cale o contato da equipe.
+      if (input.reason === "low_sentiment" && elegib?.contatoDaEquipe === true) {
+        logger.info("[handoff] clima não passa contato da equipe", {
+          conversation_id: input.conversationId,
+          origem: input.origem,
+        });
+        return { triggered: false, reason: "contato_da_equipe:sem_repasse_por_clima" };
+      }
     } catch (err) {
       logger.warn("[handoff] elegibilidade indeterminada — handoff não disparado", {
         conversation_id: input.conversationId,
@@ -427,6 +444,14 @@ export async function triggerHandoff(
       //
       // Dentro do `guard()` que já existe, como os efeitos acima.
       await guard();
+      // #4303 — OS CAMPOS DO CARD NO RESUMO. Quem assume a conversa precisa do
+      // dado que decide a próxima frase (consumo, valor da conta) sem abrir o
+      // negócio. O card é o que a passagem DECLAROU (`leadId`); sem ele este
+      // motor não inventa um "mais recente" do contato — não há turno aqui
+      // para dizer qual card a conversa está tocando, e ler o errado mostraria
+      // dado de outra venda. `camposDoCardDoLead` nunca lança: leitura que
+      // falha devolve `{}` e o resumo sai como o de hoje.
+      const camposDoCard = await camposDoCardDoLead(admin, input.organizationId, input.leadId);
       const briefing = montarBriefingDaPassagem({
         checkpoint: await checkpointDuravel(admin, input.organizationId, contactId),
         pendentesDoCliente: await falasPendentes(
@@ -436,6 +461,7 @@ export async function triggerHandoff(
           (convNow as unknown as { last_outbound_at?: string | null }).last_outbound_at ?? null,
         ),
         ...(input.declarado !== undefined ? { declaradoPeloModelo: input.declarado } : {}),
+        ...(Object.keys(camposDoCard).length > 0 ? { camposColetados: camposDoCard } : {}),
         motivo: {
           codigo: motivoDaPassagem(input.reason),
           texto: input.motivoTexto ?? null,

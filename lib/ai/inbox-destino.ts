@@ -232,7 +232,13 @@ export const POLITICAS_DE_AVISO = {
   // FORK MIA (.94): `mia_assistente_proposta`, o pedido e o resultado da proposta.
   // FORK MIA (.90): "plano" — o módulo que ligou ou desligou pelo plano e a véspera
   // da descida (lib/planos-mia/seguir-o-plano.ts) levam a Plano e cobrança.
-  other: { refs: ["agenda_reminder_sender", "lead", "channel_session", "appointment", "ai_agent", "ai_provider_credential", "agent_case", "mia_leads_da_meta_formulario", "mia_chamado", "mia_assistente_resumo", "mia_assistente_proposta", "plano"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
+  // `conversation`: a apresentação do catálogo interrompida
+  // (`lib/catalogo/retomada-de-apresentacao.ts`) nasce `other` apontando para a
+  // conversa. Nenhum kind de conversa existente diz o que ela diz, e o
+  // `message_send_stuck` cala o aviso de automação aberto na mesma janela. A porta
+  // passa pela MESMA conferência dos outros kinds: RLS de `conversations` no
+  // client da request, papel `agent` da entrada `conversation`.
+  other: { refs: ["agenda_reminder_sender", "lead", "conversation", "channel_session", "appointment", "ai_agent", "ai_provider_credential", "agent_case", "mia_leads_da_meta_formulario", "mia_chamado", "mia_assistente_resumo", "mia_assistente_proposta", "plano"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
 } satisfies Record<InboxKind, Politica>;
 
 /**

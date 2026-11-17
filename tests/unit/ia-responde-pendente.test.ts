@@ -693,6 +693,13 @@ describe("o 2º caso · calada em todos, mas avisando", () => {
     const fonte = readFileSync(join(RAIZ, "lib/agent-engine/agent/inbound-turn.ts"), "utf8");
     expect(fonte).toContain("isLeadInHandoff(pool, job.organization_id, job.contact_id)");
     expect(fonte).toContain("isLeadInHandoff(pool, tenantId, leadId)");
+    expect(fonte).not.toContain("isLeadInHandoff(pool, tenantId, leadId, { conversationId");
+    // O envio fixo da régua segue a mesma leitura por contato (.110): o #4146 do
+    // upstream passou a conversa ali, e a régua mandaria texto num número com
+    // uma pessoa atendendo o contato no outro.
+    const followup = readFileSync(join(RAIZ, "lib/agent-engine/agent/followup-turn.ts"), "utf8");
+    expect(followup).toContain("isLeadInHandoff(pool, tenantId, leadId)");
+    expect(followup).not.toContain("isLeadInHandoff(pool, tenantId, leadId, { conversationId");
   });
 
   it("o turno que pula por isso grava o rastro (aborted, contato_com_pessoa_em_outra_conversa)", async () => {

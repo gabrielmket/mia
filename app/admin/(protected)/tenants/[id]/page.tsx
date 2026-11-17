@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { CartaoDaIaDoMolde, type IaDoMolde } from "@/components/admin/tenants/CartaoDaIaDoMolde";
 import {
   CardDeCobranca,
   type AssinaturaDoCard,
@@ -8,6 +9,9 @@ import {
 import { provedorDaInstalacao } from "@/lib/cobranca/configuracao";
 import { exigeDocumento, sugestaoDoCadastro } from "@/lib/cobranca/documento";
 import type { ProvedorDeCobranca } from "@/lib/cobranca/vocabulario";
+import { loadAuthUser } from "@/lib/auth/server";
+import { tagDeIdioma } from "@/lib/i18n/datas";
+import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { createAdminClient } from "@/lib/supabase/admin";
 // FORK MIA (.98): o cupom e o parceiro na ficha (docs/fork/cupons-e-parceiros.md).
@@ -25,10 +29,11 @@ interface TenantDetailPageProps {
 
 export default async function TenantDetailPage({ params }: TenantDetailPageProps) {
   const { id } = await params;
-  const cobranca = await lerCobrancaDoTenant(id);
+  const [cobranca, iaDoMolde] = await Promise.all([lerCobrancaDoTenant(id), lerIaDoMolde(id)]);
   return (
     <div className="space-y-6">
       <TenantOverviewClient id={id} cobrancaLigada={cobranca !== null} />
+      {iaDoMolde && <CartaoDaIaDoMolde ia={iaDoMolde} />}
       {cobranca && <CardDeCobranca orgId={id} {...cobranca} />}
       {cobranca && <CupomEParceiro orgId={id} />}
       {cobranca && <DadosDeCobrancaDoTenant orgId={id} />}
@@ -47,6 +52,53 @@ async function CupomEParceiro({ orgId }: { orgId: string }) {
       parceiros={parceiros.filter((p) => !p.anonimizado_em).map((p) => ({ id: p.id, nome: p.nome }))}
     />
   );
+}
+
+/**
+ * A empresa nasceu com a IA do molde da instalação (migration 9096)? A fonte é
+ * a linha `ai.molde_de_ia_aplicado` que o gatilho gravou na auditoria DELA.
+ * `null` = não nasceu (ou a leitura falhou): sem cartão, a página fica como era
+ * — o cartão é informação, e não vale um 500.
+ */
+async function lerIaDoMolde(orgId: string): Promise<IaDoMolde | null> {
+  if (!z.string().uuid().safeParse(orgId).success) return null;
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("api_audit_log")
+    .select("created_at, metadata")
+    .eq("organization_id", orgId)
+    .eq("action", "ai.molde_de_ia_aplicado")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  const meta = (data.metadata ?? {}) as {
+    molde_org_id?: unknown;
+    funcoes_copiadas?: unknown;
+    padrao?: { default_model?: unknown } | null;
+  };
+  let nomeDoMolde: string | null = null;
+  if (typeof meta.molde_org_id === "string") {
+    const { data: moldeOrg } = await admin
+      .from("organizations")
+      .select("display_name")
+      .eq("id", meta.molde_org_id)
+      .maybeSingle();
+    nomeDoMolde = (moldeOrg as { display_name?: string | null } | null)?.display_name?.trim() || null;
+  }
+  const usuario = await loadAuthUser();
+  return {
+    nomeDoMolde,
+    funcoes: typeof meta.funcoes_copiadas === "number" ? meta.funcoes_copiadas : 0,
+    padrao: typeof meta.padrao?.default_model === "string" ? meta.padrao.default_model : null,
+    // Formatado AQUI, com fuso fixo: no cliente, o HTML servido e a hidratação
+    // divergiriam. Mesmo motivo e mesma escolha de `/admin/sistema`.
+    quando: new Date(data.created_at as string).toLocaleString(tagDeIdioma(usuario?.idioma ?? normalizarIdioma(null)), {
+      timeZone: "America/Sao_Paulo",
+      dateStyle: "short",
+      timeStyle: "short",
+    }),
+  };
 }
 
 /**

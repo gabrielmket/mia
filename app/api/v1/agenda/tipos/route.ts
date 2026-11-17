@@ -48,6 +48,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { listaTiposDeAtendimento } from "@/lib/agenda/consulta";
 import { alterarSchema, criarComRascunhoSchema, slugDe } from "@/lib/agenda/tipos-de-agendamento";
 import { localDoTeamsParaOUpstream, marcarTipoComoTeams } from "@/lib/agenda-mia/tipos-com-teams";
+import { variaveisQueOLembretePreenche } from "@/lib/agenda/lembrete-por-modelo";
 import { transportaMensagem } from "@/lib/channels/capabilities";
 import { traduzir } from "@/lib/i18n/dicionario";
 
@@ -56,6 +57,63 @@ export const dynamic = "force-dynamic";
 // FORK MIA: o contrato (categorias, locais, campos e slug) mora em
 // `lib/agenda/tipos-de-agendamento.ts`, compartilhado com o MCP de plataforma.
 const desativarSchema = z.object({ id: z.string().uuid() });
+
+/**
+ * O MODELO DO LEMBRETE FORA DA JANELA — conferido antes de gravar.
+ *
+ * Três recusas, cada uma com o que fazer, em vez do erro cru do banco:
+ *   - de outra organização (a FK composta da 9092 também recusaria, mas como 500);
+ *   - com variável que o lembrete não tem de onde preencher — o cron nunca o
+ *     mandaria, e a escolha ficaria gravada sem efeito;
+ *   - de OUTRO número que o escolhido no mesmo pedido: o modelo só sai pelo número
+ *     dono dele, e o lembrete nunca troca de número sozinho.
+ *
+ * O status (aprovado, pausado) NÃO é recusa aqui: muda depois da escolha, e quem
+ * confere na hora de mandar é o cron (`lerModeloDoLembrete`).
+ */
+async function recusaDoModeloDoLembrete(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  campos: { reminder_meta_template_id?: string | null; reminder_channel_session_id?: string | null },
+  t: (texto: string) => string,
+  requestId: string,
+): Promise<Response | null> {
+  if (!campos.reminder_meta_template_id) return null;
+  const { data: modelo, error } = await admin
+    .from("meta_templates")
+    .select("id, name, language, channel_session_id, parameter_format, components")
+    .eq("organization_id", organizationId)
+    .eq("id", campos.reminder_meta_template_id)
+    .maybeSingle();
+  if (error)
+    return fail("internal_error", t("Não foi possível consultar o modelo do lembrete."), 500, {
+      requestId,
+    });
+  if (!modelo)
+    return fail("validation_failed", t("Escolha um modelo aprovado desta organização."), 422, {
+      requestId,
+    });
+  if (variaveisQueOLembretePreenche(modelo) === null)
+    return fail(
+      "validation_failed",
+      t(
+        "Este modelo não serve para o lembrete: ele só pode ter variáveis de texto no corpo, de {{1}} a {{4}}, sem pular número.",
+      ),
+      422,
+      { requestId },
+    );
+  if (
+    campos.reminder_channel_session_id &&
+    modelo.channel_session_id !== campos.reminder_channel_session_id
+  )
+    return fail(
+      "validation_failed",
+      t("O modelo escolhido é de outro número. Escolha um modelo do número que envia os lembretes."),
+      422,
+      { requestId },
+    );
+  return null;
+}
 
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = req.headers.get("x-request-id") ?? randomUUID();
@@ -101,7 +159,9 @@ export async function GET(req: NextRequest): Promise<Response> {
       // ligado — só como pedir que ligue. Um PATCH cego sobre um estado que a
       // leitura não conta é o mesmo controle decorativo, do outro lado.
       reminder_enabled: t.lembreteLigado,
+      levar_dados_do_negocio: t.levarDadosDoNegocio,
       reminder_channel_session_id: t.lembreteCanalId ?? null,
+      reminder_meta_template_id: t.lembreteModeloId ?? null,
       reminder_minutes_before: t.lembreteAntecedenciaMin,
       reminder_extra_offsets_minutes: t.lembreteDegrausExtras,
       reminder_body: t.lembreteMensagem,
@@ -166,6 +226,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
     }
   }
+  const recusaDoModelo = await recusaDoModeloDoLembrete(admin, authz.organizationId, lido.data, t, requestId);
+  if (recusaDoModelo) return recusaDoModelo;
   const { service_draft, ...fields } = lido.data;
   const { data, error } = await admin
     .from("calendar_event_types")
@@ -254,6 +316,8 @@ export async function PATCH(req: NextRequest): Promise<Response> {
       );
     }
   }
+  const recusaDoModelo = await recusaDoModeloDoLembrete(admin, authz.organizationId, lido.data, t, requestId);
+  if (recusaDoModelo) return recusaDoModelo;
   const { data, error } = await admin
     .from("calendar_event_types")
     .update(campos)

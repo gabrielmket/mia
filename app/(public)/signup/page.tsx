@@ -12,6 +12,7 @@ import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { lerCadastroNaTela, planoInicialDoSeletor } from "@/lib/cobranca/cadastro";
+import { selecionarPlanoDoLink } from "@/lib/cobranca/selecao-do-link";
 import { tituloDaTelaPublica } from "@/lib/i18n/titulo-da-tela-publica";
 // FORK MIA (.90): os planos em cartões e o "?plano=" da página de preços.
 import { lerCadastroEmCartoes } from "@/lib/planos-mia/cadastro";
@@ -48,9 +49,11 @@ export const generateMetadata = () => tituloDaTelaPublica((t) => t("Criar conta"
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ invite?: string; plano?: string; cupom?: string }>;
+  searchParams: Promise<{ invite?: string; plano?: string | string[]; cupom?: string }>;
 }) {
-  const { invite, plano: planoDoLink, cupom: cupomDoLink } = await searchParams;
+  const { invite, plano, cupom: cupomDoLink } = await searchParams;
+  // FORK MIA (.90): o "?plano=" da página de preços aceita também o nome do plano.
+  const planoDoLink = typeof plano === "string" ? plano : undefined;
   const payload = invite ? verifyInviteToken(invite) : null;
   const convite = invite && payload ? { token: invite, email: payload.email } : undefined;
   const conviteExpirado = Boolean(invite) && !payload;
@@ -74,15 +77,33 @@ export default async function SignupPage({
   // o mesmo do gatilho. Leitura que falha não esconde nada: quem recusa é a action.
   const cadastro = convite ? null : await lerCadastroNaTela(createAdminClient());
   const planos = cadastro?.oferecidos ?? [];
-  const googleSemPlano = cadastro?.exigeEscolha ?? false;
+  // Upstream (v1.105): o link sugere um plano já oferecido, pelo id.
+  const selecao = selecionarPlanoDoLink(
+    plano,
+    planos,
+    planoInicialDoSeletor(planos, cadastro?.padraoId ?? null),
+    Boolean(invite),
+  );
   // FORK MIA (.90): os mesmos planos em cartões (limites, módulos, conversas) e o
-  // plano marcado pelo link da página de preços. Sem planos, nada muda.
+  // plano marcado pelo link da página de preços. Sem planos, nada muda. O plano
+  // que o seletor do upstream resolveu é o ponto de partida; o nosso leitor
+  // ainda aceita o nome do plano no link.
   const emCartoes = await lerCadastroEmCartoes(
     createAdminClient(),
     planos,
-    planoInicialDoSeletor(planos, cadastro?.padraoId ?? null),
-    typeof planoDoLink === "string" ? planoDoLink : null,
+    selecao.planoInicial,
+    planoDoLink ?? null,
   );
+  const planoVeioDoLink =
+    emCartoes.planoMarcado !== undefined && !emCartoes.linkSemPlano && typeof planoDoLink === "string";
+  // FORK MIA (.90): link pelo nome do plano resolvido pelos cartões não é link inválido.
+  const linkInvalido = selecao.linkInvalido && !(planoVeioDoLink && emCartoes.cartoes.length > 0);
+  // O Google atual cria no padrão; um link que escolheu um plano oferecido não
+  // pode perdê-la. Link inválido ou instalação sem plano seguem a regra de sempre.
+  const googleSemPlano =
+    (cadastro?.exigeEscolha ?? false) ||
+    selecao.linkEscolheuPlano ||
+    (planoVeioDoLink && emCartoes.cartoes.length > 0);
 
   // FORK MIA (.98): o cupom do link vale; sem link, o guardado no navegador. Só o que vale aparece.
   // O cookie só é lido quando o cupom pode valer (sem convite e com plano): quem vem
@@ -151,12 +172,17 @@ export default async function SignupPage({
         </p>
       )}
 
+      {linkInvalido && (
+        <p role="alert" className="rounded-md border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm dark:border-amber-500/30 dark:bg-amber-950/20">
+          {t("O plano deste link não está disponível. Confira o plano e o período no seletor antes de continuar.")}
+        </p>
+      )}
       <SignupForm
         convite={convite}
         planos={planos}
         planoInicial={emCartoes.planoMarcado}
         cartoes={emCartoes.cartoes}
-        planoVeioDoLink={emCartoes.planoMarcado !== undefined && !emCartoes.linkSemPlano && typeof planoDoLink === "string"}
+        planoVeioDoLink={planoVeioDoLink}
         cupomInicial={cupomInicial}
       />
       {/* O convite atravessa o Google na URL de retorno: sem ele, quem foi

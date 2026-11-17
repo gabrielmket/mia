@@ -144,12 +144,15 @@ export function LeadDossier({
   const user = useUser();
   const activeOrg = useActiveOrg();
   const podeCriarProposta =
-    user.is_platform_admin || (activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager) || false;
+    user.is_platform_admin ||
+    (activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager) ||
+    false;
   // FORK MIA: a permissão do seletor de "quem originou" é lida aqui e descida
   // ao formulário. Ver `podeVerEquipe` no LeadFieldsForm.
   const podeVerEquipe = usePodeVerEquipe();
   // A MESMA régua do arrasto e do "Mover para…" do card (`KanbanCardActions`).
   const podeMoverCard = usePermission("pipeline.move_card");
+  const podeCriarContato = usePermission("contact.create");
   // Tarefas são `agent`+, a mesma régua da tela de Tarefas e da rota — e o
   // suporte temporário só lê, como lá (`requireSupportWrite`).
   const podeEditarTarefas =
@@ -198,7 +201,7 @@ export function LeadDossier({
 
         {/* ① cabeçalho vivo */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border pb-3 text-xs">
-          <span className="font-medium tabular-nums text-text">
+          <span className="font-medium text-text tabular-nums">
             {formatValor(lead.value_cents, lead.currency)}
           </span>
           {etapas && onMudarEtapa ? (
@@ -261,11 +264,7 @@ export function LeadDossier({
             card: um botão que exige rolar até o fim é o mesmo que copiar o
             telefone e colar no softphone. Sem atalho configurado, nada é
             desenhado — nem separador, nem faixa vazia. */}
-        <AtalhosDoNegocio
-          atalhos={atalhosDoCard}
-          lead={lead}
-          contactId={lead.contact_id}
-        />
+        <AtalhosDoNegocio atalhos={atalhosDoCard} lead={lead} contactId={lead.contact_id} />
 
         <ConversaNoDossie
           conversa={lead.conversa}
@@ -286,6 +285,8 @@ export function LeadDossier({
             contactId={lead.contact_id}
             pipelineId={pipelineId}
             leadId={lead.id}
+            lead={lead}
+            podeCriarContato={podeCriarContato}
           />
         </SecaoDoDossie>
 

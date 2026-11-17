@@ -1,20 +1,27 @@
 "use client";
 
-import { useMemo } from "react";
+import { format } from "date-fns";
+import { useMemo, useState } from "react";
 
 import {
   Table,
   TableBody,
   TableCell,
+  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { useT } from "@/hooks/i18n/useT";
-import { rotuloDoIndicador } from "@/lib/plataformas-de-anuncio/meta/tabela-de-campanhas";
+import {
+  ORDEM_PADRAO,
+  type CriterioDeOrdenacao,
+  ordenarCampanhas as ordenarPorCriterio,
+  rotuloDoIndicador,
+} from "@/lib/plataformas-de-anuncio/meta/tabela-de-campanhas";
 import type { LinhaDeCampanha } from "@/lib/plataformas-de-anuncio/types";
 // FORK MIA — ordem por coluna e filtro "só com impressão". A regra mora em
 // `lib/plataformas-de-anuncio/meta/ordem-da-tabela.ts`; aqui é só fiação.
-import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
+import { useLocaleDeData, useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import {
   ordenarCampanhas,
   soQuemTeveImpressao,
@@ -25,7 +32,7 @@ import { CabecalhoOrdenavel } from "./CabecalhoOrdenavel";
 import { usePreferenciaDaTabela } from "./usePreferenciaDaTabela";
 
 /**
- * As 15 colunas.
+ * As 16 colunas.
  *
  * ─── A regra que atravessa o arquivo inteiro: ausência vira "—" ─────────────
  *
@@ -145,18 +152,34 @@ interface Props {
 export function TabelaDeCampanhas({ linhas, moeda, avisos, usuarioId }: Props) {
   const t = useT();
   const tagDoIdioma = useTagDeIdioma();
+  const localeDaData = useLocaleDeData();
   const { preferencia, ordenarPor, voltarOrdemDaPlataforma, definirSoComImpressao } =
     usePreferenciaDaTabela(usuarioId);
+
+  /**
+   * A ordem de BASE (upstream #3911): o `select` "Ordenar por", que abre pela
+   * campanha mais recente. A ordenação é ESCOLHA DE LEITURA, não dado: mora no
+   * componente e não atravessa a requisição.
+   *
+   * FORK MIA — as duas ordens convivem: a do `select` é a base, e o cabeçalho
+   * (a ordem por coluna do fork, lembrada por pessoa) ordena POR CIMA dela. A
+   * ordenação do cabeçalho é estável, então o empate segue a base. Trocar o
+   * `select` devolve a tabela à base, para a escolha nova ter efeito na hora.
+   */
+  const [criterio, setCriterio] = useState<CriterioDeOrdenacao>(ORDEM_PADRAO);
 
   // O que está à vista: primeiro o filtro, depois a ordem. Status e veiculação
   // ordenam pelo texto que a célula mostra, no idioma de quem lê.
   const visiveis = useMemo(() => {
-    const filtradas = preferencia.soComImpressao ? soQuemTeveImpressao(linhas) : linhas;
+    const filtradas = ordenarPorCriterio(
+      preferencia.soComImpressao ? soQuemTeveImpressao(linhas) : linhas,
+      criterio,
+    );
     return ordenarCampanhas(filtradas, preferencia.ordem, {
       idioma: tagDoIdioma,
       textoDoEstado: (codigo) => t(ESTADO_LEGIVEL[codigo] ?? codigo),
     });
-  }, [linhas, preferencia, tagDoIdioma, t]);
+  }, [linhas, criterio, preferencia, tagDoIdioma, t]);
   const cabecalho = { ordem: preferencia.ordem, aoOrdenar: ordenarPor };
 
   /**
@@ -187,6 +210,32 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos, usuarioId }: Props) {
     );
   };
 
+  /**
+   * O `start_time` da plataforma (`2026-08-14T00:00:00-0300`) → "dd/MM/yyyy", no
+   * idioma de quem lê.
+   *
+   * O DIA vem do próprio texto, não do instante: a plataforma escreve a hora no
+   * fuso da CONTA de anúncios, e é nesse fuso que o Gerenciador mostra a data.
+   * Converter para o fuso do navegador faria a campanha que começou à meia-noite
+   * de São Paulo aparecer na véspera para quem abre a tela de outro fuso.
+   *
+   * Texto que não começa por uma data de calendário válida vira "—", como nas
+   * outras colunas — e nunca chega ao `format`, que LANÇA com data inválida e
+   * derrubaria a tabela inteira por causa de uma célula.
+   */
+  const inicio = (valor: string | null) => {
+    const traco = <span className="text-muted-foreground">{TRACO}</span>;
+    const pedacos = valor ? /^(\d{4})-(\d{2})-(\d{2})/.exec(valor) : null;
+    const [ano, mes, diaDoMes] = (pedacos ?? []).slice(1).map(Number);
+    if (ano === undefined || mes === undefined || diaDoMes === undefined) return traco;
+    const dia = new Date(ano, mes - 1, diaDoMes);
+    // 2026-02-31 vira 03/03 no `Date`: data que não existe no calendário é "—".
+    if (dia.getFullYear() !== ano || dia.getMonth() !== mes - 1 || dia.getDate() !== diaDoMes) {
+      return traco;
+    }
+    return <>{format(dia, "dd/MM/yyyy", { locale: localeDaData })}</>;
+  };
+
   if (linhas.length === 0) {
     return (
       <p className="rounded-md border p-4 text-sm text-muted-foreground">
@@ -213,6 +262,35 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos, usuarioId }: Props) {
         ordenada={preferencia.ordem !== null}
         aoVoltarOrdem={voltarOrdemDaPlataforma}
       />
+      {/*
+        O controle mora ACIMA da tabela, e fora do contêiner de scroll: são 16
+        colunas, e dentro do `overflow-x-auto` ele rolaria junto, ficando fora da
+        tela justamente em tela estreita, que é onde ele mais importa.
+      */}
+      <div className="flex items-center justify-end gap-2">
+        <label htmlFor="ordem-das-campanhas" className="text-sm text-muted-foreground">
+          {t("Ordenar por")}
+        </label>
+        <select
+          id="ordem-das-campanhas"
+          value={criterio}
+          onChange={(evento) => {
+            setCriterio(evento.target.value as CriterioDeOrdenacao);
+            // FORK MIA: a escolha nova vale na hora, sem a ordem do cabeçalho por cima.
+            if (preferencia.ordem !== null) voltarOrdemDaPlataforma();
+          }}
+          className="h-9 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm"
+        >
+          {/*
+            O rótulo diz o que a ordem SIGNIFICA para quem opera, não o nome do
+            campo: "mais recentes" é `created_time` desc, e ninguém abre a aba
+            pensando em `created_time`.
+          */}
+          <option value="mais_recentes">{t("Mais recentes")}</option>
+          <option value="mais_antigas">{t("Mais antigas")}</option>
+          <option value="status">{t("Ativas primeiro")}</option>
+        </select>
+      </div>
       {visiveis.length === 0 ? (
         // Só o filtro chega aqui (a lista vazia de verdade já saiu acima): a
         // frase diz qual chave desligar, em vez de uma tabela muda.
@@ -224,7 +302,7 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos, usuarioId }: Props) {
       ) : (
     /*
       O scroll horizontal mora AQUI, num contêiner próprio — nunca no `<body>`.
-      São 15 colunas; em telas estreitas a tabela rola dentro do próprio quadro e
+      São 16 colunas; em telas estreitas a tabela rola dentro do próprio quadro e
       a página segue parada, que é o combinado do produto para conteúdo largo.
     */
     <div className="overflow-x-auto rounded-md border">
@@ -240,6 +318,11 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos, usuarioId }: Props) {
             <CabecalhoOrdenavel {...cabecalho} coluna="veiculacao">
               {t("Veiculação")}
             </CabecalhoOrdenavel>
+            {/*
+              Coluna do upstream (#3911). FORK MIA: sem botão de ordem no
+              cabeçalho, porque a data já tem as duas ordens no `select` acima.
+            */}
+            <TableHead aria-sort="none">{t("Início")}</TableHead>
             <CabecalhoOrdenavel {...cabecalho} coluna="resultado" className="text-right">
               {t("Resultado")}
             </CabecalhoOrdenavel>
@@ -323,6 +406,7 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos, usuarioId }: Props) {
                 </TableCell>
                 <TableCell>{estado(linha.status)}</TableCell>
                 <TableCell>{estado(linha.veiculacao)}</TableCell>
+                <TableCell className="whitespace-nowrap">{inicio(linha.iniciadaEm)}</TableCell>
                 <TableCell className="text-right">
                   <Numero valor={linha.resultado.valor} />
                   {/*

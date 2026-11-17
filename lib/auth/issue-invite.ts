@@ -9,8 +9,10 @@ import { env } from "@/lib/env";
 import { audit } from "@/lib/audit";
 import { signInviteToken, INVITE_TTL_SECONDS } from "@/lib/auth/invite-token";
 import { buildInviteEmail } from "@/lib/email/templates/invite";
+import { idiomaDoEmailDaOrganizacao } from "@/lib/email/idioma-da-organizacao";
 import { sendEmail, type EmailDeliveryError, type TransporteDeEmail } from "@/lib/email/roteador";
 import { marcaDaSaida } from "@/lib/branding/saida";
+import type { Idioma } from "@/lib/i18n/idiomas";
 
 /** Link sempre existe, inclusive quando a instalação não configurou e-mail. */
 export async function issueInvite(input: {
@@ -29,6 +31,11 @@ export async function issueInvite(input: {
   // longo. Só quem já gravou o hash do código na linha do convite o passa
   // (`lib/team/convites.ts`); sem ele, o e-mail leva o link longo de sempre.
   linkCurto?: string;
+  /**
+   * O idioma do convite, quando quem chama já o sabe. Ausente, é resolvido pela
+   * organização (`organizations.locale`) → `APP_LOCALE` → `pt-BR` (#4302).
+   */
+  idioma?: Idioma;
 }) {
   const interfaceSettings = interfaceSettingsSchema.parse(
     input.interfaceSettings ?? INTERFACE_COMPLETA,
@@ -67,6 +74,9 @@ export async function issueInvite(input: {
   if (input.dispatch !== false) {
     try {
       const marca = await marcaDaSaida(input.organizationId, { semMemo: true });
+      // A pessoa convidada ainda não tem preferência salva: o idioma vem da
+      // organização que a convidou. Nunca lança — sem banco, sai em pt-BR.
+      const idioma = input.idioma ?? (await idiomaDoEmailDaOrganizacao(input.organizationId));
       const message = buildInviteEmail({
         inviterName: input.inviterName,
         orgName: input.orgName,
@@ -74,6 +84,7 @@ export async function issueInvite(input: {
         role: input.role,
         expiresAt: new Date(exp * 1000),
         marca,
+        idioma,
       });
       const result = await sendEmail({
         to: email,

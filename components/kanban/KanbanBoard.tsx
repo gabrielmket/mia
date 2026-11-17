@@ -14,6 +14,7 @@ import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAtRiskLeads } from "@/hooks/leads/useAtRiskLeads";
 import { useReactivations } from "@/hooks/leads/useReactivations";
 import { midpoint } from "@/lib/kanban/fractional-indexing";
+import { ordenarEtapasDoFunil } from "@/lib/kanban/ordem-das-etapas";
 import { posicaoNoFimDaEtapa, proximoNaEtapaInteira } from "@/lib/kanban/vizinho-na-etapa";
 import { compararNaEtapa, posicaoNoTopoDaEtapa } from "@/lib/kanban/entrada-na-etapa";
 import { decideMotivoDaPerda } from "@/lib/leads/motivo-da-perda";
@@ -207,6 +208,22 @@ export function KanbanBoard({
         leads: leadsProp,
       }
     : queryResult.data;
+
+  /**
+   * As colunas do quadro, na ordem do funil (#3874).
+   *
+   * A rota já devolve `position` ascendente, e este `sort` NÃO é redundante: é
+   * a régua ÚNICA (`ordenarEtapasDoFunil`) que o seletor de etapa do card usa
+   * também. Enquanto a ordem era só a do array, o quadro e o seletor só
+   * concordavam por coincidência — bastava uma prop vinda de deep link, de
+   * cache antigo ou de outra leitura para o dono reordenar em Configurações e
+   * ver o seletor na ordem velha. Etapa ARQUIVADA fica de fora: ela é
+   * histórico, e o quadro nunca a mostrou (a rota já a filtra).
+   */
+  const etapasDoQuadro = useMemo(
+    () => ordenarEtapasDoFunil(data?.stages ?? []).filter((e) => !e.is_archived),
+    [data?.stages],
+  );
   const isLoading = useExternal ? false : queryResult.isLoading;
   const isError = useExternal ? false : queryResult.isError;
   const error = useExternal ? null : queryResult.error;
@@ -220,7 +237,8 @@ export function KanbanBoard({
 
   const grouped = useMemo(() => {
     if (!data) return null;
-    const porEtapa = groupLeadsByStage(data.stages, data.leads);
+    // Upstream (#3874): as colunas saem da régua única `etapasDoQuadro`.
+    const porEtapa = groupLeadsByStage(etapasDoQuadro, data.leads);
     // FORK MIA — fora do "manual", a coluna é ordenada pela tela (urgência,
     // quentes, valor). O esfriando vem do MESMO radar que pinta a borda.
     if (ordem === "manual") return porEtapa;
@@ -229,7 +247,7 @@ export function KanbanBoard({
       porEtapa.set(etapa, ordenarColuna(lista, ordem, { esfriando: coolingIds, agora }));
     }
     return porEtapa;
-  }, [data, ordem, coolingIds]);
+  }, [data, etapasDoQuadro, ordem, coolingIds]);
 
   // Um conjunto por vez, e não um card por vez: o board recebe o resultado do
   // gesto já resolvido pela coluna (um card, um intervalo, a etapa inteira). A
@@ -403,7 +421,7 @@ export function KanbanBoard({
     return null;
   }
 
-  if (data.stages.length === 0) {
+  if (etapasDoQuadro.length === 0) {
     return (
       <Card className="m-4 p-6 text-sm text-text-muted">
         {t("Nenhum negócio neste funil ainda.")}
@@ -454,7 +472,7 @@ export function KanbanBoard({
           className="flex min-h-full w-max items-stretch gap-3"
           data-faixa-das-etapas
         >
-          {data.stages.map((stage) => (
+          {etapasDoQuadro.map((stage) => (
             <StageColumn
               key={stage.id}
               stage={stage}
@@ -468,7 +486,7 @@ export function KanbanBoard({
               selectedLeadIds={selectedLeadIds}
               onSelectMany={handleSelectMany}
               onOpen={setDossieId}
-              etapas={data.stages}
+              etapas={etapasDoQuadro}
               onMoverPara={aoMoverPelaLista}
               podeRenomear={podeRenomearEtapa}
               onRenomear={(nome) => renameStage.mutate({ stageId: stage.id, name: nome })}
@@ -486,15 +504,17 @@ export function KanbanBoard({
           pipelineId={pipelineId}
           fieldDefs={camposPorEscopo(camposDoFunil(data.pipeline.settings ?? null), "negocio")}
           settingsDoFunil={(data.pipeline.settings ?? null) as Record<string, unknown> | null}
-          stages={data.stages}
+          stages={etapasDoQuadro}
           stageName={
-            data.stages.find((s) => s.id === leadDoDossie.stage_id)?.name ?? "—"
+            etapasDoQuadro.find((s) => s.id === leadDoDossie.stage_id)?.name ?? "—"
           }
           ownerNames={ownerNames}
           // FORK MIA — a barra de etapas do cartão aberto move pelo MESMO caminho do
           // "Mover para…" do upstream (`aoMoverPelaLista`): a janela do motivo da
           // perda antes do move e a regra de posição dele (quem chega a outra etapa
-          // entra no topo, #3461).
+          // entra no topo, #3461). O `etapas`/`onMudarEtapa` que o upstream (#3874)
+          // passa ao `LeadDossier` não se aplica: no quadro do fork quem abre é o
+          // `CartaoAberto`, e a barra dele lê `stages` (a régua única, acima).
           onMoverEtapa={(stageId) => aoMoverPelaLista(leadDoDossie, stageId)}
           // Os atalhos do card (#3487) saem do `settings` do funil que este
           // quadro já carregou — nenhuma chamada nova.

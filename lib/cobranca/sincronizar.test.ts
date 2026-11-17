@@ -445,3 +445,36 @@ describe("sincronizar — entrada paga (plano sem dias de teste)", () => {
     expect(rpcs("fn_reativar_organizacao")).toEqual([]);
   });
 });
+
+describe("primeiro pagamento pendente não é inadimplência", () => {
+  it("cron/retry sem provedor mantém bloqueio e não envia aviso nem altera a dívida", async () => {
+    m.linha = { ...LINHA, estado: "trial", pagamento_inicial_pendente: true, periodo_pago_desde: null,
+      provedor: null, provedor_cliente_id: null, provedor_assinatura_id: null, assinaturas_vivas: 0, trial_ate: ha(1) };
+    m.org = { ...m.org, status: "suspended", suspended_kind: "cobranca" };
+    await rodar(); await rodar();
+    expect(enviarAviso).not.toHaveBeenCalled();
+    expect(rpcs("fn_cobranca_registrar_aviso")).toEqual([]);
+    expect(rpcs("fn_reativar_organizacao")).toEqual([]);
+    expect(m.linha.estado).toBe("trial");
+  });
+  it("cadastro com fatura pendente no Asaas também não manda lembrete em retries", async () => {
+    m.linha = { ...LINHA, estado: "em_atraso", pagamento_inicial_pendente: true, periodo_pago_desde: null,
+      trial_ate: ha(1), vencida_desde: ha(1), ultimo_aviso: null, ultimo_aviso_em: null };
+    m.org = { ...m.org, status: "suspended", suspended_kind: "cobranca" };
+    ler.mockResolvedValue(situacao({ existe: false, jaPagou: false, emAtraso: false, periodoPagoDesde: null }));
+    await rodar(); await rodar();
+    expect(enviarAviso).not.toHaveBeenCalled();
+    expect(rpcs("fn_cobranca_registrar_aviso")).toEqual([]);
+    expect(rpcs("fn_reativar_organizacao")).toEqual([]);
+  });
+});
+
+it("inadimplência real já suspensa envia uma vez quando a deduplicação concede o aviso", async () => {
+  m.linha = { ...LINHA, estado: "em_atraso", pagamento_inicial_pendente: false, periodo_pago_desde: ha(24 * 40),
+    provedor: null, provedor_cliente_id: null, vencida_desde: ha(24 * 10), ultimo_aviso: null, ultimo_aviso_em: null };
+  m.org = { ...m.org, status: "suspended", suspended_kind: "cobranca" };
+  await rodar(); m.avisoGanho = false; await rodar();
+  expect(enviarAviso).toHaveBeenCalledOnce();
+  expect(rpcs("fn_cobranca_registrar_aviso")).toHaveLength(2);
+  expect(rpcs("fn_reativar_organizacao")).toEqual([]);
+});

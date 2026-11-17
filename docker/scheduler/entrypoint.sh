@@ -87,6 +87,7 @@ CRONS="
 * * * * *|45|api/v1/cron/event-log-drain
 * * * * *|25|api/v1/cron/routing-worker
 */5 * * * *|25|api/v1/cron/recover-stuck-messages
+*/5 * * * *|25|api/v1/cron/recover-stuck-calls
 * * * * *|25|api/v1/cron/proposta-travada
 * * * * *|45|api/v1/cron/webhook-replay
 */5 * * * *|25|api/v1/cron/storage-redaction?limit=50
@@ -100,6 +101,11 @@ CRONS="
 # venceu nos ultimos 15 min e mensagem dos ultimos 30 min, no maximo 50 por
 # rodada; o handoff formal nunca vence e nunca entra.
 * * * * *|60|api/v1/cron/ia-pendente
+# A FOTO GUARDADA SEM DESCRIÇÃO (MEDIA_VISION_WITHOUT_READER=defer). De 5 em 5
+# minutos: é o prazo para um follow-up, um rascunho ou uma integração passar a ver
+# a descrição da foto que chegou quando a empresa ainda não tinha quem a lesse.
+# Barato: um índice parcial vazio na maioria das instalações.
+*/5 * * * *|25|api/v1/cron/media-leitura-adiada
 # A CAMPANHA. Minuto a minuto, e a rodada manda no máximo uma mensagem por
 # número: é o cron que dá a cadência base, e o ritmo da campanha e do canal
 # (channel_knobs + pacing_ledger) só sabem torná-la mais lenta.
@@ -119,7 +125,12 @@ CRONS="
 # chegou desde a ultima marca, entao ela e curta; o teto de 240s e para a
 # primeira leitura de um formulario, que pode voltar ate 90 dias.
 */5 * * * *|240|api/v1/cron/leads-da-meta
+# Módulo opcional: não instalado, só lê a lista de módulos e sai, sem tocar nas tabelas dele.
+* * * * *|55|api/v1/cron/cadencia-worker
 */5 * * * *|60|api/v1/cron/webhook-log-retention
+# OAuth por contato dos servidores MCP do agente (migration 9095): revoga no
+# terceiro o acesso cuja conversa encerrou (ou cujo contato foi anonimizado).
+*/5 * * * *|60|api/v1/cron/mcp-oauth-revogacao
 */5 * * * *|45|api/v1/cron/channel-health
 # A JANELA DE MANUTENÇÃO (#2388). Minuto a minuto porque o que ela decide é a
 # borda de um horário ESCOLHIDO POR UMA PESSOA: perder a abertura ou a retomada

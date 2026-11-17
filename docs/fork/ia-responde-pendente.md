@@ -145,8 +145,15 @@ parada há horas não passa.
 
 ### 2.4 Calada em todos, mas avisando (caso 2)
 
-O veto do turno é o do upstream, sem mudança: `isLeadInHandoff` conta toda conversa do
-contato. O que muda é que a pausa aparece em três lugares, e que a função A não pede
+O veto do turno é o do upstream: `isLeadInHandoff` conta toda conversa do contato.
+Desde a v1.107 do upstream (#4146) a função aceita a conversa do turno
+(`{ conversationId }`) e passa a calar só ela; o fork não passa esse 4º argumento no
+turno de mensagem (`inbound-turn.ts`, os dois vetos) nem no envio fixo da régua
+(`followup-turn.ts`), para que nenhum número fale com o contato enquanto uma pessoa o
+atende em outro (fusão .110). A outra metade do #4146 vale aqui também: conversa
+encerrada não cala mais ninguém. O turno do operador (`operator-turn.ts`), que não fala
+com o contato, segue o escopo por conversa do upstream. A cerca está em
+`tests/unit/ia-responde-pendente.test.ts`. O que muda é que a pausa aparece em três lugares, e que a função A não pede
 turno que o motor pula.
 
 - **A função A** (`pedirTurnoDaMensagemPendente`) chama o próprio `isLeadInHandoff`

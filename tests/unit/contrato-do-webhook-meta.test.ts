@@ -20,6 +20,8 @@ const APP_SECRET = "app-secret-de-teste";
 const OUTRA_SESSAO = { id: "sess-2", organizationId: "org-2", wabaId: "2434045433735175" };
 const ingeridos: unknown[] = [];
 const orgsIngeridas: string[] = [];
+/** A recusa do contrato arquiva o corpo cru; o sucesso não arquiva (nada mudou ali). */
+const arquivados: Record<string, unknown>[] = [];
 
 const porToken = vi.hoisted(() => vi.fn());
 const porWaba = vi.hoisted(() => vi.fn());
@@ -60,16 +62,29 @@ vi.mock("@/lib/broadcast/desfecho-da-campanha", () => ({
  * O ramo de `failed` do upstream (#1614) encadeia `.neq().select().maybeSingle()`,
  * e a escada fixa lançaria ali — o teste mediria o mock, não a rota.
  */
-function consultaVazia(): Record<string, unknown> {
+function consultaVazia(resultado: unknown = { data: null, error: null }): Record<string, unknown> {
   const c: Record<string, unknown> = {};
   for (const m of ["update", "eq", "neq", "select"]) c[m] = () => c;
-  c.maybeSingle = async () => ({ data: null, error: null });
-  c.then = (ok: (v: unknown) => unknown) => ok({ data: null, error: null });
+  c.maybeSingle = async () => resultado;
+  c.then = (ok: (v: unknown) => unknown) => ok(resultado);
   return c;
 }
 
+/**
+ * A recusa do contrato (upstream 1.107) GRAVA: arquiva o corpo cru em
+ * `webhook_events_log` e abre o aviso em `agent_inbox_items`. O `insert` guarda
+ * o arquivo para o teste ler e devolve a linha; o resto continua vazio.
+ */
 vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: () => ({ from: () => consultaVazia() }),
+  createAdminClient: () => ({
+    from: (tabela: string) => ({
+      ...consultaVazia(),
+      insert: (linha: Record<string, unknown>) => {
+        if (tabela === "webhook_events_log") arquivados.push(linha);
+        return consultaVazia({ data: { id: String(linha.id) }, error: null });
+      },
+    }),
+  }),
 }));
 
 import { lerEnvelopeMeta } from "@/lib/channels/meta/envelope";
@@ -126,7 +141,12 @@ describe("os payloads reais atravessam inteiros", () => {
     const r = lerEnvelopeMeta(
       JSON.stringify({
         object: "whatsapp_business_account",
-        entry: [{ id: "w", changes: [{ field: "messages", value: { messages: "nem é lista", metadata: 7 } }] }],
+        entry: [
+          {
+            id: "w",
+            changes: [{ field: "messages", value: { messages: "nem é lista", metadata: 7 } }],
+          },
+        ],
       }),
     );
     expect(r.ok).toBe(true);
@@ -179,6 +199,7 @@ describe("a rota — o desfecho que a Meta enxerga", () => {
     porWaba.mockReset().mockResolvedValue(null);
     ingeridos.length = 0;
     orgsIngeridas.length = 0;
+    arquivados.length = 0;
     ecos.length = 0;
     naCampanha.length = 0;
   });
@@ -193,17 +214,28 @@ describe("a rota — o desfecho que a Meta enxerga", () => {
     vi.unstubAllEnvs();
   });
 
-  it("`entry` torto bem assinado: 400 com o campo, e NADA é ingerido", async () => {
-    // Antes era 500 (exceção não capturada) e a Meta reentregava para sempre.
+  it("`entry` torto bem assinado: 200 dizendo que recusou, e NADA é ingerido", async () => {
+    // Antes era 500 (exceção não capturada) e a Meta reentregava para sempre;
+    // depois, 400 — que faz a Meta reentregar igual. Agora o corpo torto é
+    // arquivado com `status = 'error'` e a resposta é 200, sem pedir reentrega
+    // (#290, item 3). O caso completo está em
+    // `recusa-do-webhook-meta-deixa-rastro.test.ts`.
     vi.stubEnv("META_APP_SECRET", APP_SECRET);
+    ingeridos.length = 0;
+    arquivados.length = 0;
 
     const res = await POST(pedido({ object: "whatsapp_business_account", entry: 3 }), ctx);
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
-      error: { code: "validation_failed", details: { campos: ["entry"] } },
+      accepted: false,
+      reason: "payload_fora_do_contrato",
+      campos: ["entry"],
+      arquivo: "error",
     });
     expect(ingeridos).toHaveLength(0);
+    expect(arquivados).toHaveLength(1);
+    expect(arquivados[0]).toMatchObject({ status: "error" });
     vi.unstubAllEnvs();
   });
 

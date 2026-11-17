@@ -6,8 +6,13 @@
  * `aria-sort` diz a ordem atual, o "—" fica no fim, a chave de impressão
  * esconde quem não veiculou e diz quantas estão à vista, e a escolha volta
  * depois de recarregar — por pessoa.
+ *
+ * O upstream criou um arquivo com o MESMO nome na v1.103 (#3911, o `select`
+ * "Ordenar por" e a abertura pela campanha mais recente). Os dois moram aqui:
+ * os casos dele estão no fim, no bloco "O CONTROLE DE ORDEM NA TELA", como ele
+ * os escreveu (só os ajudantes ganharam nome próprio para não colidir).
  */
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -27,6 +32,8 @@ function linha(id: string, nome: string, ajustes: Partial<LinhaDeCampanha> = {})
     status: "ACTIVE",
     veiculacao: "ACTIVE",
     objetivo: null,
+    criadaEm: null,
+    iniciadaEm: null,
     resultado: { valor: null, custoPorResultado: null, indicador: null },
     gasto: null,
     impressoes: null,
@@ -74,6 +81,7 @@ describe("ordenar pelo cabeçalho", () => {
   it("abre na ordem da plataforma, sem coluna marcada", () => {
     render(<TabelaDeCampanhas linhas={LINHAS} moeda="BRL" />);
     expect(nomesNaTabela()).toEqual(["Beta", "Alfa", "Sem veiculação", "Gama"]);
+    // A coluna "Início" (upstream #3911) não tem botão de ordem, e também diz "none".
     for (const th of screen.getAllByRole("columnheader")) {
       expect(th.getAttribute("aria-sort")).toBe("none");
     }
@@ -124,13 +132,15 @@ describe("ordenar pelo cabeçalho", () => {
     expect(nomesNaTabela()).toEqual(["Beta", "Alfa", "Sem veiculação", "Gama"]);
   });
 
-  it("os rótulos das 15 colunas não mudam com o botão dentro do cabeçalho", () => {
+  it("os rótulos das 16 colunas não mudam com o botão dentro do cabeçalho", () => {
     render(<TabelaDeCampanhas linhas={LINHAS} moeda="BRL" />);
     const rotulos = screen.getAllByRole("columnheader").map((th) => (th.textContent ?? "").trim());
-    expect(rotulos).toHaveLength(15);
+    // 16 desde a coluna "Início" do upstream (#3911), logo depois da Veiculação.
+    expect(rotulos).toHaveLength(16);
     expect(rotulos[0]).toBe("Campanha");
-    expect(rotulos[10]).toBe("Connect rate");
-    expect(rotulos[13]).toBe("Hook Rate(reproduções)");
+    expect(rotulos[3]).toBe("Início");
+    expect(rotulos[11]).toBe("Connect rate");
+    expect(rotulos[14]).toBe("Hook Rate(reproduções)");
   });
 });
 
@@ -175,5 +185,104 @@ describe("a escolha é lembrada por pessoa", () => {
     render(<TabelaDeCampanhas linhas={LINHAS} moeda="BRL" usuarioId="bruno" />);
     expect(screen.getByText("Mostrando 4 de 4")).toBeTruthy();
     expect(nomesNaTabela()).toEqual(["Beta", "Alfa", "Sem veiculação", "Gama"]);
+  });
+});
+
+// ─── O CONTROLE DE ORDEM NA TELA (upstream #3911) ───────────────────────────
+/**
+ * O CONTROLE DE ORDEM NA TELA (#3911).
+ *
+ * O teste de lib (`meta-ads-ordem-das-campanhas.test.ts`) prova a ordenação; este
+ * prova que ela CHEGA à tabela: que a tela abre na ordem padrão e que trocar o
+ * `select` reordena o que está desenhado. Sem este caso, um `select` ligado em
+ * nada — ou um `useMemo` com a dependência faltando — passaria com a lib verde.
+ *
+ * Sem rede e sem i18n: `useT` é o dublê identidade, então o rótulo na tela é a
+ * própria chave em português.
+ */
+
+function linhaComData(
+  campanhaId: string,
+  criadaEm: string | null,
+  ajustes: Partial<LinhaDeCampanha> = {},
+): LinhaDeCampanha {
+  return {
+    campanhaId,
+    nome: campanhaId,
+    status: "ACTIVE",
+    veiculacao: "ACTIVE",
+    objetivo: "OUTCOME_LEADS",
+    criadaEm,
+    iniciadaEm: criadaEm,
+    resultado: { valor: null, custoPorResultado: null, indicador: null },
+    gasto: 10,
+    impressoes: 100,
+    alcance: 80,
+    cpm: 5,
+    ctr: 1,
+    connectRate: null,
+    frequencia: 1.2,
+    cpc: 0.5,
+    hookRate: null,
+    thruPlays: null,
+    ...ajustes,
+  };
+}
+
+/** A ordem em que os nomes aparecem no corpo da tabela. */
+function nomesNaTelaComData(): string[] {
+  const corpo = screen.getAllByRole("rowgroup")[1];
+  if (!corpo) throw new Error("esperava o corpo da tabela");
+  return within(corpo)
+    .getAllByRole("row")
+    .map((tr) => (tr.textContent ?? "").trim());
+}
+
+/** As três como a plataforma entrega: da mais antiga para a mais nova. */
+const LINHAS_NA_ORDEM_DA_API = [
+  linhaComData("Captação: janeiro", "2024-01-09T11:00:00+0000", { veiculacao: "PAUSED" }),
+  linhaComData("Cadastro: Agenda Cheia", "2026-03-02T08:15:00+0000", { veiculacao: "PAUSED" }),
+  linhaComData("Engajamento: Astra Mídia", "2026-08-14T09:31:10+0000"),
+];
+
+describe("a tabela de campanhas abre na campanha mais recente", () => {
+  it("mostra primeiro a mais nova, mesmo recebendo a ordem da plataforma", () => {
+    render(<TabelaDeCampanhas linhas={LINHAS_NA_ORDEM_DA_API} moeda="BRL" />);
+
+    const [primeira] = nomesNaTelaComData();
+    expect(primeira).toContain("Engajamento: Astra Mídia");
+    expect(nomesNaTelaComData()[2]).toContain("Captação: janeiro");
+  });
+
+  it("o controle existe, com as três ordens", () => {
+    render(<TabelaDeCampanhas linhas={LINHAS_NA_ORDEM_DA_API} moeda="BRL" />);
+
+    const seletor = screen.getByLabelText("Ordenar por") as HTMLSelectElement;
+    expect(seletor.value).toBe("mais_recentes");
+    expect([...seletor.options].map((o) => o.value)).toEqual([
+      "mais_recentes",
+      "mais_antigas",
+      "status",
+    ]);
+  });
+
+  it("trocar para `mais_antigas` reordena o que está desenhado", () => {
+    render(<TabelaDeCampanhas linhas={LINHAS_NA_ORDEM_DA_API} moeda="BRL" />);
+
+    fireEvent.change(screen.getByLabelText("Ordenar por"), { target: { value: "mais_antigas" } });
+
+    const [primeira] = nomesNaTelaComData();
+    expect(primeira).toContain("Captação: janeiro");
+    expect(nomesNaTelaComData()[2]).toContain("Engajamento: Astra Mídia");
+  });
+
+  it("trocar para `status` põe quem está entregando primeiro", () => {
+    render(<TabelaDeCampanhas linhas={LINHAS_NA_ORDEM_DA_API} moeda="BRL" />);
+
+    fireEvent.change(screen.getByLabelText("Ordenar por"), { target: { value: "status" } });
+
+    const [primeira] = nomesNaTelaComData();
+    // Só a de agosto está ACTIVE; as outras duas estão pausadas.
+    expect(primeira).toContain("Engajamento: Astra Mídia");
   });
 });

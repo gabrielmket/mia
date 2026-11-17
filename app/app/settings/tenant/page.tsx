@@ -8,12 +8,14 @@ import { alineasDoArt15Visiveis, art15DoControlador } from "@/lib/legal/art15";
 import { moedaServidaOu } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import { Art15Form } from "./_art15";
+import { CatalogoDaEmpresaForm } from "./_catalogo";
 import { ZonaDePerigoDaOrganizacao } from "./_danger-zone";
 import { lerModoDeVenda } from "@/lib/empresas/modo-de-venda";
 import { InboxDaEmpresaForm } from "./_inbox";
 import { TenantForm } from "./_form";
 import { InterfaceDaEmpresaForm } from "./_interface";
 import { camposDoNegocioDosFunis } from "@/lib/leads/compras-do-contato";
+import { capacidadesLigadas } from "@/lib/organizacao/capacidades";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +127,11 @@ export default async function TenantSettingsPage() {
         />
       )}
       {row && <InboxDaEmpresaForm initial={row.interface_settings} />}
+      {row && (
+        <CatalogoDaEmpresaForm
+          inicial={capacidadesLigadas(row.settings, []).includes("apresentacao_do_catalogo")}
+        />
+      )}
       {row && <ZonaDePerigoDaOrganizacao displayName={row.display_name} />}
     </div>
   );

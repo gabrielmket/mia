@@ -1,7 +1,7 @@
 import { format } from "date-fns";
 import { describe, expect, it } from "vitest";
 
-import { ancoraDoPeriodoVizinho, recorteDaGrade } from "./recorte-da-grade";
+import { ancoraDoPeriodoVizinho, diasDoRecorte, recorteDaGrade } from "./recorte-da-grade";
 
 /**
  * As datas do vermelho de 2026-09-24. Montadas em hora LOCAL (como a
@@ -89,5 +89,17 @@ describe("ancoraDoPeriodoVizinho", () => {
 
   it("no Mês, o dia que não existe no destino encosta no último do mês", () => {
     expect(chave(ancoraDoPeriodoVizinho("mes", dia(2027, 1, 31, 12), 1))).toBe("2027-02-28");
+  });
+});
+
+describe("diasDoRecorte", () => {
+  it("devolve o primeiro e o último dia desenhados em cada visão", () => {
+    const ancora = dia(2026, 10, 1, 12);
+    expect(diasDoRecorte("dia", ancora)).toEqual({ de: "2026-10-01", ate: "2026-10-01" });
+    // FORK MIA: a semana começa na SEGUNDA (`INICIO_DA_SEMANA`, .9x), e não no
+    // domingo do upstream; 01/10/2026 é quinta, então a semana e a primeira
+    // linha do Mês abrem em 28/09, e as seis semanas do Mês vão até 08/11.
+    expect(diasDoRecorte("semana", ancora)).toEqual({ de: "2026-09-28", ate: "2026-10-04" });
+    expect(diasDoRecorte("mes", ancora)).toEqual({ de: "2026-09-28", ate: "2026-11-08" });
   });
 });

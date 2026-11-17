@@ -25,6 +25,7 @@ import {
 import { drainEventLog } from "@/lib/event-log/drain";
 import { ensureHandlersRegistered } from "@/lib/event-log/register-handlers";
 import { pinoReintentoHandler } from "@/lib/channels/zernio/pino-reintento.handler";
+import { reenvioDesaceleradoHandler } from "@/lib/messaging/reenvio-desacelerado.handler";
 import { automationRulesHandler } from "@/lib/automation/engine.handler";
 import { campanhaRespostaHandler } from "@/lib/campanhas/resposta.handler";
 import { cobrancaSinalHandler } from "@/lib/cobranca/sinal.handler";
@@ -104,6 +105,8 @@ const PULA: EventHandler[] = [
   // FORK MIA: sai para a Meta, então pula na organização parada.
   conversaoDoLeadDeFormularioHandler,
   pinoReintentoHandler,
+  // Reenviar a mensagem que o canal mandou desacelerar é falar com o cliente.
+  reenvioDesaceleradoHandler,
 ];
 
 const PREFIXO_DE_TESTE = "teste-org-parada";

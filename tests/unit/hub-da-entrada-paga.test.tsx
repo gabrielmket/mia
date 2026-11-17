@@ -46,6 +46,14 @@ vi.mock("@/lib/supabase/admin", () => ({
           data: ids.map((id) => ({ id, status: "suspended", suspended_kind: "cobranca" })),
           error: null,
         }),
+        // Fusão v1.100 a v1.107: a página lê `cobranca_assinaturas` por
+        // organização (o passo do fork e o "primeiro pagamento" do upstream).
+        // Aqui essa leitura falha, o cenário que este arquivo sempre mediu: a
+        // empresa fica no hub, e o texto vem de `esperaOPrimeiroPagamento`. O
+        // desvio para o passo está em app/account-suspended/page.test.tsx.
+        eq: () => ({
+          maybeSingle: async () => ({ data: null, error: { code: "57014", message: "fora deste teste" } }),
+        }),
       }),
     }),
   }),

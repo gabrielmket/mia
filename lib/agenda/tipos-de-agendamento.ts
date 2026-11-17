@@ -61,12 +61,32 @@ export const camposDoTipo = {
    */
   reminder_enabled: z.boolean().optional(),
   /**
+   * O BLOCO DO NEGÓCIO na descrição do evento do Google (upstream #4006, doc 272 = B).
+   *
+   * Nasce desligado (default da coluna, migration 9209) e não tem `.default()`
+   * aqui: no Google todo convidado lê a descrição, inclusive o cliente com
+   * e-mail na ficha, e atualizar o sistema não pode mandar o nome, o telefone e
+   * a etapa do funil para fora sem alguém decidir.
+   *
+   * FORK MIA: este contrato mora aqui (e não na rota, como no upstream) desde
+   * que o MCP de plataforma passou a usá-lo; campo novo da rota dele entra AQUI,
+   * senão o `z.object` o descarta calado.
+   */
+  levar_dados_do_negocio: z.boolean().optional(),
+  /**
    * O NÚMERO que manda o lembrete (upstream v1.83, `calendar_event_types.
    * reminder_channel_session_id`). Sem ele, compromisso sem conversa numa
    * empresa com 2 ou mais números fica pendente como `remetente_ambiguo`.
    * Quem grava confere antes, com `canalDoLembreteValido` abaixo.
    */
   reminder_channel_session_id: z.string().uuid().nullish(),
+  /**
+   * O modelo aprovado que sai quando a janela de 24 h do cliente fechou
+   * (upstream 1.100, `lib/agenda/lembrete-por-modelo.ts`). Nulo = como antes:
+   * fora da janela o lembrete não sai e a equipe recebe o aviso. A rota confere
+   * em `recusaDoModeloDoLembrete` antes de gravar.
+   */
+  reminder_meta_template_id: z.string().uuid().nullish(),
   /**
    * ⚠️ ESTA FAIXA É MAIS ESTREITA QUE O CHECK DO BANCO, E ISSO CONTRARIA O
    * PARÁGRAFO ACIMA DE PROPÓSITO.

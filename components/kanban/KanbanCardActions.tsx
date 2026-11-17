@@ -39,6 +39,7 @@ import { rotuloDoMembro } from "@/lib/users/rotulo-do-atendente";
 // FORK MIA (.109): "Marcar como ganho" abre a janela de ganho com os itens do
 // negócio (docs/fork/produto-no-negocio.md), em vez de fechar direto.
 import { JanelaDoGanho } from "@/components/produto-no-negocio/JanelaDoGanho";
+import { etapasParaMover } from "@/lib/kanban/ordem-das-etapas";
 
 interface KanbanCardActionsProps {
   lead: Lead;
@@ -70,7 +71,16 @@ export function KanbanCardActions({ lead, pipelineId, etapas, onMoverPara }: Kan
   const { data: members } = useAssignableMembers(canAssign);
   // A rota já devolve só agente ativo e não arquivado — é o picker.
   const { data: agents } = useAssignableAgents(canAssign);
-  const destinos = etapas?.filter((e) => e.id !== lead.stage_id) ?? [];
+  /**
+   * «Mover para…» — as MESMAS colunas do quadro, na MESMA ordem (#3874).
+   *
+   * Antes esta linha era `etapas.filter(e => e.id !== lead.stage_id)`: a ordem
+   * era a do array que chegasse. Com a régua em `lib/kanban/ordem-das-etapas`,
+   * reordenar em Configurações muda o quadro E este menu — e etapa desativada
+   * (arquivada) deixa de ser oferecida como destino, porque reativá-la por aqui
+   * seria desfazer o «desativar» do gestor sem ele ver.
+   */
+  const destinos = etapasParaMover(etapas ?? [], lead.stage_id);
 
   const reassignToUser = (ownerUserId: string | null) => {
     if (ownerUserId === lead.owner_user_id) return;
@@ -298,6 +308,7 @@ export function KanbanCardActions({ lead, pipelineId, etapas, onMoverPara }: Kan
         open={loseOpen}
         onOpenChange={setLoseOpen}
         leadId={lead.id}
+        leadLabel={lead.title}
         pipelineId={pipelineId}
       />
       <MoveToOtherPipelineDialog
