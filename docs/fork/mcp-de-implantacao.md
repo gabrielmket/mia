@@ -657,9 +657,11 @@ Ficou de fora desta fusão, por decisão:
 Mesma regra, na fusão das v1.100 a v1.107. A prova de cada linha está em
 `tests/unit/mcp-de-implantacao-novidades-do-upstream-1107.test.ts` (as duas ações
 novas, nos testes da lista de tipos de ação); a dos campos novos do agente, em
-`tests/unit/mcp-de-implantacao-campos-novos-do-agente-1107.test.ts` (MIA-15); e a do
+`tests/unit/mcp-de-implantacao-campos-novos-do-agente-1107.test.ts` (MIA-15); a do
 modelo aprovado da agenda, em `tests/unit/mcp-de-implantacao-modelo-da-agenda.test.ts`
-(MIA-16). Nenhuma ferramenta nova, só campos e uma seção de leitura.
+(MIA-16); e a do follow-up com a conversa atribuída e dos setores, em
+`tests/unit/mcp-de-implantacao-followup-e-setores-1107.test.ts` (MIA-21). Nenhuma
+ferramenta nova, só campos e seções de leitura.
 
 | novidade do upstream | versão | como o MCP alcança | operação |
 |---|---|---|---|
@@ -675,6 +677,8 @@ modelo aprovado da agenda, em `tests/unit/mcp-de-implantacao-modelo-da-agenda.te
 | O lembrete da agenda por MODELO APROVADO da Meta quando a janela de 24 h do cliente fechou (`calendar_event_types.reminder_meta_template_id`, 9092) | 1.100 | campo novo `modelo_do_lembrete` (id ou nome) em `plataforma_garantir_tipos_de_agendamento`, gravado pelo mesmo contrato da rota (`criarComRascunhoSchema`/`alterarSchema`); a conferência (`lib/implantacao/modelos-aprovados.ts`) usa as réguas do upstream (`isStatusSendable`, `variaveisQueOLembretePreenche`, o número dono da linha como o cron confere) e recusa o modelo não aprovado (a rota deixa para o cron; o MCP só escolhe entre aprovados), o de OUTRO número que o do lembrete e o de variável que o lembrete não preenche. `null` tira. A leitura (seção `agenda`) devolve `modelo_do_lembrete` de cada tipo, com `serve` e o porquê | `implantar_configuracao` |
 | Os modelos APROVADOS de cada número, para escolher | 1.100 | seção nova `modelos_aprovados` em `plataforma_ver_configuracao`: por número, os aprovados (`modelosDaConexao`, a mesma busca da tela do aviso) com id, nome, idioma, categoria, variáveis (onde, chave, o que espera), `serve_ao_lembrete` (com o porquê, quando não) e `serve_ao_aviso_da_equipe` (`avaliarModeloDoAviso`) | leitura |
 | O aviso à equipe por modelo aprovado (`config_aviso_de_caso.modelo_id`, 9094; o destino no WhatsApp de um membro, 9099) | 1.100 | SÓ LEITURA: `modelos_aprovados.aviso_da_equipe` devolve o número, o modelo escolhido e se ele ainda serve. Escolher fica na tela Aviso no WhatsApp (`/app/ai/cases/avisos`): a única porta que grava é `fn_definir_aviso_de_caso`, que exige pessoa logada (`auth.uid()`), papel admin e a verificação em duas etapas na sessão (`PUT /api/v1/ai/cases/alerta`). Um token não tem sessão, e gravar a coluna pelo cliente de serviço seria pular a porta (o mesmo motivo dos prazos da agenda) | leitura |
+| O follow-up envia mesmo com a conversa atribuída a uma pessoa (`followup_flow_pointers.send_when_assigned`, #3974) | 1.107 | campo novo `enviar_com_conversa_atribuida` em `plataforma_garantir_followup`, pela mesma conferência do PATCH da tela (`patchFollowupFlowSchema`); sem o campo, o fluxo nasce com o padrão do banco (desligado), como na tela; num fluxo publicado a chave vale na hora e é recusada até desligar, como o gatilho e `quando_humano_assume`; `plataforma_ver_followup` e a seção `followups` devolvem o valor; `plataforma_copiar_followup` leva a chave, como a importação da tela | `implantar_configuracao` |
+| Os SETORES de atendimento (`attendant_sectors`, #3881), que a ação `define_sector` pede | 1.103 | a seção `equipe` de `plataforma_ver_configuracao` ganhou `setores`, só da organização pedida, com id e nome (sem quem é de cada setor); a recusa do `sector_id` alheio em `plataforma_garantir_automacao` aponta essa leitura | leitura |
 
 Falta no MCP (fica para uma tarefa própria, porque cada item pede ferramenta ou
 leitura nova, e não um campo):
@@ -686,11 +690,7 @@ leitura nova, e não um campo):
   conversa (9312, módulo opcional): ferramentas novas, e as três primeiras encostam
   no nosso e-mail marketing e na marca travada da plataforma;
 - a reserva com capacidade e a lista de espera da agenda (9224, 9235, 9242) e o
-  molde de IA das empresas novas (9096, que encosta no cliente-modelo);
-- o "enviar mesmo com a conversa atribuída" do follow-up (`send_when_assigned`, #3974):
-  a régua do MCP nasce desligada, como na tela, mas a ferramenta não liga a chave;
-- a leitura dos setores (`attendant_sectors`): a ação `define_sector` já entra, mas o
-  id do setor ainda sai da tela.
+  molde de IA das empresas novas (9096, que encosta no cliente-modelo).
 
 Nada a configurar pela implantação: o contrato do webhook da Meta (1.107), o CPF só
 como "preenchido" na API, o escopo de leitura do negócio, a exportação em PDF, a

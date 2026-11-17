@@ -128,6 +128,28 @@ export function acharMembro(membros: Membro[], referencia: string): Membro {
   );
 }
 
+/**
+ * Os SETORES de atendimento da organização (`attendant_sectors`, upstream
+ * 1.103, #3881), só com id e nome: é o que a ação `define_sector` das
+ * automações pede (`sector_id`). Quem é de cada setor não sai daqui: a pessoa
+ * é lida em `membros`, e o setor só serve de destino. Mesma ordem da tela
+ * (`GET /api/v1/attendants/sectors`, por nome).
+ */
+export interface SetorLido {
+  id: string;
+  nome: string;
+}
+
+export async function lerSetores(admin: SupabaseClient, orgId: string): Promise<SetorLido[]> {
+  const { data, error } = await admin
+    .from("attendant_sectors")
+    .select("id, name")
+    .eq("organization_id", orgId)
+    .order("name", { ascending: true });
+  if (error) throw new Error(`não consegui ler os setores: ${error.message}`);
+  return ((data ?? []) as Array<{ id: string; name: string }>).map((s) => ({ id: s.id, nome: s.name }));
+}
+
 export interface ConviteLido {
   id: string;
   email: string;
