@@ -9,6 +9,8 @@ Este documento é o jeito de os dois andarem juntos. Ele existe porque a primeir
 sincronização (23/09/2026, 2.764 commits de uma vez) custou uma tarde inteira e quase
 deixou passar um buraco de LGPD que ninguém teria visto.
 
+**Quem confere uma fusão, ou revisa uma função nova, começa por [`docs/fork/CATALOGO.md`](fork/CATALOGO.md):** as regras que valem para todas as funções e, por função, os pontos de encaixe no código do upstream e como conferir que ela continua ligada. Toda função nova do fork entra no catálogo no mesmo PR (a cerca `tests/unit/catalogo-do-fork-cobre-cada-funcao.test.ts` reprova se faltar).
+
 ## As seis regras
 
 ### 1. O nosso mora ao lado do dele, nunca dentro
