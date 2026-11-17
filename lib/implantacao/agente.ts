@@ -1228,10 +1228,6 @@ async function garantirAgenteECadastro(
     });
   }
 
-  // 9095 — o cadastro dos servidores do agente vale na hora, como na tela.
-  const servidores = planoDosServidores ? await gravarServidoresDoAgente(c, agente.id, planoDosServidores) : null;
-  if (servidores) mudancasDoAgente.push(...servidores.mudancas);
-
   const versoes = await lerVersoes(c.admin, c.orgId, agente.id);
   const tela = escolherVersoesDaTela(versoes, agente.published_version_id);
   const referencia = tela.base;
@@ -1327,6 +1323,13 @@ async function garantirAgenteECadastro(
       desfechoDaVersao = referencia ? "atualizou" : "criou";
     }
   }
+
+  // 9095 — o cadastro dos servidores do agente vale na hora, como na tela, e
+  // só entra DEPOIS de a versão passar por todas as conferências e ser gravada:
+  // uma recusa da versão (o teto de ferramentas, o escopo, a IA) não deixa
+  // servidor nenhum gravado para trás.
+  const servidores = planoDosServidores ? await gravarServidoresDoAgente(c, agente.id, planoDosServidores) : null;
+  if (servidores) mudancasDoAgente.push(...servidores.mudancas);
 
   const noAr = estadoDoAgente(agente) === "no_ar";
   const ehRascunho = versaoFinal.status === "draft";
