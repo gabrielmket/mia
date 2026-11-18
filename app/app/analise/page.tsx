@@ -53,7 +53,7 @@ export default async function AnaliseHubPage() {
       interfaceSettings={activeOrg?.interface_settings}
       modulos={modulos}
       modoDeVenda={modoDeVenda}
-      modulosLigados={await modulosLigados(createAdminClient())}
+      modulosLigados={await modulosLigados(createAdminClient(), activeOrg?.orgId)}
       title={traduzir("Análise", idioma)}
       subtitle={traduzir(
         "Como o negócio foi no período — e o histórico para quando alguém perguntar por quê.",
