@@ -23,6 +23,11 @@
  *      esquecido; na ficha da pessoa, um telefone novo abre "Novo contato", que
  *      grava telefone E e-mail no mesmo contato, já ligado — sem sair da tela; e
  *      a ficha da empresa mostra telefone e e-mail no grupo da pessoa.
+ *
+ *   FORK MIA (.79, empresa única): a ficha da empresa é a do fork
+ *   (FichaDaEmpresa), que lista a pessoa pelo contato e tira com "Tirar da
+ *   empresa". Na jornada 3, a pessoa nasce em Pessoas e o vínculo se acerta
+ *   pela ficha da pessoa; a ficha do fork só confere o resultado.
  *   4. Lead do WhatsApp: na ficha do contato, "Ligar a uma pessoa" já abre com o
  *      nome do contato na busca e o rodapé cria a pessoa e liga o número.
  *
@@ -247,12 +252,18 @@ test("módulo ligado: liga contato e empresa pela ficha da pessoa e desfaz pela 
   await expect(page.getByRole("link", { name: EMPRESA })).toBeVisible();
   await page.screenshot({ path: `${EVIDENCIA}/5-contato-com-pessoa.png`, fullPage: true });
 
-  // 5. Ficha da empresa: a pessoa aparece; "Remover" desfaz o vínculo.
+  // 5. Ficha da empresa: a pessoa aparece; "Tirar da empresa" desfaz o vínculo.
+  //    FORK MIA (.79, empresa única): `/app/companies/<id>` é a ficha do fork
+  //    (components/cartoes/fichas/FichaDaEmpresa.tsx), não a `_client.tsx` dele.
+  //    Ela lista a pessoa pelo NÚMERO (o nome do contato, com cargo, telefone e
+  //    e-mail na mesma linha), e o botão é "Tirar da empresa", não "Remover".
   await page.goto(`/app/companies/${empresaId}`);
-  // O nome aparece duas vezes: no cartão das pessoas e no grupo dos telefones.
-  await expect(page.getByRole("link", { name: PESSOA }).first()).toBeVisible({ timeout: ESPERA });
+  const linha = page.getByTestId("pessoa-da-empresa").filter({ hasText: CONTATO });
+  await expect(linha.getByRole("link", { name: CONTATO })).toBeVisible({ timeout: ESPERA });
+  await expect(linha).toContainText("Diretora financeira");
+  await expect(linha).toContainText(EMAIL_DA_FICHA);
   await page.screenshot({ path: `${EVIDENCIA}/6-empresa-com-pessoa.png`, fullPage: true });
-  await page.getByRole("button", { name: "Remover" }).click();
+  await linha.getByRole("button", { name: "Tirar da empresa" }).click();
   await expect(page.getByText("Nenhuma pessoa vinculada.")).toBeVisible({ timeout: ESPERA });
 
   const depois = await db.from("company_people").select("id").eq("person_id", pessoaId);
@@ -263,21 +274,23 @@ test("módulo ligado: liga contato e empresa pela ficha da pessoa e desfaz pela 
   await page.screenshot({ path: `${EVIDENCIA}/7-empresa-desvinculada.png`, fullPage: true });
 });
 
-test("cadastro manual: pessoa nova pela empresa, editar decisor e contato novo pela pessoa", async () => {
+test("cadastro manual: pessoa nova, vínculo com a empresa, editar decisor e contato novo pela pessoa", async () => {
   await modulo("ligado");
 
-  // 1. Ficha da empresa: nome que não existe + cargo; o botão do RODAPÉ cria.
-  await page.goto(`/app/companies/${empresaId}`);
-  await page.getByRole("button", { name: "Adicionar pessoa", exact: true }).click();
-  const dialogo = page.getByRole("dialog");
-  await dialogo.getByPlaceholder("Buscar pessoa por nome ou e-mail").fill(PESSOA_NOVA);
-  await dialogo.getByLabel("Cargo").fill("Gerente comercial");
-  const criar = dialogo.getByRole("button", { name: `Criar nova pessoa: ${PESSOA_NOVA}` });
-  await expect(criar).toBeEnabled({ timeout: ESPERA });
-  await page.screenshot({ path: `${EVIDENCIA}/8-empresa-criar-pessoa-pelo-rodape.png` });
-  await criar.click();
-  await expect(dialogo).toHaveCount(0);
-  await expect(page.getByRole("link", { name: PESSOA_NOVA }).first()).toBeVisible({ timeout: ESPERA });
+  // FORK MIA (.79, empresa única): a ficha da empresa do fork não cria pessoa
+  // nem edita o vínculo (a do upstream, `_client.tsx`, fica fora da rota). O
+  // mesmo caminho no fork: a pessoa nasce em Pessoas, e o vínculo com cargo e o
+  // decisor esquecido se acertam pela ficha da pessoa, com os componentes dele
+  // (CamposDoVinculo, EditarVinculo). O passo 4 confere na ficha do fork.
+
+  // 1. Pessoas: "Nova pessoa" com um nome que não existe.
+  await page.goto("/app/people");
+  await page.getByRole("button", { name: "Nova pessoa", exact: true }).first().click({ timeout: ESPERA });
+  const dialogo = page.getByRole("dialog", { name: "Nova pessoa" });
+  await dialogo.getByRole("textbox").first().fill(PESSOA_NOVA);
+  await page.screenshot({ path: `${EVIDENCIA}/8-pessoas-criar-pessoa.png` });
+  await dialogo.getByRole("button", { name: "Criar", exact: true }).click();
+  await expect(dialogo).toHaveCount(0, { timeout: ESPERA });
 
   const criada = await db
     .from("people")
@@ -288,8 +301,20 @@ test("cadastro manual: pessoa nova pela empresa, editar decisor e contato novo p
   expect(criada.error).toBeNull();
   pessoaNovaId = (criada.data as { id: string }).id;
 
+  // 1b. Ficha da pessoa: "Adicionar a uma empresa" com cargo, sem o decisor.
+  await page.goto(`/app/people/${pessoaNovaId}`);
+  await expect(page.getByRole("heading", { name: PESSOA_NOVA })).toBeVisible({ timeout: ESPERA });
+  await page.getByRole("button", { name: "Adicionar a uma empresa" }).click();
+  const dialogoEmpresa = page.getByRole("dialog");
+  await dialogoEmpresa.getByPlaceholder("Buscar empresa por nome ou CNPJ").fill(EMPRESA);
+  await dialogoEmpresa.getByRole("button", { name: new RegExp(EMPRESA) }).click();
+  await dialogoEmpresa.getByLabel("Cargo").fill("Gerente comercial");
+  await dialogoEmpresa.getByRole("button", { name: "Adicionar", exact: true }).click();
+  await expect(dialogoEmpresa).toHaveCount(0);
+  await expect(page.getByRole("link", { name: EMPRESA })).toBeVisible({ timeout: ESPERA });
+
   // 2. Esqueceu o decisor: "Editar" corrige sem remover e ligar de novo.
-  await page.getByRole("button", { name: `Editar vínculo: ${PESSOA_NOVA}` }).click();
+  await page.getByRole("button", { name: `Editar vínculo: ${EMPRESA}` }).click();
   const edicao = page.getByRole("dialog");
   await expect(edicao.getByLabel("Cargo")).toHaveValue("Gerente comercial");
   await edicao.getByRole("switch").click();
@@ -301,11 +326,10 @@ test("cadastro manual: pessoa nova pela empresa, editar decisor e contato novo p
     .eq("person_id", pessoaNovaId)
     .single();
   expect(vinculo.data).toEqual({ job_title: "Gerente comercial", is_decision_maker: true });
-  await page.screenshot({ path: `${EVIDENCIA}/9-empresa-decisor-editado.png`, fullPage: true });
+  await page.screenshot({ path: `${EVIDENCIA}/9-pessoa-decisor-editado.png`, fullPage: true });
 
   // 3. Ficha da pessoa: telefone que não existe abre "Novo contato" com ele já
-  //    preenchido; o e-mail entra no MESMO contato.
-  await page.getByRole("link", { name: PESSOA_NOVA }).first().click();
+  //    preenchido; o e-mail entra no MESMO contato (já estamos na ficha dela).
   await expect(page.getByRole("heading", { name: PESSOA_NOVA })).toBeVisible({ timeout: ESPERA });
   await page.getByRole("button", { name: "Vincular contato" }).click();
   const busca = page.getByRole("dialog");
@@ -332,11 +356,14 @@ test("cadastro manual: pessoa nova pela empresa, editar decisor e contato novo p
     { phone_number: TELEFONE_NOVO, email: EMAIL_NOVO, name: PESSOA_NOVA, organization_id: orgId },
   ]);
 
-  // 4. Ficha da empresa: o número e o e-mail aparecem no grupo da pessoa.
+  // 4. Ficha da empresa (a do fork): o número e o e-mail aparecem na linha da
+  //    pessoa, com o cargo.
   await page.goto(`/app/companies/${empresaId}`);
-  const grupo = page.getByRole("listitem", { name: `Telefones e e-mails: ${PESSOA_NOVA}` });
-  await expect(grupo.getByRole("link", { name: TELEFONE_NOVO })).toBeVisible({ timeout: ESPERA });
-  await expect(grupo.getByText(EMAIL_NOVO)).toBeVisible();
+  const grupo = page.getByTestId("pessoa-da-empresa").filter({ hasText: PESSOA_NOVA });
+  await expect(grupo.getByRole("link", { name: PESSOA_NOVA })).toBeVisible({ timeout: ESPERA });
+  await expect(grupo).toContainText("Gerente comercial");
+  await expect(grupo).toContainText(TELEFONE_NOVO);
+  await expect(grupo).toContainText(EMAIL_NOVO);
   await page.screenshot({ path: `${EVIDENCIA}/10c-empresa-agrupada-por-pessoa.png`, fullPage: true });
 });
 
