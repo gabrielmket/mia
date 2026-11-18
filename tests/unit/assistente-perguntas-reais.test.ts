@@ -38,6 +38,9 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "como eu uso o mcp aqui", em: "/app/settings/servidor-mcp-externo", sobre: "/app/settings/servidor-mcp-externo", espera: "servidor-mcp-externo" },
   { pergunta: "como eu uso o mcp aqui", em: "/app/settings/api-tokens", sobre: "/app/settings/api-tokens", espera: "mcp-da-mia" },
   { pergunta: "como conecto o whatsapp", sobre: "/app/connections", espera: "conectar-numero" },
+  // FORK MIA · coexistência (MIA-28).
+  { pergunta: "como conecto o numero que ja uso no app whatsapp business", sobre: "/app/connections", espera: "coexistencia-pelo-app" },
+  { pergunta: "a sincronizacao do historico do app nao veio", sobre: "/app/connections", espera: "coexistencia-pelo-app" },
   { pergunta: "como configuro o horário da IA", sobre: "/app/ai/agents", espera: "horario-da-ia" },
   { pergunta: "onde vejo as conversões da meta", sobre: "/app/settings/conversoes", espera: "conversoes-meta" },
   { pergunta: "como mando e-mail marketing", sobre: "/app/broadcast", espera: "email-marketing-campanha" },
