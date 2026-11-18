@@ -157,130 +157,51 @@ import { rodarUmaRodada } from "@/lib/channels/historico/rodada";
 import { gravarLoteDoHistorico } from "@/lib/channels/meta/coexistencia/gravar-lote";
 import { mediaPersistHandler } from "@/workers/media-persist-worker.handler";
 import { mediaDeriveHandler } from "@/workers/media-derive-worker.handler";
+import { bancoEmMemoria, type Linha, type RpcDeMentira } from "@/tests/helpers/banco-em-memoria";
 
 // ---------------------------------------------------------------------------
-// Banco em memória: o bastante do PostgREST para os dois chamadores e o worker.
+// Banco: as tabelas de `tests/helpers/banco-em-memoria.ts`, com as funções do
+// banco que os chamadores usam, o bucket e o registro dos eventos emitidos.
 // ---------------------------------------------------------------------------
-type Linha = Record<string, unknown>;
-
 const ORG = "org-academia-alfa";
 const SESSAO_META = "sess-meta-alfa";
 const SESSAO_QR = "sess-qr-alfa";
 const NUMERO_DA_EMPRESA = "5531900000001";
 const WA_ID_DA_ANA = "5531900000002";
 
-function bancoEmMemoria() {
-  const tabelas = new Map<string, Linha[]>();
-  const tabela = (nome: string) => {
-    if (!tabelas.has(nome)) tabelas.set(nome, []);
-    return tabelas.get(nome)!;
-  };
+function bancoDoCaso() {
   const eventos: Array<{ tipo: string; args: Linha }> = [];
   const uploads: Array<{ bucket: string; path: string; bytes: number; contentType: string }> = [];
-  let seq = 0;
-
-  function consulta(nome: string) {
-    const filtros: Array<(l: Linha) => boolean> = [];
-    let op: "select" | "update" | "insert" = "select";
-    let patch: Linha = {};
-    let novas: Linha[] = [];
-    let devolve = false;
-    let limite = Infinity;
-
-    const executar = (): { data: unknown; error: unknown } => {
-      const linhas = tabela(nome);
-      if (op === "insert") {
-        for (const l of novas) {
-          const dup = linhas.some(
-            (x) => l.external_id != null && x.external_id === l.external_id && x.organization_id === l.organization_id,
-          );
-          if (dup) return { data: null, error: { code: "23505", message: "duplicate key" } };
-        }
-        const gravadas = novas.map((l) => ({
-          id: `${nome}-${++seq}`,
-          media_url: null,
-          media_mime: null,
-          media_storage_path: null,
-          ...structuredClone(l),
-        }));
-        linhas.push(...gravadas);
-        return { data: devolve ? structuredClone(gravadas) : null, error: null };
-      }
-      const alvos = linhas.filter((l) => filtros.every((f) => f(l))).slice(0, limite);
-      if (op === "update") {
-        for (const l of alvos) Object.assign(l, structuredClone(patch));
-        return { data: devolve ? alvos.map((l) => ({ id: l.id })) : null, error: null };
-      }
-      return { data: structuredClone(alvos), error: null };
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const q: any = {
-      select: () => {
-        if (op !== "select") devolve = true;
-        return q;
-      },
-      insert: (l: Linha | Linha[]) => {
-        op = "insert";
-        novas = Array.isArray(l) ? l : [l];
-        return q;
-      },
-      update: (p: Linha) => {
-        op = "update";
-        patch = p;
-        return q;
-      },
-      eq: (c: string, v: unknown) => (filtros.push((l) => l[c] === v), q),
-      neq: (c: string, v: unknown) => (filtros.push((l) => l[c] !== v), q),
-      in: (c: string, vs: unknown[]) => (filtros.push((l) => vs.includes(l[c])), q),
-      is: (c: string, v: unknown) => (filtros.push((l) => (l[c] ?? null) === v), q),
-      filter: (c: string, operador: string, v: unknown) => {
-        if (operador !== "isdistinct") throw new Error(`filtro inesperado: ${operador}`);
-        filtros.push((l) => (l[c] ?? null) !== v);
-        return q;
-      },
-      order: () => q,
-      limit: (n: number) => ((limite = n), q),
-      maybeSingle: async () => {
-        const r = executar();
-        return { data: Array.isArray(r.data) ? (r.data[0] ?? null) : r.data, error: r.error };
-      },
-      single: async () => {
-        const r = executar();
-        return { data: Array.isArray(r.data) ? r.data[0] : r.data, error: r.error };
-      },
-      then: (ok: (v: unknown) => unknown, erro?: (e: unknown) => unknown) =>
-        Promise.resolve(executar()).then(ok, erro),
-    };
-    return q;
-  }
-
-  const admin = {
-    from: consulta,
-    rpc: async (fn: string, args: Linha) => {
-      if (fn === "emit_event") {
-        eventos.push({ tipo: String(args.p_event_type), args });
-        return { data: null, error: null };
-      }
-      if (fn === "fn_titular_apagado_a_pedido") return { data: false, error: null };
-      if (fn === "fn_upsert_wa_contact") return { data: "contato-ana", error: null };
-      if (fn === "fn_upsert_wa_conversation_importada") {
-        const conversas = tabela("conversations");
-        if (!conversas.some((c) => c.id === "conversa-ana")) {
-          conversas.push({
-            id: "conversa-ana",
-            organization_id: ORG,
-            contact_id: args.p_contact,
-            channel_session_id: args.p_session,
-            is_group: false,
-            last_outbound_at: null,
-          });
-        }
-        return { data: "conversa-ana", error: null };
-      }
-      if (fn === "fn_mia_coexistencia_recontar") return { data: null, error: null };
-      return { data: null, error: { message: `rpc inesperada: ${fn}` } };
+  const ok = (data: unknown) => ({ data, error: null });
+  const rpcs: Record<string, RpcDeMentira> = {
+    emit_event: (args) => {
+      eventos.push({ tipo: String(args.p_event_type), args });
+      return ok(null);
     },
+    fn_titular_apagado_a_pedido: () => ok(false),
+    fn_upsert_wa_contact: () => ok("contato-ana"),
+    fn_upsert_wa_conversation_importada: (args, db) => {
+      const conversas = (db.conversations ??= []);
+      if (!conversas.some((c) => c.id === "conversa-ana")) {
+        conversas.push({
+          id: "conversa-ana",
+          organization_id: ORG,
+          contact_id: args.p_contact,
+          channel_session_id: args.p_session,
+          is_group: false,
+          last_outbound_at: null,
+        });
+      }
+      return ok("conversa-ana");
+    },
+    fn_mia_coexistencia_recontar: () => ok(null),
+  };
+  const base = bancoEmMemoria({}, rpcs);
+  const admin = {
+    from: base.cliente.from,
+    // Função que ninguém declarou é erro: o dublê não pode responder `null` calado.
+    rpc: async (nome: string, args: unknown) =>
+      rpcs[nome] ? base.cliente.rpc(nome, args) : { data: null, error: { message: `rpc inesperada: ${nome}` } },
     storage: {
       from: (bucket: string) => ({
         upload: async (path: string, buf: Buffer, opts: { contentType: string }) => {
@@ -291,10 +212,10 @@ function bancoEmMemoria() {
       }),
     },
   };
-  return { admin, tabela, eventos, uploads };
+  return { admin, tabela: base.tabela, eventos, uploads };
 }
 
-type Banco = ReturnType<typeof bancoEmMemoria>;
+type Banco = ReturnType<typeof bancoDoCaso>;
 
 /**
  * O dreno: entrega cada evento, na ordem, a todo handler REAL que se registra
@@ -378,7 +299,7 @@ function extensao(mime: string): string {
 // Chamador 1: coexistência (o histórico que a Meta manda).
 // ---------------------------------------------------------------------------
 function bancoDaCoexistencia() {
-  const banco = bancoEmMemoria();
+  const banco = bancoDoCaso();
   banco.tabela("channel_sessions").push({
     id: SESSAO_META,
     organization_id: ORG,
@@ -502,7 +423,7 @@ describe("coexistência: a mídia do histórico da Meta só é guardada", () => 
 // Chamador 2: canal não oficial (a importação pelo QR).
 // ---------------------------------------------------------------------------
 function bancoDoCanalNaoOficial() {
-  const banco = bancoEmMemoria();
+  const banco = bancoDoCaso();
   banco.tabela("channel_sessions").push({
     id: SESSAO_QR,
     organization_id: ORG,
