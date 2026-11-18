@@ -67,8 +67,10 @@ export async function GET(): Promise<Response> {
     const sessaoId = (sessao as { id?: string } | null)?.id ?? null;
     const numero = sessaoId ? (estado.numeros.find((n) => n.channelSessionId === sessaoId) ?? null) : null;
     const janela = configuracaoDaJanela();
+    const { data: org } = await admin.from("organizations").select("display_name").eq("id", orgId).maybeSingle();
     return ok(
       {
+        empresa: (org as { display_name?: string | null } | null)?.display_name ?? null,
         ligada: estado.chave.ligada,
         janela: janela.ok
           ? { pronta: true, appId: janela.appId, configId: janela.configId, graphVersion: janela.graphVersion, faltaNoAmbiente: [] }

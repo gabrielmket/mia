@@ -7,6 +7,8 @@ import type { Idioma } from "@/lib/i18n/idiomas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { FormularioDaMeta } from "./_form";
+// FORK MIA · coexistência (S3; docs/fork/coexistencia.md).
+import { CoexistenciaPorEmpresa } from "@/components/admin/coexistencia/CoexistenciaPorEmpresa";
 
 export const metadata = { title: "API Oficial da Meta da instalação" };
 export const dynamic = "force-dynamic";
@@ -68,6 +70,7 @@ export default async function Page() {
   const doAmbiente = appDaMetaDoAmbiente();
 
   return (
+    <>
     <FormularioDaMeta
       temSegredoSalvo={Boolean(linha?.app_secret_encrypted)}
       temTokenSalvo={Boolean(linha?.verify_token_encrypted)}
@@ -78,6 +81,11 @@ export default async function Page() {
       // levaria o dono a gerar um token por cima do que já está colado na Meta.
       leituraFalhou={Boolean(error)}
     />
+    {/* FORK MIA · coexistência: a chave por empresa, abaixo dos cartões de hoje. */}
+    <div className="mt-6">
+      <CoexistenciaPorEmpresa />
+    </div>
+    </>
   );
 }
 
