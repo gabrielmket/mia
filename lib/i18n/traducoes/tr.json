@@ -11450,5 +11450,16 @@
   "Leitura": "Okuma",
   "O link de autorização é automático: enquanto o cliente não autorizar, o agente recebe sozinho a ferramenta que gera o link. Não é preciso marcá-la aqui.": "Yetkilendirme bağlantısı otomatiktir: müşteri yetkilendirene kadar ajan, bağlantıyı üreten aracı kendiliğinden alır. Burada seçmeniz gerekmez.",
   "Este número já está em outra campanha em andamento.": "Bu numara zaten devam eden başka bir kampanyada kullanılıyor.",
-  "Abrir essa campanha": "O kampanyayı aç"
+  "Abrir essa campanha": "O kampanyayı aç",
+  "o uso soma todos os agentes": "kullanım tüm ajanları toplar",
+  "A data não pode ser depois de hoje.": "Tarih bugünden sonra olamaz.",
+  "Este mês": "Bu ay",
+  "Mês passado": "Geçen ay",
+  "Custo de IA por agente": "Ajana göre yapay zekâ maliyeti",
+  "Custo de IA por finalidade": "Amaca göre yapay zekâ maliyeti",
+  "Do cache": "Önbellekten",
+  "Agente removido": "Silinmiş ajan",
+  "Nenhuma chamada de IA no período.": "Bu dönemde yapay zekâ çağrısı yok.",
+  "O valor em R$ é parcial: dias sem cotação": "R$ tutarı kısmi: kur bilgisi olmayan günler",
+  "Sistema são as chamadas sem agente: o resumo depois da conversa, os classificadores e a transcrição. \"Do cache\" é parte dos tokens de entrada.": "Sistem, ajansız çağrılardır: konuşmadan sonraki özet, sınıflandırıcılar ve transkripsiyon. \"Önbellekten\", giriş tokenlarının bir parçasıdır."
 }

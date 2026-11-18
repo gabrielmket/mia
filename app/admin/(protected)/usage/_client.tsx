@@ -8,24 +8,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAdminUsage, type UsageRange } from "@/hooks/useAdminUsage";
+import { useAdminUsage } from "@/hooks/useAdminUsage";
 import { UsageCharts } from "@/components/admin/usage/UsageCharts";
 import { UsageTable } from "@/components/admin/usage/UsageTable";
 import { NaturezaDoGasto } from "@/components/admin/usage/NaturezaDoGasto";
 import { SaldoDoProvedorSecao } from "@/components/admin/usage/SaldoDoProvedor";
 import { useT } from "@/hooks/i18n/useT";
-
-const RANGE_OPTIONS: { value: UsageRange; label: string }[] = [
-  { value: "7d", label: "Últimos 7 dias" },
-  { value: "30d", label: "Últimos 30 dias" },
-  { value: "90d", label: "Últimos 90 dias" },
-];
+// FORK MIA (MIA-44): "Este mês" e "Mês passado" ao lado das janelas de dias.
+import {
+  ATALHOS_DE_PERIODO,
+  pedidoDoAtalho,
+  type AtalhoDePeriodo,
+} from "@/lib/ai/usage/atalhos-de-periodo";
 
 export function UsageClient() {
   const t = useT();
-  const [range, setRange] = useState<UsageRange>("30d");
+  const [atalho, setAtalho] = useState<AtalhoDePeriodo>("30d");
+  const pedido = pedidoDoAtalho(atalho);
+  // No mês, `range` vai como o padrão e a rota o ignora: quem manda é `mes`.
+  const range = pedido.tipo === "dias" ? (`${pedido.dias}d` as const) : "30d";
+  const mes = pedido.tipo === "mes" ? pedido.mes : null;
 
-  const { data, isLoading, isError } = useAdminUsage(range);
+  const { data, isLoading, isError } = useAdminUsage(range, undefined, mes);
 
   const usageData = data;
 
@@ -41,14 +45,14 @@ export function UsageClient() {
         </div>
 
         {/* Range selector */}
-        <Select value={range} onValueChange={(v) => setRange(v as UsageRange)}>
+        <Select value={atalho} onValueChange={(v) => setAtalho(v as AtalhoDePeriodo)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder={t("Período")} />
           </SelectTrigger>
           <SelectContent>
-            {RANGE_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {t(opt.label)}
+            {ATALHOS_DE_PERIODO.map((opt) => (
+              <SelectItem key={opt.valor} value={opt.valor}>
+                {t(opt.rotulo)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -77,7 +81,7 @@ export function UsageClient() {
             fatura={usageData.fatura}
           />
           <UsageCharts series={usageData.series} />
-          <UsageTable tenants={usageData.tenants} range={range} />
+          <UsageTable tenants={usageData.tenants} range={range} mes={usageData.mes} />
         </>
       )}
 

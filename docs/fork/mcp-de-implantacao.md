@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **118** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio e a MIA-18 a da lista de espera da agenda): as 110 desta página e as 8 da migração
+São **119** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda e a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md)): as 111 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -237,6 +237,7 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | `plataforma_ver_cliente` | o retrato de um cliente: módulos, números, saldo e, em `configuracao`, a limpeza automática de mídia, o freio do passo "a IA decide", o bloqueio de afirmação clínica e quantos planos de tarefa existem; desde a .96, em `pagamento_inicial`, o passo "Pagamento" do início | leitura |
 | `plataforma_listar_modulos` | os módulos que se vendem separado | leitura |
 | `plataforma_ver_saude` | o estado da instalação, e se a chave que cifra o CPF dos contatos está semeada (só sim ou não; o valor nunca sai) | leitura |
+| `plataforma_ver_consumo_de_ia` | o consumo de IA de um cliente num mês do calendário em Brasília (MIA-44, [`consumo-de-ia.md`](consumo-de-ia.md)): o total, cada agente, a linha "Sistema" (chamadas sem agente) e a quebra por finalidade, cada uma com chamadas, tokens de entrada e saída, quantos vieram do cache, o custo em centavos de dólar (a régua do teto) e em reais (cotação de cada dia). Os mesmos números da aba Uso do cliente | leitura |
 | `plataforma_ver_implantacao` | o **checklist**: por área, o que está pronto, o que falta (com a ferramenta) e o que é com uma pessoa (com a tela). Desde a .91, as áreas `primeiros_passos` (onde a empresa está no passo a passo e o número oficial que espera a Time) e `plano_e_cobranca` (assinou ou não, das tabelas de assinatura do upstream), e o `rotulo_do_cliente`: o "o que falta" que a empresa nova vê | leitura |
 | `plataforma_listar_modelos` | os modelos e vocabulários que as outras ferramentas aceitam: modelos de follow-up, pacotes e capacidades do agente, gatilhos e ações de automação, passos do funil, tipos de campo | leitura |
 | `plataforma_ver_funis` | os funis inteiros: etapas, passo do agente, campos, motivos | leitura |
