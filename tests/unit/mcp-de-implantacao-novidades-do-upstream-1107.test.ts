@@ -7,6 +7,8 @@
  * bloco por novidade, e o que se mede é o BANCO, não a resposta. Esta faixa
  * pediu dois campos: o bloco do negócio no evento do Google do tipo de
  * agendamento (9209, #4006) e a janela do perdido recente do funil (#4076).
+ * Depois veio a leitura do link de pagamento na conversa (9312, MIA-19), uma
+ * seção nova de `plataforma_ver_cliente`, sem ferramenta nova.
  * O que ainda falta no MCP está em `docs/fork/mcp-de-implantacao.md`.
  *
  * Nenhum dado daqui é de cliente real: empresa fictícia e nomes inventados.
@@ -99,5 +101,104 @@ describe("plataforma_garantir_funil · CAMPO NOVO `reabrir_perdido_dias` (upstre
     expect(settingsDoFunil(c).reabrir_perdido_dias).toBe(0);
 
     expect(await recusa(c, "plataforma_garantir_funil", { ...base, reabrir_perdido_dias: 99_999 })).toBeTruthy();
+  });
+});
+
+describe("plataforma_ver_cliente · SEÇÃO NOVA `link_de_pagamento` (upstream 9312, MIA-19)", () => {
+  // Tudo fictício: o hash é um padrão repetido, o id externo e o valor são inventados.
+  const HASH = "ab".repeat(32);
+  const ID_NO_PROVEDOR = "pagamento-ficticio-001";
+  const VALOR = 12_345;
+  const OUTRA_ORG = "00000000-0000-4000-8000-0000000000ff";
+
+  function recebimento(status: string, extra: Linha = {}): Linha {
+    return {
+      id: crypto.randomUUID(),
+      organization_id: ORG,
+      conversation_id: null,
+      lead_id: null,
+      provedor: "infinitepay",
+      external_id: status === "paga" ? ID_NO_PROVEDOR : null,
+      aviso_token_hash: HASH,
+      valor_cents: VALOR,
+      moeda: "BRL",
+      status,
+      pago_em: null,
+      created_at: "2026-11-01T12:00:00Z",
+      updated_at: "2026-11-01T12:00:00Z",
+      ...extra,
+    };
+  }
+
+  function semear(c: Cenario) {
+    c.tabela("pagamento_recebimentos").push(
+      recebimento("pendente"),
+      recebimento("pendente"),
+      recebimento("paga", { pago_em: "2026-11-03T15:00:00Z" }),
+      recebimento("paga", { pago_em: "2026-11-10T09:30:00Z" }),
+      recebimento("expirada"),
+      // De outra empresa: não entra na conta desta.
+      recebimento("paga", { organization_id: OUTRA_ORG, pago_em: "2026-11-15T10:00:00Z" }),
+    );
+  }
+
+  async function lerSecao(c: Cenario) {
+    const r = await ok(c, "plataforma_ver_cliente", {});
+    return { secao: r.dados.link_de_pagamento as Linha, texto: JSON.stringify(r.dados) };
+  }
+
+  it("módulo da instalação ligado: conta por situação só desta empresa e devolve o último pago", async () => {
+    const c = await preparar();
+    c.tabela("platform_config").push({ chave: "MODULO_LINK_DE_PAGAMENTO", valor: "ligado" });
+    semear(c);
+
+    const { secao } = await lerSecao(c);
+    expect(secao.modulo_da_instalacao_ligado).toBe(true);
+    expect(secao.quem_liga).toBe("instalacao");
+    expect(secao.provedores).toEqual([{ chave: "infinitepay", nome: "InfinitePay" }]);
+    expect(secao.recebimentos_por_situacao).toEqual({ pendente: 2, paga: 2, expirada: 1, cancelada: 0, estornada: 0 });
+    expect(secao.ultimo_pago_em).toBe("2026-11-10T09:30:00Z");
+
+    // Um pago sem data (linha antiga ou aviso incompleto) não esconde o último pago de verdade.
+    c.tabela("pagamento_recebimentos").push(recebimento("paga"));
+    const { secao: comPagoSemData } = await lerSecao(c);
+    expect(comPagoSemData.ultimo_pago_em).toBe("2026-11-10T09:30:00Z");
+  });
+
+  it("módulo desligado (o padrão): diz que está desligado e o histórico continua legível", async () => {
+    const c = await preparar();
+    semear(c);
+
+    const { secao } = await lerSecao(c);
+    expect(secao.modulo_da_instalacao_ligado).toBe(false);
+    expect((secao.recebimentos_por_situacao as Linha).paga).toBe(2);
+
+    // Empresa sem recebimento nenhum: zeros e nenhum pago.
+    const vazio = await preparar();
+    const { secao: semNada } = await lerSecao(vazio);
+    expect(semNada.recebimentos_por_situacao).toEqual({ pendente: 0, paga: 0, expirada: 0, cancelada: 0, estornada: 0 });
+    expect(semNada.ultimo_pago_em).toBeNull();
+  });
+
+  it("não devolve endereço de aviso, hash, id no provedor nem valor", async () => {
+    const c = await preparar();
+    c.tabela("platform_config").push({ chave: "MODULO_LINK_DE_PAGAMENTO", valor: "ligado" });
+    semear(c);
+
+    const { secao, texto } = await lerSecao(c);
+    expect(texto).not.toContain(HASH);
+    expect(texto).not.toContain(ID_NO_PROVEDOR);
+    expect(texto).not.toContain("webhooks/pagamento");
+    expect(JSON.stringify(secao)).not.toContain(String(VALOR));
+    expect(Object.keys(secao).sort()).toEqual(
+      ["modulo_da_instalacao_ligado", "provedores", "quem_liga", "recebimentos_por_situacao", "ultimo_pago_em"],
+    );
+  });
+
+  it("é só leitura: o retrato não escreve nada", async () => {
+    const c = await preparar();
+    semear(c);
+    await lerSecao(c);
+    expect(c.banco.escritas).toEqual([]);
   });
 });

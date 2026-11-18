@@ -44,6 +44,8 @@ import { empresasEsperandoOPrimeiroPagamento, passoDoPagamentoParaATime } from "
 import { lerCupomEParceiroDaEmpresa } from "@/lib/cupons/na-ficha";
 // FORK MIA (.96, segunda frente): as cobranças com a nota fiscal (docs/fork/area-de-cobranca.md).
 import { cobrancasParaATime } from "@/lib/area-de-cobranca/para-a-time";
+// FORK MIA (MIA-19): o link de pagamento na conversa (upstream 9312), só leitura.
+import { linkDePagamentoParaATime } from "@/lib/pagamentos/para-a-time";
 
 /**
  * A chave do CPF está semeada? Só sim ou não, e o VALOR nunca sai.
@@ -150,7 +152,10 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       "`null` = a empresa não tem cobrança pelo Asaas; \"nao_lido\" = o Asaas não respondeu. " +
       // FORK MIA (.98): o cupom e o parceiro.
       "Desde a .98, em `cupom_e_parceiro`: o cupom da empresa (o que dá, desde quando, se o desconto já acabou), o parceiro ligado a ela e a comissão fixada, " +
-      "o setup de implantação vendido e o total das comissões lançadas. Sem documento nem Pix do parceiro.",
+      "o setup de implantação vendido e o total das comissões lançadas. Sem documento nem Pix do parceiro. " +
+      // FORK MIA (MIA-19): o link de pagamento na conversa (upstream 9312).
+      "Em `link_de_pagamento`: se o módulo do link de pagamento na conversa está ligado NA INSTALAÇÃO (liga e desliga em /admin/sistema, para todas as empresas), " +
+      "os provedores, quantos recebimentos a empresa tem em cada situação e quando foi o último pago. Sem endereço de aviso, sem hash e sem valor.",
     inputSchema: {
       organization_id: z.string().uuid().describe("O id do cliente."),
     },
@@ -201,6 +206,8 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       const pagamentoInicial = await passoDoPagamentoParaATime(admin, id);
       // FORK MIA (.96, segunda frente): as cobranças e a nota. Leitura que falha diz "nao_lido".
       const cobrancas = await cobrancasParaATime(admin, id);
+      // FORK MIA (MIA-19): o link de pagamento na conversa. Não lança; o que não leu diz "nao_lido".
+      const linkDePagamento = await linkDePagamentoParaATime(admin, id);
 
       return {
         cliente: org.data,
@@ -220,6 +227,7 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         // FORK MIA (.98): leitura que falha diz "nao_lido".
         cupom_e_parceiro: await lerCupomEParceiroDaEmpresa(admin, id).catch(() => "nao_lido" as const),
         cobrancas,
+        link_de_pagamento: linkDePagamento,
         // Os interruptores da empresa que chegaram do upstream 1.74 a 1.80.
         configuracao: {
           limpeza_automatica_de_midia: {
