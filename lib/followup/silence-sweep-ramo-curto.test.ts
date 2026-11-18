@@ -142,6 +142,7 @@ const CONTADORES_ZERADOS: SilenceSweepSummary = {
   skipped_pending_return: 0,
   skipped_reentry_pause: 0,
   skipped_human_owned: 0,
+  skipped_same_silence: 0, // FORK MIA: o contador do mesmo silêncio (silence-sweep.ts)
   skipped_sem_resposta_da_equipe: 0,
   skipped_resposta_a_automacao: 0,
   skipped_teto_de_repeticoes: 0,

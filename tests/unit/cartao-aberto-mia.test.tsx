@@ -77,6 +77,10 @@ vi.mock("@/components/kanban/LeadFieldsForm", () => ({ LeadFieldsForm: () => <di
 vi.mock("@/components/kanban/PropostasDoNegocio", () => ({ PropostasDoNegocio: () => null }));
 vi.mock("@/components/kanban/LoseLeadDialog", () => ({ LoseLeadDialog: () => null }));
 vi.mock("@/components/kanban/SeletorDeContato", () => ({ SeletorDeContato: () => null }));
+// A seção "Conversas e ligações dos números" (upstream #3669) consulta as pessoas
+// relacionadas; aqui o negócio não tem nenhuma, e a seção não aparece.
+vi.mock("@/hooks/leads/useContatosRelacionados", () => ({ useContatosRelacionados: () => ({ data: { data: [] } }) }));
+vi.mock("@/components/kanban/ConversasDosNumeros", () => ({ ConversasDosNumeros: () => null }));
 // FORK MIA (9018) — Documentos e obrigações: a seção e o Foco leem destes hooks
 // (tests/unit/obrigacoes-telas.test.tsx prova o conteúdo; aqui só a presença).
 vi.mock("@/hooks/obrigacoes/useObrigacoes", () => {

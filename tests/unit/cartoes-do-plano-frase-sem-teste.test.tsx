@@ -42,7 +42,8 @@ const cartao = (id: string, nome: string, trial: number): CartaoDoPlano => ({
   modulos: [],
 });
 const CARTOES = [cartao(COM_TESTE, "Plano Teste Grátis", 14), cartao(ENTRADA_PAGA, "Plano Entrada Paga", 0)];
-const PLANOS = CARTOES.map(({ id, nome, preco_cents, intervalo, trial_dias }) => ({ id, nome, preco_cents, intervalo, trial_dias }));
+// A moeda do plano é do upstream (migration 9332); no fork a empresa paga em real.
+const PLANOS = CARTOES.map(({ id, nome, preco_cents, intervalo, trial_dias }) => ({ id, nome, preco_cents, moeda: "BRL", intervalo, trial_dias }));
 
 const NO_TESTE = "Veio da página de preços com o plano marcado. Dá para trocar aqui ou depois, no teste.";
 const NA_HORA_DE_PAGAR = "Veio da página de preços com o plano marcado. Dá para trocar aqui, na hora de pagar ou depois.";

@@ -157,7 +157,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       sheet: parsed.sheet,
       mapping,
       // FORK MIA (.79): empresa de demonstração não consulta a Receita.
-      enrichCompanies: form.get("enrich") !== "false" && !(await receitaTravada(supabase, authz.org.orgId)),
+      enrichCompanies: form.get("enrich") !== "false" && !(await receitaTravada(supabase, authz.organizationId)),
     });
 
     await audit({

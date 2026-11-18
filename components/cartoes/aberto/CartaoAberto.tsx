@@ -127,6 +127,11 @@ interface Props {
   onMoverEtapa?: (stageId: string) => void;
   /** Os atalhos do card (upstream #3487), do `settings` do funil que o quadro já leu. */
   atalhos?: AtalhoDoCard[];
+  /**
+   * A página do negócio (upstream, "Expandir" do dossiê). O quadro passa a
+   * função pronta (`hrefDoNegocio`); sem ela o link não aparece.
+   */
+  expandirHref?: string;
 }
 
 export function CartaoAberto({
@@ -141,6 +146,7 @@ export function CartaoAberto({
   ownerNames,
   onMoverEtapa,
   atalhos,
+  expandirHref,
 }: Props) {
   const t = useT();
   const user = useUser();
@@ -290,6 +296,15 @@ export function CartaoAberto({
                 <ArrowsOutSimple size={14} className="mr-1" aria-hidden />
                 {telaCheia ? t("Sair da tela cheia") : t("Tela cheia")}
               </Button>
+              {expandirHref && (
+                <Link
+                  href={expandirHref}
+                  data-testid="negocio-expandir"
+                  className="text-xs text-text-muted underline-offset-2 hover:text-text hover:underline"
+                >
+                  {t("Expandir")}
+                </Link>
+              )}
             </div>
           </div>
         </SheetHeader>

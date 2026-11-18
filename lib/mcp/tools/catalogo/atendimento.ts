@@ -142,8 +142,14 @@ export const TOOLS_ATENDIMENTO = declararTools([
      * jornada pelo modo avançado — ligar à mão, agente a agente, é o caminho
      * para quem vende B2B; o modo B2C esconde a porta de qualquer jeito
      * (`lib/empresas/modo-de-venda.ts`).
+     *
+     * FUSÃO v1.116: saiu de "organizar" para "escalar". O upstream levou
+     * "organizar" a 27 de 27 sozinho (as leituras do Amigo), e com esta linha o
+     * pacote ia a 28, impossível de ligar inteiro
+     * (tests/unit/pacote-reserva-vaga-da-critica). "Escalar" tem folga (17 de
+     * 27, medido com as três do fork) e o onboarding segue nascendo com 22.
      */
-    pacotes: ["organizar"],
+    pacotes: ["escalar"],
   },
   {
     name: "crm_list_conversations",

@@ -103,6 +103,11 @@ export const CAMPOS_ALTERAVEIS_DO_NEGOCIO: Record<keyof UpdateLeadInput, string>
   expected_close_date: "Data prevista de fechamento",
   tags: "Tags",
   custom_fields: "Campos personalizados",
+  // FORK MIA: os campos que o PATCH do negócio do fork aceita a mais (metas 0243,
+  // tipo de receita da .109, empresa do CRM B2B), com o nome que a tela já usa.
+  originated_by_user_id: "Originado por (SDR)",
+  revenue_kind: "Tipo de receita",
+  empresa_id: "Empresa",
 };
 
 function ehCampoAlteravelDoNegocio(nome: string): boolean {

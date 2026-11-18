@@ -113,7 +113,9 @@ describe("o menu desenha as classes do contrato", () => {
     if (!crm) throw new Error("esperava o grupo CRM no menu");
     // O título do grupo está DENTRO do contêiner com a classe: é ele que o CSS
     // do cliente alcança com `.nav-grupo-crm .rounded-md:hover`.
-    expect(within(crm as HTMLElement).getByRole("heading", { name: "CRM" })).toBeTruthy();
+    // FORK MIA: o rótulo do grupo sai do catálogo (no fork é "MIA CRM").
+    const rotuloDoCrm = NAV_GROUPS.find((g) => g.id === "crm")?.label ?? "CRM";
+    expect(within(crm as HTMLElement).getByRole("heading", { name: rotuloDoCrm })).toBeTruthy();
     expect(within(crm as HTMLElement).getByRole("link", { name: "Funis" })).toBeTruthy();
   });
 
