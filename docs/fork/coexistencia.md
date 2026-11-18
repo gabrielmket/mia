@@ -236,7 +236,11 @@ Fora da régua da empresa operante, declarado na cerca: é entrada da própria e
 
 - `tests/invariants/coexistencia-pedido-unico.test.ts`: três chegadas ao mesmo tempo dão UMA chamada de cada tipo à
   Meta simulada; reexecução, varredura, erro, rede caída e prazo vencido não chamam de novo; contatos recusados não
-  impedem o histórico; ciclo fora do ar não pede; a janela concluída duas vezes ao mesmo tempo abre um ciclo.
+  impedem o histórico; ciclo fora do ar não pede; a janela concluída duas vezes ao mesmo tempo abre um ciclo. E a
+  varredura dos lotes: lote cru de 8 dias vira `falhou` com o `payload` nulo e o pedido reconta; lote esquecido há
+  3 h volta ao worker uma vez só (a 2ª rodada não pede de novo); lote de 1 dia mexido há pouco fica como está.
+- `tests/unit/coexistencia-ids-em-fatias.test.ts`: a leitura de /admin/meta manda os ids ao banco em fatias de no
+  máximo 100 (`fatias.ts`): mil uuids num `.in` só estourariam a URL do PostgREST. Com 350 empresas, nada se perde.
 - `tests/invariants/coexistencia-conexao-pelo-app.test.ts`: a conexão de ponta a ponta no servidor com a Graph
   simulada (empresa certa, origem do upstream, cadastro amarrado, ciclo, pedido ao worker, QR do mesmo número
   arquivado, a mesma volta sem duplicar, número de outra empresa recusado, QR novo do número barrado).

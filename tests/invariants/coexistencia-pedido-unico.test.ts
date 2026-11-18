@@ -26,7 +26,10 @@ import { pgComoSupabaseMia } from "../pg-como-supabase-mia";
  *     `sem_resposta` SEM chamar a Meta;
  *   - passou das 24 h: `prazo_vencido`, sem chamar;
  *   - ciclo fora do ar: nada é pedido;
- *   - a janela concluída duas vezes ao mesmo tempo abre UM ciclo.
+ *   - a janela concluída duas vezes ao mesmo tempo abre UM ciclo;
+ *   - lote cru parado há mais de 7 dias perde o `payload` (LGPD, ressalva do
+ *     PR #92) e o pedido reconta a falha; lote esquecido há 3 h é pedido ao
+ *     worker UMA vez; lote de 1 dia mexido há pouco fica como está.
  *
  * Dado fictício: Academia Alfa, número +55 31 900000002.
  */
@@ -56,6 +59,7 @@ const SESSOES = {
   prazo: "c0e59164-4444-4000-8000-000000000006",
   foraDoAr: "c0e59164-4444-4000-8000-000000000007",
   janela: "c0e59164-4444-4000-8000-000000000008",
+  lotes: "c0e59164-4444-4000-8000-000000000009",
 } as const;
 
 type Resposta = { status: number; corpo: unknown } | "rede_caiu";
@@ -276,5 +280,103 @@ describe("o ciclo da janela da Meta", () => {
       { estado: "encerrada", n: 1 },
       { estado: "no_ar", n: 1 },
     ]);
+  });
+});
+
+describe("a varredura dos lotes do histórico", () => {
+  /**
+   * Um ciclo aberto pelo histórico (não pela janela: a varredura não pede a
+   * sincronização dele) e o pedido do histórico em andamento, com três lotes
+   * crus. O `payload` é fictício. As datas vão direto no insert: o gatilho de
+   * `updated_at` só age no update.
+   */
+  let sincronizacao: string;
+  const LOTES = { velho: "f0:o1", esquecido: "f0:o2", recente: "f0:o3" } as const;
+
+  async function lote(chave: string) {
+    const { rows } = await pool.query(
+      `select id, estado, payload, erro, updated_at from public.mia_coexistencia_lotes
+        where sincronizacao_id = $1 and chave = $2`,
+      [sincronizacao, chave],
+    );
+    return rows[0] as { id: string; estado: string; payload: unknown; erro: string | null; updated_at: Date };
+  }
+
+  async function pedidosAoWorker(loteId: string): Promise<number> {
+    const { rows } = await pool.query(
+      `select count(*)::int as n from public.event_log
+        where organization_id = $1 and entity_id = $2 and event_type = 'coexistencia.lote_requested'`,
+      [ORG, loteId],
+    );
+    return rows[0].n as number;
+  }
+
+  beforeAll(async () => {
+    const { rows: ciclo } = await pool.query(
+      `insert into public.mia_coexistencia_conexoes
+         (organization_id, channel_session_id, waba_id, phone_number_id, aberta_por, conectada_em)
+       values ($1, $2, $3, $4, 'historico_sem_pedido', now() - interval '9 days') returning id`,
+      [ORG, SESSOES.lotes, WABA, `${NUMERO}-lotes`],
+    );
+    const { rows: pedido } = await pool.query(
+      `insert into public.mia_coexistencia_sincronizacoes (organization_id, conexao_id, tipo, estado)
+         values ($1, $2, 'historico', 'em_andamento') returning id`,
+      [ORG, ciclo[0].id],
+    );
+    sincronizacao = pedido[0].id as string;
+    const idades: Array<[string, string, string]> = [
+      [LOTES.velho, "8 days", "8 days"],
+      [LOTES.esquecido, "3 hours", "3 hours"],
+      [LOTES.recente, "1 day", "30 minutes"],
+    ];
+    for (const [chave, criado, mexido] of idades) {
+      await pool.query(
+        `insert into public.mia_coexistencia_lotes
+           (organization_id, sincronizacao_id, tipo, chave, fase, ordem, progresso, estado, payload, created_at, updated_at)
+         values ($1, $2, 'mensagens', $3, 0, $4, 10, 'recebido', $5::jsonb, now() - $6::interval, now() - $7::interval)`,
+        [ORG, sincronizacao, chave, Number(chave.slice(-1)), JSON.stringify({ ficticio: "Ana Exemplo" }), criado, mexido],
+      );
+    }
+  });
+
+  it("lote cru de 8 dias: falhou, payload nulo, e o pedido reconta a falha", async () => {
+    const esquecidoAntes = await lote(LOTES.esquecido);
+    const r = await varrerCoexistencia(db, { fetch: metaSimulada(ACEITA).f });
+    expect(r.falhas).toEqual([]);
+    expect(r.lotesVencidos).toBeGreaterThanOrEqual(1);
+
+    expect(await lote(LOTES.velho)).toMatchObject({ estado: "falhou", payload: null, erro: "prazo_do_lote_cru" });
+    const { rows } = await pool.query(
+      `select lotes_com_falha from public.mia_coexistencia_sincronizacoes where id = $1`,
+      [sincronizacao],
+    );
+    expect(rows[0].lotes_com_falha).toBe(1);
+    // Vencido não é pedido ao worker.
+    expect(await pedidosAoWorker((await lote(LOTES.velho)).id)).toBe(0);
+
+    // Lote de 3 h: pedido ao worker uma vez, e a retomada fica marcada.
+    const esquecido = await lote(LOTES.esquecido);
+    expect(esquecido).toMatchObject({ estado: "recebido", erro: null });
+    expect(esquecido.payload).not.toBeNull();
+    expect(await pedidosAoWorker(esquecido.id)).toBe(1);
+    expect(esquecido.updated_at.getTime()).toBeGreaterThan(esquecidoAntes.updated_at.getTime());
+
+    // Controle: 1 dia de vida, mexido há 30 min. Fica como está.
+    const recente = await lote(LOTES.recente);
+    expect(recente).toMatchObject({ estado: "recebido", erro: null });
+    expect(recente.payload).not.toBeNull();
+    expect(await pedidosAoWorker(recente.id)).toBe(0);
+  });
+
+  it("a segunda rodada não pede de novo o lote retomado nem reconta", async () => {
+    const r = await varrerCoexistencia(db, { fetch: metaSimulada(ACEITA).f });
+    expect(r.falhas).toEqual([]);
+    expect(await pedidosAoWorker((await lote(LOTES.esquecido)).id)).toBe(1);
+    expect(await pedidosAoWorker((await lote(LOTES.recente)).id)).toBe(0);
+    const { rows } = await pool.query(
+      `select lotes_com_falha from public.mia_coexistencia_sincronizacoes where id = $1`,
+      [sincronizacao],
+    );
+    expect(rows[0].lotes_com_falha).toBe(1);
   });
 });

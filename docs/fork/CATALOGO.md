@@ -798,10 +798,12 @@ o canal por QR do mesmo número sai do ar (D5). Saída e volta (S4) ainda não. 
 
 **Protege.** Invariantes `coexistencia-historico-nao-dispara.test.ts` (nada dispara, nada muda na conversa
 e no negócio que já existiam, reentrega não duplica, com o controle), `coexistencia-pedido-unico.test.ts` (o pedido
-sai uma vez só, nem com chegadas simultâneas), `coexistencia-conexao-pelo-app.test.ts` (a conexão de ponta a ponta com
+sai uma vez só, nem com chegadas simultâneas; e a varredura: lote cru de 7 dias perde o `payload`, lote esquecido é
+pedido ao worker uma vez), `coexistencia-conexao-pelo-app.test.ts` (a conexão de ponta a ponta com
 a Meta simulada), `historico-importado-nao-dispara.test.ts` (o corte da 0760), `rls-tabelas-da-mia.test.ts`,
 `rls-completude-varredura.test.ts`; unidade `coexistencia-historico-leitura.test.ts`,
-`coexistencia-conexao-pelo-app.test.ts`, `mcp-de-implantacao-coexistencia.test.ts`, `dispatcher-org-parada.test.ts`,
+`coexistencia-conexao-pelo-app.test.ts`, `coexistencia-ids-em-fatias.test.ts` (/admin/meta com 350 empresas, nenhum
+`.in` com mais de 100 ids), `mcp-de-implantacao-coexistencia.test.ts`, `dispatcher-org-parada.test.ts`,
 `evento-comando-tem-consumidor.test.ts`, `cron-respeita-org-operante.test.ts`, `canal-consulta-por-organizacao.test.ts`.
 
 **Conferir.**
@@ -811,6 +813,16 @@ a Meta simulada), `historico-importado-nao-dispara.test.ts` (o corte da 0760), `
 4. `git grep -n "ORIGEM_DO_EMBEDDED_SIGNUP\|meta_connection_origin" lib/channels/meta/origem-da-conexao.ts` (a origem da conexão do upstream continua com o mesmo nome; a S3 a usa, não inventa a sua).
 5. `npx vitest run tests/unit/coexistencia-historico-leitura.test.ts tests/unit/coexistencia-conexao-pelo-app.test.ts tests/unit/mcp-de-implantacao-coexistencia.test.ts tests/unit/dispatcher-org-parada.test.ts`.
 6. MCP: `plataforma_ver_coexistencia`, `plataforma_ligar_coexistencia` (`colocar_no_ar`) e `plataforma_ver_sincronizacao_do_app`.
+
+**Riscos.** Se o upstream passar a ler o campo `history` no `parseMetaWebhook` ou a gravar o histórico por
+`ingestMetaInbound`, o histórico entraria duas vezes ou como mensagem nova: conferir na fusão. Relatórios e
+raio-X do fork ainda contam o histórico importado (9163, espera a decisão D3). Da S3: se o upstream renomear
+ou trocar a origem `embedded_signup` (`ORIGEM_DO_EMBEDDED_SIGNUP` em `lib/channels/meta/origem-da-conexao.ts`),
+o número conectado pelo app perde a marca da origem (a conferência 4 pega); se a Meta mudar o nome do evento
+de fim da janela (`FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`, em `janela.ts` e `sdk-da-meta.ts`), a janela
+fecha e a MIA não conclui a conexão, sem erro na tela. LACUNA: nenhum teste abre o `ConectarPeloApp` e chama a
+rota `concluir` pela tela (o `e2e.yml` aponta `META_GRAPH_BASE_URL` para uma porta que recusa); a prova de
+ponta a ponta é a invariante `coexistencia-conexao-pelo-app.test.ts`, no servidor.
 
 ---
 

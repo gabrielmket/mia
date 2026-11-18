@@ -13,6 +13,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { emFatias } from "./fatias";
+
 type Admin = SupabaseClient;
 
 export interface ChaveDaCoexistencia {
@@ -43,22 +45,29 @@ export async function chavesDaCoexistencia(
 ): Promise<Map<string, ChaveDaCoexistencia>> {
   const mapa = new Map<string, ChaveDaCoexistencia>();
   if (organizationIds.length === 0) return mapa;
-  const { data, error } = await admin
-    .from("mia_coexistencia_da_empresa")
-    .select("organization_id, ligada, mudada_por, mudada_em")
-    .in("organization_id", [...organizationIds]);
-  if (error) throw new Error(`chaves_da_coexistencia: ${error.code ?? "sem_codigo"} ${error.message ?? ""}`.trim());
-  for (const linha of (data ?? []) as Array<{
-    organization_id: string;
-    ligada: boolean;
-    mudada_por: string | null;
-    mudada_em: string | null;
-  }>) {
-    mapa.set(linha.organization_id, {
-      ligada: linha.ligada === true,
-      mudadaPor: linha.mudada_por,
-      mudadaEm: linha.mudada_em,
-    });
+  // Em fatias: mil ids num `.in` só estouram a URL do PostgREST (`fatias.ts`).
+  const respostas = await Promise.all(
+    emFatias(organizationIds).map((fatia) =>
+      admin
+        .from("mia_coexistencia_da_empresa")
+        .select("organization_id, ligada, mudada_por, mudada_em")
+        .in("organization_id", fatia),
+    ),
+  );
+  for (const { data, error } of respostas) {
+    if (error) throw new Error(`chaves_da_coexistencia: ${error.code ?? "sem_codigo"} ${error.message ?? ""}`.trim());
+    for (const linha of (data ?? []) as Array<{
+      organization_id: string;
+      ligada: boolean;
+      mudada_por: string | null;
+      mudada_em: string | null;
+    }>) {
+      mapa.set(linha.organization_id, {
+        ligada: linha.ligada === true,
+        mudadaPor: linha.mudada_por,
+        mudadaEm: linha.mudada_em,
+      });
+    }
   }
   return mapa;
 }

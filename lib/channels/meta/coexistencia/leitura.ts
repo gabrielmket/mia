@@ -13,6 +13,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { lerChaveDaCoexistencia, type ChaveDaCoexistencia } from "./chave";
+import { emFatias } from "./fatias";
 import { PRAZO_DA_SINCRONIZACAO_MS } from "./sincronizacao";
 
 type Admin = SupabaseClient;
@@ -101,16 +102,27 @@ export async function numerosPeloApp(
   const porEmpresa = new Map<string, NumeroPeloApp[]>();
   if (organizationIds.length === 0) return porEmpresa;
 
-  const { data: ciclos, error } = await admin
-    .from("mia_coexistencia_conexoes")
-    .select(
-      "id, organization_id, channel_session_id, waba_id, phone_number_id, estado, aberta_por, conectada_em, fora_do_ar_motivo, fora_do_ar_em, voltou_em",
-    )
-    .in("organization_id", [...organizationIds])
-    .order("conectada_em", { ascending: false })
-    .limit(500);
-  if (error) throw erroDe("ciclos_da_coexistencia", error);
-  const linhas = (ciclos ?? []) as Array<Record<string, string | null> & { id: string; organization_id: string }>;
+  // Toda consulta com `.in` vai em fatias: mil ids num `.in` só estouram a URL
+  // do PostgREST (`fatias.ts`).
+  const respostasDosCiclos = await Promise.all(
+    emFatias(organizationIds).map((fatia) =>
+      admin
+        .from("mia_coexistencia_conexoes")
+        .select(
+          "id, organization_id, channel_session_id, waba_id, phone_number_id, estado, aberta_por, conectada_em, fora_do_ar_motivo, fora_do_ar_em, voltou_em",
+        )
+        .in("organization_id", fatia)
+        .order("conectada_em", { ascending: false })
+        .limit(500),
+    ),
+  );
+  const linhas: Array<Record<string, string | null> & { id: string; organization_id: string }> = [];
+  for (const { data: ciclos, error } of respostasDosCiclos) {
+    if (error) throw erroDe("ciclos_da_coexistencia", error);
+    linhas.push(...((ciclos ?? []) as typeof linhas));
+  }
+  // Cada fatia vem em ordem; juntas, a ordem (mais recente primeiro) é refeita.
+  linhas.sort((a, b) => String(b.conectada_em).localeCompare(String(a.conectada_em)));
 
   // O ciclo mais recente de cada número; o vivo vence o encerrado.
   const escolhidos = new Map<string, (typeof linhas)[number]>();
@@ -122,29 +134,41 @@ export async function numerosPeloApp(
   const escolhidosLista = [...escolhidos.values()];
   if (escolhidosLista.length === 0) return porEmpresa;
 
-  const [{ data: pedidos, error: erroDosPedidos }, { data: sessoes, error: erroDasSessoes }] = await Promise.all([
-    admin
-      .from("mia_coexistencia_sincronizacoes")
-      .select(COLUNAS_DO_PEDIDO)
-      .in("conexao_id", escolhidosLista.map((c) => c.id)),
-    admin
-      .from("channel_sessions")
-      .select("id, organization_id, phone_number")
-      .in("organization_id", [...new Set(escolhidosLista.map((c) => c.organization_id))])
-      .in("id", [...new Set(escolhidosLista.map((c) => String(c.channel_session_id)))]),
+  const empresaDaSessao = new Map(escolhidosLista.map((c) => [String(c.channel_session_id), c.organization_id]));
+  const [respostasDosPedidos, respostasDasSessoes] = await Promise.all([
+    Promise.all(
+      emFatias(escolhidosLista.map((c) => c.id)).map((fatia) =>
+        admin.from("mia_coexistencia_sincronizacoes").select(COLUNAS_DO_PEDIDO).in("conexao_id", fatia),
+      ),
+    ),
+    Promise.all(
+      emFatias(empresaDaSessao.keys()).map((fatia) =>
+        admin
+          .from("channel_sessions")
+          .select("id, organization_id, phone_number")
+          .in("organization_id", [...new Set(fatia.map((id) => empresaDaSessao.get(id) as string))])
+          .in("id", fatia),
+      ),
+    ),
   ]);
-  if (erroDosPedidos) throw erroDe("pedidos_da_coexistencia", erroDosPedidos);
-  if (erroDasSessoes) throw erroDe("sessoes_da_coexistencia", erroDasSessoes);
+  const pedidos: LinhaDoPedido[] = [];
+  for (const { data, error: erroDosPedidos } of respostasDosPedidos) {
+    if (erroDosPedidos) throw erroDe("pedidos_da_coexistencia", erroDosPedidos);
+    pedidos.push(...((data ?? []) as LinhaDoPedido[]));
+  }
+  const sessoes: Array<{ id: string; phone_number: string | null }> = [];
+  for (const { data, error: erroDasSessoes } of respostasDasSessoes) {
+    if (erroDasSessoes) throw erroDe("sessoes_da_coexistencia", erroDasSessoes);
+    sessoes.push(...((data ?? []) as typeof sessoes));
+  }
 
   const pedidosPorCiclo = new Map<string, PedidoDaSincronizacao[]>();
-  for (const p of (pedidos ?? []) as LinhaDoPedido[]) {
+  for (const p of pedidos) {
     const lista = pedidosPorCiclo.get(p.conexao_id) ?? [];
     lista.push(pedidoDaLinha(p));
     pedidosPorCiclo.set(p.conexao_id, lista);
   }
-  const numeroDaSessao = new Map(
-    ((sessoes ?? []) as Array<{ id: string; phone_number: string | null }>).map((s) => [s.id, s.phone_number]),
-  );
+  const numeroDaSessao = new Map(sessoes.map((s) => [s.id, s.phone_number]));
 
   for (const c of escolhidosLista) {
     const conectadaEm = String(c.conectada_em);
