@@ -75,7 +75,7 @@ escreve nela. Sai de vez na parte 5.
 | Papéis em lista fechada; cargo é texto livre | `company_people_mia_papel_check` (o mesmo vocabulário de `lib/cartoes/papel.ts`) |
 | O mesmo papel na empresa e no negócio; no negócio entra o da empresa e pode ser trocado | o bloco das pessoas do negócio no cartão aberto (`Blocos.tsx`, "Outras pessoas desta empresa") |
 | Um principal por empresa, garantido pelo sistema | o índice único parcial e o gatilho `trg_mia_vinculo_antes` (quem vira principal tira o de antes) |
-| Atendente, gestor e o agente criam empresa | `fn_mia_gravar_empresa` confere `agent`; o agente pela ferramenta `crm_registrar_empresa_do_contato`; o INSERT direto em `companies` segue só do gestor (a regra do upstream, invariante `companies-people-rls`) |
+| Atendente, gestor e o agente criam empresa | `fn_mia_gravar_empresa` confere `agent`; o agente pela ferramenta `crm_registrar_empresa_do_contato`; o INSERT direto em `companies` segue a regra do upstream (desde a 9370, do atendente para cima; invariante `companies-people-rls`), e a tela do fork usa a porta |
 | Receita só pela tela, por uma pessoa; demonstração não consulta | `lib/empresas/receita.ts` (a trava da demonstração ANTES da rede); rotas `/api/v1/empresas/consultar-cnpj` e `/api/v1/empresas/[id]/receita`; as rotas do upstream (`/api/v1/companies/lookup`, `enrich`, o POST e o PATCH com enriquecimento, e a planilha de `/api/v1/imports`) recusam ou não enriquecem na demonstração |
 
 As funções da sessão são `security definer`, conferem o papel com

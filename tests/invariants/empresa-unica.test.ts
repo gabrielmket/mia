@@ -13,8 +13,8 @@ import { countAs, sql, writeCountAs } from "./gov-helpers";
  *
  *   1. as três tabelas ao lado de `companies` só se LEEM pela sessão, e só as
  *      da própria organização; `crm_empresas` (aposentada) também só se lê;
- *   2. o atendente cria e edita empresa pela porta `fn_mia_gravar_empresa`, e
- *      continua SEM insert direto em `companies` (a regra do upstream, 0448);
+ *   2. o atendente cria e edita empresa pela porta `fn_mia_gravar_empresa`; o
+ *      insert direto em `companies` segue a regra do upstream (9370: `agent`+);
  *      CNPJ repetido é recusado com o id da que já existe; leitor não grava;
  *   3. a pessoa em várias empresas, com papel em cada uma; um principal por
  *      empresa; vários números = uma pessoa; o espelho do contato (empresa do
@@ -184,8 +184,12 @@ describe("2 · criar e editar empresa", () => {
     ).toBe(`Padaria Trigo 9032|00.111.222/0001-00|00111222000100|${AGENTE}|trigo.exemplo|{padaria}`);
   });
 
-  it("e continua SEM insert direto em companies (a regra do upstream)", () => {
-    expect(writeCountAs(AGENTE, `insert into public.companies (organization_id, trade_name) values ('${ORG}', 'direto')`)).toBe(0);
+  it("e o insert direto em companies segue a regra do upstream: leitor não insere", () => {
+    // A regra é a do upstream, e ele a mudou na 9370: o piso do insert desceu de
+    // `manager` para `agent` (tests/invariants/companies-people-rls.test.ts cobra
+    // o lado dele). A tela do fork continua pela porta `fn_mia_gravar_empresa`,
+    // que confere o CNPJ repetido e o nome parecido.
+    expect(writeCountAs(LEITOR, `insert into public.companies (organization_id, trade_name) values ('${ORG}', 'direto')`)).toBe(0);
   });
 
   it("CNPJ repetido é recusado, com o id da que já existe no detalhe", () => {
