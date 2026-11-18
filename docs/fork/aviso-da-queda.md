@@ -81,6 +81,23 @@ Número sem nome aparece como `final 0002`. O telefone inteiro não vai para o g
   (texto, chave `canal_caiu:<sessão>`, frequência) não mudou.
 - As marcas ficam em `platform_avisos_enviados` (a tabela do report, 0258), com `organization_id` no `detalhe`.
 
+## O volume das marcas
+
+A marca da queda (`caiu`) e a da volta (`voltou`) nunca são apagadas, porque são a trava de 24 horas: ficam
+duas linhas por número que já caiu um dia. Por isso a rodada nunca as lê todas. O PostgREST corta toda
+resposta em 1000 linhas sem erro, e uma leitura cortada deixava o relógio de uma queda nova de fora: o cliente
+nunca era avisado.
+
+- O relógio (`fora:<sessão>`) é o que diz quais sessões importam. Ele começa antes de qualquer aviso de queda
+  e só sai quando a volta é resolvida, quando a sessão é arquivada ou apagada, ou quando ela volta dentro da
+  espera. Então só existe para quem está caído agora ou tem volta a dar. A leitura dele pagina
+  (`range`, 1000 por página) com teto de 5000 e log quando bate o teto.
+- O relógio é gravado só se não existir (`upsert` com `ignoreDuplicates`): regravar o começo a cada minuto
+  faria a espera de 10 minutos nunca vencer.
+- As marcas `caiu` e `voltou` são lidas pela chave, só das sessões que voltaram, em lotes de 100.
+- O teto de **200 sessões caídas** vale por rodada. A consulta já só traz número por QR com telefone. Com mais
+  de 200 caídas ao mesmo tempo, as que ficaram de fora entram nas rodadas seguintes.
+
 ## MCP de plataforma
 
 - Escrita: `plataforma_configurar_atendimento`, campo `aviso_da_queda_do_numero` (operação
@@ -96,6 +113,8 @@ Número sem nome aparece como `final 0002`. O telefone inteiro não vai para o g
 - `lib/avisos/aviso-da-queda.test.ts`: uma queda, um aviso (o cron rodando de minuto em minuto por um dia); a
   espera; a volta; sem queda avisada, sem volta; cliente sem grupo; chave desligada; empresa suspensa; a Academia
   Alfa nunca no grupo da Academia Beta; o número de avisos caído; o estado para o MCP.
+  E o volume: com 1200 marcas antigas e o corte de 1000 linhas do dublê (`maxRows`), a queda nova ainda é
+  avisada e a volta ainda sai; a sessão arquivada durante a queda não deixa o relógio para sempre.
 - `app/api/v1/cron/report-da-plataforma/route.test.ts`: a costura no cron, o report interno igual, o caso sem
   grupo interno e o do número de avisos caído.
 - `tests/unit/mcp-de-implantacao-aviso-da-queda.test.ts`: a chave e o estado no MCP.

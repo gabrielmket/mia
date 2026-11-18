@@ -77,8 +77,25 @@ export const JANELA_DA_QUEDA_HORAS = 24;
 /** Quanto a queda precisa durar antes de virar recado ao cliente. */
 export const ESPERA_ANTES_DE_AVISAR_MIN = 10;
 
-/** Teto de sessões caídas lidas por rodada. */
+/**
+ * Teto de sessões caídas lidas por rodada. Vale por RODADA: com mais caídas que
+ * isso ao mesmo tempo, as de fora entram nas rodadas seguintes (a leitura não
+ * tem ordem). A consulta já só traz número por QR com telefone, então linha
+ * morta sem telefone não ocupa o teto.
+ */
 const TETO_DE_SESSOES = 200;
+
+/**
+ * As marcas do relógio (`fora:<sessão>`) lidas por rodada, em páginas. Elas são
+ * poucas (uma por número caído agora, e a que sobra sai quando a sessão volta,
+ * é arquivada ou some), mas a leitura pagina porque o PostgREST corta toda
+ * resposta em 1000 linhas sem erro, e um relógio fora da leitura nunca vence.
+ */
+const PAGINA_DAS_MARCAS = 1000;
+const TETO_DE_MARCAS_DO_RELOGIO = 5000;
+
+/** Quantos ids ou chaves vão em cada `.in(...)`: a URL e a resposta ficam pequenas. */
+const LOTE = 100;
 
 export interface NumeroDoAviso {
   display_name: string | null;
@@ -162,6 +179,75 @@ function voltaPendente(marcas: Map<string, number>, sessaoId: string): boolean {
   return queda !== undefined && (volta === undefined || volta < queda);
 }
 
+function emLotes<T>(lista: T[]): T[][] {
+  const lotes: T[][] = [];
+  for (let i = 0; i < lista.length; i += LOTE) lotes.push(lista.slice(i, i + LOTE));
+  return lotes;
+}
+
+/**
+ * Os relógios das quedas em curso, `<sessão> → começo da queda`. Lança se a
+ * leitura falhar: sem saber dos relógios, a rodada não pode decidir nada.
+ */
+async function lerRelogios(admin: SupabaseClient): Promise<Map<string, number>> {
+  const relogios = new Map<string, number>();
+  const prefixo = chaveDeForaDesde("");
+  let de = 0;
+  while (de < TETO_DE_MARCAS_DO_RELOGIO) {
+    const { data, error } = await admin
+      .from("platform_avisos_enviados")
+      .select("chave, enviado_em")
+      .like("chave", `${prefixo}%`)
+      .order("chave")
+      .range(de, de + PAGINA_DAS_MARCAS - 1);
+    if (error) throw new Error(error.message);
+    const linhas = (data ?? []) as Marca[];
+    for (const m of linhas) relogios.set(m.chave.slice(prefixo.length), new Date(m.enviado_em).getTime());
+    // Avança pelo que veio, e não pelo tamanho pedido: um corte menor que a
+    // página no servidor não faz a leitura parar no meio.
+    if (linhas.length === 0) return relogios;
+    de += linhas.length;
+  }
+  logger.warn("[aviso-da-queda] teto das marcas do relógio: as de depois ficam para as próximas rodadas", {
+    teto: TETO_DE_MARCAS_DO_RELOGIO,
+  });
+  return relogios;
+}
+
+/** As marcas de queda e de volta só das sessões pedidas. Lança se uma leitura falhar. */
+async function lerQuedasEVoltas(admin: SupabaseClient, sessoes: string[]): Promise<Map<string, number>> {
+  const marcas = new Map<string, number>();
+  const chaves = sessoes.flatMap((id) => [chaveDaQueda(id), chaveDaVolta(id)]);
+  for (const lote of emLotes(chaves)) {
+    const { data, error } = await admin
+      .from("platform_avisos_enviados")
+      .select("chave, enviado_em")
+      .in("chave", lote);
+    if (error) throw new Error(error.message);
+    for (const m of (data ?? []) as Marca[]) marcas.set(m.chave, new Date(m.enviado_em).getTime());
+  }
+  return marcas;
+}
+
+/**
+ * Começa o relógio da queda. Grava só se não houver: `marcarEnviado` faz
+ * `upsert` e regravaria o começo a cada minuto, e a espera nunca venceria.
+ */
+async function comecarRelogio(admin: SupabaseClient, s: LinhaDaSessao): Promise<void> {
+  try {
+    await admin.from("platform_avisos_enviados").upsert(
+      {
+        chave: chaveDeForaDesde(s.id),
+        enviado_em: new Date().toISOString(),
+        detalhe: { organization_id: s.organization_id, status: s.status },
+      },
+      { onConflict: "chave", ignoreDuplicates: true },
+    );
+  } catch {
+    // A próxima rodada tenta de novo: a queda só é avisada um minuto depois.
+  }
+}
+
 function caido(status: string | null): boolean {
   return status !== STATUS_SAUDAVEL && status !== "STARTING";
 }
@@ -228,6 +314,12 @@ export interface DesfechoDoAvisoDaQueda {
 /**
  * Uma rodada: avisa as quedas novas e as voltas pendentes. Devolve as chaves
  * dos recados que saíram.
+ *
+ * Nenhuma leitura aqui depende de quantas marcas antigas a tabela tem: a marca
+ * da queda e a da volta ficam para sempre (são a trava de 24h), e por isso só
+ * são lidas pela chave, das sessões que importam nesta rodada. O que diz quais
+ * sessões importam para a volta é o relógio (`fora:<sessão>`), que vive só
+ * enquanto há queda em curso ou volta a dar.
  */
 export async function avisarQuedasEVoltas(
   admin: SupabaseClient,
@@ -235,30 +327,27 @@ export async function avisarQuedasEVoltas(
 ): Promise<DesfechoDoAvisoDaQueda> {
   const desfecho: DesfechoDoAvisoDaQueda = { quedas: [], voltas: [] };
   try {
-    const [{ data: marcasBrutas }, { data: caidasBrutas }, { data: doAviso }] = await Promise.all([
-      admin
-        .from("platform_avisos_enviados")
-        .select("chave, enviado_em")
-        .like("chave", `${PREFIXO_DAS_CHAVES}%`),
+    const [relogios, { data: caidasBrutas }, { data: doAviso }] = await Promise.all([
+      lerRelogios(admin),
       admin
         .from("channel_sessions")
         .select(COLUNAS)
         .is("archived_at", null)
         .neq("status", STATUS_SAUDAVEL)
+        .eq("provider", PROVIDER_EM_QUE_O_NUMERO_E_A_CONEXAO)
+        .not("phone_number", "is", null)
         .limit(TETO_DE_SESSOES),
       admin.from("channel_sessions").select("status").eq("e_numero_de_avisos", true).maybeSingle(),
     ]);
-    const marcas = new Map(((marcasBrutas ?? []) as Marca[]).map((m) => [m.chave, new Date(m.enviado_em).getTime()]));
     const numeroDeAvisosDePe = (doAviso as { status?: string | null } | null)?.status === STATUS_SAUDAVEL;
 
     // ── As quedas ──────────────────────────────────────────────────────────
     for (const s of (caidasBrutas ?? []) as LinhaDaSessao[]) {
       if (!caido(s.status) || !numeroDoCliente(s)) continue;
 
-      const fora = chaveDeForaDesde(s.id);
-      const foraDesde = marcas.get(fora);
+      const foraDesde = relogios.get(s.id);
       if (foraDesde === undefined) {
-        await marcarEnviado(admin, fora, { organization_id: s.organization_id, status: s.status });
+        await comecarRelogio(admin, s);
         continue;
       }
       if (agora.getTime() - foraDesde < ESPERA_ANTES_DE_AVISAR_MIN * 60 * 1000) continue;
@@ -274,35 +363,58 @@ export async function avisarQuedasEVoltas(
 
     // ── As voltas ──────────────────────────────────────────────────────────
     //
-    // Só as sessões com algo pendente: a volta a avisar (queda avisada mais
-    // nova que a última volta) e o relógio da queda a zerar. A marca da queda
-    // fica para sempre (é a trava), e perguntar por toda sessão que já caiu um
-    // dia faria a lista crescer a cada mês.
-    const pendentes = new Set<string>();
-    for (const chave of marcas.keys()) {
-      const id = chave.slice(chave.indexOf(":") + 1);
-      if (chave === chaveDeForaDesde(id) || voltaPendente(marcas, id)) pendentes.add(id);
+    // Só as sessões com relógio: o relógio começa antes de qualquer aviso de
+    // queda e só sai quando a volta é resolvida, então toda volta a dar tem um.
+    if (relogios.size === 0) return desfecho;
+
+    const comRelogio = [...relogios.keys()];
+    const porId = new Map<string, LinhaDaSessao & { archived_at: string | null }>();
+    const lidas = new Set<string>();
+    for (const lote of emLotes(comRelogio)) {
+      const { data, error } = await admin
+        .from("channel_sessions")
+        .select(`${COLUNAS}, archived_at`)
+        .in("id", lote);
+      // Lote que falha fica para a próxima rodada. Sem esta conferência, a
+      // falha faria todas as sessões do lote parecerem apagadas.
+      if (error) continue;
+      for (const id of lote) lidas.add(id);
+      for (const s of (data ?? []) as Array<LinhaDaSessao & { archived_at: string | null }>) porId.set(s.id, s);
     }
-    if (pendentes.size === 0) return desfecho;
 
-    const { data: deVoltaBrutas } = await admin
-      .from("channel_sessions")
-      .select(COLUNAS)
-      .in("id", [...pendentes])
-      .eq("status", STATUS_SAUDAVEL)
-      .is("archived_at", null);
+    const deVolta: LinhaDaSessao[] = [];
+    for (const id of lidas) {
+      const s = porId.get(id);
+      // Apagada ou arquivada enquanto estava caída: não há volta a dar, e o
+      // relógio sai para não ser lido em toda rodada para sempre.
+      if (!s || s.archived_at !== null) {
+        await apagarMarca(admin, chaveDeForaDesde(id));
+        continue;
+      }
+      if (s.status === STATUS_SAUDAVEL) deVolta.push(s);
+    }
+    if (deVolta.length === 0) return desfecho;
 
-    for (const s of (deVoltaBrutas ?? []) as LinhaDaSessao[]) {
-      if (marcas.has(chaveDeForaDesde(s.id))) await apagarMarca(admin, chaveDeForaDesde(s.id));
-      if (!voltaPendente(marcas, s.id)) continue;
+    const marcas = await lerQuedasEVoltas(
+      admin,
+      deVolta.map((s) => s.id),
+    );
+    for (const s of deVolta) {
+      if (!voltaPendente(marcas, s.id)) {
+        // Voltou dentro da espera, ou a volta já foi dada: só zera o relógio.
+        await apagarMarca(admin, chaveDeForaDesde(s.id));
+        continue;
+      }
 
       const chave = chaveDaVolta(s.id);
       const envio = await enviarAoGrupo(admin, s.organization_id, textoDaVolta(s), numeroDeAvisosDePe);
+      // O relógio fica: é ele que traz esta volta de novo na próxima rodada.
       if (envio === "falhou" || envio === "esperar_numero_de_avisos") continue;
       // Sem destino (chave desligada, grupo tirado, empresa parada) a volta é
       // dada por fechada sem recado: senão ela sairia dias depois, quando
       // alguém religasse a chave, falando de uma queda que ninguém lembra.
       await marcarEnviado(admin, chave, { organization_id: s.organization_id, enviada: envio === "saiu" });
+      await apagarMarca(admin, chaveDeForaDesde(s.id));
       if (envio === "saiu") desfecho.voltas.push(chave);
     }
   } catch (err) {

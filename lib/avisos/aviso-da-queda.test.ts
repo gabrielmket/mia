@@ -71,7 +71,9 @@ function sessao(id: string, organizationId: string, extra: Linha = {}): Linha {
   };
 }
 
-function cenario(opcoes: { alfa?: Linha; beta?: Linha; orgAlfa?: Linha } = {}) {
+function cenario(
+  opcoes: { alfa?: Linha; beta?: Linha; orgAlfa?: Linha; marcas?: Linha[]; maxRows?: number } = {},
+) {
   return bancoEmMemoria({
     organizations: [
       opcoes.orgAlfa ?? org(ALFA, "Academia Alfa", { grupo_de_avisos: { id: GRUPO_ALFA, nome: "Avisos Alfa" } }),
@@ -85,8 +87,8 @@ function cenario(opcoes: { alfa?: Linha; beta?: Linha; orgAlfa?: Linha } = {}) {
       sessao(SESSAO_ALFA, ALFA, opcoes.alfa),
       sessao(SESSAO_BETA, BETA, { display_name: "Comercial", phone_number: "+55 31 900000003", ...opcoes.beta }),
     ],
-    platform_avisos_enviados: [],
-  });
+    platform_avisos_enviados: opcoes.marcas ?? [],
+  }, {}, { maxRows: opcoes.maxRows });
 }
 
 type Banco = ReturnType<typeof cenario>;
@@ -314,6 +316,63 @@ describe("quem caiu é o próprio número de avisos", () => {
     await rodar(b, 30, 3);
     expect(enviados).toHaveLength(1);
     expect(enviados[0]!.to).toBe(GRUPO_ALFA);
+  });
+});
+
+describe("o volume de marcas não cala o aviso (o corte de 1000 linhas do PostgREST)", () => {
+  /**
+   * A marca da queda e a da volta ficam para sempre (são a trava de 24h): duas
+   * linhas por número que já caiu um dia. Com 1200 marcas antigas antes, uma
+   * leitura de todas as marcas pelo prefixo voltava cortada em 1000 linhas, sem a
+   * marca `fora` da queda nova. O código achava que era a primeira vez, regravava
+   * o relógio a cada minuto e a espera de 10 minutos nunca vencia: o cliente
+   * nunca era avisado, sem erro e sem log.
+   */
+  const antigas = (n: number): Linha[] =>
+    Array.from({ length: n }, (_, i) => {
+      const id = `0e000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+      const em = new Date(INICIO.getTime() - 30 * 24 * 60 * MINUTO).toISOString();
+      return [
+        { chave: chaveDaQueda(id), enviado_em: em, detalhe: {} },
+        { chave: chaveDaVolta(id), enviado_em: em, detalhe: { enviada: true } },
+      ];
+    }).flat();
+
+  it("⭐ com 1200 marcas antigas, a queda nova ainda é avisada depois da espera", async () => {
+    const b = cenario({ alfa: { status: "FAILED" }, marcas: antigas(600), maxRows: 1000 });
+
+    await rodar(b, 0, ESPERA_ANTES_DE_AVISAR_MIN + 5);
+
+    const fora = b.tabela("platform_avisos_enviados").find((m) => m.chave === chaveDeForaDesde(SESSAO_ALFA));
+    expect(fora?.enviado_em, "o relógio da queda é gravado uma vez, não regravado a cada minuto").toBe(
+      INICIO.toISOString(),
+    );
+    expect(enviados.map((e) => e.to)).toEqual([GRUPO_ALFA]);
+  });
+
+  it("⭐ e a volta também sai, com as mesmas 1200 marcas antigas", async () => {
+    const b = cenario({ alfa: { status: "FAILED" }, marcas: antigas(600), maxRows: 1000 });
+    await rodar(b, 0, ESPERA_ANTES_DE_AVISAR_MIN + 1);
+    expect(enviados).toHaveLength(1);
+
+    sessaoDe(b, SESSAO_ALFA).status = "WORKING";
+    await rodar(b, ESPERA_ANTES_DE_AVISAR_MIN + 1, 3);
+
+    expect(enviados).toHaveLength(2);
+    expect(String(enviados[1]!.body)).toContain("voltou");
+    expect(chaves(b)).not.toContain(chaveDeForaDesde(SESSAO_ALFA));
+  });
+
+  it("a sessão arquivada enquanto estava caída não deixa a marca do relógio para sempre", async () => {
+    const b = cenario({ alfa: { status: "FAILED" } });
+    await rodar(b, 0);
+    expect(chaves(b)).toContain(chaveDeForaDesde(SESSAO_ALFA));
+
+    sessaoDe(b, SESSAO_ALFA).archived_at = new Date(INICIO.getTime() + MINUTO).toISOString();
+    await rodar(b, 1);
+
+    expect(chaves(b)).not.toContain(chaveDeForaDesde(SESSAO_ALFA));
+    expect(enviados).toHaveLength(0);
   });
 });
 
