@@ -119,7 +119,11 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "roteador de intenção, que passa a escolher o agente a cada mensagem do número e " +
       "a mover o negócio do cliente para o funil de destino da intenção. " +
       // FORK MIA (.108): desfazer a trava de robô devolve a IA a um contato.
-      "E desfaz a trava de robô de uma conversa: a IA volta a mandar mensagem para aquele contato.",
+      "E desfaz a trava de robô de uma conversa: a IA volta a mandar mensagem para aquele contato. " +
+      // FORK MIA (S3): a chave da coexistência do WhatsApp.
+      "E liga a coexistência do WhatsApp de uma empresa: ela passa a ver o botão de conectar pela API o número que já usa no " +
+      "app WhatsApp Business, e a IA passa a atender por ele (quem conecta é a empresa, pela janela da Meta; desligar não " +
+      "derruba o número já conectado).",
   },
   {
     chave: "convidar_equipe",
