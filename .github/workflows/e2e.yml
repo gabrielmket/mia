@@ -1171,6 +1171,15 @@ jobs:
       # risco de contaminação. Uma cauda rompe UMA fronteira; um sorteio romperia
       # todas. Os 3 arquivos que o cancelamento impediu de medir vêm junto, porque
       # eles são justamente o fim da fila.
+      #
+      # `itens-do-negocio` (MIA-8, o produto no negócio da .109) entrou aqui em
+      # 2026-11-18 por ser a parte comum mais leve nas três rodadas verdes mais
+      # recentes da main (44243402231, 44243288672, 44217597163): 724, 735 e
+      # 898 s de job, contra 1075 a 1633 s das outras comuns. A vizinhança de
+      # CRM já mora nela (`pipelines-gestao`, `qa-selo-no-funil-usado`).
+      # Semeia os próprios funis, etapas, negócios e produtos do catálogo, com
+      # sufixo, e apaga tudo no fim. Medida na 1ª rodada do PR #103 (44253866145,
+      # quando a linha estava por engano na parte 7): 14,5 s nos três casos.
       SPECS_PARTE_3: >-
         roteamento-por-canal.spec.ts
         whatsapp-pareamento-por-codigo.spec.ts
@@ -1215,6 +1224,7 @@ jobs:
         catalogo-busca-no-catalogo-inteiro.spec.ts
         relatorio-por-etiqueta.spec.ts
         minhas-tarefas-no-celular.spec.ts
+        itens-do-negocio.spec.ts
 
       # ─── PARTE 4 — a spec de VPS fresca, e quem pode entrar ao lado dela ───
       #
@@ -1532,6 +1542,15 @@ jobs:
       # FORK MIA (.107): `raio-x-por-cadastro` também: sobe o dublê do leitor
       # (3994, como a do atendimento; o worker é um só) e um dublê de SMTP
       # (3993), e devolve o SMTP da instalação como achou.
+      # FORK MIA (MIA-41): `admin-saldo-do-provedor-e-uso-por-tenant` também:
+      # semeia a própria organização fictícia (2 agentes publicados e a sessão
+      # de canal que a versão exige, sem transporte), lança leituras de saldo
+      # com uma nota única e apaga tudo no fim. PREVISÃO, não medida: ~1 min.
+      # FORK MIA (MIA-44): `admin-consumo-de-ia-por-mes-e-por-agente` também:
+      # semeia a própria organização fictícia (2 agentes, sem publicar, e as
+      # chamadas de IA deste mês e do mês passado), só lê as duas telas de uso e
+      # apaga tudo no fim; a cotação, só se foi ela que gravou. PREVISÃO, não
+      # medida: ~1 min.
       #
       # `blueprint-de-funis` entrou em 2026-11-14 (#4283, @webtecnica): exporta,
       # aplica um funil com nome novo e reaplica o mesmo arquivo em
@@ -1556,6 +1575,8 @@ jobs:
         propostas-de-campos-do-card.spec.ts
         aviso-pelo-numero-oficial.spec.ts
         molde-de-ia-empresas-novas.spec.ts
+        admin-saldo-do-provedor-e-uso-por-tenant.spec.ts
+        admin-consumo-de-ia-por-mes-e-por-agente.spec.ts
         blueprint-de-funis.spec.ts
       # Ambiente isolado: esta spec exige HMAC WAHA e Graph sintético no
       # processo next start. As demais partes preservam a configuração WAHA.

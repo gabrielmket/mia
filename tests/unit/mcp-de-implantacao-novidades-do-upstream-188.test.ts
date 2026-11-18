@@ -120,8 +120,9 @@ describe("a lista: 69 ferramentas, e os tipos de ação seguem os do upstream", 
       // .108: as três da trava de robô.
       // .109: as duas do produto no negócio.
       // MIA-18: a da lista de espera da agenda (upstream 1.105, 9235).
+      // MIA-44: a do consumo de IA por mês e por agente.
       // MIA-67: contar os negócios e as duas das conexões do MCP (upstream 1.117).
-      (f) => daCobranca.has(f.name) || /lista_de_espera|etiquetar_contatos|assistente|chamado|email|supressao|consentimentos|segmentos|trilhas|travam|melhoria_do_produto|parceiro|cupo[mn]|repasse|raio_x|travas?_de_robo|produto_no_negocio|palavra_do_segmento|contar_negocios|conex(ao|oes)_do_mcp/.test(f.name),
+      (f) => daCobranca.has(f.name) || /consumo_de_ia|lista_de_espera|etiquetar_contatos|assistente|chamado|email|supressao|consentimentos|segmentos|trilhas|travam|melhoria_do_produto|parceiro|cupo[mn]|repasse|raio_x|travas?_de_robo|produto_no_negocio|palavra_do_segmento|contar_negocios|conex(ao|oes)_do_mcp/.test(f.name),
     );
     expect(FERRAMENTAS.length - doFork.length).toBe(69);
   });

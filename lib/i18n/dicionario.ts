@@ -78,6 +78,8 @@ import { DICIONARIO_DOS_CONTATOS_EM_MASSA } from "./dicionario-mia-contatos-em-m
 import { DICIONARIO_DO_RAIO_X_MIA } from "./dicionario-mia-raio-x";
 // FORK MIA (.107): a faixa da IA calada por outra conversa do contato, idem.
 import { DICIONARIO_DA_IA_PENDENTE } from "./dicionario-mia-ia-pendente";
+// FORK MIA (MIA-44): as quebras do consumo de IA na aba Uso do cliente, idem.
+import { DICIONARIO_DO_CONSUMO_DE_IA } from "./dicionario-mia-consumo-de-ia";
 // FORK MIA (.108): a nota, a linha do tempo e o aviso da trava de robô, idem.
 import { DICIONARIO_DA_TRAVA_DE_ROBO } from "./dicionario-mia-trava-de-robo";
 // FORK MIA (.109): o produto no negócio (docs/fork/produto-no-negocio.md).
@@ -114,6 +116,7 @@ export const DICIONARIO: Traducoes = {
   ...DICIONARIO_DOS_CONTATOS_EM_MASSA,
   ...DICIONARIO_DO_RAIO_X_MIA,
   ...DICIONARIO_DA_IA_PENDENTE,
+  ...DICIONARIO_DO_CONSUMO_DE_IA,
   ...DICIONARIO_DA_TRAVA_DE_ROBO,
   ...DICIONARIO_DO_PRODUTO_NO_NEGOCIO,
   ...TEXTOS_CONTRATACAO,
@@ -1872,6 +1875,8 @@ export const DICIONARIO: Traducoes = {
   "Versão publicada": { es: "Versión publicada" },
   "Publicado em": { es: "Publicado el" },
   "Nenhum agente publicado": { es: "Ningún agente publicado" },
+  "o uso soma todos os agentes": { es: "el uso suma todos los agentes" },
+  "A data não pode ser depois de hoje.": { es: "La fecha no puede ser posterior a hoy." },
   "Não foi possível carregar o agente do tenant. Tente recarregar a página.": { es: "No se pudo cargar el agente del tenant. Intenta recargar la página." },
   "números de teste autorizados": { es: "números de prueba autorizados" },
   "1 número de teste autorizado": { es: "1 número de prueba autorizado" },

@@ -15,9 +15,9 @@ import { operacaoPorChave } from "@/lib/mcp-plataforma/operacoes";
 const NOMES = ["plataforma_criar_raio_x", "plataforma_ver_raio_x", "plataforma_publicar_raio_x", "plataforma_encerrar_raio_x", "plataforma_reler_raio_x", "plataforma_precos_do_raio_x"];
 
 describe("as seis do raio-X", () => {
-  it("estão na lista, e a lista tem 121 (a quinta, reler, é da .105; a sexta, os preços, da .107; as três da trava de robô, da .108; as duas do produto no negócio, da .109; a da lista de espera, MIA-18; e as três da 1.117, MIA-67)", () => {
+  it("estão na lista, e a lista tem 122 (a quinta, reler, é da .105; a sexta, os preços, da .107; as três da trava de robô, da .108; as duas do produto no negócio, da .109; a da lista de espera, MIA-18; a do consumo de IA, MIA-44; e as três da 1.117, MIA-67)", () => {
     for (const n of NOMES) expect(FERRAMENTA_POR_NOME.has(n), n).toBe(true);
-    expect(FERRAMENTAS).toHaveLength(121);
+    expect(FERRAMENTAS).toHaveLength(122);
   });
 
   it("ver é leitura; as outras cinco exigem gerir_raio_x", () => {

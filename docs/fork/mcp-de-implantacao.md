@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **121** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda e a MIA-67 as três da 1.117: contar os negócios e ver e revogar as conexões do MCP da empresa): as 113 desta página e as 8 da migração
+São **122** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda, a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md), e a MIA-67 as três da 1.117: contar os negócios e ver e revogar as conexões do MCP da empresa): as 114 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -237,6 +237,7 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | `plataforma_ver_cliente` | o retrato de um cliente: módulos, números, saldo e, em `configuracao`, a limpeza automática de mídia, o freio do passo "a IA decide", o bloqueio de afirmação clínica e quantos planos de tarefa existem; desde a .96, em `pagamento_inicial`, o passo "Pagamento" do início | leitura |
 | `plataforma_listar_modulos` | os módulos que se vendem separado | leitura |
 | `plataforma_ver_saude` | o estado da instalação, e se a chave que cifra o CPF dos contatos está semeada (só sim ou não; o valor nunca sai) | leitura |
+| `plataforma_ver_consumo_de_ia` | o consumo de IA de um cliente num mês do calendário em Brasília (MIA-44, [`consumo-de-ia.md`](consumo-de-ia.md)): o total, cada agente, a linha "Sistema" (chamadas sem agente) e a quebra por finalidade, cada uma com chamadas, tokens de entrada e saída, quantos vieram do cache, o custo em centavos de dólar (a régua do teto) e em reais (cotação de cada dia). Os mesmos números da aba Uso do cliente | leitura |
 | `plataforma_ver_implantacao` | o **checklist**: por área, o que está pronto, o que falta (com a ferramenta) e o que é com uma pessoa (com a tela). Desde a .91, as áreas `primeiros_passos` (onde a empresa está no passo a passo e o número oficial que espera a Time) e `plano_e_cobranca` (assinou ou não, das tabelas de assinatura do upstream), e o `rotulo_do_cliente`: o "o que falta" que a empresa nova vê | leitura |
 | `plataforma_listar_modelos` | os modelos e vocabulários que as outras ferramentas aceitam: modelos de follow-up, pacotes e capacidades do agente, gatilhos e ações de automação, passos do funil, tipos de campo | leitura |
 | `plataforma_ver_funis` | os funis inteiros: etapas, passo do agente, campos, motivos | leitura |
@@ -683,7 +684,9 @@ modelo aprovado da agenda, em `tests/unit/mcp-de-implantacao-modelo-da-agenda.te
 `tests/unit/mcp-de-implantacao-followup-e-setores-1107.test.ts` (MIA-21). Na fusão,
 nenhuma ferramenta nova, só campos e seções de leitura. Depois dela (MIA-18), a lista
 de espera da agenda ganhou uma ferramenta própria, `plataforma_configurar_lista_de_espera`
-(a lista vai de 117 a 118; a contagem mora no teste da cobrança).
+(a lista vai de 117 a 118; a contagem mora no teste da cobrança). A leitura do link de
+pagamento na conversa (MIA-19) é uma seção nova de `plataforma_ver_cliente`, sem
+ferramenta nova, e a prova está no mesmo arquivo das novidades.
 
 | novidade do upstream | versão | como o MCP alcança | operação |
 |---|---|---|---|
@@ -704,15 +707,15 @@ de espera da agenda ganhou uma ferramenta própria, `plataforma_configurar_lista
 | Servidores MCP POR AGENTE, com OAuth por contato (`ai_agent_mcp_servers`, 9095; módulo opcional `mcp_por_agente`, que nasce desligado) | 1.100 a 1.107 | campo novo `servidores_mcp` em `plataforma_garantir_agente`: cada item liga, troca ou tira (`apagar: true`) um servidor pelo NOME, pela mesma régua e pelas mesmas peças da ação da tela (`EntradaDoServidorSchema`, `conferirEndpointDoServidor`, `descobrir`, `registrarCliente`, `cifrar`, `revogarAcessosDoServidor`, auditorias `agent.mcp_servidor_salvo`/`_removido`); o cadastro vale na hora e as `ferramentas` de cada servidor vão para o rascunho (`mcp_externo:<servidor_id>:*`). A chave e o `client_secret` entram cifrados e nunca voltam (só "configurado" e os 4 últimos da chave), nem na trilha (`redigirParaAuditoria`). O que o OAuth pede de uma pessoa volta em `com_o_humano` e o MCP não faz: registrar o aplicativo à mão quando o sistema de fora não tem registro automático (o servidor NÃO é gravado, como na tela, e a resposta traz o endereço de retorno, estável entre as chamadas) e a autorização de cada contato no navegador. A leitura (`plataforma_ver_agentes`) devolve `servidores_mcp` de cada agente, com as ferramentas da versão vigente, e se o módulo está ligado. Módulo desligado e demonstração recusam antes de gravar. Prova em `tests/unit/mcp-de-implantacao-servidores-mcp-do-agente.test.ts` | `implantar_configuracao` |
 | A LISTA DE ESPERA da agenda como módulo opcional (9235, #3414, doc 208): a vaga que abre é oferecida a uma pessoa da fila por vez, com três prazos escolhidos pela empresa | 1.105 | ferramenta nova `plataforma_configurar_lista_de_espera` (`ligada` e os três prazos), espelho de `PATCH /api/v1/agenda/lista-de-espera`: o mesmo `configDaListaDeEsperaSchema` (sem padrão: ligar pela primeira vez pede os três), a mesma chave `settings.lista_de_espera` e a mesma auditoria `agenda.lista_de_espera_configurada`. É por EMPRESA, não por tipo: o upstream guarda os prazos fora do tipo, e quem entra na fila escolhe o serviço na inscrição. Sem o módulo instalado, recusa com "módulo não instalado" e não instala. A leitura (seção `agenda`) devolve `lista_de_espera`: `modulo_instalado`, `ligada` e `prazos` | `colocar_no_ar` |
 | O LUGAR com capacidade por período (mesa, camarote, quadra: recurso `kind='space'`, `sector`, a reserva com `service_party_size`, 9224) | 1.105 | só a leitura: `plataforma_ver_configuracao`, seção `agenda`, devolve em `servico.lugares` de cada tipo o `nome`, a `area`, a `capacidade_de_pessoas` e se está `ativo`. Gravar fica na tela (veja abaixo) | |
+| O LINK DE PAGAMENTO na conversa: o recebimento do cliente final da empresa (`pagamento_recebimentos`, 9312, #3509; módulo opcional `link_de_pagamento`, que nasce desligado) | 1.106 | SÓ LEITURA: seção nova `link_de_pagamento` em `plataforma_ver_cliente` (`lib/pagamentos/para-a-time.ts`), com `modulo_da_instalacao_ligado`, `quem_liga: "instalacao"`, os `provedores` que o degrau conhece, `recebimentos_por_situacao` (contagem do banco, só da organização pedida) e `ultimo_pago_em`. Não devolve o endereço de aviso, o hash do segredo, o id no provedor nem o valor. Leitura que falha não derruba o retrato: as contagens e o último pago dizem `"nao_lido"`, e o módulo cai para `false` (falha fechada, então `false` também cobre "não consegui ler"). Ligar e desligar é da instalação (/admin/sistema, `MODULO_LINK_DE_PAGAMENTO`, vale para todas as empresas); a escrita por empresa ("liga, desliga, qual conta recebe") espera o gateway por organização do upstream (#4093) entrar pela fusão | leitura |
 | O índice da mensagem que espera em `queued` (9242) | 1.105 | nada a configurar: índice do banco, sem opção | |
 
 Falta no MCP (fica para uma tarefa própria, porque cada item pede ferramenta ou
 leitura nova, e não um campo):
 
 - as cadências de e-mail da empresa (9249, 9251, módulo opcional `cadencias`), a
-  conta Resend da organização (0795), a ouvidoria (9040) e o link de pagamento na
-  conversa (9312, módulo opcional): ferramentas novas, e as três primeiras encostam
-  no nosso e-mail marketing e na marca travada da plataforma;
+  conta Resend da organização (0795) e a ouvidoria (9040): ferramentas novas, e as
+  três encostam no nosso e-mail marketing e na marca travada da plataforma;
 - o molde de IA das empresas novas (9096, que encosta no cliente-modelo).
 
 Fica na tela, por decisão: CRIAR o lugar com capacidade e ligá-lo ao serviço (9224).
@@ -785,7 +788,7 @@ oficial (9328) é gravada pelo próprio cadastro.
 
 A fusão (MIA-62) entrou sem ferramenta nem campo novo: só o ajuste para nada quebrar (o
 `prazo` do passo do plano de tarefas). O que faltava veio em seguida, num PR próprio
-(MIA-67): **três ferramentas novas** (a lista vai de 118 a 121) e uma operação nova,
+(MIA-67): **três ferramentas novas** (a lista vai de 119 a 122, com a do consumo de IA da MIA-44 já dentro) e uma operação nova,
 `revogar_conexao_do_mcp`. A prova está em
 `tests/unit/mcp-de-implantacao-novidades-do-upstream-1117.test.ts`.
 

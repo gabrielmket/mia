@@ -46,6 +46,8 @@ import { FERRAMENTAS_DO_RAIO_X } from "./ferramentas/raio-x";
 // FORK MIA (.108): a trava de robô (docs/fork/trava-de-robo.md).
 import { FERRAMENTAS_DA_TRAVA_DE_ROBO } from "./ferramentas/trava-de-robo";
 import { FERRAMENTAS_DO_PRODUTO_NO_NEGOCIO } from "./ferramentas/produto-no-negocio";
+// FORK MIA (MIA-44): o consumo de IA por mês e por agente (docs/fork/consumo-de-ia.md).
+import { FERRAMENTAS_DE_CONSUMO_DE_IA } from "./ferramentas/consumo-de-ia";
 import { FERRAMENTAS_DO_CHECKLIST } from "./ferramentas/checklist";
 // FORK MIA (upstream 1.117, MIA-67): a contagem dos negócios e as conexões OAuth do MCP da empresa.
 import { FERRAMENTAS_DAS_CONEXOES_DO_MCP } from "./ferramentas/conexoes-do-mcp";
@@ -117,6 +119,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DA_TRAVA_DE_ROBO,
   // FORK MIA (.109): o produto no negócio: a palavra e as duas opções de um funil, e a palavra do segmento na implantação (docs/fork/produto-no-negocio.md)
   ...FERRAMENTAS_DO_PRODUTO_NO_NEGOCIO,
+  // FORK MIA (MIA-44): o consumo de IA de um cliente num mês, por agente, "Sistema" e finalidade; só lê (docs/fork/consumo-de-ia.md)
+  ...FERRAMENTAS_DE_CONSUMO_DE_IA,
   // FORK MIA (upstream 1.117, MIA-67): contar os negócios pela porta do `crm_count_leads`, e ver e revogar as conexões OAuth ao MCP da empresa (docs/fork/mcp-de-implantacao.md)
   ...FERRAMENTAS_DA_CONTAGEM_DE_NEGOCIOS,
   ...FERRAMENTAS_DAS_CONEXOES_DO_MCP,
