@@ -43,6 +43,8 @@
 import { audit } from "@/lib/audit";
 import { invalidarOrg } from "@/lib/auth/cache-curto";
 import { AI_DECIDE_PADRAO, CHAVE_DAS_AUTOMACOES } from "@/lib/automation/ai-decide-da-org";
+// FORK MIA (MIA-48): a chave do aviso da queda do número no grupo do cliente.
+import { avisoDaQuedaLigado, CHAVE_DO_AVISO_DA_QUEDA } from "@/lib/avisos/chave-do-aviso-da-queda";
 import { gravarMeta } from "@/lib/crm/metas/gravar";
 import { lerModoDeVenda } from "@/lib/empresas/modo-de-venda";
 import { PRAZO_MAX_MINUTOS, PRAZO_MIN_MINUTOS } from "@/lib/escalacao/devolucao-automatica";
@@ -431,6 +433,13 @@ export interface PedidoDeAtendimento {
    * a conversa segue no Inbox. A lista INTEIRA; `[]` tira todas.
    */
   etiquetas_de_contato_interno?: string[];
+  /**
+   * FORK MIA (MIA-48): o aviso no grupo do cliente quando o número de WhatsApp
+   * dele cai e quando volta (`lib/avisos/aviso-da-queda.ts`). Chave de topo
+   * `settings.aviso_da_queda_do_numero`, ligada por padrão (só o `false` gravado
+   * desliga); sem grupo de avisos, ligada não manda nada.
+   */
+  aviso_da_queda_do_numero?: boolean;
 }
 
 /** O freio do `ai_decide` como o motor o lê (`aiDecideLigado`): só `false` gravado desliga. */
@@ -458,6 +467,7 @@ export async function configurarAtendimento(
   let meetGravado = null as boolean | null;
   let telefoneGravado = null as boolean | null;
   let internasGravadas = null as string[] | null;
+  let avisoDaQuedaGravado = null as boolean | null;
 
   const { mudou } = await mudarSettingsDaOrganizacao(c.admin, c.orgId, (settings) => {
     const atual = routingConfigSchema.catch(routingConfigSchema.parse({})).parse(settings.routing ?? {});
@@ -566,6 +576,13 @@ export async function configurarAtendimento(
       };
     }
 
+    // FORK MIA (MIA-48): a chave do aviso da queda, de topo, só quando MUDA, lida
+    // pela mesma régua do cron (`avisoDaQuedaLigado`).
+    const avisoDaQuedaAtual = avisoDaQuedaLigado(settings);
+    const avisoDaQuedaMudou =
+      pedido.aviso_da_queda_do_numero !== undefined && pedido.aviso_da_queda_do_numero !== avisoDaQuedaAtual;
+    if (avisoDaQuedaMudou) novo = { ...novo, [CHAVE_DO_AVISO_DA_QUEDA]: pedido.aviso_da_queda_do_numero };
+
     mudancas = [];
     if (routing.mode !== atual.mode) mudancas.push("modo de distribuição");
     if (routing.handoff_return_after_minutes !== atual.handoff_return_after_minutes) mudancas.push("devolução para a IA");
@@ -593,6 +610,8 @@ export async function configurarAtendimento(
     telefoneGravado = telefoneMudou ? (pedido.telefone_de_ficha_vazia as boolean) : null;
     if (internasMudaram) mudancas.push("etiquetas de contato interno");
     internasGravadas = internasMudaram ? internasPedidas : null;
+    if (avisoDaQuedaMudou) mudancas.push("aviso da queda do número no grupo");
+    avisoDaQuedaGravado = avisoDaQuedaMudou ? (pedido.aviso_da_queda_do_numero as boolean) : null;
 
     const assinaturaFinal: AssinaturaGravada = assinaturaPedida ?? {
       humanos: assinaturaAtual.humanos,
@@ -621,6 +640,7 @@ export async function configurarAtendimento(
       google_meet_com_acesso_aberto: meetMudou ? pedido.google_meet_com_acesso_aberto : meetAtual,
       telefone_de_ficha_vazia: telefoneMudou ? pedido.telefone_de_ficha_vazia : crmAtual.telefone_de_ficha_vazia,
       etiquetas_de_contato_interno: internasMudaram ? internasPedidas : crmAtual.internal_contact_tags,
+      aviso_da_queda_do_numero: avisoDaQuedaMudou ? pedido.aviso_da_queda_do_numero : avisoDaQuedaAtual,
     };
 
     // Uma organização que nunca abriu a tela não tem `settings.routing`: gravar
@@ -712,6 +732,18 @@ export async function configurarAtendimento(
       resourceId: c.orgId,
       requestId: c.requestId,
       metadata: { tags: internasGravadas, quantidade: internasGravadas.length, via: "mcp_plataforma" },
+    });
+  }
+
+  if (mudou && avisoDaQuedaGravado !== null) {
+    void audit({
+      action: "platform.aviso_da_queda_alterado",
+      actorUserId: c.autorUserId,
+      organizationId: c.orgId,
+      resourceType: "organization",
+      resourceId: c.orgId,
+      requestId: c.requestId,
+      metadata: { ligado: avisoDaQuedaGravado, via: "mcp_plataforma" },
     });
   }
 

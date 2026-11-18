@@ -44,6 +44,8 @@ import { empresasEsperandoOPrimeiroPagamento, passoDoPagamentoParaATime } from "
 import { lerCupomEParceiroDaEmpresa } from "@/lib/cupons/na-ficha";
 // FORK MIA (.96, segunda frente): as cobranças com a nota fiscal (docs/fork/area-de-cobranca.md).
 import { cobrancasParaATime } from "@/lib/area-de-cobranca/para-a-time";
+// FORK MIA (MIA-48): o aviso da queda do número no grupo do cliente.
+import { estadoDoAvisoDaQueda } from "@/lib/avisos/aviso-da-queda";
 
 /**
  * A chave do CPF está semeada? Só sim ou não, e o VALOR nunca sai.
@@ -150,7 +152,11 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       "`null` = a empresa não tem cobrança pelo Asaas; \"nao_lido\" = o Asaas não respondeu. " +
       // FORK MIA (.98): o cupom e o parceiro.
       "Desde a .98, em `cupom_e_parceiro`: o cupom da empresa (o que dá, desde quando, se o desconto já acabou), o parceiro ligado a ela e a comissão fixada, " +
-      "o setup de implantação vendido e o total das comissões lançadas. Sem documento nem Pix do parceiro.",
+      "o setup de implantação vendido e o total das comissões lançadas. Sem documento nem Pix do parceiro. " +
+      // FORK MIA (MIA-48): o aviso da queda do número.
+      "Em `aviso_da_queda`: se o grupo de avisos do cliente recebe o recado quando um número dele cai e quando volta (`ligada`, `grupo_configurado`, " +
+      "`vai_avisar` = as duas coisas) e os últimos avisos de queda e de volta, com a data e o número (nome e final do telefone). " +
+      "A chave muda em plataforma_configurar_atendimento, `aviso_da_queda_do_numero`.",
     inputSchema: {
       organization_id: z.string().uuid().describe("O id do cliente."),
     },
@@ -220,6 +226,8 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         // FORK MIA (.98): leitura que falha diz "nao_lido".
         cupom_e_parceiro: await lerCupomEParceiroDaEmpresa(admin, id).catch(() => "nao_lido" as const),
         cobrancas,
+        // FORK MIA (MIA-48): leitura que falha diz `null` nos últimos avisos.
+        aviso_da_queda: await estadoDoAvisoDaQueda(admin, id, settings),
         // Os interruptores da empresa que chegaram do upstream 1.74 a 1.80.
         configuracao: {
           limpeza_automatica_de_midia: {

@@ -6,7 +6,7 @@
  * dublê que devolve linha fixa por formato de `select` não consegue medir isso.
  *
  * Cobre o subconjunto do supabase-js que as rotas de agente usam: `select` com
- * `eq`/`is`/`in`/`not`/`order`/`limit`, `insert`, `update`, `upsert`, `delete`,
+ * `eq`/`is`/`in`/`like`/`not`/`order`/`limit`, `insert`, `update`, `upsert`, `delete`,
  * `single`/`maybeSingle` e a lista aguardada direto. Cada escrita fica
  * registrada em `escritas`, na ordem.
  *
@@ -149,6 +149,15 @@ export function bancoEmMemoria(
       neq: (c: string, v: unknown) => (filtros.push((l) => l[c] !== v), q),
       is: (c: string, v: unknown) => (filtros.push((l) => (l[c] ?? null) === v), q),
       in: (c: string, vs: unknown[]) => (filtros.push((l) => vs.includes(l[c])), q),
+      // `like(c, "prefixo%")`: `%` é qualquer sequência e `_` um caractere, como no Postgres
+      // (FORK MIA, MIA-48: as marcas do aviso da queda são lidas pelo prefixo).
+      like: (c: string, padrao: string) => {
+        const re = new RegExp(
+          `^${padrao.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*").replace(/_/g, ".")}$`,
+          "s",
+        );
+        return (filtros.push((l) => typeof l[c] === "string" && re.test(l[c] as string)), q);
+      },
       not: (c: string, _op: string, v: unknown) => (filtros.push((l) => (l[c] ?? null) !== v), q),
       lt: (c: string, v: unknown) => (
         filtros.push((l) => (l[c] as string | number) < (v as string | number)),

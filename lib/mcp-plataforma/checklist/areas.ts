@@ -51,6 +51,8 @@ import { primeirosPassos } from "./area-dos-primeiros-passos";
 import { planoECobranca } from "./area-do-plano-e-cobranca";
 import { obrigacoes } from "./area-das-obrigacoes";
 import type { AreaDoChecklist, ResultadoDaArea } from "./tipos";
+// FORK MIA (MIA-48): a chave do aviso da queda do número.
+import { avisoDaQuedaLigado } from "@/lib/avisos/chave-do-aviso-da-queda";
 
 function vazio(): ResultadoDaArea {
   return { pronto: [], falta: [], so_pela_tela: [] };
@@ -761,6 +763,8 @@ const atendimento: AreaDoChecklist = {
       ia_espera_apos_resposta_pelo_celular_minutos: routing.manual_reply_silence_minutes,
       assinatura: { atendentes: assinatura.humanos, ia: assinatura.ia, nome_da_ia: assinatura.nomeIa },
       grupo_de_avisos: grupo?.nome ?? null,
+      // FORK MIA (MIA-48): o grupo recebe o recado quando um número do cliente cai e volta.
+      aviso_da_queda_do_numero: avisoDaQuedaLigado(org.settings),
       numeros_com_regra_propria: regrasDosNumeros.size,
     };
     const ROTULO_DO_MODO: Record<string, string> = { manual: "manual", round_robin: "em rodízio", load: "por menor carga" };
