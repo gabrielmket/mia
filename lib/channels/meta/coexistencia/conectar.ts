@@ -161,19 +161,22 @@ async function numeroEDeOutraEmpresa(
   admin: Admin,
   input: { organizationId: string; phoneNumberId: string; wabaId: string },
 ): Promise<boolean> {
+  // De propósito SEM filtro de organização: a pergunta é justamente se o
+  // número vive em OUTRA empresa da instalação (só o id e a empresa saem daqui).
   const sessoes = () =>
     admin
       .from("channel_sessions")
       .select("id, organization_id")
       .eq("provider", CHANNEL_PROVIDER_META)
-      .eq("meta_phone_number_id", input.phoneNumberId)
-      .neq("organization_id", input.organizationId);
+      .eq("meta_phone_number_id", input.phoneNumberId);
   const { data, error } = await queryTolerantToMissingArchived(
-    () => sessoes().is(ARCHIVED_AT, null).limit(1),
-    () => sessoes().limit(1),
+    () => sessoes().is(ARCHIVED_AT, null).limit(20),
+    () => sessoes().limit(20),
   );
   if (error) throw new Error(`numero_de_outra_empresa: ${error.message ?? ""}`);
-  if (((data ?? []) as unknown[]).length > 0) return true;
+  if (((data ?? []) as Array<{ organization_id: string }>).some((s) => s.organization_id !== input.organizationId)) {
+    return true;
+  }
 
   const { data: chegada, error: erroDaChegada } = await admin
     .from("meta_onboardings")
@@ -316,8 +319,8 @@ async function amarrarCadastro(
   }
 }
 
-/** Abre o ciclo da coexistência, ou devolve o da mesma passagem pela janela. */
-async function abrirCiclo(
+/** Abre o ciclo da coexistência, ou devolve o da mesma passagem pela janela. Exportada para o teste. */
+export async function abrirCiclo(
   admin: Admin,
   entrada: EntradaDaConexao,
   dados: { channelSessionId: string; phoneNumberId: string; agora: Date },
@@ -328,7 +331,7 @@ async function abrirCiclo(
       .select("id, aberta_por, conectada_em, phone_number_id")
       .eq("organization_id", entrada.organizationId)
       .eq("channel_session_id", dados.channelSessionId)
-      .neq("estado", "encerrada")
+      .in("estado", ["no_ar", "fora_do_ar"])
       .limit(1);
     if (error) throw new Error(`ciclo_vivo: ${error.message}`);
     return ((data ?? []) as Array<{ id: string; aberta_por: string; conectada_em: string; phone_number_id: string }>)[0] ?? null;
@@ -350,7 +353,7 @@ async function abrirCiclo(
       .update({ estado: "encerrada" })
       .eq("organization_id", entrada.organizationId)
       .eq("id", vivo.id)
-      .neq("estado", "encerrada");
+      .not("estado", "eq", "encerrada");
     if (error) throw new Error(`ciclo_encerrar: ${error.message}`);
   }
 

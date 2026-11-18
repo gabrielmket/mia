@@ -9,35 +9,13 @@
  */
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import type { NumeroPeloAppNaTela, PedidoDaSincronizacaoNaTela } from "@/hooks/channels/useCoexistencia";
+import type { NumeroPeloAppNaTela } from "@/hooks/channels/useCoexistencia";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 
-export type EstadoGeral = "pedida" | "andamento" | "concluida" | "falhou" | "recusou" | "incerto" | "prazo";
+import { estadoGeralDaSincronizacao, type EstadoGeral } from "./estado-geral";
 
-/** O estado que a tela mostra, a partir dos dois pedidos. Puro, para o teste. */
-export function estadoGeralDaSincronizacao(pedidos: readonly PedidoDaSincronizacaoNaTela[]): EstadoGeral {
-  const historico = pedidos.find((p) => p.tipo === "historico");
-  const contatos = pedidos.find((p) => p.tipo === "contatos");
-  const base = historico ?? contatos;
-  if (!base) return "pedida";
-  switch (base.estado) {
-    case "concluida":
-      return "concluida";
-    case "recusada_pelo_dono":
-      return "recusou";
-    case "falhou":
-      return "falhou";
-    case "sem_resposta":
-      return contatos?.estado === "em_andamento" ? "andamento" : "incerto";
-    case "prazo_vencido":
-      return "prazo";
-    case "em_andamento":
-      return "andamento";
-    default:
-      return contatos?.estado === "em_andamento" ? "andamento" : "pedida";
-  }
-}
+export { estadoGeralDaSincronizacao, type EstadoGeral };
 
 export function SeloDaSincronizacao({ estado }: { estado: EstadoGeral }) {
   const t = useT();

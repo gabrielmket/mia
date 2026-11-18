@@ -55,7 +55,7 @@ async function fecharPedindoParado(admin: Admin, agora: Date): Promise<number> {
     .from("mia_coexistencia_sincronizacoes")
     .update({ estado: "sem_resposta" })
     .eq("estado", "pedindo")
-    .lt("pedida_em", antes(agora, PEDINDO_PARADO_MS))
+    .lte("pedida_em", antes(agora, PEDINDO_PARADO_MS))
     .select("id, organization_id, conexao_id, tipo");
   if (error) throw new Error(`pedindo_parado: ${error.message}`);
   const linhas = (data ?? []) as Array<{ id: string; organization_id: string; conexao_id: string; tipo: TipoDoPedido }>;
@@ -147,7 +147,7 @@ async function vencerLotesCrus(admin: Admin, agora: Date): Promise<number> {
     .from("mia_coexistencia_lotes")
     .update({ estado: "falhou", payload: null, erro: "prazo_do_lote_cru" })
     .eq("estado", "recebido")
-    .lt("created_at", antes(agora, PRAZO_DO_LOTE_CRU_MS))
+    .lte("created_at", antes(agora, PRAZO_DO_LOTE_CRU_MS))
     .select("sincronizacao_id");
   if (error) throw new Error(`lotes_crus_vencidos: ${error.message}`);
   const pedidos = new Set(((data ?? []) as Array<{ sincronizacao_id: string }>).map((l) => l.sincronizacao_id));
