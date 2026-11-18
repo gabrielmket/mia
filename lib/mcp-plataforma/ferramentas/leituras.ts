@@ -55,6 +55,9 @@ import { servidoresNaLeitura } from "@/lib/implantacao/servidores-mcp-do-agente"
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { lerServidoresDoAgente, semSegredo } from "@/lib/mcp/servidor-externo/do-agente/registro";
 import { EXPLICACAO_DO_PASSO, ROTULO_DO_PASSO } from "@/lib/leads/agent-mapping";
+import { categoriasDeclaradasDoFunil, categoriasDoFunil } from "@/lib/leads/motivos-de-perda-do-funil";
+import { lerOpcaoDaSatisfacao } from "@/lib/atendimento/satisfacao";
+import { CAMPO_DOS_CAMPOS_ALTERADOS, CAMPOS_ALTERAVEIS_DO_NEGOCIO } from "@/lib/automation/conditions";
 import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { configAssinatura } from "@/lib/messaging/assinatura";
 import { PACOTES } from "@/lib/mcp/tools/pacotes";
@@ -334,6 +337,17 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
               "Quando a ficha de um contato que estava SEM telefone passa a ter um (informado pelo cliente, pela equipe ou por integração). " +
               "Serve para a primeira mensagem de WhatsApp a quem chegou por e-mail ou formulário sem número.",
           },
+          // Upstream 1.109 e 1.114: a ligação perdida (#4365) e o negócio alterado (9383, #1749).
+          gatilhos_novos: {
+            "lead.updated":
+              "Quando um negócio que já existe é EDITADO (título, valor, responsável, data prevista, etiquetas, campos personalizados...). " +
+              `Com a condição { "field": "${CAMPO_DOS_CAMPOS_ALTERADOS}", "op": "campo_alterado", "value": "<nome do campo>" }, a regra só roda quando a edição mexeu NAQUELE campo. ` +
+              `Os campos aceitos: ${Object.keys(CAMPOS_ALTERAVEIS_DO_NEGOCIO).join(", ")}. O evento não traz o valor antigo; as outras condições leem o negócio como está agora. ` +
+              "A condição `campo_alterado` só existe neste gatilho.",
+            "voice_call.missed":
+              "Quando uma ligação RECEBIDA não é atendida. O contexto é o contato de quem ligou (serve para mandar um WhatsApp de volta). " +
+              "Só é aceito com a telefonia em uso na empresa (tronco ou número de voz); sem ela a regra nunca dispararia e é recusada.",
+          },
           gatilhos_que_pedem_configuracao: {
             "lead.date_field_due":
               '{ "pipeline_id": "<id do funil>", "campo": "<chave do campo de data do funil>", "dias": 1 } (dias ATÉ a data; negativo = depois dela). ' +
@@ -471,6 +485,10 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
               })),
             campos: Array.isArray(settings.fields) ? settings.fields : [],
             motivos_de_perda: Array.isArray(settings.lost_reasons) ? settings.lost_reasons : [],
+            // Upstream v1.111 (#4437): o catálogo que a tela oferece (o declarado, ou o de
+            // fábrica, mais as categorias que os motivos já usam) e se o funil declarou.
+            categorias_de_perda: categoriasDoFunil(settings),
+            categorias_de_perda_declaradas: categoriasDeclaradasDoFunil(settings) !== null,
             motivos_de_ganho: Array.isArray(settings.won_reasons) ? settings.won_reasons : [],
             motivo_de_ganho_obrigatorio: settings.won_reason_required === true,
             reabertura: settings.reabertura ?? "mesmo_registro",
@@ -995,6 +1013,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           // .81: as duas opções da agenda do upstream (1.80 #978, 1.81 #2063).
           colegas_podem_mexer_na_agenda: colegasPodemMexerNaAgendaLigado(org.settings),
           google_meet_com_acesso_aberto: meetAbertoLigado(org.settings),
+          // Upstream 1.112 (#4023): a pesquisa de satisfação do encerramento, como o envio lê.
+          pesquisa_de_satisfacao: lerOpcaoDaSatisfacao(org.settings),
         };
       }
 

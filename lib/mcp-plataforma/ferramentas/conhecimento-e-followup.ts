@@ -76,7 +76,7 @@ export const FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP: readonly FerramentaDePlataf
       "INSTALAR: informe `modelo` (o id, de plataforma_listar_modelos, seção followup). O fluxo nasce RASCUNHO, com os textos do modelo, e NÃO manda mensagem para ninguém. " +
       "Modelo que dispara por etapa pede `etapa` (funil e etapa pelo nome). " +
       "AJUSTAR: `textos` troca o texto de uma mensagem pelo id do nó (veja os nós em plataforma_ver_followup) e, no texto fixo, a `midia` (imagem, vídeo, áudio ou documento que sai com o texto de legenda); `esperas` troca os minutos de uma espera; " +
-      "`silencio_minutos`, `silencio_maximo_minutos`, `pausa_para_recomecar_minutos`, `so_se_a_equipe_respondeu`, `repeticoes_por_contato`, `etapa` e `numero` ajustam o gatilho. " +
+      "`silencio_minutos`, `silencio_maximo_minutos`, `pausa_para_recomecar_minutos`, `so_se_a_equipe_respondeu`, `repeticoes_por_contato`, `etapa`, `numero`, `funil_do_negocio` e `etiqueta_do_negocio` ajustam o gatilho. " +
       "`quando_humano_assume` e `enviar_com_conversa_atribuida` dizem o que o fluxo faz quando a conversa está com uma pessoa da equipe. " +
       "MEXER NO NEGÓCIO SEM FALAR COM O CLIENTE: `mover_no_funil` garante uma caixa que leva o card para uma etapa, e `etiquetar` uma caixa que grava etiquetas. " +
       "Cada uma entra ANTES de um nó (`antes_de`): antes do fim «sem resposta» para marcar quem não respondeu, antes de uma mensagem para mover na hora em que ela sai. " +
@@ -136,6 +136,26 @@ export const FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP: readonly FerramentaDePlataf
         .describe("Troca a duração das esperas."),
       silencio_minutos: z.number().int().min(5).max(129_600).optional().describe("Para gatilho de silêncio: depois de quantos minutos sem resposta o fluxo começa."),
       numero: z.string().trim().min(1).max(120).optional().describe("Para gatilho de negócio criado: por qual número abordar (id, nome ou telefone de um número conectado)."),
+      // Upstream 1.112 (#4587): o filtro do gatilho de negócio criado.
+      funil_do_negocio: z
+        .string()
+        .trim()
+        .min(1)
+        .max(120)
+        .nullable()
+        .optional()
+        .describe(
+          "Para gatilho de negócio criado: só o negócio que nasce NESTE funil (nome ou id) começa o fluxo. Sem filtro, qualquer funil. " +
+            "Use quando a empresa tem mais de um funil com fluxo de negócio criado: o contato só fica em um fluxo por vez, e o fluxo do funil errado tomaria o lugar do certo. null tira.",
+        ),
+      etiqueta_do_negocio: z
+        .string()
+        .trim()
+        .min(1)
+        .max(40)
+        .nullable()
+        .optional()
+        .describe("Para gatilho de negócio criado: só o negócio que nasce com ESTA etiqueta começa o fluxo (sem diferença de maiúscula). Junto com `funil_do_negocio`, valem os dois. null tira."),
       cancelar_ao_responder: z.boolean().optional().describe("true encerra o fluxo na primeira resposta da pessoa."),
       quando_humano_assume: z
         .enum(["pause", "cancel", "allow"])

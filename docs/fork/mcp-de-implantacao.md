@@ -713,26 +713,51 @@ menção em nota, as reações e os tiques do número oficial.
 
 ### O que chegou do upstream 1.108 a 1.116 (fusão de 17/11, segunda parte)
 
-Nesta fusão o MCP não ganhou ferramenta nem campo: a faixa é grande (9 versões) e o PR
-ficou só com a fusão. O que já alcança sem mudança:
+A fusão entrou sem ferramenta nem campo novo: a faixa é grande (9 versões) e o PR ficou só
+com ela. O que faltava veio em seguida, num PR próprio (MIA-59), sem ferramenta nova (a
+contagem não muda): cinco campos e uma recusa em ferramentas que já existiam. A prova está em
+`tests/unit/mcp-de-implantacao-novidades-do-upstream-1116.test.ts` e
+`tests/unit/planos-mia-moeda-do-plano.test.ts`.
 
 | novidade do upstream | versão | como o MCP alcança | operação |
 |---|---|---|---|
-| As categorias de perda PRÓPRIAS do funil (`settings.lost_reason_categories`, #4437) | 1.111 | a porta compartilhada `gravarConfiguracaoDoFunil` (`lib/pipelines/pipeline-config.ts`) passou a gravar a chave, então a tela e o MCP gravam igual; falta o campo em `plataforma_garantir_funil` (abaixo) | `implantar_configuracao` |
+| As categorias de perda PRÓPRIAS do funil (`settings.lost_reason_categories`, #4437) | 1.111 | campo `categorias_de_perda` em `plataforma_garantir_funil`, pela porta compartilhada `gravarConfiguracaoDoFunil` (`lib/pipelines/pipeline-config.ts`). A lista pedida SUBSTITUI a declarada, aparada e sem repetida; `[]` esconde todas e a de fábrica não volta; tirar uma categoria não muda o `categoria` dos motivos que já a usam. `plataforma_ver_funis` devolve `categorias_de_perda` (o catálogo efetivo de `categoriasDoFunil`: o declarado, ou o de fábrica, mais as categorias em uso) e `categorias_de_perda_declaradas` | `implantar_configuracao` |
+| O filtro de funil e etiqueta do gatilho "negócio criado" do follow-up (`params.pipeline_id`, `params.tag`, #4587) | 1.112 | campos `funil_do_negocio` (nome ou id de um funil vivo da empresa) e `etiqueta_do_negocio` (gravada na forma de `normalizarTag`) em `plataforma_garantir_followup`, ao lado do `numero` do fork. `null` tira cada filtro; sem nenhum, `params` some e o gatilho volta a valer para qualquer card. Só no fluxo de `lead_created` (outro gatilho é recusado com o motivo) e, como todo ajuste de gatilho, só com o fluxo desligado. `plataforma_ver_followup` já devolvia o `gatilho` inteiro | `implantar_configuracao` |
+| A pesquisa de satisfação do encerramento (`settings.satisfacao`, #4023, 9352) | 1.112 | campo `pesquisa_de_satisfacao: { ligado?, janela_horas?, pergunta? }` em `plataforma_configurar_atendimento`. A mescla é a de `PATCH /api/v1/settings/atendimento` (o resto de `settings` e do bloco fica; janela e pergunta preenchidas pelo padrão) e a auditoria tem o mesmo nome (`settings.satisfacao_alterada`). Recusa a pergunta fora de 10 a 300 caracteres e a janela fora de 1 a 168 horas. Pedido igual à leitura de `lerOpcaoDaSatisfacao` não escreve. `plataforma_ver_configuracao`, seção `atendimento`, devolve `pesquisa_de_satisfacao`. FALA COM O CLIENTE: ligada, a pergunta sai no próximo encerramento | `implantar_configuracao` |
+| O gatilho "negócio alterado" (`lead.updated`, 9383, #1749) e a condição `campo_alterado` | 1.114 | `plataforma_garantir_automacao` já aceitava os dois, porque a lista de gatilhos (`GATILHOS_OFERECIDOS`) e a de operadores (`OPS_DE_CONDICAO`) vêm do upstream, e a recusa da condição fora do gatilho vem do `createAutomationRuleSchema`. Faltava ensinar: `plataforma_listar_modelos`, seção `automacoes`, ganhou `gatilhos_novos` com o formato da condição e os campos aceitos (`CAMPOS_ALTERAVEIS_DO_NEGOCIO`) | `implantar_configuracao` |
+| O gatilho "ligação recebida não atendida" (`voice_call.missed`, #4365, #4409) | 1.109 | aceito pela mesma lista. Como a tela só oferece o gatilho com a telefonia em uso (`gatilhoOferecido`), `garantirAutomacao` recusa a regra NOVA com ele quando `capacidadesDaOrganizacao` não traz `telefonia`, porque ela nunca dispararia; a regra que já tem o gatilho continua aceitando ajustes, como na tela | `implantar_configuracao` |
+| A moeda do plano de cobrança (`cobranca_planos.moeda`: BRL, USD, EUR, 9332) | 1.112 | campo `moeda` em `plataforma_garantir_planos`, só na CRIAÇÃO (ausente = BRL, o padrão do banco), com a régua de `POST /api/v1/admin/cobranca/planos`: fora do real com o Asaas conectado é recusado. O plano que já existe não troca de moeda (recusa que manda criar outro). `plataforma_ver_cobranca` devolve `moeda` em cada plano, e o `preco` está nela. Mudou em `lib/planos-mia/` (`leitura.ts` lê a coluna; `garantir-planos.ts` grava) | `gerir_planos` |
 | O alterar e o desativar do tipo de agendamento saíram da rota (`lib/agenda/tipos-de-agendamento.ts`, #4688) | 1.116 | o módulo do upstream virou a base do contrato que o MCP já usava (`criarSchema`, `slugDe`, `canalDoLembreteValido`), sem mudar as faixas | `implantar_configuracao` |
 
-Falta no MCP (fica para uma tarefa própria):
+Falta no MCP (cada item com o motivo; nenhum é campo de uma ferramenta que já existe):
 
-- o filtro de funil e etiqueta do gatilho "Lead criado" do follow-up (`params.pipeline_id`
-  e `params.tag`, #4587), ao lado do número da abordagem do fork;
-- o campo `lost_reason_categories` em `plataforma_garantir_funil`;
-- conferir se `plataforma_garantir_automacao` aceita os gatilhos novos "negócio alterado"
-  (`lead.updated`, 9383) e "ligação recebida não atendida" (`voice_call.missed`, #4365);
-- a pesquisa de satisfação (9352), a mensagem agendada na conversa (9336), o feriado
-  nacional do agente, o material da empresa enviado pela IA (9222, 9356), a tabela de
-  valores (9386), a tarefa recorrente (9369), o catálogo por feed (9382), os templates
-  de aparência (9388), criar pessoa com senha provisória (9380, 9381) e o plano de
-  cobrança em outra moeda (9332): ferramentas ou campos novos;
+- a tabela de valores (9386, `lib/tabela-de-valores/store.ts`): a porta do upstream existe
+  (criar, importar a planilha, listar), mas ainda não há tela nem leitor no atendimento, e a
+  importação pede o arquivo da planilha. Pede ferramenta nova, em tarefa própria;
+- o catálogo por feed (9382): módulo opcional `catalogo_por_feed`, desligado por padrão; a
+  leitura, o plano e a aplicação moram dentro da rota `POST /api/v1/products/feed` e
+  precisam sair dela antes, e o feed escreve no mesmo catálogo de `plataforma_garantir_produtos`
+  (a régua de qual dos dois manda num produto é decisão a tomar). Entra se o módulo for ligado;
+- o material da empresa enviado pela IA (9222, 9356): o upstream criou as tabelas e o leitor
+  do agente, mas não há tela, rota nem função que cadastre material. Quando o upstream
+  trouxer a porta de cadastro, a ferramenta reusa ela;
+- os templates de aparência (9388): a única porta é `fn_definir_aparencia_da_organizacao`,
+  que exige sessão de administrador com a verificação em duas etapas, e o token de
+  plataforma não tem sessão. Gravar `settings.aparencia` direto contornaria essa trava de
+  propósito: fica para decisão do Gabriel;
+- o feriado nacional do agente: a chave mora no `business_hours` do upstream, que o horário
+  da IA do fork zera ao gravar (`lib/implantacao/agente.ts`), e a tela do agente não mostra
+  o editor antigo. No fork a opção não teria efeito; entra se o horário da IA ganhar a regra
+  do feriado (decisão de produto).
+
+Fica de fora por natureza (não é montagem da empresa):
+
+- a mensagem agendada na conversa (9336): é ação de uma pessoa numa conversa, não
+  configuração;
+- a tarefa recorrente (9369): é tarefa de uma pessoa da equipe; o MCP monta os PLANOS de
+  tarefa (`plataforma_garantir_planos_de_tarefa`), que são outra coisa;
+- criar pessoa com senha provisória (9380, 9381): é acesso, e a resposta traria a senha em
+  texto. A equipe entra pelo convite por e-mail (`plataforma_convidar_pessoas`);
 - Agências (9373 a 9379) e o módulo Amigo (9392, 9393): módulos opcionais desligados no
   fork; entram no MCP só se forem ligados.
 

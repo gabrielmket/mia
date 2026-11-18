@@ -183,6 +183,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Espelhado na .73 (upstream 1.70, #2079): quem fala, em negrito, na mensagem. O espelho confere com o mesmo assinaturaEntradaSchema e grava a mesma chave de settings.
   // Relido na .86 (upstream 1.88, #3318): `por_agente` (cada agente assina com o próprio nome), e o ausente mantém o gravado. O espelho ganhou `nome_de_cada_agente` e passou a manter o gravado quando o campo não vem.
   { rota: "app/api/v1/settings/assinatura/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "9802b14502f9d3fa" },
+  // Espelhado na MIA-59 (upstream 1.112, #4023): a pesquisa de satisfação. O espelho segue o PATCH: mescla o bloco settings.satisfacao (o ausente mantém o gravado, com janela 24 h e a pergunta padrão), os mesmos limites (pergunta de 10 a 300, janela de 1 a 168 h) e a auditoria settings.satisfacao_alterada.
+  { rota: "app/api/v1/settings/atendimento/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "e1eab791174773d0" },
   // Jornada de quem atende.
   { rota: "app/api/v1/attendants/availability/[user_id]/route.ts", espelho: "lib/implantacao/agenda.ts", impressao: "de0c21f50707a594" },
   // Espelhado na MIA-18 (upstream 1.105, 9235, doc 208): os prazos e a chave da lista de espera. O espelho segue o PATCH: o mesmo configDaListaDeEsperaSchema, a mesma chave settings.lista_de_espera e a auditoria agenda.lista_de_espera_configurada; o módulo não instalado, que na rota é 404, vira a recusa "módulo não instalado". A inscrição (POST) fica na tela: pede o aceite da pessoa.
@@ -209,6 +211,7 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/actions/registration/decide.ts", espelho: "lib/planos-mia/pedidos-de-cadastro.ts", impressao: "a1c51a5a8ca0c35d" },
   // A aba Planos: novoPlanoSchema/edicaoDoPlanoSchema e a trava de preço do plano assinado.
   // Relido na fusão da 1.116: o POST aceita `moeda` e recusa dólar/euro com o Asaas. O espelho monta o plano campo a campo, sem `moeda` (nasce em real): nada a levar.
+  // Espelhado na MIA-59 (upstream 1.112, 9332): o espelho passou a aceitar `moeda` na criação, com a mesma recusa de dólar/euro com o Asaas (MOEDAS_DO_ASAAS e provedorDaInstalacao).
   { rota: "app/api/v1/admin/cobranca/planos/route.ts", espelho: "lib/planos-mia/garantir-planos.ts", impressao: "c0a28cc9c371bc4d" },
   { rota: "app/api/v1/admin/cobranca/planos/[id]/route.ts", espelho: "lib/planos-mia/garantir-planos.ts", impressao: "79549ecc4a6b4987" },
 ];
