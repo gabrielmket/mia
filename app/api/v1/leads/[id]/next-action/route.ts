@@ -154,15 +154,16 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
 
   // FORK MIA — aprovar cria a tarefa de verdade (prazo e responsável:
   // lib/cartoes/tarefa-da-proxima-acao.ts). Falha aqui não desfaz a decisão já
-  // gravada: `tarefa: null` e a tela avisa.
+  // gravada: `tarefa: null` e a tela avisa. Upstream 1.117: a rota aceita token de
+  // integração; sem pessoa por trás não há quem assine a tarefa, e ela não nasce.
   const tarefa =
-    decision === "approve"
+    decision === "approve" && userId
       ? await criarTarefaDaProximaAcao(supabase, {
           organizationId: row.organization_id,
           leadId: row.id,
           contactId: row.contact_id,
           texto: atual,
-          quemAprovou: user.id,
+          quemAprovou: userId,
           requestId,
         })
       : null;

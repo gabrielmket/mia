@@ -115,7 +115,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/api/v1/ai/routers/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "d0b8746f564c94dc" },
   // Relido na .100 (upstream 1.9x): `config.sender_routes` (agente por número do remetente). O espelho mescla o config (as regras da tela ficam) e, ao trocar o agente reserva, recusa como a rota o reserva vazio ou reservado nas regras.
   // Relido na fusão da 1.116: o PATCH move o roteador de número (`moverRoteadorParaNumero`) e grava `passagem_ao_cliente`. O espelho só grava o que foi pedido (a frase não se perde) e continua sem trocar número; a recusa agora aponta a tela, que move.
-  { rota: "app/api/v1/ai/routers/[id]/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "d9dff398687134c2" },
+  // Relido na fusão da 1.117 (#4750): o PATCH recusa `config.passagem_silenciosa` que não seja verdadeiro ou falso. O espelho não grava essa chave e mescla o config (o que a tela gravou fica); nada a levar. A troca silenciosa pelo MCP está na lista "falta no MCP" da fusão.
+  { rota: "app/api/v1/ai/routers/[id]/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "06a990f04293230c" },
   // Relido na .76 (upstream 1.79, #2624): o cliente do pool que falhou no meio da transação volta com erro (release(err)). O espelho faz o mesmo em gravarIntencoes.
   { rota: "app/api/v1/ai/routers/[id]/members/route.ts", espelho: "lib/implantacao/roteador.ts", impressao: "bd2988da8205a0a4" },
   // Memória da empresa.

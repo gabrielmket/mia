@@ -200,7 +200,7 @@ export async function POST(
       organizationId: lead.organization_id,
       leadId,
       pipelineId: lead.pipeline_id,
-      idioma: user.idioma,
+      idioma: idioma ?? IDIOMA_PADRAO,
     });
     if (semProduto) return fail(semProduto.codigo, semProduto.mensagem, 422, { requestId });
   }

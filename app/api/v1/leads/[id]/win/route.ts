@@ -17,6 +17,7 @@ import { ApiError } from "@/lib/api/types";
 import { ok, fail } from "@/lib/api/wrappers";
 import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { encerraDemanda } from "@/lib/leads/encerramento";
+import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 // FORK MIA (.109): "Pedir o produto ao marcar como ganho" (docs/fork/produto-no-negocio.md).
 import { recusaDoProdutoNoGanho } from "@/lib/produto-no-negocio/servidor";
 
@@ -57,9 +58,9 @@ export async function POST(
   // sem item (nem do bloco, nem da proposta). A IA e as automações fecham por
   // `encerraDemanda` direto e não passam por aqui.
   const semProduto = await recusaDoProdutoNoGanho(supabase, {
-    organizationId: authz.org.orgId,
+    organizationId,
     leadId,
-    idioma: authz.user.idioma,
+    idioma: idioma ?? IDIOMA_PADRAO,
   });
   if (semProduto) return fail(semProduto.codigo, semProduto.mensagem, 422, { requestId });
 
