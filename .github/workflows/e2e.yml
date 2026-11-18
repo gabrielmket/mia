@@ -1170,6 +1170,14 @@ jobs:
       # risco de contaminação. Uma cauda rompe UMA fronteira; um sorteio romperia
       # todas. Os 3 arquivos que o cancelamento impediu de medir vêm junto, porque
       # eles são justamente o fim da fila.
+      #
+      # `itens-do-negocio` (MIA-8, o produto no negócio da .109) entrou aqui em
+      # 2026-11-18 por ser a parte comum mais leve nas três rodadas verdes mais
+      # recentes da main (44243402231, 44243288672, 44217597163): 724, 735 e
+      # 898 s de job, contra 1075 a 1633 s das outras comuns. A vizinhança de
+      # CRM já mora nela (`pipelines-gestao`, `propostas-de-campos-do-card`).
+      # Semeia os próprios funis, etapas, negócios e produtos do catálogo, com
+      # sufixo, e apaga tudo no fim. PREVISÃO, não medida: ~1,5 min de caso.
       SPECS_PARTE_3: >-
         roteamento-por-canal.spec.ts
         whatsapp-pareamento-por-codigo.spec.ts
@@ -1547,6 +1555,7 @@ jobs:
         propostas-de-campos-do-card.spec.ts
         aviso-pelo-numero-oficial.spec.ts
         molde-de-ia-empresas-novas.spec.ts
+        itens-do-negocio.spec.ts
       # Ambiente isolado: esta spec exige HMAC WAHA e Graph sintético no
       # processo next start. As demais partes preservam a configuração WAHA.
       #
