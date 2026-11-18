@@ -49,7 +49,7 @@ function responder(c: CadeiaLivre) {
     ];
     return { data: linhas };
   }
-  if (c.tabela === "organization_modules" && operacaoLivre(c) === "insert") return { data: null, error: null };
+  if (c.tabela === "mia_modulos_contratados" && operacaoLivre(c) === "insert") return { data: null, error: null };
   if (c.tabela === "organizations" && filtroLivre(c, "eq", "id")) return { data: { id: ORG, display_name: "Empresa Alfa", status: "active" } };
   if (c.tabela === "modulos_instalados") return { data: [] };
   return { data: [] };

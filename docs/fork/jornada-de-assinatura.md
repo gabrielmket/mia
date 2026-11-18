@@ -52,7 +52,7 @@ Cada plano de `cobranca_planos` (do upstream, intocado) ganha uma linha ao lado 
 
 | origem | onde mora | sai com troca de plano? |
 |---|---|---|
-| **pela Time** | `organization_modules` (0245), a liberação à mão de sempre | não |
+| **pela Time** | `mia_modulos_contratados` (0245), a liberação à mão de sempre | não |
 | **pelo plano** | `mia_plano_modulos` do plano ATUAL da assinatura | sim |
 
 A pergunta "o plano liga este módulo?" é feita ao banco na hora

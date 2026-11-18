@@ -60,6 +60,21 @@ O próprio upstream estende assim: `trg_contacts_anonimizado_limpa_custom_fields
 
 Vigiado por `tests/unit/schema-mia-estende-nunca-redefine.test.ts`.
 
+**Tabela com o mesmo nome também é redefinição.** Os dois lados escrevem `create table
+if not exists`, então nada dá erro: quem nasce primeiro fica com o nome e o outro é
+pulado em silêncio. Na v1.118 a 9416 do upstream criou uma `organization_modules`
+(módulo opcional por empresa, coluna `estado`) com o nome da nossa da 0245 (módulo
+vendável contratado, `revoked_at`). A 9163 renomeou a nossa para
+`mia_modulos_contratados`. Tabela nova da MIA nasce com o prefixo `mia_`, e a cerca e o
+`scripts/redefinicoes-do-upstream.mjs` passaram a comparar tabelas.
+
+**O que tem de rodar ANTES do `baseline.sql`.** O bootstrap aplica o dele primeiro, e
+uma tabela nossa no caminho de uma dele precisa sair antes que ele chegue. O trecho
+fica no próprio `baseline-mia.sql`, entre `-- >>> ANTES DO BASELINE DO UPSTREAM` e
+`-- <<< ANTES DO BASELINE DO UPSTREAM`; o `easypanel/bootstrap.sh` (modo update) e o
+`scripts/ensaio-de-banco.sh` o recortam e aplicam primeiro, e no resto do arquivo ele
+roda de novo sem fazer nada. Tem de ser idempotente e só mexer em objeto nosso.
+
 ### 4. Sincronizar sempre, nunca acumular
 
 A dor de uma fusão cresce **mais** que o número de commits: nove dias divergindo não

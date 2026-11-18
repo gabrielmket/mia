@@ -619,10 +619,10 @@ async function gravarModulos(e: Escritor, { s, ID, org }: Contexto): Promise<voi
   // envio deles continua travado pela 9010.
   for (const modulo of s.modulos) {
     await e.executar(
-      `insert into public.organization_modules (id, organization_id, modulo, note)
+      `insert into public.mia_modulos_contratados (id, organization_id, modulo, note)
        select $1::uuid, $2::uuid, $3::text, 'Cliente modelo: liberado para a demonstração (nada sai dela).'
         where not exists (
-          select 1 from public.organization_modules
+          select 1 from public.mia_modulos_contratados
            where organization_id = $2::uuid and modulo = $3::text and revoked_at is null
         )
        on conflict (id) do nothing`,

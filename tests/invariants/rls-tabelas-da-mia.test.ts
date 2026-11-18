@@ -34,7 +34,7 @@ const LIDAS_PELO_CLIENTE = [
   "sales_targets",
   "tenant_wallet_ledger",
   "tenant_broadcast_pricing",
-  "organization_modules",
+  "mia_modulos_contratados",
   "broadcasts",
   "broadcast_recipients",
   "crm_empresas",
@@ -83,7 +83,7 @@ const LIDAS_PELO_CLIENTE = [
 const SO_A_PLATAFORMA_ESCREVE = [
   "tenant_wallet_ledger",
   "tenant_broadcast_pricing",
-  "organization_modules",
+  "mia_modulos_contratados",
   "broadcast_recipients",
   "mia_leads_da_meta_config",
   "mia_leads_da_meta_formularios",
@@ -150,7 +150,7 @@ function semear(org: string, gestor: string, tag: string): string {
       values ('${org}', 'credito', 10000, 'recarga_manual', 'mia-rls-${tag}');
     insert into public.tenant_broadcast_pricing (organization_id, preco_por_mensagem_cents)
       values ('${org}', 12);
-    insert into public.organization_modules (organization_id, modulo)
+    insert into public.mia_modulos_contratados (organization_id, modulo)
       values ('${org}', 'disparador');
     with b as (
       insert into public.broadcasts (organization_id, nome, template_name, template_language)

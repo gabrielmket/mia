@@ -5,10 +5,14 @@
 #   1. sobe o banco vazio, aplica a versão NO AR (baseline.sql e depois baseline-mia.sql,
 #      a ordem do easypanel/bootstrap.sh) e carrega as demonstrações (dado fictício);
 #   2. tira a foto "antes" (contagens, funis, relatório de negócios, colunas, objetos nossos);
-#   3. aplica a versão NOVA duas vezes (a 2ª prova a idempotência) e confere:
+#   3. aplica a versão NOVA duas vezes, na ordem do bootstrap em modo update (o trecho
+#      "antes do upstream" do baseline-mia.sql, o baseline.sql, o baseline-mia.sql; a 2ª
+#      passada prova a idempotência) e confere:
 #        - 0 erro fora dos BENIGNOS em cada passada;
 #        - contagens iguais, configuração dos funis igual (md5) e relatório de negócios igual;
-#        - nenhuma coluna do schema public sumiu;
+#        - nenhuma coluna do schema public sumiu (tabela nossa renomeada de propósito,
+#          declarada em RENOMEADAS, é comparada pelo nome novo e tem de manter as linhas);
+#        - nenhuma função ou view lê a organization_modules com coluna da nossa (9163);
 #        - fn_mia_*, trg_mia_*, políticas mia_*, tabelas mia_* e gatilhos trg_mia_demonstracao*
 #          não diminuem;
 #        - 0 tabela mia_* sem RLS;
@@ -95,6 +99,13 @@ docker cp "$NO_AR/baseline.sql" "$C:/ensaio/no-ar/baseline.sql"
 docker cp "$NO_AR/baseline-mia.sql" "$C:/ensaio/no-ar/baseline-mia.sql"
 docker cp "$NOVO/baseline.sql" "$C:/ensaio/novo/baseline.sql"
 docker cp "$NOVO/baseline-mia.sql" "$C:/ensaio/novo/baseline-mia.sql"
+# O que o bootstrap aplica ANTES do baseline.sql no modo update (o trecho marcado
+# do baseline-mia.sql; migration 9163). Arquivo vazio quando a versão não tem.
+for lado in no-ar novo; do
+  if [ "$lado" = no-ar ]; then origem="$NO_AR"; else origem="$NOVO"; fi
+  sed -n '/^-- >>> ANTES DO BASELINE DO UPSTREAM/,/^-- <<< ANTES DO BASELINE DO UPSTREAM/p' "$origem/baseline-mia.sql" >"$LOGS/antes-$lado.sql"
+  docker cp "$LOGS/antes-$lado.sql" "$C:/ensaio/$lado/antes-do-upstream.sql"
+done
 for seg in $SEGMENTOS; do
   docker cp "$DEMOS_NO_AR/demo-$seg.sql" "$C:/ensaio/demos-no-ar/demo-$seg.sql"
   docker cp "$DEMOS_NOVO/demo-$seg.sql" "$C:/ensaio/demos-novo/demo-$seg.sql"
@@ -140,7 +151,8 @@ fi
 
 echo "== 1. versão no ar e demonstrações"
 if [ -n "$DUMP" ]; then
-  ARQ -f /ensaio/no-ar/baseline.sql >"$LOGS/no-ar.log" 2>&1; ARQ -f /ensaio/no-ar/baseline-mia.sql >>"$LOGS/no-ar.log" 2>&1
+  ARQ -f /ensaio/no-ar/antes-do-upstream.sql >"$LOGS/no-ar.log" 2>&1
+  ARQ -f /ensaio/no-ar/baseline.sql >>"$LOGS/no-ar.log" 2>&1; ARQ -f /ensaio/no-ar/baseline-mia.sql >>"$LOGS/no-ar.log" 2>&1
   n=$(FORA "$LOGS/no-ar.log" | grep -c .)
   [ "$n" = 0 ] || { echo "a versão no ar aplicou com $n erro(s) fora dos benignos:" >&2; FORA "$LOGS/no-ar.log" | head -10 >&2; exit 2; }
 else
@@ -171,13 +183,31 @@ union all select 'gatilhos trg_mia_demonstracao=' || count(*) from pg_trigger wh
 ANTES=$(PSQL -tAc "$CONTAGEM" 2>&1); F_ANTES=$(PSQL -tAc "$FUNIS" 2>&1); R_ANTES=$(PSQL -tAc "$RELATORIO" 2>&1)
 N_ANTES=$(PSQL -tAc "$NOSSOS" 2>&1)
 PSQL -tAc "$COLUNAS" >"$LOGS/colunas-antes.txt"
+
+# Tabela NOSSA renomeada de propósito: "antigo:novo:coluna que só o formato nosso
+# tem". Só vale quando o banco no ar ainda tem o formato nosso no nome antigo; aí
+# as colunas dela são comparadas pelo nome novo e as linhas têm de bater.
+# 9163: a nossa organization_modules saiu do caminho da do upstream (9416).
+RENOMEADAS="organization_modules:mia_modulos_contratados:revoked_at"
+LINHAS_RENOMEADAS=""
+for r in $RENOMEADAS; do
+  antiga="${r%%:*}"; resto="${r#*:}"; nova="${resto%%:*}"; marca="${resto#*:}"
+  grep -qxF "$antiga.$marca" "$LOGS/colunas-antes.txt" || continue
+  n=$(PSQL -tAc "select count(*) from public.$antiga" 2>&1)
+  LINHAS_RENOMEADAS="$LINHAS_RENOMEADAS $antiga:$nova:$n"
+  sed -i.bak "s/^$antiga\./$nova./" "$LOGS/colunas-antes.txt"
+done
 echo "foto antes: $ANTES"
 
 echo "== 2. versão nova, duas passadas"
 T0=$(date +%s)
-ARQ -f /ensaio/novo/baseline.sql >"$LOGS/novo1.log" 2>&1; ARQ -f /ensaio/novo/baseline-mia.sql >>"$LOGS/novo1.log" 2>&1
-TEMPO=$(( $(date +%s) - T0 ))
-ARQ -f /ensaio/novo/baseline.sql >"$LOGS/novo2.log" 2>&1; ARQ -f /ensaio/novo/baseline-mia.sql >>"$LOGS/novo2.log" 2>&1
+# A ordem do easypanel/bootstrap.sh no modo update: o trecho "antes do upstream"
+# do nosso arquivo, o baseline.sql dele, o baseline-mia.sql inteiro.
+for p in 1 2; do
+  ARQ -f /ensaio/novo/antes-do-upstream.sql >"$LOGS/novo$p.log" 2>&1
+  ARQ -f /ensaio/novo/baseline.sql >>"$LOGS/novo$p.log" 2>&1; ARQ -f /ensaio/novo/baseline-mia.sql >>"$LOGS/novo$p.log" 2>&1
+  if [ "$p" = 1 ]; then TEMPO=$(( $(date +%s) - T0 )); fi
+done
 CARIMBO_NOVO=$(PSQL -tAc "select migration_mais_nova from public.schema_baseline" 2>/dev/null | head -1)
 echo "tempo da 1ª passada: ${TEMPO} s · carimbo novo: ${CARIMBO_NOVO:-?}"
 
@@ -206,6 +236,23 @@ NSUMIU=$(printf '%s' "$SUMIU" | grep -c .)
 NOVAS=$(comm -13 "$LOGS/colunas-antes.txt" "$LOGS/colunas-depois.txt" | grep -c .)
 if [ "$NSUMIU" = 0 ]; then conferir 1 "nenhuma coluna do public sumiu" "$NOVAS coluna(s) nova(s)"
 else conferir 0 "$NSUMIU coluna(s) do public sumiram" "$(printf '%s\n' "$SUMIU" | head -8 | tr '\n' ' ')"; fi
+
+for r in $LINHAS_RENOMEADAS; do
+  antiga="${r%%:*}"; resto="${r#*:}"; nova="${resto%%:*}"; antes="${resto#*:}"
+  depois=$(PSQL -tAc "select count(*) from public.$nova" 2>&1)
+  if [ "$antes" = "$depois" ]; then conferir 1 "$antiga (nossa) renomeada para $nova com as mesmas linhas" "$depois linha(s)"
+  else conferir 0 "$antiga (nossa) renomeada para $nova perdeu ou ganhou linha" "antes: $antes · depois: $depois"; fi
+done
+
+# O `rename` não corrige texto: função ou view que ainda leia a nossa pelo nome
+# antigo, com coluna do formato nosso, quebra calada. 9163.
+CITAM=$(PSQL -tAc "select string_agg(nome, ', ' order by nome) from (
+  select p.proname as nome from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname in ('public', 'private') and p.prosrc ~ 'organization_modules' and p.prosrc ~ '(revoked_at|granted_at|granted_by|revoked_by)'
+  union all
+  select viewname from pg_views where schemaname = 'public' and definition ~ 'organization_modules' and definition ~ '(revoked_at|granted_at)') x" 2>&1)
+if [ -z "$CITAM" ]; then conferir 1 "nenhuma função ou view lê a organization_modules com coluna da nossa"
+else conferir 0 "função ou view lê a organization_modules com coluna da nossa (troque para mia_modulos_contratados)" "$CITAM"; fi
 
 # Cada contagem dos objetos nossos: o depois não pode ser menor que o antes.
 DIM=""

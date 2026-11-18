@@ -399,7 +399,7 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     "sales_targets",
     "tenant_wallet_ledger",
     "tenant_broadcast_pricing",
-    "organization_modules",
+    "mia_modulos_contratados",
     "broadcasts",
     "broadcast_recipients",
     "crm_empresas",
