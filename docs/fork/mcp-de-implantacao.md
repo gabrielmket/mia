@@ -665,7 +665,9 @@ modelo aprovado da agenda, em `tests/unit/mcp-de-implantacao-modelo-da-agenda.te
 `tests/unit/mcp-de-implantacao-followup-e-setores-1107.test.ts` (MIA-21). Na fusão,
 nenhuma ferramenta nova, só campos e seções de leitura. Depois dela (MIA-18), a lista
 de espera da agenda ganhou uma ferramenta própria, `plataforma_configurar_lista_de_espera`
-(a lista vai de 117 a 118; a contagem mora no teste da cobrança).
+(a lista vai de 117 a 118; a contagem mora no teste da cobrança). A leitura do link de
+pagamento na conversa (MIA-19) é uma seção nova de `plataforma_ver_cliente`, sem
+ferramenta nova, e a prova está no mesmo arquivo das novidades.
 
 | novidade do upstream | versão | como o MCP alcança | operação |
 |---|---|---|---|
@@ -686,15 +688,15 @@ de espera da agenda ganhou uma ferramenta própria, `plataforma_configurar_lista
 | Servidores MCP POR AGENTE, com OAuth por contato (`ai_agent_mcp_servers`, 9095; módulo opcional `mcp_por_agente`, que nasce desligado) | 1.100 a 1.107 | campo novo `servidores_mcp` em `plataforma_garantir_agente`: cada item liga, troca ou tira (`apagar: true`) um servidor pelo NOME, pela mesma régua e pelas mesmas peças da ação da tela (`EntradaDoServidorSchema`, `conferirEndpointDoServidor`, `descobrir`, `registrarCliente`, `cifrar`, `revogarAcessosDoServidor`, auditorias `agent.mcp_servidor_salvo`/`_removido`); o cadastro vale na hora e as `ferramentas` de cada servidor vão para o rascunho (`mcp_externo:<servidor_id>:*`). A chave e o `client_secret` entram cifrados e nunca voltam (só "configurado" e os 4 últimos da chave), nem na trilha (`redigirParaAuditoria`). O que o OAuth pede de uma pessoa volta em `com_o_humano` e o MCP não faz: registrar o aplicativo à mão quando o sistema de fora não tem registro automático (o servidor NÃO é gravado, como na tela, e a resposta traz o endereço de retorno, estável entre as chamadas) e a autorização de cada contato no navegador. A leitura (`plataforma_ver_agentes`) devolve `servidores_mcp` de cada agente, com as ferramentas da versão vigente, e se o módulo está ligado. Módulo desligado e demonstração recusam antes de gravar. Prova em `tests/unit/mcp-de-implantacao-servidores-mcp-do-agente.test.ts` | `implantar_configuracao` |
 | A LISTA DE ESPERA da agenda como módulo opcional (9235, #3414, doc 208): a vaga que abre é oferecida a uma pessoa da fila por vez, com três prazos escolhidos pela empresa | 1.105 | ferramenta nova `plataforma_configurar_lista_de_espera` (`ligada` e os três prazos), espelho de `PATCH /api/v1/agenda/lista-de-espera`: o mesmo `configDaListaDeEsperaSchema` (sem padrão: ligar pela primeira vez pede os três), a mesma chave `settings.lista_de_espera` e a mesma auditoria `agenda.lista_de_espera_configurada`. É por EMPRESA, não por tipo: o upstream guarda os prazos fora do tipo, e quem entra na fila escolhe o serviço na inscrição. Sem o módulo instalado, recusa com "módulo não instalado" e não instala. A leitura (seção `agenda`) devolve `lista_de_espera`: `modulo_instalado`, `ligada` e `prazos` | `colocar_no_ar` |
 | O LUGAR com capacidade por período (mesa, camarote, quadra: recurso `kind='space'`, `sector`, a reserva com `service_party_size`, 9224) | 1.105 | só a leitura: `plataforma_ver_configuracao`, seção `agenda`, devolve em `servico.lugares` de cada tipo o `nome`, a `area`, a `capacidade_de_pessoas` e se está `ativo`. Gravar fica na tela (veja abaixo) | |
+| O LINK DE PAGAMENTO na conversa: o recebimento do cliente final da empresa (`pagamento_recebimentos`, 9312, #3509; módulo opcional `link_de_pagamento`, que nasce desligado) | 1.106 | SÓ LEITURA: seção nova `link_de_pagamento` em `plataforma_ver_cliente` (`lib/pagamentos/para-a-time.ts`), com `modulo_da_instalacao_ligado`, `quem_liga: "instalacao"`, os `provedores` que o degrau conhece, `recebimentos_por_situacao` (contagem do banco, só da organização pedida) e `ultimo_pago_em`. Não devolve o endereço de aviso, o hash do segredo, o id no provedor nem o valor. Leitura que falha não derruba o retrato: as contagens e o último pago dizem `"nao_lido"`, e o módulo cai para `false` (falha fechada, então `false` também cobre "não consegui ler"). Ligar e desligar é da instalação (/admin/sistema, `MODULO_LINK_DE_PAGAMENTO`, vale para todas as empresas); a escrita por empresa ("liga, desliga, qual conta recebe") espera o gateway por organização do upstream (#4093) entrar pela fusão | leitura |
 | O índice da mensagem que espera em `queued` (9242) | 1.105 | nada a configurar: índice do banco, sem opção | |
 
 Falta no MCP (fica para uma tarefa própria, porque cada item pede ferramenta ou
 leitura nova, e não um campo):
 
 - as cadências de e-mail da empresa (9249, 9251, módulo opcional `cadencias`), a
-  conta Resend da organização (0795), a ouvidoria (9040) e o link de pagamento na
-  conversa (9312, módulo opcional): ferramentas novas, e as três primeiras encostam
-  no nosso e-mail marketing e na marca travada da plataforma;
+  conta Resend da organização (0795) e a ouvidoria (9040): ferramentas novas, e as
+  três encostam no nosso e-mail marketing e na marca travada da plataforma;
 - o molde de IA das empresas novas (9096, que encosta no cliente-modelo).
 
 Fica na tela, por decisão: CRIAR o lugar com capacidade e ligá-lo ao serviço (9224).
