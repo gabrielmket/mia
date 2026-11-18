@@ -1170,6 +1170,15 @@ jobs:
       # risco de contaminação. Uma cauda rompe UMA fronteira; um sorteio romperia
       # todas. Os 3 arquivos que o cancelamento impediu de medir vêm junto, porque
       # eles são justamente o fim da fila.
+      #
+      # `itens-do-negocio` (MIA-8, o produto no negócio da .109) entrou aqui em
+      # 2026-11-18 por ser a parte comum mais leve nas três rodadas verdes mais
+      # recentes da main (44243402231, 44243288672, 44217597163): 724, 735 e
+      # 898 s de job, contra 1075 a 1633 s das outras comuns. A vizinhança de
+      # CRM já mora nela (`pipelines-gestao`, `qa-selo-no-funil-usado`).
+      # Semeia os próprios funis, etapas, negócios e produtos do catálogo, com
+      # sufixo, e apaga tudo no fim. Medida na 1ª rodada do PR #103 (44253866145,
+      # quando a linha estava por engano na parte 7): 14,5 s nos três casos.
       SPECS_PARTE_3: >-
         roteamento-por-canal.spec.ts
         whatsapp-pareamento-por-codigo.spec.ts
@@ -1214,6 +1223,7 @@ jobs:
         catalogo-busca-no-catalogo-inteiro.spec.ts
         relatorio-por-etiqueta.spec.ts
         minhas-tarefas-no-celular.spec.ts
+        itens-do-negocio.spec.ts
 
       # ─── PARTE 4 — a spec de VPS fresca, e quem pode entrar ao lado dela ───
       #
