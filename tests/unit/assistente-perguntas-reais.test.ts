@@ -175,6 +175,10 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "como desligo a IA nas automações", sobre: "/app/settings/automacoes", espera: "automacoes-freio" },
   { pergunta: "como crio uma etiqueta", sobre: "/app/settings/tags", espera: "etiquetas" },
   { pergunta: "onde ligo os recursos opcionais", sobre: "/app/settings/recursos", espera: "recursos-opcionais" },
+  // Telas que chegaram na fusão do upstream 1.108 a 1.116.
+  { pergunta: "como conecto o amigo da clínica", sobre: "/app/integrations/amigo", espera: "integracao-amigo" },
+  { pergunta: "como mudo o visual do sistema para a equipe", sobre: "/app/settings/aparencia", espera: "aparencia" },
+  { pergunta: "como crio uma organização cliente da agência", sobre: "/app/settings/organizacoes", espera: "organizacoes-da-agencia" },
   { pergunta: "como mudo os dados da empresa e a moeda", sobre: "/app/settings/tenant", espera: "organizacao" },
   { pergunta: "como devolvo as vendas para o google ads", sobre: "/app/settings/conversoes", espera: "conversoes-google" },
   { pergunta: "a meta não está recebendo as conversões, como confiro", sobre: "/app/settings/conversoes", espera: "conversoes-conferir" },

@@ -47,6 +47,9 @@ import { prefixoDoCartao } from "@/lib/cartoes/identidade";
 import { valorCurto } from "@/lib/cartoes/dinheiro";
 import { ROTULO_DO_CANAL, SELO_DO_CANAL } from "@/lib/cartoes/tipos";
 import { ConversaNoDossie } from "@/components/kanban/ConversaNoDossie";
+import { ConversasDosNumeros } from "@/components/kanban/ConversasDosNumeros";
+import { useContatosRelacionados } from "@/hooks/leads/useContatosRelacionados";
+import { Secao } from "./Secao";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { ScoreSlot } from "@/components/kanban/ScoreSlot";
 import { PropostasDoNegocio } from "@/components/kanban/PropostasDoNegocio";
@@ -77,6 +80,22 @@ import { type ControleDosCamposDoNegocio } from "@/components/kanban/LeadFieldsF
 import type { AtalhoDoCard } from "@/lib/leads/atalhos-do-card";
 
 const CHAVE_DA_TELA_CHEIA = "mia.cartao-aberto.tela-cheia";
+
+/**
+ * As conversas e ligações dos OUTROS números do cliente (upstream #3669, a
+ * seção "Conversas e ligações dos números" do dossiê), com a mesma regra dele:
+ * só aparece quando o negócio tem pessoa relacionada.
+ */
+function ConversasDosOutrosNumeros({ leadId }: { leadId: string }) {
+  const t = useT();
+  const relacionadas = useContatosRelacionados(leadId);
+  if ((relacionadas.data?.data.length ?? 0) === 0) return null;
+  return (
+    <Secao titulo={t("Conversas e ligações dos números")} id="numeros-do-negocio" testid="numeros-do-negocio">
+      <ConversasDosNumeros leadId={leadId} />
+    </Secao>
+  );
+}
 
 function lerTelaCheia(): boolean {
   try {
@@ -355,6 +374,7 @@ export function CartaoAberto({
                 "Abrir conversa" (a mesma rota da tabela de contatos). */}
             <AtalhosDoNegocio atalhos={atalhos} lead={lead} contactId={lead.contact_id} />
             <ConversaNoDossie conversa={lead.conversa} contactId={lead.contact_id} phone={lead.contact_phone} />
+            <ConversasDosOutrosNumeros leadId={lead.id} />
             {cartao.isLoading ? (
               <p className="py-3 text-xs text-text-muted">{t("Carregando…")}</p>
             ) : cartao.isError || !dados ? (

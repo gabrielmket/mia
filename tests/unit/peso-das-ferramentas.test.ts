@@ -212,8 +212,9 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
 // (2026-11-17, main de `0652fa6866`).
 // FORK MIA: + 2027 das quatro ferramentas do fork (+1854) e das descrições que o
 // fork estende (+173), a diferença medida na fusão da v1.107 (32639 contra 30612
-// do upstream). Na fusão da v1.116: 42236 = 40209 + 2027.
-const TETO_TOTAL = 42236;
+// do upstream). Na fusão da v1.116 a conta dava 42236 = 40209 + 2027; MEDIDO
+// na CI do PR #97 e no contêiner: 42237 (1 token de junção entre os dois lados).
+const TETO_TOTAL = 42237;
 
 const VARIANTE = "schedule_followup (com negócio)";
 

@@ -32,7 +32,7 @@ export function CampoComVariaveis({
   ajuda,
   obrigatorio,
   maxLength,
-  testId,
+  "data-testid": testId,
 }: {
   id?: string;
   rotulo: string;
@@ -49,8 +49,10 @@ export function CampoComVariaveis({
   /**
    * FORK MIA (.93): o `data-testid` do campo de texto. As trilhas do assistente
    * (`lib/assistente/trilhas/catalogo.ts`) acham e conferem o campo por ele.
+   * Com o nome do atributo, para a cerca das trilhas achar o marcador na tela
+   * que o usa (`tests/unit/assistente-trilhas-marcadores.test.ts`).
    */
-  testId?: string;
+  "data-testid"?: string;
 }) {
   const campoRef = React.useRef<HTMLTextAreaElement>(null);
   // `useId` é HOOK: chamado incondicionalmente, e só o valor é descartado quando

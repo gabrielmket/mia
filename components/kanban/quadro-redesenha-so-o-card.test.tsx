@@ -63,6 +63,16 @@ vi.mock("@/components/kanban/LeadDossier", () => ({ LeadDossier: () => null }));
 vi.mock("@/components/kanban/LoseLeadDialog", () => ({ LoseLeadDialog: () => null }));
 vi.mock("@/components/kanban/CamposObrigatoriosDialog", () => ({ CamposObrigatoriosDialog: () => null }));
 vi.mock("@/components/kanban/RetomarComoNovoNegocioDialog", () => ({ RetomarComoNovoNegocioDialog: () => null }));
+// FORK MIA: o cartão aberto do fork no lugar do dossiê, e a janela do ganho
+// (.109), que o arrasto para a etapa de ganho abre. A janela confirma sozinha,
+// como a pessoa que confirma, e só então o quadro move.
+vi.mock("@/components/cartoes/aberto/CartaoAberto", () => ({ CartaoAberto: () => null }));
+vi.mock("@/components/produto-no-negocio/JanelaDoGanho", () => ({
+  JanelaDoGanho: ({ onConfirmar }: { onConfirmar: (r: { wonReason?: string; updatedAt?: string }) => void }) => {
+    useEffect(() => onConfirmar({}), [onConfirmar]);
+    return null;
+  },
+}));
 
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 

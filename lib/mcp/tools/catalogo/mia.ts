@@ -32,13 +32,15 @@ export const TOOLS_MIA = declararTools([
     pacotes: ["vender"],
   },
   /**
-   * Documentos e obrigações (docs/fork/obrigacoes.md). As duas em "reter": é a
-   * jornada de não deixar o cliente escapar por falta de acompanhamento, e
-   * renovação de documento é isso. NÃO em "vender" (o pacote com que todo
-   * agente nasce): duas capacidades a mais ali comeriam a folga do teto e
-   * nenhum segundo pacote caberia (tests/unit/pacote-reserva-vaga-da-critica).
-   * Nem em "atender": a conta da tela, que uma spec de ponta a ponta cobra,
-   * sairia do lugar (tests/unit/teto-do-atender-bate-com-a-recusa-da-spec).
+   * Documentos e obrigações (docs/fork/obrigacoes.md). As duas em "organizar",
+   * juntas (a proposta usa o id que a listagem devolve). Moraram em "reter" até
+   * a fusão da v1.116: lá o upstream chegou a 26 de 27 (as leituras do anexo do
+   * card, #4544, e as do Amigo), e as duas do fork levavam o pacote a 28, que
+   * nunca ligaria inteiro (tests/unit/pacote-reserva-vaga-da-critica). A saída é
+   * a do próprio upstream (lib/mcp/tools/selecao-por-pacote.ts): mudar de
+   * pacote, não subir o teto. "Organizar" não tem capacidade crítica, e as duas
+   * não são críticas. NÃO em "vender" (o pacote com que todo agente nasce) nem
+   * em "atender" (tests/unit/teto-do-atender-bate-com-a-recusa-da-spec).
    */
   {
     name: "crm_listar_obrigacoes_pendentes",
@@ -49,7 +51,7 @@ export const TOOLS_MIA = declararTools([
       "vencendo ou vencido, e atividade recorrente chegando) para lembrar ou pedir na conversa.",
     oQueToca: "Documentos e obrigações",
     risco: "seguro",
-    pacotes: ["reter"],
+    pacotes: ["organizar"],
   },
   {
     name: "crm_propor_recebimento_de_documento",
@@ -64,6 +66,6 @@ export const TOOLS_MIA = declararTools([
      * caso é uma proposta errada, que a pessoa recusa com um clique.
      */
     risco: "atencao",
-    pacotes: ["reter"],
+    pacotes: ["organizar"],
   },
 ]);

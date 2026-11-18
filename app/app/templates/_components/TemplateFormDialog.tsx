@@ -416,7 +416,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template, gru
             rotulo={t("Mensagem")}
             fonte="inbox"
             // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).
-            testId="texto-da-resposta"
+            data-testid="texto-da-resposta"
             valor={body}
             onChange={setBody}
             placeholder={t("Oi {{primeiro_nome}}, tudo bem?")}
