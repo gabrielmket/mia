@@ -136,7 +136,7 @@ export const FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP: readonly FerramentaDePlataf
         .describe("Troca a duração das esperas."),
       silencio_minutos: z.number().int().min(5).max(129_600).optional().describe("Para gatilho de silêncio: depois de quantos minutos sem resposta o fluxo começa."),
       numero: z.string().trim().min(1).max(120).optional().describe("Para gatilho de negócio criado: por qual número abordar (id, nome ou telefone de um número conectado)."),
-      // Upstream 1.115 (#4587): o filtro do gatilho de negócio criado.
+      // Upstream 1.112 (#4587): o filtro do gatilho de negócio criado.
       funil_do_negocio: z
         .string()
         .trim()

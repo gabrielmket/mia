@@ -56,6 +56,7 @@ import { moduloLigado } from "@/lib/instalacao/modulos";
 import { lerServidoresDoAgente, semSegredo } from "@/lib/mcp/servidor-externo/do-agente/registro";
 import { EXPLICACAO_DO_PASSO, ROTULO_DO_PASSO } from "@/lib/leads/agent-mapping";
 import { categoriasDeclaradasDoFunil, categoriasDoFunil } from "@/lib/leads/motivos-de-perda-do-funil";
+import { lerOpcaoDaSatisfacao } from "@/lib/atendimento/satisfacao";
 import { CAMPO_DOS_CAMPOS_ALTERADOS, CAMPOS_ALTERAVEIS_DO_NEGOCIO } from "@/lib/automation/conditions";
 import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { configAssinatura } from "@/lib/messaging/assinatura";
@@ -336,7 +337,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
               "Quando a ficha de um contato que estava SEM telefone passa a ter um (informado pelo cliente, pela equipe ou por integração). " +
               "Serve para a primeira mensagem de WhatsApp a quem chegou por e-mail ou formulário sem número.",
           },
-          // Upstream 1.110 a 1.116: o negócio alterado (9383, #1749) e a ligação perdida (#4365).
+          // Upstream 1.109 e 1.114: a ligação perdida (#4365) e o negócio alterado (9383, #1749).
           gatilhos_novos: {
             "lead.updated":
               "Quando um negócio que já existe é EDITADO (título, valor, responsável, data prevista, etiquetas, campos personalizados...). " +
@@ -1012,6 +1013,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           // .81: as duas opções da agenda do upstream (1.80 #978, 1.81 #2063).
           colegas_podem_mexer_na_agenda: colegasPodemMexerNaAgendaLigado(org.settings),
           google_meet_com_acesso_aberto: meetAbertoLigado(org.settings),
+          // Upstream 1.112 (#4023): a pesquisa de satisfação do encerramento, como o envio lê.
+          pesquisa_de_satisfacao: lerOpcaoDaSatisfacao(org.settings),
         };
       }
 

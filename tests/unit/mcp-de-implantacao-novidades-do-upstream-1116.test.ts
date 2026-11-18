@@ -120,7 +120,7 @@ describe("plataforma_garantir_funil · CAMPO NOVO `categorias_de_perda` (upstrea
   });
 });
 
-describe("plataforma_garantir_followup · CAMPOS NOVOS `funil_do_negocio` e `etiqueta_do_negocio` (upstream 1.115, #4587)", () => {
+describe("plataforma_garantir_followup · CAMPOS NOVOS `funil_do_negocio` e `etiqueta_do_negocio` (upstream 1.112, #4587)", () => {
   const FLUXO = "Retomada · voltar a quem parou de responder";
   const fluxoNoBanco = (c: Cenario) => c.tabela("followup_flow_pointers").find((f) => f.organization_id === ORG && f.name === FLUXO)!;
 
@@ -223,5 +223,51 @@ describe("plataforma_garantir_automacao · GATILHOS NOVOS `lead.updated` (9383) 
     estado.telefonia = true;
     await ok(c, "plataforma_garantir_automacao", pedido);
     expect(regra(c, pedido.nome)!.trigger_event).toBe("voice_call.missed");
+  });
+});
+
+describe("plataforma_configurar_atendimento · CAMPO NOVO `pesquisa_de_satisfacao` (upstream 1.112, #4023, 9352)", () => {
+  const settings = (c: Cenario) => c.tabela("organizations").find((o) => o.id === ORG)!.settings as Linha;
+  const lerSatisfacao = async (c: Cenario) =>
+    ((await ok(c, "plataforma_ver_configuracao", { secoes: ["atendimento"] })).dados.atendimento as Linha).pesquisa_de_satisfacao;
+
+  it("⭐ nasce desligada; ligar grava o bloco com a janela e a pergunta padrão, como a tela; repetir não escreve", async () => {
+    const c = await preparar();
+    expect(settings(c)).not.toHaveProperty("satisfacao");
+    expect(await lerSatisfacao(c)).toMatchObject({ ligado: false, janela_horas: 24 });
+
+    const r = await ok(c, "plataforma_configurar_atendimento", { pesquisa_de_satisfacao: { ligado: true } });
+    expect(r.dados).toMatchObject({ desfecho: "atualizou", mudancas: ["pesquisa de satisfação"] });
+    expect(settings(c).satisfacao).toMatchObject({ ligado: true, janela_horas: 24 });
+    expect(String((settings(c).satisfacao as Linha).pergunta)).toContain("De 1 a 5");
+    expect(await lerSatisfacao(c)).toMatchObject({ ligado: true });
+
+    const antes = c.banco.escritas.length;
+    const de_novo = await ok(c, "plataforma_configurar_atendimento", { pesquisa_de_satisfacao: { ligado: true } });
+    expect(de_novo.dados).toMatchObject({ desfecho: "ja_estava" });
+    expect(c.banco.escritas.length).toBe(antes);
+  });
+
+  it("só as chaves que vieram mudam: desligar guarda a pergunta e a janela; o resto de `settings` fica", async () => {
+    const c = await preparar();
+    const outrasChaves = Object.keys(settings(c));
+    await ok(c, "plataforma_configurar_atendimento", {
+      pesquisa_de_satisfacao: { ligado: true, janela_horas: 48, pergunta: "Que nota de 1 a 5 você dá para o atendimento de hoje?" },
+    });
+    await ok(c, "plataforma_configurar_atendimento", { pesquisa_de_satisfacao: { ligado: false } });
+    expect(settings(c).satisfacao).toEqual({
+      ligado: false,
+      janela_horas: 48,
+      pergunta: "Que nota de 1 a 5 você dá para o atendimento de hoje?",
+    });
+    for (const chave of outrasChaves) expect(settings(c)).toHaveProperty(chave);
+  });
+
+  it("recusa que ensina: pergunta curta demais, janela fora de 1 a 168", async () => {
+    const c = await preparar();
+    const curta = await recusa(c, "plataforma_configurar_atendimento", { pesquisa_de_satisfacao: { ligado: true, pergunta: "Nota?" } });
+    expect(curta).toContain("de 10 a 300 caracteres");
+    expect(await recusa(c, "plataforma_configurar_atendimento", { pesquisa_de_satisfacao: { janela_horas: 200 } })).toBeTruthy();
+    expect(settings(c)).not.toHaveProperty("satisfacao");
   });
 });

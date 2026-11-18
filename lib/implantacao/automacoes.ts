@@ -72,7 +72,7 @@ import { acoesDePerdaSemMotivo, lerEtapasDasAcoes, mensagemDaEtapaDePerdaSemMoti
 import { capacidadesDaOrganizacao } from "@/lib/organizacao/capacidades";
 import { createAutomationRuleSchema, updateAutomationRuleSchema } from "@/lib/schemas/webhooks";
 
-/** O gatilho da ligação recebida que ninguém atendeu (upstream 1.110, #4365). */
+/** O gatilho da ligação recebida que ninguém atendeu (upstream 1.109, #4365). */
 const GATILHO_DA_LIGACAO_PERDIDA = "voice_call.missed";
 import { lePlanosDoSettings, type PlanoDeTarefas } from "@/lib/tarefas/plano";
 
@@ -416,7 +416,7 @@ export async function garantirAutomacao(
   }
   const existente = comEsteNome[0];
 
-  // Upstream 1.110 (#4365, #4409): a ligação perdida nasce do worker de voz, e
+  // Upstream 1.109 (#4365, #4409): a ligação perdida nasce do worker de voz, e
   // a tela só oferece o gatilho com a telefonia em uso. Uma regra montada aqui
   // sem ela ficaria salva sem nunca disparar. A regra que JÁ tem o gatilho
   // continua aceitando ajustes, como na tela.

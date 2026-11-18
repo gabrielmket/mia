@@ -138,11 +138,11 @@ export interface PedidoDeFollowup {
   /** Para gatilho de negócio criado: por qual número abordar (id, nome ou telefone). */
   numero?: string;
   /**
-   * Upstream 1.115 (#4587): o filtro do gatilho de negócio criado. Só o card que
+   * Upstream 1.112 (#4587): o filtro do gatilho de negócio criado. Só o card que
    * nasce NESTE funil (nome ou id) arma o fluxo. `null` tira o filtro.
    */
   funil_do_negocio?: string | null;
-  /** Upstream 1.115 (#4587): só o card que nasce com ESTA etiqueta arma o fluxo. `null` tira. */
+  /** Upstream 1.112 (#4587): só o card que nasce com ESTA etiqueta arma o fluxo. `null` tira. */
   etiqueta_do_negocio?: string | null;
   cancelar_ao_responder?: boolean;
   /** O que acontece com o fluxo quando uma pessoa assume a conversa. */
@@ -526,7 +526,7 @@ async function ajustarGatilho(
     if (!conferido.ok) throw new Recusa("O número escolhido para o gatilho não é desta empresa ou foi excluído. Escolha outro número.");
     novo.params = { ...(novo.params ?? {}), channel_session_id: canal.id };
   }
-  // Upstream 1.115 (#4587): o filtro de funil e etiqueta do negócio criado, como
+  // Upstream 1.112 (#4587): o filtro de funil e etiqueta do negócio criado, como
   // a tela grava (ausente = qualquer card; a etiqueta na forma que o banco guarda).
   const doFiltro = [
     ["funil_do_negocio", pedido.funil_do_negocio],
