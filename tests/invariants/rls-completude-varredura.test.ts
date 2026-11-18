@@ -414,6 +414,8 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     "mia_coexistencia_conexoes",
     "mia_coexistencia_sincronizacoes",
     "mia_coexistencia_lotes",
+    // 9164 — a chave da coexistência por empresa.
+    "mia_coexistencia_da_empresa",
   ].map((tabela) => ({
     tabela,
     razao:
