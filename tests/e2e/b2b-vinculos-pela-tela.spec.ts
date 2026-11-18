@@ -249,7 +249,12 @@ test("módulo ligado: liga contato e empresa pela ficha da pessoa e desfaz pela 
   // 4. Ficha do contato: agora mostra a pessoa e a empresa.
   await page.goto(`/app/contacts/${contatoId}`);
   await expect(page.getByRole("link", { name: PESSOA })).toBeVisible({ timeout: ESPERA });
-  await expect(page.getByRole("link", { name: EMPRESA })).toBeVisible();
+  // FORK MIA (.81): a ficha do contato do fork (FichaConectadaDoContato) tem a
+  // seção "Empresa" do contato, além do bloco da pessoa dele (PessoaDoContato).
+  // A empresa aparece nas duas, e a segunda chega depois (consulta própria):
+  // confere as duas, cada uma no seu lugar, para não depender de quem chega antes.
+  await expect(page.getByTestId("vinculo-do-contato").getByRole("link", { name: EMPRESA })).toBeVisible({ timeout: ESPERA });
+  await expect(page.getByRole("link", { name: EMPRESA })).toHaveCount(2, { timeout: ESPERA });
   await page.screenshot({ path: `${EVIDENCIA}/5-contato-com-pessoa.png`, fullPage: true });
 
   // 5. Ficha da empresa: a pessoa aparece; "Tirar da empresa" desfaz o vínculo.
