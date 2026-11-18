@@ -95,7 +95,7 @@ import { audit } from "@/lib/audit";
 import { listSelectableChannels, type SelectableChannel } from "@/lib/channels/selectable";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { VALID_TOOL_IDS } from "@/lib/mcp/tools/catalog";
-import { ehToolIdRemoto, toolIdAceito, toolIdRemoto } from "@/lib/mcp/servidor-externo/ids";
+import { ehToolIdRemoto, lerToolIdRemoto, toolIdAceito, toolIdRemoto } from "@/lib/mcp/servidor-externo/ids";
 import { FRASE_DA_DEMONSTRACAO } from "@/lib/demonstracao/trava";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
 
@@ -109,6 +109,23 @@ import {
 } from "./base";
 import { capacidadesOferecidas, montarCapacidades } from "./capacidades";
 import { horarioDaIaDoPedido, type HorarioPedido } from "./horario-da-ia";
+import {
+  conferirSkillsDoAgente,
+  gravarSkillsPorEtiqueta,
+  lerSkillsDaEmpresa,
+  prepararSkillsPorEtiqueta,
+  type SkillPorEtiquetaGarantida,
+  type SkillPorEtiquetaPedida,
+} from "./skills-do-agente";
+import {
+  ferramentasDoPlano,
+  gravarServidoresDoAgente,
+  planejarServidoresDoAgente,
+  type ItemComOHumano,
+  type PedidoDeServidorMcp,
+  type PlanoDosServidores,
+  type ServidorGarantido,
+} from "./servidores-mcp-do-agente";
 import { temHorarioDaIaDeclarado } from "@/lib/agent-engine/agent/horario-da-ia";
 import { lerFiltroDePalavraChave } from "@/lib/agent-engine/agent/palavra-chave-do-gatilho";
 
@@ -186,8 +203,8 @@ const ROTULO_DO_CAMPO: Record<string, string> = {
   pipeline_ids: "funis",
   knowledge_source_ids: "materiais",
   skill_names: "skills",
-  image_vision_enabled: "leitura de imagem",
-  reply_min_interval_ms: "intervalo entre respostas",
+  image_vision_enabled: "ver as fotos do cliente",
+  reply_min_interval_ms: "pausa entre respostas",
   provider: "IA da plataforma",
   model: "IA da plataforma",
   credential_id: "IA da plataforma",
@@ -260,6 +277,31 @@ export interface PedidoDeAgente {
   tamanho_da_mensagem?: number;
   espera_por_rajada_ms?: number | null;
   /**
+   * Upstream 1.101 (9101): a PAUSA mínima entre uma resposta da IA e a próxima
+   * na mesma conversa, em SEGUNDOS como na tela (0 a 600; o banco guarda ms).
+   * `null` ou 0 = sem pausa. É do rascunho.
+   */
+  pausa_entre_respostas_segundos?: number | null;
+  /**
+   * Upstream 1.107 (9108): o agente VÊ as fotos que o cliente envia
+   * (`image_vision_enabled`). Ligado por padrão, como na tela; cada foto
+   * descrita é uma chamada paga. É do rascunho.
+   */
+  ver_fotos_do_cliente?: boolean;
+  /**
+   * Upstream 1.107 (9107): QUAIS skills o agente usa (`skill_names`), pelo nome.
+   * `null` = todas as da empresa e da plataforma (o padrão); `[]` = nenhuma. É
+   * do rascunho.
+   */
+  skills?: string[] | null;
+  /**
+   * Upstream 1.107 (9230): as ETIQUETAS pelas quais cada skill entra mesmo sem a
+   * palavra-chave (`matcher.any_tags`). É da SKILL: vale para todo agente que a
+   * usa, na hora. A lista de cada skill é INTEIRA ([] tira as etiquetas).
+   * Ver `./skills-do-agente.ts`.
+   */
+  skills_por_etiqueta?: SkillPorEtiquetaPedida[];
+  /**
    * .85 — o HORÁRIO DE ATENDIMENTO DA IA (`filters.horario_da_ia`): as faixas
    * por dia em que a IA fica ATIVA; fora delas ela não responde e a conversa é
    * da equipe. O formato antigo de uma faixa (`{ inicio, fim, dias }`) é
@@ -303,12 +345,22 @@ export interface PedidoDeAgente {
     no_atendimento?: boolean;
     ferramentas?: Array<{ nome: string; leitura?: boolean }>;
   };
+  /**
+   * Os SERVIDORES MCP DO AGENTE (upstream 9095, `ai_agent_mcp_servers`): cada
+   * item liga, troca ou tira (`apagar: true`) um servidor pelo NOME. O cadastro
+   * vale na hora (não é versionado, como na tela); as `ferramentas` de cada um
+   * vão para o RASCUNHO (`tool_ids` `mcp_externo:<servidor_id>:*`). Servidor que
+   * não veio fica como está. Regras em `./servidores-mcp-do-agente.ts`.
+   */
+  servidores_mcp?: PedidoDeServidorMcp[];
 }
 
 export interface AgenteGarantido {
   agente: { id: string; nome: string; desfecho: Desfecho; mudancas: string[] };
   /** A camada "não fazer afirmação clínica" da EMPRESA, quando o pedido a trouxe. */
   bloqueio_de_afirmacao_clinica?: { ligado: boolean; desfecho: Desfecho };
+  /** As etiquetas de cada skill, quando o pedido as trouxe (são da skill e valem na hora). */
+  skills_por_etiqueta?: SkillPorEtiquetaGarantida[];
   versao: {
     id: string;
     numero: number;
@@ -319,6 +371,10 @@ export interface AgenteGarantido {
   no_ar: boolean;
   /** O que ainda impede publicar o rascunho, com quem resolve. Vazio = pode publicar. */
   falta_para_publicar: PendenciaDePublicacao[];
+  /** 9095 — os servidores MCP do agente que o pedido trouxe, sem segredo. */
+  servidores_mcp?: ServidorGarantido[];
+  /** 9095 — o que o OAuth pede de uma PESSOA (o MCP não faz): registrar o aplicativo, a autorização de cada contato. */
+  com_o_humano?: ItemComOHumano[];
   avisos: string[];
 }
 
@@ -583,6 +639,7 @@ async function montarVersao(
   referencia: LinhaDaVersao | null,
   canais: SelectableChannel[],
   avisos: string[],
+  ferramentasDosServidores: ReadonlyMap<string, string[]> = new Map(),
 ): Promise<Record<string, unknown>> {
   const corpo: Record<string, unknown> = referencia ? conteudoDa(referencia) : {};
 
@@ -607,15 +664,30 @@ async function montarVersao(
 
   // .81 — as ferramentas do servidor MCP externo moram no MESMO `tool_ids`
   // (`mcp_externo:*`). Trocar os pacotes não pode apagá-las, e a lista pedida
-  // substitui só as remotas.
+  // substitui só as remotas DELE (as sem servidor no id).
+  // 9095 — as dos servidores DO AGENTE (`mcp_externo:<servidor_id>:*`) também:
+  // cada servidor pedido troca só as dele, e as de quem não veio ficam. Lista
+  // igual à gravada (em qualquer ordem) não conta como troca: a ordem da
+  // referência fica, e o pedido repetido responde `ja_estava`.
   const pediuRemotas = pedido.servidor_mcp_externo?.ferramentas !== undefined;
-  if (pediuRemotas || pedido.pacotes !== undefined || pedido.capacidades !== undefined) {
+  if (pediuRemotas || ferramentasDosServidores.size > 0 || pedido.pacotes !== undefined || pedido.capacidades !== undefined) {
     const compiladas = ((corpo.tool_ids as string[] | null | undefined) ?? []).filter((id) => !ehToolIdRemoto(id));
     const remotasDaReferencia = ((referencia?.tool_ids as string[] | null | undefined) ?? []).filter((id) => ehToolIdRemoto(id));
-    const remotas = pediuRemotas
-      ? ferramentasRemotas(pedido.servidor_mcp_externo!.ferramentas!)
-      : remotasDaReferencia;
-    corpo.tool_ids = [...compiladas, ...remotas];
+    const trocados = new Map<string, string[]>();
+    for (const [servidorId, ids] of ferramentasDosServidores) {
+      const gravadas = remotasDaReferencia.filter((id) => lerToolIdRemoto(id)?.servidorId === servidorId);
+      if (!mesmoConteudo([...gravadas].sort(), [...ids].sort())) trocados.set(servidorId, ids);
+    }
+    const mantidas = remotasDaReferencia.filter((id) => {
+      const servidorId = lerToolIdRemoto(id)?.servidorId;
+      return servidorId ? !trocados.has(servidorId) : !pediuRemotas;
+    });
+    corpo.tool_ids = [
+      ...compiladas,
+      ...mantidas,
+      ...(pediuRemotas ? ferramentasRemotas(pedido.servidor_mcp_externo!.ferramentas!) : []),
+      ...[...trocados.values()].flat(),
+    ];
   }
 
   if (pedido.funis !== undefined) corpo.pipeline_ids = await resolverFunis(c.admin, c.orgId, pedido.funis);
@@ -647,6 +719,17 @@ async function montarVersao(
   if (pedido.dividir_mensagens !== undefined) corpo.split_messages = pedido.dividir_mensagens;
   if (pedido.tamanho_da_mensagem !== undefined) corpo.split_max_chars = pedido.tamanho_da_mensagem;
   if (pedido.espera_por_rajada_ms !== undefined) corpo.inbound_debounce_ms = pedido.espera_por_rajada_ms;
+  // Upstream 1.101 a 1.107: a pausa (a tela fala em segundos, o banco em ms), a
+  // visão de foto e as skills do agente, pela mesma régua da tela.
+  if (pedido.pausa_entre_respostas_segundos !== undefined) {
+    corpo.reply_min_interval_ms =
+      pedido.pausa_entre_respostas_segundos === null ? null : Math.round(pedido.pausa_entre_respostas_segundos * 1000);
+  }
+  if (pedido.ver_fotos_do_cliente !== undefined) corpo.image_vision_enabled = pedido.ver_fotos_do_cliente;
+  if (pedido.skills !== undefined) {
+    corpo.skill_names =
+      pedido.skills === null ? null : pedido.skills.length === 0 ? [] : conferirSkillsDoAgente(pedido.skills, await lerSkillsDaEmpresa(c));
+  }
   if (pedido.max_passos !== undefined) corpo.max_steps = pedido.max_passos;
 
   if (pedido.horario_de_atendimento !== undefined) {
@@ -826,6 +909,8 @@ function recusaDoSchema(erro: { issues: Array<{ path: PropertyKey[]; message: st
       handoff_keywords: "`palavras_de_passagem` aceita até 20 expressões de 1 a 60 caracteres.",
       split_max_chars: "`tamanho_da_mensagem` vai de 80 a 4000 caracteres.",
       inbound_debounce_ms: "`espera_por_rajada_ms` vai de 0 a 60000.",
+      reply_min_interval_ms: "`pausa_entre_respostas_segundos` vai de 0 a 600 segundos (10 minutos). null ou 0 = sem pausa.",
+      skill_names: "`skills` aceita até 100 nomes, de 1 a 120 caracteres.",
       max_steps: "`max_passos` vai de 1 a 25.",
       name: "`nome` precisa de 1 a 120 caracteres.",
       priority: "`prioridade` vai de 0 a 1000.",
@@ -983,7 +1068,14 @@ export async function garantirAgente(
   org: OrganizacaoDaImplantacao,
   pedido: PedidoDeAgente,
 ): Promise<AgenteGarantido> {
-  const garantido = await garantirAgenteECadastro(c, org, pedido);
+  // Upstream 1.107 (9230): as etiquetas das skills são conferidas INTEIRAS antes
+  // de qualquer escrita (do agente ou da skill), e gravadas depois do rascunho.
+  const etiquetasDasSkills =
+    pedido.skills_por_etiqueta !== undefined && pedido.skills_por_etiqueta.length > 0
+      ? prepararSkillsPorEtiqueta(pedido.skills_por_etiqueta, await lerSkillsDaEmpresa(c), org.settings)
+      : null;
+  let garantido = await garantirAgenteECadastro(c, org, pedido);
+  if (etiquetasDasSkills) garantido = await comEtiquetasDasSkills(c, garantido, etiquetasDasSkills);
   if (pedido.bloquear_afirmacao_clinica === undefined) return garantido;
   const camada = await garantirCamadaClinica(c, pedido.bloquear_afirmacao_clinica);
   if (camada.desfecho !== "ja_estava") {
@@ -994,6 +1086,31 @@ export async function garantirAgente(
     );
   }
   return { ...garantido, bloqueio_de_afirmacao_clinica: camada };
+}
+
+async function comEtiquetasDasSkills(
+  c: Implantacao,
+  garantido: AgenteGarantido,
+  preparadas: ReturnType<typeof prepararSkillsPorEtiqueta>,
+): Promise<AgenteGarantido> {
+  const gravadas = await gravarSkillsPorEtiqueta(c, preparadas);
+  if (gravadas.some((g) => g.desfecho !== "ja_estava")) {
+    garantido.avisos.push(
+      "As etiquetas são da SKILL, não do agente: já valem na próxima mensagem para TODO agente que usa a skill, sem publicar.",
+    );
+  }
+  // O agente com lista própria de skills (`skills`) só recebe as que estão nela.
+  const versoes = await lerVersoes(c.admin, c.orgId, garantido.agente.id);
+  const lista = versoes.find((v) => v.id === garantido.versao.id)?.skill_names;
+  if (Array.isArray(lista)) {
+    const fora = gravadas.filter((g) => !lista.includes(g.skill)).map((g) => `«${g.skill}»`);
+    if (fora.length > 0) {
+      garantido.avisos.push(
+        `${fora.join(", ")} não ${fora.length === 1 ? "está" : "estão"} nas \`skills\` deste agente: ele não as usa, com etiqueta ou sem. Inclua em \`skills\` (ou mande \`skills: null\` para todas).`,
+      );
+    }
+  }
+  return { ...garantido, skills_por_etiqueta: gravadas };
 }
 
 async function garantirAgenteECadastro(
@@ -1034,9 +1151,18 @@ async function garantirAgenteECadastro(
     );
   }
 
+  // 9095 — os servidores MCP do agente: tudo que recusa, e a rede da
+  // descoberta OAuth, ANTES de gravar o agente ou a versão. O agente que ainda
+  // vai nascer não tem servidor nenhum; o do formato antigo é recusado abaixo.
+  const planoDosServidores: PlanoDosServidores | null =
+    pedido.servidores_mcp !== undefined && pedido.servidores_mcp.length > 0 && (!agente || agente.kind === "mcp_agent")
+      ? await planejarServidoresDoAgente(c, org, { id: agente?.id ?? null, nome }, pedido.servidores_mcp)
+      : null;
+  const ferramentasDosServidores = ferramentasDoPlano(planoDosServidores);
+
   // ── agente novo: o caminho de `POST /api/v1/ai/agents` ────────────────────
   if (!agente) {
-    const corpo = await montarVersao(c, org, pedido, null, canais, avisos);
+    const corpo = await montarVersao(c, org, pedido, null, canais, avisos, ferramentasDosServidores);
     // A IA vem da plataforma: o corpo recebe o par e "a chave desta instalação".
     const provisorio = { ...corpo, provider: "anthropic", model: "a-definir", credential_id: null };
     const lido = agentMcpCreateSchema.safeParse({
@@ -1115,11 +1241,16 @@ async function garantirAgenteECadastro(
       if (error) throw new Error(`o agente nasceu, mas não consegui gravar o cadastro dele (${configDoNovo.mudancas.join(", ")}): ${error.message}. Chame de novo.`);
     }
 
+    // 9095 — os servidores entram depois de o agente nascer (a linha aponta
+    // para ele); as ferramentas deles já foram no rascunho, com o id do plano.
+    const servidoresDoNovo = planoDosServidores ? await gravarServidoresDoAgente(c, linhaDoAgente.id, planoDosServidores) : null;
+
     return {
       agente: { id: linhaDoAgente.id, nome: linhaDoAgente.name, desfecho: "criou", mudancas: [] },
       versao: { id: linhaDaVersao.id, numero: linhaDaVersao.version_number, situacao: "rascunho", desfecho: "criou", mudancas: [] },
       no_ar: false,
       falta_para_publicar: await pendenciasDePublicacao(c.admin, c.orgId, linhaDaVersao, canais),
+      ...comServidores(servidoresDoNovo),
       avisos,
     };
   }
@@ -1180,7 +1311,7 @@ async function garantirAgenteECadastro(
   const versoes = await lerVersoes(c.admin, c.orgId, agente.id);
   const tela = escolherVersoesDaTela(versoes, agente.published_version_id);
   const referencia = tela.base;
-  const corpo = await montarVersao(c, org, pedido, referencia, canais, avisos);
+  const corpo = await montarVersao(c, org, pedido, referencia, canais, avisos, ferramentasDosServidores);
 
   // A IA que vale: a atual do agente (ou a da plataforma, sem versão nenhuma).
   const comIa = await travarIaDaVersaoNova(
@@ -1273,6 +1404,13 @@ async function garantirAgenteECadastro(
     }
   }
 
+  // 9095 — o cadastro dos servidores do agente vale na hora, como na tela, e
+  // só entra DEPOIS de a versão passar por todas as conferências e ser gravada:
+  // uma recusa da versão (o teto de ferramentas, o escopo, a IA) não deixa
+  // servidor nenhum gravado para trás.
+  const servidores = planoDosServidores ? await gravarServidoresDoAgente(c, agente.id, planoDosServidores) : null;
+  if (servidores) mudancasDoAgente.push(...servidores.mudancas);
+
   const noAr = estadoDoAgente(agente) === "no_ar";
   const ehRascunho = versaoFinal.status === "draft";
   if (noAr && ehRascunho) {
@@ -1297,7 +1435,19 @@ async function garantirAgenteECadastro(
     },
     no_ar: noAr,
     falta_para_publicar: ehRascunho ? await pendenciasDePublicacao(c.admin, c.orgId, versaoFinal, canais) : [],
+    ...comServidores(servidores),
     avisos,
+  };
+}
+
+/** 9095 — o pedaço da resposta dos servidores MCP do agente, só quando o pedido os trouxe. */
+function comServidores(
+  gravados: { servidores: ServidorGarantido[]; com_o_humano: ItemComOHumano[] } | null,
+): Pick<AgenteGarantido, "servidores_mcp" | "com_o_humano"> {
+  if (!gravados) return {};
+  return {
+    servidores_mcp: gravados.servidores,
+    ...(gravados.com_o_humano.length > 0 ? { com_o_humano: gravados.com_o_humano } : {}),
   };
 }
 

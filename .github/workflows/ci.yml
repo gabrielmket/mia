@@ -709,7 +709,7 @@ jobs:
     # medido — não há Docker onde esta matriz foi escrita —, e existe para o
     # vermelho continuar falando de schema: mantido em 20, a perna morreria por
     # relógio no meio da segunda passada.
-    timeout-minutes: 45
+    timeout-minutes: 60
     # 30 → 45 em 10/11/2026 (doc de decisão 302): cortada por relógio aos 30 min
     # no pg15 e no pg17, também na `main`. Razão inteira em
     # tests/unit/preambulo-do-ci-nao-come-o-relogio.test.ts (TETOS).
@@ -720,6 +720,13 @@ jobs:
     # 523 dos 597 arquivos verdes e nenhum vermelho, enquanto a do pg17 passou
     # inteira. O teto existia para o vermelho falar de schema, e no 30 ele passou
     # a falar do executor hospedado.
+    # FORK MIA (.110): 60, MEDIDO, tempo do job em 17/11/2026. Na ponta do #86
+    # (d71628e7e) pg15 e pg17 levaram 36 min, na repetição; na main da .110
+    # (268f0552d) o pg15 passou com 44 min e o pg17 foi cortado aos 45; no PR #89
+    # o pg17 foi cortado aos 45 nas duas rodadas seguidas. A fusão MIA-12
+    # (v1.108 a v1.116) trouxe o roteamento do upstream abaixo, mas sem a
+    # variável `RUNNER_PROPRIO` a perna continua no `ubuntu-latest` e o tempo não
+    # muda: o 60 fica (medição no PR #97).
     # RUNNERS PRÓPRIOS (VPS `deskcomm-vps`, aprovados pelo dono em 12/11/2026).
     # Por quê: a fila do Actions (teto de jobs simultâneos) segura esta matriz,
     # que é a perna mais longa do CI. Dois runners numa VPS dedicada

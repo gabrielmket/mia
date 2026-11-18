@@ -34,6 +34,8 @@ import { acharPorNomeOuId } from "@/lib/implantacao/base";
 import { produtoNoNegocioDoFunil } from "./produto-no-negocio";
 import { lerAgentes, lerCamadaClinica, lerVersoes, limiarDeSentimentoDo, pendenciasDePublicacao } from "@/lib/implantacao/agente";
 import { lerTipos } from "@/lib/implantacao/agenda";
+import { lerModeloDoAvisoDaEquipe, lerModelosAprovados, lerModelosPorId, modeloDoLembreteLido } from "@/lib/implantacao/modelos-aprovados";
+import { lerLugaresPorTipo, lerListaDeEspera } from "@/lib/implantacao/lista-de-espera";
 import { lerConexoesDeBancoExterno, retratoDaConexao } from "@/lib/implantacao/banco-externo";
 import { diasDaProspeccaoDe, lerAjustesDosCanais, lerCanais, lerPausasAgendadas } from "@/lib/implantacao/canal";
 import { lerRegrasDosNumeros, retratoDaDistribuicao } from "@/lib/implantacao/distribuicao-do-numero";
@@ -43,11 +45,15 @@ import { retratoDosPlanos } from "@/lib/implantacao/planos-de-tarefa";
 import { lerRegras } from "@/lib/implantacao/automacoes";
 import { CONFIGURACAO_DOS_GATILHOS_DE_OBRIGACAO, modelosDeObrigacaoParaOAgente } from "@/lib/implantacao/obrigacoes";
 import { capacidadesOferecidas, catalogoServido, pacotesLigados } from "@/lib/implantacao/capacidades";
-import { lerConvites, lerMembros } from "@/lib/implantacao/equipe";
+import { lerConvites, lerMembros, lerSetores } from "@/lib/implantacao/equipe";
 import { GATILHOS_COM_MOTOR, lerFluxos, nosDoGrafo } from "@/lib/implantacao/followup";
 import { lerDocumentoDaMemoria } from "@/lib/implantacao/memoria";
 import { lerModelosOficiais, lerRespostasProntas } from "@/lib/implantacao/mensagens";
 import { retratoDosRoteadores } from "@/lib/implantacao/roteador";
+import { lerSkillsDaEmpresa } from "@/lib/implantacao/skills-do-agente";
+import { servidoresNaLeitura } from "@/lib/implantacao/servidores-mcp-do-agente";
+import { moduloLigado } from "@/lib/instalacao/modulos";
+import { lerServidoresDoAgente, semSegredo } from "@/lib/mcp/servidor-externo/do-agente/registro";
 import { EXPLICACAO_DO_PASSO, ROTULO_DO_PASSO } from "@/lib/leads/agent-mapping";
 import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { configAssinatura } from "@/lib/messaging/assinatura";
@@ -97,6 +103,8 @@ const SECOES_DE_CONFIGURACAO = [
   "canais",
   "atendimento",
   "mensagens",
+  // upstream 1.100 (9092, 9094): os modelos aprovados de cada número, para o lembrete e o aviso à equipe
+  "modelos_aprovados",
   // upstream 1.74 a 1.80
   "planos_de_tarefa",
   "fontes_de_formulario",
@@ -127,7 +135,7 @@ const ACOES_DE_AUTOMACAO = [
     type: "define_sector",
     o_que_faz:
       "Põe a conversa do negócio num SETOR de atendimento (upstream 1.103, #3881): a distribuição passa a mandar a conversa só para quem é do setor. Por padrão não troca um setor escolhido à mão por uma pessoa.",
-    config: '{ "sector_id": "<id do setor>", "sobrescrever_setor_manual": true | false (opcional) }',
+    config: '{ "sector_id": "<id do setor, de plataforma_ver_configuracao, seção equipe, em setores>", "sobrescrever_setor_manual": true | false (opcional) }',
   },
   {
     type: "assign_owner",
@@ -486,7 +494,10 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
       "Com `agente`, devolve também o PROMPT e a configuração inteira da versão vigente (o rascunho, se houver; senão a publicada), com o horário de atendimento da IA dela. " +
       "Devolve o FILTRO DE PALAVRAS da versão vigente (`filtro_de_palavras`): desde a v1.87 do upstream, com ele preenchido a IA não responde a mensagem sem nenhuma das palavras. " +
       "Devolve a passagem por assunto jurídico de cada agente e, da EMPRESA, se o bloqueio de afirmação clínica está ligado (`seguranca_da_empresa`). " +
+      "Devolve, da versão vigente de cada agente, a pausa entre respostas (`pausa_entre_respostas_segundos`), se ele vê as fotos do cliente (`ver_fotos_do_cliente`) e QUAIS skills usa (`skills`: null = todas); " +
+      "e as skills da empresa com as ETIQUETAS pelas quais cada uma entra (`skills_da_empresa`). " +
       "Devolve ainda os ROTEADORES de intenção: o número, se está ligado, o agente reserva e cada intenção com o agente e o funil de destino. " +
+      "Devolve os SERVIDORES MCP DE CADA AGENTE (`servidores_mcp`): nome, host, autenticação, se está ativo, se a chave está configurada (com os 4 últimos caracteres) ou, no OAuth por contato, o client_id, se há segredo, se o registro foi automático e o endereço de retorno, e as ferramentas escolhidas na versão vigente. Chave e segredo nunca voltam. " +
       "QUANDO USAR: antes de plataforma_garantir_agente e de plataforma_garantir_roteador, e antes de publicar ou ligar. " +
       "Devolve ainda as capacidades que a tela oferece a ESTE cliente (módulos e modo de venda mudam a lista) quando `com_capacidades` é verdadeiro.",
     inputSchema: {
@@ -553,8 +564,20 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           passagem_por_assunto_juridico: base ? base.handoff_legal_enabled !== false : null,
           // .86 — o filtro de palavras da versão vigente (upstream 1.87: ele VALE; null = sem filtro).
           filtro_de_palavras: base ? filtroDePalavrasDe(base.trigger_config) : null,
+          // Upstream 1.101 a 1.107 (9101, 9107, 9108), da versão vigente. A pausa em
+          // segundos, como na tela; a visão de foto ligada quando a coluna não diz o contrário.
+          pausa_entre_respostas_segundos:
+            base && typeof base.reply_min_interval_ms === "number" ? Math.round(base.reply_min_interval_ms / 1000) : null,
+          ver_fotos_do_cliente: base ? base.image_vision_enabled !== false : null,
+          skills: base ? ((base.skill_names as string[] | null | undefined) ?? null) : null,
           followups_armados: (followup?.enabled ? (followup.flow_pointer_ids ?? []) : []).map(
             (id) => fluxos.find((f) => f.id === id)?.name ?? id,
+          ),
+          // 9095 — os servidores MCP DESTE agente (o cadastro vale na hora), sem
+          // segredo, com as ferramentas escolhidas na versão vigente.
+          servidores_mcp: servidoresNaLeitura(
+            (await lerServidoresDoAgente(c.admin, c.orgId, agente.id)).map(semSegredo),
+            base ? ((base.tool_ids as string[] | null) ?? []) : [],
           ),
           // .85 — o horário de atendimento da IA da versão PUBLICADA.
           horario_de_atendimento: {
@@ -601,10 +624,22 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           "com mais de um no mesmo número, o de maior prioridade (no empate, o mais antigo), a não ser que exista um roteador LIGADO naquele número, que escolhe pela intenção " +
           "(plataforma_garantir_roteador e plataforma_ligar_roteador; veja `roteadores` abaixo).",
         agentes,
+        // 9095 — o módulo opcional da instalação: desligado, a tela some e o turno não monta servidor do agente.
+        servidores_mcp_por_agente: {
+          modulo_ligado: await moduloLigado(c.admin, "mcp_por_agente"),
+        },
         // A camada da EMPRESA, que vale para todos os agentes (upstream 1.74, #2321).
         seguranca_da_empresa: {
           bloqueio_de_afirmacao_clinica: await lerCamadaClinica(c.admin, c.orgId),
         },
+        // Upstream 1.107 (9107, 9230): as skills que a empresa alcança, com as etiquetas
+        // de cada uma. Leitura que falha não derruba a dos agentes: diz que não leu.
+        ...(await lerSkillsDaEmpresa(c).then(
+          (skills) => ({
+            skills_da_empresa: skills.map((s) => ({ nome: s.nome, de: s.de, descricao: s.descricao, etiquetas: s.etiquetas })),
+          }),
+          (err: unknown) => ({ skills_nao_lidas: err instanceof Error ? err.message : "erro desconhecido" }),
+        )),
         // Os roteadores de intenção, com o agente e o destino de cada intenção
         // pelo nome. Leitura que falha não derruba a dos agentes: diz que não leu.
         ...(await retratoDosRoteadores(c.admin, c.orgId).then(
@@ -708,8 +743,9 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
     description:
       "O conteúdo do que já está configurado num cliente, por seção: `etiquetas` (o vocabulário com as cores), `memoria` (as regras da casa e as anotações), " +
       "`conhecimento` (os materiais e a situação da indexação), `followups` (os fluxos e se estão publicados), `automacoes` (as regras, com gatilho e ações), " +
-      "`agenda` (os tipos de agendamento e a jornada de cada pessoa), `equipe` (membros com id e e-mail, e convites), `canais` (os números com id e situação), " +
+      "`agenda` (os tipos de agendamento, com os lugares e a capacidade de cada serviço, a lista de espera e a jornada de cada pessoa), `equipe` (membros com id e e-mail, convites e os setores de atendimento com id e nome), `canais` (os números com id e situação), " +
       "`atendimento` (a distribuição e o freio do passo \"a IA decide\"), `mensagens` (respostas prontas e modelos oficiais), " +
+      "`modelos_aprovados` (os modelos APROVADOS da Meta de cada número, com idioma, categoria e variáveis, se servem ao lembrete da agenda e ao aviso à equipe, e o modelo escolhido no aviso à equipe), " +
       "`planos_de_tarefa` (as sequências de tarefa com os passos), `fontes_de_formulario` (destino, perguntas, endereço de captação e a autorização de IA, sem o segredo) " +
       "e `banco_externo` (as conexões, só com o nome e a coluna do cliente; nunca endereço, usuário ou senha). " +
       "Em `canais`, cada número traz também os dias da prospecção, se guarda o histórico, se está pausado, as pausas agendadas e a distribuição do número (regra própria, modo, atendente padrão e responsáveis). " +
@@ -787,6 +823,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           situacao: f.status === "active" ? "publicado" : f.status === "disabled" ? "desligado" : "rascunho",
           gatilho: f.trigger_config ?? { kind: "manual" },
           quando_humano_assume: f.handoff_policy,
+          enviar_com_conversa_atribuida: f.send_when_assigned === true,
         }));
       }
 
@@ -816,8 +853,17 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           .select("user_id, is_available, capacity, schedule")
           .eq("organization_id", c.orgId);
         if (error) throw new Error(`não consegui ler as jornadas: ${error.message}`);
+        const tiposDaAgenda = await lerTipos(c.admin, c.orgId);
+        // Upstream 1.100 (9092): o modelo do lembrete de cada tipo, e se ainda serve.
+        const modelosDoLembrete = await lerModelosPorId(
+          c.admin,
+          c.orgId,
+          [...new Set(tiposDaAgenda.map((t) => t.reminder_meta_template_id).filter((x): x is string => typeof x === "string"))],
+        );
+        // Upstream 1.105 (9224): os lugares com capacidade de cada serviço.
+        const lugares = await lerLugaresPorTipo(c.admin, c.orgId);
         r.agenda = {
-          tipos: (await lerTipos(c.admin, c.orgId)).map((t) => ({
+          tipos: tiposDaAgenda.map((t) => ({
             id: t.id,
             nome: t.name,
             slug: t.slug,
@@ -830,15 +876,29 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             lembrete_minutos_antes: t.reminder_minutes_before ?? null,
             // .81: o número que manda o lembrete (upstream v1.83). null = automático.
             canal_do_lembrete_id: (t.reminder_channel_session_id as string | null | undefined) ?? null,
+            // Upstream 1.100 (9092): o modelo aprovado fora da janela de 24 h. null = nenhum.
+            modelo_do_lembrete: modeloDoLembreteLido(
+              modelosDoLembrete,
+              t.reminder_meta_template_id as string | null | undefined,
+              t.reminder_channel_session_id as string | null | undefined,
+            ),
             preco_padrao_cents: t.default_price_cents === null || t.default_price_cents === undefined ? null : Number(t.default_price_cents),
             // Upstream v1.104 (9209): o bloco do negócio no evento do Google.
             levar_dados_do_negocio: t.levar_dados_do_negocio === true,
             // .86 — a agenda por serviço (upstream 1.87, 0716): null quando o tipo não adotou a programação.
             servico:
               t.service_enabled === true
-                ? { modo_de_reserva: t.booking_mode ?? null, capacidade: t.service_capacity ?? null, em_rascunho: t.is_active === false }
+                ? {
+                    modo_de_reserva: t.booking_mode ?? null,
+                    capacidade: t.service_capacity ?? null,
+                    em_rascunho: t.is_active === false,
+                    // Upstream 1.105 (9224): o lugar que a reserva escolhe, com a capacidade em PESSOAS por período.
+                    lugares: lugares.get(String(t.id)) ?? [],
+                  }
                 : null,
           })),
+          // Upstream 1.105 (9235): módulo opcional; os prazos são da empresa.
+          lista_de_espera: await lerListaDeEspera(c.admin, org.settings),
           jornadas: ((jornadas ?? []) as Array<{ user_id: string; is_available: boolean; capacity: number; schedule: { timezone?: string; windows?: Array<{ dow: number; start: string; end: string }> } | null }>).map((j) => ({
             pessoa: membros.find((m) => m.user_id === j.user_id)?.email ?? j.user_id,
             disponivel: j.is_available,
@@ -859,6 +919,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             ativo: m.ativo,
           })),
           convites: await lerConvites(c.admin, c.orgId),
+          // Upstream 1.103 (#3881): os setores, com id e nome, para a ação `define_sector` das automações.
+          setores: await lerSetores(c.admin, c.orgId),
         };
       }
 
@@ -936,6 +998,14 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
         };
       }
 
+      if (pedidas.has("modelos_aprovados")) {
+        r.modelos_aprovados = {
+          numeros: await lerModelosAprovados(c.admin, c.orgId),
+          // Só leitura: a escolha é de uma pessoa na tela (sessão com as duas etapas).
+          aviso_da_equipe: await lerModeloDoAvisoDaEquipe(c.admin, c.orgId),
+        };
+      }
+
       if (pedidas.has("mensagens")) {
         r.mensagens = {
           respostas_prontas: (await lerRespostasProntas(c.admin, c.orgId)).map((x) => ({
@@ -988,6 +1058,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
         situacao: fluxo.status === "active" ? "publicado" : fluxo.status === "disabled" ? "desligado" : "rascunho",
         gatilho: fluxo.trigger_config ?? { kind: "manual" },
         quando_humano_assume: fluxo.handoff_policy,
+        // Upstream 1.107 (#3974): enviar mesmo com a conversa atribuída (plataforma_garantir_followup).
+        enviar_com_conversa_atribuida: fluxo.send_when_assigned === true,
         nos: nosDoGrafo(rascunho, nomeDaEtapa),
         // Por onde o fluxo anda: é o que diz ANTES de qual nó uma caixa cabe.
         setas: (rascunho?.edges ?? []).map((e) => ({

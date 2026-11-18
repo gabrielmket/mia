@@ -15,6 +15,9 @@ import { TAMANHO_MAXIMO_DO_TEXTO } from "@/lib/agent-engine/agent/aviso-fora-do-
 import { MAX_FAIXAS_POR_DIA } from "@/lib/agent-engine/agent/horario-da-ia";
 import { DEFAULT_SENTIMENT_THRESHOLD } from "@/lib/ai/prompts/sentiment";
 import { garantirAgente, pausarAgente, publicarAgente, type PedidoDeAgente } from "@/lib/implantacao/agente";
+import { TETO_DE_ETIQUETAS_DA_SKILL } from "@/lib/implantacao/skills-do-agente";
+import { LIMITE_DE_SERVIDORES_POR_AGENTE, MODOS_DE_AUTENTICACAO } from "@/lib/mcp/servidor-externo/do-agente/registro";
+import { hostDoEndpoint } from "@/lib/mcp/servidor-externo/registro";
 import { PACOTES } from "@/lib/mcp/tools/pacotes";
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
 
@@ -68,14 +71,86 @@ const horarioDaIa = z
   })
   .strict();
 
+/** 9095 — uma ferramenta de um servidor MCP do agente (ou do servidor da empresa). */
+const ferramentaRemota = z
+  .object({
+    nome: z.string().trim().min(1).max(64).describe("O nome EXATO da ferramenta, como o servidor a anuncia."),
+    leitura: z
+      .boolean()
+      .optional()
+      .describe("true (o padrão): só consulta. false: a ferramenta escreve no sistema de fora, e não monta em conversa com cliente (a não ser com `escrita_delegada`)."),
+  })
+  .strict();
+
+/**
+ * 9095 — um servidor MCP DO AGENTE (upstream: `ai_agent_mcp_servers`, a seção
+ * "Servidores MCP" da tela do agente). A régua de cada campo é a da tela
+ * (`EntradaDoServidorSchema`), conferida de novo no domínio.
+ */
+const servidorMcpDoAgente = z
+  .object({
+    nome: z.string().trim().min(1).max(80).describe('O nome do servidor neste agente (ex.: "Pedidos"). É a CHAVE: o mesmo nome altera o mesmo servidor.'),
+    endereco: z.string().trim().min(8).max(2048).optional().describe("O endereço do servidor MCP do sistema de fora (público; nada depois de `?` ou `#`). Obrigatório para criar."),
+    autenticacao: z
+      .enum(MODOS_DE_AUTENTICACAO)
+      .optional()
+      .describe(
+        'Como o agente se identifica no servidor. "nenhuma"; "chave_estatica" (uma chave fixa, em `chave`); ou "oauth_por_contato" (cada CONTATO autoriza com o login dele, no navegador, pelo link que a IA manda na conversa). Obrigatório para criar.',
+      ),
+    chave: z.string().trim().min(1).max(4096).optional().describe('Só com "chave_estatica": a chave que o sistema de fora deu. Entra CIFRADA e nunca volta (a leitura diz só os 4 últimos caracteres). Ausente: fica a gravada.'),
+    oauth_client_id: z
+      .string()
+      .trim()
+      .min(1)
+      .max(512)
+      .optional()
+      .describe('Só com "oauth_por_contato", quando o sistema de fora NÃO aceita registro automático: o client_id do aplicativo que uma pessoa registrou lá. Com registro automático, deixe de fora.'),
+    oauth_client_secret: z.string().trim().min(1).max(4096).optional().describe("Idem, se o sistema deu um segredo. Entra CIFRADO e nunca volta."),
+    escopos: z.array(z.string().trim().min(1).max(128)).max(50).optional().describe('Só com "oauth_por_contato": os escopos pedidos na autorização (ex.: ["pedidos:ler"]).'),
+    escrita_delegada: z
+      .boolean()
+      .optional()
+      .describe('Só com "oauth_por_contato". Ligada, a ferramenta marcada como escrita (`leitura: false`) pode ser chamada na conversa COM A CREDENCIAL DO CONTATO. Nasce desligada.'),
+    retencao_horas: z
+      .number()
+      .int()
+      .min(0)
+      .max(720)
+      .optional()
+      .describe("Quantas horas o acesso do contato dura depois de a conversa ser encerrada (0, o padrão: revoga no encerramento)."),
+    ativo: z.boolean().optional().describe("false guarda o cadastro sem usar o servidor. Padrão: true."),
+    ferramentas: z
+      .array(ferramentaRemota)
+      .max(30)
+      .optional()
+      .describe("A lista INTEIRA das ferramentas DESTE servidor que o agente usa (substitui as dele; [] tira todas). Vai para o RASCUNHO."),
+    apagar: z.boolean().optional().describe("true tira o servidor do agente (os acessos dos contatos são revogados antes). Os outros campos são ignorados."),
+  })
+  .strict();
+
+/** 9095 — o que vai para a trilha: nada de chave nem segredo, e o endereço só como host. */
+function redigirAgenteParaAuditoria(args: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(args.servidores_mcp)) return args;
+  return {
+    ...args,
+    servidores_mcp: (args.servidores_mcp as Array<Record<string, unknown>>).map((s) => ({
+      ...s,
+      ...(typeof s.endereco === "string" ? { endereco: hostDoEndpoint(s.endereco) } : {}),
+      ...(s.chave !== undefined ? { chave: "[redigida]" } : {}),
+      ...(s.oauth_client_secret !== undefined ? { oauth_client_secret: "[redigido]" } : {}),
+    })),
+  };
+}
+
 export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
   {
     name: "plataforma_garantir_agente",
     description:
       "Cria ou altera um AGENTE DE IA de um cliente: o nome, o PROMPT, as capacidades (por pacote), os funis em que ele pode mexer, os materiais que consulta, " +
-      "os follow-ups que arma, as palavras que passam a conversa para uma pessoa, se o assunto jurídico passa a conversa para uma pessoa, o HORÁRIO DE ATENDIMENTO DA IA (as faixas por dia em que ela fica ativa; fora delas ela não responde e a conversa é da equipe), o limiar de sentimento e o número de WhatsApp. " +
+      "os follow-ups que arma, as palavras que passam a conversa para uma pessoa, se o assunto jurídico passa a conversa para uma pessoa, o HORÁRIO DE ATENDIMENTO DA IA (as faixas por dia em que ela fica ativa; fora delas ela não responde e a conversa é da equipe), o limiar de sentimento, o número de WhatsApp, a PAUSA entre respostas, se ele VÊ AS FOTOS do cliente, QUAIS SKILLS ele usa e por quais ETIQUETAS cada skill entra. " +
       "O que esta ferramenta grava é um RASCUNHO: nada muda no atendimento até plataforma_publicar_agente. " +
-      "As exceções são do CADASTRO do agente e valem na hora: `nome`, `descricao`, `prioridade`, `limiar_de_sentimento` e `servidor_mcp_externo.no_atendimento`. " +
+      "As exceções são do CADASTRO do agente e valem na hora: `nome`, `descricao`, `prioridade`, `limiar_de_sentimento`, `servidor_mcp_externo.no_atendimento` e o cadastro dos `servidores_mcp` (as ferramentas deles vão para o rascunho). " +
+      "E `skills_por_etiqueta` é da SKILL: vale na hora para todo agente que usa a skill. " +
       "ATENÇÃO: `bloquear_afirmacao_clinica` é da EMPRESA, não do agente: liga ou desliga a proteção para TODOS os agentes do cliente, na hora. Só faz sentido em clínica e consultório. " +
       "GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é o NOME do agente. Agente novo nasce com a versão 1 em rascunho; " +
       "agente com rascunho tem o rascunho atualizado; agente só com versão publicada ganha um rascunho novo. " +
@@ -158,6 +233,53 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
         .nullable()
         .optional()
         .describe("Quanto esperar o cliente terminar de mandar várias mensagens seguidas antes de responder, em milissegundos. null = o padrão da instalação."),
+      // Upstream 1.101 a 1.107 (9101, 9107, 9108, 9230).
+      pausa_entre_respostas_segundos: z
+        .number()
+        .int()
+        .min(0)
+        .max(600)
+        .nullable()
+        .optional()
+        .describe(
+          "A PAUSA mínima, em segundos, entre uma resposta da IA e a próxima na MESMA conversa: o que o cliente escrever nesse meio-tempo é respondido junto. " +
+            "De 0 a 600 (10 minutos), como na tela. null ou 0 = sem pausa (o padrão). É do RASCUNHO: vale depois de publicar.",
+        ),
+      ver_fotos_do_cliente: z
+        .boolean()
+        .optional()
+        .describe(
+          "O agente VÊ as fotos que o cliente envia (entende o que a foto mostra). Padrão: sim. Cada foto descrita é uma chamada paga a um modelo de IA com visão. " +
+            "false: ele sabe que chegou uma foto, mas não vê o que ela mostra, e pode pedir que o cliente conte. PDF não muda. É do RASCUNHO.",
+        ),
+      skills: z
+        .array(z.string().trim().min(1).max(120))
+        .max(100)
+        .nullable()
+        .optional()
+        .describe(
+          "QUAIS skills este agente usa, pelo nome (a lista em plataforma_ver_agentes, `skills_da_empresa`). " +
+            "null = TODAS as da empresa e da plataforma (o padrão); [] = nenhuma; nomes = só estas. A lista vem INTEIRA. É do RASCUNHO: vale depois de publicar.",
+        ),
+      skills_por_etiqueta: z
+        .array(
+          z
+            .object({
+              skill: z.string().trim().min(1).max(120).describe("O nome de uma skill INSTALADA na empresa."),
+              etiquetas: z
+                .array(z.string().trim().min(1).max(40))
+                .max(TETO_DE_ETIQUETAS_DA_SKILL)
+                .describe("A lista INTEIRA de etiquetas que fazem a skill entrar ([] tira todas). Cada uma tem de existir na empresa."),
+            })
+            .strict(),
+        )
+        .max(50)
+        .optional()
+        .describe(
+          "Por quais ETIQUETAS cada skill entra: se a conversa ou o contato tiver uma delas, a skill entra mesmo sem a palavra-chave (serve para a prospecção, em que o cliente quase nunca escreve o nome do ramo). " +
+            "ATENÇÃO: é da SKILL, não do agente: vale NA HORA, sem publicar, para todo agente que usa a skill. " +
+            "A etiqueta tem de existir na empresa (crie antes com plataforma_garantir_etiquetas); a skill tem de estar instalada nela (a de plataforma se instala na tela Skills).",
+        ),
       horario_de_atendimento: z
         .union([horarioDaIa, faixaNoFormatoAntigo])
         .nullable()
@@ -249,7 +371,21 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
         .optional()
         .describe(
           "As ferramentas do SERVIDOR MCP EXTERNO da empresa (cadastrado por plataforma_configurar_servidor_mcp_externo) que este agente pode usar. " +
+            "`no_atendimento` vale também para os `servidores_mcp` deste agente com \"nenhuma\" ou \"chave_estatica\". " +
             "Recusado na empresa de demonstração.",
+        ),
+      // 9095 — os servidores MCP DO AGENTE (upstream), ao lado do da empresa.
+      servidores_mcp: z
+        .array(servidorMcpDoAgente)
+        .min(1)
+        .max(LIMITE_DE_SERVIDORES_POR_AGENTE * 2)
+        .optional()
+        .describe(
+          `Os SERVIDORES MCP DESTE agente (até ${LIMITE_DE_SERVIDORES_POR_AGENTE}), ao lado do servidor da empresa: a mesma seção "Servidores MCP" da tela do agente. ` +
+            "Cada item LIGA (nome novo, com `endereco` e `autenticacao`), TROCA (nome que já existe: só os campos que vieram mudam) ou TIRA (`apagar: true`) um servidor pelo NOME. Servidor que não veio fica como está. " +
+            "O cadastro vale na hora; as `ferramentas` de cada um vão para o RASCUNHO. A chave e o segredo nunca voltam: a resposta e plataforma_ver_agentes dizem só se estão configurados (e os 4 últimos da chave). " +
+            'OAUTH POR CONTATO: o sistema faz a descoberta e, se o sistema de fora aceitar, o registro automático do aplicativo. O que é de uma PESSOA volta em `com_o_humano`, e o MCP não tenta fazer: registrar o aplicativo à mão (quando não há registro automático; aí o servidor NÃO é gravado e a resposta traz o endereço de retorno a registrar) e a autorização de cada contato, no navegador. ' +
+            'Precisa do módulo opcional "Servidores MCP por agente" ligado na instalação (quem opera a plataforma liga; nasce desligado). Recusado na empresa de demonstração (tirar vale).',
         ),
     },
     exemplo: {
@@ -270,6 +406,8 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
       },
     },
     operacao: "implantar_configuracao",
+    // 9095 — a chave e o segredo dos servidores do agente NUNCA vão para a trilha.
+    redigirParaAuditoria: redigirAgenteParaAuditoria,
     handler: async (ctx, args) => {
       const { c, org } = await alvo(ctx, args);
       const { organization_id: _org, ...pedido } = args;

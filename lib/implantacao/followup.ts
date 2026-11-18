@@ -90,7 +90,7 @@ export const GATILHOS_COM_MOTOR: readonly string[] = [
 ];
 
 const COLUNAS_DO_FLUXO =
-  "id, name, status, active_version_id, draft_graph, handoff_policy, trigger_config, surface, created_at, updated_at";
+  "id, name, status, active_version_id, draft_graph, handoff_policy, send_when_assigned, trigger_config, surface, created_at, updated_at";
 
 export interface LinhaDoFluxo {
   id: string;
@@ -99,6 +99,8 @@ export interface LinhaDoFluxo {
   active_version_id: string | null;
   draft_graph: FlowGraph | null;
   handoff_policy: string;
+  /** Upstream 1.107 (#3974): enviar mesmo com a conversa atribuída a uma pessoa. O banco nasce `false`. */
+  send_when_assigned?: boolean | null;
   trigger_config: TriggerConfig | null;
   surface: string | null;
   updated_at: string;
@@ -137,6 +139,14 @@ export interface PedidoDeFollowup {
   cancelar_ao_responder?: boolean;
   /** O que acontece com o fluxo quando uma pessoa assume a conversa. */
   quando_humano_assume?: "pause" | "cancel" | "allow";
+  /**
+   * Upstream 1.107 (#3974): a coluna `send_when_assigned`, "enviar mesmo com a
+   * conversa atribuída a uma pessoa". Sem o campo, o fluxo novo nasce com o
+   * padrão do banco (desligado), como na tela. O motor lê a coluna do próprio
+   * fluxo na hora do envio (`lib/followup/envio-com-o-dono.ts`), então ela vale
+   * na hora, como a regra de quando uma pessoa assume.
+   */
+  enviar_com_conversa_atribuida?: boolean;
   /**
    * Para gatilho de silêncio: o fluxo só começa enquanto o silêncio for
    * RECENTE (entre `silencio_minutos` e este teto). `null` tira o teto.
@@ -639,6 +649,8 @@ export async function garantirFollowup(c: Implantacao, pedido: PedidoDeFollowup)
         draft_graph: grafo,
         trigger_config: gatilho,
         handoff_policy: pedido.quando_humano_assume ?? modelo.handoffPolicy,
+        // Sem o campo, a coluna fica com o padrão do banco (desligado), como na tela.
+        ...(pedido.enviar_com_conversa_atribuida !== undefined ? { send_when_assigned: pedido.enviar_com_conversa_atribuida } : {}),
       })
       .select(COLUNAS_DO_FLUXO)
       .single();
@@ -691,19 +703,29 @@ export async function garantirFollowup(c: Implantacao, pedido: PedidoDeFollowup)
   if (pedido.quando_humano_assume !== undefined && pedido.quando_humano_assume !== existente.handoff_policy) {
     patch.handoff_policy = pedido.quando_humano_assume;
   }
+  if (
+    pedido.enviar_com_conversa_atribuida !== undefined &&
+    pedido.enviar_com_conversa_atribuida !== (existente.send_when_assigned === true)
+  ) {
+    patch.send_when_assigned = pedido.enviar_com_conversa_atribuida;
+  }
   const mudancas = [
     ...mudancasDoGrafo,
     ...mudancasDoGatilho,
     ...(patch.handoff_policy ? ["quando uma pessoa assume"] : []),
+    ...(patch.send_when_assigned !== undefined ? ["enviar com a conversa atribuída"] : []),
   ];
 
   // O texto de um fluxo publicado muda no RASCUNHO e só vale depois de publicar.
   // O gatilho e a política moram no próprio fluxo e valeriam na hora: num fluxo
   // que está no ar, isso é mexer no que fala com o cliente final, e montar não
   // faz isso.
-  if (existente.status === "active" && (patch.trigger_config !== undefined || patch.handoff_policy !== undefined)) {
+  if (
+    existente.status === "active" &&
+    (patch.trigger_config !== undefined || patch.handoff_policy !== undefined || patch.send_when_assigned !== undefined)
+  ) {
     throw new Recusa(
-      `O fluxo «${existente.name}» está publicado, e o gatilho e a regra de quando uma pessoa assume valem na hora. ` +
+      `O fluxo «${existente.name}» está publicado, e o gatilho, a regra de quando uma pessoa assume e o envio com a conversa atribuída valem na hora. ` +
         "Desligue o fluxo (plataforma_publicar_followup com `ativo: false`), ajuste e publique de novo.",
     );
   }

@@ -410,6 +410,10 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     "mia_travas_de_robo",
     // .109 — os itens do negócio (9160).
     "mia_itens_do_negocio",
+    // 9162 — a coexistência do WhatsApp.
+    "mia_coexistencia_conexoes",
+    "mia_coexistencia_sincronizacoes",
+    "mia_coexistencia_lotes",
   ].map((tabela) => ({
     tabela,
     razao:

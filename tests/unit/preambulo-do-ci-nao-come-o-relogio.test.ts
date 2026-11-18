@@ -72,7 +72,7 @@ const TETOS: Record<string, { minutos: number; razao: string }> = {
   // lê o desfecho de `needs`. O teto que denuncia a suíte crescendo vive na perna
   // que a roda.
   "ci.yml::invariants-majors": {
-    minutos: 45,
+    minutos: 60,
     razao:
       "a perna deixou de ser UMA passada: agora é `test:db` + `test:db:update`, e cada uma sobe " +
       "Postgres e aplica o baseline (p90 medido de uma passada: 325s). O 30 era DECLARADO, não " +
@@ -81,7 +81,11 @@ const TETOS: Record<string, { minutos: number; razao: string }> = {
       "45 com ok do dono (doc de decisão 302). Se voltar a bater no teto, a pergunta é por que a " +
       "passada cresceu, não subir de novo. FORK MIA (.101), MEDIDO: na ponta da .100 a perna do " +
       "pg15 levou 28,5 min; no PR da .101 morreu por relógio duas vezes seguidas com 523 dos 597 " +
-      "arquivos verdes e nenhum vermelho (o pg17 passou inteiro)",
+      "arquivos verdes e nenhum vermelho (o pg17 passou inteiro). FORK MIA (.110), MEDIDO (tempo " +
+      "do job, 17/11/2026): na ponta do #86 (d71628e7e) pg15 e pg17 levaram 36 min, na " +
+      "repetição; na main da .110 (268f0552d) o pg15 passou com 44 min e o pg17 foi cortado aos " +
+      "45; no PR #89 o pg17 foi cortado aos 45 nas duas rodadas seguidas. Daí 60, provisório " +
+      "até a fusão MIA-12",
   },
 };
 

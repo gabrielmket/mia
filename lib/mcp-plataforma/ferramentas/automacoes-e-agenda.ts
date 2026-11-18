@@ -3,8 +3,9 @@
  * `lib/implantacao/automacoes.ts` e `lib/implantacao/agenda.ts`.
  *
  * Em cada área há duas operações do token: criar e ajustar é montagem
- * (`implantar_configuracao`); LIGAR a regra e LIGAR o lembrete fazem o sistema
- * passar a agir sozinho com o cliente final, e são `colocar_no_ar`.
+ * (`implantar_configuracao`); LIGAR a regra, LIGAR o lembrete e LIGAR a lista
+ * de espera fazem o sistema passar a agir sozinho com o cliente final, e são
+ * `colocar_no_ar`.
  */
 import { z } from "zod";
 
@@ -20,6 +21,7 @@ import {
   type TipoPedido,
 } from "@/lib/implantacao/agenda";
 import { garantirAutomacao, ligarAutomacao, type PedidoDeAutomacao } from "@/lib/implantacao/automacoes";
+import { configurarListaDeEspera } from "@/lib/implantacao/lista-de-espera";
 import { garantirPlanosDeTarefa, TETO_DE_PASSOS, TETO_DE_PLANOS, type PlanoPedido } from "@/lib/implantacao/planos-de-tarefa";
 import { GATILHOS_OFERECIDOS } from "@/lib/schemas/webhooks";
 import { PRIORIDADES_DA_TAREFA } from "@/lib/tarefas/tipos";
@@ -243,7 +245,8 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
       "Toda organização nasce com três tipos de exemplo: confira em plataforma_ver_configuracao, seção agenda, antes de criar. " +
       "Categorias e locais aceitos: plataforma_listar_modelos, seção agenda. " +
       "`canal_do_lembrete` escolhe o NÚMERO que manda o lembrete do tipo: com 2 ou mais números na empresa, sem ele o lembrete de compromisso marcado sem conversa fica pendente (a resposta avisa). " +
-      "O QUE NÃO FAZ: não liga o lembrete (plataforma_ligar_lembrete), não desativa nem reativa tipo, não define a jornada de ninguém (plataforma_definir_jornada), " +
+      "`modelo_do_lembrete` escolhe o MODELO APROVADO da Meta que leva o lembrete quando a janela de 24 h do cliente fechou (número oficial): só entre os aprovados do número que manda o lembrete (plataforma_ver_configuracao, seção modelos_aprovados). " +
+      "O QUE NÃO FAZ: não liga o lembrete (plataforma_ligar_lembrete), não cria nem submete modelo à Meta, não escolhe o modelo do aviso à equipe (é pela tela Aviso no WhatsApp, que pede a verificação em duas etapas), não desativa nem reativa tipo, não define a jornada de ninguém (plataforma_definir_jornada), " +
       "não cria tipo com Microsoft Teams e não mexe nos prazos da agenda (esses são pela tela: Configurações › Agenda).",
     inputSchema: {
       organization_id: ORGANIZACAO,
@@ -291,6 +294,18 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
                 .describe(
                   "true: o evento do Google deste tipo leva na descrição os dados do negócio (contato, etapa, valor) para quem atende conferir. " +
                     "Nasce desligado: é dado do cliente indo ao Google, então só ligue com o combinado do cliente.",
+                ),
+              // Upstream 1.100 (9092): o lembrete por modelo aprovado fora da janela de 24 h.
+              modelo_do_lembrete: z
+                .string()
+                .trim()
+                .max(200)
+                .nullable()
+                .optional()
+                .describe(
+                  "Id ou nome de um modelo APROVADO do número que manda o lembrete: sai quando a janela de 24 h do cliente fechou (no número oficial, fora dela só modelo). " +
+                    "As variáveis do corpo recebem, nesta ordem: {{1}} primeiro nome, {{2}} dia e hora, {{3}} título, {{4}} endereço. null tira (fora da janela o lembrete não sai e a equipe é avisada). " +
+                    "Recusa modelo não aprovado, de outro número ou com variável que o lembrete não preenche.",
                 ),
             })
             .strict(),
@@ -379,6 +394,44 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
       const { c } = await alvo(ctx, args);
       const { organization_id: _org, ...pedido } = args;
       return ligarLembrete(c, pedido as unknown as PedidoDeLembrete);
+    },
+  },
+
+  // Upstream 1.105 (9235, #3414, doc 208): a lista de espera é módulo opcional, e os prazos são da EMPRESA.
+  {
+    name: "plataforma_configurar_lista_de_espera",
+    description:
+      "LIGA ou desliga a LISTA DE ESPERA da agenda de um cliente e escolhe os três prazos da oferta. Ligada, quando um horário abre (alguém desmarcou), " +
+      "o sistema OFERECE a vaga pelo WhatsApp a uma pessoa da fila por vez, entre quem aceitou ser avisado, e segura a vaga até ela responder. " +
+      "É por EMPRESA, não por tipo: quem entra na fila escolhe o serviço na inscrição. " +
+      "Os três prazos não têm padrão: para ligar pela primeira vez, mande os três. Depois, o que não vier fica o gravado. Chamar de novo com o mesmo pedido responde `ja_estava`. " +
+      "MÓDULO OPCIONAL: sem o módulo instalado nesta instalação, a ferramenta recusa com \"módulo não instalado\" e NÃO instala (quem instala é uma pessoa, em Admin › Módulos). " +
+      "ANTES DE LIGAR: confirme com o humano, porque a oferta é mensagem para o cliente final. " +
+      "O QUE NÃO FAZ: não inscreve ninguém na fila (a inscrição pede o aceite da pessoa e é pela tela Agenda › Lista de espera), " +
+      "e não configura LUGAR com capacidade (mesa, camarote, quadra), que é da programação do serviço na tela (Configurações › Agenda › Configurar); a leitura mostra os lugares em plataforma_ver_configuracao, seção agenda.",
+    inputSchema: {
+      organization_id: ORGANIZACAO,
+      ligada: z.boolean().describe("true liga, false desliga. Desligar mantém os prazos gravados."),
+      prazo_maximo_minutos: z.number().int().min(1).max(1440).optional().describe("Quanto tempo, no máximo, a vaga fica segurada para uma pessoa responder (1 a 1440)."),
+      margem_antes_minutos: z.number().int().min(0).max(1440).optional().describe("A folga entre o fim do prazo da oferta e o início do horário (0 a 1440)."),
+      prazo_minimo_minutos: z
+        .number()
+        .int()
+        .min(1)
+        .max(1440)
+        .optional()
+        .describe("Prazo menor que este não dá tempo de responder: a vaga nem é oferecida. Não pode passar do máximo."),
+    },
+    exemplo: { organization_id: ORG_DE_EXEMPLO, ligada: true, prazo_maximo_minutos: 120, margem_antes_minutos: 60, prazo_minimo_minutos: 15 },
+    operacao: "colocar_no_ar",
+    handler: async (ctx, args) => {
+      const { c } = await alvo(ctx, args);
+      return configurarListaDeEspera(c, {
+        ligada: args.ligada === true,
+        prazo_maximo_minutos: args.prazo_maximo_minutos as number | undefined,
+        margem_antes_minutos: args.margem_antes_minutos as number | undefined,
+        prazo_minimo_minutos: args.prazo_minimo_minutos as number | undefined,
+      });
     },
   },
 ];

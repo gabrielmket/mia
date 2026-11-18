@@ -83,7 +83,7 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Relido na .72 (upstream 1.70, #2028): só a autenticação mudou (sessão OU token dsk_, resolveAuthDual). Nenhuma regra nova para o espelho.
   // Relido na fusão da 1.116: a instalação saiu da rota para `lib/followup/instalar-modelo.ts`, com as mesmas recusas (modelo, etapa ausente, arquivada) e a mesma gravação. O espelho segue igual: nada a levar.
   { rota: "app/api/v1/ai/followup-flows/from-model/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "b8c2c62e18ba713b" },
-  // Relido na fusão da 1.107 (#3974): a leitura ganhou `send_when_assigned` (enviar mesmo com a conversa atribuída). O espelho não grava a coluna, então a régua montada por ele nasce com o padrão do banco (desligado), como na tela. A chave pela ferramenta fica como falta no MCP.
+  // Relido na fusão da 1.107 (#3974): a leitura ganhou `send_when_assigned` (enviar mesmo com a conversa atribuída). Sem o campo, o espelho não grava a coluna, e a régua montada por ele nasce com o padrão do banco (desligado), como na tela. Desde a MIA-21 a ferramenta liga e desliga a chave (`enviar_com_conversa_atribuida`), com a mesma recusa do gatilho num fluxo publicado, e a cópia leva a chave, como a importação da tela.
   { rota: "app/api/v1/ai/followup-flows/[id]/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "b5771838c23bb67a" },
   // Relido na .84 (upstream 1.86, #3056 e #3048): a publicação confere os modelos de mensagem citados (carregaModelosCitados, modelo inexistente nesta conta é recusado) e devolve os AVISOS do gatilho de silêncio (avisosDoGatilho). O espelho (publicarFollowup) faz as duas coisas e devolve os avisos em `avisos`.
   { rota: "app/api/v1/ai/followup-flows/[id]/publish/route.ts", espelho: "lib/implantacao/followup.ts", impressao: "c669f202a47bde3d" },
@@ -135,6 +135,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Espelhado na .81 (upstream v1.83, #2147/#2948): o servidor MCP externo, com o guard anti-SSRF, a chave cifrada nas colunas e a auditoria só com o host. A recusa da demonstração é NOSSA nos dois lados.
   // Relido na fusão da 1.116: a tela ganhou a lista de escritas liberadas da conexão (`escritasLiberadasConexao`, `curinga_nao_aceito`). O espelho não mexe nela, e `mesclarServidorMcpExterno` preserva o resto do `settings`: nada a levar. A lista fica para a tarefa do que falta no MCP.
   { rota: "app/actions/settings/definirServidorMcpExterno.ts", espelho: "lib/implantacao/servidor-mcp-externo.ts", impressao: "6ce142d287866660" },
+  // Espelhado com a fusão 1.100 a 1.107 (upstream 9095): os servidores MCP por agente, com o OAuth por contato. O espelho é o `servidores_mcp` de plataforma_garantir_agente: as mesmas peças (cifra, `chave_last4`, revogação quando a origem dos tokens muda, slug estável, teto por agente) e as mesmas auditorias, só com o host.
+  { rota: "app/actions/agents/servidoresMcpDoAgente.ts", espelho: "lib/implantacao/servidores-mcp-do-agente.ts", impressao: "7746c0f49e6c8702" },
   // Espelhado na .76 (upstream 1.76, #2367): o freio do passo "a IA decide", com a mescla nos dois níveis de settings e a mesma auditoria.
   { rota: "app/actions/settings/definirAiDecideDaEmpresa.ts", espelho: "lib/implantacao/empresa.ts", impressao: "8168719014b15dca" },
   // Espelhado na .76 (upstream 1.77, #1752): os planos de tarefa, conferidos por planosSchema, em settings.task_plans.
@@ -182,6 +184,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/api/v1/settings/assinatura/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "9802b14502f9d3fa" },
   // Jornada de quem atende.
   { rota: "app/api/v1/attendants/availability/[user_id]/route.ts", espelho: "lib/implantacao/agenda.ts", impressao: "de0c21f50707a594" },
+  // Espelhado na MIA-18 (upstream 1.105, 9235, doc 208): os prazos e a chave da lista de espera. O espelho segue o PATCH: o mesmo configDaListaDeEsperaSchema, a mesma chave settings.lista_de_espera e a auditoria agenda.lista_de_espera_configurada; o módulo não instalado, que na rota é 404, vira a recusa "módulo não instalado". A inscrição (POST) fica na tela: pede o aceite da pessoa.
+  { rota: "app/api/v1/agenda/lista-de-espera/route.ts", espelho: "lib/implantacao/lista-de-espera.ts", impressao: "a5c4b357a7291be5" },
   // Respostas prontas e modelo oficial do WhatsApp.
   // Relido na .81 (upstream 1.81, #2526): `midias` nasce vazia no POST, o PATCH remove pela lista que fica (conferida, e o arquivo sai do bucket só depois da linha) e o upload é a rota /midias. O espelho ganhou `imagens`: a lista inteira por endereço, baixada e conferida pelos bytes, com o nome tirado do conteúdo (repetir não empilha), e as mesmas auditorias.
   // Relido na .86 (upstream 1.88, #3244, 0729; 1.87, #2833): a resposta nova nasce no TOPO (`ordem`, um passo acima da primeira) e a mídia pode ser áudio. O espelho grava a `ordem` das novas no topo, na ordem do pedido; as imagens seguem conferidas pelo farejador da imagem (áudio fica na tela).
