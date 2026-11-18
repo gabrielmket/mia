@@ -105,6 +105,29 @@ const sessao = (b: ReturnType<typeof banco>) => b.tabela("channel_sessions")[0]!
 const avisos = (b: ReturnType<typeof banco>, status?: string) =>
   b.tabela("agent_inbox_items").filter((a) => !status || a.status === status);
 
+/** A próxima escrita (`update`) em `channel_sessions` falha UMA vez: a queda curta do banco no meio da volta. */
+function falharUmaVezAEscritaDaSessao(b: ReturnType<typeof banco>) {
+  const cliente = b.cliente as { from: (t: string) => Record<string, unknown> };
+  const original = cliente.from;
+  let falhou = false;
+  cliente.from = (t: string) => {
+    const q = original(t);
+    if (t !== "channel_sessions" || falhou) return q;
+    return {
+      ...q,
+      update: () => {
+        falhou = true;
+        const queda: Record<string, unknown> = {
+          eq: () => queda,
+          select: () => queda,
+          then: (ok: (r: unknown) => unknown) => Promise.resolve(ok({ data: null, error: { message: "queda curta" } })),
+        };
+        return queda;
+      },
+    };
+  };
+}
+
 describe("a leitura do account_update (pura)", () => {
   it("PARTNER_REMOVED: a WABA, o motivo, quem iniciou e o time do evento", () => {
     const [l] = leiturasDaConta(PARTNER_REMOVED() as never);
@@ -293,5 +316,26 @@ describe("a volta, sem duplicar nada", () => {
     expect(avisos(b, "open").map((a) => a.title)).toEqual(["+5531900000002 fora do ar"]);
     expect(String(avisos(b, "open")[0]!.body)).toContain("30 dias");
     expect(ciclo(b)).toMatchObject({ estado: "fora_do_ar", fora_do_ar_motivo: "COMPANION_INACTIVITY" });
+  });
+
+  it("a volta que falhou no meio: a reentrega do mesmo ACCOUNT_RECONNECTED põe a sessão no ar e fecha o aviso", async () => {
+    const b = banco();
+    await receber(b, PARTNER_REMOVED(T0));
+    falharUmaVezAEscritaDaSessao(b);
+    expect(await receber(b, ACCOUNT_RECONNECTED(T0 + 60))).toEqual(["conta:failed"]);
+    // O defeito: o ciclo diz "de volta", mas a sessão ficou parada e o aviso, aberto.
+    expect(ciclo(b).estado).toBe("no_ar");
+    expect(sessao(b)).toMatchObject({ status: "STOPPED", status_reason: MOTIVO_DA_SESSAO_FORA_DO_AR });
+
+    expect(await receber(b, ACCOUNT_RECONNECTED(T0 + 60))).toEqual(["conta:voltou_reparado"]);
+    expect(sessao(b)).toMatchObject({ id: SESSAO, status: "WORKING", status_reason: null });
+    expect(avisos(b, "resolved").map((a) => a.title)).toEqual(["+5531900000002 fora do ar"]);
+    expect(avisos(b, "open").map((a) => a.title)).toEqual(["+5531900000002 voltou"]);
+    expect(b.tabela("channel_sessions")).toHaveLength(1);
+    expect(b.tabela("mia_coexistencia_conexoes")).toHaveLength(1);
+
+    // Mais uma reentrega, já curada: nada a fazer, e o aviso de voltou não se repete.
+    expect(await receber(b, ACCOUNT_RECONNECTED(T0 + 60))).toEqual(["conta:ja_no_ar"]);
+    expect(avisos(b, "open")).toHaveLength(1);
   });
 });

@@ -144,6 +144,7 @@ interface CicloVivo {
   channel_session_id: string;
   estado: "no_ar" | "fora_do_ar";
   fora_do_ar_em: string | null;
+  voltou_em: string | null;
   ultimo_evento_em: string | null;
 }
 
@@ -187,7 +188,7 @@ export async function aplicarNaConta(
 ): Promise<string[]> {
   const { data, error } = await admin
     .from("mia_coexistencia_conexoes")
-    .select("id, channel_session_id, estado, fora_do_ar_em, ultimo_evento_em")
+    .select("id, channel_session_id, estado, fora_do_ar_em, voltou_em, ultimo_evento_em")
     .eq("organization_id", organizationId)
     .eq("waba_id", leitura.wabaId)
     .in("estado", ["no_ar", "fora_do_ar"]);
@@ -287,6 +288,20 @@ async function voltar(
       quando,
     );
     if (error) throw new Error(`ciclo_ja_no_ar: ${error.message}`);
+    // A volta que falhou no meio: o ciclo já foi a `no_ar`, mas a escrita da
+    // sessão caiu (e a rota respondeu 200). A reentrega da Meta refaz o passo da
+    // sessão, que só pega a sessão que NÓS tiramos; se ele consertou, refaz o
+    // aviso também. Ciclo que nunca saiu (`voltou_em` nulo) não tem o que curar.
+    if (ciclo.voltou_em && (await reporSessao(admin, organizationId, ciclo, quando))) {
+      await avisarNumeroVoltou(admin, {
+        organizationId,
+        channelSessionId: ciclo.channel_session_id,
+        conexaoId: ciclo.id,
+        voltouEm: ciclo.voltou_em,
+        requestId,
+      });
+      return "conta:voltou_reparado";
+    }
     return "conta:ja_no_ar";
   }
 
@@ -302,15 +317,7 @@ async function voltar(
   if (error) throw new Error(`ciclo_voltou: ${error.message}`);
   if (((data ?? []) as unknown[]).length === 0) return "conta:evento_velho";
 
-  // A MESMA sessão volta a WORKING. Só a que nós tiramos: se o vigia de saúde ou
-  // uma pessoa mudou o estado depois, a decisão é deles.
-  const { error: erroDaSessao } = await admin
-    .from("channel_sessions")
-    .update({ status: "WORKING", status_reason: null, last_status_change_at: quando })
-    .eq("organization_id", organizationId)
-    .eq("id", ciclo.channel_session_id)
-    .eq("status_reason", MOTIVO_DA_SESSAO_FORA_DO_AR);
-  if (erroDaSessao) throw new Error(`sessao_voltou: ${erroDaSessao.message}`);
+  await reporSessao(admin, organizationId, ciclo, quando);
 
   await avisarNumeroVoltou(admin, {
     organizationId,
@@ -320,4 +327,21 @@ async function voltar(
     requestId,
   });
   return "conta:voltou";
+}
+
+/**
+ * A MESMA sessão volta a WORKING. Só a que nós tiramos: se o vigia de saúde ou
+ * uma pessoa mudou o estado depois, a decisão é deles. Devolve se alguma linha
+ * mudou (a cura da reentrega usa isso). Lança se o banco falhar.
+ */
+async function reporSessao(admin: Admin, organizationId: string, ciclo: CicloVivo, quando: string): Promise<boolean> {
+  const { data, error } = await admin
+    .from("channel_sessions")
+    .update({ status: "WORKING", status_reason: null, last_status_change_at: quando })
+    .eq("organization_id", organizationId)
+    .eq("id", ciclo.channel_session_id)
+    .eq("status_reason", MOTIVO_DA_SESSAO_FORA_DO_AR)
+    .select("id");
+  if (error) throw new Error(`sessao_voltou: ${error.message}`);
+  return ((data ?? []) as unknown[]).length > 0;
 }

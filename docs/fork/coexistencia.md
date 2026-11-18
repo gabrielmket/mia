@@ -288,6 +288,14 @@ Evento com `time` menor que o `ultimo_evento_em` do ciclo não muda nada (a volt
 não tira do ar); empate aplica. A volta com o número já no ar só guarda o `time`. WABA sem ciclo vivo (número do canal
 oficial que não entrou pelo app) não muda nada.
 
+A volta que falha no meio se cura na reentrega. Se o ciclo já foi a `no_ar` e a escrita da sessão caiu, o desfecho é
+`conta:failed` e a rota responde 200. Quando a Meta entrega o mesmo evento de novo, ele cai no ramo "já no ar". Lá, se o
+ciclo tem `voltou_em`, o passo da sessão roda de novo, e ele só pega a sessão com o nosso `status_reason`. Se esse passo
+mudou alguma linha, o aviso de "voltou" também é refeito, e o desfecho é `conta:voltou_reparado`. Se não mudou nada, o
+desfecho é `conta:ja_no_ar`, e o "voltou" que a equipe já fechou não reabre. A saída já se curava assim: o ramo "já
+fora do ar" repete a sessão e o aviso. A rota continua respondendo 200 em `conta:failed`; sem a reentrega, o caso fica
+no log de erro (`saída ou volta do número não aplicada`).
+
 Com a sessão fora de `WORKING`, o que já existe do upstream passa a valer sem encaixe: o envio para, e a conversa
 mostra a faixa de número fora do ar (`components/inbox/NumeroForaDoAr.tsx`). `lib/channels/historico/quedas.ts`
 filtra `provider = waha`, então a saída não abre a recuperação de queda do QR (conferido na S4).
@@ -347,7 +355,8 @@ ou pôr o número no ar é da Meta e do dono no app, e conectar de novo é crede
 
 - `tests/unit/coexistencia-saida-e-volta.test.ts`: a leitura dos três eventos (os seis motivos, motivo desconhecido, sem
   `time`), a saída com UM aviso e a reentrega, a volta sem nenhuma escrita em contato, conversa, cartão, sessão ou ciclo
-  novos, os eventos fora de ordem nos dois sentidos, a sessão que outro tirou do ar, WABA sem ciclo.
+  novos, os eventos fora de ordem nos dois sentidos, a sessão que outro tirou do ar, WABA sem ciclo, e a volta que falhou
+  na escrita da sessão e se cura na reentrega do mesmo evento.
 - `tests/unit/meta-edicao-e-apagar.test.ts`: a leitura nos dois campos (texto e legenda), a edição (reentrega, edição
   velha, sem texto, sem alvo) e o apagar (linha e corpo ficam, prévia, uma trilha só, a do app, sem alvo).
 - `tests/invariants/coexistencia-saida-e-volta.test.ts`, contra o banco: sair e voltar pelo aviso da Meta e pela janela
