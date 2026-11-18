@@ -177,7 +177,7 @@ CRONS="
 0 * * * *|90|api/v1/cron/varredura-de-avisos
 # A COEXISTÊNCIA DO WHATSAPP (FORK MIA, docs/fork/coexistencia.md). De 5 em 5
 # minutos porque o prazo da Meta para pedir os contatos e o histórico é de 24 h
-# depois da conexão, e o pedido parado no meio precisa virar "sem resposta" (com
+# depois da conexão, e o pedido parado no meio precisa virar sem resposta (com
 # aviso) enquanto ainda dá para alguém decidir. Barato: só olha pedido em aberto,
 # ciclo dos últimos 3 dias e lote parado. Nunca pede à Meta duas vezes.
 */5 * * * *|60|api/v1/cron/coexistencia

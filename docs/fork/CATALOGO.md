@@ -786,13 +786,14 @@ o canal por QR do mesmo número sai do ar (D5). Saída e volta (S4) ainda não. 
 `lib/channels/meta/coexistencia/` (S2: `historico.ts`, `mapear.ts`, `estado.ts`, `receber.ts`, `contatos.ts`,
 `gravar-lote.ts`, `lote.handler.ts`; S3: `chave.ts`, `ligar.ts`, `janela.ts`, `conectar.ts`, `sincronizacao.ts`,
 `sincronizacao.handler.ts`, `avisos.ts`, `qr-do-mesmo-numero.ts`, `leitura.ts`, `varredura.ts`),
-`components/connections/coexistencia/`, `components/admin/coexistencia/`, `lib/mcp-plataforma/ferramentas/coexistencia.ts`.
+`components/connections/coexistencia/`, `components/admin/coexistencia/` (na tela pelo layout do fork
+`app/admin/(protected)/meta/layout.tsx`), `lib/mcp-plataforma/ferramentas/coexistencia.ts`.
 
 **Pontos de encaixe** (todos `FORK MIA`): `app/api/v1/webhooks/meta/[token]/route.ts` (a chamada a
 `receberHistoricoDaMeta` logo depois de nascer `desfechos`, e `ingerirContatoDoAppContando` no lugar de
 `ingestMetaAppContactSync`), `lib/channels/consumidores.ts` (o `loteDoHistoricoHandler` e o
 `pedidoDaSincronizacaoHandler`), `components/connections/CanalOficialClient.tsx` (`<ConectarPeloApp />`),
-`app/admin/(protected)/meta/page.tsx` (`<CoexistenciaPorEmpresa />`), `app/api/v1/channel-sessions/[id]/route.ts`
+`app/api/v1/channel-sessions/[id]/route.ts`
 (`barrarQrEmCoexistencia`), `docker/scheduler/entrypoint.sh` (a varredura `api/v1/cron/coexistencia`).
 
 **Protege.** Invariantes `coexistencia-historico-nao-dispara.test.ts` (nada dispara, nada muda na conversa

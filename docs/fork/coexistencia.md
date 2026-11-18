@@ -175,13 +175,12 @@ passagem nova (o cliente saiu do app e voltou), e aí o velho vira `encerrada` e
 | O estado (tela, /admin/meta, MCP) | `lib/channels/meta/coexistencia/leitura.ts` |
 | A varredura de 5 minutos | `lib/channels/meta/coexistencia/varredura.ts`, `app/api/v1/cron/coexistencia` |
 | As rotas | `app/api/v1/channels/official/coexistencia`, `app/api/v1/admin/coexistencia` |
-| A tela | `components/connections/coexistencia/` (SDK em `sdk-da-meta.ts`), `components/admin/coexistencia/` |
+| A tela | `components/connections/coexistencia/` (SDK em `sdk-da-meta.ts`), `components/admin/coexistencia/` (em /admin/meta pelo layout do fork `app/admin/(protected)/meta/layout.tsx`, sem tocar a página do upstream) |
 | O MCP de plataforma | `lib/mcp-plataforma/ferramentas/coexistencia.ts` |
 
 Encaixes `FORK MIA` em arquivos do upstream, um bloco curto cada:
 
 - `components/connections/CanalOficialClient.tsx`: `<ConectarPeloApp />` depois do cartão do canal conectado.
-- `app/admin/(protected)/meta/page.tsx`: `<CoexistenciaPorEmpresa />` abaixo dos cartões de hoje.
 - `app/api/v1/channel-sessions/[id]/route.ts`: `barrarQrEmCoexistencia` onde o número do aparelho do QR é lido e
   gravado (a consulta que a tela de pareamento faz). O QR que acabou de parear um número em coexistência na mesma
   empresa sai do ar, e a rota responde 409 `coexistencia_ativa`.
