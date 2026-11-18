@@ -82,6 +82,10 @@ function dubleAdmin(
       // cortam com `limit`; o `lt` e o `limit` do upstream já servem às duas.
       lt: (coluna: string, valor: string) =>
         consulta(tabela, [...predicados, (l) => String(l[coluna]) < valor], ordem, teto),
+      // Fork MIA (MIA-44): com um mês escolhido, a cotação e a fatura ganham o
+      // limite de cima (`lte` no último dia do período).
+      lte: (coluna: string, valor: string) =>
+        consulta(tabela, [...predicados, (l) => String(l[coluna]) <= valor], ordem, teto),
       // `order` é o que faz o caso "maior prioridade" medir a ROTA e não o
       // dublê: sem ele, o vencedor seria o primeiro do fixture, e a ordem que a
       // rota pede ao banco não estaria sendo exercida.
