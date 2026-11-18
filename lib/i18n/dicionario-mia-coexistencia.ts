@@ -126,4 +126,7 @@ export const DICIONARIO_DA_COEXISTENCIA: Traducoes = {
   "A empresa já tem outro número no canal oficial. Exclua aquele canal em Conexões antes de conectar este.": { es: "La empresa ya tiene otro número en el canal oficial. Elimina ese canal en Conexiones antes de conectar este." },
   "Esta instalação não consegue guardar a credencial cifrada. Fale com o suporte da MIA.": { es: "Esta instalación no puede guardar la credencial cifrada. Habla con el soporte de MIA." },
   "Não foi possível concluir a conexão. Tente de novo em alguns minutos.": { es: "No fue posible concluir la conexión. Intenta de nuevo en unos minutos." },
+  "Este número está conectado pelo app WhatsApp Business (coexistência). Enquanto a coexistência estiver ligada, ele não pode ser conectado por QR.": {
+    es: "Este número está conectado por la app WhatsApp Business (coexistencia). Mientras la coexistencia esté activada, no se puede conectar por QR.",
+  },
 };

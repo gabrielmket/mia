@@ -50,11 +50,14 @@ const db = estado.cliente as Parameters<typeof import("@/lib/channels/meta/coexi
 
 const { conectarPeloApp } = await import("@/lib/channels/meta/coexistencia/conectar");
 const { EVENTO_DA_SINCRONIZACAO } = await import("@/lib/channels/meta/coexistencia/sincronizacao");
+const { barrarQrEmCoexistencia } = await import("@/lib/channels/meta/coexistencia/qr-do-mesmo-numero");
 
 const ALFA = "c0e59164-0000-4000-8000-0000000000c1";
 const BETA = "c0e59164-0000-4000-8000-0000000000c2";
 const ANA = "c0e59164-1111-4000-8000-0000000000c1";
 const QR_DO_MESMO_NUMERO = "c0e59164-4444-4000-8000-0000000000c1";
+const QR_NOVO = "c0e59164-4444-4000-8000-0000000000c2";
+const QR_DE_OUTRO_NUMERO = "c0e59164-4444-4000-8000-0000000000c3";
 const WABA = "987650009164";
 const NUMERO = "123450009164";
 const WABA_DA_BETA = "987650009165";
@@ -212,5 +215,47 @@ describe("a conexão pelo app, com a Meta simulada", () => {
     const r = await conectarPeloApp(db, { ...ENTRADA, organizationId: BETA, wabaId: WABA_DA_BETA }, { fetch: graph });
     expect(r).toMatchObject({ ok: true, cicloNovo: true });
     expect(await sessoesOficiais(BETA)).toHaveLength(1);
+  });
+});
+
+describe("o QR não pareia de novo o número em coexistência (D5)", () => {
+  beforeAll(async () => {
+    for (const [id, nome] of [
+      [QR_NOVO, "qr-novo-academia-alfa-9164"],
+      [QR_DE_OUTRO_NUMERO, "qr-outro-academia-alfa-9164"],
+    ] as const) {
+      await pool.query(
+        `insert into public.channel_sessions (id, organization_id, waha_session_name, webhook_secret_encrypted, status)
+           values ($1, $2, $3, '\\x00'::bytea, 'WORKING') on conflict (id) do nothing`,
+        [id, ALFA, nome],
+      );
+    }
+  });
+
+  it("o QR que acabou de parear o número conectado pelo app sai do ar", async () => {
+    const barrado = await barrarQrEmCoexistencia(db, {
+      organizationId: ALFA,
+      channelSessionId: QR_NOVO,
+      wahaSessionName: "qr-novo-academia-alfa-9164",
+      numeroObservado: "5531900000002",
+      requestId: "inv-9164-qr",
+    });
+    expect(barrado).toBe(true);
+    const { rows } = await pool.query(`select status, archived_at from public.channel_sessions where id = $1`, [QR_NOVO]);
+    expect(rows[0].status).toBe("STOPPED");
+    expect(rows[0].archived_at).not.toBeNull();
+  });
+
+  it("controle: outro número pareia normalmente", async () => {
+    const barrado = await barrarQrEmCoexistencia(db, {
+      organizationId: ALFA,
+      channelSessionId: QR_DE_OUTRO_NUMERO,
+      wahaSessionName: "qr-outro-academia-alfa-9164",
+      numeroObservado: "5531900000003",
+      requestId: "inv-9164-qr",
+    });
+    expect(barrado).toBe(false);
+    const { rows } = await pool.query(`select status, archived_at from public.channel_sessions where id = $1`, [QR_DE_OUTRO_NUMERO]);
+    expect(rows[0]).toEqual({ status: "WORKING", archived_at: null });
   });
 });
