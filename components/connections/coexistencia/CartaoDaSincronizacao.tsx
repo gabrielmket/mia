@@ -122,6 +122,18 @@ export function CartaoDaSincronizacao({ numero, empresa }: { numero: NumeroPeloA
   const nContatos = contatos?.contatosRecebidos ?? 0;
   const nConversas = historico?.conversasRecebidas ?? 0;
   const nMensagens = historico?.mensagensRecebidas ?? 0;
+  const textoDoPedido = t(
+    "A MIA pediu à Meta os contatos ({contatos}) e o histórico ({historico}). Agora é a Meta que manda, em partes. Deixe o app aberto no celular para ajudar.",
+  )
+    .replace("{contatos}", quando(contatos?.pedidaEm ?? null))
+    .replace("{historico}", quando(historico?.pedidaEm ?? null));
+  const textoDaConclusao = t(
+    "Sincronização concluída em {quando}. Chegaram os contatos e as conversas individuais dos últimos 180 dias. Grupos não vêm.",
+  ).replace("{quando}", quando(historico?.concluidaEm ?? null));
+  const textoDasMidias = t("Mídias guardadas: {n} (a Meta só manda mídia das últimas 2 semanas).").replace(
+    "{n}",
+    (historico?.midiasGuardadas ?? 0).toLocaleString(tag),
+  );
 
   return (
     <Card className="p-4" id="sincronizacao" data-testid="coexistencia-sincronizacao">
@@ -142,9 +154,7 @@ export function CartaoDaSincronizacao({ numero, empresa }: { numero: NumeroPeloA
 
       {estado === "pedida" ? (
         <p className="rounded-md border border-border bg-surface-elevated p-3 text-sm">
-          {t("A MIA pediu à Meta os contatos ({contatos}) e o histórico ({historico}). Agora é a Meta que manda, em partes. Deixe o app aberto no celular para ajudar.")
-            .replace("{contatos}", quando(contatos?.pedidaEm ?? null))
-            .replace("{historico}", quando(historico?.pedidaEm ?? null))}
+          {textoDoPedido}
         </p>
       ) : null}
 
@@ -162,10 +172,7 @@ export function CartaoDaSincronizacao({ numero, empresa }: { numero: NumeroPeloA
 
       {estado === "concluida" ? (
         <p className="rounded-md bg-success-bg p-3 text-sm text-success-fg">
-          {t("Sincronização concluída em {quando}. Chegaram os contatos e as conversas individuais dos últimos 180 dias. Grupos não vêm.").replace(
-            "{quando}",
-            quando(historico?.concluidaEm ?? null),
-          )}
+          {textoDaConclusao}
         </p>
       ) : null}
 
@@ -228,10 +235,7 @@ export function CartaoDaSincronizacao({ numero, empresa }: { numero: NumeroPeloA
       ) : null}
       {estado === "concluida" ? (
         <p className="mt-2 text-xs text-text-muted">
-          {t("Mídias guardadas: {n} (a Meta só manda mídia das últimas 2 semanas).").replace(
-            "{n}",
-            (historico?.midiasGuardadas ?? 0).toLocaleString(tag),
-          )}
+          {textoDasMidias}
         </p>
       ) : null}
       {estado === "falhou" ? (

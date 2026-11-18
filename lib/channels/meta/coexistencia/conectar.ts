@@ -185,6 +185,12 @@ async function numeroEDeOutraEmpresa(
   return dono !== null && dono !== input.organizationId;
 }
 
+/** O nome que o canal já tem, ou o que a Meta deu ao número. */
+function nomeDoCanal(existente: { display_name?: string | null } | null, daMeta: string): string {
+  const atual = existente ? existente.display_name : null;
+  return atual && atual.trim().length > 0 ? atual : daMeta;
+}
+
 interface SessaoExistente {
   id: string;
   archived_at?: string | null;
@@ -236,7 +242,8 @@ async function gravarSessao(
     meta_waba_id: entrada.wabaId,
     meta_token_encrypted: dados.tokenCifrado,
     phone_number: dados.phoneNumber,
-    display_name: existente?.display_name || dados.nome,
+    // O nome do canal é do operador depois da 1ª conexão (Renomear): reconectar não o apaga.
+    display_name: nomeDoCanal(existente, dados.nome),
     status: "WORKING",
   };
 
