@@ -224,6 +224,33 @@ describe("plataforma_garantir_automacao · GATILHOS NOVOS `lead.updated` (9383) 
     await ok(c, "plataforma_garantir_automacao", pedido);
     expect(regra(c, pedido.nome)!.trigger_event).toBe("voice_call.missed");
   });
+
+  it("a regra que JÁ tem `voice_call.missed` aceita ajuste com a telefonia desligada; trocar outra regra para ele, não", async () => {
+    const c = await preparar();
+    const pedido = {
+      nome: "Etiquetar quem ligou sem resposta",
+      gatilho: "voice_call.missed",
+      acoes: [{ type: "add_tag", config: { tags: ["ligou-sem-resposta"] } }],
+    };
+    estado.telefonia = true;
+    await ok(c, "plataforma_garantir_automacao", pedido);
+
+    // A telefonia saiu de uso depois: a regra montada continua ajustável, como na tela.
+    estado.telefonia = false;
+    const repetida = await ok(c, "plataforma_garantir_automacao", pedido);
+    expect((repetida.dados.regra as Linha).desfecho).toBe("ja_estava");
+    const ajuste = { ...pedido, acoes: [{ type: "add_tag", config: { tags: ["retornar-ligacao"] } }] };
+    const ajustada = await ok(c, "plataforma_garantir_automacao", ajuste);
+    expect((ajustada.dados.regra as Linha).desfecho).toBe("atualizou");
+    expect(regra(c, pedido.nome)!.trigger_event).toBe("voice_call.missed");
+    expect(JSON.stringify(regra(c, pedido.nome)!.actions)).toContain("retornar-ligacao");
+
+    // Uma regra que existe com outro gatilho não pode passar a ele sem a telefonia.
+    const outra = { nome: "Etiquetar negócio ganho", gatilho: "lead.won", acoes: [{ type: "add_tag", config: { tags: ["ganho"] } }] };
+    await ok(c, "plataforma_garantir_automacao", outra);
+    expect(await recusa(c, "plataforma_garantir_automacao", { ...outra, gatilho: "voice_call.missed" })).toContain("telefonia");
+    expect(regra(c, outra.nome)!.trigger_event).toBe("lead.won");
+  });
 });
 
 describe("plataforma_configurar_atendimento · CAMPO NOVO `pesquisa_de_satisfacao` (upstream 1.112, #4023, 9352)", () => {
