@@ -560,7 +560,28 @@ const OPERACAO_DO_FORK: Manual[] = [
     ],
     observacao:
       "A Meta manda os contatos e até 180 dias de conversa uma vez só, e só até 24 horas depois da conexão: se falhar, a MIA não pede de novo sozinha, e para tentar outra vez o número precisa ser desconectado no app e conectado de novo. O que chega entra como histórico: a IA não responde a conversa velha. Se o número já estava conectado por QR, esse canal é arquivado. Abra o app no celular pelo menos a cada 14 dias, ou a Meta tira o número da API.",
-    vejaTambem: ["templates-da-meta"],
+    vejaTambem: ["templates-da-meta", "coexistencia-fora-do-ar"],
+  },
+  // FORK MIA · coexistência, o dia a dia (S4 e S5, docs/fork/coexistencia.md, seção 6).
+  {
+    id: "coexistencia-fora-do-ar",
+    titulo: "Número do app WhatsApp Business fora do ar, a volta, e o que foi editado ou apagado no app (coexistência)",
+    palavras: [
+      "coexistencia", "app whatsapp business", "fora do ar", "saiu da api", "numero do app saiu",
+      "numero saiu do ar", "voltou", "de volta", "conectar de novo", "motivo informado pela meta",
+      "editei no app", "apaguei no app", "mensagem editada", "mensagem apagada", "editada", "apagada",
+    ],
+    href: "/app/connections",
+    papelMinimo: "admin",
+    passos: [
+      "Abra Conexões, aba API Oficial (Meta). Quando a Meta tira o número da API, o cartão do número diz O número saiu da API desde, com o Motivo informado pela Meta, e a Central de avisos ganha um aviso de número fora do ar.",
+      "Enquanto o número está fora do ar, nada sai pela MIA por ele: IA, equipe, disparos e lembretes param. O app no celular continua funcionando.",
+      "Para voltar, abra o app WhatsApp Business no celular e clique em Conectar de novo no cartão do número: é a mesma janela da Meta da primeira conexão.",
+      "Quando o número volta, o cartão diz O número voltou em, e a Central ganha o aviso de que ele voltou. Contatos, conversas e cartões são os mesmos de antes: nada é duplicado.",
+    ],
+    observacao:
+      "O que o cliente ou o dono editam ou apagam no WhatsApp também muda na MIA: a mensagem editada ganha o texto novo, e a apagada continua na conversa com a marca de apagada (a que o cliente apagou fica sem o texto). A mensagem de antes da conexão não muda, porque a MIA não tem a original. A volta não pede os contatos e o histórico de novo: a Meta só manda isso uma vez por conexão. Os motivos mais comuns de sair do ar são o celular ficar uns 14 dias sem abrir o app ou o dono desconectar o número no app.",
+    vejaTambem: ["coexistencia-pelo-app", "numero-desconectado", "central-de-avisos"],
   },
   {
     id: "backup",
