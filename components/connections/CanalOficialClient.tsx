@@ -163,7 +163,7 @@ export function CanalOficialClient({
       ) : null}
       {/* FORK MIA · coexistência (docs/fork/coexistencia.md): conectar pelo app
           WhatsApp Business, e a sincronização dos contatos e do histórico. */}
-      <ConectarPeloApp />
+      <ConectarPeloApp canalConectado={Boolean(estado?.connected)} />
       {estado?.channel_session_id && <ChannelAiAccess channelId={estado.channel_session_id} />}
 
       {estado?.webhook ? (

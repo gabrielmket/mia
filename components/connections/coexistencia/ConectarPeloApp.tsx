@@ -33,7 +33,7 @@ function localeDoSdk(tag: string): string {
   return tag.toLowerCase().startsWith("es") ? "es_LA" : "pt_BR";
 }
 
-export function ConectarPeloApp() {
+export function ConectarPeloApp({ canalConectado = false }: { canalConectado?: boolean } = {}) {
   const t = useT();
   const idioma = useTagDeIdioma();
   const { data, isPending } = useCoexistencia();
@@ -83,6 +83,10 @@ export function ConectarPeloApp() {
       </div>
     );
   }
+
+  // O canal oficial já conectado por outra porta (link ou manual): o cartão some,
+  // como no protótipo. Trocar o número é excluir o canal em Conexões primeiro.
+  if (canalConectado) return null;
 
   if (!estado.ligada) {
     return (
