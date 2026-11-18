@@ -23,13 +23,16 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { falhaDaEscritaDePlatformAdmin, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { calcularCusto, type ContagemPorCategoria } from "@/lib/channels/meta/custo-da-conversa";
 import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
+// FORK MIA (MIA-44): o consumo de IA por mês e por agente (docs/fork/consumo-de-ia.md).
+import { falhouOConsumo, lerConsumoDoPeriodo, periodoDoPedido } from "@/lib/ai/usage/consumo-do-periodo";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Teto por consulta: 50 páginas de 1000. Um mês de tenant grande cabe; um ano
- * não, e não precisa.
+ * Teto por consulta das mensagens cobradas: 50 páginas de 1000. Um mês de
+ * tenant grande cabe; um ano não, e não precisa. (O teto das chamadas de IA é o
+ * de `lib/ai/usage/consumo-do-periodo.ts`.)
  *
  * ⚠️ PAGINADO. O `.limit(50_000)` que estava aqui nunca trouxe 50 mil linhas: o
  * PostgREST corta toda resposta em 1000 sem avisar, o custo de IA saía da soma
@@ -58,38 +61,41 @@ export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
    * Dias e não "mês corrente" de propósito: a pergunta aqui é de TENDÊNCIA
    * ("está crescendo?"), e no dia 2 do mês a janela do mês corrente responde
    * quase nada. A fatura fechada por mês tem tela própria (`/admin/custo-da-meta`).
+   *
+   * FORK MIA (MIA-44): ou `mes=AAAA-MM`, o mês do calendário em Brasília
+   * ("quanto gastou no mês passado?"). `mes` vence `dias`, e TODOS os números
+   * desta resposta passam a ser daquele mês. `mes` fora do formato é 400.
    */
-  const dias = Math.min(Math.max(Number(req.nextUrl.searchParams.get("dias") ?? 30) || 30, 1), 180);
-  const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString();
+  const periodo = periodoDoPedido({
+    mes: req.nextUrl.searchParams.get("mes"),
+    dias: req.nextUrl.searchParams.get("dias"),
+  });
+  if (!periodo) {
+    return fail("validation_error", "mes deve vir como AAAA-MM", 400, { requestId });
+  }
+  const { dias } = periodo;
+  const desde = periodo.inicio;
+  const antesDe = periodo.fim;
 
   const admin = createAdminClient();
 
-  const [conversas, mensagens, chamadas, cobradas, precos] = await Promise.all([
+  const [conversas, mensagens, consumo, cobradas, precos] = await Promise.all([
     admin
       .from("conversations")
       .select("id", { count: "exact", head: true })
       .eq("organization_id", id)
-      .gte("created_at", desde),
+      .gte("created_at", desde)
+      .lt("created_at", antesDe),
     admin
       .from("messages")
       .select("id", { count: "exact", head: true })
       .eq("organization_id", id)
-      .gte("created_at", desde),
-    // Da mais nova para a mais antiga, com `id` de desempate: se a leitura
-    // for cortada, sobra o fim da janela, que é o que a pergunta de tendência
-    // ("está crescendo?") olha.
-    lerTodasAsPaginas<{ cost_cents: number | null; total_tokens: number | null }>(
-      (de, ate, pedirContagem) =>
-        admin
-          .from("llm_calls")
-          .select("cost_cents, total_tokens", pedirContagem ? { count: "exact" } : undefined)
-          .eq("organization_id", id)
-          .gte("created_at", desde)
-          .order("created_at", { ascending: false })
-          .order("id", { ascending: false })
-          .range(de, ate),
-      { paginasMaximas: PAGINAS_MAXIMAS },
-    ),
+      .gte("created_at", desde)
+      .lt("created_at", antesDe),
+    // FORK MIA (MIA-44): a mesma leitura de `plataforma_ver_consumo_de_ia`,
+    // paginada, com a régua do teto (coalesce de cost_cents). O bloco `ia`
+    // abaixo sai dela, e não de uma segunda leitura de `llm_calls`.
+    lerConsumoDoPeriodo(admin, id, periodo),
     lerTodasAsPaginas<{ meta_pricing_category: string | null }>(
       (de, ate, pedirContagem) =>
         admin
@@ -98,6 +104,7 @@ export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
           .eq("organization_id", id)
           .eq("meta_billable", true)
           .gte("created_at", desde)
+          .lt("created_at", antesDe)
           .order("created_at", { ascending: false })
           .order("id", { ascending: false })
           .range(de, ate),
@@ -107,14 +114,14 @@ export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
   ]);
 
   // Leitura que falha no meio não vira "custo zero": responde erro.
-  if (chamadas.erro) return fail("db_error", chamadas.erro, 500, { requestId });
+  if (falhouOConsumo(consumo)) return fail("db_error", consumo.erro, 500, { requestId });
   if (cobradas.erro) return fail("db_error", cobradas.erro, 500, { requestId });
 
-  const linhasDeIa = chamadas.linhas;
-
   // Centavos de DÓLAR, como o resto do custo de IA neste repositório.
-  const custoDeIaCents = linhasDeIa.reduce((s, l) => s + Number(l.cost_cents ?? 0), 0);
-  const tokens = linhasDeIa.reduce((s, l) => s + Number(l.total_tokens ?? 0), 0);
+  // `tokens` é entrada + saída: `llm_calls` não tem `total_tokens` (é coluna de
+  // `ai_invocations`), e pedi-la fazia o PostgREST recusar a leitura inteira.
+  const { total } = consumo;
+  const tokens = total.tokens_entrada + total.tokens_saida;
 
   const porCategoria = new Map<string, number>();
   for (const m of cobradas.linhas) {
@@ -134,15 +141,28 @@ export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
   return ok(
     {
       dias,
+      // FORK MIA (MIA-44): o período de todos os números abaixo.
+      mes: periodo.mes,
+      periodo: { tipo: periodo.tipo, inicio: periodo.inicio, fim: periodo.fim, fuso: periodo.fuso },
       conversas: conversas.count ?? 0,
       mensagens: mensagens.count ?? 0,
       ia: {
-        chamadas: linhasDeIa.length,
+        chamadas: total.chamadas,
         tokens,
-        custo_usd_cents: custoDeIaCents,
+        custo_usd_cents: total.custo_usd_cents,
         // A leitura foi cortada? A tela precisa dizer, senão o número se lê
         // como total e a conta fecha menor que a realidade.
-        truncado: chamadas.truncado,
+        truncado: consumo.truncado,
+      },
+      // FORK MIA (MIA-44): por agente, a linha "Sistema", por finalidade e em R$.
+      consumo: {
+        total: consumo.total,
+        por_agente: consumo.por_agente,
+        sistema: consumo.sistema,
+        por_finalidade: consumo.por_finalidade,
+        reais: consumo.reais,
+        truncado: consumo.truncado,
+        chamadas_no_banco: consumo.chamadas_no_banco,
       },
       mensagens_cobradas: {
         total: cobradas.linhas.length,
