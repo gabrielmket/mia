@@ -47,6 +47,9 @@ import { FERRAMENTAS_DO_RAIO_X } from "./ferramentas/raio-x";
 import { FERRAMENTAS_DA_TRAVA_DE_ROBO } from "./ferramentas/trava-de-robo";
 import { FERRAMENTAS_DO_PRODUTO_NO_NEGOCIO } from "./ferramentas/produto-no-negocio";
 import { FERRAMENTAS_DO_CHECKLIST } from "./ferramentas/checklist";
+// FORK MIA (upstream 1.117, MIA-67): a contagem dos negócios e as conexões OAuth do MCP da empresa.
+import { FERRAMENTAS_DAS_CONEXOES_DO_MCP } from "./ferramentas/conexoes-do-mcp";
+import { FERRAMENTAS_DA_CONTAGEM_DE_NEGOCIOS } from "./ferramentas/contagem-de-negocios";
 import { FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP } from "./ferramentas/conhecimento-e-followup";
 import { FERRAMENTAS_DE_CONVERSOES } from "./ferramentas/conversoes";
 import { FERRAMENTAS_DE_DEMONSTRACAO } from "./ferramentas/demonstracao";
@@ -114,6 +117,9 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DA_TRAVA_DE_ROBO,
   // FORK MIA (.109): o produto no negócio: a palavra e as duas opções de um funil, e a palavra do segmento na implantação (docs/fork/produto-no-negocio.md)
   ...FERRAMENTAS_DO_PRODUTO_NO_NEGOCIO,
+  // FORK MIA (upstream 1.117, MIA-67): contar os negócios pela porta do `crm_count_leads`, e ver e revogar as conexões OAuth ao MCP da empresa (docs/fork/mcp-de-implantacao.md)
+  ...FERRAMENTAS_DA_CONTAGEM_DE_NEGOCIOS,
+  ...FERRAMENTAS_DAS_CONEXOES_DO_MCP,
 ];
 
 export const FERRAMENTA_POR_NOME = new Map(FERRAMENTAS.map((f) => [f.name, f]));
