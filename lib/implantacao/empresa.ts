@@ -40,6 +40,7 @@
  * "já estava". As duas escritas em `settings` (modo de venda e distribuição) vão
  * por `mudarSettingsDaOrganizacao`, que não pisa em quem gravou no meio.
  */
+import { lerOpcaoDaSatisfacao, TEXTO_DA_PERGUNTA_PADRAO } from "@/lib/atendimento/satisfacao";
 import { audit } from "@/lib/audit";
 import { invalidarOrg } from "@/lib/auth/cache-curto";
 import { AI_DECIDE_PADRAO, CHAVE_DAS_AUTOMACOES } from "@/lib/automation/ai-decide-da-org";
@@ -431,6 +432,13 @@ export interface PedidoDeAtendimento {
    * a conversa segue no Inbox. A lista INTEIRA; `[]` tira todas.
    */
   etiquetas_de_contato_interno?: string[];
+  /**
+   * Upstream 1.112 (#4023, 9352): a PESQUISA DE SATISFAÇÃO do encerramento
+   * (`settings.satisfacao`): ao fechar o atendimento, o cliente recebe UMA
+   * pergunta de 1 a 5 no WhatsApp. Nasce desligada. Só as chaves que vieram
+   * mudam; a mescla é a de `PATCH /api/v1/settings/atendimento`.
+   */
+  pesquisa_de_satisfacao?: { ligado?: boolean; janela_horas?: number; pergunta?: string };
 }
 
 /** O freio do `ai_decide` como o motor o lê (`aiDecideLigado`): só `false` gravado desliga. */
@@ -458,6 +466,7 @@ export async function configurarAtendimento(
   let meetGravado = null as boolean | null;
   let telefoneGravado = null as boolean | null;
   let internasGravadas = null as string[] | null;
+  let satisfacaoGravada = null as { ligado: boolean } | null;
 
   const { mudou } = await mudarSettingsDaOrganizacao(c.admin, c.orgId, (settings) => {
     const atual = routingConfigSchema.catch(routingConfigSchema.parse({})).parse(settings.routing ?? {});
@@ -566,6 +575,33 @@ export async function configurarAtendimento(
       };
     }
 
+    // Upstream 1.112 (#4023): a pesquisa de satisfação. A mescla em dois níveis
+    // da rota da tela (o resto de `settings` e o resto do bloco ficam), com a
+    // janela e a pergunta preenchidas pelo padrão, como a tela grava. Pedido
+    // igual ao que a leitura (`lerOpcaoDaSatisfacao`) já devolve não escreve.
+    const satisfacaoAtual = lerOpcaoDaSatisfacao(settings);
+    let satisfacaoMudou = false;
+    if (pedido.pesquisa_de_satisfacao !== undefined) {
+      const pedida = pedido.pesquisa_de_satisfacao;
+      const pergunta = pedida.pergunta?.trim();
+      if (pergunta !== undefined && (pergunta.length < 10 || pergunta.length > 300)) {
+        throw new Recusa(
+          "A pergunta da pesquisa de satisfação tem de 10 a 300 caracteres. Curta é melhor: a resposta esperada é um número de 1 a 5 " +
+            `(ex.: «${TEXTO_DA_PERGUNTA_PADRAO}»).`,
+        );
+      }
+      const proxima = {
+        ligado: pedida.ligado ?? satisfacaoAtual.ligado,
+        janela_horas: pedida.janela_horas ?? satisfacaoAtual.janela_horas,
+        pergunta: pergunta ?? satisfacaoAtual.pergunta,
+      };
+      satisfacaoMudou = !mesmoConteudo(proxima, satisfacaoAtual);
+      if (satisfacaoMudou) {
+        const blocoAtual = (settings.satisfacao as Record<string, unknown> | null) ?? {};
+        novo = { ...novo, satisfacao: { ...blocoAtual, ...proxima } };
+      }
+    }
+
     mudancas = [];
     if (routing.mode !== atual.mode) mudancas.push("modo de distribuição");
     if (routing.handoff_return_after_minutes !== atual.handoff_return_after_minutes) mudancas.push("devolução para a IA");
@@ -593,6 +629,8 @@ export async function configurarAtendimento(
     telefoneGravado = telefoneMudou ? (pedido.telefone_de_ficha_vazia as boolean) : null;
     if (internasMudaram) mudancas.push("etiquetas de contato interno");
     internasGravadas = internasMudaram ? internasPedidas : null;
+    if (satisfacaoMudou) mudancas.push("pesquisa de satisfação");
+    satisfacaoGravada = satisfacaoMudou ? { ligado: (novo.satisfacao as { ligado: boolean }).ligado } : null;
 
     const assinaturaFinal: AssinaturaGravada = assinaturaPedida ?? {
       humanos: assinaturaAtual.humanos,
@@ -621,6 +659,7 @@ export async function configurarAtendimento(
       google_meet_com_acesso_aberto: meetMudou ? pedido.google_meet_com_acesso_aberto : meetAtual,
       telefone_de_ficha_vazia: telefoneMudou ? pedido.telefone_de_ficha_vazia : crmAtual.telefone_de_ficha_vazia,
       etiquetas_de_contato_interno: internasMudaram ? internasPedidas : crmAtual.internal_contact_tags,
+      pesquisa_de_satisfacao: lerOpcaoDaSatisfacao(novo),
     };
 
     // Uma organização que nunca abriu a tela não tem `settings.routing`: gravar
@@ -712,6 +751,18 @@ export async function configurarAtendimento(
       resourceId: c.orgId,
       requestId: c.requestId,
       metadata: { tags: internasGravadas, quantidade: internasGravadas.length, via: "mcp_plataforma" },
+    });
+  }
+  if (mudou && satisfacaoGravada !== null) {
+    // A mesma linha de `PATCH /api/v1/settings/atendimento` (upstream 1.112, #4023).
+    void audit({
+      action: "settings.satisfacao_alterada",
+      actorUserId: c.autorUserId,
+      organizationId: c.orgId,
+      resourceType: "organization",
+      resourceId: c.orgId,
+      requestId: c.requestId,
+      metadata: { ligado: satisfacaoGravada.ligado, via: "mcp_plataforma" },
     });
   }
 

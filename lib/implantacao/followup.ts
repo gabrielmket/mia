@@ -57,6 +57,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
 import { listSelectableChannels } from "@/lib/channels/selectable";
+import { normalizarTag } from "@/lib/contacts/tag-normalizada";
 import { patchFollowupFlowSchema, triggerConfigSchema, type TriggerConfig } from "@/lib/followup/api-schemas";
 import { carregaEtapasCitadas } from "@/lib/followup/etapas-citadas";
 import { carregaModelosCitados } from "@/lib/followup/modelos-citados";
@@ -136,6 +137,13 @@ export interface PedidoDeFollowup {
   silencio_minutos?: number;
   /** Para gatilho de negócio criado: por qual número abordar (id, nome ou telefone). */
   numero?: string;
+  /**
+   * Upstream 1.112 (#4587): o filtro do gatilho de negócio criado. Só o card que
+   * nasce NESTE funil (nome ou id) arma o fluxo. `null` tira o filtro.
+   */
+  funil_do_negocio?: string | null;
+  /** Upstream 1.112 (#4587): só o card que nasce com ESTA etiqueta arma o fluxo. `null` tira. */
+  etiqueta_do_negocio?: string | null;
   cancelar_ao_responder?: boolean;
   /** O que acontece com o fluxo quando uma pessoa assume a conversa. */
   quando_humano_assume?: "pause" | "cancel" | "allow";
@@ -323,15 +331,20 @@ export function garantirCaixas(grafo: FlowGraph, caixas: readonly CaixaResolvida
   return { grafo: { ...grafo, nodes, edges } as FlowGraph, mudancas };
 }
 
-async function resolverEtapa(admin: SupabaseClient, orgId: string, ref: { funil: string; etapa: string }): Promise<string> {
+/** Um funil vivo DESTA organização, pelo nome ou pelo id. */
+async function resolverFunil(admin: SupabaseClient, orgId: string, ref: string): Promise<{ id: string; name: string }> {
   const { data: funis, error } = await admin.from("crm_pipelines").select("id, name, is_archived").eq("organization_id", orgId);
   if (error) throw new Error(`não consegui ler os funis: ${error.message}`);
-  const funil = acharPorNomeOuId(
+  return acharPorNomeOuId(
     ((funis ?? []) as Array<{ id: string; name: string; is_archived: boolean }>).filter((f) => !f.is_archived),
-    ref.funil,
+    ref,
     (f) => f.name,
     { singular: "o funil", comoListar: "Crie o funil com plataforma_garantir_funil antes do follow-up." },
   );
+}
+
+async function resolverEtapa(admin: SupabaseClient, orgId: string, ref: { funil: string; etapa: string }): Promise<string> {
+  const funil = await resolverFunil(admin, orgId, ref.funil);
   const { data: etapas, error: etapasErr } = await admin
     .from("crm_stages")
     .select("id, name, is_archived")
@@ -512,6 +525,33 @@ async function ajustarGatilho(
     const conferido = await numeroEhDaOrganizacao(c.admin, c.orgId, canal.id);
     if (!conferido.ok) throw new Recusa("O número escolhido para o gatilho não é desta empresa ou foi excluído. Escolha outro número.");
     novo.params = { ...(novo.params ?? {}), channel_session_id: canal.id };
+  }
+  // Upstream 1.112 (#4587): o filtro de funil e etiqueta do negócio criado, como
+  // a tela grava (ausente = qualquer card; a etiqueta na forma que o banco guarda).
+  const doFiltro = [
+    ["funil_do_negocio", pedido.funil_do_negocio],
+    ["etiqueta_do_negocio", pedido.etiqueta_do_negocio],
+  ] as const;
+  const filtroPedido = doFiltro.filter(([, valor]) => valor !== undefined).map(([campo]) => campo);
+  if (filtroPedido.length > 0) {
+    if (novo.kind !== "lead_created") {
+      throw new Recusa(
+        `${filtroPedido.map((p) => `\`${p}\``).join(" e ")} só ${filtroPedido.length === 1 ? "vale" : "valem"} para fluxo que dispara por negócio criado; este dispara por «${novo.kind}».`,
+      );
+    }
+    const params: Record<string, unknown> = { ...(novo.params ?? {}) };
+    if (pedido.funil_do_negocio === null) delete params.pipeline_id;
+    else if (pedido.funil_do_negocio !== undefined) {
+      params.pipeline_id = (await resolverFunil(c.admin, c.orgId, pedido.funil_do_negocio)).id;
+    }
+    if (pedido.etiqueta_do_negocio === null) delete params.tag;
+    else if (pedido.etiqueta_do_negocio !== undefined) {
+      const etiqueta = normalizarTag(pedido.etiqueta_do_negocio);
+      if (!etiqueta) throw new Recusa("`etiqueta_do_negocio` veio vazia. Para tirar o filtro de etiqueta, mande `null`.");
+      params.tag = etiqueta;
+    }
+    if (Object.keys(params).length > 0) novo.params = params;
+    else delete novo.params;
   }
   if (pedido.cancelar_ao_responder !== undefined) novo.cancel_on_reply = pedido.cancelar_ao_responder;
 
