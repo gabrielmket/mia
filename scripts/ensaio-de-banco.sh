@@ -197,6 +197,9 @@ for r in $RENOMEADAS; do
   LINHAS_RENOMEADAS="$LINHAS_RENOMEADAS $antiga:$nova:$n"
   sed -i.bak "s/^$antiga\./$nova./" "$LOGS/colunas-antes.txt"
 done
+# O comm exige as duas listas na mesma ordem: o renomear acima tira a de antes
+# da ordem do Postgres, então as duas são reordenadas com a mesma regra.
+LC_ALL=C sort -o "$LOGS/colunas-antes.txt" "$LOGS/colunas-antes.txt"
 echo "foto antes: $ANTES"
 
 echo "== 2. versão nova, duas passadas"
@@ -214,6 +217,7 @@ echo "tempo da 1ª passada: ${TEMPO} s · carimbo novo: ${CARIMBO_NOVO:-?}"
 DEPOIS=$(PSQL -tAc "$CONTAGEM" 2>&1); F_DEPOIS=$(PSQL -tAc "$FUNIS" 2>&1); R_DEPOIS=$(PSQL -tAc "$RELATORIO" 2>&1)
 N_DEPOIS=$(PSQL -tAc "$NOSSOS" 2>&1)
 PSQL -tAc "$COLUNAS" >"$LOGS/colunas-depois.txt"
+LC_ALL=C sort -o "$LOGS/colunas-depois.txt" "$LOGS/colunas-depois.txt"
 
 echo "== 3. conferências"
 for p in 1 2; do
@@ -231,9 +235,9 @@ if printf '%s' "$R_ANTES" | grep -qi 'ERROR'; then
 elif [ "$R_ANTES" = "$R_DEPOIS" ]; then conferir 1 "relatório de negócios igual (fn_mia_relatorio_linhas)"
 else conferir 0 "relatório de negócios mudou" "$R_ANTES x $R_DEPOIS"; fi
 
-SUMIU=$(comm -23 "$LOGS/colunas-antes.txt" "$LOGS/colunas-depois.txt")
+SUMIU=$(LC_ALL=C comm -23 "$LOGS/colunas-antes.txt" "$LOGS/colunas-depois.txt")
 NSUMIU=$(printf '%s' "$SUMIU" | grep -c .)
-NOVAS=$(comm -13 "$LOGS/colunas-antes.txt" "$LOGS/colunas-depois.txt" | grep -c .)
+NOVAS=$(LC_ALL=C comm -13 "$LOGS/colunas-antes.txt" "$LOGS/colunas-depois.txt" | grep -c .)
 if [ "$NSUMIU" = 0 ]; then conferir 1 "nenhuma coluna do public sumiu" "$NOVAS coluna(s) nova(s)"
 else conferir 0 "$NSUMIU coluna(s) do public sumiram" "$(printf '%s\n' "$SUMIU" | head -8 | tr '\n' ' ')"; fi
 

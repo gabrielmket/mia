@@ -67,14 +67,6 @@
   {
    "modulo": "admin-destinos-internos",
    "licao": "conhecendo-a-tela",
-   "passo": "p2",
-   "campo": "destaque",
-   "indice": 1,
-   "tipo": "texto"
-  },
-  {
-   "modulo": "admin-destinos-internos",
-   "licao": "conhecendo-a-tela",
    "passo": "p3",
    "campo": "destaque",
    "indice": 1,
@@ -142,14 +134,6 @@
    "passo": "p2",
    "campo": "destaque",
    "indice": 0,
-   "tipo": "texto"
-  },
-  {
-   "modulo": "admin-inbox",
-   "licao": "lendo-uma-conversa",
-   "passo": "p2",
-   "campo": "destaque",
-   "indice": 1,
    "tipo": "texto"
   },
   {
@@ -238,14 +222,6 @@
    "passo": "p3",
    "campo": "destaque",
    "indice": 0,
-   "tipo": "texto"
-  },
-  {
-   "modulo": "admin-meta",
-   "licao": "cadastrar-a-chave",
-   "passo": "p2",
-   "campo": "destaque",
-   "indice": 2,
    "tipo": "texto"
   },
   {
@@ -489,14 +465,6 @@
    "tipo": "texto"
   },
   {
-   "modulo": "admin-users",
-   "licao": "ficha-da-pessoa",
-   "passo": "p3",
-   "campo": "antes",
-   "indice": 3,
-   "tipo": "role-nome"
-  },
-  {
    "modulo": "agenda",
    "licao": "agenda-de-cada-pessoa",
    "passo": "p1",
@@ -551,14 +519,6 @@
    "campo": "antes",
    "indice": 0,
    "tipo": "role-nome"
-  },
-  {
-   "modulo": "app-no-celular",
-   "licao": "conhecendo-a-tela",
-   "passo": "p3",
-   "campo": "destaque",
-   "indice": 0,
-   "tipo": "texto"
   },
   {
    "modulo": "atividades",
@@ -1037,23 +997,7 @@
    "licao": "chamadas-ler-a-conversa",
    "passo": "p2",
    "campo": "destaque",
-   "indice": 1,
-   "tipo": "texto"
-  },
-  {
-   "modulo": "chamadas",
-   "licao": "chamadas-ler-a-conversa",
-   "passo": "p2",
-   "campo": "destaque",
    "indice": 2,
-   "tipo": "texto"
-  },
-  {
-   "modulo": "comandas",
-   "licao": "comandas-conhecendo-o-balcao",
-   "passo": "p3",
-   "campo": "destaque",
-   "indice": 0,
    "tipo": "texto"
   },
   {
@@ -1323,14 +1267,6 @@
   {
    "modulo": "conversoes",
    "licao": "o-que-a-meta-recebe",
-   "passo": "p4",
-   "campo": "destaque",
-   "indice": 0,
-   "tipo": "css-texto"
-  },
-  {
-   "modulo": "conversoes",
-   "licao": "o-que-a-meta-recebe",
    "passo": "p5",
    "campo": "destaque",
    "indice": 0,
@@ -1447,14 +1383,6 @@
    "campo": "destaque",
    "indice": 1,
    "tipo": "texto"
-  },
-  {
-   "modulo": "desempenho",
-   "licao": "funil-e-equipe",
-   "passo": "p2",
-   "campo": "destaque",
-   "indice": 2,
-   "tipo": "role-nome"
   },
   {
    "modulo": "desempenho",
@@ -1651,33 +1579,9 @@
   {
    "modulo": "etapas-do-funil",
    "licao": "etapas-do-funil-motivos-de-perda",
-   "passo": "p2",
-   "campo": "destaque",
-   "indice": 1,
-   "tipo": "css-texto"
-  },
-  {
-   "modulo": "etapas-do-funil",
-   "licao": "etapas-do-funil-motivos-de-perda",
-   "passo": "p3",
-   "campo": "destaque",
-   "indice": 0,
-   "tipo": "css-texto"
-  },
-  {
-   "modulo": "etapas-do-funil",
-   "licao": "etapas-do-funil-motivos-de-perda",
    "passo": "p3",
    "campo": "destaque",
    "indice": 1,
-   "tipo": "css-texto"
-  },
-  {
-   "modulo": "etapas-do-funil",
-   "licao": "etapas-do-funil-motivos-de-perda",
-   "passo": "p3",
-   "campo": "antes",
-   "indice": 0,
    "tipo": "css-texto"
   },
   {
@@ -2102,14 +2006,6 @@
    "passo": "p1",
    "campo": "destaque",
    "indice": 2,
-   "tipo": "texto"
-  },
-  {
-   "modulo": "inbox",
-   "licao": "assumir-e-responder",
-   "passo": "p2",
-   "campo": "antes",
-   "indice": 1,
    "tipo": "texto"
   },
   {
@@ -2561,22 +2457,6 @@
    "tipo": "role-nome"
   },
   {
-   "modulo": "pessoas",
-   "licao": "pessoas-cadastrar-uma-pessoa",
-   "passo": "p3",
-   "campo": "destaque",
-   "indice": 0,
-   "tipo": "role-nome"
-  },
-  {
-   "modulo": "pessoas",
-   "licao": "pessoas-cadastrar-uma-pessoa",
-   "passo": "p3",
-   "campo": "antes",
-   "indice": 1,
-   "tipo": "role-nome"
-  },
-  {
    "modulo": "plano-e-cobranca",
    "licao": "conhecendo-seu-plano",
    "passo": "p2",
@@ -2743,14 +2623,6 @@
    "campo": "antes",
    "indice": 2,
    "tipo": "role-nome"
-  },
-  {
-   "modulo": "prospeccao",
-   "licao": "escolher-as-empresas",
-   "passo": "p1",
-   "campo": "destaque",
-   "indice": 2,
-   "tipo": "texto"
   },
   {
    "modulo": "prospeccao",

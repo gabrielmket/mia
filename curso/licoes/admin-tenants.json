@@ -517,7 +517,7 @@
         {
           "id": "p4",
           "titulo": "Integrações, LGPD e IA",
-          "texto": "Em \"Integrações\", você vê a situação da loja Nuvemshop e, em \"WAHA sessions\", quantos canais de atendimento a empresa tem cadastrados, conectados ou não. Em \"Compliance & IA\", ficam os pedidos de LGPD ainda abertos, que ganham um alerta amarelo quando existem, e quantas vezes a IA foi usada nos últimos 30 dias.",
+          "texto": "Em \"Integrações\", você vê a situação da loja Nuvemshop e, em \"Sessões MiaZap\", quantos canais de atendimento a empresa tem cadastrados, conectados ou não. Em \"Compliance & IA\", ficam os pedidos de LGPD ainda abertos, que ganham um alerta amarelo quando existem, e quantas vezes a IA foi usada nos últimos 30 dias.",
           "antes": [
             {
               "acao": "rolar",
@@ -785,12 +785,12 @@
         {
           "id": "p3",
           "titulo": "O WhatsApp e a loja",
-          "texto": "O cartão \"WAHA\" mostra quantos canais de WhatsApp da empresa estão conectados, do total. Aqui é \"0/1 conectada\": o único número está parado, por isso o selo é \"Crítico\". Sem nenhum número, o selo é \"Atenção\". O cartão \"Nuvemshop\" diz se a loja virtual está ligada e quando o acesso a ela vence. Empresa que não usa loja virtual aparece como \"Não conectado\", com selo \"Atenção\": nesse caso, não há nada a resolver.",
+          "texto": "O cartão \"MiaZap\" mostra quantos canais de WhatsApp da empresa estão conectados, do total. Aqui é \"0/1 conectada\": o único número está parado, por isso o selo é \"Crítico\". Sem nenhum número, o selo é \"Atenção\". O cartão \"Nuvemshop\" diz se a loja virtual está ligada e quando o acesso a ela vence. Empresa que não usa loja virtual aparece como \"Não conectado\", com selo \"Atenção\": nesse caso, não há nada a resolver.",
           "antes": [],
           "destaques": [
             {
               "alvo": {
-                "css": "div.rounded-xl:has(span:text-is('WAHA'))"
+                "css": "div.rounded-xl:has(span:text-is('MiaZap'))"
               },
               "rotulo": "Números de WhatsApp",
               "tipo": "caixa"

@@ -81,12 +81,12 @@
         {
           "id": "p4",
           "titulo": "Números de WhatsApp com problema",
-          "texto": "O cartão \"LGPD em Risco\" conta os pedidos de clientes sobre os próprios dados (uma cópia ou a exclusão deles) que ainda estão em aberto e cujo prazo vence nos próximos 5 dias ou já venceu. Quando passa de zero, fica vermelho. O cartão \"Budgets IA\" conta as empresas cujo gasto com IA chegou a 80% ou mais do teto que elas definiram. Repare que ele fala em gasto acumulado: esse número não zera na virada do mês e pode somar o gasto de meses anteriores. O cartão \"Alertas WAHA\" deveria contar os números de WhatsApp com problema de conexão. Hoje ele fica sempre em zero. Para saber se o número de uma empresa caiu, abra a página de saúde dela e veja o cartão \"WAHA\", que mostra quantos números estão conectados.",
+          "texto": "O cartão \"LGPD em Risco\" conta os pedidos de clientes sobre os próprios dados (uma cópia ou a exclusão deles) que ainda estão em aberto e cujo prazo vence nos próximos 5 dias ou já venceu. Quando passa de zero, fica vermelho. O cartão \"Budgets IA\" conta as empresas cujo gasto com IA chegou a 80% ou mais do teto que elas definiram. Repare que ele fala em gasto acumulado: esse número não zera na virada do mês e pode somar o gasto de meses anteriores. O cartão \"Alertas MiaZap\" deveria contar os números de WhatsApp com problema de conexão. Hoje ele fica sempre em zero. Para saber se o número de uma empresa caiu, abra a página de saúde dela e veja o cartão \"MiaZap\", que mostra quantos números estão conectados.",
           "antes": [],
           "destaques": [
             {
               "alvo": {
-                "css": "div.grid > div.shadow-xs:has-text('Alertas WAHA')"
+                "css": "div.grid > div.shadow-xs:has-text('Alertas MiaZap')"
               },
               "rotulo": "Conexões de WhatsApp",
               "tipo": "caixa"
@@ -160,7 +160,7 @@
         {
           "id": "p2",
           "titulo": "Os selos de cada linha",
-          "texto": "Cada linha traz o nome da empresa e dois selos. O primeiro diz a urgência: \"Crítico\", em vermelho, ou \"Atenção\". O segundo diz o assunto: \"LGPD\" (prazo de pedido de dados), \"Overflow\" (fila cheia), \"IA Budget\" (gasto com IA) ou \"WAHA\" (número de WhatsApp com problema). Embaixo vem a frase que explica o problema. Aqui, a Rede Sorriso Pleno tem um pedido de LGPD com o prazo já vencido.",
+          "texto": "Cada linha traz o nome da empresa e dois selos. O primeiro diz a urgência: \"Crítico\", em vermelho, ou \"Atenção\". O segundo diz o assunto: \"LGPD\" (prazo de pedido de dados), \"Overflow\" (fila cheia), \"IA Budget\" (gasto com IA) ou \"MiaZap\" (número de WhatsApp com problema). Embaixo vem a frase que explica o problema. Aqui, a Rede Sorriso Pleno tem um pedido de LGPD com o prazo já vencido.",
           "antes": [],
           "destaques": [
             {
@@ -251,7 +251,7 @@
         {
           "id": "p6",
           "titulo": "Abrindo a empresa do alerta",
-          "texto": "Clicar numa linha leva você à tela com os detalhes do problema. Os alertas de fila e de IA abrem a página de saúde daquela empresa; os de LGPD abrem a tela \"LGPD\" do Admin. Aqui, o cartão \"Orçamento IA\" mostra o gasto do mês, que é o que decide se a IA para. Ele está em 0%: os 87% do alerta eram o gasto acumulado. Os outros cartões em amarelo (\"WAHA\", \"Nuvemshop\" e \"Audit Lag\") só dizem que essa empresa de exemplo ainda não ligou esses canais nem tem atividade registrada; não é defeito. Para voltar ao painel, clique em \"Dashboard\" no menu.",
+          "texto": "Clicar numa linha leva você à tela com os detalhes do problema. Os alertas de fila e de IA abrem a página de saúde daquela empresa; os de LGPD abrem a tela \"LGPD\" do Admin. Aqui, o cartão \"Orçamento IA\" mostra o gasto do mês, que é o que decide se a IA para. Ele está em 0%: os 87% do alerta eram o gasto acumulado. Os outros cartões em amarelo (\"MiaZap\", \"Nuvemshop\" e \"Audit Lag\") só dizem que essa empresa de exemplo ainda não ligou esses canais nem tem atividade registrada; não é defeito. Para voltar ao painel, clique em \"Dashboard\" no menu.",
           "antes": [
             {
               "acao": "click",
