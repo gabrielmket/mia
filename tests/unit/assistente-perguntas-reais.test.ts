@@ -211,6 +211,8 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "como conecto o banco de dados do meu erp", sobre: "/app/integracao-dados", espera: "banco-externo" },
   { pergunta: "como ativo uma extensão", sobre: "/app/extensions", espera: "extensoes" },
   { pergunta: "por que nada sai desta empresa de demonstração", sobre: "/app/settings/tenant", espera: "demonstracao" },
+  // FORK MIA (.117): a tela nova do upstream, Follow-up por etapa.
+  { pergunta: "como mudo quantos dias o negócio fica parado na etapa antes do follow-up", sobre: "/app/settings/followup-por-etapa", espera: "followup-por-etapa" },
 ];
 
 /** O achado é a ajuda esperada? */
