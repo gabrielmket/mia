@@ -36,6 +36,7 @@ function exportCSV(tenants: UsageTenantRow[], range: UsageRange): void {
     "tenant",
     "slug",
     "agente",
+    "agentes_publicados",
     "mensagens",
     "conversas",
     "invocacoes_ai",
@@ -49,6 +50,7 @@ function exportCSV(tenants: UsageTenantRow[], range: UsageRange): void {
     `"${t.tenant_name.replace(/"/g, '""')}"`,
     t.tenant_slug,
     t.agent_name ? `"${t.agent_name.replace(/"/g, '""')}"` : "",
+    t.agents_published_count,
     t.messages_count,
     t.conversations_count,
     t.ai_invocations_count,
@@ -131,6 +133,13 @@ export function UsageTable({ tenants, range }: UsageTableProps) {
                 <TableCell className="text-sm">
                   {row.agent_name ?? (
                     <span className="text-muted-foreground">{t("Nenhum agente publicado")}</span>
+                  )}
+                  {/* A linha soma o uso de todos os agentes do cliente; o nome é
+                      só o de maior prioridade. Sem isto, duas Sofias pareciam uma. */}
+                  {row.agents_published_count > 1 && (
+                    <span className="block text-xs text-muted-foreground">
+                      +{row.agents_published_count - 1} · {t("o uso soma todos os agentes")}
+                    </span>
                   )}
                 </TableCell>
                 <TableCell className="text-right text-sm tabular-nums">

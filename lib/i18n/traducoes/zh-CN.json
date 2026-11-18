@@ -6025,5 +6025,7 @@
   "A apresentação do catálogo está desligada nesta empresa.": "此公司已关闭目录介绍。",
   "O áudio precisa ser OGG/Opus, WebM/Opus ou M4A válido.": "音频必须是有效的 OGG/Opus、WebM/Opus 或 M4A。",
   "Apresentação do catálogo pela IA": "AI 目录介绍",
-  "Cada produto pode ter uma apresentação em texto ou áudio, com fotos e preço, que o atendente de IA envia em sequência quando o cliente pede.": "每个产品都可以有文字或音频介绍（可含照片和价格），客户询问时由 AI 客服按顺序发送。"
+  "Cada produto pode ter uma apresentação em texto ou áudio, com fotos e preço, que o atendente de IA envia em sequência quando o cliente pede.": "每个产品都可以有文字或音频介绍（可含照片和价格），客户询问时由 AI 客服按顺序发送。",
+  "o uso soma todos os agentes": "用量包含所有智能体",
+  "A data não pode ser depois de hoje.": "日期不能晚于今天。"
 }

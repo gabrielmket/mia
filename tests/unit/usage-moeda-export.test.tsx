@@ -27,6 +27,7 @@ it("informa chamadas sem preço e exporta o custo em dólar", async () => {
       ai_cost_cents: 123,
       ai_unpriced_count: 2,
       agent_name: null,
+      agents_published_count: 1,
     };
     render(<UsageTable tenants={[row]} range="30d" />);
     expect(screen.getByText("2 chamadas sem preço")).toBeInTheDocument();
