@@ -69,7 +69,11 @@ import { classificarMidiaComLegenda } from "@/lib/messaging/media/midia-com-lege
 import { autoriaDaMudanca } from "@/lib/operacao/autoria";
 import type { ConditionOp } from "@/lib/automation/conditions";
 import { acoesDePerdaSemMotivo, lerEtapasDasAcoes, mensagemDaEtapaDePerdaSemMotivo } from "@/lib/automation/motivo-da-perda-na-acao";
+import { capacidadesDaOrganizacao } from "@/lib/organizacao/capacidades";
 import { createAutomationRuleSchema, updateAutomationRuleSchema } from "@/lib/schemas/webhooks";
+
+/** O gatilho da ligação recebida que ninguém atendeu (upstream 1.110, #4365). */
+const GATILHO_DA_LIGACAO_PERDIDA = "voice_call.missed";
 import { lePlanosDoSettings, type PlanoDeTarefas } from "@/lib/tarefas/plano";
 
 import { acharPorNomeOuId, atorDaImplantacao, chaveDoNome, mesmoConteudo, type Desfecho, type Implantacao } from "./base";
@@ -411,6 +415,21 @@ export async function garantirAutomacao(
     );
   }
   const existente = comEsteNome[0];
+
+  // Upstream 1.110 (#4365, #4409): a ligação perdida nasce do worker de voz, e
+  // a tela só oferece o gatilho com a telefonia em uso. Uma regra montada aqui
+  // sem ela ficaria salva sem nunca disparar. A regra que JÁ tem o gatilho
+  // continua aceitando ajustes, como na tela.
+  if (
+    regra.trigger_event === GATILHO_DA_LIGACAO_PERDIDA &&
+    existente?.trigger_event !== GATILHO_DA_LIGACAO_PERDIDA &&
+    !(await capacidadesDaOrganizacao(c.admin, c.orgId)).includes("telefonia")
+  ) {
+    throw new Recusa(
+      `O gatilho «${GATILHO_DA_LIGACAO_PERDIDA}» (ligação recebida não atendida) só dispara com a telefonia em uso nesta empresa, e ela não está. ` +
+        "Antes, a empresa precisa de um tronco de telefonia ou de um número de voz ativo (Configurações › Telefonia); ou escolha outro gatilho.",
+    );
+  }
 
   if (!existente) {
     const { data: criada, error } = await c.admin

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { LEAD_STAGES } from "@/lib/agent-engine/agent/lead-state";
 import { garantirFunil, TETO_DE_ETAPAS, type PedidoDeFunil } from "@/lib/implantacao/funil";
 import { DIAS_MAXIMO_PARA_REABRIR } from "@/lib/leads/janela-do-perdido";
+import { MAX_CARACTERES_DA_CATEGORIA_DE_PERDA, MAX_CATEGORIAS_DE_PERDA } from "@/lib/schemas/leads";
 import { mostrarQuandoSchema } from "@/lib/schemas/mostrar-quando";
 
 import type { FerramentaDePlataforma } from "../tipos";
@@ -181,6 +182,17 @@ export const FERRAMENTAS_DE_FUNIL: readonly FerramentaDePlataforma[] = [
         .max(50)
         .optional()
         .describe('Os motivos de perda oferecidos ao fechar como perdido: texto, ou { "label": "Achou caro", "categoria": "Cliente" }.'),
+      // Upstream v1.111 (#4437): as categorias de perda próprias do funil.
+      categorias_de_perda: z
+        .array(z.string().trim().min(1).max(MAX_CARACTERES_DA_CATEGORIA_DE_PERDA))
+        .max(MAX_CATEGORIAS_DE_PERDA)
+        .optional()
+        .describe(
+          'As categorias que agrupam os motivos de perda deste funil, na ordem da tela (ex.: ["Preço", "Risco", "Desistência"]). ' +
+            "SUBSTITUI a lista do funil; sem o campo, nada muda. Sem nunca declarar, o funil usa as de fábrica (Cliente, Concorrência, Mérito, Nós, Ausência). " +
+            "[] esconde todas. Tirar uma categoria não muda os motivos que já a usam: eles continuam agrupados nela. " +
+            "Ponha o mesmo nome no `categoria` de cada motivo em `motivos_de_perda`.",
+        ),
       motivos_de_ganho: z.array(z.string().min(1).max(80)).max(50).optional().describe("Os motivos de ganho oferecidos ao fechar como ganho."),
       motivo_de_ganho_obrigatorio: z.boolean().optional().describe("true exige o motivo ao fechar como ganho."),
       vocabulario: z

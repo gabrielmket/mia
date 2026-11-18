@@ -94,7 +94,8 @@ export const FERRAMENTAS_DE_AUTOMACAO_E_AGENDA: readonly FerramentaDePlataforma[
                 .describe(
                   '"eq" igual, "neq" diferente, "contains" contém, "not_contains" não contém, "is_empty" está vazio, "is_not_empty" está preenchido, ' +
                     '"gt"/"gte"/"lt"/"lte" maior, maior ou igual, menor, menor ou igual (número ou data). Desde a v1.85 do upstream o "contains" ignora maiúscula, ACENTO e pontuação ' +
-                    '("anúncio" casa "anuncio"); "eq" continua exato. ATENÇÃO (v1.87): "neq" num campo AUSENTE (nunca preenchido) não casa mais; para pegar "não preencheu", use "is_empty".',
+                    '("anúncio" casa "anuncio"); "eq" continua exato. ATENÇÃO (v1.87): "neq" num campo AUSENTE (nunca preenchido) não casa mais; para pegar "não preencheu", use "is_empty". ' +
+                    '"campo_alterado" (só no gatilho lead.updated): field "event.fields" e value o nome do campo do negócio (ex.: "expected_close_date"); a lista está em plataforma_listar_modelos, seção automacoes.',
                 ),
               value: z.string().max(500).optional().describe('O valor a comparar. Sem valor em "is_empty" e "is_not_empty".'),
             })
