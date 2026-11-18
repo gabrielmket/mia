@@ -737,6 +737,33 @@ Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
 
+### O que chegou do upstream 1.117 (fusão de 18/11)
+
+O MCP não ganhou ferramenta nem campo nesta fusão: por decisão do Chefe (MIA-62), o
+MCP desta faixa vira uma tarefa própria depois dela. O que a fusão ajustou para nada
+quebrar, e o que já alcança:
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| O prazo do passo do plano de tarefas pode contar de um campo de data do negócio (`prazo`, 9404, #4717) | 1.117 | `plataforma_garantir_planos_de_tarefa` grava o passo com `prazo` no modo de sempre (`dias_a_partir_de_hoje`) e mantém `vence_em_dias`; `plataforma_ver_configuracao` (seção `planos_de_tarefa`) passa a devolver o `prazo`, inclusive o de campo de data feito na tela | `implantar_configuracao` |
+| Os prazos dos fluxos de negócio parado, etapa por etapa (tela Follow-up por etapa) | 1.117 | já alcançava: o prazo é o `trigger_config.dias` do próprio fluxo, o mesmo que `plataforma_garantir_automacao` grava | `implantar_configuracao` |
+
+Falta no MCP (fica para a tarefa de MCP desta faixa):
+
+- `crm_count_leads` (ferramenta nova do MCP de dentro) e o token de
+  integração `dsk_` nas rotas de leads e de propostas;
+- o OAuth do MCP (9390): nada a configurar por empresa, mas o manual "MCP da MIA" do
+  assistente ainda só fala do token colado à mão;
+- o prazo por campo de data em `plataforma_garantir_planos_de_tarefa` (hoje só o modo de
+  sempre);
+- o agente da campanha de entrada (`campaign_entry_agent_id`, 9415) e a troca silenciosa
+  do roteador: campos novos de campanha e de roteador;
+- a cor por canal no aviso de mensagem (`definirCorPorCanal`): campo novo de notificações.
+
+Nada a configurar pela implantação: as identidades de rede social do contato (9419) são
+gravadas pela ingestão, e o compromisso cancelado que deixa excluir o contato (9405) é
+regra do banco.
+
 ### O horário de atendimento da IA (.85)
 
 Função do fork, não do upstream, e entra no MCP na mesma versão. A prova está em
