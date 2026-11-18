@@ -711,6 +711,62 @@ Nada a configurar pela implantação: o contrato do webhook da Meta (1.107), o C
 como "preenchido" na API, o escopo de leitura do negócio, a exportação em PDF, a
 menção em nota, as reações e os tiques do número oficial.
 
+### O que chegou do upstream 1.108 a 1.116 (fusão de 17/11, segunda parte)
+
+Nesta fusão o MCP não ganhou ferramenta nem campo: a faixa é grande (9 versões) e o PR
+ficou só com a fusão. O que já alcança sem mudança:
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| As categorias de perda PRÓPRIAS do funil (`settings.lost_reason_categories`, #4437) | 1.111 | a porta compartilhada `gravarConfiguracaoDoFunil` (`lib/pipelines/pipeline-config.ts`) passou a gravar a chave, então a tela e o MCP gravam igual; falta o campo em `plataforma_garantir_funil` (abaixo) | `implantar_configuracao` |
+| O alterar e o desativar do tipo de agendamento saíram da rota (`lib/agenda/tipos-de-agendamento.ts`, #4688) | 1.116 | o módulo do upstream virou a base do contrato que o MCP já usava (`criarSchema`, `slugDe`, `canalDoLembreteValido`), sem mudar as faixas | `implantar_configuracao` |
+
+Falta no MCP (fica para uma tarefa própria):
+
+- o filtro de funil e etiqueta do gatilho "Lead criado" do follow-up (`params.pipeline_id`
+  e `params.tag`, #4587), ao lado do número da abordagem do fork;
+- o campo `lost_reason_categories` em `plataforma_garantir_funil`;
+- conferir se `plataforma_garantir_automacao` aceita os gatilhos novos "negócio alterado"
+  (`lead.updated`, 9383) e "ligação recebida não atendida" (`voice_call.missed`, #4365);
+- a pesquisa de satisfação (9352), a mensagem agendada na conversa (9336), o feriado
+  nacional do agente, o material da empresa enviado pela IA (9222, 9356), a tabela de
+  valores (9386), a tarefa recorrente (9369), o catálogo por feed (9382), os templates
+  de aparência (9388), criar pessoa com senha provisória (9380, 9381) e o plano de
+  cobrança em outra moeda (9332): ferramentas ou campos novos;
+- Agências (9373 a 9379) e o módulo Amigo (9392, 9393): módulos opcionais desligados no
+  fork; entram no MCP só se forem ligados.
+
+Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4590) é
+variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
+oficial (9328) é gravada pelo próprio cadastro.
+
+### O que chegou do upstream 1.117 (fusão de 18/11)
+
+O MCP não ganhou ferramenta nem campo nesta fusão: por decisão do Chefe (MIA-62), o
+MCP desta faixa vira uma tarefa própria depois dela. O que a fusão ajustou para nada
+quebrar, e o que já alcança:
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| O prazo do passo do plano de tarefas pode contar de um campo de data do negócio (`prazo`, 9404, #4717) | 1.117 | `plataforma_garantir_planos_de_tarefa` grava o passo com `prazo` no modo de sempre (`dias_a_partir_de_hoje`) e mantém `vence_em_dias`; `plataforma_ver_configuracao` (seção `planos_de_tarefa`) passa a devolver o `prazo`, inclusive o de campo de data feito na tela | `implantar_configuracao` |
+| Os prazos dos fluxos de negócio parado, etapa por etapa (tela Follow-up por etapa) | 1.117 | já alcançava: o prazo é o `trigger_config.dias` do próprio fluxo, o mesmo que `plataforma_garantir_automacao` grava | `implantar_configuracao` |
+
+Falta no MCP (fica para a tarefa de MCP desta faixa):
+
+- `crm_count_leads` (ferramenta nova do MCP de dentro) e o token de
+  integração `dsk_` nas rotas de leads e de propostas;
+- o OAuth do MCP (9390): nada a configurar por empresa, mas o manual "MCP da MIA" do
+  assistente ainda só fala do token colado à mão;
+- o prazo por campo de data em `plataforma_garantir_planos_de_tarefa` (hoje só o modo de
+  sempre);
+- o agente da campanha de entrada (`campaign_entry_agent_id`, 9415) e a troca silenciosa
+  do roteador: campos novos de campanha e de roteador;
+- a cor por canal no aviso de mensagem (`definirCorPorCanal`): campo novo de notificações.
+
+Nada a configurar pela implantação: as identidades de rede social do contato (9419) são
+gravadas pela ingestão, e o compromisso cancelado que deixa excluir o contato (9405) é
+regra do banco.
+
 ### O horário de atendimento da IA (.85)
 
 Função do fork, não do upstream, e entra no MCP na mesma versão. A prova está em

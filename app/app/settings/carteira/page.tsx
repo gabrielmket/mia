@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
+import { CabecalhoDaSubTela } from "@/components/settings/CabecalhoDaSubTela";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { CarteiraDaEmpresa } from "./_client";
 
@@ -19,12 +20,12 @@ export default async function CarteiraPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Créditos")}</h1>
+      {/* FORK MIA: o cabeçalho comum das subtelas (volta ao índice), do upstream. */}
+      <CabecalhoDaSubTela className="min-w-0" titulo={t("Créditos")} idioma={user.idioma}>
         <p className="text-sm text-muted-foreground">
           {t("Quanto crédito a empresa tem para disparos, e o que já foi consumido.")}
         </p>
-      </header>
+      </CabecalhoDaSubTela>
       {podeVer ? (
         <CarteiraDaEmpresa />
       ) : (

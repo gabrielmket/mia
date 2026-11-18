@@ -3,6 +3,7 @@ import type { DadosDoPainel } from "@/lib/cobranca/painel";
 import { formatadorDeData } from "@/lib/cobranca/fuso";
 import { ROTULO_DO_ESTADO } from "@/lib/cobranca/rotulos";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { formatCents } from "@/lib/money";
 import type { Idioma } from "@/lib/i18n/idiomas";
 // FORK MIA (.90): o uso de IA em % do incluído, nunca dólar (lib/ai/custo-e-da-plataforma.ts).
 import { AVISO_DA_IA_EM_PERCENTUAL, conversasEstimadas, percentualDaIa } from "@/lib/planos-mia/catalogo";
@@ -14,7 +15,6 @@ import { AVISO_DA_IA_EM_PERCENTUAL, conversasEstimadas, percentualDaIa } from "@
 export function PainelDaAssinatura({ dados, idioma }: { dados: DadosDoPainel; idioma: Idioma }) {
   const t = (texto: string) => traduzir(texto, idioma);
   const data = formatadorDeData(idioma, dados.fuso, { dateStyle: "short" });
-  const brl = new Intl.NumberFormat(idioma, { style: "currency", currency: "BRL" });
   // "2 de 3"; sem teto, "2 · sem limite" (e não "2 de sem limite").
   const deLimite = (usados: string, limite: string | null) =>
     limite === null
@@ -45,7 +45,7 @@ export function PainelDaAssinatura({ dados, idioma }: { dados: DadosDoPainel; id
           {t("Seu plano")}: {p.nome}
         </h2>
         <p className="text-sm text-muted-foreground">
-          {brl.format(p.preco_cents / 100)} {p.intervalo === "mes" ? t("por mês") : t("por ano")}
+          {formatCents(p.preco_cents, p.moeda)} {p.intervalo === "mes" ? t("por mês") : t("por ano")}
         </p>
       </div>
       <p className="text-sm font-medium">{situacao}</p>

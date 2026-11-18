@@ -32,6 +32,7 @@ import { conferirDadosFiscais, faltasDosDadosFiscais } from "@/lib/dados-fiscais
 // FORK MIA (.98): o cupom do link ou digitado (docs/fork/cupons-e-parceiros.md).
 import { CupomNoCadastro } from "@/components/cupons/CupomNoCadastro";
 import type { CupomPublico } from "@/lib/cupons/publico";
+import { formatCents } from "@/lib/money";
 
 /**
  * Convite em curso: a conta está sendo criada para ACEITAR um convite, não para
@@ -365,7 +366,7 @@ export function SignupForm({
           <select id="cobranca_plan_id" className="h-10 w-full rounded-md border bg-background px-3 text-sm" {...register("cobranca_plan_id")}>
             {planos.map((plano) => (
               <option key={plano.id} value={plano.id}>
-                {plano.nome} — {new Intl.NumberFormat(idioma, { style: "currency", currency: "BRL" }).format(plano.preco_cents / 100)} / {plano.intervalo === "ano" ? t("ano") : t("mês")}
+                {plano.nome} — {formatCents(plano.preco_cents, plano.moeda)} / {plano.intervalo === "ano" ? t("ano") : t("mês")}
                 {plano.trial_dias > 0 ? ` · ${plano.trial_dias} ${t("dias de teste")}` : ` · ${t("sem período de teste")}`}
               </option>
             ))}
@@ -375,7 +376,7 @@ export function SignupForm({
               <p className="text-xs text-muted-foreground">{t("Plano selecionado")}</p>
               <p className="mt-1 font-semibold">{planoSelecionado.nome}</p>
               <p className="mt-1 text-muted-foreground">
-                {new Intl.NumberFormat(idioma, { style: "currency", currency: "BRL" }).format(planoSelecionado.preco_cents / 100)}
+                {formatCents(planoSelecionado.preco_cents, planoSelecionado.moeda)}
                 {planoSelecionado.intervalo === "ano" ? " / " + t("ano") + " · " + t("pagamento anual de uma vez") : " / " + t("mês")}
               </p>
             </div>

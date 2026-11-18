@@ -901,7 +901,7 @@ describe("plataforma_garantir_roteador e plataforma_ligar_roteador · PASSOU A A
     c.tabela("channel_sessions").push({ ...c.tabela("channel_sessions")[0]!, id: "0e000000-0000-4000-8000-000000000002", display_name: "Comercial", phone_number: "+5500900000002" });
     const outroNumero = await chamar({ ...ROTEADOR, numero: "Comercial" });
     expect(outroNumero.erro).toBe(true);
-    expect(outroNumero.texto).toContain("o número de um roteador não se troca");
+    expect(outroNumero.texto).toContain("a ferramenta não troca o número de um roteador");
   });
 
   it("organização sem número conectado: a recusa diz que conectar é com uma pessoa", async () => {

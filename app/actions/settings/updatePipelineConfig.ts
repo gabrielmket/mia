@@ -78,6 +78,10 @@ export async function updatePipelineConfig(
       vocabulary_changed: !!parsed.data.vocabulary,
       fields_count: parsed.data.fields?.length ?? null,
       lost_reasons_count: parsed.data.lost_reasons?.length ?? null,
+      // #4437: quantas categorias o funil declara. Quais são NÃO entram na
+      // auditoria — o vocabulário é do negócio e a contagem já responde à
+      // pergunta que a auditoria faz ("mudou a configuração?").
+      lost_reason_categories_count: parsed.data.lost_reason_categories?.length ?? null,
       won_reasons_count: parsed.data.won_reasons?.length ?? null,
       won_reason_required: parsed.data.won_reason_required ?? null,
       reabertura: parsed.data.reabertura ?? null,

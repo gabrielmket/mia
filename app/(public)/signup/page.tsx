@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { lerCadastroNaTela, planoInicialDoSeletor } from "@/lib/cobranca/cadastro";
+import { lerCadastroNaTela, planoInicialDoSeletor, planosNaMoedaDoLink } from "@/lib/cobranca/cadastro";
 import { selecionarPlanoDoLink } from "@/lib/cobranca/selecao-do-link";
 import { tituloDaTelaPublica } from "@/lib/i18n/titulo-da-tela-publica";
 // FORK MIA (.90): os planos em cartões e o "?plano=" da página de preços.
@@ -49,9 +49,9 @@ export const generateMetadata = () => tituloDaTelaPublica((t) => t("Criar conta"
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ invite?: string; plano?: string | string[]; cupom?: string }>;
+  searchParams: Promise<{ invite?: string; plano?: string | string[]; cupom?: string; moeda?: string | string[] }>;
 }) {
-  const { invite, plano, cupom: cupomDoLink } = await searchParams;
+  const { invite, plano, cupom: cupomDoLink, moeda } = await searchParams;
   // FORK MIA (.90): o "?plano=" da página de preços aceita também o nome do plano.
   const planoDoLink = typeof plano === "string" ? plano : undefined;
   const payload = invite ? verifyInviteToken(invite) : null;
@@ -76,7 +76,9 @@ export default async function SignupPage({
   // Google fica (doc 146, opção B). O critério é o de `lib/cobranca/cadastro.ts`,
   // o mesmo do gatilho. Leitura que falha não esconde nada: quem recusa é a action.
   const cadastro = convite ? null : await lerCadastroNaTela(createAdminClient());
-  const planos = cadastro?.oferecidos ?? [];
+  // Migration 9332: o link escolhe a moeda (`?moeda=`, ou a do `?plano=`), e o
+  // seletor mostra só os planos nela. Sem pedido, a lista inteira, como sempre.
+  const planos = planosNaMoedaDoLink(cadastro?.oferecidos ?? [], { moeda, plano });
   // Upstream (v1.105): o link sugere um plano já oferecido, pelo id.
   const selecao = selecionarPlanoDoLink(
     plano,

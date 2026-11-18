@@ -211,6 +211,7 @@ const SITES: { arquivo: string; fronteira: string; papel?: "gerador" | "validado
   // saiu de `app/api/v1/ai/knowledge/sources/route.ts` para a rota e o MCP de
   // plataforma gravarem pelo mesmo caminho. A chave é a mesma: `<org>/<uuid>.md`.
   { arquivo: "lib/ai/rag/criar-material.ts", fronteira: "storage.chave-de-objeto" },
+  { arquivo: "app/api/v1/ai/knowledge/sources/[id]/texto/route.ts", fronteira: "storage.chave-de-objeto" },
   // O PDF da proposta comercial (#1832): `<org>/<proposta>.pdf`, dois uuids.
   { arquivo: "lib/propostas/storage.ts", fronteira: "storage.chave-de-objeto" },
   // FORK MIA — a importação de materiais pelo MCP de plataforma
@@ -261,10 +262,14 @@ const SITES: { arquivo: string; fronteira: string; papel?: "gerador" | "validado
   { arquivo: "lib/api/client.ts", fronteira: "api.idempotency-key", papel: "gerador" },
   { arquivo: "lib/api/idempotency.ts", fronteira: "api.idempotency-key", papel: "validador" },
   { arquivo: "lib/extensions/http.ts", fronteira: "api.idempotency-key", papel: "validador" },
+  { arquivo: "app/api/v1/agencia/clientes/route.ts", fronteira: "api.idempotency-key", papel: "validador" },
   { arquivo: "app/api/v1/admin/tenants/route.ts", fronteira: "api.idempotency-key", papel: "validador" },
   { arquivo: "app/api/v1/channel-sessions/route.ts", fronteira: "api.idempotency-key", papel: "validador" },
   { arquivo: "app/api/v1/lgpd/requests/[id]/approve/route.ts", fronteira: "api.idempotency-key", papel: "validador" },
   { arquivo: "app/api/v1/onboarding/whatsapp/session/route.ts", fronteira: "api.idempotency-key", papel: "validador" },
+  // Módulo `amigo` (#4227): a tela gera a chave e a rota de operações a valida.
+  { arquivo: "app/app/integrations/amigo/_api.ts", fronteira: "api.idempotency-key", papel: "gerador" },
+  { arquivo: "app/api/v1/integrations/amigo/execute/route.ts", fronteira: "api.idempotency-key", papel: "validador" },
 ];
 
 describe("todo identificador que cruza fronteira cabe no que o terceiro aceita", () => {

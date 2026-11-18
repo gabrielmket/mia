@@ -32,13 +32,19 @@ export const TOOLS_MIA = declararTools([
     pacotes: ["vender"],
   },
   /**
-   * Documentos e obrigações (docs/fork/obrigacoes.md). As duas em "reter": é a
-   * jornada de não deixar o cliente escapar por falta de acompanhamento, e
-   * renovação de documento é isso. NÃO em "vender" (o pacote com que todo
-   * agente nasce): duas capacidades a mais ali comeriam a folga do teto e
-   * nenhum segundo pacote caberia (tests/unit/pacote-reserva-vaga-da-critica).
-   * Nem em "atender": a conta da tela, que uma spec de ponta a ponta cobra,
-   * sairia do lugar (tests/unit/teto-do-atender-bate-com-a-recusa-da-spec).
+   * Documentos e obrigações (docs/fork/obrigacoes.md). As duas em "escalar",
+   * juntas (a proposta usa o id que a listagem devolve). Moraram em "reter" e
+   * depois em "organizar"; na fusão da v1.116 os dois ficaram sem vaga: o
+   * upstream levou "reter" a 26 de 27 (o anexo do card, #4544, e o Amigo) e
+   * "organizar" a 27 de 27 (o Amigo), e cada capacidade do fork a mais tornava
+   * o pacote impossível de ligar inteiro (tests/unit/pacote-reserva-vaga-da-critica).
+   * A saída é a do próprio upstream (lib/mcp/tools/selecao-por-pacote.ts): mudar
+   * de pacote, não subir o teto. "Escalar" tem folga (17 de 27 com as três do
+   * fork, medido) e a proposta é, ela mesma, uma passagem para uma pessoa
+   * decidir. NÃO em "vender" (o pacote com que todo agente nasce), nem em
+   * "atender" (tests/unit/teto-do-atender-bate-com-a-recusa-da-spec), nem em
+   * "evoluir" (é a jornada que ainda cabe depois do onboarding: 27 de 27).
+   * O agente já configurado não muda: a escolha é guardada por nome.
    */
   {
     name: "crm_listar_obrigacoes_pendentes",
@@ -49,7 +55,7 @@ export const TOOLS_MIA = declararTools([
       "vencendo ou vencido, e atividade recorrente chegando) para lembrar ou pedir na conversa.",
     oQueToca: "Documentos e obrigações",
     risco: "seguro",
-    pacotes: ["reter"],
+    pacotes: ["escalar"],
   },
   {
     name: "crm_propor_recebimento_de_documento",
@@ -64,6 +70,6 @@ export const TOOLS_MIA = declararTools([
      * caso é uma proposta errada, que a pessoa recusa com um clique.
      */
     risco: "atencao",
-    pacotes: ["reter"],
+    pacotes: ["escalar"],
   },
 ]);

@@ -66,8 +66,9 @@ function fakeDb(pointer: PointerDeLead, opts: { recusaNumero?: boolean } = {}) {
     async carregaPointersDeLead() {
       return [pointer];
     },
-    async carregaContatoDoNegocio() {
-      return CONTATO;
+    // Upstream #4587: o cartão inteiro (contato, funil e etiquetas) no lugar do contato.
+    async carregaCartaoDoNegocio() {
+      return { contactId: CONTATO, pipelineId: null, tags: [] };
     },
     async carregaNoDeGatilho() {
       return { id: "t1", pedeAgente: false };

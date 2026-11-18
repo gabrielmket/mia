@@ -21,6 +21,7 @@ import type { EstadoDaAssinatura, ProvedorDeCobranca } from "@/lib/cobranca/voca
 import { useIdioma } from "@/lib/i18n/IdiomaProvider";
 // FORK MIA (.90): conversas no lugar do dólar (docs/fork/jornada-de-assinatura.md).
 import { conversasEstimadas } from "@/lib/planos-mia/catalogo";
+import { formatCents } from "@/lib/money";
 
 export interface PropsDasAcoes {
   estado: EstadoDaAssinatura;
@@ -115,7 +116,8 @@ export function AcoesDaAssinatura(p: PropsDasAcoes) {
         proximoVencimento: p.proximoVencimento ? new Date(p.proximoVencimento) : null,
         agora: new Date(p.instanteCalculo),
       });
-  const reais = (centavos: number) => new Intl.NumberFormat(idioma, { style: "currency", currency: "BRL" }).format(centavos / 100);
+  // A moeda é a do plano atual (migration 9332): a troca só oferece planos nela.
+  const reais = (centavos: number) => formatCents(centavos, p.planoAtual?.moeda ?? selecionado?.moeda ?? "BRL");
   // FORK MIA (.90): o teto de IA vira "cerca de N conversas"; o dólar é da plataforma
   // (lib/ai/custo-e-da-plataforma.ts). A página de cobrança já manda a estimativa no
   // lugar do teto (`conversas_estimadas`); sem ela, a conta é feita aqui.

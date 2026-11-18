@@ -264,7 +264,7 @@ export async function gravarSkillsPorEtiqueta(
       requestId: c.requestId,
       metadata: {
         name: p.skill.nome,
-        keywords: matcher.any_keywords.length,
+        keywords: matcher.any_keywords?.length ?? 0,
         tags: matcher.any_tags?.length ?? 0,
         via: "mcp_plataforma",
       },

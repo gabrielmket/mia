@@ -75,6 +75,13 @@ interface Props {
   podeVerEquipe?: boolean;
   /** Confirmação externa do próprio card: preserva os outros campos em edição. */
   controle?: Ref<ControleDosCamposDoNegocio>;
+  /**
+   * A DESCRIÇÃO ALTA (#4151): na página inteira do negócio ela é o campo que se
+   * lê e se reescreve, e três linhas davam uma janela de 3,5 linhas de texto
+   * para o único campo longo do formulário. Na gaveta de 28rem o padrão continua
+   * sendo o de sempre — não é a mesma régua de espaço.
+   */
+  descricaoAlta?: boolean;
 }
 
 function centsToReais(cents: number | null | undefined): string {
@@ -104,6 +111,7 @@ export function LeadFieldsForm({
   onCancel,
   podeVerEquipe = false,
   controle,
+  descricaoAlta = false,
 }: Props) {
   const t = useT();
   const org = useActiveOrg();
@@ -297,7 +305,7 @@ export function LeadFieldsForm({
 
         <div className="space-y-2">
           <Label htmlFor="description">{t("Descrição")}</Label>
-          <Textarea id="description" rows={3} {...form.register("description")} />
+          <Textarea id="description" rows={descricaoAlta ? 10 : 3} {...form.register("description")} />
         </div>
 
         {/* FORK MIA (.109): o bloco de itens do negócio (tela 2 do protótipo). */}

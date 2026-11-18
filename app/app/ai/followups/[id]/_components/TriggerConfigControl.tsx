@@ -34,6 +34,7 @@ import {
 import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { NumeroDoGatilho, rotuloDoNumero } from "./NumeroDoGatilho";
 import { MAX_PAUSA_DE_REENTRADA_MINUTES } from "@/lib/followup/pausa-de-reentrada";
+import { normalizarTag } from "@/lib/contacts/tag-normalizada";
 
 /**
  * Controle de `trigger_config` do pointer (Task 8.5) — como o fluxo começa.
@@ -103,6 +104,17 @@ interface TriggerFormState {
   eventTypeIds: string[];
   /** FORK MIA — `params.channel_session_id` do "Lead criado"; `""` = automático. */
   channelSessionId: string;
+  /**
+   * #4587 — o filtro do gatilho «Lead criado»: o funil em que o card precisa
+   * nascer e a etiqueta que ele precisa ter. Vazio = qualquer.
+   *
+   * Por que existir: só há UM fluxo vivo por contato
+   * (`idx_followup_enrollments_one_live`). Sem filtro, o card nascido no funil B
+   * inscrevia o contato no fluxo do funil A e, por ser a única inscrição
+   * permitida, bloqueava a do fluxo certo.
+   */
+  pipelineId: string;
+  tagDoNegocio: string;
 }
 
 const DEFAULT_THRESHOLD_MINUTES = 60;
@@ -119,6 +131,13 @@ const MAX_SILENCIO_MINUTOS = 10_080;
  * `onValueChange` e no `toTriggerConfig`.
  */
 const NAO_MOVER = "nao_mover";
+
+/**
+ * O "qualquer funil" do filtro do gatilho de card (#4587). O Radix não aceita
+ * item com valor vazio; a conversão para `""` (ausente no `trigger_config`) mora
+ * no `onValueChange` e no `toTriggerConfig`.
+ */
+const QUALQUER_FUNIL = "qualquer_funil";
 
 const KIND_LABEL: Record<TriggerKind, string> = {
   appointment_no_show:"Falta confirmada pela equipe",
@@ -165,6 +184,8 @@ function parseTriggerConfig(raw: Record<string, unknown>): TriggerFormState {
       threshold_minutes?: number;
       segments?: string[];
       stage_id?: string;
+      pipeline_id?: string;
+      tag?: string;
       event_type_ids?: string[];
       reentry_pause_minutes?: number;
       max_silence_minutes?: number;
@@ -208,6 +229,8 @@ function parseTriggerConfig(raw: Record<string, unknown>): TriggerFormState {
       kind === "lead_created" && typeof params.channel_session_id === "string" ? params.channel_session_id : "",
     moveToStageId:
       kind === "stage_change" && typeof raw.move_to_stage_on_reply === "string" ? raw.move_to_stage_on_reply : "",
+    pipelineId: kind === "lead_created" && typeof params.pipeline_id === "string" ? params.pipeline_id : "",
+    tagDoNegocio: kind === "lead_created" && typeof params.tag === "string" ? params.tag : "",
   };
 }
 
@@ -241,11 +264,22 @@ function toTriggerConfig(form: TriggerFormState): Record<string, unknown> {
   // todo fluxo armado assim.
   if (form.kind === "case_opened") return { kind: "case_opened", ...cancelOnReply };
   if (form.kind === "webhook") return { kind: "webhook", ...cancelOnReply };
-  // FORK MIA — sem número escolhido, sem `params`: o automático de sempre.
   if (form.kind === "lead_created") {
+    // #4587 — o filtro do card. Vazio NÃO vira `params: {}`: sem filtro o
+    // `trigger_config` é o de antes desta mudança, byte a byte (fluxo já
+    // publicado não muda de sentido por ter sido salvo de novo).
+    // FORK MIA — o número escolhido entra no mesmo `params`; sem ele, o
+    // automático de sempre.
+    const pipelineId = form.pipelineId.trim();
+    const tag = form.tagDoNegocio.trim();
+    const filtro = {
+      ...(form.channelSessionId ? { channel_session_id: form.channelSessionId } : {}),
+      ...(pipelineId ? { pipeline_id: pipelineId } : {}),
+      ...(tag ? { tag: normalizarTag(tag) } : {}),
+    };
     return {
       kind: "lead_created",
-      ...(form.channelSessionId ? { params: { channel_session_id: form.channelSessionId } } : {}),
+      ...(Object.keys(filtro).length > 0 ? { params: filtro } : {}),
       ...cancelOnReply,
     };
   }
@@ -290,6 +324,8 @@ function summaryLabel(
   etapa: { stageName: string; pipelineName: string } | null,
   t: (texto: string) => string = (texto) => texto,
   numero: string | null = null,
+  /** Nome do funil do filtro do gatilho de card (#4587); null = não resolvido. */
+  funilDoFiltro: string | null = null,
 ): string {
   if(cfg.kind === "appointment_no_show") return t("Gatilho: falta confirmada pela equipe");
   if (cfg.kind === "silence") {
@@ -337,9 +373,21 @@ function summaryLabel(
   }
   if (cfg.kind === "case_opened") return `${t("Gatilho")}: ${t("quando o agente pede ajuda")}`;
   if (cfg.kind === "webhook") return t("Disparado por uma automação em Webhooks");
+  // #4587 — o rótulo diz o que está escolhido: um fluxo «Lead criado» com
+  // filtro e um sem filtro fazem coisas diferentes, e é o botão fechado que o
+  // dono lê uma semana depois.
   if (cfg.kind === "lead_created") {
+    const p = cfg.params as { pipeline_id?: string; tag?: string } | undefined;
+    const partes: string[] = [];
+    if (typeof p?.pipeline_id === "string" && p.pipeline_id) {
+      partes.push(`${t("no funil")} «${funilDoFiltro ?? t("escolhido")}»`);
+    }
+    if (typeof p?.tag === "string" && p.tag) partes.push(`${t("com a etiqueta")} «${p.tag}»`);
+    const base = partes.length > 0
+      ? `${t("Gatilho")}: ${t("Lead criado")} (${partes.join(" · ")})`
+      : `${t("Gatilho")}: ${t("Lead criado")}`;
     // FORK MIA — o número escolhido vai no rótulo que dura, como a etapa.
-    return numero ? `${t("Gatilho")}: ${t("Lead criado")} · ${numero}` : `${t("Gatilho")}: ${t("Lead criado")}`;
+    return numero ? `${base} · ${numero}` : base;
   }
   if (cfg.kind === "manual" || cfg.kind === undefined) return `${t("Gatilho")}: ${t("Manual")}`;
   // conversation_end de dados antigos (API crua) — sem UI própria, mas mostrado
@@ -364,9 +412,14 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
   // precisa do nome da etapa para não exibir «Etapa do funil» genérico num
   // fluxo já configurado.
   const { etapas, carregando: etapasCarregando } = useEtapasDeGatilho();
-  const etapaSalva = etapas.find((e) => e.stageId === parseTriggerConfig(triggerConfig).stageId);
+  const salvoNoFio = parseTriggerConfig(triggerConfig);
+  const etapaSalva = etapas.find((e) => e.stageId === salvoNoFio.stageId);
+  // #4587 — o nome do funil do filtro, para o botão fechado dizer QUAL funil.
+  const funilDoFiltro = salvoNoFio.pipelineId
+    ? (etapas.find((e) => e.pipelineId === salvoNoFio.pipelineId)?.pipelineName ?? null)
+    : null;
   // FORK MIA — o nome do número escolhido no "Lead criado", para o rótulo fechado.
-  const numeroSalvo = triggerConfig.kind === "lead_created" ? parseTriggerConfig(triggerConfig).channelSessionId : "";
+  const numeroSalvo = triggerConfig.kind === "lead_created" ? salvoNoFio.channelSessionId : "";
   const canais = useChannelSessions({ enabled: numeroSalvo !== "" });
   const canalSalvo = numeroSalvo ? canais.data?.find((c) => c.id === numeroSalvo) : undefined;
   const rotuloDoNumeroSalvo = numeroSalvo ? (canalSalvo ? rotuloDoNumero(canalSalvo, t) : t("Número excluído")) : null;
@@ -418,8 +471,11 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
         form.thresholdUnidade !== saved.thresholdUnidade ||
         form.segments !== saved.segments)) ||
     (form.kind === "stage_change" && form.stageId !== saved.stageId) ||
-    (form.kind === "lead_created" && form.channelSessionId !== saved.channelSessionId) ||
-    (form.kind === "stage_change" && form.moveToStageId !== saved.moveToStageId);
+    (form.kind === "stage_change" && form.moveToStageId !== saved.moveToStageId) ||
+    (form.kind === "lead_created" &&
+      (form.channelSessionId !== saved.channelSessionId ||
+        form.pipelineId !== saved.pipelineId ||
+        form.tagDoNegocio !== saved.tagDoNegocio));
 
   const onSave = () => {
     if (thresholdInvalid || stageInvalid) return;
@@ -446,7 +502,7 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button type="button" variant="outline" size="sm" data-testid="trigger-config-button">
-          {summaryLabel(triggerConfig, etapaSalva ?? null, t, canais.isLoading ? null : rotuloDoNumeroSalvo)}
+          {summaryLabel(triggerConfig, etapaSalva ?? null, t, canais.isLoading ? null : rotuloDoNumeroSalvo, funilDoFiltro)}
         </Button>
       </PopoverTrigger>
       {/* O painel cresce com o gatilho de silêncio (mínimo, teto, segmentos, pausa):
@@ -555,6 +611,54 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
 
           {form.kind === "lead_created" && (
             <div className="space-y-2">
+              {/* #4587 — o filtro do card. Sem ele, o card nascido em outro
+                  funil inscrevia o contato neste fluxo e, por só existir um
+                  fluxo vivo por contato, bloqueava o fluxo do funil certo. */}
+              <div className="space-y-2">
+                <Label htmlFor="trigger-lead-pipeline">{t("Funil (opcional)")}</Label>
+                <Select
+                  value={form.pipelineId || QUALQUER_FUNIL}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, pipelineId: v === QUALQUER_FUNIL ? "" : v }))
+                  }
+                  disabled={etapasCarregando}
+                >
+                  <SelectTrigger id="trigger-lead-pipeline" data-testid="trigger-lead-pipeline">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={QUALQUER_FUNIL}>{t("Qualquer funil")}</SelectItem>
+                    {funis.map((funil) => (
+                      <SelectItem key={funil.id} value={funil.id}>
+                        {funil.nome}
+                      </SelectItem>
+                    ))}
+                    {/* Funil gravado que não está na lista (arquivado ou ainda
+                        carregando): mostrá-lo pelo nome em vez de deixar o
+                        seletor em branco — o valor continua no `trigger_config`. */}
+                    {form.pipelineId && !funis.some((f) => f.id === form.pipelineId) && (
+                      <SelectItem value={form.pipelineId}>
+                        {funilDoFiltro ?? t("escolhido")}
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="trigger-lead-tag">{t("Etiqueta do negócio (opcional)")}</Label>
+                <Input
+                  id="trigger-lead-tag"
+                  placeholder={t("ex: vip")}
+                  value={form.tagDoNegocio}
+                  onChange={(e) => setForm((f) => ({ ...f, tagDoNegocio: e.target.value }))}
+                  data-testid="trigger-lead-tag"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    "Só começa para negócios criados neste funil e/ou com esta etiqueta. Em branco = qualquer funil, qualquer etiqueta.",
+                  )}
+                </p>
+              </div>
               <p className="text-xs text-muted-foreground">
                 {t(
                   "O fluxo começa quando um negócio nasce: a primeira mensagem que abre o card, um formulário ou o cadastro manual. Negócios importados por planilha não entram. A entrada na fila leva poucos minutos, não é instantânea.",

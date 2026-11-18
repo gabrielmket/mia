@@ -20,6 +20,7 @@
  * provider fora de `lib/channels/`. A tela manda texto, botão e exemplos; a
  * tradução para o vocabulário da Graph API mora aqui.
  */
+import { graphBaseUrl } from "@/lib/channels/meta/graph-base";
 
 export type CategoriaDeTemplate = "MARKETING" | "UTILITY" | "AUTHENTICATION";
 
@@ -148,7 +149,7 @@ export async function criarTemplate(input: CriarTemplateInput): Promise<CriarTem
     };
   }
 
-  const url = `https://graph.facebook.com/${input.graphVersion}/${input.wabaId}/message_templates`;
+  const url = `${graphBaseUrl(input.graphVersion)}/${input.wabaId}/message_templates`;
   let res: Response;
   try {
     res = await fetch(url, {

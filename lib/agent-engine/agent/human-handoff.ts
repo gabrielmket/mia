@@ -532,7 +532,10 @@ export async function performHumanHandoff(
                                  then metadata->>$7::text else gen_random_uuid()::text end),
             active_ai_agent_id = null,
             active_intent = null,
-            active_agent_set_at = null
+            active_agent_set_at = null,
+            -- #4318: a passagem explícita pendente também cai — se o bot voltar,
+            -- o roteador decide de novo em vez de reassumir por inércia.
+            active_agent_transfer_at = null
       where organization_id = $1 and id = $2
       returning metadata->>$7::text as aviso_episodio`,
     [ids.tenantId, ids.conversationId, SILENCE_INFINITY, opts.reason, CHAVE_DO_HANDOFF_TECNICO, marcaDaDerivacao, MARCA_EPISODIO_HANDOFF],
@@ -589,6 +592,7 @@ export async function performHumanHandoff(
       checkpoint: null,
       camposColetados: opts.camposColetados,
       motivo: { codigo: 'verificacao_manual' },
+      idioma: await idiomaDaOrganizacao(db, ids.tenantId, opts.log),
     });
     const gravou = await registrarPassagem(db, {
       organizationId: ids.tenantId,
@@ -966,6 +970,7 @@ export async function applyRequestHumanHandoff(
       : {}),
     ...(Object.keys(camposDoCard).length > 0 ? { camposColetados: camposDoCard } : {}),
     motivo: { codigo: motivoCodigo, texto: porQue },
+    idioma: await idiomaDaOrganizacao(db, ids.tenantId, opts.log),
   });
 
   // #2210: o handoff só carrega a marca quando a causa é a falta de texto —
@@ -1043,6 +1048,7 @@ export function buildHandoffSummary(
      */
     declaracao?: DeclaracaoDoTurno | null;
   } | null,
+  idioma: Idioma = 'pt-BR',
 ): string {
-  return montarBriefingDaPassagem({ checkpoint: previous }).body;
+  return montarBriefingDaPassagem({ checkpoint: previous, idioma }).body;
 }

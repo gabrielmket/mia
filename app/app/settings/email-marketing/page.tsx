@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { ConfiguracaoDoEmailMarketing } from "@/components/email-marketing/ConfiguracaoDoEmailMarketing";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
+import { CabecalhoDaSubTela } from "@/components/settings/CabecalhoDaSubTela";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -25,12 +26,12 @@ export default async function EmailMarketingPage() {
   const podeVer = !!org && ROLE_RANK[org.role] >= ROLE_RANK.manager;
   return (
     <div className="flex h-full flex-col gap-6 p-4 sm:p-6">
-      <header className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("E-mail marketing")}</h1>
+      {/* FORK MIA: o cabeçalho comum das subtelas (volta ao índice), do upstream. */}
+      <CabecalhoDaSubTela className="min-w-0" titulo={t("E-mail marketing")} idioma={user.idioma}>
         <p className="text-sm text-muted-foreground">
           {t("Domínio, remetentes, rodapé, ritmo e lista de supressão das campanhas de e-mail.")}
         </p>
-      </header>
+      </CabecalhoDaSubTela>
       {podeVer ? (
         <ConfiguracaoDoEmailMarketing />
       ) : (

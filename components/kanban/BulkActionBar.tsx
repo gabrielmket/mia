@@ -27,6 +27,7 @@ import { apiClient } from "@/lib/api/client";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { useBulkAction } from "@/hooks/kanban/useBulkAction";
 import { resolveVocabulary } from "@/lib/kanban/vocabulary";
+import { filtrarEtiquetas } from "@/lib/kanban/filtrar-etiquetas";
 import type { PipelineVocabulary, Stage } from "@/lib/kanban/types";
 import { LoseLeadDialog, anotarMotivoDaPerda } from "./LoseLeadDialog";
 import { rotuloDoMembro } from "@/lib/users/rotulo-do-atendente";
@@ -328,8 +329,7 @@ export function BulkActionBar({
                 {t("Adicionar")}
               </Button>
             </div>
-            {tagsExistentes
-              .filter((tag) => tag.toLowerCase().includes(tagInput.trim().toLowerCase()))
+            {filtrarEtiquetas(tagsExistentes, tagInput)
               .slice(0, 10)
               .map((tag) => (
                 <DropdownMenuItem key={tag} onClick={() => runTagAdd(tag)}>

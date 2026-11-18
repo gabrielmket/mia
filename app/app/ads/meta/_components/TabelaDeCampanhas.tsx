@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   Table,
@@ -12,6 +12,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useT } from "@/hooks/i18n/useT";
+import {
+  armazenamentoLocal,
+  gravarOrdemLembrada,
+  lerOrdemLembrada,
+} from "@/lib/plataformas-de-anuncio/meta/ordem-lembrada";
 import {
   ORDEM_PADRAO,
   type CriterioDeOrdenacao,
@@ -159,7 +164,13 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos, usuarioId }: Props) {
   /**
    * A ordem de BASE (upstream #3911): o `select` "Ordenar por", que abre pela
    * campanha mais recente. A ordenação é ESCOLHA DE LEITURA, não dado: mora no
-   * componente e não atravessa a requisição.
+   * componente e não atravessa a requisição. Quem lembra dela é o NAVEGADOR
+   * (upstream #4480), pelo mesmo `localStorage` do grupo fechado do menu.
+   *
+   * A leitura é num `useEffect`, nunca no inicializador do estado: no servidor
+   * não há `localStorage`, e ler na inicialização faria o HTML servido divergir
+   * do primeiro render do cliente (erro de hidratação). Antes do efeito vale
+   * `ORDEM_PADRAO`, que é também a ordem em que `linhas` já chega.
    *
    * FORK MIA — as duas ordens convivem: a do `select` é a base, e o cabeçalho
    * (a ordem por coluna do fork, lembrada por pessoa) ordena POR CIMA dela. A
@@ -167,20 +178,39 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos, usuarioId }: Props) {
    * `select` devolve a tabela à base, para a escolha nova ter efeito na hora.
    */
   const [criterio, setCriterio] = useState<CriterioDeOrdenacao>(ORDEM_PADRAO);
+  useEffect(() => {
+    const lembrada = lerOrdemLembrada(armazenamentoLocal());
+    if (lembrada !== ORDEM_PADRAO) setCriterio(lembrada);
+  }, []);
 
-  // O que está à vista: primeiro o filtro, depois a ordem. Status e veiculação
+  /**
+   * "Só ativas" (upstream #4412) recorta a lista: o filtro não mexe na ordem,
+   * então marcar a caixa mantém o que o seletor escolheu. Desmarcada por
+   * padrão, e sem memória entre visitas. FORK MIA: soma com o "só com
+   * impressão" do fork; os dois recortes valem juntos.
+   */
+  const [soAtivas, setSoAtivas] = useState(false);
+
+  // O que está à vista: primeiro os filtros, depois a ordem. Status e veiculação
   // ordenam pelo texto que a célula mostra, no idioma de quem lê.
   const visiveis = useMemo(() => {
+    const comImpressao = preferencia.soComImpressao ? soQuemTeveImpressao(linhas) : linhas;
     const filtradas = ordenarPorCriterio(
-      preferencia.soComImpressao ? soQuemTeveImpressao(linhas) : linhas,
+      soAtivas ? comImpressao.filter((linha) => linha.status === "ACTIVE") : comImpressao,
       criterio,
     );
     return ordenarCampanhas(filtradas, preferencia.ordem, {
       idioma: tagDoIdioma,
       textoDoEstado: (codigo) => t(ESTADO_LEGIVEL[codigo] ?? codigo),
     });
-  }, [linhas, criterio, preferencia, tagDoIdioma, t]);
+  }, [linhas, criterio, soAtivas, preferencia, tagDoIdioma, t]);
   const cabecalho = { ordem: preferencia.ordem, aoOrdenar: ordenarPor };
+
+  /** Troca e grava no mesmo gesto: a escolha vale já e sobrevive ao próximo F5. */
+  function trocarCriterio(novo: CriterioDeOrdenacao) {
+    setCriterio(novo);
+    gravarOrdemLembrada(armazenamentoLocal(), novo);
+  }
 
   /**
    * A ressalva da leitura, quando existe: é o `title` do "—" da coluna do
@@ -268,6 +298,15 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos, usuarioId }: Props) {
         tela justamente em tela estreita, que é onde ele mais importa.
       */}
       <div className="flex items-center justify-end gap-2">
+        <label className="mr-2 flex items-center gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={soAtivas}
+            onChange={(evento) => setSoAtivas(evento.target.checked)}
+            className="size-4 accent-[var(--color-accent)]"
+          />
+          {t("Só ativas")}
+        </label>
         <label htmlFor="ordem-das-campanhas" className="text-sm text-muted-foreground">
           {t("Ordenar por")}
         </label>
@@ -275,7 +314,7 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos, usuarioId }: Props) {
           id="ordem-das-campanhas"
           value={criterio}
           onChange={(evento) => {
-            setCriterio(evento.target.value as CriterioDeOrdenacao);
+            trocarCriterio(evento.target.value as CriterioDeOrdenacao);
             // FORK MIA: a escolha nova vale na hora, sem a ordem do cabeçalho por cima.
             if (preferencia.ordem !== null) voltarOrdemDaPlataforma();
           }}
@@ -295,9 +334,12 @@ export function TabelaDeCampanhas({ linhas, moeda, avisos, usuarioId }: Props) {
         // Só o filtro chega aqui (a lista vazia de verdade já saiu acima): a
         // frase diz qual chave desligar, em vez de uma tabela muda.
         <p className="rounded-md border p-4 text-sm text-muted-foreground">
-          {t(
-            "Nenhuma campanha teve impressão neste período. Desligue a chave \"Só campanhas com impressão\" para ver todas.",
-          )}
+          {/* FORK MIA: a frase diz qual dos dois filtros esvaziou a tabela. */}
+          {preferencia.soComImpressao
+            ? t(
+                "Nenhuma campanha teve impressão neste período. Desligue a chave \"Só campanhas com impressão\" para ver todas.",
+              )
+            : t("Nenhuma campanha ativa neste período.")}
         </p>
       ) : (
     /*
