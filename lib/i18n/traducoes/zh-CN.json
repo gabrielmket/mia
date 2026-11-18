@@ -6027,5 +6027,17 @@
   "Apresentação do catálogo pela IA": "AI 目录介绍",
   "Cada produto pode ter uma apresentação em texto ou áudio, com fotos e preço, que o atendente de IA envia em sequência quando o cliente pede.": "每个产品都可以有文字或音频介绍（可含照片和价格），客户询问时由 AI 客服按顺序发送。",
   "o uso soma todos os agentes": "用量包含所有智能体",
-  "A data não pode ser depois de hoje.": "日期不能晚于今天。"
+  "A data não pode ser depois de hoje.": "日期不能晚于今天。",
+  "Este mês": "本月",
+  "Mês passado": "上月",
+  "Custo de IA por agente": "按智能体的 AI 成本",
+  "Custo de IA por finalidade": "按用途的 AI 成本",
+  "Do cache": "来自缓存",
+  "Agente removido": "已删除的智能体",
+  "Nenhuma chamada de IA no período.": "此期间没有 AI 调用。",
+  "O valor em R$ é parcial: dias sem cotação": "R$ 金额不完整：有些天没有汇率",
+  "Chamadas": "调用",
+  "Total": "合计",
+  "Finalidade": "用途",
+  "Sistema são as chamadas sem agente: o resumo depois da conversa, os classificadores e a transcrição. \"Do cache\" é parte dos tokens de entrada.": "系统是指没有智能体的调用：对话后的摘要、分类器和转写。\"来自缓存\"是输入 token 的一部分。"
 }

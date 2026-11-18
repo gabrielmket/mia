@@ -9754,5 +9754,15 @@
   "Apresentação do catálogo pela IA": "AI catalog presentation",
   "Cada produto pode ter uma apresentação em texto ou áudio, com fotos e preço, que o atendente de IA envia em sequência quando o cliente pede.": "Each product can have a presentation in text or audio, with photos and price, which the AI agent sends in sequence when the customer asks.",
   "o uso soma todos os agentes": "usage adds up all agents",
-  "A data não pode ser depois de hoje.": "The date cannot be later than today."
+  "A data não pode ser depois de hoje.": "The date cannot be later than today.",
+  "Este mês": "This month",
+  "Mês passado": "Last month",
+  "Custo de IA por agente": "AI cost by agent",
+  "Custo de IA por finalidade": "AI cost by purpose",
+  "Do cache": "From cache",
+  "Agente removido": "Deleted agent",
+  "Nenhuma chamada de IA no período.": "No AI calls in this period.",
+  "O valor em R$ é parcial: dias sem cotação": "The R$ amount is partial: days without an exchange rate",
+  "Finalidade": "Purpose",
+  "Sistema são as chamadas sem agente: o resumo depois da conversa, os classificadores e a transcrição. \"Do cache\" é parte dos tokens de entrada.": "System means calls without an agent: the summary after the conversation, the classifiers and the transcription. \"From cache\" is part of the input tokens."
 }

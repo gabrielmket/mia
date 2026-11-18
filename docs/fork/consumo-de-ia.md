@@ -4,9 +4,9 @@
 > no mês passado e neste mês, em tokens e em dinheiro, com cada agente separado. Exemplos aqui com
 > dado fictício (Academia Alfa, com os agentes Recepção e Vendas).
 
-Esta página cobre a **leitura** (a função, a rota da aba Uso e a ferramenta do MCP). As telas
-("Este mês" e "Mês passado" nas duas telas de uso, a quebra por agente na aba Uso) são a parte
-seguinte, MIA-46.
+Esta página cobre a **leitura** (a função, a rota da aba Uso e a ferramenta do MCP, MIA-45) e as
+**telas** ("Este mês" e "Mês passado" nas duas telas de uso, a quebra por agente na aba Uso, MIA-46,
+seção 7).
 
 ## 1. O caso
 
@@ -91,3 +91,58 @@ sem `mes`.
 - Depende de colunas do upstream em `llm_calls`: `agent_id` (0130), `purpose`, `input_tokens`,
   `output_tokens`, `cache_read_tokens`, `cost_cents`. Se o upstream renomear alguma, a leitura falha
   com erro (não vira zero) e o teste da rota fica vermelho.
+
+## 7. As telas (MIA-46)
+
+O custo em dinheiro só aparece no painel da plataforma. A tela de uso do cliente (`/app/ai/usage`)
+não mudou.
+
+### 7.1 O seletor de período
+
+As duas telas (`/admin/usage` e a aba Uso do cliente) oferecem 7, 30 e 90 dias, **Este mês** e
+**Mês passado**. Os atalhos moram em `lib/ai/usage/atalhos-de-periodo.ts` (`ATALHOS_DE_PERIODO`,
+`pedidoDoAtalho`), que só traduz o botão em `dias` ou `mes=AAAA-MM`. Qual é o mês atual e o anterior
+sai de `mesAtualEAnterior`; o início e o fim saem de `periodoDoPedido`, na rota. Nenhuma das duas
+telas calcula a janela.
+
+### 7.2 `/api/v1/admin/usage?mes=AAAA-MM`
+
+- `mes` vence `range`. Fora do formato é 400, e nada é lido. A resposta ganha `mes` (`null` nas
+  janelas de dias).
+- A janela é a do mês em Brasília (`periodoDoPedido`). O dia de cada linha, nas séries e na conversão
+  para R$, passa a ser o de Brasília (`diaEmBrasilia`), e a série vai do dia 1 ao último dia do mês,
+  inclusive os dias que ainda não chegaram em "Este mês" (com zero).
+- A fatura do provedor (`platform_openai_spend`) e as cotações (`platform_fx_rates`) passam a ter
+  também o limite de cima (o último dia do período): sem isso, a fatura do mês passado somava os
+  dias deste mês.
+- **Sem `mes`, nada muda**: as janelas de 7, 30 e 90 dias continuam em dias de calendário UTC, como
+  eram. O mês em Brasília e a janela em UTC podem por isso diferir nas três horas da virada.
+- O nome do CSV leva o mês (`usage-2026-10.csv`).
+
+### 7.3 A aba Uso do cliente
+
+`components/admin/tenants/UsoDoTenant.tsx`, com o mesmo `Card` e o mesmo estilo de tabela da
+`UsageTable` (não é layout novo, decisão do Chefe na MIA-46):
+
+- O card **Custo de IA** mostra o real ao lado do dólar (`consumo.total.custo_brl`). Dia com custo e
+  sem cotação: "O valor em R$ é parcial: dias sem cotação: N".
+- **Custo de IA por agente**: uma linha por agente (agente removido aparece como "Agente removido";
+  arquivado leva o selo), a linha **Sistema** e o **Total**. Colunas: chamadas, tokens (entrada +
+  saída), do cache (parte da entrada), US$ e R$. Chamada sem preço é dita abaixo do US$.
+- **Custo de IA por finalidade**: o código de `llm_calls.purpose` (`agent_turn`, `checkpoint`...),
+  com as mesmas colunas.
+
+Os textos novos em espanhol moram em `lib/i18n/dicionario-mia-consumo-de-ia.ts`; em inglês, turco e
+chinês, em `lib/i18n/traducoes/*.json`.
+
+### 7.4 Testes e prova pela tela
+
+- `tests/unit/consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`: os atalhos (o mês de Brasília
+  na virada, dezembro do ano anterior em janeiro), a rota geral com `mes` (janela, série de 31 dias,
+  fatura sem os dias do mês seguinte, R$ pela cotação de cada dia, 400 no formato errado, as janelas
+  de dias sem mudança) e a aba Uso (o botão do mês pede `mes`, R$ no card, as linhas de cada agente,
+  do Sistema e das finalidades).
+- `tests/e2e/admin-consumo-de-ia-por-mes-e-por-agente.spec.ts`: a Academia Alfa (fictícia) com 2
+  agentes e chamadas de sistema neste mês e no mês passado, vista nas duas telas, em "Este mês" e
+  "Mês passado". As capturas saem no artefato de evidência da CI.
+

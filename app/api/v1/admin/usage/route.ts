@@ -12,6 +12,9 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { randomUUID } from "node:crypto";
 import { lerPaginasDeUso } from "@/lib/admin/usage-pages";
+// FORK MIA (MIA-44): o mês do calendário em Brasília, pelo mesmo cálculo da aba Uso
+// e do MCP (docs/fork/consumo-de-ia.md).
+import { diaEmBrasilia, periodoDoPedido } from "@/lib/ai/usage/consumo-do-periodo";
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -20,6 +23,9 @@ import { lerPaginasDeUso } from "@/lib/admin/usage-pages";
 const querySchema = z.object({
   range: z.enum(["7d", "30d", "90d"]).default("30d"),
   tenant_id: z.string().uuid().optional(),
+  // FORK MIA (MIA-44): `mes=AAAA-MM` ("Este mês", "Mês passado"). Vence `range`.
+  // O formato é conferido por `periodoDoPedido`, abaixo, e não por uma segunda regra aqui.
+  mes: z.string().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -74,6 +80,12 @@ export interface UsageSeries {
 
 export interface UsageData {
   range: "7d" | "30d" | "90d";
+  /**
+   * FORK MIA (MIA-44): AAAA-MM quando o período é um mês do calendário em
+   * Brasília. Aí `range` é ignorado, e tudo abaixo (tabela, séries, natureza,
+   * fatura e reais) é daquele mês, com os dias da série em Brasília.
+   */
+  mes: string | null;
   tenants: UsageTenantRow[];
   series: UsageSeries;
   /**
@@ -137,7 +149,14 @@ export async function GET(req: NextRequest) {
 
   const { range, tenant_id } = parsed.data;
   const rangeMap: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90 };
-  const days = rangeMap[range] ?? 30;
+  // FORK MIA (MIA-44): o mês sai de `periodoDoPedido`, o mesmo início e fim da
+  // aba Uso do cliente e de `plataforma_ver_consumo_de_ia`. Não reescrever aqui.
+  const periodoDoMes = parsed.data.mes ? periodoDoPedido({ mes: parsed.data.mes }) : null;
+  if (parsed.data.mes && !periodoDoMes) {
+    return fail("validation_error", "mes deve vir como AAAA-MM", 400, { requestId });
+  }
+  const mes = periodoDoMes?.mes ?? null;
+  const days = periodoDoMes?.dias ?? rangeMap[range] ?? 30;
 
   const admin = createAdminClient();
 
@@ -189,8 +208,14 @@ export async function GET(req: NextRequest) {
   endDate.setUTCDate(endDate.getUTCDate() + 1);
   const startDate = new Date(endDate);
   startDate.setUTCDate(startDate.getUTCDate() - days);
-  const startIso = startDate.toISOString();
-  const endIso = endDate.toISOString();
+  // FORK MIA (MIA-44): no mês, a janela é a do mês em Brasília (fim exclusivo), e
+  // o dia de cada linha também é o de Brasília. Fora do mês, segue o dia UTC de
+  // antes, para os 7/30/90 não mudarem.
+  const startIso = periodoDoMes?.inicio ?? startDate.toISOString();
+  const endIso = periodoDoMes?.fim ?? endDate.toISOString();
+  const diaDe = (iso: string): string => (periodoDoMes ? diaEmBrasilia(iso) : iso.slice(0, 10));
+  // O primeiro e o último dia do período, no calendário em que a série é contada.
+  const primeiroDia = periodoDoMes ? `${periodoDoMes.mes}-01` : startIso.slice(0, 10);
   interface UsoLinha {
     id: string;
     organization_id: string;
@@ -254,12 +279,12 @@ export async function GET(req: NextRequest) {
     mapa.set(chave, (mapa.get(chave) ?? 0) + valor);
   for (const row of mensagens) {
     somar(messagesCountMap, row.organization_id);
-    somar(msgDayMap, row.created_at.slice(0, 10));
+    somar(msgDayMap, diaDe(row.created_at));
   }
   for (const row of conversas) somar(convsCountMap, row.organization_id);
   for (const row of chamadas) {
     const tokens = (row.input_tokens ?? 0) + (row.output_tokens ?? 0);
-    const dia = row.created_at.slice(0, 10);
+    const dia = diaDe(row.created_at);
     somar(aiInvCountMap, row.organization_id);
     somar(aiTokensMap, row.organization_id, tokens);
     somar(aiTokensDayMap, dia, tokens);
@@ -325,11 +350,15 @@ export async function GET(req: NextRequest) {
   // -------------------------------------------------------------------------
 
   const dateLabels: string[] = [];
+  // O dia 1º à meia-noite UTC só serve de contador de datas: o rótulo é o dia do
+  // calendário (Brasília no mês, UTC nas janelas), não um instante.
+  const primeiroRotulo = new Date(`${primeiroDia}T00:00:00Z`);
   for (let i = 0; i < days; i++) {
-    const dia = new Date(startDate);
+    const dia = new Date(primeiroRotulo);
     dia.setUTCDate(dia.getUTCDate() + i);
     dateLabels.push(dia.toISOString().slice(0, 10));
   }
+  const ultimoDia = dateLabels[dateLabels.length - 1] ?? primeiroDia;
 
   const series: UsageSeries = {
     messages: dateLabels.map((date) => ({
@@ -354,7 +383,7 @@ export async function GET(req: NextRequest) {
     action: "platform_admin.usage_viewed",
     actorUserId: adminCtx.user.id,
     actingAsPlatformAdmin: true,
-    metadata: { range, tenant_id: tenant_id ?? null },
+    metadata: { range, mes, tenant_id: tenant_id ?? null },
     requestId,
   });
 
@@ -373,7 +402,9 @@ export async function GET(req: NextRequest) {
   const { data: fxRows } = await admin
     .from("platform_fx_rates")
     .select("dia, usd_brl")
-    .gte("dia", startIso.slice(0, 10))
+    .gte("dia", primeiroDia)
+    // FORK MIA (MIA-44): com o mês passado, a cotação de depois dele não entra.
+    .lte("dia", ultimoDia)
     .order("dia", { ascending: false })
     .limit(400);
   // A cotação anterior ao início da janela também importa: um dia sem captura
@@ -382,7 +413,7 @@ export async function GET(req: NextRequest) {
   const { data: fxAnterior } = await admin
     .from("platform_fx_rates")
     .select("dia, usd_brl")
-    .lt("dia", startIso.slice(0, 10))
+    .lt("dia", primeiroDia)
     .order("dia", { ascending: false })
     .limit(1);
   const historico: CotacaoDoDia[] = [...(fxRows ?? []), ...(fxAnterior ?? [])].map((r) => ({
@@ -395,7 +426,9 @@ export async function GET(req: NextRequest) {
   const { data: faturaRows } = await admin
     .from("platform_openai_spend")
     .select("dia, usd")
-    .gte("dia", startIso.slice(0, 10))
+    .gte("dia", primeiroDia)
+    // FORK MIA (MIA-44): a fatura do mês passado não soma os dias deste mês.
+    .lte("dia", ultimoDia)
     .order("dia", { ascending: false })
     .limit(400);
   const fatura =
@@ -426,6 +459,7 @@ export async function GET(req: NextRequest) {
   return ok<UsageData>(
     {
       range,
+      mes,
       tenants,
       series,
       natureza,

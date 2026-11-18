@@ -30,7 +30,7 @@ function fmtNum(n: number): string {
 // CSV export
 // ---------------------------------------------------------------------------
 
-function exportCSV(tenants: UsageTenantRow[], range: UsageRange): void {
+function exportCSV(tenants: UsageTenantRow[], periodo: string): void {
   const headers = [
     "organization_id",
     "tenant",
@@ -64,7 +64,7 @@ function exportCSV(tenants: UsageTenantRow[], range: UsageRange): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `usage-${range}.csv`;
+  anchor.download = `usage-${periodo}.csv`;
   anchor.click();
   URL.revokeObjectURL(url);
 }
@@ -76,9 +76,11 @@ function exportCSV(tenants: UsageTenantRow[], range: UsageRange): void {
 interface UsageTableProps {
   tenants: UsageTenantRow[];
   range: UsageRange;
+  /** FORK MIA (MIA-44): AAAA-MM quando o período é um mês; vence `range` no nome do CSV. */
+  mes?: string | null;
 }
 
-export function UsageTable({ tenants, range }: UsageTableProps) {
+export function UsageTable({ tenants, range, mes }: UsageTableProps) {
   const t = useT();
   if (tenants.length === 0) {
     return (
@@ -99,7 +101,7 @@ export function UsageTable({ tenants, range }: UsageTableProps) {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => exportCSV(tenants, range)}
+          onClick={() => exportCSV(tenants, mes ?? range)}
           className="gap-1.5 text-xs"
         >
           {t("Exportar CSV")}
