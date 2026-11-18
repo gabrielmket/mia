@@ -791,13 +791,17 @@ conexão pelo app (S3) e saída e volta (S4) ainda não. **Migrations** 9162. **
 **Protege.** Invariantes `coexistencia-historico-nao-dispara.test.ts` (nada dispara, nada muda na conversa
 e no negócio que já existiam, reentrega não duplica, com o controle), `historico-importado-nao-dispara.test.ts`
 (o corte da 0760), `rls-tabelas-da-mia.test.ts`, `rls-completude-varredura.test.ts`; unidade
-`coexistencia-historico-leitura.test.ts`, `dispatcher-org-parada.test.ts`, `evento-comando-tem-consumidor.test.ts`.
+`coexistencia-historico-leitura.test.ts`, `dispatcher-org-parada.test.ts`, `evento-comando-tem-consumidor.test.ts`,
+`historico-midia-so-guarda.test.ts` (a mídia do histórico, pelos dois chamadores, a coexistência e a importação
+do canal não oficial, só é guardada: sem derivação, transcrição, visão nem IA, com o controle sem a chave).
 
 **Conferir.**
 1. `git grep -n "receberHistoricoDaMeta\|ingerirContatoDoAppContando" "app/api/v1/webhooks/meta/[token]/route.ts"` (**as duas chamadas existem**; sem a primeira o histórico volta a ser ignorado em silêncio).
 2. `git grep -n "historico_importado" supabase/migrations/*0760*` e a mesma chave em `fn_emit_message_event` no `baseline.sql` (se o upstream mudar o corte, o histórico passa a acordar a IA).
 3. `npx vitest run tests/unit/coexistencia-historico-leitura.test.ts tests/unit/dispatcher-org-parada.test.ts`.
-4. MCP: nenhuma ferramenta nesta etapa (a leitura da sincronização entra na S3, com a tela).
+4. `npx vitest run tests/unit/historico-midia-so-guarda.test.ts` (se reprovar, o worker de mídia voltou a pedir
+   a derivação paga para conversa de meses atrás: a guarda é o `historicoImportado` de `workers/media-persist-worker.ts`).
+5. MCP: nenhuma ferramenta nesta etapa (a leitura da sincronização entra na S3, com a tela).
 
 **Riscos.** Se o upstream passar a ler o campo `history` no `parseMetaWebhook` ou a gravar o histórico por
 `ingestMetaInbound`, o histórico entraria duas vezes ou como mensagem nova: conferir na fusão. Relatórios e
@@ -831,7 +835,7 @@ raio-X do fork ainda contam o histórico importado (9163, espera a decisão D3).
 | 20 | Produto no negócio | `produto-no-negocio.md` | 9160, 9161 | `produto-no-negocio-servidor.test.ts`, `produto-no-negocio-regras.test.ts` |
 | 21 | Raio-X do atendimento | `raio-x-do-atendimento.md` | 9150, 9151, 9152 | `raio-x-leitor-nao-envia.test.ts`, `raio-x-anonimizar.test.ts` |
 | 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
-| 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-historico-leitura.test.ts` |
+| 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.
