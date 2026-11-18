@@ -202,3 +202,42 @@ describe("plataforma_ver_cliente · SEÇÃO NOVA `link_de_pagamento` (upstream 9
     expect(c.banco.escritas).toEqual([]);
   });
 });
+
+describe("plataforma_ver_cliente · `link_de_pagamento` quando a leitura falha (MIA-19)", () => {
+  /** Uma consulta que termina com erro do banco, qualquer que seja a corrente de filtros. */
+  function consultaComErro() {
+    const resposta = { data: null, count: null, error: { message: "falha simulada" } };
+    const corrente: Record<string, unknown> = {};
+    for (const m of ["select", "eq", "neq", "not", "is", "in", "order", "limit", "range"]) corrente[m] = () => corrente;
+    corrente.then = (ok: (v: typeof resposta) => unknown) => Promise.resolve(ok(resposta));
+    return corrente;
+  }
+
+  async function lerComFalha(modo: "erro" | "lanca") {
+    const c = await preparar();
+    c.tabela("platform_config").push({ chave: "MODULO_LINK_DE_PAGAMENTO", valor: "ligado" });
+    const cliente = c.cliente as unknown as { from: (t: string) => unknown };
+    const original = cliente.from.bind(cliente);
+    cliente.from = (t: string) => {
+      if (t !== "pagamento_recebimentos") return original(t);
+      if (modo === "lanca") throw new Error("falha simulada");
+      return consultaComErro();
+    };
+    const r = await ok(c, "plataforma_ver_cliente", {});
+    return r.dados as Linha;
+  }
+
+  it.each(["erro", "lanca"] as const)("a tabela %s: a seção diz \"nao_lido\" e o retrato do cliente não cai", async (modo) => {
+    const dados = await lerComFalha(modo);
+    const secao = dados.link_de_pagamento as Linha;
+    expect(secao.recebimentos_por_situacao).toBe("nao_lido");
+    expect(secao.ultimo_pago_em).toBe("nao_lido");
+    // O que não depende da tabela continua preenchido.
+    expect(secao.modulo_da_instalacao_ligado).toBe(true);
+    expect(secao.quem_liga).toBe("instalacao");
+    expect(secao.provedores).toEqual([{ chave: "infinitepay", nome: "InfinitePay" }]);
+    // O resto do retrato segue lá.
+    expect(dados.cliente).toBeTruthy();
+    expect("cobrancas" in dados).toBe(true);
+  });
+});
