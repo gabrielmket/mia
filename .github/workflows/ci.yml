@@ -341,9 +341,15 @@ jobs:
         # FORK MIA (.89): cresceu. A junção do assistente da MIA (.88) com o
         # disparo de e-mail (.89) estourou os 6 GB neste passo ("JavaScript heap
         # out of memory", PR #61). 8 GB, ainda com folga nos 16 GB do runner.
+        # FORK MIA (fusão v1.108 a v1.116): cresceu de novo. O upstream da v1.116
+        # mais o fork estourou os 8 GB aos 2 min 47 s, perto do fim de um tsc
+        # normal (PR #97, run 44170014011): crescimento do projeto, não um tipo
+        # que explode. 12 GB, ainda abaixo dos 16 GB do runner (o passo roda
+        # sozinho). O `--extendedDiagnostics` imprime a memória usada ("Memory
+        # used"), para a próxima vez que encostar já ter o número medido.
         env:
-          NODE_OPTIONS: --max-old-space-size=8192
-        run: pnpm typecheck
+          NODE_OPTIONS: --max-old-space-size=12288
+        run: pnpm typecheck --extendedDiagnostics
 
       # Na parte 2, não na 1: o porquê e a conta estão no cabeçalho do job.
       - name: Lint
