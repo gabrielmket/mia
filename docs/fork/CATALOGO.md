@@ -785,7 +785,9 @@ upstream; a MIA pede contatos e histórico (`smb_app_data`) uma vez só, atrás 
 o canal por QR do mesmo número sai do ar (D5). S4: o número que sai da coexistência (`PARTNER_REMOVED`,
 `ACCOUNT_OFFBOARDED`) fica fora do ar com aviso na Central, e o que volta (`ACCOUNT_RECONNECTED` ou a janela de novo)
 reaproveita sessão, contato, conversa e cartão; a edição e o apagar feitos no WhatsApp (pelo cliente ou pelo dono no
-app) chegam na mensagem original, que só é marcada. **Migrations** 9162, 9164. **Mora em**
+app) chegam na mensagem original, que só é marcada. S5: o Assistente responde sobre a conexão e sobre o número fora do ar
+(manuais `coexistencia-pelo-app` e `coexistencia-fora-do-ar` em `lib/assistente/manuais-das-telas.ts`), e o teste com um
+número de verdade tem roteiro (seção 8 do documento). **Migrations** 9162, 9164. **Mora em**
 `lib/channels/meta/coexistencia/` (S2: `historico.ts`, `mapear.ts`, `estado.ts`, `receber.ts`, `contatos.ts`,
 `gravar-lote.ts`, `lote.handler.ts`; S3: `chave.ts`, `ligar.ts`, `janela.ts`, `conectar.ts`, `sincronizacao.ts`,
 `sincronizacao.handler.ts`, `avisos.ts`, `qr-do-mesmo-numero.ts`, `leitura.ts`, `varredura.ts`; S4: `saida-e-volta.ts`,
@@ -810,7 +812,7 @@ a Meta simulada), `coexistencia-saida-e-volta.test.ts` (S4: sair e voltar pelos 
 conversa, cartão, sessão nem ciclo; a edição e o apagar no banco), `historico-importado-nao-dispara.test.ts` (o corte da 0760), `rls-tabelas-da-mia.test.ts`,
 `rls-completude-varredura.test.ts`; unidade `coexistencia-historico-leitura.test.ts`,
 `coexistencia-conexao-pelo-app.test.ts`, `coexistencia-ids-em-fatias.test.ts` (/admin/meta com 350 empresas, nenhum
-`.in` com mais de 100 ids), `coexistencia-saida-e-volta.test.ts` e `meta-edicao-e-apagar.test.ts` (S4), `mcp-de-implantacao-coexistencia.test.ts`, `dispatcher-org-parada.test.ts`,
+`.in` com mais de 100 ids), `coexistencia-saida-e-volta.test.ts` e `meta-edicao-e-apagar.test.ts` (S4), `mcp-de-implantacao-coexistencia.test.ts`, `assistente-perguntas-reais.test.ts` (S5), `dispatcher-org-parada.test.ts`,
 `evento-comando-tem-consumidor.test.ts`, `cron-respeita-org-operante.test.ts`, `canal-consulta-por-organizacao.test.ts`.
 
 **Conferir.**
