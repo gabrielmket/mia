@@ -63,7 +63,10 @@ function chamada(i: number, organization_id: string): Linha {
     id: `chamada-${String(i).padStart(6, "0")}`,
     organization_id,
     cost_cents: 3,
-    total_tokens: 1_000,
+    // `llm_calls` não tem `total_tokens` (é de `ai_invocations`): os tokens da
+    // aba Uso são entrada + saída (MIA-44).
+    input_tokens: 900,
+    output_tokens: 100,
     created_at: new Date(Date.now() - 60_000 - i * 1_000).toISOString(),
   };
 }
@@ -171,10 +174,12 @@ describe("GET /api/v1/admin/tenants/[id]/usage", () => {
   });
 
   it("acima do teto de páginas: o truncado do custo de IA passa a ligar", async () => {
+    // O teto das chamadas de IA é o de `lib/ai/usage/consumo-do-periodo.ts`
+    // (100 páginas) desde a MIA-44: a aba Uso lê pela mesma função do MCP.
     const banco = postgrestComTeto({
       conversations: [],
       platform_precos_meta: PRECOS,
-      llm_calls: Array.from({ length: 50_001 }, (_, i) => chamada(i, CLINICA)),
+      llm_calls: Array.from({ length: 100_001 }, (_, i) => chamada(i, CLINICA)),
       messages: [],
     });
     ligar(banco);
@@ -183,7 +188,7 @@ describe("GET /api/v1/admin/tenants/[id]/usage", () => {
     const { data } = (await res.json()) as { data: { ia: { chamadas: number; truncado: boolean } } };
 
     expect(data.ia.truncado).toBe(true);
-    expect(data.ia.chamadas).toBe(50_000);
+    expect(data.ia.chamadas).toBe(100_000);
   });
 });
 

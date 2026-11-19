@@ -44,6 +44,7 @@ import { LEAD_STAGES, type LeadStage } from "@/lib/agent-engine/agent/lead-state
 import { ApiError } from "@/lib/api/types";
 import { ROTULO_DO_PASSO, type EntradaDeMapeamento } from "@/lib/leads/agent-mapping";
 import { gravarMapeamentoDoAgente } from "@/lib/leads/agent-mapping-operations";
+import { categoriasDeclaradasDoFunil } from "@/lib/leads/motivos-de-perda-do-funil";
 import { chaveDeNome, slugDeNome } from "@/lib/leads/stage-editing";
 import { arquivarEtapa, atualizarEtapa, criarEtapa } from "@/lib/leads/stage-operations";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
@@ -120,6 +121,13 @@ export interface PedidoDeFunil {
   arquivar_etapas_fora_da_lista?: boolean;
   campos?: CampoPedido[];
   motivos_de_perda?: Array<string | { label: string; categoria?: string }>;
+  /**
+   * Upstream v1.111 (#4437): as categorias de perda PRÓPRIAS do funil, na ordem
+   * da tela (`settings.lost_reason_categories`). A lista pedida SUBSTITUI a
+   * declarada, e `[]` é "escondi todas" (não volta a de fábrica). Tirar uma
+   * categoria não mexe no `categoria` dos motivos que já a usam.
+   */
+  categorias_de_perda?: string[];
   motivos_de_ganho?: string[];
   motivo_de_ganho_obrigatorio?: boolean;
   vocabulario?: {
@@ -629,6 +637,25 @@ function montarConfiguracao(
     if (mudou) patch.lost_reasons = lista;
   }
 
+  if (pedido.categorias_de_perda !== undefined) {
+    // A mesma limpeza da leitura (`categoriasDeclaradasDoFunil`): aparada e sem
+    // repetida. A comparação é com a lista DECLARADA, não com a efetiva: quem
+    // nunca declarou e pede a de fábrica passa a ter a chave gravada.
+    const vistas = new Set<string>();
+    const pedidas: string[] = [];
+    for (const crua of pedido.categorias_de_perda) {
+      const texto = crua.trim();
+      if (!texto || vistas.has(texto)) continue;
+      vistas.add(texto);
+      pedidas.push(texto);
+    }
+    const declaradas = categoriasDeclaradasDoFunil(atual.settings);
+    if (declaradas === null || !mesmoConteudo(declaradas, pedidas)) {
+      patch.lost_reason_categories = pedidas;
+      mudancas.push(pedidas.length === 0 ? "categorias de perda escondidas" : "categorias de perda");
+    }
+  }
+
   if (pedido.motivos_de_ganho) {
     const existentes = Array.isArray(atual.settings.won_reasons) ? (atual.settings.won_reasons as string[]) : [];
     const lista = [...existentes];
@@ -852,6 +879,7 @@ export async function garantirFunil(c: Implantacao, pedido: PedidoDeFunil): Prom
   const pediuConfiguracao =
     pedido.campos !== undefined ||
     pedido.motivos_de_perda !== undefined ||
+    pedido.categorias_de_perda !== undefined ||
     pedido.motivos_de_ganho !== undefined ||
     pedido.motivo_de_ganho_obrigatorio !== undefined ||
     pedido.vocabulario !== undefined ||

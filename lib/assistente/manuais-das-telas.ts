@@ -1112,6 +1112,27 @@ const TELAS_DO_UPSTREAM: Manual[] = [
     ],
     observacao: "Só existe com o módulo de agências ligado na instalação. Quando aparece Limite atingido, o aumento é pedido ao administrador da plataforma.",
   },
+  // .117 (upstream v1.117): a tela que mostra, etapa por etapa, os fluxos de
+  // "negócio parado na mesma etapa" e edita o prazo no próprio fluxo.
+  {
+    id: "followup-por-etapa",
+    titulo: "Follow-up por etapa: o prazo de cada fluxo de negócio parado, etapa por etapa",
+    palavras: [
+      "follow-up por etapa", "followup por etapa", "etapa parada", "negocio parado", "prazo do follow-up",
+      "dias parado", "lembrete por etapa", "acompanhamento da etapa", "quantos dias", "retomar negocio",
+    ],
+    href: "/app/settings/followup-por-etapa",
+    papelMinimo: "manager",
+    passos: [
+      "Abra Configurações e, em Sua empresa, Follow-up por etapa.",
+      "A tela lista as etapas abertas de cada funil e, em cada uma, os fluxos de negócio parado na mesma etapa que a alcançam. Etapa sem fluxo aparece com o aviso Nenhum fluxo de etapa parada alcança esta etapa.",
+      "Em Prazo (dias), mude quantos dias o negócio precisa ficar parado para o fluxo agir.",
+      "Clique em Salvar prazos. O prazo é gravado no próprio fluxo, o mesmo que o sistema lê.",
+      "Para mudar a mensagem, use Abrir no construtor do fluxo: o texto continua no fluxo.",
+    ],
+    observacao:
+      "Não existe um prazo da etapa: cada fluxo tem o seu, e uma etapa alcançada por dois fluxos mostra os dois, que disparam cada um o seu lembrete. Fluxo desligado aparece marcado e não age.",
+  },
 ];
 
 /**

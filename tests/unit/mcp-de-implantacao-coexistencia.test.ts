@@ -124,9 +124,9 @@ beforeEach(() => {
 });
 
 describe("as três da coexistência", () => {
-  it("estão na lista, e a lista tem 121", () => {
+  it("estão na lista, e a lista tem 122 (119 até a do consumo de IA, MIA-44, + as três da coexistência)", () => {
     for (const n of NOMES) expect(FERRAMENTA_POR_NOME.has(n), n).toBe(true);
-    expect(FERRAMENTAS).toHaveLength(121);
+    expect(FERRAMENTAS).toHaveLength(122);
   });
 
   it("ver é leitura; ligar exige colocar_no_ar, e o raio da caixinha fala da coexistência", () => {

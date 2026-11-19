@@ -120,8 +120,8 @@ describe("a lista: 69 ferramentas, e os tipos de ação seguem os do upstream", 
       // .108: as três da trava de robô.
       // .109: as duas do produto no negócio.
       // MIA-18: a da lista de espera da agenda (upstream 1.105, 9235).
-      // MIA-28: as três da coexistência do WhatsApp (ver, ligar e a sincronização do app).
-      (f) => daCobranca.has(f.name) || /coexistencia|sincronizacao_do_app|lista_de_espera|etiquetar_contatos|assistente|chamado|email|supressao|consentimentos|segmentos|trilhas|travam|melhoria_do_produto|parceiro|cupo[mn]|repasse|raio_x|travas?_de_robo|produto_no_negocio|palavra_do_segmento/.test(f.name),
+      // MIA-44: a do consumo de IA por mês e por agente. MIA-28: as três da coexistência do WhatsApp (ver, ligar e a sincronização do app).
+      (f) => daCobranca.has(f.name) || /consumo_de_ia|coexistencia|sincronizacao_do_app|lista_de_espera|etiquetar_contatos|assistente|chamado|email|supressao|consentimentos|segmentos|trilhas|travam|melhoria_do_produto|parceiro|cupo[mn]|repasse|raio_x|travas?_de_robo|produto_no_negocio|palavra_do_segmento/.test(f.name),
     );
     expect(FERRAMENTAS.length - doFork.length).toBe(69);
   });

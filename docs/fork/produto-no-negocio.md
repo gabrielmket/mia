@@ -167,6 +167,13 @@ negócio, a razão é esta.
   funis; as contagens dos outros testes do MCP vão a 117.
 - `tests/invariants/produto-no-negocio.test.ts` e a tabela em `rls-tabelas-da-mia.test.ts` e
   `rls-completude-varredura.test.ts`.
+- `tests/e2e/itens-do-negocio.spec.ts` (parte 3 do e2e), pela tela e conferindo no banco:
+  em Editar negócio, a busca no catálogo, a quantidade, o desconto e a soma que vira o valor;
+  o preço congelado quando o catálogo muda; o valor digitado à mão que para de somar; tirar
+  um item e "Usar a soma". Na janela de ganho, com "pedir" ligado, o `/win` sem item
+  recusado com 422 e a janela que só confirma com item (e grava item, valor e motivo); com
+  "pedir" desligado (a chave ausente), o fechamento sem item e o negócio de antes dos itens
+  fechado sem nada regravado. Ficam de fora o mover em lote e o Novo negócio (seção 11).
 
 ## 10. Pontos de ligação no código do upstream
 
