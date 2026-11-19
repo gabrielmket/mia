@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **119** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda e a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md)): as 111 desta página e as 8 da migração
+São **122** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda, a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md), e a MIA-67 as três da 1.117: contar os negócios e ver e revogar as conexões do MCP da empresa): as 114 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -254,6 +254,8 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | `plataforma_ver_email_marketing` | o RETRATO do e-mail marketing (.89): módulo, Amazon ligada no servidor (só sim ou não, nunca a chave), o domínio e os seis registros com o que falta, os remetentes, o "responder para", o rodapé, o ritmo e a janela, o degrau do aquecimento, a saúde dos 30 dias, o preço por e-mail (desde a .95, com a origem: definido à mão, o plano ou o padrão), o saldo, a supressão, os textos de consentimento, os segmentos, os modelos e as PENDÊNCIAS para o primeiro envio | leitura |
 | `plataforma_ver_campanhas_de_email` | as campanhas de e-mail (.89): situação, por que pausou, o andamento e, com `campanha_id`, os resultados (entregues, aberturas como estimativa, cliques únicos sem robô, descadastros, rejeições, reclamações, cobrado e cliques por link) | leitura |
 | `plataforma_ver_links_do_dono` | os links para o dono do negócio de um cliente: para quem, o endereço, a situação (ativo, vencido, revogado), os painéis, o período, se mostra valores, a validade, o último acesso e quantos acessos | leitura |
+| `plataforma_contar_negocios` | (upstream 1.117, MIA-67) quantos negócios um cliente tem, por funil, etapa (nome ou id) e situação: o total e, sem filtro de situação, o total aberto, ganho e perdido. Só números, pela porta do `crm_count_leads` (`countLeadsHandler`): o negócio de contato pessoal não conta | leitura |
+| `plataforma_ver_conexoes_do_mcp` | (upstream 1.117, 9390, MIA-67) os aplicativos conectados ao MCP da empresa pelo OAuth: o nome que o aplicativo declarou, o host para onde o acesso foi entregue, a situação (ativa, revogada, vencida), o acesso (`ler` ou `ler_e_alterar`), o papel gravado no token, quem autorizou, o nome na tela de API Tokens e o último uso. Nada do token nem do refresh; os tokens colados à mão não aparecem | leitura |
 
 ### Operações que já existiam
 
@@ -365,6 +367,23 @@ no banco fica só o hash. Por isso "Copiar link" funciona a qualquer hora e
 não manda dado nenhum para a prévia do WhatsApp, conta e audita cada abertura sem
 identificar a pessoa, e usa metadados fixos. Na empresa de demonstração o link
 funciona com os dados fictícios e a página avisa que é demonstração.
+
+### As conexões de aplicativo ao MCP da empresa · operação `revogar_conexao_do_mcp` (1.117)
+
+Desde a 1.117 (migration 9390) um aplicativo que não deixa colar chave, como o
+ChatGPT, conecta ao `/api/mcp` da empresa pelo OAuth: o administrador da empresa
+autoriza na tela do CRM e o aplicativo recebe um token `dsk_` de `api_tokens`
+marcado `aud:mcp` (só vale no `/api/mcp`). Cada conexão é uma linha de
+`mcp_oauth_concessoes` com o token dela, e a tela de API Tokens a mostra e revoga
+como um token. O MCP de plataforma só lê e revoga: não cria conexão (o
+consentimento é do administrador da empresa) e não mexe no acesso que "Ler e
+alterar" dá ao aplicativo, que é do banco (`fn_mcp_oauth_trocar_codigo`). Caixinha
+própria no token porque o estrago é outro: não monta nada e não fala com ninguém,
+mas corta um acesso que a empresa deu.
+
+| ferramenta | o que faz | reexecução |
+|---|---|---|
+| `plataforma_revogar_conexao_do_mcp` | revoga UMA conexão pelo `conexao_id` (de `plataforma_ver_conexoes_do_mcp`): o token fica revogado (`revoked_at`, `revoked_by`, como na tela, e a trilha `token.revoked`) e a concessão marcada `revogada_em` (como `fn_mcp_oauth_desligar`), então o aplicativo para na hora e a renovação é recusada. Recusa a conexão de outra empresa e a que aponta para token sem `aud:mcp` (token à mão nunca é revogado por aqui) | revogada de novo, ou revogada antes na tela, responde `ja_estava` sem escrever |
 
 ### O disparo de e-mail marketing (.89)
 
@@ -797,26 +816,33 @@ busca de contatos pelo índice (9421) são regra do banco.
 
 ### O que chegou do upstream 1.117 (fusão de 18/11)
 
-O MCP não ganhou ferramenta nem campo nesta fusão: por decisão do Chefe (MIA-62), o
-MCP desta faixa vira uma tarefa própria depois dela. O que a fusão ajustou para nada
-quebrar, e o que já alcança:
+A fusão (MIA-62) entrou sem ferramenta nem campo novo: só o ajuste para nada quebrar (o
+`prazo` do passo do plano de tarefas). O que faltava veio em seguida, num PR próprio
+(MIA-67): **três ferramentas novas** (a lista vai de 119 a 122, com a do consumo de IA da MIA-44 já dentro) e uma operação nova,
+`revogar_conexao_do_mcp`. A prova está em
+`tests/unit/mcp-de-implantacao-novidades-do-upstream-1117.test.ts`.
 
 | novidade do upstream | versão | como o MCP alcança | operação |
 |---|---|---|---|
+| A ferramenta `crm_count_leads` do MCP da empresa: conta negócios por funil, etapa e situação sem listar nenhum (`countLeadsHandler`) | 1.117 | como capacidade do agente, já alcançava: o catálogo da instalação a traz no pacote "reter", que `plataforma_garantir_agente` liga (`pacotes: ["reter"]` grava `crm_count_leads` no rascunho) e `plataforma_listar_modelos` (seção `capacidades_do_agente`) ensina. ATENÇÃO: o agente que já tinha o pacote "reter" inteiro passa a aparecer sem ele em `plataforma_ver_agentes` (`pacotes_ligados`) até o pacote ser ligado de novo, porque o pacote ganhou uma capacidade; é a régua do upstream, a mesma da tela. Para a implantação, a ferramenta nova `plataforma_contar_negocios` conta pela MESMA porta (o total e o total por situação, com funil e etapa pelo nome) | leitura |
+| O token de integração `dsk_` nas rotas de leads e de propostas (`requireRole` virou `resolveAuthDual`, #4390) | 1.117 | nada a configurar: o MCP de plataforma não passa por rota nenhuma delas, só pelos handlers compartilhados (`app/api/v1/leads/_handler.ts`), que ganharam o filtro de organização em mais leituras e o `actorApiTokenId` na trilha. A cerca do arquivo de prova reprova se um arquivo de `lib/mcp-plataforma` importar uma dessas rotas | |
+| O OAuth do MCP (9390): o aplicativo conecta ao `/api/mcp` pelo consentimento do administrador da empresa, com um token `dsk_` marcado `aud:mcp` | 1.117 | duas ferramentas novas: `plataforma_ver_conexoes_do_mcp` (leitura) e `plataforma_revogar_conexao_do_mcp` (operação `revogar_conexao_do_mcp`), descritas em "As conexões de aplicativo ao MCP da empresa", nesta seção. Criar conexão fica de fora: o consentimento é da pessoa | `revogar_conexao_do_mcp` |
 | O prazo do passo do plano de tarefas pode contar de um campo de data do negócio (`prazo`, 9404, #4717) | 1.117 | `plataforma_garantir_planos_de_tarefa` grava o passo com `prazo` no modo de sempre (`dias_a_partir_de_hoje`) e mantém `vence_em_dias`; `plataforma_ver_configuracao` (seção `planos_de_tarefa`) passa a devolver o `prazo`, inclusive o de campo de data feito na tela | `implantar_configuracao` |
 | Os prazos dos fluxos de negócio parado, etapa por etapa (tela Follow-up por etapa) | 1.117 | já alcançava: o prazo é o `trigger_config.dias` do próprio fluxo, o mesmo que `plataforma_garantir_automacao` grava | `implantar_configuracao` |
 
-Falta no MCP (fica para a tarefa de MCP desta faixa):
+Falta no MCP (cada item com o motivo):
 
-- `crm_count_leads` (ferramenta nova do MCP de dentro) e o token de
-  integração `dsk_` nas rotas de leads e de propostas;
-- o OAuth do MCP (9390): nada a configurar por empresa, mas o manual "MCP da MIA" do
-  assistente ainda só fala do token colado à mão;
+- o manual "MCP da MIA" do assistente (`lib/assistente/manuais-das-telas.ts`) ainda só
+  ensina o token colado à mão, e o ChatGPT, que está nas palavras dele, conecta pelo
+  OAuth. Mudar o manual muda o que a equipe do cliente lê no assistente: fica para o
+  Chefe decidir (MIA-67);
 - o prazo por campo de data em `plataforma_garantir_planos_de_tarefa` (hoje só o modo de
-  sempre);
+  sempre): campo novo de uma ferramenta que já existe, fora do recorte da MIA-67;
 - o agente da campanha de entrada (`campaign_entry_agent_id`, 9415) e a troca silenciosa
-  do roteador: campos novos de campanha e de roteador;
-- a cor por canal no aviso de mensagem (`definirCorPorCanal`): campo novo de notificações.
+  do roteador: campos novos de campanha e de roteador, e os dois mudam quem responde ao
+  cliente final (ligados, falam com ele), então pedem decisão antes;
+- a cor por canal no aviso de mensagem (`definirCorPorCanal`): campo novo de
+  notificações, que nasce ligado (é só visual).
 
 Nada a configurar pela implantação: as identidades de rede social do contato (9419) são
 gravadas pela ingestão, e o compromisso cancelado que deixa excluir o contato (9405) é
@@ -1203,6 +1229,7 @@ Testes:
 | `tests/invariants/distribuicao-do-numero-pela-plataforma.test.ts` | a função da 9045 no Postgres de verdade: o controle negativo (a porta do upstream recusa o ator da plataforma), o mesmo efeito da porta do upstream, as recusas copiadas, o gatilho do upstream que solta o destino de quem sai, o `reset`, as recusas do ator e que só o `service_role` executa |
 | `tests/unit/mcp-de-implantacao-relatorios.test.ts` | as duas ferramentas do montador de relatórios (.80), a operação `implantar_configuracao`, o que o garantir grava (prontos ligados ao funil, relatórios do segmento e painel, compartilhados), que rodar de novo não duplica e só completa o painel, a meta do mês, o funil de outra empresa, e a leitura sem o "só para mim" de ninguém |
 | `tests/invariants/montador-de-relatorios.test.ts` | as tabelas do montador (9040) e o motor estendido (9041) no Postgres de verdade: quem vê, cria, compartilha, edita e exporta, com controle positivo e negativo; produto, filtro de vários valores, meta por grupo de tempo, funil com soma, responsável no follow-up, agente nas conversas; a lista por trás do número com a mesma conta; e o link do painel (9042) |
+| `tests/unit/mcp-de-implantacao-novidades-do-upstream-1117.test.ts` | as novidades do upstream 1.117 (MIA-67): `crm_count_leads` no pacote "reter" (catálogo, `plataforma_listar_modelos` e o rascunho do agente), `plataforma_contar_negocios` (o total, por situação, os filtros pelo nome, a outra empresa que não entra, a recusa que ensina, a leitura livre), a cerca de que o MCP de plataforma não importa rota de leads nem de propostas, e as conexões OAuth: a leitura sem nada do token nem dos tokens à mão, a revogada na tela, revogar o token e a concessão com a trilha da tela, o `ja_estava` sem escrita, a outra empresa, o token sem `aud:mcp` e a operação própria |
 | `tests/unit/mcp-de-implantacao-paineis.test.ts` | as quatro ferramentas dos painéis e do link para o dono (.78): a caixinha `compartilhar_paineis`, que o garantir não duplica e ajusta no mesmo endereço, a revogação, a leitura e a demonstração; e a meta do mês em `plataforma_configurar_empresa` |
 | `tests/invariants/motor-de-conta-dos-relatorios.test.ts` | o motor de conta (9030) no Postgres de verdade: a regra de data e o fuso, sem o teto de 1000 linhas, as etiquetas, o "Sem …" e o "Outros", a meta, quem vê o quê (atendente, gestor, outra empresa, anon, plataforma) e a situação da obrigação igual à de `lib/obrigacoes/situacao.ts` |
 | `tests/invariants/link-dos-paineis-para-o-dono.test.ts` | a tabela do link (9031): só o servidor lê e escreve, as constraints, o funil de outra empresa e a contagem de acesso só em link vivo |

@@ -221,6 +221,18 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "os números do atendimento a quem o tiver, sem login, até vencer ou ser revogado. E encerra: derruba a conexão e agenda a exclusão das " +
       "conversas. Um token vazado gera links de conexão em nome da Time e publica relatório que ninguém revisou de verdade.",
   },
+  // FORK MIA (upstream 1.117, migration 9390, MIA-67): revogar a conexão de um
+  // aplicativo (o ChatGPT) ao MCP da empresa. Chave própria: não monta nada e não
+  // fala com ninguém, mas CORTA um acesso que a empresa deu. Criar conexão não tem
+  // chave: só o administrador da empresa conecta, no aplicativo.
+  {
+    chave: "revogar_conexao_do_mcp",
+    rotulo: "Revogar a conexão de um aplicativo ao MCP da empresa",
+    raio:
+      "Revoga, em QUALQUER cliente, a conexão de um aplicativo (como o ChatGPT) ao MCP da empresa, feita pelo OAuth: o aplicativo deixa de ler e de alterar " +
+      "o CRM na hora, e o administrador da empresa precisa autorizar de novo. Um token vazado derruba as integrações de IA de todos os clientes. " +
+      "Não cria conexão, não lê o token e não mexe nos tokens colados à mão.",
+  },
 ] as const;
 
 const POR_CHAVE = new Map(OPERACOES.map((o) => [o.chave, o]));
