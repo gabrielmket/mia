@@ -8344,7 +8344,7 @@ export const DICIONARIO: Traducoes = {
   "Alvo (quantidade)": { es: "Objetivo (cantidad)" },
   "Alvo inválido.": { es: "Objetivo inválido." },
   "Da empresa inteira": { es: "De toda la empresa" },
-  "De quem é a meta": { es: "De quién es la meta" },
+  // "De quem é a meta" vem do bloco do upstream (#4796, meta em valor): as duas eram iguais e o tsc recusa chave repetida.
   "Definir meta": { es: "Definir meta" },
   "Definir meta do mês": { es: "Definir meta del mes" },
   "Informe o alvo.": { es: "Informe el objetivo." },

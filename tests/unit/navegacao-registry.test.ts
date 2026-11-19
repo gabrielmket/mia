@@ -252,8 +252,10 @@ describe("hubSections", () => {
 
   it("o catálogo de serviços só tem porta com o módulo catalogo_servicos instalado (#3480)", () => {
     const hrefs = (modulos: readonly ModuloOpcional[]) =>
-      hubSections("crm", true, null, undefined, modulos).flatMap((s) => s.items.map((i) => i.href));
-    const busca = (modulos: readonly ModuloOpcional[]) => searchable(true, null, undefined, modulos).map((d) => d.href);
+      // FORK MIA: os módulos da instalação vêm em 6º (busca) e 7º (hub); o 4º/5º e o 5º/6º são os nossos. Ver `hubSections`.
+      hubSections("crm", true, null, undefined, undefined, undefined, modulos).flatMap((s) => s.items.map((i) => i.href));
+    const busca = (modulos: readonly ModuloOpcional[]) =>
+      searchable(true, null, undefined, undefined, undefined, modulos).map((d) => d.href);
     expect(dest("/app/servicos").modulo).toBe("catalogo_servicos");
     expect(hrefs([])).not.toContain("/app/servicos");
     expect(busca([])).not.toContain("/app/servicos");
