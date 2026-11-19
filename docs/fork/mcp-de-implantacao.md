@@ -802,9 +802,12 @@ oficial (9328) é gravada pelo próprio cadastro.
 
 ### O que chegou do upstream 1.119 (fusão de 19/11)
 
-A fusão (MIA-91) entra sem ferramenta nem campo novo, como na 1.117 e na 1.118: nenhuma das
-rotas e funções que o MCP espelha (seção 5) mudou na faixa. O que a implantação de um cliente
-usaria fica listado abaixo, para um PR próprio.
+A fusão (MIA-91) entra sem ferramenta nem campo novo, como na 1.117 e na 1.118. Uma rota
+espelhada (seção 5) mudou na faixa: o PATCH de `app/api/v1/products/[id]/route.ts` ganhou a
+porta do catálogo de serviços (#3480), e `lib/implantacao/produtos.ts` levou a mesma regra
+(com o módulo ligado, o preço de um produto que já existe não fica abaixo do sinal fixo do
+serviço; o item sai recusado com o motivo). O que a implantação de um cliente usaria fica
+listado abaixo, para um PR próprio.
 
 Falta no MCP (cada item com o motivo):
 
