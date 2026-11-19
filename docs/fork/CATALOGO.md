@@ -108,12 +108,17 @@ segundo chamador da exceção do convite.
 gatilho, view ou constraint que já exista no `baseline.sql`: vale o nosso (roda por último) e a melhoria
 futura do upstream some em silêncio. Migration do upstream que passa a definir um nome que o fork já usa
 também é colisão. O carimbo (`lib/schema/carimbo.ts` e o `insert` no `baseline-mia.sql`) é a nossa mais nova.
+Exceção à ordem: o trecho entre `-- >>> ANTES DO BASELINE DO UPSTREAM` e `-- <<< ...` do `baseline-mia.sql`
+(migration 9163) roda ANTES do `baseline.sql`, recortado por `antes_do_upstream` nas duas passadas do modo update
+do `bootstrap.sh` e pelo `scripts/ensaio-de-banco.sh`; se ele some ou perde a chamada, nada dá erro e a
+`organization_modules` do upstream (9416) cai na nossa.
 
 ```bash
 git diff --stat upstream/main vB -- supabase/baseline.sql supabase/migrations   # vazio se vB é o upstream puro
 ls supabase/migrations supabase/migrations-mia | grep -E "_9[0-9]{3}_" | sort | uniq -d   # número repetido
 node scripts/redefinicoes-do-upstream.mjs supabase/baseline.sql supabase/baseline-mia.sql
 npx vitest run tests/unit/schema-mia-estende-nunca-redefine.test.ts tests/unit/carimbo-do-schema.test.ts   tests/unit/mcp-de-implantacao-espelhos.test.ts   # o último guarda as funções do upstream que copiamos (9022, 9045)
+npx vitest run tests/unit/schema-mia-antes-do-upstream.test.ts   # o trecho da 9163 existe e roda antes do baseline.sql
 ```
 
 ### R4. LGPD: anonimização e exportação cobrem as tabelas nossas
