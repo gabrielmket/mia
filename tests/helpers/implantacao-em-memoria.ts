@@ -48,6 +48,8 @@ export const TODAS_AS_OPERACOES = [
   "decidir_cadastro",
   // FORK MIA (.101): o raio-X do atendimento.
   "gerir_raio_x",
+  // FORK MIA (upstream 1.117, MIA-67): revogar a conexão OAuth de um aplicativo ao MCP da empresa.
+  "revogar_conexao_do_mcp",
 ];
 
 /** O funil de e-commerce que o gatilho de seed entrega a toda organização nova. */
