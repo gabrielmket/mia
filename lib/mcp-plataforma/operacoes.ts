@@ -233,6 +233,18 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "o CRM na hora, e o administrador da empresa precisa autorizar de novo. Um token vazado derruba as integrações de IA de todos os clientes. " +
       "Não cria conexão, não lê o token e não mexe nos tokens colados à mão.",
   },
+  // FORK MIA (upstream 1.118, migration 9416, MIA-79): o módulo OPCIONAL do
+  // upstream por empresa. Chave própria, e não `liberar_modulo` (o módulo
+  // VENDIDO do fork): um token que já tinha aquela não ganha esta em silêncio.
+  // Na tela do upstream, só o admin de plataforma decide.
+  {
+    chave: "gerir_modulo_opcional",
+    rotulo: "Ligar ou desligar módulo opcional por empresa",
+    raio:
+      "Desliga (ou devolve ao padrão) um módulo opcional da instalação em QUALQUER cliente: as telas e as rotas do módulo somem para a equipe da empresa e o que ele faz " +
+      "sozinho para (a IA deixa de seguir os fluxos de atendimento, a fila de ligações some). Um token vazado tira recurso de todos os clientes. " +
+      "Não apaga dado, não liga nada na instalação e não mexe nos módulos vendidos.",
+  },
 ] as const;
 
 const POR_CHAVE = new Map(OPERACOES.map((o) => [o.chave, o]));

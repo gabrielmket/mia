@@ -50,6 +50,8 @@ export const TODAS_AS_OPERACOES = [
   "gerir_raio_x",
   // FORK MIA (upstream 1.117, MIA-67): revogar a conexão OAuth de um aplicativo ao MCP da empresa.
   "revogar_conexao_do_mcp",
+  // FORK MIA (upstream 1.118, MIA-79): o módulo opcional por empresa.
+  "gerir_modulo_opcional",
 ];
 
 /** O funil de e-commerce que o gatilho de seed entrega a toda organização nova. */

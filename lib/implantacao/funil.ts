@@ -24,7 +24,7 @@
  * funil já existente, o caminho é o da tela: etapa a etapa, preservando os
  * ids, e sem arquivar nada que o pedido não cite.
  *
- * ── A janela de esfriando ganhou tela; a cor continua sem ───────────────────
+ * ── A janela de esfriando, a cor e o critério: tudo pela tela de etapas ─────
  *
  * `expected_duration_hours` (o prazo que o radar de risco usa para dizer que o
  * negócio esfriou) nasceu sem tela e era escrito direto. O upstream 1.70
@@ -33,8 +33,11 @@
  * por `atualizarEtapa`, como a probabilidade, com a mesma recusa e a mesma
  * auditoria (`pipeline.stage_updated`).
  *
- * `color` (a cor da coluna no quadro) segue sem tela: é escrita direto, com a
- * autoria, como a semente da empresa de demonstração faz. `requires_human` fica
+ * `color` (a cor da coluna no quadro) era escrita direto, porque nenhuma tela a
+ * gravava. O upstream 1.118 (#4802) deu a ela a tela e a régua
+ * (`normalizarCorDaEtapa`), e o critério da etapa (`description`, #4836: o
+ * texto que o agente lê para decidir quando mover o negócio para ela) veio
+ * junto. Os dois vão por `atualizarEtapa` desde a MIA-79. `requires_human` fica
  * DE FORA de propósito: o único leitor dela é o worker legado, que não responde
  * mais; oferecê-la seria prometer um comportamento que não existe.
  */
@@ -45,10 +48,10 @@ import { ApiError } from "@/lib/api/types";
 import { ROTULO_DO_PASSO, type EntradaDeMapeamento } from "@/lib/leads/agent-mapping";
 import { gravarMapeamentoDoAgente } from "@/lib/leads/agent-mapping-operations";
 import { categoriasDeclaradasDoFunil } from "@/lib/leads/motivos-de-perda-do-funil";
-import { chaveDeNome, slugDeNome } from "@/lib/leads/stage-editing";
+import { normalizarCorDaEtapa } from "@/lib/leads/cor-da-etapa";
+import { chaveDeNome, normalizarDescricaoDeEtapa, slugDeNome } from "@/lib/leads/stage-editing";
 import { arquivarEtapa, atualizarEtapa, criarEtapa } from "@/lib/leads/stage-operations";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
-import { autoriaDaMudanca } from "@/lib/operacao/autoria";
 import { etapasParaGravar } from "@/lib/onboarding/proposta-de-funil";
 import { gravarConfiguracaoDoFunil } from "@/lib/pipelines/pipeline-config";
 import { condicoesDeclaradas, type MostrarQuando } from "@/lib/schemas/mostrar-quando";
@@ -80,6 +83,12 @@ export interface EtapaPedida {
   probabilidade?: number | null;
   prazo_esperado_horas?: number | null;
   cor?: string | null;
+  /**
+   * Upstream 1.118 (#4836): o CRITÉRIO da etapa (`crm_stages.description`),
+   * quando um negócio entra nela. É o texto que o agente lê em `crm_list_stages`
+   * para decidir mover o card. `null` ou vazio limpa.
+   */
+  criterio?: string | null;
   avisar_na_central?: boolean;
 }
 
@@ -106,6 +115,13 @@ export interface CampoPedido {
    * nunca apaga o valor gravado.
    */
   mostrar_quando?: MostrarQuando | null;
+  /**
+   * Upstream 1.118 (#4684): "A IA pode ler este campo". Só o `true` libera o
+   * valor para o modelo (`campoLiberadoParaIa`); `false` APAGA a marca, como a
+   * tela faz ao desmarcar. Ausente não mexe: o campo que já existe fica como
+   * está, e o campo novo nasce desmarcado (a regra do upstream).
+   */
+  ia_pode_ler?: boolean;
 }
 
 export interface PedidoDeFunil {
@@ -189,11 +205,13 @@ interface EtapaLida {
   avisar_na_central: boolean | null;
   expected_duration_hours: number | null;
   color: string | null;
+  /** Upstream 1.118 (#4836): o critério da etapa. */
+  description: string | null;
 }
 
 const COLUNAS_DA_ETAPA =
   "id, name, slug, position, is_won, is_lost, is_archived, win_probability, agent_stage_hint, " +
-  "avisar_na_central, expected_duration_hours, color";
+  "avisar_na_central, expected_duration_hours, color, description";
 
 async function lerEtapas(admin: SupabaseClient, orgId: string, pipelineId: string): Promise<EtapaLida[]> {
   const { data, error } = await admin
@@ -316,9 +334,10 @@ async function aplicarQuadro(
 }
 
 /**
- * O que a função do banco não recebe: as três colunas que a tela de etapas
- * grava (probabilidade, aviso na Central e janela de esfriando) e a cor, que
- * nenhuma tela grava. Devolve o que mudou, em palavras.
+ * O que a função do banco não recebe: o que a tela de etapas grava
+ * (probabilidade, aviso na Central, janela de esfriando e, desde a 1.118, a cor
+ * e o critério). Tudo por `atualizarEtapa`, com a régua e a auditoria dela.
+ * Devolve o que mudou, em palavras.
  */
 async function ajustarAtributos(
   c: Implantacao,
@@ -328,14 +347,16 @@ async function ajustarAtributos(
 ): Promise<string[]> {
   const mudancas: string[] = [];
 
-  // Probabilidade, aviso na Central e a janela de esfriando têm tela: vão pela
-  // operação dela, com a mesma validação e a mesma auditoria. A janela ganhou
-  // tela no upstream 1.70 (#2161): `atualizarEtapa` confere 1 a 8760 horas
-  // inteiras (`validarJanelaDeEsfriamento`) antes de tocar no banco.
+  // A janela ganhou tela no upstream 1.70 (#2161): `atualizarEtapa` confere 1 a
+  // 8760 horas inteiras (`validarJanelaDeEsfriamento`) antes de tocar no banco.
+  // A cor e o critério ganharam na 1.118 (#4802, #4836): a cor passa por
+  // `normalizarCorDaEtapa` e o critério pelo teto de `validarDescricaoDeEtapa`.
   const pedidoDaTela: {
     win_probability?: number | null;
     avisar_na_central?: boolean;
     expected_duration_hours?: number | null;
+    color?: string | null;
+    description?: string | null;
   } = {};
   if (pedida.probabilidade !== undefined && (atual.win_probability ?? null) !== pedida.probabilidade) {
     pedidoDaTela.win_probability = pedida.probabilidade;
@@ -357,26 +378,26 @@ async function ajustarAtributos(
     pedidoDaTela.expected_duration_hours = pedida.prazo_esperado_horas;
     mudancas.push("prazo esperado");
   }
+  if (pedida.cor !== undefined) {
+    const pedidaNormalizada = pedida.cor === null ? null : (normalizarCorDaEtapa(pedida.cor) ?? pedida.cor);
+    if (normalizarCorDaEtapa(atual.color) !== pedidaNormalizada) {
+      // A cor fora da forma segue crua: quem recusa, com a frase da tela, é `atualizarEtapa`.
+      pedidoDaTela.color = pedida.cor;
+      mudancas.push("cor");
+    }
+  }
+  if (
+    pedida.criterio !== undefined &&
+    (atual.description ?? null) !== normalizarDescricaoDeEtapa(pedida.criterio)
+  ) {
+    pedidoDaTela.description = pedida.criterio;
+    mudancas.push("critério");
+  }
   if (Object.keys(pedidoDaTela).length > 0) {
     await atualizarEtapa(
       { supabase: c.admin, organizationId: c.orgId, actor: atorDaImplantacao(c), requestId: c.requestId },
       { pipelineId, stageId: atual.id, pedido: pedidoDaTela },
     );
-  }
-
-  const direto: Record<string, unknown> = {};
-  if (pedida.cor !== undefined && (atual.color ?? null) !== (pedida.cor?.toLowerCase() ?? null)) {
-    direto.color = pedida.cor?.toLowerCase() ?? null;
-    mudancas.push("cor");
-  }
-  if (Object.keys(direto).length > 0) {
-    const { error } = await c.admin
-      .from("crm_stages")
-      .update({ ...direto, ...autoriaDaMudanca(atorDaImplantacao(c)) })
-      .eq("id", atual.id)
-      .eq("organization_id", c.orgId)
-      .eq("pipeline_id", pipelineId);
-    if (error) throw new Error(`não consegui gravar a etapa «${atual.name}»: ${error.message}`);
   }
 
   return mudancas;
@@ -476,7 +497,7 @@ async function convergirEtapas(
     }
   }
 
-  // 4. probabilidade, aviso, prazo e cor.
+  // 4. probabilidade, aviso, prazo, cor e critério.
   vivas = (await lerEtapas(c.admin, c.orgId, pipelineId)).filter((e) => !e.is_archived);
   for (const pedida of pedidas) {
     const atual = vivas.find((e) => e.id === idPorNome.get(chaveDeNome(pedida.nome)));
@@ -587,6 +608,16 @@ function montarConfiguracao(
         definicao.mostrar_quando = campo.mostrar_quando as CustomFieldDef["mostrar_quando"];
       }
       const anterior = porChave.get(campo.key.toLowerCase());
+      // Upstream 1.118 (#4684): a marca "A IA pode ler este campo" só existe no
+      // campo do NEGÓCIO (a tela não a oferece no do contato, e o recorte da IA
+      // só lê `crm_leads.custom_fields`).
+      const escopoFinal = campo.escopo ?? (anterior?.escopo === "contato" ? "contato" : "negocio");
+      if (campo.ia_pode_ler === true && escopoFinal === "contato") {
+        throw new Recusa(
+          `O campo «${campo.label}» é do CONTATO, e a marca \`ia_pode_ler\` só vale para campo do NEGÓCIO: ` +
+            "é o valor gravado no negócio que a IA lê. Tire `ia_pode_ler` ou deixe o campo do negócio.",
+        );
+      }
       // `null` tira a condição: sem esta linha a mescla com o anterior a manteria.
       // .84 — e o escopo, como a tela grava: a chave só existe quando é
       // `contato` (ausente é negócio); `negocio` pedido por extenso tira a chave.
@@ -599,6 +630,13 @@ function montarConfiguracao(
         if (campo.escopo === "contato") r = { ...r, escopo: "contato" };
         else if (campo.escopo === "negocio") {
           const { escopo: _negocio, ...resto } = r;
+          r = resto as CustomFieldDef;
+        }
+        // Upstream 1.118 (#4684): marcar grava `true`; desmarcar APAGA a chave,
+        // como a tela (a ausência é o desmarcado). Ausente no pedido não mexe.
+        if (campo.ia_pode_ler === true) r = { ...r, ia_pode_ler: true };
+        else if (campo.ia_pode_ler === false) {
+          const { ia_pode_ler: _desmarcada, ...resto } = r;
           r = resto as CustomFieldDef;
         }
         return r;
