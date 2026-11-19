@@ -87,6 +87,15 @@ export interface PeriodoDoConsumo {
  * AAAA-MM devolve `null` (quem chama responde erro de validação, em vez de cair
  * em silêncio na janela padrão). `dias` inválido cai no padrão e é limitado a
  * 1..180, como a rota já fazia.
+ *
+ * MIA-78: `dias=N` são os N DIAS DO CALENDÁRIO EM BRASÍLIA terminados hoje,
+ * hoje incluído: de 00:00 de (hoje − N + 1) a 00:00 de amanhã, em Brasília.
+ * É a régua única de "N dias" da tela geral (`/admin/usage`), da aba Uso do
+ * cliente e de `plataforma_ver_consumo_de_ia`. Antes a aba Uso e o MCP liam
+ * N×24 h corridas até agora, e a tela geral N dias de calendário UTC: a mesma
+ * chamada entrava numa e não na outra. Dia de Brasília porque o mês desta
+ * leitura já é o de Brasília: um mês é a soma dos dias dele, e a série diária
+ * da tela geral tem N barras inteiras.
  */
 export function periodoDoPedido(
   pedido: { mes?: string | null; dias?: string | number | null },
@@ -101,14 +110,52 @@ export function periodoDoPedido(
   }
   const bruto = Number(pedido.dias ?? DIAS_PADRAO) || DIAS_PADRAO;
   const dias = Math.min(Math.max(Math.trunc(bruto), DIAS_MINIMO), DIAS_MAXIMO);
+  const hoje = diaEmBrasilia(agora.toISOString());
   return {
     tipo: "dias",
     mes: null,
     dias,
-    inicio: new Date(agora.getTime() - dias * 86_400_000).toISOString(),
-    fim: agora.toISOString(),
+    inicio: inicioDoDiaEmBrasilia(somarDias(hoje, 1 - dias)),
+    fim: inicioDoDiaEmBrasilia(somarDias(hoje, 1)),
     fuso: FUSO_DO_CONSUMO,
   };
+}
+
+/** AAAA-MM-DD mais `n` dias do calendário (a conta é de data, sem fuso). */
+function somarDias(dia: string, n: number): string {
+  const d = new Date(`${dia}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+const FORMATADOR_DO_INSTANTE = new Intl.DateTimeFormat("en-US", {
+  timeZone: FUSO_DO_CONSUMO,
+  hourCycle: "h23",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
+/** Quanto o relógio de Brasília está à frente do UTC naquele instante, em ms. */
+function deslocamentoEmBrasilia(ms: number): number {
+  const partes = FORMATADOR_DO_INSTANTE.formatToParts(new Date(ms));
+  const n = (t: string) => Number(partes.find((p) => p.type === t)?.value ?? "0");
+  return Date.UTC(n("year"), n("month") - 1, n("day"), n("hour") % 24, n("minute"), n("second")) - ms;
+}
+
+/**
+ * 00:00 do dia AAAA-MM-DD em Brasília, em UTC. Duas passadas, como
+ * `janelaDoMes`: o deslocamento depende do instante (o horário de verão de
+ * antes de 2019), e o instante, do deslocamento.
+ */
+export function inicioDoDiaEmBrasilia(dia: string): string {
+  const chute = Date.parse(`${dia}T00:00:00Z`);
+  let real = chute;
+  for (let i = 0; i < 2; i++) real = chute - deslocamentoEmBrasilia(real);
+  return new Date(real).toISOString();
 }
 
 /** AAAA-MM de agora em Brasília, e o mês anterior: os dois atalhos das telas. */
