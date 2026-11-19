@@ -155,6 +155,12 @@ export async function garantirPlanosDeTarefa(
         ordem: j + 1,
         titulo: s.titulo.trim(),
         descricao: s.descricao?.trim() ? s.descricao.trim() : null,
+        // Upstream v1.117 (#4717): o passo guarda o prazo em `prazo`, e
+        // `vence_em_dias` sobra só no modo de sempre, com o mesmo número. É a
+        // forma que `lePlanosDoSettings` devolve, então um pedido igual ao que
+        // está gravado continua saindo como `ja_estava`. O MCP ainda não grava o
+        // prazo por campo de data (lista "falta no MCP" da fusão da v1.117).
+        prazo: { modo: "dias_a_partir_de_hoje" as const, dias: s.vence_em_dias },
         vence_em_dias: s.vence_em_dias,
         prioridade: s.prioridade ?? "medium",
         atribuir_a: responsavelDoPasso(s.responsavel, () => equipe, `planos[${i}].passos[${j}]`),
@@ -232,6 +238,9 @@ export function retratoDosPlanos(settings: Record<string, unknown>, membros: Mem
       ordem: s.ordem,
       titulo: s.titulo,
       descricao: s.descricao,
+      // Desde a v1.117 o passo feito na tela pode contar de um campo de data do
+      // negócio: aí não há `vence_em_dias`, e só `prazo` diz de onde conta.
+      prazo: s.prazo,
       vence_em_dias: s.vence_em_dias,
       prioridade: s.prioridade,
       responsavel:

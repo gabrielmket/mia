@@ -11,6 +11,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { MOEDAS, type Moeda } from "@/lib/cobranca/vocabulario";
+
 import { ehModuloDoPlano, slugDoPlano, type ModuloDoPlano } from "./catalogo";
 
 export interface PlanoComModulos {
@@ -19,6 +21,8 @@ export interface PlanoComModulos {
   /** O "?plano=" do link do cadastro (derivado do nome). */
   slug: string;
   preco_cents: number;
+  /** Upstream (migration 9332): BRL, USD ou EUR. Escolhida na criação e não muda. */
+  moeda: Moeda;
   intervalo: string;
   trial_dias: number;
   max_assentos: number | null;
@@ -39,6 +43,8 @@ interface PlanoDoUpstream {
   id: string;
   nome: string;
   preco_cents: number;
+  /** Opcional: a linha montada antes da 9332 (e nos dublês) não a traz. */
+  moeda?: string | null;
   intervalo: string;
   trial_dias: number;
   max_assentos: number | null;
@@ -64,7 +70,7 @@ const COLUNAS_DO_LADO =
   "plano_id, modulos, preco_por_mensagem_cents, preco_por_email_cents, frase, destaque";
 
 const COLUNAS_DO_UPSTREAM =
-  "id, nome, preco_cents, intervalo, trial_dias, max_assentos, max_canais, teto_ia_usd_cents, padrao_no_cadastro, oferecido_ao_cliente, arquivado_em";
+  "id, nome, preco_cents, moeda, intervalo, trial_dias, max_assentos, max_canais, teto_ia_usd_cents, padrao_no_cadastro, oferecido_ao_cliente, arquivado_em";
 
 /** Junta uma linha do upstream com a nossa (pura; exportada para os testes). */
 export function juntarPlano(p: PlanoDoUpstream, lado: LadoDoPlano | undefined): PlanoComModulos {
@@ -73,6 +79,7 @@ export function juntarPlano(p: PlanoDoUpstream, lado: LadoDoPlano | undefined): 
     nome: p.nome,
     slug: slugDoPlano(p.nome),
     preco_cents: Number(p.preco_cents),
+    moeda: MOEDAS.find((m) => m === p.moeda) ?? "BRL",
     intervalo: p.intervalo,
     trial_dias: Number(p.trial_dias),
     max_assentos: p.max_assentos,

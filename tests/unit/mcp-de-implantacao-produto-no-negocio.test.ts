@@ -5,7 +5,7 @@
  * Duas ferramentas, as duas `implantar_configuracao`: configurar a palavra e as
  * duas opções de UM funil, e garantir a palavra do segmento nos funis do cliente
  * sem atropelar palavra escolhida. A leitura é a de plataforma_ver_funis, que
- * passa a trazer `produto_no_negocio`. A lista vai de 115 para 117 (118 com a da lista de espera, MIA-18; 121 com as três da coexistência, MIA-28).
+ * passa a trazer `produto_no_negocio`. A lista vai de 115 para 117 (118 com a da lista de espera, MIA-18; 119 com a do consumo de IA, MIA-44; 122 com as três da coexistência, MIA-28).
  *
  * Banco em memória, dado fictício.
  */
@@ -55,9 +55,9 @@ beforeEach(() => {
 });
 
 describe("as duas do produto no negócio", () => {
-  it("estão na lista, e a lista tem 121 (115 da .108 + as duas da .109 + a da lista de espera, MIA-18; 121 com as três da coexistência, MIA-28)", () => {
+  it("estão na lista, e a lista tem 122 (115 da .108 + as duas da .109 + a da lista de espera, MIA-18 + a do consumo de IA, MIA-44 + as três da coexistência, MIA-28)", () => {
     for (const n of NOMES) expect(FERRAMENTA_POR_NOME.has(n), n).toBe(true);
-    expect(FERRAMENTAS).toHaveLength(121);
+    expect(FERRAMENTAS).toHaveLength(122);
   });
 
   it("as duas são montagem (implantar_configuracao) e o exemplo de cada uma vale no próprio schema", () => {

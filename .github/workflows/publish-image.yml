@@ -303,8 +303,10 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # FORK MIA: NODE_HEAP_MB 8192, o teto que o fork usa desde a .94 (Dockerfile).
           build-args: |
             APP_VERSION=${{ steps.ver.outputs.value }}
+            NODE_HEAP_MB=8192
           # Cache por imagem: cada uma tem camadas diferentes, e um escopo único
           # faria uma sobrescrever o cache da outra a cada run.
           cache-from: type=gha,scope=${{ matrix.name }}-${{ matrix.arch }}
@@ -423,8 +425,10 @@ jobs:
           push: false
           load: true
           tags: deskcomm-smoke:pr
+          # FORK MIA: NODE_HEAP_MB 8192, o teto que o fork usa desde a .94 (Dockerfile).
           build-args: |
             APP_VERSION=smoke
+            NODE_HEAP_MB=8192
           # Mesmo escopo de cache do build-and-push: as camadas são idênticas,
           # então na prática este job reaproveita aquele build em vez de repeti-lo.
           cache-from: |
