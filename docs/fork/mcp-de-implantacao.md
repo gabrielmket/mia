@@ -765,6 +765,36 @@ Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
 
+### O que chegou do upstream 1.118 (fusão de 18/11, segunda do dia)
+
+O MCP não ganhou ferramenta nem campo nesta fusão: como na 1.117 (MIA-62), o MCP da
+faixa vira uma tarefa própria depois dela. O que a fusão ajustou para nada quebrar, e
+o que já alcança:
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| A cor e o critério da etapa voltam na leitura do mapeamento do agente (#4802, #4836) | 1.118 | a rota do mapeamento continua chamando `gravarMapeamentoDoAgente` (`lib/leads/agent-mapping-operations.ts`), a gravação que o MCP compartilha; a leitura ganhou `color` e `description` sem mexer nela | `implantar_configuracao` |
+| Módulos opcionais por empresa (`organization_modules`, 9416, #4065) | 1.118 | ainda não: `capacidadesOferecidas` (`lib/implantacao/capacidades.ts`) espelha `GET /api/v1/mcp/tools`, que o upstream deixou perguntando só pela instalação (F2 do #3868); as duas mudam juntas quando ele mudar a rota | (nenhuma) |
+
+Falta no MCP (fica para a tarefa de MCP desta faixa):
+
+- ligar e desligar módulo opcional POR EMPRESA (`organization_modules`, a ação
+  `updateModuloDaEmpresa`), e `plataforma_ver_configuracao` mostrar a exceção da empresa;
+- a marca "A IA pode ler este campo" (`ia_pode_ler`, #4684) nos campos do negócio do
+  funil: sem ela, campo novo não chega ao modelo. O MCP de plataforma ainda não cria
+  campos do funil, então a lacuna é o campo inteiro com a marca;
+- a cor da etapa (`crm_stages.color`, #4802) e o critério da etapa
+  (`crm_stages.description`, #4836) na criação e na edição de etapas;
+- a tela inicial por empresa e por pessoa (#4864);
+- a Efi como provedor da cobrança do dono (9418, #4095): só se a cobrança do upstream
+  um dia for ligada no fork, que hoje cobra pela jornada de assinatura (Asaas);
+- as ferramentas do MCP de dentro que mudaram: `crm_update_lead` com `tags_adicionar` e
+  `tags_remover` (#4666), idempotência de envio (#4850), `crm_update_stage` gravando o
+  critério (#4843).
+
+Nada a configurar pela implantação: a comanda que não atravessa a empresa (9413) e a
+busca de contatos pelo índice (9421) são regra do banco.
+
 ### O que chegou do upstream 1.117 (fusão de 18/11)
 
 O MCP não ganhou ferramenta nem campo nesta fusão: por decisão do Chefe (MIA-62), o

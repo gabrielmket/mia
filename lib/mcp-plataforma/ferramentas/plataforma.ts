@@ -173,7 +173,7 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         // (é o histórico), e contá-la aqui diria que o cliente tem um módulo
         // que ele cancelou — bem no retrato que alguém usa para decidir.
         admin
-          .from("organization_modules")
+          .from("mia_modulos_contratados")
           .select("modulo, granted_at")
           .eq("organization_id", id)
           .is("revoked_at", null),
@@ -484,7 +484,7 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         // que é outra história, e a errada. Só alcança a liberação VIVA (o
         // índice único é parcial; revogadas podem se repetir).
         const { error } = await admin
-          .from("organization_modules")
+          .from("mia_modulos_contratados")
           .update({ revoked_at: new Date().toISOString(), revoked_by: autorUserId })
           .eq("organization_id", orgId)
           .eq("modulo", chave)
@@ -503,7 +503,7 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       // INSERT e não upsert: o índice único parcial já recusa uma segunda
       // liberação viva, e a recusa é a resposta certa — "já está liberado" não
       // é erro de quem pediu, mas também não é uma liberação nova para contar.
-      const { error } = await admin.from("organization_modules").insert({
+      const { error } = await admin.from("mia_modulos_contratados").insert({
         organization_id: orgId,
         modulo: chave,
         granted_by: autorUserId,

@@ -3,7 +3,7 @@
  *
  * Com o módulo desligado (`LEADS_DA_META_E_MODULO_VENDAVEL = false`) a resposta é
  * sempre sim, sem consultar o banco. Ligado, é a liberação viva em
- * `organization_modules` — e leitura que falha RECUSA, como em `moduloLiberado`.
+ * `mia_modulos_contratados` — e leitura que falha RECUSA, como em `moduloLiberado`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 

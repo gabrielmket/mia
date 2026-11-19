@@ -2,7 +2,7 @@
  * FORK MIA (.90) — O MÓDULO QUE VEM PELO PLANO.
  *
  * Duas origens para um módulo vendável numa empresa:
- *   - "pela Time": a liberação à mão em `organization_modules` (0245), que
+ *   - "pela Time": a liberação à mão em `mia_modulos_contratados` (0245), que
  *     continua como sempre e não sai com troca de plano;
  *   - "pelo plano": `mia_plano_modulos` do plano ATUAL da assinatura, perguntado
  *     ao banco na hora (`fn_mia_modulos_do_plano`, 9070). Não há cópia para
@@ -74,7 +74,7 @@ export async function origemDosModulos(
 ): Promise<OrigemDoModulo[]> {
   const [pelaTime, peloPlano] = await Promise.all([
     admin
-      .from("organization_modules")
+      .from("mia_modulos_contratados")
       .select("modulo")
       .eq("organization_id", orgId)
       .is("revoked_at", null),
@@ -123,7 +123,7 @@ export async function crmB2bForaDoPlano(
     if (!assinatura) return false;
     if ((await modulosPeloPlano(admin, orgId)).includes("crm_b2b")) return false;
     const { data: aMao, error: erroDaMao } = await admin
-      .from("organization_modules")
+      .from("mia_modulos_contratados")
       .select("id")
       .eq("organization_id", orgId)
       .eq("modulo", "crm_b2b")
@@ -166,7 +166,7 @@ export async function moduloSaiuPeloPlano(
       .maybeSingle();
     if (error || !assinatura) return false;
     const { data: aMao, error: erroDaMao } = await admin
-      .from("organization_modules")
+      .from("mia_modulos_contratados")
       .select("id")
       .eq("organization_id", orgId)
       .eq("modulo", modulo)

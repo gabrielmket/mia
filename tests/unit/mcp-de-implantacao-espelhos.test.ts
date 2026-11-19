@@ -212,7 +212,7 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // A aba Planos: novoPlanoSchema/edicaoDoPlanoSchema e a trava de preço do plano assinado.
   // Relido na fusão da 1.116: o POST aceita `moeda` e recusa dólar/euro com o Asaas. O espelho monta o plano campo a campo, sem `moeda` (nasce em real): nada a levar.
   // Espelhado na MIA-59 (upstream 1.112, 9332): o espelho passou a aceitar `moeda` na criação, com a mesma recusa de dólar/euro com o Asaas (MOEDAS_DO_ASAAS e provedorDaInstalacao).
-  { rota: "app/api/v1/admin/cobranca/planos/route.ts", espelho: "lib/planos-mia/garantir-planos.ts", impressao: "c0a28cc9c371bc4d" },
+  { rota: "app/api/v1/admin/cobranca/planos/route.ts", espelho: "lib/planos-mia/garantir-planos.ts", impressao: "769d0f55df050d4a" },
   { rota: "app/api/v1/admin/cobranca/planos/[id]/route.ts", espelho: "lib/planos-mia/garantir-planos.ts", impressao: "79549ecc4a6b4987" },
 ];
 

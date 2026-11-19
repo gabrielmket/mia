@@ -138,6 +138,22 @@ const META_E_GOOGLE: Manual[] = [
     observacao: "A conexão é só de leitura: o sistema não muda nada na sua conta de anúncios. Para tirar, use Desconectar. As campanhas de anúncio são criadas no Gerenciador de Anúncios da Meta.",
   },
   {
+    // FORK MIA (fusão da v1.118): a tela Google Ads do upstream (#4795) entra no assistente.
+    id: "painel-google-ads",
+    titulo: "Ver os negócios e o desempenho das campanhas do Google Ads",
+    palavras: ["google ads", "anuncios do google", "campanhas do google", "gclid", "investimento", "cliques", "impressoes", "midia paga"],
+    href: "/app/ads/google",
+    papelMinimo: "manager",
+    passos: [
+      "Abra Análise › Google Ads.",
+      "Na visão Resultados no CRM, escolha a Conta de anúncios e o Período de criação: aparecem os negócios atribuídos, os ganhos, a taxa de ganho e o valor ganho, por campanha.",
+      "Em Origem dos negócios, agrupe por campanha ou grupo de anúncios e abra uma linha para ver de onde veio cada resultado.",
+      "Na visão Desempenho no Google, escolha o Período e clique em Atualizar para ver investimento, impressões, cliques e conversões informados pelo Google.",
+    ],
+    observacao: "Os números do CRM contam só os negócios que chegaram com a marca de um anúncio do Google. O desempenho no Google precisa da conta conectada em Configurações › Conversões.",
+    vejaTambem: ["conectar-meta-ads"],
+  },
+  {
     id: "leads-formulario-meta",
     titulo: "Trazer para o funil os leads dos formulários da Meta (cadastro instantâneo)",
     palavras: [

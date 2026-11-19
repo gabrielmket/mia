@@ -115,7 +115,11 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
   "crm_confirm_appointment": { tokens: 318, motivo: BASE },
   "crm_set_appointment_outcome": { tokens: 263, motivo: BASE },
   "crm_create_lead": { tokens: 1003, motivo: "referencia_externa (Spec 25 R5): +70 do item escolhido e do funil opcional; a forma é conferida por refine, sem padrão no esquema" },
-  "crm_update_lead": { tokens: 817, motivo: BASE },
+  "crm_update_lead": {
+    tokens: 966,
+    motivo:
+      "#4666: a descrição diz que `tags` SUBSTITUI a lista inteira, e entram `tags_adicionar`/`tags_remover` — sem essas palavras o agente apagava etiqueta acreditando acrescentar",
+  },
   "crm_move_lead_stage": { tokens: 380, motivo: BASE },
   "crm_retomar_lead": { tokens: 394, motivo: BASE },
   "crm_propose_lead_fields_from_document": { tokens: 583, motivo: BASE },
@@ -212,12 +216,16 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
 // e 413 de `crm_get_lead_attachment`. MEDIDO no merge com a main: 40209 = 39537 + 672
 // (2026-11-17, main de `0652fa6866`).
 // +317 com `crm_count_leads` (upstream v1.117).
+// +149 no `crm_update_lead` (#4666), que passou a dizer que `tags` substitui a
+// lista inteira e ganhou `tags_adicionar`/`tags_remover`. MEDIDO no merge com a
+// main pós-#4886 e #4684: 40675 (2026-11-18).
 // FORK MIA: + 2027 das quatro ferramentas do fork (+1854) e das descrições que o
 // fork estende (+173), a diferença medida na fusão da v1.107 (32639 contra 30612
 // do upstream). Na fusão da v1.116 a conta dava 42236 = 40209 + 2027; MEDIDO
 // na CI do PR #97 e no contêiner: 42237 (1 token de junção entre os dois lados).
 // Na fusão da v1.117: 42554 = 42237 + 317 (`crm_count_leads`).
-const TETO_TOTAL = 42554;
+// Na fusão da v1.118: 42703 = 42554 + 149 (`crm_update_lead`, #4666).
+const TETO_TOTAL = 42703;
 
 const VARIANTE = "schedule_followup (com negócio)";
 
