@@ -231,6 +231,11 @@ test.describe("busca dentro da conversa", () => {
       .filter({ hasText: "Resultados nas mensagens carregadas" });
     await expect(contador).toHaveText(/Resultados nas mensagens carregadas:\s*2$/);
     await expect(page.locator('[data-search-match="true"]')).toHaveCount(2);
+    // A marca entra antes de o anel aparecer no estilo computado: a leitura
+    // única logo depois dela já pegou o box-shadow sem o anel (MIA-88). Espera.
+    await expect
+      .poll(async () => (await medirBolhas(page)).filter((m) => m.marcada && m.anel).length)
+      .toBe(2);
 
     const medidas = await medirBolhas(page);
     console.info(`busca-na-conversa · bolhas: ${JSON.stringify(medidas)}`);
