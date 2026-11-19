@@ -40,19 +40,23 @@ export interface MemoriaGravada {
 export async function lerDocumentoDaMemoria(
   c: Pick<Implantacao, "admin" | "orgId">,
 ): Promise<{ versao: number; conteudo: string; criado_em: string } | null> {
-  const { data: ponteiro } = await c.admin
+  // Upstream 1.11x: leitura que falha não é "sem memória" (a rota responde 500);
+  // aqui também não, senão a gravação abriria uma versão por cima da que existe.
+  const { data: ponteiro, error: erroDoPonteiro } = await c.admin
     .from("org_memory_pointers")
     .select("version_id")
     .eq("organization_id", c.orgId)
     .maybeSingle();
+  if (erroDoPonteiro) throw new Error(`não consegui ler a memória: ${erroDoPonteiro.message}`);
   const versionId = (ponteiro as { version_id?: string | null } | null)?.version_id;
   if (!versionId) return null;
-  const { data: versao } = await c.admin
+  const { data: versao, error: erroDaVersao } = await c.admin
     .from("org_memory_versions")
     .select("version_number, content, created_at")
     .eq("id", versionId)
     .eq("organization_id", c.orgId)
     .maybeSingle();
+  if (erroDaVersao) throw new Error(`não consegui ler a versão ativa da memória: ${erroDaVersao.message}`);
   if (!versao) return null;
   const linha = versao as { version_number: number; content: string; created_at: string };
   return { versao: linha.version_number, conteudo: linha.content, criado_em: linha.created_at };

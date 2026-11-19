@@ -17,6 +17,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
+import { provedorDaInstalacao } from "@/lib/cobranca/configuracao";
+import { MOEDAS_DO_ASAAS, type Moeda } from "@/lib/cobranca/vocabulario";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { edicaoDoPlanoSchema, novoPlanoSchema } from "@/lib/schemas/cobranca-plano";
 
@@ -27,6 +29,12 @@ import { seguirOPlano } from "./seguir-o-plano";
 export interface PlanoPedido {
   nome: string;
   preco_cents: number;
+  /**
+   * Upstream (migration 9332): a moeda, só na CRIAÇÃO (ausente = BRL, o padrão
+   * do banco). Plano criado não troca de moeda: quem assinou passaria a ser
+   * cobrado noutra moeda sem ter escolhido (`novoPlanoSchema`).
+   */
+  moeda?: Moeda;
   intervalo?: "mes" | "ano";
   trial_dias?: number;
   max_assentos?: number | null;
@@ -296,7 +304,13 @@ export async function garantirPlanos(
     );
     try {
       if (!existente) {
-        const valido = novoPlanoSchema.safeParse(doUpstream);
+        // A régua de `POST /api/v1/admin/cobranca/planos`: o Asaas não tem moeda e
+        // cobraria o número como real, então fora do real o plano nasce recusado.
+        if (p.moeda !== undefined && !MOEDAS_DO_ASAAS.includes(p.moeda) && (await provedorDaInstalacao()) === "asaas") {
+          r.recusas.push({ plano: p.nome, motivo: "O Asaas cobra só em real. Para dólar ou euro, conecte a Stripe." });
+          continue;
+        }
+        const valido = novoPlanoSchema.safeParse(p.moeda !== undefined ? { ...doUpstream, moeda: p.moeda } : doUpstream);
         if (!valido.success) {
           r.recusas.push({
             plano: p.nome,
@@ -321,6 +335,13 @@ export async function garantirPlanos(
         }
         await salvarLadoDoPlano(admin, (data as { id: string }).id, lado, autor);
         r.criados.push(p.nome);
+        continue;
+      }
+      if (p.moeda !== undefined && p.moeda !== existente.moeda) {
+        r.recusas.push({
+          plano: p.nome,
+          motivo: `Este plano é cobrado em ${existente.moeda}, e a moeda não muda depois de criado. Para cobrar em ${p.moeda}, crie outro plano com outro nome.`,
+        });
         continue;
       }
       const assinantes = await assinantesDoPlano(admin, existente.id);

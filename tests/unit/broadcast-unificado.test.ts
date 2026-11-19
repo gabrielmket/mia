@@ -140,7 +140,9 @@ describe("toda rota que o módulo diz proteger, protege de fato", () => {
     const semGuarda: string[] = [];
     for (const arquivo of arquivos) {
       const fonte = readFileSync(arquivo, "utf8");
-      const recursos = [...fonte.matchAll(/requireRole\([^)]*resource:\s*"([^"]+)"/g)].map((m) => m[1]!);
+      // Desde a 1.11x as rotas de Campanhas do upstream entram por `resolveAuthDual`
+      // (sessão OU token); os dois ramos passam pela trava (lib/api/auth-dual.ts).
+      const recursos = [...fonte.matchAll(/(?:requireRole|resolveAuthDual)\([^)]*resource:\s*"([^"]+)"/g)].map((m) => m[1]!);
       const confereInline = fonte.includes("moduloLiberado(");
       const confereNoRequireRole =
         recursos.length > 0 && recursos.every((r) => moduloExigidoPeloRecurso(r) === "disparador");
@@ -160,7 +162,7 @@ describe("toda rota que o módulo diz proteger, protege de fato", () => {
     const usados = new Set<string>();
     for (const prefixo of ROTAS_DO_QR) {
       for (const arquivo of arquivosDeRota(prefixo)) {
-        for (const m of readFileSync(arquivo, "utf8").matchAll(/requireRole\([^)]*resource:\s*"([^"]+)"/g)) {
+        for (const m of readFileSync(arquivo, "utf8").matchAll(/(?:requireRole|resolveAuthDual)\([^)]*resource:\s*"([^"]+)"/g)) {
           usados.add(m[1]!);
         }
       }

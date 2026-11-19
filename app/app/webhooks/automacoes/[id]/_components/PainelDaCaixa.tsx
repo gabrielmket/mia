@@ -8,13 +8,17 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
+import { useCapacidadesLigadas } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
 import { usePipelineStages, usePipelines, useWebhookSources } from "@/hooks/webhooks/useWebhookSources";
 import { acoesQueFechamLaco, GATILHOS_OFERECIDOS, MENSAGEM_DO_LACO_DE_LEAD } from "@/lib/schemas/webhooks";
 import {
+  CAMPOS_ALTERAVEIS_DO_NEGOCIO,
   CONDICOES_DO_CONTATO,
   contarCondicoes,
   OPERADORES_SEM_VALOR,
+  operadorCabeNoCampo,
+  rotuloDoCampoAlterado,
   valorPadraoDoCampo,
 } from "@/lib/automation/conditions";
 // FORK MIA (.81) — os gatilhos de obrigação no designer, com a mesma caixa do editor em lista.
@@ -44,7 +48,13 @@ import {
   valorDaCondicaoNaTela,
 } from "@/app/app/webhooks/_components/CondicaoDoContato";
 import { CURATED_FIELDS, OP_LABELS, type CuratedField, type Op } from "@/app/app/webhooks/_components/RuleEditor";
-import { ACTION_LABELS, TRIGGER_LABELS, type ActionType, type TriggerEvent } from "@/app/app/webhooks/_components/labels";
+import {
+  ACTION_LABELS,
+  TRIGGER_LABELS,
+  gatilhoOferecido,
+  type ActionType,
+  type TriggerEvent,
+} from "@/app/app/webhooks/_components/labels";
 
 import { VISUAL_DAS_CONDICOES, VISUAL_DO_GATILHO, visualDaAcao, type VisualDaCaixa } from "./visual";
 
@@ -96,6 +106,7 @@ export function PainelDoGatilho({
   onTela: (tela: TelaDoGatilho) => void;
 }) {
   const t = useT();
+  const capacidadesLigadas = useCapacidadesLigadas();
   const { data: funisRes } = usePipelines();
   const { data: fontesRes } = useWebhookSources();
   const funis = funisRes?.data ?? [];
@@ -119,11 +130,14 @@ export function PainelDoGatilho({
             {/* FORK MIA: `GATILHOS_OFERECIDOS`, e não a lista inteira — o nome
                 antigo de "horário marcado" (`appointment.booked`) não é
                 oferecido para regra nova; a regra gravada com ele continua
-                mostrando o próprio gatilho. */}
+                mostrando o próprio gatilho. O filtro por capacidade é do
+                upstream (#4409). */}
             {(evento && !(GATILHOS_OFERECIDOS as string[]).includes(evento) && evento in TRIGGER_LABELS
               ? [evento as TriggerEvent, ...GATILHOS_OFERECIDOS]
               : GATILHOS_OFERECIDOS
-            ).map((ev) => (
+            )
+              .filter((ev) => gatilhoOferecido(ev, capacidadesLigadas, evento))
+              .map((ev) => (
               <SelectItem key={ev} value={ev}>
                 {t(TRIGGER_LABELS[ev])}
               </SelectItem>
@@ -362,7 +376,11 @@ export function PainelDasCondicoes({
             // Condição do contato: o jsonb guarda `sim|7|Manutenção`, e o que a
             // pessoa lê é `Sim · 7 dias · Manutenção`.
             const valor =
-              curado?.kind === "sim_nao" ? valorDaCondicaoNaTela(linha.value, t) : linha.value;
+              curado?.kind === "sim_nao"
+                ? valorDaCondicaoNaTela(linha.value, t)
+                : linha.op === "campo_alterado"
+                  ? t(rotuloDoCampoAlterado(linha.value))
+                  : linha.value;
             return (
               <li key={i} className="rounded-md border border-border px-3 py-2 text-text" data-testid={`condicao-${i}`}>
                 <span className="font-medium">{curado ? t(curado.label) : linha.field}</span>
@@ -451,11 +469,13 @@ export function PainelDasCondicoes({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(Object.keys(OP_LABELS) as Op[]).map((op) => (
-                    <SelectItem key={op} value={op}>
-                      {t(curado?.lista && op === "contains" ? "tem a tag" : OP_LABELS[op])}
-                    </SelectItem>
-                  ))}
+                  {(Object.keys(OP_LABELS) as Op[])
+                    .filter((op) => operadorCabeNoCampo(op, linha.field))
+                    .map((op) => (
+                      <SelectItem key={op} value={op}>
+                        {t(curado?.lista && op === "contains" ? "tem a tag" : OP_LABELS[op])}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               {/* `esta vazio`/`esta preenchido` perguntam pelo CAMPO, não por um
@@ -480,6 +500,19 @@ export function PainelDasCondicoes({
                   valor={linha.value}
                   onChange={(v) => mudar(i, { value: v })}
                 />
+              ) : linha.op === "campo_alterado" ? (
+                <Select value={linha.value} onValueChange={(v) => mudar(i, { value: v })}>
+                  <SelectTrigger className="flex-1" aria-label={t("Campo do negócio")}>
+                    <SelectValue placeholder={t("Escolha o campo")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(CAMPOS_ALTERAVEIS_DO_NEGOCIO).map((nome) => (
+                      <SelectItem key={nome} value={nome}>
+                        {t(rotuloDoCampoAlterado(nome))}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               ) : (
                 <Input
                   className="flex-1"

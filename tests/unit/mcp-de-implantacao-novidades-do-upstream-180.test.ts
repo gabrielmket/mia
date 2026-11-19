@@ -408,14 +408,15 @@ describe("plataforma_garantir_planos_de_tarefa · FERRAMENTA NOVA (upstream 1.77
     expect((r.dados.avisos as string[]).join(" ")).toContain("apply_task_plan");
     const settings = c.tabela("organizations")[0]!.settings as Linha;
     expect(settings.tags).toEqual(["vip"]);
+    // Upstream v1.117 (#4717): o passo leva `prazo`, e `vence_em_dias` sobra com o mesmo número.
     expect(settings.task_plans).toEqual([
       {
         id: "plano-proposta-enviada",
         nome: "Proposta enviada",
         descricao: "O acompanhamento de quem recebeu proposta.",
         passos: [
-          { ordem: 1, titulo: "Ligar para {{contact.name}}", descricao: null, vence_em_dias: 2, prioridade: "high", atribuir_a: { usuario_id: AUTOR } },
-          { ordem: 2, titulo: "Cobrar a resposta", descricao: null, vence_em_dias: 10, prioridade: "medium", atribuir_a: "dono_do_lead" },
+          { ordem: 1, titulo: "Ligar para {{contact.name}}", descricao: null, prazo: { modo: "dias_a_partir_de_hoje", dias: 2 }, vence_em_dias: 2, prioridade: "high", atribuir_a: { usuario_id: AUTOR } },
+          { ordem: 2, titulo: "Cobrar a resposta", descricao: null, prazo: { modo: "dias_a_partir_de_hoje", dias: 10 }, vence_em_dias: 10, prioridade: "medium", atribuir_a: "dono_do_lead" },
         ],
       },
     ]);

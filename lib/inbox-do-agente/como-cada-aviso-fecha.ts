@@ -341,6 +341,29 @@ export const COMO_FECHA = {
       "É um recado de que a plataforma mudou a situação de um modelo. Depois de duas " +
       "semanas ou o modelo foi corrigido, ou não era usado — e o aviso vira histórico.",
   },
+  // FORK MIA (fusão v1.108 a v1.116): os três avisos novos do upstream. Nenhum
+  // tem pergunta que o vigia saiba refazer no SQL, então fecham por idade.
+  channel_template_review_direct: {
+    modo: "idade",
+    dias: 14,
+    porque:
+      "O mesmo recado do `channel_template_review`, vindo do canal oficial direto (#3635). " +
+      "Depois de duas semanas o modelo foi corrigido ou não era usado.",
+  },
+  routing_ia_wait_expired: {
+    modo: "idade",
+    dias: 7,
+    porque:
+      "A espera pela IA venceu e a conversa já seguiu para a fila (#3966): o aviso conta um " +
+      "fato daquele momento. Uma semana depois, o que importa é a conversa, não o aviso.",
+  },
+  followup_descartado: {
+    modo: "idade",
+    dias: 14,
+    porque:
+      "O retorno combinado foi descartado (#4696) e isso não se desfaz. Passadas duas semanas, " +
+      "retomar o contato é decisão nova, que começa na conversa ou no funil.",
+  },
   voice_call_missed: {
     modo: "idade",
     dias: 7,

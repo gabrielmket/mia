@@ -82,6 +82,10 @@ function dubleAdmin(
       // cortam com `limit`; o `lt` e o `limit` do upstream já servem às duas.
       lt: (coluna: string, valor: string) =>
         consulta(tabela, [...predicados, (l) => String(l[coluna]) < valor], ordem, teto),
+      // Fork MIA (MIA-44): com um mês escolhido, a cotação e a fatura ganham o
+      // limite de cima (`lte` no último dia do período).
+      lte: (coluna: string, valor: string) =>
+        consulta(tabela, [...predicados, (l) => String(l[coluna]) <= valor], ordem, teto),
       // `order` é o que faz o caso "maior prioridade" medir a ROTA e não o
       // dublê: sem ele, o vencedor seria o primeiro do fixture, e a ordem que a
       // rota pede ao banco não estaria sendo exercida.
@@ -214,6 +218,18 @@ describe("GET /api/v1/admin/usage — agente na carteira", () => {
     const corpo = await (await chamar()).json();
 
     expect(corpo.data.tenants[0].agent_name).toBe("Prioridade alta");
+    // A linha soma o uso dos dois; a contagem é o que avisa a tela disso.
+    expect(corpo.data.tenants[0].agents_published_count).toBe(2);
+  });
+
+  it("sem agente publicado a contagem é zero", async () => {
+    vi.mocked(createAdminClient).mockReturnValue(
+      dubleAdmin({ organizations: [org(ORG_A, "Cliente A")], ai_agents: [] }) as never,
+    );
+
+    const corpo = await (await chamar()).json();
+
+    expect(corpo.data.tenants[0].agents_published_count).toBe(0);
   });
 
   it("agente de outra organização não aparece na linha desta", async () => {

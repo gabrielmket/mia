@@ -59,11 +59,14 @@ describe("portas por empresa (issue #1341)", () => {
     // plataforma (custo e chave do provedor de IA, lib/ai/custo-e-da-plataforma.ts),
     // a mesma adaptação de interface-por-vinculo.test.ts. O controle abaixo impede
     // que marcar tudo como somentePlataforma deixe este caso verde com o menu vazio.
-    const doTenant = NAV_CATALOG.filter((d) => !("somentePlataforma" in d && d.somentePlataforma));
+    // Os destinos `agenciaOnly` do upstream (v1.114) não entram na interface de
+    // ninguém, nem de quem administra a plataforma.
+    const semAgencia = NAV_CATALOG.filter((d) => !("agenciaOnly" in d && d.agenciaOnly));
+    const doTenant = semAgencia.filter((d) => !("somentePlataforma" in d && d.somentePlataforma));
     expect(hrefs(combinarInterfaces(completa, completa))).toEqual(doTenant.map((d) => d.href));
     expect(
       destinosDaInterface(combinarInterfaces(completa, completa), true, "admin").map((d) => d.href),
-    ).toEqual(NAV_CATALOG.map((d) => d.href));
+    ).toEqual(semAgencia.map((d) => d.href));
   });
 
   it("o vínculo NÃO abre porta que a empresa não oferece", () => {

@@ -30,7 +30,9 @@ import { moduloLiberado } from "@/lib/modulos/liberacao";
 export interface PedidoDeRecurso {
   db: SupabaseClient;
   organizationId: string;
-  userId: string;
+  /** `null` no ramo do token (`resolveAuthDual`): quem pede é o token, não uma pessoa. */
+  userId: string | null;
+  apiTokenId?: string | null;
   resource: string | undefined;
   requestId?: string;
   t: (texto: string) => string;
@@ -49,6 +51,7 @@ export async function recusaPorModulo(
   void audit({
     action: "authz.denied",
     actorUserId: pedido.userId,
+    actorApiTokenId: pedido.apiTokenId ?? null,
     organizationId: pedido.organizationId,
     resourceType: pedido.resource ?? null,
     requestId: pedido.requestId,

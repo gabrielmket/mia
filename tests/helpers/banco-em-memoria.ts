@@ -6,7 +6,7 @@
  * dublê que devolve linha fixa por formato de `select` não consegue medir isso.
  *
  * Cobre o subconjunto do supabase-js que as rotas de agente usam: `select` com
- * `eq`/`is`/`in`/`like`/`not`/`order`/`limit`, `insert`, `update`, `upsert`, `delete`,
+ * `eq`/`is`/`in`/`like`/`not`/`filter("isdistinct")`/`order`/`limit`, `insert`, `update`, `upsert`, `delete`,
  * `single`/`maybeSingle` e a lista aguardada direto. Cada escrita fica
  * registrada em `escritas`, na ordem.
  *
@@ -159,6 +159,14 @@ export function bancoEmMemoria(
         return (filtros.push((l) => typeof l[c] === "string" && re.test(l[c] as string)), q);
       },
       not: (c: string, _op: string, v: unknown) => (filtros.push((l) => (l[c] ?? null) !== v), q),
+      // `filter(c, "isdistinct", v)`: a guarda LGPD do worker de mídia (o corpo
+      // redigido); nulo é distinto de qualquer valor. Outro operador lança, para
+      // nenhum teste ficar verde com um filtro que o dublê não entende.
+      filter: (c: string, operador: string, v: unknown) => {
+        if (operador !== "isdistinct") throw new Error(`banco-em-memoria: filtro não suportado: ${operador}`);
+        filtros.push((l) => (l[c] ?? null) !== v);
+        return q;
+      },
       lt: (c: string, v: unknown) => (
         filtros.push((l) => (l[c] as string | number) < (v as string | number)),
         q

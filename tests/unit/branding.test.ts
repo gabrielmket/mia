@@ -843,10 +843,22 @@ type CategoriaDeHost =
 type EntradaDeHost = { categoria: CategoriaDeHost; motivo: string };
 
 const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
+  // ── amostra de FORMATO: chega à tela como prévia, não é destino de chamada ──
+  "loja.exemplo": {
+    categoria: "AMOSTRA",
+    motivo:
+      "exemplo de LINK na prévia de variável (`lib/variaveis/previa.ts`): mostra a quem opera o formato do valor que entra no texto. O produto nunca faz requisição para este host — é amostra, no mesmo sentido do `wa.me` da tela de Conversões.",
+  },
   "chatgpt.com": {
     categoria: "CONSOLE",
     motivo:
       "é o serviço da conta ChatGPT que o operador abre para conectar a assinatura. O produto não faz requests para este host; a consulta do catálogo e a inferência SIWC usam a API pública oficial em api.openai.com.",
+  },
+  // ── Módulo opcional `amigo` (#4227): a API do sistema de clínicas ──
+  "amigobot-api.amigoapp.com.br": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "API do sistema de clínicas Amigo, origem FIXA do transporte (`lib/amigo/transport.ts`): só é chamada com o módulo `amigo` instalado e um token cadastrado pela empresa. Não há campo para URL livre — o host fixo é o que impede a credencial de ir a outro destino.",
   },
   // ── Web Push: o serviço de push do navegador, destino do envio ──
   "fcm.googleapis.com": {
@@ -960,6 +972,11 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "endpoint da Graph API do WhatsApp Cloud — 6 arquivos: envio de template, sincronização de modelos, validação de credencial, conversões e insights. É contrato da Meta, não escolha nossa.",
   },
+  "api.telegram.org": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint da Bot API do Telegram (canal nativo do #3440): é para onde `lib/channels/bot/credentials.ts` envia `sendMessage` e registra o webhook. Endpoint padrão fixo de propósito — instalação que não configura nada tem de funcionar —, com override por TELEGRAM_API_BASE_URL para a prova em tela.",
+  },
   "www.googleapis.com": {
     categoria: "FORNECEDOR",
     motivo:
@@ -1055,6 +1072,11 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     categoria: "CONSOLE",
     motivo:
       "painel onde o usuário gera a PRÓPRIA chave da DeepSeek (`ondePegarAChave` em lib/ai/pontos/provedores.ts). Endereço do fornecedor, não nosso.",
+  },
+  "cdn.deepseek.com": {
+    categoria: "CONSOLE",
+    motivo:
+      "documento do fornecedor: é a política de privacidade da DeepSeek que `fonteDoPais` (lib/ai/pontos/provedores.ts) cita como prova do país de processamento. A tela (`OndeOTextoEProcessado.tsx`) só monta o link com a URL deste catálogo — o produto NUNCA busca o host, quem abre é a pessoa que quer ler a fonte. Endereço do fornecedor, não nosso: trocar pelo domínio do revendedor faria o link não provar nada.",
   },
   "app.requesty.ai": {
     categoria: "CONSOLE",
@@ -1179,6 +1201,11 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     categoria: "RECONHECIMENTO",
     motivo:
       "marca agregador e conta como link social no raio-X. Nunca chamada, nunca exibida (a tela mostra o rótulo traduzido).",
+  },
+  "fb.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "apelido curto do Facebook publicado em `socials`: o rótulo da rede na 1ª mensagem sai do host (`lib/prospecting/sinais-da-empresa.ts`). Nunca chamado, nunca exibido como endereço — o prompt recebe `Facebook: <url>`.",
   },
   "google.com": {
     categoria: "RECONHECIMENTO",
@@ -1350,10 +1377,20 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "assinatura de HTML do Wix no raio-X. Nunca chamada, nunca exibida.",
   },
+  "tiktok.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "rede social reconhecida pelo host em `socials` (planilha importada e links do site): vira o rótulo `TikTok` na 1ª mensagem. Nunca chamada, nunca exibida como endereço.",
+  },
   "wordpress.com": {
     categoria: "RECONHECIMENTO",
     motivo:
       "assinatura de construtor (WordPress.com gratuito): URL final contendo o domínio vira o rótulo. Nunca chamada, nunca exibida.",
+  },
+  "youtube.com": {
+    categoria: "RECONHECIMENTO",
+    motivo:
+      "rede social reconhecida pelo host em `socials` (planilha importada e links do site): vira o rótulo `YouTube` na 1ª mensagem. Nunca chamada, nunca exibida como endereço.",
   },
 };
 
@@ -1529,6 +1566,11 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // Decisão escrita (spec 24, auditoria de site): agregador de bio-links,
       // marca agregador sem fetch — nunca chamado, nunca exibido.
       "carrd.co",
+      // Decisão escrita: o host é a CDN onde a DeepSeek publica a política de
+      // privacidade que `fonteDoPais` cita como prova do país de processamento.
+      // O produto não fala com ele — a tela monta o link da fonte e quem abre é
+      // a pessoa. CONSOLE porque é documento do fornecedor, não destino nosso.
+      "cdn.deepseek.com",
       // A pessoa abre o produto ChatGPT para autenticar a conta; o CRM chama
       // apenas `api.openai.com` no fluxo SIWC.
       "chatgpt.com",
@@ -1544,6 +1586,13 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // como link social no raio-X — nunca chamada, nunca exibida (a tela mostra
       // o rótulo traduzido).
       "facebook.com",
+      // Decisão escrita (#4459): `fb.com`, `tiktok.com` e `youtube.com` entram
+      // como RECONHECIMENTO, não como FORNECEDOR — o produto NÃO fala com eles.
+      // `lib/prospecting/sinais-da-empresa.ts` lê o host da URL já coletada em
+      // `socials` (planilha importada, links do site) só para escrever o NOME da
+      // rede na 1ª mensagem; a tela e o prompt recebem o rótulo, nunca o host
+      // como destino de chamada. Mesma classe dos três vizinhos desta lista.
+      "fb.com",
       // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
       // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
       "gmail.com",
@@ -1583,6 +1632,11 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
       // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
       "live.com",
+      // Decisão escrita: amostra de FORMATO de valor na prévia de variável
+      // (`lib/variaveis/previa.ts`) — a quem opera vê `loja.exemplo/previa/ana`
+      // como exemplo do link que a variável entrega. O produto nunca faz
+      // requisição para ele; mesma natureza do `wa.me` da tela de Conversões.
+      "loja.exemplo",
       // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
       // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
       "mac.com",
@@ -1653,6 +1707,9 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
       // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
       "terra.com.br",
+      // Ver a decisão escrita em `fb.com`: mesma classe, mesmo módulo, o rótulo
+      // da rede na 1ª mensagem.
+      "tiktok.com",
       "tusitio.com",
       // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
       // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
@@ -1681,6 +1738,9 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
       // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
       "ymail.com",
+      // Ver a decisão escrita em `fb.com`: mesma classe, mesmo módulo, o rótulo
+      // da rede na 1ª mensagem.
+      "youtube.com",
       // FORK MIA (.89), decisão escrita: provedor gratuito que o disparo de
       // e-mail RECUSA como remetente — comparado, nunca chamado nem exibido.
       "zipmail.com.br",

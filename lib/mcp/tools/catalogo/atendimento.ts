@@ -142,8 +142,14 @@ export const TOOLS_ATENDIMENTO = declararTools([
      * jornada pelo modo avançado — ligar à mão, agente a agente, é o caminho
      * para quem vende B2B; o modo B2C esconde a porta de qualquer jeito
      * (`lib/empresas/modo-de-venda.ts`).
+     *
+     * FUSÃO v1.116: saiu de "organizar" para "escalar". O upstream levou
+     * "organizar" a 27 de 27 sozinho (as leituras do Amigo), e com esta linha o
+     * pacote ia a 28, impossível de ligar inteiro
+     * (tests/unit/pacote-reserva-vaga-da-critica). "Escalar" tem folga (17 de
+     * 27, medido com as três do fork) e o onboarding segue nascendo com 22.
      */
-    pacotes: ["organizar"],
+    pacotes: ["escalar"],
   },
   {
     name: "crm_list_conversations",
@@ -183,6 +189,26 @@ export const TOOLS_ATENDIMENTO = declararTools([
       "Envia uma mensagem de WhatsApp para o cliente. Ele recebe de verdade, no celular dele, e não dá para desfazer.",
     oQueToca: "Atendimento",
     risco: "critico",
+    pacotes: ["atender"],
+  },
+  {
+    name: "crm_send_material",
+    category: "write",
+    rotulo: "Enviar material da empresa",
+    explicacao:
+      "Envia um material da empresa já cadastrado — catálogo em PDF, tabela de preços, ficha — " +
+      "como documento no WhatsApp, com a legenda que acompanha. O arquivo sai do material " +
+      "cadastrado, não de um link: nada é lido nem consultado pela IA.",
+    oQueToca: "Atendimento",
+    // `critico` como `crm_send_whatsapp_message`: alcança o cliente de verdade e
+    // não dá para desfazer. Crítica não entra por pacote (`entraPorPacote`), então
+    // ligar "Atender e responder" não dá ao agente o direito de mandar arquivo.
+    risco: "critico",
+    // `atender` é a jornada do envio, e o pacote tem vaga para a crítica: a conta
+    // dele vai de 21 para 22 vagas com esta capacidade, contra o teto de 27
+    // (`tests/unit/pacote-reserva-vaga-da-critica.test.ts`). Fica FORA de
+    // `evoluir` de propósito — era o único pacote que ainda cabia a partir do
+    // onboarding, e uma capacidade a mais ali fecharia o beco que a #162 mede.
     pacotes: ["atender"],
   },
   {

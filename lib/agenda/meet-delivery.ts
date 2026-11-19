@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { STATUS_OPERANTE } from "@/lib/organizacao/operante";
 import { decidirElegibilidade, montarEstadoDeElegibilidade, ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
+import { CHAVE_DA_IA_COM_DONO } from "@/lib/ai/elegibilidade/ia-com-dono";
 import type { ServiceBoundary } from "@/lib/atendimento/fronteira";
 import type { JobClaim } from "@/lib/agent-engine/queue/claim";
 import type { Queryable } from "@/lib/agent-engine/queue/queue";
@@ -23,6 +24,20 @@ const policySchema = z.discriminatedUnion("current", [
     // é recusado — nunca lido como "marca desligada".
     force_human: z.boolean().nullable(), ai_opt_out: z.boolean(), ai_gate: z.string().nullable(),
     ai_authorized_at: z.string().nullable(), assignee_kind: z.string().nullable(), bot_silenced_until: z.string().nullable(),
+    // Obrigatórios como CHAVE, igual à marca acima: banco sem a 9399 não devolve o
+    // modo do canal, e a entrega é recusada em vez de pular a lista de teste.
+    ai_gate_mode: z.string().nullable(), ai_test_phone_numbers: z.unknown(), contact_phone_number: z.string().nullable(),
+    // Testadores de Instagram/Facebook (9408, depois da 9394). Opcionais: banco sem a
+    // 9408 não devolve a lista, e o gate a lê como vazia, então o testador social não
+    // passa (falha fechada) e a lista de telefones continua valendo.
+    ai_test_social_identities: z.unknown().optional(), contact_social_identity: z.string().nullable().optional(),
+    /**
+     * O modo "IA com o dono" (#3967). OPCIONAL porque a política de hoje
+     * (`fn_meet_delivery_current`) ainda não o devolve: ausente = não ligado,
+     * que é o comportamento de hoje (dono humano bloqueia a entrega de agenda).
+     * Quando a função passar a carregar o campo, este lado já o honra.
+     */
+    ai_com_dono: z.boolean().optional(),
   }),
 ]);
 function requireCurrentPolicy(raw: unknown) {
@@ -33,80 +48,28 @@ function requireCurrentPolicy(raw: unknown) {
   }
   return p;
 }
-/**
- * O que o gate do PRÉ-LANÇAMENTO precisa e a policy SQL não devolve: o modo do
- * canal (`ai_gate_mode`), a lista de telefones de teste e o telefone do contato.
- *
- * Sem isto a entrega do link avaliava o canal em pré-lançamento como allowlist
- * pura e exigia `ai_authorized_at`, que o número de teste não tem — enquanto o
- * turno (consulta-pg.ts) passa os três campos e deixa o número de teste
- * conversar. Resultado medido (Time Company, 2026-09-15): o agente marcou duas
- * reuniões com números da lista de teste, o Meet ficou pronto, e as duas entregas
- * do link terminaram `blocked:sem_autorizacao`. A regra continua sendo a MESMA
- * (`montarEstadoDeElegibilidade` + `decidirElegibilidade`); só passa a receber o
- * mesmo estado que o turno recebe.
- */
-interface AcessoDoCanal {
-  metadata: Record<string, unknown> | null;
-  telefone: string | null;
-}
-type LerAcessoDoCanal = (contactId: string, channelSessionId: string) => Promise<AcessoDoCanal | null>;
-
-async function requirePolicy(
-  raw: unknown,
-  lerAcesso: LerAcessoDoCanal,
-): Promise<{ humanCommand: boolean; contactId: string; channelSessionId: string }> {
+function requirePolicy(raw: unknown): { humanCommand: boolean; contactId: string; channelSessionId: string } {
   const p = requireCurrentPolicy(raw);
   if (p.human_command === true) return { humanCommand: true, contactId: p.contact_id, channelSessionId: p.channel_session_id };
-  const acesso = await lerAcesso(p.contact_id, p.channel_session_id);
   const result = decidirElegibilidade(montarEstadoDeElegibilidade({
     // `current: true` só sai de `fn_meet_delivery_current`, que já exige a
-    // organização operante (join organizations status=active): quando a
+    // organização operante (join organizations status='active'): quando a
     // política chega aqui, a org ESTAVA operante na mesma leitura.
     orgStatus: STATUS_OPERANTE,
-    aiGate: p.ai_gate,
-    aiGateMode: acesso?.metadata?.["ai_gate_mode"],
-    aiTestPhoneNumbers: acesso?.metadata?.["ai_test_phone_numbers"],
-    contactPhoneNumber: acesso?.telefone ?? null,
-    forceHuman: p.force_human,
+    aiGate: p.ai_gate, forceHuman: p.force_human,
+    // Pré-go-live (#4701): só a lista de teste do canal recebe o link, como nos outros caminhos da IA.
+    aiGateMode: p.ai_gate_mode, aiTestPhoneNumbers: p.ai_test_phone_numbers, contactPhoneNumber: p.contact_phone_number,
+    aiTestSocialIdentities: p.ai_test_social_identities, contactSocialIdentity: p.contact_social_identity ?? null,
     // `ai_opt_out` lido do contato pela própria política (migration 0676), e não
     // deduzido de `force_human`: outro escritor que zere `force_human` não pode
     // liberar para a IA um contato marcado "sempre atendimento humano".
     aiOptOut: p.ai_opt_out, assigneeKind: p.assignee_kind ?? null,
+    metadataDaConversa: { [CHAVE_DA_IA_COM_DONO]: p.ai_com_dono === true },
     botSilencedUntil: p.bot_silenced_until, aiAuthorizedAt: p.ai_authorized_at,
     agora: new Date(), ttlMs: ttlDaAutorizacaoMs(process.env),
   }));
   if (!result.permite) throw new MeetingDeliveryBlockedError(result.motivo);
   return { humanCommand: false, contactId: p.contact_id, channelSessionId: p.channel_session_id };
-}
-
-function lerAcessoDoCanalPg(db: Queryable, organizationId: string): LerAcessoDoCanal {
-  return async (contactId, channelSessionId) => {
-    const { rows } = await db.query<{ metadata: Record<string, unknown> | null; phone_number: string | null }>(
-      `select cs.metadata, ct.phone_number
-         from channel_sessions cs
-         join contacts ct on ct.organization_id = cs.organization_id and ct.id = $3
-        where cs.organization_id = $1 and cs.id = $2`,
-      [organizationId, channelSessionId, contactId],
-    );
-    const r = rows[0];
-    return r ? { metadata: r.metadata, telefone: r.phone_number } : null;
-  };
-}
-
-function lerAcessoDoCanalSupabase(db: SupabaseClient, organizationId: string): LerAcessoDoCanal {
-  return async (contactId, channelSessionId) => {
-    const [canal, contato] = await Promise.all([
-      db.from("channel_sessions").select("metadata").eq("organization_id", organizationId).eq("id", channelSessionId).maybeSingle(),
-      db.from("contacts").select("phone_number").eq("organization_id", organizationId).eq("id", contactId).maybeSingle(),
-    ]);
-    if (canal.error) throw canal.error;
-    if (contato.error) throw contato.error;
-    return {
-      metadata: (canal.data?.metadata as Record<string, unknown> | null | undefined) ?? null,
-      telefone: (contato.data?.phone_number as string | null | undefined) ?? null,
-    };
-  };
 }
 /** Só reconhecimento de recibo: não autoriza transporte, mas conserva dados,
  * intenção, atendimento e aquisição originais pelo mesmo predicado do settle. */
@@ -121,7 +84,7 @@ async function readMeetingPolicyPg(db: Queryable, c: MeetingDeliveryContext): Pr
   return rows[0]?.policy;
 }
 export async function assertMeetingDeliveryPg(db: Queryable, c: MeetingDeliveryContext) {
-  return requirePolicy(await readMeetingPolicyPg(db, c), lerAcessoDoCanalPg(db, c.organizationId));
+  return requirePolicy(await readMeetingPolicyPg(db, c));
 }
 export async function assertMeetingDeliverySupabase(db: SupabaseClient, c: MeetingDeliveryContext) {
   const { data, error } = await db.rpc("fn_meet_delivery_policy", {
@@ -129,7 +92,7 @@ export async function assertMeetingDeliverySupabase(db: SupabaseClient, c: Meeti
     p_acquired_at: c.jobClaim.acquired_at,
   });
   if (error) throw error;
-  return requirePolicy(data, lerAcessoDoCanalSupabase(db, c.organizationId));
+  return requirePolicy(data);
 }
 
 export interface MeetingBookingContext {

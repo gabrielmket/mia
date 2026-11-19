@@ -132,7 +132,7 @@ export function permitidos(
 ): NavMetadata[] {
   return (NAV_CATALOG as readonly NavMetadata[]).filter(
     (d) =>
-      canSee(d, platform, role) &&
+      !d.agenciaOnly && canSee(d, platform, role) &&
       // FORK MIA (.79, empresa única): Empresas (`/app/companies`) é o cadastro
       // ÚNICO de empresa do fork e existe sem o módulo `crm_b2b`; quem a
       // esconde é o modo de venda (B2C), em `destinosDaInterface`. Pessoas e

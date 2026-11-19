@@ -96,15 +96,36 @@ export async function POST(req: NextRequest, { params }: Rota) {
   }
 
   const agora = new Date().toISOString();
-  const { data: dona, error: erroDaDona } = sinal.clienteRef
-    ? await admin
+  // ─── A LEITURA DA EMPRESA NÃO PODE ENGOLIR O AVISO (#3870) ────────────────
+  // A rota já gravava o ponteiro quando a leitura devolvia ERRO e quando não
+  // achava a empresa. Faltava o caso em que a leitura LANÇA — cliente do
+  // PostgREST sem rede, `fetch` abortado, resposta fora do contrato: a exceção
+  // subia, o Next devolvia 500 e o aviso ia embora sem rastro nenhum. Aqui ela
+  // vira o mesmo caminho do erro, que grava o ponteiro `received` com o motivo
+  // antes do 500 (o `sinal` já foi lido: o corpo não se perde, e a reentrega
+  // fecha a mesma linha pelo índice de idempotência).
+  let dona: { organization_id: string } | null = null;
+  let erroDaDona: { code?: string } | null = null;
+  if (sinal.clienteRef) {
+    try {
+      const leitura = await admin
         .from("cobranca_assinaturas")
         .select("organization_id")
         .eq("provedor", provedor)
         .eq("provedor_cliente_id", sinal.clienteRef)
-        .maybeSingle()
-    : { data: null, error: null };
-  const org = (dona as { organization_id: string } | null)?.organization_id ?? null;
+        .maybeSingle();
+      dona = leitura.data as { organization_id: string } | null;
+      erroDaDona = leitura.error;
+    } catch (erro) {
+      // Só o TIPO da falha vai para o log — nunca URL, corpo ou credencial.
+      erroDaDona = { code: "leitura_excecao" };
+      logger.error("cobranca.leitura_da_empresa_falhou", {
+        provedor,
+        motivo: erro instanceof Error ? erro.name : "desconhecido",
+      });
+    }
+  }
+  const org = dona?.organization_id ?? null;
   // FORK MIA (.107): o cliente pode ser de uma CONTA do raio-X por cadastro (a
   // nova análise paga). Ele não é empresa da MIA; o aviso só acorda a releitura
   // dos pedidos dela no Asaas (`lib/raio-x/pedidos.ts`), como o resto daqui.

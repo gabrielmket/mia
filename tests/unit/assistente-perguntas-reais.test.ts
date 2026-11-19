@@ -175,6 +175,10 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "como desligo a IA nas automações", sobre: "/app/settings/automacoes", espera: "automacoes-freio" },
   { pergunta: "como crio uma etiqueta", sobre: "/app/settings/tags", espera: "etiquetas" },
   { pergunta: "onde ligo os recursos opcionais", sobre: "/app/settings/recursos", espera: "recursos-opcionais" },
+  // Telas que chegaram na fusão do upstream 1.108 a 1.116.
+  { pergunta: "como conecto o amigo da clínica", sobre: "/app/integrations/amigo", espera: "integracao-amigo" },
+  { pergunta: "como mudo o visual do sistema para a equipe", sobre: "/app/settings/aparencia", espera: "aparencia" },
+  { pergunta: "como crio uma organização cliente da agência", sobre: "/app/settings/organizacoes", espera: "organizacoes-da-agencia" },
   { pergunta: "como mudo os dados da empresa e a moeda", sobre: "/app/settings/tenant", espera: "organizacao" },
   { pergunta: "como devolvo as vendas para o google ads", sobre: "/app/settings/conversoes", espera: "conversoes-google" },
   { pergunta: "a meta não está recebendo as conversões, como confiro", sobre: "/app/settings/conversoes", espera: "conversoes-conferir" },
@@ -207,6 +211,8 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "como conecto o banco de dados do meu erp", sobre: "/app/integracao-dados", espera: "banco-externo" },
   { pergunta: "como ativo uma extensão", sobre: "/app/extensions", espera: "extensoes" },
   { pergunta: "por que nada sai desta empresa de demonstração", sobre: "/app/settings/tenant", espera: "demonstracao" },
+  // FORK MIA (.117): a tela nova do upstream, Follow-up por etapa.
+  { pergunta: "como mudo quantos dias o negócio fica parado na etapa antes do follow-up", sobre: "/app/settings/followup-por-etapa", espera: "followup-por-etapa" },
 ];
 
 /** O achado é a ajuda esperada? */

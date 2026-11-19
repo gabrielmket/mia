@@ -54,6 +54,7 @@ import {
   lerReceitasDoBanco,
   validarFixosDaReceita,
 } from "@/lib/external-db/receitas/instancias";
+import { primeiroDestinoInvalido } from "@/lib/external-db/receitas/destino-no-banco";
 import { IDS_DAS_RECEITAS, receitaDe } from "@/lib/external-db/receitas/registro";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
@@ -193,6 +194,9 @@ async function gravarReceitas(
       descricao: (p.descricao ?? definicao?.descricao ?? "").trim().slice(0, 300),
       fixos: p.fixos ?? {},
       ativa: p.ativa ?? true,
+      // Upstream 1.11x (R5b): o destino do interesse é escolhido na TELA. A
+      // ferramenta não o define, mas regravar a receita não pode apagá-lo.
+      ...(existente?.destino_do_interesse ? { destino_do_interesse: existente.destino_do_interesse } : {}),
     };
   });
   const conferido = atualizarReceitasSchema.safeParse({ receitas: instancias });
@@ -227,6 +231,14 @@ async function gravarReceitas(
         `\`receitas[${i}]\`: a receita "${inst.receita}" roda em ${definicao.motores.join(" ou ")}, e a conexão «${conexao.label}» é ${motor}.`,
       );
     }
+  }
+  // A mesma conferência da rota (R5b): o funil e a etapa de destino têm de
+  // existir nesta organização e estar ativos.
+  const destinoRuim = await primeiroDestinoInvalido(c.admin, c.orgId, conferido.data.receitas);
+  if (destinoRuim !== null) {
+    throw new Recusa(
+      `\`receitas[${destinoRuim}]\`: o funil ou a etapa escolhidos na tela para o interesse do cliente não existem ou não estão ativos. Escolha um funil e uma etapa ativos na tela da conexão.`,
+    );
   }
   if (JSON.stringify(gravadas) === JSON.stringify(conferido.data.receitas)) return null;
 

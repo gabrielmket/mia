@@ -50,6 +50,9 @@ it("todo handler mutante do app declara guarda de suporte ou é infraestrutura i
   // linhas acima. Não há sessão de suporte para a guarda ler; chamá-la aqui
   // seria um no-op que devolve 503 quando o GoTrue oscila.
   if(path==="app/api/v1/tenants/provision/route.ts")continue;
+  // Encerrar delegação só revoga a própria sessão, validada por auth.uid/session_id
+  // no RPC. Precisa funcionar mesmo depois da revogação da agência.
+  if(path==="app/api/v1/agencia/sessao/encerrar/route.ts")continue;
   if(path.includes("/impersonate"))continue; // início/fim autenticam a posse e têm contrato próprio
   // FORK MIA — notificações de mudança da Graph da Microsoft: quem chama é o
   // servidor da Microsoft, sem cookie nem ator. A prova é o `clientState` de

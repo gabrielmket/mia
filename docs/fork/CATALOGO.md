@@ -791,13 +791,17 @@ conexão pelo app (S3) e saída e volta (S4) ainda não. **Migrations** 9162. **
 **Protege.** Invariantes `coexistencia-historico-nao-dispara.test.ts` (nada dispara, nada muda na conversa
 e no negócio que já existiam, reentrega não duplica, com o controle), `historico-importado-nao-dispara.test.ts`
 (o corte da 0760), `rls-tabelas-da-mia.test.ts`, `rls-completude-varredura.test.ts`; unidade
-`coexistencia-historico-leitura.test.ts`, `dispatcher-org-parada.test.ts`, `evento-comando-tem-consumidor.test.ts`.
+`coexistencia-historico-leitura.test.ts`, `dispatcher-org-parada.test.ts`, `evento-comando-tem-consumidor.test.ts`,
+`historico-midia-so-guarda.test.ts` (a mídia do histórico, pelos dois chamadores, a coexistência e a importação
+do canal não oficial, só é guardada: sem derivação, transcrição, visão nem IA, com o controle sem a chave).
 
 **Conferir.**
 1. `git grep -n "receberHistoricoDaMeta\|ingerirContatoDoAppContando" "app/api/v1/webhooks/meta/[token]/route.ts"` (**as duas chamadas existem**; sem a primeira o histórico volta a ser ignorado em silêncio).
 2. `git grep -n "historico_importado" supabase/migrations/*0760*` e a mesma chave em `fn_emit_message_event` no `baseline.sql` (se o upstream mudar o corte, o histórico passa a acordar a IA).
 3. `npx vitest run tests/unit/coexistencia-historico-leitura.test.ts tests/unit/dispatcher-org-parada.test.ts`.
-4. MCP: nenhuma ferramenta nesta etapa (a leitura da sincronização entra na S3, com a tela).
+4. `npx vitest run tests/unit/historico-midia-so-guarda.test.ts` (se reprovar, o worker de mídia voltou a pedir
+   a derivação paga para conversa de meses atrás: a guarda é o `historicoImportado` de `workers/media-persist-worker.ts`).
+5. MCP: nenhuma ferramenta nesta etapa (a leitura da sincronização entra na S3, com a tela).
 
 **Riscos.** Se o upstream passar a ler o campo `history` no `parseMetaWebhook` ou a gravar o histórico por
 `ingestMetaInbound`, o histórico entraria duas vezes ou como mensagem nova: conferir na fusão. Relatórios e
@@ -805,7 +809,45 @@ raio-X do fork ainda contam o histórico importado (9163, espera a decisão D3).
 
 ---
 
-### 24. O aviso da queda e da volta do número no grupo do cliente · [`aviso-da-queda.md`](aviso-da-queda.md)
+### 24. O consumo de IA por mês e por agente · [`consumo-de-ia.md`](consumo-de-ia.md)
+**O que faz.** A leitura do consumo de IA de um cliente num mês do calendário em Brasília (ou em N dias),
+quebrada por agente, pela linha "Sistema" (chamadas sem `agent_id`) e por finalidade, em centavos de dólar e
+em reais pela cotação de cada dia. Usada pela aba Uso do cliente e pelo MCP. Nas telas (MIA-46), "Este mês" e
+"Mês passado" no seletor de `/admin/usage` e da aba Uso, e na aba Uso o R$ no card do custo de IA e as tabelas
+por agente (com "Sistema") e por finalidade. Só no painel da plataforma: `/app/ai/usage` não mudou.
+**Migrations** nenhuma (lê `llm_calls`, `ai_agents` e `platform_fx_rates`, da 0241). **Mora em**
+`lib/ai/usage/consumo-do-periodo.ts`, `lib/ai/usage/atalhos-de-periodo.ts`,
+`lib/mcp-plataforma/ferramentas/consumo-de-ia.ts`, `components/admin/tenants/UsoDoTenant.tsx`.
+
+**Pontos de encaixe** (todos `FORK MIA (MIA-44)`): `app/api/v1/admin/tenants/[id]/usage/route.ts` (a rota é
+do fork; o `mes` e a chamada a `lerConsumoDoPeriodo`), `lib/mcp-plataforma/ferramentas.ts`
+(`FERRAMENTAS_DE_CONSUMO_DE_IA`), `app/api/v1/admin/usage/route.ts` (o `mes`, `periodoDoPedido` e o dia de
+Brasília nas séries), `app/admin/(protected)/usage/_client.tsx` e `components/admin/usage/UsageTable.tsx` (o
+seletor e o nome do CSV), `hooks/useAdminUsage.ts`, `lib/i18n/dicionario.ts` (o espalhamento de
+`DICIONARIO_DO_CONSUMO_DE_IA`). Do upstream, só as colunas de `llm_calls`: `agent_id` (0130), `purpose`,
+`input_tokens`, `output_tokens`, `cache_read_tokens`, `cost_cents`.
+
+**Protege.** `tests/unit/consumo-de-ia-por-mes-e-por-agente.test.ts` (paginação acima de 1000, agente x
+Sistema, cache, virada do mês em Brasília com TZ de Brasília e UTC, R$ e dia sem cotação, a rota e o MCP com os
+mesmos números), `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx` (os atalhos, `/admin/usage?mes=` e a aba
+Uso), `painel-de-custo-nao-para-na-linha-1000.test.ts`, `orcamento-uma-regua-de-gasto.test.ts` (nenhuma segunda
+régua de gasto mensal) e a e2e `admin-consumo-de-ia-por-mes-e-por-agente.spec.ts`.
+
+**Conferir.**
+1. `git grep -n "lerConsumoDoPeriodo" "app/api/v1/admin/tenants/[id]/usage/route.ts" lib/mcp-plataforma/ferramentas/consumo-de-ia.ts` (**as duas chamadas existem**; sem uma delas a tela e o MCP passam a divergir).
+2. Se a fusão mexeu em `llm_calls` (`git diff vA vB -- supabase/migrations supabase/baseline.sql | grep -n "llm_calls"`), confira que as seis colunas acima continuam com o mesmo nome e o mesmo sentido (`cache_read_tokens` como parte de `input_tokens`).
+3. `npx vitest run tests/unit/consumo-de-ia-por-mes-e-por-agente.test.ts tests/unit/consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx tests/unit/orcamento-uma-regua-de-gasto.test.ts`.
+4. MCP (lê só): `plataforma_ver_consumo_de_ia` com a empresa de demonstração e o mês corrente.
+5. Se a fusão mexeu em `app/api/v1/admin/usage/route.ts` (do upstream), confira que `mes` ainda passa por `periodoDoPedido` e que a fatura e as cotações têm o limite de cima (`git grep -n "periodoDoPedido\|ultimoDia" app/api/v1/admin/usage/route.ts`).
+
+**Riscos.** O mês daqui é o de Brasília e o do teto (`fn_gasto_de_ia_do_mes`) é o do banco, em UTC: os dois
+números podem diferir pelas chamadas das últimas 3 horas do mês. Fica assim por decisão (mudar o teto muda o que
+o cliente recebe). Se o upstream trouxer a soma de uso no banco por organização (`fn_uso_de_ia`, 0586) com
+quebra por agente, a leitura daqui pode passar a perguntar a ela, desde que a régua do custo continue a mesma.
+
+---
+
+### 25. O aviso da queda e da volta do número no grupo do cliente · [`aviso-da-queda.md`](aviso-da-queda.md)
 **O que faz.** Quando um número por QR de um cliente cai (e a queda dura 10 minutos), o número de avisos manda
 UMA mensagem no grupo de avisos daquele cliente com o final do telefone e o passo a passo do QR, e uma curta
 quando ele volta. Trava de um aviso por queda por dia (`jaAvisou`, chave por sessão). Chave por cliente
@@ -856,8 +898,9 @@ número de avisos caído), `app/api/v1/cron/report-da-plataforma/route.test.ts` 
 | 20 | Produto no negócio | `produto-no-negocio.md` | 9160, 9161 | `produto-no-negocio-servidor.test.ts`, `produto-no-negocio-regras.test.ts` |
 | 21 | Raio-X do atendimento | `raio-x-do-atendimento.md` | 9150, 9151, 9152 | `raio-x-leitor-nao-envia.test.ts`, `raio-x-anonimizar.test.ts` |
 | 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
-| 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-historico-leitura.test.ts` |
-| 24 | Aviso da queda do número | `aviso-da-queda.md` | nenhuma | `aviso-da-queda.test.ts`, `mcp-de-implantacao-aviso-da-queda.test.ts` |
+| 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts` |
+| 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | nenhuma (lê a 0241) | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts` |
+| 25 | Aviso da queda do número | `aviso-da-queda.md` | nenhuma | `aviso-da-queda.test.ts`, `mcp-de-implantacao-aviso-da-queda.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.

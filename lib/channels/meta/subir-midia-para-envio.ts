@@ -21,6 +21,7 @@
  * de um hospedeiro qualquer; quem tem, descobre que o link do Drive devolve
  * HTML em vez da imagem — e o erro chega como `131053` depois do disparo.
  */
+import { graphBaseUrl } from "@/lib/channels/meta/graph-base";
 
 export interface SubirParaEnvioInput {
   phoneNumberId: string;
@@ -57,7 +58,7 @@ export async function subirMidiaParaEnvio(
     form.append("file", new Blob([input.bytes], { type: input.mimeType }), input.filename);
 
     const res = await fetch(
-      `https://graph.facebook.com/${input.graphVersion}/${encodeURIComponent(input.phoneNumberId)}/media`,
+      `${graphBaseUrl(input.graphVersion)}/${encodeURIComponent(input.phoneNumberId)}/media`,
       {
         method: "POST",
         // `Bearer` AQUI, ao contrário da segunda etapa do upload de template,

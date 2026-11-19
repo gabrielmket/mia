@@ -10,6 +10,7 @@ import {
   type PedidoDeAtendimento,
   type PedidoDeEmpresa,
 } from "@/lib/implantacao/empresa";
+import { JANELA_DA_NOTA_HORAS, JANELA_MAXIMA_HORAS, TEXTO_DA_PERGUNTA_PADRAO } from "@/lib/atendimento/satisfacao";
 import { TAMANHO_MAXIMO_DA_TAG } from "@/lib/contacts/tag-normalizada";
 import { PRAZO_MAX_MINUTOS, PRAZO_MIN_MINUTOS } from "@/lib/escalacao/devolucao-automatica";
 import { recusar } from "@/lib/mcp-plataforma/recusa";
@@ -119,6 +120,7 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
       "`google_meet_com_acesso_aberto`: a reunião do Google Meet que o sistema cria já nasce com o acesso aberto a quem tem o link, sem sala de espera (nasce desligado). " +
       "Desde a .86 (upstream 1.87 e 1.88): `assinatura.nome_de_cada_agente` (cada agente assina com o próprio nome), `devolver_a_fila_sem_resposta_minutos` (a conversa do rodízio sem resposta humana volta para a fila), " +
       "`telefone_de_ficha_vazia` (o telefone dito na conversa entra sozinho na ficha sem número) e `etiquetas_de_contato_interno` (o contato com uma delas não vira card e a IA não responde). " +
+      "Do upstream 1.112: `pesquisa_de_satisfacao` (a nota de 1 a 5 pedida ao cliente quando o atendimento é encerrado). " +
       "Só os campos que VIERAM mudam; pedido igual ao que está gravado responde `ja_estava`. As duas primeiras decisões andam juntas: rodízio sem restringir a visibilidade deixa todo mundo vendo a carteira do colega. " +
       "ATENÇÃO: tudo aqui vale na hora, inclusive para o agente que já está no ar. A assinatura ligada aparece na PRÓXIMA mensagem que o cliente final receber. " +
       "O QUE NÃO FAZ: não define a distribuição de cada NÚMERO (quem recebe, o modo próprio e o atendente padrão do número: é plataforma_configurar_canal, `distribuicao`) " +
@@ -234,6 +236,30 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
         .describe(
           "true (o padrão): quando um número de WhatsApp do cliente cai, o grupo de avisos dele recebe um recado (um por queda, por dia) com o passo a passo do QR, e outro quando volta. " +
             "false: o grupo do cliente não recebe esses recados (o report interno da plataforma continua avisando a Time). Precisa do grupo de avisos escolhido em Admin › Número de avisos.",
+        ),
+      // Upstream 1.112 (#4023, 9352).
+      pesquisa_de_satisfacao: z
+        .object({
+          ligado: z.boolean().optional().describe("true liga. Nasce desligada."),
+          janela_horas: z
+            .number()
+            .int()
+            .min(1)
+            .max(JANELA_MAXIMA_HORAS)
+            .optional()
+            .describe(`Por quantas horas a resposta do cliente vale como nota (1 a ${JANELA_MAXIMA_HORAS}; o padrão é ${JANELA_DA_NOTA_HORAS}).`),
+          pergunta: z
+            .string()
+            .max(400)
+            .optional()
+            .describe(`O texto que o cliente lê, de 10 a 300 caracteres. O padrão é «${TEXTO_DA_PERGUNTA_PADRAO}».`),
+        })
+        .strict()
+        .optional()
+        .describe(
+          "A PESQUISA DE SATISFAÇÃO: quando a equipe ENCERRA um atendimento, o cliente recebe no WhatsApp UMA pergunta de 1 a 5, e a resposta vira a nota daquele atendimento (só gestor e administrador veem). " +
+            "FALA COM O CLIENTE: ligada, a pergunta sai no próximo encerramento. Não sai para contato bloqueado ou pessoal, nem fora da janela de envio do número. " +
+            "Só as chaves que vieram mudam; a pergunta e a janela ficam guardadas ao desligar.",
         ),
     },
     exemplo: { organization_id: ORG_DE_EXEMPLO, modo: "round_robin", visibilidade: "own_and_unassigned", devolver_para_a_ia_apos_minutos: 60 },

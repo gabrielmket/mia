@@ -1027,6 +1027,69 @@ const TELAS_DO_UPSTREAM: Manual[] = [
       "A tela só aparece com o recurso Painel de atendimento instalado. Ela se atualiza sozinha, então serve para deixar aberta num monitor. O robô ao lado da conversa quer dizer que o automático está atendendo. Cada coluna mostra até 100 conversas.",
     vejaTambem: ["inbox"],
   },
+  // Telas que chegaram na fusão do upstream 1.108 a 1.116, escritas lendo o código de cada uma.
+  {
+    id: "integracao-amigo",
+    titulo: "Conectar a clínica ao Amigo (agenda, pacientes e catálogos)",
+    palavras: ["amigo", "clinica", "paciente", "token amigo", "agenda da clinica", "consulta", "unidade padrao", "agenda principal"],
+    href: "/app/integrations/amigo",
+    papelMinimo: "admin",
+    passos: [
+      "Abra Integrações › Amigo, na aba Configuração.",
+      "Em Conexão da clínica, cole o Token Amigo (peça o token de acesso à sua clínica) e use Testar conexão.",
+      "Com a conexão validada, confira a Unidade padrão e o Fuso da clínica, decida se quer Usar Amigo como agenda principal e clique em Salvar configuração.",
+      "Depois, as abas Agenda, Pacientes e Catálogos mostram a operação da clínica. Operações pendentes lista o que ainda não voltou do Amigo.",
+    ],
+    observacao: "Só aparece com o módulo Amigo ligado na instalação. Consultar é para a equipe; configurar é de admin. Desconectar Amigo impede novas operações e preserva o histórico.",
+  },
+  {
+    id: "aparencia",
+    titulo: "Mudar a aparência do sistema para a equipe (templates e personalização)",
+    palavras: ["aparencia", "template", "tema", "visual", "fonte", "densidade", "arredondamento", "cor secundaria", "modo escuro"],
+    href: "/app/settings/aparencia",
+    papelMinimo: "admin",
+    passos: [
+      "Abra Configurações › Aparência.",
+      "Em Templates, use Visualizar para ver um template só no seu navegador, e Aplicar para escolher o que vai para a equipe.",
+      "Em Personalizar, ajuste Fonte, Densidade, Arredondamento, Cor secundária e Intensidade dos efeitos.",
+      "Clique em Salvar para a equipe. Descartar volta ao que estava salvo.",
+    ],
+    observacao: "A cor principal e o logotipo vêm da tela Marca e valem em qualquer template. Claro, escuro ou automático é escolha de cada pessoa, no próprio navegador.",
+  },
+  {
+    id: "organizacoes-da-agencia",
+    titulo: "Criar e abrir as organizações clientes da agência",
+    palavras: ["agencia", "organizacoes clientes", "organizacao cliente", "cliente da agencia", "criar organizacao", "abrir organizacao"],
+    href: "/app/settings/organizacoes",
+    papelMinimo: "admin",
+    passos: [
+      "Abra Configurações › Organizações clientes (aparece só para uma organização de agência).",
+      "Use Criar organização cliente, preencha Nome e Identificador e confirme.",
+      "Na lista de Organizações vinculadas, use Abrir organização para entrar na conta do cliente.",
+    ],
+    observacao: "Só existe com o módulo de agências ligado na instalação. Quando aparece Limite atingido, o aumento é pedido ao administrador da plataforma.",
+  },
+  // .117 (upstream v1.117): a tela que mostra, etapa por etapa, os fluxos de
+  // "negócio parado na mesma etapa" e edita o prazo no próprio fluxo.
+  {
+    id: "followup-por-etapa",
+    titulo: "Follow-up por etapa: o prazo de cada fluxo de negócio parado, etapa por etapa",
+    palavras: [
+      "follow-up por etapa", "followup por etapa", "etapa parada", "negocio parado", "prazo do follow-up",
+      "dias parado", "lembrete por etapa", "acompanhamento da etapa", "quantos dias", "retomar negocio",
+    ],
+    href: "/app/settings/followup-por-etapa",
+    papelMinimo: "manager",
+    passos: [
+      "Abra Configurações e, em Sua empresa, Follow-up por etapa.",
+      "A tela lista as etapas abertas de cada funil e, em cada uma, os fluxos de negócio parado na mesma etapa que a alcançam. Etapa sem fluxo aparece com o aviso Nenhum fluxo de etapa parada alcança esta etapa.",
+      "Em Prazo (dias), mude quantos dias o negócio precisa ficar parado para o fluxo agir.",
+      "Clique em Salvar prazos. O prazo é gravado no próprio fluxo, o mesmo que o sistema lê.",
+      "Para mudar a mensagem, use Abrir no construtor do fluxo: o texto continua no fluxo.",
+    ],
+    observacao:
+      "Não existe um prazo da etapa: cada fluxo tem o seu, e uma etapa alcançada por dois fluxos mostra os dois, que disparam cada um o seu lembrete. Fluxo desligado aparece marcado e não age.",
+  },
 ];
 
 /**

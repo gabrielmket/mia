@@ -32,7 +32,8 @@ import type { Actor } from "@/lib/api/handlers/types";
 import { fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import type { Role } from "@/lib/auth/types";
-import type { Idioma } from "@/lib/i18n/idiomas";
+import { traduzir } from "@/lib/i18n/dicionario";
+import { IDIOMA_PADRAO, type Idioma } from "@/lib/i18n/idiomas";
 import {
   McpAuthError,
   ensureRole,
@@ -41,6 +42,7 @@ import {
   validateBearerToken,
 } from "@/lib/mcp/auth";
 import { JANELA_SEGUNDOS, TETO_DE_ESCRITA, TETO_POR_ORGANIZACAO } from "@/lib/mcp/rate-limit";
+import { recusaPorModulo } from "@/lib/modulos/recusa-por-recurso"; // FORK MIA (.58)
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -127,12 +129,28 @@ export async function resolveAuthDual(
       throw err;
     }
 
+    // FORK MIA (.58): a trava do módulo vendável pelo `resource` vale também para
+    // o token. Ela mora no `requireRole`, que este ramo não chama; desde a 1.11x
+    // as Campanhas do upstream aceitam token, e sem isto um token usaria o
+    // Broadcast numa empresa que não o contratou. Ver lib/modulos/recusa-por-recurso.ts.
+    const admin = createAdminClient();
+    const semModulo = await recusaPorModulo({
+      db: admin,
+      organizationId: auth.organizationId,
+      userId: null,
+      apiTokenId: auth.apiTokenId,
+      resource,
+      requestId,
+      t: (texto) => traduzir(texto, IDIOMA_PADRAO),
+    });
+    if (semModulo) return { ok: false, response: semModulo };
+
     // organization_id vem do TOKEN (fonte confiável), nunca do cliente.
     return {
       ok: true,
       organizationId: auth.organizationId,
       actor: auth.actor,
-      supabase: createAdminClient(),
+      supabase: admin,
       via: "token",
       scopes: auth.scopes,
       apiTokenId: auth.apiTokenId,

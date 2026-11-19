@@ -24,7 +24,10 @@ export interface CardInput {
   recurringPeriod?: string | null;
   currency: string | null;
   owner: OwnerDisplay;
-  /** Nome do estágio atual — o "3d em Negociação" do rodapé. */
+  /**
+   * Nome do estágio. A coluna já o escreve no cabeçalho; fora dela o card o
+   * mostra numa linha própria, nunca ao lado do responsável.
+   */
   stageName: string;
   /** Horas paradas no estágio (board calcula; null = sem sinal). */
   hoursInStage: number | null;
@@ -101,6 +104,8 @@ export function buildCardInput(
     | "owner_agent"
     // O NOME resolvido pela rota do quadro, não uma coluna do lead.
     | "empresa_nome"
+    | "owner_user_name"
+    | "owner_user_removed"
     | "next_action"
     | "score"
   >,
@@ -186,12 +191,13 @@ export interface CardState {
   border: "accent" | "warning" | "neutral";
   slot: CardSlot;
   /**
-   * O rodapé mostra o número de horas/dias, ou só o nome do estágio.
+   * A coluna mostra o número de horas/dias no rodapé quando isto é verdadeiro.
    *
-   * UM relógio por card: hoje "sem resposta há 6 dias" e "6d em Proposta
-   * enviada" saem os dois de `last_activity_at`, então mostrar os dois é o
-   * mesmo número duas vezes — ruído com cara de informação. Quando o slot já
-   * conta o tempo, o rodapé fica só com o lugar ("em Proposta enviada").
+   * UM relógio por card: "sem resposta há 6 dias" e "6d" sairiam os dois do
+   * mesmo instante, então mostrar os dois é o mesmo número duas vezes. Quando
+   * o slot já conta o tempo, o rodapé da coluna não repete o número. O nome da
+   * etapa não entra nessa linha: a coluna já o mostra, e fora dela o card
+   * escreve a etapa numa linha própria.
    */
   showStageAge: boolean;
 }

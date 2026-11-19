@@ -58,6 +58,8 @@ vi.mock("@/lib/auth/server", () => ({
 vi.mock("@/lib/impersonate/support", () => ({
   requireSupportWrite: vi.fn(async () => null),
   supportWriteError: vi.fn(() => null),
+  // Upstream 1.11x: o onboarding também recusa o acesso de acompanhamento.
+  permanentAccessError: vi.fn(() => null),
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => estado.banco.cliente }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => estado.banco.cliente }));
