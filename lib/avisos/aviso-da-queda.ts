@@ -234,8 +234,12 @@ async function lerQuedasEVoltas(admin: SupabaseClient, sessoes: string[]): Promi
  * `upsert` e regravaria o começo a cada minuto, e a espera nunca venceria.
  */
 async function comecarRelogio(admin: SupabaseClient, s: LinhaDaSessao): Promise<void> {
+  // A próxima rodada tenta de novo: a queda só é avisada um minuto depois. Mas
+  // a falha vai para o log, a que lança e a que o supabase devolve em `error`
+  // sem lançar: um relógio que nunca grava é um cliente que nunca é avisado.
+  let detalhe: string | null = null;
   try {
-    await admin.from("platform_avisos_enviados").upsert(
+    const { error } = await admin.from("platform_avisos_enviados").upsert(
       {
         chave: chaveDeForaDesde(s.id),
         enviado_em: new Date().toISOString(),
@@ -243,8 +247,16 @@ async function comecarRelogio(admin: SupabaseClient, s: LinhaDaSessao): Promise<
       },
       { onConflict: "chave", ignoreDuplicates: true },
     );
-  } catch {
-    // A próxima rodada tenta de novo: a queda só é avisada um minuto depois.
+    if (error) detalhe = error.message;
+  } catch (err) {
+    detalhe = err instanceof Error ? err.message : "erro";
+  }
+  if (detalhe !== null) {
+    logger.warn("[aviso-da-queda] o relógio da queda não gravou; a próxima rodada tenta de novo", {
+      organizationId: s.organization_id,
+      sessionId: s.id,
+      detail: detalhe,
+    });
   }
 }
 

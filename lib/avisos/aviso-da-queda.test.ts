@@ -13,6 +13,7 @@ vi.mock("@/lib/channels", async (real) => ({
 }));
 
 import { PROVIDER_EM_QUE_O_NUMERO_E_A_CONEXAO as QR } from "@/lib/channels/capabilities";
+import { logger } from "@/lib/logger";
 import { bancoEmMemoria, type Linha } from "@/tests/helpers/banco-em-memoria";
 
 import {
@@ -373,6 +374,36 @@ describe("o volume de marcas não cala o aviso (o corte de 1000 linhas do PostgR
 
     expect(chaves(b)).not.toContain(chaveDeForaDesde(SESSAO_ALFA));
     expect(enviados).toHaveLength(0);
+  });
+
+  it("o relógio que o banco recusa (o `error` do supabase, sem lançar) vai para o log", async () => {
+    const b = cenario({ alfa: { status: "FAILED" } });
+    const real = b.cliente as unknown as { from: (t: string) => Record<string, unknown> };
+    const cliente = {
+      ...real,
+      from: (t: string) => {
+        const q = real.from(t);
+        if (t !== "platform_avisos_enviados") return q;
+        return {
+          ...q,
+          upsert: (linha: Linha, ...resto: unknown[]) =>
+            String(linha.chave) === chaveDeForaDesde(SESSAO_ALFA)
+              ? Promise.resolve({ data: null, error: { message: "falha de teste" } })
+              : (q.upsert as (...a: unknown[]) => unknown)(linha, ...resto),
+        };
+      },
+    };
+    const aviso = vi.spyOn(logger, "warn").mockImplementation(() => undefined as never);
+    try {
+      await avisarQuedasEVoltas(cliente as never, new Date());
+      expect(chaves(b)).not.toContain(chaveDeForaDesde(SESSAO_ALFA));
+      expect(aviso).toHaveBeenCalledWith(
+        expect.stringContaining("o relógio da queda não gravou"),
+        expect.objectContaining({ organizationId: ALFA, sessionId: SESSAO_ALFA, detail: "falha de teste" }),
+      );
+    } finally {
+      aviso.mockRestore();
+    }
   });
 });
 
