@@ -66,6 +66,8 @@ jobs:
           SENTRY_DSN: "off"
           # FORK MIA (.100): mesmo motivo do build do e2e.yml e do perf.yml, a checagem
           # de tipos do `next build` passa do heap padrão com as peças do fork.
+          # O upstream (v1.119, #4785) pôs 6 GB aqui pelo mesmo motivo; o fork
+          # mantém 8 GB porque o type check com as peças do fork é maior.
           NODE_OPTIONS: --max-old-space-size=8192
       - name: O standalone leva o mysql2 completo?
         run: node scripts/verificar-standalone-mysql.mjs

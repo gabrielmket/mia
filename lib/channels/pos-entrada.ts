@@ -1247,6 +1247,7 @@ async function abrirDemanda(
       messageId: entrada.messageId,
       nomeDoContato: entrada.nomeDoContato,
       origem: origemDoNegocioPeloCanal(entrada.canal),
+      channelSessionId: entrada.channelSessionId,
       ...(atribuicaoDaMensagem ? { atribuicaoDaMensagem } : {}),
     });
 
