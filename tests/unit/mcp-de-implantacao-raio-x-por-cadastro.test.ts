@@ -5,7 +5,7 @@
  *    e-mail e o WhatsApp da pessoa MASCARADOS) e os PEDIDOS de nova análise;
  *  - a sexta ferramenta do raio-X, `plataforma_precos_do_raio_x` (operação
  *    `gerir_raio_x`), vê e define o preço da nova análise, e audita;
- *  - a lista tem 112 na .107 (115 desde as três da trava de robô, .108; 117 com as duas do produto no negócio, .109; 118 com a da lista de espera, MIA-18; 121 com as três da coexistência, MIA-28).
+ *  - a lista tem 112 na .107 (115 desde as três da trava de robô, .108; 117 com as duas do produto no negócio, .109; 118 com a da lista de espera, MIA-18; 119 com a do consumo de IA, MIA-44; 122 com as três da coexistência, MIA-28).
  *
  * Banco em memória, dado fictício.
  */
@@ -95,8 +95,8 @@ beforeEach(() => {
 });
 
 describe("o raio-X por cadastro no MCP", () => {
-  it("a lista tem 121 (112 + as três da trava de robô da .108 + as duas do produto no negócio da .109 + a da lista de espera, MIA-18), e a sexta do raio-X é a dos preços, com gerir_raio_x", () => {
-    expect(FERRAMENTAS).toHaveLength(121);
+  it("a lista tem 122 (112 + as três da trava de robô da .108 + as duas do produto no negócio da .109 + a da lista de espera, MIA-18 + a do consumo de IA, MIA-44 + as três da coexistência, MIA-28), e a sexta do raio-X é a dos preços, com gerir_raio_x", () => {
+    expect(FERRAMENTAS).toHaveLength(122);
     expect(FERRAMENTA_POR_NOME.get("plataforma_precos_do_raio_x")!.operacao).toBe("gerir_raio_x");
     expect(FERRAMENTA_POR_NOME.get("plataforma_precos_do_raio_x")!.description).toMatch(/INTERESSE/);
     expect(FERRAMENTA_POR_NOME.get("plataforma_ver_raio_x")!.description).toMatch(/ORIGEM/);

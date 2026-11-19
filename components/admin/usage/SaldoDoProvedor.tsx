@@ -25,6 +25,7 @@ import {
   useLancarSaldo,
   type SaldoDoProvedor as Saldo,
 } from "@/hooks/useAiSaldo";
+import { diaLocal, momentoDoLancamento } from "@/lib/ai/custo/dia-do-lancamento";
 
 /** O provedor cobra em dólar; o formato do NÚMERO segue o idioma de quem lê. */
 function usd(v: number, tag: string): string {
@@ -141,7 +142,10 @@ function Formulario() {
   const [nota, setNota] = useState("");
 
   const numero = Number(valor.replace(",", "."));
-  const valido = Number.isFinite(numero) && numero >= 0 && valor.trim() !== "";
+  // O dia vira instante no fuso de quem digita; ver lib/ai/custo/dia-do-lancamento.ts.
+  const momento = quando ? momentoDoLancamento(quando) : null;
+  const valido =
+    Number.isFinite(numero) && numero >= 0 && valor.trim() !== "" && (!momento || momento.ok);
 
   return (
     <form
@@ -153,7 +157,7 @@ function Formulario() {
           {
             tipo,
             amount_usd: numero,
-            ...(quando ? { occurred_at: new Date(quando).toISOString() } : {}),
+            ...(momento?.ok ? { occurred_at: momento.occurred_at } : {}),
             // Só em recarga: é o par (reais que saíram, dólares que entraram)
             // que revela IOF e spread sem ninguém estimar percentual.
             ...(tipo === "recarga" && Number(reais.replace(",", ".")) > 0
@@ -225,8 +229,14 @@ function Formulario() {
           type="date"
           className="w-40"
           value={quando}
+          max={diaLocal(new Date())}
           onChange={(e) => setQuando(e.target.value)}
         />
+        {momento && !momento.ok && (
+          <p className="text-xs text-error-fg">
+            {t(momento.motivo === "futuro" ? "A data não pode ser depois de hoje." : "Data inválida.")}
+          </p>
+        )}
       </div>
       <div className="min-w-[12rem] flex-1 space-y-1">
         <label className="block text-xs text-muted-foreground" htmlFor="saldo-nota">

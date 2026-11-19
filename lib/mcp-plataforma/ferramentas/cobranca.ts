@@ -40,6 +40,7 @@ import { toleranciaDias } from "@/lib/cobranca/configuracao";
 import { emailDoAdminDaEmpresa } from "@/lib/cobranca/emails";
 import { urlDoPainelDaEmpresa } from "@/lib/cobranca/url";
 import { lerVisaoGeral, montarChecklist } from "@/lib/cobranca/visao-geral";
+import { MOEDAS } from "@/lib/cobranca/vocabulario";
 import { PRECO_PADRAO_POR_EMAIL_CENTS } from "@/lib/email-marketing/regras";
 import { organizacaoDaImplantacao } from "@/lib/implantacao/base";
 import { moduloLigado } from "@/lib/instalacao/modulos";
@@ -76,6 +77,8 @@ function planoParaAPlataforma(p: PlanoComModulos, assinantes: number) {
     id: p.id,
     nome: p.nome,
     preco: reais(p.preco_cents),
+    // Upstream (9332): o `preco` está nesta moeda.
+    moeda: p.moeda,
     intervalo: p.intervalo,
     teste_dias: p.trial_dias,
     pessoas: p.max_assentos,
@@ -176,7 +179,15 @@ const PLANO_PEDIDO = z.object({
     .min(5)
     .max(1_000_000)
     .describe(
-      "Preço por período, em REAIS (ex.: 297). Mínimo R$ 5,00. Não muda depois que alguém assina.",
+      "Preço por período, na moeda do plano (em REAIS quando `moeda` não vem; ex.: 297). Mínimo 5,00. Não muda depois que alguém assina.",
+    ),
+  // Upstream (migration 9332): plano em dólar ou euro.
+  moeda: z
+    .enum(MOEDAS)
+    .optional()
+    .describe(
+      '"BRL" (o padrão), "USD" ou "EUR". Só na CRIAÇÃO: o plano não troca de moeda depois (para outra moeda, crie outro plano). ' +
+        "Fora do real só com a Stripe conectada: o Asaas cobra só em real, e o boleto também é só em real.",
     ),
   intervalo: z
     .enum(["mes", "ano"])
@@ -371,6 +382,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       const pedidos = (args.planos as Array<z.infer<typeof PLANO_PEDIDO>>).map((p) => ({
         nome: p.nome,
         preco_cents: Math.round(p.preco * 100),
+        moeda: p.moeda,
         intervalo: p.intervalo,
         trial_dias: p.teste_dias,
         max_assentos: p.pessoas,

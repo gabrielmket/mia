@@ -33,6 +33,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { lerConsumoDeIa } from "@/lib/ai/custo/consumo-de-ia";
 import { derivarSaldo } from "@/lib/ai/custo/saldo";
+import { instanteNaoEstaNoFuturo } from "@/lib/ai/custo/dia-do-lancamento";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,13 @@ const lancamentoSchema = z.object({
   // Quanto saiu em REAIS: com o valor em dólar, dá a taxa efetiva paga — IOF e
   // spread do banco dentro, medidos em vez de estimados. Só faz sentido em recarga.
   amount_brl: z.number().finite().min(0).max(10_000_000).optional(),
-  occurred_at: z.string().datetime().optional(),
+  occurred_at: z
+    .string()
+    .datetime()
+    .refine((v) => instanteNaoEstaNoFuturo(v), {
+      message: "A data do lançamento não pode estar no futuro.",
+    })
+    .optional(),
   note: z.string().trim().max(200).optional(),
 });
 

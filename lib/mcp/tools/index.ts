@@ -25,6 +25,7 @@ import {
 } from "./conversations";
 import {
   crmListLeads,
+  crmCountLeads,
   crmGetLead,
   crmCreateLead,
   crmUpdateLead,
@@ -133,6 +134,7 @@ export const allTools: ReadonlyArray<McpToolDefinition> = [
   crmGetConversationHistory,
   crmGetQueueStatus,
   crmListLeads,
+  crmCountLeads,
   crmGetLead,
   // #4544 (item 2) — o documento anexado ao card: listar para descobrir o id,
   // ler para tirar dali os valores. Entram logo depois do get_lead porque são a

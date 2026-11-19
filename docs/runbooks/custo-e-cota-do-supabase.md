@@ -99,16 +99,17 @@ como conferência no painel (**Settings → Usage → Auth**), não como primeir
 | 3 | **Autohospedar** o Supabase | a cota deixa de existir; o custo vira a VPS | só está documentado para instalação **nova** — migração com dados não tem passo a passo |
 
 **1. Limpar — custo zero, e o que exatamente sai.** O cron `data-retention` roda às 04h40
-(`docker/scheduler/entrypoint.sh:175`) e poda as tabelas que crescem sozinhas; o que ele apaga e as
+(`docker/scheduler/entrypoint.sh:279`) e poda as tabelas que crescem sozinhas; o que ele apaga e as
 alavancas (`JOB_QUEUE_RETENTION_DAYS`, `AUDIT_LOG_RETENTION_DAYS`, as de telemetria de IA) estão em
 §4.1 e §4.2. Para o storage há dois crons, e eles trabalham em par:
 
-- `media-retention`, às 05h20 (`docker/scheduler/entrypoint.sh:179`), enfileira o arquivo de mensagem
+- `media-retention`, às 05h20 (`docker/scheduler/entrypoint.sh:283`), enfileira o arquivo de mensagem
   mais velho que `organizations.media_retention_days` — padrão **365** dias, piso **30**
   (`supabase/migrations/20260926200200_0432_poda_de_midia.sql:35`) — e o órfão de conversa apagada;
   a rodada enfileira até 10 mil arquivos (`app/api/v1/cron/media-retention/route.ts:39-41`);
-- `storage-redaction`, a cada 5 minutos (`docker/scheduler/entrypoint.sh:65`), drena essa fila pelo
+- `storage-redaction`, a cada 5 minutos (`docker/scheduler/entrypoint.sh:93`), drena essa fila pelo
   Storage API.
+<!-- FORK MIA (.117): as três linhas citadas acima são as do `entrypoint.sh` do fork, que tem os crons e o segredo do agendador nossos (no upstream: 175, 179 e 65). A cerca `documentacao-aponta-para-o-que-existe` confere a linha. -->
 
 **O limite dessa limpeza:** a poda de mídia só toca o bucket `whatsapp-media`
 (`supabase/migrations/20260926200200_0432_poda_de_midia.sql:47`). Foto de produto, logo da marca,
