@@ -142,6 +142,9 @@ describe("a lista de ferramentas", () => {
       "plataforma_reler_raio_x",
       // .107: o preço da nova análise do raio-X por cadastro é da instalação.
       "plataforma_precos_do_raio_x",
+      // MIA-99: o preço que a Meta cobra por mensagem é da instalação, não de uma empresa.
+      "plataforma_ver_precos_da_meta",
+      "plataforma_definir_precos_da_meta",
     ]);
   });
 

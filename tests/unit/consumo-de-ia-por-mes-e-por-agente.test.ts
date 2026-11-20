@@ -333,6 +333,7 @@ describe("a rota da aba Uso e a ferramenta do MCP", () => {
       ],
       messages: [],
       platform_precos_meta: [],
+      mia_precos_meta_vigencias: [],
     });
 
   const pedir = async (consulta: string) => {
