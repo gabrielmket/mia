@@ -96,8 +96,6 @@ const SEM_FILTRO: Record<string, string> = {
     "FORK MIA: sincronia com o Outlook, o par do agenda-google-sync; deliberadamente não gatilhada (spec §4)",
   "cotacao-do-dolar": "FORK MIA: a cotação do dia é da instalação inteira; não pertence a organização nenhuma",
   "gasto-openai": "FORK MIA: o gasto da conta OpenAI é da plataforma; não pertence a organização nenhuma",
-  "report-da-plataforma":
-    "FORK MIA: fala só no grupo INTERNO da plataforma (saldo, números, schema, resumo); nenhuma mensagem a cliente",
   "varredura-de-avisos": "FORK MIA: só fecha aviso da Central que deixou de valer; escrita interna, sem custo nem saída",
 };
 

@@ -124,7 +124,11 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
       "Só os campos que VIERAM mudam; pedido igual ao que está gravado responde `ja_estava`. As duas primeiras decisões andam juntas: rodízio sem restringir a visibilidade deixa todo mundo vendo a carteira do colega. " +
       "ATENÇÃO: tudo aqui vale na hora, inclusive para o agente que já está no ar. A assinatura ligada aparece na PRÓXIMA mensagem que o cliente final receber. " +
       "O QUE NÃO FAZ: não define a distribuição de cada NÚMERO (quem recebe, o modo próprio e o atendente padrão do número: é plataforma_configurar_canal, `distribuicao`) " +
-      "e não escolhe o grupo de avisos (Admin › Número de avisos).",
+      "e não escolhe o grupo de avisos (Admin › Número de avisos). " +
+      // FORK MIA (MIA-48).
+      "`aviso_da_queda_do_numero`: o número de avisos manda UMA mensagem no grupo de avisos do cliente quando um número de WhatsApp dele (por QR) cai, " +
+      "com o passo a passo para reconectar, e uma curta quando ele volta. Nasce LIGADO; sem grupo de avisos escolhido, não manda nada. " +
+      "O estado (e os últimos avisos) aparece em plataforma_ver_cliente, `aviso_da_queda`.",
     inputSchema: {
       organization_id: ORGANIZACAO,
       modo: z.enum(ROUTING_MODES).optional(),
@@ -224,6 +228,14 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
         .describe(
           "As etiquetas de CONTATO INTERNO (a lista inteira; [] tira todas): o contato marcado com uma delas (equipe, sócio, família, fornecedor) não vira card no funil e a IA NÃO responde a ele. " +
             "A conversa continua normal no Inbox, inclusive para envio manual. As etiquetas são comparadas sem diferença de maiúscula e acento.",
+        ),
+      // FORK MIA (MIA-48).
+      aviso_da_queda_do_numero: z
+        .boolean()
+        .optional()
+        .describe(
+          "true (o padrão): quando um número de WhatsApp do cliente cai, o grupo de avisos dele recebe um recado (um por queda, por dia) com o passo a passo do QR, e outro quando volta. " +
+            "false: o grupo do cliente não recebe esses recados (o report interno da plataforma continua avisando a Time). Precisa do grupo de avisos escolhido em Admin › Número de avisos.",
         ),
       // Upstream 1.112 (#4023, 9352).
       pesquisa_de_satisfacao: z
