@@ -184,6 +184,43 @@ describe("as leituras", () => {
     expect(typeof r.janela_configurada).toBe("boolean");
   });
 
+  it("S4: ver a coexistência mostra o número fora do ar (motivo, quem iniciou) e o de volta", async () => {
+    const fora = conectado();
+    Object.assign(fora.mia_coexistencia_conexoes[0]!, {
+      estado: "fora_do_ar",
+      fora_do_ar_motivo: "PRIMARY_INACTIVITY",
+      fora_do_ar_iniciado_por: "SYSTEM",
+      fora_do_ar_em: "2026-11-18T09:40:00.000Z",
+      ultimo_evento_em: "2026-11-18T09:40:00.000Z",
+    });
+    const r = await chamar("plataforma_ver_coexistencia", banco(fora), { organization_id: ALFA });
+    expect((r.numeros_pelo_app as unknown[])[0]).toMatchObject({
+      numero: "+5531900000002",
+      estado: "fora_do_ar",
+      situacao: "fora_do_ar",
+      fora_do_ar_motivo: "PRIMARY_INACTIVITY",
+      fora_do_ar_iniciado_por: "SYSTEM",
+      fora_do_ar_em: "2026-11-18T09:40:00.000Z",
+      voltou_em: null,
+    });
+
+    const volta = conectado();
+    Object.assign(volta.mia_coexistencia_conexoes[0]!, {
+      estado: "no_ar",
+      fora_do_ar_motivo: "PRIMARY_INACTIVITY",
+      fora_do_ar_em: "2026-11-18T09:40:00.000Z",
+      voltou_em: "2026-11-19T10:12:00.000Z",
+      ultimo_evento_em: "2026-11-19T10:12:00.000Z",
+    });
+    const r2 = await chamar("plataforma_ver_coexistencia", banco(volta), { organization_id: ALFA });
+    expect((r2.numeros_pelo_app as unknown[])[0]).toMatchObject({
+      estado: "no_ar",
+      situacao: "de_volta",
+      voltou_em: "2026-11-19T10:12:00.000Z",
+      ultimo_aviso_da_meta_em: "2026-11-19T10:12:00.000Z",
+    });
+  });
+
   it("ver a sincronização: os dois pedidos na ordem, só contagens", async () => {
     const r = await chamar("plataforma_ver_sincronizacao_do_app", banco(conectado()), { organization_id: ALFA });
     const [numero] = r.numeros as Array<Record<string, unknown>>;

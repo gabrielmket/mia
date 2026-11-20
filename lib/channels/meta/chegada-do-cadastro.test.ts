@@ -114,6 +114,14 @@ describe("o formato que a Meta mandou de verdade (21/09/2026)", () => {
     expect(chegada?.phoneNumber).toBeNull();
   });
 
+  it("FORK MIA (S4): a saída e a volta do número não são chegada e não reescrevem o cadastro", () => {
+    // Sem esta guarda, o PARTNER_REMOVED (sem número) zerava o número do cadastro já amarrado.
+    for (const event of ["PARTNER_REMOVED", "ACCOUNT_OFFBOARDED", "ACCOUNT_RECONNECTED"]) {
+      expect(lerChegada("account_update", "1607115514160063", { event }), event).toBeNull();
+    }
+    expect(lerChegada("account_update", "1607115514160063", { event: "PARTNER_ADDED" })?.wabaId).toBe("1607115514160063");
+  });
+
   it("continua caindo no envelope quando o evento não tem waba_info", () => {
     // `account_update` traz o id no próprio envelope, e ali o fallback está certo.
     expect(lerChegada("account_update", "1607115514160063", { event: "VERIFIED" })?.wabaId).toBe(

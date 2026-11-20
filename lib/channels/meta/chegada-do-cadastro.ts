@@ -21,6 +21,9 @@ import { logger } from "@/lib/logger";
 /** Os campos de webhook que dizem "uma conta se conectou ao nosso app". */
 export const CAMPOS_DE_CHEGADA = ["account_update", "partner_added"] as const;
 
+/** Os eventos de `account_update` que dizem que o número SAIU ou VOLTOU (S4 da coexistência). */
+const EVENTOS_QUE_NAO_SAO_CHEGADA = ["PARTNER_REMOVED", "ACCOUNT_OFFBOARDED", "ACCOUNT_RECONNECTED"] as const;
+
 export interface ChegadaDoCadastro {
   wabaId: string;
   businessName: string | null;
@@ -49,6 +52,12 @@ export function lerChegada(
   value: Record<string, unknown>,
 ): ChegadaDoCadastro | null {
   if (!(CAMPOS_DE_CHEGADA as readonly string[]).includes(field)) return null;
+  // Coexistência (S4): a SAÍDA e a VOLTA do número também vêm em
+  // `account_update`, e não são chegada. Sem esta guarda, a saída reescrevia o
+  // retrato do cadastro já amarrado com número nulo (o evento não traz número).
+  // Quem as trata é `coexistencia/saida-e-volta.ts`.
+  const evento = texto(value.event)?.toUpperCase();
+  if (evento && (EVENTOS_QUE_NAO_SAO_CHEGADA as readonly string[]).includes(evento)) return null;
 
   /**
    * DE ONDE sai o id da WABA — e por que a ordem é esta.
