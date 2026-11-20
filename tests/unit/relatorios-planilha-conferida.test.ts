@@ -78,7 +78,7 @@ function lerCsv(texto: string, sep: Separador): string[][] {
   return linhas;
 }
 
-function resposta(parcial: Partial<RespostaDoMotor> & Record<string, unknown>): RespostaDoMotor {
+function resposta(parcial: Record<string, unknown>): RespostaDoMotor {
   return {
     fonte: "negocios",
     medidas: ["soma"],
