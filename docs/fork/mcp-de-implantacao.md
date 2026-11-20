@@ -119,7 +119,7 @@ pessoa faz (com a tela e o caminho).
 | 12 | Automações (nascem desligadas), tipos de agendamento, jornada e respostas prontas | `plataforma_garantir_automacao`, `plataforma_garantir_tipos_de_agendamento`, `plataforma_definir_jornada`, `plataforma_garantir_respostas_prontas` | agente |
 | 12a | Planos de tarefa (antes da automação que os aplica) e a fonte de formulário do site (antes da automação que reage a ela) | `plataforma_garantir_planos_de_tarefa`, `plataforma_garantir_fonte_de_formulario` | agente |
 | 13 | **Conectar o número de WhatsApp** | tela **Conexões** (`/app/connections`) | **pessoa do cliente** |
-| 13a | Depois do número: os dias da prospecção, por QR Code guardar o histórico, desde a .83 quem recebe as conversas dele (a distribuição do número: responsáveis, modo próprio e atendente padrão; a equipe já tem de ter aceitado o convite) e, desde a .85, a janela de RESPOSTA do número quando o horário da IA cai fora dela (`plataforma_ver_agentes` avisa) | `plataforma_configurar_canal` | agente |
+| 13a | Depois do número: os dias da prospecção, por QR Code guardar o histórico, desde a .83 quem recebe as conversas dele (a distribuição do número: responsáveis, modo próprio e atendente padrão; a equipe já tem de ter aceitado o convite) e, desde a .85, a janela de RESPOSTA do número quando o horário da IA cai fora dela (`plataforma_ver_agentes` avisa) e, da 1.119, o funil de entrada do número quando ele não deve cair no funil padrão | `plataforma_configurar_canal` | agente |
 | 14 | Conferir o rascunho com o cliente antes de pôr no ar | `plataforma_ver_agentes`, `plataforma_ver_followup` | agente e pessoa |
 | 15 | Publicar os follow-ups e o agente | `plataforma_publicar_followup`, `plataforma_publicar_agente` | agente |
 | 15a | Só com dois ou mais agentes no MESMO número: montar o roteador de intenção (uma intenção por agente, e o funil de destino de cada uma) e ligá-lo | `plataforma_garantir_roteador`, `plataforma_ligar_roteador` | agente |
@@ -300,7 +300,7 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 | `plataforma_garantir_planos_de_tarefa` | os planos de tarefa (a sequência de tarefas que uma automação aplica ao negócio), com título, prazo, prioridade e responsável de cada passo | o `id` do plano, ou o nome | 50 planos; 30 passos por plano |
 | `plataforma_definir_tela_inicial` | (1.118, #4864, MIA-79) a tela que abre depois de entrar: a da EMPRESA (sem `pessoa`) ou a de uma pessoa da equipe (`pessoa`, por e-mail); a da pessoa vence. Só aceita área que está no menu de quem entra (a recusa lista as opções); `null` volta ao padrão. Troca só a chave `inicio` do `interface_settings`, como a tela (o menu e a trava do Inbox ficam), e audita `org.interface_changed` ou `team.interface_changed` | a empresa, ou a pessoa | uma tela |
 | `plataforma_garantir_fonte_de_formulario` | a fonte de formulário: destino (funil e etapa), as perguntas do formulário, o mapeamento dos campos, o endereço de retorno, a autorização de IA na captação e, desde a .82, a atualização do card no reenvio (`atualizar_card_no_reenvio`); as duas últimas exigem a assinatura, posta pela pessoa. Devolve o caminho do endereço de captação | nome da fonte | uma fonte; 20 perguntas |
-| `plataforma_configurar_canal` | de um número: o nome interno (.81), os dias da prospecção, guardar o histórico (só QR Code; desligar pede confirmação escrita) e a pausa agendada de até 24 horas (de um número ou de todos), com o ajuste dos horários de uma que ainda não começou (.81) e o cancelamento; e, desde a .83, a `distribuicao` do número (os `responsaveis`, o `modo` próprio e o `atendente_padrao`, ou `voltar_ao_padrao_da_organizacao`), gravada pela função do fork da `9045`; e, desde a .85, a `janela_de_resposta` (as horas em que o número responde a quem escreveu, 0 a 24; disparo e prospecção não mudam). Nunca credencial, token ou número | o número; a pausa, pelo número e pela janela | um número |
+| `plataforma_configurar_canal` | de um número: o nome interno (.81), os dias da prospecção, guardar o histórico (só QR Code; desligar pede confirmação escrita) e a pausa agendada de até 24 horas (de um número ou de todos), com o ajuste dos horários de uma que ainda não começou (.81) e o cancelamento; e, desde a .83, a `distribuicao` do número (os `responsaveis`, o `modo` próprio e o `atendente_padrao`, ou `voltar_ao_padrao_da_organizacao`), gravada pela função do fork da `9045`; e, desde a .85, a `janela_de_resposta` (as horas em que o número responde a quem escreveu, 0 a 24; disparo e prospecção não mudam); e, da 1.119, o `funil_de_entrada` (o funil e a etapa onde a conversa nova do número vira negócio; `funil: null` volta ao padrão). Nunca credencial, token ou número | o número; a pausa, pelo número e pela janela | um número |
 | `plataforma_configurar_banco_externo` | numa conexão de banco externo que já existe: as fontes liberadas (o modo e a lista de tabelas e colunas que o agente pode ler, .81) e a coluna que identifica o cliente nas conversas (telefone ou e-mail). Desde a .84 a resposta e a leitura dizem o motor (`tipo_do_banco`: PostgreSQL ou MySQL) e o aviso do último teste. Nunca lê nem devolve a conexão ou a senha | o nome da conexão | uma conexão |
 | `plataforma_configurar_servidor_mcp_externo` | (.81) o servidor MCP externo do cliente (o sistema de fora que a IA consulta): o endereço https público e a chave, gravada CIFRADA e nunca devolvida (a resposta traz os quatro últimos caracteres; a trilha leva só o host); `apagar: true` tira. Recusa a empresa de demonstração | a organização | um servidor |
 | `plataforma_garantir_tipos_de_obrigacao` | o catálogo de tipos de documentos e obrigações de um funil, inclusive `modelo_do_segmento` (os tipos prontos do segmento) | nome do tipo dentro do funil | 60 tipos por funil |
@@ -802,35 +802,42 @@ oficial (9328) é gravada pelo próprio cadastro.
 
 ### O que chegou do upstream 1.119 (fusão de 19/11)
 
-A fusão (MIA-91) entra sem ferramenta nem campo novo, como na 1.117 e na 1.118. Uma rota
-espelhada (seção 5) mudou na faixa: o PATCH de `app/api/v1/products/[id]/route.ts` ganhou a
-porta do catálogo de serviços (#3480), e `lib/implantacao/produtos.ts` levou a mesma regra
-(com o módulo ligado, o preço de um produto que já existe não fica abaixo do sinal fixo do
-serviço; o item sai recusado com o motivo). O que a implantação de um cliente usaria fica
-listado abaixo, para um PR próprio.
+A fusão (MIA-91, PR #119) entrou sem ferramenta nem campo novo, como na 1.117 e na 1.118.
+Uma rota espelhada (seção 5) mudou na faixa: o PATCH de `app/api/v1/products/[id]/route.ts`
+ganhou a porta do catálogo de serviços (#3480), e `lib/implantacao/produtos.ts` levou a mesma
+regra (com o módulo ligado, o preço de um produto que já existe não fica abaixo do sinal fixo
+do serviço; o item sai recusado com o motivo).
+
+O que faltava veio em seguida, num PR próprio (MIA-96): **três campos** em ferramentas que já
+existiam, nenhuma ferramenta nova (a contagem não muda) e nenhuma operação nova. Nenhum padrão
+mudou, e nada liga sozinho: cada campo só grava quando vem no pedido. A prova está em
+`tests/unit/mcp-de-implantacao-novidades-do-upstream-1119.test.ts`, e os três espelhos novos em
+`tests/unit/mcp-de-implantacao-espelhos.test.ts`.
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| O funil de entrada por número (`channel_sessions.entry_pipeline_id` e `entry_stage_id`, 9430): a conversa nova de um número vira negócio no funil e na etapa escolhidos | 1.119 | campo `funil_de_entrada: { funil, etapa? }` em `plataforma_configurar_canal`, funil e etapa pelo nome ou id. Espelho de `PATCH /api/v1/channel-sessions/[id]/entrada` (`lib/implantacao/funil-de-entrada.ts`), com as conferências da rota: funil vivo da organização, etapa aberta (nem ganho nem perdido) desse funil, etapa nula sem funil; a trilha é `channel.entry_pipeline_changed`. `funil: null` volta ao funil padrão. Diferente da rota: etapa sem funil é recusada (a rota zera calada). A seção `canais` de `plataforma_ver_configuracao` devolve `funil_de_entrada` de cada número (`padrao`, `funil`, `etapa`). Muda onde nasce o card NOVO; os que existem não mudam, e a campanha com funil próprio e quem já é cliente seguem a regra deles (`lib/leads/nascimento-do-lead.ts`) | `implantar_configuracao` |
+| A Operação do dia (`settings.operacao_do_dia`): as etiquetas de conversa de cada seção da tela, os pedaços de nome de etapa que contam como proposta e o relatório diário (ligado e hora) | 1.119 | campo `operacao_do_dia: { etiquetas?, etapas_de_proposta?, relatorio? }` em `plataforma_configurar_atendimento`. A régua é a de `PATCH /api/v1/operacao/configuracao`: `configuracaoSchema.strict()`, a leitura com padrão `lerConfiguracao` e a mescla da rota (etiquetas e relatório chave a chave, a lista de etapas substituída); a trilha é `settings.operacao_do_dia_updated` com o antes e o depois. Diferente da rota: pedido igual ao lido (inclusive o padrão) não escreve. A seção `atendimento` devolve `operacao_do_dia`. O relatório fica guardado na tela, para a equipe: não é enviado a ninguém | `implantar_configuracao` |
+| O primeiro nome do cliente no aviso de transferência à equipe (`settings.crm.aviso_transferencia_com_nome`, a ação `definirNomeNaTransferencia`) | 1.119 | campo `aviso_de_transferencia_com_nome` em `plataforma_configurar_atendimento`, pela mescla da ação (o resto de `settings.crm` fica), com a trilha dela (`crm.aviso_nome_na_transferencia_alterado`). Ausente no banco continua DESLIGADO (o aviso padrão leva só o link, por privacidade), e pedir `false` numa empresa que nunca mexeu não grava a chave. A seção `atendimento` devolve `aviso_de_transferencia: { avisar_nas_transferencias, com_o_primeiro_nome_do_cliente }`. ATENÇÃO: a lista da fusão dizia "nome do atendente" e "o texto que o cliente final recebe"; no código é o primeiro nome do CLIENTE, no aviso que vai ao número de avisos da EQUIPE. O cliente final não recebe nada diferente; o que muda é dado pessoal saindo para um WhatsApp fora do sistema, e a descrição do campo manda ligar só a pedido da empresa | `implantar_configuracao` |
 
 Falta no MCP (cada item com o motivo):
 
 - o teto de respostas da IA por conversa agora é **por empresa** (#4590): `por_conversa`,
   `janela_minutos` e `silenciar_minutos` em `organizations.settings.anti_ban`, pela rota
   `/api/v1/ai/pacing/teto-de-respostas`. Antes era só variável do worker (ver a 1.116,
-  acima). Campo novo de uma ferramenta que já existe (a da trava de robô ou a do agente),
-  e a escolha de junto de qual é parte da decisão do teto duplo (PR da fusão);
-- o funil de entrada por número (`channel_sessions.entry_pipeline_id` e `entry_stage_id`,
-  9430), pela rota `/api/v1/channel-sessions/[id]/entrada`: campo novo da conexão; muda
-  onde nasce o negócio de quem escreve para aquele número;
-- a Operação do dia (`settings.operacao_do_dia`: as etiquetas das seções, as etapas de
-  proposta e a hora do relatório, pela rota `/api/v1/operacao/configuracao`): ferramenta
-  nova ou campo da ferramenta da empresa. O padrão (ligado às 21h) já serve;
-- o aviso de transferência com o nome do atendente (`settings.crm.aviso_transferencia_com_nome`,
-  `definirNomeNaTransferencia`): campo novo; muda o texto que o cliente final recebe;
-- a meta de vendas em valor e por vendedor (`crm_metas.vendedor_id`, 9410): só se o MCP
-  passar a montar metas, o que hoje ele não faz;
+  acima). Fica de fora até a decisão do teto duplo (seção 3 do PR #119): a decisão diz
+  também junto de qual ferramenta o campo entra (a da trava de robô ou a do agente);
+- a meta de vendas em valor e por vendedor (`crm_metas.vendedor_id`, 9410): o MCP grava só
+  a meta do mês da empresa inteira (`meta_do_mes` em `plataforma_configurar_empresa`), e não
+  monta metas por pessoa nem por agente. Entra se o MCP passar a montar metas;
 - o catálogo de serviços (9432): módulo opcional, desligado no fork; entra no MCP só se for
   ligado (o liga e desliga já passa por `plataforma_definir_modulo_da_empresa`);
 - o modelo do decisor do Jev escolhido na tela (`lib/ai/decisao/`), com aceite novo a cada
   troca: muda quem recebe a mensagem do cliente e o aceite de privacidade, então pede decisão
   do Gabriel antes.
+
+Entrou na MIA-96 (ver a tabela): o funil de entrada por número, a Operação do dia e o primeiro
+nome do cliente no aviso de transferência.
 
 Nada a configurar pela implantação: o fim do envio no ledger (9407), o propósito da leitura do
 CPF (9423), a religação da conexão presa em "Conectando…" e o texto de `crm_list_pipelines` com
