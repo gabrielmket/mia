@@ -800,6 +800,42 @@ Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
 
+### O que chegou do upstream 1.119 (fusão de 19/11)
+
+A fusão (MIA-91) entra sem ferramenta nem campo novo, como na 1.117 e na 1.118. Uma rota
+espelhada (seção 5) mudou na faixa: o PATCH de `app/api/v1/products/[id]/route.ts` ganhou a
+porta do catálogo de serviços (#3480), e `lib/implantacao/produtos.ts` levou a mesma regra
+(com o módulo ligado, o preço de um produto que já existe não fica abaixo do sinal fixo do
+serviço; o item sai recusado com o motivo). O que a implantação de um cliente usaria fica
+listado abaixo, para um PR próprio.
+
+Falta no MCP (cada item com o motivo):
+
+- o teto de respostas da IA por conversa agora é **por empresa** (#4590): `por_conversa`,
+  `janela_minutos` e `silenciar_minutos` em `organizations.settings.anti_ban`, pela rota
+  `/api/v1/ai/pacing/teto-de-respostas`. Antes era só variável do worker (ver a 1.116,
+  acima). Campo novo de uma ferramenta que já existe (a da trava de robô ou a do agente),
+  e a escolha de junto de qual é parte da decisão do teto duplo (PR da fusão);
+- o funil de entrada por número (`channel_sessions.entry_pipeline_id` e `entry_stage_id`,
+  9430), pela rota `/api/v1/channel-sessions/[id]/entrada`: campo novo da conexão; muda
+  onde nasce o negócio de quem escreve para aquele número;
+- a Operação do dia (`settings.operacao_do_dia`: as etiquetas das seções, as etapas de
+  proposta e a hora do relatório, pela rota `/api/v1/operacao/configuracao`): ferramenta
+  nova ou campo da ferramenta da empresa. O padrão (ligado às 21h) já serve;
+- o aviso de transferência com o nome do atendente (`settings.crm.aviso_transferencia_com_nome`,
+  `definirNomeNaTransferencia`): campo novo; muda o texto que o cliente final recebe;
+- a meta de vendas em valor e por vendedor (`crm_metas.vendedor_id`, 9410): só se o MCP
+  passar a montar metas, o que hoje ele não faz;
+- o catálogo de serviços (9432): módulo opcional, desligado no fork; entra no MCP só se for
+  ligado (o liga e desliga já passa por `plataforma_definir_modulo_da_empresa`);
+- o modelo do decisor do Jev escolhido na tela (`lib/ai/decisao/`), com aceite novo a cada
+  troca: muda quem recebe a mensagem do cliente e o aceite de privacidade, então pede decisão
+  do Gabriel antes.
+
+Nada a configurar pela implantação: o fim do envio no ledger (9407), o propósito da leitura do
+CPF (9423), a religação da conexão presa em "Conectando…" e o texto de `crm_list_pipelines` com
+os campos do funil (#4667, o MCP da empresa) são regra do banco, do worker ou da ferramenta.
+
 ### O que chegou do upstream 1.118 (fusão de 18/11, segunda do dia)
 
 A fusão (MIA-73, PR #113) entrou sem ferramenta nem campo novo, como na 1.117. O que

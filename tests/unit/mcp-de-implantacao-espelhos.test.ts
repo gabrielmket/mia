@@ -67,7 +67,7 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/api/v1/products/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "dfbb2e937a921dab" },
   // Relido na fusão da 1.107: o DELETE apaga também o áudio da apresentação do produto no bucket. O espelho não apaga produto: nada a levar.
   // Relido na fusão da 1.116: o PATCH recusa `capacidade` com a capacidade do produto desligada. O espelho não grava `capacidade`: nada a levar.
-  { rota: "app/api/v1/products/[id]/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "6ce8cc63713c7551" },
+  { rota: "app/api/v1/products/[id]/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "4177b16a042de11d" },
   // Automações.
   // Relido na .76 (upstream 1.78): a fonte de formulário de `trigger_config.webhook_source_id` tem de ser da empresa. O espelho confere (conferirConfiguracaoDoGatilho), com a frase da rota; e também o funil e a etapa dos gatilhos de tempo.
   // Relido na .84 (upstream 1.86, #2791): o POST recusa o gatilho por data num campo do CONTATO (campoDoGatilhoDeDataEhDoContato, MENSAGEM_CAMPO_DE_DATA_DO_CONTATO). O espelho recusa com a mesma frase (recusarDataDoContato), ao criar e ao reescrever.

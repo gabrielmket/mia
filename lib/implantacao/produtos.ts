@@ -29,6 +29,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { audit } from "@/lib/audit";
 import { moedaDaOrganizacao } from "@/lib/catalogo/moeda-da-org";
 import { chaveDoCodigo } from "@/lib/catalogo/planilha";
+import { MODULO_SERVICOS, sinaisFixosQueTravamPreco } from "@/lib/catalogo/servicos-supabase";
+import { moduloLigado } from "@/lib/instalacao/modulos";
 import { COLUNAS_DO_PRODUTO, precoParaCentavos, produtoCreateSchema } from "@/lib/schemas/produtos";
 
 import type { Desfecho, Implantacao } from "./base";
@@ -305,6 +307,20 @@ export async function garantirProdutos(c: Implantacao, pedidos: ProdutoPedido[])
       ((atuais ?? []) as unknown as Array<Record<string, unknown>>).map((p) => [String(p.codigo), p]),
     );
 
+    // A porta do módulo de serviços (doc 212 do upstream, espelho do PATCH de
+    // app/api/v1/products/[id]/route.ts): o item que já existe pode ser serviço
+    // ou variação de um, com sinal FIXO na família, e o preço novo não fica
+    // abaixo dele. Com o módulo desligado, nada é consultado. Sem conseguir
+    // conferir, nada é gravado.
+    let sinais = new Map<string, number>();
+    if (await moduloLigado(c.admin, MODULO_SERVICOS)) {
+      try {
+        sinais = await sinaisFixosQueTravamPreco(c.admin, c.orgId, [...porCodigo.values()].map((p) => String(p.id)));
+      } catch (erro) {
+        throw new Error(`não consegui conferir o sinal fixo dos serviços: ${erro instanceof Error ? erro.message : String(erro)}`);
+      }
+    }
+
     for (const item of existentes) {
       const atual = porCodigo.get(item.codigo);
       if (!atual) {
@@ -317,6 +333,11 @@ export async function garantirProdutos(c: Implantacao, pedidos: ProdutoPedido[])
       }
       if (Object.keys(patch).length === 0) {
         itens.push({ posicao: item.posicao, codigo: item.codigo, nome: item.nome, desfecho: "ja_estava" });
+        continue;
+      }
+      const sinal = sinais.get(String(atual.id));
+      if (typeof patch.preco_cents === "number" && sinal !== undefined && patch.preco_cents < sinal) {
+        itens.push({ posicao: item.posicao, codigo: item.codigo, nome: item.nome, desfecho: "recusado", motivo: "o preço ficaria abaixo do sinal fixo do serviço." });
         continue;
       }
       const { error: updErr } = await c.admin
