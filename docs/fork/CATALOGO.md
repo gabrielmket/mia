@@ -781,36 +781,57 @@ o `git grep` acima é a conferência manual, e é o candidato a cerca.
 
 ---
 
-### 23. Coexistência do WhatsApp: o histórico da Meta · [`coexistencia.md`](coexistencia.md)
-**O que faz.** O número usado no app WhatsApp Business e na MIA ao mesmo tempo: o histórico de até 180 dias
+### 23. Coexistência do WhatsApp: o histórico da Meta e a conexão pelo app · [`coexistencia.md`](coexistencia.md)
+**O que faz.** O número usado no app WhatsApp Business e na MIA ao mesmo tempo. S2: o histórico de até 180 dias
 que a Meta manda no campo `history` entra como histórico importado (`metadata.historico_importado = 'true'`,
-o corte da 0760) e não dispara nada; os contatos da agenda do app somam no pedido de contatos. Etapa S2;
-conexão pelo app (S3) e saída e volta (S4) ainda não. **Migrations** 9162. **Mora em**
-`lib/channels/meta/coexistencia/` (`historico.ts`, `mapear.ts`, `estado.ts`, `receber.ts`, `contatos.ts`,
-`gravar-lote.ts`, `lote.handler.ts`).
+o corte da 0760) e não dispara nada; os contatos da agenda do app somam no pedido de contatos. S3: a empresa com a
+chave ligada conecta o número pela janela da Meta (SDK JS), já amarrado a ela, com a origem `embedded_signup` do
+upstream; a MIA pede contatos e histórico (`smb_app_data`) uma vez só, atrás da trava `unique (conexao_id, tipo)`;
+o canal por QR do mesmo número sai do ar (D5). Saída e volta (S4) ainda não. **Migrations** 9162, 9164. **Mora em**
+`lib/channels/meta/coexistencia/` (S2: `historico.ts`, `mapear.ts`, `estado.ts`, `receber.ts`, `contatos.ts`,
+`gravar-lote.ts`, `lote.handler.ts`; S3: `chave.ts`, `ligar.ts`, `janela.ts`, `conectar.ts`, `sincronizacao.ts`,
+`sincronizacao.handler.ts`, `avisos.ts`, `qr-do-mesmo-numero.ts`, `leitura.ts`, `varredura.ts`),
+`components/connections/coexistencia/`, `components/admin/coexistencia/` (na tela pelo layout do fork
+`app/admin/(protected)/meta/layout.tsx`), `lib/mcp-plataforma/ferramentas/coexistencia.ts`.
 
 **Pontos de encaixe** (todos `FORK MIA`): `app/api/v1/webhooks/meta/[token]/route.ts` (a chamada a
 `receberHistoricoDaMeta` logo depois de nascer `desfechos`, e `ingerirContatoDoAppContando` no lugar de
-`ingestMetaAppContactSync`), `lib/channels/consumidores.ts` (o `loteDoHistoricoHandler`).
+`ingestMetaAppContactSync`), `lib/channels/consumidores.ts` (o `loteDoHistoricoHandler` e o
+`pedidoDaSincronizacaoHandler`), `components/connections/CanalOficialClient.tsx` (`<ConectarPeloApp />`),
+`app/api/v1/channel-sessions/[id]/route.ts`
+(`barrarQrEmCoexistencia`), `docker/scheduler/entrypoint.sh` (a varredura `api/v1/cron/coexistencia`).
 
 **Protege.** Invariantes `coexistencia-historico-nao-dispara.test.ts` (nada dispara, nada muda na conversa
-e no negócio que já existiam, reentrega não duplica, com o controle), `historico-importado-nao-dispara.test.ts`
-(o corte da 0760), `rls-tabelas-da-mia.test.ts`, `rls-completude-varredura.test.ts`; unidade
-`coexistencia-historico-leitura.test.ts`, `dispatcher-org-parada.test.ts`, `evento-comando-tem-consumidor.test.ts`,
+e no negócio que já existiam, reentrega não duplica, com o controle), `coexistencia-pedido-unico.test.ts` (o pedido
+sai uma vez só, nem com chegadas simultâneas; e a varredura: lote cru de 7 dias perde o `payload`, lote esquecido é
+pedido ao worker uma vez), `coexistencia-conexao-pelo-app.test.ts` (a conexão de ponta a ponta com
+a Meta simulada), `historico-importado-nao-dispara.test.ts` (o corte da 0760), `rls-tabelas-da-mia.test.ts`,
+`rls-completude-varredura.test.ts`; unidade `coexistencia-historico-leitura.test.ts`,
+`coexistencia-conexao-pelo-app.test.ts`, `coexistencia-ids-em-fatias.test.ts` (/admin/meta com 350 empresas, nenhum
+`.in` com mais de 100 ids), `mcp-de-implantacao-coexistencia.test.ts`, `dispatcher-org-parada.test.ts`,
+`evento-comando-tem-consumidor.test.ts`, `cron-respeita-org-operante.test.ts`, `canal-consulta-por-organizacao.test.ts`,
 `historico-midia-so-guarda.test.ts` (a mídia do histórico, pelos dois chamadores, a coexistência e a importação
 do canal não oficial, só é guardada: sem derivação, transcrição, visão nem IA, com o controle sem a chave).
 
 **Conferir.**
 1. `git grep -n "receberHistoricoDaMeta\|ingerirContatoDoAppContando" "app/api/v1/webhooks/meta/[token]/route.ts"` (**as duas chamadas existem**; sem a primeira o histórico volta a ser ignorado em silêncio).
 2. `git grep -n "historico_importado" supabase/migrations/*0760*` e a mesma chave em `fn_emit_message_event` no `baseline.sql` (se o upstream mudar o corte, o histórico passa a acordar a IA).
-3. `npx vitest run tests/unit/coexistencia-historico-leitura.test.ts tests/unit/dispatcher-org-parada.test.ts`.
-4. `npx vitest run tests/unit/historico-midia-so-guarda.test.ts` (se reprovar, o worker de mídia voltou a pedir
+3. `git grep -n "ConectarPeloApp\|CoexistenciaPorEmpresa\|barrarQrEmCoexistencia\|pedidoDaSincronizacaoHandler" components app lib` (os quatro encaixes da S3 existem) e `grep -n "cron/coexistencia" docker/scheduler/entrypoint.sh`.
+4. `git grep -n "ORIGEM_DO_EMBEDDED_SIGNUP\|meta_connection_origin" lib/channels/meta/origem-da-conexao.ts` (a origem da conexão do upstream continua com o mesmo nome; a S3 a usa, não inventa a sua).
+5. `npx vitest run tests/unit/coexistencia-historico-leitura.test.ts tests/unit/coexistencia-conexao-pelo-app.test.ts tests/unit/mcp-de-implantacao-coexistencia.test.ts tests/unit/dispatcher-org-parada.test.ts`.
+6. `npx vitest run tests/unit/historico-midia-so-guarda.test.ts` (se reprovar, o worker de mídia voltou a pedir
    a derivação paga para conversa de meses atrás: a guarda é o `historicoImportado` de `workers/media-persist-worker.ts`).
-5. MCP: nenhuma ferramenta nesta etapa (a leitura da sincronização entra na S3, com a tela).
+7. MCP: `plataforma_ver_coexistencia`, `plataforma_ligar_coexistencia` (`colocar_no_ar`) e `plataforma_ver_sincronizacao_do_app`.
 
 **Riscos.** Se o upstream passar a ler o campo `history` no `parseMetaWebhook` ou a gravar o histórico por
 `ingestMetaInbound`, o histórico entraria duas vezes ou como mensagem nova: conferir na fusão. Relatórios e
-raio-X do fork ainda contam o histórico importado (9163, espera a decisão D3).
+raio-X do fork ainda contam o histórico importado (9165, espera a decisão D3). Da S3: se o upstream renomear
+ou trocar a origem `embedded_signup` (`ORIGEM_DO_EMBEDDED_SIGNUP` em `lib/channels/meta/origem-da-conexao.ts`),
+o número conectado pelo app perde a marca da origem (a conferência 4 pega); se a Meta mudar o nome do evento
+de fim da janela (`FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`, em `janela.ts` e `sdk-da-meta.ts`), a janela
+fecha e a MIA não conclui a conexão, sem erro na tela. LACUNA: nenhum teste abre o `ConectarPeloApp` e chama a
+rota `concluir` pela tela (o `e2e.yml` aponta `META_GRAPH_BASE_URL` para uma porta que recusa); a prova de
+ponta a ponta é a invariante `coexistencia-conexao-pelo-app.test.ts`, no servidor.
 
 ---
 
@@ -880,7 +901,7 @@ quebra por agente, a leitura daqui pode passar a perguntar a ela, desde que a r�
 | 20 | Produto no negócio | `produto-no-negocio.md` | 9160, 9161 | `produto-no-negocio-servidor.test.ts`, `produto-no-negocio-regras.test.ts` |
 | 21 | Raio-X do atendimento | `raio-x-do-atendimento.md` | 9150, 9151, 9152 | `raio-x-leitor-nao-envia.test.ts`, `raio-x-anonimizar.test.ts` |
 | 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
-| 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts` |
+| 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162, 9164 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-pedido-unico.test.ts`, `coexistencia-conexao-pelo-app.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts` |
 | 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | nenhuma (lê a 0241) | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts`, `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua

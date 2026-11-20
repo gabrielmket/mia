@@ -45,6 +45,7 @@ import { FERRAMENTAS_DE_CUPONS_E_PARCEIROS } from "./ferramentas/cupons-e-parcei
 import { FERRAMENTAS_DO_RAIO_X } from "./ferramentas/raio-x";
 // FORK MIA (.108): a trava de robô (docs/fork/trava-de-robo.md).
 import { FERRAMENTAS_DA_TRAVA_DE_ROBO } from "./ferramentas/trava-de-robo";
+import { FERRAMENTAS_DA_COEXISTENCIA } from "./ferramentas/coexistencia";
 import { FERRAMENTAS_DO_PRODUTO_NO_NEGOCIO } from "./ferramentas/produto-no-negocio";
 // FORK MIA (MIA-44): o consumo de IA por mês e por agente (docs/fork/consumo-de-ia.md).
 import { FERRAMENTAS_DE_CONSUMO_DE_IA } from "./ferramentas/consumo-de-ia";
@@ -128,6 +129,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DAS_CONEXOES_DO_MCP,
   // FORK MIA (upstream 1.118, MIA-79): o módulo opcional por empresa (9416) e a tela inicial da empresa e da pessoa (#4864) (docs/fork/mcp-de-implantacao.md)
   ...FERRAMENTAS_DA_FAIXA_1118,
+  // FORK MIA (S3 da coexistência): ver e ligar a chave da empresa, ver a sincronização do app (docs/fork/coexistencia.md)
+  ...FERRAMENTAS_DA_COEXISTENCIA,
 ];
 
 export const FERRAMENTA_POR_NOME = new Map(FERRAMENTAS.map((f) => [f.name, f]));

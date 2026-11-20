@@ -85,7 +85,7 @@ const ctx = (banco: ReturnType<typeof bancoLivre>) => ({ admin: banco.cliente as
 
 describe("o passo do pagamento no MCP de plataforma", () => {
   it("o passo não trouxe ferramenta nova: a lista tem as 99 de antes, a de etiquetar da .97, as 6 de cupons da .98 as 4 do raio-X da .101, a de reler da .105, a dos preços do raio-X da .107, as 3 da trava de robô da .108 e as 2 do produto no negócio da .109", () => {
-    expect(FERRAMENTAS).toHaveLength(124);
+    expect(FERRAMENTAS).toHaveLength(127);
   });
 
   it("⭐ listar_clientes com o filtro: só quem espera o primeiro pagamento, com a forma e a situação", async () => {

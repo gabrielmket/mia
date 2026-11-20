@@ -175,6 +175,12 @@ CRONS="
 # fila) mudam em minutos mas não são urgentes — um aviso que sobrevive 40
 # minutos ao conserto não estraga a tela; um que sobrevive uma semana, sim.
 0 * * * *|90|api/v1/cron/varredura-de-avisos
+# A COEXISTÊNCIA DO WHATSAPP (FORK MIA, docs/fork/coexistencia.md). De 5 em 5
+# minutos porque o prazo da Meta para pedir os contatos e o histórico é de 24 h
+# depois da conexão, e o pedido parado no meio precisa virar sem resposta (com
+# aviso) enquanto ainda dá para alguém decidir. Barato: só olha pedido em aberto,
+# ciclo dos últimos 3 dias e lote parado. Nunca pede à Meta duas vezes.
+*/5 * * * *|60|api/v1/cron/coexistencia
 # O ROBÔ DO AMIGO (módulo opcional, #4227). Sem webhook do fornecedor, relê a
 # agenda de uma conexão ativa por volta. Com o módulo desligado, a rota sai na
 # primeira linha sem tocar em tabela.

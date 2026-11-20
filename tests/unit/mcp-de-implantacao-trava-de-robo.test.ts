@@ -101,9 +101,9 @@ beforeEach(() => {
 });
 
 describe("as três da trava de robô", () => {
-  it("estão na lista, e a lista tem 124 (112 da .107 + as três da .108 + as duas do produto no negócio da .109 + a da lista de espera, MIA-18 + a do consumo de IA, MIA-44 + as três da 1.117, MIA-67 + as duas da 1.118, MIA-79)", () => {
+  it("estão na lista, e a lista tem 127 (112 da .107 + as três da .108 + as duas do produto no negócio da .109 + a da lista de espera, MIA-18 + a do consumo de IA, MIA-44 + as três da 1.117, MIA-67 + as duas da 1.118, MIA-79 + as três da coexistência, MIA-28)", () => {
     for (const n of NOMES) expect(FERRAMENTA_POR_NOME.has(n), n).toBe(true);
-    expect(FERRAMENTAS).toHaveLength(124);
+    expect(FERRAMENTAS).toHaveLength(127);
   });
 
   it("ver é leitura; configurar é montagem; desfazer põe a IA de volta no ar", () => {
