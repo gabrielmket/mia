@@ -64,6 +64,13 @@ function etapas(): Array<{ id: string; name: string }> {
     .sort((a, b) => Number(a.position) - Number(b.position)) as Array<{ id: string; name: string }>;
 }
 
+/** As três primeiras etapas do funil semeado (o semeador cria pelo menos três). */
+function tresEtapas(): [{ id: string }, { id: string }, { id: string }] {
+  const [s0, s1, s2] = etapas();
+  if (!s0 || !s1 || !s2) throw new Error("o funil semeado precisa de três etapas");
+  return [s0, s1, s2];
+}
+
 function lead(org: string, extra: Record<string, unknown>) {
   return {
     id: randomUUID(),
@@ -85,7 +92,7 @@ function passagem(org: string, leadId: string, quando: string, payload: Record<s
 
 /** O mês de outubro da Academia Alfa, com um negócio de setembro na borda e um da empresa vizinha. */
 function semearOutubro() {
-  const [s0, s1, s2] = etapas() as [{ id: string }, { id: string }, { id: string }];
+  const [s0, s1, s2] = tresEtapas();
   const ganho = lead(ORG, {
     stage_id: s2.id,
     status: "won",
@@ -239,7 +246,7 @@ describe("plataforma_ver_analise_do_funil", () => {
     // O mês no fuso da empresa: 00h de 01/10 a 00h de 01/11 em Brasília.
     expect(d.janela).toEqual({ from: "2026-10-01T03:00:00.000Z", to: "2026-11-01T03:00:00.000Z" });
 
-    const [s0, s1] = etapas() as [{ id: string }, { id: string }];
+    const [s0, s1] = tresEtapas();
     const linha = (id: string) => d.conversao.etapas.find((e) => e.etapa.id === id)!;
     // Os dois de outubro entraram na primeira etapa e passaram; o da borda (setembro) não conta.
     expect(linha(s0.id)).toMatchObject({ entraram: 2, passaram: 2, taxa: 1 });
