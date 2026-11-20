@@ -800,6 +800,34 @@ Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
 
+### O que chegou do upstream 1.121 (fusão de 20/11, MIA-113)
+
+A fusão entra sem ferramenta nem campo novo no MCP de plataforma. Nenhuma rota espelhada da
+seção 5 mudou de regra: as rotas que o MCP espelha e que a faixa tocou (`pipelines`,
+`pipelines/[id]`, `pipelines/[id]/agent-mapping`, `ai/knowledge/sources`) só trocaram a
+porta (sessão ou token `dsk_`, `resolveAuthDual`) e chamam as mesmas funções compartilhadas
+(`criarFunil`, `atualizarFunil`, `gravarMapeamentoDoAgente`, `criarMaterial`). Duas mudanças
+nelas, que valem também para o MCP: o audit leva `actor_api_token_id` quando a escrita veio
+por token, e o `criarMaterial` recusa `source_metadata.blob_path` fora da pasta da empresa
+(`caminhoDaOrganizacao`, regra nova do upstream).
+
+Falta no MCP (cada item com o motivo):
+
+- as ~130 rotas `/api/v1/*` de configuração que passaram a aceitar token `dsk_` com
+  `config:read`/`config:write` e papel admin: o MCP de plataforma pode, depois, trocar
+  caminhos próprios por elas. Não é campo nem ferramenta nova; é decisão de desenho, e fica
+  para um PR próprio depois da revisão das sobreposições abaixo;
+- o MCP da EMPRESA ganhou 7 ferramentas para ver, corrigir, testar, publicar e reverter
+  assistentes pelo ChatGPT (`lib/mcp/tools/agentes.ts`, #4805). Sobrepõe o que o MCP de
+  plataforma faz de agente (`plataforma_garantir_agente` e vizinhas): conferir antes de criar
+  ferramenta nova de edição de assistente. No fork elas passam pela trava da IA
+  (`lib/ai/agents/edicao.ts`): pelo token, provedor, modelo e chave nunca mudam.
+
+Nada a configurar pela implantação: o motivo real do adiamento do follow-up, o visto azul do
+WAHA sem "Guardar histórico" (#5015), o aviso crítico quando a IA não responde nem após a
+correção, o PDF escaneado que deixa de ser falha crítica, os ganhos do Desempenho por funil
+(#4931) e o custo da IA somado no banco são regra do worker, da tela ou do relatório.
+
 ### O que chegou do upstream 1.120 e 1.120.1 (fusão de 20/11)
 
 A fusão (MIA-101) entra sem ferramenta nem campo novo. Nenhuma rota espelhada (seção 5)

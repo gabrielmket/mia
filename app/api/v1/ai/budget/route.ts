@@ -33,8 +33,11 @@ import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { requireRole } from "@/lib/auth/require-role";
 import { podeVerCusto } from "@/lib/ai/custo-e-da-plataforma";
+import { extractBearer } from "@/lib/mcp/auth";
+import { IDIOMA_PADRAO, type Idioma } from "@/lib/i18n/idiomas";
 import { getBudgetStatus, type BudgetStatus } from "@/lib/ai/budget/check";
 import {
   PISO_DE_TETO_CENTS,
@@ -87,8 +90,38 @@ const patchSchema = z
     { message: "Informe ao menos um campo: teto, limiar ou modo." },
   );
 
-export async function GET(_req: NextRequest): Promise<Response> {
+/** Quem chama, pelo portão que o trouxe (sessão de navegador ou token de integração). */
+type QuemChama = { idioma: Idioma; orgId: string; autor: string | null; apiTokenId: string | null };
+
+/** FORK MIA: a recusa de quem não vê o consumo de IA (lib/ai/custo-e-da-plataforma.ts). */
+function recusaDoConsumo(idioma: Idioma, requestId: string): Response {
+  return fail(
+    "forbidden",
+    traduzir("O consumo de IA é acompanhado pela administração da plataforma.", idioma),
+    403,
+    { requestId },
+  );
+}
+
+export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
+  // Token de integração (Bearer). Sem Bearer, a sessão segue como era.
+  if (extractBearer(req.headers.get("authorization"))) {
+    const authz = await resolveAuthDual(req, {
+      requestId,
+      resource: "ai_budget",
+      role: "manager",
+      scope: "config:read",
+      tokenRole: "admin",
+    });
+    if (!authz.ok) return authz.response;
+    const teto = await tetoDeEscritaDoToken(authz, "ai_budget", requestId);
+    if (teto) return teto;
+    // FORK MIA: teto e gasto são dinheiro da plataforma, e o token nunca é da
+    // plataforma. A v1.121 abriu a leitura ao token; aqui ela segue recusada.
+    return recusaDoConsumo(authz.idioma ?? IDIOMA_PADRAO, requestId);
+  }
+
   const authz = await requireRole("manager", { requestId, resource: "ai_budget" });
   if (!authz.ok) return authz.response;
   const { org: activeOrg } = authz;
@@ -112,17 +145,32 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   if (supportDenied) return supportDenied;
 
   const requestId = randomUUID();
-  const authz = await requireRole("admin", { requestId, resource: "ai_budget" });
-  if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const { user: authUser, org: activeOrg } = authz;
-  // Quem não vê o gasto não arma o teto dele: a escada off → avisar → bloquear
-  // decide se a IA PARA, e essa decisão é de quem paga a conta do provedor.
-  if (!podeVerCusto(authUser)) {
-    return fail("forbidden", t("O consumo de IA é acompanhado pela administração da plataforma."), 403, {
+  let quem: QuemChama;
+  if (extractBearer(req.headers.get("authorization"))) {
+    const authz = await resolveAuthDual(req, {
       requestId,
+      resource: "ai_budget",
+      role: "admin",
+      scope: "config:write",
+      tokenRole: "admin",
     });
+    if (!authz.ok) return authz.response;
+    const teto = await tetoDeEscritaDoToken(authz, "ai_budget", requestId);
+    if (teto) return teto;
+    // FORK MIA: o token é da empresa, nunca da plataforma (lib/ai/trava-da-ia-na-rota.ts),
+    // e quem não vê o gasto não arma o teto dele. A v1.121 abriu esta escrita ao
+    // token; aqui ela continua só da plataforma, pela sessão.
+    return recusaDoConsumo(authz.idioma ?? IDIOMA_PADRAO, requestId);
+  } else {
+    const authz = await requireRole("admin", { requestId, resource: "ai_budget" });
+    if (!authz.ok) return authz.response;
+    // Quem não vê o gasto não arma o teto dele: a escada off → avisar → bloquear
+    // decide se a IA PARA, e essa decisão é de quem paga a conta do provedor.
+    if (!podeVerCusto(authz.user)) return recusaDoConsumo(authz.user.idioma, requestId);
+    quem = { idioma: authz.user.idioma, orgId: authz.org.orgId, autor: authz.user.id, apiTokenId: null };
   }
+  const t = (texto: string) => traduzir(texto, quem.idioma);
+  const activeOrg = { orgId: quem.orgId };
 
   let body: unknown;
   try {
@@ -280,7 +328,8 @@ export async function PATCH(req: NextRequest): Promise<Response> {
       : desarmando
         ? "ai.budget_enforcement_disarmed"
         : "ai.budget_limit_changed",
-    actorUserId: authUser.id,
+    actorUserId: quem.autor,
+    actorApiTokenId: quem.apiTokenId,
     organizationId: activeOrg.orgId,
     resourceType: "ai_budgets",
     resourceId: activeOrg.orgId,

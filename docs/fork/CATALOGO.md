@@ -588,7 +588,9 @@ duas funções copiadas do upstream), 9030, 9031, 9040 a 9042. **Mora em** `lib/
 compartilhada, e as rotas espelhadas (seção 5): a cerca dos espelhos guarda a impressão de cada uma e
 **reprova quando o código da rota muda**, para alguém reler o espelho. Também
 `lib/ai/trava-da-ia-na-rota.ts` (o token nunca escolhe IA) e o token `dsk_` do upstream
-(`resolveAuthDual`).
+(`resolveAuthDual`). Desde a v1.121, `lib/ai/agents/edicao.ts` (salvar rascunho, publicar e
+reverter o agente, que o upstream tirou da tela para o MCP de agentes dele usar também): a trava
+da IA mora ali, pelo `quemPede` do ator; sem ele (o token), ninguém escolhe IA.
 
 **Protege.** `tests/unit/mcp-de-implantacao-ferramentas.test.ts`, `mcp-de-implantacao-espelhos.test.ts`, `mcp-de-implantacao-operacoes.test.ts`, `mcp-de-implantacao-ponta-a-ponta.test.ts`, `mcp-de-plataforma-escopo.test.ts`, `distribuicao-do-numero-pela-plataforma.test.ts`, `dono-do-contato-pela-plataforma.test.ts`, `mcp-de-implantacao-servidores-mcp-do-agente.test.ts` (os servidores MCP por agente, 9095) e a família `mcp-de-implantacao-novidades-do-upstream-*.test.ts`.
 
