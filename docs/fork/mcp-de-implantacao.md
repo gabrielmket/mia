@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **124** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda, a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md), a MIA-67 as três da 1.117: contar os negócios e ver e revogar as conexões do MCP da empresa, e a MIA-79 as duas da 1.118: o módulo opcional por empresa e a tela inicial): as 116 desta página e as 8 da migração
+São **126** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda, a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md), a MIA-67 as três da 1.117: contar os negócios e ver e revogar as conexões do MCP da empresa, a MIA-79 as duas da 1.118: o módulo opcional por empresa e a tela inicial, e a MIA-103 as duas leituras da Análise do funil e das conversas do mês): as 118 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -251,6 +251,8 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | `plataforma_diagnosticar_conversoes_da_meta` | o diagnóstico da Meta, o mesmo do botão "Testar conexão": token, destino, permissão, último envio aceito, recusas em 7 dias e modo de teste. Faz três leituras na Meta com o token do cliente; nenhum evento é enviado | leitura |
 | `plataforma_ver_paineis` | os doze PAINÉIS PRONTOS de um cliente (resultado do mês, meta do mês, funil, de onde vêm, por que perdemos, atendimento, tempo de resposta, agenda, follow-up, anúncios, previsão, assuntos), com os números do motor de conta no banco (`fn_mia_relatorio`, 9030): todas as linhas do período, no fuso e na moeda da empresa. Período 7, 30 ou 90 dias, ou o mês; funil opcional; com ou sem valores em reais. Nada de custo de IA, gasto com anúncio, nome ou contato | leitura |
 | `plataforma_ver_relatorios` | o MONTADOR DE RELATÓRIOS de um cliente (.80): os doze relatórios prontos e o funil a que estão ligados, os relatórios e os painéis da equipe (compartilhados ou criados pela implantação) com o que cada um mede e agrupa, e quantos são só de quem criou (esses não são listados: o "só para mim" não aparece para ninguém). Com `numeros: true`, calcula cada relatório dos painéis no banco (`fn_mia_relatorio`) e devolve total e maiores grupos; diz qual relatório fica fora do link do dono por mostrar pessoa da equipe | leitura |
+| `plataforma_ver_analise_do_funil` | a ANÁLISE DO FUNIL de um cliente (MIA-103), com os mesmos números da tela Painéis > Análise do funil: a passagem etapa a etapa de cada funil (entraram, passaram, taxa nula sem amostra, desvios), a mediana e os quartis dos dias até fechar dos ganhos, a origem por situação com o valor por moeda, a contra-métrica (turnos e opt-outs de `fn_atrito_metrics`) e as duas parcelas do período (vendido único e recorrência nova mensal). Janela: 7, 30 ou 90 dias até agora (`dias`, como os botões da tela) ou um mês do calendário no fuso da empresa (`mes`, o corrente até agora). A conta é `lib/metrics/funil.ts`, pela mesma sequência da rota `/api/v1/metrics/funil` (`lib/implantacao/analise-do-funil.ts`, espelho conferido na seção 5); a paridade com a rota é medida em teste. Nada de negócio, contato ou nome | leitura |
+| `plataforma_ver_conversas_do_mes` | as CONVERSAS de um cliente num mês do calendário, no fuso da empresa (MIA-103), por quem respondeu: `agente` (só o agente de IA), `equipe` (uma pessoa respondeu) e `sem_resposta`, sempre os três; o total, a taxa de resolvidas pelo agente e o tempo até a primeira resposta do agente e da equipe em segundos (metade e 9 em 10). `por_canal: true` repete os três dentro de cada canal. É o motor dos relatórios (`fn_mia_relatorio`, fonte "conversas", agrupada por "quem"), a mesma conta do painel "Atendimento: agente e equipe" e do montador; cada conversa conta pelo dia em que o cliente escreveu. Sem `mes`, o mês corrente até hoje; mês que ainda não começou é recusado. Nada de conversa, contato ou pessoa da equipe | leitura |
 | `plataforma_ver_email_marketing` | o RETRATO do e-mail marketing (.89): módulo, Amazon ligada no servidor (só sim ou não, nunca a chave), o domínio e os seis registros com o que falta, os remetentes, o "responder para", o rodapé, o ritmo e a janela, o degrau do aquecimento, a saúde dos 30 dias, o preço por e-mail (desde a .95, com a origem: definido à mão, o plano ou o padrão), o saldo, a supressão, os textos de consentimento, os segmentos, os modelos e as PENDÊNCIAS para o primeiro envio | leitura |
 | `plataforma_ver_campanhas_de_email` | as campanhas de e-mail (.89): situação, por que pausou, o andamento e, com `campanha_id`, os resultados (entregues, aberturas como estimativa, cliques únicos sem robô, descadastros, rejeições, reclamações, cobrado e cliques por link) | leitura |
 | `plataforma_ver_links_do_dono` | os links para o dono do negócio de um cliente: para quem, o endereço, a situação (ativo, vencido, revogado), os painéis, o período, se mostra valores, a validade, o último acesso e quantos acessos | leitura |
@@ -863,6 +865,32 @@ Nada a configurar pela implantação: as identidades de rede social do contato (
 gravadas pela ingestão, e o compromisso cancelado que deixa excluir o contato (9405) é
 regra do banco.
 
+### A Análise do funil e as conversas do mês (MIA-103)
+
+Duas leituras, sem operação, para quem atende a Time responder sobre um cliente sem abrir a
+conta dele (mapa do sistema, 2.2 e 2.3):
+
+- `plataforma_ver_analise_do_funil` devolve o mesmo corpo da rota `/api/v1/metrics/funil`
+  (a tela Painéis > Análise do funil), com `empresa`, `fuso` e `periodo` na frente. A rota faz
+  as leituras dentro dela, então a ferramenta é um ESPELHO (`lib/implantacao/analise-do-funil.ts`):
+  as mesmas seis leituras paginadas, cada uma com `organization_id` da empresa conferida, as
+  duas grafias de `stage_changed` e as mesmas funções de conta. A rota está na lista da seção 5
+  (`tests/unit/mcp-de-implantacao-espelhos.test.ts`), e o teste da ferramenta chama a rota sobre
+  o mesmo banco e exige os mesmos números. `mes` é o mês do calendário no fuso da empresa (de
+  00h do dia 1º a 00h do dia 1º seguinte; o corrente, até agora); sem `mes`, os 7, 30 ou 90 dias
+  da tela.
+- `plataforma_ver_conversas_do_mes` pergunta ao motor dos relatórios (`fn_mia_relatorio`) a
+  fonte "conversas" agrupada por "quem", com as medidas `qtd`, `resolv`, `tresp` e `tresp90`: os
+  pedidos dos painéis "Atendimento" e "Tempo de resposta" juntos, e o do relatório montado na tela. O mês corrente é o
+  "Este mês" do motor (até hoje); um mês anterior vai como período personalizado do dia 1º ao
+  último dia. O motor decide quem respondeu: `equipe` quando uma pessoa respondeu (mesmo depois
+  do agente), `agente` quando só a IA respondeu, `sem_resposta` quando ninguém respondeu. Os
+  três vêm sempre, com zero quando o motor não devolve o grupo.
+
+As duas recusam mês que ainda não começou no fuso da empresa (o zero pareceria medição) e não
+devolvem nome de pessoa, contato nem conversa: só números somados. Fuso vazio ou que não existe
+vale Brasília (`fusoUtilizavel`), como no resto dos relatórios.
+
 ### O horário de atendimento da IA (.85)
 
 Função do fork, não do upstream, e entra no MCP na mesma versão. A prova está em
@@ -1136,13 +1164,14 @@ Também ficaram de fora, por desenho:
 - **Importar contatos, empresas e negócios de outro CRM.** É outra entrega, com
   ferramentas próprias.
 - **Login por OAuth no MCP.** O acesso é pelo token de plataforma.
-- **Relatórios de operação** que o upstream trouxe na 1.71 à 1.73: a análise do
-  funil (`GET /api/v1/metrics/funil`), o relatório por etiqueta e a taxa
-  histórica e o tempo por etapa. São leitura de operação, não configuração de
-  implantação, e a conta de cada um está montada dentro da rota. A análise do
-  funil ganhou tela no fork (`/app/paineis/funil`, por cima da conta dele);
-  os números que a implantação confere saem de `plataforma_ver_paineis` e, desde a
-  .80, de `plataforma_ver_relatorios` (o montador de relatórios).
+- **Relatórios de operação** que o upstream trouxe na 1.71 à 1.73: o relatório
+  por etiqueta e a taxa histórica e o tempo por etapa. São leitura de operação,
+  não configuração de implantação, e a conta de cada um está montada dentro da
+  rota. Os números que a implantação confere saem de `plataforma_ver_paineis` e,
+  desde a .80, de `plataforma_ver_relatorios` (o montador de relatórios). A
+  análise do funil (`GET /api/v1/metrics/funil`, tela `/app/paineis/funil`)
+  saiu desta lista na MIA-103: `plataforma_ver_analise_do_funil` a lê (veja
+  "A Análise do funil e as conversas do mês", na seção 3).
 - **A consulta de CNPJ na Receita.** Desde a .79 (empresa única,
   [`empresa-unica.md`](empresa-unica.md)) o cadastro de empresa é um só,
   `companies`, e `plataforma_importar_empresas` grava nele. A consulta à Receita

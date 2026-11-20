@@ -95,8 +95,8 @@ beforeEach(() => {
 });
 
 describe("o raio-X por cadastro no MCP", () => {
-  it("a lista tem 124 (112 + as três da trava de robô da .108 + as duas do produto no negócio da .109 + a da lista de espera, MIA-18 + a do consumo de IA, MIA-44 + as três da 1.117, MIA-67), e a sexta do raio-X é a dos preços, com gerir_raio_x", () => {
-    expect(FERRAMENTAS).toHaveLength(124);
+  it("a lista tem 126 (112 + as três da trava de robô da .108 + as duas do produto no negócio da .109 + a da lista de espera, MIA-18 + a do consumo de IA, MIA-44 + as três da 1.117, MIA-67 + as duas da 1.118, MIA-79 + as duas da MIA-103), e a sexta do raio-X é a dos preços, com gerir_raio_x", () => {
+    expect(FERRAMENTAS).toHaveLength(126);
     expect(FERRAMENTA_POR_NOME.get("plataforma_precos_do_raio_x")!.operacao).toBe("gerir_raio_x");
     expect(FERRAMENTA_POR_NOME.get("plataforma_precos_do_raio_x")!.description).toMatch(/INTERESSE/);
     expect(FERRAMENTA_POR_NOME.get("plataforma_ver_raio_x")!.description).toMatch(/ORIGEM/);
