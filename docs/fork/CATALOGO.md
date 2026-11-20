@@ -852,6 +852,34 @@ números podem diferir pelas chamadas das últimas 3 horas do mês. Fica assim p
 o cliente recebe). Se o upstream trouxer a soma de uso no banco por organização (`fn_uso_de_ia`, 0586) com
 quebra por agente, a leitura daqui pode passar a perguntar a ela, desde que a régua do custo continue a mesma.
 
+### 25. O fuso da organização nos relatórios · [`fuso-da-organizacao.md`](fuso-da-organizacao.md)
+**O que faz.** Uma regra só para o fuso dos relatórios: `organizations.timezone` vazio, só espaços ou com nome
+que não existe vale `America/Sao_Paulo` no relatório comercial, na série do Desempenho, no relatório de vendas,
+na planilha e no motor dos relatórios montados e dos painéis prontos. E a gravação recusa o nome que não existe
+(Configurações, painel da plataforma, boas-vindas, MCP). **Migrations** 9166 (redefine a nossa
+`fn_mia_relatorio_preparar`, corpo da 9041). **Mora em** `lib/tempo/fuso-gravavel.ts`.
+
+**Pontos de encaixe** (todos `FORK MIA (MIA-102)` ou `MIA-102`): do upstream, `lib/relatorios/janela.ts`
+(`TZ_PADRAO = FUSO_PADRAO`), `app/api/v1/reports/comercial/route.ts` (`fusoDoRelatorio(org.timezone)`),
+`lib/schemas/settings.ts` (`tenantSchema.timezone`), `lib/schemas/onboarding.ts` (`welcomeSchema.timezone`),
+`app/app/settings/tenant/_form.tsx` (a frase da recusa no toast); do fork, `app/api/v1/relatorios/exportar/route.ts`,
+`app/api/v1/relatorio-de-vendas/route.ts`, `lib/implantacao/empresa.ts`, `lib/i18n/dicionario-relatorios-mia.ts`.
+
+**Protege.** `tests/unit/fuso-dos-relatorios-uma-regra.test.ts` (a regra em TypeScript, a rota comercial, a
+gravação e a catraca de que nenhum leitor de relatório tem recuo próprio) e o invariante
+`fuso-invalido-nos-relatorios.test.ts` (o motor no Postgres com fuso inválido, vazio e só espaços, Tóquio como
+controle, pela sessão de um gestor).
+
+**Conferir.**
+1. `git grep -n "TZ_PADRAO = \|fusoDoRelatorio(org.timezone)" lib/relatorios/janela.ts app/api/v1/reports/comercial/route.ts` (as duas linhas existem; se o upstream reescreveu a janela, o recuo para UTC pode ter voltado).
+2. `git grep -n "fusoGravavelSchema" lib/schemas/settings.ts lib/schemas/onboarding.ts` (o fuso da organização segue passando pela régua da gravação).
+3. Se a fusão trouxe uma rota nova de relatório que lê `organizations.timezone`, ela entra na lista da catraca em `fuso-dos-relatorios-uma-regra.test.ts`.
+4. `npx vitest run tests/unit/fuso-dos-relatorios-uma-regra.test.ts`.
+
+**Riscos.** `lib/relatorios/janela.ts` tem PR aberto no upstream (#5002, a meia-noite pulada); a linha do
+`TZ_PADRAO` fica fora do trecho dele, mas confira na fusão. A empresa que já tem um fuso torto gravado continua
+lendo Brasília e só consegue salvar os dados da empresa escolhendo um fuso válido.
+
 ---
 
 ## Tabela final: por função, o documento, as migrations e os testes principais
@@ -882,6 +910,7 @@ quebra por agente, a leitura daqui pode passar a perguntar a ela, desde que a r�
 | 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
 | 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts` |
 | 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | nenhuma (lê a 0241) | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts`, `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts` |
+| 25 | O fuso da organização nos relatórios | `fuso-da-organizacao.md` | 9166 | `fuso-dos-relatorios-uma-regra.test.ts`, `tests/invariants/fuso-invalido-nos-relatorios.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.
