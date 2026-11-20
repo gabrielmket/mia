@@ -50,6 +50,11 @@ import { FERRAMENTAS_DO_PRODUTO_NO_NEGOCIO } from "./ferramentas/produto-no-nego
 // FORK MIA (MIA-44): o consumo de IA por mês e por agente (docs/fork/consumo-de-ia.md).
 import { FERRAMENTAS_DE_CONSUMO_DE_IA } from "./ferramentas/consumo-de-ia";
 import { FERRAMENTAS_DO_CHECKLIST } from "./ferramentas/checklist";
+// FORK MIA (upstream 1.117, MIA-67): a contagem dos negócios e as conexões OAuth do MCP da empresa.
+import { FERRAMENTAS_DAS_CONEXOES_DO_MCP } from "./ferramentas/conexoes-do-mcp";
+import { FERRAMENTAS_DA_CONTAGEM_DE_NEGOCIOS } from "./ferramentas/contagem-de-negocios";
+// FORK MIA (upstream 1.118, MIA-79): o módulo opcional por empresa e a tela inicial.
+import { FERRAMENTAS_DA_FAIXA_1118 } from "./ferramentas/novidades-1118";
 import { FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP } from "./ferramentas/conhecimento-e-followup";
 import { FERRAMENTAS_DE_CONVERSOES } from "./ferramentas/conversoes";
 import { FERRAMENTAS_DE_DEMONSTRACAO } from "./ferramentas/demonstracao";
@@ -119,6 +124,11 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DO_PRODUTO_NO_NEGOCIO,
   // FORK MIA (MIA-44): o consumo de IA de um cliente num mês, por agente, "Sistema" e finalidade; só lê (docs/fork/consumo-de-ia.md)
   ...FERRAMENTAS_DE_CONSUMO_DE_IA,
+  // FORK MIA (upstream 1.117, MIA-67): contar os negócios pela porta do `crm_count_leads`, e ver e revogar as conexões OAuth ao MCP da empresa (docs/fork/mcp-de-implantacao.md)
+  ...FERRAMENTAS_DA_CONTAGEM_DE_NEGOCIOS,
+  ...FERRAMENTAS_DAS_CONEXOES_DO_MCP,
+  // FORK MIA (upstream 1.118, MIA-79): o módulo opcional por empresa (9416) e a tela inicial da empresa e da pessoa (#4864) (docs/fork/mcp-de-implantacao.md)
+  ...FERRAMENTAS_DA_FAIXA_1118,
   // FORK MIA (S3 da coexistência): ver e ligar a chave da empresa, ver a sincronização do app (docs/fork/coexistencia.md)
   ...FERRAMENTAS_DA_COEXISTENCIA,
 ];

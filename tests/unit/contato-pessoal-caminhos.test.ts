@@ -197,7 +197,21 @@ describe("caminho 10 — métricas não somam pessoal", () => {
     const src = semComentarios(
       fonte("app", "api", "v1", "admin", "usage", "route.ts"),
     );
-    expect(src).toMatch(/is_personal/);
+    // FORK MIA (MIA-78): a lista dos pessoais é lida em
+    // `lib/ai/usage/contatos-pessoais.ts`, a mesma da aba Uso do cliente.
+    const lista = semComentarios(fonte("lib", "ai", "usage", "contatos-pessoais.ts"));
+    expect(src).toMatch(/lerContatosPessoais\(/);
+    expect(lista).toMatch(/is_personal/);
+    expect(src).toMatch(/\.not\("contact_id",\s*"in"/);
+  });
+
+  // FORK MIA (MIA-78): a aba Uso do cliente também, para as duas telas darem o
+  // mesmo número.
+  it("a aba Uso do cliente exclui mensagens de pessoal", () => {
+    const src = semComentarios(
+      fonte("app", "api", "v1", "admin", "tenants", "[id]", "usage", "route.ts"),
+    );
+    expect(src).toMatch(/lerContatosPessoais\(/);
     expect(src).toMatch(/\.not\("contact_id",\s*"in"/);
   });
 

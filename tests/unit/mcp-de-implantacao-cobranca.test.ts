@@ -6,7 +6,7 @@
  * A CONTAGEM da lista mora aqui desde a .90: 92 (as 83 da .89 e as nove da
  * cobrança), 94 com as duas das propostas do assistente (.91), 98 com as
  * quatro das trilhas (.93) e 99 com o
- * desfazer da proposta (.94), 100 com a de etiquetar os contatos (.97), 106 com as seis de cupons, parceiros e repasses (.98), 110 com as quatro do raio-X do atendimento (.101), 111 com a de ler o raio-X de novo (.105), 112 com a dos preços do raio-X por cadastro (.107), 115 com as três da trava de robô (.108), 117 com as duas do produto no negócio (.109), 118 com a da lista de espera da agenda (MIA-18), 119 com a do consumo de IA (MIA-44), 122 com as três da coexistência (MIA-28); a .95 (o preço do e-mail por plano) não pediu
+ * desfazer da proposta (.94), 100 com a de etiquetar os contatos (.97), 106 com as seis de cupons, parceiros e repasses (.98), 110 com as quatro do raio-X do atendimento (.101), 111 com a de ler o raio-X de novo (.105), 112 com a dos preços do raio-X por cadastro (.107), 115 com as três da trava de robô (.108), 117 com as duas do produto no negócio (.109), 118 com a da lista de espera da agenda (MIA-18), 119 com a do consumo de IA (MIA-44), 122 com as três da 1.117 (MIA-67), 124 com as duas da 1.118 (MIA-79), 127 com as três da coexistência (MIA-28); a .95 (o preço do e-mail por plano) não pediu
  * ferramenta nova, só o campo `preco_email` nos planos e os preços na leitura da
  * assinatura. E as regras que não podem virar: o MCP não conecta a chave do
  * provedor, não marca como pago, não cancela a assinatura do cliente, não muda
@@ -49,7 +49,7 @@ function responder(c: CadeiaLivre) {
     ];
     return { data: linhas };
   }
-  if (c.tabela === "organization_modules" && operacaoLivre(c) === "insert") return { data: null, error: null };
+  if (c.tabela === "mia_modulos_contratados" && operacaoLivre(c) === "insert") return { data: null, error: null };
   if (c.tabela === "organizations" && filtroLivre(c, "eq", "id")) return { data: { id: ORG, display_name: "Empresa Alfa", status: "active" } };
   if (c.tabela === "modulos_instalados") return { data: [] };
   return { data: [] };
@@ -76,9 +76,9 @@ const banco = () =>
     return {};
   });
 
-describe("a lista: 122 ferramentas, nove delas da cobrança", () => {
-  it("122 = as 83 da .89 + as nove da cobrança (.90) + as duas das propostas do assistente (.91) + as quatro das trilhas e de onde os clientes travam (.93) + o desfazer da proposta (.94) + a de etiquetar os contatos (.97) + as seis de cupons, parceiros e repasses (.98) + as quatro do raio-X (.101) + a de ler o raio-X de novo (.105) + a dos preços do raio-X por cadastro (.107) + as três da trava de robô (.108) + as duas do produto no negócio (.109) + a da lista de espera da agenda (MIA-18) + a do consumo de IA (MIA-44) + as três da coexistência (MIA-28) = 122", () => {
-    expect(FERRAMENTAS).toHaveLength(122);
+describe("a lista: 127 ferramentas, nove delas da cobrança", () => {
+  it("127 = as 83 da .89 + as nove da cobrança (.90) + as duas das propostas do assistente (.91) + as quatro das trilhas e de onde os clientes travam (.93) + o desfazer da proposta (.94) + a de etiquetar os contatos (.97) + as seis de cupons, parceiros e repasses (.98) + as quatro do raio-X (.101) + a de ler o raio-X de novo (.105) + a dos preços do raio-X por cadastro (.107) + as três da trava de robô (.108) + as duas do produto no negócio (.109) + a da lista de espera da agenda (MIA-18) + a do consumo de IA (MIA-44) + as três da 1.117 (MIA-67: contar os negócios e as conexões do MCP) + as duas da 1.118 (MIA-79: o módulo opcional por empresa e a tela inicial) + as três da coexistência (MIA-28) = 127", () => {
+    expect(FERRAMENTAS).toHaveLength(127);
     expect(FERRAMENTAS_DE_COBRANCA).toHaveLength(9);
     expect(new Set(FERRAMENTAS.map((f) => f.name)).size).toBe(FERRAMENTAS.length);
   });

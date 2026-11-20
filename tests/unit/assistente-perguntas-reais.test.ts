@@ -158,6 +158,7 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "como monto um relatório", sobre: "/app/relatorios", espera: "relatorios" },
   { pergunta: "como exporto um relatório para excel", sobre: "/app/relatorios", espera: "exportar-relatorio" },
   { pergunta: "onde vejo o custo das campanhas de anúncio", sobre: "/app/ads/meta" },
+  { pergunta: "quantos negócios vieram do google ads", sobre: "/app/ads/google", espera: "painel-google-ads" },
   { pergunta: "onde vejo o que a equipe fez no período", sobre: "/app/activities", espera: "atividades" },
   { pergunta: "o agente está melhorando?", sobre: "/app/ai/evolution", espera: "evolucao-da-ia" },
   { pergunta: "quem alterou esse negócio", sobre: "/app/audit", espera: "audit-log" },

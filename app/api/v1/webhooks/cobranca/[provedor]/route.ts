@@ -33,7 +33,7 @@ export const dynamic = "force-dynamic";
 
 const LIMITE_DO_CORPO = 1_048_576;
 const RECUSAS_POR_MINUTO = 120;
-/** Avisos VÁLIDOS do Asaas de cliente que não existe aqui, por IP: o teto do token vazado. */
+/** Avisos VÁLIDOS de cliente que não existe aqui, por provedor de token estático: o teto do token vazado. */
 const DESCONHECIDOS_POR_MINUTO = 120;
 
 type Rota = { params: Promise<{ provedor: string }> };
@@ -62,7 +62,9 @@ export async function POST(req: NextRequest, { params }: Rota) {
     return fail("payload_too_large", "Aviso grande demais.", 413, { requestId });
   }
 
-  const sinal = adaptador(provedor).verificarWebhook(corpo, req.headers, segredo, new Date());
+  // `req.nextUrl` vai junto porque o aviso do Efi se autentica na URL (não assina o
+  // corpo): é dela que saem o token e a empresa dona. Stripe e Asaas a ignoram.
+  const sinal = adaptador(provedor).verificarWebhook(corpo, req.headers, segredo, new Date(), req.nextUrl);
   if (!sinal) {
     // Só RECUSAS contam no limite: aviso válido nunca leva 429, porque é ele que
     // reativa quem pagou. O balde é o IP (forjar só troca de balde); sem proxy à
@@ -130,10 +132,11 @@ export async function POST(req: NextRequest, { params }: Rota) {
   // nova análise paga). Ele não é empresa da MIA; o aviso só acorda a releitura
   // dos pedidos dela no Asaas (`lib/raio-x/pedidos.ts`), como o resto daqui.
   const contaDoRaioX = !org && provedor === "asaas" && sinal.clienteRef ? await contaDoRaioXPeloClienteDoAsaas(admin, sinal.clienteRef) : null;
-  if (!org && !contaDoRaioX && provedor === "asaas") {
-    // O token do Asaas é estático: vazado, ele assina avisos de clientes que não
-    // existem, e cada um viraria uma linha nova. Acima do balde, 200 SEM gravar:
-    // 429 faria o Asaas interromper a fila, e com ela os avisos verdadeiros; o
+  if (!org && !contaDoRaioX && provedor !== "stripe") {
+    // Só a Stripe assina cada aviso. Asaas e Efi autenticam por token ESTÁTICO:
+    // vazado, ele autentica avisos de clientes que não existem, e cada um viraria
+    // uma linha nova. Acima do balde, 200 SEM gravar: 429 faria o provedor
+    // interromper a fila, e com ela os avisos verdadeiros; o
     // que for de verdade, a reconciliação cura. Cliente conhecido só entra aqui se a
     // leitura da empresa falhou: sem saber a dona, o aviso também vira linha nova.
     // Chave GLOBAL por provedor, não por IP: o IP é o primeiro salto do

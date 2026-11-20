@@ -25,6 +25,8 @@ import { calcularCusto, type ContagemPorCategoria } from "@/lib/channels/meta/cu
 import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 // FORK MIA (MIA-44): o consumo de IA por mês e por agente (docs/fork/consumo-de-ia.md).
 import { falhouOConsumo, lerConsumoDoPeriodo, periodoDoPedido } from "@/lib/ai/usage/consumo-do-periodo";
+// FORK MIA (MIA-78): as mensagens dos pessoais ficam fora, como na tela geral.
+import { lerContatosPessoais, listaDosPessoais } from "@/lib/ai/usage/contatos-pessoais";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +67,10 @@ export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
    * FORK MIA (MIA-44): ou `mes=AAAA-MM`, o mês do calendário em Brasília
    * ("quanto gastou no mês passado?"). `mes` vence `dias`, e TODOS os números
    * desta resposta passam a ser daquele mês. `mes` fora do formato é 400.
+   *
+   * FORK MIA (MIA-78): `dias=N` são os N dias do calendário em Brasília
+   * terminados hoje, a mesma janela de `/admin/usage` e do MCP
+   * (`periodoDoPedido`). Não eram: aqui eram N×24 h corridas até agora.
    */
   const periodo = periodoDoPedido({
     mes: req.nextUrl.searchParams.get("mes"),
@@ -79,6 +85,20 @@ export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
 
   const admin = createAdminClient();
 
+  // FORK MIA (MIA-78): pessoal não soma (spec 21, caminho 10). A tela geral já
+  // tirava as mensagens dos contatos pessoais e esta aba não: o mesmo cliente
+  // no mesmo mês dava N numa e N + as dos pessoais na outra.
+  const pessoais = await lerContatosPessoais(admin, [id]);
+  if (pessoais.erro) return fail("db_error", pessoais.erro, 500, { requestId });
+  let contagemDeMensagens = admin
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", id)
+    .gte("created_at", desde)
+    .lt("created_at", antesDe);
+  const foraOsPessoais = listaDosPessoais(pessoais.ids);
+  if (foraOsPessoais) contagemDeMensagens = contagemDeMensagens.not("contact_id", "in", foraOsPessoais);
+
   const [conversas, mensagens, consumo, cobradas, precos] = await Promise.all([
     admin
       .from("conversations")
@@ -86,12 +106,7 @@ export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
       .eq("organization_id", id)
       .gte("created_at", desde)
       .lt("created_at", antesDe),
-    admin
-      .from("messages")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", id)
-      .gte("created_at", desde)
-      .lt("created_at", antesDe),
+    contagemDeMensagens,
     // FORK MIA (MIA-44): a mesma leitura de `plataforma_ver_consumo_de_ia`,
     // paginada, com a régua do teto (coalesce de cost_cents). O bloco `ia`
     // abaixo sai dela, e não de uma segunda leitura de `llm_calls`.
@@ -114,8 +129,13 @@ export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
   ]);
 
   // Leitura que falha no meio não vira "custo zero": responde erro.
+  // FORK MIA (MIA-78): as contagens e os preços também. Sem conferir, uma
+  // contagem que falhava saía 0 e um preço que não vinha saía custo R$ 0,00.
+  if (conversas.error) return fail("db_error", conversas.error.message, 500, { requestId });
+  if (mensagens.error) return fail("db_error", mensagens.error.message, 500, { requestId });
   if (falhouOConsumo(consumo)) return fail("db_error", consumo.erro, 500, { requestId });
   if (cobradas.erro) return fail("db_error", cobradas.erro, 500, { requestId });
+  if (precos.error) return fail("db_error", precos.error.message, 500, { requestId });
 
   // Centavos de DÓLAR, como o resto do custo de IA neste repositório.
   // `tokens` é entrada + saída: `llm_calls` não tem `total_tokens` (é coluna de
@@ -145,7 +165,11 @@ export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
       mes: periodo.mes,
       periodo: { tipo: periodo.tipo, inicio: periodo.inicio, fim: periodo.fim, fuso: periodo.fuso },
       conversas: conversas.count ?? 0,
+      // Sem as mensagens dos contatos pessoais (MIA-78).
       mensagens: mensagens.count ?? 0,
+      // FORK MIA (MIA-78): a lista dos pessoais passou do teto, e as mensagens
+      // dos que ficaram de fora dela estão em `mensagens`.
+      pessoais_truncado: pessoais.truncado,
       ia: {
         chamadas: total.chamadas,
         tokens,

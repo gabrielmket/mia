@@ -21,7 +21,7 @@
 
 export const LEADS_DA_META_E_MODULO_VENDAVEL = false;
 
-/** A chave em `organization_modules`. Identidade interna: não muda com o nome do produto. */
+/** A chave em `mia_modulos_contratados`. Identidade interna: não muda com o nome do produto. */
 export const MODULO_DOS_LEADS_DA_META = "leads_da_meta" as const;
 
 export const ROTAS_DOS_LEADS_DA_META = ["/api/v1/leads-da-meta"] as const;

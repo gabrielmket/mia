@@ -108,12 +108,17 @@ segundo chamador da exceção do convite.
 gatilho, view ou constraint que já exista no `baseline.sql`: vale o nosso (roda por último) e a melhoria
 futura do upstream some em silêncio. Migration do upstream que passa a definir um nome que o fork já usa
 também é colisão. O carimbo (`lib/schema/carimbo.ts` e o `insert` no `baseline-mia.sql`) é a nossa mais nova.
+Exceção à ordem: o trecho entre `-- >>> ANTES DO BASELINE DO UPSTREAM` e `-- <<< ...` do `baseline-mia.sql`
+(migration 9163) roda ANTES do `baseline.sql`, recortado por `antes_do_upstream` nas duas passadas do modo update
+do `bootstrap.sh` e pelo `scripts/ensaio-de-banco.sh`; se ele some ou perde a chamada, nada dá erro e a
+`organization_modules` do upstream (9416) cai na nossa.
 
 ```bash
 git diff --stat upstream/main vB -- supabase/baseline.sql supabase/migrations   # vazio se vB é o upstream puro
 ls supabase/migrations supabase/migrations-mia | grep -E "_9[0-9]{3}_" | sort | uniq -d   # número repetido
 node scripts/redefinicoes-do-upstream.mjs supabase/baseline.sql supabase/baseline-mia.sql
 npx vitest run tests/unit/schema-mia-estende-nunca-redefine.test.ts tests/unit/carimbo-do-schema.test.ts   tests/unit/mcp-de-implantacao-espelhos.test.ts   # o último guarda as funções do upstream que copiamos (9022, 9045)
+npx vitest run tests/unit/schema-mia-antes-do-upstream.test.ts   # o trecho da 9163 existe e roda antes do baseline.sql
 ```
 
 ### R4. LGPD: anonimização e exportação cobrem as tabelas nossas
@@ -820,7 +825,7 @@ do canal não oficial, só é guardada: sem derivação, transcrição, visão n
 
 **Riscos.** Se o upstream passar a ler o campo `history` no `parseMetaWebhook` ou a gravar o histórico por
 `ingestMetaInbound`, o histórico entraria duas vezes ou como mensagem nova: conferir na fusão. Relatórios e
-raio-X do fork ainda contam o histórico importado (9163, espera a decisão D3). Da S3: se o upstream renomear
+raio-X do fork ainda contam o histórico importado (9165, espera a decisão D3). Da S3: se o upstream renomear
 ou trocar a origem `embedded_signup` (`ORIGEM_DO_EMBEDDED_SIGNUP` em `lib/channels/meta/origem-da-conexao.ts`),
 o número conectado pelo app perde a marca da origem (a conferência 4 pega); se a Meta mudar o nome do evento
 de fim da janela (`FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`, em `janela.ts` e `sdk-da-meta.ts`), a janela
@@ -838,6 +843,7 @@ em reais pela cotação de cada dia. Usada pela aba Uso do cliente e pelo MCP. N
 por agente (com "Sistema") e por finalidade. Só no painel da plataforma: `/app/ai/usage` não mudou.
 **Migrations** nenhuma (lê `llm_calls`, `ai_agents` e `platform_fx_rates`, da 0241). **Mora em**
 `lib/ai/usage/consumo-do-periodo.ts`, `lib/ai/usage/atalhos-de-periodo.ts`,
+`lib/ai/usage/contatos-pessoais.ts` (a lista dos contatos pessoais que as duas telas tiram da contagem, MIA-78),
 `lib/mcp-plataforma/ferramentas/consumo-de-ia.ts`, `components/admin/tenants/UsoDoTenant.tsx`.
 
 **Pontos de encaixe** (todos `FORK MIA (MIA-44)`): `app/api/v1/admin/tenants/[id]/usage/route.ts` (a rota é
@@ -852,12 +858,13 @@ seletor e o nome do CSV), `hooks/useAdminUsage.ts`, `lib/i18n/dicionario.ts` (o 
 Sistema, cache, virada do mês em Brasília com TZ de Brasília e UTC, R$ e dia sem cotação, a rota e o MCP com os
 mesmos números), `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx` (os atalhos, `/admin/usage?mes=` e a aba
 Uso), `painel-de-custo-nao-para-na-linha-1000.test.ts`, `orcamento-uma-regua-de-gasto.test.ts` (nenhuma segunda
-régua de gasto mensal) e a e2e `admin-consumo-de-ia-por-mes-e-por-agente.spec.ts`.
+régua de gasto mensal), `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts` (MIA-78: a tela geral e a aba Uso
+com os mesmos pessoais fora e a mesma janela de N dias de Brasília, e leitura que falha virando 500, não zero) e a e2e `admin-consumo-de-ia-por-mes-e-por-agente.spec.ts`.
 
 **Conferir.**
 1. `git grep -n "lerConsumoDoPeriodo" "app/api/v1/admin/tenants/[id]/usage/route.ts" lib/mcp-plataforma/ferramentas/consumo-de-ia.ts` (**as duas chamadas existem**; sem uma delas a tela e o MCP passam a divergir).
 2. Se a fusão mexeu em `llm_calls` (`git diff vA vB -- supabase/migrations supabase/baseline.sql | grep -n "llm_calls"`), confira que as seis colunas acima continuam com o mesmo nome e o mesmo sentido (`cache_read_tokens` como parte de `input_tokens`).
-3. `npx vitest run tests/unit/consumo-de-ia-por-mes-e-por-agente.test.ts tests/unit/consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx tests/unit/orcamento-uma-regua-de-gasto.test.ts`.
+3. `npx vitest run tests/unit/consumo-de-ia-por-mes-e-por-agente.test.ts tests/unit/consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx tests/unit/orcamento-uma-regua-de-gasto.test.ts tests/unit/consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts`.
 4. MCP (lê só): `plataforma_ver_consumo_de_ia` com a empresa de demonstração e o mês corrente.
 5. Se a fusão mexeu em `app/api/v1/admin/usage/route.ts` (do upstream), confira que `mes` ainda passa por `periodoDoPedido` e que a fatura e as cotações têm o limite de cima (`git grep -n "periodoDoPedido\|ultimoDia" app/api/v1/admin/usage/route.ts`).
 
@@ -895,7 +902,7 @@ quebra por agente, a leitura daqui pode passar a perguntar a ela, desde que a r�
 | 21 | Raio-X do atendimento | `raio-x-do-atendimento.md` | 9150, 9151, 9152 | `raio-x-leitor-nao-envia.test.ts`, `raio-x-anonimizar.test.ts` |
 | 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
 | 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162, 9164 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-pedido-unico.test.ts`, `coexistencia-conexao-pelo-app.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts` |
-| 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | nenhuma (lê a 0241) | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts` |
+| 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | nenhuma (lê a 0241) | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts`, `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.

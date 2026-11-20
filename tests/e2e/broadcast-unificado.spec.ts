@@ -62,7 +62,7 @@ let liberacoesDeAntes: string[] = [];
 
 async function semModulo(): Promise<void> {
   await servico
-    .from("organization_modules")
+    .from("mia_modulos_contratados")
     .update({ revoked_at: new Date().toISOString() })
     .eq("organization_id", orgId)
     .eq("modulo", "disparador")
@@ -71,7 +71,7 @@ async function semModulo(): Promise<void> {
 
 async function comModulo(): Promise<void> {
   await semModulo();
-  const { error } = await servico.from("organization_modules").insert({
+  const { error } = await servico.from("mia_modulos_contratados").insert({
     organization_id: orgId,
     modulo: "disparador",
     note: "e2e broadcast-unificado — apagada no fim da spec",
@@ -87,7 +87,7 @@ test.beforeAll(async () => {
   await afirmarAdminDeTenantPuro(creds.users.admin.email);
 
   const { data: vivas } = await servico
-    .from("organization_modules")
+    .from("mia_modulos_contratados")
     .select("id")
     .eq("organization_id", orgId)
     .eq("modulo", "disparador")
@@ -134,12 +134,12 @@ test.afterAll(async () => {
   await servico.from("campaigns").delete().eq("organization_id", orgId).eq("name", CAMPANHA_QR);
   if (canalId) await servico.from("channel_sessions").delete().eq("id", canalId);
   await servico
-    .from("organization_modules")
+    .from("mia_modulos_contratados")
     .delete()
     .eq("organization_id", orgId)
     .eq("note", "e2e broadcast-unificado — apagada no fim da spec");
   if (liberacoesDeAntes.length > 0) {
-    await servico.from("organization_modules").update({ revoked_at: null }).in("id", liberacoesDeAntes);
+    await servico.from("mia_modulos_contratados").update({ revoked_at: null }).in("id", liberacoesDeAntes);
   }
 });
 

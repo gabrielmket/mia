@@ -38,6 +38,10 @@ agentes.
 6. **Paginado, e o corte é dito.** A leitura é a de `lib/leitura/todas-as-paginas.ts`, da chamada
    mais nova para a mais antiga, até 100 páginas de 1000. Acima disso sai `truncado: true` (o começo
    do período ficou de fora).
+7. **"N dias" são N dias do calendário em Brasília, terminados hoje (MIA-78).** `dias=30` vai de
+   00:00 de 29 dias atrás a 00:00 de amanhã, no fuso `America/Sao_Paulo` (`periodoDoPedido`,
+   `inicioDoDiaEmBrasilia`). É a régua única de 7, 30 e 90 dias na tela geral (`/admin/usage`), na
+   aba Uso do cliente e em `plataforma_ver_consumo_de_ia` (seção 8).
 
 ### 2.1 O mês do teto não é o mesmo
 
@@ -51,6 +55,8 @@ Gabriel.
 
 - `lib/ai/usage/consumo-do-periodo.ts`: `periodoDoPedido` (o período de `mes` ou `dias`),
   `lerConsumoDoPeriodo` (a leitura e as somas), `mesAtualEAnterior` (os dois atalhos das telas).
+- `lib/ai/usage/contatos-pessoais.ts`: `lerContatosPessoais` e `listaDosPessoais`, a lista dos
+  contatos pessoais que as duas rotas tiram das mensagens (MIA-78, seção 8).
 - `app/api/v1/admin/tenants/[id]/usage/route.ts`: aceita `mes=AAAA-MM` além de `dias` (`mes` vence;
   fora do formato é 400). Com `mes`, **todos** os números da resposta são do mês (conversas,
   mensagens, IA e mensagens cobradas). Os campos de antes continuam (`dias`, `conversas`,
@@ -63,9 +69,11 @@ coluna que essa tabela não tem (é de `ai_invocations`); `tokens` agora é entr
 
 ## 4. O MCP de plataforma
 
-`plataforma_ver_consumo_de_ia` (só lê, sem operação): recebe `organization_id` e `mes` (AAAA-MM;
-ausente, o mês corrente em Brasília) e devolve a empresa, o período e os mesmos blocos de `consumo`
-da rota, saídos da mesma função. Cliente que não existe é recusado com o caminho para achar o id
+`plataforma_ver_consumo_de_ia` (só lê, sem operação): recebe `organization_id`, `mes` (AAAA-MM) e
+`dias` (1 a 180, os N dias do calendário em Brasília terminados hoje, MIA-78). `mes` vence `dias`;
+sem nenhum dos dois, o mês corrente em Brasília. Devolve a empresa, o mês (`null` em `dias`), os
+`dias`, o período (`tipo`, `inicio`, `fim`, `fuso`) e os mesmos blocos de `consumo` da rota, saídos
+da mesma função. Cliente que não existe é recusado com o caminho para achar o id
 (`plataforma_listar_clientes`).
 
 Exemplo (fictício):
@@ -115,8 +123,8 @@ telas calcula a janela.
 - A fatura do provedor (`platform_openai_spend`) e as cotações (`platform_fx_rates`) passam a ter
   também o limite de cima (o último dia do período): sem isso, a fatura do mês passado somava os
   dias deste mês.
-- **Sem `mes`, nada muda**: as janelas de 7, 30 e 90 dias continuam em dias de calendário UTC, como
-  eram. O mês em Brasília e a janela em UTC podem por isso diferir nas três horas da virada.
+- Sem `mes`, as janelas de 7, 30 e 90 dias também saem de `periodoDoPedido`, em dias de Brasília
+  (MIA-78, seção 8). Até a MIA-78 eram dias de calendário UTC.
 - O nome do CSV leva o mês (`usage-2026-10.csv`).
 
 ### 7.3 A aba Uso do cliente
@@ -146,3 +154,66 @@ chinês, em `lib/i18n/traducoes/*.json`.
   agentes e chamadas de sistema neste mês e no mês passado, vista nas duas telas, em "Este mês" e
   "Mês passado". As capturas saem no artefato de evidência da CI.
 
+## 8. As duas telas dão o mesmo número (MIA-78)
+
+Para o mesmo cliente e o mesmo período, a tela geral (`/admin/usage`, `GET /api/v1/admin/usage`) e a
+aba Uso do cliente (`GET /api/v1/admin/tenants/[id]/usage`) davam números diferentes, e a aba Uso
+mostrava zero quando uma leitura falhava. Três correções, achadas no levantamento da MIA-70 (mapa
+da MIA-54, seção 2.1):
+
+### 8.1 A régua dos "N dias"
+
+**N dias são os N dias do calendário em Brasília terminados hoje, hoje incluído**: de 00:00 de
+(hoje − N + 1) a 00:00 de amanhã, no fuso `America/Sao_Paulo`. Exemplo: em 18/11/2026, às 9h de
+Brasília, "30 dias" vai de 20/10 00:00 a 19/11 00:00 de Brasília (`2026-10-20T03:00Z` a
+`2026-11-19T03:00Z`).
+
+Antes eram duas réguas: a tela geral lia N dias de calendário UTC até o fim de hoje; a aba Uso e o
+MCP liam N×24 h corridas até agora. Uma chamada às 22h de Brasília do primeiro dia entrava numa e não
+na outra. A régua mora em `periodoDoPedido` (`lib/ai/usage/consumo-do-periodo.ts`), e as três
+leituras a chamam; nenhuma calcula a janela.
+
+Por que o dia de Brasília, e não as N×24 h que a aba Uso usava:
+
+- o mês desta leitura já é o de Brasília (regra 2): o mês passa a ser exatamente a soma dos dias
+  dele, na mesma régua;
+- a série diária da tela geral fica com N barras inteiras, cada uma um dia de Brasília (com N×24 h,
+  a primeira e a última barra seriam pedaços de dia, e seriam N+1);
+- o número de um dia que já passou não muda conforme a hora em que se abre a tela.
+
+O que muda para quem lê: a tela geral, nos 7/30/90 dias, conta e rotula os dias por Brasília, e
+não mais por UTC (a diferença são as chamadas das 21h à meia-noite de Brasília nas duas pontas); a
+aba Uso e o MCP, em `dias`, passam a começar à meia-noite de Brasília do primeiro dia, em vez de
+N×24 h antes de agora. O desenho das telas não mudou.
+
+### 8.2 Contato pessoal fica fora nas duas
+
+Pessoal não soma (spec 21, caminho 10). A tela geral já tirava as mensagens dos contatos pessoais
+(`contacts.is_personal`); a aba Uso não, e a Academia Alfa com a Ana Exemplo marcada pessoal dava N
+mensagens numa e N + as da Ana na outra. As duas leem a lista em `lerContatosPessoais`
+(`lib/ai/usage/contatos-pessoais.ts`) e aplicam o mesmo filtro (`contact_id not in (...)`).
+
+Só a contagem de mensagens tira os pessoais, como na tela geral. As conversas e as mensagens
+**cobradas** pela Meta não: a cobrança da Meta acontece com ou sem pessoal.
+
+A lista vai na URL do PostgREST e por isso tem teto: 2 páginas de 1000 (o `limit(2000)` de antes
+nunca trazia mais de 1000, porque o PostgREST corta toda resposta em 1000 sem avisar). Passou do teto,
+as duas rotas respondem `pessoais_truncado: true`: há pessoais fora da lista, e as mensagens deles
+estão contadas. As telas ainda não mostram esse aviso (mostrar seria mudar o desenho, fora da
+MIA-78); o MCP e quem lê a resposta veem.
+
+### 8.3 Leitura que falha é erro
+
+Na aba Uso, a contagem de conversas, a de mensagens e os preços da Meta (`platform_precos_meta`)
+não eram conferidos: a contagem que falhava saía 0, e o preço que não vinha saía custo de mensagem
+R$ 0,00. Agora qualquer uma delas que falha responde 500 `db_error`, como a leitura do consumo de IA
+e a das mensagens cobradas já faziam. A lista dos pessoais também: na aba Uso e na tela geral, falha
+nela é 500, e não "nenhum pessoal" contando as mensagens deles.
+
+### 8.4 Testes
+
+`tests/unit/consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts`, com a Academia Alfa e a Ana
+Exemplo (fictícias): o mesmo número de mensagens nas duas telas com e sem pessoal, os 30 dias com o
+mesmo início, fim e chamadas na tela geral, na aba Uso e no MCP (com as pontas de Brasília), cada
+leitura que falha virando 500, e o `pessoais_truncado` acima de 2000. O caso "limites" de
+`app/api/v1/admin/usage/route.test.ts` passou para os dias de Brasília.
