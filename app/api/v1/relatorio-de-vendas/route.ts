@@ -33,7 +33,7 @@ import { type NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
-import { FUSO_PADRAO, janelaDoMes, mesNoFuso } from "@/lib/crm/metas/fuso";
+import { janelaDoMes, mesNoFuso } from "@/lib/crm/metas/fuso";
 import {
   cicloDeVenda,
   historico,
@@ -44,6 +44,7 @@ import {
 import { traduzir } from "@/lib/i18n/dicionario";
 import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { createClient } from "@/lib/supabase/server";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 // FORK MIA (.109): os dois quadros do produto no negócio e o funil sem valor
 // recorrente contando como avulso (docs/fork/produto-no-negocio.md).
 import { palavraGravada } from "@/lib/produto-no-negocio/funil";
@@ -85,7 +86,11 @@ export async function GET(req: NextRequest): Promise<Response> {
     .select("timezone")
     .eq("id", org.orgId)
     .maybeSingle();
-  const fuso = (orgRow?.timezone as string | null) || FUSO_PADRAO;
+  // MIA-102: vazio OU inválido vale Brasília, como no Desempenho e no motor dos
+  // relatórios montados. Era `|| FUSO_PADRAO` (UTC, de `lib/crm/metas/fuso`): a
+  // empresa sem fuso fechava o mês às 21h de Brasília, e o fuso inválido
+  // derrubava `janelaDoMes` (o `Intl` lança).
+  const fuso = fusoUtilizavel(orgRow?.timezone as string | null);
 
   /**
    * A janela cobre a SÉRIE inteira, não só o mês pedido: a evolução precisa dos

@@ -60,7 +60,7 @@ import {
 import { colegasPodemMexerNaAgendaLigado, crmSettingsSchema, meetAbertoLigado, tenantSchema } from "@/lib/schemas/settings";
 import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { DEFAULT_VISIBILITY_MODE } from "@/lib/auth/types";
-import { fusoValido } from "@/lib/tempo/fusos";
+import { fusoGravavel } from "@/lib/tempo/fuso-gravavel";
 
 import {
   mesmoConteudo,
@@ -122,7 +122,9 @@ export async function configurarEmpresa(
   pedido: PedidoDeEmpresa,
 ): Promise<{ desfecho: Desfecho; mudancas: string[]; empresa: Record<string, unknown>; avisos: string[] }> {
   const avisos: string[] = [];
-  if (pedido.fuso !== undefined && !fusoValido(pedido.fuso)) {
+  // MIA-102: a régua da gravação (`fusoGravavel`), a mesma de `tenantSchema`:
+  // o nome tem de existir no `Intl` e no Postgres, na grafia da base IANA.
+  if (pedido.fuso !== undefined && !fusoGravavel(pedido.fuso)) {
     throw new Recusa(
       `"${pedido.fuso}" não é um fuso horário válido. Use o nome da região, sem acento (ex.: "America/Sao_Paulo", "America/Manaus", "Europe/Lisbon").`,
     );
@@ -170,6 +172,10 @@ export async function configurarEmpresa(
       dpo_email: "`email_do_encarregado` precisa ser um e-mail.",
       privacy_policy_url: "`politica_de_privacidade_url` precisa ser um endereço completo (https://...).",
       country: "`pais` usa duas letras maiúsculas (ex.: \"BR\").",
+      // MIA-102: sem `fuso` no pedido, vai o gravado; se ELE é o inválido
+      // (gravado antes da régua), a empresa só sai do lugar com um fuso novo.
+      timezone:
+        "o fuso gravado na empresa não é um fuso horário válido: mande `fuso` junto (ex.: \"America/Sao_Paulo\", \"America/Manaus\", \"Europe/Lisbon\").",
     };
     throw new Recusa(
       "Os dados da empresa não passaram na conferência:\n- " +
