@@ -66,15 +66,19 @@ declare
   v_agora timestamptz := now();
   v_aberta_id uuid;
   v_aberta_centavos integer;
-  v_aberta_desde timestamptz;
+  v_aberta_criada timestamptz;
   v_tem_historico boolean;
 begin
+  -- "Aberta nesta mesma transação" se lê em `criado_em`, que é o `now()` da
+  -- transação que a abriu: igual ao nosso, foi esta. Não em `vigente_desde`:
+  -- o primeiro preço da categoria tem `-infinity` ali.
+  --
   -- A categoria que deixou de ter preço (apagada, ou renomeada num update):
   -- a vigência aberta dela fecha agora. A que abriu nesta mesma transação nunca
   -- valeu para mensagem nenhuma e sai.
   if tg_op = 'DELETE' or (tg_op = 'UPDATE' and old.categoria is distinct from new.categoria) then
     delete from public.mia_precos_meta_vigencias
-     where categoria = old.categoria and vigente_ate is null and vigente_desde >= v_agora;
+     where categoria = old.categoria and vigente_ate is null and criado_em = v_agora;
     update public.mia_precos_meta_vigencias
        set vigente_ate = v_agora
      where categoria = old.categoria and vigente_ate is null;
@@ -83,8 +87,8 @@ begin
     end if;
   end if;
 
-  select v.id, v.centavos_brl, v.vigente_desde
-    into v_aberta_id, v_aberta_centavos, v_aberta_desde
+  select v.id, v.centavos_brl, v.criado_em
+    into v_aberta_id, v_aberta_centavos, v_aberta_criada
     from public.mia_precos_meta_vigencias v
    where v.categoria = new.categoria and v.vigente_ate is null
    for update;
@@ -96,7 +100,7 @@ begin
 
   -- Aberta nesta mesma transação: corrige o valor em vez de abrir uma vigência
   -- de duração zero.
-  if v_aberta_id is not null and v_aberta_desde >= v_agora then
+  if v_aberta_id is not null and v_aberta_criada = v_agora then
     update public.mia_precos_meta_vigencias
        set centavos_brl = new.centavos_brl, criado_por = new.atualizado_por
      where id = v_aberta_id;
