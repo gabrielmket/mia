@@ -199,9 +199,11 @@ describe("o hub e o item aberto também são alvos estáveis do CSS do dono", ()
     comoAdmin();
     render(<Sidebar collapsed={false} />);
 
-    const crm = screen.getByRole("link", { name: /Ver tudo em CRM/ });
+    // FORK MIA: no fork os hubs se chamam "Ver tudo no CRM" e "Ver tudo no
+    // agente" (lib/navigation/catalogo.ts); o contrato de classe medido é o mesmo.
+    const crm = screen.getByRole("link", { name: /Ver tudo no CRM/ });
     expect(crm.className).toContain("nav-item-crm");
-    const ia = screen.getByRole("link", { name: /Ver tudo em IA/ });
+    const ia = screen.getByRole("link", { name: /Ver tudo no agente/ });
     expect(ia.className).toContain("nav-item-ai");
     // E a classe do hub não vaza para o link do destino vizinho.
     expect(screen.getByRole("link", { name: "Funis" }).className).not.toContain("nav-item-crm");
