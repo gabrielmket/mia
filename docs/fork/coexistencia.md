@@ -3,8 +3,9 @@
 Fork MIA. O cliente usa o MESMO número no app WhatsApp Business do celular e na MIA (Cloud API da Meta).
 Este documento cresce por etapa; hoje cobre a **S2: o histórico que a Meta manda entra como passado e não
 dispara nada** (migration 9162) e a **S3: a conexão pelo app e o pedido único da sincronização** (migration 9164,
-carimbo `20261118120000_9164_coexistencia_da_empresa`; seção 5) e a **S4: a saída e a volta do número, a edição e o
-apagar feitos pelo app** (sem migration nova; seção 6).
+carimbo `20261118120000_9164_coexistencia_da_empresa`; seção 5), a **S4: a saída e a volta do número, a edição e o
+apagar feitos pelo app** (sem migration nova; seção 6) e a **S5: o Assistente e o teste com um número de verdade**
+(seções 7 e 8).
 
 Desenho completo, protótipo e decisões: tarefas MIA-24 (plano) e MIA-25 (desenho) no painel do time.
 
@@ -131,7 +132,8 @@ com `aberta_por = 'historico_sem_pedido'` e o pedido do histórico já `em_andam
 - **S4:** feita (seção 6).
 - **Relatórios e raio-X do fork (9165, decisão D3):** conferido em 17/11/2026, nenhuma das funções do fork
   que leem `messages` corta `historico_importado`. Com 180 dias de histórico, o tempo de resposta e o raio-X
-  do primeiro mês contariam conversa velha. O corte espera a decisão do Gabriel.
+  do primeiro mês contariam conversa velha. O Gabriel aprovou excluir (D3, 17/11/2026), e a 9163 ainda não
+  existe: até ela entrar, o primeiro mês de um número que trouxe o histórico sai distorcido nesses relatórios.
 - Lote guardado sem o pedido ao worker (o `emit_event` falhou na rota) fica em `recebido` e vai ao log com o
   id; a varredura da S3 o retoma (seção 5.5).
 - **Prazo do lote cru (S3, LGPD):** nesta etapa, um lote que nunca sai de `recebido` (worker parado, ou o
@@ -364,3 +366,38 @@ ou pôr o número no ar é da Meta e do dono no app, e conectar de novo é crede
   edição e o apagar com as constraints de verdade.
 - `lib/channels/meta/chegada-do-cadastro.test.ts`: a saída e a volta não são chegada.
 - `tests/unit/mcp-de-implantacao-coexistencia.test.ts`: o MCP com o número fora do ar e de volta.
+
+## 7. O Assistente (S3 e S5)
+
+Dois manuais em `lib/assistente/manuais-das-telas.ts`, os dois na tela Conexões, para o administrador da empresa:
+
+| Manual | Responde |
+|---|---|
+| `coexistencia-pelo-app` (S3) | como conectar o número que já está no app, a sincronização que não veio, se dá para pedir o histórico de novo |
+| `coexistencia-fora-do-ar` (S5) | o número que saiu do ar (o motivo, o que para, "Conectar de novo"), a volta sem duplicar, a mensagem editada ou apagada no WhatsApp |
+
+As frases são as da tela (`ForaDoArEVolta.tsx`, `AvisoDeLimitesECustos.tsx`, `motivo.ts`). Prova:
+`tests/unit/assistente-perguntas-reais.test.ts`, com sete perguntas da coexistência; "meu número desconectou" continua
+achando primeiro o manual do QR (`numero-desconectado`).
+
+## 8. O teste com um número de verdade (S5)
+
+O roteiro passo a passo está no documento `roteiro` da tarefa MIA-24, no painel do time. Ele é com o Gabriel, fora de
+produção, e só depois da revisão da sessão dev. O resumo:
+
+- **Antes:** a MIA como Provedor de Tecnologia na Meta; `META_APP_ID` e `META_COEXISTENCIA_CONFIG_ID` na instalação de
+  teste; os campos `account_update`, `history`, `smb_app_state_sync` e `smb_message_echoes` assinados no app da Meta; o
+  número de teste no app WhatsApp Business 2.24.17 ou mais novo, que não seja de cliente; a chave da empresa de teste
+  ligada em /admin/meta.
+- **A sincronização sai uma vez só.** Contatos e histórico só podem ser pedidos uma vez por conexão, e só nas 24 h depois
+  dela. Para repetir, o número precisa sair da coexistência no app e passar pela janela de novo (ciclo novo). Por isso o
+  número de teste não pode ser um que alguém precise do histórico depois, e a conexão só é feita quando todo o resto do
+  roteiro estiver pronto.
+- **O que o teste confere** e a Meta simulada não confere: o formato do lote do histórico e da mídia à parte (seção 1),
+  o `FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING` e o número que vem com ele, os três eventos da saída e da volta
+  (seção 6.1), e o vigia de saúde do upstream com o número fora do ar (seção 6.6).
+- **Empresa de teste:** uma empresa nova, que não seja de demonstração. A 9010 não deixa nascer canal vivo na empresa de
+  demonstração, e a chave da coexistência recusa ligar nela (seção 5.4).
+
+Os custos e limites que aparecem na tela são os conferidos nas páginas da Meta em 17/11/2026 (o aviso de limites e
+custos). O valor em reais por mensagem no Brasil não está na página e segue "a conferir".
