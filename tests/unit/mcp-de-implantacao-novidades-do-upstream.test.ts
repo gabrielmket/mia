@@ -459,7 +459,10 @@ describe("plataforma_garantir_followup · PASSOU A ALCANÇAR as caixas que mexem
     await ok(c, "plataforma_garantir_followup", CAIXAS);
     const lido = await ok(c, "plataforma_ver_followup", { fluxo: RETOMADA });
     const nos = lido.dados.nos as Linha[];
-    expect(nos.find((n) => n.no === "mover-antes-de-fim-esgotou")).toMatchObject({ tipo: "move_lead", etapa_de_destino: "Sem resposta" });
+    // «Etapa · Funil», o rótulo do `carregaEtapasCitadas`. Até a 1.120 o funil vinha
+    // por embed, que o banco falso não resolvia, e o teste via só a etapa; na 1.121
+    // o funil vem em consulta própria filtrada pela organização (Spec 33).
+    expect(nos.find((n) => n.no === "mover-antes-de-fim-esgotou")).toMatchObject({ tipo: "move_lead", etapa_de_destino: "Sem resposta · Agendamentos" });
     expect(nos.find((n) => n.no === "etiqueta-antes-de-fim-esgotou")).toMatchObject({ tipo: "edit_lead_tag", etiquetas: ["Follow-up sem resposta"] });
     expect(lido.dados.setas).toEqual(expect.arrayContaining([{ de: "resposta-3", para: "mover-antes-de-fim-esgotou", quando: "ramo no_reply" }]));
   });
