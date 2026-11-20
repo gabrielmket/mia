@@ -45,7 +45,7 @@ export default async function SettingsHubPage() {
     : undefined;
   const idioma = user.idioma;
 
-  const ligados = await modulosLigados(createAdminClient());
+  const ligados = await modulosLigados(createAdminClient(), activeOrg?.orgId);
   const agencia =
     ligados.includes("agencias") &&
     activeOrg &&

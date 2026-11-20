@@ -28,6 +28,7 @@ import { CARIMBO_DO_SCHEMA, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
 import { lerCamadaClinica } from "@/lib/implantacao/agente";
 import { iaDecideLigadaNa } from "@/lib/implantacao/empresa";
 import { lePlanosDoSettings } from "@/lib/tarefas/plano";
+import { lerModulosOpcionaisDaEmpresa } from "@/lib/implantacao/modulos-da-empresa";
 
 import type { FerramentaDePlataforma } from "../tipos";
 // FORK MIA (.90): a jornada de assinatura (docs/fork/jornada-de-assinatura.md).
@@ -155,7 +156,10 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       "o setup de implantação vendido e o total das comissões lançadas. Sem documento nem Pix do parceiro. " +
       // FORK MIA (MIA-19): o link de pagamento na conversa (upstream 9312).
       "Em `link_de_pagamento`: se o módulo do link de pagamento na conversa está ligado NA INSTALAÇÃO (liga e desliga em /admin/sistema, para todas as empresas), " +
-      "os provedores, quantos recebimentos a empresa tem em cada situação e quando foi o último pago. Sem endereço de aviso, sem hash e sem valor.",
+      "os provedores, quantos recebimentos a empresa tem em cada situação e quando foi o último pago. Sem endereço de aviso, sem hash e sem valor. " +
+      // FORK MIA (upstream 1.118, MIA-79): o módulo opcional por empresa.
+      "Em `modulos_opcionais`: cada módulo opcional da instalação que se decide por empresa, com o `estado` escolhido para ela (`herda`, `ligado` ou `desligado`), " +
+      "se vale agora (`efetivo`) e se a instalação o tem desligado (`bloqueado_pela_instalacao`). Muda com plataforma_definir_modulo_da_empresa. \"nao_lido\" = a leitura falhou.",
     inputSchema: {
       organization_id: z.string().uuid().describe("O id do cliente."),
     },
@@ -173,7 +177,7 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         // (é o histórico), e contá-la aqui diria que o cliente tem um módulo
         // que ele cancelou — bem no retrato que alguém usa para decidir.
         admin
-          .from("organization_modules")
+          .from("mia_modulos_contratados")
           .select("modulo, granted_at")
           .eq("organization_id", id)
           .is("revoked_at", null),
@@ -228,6 +232,8 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         cupom_e_parceiro: await lerCupomEParceiroDaEmpresa(admin, id).catch(() => "nao_lido" as const),
         cobrancas,
         link_de_pagamento: linkDePagamento,
+        // FORK MIA (upstream 1.118, MIA-79): a exceção da empresa a cada módulo opcional. Não lança.
+        modulos_opcionais: await lerModulosOpcionaisDaEmpresa(admin, id),
         // Os interruptores da empresa que chegaram do upstream 1.74 a 1.80.
         configuracao: {
           limpeza_automatica_de_midia: {
@@ -484,7 +490,7 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         // que é outra história, e a errada. Só alcança a liberação VIVA (o
         // índice único é parcial; revogadas podem se repetir).
         const { error } = await admin
-          .from("organization_modules")
+          .from("mia_modulos_contratados")
           .update({ revoked_at: new Date().toISOString(), revoked_by: autorUserId })
           .eq("organization_id", orgId)
           .eq("modulo", chave)
@@ -503,7 +509,7 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       // INSERT e não upsert: o índice único parcial já recusa uma segunda
       // liberação viva, e a recusa é a resposta certa — "já está liberado" não
       // é erro de quem pediu, mas também não é uma liberação nova para contar.
-      const { error } = await admin.from("organization_modules").insert({
+      const { error } = await admin.from("mia_modulos_contratados").insert({
         organization_id: orgId,
         modulo: chave,
         granted_by: autorUserId,

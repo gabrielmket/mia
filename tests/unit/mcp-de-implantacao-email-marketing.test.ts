@@ -92,7 +92,7 @@ async function preparar(opcoes: OpcoesDoCenario & { comModulo?: boolean } = {}) 
   });
   if (opcoes.comModulo) {
     cenario.banco
-      .tabela("organization_modules")
+      .tabela("mia_modulos_contratados")
       .push({
         id: randomUUID(),
         organization_id: ORG,

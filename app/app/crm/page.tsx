@@ -79,7 +79,8 @@ export default async function CrmHubPage() {
       modulos={modulos}
       modoDeVenda={modoDeVenda}
       // FORK MIA (.90): Vendas B2B fora do plano some do inventário (lib/planos-mia/).
-      modulosLigados={await modulosLigadosParaASessao()}
+      // Desde a v1.118 (#4065) a lista de base já é a DA EMPRESA ativa.
+      modulosLigados={await modulosLigadosParaASessao(activeOrg?.orgId)}
       title={traduzir("CRM", idioma)}
       subtitle={traduzir(
         "Onde a venda acontece — e o que você define uma vez para ela funcionar.",

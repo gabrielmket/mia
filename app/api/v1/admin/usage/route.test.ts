@@ -47,10 +47,11 @@ function dubleAdmin(
     predicados: Predicado[] = [],
     ordem?: (a: Linha, b: Linha) => number,
     teto = 1000,
+    desde = 0,
   ) {
     const linhas = () => {
       const filtradas = (tabelas[tabela] ?? []).filter((l) => predicados.every((p) => p(l)));
-      return (ordem ? [...filtradas].sort(ordem) : filtradas).slice(0, teto);
+      return (ordem ? [...filtradas].sort(ordem) : filtradas).slice(desde, desde + teto);
     };
     const api: Record<string, unknown> = {
       select: () => consulta(tabela, predicados, ordem),
@@ -73,6 +74,9 @@ function dubleAdmin(
       in: (coluna: string, valores: unknown[]) =>
         consulta(tabela, [...predicados, (l) => valores.includes(l[coluna])], ordem),
       limit: (n: number) => consulta(tabela, predicados, ordem, Math.min(n, 1000)),
+      // Fork MIA (MIA-78): a lista dos contatos pessoais é lida paginada.
+      range: (de: number, ate: number) =>
+        consulta(tabela, predicados, ordem, Math.min(ate - de + 1, 1000), de),
       gt: (coluna: string, valor: string) =>
         consulta(tabela, [...predicados, (l) => String(l[coluna]) > valor], ordem, teto),
       gte: (coluna: string, valor: string) =>
@@ -337,17 +341,21 @@ describe("período e falhas da medição", () => {
     expect(res.status).toBe(500);
     expect((await res.json()).data).toBeUndefined();
   });
-  it("usa os mesmos limites UTC na tabela e série", async () => {
+  // Fork MIA (MIA-78): os 30 dias são os do calendário em Brasília
+  // (`periodoDoPedido`), a mesma janela da aba Uso do cliente e do MCP. Eram os
+  // do calendário UTC. 04/11 às 12h em Brasília: de 06/10 00:00 (03:00Z) a
+  // 05/11 00:00 (03:00Z).
+  it("usa os mesmos limites (dias de Brasília) na tabela e série", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-11-04T15:00:00Z"));
     vi.mocked(createAdminClient).mockReturnValue(
       dubleAdmin({
         organizations: [org(ORG_A, "A")],
         llm_calls: [
-          "2026-10-05T23:59:59Z",
-          "2026-10-06T00:00:00Z",
-          "2026-11-04T23:59:59Z",
-          "2026-11-05T00:00:00Z",
+          "2026-10-06T02:59:59Z",
+          "2026-10-06T03:00:00Z",
+          "2026-11-05T02:59:59Z",
+          "2026-11-05T03:00:00Z",
         ].map((created_at, i) => ({
           id: String(i),
           organization_id: ORG_A,

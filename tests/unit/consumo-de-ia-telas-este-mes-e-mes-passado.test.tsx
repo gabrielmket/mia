@@ -133,7 +133,7 @@ describe("GET /api/v1/admin/usage com mes", () => {
     expect(data.reais).toMatchObject({ total: 11, dias_sem_cotacao: 0 });
   });
 
-  it("sem mes, as janelas de dias seguem como eram, e mes vem null", async () => {
+  it("sem mes, as janelas de dias saem de periodoDoPedido (MIA-78), e mes vem null", async () => {
     const b = banco();
     vi.mocked(createAdminClient).mockReturnValue(b.cliente as never);
 

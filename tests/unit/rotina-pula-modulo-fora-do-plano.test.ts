@@ -67,7 +67,7 @@ let e: Estado;
 function responder(c: CadeiaLivre) {
   if (c.tabela === "cobranca_assinaturas")
     return e.erroNaAssinatura ? { error: { message: "caiu" } } : { data: e.assinatura };
-  if (c.tabela === "organization_modules") return { data: e.aMao };
+  if (c.tabela === "mia_modulos_contratados") return { data: e.aMao };
   if (c.tabela === "broadcasts" && operacaoLivre(c) === "select")
     return {
       data: [

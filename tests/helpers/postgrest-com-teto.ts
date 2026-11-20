@@ -7,7 +7,8 @@
  * e mediria o dublê, não o código. Este aqui:
  *
  *   · corta TODA resposta em `maxRows`, por maior que seja o `limit`/`range`;
- *   · aplica de verdade os filtros (`eq`, `neq`, `is`, `not … is null`, `in`,
+ *   · aplica de verdade os filtros (`eq`, `neq`, `is`, `not … is null`,
+ *     `not … in (…)`, `in`,
  *     `overlaps`, `gte`, `gt`, `lt`, `lte`), a ordem e o `range`;
  *   · devolve o `count` exato só quando o `select` o pede, e `null` senão; com
  *     `head: true` devolve só a contagem, sem linha;
@@ -260,8 +261,15 @@ export function postgrestComTeto(
       neq: (c: string, v: unknown) => filtrar("neq", c, v, (l) => l[c] !== v),
       is: (c: string, v: unknown) => filtrar("is", c, v, (l) => (l[c] ?? null) === v),
       not: (c: string, op: string, v: unknown) => {
+        // FORK MIA (MIA-78): `not … in` com a lista no formato do PostgREST,
+        // `(a,b,c)`. Como no Postgres, linha com a coluna nula não passa
+        // (`NOT (null IN (...))` é nulo).
+        if (op === "in" && typeof v === "string" && /^\(.*\)$/s.test(v)) {
+          const fora = new Set(v.slice(1, -1).split(","));
+          return filtrar("not-in", c, v, (l) => l[c] != null && !fora.has(String(l[c])));
+        }
         if (op !== "is" || v !== null) {
-          throw new Error(`dublê: .not("${c}", "${op}", …) só é suportado como "is null"`);
+          throw new Error(`dublê: .not("${c}", "${op}", …) só é suportado como "is null" e "in (…)"`);
         }
         return filtrar("not-is-null", c, null, (l) => (l[c] ?? null) !== null);
       },

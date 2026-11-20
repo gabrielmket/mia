@@ -295,7 +295,7 @@ export async function avisarModulosQueSaem(
     let avisos = 0;
     for (const c of candidatas) {
       const { data: mao } = await admin
-        .from("organization_modules")
+        .from("mia_modulos_contratados")
         .select("modulo")
         .eq("organization_id", c.organization_id)
         .is("revoked_at", null);

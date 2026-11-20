@@ -97,9 +97,25 @@ if ! existentes="$(psql "$DB" -tAc "select count(*) from information_schema.tabl
   falha "não consegui ler o estado do banco (a conexão caiu?). Nada foi alterado; reimplante."
 fi
 existentes="$(printf '%s' "$existentes" | tr -d '[:space:]')"
+# FORK MIA (fusão v1.118, migration 9163): o que o NOSSO schema precisa fazer
+# ANTES do do upstream. Hoje é um só: a nossa `organization_modules` (0245) sai do
+# caminho da `organization_modules` que a 9416 do upstream cria, com outro
+# formato. Se o `baseline.sql` chegasse primeiro, a 9416 cairia na nossa tabela
+# (comentário em coluna que não existe, `revoke` de `authenticated` e um gatilho
+# que grava `updated_at`, coluna que a nossa não tem). O trecho mora no próprio
+# `baseline-mia.sql`, entre `-- >>> ANTES DO BASELINE DO UPSTREAM` e `-- <<< ...`
+# (sem arquivo novo para montar no contêiner), e roda de novo, no lugar, sem
+# fazer nada. Banco novo não precisa: lá a nossa ainda não existe.
+# Prova: scripts/ensaio-de-banco.sh faz o mesmo antes de cada passada.
+antes_do_upstream() {
+  sed -n '/^-- >>> ANTES DO BASELINE DO UPSTREAM/,/^-- <<< ANTES DO BASELINE DO UPSTREAM/p' "$BASELINE_MIA" \
+    | psql "$DB" -q > /tmp/baseline.log 2>&1 || true
+}
+
 if [ "${existentes:-0}" -gt 0 ]; then
   log "banco já tem ${existentes} tabelas: re-aplicando o schema em modo update"
-  psql "$DB" -q -f "$BASELINE" > /tmp/baseline.log 2>&1 || true
+  antes_do_upstream
+  psql "$DB" -q -f "$BASELINE" >> /tmp/baseline.log 2>&1 || true
   # O da MIA vai para o MESMO log: o contador abaixo tem de ver os erros dos dois
   # arquivos, senão uma migration nossa que falhe fica fora da saúde.
   psql "$DB" -q -f "$BASELINE_MIA" >> /tmp/baseline.log 2>&1 || true
@@ -117,7 +133,8 @@ if [ "${existentes:-0}" -gt 0 ]; then
     log "o schema esbarrou num lock do app ainda no ar (deadlock detected): aplicando de novo, uma vez (é seguro)"
     printf '%s\n' "$inesperados" | head -5
     mv /tmp/baseline.log /tmp/baseline-passada-1.log
-    psql "$DB" -q -f "$BASELINE" > /tmp/baseline.log 2>&1 || true
+    antes_do_upstream
+    psql "$DB" -q -f "$BASELINE" >> /tmp/baseline.log 2>&1 || true
     psql "$DB" -q -f "$BASELINE_MIA" >> /tmp/baseline.log 2>&1 || true
     inesperados="$(grep -iE 'ERROR|FATAL' /tmp/baseline.log | grep -viE "$BENIGNOS" || true)"
   fi

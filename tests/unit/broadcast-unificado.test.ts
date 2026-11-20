@@ -229,7 +229,7 @@ describe("o requireRole trava as Campanhas pelo módulo", () => {
     const banco = preparar(true);
     const r = await requireRole("manager", { requestId: "req", resource: "campaigns" });
     expect(r.ok).toBe(true);
-    expect(banco.consultas).toEqual(QR_EXIGE_O_MODULO ? ["organization_modules"] : []);
+    expect(banco.consultas).toEqual(QR_EXIGE_O_MODULO ? ["mia_modulos_contratados"] : []);
   });
 
   it("recurso fora da lista nem pergunta ao banco — nada muda para o resto do produto", async () => {

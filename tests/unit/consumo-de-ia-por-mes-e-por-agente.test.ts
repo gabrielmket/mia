@@ -152,7 +152,13 @@ describe("o período", () => {
 
   it("dias: 30 por padrão, limitado a 1..180, como a rota já fazia; mes vence dias", () => {
     const agora = new Date("2026-11-18T12:00:00Z");
-    expect(periodoDoPedido({}, agora)).toMatchObject({ tipo: "dias", dias: 30, fim: agora.toISOString() });
+    // MIA-78: os 30 dias do calendário em Brasília terminados hoje (20/10 a 18/11).
+    expect(periodoDoPedido({}, agora)).toMatchObject({
+      tipo: "dias",
+      dias: 30,
+      inicio: "2026-10-20T03:00:00.000Z",
+      fim: "2026-11-19T03:00:00.000Z",
+    });
     expect(periodoDoPedido({ dias: "999" }, agora)?.dias).toBe(180);
     expect(periodoDoPedido({ dias: "0" }, agora)?.dias).toBe(30);
     expect(periodoDoPedido({ dias: "-4" }, agora)?.dias).toBe(1);

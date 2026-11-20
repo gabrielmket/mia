@@ -23,7 +23,7 @@ export async function moduloLiberado(
   modulo: ChaveDeModulo,
 ): Promise<boolean> {
   const { data, error } = await db
-    .from("organization_modules")
+    .from("mia_modulos_contratados")
     .select("id")
     .eq("organization_id", organizationId)
     .eq("modulo", modulo)
@@ -55,7 +55,7 @@ export async function modulosDaOrganizacao(
 ): Promise<Set<string>> {
   try {
     const { data, error } = await db
-      .from("organization_modules")
+      .from("mia_modulos_contratados")
       .select("modulo")
       .eq("organization_id", organizationId)
       .is("revoked_at", null);

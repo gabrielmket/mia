@@ -727,6 +727,16 @@ jobs:
     # (v1.108 a v1.116) trouxe o roteamento do upstream abaixo, mas sem a
     # variável `RUNNER_PROPRIO` a perna continua no `ubuntu-latest` e o tempo não
     # muda: o 60 fica (medição no PR #97).
+    # FORK MIA (MIA-71): a perna deixou de ser UMA passada por major. MEDIDO em
+    # 18/11/2026 (jobs de 7 rodadas do ci.yml, todas verdes): 51 a 57 min por
+    # perna no pg15 e no pg17, e o passo `update.sh sobre banco COM DADOS` leva
+    # só 0,2 a 0,4 min — o peso inteiro é o `vitest` do `test:db` (725 arquivos
+    # em série, um banco por arquivo, ~49 a 54 min), então separar as duas
+    # passadas não ganharia nada. A matriz agora é major × FATIA: `--shard=N/3`
+    # do vitest, cada fatia sobe o próprio Postgres e roda um terço dos arquivos
+    # (simulado sobre o tempo por arquivo do log do pg17: 22,4 · 16,6 · 15,2 min,
+    # mais ~1,5 de subida). O teto continua 60 até a medição do PR dizer outra
+    # coisa; o número novo, se vier, é decidido sobre a distribuição das fatias.
     # RUNNERS PRÓPRIOS (VPS `deskcomm-vps`, aprovados pelo dono em 12/11/2026).
     # Por quê: a fila do Actions (teto de jobs simultâneos) segura esta matriz,
     # que é a perna mais longa do CI. Dois runners numa VPS dedicada
@@ -752,7 +762,7 @@ jobs:
     runs-on: ${{ vars.RUNNER_PROPRIO == 'ligado' && !endsWith(github.actor, '[bot]') && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","deskcomm-vps"]') || 'ubuntu-latest' }}
     needs: [invariants-alcance]
     concurrency:
-      group: ${{ github.workflow }}-invariants-majors-pg${{ matrix.pg }}-${{ github.event.pull_request.number || github.ref }}${{ github.event_name == 'pull_request' && github.run_attempt != '1' && format('-reentrada-{0}', github.event.pull_request.head.sha) || '' }}${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt != '1' && format('-reentrada-{0}', github.sha) || '' }}
+      group: ${{ github.workflow }}-invariants-majors-pg${{ matrix.pg }}-fatia${{ matrix.fatia }}-${{ github.event.pull_request.number || github.ref }}${{ github.event_name == 'pull_request' && github.run_attempt != '1' && format('-reentrada-{0}', github.event.pull_request.head.sha) || '' }}${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt != '1' && format('-reentrada-{0}', github.sha) || '' }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     strategy:
       # `false` e não o padrão (`true`): com `fail-fast`, a primeira major que
@@ -764,6 +774,15 @@ jobs:
         # A lista vem do `invariants-alcance`: ["15","17"] sempre que o PR
         # alcança o piso, e fora de pull_request; ["17"] no PR que não alcança.
         pg: ${{ fromJSON(needs.invariants-alcance.outputs.majors) }}
+        # As FATIAS do `test:db` (MIA-71): `vitest --shard=N/3`, que corta os
+        # 725 arquivos por hash do caminho, sem olhar para o tempo de cada um.
+        # Sem a fatia no `concurrency:` acima as três pernas da mesma major
+        # caíam no MESMO grupo e o `cancel-in-progress` cancelaria duas.
+        # Todas as fatias de todas as majors têm de passar: o agregado
+        # `invariants` lê o resultado da matriz inteira. Mudar o 3 aqui exige
+        # mudar o `--shard=N/3` do passo abaixo — quem guarda é
+        # tests/unit/invariants-majors-em-fatias.test.ts.
+        fatia: [1, 2, 3]
     env:
       # Uma variável, os dois scripts: `scripts/test-db.sh` e
       # `scripts/test-update-com-dados.sh` leem esta para escolher a imagem.
@@ -794,7 +813,7 @@ jobs:
         # aceita `timeout-minutes`. Razão e medições: o cabeçalho da action.
         timeout-minutes: 5
 
-      - name: RLS isolation + governance invariants (pg${{ matrix.pg }})
+      - name: RLS isolation + governance invariants (pg${{ matrix.pg }}, fatia ${{ matrix.fatia }}/3)
         # O token é só para `gh release view`: o test:db confere o update.sh da
         # última release publicada (issue #1909), e a API anônima tem teto de 60
         # consultas/hora por IP — o executor próprio é um IP só.
@@ -812,7 +831,7 @@ jobs:
           rel="$(gh release view -R "$UPSTREAM_REPO" --json tagName -q .tagName)"
           git fetch -q --no-tags --depth=1 "https://github.com/${UPSTREAM_REPO}.git" \
             "+refs/tags/${rel}:refs/tags/${rel}" "+refs/tags/v1.63.0:refs/tags/v1.63.0"
-          CONFERENCIA_KIT_RELEASE="$rel" pnpm test:db
+          CONFERENCIA_KIT_RELEASE="$rel" pnpm test:db --shard=${{ matrix.fatia }}/3
 
       # O `update.sh` do cliente roda sobre um banco COM DADOS, e nenhum gate
       # exercitava isso: `test:db` aplica o baseline num banco VAZIO, então
@@ -820,7 +839,11 @@ jobs:
       # que o cabeçalho de scripts/test-update-com-dados.sh mede). O script
       # existia desde 2026-08-27 e NENHUM workflow o chamava (issue #454): aqui
       # ele passa a ser gate, nas duas majors, pela mesma variável de imagem.
+      # MIA-71: roda na fatia 1 de cada major, uma vez por major — ele não
+      # depende de fatia (semeia o próprio banco) e custa 0,2 a 0,4 min, então
+      # repeti-lo nas três só gastaria três subidas de Postgres.
       - name: update.sh sobre banco COM DADOS (pg${{ matrix.pg }})
+        if: matrix.fatia == 1
         run: pnpm test:db:update
 
       # No runner próprio o que sobra fica no disco e na RAM para o próximo job.
@@ -842,7 +865,7 @@ jobs:
   # (a lista dos cinco — `verify, build-and-size, invariants, e2e, imagens-ok` —
   # está na triagem do CI; token de fork não lê branch protection pela API, e por
   # isso ela é citada, não remedida aqui). Job de matrix se
-  # chama `invariants-majors (15)` e `invariants-majors (17)`: se a matriz
+  # chama `invariants-majors (15, 1)` … `invariants-majors (17, 3)`: se a matriz
   # tivesse ficado com o nome `invariants`, a proteção passaria a esperar para
   # sempre um check que nenhum run produz, e NENHUM PR mergearia.
   invariants:
