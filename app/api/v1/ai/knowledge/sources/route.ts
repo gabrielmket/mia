@@ -8,20 +8,24 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * escolha da versão publicada de cada assistente
  * (`ai_agent_versions.knowledge_source_ids`).
  *
- * Auth: sessão por cookie, papel >= manager para escrever.
- * `organization_id` SEMPRE sai da sessão autenticada — nunca do corpo.
+ * Auth: sessão por cookie OU token de servidor (`resolveAuthDual`), papel >= manager
+ * para escrever. `organization_id` SEMPRE sai da sessão autenticada ou da linha do
+ * token — nunca do corpo.
  */
 
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, fail } from "@/lib/api/wrappers";
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { audit } from "@/lib/audit";
 import { loadAuthUser } from "@/lib/auth/server";
-import { orgAtivaDaApi, requireRole } from "@/lib/auth/require-role";
+import { orgAtivaDaApi } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { criarMaterial } from "@/lib/ai/rag/criar-material";
+import { extractBearer } from "@/lib/mcp/auth";
+import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -64,25 +68,47 @@ const SELECT_COLUNAS =
 // GET
 // ---------------------------------------------------------------------------
 
-export async function GET(_req: NextRequest): Promise<Response> {
+export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
 
-  const authUser = await loadAuthUser();
-  if (!authUser) {
-    return fail("unauthenticated", "Auth required.", 401, { requestId });
-  }
-  const ativa = await orgAtivaDaApi(authUser, requestId);
-  if (!ativa.ok) return ativa.response;
-  const activeOrg = ativa.org;
-  if (!activeOrg) {
-    return fail("forbidden", "Nenhuma organização ativa.", 403, { requestId });
+  const bearer = extractBearer(req.headers.get("authorization"));
+  let supabase: Awaited<ReturnType<typeof createClient>>;
+  let organizationId: string;
+
+  if (bearer) {
+    // Token de servidor: config:read + papel admin (tokenRole).
+    const authz = await resolveAuthDual(req, {
+      requestId,
+      resource: "ai_knowledge",
+      role: "viewer",
+      scope: "config:read",
+      tokenRole: "admin",
+    });
+    if (!authz.ok) return authz.response;
+    const teto = await tetoDeEscritaDoToken(authz, "ai_knowledge", requestId);
+    if (teto) return teto;
+    supabase = authz.supabase;
+    organizationId = authz.organizationId;
+  } else {
+    // Sessão de navegador: caminho antigo, byte a byte igual ao de hoje.
+    const authUser = await loadAuthUser();
+    if (!authUser) {
+      return fail("unauthenticated", "Auth required.", 401, { requestId });
+    }
+    const ativa = await orgAtivaDaApi(authUser, requestId);
+    if (!ativa.ok) return ativa.response;
+    const activeOrg = ativa.org;
+    if (!activeOrg) {
+      return fail("forbidden", "Nenhuma organização ativa.", 403, { requestId });
+    }
+    supabase = await createClient();
+    organizationId = activeOrg.orgId;
   }
 
-  const supabase = await createClient();
   const { data, error } = await supabase
     .from("ai_knowledge_sources")
     .select(SELECT_COLUNAS)
-    .eq("organization_id", activeOrg.orgId)
+    .eq("organization_id", organizationId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -105,10 +131,17 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const requestId = randomUUID();
 
-  const authz = await requireRole("manager", { requestId, resource: "ai_knowledge" });
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "ai_knowledge",
+    role: "manager",
+    scope: "config:write",
+    tokenRole: "admin",
+  });
   if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const { org: activeOrg } = authz;
+  const teto = await tetoDeEscritaDoToken(authz, "ai_knowledge", requestId);
+  if (teto) return teto;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? IDIOMA_PADRAO);
 
   let rawBody: unknown;
   try {
@@ -125,11 +158,12 @@ export async function POST(req: NextRequest): Promise<Response> {
     });
   }
 
-  // FORK MIA: a criação (tipo, conteúdo, arquivo do texto colado, itens, evento
-  // de indexação) mora em `lib/ai/rag/criar-material.ts`, compartilhada com o
-  // MCP de plataforma. Aqui só há transporte e a tradução da frase.
+  // FORK MIA: a criação (tipo, conteúdo, caminho do arquivo, texto colado, itens,
+  // evento de indexação) mora em `lib/ai/rag/criar-material.ts`, compartilhada
+  // com o MCP de plataforma. Aqui só há transporte e a tradução da frase. Desde a
+  // v1.121 a rota aceita token: a organização sai de `authz`, nunca do corpo.
   const criado = await criarMaterial(
-    { admin: createAdminClient(), leitura: await createClient(), organizationId: activeOrg.orgId },
+    { admin: createAdminClient(), leitura: authz.supabase, organizationId: authz.organizationId },
     parsed.data,
   );
   if (!criado.ok) return fail(criado.code, t(criado.message), criado.status, { requestId });
@@ -139,8 +173,9 @@ export async function POST(req: NextRequest): Promise<Response> {
   // LGPD não a alcança).
   void audit({
     action: "ai.knowledge_source_created",
-    actorUserId: authz.user.id,
-    organizationId: activeOrg.orgId,
+    actorUserId: authz.actor.type === "user" ? authz.actor.id : null,
+    actorApiTokenId: authz.apiTokenId ?? null,
+    organizationId: authz.organizationId,
     resourceType: "ai_knowledge_source",
     resourceId: criado.id,
     requestId,

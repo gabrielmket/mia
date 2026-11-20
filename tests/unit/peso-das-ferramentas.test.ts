@@ -38,6 +38,8 @@ import { allTools } from "@/lib/mcp/tools";
 const BASE = "linha de base, medida quando a cerca nasceu (2026-10-31)";
 /** Módulo opcional `amigo` (#4227): só entram no catálogo com o módulo instalado. */
 const AMIGO = "módulo amigo, fora do catálogo de quem não instalou";
+/** Editar os assistentes de IA pelo ChatGPT: só admin, nunca montadas no turno do agente. */
+const EDITAR_ASSISTENTES = "editar assistentes (só admin, por aplicativo conectado); nunca montada no turno do agente";
 
 const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
   "crm_list_event_types": { tokens: 204, motivo: BASE },
@@ -80,6 +82,16 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
   "crm_list_improvement_proposals": { tokens: 85, motivo: BASE },
   "crm_get_org_memory": { tokens: 114, motivo: BASE },
   "crm_save_org_memory": { tokens: 285, motivo: BASE },
+  // Editar os assistentes de IA (só admin, por um aplicativo conectado como o
+  // ChatGPT). Pesam aqui porque a cerca mede `allTools` inteira; no turno do
+  // agente nenhuma é montada (`apenasHumano`, `lib/ai/runtime/tools.ts`).
+  "crm_list_ai_agents": { tokens: 115, motivo: EDITAR_ASSISTENTES },
+  "crm_get_ai_agent_version": { tokens: 294, motivo: EDITAR_ASSISTENTES },
+  "crm_get_ai_agent_turn": { tokens: 265, motivo: EDITAR_ASSISTENTES },
+  "crm_save_ai_agent_draft": { tokens: 1015, motivo: "editar assistentes: +478 com `configuracoes` (modelo, voz, ferramentas, passar para pessoa, dividir, imagens); nunca montada no turno do agente" },
+  "crm_test_ai_agent_version": { tokens: 406, motivo: EDITAR_ASSISTENTES },
+  "crm_publish_ai_agent_version": { tokens: 264, motivo: EDITAR_ASSISTENTES },
+  "crm_rollback_ai_agent": { tokens: 235, motivo: EDITAR_ASSISTENTES },
   "crm_list_contact_orders": { tokens: 234, motivo: BASE },
   "crm_search_products": { tokens: 362, motivo: BASE },
   "crm_get_honorarios_contrato": { tokens: 253, motivo: BASE },
@@ -236,7 +248,13 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
 // mediu 40730 = 40675 + 55 (2026-11-18, main de `9da6943cc2`).
 // Na fusão da v1.119: 42758 = 42703 + 55 (`crm_list_pipelines`, #4667).
 // Na fusão da v1.120: 45314 = 43286 + 2028 (a diferença do fork, 42758 - 40730).
-const TETO_TOTAL = 45314;
+// +2594 com as 7 ferramentas de editar os assistentes de IA (#4805; só admin, pelo
+// ChatGPT; nenhuma vai para o turno do agente): 2116 das ferramentas e 478 de
+// `configuracoes` no rascunho. MEDIDO no merge com a main de 20/11 (`4c7f1f2fd9`):
+// 45880 = 43286 + 2594 (2026-11-20), não somado à mão.
+// FORK MIA, na fusão da v1.121: 47908 = 45880 + 2028 (a diferença do fork,
+// 45314 - 43286, com as 7 ferramentas de editar assistentes do upstream acima).
+const TETO_TOTAL = 47908;
 
 const VARIANTE = "schedule_followup (com negócio)";
 

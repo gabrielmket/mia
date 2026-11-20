@@ -47,6 +47,12 @@ export interface DepsDeFunil {
   /** Quem está agindo. NUNCA sai do input: é resolvido de fonte confiável pelo chamador. */
   actor: Actor;
   requestId: string;
+  /**
+   * Id da linha do token (`api_tokens.id`) quando a rota entrou por token
+   * (`resolveAuthDual`, desde a v1.121 do upstream). Vai para o
+   * `actor_api_token_id` do audit, como na rota dele. Ausente = sessão ou MCP.
+   */
+  apiTokenId?: string | null;
 }
 
 /** `position` entra: a reordenação calcula em cima dela. As mesmas colunas de `_funis.ts`. */
@@ -213,6 +219,7 @@ export async function criarFunil(
   void audit({
     action: "pipeline.created",
     actorUserId: autorDoAudit(deps.actor),
+    actorApiTokenId: deps.apiTokenId ?? null,
     organizationId: orgId,
     resourceType: "crm_pipeline",
     resourceId: pipelineId,
@@ -429,6 +436,7 @@ export async function atualizarFunil(
       // e `pipeline.updated` esconderia isso entre os renames.
       action: tiraDoArquivo ? "pipeline.unarchived" : "pipeline.updated",
       actorUserId: autorDoAudit(deps.actor),
+      actorApiTokenId: deps.apiTokenId ?? null,
       organizationId: orgId,
       resourceType: "crm_pipeline",
       resourceId: pipelineId,
