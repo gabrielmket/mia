@@ -220,6 +220,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/actions/settings/atualizarInterfaceDaEmpresa.ts", espelho: "lib/implantacao/tela-inicial.ts", impressao: "c5a12aee436db207" },
   // FORK MIA (upstream 1.118, #4864, MIA-79): a tela inicial da pessoa. O espelho segue o vínculo ativo e aceito, o cache da pessoa e a trilha.
   { rota: "app/api/v1/team/[user_id]/interface/route.ts", espelho: "lib/implantacao/tela-inicial.ts", impressao: "610a3c9ac737957b" },
+  // FORK MIA (MIA-103): a Análise do funil, uma LEITURA. O espelho faz as mesmas seis leituras da janela (paginadas, com o filtro da organização), lê as duas grafias de `stage_changed` e monta com as mesmas funções (montarRelatorioDeFunil, separarValoresDoPeriodo, a contra-métrica de fn_atrito_metrics). A paridade dos números é medida em tests/unit/mcp-de-implantacao-analise-e-conversas.test.ts, contra a rota.
+  { rota: "app/api/v1/metrics/funil/route.ts", espelho: "lib/implantacao/analise-do-funil.ts", impressao: "bec9834ee04322cb" },
 ];
 
 describe("a regra copiada: gatilhos de follow-up que têm motor", () => {
