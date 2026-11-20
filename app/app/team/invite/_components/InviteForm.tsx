@@ -79,7 +79,7 @@ export function InviteForm() {
     <div className="grid gap-6 md:grid-cols-[1fr,2fr]">
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="emails">Emails</Label>
+          <Label htmlFor="emails">{t("E-mails")}</Label>
           <Textarea
             id="emails"
             // FORK MIA (.93): marcador do "Me mostra como" (lib/assistente/trilhas/catalogo.ts).

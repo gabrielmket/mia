@@ -33,6 +33,9 @@
  * atendente de destino padrão e os responsáveis, pela função do fork da 9045.
  * Mora em `./distribuicao-do-numero.ts`, que explica o espelho.
  *
+ * Upstream 1.119 (9430, MIA-96) — o FUNIL DE ENTRADA do número: onde a conversa
+ * nova dele vira negócio. Mora em `./funil-de-entrada.ts`, que explica o espelho.
+ *
  * .85 — a JANELA DE RESPOSTA do número (`resposta_start_hour`/`resposta_end_hour`,
  * 0495), pela régua de `PUT /api/v1/ai/pacing`: é o ajuste que o horário da IA
  * pede quando a deixa ativa fora dela. Só a resposta: a janela de disparo, o
@@ -68,6 +71,7 @@ import {
   type DistribuicaoDoNumero,
   type DistribuicaoPedida,
 } from "./distribuicao-do-numero";
+import { definirFunilDeEntrada, type FunilDeEntradaLido, type FunilDeEntradaPedido } from "./funil-de-entrada";
 
 /** Todos os dias: o padrão da coluna (0642) para a conexão que nunca escolheu. */
 export const TODOS_OS_DIAS = [0, 1, 2, 3, 4, 5, 6] as const;
@@ -120,6 +124,12 @@ export interface PedidoDeCanal {
    * prospecção não mudam.
    */
   janela_de_resposta?: { inicio_hora: number; fim_hora: number } | null;
+  /**
+   * Upstream 1.119 (9430): o funil e a etapa onde a conversa nova DESTE número
+   * vira negócio. `funil: null` volta ao funil padrão da organização. Ver
+   * `./funil-de-entrada.ts`.
+   */
+  funil_de_entrada?: FunilDeEntradaPedido;
 }
 
 export interface AgendaDePausaLida {
@@ -246,6 +256,7 @@ export interface CanalConfigurado {
   nome_interno?: { nome: string; desfecho: "atualizou" | "ja_estava" };
   distribuicao?: DistribuicaoDoNumero & { desfecho: Desfecho };
   janela_de_resposta?: { inicio_hora: number; fim_hora: number; propria: boolean; desfecho: "atualizou" | "ja_estava"; turnos_reprogramados?: number | null };
+  funil_de_entrada?: FunilDeEntradaLido & { desfecho: "atualizou" | "ja_estava" };
   avisos: string[];
 }
 
@@ -268,6 +279,7 @@ export async function configurarCanal(
     pedido.nome_interno !== undefined ||
     pedido.distribuicao !== undefined ||
     pedido.janela_de_resposta !== undefined ||
+    pedido.funil_de_entrada !== undefined ||
     (pedido.pausa_agendada !== undefined && pedido.pausa_agendada.todos_os_numeros !== true);
   if (precisaDoCanal && !pedido.canal) {
     throw new Recusa(
@@ -621,6 +633,22 @@ export async function configurarCanal(
     const feita = await configurarDistribuicaoDoNumero(c, tokenId, canal, pedido.distribuicao, avisos);
     mudancas.push(...feita.mudancas);
     r.distribuicao = { ...feita.distribuicao, desfecho: feita.desfecho };
+  }
+
+  // ── o funil de entrada: o caminho de `PATCH /api/v1/channel-sessions/[id]/entrada` (upstream 1.119) ──
+  if (pedido.funil_de_entrada !== undefined && canal) {
+    const feito = await definirFunilDeEntrada(c, canal, pedido.funil_de_entrada);
+    r.funil_de_entrada = feito;
+    if (feito.desfecho === "atualizou") {
+      mudancas.push("funil de entrada");
+      avisos.push(
+        feito.funil
+          ? `A conversa NOVA deste número passa a virar negócio no funil «${feito.funil.nome}»${feito.etapa ? `, na etapa «${feito.etapa.nome}»` : ", na etapa de entrada dele"}. ` +
+              "Os negócios que já existem não mudam de funil. A campanha com funil próprio e quem já é cliente continuam na regra deles. " +
+              "Funil arquivado volta sozinho ao funil padrão; etapa arquivada (ou que virou ganho/perda), à etapa de entrada do funil."
+          : "A conversa NOVA deste número volta a virar negócio no funil padrão da organização. Os negócios que já existem não mudam.",
+      );
+    }
   }
 
   r.desfecho = mudancas.length > 0 ? "atualizou" : "ja_estava";

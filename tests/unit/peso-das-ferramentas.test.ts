@@ -73,7 +73,7 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
     motivo:
       "#4544: precisa dizer que imagem/binário NÃO é transcrito (senão o agente trata resposta vazia como documento sem dados) e que o teto é por chamada",
   },
-  "crm_list_pipelines": { tokens: 63, motivo: BASE },
+  "crm_list_pipelines": { tokens: 118, motivo: "#4667: a descrição passou a dizer que a lista traz os CAMPOS do funil (key/label/type/escopo/options[].value) e que em `custom_fields` se usa a key daí; sem isso o agente inventava a chave" },
   "crm_get_pipeline_forecast": { tokens: 281, motivo: "#4322: a descrição passou a dizer que `truncado: true` marca valores parciais quando o funil passa do teto de leitura; sem isso o agente apresenta um recorte como o total" },
   "crm_search_knowledge": { tokens: 250, motivo: BASE },
   "crm_list_knowledge_sources": { tokens: 86, motivo: BASE },
@@ -225,7 +225,11 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
 // na CI do PR #97 e no contêiner: 42237 (1 token de junção entre os dois lados).
 // Na fusão da v1.117: 42554 = 42237 + 317 (`crm_count_leads`).
 // Na fusão da v1.118: 42703 = 42554 + 149 (`crm_update_lead`, #4666).
-const TETO_TOTAL = 42703;
+// +55 na descrição de `crm_list_pipelines`, que passou a dizer que a lista traz
+// os CAMPOS do funil (#4667), delta medido naquela entrada (63 → 118). O upstream
+// mediu 40730 = 40675 + 55 (2026-11-18, main de `9da6943cc2`).
+// Na fusão da v1.119: 42758 = 42703 + 55 (`crm_list_pipelines`, #4667).
+const TETO_TOTAL = 42758;
 
 const VARIANTE = "schedule_followup (com negócio)";
 

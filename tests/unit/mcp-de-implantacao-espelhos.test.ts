@@ -67,7 +67,7 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/api/v1/products/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "dfbb2e937a921dab" },
   // Relido na fusão da 1.107: o DELETE apaga também o áudio da apresentação do produto no bucket. O espelho não apaga produto: nada a levar.
   // Relido na fusão da 1.116: o PATCH recusa `capacidade` com a capacidade do produto desligada. O espelho não grava `capacidade`: nada a levar.
-  { rota: "app/api/v1/products/[id]/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "6ce8cc63713c7551" },
+  { rota: "app/api/v1/products/[id]/route.ts", espelho: "lib/implantacao/produtos.ts", impressao: "4177b16a042de11d" },
   // Automações.
   // Relido na .76 (upstream 1.78): a fonte de formulário de `trigger_config.webhook_source_id` tem de ser da empresa. O espelho confere (conferirConfiguracaoDoGatilho), com a frase da rota; e também o funil e a etapa dos gatilhos de tempo.
   // Relido na .84 (upstream 1.86, #2791): o POST recusa o gatilho por data num campo do CONTATO (campoDoGatilhoDeDataEhDoContato, MENSAGEM_CAMPO_DE_DATA_DO_CONTATO). O espelho recusa com a mesma frase (recusarDataDoContato), ao criar e ao reescrever.
@@ -220,6 +220,12 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/actions/settings/atualizarInterfaceDaEmpresa.ts", espelho: "lib/implantacao/tela-inicial.ts", impressao: "c5a12aee436db207" },
   // FORK MIA (upstream 1.118, #4864, MIA-79): a tela inicial da pessoa. O espelho segue o vínculo ativo e aceito, o cache da pessoa e a trilha.
   { rota: "app/api/v1/team/[user_id]/interface/route.ts", espelho: "lib/implantacao/tela-inicial.ts", impressao: "610a3c9ac737957b" },
+  // FORK MIA (upstream 1.119, 9430, MIA-96): o funil de entrada do número. O espelho segue as três conferências (funil vivo da organização, etapa aberta do funil, etapa nula sem funil), o "igual não grava" e a trilha `channel.entry_pipeline_changed`.
+  { rota: "app/api/v1/channel-sessions/[id]/entrada/route.ts", espelho: "lib/implantacao/funil-de-entrada.ts", impressao: "83f261ea9de0da84" },
+  // FORK MIA (upstream 1.119, MIA-96): a Operação do dia. O espelho (configurarAtendimento) usa `configuracaoSchema.strict()`, `lerConfiguracao` e a mescla da rota (etiquetas e relatório chave a chave, a lista de etapas substituída), com a mesma trilha.
+  { rota: "app/api/v1/operacao/configuracao/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "085a1a488b925c3a" },
+  // FORK MIA (upstream 1.119, MIA-96): o primeiro nome do cliente no aviso de transferência. O espelho (configurarAtendimento) mescla `settings.crm` como a ação e grava a mesma trilha.
+  { rota: "app/actions/settings/definirNomeNaTransferencia.ts", espelho: "lib/implantacao/empresa.ts", impressao: "c9d2f4cc9d9b7102" },
 ];
 
 describe("a regra copiada: gatilhos de follow-up que têm motor", () => {

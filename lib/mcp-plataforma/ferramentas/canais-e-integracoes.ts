@@ -41,8 +41,9 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
       "com `ajustar_pausa_agendada` para corrigir os horários de uma que ainda não começou e `cancelar_pausa_agendada` para desmarcar, " +
       "a `janela_de_resposta` (as horas em que o número RESPONDE a quem escreveu, 0 a 24; o padrão é 7h às 22h, para proteger o número de bloqueio: o que o agente escreve fora dela sai na abertura; " +
       "é o ajuste que plataforma_ver_agentes aponta quando o horário de atendimento da IA cai fora dela; disparo em massa, retomada e prospecção NÃO mudam) " +
-      "e a `distribuicao` do número (as regras de atendimento POR NÚMERO): quem pode receber as conversas dele (`responsaveis`), o jeito de distribuir só deste número (`modo`: " +
-      "\"manual\", \"round_robin\" ou \"load\"; null segue a organização) e o `atendente_padrao`, que recebe DIRETO todo cliente novo do número. " +
+      "a `distribuicao` do número (as regras de atendimento POR NÚMERO): quem pode receber as conversas dele (`responsaveis`), o jeito de distribuir só deste número (`modo`: " +
+      "\"manual\", \"round_robin\" ou \"load\"; null segue a organização) e o `atendente_padrao`, que recebe DIRETO todo cliente novo do número, " +
+      "e o `funil_de_entrada` (o funil e a etapa onde a conversa NOVA deste número vira negócio; sem escolha, o funil padrão da organização). " +
       "Só o que VEIO muda; o que veio igual responde `ja_estava`, e a pausa igual a uma já marcada não é marcada de novo. " +
       "A hora da pausa pode vir sem fuso (\"2026-10-20T23:00\", na hora da empresa) ou com ele. " +
       "ATENÇÃO: desligar `guardar_historico` num número que já guarda pode apagar o que o canal guardou, e por isso pede `confirmo_apagar_historico_guardado: true`. " +
@@ -160,6 +161,31 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
           "As horas em que o número RESPONDE a quem escreveu. { inicio_hora: 0, fim_hora: 24 } = responde a qualquer hora (a IA ativa de madrugada responde na hora). " +
             "null = volta a seguir a janela de disparo do número. Disparo em massa, retomada e prospecção não mudam. Vale na hora.",
         ),
+      // Upstream 1.119 (9430, MIA-96): o funil de entrada por número.
+      funil_de_entrada: z
+        .object({
+          funil: z
+            .string()
+            .trim()
+            .min(1)
+            .max(200)
+            .nullable()
+            .describe("Nome ou id do funil (de plataforma_ver_funis; arquivado não serve). null = volta ao funil padrão da organização."),
+          etapa: z
+            .string()
+            .trim()
+            .min(1)
+            .max(200)
+            .nullable()
+            .optional()
+            .describe("Nome ou id de uma etapa ABERTA desse funil (nem ganho nem perdido). Ausente ou null = a etapa de entrada do próprio funil."),
+        })
+        .strict()
+        .optional()
+        .describe(
+          "ONDE NASCE O NEGÓCIO de quem escreve para ESTE número pela primeira vez (Conexões › o número › Funil de entrada): ex.: o número do atacado põe gente no funil do atacado. " +
+            "Vale para o card NOVO; os negócios que já existem não mudam. A campanha com funil próprio e quem já é cliente seguem a regra deles. Não manda mensagem a ninguém.",
+        ),
     },
     exemplo: {
       organization_id: ORG_DE_EXEMPLO,
@@ -180,10 +206,11 @@ export const FERRAMENTAS_DE_CANAIS_E_INTEGRACOES: readonly FerramentaDePlataform
         p.ajustar_pausa_agendada === undefined &&
         p.nome_interno === undefined &&
         p.distribuicao === undefined &&
-        p.janela_de_resposta === undefined
+        p.janela_de_resposta === undefined &&
+        p.funil_de_entrada === undefined
       ) {
         recusar(
-          "Informe ao menos um ajuste: `dias_da_prospeccao`, `guardar_historico`, `pausa_agendada`, `ajustar_pausa_agendada`, `cancelar_pausa_agendada`, `nome_interno`, `distribuicao` ou `janela_de_resposta`. " +
+          "Informe ao menos um ajuste: `dias_da_prospeccao`, `guardar_historico`, `pausa_agendada`, `ajustar_pausa_agendada`, `cancelar_pausa_agendada`, `nome_interno`, `distribuicao`, `janela_de_resposta` ou `funil_de_entrada`. " +
             'Ex.: { "canal": "Recepção", "dias_da_prospeccao": [1, 2, 3, 4, 5] }',
         );
       }
