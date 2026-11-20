@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient();
   const { data, error } = await admin
-    .from("organization_modules")
+    .from("mia_modulos_contratados")
     .select("id, modulo, granted_at, revoked_at, note")
     .eq("organization_id", orgId)
     .is("revoked_at", null);
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
   // Re-liberar depois de cancelar é caso normal (voltou a contratar), e o
   // índice único só vale para linha viva — então basta inserir de novo.
   const { data, error } = await admin
-    .from("organization_modules")
+    .from("mia_modulos_contratados")
     .insert({
       organization_id: parsed.data.organization_id,
       modulo: parsed.data.modulo,
@@ -170,7 +170,7 @@ export async function DELETE(req: NextRequest) {
 
   const admin = createAdminClient();
   const { error } = await admin
-    .from("organization_modules")
+    .from("mia_modulos_contratados")
     .update({ revoked_at: new Date().toISOString(), revoked_by: ctx.user.id })
     .eq("organization_id", orgId)
     .eq("modulo", modulo)

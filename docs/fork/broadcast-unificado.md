@@ -76,7 +76,7 @@ o remédio pior que a doença, e é a mesma regra que o `broadcast-worker` já s
   muda toda semana. A unificação é de tela.
 - **As telas de `/app/campaigns/*` por dentro.** O formulário e o detalhe do QR
   são os do upstream, sem uma linha nossa: melhoria dele entra de graça.
-- **A chave do módulo.** Continua `disparador` (gravada em `organization_modules`).
+- **A chave do módulo.** Continua `disparador` (gravada em `mia_modulos_contratados`).
 - **A carteira** continua em Configurações › Créditos, só para o disparo oficial.
 
 ## Onde mora a diferença do fork

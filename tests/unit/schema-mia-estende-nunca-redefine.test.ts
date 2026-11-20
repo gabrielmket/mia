@@ -65,6 +65,11 @@ const TIPOS = {
   gatilho: /create\s+(?:or\s+replace\s+)?(?:constraint\s+)?trigger\s+("?[a-z0-9_]+"?)/gi,
   view: /create\s+(?:or\s+replace\s+)?(?:materialized\s+)?view\s+((?:"?public"?\.)?"?[a-z0-9_]+"?)/gi,
   constraint: /add\s+constraint\s+("?[a-z0-9_]+"?)/gi,
+  // Tabela com o mesmo nome: os dois lados escrevem `create table if not exists`,
+  // quem chega primeiro fica com o nome e o outro é pulado sem erro. Foi a
+  // `organization_modules` da v1.118 (9416 dele, 0245 nossa, formatos
+  // diferentes), que a 9163 renomeou para `mia_modulos_contratados` (MIA-73).
+  tabela: /create\s+(?:unlogged\s+)?table\s+(?:if\s+not\s+exists\s+)?((?:"?public"?\.)?"?[a-z0-9_]+"?)(?=\s*\()/gi,
 } as const;
 
 /**
@@ -114,6 +119,13 @@ describe("o schema da MIA estende o do upstream, nunca o redefine", () => {
     const doUpstream = nomesDe(BASELINE_UPSTREAM, TIPOS["função"]);
     const achados = [...nomesDe(sabotado, TIPOS["função"])].filter((n) => doUpstream.has(n));
     expect(achados).toContain("fn_lgpd_cascade_redact_contact");
+  });
+
+  it("o instrumento enxerga tabela com o nome de uma do upstream (controle negativo)", () => {
+    const sabotado = BASELINE_MIA + "\ncreate table if not exists public.organizations (id uuid);\n";
+    const doUpstream = nomesDe(BASELINE_UPSTREAM, TIPOS.tabela);
+    const achados = [...nomesDe(sabotado, TIPOS.tabela)].filter((n) => doUpstream.has(n));
+    expect(achados).toContain("organizations");
   });
 });
 

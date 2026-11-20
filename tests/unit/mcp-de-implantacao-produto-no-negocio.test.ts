@@ -55,9 +55,9 @@ beforeEach(() => {
 });
 
 describe("as duas do produto no negócio", () => {
-  it("estão na lista, e a lista tem 119 (115 da .108 + as duas da .109 + a da lista de espera, MIA-18 + a do consumo de IA, MIA-44)", () => {
+  it("estão na lista, e a lista tem 124 (115 da .108 + as duas da .109 + a da lista de espera, MIA-18 + a do consumo de IA, MIA-44 + as três da 1.117, MIA-67 + as duas da 1.118, MIA-79)", () => {
     for (const n of NOMES) expect(FERRAMENTA_POR_NOME.has(n), n).toBe(true);
-    expect(FERRAMENTAS).toHaveLength(119);
+    expect(FERRAMENTAS).toHaveLength(124);
   });
 
   it("as duas são montagem (implantar_configuracao) e o exemplo de cada uma vale no próprio schema", () => {

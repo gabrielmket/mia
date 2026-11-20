@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **119** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda e a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md)): as 111 desta página e as 8 da migração
+São **124** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda, a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md), a MIA-67 as três da 1.117: contar os negócios e ver e revogar as conexões do MCP da empresa, e a MIA-79 as duas da 1.118: o módulo opcional por empresa e a tela inicial): as 116 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -234,17 +234,17 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | ferramenta | o que devolve | reexecução |
 |---|---|---|
 | `plataforma_listar_clientes` | as organizações da instalação, com busca por nome; desde a .96, `situacao_do_pagamento: "aguardando_primeiro_pagamento"` traz só quem espera o primeiro pagamento, com a forma escolhida, a situação e desde quando | leitura |
-| `plataforma_ver_cliente` | o retrato de um cliente: módulos, números, saldo e, em `configuracao`, a limpeza automática de mídia, o freio do passo "a IA decide", o bloqueio de afirmação clínica e quantos planos de tarefa existem; desde a .96, em `pagamento_inicial`, o passo "Pagamento" do início; desde a MIA-48, em `aviso_da_queda`, a chave do aviso da queda do número e os últimos avisos de queda e de volta | leitura |
+| `plataforma_ver_cliente` | o retrato de um cliente: módulos, números, saldo e, em `configuracao`, a limpeza automática de mídia, o freio do passo "a IA decide", o bloqueio de afirmação clínica e quantos planos de tarefa existem; desde a .96, em `pagamento_inicial`, o passo "Pagamento" do início; desde a 1.118 (MIA-79), em `modulos_opcionais`, cada módulo opcional que se decide por empresa, com o estado escolhido (`herda`, `ligado`, `desligado`), se vale agora (`efetivo`) e se a instalação o tem desligado (`bloqueado_pela_instalacao`); desde a MIA-48, em `aviso_da_queda`, a chave do aviso da queda do número e os últimos avisos de queda e de volta | leitura |
 | `plataforma_listar_modulos` | os módulos que se vendem separado | leitura |
 | `plataforma_ver_saude` | o estado da instalação, e se a chave que cifra o CPF dos contatos está semeada (só sim ou não; o valor nunca sai) | leitura |
-| `plataforma_ver_consumo_de_ia` | o consumo de IA de um cliente num mês do calendário em Brasília (MIA-44, [`consumo-de-ia.md`](consumo-de-ia.md)): o total, cada agente, a linha "Sistema" (chamadas sem agente) e a quebra por finalidade, cada uma com chamadas, tokens de entrada e saída, quantos vieram do cache, o custo em centavos de dólar (a régua do teto) e em reais (cotação de cada dia). Os mesmos números da aba Uso do cliente | leitura |
+| `plataforma_ver_consumo_de_ia` | o consumo de IA de um cliente num mês do calendário em Brasília ou nos últimos N dias de Brasília (`dias`, a mesma janela das telas; MIA-44 e MIA-78, [`consumo-de-ia.md`](consumo-de-ia.md)): o total, cada agente, a linha "Sistema" (chamadas sem agente) e a quebra por finalidade, cada uma com chamadas, tokens de entrada e saída, quantos vieram do cache, o custo em centavos de dólar (a régua do teto) e em reais (cotação de cada dia). Os mesmos números da aba Uso do cliente | leitura |
 | `plataforma_ver_implantacao` | o **checklist**: por área, o que está pronto, o que falta (com a ferramenta) e o que é com uma pessoa (com a tela). Desde a .91, as áreas `primeiros_passos` (onde a empresa está no passo a passo e o número oficial que espera a Time) e `plano_e_cobranca` (assinou ou não, das tabelas de assinatura do upstream), e o `rotulo_do_cliente`: o "o que falta" que a empresa nova vê | leitura |
 | `plataforma_listar_modelos` | os modelos e vocabulários que as outras ferramentas aceitam: modelos de follow-up, pacotes e capacidades do agente, gatilhos e ações de automação, passos do funil, tipos de campo | leitura |
-| `plataforma_ver_funis` | os funis inteiros: etapas, passo do agente, campos, motivos | leitura |
+| `plataforma_ver_funis` | os funis inteiros: etapas (desde a 1.118, com a cor e o `criterio`), passo do agente, campos (desde a 1.118, cada um com `ia_pode_ler`: se a IA lê o valor), motivos | leitura |
 | `plataforma_ver_agentes` | os agentes, a versão no ar, o rascunho, o limiar de sentimento, a passagem por assunto jurídico e o que falta para publicar; desde a .85, o horário de atendimento da IA da versão publicada (`horario_de_atendimento`: faixas, fuso, `ativa_agora`, `proxima_troca` e se cai fora da janela de resposta do número); com `agente`, o horário da versão vigente; o bloqueio de afirmação clínica da empresa (`seguranca_da_empresa`); os **roteadores** de intenção (número, se está ligado, agente reserva, janela de contexto do classificador e cada intenção com o agente e o funil de destino); e os servidores MCP de cada agente (`servidores_mcp`, 9095: host, autenticação, chave só como "configurada" e 4 últimos, ferramentas da versão vigente) | leitura |
 | `plataforma_ver_catalogo` | os produtos e serviços, com busca e paginação | leitura |
 | `plataforma_ver_obrigacoes` | os documentos e obrigações com vencimento: contadores (vencidos, vencendo em 30 dias, pedidos sem resposta, em dia), os itens por situação e o catálogo de tipos por funil | leitura |
-| `plataforma_ver_configuracao` | o conteúdo do que está configurado, por seção (etiquetas, memória, conhecimento, follow-ups, automações, agenda, equipe, números, atendimento, mensagens, planos de tarefa, fontes de formulário e banco externo). Em números, também os dias da prospecção, se guarda o histórico, se está pausado, as pausas agendadas e, desde a .83, a distribuição do número (regra própria, modo, atendente padrão e responsáveis, por e-mail); em atendimento, o freio do passo "a IA decide"; nas fontes, nunca o segredo; no banco externo, nunca endereço, usuário ou senha | leitura |
+| `plataforma_ver_configuracao` | o conteúdo do que está configurado, por seção (etiquetas, memória, conhecimento, follow-ups, automações, agenda, equipe, números, atendimento, mensagens, planos de tarefa, fontes de formulário e banco externo). Em equipe, desde a 1.118 (MIA-79), a tela inicial de cada pessoa e a da empresa, com as opções. Em números, também os dias da prospecção, se guarda o histórico, se está pausado, as pausas agendadas e, desde a .83, a distribuição do número (regra própria, modo, atendente padrão e responsáveis, por e-mail); em atendimento, o freio do passo "a IA decide"; nas fontes, nunca o segredo; no banco externo, nunca endereço, usuário ou senha | leitura |
 | `plataforma_ver_followup` | um fluxo de follow-up por dentro: gatilho, nós, textos e esperas, a etapa de destino das caixas de mover e as etiquetas das caixas de etiquetar, e as setas entre os nós | leitura |
 | `plataforma_ver_conversoes` | as conversões de um cliente: as conexões da Meta e do Google **sem segredo**, se a identidade da Meta (ID da Página ou da conta do WhatsApp Business) está preenchida, as regras por funil das duas plataformas, a chave dos leads de formulário, o evento recomendado para cada etapa e os 20 últimos envios com a situação e o motivo | leitura |
 | `plataforma_listar_demonstracoes` | as empresas de demonstração por segmento (construtora, clínica odontológica, indústria, academia) e a bancada: se existe, o id, quando a semente foi aplicada e as contagens; e qualquer outra organização marcada como demonstração | leitura |
@@ -254,6 +254,8 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | `plataforma_ver_email_marketing` | o RETRATO do e-mail marketing (.89): módulo, Amazon ligada no servidor (só sim ou não, nunca a chave), o domínio e os seis registros com o que falta, os remetentes, o "responder para", o rodapé, o ritmo e a janela, o degrau do aquecimento, a saúde dos 30 dias, o preço por e-mail (desde a .95, com a origem: definido à mão, o plano ou o padrão), o saldo, a supressão, os textos de consentimento, os segmentos, os modelos e as PENDÊNCIAS para o primeiro envio | leitura |
 | `plataforma_ver_campanhas_de_email` | as campanhas de e-mail (.89): situação, por que pausou, o andamento e, com `campanha_id`, os resultados (entregues, aberturas como estimativa, cliques únicos sem robô, descadastros, rejeições, reclamações, cobrado e cliques por link) | leitura |
 | `plataforma_ver_links_do_dono` | os links para o dono do negócio de um cliente: para quem, o endereço, a situação (ativo, vencido, revogado), os painéis, o período, se mostra valores, a validade, o último acesso e quantos acessos | leitura |
+| `plataforma_contar_negocios` | (upstream 1.117, MIA-67) quantos negócios um cliente tem, por funil, etapa (nome ou id) e situação: o total e, sem filtro de situação, o total aberto, ganho e perdido. Só números, pela porta do `crm_count_leads` (`countLeadsHandler`): o negócio de contato pessoal não conta | leitura |
+| `plataforma_ver_conexoes_do_mcp` | (upstream 1.117, 9390, MIA-67) os aplicativos conectados ao MCP da empresa pelo OAuth: o nome que o aplicativo declarou, o host para onde o acesso foi entregue, a situação (ativa, revogada, vencida), o acesso (`ler` ou `ler_e_alterar`), o papel gravado no token, quem autorizou, o nome na tela de API Tokens e o último uso. Nada do token nem do refresh; os tokens colados à mão não aparecem | leitura |
 
 ### Operações que já existiam
 
@@ -284,7 +286,7 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 |---|---|---|---|
 | `plataforma_configurar_empresa` | nome, razão social, CNPJ, país (desde a .82, trocar o país sem mandar `fuso` leva o fuso sugerido do país, como a tela), fuso, idioma, moeda, modo de venda, retenção de mídia, a limpeza automática de mídia antiga (ligada, apaga sem volta), encarregado e política de privacidade; e, desde a .79, a **meta do mês** (`meta_do_mes`: o faturamento dos ganhos da empresa inteira, em centavos, no mês corrente ou no `mes` pedido), pelo mesmo upsert da tela de Desempenho (`lib/crm/metas/gravar.ts`). É ela que vira a barra do painel "Meta do mês" | a organização; a meta, pelo mês | só os campos que vieram mudam |
 | `plataforma_configurar_atendimento` | modo de distribuição (manual, rodízio ou menor carga; desde a .83 vale para os números SEM regra própria), visibilidade das conversas, devolução para a IA, quanto a IA espera depois de uma resposta pelo celular, o nome de quem fala (atendente ou IA) em negrito na mensagem (desde a .86, também o nome de cada agente), o freio da empresa para o passo "a IA decide" das automações, desde a .81 as duas opções da agenda (atendentes mexem na agenda dos colegas; Google Meet com acesso aberto) e, desde a .86, a devolução à fila da conversa do rodízio sem resposta, o telefone que entra sozinho na ficha sem número e as etiquetas de contato interno; desde a MIA-48, o aviso no grupo do cliente quando um número dele cai e volta (`aviso_da_queda_do_numero`, `aviso-da-queda.md`) | a organização | idem |
-| `plataforma_garantir_funil` | funil, etapas na ordem, passo do agente por etapa, probabilidade, janela de esfriando (`prazo_esperado_horas`, pela régua da tela: 1 a 8760 horas inteiras) e cor, campos personalizados (com obrigatoriedade por etapa; desde a .84, de quem é o campo, `escopo` negócio ou contato, só no funil padrão, e a lista pesquisável `searchable_select` com `aliases` e `allow_new`), motivos de perda e de ganho, vocabulário (desde a .79 também `compromisso` e `compromisso_plural`, como o segmento chama o que a agenda marca: o plural é o título do painel pronto de agenda) | nome do funil; nome da etapa; `key` do campo; rótulo do motivo | 20 etapas |
+| `plataforma_garantir_funil` | funil, etapas na ordem, passo do agente por etapa, probabilidade, janela de esfriando (`prazo_esperado_horas`, pela régua da tela: 1 a 8760 horas inteiras), cor e, desde a 1.118, o `criterio` da etapa (o texto que o agente lê para mover o card; cor e critério pela operação da tela de etapas), campos personalizados (desde a 1.118 com a marca `ia_pode_ler`, que a ferramenta só grava quando o pedido manda; com obrigatoriedade por etapa; desde a .84, de quem é o campo, `escopo` negócio ou contato, só no funil padrão, e a lista pesquisável `searchable_select` com `aliases` e `allow_new`), motivos de perda e de ganho, vocabulário (desde a .79 também `compromisso` e `compromisso_plural`, como o segmento chama o que a agenda marca: o plural é o título do painel pronto de agenda) | nome do funil; nome da etapa; `key` do campo; rótulo do motivo | 20 etapas |
 | `plataforma_garantir_produtos` | catálogo em lote, com preço em centavos ou em texto (`"R$ 189,90"`); item com problema é recusado com motivo e não derruba os outros | código do produto (sem código, o nome) | 200 produtos |
 | `plataforma_garantir_etiquetas` | etiquetas no vocabulário, com cor e descrição | nome da etiqueta, sem diferenciar maiúscula | 50 etiquetas |
 | `plataforma_etiquetar_contatos` (.97) | põe ou tira uma etiqueta em todos os contatos de um filtro, sem disparar automação; `apenas_contar` confere antes (operação `importar_base`, ver [`contatos-em-massa.md`](contatos-em-massa.md)) | etiqueta por contato: repetir não duplica | 1000 contatos por chamada, com `cursor` |
@@ -296,6 +298,7 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 | `plataforma_garantir_roteador` | cria ou ajusta o roteador de intenção de um número, **desligado**: nome, número, agente reserva, a janela de contexto do classificador (0 a 16 mensagens, 8 no roteador novo) e as intenções, cada uma com o agente e o funil (e a etapa) de destino do negócio | nome do roteador; nome da intenção | 20 intenções |
 | `plataforma_garantir_automacao` | cria ou ajusta uma regra de automação, **desligada**. É também o webhook de saída: os gatilhos de ganho, perda, reabertura e troca de responsável com a ação `call_webhook`. Aceita o passo "a IA decide" (`ai_decide`, com as ações das opções conferidas pela mesma régua), aplicar um plano de tarefas, etiqueta no contato, o recorte por fonte de formulário e o funil e a etapa dos gatilhos de tempo; desde a .83, a `media_url` da mensagem de WhatsApp (imagem ou PDF, conferida antes de gravar); desde a .84, o RODÍZIO da ação atribuir (`{ "modo": "rodizio", "fila": [...] }`, cada pessoa conferida contra a equipe) e a recusa do gatilho por data num campo do contato | nome da regra | uma regra |
 | `plataforma_garantir_planos_de_tarefa` | os planos de tarefa (a sequência de tarefas que uma automação aplica ao negócio), com título, prazo, prioridade e responsável de cada passo | o `id` do plano, ou o nome | 50 planos; 30 passos por plano |
+| `plataforma_definir_tela_inicial` | (1.118, #4864, MIA-79) a tela que abre depois de entrar: a da EMPRESA (sem `pessoa`) ou a de uma pessoa da equipe (`pessoa`, por e-mail); a da pessoa vence. Só aceita área que está no menu de quem entra (a recusa lista as opções); `null` volta ao padrão. Troca só a chave `inicio` do `interface_settings`, como a tela (o menu e a trava do Inbox ficam), e audita `org.interface_changed` ou `team.interface_changed` | a empresa, ou a pessoa | uma tela |
 | `plataforma_garantir_fonte_de_formulario` | a fonte de formulário: destino (funil e etapa), as perguntas do formulário, o mapeamento dos campos, o endereço de retorno, a autorização de IA na captação e, desde a .82, a atualização do card no reenvio (`atualizar_card_no_reenvio`); as duas últimas exigem a assinatura, posta pela pessoa. Devolve o caminho do endereço de captação | nome da fonte | uma fonte; 20 perguntas |
 | `plataforma_configurar_canal` | de um número: o nome interno (.81), os dias da prospecção, guardar o histórico (só QR Code; desligar pede confirmação escrita) e a pausa agendada de até 24 horas (de um número ou de todos), com o ajuste dos horários de uma que ainda não começou (.81) e o cancelamento; e, desde a .83, a `distribuicao` do número (os `responsaveis`, o `modo` próprio e o `atendente_padrao`, ou `voltar_ao_padrao_da_organizacao`), gravada pela função do fork da `9045`; e, desde a .85, a `janela_de_resposta` (as horas em que o número responde a quem escreveu, 0 a 24; disparo e prospecção não mudam). Nunca credencial, token ou número | o número; a pausa, pelo número e pela janela | um número |
 | `plataforma_configurar_banco_externo` | numa conexão de banco externo que já existe: as fontes liberadas (o modo e a lista de tabelas e colunas que o agente pode ler, .81) e a coluna que identifica o cliente nas conversas (telefone ou e-mail). Desde a .84 a resposta e a leitura dizem o motor (`tipo_do_banco`: PostgreSQL ou MySQL) e o aviso do último teste. Nunca lê nem devolve a conexão ou a senha | o nome da conexão | uma conexão |
@@ -365,6 +368,38 @@ no banco fica só o hash. Por isso "Copiar link" funciona a qualquer hora e
 não manda dado nenhum para a prévia do WhatsApp, conta e audita cada abertura sem
 identificar a pessoa, e usa metadados fixos. Na empresa de demonstração o link
 funciona com os dados fictícios e a página avisa que é demonstração.
+
+### As conexões de aplicativo ao MCP da empresa · operação `revogar_conexao_do_mcp` (1.117)
+
+Desde a 1.117 (migration 9390) um aplicativo que não deixa colar chave, como o
+ChatGPT, conecta ao `/api/mcp` da empresa pelo OAuth: o administrador da empresa
+autoriza na tela do CRM e o aplicativo recebe um token `dsk_` de `api_tokens`
+marcado `aud:mcp` (só vale no `/api/mcp`). Cada conexão é uma linha de
+`mcp_oauth_concessoes` com o token dela, e a tela de API Tokens a mostra e revoga
+como um token. O MCP de plataforma só lê e revoga: não cria conexão (o
+consentimento é do administrador da empresa) e não mexe no acesso que "Ler e
+alterar" dá ao aplicativo, que é do banco (`fn_mcp_oauth_trocar_codigo`). Caixinha
+própria no token porque o estrago é outro: não monta nada e não fala com ninguém,
+mas corta um acesso que a empresa deu.
+
+| ferramenta | o que faz | reexecução |
+|---|---|---|
+| `plataforma_revogar_conexao_do_mcp` | revoga UMA conexão pelo `conexao_id` (de `plataforma_ver_conexoes_do_mcp`): o token fica revogado (`revoked_at`, `revoked_by`, como na tela, e a trilha `token.revoked`) e a concessão marcada `revogada_em` (como `fn_mcp_oauth_desligar`), então o aplicativo para na hora e a renovação é recusada. Recusa a conexão de outra empresa e a que aponta para token sem `aud:mcp` (token à mão nunca é revogado por aqui) | revogada de novo, ou revogada antes na tela, responde `ja_estava` sem escrever |
+
+### O módulo opcional por empresa · operação `gerir_modulo_opcional` (1.118)
+
+Desde a 1.118 (migration 9416, #3868) cada módulo opcional da instalação que o
+upstream decide por empresa (`MODULOS_POR_EMPRESA`: banco externo, fluxos de
+atendimento, propostas, B2B, setores, avisos, conferir WhatsApp, MCP por agente e
+cold call) pode ter a EXCEÇÃO de uma empresa (`organization_modules`). É o módulo do
+upstream, como ele é: não é o módulo vendido do fork (`mia_modulos_contratados`,
+`plataforma_liberar_modulo`), e as duas camadas convivem (seção 3 do PR #113). Na tela
+do upstream só o admin de plataforma decide, então a caixinha é própria: um token que
+já tinha `liberar_modulo` não ganha esta em silêncio.
+
+| ferramenta | o que faz | reexecução |
+|---|---|---|
+| `plataforma_definir_modulo_da_empresa` | `herda` (apaga a exceção: segue a instalação), `desligado` (tira o módulo SÓ desta empresa) ou `ligado`. As regras são as da ação da tela (`updateModuloDaEmpresa`), num espelho com a impressão registrada: a instalação é o teto (ligar o que ela tem desligado é recusado, com o caminho de `/admin/sistema`), o que ainda não se liga é recusado, desligar não apaga dado (religar traz de volta) e a trilha é `organization.modulo_updated` com o de e o para. A lista de capacidades que a tela do agente oferece continua seguindo a instalação (`capacidadesOferecidas` espelha `GET /api/v1/mcp/tools`, que o upstream deixou assim) | o mesmo estado responde `ja_estava` sem escrever nem auditar |
 
 ### O disparo de e-mail marketing (.89)
 
@@ -765,28 +800,64 @@ Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
 
-### O que chegou do upstream 1.117 (fusão de 18/11)
+### O que chegou do upstream 1.118 (fusão de 18/11, segunda do dia)
 
-O MCP não ganhou ferramenta nem campo nesta fusão: por decisão do Chefe (MIA-62), o
-MCP desta faixa vira uma tarefa própria depois dela. O que a fusão ajustou para nada
-quebrar, e o que já alcança:
+A fusão (MIA-73, PR #113) entrou sem ferramenta nem campo novo, como na 1.117. O que
+faltava veio em seguida, num PR próprio (MIA-79): **duas ferramentas novas** (a lista vai de
+122 a 124), uma operação nova, `gerir_modulo_opcional`, e três campos em ferramentas que
+já existiam. A prova está em
+`tests/unit/mcp-de-implantacao-novidades-do-upstream-1118.test.ts`, e os três espelhos
+novos em `tests/unit/mcp-de-implantacao-espelhos.test.ts`.
 
 | novidade do upstream | versão | como o MCP alcança | operação |
 |---|---|---|---|
+| Módulos opcionais por empresa (`organization_modules`, 9416, #3868) | 1.118 | ferramenta nova `plataforma_definir_modulo_da_empresa` (descrita em "O módulo opcional por empresa", nesta seção), e `plataforma_ver_cliente` devolve `modulos_opcionais` (a leitura do upstream, `lerModulosDaEmpresa`). `capacidadesOferecidas` (`lib/implantacao/capacidades.ts`) continua perguntando só pela instalação, como `GET /api/v1/mcp/tools` (F2 do #3868): as duas mudam juntas quando ele mudar a rota | `gerir_modulo_opcional` |
+| A marca "A IA pode ler este campo" (`ia_pode_ler`, #4684): campo sem ela fica no card e não vai ao modelo | 1.118 | campo `ia_pode_ler` em cada campo de `plataforma_garantir_funil`: `true` grava a marca, `false` a apaga (como a tela), ausente não mexe, e o campo novo nasce desmarcado. Só no campo do NEGÓCIO (no do contato, recusa). A ferramenta nunca marca sozinha. `plataforma_ver_funis` devolve `ia_pode_ler` por extenso em cada campo | `implantar_configuracao` |
+| A cor da etapa ganhou tela e régua (#4802) | 1.118 | `cor` já existia em `plataforma_garantir_funil`; agora vai por `atualizarEtapa` (`normalizarCorDaEtapa`, auditoria `pipeline.stage_updated`), como a tela, e não mais por escrita direta | `implantar_configuracao` |
+| O critério da etapa (`crm_stages.description`, #4836): o texto que o agente lê em `crm_list_stages` para decidir mover o card | 1.118 | campo `criterio` em cada etapa de `plataforma_garantir_funil`, pela mesma `atualizarEtapa` (teto de 500 de `validarDescricaoDeEtapa`; vazio vira `null`). `plataforma_ver_funis` devolve `criterio`. Escrever o critério muda para onde o agente move os cards | `implantar_configuracao` |
+| A tela inicial por empresa e por pessoa (`interface_settings.inicio`, #4864) | 1.118 | ferramenta nova `plataforma_definir_tela_inicial` (na tabela da Montagem). A seção `equipe` de `plataforma_ver_configuracao` devolve a tela inicial da empresa, as opções e a de cada pessoa. Dois espelhos: `atualizarInterfaceDaEmpresa` e `PATCH /api/v1/team/[user_id]/interface` | `implantar_configuracao` |
+| As ferramentas do MCP da empresa que mudaram: `crm_update_lead` com `tags_adicionar` e `tags_remover` (#4666), a idempotência de envio (#4850) e `crm_update_stage` gravando o critério (#4843) | 1.118 | já alcançava: nenhuma ferramenta nova no catálogo, e `plataforma_garantir_agente` e `plataforma_listar_modelos` leem o catálogo servido (`catalogoServido`), sem cópia. O MCP de plataforma não envia mensagem nem atualiza negócio, então a idempotência e as etiquetas não têm par aqui. A cerca da faixa reprova se as três sumirem do catálogo ou dos pacotes | |
+| A cor e o critério na leitura do mapeamento do agente (#4802, #4836) | 1.118 | a rota do mapeamento continua chamando `gravarMapeamentoDoAgente` (`lib/leads/agent-mapping-operations.ts`), a gravação que o MCP compartilha | `implantar_configuracao` |
+
+Falta no MCP (cada item com o motivo):
+
+- a Efi como provedor da cobrança do dono (9418, #4095): só se a cobrança do upstream
+  um dia for ligada no fork, que hoje cobra pela jornada de assinatura (Asaas). Decisão
+  que não foi tomada (MIA-79).
+
+Nada a configurar pela implantação: a comanda que não atravessa a empresa (9413), a
+busca de contatos pelo índice (9421) e a carência de 10 s antes do modelo pago (#4835,
+variável `FOLLOWUP_CARENCIA_DO_MODELO_MS` do worker) são regra do banco ou do ambiente.
+
+### O que chegou do upstream 1.117 (fusão de 18/11)
+
+A fusão (MIA-62) entrou sem ferramenta nem campo novo: só o ajuste para nada quebrar (o
+`prazo` do passo do plano de tarefas). O que faltava veio em seguida, num PR próprio
+(MIA-67): **três ferramentas novas** (a lista vai de 119 a 122, com a do consumo de IA da MIA-44 já dentro) e uma operação nova,
+`revogar_conexao_do_mcp`. A prova está em
+`tests/unit/mcp-de-implantacao-novidades-do-upstream-1117.test.ts`.
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| A ferramenta `crm_count_leads` do MCP da empresa: conta negócios por funil, etapa e situação sem listar nenhum (`countLeadsHandler`) | 1.117 | como capacidade do agente, já alcançava: o catálogo da instalação a traz no pacote "reter", que `plataforma_garantir_agente` liga (`pacotes: ["reter"]` grava `crm_count_leads` no rascunho) e `plataforma_listar_modelos` (seção `capacidades_do_agente`) ensina. ATENÇÃO: o agente que já tinha o pacote "reter" inteiro passa a aparecer sem ele em `plataforma_ver_agentes` (`pacotes_ligados`) até o pacote ser ligado de novo, porque o pacote ganhou uma capacidade; é a régua do upstream, a mesma da tela. Para a implantação, a ferramenta nova `plataforma_contar_negocios` conta pela MESMA porta (o total e o total por situação, com funil e etapa pelo nome) | leitura |
+| O token de integração `dsk_` nas rotas de leads e de propostas (`requireRole` virou `resolveAuthDual`, #4390) | 1.117 | nada a configurar: o MCP de plataforma não passa por rota nenhuma delas, só pelos handlers compartilhados (`app/api/v1/leads/_handler.ts`), que ganharam o filtro de organização em mais leituras e o `actorApiTokenId` na trilha. A cerca do arquivo de prova reprova se um arquivo de `lib/mcp-plataforma` importar uma dessas rotas | |
+| O OAuth do MCP (9390): o aplicativo conecta ao `/api/mcp` pelo consentimento do administrador da empresa, com um token `dsk_` marcado `aud:mcp` | 1.117 | duas ferramentas novas: `plataforma_ver_conexoes_do_mcp` (leitura) e `plataforma_revogar_conexao_do_mcp` (operação `revogar_conexao_do_mcp`), descritas em "As conexões de aplicativo ao MCP da empresa", nesta seção. Criar conexão fica de fora: o consentimento é da pessoa | `revogar_conexao_do_mcp` |
 | O prazo do passo do plano de tarefas pode contar de um campo de data do negócio (`prazo`, 9404, #4717) | 1.117 | `plataforma_garantir_planos_de_tarefa` grava o passo com `prazo` no modo de sempre (`dias_a_partir_de_hoje`) e mantém `vence_em_dias`; `plataforma_ver_configuracao` (seção `planos_de_tarefa`) passa a devolver o `prazo`, inclusive o de campo de data feito na tela | `implantar_configuracao` |
 | Os prazos dos fluxos de negócio parado, etapa por etapa (tela Follow-up por etapa) | 1.117 | já alcançava: o prazo é o `trigger_config.dias` do próprio fluxo, o mesmo que `plataforma_garantir_automacao` grava | `implantar_configuracao` |
 
-Falta no MCP (fica para a tarefa de MCP desta faixa):
+Falta no MCP (cada item com o motivo):
 
-- `crm_count_leads` (ferramenta nova do MCP de dentro) e o token de
-  integração `dsk_` nas rotas de leads e de propostas;
-- o OAuth do MCP (9390): nada a configurar por empresa, mas o manual "MCP da MIA" do
-  assistente ainda só fala do token colado à mão;
+- o manual "MCP da MIA" do assistente (`lib/assistente/manuais-das-telas.ts`) ainda só
+  ensina o token colado à mão, e o ChatGPT, que está nas palavras dele, conecta pelo
+  OAuth. Mudar o manual muda o que a equipe do cliente lê no assistente: fica para o
+  Chefe decidir (MIA-67);
 - o prazo por campo de data em `plataforma_garantir_planos_de_tarefa` (hoje só o modo de
-  sempre);
+  sempre): campo novo de uma ferramenta que já existe, fora do recorte da MIA-67;
 - o agente da campanha de entrada (`campaign_entry_agent_id`, 9415) e a troca silenciosa
-  do roteador: campos novos de campanha e de roteador;
-- a cor por canal no aviso de mensagem (`definirCorPorCanal`): campo novo de notificações.
+  do roteador: campos novos de campanha e de roteador, e os dois mudam quem responde ao
+  cliente final (ligados, falam com ele), então pedem decisão antes;
+- a cor por canal no aviso de mensagem (`definirCorPorCanal`): campo novo de
+  notificações, que nasce ligado (é só visual).
 
 Nada a configurar pela implantação: as identidades de rede social do contato (9419) são
 gravadas pela ingestão, e o compromisso cancelado que deixa excluir o contato (9405) é
@@ -1173,6 +1244,7 @@ Testes:
 | `tests/invariants/distribuicao-do-numero-pela-plataforma.test.ts` | a função da 9045 no Postgres de verdade: o controle negativo (a porta do upstream recusa o ator da plataforma), o mesmo efeito da porta do upstream, as recusas copiadas, o gatilho do upstream que solta o destino de quem sai, o `reset`, as recusas do ator e que só o `service_role` executa |
 | `tests/unit/mcp-de-implantacao-relatorios.test.ts` | as duas ferramentas do montador de relatórios (.80), a operação `implantar_configuracao`, o que o garantir grava (prontos ligados ao funil, relatórios do segmento e painel, compartilhados), que rodar de novo não duplica e só completa o painel, a meta do mês, o funil de outra empresa, e a leitura sem o "só para mim" de ninguém |
 | `tests/invariants/montador-de-relatorios.test.ts` | as tabelas do montador (9040) e o motor estendido (9041) no Postgres de verdade: quem vê, cria, compartilha, edita e exporta, com controle positivo e negativo; produto, filtro de vários valores, meta por grupo de tempo, funil com soma, responsável no follow-up, agente nas conversas; a lista por trás do número com a mesma conta; e o link do painel (9042) |
+| `tests/unit/mcp-de-implantacao-novidades-do-upstream-1117.test.ts` | as novidades do upstream 1.117 (MIA-67): `crm_count_leads` no pacote "reter" (catálogo, `plataforma_listar_modelos` e o rascunho do agente), `plataforma_contar_negocios` (o total, por situação, os filtros pelo nome, a outra empresa que não entra, a recusa que ensina, a leitura livre), a cerca de que o MCP de plataforma não importa rota de leads nem de propostas, e as conexões OAuth: a leitura sem nada do token nem dos tokens à mão, a revogada na tela, revogar o token e a concessão com a trilha da tela, o `ja_estava` sem escrita, a outra empresa, o token sem `aud:mcp` e a operação própria |
 | `tests/unit/mcp-de-implantacao-paineis.test.ts` | as quatro ferramentas dos painéis e do link para o dono (.78): a caixinha `compartilhar_paineis`, que o garantir não duplica e ajusta no mesmo endereço, a revogação, a leitura e a demonstração; e a meta do mês em `plataforma_configurar_empresa` |
 | `tests/invariants/motor-de-conta-dos-relatorios.test.ts` | o motor de conta (9030) no Postgres de verdade: a regra de data e o fuso, sem o teto de 1000 linhas, as etiquetas, o "Sem …" e o "Outros", a meta, quem vê o quê (atendente, gestor, outra empresa, anon, plataforma) e a situação da obrigação igual à de `lib/obrigacoes/situacao.ts` |
 | `tests/invariants/link-dos-paineis-para-o-dono.test.ts` | a tabela do link (9031): só o servidor lê e escreve, as constraints, o funil de outra empresa e a contagem de acesso só em link vivo |

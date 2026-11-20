@@ -117,7 +117,7 @@ const modulos: AreaDoChecklist = {
   avaliar: async ({ admin }, org) => {
     const r = vazio();
     const { data, error } = await admin
-      .from("organization_modules")
+      .from("mia_modulos_contratados")
       .select("modulo")
       .eq("organization_id", org.id)
       .is("revoked_at", null);

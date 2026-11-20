@@ -605,7 +605,10 @@ grant select, insert, update on public.tenant_broadcast_pricing to service_role;
 
 -- ---- liberação por módulo (migration 0245) ----
 --
--- Espelho EXATO da migration. Idempotente, como todo o apêndice.
+-- Espelho da migration com o NOME da 9163: a tabela nasceu `organization_modules`
+-- e desde a fusão v1.118 é `mia_modulos_contratados` (a do upstream ficou com o
+-- nome antigo). Índices e policy trocaram junto; o resto é a 0245 como ela é.
+-- Idempotente, como todo o apêndice.
 
 -- 0245 — cada cliente com o que comprou
 --
@@ -633,7 +636,81 @@ grant select, insert, update on public.tenant_broadcast_pricing to service_role;
 -- linha responde "nunca teve", que é outra história — e é a história errada na
 -- conversa em que alguém pergunta por que a tela sumiu.
 
-create table if not exists public.organization_modules (
+-- >>> ANTES DO BASELINE DO UPSTREAM (migration 9163): início
+--
+-- A NOSSA `organization_modules` SAI DO CAMINHO DA DELE. Desde a v1.118 (9416,
+-- #4065) o upstream cria uma `public.organization_modules` com outro formato e
+-- outro sentido (exceção de módulo opcional por empresa: `estado`
+-- ligado/desligado, PK (organization_id, modulo), só service_role). A nossa, de
+-- 0245, guarda o módulo VENDÁVEL contratado (`revoked_at`, `granted_*`). Com o
+-- mesmo nome, quem nasce primeiro fica com ele e o outro lado quebra
+-- (MIA-73/MIA-74).
+--
+-- Este trecho roda ANTES do `baseline.sql`: o `easypanel/bootstrap.sh` e o
+-- `scripts/ensaio-de-banco.sh` o recortam daqui (entre os marcadores `>>>` e
+-- `<<<`) e o aplicam primeiro. É o que deixa a 9416 criar a dela byte a byte no
+-- servidor no ar. Se ele rodasse só aqui, depois do `baseline.sql`, a 9416 cairia
+-- na nossa tabela: `comment on column estado` com erro, o `revoke` tirando o
+-- select de `authenticated` e o gatilho `trg_organization_modules_touch` (que
+-- grava `updated_at`, coluna que a nossa não tem) quebrando toda revogação.
+--
+-- No resto do arquivo ele roda de novo, no lugar, e não faz nada. Se algum
+-- caminho aplicou o `baseline.sql` sem este passo antes, ele ainda move a nossa
+-- (sem perder linha), tira o gatilho dele da nossa e avisa: a dele nasce na
+-- próxima aplicação do `baseline.sql`.
+--
+-- Só renomeia o NOSSO formato (a coluna `revoked_at`). Rodar duas vezes não faz
+-- nada. Nenhuma linha é apagada nem copiada: é `rename`.
+do $$
+declare
+  v_nome text;
+begin
+  if exists (
+       select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'organization_modules' and column_name = 'revoked_at'
+     ) and to_regclass('public.mia_modulos_contratados') is null then
+    alter table public.organization_modules rename to mia_modulos_contratados;
+
+    -- Chave e FKs: o nome da chave é também um índice, e a 9416 cria um
+    -- `organization_modules_pkey` dela.
+    for v_nome in
+      select conname from pg_constraint
+       where conrelid = 'public.mia_modulos_contratados'::regclass and conname like 'organization\_modules\_%'
+    loop
+      execute format('alter table public.mia_modulos_contratados rename constraint %I to %I',
+                     v_nome, 'mia_modulos_contratados_' || substr(v_nome, length('organization_modules_') + 1));
+    end loop;
+
+    if to_regclass('public.uq_organization_modules_vivo') is not null then
+      alter index public.uq_organization_modules_vivo rename to uq_mia_modulos_contratados_vivo;
+    end if;
+    if to_regclass('public.idx_organization_modules_org') is not null then
+      alter index public.idx_organization_modules_org rename to idx_mia_modulos_contratados_org;
+    end if;
+
+    if exists (select 1 from pg_policies
+                where schemaname = 'public' and tablename = 'mia_modulos_contratados'
+                  and policyname = 'organization_modules_select') then
+      alter policy organization_modules_select on public.mia_modulos_contratados
+        rename to mia_modulos_contratados_select;
+    end if;
+
+    -- Só existe aqui se o `baseline.sql` rodou antes deste passo (o caminho de
+    -- reserva): o gatilho é DELE e vai com a tabela dele.
+    if exists (select 1 from pg_trigger
+                where tgrelid = 'public.mia_modulos_contratados'::regclass
+                  and tgname = 'trg_organization_modules_touch' and not tgisinternal) then
+      drop trigger trg_organization_modules_touch on public.mia_modulos_contratados;
+      raise warning 'MIA 9163: a organization_modules do upstream (9416) nasce na proxima aplicacao do baseline.sql; o passo "antes do baseline" nao rodou antes dele';
+    end if;
+
+    raise notice 'MIA 9163: organization_modules (a nossa, 0245) agora e mia_modulos_contratados, % linha(s)',
+      (select count(*) from public.mia_modulos_contratados);
+  end if;
+end $$;
+-- <<< ANTES DO BASELINE DO UPSTREAM (migration 9163): fim
+
+create table if not exists public.mia_modulos_contratados (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations(id) on delete cascade,
   -- A chave do catálogo em `lib/modulos/catalogo.ts`. Texto livre de propósito:
@@ -651,28 +728,28 @@ create table if not exists public.organization_modules (
   created_at       timestamptz not null default now()
 );
 
-comment on table public.organization_modules is
+comment on table public.mia_modulos_contratados is
   'Modulos VENDAVEIS que cada organizacao contratou. Ausencia de linha (ou linha revogada) = nao contratado. O catalogo dos modulos vive no codigo (lib/modulos/catalogo.ts); o que o catalogo nao declara continua liberado para todos, como sempre foi.';
 
-comment on column public.organization_modules.revoked_at is
+comment on column public.mia_modulos_contratados.revoked_at is
   'Cancelamento. Preenchido = nao libera mais. A linha FICA, porque apagar responderia "nunca teve", que e outra historia - e a errada na conversa em que alguem pergunta por que a tela sumiu.';
 
 -- Uma liberação VIVA por módulo por organização. Revogadas podem se repetir
 -- (contratou, cancelou, contratou de novo é histórico legítimo), e por isso o
 -- índice é parcial.
-create unique index if not exists uq_organization_modules_vivo
-  on public.organization_modules (organization_id, modulo)
+create unique index if not exists uq_mia_modulos_contratados_vivo
+  on public.mia_modulos_contratados (organization_id, modulo)
   where revoked_at is null;
 
-create index if not exists idx_organization_modules_org
-  on public.organization_modules (organization_id, modulo, revoked_at);
+create index if not exists idx_mia_modulos_contratados_org
+  on public.mia_modulos_contratados (organization_id, modulo, revoked_at);
 
-alter table public.organization_modules enable row level security;
+alter table public.mia_modulos_contratados enable row level security;
 
 -- A organização LÊ o que ela contratou (a tela precisa saber o que mostrar);
 -- quem libera e cancela é a plataforma, e só ela.
-drop policy if exists organization_modules_select on public.organization_modules;
-create policy organization_modules_select on public.organization_modules
+drop policy if exists mia_modulos_contratados_select on public.mia_modulos_contratados;
+create policy mia_modulos_contratados_select on public.mia_modulos_contratados
   for select to authenticated
   using (
     public.fn_is_platform_admin()
@@ -680,9 +757,9 @@ create policy organization_modules_select on public.organization_modules
   );
 
 -- `authenticated` sai do revoke junto com anon (migration 9001) — ver a carteira, acima.
-revoke all on public.organization_modules from anon, authenticated;
-grant select on public.organization_modules to authenticated;
-grant select, insert, update on public.organization_modules to service_role;
+revoke all on public.mia_modulos_contratados from anon, authenticated;
+grant select on public.mia_modulos_contratados to authenticated;
+grant select, insert, update on public.mia_modulos_contratados to service_role;
 -- Sem `delete`: revogar é `update` em `revoked_at`, e o histórico fica.
 
 
@@ -1908,7 +1985,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261117120000_9162_coexistencia_sincronizacao', now())
+values (1, '20261118110000_9163_modulos_contratados_saem_do_caminho', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -22715,6 +22792,24 @@ grant execute on function public.fn_mia_coexistencia_somar_contato(uuid) to serv
 grant execute on function public.fn_mia_coexistencia_recontar(uuid) to service_role;
 
 notify pgrst, 'reload schema';
+
+
+-- ─── 9163 · a nossa organization_modules sai do caminho da dele ───
+--
+-- FORK MIA (fusão v1.118). O renomear em si roda no bloco da 0245, acima, no
+-- trecho `>>> ANTES DO BASELINE DO UPSTREAM`, que o bootstrap aplica antes do
+-- `baseline.sql`: é ali que a tabela nasce e é ali que ela tem de ter o nome novo.
+-- Aqui fica só a conferência: as duas no formato nosso ao mesmo tempo seria um
+-- renomear pela metade, e isso tem de aparecer no log da implantação.
+do $$
+begin
+  if exists (
+       select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'organization_modules' and column_name = 'revoked_at'
+     ) then
+    raise warning 'MIA 9163: a organization_modules ainda tem o formato da MIA (revoked_at) e a mia_modulos_contratados ja existe: confira as duas antes de qualquer outra coisa';
+  end if;
+end $$;
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----

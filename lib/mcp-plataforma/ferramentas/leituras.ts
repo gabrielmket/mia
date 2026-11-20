@@ -48,6 +48,7 @@ import { lerRegras } from "@/lib/implantacao/automacoes";
 import { CONFIGURACAO_DOS_GATILHOS_DE_OBRIGACAO, modelosDeObrigacaoParaOAgente } from "@/lib/implantacao/obrigacoes";
 import { capacidadesOferecidas, catalogoServido, pacotesLigados } from "@/lib/implantacao/capacidades";
 import { lerConvites, lerMembros, lerSetores } from "@/lib/implantacao/equipe";
+import { lerTelasIniciais } from "@/lib/implantacao/tela-inicial";
 import { GATILHOS_COM_MOTOR, lerFluxos, nosDoGrafo } from "@/lib/implantacao/followup";
 import { lerDocumentoDaMemoria } from "@/lib/implantacao/memoria";
 import { lerModelosOficiais, lerRespostasProntas } from "@/lib/implantacao/mensagens";
@@ -57,6 +58,7 @@ import { servidoresNaLeitura } from "@/lib/implantacao/servidores-mcp-do-agente"
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { lerServidoresDoAgente, semSegredo } from "@/lib/mcp/servidor-externo/do-agente/registro";
 import { EXPLICACAO_DO_PASSO, ROTULO_DO_PASSO } from "@/lib/leads/agent-mapping";
+import { campoLiberadoParaIa } from "@/lib/leads/campos-do-funil";
 import { categoriasDeclaradasDoFunil, categoriasDoFunil } from "@/lib/leads/motivos-de-perda-do-funil";
 import { lerOpcaoDaSatisfacao } from "@/lib/atendimento/satisfacao";
 import { CAMPO_DOS_CAMPOS_ALTERADOS, CAMPOS_ALTERAVEIS_DO_NEGOCIO } from "@/lib/automation/conditions";
@@ -423,7 +425,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
     name: "plataforma_ver_funis",
     description:
       "Os funis de um cliente, inteiros: nome, se é o padrão, as etapas na ordem (id, nome, ganho/perda, passo do agente, probabilidade, " +
-      "prazo esperado, cor), os campos personalizados, os motivos de perda e de ganho e o vocabulário. " +
+      "prazo esperado, cor, critério), os campos personalizados (cada um com `ia_pode_ler`: se a IA lê o valor), os motivos de perda e de ganho e o vocabulário. " +
       // FORK MIA (.109)
       "Traz também `produto_no_negocio`: a palavra com que o funil chama o que o negócio vende e as opções de pedir o item no ganho e de mostrar o valor recorrente. " +
       "QUANDO USAR: antes de plataforma_garantir_funil (para ver o que existe e não duplicar), e sempre que precisar do id de um funil ou etapa " +
@@ -455,7 +457,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
       }
       const { data: etapas, error: etapasErr } = await c.admin
         .from("crm_stages")
-        .select("id, pipeline_id, name, slug, position, is_won, is_lost, is_archived, win_probability, agent_stage_hint, avisar_na_central, expected_duration_hours, color")
+        .select("id, pipeline_id, name, slug, position, is_won, is_lost, is_archived, win_probability, agent_stage_hint, avisar_na_central, expected_duration_hours, color, description")
         .eq("organization_id", c.orgId)
         .order("position", { ascending: true });
       if (etapasErr) throw new Error(`não consegui ler as etapas: ${etapasErr.message}`);
@@ -482,10 +484,20 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
                 probabilidade: e.win_probability ?? null,
                 prazo_esperado_horas: e.expected_duration_hours === null ? null : Number(e.expected_duration_hours),
                 cor: e.color ?? null,
+                // Upstream 1.118 (#4836): o critério que o agente lê para mover o card.
+                criterio: e.description ?? null,
                 avisar_na_central: e.avisar_na_central === true,
                 ...(e.is_archived === true ? { arquivada: true } : {}),
               })),
-            campos: Array.isArray(settings.fields) ? settings.fields : [],
+            // Upstream 1.118 (#4684): `ia_pode_ler` por extenso em cada campo (a
+            // ausência é o desmarcado, e a leitura diz isso em vez de omitir).
+            campos: Array.isArray(settings.fields)
+              ? settings.fields.map((campo) =>
+                  campo && typeof campo === "object" && !Array.isArray(campo)
+                    ? { ...campo, ia_pode_ler: campoLiberadoParaIa(campo as { ia_pode_ler?: boolean }) }
+                    : campo,
+                )
+              : [],
             motivos_de_perda: Array.isArray(settings.lost_reasons) ? settings.lost_reasons : [],
             // Upstream v1.111 (#4437): o catálogo que a tela oferece (o declarado, ou o de
             // fábrica, mais as categorias que os motivos já usam) e se o funil declarou.
@@ -763,7 +775,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
     description:
       "O conteúdo do que já está configurado num cliente, por seção: `etiquetas` (o vocabulário com as cores), `memoria` (as regras da casa e as anotações), " +
       "`conhecimento` (os materiais e a situação da indexação), `followups` (os fluxos e se estão publicados), `automacoes` (as regras, com gatilho e ações), " +
-      "`agenda` (os tipos de agendamento, com os lugares e a capacidade de cada serviço, a lista de espera e a jornada de cada pessoa), `equipe` (membros com id e e-mail, convites e os setores de atendimento com id e nome), `canais` (os números com id e situação), " +
+      "`agenda` (os tipos de agendamento, com os lugares e a capacidade de cada serviço, a lista de espera e a jornada de cada pessoa), `equipe` (membros com id, e-mail e a tela inicial de cada um, convites, os setores de atendimento com id e nome, e a tela inicial da empresa com as opções), `canais` (os números com id e situação), " +
       "`atendimento` (a distribuição e o freio do passo \"a IA decide\"), `mensagens` (respostas prontas e modelos oficiais), " +
       "`modelos_aprovados` (os modelos APROVADOS da Meta de cada número, com idioma, categoria e variáveis, se servem ao lembrete da agenda e ao aviso à equipe, e o modelo escolhido no aviso à equipe), " +
       "`planos_de_tarefa` (as sequências de tarefa com os passos), `fontes_de_formulario` (destino, perguntas, endereço de captação e a autorização de IA, sem o segredo) " +
@@ -930,6 +942,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
       }
 
       if (pedidas.has("equipe")) {
+        // Upstream 1.118 (#4864): a tela inicial da empresa e a de cada pessoa.
+        const telas = await lerTelasIniciais(c.admin, c.orgId);
         r.equipe = {
           membros: (await lerMembros(c.admin, c.orgId)).map((m) => ({
             user_id: m.user_id,
@@ -937,7 +951,14 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
             nome: m.nome,
             papel: m.papel,
             ativo: m.ativo,
+            tela_inicial: telas.por_pessoa.get(m.user_id) ?? null,
           })),
+          tela_inicial: {
+            da_empresa: telas.da_empresa,
+            opcoes: telas.opcoes_da_empresa,
+            como_mudar:
+              "plataforma_definir_tela_inicial. A tela da pessoa vence a da empresa; sem nenhuma, entra pelo Inbox (ou pela primeira área do menu).",
+          },
           convites: await lerConvites(c.admin, c.orgId),
           // Upstream 1.103 (#3881): os setores, com id e nome, para a ação `define_sector` das automações.
           setores: await lerSetores(c.admin, c.orgId),

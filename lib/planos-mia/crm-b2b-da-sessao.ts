@@ -30,11 +30,13 @@ export async function crmB2bForaDoPlanoDaSessao(): Promise<boolean> {
 
 /**
  * Os módulos da instalação como o menu DESTA empresa os enxerga: a lista de
- * `modulosLigados`, menos Vendas B2B fora do plano. Para os hubs que desenham o
+ * `modulosLigados` (com a camada da empresa, quando vem), menos Vendas B2B fora do plano. Para os hubs que desenham o
  * inventário (o do CRM). Desligada a cobrança, é a lista de sempre.
  */
-export async function modulosLigadosParaASessao(): Promise<ModuloOpcional[]> {
-  const ligados = await modulosLigados(createAdminClient());
+export async function modulosLigadosParaASessao(organizacaoId?: string | null): Promise<ModuloOpcional[]> {
+  // `organizacaoId` (v1.118, #4065): a camada POR EMPRESA do upstream entra antes
+  // do plano. As duas só tiram módulo, nunca ligam: convivem sem efeito em dobro.
+  const ligados = await modulosLigados(createAdminClient(), organizacaoId);
   if (!ligados.includes("crm_b2b") || !ligados.includes("cobranca")) return ligados;
   return (await crmB2bForaDoPlanoDaSessao()) ? ligados.filter((m) => m !== "crm_b2b") : ligados;
 }

@@ -131,6 +131,18 @@ function fakePool(c: Cenario) {
       contatosConsultados.push(params ?? []);
       return { rows: c.contato ? [{ is_anonymized: false, ...c.contato }] : [] };
     }
+    // A releitura da janela antes do modelo pago (upstream #4835) lê a conexão e
+    // os dois lados da janela a partir da conversa, como o duplo do upstream em
+    // fluxo-envia-modelo-aprovado.test.ts. Já houve saída: não é o primeiro
+    // contato, e a carência não se aplica.
+    if (/select s\.provider, c\.last_inbound_at, c\.last_outbound_at/.test(sql)) {
+      const ha = c.ultimoInboundHa ?? 72;
+      return {
+        rows: [
+          { provider: PROVIDER_OFICIAL, last_inbound_at: new Date(Date.now() - ha * HORA), last_outbound_at: new Date(Date.now() - HORA) },
+        ],
+      };
+    }
     if (/from channel_sessions s/.test(sql)) {
       const ha = c.ultimoInboundHa ?? 72;
       return { rows: [{ provider: PROVIDER_OFICIAL, last_inbound_at: new Date(Date.now() - ha * HORA) }] };

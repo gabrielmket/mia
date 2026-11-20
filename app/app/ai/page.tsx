@@ -47,8 +47,8 @@ export default async function AiHubPage() {
       modoDeVenda={modoDeVenda}
       // Obrigatório desde o upstream (B1 do #1573): sem a lista, o cartão de
       // "Fluxos de atendimento" aparecia numa instalação sem o módulo e o
-      // clique dava 404.
-      modulosLigados={await modulosLigados(createAdminClient())}
+      // clique dava 404. Desde a v1.118 (#4065) a lista é a DA EMPRESA ativa.
+      modulosLigados={await modulosLigados(createAdminClient(), activeOrg?.orgId)}
       // O título é a marca do produto ("Agente MIA", não "Agente de IA"), mas
       // ainda passa pelo dicionário: a entrada existe e a chave é o texto em
       // português, então quem usa es vê a marca sem cair em português cru no

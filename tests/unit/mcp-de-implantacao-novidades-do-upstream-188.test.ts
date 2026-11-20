@@ -121,7 +121,9 @@ describe("a lista: 69 ferramentas, e os tipos de ação seguem os do upstream", 
       // .109: as duas do produto no negócio.
       // MIA-18: a da lista de espera da agenda (upstream 1.105, 9235).
       // MIA-44: a do consumo de IA por mês e por agente.
-      (f) => daCobranca.has(f.name) || /consumo_de_ia|lista_de_espera|etiquetar_contatos|assistente|chamado|email|supressao|consentimentos|segmentos|trilhas|travam|melhoria_do_produto|parceiro|cupo[mn]|repasse|raio_x|travas?_de_robo|produto_no_negocio|palavra_do_segmento/.test(f.name),
+      // MIA-67: contar os negócios e as duas das conexões do MCP (upstream 1.117).
+      // MIA-79: o módulo opcional por empresa e a tela inicial (upstream 1.118).
+      (f) => daCobranca.has(f.name) || /consumo_de_ia|lista_de_espera|etiquetar_contatos|assistente|chamado|email|supressao|consentimentos|segmentos|trilhas|travam|melhoria_do_produto|parceiro|cupo[mn]|repasse|raio_x|travas?_de_robo|produto_no_negocio|palavra_do_segmento|contar_negocios|conex(ao|oes)_do_mcp|modulo_da_empresa|tela_inicial/.test(f.name),
     );
     expect(FERRAMENTAS.length - doFork.length).toBe(69);
   });

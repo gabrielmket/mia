@@ -49,6 +49,12 @@ const PADROES = {
   funcao: /create\s+(?:or\s+replace\s+)?function\s+((?:"?public"?\.)?"?[a-z0-9_]+"?)/gi,
   gatilho: /create\s+(?:or\s+replace\s+)?(?:constraint\s+)?trigger\s+("?[a-z0-9_]+"?)/gi,
   view: /create\s+(?:or\s+replace\s+)?(?:materialized\s+)?view\s+((?:"?public"?\.)?"?[a-z0-9_]+"?)/gi,
+  // Tabela com o mesmo nome não é "redefinição" para o Postgres: os dois lados
+  // escrevem `create table if not exists`, quem chega primeiro fica com o nome e
+  // o outro é pulado em silêncio. Foi a `organization_modules` da v1.118 (a 9416
+  // dele e a nossa 0245, formatos diferentes; MIA-73). Só o schema `public`:
+  // `private`, `auth` e `storage` têm donos e nomes próprios.
+  tabela: /create\s+(?:unlogged\s+)?table\s+(?:if\s+not\s+exists\s+)?((?:"?public"?\.)?"?[a-z0-9_]+"?)(?=\s*\()/gi,
 };
 
 function coletar(sql) {

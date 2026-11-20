@@ -542,7 +542,7 @@ describe("a chave e o módulo", () => {
 
   it("virando módulo vendável, só a empresa com liberação viva passa", async () => {
     montar({
-      organization_modules: [
+      mia_modulos_contratados: [
         { organization_id: "org-com", modulo: "leads_da_meta", revoked_at: null },
         { organization_id: "org-revogada", modulo: "leads_da_meta", revoked_at: "2026-09-01" },
       ],

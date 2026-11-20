@@ -41,7 +41,7 @@
     { "id": "rota-campaigns", "lane": "api", "col": 2, "type": "service", "label": "/api/v1/campaigns, campaign-templates, campaign-suppressions (upstream, intactas)" },
     { "id": "motor-oficial", "lane": "motor", "col": 0, "type": "worker", "label": "cron broadcast-worker → lib/broadcast/motor.ts (modelo pela Meta, débito na carteira)" },
     { "id": "motor-qr", "lane": "motor", "col": 1, "type": "worker", "label": "cron campaign-worker → lib/campanhas/rodada.ts (texto livre, ritmo do número)" },
-    { "id": "organization-modules", "lane": "dados", "col": 0, "type": "database", "label": "organization_modules — liberação viva do disparador" },
+    { "id": "organization-modules", "lane": "dados", "col": 0, "type": "database", "label": "mia_modulos_contratados — liberação viva do disparador" },
     { "id": "broadcast-recipients", "lane": "dados", "col": 1, "type": "database", "label": "broadcasts + broadcast_recipients" },
     { "id": "carteira", "lane": "dados", "col": 2, "type": "database", "label": "tenant_wallet_ledger + tenant_broadcast_pricing" },
     { "id": "campaigns", "lane": "dados", "col": 3, "type": "database", "label": "campaigns + campaign_recipients (upstream)" },

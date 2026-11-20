@@ -85,7 +85,10 @@ const TETOS: Record<string, { minutos: number; razao: string }> = {
       "do job, 17/11/2026): na ponta do #86 (d71628e7e) pg15 e pg17 levaram 36 min, na " +
       "repetição; na main da .110 (268f0552d) o pg15 passou com 44 min e o pg17 foi cortado aos " +
       "45; no PR #89 o pg17 foi cortado aos 45 nas duas rodadas seguidas. Daí 60, provisório " +
-      "até a fusão MIA-12",
+      "até a fusão MIA-12. FORK MIA (MIA-71), MEDIDO em 18/11/2026 (7 rodadas verdes): 51 a 57 " +
+      "min por perna, e o passo do `update.sh` leva só 0,2 a 0,4 min — o peso é o vitest do " +
+      "`test:db`, então a matriz virou major × fatia (`--shard=N/3`) e o `update.sh` roda na " +
+      "fatia 1. O 60 fica até a medição das fatias; o teto é rede de segurança, não régua",
   },
 };
 
