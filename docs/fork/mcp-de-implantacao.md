@@ -800,6 +800,33 @@ Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
 
+### O que chegou do upstream 1.120 e 1.120.1 (fusão de 20/11)
+
+A fusão (MIA-101) entra sem ferramenta nem campo novo. Nenhuma rota espelhada (seção 5)
+mudou na faixa. Duas peças que o MCP usa mudaram por baixo e continuam servindo sem ajuste:
+o passo do plano de tarefas (`lib/tarefas/plano.ts`) passou a aceitar só `"dono_do_lead"` ou
+`{ usuario_id }` (`AtribuicaoDoPasso`), que é o que `lib/implantacao/planos-de-tarefa.ts` já
+gravava; e `camposDaRecusa` do catálogo de serviços devolve código da regra em vez de frase,
+fora do caminho de `lib/implantacao/produtos.ts` (que só usa `sinaisFixosQueTravamPreco`).
+
+Falta no MCP (cada item com o motivo):
+
+- as duas opções novas da campanha de prospecção: "Aprovar a prévia de cada empresa antes do
+  primeiro contato" (#3630, desligada por padrão) e "De onde vem a primeira mensagem", pela
+  estratégia do site ou pelo prompt do agente (#4315). Campo novo, só se o MCP passar a montar
+  campanha de prospecção, o que hoje ele não faz;
+- o setor da tarefa (`lib/tarefas/setores-da-tarefa.ts`, #4883) e a tarefa que se repete todo
+  dia ou todo mês (#4595): o plano de tarefas da implantação não tem recorrência nem setor.
+  Campo novo de `plataforma_garantir_planos_de_tarefa`, se a implantação quiser montar tarefa
+  recorrente para a equipe do cliente.
+
+Nada a configurar pela implantação: as ferramentas de tarefa `crm_create_task`,
+`crm_list_tasks` e `crm_update_task` (#4838) são do MCP da empresa e chegam com a fusão; as
+abas do Inbox por pessoa (#3313) são preferência de cada usuário; a distribuição que reabre
+quando o horário do atendente ou da fila abre (#3916) é passo do `routing-worker`; a falha
+permanente de envio (#4723), a voz em WAV no Instagram (#4719) e as linhas "Responsável" e
+"Funil" no aviso de negócio para a equipe são regra do worker ou da automação.
+
 ### O que chegou do upstream 1.119 (fusão de 19/11)
 
 A fusão (MIA-91) entra sem ferramenta nem campo novo, como na 1.117 e na 1.118. Uma rota

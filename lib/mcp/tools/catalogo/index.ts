@@ -30,6 +30,7 @@ import { TOOLS_MARKETING } from "./marketing";
 import { TOOLS_OPERACAO } from "./operacao";
 import { TOOLS_RECEITAS_EXTERNAS } from "./receitas-externas";
 import { TOOLS_RETENCAO } from "./retencao";
+import { TOOLS_TAREFAS } from "./tarefas";
 import type { McpToolCatalogEntry } from "./tipos";
 
 export type { McpToolCatalogEntry } from "./tipos";
@@ -50,6 +51,7 @@ export const TOOL_CATALOG: ReadonlyArray<McpToolCatalogEntry> = [
   ...TOOLS_MARKETING,
   ...TOOLS_OPERACAO,
   ...TOOLS_RETENCAO,
+  ...TOOLS_TAREFAS,
   // FORK MIA — as capacidades do fork, num arquivo nosso.
   ...TOOLS_MIA,
 ];

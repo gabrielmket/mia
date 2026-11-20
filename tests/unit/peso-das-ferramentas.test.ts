@@ -142,6 +142,9 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
   "crm_set_webhook_source_active": { tokens: 199, motivo: BASE },
   "crm_set_automation_rule_active": { tokens: 232, motivo: BASE },
   "crm_schedule_followup": { tokens: 539, motivo: BASE },
+  "crm_create_task": { tokens: 736, motivo: "capacidade nova (#4838): tarefa da equipe pelo MCP, no pacote escalar; o peso é quase todo o regex que o zod gera para cada uuid e data — o mesmo das irmãs" },
+  "crm_list_tasks": { tokens: 901, motivo: "capacidade nova (#4838): tarefa da equipe pelo MCP, no pacote escalar; o peso é quase todo o regex que o zod gera para cada uuid e data — o mesmo das irmãs" },
+  "crm_update_task": { tokens: 919, motivo: "capacidade nova (#4838): tarefa da equipe pelo MCP, no pacote escalar; o peso é quase todo o regex que o zod gera para cada uuid e data — o mesmo das irmãs" },
   "crm_enroll_followup_flow": { tokens: 365, motivo: BASE },
   "crm_cancel_followup": { tokens: 254, motivo: BASE },
   "crm_close_demand": { tokens: 244, motivo: BASE },
@@ -219,6 +222,9 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
 // +149 no `crm_update_lead` (#4666), que passou a dizer que `tags` substitui a
 // lista inteira e ganhou `tags_adicionar`/`tags_remover`. MEDIDO no merge com a
 // main pós-#4886 e #4684: 40675 (2026-11-18).
+// +2556 com as três ferramentas de tarefa (#4838): 736 de `crm_create_task`, 901 de
+// `crm_list_tasks` e 919 de `crm_update_task`. MEDIDO no merge com a main de 19/11
+// (que já tinha 40730): 43286 (2026-11-19), não somado à mão.
 // FORK MIA: + 2027 das quatro ferramentas do fork (+1854) e das descrições que o
 // fork estende (+173), a diferença medida na fusão da v1.107 (32639 contra 30612
 // do upstream). Na fusão da v1.116 a conta dava 42236 = 40209 + 2027; MEDIDO
@@ -229,7 +235,8 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
 // os CAMPOS do funil (#4667), delta medido naquela entrada (63 → 118). O upstream
 // mediu 40730 = 40675 + 55 (2026-11-18, main de `9da6943cc2`).
 // Na fusão da v1.119: 42758 = 42703 + 55 (`crm_list_pipelines`, #4667).
-const TETO_TOTAL = 42758;
+// Na fusão da v1.120: 45314 = 43286 + 2028 (a diferença do fork, 42758 - 40730).
+const TETO_TOTAL = 45314;
 
 const VARIANTE = "schedule_followup (com negócio)";
 
