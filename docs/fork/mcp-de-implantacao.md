@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **124** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda, a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md), a MIA-67 as três da 1.117: contar os negócios e ver e revogar as conexões do MCP da empresa, e a MIA-79 as duas da 1.118: o módulo opcional por empresa e a tela inicial): as 116 desta página e as 8 da migração
+São **126** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda, a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md), a MIA-67 as três da 1.117: contar os negócios e ver e revogar as conexões do MCP da empresa, a MIA-79 as duas da 1.118: o módulo opcional por empresa e a tela inicial, e a MIA-99 as duas do preço que a Meta cobra por mensagem): as 118 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -237,7 +237,8 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | `plataforma_ver_cliente` | o retrato de um cliente: módulos, números, saldo e, em `configuracao`, a limpeza automática de mídia, o freio do passo "a IA decide", o bloqueio de afirmação clínica e quantos planos de tarefa existem; desde a .96, em `pagamento_inicial`, o passo "Pagamento" do início; desde a 1.118 (MIA-79), em `modulos_opcionais`, cada módulo opcional que se decide por empresa, com o estado escolhido (`herda`, `ligado`, `desligado`), se vale agora (`efetivo`) e se a instalação o tem desligado (`bloqueado_pela_instalacao`) | leitura |
 | `plataforma_listar_modulos` | os módulos que se vendem separado | leitura |
 | `plataforma_ver_saude` | o estado da instalação, e se a chave que cifra o CPF dos contatos está semeada (só sim ou não; o valor nunca sai) | leitura |
-| `plataforma_ver_consumo_de_ia` | o consumo de IA de um cliente num mês do calendário em Brasília ou nos últimos N dias de Brasília (`dias`, a mesma janela das telas; MIA-44 e MIA-78, [`consumo-de-ia.md`](consumo-de-ia.md)): o total, cada agente, a linha "Sistema" (chamadas sem agente) e a quebra por finalidade, cada uma com chamadas, tokens de entrada e saída, quantos vieram do cache, o custo em centavos de dólar (a régua do teto) e em reais (cotação de cada dia). Os mesmos números da aba Uso do cliente | leitura |
+| `plataforma_ver_consumo_de_ia` | o consumo de IA de um cliente num mês do calendário em Brasília ou nos últimos N dias de Brasília (`dias`, a mesma janela das telas; MIA-44 e MIA-78, [`consumo-de-ia.md`](consumo-de-ia.md)): o total, cada agente, a linha "Sistema" (chamadas sem agente) e a quebra por finalidade, cada uma com chamadas, tokens de entrada e saída, quantos vieram do cache, o custo em centavos de dólar (a régua do teto) e em reais (cotação de cada dia). Desde a MIA-99, `mensagens_cobradas`: as mensagens que a Meta cobrou no período, cada uma ao preço que valia no instante dela (o mês fechado não muda com o reajuste; [`consumo-de-ia.md`](consumo-de-ia.md), seção 9). Os mesmos números da aba Uso do cliente | leitura |
+| `plataforma_ver_precos_da_meta` | o preço que a Meta cobra por mensagem, por categoria, em centavos de real (MIA-99, [`consumo-de-ia.md`](consumo-de-ia.md), seção 9): o de hoje, as categorias sem preço e o histórico das vigências (`vigente_desde: null` = desde sempre, `vigente_ate: null` = o atual) | leitura |
 | `plataforma_ver_implantacao` | o **checklist**: por área, o que está pronto, o que falta (com a ferramenta) e o que é com uma pessoa (com a tela). Desde a .91, as áreas `primeiros_passos` (onde a empresa está no passo a passo e o número oficial que espera a Time) e `plano_e_cobranca` (assinou ou não, das tabelas de assinatura do upstream), e o `rotulo_do_cliente`: o "o que falta" que a empresa nova vê | leitura |
 | `plataforma_listar_modelos` | os modelos e vocabulários que as outras ferramentas aceitam: modelos de follow-up, pacotes e capacidades do agente, gatilhos e ações de automação, passos do funil, tipos de campo | leitura |
 | `plataforma_ver_funis` | os funis inteiros: etapas (desde a 1.118, com a cor e o `criterio`), passo do agente, campos (desde a 1.118, cada um com `ia_pode_ler`: se a IA lê o valor), motivos | leitura |
@@ -400,6 +401,18 @@ já tinha `liberar_modulo` não ganha esta em silêncio.
 | ferramenta | o que faz | reexecução |
 |---|---|---|
 | `plataforma_definir_modulo_da_empresa` | `herda` (apaga a exceção: segue a instalação), `desligado` (tira o módulo SÓ desta empresa) ou `ligado`. As regras são as da ação da tela (`updateModuloDaEmpresa`), num espelho com a impressão registrada: a instalação é o teto (ligar o que ela tem desligado é recusado, com o caminho de `/admin/sistema`), o que ainda não se liga é recusado, desligar não apaga dado (religar traz de volta) e a trilha é `organization.modulo_updated` com o de e o para. A lista de capacidades que a tela do agente oferece continua seguindo a instalação (`capacidadesOferecidas` espelha `GET /api/v1/mcp/tools`, que o upstream deixou assim) | o mesmo estado responde `ja_estava` sem escrever nem auditar |
+
+### O preço que a Meta cobra por mensagem · operação `definir_custo_da_meta` (MIA-99)
+
+O preço de CUSTO de cada categoria de mensagem da Meta (`platform_precos_meta`, a tabela da tela
+`/admin/custo-da-meta`), que entra no custo de todos os clientes. Desde a 9165 ele tem vigência: o preço
+novo vale a partir de agora, e as mensagens de antes continuam ao preço antigo, então um mês fechado não
+muda ([`consumo-de-ia.md`](consumo-de-ia.md), seção 9). Caixinha própria no token, e não `definir_preco`:
+aquela muda o que UM cliente paga; esta, o custo de TODOS.
+
+| ferramenta | o que faz | reexecução |
+|---|---|---|
+| `plataforma_definir_precos_da_meta` | grava os preços pedidos (`precos: [{ categoria, centavos_brl }]`, só as categorias que a Meta usa hoje) em `platform_precos_meta`, como o PUT da tela; o gatilho da 9165 fecha a vigência atual e abre a nova. Cada categoria volta com `antes` e `resultado`: `mudou` (vale a partir de agora) ou `primeiro_preco` (a categoria nunca teve preço, e este vale desde sempre). Categoria repetida no pedido é recusada. Não apaga preço, não muda o que o cliente paga e não envia nada | o mesmo preço responde `ja_estava` e não escreve |
 
 ### O disparo de e-mail marketing (.89)
 

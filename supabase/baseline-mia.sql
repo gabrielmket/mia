@@ -1985,7 +1985,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261118110000_9163_modulos_contratados_saem_do_caminho', now())
+values (1, '20261120120000_9165_preco_da_meta_com_vigencia', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -22810,6 +22810,165 @@ begin
     raise warning 'MIA 9163: a organization_modules ainda tem o formato da MIA (revoked_at) e a mia_modulos_contratados ja existe: confira as duas antes de qualquer outra coisa';
   end if;
 end $$;
+
+
+-- ─── 9165 · o preço da Meta ganha vigência, e o mês fechado não muda ───
+--
+-- FORK MIA (MIA-99). Espelho EXATO da migration 9165 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+-- 9165 · o preço da Meta ganha vigência, e o mês fechado não muda
+--
+-- FORK MIA (MIA-99, defeito 4 da seção 2.1 do mapa da MIA-54). Só objetos
+-- NOSSOS (docs/FORK-MIA.md, regra 3): uma tabela nova com o prefixo `mia_`,
+-- uma função com nome nosso e um gatilho na `platform_precos_meta`, que também
+-- é nossa (0259).
+--
+-- ── Por que um gatilho, e não a rota fechando a vigência ─────────────────────
+--
+-- Quem grava preço é quem tem de fechar a vigência. Escrito na rota, valeria
+-- para a rota: o MCP, um `update` à mão e a imagem de antes desta migration
+-- (num rollback de imagem o banco fica) continuariam sobrescrevendo, e o
+-- histórico teria buracos que ninguém vê. Pendurado no FATO (a linha de
+-- `platform_precos_meta` mudou), vale para todos, e na mesma transação: não
+-- existe o instante em que a vigência velha fechou e a nova não abriu.
+--
+-- ── Por que `-infinity` no primeiro preço ────────────────────────────────────
+--
+-- O preço de hoje é o único que se conhece. Fazê-lo valer só a partir desta
+-- migration deixaria todo o passado "sem preço" (a tela diria "preço não
+-- informado" para outubro), que é mentira de outro tipo. A regra vale também
+-- para a categoria que ganha preço pela primeira vez depois daqui: o primeiro
+-- número dela cobre o passado, e só o SEGUNDO em diante tem início no dia em
+-- que foi gravado.
+
+create table if not exists public.mia_precos_meta_vigencias (
+  id uuid primary key default gen_random_uuid(),
+  categoria text not null,
+  -- Centavos de REAL, como `platform_precos_meta.centavos_brl`.
+  centavos_brl integer not null,
+  -- `-infinity` = desde sempre (o primeiro preço da categoria).
+  vigente_desde timestamptz not null,
+  -- Nulo = é o preço atual.
+  vigente_ate timestamptz,
+  criado_em timestamptz not null default now(),
+  -- Quem gravou o preço (`platform_precos_meta.atualizado_por`), um admin da plataforma.
+  criado_por uuid,
+  constraint mia_precos_meta_vigencias_centavos_check check (centavos_brl >= 0),
+  constraint mia_precos_meta_vigencias_intervalo_check
+    check (vigente_ate is null or vigente_ate > vigente_desde)
+);
+
+comment on table public.mia_precos_meta_vigencias is
+  'MIA (9165): o historico do preco de cada categoria de mensagem da Meta, em centavos de REAL. Uma mensagem custa o preco cuja vigencia contem o instante dela (vigente_desde <= created_at < vigente_ate). vigente_ate nulo = o preco atual (um por categoria); vigente_desde = -infinity = desde sempre (o primeiro preco da categoria). Mantida pelo gatilho trg_mia_precos_meta_vigencia em platform_precos_meta: nao escreva aqui direto.';
+
+-- Uma vigência aberta por categoria: é a trava contra dois "preços atuais".
+create unique index if not exists uq_mia_precos_meta_vigencias_aberta
+  on public.mia_precos_meta_vigencias (categoria)
+  where vigente_ate is null;
+
+-- A pergunta é sempre "que preço valia nesta categoria neste instante".
+create index if not exists idx_mia_precos_meta_vigencias_categoria
+  on public.mia_precos_meta_vigencias (categoria, vigente_desde);
+
+-- `security invoker`: quem grava preço é o servidor (service_role), que tem as
+-- permissões nas duas tabelas. A função não faz nada que quem grava não possa.
+create or replace function public.fn_mia_preco_da_meta_abre_vigencia()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_agora timestamptz := now();
+  v_aberta_id uuid;
+  v_aberta_centavos integer;
+  v_aberta_desde timestamptz;
+  v_tem_historico boolean;
+begin
+  -- A categoria que deixou de ter preço (apagada, ou renomeada num update):
+  -- a vigência aberta dela fecha agora. A que abriu nesta mesma transação nunca
+  -- valeu para mensagem nenhuma e sai.
+  if tg_op = 'DELETE' or (tg_op = 'UPDATE' and old.categoria is distinct from new.categoria) then
+    delete from public.mia_precos_meta_vigencias
+     where categoria = old.categoria and vigente_ate is null and vigente_desde >= v_agora;
+    update public.mia_precos_meta_vigencias
+       set vigente_ate = v_agora
+     where categoria = old.categoria and vigente_ate is null;
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+  end if;
+
+  select v.id, v.centavos_brl, v.vigente_desde
+    into v_aberta_id, v_aberta_centavos, v_aberta_desde
+    from public.mia_precos_meta_vigencias v
+   where v.categoria = new.categoria and v.vigente_ate is null
+   for update;
+
+  -- O mesmo preço gravado de novo (a tela manda a tabela inteira): nada muda.
+  if v_aberta_id is not null and v_aberta_centavos = new.centavos_brl then
+    return new;
+  end if;
+
+  -- Aberta nesta mesma transação: corrige o valor em vez de abrir uma vigência
+  -- de duração zero.
+  if v_aberta_id is not null and v_aberta_desde >= v_agora then
+    update public.mia_precos_meta_vigencias
+       set centavos_brl = new.centavos_brl, criado_por = new.atualizado_por
+     where id = v_aberta_id;
+    return new;
+  end if;
+
+  select exists (
+    select 1 from public.mia_precos_meta_vigencias v where v.categoria = new.categoria
+  ) into v_tem_historico;
+
+  if v_aberta_id is not null then
+    update public.mia_precos_meta_vigencias set vigente_ate = v_agora where id = v_aberta_id;
+  end if;
+
+  insert into public.mia_precos_meta_vigencias (categoria, centavos_brl, vigente_desde, criado_por)
+  values (
+    new.categoria,
+    new.centavos_brl,
+    -- O primeiro preço da categoria vale desde sempre (o cabeçalho diz por quê).
+    case when v_tem_historico then v_agora else '-infinity'::timestamptz end,
+    new.atualizado_por
+  );
+  return new;
+end;
+$$;
+
+comment on function public.fn_mia_preco_da_meta_abre_vigencia() is
+  'MIA (9165): gatilho de platform_precos_meta. Preco novo fecha a vigencia aberta da categoria em now() e abre outra; o primeiro preco da categoria vale desde sempre (-infinity); preco igual nao abre vigencia; categoria apagada fecha a vigencia aberta.';
+
+drop trigger if exists trg_mia_precos_meta_vigencia on public.platform_precos_meta;
+create trigger trg_mia_precos_meta_vigencia
+  after insert or update or delete on public.platform_precos_meta
+  for each row execute function public.fn_mia_preco_da_meta_abre_vigencia();
+
+-- O preço de hoje vira a primeira vigência, desde sempre. Só a categoria que
+-- ainda não tem vigência nenhuma: rodar de novo não faz nada.
+insert into public.mia_precos_meta_vigencias (categoria, centavos_brl, vigente_desde, criado_em, criado_por)
+select p.categoria, p.centavos_brl, '-infinity'::timestamptz, p.atualizado_em, p.atualizado_por
+  from public.platform_precos_meta p
+ where not exists (
+   select 1 from public.mia_precos_meta_vigencias v where v.categoria = p.categoria
+ );
+
+alter table public.mia_precos_meta_vigencias enable row level security;
+
+-- ZERO POLICIES, como `platform_precos_meta`: é preço de CUSTO da plataforma,
+-- quem lê é o servidor.
+revoke all on public.mia_precos_meta_vigencias from public, anon, authenticated;
+grant select, insert, update, delete on public.mia_precos_meta_vigencias to service_role;
+
+revoke all on function public.fn_mia_preco_da_meta_abre_vigencia() from public, anon, authenticated;
+grant execute on function public.fn_mia_preco_da_meta_abre_vigencia() to service_role;
+
+notify pgrst, 'reload schema';
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----

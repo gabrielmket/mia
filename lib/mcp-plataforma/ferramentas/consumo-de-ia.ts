@@ -9,6 +9,10 @@
  * FORK MIA (MIA-78): `dias` é a mesma janela dos 7/30/90 dias das duas telas
  * (`periodoDoPedido`: N dias do calendário em Brasília, hoje incluído).
  *
+ * FORK MIA (MIA-99): traz também as mensagens que a Meta cobrou no período,
+ * cada uma ao preço que valia no instante dela (`lerCustoDeMensagemDoPeriodo`,
+ * a mesma leitura do bloco `mensagens_cobradas` da aba Uso).
+ *
  * ⚠️ Dinheiro aqui é o preço de CUSTO da plataforma: o MCP de plataforma é da
  * Time, e o número não vai para o cliente (`lib/ai/custo-e-da-plataforma.ts`).
  */
@@ -22,6 +26,7 @@ import {
   mesAtualEAnterior,
   periodoDoPedido,
 } from "@/lib/ai/usage/consumo-do-periodo";
+import { falhouOCustoDeMensagem, lerCustoDeMensagemDoPeriodo } from "@/lib/channels/meta/custo-do-periodo";
 import { organizacaoDaImplantacao } from "@/lib/implantacao/base";
 
 import { recusar } from "../recusa";
@@ -40,7 +45,10 @@ export const FERRAMENTAS_DE_CONSUMO_DE_IA: FerramentaDePlataforma[] = [
       "e `sem_preco` (chamadas sem preço registrado, que entram como zero). " +
       "`reais.dias_sem_cotacao` não vazio = o total em real está incompleto (dia sem cotação fica de fora). " +
       "`truncado: true` = o mês passou do teto de leitura e o começo dele ficou de fora. " +
-      "O mês do teto do orçamento é o do banco (UTC) e pode diferir deste nas últimas 3 horas do mês. Só lê.",
+      "O mês do teto do orçamento é o do banco (UTC) e pode diferir deste nas últimas 3 horas do mês. " +
+      "`mensagens_cobradas`: as mensagens que a META cobrou no período, por categoria, em centavos de REAL, cada mensagem ao preço que valia no instante dela " +
+      "(um reajuste não muda um mês já fechado; num mês em que o preço mudou, a quebra por preço está em `linhas[].precos`). `semPreco` = categorias com mensagem " +
+      "sem preço vigente, fora do total. Os mesmos números da aba Uso. Só lê.",
     inputSchema: {
       organization_id: ORGANIZACAO,
       mes: z
@@ -67,8 +75,14 @@ export const FERRAMENTAS_DE_CONSUMO_DE_IA: FerramentaDePlataforma[] = [
       const mes = typeof args.mes === "string" ? args.mes : dias === null ? mesAtualEAnterior().atual : null;
       const periodo = periodoDoPedido({ mes, dias });
       if (!periodo) recusar("mes deve vir como AAAA-MM, por exemplo 2026-10.");
-      const consumo = await lerConsumoDoPeriodo(admin, org.id, periodo);
+      const [consumo, mensagensCobradas] = await Promise.all([
+        lerConsumoDoPeriodo(admin, org.id, periodo),
+        lerCustoDeMensagemDoPeriodo(admin, org.id, periodo),
+      ]);
       if (falhouOConsumo(consumo)) throw new Error(`não consegui ler o consumo de IA: ${consumo.erro}`);
+      if (falhouOCustoDeMensagem(mensagensCobradas)) {
+        throw new Error(`não consegui ler as mensagens cobradas pela Meta: ${mensagensCobradas.erro}`);
+      }
       return {
         empresa: org.display_name,
         organization_id: org.id,
@@ -82,6 +96,7 @@ export const FERRAMENTAS_DE_CONSUMO_DE_IA: FerramentaDePlataforma[] = [
         reais: consumo.reais,
         truncado: consumo.truncado,
         chamadas_no_banco: consumo.chamadas_no_banco,
+        mensagens_cobradas: mensagensCobradas,
       };
     },
   },

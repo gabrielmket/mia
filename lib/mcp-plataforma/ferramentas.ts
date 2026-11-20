@@ -54,6 +54,8 @@ import { FERRAMENTAS_DAS_CONEXOES_DO_MCP } from "./ferramentas/conexoes-do-mcp";
 import { FERRAMENTAS_DA_CONTAGEM_DE_NEGOCIOS } from "./ferramentas/contagem-de-negocios";
 // FORK MIA (upstream 1.118, MIA-79): o módulo opcional por empresa e a tela inicial.
 import { FERRAMENTAS_DA_FAIXA_1118 } from "./ferramentas/novidades-1118";
+// FORK MIA (MIA-99): o preço que a Meta cobra por mensagem, com vigência.
+import { FERRAMENTAS_DE_PRECOS_DA_META } from "./ferramentas/precos-da-meta";
 import { FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP } from "./ferramentas/conhecimento-e-followup";
 import { FERRAMENTAS_DE_CONVERSOES } from "./ferramentas/conversoes";
 import { FERRAMENTAS_DE_DEMONSTRACAO } from "./ferramentas/demonstracao";
@@ -128,6 +130,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DAS_CONEXOES_DO_MCP,
   // FORK MIA (upstream 1.118, MIA-79): o módulo opcional por empresa (9416) e a tela inicial da empresa e da pessoa (#4864) (docs/fork/mcp-de-implantacao.md)
   ...FERRAMENTAS_DA_FAIXA_1118,
+  // FORK MIA (MIA-99): ver e mudar o preço que a Meta cobra por mensagem; o preço novo vale a partir de agora e o mês fechado não muda (docs/fork/consumo-de-ia.md)
+  ...FERRAMENTAS_DE_PRECOS_DA_META,
 ];
 
 export const FERRAMENTA_POR_NOME = new Map(FERRAMENTAS.map((f) => [f.name, f]));
