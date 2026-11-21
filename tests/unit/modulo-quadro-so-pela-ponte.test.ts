@@ -21,7 +21,11 @@ const RAIZ = process.cwd();
 const QUADRO = "components/modulo/QuadroDoModulo.tsx";
 
 /** Iframes que já existiam e NÃO são de módulo (pré-visualização de anexo PDF do cartão). */
-const IFRAMES_QUE_NAO_SAO_DE_MODULO = ["components/kanban/FileUploadCustomField.tsx"];
+const IFRAMES_QUE_NAO_SAO_DE_MODULO = [
+  "components/kanban/FileUploadCustomField.tsx",
+  // FORK MIA (.89): a prévia do e-mail marketing, `srcDoc` com `sandbox=""` (nada roda nem navega).
+  "components/email-marketing/campanha/AbaMensagem.tsx",
+];
 
 const PASTAS_IGNORADAS = new Set([
   "node_modules",
