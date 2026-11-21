@@ -634,6 +634,22 @@ const OPERACAO_DO_FORK: Manual[] = [
 ];
 
 const TELAS_DO_UPSTREAM: Manual[] = [
+  // .123 (upstream v1.123, #5089): a tela de um módulo conectado, `/app/m/<módulo>`. Só existe
+  // quando o administrador da instalação instala e liga um módulo para a empresa.
+  {
+    id: "modulo-conectado",
+    titulo: "Abrir um módulo conectado (grupo Módulos do menu)",
+    palavras: ["modulo", "modulo conectado", "extensao", "integracao", "modulos", "app externo", "tela do modulo"],
+    href: "/app",
+    telas: ["/app/m/[modulo]"],
+    papelMinimo: "viewer",
+    passos: [
+      "No menu lateral, abra o grupo Módulos e clique no módulo. Ele também aparece na busca (Ctrl+K), e o botão do módulo, no topo, abre a mesma tela num painel ao lado.",
+      "A tela do módulo abre dentro do CRM. Ele só vê as áreas que a empresa consentiu ao ligá-lo.",
+      "Se aparecer \"O serviço deste módulo não respondeu\", o resto do CRM segue funcionando: tente de novo em instantes.",
+    ],
+    observacao: "Sem módulo ligado, o grupo Módulos não aparece. Quem instala e liga módulo é o administrador da instalação, não a empresa.",
+  },
   // .100 (upstream v1.97, #3572): o índice da ajuda no rodapé do menu. Convive com o
   // assistente: a Ajuda é o índice por jornada; o assistente responde e leva à tela.
   {

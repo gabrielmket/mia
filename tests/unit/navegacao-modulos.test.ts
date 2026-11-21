@@ -10,6 +10,10 @@ import {
 /**
  * O grupo "Módulos" é GERADO (Spec 33, F4, tarefa 4): um item `/app/m/<slug>` por módulo conectado
  * ativo. A regra de ouro é que, sem módulo, a navegação é exatamente a de antes.
+ *
+ * FORK MIA (fusão da v1.123): a assinatura do fork tem dois eixos a mais depois de `settings`
+ * (o que a organização CONTRATOU e o modo de venda, ver `lib/navigation/registry.ts`). Cada
+ * chamada abaixo leva `undefined, undefined` nessas duas posições, e o resto fica na ordem dele.
  */
 
 const PAPEIS = [
@@ -29,15 +33,15 @@ describe("grupo Módulos gerado: sem módulo, nada muda", () => {
   for (const { platform, role } of PAPEIS) {
     it(`sidebarGroups idêntico com lista vazia ou ausente (${role ?? "plataforma"})`, () => {
       const sem = sidebarGroups(platform, role);
-      expect(sidebarGroups(platform, role, undefined, [], [], [])).toEqual(sem);
-      expect(sidebarGroups(platform, role, undefined, [], [], undefined)).toEqual(sem);
+      expect(sidebarGroups(platform, role, undefined, undefined, undefined, [], [], [])).toEqual(sem);
+      expect(sidebarGroups(platform, role, undefined, undefined, undefined, [], [], undefined)).toEqual(sem);
       expect(sem.some((g) => g.group.id === "modulos")).toBe(false);
     });
 
     it(`searchable idêntico com lista vazia ou ausente (${role ?? "plataforma"})`, () => {
       const sem = searchable(platform, role);
-      expect(searchable(platform, role, undefined, undefined, undefined, [])).toEqual(sem);
-      expect(searchable(platform, role, undefined, undefined, undefined, undefined)).toEqual(sem);
+      expect(searchable(platform, role, undefined, undefined, undefined, undefined, undefined, [])).toEqual(sem);
+      expect(searchable(platform, role, undefined, undefined, undefined, undefined, undefined, undefined)).toEqual(sem);
       expect(sem.some((d) => d.group === "modulos")).toBe(false);
     });
   }
@@ -50,7 +54,7 @@ describe("grupo Módulos gerado: sem módulo, nada muda", () => {
 describe("grupo Módulos gerado: com módulos", () => {
   it("aparece um grupo Módulos com um item /app/m/<slug> por módulo, e o resto fica igual", () => {
     const base = sidebarGroups(false, "viewer");
-    const com = sidebarGroups(false, "viewer", undefined, [], [], DOIS);
+    const com = sidebarGroups(false, "viewer", undefined, undefined, undefined, [], [], DOIS);
     expect(com.slice(0, base.length)).toEqual(base);
     const g = com.find((x) => x.group.id === "modulos");
     expect(g?.group.label).toBe("Módulos");
@@ -60,7 +64,7 @@ describe("grupo Módulos gerado: com módulos", () => {
 
   it("é visível a qualquer membro, do viewer ao admin", () => {
     for (const role of ["viewer", "agent", "manager", "admin"] as const) {
-      const g = sidebarGroups(false, role, undefined, [], [], DOIS).find(
+      const g = sidebarGroups(false, role, undefined, undefined, undefined, [], [], DOIS).find(
         (x) => x.group.id === "modulos",
       );
       expect(g?.items).toHaveLength(2);
@@ -69,7 +73,7 @@ describe("grupo Módulos gerado: com módulos", () => {
 
   it("entra no ⌘K, depois dos destinos de sempre", () => {
     const base = searchable(false, "agent");
-    const com = searchable(false, "agent", undefined, undefined, undefined, DOIS);
+    const com = searchable(false, "agent", undefined, undefined, undefined, undefined, undefined, DOIS);
     expect(com.slice(0, base.length)).toEqual(base);
     expect(com.slice(base.length).map((d) => d.href)).toEqual([
       "/app/m/acme-comanda",
@@ -91,17 +95,17 @@ describe("grupo Módulos gerado: com módulos", () => {
       { slug: "ok-um", titulo: "Bom" },
       { slug: "ok-um", titulo: "Bom de novo" },
     ];
-    const g = sidebarGroups(false, "viewer", undefined, [], [], sujos).find(
+    const g = sidebarGroups(false, "viewer", undefined, undefined, undefined, [], [], sujos).find(
       (x) => x.group.id === "modulos",
     );
     expect(g?.items.map((i) => i.href)).toEqual(["/app/m/ok-um"]);
     expect(
-      searchable(false, "viewer", undefined, [], [], sujos).filter((d) => d.group === "modulos"),
+      searchable(false, "viewer", undefined, undefined, undefined, [], [], sujos).filter((d) => d.group === "modulos"),
     ).toHaveLength(1);
   });
 
   it("só slugs inválidos: nenhum grupo", () => {
-    const g = sidebarGroups(false, "viewer", undefined, [], [], [{ slug: "X/Y", titulo: "Z" }]);
+    const g = sidebarGroups(false, "viewer", undefined, undefined, undefined, [], [], [{ slug: "X/Y", titulo: "Z" }]);
     expect(g.some((x) => x.group.id === "modulos")).toBe(false);
   });
 });

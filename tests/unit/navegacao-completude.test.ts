@@ -166,7 +166,10 @@ describe("completude da navegação", () => {
         20,
       );
     }
-    const itens = searchable(false, "viewer", undefined, [], [], [{ slug: "acme-x", titulo: "X" }]);
+    // FORK MIA: dois eixos a mais depois de `settings` (contratados e modo de venda).
+    const itens = searchable(false, "viewer", undefined, undefined, undefined, [], [], [
+      { slug: "acme-x", titulo: "X" },
+    ]);
     expect(itens.map((d) => d.href)).toContain("/app/m/acme-x");
   });
 
