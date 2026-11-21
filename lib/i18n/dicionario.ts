@@ -17408,9 +17408,6 @@ export const DICIONARIO: Traducoes = {
   "Não consegui ler o carimbo do schema. Num banco que ainda não recebeu a migration 0268 isso é esperado; em qualquer outro caso, é sinal de que o baseline não chegou ao fim.": {
     es: "No pude leer el sello del esquema. En una base que todavía no recibió la migración 0268 esto es esperado; en cualquier otro caso, es señal de que el baseline no llegó al final.",
   },
-  "em dia": {
-    es: "al día",
-  },
   "precisa de atenção": {
     es: "necesita atención",
   },
