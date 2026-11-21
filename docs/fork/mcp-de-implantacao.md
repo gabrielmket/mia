@@ -800,6 +800,35 @@ Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
 
+### O que chegou do upstream 1.122 (fusão de 21/11, MIA-118)
+
+A fusão entra com um ajuste e sem ferramenta nova.
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| O funil aceita 100 campos do negócio, não mais 50 (#4780, `MAX_CAMPOS_DO_NEGOCIO`) | 1.122 | `plataforma_garantir_funil` passa a aceitar a lista `campos` até o mesmo teto, lido da constante do upstream (antes cortava em 50 por conta própria). A cota do negócio continua conferida por `gravarConfiguracaoDoFunil`, a gravação da tela | `implantar_configuracao` |
+| O módulo desligado por empresa passa a valer também em Propostas, Empresas, setores, avisos e nos crons de proposta (#4960, #4963, #4971) | 1.122 | já alcançava: `plataforma_definir_modulo_da_empresa` grava a mesma linha de `organization_modules`. O efeito dela fica maior. No fork a TELA de Empresas continua aberta sem o módulo (docs/fork/empresa-unica.md, seção 4); fecham as rotas do módulo | `gerir_modulo_opcional` |
+| `crm_send_whatsapp_message` aceita `media_storage_path` e `media_filename` (#5034) | 1.122 | nada a fazer: é ferramenta do MCP da EMPRESA, e o MCP de plataforma não envia mensagem | |
+
+Falta no MCP (cada item com o motivo):
+
+- o "Bloquear chamadas recebidas" (Configurações › Segurança, `organizations.settings`,
+  evento `call.received` do WAHA): campo novo de segurança da empresa. Ligado, a ligação de
+  voz do cliente final é recusada na hora, então pede decisão antes de a implantação
+  ligar sozinha. Nasce desligado;
+- o resumo das 7h só nos dias com agendamento (9434, `fn_definir_resumo_do_aviso_de_agendamento`):
+  o MCP de plataforma ainda não configura o aviso de agendamento; o campo entra junto quando
+  ele entrar. Nasce desligado;
+- o módulo conectado (9436 a 9442: pacote, interruptor, consentimento por área, token de uma
+  hora, rotas `/api/v1/extensions/*`): superfície nova de autorização, instalada pelo
+  administrador da instalação. Fica fora até alguém decidir se a implantação de um cliente
+  instala módulo.
+
+Nada a configurar pela implantação: a foto do contato no card, "Suas campanhas" por nicho,
+o contador de Tarefas no menu, a lista de horários livres como evidência da conferência de
+promessa (#4933), o aviso do funil de entrada por número na tela do agente (#4940) e o
+preço novo do Gemini 3.5 Flash são regra da tela, do agente ou do catálogo de modelos.
+
 ### O que chegou do upstream 1.121 (fusão de 20/11, MIA-113)
 
 A fusão entra sem ferramenta nem campo novo no MCP de plataforma. Nenhuma rota espelhada da
