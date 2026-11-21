@@ -800,6 +800,31 @@ Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
 
+### O que chegou do upstream 1.123 (fusão de 21/11, MIA-122)
+
+A fusão entra sem ferramenta nova e sem ajuste no MCP de plataforma.
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| Na véspera e no dia do feriado nacional, o agente marca pelos horários livres da Agenda quando "Não atender em feriado nacional" está desligada (#5039) | 1.123 | nada a gravar: no fork a opção não tem efeito (ver "Falta no MCP" da 1.108 a 1.116: o horário da IA zera o `business_hours`). O que a implantação faz para fechar no feriado é bloquear o dia na Agenda | |
+| A tarefa recorrente concluída pelo MCP gera a próxima (#5058, `lib/mcp/tools/tarefas.ts`) | 1.123 | nada a fazer: é ferramenta do MCP da EMPRESA | |
+
+Falta no MCP (cada item com o motivo):
+
+- o "Não enviar aviso de caso" por pessoa da equipe (#4989, `lib/escalacao/membros-sem-aviso.ts`):
+  o MCP de plataforma ainda não configura a cadeia do aviso de caso; a marca entra junto
+  quando ela entrar. Nasce desligada (todos recebem, como antes);
+- o módulo conectado na tela (grupo Módulos, rota `/app/m/[modulo]`, eventos 9445 e 9446):
+  segue fora pelo mesmo motivo da 1.122. As rotas do fork entraram no mapa de áreas do
+  token de módulo (`lib/auth/portas-de-token/areas.ts`, trechos `FORK MIA`) para o dia em
+  que alguém ligar um módulo;
+- os agentes de voz pela aba Telefone (#5066): a voz não tem fiação no fork
+  (docs/FORK-MIA.md, "A voz precisa de fiação").
+
+Nada a configurar pela implantação: a importação com "Conferir arquivo" (#4899), a borda
+arrastável do card da Agenda (#4450), os modelos Gemini aposentados escondidos do seletor e
+os crons que varrem só organizações elegíveis são regra da tela, do agente ou do worker.
+
 ### O que chegou do upstream 1.122 (fusão de 21/11, MIA-118)
 
 A fusão entra com um ajuste e sem ferramenta nova.
