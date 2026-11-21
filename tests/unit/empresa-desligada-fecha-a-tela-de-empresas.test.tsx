@@ -83,7 +83,7 @@ describe("FORK MIA: a tela de Empresas existe com o módulo ligado ou desligado"
     expect(r).toBe("tela");
   });
 
-  it("instalação DESLIGADA + empresa ligada: a tela existe — o módulo não é condição dela no fork", async () => {
+  it("instalação DESLIGADA + empresa ligada: a tela existe, porque o módulo não é condição dela no fork", async () => {
     mundo({ instalacaoLigada: false, linhaDaEmpresa: "ligado" });
     const r = await Layout({ children: "tela" });
     expect(mocks.notFound).not.toHaveBeenCalled();
