@@ -71,6 +71,9 @@ const SEM_AREA: readonly EntradaSemArea[] = [
   e("channels"), // conexão de canal e credencial do provedor
   e("channel-sessions"), // conexão, pareamento e QR do canal
   e("agenda/google"), // conexão com a conta Google
+  // FORK MIA (9014): a conexão com a conta Microsoft (Outlook e Teams) é o par da do Google
+  // (docs/fork/agenda-microsoft.md). O `resolver` do compromisso segue com área, como o do Google.
+  e("agenda/microsoft"),
   e("modulos"), // administração de extensões (inclui o objeto de dados do módulo)
   e("extensions"),
   e("admin"),
@@ -96,6 +99,9 @@ const SEM_AREA: readonly EntradaSemArea[] = [
   e("ai/followups/enrollments/[id]/resume"),
   e("ai/followups/enrollments/[id]/skip"),
   e("contacts/[id]/unblock"), // desfaz o descadastro, que é regra do envio
+  // FORK MIA (.89): aceite e recusa do e-mail marketing mudam quem recebe campanha, como o
+  // `unblock` acima. A leitura do consentimento segue na área `contatos`.
+  e("contacts/[id]/consentimento-de-email", "escrita"),
   e("voice"), // chamada de voz em tempo real
   e("leads/[id]/conversion"), // reenvia conversão à plataforma de anúncio
   e("conversions"),
@@ -286,6 +292,7 @@ const LEITURAS_COM_CONTATO_EMBUTIDO: readonly string[] = [
   "leads/at-risk", // o radar de risco traz o nome do contato (lib/leads/radar-de-risco.ts)
   "reports/activities", // cada linha traz o nome do contato (lib/reports/atividades.ts)
   "proposals/[id]/previa", // o PDF leva nome, e-mail e telefone do contato, como o documento
+  "leads/[id]/cartao", // FORK MIA (.87): o cartão aberto traz nome e telefone do contato (lib/cartoes/cartao-aberto-servidor.ts)
 ];
 
 export function leituraExigeAreaContatos(modelo: string, metodo: string): boolean {

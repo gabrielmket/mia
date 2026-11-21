@@ -50,6 +50,12 @@ const JUSTIFICADAS: Record<string, string> = {
     "a resposta é `{ contact_id, papel }`: só o identificador que o chamador enviou.",
   "DELETE /api/v1/leads/[id]/contatos-relacionados":
     "a resposta é `{ contact_id, removido }`: só o identificador que o chamador enviou.",
+  // FORK MIA (.87): o `envolvido` do cartão, par do `contatos-relacionados` acima
+  // (docs/fork/cartoes-e-fichas.md, seção 2.1).
+  "POST /api/v1/leads/[id]/envolvidos":
+    "lê do contato só `id, is_anonymized` para conferir a empresa; a resposta é `{ lead_id, contact_id, papel }`.",
+  "DELETE /api/v1/leads/[id]/envolvidos":
+    "a resposta é `{ lead_id, contact_id }`: só o identificador que o chamador enviou.",
   "PATCH /api/v1/proposals/[id]/documento":
     "a resposta é `{ campo }` ou `{ secoesEditadas }`: nome de campo e de seção, sem contato.",
   "POST /api/v1/proposals/[id]/preencher-com-conversa":

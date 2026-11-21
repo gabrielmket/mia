@@ -56,6 +56,7 @@
       "POST /api/v1/agenda/agendamentos",
       "POST /api/v1/agenda/agendamentos/[id]/google/resolver",
       "POST /api/v1/agenda/agendamentos/[id]/google/retry",
+      "POST /api/v1/agenda/agendamentos/[id]/microsoft/resolver",
       "POST /api/v1/agenda/enderecos",
       "POST /api/v1/agenda/excecoes",
       "POST /api/v1/agenda/lista-de-espera",
@@ -94,6 +95,7 @@
       "GET /api/v1/ai/followups/enrollments/[id]",
       "GET /api/v1/ai/followups/queue",
       "GET /api/v1/ai/guardrail-layers",
+      "GET /api/v1/ai/horario-da-ia",
       "GET /api/v1/ai/inbox",
       "GET /api/v1/ai/jev",
       "GET /api/v1/ai/knowledge/sources",
@@ -245,6 +247,7 @@
     "contatos": [
       "DELETE /api/v1/companies/[id]",
       "DELETE /api/v1/contacts/[id]/always-human",
+      "DELETE /api/v1/contacts/[id]/mesma-pessoa",
       "DELETE /api/v1/contacts/[id]/personal",
       "DELETE /api/v1/contacts/[id]/phones/[id]",
       "DELETE /api/v1/contacts/[id]/sem-interesse",
@@ -256,8 +259,10 @@
       "GET /api/v1/contacts/[id]/avatar",
       "GET /api/v1/contacts/[id]/carteira",
       "GET /api/v1/contacts/[id]/compras",
+      "GET /api/v1/contacts/[id]/consentimento-de-email",
       "GET /api/v1/contacts/[id]/crm-summary",
       "GET /api/v1/contacts/[id]/empresa-da-prospeccao",
+      "GET /api/v1/contacts/[id]/ficha",
       "GET /api/v1/contacts/[id]/hierarquia-do-anuncio",
       "GET /api/v1/contacts/[id]/person",
       "GET /api/v1/contacts/[id]/proposals",
@@ -268,6 +273,7 @@
       "GET /api/v1/contacts/cep",
       "GET /api/v1/contacts/compare",
       "GET /api/v1/contacts/duplicates",
+      "GET /api/v1/contacts/tags",
       "GET /api/v1/tags/cores",
       "GET /api/v1/tags/vocabulario",
       "PATCH /api/v1/companies/[id]",
@@ -281,6 +287,7 @@
       "POST /api/v1/contacts",
       "POST /api/v1/contacts/[id]/always-human",
       "POST /api/v1/contacts/[id]/empresa-da-prospeccao",
+      "POST /api/v1/contacts/[id]/mesma-pessoa",
       "POST /api/v1/contacts/[id]/personal",
       "POST /api/v1/contacts/[id]/phones",
       "POST /api/v1/contacts/[id]/phones/[id]/primary",
@@ -288,6 +295,7 @@
       "POST /api/v1/contacts/[id]/roteiros/[id]/negocio",
       "POST /api/v1/contacts/[id]/sem-interesse",
       "POST /api/v1/contacts/bulk",
+      "POST /api/v1/contacts/bulk/filtro",
       "POST /api/v1/contacts/duplicates/dismiss",
       "POST /api/v1/contacts/import",
       "POST /api/v1/contacts/import/agenda",
@@ -340,6 +348,7 @@
       "GET /api/v1/pipelines",
       "GET /api/v1/pipelines/[id]/agent-mapping",
       "GET /api/v1/pipelines/[id]/forecast",
+      "GET /api/v1/pipelines/[id]/produto-no-negocio",
       "GET /api/v1/pipelines/[id]/stages",
       "GET /api/v1/pipelines/[id]/stages/win-rates",
       "GET /api/v1/pipelines/default",
@@ -354,17 +363,20 @@
     "negocios": [
       "DELETE /api/v1/leads/[id]/attachments",
       "DELETE /api/v1/leads/[id]/contatos-relacionados",
+      "DELETE /api/v1/leads/[id]/envolvidos",
       "DELETE /api/v1/proposals/[id]",
       "GET /api/v1/lead-captures",
       "GET /api/v1/leads/[id]",
       "GET /api/v1/leads/[id]/attachments",
       "GET /api/v1/leads/[id]/attachments/[id]/media",
+      "GET /api/v1/leads/[id]/cartao",
       "GET /api/v1/leads/[id]/checklist",
       "GET /api/v1/leads/[id]/clone",
       "GET /api/v1/leads/[id]/contatos-relacionados",
       "GET /api/v1/leads/[id]/conversas-e-ligacoes",
       "GET /api/v1/leads/[id]/eventos",
       "GET /api/v1/leads/[id]/field-proposals",
+      "GET /api/v1/leads/[id]/itens",
       "GET /api/v1/leads/[id]/timeline",
       "GET /api/v1/leads/at-risk",
       "GET /api/v1/leads/import",
@@ -383,14 +395,17 @@
       "PATCH /api/v1/proposals/[id]/modelo",
       "POST /api/v1/leads",
       "POST /api/v1/leads/[id]/attachments",
+      "POST /api/v1/leads/[id]/campos-confirmados",
       "POST /api/v1/leads/[id]/checklist/[id]",
       "POST /api/v1/leads/[id]/clone",
       "POST /api/v1/leads/[id]/contact",
       "POST /api/v1/leads/[id]/contatos-relacionados",
+      "POST /api/v1/leads/[id]/envolvidos",
       "POST /api/v1/leads/[id]/field-proposals/[id]",
       "POST /api/v1/leads/[id]/lose",
       "POST /api/v1/leads/[id]/move",
       "POST /api/v1/leads/[id]/next-action",
+      "POST /api/v1/leads/[id]/notas",
       "POST /api/v1/leads/[id]/reactivation",
       "POST /api/v1/leads/[id]/retomar",
       "POST /api/v1/leads/[id]/win",
@@ -401,7 +416,8 @@
       "POST /api/v1/proposals/[id]/assistant/apply",
       "POST /api/v1/proposals/[id]/decide",
       "POST /api/v1/proposals/[id]/preencher-com-conversa",
-      "POST /api/v1/proposals/[id]/revise"
+      "POST /api/v1/proposals/[id]/revise",
+      "PUT /api/v1/leads/[id]/itens"
     ]
   },
   "formatos": {
@@ -544,8 +560,8 @@
         },
         {
           "nome": "criarComRascunhoSchema",
-          "origem": "local",
-          "hash": "8fba77b82a7329bc"
+          "origem": "@/lib/agenda/tipos-de-agendamento",
+          "hash": "nao-resolvido"
         },
         {
           "nome": "desativarSchema",
@@ -730,7 +746,7 @@
         {
           "nome": "triggerConfigSchema",
           "origem": "@/lib/followup/api-schemas",
-          "hash": "628c82021c4e9969"
+          "hash": "84c848d28d11c426"
         }
       ],
       "resposta": []
@@ -1090,7 +1106,7 @@
         {
           "nome": "createAutomationRuleSchema",
           "origem": "@/lib/schemas",
-          "hash": "7f5ae4be2ea70bf9"
+          "hash": "ad0d6d4346502e96"
         }
       ],
       "resposta": []
@@ -1111,6 +1127,16 @@
           "nome": "corpoSchema",
           "origem": "local",
           "hash": "2f01abd27fc91b1e"
+        }
+      ],
+      "resposta": []
+    },
+    "/api/v1/contacts/[id]/consentimento-de-email": {
+      "corpo": [
+        {
+          "nome": "pedidoSchema",
+          "origem": "local",
+          "hash": "aee9caade13732bb"
         }
       ],
       "resposta": []
