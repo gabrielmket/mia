@@ -23163,6 +23163,53 @@ revoke execute on function public.fn_mia_relatorio_preparar(uuid, text, text[], 
 grant execute on function public.fn_mia_relatorio_preparar(uuid, text, text[], text, text, jsonb, text, date, date, timestamptz) to authenticated, service_role;
 
 
+-- ─── 9168 · o batimento dos crons ───
+--
+-- FORK MIA (MIA-154). Espelho EXATO da migration 9168 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+-- 9168 · o batimento dos crons
+--
+-- FORK MIA (MIA-154). Só objeto NOSSO (docs/FORK-MIA.md, regra 3): uma tabela
+-- nova com o prefixo `mia_`. Nenhuma função, nenhum gatilho.
+--
+-- ── Por que no banco, e não no Redis com TTL ─────────────────────────────────
+--
+-- Sem migration, o Redis seria mais barato, mas o carimbo some quando o Redis
+-- reinicia, e a `/health` diria "parado" sobre um vigia que está rodando. Uma
+-- escrita a cada 5 min no banco sobrevive a reinício e segue o padrão do bloco
+-- `backup` (9006): carimbo no banco, julgado com prazo por quem lê.
+--
+-- ── Por que uma linha por ROTA ───────────────────────────────────────────────
+--
+-- A tabela nasce para o vigia dos números, mas o nome não é dele: estender o
+-- batimento a outro cron é uma chamada a `registrarBatimento` com outra rota,
+-- sem migration nova. A linha é regravada, não acumulada: o histórico dos
+-- crons é o log, e uma tabela que cresce 288 linhas por dia por rota só para
+-- responder "qual foi a última" seria custo sem pergunta.
+
+create table if not exists public.mia_batimentos_de_cron (
+  -- O nome da rota de cron, como em `app/api/v1/cron/<rota>` (ex.: `channel-health`).
+  rota text primary key,
+  ultima_rodada_em timestamptz not null,
+  -- Só contagens da rodada (sessões, verificadas, desfechos). Nunca id de
+  -- empresa, nome ou telefone: a `/health` é pública.
+  resumo jsonb
+);
+
+comment on table public.mia_batimentos_de_cron is
+  'MIA (9168): o batimento de cada cron, uma linha por rota, regravada por upsert no fim de cada rodada (lib/cron/batimento.ts). ultima_rodada_em = quando a rodada terminou; resumo = so contagens da rodada. A /api/v1/health le a linha do channel-health (vigia_dos_canais.em_dia: menos de 15 min). Plataforma, zero policies, so o service_role.';
+
+alter table public.mia_batimentos_de_cron enable row level security;
+
+-- ZERO POLICIES: é estado da plataforma, quem lê e escreve é o servidor.
+revoke all on public.mia_batimentos_de_cron from public, anon, authenticated;
+grant select, insert, update, delete on public.mia_batimentos_de_cron to service_role;
+
+notify pgrst, 'reload schema';
+
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
