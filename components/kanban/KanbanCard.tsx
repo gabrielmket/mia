@@ -34,6 +34,7 @@ import { TarefasNoCard } from "./TarefasNoCard";
 // (docs/fork/produto-no-negocio.md).
 import { useContextoDoCartao } from "@/components/cartoes/ContextoDoCartao";
 import { LinhaDoProduto } from "@/components/produto-no-negocio/LinhaDoProduto";
+import { FotoDoContato } from "./FotoDoContato";
 
 /** Os dois gestos de seleção que o card sabe relatar. */
 export type GestoDeSelecao = "alterna" | "intervalo";
@@ -293,6 +294,11 @@ export const KanbanCard = memo(function KanbanCard({
                   aria-label={`${t("Tag")}: ${card.canonicalTag}`}
                 />
               )}
+              {/* A foto do contato — só quando HÁ foto: sem ela, nada (o disco
+                  de iniciais do rodapé é o do responsável; ver FotoDoContato). */}
+              {lead.contact_id && lead.contact_has_avatar === true ? (
+                <FotoDoContato contactId={lead.contact_id} denso={denso} />
+              ) : null}
               {/* O TÍTULO é o elemento ativável, não o card inteiro.
                   `role="group"` no card foi decisão da wave 2 (o dnd marca o
                   handle como button, e com o menu de ações dentro isso vira

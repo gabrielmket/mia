@@ -8,14 +8,16 @@
  * porque é assim que o operador pensa depois de configurar o painel: "troquei o
  * modelo do classificador de estágio, está funcionando?".
  */
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { NextRequest } from "next/server";
 
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { fail, ok } from "@/lib/api/wrappers";
-import { requireRole } from "@/lib/auth/require-role";
 // MIA: o custo em dinheiro é número da plataforma — sai da resposta para quem
 // não é admin de plataforma (ver `lib/ai/custo-e-da-plataforma.ts`).
 import { podeVerCusto, semCusto } from "@/lib/ai/custo-e-da-plataforma";
+import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
 import { PROVEDOR_DO_JEV } from "@/lib/ai/decisao/credencial";
 import { CONFERENCIA_DE_CAMPO, PEDIDOS_DO_CLIENTE, rotuloDaChamadaDoJev } from "@/lib/ai/decisao/tarefas";
 import {
@@ -27,8 +29,8 @@ import {
 import { rotuloDoProvedor } from "@/lib/ai/pontos/provedores";
 import { PONTO_POR_ID } from "@/lib/ai/pontos/registro";
 import { EXPLICACAO_DA_ORIGEM, type OrigemDaEscolha } from "@/lib/ai/pontos/resolver";
-import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 
 export const dynamic = "force-dynamic";
 
@@ -94,10 +96,18 @@ const filtrosDaQuery = z.object({
 });
 
 export async function GET(req: NextRequest): Promise<Response> {
-  const authz = await requireRole("manager", { resource: "ai_runs" });
+  const requestId = randomUUID();
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "ai_runs",
+    role: "manager",
+    scope: "config:read",
+    tokenRole: "admin",
+  });
   if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const { org } = authz;
+  const teto = await tetoDeEscritaDoToken(authz, "ai_runs", requestId);
+  if (teto) return teto;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? IDIOMA_PADRAO);
 
   // Zod na query string, como a rota irmã de uso já faz. `Math.min(Number(…))`
   // não valida nada: `?limit=abc` virava `NaN` e `?limit=-5` passava direto,
@@ -109,13 +119,13 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
   const { purpose, status, provider, limit: limite } = filtros.data;
 
-  const db = await createClient();
+  const db = authz.supabase;
   let q = db
     .from("llm_calls")
     .select(
       "id, purpose, provider, model, status, error_code, error_message, http_status, origem_da_escolha, input_tokens, output_tokens, cost_cents, latency_ms, created_at",
     )
-    .eq("organization_id", org.orgId)
+    .eq("organization_id", authz.organizationId)
     .order("created_at", { ascending: false })
     .limit(limite);
 
@@ -197,7 +207,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     // O dinheiro sai da resposta quando quem pede não é da plataforma — a tela
     // já esconde a linha de custo quando ela é nula, então o cliente continua
     // vendo tokens, tempo e erro, que é o que diagnostica o atendimento dele.
-    execucoes: semCusto(execucoes, podeVerCusto(authz.user)),
+    execucoes: semCusto(execucoes, podeVerCusto(await quemPedeNaRota(authz))),
     resumo: {
       total: execucoes.length,
       erros: erros.length,
