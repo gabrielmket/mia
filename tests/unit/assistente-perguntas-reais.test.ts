@@ -214,6 +214,10 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "por que nada sai desta empresa de demonstração", sobre: "/app/settings/tenant", espera: "demonstracao" },
   // FORK MIA (.117): a tela nova do upstream, Follow-up por etapa.
   { pergunta: "como mudo quantos dias o negócio fica parado na etapa antes do follow-up", sobre: "/app/settings/followup-por-etapa", espera: "followup-por-etapa" },
+  // FORK MIA (.119): as telas novas do upstream, Operação do dia, Relatórios do dia e Serviços.
+  { pergunta: "como vejo quem está aguardando uma pessoa hoje", sobre: "/app/operacao", espera: "operacao-do-dia" },
+  { pergunta: "como mudo a hora do relatório diário", sobre: "/app/operacao/relatorios", espera: "relatorios-do-dia" },
+  { pergunta: "como cadastro um serviço com sinal e prazo", sobre: "/app/servicos", espera: "servicos" },
 ];
 
 /** O achado é a ajuda esperada? */

@@ -74,7 +74,8 @@ coluna que essa tabela não tem (é de `ai_invocations`); `tokens` agora é entr
 sem nenhum dos dois, o mês corrente em Brasília. Devolve a empresa, o mês (`null` em `dias`), os
 `dias`, o período (`tipo`, `inicio`, `fim`, `fuso`) e os mesmos blocos de `consumo` da rota, saídos
 da mesma função. Cliente que não existe é recusado com o caminho para achar o id
-(`plataforma_listar_clientes`).
+(`plataforma_listar_clientes`). Desde a MIA-99 devolve também `mensagens_cobradas`, o mesmo bloco da aba
+Uso (seção 9).
 
 Exemplo (fictício):
 
@@ -204,8 +205,8 @@ MIA-78); o MCP e quem lê a resposta veem.
 
 ### 8.3 Leitura que falha é erro
 
-Na aba Uso, a contagem de conversas, a de mensagens e os preços da Meta (`platform_precos_meta`)
-não eram conferidos: a contagem que falhava saía 0, e o preço que não vinha saía custo de mensagem
+Na aba Uso, a contagem de conversas, a de mensagens e os preços da Meta (`platform_precos_meta`; desde a
+MIA-99, o histórico `mia_precos_meta_vigencias`, seção 9) não eram conferidos: a contagem que falhava saía 0, e o preço que não vinha saía custo de mensagem
 R$ 0,00. Agora qualquer uma delas que falha responde 500 `db_error`, como a leitura do consumo de IA
 e a das mensagens cobradas já faziam. A lista dos pessoais também: na aba Uso e na tela geral, falha
 nela é 500, e não "nenhum pessoal" contando as mensagens deles.
@@ -217,3 +218,98 @@ Exemplo (fictícias): o mesmo número de mensagens nas duas telas com e sem pess
 mesmo início, fim e chamadas na tela geral, na aba Uso e no MCP (com as pontas de Brasília), cada
 leitura que falha virando 500, e o `pessoais_truncado` acima de 2000. O caso "limites" de
 `app/api/v1/admin/usage/route.test.ts` passou para os dias de Brasília.
+
+## 9. O preço da Meta tem vigência, e o mês fechado não muda (MIA-99)
+
+Defeito 4 da seção 2.1 do mapa (MIA-54, levantamento da MIA-70). `platform_precos_meta` (0259) guardava
+só o preço atual de cada categoria, e a aba Uso e a tela do custo da Meta multiplicavam as mensagens do
+mês pedido por ele. A Academia Alfa (fictícia) com 100 mensagens de marketing cobradas em outubro a
+R$ 0,35 dava R$ 35,00; o preço ia a R$ 0,50 em novembro e outubro passava a R$ 50,00.
+
+### 9.1 A regra
+
+**Cada mensagem cobrada custa o preço que valia no instante dela**: o da vigência com
+`vigente_desde <= created_at < vigente_ate`. O período continua o de Brasília (seção 2, regra 2, e
+MIA-78): ele decide QUAIS mensagens entram; a vigência decide QUANTO cada uma custa. Com o exemplo acima,
+outubro fica R$ 35,00 depois do reajuste, e novembro cobra R$ 0,35 até o instante do reajuste e R$ 0,50
+dali em diante.
+
+- **O primeiro preço de uma categoria vale desde sempre** (`vigente_desde = -infinity`). Não há
+  histórico para reconstruir: o preço que existia quando a 9165 rodou virou a primeira vigência de cada
+  categoria, desde sempre, e o custo do passado ficou exatamente como estava. A mesma regra vale para a
+  categoria que ganha o primeiro preço depois: ele cobre o passado. Só do segundo preço em diante a
+  vigência começa no instante em que foi gravado.
+- **O preço novo vale a partir de agora.** Não existe preço retroativo: gravar fecha a vigência atual em
+  `now()` e abre a nova no mesmo instante, sem buraco nem sobreposição.
+- **O mesmo preço gravado de novo não abre vigência** (a tela manda a tabela inteira no PUT).
+- **Apagar o preço** (só por SQL: nenhuma tela nem ferramenta apaga) fecha a vigência aberta; daí em diante
+  as mensagens da categoria ficam "sem preço" (nunca zero), e o preço que voltar recomeça agora.
+- **Duas mudanças na mesma transação** dão uma vigência só, com o último valor.
+
+### 9.2 Onde mora
+
+- Migration `9165_preco_da_meta_com_vigencia` (`supabase/migrations-mia/`, espelhada no fim do
+  `baseline-mia.sql`). Tabela nossa `mia_precos_meta_vigencias` (`categoria`, `centavos_brl`,
+  `vigente_desde`, `vigente_ate` nulo no preço atual, `criado_em`, `criado_por`), uma vigência aberta por
+  categoria (`uq_mia_precos_meta_vigencias_aberta`). Plataforma: zero policies, só o `service_role`.
+- **Quem fecha e abre a vigência é um gatilho** em `platform_precos_meta`
+  (`trg_mia_precos_meta_vigencia`, função `fn_mia_preco_da_meta_abre_vigencia`, `security invoker`).
+  Por isso ele vale para todo caminho que grava preço: o PUT de `/api/v1/admin/custo-da-meta`, o MCP
+  (`plataforma_definir_precos_da_meta`), um `update` à mão e a imagem de antes da 9165 (num rollback de
+  imagem o banco fica). Nenhuma coluna mudou: `platform_precos_meta` continua sendo o preço atual, e a
+  leitura de antes da migration continua funcionando.
+- A conta: `calcularCustoPorVigencia` (`lib/channels/meta/custo-da-conversa.ts`), que devolve o mesmo
+  formato de antes (uma linha por categoria, `totalCentavos`, `semPreco`) e, em cada linha, a quebra por
+  preço em `precos`. `centavosUnitarios` passa a ser o preço da mensagem mais recente do período que tinha
+  preço; as telas não o mostram.
+- As leituras: `lib/channels/meta/custo-do-periodo.ts`. `lerVigenciasDoPreco` (o histórico; leitura que
+  falha é erro) e `lerCustoDeMensagemDoPeriodo` (as mensagens cobradas de uma empresa no período, já com o
+  custo). A aba Uso e o MCP chamam a segunda; a tela do custo da Meta, que lê todas as empresas, chama a
+  primeira e faz a conta.
+
+### 9.3 Quem usa
+
+| leitura | antes | agora |
+|---|---|---|
+| aba Uso (`GET /api/v1/admin/tenants/[id]/usage`, `mensagens_cobradas`) | preço de hoje | preço do instante de cada mensagem |
+| `/admin/custo-da-meta` (`GET /api/v1/admin/custo-da-meta`, `clientes`) | preço de hoje | preço do instante de cada mensagem; `precos` (a tabela que a tela edita) continua o de hoje |
+| `plataforma_ver_consumo_de_ia` | não trazia mensagem cobrada | `mensagens_cobradas`, o mesmo bloco da aba Uso |
+| `/admin/usage` (tela geral) | não tem custo de mensagem da Meta | não mudou |
+
+O desenho das telas não mudou: muda só o número. A tela do cliente (`/app/ai/usage`) não foi tocada.
+
+⚠️ O mês de `/admin/custo-da-meta` ainda é o mês em UTC (`?mes=` corta de 00:00 UTC do dia 1º), e não o de
+Brasília: o defeito é anterior e outro, e corrigi-lo muda quais mensagens a tela conta. Fica para outra
+tarefa.
+
+### 9.4 O MCP
+
+- `plataforma_ver_precos_da_meta` (só lê): `atuais` (o preço de hoje de cada categoria), `sem_preco` (as
+  categorias conhecidas sem preço) e `historico` (cada vigência; `vigente_desde: null` = desde sempre,
+  `vigente_ate: null` = é o preço atual).
+- `plataforma_definir_precos_da_meta` (operação `definir_custo_da_meta`, chave própria: `definir_preco`
+  muda o que UM cliente paga, esta o custo de TODOS). Recebe `precos: [{ categoria, centavos_brl }]` só
+  das categorias que a Meta usa hoje. Grava em `platform_precos_meta` como o PUT da tela, e o gatilho faz o
+  resto. Cada categoria volta com `antes` e `resultado`: `mudou` (vale a partir de agora),
+  `primeiro_preco` (nunca teve preço, vale desde sempre) ou `ja_estava` (nada foi escrito). A mesma
+  categoria duas vezes no pedido é recusada.
+
+Exemplo (fictício):
+
+```json
+{ "precos": [{ "categoria": "marketing", "centavos_brl": 50 }] }
+```
+
+### 9.5 Testes
+
+- `tests/unit/preco-da-meta-com-vigencia.test.ts`: a Academia Alfa com 100 mensagens de marketing em
+  outubro e o reajuste em 10/11. Outubro igual antes e depois na aba Uso, na tela do custo da Meta e no
+  MCP; novembro com os dois preços; o controle (a conta de antes dava R$ 50,00); a virada de Brasília
+  (23h30 de 31/10 é outubro, ao preço de outubro); o histórico que falha virando 500; o fim exclusivo da
+  vigência; a categoria apagada; e as duas ferramentas do MCP (só o que mudou é gravado, `ja_estava`,
+  `primeiro_preco`, a recusa).
+- `tests/invariants/preco-da-meta-com-vigencia.test.ts`, no Postgres de verdade: o gatilho fechando e
+  abrindo vigência pelo mesmo upsert da tela e do MCP, o mês passado igual e este mês com os dois preços
+  pela mesma leitura da aba Uso, preço igual sem vigência nova, duas mudanças numa transação, apagar e
+  voltar, a migration aplicada de novo sem mexer no histórico, o `service_role` gravando e a sessão sem
+  ler.

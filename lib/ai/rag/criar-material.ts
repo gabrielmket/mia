@@ -18,6 +18,7 @@ import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { temChaveDeEmbedding } from "@/lib/ai/embeddings/chave";
+import { caminhoDaOrganizacao } from "@/lib/ai/knowledge/caminho-do-arquivo";
 import { BUCKET_DE_CONHECIMENTO } from "@/lib/ai/rag/ingest/documento";
 import { parseFaqMarkdown } from "@/lib/ai/rag/ingest/faq";
 import {
@@ -137,6 +138,13 @@ export async function criarMaterial(deps: DepsDoMaterial, input: EntradaDoMateri
       "invalid_request",
       "Cole o texto do documento, ou envie o arquivo em /api/v1/ai/knowledge/sources/upload.",
     );
+  }
+
+  // (Upstream v1.121) `blob_path` do corpo só no formato que o upload grava, na
+  // pasta de quem chama, pela sessão ou pelo token. Nenhuma tela manda este campo.
+  const blobPathDoCorpo = input.source_metadata?.blob_path;
+  if (blobPathDoCorpo !== undefined && !caminhoDaOrganizacao(blobPathDoCorpo, organizationId)) {
+    return recusa(422, "validation_failed", "Caminho do arquivo fora da organização.");
   }
 
   // TEXTO COLADO DE DOCUMENTO VIRA ARQUIVO.

@@ -80,6 +80,8 @@ interface KanbanBoardProps {
   usuarioAtualId?: string | null;
   /** Densidade compacta dos cards (issue #3461, item 2), escolhida na página. */
   denso?: boolean;
+  /** A cor da etapa pinta a coluna inteira (preferência de quem olha). */
+  corNaColuna?: boolean;
   /**
    * Quadro de funil ARQUIVADO (#1298): abre para OLHAR, e nada aqui grava —
    * sem arrastar card, sem menu de ações, sem seleção em lote e sem dossiê.
@@ -137,6 +139,7 @@ export function KanbanBoard({
   ordem = "manual",
   usuarioAtualId = null,
   denso = false,
+  corNaColuna = false,
   somenteLeitura = false,
 }: KanbanBoardProps) {
   const t = useT();
@@ -523,6 +526,7 @@ export function KanbanBoard({
               soltoId={soltoId}
               abertoId={dossieId}
               denso={denso}
+              corNaColuna={corNaColuna}
               somenteLeitura={somenteLeitura}
             />
           ))}

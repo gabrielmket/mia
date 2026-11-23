@@ -245,6 +245,17 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "sozinho para (a IA deixa de seguir os fluxos de atendimento, a fila de ligações some). Um token vazado tira recurso de todos os clientes. " +
       "Não apaga dado, não liga nada na instalação e não mexe nos módulos vendidos.",
   },
+  // FORK MIA (MIA-99): o preço que a META cobra por mensagem (docs/fork/consumo-de-ia.md,
+  // seção 9). Chave própria, e não `definir_preco`: aquela muda o que UM cliente paga;
+  // esta, o custo de TODOS, que é outro estrago.
+  {
+    chave: "definir_custo_da_meta",
+    rotulo: "Definir o preço que a Meta cobra por mensagem",
+    raio:
+      "Muda o preço de CUSTO de cada categoria de mensagem da Meta, que entra no custo de QUALQUER cliente nas telas da plataforma a partir de agora (o mês fechado não muda). " +
+      "Um token vazado faz o custo e a margem de todos os clientes parecerem outros, e quem decide preço por esses números decide errado. " +
+      "Não muda o que nenhum cliente paga, não envia mensagem e não apaga preço.",
+  },
 ] as const;
 
 const POR_CHAVE = new Map(OPERACOES.map((o) => [o.chave, o]));

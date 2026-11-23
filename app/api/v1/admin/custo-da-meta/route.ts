@@ -8,6 +8,12 @@
  * ela cobra por tabela, que varia por país e por reajuste. Então dinheiro aqui é
  * contagem × preço vigente, e o preço é nosso (`platform_precos_meta`).
  *
+ * FORK MIA (MIA-99, migration 9165): "vigente" no INSTANTE de cada mensagem
+ * (`mia_precos_meta_vigencias`), e não hoje: um reajuste em novembro não muda
+ * mais o custo de outubro. O PUT continua gravando em `platform_precos_meta`, e
+ * é o gatilho dela que fecha a vigência atual e abre a nova, para este e para
+ * qualquer outro caminho que grave preço.
+ *
  * Fica no painel da plataforma, como o custo de IA: é o preço de CUSTO daquilo
  * que o cliente comprou, e mostrá-lo a ele seria mostrar a margem
  * (`lib/ai/custo-e-da-plataforma.ts`).
@@ -20,7 +26,8 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { falhaDaEscritaDePlatformAdmin, requirePlatformAdminEscrita, requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
-import { calcularCusto, type ContagemPorCategoria } from "@/lib/channels/meta/custo-da-conversa";
+import { calcularCustoPorVigencia, type MensagemCobrada } from "@/lib/channels/meta/custo-da-conversa";
+import { lerVigenciasDoPreco, mensagemCobrada } from "@/lib/channels/meta/custo-do-periodo";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -102,14 +109,14 @@ export async function GET(req: NextRequest): Promise<Response> {
     return fail("db_error", (e as Error).message, 500, { requestId });
   }
 
-  const [cobradas, { data: precos }, { data: orgs }] = await Promise.all([
-    lerTodasAsPaginas<{ organization_id: string; meta_pricing_category: string | null }>(
+  const [cobradas, precos, vigencias, { data: orgs }] = await Promise.all([
+    lerTodasAsPaginas<{ organization_id: string; meta_pricing_category: string | null; created_at: string }>(
       (de, ate, pedirContagem) =>
         excluirDemonstracao(
           admin
             .from("messages")
             .select(
-              "organization_id, meta_pricing_category",
+              "organization_id, meta_pricing_category, created_at",
               pedirContagem ? { count: "exact" } : undefined,
             )
             .eq("meta_billable", true)
@@ -123,13 +130,19 @@ export async function GET(req: NextRequest): Promise<Response> {
           .range(de, ate),
       { paginasMaximas: PAGINAS_MAXIMAS },
     ),
+    // O preço ATUAL, para a tabela que a tela edita.
     admin.from("platform_precos_meta").select("categoria, centavos_brl"),
+    // FORK MIA (MIA-99): o histórico, para a conta.
+    lerVigenciasDoPreco(admin),
     admin.from("organizations").select("id, display_name").is("redacted_at", null),
   ]);
   if (cobradas.erro) return fail("db_error", cobradas.erro, 500, { requestId });
+  // FORK MIA (MIA-99): preço que não vem não vira custo R$ 0,00.
+  if (precos.error) return fail("db_error", precos.error.message, 500, { requestId });
+  if ("erro" in vigencias) return fail("db_error", vigencias.erro, 500, { requestId });
   const linhas = cobradas.linhas;
 
-  const tabela = (precos ?? []) as Array<{ categoria: string; centavos_brl: number }>;
+  const tabela = (precos.data ?? []) as Array<{ categoria: string; centavos_brl: number }>;
   const nome = new Map(
     (orgs ?? []).map((o) => [
       (o as { id: string }).id,
@@ -140,23 +153,19 @@ export async function GET(req: NextRequest): Promise<Response> {
   // Contagem em memória: a alternativa seria um `group by` via RPC, e criar uma
   // função no banco para uma tela de painel que lê um mês é mais peça para
   // manter do que a pergunta merece. O teto acima é o que mantém isso honesto.
-  const porOrg = new Map<string, Map<string, number>>();
+  const porOrg = new Map<string, MensagemCobrada[]>();
   for (const l of linhas) {
-    // Cobrada sem categoria é a Meta mudando o formato outra vez. Vira uma
-    // linha com nome próprio em vez de sumir na contagem.
-    const categoria = l.meta_pricing_category ?? "sem_categoria";
-    const mapa = porOrg.get(l.organization_id) ?? new Map<string, number>();
-    mapa.set(categoria, (mapa.get(categoria) ?? 0) + 1);
-    porOrg.set(l.organization_id, mapa);
+    // Cobrada sem categoria é a Meta mudando o formato outra vez: vira
+    // `sem_categoria` em vez de sumir na contagem (`mensagemCobrada`).
+    const doCliente = porOrg.get(l.organization_id) ?? [];
+    doCliente.push(mensagemCobrada(l));
+    porOrg.set(l.organization_id, doCliente);
   }
 
   const clientes = [...porOrg.entries()]
-    .map(([orgId, mapa]) => {
-      const contagens: ContagemPorCategoria[] = [...mapa.entries()].map(([categoria, cobradas]) => ({
-        categoria,
-        cobradas,
-      }));
-      const custo = calcularCusto(contagens, tabela);
+    .map(([orgId, mensagens]) => {
+      // FORK MIA (MIA-99): cada mensagem ao preço do instante dela.
+      const custo = calcularCustoPorVigencia(mensagens, vigencias.vigencias);
       return {
         organization_id: orgId,
         organizacao: nome.get(orgId) ?? orgId,
