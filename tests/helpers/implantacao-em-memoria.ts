@@ -52,6 +52,8 @@ export const TODAS_AS_OPERACOES = [
   "revogar_conexao_do_mcp",
   // FORK MIA (upstream 1.118, MIA-79): o módulo opcional por empresa.
   "gerir_modulo_opcional",
+  // FORK MIA (MIA-99): o preço que a Meta cobra por mensagem.
+  "definir_custo_da_meta",
 ];
 
 /** O funil de e-commerce que o gatilho de seed entrega a toda organização nova. */

@@ -50,4 +50,10 @@ export const DICIONARIO_RELATORIOS_MIA: Traducoes = {
   "Não consegui gravar a lista nova, e o disparo ficou sem destinatários. Salve o filtro de novo para remontar a lista.": {
     es: "No pude guardar la lista nueva, y el envío quedó sin destinatarios. Guarda el filtro de nuevo para rearmar la lista.",
   },
+  // ─── o fuso da organização (MIA-102, lib/tempo/fuso-gravavel.ts) ───────────
+  // A recusa de quem grava um fuso que não existe: Configurações, o painel da
+  // plataforma e as boas-vindas (docs/fork/fuso-da-organizacao.md).
+  "Fuso horário inválido. Use o nome da região, sem acento (ex.: America/Sao_Paulo, America/Manaus, Europe/Lisbon).": {
+    es: "Zona horaria inválida. Usa el nombre de la región, sin tildes (ej.: America/Sao_Paulo, America/Manaus, Europe/Lisbon).",
+  },
 };

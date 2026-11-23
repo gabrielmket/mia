@@ -18,18 +18,23 @@
  * 30 inteiro) e exclusivo como instante — que é o que impede a venda da
  * meia-noite do dia 1º de outubro de contar em setembro E em outubro.
  *
- * ─── Duas passadas, porque o offset depende do instante ─────────────────────
- *
- * `data + 'T00:00:00Z' - offset` erra na fronteira de horário de verão: o
- * deslocamento medido à meia-noite UTC pode não ser o do instante encontrado
- * depois de subtraído. `inicioDoDia` mede duas vezes e só aceita a segunda
- * quando ela confirma a primeira (o mesmo algoritmo de
- * `app/api/v1/reports/tags/route.ts`, escrito uma vez para os dois).
+ * Use the agenda's time conversion so a skipped midnight starts the report at
+ * the first local hour of the selected day.
  */
+import { instanteDe } from "@/lib/agenda/fuso";
 import { fusoValido } from "@/lib/reports/atividades";
+import { FUSO_PADRAO } from "@/lib/tempo/fusos";
 
-/** Fuso de reserva: organização sem `timezone` configurado. */
-export const TZ_PADRAO = "UTC";
+/**
+ * Fuso de reserva: organização sem `timezone` configurado, ou com um nome que o
+ * `Intl` recusa.
+ *
+ * FORK MIA (MIA-102): era "UTC". Com isso a mesma venda das 22h de 31/10 em
+ * Brasília caía em novembro aqui e em outubro na série do Desempenho
+ * (`fusoUtilizavel`) e no motor dos relatórios montados (9166), que recuam para
+ * `America/Sao_Paulo`, o padrão da coluna. Uma regra só nos três.
+ */
+export const TZ_PADRAO = FUSO_PADRAO;
 
 /**
  * O TETO DE PERÍODO DA TELA DE FATURAMENTO — um valor e uma conta, para as duas
@@ -103,20 +108,10 @@ export function dataNoFuso(instante: Date, tz: string): string {
   return `${p.ano}-${dois(p.mes)}-${dois(p.dia)}`;
 }
 
-/** `2026-09-01` em `tz` → instante UTC do começo daquele dia LOCAL. */
+/** The UTC instant at the start of the local calendar day. */
 export function inicioDoDia(data: string, tz: string): Date {
-  const pretendido = Date.parse(`${data}T00:00:00Z`);
-  const primeira = deslocamentoDe(pretendido, tz);
-  const tentativa = pretendido - primeira;
-  const segunda = deslocamentoDe(tentativa, tz);
-  return new Date(segunda === primeira ? tentativa : pretendido - segunda);
-}
-
-/** Quanto o relógio local está à frente do UTC naquele instante, em ms. */
-function deslocamentoDe(instanteUtcMs: number, tz: string): number {
-  const p = partesLocais(new Date(instanteUtcMs), tz);
-  const localComoUtc = Date.UTC(p.ano, p.mes - 1, p.dia, p.hora, p.minuto, p.segundo);
-  return localComoUtc - instanteUtcMs;
+  const [ano, mes, dia] = data.split("-").map(Number) as [number, number, number];
+  return instanteDe({ ano, mes, dia }, tz);
 }
 
 /**
@@ -135,7 +130,7 @@ export interface JanelaDoRelatorio {
 }
 
 /** Monta a janela a partir dos dois dias civis e do fuso da organização. */
-export function janelaDoRelatorio(de: string, ate: string, tz: string): JanelaDoRelatorio {
+export function janelaDoRelatorio(de: string, ate: string, tz: string | null | undefined): JanelaDoRelatorio {
   const fuso = fusoDoRelatorio(tz);
   return {
     de,
@@ -152,7 +147,7 @@ export function janelaDoRelatorio(de: string, ate: string, tz: string): JanelaDo
  * default é declarado na resposta (`padrao: true`) para a tela poder dizer qual
  * período está mostrando.
  */
-export function periodoPadrao(agora: Date, tz: string): { de: string; ate: string } {
+export function periodoPadrao(agora: Date, tz: string | null | undefined): { de: string; ate: string } {
   const fuso = fusoDoRelatorio(tz);
   const hoje = dataNoFuso(agora, fuso);
   return { de: `${hoje.slice(0, 7)}-01`, ate: hoje };

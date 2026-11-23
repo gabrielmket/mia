@@ -112,6 +112,8 @@ const QUEM_LE_A_AGENDA: Record<string, string> = {
   "lib/channels/meta/coexistencia/contatos.ts":
     "FORK MIA: compara o nome da agenda antes e depois da gravação do upstream só para contar contato recebido; não monta mensagem",
   "lib/contacts/nome-da-agenda.ts": "decide o que a varredura grava",
+  "lib/modulo/redigir-contato.ts":
+    "usa o nome da agenda (que vem no objeto do contato das conversas) só para TIRÁ-LO do texto livre do módulo sem `contatos`; o objeto sai inteiro",
   "lib/contacts/agenda-do-celular.ts":
     "o 'Sincronizar agenda' (#2776) que ESCREVE o campo no contato que acabou de nascer; não lê nem monta mensagem",
   "lib/contacts/rotulo-do-contato.ts": "rotuloParaAEquipe, o rótulo das telas da equipe",

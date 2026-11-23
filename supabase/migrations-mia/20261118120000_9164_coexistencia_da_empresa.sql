@@ -3,8 +3,9 @@
 -- 9164 · a chave da coexistência, por empresa
 --
 -- FORK MIA (S3 da coexistência). Só objetos NOSSOS (docs/FORK-MIA.md, regra 3):
--- uma tabela nova e as policies dela. A 9163 é da fusão v1.118; o corte do
--- histórico importado nos relatórios do fork (decisão D3, ainda aberta) fica para a 9165.
+-- uma tabela nova e as policies dela. A 9163 é da fusão v1.118, a 9165 do preço da
+-- Meta (MIA-99) e a 9166 do fuso dos relatórios (MIA-102); o corte do histórico
+-- importado nos relatórios do fork (decisão D3, ainda aberta) fica para a 9167.
 
 create table if not exists public.mia_coexistencia_da_empresa (
   organization_id  uuid primary key references public.organizations(id) on delete cascade,

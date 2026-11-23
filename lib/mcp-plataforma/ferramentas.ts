@@ -55,6 +55,10 @@ import { FERRAMENTAS_DAS_CONEXOES_DO_MCP } from "./ferramentas/conexoes-do-mcp";
 import { FERRAMENTAS_DA_CONTAGEM_DE_NEGOCIOS } from "./ferramentas/contagem-de-negocios";
 // FORK MIA (upstream 1.118, MIA-79): o módulo opcional por empresa e a tela inicial.
 import { FERRAMENTAS_DA_FAIXA_1118 } from "./ferramentas/novidades-1118";
+// FORK MIA (MIA-99): o preço que a Meta cobra por mensagem, com vigência.
+import { FERRAMENTAS_DE_PRECOS_DA_META } from "./ferramentas/precos-da-meta";
+// FORK MIA (MIA-103): a Análise do funil e as conversas do mês de um cliente, só leitura.
+import { FERRAMENTAS_DA_ANALISE_E_DAS_CONVERSAS } from "./ferramentas/analise-e-conversas";
 import { FERRAMENTAS_DE_CONHECIMENTO_E_FOLLOWUP } from "./ferramentas/conhecimento-e-followup";
 import { FERRAMENTAS_DE_CONVERSOES } from "./ferramentas/conversoes";
 import { FERRAMENTAS_DE_DEMONSTRACAO } from "./ferramentas/demonstracao";
@@ -131,6 +135,10 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DA_FAIXA_1118,
   // FORK MIA (S3 da coexistência): ver e ligar a chave da empresa, ver a sincronização do app (docs/fork/coexistencia.md)
   ...FERRAMENTAS_DA_COEXISTENCIA,
+  // FORK MIA (MIA-99): ver e mudar o preço que a Meta cobra por mensagem; o preço novo vale a partir de agora e o mês fechado não muda (docs/fork/consumo-de-ia.md)
+  ...FERRAMENTAS_DE_PRECOS_DA_META,
+  // FORK MIA (MIA-103): a Análise do funil (lib/metrics/funil.ts) e as conversas do mês por quem respondeu (fn_mia_relatorio, fonte "conversas"); só leem (docs/fork/mcp-de-implantacao.md)
+  ...FERRAMENTAS_DA_ANALISE_E_DAS_CONVERSAS,
 ];
 
 export const FERRAMENTA_POR_NOME = new Map(FERRAMENTAS.map((f) => [f.name, f]));
