@@ -68,6 +68,7 @@ import { instanteDoBanco } from "@/lib/tempo/agora";
 // FORK MIA: as réguas de data do fork que entram na lista (fusão da v1.107).
 import { instanteDaMensagem } from "@/lib/agent-engine/agent/horario-da-ia-no-motor";
 import { linkDeConexaoVivo, venceu } from "@/lib/raio-x/prazos";
+import { calcularCustoPorVigencia } from "@/lib/channels/meta/custo-da-conversa";
 
 /**
  * O instante de referência, com MILISSEGUNDO de propósito: é o pedaço que
@@ -280,6 +281,34 @@ export function reguasDeData(pool: pg.Pool): ReguaDeData[] {
           inboundMessageId: id,
         });
         return instante !== null && instante.getTime() === CHEGADA_MS;
+      },
+    },
+    {
+      nome: "calcularCustoPorVigencia",
+      onde: "lib/channels/meta/custo-da-conversa.ts:164",
+      // (MIA-99) O preço da Meta que vale para cada mensagem cobrada: o
+      // `messages.created_at` (timestamptz) cai na vigência que o contém
+      // (`vigente_desde <= created_at < vigente_ate`). Chega `Date` do `pg` e
+      // texto do PostgREST. Três vigências em volta de `CHEGADA`, a do meio com
+      // um milissegundo só: o preço 2 sai só se a régua viu o epoch exato.
+      // Sem instante a régua LANÇA de propósito ("data ilegível") em vez de
+      // deixar a mensagem fora de toda vigência sem aviso; `created_at` é
+      // `not null`. O `catch` é a tradução desse lançamento no "não vi".
+      entrada: "valor",
+      exercitar: (valorCru) => {
+        try {
+          const r = calcularCustoPorVigencia(
+            [{ categoria: "marketing", created_at: valorCru as string | Date }],
+            [
+              { categoria: "marketing", centavos_brl: 1, vigente_desde: "-infinity", vigente_ate: CHEGADA_MS },
+              { categoria: "marketing", centavos_brl: 2, vigente_desde: CHEGADA_MS, vigente_ate: CHEGADA_MS + 1 },
+              { categoria: "marketing", centavos_brl: 4, vigente_desde: CHEGADA_MS + 1, vigente_ate: null },
+            ],
+          );
+          return r.totalCentavos === 2;
+        } catch {
+          return false;
+        }
       },
     },
     {
