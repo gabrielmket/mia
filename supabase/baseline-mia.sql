@@ -22812,6 +22812,357 @@ begin
 end $$;
 
 
+-- ─── 9165 · o preço da Meta ganha vigência, e o mês fechado não muda ───
+--
+-- FORK MIA (MIA-99). Espelho EXATO da migration 9165 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+-- 9165 · o preço da Meta ganha vigência, e o mês fechado não muda
+--
+-- FORK MIA (MIA-99, defeito 4 da seção 2.1 do mapa da MIA-54). Só objetos
+-- NOSSOS (docs/FORK-MIA.md, regra 3): uma tabela nova com o prefixo `mia_`,
+-- uma função com nome nosso e um gatilho na `platform_precos_meta`, que também
+-- é nossa (0259).
+--
+-- ── Por que um gatilho, e não a rota fechando a vigência ─────────────────────
+--
+-- Quem grava preço é quem tem de fechar a vigência. Escrito na rota, valeria
+-- para a rota: o MCP, um `update` à mão e a imagem de antes desta migration
+-- (num rollback de imagem o banco fica) continuariam sobrescrevendo, e o
+-- histórico teria buracos que ninguém vê. Pendurado no FATO (a linha de
+-- `platform_precos_meta` mudou), vale para todos, e na mesma transação: não
+-- existe o instante em que a vigência velha fechou e a nova não abriu.
+--
+-- ── Por que `-infinity` no primeiro preço ────────────────────────────────────
+--
+-- O preço de hoje é o único que se conhece. Fazê-lo valer só a partir desta
+-- migration deixaria todo o passado "sem preço" (a tela diria "preço não
+-- informado" para outubro), que é mentira de outro tipo. A regra vale também
+-- para a categoria que ganha preço pela primeira vez depois daqui: o primeiro
+-- número dela cobre o passado, e só o SEGUNDO em diante tem início no dia em
+-- que foi gravado.
+
+create table if not exists public.mia_precos_meta_vigencias (
+  id uuid primary key default gen_random_uuid(),
+  categoria text not null,
+  -- Centavos de REAL, como `platform_precos_meta.centavos_brl`.
+  centavos_brl integer not null,
+  -- `-infinity` = desde sempre (o primeiro preço da categoria).
+  vigente_desde timestamptz not null,
+  -- Nulo = é o preço atual.
+  vigente_ate timestamptz,
+  criado_em timestamptz not null default now(),
+  -- Quem gravou o preço (`platform_precos_meta.atualizado_por`), um admin da plataforma.
+  criado_por uuid,
+  constraint mia_precos_meta_vigencias_centavos_check check (centavos_brl >= 0),
+  constraint mia_precos_meta_vigencias_intervalo_check
+    check (vigente_ate is null or vigente_ate > vigente_desde)
+);
+
+comment on table public.mia_precos_meta_vigencias is
+  'MIA (9165): o historico do preco de cada categoria de mensagem da Meta, em centavos de REAL. Uma mensagem custa o preco cuja vigencia contem o instante dela (vigente_desde <= created_at < vigente_ate). vigente_ate nulo = o preco atual (um por categoria); vigente_desde = -infinity = desde sempre (o primeiro preco da categoria). Mantida pelo gatilho trg_mia_precos_meta_vigencia em platform_precos_meta: nao escreva aqui direto.';
+
+-- Uma vigência aberta por categoria: é a trava contra dois "preços atuais".
+create unique index if not exists uq_mia_precos_meta_vigencias_aberta
+  on public.mia_precos_meta_vigencias (categoria)
+  where vigente_ate is null;
+
+-- A pergunta é sempre "que preço valia nesta categoria neste instante".
+create index if not exists idx_mia_precos_meta_vigencias_categoria
+  on public.mia_precos_meta_vigencias (categoria, vigente_desde);
+
+-- `security invoker`: quem grava preço é o servidor (service_role), que tem as
+-- permissões nas duas tabelas. A função não faz nada que quem grava não possa.
+create or replace function public.fn_mia_preco_da_meta_abre_vigencia()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_agora timestamptz := now();
+  v_aberta_id uuid;
+  v_aberta_centavos integer;
+  v_aberta_criada timestamptz;
+  v_tem_historico boolean;
+begin
+  -- "Aberta nesta mesma transação" se lê em `criado_em`, que é o `now()` da
+  -- transação que a abriu: igual ao nosso, foi esta. Não em `vigente_desde`:
+  -- o primeiro preço da categoria tem `-infinity` ali.
+  --
+  -- A categoria que deixou de ter preço (apagada, ou renomeada num update):
+  -- a vigência aberta dela fecha agora. A que abriu nesta mesma transação nunca
+  -- valeu para mensagem nenhuma e sai.
+  if tg_op = 'DELETE' or (tg_op = 'UPDATE' and old.categoria is distinct from new.categoria) then
+    delete from public.mia_precos_meta_vigencias
+     where categoria = old.categoria and vigente_ate is null and criado_em = v_agora;
+    update public.mia_precos_meta_vigencias
+       set vigente_ate = v_agora
+     where categoria = old.categoria and vigente_ate is null;
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+  end if;
+
+  select v.id, v.centavos_brl, v.criado_em
+    into v_aberta_id, v_aberta_centavos, v_aberta_criada
+    from public.mia_precos_meta_vigencias v
+   where v.categoria = new.categoria and v.vigente_ate is null
+   for update;
+
+  -- O mesmo preço gravado de novo (a tela manda a tabela inteira): nada muda.
+  if v_aberta_id is not null and v_aberta_centavos = new.centavos_brl then
+    return new;
+  end if;
+
+  -- Aberta nesta mesma transação: corrige o valor em vez de abrir uma vigência
+  -- de duração zero.
+  if v_aberta_id is not null and v_aberta_criada = v_agora then
+    update public.mia_precos_meta_vigencias
+       set centavos_brl = new.centavos_brl, criado_por = new.atualizado_por
+     where id = v_aberta_id;
+    return new;
+  end if;
+
+  select exists (
+    select 1 from public.mia_precos_meta_vigencias v where v.categoria = new.categoria
+  ) into v_tem_historico;
+
+  if v_aberta_id is not null then
+    update public.mia_precos_meta_vigencias set vigente_ate = v_agora where id = v_aberta_id;
+  end if;
+
+  insert into public.mia_precos_meta_vigencias (categoria, centavos_brl, vigente_desde, criado_por)
+  values (
+    new.categoria,
+    new.centavos_brl,
+    -- O primeiro preço da categoria vale desde sempre (o cabeçalho diz por quê).
+    case when v_tem_historico then v_agora else '-infinity'::timestamptz end,
+    new.atualizado_por
+  );
+  return new;
+end;
+$$;
+
+comment on function public.fn_mia_preco_da_meta_abre_vigencia() is
+  'MIA (9165): gatilho de platform_precos_meta. Preco novo fecha a vigencia aberta da categoria em now() e abre outra; o primeiro preco da categoria vale desde sempre (-infinity); preco igual nao abre vigencia; categoria apagada fecha a vigencia aberta.';
+
+drop trigger if exists trg_mia_precos_meta_vigencia on public.platform_precos_meta;
+create trigger trg_mia_precos_meta_vigencia
+  after insert or update or delete on public.platform_precos_meta
+  for each row execute function public.fn_mia_preco_da_meta_abre_vigencia();
+
+-- O preço de hoje vira a primeira vigência, desde sempre. Só a categoria que
+-- ainda não tem vigência nenhuma: rodar de novo não faz nada.
+insert into public.mia_precos_meta_vigencias (categoria, centavos_brl, vigente_desde, criado_em, criado_por)
+select p.categoria, p.centavos_brl, '-infinity'::timestamptz, p.atualizado_em, p.atualizado_por
+  from public.platform_precos_meta p
+ where not exists (
+   select 1 from public.mia_precos_meta_vigencias v where v.categoria = p.categoria
+ );
+
+alter table public.mia_precos_meta_vigencias enable row level security;
+
+-- ZERO POLICIES, como `platform_precos_meta`: é preço de CUSTO da plataforma,
+-- quem lê é o servidor.
+revoke all on public.mia_precos_meta_vigencias from public, anon, authenticated;
+grant select, insert, update, delete on public.mia_precos_meta_vigencias to service_role;
+
+revoke all on function public.fn_mia_preco_da_meta_abre_vigencia() from public, anon, authenticated;
+grant execute on function public.fn_mia_preco_da_meta_abre_vigencia() to service_role;
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9166 · fuso vazio ou inválido vale Brasília nos relatórios montados ───
+--
+-- FORK MIA (MIA-102). Espelho EXATO da migration 9166 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+-- 9166 · fuso vazio ou inválido vale Brasília nos relatórios montados
+--
+-- `fn_mia_`: só objeto NOSSO é redefinido (docs/FORK-MIA.md, regra 3).
+-- Idempotente: `create or replace`, e as permissões reemitidas como na 9041. O
+-- corpo é o da última definição (9041); o que muda está marcado "9166".
+
+create or replace function public.fn_mia_relatorio_preparar(
+  p_org uuid,
+  p_fonte text,
+  p_medidas text[],
+  p_dim1 text,
+  p_dim2 text,
+  p_filtros jsonb,
+  p_periodo text,
+  p_de date,
+  p_ate date,
+  p_agora timestamptz
+) returns jsonb
+language plpgsql
+stable
+set search_path = ''
+as $f$
+declare
+  v_catalogo jsonb := public.fn_mia_relatorio_catalogo();
+  v_fonte jsonb := v_catalogo -> p_fonte;
+  v_filtros jsonb := '{}'::jsonb;
+  v_medidas text[];
+  v_chave text;
+  v_valor jsonb;
+  v_fuso text;
+  v_moeda text;
+  v_janela jsonb;
+  v_funil uuid;
+  v_funil_info jsonb;
+  v_precisa text[];
+begin
+  -- ── quem pergunta ──
+  if auth.uid() is not null
+     and not public.fn_is_platform_admin()
+     and public.fn_user_role_in_org(p_org) is null then
+    raise exception 'sem_vinculo_com_a_organizacao' using errcode = '42501';
+  end if;
+
+  -- ── o pedido ──
+  if v_fonte is null or left(p_fonte, 1) = '_' then
+    raise exception 'fonte_desconhecida: %', p_fonte using errcode = '22023';
+  end if;
+  select coalesce(array_agg(distinct m order by m), '{}') into v_medidas
+    from unnest(coalesce(p_medidas, '{}')) m where m is not null;
+  if cardinality(v_medidas) = 0 or cardinality(v_medidas) > 6 then
+    raise exception 'medidas: de uma a seis' using errcode = '22023';
+  end if;
+  foreach v_chave in array v_medidas loop
+    if not (v_fonte -> 'medidas') ? v_chave then
+      raise exception 'medida_desconhecida_para_a_fonte: % em %', v_chave, p_fonte using errcode = '22023';
+    end if;
+  end loop;
+  if p_dim1 is not null and not (v_fonte -> 'dims') ? p_dim1 then
+    raise exception 'agrupamento_desconhecido_para_a_fonte: % em %', p_dim1, p_fonte using errcode = '22023';
+  end if;
+  if p_dim2 is not null and (p_dim1 is null or not (v_fonte -> 'dims') ? p_dim2 or p_dim2 = p_dim1) then
+    raise exception 'segundo_agrupamento_invalido: %', p_dim2 using errcode = '22023';
+  end if;
+
+  -- ── os filtros, normalizados ──
+  if p_filtros is not null and jsonb_typeof(p_filtros) <> 'object' then
+    raise exception 'filtros: um objeto' using errcode = '22023';
+  end if;
+  for v_chave, v_valor in select f.key, f.value from jsonb_each(coalesce(p_filtros, '{}'::jsonb)) f loop
+    -- As chaves internas são do motor: quem pergunta não as escolhe.
+    continue when left(v_chave, 2) = '__';
+    if not (v_fonte -> 'filtros') ? v_chave then
+      raise exception 'filtro_desconhecido_para_a_fonte: % em %', v_chave, p_fonte using errcode = '22023';
+    end if;
+    continue when jsonb_typeof(v_valor) = 'null';
+    if jsonb_typeof(v_valor) = 'array' then
+      if (v_catalogo -> '_um_valor_so') ? v_chave then
+        raise exception 'filtro_de_um_valor_so: %', v_chave using errcode = '22023';
+      end if;
+      continue when jsonb_array_length(v_valor) = 0;
+      if jsonb_array_length(v_valor) > 50 then
+        raise exception 'filtro_com_mais_de_50_valores: %', v_chave using errcode = '22023';
+      end if;
+      if exists (select 1 from jsonb_array_elements(v_valor) e where jsonb_typeof(e) <> 'string') then
+        raise exception 'filtro_lista_so_de_texto: %', v_chave using errcode = '22023';
+      end if;
+      if jsonb_array_length(v_valor) = 1 then
+        v_valor := v_valor -> 0;
+      end if;
+    end if;
+    v_filtros := v_filtros || jsonb_build_object(v_chave, v_valor);
+  end loop;
+
+  -- "Chegaram até a etapa" é o funil: agrupando por etapa, sozinha ou com a
+  -- soma do valor de quem chegou (9041).
+  if 'chegaram' = any(v_medidas)
+     and (exists (select 1 from unnest(v_medidas) m where m not in ('chegaram', 'soma'))
+          or p_dim1 is distinct from 'etapa' or p_dim2 is not null) then
+    raise exception 'chegaram_so_agrupando_por_etapa_com_a_soma_no_maximo' using errcode = '22023';
+  end if;
+
+  -- Anúncios: o que foi informado à Meta e ao Google é de gestor e
+  -- administrador (o piso das telas de Conversões e de Meta Ads).
+  if p_fonte = 'anuncios' and auth.uid() is not null
+     and not public.fn_is_platform_admin()
+     and not public.fn_role_at_least(p_org, 'manager') then
+    raise exception 'anuncios_so_para_gestor_ou_administrador' using errcode = '42501';
+  end if;
+
+  -- ── a empresa: fuso e moeda ──
+  -- 9166: fuso vazio OU que o Postgres não conhece vale Brasília (o padrão da
+  -- coluna), em vez de levantar erro no `at time zone` e o relatório não abrir.
+  -- O `pg_timezone_names` é lido uma vez por pedido, aqui, e não por linha.
+  select coalesce((select z.name from pg_timezone_names z where z.name = btrim(o.timezone)),
+                  'America/Sao_Paulo'),
+         coalesce(nullif(btrim(o.currency), ''), 'BRL')
+    into v_fuso, v_moeda
+    from public.organizations o
+   where o.id = p_org;
+  if v_fuso is null then
+    raise exception 'organizacao_inexistente' using errcode = '22023';
+  end if;
+
+  -- ── o período ──
+  v_janela := public.fn_mia_relatorio_janela(v_fuso, p_periodo, p_de, p_ate,
+                                             coalesce((v_fonte->>'futuro')::boolean, false), p_agora);
+  if v_janela->>'periodo' <> 'tudo' then
+    if (p_dim1 = 'dia' or p_dim2 = 'dia') and (v_janela->>'dias')::int > 400 then
+      raise exception 'agrupar_por_dia_ate_400_dias' using errcode = '22023';
+    end if;
+    if (p_dim1 = 'semana' or p_dim2 = 'semana') and (v_janela->>'dias')::int > 1830 then
+      raise exception 'agrupar_por_semana_ate_cinco_anos' using errcode = '22023';
+    end if;
+  end if;
+
+  -- ── o funil (negócios por etapa, ou filtrados por funil) ──
+  if p_fonte = 'negocios'
+     and (p_dim1 = 'etapa' or p_dim2 = 'etapa' or v_filtros ? 'funil') then
+    v_funil := nullif(v_filtros->>'funil', '')::uuid;
+    if v_funil is null then
+      select p.id into v_funil
+        from public.crm_pipelines p
+       where p.organization_id = p_org and not p.is_archived
+       order by p.is_default desc, p.position, p.created_at
+       limit 1;
+    end if;
+    select jsonb_build_object('id', p.id, 'nome', p.name, 'vocabulario', p.vocabulary)
+      into v_funil_info
+      from public.crm_pipelines p
+     where p.id = v_funil and p.organization_id = p_org;
+    if v_funil_info is null then
+      raise exception 'funil_inexistente' using errcode = '22023';
+    end if;
+    v_filtros := v_filtros || jsonb_build_object('funil', v_funil::text);
+  end if;
+
+  -- O que as linhas precisam calcular: os agrupamentos e os filtros do pedido.
+  select coalesce(array_agg(distinct x), '{}') into v_precisa
+    from unnest(array[p_dim1, p_dim2] || array(select jsonb_object_keys(v_filtros))) x
+   where x is not null;
+
+  return jsonb_build_object(
+    'medidas', to_jsonb(v_medidas),
+    'filtros', v_filtros,
+    'precisa', to_jsonb(v_precisa),
+    'fuso', v_fuso,
+    'moeda', v_moeda,
+    'janela', v_janela,
+    'funil', v_funil_info
+  );
+end;
+$f$;
+
+comment on function public.fn_mia_relatorio_preparar(uuid, text, text[], text, text, jsonb, text, date, date, timestamptz) is
+  'MIA (9041, 9166): o preparo de um pedido ao motor de relatorios, a regua unica do motor (fn_mia_relatorio) e da lista (fn_mia_relatorio_lista): a guarda de vinculo (42501), o catalogo (22023), os filtros normalizados, o fuso e a moeda da empresa (9166: fuso vazio ou que o Postgres nao conhece vale America/Sao_Paulo), a janela do periodo e o funil.';
+
+
+revoke all on function public.fn_mia_relatorio_preparar(uuid, text, text[], text, text, jsonb, text, date, date, timestamptz) from public;
+revoke execute on function public.fn_mia_relatorio_preparar(uuid, text, text[], text, text, jsonb, text, date, date, timestamptz) from anon;
+grant execute on function public.fn_mia_relatorio_preparar(uuid, text, text[], text, text, jsonb, text, date, date, timestamptz) to authenticated, service_role;
+
+
 -- ─── 9167 · o valor do negócio com item segue os itens ───
 --
 -- FORK MIA (fusão v1.124). Espelho EXATO da migration 9167 (supabase/migrations-mia/), onde

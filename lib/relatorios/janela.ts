@@ -23,9 +23,18 @@
  */
 import { instanteDe } from "@/lib/agenda/fuso";
 import { fusoValido } from "@/lib/reports/atividades";
+import { FUSO_PADRAO } from "@/lib/tempo/fusos";
 
-/** Fuso de reserva: organização sem `timezone` configurado. */
-export const TZ_PADRAO = "UTC";
+/**
+ * Fuso de reserva: organização sem `timezone` configurado, ou com um nome que o
+ * `Intl` recusa.
+ *
+ * FORK MIA (MIA-102): era "UTC". Com isso a mesma venda das 22h de 31/10 em
+ * Brasília caía em novembro aqui e em outubro na série do Desempenho
+ * (`fusoUtilizavel`) e no motor dos relatórios montados (9166), que recuam para
+ * `America/Sao_Paulo`, o padrão da coluna. Uma regra só nos três.
+ */
+export const TZ_PADRAO = FUSO_PADRAO;
 
 /**
  * O TETO DE PERÍODO DA TELA DE FATURAMENTO — um valor e uma conta, para as duas
@@ -121,7 +130,7 @@ export interface JanelaDoRelatorio {
 }
 
 /** Monta a janela a partir dos dois dias civis e do fuso da organização. */
-export function janelaDoRelatorio(de: string, ate: string, tz: string): JanelaDoRelatorio {
+export function janelaDoRelatorio(de: string, ate: string, tz: string | null | undefined): JanelaDoRelatorio {
   const fuso = fusoDoRelatorio(tz);
   return {
     de,
@@ -138,7 +147,7 @@ export function janelaDoRelatorio(de: string, ate: string, tz: string): JanelaDo
  * default é declarado na resposta (`padrao: true`) para a tela poder dizer qual
  * período está mostrando.
  */
-export function periodoPadrao(agora: Date, tz: string): { de: string; ate: string } {
+export function periodoPadrao(agora: Date, tz: string | null | undefined): { de: string; ate: string } {
   const fuso = fusoDoRelatorio(tz);
   const hoje = dataNoFuso(agora, fuso);
   return { de: `${hoje.slice(0, 7)}-01`, ate: hoje };

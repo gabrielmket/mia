@@ -26,6 +26,8 @@ import {
   MAX_CATEGORIAS_DE_PERDA,
 } from "@/lib/schemas/leads";
 import { MOEDAS_SERVIDAS } from "@/lib/money";
+// FORK MIA (MIA-102): o fuso gravado na organização passa pela mesma régua do motor dos relatórios.
+import { fusoGravavelSchema } from "@/lib/tempo/fuso-gravavel";
 
 import { conversationTagSchema } from "./messaging";
 import { mostrarQuandoSchema } from "./mostrar-quando";
@@ -122,7 +124,9 @@ export const tenantSchema = z.object({
     .nullable()
     .optional()
     .or(z.literal("").transform(() => null)),
-  timezone: z.string().min(1).max(64),
+  // FORK MIA (MIA-102): era `z.string().min(1).max(64)`, e `America/Sao_Pualo`
+  // gravava sem reclamar; o nome tem de existir no `Intl` e no Postgres.
+  timezone: fusoGravavelSchema,
   locale: z.enum(LOCALES),
   currency: z.enum(MOEDAS),
   media_retention_days: z.coerce.number().int().min(30).max(3650),

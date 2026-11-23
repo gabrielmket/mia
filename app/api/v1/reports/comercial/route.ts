@@ -77,6 +77,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
 import {
   JANELA_MAXIMA_DIAS,
+  fusoDoRelatorio,
   janelaDoRelatorio,
   periodoPadrao,
   periodoPassaDoTeto,
@@ -181,7 +182,9 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   // O fuso é o da ORGANIZAÇÃO: duas pessoas da mesma empresa têm de ver o mesmo
   // mês, e o mês é o da parede da empresa.
-  const tz = org.timezone ?? "UTC";
+  // FORK MIA (MIA-102): o nulo recuava para "UTC" aqui mesmo, antes
+  // de chegar à régua. Vazio ou inválido vale Brasília, como nos outros painéis.
+  const tz = fusoDoRelatorio(org.timezone);
   const padraoSemParametro = !parsed.data.de && !parsed.data.ate;
   const padrao = periodoPadrao(new Date(), tz);
   const deTexto = parsed.data.de ?? padrao.de;
