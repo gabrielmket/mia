@@ -82,7 +82,12 @@ Como (9167, só objetos nossos): a invariante é "negócio com item do bloco nun
    primeiro item num negócio que já tinha venda desliga a marca; a rota grava o valor dos itens logo
    depois.
 3. `fn_mia_valor_do_negocio_volta_as_vendas`: a rota dos itens chama quando o negócio fica sem
-   item; com venda, regrava as vendas com o mesmo valor e o gatilho dele soma de novo.
+   item, inclusive quando o último item sai e o valor e a marca não mudam (Valor à mão igual ao de
+   antes); com venda, regrava as vendas com o mesmo valor e o gatilho dele soma de novo.
+
+Cerca no Postgres de verdade: `tests/invariants/valor-do-negocio-segue-os-itens.test.ts` (item e
+depois venda, venda e depois item, item de proposta, último item sai, a cura e a auto-cura da 9450
+reaplicada).
 
 Na tela, `valorSegueAsVendas` (`lib/produto-no-negocio/regras.ts`) é a mesma régua: o
 `LeadFieldsForm` e o painel do Inbox só mostram "Soma de N venda(s) registrada(s)" em negócio sem

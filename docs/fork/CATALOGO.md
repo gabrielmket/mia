@@ -719,7 +719,8 @@ relatório de vendas, comanda do ganho por item. Com as vendas registradas do up
 **Protege.** `tests/unit/produto-no-negocio.test.ts`, `produto-no-negocio-regras.test.ts`,
 `produto-no-negocio-relatorio.test.ts`, `produto-no-negocio-servidor.test.ts`,
 `mcp-de-implantacao-produto-no-negocio.test.ts`; invariantes `rls-completude-varredura.test.ts`,
-`rls-tabelas-da-mia.test.ts`.
+`rls-tabelas-da-mia.test.ts`, `valor-do-negocio-segue-os-itens.test.ts` (9167 no Postgres de verdade: item
+e depois venda, venda e depois item, item de proposta, último item sai, a cura e a auto-cura da 9450).
 
 **Conferir.**
 1. `git grep -n "FORK MIA (.109)" -- components/kanban app/api/v1/leads app/api/v1/proposals lib/financeiro | wc -l` (compare com a contagem antes da fusão).
@@ -879,7 +880,7 @@ quebra por agente, a leitura daqui pode passar a perguntar a ela, desde que a r�
 | 17 | Obrigações | `obrigacoes.md` | 9018 | `obrigacoes-gatilhos.test.ts`, `obrigacoes-contexto-da-automacao.test.ts` |
 | 18 | Pagamento no início | `pagamento-no-inicio.md` | 9120, 9121, 9122 | `pagamento-inicial-fim-do-teste.test.ts`, `cartao-fora-dos-registros.test.ts` |
 | 19 | Primeiros passos | `primeiros-passos.md` | 9070, 9071, 9080-9082 | `welcome-do-upstream-funciona-sozinho.test.tsx`, `raiz-do-app-respeita-o-passo-a-passo.test.ts` |
-| 20 | Produto no negócio | `produto-no-negocio.md` | 9160, 9161, 9167 | `produto-no-negocio-servidor.test.ts`, `produto-no-negocio-regras.test.ts` |
+| 20 | Produto no negócio | `produto-no-negocio.md` | 9160, 9161, 9167 | `produto-no-negocio-servidor.test.ts`, `produto-no-negocio-regras.test.ts`, `valor-do-negocio-segue-os-itens.test.ts` |
 | 21 | Raio-X do atendimento | `raio-x-do-atendimento.md` | 9150, 9151, 9152 | `raio-x-leitor-nao-envia.test.ts`, `raio-x-anonimizar.test.ts` |
 | 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
 | 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts` |

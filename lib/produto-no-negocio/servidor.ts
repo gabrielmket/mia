@@ -470,7 +470,10 @@ export async function gravarItensDoNegocio(
   // Se o negócio tem venda registrada (9449), o gatilho dele (9450) soma as
   // vendas de novo, por cima do que acabou de ser gravado aqui. Com item, quem
   // manda é o bloco, e a 9167 mantém a marca das vendas desligada.
-  if (finais.length === 0 && Object.keys(patchDoNegocio).length > 0) {
+  // Roda também quando o último item sai sem mudar o valor nem a marca (Valor à
+  // mão igual ao de antes): o patch fica vazio, mas o negócio deixou de ter item
+  // e as vendas têm de voltar a mandar (revisão do #129).
+  if (finais.length === 0 && (apagar.length > 0 || Object.keys(patchDoNegocio).length > 0)) {
     const { error } = await admin.rpc("fn_mia_valor_do_negocio_volta_as_vendas", { p_org: org, p_lead: leadId });
     if (error) throw new Error(`negócio (valor pelas vendas): ${error.message}`);
     const releitura = await lerNegocio(admin, org, leadId);
