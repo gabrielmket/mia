@@ -10,6 +10,7 @@ import { DIAS_MAXIMO_PARA_REABRIR } from "@/lib/leads/janela-do-perdido";
 import { TETO_DA_DESCRICAO_DA_ETAPA } from "@/lib/leads/stage-editing";
 import { MAX_CARACTERES_DA_CATEGORIA_DE_PERDA, MAX_CATEGORIAS_DE_PERDA } from "@/lib/schemas/leads";
 import { mostrarQuandoSchema } from "@/lib/schemas/mostrar-quando";
+import { MAX_CAMPOS_DO_NEGOCIO } from "@/lib/schemas/settings";
 
 import type { FerramentaDePlataforma } from "../tipos";
 import { alvo, ORGANIZACAO, ORG_DE_EXEMPLO } from "./comum";
@@ -184,9 +185,12 @@ export const FERRAMENTAS_DE_FUNIL: readonly FerramentaDePlataforma[] = [
         .boolean()
         .optional()
         .describe("true ARQUIVA as etapas do funil que não estão em `etapas`, desde que estejam sem negócio. Padrão: falso (nada é tirado)."),
+      // Upstream v1.122 (#4780): o teto é o da tela (`MAX_CAMPOS_DO_NEGOCIO`, 100),
+      // lido da constante para não envelhecer de novo. A cota do negócio quem
+      // confere é `gravarConfiguracaoDoFunil`, a mesma gravação da tela.
       campos: z
         .array(campo)
-        .max(50)
+        .max(MAX_CAMPOS_DO_NEGOCIO)
         .optional()
         .describe(
           "Campos personalizados deste funil: do negócio (o padrão) ou, só no funil padrão, do contato (`escopo`). " +

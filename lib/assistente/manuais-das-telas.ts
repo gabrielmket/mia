@@ -634,6 +634,22 @@ const OPERACAO_DO_FORK: Manual[] = [
 ];
 
 const TELAS_DO_UPSTREAM: Manual[] = [
+  // .123 (upstream v1.123, #5089): a tela de um módulo conectado, `/app/m/<módulo>`. Só existe
+  // quando o administrador da instalação instala e liga um módulo para a empresa.
+  {
+    id: "modulo-conectado",
+    titulo: "Abrir um módulo conectado (grupo Módulos do menu)",
+    palavras: ["modulo", "modulo conectado", "extensao", "integracao", "modulos", "app externo", "tela do modulo"],
+    href: "/app",
+    telas: ["/app/m/[modulo]"],
+    papelMinimo: "viewer",
+    passos: [
+      "No menu lateral, abra o grupo Módulos e clique no módulo. Ele também aparece na busca (Ctrl+K), e o botão do módulo, no topo, abre a mesma tela num painel ao lado.",
+      "A tela do módulo abre dentro do CRM. Ele só vê as áreas que a empresa consentiu ao ligá-lo.",
+      "Se aparecer \"O serviço deste módulo não respondeu\", o resto do CRM segue funcionando: tente de novo em instantes.",
+    ],
+    observacao: "Sem módulo ligado, o grupo Módulos não aparece. Quem instala e liga módulo é o administrador da instalação, não a empresa.",
+  },
   // .100 (upstream v1.97, #3572): o índice da ajuda no rodapé do menu. Convive com o
   // assistente: a Ajuda é o índice por jornada; o assistente responde e leva à tela.
   {
@@ -1105,6 +1121,63 @@ const TELAS_DO_UPSTREAM: Manual[] = [
     ],
     observacao:
       "Não existe um prazo da etapa: cada fluxo tem o seu, e uma etapa alcançada por dois fluxos mostra os dois, que disparam cada um o seu lembrete. Fluxo desligado aparece marcado e não age.",
+  },
+  // Fusão do upstream 1.119: as três telas novas dele, escritas a partir dos
+  // rótulos de `app/app/operacao/**` e `app/app/servicos/_client.tsx`.
+  {
+    id: "operacao-do-dia",
+    titulo: "Operação do dia: quem chegou, quem espera e o que falhou hoje",
+    palavras: [
+      "operacao do dia", "resumo do dia", "como foi o dia", "quem esta esperando", "aguardando uma pessoa",
+      "conversas novas", "o que falhou hoje", "canais fora do ar", "pedidos de produto", "reclamacoes",
+    ],
+    href: "/app/operacao",
+    papelMinimo: "viewer",
+    passos: [
+      "Abra Operação do dia (no hub Ver tudo no Insights).",
+      "Em Dia, fique em Hoje ou escolha outro dia. A tela mostra Conversas novas no dia, Conversas com mensagem do cliente no dia, Aguardando uma pessoa, os negócios do dia e as Falhas de operação.",
+      "Em cada linha, use Abrir conversa para ir direto ao atendimento.",
+      "Quem é gerente ou administrador pode clicar em Gerar relatório agora para salvar o dia, e em Relatórios salvos para ver os dias guardados.",
+    ],
+    observacao:
+      "Canais fora do ar, Avisos abertos na Central e Erros da IA são o estado do momento e só aparecem no dia de hoje. Cada pessoa vê só as conversas que já pode ver no Inbox.",
+    vejaTambem: ["relatorios-do-dia"],
+  },
+  {
+    id: "relatorios-do-dia",
+    titulo: "Relatórios do dia: o relatório de cada dia, salvo sozinho",
+    palavras: [
+      "relatorio do dia", "relatorio diario", "relatorios salvos", "historico do dia", "hora do relatorio",
+      "etiqueta de urgente", "etiqueta de reclamacao", "etapas de proposta",
+    ],
+    href: "/app/operacao/relatorios",
+    papelMinimo: "manager",
+    passos: [
+      "Abra Relatórios do dia (ou, em Operação do dia, clique em Relatórios salvos).",
+      "A lista mostra cada Dia, a hora em que foi Gerado às e a Origem (Automático ou Gerado por uma pessoa). Clique no dia para abrir o relatório, com o link de cada conversa e o Texto do relatório.",
+      "O administrador ajusta, em Configuração da Operação do dia, as etiquetas que separam as seções (pedido de produto, projeto grande, reclamação e urgente), as etapas do funil que contam como proposta e, em Salvar o relatório automaticamente todo dia, a Hora. Depois clique em Salvar.",
+    ],
+    observacao:
+      "O relatório automático vem ligado, às 21h no fuso da empresa. Ele só guarda o resumo do dia na própria empresa: não envia mensagem a ninguém.",
+    vejaTambem: ["operacao-do-dia"],
+  },
+  {
+    id: "servicos",
+    titulo: "Serviços: cadastrar o que a empresa vende por hora, projeto ou plano",
+    palavras: [
+      "servicos", "cadastrar servico", "catalogo de servicos", "preco do servico", "sinal", "prazo",
+      "variacao do servico", "dias uteis", "instrucoes para o agente",
+    ],
+    href: "/app/servicos",
+    papelMinimo: "manager",
+    passos: [
+      "Abra Serviços (no hub Ver tudo no CRM, ao lado de Produtos).",
+      "Clique em Novo serviço e preencha Nome, Tipo, Descrição, Preço, Prazo (dias úteis) e o Sinal (Sem sinal, Percentual do preço ou Valor fixo).",
+      "Em Instruções para o agente, escreva o que orienta a conversa (o agente não repete este texto ao cliente) e deixe ligado O agente pode oferecer este serviço. Clique em Salvar.",
+      "Para mais de uma opção do mesmo serviço, use Adicionar variação, com Nome da variação, Código da variação e Preço da variação.",
+    ],
+    observacao:
+      "A tela só aparece quando o módulo de Serviços está ligado para a empresa; na MIA, quem liga é a Time Company. Enquanto não houver serviço cadastrado, o agente não tem preço, prazo nem sinal para responder.",
   },
 ];
 

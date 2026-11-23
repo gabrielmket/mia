@@ -121,6 +121,8 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
       "Desde a .86 (upstream 1.87 e 1.88): `assinatura.nome_de_cada_agente` (cada agente assina com o próprio nome), `devolver_a_fila_sem_resposta_minutos` (a conversa do rodízio sem resposta humana volta para a fila), " +
       "`telefone_de_ficha_vazia` (o telefone dito na conversa entra sozinho na ficha sem número) e `etiquetas_de_contato_interno` (o contato com uma delas não vira card e a IA não responde). " +
       "Do upstream 1.112: `pesquisa_de_satisfacao` (a nota de 1 a 5 pedida ao cliente quando o atendimento é encerrado). " +
+      "Do upstream 1.119: `aviso_de_transferencia_com_nome` (o primeiro nome do cliente no aviso de transferência que vai ao número de avisos da EQUIPE) e " +
+      "`operacao_do_dia` (as etiquetas de cada seção da tela Operação do dia, as etapas que contam como proposta e a hora do relatório diário). " +
       "Só os campos que VIERAM mudam; pedido igual ao que está gravado responde `ja_estava`. As duas primeiras decisões andam juntas: rodízio sem restringir a visibilidade deixa todo mundo vendo a carteira do colega. " +
       "ATENÇÃO: tudo aqui vale na hora, inclusive para o agente que já está no ar. A assinatura ligada aparece na PRÓXIMA mensagem que o cliente final receber. " +
       "O QUE NÃO FAZ: não define a distribuição de cada NÚMERO (quem recebe, o modo próprio e o atendente padrão do número: é plataforma_configurar_canal, `distribuicao`) " +
@@ -260,6 +262,55 @@ export const FERRAMENTAS_DE_EMPRESA: readonly FerramentaDePlataforma[] = [
           "A PESQUISA DE SATISFAÇÃO: quando a equipe ENCERRA um atendimento, o cliente recebe no WhatsApp UMA pergunta de 1 a 5, e a resposta vira a nota daquele atendimento (só gestor e administrador veem). " +
             "FALA COM O CLIENTE: ligada, a pergunta sai no próximo encerramento. Não sai para contato bloqueado ou pessoal, nem fora da janela de envio do número. " +
             "Só as chaves que vieram mudam; a pergunta e a janela ficam guardadas ao desligar.",
+        ),
+      // Upstream 1.119 (MIA-96): a opção de `definirNomeNaTransferencia`.
+      aviso_de_transferencia_com_nome: z
+        .boolean()
+        .optional()
+        .describe(
+          "true: o aviso de TRANSFERÊNCIA para atendimento humano, que vai ao número de avisos da EQUIPE (IA › Casos › Avisos), passa a mostrar o PRIMEIRO NOME do cliente além do link. " +
+            "false (o padrão, por privacidade): o aviso leva só o link. O motivo da transferência nunca entra. Não muda nada do que o cliente recebe. " +
+            "Só tem efeito com o aviso das transferências ligado (`aviso_de_transferencia.avisar_nas_transferencias` na seção atendimento de plataforma_ver_configuracao). " +
+            "É dado pessoal saindo para um WhatsApp fora do sistema: ligue só a pedido da empresa.",
+        ),
+      // Upstream 1.119 (MIA-96): a configuração de `PATCH /api/v1/operacao/configuracao`.
+      operacao_do_dia: z
+        .object({
+          etiquetas: z
+            .object({
+              produto: z.string().max(80).optional(),
+              projeto: z.string().max(80).optional(),
+              reclamacao: z.string().max(80).optional(),
+              urgente: z.string().max(80).optional(),
+            })
+            .strict()
+            .optional()
+            .describe(
+              'A etiqueta de CONVERSA que põe a conversa em cada seção da tela (padrão: "produto", "projeto", "reclamação", "urgente"). 1 a 40 caracteres, gravada em minúsculas. ' +
+                "Só as chaves que vieram mudam. Use as etiquetas que a equipe (ou a IA) já põe nas conversas.",
+            ),
+          etapas_de_proposta: z
+            .array(z.string().max(80))
+            .max(20)
+            .optional()
+            .describe(
+              'A lista INTEIRA de pedaços de nome de etapa que contam como "proposta" (padrão: proposta, orcamento, presupuesto, cotacao, proposal, quote). ' +
+                'Comparados sem acento e sem caixa: "proposta" casa a etapa "Proposta enviada". Até 20, de 1 a 60 caracteres.',
+            ),
+          relatorio: z
+            .object({
+              ligado: z.boolean().optional().describe("O relatório diário da operação. Nasce ligado."),
+              hora: z.number().int().min(0).max(23).optional().describe("A hora em que o relatório do dia é gerado, de 0 a 23, no fuso da empresa (padrão 21)."),
+            })
+            .strict()
+            .optional()
+            .describe("O relatório diário: fica guardado na tela Operação do dia, para a equipe. Não é enviado a ninguém."),
+        })
+        .strict()
+        .optional()
+        .describe(
+          "A tela OPERAÇÃO DO DIA (gestor e administrador): quem espera uma pessoa, as conversas de produto, projeto e reclamação, as propostas do dia e o relatório diário. " +
+            "Sem nada gravado, valem os padrões, que já servem. Só o que veio muda. Não fala com o cliente.",
         ),
     },
     exemplo: { organization_id: ORG_DE_EXEMPLO, modo: "round_robin", visibilidade: "own_and_unassigned", devolver_para_a_ia_apos_minutos: 60 },

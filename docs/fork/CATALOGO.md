@@ -588,7 +588,9 @@ duas funções copiadas do upstream), 9030, 9031, 9040 a 9042. **Mora em** `lib/
 compartilhada, e as rotas espelhadas (seção 5): a cerca dos espelhos guarda a impressão de cada uma e
 **reprova quando o código da rota muda**, para alguém reler o espelho. Também
 `lib/ai/trava-da-ia-na-rota.ts` (o token nunca escolhe IA) e o token `dsk_` do upstream
-(`resolveAuthDual`).
+(`resolveAuthDual`). Desde a v1.121, `lib/ai/agents/edicao.ts` (salvar rascunho, publicar e
+reverter o agente, que o upstream tirou da tela para o MCP de agentes dele usar também): a trava
+da IA mora ali, pelo `quemPede` do ator; sem ele (o token), ninguém escolhe IA.
 
 **Protege.** `tests/unit/mcp-de-implantacao-ferramentas.test.ts`, `mcp-de-implantacao-espelhos.test.ts`, `mcp-de-implantacao-operacoes.test.ts`, `mcp-de-implantacao-ponta-a-ponta.test.ts`, `mcp-de-plataforma-escopo.test.ts`, `distribuicao-do-numero-pela-plataforma.test.ts`, `dono-do-contato-pela-plataforma.test.ts`, `mcp-de-implantacao-servidores-mcp-do-agente.test.ts` (os servidores MCP por agente, 9095) e a família `mcp-de-implantacao-novidades-do-upstream-*.test.ts`.
 
@@ -819,18 +821,24 @@ raio-X do fork ainda contam o histórico importado (9163, espera a decisão D3).
 quebrada por agente, pela linha "Sistema" (chamadas sem `agent_id`) e por finalidade, em centavos de dólar e
 em reais pela cotação de cada dia. Usada pela aba Uso do cliente e pelo MCP. Nas telas (MIA-46), "Este mês" e
 "Mês passado" no seletor de `/admin/usage` e da aba Uso, e na aba Uso o R$ no card do custo de IA e as tabelas
-por agente (com "Sistema") e por finalidade. Só no painel da plataforma: `/app/ai/usage` não mudou.
-**Migrations** nenhuma (lê `llm_calls`, `ai_agents` e `platform_fx_rates`, da 0241). **Mora em**
+por agente (com "Sistema") e por finalidade. Só no painel da plataforma: `/app/ai/usage` não mudou. Desde a
+MIA-99, o custo de mensagem da Meta (aba Uso, `/admin/custo-da-meta` e o MCP) usa o preço vigente no instante de
+cada mensagem, e o mês fechado não muda quando o preço muda depois (seção 9 do documento).
+**Migrations** 9165 (o histórico de preços da Meta, `mia_precos_meta_vigencias`, e o gatilho em
+`platform_precos_meta`); o resto lê `llm_calls`, `ai_agents` e `platform_fx_rates` (0241). **Mora em**
 `lib/ai/usage/consumo-do-periodo.ts`, `lib/ai/usage/atalhos-de-periodo.ts`,
 `lib/ai/usage/contatos-pessoais.ts` (a lista dos contatos pessoais que as duas telas tiram da contagem, MIA-78),
-`lib/mcp-plataforma/ferramentas/consumo-de-ia.ts`, `components/admin/tenants/UsoDoTenant.tsx`.
+`lib/mcp-plataforma/ferramentas/consumo-de-ia.ts`, `components/admin/tenants/UsoDoTenant.tsx`,
+`lib/channels/meta/custo-do-periodo.ts` e `calcularCustoPorVigencia` em `lib/channels/meta/custo-da-conversa.ts`
+(MIA-99), `lib/mcp-plataforma/ferramentas/precos-da-meta.ts` (MIA-99).
 
 **Pontos de encaixe** (todos `FORK MIA (MIA-44)`): `app/api/v1/admin/tenants/[id]/usage/route.ts` (a rota é
 do fork; o `mes` e a chamada a `lerConsumoDoPeriodo`), `lib/mcp-plataforma/ferramentas.ts`
 (`FERRAMENTAS_DE_CONSUMO_DE_IA`), `app/api/v1/admin/usage/route.ts` (o `mes`, `periodoDoPedido` e o dia de
 Brasília nas séries), `app/admin/(protected)/usage/_client.tsx` e `components/admin/usage/UsageTable.tsx` (o
 seletor e o nome do CSV), `hooks/useAdminUsage.ts`, `lib/i18n/dicionario.ts` (o espalhamento de
-`DICIONARIO_DO_CONSUMO_DE_IA`). Do upstream, só as colunas de `llm_calls`: `agent_id` (0130), `purpose`,
+`DICIONARIO_DO_CONSUMO_DE_IA`), `app/api/v1/admin/custo-da-meta/route.ts` (`FORK MIA (MIA-99)`: a conta pela
+vigência), `lib/mcp-plataforma/operacoes.ts` (`definir_custo_da_meta`). Do upstream, só as colunas de `llm_calls`: `agent_id` (0130), `purpose`,
 `input_tokens`, `output_tokens`, `cache_read_tokens`, `cost_cents`.
 
 **Protege.** `tests/unit/consumo-de-ia-por-mes-e-por-agente.test.ts` (paginação acima de 1000, agente x
@@ -838,23 +846,55 @@ Sistema, cache, virada do mês em Brasília com TZ de Brasília e UTC, R$ e dia 
 mesmos números), `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx` (os atalhos, `/admin/usage?mes=` e a aba
 Uso), `painel-de-custo-nao-para-na-linha-1000.test.ts`, `orcamento-uma-regua-de-gasto.test.ts` (nenhuma segunda
 régua de gasto mensal), `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts` (MIA-78: a tela geral e a aba Uso
-com os mesmos pessoais fora e a mesma janela de N dias de Brasília, e leitura que falha virando 500, não zero) e a e2e `admin-consumo-de-ia-por-mes-e-por-agente.spec.ts`.
+com os mesmos pessoais fora e a mesma janela de N dias de Brasília, e leitura que falha virando 500, não zero),
+`preco-da-meta-com-vigencia.test.ts` (MIA-99: outubro igual depois do reajuste de novembro nas três leituras, a
+virada de Brasília, as ferramentas de preço), o invariante `tests/invariants/preco-da-meta-com-vigencia.test.ts` (o
+gatilho no Postgres de verdade) e a e2e `admin-consumo-de-ia-por-mes-e-por-agente.spec.ts`.
 
 **Conferir.**
 1. `git grep -n "lerConsumoDoPeriodo" "app/api/v1/admin/tenants/[id]/usage/route.ts" lib/mcp-plataforma/ferramentas/consumo-de-ia.ts` (**as duas chamadas existem**; sem uma delas a tela e o MCP passam a divergir).
 2. Se a fusão mexeu em `llm_calls` (`git diff vA vB -- supabase/migrations supabase/baseline.sql | grep -n "llm_calls"`), confira que as seis colunas acima continuam com o mesmo nome e o mesmo sentido (`cache_read_tokens` como parte de `input_tokens`).
 3. `npx vitest run tests/unit/consumo-de-ia-por-mes-e-por-agente.test.ts tests/unit/consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx tests/unit/orcamento-uma-regua-de-gasto.test.ts tests/unit/consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts`.
-4. MCP (lê só): `plataforma_ver_consumo_de_ia` com a empresa de demonstração e o mês corrente.
+4. MCP (lê só): `plataforma_ver_consumo_de_ia` com a empresa de demonstração e o mês corrente, e `plataforma_ver_precos_da_meta` (o histórico tem uma vigência aberta por categoria).
 5. Se a fusão mexeu em `app/api/v1/admin/usage/route.ts` (do upstream), confira que `mes` ainda passa por `periodoDoPedido` e que a fatura e as cotações têm o limite de cima (`git grep -n "periodoDoPedido\|ultimoDia" app/api/v1/admin/usage/route.ts`).
+6. MIA-99: `git grep -n "lerCustoDeMensagemDoPeriodo\|calcularCustoPorVigencia" app/api/v1/admin lib/mcp-plataforma` (**a aba Uso, o MCP e `/admin/custo-da-meta` fazem a conta pela vigência**; quem voltar a `calcularCusto` com a tabela atual devolve o defeito) e, no banco, `select tgname from pg_trigger where tgname = 'trg_mia_precos_meta_vigencia'`.
 
 **Riscos.** O mês daqui é o de Brasília e o do teto (`fn_gasto_de_ia_do_mes`) é o do banco, em UTC: os dois
 números podem diferir pelas chamadas das últimas 3 horas do mês. Fica assim por decisão (mudar o teto muda o que
 o cliente recebe). Se o upstream trouxer a soma de uso no banco por organização (`fn_uso_de_ia`, 0586) com
 quebra por agente, a leitura daqui pode passar a perguntar a ela, desde que a régua do custo continue a mesma.
 
+### 25. O fuso da organização nos relatórios · [`fuso-da-organizacao.md`](fuso-da-organizacao.md)
+**O que faz.** Uma regra só para o fuso dos relatórios: `organizations.timezone` vazio, só espaços ou com nome
+que não existe vale `America/Sao_Paulo` no relatório comercial, na série do Desempenho, no relatório de vendas,
+na planilha e no motor dos relatórios montados e dos painéis prontos. E a gravação recusa o nome que não existe
+(Configurações, painel da plataforma, boas-vindas, MCP). **Migrations** 9166 (redefine a nossa
+`fn_mia_relatorio_preparar`, corpo da 9041). **Mora em** `lib/tempo/fuso-gravavel.ts`.
+
+**Pontos de encaixe** (todos `FORK MIA (MIA-102)` ou `MIA-102`): do upstream, `lib/relatorios/janela.ts`
+(`TZ_PADRAO = FUSO_PADRAO`), `app/api/v1/reports/comercial/route.ts` (`fusoDoRelatorio(org.timezone)`),
+`lib/schemas/settings.ts` (`tenantSchema.timezone`), `lib/schemas/onboarding.ts` (`welcomeSchema.timezone`),
+`app/app/settings/tenant/_form.tsx` (a frase da recusa no toast); do fork, `app/api/v1/relatorios/exportar/route.ts`,
+`app/api/v1/relatorio-de-vendas/route.ts`, `lib/implantacao/empresa.ts`, `lib/i18n/dicionario-relatorios-mia.ts`.
+
+**Protege.** `tests/unit/fuso-dos-relatorios-uma-regra.test.ts` (a regra em TypeScript, a rota comercial, a
+gravação e a catraca de que nenhum leitor de relatório tem recuo próprio) e o invariante
+`fuso-invalido-nos-relatorios.test.ts` (o motor no Postgres com fuso inválido, vazio e só espaços, Tóquio como
+controle, pela sessão de um gestor).
+
+**Conferir.**
+1. `git grep -n "TZ_PADRAO = \|fusoDoRelatorio(org.timezone)" lib/relatorios/janela.ts app/api/v1/reports/comercial/route.ts` (as duas linhas existem; se o upstream reescreveu a janela, o recuo para UTC pode ter voltado).
+2. `git grep -n "fusoGravavelSchema" lib/schemas/settings.ts lib/schemas/onboarding.ts` (o fuso da organização segue passando pela régua da gravação).
+3. Se a fusão trouxe uma rota nova de relatório que lê `organizations.timezone`, ela entra na lista da catraca em `fuso-dos-relatorios-uma-regra.test.ts`.
+4. `npx vitest run tests/unit/fuso-dos-relatorios-uma-regra.test.ts`.
+
+**Riscos.** `lib/relatorios/janela.ts` tem PR aberto no upstream (#5002, a meia-noite pulada); a linha do
+`TZ_PADRAO` fica fora do trecho dele, mas confira na fusão. A empresa que já tem um fuso torto gravado continua
+lendo Brasília e só consegue salvar os dados da empresa escolhendo um fuso válido.
+
 ---
 
-### 25. O aviso da queda e da volta do número no grupo do cliente · [`aviso-da-queda.md`](aviso-da-queda.md)
+### 26. O aviso da queda e da volta do número no grupo do cliente · [`aviso-da-queda.md`](aviso-da-queda.md)
 **O que faz.** Quando um número por QR de um cliente cai (e a queda dura 10 minutos), o número de avisos manda
 UMA mensagem no grupo de avisos daquele cliente com o final do telefone e o passo a passo do QR, e uma curta
 quando ele volta. Trava de um aviso por queda por dia (`jaAvisou`, chave por sessão). Chave por cliente
@@ -906,8 +946,9 @@ número de avisos caído), `app/api/v1/cron/report-da-plataforma/route.test.ts` 
 | 21 | Raio-X do atendimento | `raio-x-do-atendimento.md` | 9150, 9151, 9152 | `raio-x-leitor-nao-envia.test.ts`, `raio-x-anonimizar.test.ts` |
 | 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
 | 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts` |
-| 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | nenhuma (lê a 0241) | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts`, `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts` |
-| 25 | Aviso da queda do número | `aviso-da-queda.md` | nenhuma | `aviso-da-queda.test.ts`, `mcp-de-implantacao-aviso-da-queda.test.ts` |
+| 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | 9165 (o preço da Meta com vigência); lê a 0241 | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts`, `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts`, `preco-da-meta-com-vigencia.test.ts` |
+| 25 | O fuso da organização nos relatórios | `fuso-da-organizacao.md` | 9166 | `fuso-dos-relatorios-uma-regra.test.ts`, `tests/invariants/fuso-invalido-nos-relatorios.test.ts` |
+| 26 | Aviso da queda do número | `aviso-da-queda.md` | nenhuma | `aviso-da-queda.test.ts`, `mcp-de-implantacao-aviso-da-queda.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.

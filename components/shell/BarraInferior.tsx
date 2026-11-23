@@ -122,6 +122,7 @@ export function BarraInferior() {
     activeOrg?.modo_de_venda,
     activeOrg?.modulos_ligados ?? [],
     activeOrg?.capacidades_ligadas ?? [],
+    activeOrg?.modulos_conectados ?? [],
   )) {
     for (const item of items) visiveis.set(item.href, item);
   }

@@ -192,10 +192,13 @@ function ehNomeRepetido(erro: { code?: string; message?: string } | null): boole
 
 export async function duplicateAgentWithVersion(
   admin: SupabaseClient,
+  // `actorUserId` é `null` quando quem duplica é um token de integração: a
+  // coluna `created_by` das duas tabelas aceita nulo, e id de token nunca vai
+  // para coluna de pessoa.
   input: {
     orgId: string;
     agentId: string;
-    actorUserId: string;
+    actorUserId: string | null;
     requireVersion: boolean;
     /**
      * FORK MIA: a IA que a cópia leva no lugar da do rascunho copiado, quando
@@ -275,7 +278,7 @@ export async function duplicateAgentWithVersion(
     return { ok: false, error: "agent_insert_failed", message: corpoLegado.error.message };
   }
   const receitaLegada = corpoLegado
-    ? mcpAgentDraftRecords({ orgId, userId: actorUserId }, corpoLegado.data)
+    ? mcpAgentDraftRecords({ orgId, userId: actorUserId ?? "" }, corpoLegado.data)
     : null;
 
   // A cópia GRAVA o provedor da origem, e gravar passa pela mesma régua do
@@ -378,7 +381,8 @@ export async function duplicateAgentWithVersion(
     await admin
       .from("ai_agents")
       .update({ archived_at: new Date().toISOString() })
-      .eq("id", (newAgent as { id: string }).id);
+      .eq("id", (newAgent as { id: string }).id)
+      .eq("organization_id", orgId);
     return { ok: false, error: "version_insert_failed", message: versionErr?.message };
   }
 

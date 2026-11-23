@@ -77,6 +77,10 @@ function banco(tabelas: Record<string, Linha[]>) {
     ],
     platform_fx_rates: [{ dia: "2026-09-30", usd_brl: 5 }],
     platform_precos_meta: [{ categoria: "marketing", centavos_brl: 35 }],
+    // MIA-99: a conta sai do histórico de preços (9165).
+    mia_precos_meta_vigencias: [
+      { categoria: "marketing", centavos_brl: 35, vigente_desde: "-infinity", vigente_ate: null },
+    ],
     ...tabelas,
   });
 }
@@ -279,7 +283,8 @@ describe("3. leitura que falha vira erro, nunca zero", () => {
     ["a contagem de conversas", "conversations", soAContagem],
     // Só a contagem: a leitura das mensagens cobradas (a outra de `messages`) já era conferida.
     ["a contagem de mensagens", "messages", soAContagem],
-    ["os preços da Meta (era custo R$ 0,00)", "platform_precos_meta", qualquer],
+    // MIA-99: os preços da aba Uso vêm do histórico (9165), não mais da tabela do preço atual.
+    ["os preços da Meta (era custo R$ 0,00)", "mia_precos_meta_vigencias", qualquer],
     ["a lista dos contatos pessoais", "contacts", qualquer],
   ];
 

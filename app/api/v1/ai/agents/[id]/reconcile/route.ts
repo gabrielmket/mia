@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { NextRequest } from "next/server";
 import { requireSupportWrite } from "@/lib/impersonate/support";
-import { requireRole } from "@/lib/auth/require-role";
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publishFirstVersion } from "@/lib/ai/agents/first-publication";
 import { codigoDoEscopo, mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
@@ -11,6 +11,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { ehProvedorSuportado } from "@/lib/ai/pontos/provedores";
 import { travarIaDaVersaoNova } from "@/lib/ai/trava-da-ia";
+import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
 const input = z.object({
   channel_id: z.uuid(),
   // Só quem CONVERSA: o Jev tem chave cadastrável, mas escolhido como cérebro
@@ -20,12 +21,28 @@ const input = z.object({
   model: z.string().min(1).max(200),
   credential_id: z.uuid().nullable(),
 });
+// Sessão OU token de integração (Spec 33, R1): o token precisa de `config:write` e
+// de papel admin (`tokenRole`), como o irmão `publish`. A organização sai de
+// `auth.organizationId` (linha do token, nunca do path), e no ramo do token o
+// cliente é a service role: o `organization_id` de cada consulta abaixo e das
+// funções que ela chama é a única barreira.
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const denied = await requireSupportWrite();
   if (denied) return denied;
   const requestId = randomUUID(),
-    auth = await requireRole("admin", { requestId, resource: "ai_agents" });
+    auth = await resolveAuthDual(req, {
+      requestId,
+      resource: "ai_agents",
+      role: "admin",
+      scope: "config:write",
+      tokenRole: "admin",
+    });
   if (!auth.ok) return auth.response;
+  const teto = await tetoDeEscritaDoToken(auth, "ai_agents", requestId);
+  if (teto) return teto;
+  const orgId = auth.organizationId;
+  // Token de integração não é pessoa: `created_by` recebe null, nunca o id do token.
+  const actorUserId = auth.actor.type === "user" ? auth.actor.id : null;
   const { id } = await ctx.params,
     parsed = input.safeParse(await req.json().catch(() => null));
   if (!z.uuid().safeParse(id).success || !parsed.success)
@@ -34,19 +51,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { data: agent } = await admin
     .from("ai_agents")
     .select("id,kind,system_prompt,published_version_id,archived_at")
-    .eq("organization_id", auth.org.orgId)
+    .eq("organization_id", orgId)
     .eq("id", id)
     .maybeSingle();
   if (!agent || agent.kind === "mcp_agent" || agent.archived_at)
     return fail("not_found", "Agente legado indisponível.", 404, { requestId });
   if (agent.published_version_id) {
-    await recordLegacyNotice(admin,auth.org.orgId,id,'pronto');
+    await recordLegacyNotice(admin,orgId,id,'pronto');
     return ok({ published: true }, { requestId });
   }
   const { data: versions, error } = await admin
     .from("ai_agent_versions")
     .select("id,provisioning_origin")
-    .eq("organization_id", auth.org.orgId)
+    .eq("organization_id", orgId)
     .eq("agent_id", id)
     .limit(2);
   if (error)
@@ -67,7 +84,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   // chave do corpo passava sempre (lib/ai/trava-da-ia.ts).
   const travada = await travarIaDaVersaoNova(
     admin,
-    { user: auth.user, orgId: auth.org.orgId, agenteDeReferencia: null },
+    // FORK MIA: desde a v1.121 do upstream a rota aceita token (resolveAuthDual).
+    { user: await quemPedeNaRota(auth), orgId, agenteDeReferencia: null },
     {
       provider: parsed.data.provider,
       model: parsed.data.model,
@@ -79,14 +97,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const p = { ...parsed.data, ...travada.corpo };
   // O canal já é conferido contra a organização em `publishFirstVersion`.
   // (Upstream) o escopo confere o que vai AO AR — por isso depois da trava.
-  const escopo = await validarEscopoDaVersao(admin, auth.org.orgId, { credential_id: p.credential_id, provider: p.provider });
+  const escopo = await validarEscopoDaVersao(admin, orgId, { credential_id: p.credential_id, provider: p.provider });
   if (!escopo.ok) return fail(codigoDoEscopo(escopo), mensagemDoEscopo(escopo), 422, { requestId });
   const result = await publishFirstVersion(
       admin,
-      auth.org.orgId,
+      orgId,
       agent,
       agent.system_prompt ?? "",
-      auth.user.id,
+      actorUserId,
       {
         channelId: p.channel_id,
         provider: p.provider,
@@ -95,11 +113,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       },
     );
   const cause=legacyRecoveryCause(result);
-  await recordLegacyNotice(admin,auth.org.orgId,id,cause);
+  await recordLegacyNotice(admin,orgId,id,cause);
   void audit({
     action: "ai_agent.reconciled",
-    actorUserId: auth.user.id,
-    organizationId: auth.org.orgId,
+    actorUserId,
+    actorApiTokenId: auth.apiTokenId ?? null,
+    organizationId: orgId,
     resourceType: "ai_agent",
     resourceId: id,
     requestId,
