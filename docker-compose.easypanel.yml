@@ -152,7 +152,12 @@ services:
       WHATSAPP_HOOK_URL: http://app:3000/api/v1/webhooks/waha
       # FORK MIA (upstream v1.86, #2797): `message.reaction` entra, é por onde
       # chega a reação (👍) do cliente pelo canal por QR; `message.any` não a cobre.
-      WHATSAPP_HOOK_EVENTS: "message.any,message.ack,message.edited,message.revoked,message.reaction,session.status,state.change"
+      # FORK MIA (upstream v1.122): `call.received` entra, é a ligação de voz que
+      # chega no número por QR. Só tem efeito com "Bloquear chamadas recebidas"
+      # ligado na empresa (Configurações › Segurança, nasce desligado); aí ela é
+      # recusada na hora (lib/organizacao/bloqueio-de-chamadas.ts). O número em
+      # coexistência não passa pelo WAHA e não é tocado.
+      WHATSAPP_HOOK_EVENTS: "message.any,message.ack,message.edited,message.revoked,message.reaction,session.status,state.change,call.received"
       WHATSAPP_DEFAULT_ENGINE: NOWEB
       WAHA_DASHBOARD_ENABLED: "false"
       WHATSAPP_RESTART_ALL_SESSIONS: "True"

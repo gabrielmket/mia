@@ -18,6 +18,7 @@ import { AgentTabs } from "./_components/AgentTabs";
 import { AgentEditorClient } from "./_client";
 import type { FunilDaResposta } from "@/hooks/pipelines/usePipelines";
 import { coberturaDoFunil, type EtapaDoMapa } from "@/lib/leads/agent-mapping";
+import { entradasDoAgente } from "@/lib/leads/entrada-dos-numeros-do-agente";
 import type { CoberturaPorFunil } from "./_components/FunisDoAgente";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { moduloLigado } from "@/lib/instalacao/modulos";
@@ -168,6 +169,15 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
     const c = coberturaDoFunil(etapasPorFunil.get(f.id) ?? []);
     cobertura[f.id] = { traduzidos: c.traduzidos, total: c.total, mudo: c.mudo };
   }
+  // Onde nascem os cards das conversas novas de cada número e quais números
+  // chegam a este agente por roteador (#4940) — pela mesma régua do nascimento
+  // do lead, para o aviso do funil de entrada não discordar do que acontece.
+  const { funilDeEntradaPorNumero, numerosDoRoteador } = await entradasDoAgente(
+    supabase,
+    activeOrg.orgId,
+    id,
+    channelSessions,
+  );
   const credentials = (credentialsRes.data ?? []) as CredentialRow[];
   const routerMemberRow = routerMemberRes.data as {
     router_id: string;
@@ -248,6 +258,8 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
         channelSessions={channelSessions}
         funis={funis}
         cobertura={cobertura}
+        funilDeEntradaPorNumero={funilDeEntradaPorNumero}
+        numerosDoRoteador={numerosDoRoteador}
         materiais={materiais}
         skills={await skillsDisponiveis(createAdminClient(), activeOrg.orgId)}
         routerMembership={routerMembership}
