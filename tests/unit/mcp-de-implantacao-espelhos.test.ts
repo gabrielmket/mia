@@ -244,6 +244,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/api/v1/operacao/configuracao/route.ts", espelho: "lib/implantacao/empresa.ts", impressao: "085a1a488b925c3a" },
   // FORK MIA (upstream 1.119, MIA-96): o primeiro nome do cliente no aviso de transferência. O espelho (configurarAtendimento) mescla `settings.crm` como a ação e grava a mesma trilha.
   { rota: "app/actions/settings/definirNomeNaTransferencia.ts", espelho: "lib/implantacao/empresa.ts", impressao: "c9d2f4cc9d9b7102" },
+  // FORK MIA (MIA-103): a Análise do funil, uma LEITURA. O espelho faz as mesmas seis leituras da janela (paginadas, com o filtro da organização), lê as duas grafias de `stage_changed` e monta com as mesmas funções (montarRelatorioDeFunil, separarValoresDoPeriodo, a contra-métrica de fn_atrito_metrics). A paridade dos números é medida em tests/unit/mcp-de-implantacao-analise-e-conversas.test.ts, contra a rota.
+  { rota: "app/api/v1/metrics/funil/route.ts", espelho: "lib/implantacao/analise-do-funil.ts", impressao: "bec9834ee04322cb" },
 ];
 
 describe("a regra copiada: gatilhos de follow-up que têm motor", () => {
