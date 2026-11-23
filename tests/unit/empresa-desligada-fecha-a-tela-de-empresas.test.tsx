@@ -11,8 +11,10 @@
  * O modo de venda esconde a PORTA no menu; o layout não tranca a tela, nem pela
  * instalação nem pela empresa. As mesmas quatro combinações do upstream ficam,
  * com a resposta do fork: a tela existe em todas e o layout nem lê o módulo.
- * A camada por empresa do #4871 continua valendo nas ROTAS do módulo
- * (`lib/crm-b2b/route-helpers.ts`), que é onde Pessoas e Importação fecham.
+ * As ROTAS do módulo (`lib/crm-b2b/route-helpers.ts`) fecham pela INSTALAÇÃO:
+ * todas chamam `seModuloB2bDesligado(requestId)` sem a empresa, como no
+ * upstream. O único consumidor da camada por empresa em `crm_b2b` era este
+ * layout, e o fork o tira de propósito (revisão do PR #127, ponto 1).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
