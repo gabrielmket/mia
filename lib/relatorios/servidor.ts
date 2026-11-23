@@ -766,11 +766,6 @@ export async function exportarPlanilha(
   let texto: string;
   let linhas: number;
   let cortada = false;
-  // MIA-106: o fuso da planilha é o que o MOTOR usou (`janela.fuso`), o mesmo
-  // que a tela mostra (`ListaPorTras` lê `lista.janela.fuso`). O `p.fuso` da
-  // rota é lido à parte em `organizations.timezone` e fica só de reserva: com
-  // ele, a data da lista podia sair num dia na tela e noutro na planilha.
-  let fuso = p.fuso;
   if (p.tipo === "relatorio") {
     const c = await calcularRelatorio(db, admin, {
       organizationId: quem.organizationId,
@@ -778,7 +773,6 @@ export async function exportarPlanilha(
       valores: p.valores,
       funilPadrao: p.funilPadrao,
     });
-    fuso = c.resposta.janela?.fuso || fuso;
     const modelo = modeloDoGrafico(c.resposta, c.config.medida, c.nomes);
     const csv = csvDoRelatorio(modelo, { sep: p.sep, f: p.f, rotuloDaMedida: rotuloDaMedida(c.config.medida, c.config.fonte, p.f.t) });
     texto = csv.texto;
@@ -798,11 +792,10 @@ export async function exportarPlanilha(
       deslocamento: 0,
     });
     cortada = lista.n > lista.linhas.length;
-    fuso = lista.janela?.fuso || fuso;
     const csv = csvDaLista(colunasDaLista(p.config.fonte, { valores: p.valores, tela: false }), lista.linhas, {
       sep: p.sep,
       moeda: lista.moeda,
-      ctx: { nomes, fuso, t: p.f.t },
+      ctx: { nomes, fuso: p.fuso, t: p.f.t },
     });
     texto = csv.texto;
     linhas = csv.linhas;
@@ -830,7 +823,7 @@ export async function exportarPlanilha(
     requestId: quem.requestId,
     metadata: { tipo: p.tipo, fonte: p.config.fonte, pronto: p.pronto, linhas, cortada, via: quem.via },
   });
-  const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: fuso, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: p.fuso, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   return {
     arquivo: nomeDoArquivo({ empresa: p.empresa, relatorio: p.nome, grupo: p.tipo === "lista" ? p.grupo : null, hoje }),
     texto,
