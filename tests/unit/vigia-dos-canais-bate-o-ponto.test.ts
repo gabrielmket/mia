@@ -116,7 +116,7 @@ function sessao(n: number): Linha {
     status: "WORKING",
     status_reason: null,
     display_name: `Canal ${n}`,
-    phone_number: `+55119999900${n}`,
+    phone_number: `+553190000000${n}`,
     archived_at: null,
     consecutive_health_fails: 0,
     last_status_change_at: "2026-11-20T10:00:00.000Z",
@@ -169,7 +169,7 @@ describe("o vigia dos números bate o ponto (MIA-154)", () => {
   it("o resumo do batimento só tem contagens: nenhum id, nome ou telefone", async () => {
     await rodar();
     const texto = JSON.stringify(batimentos()[0]?.payload);
-    for (const proibido of ["sessao-1", "org-1", "Canal 1", "+551199999001", "org_1_comercial"]) {
+    for (const proibido of ["sessao-1", "org-1", "Canal 1", "+5531900000001", "org_1_comercial"]) {
       expect(texto, `o batimento levou "${proibido}"`).not.toContain(proibido);
     }
   });
