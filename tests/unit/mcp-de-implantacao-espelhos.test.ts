@@ -246,7 +246,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // FORK MIA (upstream 1.119, MIA-96): o primeiro nome do cliente no aviso de transferência. O espelho (configurarAtendimento) mescla `settings.crm` como a ação e grava a mesma trilha.
   { rota: "app/actions/settings/definirNomeNaTransferencia.ts", espelho: "lib/implantacao/empresa.ts", impressao: "c9d2f4cc9d9b7102" },
   // FORK MIA (MIA-103): a Análise do funil, uma LEITURA. O espelho faz as mesmas seis leituras da janela (paginadas, com o filtro da organização), lê as duas grafias de `stage_changed` e monta com as mesmas funções (montarRelatorioDeFunil, separarValoresDoPeriodo, a contra-métrica de fn_atrito_metrics). A paridade dos números é medida em tests/unit/mcp-de-implantacao-analise-e-conversas.test.ts, contra a rota.
-  { rota: "app/api/v1/metrics/funil/route.ts", espelho: "lib/implantacao/analise-do-funil.ts", impressao: "bec9834ee04322cb" },
+  // Relido na fusão da 1.124 (#4191, MIA-127): a rota lê `nao_comercial_em` e passa a coluna a montarRelatorioDeFunil, que corta o negócio não comercial e as passagens dele da conta comercial (os valores do período seguem como antes). Levado: o espelho lê a mesma coluna e a passa igual.
+  { rota: "app/api/v1/metrics/funil/route.ts", espelho: "lib/implantacao/analise-do-funil.ts", impressao: "d3a61e7f7e14aecb" },
 ];
 
 describe("a regra copiada: gatilhos de follow-up que têm motor", () => {
