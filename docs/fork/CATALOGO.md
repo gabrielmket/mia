@@ -894,6 +894,32 @@ lendo Brasília e só consegue salvar os dados da empresa escolhendo um fuso vá
 
 ---
 
+### 26. O batimento do vigia dos canais · [`vigia-dos-canais.md`](vigia-dos-canais.md)
+**O que faz.** No fim de cada rodada, o vigia dos números (`channel-health`, a cada 5 min) regrava a linha dele
+em `mia_batimentos_de_cron`, e a `/api/v1/health` responde `vigia_dos_canais: { ultima_rodada_em, em_dia }`
+(menos de 15 min), sem mudar o `status`. É o sinal de que o vigia passou, que a rodada estável não dava
+(MIA-152). **Migrations** 9168. **Mora em** `lib/cron/batimento.ts`.
+
+**Pontos de encaixe** (todos `FORK MIA (MIA-154)`): do upstream, `app/api/v1/cron/channel-health/route.ts` (o
+`registrarBatimento` antes do `return` final, e os dois passos em `PASSOS_DEPOIS_DO_PORTAO`),
+`app/api/v1/health/route.ts` (`lerBatimentoDoVigia` e o bloco `vigia_dos_canais`) e
+`tests/unit/voz-nao-derruba-a-vigilancia-de-canal.test.ts` (o dublê aceita o `upsert`).
+
+**Protege.** `tests/unit/vigia-dos-canais-bate-o-ponto.test.ts` (a rodada grava exatamente um batimento; a falha
+dele não muda a resposta), `app/api/v1/health/health-diz-se-o-vigia-dos-canais-passou.test.ts` (em dia, atrasado,
+sem linha, sem tabela) e o invariante `batimento-dos-crons.test.ts` (o `upsert` regrava; só o `service_role`).
+
+**Conferir.**
+1. `git grep -n "registrarBatimento(admin, ROTA_DO_VIGIA_DOS_CANAIS" app/api/v1/cron/channel-health/route.ts` (a chamada existe e está DEPOIS do laço, antes do `return` final; se o upstream reescreveu o fim da rodada, ela pode ter sumido).
+2. `git grep -n "vigia_dos_canais: avaliarVigiaDosCanais" app/api/v1/health/route.ts` (o bloco segue na resposta).
+3. Se o upstream passou a gravar algo na saída ociosa do vigia, o batimento pode ir para lá também (ver "O que ele NÃO cobre" no documento).
+4. `npx vitest run tests/unit/vigia-dos-canais-bate-o-ponto.test.ts app/api/v1/health/health-diz-se-o-vigia-dos-canais-passou.test.ts tests/unit/cron-passa-pelo-portao.test.ts`.
+
+**Riscos.** Instalação sem número ativo sai pelo portão do piso ocioso antes do batimento, e a `/health` diz
+`em_dia: false`. Na produção da MIA há números.
+
+---
+
 ## Tabela final: por função, o documento, as migrations e os testes principais
 
 | # | função | documento | migrations | testes principais |
@@ -923,6 +949,7 @@ lendo Brasília e só consegue salvar os dados da empresa escolhendo um fuso vá
 | 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts` |
 | 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | 9165 (o preço da Meta com vigência); lê a 0241 | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts`, `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts`, `preco-da-meta-com-vigencia.test.ts` |
 | 25 | O fuso da organização nos relatórios | `fuso-da-organizacao.md` | 9166 | `fuso-dos-relatorios-uma-regra.test.ts`, `tests/invariants/fuso-invalido-nos-relatorios.test.ts` |
+| 26 | O batimento do vigia dos canais | `vigia-dos-canais.md` | 9168 | `vigia-dos-canais-bate-o-ponto.test.ts`, `health-diz-se-o-vigia-dos-canais-passou.test.ts`, `tests/invariants/batimento-dos-crons.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.
