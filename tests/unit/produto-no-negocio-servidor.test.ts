@@ -142,6 +142,18 @@ describe("gravar os itens do negócio", () => {
     expect(lerLead(b, NOVO).value_cents).toBeNull();
   });
 
+  // FORK MIA (fusão v1.124): as vendas registradas do upstream (9449/9450).
+  it("o último item sai: a rota devolve o negócio às vendas (9167), e com item não chama", async () => {
+    const b = banco();
+    await gravar(b, NOVO, { itens: [{ product_id: LIMPEZA, quantidade: 1, desconto_cents: 0 }], valor: { modo: "soma" } });
+    expect(b.chamadasRpc.filter((c) => c.nome === "fn_mia_valor_do_negocio_volta_as_vendas")).toHaveLength(0);
+
+    await gravar(b, NOVO, { itens: [], valor: { modo: "soma" } });
+    expect(b.chamadasRpc.filter((c) => c.nome === "fn_mia_valor_do_negocio_volta_as_vendas")).toEqual([
+      { nome: "fn_mia_valor_do_negocio_volta_as_vendas", args: { p_org: ORG, p_lead: NOVO } },
+    ]);
+  });
+
   it("valor digitado à mão: grava a marca e para de somar até alguém pedir a soma", async () => {
     const b = banco();
     await gravar(b, NOVO, {
