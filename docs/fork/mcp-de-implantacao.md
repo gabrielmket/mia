@@ -887,10 +887,67 @@ Falta no MCP (cada item com o motivo):
   caminhos próprios por elas. Não é campo nem ferramenta nova; é decisão de desenho, e fica
   para um PR próprio depois da revisão das sobreposições abaixo;
 - o MCP da EMPRESA ganhou 7 ferramentas para ver, corrigir, testar, publicar e reverter
-  assistentes pelo ChatGPT (`lib/mcp/tools/agentes.ts`, #4805). Sobrepõe o que o MCP de
-  plataforma faz de agente (`plataforma_garantir_agente` e vizinhas): conferir antes de criar
-  ferramenta nova de edição de assistente. No fork elas passam pela trava da IA
-  (`lib/ai/agents/edicao.ts`): pelo token, provedor, modelo e chave nunca mudam.
+  assistentes pelo ChatGPT (`lib/mcp/tools/agentes.ts`, #4805). A conferência da sobreposição
+  com o MCP de plataforma está logo abaixo (MIA-115); o que sobrou dela para o MCP de
+  plataforma está na lista do fim da conferência.
+
+#### O MCP de agentes da empresa e o MCP de plataforma (MIA-115, 23/11)
+
+Os dois editam o mesmo agente, por caminhos diferentes, e convivem:
+
+- o do upstream é do **admin da empresa** pelo ChatGPT (token da conexão de aplicativo, papel
+  admin, `mcp:read`/`mcp:write`, `apenasHumano`: nunca entra no turno do agente) e passa por
+  `lib/ai/agents/edicao.ts`, o mesmo código da tela do agente;
+- o nosso é da **implantação** (token de plataforma, operações `implantar_configuracao` e
+  `colocar_no_ar`) e passa por `lib/implantacao/agente.ts`.
+
+Os dois aplicam a trava da IA (`lib/ai/trava-da-ia.ts`), cada um no seu caminho. No caminho do
+upstream o ator do token não traz `quemPede` e vale `TOKEN_NAO_ESCOLHE_IA`: provedor, modelo e
+chave nunca mudam pelo token. A cerca é o `describe` "edição pelo token do MCP" em
+`tests/unit/trava-da-ia-portas.test.ts` (rascunho novo, rascunho existente, publicar versão de
+modelo antigo, reverter, cada um com o controle da plataforma, e o esquema).
+
+| Do upstream (MCP da empresa) | O que faz | No MCP de plataforma | Conclusão |
+|---|---|---|---|
+| `crm_list_ai_agents` | lista os assistentes com a versão publicada (modelo, voz), o rascunho e o número | `plataforma_ver_agentes` (mais: situação no ar, o que falta para publicar, pacotes, funis, horário da IA) | conviver; nada a trazer |
+| `crm_get_ai_agent_version` | as instruções inteiras e as configurações de uma versão (publicada, rascunho ou por número) | `plataforma_ver_agentes` com `agente` (prompt e configuração da versão vigente) | conviver. O nosso não lê versão antiga por número; a implantação não precisou até hoje |
+| `crm_get_ai_agent_turn` | por que o assistente respondeu assim numa conversa: a versão que respondeu, o modelo, as ferramentas chamadas, o turno abortado e o motivo | não tem | falta (lista abaixo) |
+| `crm_save_ai_agent_draft` | rascunho por troca exata, anexar ao fim ou texto inteiro, em 1 a 5 assistentes, e as configurações (voz, ferramentas, passar para pessoa, dividir mensagens, ver imagens) | `plataforma_garantir_agente` (rascunho com o pedido inteiro, idempotente) | conviver. **No fork o esquema não tem `provedor` nem `modelo`** (MIA-115): o ChatGPT não promete uma troca que a trava ignoraria, e quem manda recebe a recusa do esquema (`.strict()`) |
+| `crm_test_ai_agent_version` | simula uma mensagem contra uma versão; nada é enviado, gasta crédito de IA | não tem | falta (lista abaixo) |
+| `crm_publish_ai_agent_version` | publica uma versão, com as checagens da tela | `plataforma_publicar_agente` (lista todas as pendências e quem resolve cada uma) | conviver |
+| `crm_rollback_ai_agent` | copia uma versão antiga numa versão nova e a publica | não tem (`plataforma_pausar_agente` cala o agente, não volta a versão) | falta (lista abaixo) |
+
+Cuidados para quem implanta, agora que o dono também edita:
+
+- **O rascunho é um só.** Os dois caminhos partem do rascunho vigente do agente: o que o dono
+  deixou no rascunho pelo ChatGPT vai junto quando a implantação publica, e vice-versa. Antes de
+  `plataforma_publicar_agente` num cliente que já está no ar, leia o rascunho com
+  `plataforma_ver_agentes` (`agente`).
+- **`prompt` substitui o texto inteiro.** `plataforma_garantir_agente` com `prompt` regrava as
+  instruções inteiras, inclusive uma correção que o dono fez pelo ChatGPT. Num cliente no ar,
+  leia a versão vigente antes e parta dela.
+- **Ferramenta solta.** `ferramentas_adicionar` do dono não passa pelos pacotes: ele pode dar
+  uma capacidade avulsa (as do administrador a ferramenta recusa). Uma
+  `plataforma_garantir_agente` com `pacotes` monta a lista de novo pelos pacotes.
+- **O dono vê o modelo.** `crm_list_ai_agents` e `crm_get_ai_agent_version` devolvem o modelo (e
+  o provedor) da versão ao admin da empresa, que a tela do cliente esconde desde a .56. A
+  MIA-115 não mexeu (não mexe no que o cliente vê); fica como decisão para o Gabriel.
+- **O teste gasta a IA da plataforma.** `crm_test_ai_agent_version` é o mesmo botão "Testar" da
+  tela e roda com a IA da plataforma, como pela tela. Não é envio a ninguém.
+
+Falta no MCP de plataforma, da conferência (cada item com o motivo; nenhum entra na MIA-115, que
+não cria ferramenta de edição de assistente):
+
+- ler o porquê de uma resposta numa conversa (o equivalente de `crm_get_ai_agent_turn`): é o
+  diagnóstico de suporte que mais falta, mas lê conversa de cliente, e o MCP de plataforma até
+  hoje só lê contagem de conversa (`plataforma_ver_conversas_do_mes`). Pede decisão sobre o que
+  pode voltar (sem texto da mensagem do cliente) e ferramenta própria;
+- voltar um agente para uma versão anterior (o equivalente de `crm_rollback_ai_agent`), para
+  desfazer uma publicação errada sem reescrever o pedido: ferramenta própria de escrita, na
+  operação `colocar_no_ar`, por `reverterParaVersao` do `edicao.ts` com o ator da plataforma;
+- testar um rascunho com uma mensagem antes de publicar (o equivalente de
+  `crm_test_ai_agent_version`): gasta IA da plataforma por chamada; pede decisão de teto antes
+  de virar ferramenta.
 
 Nada a configurar pela implantação: o motivo real do adiamento do follow-up, o visto azul do
 WAHA sem "Guardar histórico" (#5015), o aviso crítico quando a IA não responde nem após a
