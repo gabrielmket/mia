@@ -58,6 +58,7 @@ import {
   type RoutingMode,
 } from "@/lib/schemas/routing";
 import { colegasPodemMexerNaAgendaLigado, crmSettingsSchema, meetAbertoLigado, tenantSchema } from "@/lib/schemas/settings";
+import { configuracaoSchema, lerConfiguracao, type ConfiguracaoDaOperacao } from "@/lib/operacao/regras";
 import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { DEFAULT_VISIBILITY_MODE } from "@/lib/auth/types";
 import { fusoValido } from "@/lib/tempo/fusos";
@@ -69,6 +70,7 @@ import {
   type Implantacao,
   type OrganizacaoDaImplantacao,
 } from "./base";
+import { retratoDaOperacaoDoDia, retratoDoAvisoDeTransferencia } from "./aviso-e-operacao-do-dia";
 
 export interface PedidoDeEmpresa {
   nome?: string;
@@ -439,6 +441,26 @@ export interface PedidoDeAtendimento {
    * mudam; a mescla é a de `PATCH /api/v1/settings/atendimento`.
    */
   pesquisa_de_satisfacao?: { ligado?: boolean; janela_horas?: number; pergunta?: string };
+  /**
+   * Upstream 1.119 — o PRIMEIRO NOME DO CLIENTE no aviso de transferência que vai
+   * ao número de avisos da EQUIPE (`settings.crm.aviso_transferencia_com_nome`,
+   * a ação `definirNomeNaTransferencia`). Ausente no banco = DESLIGADO, por
+   * decisão de privacidade: o aviso padrão leva só o link. Não muda nada do que
+   * o cliente final recebe.
+   */
+  aviso_de_transferencia_com_nome?: boolean;
+  /**
+   * Upstream 1.119 — a OPERAÇÃO DO DIA (`settings.operacao_do_dia`, rota
+   * `PATCH /api/v1/operacao/configuracao`): as etiquetas de conversa de cada
+   * seção da tela, os pedaços de nome de etapa que contam como proposta e o
+   * relatório diário. A mescla é a da rota: etiquetas e relatório chave a
+   * chave, `etapas_de_proposta` substitui a lista.
+   */
+  operacao_do_dia?: {
+    etiquetas?: { produto?: string; projeto?: string; reclamacao?: string; urgente?: string };
+    etapas_de_proposta?: string[];
+    relatorio?: { ligado?: boolean; hora?: number };
+  };
 }
 
 /** O freio do `ai_decide` como o motor o lê (`aiDecideLigado`): só `false` gravado desliga. */
@@ -467,6 +489,8 @@ export async function configurarAtendimento(
   let telefoneGravado = null as boolean | null;
   let internasGravadas = null as string[] | null;
   let satisfacaoGravada = null as { ligado: boolean } | null;
+  let nomeNoAvisoGravado = null as boolean | null;
+  let operacaoGravada = null as { antes: ConfiguracaoDaOperacao; depois: ConfiguracaoDaOperacao } | null;
 
   const { mudou } = await mudarSettingsDaOrganizacao(c.admin, c.orgId, (settings) => {
     const atual = routingConfigSchema.catch(routingConfigSchema.parse({})).parse(settings.routing ?? {});
@@ -563,7 +587,13 @@ export async function configurarAtendimento(
     const internasPedidas =
       pedido.etiquetas_de_contato_interno !== undefined ? normalizarTags(pedido.etiquetas_de_contato_interno) : null;
     const internasMudaram = internasPedidas !== null && !mesmoConteudo(internasPedidas, crmAtual.internal_contact_tags);
-    if (telefoneMudou || internasMudaram) {
+    // Upstream 1.119: o primeiro nome do cliente no aviso de transferência, pela
+    // mescla de `definirNomeNaTransferencia` (o resto de `settings.crm` fica).
+    // Só o `true` gravado liga, como `avisoDeTransferenciaComNomeLigado` lê.
+    const nomeNoAvisoAtual = crmAtual.aviso_transferencia_com_nome === true;
+    const nomeNoAvisoMudou =
+      pedido.aviso_de_transferencia_com_nome !== undefined && pedido.aviso_de_transferencia_com_nome !== nomeNoAvisoAtual;
+    if (telefoneMudou || internasMudaram || nomeNoAvisoMudou) {
       const crm = (settings.crm ?? {}) as Record<string, unknown>;
       novo = {
         ...novo,
@@ -571,6 +601,7 @@ export async function configurarAtendimento(
           ...crm,
           ...(telefoneMudou ? { telefone_de_ficha_vazia: pedido.telefone_de_ficha_vazia } : {}),
           ...(internasMudaram ? { internal_contact_tags: internasPedidas } : {}),
+          ...(nomeNoAvisoMudou ? { aviso_transferencia_com_nome: pedido.aviso_de_transferencia_com_nome } : {}),
         },
       };
     }
@@ -599,6 +630,34 @@ export async function configurarAtendimento(
       if (satisfacaoMudou) {
         const blocoAtual = (settings.satisfacao as Record<string, unknown> | null) ?? {};
         novo = { ...novo, satisfacao: { ...blocoAtual, ...proxima } };
+      }
+    }
+
+    // Upstream 1.119: a Operação do dia, pela régua de `PATCH /api/v1/operacao/configuracao`:
+    // `configuracaoSchema.strict()`, a leitura com padrão (`lerConfiguracao`) e a
+    // mescla da rota. A rota grava o bloco inteiro já resolvido; aqui também, e
+    // só quando o resultado MUDA (a rota grava sempre).
+    const operacaoAtual = lerConfiguracao(settings);
+    let operacaoNova: ConfiguracaoDaOperacao | null = null;
+    if (pedido.operacao_do_dia !== undefined) {
+      const { etiquetas, ...resto } = pedido.operacao_do_dia;
+      const conferida = configuracaoSchema.strict().safeParse({ ...resto, ...(etiquetas !== undefined ? { tags: etiquetas } : {}) });
+      if (!conferida.success) {
+        throw new Recusa(
+          "A Operação do dia não passou na conferência. Cada etiqueta (`produto`, `projeto`, `reclamacao`, `urgente`) tem de 1 a 40 caracteres e é gravada em minúsculas; " +
+            "`etapas_de_proposta` é uma lista de até 20 pedaços de nome de etapa (1 a 60 caracteres cada); `relatorio.hora` vai de 0 a 23, na hora da empresa. " +
+            'Ex.: { "etiquetas": { "reclamacao": "reclamação" }, "etapas_de_proposta": ["proposta", "orçamento"], "relatorio": { "hora": 20 } }.',
+        );
+      }
+      const pedida = conferida.data;
+      const depois: ConfiguracaoDaOperacao = {
+        tags: { ...operacaoAtual.tags, ...pedida.tags },
+        etapas_de_proposta: pedida.etapas_de_proposta ?? operacaoAtual.etapas_de_proposta,
+        relatorio: { ...operacaoAtual.relatorio, ...pedida.relatorio },
+      };
+      if (!mesmoConteudo(depois, operacaoAtual)) {
+        operacaoNova = depois;
+        novo = { ...novo, operacao_do_dia: depois };
       }
     }
 
@@ -631,6 +690,10 @@ export async function configurarAtendimento(
     internasGravadas = internasMudaram ? internasPedidas : null;
     if (satisfacaoMudou) mudancas.push("pesquisa de satisfação");
     satisfacaoGravada = satisfacaoMudou ? { ligado: (novo.satisfacao as { ligado: boolean }).ligado } : null;
+    if (nomeNoAvisoMudou) mudancas.push("primeiro nome do cliente no aviso de transferência");
+    nomeNoAvisoGravado = nomeNoAvisoMudou ? (pedido.aviso_de_transferencia_com_nome as boolean) : null;
+    if (operacaoNova !== null) mudancas.push("Operação do dia");
+    operacaoGravada = operacaoNova !== null ? { antes: operacaoAtual, depois: operacaoNova } : null;
 
     const assinaturaFinal: AssinaturaGravada = assinaturaPedida ?? {
       humanos: assinaturaAtual.humanos,
@@ -660,6 +723,8 @@ export async function configurarAtendimento(
       telefone_de_ficha_vazia: telefoneMudou ? pedido.telefone_de_ficha_vazia : crmAtual.telefone_de_ficha_vazia,
       etiquetas_de_contato_interno: internasMudaram ? internasPedidas : crmAtual.internal_contact_tags,
       pesquisa_de_satisfacao: lerOpcaoDaSatisfacao(novo),
+      aviso_de_transferencia: retratoDoAvisoDeTransferencia(novo),
+      operacao_do_dia: retratoDaOperacaoDoDia(novo),
     };
 
     // Uma organização que nunca abriu a tela não tem `settings.routing`: gravar
@@ -753,6 +818,31 @@ export async function configurarAtendimento(
       metadata: { tags: internasGravadas, quantidade: internasGravadas.length, via: "mcp_plataforma" },
     });
   }
+  if (mudou && nomeNoAvisoGravado !== null) {
+    // A mesma linha de `definirNomeNaTransferencia` (IA › Casos › Avisos).
+    void audit({
+      action: "crm.aviso_nome_na_transferencia_alterado",
+      actorUserId: c.autorUserId,
+      organizationId: c.orgId,
+      resourceType: "organization",
+      resourceId: c.orgId,
+      requestId: c.requestId,
+      metadata: { ligado: nomeNoAvisoGravado, via: "mcp_plataforma" },
+    });
+  }
+  if (mudou && operacaoGravada !== null) {
+    // A mesma linha de `PATCH /api/v1/operacao/configuracao` (upstream 1.119).
+    void audit({
+      action: "settings.operacao_do_dia_updated",
+      actorUserId: c.autorUserId,
+      organizationId: c.orgId,
+      resourceType: "organization",
+      resourceId: c.orgId,
+      requestId: c.requestId,
+      metadata: { ...operacaoGravada, via: "mcp_plataforma" },
+    });
+  }
+
   if (mudou && satisfacaoGravada !== null) {
     // A mesma linha de `PATCH /api/v1/settings/atendimento` (upstream 1.112, #4023).
     void audit({
