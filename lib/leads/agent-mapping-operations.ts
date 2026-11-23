@@ -31,6 +31,8 @@ export interface DepsDoMapeamento {
   /** Quem está agindo. NUNCA sai do input: é resolvido de fonte confiável pelo chamador. */
   actor: Actor;
   requestId: string;
+  /** `api_tokens.id` quando a rota entrou por token (v1.121 do upstream); vai ao audit. */
+  apiTokenId?: string | null;
 }
 
 /**
@@ -106,6 +108,7 @@ export async function gravarMapeamentoDoAgente(
     void audit({
       action: "pipeline.agent_mapping_updated",
       actorUserId: deps.actor.type === "user" ? deps.actor.id : null,
+      actorApiTokenId: deps.apiTokenId ?? null,
       organizationId: deps.organizationId,
       resourceType: "crm_pipeline",
       resourceId: pipelineId,

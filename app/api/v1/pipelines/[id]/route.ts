@@ -21,8 +21,8 @@ import { type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { fail, ok } from "@/lib/api/wrappers";
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { audit } from "@/lib/audit";
-import { requireRole } from "@/lib/auth/require-role";
 import { ApiError } from "@/lib/api/types";
 import {
   podeExcluirDeVez,
@@ -30,9 +30,9 @@ import {
   type FunilEditavel,
 } from "@/lib/pipelines/pipeline-editing";
 import { atualizarFunil } from "@/lib/pipelines/pipeline-operations";
-import { createClient } from "@/lib/supabase/server";
 
 import { conflitoDoBanco, corpo, lerDependencias, lerFunis } from "../_funis";
+import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -81,10 +81,18 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (supportDenied) return supportDenied;
 
   const requestId = randomUUID();
-  const authz = await requireRole("manager", { requestId, resource: "crm_pipelines" });
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "crm_pipelines",
+    role: "manager",
+    scope: "config:write",
+    tokenRole: "admin",
+  });
   if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const orgId = authz.org.orgId;
+  const teto = await tetoDeEscritaDoToken(authz, "pipelines.id", requestId);
+  if (teto) return teto;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? IDIOMA_PADRAO);
+  const orgId = authz.organizationId;
 
   const { id: pipelineId } = await ctx.params;
 
@@ -108,13 +116,15 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   // se muda e não se apaga, liberar o antigo antes de marcar o novo) moram em
   // `lib/pipelines/pipeline-operations.ts`, compartilhadas com o MCP de
   // plataforma. Aqui só há transporte, e a tradução da frase para quem lê.
-  const supabase = await createClient();
+  // Desde a v1.121 a rota aceita token: cliente, organização e ator saem de `authz`.
+  const supabase = authz.supabase;
   try {
     const { funis } = await atualizarFunil(
       {
         supabase,
         organizationId: orgId,
-        actor: { type: "user", id: authz.user.id, role: authz.org.role },
+        actor: authz.actor,
+        apiTokenId: authz.apiTokenId ?? null,
         requestId,
       },
       { pipelineId, pedido },
@@ -133,15 +143,23 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx): Promise<Response>
   if (supportDenied) return supportDenied;
 
   const requestId = randomUUID();
-  const authz = await requireRole("manager", { requestId, resource: "crm_pipelines" });
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "crm_pipelines",
+    role: "manager",
+    scope: "config:write",
+    tokenRole: "admin",
+  });
   if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const orgId = authz.org.orgId;
+  const teto = await tetoDeEscritaDoToken(authz, "pipelines.id", requestId);
+  if (teto) return teto;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? IDIOMA_PADRAO);
+  const orgId = authz.organizationId;
 
   const { id: pipelineId } = await ctx.params;
   const definitivo = req.nextUrl.searchParams.get("definitivo") === "1";
 
-  const supabase = await createClient();
+  const supabase = authz.supabase;
 
   let funis: FunilEditavel[];
   try {
@@ -198,7 +216,8 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx): Promise<Response>
 
   void audit({
     action: definitivo ? "pipeline.deleted" : "pipeline.archived",
-    actorUserId: authz.user.id,
+    actorUserId: authz.actor.type === "user" ? authz.actor.id : null,
+    actorApiTokenId: authz.apiTokenId ?? null,
     organizationId: orgId,
     resourceType: "crm_pipeline",
     resourceId: pipelineId,
