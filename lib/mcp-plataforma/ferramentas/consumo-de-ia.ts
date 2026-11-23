@@ -118,12 +118,12 @@ export const FERRAMENTAS_DE_CONSUMO_DE_IA: FerramentaDePlataforma[] = [
     name: "plataforma_ver_ranking_de_consumo_de_ia",
     description:
       "O consumo de IA da PLATAFORMA inteira num MÊS do calendário (no horário de Brasília), ou nos últimos N DIAS (`dias`, a mesma janela das telas): " +
-      "as empresas em ordem de custo, da mais cara para a mais barata, a mesma visão da tela geral de uso do painel (`/admin/usage`). " +
+      "as empresas em ordem de custo, da mais cara para a mais barata, a visão da tela geral de uso do painel (`/admin/usage`), no mesmo período e na mesma ordem por custo. " +
       "As empresas de DEMONSTRAÇÃO ficam de fora, como na tela geral; as que não gastaram aparecem com zero, no fim. " +
       "Cada empresa traz `posicao`, o id, o nome, chamadas, tokens de entrada e de saída, `tokens_do_cache` (parte da entrada), " +
       "`custo_usd_cents` (centavos de dólar, a mesma soma do teto mensal), `custo_brl` (reais, cada dia pela cotação do dia) e `sem_preco`. " +
       "`total` é a plataforma: a soma das empresas FECHA com ele, em US$ e em R$ (o total manda; uma empresa pode ficar um centavo longe do total da aba Uso dela). " +
-      "A ordem é pelo custo em dólar, depois chamadas, depois o nome. `limite` corta a lista de empresas, não o total. " +
+      "A ordem é pelo custo em dólar, depois chamadas de IA, depois o nome. O DESEMPATE difere da tela geral, que desempata por mensagens: no custo igual (as que não gastaram, por exemplo), a ordem pode não ser a da tela. `limite` corta a lista de empresas, não o total. " +
       "O detalhe por agente, Sistema e finalidade de uma empresa está em plataforma_ver_consumo_de_ia. " +
       "`reais.dias_sem_cotacao` não vazio = o R$ está incompleto; `truncado: true` = alguma empresa passou do teto de leitura. " +
       "O mês do teto do orçamento é o do banco (UTC) e pode diferir deste nas últimas 3 horas do mês. Só lê.",

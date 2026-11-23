@@ -88,12 +88,16 @@ function chamada(campos: Partial<Linha> & { created_at: string }): Linha {
 /** Outubro de 2026 em Brasília: de 01/10 00:00 (03:00Z) a 01/11 00:00 (03:00Z). */
 const OUTUBRO = periodoDoPedido({ mes: "2026-10" }) as PeriodoDoConsumo;
 
-function banco(llm_calls: Linha[], platform_fx_rates: Linha[] = [{ dia: "2026-09-30", usd_brl: 5 }]) {
+function banco(
+  llm_calls: Linha[],
+  platform_fx_rates: Linha[] = [{ dia: "2026-09-30", usd_brl: 5 }],
+  outras: { organizations?: Linha[]; messages?: Linha[] } = {},
+) {
   return postgrestComTeto({
-    organizations: ORGANIZACOES,
+    organizations: outras.organizations ?? ORGANIZACOES,
     ai_agents: AGENTES,
     contacts: [],
-    messages: [],
+    messages: outras.messages ?? [],
     conversations: [],
     llm_calls,
     platform_fx_rates,
@@ -319,7 +323,7 @@ describe("plataforma_ver_ranking_de_consumo_de_ia: o MCP e a tela geral dão o m
     expect(z.object(ferramenta!.inputSchema).safeParse(ferramenta!.exemplo).success).toBe(true);
   });
 
-  it("as mesmas empresas, na mesma ordem e com o mesmo custo da tela geral (`/api/v1/admin/usage?mes=`)", async () => {
+  it("as mesmas empresas, na mesma ordem por custo e com o mesmo custo da tela geral (`/api/v1/admin/usage?mes=`)", async () => {
     vi.mocked(createAdminClient).mockReturnValue(banco(chamadasDoRanking()).cliente as never);
     const { GET } = await import("@/app/api/v1/admin/usage/route");
     const res = await GET(new NextRequest("http://localhost/api/v1/admin/usage?mes=2026-10"));
@@ -335,6 +339,65 @@ describe("plataforma_ver_ranking_de_consumo_de_ia: o MCP e a tela geral dão o m
     );
     // O R$ da plataforma é o da tela geral, arredondado ao centavo.
     expect(mcp.total.custo_brl).toBe(Math.round(data.reais.total * 100) / 100);
+  });
+
+  /**
+   * O desempate (revisão do PR #132): a tela geral desempata por MENSAGENS do
+   * período; o ranking, por chamadas de IA e depois o nome. Alfa e Beta custam
+   * o mesmo (Alfa com duas chamadas, Beta com uma e mais mensagens); Gama e
+   * Delta não gastaram (Gama com mensagens). As duas ordens ficam fixadas aqui:
+   * se uma mudar, este teste avisa, e o documento (seção 10.2) tem de mudar junto.
+   */
+  it("o desempate: custo igual sai por chamadas e nome no MCP, e por mensagens na tela geral", async () => {
+    const DELTA = "e5e5e5e5-0000-4000-8000-000000000136";
+    const organizations = [
+      ...ORGANIZACOES,
+      { id: DELTA, display_name: "Academia Delta", slug: "academia-delta", settings: {}, demonstracao: false },
+    ];
+    let m = 0;
+    const mensagem = (organization_id: string): Linha => ({
+      id: `mensagem-${String(++m).padStart(7, "0")}`,
+      organization_id,
+      contact_id: null,
+      created_at: "2026-10-12T12:00:00Z",
+    });
+    const messages = [mensagem(BETA), mensagem(BETA), mensagem(BETA), mensagem(GAMA)];
+    const llm = [
+      chamada({ organization_id: ALFA, cost_cents: 10, created_at: "2026-10-03T12:00:00Z" }),
+      chamada({ organization_id: ALFA, cost_cents: 10, created_at: "2026-10-04T12:00:00Z" }),
+      chamada({ organization_id: BETA, cost_cents: 20, created_at: "2026-10-05T12:00:00Z" }),
+    ];
+
+    vi.mocked(createAdminClient).mockReturnValue(banco(llm, undefined, { organizations, messages }).cliente as never);
+    const { GET } = await import("@/app/api/v1/admin/usage/route");
+    const res = await GET(new NextRequest("http://localhost/api/v1/admin/usage?mes=2026-10"));
+    expect(res.status).toBe(200);
+    const { data } = (await res.json()) as {
+      data: { tenants: Array<{ organization_id: string; ai_cost_cents: number; messages_count: number }> };
+    };
+
+    const ferramenta = FERRAMENTA_POR_NOME.get("plataforma_ver_ranking_de_consumo_de_ia")!;
+    const ctx = { admin: banco(llm, undefined, { organizations, messages }).cliente } as unknown as ContextoDaFerramenta;
+    const mcp = (await ferramenta.handler(ctx, { mes: "2026-10" })) as {
+      empresas: Array<{ organization_id: string; custo_usd_cents: number; chamadas: number }>;
+    };
+
+    // O MCP: custo, depois chamadas de IA, depois o nome.
+    expect(mcp.empresas.map((e) => [e.organization_id, e.custo_usd_cents, e.chamadas])).toEqual([
+      [ALFA, 20, 2],
+      [BETA, 20, 1],
+      [DELTA, 0, 0],
+      [GAMA, 0, 0],
+    ]);
+    // A tela geral: custo, depois mensagens.
+    expect(data.tenants.map((t) => [t.organization_id, t.ai_cost_cents, t.messages_count])).toEqual([
+      [BETA, 20, 3],
+      [ALFA, 20, 0],
+      [GAMA, 0, 1],
+      [DELTA, 0, 0],
+    ]);
+    // A ordem por custo é a mesma nas duas.
+    expect(mcp.empresas.map((e) => e.custo_usd_cents)).toEqual(data.tenants.map((t) => t.ai_cost_cents));
   });
 
   it("`limite` corta a lista, não o total", async () => {

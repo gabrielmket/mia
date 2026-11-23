@@ -55,9 +55,11 @@
  *
  * ── A plataforma inteira (MIA-136) ──────────────────────────────────────────
  *
- * `lerRankingDoConsumo` é o ranking das empresas por custo, a mesma visão da
- * tela geral (`/admin/usage`): todas as empresas menos as de demonstração
- * (`SEM_DEMONSTRACAO`), o mesmo `periodoDoPedido`. Cada empresa é lida por
+ * `lerRankingDoConsumo` é o ranking das empresas por custo, a visão da tela
+ * geral (`/admin/usage`): todas as empresas menos as de demonstração
+ * (`SEM_DEMONSTRACAO`), o mesmo `periodoDoPedido` e a mesma ordem por custo.
+ * O DESEMPATE é outro: aqui chamadas de IA e depois o nome; na tela geral,
+ * mensagens do período. Cada empresa é lida por
  * esta mesma leitura (uma conta só), e o total da plataforma manda nas linhas
  * das empresas pela mesma regra: a soma das empresas fecha com ele.
  *
@@ -630,7 +632,12 @@ interface EmpresaLida {
  * com ele (`fecharPeloTotal`).
  *
  * Ordem: custo em US$ (a régua do teto, a mesma da tela geral), depois
- * chamadas, depois o nome.
+ * chamadas de IA, depois o nome, depois o id (nada fica na ordem do banco).
+ * A tela geral desempata por mensagens do período, e não tem terceiro
+ * critério: no custo igual (as que não gastaram, por exemplo), as duas listas
+ * podem sair em ordem diferente. Mensagens não são consumo de IA, e lê-las
+ * aqui seria uma segunda leitura (com os contatos pessoais fora) só para o
+ * desempate.
  */
 export async function lerRankingDoConsumo(
   admin: Pick<SupabaseClient, "from">,
@@ -701,7 +708,8 @@ export async function lerRankingDoConsumo(
       (x, y) =>
         y.lido.totalExato.usd_cents - x.lido.totalExato.usd_cents ||
         y.linha.chamadas - x.linha.chamadas ||
-        (x.org.display_name ?? "").localeCompare(y.org.display_name ?? ""),
+        (x.org.display_name ?? "").localeCompare(y.org.display_name ?? "", "pt-BR") ||
+        x.org.id.localeCompare(y.org.id),
     )
     .map(({ org, lido, linha: l }, i): ConsumoDaEmpresa => ({
       posicao: i + 1,

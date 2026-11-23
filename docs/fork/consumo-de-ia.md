@@ -344,7 +344,8 @@ linha fica R$ 0,34 e as outras três R$ 0,33, e a soma é R$ 1,34.
 
 ### 10.2 O ranking da plataforma
 
-`plataforma_ver_ranking_de_consumo_de_ia` (só lê, sem operação) é a mesma visão da tela geral, no MCP:
+`plataforma_ver_ranking_de_consumo_de_ia` (só lê, sem operação) é a visão da tela geral, no MCP, com uma
+diferença no desempate (abaixo):
 
 - **As mesmas empresas:** todas, menos as de demonstração (`SEM_DEMONSTRACAO`, como a tela geral). As que
   não gastaram aparecem com zero, no fim.
@@ -353,7 +354,11 @@ linha fica R$ 0,34 e as outras três R$ 0,33, e a soma é R$ 1,34.
 - **A mesma conta:** cada empresa é lida por `lerConsumoDoPeriodo`, a leitura da aba Uso (uma conta só; as
   cotações são lidas uma vez para todas). O custo em US$ e as chamadas de cada empresa são os da tabela da
   tela geral, e o R$ da plataforma é o da tela geral arredondado ao centavo.
-- **A ordem:** custo em dólar (a régua do teto, a mesma ordem da tela geral), depois chamadas, depois o nome.
+- **A ordem:** custo em dólar (a régua do teto), a mesma ordem por custo da tela geral. **O desempate é
+  outro:** aqui, chamadas de IA, depois o nome (e o id, para nada ficar na ordem do banco); na tela geral
+  (`app/api/v1/admin/usage/route.ts`), mensagens do período, sem terceiro critério. No custo igual (as que
+  não gastaram, por exemplo), as duas listas podem sair em ordem diferente. Mensagens não são consumo de IA,
+  e lê-las no ranking seria uma segunda leitura (com os contatos pessoais fora) só para desempatar.
 - **A soma fecha:** `total` é a plataforma, e as empresas fecham com ele pela mesma regra da seção 10.1. Por
   isso uma empresa pode ficar um centavo longe do total da aba Uso dela; o detalhe de uma empresa (agentes,
   Sistema, finalidades) continua em `plataforma_ver_consumo_de_ia`.
@@ -386,7 +391,9 @@ Gama e uma empresa de demonstração (fictícias):
   ordem se entrassem), cada empresa com os números da aba Uso dela, a soma das empresas fechando com a
   plataforma, o dia sem cotação e a leitura que falha;
 - o MCP contra a tela geral (`/api/v1/admin/usage?mes=2026-10`): as mesmas empresas, na mesma ordem, com o
-  mesmo custo e as mesmas chamadas, e o mesmo R$; o `limite`; e o mês fora do formato recusado.
+  mesmo custo e as mesmas chamadas, e o mesmo R$; o desempate, com duas empresas de custo igual e duas sem
+  gasto, em que a ordem de cada lista fica fixada (a do MCP por chamadas e nome, a da tela por mensagens) e
+  a ordem por custo é a mesma nas duas; o `limite`; e o mês fora do formato recusado.
 
 O dublê do PostgREST (`tests/helpers/postgrest-com-teto.ts`) passou a entender `not … is true`, o filtro
 da demonstração, com a regra do Postgres (o falso e o nulo passam).

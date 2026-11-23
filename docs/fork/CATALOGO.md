@@ -823,7 +823,11 @@ em reais pela cotação de cada dia. Usada pela aba Uso do cliente e pelo MCP. N
 "Mês passado" no seletor de `/admin/usage` e da aba Uso, e na aba Uso o R$ no card do custo de IA e as tabelas
 por agente (com "Sistema") e por finalidade. Só no painel da plataforma: `/app/ai/usage` não mudou. Desde a
 MIA-99, o custo de mensagem da Meta (aba Uso, `/admin/custo-da-meta` e o MCP) usa o preço vigente no instante de
-cada mensagem, e o mês fechado não muda quando o preço muda depois (seção 9 do documento).
+cada mensagem, e o mês fechado não muda quando o preço muda depois (seção 9 do documento). Desde a MIA-136, a
+soma das linhas (agentes com o Sistema, finalidades, empresas) fecha com o total em R$ e em US$ (`fecharPeloTotal`:
+o total manda), e o MCP tem o ranking da plataforma (`lerRankingDoConsumo`, ferramenta
+`plataforma_ver_ranking_de_consumo_de_ia`): as empresas sem as de demonstração, no período e na ordem por custo da
+tela geral; o desempate é por chamadas de IA e nome, e na tela geral por mensagens (seção 10 do documento).
 **Migrations** 9165 (o histórico de preços da Meta, `mia_precos_meta_vigencias`, e o gatilho em
 `platform_precos_meta`); o resto lê `llm_calls`, `ai_agents` e `platform_fx_rates` (0241). **Mora em**
 `lib/ai/usage/consumo-do-periodo.ts`, `lib/ai/usage/atalhos-de-periodo.ts`,
@@ -848,14 +852,16 @@ Uso), `painel-de-custo-nao-para-na-linha-1000.test.ts`, `orcamento-uma-regua-de-
 régua de gasto mensal), `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts` (MIA-78: a tela geral e a aba Uso
 com os mesmos pessoais fora e a mesma janela de N dias de Brasília, e leitura que falha virando 500, não zero),
 `preco-da-meta-com-vigencia.test.ts` (MIA-99: outubro igual depois do reajuste de novembro nas três leituras, a
-virada de Brasília, as ferramentas de preço), o invariante `tests/invariants/preco-da-meta-com-vigencia.test.ts` (o
+virada de Brasília, as ferramentas de preço), `consumo-de-ia-ranking-e-soma-que-fecha.test.ts` (MIA-136: a soma
+que fecha, o ranking sem a demonstração e no mês de Brasília, o MCP contra a tela geral e o desempate das duas
+listas fixado), o invariante `tests/invariants/preco-da-meta-com-vigencia.test.ts` (o
 gatilho no Postgres de verdade) e a e2e `admin-consumo-de-ia-por-mes-e-por-agente.spec.ts`.
 
 **Conferir.**
 1. `git grep -n "lerConsumoDoPeriodo" "app/api/v1/admin/tenants/[id]/usage/route.ts" lib/mcp-plataforma/ferramentas/consumo-de-ia.ts` (**as duas chamadas existem**; sem uma delas a tela e o MCP passam a divergir).
 2. Se a fusão mexeu em `llm_calls` (`git diff vA vB -- supabase/migrations supabase/baseline.sql | grep -n "llm_calls"`), confira que as seis colunas acima continuam com o mesmo nome e o mesmo sentido (`cache_read_tokens` como parte de `input_tokens`).
-3. `npx vitest run tests/unit/consumo-de-ia-por-mes-e-por-agente.test.ts tests/unit/consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx tests/unit/orcamento-uma-regua-de-gasto.test.ts tests/unit/consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts`.
-4. MCP (lê só): `plataforma_ver_consumo_de_ia` com a empresa de demonstração e o mês corrente, e `plataforma_ver_precos_da_meta` (o histórico tem uma vigência aberta por categoria).
+3. `npx vitest run tests/unit/consumo-de-ia-por-mes-e-por-agente.test.ts tests/unit/consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx tests/unit/orcamento-uma-regua-de-gasto.test.ts tests/unit/consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts tests/unit/consumo-de-ia-ranking-e-soma-que-fecha.test.ts`.
+4. MCP (lê só): `plataforma_ver_consumo_de_ia` com a empresa de demonstração e o mês corrente, `plataforma_ver_ranking_de_consumo_de_ia` com o mês corrente (a demonstração não aparece, e a soma das empresas é o `total`) e `plataforma_ver_precos_da_meta` (o histórico tem uma vigência aberta por categoria).
 5. Se a fusão mexeu em `app/api/v1/admin/usage/route.ts` (do upstream), confira que `mes` ainda passa por `periodoDoPedido` e que a fatura e as cotações têm o limite de cima (`git grep -n "periodoDoPedido\|ultimoDia" app/api/v1/admin/usage/route.ts`).
 6. MIA-99: `git grep -n "lerCustoDeMensagemDoPeriodo\|calcularCustoPorVigencia" app/api/v1/admin lib/mcp-plataforma` (**a aba Uso, o MCP e `/admin/custo-da-meta` fazem a conta pela vigência**; quem voltar a `calcularCusto` com a tabela atual devolve o defeito) e, no banco, `select tgname from pg_trigger where tgname = 'trg_mia_precos_meta_vigencia'`.
 
