@@ -25,6 +25,7 @@ import { configDoRelatorioSchema, type ConfigDoRelatorio } from "@/lib/relatorio
 import { contextoDaRota, lerCorpo, respostaDaRecusa } from "@/lib/relatorios/rota";
 import { grupoDaListaSchema } from "@/lib/relatorios/schemas";
 import { exportarPlanilha } from "@/lib/relatorios/servidor";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +67,9 @@ export async function POST(req: NextRequest): Promise<Response> {
       .eq("id", ctx.quem.organizationId)
       .maybeSingle();
     const empresa = (org as { display_name?: string; timezone?: string | null; currency?: string | null } | null) ?? {};
-    const fuso = empresa.timezone || "America/Sao_Paulo";
+    // MIA-102: vazio OU inválido vale Brasília. Com `||`, o `America/Sao_Pualo`
+    // gravado passava direto para o `Intl` da planilha e a exportação caía em 500.
+    const fuso = fusoUtilizavel(empresa.timezone);
     const planilha = await exportarPlanilha(ctx.db, ctx.admin, ctx.quem, {
       tipo: d.tipo,
       nome: d.nome,
