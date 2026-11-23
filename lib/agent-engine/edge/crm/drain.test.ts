@@ -586,6 +586,10 @@ it('carona na rajada estende o run_after do job — e o teto do knob chega na co
     event.organization_id,
     event.payload.contact_id,
     45_000,
+    // MIA: as duas cercas do fork na mesma consulta (debounce.ts, `$4` e `$5`):
+    // o horizonte da carona (o debounce do knob) e a mesma conversa.
+    8_000,
+    event.payload.conversation_id,
   ]);
 
   const estender = calls.findIndex((s) => s.includes('update job_queue set run_after'));
