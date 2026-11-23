@@ -153,6 +153,8 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "onde vejo a conversão etapa a etapa", sobre: "/app/paineis/funil", espera: "analise-do-funil" },
   { pergunta: "como mando os números para o dono por um link", sobre: "/app/paineis/links", espera: "link-do-dono" },
   { pergunta: "como monto um relatório", sobre: "/app/relatorios", espera: "relatorios" },
+  // FORK MIA (fusão da v1.124): o painel de vendas do upstream.
+  { pergunta: "quanto eu vendi este mês", sobre: "/app/vendas", espera: "painel-de-vendas" },
   { pergunta: "como exporto um relatório para excel", sobre: "/app/relatorios", espera: "exportar-relatorio" },
   { pergunta: "onde vejo o custo das campanhas de anúncio", sobre: "/app/ads/meta" },
   { pergunta: "quantos negócios vieram do google ads", sobre: "/app/ads/google", espera: "painel-google-ads" },

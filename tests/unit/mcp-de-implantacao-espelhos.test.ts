@@ -159,7 +159,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Espelhados na .76: os dias da prospecção (1.80, 0642), guardar o histórico (1.74, #999) e a pausa agendada (1.79, #2388).
   // Relido na .100 (upstream 1.97, #3383): o PUT solta os turnos com o rastro `adiado_por_janela` quando a janela de resposta abre (soltarAdiadosDaSessao). O espelho chama a mesma função depois de gravar a janela, ao lado da reprogramação do fork.
   // Relido na fusão da 1.121: a rota passou a aceitar token `dsk_` (`resolveAuthDual`, `config:read`/`config:write`, papel admin) e o audit leva `actorApiTokenId`. Nenhuma regra de negócio mudou; o espelho entra pela plataforma, com a autorização dele: nada a levar.
-  { rota: "app/api/v1/ai/pacing/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "bfccc15784dafbef" },
+  // Relido na fusão da 1.124 (#3851): o GET lê e devolve `teto_so_abordagem` (nulo = desligado). O espelho não grava a coluna, então o número montado pela implantação nasce com a régua de sempre: nada a levar. O campo ficou em "Falta no MCP" (docs/fork/mcp-de-implantacao.md, 1.124), porque ligado ele muda o envio do follow-up.
+  { rota: "app/api/v1/ai/pacing/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "d8cf9fe6a177b569" },
   // Relido na fusão da 1.116: o GET aceita token. O espelho só lê, pela mesma `lerAcervoDoCanal`: nada a levar.
   { rota: "app/api/v1/channel-sessions/[id]/acervo/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "a1ecd1e6b5d4d614" },
   // Relido na .81 (upstream 1.81, #2388): a régua da janela virou validarJanela, compartilhada por criar e EDITAR, e o [id] ganhou o PATCH que corrige os dois horários de uma janela que ainda não começou (status scheduled, com a trava contra a corrida do relógio). O espelho ganhou `ajustar_pausa_agendada` com a mesma régua (recusaDaJanela) e a mesma auditoria channel.schedule_updated.

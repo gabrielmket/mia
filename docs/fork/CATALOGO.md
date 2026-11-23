@@ -519,7 +519,7 @@ cliente deixou pendente em vez de calar; e a pausa por outra conversa do mesmo c
 
 **Conferir.**
 1. `git grep -n "FORK MIA (.107)" -- lib/escalacao lib/agent-engine/agent/inbound-turn.ts app/api/v1/conversations components/inbox`.
-2. `git grep -n "responderPendente" lib app | wc -l` (as quatro chamadas em `retomada.ts`, `release`, `close`, `handoff-tecnico`).
+2. `git grep -n "responderPendente" lib app | wc -l` (as quatro chamadas em `retomada.ts`, `release`, o fechamento (`conversations/[id]/_handler.ts` desde a v1.124), `handoff-tecnico`).
 3. `npx vitest run tests/unit/ia-responde-pendente.test.ts tests/unit/ia-responde-pendente-faixa.test.tsx`.
 4. Se o upstream mexeu em `inbound-turn.ts` ou `retomada.ts`: reconferir os dois casos do documento (seção 1).
 
@@ -705,7 +705,7 @@ reescrever o teste, o ajuste some.
 ### 20. O produto ou serviço no negócio · [`produto-no-negocio.md`](produto-no-negocio.md)
 **O que faz.** O negócio diz o que foi vendido: itens do catálogo com preço congelado e valor que soma, a
 janela "Marcar como ganho" no botão e no arrasto, a palavra e as duas opções por funil, dois quadros no
-relatório de vendas, comanda do ganho por item. **Migrations** 9160, 9161. **Mora em**
+relatório de vendas, comanda do ganho por item. Com as vendas registradas do upstream (v1.124), o negócio com item continua com o valor dos itens. **Migrations** 9160, 9161, 9167. **Mora em**
 `lib/produto-no-negocio/`, `components/produto-no-negocio/`, `hooks/produto-no-negocio/`,
 `app/api/v1/leads/[id]/itens/`, `app/api/v1/pipelines/[id]/produto-no-negocio/`.
 
@@ -714,7 +714,7 @@ relatório de vendas, comanda do ganho por item. **Migrations** 9160, 9161. **Mo
 `KanbanBoard.tsx` (a janela no arrasto), `hooks/kanban/useUpdateLead.ts`, `lib/schemas/settings.ts`
 (`vocabulary.produto`, `pedir_produto_no_ganho`), `app/api/v1/leads/[id]/win/route.ts` e `move/route.ts`
 (a recusa do ganho sem item), `app/api/v1/proposals/[id]/send/route.ts` (o recálculo do valor),
-`lib/financeiro/comanda-do-ganho.ts` e `.handler.ts`, `app/app/settings/tenant/pipelines/_client.tsx`.
+`lib/financeiro/comanda-do-ganho.ts` e `.handler.ts`, `app/app/settings/tenant/pipelines/_client.tsx`; e `FORK MIA (fusão v1.124)` em `LeadFieldsForm.tsx` e `components/inbox/CRMSidePanel.tsx` (o Valor só segue as vendas registradas sem item).
 
 **Protege.** `tests/unit/produto-no-negocio.test.ts`, `produto-no-negocio-regras.test.ts`,
 `produto-no-negocio-relatorio.test.ts`, `produto-no-negocio-servidor.test.ts`,
@@ -879,7 +879,7 @@ quebra por agente, a leitura daqui pode passar a perguntar a ela, desde que a r�
 | 17 | Obrigações | `obrigacoes.md` | 9018 | `obrigacoes-gatilhos.test.ts`, `obrigacoes-contexto-da-automacao.test.ts` |
 | 18 | Pagamento no início | `pagamento-no-inicio.md` | 9120, 9121, 9122 | `pagamento-inicial-fim-do-teste.test.ts`, `cartao-fora-dos-registros.test.ts` |
 | 19 | Primeiros passos | `primeiros-passos.md` | 9070, 9071, 9080-9082 | `welcome-do-upstream-funciona-sozinho.test.tsx`, `raiz-do-app-respeita-o-passo-a-passo.test.ts` |
-| 20 | Produto no negócio | `produto-no-negocio.md` | 9160, 9161 | `produto-no-negocio-servidor.test.ts`, `produto-no-negocio-regras.test.ts` |
+| 20 | Produto no negócio | `produto-no-negocio.md` | 9160, 9161, 9167 | `produto-no-negocio-servidor.test.ts`, `produto-no-negocio-regras.test.ts` |
 | 21 | Raio-X do atendimento | `raio-x-do-atendimento.md` | 9150, 9151, 9152 | `raio-x-leitor-nao-envia.test.ts`, `raio-x-anonimizar.test.ts` |
 | 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
 | 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts` |

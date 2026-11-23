@@ -55,6 +55,40 @@ Depois que a proposta é enviada (a rota do upstream troca o valor pelo total de
 de "à mão": a proposta enviada troca o valor do negócio, como sempre trocou, e o bloco entra na
 conta. O negócio de antes dos itens (marca nula) não é tocado.
 
+### 2.3 As vendas registradas do upstream (fusão v1.124)
+
+A v1.124 trouxe "Registrar venda" (o "+" ao lado do Valor e no cartão do funil, tabela
+`vendas_registradas`, 9449) e o painel Análise › Vendas. A 9450 dele grava
+`crm_leads.value_cents` = soma das vendas a cada venda, guarda o valor anterior em
+`valor_digitado_cents` e liga `valor_pelas_vendas`; a tela dele trava o campo Valor quando há
+venda. Sem nada, o gatilho dele e a rota dos itens escreveriam a mesma coluna e venceria o último.
+
+A regra da fusão (MIA-127) é **nada muda para quem já usa itens**:
+
+- **Negócio com item do bloco:** o Valor continua sendo a soma dos itens (ou o digitado à mão). A
+  venda registrada entra e conta no painel de vendas dele, mas não troca o Valor. O "+" continua
+  ao lado do Valor.
+- **Negócio sem item do bloco:** vale o upstream inteiro (o Valor é a soma das vendas, em leitura).
+  Item de proposta não conta como item do bloco: o valor da proposta é do upstream, como antes.
+
+Como (9167, só objetos nossos): a invariante é "negócio com item do bloco nunca fica com
+`valor_pelas_vendas` ligado".
+
+1. `trg_mia_valor_do_negocio_segue_os_itens` (`before update of value_cents, valor_pelas_vendas`
+   em `crm_leads`): com item do bloco, a escrita que liga a marca das vendas é desfeita (o valor
+   volta, a marca desliga, o digitado zera). Pega o gatilho da 9450 e a auto-cura dela, que roda de
+   novo a cada reaplicação do `baseline.sql`.
+2. `trg_mia_item_do_negocio_tira_a_marca_das_vendas` (`after insert` em `mia_itens_do_negocio`): o
+   primeiro item num negócio que já tinha venda desliga a marca; a rota grava o valor dos itens logo
+   depois.
+3. `fn_mia_valor_do_negocio_volta_as_vendas`: a rota dos itens chama quando o negócio fica sem
+   item; com venda, regrava as vendas com o mesmo valor e o gatilho dele soma de novo.
+
+Na tela, `valorSegueAsVendas` (`lib/produto-no-negocio/regras.ts`) é a mesma régua: o
+`LeadFieldsForm` e o painel do Inbox só mostram "Soma de N venda(s) registrada(s)" em negócio sem
+item. **Decisão para o Gabriel** (PR da fusão v1.123 a v1.124): manter assim (recomendado), ou
+fazer a venda registrada mandar no Valor também com item.
+
 ## 3. As telas
 
 | tela do protótipo | onde | arquivo |
@@ -143,7 +177,9 @@ A lista vai de 115 para 117 ferramentas.
   os que existiam ficam nulos).
 - **9161** `fn_mia_relatorio_linhas` (nossa, 9030/9041/9046) redefinida com o corpo da 9046: a
   dimensão `produto` da fonte `negocios` junta os itens da proposta e os do próprio negócio.
-- Carimbo: `20261116120100_9161_produto_do_negocio_nos_relatorios`.
+- **9167** (fusão v1.124) as vendas registradas do upstream não trocam o valor do negócio com item
+  (seção 2.3): dois gatilhos e uma função, todos nossos.
+- Carimbo: o da migration mais nova do fork (`lib/schema/carimbo.ts`).
 
 **LGPD.** `mia_itens_do_negocio` não tem `contact_id` nem texto da pessoa: guarda nome e preço de
 produto do catálogo, quantidades e ids (o mesmo molde de `crm_proposal_items`, que fica fora da
@@ -195,7 +231,10 @@ Todos com o comentário `FORK MIA (.109)`:
   sem item com a opção ligada;
 - `app/api/v1/proposals/[id]/send/route.ts`: o recálculo do valor depois do envio;
 - `lib/financeiro/comanda-do-ganho.ts` e `comanda-do-ganho.handler.ts`: as linhas por item;
-- `lib/i18n/dicionario.ts` e `lib/audit/actions.ts`: o dicionário nosso e as três ações.
+- `lib/i18n/dicionario.ts` e `lib/audit/actions.ts`: o dicionário nosso e as três ações;
+- `FORK MIA (fusão v1.124)`: `components/kanban/LeadFieldsForm.tsx` (o Valor só segue as vendas sem
+  item, e o "+" de registrar venda ao lado do nosso campo) e `components/inbox/CRMSidePanel.tsx` (a
+  mesma régua no Valor do Inbox).
 
 Do fork: `lib/pipelines/pipeline-config.ts`, `lib/cartoes/` (`tipos.ts`, `sinais-do-quadro.ts`),
 `components/cartoes/` (`ContextoDoCartao.tsx`; `aberto/CartaoAberto.tsx`: os itens por extenso no cabeçalho e o botão "Ganho" abrindo a janela),
