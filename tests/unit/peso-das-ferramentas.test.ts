@@ -88,7 +88,7 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
   "crm_list_ai_agents": { tokens: 115, motivo: EDITAR_ASSISTENTES },
   "crm_get_ai_agent_version": { tokens: 294, motivo: EDITAR_ASSISTENTES },
   "crm_get_ai_agent_turn": { tokens: 265, motivo: EDITAR_ASSISTENTES },
-  "crm_save_ai_agent_draft": { tokens: 1015, motivo: "editar assistentes: +478 com `configuracoes` (modelo, voz, ferramentas, passar para pessoa, dividir, imagens); nunca montada no turno do agente" },
+  "crm_save_ai_agent_draft": { tokens: 940, motivo: "editar assistentes: +478 com `configuracoes` (voz, ferramentas, passar para pessoa, dividir, imagens); nunca montada no turno do agente. FORK MIA: -75 sem `provedor` e `modelo` (a IA é da plataforma, MIA-115)" },
   "crm_test_ai_agent_version": { tokens: 406, motivo: EDITAR_ASSISTENTES },
   "crm_publish_ai_agent_version": { tokens: 264, motivo: EDITAR_ASSISTENTES },
   "crm_rollback_ai_agent": { tokens: 235, motivo: EDITAR_ASSISTENTES },
@@ -260,7 +260,9 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
 // MEDIDO no merge com a main de 20/11: 45919 = 45880 + 39 (2026-11-20), não somado à mão.
 // FORK MIA, na fusão da v1.122: 47947 = 45919 + 2028 (a mesma diferença do fork
 // medida na fusão da v1.121, 45314 - 43286, por cima dos +39 dele).
-const TETO_TOTAL = 47947;
+// FORK MIA, MIA-115: -75 em `crm_save_ai_agent_draft`, que no fork não oferece
+// `provedor` nem `modelo` (1015 → 940). MEDIDO: 47872 = 47947 - 75 (2026-11-23).
+const TETO_TOTAL = 47872;
 
 const VARIANTE = "schedule_followup (com negócio)";
 
