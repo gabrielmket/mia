@@ -62,7 +62,10 @@ Gabriel.
   mensagens, IA e mensagens cobradas). Os campos de antes continuam (`dias`, `conversas`,
   `mensagens`, `ia`, `mensagens_cobradas`); entram `mes`, `periodo` e `consumo` (`total`,
   `por_agente`, `sistema`, `por_finalidade`, `reais`, `truncado`, `chamadas_no_banco`).
-- `lib/mcp-plataforma/ferramentas/consumo-de-ia.ts`: `plataforma_ver_consumo_de_ia`.
+- `lib/mcp-plataforma/ferramentas/consumo-de-ia.ts`: `plataforma_ver_consumo_de_ia` e, desde a MIA-136,
+  `plataforma_ver_ranking_de_consumo_de_ia` (seção 10).
+- `lerRankingDoConsumo` e `fecharPeloTotal`, no mesmo `consumo-do-periodo.ts`: a plataforma inteira em
+  ordem de custo e a soma que fecha com o total (MIA-136, seção 10).
 
 O bloco `ia` da rota passou a sair da mesma leitura. Antes ele pedia `total_tokens` a `llm_calls`,
 coluna que essa tabela não tem (é de `ai_invocations`); `tokens` agora é entrada + saída.
@@ -75,7 +78,8 @@ sem nenhum dos dois, o mês corrente em Brasília. Devolve a empresa, o mês (`n
 `dias`, o período (`tipo`, `inicio`, `fim`, `fuso`) e os mesmos blocos de `consumo` da rota, saídos
 da mesma função. Cliente que não existe é recusado com o caminho para achar o id
 (`plataforma_listar_clientes`). Desde a MIA-99 devolve também `mensagens_cobradas`, o mesmo bloco da aba
-Uso (seção 9).
+Uso (seção 9). Desde a MIA-136, a plataforma inteira está em `plataforma_ver_ranking_de_consumo_de_ia`
+(seção 10), e a soma dos agentes com o Sistema fecha com o total.
 
 Exemplo (fictício):
 
@@ -313,3 +317,76 @@ Exemplo (fictício):
   pela mesma leitura da aba Uso, preço igual sem vigência nova, duas mudanças numa transação, apagar e
   voltar, a migration aplicada de novo sem mexer no histórico, o `service_role` gravando e a sessão sem
   ler.
+
+## 10. A plataforma inteira no MCP, e a soma em R$ que fecha (MIA-136)
+
+Dois itens do "Falta" do mapa (MIA-54, seção 2.1): `plataforma_ver_consumo_de_ia` só lia um cliente,
+enquanto a tela geral (`/admin/usage`) já mostrava a plataforma inteira; e, na aba Uso e no MCP, a soma
+dos agentes com o Sistema podia diferir do total em centavos.
+
+### 10.1 A soma fecha com o total
+
+Cada linha era arredondada sozinha: R$ a 2 casas, US$ a 4 casas de centavo. A Academia Alfa (fictícia) com
+três agentes e o Sistema, cada um com 6,68 centavos de dólar a R$ 5, tem R$ 0,334 em cada linha: o total
+exato é R$ 1,336 (R$ 1,34), e as quatro linhas arredondadas davam 4 × R$ 0,33 = R$ 1,32.
+
+**O total manda, e as linhas se ajustam.** O total é o valor exato do período arredondado, como antes.
+As linhas saem dele pelo maior resto (`fecharPeloTotal`): cada uma começa no seu valor exato para baixo, e
+os centavos que faltam para o total vão para as de maior fração (no empate, para a maior). No exemplo, uma
+linha fica R$ 0,34 e as outras três R$ 0,33, e a soma é R$ 1,34.
+
+- Cada linha fica no seu valor para baixo ou para cima: nunca mais de um centavo longe do exato.
+- Vale nas duas partições da leitura: agentes + Sistema, e as finalidades. Em R$ (2 casas) e em US$
+  (4 casas de centavo).
+- O total não mudou. O que muda é, no máximo, um centavo em algumas linhas.
+- Vale para a aba Uso do cliente e para `plataforma_ver_consumo_de_ia`, que leem a mesma função. A
+  tela do próprio cliente (`/app/ai/usage`) não mostra dinheiro e não foi tocada.
+
+### 10.2 O ranking da plataforma
+
+`plataforma_ver_ranking_de_consumo_de_ia` (só lê, sem operação) é a mesma visão da tela geral, no MCP:
+
+- **As mesmas empresas:** todas, menos as de demonstração (`SEM_DEMONSTRACAO`, como a tela geral). As que
+  não gastaram aparecem com zero, no fim.
+- **O mesmo período:** `mes` (AAAA-MM, o mês de Brasília) ou `dias` (os N dias do calendário em Brasília
+  terminados hoje), por `periodoDoPedido`. Sem nenhum dos dois, o mês corrente.
+- **A mesma conta:** cada empresa é lida por `lerConsumoDoPeriodo`, a leitura da aba Uso (uma conta só; as
+  cotações são lidas uma vez para todas). O custo em US$ e as chamadas de cada empresa são os da tabela da
+  tela geral, e o R$ da plataforma é o da tela geral arredondado ao centavo.
+- **A ordem:** custo em dólar (a régua do teto, a mesma ordem da tela geral), depois chamadas, depois o nome.
+- **A soma fecha:** `total` é a plataforma, e as empresas fecham com ele pela mesma regra da seção 10.1. Por
+  isso uma empresa pode ficar um centavo longe do total da aba Uso dela; o detalhe de uma empresa (agentes,
+  Sistema, finalidades) continua em `plataforma_ver_consumo_de_ia`.
+- **`limite`** (1 a 500) corta a lista de empresas, não o total; `empresas_no_total` diz quantas há.
+- Cada empresa traz `posicao`, `organization_id`, `empresa`, `slug`, os números da linha (chamadas, tokens,
+  cache, `custo_usd_cents`, `custo_brl`, `sem_preco`), `dias_sem_cotacao` e `truncado`. A resposta traz
+  ainda `reais` (dias sem cotação da plataforma e a última cotação), `truncado` (alguma empresa passou do
+  teto) e `chamadas_no_banco`.
+- Leitura que falha é erro, nunca zero.
+
+As empresas são lidas de cinco em cinco. O mês do teto continua o do banco (UTC, seção 2.1): não foi mudado.
+
+Exemplo (fictício):
+
+```json
+{ "mes": "2026-10", "limite": 10 }
+```
+
+### 10.3 Testes
+
+`tests/unit/consumo-de-ia-ranking-e-soma-que-fecha.test.ts`, com a Academia Alfa, a Academia Beta, a Academia
+Gama e uma empresa de demonstração (fictícias):
+
+- `fecharPeloTotal`: os três terços de R$ 1,00 (o controle de antes dava R$ 0,99), o centavo para a maior
+  fração, o resíduo de ponto flutuante, parte zero, US$ a 4 casas, e uma varredura de 500 partições
+  aleatórias em que a soma é sempre o total e cada parte fica a menos de um centavo do exato;
+- a aba Uso e o MCP: os agentes com o Sistema, e as finalidades, somando o total em R$ e em US$;
+- o ranking: a demonstração de fora (ela é a que mais gasta), a ordem por custo, quem não gastou com zero no
+  fim, o mês de Brasília (22h de 31/10 entra; 23h59 de 30/09 e 00:00 de 01/11 ficam de fora, e passariam a
+  ordem se entrassem), cada empresa com os números da aba Uso dela, a soma das empresas fechando com a
+  plataforma, o dia sem cotação e a leitura que falha;
+- o MCP contra a tela geral (`/api/v1/admin/usage?mes=2026-10`): as mesmas empresas, na mesma ordem, com o
+  mesmo custo e as mesmas chamadas, e o mesmo R$; o `limite`; e o mês fora do formato recusado.
+
+O dublê do PostgREST (`tests/helpers/postgrest-com-teto.ts`) passou a entender `not … is true`, o filtro
+da demonstração, com a regra do Postgres (o falso e o nulo passam).
