@@ -325,7 +325,11 @@ services:
       DNS_NODES: "''"
       RLIMIT_NOFILE: "10000"
       APP_NAME: realtime
-      SEED_SELF_HOST: "true"
+      # Semente desligada (23/11/2026, MIA-140): ligada, ela apaga e recria o
+      # tenant `realtime-dev` a cada subida com poll_interval_ms = 100, e o
+      # intervalo de 500 ms aprovado se perde no reinício. Desligada, trocar o
+      # JWT_SECRET pede atualizar o tenant à mão: docs/fork/realtime-do-sistema.md.
+      SEED_SELF_HOST: "false"
       RUN_JANITOR: "true"
       DISABLE_HEALTHCHECK_LOGGING: "true"
 

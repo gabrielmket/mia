@@ -892,6 +892,29 @@ controle, pela sessão de um gestor).
 `TZ_PADRAO` fica fora do trecho dele, mas confira na fusão. A empresa que já tem um fuso torto gravado continua
 lendo Brasília e só consegue salvar os dados da empresa escolhendo um fuso válido.
 
+### 26. O realtime do sistema com a semente desligada · [`realtime-do-sistema.md`](realtime-do-sistema.md)
+**O que faz.** O serviço `realtime` do Supabase próprio sobe com `SEED_SELF_HOST: "false"`. Assim o `run.sh`
+do realtime não apaga e recria o tenant `realtime-dev` a cada subida, e o `poll_interval_ms` aprovado (500 ms,
+MIA-141, contra os 100 ms de fábrica que faziam o `realtime.list_changes` pesar 79% do tempo do banco) fica entre
+reinícios. **Migrations** nenhuma (o tenant mora no esquema `_realtime`, do próprio realtime). **Mora em**
+`infra/supabase-sistema-mia/docker-compose.yml` (a fonte) e no `docker-compose.inline.yml` gerado dele pelo
+`gerar-inline.mjs`.
+
+**Pontos de encaixe.** Nenhum no upstream: `infra/supabase-sistema-mia/` só existe no fork. O risco vem da imagem
+`supabase/realtime` (hoje v2.76.5): uma versão nova pode mudar o nome da variável ou o que o `run.sh` faz com ela.
+
+**Protege.** Nenhum teste automático: a variável é do compose, e o valor que importa está no banco de produção.
+A conferência é a leitura abaixo.
+
+**Conferir.**
+1. `git grep -n 'SEED_SELF_HOST' infra/supabase-sistema-mia/` (as duas linhas, no compose e no inline, dizem `"false"`; se só uma diz, rode de novo `node gerar-inline.mjs`).
+2. Ao trocar a tag da imagem `supabase/realtime`, leia o `run.sh` da versão nova e confirme que `SEED_SELF_HOST` desligado ainda não recria o tenant.
+3. Depois de reiniciar o realtime em produção (só com aprovação do Gabriel), leia `settings->>'poll_interval_ms'` em `_realtime.extensions` (tipo `postgres_cdc_rls`): deve ser 500.
+
+**Riscos.** Trocar o `JWT_SECRET`, instalar do zero ou restaurar num banco vazio (o `_realtime` não entra no
+backup) pedem mexer no tenant à mão, como diz o documento. Sem isso, as telas deixam de atualizar ao vivo, e o
+resto do sistema continua funcionando.
+
 ---
 
 ## Tabela final: por função, o documento, as migrations e os testes principais
@@ -923,6 +946,7 @@ lendo Brasília e só consegue salvar os dados da empresa escolhendo um fuso vá
 | 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts` |
 | 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | 9165 (o preço da Meta com vigência); lê a 0241 | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts`, `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts`, `preco-da-meta-com-vigencia.test.ts` |
 | 25 | O fuso da organização nos relatórios | `fuso-da-organizacao.md` | 9166 | `fuso-dos-relatorios-uma-regra.test.ts`, `tests/invariants/fuso-invalido-nos-relatorios.test.ts` |
+| 26 | O realtime do sistema com a semente desligada | `realtime-do-sistema.md` | nenhuma | nenhum (conferência pela leitura do tenant) |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.
