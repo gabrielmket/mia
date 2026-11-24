@@ -281,10 +281,6 @@ describe("a sétima cópia não nasce", () => {
       arquivo: "lib/ai/seletor-de-modelo.ts",
       trecho: '${m.display_name ?? ""}',
       motivo: "busca pelo nome do MODELO de IA no seletor, não de pessoa",
-    },    {
-      arquivo: "lib/ai/ia-da-empresa.ts",
-      trecho: "nome: linha.display_name ?? null,",
-      motivo: "nome da ORGANIZAÇÃO (organizations.display_name) no lote de `iaDasEmpresas`, para o MCP de plataforma; não de contato",
     },
   ];
 
