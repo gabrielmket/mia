@@ -98,7 +98,7 @@ describe("a lista", () => {
     expect(FERRAMENTAS).toHaveLength(135);
     expect(FERRAMENTAS.find((f) => f.name === "plataforma_ver_ia_das_empresas")?.operacao).toBeNull();
     // Trocar o modelo é ato de pessoa, com MFA, no painel.
-    const trocas = FERRAMENTAS.filter((f) => /^plataforma_(trocar|mudar|definir|configurar)_.*(ia|modelo|provedor)/.test(f.name));
+    const trocas = FERRAMENTAS.filter((f) => /^plataforma_(trocar|mudar|definir|configurar|escolher)_(.*_)?(ia|modelo|modelos|provedor|provedores)(_|$)/.test(f.name));
     expect(trocas.map((f) => f.name)).toEqual([]);
 
     const mcp = await clienteMcp(criarServidorDePlataforma as never, []);

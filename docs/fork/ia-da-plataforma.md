@@ -89,7 +89,7 @@ Anthropic. A regra é pura e mora em `lib/ai/aviso-da-ia-das-empresas.ts`. Conta
 
 | Ferramenta | O que faz | Tipo |
 |---|---|---|
-| `plataforma_ver_ia_das_empresas` | por empresa: se segue a plataforma ou tem escolha própria, o provedor e o modelo em vigor, e se há chave utilizável (`propria`, `instalacao` ou `null`). Nada da chave em si sai. Filtros: `organization_id` (uma empresa) e `so_sem_chave` | leitura |
+| `plataforma_ver_ia_das_empresas` | por empresa: se segue a plataforma ou tem escolha própria, o provedor e o modelo em vigor, e se há chave utilizável (`propria`, `instalacao` ou `null`). Traz também a `contagem` (`contarEmpresas`: só as operantes), os mesmos números do cartão do admin, da `/health` e do relatório interno; a suspensa aparece com `operante: false` e não conta. Nada da chave em si sai. Filtros: `organization_id` (uma empresa) e `so_sem_chave`; as sem chave vêm primeiro | leitura |
 
 **Não há ferramenta de troca.** Trocar modelo é ato de pessoa, com MFA, no painel: em
 `/admin/modelo-de-ia` (todas as que seguem) ou na tela Provedores da empresa, em modo suporte (uma).
