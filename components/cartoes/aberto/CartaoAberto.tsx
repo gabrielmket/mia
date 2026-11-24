@@ -76,6 +76,9 @@ import { SecaoDeObrigacoes } from "@/components/obrigacoes/SecaoDeObrigacoes";
 // da revisão chega ao formulário de campos pelo mesmo controle do dossiê.
 import { AtalhosDoNegocio } from "@/components/kanban/AtalhosDoCard";
 import { RevisaoDoDocumento } from "@/components/kanban/RevisaoDoDocumento";
+// Upstream v1.124 (#4191): a classificação comercial do negócio, logo abaixo dos
+// atalhos, como no dossiê. Mesma régua de edição das tarefas.
+import { ClassificacaoComercial } from "@/components/kanban/ClassificacaoComercial";
 import { type ControleDosCamposDoNegocio } from "@/components/kanban/LeadFieldsForm";
 import type { AtalhoDoCard } from "@/lib/leads/atalhos-do-card";
 
@@ -388,6 +391,11 @@ export function CartaoAberto({
             {/* Upstream 1.71 (#2207): sem conversa e com contato, vira o botão
                 "Abrir conversa" (a mesma rota da tabela de contatos). */}
             <AtalhosDoNegocio atalhos={atalhos} lead={lead} contactId={lead.contact_id} />
+            <ClassificacaoComercial
+              key={`${lead.id}:${lead.nao_comercial_em ?? "comercial"}`}
+              lead={lead}
+              podeEditar={podeEditarTarefas}
+            />
             <ConversaNoDossie conversa={lead.conversa} contactId={lead.contact_id} phone={lead.contact_phone} />
             <ConversasDosOutrosNumeros leadId={lead.id} />
             {cartao.isLoading ? (

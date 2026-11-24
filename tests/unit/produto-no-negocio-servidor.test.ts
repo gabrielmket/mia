@@ -142,6 +142,37 @@ describe("gravar os itens do negócio", () => {
     expect(lerLead(b, NOVO).value_cents).toBeNull();
   });
 
+  // FORK MIA (fusão v1.124): as vendas registradas do upstream (9449/9450).
+  it("o último item sai: a rota devolve o negócio às vendas (9167), e com item não chama", async () => {
+    const b = banco();
+    await gravar(b, NOVO, { itens: [{ product_id: LIMPEZA, quantidade: 1, desconto_cents: 0 }], valor: { modo: "soma" } });
+    expect(b.chamadasRpc.filter((c) => c.nome === "fn_mia_valor_do_negocio_volta_as_vendas")).toHaveLength(0);
+
+    await gravar(b, NOVO, { itens: [], valor: { modo: "soma" } });
+    expect(b.chamadasRpc.filter((c) => c.nome === "fn_mia_valor_do_negocio_volta_as_vendas")).toEqual([
+      { nome: "fn_mia_valor_do_negocio_volta_as_vendas", args: { p_org: ORG, p_lead: NOVO } },
+    ]);
+  });
+
+  it("o último item sai com o Valor à mão igual: a rota chama a 9167 mesmo sem mudar o valor", async () => {
+    const b = banco();
+    const aMao = { modo: "a_mao" as const, value_cents: 300_000 };
+    await gravar(b, NOVO, { itens: [{ product_id: LIMPEZA, quantidade: 1, desconto_cents: 0 }], valor: aMao });
+    expect(lerLead(b, NOVO)).toMatchObject({ value_cents: 300_000, valor_a_mao: true });
+
+    const r = await gravar(b, NOVO, { itens: [], valor: aMao });
+    expect(r.mudou).toBe(true);
+    expect(b.chamadasRpc.filter((c) => c.nome === "fn_mia_valor_do_negocio_volta_as_vendas")).toEqual([
+      { nome: "fn_mia_valor_do_negocio_volta_as_vendas", args: { p_org: ORG, p_lead: NOVO } },
+    ]);
+  });
+
+  it("negócio sem item que segue sem item e sem mudança: nada é chamado", async () => {
+    const b = banco();
+    await gravar(b, NOVO, { itens: [], valor: { modo: "soma" } });
+    expect(b.chamadasRpc.filter((c) => c.nome === "fn_mia_valor_do_negocio_volta_as_vendas")).toHaveLength(0);
+  });
+
   it("valor digitado à mão: grava a marca e para de somar até alguém pedir a soma", async () => {
     const b = banco();
     await gravar(b, NOVO, {

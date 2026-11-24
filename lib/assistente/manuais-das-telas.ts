@@ -154,6 +154,22 @@ const META_E_GOOGLE: Manual[] = [
     vejaTambem: ["conectar-meta-ads"],
   },
   {
+    // FORK MIA (fusão da v1.124): o painel de vendas e o "Registrar venda" do upstream (9449/9450).
+    id: "painel-de-vendas",
+    titulo: "Ver quanto vendi no período e registrar uma venda",
+    palavras: ["vendas", "quanto vendi", "valor vendido", "ticket medio", "conversao", "registrar venda", "recompra", "faturamento"],
+    href: "/app/vendas",
+    papelMinimo: "viewer",
+    passos: [
+      "Abra Análise › Ver tudo › Vendas.",
+      "Escolha o período (Hoje, 7 dias, 30 dias, Este mês ou Mês passado) ou as datas, e, se quiser, filtre por Funil e por Tag.",
+      "Os cartões mostram Vendas, Valor vendido, Ticket médio e Conversão; abaixo vêm o gráfico do período e as tags que mais vendem.",
+      "Para registrar uma venda, abra o negócio e use o + ao lado do Valor: cada venda entra com valor, data e tags, e um negócio pode ter várias (recompra).",
+    ],
+    observacao: "Conta a venda registrada e, quando o negócio ganho não tem venda registrada, o valor dele. Num negócio com produtos no bloco de itens, o Valor do negócio continua sendo a soma dos itens; a venda registrada conta neste painel.",
+    vejaTambem: ["relatorios"],
+  },
+  {
     id: "leads-formulario-meta",
     titulo: "Trazer para o funil os leads dos formulários da Meta (cadastro instantâneo)",
     palavras: [

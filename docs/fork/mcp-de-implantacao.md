@@ -815,6 +815,43 @@ Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
 
+### O que chegou do upstream 1.124 (fusão de 23/11, MIA-127)
+
+A fusão entra sem ferramenta nova e sem campo novo no MCP de plataforma. Uma rota espelhada
+(seção 5) mudou: o GET de `app/api/v1/ai/pacing/route.ts` lê e devolve `teto_so_abordagem`.
+O espelho (`lib/implantacao/canal.ts`) não grava a coluna, e nula ela é a régua de sempre, então
+o número montado pela implantação continua igual (impressão relida em
+`tests/unit/mcp-de-implantacao-espelhos.test.ts`).
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| Registrar venda no negócio e o painel Análise › Vendas (9449, 9450) | 1.124 | nada a configurar: é registro do dia a dia. No fork, negócio com item do bloco continua com o valor dos itens (9167, `docs/fork/produto-no-negocio.md` 2.3); `plataforma_configurar_produto_no_negocio` não muda | |
+| O MCP da EMPRESA edita a ficha do cliente e comanda a conversa por token (`crm_update_contact`, `crm_pause_ai`, `crm_resume_ai`, `crm_close_conversation`, `crm_reopen_conversation`, #4517) | 1.124 | nada a fazer: são ferramentas do MCP da empresa. No fork o fechamento por token passa pela mesma devolução sem responder a pendente (`responderPendente: false`, `conversations/[id]/_handler.ts`) | |
+
+Falta no MCP (cada item com o motivo):
+
+- "Teto do dia só na abordagem" e o teto próprio do follow-up por número
+  (`channel_knobs.teto_so_abordagem` e `followup_daily_cap`, 9455 e 9456): campo novo do canal.
+  Ligado, o follow-up de quem já foi abordado sai sem gastar nem esperar o teto de aquecimento,
+  então muda o envio e pede decisão antes de a implantação ligar sozinha. Nasce desligado;
+- "Conversas novas criam negócio no funil" por conexão (`channel_sessions.conversa_nova_cria_negocio`,
+  9459): campo novo da conexão. Nasce ligado, que é o comportamento de antes; entra junto com o
+  funil de entrada por número (falta desde a 1.119);
+- o menu de atendimento sem IA (módulo opcional, `settings.menu_de_atendimento`): módulo que nasce
+  desligado e muda quem responde a primeira mensagem do cliente final. Fica fora até alguém
+  decidir que a implantação monta menu;
+- a janela própria da campanha de prospecção (9454) e o arquivo da primeira abordagem enviado pela
+  tela: o MCP não monta campanha de prospecção;
+- as contas de relatório do Google Ads (9448): autorização com o login Google de quem tem acesso à
+  conta, feita pelo administrador do cliente;
+- o negócio não comercial (9414, 9451): classificação do dia a dia, sem configuração.
+
+Nada a configurar pela implantação: a rajada de mensagens que vira uma resposta (#196, teto de
+45 s da instalação), o agente que só se reapresenta quando o roteador troca de agente, o rascunho
+assistido que chama a passagem, a atualização pela janela de manutenção (`SYSTEM_UPDATE_WINDOW`,
+do instalador do upstream; o fork implanta pelo EasyPanel) e o catálogo por feed por empresa (o liga
+e desliga já passa por `plataforma_definir_modulo_da_empresa`).
+
 ### O que chegou do upstream 1.123 (fusão de 21/11, MIA-122)
 
 A fusão entra sem ferramenta nova e sem ajuste no MCP de plataforma.
