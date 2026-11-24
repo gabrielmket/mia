@@ -1278,10 +1278,14 @@ vai de 112 a 115). A prova está em `tests/unit/mcp-de-implantacao-trava-de-robo
 Nenhuma operação nova: configurar é montagem (`implantar_configuracao`, vale na hora para todo contato do cliente) e desfazer
 põe a IA de volta no ar para um contato (`colocar_no_ar`). Toda a regra mora em `lib/trava-de-robo/`.
 
+O sinal D, o ritmo de máquina (MIA-210, migration 9171), não trouxe ferramenta nova: a lista continua
+igual. A configuração dele entra pela mesma `plataforma_configurar_trava_de_robo` (o `pedidoDeConfigDaTravaSchema`
+ganhou os quatro campos) e o registro dele sai pela mesma `plataforma_ver_travas_de_robo`.
+
 | ferramenta | o que faz | operação |
 |---|---|---|
-| `plataforma_ver_travas_de_robo` | com `organization_id`, a configuração do cliente (o padrão quando não há linha) e os registros do período; sem ele, os registros de todos os clientes. `periodo_dias` (padrão 7, até 90), `motivo` (`robo` ou `teto`) e `limite`. Cada registro traz a conversa com o link do Inbox, os 4 últimos dígitos do telefone, os sinais (só o nome do sinal e o id da mensagem), as respostas da IA na janela, os negócios perdidos, o que falhou e se foi desfeito. Sem texto de mensagem | leitura |
-| `plataforma_configurar_trava_de_robo` | liga, desliga ou ajusta os limites; só o que vier muda; o mesmo pedido responde `ja_estava`. Audita `ai.trava_de_robo_configurada` com o antes e o depois | `implantar_configuracao` |
+| `plataforma_ver_travas_de_robo` | com `organization_id`, a configuração do cliente (o padrão quando não há linha) e os registros do período; sem ele, os registros de todos os clientes. `periodo_dias` (padrão 7, até 90), `motivo` (`robo` ou `teto`) e `limite`. Cada registro traz a conversa com o link do Inbox, os 4 últimos dígitos do telefone, os sinais (só o nome do sinal e o id da mensagem), as respostas da IA na janela, os negócios perdidos, o que falhou e se foi desfeito. Sem texto de mensagem. O ritmo de máquina (MIA-210) aparece como `motivo` `teto` com o sinal `ritmo` em `sinais` | leitura |
+| `plataforma_configurar_trava_de_robo` | liga, desliga ou ajusta os limites; só o que vier muda; o mesmo pedido responde `ja_estava`. Audita `ai.trava_de_robo_configurada` com o antes e o depois. Desde a MIA-210, também os quatro campos do ritmo de máquina (`ritmo_ligado`, que desliga só ele, `ritmo_giros` 4 a 30, `ritmo_latencia_maxima_segundos` 10 a 300, `ritmo_variacao_segundos` 2 a 60), com a recusa que diz o campo fora da faixa | `implantar_configuracao` |
 | `plataforma_desfazer_trava_de_robo` | a mesma devolução do "Devolver ao automático" para a conversa, mais tirar a etiqueta "robô" e marcar o registro como desfeito. Não reabre negócio nem conversa, e não responde a mensagem pendente. Recusa conversa sem trava de pé e contato "sempre atendimento humano". Audita `ai.trava_de_robo_desfeita` | `colocar_no_ar` |
 
 ### O que chegou do upstream 1.85 (.83)

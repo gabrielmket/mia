@@ -766,7 +766,7 @@ anonimizadas (LGPD, seção 6 do documento). Falta o primeiro cadastro real pelo
 ### 22. A trava de robô · [`trava-de-robo.md`](trava-de-robo.md)
 **O que faz.** Quando o robô de outra empresa responde às nossas mensagens, o laço para sem chamar o modelo:
 o contato é calado, os negócios abertos viram perdidos e a conversa é encerrada; mais o teto de 30
-respostas da IA por conversa em 60 minutos. **Migrations** 9153, 9154. **Mora em** `lib/trava-de-robo/`
+respostas da IA por conversa em 60 minutos, e o ritmo de máquina (sinal D, MIA-210), que pausa como o teto. **Migrations** 9153, 9154, 9171. **Mora em** `lib/trava-de-robo/`
 (`deteccao.ts`, `config.ts`, `aplicar.ts`, `no-turno.ts`, `registros.ts`, `etiqueta.ts`, `textos.ts`),
 `lib/mcp-plataforma/ferramentas/trava-de-robo.ts`.
 
@@ -976,7 +976,7 @@ sem linha, sem tabela) e o invariante `batimento-dos-crons.test.ts` (o `upsert` 
 | 19 | Primeiros passos | `primeiros-passos.md` | 9070, 9071, 9080-9082 | `welcome-do-upstream-funciona-sozinho.test.tsx`, `raiz-do-app-respeita-o-passo-a-passo.test.ts` |
 | 20 | Produto no negócio | `produto-no-negocio.md` | 9160, 9161, 9167 | `produto-no-negocio-servidor.test.ts`, `produto-no-negocio-regras.test.ts`, `valor-do-negocio-segue-os-itens.test.ts` |
 | 21 | Raio-X do atendimento | `raio-x-do-atendimento.md` | 9150, 9151, 9152 | `raio-x-leitor-nao-envia.test.ts`, `raio-x-anonimizar.test.ts` |
-| 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
+| 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154, 9171 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
 | 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts` |
 | 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | 9165 (o preço da Meta com vigência); lê a 0241 | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts`, `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts`, `preco-da-meta-com-vigencia.test.ts` |
 | 25 | O fuso da organização nos relatórios | `fuso-da-organizacao.md` | 9166 | `fuso-dos-relatorios-uma-regra.test.ts`, `tests/invariants/fuso-invalido-nos-relatorios.test.ts` |
