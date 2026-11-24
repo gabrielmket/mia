@@ -470,11 +470,11 @@ desligada, as escritas recusam com o caminho para ligar.
 | `plataforma_ver_cobranca` | leitura | a cobrança da instalação: ligada ou não, provedor e modo, se o aviso de pagamento chega, a régua, o que falta para a primeira cobrança, os planos (limites, módulos, preço do Broadcast, preço por e-mail `preco_email` desde a .95 com o `preco_email_padrao`, conversas estimadas, quantas empresas assinam), as empresas por situação, os pacotes de crédito e o modo do cadastro. A chave nunca sai | leitura |
 | `plataforma_garantir_planos` | `gerir_planos` | os planos pelo nome (preço, intervalo, teste, pessoas, números, teto de IA, módulos, preço do Broadcast, preço por e-mail `preco_email` desde a .95, frase e selo, oferecido ou escondido, o do cadastro) e os `pacotes_de_creditos`. Plano assinado não muda de preço nem perde módulo (nem muda o preço do Broadcast ou o por e-mail): a resposta manda arquivar e criar outro | pelo nome; o igual volta em `sem_mudanca` |
 | `plataforma_listar_assinaturas` | leitura | as empresas por situação, com plano, agendado, origem, fim do teste, o próximo aviso da régua, a suspensão prevista, o link em aberto e os passos feitos; filtro `so_cadastro_proprio` | leitura |
-| `plataforma_ver_assinatura` | leitura | uma empresa: plano, situação, datas, a régua ponto a ponto, quem administra (e-mail mascarado), os passos e os módulos com a origem; desde a .95, `precos`: o da mensagem do Broadcast e o por e-mail que valem, em reais, cada um com a origem (`definido_a_mao`, `plano` ou `padrao`) e o definido à mão | leitura |
+| `plataforma_ver_assinatura` | leitura | uma empresa: plano, situação, datas, a régua ponto a ponto, quem administra (e-mail mascarado), os passos e os módulos com a origem; desde a .95, `precos`: o da mensagem do Broadcast e o por e-mail que valem, em reais, cada um com a origem (`definido_a_mao`, `plano` ou `padrao`) e o definido à mão; desde a MIA-168, `lead_na_time`: o negócio do cadastro no funil MIA - SDR da Time, os momentos (cadastro concluído, teste começou, pagamento confirmado com o valor em BRL) e o erro (`sem_fonte`, `fonte_inexistente`, `recusado`, `falhou`, `sem_etapa:<nome>`), com `configurado` dizendo se `CADASTRO_FONTE_DO_CRM` está no ambiente | leitura |
 | `plataforma_atribuir_plano` | `gerir_cobranca` | atribui ou troca o plano como o dono no card Cobrança: a isenta passa a pagar em teste; no teste a troca vale na hora, depois fica para a renovação (plano negociado não paga diferença). Aceita plano escondido | o mesmo plano responde `mudou: false` |
 | `plataforma_gerar_link_de_pagamento` | `gerir_cobranca` | o mesmo botão do card: devolve o link em aberto ou cria um; no Asaas, a primeira vez pede o `documento` de quem paga, que vai direto ao Asaas e não fica guardado (nem na auditoria) | devolve o link em aberto |
 | `plataforma_ajustar_cobranca` | `gerir_cobranca` | `dar_prazo` (até 60 dias), `isentar` (recusa com assinatura viva no provedor) ou `voltar_a_cobranca` (com o `plano`). Prazo e isenção reativam quem foi suspenso por pagamento | o mesmo pedido regrava a mesma situação (`mudou: false` no isentar) |
-| `plataforma_listar_pedidos_de_cadastro` | leitura | os pedidos esperando aprovação: empresa, quem pediu (mascarado), plano escolhido e o que a empresa faz | leitura |
+| `plataforma_listar_pedidos_de_cadastro` | leitura | os pedidos esperando aprovação: empresa, quem pediu (mascarado), plano escolhido e o que a empresa faz; desde a MIA-168, o `lead_na_time` de cada pedido e `cadastros_na_time` (a variável configurada ou não, e os últimos cadastros cujo lead falhou, só com ids, datas e o erro) | leitura |
 | `plataforma_decidir_pedido_de_cadastro` | `decidir_cadastro` | aprova (a empresa nasce no plano escolhido, pelo mesmo caminho do cadastro) ou recusa com o `motivo`, que vai por e-mail a quem pediu | o pedido decidido devolve a decisão anterior |
 
 As três caixinhas novas do token, e o raio de cada uma: `gerir_planos` mexe no preço e nos
@@ -816,6 +816,43 @@ Fica de fora por natureza (não é montagem da empresa):
 Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4590) é
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
+
+### O que chegou do upstream 1.124 (fusão de 23/11, MIA-127)
+
+A fusão entra sem ferramenta nova e sem campo novo no MCP de plataforma. Uma rota espelhada
+(seção 5) mudou: o GET de `app/api/v1/ai/pacing/route.ts` lê e devolve `teto_so_abordagem`.
+O espelho (`lib/implantacao/canal.ts`) não grava a coluna, e nula ela é a régua de sempre, então
+o número montado pela implantação continua igual (impressão relida em
+`tests/unit/mcp-de-implantacao-espelhos.test.ts`).
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| Registrar venda no negócio e o painel Análise › Vendas (9449, 9450) | 1.124 | nada a configurar: é registro do dia a dia. No fork, negócio com item do bloco continua com o valor dos itens (9167, `docs/fork/produto-no-negocio.md` 2.3); `plataforma_configurar_produto_no_negocio` não muda | |
+| O MCP da EMPRESA edita a ficha do cliente e comanda a conversa por token (`crm_update_contact`, `crm_pause_ai`, `crm_resume_ai`, `crm_close_conversation`, `crm_reopen_conversation`, #4517) | 1.124 | nada a fazer: são ferramentas do MCP da empresa. No fork o fechamento por token passa pela mesma devolução sem responder a pendente (`responderPendente: false`, `conversations/[id]/_handler.ts`) | |
+
+Falta no MCP (cada item com o motivo):
+
+- "Teto do dia só na abordagem" e o teto próprio do follow-up por número
+  (`channel_knobs.teto_so_abordagem` e `followup_daily_cap`, 9455 e 9456): campo novo do canal.
+  Ligado, o follow-up de quem já foi abordado sai sem gastar nem esperar o teto de aquecimento,
+  então muda o envio e pede decisão antes de a implantação ligar sozinha. Nasce desligado;
+- "Conversas novas criam negócio no funil" por conexão (`channel_sessions.conversa_nova_cria_negocio`,
+  9459): campo novo da conexão. Nasce ligado, que é o comportamento de antes; entra junto com o
+  funil de entrada por número (falta desde a 1.119);
+- o menu de atendimento sem IA (módulo opcional, `settings.menu_de_atendimento`): módulo que nasce
+  desligado e muda quem responde a primeira mensagem do cliente final. Fica fora até alguém
+  decidir que a implantação monta menu;
+- a janela própria da campanha de prospecção (9454) e o arquivo da primeira abordagem enviado pela
+  tela: o MCP não monta campanha de prospecção;
+- as contas de relatório do Google Ads (9448): autorização com o login Google de quem tem acesso à
+  conta, feita pelo administrador do cliente;
+- o negócio não comercial (9414, 9451): classificação do dia a dia, sem configuração.
+
+Nada a configurar pela implantação: a rajada de mensagens que vira uma resposta (#196, teto de
+45 s da instalação), o agente que só se reapresenta quando o roteador troca de agente, o rascunho
+assistido que chama a passagem, a atualização pela janela de manutenção (`SYSTEM_UPDATE_WINDOW`,
+do instalador do upstream; o fork implanta pelo EasyPanel) e o catálogo por feed por empresa (o liga
+e desliga já passa por `plataforma_definir_modulo_da_empresa`).
 
 ### O que chegou do upstream 1.123 (fusão de 21/11, MIA-122)
 

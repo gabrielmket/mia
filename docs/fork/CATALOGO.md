@@ -519,7 +519,7 @@ cliente deixou pendente em vez de calar; e a pausa por outra conversa do mesmo c
 
 **Conferir.**
 1. `git grep -n "FORK MIA (.107)" -- lib/escalacao lib/agent-engine/agent/inbound-turn.ts app/api/v1/conversations components/inbox`.
-2. `git grep -n "responderPendente" lib app | wc -l` (as quatro chamadas em `retomada.ts`, `release`, `close`, `handoff-tecnico`).
+2. `git grep -n "responderPendente" lib app | wc -l` (as quatro chamadas em `retomada.ts`, `release`, o fechamento (`conversations/[id]/_handler.ts` desde a v1.124), `handoff-tecnico`).
 3. `npx vitest run tests/unit/ia-responde-pendente.test.ts tests/unit/ia-responde-pendente-faixa.test.tsx`.
 4. Se o upstream mexeu em `inbound-turn.ts` ou `retomada.ts`: reconferir os dois casos do documento (seção 1).
 
@@ -529,7 +529,9 @@ robô, função 22): o merge dele é o mais provável de desligar uma das duas.
 ### 13. Jornada de assinatura: a cobrança · [`jornada-de-assinatura.md`](jornada-de-assinatura.md)
 **O que faz.** A empresa que chega pelo site escolhe um plano, se cadastra, testa, paga e usa o que o
 plano libera, sem ninguém da Time no meio; a Time acompanha e recebe no zap só o que exige ação. Tudo sai
-desligado. **Migrations** 9070 (o plano libera módulo), 9071 (origem), 9072 (crédito por Pix), 9110, 0245.
+desligado. Desde a MIA-168, todo cadastro do `/signup` vira lead no funil "MIA - SDR" da Time e anda nele
+(seção 12 do documento). **Migrations** 9070 (o plano libera módulo), 9071 (origem), 9072 (crédito por Pix), 9110, 0245,
+9169 (o cadastro no CRM da Time).
 **Mora em** `lib/planos-mia/`, `components/planos-mia/`, `lib/carteira/compra-pelo-asaas.ts`, `app/precos/`.
 
 **Pontos de encaixe** (seção 11): `lib/modulos/liberacao.ts` (`moduloLiberado`, `modulosDaOrganizacao`
@@ -538,12 +540,17 @@ somam o plano), `lib/cobranca/sincronizar.ts` (`aplicarRegua`) e `lib/cobranca/t
 `app/api/v1/cron/cobranca/route.ts` (a rodada da jornada depois da do upstream),
 `lib/agent-engine/edge/llm/orcamento.ts`, `lib/ai/inbox-destino.ts` (`ref_kind` `plano`),
 `lib/crm-b2b/route-helpers.ts`, `components/auth/SignupForm.tsx`, `app/actions/registration/decide.ts`,
-`components/cobranca/PainelDaAssinatura.tsx`, `lib/auth/public-paths.ts` (`/precos`).
+`components/cobranca/PainelDaAssinatura.tsx`, `lib/auth/public-paths.ts` (`/precos`). MIA-168:
+`app/actions/auth/signUp.ts` (`registrarCadastroDoSignup`), `app/(public)/signup/page.tsx` e
+`components/auth/SignupForm.tsx` (`mia_origem`), `lib/auth/schemas.ts`, `lib/cobranca/sinal.handler.ts`
+(`informarPagamentoATime`) e `lib/event-log/register-handlers.ts` (`leadDoCadastroHandler`).
 
-**Protege.** `tests/unit/jornada-de-assinatura.test.ts`, `jornada-tudo-desligado.test.ts`, `planos-mia-regras.test.ts`, `entrada-paga-sem-aviso-de-suspensa.test.ts`, `rotina-pula-modulo-fora-do-plano.test.ts`, `compra-de-creditos-pelo-asaas.test.ts`, `mcp-de-implantacao-cobranca.test.ts`.
+**Protege.** `tests/unit/jornada-de-assinatura.test.ts`, `jornada-tudo-desligado.test.ts`, `planos-mia-regras.test.ts`, `entrada-paga-sem-aviso-de-suspensa.test.ts`, `rotina-pula-modulo-fora-do-plano.test.ts`, `compra-de-creditos-pelo-asaas.test.ts`, `mcp-de-implantacao-cobranca.test.ts`, `lead-do-cadastro.test.ts`, e
+`tests/invariants/cadastro-na-time.test.ts`.
 
 **Conferir.**
 1. `git grep -n "FORK MIA" -- lib/modulos/liberacao.ts lib/cobranca/sincronizar.ts lib/cobranca/rodada.ts app/api/v1/cron/cobranca/route.ts`.
+   O lead do cadastro: `git grep -n "MIA-168" -- app/actions/auth/signUp.ts lib/cobranca/sinal.handler.ts lib/event-log/register-handlers.ts components/auth/SignupForm.tsx`.
 2. `npx vitest run tests/unit/jornada-tudo-desligado.test.ts tests/unit/entrada-paga-sem-aviso-de-suspensa.test.ts tests/unit/rotina-pula-modulo-fora-do-plano.test.ts`.
 3. `lib/cobranca/sincronizar.test.ts` (do upstream) tem um caso trocado pela regra do fork, marcado `FORK MIA`: se a fusão o reverteu, o teste pede o aviso de "suspensa" que a regra da entrada paga cala.
 4. MCP (lê só): `plataforma_ver_assinatura`, `plataforma_listar_modulos`, `plataforma_ver_cobranca`.
@@ -705,7 +712,7 @@ reescrever o teste, o ajuste some.
 ### 20. O produto ou serviço no negócio · [`produto-no-negocio.md`](produto-no-negocio.md)
 **O que faz.** O negócio diz o que foi vendido: itens do catálogo com preço congelado e valor que soma, a
 janela "Marcar como ganho" no botão e no arrasto, a palavra e as duas opções por funil, dois quadros no
-relatório de vendas, comanda do ganho por item. **Migrations** 9160, 9161. **Mora em**
+relatório de vendas, comanda do ganho por item. Com as vendas registradas do upstream (v1.124), o negócio com item continua com o valor dos itens. **Migrations** 9160, 9161, 9167. **Mora em**
 `lib/produto-no-negocio/`, `components/produto-no-negocio/`, `hooks/produto-no-negocio/`,
 `app/api/v1/leads/[id]/itens/`, `app/api/v1/pipelines/[id]/produto-no-negocio/`.
 
@@ -714,12 +721,13 @@ relatório de vendas, comanda do ganho por item. **Migrations** 9160, 9161. **Mo
 `KanbanBoard.tsx` (a janela no arrasto), `hooks/kanban/useUpdateLead.ts`, `lib/schemas/settings.ts`
 (`vocabulary.produto`, `pedir_produto_no_ganho`), `app/api/v1/leads/[id]/win/route.ts` e `move/route.ts`
 (a recusa do ganho sem item), `app/api/v1/proposals/[id]/send/route.ts` (o recálculo do valor),
-`lib/financeiro/comanda-do-ganho.ts` e `.handler.ts`, `app/app/settings/tenant/pipelines/_client.tsx`.
+`lib/financeiro/comanda-do-ganho.ts` e `.handler.ts`, `app/app/settings/tenant/pipelines/_client.tsx`; e `FORK MIA (fusão v1.124)` em `LeadFieldsForm.tsx` e `components/inbox/CRMSidePanel.tsx` (o Valor só segue as vendas registradas sem item).
 
 **Protege.** `tests/unit/produto-no-negocio.test.ts`, `produto-no-negocio-regras.test.ts`,
 `produto-no-negocio-relatorio.test.ts`, `produto-no-negocio-servidor.test.ts`,
 `mcp-de-implantacao-produto-no-negocio.test.ts`; invariantes `rls-completude-varredura.test.ts`,
-`rls-tabelas-da-mia.test.ts`.
+`rls-tabelas-da-mia.test.ts`, `valor-do-negocio-segue-os-itens.test.ts` (9167 no Postgres de verdade: item
+e depois venda, venda e depois item, item de proposta, último item sai, a cura e a auto-cura da 9450).
 
 **Conferir.**
 1. `git grep -n "FORK MIA (.109)" -- components/kanban app/api/v1/leads app/api/v1/proposals lib/financeiro | wc -l` (compare com a contagem antes da fusão).
@@ -933,14 +941,14 @@ resto do sistema continua funcionando.
 | 10 | E-mail marketing | `email-marketing.md` | 9060-9065, 9110 | `email-marketing-regras.test.ts`, `tests/invariants/email-marketing.test.ts` |
 | 11 | Empresa única | `empresa-unica.md` | 9032, 9033, 9034 | `empresa-unica.test.ts`, `papel-do-contato-na-empresa.test.ts` |
 | 12 | IA responde pendente | `ia-responde-pendente.md` | nenhuma | `ia-responde-pendente.test.ts`, `ia-responde-pendente-faixa.test.tsx` |
-| 13 | Jornada de assinatura | `jornada-de-assinatura.md` | 9070, 9071, 9072, 9110 | `jornada-tudo-desligado.test.ts`, `planos-mia-regras.test.ts` |
+| 13 | Jornada de assinatura | `jornada-de-assinatura.md` | 9070, 9071, 9072, 9110, 9169 | `jornada-tudo-desligado.test.ts`, `planos-mia-regras.test.ts` |
 | 14 | Leads da Meta | `leads-da-meta.md` | 9003, 9004, 9005, 9008, 9009 | `paginas-da-meta-por-empresa.test.ts` |
 | 15 | MCP de implantação | `mcp-de-implantacao.md` | 9022, 9045, 9030, 9031, 9040-9042 | `mcp-de-implantacao-espelhos.test.ts`, `mcp-de-implantacao-ferramentas.test.ts` |
 | 16 | MCP de migração | `mcp-de-migracao.md` | 9022 | `mcp-de-migracao-base.test.ts`, `mcp-de-migracao-importa-em-silencio.test.ts` |
 | 17 | Obrigações | `obrigacoes.md` | 9018 | `obrigacoes-gatilhos.test.ts`, `obrigacoes-contexto-da-automacao.test.ts` |
 | 18 | Pagamento no início | `pagamento-no-inicio.md` | 9120, 9121, 9122 | `pagamento-inicial-fim-do-teste.test.ts`, `cartao-fora-dos-registros.test.ts` |
 | 19 | Primeiros passos | `primeiros-passos.md` | 9070, 9071, 9080-9082 | `welcome-do-upstream-funciona-sozinho.test.tsx`, `raiz-do-app-respeita-o-passo-a-passo.test.ts` |
-| 20 | Produto no negócio | `produto-no-negocio.md` | 9160, 9161 | `produto-no-negocio-servidor.test.ts`, `produto-no-negocio-regras.test.ts` |
+| 20 | Produto no negócio | `produto-no-negocio.md` | 9160, 9161, 9167 | `produto-no-negocio-servidor.test.ts`, `produto-no-negocio-regras.test.ts`, `valor-do-negocio-segue-os-itens.test.ts` |
 | 21 | Raio-X do atendimento | `raio-x-do-atendimento.md` | 9150, 9151, 9152 | `raio-x-leitor-nao-envia.test.ts`, `raio-x-anonimizar.test.ts` |
 | 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
 | 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts` |

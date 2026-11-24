@@ -1,6 +1,7 @@
 "use client";
 
 import { useActiveOrg } from "@/hooks/auth/AuthProvider";
+import { roleAtLeast } from "@/lib/auth/types";
 import { useT } from "@/hooks/i18n/useT";
 import { useEffect, useImperativeHandle, useState, type Ref } from "react";
 import { useForm } from "react-hook-form";
@@ -14,7 +15,9 @@ import { useEditLead } from "@/hooks/kanban/useUpdateLead";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import type { Lead } from "@/lib/types/leads";
 import { updateLeadSchema, type UpdateLeadInput } from "@/lib/schemas/leads";
-import { MOEDA_PADRAO, parseReaisToCents, simboloDaMoeda } from "@/lib/money";
+import { MOEDA_PADRAO, formatCents, parseReaisToCents, simboloDaMoeda } from "@/lib/money";
+import { BotaoRegistrarVenda } from "@/components/vendas/BotaoRegistrarVenda";
+import { useVendasDoNegocio } from "@/hooks/vendas/useVendasRegistradas";
 import { soChavesAlteradas } from "@/lib/leads/custom-fields-so-diff";
 import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 import { ContactTagsEditor } from "@/components/inbox/ContactTagsEditor";
@@ -26,6 +29,7 @@ import type { CampoConfirmadoDoDocumento } from "./RevisaoDoDocumento";
 import { BlocoDeItens } from "@/components/produto-no-negocio/BlocoDeItens";
 import { AvisoDoValorRecorrente, CampoDoValor } from "@/components/produto-no-negocio/CampoDoValor";
 import { useRascunhoDoNegocio } from "@/components/produto-no-negocio/useRascunhoDoNegocio";
+import { valorSegueAsVendas } from "@/lib/produto-no-negocio/regras";
 import { usePalavraDoProduto, useProdutoNoFunil } from "@/hooks/produto-no-negocio/useProdutoNoNegocio";
 
 /**
@@ -129,6 +133,20 @@ export function LeadFieldsForm({
   const usarBloco = itens.pronto;
   const [apagarRecorrente, setApagarRecorrente] = useState(false);
   const [blocoAssumiu, setBlocoAssumiu] = useState<string | null>(null);
+  // Com venda registrada, o Valor É a soma das vendas na moeda do negócio —
+  // o banco grava isso em `value_cents` (migration 9450). Aqui a soma sai da
+  // mesma lista, para o campo acompanhar a venda recém-registrada sem esperar
+  // o negócio ser relido.
+  const { data: vendas } = useVendasDoNegocio(lead.id);
+  const vendasDoNegocio = Array.isArray(vendas) ? vendas : [];
+  // FORK MIA (fusão v1.124): com item no bloco, o valor continua sendo o dos
+  // itens (ou o digitado à mão) e o banco desfaz a troca pela soma das vendas
+  // (9167). O campo só vira "soma das vendas" quando o negócio não tem item.
+  const valorPelasVendas = valorSegueAsVendas({ vendas: vendasDoNegocio.length, itens: itens.rascunho?.itens });
+  const somaDasVendas = vendasDoNegocio.reduce(
+    (soma, v) => soma + (v.currency.toUpperCase() === moedaDoValor.toUpperCase() ? v.valor_cents : 0),
+    0,
+  );
   const [customFields, setCustomFields] = useState<Record<string, unknown>>(lead.custom_fields ?? {});
   // A RÉGUA do diff (issue #2132): o valor carregado ao abrir. Só o que a
   // pessoa mudar daqui vai viajar — devolver o objeto inteiro sobrescrevia o
@@ -175,6 +193,18 @@ export function LeadFieldsForm({
     }
   }
 
+  // O Valor relido do banco entra no campo quando a pessoa não o mexeu: apagar
+  // a última venda devolve o valor digitado (decisão 2B do doc 396), e o campo
+  // volta editável com ELE — não com a soma que estava em memória, que um
+  // Salvar gravaria por cima.
+  useEffect(() => {
+    const doBanco = centsToReais(lead.value_cents);
+    const carregado = form.formState.defaultValues?.valueReais;
+    if (carregado === doBanco || form.getValues("valueReais") !== carregado) return;
+    form.resetField("valueReais", { defaultValue: doBanco });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead.value_cents]);
+
   useImperativeHandle(controle, () => ({
     confirmarCampo(confirmacao) {
       // A confirmação pode terminar depois de a pessoa abrir outro card.
@@ -198,7 +228,7 @@ export function LeadFieldsForm({
     }
     const reais = values.valueReais.trim();
     let valueCents: number | null = null;
-    if (!usarBloco && reais.length > 0) {
+    if (!usarBloco && !valorPelasVendas && reais.length > 0) {
       // A MESMA moeda que o rótulo do campo mostra ao lado («Valor ($)»): é ela
       // que decide se a vírgula é decimal ou separador de milhar (#3331).
       valueCents = parseReaisToCents(reais, moedaDoValor);
@@ -239,8 +269,10 @@ export function LeadFieldsForm({
     const patch: Record<string, unknown> = {
       title: values.title.trim(),
       description: values.description.trim() ? values.description.trim() : null,
-      // FORK MIA (.109): com o bloco, o valor vai pelo PUT dos itens.
-      ...(usarBloco ? {} : { value_cents: valueCents }),
+      // FORK MIA (.109): com o bloco, o valor vai pelo PUT dos itens. Com venda
+      // registrada (e sem item no bloco), o valor é do banco, a soma das vendas:
+      // o formulário não o reescreve (regra do upstream, 9450).
+      ...(usarBloco || valorPelasVendas ? {} : { value_cents: valueCents }),
       // FORK MIA (.109): com "Mostrar valor recorrente" desligado os campos não
       // aparecem e não viajam (o que está gravado fica), a não ser que a pessoa
       // tenha pedido "Apagar o valor recorrente".
@@ -323,26 +355,71 @@ export function LeadFieldsForm({
 
         <div className="grid grid-cols-2 gap-3">
           {/* FORK MIA (.109): com o bloco, o Valor é a soma (ou o digitado à mão). */}
-          {usarBloco && itens.rascunho ? (
-            <CampoDoValor
-              rascunho={itens.rascunho}
-              onRascunho={itens.setRascunho}
-              palavra={palavra}
-              moeda={itens.moeda}
-              desabilitado={edit.isPending || itens.salvando}
-            />
+          {usarBloco && itens.rascunho && !valorPelasVendas ? (
+            <div className="space-y-2">
+              <CampoDoValor
+                rascunho={itens.rascunho}
+                onRascunho={itens.setRascunho}
+                palavra={palavra}
+                moeda={itens.moeda}
+                desabilitado={edit.isPending || itens.salvando}
+              />
+              {/* FORK MIA (fusão v1.124): o "+" de registrar venda do upstream
+                  continua ao alcance com o bloco. A venda conta no painel de
+                  vendas; o Valor segue os itens (9167). */}
+              {roleAtLeast(org?.role, "agent") && (
+                <BotaoRegistrarVenda
+                  leadId={lead.id}
+                  titulo={lead.title}
+                  moeda={moedaDoValor.toUpperCase()}
+                  className="size-9 border border-border"
+                  testId="valor-registrar-venda"
+                />
+              )}
+            </div>
           ) : (
           <div className="space-y-2">
             {/* O rótulo segue a moeda do NEGÓCIO (a organização é a reserva):
                   `R$` em duro mentia para quem opera em euro. */}
             <Label htmlFor="valueReais">{t("Valor")} ({simboloDaMoeda(moedaDoValor)})</Label>
-            <Input
-              id="valueReais"
-              inputMode="decimal"
-              placeholder="0,00"
-              {...form.register("valueReais")}
-            />
-            <EcoDoValor control={form.control} moeda={moedaDoValor} />
+            <div className="flex items-center gap-1">
+              {valorPelasVendas ? (
+                <Input
+                  id="valueReais"
+                  readOnly
+                  aria-readonly
+                  data-testid="valor-pelas-vendas"
+                  value={formatCents(somaDasVendas, moedaDoValor)}
+                  className="bg-surface-elevated"
+                />
+              ) : (
+                <Input
+                  id="valueReais"
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  {...form.register("valueReais")}
+                />
+              )}
+              {/* A ÚNICA porta de "registrar venda" no negócio: o "+" mora no
+                  próprio Valor, e cada venda soma nele. */}
+              {/* Piso do `POST /api/v1/vendas`: abaixo de `agent` o "+" só terminaria em 403. */}
+              {roleAtLeast(org?.role, "agent") && (
+                <BotaoRegistrarVenda
+                  leadId={lead.id}
+                  titulo={lead.title}
+                  moeda={moedaDoValor.toUpperCase()}
+                  className="size-9 border border-border"
+                  testId="valor-registrar-venda"
+                />
+              )}
+            </div>
+            {valorPelasVendas ? (
+              <p className="text-xs text-text-muted" data-testid="valor-pelas-vendas-legenda">
+                {t("Soma de")} {vendasDoNegocio.length} {t("venda(s) registrada(s)")}
+              </p>
+            ) : (
+              <EcoDoValor control={form.control} moeda={moedaDoValor} />
+            )}
             {form.formState.errors.valueReais && (
               <p className="text-xs text-error-fg">
                 {t(form.formState.errors.valueReais.message ?? "")}

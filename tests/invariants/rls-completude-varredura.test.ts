@@ -79,6 +79,7 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
+  { tabela: "google_ads_reporting_accounts", razao: "tests/invariants/contas-de-relatorio-do-google-ads.test.ts — o servidor lê as contas das duas organizações. Em ambas as direções, o administrador autenticado identifica a própria organização por JWT e recebe 42501 ao ler as credenciais tanto dela quanto da vizinha." },
   { tabela: "relatorios_operacao_diarios", razao: "tests/invariants/relatorios-operacao-diarios-isolamento.test.ts (migration 9400, #4722) — dois tenants reais por JWT: manager e admin leem só os relatórios da própria organização (controle positivo) e ZERO do vizinho; agent e viewer da MESMA organização leem zero (a policy exige manager); authenticated só tem SELECT e anon nada — o delete do gestor vizinho é recusado e a escrita é do servidor; unicidade (organization_id, dia) e CHECK de gerado_por com prova." },
   { tabela: "tabela_de_valores_importacoes", razao: "tests/invariants/tabela-de-valores-negociacao.test.ts (migration 9386, #4612) — livro exclusivo do servidor: RLS ligada e NENHUMA policy; membro da própria organização com JWT authenticated recebe permission denied (com controle positivo da mesma sessão lendo tabelas_de_valores); escrita direta de authenticated recusada nas três tabelas da tabela de valores." },
   { tabela: "agencia_clientes", razao: "tests/invariants/agencias.test.ts — JWT authenticated: o cliente não lê o vínculo com a agência (count 0) e, com o módulo desligado, nenhuma policy devolve linha (1 → 0, com controle positivo); a agência só lê/edita o cliente vinculado e nunca a organização irmã." },
@@ -557,6 +558,16 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "recebem permission denied (42501); as funções que gravam (seguir o plano, " +
       "confirmar a compra) não são da sessão; a compra paga lança uma vez só.",
   })),
+  // Fork MIA, 9169 · o cadastro do /signup como lead no CRM da Time (MIA-168): o IP,
+  // o navegador e os ids de clique da medição, e os três momentos do funil.
+  {
+    tabela: "mia_cadastro_na_time",
+    razao:
+      "tests/invariants/cadastro-na-time.test.ts · exclusiva do servidor: RLS ligada com " +
+      "ZERO políticas, o administrador da PRÓPRIA empresa e anon recebem permission denied " +
+      "(42501) na leitura e na escrita, o service_role grava e lê (controle positivo); a " +
+      "limpeza da LGPD só o servidor executa.",
+  },
   // Fork MIA, 9130 a 9132 · cupons, parceiros e comissão (.98): o cupom da empresa, o
   // setup vendido e as comissões. Só o servidor; nem o administrador da empresa lê.
   ...["mia_cupom_da_empresa", "mia_setup_da_empresa", "mia_comissoes"].map((tabela) => ({

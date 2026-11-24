@@ -43,6 +43,8 @@ import { avisoDeHandoffHandler } from "@/lib/escalacao/aviso-de-handoff.handler"
 import { avisoDePropostaNoWhatsAppHandler } from "@/lib/propostas/aviso-no-whatsapp.handler";
 import { avisoDeAgendamentoNoWhatsAppHandler } from "@/lib/agenda/aviso-de-agendamento.handler";
 import { cobrancaSinalHandler } from "@/lib/cobranca/sinal.handler";
+// FORK MIA (MIA-168): o cadastro anda no funil da Time (docs/fork/jornada-de-assinatura.md).
+import { leadDoCadastroHandler } from "@/lib/planos-mia/lead-do-cadastro.handler";
 import { reenvioDesaceleradoHandler } from "@/lib/messaging/reenvio-desacelerado.handler";
 import { registerHandler } from "@/lib/event-log/dispatcher";
 
@@ -103,6 +105,9 @@ export function ensureHandlersRegistered(): void {
   // A cobrança do revendedor: relê o provedor (rede de terceiro) e só então
   // escreve. Consome um evento só dela, então a posição não atrasa ninguém.
   registerHandler(cobrancaSinalHandler);
+  // FORK MIA (MIA-168): a empresa do cadastro nasceu, o card dela anda no CRM da
+  // Time. Consome um evento só dele, então a posição não atrasa ninguém.
+  registerHandler(leadDoCadastroHandler);
   // Penúltimo, pelo MESMO critério do último: o aviso ao suporte sai por rede de
   // terceiro (o transporte de WhatsApp) e nunca pode atrasar quem escreve no
   // banco — inclusive o `followupGatilhoCasoHandler`, que consome o MESMO evento

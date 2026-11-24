@@ -27,13 +27,18 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { createHmac } from "node:crypto";
-
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
-import { HEADER_ASSINATURA_DE_ENTRADA } from "@/lib/webhooks/assinatura";
-import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+// FORK MIA (MIA-168): o núcleo "chamar a fonte por dentro" é comum ao cadastro do /signup.
+import {
+  enviarAFonteDaTime,
+  orgDaFonte,
+  type DependenciasDaCaptacao,
+  type MotivoSemLead,
+  type ProcessarCaptacao,
+  type ResultadoDaCaptacao,
+} from "@/lib/time/captacao-na-time";
 
 import type { CampoDeOrigem } from "./cadastro";
 import { whatsappParaLer, type Segmento } from "./regras";
@@ -88,53 +93,11 @@ export function corpoDoLead(conta: ContaDoLead, raioX: RaioXDoLead | null, orige
   return { ...corpo, ...extras };
 }
 
-/** Chama a rota de captação por dentro, com o pedido montado como o de um formulário. */
-export type ProcessarCaptacao = (token: string, corpo: string, headers: Record<string, string>) => Promise<Response>;
+export type { MotivoSemLead, ProcessarCaptacao };
 
-const processarPelaRota: ProcessarCaptacao = async (token, corpo, headers) => {
-  const [{ NextRequest }, rota] = await Promise.all([import("next/server"), import("@/app/api/v1/webhooks/in/[token]/route")]);
-  const base = (env.NEXT_PUBLIC_APP_URL ?? "http://localhost").replace(/\/+$/, "");
-  const req = new NextRequest(`${base}/api/v1/webhooks/in/${encodeURIComponent(token)}`, { method: "POST", headers, body: corpo });
-  return rota.POST(req, { params: Promise.resolve({ token }) });
-};
+export type DependenciasDoLead = DependenciasDaCaptacao;
 
-export interface DependenciasDoLead {
-  /** Para o teste: a fonte (sem ela, `RAIO_X_FONTE_DO_CRM`). `null` = sem fonte. */
-  fonteId?: string | null;
-  processar?: ProcessarCaptacao;
-}
-
-export type MotivoSemLead = "sem_fonte" | "fonte_inexistente" | "recusado" | "falhou";
-
-export type ResultadoDoLead =
-  | { ok: true; leadId: string; organizationId: string }
-  | { ok: false; motivo: MotivoSemLead };
-
-interface FonteDoCrm {
-  id: string;
-  organizationId: string;
-  token: string;
-  segredo: string | null;
-}
-
-function idDaFonte(deps: DependenciasDoLead): string | null {
-  const bruto = deps.fonteId !== undefined ? deps.fonteId : process.env[VARIAVEL_DA_FONTE];
-  const id = typeof bruto === "string" ? bruto.trim() : "";
-  return /^[0-9a-f-]{36}$/i.test(id) ? id : null;
-}
-
-async function lerFonte(admin: SupabaseClient, id: string): Promise<FonteDoCrm | null> {
-  const { data, error } = await admin
-    .from("webhook_sources")
-    .select("id, organization_id, path_token, secret_encrypted, is_active")
-    .eq("id", id)
-    .maybeSingle();
-  if (error || !data) return null;
-  const f = data as { id: string; organization_id: string; path_token: string | null; secret_encrypted: string | null; is_active: boolean };
-  if (!f.is_active || !f.path_token) return null;
-  const segredo = f.secret_encrypted ? await decryptWebhookSecret(admin, f.secret_encrypted) : null;
-  return { id: f.id, organizationId: f.organization_id, token: f.path_token, segredo };
-}
+export type ResultadoDoLead = { ok: true; leadId: string; organizationId: string } | { ok: false; motivo: MotivoSemLead };
 
 async function marcarConta(admin: SupabaseClient, contaId: string, valores: Record<string, unknown>): Promise<void> {
   const { error } = await admin.from("mia_raio_x_contas").update(valores).eq("id", contaId);
@@ -150,42 +113,27 @@ export async function enviarAoCrm(
   entrada: { conta: ContaDoLead; raioX: RaioXDoLead | null; origem?: Partial<Record<CampoDeOrigem, string>>; extras?: Record<string, string> },
   deps: DependenciasDoLead = {},
 ): Promise<ResultadoDoLead> {
-  const id = idDaFonte(deps);
-  if (!id) {
-    logger.warn(`[raio-x] ${VARIAVEL_DA_FONTE} não configurada: o cadastro não virou lead no CRM da Time`, { contaId: entrada.conta.id });
-    await marcarConta(admin, entrada.conta.id, { crm_erro: "sem_fonte" });
-    return { ok: false, motivo: "sem_fonte" };
+  const base = (env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+  const r: ResultadoDaCaptacao = await enviarAFonteDaTime(
+    admin,
+    {
+      variavel: VARIAVEL_DA_FONTE,
+      corpo: corpoDoLead(entrada.conta, entrada.raioX, entrada.origem ?? {}, entrada.extras ?? {}),
+      userAgent: "mia-raio-x/1",
+      referer: base ? `${base}/raio-x/gratis` : null,
+    },
+    deps,
+  );
+  if (r.ok) {
+    await marcarConta(admin, entrada.conta.id, { crm_lead_id: r.leadId, crm_enviado_em: new Date().toISOString(), crm_erro: null });
+    return r;
   }
-  try {
-    const fonte = await lerFonte(admin, id);
-    if (!fonte) {
-      logger.warn("[raio-x] a fonte do CRM da Time não existe ou está desligada", { contaId: entrada.conta.id });
-      await marcarConta(admin, entrada.conta.id, { crm_erro: "fonte_inexistente" });
-      return { ok: false, motivo: "fonte_inexistente" };
-    }
-    const corpo = JSON.stringify(corpoDoLead(entrada.conta, entrada.raioX, entrada.origem ?? {}, entrada.extras ?? {}));
-    const base = (env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
-    const headers: Record<string, string> = {
-      "content-type": "application/json",
-      "user-agent": "mia-raio-x/1",
-      ...(base ? { referer: `${base}/raio-x/gratis` } : {}),
-    };
-    if (fonte.segredo) headers[HEADER_ASSINATURA_DE_ENTRADA] = createHmac("sha256", fonte.segredo).update(corpo).digest("hex");
-    const resposta = await (deps.processar ?? processarPelaRota)(fonte.token, corpo, headers);
-    const lido = (await resposta.json().catch(() => null)) as { data?: { lead_id?: string } } | null;
-    const leadId = lido?.data?.lead_id;
-    if (!resposta.ok || typeof leadId !== "string") {
-      logger.warn("[raio-x] a fonte do CRM da Time recusou o cadastro", { contaId: entrada.conta.id, status: resposta.status });
-      await marcarConta(admin, entrada.conta.id, { crm_erro: "recusado" });
-      return { ok: false, motivo: "recusado" };
-    }
-    await marcarConta(admin, entrada.conta.id, { crm_lead_id: leadId, crm_enviado_em: new Date().toISOString(), crm_erro: null });
-    return { ok: true, leadId, organizationId: fonte.organizationId };
-  } catch (erro) {
-    logger.warn("[raio-x] o lead no CRM da Time falhou", { contaId: entrada.conta.id, detail: erro instanceof Error ? erro.message : "erro" });
-    await marcarConta(admin, entrada.conta.id, { crm_erro: "falhou" });
-    return { ok: false, motivo: "falhou" };
-  }
+  if (r.motivo === "sem_fonte") logger.warn(`[raio-x] ${VARIAVEL_DA_FONTE} não configurada: o cadastro não virou lead no CRM da Time`, { contaId: entrada.conta.id });
+  else if (r.motivo === "fonte_inexistente") logger.warn("[raio-x] a fonte do CRM da Time não existe ou está desligada", { contaId: entrada.conta.id });
+  else if (r.motivo === "recusado") logger.warn("[raio-x] a fonte do CRM da Time recusou o cadastro", { contaId: entrada.conta.id, status: r.status });
+  else logger.warn("[raio-x] o lead no CRM da Time falhou", { contaId: entrada.conta.id, detail: r.detalhe ?? "erro" });
+  await marcarConta(admin, entrada.conta.id, { crm_erro: r.motivo });
+  return { ok: false, motivo: r.motivo };
 }
 
 /**
@@ -201,15 +149,9 @@ export async function garantirLead(
   deps: DependenciasDoLead = {},
 ): Promise<ResultadoDoLead> {
   if (!conta.crm_lead_id) return enviarAoCrm(admin, { conta, raioX }, deps);
-  const id = idDaFonte(deps);
-  if (!id) return { ok: false, motivo: "sem_fonte" };
-  try {
-    const fonte = await lerFonte(admin, id);
-    if (!fonte) return { ok: false, motivo: "fonte_inexistente" };
-    return { ok: true, leadId: conta.crm_lead_id, organizationId: fonte.organizationId };
-  } catch {
-    return { ok: false, motivo: "falhou" };
-  }
+  const org = await orgDaFonte(admin, VARIAVEL_DA_FONTE, deps);
+  if (!org.ok) return { ok: false, motivo: org.motivo };
+  return { ok: true, leadId: conta.crm_lead_id, organizationId: org.organizationId };
 }
 
 /** Uma nota na linha do tempo do negócio, e nada mais (o contato não muda). Nunca lança. */
