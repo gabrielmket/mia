@@ -75,6 +75,8 @@ import { FERRAMENTAS_DE_RELATORIOS } from "./ferramentas/relatorios";
 import { FERRAMENTAS_DE_ROTEADOR } from "./ferramentas/roteador";
 // As ferramentas de importação (docs/fork/mcp-de-migracao.md).
 import { FERRAMENTAS_DE_IMPORTACAO } from "./importacao";
+// FORK MIA (MIA-218): a IA de cada empresa: segue a plataforma ou tem escolha própria, o par e a chave; só lê (docs/fork/ia-da-plataforma.md).
+import { FERRAMENTAS_DA_IA_DAS_EMPRESAS } from "./ferramentas/ia-das-empresas";
 import type { FerramentaDePlataforma } from "./tipos";
 
 export type { ContextoDaFerramenta, FerramentaDePlataforma } from "./tipos";
@@ -136,6 +138,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DE_PRECOS_DA_META,
   // FORK MIA (MIA-103): a Análise do funil (lib/metrics/funil.ts) e as conversas do mês por quem respondeu (fn_mia_relatorio, fonte "conversas"); só leem (docs/fork/mcp-de-implantacao.md)
   ...FERRAMENTAS_DA_ANALISE_E_DAS_CONVERSAS,
+  // FORK MIA (MIA-218): a IA de cada empresa e quantas estão sem chave; sem ferramenta de troca, que é ato de pessoa com MFA (docs/fork/ia-da-plataforma.md)
+  ...FERRAMENTAS_DA_IA_DAS_EMPRESAS,
 ];
 
 export const FERRAMENTA_POR_NOME = new Map(FERRAMENTAS.map((f) => [f.name, f]));
