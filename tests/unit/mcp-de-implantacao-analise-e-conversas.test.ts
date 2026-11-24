@@ -81,6 +81,7 @@ function lead(org: string, extra: Record<string, unknown>) {
     closed_at: null,
     recurring_value_cents: null,
     recurring_period: null,
+    nao_comercial_em: null,
     owner_id: ANA,
     ...extra,
   };
@@ -275,6 +276,41 @@ describe("plataforma_ver_analise_do_funil", () => {
 
     // Só números somados: nenhum nome de pessoa da equipe.
     expect(r.texto).not.toContain("Ana Exemplo");
+  });
+
+  it("negócio não comercial (#4191): fica fora da conta, como na rota da tela", async () => {
+    semearOutubro();
+    const [s0, s1] = tresEtapas();
+    // Criado em outubro, aberto, e classificado pela equipe como NÃO comercial: sem o corte, viraria
+    // uma linha nova de origem e mais uma entrada na primeira etapa.
+    const naoComercial = lead(ORG, {
+      stage_id: s1.id,
+      status: "open",
+      source: "whatsapp",
+      created_at: "2026-10-12T13:00:00.000Z",
+      nao_comercial_em: "2026-10-13T13:00:00.000Z",
+    });
+    cenario.banco.db.crm_leads = [...(cenario.banco.db.crm_leads ?? []), naoComercial];
+    cenario.banco.db.crm_lead_activities = [
+      ...(cenario.banco.db.crm_lead_activities ?? []),
+      passagem(ORG, naoComercial.id, "2026-10-12T14:00:00.000Z", { from_stage_id: s0.id, to_stage_id: s1.id }),
+    ];
+
+    const r = await chamar("plataforma_ver_analise_do_funil", { organization_id: ORG, mes: "2026-10" });
+    expect(r.erro, r.texto).toBe(false);
+    const d = r.dados as unknown as Analise;
+    const linha = (id: string) => d.conversao.etapas.find((e) => e.etapa.id === id)!;
+    expect(linha(s0.id)).toMatchObject({ entraram: 2, passaram: 2 });
+    expect(d.origem.linhas.map((l) => l.origem)).not.toContain("whatsapp");
+
+    const res = await rotaDoFunil(
+      new NextRequest(`http://localhost/api/v1/metrics/funil?from=${d.janela.from}&to=${d.janela.to}`),
+    );
+    expect(res.status).toBe(200);
+    const tela = ((await res.json()) as { data: Analise }).data;
+    for (const campo of ["base", "conversao", "dias_ate_fechar", "origem", "valores_do_periodo"] as const) {
+      expect(d[campo], `${campo} diverge da tela`).toEqual(tela[campo]);
+    }
   });
 
   it("sem `mes`: os últimos 30 dias até agora, como o botão padrão da tela", async () => {

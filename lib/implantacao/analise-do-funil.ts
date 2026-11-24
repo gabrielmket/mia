@@ -54,10 +54,12 @@ interface LeadCru {
   closed_at: string | null;
   recurring_value_cents: number | null;
   recurring_period: string | null;
+  /** #4191 (upstream 1.124): classificação não comercial; `null` é o estado comercial. */
+  nao_comercial_em: string | null;
 }
 
 const COLUNAS_DO_LEAD =
-  "id, pipeline_id, stage_id, status, source, value_cents, currency, created_at, closed_at, recurring_value_cents, recurring_period";
+  "id, pipeline_id, stage_id, status, source, value_cents, currency, created_at, closed_at, recurring_value_cents, recurring_period, nao_comercial_em";
 
 export interface ContraMetrica {
   turnos: { p50: number | null; p90: number | null; denominador: string } | null;
@@ -198,6 +200,8 @@ export async function lerAnaliseDoFunil(
     currency: l.currency,
     created_at: l.created_at,
     closed_at: l.closed_at,
+    // #4191: como a rota, a coluna vai para montarRelatorioDeFunil, que corta o negócio não comercial da conta.
+    nao_comercial_em: l.nao_comercial_em ?? null,
   }));
 
   const etapas: EtapaReferencia[] = (

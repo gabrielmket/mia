@@ -41,6 +41,7 @@ import {
   somaEsperada,
   valorDoItem,
   type ItemDoNegocio,
+  valorSegueAsVendas,
 } from "@/lib/produto-no-negocio/regras";
 
 const IMPLANTE = { id: "p-imp", codigo: "IMP-01", nome: "Implante unitário", precoCents: 450_000, moeda: "BRL" };
@@ -320,5 +321,23 @@ describe("o funil sem valor recorrente conta como avulso nas metas", () => {
     expect(lidas[1]).toEqual(vendas[1]);
     // Nada é regravado: a lista de entrada continua igual.
     expect(vendas[0]!.revenue_kind).toBe("recorrente");
+  });
+});
+
+// FORK MIA (fusão v1.124): o Valor só segue as vendas registradas do upstream sem item do bloco.
+describe("valorSegueAsVendas", () => {
+  it("sem venda, nunca", () => {
+    expect(valorSegueAsVendas({ vendas: 0, itens: [] })).toBe(false);
+    expect(valorSegueAsVendas({ vendas: 0, itens: undefined })).toBe(false);
+  });
+  it("com venda e sem item do bloco, segue as vendas (o upstream inteiro)", () => {
+    expect(valorSegueAsVendas({ vendas: 2, itens: [] })).toBe(true);
+    expect(valorSegueAsVendas({ vendas: 1, itens: null })).toBe(true);
+    // Item da proposta é do upstream: não tira o negócio das vendas.
+    expect(valorSegueAsVendas({ vendas: 1, itens: [{ origem: "proposta" }] })).toBe(true);
+  });
+  it("com item do bloco, o valor é dos itens mesmo com venda", () => {
+    expect(valorSegueAsVendas({ vendas: 3, itens: [{ origem: "negocio" }] })).toBe(false);
+    expect(valorSegueAsVendas({ vendas: 3, itens: [{ origem: "proposta" }, { origem: "negocio" }] })).toBe(false);
   });
 });

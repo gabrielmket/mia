@@ -77,6 +77,9 @@ vi.mock("@/components/kanban/LeadFieldsForm", () => ({ LeadFieldsForm: () => <di
 vi.mock("@/components/kanban/PropostasDoNegocio", () => ({ PropostasDoNegocio: () => null }));
 vi.mock("@/components/kanban/LoseLeadDialog", () => ({ LoseLeadDialog: () => null }));
 vi.mock("@/components/kanban/SeletorDeContato", () => ({ SeletorDeContato: () => null }));
+// A classificação comercial (upstream #4191, v1.124) usa o QueryClient; o
+// conteúdo dela é provado pelos testes do dossiê. Aqui, como lá, fica fora.
+vi.mock("@/components/kanban/ClassificacaoComercial", () => ({ ClassificacaoComercial: () => null }));
 // A seção "Conversas e ligações dos números" (upstream #3669) consulta as pessoas
 // relacionadas; aqui o negócio não tem nenhuma, e a seção não aparece.
 vi.mock("@/hooks/leads/useContatosRelacionados", () => ({ useContatosRelacionados: () => ({ data: { data: [] } }) }));
