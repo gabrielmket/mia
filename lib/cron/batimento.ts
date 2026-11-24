@@ -59,8 +59,11 @@ export async function registrarBatimento(
   agora: Date = new Date(),
 ): Promise<void> {
   try {
+    // O nome vai LITERAL (e não `TABELA_DO_BATIMENTO`): a cerca
+    // `on-conflict-aponta-para-constraint-real` só confere o alvo do
+    // `onConflict` contra o banco quando lê a tabela no `.from("...")` acima.
     const { error } = await admin
-      .from(TABELA_DO_BATIMENTO)
+      .from("mia_batimentos_de_cron")
       .upsert({ rota, ultima_rodada_em: agora.toISOString(), resumo }, { onConflict: "rota" });
     if (error) {
       logger.warn("[batimento] não gravou", { rota, detail: error.message });
