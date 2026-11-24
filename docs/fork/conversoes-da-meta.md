@@ -275,7 +275,7 @@ desligado por padrão e ligado só pela ferramenta de teste.
 | `plataforma_ver_conversoes` | ganhou a seção `site`: as regras, as variáveis configuradas (sim ou não), o modo de teste e os últimos envios do site, sem dado de pessoa |
 | `plataforma_garantir_conversoes_do_site` | montagem: grava as regras DESLIGADAS, só na empresa dona da fonte; recusa evento fora dos 4, etapa de ganho ou perda, Google sem ação e Purchase/Subscribe sem valor |
 | `plataforma_ligar_conversoes` | `plataforma: "site"` liga as regras do site das etapas (`colocar_no_ar`), com aviso se falta variável ou se o código de teste ainda está lá |
-| `plataforma_testar_conversoes_do_site` | um evento com a Ana Exemplo à Meta (recusa sem o código de teste) e ao Google com `validateOnly`. Não grava no livro-razão |
+| `plataforma_testar_conversoes_do_site` | um evento com a Ana Exemplo à Meta, com o consentimento `medicao` e navegador fictícios para sair `website` como um cadastro real (recusa sem o código de teste) e ao Google com `validateOnly`. Não grava no livro-razão |
 
 O checklist (`plataforma_ver_implantacao`, área `conversoes`) ganha o item das regras do
 site na empresa dona da fonte.

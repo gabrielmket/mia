@@ -358,6 +358,8 @@ export const PESSOA_DE_TESTE = {
   telefone: "5500900000000",
   ip: "203.0.113.10",
   navegador: "Mozilla/5.0 (X11; Linux x86_64) teste-das-conversoes-do-site",
+  fbp: "fb.1.1700000000000.1234567890",
+  fbc: "fb.1.1700000000000.teste-das-conversoes-do-site",
   gclidFicticio: "teste-das-conversoes-do-site",
 } as const;
 
@@ -403,9 +405,11 @@ export async function testarConversoesDoSite(c: Implantacao, pedido: PedidoDeTes
     ip: PESSOA_DE_TESTE.ip,
     navegador: PESSOA_DE_TESTE.navegador,
     pagina: paginaDoCadastro(),
-    fbp: null,
-    fbc: null,
-    consentimento: "necessario",
+    // A prova tem de parecer com o cadastro real de quem aceitou o aviso de
+    // cookies: com `medicao`, o corpo sai `website` com IP, agente, fbp e fbc.
+    fbp: PESSOA_DE_TESTE.fbp,
+    fbc: PESSOA_DE_TESTE.fbc,
+    consentimento: "medicao",
     gclid: (pedido.gclid ?? "").trim() || PESSOA_DE_TESTE.gclidFicticio,
     gbraid: null,
     wbraid: null,

@@ -230,6 +230,13 @@ describe("plataforma_testar_conversoes_do_site", () => {
     expect(corpoMeta.test_event_code).toBe(CODIGO);
     expect(corpoMeta.data[0]).toMatchObject({ event_name: "Purchase", action_source: "website", event_source_url: "https://app.exemplo.test/signup" });
     expect(corpoMeta.data[0].custom_data).toMatchObject({ value: 1, currency: "BRL" });
+    // A Ana Exemplo consentiu a medição: o corpo leva o que vem do navegador.
+    expect(corpoMeta.data[0].user_data).toMatchObject({
+      client_ip_address: "203.0.113.10",
+      fbp: "fb.1.1700000000000.1234567890",
+      fbc: "fb.1.1700000000000.teste-das-conversoes-do-site",
+    });
+    expect(corpoMeta.data[0].user_data.client_user_agent).toContain("teste-das-conversoes-do-site");
 
     const google = fetch.mock.calls.find(([u]) => String(u).includes("googleads.googleapis.com"))!;
     const corpoGoogle = JSON.parse(String((google[1] as RequestInit).body));
