@@ -45,6 +45,7 @@ import { FERRAMENTAS_DE_CUPONS_E_PARCEIROS } from "./ferramentas/cupons-e-parcei
 import { FERRAMENTAS_DO_RAIO_X } from "./ferramentas/raio-x";
 // FORK MIA (.108): a trava de robô (docs/fork/trava-de-robo.md).
 import { FERRAMENTAS_DA_TRAVA_DE_ROBO } from "./ferramentas/trava-de-robo";
+import { FERRAMENTAS_DA_COEXISTENCIA } from "./ferramentas/coexistencia";
 import { FERRAMENTAS_DO_PRODUTO_NO_NEGOCIO } from "./ferramentas/produto-no-negocio";
 // FORK MIA (MIA-44): o consumo de IA por mês e por agente (docs/fork/consumo-de-ia.md).
 import { FERRAMENTAS_DE_CONSUMO_DE_IA } from "./ferramentas/consumo-de-ia";
@@ -125,13 +126,15 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DA_TRAVA_DE_ROBO,
   // FORK MIA (.109): o produto no negócio: a palavra e as duas opções de um funil, e a palavra do segmento na implantação (docs/fork/produto-no-negocio.md)
   ...FERRAMENTAS_DO_PRODUTO_NO_NEGOCIO,
-  // FORK MIA (MIA-44): o consumo de IA de um cliente num mês, por agente, "Sistema" e finalidade; só lê (docs/fork/consumo-de-ia.md)
+  // FORK MIA (MIA-44): o consumo de IA de um cliente num mês, por agente, "Sistema" e finalidade; MIA-136: e o ranking das empresas da plataforma; só leem (docs/fork/consumo-de-ia.md)
   ...FERRAMENTAS_DE_CONSUMO_DE_IA,
   // FORK MIA (upstream 1.117, MIA-67): contar os negócios pela porta do `crm_count_leads`, e ver e revogar as conexões OAuth ao MCP da empresa (docs/fork/mcp-de-implantacao.md)
   ...FERRAMENTAS_DA_CONTAGEM_DE_NEGOCIOS,
   ...FERRAMENTAS_DAS_CONEXOES_DO_MCP,
   // FORK MIA (upstream 1.118, MIA-79): o módulo opcional por empresa (9416) e a tela inicial da empresa e da pessoa (#4864) (docs/fork/mcp-de-implantacao.md)
   ...FERRAMENTAS_DA_FAIXA_1118,
+  // FORK MIA (S3 da coexistência): ver e ligar a chave da empresa, ver a sincronização do app (docs/fork/coexistencia.md)
+  ...FERRAMENTAS_DA_COEXISTENCIA,
   // FORK MIA (MIA-99): ver e mudar o preço que a Meta cobra por mensagem; o preço novo vale a partir de agora e o mês fechado não muda (docs/fork/consumo-de-ia.md)
   ...FERRAMENTAS_DE_PRECOS_DA_META,
   // FORK MIA (MIA-103): a Análise do funil (lib/metrics/funil.ts) e as conversas do mês por quem respondeu (fn_mia_relatorio, fonte "conversas"); só leem (docs/fork/mcp-de-implantacao.md)

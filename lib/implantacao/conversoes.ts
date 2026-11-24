@@ -71,7 +71,7 @@ const quem = (c: Implantacao): QuemSalva => ({
 });
 
 /** Como a situação do livro-razão (a do upstream) é dita a quem não vê a tela. */
-const ROTULO_DA_SITUACAO: Record<ReturnType<typeof situacaoDaLinha>, string> = {
+export const ROTULO_DA_SITUACAO: Record<ReturnType<typeof situacaoDaLinha>, string> = {
   todas: "todas",
   entregue: "Enviado",
   falha: "Recusado pela plataforma",
@@ -95,7 +95,7 @@ export interface FunilDaRegua {
  * Os funis vivos da organização com as etapas na ordem. Ganho é a compra e
  * perda não é conversão: nenhuma das duas é etapa da régua.
  */
-async function lerFunisDaRegua(admin: SupabaseClient, organizationId: string): Promise<FunilDaRegua[]> {
+export async function lerFunisDaRegua(admin: SupabaseClient, organizationId: string): Promise<FunilDaRegua[]> {
   const [funis, etapas] = await Promise.all([
     admin
       .from("crm_pipelines")
@@ -134,7 +134,7 @@ async function lerFunisDaRegua(admin: SupabaseClient, organizationId: string): P
     });
 }
 
-async function funilDaRegua(c: Implantacao, referencia: string): Promise<FunilDaRegua> {
+export async function funilDaRegua(c: Implantacao, referencia: string): Promise<FunilDaRegua> {
   const funis = await lerFunisDaRegua(c.admin, c.orgId);
   const funil = acharPorNomeOuId(funis, referencia, (f) => f.nome, {
     singular: "o funil",
@@ -149,7 +149,7 @@ async function funilDaRegua(c: Implantacao, referencia: string): Promise<FunilDa
   return funil;
 }
 
-function etapaDoFunil(funil: FunilDaRegua, referencia: string): { id: string; nome: string } {
+export function etapaDoFunil(funil: FunilDaRegua, referencia: string): { id: string; nome: string } {
   const fechada = [...funil.ganho, ...funil.perda].find(
     (nome) => nome.trim().toLowerCase() === referencia.trim().toLowerCase(),
   );

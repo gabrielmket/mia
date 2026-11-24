@@ -8,7 +8,7 @@
  *
  *   · corta TODA resposta em `maxRows`, por maior que seja o `limit`/`range`;
  *   · aplica de verdade os filtros (`eq`, `neq`, `is`, `not … is null`,
- *     `not … in (…)`, `in`,
+ *     `not … is true/false`, `not … in (…)`, `in`,
  *     `overlaps`, `gte`, `gt`, `lt`, `lte`), a ordem e o `range`;
  *   · devolve o `count` exato só quando o `select` o pede, e `null` senão; com
  *     `head: true` devolve só a contagem, sem linha;
@@ -268,8 +268,13 @@ export function postgrestComTeto(
           const fora = new Set(v.slice(1, -1).split(","));
           return filtrar("not-in", c, v, (l) => l[c] != null && !fora.has(String(l[c])));
         }
+        // FORK MIA (MIA-136): `not … is true` (o `SEM_DEMONSTRACAO`). Como no
+        // Postgres, `NOT (x IS TRUE)` deixa passar o falso E o nulo.
+        if (op === "is" && (v === true || v === false)) {
+          return filtrar(`not-is-${v}`, c, v, (l) => (l[c] ?? null) !== v);
+        }
         if (op !== "is" || v !== null) {
-          throw new Error(`dublê: .not("${c}", "${op}", …) só é suportado como "is null" e "in (…)"`);
+          throw new Error(`dublê: .not("${c}", "${op}", …) só é suportado como "is null", "is true/false" e "in (…)"`);
         }
         return filtrar("not-is-null", c, null, (l) => (l[c] ?? null) !== null);
       },

@@ -124,7 +124,7 @@ pessoa faz (com a tela e o caminho).
 | 15 | Publicar os follow-ups e o agente | `plataforma_publicar_followup`, `plataforma_publicar_agente` | agente |
 | 15a | Só com dois ou mais agentes no MESMO número: montar o roteador de intenção (uma intenção por agente, e o funil de destino de cada uma) e ligá-lo | `plataforma_garantir_roteador`, `plataforma_ligar_roteador` | agente |
 | 16 | Ligar as automações e os lembretes | `plataforma_ligar_automacao`, `plataforma_ligar_lembrete` | agente |
-| 16a | Conversões (opcional, para quem anuncia): montar as regras por etapa, e ligar depois de a pessoa conectar a conta de anúncios | `plataforma_ver_conversoes`, `plataforma_garantir_conversoes_da_meta`, `plataforma_garantir_conversoes_do_google`, `plataforma_ligar_conversoes`, `plataforma_ligar_leads_de_formulario_da_meta` | agente (a conexão é com a pessoa do cliente) |
+| 16a | Conversões (opcional, para quem anuncia): montar as regras por etapa, e ligar depois de a pessoa conectar a conta de anúncios | `plataforma_ver_conversoes`, `plataforma_garantir_conversoes_da_meta`, `plataforma_garantir_conversoes_do_google`, `plataforma_ligar_conversoes`, `plataforma_ligar_leads_de_formulario_da_meta`; na empresa dona da fonte do cadastro, também `plataforma_garantir_conversoes_do_site` e `plataforma_testar_conversoes_do_site` (MIA-169) | agente (a conexão é com a pessoa do cliente; a credencial do site é variável do servidor) |
 | 17 | Convidar a equipe (o link curto de cada convite volta na resposta, para mandar por WhatsApp) | `plataforma_convidar_pessoas` | agente |
 | 18 | Conferir o checklist: `pode_atender` e a lista do que ficou com uma pessoa | `plataforma_ver_implantacao` | agente |
 | 18a | Os relatórios e o painel do segmento (montador de relatórios), os números do primeiro dia, e o link para o dono preparado (mandado só quando o cliente pedir) | `plataforma_garantir_relatorios`, `plataforma_ver_relatorios`, `plataforma_ver_paineis`, `plataforma_garantir_link_do_dono` | agente (quem manda o link é uma pessoa) |
@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **128** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda, a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md), a MIA-67 as três da 1.117: contar os negócios e ver e revogar as conexões do MCP da empresa, a MIA-79 as duas da 1.118: o módulo opcional por empresa e a tela inicial, a MIA-99 as duas do preço que a Meta cobra por mensagem, e a MIA-103 as duas leituras da Análise do funil e das conversas do mês): as 120 desta página e as 8 da migração
+São **134** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda, a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md), a MIA-67 as três da 1.117: contar os negócios e ver e revogar as conexões do MCP da empresa, a MIA-79 as duas da 1.118: o módulo opcional por empresa e a tela inicial, a MIA-99 as duas do preço que a Meta cobra por mensagem, a MIA-103 as duas leituras da Análise do funil e das conversas do mês, e a MIA-169 as duas das conversões do site: garantir as regras e testar com a Ana Exemplo, [`conversoes-da-meta.md`](conversoes-da-meta.md#conversões-do-site), a MIA-28 as três da coexistência do WhatsApp, e a MIA-136 o ranking do consumo de IA da plataforma, [`consumo-de-ia.md`](consumo-de-ia.md), seção 10): as 126 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -237,7 +237,8 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | `plataforma_ver_cliente` | o retrato de um cliente: módulos, números, saldo e, em `configuracao`, a limpeza automática de mídia, o freio do passo "a IA decide", o bloqueio de afirmação clínica e quantos planos de tarefa existem; desde a .96, em `pagamento_inicial`, o passo "Pagamento" do início; desde a 1.118 (MIA-79), em `modulos_opcionais`, cada módulo opcional que se decide por empresa, com o estado escolhido (`herda`, `ligado`, `desligado`), se vale agora (`efetivo`) e se a instalação o tem desligado (`bloqueado_pela_instalacao`) | leitura |
 | `plataforma_listar_modulos` | os módulos que se vendem separado | leitura |
 | `plataforma_ver_saude` | o estado da instalação, e se a chave que cifra o CPF dos contatos está semeada (só sim ou não; o valor nunca sai) | leitura |
-| `plataforma_ver_consumo_de_ia` | o consumo de IA de um cliente num mês do calendário em Brasília ou nos últimos N dias de Brasília (`dias`, a mesma janela das telas; MIA-44 e MIA-78, [`consumo-de-ia.md`](consumo-de-ia.md)): o total, cada agente, a linha "Sistema" (chamadas sem agente) e a quebra por finalidade, cada uma com chamadas, tokens de entrada e saída, quantos vieram do cache, o custo em centavos de dólar (a régua do teto) e em reais (cotação de cada dia). Desde a MIA-99, `mensagens_cobradas`: as mensagens que a Meta cobrou no período, cada uma ao preço que valia no instante dela (o mês fechado não muda com o reajuste; [`consumo-de-ia.md`](consumo-de-ia.md), seção 9). Os mesmos números da aba Uso do cliente | leitura |
+| `plataforma_ver_consumo_de_ia` | o consumo de IA de um cliente num mês do calendário em Brasília ou nos últimos N dias de Brasília (`dias`, a mesma janela das telas; MIA-44 e MIA-78, [`consumo-de-ia.md`](consumo-de-ia.md)): o total, cada agente, a linha "Sistema" (chamadas sem agente) e a quebra por finalidade, cada uma com chamadas, tokens de entrada e saída, quantos vieram do cache, o custo em centavos de dólar (a régua do teto) e em reais (cotação de cada dia). Desde a MIA-99, `mensagens_cobradas`: as mensagens que a Meta cobrou no período, cada uma ao preço que valia no instante dela (o mês fechado não muda com o reajuste; [`consumo-de-ia.md`](consumo-de-ia.md), seção 9). Os mesmos números da aba Uso do cliente. Desde a MIA-136, a soma dos agentes com o Sistema, e a das finalidades, fecha com o total em R$ e em US$ (o total manda; [`consumo-de-ia.md`](consumo-de-ia.md), seção 10) | leitura |
+| `plataforma_ver_ranking_de_consumo_de_ia` | o consumo de IA da PLATAFORMA no mesmo período (`mes` em Brasília ou `dias`; MIA-136, [`consumo-de-ia.md`](consumo-de-ia.md), seção 10): as empresas em ordem de custo, sem as de demonstração, a visão da tela geral de uso (`/admin/usage`) no mesmo período e na mesma ordem por custo (o desempate é por chamadas de IA e nome; na tela geral, por mensagens), cada uma lida por `lerConsumoDoPeriodo` (a conta da aba Uso). Cada empresa com posição, chamadas, tokens, cache, US$, R$ e chamadas sem preço; o `total` da plataforma, com o qual a soma das empresas fecha; `limite` corta a lista, não o total | leitura |
 | `plataforma_ver_precos_da_meta` | o preço que a Meta cobra por mensagem, por categoria, em centavos de real (MIA-99, [`consumo-de-ia.md`](consumo-de-ia.md), seção 9): o de hoje, as categorias sem preço e o histórico das vigências (`vigente_desde: null` = desde sempre, `vigente_ate: null` = o atual) | leitura |
 | `plataforma_ver_implantacao` | o **checklist**: por área, o que está pronto, o que falta (com a ferramenta) e o que é com uma pessoa (com a tela). Desde a .91, as áreas `primeiros_passos` (onde a empresa está no passo a passo e o número oficial que espera a Time) e `plano_e_cobranca` (assinou ou não, das tabelas de assinatura do upstream), e o `rotulo_do_cliente`: o "o que falta" que a empresa nova vê | leitura |
 | `plataforma_listar_modelos` | os modelos e vocabulários que as outras ferramentas aceitam: modelos de follow-up, pacotes e capacidades do agente, gatilhos e ações de automação, passos do funil, tipos de campo | leitura |
@@ -247,7 +248,7 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | `plataforma_ver_obrigacoes` | os documentos e obrigações com vencimento: contadores (vencidos, vencendo em 30 dias, pedidos sem resposta, em dia), os itens por situação e o catálogo de tipos por funil | leitura |
 | `plataforma_ver_configuracao` | o conteúdo do que está configurado, por seção (etiquetas, memória, conhecimento, follow-ups, automações, agenda, equipe, números, atendimento, mensagens, planos de tarefa, fontes de formulário e banco externo). Em equipe, desde a 1.118 (MIA-79), a tela inicial de cada pessoa e a da empresa, com as opções. Em números, também os dias da prospecção, se guarda o histórico, se está pausado, as pausas agendadas e, desde a .83, a distribuição do número (regra própria, modo, atendente padrão e responsáveis, por e-mail); em atendimento, o freio do passo "a IA decide"; nas fontes, nunca o segredo; no banco externo, nunca endereço, usuário ou senha | leitura |
 | `plataforma_ver_followup` | um fluxo de follow-up por dentro: gatilho, nós, textos e esperas, a etapa de destino das caixas de mover e as etiquetas das caixas de etiquetar, e as setas entre os nós | leitura |
-| `plataforma_ver_conversoes` | as conversões de um cliente: as conexões da Meta e do Google **sem segredo**, se a identidade da Meta (ID da Página ou da conta do WhatsApp Business) está preenchida, as regras por funil das duas plataformas, a chave dos leads de formulário, o evento recomendado para cada etapa e os 20 últimos envios com a situação e o motivo | leitura |
+| `plataforma_ver_conversoes` | as conversões de um cliente: as conexões da Meta e do Google **sem segredo**, se a identidade da Meta (ID da Página ou da conta do WhatsApp Business) está preenchida, as regras por funil das duas plataformas, a chave dos leads de formulário, o evento recomendado para cada etapa e os 20 últimos envios com a situação e o motivo . Desde a MIA-169, a seção `site`: as regras das conversões do site, se as variáveis do servidor estão configuradas (sim ou não), o modo de teste e os últimos envios do site, sem dado de pessoa | leitura |
 | `plataforma_listar_demonstracoes` | as empresas de demonstração por segmento (construtora, clínica odontológica, indústria, academia) e a bancada: se existe, o id, quando a semente foi aplicada e as contagens; e qualquer outra organização marcada como demonstração | leitura |
 | `plataforma_diagnosticar_conversoes_da_meta` | o diagnóstico da Meta, o mesmo do botão "Testar conexão": token, destino, permissão, último envio aceito, recusas em 7 dias e modo de teste. Faz três leituras na Meta com o token do cliente; nenhum evento é enviado | leitura |
 | `plataforma_ver_paineis` | os doze PAINÉIS PRONTOS de um cliente (resultado do mês, meta do mês, funil, de onde vêm, por que perdemos, atendimento, tempo de resposta, agenda, follow-up, anúncios, previsão, assuntos), com os números do motor de conta no banco (`fn_mia_relatorio`, 9030): todas as linhas do período, no fuso e na moeda da empresa. Período 7, 30 ou 90 dias, ou o mês; funil opcional; com ou sem valores em reais. Nada de custo de IA, gasto com anúncio, nome ou contato | leitura |
@@ -313,6 +314,7 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 | `plataforma_garantir_conversoes_da_meta` | o que cada etapa aberta de um funil informa à Meta (a régua do upstream, 0524): o evento padrão; com `usar_recomendado: true`, o sistema escolhe o evento pelo nome da etapa. A regra nasce **desligada** | a etapa do funil | 20 regras |
 | `plataforma_garantir_relatorios` | o MONTADOR DE RELATÓRIOS pronto (.80, item 9): liga os doze prontos ao funil do cliente (o principal ou `funil_id`, em `mia_relatorios_da_empresa`), cria os relatórios a mais do segmento (`clinica`, `construtora`, `industria`, `academia` ou `geral`: três do segmento e a conversão por origem) e monta o painel do segmento com oito relatórios, compartilhados com a equipe (`lib/relatorios/segmentos.ts`, a mesma receita da demonstração). Aceita `meta_do_mes` (a mesma de `plataforma_configurar_empresa`) e devolve o link para o dono SUGERIDO (para quem e quais prontos), sem criá-lo | o relatório pela chave natural (`mia_relatorios.chave`); o painel pela dele; no painel só COMPLETA o que faltar: o que o cliente pôs, o tamanho e a ordem que mudou ficam | um segmento |
 | `plataforma_garantir_conversoes_do_google` | o que cada etapa aberta informa ao Google Ads: o nome da conversão e o id da ação de conversão (que já tem de existir na conta do Google). A regra nasce **desligada** | a etapa do funil | 20 regras |
+| `plataforma_garantir_conversoes_do_site` | (MIA-169) as CONVERSÕES DO SITE, só na empresa dona da fonte `CADASTRO_FONTE_DO_CRM`: por etapa aberta, o evento de site da Meta (CompleteRegistration, StartTrial, Subscribe, Purchase) e a ação do Google Ads; várias regras por etapa, Purchase e Subscribe sempre com valor. A regra nasce **desligada**; a demonstração e as outras empresas recusam | (etapa, evento) e (etapa, ação) | 20 regras |
 
 Todas respondem `criou`, `atualizou` ou `ja_estava`, item a item quando a chamada
 é em lote.
@@ -329,7 +331,8 @@ Todas respondem `criou`, `atualizou` ou `ja_estava`, item a item quando a chamad
 | `plataforma_ligar_lembrete` | liga o lembrete de um tipo de agendamento, com antecedência e texto | mesmo pedido, `ja_estava` |
 | `plataforma_configurar_lista_de_espera` | liga ou desliga a lista de espera da agenda da empresa e escolhe os três prazos da oferta (upstream 9235, módulo opcional): ligada, a vaga que abre é oferecida pelo WhatsApp a uma pessoa da fila por vez. Sem o módulo instalado, recusa com "módulo não instalado" e não instala | mesmo pedido, `ja_estava` |
 | `plataforma_submeter_modelo_whatsapp` | submete à Meta um modelo oficial de mensagem (só texto) | modelo que já existe na conta não é reenviado |
-| `plataforma_ligar_conversoes` | liga ou desliga as regras de conversão por etapa de um funil, na Meta ou no Google: o sistema passa a mandar evento de cliente para a plataforma de anúncio. Ligar não envia o passado | mesmo pedido, `ja_estava` |
+| `plataforma_ligar_conversoes` | liga ou desliga as regras de conversão por etapa de um funil, na Meta ou no Google: o sistema passa a mandar evento de cliente para a plataforma de anúncio. Ligar não envia o passado . Com `plataforma: "site"` (MIA-169), as regras do site, e a resposta avisa se falta variável no servidor ou se o código de teste ainda está lá | mesmo pedido, `ja_estava` |
+| `plataforma_testar_conversoes_do_site` | (MIA-169) manda UM evento com a pessoa fictícia Ana Exemplo à Meta, no dataset do site e em modo de teste (recusa sem `META_TEST_EVENT_CODE`), e, com uma ação, ao Google só validando (`validateOnly`). Não grava no livro-razão: é a prova do aceite | não grava nada; repetir manda outro evento de teste |
 | `plataforma_ligar_leads_de_formulario_da_meta` | liga ou desliga a volta dos leads de formulário para a Meta | mesmo pedido, `ja_estava` |
 
 ### Equipe · operação `convidar_equipe`
@@ -468,11 +471,11 @@ desligada, as escritas recusam com o caminho para ligar.
 | `plataforma_ver_cobranca` | leitura | a cobrança da instalação: ligada ou não, provedor e modo, se o aviso de pagamento chega, a régua, o que falta para a primeira cobrança, os planos (limites, módulos, preço do Broadcast, preço por e-mail `preco_email` desde a .95 com o `preco_email_padrao`, conversas estimadas, quantas empresas assinam), as empresas por situação, os pacotes de crédito e o modo do cadastro. A chave nunca sai | leitura |
 | `plataforma_garantir_planos` | `gerir_planos` | os planos pelo nome (preço, intervalo, teste, pessoas, números, teto de IA, módulos, preço do Broadcast, preço por e-mail `preco_email` desde a .95, frase e selo, oferecido ou escondido, o do cadastro) e os `pacotes_de_creditos`. Plano assinado não muda de preço nem perde módulo (nem muda o preço do Broadcast ou o por e-mail): a resposta manda arquivar e criar outro | pelo nome; o igual volta em `sem_mudanca` |
 | `plataforma_listar_assinaturas` | leitura | as empresas por situação, com plano, agendado, origem, fim do teste, o próximo aviso da régua, a suspensão prevista, o link em aberto e os passos feitos; filtro `so_cadastro_proprio` | leitura |
-| `plataforma_ver_assinatura` | leitura | uma empresa: plano, situação, datas, a régua ponto a ponto, quem administra (e-mail mascarado), os passos e os módulos com a origem; desde a .95, `precos`: o da mensagem do Broadcast e o por e-mail que valem, em reais, cada um com a origem (`definido_a_mao`, `plano` ou `padrao`) e o definido à mão | leitura |
+| `plataforma_ver_assinatura` | leitura | uma empresa: plano, situação, datas, a régua ponto a ponto, quem administra (e-mail mascarado), os passos e os módulos com a origem; desde a .95, `precos`: o da mensagem do Broadcast e o por e-mail que valem, em reais, cada um com a origem (`definido_a_mao`, `plano` ou `padrao`) e o definido à mão; desde a MIA-168, `lead_na_time`: o negócio do cadastro no funil MIA - SDR da Time, os momentos (cadastro concluído, teste começou, pagamento confirmado com o valor em BRL) e o erro (`sem_fonte`, `fonte_inexistente`, `recusado`, `falhou`, `sem_etapa:<nome>`), com `configurado` dizendo se `CADASTRO_FONTE_DO_CRM` está no ambiente | leitura |
 | `plataforma_atribuir_plano` | `gerir_cobranca` | atribui ou troca o plano como o dono no card Cobrança: a isenta passa a pagar em teste; no teste a troca vale na hora, depois fica para a renovação (plano negociado não paga diferença). Aceita plano escondido | o mesmo plano responde `mudou: false` |
 | `plataforma_gerar_link_de_pagamento` | `gerir_cobranca` | o mesmo botão do card: devolve o link em aberto ou cria um; no Asaas, a primeira vez pede o `documento` de quem paga, que vai direto ao Asaas e não fica guardado (nem na auditoria) | devolve o link em aberto |
 | `plataforma_ajustar_cobranca` | `gerir_cobranca` | `dar_prazo` (até 60 dias), `isentar` (recusa com assinatura viva no provedor) ou `voltar_a_cobranca` (com o `plano`). Prazo e isenção reativam quem foi suspenso por pagamento | o mesmo pedido regrava a mesma situação (`mudou: false` no isentar) |
-| `plataforma_listar_pedidos_de_cadastro` | leitura | os pedidos esperando aprovação: empresa, quem pediu (mascarado), plano escolhido e o que a empresa faz | leitura |
+| `plataforma_listar_pedidos_de_cadastro` | leitura | os pedidos esperando aprovação: empresa, quem pediu (mascarado), plano escolhido e o que a empresa faz; desde a MIA-168, o `lead_na_time` de cada pedido e `cadastros_na_time` (a variável configurada ou não, e os últimos cadastros cujo lead falhou, só com ids, datas e o erro) | leitura |
 | `plataforma_decidir_pedido_de_cadastro` | `decidir_cadastro` | aprova (a empresa nasce no plano escolhido, pelo mesmo caminho do cadastro) ou recusa com o `motivo`, que vai por e-mail a quem pediu | o pedido decidido devolve a decisão anterior |
 
 As três caixinhas novas do token, e o raio de cada uma: `gerir_planos` mexe no preço e nos
@@ -815,6 +818,43 @@ Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
 
+### O que chegou do upstream 1.124 (fusão de 23/11, MIA-127)
+
+A fusão entra sem ferramenta nova e sem campo novo no MCP de plataforma. Uma rota espelhada
+(seção 5) mudou: o GET de `app/api/v1/ai/pacing/route.ts` lê e devolve `teto_so_abordagem`.
+O espelho (`lib/implantacao/canal.ts`) não grava a coluna, e nula ela é a régua de sempre, então
+o número montado pela implantação continua igual (impressão relida em
+`tests/unit/mcp-de-implantacao-espelhos.test.ts`).
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| Registrar venda no negócio e o painel Análise › Vendas (9449, 9450) | 1.124 | nada a configurar: é registro do dia a dia. No fork, negócio com item do bloco continua com o valor dos itens (9167, `docs/fork/produto-no-negocio.md` 2.3); `plataforma_configurar_produto_no_negocio` não muda | |
+| O MCP da EMPRESA edita a ficha do cliente e comanda a conversa por token (`crm_update_contact`, `crm_pause_ai`, `crm_resume_ai`, `crm_close_conversation`, `crm_reopen_conversation`, #4517) | 1.124 | nada a fazer: são ferramentas do MCP da empresa. No fork o fechamento por token passa pela mesma devolução sem responder a pendente (`responderPendente: false`, `conversations/[id]/_handler.ts`) | |
+
+Falta no MCP (cada item com o motivo):
+
+- "Teto do dia só na abordagem" e o teto próprio do follow-up por número
+  (`channel_knobs.teto_so_abordagem` e `followup_daily_cap`, 9455 e 9456): campo novo do canal.
+  Ligado, o follow-up de quem já foi abordado sai sem gastar nem esperar o teto de aquecimento,
+  então muda o envio e pede decisão antes de a implantação ligar sozinha. Nasce desligado;
+- "Conversas novas criam negócio no funil" por conexão (`channel_sessions.conversa_nova_cria_negocio`,
+  9459): campo novo da conexão. Nasce ligado, que é o comportamento de antes; entra junto com o
+  funil de entrada por número (falta desde a 1.119);
+- o menu de atendimento sem IA (módulo opcional, `settings.menu_de_atendimento`): módulo que nasce
+  desligado e muda quem responde a primeira mensagem do cliente final. Fica fora até alguém
+  decidir que a implantação monta menu;
+- a janela própria da campanha de prospecção (9454) e o arquivo da primeira abordagem enviado pela
+  tela: o MCP não monta campanha de prospecção;
+- as contas de relatório do Google Ads (9448): autorização com o login Google de quem tem acesso à
+  conta, feita pelo administrador do cliente;
+- o negócio não comercial (9414, 9451): classificação do dia a dia, sem configuração.
+
+Nada a configurar pela implantação: a rajada de mensagens que vira uma resposta (#196, teto de
+45 s da instalação), o agente que só se reapresenta quando o roteador troca de agente, o rascunho
+assistido que chama a passagem, a atualização pela janela de manutenção (`SYSTEM_UPDATE_WINDOW`,
+do instalador do upstream; o fork implanta pelo EasyPanel) e o catálogo por feed por empresa (o liga
+e desliga já passa por `plataforma_definir_modulo_da_empresa`).
+
 ### O que chegou do upstream 1.123 (fusão de 21/11, MIA-122)
 
 A fusão entra sem ferramenta nova e sem ajuste no MCP de plataforma.
@@ -887,10 +927,67 @@ Falta no MCP (cada item com o motivo):
   caminhos próprios por elas. Não é campo nem ferramenta nova; é decisão de desenho, e fica
   para um PR próprio depois da revisão das sobreposições abaixo;
 - o MCP da EMPRESA ganhou 7 ferramentas para ver, corrigir, testar, publicar e reverter
-  assistentes pelo ChatGPT (`lib/mcp/tools/agentes.ts`, #4805). Sobrepõe o que o MCP de
-  plataforma faz de agente (`plataforma_garantir_agente` e vizinhas): conferir antes de criar
-  ferramenta nova de edição de assistente. No fork elas passam pela trava da IA
-  (`lib/ai/agents/edicao.ts`): pelo token, provedor, modelo e chave nunca mudam.
+  assistentes pelo ChatGPT (`lib/mcp/tools/agentes.ts`, #4805). A conferência da sobreposição
+  com o MCP de plataforma está logo abaixo (MIA-115); o que sobrou dela para o MCP de
+  plataforma está na lista do fim da conferência.
+
+#### O MCP de agentes da empresa e o MCP de plataforma (MIA-115, 23/11)
+
+Os dois editam o mesmo agente, por caminhos diferentes, e convivem:
+
+- o do upstream é do **admin da empresa** pelo ChatGPT (token da conexão de aplicativo, papel
+  admin, `mcp:read`/`mcp:write`, `apenasHumano`: nunca entra no turno do agente) e passa por
+  `lib/ai/agents/edicao.ts`, o mesmo código da tela do agente;
+- o nosso é da **implantação** (token de plataforma, operações `implantar_configuracao` e
+  `colocar_no_ar`) e passa por `lib/implantacao/agente.ts`.
+
+Os dois aplicam a trava da IA (`lib/ai/trava-da-ia.ts`), cada um no seu caminho. No caminho do
+upstream o ator do token não traz `quemPede` e vale `TOKEN_NAO_ESCOLHE_IA`: provedor, modelo e
+chave nunca mudam pelo token. A cerca é o `describe` "edição pelo token do MCP" em
+`tests/unit/trava-da-ia-portas.test.ts` (rascunho novo, rascunho existente, publicar versão de
+modelo antigo, reverter, cada um com o controle da plataforma, e o esquema).
+
+| Do upstream (MCP da empresa) | O que faz | No MCP de plataforma | Conclusão |
+|---|---|---|---|
+| `crm_list_ai_agents` | lista os assistentes com a versão publicada (modelo, voz), o rascunho e o número | `plataforma_ver_agentes` (mais: situação no ar, o que falta para publicar, pacotes, funis, horário da IA) | conviver; nada a trazer |
+| `crm_get_ai_agent_version` | as instruções inteiras e as configurações de uma versão (publicada, rascunho ou por número) | `plataforma_ver_agentes` com `agente` (prompt e configuração da versão vigente) | conviver. O nosso não lê versão antiga por número; a implantação não precisou até hoje |
+| `crm_get_ai_agent_turn` | por que o assistente respondeu assim numa conversa: a versão que respondeu, o modelo, as ferramentas chamadas, o turno abortado e o motivo | não tem | falta (lista abaixo) |
+| `crm_save_ai_agent_draft` | rascunho por troca exata, anexar ao fim ou texto inteiro, em 1 a 5 assistentes, e as configurações (voz, ferramentas, passar para pessoa, dividir mensagens, ver imagens) | `plataforma_garantir_agente` (rascunho com o pedido inteiro, idempotente) | conviver. **No fork o esquema não tem `provedor` nem `modelo`** (MIA-115): o ChatGPT não promete uma troca que a trava ignoraria, e quem manda recebe a recusa do esquema (`.strict()`) |
+| `crm_test_ai_agent_version` | simula uma mensagem contra uma versão; nada é enviado, gasta crédito de IA | não tem | falta (lista abaixo) |
+| `crm_publish_ai_agent_version` | publica uma versão, com as checagens da tela | `plataforma_publicar_agente` (lista todas as pendências e quem resolve cada uma) | conviver |
+| `crm_rollback_ai_agent` | copia uma versão antiga numa versão nova e a publica | não tem (`plataforma_pausar_agente` cala o agente, não volta a versão) | falta (lista abaixo) |
+
+Cuidados para quem implanta, agora que o dono também edita:
+
+- **O rascunho é um só.** Os dois caminhos partem do rascunho vigente do agente: o que o dono
+  deixou no rascunho pelo ChatGPT vai junto quando a implantação publica, e vice-versa. Antes de
+  `plataforma_publicar_agente` num cliente que já está no ar, leia o rascunho com
+  `plataforma_ver_agentes` (`agente`).
+- **`prompt` substitui o texto inteiro.** `plataforma_garantir_agente` com `prompt` regrava as
+  instruções inteiras, inclusive uma correção que o dono fez pelo ChatGPT. Num cliente no ar,
+  leia a versão vigente antes e parta dela.
+- **Ferramenta solta.** `ferramentas_adicionar` do dono não passa pelos pacotes: ele pode dar
+  uma capacidade avulsa (as do administrador a ferramenta recusa). Uma
+  `plataforma_garantir_agente` com `pacotes` monta a lista de novo pelos pacotes.
+- **O dono vê o modelo.** `crm_list_ai_agents` e `crm_get_ai_agent_version` devolvem o modelo (e
+  o provedor) da versão ao admin da empresa, que a tela do cliente esconde desde a .56. A
+  MIA-115 não mexeu (não mexe no que o cliente vê); fica como decisão para o Gabriel.
+- **O teste gasta a IA da plataforma.** `crm_test_ai_agent_version` é o mesmo botão "Testar" da
+  tela e roda com a IA da plataforma, como pela tela. Não é envio a ninguém.
+
+Falta no MCP de plataforma, da conferência (cada item com o motivo; nenhum entra na MIA-115, que
+não cria ferramenta de edição de assistente):
+
+- ler o porquê de uma resposta numa conversa (o equivalente de `crm_get_ai_agent_turn`): é o
+  diagnóstico de suporte que mais falta, mas lê conversa de cliente, e o MCP de plataforma até
+  hoje só lê contagem de conversa (`plataforma_ver_conversas_do_mes`). Pede decisão sobre o que
+  pode voltar (sem texto da mensagem do cliente) e ferramenta própria;
+- voltar um agente para uma versão anterior (o equivalente de `crm_rollback_ai_agent`), para
+  desfazer uma publicação errada sem reescrever o pedido: ferramenta própria de escrita, na
+  operação `colocar_no_ar`, por `reverterParaVersao` do `edicao.ts` com o ator da plataforma;
+- testar um rascunho com uma mensagem antes de publicar (o equivalente de
+  `crm_test_ai_agent_version`): gasta IA da plataforma por chamada; pede decisão de teto antes
+  de virar ferramenta.
 
 Nada a configurar pela implantação: o motivo real do adiamento do follow-up, o visto azul do
 WAHA sem "Guardar histórico" (#5015), o aviso crítico quando a IA não responde nem após a
@@ -1239,11 +1336,33 @@ vai de 112 a 115). A prova está em `tests/unit/mcp-de-implantacao-trava-de-robo
 Nenhuma operação nova: configurar é montagem (`implantar_configuracao`, vale na hora para todo contato do cliente) e desfazer
 põe a IA de volta no ar para um contato (`colocar_no_ar`). Toda a regra mora em `lib/trava-de-robo/`.
 
+O sinal D, o ritmo de máquina (MIA-210, migration 9171), não trouxe ferramenta nova: a lista continua
+igual. A configuração dele entra pela mesma `plataforma_configurar_trava_de_robo` (o `pedidoDeConfigDaTravaSchema`
+ganhou os quatro campos) e o registro dele sai pela mesma `plataforma_ver_travas_de_robo`.
+
 | ferramenta | o que faz | operação |
 |---|---|---|
-| `plataforma_ver_travas_de_robo` | com `organization_id`, a configuração do cliente (o padrão quando não há linha) e os registros do período; sem ele, os registros de todos os clientes. `periodo_dias` (padrão 7, até 90), `motivo` (`robo` ou `teto`) e `limite`. Cada registro traz a conversa com o link do Inbox, os 4 últimos dígitos do telefone, os sinais (só o nome do sinal e o id da mensagem), as respostas da IA na janela, os negócios perdidos, o que falhou e se foi desfeito. Sem texto de mensagem | leitura |
-| `plataforma_configurar_trava_de_robo` | liga, desliga ou ajusta os limites; só o que vier muda; o mesmo pedido responde `ja_estava`. Audita `ai.trava_de_robo_configurada` com o antes e o depois | `implantar_configuracao` |
+| `plataforma_ver_travas_de_robo` | com `organization_id`, a configuração do cliente (o padrão quando não há linha) e os registros do período; sem ele, os registros de todos os clientes. `periodo_dias` (padrão 7, até 90), `motivo` (`robo` ou `teto`) e `limite`. Cada registro traz a conversa com o link do Inbox, os 4 últimos dígitos do telefone, os sinais (só o nome do sinal e o id da mensagem), as respostas da IA na janela, os negócios perdidos, o que falhou e se foi desfeito. Sem texto de mensagem. O ritmo de máquina (MIA-210) aparece como `motivo` `teto` com o sinal `ritmo` em `sinais` | leitura |
+| `plataforma_configurar_trava_de_robo` | liga, desliga ou ajusta os limites; só o que vier muda; o mesmo pedido responde `ja_estava`. Audita `ai.trava_de_robo_configurada` com o antes e o depois. Desde a MIA-210, também os quatro campos do ritmo de máquina (`ritmo_ligado`, que desliga só ele, `ritmo_giros` 4 a 30, `ritmo_latencia_maxima_segundos` 10 a 300, `ritmo_variacao_segundos` 2 a 60), com a recusa que diz o campo fora da faixa | `implantar_configuracao` |
 | `plataforma_desfazer_trava_de_robo` | a mesma devolução do "Devolver ao automático" para a conversa, mais tirar a etiqueta "robô" e marcar o registro como desfeito. Não reabre negócio nem conversa, e não responde a mensagem pendente. Recusa conversa sem trava de pé e contato "sempre atendimento humano". Audita `ai.trava_de_robo_desfeita` | `colocar_no_ar` |
+
+### A coexistência do WhatsApp (MIA-28)
+
+Função do fork ([`coexistencia.md`](coexistencia.md)), e entra no MCP na mesma versão: **três ferramentas novas** (a lista
+vai de 124 a 127). A prova está em `tests/unit/mcp-de-implantacao-coexistencia.test.ts`, e a CONTAGEM nos testes da lista.
+Nenhuma operação nova: ligar a chave exige `colocar_no_ar` (o desenho dizia `implantar_configuracao`, mas a cerca do MCP
+amarra o verbo "ligar" a `colocar_no_ar`, e com a chave a empresa passa a conectar pela API o número do app, por onde a IA
+atende). A regra mora em `lib/channels/meta/coexistencia/` (`ligar.ts`, `leitura.ts`), a mesma da tela de /admin/meta.
+
+| ferramenta | o que faz | operação |
+|---|---|---|
+| `plataforma_ver_coexistencia` | a chave da empresa (`ligada`, quem mudou e quando), se a instalação tem o app da Meta configurado para a janela (`janela_configurada`, `falta_no_ambiente`) e os números conectados pelo app, com estado, data da conexão e motivo de estar fora do ar | leitura |
+| `plataforma_ligar_coexistencia` | liga ou desliga a chave; o mesmo pedido responde `ja_estava`. Recusa empresa que não opera (`ehOperante`) e empresa de demonstração (a 9010 não deixa nascer canal vivo nela). Desligar com número conectado responde os números que continuam. Audita `platform.coexistencia_alterada` | `colocar_no_ar` |
+| `plataforma_ver_sincronizacao_do_app` | por número: os dois pedidos (`contatos` e `historico`) com estado, datas, `request_id` da Meta, erro, progresso, fase e contagens; o prazo de 24 h. Só contagens | leitura |
+
+Fora, de propósito: conectar o número (é credencial e acesso: só a janela da Meta, no navegador do cliente, faz) e pedir a
+sincronização de novo (não existe por desenho: a Meta aceita cada pedido uma vez só por conexão). A área "coexistência" no
+checklist do `plataforma_ver_implantacao` ainda não entrou (fica para a S5, com o roteiro do teste real).
 
 ### O que chegou do upstream 1.85 (.83)
 
@@ -1429,6 +1548,7 @@ Testes:
 | `tests/unit/mcp-de-implantacao-ferramentas.test.ts` | o catálogo: descrições, exemplos que passam no próprio esquema, a guarda da operação, organização inexistente, recusa que ensina, auditoria |
 | `tests/unit/mcp-de-implantacao-operacoes.test.ts` | cada ferramenta: o que grava, a reexecução, as recusas e a empresa de demonstração |
 | `tests/unit/mcp-de-implantacao-conversoes.test.ts` | as seis ferramentas de conversões: o que gravam, que montar não liga, a reexecução, as recusas, a resposta sem segredo e a empresa de demonstração |
+| `tests/unit/mcp-de-implantacao-conversoes-do-site.test.ts` | (MIA-169) as conversões do site: garantir (várias por etapa, desligadas, reexecução, recusas, só na empresa da fonte), ligar com `plataforma: "site"`, testar (Ana Exemplo, recusa sem o código, nada no livro-razão), a demonstração e a seção `site` sem segredo |
 | `tests/unit/mcp-de-implantacao-novidades-do-upstream.test.ts` | cada novidade do upstream 1.70 a 1.73: o campo ou a caixa nova passa pela ferramenta (o que grava, a reexecução, a recusa que ensina, a leitura), e as duas ferramentas do roteador |
 | `tests/unit/mcp-de-implantacao-novidades-do-upstream-180.test.ts` | cada novidade do upstream 1.74 a 1.80, no mesmo molde, as quatro ferramentas novas e a prova de que os tipos de ação da ferramenta são exatamente os do upstream |
 | `tests/unit/mcp-de-implantacao-novidades-do-upstream-183.test.ts` | cada novidade do upstream 1.81 a 1.83 (.81), no mesmo molde, a ferramenta nova do servidor MCP externo (a chave nunca volta nem vai para a trilha) e a empresa de demonstração |

@@ -159,7 +159,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Espelhados na .76: os dias da prospecção (1.80, 0642), guardar o histórico (1.74, #999) e a pausa agendada (1.79, #2388).
   // Relido na .100 (upstream 1.97, #3383): o PUT solta os turnos com o rastro `adiado_por_janela` quando a janela de resposta abre (soltarAdiadosDaSessao). O espelho chama a mesma função depois de gravar a janela, ao lado da reprogramação do fork.
   // Relido na fusão da 1.121: a rota passou a aceitar token `dsk_` (`resolveAuthDual`, `config:read`/`config:write`, papel admin) e o audit leva `actorApiTokenId`. Nenhuma regra de negócio mudou; o espelho entra pela plataforma, com a autorização dele: nada a levar.
-  { rota: "app/api/v1/ai/pacing/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "bfccc15784dafbef" },
+  // Relido na fusão da 1.124 (#3851): o GET lê e devolve `teto_so_abordagem` (nulo = desligado). O espelho não grava a coluna, então o número montado pela implantação nasce com a régua de sempre: nada a levar. O campo ficou em "Falta no MCP" (docs/fork/mcp-de-implantacao.md, 1.124), porque ligado ele muda o envio do follow-up.
+  { rota: "app/api/v1/ai/pacing/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "d8cf9fe6a177b569" },
   // Relido na fusão da 1.116: o GET aceita token. O espelho só lê, pela mesma `lerAcervoDoCanal`: nada a levar.
   { rota: "app/api/v1/channel-sessions/[id]/acervo/route.ts", espelho: "lib/implantacao/canal.ts", impressao: "a1ecd1e6b5d4d614" },
   // Relido na .81 (upstream 1.81, #2388): a régua da janela virou validarJanela, compartilhada por criar e EDITAR, e o [id] ganhou o PATCH que corrige os dois horários de uma janela que ainda não começou (status scheduled, com a trava contra a corrida do relógio). O espelho ganhou `ajustar_pausa_agendada` com a mesma régua (recusaDaJanela) e a mesma auditoria channel.schedule_updated.
@@ -245,7 +246,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // FORK MIA (upstream 1.119, MIA-96): o primeiro nome do cliente no aviso de transferência. O espelho (configurarAtendimento) mescla `settings.crm` como a ação e grava a mesma trilha.
   { rota: "app/actions/settings/definirNomeNaTransferencia.ts", espelho: "lib/implantacao/empresa.ts", impressao: "c9d2f4cc9d9b7102" },
   // FORK MIA (MIA-103): a Análise do funil, uma LEITURA. O espelho faz as mesmas seis leituras da janela (paginadas, com o filtro da organização), lê as duas grafias de `stage_changed` e monta com as mesmas funções (montarRelatorioDeFunil, separarValoresDoPeriodo, a contra-métrica de fn_atrito_metrics). A paridade dos números é medida em tests/unit/mcp-de-implantacao-analise-e-conversas.test.ts, contra a rota.
-  { rota: "app/api/v1/metrics/funil/route.ts", espelho: "lib/implantacao/analise-do-funil.ts", impressao: "bec9834ee04322cb" },
+  // Relido na fusão da 1.124 (#4191, MIA-127): a rota lê `nao_comercial_em` e passa a coluna a montarRelatorioDeFunil, que corta o negócio não comercial e as passagens dele da conta comercial (os valores do período seguem como antes). Levado: o espelho lê a mesma coluna e a passa igual.
+  { rota: "app/api/v1/metrics/funil/route.ts", espelho: "lib/implantacao/analise-do-funil.ts", impressao: "d3a61e7f7e14aecb" },
 ];
 
 describe("a regra copiada: gatilhos de follow-up que têm motor", () => {

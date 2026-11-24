@@ -38,6 +38,9 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "como eu uso o mcp aqui", em: "/app/settings/servidor-mcp-externo", sobre: "/app/settings/servidor-mcp-externo", espera: "servidor-mcp-externo" },
   { pergunta: "como eu uso o mcp aqui", em: "/app/settings/api-tokens", sobre: "/app/settings/api-tokens", espera: "mcp-da-mia" },
   { pergunta: "como conecto o whatsapp", sobre: "/app/connections", espera: "conectar-numero" },
+  // FORK MIA · coexistência (MIA-28).
+  { pergunta: "como conecto o numero que ja uso no app whatsapp business", sobre: "/app/connections", espera: "coexistencia-pelo-app" },
+  { pergunta: "a sincronizacao do historico do app nao veio", sobre: "/app/connections", espera: "coexistencia-pelo-app" },
   { pergunta: "como configuro o horário da IA", sobre: "/app/ai/agents", espera: "horario-da-ia" },
   { pergunta: "onde vejo as conversões da meta", sobre: "/app/settings/conversoes", espera: "conversoes-meta" },
   { pergunta: "como mando e-mail marketing", sobre: "/app/broadcast", espera: "email-marketing-campanha" },
@@ -153,6 +156,8 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "onde vejo a conversão etapa a etapa", sobre: "/app/paineis/funil", espera: "analise-do-funil" },
   { pergunta: "como mando os números para o dono por um link", sobre: "/app/paineis/links", espera: "link-do-dono" },
   { pergunta: "como monto um relatório", sobre: "/app/relatorios", espera: "relatorios" },
+  // FORK MIA (fusão da v1.124): o painel de vendas do upstream.
+  { pergunta: "quanto eu vendi este mês", sobre: "/app/vendas", espera: "painel-de-vendas" },
   { pergunta: "como exporto um relatório para excel", sobre: "/app/relatorios", espera: "exportar-relatorio" },
   { pergunta: "onde vejo o custo das campanhas de anúncio", sobre: "/app/ads/meta" },
   { pergunta: "quantos negócios vieram do google ads", sobre: "/app/ads/google", espera: "painel-google-ads" },

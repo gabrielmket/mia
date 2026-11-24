@@ -26,7 +26,7 @@ import type { AtorDaEdicao } from "@/lib/ai/agents/edicao";
 import { linhaDoRascunhoClonado, VERSION_COLUMNS, type LinhaDaVersao } from "@/lib/ai/agents/linha-da-versao";
 import { aplicarConfiguracoes, QUANDO_VOZ } from "@/lib/ai/agents/configuracao-do-rascunho";
 import { aplicarEdicaoNoPrompt, explicarRecusa, PROMPT_MAX } from "@/lib/ai/agents/editar-prompt";
-import { PROVIDERS, testeHistoryMessageSchema, testRunSchema } from "@/lib/ai/agents/validation";
+import { testeHistoryMessageSchema, testRunSchema } from "@/lib/ai/agents/validation";
 import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
 
 import type { McpContext, McpToolDefinition } from "../types";
@@ -395,10 +395,12 @@ const saveDraftShape = {
   novo_prompt: z.string().min(10).max(PROMPT_MAX).optional().describe("The WHOLE new instructions text. Excludes substituicoes/anexar_ao_final."),
   substituicoes: z.array(substituicaoShape).min(1).max(20).optional().describe("Targeted find/replace edits, applied in order."),
   anexar_ao_final: z.string().min(1).max(5000).optional().describe("Text appended at the end of the instructions."),
+  // FORK MIA: sem `provedor` e `modelo`. No fork a IA do assistente é da
+  // plataforma (lib/ai/trava-da-ia.ts, aplicada em lib/ai/agents/edicao.ts): pelo
+  // token os dois seriam ignorados, e o ChatGPT prometeria uma troca que não
+  // acontece. Com `.strict()`, quem mandar recebe a recusa do esquema.
   configuracoes: z
     .object({
-      provedor: z.enum(PROVIDERS).optional().describe("AI provider. Omit to keep the current one."),
-      modelo: z.string().trim().min(1).max(120).optional().describe("Model id, e.g. claude-sonnet-5-5. Must belong to the provider."),
       voz_ligada: z.boolean().optional().describe("Voice replies on/off."),
       voz_quando: z.enum(QUANDO_VOZ).optional().describe('When to reply by voice: "nunca", "espelhar" (when the customer sends audio), "sempre", "quando_pede".'),
       ferramentas_adicionar: z.array(z.string().min(1).max(120)).max(27).optional().describe("Tool ids to give the assistant."),
@@ -412,7 +414,7 @@ const saveDraftShape = {
     })
     .strict()
     .optional()
-    .describe("Assistant SETTINGS to change in the same draft. Channel/number, AI key, funnels and knowledge are not changeable here."),
+    .describe("Assistant SETTINGS to change in the same draft. AI provider and model, AI key, channel/number, funnels and knowledge are not changeable here."),
 };
 
 export const crmSaveAiAgentDraft: McpToolDefinition<typeof saveDraftShape> = {
@@ -421,7 +423,7 @@ export const crmSaveAiAgentDraft: McpToolDefinition<typeof saveDraftShape> = {
     "Saves a correction to an AI assistant's instructions and/or SETTINGS as a DRAFT. NOTHING changes for customers " +
     "until the draft is published. The edit starts from the assistant's current draft if one exists (so other pending " +
     "draft work is kept), otherwise from the live version; anything not mentioned is copied unchanged. Settings " +
-    "(configuracoes): model, voice, tools, hand-over-to-person words, message splitting, image reading. " +
+    "(configuracoes): voice, tools, hand-over-to-person words, message splitting, image reading (the AI model is set by the platform). " +
     "Prefer targeted edits: substituicoes (exact find/replace, refused if the excerpt is missing or ambiguous) and/or " +
     "anexar_ao_final. Use novo_prompt only to replace the whole text. Several agent_ids apply the same edit to each " +
     "assistant separately; a failure on one does not block the others. After saving, test with crm_test_ai_agent_version.",

@@ -17,6 +17,8 @@ import { relerComprasEmAberto } from "@/lib/carteira/compra-pelo-asaas";
 import { marcarPagoPeloAviso } from "@/lib/pagamento-inicial/servico";
 // FORK MIA (.98): o cupom, o setup e a comissão (docs/fork/cupons-e-parceiros.md).
 import { depoisDoAvisoDoAsaas } from "@/lib/parceiros/rodada";
+// FORK MIA (MIA-168): o primeiro pagamento leva o card do cadastro a "Assinante" (docs/fork/jornada-de-assinatura.md).
+import { informarPagamentoATime } from "@/lib/planos-mia/lead-do-cadastro";
 
 import { sincronizar } from "./sincronizar";
 
@@ -50,6 +52,8 @@ async function handle(row: EventRow): Promise<HandlerResult> {
   // FORK MIA (.96): a linha do passo "Pagamento" sabe que pagou (para a tela, o
   // MCP e o lembrete). Quem liberou foi a releitura acima. Nunca lança.
   await marcarPagoPeloAviso(admin, row.organization_id);
+  // FORK MIA (MIA-168): o primeiro pagamento vai ao CRM da Time, com o valor. Nunca lança.
+  await informarPagamentoATime(admin, row.organization_id);
   // FORK MIA (.98): o mesmo aviso acerta o desconto do cupom (a troca de plano põe o
   // preço cheio de volta), confere o setup e lança a comissão. Nunca lança.
   await depoisDoAvisoDoAsaas(admin, row.organization_id);
