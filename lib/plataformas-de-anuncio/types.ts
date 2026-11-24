@@ -110,6 +110,37 @@ export interface ConversaoOffline {
    * `LeadSubmitted`…), enquanto o livro-razão guarda `MetaEtapa:<uuid>`.
    */
   eventoNaPlataforma?: string | null;
+  /**
+   * FORK MIA (MIA-169): presente só no EVENTO DE SITE (as regras do site,
+   * `lib/conversoes/site.ts`). Na Meta, o transporte delega a
+   * `meta/evento-do-site.ts`; no Google, só `somenteValidar` muda o envio.
+   */
+  site?: DadosDoEventoDoSite;
+}
+
+/**
+ * FORK MIA (MIA-169): o que o evento de site leva além do comum, ainda EM CLARO
+ * (o hash é do transporte). Vem da `mia_cadastro_na_time` (parte A) e do
+ * contato do negócio. `fbp`/`fbc` só valem com `consentimento = "medicao"`, e o
+ * transporte confere de novo.
+ */
+export interface DadosDoEventoDoSite {
+  email: string | null;
+  /** O nome da pessoa (por `nomeDoContato`), para `fn`/`ln`. */
+  nome: string | null;
+  /** O id da empresa cliente (`external_id`). */
+  idExterno: string | null;
+  ip: string | null;
+  navegador: string | null;
+  /** A página do cadastro, sem a query (`event_source_url`). */
+  pagina: string | null;
+  fbp: string | null;
+  fbc: string | null;
+  consentimento: string | null;
+  /** O id da cobrança paga (`order_id` em Purchase e Subscribe). */
+  pedidoId: string | null;
+  /** Google: `validateOnly`. Desligado por padrão; só a ferramenta de teste liga. */
+  somenteValidar?: boolean;
 }
 
 /**

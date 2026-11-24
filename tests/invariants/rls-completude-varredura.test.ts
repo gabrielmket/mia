@@ -611,6 +611,15 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "`permission denied` (42501) em select, insert, update e delete por JWT, nas sete " +
       "tabelas do raio-X; o service_role grava e lê (controle positivo).",
   },
+  // Fork MIA, 9170 (MIA-169) — as regras das conversões do site.
+  {
+    tabela: "mia_regras_de_conversao_do_site",
+    razao:
+      "tests/invariants/regras-de-conversao-do-site.test.ts — exclusiva do servidor: " +
+      "RLS ligada com ZERO políticas, o administrador da PRÓPRIA empresa (JWT) e anon " +
+      "recebem `permission denied` (42501) em select, insert, update e delete; o " +
+      "service_role lê (controle positivo). A etapa é da mesma empresa por FK composta.",
+  },
   // Fork MIA, 9031 — o link dos painéis para o dono do negócio.
   {
     tabela: "mia_paineis_links",

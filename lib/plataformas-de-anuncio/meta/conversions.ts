@@ -64,6 +64,8 @@ import { VERSAO_PADRAO_DA_GRAPH } from "@/lib/graph-version";
 import { logger } from "@/lib/logger";
 
 import { baseDaGraphDeAnuncio } from "./graph-base";
+// FORK MIA (MIA-169): o evento de site (as regras do site, docs/fork/conversoes-da-meta.md).
+import { enviarEventoDoSite } from "./evento-do-site";
 import type {
   ConversaoOffline,
   CredencialDeConversao,
@@ -107,6 +109,8 @@ async function enviar(
   credencial: CredencialDeConversao,
   conversao: ConversaoOffline,
 ): Promise<ResultadoDeEnvio> {
+  // FORK MIA (MIA-169): o evento de SITE tem fio próprio (`website`), em `./evento-do-site.ts`.
+  if (conversao.site) return enviarEventoDoSite(credencial, conversao);
   // Dois formatos e só dois: a compra, que exige valor (regra 1), e o evento de
   // ETAPA, que sai com o nome padrão escolhido na regra e sem valor — o negócio
   // ainda não foi vendido, e um valor ali ensinaria receita que não existiu.
