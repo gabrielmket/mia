@@ -3,8 +3,8 @@
  * (`lib/plataformas-de-anuncio/meta/evento-do-site.ts`), sem rede.
  *
  * O que se mede é o fio: `website` com a página e o navegador, os hashes
- * SHA-256 do valor normalizado, `fbp`/`fbc` só com o aviso de cookies aceito
- * (`medicao`), valor, moeda e id do pedido só no Purchase e no Subscribe, o
+ * SHA-256 do valor normalizado, IP, navegador, `fbp` e `fbc` só com o aviso de
+ * cookies aceito (`medicao`), valor, moeda e id do pedido só no Purchase e no Subscribe, o
  * `test_event_code`, e `system_generated` quando o navegador não foi guardado.
  *
  * Dado fictício: a Ana Exemplo, domínio de exemplo e IP de documentação.
@@ -92,13 +92,19 @@ describe("o evento de site na Meta", () => {
     expect(corpo.test_event_code).toBeUndefined();
   });
 
-  it("⭐ sem o aviso de cookies aceito (`medicao`), fbp e fbc não saem, mesmo guardados", () => {
+  it("⭐ sem o aviso de cookies aceito (`medicao`), nada do navegador sai, mesmo guardado: sai `system_generated`", () => {
     for (const consentimento of ["necessario", null]) {
-      const { e } = evento(conversao("StartTrial", {}, { consentimento }));
+      const { e, origem } = evento(conversao("StartTrial", {}, { consentimento }));
       expect(e.user_data).not.toHaveProperty("fbp");
       expect(e.user_data).not.toHaveProperty("fbc");
-      // O resto continua (a especificação: IP e navegador não dependem do aviso).
-      expect(e.user_data.client_user_agent).toBe("Mozilla/5.0 (teste)");
+      // A parte A guarda IP e navegador também com `necessario`; a medição não os usa.
+      expect(e.user_data).not.toHaveProperty("client_ip_address");
+      expect(e.user_data).not.toHaveProperty("client_user_agent");
+      expect(e).not.toHaveProperty("event_source_url");
+      expect(origem).toBe("system_generated");
+      expect(e.action_source).toBe("system_generated");
+      // Os hashes continuam.
+      expect(e.user_data.em).toEqual([sha("ana.exemplo@example.com")]);
     }
   });
 

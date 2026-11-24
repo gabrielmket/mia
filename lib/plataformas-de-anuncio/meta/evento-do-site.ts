@@ -13,8 +13,10 @@
  * As regras do fio:
  *  - `action_source: "website"` exige `event_source_url` e `client_user_agent`.
  *    Sem navegador ou sem página guardados (o prazo de guarda passou, ou o
- *    cadastro foi pelo Google), sai `system_generated`, como o upstream, e nunca
- *    com navegador inventado;
+ *    cadastro foi pelo Google), ou sem o consentimento `medicao`, sai
+ *    `system_generated`, como o upstream, e nunca com navegador inventado;
+ *  - IP e agente só com o consentimento `medicao`, como `fbp` e `fbc`: a parte A
+ *    guarda os dois também com `necessario`, mas a medição não os usa;
  *  - `em`, `ph`, `fn`, `ln` e `external_id` vão em SHA-256 do valor normalizado
  *    (minúsculo; telefone só dígitos). IP, agente, `fbp` e `fbc` vão em claro,
  *    como a Meta pede;
@@ -109,15 +111,20 @@ export function corpoDoEventoDoSite(
     return { ok: false, detalhe: "Sem e-mail, telefone nem id da empresa, a Meta não tem como reconhecer a pessoa." };
   }
 
+  // Tudo o que é do navegador (IP, agente, `fbp`, `fbc`) só sai com o aviso de
+  // cookies aceito (`medicao`). A parte A guarda IP e agente mesmo com
+  // `necessario`, mas a medição não os usa: sem `medicao`, o evento sai
+  // `system_generated`, só com os hashes.
+  const comMedicao = site.consentimento === "medicao";
   const navegador = (site.navegador ?? "").trim();
   const pagina = (site.pagina ?? "").trim();
-  const doNavegador = navegador !== "" && pagina !== "";
+  const doNavegador = comMedicao && navegador !== "" && pagina !== "";
   if (doNavegador) {
     const ip = ipLimpo(site.ip);
     if (ip) userData.client_ip_address = ip;
     userData.client_user_agent = navegador;
   }
-  if (site.consentimento === "medicao") {
+  if (comMedicao) {
     if (site.fbp?.trim()) userData.fbp = site.fbp.trim();
     if (site.fbc?.trim()) userData.fbc = site.fbc.trim();
   }

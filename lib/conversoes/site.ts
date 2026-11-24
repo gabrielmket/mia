@@ -447,16 +447,19 @@ export function montarConversaoDoSite(p: {
   identificadoresGoogle?: ConversaoOffline["identificadoresGoogle"];
   somenteValidar?: boolean;
 }): ConversaoOffline {
+  // IP, navegador, `fbp` e `fbc` só com o aviso de cookies aceito (`medicao`).
+  // A parte A guarda IP e navegador também com `necessario`; a medição não os
+  // usa. O transporte confere de novo.
+  const comMedicao = p.cadastro.consentimento === "medicao";
   const site: DadosDoEventoDoSite = {
     email: p.email,
     nome: p.nome,
     idExterno: p.cadastro.empresaClienteId,
-    ip: p.cadastro.ip,
-    navegador: p.cadastro.navegador,
+    ip: comMedicao ? p.cadastro.ip : null,
+    navegador: comMedicao ? p.cadastro.navegador : null,
     pagina: p.cadastro.pagina,
-    // O transporte confere de novo; aqui já não passam sem o aviso aceito.
-    fbp: p.cadastro.consentimento === "medicao" ? p.cadastro.fbp : null,
-    fbc: p.cadastro.consentimento === "medicao" ? p.cadastro.fbc : null,
+    fbp: comMedicao ? p.cadastro.fbp : null,
+    fbc: comMedicao ? p.cadastro.fbc : null,
     consentimento: p.cadastro.consentimento,
     pedidoId: p.cadastro.pedidoId,
     ...(p.somenteValidar ? { somenteValidar: true } : {}),

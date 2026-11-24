@@ -243,7 +243,9 @@ a compra do site já sai pela etapa "Assinante" e contaria duas vezes.
 ### O fio da Meta (`meta/evento-do-site.ts`)
 
 - `action_source: "website"`, `event_source_url` (a página do cadastro, sem a query),
-  `client_ip_address` e `client_user_agent` em claro;
+  `client_ip_address` e `client_user_agent` em claro, **só com `consentimento = medicao`**.
+  A parte A guarda IP e navegador também com `necessario`, mas a medição não os usa:
+  sem `medicao`, o evento sai `system_generated`, só com os hashes;
 - `em`, `ph`, `fn`, `ln` e `external_id` (o id da empresa cliente) em SHA-256 do valor
   normalizado (minúsculo; telefone só dígitos);
 - `fbp` e `fbc` **só com `consentimento = medicao`** (conferido de novo no transporte);
@@ -332,7 +334,7 @@ Nenhum teste fala com a Meta. Com o **código de teste** preenchido na conexão:
 | `tests/unit/mcp-de-implantacao-conversoes.test.ts` | as seis ferramentas do MCP sobre a tabela do upstream |
 | `tests/invariants/conversoes-da-meta-por-etapa.test.ts` | o Postgres de verdade: a 9019, ⭐ a regra da casa com o registro, os formulários, o reenvio do upstream, a demonstração e o MCP |
 | `tests/invariants/rls-tabelas-da-mia.test.ts` | as duas tabelas da 9017 continuam com a RLS delas |
-| `tests/unit/conversoes-do-site-meta.test.ts` | (MIA-169) o corpo do evento de site: `website`, os hashes, fbp e fbc só com `medicao`, valor e pedido no Purchase e no Subscribe, `test_event_code` e `system_generated` sem navegador |
+| `tests/unit/conversoes-do-site-meta.test.ts` | (MIA-169) o corpo do evento de site: `website`, os hashes, IP, navegador, fbp e fbc só com `medicao`, valor e pedido no Purchase e no Subscribe, `test_event_code` e `system_generated` sem navegador |
 | `tests/unit/conversoes-do-site-motor.test.ts` | (MIA-169) o consumidor e as travas, o reenvio pelos consumidores do upstream, ⭐ outra empresa nunca usa a variável, a guarda `venda_pelo_site` e o Google com valor e `validateOnly` |
 | `tests/unit/mcp-de-implantacao-conversoes-do-site.test.ts` | (MIA-169) as ferramentas do site no MCP |
 | `tests/invariants/regras-de-conversao-do-site.test.ts` | (MIA-169) o Postgres de verdade: os CHECKs, as unicidades, a FK da etapa, o gatilho de `configured_at` e a RLS da 9170 |

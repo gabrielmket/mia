@@ -443,4 +443,37 @@ describe("o Google do site", () => {
     await transporteGoogle.enviar(credencial, { ...conversao, site: { ...conversao.site!, somenteValidar: true } });
     expect(corpo(idasAoGoogle()[1]!).validateOnly).toBe(true);
   });
+
+  it("⭐ sem `consentimento = medicao`, a conversão não leva IP, navegador, fbp nem fbc, mesmo guardados", () => {
+    const guardado = {
+      empresaClienteId: EMPRESA,
+      ip: "203.0.113.10",
+      navegador: "Mozilla/5.0 (teste)",
+      pagina: "https://app.exemplo.test/signup",
+      fbp: "fb.1.1.1",
+      fbc: "fb.1.1.abc",
+      gclid: null,
+      gbraid: null,
+      wbraid: null,
+      pedidoId: null,
+    };
+    const montar = (consentimento: string | null) =>
+      montarConversaoDoSite({
+        organizationId: ORG,
+        leadId: LEAD,
+        evento: `Etapa:${REGRA.cadastroGoogle}`,
+        ocorridoEm: new Date(MOVIMENTO),
+        eventoMeta: "CompleteRegistration",
+        valorCentavos: null,
+        moeda: "BRL",
+        telefone: null,
+        email: "ana.exemplo@example.com",
+        nome: "Ana Exemplo",
+        cadastro: { ...guardado, consentimento },
+      }).site!;
+    for (const consentimento of ["necessario", null]) {
+      expect(montar(consentimento)).toMatchObject({ ip: null, navegador: null, fbp: null, fbc: null });
+    }
+    expect(montar("medicao")).toMatchObject({ ip: "203.0.113.10", navegador: "Mozilla/5.0 (teste)", fbp: "fb.1.1.1" });
+  });
 });
