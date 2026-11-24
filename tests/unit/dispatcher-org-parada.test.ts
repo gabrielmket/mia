@@ -31,6 +31,8 @@ import { reenvioDesaceleradoHandler } from "@/lib/messaging/reenvio-desacelerado
 import { automationRulesHandler } from "@/lib/automation/engine.handler";
 import { campanhaRespostaHandler } from "@/lib/campanhas/resposta.handler";
 import { cobrancaSinalHandler } from "@/lib/cobranca/sinal.handler";
+// FORK MIA — o cadastro anda no funil da Time (docs/fork/jornada-de-assinatura.md).
+import { leadDoCadastroHandler } from "@/lib/planos-mia/lead-do-cadastro.handler";
 import { conversaoDeVendaHandler } from "@/lib/conversoes/envio.handler";
 import { conversaoDeQualificacaoHandler } from "@/lib/conversoes/qualificacao.handler";
 import { conversaoDeEtapaMetaHandler } from "@/lib/conversoes/etapa-meta.handler";
@@ -83,6 +85,9 @@ const RODA: EventHandler[] = [
   // FORK MIA — o histórico da coexistência é ENTRADA (a conversa que a empresa
   // já teve): escrita interna, sem rede e sem custo.
   loteDoHistoricoHandler,
+  // FORK MIA — o card do cadastro no CRM da TIME (outra org, a operante): a
+  // entrada paga nasce parada e o cadastro dela também conta. Sem rede.
+  leadDoCadastroHandler,
 ];
 
 const PULA: EventHandler[] = [

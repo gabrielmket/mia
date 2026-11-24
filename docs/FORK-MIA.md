@@ -175,6 +175,14 @@ npx vitest run
   cobrança do upstream; os pontos de ligação estão em
   [`docs/fork/jornada-de-assinatura.md`](fork/jornada-de-assinatura.md), seção 11, e
   os espelhos das rotas do card Cobrança, na seção 6.
+  O lead do cadastro (MIA-168: todo cadastro do `/signup` vira negócio no funil "MIA - SDR"
+  da Time e anda em Cadastro concluído, Em teste e Assinante) mora em
+  `lib/planos-mia/lead-do-cadastro*.ts`, `lib/planos-mia/origem-do-cadastro.ts` e no núcleo
+  comum com o Raio-X, `lib/time/captacao-na-time.ts`; a tabela é a 9169. Os pontos novos no
+  código do upstream são uma linha cada: `app/actions/auth/signUp.ts`,
+  `app/(public)/signup/page.tsx`, `components/auth/SignupForm.tsx`, `lib/auth/schemas.ts`,
+  `lib/cobranca/sinal.handler.ts` e `lib/event-log/register-handlers.ts` (seção 12 de
+  [`docs/fork/jornada-de-assinatura.md`](fork/jornada-de-assinatura.md)).
   O pagamento no início (.96: o cadastro da entrada paga, os dados fiscais, o passo
   "Pagamento" com Pix, cartão e boleto, o modo teste e o bloqueio no fim do teste) mora em
   `lib/dados-fiscais/`, `lib/asaas-mia/`, `lib/pagamento-inicial/` e

@@ -529,7 +529,9 @@ robô, função 22): o merge dele é o mais provável de desligar uma das duas.
 ### 13. Jornada de assinatura: a cobrança · [`jornada-de-assinatura.md`](jornada-de-assinatura.md)
 **O que faz.** A empresa que chega pelo site escolhe um plano, se cadastra, testa, paga e usa o que o
 plano libera, sem ninguém da Time no meio; a Time acompanha e recebe no zap só o que exige ação. Tudo sai
-desligado. **Migrations** 9070 (o plano libera módulo), 9071 (origem), 9072 (crédito por Pix), 9110, 0245.
+desligado. Desde a MIA-168, todo cadastro do `/signup` vira lead no funil "MIA - SDR" da Time e anda nele
+(seção 12 do documento). **Migrations** 9070 (o plano libera módulo), 9071 (origem), 9072 (crédito por Pix), 9110, 0245,
+9169 (o cadastro no CRM da Time).
 **Mora em** `lib/planos-mia/`, `components/planos-mia/`, `lib/carteira/compra-pelo-asaas.ts`, `app/precos/`.
 
 **Pontos de encaixe** (seção 11): `lib/modulos/liberacao.ts` (`moduloLiberado`, `modulosDaOrganizacao`
@@ -538,12 +540,17 @@ somam o plano), `lib/cobranca/sincronizar.ts` (`aplicarRegua`) e `lib/cobranca/t
 `app/api/v1/cron/cobranca/route.ts` (a rodada da jornada depois da do upstream),
 `lib/agent-engine/edge/llm/orcamento.ts`, `lib/ai/inbox-destino.ts` (`ref_kind` `plano`),
 `lib/crm-b2b/route-helpers.ts`, `components/auth/SignupForm.tsx`, `app/actions/registration/decide.ts`,
-`components/cobranca/PainelDaAssinatura.tsx`, `lib/auth/public-paths.ts` (`/precos`).
+`components/cobranca/PainelDaAssinatura.tsx`, `lib/auth/public-paths.ts` (`/precos`). MIA-168:
+`app/actions/auth/signUp.ts` (`registrarCadastroDoSignup`), `app/(public)/signup/page.tsx` e
+`components/auth/SignupForm.tsx` (`mia_origem`), `lib/auth/schemas.ts`, `lib/cobranca/sinal.handler.ts`
+(`informarPagamentoATime`) e `lib/event-log/register-handlers.ts` (`leadDoCadastroHandler`).
 
-**Protege.** `tests/unit/jornada-de-assinatura.test.ts`, `jornada-tudo-desligado.test.ts`, `planos-mia-regras.test.ts`, `entrada-paga-sem-aviso-de-suspensa.test.ts`, `rotina-pula-modulo-fora-do-plano.test.ts`, `compra-de-creditos-pelo-asaas.test.ts`, `mcp-de-implantacao-cobranca.test.ts`.
+**Protege.** `tests/unit/jornada-de-assinatura.test.ts`, `jornada-tudo-desligado.test.ts`, `planos-mia-regras.test.ts`, `entrada-paga-sem-aviso-de-suspensa.test.ts`, `rotina-pula-modulo-fora-do-plano.test.ts`, `compra-de-creditos-pelo-asaas.test.ts`, `mcp-de-implantacao-cobranca.test.ts`, `lead-do-cadastro.test.ts`, e
+`tests/invariants/cadastro-na-time.test.ts`.
 
 **Conferir.**
 1. `git grep -n "FORK MIA" -- lib/modulos/liberacao.ts lib/cobranca/sincronizar.ts lib/cobranca/rodada.ts app/api/v1/cron/cobranca/route.ts`.
+   O lead do cadastro: `git grep -n "MIA-168" -- app/actions/auth/signUp.ts lib/cobranca/sinal.handler.ts lib/event-log/register-handlers.ts components/auth/SignupForm.tsx`.
 2. `npx vitest run tests/unit/jornada-tudo-desligado.test.ts tests/unit/entrada-paga-sem-aviso-de-suspensa.test.ts tests/unit/rotina-pula-modulo-fora-do-plano.test.ts`.
 3. `lib/cobranca/sincronizar.test.ts` (do upstream) tem um caso trocado pela regra do fork, marcado `FORK MIA`: se a fusão o reverteu, o teste pede o aviso de "suspensa" que a regra da entrada paga cala.
 4. MCP (lê só): `plataforma_ver_assinatura`, `plataforma_listar_modulos`, `plataforma_ver_cobranca`.
@@ -960,7 +967,7 @@ sem linha, sem tabela) e o invariante `batimento-dos-crons.test.ts` (o `upsert` 
 | 10 | E-mail marketing | `email-marketing.md` | 9060-9065, 9110 | `email-marketing-regras.test.ts`, `tests/invariants/email-marketing.test.ts` |
 | 11 | Empresa única | `empresa-unica.md` | 9032, 9033, 9034 | `empresa-unica.test.ts`, `papel-do-contato-na-empresa.test.ts` |
 | 12 | IA responde pendente | `ia-responde-pendente.md` | nenhuma | `ia-responde-pendente.test.ts`, `ia-responde-pendente-faixa.test.tsx` |
-| 13 | Jornada de assinatura | `jornada-de-assinatura.md` | 9070, 9071, 9072, 9110 | `jornada-tudo-desligado.test.ts`, `planos-mia-regras.test.ts` |
+| 13 | Jornada de assinatura | `jornada-de-assinatura.md` | 9070, 9071, 9072, 9110, 9169 | `jornada-tudo-desligado.test.ts`, `planos-mia-regras.test.ts` |
 | 14 | Leads da Meta | `leads-da-meta.md` | 9003, 9004, 9005, 9008, 9009 | `paginas-da-meta-por-empresa.test.ts` |
 | 15 | MCP de implantação | `mcp-de-implantacao.md` | 9022, 9045, 9030, 9031, 9040-9042 | `mcp-de-implantacao-espelhos.test.ts`, `mcp-de-implantacao-ferramentas.test.ts` |
 | 16 | MCP de migração | `mcp-de-migracao.md` | 9022 | `mcp-de-migracao-base.test.ts`, `mcp-de-migracao-importa-em-silencio.test.ts` |

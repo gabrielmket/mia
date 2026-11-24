@@ -33,6 +33,8 @@ import { conferirDadosFiscais, faltasDosDadosFiscais } from "@/lib/dados-fiscais
 // FORK MIA (.98): o cupom do link ou digitado (docs/fork/cupons-e-parceiros.md).
 import { CupomNoCadastro } from "@/components/cupons/CupomNoCadastro";
 import type { CupomPublico } from "@/lib/cupons/publico";
+// FORK MIA (MIA-168): a origem do link, escondida (docs/fork/jornada-de-assinatura.md).
+import type { OrigemDoCadastro } from "@/lib/planos-mia/origem-do-cadastro";
 import { formatCents } from "@/lib/money";
 
 /**
@@ -53,6 +55,7 @@ export function SignupForm({
   cartoes = [],
   planoVeioDoLink = false,
   cupomInicial = null,
+  origem,
 }: {
   convite?: ConviteDoSignup;
   planos?: readonly PlanoDoCadastro[];
@@ -64,6 +67,8 @@ export function SignupForm({
   planoVeioDoLink?: boolean;
   /** FORK MIA (.98): o cupom do link ("?cupom=") ou guardado no navegador. */
   cupomInicial?: CupomPublico | null;
+  /** FORK MIA (MIA-168): os utm_* e os ids de clique do link. Não aparece na tela. */
+  origem?: OrigemDoCadastro;
 }) {
   const t = useT();
   const idioma = useIdioma();
@@ -141,6 +146,9 @@ export function SignupForm({
     // FORK MIA (.98): o cupom vai junto só quando vale no plano marcado.
     const comCupom =
       miaCupom?.valido === true && typeof values.cobranca_plan_id === "string" && miaCupom.planos.includes(values.cobranca_plan_id) ? { mia_cupom: miaCupom.codigo } : {};
+    // FORK MIA (MIA-168): a origem do link vai junto, escondida (só sem convite).
+    const comOrigem: { mia_origem?: Record<string, string> } =
+      origem && Object.keys(origem).length > 0 ? { mia_origem: origem as Record<string, string> } : {};
     // No modo convite o e-mail do formulário é readonly, e readonly no
     // cliente não vale nada: quem confere de novo é o servidor.
     const entrada: SignupInput | SignupComConviteInput = convite
@@ -151,8 +159,8 @@ export function SignupForm({
           password_confirm: values.password_confirm,
         }
       : entradaPaga
-        ? { ...values, ...comCupom, mia_nome: miaNome, mia_fiscal: { ...miaFiscais, telefone: miaWhatsapp }, continuar_pagamento: true }
-        : { ...values, ...comCupom, continuar_pagamento: false };
+        ? { ...values, ...comCupom, ...comOrigem, mia_nome: miaNome, mia_fiscal: { ...miaFiscais, telefone: miaWhatsapp }, continuar_pagamento: true }
+        : { ...values, ...comCupom, ...comOrigem, continuar_pagamento: false };
     // FORK MIA (.96/.98): o "continuar para o pagamento" do upstream segue a
     // entrada paga do fork, que já desconta o cupom de dias grátis.
     // O idioma desta tela e o fuso do navegador: a empresa nasce com eles

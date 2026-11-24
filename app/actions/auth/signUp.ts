@@ -26,6 +26,8 @@ import { guardarDadosDoCadastro } from "@/lib/dados-fiscais/banco";
 // FORK MIA (.98): o cupom do cadastro (docs/fork/cupons-e-parceiros.md).
 import { guardarCupomDoCadastro } from "@/lib/cupons/banco";
 import { conferirCupomDoCadastro, type ConferenciaDoCupomDoCadastro } from "@/lib/cupons/cadastro";
+// FORK MIA (MIA-168): o cadastro vira lead no CRM da Time (docs/fork/jornada-de-assinatura.md).
+import { registrarCadastroDoSignup } from "@/lib/planos-mia/lead-do-cadastro-no-signup";
 import {
   CHAVE_FUSO_DO_CADASTRO,
   CHAVE_IDIOMA_DO_CADASTRO,
@@ -385,6 +387,18 @@ export async function signUp(
   // FORK MIA (.98): o cupom espera a empresa nascer (o gatilho adiado da 9130 o aplica).
   if (cupomDoCadastro.ok && cupomDoCadastro.codigo && data.user?.id) {
     await guardarCupomDoCadastro(createAdminClient(), data.user.id, cupomDoCadastro.codigo);
+  }
+  // FORK MIA (MIA-168): a conta NOVA vira lead no CRM da Time ("Novo contato"). Convite
+  // e conta que já existia (identities vazio, a resposta ofuscada) ficam fora. Nunca lança.
+  if (!convite && data.user?.id && (data.user.identities?.length ?? 0) > 0) {
+    await registrarCadastroDoSignup({
+      userId: data.user.id,
+      dados: parsed.data as SignupInput,
+      planoId: planoEscolhido ?? null,
+      cupom: cupomDoCadastro.ok ? cupomDoCadastro.codigo : null,
+      nome: entradaPaga.ok && entradaPaga.entradaPaga ? entradaPaga.nome : null,
+      headers: hdrs,
+    });
   }
 
   await audit({

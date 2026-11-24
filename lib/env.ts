@@ -634,6 +634,11 @@ const schema = z.object({
   AWS_SES_SNS_TOPIC_ARN: z.string().optional().default(""),
   EMAIL_MARKETING_TOKEN_SECRET: z.string().optional().default(""),
 
+  // FORK MIA (MIA-168): o id da fonte de formulário "App · cadastro" no CRM da
+  // Time (lib/planos-mia/lead-do-cadastro.ts, docs/fork/jornada-de-assinatura.md).
+  // Opcional: vazia, o cadastro segue normal e o erro `sem_fonte` aparece no MCP.
+  CADASTRO_FONTE_DO_CRM: z.string().optional().default(""),
+
   // Google Ads — credencial da INSTALAÇÃO, não da organização (migration 0307).
   // O developer token pertence a quem construiu o software, não à conta de
   // anúncios de cada cliente: uma instalação usa o MESMO token pra reportar
