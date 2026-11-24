@@ -1217,6 +1217,26 @@ const TELAS_DO_UPSTREAM: Manual[] = [
     observacao:
       "A tela só aparece quando o módulo de Serviços está ligado para a empresa; na MIA, quem liga é a Time Company. Enquanto não houver serviço cadastrado, o agente não tem preço, prazo nem sinal para responder.",
   },
+  {
+    // Fusão v1.125 (#5128): a tela nova do upstream, escrita lendo
+    // `app/app/settings/links-de-contato/`.
+    id: "tipos-de-link-do-contato",
+    titulo: "Tipos de link do contato: escolher quais links a ficha e o funil mostram",
+    palavras: [
+      "tipos de link", "links do contato", "instagram", "site", "google meu negocio", "linkedin", "tiktok",
+      "youtube", "facebook", "link na bio", "esconder campo", "campo que nao uso",
+    ],
+    href: "/app/settings/links-de-contato",
+    telas: ["/app/contacts", "/app/kanban"],
+    papelMinimo: "admin",
+    passos: [
+      "Abra Configurações e, em Sua empresa, Tipos de link do contato.",
+      "Em Quais tipos a ficha mostra, marque os tipos que a empresa usa (Instagram, Link na bio, Site, Google Meu Negócio, Facebook, LinkedIn, TikTok, YouTube e Outro) e desmarque os outros. Pelo menos um fica marcado.",
+      "Clique em Salvar tipos. A ficha do contato e o card do funil passam a mostrar só os tipos marcados, para a empresa inteira.",
+    ],
+    observacao:
+      "Desmarcar um tipo não apaga o que já foi preenchido nele: o valor fica guardado e volta a aparecer quando o tipo é marcado de novo. Só o administrador da empresa muda esta escolha.",
+  },
 ];
 
 /**

@@ -818,6 +818,38 @@ Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
 
+### O que chegou do upstream 1.125 (fusão de 24/11, MIA-227)
+
+A fusão entra sem ferramenta nova e sem campo novo no MCP de plataforma. Nenhuma rota espelhada
+(seção 5) mudou nesta faixa. O `crm_count_leads` com `por_etapa` (#4996) é do MCP da EMPRESA e
+vem pronto do upstream.
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| Transferir os negócios em andamento de um funil para outro ao arquivar ou excluir (9466, `POST /api/v1/pipelines/[id]/negocios`) | 1.125 | nada a configurar: é operação do dia a dia na tela do funil | |
+| A regra com gatilho "Negócio ganho" ou "Negócio perdido" inicia o follow-up (9470, #5077) | 1.125 | nada a gravar: a regra já existia e falhava calada; `plataforma_garantir_automacao` não muda | |
+| Preço do Gemini 3.5 Flash (9462) | 1.125 | nada a fazer: tabela de preço da plataforma | |
+
+Falta no MCP (cada item com o motivo):
+
+- os tipos de link do contato por empresa (`organizations.settings.links_de_contato`, tela
+  Configurações › Tipos de link do contato, #5128): escolha nova da empresa, sem ferramenta que a
+  leia ou grave. Sem ela vale o catálogo inteiro, que é o de antes;
+- "Continuar a conversa quando a equipe devolver ao automático" por agente
+  (`trigger_config.resume_on_handback`, `lib/escalacao/retomada-ao-devolver.ts`): campo novo do
+  agente. Nasce desligado e, ligado, a IA fala com o cliente na hora da devolução, então muda o
+  envio e pede decisão antes de a implantação ligar sozinha. Convive com a resposta da mensagem
+  pendente do fork (.107), ver `docs/fork/CATALOGO.md`, função 12;
+- o App ID e o Configuration ID do Embedded Signup do upstream (`platform_meta_app.app_id` e
+  `config_id`, 9463, Admin › API Oficial): configuração da PLATAFORMA, não da empresa. Preenchidos,
+  a tela do canal oficial ganha um segundo botão de conexão pelo Facebook, ao lado do "Conectar pelo
+  app" da coexistência do fork. Ficam vazios até o Gabriel decidir (PR da fusão, decisão 1).
+
+Nada a configurar pela implantação: a IA que não fala depois que uma pessoa assume, a resposta do
+responsável que cala a IA, a distribuição automática que não interrompe a IA devolvida, as
+anotações do cliente no Inbox, a ordem da Fila e os tetos de CPU e memória do `docker-compose.prod.yml`
+(o fork implanta pelo `docker-compose.easypanel.yml`, que é nosso e não os recebe).
+
 ### O que chegou do upstream 1.124 (fusão de 23/11, MIA-127)
 
 A fusão entra sem ferramenta nova e sem campo novo no MCP de plataforma. Uma rota espelhada

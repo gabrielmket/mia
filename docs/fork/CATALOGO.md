@@ -528,6 +528,13 @@ cliente deixou pendente em vez de calar; e a pausa por outra conversa do mesmo c
 **Riscos.** `inbound-turn.ts` é o arquivo do upstream que mais recebe encaixe nosso (aqui e na trava de
 robô, função 22): o merge dele é o mais provável de desligar uma das duas.
 
+**Convive com a retomada ao devolver do upstream** (v1.125, `lib/escalacao/retomada-ao-devolver.ts`,
+opção do agente `trigger_config.resume_on_handback`, nasce desligada). As duas falam na devolução, mas
+nunca pelo mesmo caso: a do fork só pede o turno quando a ÚLTIMA fala é do cliente, sem saída depois
+dela; a do upstream só enfileira quando a última fala é da EQUIPE (`ultima_fala_nao_e_da_equipe`
+recusa o resto) e recua se houver follow-up vivo. Se o upstream afrouxar essa recusa, as duas
+mandariam mensagem na mesma devolução: conferir na fusão.
+
 ### 13. Jornada de assinatura: a cobrança · [`jornada-de-assinatura.md`](jornada-de-assinatura.md)
 **O que faz.** A empresa que chega pelo site escolhe um plano, se cadastra, testa, paga e usa o que o
 plano libera, sem ninguém da Time no meio; a Time acompanha e recebe no zap só o que exige ação. Tudo sai
@@ -848,6 +855,15 @@ de fim da janela (`FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`, em `janela.ts` e `s
 fecha e a MIA não conclui a conexão, sem erro na tela. LACUNA: nenhum teste abre o `ConectarPeloApp` e chama a
 rota `concluir` pela tela (o `e2e.yml` aponta `META_GRAPH_BASE_URL` para uma porta que recusa); a prova de
 ponta a ponta é a invariante `coexistencia-conexao-pelo-app.test.ts`, no servidor.
+
+**O Embedded Signup do upstream** (v1.125, #5113: `components/connections/ConectarPeloFacebook.tsx`,
+`app/api/v1/channels/official/embedded-signup/`, colunas `app_id` e `config_id` da 9463 em
+`platform_meta_app`) abre a mesma janela da Meta (`featureType: "whatsapp_business_app_onboarding"`) e
+grava o canal com a origem `embedded_signup`, mas sem pedir a sincronização do histórico. O botão dele só
+aparece com o App ID e o Configuration ID preenchidos em Admin › API Oficial; enquanto ficarem vazios, o
+"Conectar pelo app" do fork é a única porta. Os dois ouvintes de `postMessage` só concluem com o código
+da própria janela, então uma janela aberta por um não conclui no outro. Encaixar o nosso sobre o dele é
+decisão do Gabriel (PR da fusão v1.125).
 
 ---
 

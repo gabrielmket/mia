@@ -182,6 +182,17 @@ montar_fixture() {
   local proj="$raiz/inst" ns
   ns="$(sed -n 's/^IMG_NS="\(.*\)"$/\1/p' "$kit/_common.sh" | head -1)"
   [ -n "$ns" ] || { echo "FATAL: não li IMG_NS de $kit/_common.sh" >&2; exit 1; }
+  # FORK MIA: os NOMES das imagens também vêm do _common.sh (mia-crm, mia-worker,
+  # mia-scheduler, mia-voice-agent), como em tests/shell/update-guard.test.sh: o
+  # teste mede o kit, não um literal do upstream. Globais de propósito: as provas
+  # de cada cenário leem o nome do app depois de montar a instalação.
+  base_da_imagem() { grep -m1 "^$1=" "$kit/_common.sh" | sed 's#.*/##; s#"##g'; }
+  IMG_APP_BASE="$(base_da_imagem IMG_APP)"
+  IMG_WORKER_BASE="$(base_da_imagem IMG_WORKER)"
+  IMG_SCHEDULER_BASE="$(base_da_imagem IMG_SCHEDULER)"
+  IMG_VOICE_AGENT_BASE="$(base_da_imagem IMG_VOICE_AGENT)"
+  [ -n "$IMG_APP_BASE" ] && [ -n "$IMG_WORKER_BASE" ] && [ -n "$IMG_SCHEDULER_BASE" ] && [ -n "$IMG_VOICE_AGENT_BASE" ] \
+    || { echo "FATAL: não li IMG_APP/IMG_WORKER/IMG_SCHEDULER/IMG_VOICE_AGENT de $kit/_common.sh" >&2; exit 1; }
   mkdir -p "$proj/supabase"
   cp -RL "$kit" "$proj/hostgator-setup-kit"
   printf 'services:\n  app:\n    image: ${APP_IMAGE:-x}\n' > "$proj/docker-compose.prod.yml"
@@ -190,13 +201,13 @@ montar_fixture() {
   # baseline" seria verdade por vacuidade.
   printf 'select 1;\n' > "$proj/supabase/baseline.sql"
   cat > "$proj/.env" <<ENV
-APP_IMAGE=$ns/deskcommcrm:$atual
+APP_IMAGE=$ns/$IMG_APP_BASE:$atual
 APP_PULL_POLICY=$policy
-WORKER_IMAGE=$ns/deskcomm-worker:$atual
+WORKER_IMAGE=$ns/$IMG_WORKER_BASE:$atual
 WORKER_PULL_POLICY=$policy
-SCHEDULER_IMAGE=$ns/deskcomm-scheduler:$atual
+SCHEDULER_IMAGE=$ns/$IMG_SCHEDULER_BASE:$atual
 SCHEDULER_PULL_POLICY=$policy
-VOICE_AGENT_IMAGE=$ns/deskcomm-voice-agent:$atual
+VOICE_AGENT_IMAGE=$ns/$IMG_VOICE_AGENT_BASE:$atual
 VOICE_AGENT_PULL_POLICY=$policy
 SUPABASE_DB_URL=postgresql://x/y
 NEXT_PUBLIC_APP_URL=https://crm.exemplo.com.br
@@ -250,11 +261,11 @@ caso_a1() {  # caso_a1 <kit> <raiz> → as provas são contadas nos contadores g
   igual "A1 · update.sh terminou com rc=0" 0 "$RC"
   contem "A1 · o pull do APP foi feito na versão alvo (1.122.0)" "app" "$log"
   afirmar "A1 · o app foi BAIXADO com policy=missing" \
-    grep -qE 'pull  app +[^ ]*deskcommcrm:1\.122\.0 +policy=missing +→ BAIXADA' "$log"
+    grep -qE "pull  app +[^ ]*${IMG_APP_BASE}:1\\.122\\.0 +policy=missing +→ BAIXADA" "$log"
   negar "A1 · o app NÃO foi pulado (Skipped)" \
     grep -qE 'pull  app .*→ SKIPPED' "$log"
   afirmar "A1 · o .env ficou coerente com o que foi puxado (APP_IMAGE=1.122.0)" \
-    grep -qxE "APP_IMAGE=[^=]*deskcommcrm:1\.122\.0" "$proj/.env"
+    grep -qxE "APP_IMAGE=[^=]*${IMG_APP_BASE}:1\\.122\\.0" "$proj/.env"
   afirmar "A1 · o .env ficou coerente com o pull (APP_PULL_POLICY=missing)" \
     grep -qx "APP_PULL_POLICY=missing" "$proj/.env"
   afirmar "A1 · worker e scheduler também vieram (o sandbox mede o todo)" \
@@ -291,7 +302,7 @@ caso_a2() {
   afirmar "A2 · o never do operador continua no .env" \
     grep -qx "APP_PULL_POLICY=never" "$proj/.env"
   afirmar "A2 · e a imagem do operador não foi trocada" \
-    grep -qxE "APP_IMAGE=[^=]*deskcommcrm:1\.122\.0" "$proj/.env"
+    grep -qxE "APP_IMAGE=[^=]*${IMG_APP_BASE}:1\\.122\\.0" "$proj/.env"
 
   [ "$PROVAS" -gt "$inicio" ] && [ "$FALHAS" -eq "$inicio_falhas" ]
 }

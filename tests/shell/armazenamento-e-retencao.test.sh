@@ -35,6 +35,16 @@ KIT_DIR="$ROOT/hostgator-setup-kit"
 # (fork) ficaria com o teste reprovando sem ter quebrado nada.
 NS="$(sed -n 's/^IMG_NS="\(.*\)"$/\1/p' "$KIT_DIR/_common.sh" | head -1)"
 [ -n "$NS" ] || { echo "não consegui ler IMG_NS de _common.sh" >&2; exit 1; }
+# FORK MIA: os NOMES das imagens também vêm do _common.sh (mia-crm, mia-worker,
+# mia-scheduler, mia-voice-agent), como em tests/shell/update-guard.test.sh: a
+# poda reconhece as NOSSAS imagens pelo nome do kit, não por um literal do upstream.
+base_da_imagem() { grep -m1 "^$1=" "$KIT_DIR/_common.sh" | sed 's#.*/##; s#"##g'; }
+IMG_APP_BASE="$(base_da_imagem IMG_APP)"
+IMG_WORKER_BASE="$(base_da_imagem IMG_WORKER)"
+IMG_SCHEDULER_BASE="$(base_da_imagem IMG_SCHEDULER)"
+IMG_VOICE_AGENT_BASE="$(base_da_imagem IMG_VOICE_AGENT)"
+[ -n "$IMG_APP_BASE" ] && [ -n "$IMG_WORKER_BASE" ] && [ -n "$IMG_SCHEDULER_BASE" ] && [ -n "$IMG_VOICE_AGENT_BASE" ] \
+  || { echo "não consegui ler IMG_APP/IMG_WORKER/IMG_SCHEDULER/IMG_VOICE_AGENT de _common.sh" >&2; exit 1; }
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -92,16 +102,16 @@ PROJ="$WORK/proj"
 mkdir -p "$PROJ/backups"
 : > "$PROJ/docker-compose.prod.yml"
 cat > "$PROJ/.env" <<ENV
-APP_IMAGE="$NS/deskcommcrm:1.115.0"
-WORKER_IMAGE="$NS/deskcomm-worker:1.115.0"
-SCHEDULER_IMAGE="$NS/deskcomm-scheduler:1.115.0"
-VOICE_AGENT_IMAGE="$NS/deskcomm-voice-agent:1.115.0"
+APP_IMAGE="$NS/$IMG_APP_BASE:1.115.0"
+WORKER_IMAGE="$NS/$IMG_WORKER_BASE:1.115.0"
+SCHEDULER_IMAGE="$NS/$IMG_SCHEDULER_BASE:1.115.0"
+VOICE_AGENT_IMAGE="$NS/$IMG_VOICE_AGENT_BASE:1.115.0"
 ENV
 
 # A "volta": a versão que o update anterior deixou no snapshot. É ela que a
 # poda tem de preservar junto com a atual.
 cat > "$PROJ/.deskcomm-env-antes-do-update" <<ENV
-APP_IMAGE="$NS/deskcommcrm:1.114.0"
+APP_IMAGE="$NS/$IMG_APP_BASE:1.114.0"
 ENV
 
 runner() {  # runner <arquivo> : fonte das funções, com o projeto como cwd
@@ -222,15 +232,15 @@ printf '\n▶ 4. Poda conservadora de imagens\n'
 : > "$DOCKER_LOG"
 export FAKE_IMAGE_LIST="$WORK/imagens.txt"
 cat > "$FAKE_IMAGE_LIST" <<LIST
-$NS/deskcommcrm:1.108.0
-$NS/deskcommcrm:1.110.0
-$NS/deskcommcrm:1.114.0
-$NS/deskcommcrm:1.115.0
-$NS/deskcommcrm:stable
-$NS/deskcomm-worker:1.108.0
-$NS/deskcomm-worker:1.115.0
+$NS/$IMG_APP_BASE:1.108.0
+$NS/$IMG_APP_BASE:1.110.0
+$NS/$IMG_APP_BASE:1.114.0
+$NS/$IMG_APP_BASE:1.115.0
+$NS/$IMG_APP_BASE:stable
+$NS/$IMG_WORKER_BASE:1.108.0
+$NS/$IMG_WORKER_BASE:1.115.0
 LIST
-export FAKE_IMAGE_USED="$NS/deskcomm-worker:1.108.0"
+export FAKE_IMAGE_USED="$NS/$IMG_WORKER_BASE:1.108.0"
 
 poda="$WORK/poda.sh"
 runner "$poda"
@@ -248,12 +258,12 @@ check "NUNCA com --all" nao_tem "$DOCKER_LOG" "--all"
 check "nunca docker system prune" nao_tem "$DOCKER_LOG" "system prune"
 check "uma chamada só de prune (sem laço)" [ "$(grep -c 'image prune' "$DOCKER_LOG")" -eq 1 ]
 
-check "removeu a versão antiga do app" tem "$DOCKER_LOG" "image rm $NS/deskcommcrm:1.108.0"
-check "removeu a outra versão antiga" tem "$DOCKER_LOG" "image rm $NS/deskcommcrm:1.110.0"
-check "preservou a versão ATUAL" nao_tem "$DOCKER_LOG" "rm $NS/deskcommcrm:1.115.0"
-check "preservou a versão da VOLTA" nao_tem "$DOCKER_LOG" "rm $NS/deskcommcrm:1.114.0"
-check "preservou o canal móvel stable" nao_tem "$DOCKER_LOG" "rm $NS/deskcommcrm:stable"
-check "preservou imagem usada por contêiner parado" nao_tem "$DOCKER_LOG" "rm $NS/deskcomm-worker:1.108.0"
+check "removeu a versão antiga do app" tem "$DOCKER_LOG" "image rm $NS/$IMG_APP_BASE:1.108.0"
+check "removeu a outra versão antiga" tem "$DOCKER_LOG" "image rm $NS/$IMG_APP_BASE:1.110.0"
+check "preservou a versão ATUAL" nao_tem "$DOCKER_LOG" "rm $NS/$IMG_APP_BASE:1.115.0"
+check "preservou a versão da VOLTA" nao_tem "$DOCKER_LOG" "rm $NS/$IMG_APP_BASE:1.114.0"
+check "preservou o canal móvel stable" nao_tem "$DOCKER_LOG" "rm $NS/$IMG_APP_BASE:stable"
+check "preservou imagem usada por contêiner parado" nao_tem "$DOCKER_LOG" "rm $NS/$IMG_WORKER_BASE:1.108.0"
 check "não tocou em imagem de terceiros" nao_tem "$DOCKER_LOG" "image rm devlikeapro"
 check "a saída diz o que foi removido" tem <(printf '%s' "$saida") "imagem antiga removida"
 
@@ -262,7 +272,7 @@ printf '\n▶ 4b. Falha da poda não aborta\n'
 saida="$(FAKE_PRUNE_FAIL=1 bash "$poda" 2>&1)"; rc=$?
 check "RC 0 mesmo com a poda falhando" [ "$rc" -eq 0 ]
 check "o aviso aparece para o operador" tem <(printf '%s' "$saida") "poda de camadas soltas não rodou"
-check "e a poda das nossas imagens segue" tem "$DOCKER_LOG" "image rm $NS/deskcommcrm:1.108.0"
+check "e a poda das nossas imagens segue" tem "$DOCKER_LOG" "image rm $NS/$IMG_APP_BASE:1.108.0"
 
 printf '\n▶ 4c. Poda desligável pelo .env\n'
 : > "$DOCKER_LOG"
