@@ -386,7 +386,7 @@ describe("2 e 3. a empresa nasceu", () => {
 
   it("o consumidor: roda na org parada e escuta só o nascimento", async () => {
     expect(leadDoCadastroHandler.naOrgParada).toBe("roda");
-    expect(leadDoCadastroHandler.events).toEqual(["mia.cadastro.empresa_nasceu"]);
+    expect(leadDoCadastroHandler.events).toEqual(["cadastro.empresa_nasceu"]);
   });
 });
 
