@@ -47,6 +47,13 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { escolheIa, MENSAGEM_IA_DA_PLATAFORMA } from "@/lib/ai/trava-da-ia";
 import { temPrecoNoMotor } from "@/lib/agent-engine/edge/llm/pricing";
 import { modeloAposentadoNoProvedor } from "@/lib/agent-engine/edge/llm/modelos-aposentados";
+// FORK MIA (9172, MIA-217): a régua única de "qual IA vale e se tem chave".
+import {
+  chaveUtilizavel,
+  credenciaisValidadas,
+  iaDaEmpresa,
+  recusaDoPadraoSemChave,
+} from "@/lib/ai/ia-da-empresa";
 
 export const dynamic = "force-dynamic";
 
@@ -312,6 +319,11 @@ export async function GET(): Promise<Response> {
   // login das credenciais — a mesma regra da tela de Credenciais.
   const oferece = await provedorOferecido(createAdminClient());
 
+  // FORK MIA (9172, MIA-217): de onde vem o padrão (segue a plataforma ou é
+  // escolha própria) e se ele tem chave utilizável. A tela desenha o aviso em
+  // cima disto. `null` quando a leitura falhou: a tela não mostra o aviso.
+  const ia = await iaDaEmpresa(createAdminClient(), org.orgId).catch(() => null);
+
   return ok({
     papeis: PAPEIS,
     pontos,
@@ -333,6 +345,9 @@ export async function GET(): Promise<Response> {
     // FORK MIA: provedor e modelo de cada ponto são da plataforma; o painel fica
     // só de leitura para quem não escolhe IA (lib/ai/trava-da-ia.ts).
     podeEditar: roleAtLeast(org.role, "admin") && escolheIa(authz.user),
+    // FORK MIA (9172): `origem` = "plataforma" | "propria"; `chave` =
+    // "propria" | "instalacao" | null (null = a empresa está sem IA).
+    ia: ia ? { origem: ia.origem, chave: ia.chave } : null,
   });
 }
 
@@ -455,6 +470,24 @@ export async function PUT(req: NextRequest): Promise<Response> {
         422,
       );
     }
+  }
+
+  // FORK MIA (9172, MIA-217): a função ligada, sem credencial escolhida e sem
+  // endereço próprio, roda com a chave da empresa ou a da instalação. Sem
+  // nenhuma das duas ela ficaria sem IA: recusa aqui, onde alguém lê o motivo.
+  // Provedor de serviço (voz) tem régua própria e fica de fora.
+  if (
+    !corpo.credential_id &&
+    !corpo.base_url &&
+    corpo.is_enabled !== false &&
+    ehProvedorSuportado(corpo.provider)
+  ) {
+    const recusa = recusaDoPadraoSemChave({
+      provider: corpo.provider,
+      chave: chaveUtilizavel(corpo.provider, await credenciaisValidadas(createAdminClient(), org.orgId)),
+      alvo: "funcao",
+    });
+    if (recusa) return fail("ia_sem_chave", recusa, 422);
   }
 
   const { data: gravado, error } = await db
@@ -624,6 +657,15 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   // JWT), nunca do corpo.
   const admin = createAdminClient();
 
+  // FORK MIA (9172, MIA-217): salvar o padrão num provedor sem chave utilizável
+  // (própria, ativa e validada, ou da instalação) deixaria a empresa sem IA.
+  const recusa = recusaDoPadraoSemChave({
+    provider: corpo.provider,
+    chave: chaveUtilizavel(corpo.provider, await credenciaisValidadas(admin, org.orgId)),
+    alvo: "empresa",
+  });
+  if (recusa) return fail("ia_sem_chave", recusa, 422);
+
   // MERGE, nunca sobrescrita. `organizations.settings` é um jsonb compartilhado
   // — `branding` (a marca da instalação) e `security` (a política de MFA) moram
   // nele. Um `update({ settings: { llm } })` ingênuo apaga os dois em silêncio, e
@@ -642,7 +684,10 @@ export async function PATCH(req: NextRequest): Promise<Response> {
 
   const { data: gravado, error } = await admin
     .from("organizations")
-    .update({ settings })
+    // FORK MIA (9172): salvar o padrão neste cartão é a escolha própria — a
+    // empresa deixa de seguir a IA da plataforma (`trg_ia_segue_a_plataforma`
+    // devolveria o par da plataforma se a coluna ficasse `true`).
+    .update({ settings, ia_segue_a_plataforma: false })
     .eq("id", org.orgId)
     .select("settings")
     .maybeSingle();
