@@ -68,6 +68,7 @@ Há duas portas, e o defeito é sempre uma saída nova que não passa por nenhum
 | conversões da Meta e do Google | a conexão de conversões não liga na demonstração (9010); as conversões do site, que usam a credencial da variável e não a conexão, perguntam à `travaDaDemonstracao` em `lib/conversoes/site.ts` | consumidor novo que fala com a rede sem ler a conexão |
 | agenda externa, push, ligação, servidor MCP externo, webhook de saída | gatilhos da 9010, 9016, 9043 | integração nova com conexão própria |
 | e-mail marketing | `lib/email-marketing/envio.ts` (`travaDaDemonstracao`) e `trg_mia_email_demonstracao_nao_envia` (9064) | motor novo que manda sem o `mandar` |
+| recusa de ligação recebida, WAHA `call.received` | `lib/waha/ingest.ts` (`handleCallReceived`, `travaDaDemonstracao`) | handler novo de evento que age no WhatsApp sem passar por `messages` |
 
 **Conferir.**
 
@@ -86,7 +87,8 @@ git diff --name-only --diff-filter=A vA vB -- lib app | xargs grep -l "graph.fac
 git diff --name-only --diff-filter=A vA vB -- lib | xargs grep -l "conversions\|capi\|gtag\|measurement" 2>/dev/null
 # 5. Os testes que provam a trava
 npx vitest run tests/unit/send-email-na-demonstracao.test.ts tests/unit/cliente-modelo-trava.test.ts \
-  tests/unit/convite-de-equipe-na-demonstracao.test.ts tests/unit/empresa-de-demonstracao-nao-envia.test.ts
+  tests/unit/convite-de-equipe-na-demonstracao.test.ts tests/invariants/empresa-de-demonstracao-nao-envia.test.ts \
+  tests/unit/recusa-de-ligacao-na-demonstracao.test.ts
 ```
 
 Hoje há onze chamadores de `sendEmail(` fora de `lib/email/` (`git grep -ln "sendEmail(" -- lib app`).

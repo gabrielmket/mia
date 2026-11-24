@@ -32,6 +32,8 @@ import { agenteAceitaComandoDeCelular, lerComandoDeControle } from "@/lib/escala
 import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
 import { getWahaClient } from "@/lib/waha/client";
 import { lerBloqueioDeChamadas } from "@/lib/organizacao/bloqueio-de-chamadas";
+// FORK MIA · CLIENTE MODELO — a recusa de ligação passa pela trava da demonstração.
+import { travaDaDemonstracao } from "@/lib/demonstracao/trava";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 import { estamparAtribuicaoDoContato, metadataDoAnuncio } from "@/lib/leads/atribuicao-de-anuncio";
@@ -2484,6 +2486,20 @@ async function handleCallReceived(
 
   try {
     if (!(await lerBloqueioDeChamadas(admin, session.organization_id))) return;
+    // FORK MIA · CLIENTE MODELO — recusar a ligação chega a uma pessoa de verdade
+    // e não passa por `messages` nem por estado que o banco barre: a trava da
+    // demonstração (R1 do docs/fork/CATALOGO.md) é perguntada aqui, só quando a
+    // chave está ligada. Falha fechada: na dúvida, a ligação toca.
+    const trava = await travaDaDemonstracao(admin, session.organization_id);
+    if (trava.travado) {
+      logger.info("waha.ingest: chamada recebida não recusada (empresa de demonstração)", {
+        organization_id: session.organization_id,
+        channel_session_id: session.id,
+        call_id: callId,
+        motivo: trava.motivo,
+      });
+      return;
+    }
     const waha = getWahaClient();
     if (!waha) {
       logger.warn("waha.ingest: bloqueio de chamada ligado, mas o WAHA não está configurado", {
