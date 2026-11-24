@@ -2,7 +2,7 @@
  * FORK MIA (MIA-218) · O AVISO DA TRAVA: empresa com o padrão de IA num
  * provedor sem chave utilizável (docs/fork/ia-da-plataforma.md).
  *
- * Foi o buraco da MIA-215: 14 empresas nasceram no padrão do produto do
+ * Foi o buraco da MIA-215: empresas nasceram no padrão do produto do
  * upstream (Anthropic), a instalação não tinha chave da Anthropic, e nenhuma
  * delas fez uma chamada de IA por semanas sem ninguém saber. A trava do
  * servidor (MIA-217) recusa salvar um padrão assim; isto aqui é o que AVISA
