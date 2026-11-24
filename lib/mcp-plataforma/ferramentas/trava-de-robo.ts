@@ -37,8 +37,10 @@ export const FERRAMENTAS_DA_TRAVA_DE_ROBO: readonly FerramentaDePlataforma[] = [
       "(1) motivo `robo`: do outro lado da conversa há um ROBÔ (3 mensagens automáticas em 15 minutos, cada uma depois de uma resposta da IA; " +
       "o sinal é a mensagem que se declara automática, o mesmo texto repetido pela 3ª vez em 2 horas, ou texto longo chegando rápido demais para alguém digitar). " +
       "Aí a IA fica calada para o contato, ele ganha a etiqueta \"robô\", os follow-ups dele são cancelados, cada negócio aberto vira PERDIDO com o motivo " +
-      "\"Robô ou atendimento automático\" e a conversa é encerrada. (2) motivo `teto`: a IA respondeu 30 vezes em 60 minutos na mesma conversa; a IA pausa só " +
-      "naquela conversa, sem perder negócio e sem encerrar, e a equipe recebe o aviso na Central. " +
+      "\"Robô ou atendimento automático\" e a conversa é encerrada. (2) motivo `teto`: a IA respondeu 30 vezes em 60 minutos na mesma conversa, OU o outro lado " +
+      "respondeu no RITMO DE MÁQUINA (sinal `ritmo`: 6 respostas seguidas da IA em 15 minutos, cada uma respondida em texto em até 60 s e sempre com o mesmo atraso, " +
+      "a maior menos a menor até 8 s; é o robô que varia o texto e responde devagar). A IA pausa só naquela conversa, sem perder negócio e sem encerrar, e a equipe " +
+      "recebe o aviso na Central. O registro do ritmo tem motivo `teto` e o sinal `ritmo` em `sinais`. " +
       "Cada registro traz a empresa, a conversa (com o link do Inbox), os 4 últimos dígitos do telefone do contato, os sinais que casaram (só o nome do sinal e o id da " +
       "mensagem, nunca o texto), quantas respostas a IA deu na janela, os negócios afetados, o que falhou e se alguém já desfez. " +
       "Sem `organization_id`, lista os registros de TODOS os clientes (sem a configuração). Para devolver a IA a um contato travado: plataforma_desfazer_trava_de_robo.",
@@ -51,7 +53,10 @@ export const FERRAMENTAS_DA_TRAVA_DE_ROBO: readonly FerramentaDePlataforma[] = [
           "O id do cliente (de plataforma_listar_clientes): traz a configuração dele e só os registros dele. Sem ele, os registros de todos os clientes.",
         ),
       periodo_dias: z.number().int().min(1).max(90).optional().describe("Quantos dias para trás (padrão 7, até 90)."),
-      motivo: z.enum(["robo", "teto"]).optional().describe("Só os registros deste motivo: robo (o laço com outro robô) ou teto (respostas demais)."),
+      motivo: z
+        .enum(["robo", "teto"])
+        .optional()
+        .describe("Só os registros deste motivo: robo (o laço com outro robô) ou teto (respostas demais, ou o ritmo de máquina: o sinal `ritmo` em `sinais`)."),
       limite: z.number().int().min(1).max(200).optional().describe("Quantos registros, os mais novos primeiro (padrão 50, até 200)."),
     },
     exemplo: { organization_id: ORG_DE_EXEMPLO, periodo_dias: 7 },
@@ -106,14 +111,16 @@ export const FERRAMENTAS_DA_TRAVA_DE_ROBO: readonly FerramentaDePlataforma[] = [
     name: "plataforma_configurar_trava_de_robo",
     description:
       "LIGA, DESLIGA ou AJUSTA os limites da TRAVA DE ROBÔ de um cliente. Só o que vier no pedido muda; o resto fica como está (o padrão é LIGADA, " +
-      "3 mensagens de robô em 15 minutos, repetição pela 3ª vez em 120 minutos, 80 caracteres a mais de 15 por segundo, teto de 30 respostas da IA em 60 minutos). " +
+      "3 mensagens de robô em 15 minutos, repetição pela 3ª vez em 120 minutos, 80 caracteres a mais de 15 por segundo, teto de 30 respostas da IA em 60 minutos, " +
+      "ritmo de máquina LIGADO com 6 giros seguidos, cada um respondido em até 60 s, variando até 8 s). " +
       "Vale na hora, para todo contato do cliente, no próximo turno da IA. Chamar de novo com os mesmos valores responde `ja_estava`. " +
-      "ATENÇÃO: desligar (`ligada: false`) desliga as DUAS proteções, a do robô e a do teto; com ela desligada, a IA responde outro robô sem parar e gasta IA até alguém " +
-      "perceber. Limite mais frouxo (mais mensagens para disparar, teto mais alto) tem o mesmo efeito mais devagar. " +
+      "ATENÇÃO: desligar (`ligada: false`) desliga TODAS as proteções, a do robô, a do ritmo e a do teto; com ela desligada, a IA responde outro robô sem parar e gasta IA " +
+      "até alguém perceber. Para desligar só o ritmo de máquina (o sinal que pode pausar uma pessoa que responde muito regular), use `ritmo_ligado: false`: o laço e o " +
+      "teto continuam. Limite mais frouxo (mais mensagens ou giros para disparar, teto mais alto, variação menor) tem o mesmo efeito mais devagar. " +
       "O QUE NÃO FAZ: não devolve a IA a quem já foi travado (plataforma_desfazer_trava_de_robo) e não reabre negócio nem conversa.",
     inputSchema: {
       organization_id: ORGANIZACAO,
-      ligada: z.boolean().optional().describe("true liga (o padrão), false desliga as duas proteções."),
+      ligada: z.boolean().optional().describe("true liga (o padrão), false desliga todas as proteções (o robô, o ritmo e o teto)."),
       janela_minutos: limite("janela_minutos", "A janela em que as mensagens de robô são contadas, em minutos (padrão 15)."),
       mensagens_para_disparar: limite(
         "mensagens_para_disparar",
@@ -134,6 +141,22 @@ export const FERRAMENTAS_DA_TRAVA_DE_ROBO: readonly FerramentaDePlataforma[] = [
       ),
       teto_respostas: limite("teto_respostas", "O teto de respostas (turnos) da IA na mesma conversa (padrão 30)."),
       teto_janela_minutos: limite("teto_janela_minutos", "A janela do teto, em minutos (padrão 60)."),
+      ritmo_ligado: z
+        .boolean()
+        .optional()
+        .describe("O ritmo de máquina: true liga (o padrão), false desliga SÓ ele (o laço com robô e o teto continuam)."),
+      ritmo_giros: limite(
+        "ritmo_giros",
+        "Quantos giros SEGUIDOS no mesmo ritmo disparam (padrão 6). Giro é a resposta da IA e a primeira resposta em texto do outro lado; cabem na janela de janela_minutos.",
+      ),
+      ritmo_latencia_maxima_segundos: limite(
+        "ritmo_latencia_maxima_segundos",
+        "Em cada giro, o outro lado respondeu em até quantos segundos (padrão 60). Resposta mais lenta quebra a sequência.",
+      ),
+      ritmo_variacao_segundos: limite(
+        "ritmo_variacao_segundos",
+        "A maior latência menos a menor, nos giros, fica até quantos segundos (padrão 8). Gente varia mais que isso; subir este número pega mais conversa de gente.",
+      ),
     },
     exemplo: { organization_id: ORG_DE_EXEMPLO, ligada: true, teto_respostas: 40 },
     operacao: "implantar_configuracao",
@@ -143,7 +166,9 @@ export const FERRAMENTAS_DA_TRAVA_DE_ROBO: readonly FerramentaDePlataforma[] = [
       const pedido = pedidoDeConfigDaTravaSchema.safeParse(resto);
       if (!pedido.success) recusar(`Pedido inválido: ${pedido.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}.`);
       if (Object.keys(pedido.data).length === 0) {
-        recusar("Informe ao menos um campo: ligada ou um dos limites. Para só ver a configuração, use plataforma_ver_travas_de_robo.");
+        recusar(
+          "Informe ao menos um campo: ligada, ritmo_ligado ou um dos limites. Para só ver a configuração, use plataforma_ver_travas_de_robo.",
+        );
       }
       const r = await configurarTrava(ctx.admin, {
         organizationId: org.id,

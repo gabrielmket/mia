@@ -26,6 +26,8 @@ import { guardarDadosDoCadastro } from "@/lib/dados-fiscais/banco";
 // FORK MIA (.98): o cupom do cadastro (docs/fork/cupons-e-parceiros.md).
 import { guardarCupomDoCadastro } from "@/lib/cupons/banco";
 import { conferirCupomDoCadastro, type ConferenciaDoCupomDoCadastro } from "@/lib/cupons/cadastro";
+// FORK MIA (MIA-168): o cadastro vira lead no CRM da Time (docs/fork/jornada-de-assinatura.md).
+import { registrarCadastroDoSignup } from "@/lib/planos-mia/lead-do-cadastro-no-signup";
 import {
   CHAVE_FUSO_DO_CADASTRO,
   CHAVE_IDIOMA_DO_CADASTRO,
@@ -84,6 +86,7 @@ export type SignUpResult =
         | "validation_error"
         | "rate_limited"
         | "signup_failed"
+        | "password_too_long"
         | "somente_convite"
         | "conta_ja_existe"
         | "email_indisponivel";
@@ -336,6 +339,27 @@ export async function signUp(
       return { ok: false, error: "conta_ja_existe" };
     }
 
+    // ── A SENHA LONGA DEMAIS TAMBÉM TEM CAUSA PRÓPRIA ─────────────────────
+    //
+    // O schema já recusa acima de 72 bytes (#4313), mas a régua daqui e a do
+    // GoTrue podem divergir numa versão futura — e aí a tela voltaria a dizer
+    // "Não foi possível criar a conta. Tente novamente.", que não diz o que
+    // corrigir. Causa conhecida tem código próprio: `password_too_long`, a
+    // mesma frase de campo que a tela de nova senha mostra.
+    if (/cannot be longer than 72 characters/i.test(error.message)) {
+      await audit({
+        action: "auth.signup_failed",
+        metadata: {
+          email_hash: hashEmail(parsed.data.email),
+          reason: "senha_longa_demais",
+        },
+        requestId,
+        ip,
+        userAgent,
+      });
+      return { ok: false, error: "password_too_long" };
+    }
+
     await audit({
       action: "auth.signup_failed",
       metadata: {
@@ -363,6 +387,18 @@ export async function signUp(
   // FORK MIA (.98): o cupom espera a empresa nascer (o gatilho adiado da 9130 o aplica).
   if (cupomDoCadastro.ok && cupomDoCadastro.codigo && data.user?.id) {
     await guardarCupomDoCadastro(createAdminClient(), data.user.id, cupomDoCadastro.codigo);
+  }
+  // FORK MIA (MIA-168): a conta NOVA vira lead no CRM da Time ("Novo contato"). Convite
+  // e conta que já existia (identities vazio, a resposta ofuscada) ficam fora. Nunca lança.
+  if (!convite && data.user?.id && (data.user.identities?.length ?? 0) > 0) {
+    await registrarCadastroDoSignup({
+      userId: data.user.id,
+      dados: parsed.data as SignupInput,
+      planoId: planoEscolhido ?? null,
+      cupom: cupomDoCadastro.ok ? cupomDoCadastro.codigo : null,
+      nome: entradaPaga.ok && entradaPaga.entradaPaga ? entradaPaga.nome : null,
+      headers: hdrs,
+    });
   }
 
   await audit({

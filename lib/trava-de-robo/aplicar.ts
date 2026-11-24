@@ -38,6 +38,13 @@
  * na conversa, que a varredura de avisos fecha quando a conversa sai da fila),
  * a nota, a linha do tempo e o registro.
  *
+ * O RITMO DE MÁQUINA (sinal D, MIA-210) usa esta mesma ação: é indício, e não
+ * autodeclaração, então pausa como o teto e não perde nada. A nota e o aviso
+ * dizem quantas vezes a IA respondeu (`respostas_da_ia`) e em quanto tempo
+ * (`duracao_segundos`): no teto, as respostas da janela; no ritmo, os giros da
+ * sequência ("respondeu 6 vezes em 3 min"). O registro leva `motivo = 'teto'` e
+ * o sinal `ritmo` em `sinais`.
+ *
  * ⚠️ A regra do upstream que a .107 manteve ("calada em todos, mas avisando"):
  * `isLeadInHandoff` conta o silêncio de QUALQUER conversa do contato, então,
  * enquanto a pausa do teto vale, o motor também não responde esse contato nos
@@ -468,7 +475,8 @@ export async function aplicarTetoDeRespostas(
   if (erroDaPausa) throw new Error(`teto de respostas: a conversa não foi pausada (${mensagemDoErro(erroDaPausa)})`);
 
   const minutos = minutosDaDuracao(avaliacao.duracao_segundos);
-  const valores = { respostas: avaliacao.respostas_no_teto, minutos };
+  // No teto, `respostas_da_ia` é a conta da janela do teto; no ritmo, os giros da sequência.
+  const valores = { respostas: avaliacao.respostas_da_ia, minutos };
 
   // 2 · o aviso na Central (um por conversa enquanto estiver aberto)
   const { data: aberto, error: erroDoAberto } = await admin
@@ -516,7 +524,13 @@ export async function aplicarTetoDeRespostas(
       sourceId: alvo.conversationId,
       actor: ATOR_DA_TRAVA,
       reason: LINHA_DO_TEMPO_DO_TETO,
-      payload: { conversation_id: alvo.conversationId, motivo: "teto", respostas: avaliacao.respostas_no_teto, minutos },
+      payload: {
+        conversation_id: alvo.conversationId,
+        motivo: "teto",
+        gatilho: avaliacao.gatilho ?? "teto",
+        respostas: avaliacao.respostas_da_ia,
+        minutos,
+      },
     });
     if (!atividade.ok) falhas.push("linha_do_tempo");
   }
@@ -526,7 +540,7 @@ export async function aplicarTetoDeRespostas(
     motivo: "teto",
     sinais: avaliacao.sinais,
     mensagens_de_robo: avaliacao.mensagens_de_robo,
-    respostas_da_ia: avaliacao.respostas_no_teto,
+    respostas_da_ia: avaliacao.respostas_da_ia,
     duracao_segundos: avaliacao.duracao_segundos,
     negocios_afetados: [],
     conversa_encerrada: false,
@@ -541,7 +555,13 @@ export async function aplicarTetoDeRespostas(
     resourceType: "conversation",
     resourceId: alvo.conversationId,
     requestId: deps.requestId,
-    metadata: { motivo: "teto", registro_id: registroId, respostas_da_ia: avaliacao.respostas_no_teto, falhas },
+    metadata: {
+      motivo: "teto",
+      gatilho: avaliacao.gatilho ?? "teto",
+      registro_id: registroId,
+      respostas_da_ia: avaliacao.respostas_da_ia,
+      falhas,
+    },
   });
 
   return { registroId, negocios: [], conversaEncerrada: false, etiquetaAplicada: false, followupsCancelados: 0, falhas };

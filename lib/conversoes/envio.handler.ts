@@ -61,6 +61,8 @@ import {
   rotuloDoEventoDaMeta,
 } from "./regras-meta";
 import { lerRegistro, registraEnvio } from "./registro-de-envio";
+// FORK MIA (MIA-169): as conversões do site (docs/fork/conversoes-da-meta.md, "Conversões do site").
+import { ehVendaPeloSite, processarConversaoDoSite } from "./site";
 
 const CONSUMER_KEY = "conversoes.venda";
 
@@ -99,6 +101,10 @@ export async function processarConversao(
   )
     return ok("skipped", "outro_evento");
   if (!row.entity_id) return ok("skipped", "sem_entidade");
+  // FORK MIA (MIA-169): a chave de uma regra do SITE (`MetaEtapa:`/`Etapa:` + id da
+  // regra) é decidida inteira em `./site.ts`; `null` = não é, e o upstream segue.
+  const doSite = qualificacao ? await processarConversaoDoSite(row, EVENTO, qualificacao) : null;
+  if (doSite) return { ...doSite, consumer_key: CONSUMER_KEY };
 
   const admin = createAdminClient();
 
@@ -140,6 +146,10 @@ export async function processarConversao(
   if (registro?.status === "sent") {
     return ok("skipped", "ja_enviada");
   }
+  // FORK MIA (MIA-169): a compra do cadastro do site sai pela etapa "Assinante"
+  // (`./site.ts`); pela venda ela contaria duas vezes.
+  if (!qualificacao && !registro?.remote_request_id && (await ehVendaPeloSite(admin, row.organization_id, lead.id)))
+    return ok("skipped", "venda_pelo_site");
 
   const leitura =
     registro?.remote_request_id && ehPlataformaConhecida(registro.platform)

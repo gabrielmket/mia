@@ -19,9 +19,13 @@
  * contasse como falta, toda implantação terminaria com uma pendência que nem
  * sempre é de alguém. O caminho fica em `dados.como_configurar`.
  */
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { listarRegrasGoogle } from "@/lib/conversoes/regras-google";
 import { lerChaveDeFormulario } from "@/lib/conversoes-meta/config";
 import { listarRegrasMeta } from "@/lib/conversoes/regras-meta";
+// FORK MIA (MIA-169): as conversões do site, só na empresa dona da fonte do cadastro.
+import { orgDaFonteDoCadastro, TABELA_DAS_REGRAS_DO_SITE } from "@/lib/conversoes/site";
 import { identidadeDaMeta } from "@/lib/plataformas-de-anuncio/meta/identidade";
 
 import type { AreaDoChecklist } from "./tipos";
@@ -37,6 +41,7 @@ export const conversoes: AreaDoChecklist = {
       lerChaveDeFormulario(admin, org.id),
     ]);
     if (conexoes.error) throw new Error(conexoes.error.message);
+    const doSite = await regrasDoSite(admin, org.id);
 
     const ligadas = ((conexoes.data ?? []) as Array<{ platform: string; enabled: boolean }>).filter((x) => x.enabled);
     const metaLigadas = regrasMeta.filter((r) => r.enabled).length;
@@ -50,6 +55,9 @@ export const conversoes: AreaDoChecklist = {
       pronto.push(`${googleLigadas} de ${regrasGoogle.length} regra(s) de etapa do Google Ads ligada(s).`);
     }
     if (chave.ligada) pronto.push("Leads de formulário da Meta voltam para a Meta.");
+    if (doSite && doSite.gravadas > 0) {
+      pronto.push(`${doSite.ligadas} de ${doSite.gravadas} regra(s) das conversões do site ligada(s).`);
+    }
 
     // Upstream 1.70 (#2197): sem o ID da Página ou o da conta do WhatsApp
     // Business a Meta recusa a venda vinda de anúncio clique-para-WhatsApp.
@@ -94,6 +102,16 @@ export const conversoes: AreaDoChecklist = {
         regras_da_meta: { gravadas: regrasMeta.length, ligadas: metaLigadas },
         regras_do_google: { gravadas: regrasGoogle.length, ligadas: googleLigadas },
         leads_de_formulario_da_meta: chave.ligada,
+        ...(doSite
+          ? {
+              regras_do_site: {
+                ...doSite,
+                como_configurar:
+                  "Esta é a empresa dona da fonte do cadastro: plataforma_garantir_conversoes_do_site grava as regras DESLIGADAS, " +
+                  "plataforma_testar_conversoes_do_site prova com a Ana Exemplo e plataforma_ligar_conversoes (`plataforma: \"site\"`) liga.",
+              },
+            }
+          : {}),
         como_configurar:
           "plataforma_ver_conversoes mostra os funis, as etapas e o que já existe. plataforma_garantir_conversoes_da_meta " +
           "(com `usar_recomendado: true`) e plataforma_garantir_conversoes_do_google gravam as regras DESLIGADAS; " +
@@ -103,3 +121,15 @@ export const conversoes: AreaDoChecklist = {
     };
   },
 };
+
+/** FORK MIA (MIA-169): as regras do site, só na empresa da fonte do cadastro. `null` nas outras. */
+async function regrasDoSite(
+  admin: SupabaseClient,
+  orgId: string,
+): Promise<{ gravadas: number; ligadas: number } | null> {
+  if ((await orgDaFonteDoCadastro(admin)) !== orgId) return null;
+  const { data, error } = await admin.from(TABELA_DAS_REGRAS_DO_SITE).select("enabled").eq("organization_id", orgId);
+  if (error) throw new Error(error.message);
+  const linhas = (data ?? []) as Array<{ enabled: boolean }>;
+  return { gravadas: linhas.length, ligadas: linhas.filter((l) => l.enabled).length };
+}

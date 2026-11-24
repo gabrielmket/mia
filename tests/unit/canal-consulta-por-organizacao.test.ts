@@ -161,6 +161,18 @@ const LEITURAS_LEGITIMAS: ReadonlyArray<{
       "quem já atendia: a proteção que existe para não mexer no webhook de " +
       "ninguém passaria a autorizar exatamente isso.",
   },
+  {
+    // FORK MIA · coexistência (S3, docs/fork/coexistencia.md).
+    arquivo: "lib/channels/meta/coexistencia/conectar.ts",
+    funcao: "numeroEDeOutraEmpresa",
+    filtros: ["provider", "meta_phone_number_id"],
+    motivo:
+      "Pergunta feita ANTES de gravar a conexão pelo app: 'este número oficial já " +
+      "está ativo em OUTRA empresa desta instalação?'. Só o id e a empresa saem, e " +
+      "a resposta é sim/não. Filtrar por organization_id faria a consulta responder " +
+      "'livre' e a janela da Meta amarraria o número de uma empresa em outra: a " +
+      "conversa de um cliente sairia pelo número de outro.",
+  },
 ];
 
 /** A consulta é EXATAMENTE a declarada (arquivo + função + conjunto de filtros)? */

@@ -65,6 +65,8 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { autorizaCron } from "@/lib/auth/cron-auth";
 import { recursoOcioso } from "@/lib/cron/piso-ocioso";
+// FORK MIA (MIA-154): o recibo da rodada, lido pela `/api/v1/health`.
+import { registrarBatimento, ROTA_DO_VIGIA_DOS_CANAIS } from "@/lib/cron/batimento";
 
 export const dynamic = "force-dynamic";
 
@@ -123,6 +125,13 @@ const PASSOS_DEPOIS_DO_PORTAO = [
   "const desfechos",
   "let ignoradas",
   "for (s of sessoes)",
+  // FORK MIA (MIA-154): o batimento do vigia. Fica abaixo do portão DE
+  // PROPÓSITO: a saída ociosa não toca o PostgREST (#3731, prova em
+  // `tests/unit/piso-ocioso-das-filas.test.ts`), então em instalação sem
+  // número ativo o batimento para, e a `/health` diz `em_dia: false`. Ver
+  // `docs/fork/vigia-dos-canais.md`.
+  "const resumo",
+  "expr await registrarBatimento(...)",
   "return",
 ] as const;
 void PASSOS_DEPOIS_DO_PORTAO;
@@ -306,7 +315,14 @@ async function handle(req: NextRequest): Promise<Response> {
     }
   }
 
-  return ok({ sessoes: sessoes.length, verificadas, ignoradas, ...desfechos }, { requestId });
+  const resumo = { sessoes: sessoes.length, verificadas, ignoradas, ...desfechos };
+
+  // FORK MIA (MIA-154): o recibo da rodada. Rodada estável não escreve nada no
+  // laço, e sem isto ninguém sabia se o vigia tinha passado (MIA-152). Só
+  // contagens; falha aqui vira `warn` e não muda a resposta.
+  await registrarBatimento(admin, ROTA_DO_VIGIA_DOS_CANAIS, resumo);
+
+  return ok(resumo, { requestId });
 }
 
 export const GET = handle;

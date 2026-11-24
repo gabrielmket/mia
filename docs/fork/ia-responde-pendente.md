@@ -263,7 +263,7 @@ Todos com o comentário `FORK MIA (.107)`:
 - `lib/escalacao/retomada.ts`: a opção `responderPendente`, a nota no `bot_silenced_until
   = null` e a chamada da função depois da auditoria;
 - `app/api/v1/conversations/[id]/release/route.ts`: a chamada da função;
-- `app/api/v1/conversations/[id]/close/route.ts`: `responderPendente: false`;
+- `app/api/v1/conversations/[id]/_handler.ts` (`fecharConversaHandler`, desde a v1.124 o fechamento mora ali): `responderPendente: false`;
 - `lib/escalacao/handoff-tecnico.ts`: `responderPendente: false`;
 - `lib/agent-engine/agent/inbound-turn.ts`: uma chamada a `registrarPausaPorOutraConversa`
   no pulo do handler, e o import;

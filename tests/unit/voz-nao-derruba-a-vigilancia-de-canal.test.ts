@@ -89,6 +89,10 @@ vi.mock("@/lib/supabase/admin", () => ({
         return cadeia;
       };
       cadeia.limit = async () => ({ data: linhas, error: null });
+      // FORK MIA (MIA-154): o batimento do vigia (`mia_batimentos_de_cron`)
+      // no fim da rodada. Sem isto ele cai no `catch` e o `warn` dele entra
+      // na conta dos avisos que este arquivo mede.
+      cadeia.upsert = async () => ({ data: null, error: null });
       return cadeia;
     },
   }),

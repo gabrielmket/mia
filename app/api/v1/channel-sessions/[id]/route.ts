@@ -37,6 +37,9 @@ import { resolverSaudeDaConexaoRemovida } from "@/lib/channels/health";
 import { sincronizarAvisoDePausa } from "@/lib/channels/central-de-pausa";
 import { desfazerWebhookDoNumero } from "@/lib/channels/meta/webhook-override";
 import { numeroObservadoDaSessao } from "@/lib/channels/numero-observado";
+// FORK MIA · coexistência (D5).
+import { barrarQrEmCoexistencia } from "@/lib/channels/meta/coexistencia/qr-do-mesmo-numero";
+import { idiomaDoAviso } from "@/lib/i18n/idioma-do-aviso";
 import { apagarAssinaturaSocial } from "@/lib/channels/social/store";
 import { isChannelStatus } from "@/lib/schemas/channels";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -250,6 +253,32 @@ async function responderGet(
     });
   } catch {
     return fail("connection_status_failed", "Não foi possível conferir a conexão. Tente novamente.", 502, { requestId });
+  }
+
+  // FORK MIA · coexistência (D5, docs/fork/coexistencia.md): o QR que acabou de
+  // parear um número que a empresa conectou pelo app WhatsApp Business sai do ar,
+  // senão a mesma mensagem entraria duas vezes (pela Meta e pelo QR).
+  if (
+    liveStatus === "WORKING" &&
+    phoneNumber &&
+    phoneNumber !== session.phone_number &&
+    (await barrarQrEmCoexistencia(createAdminClient(), {
+      organizationId,
+      channelSessionId: id,
+      wahaSessionName: nomeSessao,
+      numeroObservado: phoneNumber,
+      requestId,
+    }))
+  ) {
+    return fail(
+      "coexistencia_ativa",
+      traduzir(
+        "Este número está conectado pelo app WhatsApp Business (coexistência). Enquanto a coexistência estiver ligada, ele não pode ser conectado por QR.",
+        await idiomaDoAviso(createAdminClient(), organizationId),
+      ),
+      409,
+      { requestId },
+    );
   }
 
   // Sincroniza o DB: sempre carimba o health check; atualiza status/telefone só se válido.

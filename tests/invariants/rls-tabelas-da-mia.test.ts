@@ -72,6 +72,8 @@ const LIDAS_PELO_CLIENTE = [
   // sincronização; o lote cru só a plataforma lê (não entra aqui).
   "mia_coexistencia_conexoes",
   "mia_coexistencia_sincronizacoes",
+  // 9164 — a chave da coexistência: a equipe lê a da própria empresa.
+  "mia_coexistencia_da_empresa",
 ] as const;
 
 /**
@@ -110,6 +112,8 @@ const SO_A_PLATAFORMA_ESCREVE = [
   "mia_coexistencia_conexoes",
   "mia_coexistencia_sincronizacoes",
   "mia_coexistencia_lotes",
+  // 9164 — a chave da coexistência: quem grava é a rota de plataforma e o MCP.
+  "mia_coexistencia_da_empresa",
   // .79 — empresa única: `crm_empresas` está APOSENTADA (9033: os dados foram para
   // `companies`, a sessão só lê até a entrega 5 tirá-la de vez), e as três tabelas
   // ao lado são escritas só pelas funções definer da 9034.
@@ -269,6 +273,8 @@ function semear(org: string, gestor: string, tag: string): string {
     )
     insert into public.mia_coexistencia_lotes (organization_id, sincronizacao_id, tipo, chave, fase, ordem)
       select '${org}', sx.id, 'mensagens', 'f0:o1', 0, 1 from sx;
+    -- 9164: a chave da coexistência da empresa.
+    insert into public.mia_coexistencia_da_empresa (organization_id, ligada) values ('${org}', true);
   `;
 }
 
