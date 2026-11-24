@@ -136,7 +136,7 @@ export function ModeloDeIa() {
         <CardContent className="space-y-4">
           <p className="text-sm text-text-muted">
             {t(
-              "Vale para todo cliente novo. Quem contrata não escolhe o modelo — assim como não escolhe a chave de IA: é engrenagem nossa, e a conta também.",
+              "Vale para todas as empresas que não escolheram outro. Quem contrata não escolhe o modelo — assim como não escolhe a chave de IA: é engrenagem nossa, e a conta também.",
             )}
           </p>
 

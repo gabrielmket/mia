@@ -45,6 +45,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { escolheIaDaEmpresa, MENSAGEM_IA_DA_PLATAFORMA } from "@/lib/ai/trava-da-ia";
+import { podeConfigurarChaveDeIa } from "@/lib/ai/custo-e-da-plataforma";
 import { temPrecoNoMotor } from "@/lib/agent-engine/edge/llm/pricing";
 import { modeloAposentadoNoProvedor } from "@/lib/agent-engine/edge/llm/modelos-aposentados";
 
@@ -334,6 +335,9 @@ export async function GET(): Promise<Response> {
     // só de leitura para quem não escolhe IA (lib/ai/trava-da-ia.ts). A
     // plataforma em modo suporte com edição escolhe (MIA-218).
     podeEditar: roleAtLeast(org.role, "admin") && escolheIaDaEmpresa(authz.user, org.orgId),
+    // FORK MIA (MIA-218): a chave própria é opção avançada, só do admin da
+    // plataforma fora de suporte (a mesma régua da tela de Credenciais).
+    podeCadastrarChave: podeConfigurarChaveDeIa(authz.user),
   });
 }
 

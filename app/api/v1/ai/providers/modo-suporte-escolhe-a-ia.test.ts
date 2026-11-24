@@ -128,6 +128,12 @@ describe("admin de plataforma em modo suporte com edição permitida", () => {
     expect(await podeEditar()).toBe(true);
   });
 
+  it("não ganha o cadastro de chave própria: a chave segue fora do acompanhamento", async () => {
+    const res = await GET();
+    const corpo = (await res.json()) as { data: { podeCadastrarChave: boolean } };
+    expect(corpo.data.podeCadastrarChave).toBe(false);
+  });
+
   it("salva o padrão da empresa", async () => {
     const res = await salvarPadrao();
     expect(res.status).toBe(200);
