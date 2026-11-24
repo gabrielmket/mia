@@ -311,7 +311,11 @@ services:
       DNS_NODES: "''"
       RLIMIT_NOFILE: "10000"
       APP_NAME: realtime
-      SEED_SELF_HOST: "true"
+      # Desligado em 23/11/2026 (MIA-140/141): com "true" o realtime apaga e
+      # recria o tenant a cada reinício, com poll_interval_ms 100. O tenant
+      # realtime-dev fica no banco com 500 ms. Trocar o JWT_SECRET agora pede
+      # atualizar o jwt_secret do tenant à mão em _realtime.tenants.
+      SEED_SELF_HOST: "false"
       RUN_JANITOR: "true"
       DISABLE_HEALTHCHECK_LOGGING: "true"
 
