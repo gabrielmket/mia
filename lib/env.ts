@@ -651,6 +651,17 @@ const schema = z.object({
   GOOGLE_ADS_OAUTH_CLIENT_ID: z.string().optional().default(""),
   GOOGLE_ADS_OAUTH_CLIENT_SECRET: z.string().optional().default(""),
 
+  // FORK MIA (MIA-169): as conversões do SITE (docs/fork/conversoes-da-meta.md,
+  // "Conversões do site"). O dataset do site e o token dele valem SÓ para a
+  // empresa dona da fonte `CADASTRO_FONTE_DO_CRM` (a Time): nenhuma outra usa.
+  // Com `META_TEST_EVENT_CODE`, os eventos do site vão para "Testar eventos" da
+  // Meta e o livro-razão marca `evento_de_teste`. Opcionais: sem as duas
+  // primeiras, a regra do site fica pendente com `site_sem_credencial`. Lidas
+  // na hora do envio (`lib/conversoes/site.ts`) e nunca escritas em log.
+  MIA_META_DATASET_DO_SITE: z.string().optional().default(""),
+  MIA_META_TOKEN_DO_SITE: z.string().optional().default(""),
+  META_TEST_EVENT_CODE: z.string().optional().default(""),
+
   // Nuvemshop — opcional (template genérico open-source). Só exigidas quando
   // NUVEMSHOP_ENABLED=true; o runtime já degrada via getConfig()==null.
   NUVEMSHOP_APP_ID: z.string().optional().default(""),

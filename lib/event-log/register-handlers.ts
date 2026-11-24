@@ -33,6 +33,8 @@ import { conversaoDeVendaHandler } from "@/lib/conversoes/envio.handler";
 // FORK MIA: a volta dos leads de formulário da Meta, ao lado dos consumidores
 // de conversão do upstream (docs/fork/conversoes-da-meta.md).
 import { conversaoDoLeadDeFormularioHandler } from "@/lib/conversoes-meta/formulario.handler";
+// FORK MIA (MIA-169): as conversões do site (docs/fork/conversoes-da-meta.md, "Conversões do site").
+import { conversaoDeEtapaDoSiteHandler } from "@/lib/conversoes/etapa-site.handler";
 import { avisoDeEtapaHandler } from "@/lib/leads/aviso-de-etapa.handler";
 import { avisoAoDonoDaCarteira } from "@/lib/carteira/aviso-ao-dono";
 import { comandaDoGanhoHandler } from "@/lib/financeiro/comanda-do-ganho.handler";
@@ -136,5 +138,7 @@ export function ensureHandlersRegistered(): void {
   // O nosso consumidor de etapa da .70 (`conversoes.meta_etapa`) saiu daqui na
   // .72, quando a régua da Meta do upstream (0524) virou a principal.
   registerHandler(conversaoDoLeadDeFormularioHandler);
+  // FORK MIA (MIA-169): as regras do site (9170), pelo mesmo critério.
+  registerHandler(conversaoDeEtapaDoSiteHandler);
   _registered = true;
 }

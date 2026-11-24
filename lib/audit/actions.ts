@@ -870,6 +870,11 @@ export const AUDIT_ACTIONS = [
   "google_ads_conversion_action.created",
   // O que cada etapa do funil informa à Meta (0524) — o par da regra acima.
   "meta_ads_conversion_rules.updated",
+  // FORK MIA (MIA-169) · as conversões do site (docs/fork/conversoes-da-meta.md,
+  // "Conversões do site"): as regras garantidas ou ligadas pelo MCP de plataforma,
+  // e o evento de teste (dado fictício) mandado à Meta e ao Google.
+  "mia_regras_do_site.updated",
+  "mia_regras_do_site.testado",
   // FORK MIA (migration 9017) — conversões da Meta por etapa do funil
   // (docs/fork/conversoes-da-meta.md): quem mudou o que cada etapa informa à
   // Meta, quem ligou a volta dos leads de formulário e quem pediu o reenvio de

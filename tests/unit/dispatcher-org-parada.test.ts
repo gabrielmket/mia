@@ -40,6 +40,7 @@ import { conversaoDeNascimentoMetaHandler } from "@/lib/conversoes/nascimento-me
 import { conversaoDeCliqueMetaHandler } from "@/lib/conversoes/clique-meta.handler";
 // FORK MIA — a volta dos leads de formulário da Meta (docs/fork/conversoes-da-meta.md).
 import { conversaoDoLeadDeFormularioHandler } from "@/lib/conversoes-meta/formulario.handler";
+import { conversaoDeEtapaDoSiteHandler } from "@/lib/conversoes/etapa-site.handler";
 import { avisoDeAgendamentoNoWhatsAppHandler } from "@/lib/agenda/aviso-de-agendamento.handler";
 import { avisoDeCasoAoSuporteHandler } from "@/lib/escalacao/aviso-ao-suporte.handler";
 import { avisoDeHandoffHandler } from "@/lib/escalacao/aviso-de-handoff.handler";
@@ -114,6 +115,7 @@ const PULA: EventHandler[] = [
   conversaoDeCliqueMetaHandler,
   // FORK MIA: sai para a Meta, então pula na organização parada.
   conversaoDoLeadDeFormularioHandler,
+  conversaoDeEtapaDoSiteHandler,
   pinoReintentoHandler,
   // Reenviar a mensagem que o canal mandou desacelerar é falar com o cliente.
   reenvioDesaceleradoHandler,
