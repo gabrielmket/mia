@@ -179,6 +179,7 @@ export async function avaliarETravarNoTurno(
       job_id: alvo.jobId,
       conversation_id: alvo.conversationId,
       motivo: motivoDoRastro,
+      gatilho: avaliacao.gatilho,
       mensagens_de_robo: avaliacao.mensagens_de_robo,
       respostas_da_ia: avaliacao.respostas_da_ia,
       negocios_perdidos: desfecho.negocios.length,

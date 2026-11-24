@@ -55,6 +55,8 @@ export function montarEvento(credencial: CredencialDeConversao, conversao: Conve
           : {}),
       },
     ],
+    // FORK MIA (MIA-169): só a ferramenta de teste das conversões do site liga.
+    ...(conversao.site?.somenteValidar ? { validateOnly: true } : {}),
     // Não inventa consentimento. O telefone só vai quando a organização ligou
     // `google_send_hashed_phone` (0436) — e sempre criptografado, nunca em claro.
   };

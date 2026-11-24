@@ -57,6 +57,8 @@ import {
 import { garantirPacotesDeCreditos, garantirPlanos } from "@/lib/planos-mia/garantir-planos";
 import { lerPlanosComModulos, type PlanoComModulos } from "@/lib/planos-mia/leitura";
 import { decidirPedidoDeCadastro } from "@/lib/planos-mia/pedidos-de-cadastro";
+// FORK MIA (MIA-168): o lead do cadastro no CRM da Time.
+import { lerCadastrosComErro, lerLeadNaTimeDaEmpresa, lerLeadsNaTimeDosUsuarios } from "@/lib/planos-mia/lead-do-cadastro";
 import { lerPrecosDaEmpresa } from "@/lib/planos-mia/preco-por-email";
 import { SITUACOES } from "@/lib/planos-mia/situacao";
 
@@ -442,7 +444,10 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       "ponto a ponto (o que já foi e o que vem), quem administra (e-mail mascarado), os primeiros passos e os módulos com a origem (pelo plano ou pela Time). " +
       "Desde a .91, o \"o que falta\" de AGORA (o_que_falta_agora: as contas e cada item com a coluna e quem faz, a mesma régua do Início do cliente). " +
       "Desde a .95, os PREÇOS que valem para a empresa (precos: o da mensagem do Broadcast e o por e-mail, em reais, cada um com a origem: " +
-      "definido à mão, o plano ou, no e-mail, o padrão; e o definido à mão, se houver).",
+      "definido à mão, o plano ou, no e-mail, o padrão; e o definido à mão, se houver). " +
+      "Desde a MIA-168, o LEAD NA TIME (lead_na_time: o negócio no funil MIA - SDR da Time, os momentos informados: cadastro concluído, teste começou, " +
+      "pagamento confirmado com o valor em BRL; e o erro, como sem_fonte, fonte_inexistente, recusado ou sem_etapa:<nome>; null quando a empresa não " +
+      "veio do /signup). configurado=false quer dizer que CADASTRO_FONTE_DO_CRM não está no ambiente.",
     inputSchema: { organization_id: ORGANIZACAO },
     exemplo: { organization_id: ORG_DE_EXEMPLO },
     operacao: null,
@@ -462,6 +467,8 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
         o_que_falta_agora: d.o_que_falta_agora,
         // FORK MIA (.95): os dois preços que valem, com a origem de cada um.
         precos: precosParaAPlataforma(await lerPrecosDaEmpresa(ctx.admin, String(args.organization_id))),
+        // FORK MIA (MIA-168): o card do cadastro no CRM da Time.
+        lead_na_time: await lerLeadNaTimeDaEmpresa(ctx.admin, String(args.organization_id)),
       };
     },
   },
@@ -631,17 +638,23 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       'Os PEDIDOS DE CADASTRO esperando aprovação (modo do cadastro "com aprovação"): a empresa, quem pediu (e-mail mascarado), o plano escolhido ' +
       "(sem escolha, o do cadastro) e o que a empresa faz. Para aprovar ou recusar, plataforma_decidir_pedido_de_cadastro. " +
       "Desde a .91, também as EMPRESAS que entraram com o Facebook no passo do telefone e esperam a Time ligar o número oficial " +
-      "(empresas_esperando_o_numero; a ligação continua à mão, em Admin › Cadastro incorporado).",
+      "(empresas_esperando_o_numero; a ligação continua à mão, em Admin › Cadastro incorporado). " +
+      "Desde a MIA-168, o LEAD NA TIME de cada pedido (lead_na_time: o negócio no funil MIA - SDR, os momentos e o erro) e, em cadastros_na_time, " +
+      "se CADASTRO_FONTE_DO_CRM está configurada e os últimos cadastros cujo lead falhou (só ids, datas e o erro: sem_fonte, fonte_inexistente, " +
+      "recusado, falhou, sem_etapa:<nome>). A rodada horária da cobrança tenta de novo.",
     inputSchema: {},
     exemplo: {},
     operacao: null,
     handler: async (ctx) => {
-      const [pedidos, modo, esperando] = await Promise.all([
+      const [pedidos, modo, esperando, comErro] = await Promise.all([
         lerPedidosDeCadastro(ctx.admin),
         modoDeCadastro(),
         // FORK MIA (.91): a empresa no "esperando a Time" do passo do telefone.
         lerEmpresasEsperandoONumero(ctx.admin),
+        // FORK MIA (MIA-168): os cadastros cujo lead no CRM da Time falhou.
+        lerCadastrosComErro(ctx.admin),
       ]);
+      const leads = await lerLeadsNaTimeDosUsuarios(ctx.admin, pedidos.map((p) => p.user_id));
       return {
         modo_do_cadastro: modo,
         total: pedidos.length,
@@ -652,12 +665,14 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
           plano: p.plano,
           o_que_faz: p.o_que_faz,
           pedido_em: p.criado_em,
+          lead_na_time: leads.get(p.user_id) ?? null,
         })),
         empresas_esperando_o_numero: esperando.map((e) => ({
           organization_id: e.organization_id,
           nome: e.nome,
           entrou_com_facebook_em: e.desde,
         })),
+        cadastros_na_time: comErro,
       };
     },
   },

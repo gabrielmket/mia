@@ -7,7 +7,8 @@
  * proteção não pode depender de alguém lembrar de ligar.
  *
  * Os limites moram em três lugares que conferem um ao outro: aqui (o padrão e a
- * faixa), nas CHECKs da 9153 e no teste `tests/unit/trava-de-robo.test.ts`.
+ * faixa), nas CHECKs da 9153 (e da 9171, os do ritmo) e no teste
+ * `tests/unit/trava-de-robo.test.ts`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
@@ -31,7 +32,23 @@ export interface ConfigDaTrava {
   teto_respostas: number;
   /** ...nesta janela. */
   teto_janela_minutos: number;
+  /**
+   * O sinal D, o ritmo de máquina (9171, MIA-210). Desliga SÓ ele: o laço e o
+   * teto continuam valendo. `ligada` false desliga os três.
+   */
+  ritmo_ligado: boolean;
+  /** Quantos giros SEGUIDOS (resposta da IA e a resposta do outro lado) no mesmo ritmo disparam. */
+  ritmo_giros: number;
+  /** Cada um desses giros, o outro lado respondeu em até estes segundos... */
+  ritmo_latencia_maxima_segundos: number;
+  /** ...e a maior latência menos a menor fica até aqui. Gente varia mais que isso. */
+  ritmo_variacao_segundos: number;
 }
+
+/** As chaves de liga e desliga (o resto é limite inteiro, com faixa). */
+export const CHAVES_DA_TRAVA = ["ligada", "ritmo_ligado"] as const;
+
+export type ChaveDaTrava = (typeof CHAVES_DA_TRAVA)[number];
 
 export const CONFIG_PADRAO_DA_TRAVA: Readonly<ConfigDaTrava> = Object.freeze({
   ligada: true,
@@ -43,9 +60,13 @@ export const CONFIG_PADRAO_DA_TRAVA: Readonly<ConfigDaTrava> = Object.freeze({
   velocidade_caracteres_por_segundo: 15,
   teto_respostas: 30,
   teto_janela_minutos: 60,
+  ritmo_ligado: true,
+  ritmo_giros: 6,
+  ritmo_latencia_maxima_segundos: 60,
+  ritmo_variacao_segundos: 8,
 });
 
-/** A faixa de cada limite: a mesma das CHECKs da 9153. */
+/** A faixa de cada limite: a mesma das CHECKs da 9153 e, nos do ritmo, da 9171. */
 export const FAIXAS_DA_TRAVA = {
   janela_minutos: [1, 240],
   mensagens_para_disparar: [2, 20],
@@ -55,7 +76,10 @@ export const FAIXAS_DA_TRAVA = {
   velocidade_caracteres_por_segundo: [3, 200],
   teto_respostas: [5, 500],
   teto_janela_minutos: [5, 1440],
-} as const satisfies Record<Exclude<keyof ConfigDaTrava, "ligada">, readonly [number, number]>;
+  ritmo_giros: [4, 30],
+  ritmo_latencia_maxima_segundos: [10, 300],
+  ritmo_variacao_segundos: [2, 60],
+} as const satisfies Record<Exclude<keyof ConfigDaTrava, ChaveDaTrava>, readonly [number, number]>;
 
 export type LimiteDaTrava = keyof typeof FAIXAS_DA_TRAVA;
 
@@ -78,6 +102,10 @@ export const pedidoDeConfigDaTravaSchema = z
     velocidade_caracteres_por_segundo: inteiro("velocidade_caracteres_por_segundo").optional(),
     teto_respostas: inteiro("teto_respostas").optional(),
     teto_janela_minutos: inteiro("teto_janela_minutos").optional(),
+    ritmo_ligado: z.boolean().optional(),
+    ritmo_giros: inteiro("ritmo_giros").optional(),
+    ritmo_latencia_maxima_segundos: inteiro("ritmo_latencia_maxima_segundos").optional(),
+    ritmo_variacao_segundos: inteiro("ritmo_variacao_segundos").optional(),
   })
   .strict();
 
@@ -91,7 +119,10 @@ export type PedidoDeConfigDaTrava = z.infer<typeof pedidoDeConfigDaTravaSchema>;
 export function configDaLinha(linha: Record<string, unknown> | null | undefined): ConfigDaTrava {
   const c: ConfigDaTrava = { ...CONFIG_PADRAO_DA_TRAVA };
   if (!linha) return c;
-  if (typeof linha.ligada === "boolean") c.ligada = linha.ligada;
+  for (const chave of CHAVES_DA_TRAVA) {
+    const valor = linha[chave];
+    if (typeof valor === "boolean") c[chave] = valor;
+  }
   for (const chave of LIMITES_DA_TRAVA) {
     const valor = Number(linha[chave]);
     const [min, max] = FAIXAS_DA_TRAVA[chave];

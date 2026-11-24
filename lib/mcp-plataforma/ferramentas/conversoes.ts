@@ -34,6 +34,16 @@ import {
   type PedidoDeRegrasDaMeta,
   type PedidoDeRegrasDoGoogle,
 } from "@/lib/implantacao/conversoes";
+// FORK MIA (MIA-169): as conversões do site (docs/fork/conversoes-da-meta.md, "Conversões do site").
+import {
+  EVENTOS_DE_SITE_DA_META,
+  garantirConversoesDoSite,
+  ligarConversoesDoSite,
+  testarConversoesDoSite,
+  verConversoesDoSite,
+  type PedidoDeRegrasDoSite,
+  type PedidoDeTesteDoSite,
+} from "@/lib/implantacao/conversoes-do-site";
 
 import type { FerramentaDePlataforma } from "../tipos";
 import { alvo, ORGANIZACAO, ORG_DE_EXEMPLO } from "./comum";
@@ -58,13 +68,14 @@ export const FERRAMENTAS_DE_CONVERSOES: readonly FerramentaDePlataforma[] = [
       "por funil, cada etapa aberta com a regra da Meta (evento, ligada) e a do Google (nome, ação de conversão, categoria, ligada), mais o evento que o sistema recomendaria para a Meta pelo nome da etapa; " +
       "a lista de eventos padrão da Meta que a régua oferece; os 20 últimos envios com a situação e o motivo; e quantos foram recusados em 7 dias. " +
       "QUANDO USAR: antes de plataforma_garantir_conversoes_da_meta ou _do_google (para ver os funis, as etapas e o que já existe) e depois de ligar, para conferir se os envios estão saindo. " +
-      "A compra (negócio ganho) não é regra de etapa: sai sozinha quando a conexão está ligada.",
+      "A compra (negócio ganho) não é regra de etapa: sai sozinha quando a conexão está ligada. " +
+      "A seção `site` mostra as CONVERSÕES DO SITE (o cadastro e a assinatura da MIA, só na empresa dona da fonte do cadastro): as regras, se as variáveis do servidor estão configuradas (sim ou não, nunca o valor), se o modo de teste está ligado e os últimos envios do site (situação e motivo, sem dado de pessoa).",
     inputSchema: { organization_id: ORGANIZACAO },
     exemplo: { organization_id: ORG_DE_EXEMPLO },
     operacao: null,
     handler: async (ctx, args) => {
       const { c, org } = await alvo(ctx, args);
-      return verConversoes(c, org.demonstracao);
+      return { ...(await verConversoes(c, org.demonstracao)), site: await verConversoesDoSite(c) };
     },
   },
 
@@ -182,10 +193,13 @@ export const FERRAMENTAS_DE_CONVERSOES: readonly FerramentaDePlataforma[] = [
       "Ligar NÃO envia o passado: vale para os negócios que entrarem nas etapas a partir dali. Chamar de novo com o mesmo pedido responde `ja_estava`. " +
       "ANTES DE LIGAR: confira as regras em plataforma_ver_conversoes e confirme com o humano, porque é dado de cliente saindo para a conta de anúncios. " +
       "Se a conexão com a plataforma não estiver preenchida e ligada (isso é pela tela), a regra fica ligada e nada sai: a resposta avisa. " +
-      "Na empresa de demonstração a regra liga e nada é enviado.",
+      "Na empresa de demonstração a regra liga e nada é enviado. " +
+      "Com `plataforma: \"site\"` liga as CONVERSÕES DO SITE (só na empresa dona da fonte do cadastro; a demonstração recusa): todas as regras do site das etapas, na Meta e no Google, e a resposta avisa se falta variável no servidor ou se o código de teste ainda está lá.",
     inputSchema: {
       organization_id: ORGANIZACAO,
-      plataforma: z.enum(["meta", "google"]).describe("meta (a Meta: Facebook e Instagram) ou google (o Google Ads)."),
+      plataforma: z
+        .enum(["meta", "google", "site"])
+        .describe("meta (a Meta: Facebook e Instagram), google (o Google Ads) ou site (as conversões do site, de plataforma_garantir_conversoes_do_site)."),
       funil: FUNIL,
       etapas: z
         .array(ETAPA)
@@ -199,7 +213,106 @@ export const FERRAMENTAS_DE_CONVERSOES: readonly FerramentaDePlataforma[] = [
     handler: async (ctx, args) => {
       const { c, org } = await alvo(ctx, args);
       const { organization_id: _org, ...pedido } = args;
+      // FORK MIA (MIA-169): o site tem regras próprias (9170).
+      if (pedido.plataforma === "site")
+        return ligarConversoesDoSite(c, pedido as unknown as { funil: string; etapas?: string[]; ligada: boolean }, org.demonstracao);
       return ligarConversoes(c, pedido as unknown as PedidoDeLigarConversoes, org.demonstracao);
+    },
+  },
+
+  // FORK MIA (MIA-169): as conversões do site.
+  {
+    name: "plataforma_garantir_conversoes_do_site",
+    description:
+      "Grava as CONVERSÕES DO SITE: o que cada etapa do funil manda quando o cadastro ou a assinatura da MIA andam nele (cadastro concluído, teste, pagamento). " +
+      "SÓ na empresa dona da fonte do cadastro (a variável CADASTRO_FONTE_DO_CRM do servidor): em qualquer outra a ferramenta recusa, e o funil de um cliente usa plataforma_garantir_conversoes_da_meta ou _do_google. " +
+      `Na Meta o evento é de SITE, no dataset do site, um destes: ${EVENTOS_DE_SITE_DA_META.join(", ")}. No Google Ads é a ação de conversão (id numérico), importada pelo clique. ` +
+      "Uma etapa pode ter VÁRIAS regras (ex.: a de assinante manda Subscribe e Purchase à Meta e a ação de compra ao Google). Purchase e Subscribe levam sempre o valor do negócio (`leva_valor`); na regra do Google, `leva_valor: true` manda o valor junto. " +
+      "A regra NASCE DESLIGADA: prove com plataforma_testar_conversoes_do_site e ligue com plataforma_ligar_conversoes (`plataforma: \"site\"`). " +
+      "GARANTIR quer dizer: pode ser chamada de novo sem duplicar. A chave é (etapa, evento) na Meta e (etapa, ação) no Google; cada regra responde `criou`, `atualizou` ou `ja_estava`. Regra que o pedido não cita fica como está. Regra LIGADA não é editada por aqui: desligue, ajuste e religue. " +
+      "O QUE NÃO FAZ: não liga, não envia, não mexe em etapa de ganho nem de perda, não recebe o dataset nem o token do site (são variáveis do servidor) e não conecta o Google Ads (é pela tela).",
+    inputSchema: {
+      organization_id: ORGANIZACAO,
+      funil: FUNIL,
+      regras: z
+        .array(
+          z
+            .object({
+              etapa: ETAPA,
+              plataforma: z.enum(["meta", "google"]).describe("meta (o evento de site no dataset do site) ou google (a ação de conversão do Google Ads)."),
+              evento: z
+                .enum(EVENTOS_DE_SITE_DA_META)
+                .optional()
+                .describe(`Só na Meta: ${EVENTOS_DE_SITE_DA_META.join(", ")}.`),
+              acao_de_conversao_id: z
+                .string()
+                .trim()
+                .regex(/^[1-9]\d{0,31}$/, "só dígitos, o id numérico da ação de conversão no Google Ads (ex.: 7123456789)")
+                .optional()
+                .describe("Só no Google: o id numérico da ação de conversão. Só dígitos."),
+              leva_valor: z
+                .boolean()
+                .optional()
+                .describe("true: o evento leva o valor do negócio (sem valor, o envio fica pendente com sem_valor). Purchase e Subscribe levam sempre."),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(20)
+        .describe("As regras. Várias por etapa são aceitas."),
+    },
+    exemplo: {
+      organization_id: ORG_DE_EXEMPLO,
+      funil: "Vendas",
+      regras: [
+        { etapa: "Cadastro concluído", plataforma: "meta", evento: "CompleteRegistration" },
+        { etapa: "Cadastro concluído", plataforma: "google", acao_de_conversao_id: "7123456789" },
+        { etapa: "Em teste", plataforma: "meta", evento: "StartTrial" },
+        { etapa: "Assinante", plataforma: "meta", evento: "Purchase" },
+      ],
+    },
+    operacao: "implantar_configuracao",
+    handler: async (ctx, args) => {
+      const { c, org } = await alvo(ctx, args);
+      const { organization_id: _org, ...pedido } = args;
+      return garantirConversoesDoSite(c, pedido as unknown as PedidoDeRegrasDoSite, org.demonstracao);
+    },
+  },
+
+  {
+    name: "plataforma_testar_conversoes_do_site",
+    description:
+      "PROVA as conversões do site sem cliente de verdade: manda UM evento com a pessoa fictícia Ana Exemplo à Meta, no dataset do site e em MODO DE TESTE (aparece em \"Testar eventos\" do Gerenciador de Eventos e não conta nos anúncios), " +
+      "e, com `acao_de_conversao_id`, ao Google Ads SÓ VALIDANDO (validateOnly: o Google confere e nada é importado). " +
+      "Recusa sem o código de teste da Meta no servidor (META_TEST_EVENT_CODE): sem ele o evento contaria como real. Só na empresa dona da fonte do cadastro; a demonstração recusa. " +
+      "O QUE NÃO FAZ: não grava no livro-razão (o teste não aparece nos envios), não liga nem muda regra e não manda dado de cliente nenhum. Devolve se cada plataforma aceitou e, se não, o que ela respondeu. " +
+      "QUANDO USAR: depois de colar as variáveis do site no servidor e antes de ligar as regras (é o aceite). Sem `gclid`, o Google recebe um clique fictício e responde com erro de clique, o que já prova a conexão e a ação.",
+    inputSchema: {
+      organization_id: ORGANIZACAO,
+      evento: z
+        .enum(EVENTOS_DE_SITE_DA_META)
+        .optional()
+        .describe("O evento da Meta a testar. Padrão: CompleteRegistration. Purchase e Subscribe vão com valor, moeda BRL e id do pedido."),
+      acao_de_conversao_id: z
+        .string()
+        .trim()
+        .regex(/^[1-9]\d{0,31}$/, "só dígitos, o id numérico da ação de conversão no Google Ads")
+        .optional()
+        .describe("A ação do Google Ads a validar. Sem isto, o Google não é testado."),
+      gclid: z
+        .string()
+        .trim()
+        .regex(/^[A-Za-z0-9._~-]{1,512}$/, "o gclid como veio na URL do anúncio")
+        .optional()
+        .describe("O gclid de um clique SEU num anúncio, para a validação completa no Google. Nunca o de um cliente."),
+      valor_centavos: z.number().int().min(1).max(10_000_000).optional().describe("O valor do evento, em centavos de BRL. Padrão: 100 (R$ 1,00)."),
+    },
+    exemplo: { organization_id: ORG_DE_EXEMPLO, evento: "Purchase", acao_de_conversao_id: "7123456789" },
+    operacao: "colocar_no_ar",
+    handler: async (ctx, args) => {
+      const { c, org } = await alvo(ctx, args);
+      const { organization_id: _org, ...pedido } = args;
+      return testarConversoesDoSite(c, pedido as unknown as PedidoDeTesteDoSite, org.demonstracao);
     },
   },
 

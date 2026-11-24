@@ -16,6 +16,8 @@ import {
 import { copyToClipboard } from "@/lib/clipboard";
 import { useT } from "@/hooks/i18n/useT";
 import { ChannelAiAccess } from "./ChannelAiAccess";
+// FORK MIA · coexistência (S3).
+import { ConectarPeloApp } from "./coexistencia/ConectarPeloApp";
 import { ParaIntegrar } from "./ParaIntegrar";
 
 /** Campo somente-leitura com botão de copiar — o que o operador cola na Meta. */
@@ -159,6 +161,9 @@ export function CanalOficialClient({
           </p>
         </Card>
       ) : null}
+      {/* FORK MIA · coexistência (docs/fork/coexistencia.md): conectar pelo app
+          WhatsApp Business, e a sincronização dos contatos e do histórico. */}
+      <ConectarPeloApp canalConectado={Boolean(estado?.connected)} />
       {estado?.channel_session_id && <ChannelAiAccess channelId={estado.channel_session_id} />}
 
       {estado?.webhook ? (

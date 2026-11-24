@@ -94,8 +94,8 @@ type Linha = {
 type Resposta = { contagem: { seguem: number; propria: number; sem_chave: number }; total: number; empresas: Linha[] };
 
 describe("a lista", () => {
-  it("está lá, só lê, a lista tem 129 (128 + esta), e não há ferramenta de trocar a IA", async () => {
-    expect(FERRAMENTAS).toHaveLength(129);
+  it("está lá, só lê, a lista tem 135 (134 + esta), e não há ferramenta de trocar a IA", async () => {
+    expect(FERRAMENTAS).toHaveLength(135);
     expect(FERRAMENTAS.find((f) => f.name === "plataforma_ver_ia_das_empresas")?.operacao).toBeNull();
     // Trocar o modelo é ato de pessoa, com MFA, no painel.
     const trocas = FERRAMENTAS.filter((f) => /^plataforma_(trocar|mudar|definir|configurar)_.*(ia|modelo|provedor)/.test(f.name));

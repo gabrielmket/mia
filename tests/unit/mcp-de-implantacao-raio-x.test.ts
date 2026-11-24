@@ -15,9 +15,9 @@ import { operacaoPorChave } from "@/lib/mcp-plataforma/operacoes";
 const NOMES = ["plataforma_criar_raio_x", "plataforma_ver_raio_x", "plataforma_publicar_raio_x", "plataforma_encerrar_raio_x", "plataforma_reler_raio_x", "plataforma_precos_do_raio_x"];
 
 describe("as seis do raio-X", () => {
-  it("estão na lista, e a lista tem 129 (a quinta, reler, é da .105; a sexta, os preços, da .107; as três da trava de robô, da .108; as duas do produto no negócio, da .109; a da lista de espera, MIA-18; a do consumo de IA, MIA-44; as três da 1.117, MIA-67; as duas da 1.118, MIA-79; as duas dos preços da Meta, MIA-99; as duas da MIA-103; e a da IA das empresas, MIA-218)", () => {
+  it("estão na lista, e a lista tem 135 (a quinta, reler, é da .105; a sexta, os preços, da .107; as três da trava de robô, da .108; as duas do produto no negócio, da .109; a da lista de espera, MIA-18; a do consumo de IA, MIA-44; as três da 1.117, MIA-67; as duas da 1.118, MIA-79; as duas dos preços da Meta, MIA-99; as duas da MIA-103; as duas das conversões do site, MIA-169; as três da coexistência, MIA-28; e o ranking do consumo de IA, MIA-136 + a da IA das empresas, MIA-218)", () => {
     for (const n of NOMES) expect(FERRAMENTA_POR_NOME.has(n), n).toBe(true);
-    expect(FERRAMENTAS).toHaveLength(129);
+    expect(FERRAMENTAS).toHaveLength(135);
   });
 
   it("ver é leitura; as outras cinco exigem gerir_raio_x", () => {
