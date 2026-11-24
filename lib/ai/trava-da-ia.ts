@@ -61,6 +61,45 @@ export function escolheIa(user: QuemPede): boolean {
   return podeConfigurarChaveDeIa(user);
 }
 
+/**
+ * A PLATAFORMA DENTRO DA EMPRESA, COM EDIÇÃO (MIA-218).
+ *
+ * `escolheIa` deixa de fora toda sessão de suporte, e isso trancava a única
+ * porta que existe para trocar o padrão de IA de uma empresa: o admin de
+ * plataforma não é membro dela, e só chega à tela Provedores de IA entrando
+ * em modo suporte. Em 24/11 ele abriu a tela com "Edição permitida", escolheu
+ * o modelo, e o "Salvar padrão" não apareceu (o PATCH respondia 403).
+ *
+ * Passa só quem é, ao mesmo tempo:
+ *   - admin de plataforma com `scope === "full"` (o `support_readonly` lê);
+ *   - numa sessão ATIVA, em modo `full` ("Edição permitida");
+ *   - aberta pela plataforma, e não por uma agência (`agency_id` vazio);
+ *   - na empresa da própria sessão.
+ *
+ * A abertura da sessão já exigiu MFA estrita (`/admin/tenants/[id]/impersonate`).
+ *
+ * Vale para a tela Provedores de IA (o padrão da empresa e os pontos). A chave
+ * e o custo continuam em `podeConfigurarChaveDeIa`, e o cérebro dos agentes
+ * continua em `escolheIa`: acompanhar não muda essas duas réguas.
+ */
+export function plataformaEditaEmSuporte(user: QuemPede, orgId: string): boolean {
+  const s = user.support;
+  return (
+    user.is_platform_admin === true &&
+    user.platform_admin_scope === "full" &&
+    !!s &&
+    s.status === "active" &&
+    s.access_mode === "full" &&
+    !s.agency_id &&
+    s.organization_id === orgId
+  );
+}
+
+/** Quem escolhe a IA DESTA EMPRESA na tela Provedores de IA. */
+export function escolheIaDaEmpresa(user: QuemPede, orgId: string): boolean {
+  return escolheIa(user) || plataformaEditaEmSuporte(user, orgId);
+}
+
 function iaDaLinha(linha: Record<string, unknown> | null | undefined): IaDaVersao | null {
   if (!linha) return null;
   return {

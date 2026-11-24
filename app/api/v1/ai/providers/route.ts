@@ -44,7 +44,7 @@ import { decidirTranscricao } from "@/lib/messaging/media/escada-de-transcricao"
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
-import { escolheIa, MENSAGEM_IA_DA_PLATAFORMA } from "@/lib/ai/trava-da-ia";
+import { escolheIaDaEmpresa, MENSAGEM_IA_DA_PLATAFORMA } from "@/lib/ai/trava-da-ia";
 import { temPrecoNoMotor } from "@/lib/agent-engine/edge/llm/pricing";
 import { modeloAposentadoNoProvedor } from "@/lib/agent-engine/edge/llm/modelos-aposentados";
 
@@ -331,8 +331,9 @@ export async function GET(): Promise<Response> {
     instalacaoTemChave: instalacaoTemChaveDeIa(),
     modelos,
     // FORK MIA: provedor e modelo de cada ponto são da plataforma; o painel fica
-    // só de leitura para quem não escolhe IA (lib/ai/trava-da-ia.ts).
-    podeEditar: roleAtLeast(org.role, "admin") && escolheIa(authz.user),
+    // só de leitura para quem não escolhe IA (lib/ai/trava-da-ia.ts). A
+    // plataforma em modo suporte com edição escolhe (MIA-218).
+    podeEditar: roleAtLeast(org.role, "admin") && escolheIaDaEmpresa(authz.user, org.orgId),
   });
 }
 
@@ -372,7 +373,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user, org } = authz;
   // FORK MIA: provedor, modelo e chave de IA são da plataforma (lib/ai/trava-da-ia.ts).
-  if (!escolheIa(user)) return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403);
+  if (!escolheIaDaEmpresa(user, org.orgId)) return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403);
 
   const parsed = corpoDoPut.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -537,7 +538,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user, org } = authz;
   // FORK MIA: provedor, modelo e chave de IA são da plataforma (lib/ai/trava-da-ia.ts).
-  if (!escolheIa(user)) return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403);
+  if (!escolheIaDaEmpresa(user, org.orgId)) return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403);
 
   const parsed = corpoDoPatch.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
