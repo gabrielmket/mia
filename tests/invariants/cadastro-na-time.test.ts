@@ -14,7 +14,7 @@ import { lastLine, sql } from "./gov-helpers";
  *   - as travas: `fbp`/`fbc` só com `consentimento = medicao`, o consentimento
  *     só nos dois valores, uma linha por conta, lead sem org recusado;
  *   - o gatilho depois do insert em `mia_origem_da_empresa`: a empresa do
- *     cadastro emite `mia.cadastro.empresa_nasceu` (uma vez), a de implantação não;
+ *     cadastro emite `cadastro.empresa_nasceu` (uma vez), a de implantação não;
  *   - a limpeza da LGPD zera IP, navegador, fbp, fbc e os ids de clique passado o
  *     `guardar_ate` ou 7 dias depois do pagamento, e não toca a linha nova; só o
  *     servidor executa.
@@ -51,7 +51,7 @@ function como(usuario: string, comando: string): string {
 }
 
 const eventos = (org: string) =>
-  lastLine(sql(`select count(*) from public.event_log where organization_id = '${org}' and event_type = 'mia.cadastro.empresa_nasceu';`));
+  lastLine(sql(`select count(*) from public.event_log where organization_id = '${org}' and event_type = 'cadastro.empresa_nasceu';`));
 
 beforeAll(() => {
   // Sem PII real: e-mails sintéticos (LGPD); IP da faixa de documentação (RFC 5737).
@@ -111,12 +111,12 @@ describe("9169: as travas", () => {
 });
 
 describe("9169: o gatilho do nascimento", () => {
-  it("⭐ a empresa do cadastro emite mia.cadastro.empresa_nasceu uma vez; a de implantação, nenhuma", () => {
+  it("⭐ a empresa do cadastro emite cadastro.empresa_nasceu uma vez; a de implantação, nenhuma", () => {
     expect(lastLine(sql(`select origem from public.mia_origem_da_empresa where organization_id = '${ORG_CADASTRO}';`))).toBe("cadastro");
     expect(eventos(ORG_CADASTRO)).toBe("1");
     expect(eventos(ORG_IMPLANTACAO)).toBe("0");
     expect(
-      lastLine(sql(`select payload->>'organization_id' from public.event_log where organization_id = '${ORG_CADASTRO}' and event_type = 'mia.cadastro.empresa_nasceu';`)),
+      lastLine(sql(`select payload->>'organization_id' from public.event_log where organization_id = '${ORG_CADASTRO}' and event_type = 'cadastro.empresa_nasceu';`)),
     ).toBe(ORG_CADASTRO);
   });
 

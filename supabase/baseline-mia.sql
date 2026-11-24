@@ -23371,7 +23371,7 @@ begin
   if new.origem = 'cadastro' then
     begin
       perform public.emit_event(
-        'mia.cadastro.empresa_nasceu',
+        'cadastro.empresa_nasceu',
         'organization',
         new.organization_id,
         jsonb_build_object('organization_id', new.organization_id),

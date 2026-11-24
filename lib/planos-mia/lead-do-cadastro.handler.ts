@@ -1,5 +1,5 @@
 /**
- * FORK MIA (MIA-168) · O CONSUMIDOR DE `mia.cadastro.empresa_nasceu`.
+ * FORK MIA (MIA-168) · O CONSUMIDOR DE `cadastro.empresa_nasceu`.
  *
  * O gatilho da 9169 (depois do insert em `mia_origem_da_empresa`, origem
  * `cadastro`) emite o evento na org do CLIENTE. Aqui o card do cadastro, no CRM
@@ -29,6 +29,6 @@ async function handle(row: EventRow): Promise<HandlerResult> {
 export const leadDoCadastroHandler: EventHandler = {
   key: CONSUMER_KEY,
   naOrgParada: "roda",
-  events: ["mia.cadastro.empresa_nasceu"],
+  events: ["cadastro.empresa_nasceu"],
   handle,
 };

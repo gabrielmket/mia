@@ -426,7 +426,7 @@ da fonte vem de **`CADASTRO_FONTE_DO_CRM`**. A fonte e as etapas se criam pelo M
 | momento | quando | onde | etapa |
 |---|---|---|---|
 | envio | conta criada, e-mail a confirmar | `signUp.ts` › `registrarCadastroDoSignup` | Novo contato (pela fonte) |
-| cadastro concluído | a empresa nasceu (e-mail confirmado ou pedido aprovado) | gatilho da 9169 › `mia.cadastro.empresa_nasceu` › `lead-do-cadastro.handler.ts` | Cadastro concluído |
+| cadastro concluído | a empresa nasceu (e-mail confirmado ou pedido aprovado) | gatilho da 9169 › `cadastro.empresa_nasceu` › `lead-do-cadastro.handler.ts` | Cadastro concluído |
 | teste começou | a empresa nasceu em `trial`, com prazo e sem pagamento pendente | o mesmo consumidor | Em teste |
 | pagamento confirmado | o primeiro pagamento no Asaas | `informarPagamentoATime` no `cobranca.sinal` e na rodada da jornada | Assinante, com o valor em BRL |
 

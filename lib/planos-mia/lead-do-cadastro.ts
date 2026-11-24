@@ -12,7 +12,7 @@
  *      `mia_cadastro_na_time` (9169) e o lead em "Novo contato", pela fonte;
  *   2. o e-mail confirmado, a empresa nasceu: "Cadastro concluído";
  *   3. a empresa nasceu no teste: "Em teste" (os dois pelo consumidor
- *      `lead-do-cadastro.handler.ts`, do evento `mia.cadastro.empresa_nasceu`);
+ *      `lead-do-cadastro.handler.ts`, do evento `cadastro.empresa_nasceu`);
  *   4. o primeiro pagamento confirmado: "Assinante", com o valor em BRL
  *      (`informarPagamentoATime`, no consumidor `cobranca.sinal` e na rodada).
  * O card anda pela mesma porta do kanban (`moveLeadHandler`), que emite o
@@ -248,8 +248,10 @@ export async function registrarCadastroNaTime(
     const medicao = entrada.consentimento === "medicao";
     const origem = origemSaneada(entrada.origem ?? {});
     const { gclid, gbraid, wbraid, ...resto } = origem;
+    // `.from()` com o nome LITERAL nos dois upserts: é o que a varredura
+    // `on-conflict-aponta-para-constraint-real` lê para conferir o alvo.
     const { error } = await cliente
-      .from(TABELA)
+      .from("mia_cadastro_na_time")
       .upsert(
         {
           user_id: entrada.userId,
@@ -407,7 +409,7 @@ async function linhaDoUsuario(cliente: SupabaseClient, userId: string): Promise<
 async function garantirLinha(cliente: SupabaseClient, userId: string): Promise<LinhaDoCadastro | null> {
   const existente = await linhaDoUsuario(cliente, userId);
   if (existente) return existente;
-  const { error } = await cliente.from(TABELA).upsert({ user_id: userId }, { onConflict: "user_id", ignoreDuplicates: true });
+  const { error } = await cliente.from("mia_cadastro_na_time").upsert({ user_id: userId }, { onConflict: "user_id", ignoreDuplicates: true });
   if (error) throw new Error(`linha não gravou (${error.code ?? "sem_codigo"})`);
   return linhaDoUsuario(cliente, userId);
 }

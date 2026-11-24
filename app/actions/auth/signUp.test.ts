@@ -42,6 +42,11 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
+// FORK MIA (MIA-168): o lead do cadastro no CRM da Time. Mockado para o caso
+// "a ligação no signUp" (no fim do arquivo) VER quem é chamado; sem o mock, a
+// chamada caía no `catch` (o `cookies()` não existe aqui) e ninguém via nada.
+const registrarCadastroDoSignup = vi.hoisted(() => vi.fn(async () => ({ estado: "enviado" })));
+vi.mock("@/lib/planos-mia/lead-do-cadastro-no-signup", () => ({ registrarCadastroDoSignup }));
 // Mockada aqui em vez de deixar bater no banco: a política é lida em TODO
 // cadastro, e sem o mock cada caso deste arquivo tentaria uma conexão real.
 vi.mock("@/lib/auth/politica-de-cadastro", () => ({
@@ -543,5 +548,94 @@ describe("signUp — senha acima de 72 bytes (#4313)", () => {
 
     expect(res).toEqual({ ok: false, error: "password_too_long" });
     expect(signUpDoProvedor).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * FORK MIA (MIA-168) · A LIGAÇÃO NO `signUp`: A CONTA NOVA VIRA LEAD NA TIME.
+ *
+ * `lead-do-cadastro.test.ts` cobre o módulo; este bloco cobre o ponto do
+ * upstream, que é onde "peça solta" nasce sem erro nenhum. E prova a
+ * anti-enumeração: conta que já existia (o GoTrue devolve `identities: []`, a
+ * resposta ofuscada) e convite não viram lead, e a resposta continua a mesma.
+ */
+describe("signUp — a conta nova vira lead no CRM da Time (MIA-168)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    signUpDoProvedor.mockReset();
+    registrarCadastroDoSignup.mockClear();
+    vi.mocked(headers).mockResolvedValue({
+      get: (k: string) => (k === "x-forwarded-for" ? `198.51.100.${(n % 250) + 1}` : null),
+    } as never);
+    vi.mocked(createClient).mockResolvedValue({
+      auth: { signUp: signUpDoProvedor },
+    } as never);
+    vi.mocked(modoDeCadastro).mockResolvedValue("aberto");
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("⭐ conta nova (com identities): chama registrarCadastroDoSignup com o usuário e o formulário", async () => {
+    signUpDoProvedor.mockResolvedValue({
+      data: { user: { id: "u-lead-1", identities: [{ id: "i-1" }] }, session: null },
+      error: null,
+    });
+    const dados = entrada();
+
+    const { signUp } = await import("./signUp");
+    const res = await signUp(dados);
+
+    expect(res).toEqual({ ok: true, sessao_ativa: false });
+    expect(registrarCadastroDoSignup).toHaveBeenCalledTimes(1);
+    expect(registrarCadastroDoSignup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "u-lead-1",
+        dados: expect.objectContaining({ email: dados.email, org_name: dados.org_name }),
+      }),
+    );
+  });
+
+  it("conta que já existia (identities vazio): NÃO vira lead, e a resposta é a mesma", async () => {
+    signUpDoProvedor.mockResolvedValue({
+      data: { user: { id: "u-ofuscado", identities: [] }, session: null },
+      error: null,
+    });
+
+    const { signUp } = await import("./signUp");
+    const res = await signUp(entrada());
+
+    expect(res).toEqual({ ok: true, sessao_ativa: false });
+    expect(registrarCadastroDoSignup).not.toHaveBeenCalled();
+  });
+
+  it("convite: NÃO vira lead (quem entra por convite é da empresa que convidou)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({ disable_signup: false }) }) as Response),
+    );
+    const { signInviteToken, INVITE_TTL_SECONDS } = await import("@/lib/auth/invite-token");
+    const dados = entrada();
+    const token = signInviteToken({
+      invite_id: "00000000-0000-4000-8000-000000000005",
+      email: dados.email,
+      organization_id: "00000000-0000-4000-8000-000000000001",
+      role: "agent",
+      exp: Math.floor(Date.now() / 1000) + INVITE_TTL_SECONDS,
+    });
+    signUpDoProvedor.mockResolvedValue({
+      data: { user: { id: "u-convidada", identities: [{ id: "i-2" }] }, session: null },
+      error: null,
+    });
+
+    const { signUp } = await import("./signUp");
+    const res = await signUp(
+      { full_name: "Convidada da Silva", email: dados.email, password: dados.password, password_confirm: dados.password_confirm },
+      token,
+    );
+
+    expect(res).toEqual({ ok: true, sessao_ativa: false });
+    expect(signUpDoProvedor).toHaveBeenCalled();
+    expect(registrarCadastroDoSignup).not.toHaveBeenCalled();
   });
 });
