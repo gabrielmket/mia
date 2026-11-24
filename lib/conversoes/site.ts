@@ -38,6 +38,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { travaDaDemonstracao } from "@/lib/demonstracao/trava";
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { lerCredencial } from "@/lib/plataformas-de-anuncio/credenciais";
 import { lerIdentificadoresGoogle } from "@/lib/plataformas-de-anuncio/google/identificadores";
@@ -371,6 +372,15 @@ export async function processarConversaoDoSite(
     if (!lida.ok) {
       await registra("skipped", lida.motivo);
       return ok("skipped", lida.motivo);
+    }
+    // A trava da demonstração (9010) mora na conexão, e este ramo não lê a
+    // conexão: pergunta à mesma `fn_mia_e_demonstracao`. Demonstração não manda;
+    // sem confirmar, também não, e tenta de novo mais tarde.
+    const trava = await travaDaDemonstracao(admin, row.organization_id);
+    if (trava.travado) {
+      if (trava.motivo === "nao_confirmado") return depois("site_demonstracao_nao_confirmada");
+      await registra("skipped", "site_empresa_de_demonstracao");
+      return ok("skipped", "site_empresa_de_demonstracao");
     }
     credencial = lida.credencial;
   } else {

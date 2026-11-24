@@ -225,6 +225,11 @@ e o uuid da regra não colide com o das regras dele (que é o da etapa).
      token. Sem as variáveis: `site_sem_credencial`. A conexão da Meta da tela NÃO é
      usada (a da Time aponta para outro dataset, e trocá-la levaria as conversões de
      WhatsApp para o dataset do site);
+   - **trava da demonstração**: como este ramo não lê a conexão, ele não passa pelo
+     gatilho da 9010. Por isso pergunta à `fn_mia_e_demonstracao` antes de mandar. Se a
+     empresa é de demonstração, o envio fica `site_empresa_de_demonstracao` e nada vai à
+     Meta. Se não der para confirmar, nada sai, e o evento volta mais tarde
+     (`site_demonstracao_nao_confirmada`);
    - **Google** pela conexão da própria empresa (a tela de Conversões), com a ação da regra.
 4. O reenvio (`ad_conversion.retry_requested`) é dos consumidores do UPSTREAM: eles leem o
    retrato e chamam `processarConversao`, que volta a `site.ts`. O nosso consumidor não

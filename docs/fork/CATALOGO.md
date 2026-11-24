@@ -65,7 +65,7 @@ Há duas portas, e o defeito é sempre uma saída nova que não passa por nenhum
 | e-mail das automações | `lib/automation/actions/send-email.ts` (`travaDaDemonstracao`) e o gatilho da 9043 | ação nova de automação que envia por outro caminho |
 | mensagem de WhatsApp | a fila de `messages` recusa saída `queued`/`sending` (9010) | envio **sem** passar pela tabela `messages`: chamada direta à API do provedor |
 | campanha, broadcast, follow-up, prospecção, lembrete | banco, na mudança de estado (9010) | caminho novo que dispara sem mudar o estado barrado |
-| conversões da Meta e do Google | a conexão de conversões não liga na demonstração (9010) | consumidor novo que fala com a rede sem ler a conexão |
+| conversões da Meta e do Google | a conexão de conversões não liga na demonstração (9010); as conversões do site, que usam a credencial da variável e não a conexão, perguntam à `travaDaDemonstracao` em `lib/conversoes/site.ts` | consumidor novo que fala com a rede sem ler a conexão |
 | agenda externa, push, ligação, servidor MCP externo, webhook de saída | gatilhos da 9010, 9016, 9043 | integração nova com conexão própria |
 | e-mail marketing | `lib/email-marketing/envio.ts` (`travaDaDemonstracao`) e `trg_mia_email_demonstracao_nao_envia` (9064) | motor novo que manda sem o `mandar` |
 

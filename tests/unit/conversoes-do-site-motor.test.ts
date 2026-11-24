@@ -82,6 +82,8 @@ const regra = (id: string, stage: string, over: Linha = {}): Linha => ({
 });
 
 let banco: ReturnType<typeof bancoEmMemoria>;
+/** O que a `fn_mia_e_demonstracao` responde: a empresa é de demonstração, não é, ou a leitura falha. */
+let demonstracao: boolean | "erro" = false;
 const fetch = vi.fn();
 const tabela = (n: string) => banco.tabela(n) as Linha[];
 
@@ -124,6 +126,9 @@ function montar(org = ORG) {
       regra(REGRA.purchase, ETAPA.assinante, { organization_id: org, evento_meta: "Purchase", leva_valor: true }),
     ],
     ad_conversion_dispatches: [],
+  }, {
+    fn_mia_e_demonstracao: () =>
+      demonstracao === "erro" ? { data: null, error: { message: "indisponivel" } } : { data: demonstracao, error: null },
   });
   estado.cliente = banco.cliente;
 }
@@ -150,6 +155,7 @@ const corpo = (chamada: unknown[]) => JSON.parse(String((chamada[1] as RequestIn
 const livro = (chave: string) => tabela("ad_conversion_dispatches").find((l) => l.event_name === chave);
 
 beforeEach(() => {
+  demonstracao = false;
   montar();
   estado.google = {
     datasetId: "",
@@ -367,6 +373,27 @@ describe("⭐ outra empresa nunca usa a credencial da variável", () => {
     await conversaoDeEtapaDoSiteHandler.handle(movimento(ETAPA.cadastro));
     expect(idasAMeta()).toHaveLength(0);
     expect(livro(`MetaEtapa:${REGRA.cadastroMeta}`)).toMatchObject({ reason: "site_fora_da_empresa_da_fonte" });
+  });
+});
+
+describe("⭐ a empresa de demonstração não manda pela variável", () => {
+  // O ramo da Meta do site não lê a conexão, então não passa pelo gatilho da
+  // 9010: o motor pergunta à `fn_mia_e_demonstracao` antes de mandar.
+  it("a fonte do cadastro apontando para uma empresa de demonstração: nada vai à Meta", async () => {
+    demonstracao = true;
+    const r = await conversaoDeEtapaDoSiteHandler.handle(movimento(ETAPA.cadastro));
+    expect(idasAMeta()).toHaveLength(0);
+    expect(r.detail).toContain("site_empresa_de_demonstracao");
+    expect(livro(`MetaEtapa:${REGRA.cadastroMeta}`)).toMatchObject({ status: "skipped", reason: "site_empresa_de_demonstracao" });
+    expect(banco.chamadasRpc.some((c) => c.nome === "fn_mia_e_demonstracao")).toBe(true);
+  });
+
+  it("sem confirmar que a empresa é de verdade, também não manda, e tenta de novo", async () => {
+    demonstracao = "erro";
+    const r = await conversaoDeEtapaDoSiteHandler.handle(movimento(ETAPA.cadastro));
+    expect(idasAMeta()).toHaveLength(0);
+    expect(r.status).toBe("retry");
+    expect(r.detail).toContain("site_demonstracao_nao_confirmada");
   });
 });
 
