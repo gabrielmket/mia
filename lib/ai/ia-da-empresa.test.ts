@@ -10,6 +10,7 @@ import {
   chaveUtilizavel,
   contarEmpresas,
   iaDaLinha,
+  iaDasEmpresas,
   recusaDaPlataformaSemChave,
   recusaDoPadraoSemChave,
 } from "./ia-da-empresa";
@@ -146,5 +147,47 @@ describe("contarEmpresas — o que o cartão do admin mostra", () => {
 
   it("leitura que falhou continua null — nunca vira zero", () => {
     expect(contarEmpresas(null)).toBeNull();
+  });
+});
+
+describe("iaDasEmpresas — o lote que a saúde, o relatório e o MCP leem", () => {
+  type Resposta = { data: unknown; error: { message: string } | null };
+  // Um cliente falso só com as duas leituras do lote.
+  const clienteFalso = (orgs: Resposta, creds: Resposta) =>
+    ({
+      from: (tabela: string) => {
+        const r = tabela === "organizations" ? orgs : creds;
+        const cadeia = {
+          select: () => cadeia,
+          order: () => Promise.resolve(r),
+          eq: () => cadeia,
+          not: () => Promise.resolve(r),
+        };
+        return cadeia;
+      },
+    }) as unknown as Parameters<typeof iaDasEmpresas>[0];
+
+  it("traz nome e operante, sem outra leitura", async () => {
+    const admin = clienteFalso(
+      {
+        data: [
+          { id: "a", status: "active", display_name: "Empresa A", settings: { llm: { provider: "openai", default_model: "m" } }, ia_segue_a_plataforma: true },
+          { id: "b", status: "suspended", display_name: null, settings: { llm: { provider: "anthropic" } }, ia_segue_a_plataforma: false },
+        ],
+        error: null,
+      },
+      { data: [{ organization_id: "b", provider: "anthropic", is_active: true, validated_at: VALIDADA }], error: null },
+    );
+    expect(await iaDasEmpresas(admin, soOpenai)).toEqual([
+      { organizationId: "a", provider: "openai", modelId: "m", origem: "plataforma", chave: "instalacao", status: "active", nome: "Empresa A", operante: true },
+      { organizationId: "b", provider: "anthropic", modelId: null, origem: "propria", chave: "propria", status: "suspended", nome: null, operante: false },
+    ]);
+  });
+
+  it("falha de leitura vira null, nunca lista vazia", async () => {
+    const falha = { data: null, error: { message: "x" } };
+    const ok = { data: [], error: null };
+    expect(await iaDasEmpresas(clienteFalso(falha, ok), soOpenai)).toBeNull();
+    expect(await iaDasEmpresas(clienteFalso(ok, falha), soOpenai)).toBeNull();
   });
 });

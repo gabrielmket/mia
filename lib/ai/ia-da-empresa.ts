@@ -185,17 +185,27 @@ export async function iaDaEmpresa(
   return iaDaLinha(orgRes.data as LinhaDaEmpresa, credsRes, chaveDaInstalacao);
 }
 
+/** Uma empresa no lote: a IA dela e o que a saúde e o MCP mostram sem outra leitura. */
+export type IaDaEmpresaNoLote = IaDaEmpresa & {
+  /** `organizations.status`, cru. */
+  status: string | null;
+  /** `organizations.display_name`, para o MCP. */
+  nome: string | null;
+  /** `ehOperante(status)`: a saúde e o cartão contam só as que operam. */
+  operante: boolean;
+};
+
 /**
  * A IA de TODAS as empresas, em duas leituras (sem N+1): para o cartão do
- * admin, a saúde, o relatório interno e o MCP. Leva o `status` para quem conta
- * só as que operam (`ehOperante`). `null` quando a leitura falhou.
+ * admin, a saúde, o relatório interno e o MCP. `null` quando a leitura falhou,
+ * nunca lista vazia: quem conta diz "não sei", e não "0 sem chave".
  */
 export async function iaDasEmpresas(
   admin: SupabaseClient,
   chaveDaInstalacao: ChaveDaInstalacao = chaveDaInstalacaoNoAmbiente,
-): Promise<Array<IaDaEmpresa & { status: string | null }> | null> {
+): Promise<IaDaEmpresaNoLote[] | null> {
   const [orgRes, credsRes] = await Promise.all([
-    admin.from("organizations").select("id, status, settings, ia_segue_a_plataforma").order("id"),
+    admin.from("organizations").select("id, status, display_name, settings, ia_segue_a_plataforma").order("id"),
     admin
       .from("ai_provider_credentials")
       .select("organization_id, provider, is_active, validated_at")
@@ -210,9 +220,12 @@ export async function iaDasEmpresas(
     lista.push(c);
     porEmpresa.set(c.organization_id, lista);
   }
-  return ((orgRes.data ?? []) as Array<LinhaDaEmpresa & { status: string | null }>).map((linha) => ({
+  type LinhaDoLote = LinhaDaEmpresa & { status: string | null; display_name: string | null };
+  return ((orgRes.data ?? []) as LinhaDoLote[]).map((linha) => ({
     ...iaDaLinha(linha, porEmpresa.get(linha.id) ?? [], chaveDaInstalacao),
     status: linha.status ?? null,
+    nome: linha.display_name ?? null,
+    operante: ehOperante(linha.status ?? null),
   }));
 }
 
