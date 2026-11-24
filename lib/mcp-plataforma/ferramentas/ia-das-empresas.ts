@@ -18,7 +18,6 @@
 import { z } from "zod";
 
 import { contarEmpresas, iaDasEmpresas, nomeDoProvedor } from "@/lib/ai/ia-da-empresa";
-import { ehOperante } from "@/lib/organizacao/operante";
 
 import { recusar } from "../recusa";
 import type { FerramentaDePlataforma } from "../tipos";
@@ -51,15 +50,9 @@ export const FERRAMENTAS_DA_IA_DAS_EMPRESAS: FerramentaDePlataforma[] = [
       const soSemChave = args.so_sem_chave === true;
       const uma = typeof args.organization_id === "string" ? args.organization_id : null;
 
-      const [empresas, nomes] = await Promise.all([
-        iaDasEmpresas(admin),
-        admin.from("organizations").select("id, display_name"),
-      ]);
+      // `iaDasEmpresas` já traz o nome e se a empresa opera: uma leitura só.
+      const empresas = await iaDasEmpresas(admin);
       if (empresas === null) throw new Error("não consegui ler a IA das empresas (organizations ou ai_provider_credentials).");
-      if (nomes.error) throw new Error(`não consegui ler os nomes das empresas: ${nomes.error.message}`);
-      const nomePorId = new Map(
-        ((nomes.data ?? []) as Array<{ id: string; display_name: string | null }>).map((o) => [o.id, o.display_name]),
-      );
 
       if (uma !== null && !empresas.some((e) => e.organizationId === uma)) {
         recusar(
@@ -71,9 +64,9 @@ export const FERRAMENTAS_DA_IA_DAS_EMPRESAS: FerramentaDePlataforma[] = [
         .filter((e) => (uma === null || e.organizationId === uma) && (!soSemChave || e.chave === null))
         .map((e) => ({
           organization_id: e.organizationId,
-          empresa: nomePorId.get(e.organizationId) ?? null,
+          empresa: e.nome,
           status: e.status,
-          operante: ehOperante(e.status),
+          operante: e.operante,
           origem: e.origem,
           provedor: e.provider,
           provedor_nome: nomeDoProvedor(e.provider),

@@ -27,14 +27,15 @@ vi.mock("@/lib/audit", () => ({
   isServiceRoleConfigured: () => true,
   hashEmail: (e: string) => e,
 }));
-// A instalação tem chave da OpenAI, e só dela. A chave fictícia nunca pode sair na resposta.
-const CHAVE_DA_INSTALACAO = "sk-instalacao-ficticia-0000";
+// A instalação tem chave da OpenAI, e só dela.
+// A chave (cifrada) da credencial fictícia nunca pode sair na resposta.
+const CHAVE_CIFRADA = "cifra-ficticia-0000";
 vi.mock("@/lib/ai/ia-da-empresa", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/ai/ia-da-empresa")>();
   return {
     ...real,
     iaDasEmpresas: (admin: Parameters<typeof real.iaDasEmpresas>[0]) =>
-      real.iaDasEmpresas(admin, (p: string) => (p === "openai" ? CHAVE_DA_INSTALACAO : null)),
+      real.iaDasEmpresas(admin, (p: string) => p === "openai"),
   };
 });
 
@@ -64,7 +65,14 @@ beforeEach(() => {
     empresa(DELTA, "Studio Delta", { status: "suspended", settings: { llm: { provider: "anthropic" } } }),
   );
   db.ai_provider_credentials = [
-    { id: "cred-1", organization_id: GAMA, provider: "google", is_active: true, validated_at: "2026-11-01T00:00:00Z" },
+    {
+      id: "cred-1",
+      organization_id: GAMA,
+      provider: "google",
+      is_active: true,
+      validated_at: "2026-11-01T00:00:00Z",
+      api_key_encrypted: CHAVE_CIFRADA,
+    },
     // cadastrada e nunca validada: não é chave utilizável
     { id: "cred-2", organization_id: EPSILON, provider: "google", is_active: true, validated_at: null },
     // validada, mas desativada
@@ -148,7 +156,7 @@ describe("plataforma_ver_ia_das_empresas", () => {
 
   it("nunca devolve a chave em si", async () => {
     const r = await chamar({});
-    expect(r.texto).not.toContain(CHAVE_DA_INSTALACAO);
+    expect(r.texto).not.toContain(CHAVE_CIFRADA);
     expect(r.texto).not.toMatch(/api_key|encrypted|secret/i);
   });
 
