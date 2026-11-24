@@ -222,6 +222,13 @@ npx vitest run
   `lib/mcp-plataforma/ferramentas/produto-no-negocio.ts`, com o schema na 9160 e na 9161, as duas
   primeiras da faixa 9160-9169; os pontos de ligação no código do upstream estão em
   [`docs/fork/produto-no-negocio.md`](fork/produto-no-negocio.md), seção 10.
+  As conversões do site (MIA-169: o cadastro e a assinatura da MIA viram evento de SITE na
+  Meta e importação de clique no Google, pelo motor do upstream e com regras nossas por etapa)
+  moram em `lib/conversoes/site.ts`, `lib/conversoes/etapa-site.handler.ts`,
+  `lib/plataformas-de-anuncio/meta/evento-do-site.ts` e `lib/implantacao/conversoes-do-site.ts`,
+  com o schema na 9170 (`mia_regras_de_conversao_do_site`); a lista fechada dos pontos de
+  ligação no código do upstream está em
+  [`docs/fork/conversoes-da-meta.md`](fork/conversoes-da-meta.md#conversões-do-site).
 - **Funcionalidade duplicada.** Os dois lados construíram, na mesma semana, o
   cadastro incorporado da Meta, o disparo em massa e o aviso no WhatsApp. A decisão
   de ficar com um, com o outro ou com os dois é de produto. Para o **disparo em
