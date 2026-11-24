@@ -97,6 +97,7 @@ falha alto:
 | tabela nova com `contact_id` que nada anonimiza | `lgpd-exporta-o-que-redige` |
 | namespace das imagens voltando para o do upstream | `namespace-das-imagens` |
 | o schema da MIA deixando de ser aplicado no deploy | `carimbo-do-schema` |
+| nome de evento do `event_log` com três segmentos, que o CHECK `event_type_format` recusa e o bloco do gatilho engole (PR #138) | `nome-de-evento-do-event-log-tem-dois-segmentos` |
 
 Estas catracas são **nossas** e o upstream não as tem. Na fusão de 25/09 elas acharam
 quatro buracos de LGPD no código novo dele, dois dias depois de ele escrever.
