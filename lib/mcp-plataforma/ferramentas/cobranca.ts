@@ -445,8 +445,8 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       "Desde a .91, o \"o que falta\" de AGORA (o_que_falta_agora: as contas e cada item com a coluna e quem faz, a mesma régua do Início do cliente). " +
       "Desde a .95, os PREÇOS que valem para a empresa (precos: o da mensagem do Broadcast e o por e-mail, em reais, cada um com a origem: " +
       "definido à mão, o plano ou, no e-mail, o padrão; e o definido à mão, se houver). " +
-      "Desde a MIA-168, o LEAD NA TIME (lead_na_time: o negócio no funil MIA - SDR da Time, os momentos informados — cadastro concluído, teste começou, " +
-      "pagamento confirmado com o valor em BRL — e o erro, como sem_fonte, fonte_inexistente, recusado ou sem_etapa:<nome>; null quando a empresa não " +
+      "Desde a MIA-168, o LEAD NA TIME (lead_na_time: o negócio no funil MIA - SDR da Time, os momentos informados: cadastro concluído, teste começou, " +
+      "pagamento confirmado com o valor em BRL; e o erro, como sem_fonte, fonte_inexistente, recusado ou sem_etapa:<nome>; null quando a empresa não " +
       "veio do /signup). configurado=false quer dizer que CADASTRO_FONTE_DO_CRM não está no ambiente.",
     inputSchema: { organization_id: ORGANIZACAO },
     exemplo: { organization_id: ORG_DE_EXEMPLO },

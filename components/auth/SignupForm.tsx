@@ -147,7 +147,8 @@ export function SignupForm({
     const comCupom =
       miaCupom?.valido === true && typeof values.cobranca_plan_id === "string" && miaCupom.planos.includes(values.cobranca_plan_id) ? { mia_cupom: miaCupom.codigo } : {};
     // FORK MIA (MIA-168): a origem do link vai junto, escondida (só sem convite).
-    const comOrigem = origem && Object.keys(origem).length > 0 ? { mia_origem: origem } : {};
+    const comOrigem: { mia_origem?: Record<string, string> } =
+      origem && Object.keys(origem).length > 0 ? { mia_origem: origem as Record<string, string> } : {};
     // No modo convite o e-mail do formulário é readonly, e readonly no
     // cliente não vale nada: quem confere de novo é o servidor.
     const entrada: SignupInput | SignupComConviteInput = convite

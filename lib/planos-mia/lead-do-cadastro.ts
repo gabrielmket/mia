@@ -373,7 +373,7 @@ async function lerEmpresa(cliente: SupabaseClient, orgId: string): Promise<Empre
   if (error) throw new Error(`empresa ilegível (${error.code ?? "sem_codigo"})`);
   if (!data) return null;
   const o = data as { id: string; display_name: string | null; created_by: string | null; demonstracao?: boolean | null };
-  return { id: o.id, nome: o.display_name ?? "", criadaPor: o.created_by, demonstracao: o.demonstracao === true };
+  return { id: o.id, nome: typeof o.display_name === "string" ? o.display_name : "", criadaPor: o.created_by, demonstracao: o.demonstracao === true };
 }
 
 async function lerAssinatura(cliente: SupabaseClient, orgId: string): Promise<AssinaturaDaEmpresa | null> {

@@ -558,6 +558,16 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "recebem permission denied (42501); as funções que gravam (seguir o plano, " +
       "confirmar a compra) não são da sessão; a compra paga lança uma vez só.",
   })),
+  // Fork MIA, 9169 · o cadastro do /signup como lead no CRM da Time (MIA-168): o IP,
+  // o navegador e os ids de clique da medição, e os três momentos do funil.
+  {
+    tabela: "mia_cadastro_na_time",
+    razao:
+      "tests/invariants/cadastro-na-time.test.ts · exclusiva do servidor: RLS ligada com " +
+      "ZERO políticas, o administrador da PRÓPRIA empresa e anon recebem permission denied " +
+      "(42501) na leitura e na escrita, o service_role grava e lê (controle positivo); a " +
+      "limpeza da LGPD só o servidor executa.",
+  },
   // Fork MIA, 9130 a 9132 · cupons, parceiros e comissão (.98): o cupom da empresa, o
   // setup vendido e as comissões. Só o servidor; nem o administrador da empresa lê.
   ...["mia_cupom_da_empresa", "mia_setup_da_empresa", "mia_comissoes"].map((tabela) => ({
