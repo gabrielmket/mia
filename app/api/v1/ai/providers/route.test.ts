@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 import { requireRole } from "@/lib/auth/require-role";
@@ -41,6 +41,10 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
 
 /** O que o `baseline.sql` semeia para openai — o catálogo "já existente". */
@@ -63,6 +67,11 @@ interface EstadoDoBanco {
    * está nele", e é a diferença que a rota precisa enxergar.
    */
   catalogo: string[];
+  /**
+   * FORK MIA (9172): as credenciais da empresa que a trava "provedor sem
+   * chave" enxerga (ativas e validadas). Lidas pelo cliente admin.
+   */
+  credenciais?: Array<{ provider: string; is_active: boolean; validated_at: string | null }>;
 }
 
 function stubDoBanco(estado: EstadoDoBanco) {
@@ -119,6 +128,17 @@ function stubDoBanco(estado: EstadoDoBanco) {
           },
         };
       }
+      if (tabela === "ai_provider_credentials") {
+        const lista = estado.credenciais ?? [];
+        const cadeia = {
+          select: () => cadeia,
+          eq: () => cadeia,
+          not: () => cadeia,
+          then: (ok: (v: unknown) => unknown, erro: (e: unknown) => unknown) =>
+            Promise.resolve({ data: lista, error: null }).then(ok, erro),
+        };
+        return cadeia;
+      }
       throw new Error(`tabela inesperada: ${tabela}`);
     },
   };
@@ -158,6 +178,12 @@ describe("PATCH /api/v1/ai/providers — padrão da organização", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // FORK MIA (9172): a instalação de teste tem as chaves da OpenAI e da
+    // OpenRouter, e não a da Anthropic — o retrato da produção. Sem chave, o
+    // PATCH recusa (casos no fim do arquivo).
+    vi.stubEnv("OPENAI_API_KEY", "sk-teste-da-instalacao");
+    vi.stubEnv("OPENROUTER_API_KEY", "sk-or-teste-da-instalacao");
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
     estado = { atualizacao: null, catalogo: CATALOGO_SEMEADO };
     estadoDeSessao = { atualizacao: null, catalogo: CATALOGO_SEMEADO };
     vi.mocked(requireSupportWrite).mockResolvedValue(null);
@@ -184,6 +210,9 @@ describe("PATCH /api/v1/ai/providers — padrão da organização", () => {
     // O que NÃO podia ser tocado:
     expect(settings.branding).toEqual(SETTINGS_EXISTENTES.branding);
     expect(settings.security).toEqual(SETTINGS_EXISTENTES.security);
+    // FORK MIA (9172): salvar o padrão aqui é a escolha própria — a empresa
+    // deixa de seguir a IA da plataforma, na MESMA escrita.
+    expect(estado.atualizacao?.ia_segue_a_plataforma).toBe(false);
   });
 
   it("escreve pelo CLIENTE ADMIN, não pelo de sessão", async () => {
@@ -266,5 +295,67 @@ describe("PATCH /api/v1/ai/providers — padrão da organização", () => {
       "admin",
       expect.objectContaining({ resource: "ai_providers" }),
     );
+  });
+});
+
+// FORK MIA (9172, MIA-217): a trava no servidor. Salvar o padrão num provedor
+// sem chave utilizável (própria, ativa e validada, ou da instalação) deixaria a
+// empresa sem IA — é exatamente o estado em que 14 empresas estavam.
+describe("PATCH /api/v1/ai/providers — provedor sem chave é recusado", () => {
+  let estado: EstadoDoBanco;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv("OPENAI_API_KEY", "sk-teste-da-instalacao");
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    estado = { atualizacao: null, catalogo: ["claude-sonnet-5"], credenciais: [] };
+    vi.mocked(requireSupportWrite).mockResolvedValue(null);
+    vi.mocked(createClient).mockResolvedValue(
+      stubDoBanco({ atualizacao: null, catalogo: ["claude-sonnet-5"] }) as unknown as Awaited<
+        ReturnType<typeof createClient>
+      >,
+    );
+    vi.mocked(createAdminClient).mockReturnValue(
+      stubDoBanco(estado) as unknown as ReturnType<typeof createAdminClient>,
+    );
+    autorizadoComoAdmin();
+  });
+
+  it("sem chave da instalação e sem chave da empresa: 422 ia_sem_chave, e nada é gravado", async () => {
+    const { PATCH } = await import("./route");
+    const res = await PATCH(requisicao({ provider: "anthropic", default_model: "claude-sonnet-5" }));
+
+    expect(res.status).toBe(422);
+    const json = (await res.json()) as { error: { code: string; message: string } };
+    expect(json.error.code).toBe("ia_sem_chave");
+    expect(json.error.message).toContain("Anthropic (Claude) não tem chave nesta instalação");
+    expect(json.error.message).toContain("deixe a empresa seguindo a IA da plataforma");
+    expect(estado.atualizacao).toBeNull();
+  });
+
+  it("chave da empresa cadastrada mas NÃO validada não conta", async () => {
+    estado.credenciais = [{ provider: "anthropic", is_active: true, validated_at: null }];
+    const { PATCH } = await import("./route");
+    const res = await PATCH(requisicao({ provider: "anthropic", default_model: "claude-sonnet-5" }));
+
+    expect(res.status).toBe(422);
+    expect(estado.atualizacao).toBeNull();
+  });
+
+  it("com a chave da empresa ativa e validada, grava e vira escolha própria", async () => {
+    estado.credenciais = [{ provider: "anthropic", is_active: true, validated_at: "2026-11-01T00:00:00Z" }];
+    const { PATCH } = await import("./route");
+    const res = await PATCH(requisicao({ provider: "anthropic", default_model: "claude-sonnet-5" }));
+
+    expect(res.status).toBe(200);
+    expect(estado.atualizacao?.ia_segue_a_plataforma).toBe(false);
+  });
+
+  it("com a chave da instalação, grava sem a empresa ter chave própria", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-da-instalacao");
+    const { PATCH } = await import("./route");
+    const res = await PATCH(requisicao({ provider: "anthropic", default_model: "claude-sonnet-5" }));
+
+    expect(res.status).toBe(200);
   });
 });
