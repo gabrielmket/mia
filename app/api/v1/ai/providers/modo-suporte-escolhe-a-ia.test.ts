@@ -5,13 +5,13 @@
  * O admin de plataforma não é membro das empresas: a única porta para a tela
  * Provedores de IA de uma delas é o modo suporte. Até a .116, `escolheIa`
  * recusava toda sessão de suporte, e a tela abria sem "Salvar padrão" e com o
- * PATCH em 403. Aqui fica a régua de quem passa e de quem continua de fora.
+ * PATCH em 403. Aqui a rota de verdade, ponta a ponta: quem passa e quem
+ * continua de fora. A régua sozinha está em `lib/ai/trava-da-ia.test.ts`.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 import { requireRole } from "@/lib/auth/require-role";
-import { plataformaEditaEmSuporte } from "@/lib/ai/trava-da-ia";
 
 const banco = vi.hoisted(() => ({
   gravacoes: [] as Array<{ tabela: string; payload: unknown }>,
@@ -70,7 +70,6 @@ vi.mock("@/lib/supabase/server", () => ({
 import { GET, PATCH } from "@/app/api/v1/ai/providers/route";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
-const OUTRA_ORG = "44444444-4444-4444-8444-444444444444";
 
 type Sessao = {
   status: "active" | "expired" | "revoked";
@@ -128,12 +127,6 @@ describe("admin de plataforma em modo suporte com edição permitida", () => {
     expect(await podeEditar()).toBe(true);
   });
 
-  it("não ganha o cadastro de chave própria: a chave segue fora do acompanhamento", async () => {
-    const res = await GET();
-    const corpo = (await res.json()) as { data: { podeCadastrarChave: boolean } };
-    expect(corpo.data.podeCadastrarChave).toBe(false);
-  });
-
   it("salva o padrão da empresa", async () => {
     const res = await salvarPadrao();
     expect(res.status).toBe(200);
@@ -149,7 +142,6 @@ describe("quem continua sem escolher a IA da empresa", () => {
     ["plataforma sem scope carregado", quem({ plataforma: true, scope: null, support: sessao() })],
     ["sessão aberta por uma agência", quem({ plataforma: true, support: sessao({ agency_id: "55555555-5555-4555-8555-555555555555" }) })],
     ["sessão encerrada", quem({ plataforma: true, support: sessao({ status: "expired" }) })],
-    ["sessão de outra empresa", quem({ plataforma: true, support: sessao({ organization_id: OUTRA_ORG }) })],
     ["suporte de quem não é da plataforma", quem({ plataforma: false, support: sessao() })],
   ];
 
@@ -166,11 +158,5 @@ describe("quem continua sem escolher a IA da empresa", () => {
   it("plataforma em suporte com edição, mas papel de leitura na empresa: painel só de leitura", async () => {
     entraComo(quem({ plataforma: true, support: sessao() }), "viewer");
     expect(await podeEditar()).toBe(false);
-  });
-});
-
-describe("a régua sozinha", () => {
-  it("fora de suporte não é este caminho (é o do escolheIa)", () => {
-    expect(plataformaEditaEmSuporte(quem({ plataforma: true, support: null }), ORG)).toBe(false);
   });
 });

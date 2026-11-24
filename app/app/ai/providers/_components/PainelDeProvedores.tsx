@@ -117,11 +117,17 @@ interface Dados {
   modelos: Modelo[];
   padrao: { provider: string; defaultModel: string | null };
   podeEditar: boolean;
-  /** FORK MIA (MIA-218): a chave própria é opção avançada, só do admin da plataforma. */
-  podeCadastrarChave?: boolean;
 }
 
-export function PainelDeProvedores() {
+export function PainelDeProvedores({
+  podeCadastrarChave = false,
+}: {
+  /**
+   * FORK MIA (MIA-218): a chave própria é opção avançada, só do admin da
+   * plataforma fora de suporte (`podeConfigurarChaveDeIa`). Vem da página.
+   */
+  podeCadastrarChave?: boolean;
+} = {}) {
   const t = useT();
   const [dados, setDados] = useState<Dados | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -215,7 +221,7 @@ export function PainelDeProvedores() {
       <AvisoDaChave
         semChavePropria={semChave}
         instalacaoTemChave={dados.instalacaoTemChave}
-        podeCadastrarChave={dados.podeCadastrarChave === true}
+        podeCadastrarChave={podeCadastrarChave}
       />
 
       <CartaoDoPadrao dados={dados} aoSalvar={carregar} />
