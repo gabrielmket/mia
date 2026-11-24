@@ -1,4 +1,6 @@
 import { z } from "zod";
+// FORK MIA (MIA-168): a origem do link do cadastro (docs/fork/jornada-de-assinatura.md).
+import { origemDoCadastroSchema } from "@/lib/planos-mia/origem-do-cadastro";
 
 export const loginSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -93,6 +95,9 @@ export const signupSchema = z
     mia_fiscal: z.record(z.string(), z.string().max(160)).optional(),
     // FORK MIA (.98): o cupom do link ou digitado. Quem confere é a action.
     mia_cupom: z.string().trim().max(40).optional(),
+    // FORK MIA (MIA-168): os utm_* e os ids de clique do link, num campo escondido
+    // (lib/planos-mia/origem-do-cadastro.ts). Só chaves conhecidas, com teto.
+    mia_origem: origemDoCadastroSchema.optional(),
     continuar_pagamento: z.boolean().optional(),
     email: z.string().email("Email inválido"),
     password: senhaDoCadastroSchema,

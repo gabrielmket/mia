@@ -16,6 +16,8 @@ import { selecionarPlanoDoLink } from "@/lib/cobranca/selecao-do-link";
 import { tituloDaTelaPublica } from "@/lib/i18n/titulo-da-tela-publica";
 // FORK MIA (.90): os planos em cartões e o "?plano=" da página de preços.
 import { lerCadastroEmCartoes } from "@/lib/planos-mia/cadastro";
+// FORK MIA (MIA-168): a origem do link vira lead no CRM da Time (docs/fork/jornada-de-assinatura.md).
+import { origemDoLink } from "@/lib/planos-mia/origem-do-cadastro";
 // FORK MIA (.98): o cupom do link, ou o guardado no navegador por 30 dias.
 import { cookies } from "next/headers";
 import { COOKIE_DO_CUPOM } from "@/lib/cupons/regras";
@@ -49,9 +51,12 @@ export const generateMetadata = () => tituloDaTelaPublica((t) => t("Criar conta"
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ invite?: string; plano?: string | string[]; cupom?: string; moeda?: string | string[] }>;
+  searchParams: Promise<{ invite?: string; plano?: string | string[]; cupom?: string; moeda?: string | string[] } & Record<string, string | string[] | undefined>>;
 }) {
-  const { invite, plano, cupom: cupomDoLink, moeda } = await searchParams;
+  const parametros = await searchParams;
+  const { invite, plano, cupom: cupomDoLink, moeda } = parametros;
+  // FORK MIA (MIA-168): os utm_* e os ids de clique do link vão ao CRM da Time, escondidos.
+  const origemDoCadastro = origemDoLink(parametros);
   // FORK MIA (.90): o "?plano=" da página de preços aceita também o nome do plano.
   const planoDoLink = typeof plano === "string" ? plano : undefined;
   const payload = invite ? verifyInviteToken(invite) : null;
@@ -186,6 +191,7 @@ export default async function SignupPage({
         cartoes={emCartoes.cartoes}
         planoVeioDoLink={planoVeioDoLink}
         cupomInicial={cupomInicial}
+        origem={origemDoCadastro}
       />
       {/* O convite atravessa o Google na URL de retorno: sem ele, quem foi
           convidado e cria a conta com Google ganharia uma empresa própria. */}
