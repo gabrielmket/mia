@@ -18,7 +18,7 @@ própria da empresa é opção avançada, só para o administrador da plataforma
 
 ## 2. Por que existe
 
-Em 24/11/2026, 14 de 18 empresas estavam no padrão do produto do upstream
+Em 24/11/2026, a maior parte das empresas estava no padrão do produto do upstream
 (anthropic/claude-sonnet-5), gravado por `fn_seed_org_llm_defaults` quando cada uma nasceu. A
 instalação não tem chave da Anthropic, e nenhuma delas tinha chave própria. Nenhuma fez uma chamada
 de IA por semanas, e ninguém viu. A troca em `/admin/modelo-de-ia` não chegava a elas: valia só para
@@ -75,15 +75,26 @@ uma chave própria foi desativada, ou `platform_ia` ficou vazio numa instalaçã
 Anthropic. A regra é pura e mora em `lib/ai/aviso-da-ia-das-empresas.ts`. Conta só empresa operante
 (`ehOperante`). A demonstração conta, porque é usada em venda.
 
+Todos leem a mesma régua, `iaDasEmpresas` ou `iaDaEmpresa` (`lib/ai/ia-da-empresa.ts`), e por isso
+dizem o mesmo número.
+
 - **`/health`**: `data.ia.empresas_sem_chave`, só a contagem, sem id nem nome, igual com e sem o
-  segredo. `null` quer dizer que a leitura falhou. **Não muda o `status`**: o passo 1 do trem de
-  implantação lê o `status`, e uma empresa mal configurada não pode travar a implantação.
-- **Relatório interno** (`cron/report-da-plataforma`): um recado por dia enquanto houver empresa sem
-  chave, com a contagem, onde ver quais e onde corrigir. Sem nome de empresa.
-- **Tela Provedores**: na empresa sem chave utilizável, o aviso de chave vira o aviso da trava. O
-  administrador da plataforma vê o caminho para corrigir; a empresa é mandada ao suporte.
-- **Admin › Modelo de IA**: o cartão diz "Vale para todas as empresas que não escolheram outro." e
-  mostra quantas seguem, quantas têm escolha própria e quantas estão sem chave.
+  segredo. A leitura tem o mesmo teto de tempo das outras da saúde; `null` quer dizer que ela falhou
+  (diferente de zero). **Não muda o `status`**: o passo 1 do trem de implantação lê o `status`, e
+  uma empresa mal configurada não pode travar a implantação.
+- **Relatório interno** (`cron/report-da-plataforma`, seção 3b): o cron roda de minuto em minuto, e
+  esta parte lê as empresas só a cada 15 minutos. Enquanto houver empresa sem chave, sai um recado
+  por dia (chave `ia_das_empresas_sem_chave`), com a contagem, onde ver quais e onde corrigir. Sem
+  nome de empresa. Leitura que falhou não avisa.
+- **Tela Provedores** (`AvisoDaChave`, sobre `ia.chave` do GET):
+  - `instalacao`: "Usando a chave da MIA. Nenhuma chave precisa ser cadastrada.";
+  - `null`: quem escolhe a IA (a plataforma em suporte) lê "A IA principal desta empresa (provedor)
+    está sem chave e não responde aos clientes. Escolha no padrão abaixo um provedor com chave."; a
+    empresa lê que é com o suporte, sem link;
+  - `propria`, ou `ia` nulo (leitura falhou): nada.
+- **Admin › Modelo de IA** (`ContagemDasEmpresas`, sobre `empresas` do GET): o cartão diz "Vale para
+  todas as empresas que não escolheram outro." e mostra quantas seguem, quantas têm escolha própria
+  e quantas estão sem chave. Com alguma sem chave, diz o efeito e aponta o MCP. `null`: nada.
 
 ## 6. MCP
 
@@ -107,5 +118,10 @@ Anthropic. A regra é pura e mora em `lib/ai/aviso-da-ia-das-empresas.ts`. Conta
 3. O upstream mexeu em `fn_seed_org_llm_defaults` ou criou um "padrão da instalação"? Confira que o
    gatilho `trg_ia_segue_a_plataforma` continua rodando antes do seed (ordem alfabética dos BEFORE).
 4. Rode `lib/ai/trava-da-ia.test.ts`, `app/api/v1/ai/providers/modo-suporte-escolhe-a-ia.test.ts`,
-   `app/app/ai/providers/_components/AvisoDaChave.test.tsx`, `lib/ai/aviso-da-ia-das-empresas.test.ts`
+   `app/app/ai/providers/_components/AvisoDaChave.test.tsx`,
+   `components/admin/modelo-de-ia/ContagemDasEmpresas.test.tsx`,
+   `app/api/v1/health/health-diz-se-ha-empresa-sem-ia.test.ts`,
+   `tests/unit/report-da-plataforma-ia-sem-chave.test.ts`, `lib/ai/aviso-da-ia-das-empresas.test.ts`
    e `tests/unit/mcp-de-implantacao-ia-das-empresas.test.ts`.
+5. O upstream mexeu na `/health` ou no relatório interno? Confira com
+   `git grep -n "MIA-218" -- app/api/v1/health/route.ts app/api/v1/cron/report-da-plataforma/route.ts`.
