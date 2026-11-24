@@ -355,7 +355,7 @@ describe("⭐ outra empresa nunca usa a credencial da variável", () => {
   });
 
   it("a regra pura: só a empresa da fonte recebe a credencial; sem a fonte, ninguém", () => {
-    const ambiente = { MIA_META_DATASET_DO_SITE: DATASET_DO_SITE, MIA_META_TOKEN_DO_SITE: "t" } as NodeJS.ProcessEnv;
+    const ambiente = { MIA_META_DATASET_DO_SITE: DATASET_DO_SITE, MIA_META_TOKEN_DO_SITE: "t" } as unknown as NodeJS.ProcessEnv;
     expect(credencialDaMetaDoSite(ORG, ORG, ambiente).ok).toBe(true);
     expect(credencialDaMetaDoSite(OUTRA, ORG, ambiente)).toEqual({ ok: false, motivo: "site_fora_da_empresa_da_fonte" });
     expect(credencialDaMetaDoSite(ORG, null, ambiente)).toEqual({ ok: false, motivo: "site_fora_da_empresa_da_fonte" });

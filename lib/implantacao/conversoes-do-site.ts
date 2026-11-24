@@ -118,7 +118,7 @@ export async function verConversoesDoSite(c: Implantacao): Promise<Record<string
   let ultimos: Array<Record<string, unknown>> = [];
   if (regras.length > 0) {
     const chaves = regras.map((r) => chaveDaRegraDoSite({ id: r.id, plataforma: r.plataforma }));
-    const porChave = new Map(regras.map((r) => [chaveDaRegraDoSite({ id: r.id, plataforma: r.plataforma }), r]));
+    const porChave = new Map<string, LinhaDaRegra>(regras.map((r) => [chaveDaRegraDoSite({ id: r.id, plataforma: r.plataforma }), r]));
     const { data, error } = await c.admin
       .from("ad_conversion_dispatches")
       .select("event_name, platform, status, reason, attempted_at")
@@ -383,7 +383,7 @@ export async function testarConversoesDoSite(c: Implantacao, pedido: PedidoDeTes
   const codigo = codigoDeTesteDoSite();
   if (!codigo) {
     throw new Recusa(
-      `Sem ${VARIAVEL_DO_CODIGO_DE_TESTE} no servidor o evento iria à Meta como real e contaria nos anúncios. Peça a quem cuida do servidor para colar ` +
+      `${VARIAVEL_DO_CODIGO_DE_TESTE} não está no servidor, e sem ele o evento iria à Meta como real e contaria nos anúncios. Peça a quem cuida do servidor para colar ` +
         'o código da aba "Testar eventos" do dataset do site, rode de novo e, depois do aceite, tire a variável. Nada foi enviado.',
     );
   }
