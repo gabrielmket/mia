@@ -124,9 +124,9 @@ beforeEach(() => {
 });
 
 describe("as três da coexistência", () => {
-  it("estão na lista, e a lista tem 133 (128 até as duas da MIA-103 + as duas das conversões do site, MIA-169 + as três da coexistência)", () => {
+  it("estão na lista, e a lista tem 134 (128 até as duas da MIA-103 + as duas das conversões do site, MIA-169 + as três da coexistência + o ranking do consumo de IA, MIA-136)", () => {
     for (const n of NOMES) expect(FERRAMENTA_POR_NOME.has(n), n).toBe(true);
-    expect(FERRAMENTAS).toHaveLength(133);
+    expect(FERRAMENTAS).toHaveLength(134);
   });
 
   it("ver é leitura; ligar exige colocar_no_ar, e o raio da caixinha fala da coexistência", () => {

@@ -126,7 +126,7 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DA_TRAVA_DE_ROBO,
   // FORK MIA (.109): o produto no negócio: a palavra e as duas opções de um funil, e a palavra do segmento na implantação (docs/fork/produto-no-negocio.md)
   ...FERRAMENTAS_DO_PRODUTO_NO_NEGOCIO,
-  // FORK MIA (MIA-44): o consumo de IA de um cliente num mês, por agente, "Sistema" e finalidade; só lê (docs/fork/consumo-de-ia.md)
+  // FORK MIA (MIA-44): o consumo de IA de um cliente num mês, por agente, "Sistema" e finalidade; MIA-136: e o ranking das empresas da plataforma; só leem (docs/fork/consumo-de-ia.md)
   ...FERRAMENTAS_DE_CONSUMO_DE_IA,
   // FORK MIA (upstream 1.117, MIA-67): contar os negócios pela porta do `crm_count_leads`, e ver e revogar as conexões OAuth ao MCP da empresa (docs/fork/mcp-de-implantacao.md)
   ...FERRAMENTAS_DA_CONTAGEM_DE_NEGOCIOS,
