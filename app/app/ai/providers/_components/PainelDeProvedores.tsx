@@ -117,6 +117,11 @@ interface Dados {
   modelos: Modelo[];
   padrao: { provider: string; defaultModel: string | null };
   podeEditar: boolean;
+  /**
+   * FORK MIA (9172, MIA-217): de onde vem o padrão e de onde sai a chave dele
+   * (`iaDaEmpresa`). `null` = a leitura falhou: a tela não mostra o aviso.
+   */
+  ia?: { origem: "plataforma" | "propria"; chave: "propria" | "instalacao" | null } | null;
 }
 
 export function PainelDeProvedores({
@@ -205,8 +210,6 @@ export function PainelDeProvedores({
     return <div className="p-6 text-sm text-muted-foreground">{t("Carregando…")}</div>;
   }
 
-  const semChave = dados.credenciais.length === 0;
-
   return (
     <div className="mx-auto w-full max-w-5xl p-6" data-testid="painel-de-provedores">
       <header className="mb-6">
@@ -217,10 +220,13 @@ export function PainelDeProvedores({
         </p>
       </header>
 
-      {/* FORK MIA (MIA-218): na MIA a chave é da plataforma; o aviso diz isso. */}
+      {/* FORK MIA (MIA-218): na MIA a chave é da plataforma; o aviso diz isso, e avisa o padrão sem chave. */}
       <AvisoDaChave
-        semChavePropria={semChave}
-        instalacaoTemChave={dados.instalacaoTemChave}
+        ia={dados.ia ?? null}
+        provedorNome={
+          dados.provedores.find((p) => p.id === dados.padrao.provider)?.rotulo ?? dados.padrao.provider
+        }
+        podeEditar={dados.podeEditar}
         podeCadastrarChave={podeCadastrarChave}
       />
 

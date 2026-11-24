@@ -44,6 +44,11 @@ vi.mock("@/lib/supabase/admin", () => ({
     from: (tabela: string) => {
       if (tabela === "platform_config") return cadeia(tabela, [], null);
       if (tabela === "modulos_instalados") return cadeia(tabela, [], null);
+      // A trava da MIA-217 confere a chave pelo admin: a empresa tem uma da
+      // OpenAI, validada, então salvar a OpenAI não cai em `ia_sem_chave`.
+      if (tabela === "ai_provider_credentials") {
+        return cadeia(tabela, [{ provider: "openai", is_active: true, validated_at: "2026-10-01T00:00:00Z" }], null);
+      }
       return cadeia(tabela, [], { settings: {} });
     },
   }),
