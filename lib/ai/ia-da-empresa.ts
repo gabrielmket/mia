@@ -221,11 +221,11 @@ export async function iaDasEmpresas(
     porEmpresa.set(c.organization_id, lista);
   }
   type LinhaDoLote = LinhaDaEmpresa & { status: string | null; display_name: string | null };
-  return ((orgRes.data ?? []) as LinhaDoLote[]).map((linha) => ({
-    ...iaDaLinha(linha, porEmpresa.get(linha.id) ?? [], chaveDaInstalacao),
-    status: linha.status ?? null,
-    nome: linha.display_name ?? null,
-    operante: ehOperante(linha.status ?? null),
+  return ((orgRes.data ?? []) as LinhaDoLote[]).map((org) => ({
+    ...iaDaLinha(org, porEmpresa.get(org.id) ?? [], chaveDaInstalacao),
+    status: org.status ?? null,
+    nome: org.display_name ?? null,
+    operante: ehOperante(org.status ?? null),
   }));
 }
 
