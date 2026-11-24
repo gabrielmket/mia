@@ -599,15 +599,19 @@ compartilhada, e as rotas espelhadas (seção 5): a cerca dos espelhos guarda a 
 `lib/ai/trava-da-ia-na-rota.ts` (o token nunca escolhe IA) e o token `dsk_` do upstream
 (`resolveAuthDual`). Desde a v1.121, `lib/ai/agents/edicao.ts` (salvar rascunho, publicar e
 reverter o agente, que o upstream tirou da tela para o MCP de agentes dele usar também): a trava
-da IA mora ali, pelo `quemPede` do ator; sem ele (o token), ninguém escolhe IA.
+da IA mora ali, pelo `quemPede` do ator; sem ele (o token), vale `TOKEN_NAO_ESCOLHE_IA` (a mesma
+constante das rotas) e ninguém escolhe IA. No fork o `crm_save_ai_agent_draft` do upstream não
+oferece `provedor` nem `modelo` (MIA-115). A conferência de sobreposição entre o MCP de agentes da
+empresa e o nosso está em `mcp-de-implantacao.md`, "O MCP de agentes da empresa e o MCP de plataforma".
 
-**Protege.** `tests/unit/mcp-de-implantacao-ferramentas.test.ts`, `mcp-de-implantacao-espelhos.test.ts`, `mcp-de-implantacao-operacoes.test.ts`, `mcp-de-implantacao-ponta-a-ponta.test.ts`, `mcp-de-plataforma-escopo.test.ts`, `distribuicao-do-numero-pela-plataforma.test.ts`, `dono-do-contato-pela-plataforma.test.ts`, `mcp-de-implantacao-servidores-mcp-do-agente.test.ts` (os servidores MCP por agente, 9095) e a família `mcp-de-implantacao-novidades-do-upstream-*.test.ts`.
+**Protege.** `tests/unit/mcp-de-implantacao-ferramentas.test.ts`, `mcp-de-implantacao-espelhos.test.ts`, `mcp-de-implantacao-operacoes.test.ts`, `mcp-de-implantacao-ponta-a-ponta.test.ts`, `mcp-de-plataforma-escopo.test.ts`, `distribuicao-do-numero-pela-plataforma.test.ts`, `dono-do-contato-pela-plataforma.test.ts`, `mcp-de-implantacao-servidores-mcp-do-agente.test.ts` (os servidores MCP por agente, 9095) e a família `mcp-de-implantacao-novidades-do-upstream-*.test.ts`. A trava da IA no token do MCP de agentes do upstream: o `describe` "edição pelo token do MCP" de `tests/unit/trava-da-ia-portas.test.ts` (chama o `edicao.ts` direto com ator de token, cada caso com o controle da plataforma, mais o esquema do rascunho; MIA-115/MIA-116).
 
 **Conferir.**
 1. `npx vitest run tests/unit/mcp-de-implantacao-espelhos.test.ts` (vermelho = o upstream mudou uma rota espelhada: releia o espelho e regrave a impressão).
 2. `npx vitest run tests/unit/mcp-de-implantacao-ferramentas.test.ts tests/unit/mcp-de-plataforma-escopo.test.ts`.
 3. Função nova do upstream na faixa fundida: existe `mcp-de-implantacao-novidades-do-upstream-<versão>.test.ts` para ela? (R5)
 4. MCP (lê só, na demonstração): `plataforma_ver_catalogo`, `plataforma_ver_implantacao`, `plataforma_ver_configuracao`.
+5. Se o upstream mexeu em `lib/ai/agents/edicao.ts` ou em `lib/mcp/tools/agentes.ts`: `npx vitest run tests/unit/trava-da-ia-portas.test.ts` (vermelho no `describe` do token = o MCP dele passou a escolher IA, ou `provedor`/`modelo` voltaram ao esquema do `crm_save_ai_agent_draft` na fusão: tire de novo, com o `FORK MIA` do lado).
 
 **Riscos.** Uma ferramenta que grava passa pelo mesmo caminho da tela; se o caminho do upstream ganhar
 um passo, o espelho fica atrás. A tela de tokens lista `OPERACOES`: chave nova aparece sozinha, sem migration.
