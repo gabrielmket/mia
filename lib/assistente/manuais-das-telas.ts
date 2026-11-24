@@ -572,6 +572,28 @@ const OPERACAO_DO_FORK: Manual[] = [
     ],
     observacao: "O modelo só aparece nos disparos e nos follow-ups depois que a Meta aprovar. Mudar quantas variáveis existem faz a Meta pedir exemplos novos.",
   },
+  // FORK MIA · coexistência do WhatsApp (docs/fork/coexistencia.md).
+  {
+    id: "coexistencia-pelo-app",
+    titulo: "Conectar pelo app WhatsApp Business: o mesmo número no celular e na MIA (coexistência)",
+    palavras: [
+      "coexistencia", "app whatsapp business", "mesmo numero do app", "numero que ja uso no celular",
+      "conectar pelo app", "continuar usando o celular", "sincronizar historico", "historico do app",
+      "contatos do app", "sincronizacao", "qr da meta",
+    ],
+    href: "/app/connections",
+    papelMinimo: "admin",
+    passos: [
+      "Abra Conexões, aba API Oficial (Meta). Se aparecer Esta opção ainda não está liberada para a sua empresa, peça ao suporte da MIA para ligar a coexistência.",
+      "Tenha à mão o celular com o app WhatsApp Business 2.24.17 ou mais novo e o login no Facebook de quem administra o portfólio da empresa.",
+      "Clique em Conectar pelo app WhatsApp Business, leia o aviso de limites e custos, marque Li os limites e os custos e clique em Continuar na janela da Meta.",
+      "Na janela da Meta, entre com o Facebook, escolha o portfólio e conectar o app WhatsApp Business, informe o número, leia o QR com o app no celular e escolha se compartilha o histórico.",
+      "Ao concluir, o número volta para Conexões já ligado à sua empresa. Use Ver a sincronização para acompanhar os contatos e o histórico que a Meta manda.",
+    ],
+    observacao:
+      "A Meta manda os contatos e até 180 dias de conversa uma vez só, e só até 24 horas depois da conexão: se falhar, a MIA não pede de novo sozinha, e para tentar outra vez o número precisa ser desconectado no app e conectado de novo. O que chega entra como histórico: a IA não responde a conversa velha. Se o número já estava conectado por QR, esse canal é arquivado. Abra o app no celular pelo menos a cada 14 dias, ou a Meta tira o número da API.",
+    vejaTambem: ["templates-da-meta"],
+  },
   {
     id: "backup",
     titulo: "Cópia de segurança (backup) dos dados",

@@ -323,6 +323,12 @@ export const AUDIT_ACTIONS = [
   "platform.modelo_de_ia_alterado",
   "platform.cadastro_incorporado_alterado",
   "platform.cadastro_incorporado_amarrado",
+  // FORK MIA (9164) — a coexistência do WhatsApp (docs/fork/coexistencia.md):
+  // quem ligou ou desligou a chave da empresa, o número que a empresa conectou
+  // pelo app WhatsApp Business e o canal por QR do mesmo número que saiu do ar.
+  "platform.coexistencia_alterada",
+  "channel.coexistencia_conectada",
+  "channel.coexistencia_qr_desligado",
   "platform.report_alterado",
   "platform.fila_morta_reprocessada",
   "platform.precos_da_meta_alterados",

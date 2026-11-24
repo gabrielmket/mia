@@ -82,6 +82,7 @@ import { DICIONARIO_DA_IA_PENDENTE } from "./dicionario-mia-ia-pendente";
 import { DICIONARIO_DO_CONSUMO_DE_IA } from "./dicionario-mia-consumo-de-ia";
 // FORK MIA (.108): a nota, a linha do tempo e o aviso da trava de robô, idem.
 import { DICIONARIO_DA_TRAVA_DE_ROBO } from "./dicionario-mia-trava-de-robo";
+import { DICIONARIO_DA_COEXISTENCIA } from "./dicionario-mia-coexistencia";
 // FORK MIA (.109): o produto no negócio (docs/fork/produto-no-negocio.md).
 import { DICIONARIO_DO_PRODUTO_NO_NEGOCIO } from "./dicionario-mia-produto-no-negocio";
 import { TEXTOS_AGENDA_CONFIGURACAO } from "./agenda-configuracao";
@@ -120,6 +121,7 @@ export const DICIONARIO: Traducoes = {
   ...DICIONARIO_DA_IA_PENDENTE,
   ...DICIONARIO_DO_CONSUMO_DE_IA,
   ...DICIONARIO_DA_TRAVA_DE_ROBO,
+  ...DICIONARIO_DA_COEXISTENCIA,
   ...DICIONARIO_DO_PRODUTO_NO_NEGOCIO,
   ...TEXTOS_PAINEL_GOOGLE_ADS,
   ...TEXTOS_CONTRATACAO,

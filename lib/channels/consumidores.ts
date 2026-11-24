@@ -7,6 +7,7 @@
 import type { EventHandler } from "@/lib/event-log/dispatcher";
 
 import { loteDoHistoricoHandler } from "./meta/coexistencia/lote.handler";
+import { pedidoDaSincronizacaoHandler } from "./meta/coexistencia/sincronizacao.handler";
 import { pinoReintentoHandler } from "./zernio/pino-reintento.handler";
 
 export const CONSUMIDORES_DOS_CANAIS: readonly EventHandler[] = [
@@ -15,4 +16,7 @@ export const CONSUMIDORES_DOS_CANAIS: readonly EventHandler[] = [
   // FORK MIA: o lote do histórico que a Meta manda na coexistência, gravado
   // como histórico importado (docs/fork/coexistencia.md).
   loteDoHistoricoHandler,
+  // FORK MIA: o pedido único dos contatos e do histórico do app, logo depois da
+  // conexão pelo app WhatsApp Business (docs/fork/coexistencia.md).
+  pedidoDaSincronizacaoHandler,
 ];

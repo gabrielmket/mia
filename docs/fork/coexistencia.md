@@ -2,7 +2,8 @@
 
 Fork MIA. O cliente usa o MESMO número no app WhatsApp Business do celular e na MIA (Cloud API da Meta).
 Este documento cresce por etapa; hoje cobre a **S2: o histórico que a Meta manda entra como passado e não
-dispara nada**. Migration 9162 (carimbo `20261117120000_9162_coexistencia_sincronizacao`).
+dispara nada** (migration 9162) e a **S3: a conexão pelo app e o pedido único da sincronização** (migration 9164,
+carimbo `20261118120000_9164_coexistencia_da_empresa`; seção 5).
 
 Desenho completo, protótipo e decisões: tarefas MIA-24 (plano) e MIA-25 (desenho) no painel do time.
 
@@ -125,17 +126,127 @@ com `aberta_por = 'historico_sem_pedido'` e o pedido do histórico já `em_andam
 
 ## 4. O que fica para as próximas etapas
 
-- **S3:** a conexão pelo app, o pedido único (`smb_app_data`) com a trava, a tela do canal e as ferramentas
-  do MCP de plataforma (ver e ligar a coexistência, ver a sincronização).
+- **S3:** feita (seção 5).
 - **S4:** saída e volta do número (`PARTNER_REMOVED`, `ACCOUNT_OFFBOARDED`, `ACCOUNT_RECONNECTED`), edição e
   apagamento.
-- **Relatórios e raio-X do fork (9163, decisão D3):** conferido em 17/11/2026, nenhuma das funções do fork
+- **Relatórios e raio-X do fork (9172, decisão D3):** conferido em 17/11/2026, nenhuma das funções do fork
   que leem `messages` corta `historico_importado`. Com 180 dias de histórico, o tempo de resposta e o raio-X
   do primeiro mês contariam conversa velha. O corte espera a decisão do Gabriel.
 - Lote guardado sem o pedido ao worker (o `emit_event` falhou na rota) fica em `recebido` e vai ao log com o
-  id; a varredura da S3 o retoma.
+  id; a varredura da S3 o retoma (seção 5.5).
 - **Prazo do lote cru (S3, LGPD):** nesta etapa, um lote que nunca sai de `recebido` (worker parado, ou o
   pedido ao worker perdido) guarda o `payload` sem prazo. A mesma varredura da S3 fecha isso: retoma o lote
   parado e, passado o prazo (proposta: 7 dias), marca o lote `falhou` com `payload` nulo e conta a falha no
   pedido. Até a S3 entrar, a MIA não abre a conexão pelo app: o histórico só chega se o número for conectado
   por fora do fluxo. Apontado pelo Revisor no PR #92.
+
+## 5. A conexão pelo app e o pedido único (S3)
+
+### 5.1 O caminho
+
+```
+tela do canal oficial (chave ligada)
+  └─ "Conectar pelo app WhatsApp Business" → aviso de limites e custos → janela da Meta (SDK JS)
+       └─ POST /api/v1/channels/official/coexistencia {acao: "abrir"}    → nonce (10 min, empresa + pessoa)
+       └─ FB.login com featureType whatsapp_business_app_onboarding      → código + FINISH_..._ONBOARDING (waba_id)
+       └─ POST /api/v1/channels/official/coexistencia {acao: "concluir"} → conectarPeloApp
+            ├─ código → token (oauth/access_token, App Secret no servidor)
+            ├─ número da janela ou da conta (numeros-da-waba.ts); validado com o token novo
+            ├─ número ativo em OUTRA empresa: recusa (nunca toma o número de ninguém)
+            ├─ sessão do canal oficial NA EMPRESA DA SESSÃO, WORKING, origem embedded_signup (9328 do upstream)
+            ├─ webhook do número registrado (a mesma peça da porta manual); meta_onboardings já amarrado
+            ├─ ciclo da coexistência aberto (mia_coexistencia_conexoes)
+            ├─ canal por QR do mesmo número arquivado (D5)
+            └─ coexistencia.sincronizacao_requested → worker: pedirSincronizacao (contatos, depois histórico)
+```
+
+Não chama `/register`: a página da Meta manda pular, o número já está registrado no app. A mesma volta duas vezes
+dá uma sessão, um ciclo e um pedido: o ciclo vivo aberto pela janela há menos de 10 minutos é o mesmo; mais velho é
+passagem nova (o cliente saiu do app e voltou), e aí o velho vira `encerrada` e nasce outro.
+
+| Peça | Arquivo |
+|---|---|
+| A chave da empresa (9164) | `lib/channels/meta/coexistencia/chave.ts`, `ligar.ts` (recusas) |
+| A janela: configuração e nonce | `lib/channels/meta/coexistencia/janela.ts` |
+| A conexão | `lib/channels/meta/coexistencia/conectar.ts` |
+| O pedido único e o worker | `lib/channels/meta/coexistencia/sincronizacao.ts`, `sincronizacao.handler.ts` |
+| O aviso quando não vem | `lib/channels/meta/coexistencia/avisos.ts` |
+| O canal por QR do mesmo número (D5) | `lib/channels/meta/coexistencia/qr-do-mesmo-numero.ts` |
+| O estado (tela, /admin/meta, MCP) | `lib/channels/meta/coexistencia/leitura.ts` |
+| A varredura de 5 minutos | `lib/channels/meta/coexistencia/varredura.ts`, `app/api/v1/cron/coexistencia` |
+| As rotas | `app/api/v1/channels/official/coexistencia`, `app/api/v1/admin/coexistencia` |
+| A tela | `components/connections/coexistencia/` (SDK em `sdk-da-meta.ts`), `components/admin/coexistencia/` (em /admin/meta pelo layout do fork `app/admin/(protected)/meta/layout.tsx`, sem tocar a página do upstream) |
+| O MCP de plataforma | `lib/mcp-plataforma/ferramentas/coexistencia.ts` |
+
+Encaixes `FORK MIA` em arquivos do upstream, um bloco curto cada:
+
+- `components/connections/CanalOficialClient.tsx`: `<ConectarPeloApp />` depois do cartão do canal conectado.
+- `app/api/v1/channel-sessions/[id]/route.ts`: `barrarQrEmCoexistencia` onde o número do aparelho do QR é lido e
+  gravado (a consulta que a tela de pareamento faz). O QR que acabou de parear um número em coexistência na mesma
+  empresa sai do ar, e a rota responde 409 `coexistencia_ativa`.
+- `lib/channels/consumidores.ts`: o handler do pedido. `docker/scheduler/entrypoint.sh`: a varredura.
+
+A porta manual (`channels/official/route.ts`), o link hospedado (`embedded_signup_url`) e o canal parceiro ficam
+como estão.
+
+### 5.2 A configuração da janela
+
+A janela precisa de `META_APP_ID` (o app da MIA na Meta, que já existia no `.env`) e de
+`META_COEXISTENCIA_CONFIG_ID` (a configuração do cadastro incorporado com a opção do app WhatsApp Business), mais o
+App Secret que a instalação já tem. Sem os dois ids, o botão aparece desligado e a tela diz que falta configurar.
+Decisão D2 (17/11/2026): o `featureType` é a opção da v4 do cadastro incorporado; na v5 ela já vem ligada e o campo é
+ignorado. O fluxo é o mesmo nas duas.
+
+### 5.3 O pedido único
+
+A trava é `unique (conexao_id, tipo)` em `mia_coexistencia_sincronizacoes` (9162): a linha nasce `pedindo` ANTES de
+chamar a Meta, com `on conflict do nothing`, e só quem inseriu chama. Antes, confere ciclo `no_ar` e o prazo de 24 h.
+
+| O que aconteceu | Estado | Aviso |
+|---|---|---|
+| 200 com `request_id` | `pedida` (a S2 leva a `em_andamento` no 1º contato ou lote) | nenhum |
+| A Meta respondeu erro | `falhou`, com o código e o título dela | Central da empresa + log de erro |
+| Rede caída, tempo esgotado, 5xx sem corpo | `sem_resposta` (não dá para saber se a Meta aceitou) | idem |
+| Processo morreu no meio | a varredura muda `pedindo` de mais de 5 min para `sem_resposta` | idem |
+| Passou das 24 h | `prazo_vencido` (insert com o estado final, mesma trava) | idem |
+
+Nenhum desfecho tem segunda tentativa automática. D1 (17/11/2026): contatos recusados, o histórico é pedido mesmo
+assim. O aviso da Central é `kind = 'other'` apontando para a conexão (`ref_kind = 'channel_session'`), um por número e
+por tipo de pedido, e fecha por decisão de quem lê.
+
+### 5.4 A chave e o canal por QR do mesmo número
+
+`mia_coexistencia_da_empresa` (9164): sem linha é desligada, e é assim que toda empresa nasce. Quem liga é o
+administrador de plataforma, em /admin/meta (escrita com MFA) ou pelo MCP. Recusa empresa que não opera e empresa
+de demonstração (a 9010 não deixa nascer canal vivo nela). Desligar não derruba o número conectado: só esconde o
+botão, e a conexão nova é recusada.
+
+D5 (17/11/2026): quando a Meta confirma a conexão, o canal por QR do mesmo número na mesma empresa (comparado só pelos
+dígitos: o oficial grava `+55…`, o QR grava `55…`) sai do aparelho e é arquivado, com os avisos fechados. Enquanto o
+ciclo estiver vivo, o QR que parear o mesmo número sai do ar no primeiro momento em que o número é lido.
+
+### 5.5 A varredura (5 em 5 minutos)
+
+`app/api/v1/cron/coexistencia`: `pedindo` parado vira `sem_resposta`; ciclo aberto pela janela sem os dois pedidos é
+pedido (atrás da trava) ou vence o prazo; lote do histórico esquecido em `recebido` há 2 horas volta ao worker; lote
+cru parado há 7 dias vira `falhou` com o `payload` nulo e o pedido reconta (LGPD, a ressalva do Revisor no PR #92).
+Fora da régua da empresa operante, declarado na cerca: é entrada da própria empresa, com prazo de 24 h da Meta.
+
+### 5.6 Provas
+
+- `tests/invariants/coexistencia-pedido-unico.test.ts`: três chegadas ao mesmo tempo dão UMA chamada de cada tipo à
+  Meta simulada; reexecução, varredura, erro, rede caída e prazo vencido não chamam de novo; contatos recusados não
+  impedem o histórico; ciclo fora do ar não pede; a janela concluída duas vezes ao mesmo tempo abre um ciclo. E a
+  varredura dos lotes: lote cru de 8 dias vira `falhou` com o `payload` nulo e o pedido reconta; lote esquecido há
+  3 h volta ao worker uma vez só (a 2ª rodada não pede de novo); lote de 1 dia mexido há pouco fica como está.
+- `tests/unit/coexistencia-ids-em-fatias.test.ts`: a leitura de /admin/meta manda os ids ao banco em fatias de no
+  máximo 100 (`fatias.ts`): mil uuids num `.in` só estourariam a URL do PostgREST. Com 350 empresas, nada se perde.
+- `tests/invariants/coexistencia-conexao-pelo-app.test.ts`: a conexão de ponta a ponta no servidor com a Graph
+  simulada (empresa certa, origem do upstream, cadastro amarrado, ciclo, pedido ao worker, QR do mesmo número
+  arquivado, a mesma volta sem duplicar, número de outra empresa recusado, QR novo do número barrado).
+- `tests/unit/coexistencia-conexao-pelo-app.test.ts` (nonce, fim da janela, troca do código, chave desligada) e
+  `tests/unit/mcp-de-implantacao-coexistencia.test.ts` (as três ferramentas).
+
+O e2e de tela fica para quando o `e2e.yml` puder apontar a Graph para um dublê: hoje ele fixa `META_GRAPH_BASE_URL`
+numa porta que recusa, e outras specs dependem disso.
+

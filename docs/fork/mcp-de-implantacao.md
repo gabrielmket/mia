@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **130** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda, a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md), a MIA-67 as três da 1.117: contar os negócios e ver e revogar as conexões do MCP da empresa, a MIA-79 as duas da 1.118: o módulo opcional por empresa e a tela inicial, a MIA-99 as duas do preço que a Meta cobra por mensagem, a MIA-103 as duas leituras da Análise do funil e das conversas do mês, e a MIA-169 as duas das conversões do site: garantir as regras e testar com a Ana Exemplo, [`conversoes-da-meta.md`](conversoes-da-meta.md#conversões-do-site)): as 122 desta página e as 8 da migração
+São **133** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda, a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md), a MIA-67 as três da 1.117: contar os negócios e ver e revogar as conexões do MCP da empresa, a MIA-79 as duas da 1.118: o módulo opcional por empresa e a tela inicial, a MIA-99 as duas do preço que a Meta cobra por mensagem, a MIA-103 as duas leituras da Análise do funil e das conversas do mês, e a MIA-169 as duas das conversões do site: garantir as regras e testar com a Ana Exemplo, [`conversoes-da-meta.md`](conversoes-da-meta.md#conversões-do-site), e a MIA-28 as três da coexistência do WhatsApp): as 125 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -1287,6 +1287,24 @@ ganhou os quatro campos) e o registro dele sai pela mesma `plataforma_ver_travas
 | `plataforma_ver_travas_de_robo` | com `organization_id`, a configuração do cliente (o padrão quando não há linha) e os registros do período; sem ele, os registros de todos os clientes. `periodo_dias` (padrão 7, até 90), `motivo` (`robo` ou `teto`) e `limite`. Cada registro traz a conversa com o link do Inbox, os 4 últimos dígitos do telefone, os sinais (só o nome do sinal e o id da mensagem), as respostas da IA na janela, os negócios perdidos, o que falhou e se foi desfeito. Sem texto de mensagem. O ritmo de máquina (MIA-210) aparece como `motivo` `teto` com o sinal `ritmo` em `sinais` | leitura |
 | `plataforma_configurar_trava_de_robo` | liga, desliga ou ajusta os limites; só o que vier muda; o mesmo pedido responde `ja_estava`. Audita `ai.trava_de_robo_configurada` com o antes e o depois. Desde a MIA-210, também os quatro campos do ritmo de máquina (`ritmo_ligado`, que desliga só ele, `ritmo_giros` 4 a 30, `ritmo_latencia_maxima_segundos` 10 a 300, `ritmo_variacao_segundos` 2 a 60), com a recusa que diz o campo fora da faixa | `implantar_configuracao` |
 | `plataforma_desfazer_trava_de_robo` | a mesma devolução do "Devolver ao automático" para a conversa, mais tirar a etiqueta "robô" e marcar o registro como desfeito. Não reabre negócio nem conversa, e não responde a mensagem pendente. Recusa conversa sem trava de pé e contato "sempre atendimento humano". Audita `ai.trava_de_robo_desfeita` | `colocar_no_ar` |
+
+### A coexistência do WhatsApp (MIA-28)
+
+Função do fork ([`coexistencia.md`](coexistencia.md)), e entra no MCP na mesma versão: **três ferramentas novas** (a lista
+vai de 124 a 127). A prova está em `tests/unit/mcp-de-implantacao-coexistencia.test.ts`, e a CONTAGEM nos testes da lista.
+Nenhuma operação nova: ligar a chave exige `colocar_no_ar` (o desenho dizia `implantar_configuracao`, mas a cerca do MCP
+amarra o verbo "ligar" a `colocar_no_ar`, e com a chave a empresa passa a conectar pela API o número do app, por onde a IA
+atende). A regra mora em `lib/channels/meta/coexistencia/` (`ligar.ts`, `leitura.ts`), a mesma da tela de /admin/meta.
+
+| ferramenta | o que faz | operação |
+|---|---|---|
+| `plataforma_ver_coexistencia` | a chave da empresa (`ligada`, quem mudou e quando), se a instalação tem o app da Meta configurado para a janela (`janela_configurada`, `falta_no_ambiente`) e os números conectados pelo app, com estado, data da conexão e motivo de estar fora do ar | leitura |
+| `plataforma_ligar_coexistencia` | liga ou desliga a chave; o mesmo pedido responde `ja_estava`. Recusa empresa que não opera (`ehOperante`) e empresa de demonstração (a 9010 não deixa nascer canal vivo nela). Desligar com número conectado responde os números que continuam. Audita `platform.coexistencia_alterada` | `colocar_no_ar` |
+| `plataforma_ver_sincronizacao_do_app` | por número: os dois pedidos (`contatos` e `historico`) com estado, datas, `request_id` da Meta, erro, progresso, fase e contagens; o prazo de 24 h. Só contagens | leitura |
+
+Fora, de propósito: conectar o número (é credencial e acesso: só a janela da Meta, no navegador do cliente, faz) e pedir a
+sincronização de novo (não existe por desenho: a Meta aceita cada pedido uma vez só por conexão). A área "coexistência" no
+checklist do `plataforma_ver_implantacao` ainda não entrou (fica para a S5, com o roteiro do teste real).
 
 ### O que chegou do upstream 1.85 (.83)
 
