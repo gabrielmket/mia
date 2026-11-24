@@ -1985,7 +1985,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261120130000_9166_fuso_invalido_vale_brasilia_nos_relatorios', now())
+values (1, '20261124200000_9171_ritmo_de_maquina_na_trava_de_robo', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -23161,6 +23161,56 @@ comment on function public.fn_mia_relatorio_preparar(uuid, text, text[], text, t
 revoke all on function public.fn_mia_relatorio_preparar(uuid, text, text[], text, text, jsonb, text, date, date, timestamptz) from public;
 revoke execute on function public.fn_mia_relatorio_preparar(uuid, text, text[], text, text, jsonb, text, date, date, timestamptz) from anon;
 grant execute on function public.fn_mia_relatorio_preparar(uuid, text, text[], text, text, jsonb, text, date, date, timestamptz) to authenticated, service_role;
+
+
+-- ─── 9171 · o ritmo de máquina na trava de robô ───
+--
+-- FORK MIA (MIA-210). Espelho EXATO da migration 9171 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+-- 9171 · o ritmo de máquina na trava de robô
+--
+-- FORK MIA (MIA-210). Só objeto NOSSO (docs/FORK-MIA.md, regra 3): colunas
+-- novas na tabela da 9153 e as CHECKs delas dentro de `do` que confere o
+-- catálogo, no padrão da 9153. Nenhuma função criada, nenhuma CHECK mudada.
+
+alter table public.mia_trava_de_robo_config
+  -- O sinal D (ritmo de máquina). Desliga só ele: o laço e o teto continuam.
+  add column if not exists ritmo_ligado                    boolean not null default true,
+  -- Quantos giros SEGUIDOS no mesmo ritmo disparam.
+  add column if not exists ritmo_giros                     integer not null default 6,
+  -- Cada giro, o outro lado respondeu em até estes segundos...
+  add column if not exists ritmo_latencia_maxima_segundos  integer not null default 60,
+  -- ...e a maior latência menos a menor fica até aqui.
+  add column if not exists ritmo_variacao_segundos         integer not null default 8;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'mia_trava_de_robo_config_ritmo_giros') then
+    alter table public.mia_trava_de_robo_config add constraint mia_trava_de_robo_config_ritmo_giros
+      check (ritmo_giros between 4 and 30);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_trava_de_robo_config_ritmo_latencia') then
+    alter table public.mia_trava_de_robo_config add constraint mia_trava_de_robo_config_ritmo_latencia
+      check (ritmo_latencia_maxima_segundos between 10 and 300);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_trava_de_robo_config_ritmo_variacao') then
+    alter table public.mia_trava_de_robo_config add constraint mia_trava_de_robo_config_ritmo_variacao
+      check (ritmo_variacao_segundos between 2 and 60);
+  end if;
+end $$;
+
+comment on column public.mia_trava_de_robo_config.ritmo_ligado is
+  'MIA (9171): liga o sinal D, o ritmo de maquina (padrao true). Desliga so ele: o laco com robo e o teto continuam valendo. ligada false desliga os tres.';
+comment on column public.mia_trava_de_robo_config.ritmo_giros is
+  'MIA (9171): quantos giros seguidos (a ultima resposta da IA e a primeira recebida em texto depois dela, sem a equipe no meio) no mesmo ritmo disparam. Dispara como o teto: pausa so a conversa.';
+comment on column public.mia_trava_de_robo_config.ritmo_latencia_maxima_segundos is
+  'MIA (9171): em cada giro do ritmo, o outro lado respondeu em ate estes segundos. Acima disto o giro quebra a sequencia.';
+comment on column public.mia_trava_de_robo_config.ritmo_variacao_segundos is
+  'MIA (9171): a maior latencia menos a menor, nos giros do ritmo, fica ate aqui. Gente varia mais que isto.';
+
+notify pgrst, 'reload schema';
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----

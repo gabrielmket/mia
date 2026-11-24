@@ -201,7 +201,9 @@ describe("a régua: o que NÃO é laço", () => {
       conversa.push(daIa("Posso confirmar o horário das 15h?", -8 * MIN + i * 40 * SEG));
       conversa.push(doContato(r, -8 * MIN + i * 40 * SEG + 1 * SEG));
     });
-    const r = avaliar(conversa);
+    // Este mede A, B e C. Oito respostas cravadas em 1 s são o ritmo de máquina (sinal D),
+    // que tem o bloco dele: "a régua: o ritmo de máquina".
+    const r = avaliar(conversa, { ritmo_ligado: false });
     expect(r.dispara).toBeNull();
     expect(r.mensagens_de_robo).toBe(0);
     expect("ok".length).toBeLessThan(MINIMO_DE_CARACTERES_DA_REPETICAO);
@@ -318,6 +320,187 @@ describe("a régua: depois de um registro, a conta recomeça", () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// O sinal D: o ritmo de máquina (MIA-210)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A IA responde 20 s depois de cada recebida (o tempo de juntar e pensar). */
+const PENSAR = 20 * SEG;
+
+/**
+ * Giros de ritmo: a IA fala e o outro lado responde `latencias[i]` segundos
+ * depois. A última recebida chega 10 s antes de AGORA (é o turno avaliado).
+ */
+function giros(
+  latencias: number[],
+  opcoes: { textos?: string[]; tipos?: Array<string | null>; extra?: (i: number, recebida: number) => Mensagem[] } = {},
+): Mensagem[] {
+  const total = latencias.reduce((a, l) => a + l * SEG + PENSAR, 0) - PENSAR;
+  let t = -10 * SEG - total;
+  const saida: Mensagem[] = [];
+  latencias.forEach((lat, i) => {
+    saida.push(daIa(RESPOSTAS_DA_IA[i % RESPOSTAS_DA_IA.length]!, t));
+    t += lat * SEG;
+    const texto = opcoes.textos?.[i] ?? DESPEDIDAS_DA_ACADEMIA[i % DESPEDIDAS_DA_ACADEMIA.length]!;
+    const tipo = opcoes.tipos?.[i] ?? "text";
+    saida.push(msg("inbound", null, tipo === "text" ? texto : "", t, { type: tipo }));
+    saida.push(...(opcoes.extra?.(i, t) ?? []));
+    t += PENSAR;
+  });
+  return saida;
+}
+
+const RESPOSTAS_DA_IA = [
+  "Que bom falar com você! Posso ajudar em mais alguma coisa?",
+  "Imagina! Qualquer dúvida sobre os planos, é só chamar.",
+  "Combinado. Fico à disposição.",
+  "Obrigada você! Tenha uma ótima semana.",
+  "Até mais! Se quiser, te mando os horários das aulas.",
+  "Perfeito, fico por aqui então.",
+];
+
+/** O robô da "Academia Beta" se despede de um jeito diferente a cada vez, curto e sem se declarar. */
+const DESPEDIDAS_DA_ACADEMIA = [
+  "Obrigado pelo contato!",
+  "Nós que agradecemos 😊",
+  "Até logo!",
+  "Tenha um ótimo dia",
+  "Conte sempre com a Academia Beta",
+  "Valeu, até mais",
+  "Um abraço da equipe",
+  "Bons treinos!",
+  "Estamos à disposição",
+];
+
+/** 15 s ± 3: o robô responde sempre com o mesmo atraso. */
+const RITMO_DA_ACADEMIA = [15, 13, 17, 16, 14, 18, 15, 13, 16];
+
+describe("a régua: o ritmo de máquina (sinal D)", () => {
+  it("o laço de despedida da Academia Beta (15 s ± 3, texto variando e curto): dispara no 6º giro, como o teto, com o sinal 'ritmo'", () => {
+    // Nenhum dos três sinais pega este robô: não se declara, não repete, e é curto e devagar.
+    for (const texto of DESPEDIDAS_DA_ACADEMIA) expect(ehAutodeclaracaoDeAutomacao(texto), texto).toBe(false);
+    expect(avaliar(giros(RITMO_DA_ACADEMIA.slice(0, 6)), { ritmo_ligado: false }).dispara).toBeNull();
+
+    expect(avaliar(giros(RITMO_DA_ACADEMIA.slice(0, 5))).dispara).toBeNull();
+    const conversa = giros(RITMO_DA_ACADEMIA.slice(0, 6));
+    const r = avaliar(conversa);
+    expect(r.dispara).toBe("teto");
+    expect(r.gatilho).toBe("ritmo");
+    expect(r.mensagens_de_robo).toBe(6);
+    expect(r.respostas_da_ia).toBe(6);
+    const recebidas = conversa.filter((m) => m.direction === "inbound").map((m) => m.id);
+    expect(r.sinais).toEqual(recebidas.map((id) => ({ mensagem_id: id, sinais: ["ritmo"] })));
+    // Da 1ª resposta da IA à última recebida: 6 latências e 5 vezes o tempo da IA pensar.
+    const soma = RITMO_DA_ACADEMIA.slice(0, 6).reduce((a, b) => a + b, 0);
+    expect(r.duracao_segundos).toBe(soma + 5 * 20);
+    expect(JSON.stringify(r.sinais)).not.toMatch(/Academia|abraço/);
+  });
+
+  it("só a PRIMEIRA recebida depois da resposta da IA fecha o giro: o 2º balão do robô, a qualquer tempo, não quebra o ritmo", () => {
+    const conversa = giros(RITMO_DA_ACADEMIA.slice(0, 6), {
+      extra: (i, recebida) => [doContato("💪", recebida + (i % 2 === 0 ? 2 : 9) * SEG)],
+    });
+    expect(avaliar(conversa)).toMatchObject({ dispara: "teto", gatilho: "ritmo", mensagens_de_robo: 6 });
+  });
+
+  it("Ana Exemplo responde rápido, mas varia (8, 25, 12, 40, 9 e 30 s): não dispara", () => {
+    const textos = ["oi, tudo bem", "quero saber do plano anual", "tem desconto?", "e o horário de sábado?", "ok", "vou ver com meu marido"];
+    expect(avaliar(giros([8, 25, 12, 40, 9, 30], { textos })).dispara).toBeNull();
+  });
+
+  it("Bruno Teste, regular por 5 giros: não dispara", () => {
+    const textos = ["bom dia", "sim", "pode ser", "às 18h", "fechado"];
+    expect(avaliar(giros([20, 21, 19, 20, 22], { textos })).dispara).toBeNull();
+  });
+
+  it("um áudio no meio quebra a sequência: 3 textos, um áudio e mais 3 textos no mesmo ritmo não disparam", () => {
+    const tipos = ["text", "text", "text", "audio", "text", "text", "text"];
+    expect(avaliar(giros(RITMO_DA_ACADEMIA.slice(0, 7), { tipos })).dispara).toBeNull();
+    // Controle: os mesmos 7 giros, todos em texto, disparam.
+    expect(avaliar(giros(RITMO_DA_ACADEMIA.slice(0, 7))).gatilho).toBe("ritmo");
+  });
+
+  it("a mensagem da equipe no meio quebra a sequência", () => {
+    const conversa = giros(RITMO_DA_ACADEMIA.slice(0, 7), {
+      extra: (i, recebida) => (i === 2 ? [daEquipe("Oi, aqui é a Ana, da equipe. Já te respondo.", recebida + 5 * SEG)] : []),
+    });
+    expect(avaliar(conversa).dispara).toBeNull();
+  });
+
+  it("o robô lento (90 s) não dispara no padrão, e dispara com ritmo_latencia_maxima_segundos 120", () => {
+    const lento = giros([90, 88, 92, 91, 89, 90]);
+    expect(avaliar(lento).dispara).toBeNull();
+    expect(avaliar(lento, { ritmo_latencia_maxima_segundos: 120 })).toMatchObject({ dispara: "teto", gatilho: "ritmo" });
+  });
+
+  it("a variação e o número de giros vêm da configuração", () => {
+    const largo = giros([10, 22, 14, 19, 12, 20]); // varia 12 s
+    expect(avaliar(largo).dispara).toBeNull();
+    expect(avaliar(largo, { ritmo_variacao_segundos: 12 }).gatilho).toBe("ritmo");
+    expect(avaliar(giros(RITMO_DA_ACADEMIA.slice(0, 6)), { ritmo_giros: 7 }).dispara).toBeNull();
+    expect(avaliar(giros(RITMO_DA_ACADEMIA.slice(0, 7)), { ritmo_giros: 7 }).gatilho).toBe("ritmo");
+  });
+
+  it("os giros têm de caber na janela de 15 minutos", () => {
+    // 6 giros a cada ~3 min: o ritmo é regular, mas a sequência leva mais que a janela.
+    const espalhado = giros([15, 15, 15, 15, 15, 15]).map((m, i) => ({ ...m, created_at: em(-17 * MIN + Math.floor(i / 2) * 3 * MIN + (i % 2) * 15 * SEG) }));
+    expect(avaliar(espalhado).dispara).toBeNull();
+    expect(avaliar(espalhado, { janela_minutos: 20 }).gatilho).toBe("ritmo");
+  });
+
+  it("ritmo_ligado false: o ritmo não dispara, e o laço e o teto continuam valendo", () => {
+    expect(avaliar(giros(RITMO_DA_ACADEMIA.slice(0, 6)), { ritmo_ligado: false }).dispara).toBeNull();
+    expect(avaliar(lacoDaOperadora(3), { ritmo_ligado: false }).dispara).toBe("robo");
+    const muitas: Mensagem[] = [];
+    for (let i = 0; i < 30; i += 1) {
+      muitas.push(doContato(`Dúvida ${i} sobre o plano`, -55 * MIN + i * 90 * SEG));
+      muitas.push(daIa("Claro, explico.", -55 * MIN + i * 90 * SEG + 20 * SEG));
+    }
+    expect(avaliar(muitas, { ritmo_ligado: false })).toMatchObject({ dispara: "teto", gatilho: "teto", respostas_da_ia: 30 });
+    // E `ligada` false desliga os três.
+    expect(avaliar(giros(RITMO_DA_ACADEMIA.slice(0, 6)), { ligada: false }).dispara).toBeNull();
+  });
+
+  it("a autodeclaração junto: continua 'robo', porque o laço vem antes do ritmo", () => {
+    const textos = [...DESPEDIDAS_DA_ACADEMIA.slice(0, 6)];
+    for (const i of [1, 3, 5]) textos[i] = `${textos[i]} Esta é uma mensagem automática.`;
+    const r = avaliar(giros(RITMO_DA_ACADEMIA.slice(0, 6), { textos }));
+    expect(r).toMatchObject({ dispara: "robo", gatilho: "robo" });
+    expect(r.sinais.flatMap((x) => x.sinais)).not.toContain("ritmo");
+  });
+
+  it("o ritmo vem antes do teto de 30: a nota fala dos giros, não das respostas da hora", () => {
+    const antes: Mensagem[] = [];
+    for (let i = 0; i < 30; i += 1) {
+      antes.push(doContato(`Pergunta ${i} sobre o plano`, -58 * MIN + i * 80 * SEG));
+      antes.push(daIa("Claro, explico.", -58 * MIN + i * 80 * SEG + 10 * SEG));
+    }
+    const r = avaliar([...antes, ...giros(RITMO_DA_ACADEMIA.slice(0, 6))]);
+    expect(r).toMatchObject({ dispara: "teto", gatilho: "ritmo", respostas_da_ia: 6 });
+    expect(r.respostas_no_teto).toBeGreaterThanOrEqual(30);
+  });
+
+  it("depois do registro (`desde`): precisa de 6 giros novos", () => {
+    const conversa = giros(RITMO_DA_ACADEMIA.slice(0, 9));
+    const recebidas = conversa.filter((m) => m.direction === "inbound");
+    // O registro caiu logo depois da 3ª recebida: sobram 6 giros novos.
+    const registro = new Date(Date.parse(recebidas[2]!.created_at) + 1 * SEG);
+    expect(avaliar(conversa, {}, registro)).toMatchObject({ dispara: "teto", gatilho: "ritmo", mensagens_de_robo: 6 });
+    // Logo depois da 4ª: só 5 novos, não dispara.
+    const depois = new Date(Date.parse(recebidas[3]!.created_at) + 1 * SEG);
+    expect(avaliar(conversa, {}, depois).dispara).toBeNull();
+  });
+
+  it("os 8 'ok' cravados em 1 s depois de cada resposta são ritmo de máquina: pausa como o teto, sem perder nada", () => {
+    const conversa: Mensagem[] = [];
+    ["ok", "sim", "ok", "sim", "ok", "ok", "sim", "ok"].forEach((r, i) => {
+      conversa.push(daIa("Posso confirmar o horário das 15h?", -8 * MIN + i * 40 * SEG));
+      conversa.push(doContato(r, -8 * MIN + i * 40 * SEG + 1 * SEG));
+    });
+    expect(avaliar(conversa)).toMatchObject({ dispara: "teto", gatilho: "ritmo" });
+  });
+});
+
 describe("a configuração", () => {
   it("o padrão é LIGADA, com os limites da especificação", () => {
     expect(CONFIG_PADRAO_DA_TRAVA).toEqual({
@@ -330,25 +513,50 @@ describe("a configuração", () => {
       velocidade_caracteres_por_segundo: 15,
       teto_respostas: 30,
       teto_janela_minutos: 60,
+      ritmo_ligado: true,
+      ritmo_giros: 6,
+      ritmo_latencia_maxima_segundos: 60,
+      ritmo_variacao_segundos: 8,
     });
     expect(configDaLinha(null)).toEqual(CONFIG_PADRAO_DA_TRAVA);
   });
 
   it("valor fora da faixa numa linha gravada cai no padrão daquele campo", () => {
-    const c = configDaLinha({ ligada: false, teto_respostas: 0, janela_minutos: 30 });
+    const c = configDaLinha({ ligada: false, teto_respostas: 0, janela_minutos: 30, ritmo_ligado: false, ritmo_giros: 2, ritmo_variacao_segundos: 12 });
     expect(c.ligada).toBe(false);
     expect(c.teto_respostas).toBe(30);
     expect(c.janela_minutos).toBe(30);
+    expect(c.ritmo_ligado).toBe(false);
+    expect(c.ritmo_giros).toBe(6);
+    expect(c.ritmo_variacao_segundos).toBe(12);
+    // Linha de antes da 9171 (sem as colunas do ritmo): o ritmo vale o padrão, LIGADO.
+    expect(configDaLinha({ ligada: true, teto_respostas: 40 })).toMatchObject({ ritmo_ligado: true, ritmo_giros: 6, ritmo_latencia_maxima_segundos: 60 });
   });
 
-  it("as faixas e os padrões do código são os mesmos das CHECKs e dos defaults da 9153", () => {
-    const sql = readFileSync(join(RAIZ, "supabase/migrations-mia/20261112120000_9153_trava_de_robo_config.sql"), "utf8");
+  it("as faixas e os padrões do código são os mesmos das CHECKs e dos defaults da 9153 e da 9171", () => {
+    const sql = [
+      "supabase/migrations-mia/20261112120000_9153_trava_de_robo_config.sql",
+      "supabase/migrations-mia/20261124200000_9171_ritmo_de_maquina_na_trava_de_robo.sql",
+    ]
+      .map((f) => readFileSync(join(RAIZ, f), "utf8"))
+      .join("\n");
     for (const [campo, [min, max]] of Object.entries(FAIXAS_DA_TRAVA)) {
       expect(sql, campo).toMatch(new RegExp(`check \\(${campo} between ${min} and ${max}\\)`));
       const padrao = (CONFIG_PADRAO_DA_TRAVA as unknown as Record<string, number>)[campo];
       expect(sql, campo).toMatch(new RegExp(`${campo}\\s+integer not null default ${padrao}\\b`));
     }
     expect(sql).toMatch(/ligada\s+boolean not null default true/);
+    expect(sql).toMatch(/ritmo_ligado\s+boolean not null default true/);
+  });
+
+  it("a 9171 só acrescenta: coluna nova com `if not exists`, CHECK nomeada conferida no catálogo, nenhuma CHECK da 9154", () => {
+    const sql = readFileSync(join(RAIZ, "supabase/migrations-mia/20261124200000_9171_ritmo_de_maquina_na_trava_de_robo.sql"), "utf8");
+    const corpo = sql.split("\n").filter((l) => !l.startsWith("--")).join("\n");
+    expect(corpo.match(/add column if not exists/g) ?? []).toHaveLength(4);
+    expect(corpo).not.toMatch(/drop |rename |create or replace|mia_travas_de_robo\b/);
+    for (const nome of ["ritmo_giros", "ritmo_latencia", "ritmo_variacao"]) {
+      expect(corpo).toContain(`conname = 'mia_trava_de_robo_config_${nome}'`);
+    }
   });
 });
 
@@ -653,6 +861,51 @@ describe("no turno: avaliar e travar", () => {
     expect(await noTurno(banco.cliente)).toBe("teto");
     expect(registrarRastro).toHaveBeenCalledWith("teto_de_respostas_da_ia");
     expect(banco.db.conversations![0]!.bot_silenced_until).toBe("infinity");
+  });
+});
+
+describe("no turno: o ritmo de máquina age como o teto", () => {
+  it("pausa SÓ a conversa, registra 'teto' com o sinal 'ritmo' e a nota diz 6 vezes, sem perder negócio, encerrar nem calar o contato", async () => {
+    const registrarRastro = vi.fn(async () => undefined);
+    const banco = cenario({ mensagens: giros(RITMO_DA_ACADEMIA.slice(0, 6)) });
+    const desfecho = await avaliarETravarNoTurno(null, { organizationId: ORG, conversationId: CONV, contactId: CONTATO, jobId: JOB }, undefined, {
+      admin: banco.cliente as never,
+      agora: () => AGORA,
+      registrarRastro,
+    });
+    expect(desfecho).toBe("teto");
+    expect(registrarRastro).toHaveBeenCalledWith("teto_de_respostas_da_ia");
+
+    expect(banco.db.conversations![0]).toMatchObject({ bot_silenced_until: "infinity", status: "pending" });
+    expect(banco.db.contacts![0]).toMatchObject({ force_human: false, tags: ["prospeccao"] });
+    expect(banco.db.crm_leads![0]).toMatchObject({ stage_id: ETAPA_ABERTA, status: "open" });
+    expect(banco.db.cron_jobs![0]!.enabled).toBe(true);
+    expect(banco.chamadasRpc.map((c) => c.nome)).not.toContain("fn_service_status");
+
+    const [registro] = banco.db.mia_travas_de_robo!;
+    expect(registro).toMatchObject({
+      motivo: "teto",
+      mensagens_de_robo: 6,
+      respostas_da_ia: 6,
+      negocios_afetados: [],
+      conversa_encerrada: false,
+      etiqueta_aplicada: false,
+    });
+    const sinais = registro!.sinais as Array<{ sinais: string[] }>;
+    expect(sinais).toHaveLength(6);
+    expect(sinais.every((x) => x.sinais.includes("ritmo"))).toBe(true);
+
+    // O texto é o do teto; mudam só o número e a duração, a da sequência: 93 s de
+    // latência e 5 vezes 20 s da IA pensar, 193 s, que a nota arredonda para 4 min.
+    expect(registro!.duracao_segundos).toBe(193);
+    expect(banco.db.conversation_notes![0]!.body).toBe(
+      textos.NOTA_DO_TETO.replace("{respostas}", "6").replace("{minutos}", "4"),
+    );
+    expect(banco.db.agent_inbox_items![0]!.body).toBe(
+      textos.CORPO_DO_AVISO_DO_TETO.replace("{respostas}", "6").replace("{minutos}", "4"),
+    );
+    const auditado = vi.mocked(audit).mock.calls.map(([e]) => e).find((e) => e.action === "ai.trava_de_robo_teto");
+    expect(auditado?.metadata).toMatchObject({ motivo: "teto", gatilho: "ritmo", respostas_da_ia: 6 });
   });
 });
 

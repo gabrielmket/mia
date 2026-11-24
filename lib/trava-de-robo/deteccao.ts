@@ -36,10 +36,22 @@
  * saudação automática única de uma empresa não dispara: é um giro só, e depois
  * dela responde gente.
  *
- * O TETO é a segunda proteção: 30 respostas (turnos) da IA na mesma conversa em
- * 60 minutos pausam a IA só ali.
+ * O RITMO DE MÁQUINA (sinal D, MIA-210) pega o robô que varia o texto, responde
+ * curto e devagar, e por isso passa por baixo de A, B e C. Um GIRO DE RITMO é a
+ * última resposta da IA (o último balão) seguida da PRIMEIRA mensagem recebida
+ * depois dela, de TEXTO com corpo e sem saída da equipe no meio; a latência é a
+ * diferença dos `created_at`. Dispara quando os últimos 6 giros SEGUIDOS cabem
+ * nos 15 minutos da janela, cada latência fica até 60 s e a maior menos a menor
+ * fica até 8 s: gente varia o tempo de resposta, o robô responde sempre com o
+ * mesmo atraso. Quebram a sequência a recebida que não é texto (áudio, imagem),
+ * a latência acima do máximo e a saída que não é da IA. É indício, não
+ * autodeclaração: a ação é a do TETO (pausa só a conversa, não perde negócio,
+ * não encerra), com o sinal `ritmo` em `sinais`.
  *
- * As duas contas começam depois do último registro da trava na conversa
+ * O TETO é a última proteção: 30 respostas (turnos) da IA na mesma conversa em
+ * 60 minutos pausam a IA só ali. A ordem é laço, ritmo, teto.
+ *
+ * As contas começam depois do último registro da trava na conversa
  * (`desde`): quem devolve a conversa para a IA não a vê travar de novo no giro
  * seguinte por causa dos giros que já foram contados.
  */
@@ -60,7 +72,7 @@ export interface MensagemDaTrava {
   metadata?: unknown;
 }
 
-export type SinalDeRobo = "autodeclaracao" | "repeticao" | "velocidade";
+export type SinalDeRobo = "autodeclaracao" | "repeticao" | "velocidade" | "ritmo";
 
 export interface SinaisDaMensagem {
   mensagem_id: string;
@@ -68,17 +80,23 @@ export interface SinaisDaMensagem {
 }
 
 export interface AvaliacaoDaTrava {
-  /** `robo` = o laço; `teto` = respostas demais; `null` = segue. */
+  /** `robo` = o laço; `teto` = respostas demais ou o ritmo de máquina; `null` = segue. */
   dispara: "robo" | "teto" | null;
+  /**
+   * O que disparou: `robo` (o laço), `ritmo` (o sinal D, que age como o teto) ou
+   * `teto` (respostas demais). Não vai ao banco como motivo: o ritmo grava
+   * `motivo = 'teto'` e o sinal `ritmo` em `sinais`.
+   */
+  gatilho: "robo" | "ritmo" | "teto" | null;
   /** Giros do laço na janela (respostas da IA seguidas de mensagem de robô). */
   mensagens_de_robo: number;
   /** Os sinais de cada mensagem contada, sem texto (só id e o nome do sinal). */
   sinais: SinaisDaMensagem[];
-  /** Respostas (turnos) da IA na janela do motivo que disparou (ou na do robô, quando nada disparou). */
+  /** Respostas (turnos) da IA na janela do motivo que disparou (no ritmo, os giros da sequência; quando nada disparou, na janela do robô). */
   respostas_da_ia: number;
   /** Respostas da IA na janela do teto. */
   respostas_no_teto: number;
-  /** Da primeira à última mensagem contada do robô; no teto, da primeira à última resposta da IA. */
+  /** Da primeira à última mensagem contada do robô; no ritmo, da 1ª resposta da IA da sequência à última recebida; no teto, da primeira à última resposta da IA. */
   duracao_segundos: number;
 }
 
@@ -196,6 +214,26 @@ function ehRespostaDaIa(m: MensagemDaTrava): boolean {
   return m.direction === "outbound" && m.sent_via === "ai";
 }
 
+/** Um giro de ritmo: a última resposta da IA e a primeira recebida depois dela. */
+interface GiroDeRitmo {
+  /** O último balão da resposta da IA. */
+  resposta: number;
+  /** A primeira recebida depois dele. */
+  recebida: number;
+  mensagem_id: string;
+  latencia_segundos: number;
+}
+
+/** O sinal D cabe? Os últimos `ritmo_giros` giros seguidos, na janela, no mesmo atraso. */
+function ritmoDeMaquina(sequencia: readonly GiroDeRitmo[], config: ConfigDaTrava, inicio: number): GiroDeRitmo[] | null {
+  if (!config.ritmo_ligado || sequencia.length < config.ritmo_giros) return null;
+  const ultimos = sequencia.slice(-config.ritmo_giros);
+  if (ultimos[0]!.resposta < inicio) return null;
+  const latencias = ultimos.map((g) => g.latencia_segundos);
+  if (Math.max(...latencias) - Math.min(...latencias) > config.ritmo_variacao_segundos) return null;
+  return ultimos;
+}
+
 /**
  * Avalia a conversa: a trava de robô dispara, o teto dispara, ou segue?
  *
@@ -229,6 +267,9 @@ export function avaliarTrava(entrada: {
 
   let ultimaSaida: MensagemDaTrava | null = null;
   let anterior: MensagemDaTrava | null = null;
+  // O sinal D: a resposta da IA que espera a primeira recebida, e a sequência de giros no ar.
+  let giroAberto: number | null = null;
+  let sequencia: GiroDeRitmo[] = [];
 
   for (const m of ordenadas) {
     const t = instante(m.created_at);
@@ -237,11 +278,30 @@ export function avaliarTrava(entrada: {
       if (ehRespostaDaIa(m) && !(anterior && ehRespostaDaIa(anterior))) iniciosDasRespostas.push(t);
       ultimaSaida = m;
       anterior = m;
+      if (ehRespostaDaIa(m)) {
+        giroAberto = t;
+      } else {
+        // A equipe (ou a automação) falou: a sequência do ritmo acaba aqui.
+        giroAberto = null;
+        sequencia = [];
+      }
       continue;
     }
     anterior = m;
     if (m.direction !== "inbound") continue;
     const corpo = (m.body ?? "").trim();
+
+    // Sinal D: só a PRIMEIRA recebida depois da resposta da IA fecha o giro.
+    if (giroAberto !== null) {
+      const latencia = (t - giroAberto) / 1000;
+      const ehTexto = (m.type ?? "text") === "text" && corpo !== "";
+      if (ehTexto && latencia <= config.ritmo_latencia_maxima_segundos) {
+        sequencia.push({ resposta: giroAberto, recebida: t, mensagem_id: m.id, latencia_segundos: latencia });
+      } else {
+        sequencia = [];
+      }
+      giroAberto = null;
+    }
     if (corpo === "") continue;
 
     const achados: SinalDeRobo[] = [];
@@ -278,6 +338,7 @@ export function avaliarTrava(entrada: {
   if (config.ligada && girosDoRobo.size >= config.mensagens_para_disparar) {
     return {
       dispara: "robo",
+      gatilho: "robo",
       mensagens_de_robo: girosDoRobo.size,
       sinais,
       respostas_da_ia: respostasNoRobo.length,
@@ -285,9 +346,29 @@ export function avaliarTrava(entrada: {
       duracao_segundos: duracao(temposDoRobo),
     };
   }
+  const ritmo = config.ligada ? ritmoDeMaquina(sequencia, config, inicioDoRobo) : null;
+  if (ritmo) {
+    // Cada recebida dos giros ganha o sinal `ritmo`, somado ao que ela já tinha de A, B ou C.
+    const comRitmo = sinais.map((s) => ({ mensagem_id: s.mensagem_id, sinais: [...s.sinais] }));
+    for (const giro of ritmo) {
+      const ja = comRitmo.find((s) => s.mensagem_id === giro.mensagem_id);
+      if (ja) ja.sinais.push("ritmo");
+      else comRitmo.push({ mensagem_id: giro.mensagem_id, sinais: ["ritmo"] });
+    }
+    return {
+      dispara: "teto",
+      gatilho: "ritmo",
+      mensagens_de_robo: ritmo.length,
+      sinais: comRitmo,
+      respostas_da_ia: ritmo.length,
+      respostas_no_teto: respostasNoTeto.length,
+      duracao_segundos: Math.max(0, Math.round((ritmo[ritmo.length - 1]!.recebida - ritmo[0]!.resposta) / 1000)),
+    };
+  }
   if (config.ligada && respostasNoTeto.length >= config.teto_respostas) {
     return {
       dispara: "teto",
+      gatilho: "teto",
       mensagens_de_robo: girosDoRobo.size,
       sinais,
       respostas_da_ia: respostasNoTeto.length,
@@ -297,6 +378,7 @@ export function avaliarTrava(entrada: {
   }
   return {
     dispara: null,
+    gatilho: null,
     mensagens_de_robo: girosDoRobo.size,
     sinais,
     respostas_da_ia: respostasNoRobo.length,

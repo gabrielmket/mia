@@ -19,6 +19,7 @@ import {
   CONFIG_PADRAO_DA_TRAVA,
   configDaLinha,
   lerConfigDaTrava,
+  CHAVES_DA_TRAVA,
   LIMITES_DA_TRAVA,
   type ConfigDaTrava,
   type PedidoDeConfigDaTrava,
@@ -91,7 +92,7 @@ export async function configurarTrava(
   if (!lida.lida) throw new Error(`não consegui ler a configuração da trava de robô: ${lida.erro ?? "erro"}`);
   const antes = lida.config;
   const depois = configDaLinha({ ...antes, ...entrada.pedido });
-  const igual = depois.ligada === antes.ligada && LIMITES_DA_TRAVA.every((c) => depois[c] === antes[c]);
+  const igual = [...CHAVES_DA_TRAVA, ...LIMITES_DA_TRAVA].every((c) => depois[c] === antes[c]);
   if (igual && lida.gravada) return { config: depois, ja_estava: true, antes };
 
   const { error } = await admin.from("mia_trava_de_robo_config").upsert(
