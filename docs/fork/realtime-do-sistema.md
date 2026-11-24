@@ -1,8 +1,9 @@
 # Realtime do supabase-sistema-mia: semente desligada
 
 O serviço `realtime` de `infra/supabase-sistema-mia/docker-compose.yml` sobe com
-`SEED_SELF_HOST: "false"`. Está assim no ar desde 23/11/2026 (MIA-140, MIA-141, MIA-145), e o
-compose do repositório descreve o que está no ar.
+`SEED_SELF_HOST: "false"` (MIA-140, MIA-141, MIA-145). O banco de produção está com
+`poll_interval_ms` = 500 desde 23/11/2026; a variável é trocada no painel do EasyPanel pelo Gabriel,
+e este compose descreve o realtime depois dessa troca.
 
 ## Por quê
 
