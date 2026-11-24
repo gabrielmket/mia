@@ -17,4 +17,16 @@ export const DICIONARIO_DA_IA_DA_PLATAFORMA: Traducoes = {
   "A IA desta conta está sem chave para funcionar. Fale com o suporte.": {
     es: "La IA de esta cuenta no tiene clave para funcionar. Habla con soporte.",
   },
+  "A IA principal desta empresa ({provedor}) está sem chave e não responde aos clientes.": {
+    es: "La IA principal de esta empresa ({provedor}) no tiene clave y no responde a los clientes.",
+  },
+  "Escolha no padrão abaixo um provedor com chave.": {
+    es: "Elige abajo, en el estándar, un proveedor con clave.",
+  },
+  "{n} seguem a plataforma": { es: "{n} siguen la plataforma" },
+  "{n} com escolha própria": { es: "{n} con elección propia" },
+  "{n} sem chave": { es: "{n} sin clave" },
+  "Empresa sem chave não responde com IA. Para ver quais: plataforma_ver_ia_das_empresas no MCP de plataforma.": {
+    es: "Una empresa sin clave no responde con IA. Para ver cuáles: plataforma_ver_ia_das_empresas en el MCP de plataforma.",
+  },
 };

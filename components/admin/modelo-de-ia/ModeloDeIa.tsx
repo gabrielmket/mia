@@ -65,6 +65,7 @@ import {
 } from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
 import { useModeloDeIa, useSalvarModeloDeIa } from "@/hooks/useModeloDeIa";
+import { ContagemDasEmpresas } from "@/components/admin/modelo-de-ia/ContagemDasEmpresas";
 import {
   AUTOMATICO,
   itensDoSeletor,
@@ -139,6 +140,8 @@ export function ModeloDeIa() {
               "Vale para todas as empresas que não escolheram outro. Quem contrata não escolhe o modelo — assim como não escolhe a chave de IA: é engrenagem nossa, e a conta também.",
             )}
           </p>
+          {/* FORK MIA (MIA-218): quantas seguem, quantas escolheram outro, quantas estão sem chave. */}
+          <ContagemDasEmpresas empresas={data.empresas} />
 
           {catalogoVazio ? (
             /* Catálogo vazio numa tela de plataforma é DEFEITO, não estado
