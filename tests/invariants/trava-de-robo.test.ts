@@ -1,6 +1,6 @@
 /**
- * 9153 e 9154 · A TRAVA DE ROBÔ no Postgres de verdade (FORK MIA .108,
- * docs/fork/trava-de-robo.md).
+ * 9153, 9154 e 9171 · A TRAVA DE ROBÔ no Postgres de verdade (FORK MIA .108,
+ * docs/fork/trava-de-robo.md; o ritmo de máquina, MIA-210, na 9171).
  *
  * ─── O que se mede, e por quê ───────────────────────────────────────────────
  *
@@ -11,7 +11,9 @@
  * 2. O que o banco GARANTE sozinho: a faixa de cada limite da configuração (as
  *    mesmas de `lib/trava-de-robo/config.ts`), o padrão LIGADA, o motivo fechado
  *    ('robo', 'teto'), os sinais em lista, e que o TETO não perde negócio, não
- *    encerra e não etiqueta.
+ *    encerra e não etiqueta. Na 9171: os quatro campos do ritmo nascem com o
+ *    padrão (LIGADO, 6 giros, 60 s, 8 s) e as faixas são as do código. O registro
+ *    do ritmo cabe nas CHECKs da 9154 como estão (motivo 'teto', sinal 'ritmo').
  * 3. O registro é auditoria: apagar o contato ou a conversa solta a referência
  *    (on delete set null) e o registro fica.
  *
@@ -110,6 +112,48 @@ describe("o que o banco garante sozinho", () => {
     ).toMatch(/^true,15,3,(30|40),60$/);
   });
 
+  it("9171 · o ritmo de máquina nasce LIGADO, com 6 giros, 60 s e 8 s", () => {
+    expect(
+      lastLine(
+        sql(`select ritmo_ligado::text || ',' || ritmo_giros || ',' || ritmo_latencia_maxima_segundos || ',' || ritmo_variacao_segundos
+               from public.mia_trava_de_robo_config where organization_id = '${ORG}';`),
+      ),
+    ).toBe("true,6,60,8");
+    for (const coluna of ["ritmo_ligado", "ritmo_giros", "ritmo_latencia_maxima_segundos", "ritmo_variacao_segundos"]) {
+      expect(
+        lastLine(
+          sql(`select is_nullable from information_schema.columns
+                where table_schema = 'public' and table_name = 'mia_trava_de_robo_config' and column_name = '${coluna}';`),
+        ),
+        coluna,
+      ).toBe("NO");
+    }
+  });
+
+  it.each([
+    ["ritmo_giros", 4],
+    ["ritmo_giros", 30],
+    ["ritmo_latencia_maxima_segundos", 10],
+    ["ritmo_latencia_maxima_segundos", 300],
+    ["ritmo_variacao_segundos", 2],
+    ["ritmo_variacao_segundos", 60],
+  ])("9171 · CONTROLE: a ponta da faixa passa: %s = %s", (campo, valor) => {
+    expect(tentar("postgres", `update public.mia_trava_de_robo_config set ${campo} = ${valor} where organization_id = '${ORG}'`)).toBe("passou");
+  });
+
+  it("9171 · o registro do ritmo (motivo 'teto', sinal 'ritmo') cabe nas CHECKs da 9154 como estão", () => {
+    expect(
+      tentar(
+        "postgres",
+        `insert into public.mia_travas_de_robo (organization_id, motivo, sinais, mensagens_de_robo, respostas_da_ia, duracao_segundos)
+           values ('${ORG}', 'teto', '[{"mensagem_id":"${CONTATO}","sinais":["ritmo"]}]'::jsonb, 6, 6, 193)`,
+      ),
+    ).toBe("passou");
+    expect(
+      lastLine(sql(`select count(*) from pg_constraint where conrelid = 'public.mia_travas_de_robo'::regclass and contype = 'c';`)),
+    ).toBe("5");
+  });
+
   it.each([
     ["janela_minutos", 0],
     ["mensagens_para_disparar", 1],
@@ -119,6 +163,12 @@ describe("o que o banco garante sozinho", () => {
     ["velocidade_caracteres_por_segundo", 2],
     ["teto_respostas", 4],
     ["teto_janela_minutos", 2000],
+    ["ritmo_giros", 3],
+    ["ritmo_giros", 31],
+    ["ritmo_latencia_maxima_segundos", 9],
+    ["ritmo_latencia_maxima_segundos", 301],
+    ["ritmo_variacao_segundos", 1],
+    ["ritmo_variacao_segundos", 61],
   ])("limite fora da faixa é recusado: %s = %s (23514)", (campo, valor) => {
     expect(tentar("postgres", `update public.mia_trava_de_robo_config set ${campo} = ${valor} where organization_id = '${ORG}'`)).toBe("23514");
   });

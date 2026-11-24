@@ -34,6 +34,13 @@ const PRECOS = [
   { categoria: "marketing", centavos_brl: 40 },
   { categoria: "utility", centavos_brl: 5 },
 ];
+/**
+ * FORK MIA (MIA-99): a conta sai do histórico de preços (9165), cada mensagem ao
+ * preço vigente no instante dela. O primeiro preço de cada categoria vale desde
+ * sempre, que é o que a migration faz com o preço de hoje.
+ */
+const VIGENCIAS = PRECOS.map((p) => ({ ...p, vigente_desde: "-infinity", vigente_ate: null }));
+
 
 function ligar(banco: PostgrestComTeto): void {
   vi.mocked(createAdminClient).mockReturnValue(banco.cliente as never);
@@ -88,6 +95,7 @@ describe("GET /api/v1/admin/custo-da-meta", () => {
         { id: ACADEMIA, display_name: "Academia Modelo", redacted_at: null, demonstracao: false },
       ],
       platform_precos_meta: PRECOS,
+      mia_precos_meta_vigencias: VIGENCIAS,
       messages: [
         ...Array.from({ length: 1_800 }, (_, i) => cobrada(i, CLINICA, "marketing")),
         ...Array.from({ length: 700 }, (_, i) => cobrada(i, ACADEMIA, "utility")),
@@ -127,6 +135,7 @@ describe("GET /api/v1/admin/custo-da-meta", () => {
     const banco = postgrestComTeto({
       organizations: [{ id: CLINICA, display_name: "Clínica Modelo", redacted_at: null, demonstracao: false }],
       platform_precos_meta: PRECOS,
+      mia_precos_meta_vigencias: VIGENCIAS,
       messages: Array.from({ length: 50_001 }, (_, i) => cobrada(i, CLINICA, "marketing")),
     });
     ligar(banco);
@@ -151,6 +160,7 @@ describe("GET /api/v1/admin/tenants/[id]/usage", () => {
     const banco = postgrestComTeto({
       conversations: [],
       platform_precos_meta: PRECOS,
+      mia_precos_meta_vigencias: VIGENCIAS,
       llm_calls: [
         ...Array.from({ length: 2_500 }, (_, i) => chamada(i, CLINICA)),
         // De outro cliente: não entra.
@@ -179,6 +189,7 @@ describe("GET /api/v1/admin/tenants/[id]/usage", () => {
     const banco = postgrestComTeto({
       conversations: [],
       platform_precos_meta: PRECOS,
+      mia_precos_meta_vigencias: VIGENCIAS,
       llm_calls: Array.from({ length: 100_001 }, (_, i) => chamada(i, CLINICA)),
       messages: [],
     });

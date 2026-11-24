@@ -123,8 +123,9 @@ describe("a lista: 69 ferramentas, e os tipos de ação seguem os do upstream", 
       // MIA-44: a do consumo de IA por mês e por agente.
       // MIA-67: contar os negócios e as duas das conexões do MCP (upstream 1.117).
       // MIA-79: o módulo opcional por empresa e a tela inicial (upstream 1.118).
-      // MIA-28: as três da coexistência do WhatsApp (ver, ligar e a sincronização do app).
-      (f) => daCobranca.has(f.name) || /consumo_de_ia|coexistencia|sincronizacao_do_app|lista_de_espera|etiquetar_contatos|assistente|chamado|email|supressao|consentimentos|segmentos|trilhas|travam|melhoria_do_produto|parceiro|cupo[mn]|repasse|raio_x|travas?_de_robo|produto_no_negocio|palavra_do_segmento|contar_negocios|conex(ao|oes)_do_mcp|modulo_da_empresa|tela_inicial/.test(f.name),
+      // MIA-99: ver e definir o preço da Meta, com vigência. MIA-103: a Análise do funil e as conversas do mês de um cliente.
+      // MIA-169: garantir e testar as conversões do site. MIA-28: as três da coexistência do WhatsApp (ver, ligar e a sincronização do app).
+      (f) => daCobranca.has(f.name) || /analise_do_funil|conversas_do_mes|consumo_de_ia|coexistencia|sincronizacao_do_app|lista_de_espera|etiquetar_contatos|assistente|chamado|email|supressao|consentimentos|segmentos|trilhas|travam|melhoria_do_produto|parceiro|cupo[mn]|repasse|raio_x|travas?_de_robo|produto_no_negocio|palavra_do_segmento|contar_negocios|conex(ao|oes)_do_mcp|modulo_da_empresa|tela_inicial|precos_da_meta|conversoes_do_site/.test(f.name),
     );
     expect(FERRAMENTAS.length - doFork.length).toBe(69);
   });

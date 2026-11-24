@@ -38,6 +38,8 @@ import { lerModeloDoAvisoDaEquipe, lerModelosAprovados, lerModelosPorId, modeloD
 import { lerLugaresPorTipo, lerListaDeEspera } from "@/lib/implantacao/lista-de-espera";
 import { lerConexoesDeBancoExterno, retratoDaConexao } from "@/lib/implantacao/banco-externo";
 import { diasDaProspeccaoDe, lerAjustesDosCanais, lerCanais, lerPausasAgendadas } from "@/lib/implantacao/canal";
+import { lerFunisDeEntrada } from "@/lib/implantacao/funil-de-entrada";
+import { retratoDaOperacaoDoDia, retratoDoAvisoDeTransferencia } from "@/lib/implantacao/aviso-e-operacao-do-dia";
 import { lerRegrasDosNumeros, retratoDaDistribuicao } from "@/lib/implantacao/distribuicao-do-numero";
 import { iaDecideLigadaNa } from "@/lib/implantacao/empresa";
 import { lerFontes, retratoDaFonte } from "@/lib/implantacao/fonte-de-formulario";
@@ -774,11 +776,11 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
       "O conteúdo do que já está configurado num cliente, por seção: `etiquetas` (o vocabulário com as cores), `memoria` (as regras da casa e as anotações), " +
       "`conhecimento` (os materiais e a situação da indexação), `followups` (os fluxos e se estão publicados), `automacoes` (as regras, com gatilho e ações), " +
       "`agenda` (os tipos de agendamento, com os lugares e a capacidade de cada serviço, a lista de espera e a jornada de cada pessoa), `equipe` (membros com id, e-mail e a tela inicial de cada um, convites, os setores de atendimento com id e nome, e a tela inicial da empresa com as opções), `canais` (os números com id e situação), " +
-      "`atendimento` (a distribuição e o freio do passo \"a IA decide\"), `mensagens` (respostas prontas e modelos oficiais), " +
+      "`atendimento` (a distribuição, o freio do passo \"a IA decide\", o aviso de transferência à equipe e a Operação do dia), `mensagens` (respostas prontas e modelos oficiais), " +
       "`modelos_aprovados` (os modelos APROVADOS da Meta de cada número, com idioma, categoria e variáveis, se servem ao lembrete da agenda e ao aviso à equipe, e o modelo escolhido no aviso à equipe), " +
       "`planos_de_tarefa` (as sequências de tarefa com os passos), `fontes_de_formulario` (destino, perguntas, endereço de captação e a autorização de IA, sem o segredo) " +
       "e `banco_externo` (as conexões, só com o nome e a coluna do cliente; nunca endereço, usuário ou senha). " +
-      "Em `canais`, cada número traz também os dias da prospecção, se guarda o histórico, se está pausado, as pausas agendadas e a distribuição do número (regra própria, modo, atendente padrão e responsáveis). " +
+      "Em `canais`, cada número traz também os dias da prospecção, se guarda o histórico, se está pausado, as pausas agendadas, a distribuição do número (regra própria, modo, atendente padrão e responsáveis) e o funil de entrada. " +
       "QUANDO USAR: para ler antes de alterar, e para achar ids (de pessoa, de número, de fluxo) que outras ferramentas pedem. " +
       "Peça só as seções de que precisa: a resposta inteira é grande.",
     inputSchema: {
@@ -970,6 +972,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
         // .83 — as regras de atendimento por número (upstream 1.85, 0663).
         const regras = await lerRegrasDosNumeros(c.admin, c.orgId);
         const equipe = regras.size > 0 ? await lerMembros(c.admin, c.orgId) : [];
+        // Upstream 1.119 (9430): onde a conversa nova de cada número vira negócio.
+        const entradas = await lerFunisDeEntrada(c);
         r.canais = canais.map((s) => ({
           id: s.id,
           nome: nomeDoCanal(s),
@@ -985,6 +989,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           guardar_historico: conexaoGuardaHistorico(s.provider) ? lerGuardarHistorico(s.metadata) : null,
           pausas_agendadas: pausas.filter((a) => a.todos_os_numeros || a.numero_id === s.id).map((a) => ({ id: a.id, inicio: a.inicio, fim: a.fim, situacao: a.situacao, todos_os_numeros: a.todos_os_numeros })),
           distribuicao: retratoDaDistribuicao(regras.get(s.id), equipe),
+          funil_de_entrada: entradas.get(s.id) ?? { padrao: true, funil: null, etapa: null },
         }));
       }
 
@@ -1036,6 +1041,9 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           google_meet_com_acesso_aberto: meetAbertoLigado(org.settings),
           // Upstream 1.112 (#4023): a pesquisa de satisfação do encerramento, como o envio lê.
           pesquisa_de_satisfacao: lerOpcaoDaSatisfacao(org.settings),
+          // Upstream 1.119: o aviso de transferência à equipe (com ou sem o primeiro nome do cliente) e a Operação do dia.
+          aviso_de_transferencia: retratoDoAvisoDeTransferencia(org.settings),
+          operacao_do_dia: retratoDaOperacaoDoDia(org.settings),
         };
       }
 

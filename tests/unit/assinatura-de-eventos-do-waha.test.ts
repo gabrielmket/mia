@@ -35,7 +35,17 @@ import { describe, expect, it } from "vitest";
  * banco de todo clone, sem trazer uma única mensagem a mais.
  */
 
-const COMPOSES = ["docker-compose.prod.yml", "docker-compose.yml", "docker-compose.local.yml"];
+// FORK MIA (fusão da v1.122): o compose que a MIA sobe em produção é o do
+// EasyPanel. Ele fica na lista para não repetir o elo silencioso descrito abaixo:
+// sem `call.received` nele, o bloqueio de chamadas funcionaria em todo compose
+// menos no que os clientes usam. A primeira linha de `WHATSAPP_HOOK_EVENTS` dele
+// é a do WAHA (a segunda, vazia, é a do serviço que não assina nada).
+const COMPOSES = [
+  "docker-compose.prod.yml",
+  "docker-compose.yml",
+  "docker-compose.local.yml",
+  "docker-compose.easypanel.yml",
+];
 
 /** A lista de eventos do `WHATSAPP_HOOK_EVENTS` de um compose, em ordem. */
 function eventosDe(arquivo: string): string[] {
@@ -73,6 +83,13 @@ describe("a assinatura de eventos do canal por QR", () => {
       for (const e of ["message.ack", "message.edited", "message.revoked", "session.status", "state.change"]) {
         expect(linha, `sumiu ${e}`).toContain(e);
       }
+    });
+
+    it(`${arquivo}: assina \`call.received\``, () => {
+      // Sem o evento o WAHA nunca avisa da ligação, e "Bloquear chamadas
+      // recebidas" (lib/organizacao/bloqueio-de-chamadas.ts) liga e não recusa nada.
+      const eventos = (linha.split('"')[1] ?? "").split(",").map((e) => e.trim());
+      expect(eventos).toContain("call.received");
     });
   }
 });

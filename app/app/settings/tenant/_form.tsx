@@ -21,6 +21,7 @@ import { IDIOMAS_VISIVEIS } from "@/lib/i18n/registro";
 import { MOEDAS_SERVIDAS, simboloDaMoeda, type MoedaServida } from "@/lib/money";
 import { paisesOferecidos, perfilDoPais } from "@/lib/legal/perfil-do-pais";
 import { tenantSchema, type Locale, type TenantInput } from "@/lib/schemas/settings";
+import { MENSAGEM_DO_FUSO_INVALIDO } from "@/lib/tempo/fuso-gravavel";
 import { FUSOS_OFERECIDOS } from "@/lib/tempo/fusos";
 
 interface Props {
@@ -57,7 +58,10 @@ export function TenantForm({ initial, onSave, onSaved }: Props) {
     e.preventDefault();
     const parsed = tenantSchema.safeParse(form);
     if (!parsed.success) {
-      toast.error(t("Dados inválidos."));
+      // FORK MIA (MIA-102): a empresa com um fuso torto gravado antes da régua
+      // fica sabendo POR QUE não salva (e o que escolher), não só "inválidos".
+      const doFuso = parsed.error.issues.some((i) => i.path[0] === "timezone");
+      toast.error(doFuso ? t(MENSAGEM_DO_FUSO_INVALIDO) : t("Dados inválidos."));
       return;
     }
     startTransition(async () => {

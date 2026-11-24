@@ -634,6 +634,11 @@ const schema = z.object({
   AWS_SES_SNS_TOPIC_ARN: z.string().optional().default(""),
   EMAIL_MARKETING_TOKEN_SECRET: z.string().optional().default(""),
 
+  // FORK MIA (MIA-168): o id da fonte de formulário "App · cadastro" no CRM da
+  // Time (lib/planos-mia/lead-do-cadastro.ts, docs/fork/jornada-de-assinatura.md).
+  // Opcional: vazia, o cadastro segue normal e o erro `sem_fonte` aparece no MCP.
+  CADASTRO_FONTE_DO_CRM: z.string().optional().default(""),
+
   // Google Ads — credencial da INSTALAÇÃO, não da organização (migration 0307).
   // O developer token pertence a quem construiu o software, não à conta de
   // anúncios de cada cliente: uma instalação usa o MESMO token pra reportar
@@ -645,6 +650,17 @@ const schema = z.object({
   GOOGLE_ADS_DEVELOPER_TOKEN: z.string().optional().default(""),
   GOOGLE_ADS_OAUTH_CLIENT_ID: z.string().optional().default(""),
   GOOGLE_ADS_OAUTH_CLIENT_SECRET: z.string().optional().default(""),
+
+  // FORK MIA (MIA-169): as conversões do SITE (docs/fork/conversoes-da-meta.md,
+  // "Conversões do site"). O dataset do site e o token dele valem SÓ para a
+  // empresa dona da fonte `CADASTRO_FONTE_DO_CRM` (a Time): nenhuma outra usa.
+  // Com `META_TEST_EVENT_CODE`, os eventos do site vão para "Testar eventos" da
+  // Meta e o livro-razão marca `evento_de_teste`. Opcionais: sem as duas
+  // primeiras, a regra do site fica pendente com `site_sem_credencial`. Lidas
+  // na hora do envio (`lib/conversoes/site.ts`) e nunca escritas em log.
+  MIA_META_DATASET_DO_SITE: z.string().optional().default(""),
+  MIA_META_TOKEN_DO_SITE: z.string().optional().default(""),
+  META_TEST_EVENT_CODE: z.string().optional().default(""),
 
   // Nuvemshop — opcional (template genérico open-source). Só exigidas quando
   // NUVEMSHOP_ENABLED=true; o runtime já degrada via getConfig()==null.
@@ -744,6 +760,13 @@ const schema = z.object({
    */
   VAPID_PUBLIC_KEY: z.string().optional().default(""),
   VAPID_PRIVATE_KEY: z.string().optional().default(""),
+
+  /**
+   * Chave PRIVADA (PEM PKCS#8, curva P-256) com que o host assina o JWT de contexto do módulo
+   * conectado (spec 33, F3). Vazio = recurso desligado: a rota de contexto responde 503 e o módulo
+   * fica com teto `agent` e sem pessoa. Instalação fresca não precisa dela. Nunca vai a log.
+   */
+  MODULE_JWT_PRIVATE_KEY: z.string().optional().default(""),
 });
 
 let parsed = schema.safeParse(process.env);

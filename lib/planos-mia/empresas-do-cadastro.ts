@@ -73,6 +73,8 @@ export interface LinhaDaEmpresa {
 
 export interface PedidoDeCadastro {
   id: string;
+  /** A conta de quem pediu (MIA-168: o lead dela no CRM da Time). */
+  user_id: string;
   empresa: string;
   email: string | null;
   plano: string | null;
@@ -283,6 +285,7 @@ export async function lerPedidosDeCadastro(admin: SupabaseClient): Promise<Pedid
         typeof meta.mia_o_que_faz === "string" ? meta.mia_o_que_faz.slice(0, 200) : null;
       return {
         id: p.id,
+        user_id: p.user_id,
         empresa: p.requested_organization_name,
         email: maskEmail(data.user?.email ?? null),
         // Sem escolha, a empresa nasce no padrão (o gatilho 0679 decide na aprovação).

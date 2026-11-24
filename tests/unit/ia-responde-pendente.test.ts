@@ -424,7 +424,11 @@ describe("B · a devolução para a IA", () => {
   it("as rotas que devolvem passam pela função: Liberar chama, fechar e handoff-tecnico pedem false", () => {
     const liberar = readFileSync(join(RAIZ, "app/api/v1/conversations/[id]/release/route.ts"), "utf8");
     expect(liberar).toMatch(/pedirTurnoDaMensagemPendente\(supabase, \{[^}]*origem: "retomada_da_ia"/);
-    const fechar = readFileSync(join(RAIZ, "app/api/v1/conversations/[id]/close/route.ts"), "utf8");
+    // O fechamento mora em `conversations/[id]/_handler.ts` desde o upstream v1.124.0;
+    // a rota `close` só chama `fecharConversaHandler`.
+    const fecharRota = readFileSync(join(RAIZ, "app/api/v1/conversations/[id]/close/route.ts"), "utf8");
+    expect(fecharRota).toContain("fecharConversaHandler");
+    const fechar = readFileSync(join(RAIZ, "app/api/v1/conversations/[id]/_handler.ts"), "utf8");
     expect(fechar).toContain("responderPendente: false");
     const tecnico = readFileSync(join(RAIZ, "lib/escalacao/handoff-tecnico.ts"), "utf8");
     expect(tecnico).toContain("responderPendente: false");

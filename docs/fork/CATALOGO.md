@@ -65,9 +65,10 @@ Há duas portas, e o defeito é sempre uma saída nova que não passa por nenhum
 | e-mail das automações | `lib/automation/actions/send-email.ts` (`travaDaDemonstracao`) e o gatilho da 9043 | ação nova de automação que envia por outro caminho |
 | mensagem de WhatsApp | a fila de `messages` recusa saída `queued`/`sending` (9010) | envio **sem** passar pela tabela `messages`: chamada direta à API do provedor |
 | campanha, broadcast, follow-up, prospecção, lembrete | banco, na mudança de estado (9010) | caminho novo que dispara sem mudar o estado barrado |
-| conversões da Meta e do Google | a conexão de conversões não liga na demonstração (9010) | consumidor novo que fala com a rede sem ler a conexão |
+| conversões da Meta e do Google | a conexão de conversões não liga na demonstração (9010); as conversões do site, que usam a credencial da variável e não a conexão, perguntam à `travaDaDemonstracao` em `lib/conversoes/site.ts` | consumidor novo que fala com a rede sem ler a conexão |
 | agenda externa, push, ligação, servidor MCP externo, webhook de saída | gatilhos da 9010, 9016, 9043 | integração nova com conexão própria |
 | e-mail marketing | `lib/email-marketing/envio.ts` (`travaDaDemonstracao`) e `trg_mia_email_demonstracao_nao_envia` (9064) | motor novo que manda sem o `mandar` |
+| recusa de ligação recebida, WAHA `call.received` | `lib/waha/ingest.ts` (`handleCallReceived`, `travaDaDemonstracao`) | handler novo de evento que age no WhatsApp sem passar por `messages` |
 
 **Conferir.**
 
@@ -86,7 +87,8 @@ git diff --name-only --diff-filter=A vA vB -- lib app | xargs grep -l "graph.fac
 git diff --name-only --diff-filter=A vA vB -- lib | xargs grep -l "conversions\|capi\|gtag\|measurement" 2>/dev/null
 # 5. Os testes que provam a trava
 npx vitest run tests/unit/send-email-na-demonstracao.test.ts tests/unit/cliente-modelo-trava.test.ts \
-  tests/unit/convite-de-equipe-na-demonstracao.test.ts tests/unit/empresa-de-demonstracao-nao-envia.test.ts
+  tests/unit/convite-de-equipe-na-demonstracao.test.ts tests/invariants/empresa-de-demonstracao-nao-envia.test.ts \
+  tests/unit/recusa-de-ligacao-na-demonstracao.test.ts
 ```
 
 Hoje há onze chamadores de `sendEmail(` fora de `lib/email/` (`git grep -ln "sendEmail(" -- lib app`).
@@ -519,7 +521,7 @@ cliente deixou pendente em vez de calar; e a pausa por outra conversa do mesmo c
 
 **Conferir.**
 1. `git grep -n "FORK MIA (.107)" -- lib/escalacao lib/agent-engine/agent/inbound-turn.ts app/api/v1/conversations components/inbox`.
-2. `git grep -n "responderPendente" lib app | wc -l` (as quatro chamadas em `retomada.ts`, `release`, `close`, `handoff-tecnico`).
+2. `git grep -n "responderPendente" lib app | wc -l` (as quatro chamadas em `retomada.ts`, `release`, o fechamento (`conversations/[id]/_handler.ts` desde a v1.124), `handoff-tecnico`).
 3. `npx vitest run tests/unit/ia-responde-pendente.test.ts tests/unit/ia-responde-pendente-faixa.test.tsx`.
 4. Se o upstream mexeu em `inbound-turn.ts` ou `retomada.ts`: reconferir os dois casos do documento (seção 1).
 
@@ -529,7 +531,9 @@ robô, função 22): o merge dele é o mais provável de desligar uma das duas.
 ### 13. Jornada de assinatura: a cobrança · [`jornada-de-assinatura.md`](jornada-de-assinatura.md)
 **O que faz.** A empresa que chega pelo site escolhe um plano, se cadastra, testa, paga e usa o que o
 plano libera, sem ninguém da Time no meio; a Time acompanha e recebe no zap só o que exige ação. Tudo sai
-desligado. **Migrations** 9070 (o plano libera módulo), 9071 (origem), 9072 (crédito por Pix), 9110, 0245.
+desligado. Desde a MIA-168, todo cadastro do `/signup` vira lead no funil "MIA - SDR" da Time e anda nele
+(seção 12 do documento). **Migrations** 9070 (o plano libera módulo), 9071 (origem), 9072 (crédito por Pix), 9110, 0245,
+9169 (o cadastro no CRM da Time).
 **Mora em** `lib/planos-mia/`, `components/planos-mia/`, `lib/carteira/compra-pelo-asaas.ts`, `app/precos/`.
 
 **Pontos de encaixe** (seção 11): `lib/modulos/liberacao.ts` (`moduloLiberado`, `modulosDaOrganizacao`
@@ -538,12 +542,17 @@ somam o plano), `lib/cobranca/sincronizar.ts` (`aplicarRegua`) e `lib/cobranca/t
 `app/api/v1/cron/cobranca/route.ts` (a rodada da jornada depois da do upstream),
 `lib/agent-engine/edge/llm/orcamento.ts`, `lib/ai/inbox-destino.ts` (`ref_kind` `plano`),
 `lib/crm-b2b/route-helpers.ts`, `components/auth/SignupForm.tsx`, `app/actions/registration/decide.ts`,
-`components/cobranca/PainelDaAssinatura.tsx`, `lib/auth/public-paths.ts` (`/precos`).
+`components/cobranca/PainelDaAssinatura.tsx`, `lib/auth/public-paths.ts` (`/precos`). MIA-168:
+`app/actions/auth/signUp.ts` (`registrarCadastroDoSignup`), `app/(public)/signup/page.tsx` e
+`components/auth/SignupForm.tsx` (`mia_origem`), `lib/auth/schemas.ts`, `lib/cobranca/sinal.handler.ts`
+(`informarPagamentoATime`) e `lib/event-log/register-handlers.ts` (`leadDoCadastroHandler`).
 
-**Protege.** `tests/unit/jornada-de-assinatura.test.ts`, `jornada-tudo-desligado.test.ts`, `planos-mia-regras.test.ts`, `entrada-paga-sem-aviso-de-suspensa.test.ts`, `rotina-pula-modulo-fora-do-plano.test.ts`, `compra-de-creditos-pelo-asaas.test.ts`, `mcp-de-implantacao-cobranca.test.ts`.
+**Protege.** `tests/unit/jornada-de-assinatura.test.ts`, `jornada-tudo-desligado.test.ts`, `planos-mia-regras.test.ts`, `entrada-paga-sem-aviso-de-suspensa.test.ts`, `rotina-pula-modulo-fora-do-plano.test.ts`, `compra-de-creditos-pelo-asaas.test.ts`, `mcp-de-implantacao-cobranca.test.ts`, `lead-do-cadastro.test.ts`, e
+`tests/invariants/cadastro-na-time.test.ts`.
 
 **Conferir.**
 1. `git grep -n "FORK MIA" -- lib/modulos/liberacao.ts lib/cobranca/sincronizar.ts lib/cobranca/rodada.ts app/api/v1/cron/cobranca/route.ts`.
+   O lead do cadastro: `git grep -n "MIA-168" -- app/actions/auth/signUp.ts lib/cobranca/sinal.handler.ts lib/event-log/register-handlers.ts components/auth/SignupForm.tsx`.
 2. `npx vitest run tests/unit/jornada-tudo-desligado.test.ts tests/unit/entrada-paga-sem-aviso-de-suspensa.test.ts tests/unit/rotina-pula-modulo-fora-do-plano.test.ts`.
 3. `lib/cobranca/sincronizar.test.ts` (do upstream) tem um caso trocado pela regra do fork, marcado `FORK MIA`: se a fusão o reverteu, o teste pede o aviso de "suspensa" que a regra da entrada paga cala.
 4. MCP (lê só): `plataforma_ver_assinatura`, `plataforma_listar_modulos`, `plataforma_ver_cobranca`.
@@ -588,15 +597,21 @@ duas funções copiadas do upstream), 9030, 9031, 9040 a 9042. **Mora em** `lib/
 compartilhada, e as rotas espelhadas (seção 5): a cerca dos espelhos guarda a impressão de cada uma e
 **reprova quando o código da rota muda**, para alguém reler o espelho. Também
 `lib/ai/trava-da-ia-na-rota.ts` (o token nunca escolhe IA) e o token `dsk_` do upstream
-(`resolveAuthDual`).
+(`resolveAuthDual`). Desde a v1.121, `lib/ai/agents/edicao.ts` (salvar rascunho, publicar e
+reverter o agente, que o upstream tirou da tela para o MCP de agentes dele usar também): a trava
+da IA mora ali, pelo `quemPede` do ator; sem ele (o token), vale `TOKEN_NAO_ESCOLHE_IA` (a mesma
+constante das rotas) e ninguém escolhe IA. No fork o `crm_save_ai_agent_draft` do upstream não
+oferece `provedor` nem `modelo` (MIA-115). A conferência de sobreposição entre o MCP de agentes da
+empresa e o nosso está em `mcp-de-implantacao.md`, "O MCP de agentes da empresa e o MCP de plataforma".
 
-**Protege.** `tests/unit/mcp-de-implantacao-ferramentas.test.ts`, `mcp-de-implantacao-espelhos.test.ts`, `mcp-de-implantacao-operacoes.test.ts`, `mcp-de-implantacao-ponta-a-ponta.test.ts`, `mcp-de-plataforma-escopo.test.ts`, `distribuicao-do-numero-pela-plataforma.test.ts`, `dono-do-contato-pela-plataforma.test.ts`, `mcp-de-implantacao-servidores-mcp-do-agente.test.ts` (os servidores MCP por agente, 9095) e a família `mcp-de-implantacao-novidades-do-upstream-*.test.ts`.
+**Protege.** `tests/unit/mcp-de-implantacao-ferramentas.test.ts`, `mcp-de-implantacao-espelhos.test.ts`, `mcp-de-implantacao-operacoes.test.ts`, `mcp-de-implantacao-ponta-a-ponta.test.ts`, `mcp-de-plataforma-escopo.test.ts`, `distribuicao-do-numero-pela-plataforma.test.ts`, `dono-do-contato-pela-plataforma.test.ts`, `mcp-de-implantacao-servidores-mcp-do-agente.test.ts` (os servidores MCP por agente, 9095) e a família `mcp-de-implantacao-novidades-do-upstream-*.test.ts`. A trava da IA no token do MCP de agentes do upstream: o `describe` "edição pelo token do MCP" de `tests/unit/trava-da-ia-portas.test.ts` (chama o `edicao.ts` direto com ator de token, cada caso com o controle da plataforma, mais o esquema do rascunho; MIA-115/MIA-116).
 
 **Conferir.**
 1. `npx vitest run tests/unit/mcp-de-implantacao-espelhos.test.ts` (vermelho = o upstream mudou uma rota espelhada: releia o espelho e regrave a impressão).
 2. `npx vitest run tests/unit/mcp-de-implantacao-ferramentas.test.ts tests/unit/mcp-de-plataforma-escopo.test.ts`.
 3. Função nova do upstream na faixa fundida: existe `mcp-de-implantacao-novidades-do-upstream-<versão>.test.ts` para ela? (R5)
 4. MCP (lê só, na demonstração): `plataforma_ver_catalogo`, `plataforma_ver_implantacao`, `plataforma_ver_configuracao`.
+5. Se o upstream mexeu em `lib/ai/agents/edicao.ts` ou em `lib/mcp/tools/agentes.ts`: `npx vitest run tests/unit/trava-da-ia-portas.test.ts` (vermelho no `describe` do token = o MCP dele passou a escolher IA, ou `provedor`/`modelo` voltaram ao esquema do `crm_save_ai_agent_draft` na fusão: tire de novo, com o `FORK MIA` do lado).
 
 **Riscos.** Uma ferramenta que grava passa pelo mesmo caminho da tela; se o caminho do upstream ganhar
 um passo, o espelho fica atrás. A tela de tokens lista `OPERACOES`: chave nova aparece sozinha, sem migration.
@@ -703,7 +718,7 @@ reescrever o teste, o ajuste some.
 ### 20. O produto ou serviço no negócio · [`produto-no-negocio.md`](produto-no-negocio.md)
 **O que faz.** O negócio diz o que foi vendido: itens do catálogo com preço congelado e valor que soma, a
 janela "Marcar como ganho" no botão e no arrasto, a palavra e as duas opções por funil, dois quadros no
-relatório de vendas, comanda do ganho por item. **Migrations** 9160, 9161. **Mora em**
+relatório de vendas, comanda do ganho por item. Com as vendas registradas do upstream (v1.124), o negócio com item continua com o valor dos itens. **Migrations** 9160, 9161, 9167. **Mora em**
 `lib/produto-no-negocio/`, `components/produto-no-negocio/`, `hooks/produto-no-negocio/`,
 `app/api/v1/leads/[id]/itens/`, `app/api/v1/pipelines/[id]/produto-no-negocio/`.
 
@@ -712,12 +727,13 @@ relatório de vendas, comanda do ganho por item. **Migrations** 9160, 9161. **Mo
 `KanbanBoard.tsx` (a janela no arrasto), `hooks/kanban/useUpdateLead.ts`, `lib/schemas/settings.ts`
 (`vocabulary.produto`, `pedir_produto_no_ganho`), `app/api/v1/leads/[id]/win/route.ts` e `move/route.ts`
 (a recusa do ganho sem item), `app/api/v1/proposals/[id]/send/route.ts` (o recálculo do valor),
-`lib/financeiro/comanda-do-ganho.ts` e `.handler.ts`, `app/app/settings/tenant/pipelines/_client.tsx`.
+`lib/financeiro/comanda-do-ganho.ts` e `.handler.ts`, `app/app/settings/tenant/pipelines/_client.tsx`; e `FORK MIA (fusão v1.124)` em `LeadFieldsForm.tsx` e `components/inbox/CRMSidePanel.tsx` (o Valor só segue as vendas registradas sem item).
 
 **Protege.** `tests/unit/produto-no-negocio.test.ts`, `produto-no-negocio-regras.test.ts`,
 `produto-no-negocio-relatorio.test.ts`, `produto-no-negocio-servidor.test.ts`,
 `mcp-de-implantacao-produto-no-negocio.test.ts`; invariantes `rls-completude-varredura.test.ts`,
-`rls-tabelas-da-mia.test.ts`.
+`rls-tabelas-da-mia.test.ts`, `valor-do-negocio-segue-os-itens.test.ts` (9167 no Postgres de verdade: item
+e depois venda, venda e depois item, item de proposta, último item sai, a cura e a auto-cura da 9450).
 
 **Conferir.**
 1. `git grep -n "FORK MIA (.109)" -- components/kanban app/api/v1/leads app/api/v1/proposals lib/financeiro | wc -l` (compare com a contagem antes da fusão).
@@ -756,7 +772,7 @@ anonimizadas (LGPD, seção 6 do documento). Falta o primeiro cadastro real pelo
 ### 22. A trava de robô · [`trava-de-robo.md`](trava-de-robo.md)
 **O que faz.** Quando o robô de outra empresa responde às nossas mensagens, o laço para sem chamar o modelo:
 o contato é calado, os negócios abertos viram perdidos e a conversa é encerrada; mais o teto de 30
-respostas da IA por conversa em 60 minutos. **Migrations** 9153, 9154. **Mora em** `lib/trava-de-robo/`
+respostas da IA por conversa em 60 minutos, e o ritmo de máquina (sinal D, MIA-210), que pausa como o teto. **Migrations** 9153, 9154, 9171. **Mora em** `lib/trava-de-robo/`
 (`deteccao.ts`, `config.ts`, `aplicar.ts`, `no-turno.ts`, `registros.ts`, `etiqueta.ts`, `textos.ts`),
 `lib/mcp-plataforma/ferramentas/trava-de-robo.ts`.
 
@@ -832,7 +848,7 @@ do canal não oficial, só é guardada: sem derivação, transcrição, visão n
 
 **Riscos.** Se o upstream passar a ler o campo `history` no `parseMetaWebhook` ou a gravar o histórico por
 `ingestMetaInbound`, o histórico entraria duas vezes ou como mensagem nova: conferir na fusão. Relatórios e
-raio-X do fork ainda contam o histórico importado (9165, espera a decisão D3). Da S3: se o upstream renomear
+raio-X do fork ainda contam o histórico importado (9172, espera a decisão D3). Da S3: se o upstream renomear
 ou trocar a origem `embedded_signup` (`ORIGEM_DO_EMBEDDED_SIGNUP` em `lib/channels/meta/origem-da-conexao.ts`),
 o número conectado pelo app perde a marca da origem (a conferência 4 pega); se a Meta mudar o nome do evento
 de fim da janela (`FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`, em `janela.ts` e `sdk-da-meta.ts`), a janela
@@ -847,18 +863,28 @@ ponta a ponta é a invariante `coexistencia-conexao-pelo-app.test.ts`, no servid
 quebrada por agente, pela linha "Sistema" (chamadas sem `agent_id`) e por finalidade, em centavos de dólar e
 em reais pela cotação de cada dia. Usada pela aba Uso do cliente e pelo MCP. Nas telas (MIA-46), "Este mês" e
 "Mês passado" no seletor de `/admin/usage` e da aba Uso, e na aba Uso o R$ no card do custo de IA e as tabelas
-por agente (com "Sistema") e por finalidade. Só no painel da plataforma: `/app/ai/usage` não mudou.
-**Migrations** nenhuma (lê `llm_calls`, `ai_agents` e `platform_fx_rates`, da 0241). **Mora em**
+por agente (com "Sistema") e por finalidade. Só no painel da plataforma: `/app/ai/usage` não mudou. Desde a
+MIA-99, o custo de mensagem da Meta (aba Uso, `/admin/custo-da-meta` e o MCP) usa o preço vigente no instante de
+cada mensagem, e o mês fechado não muda quando o preço muda depois (seção 9 do documento). Desde a MIA-136, a
+soma das linhas (agentes com o Sistema, finalidades, empresas) fecha com o total em R$ e em US$ (`fecharPeloTotal`:
+o total manda), e o MCP tem o ranking da plataforma (`lerRankingDoConsumo`, ferramenta
+`plataforma_ver_ranking_de_consumo_de_ia`): as empresas sem as de demonstração, no período e na ordem por custo da
+tela geral; o desempate é por chamadas de IA e nome, e na tela geral por mensagens (seção 10 do documento).
+**Migrations** 9165 (o histórico de preços da Meta, `mia_precos_meta_vigencias`, e o gatilho em
+`platform_precos_meta`); o resto lê `llm_calls`, `ai_agents` e `platform_fx_rates` (0241). **Mora em**
 `lib/ai/usage/consumo-do-periodo.ts`, `lib/ai/usage/atalhos-de-periodo.ts`,
 `lib/ai/usage/contatos-pessoais.ts` (a lista dos contatos pessoais que as duas telas tiram da contagem, MIA-78),
-`lib/mcp-plataforma/ferramentas/consumo-de-ia.ts`, `components/admin/tenants/UsoDoTenant.tsx`.
+`lib/mcp-plataforma/ferramentas/consumo-de-ia.ts`, `components/admin/tenants/UsoDoTenant.tsx`,
+`lib/channels/meta/custo-do-periodo.ts` e `calcularCustoPorVigencia` em `lib/channels/meta/custo-da-conversa.ts`
+(MIA-99), `lib/mcp-plataforma/ferramentas/precos-da-meta.ts` (MIA-99).
 
 **Pontos de encaixe** (todos `FORK MIA (MIA-44)`): `app/api/v1/admin/tenants/[id]/usage/route.ts` (a rota é
 do fork; o `mes` e a chamada a `lerConsumoDoPeriodo`), `lib/mcp-plataforma/ferramentas.ts`
 (`FERRAMENTAS_DE_CONSUMO_DE_IA`), `app/api/v1/admin/usage/route.ts` (o `mes`, `periodoDoPedido` e o dia de
 Brasília nas séries), `app/admin/(protected)/usage/_client.tsx` e `components/admin/usage/UsageTable.tsx` (o
 seletor e o nome do CSV), `hooks/useAdminUsage.ts`, `lib/i18n/dicionario.ts` (o espalhamento de
-`DICIONARIO_DO_CONSUMO_DE_IA`). Do upstream, só as colunas de `llm_calls`: `agent_id` (0130), `purpose`,
+`DICIONARIO_DO_CONSUMO_DE_IA`), `app/api/v1/admin/custo-da-meta/route.ts` (`FORK MIA (MIA-99)`: a conta pela
+vigência), `lib/mcp-plataforma/operacoes.ts` (`definir_custo_da_meta`). Do upstream, só as colunas de `llm_calls`: `agent_id` (0130), `purpose`,
 `input_tokens`, `output_tokens`, `cache_read_tokens`, `cost_cents`.
 
 **Protege.** `tests/unit/consumo-de-ia-por-mes-e-por-agente.test.ts` (paginação acima de 1000, agente x
@@ -866,19 +892,102 @@ Sistema, cache, virada do mês em Brasília com TZ de Brasília e UTC, R$ e dia 
 mesmos números), `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx` (os atalhos, `/admin/usage?mes=` e a aba
 Uso), `painel-de-custo-nao-para-na-linha-1000.test.ts`, `orcamento-uma-regua-de-gasto.test.ts` (nenhuma segunda
 régua de gasto mensal), `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts` (MIA-78: a tela geral e a aba Uso
-com os mesmos pessoais fora e a mesma janela de N dias de Brasília, e leitura que falha virando 500, não zero) e a e2e `admin-consumo-de-ia-por-mes-e-por-agente.spec.ts`.
+com os mesmos pessoais fora e a mesma janela de N dias de Brasília, e leitura que falha virando 500, não zero),
+`preco-da-meta-com-vigencia.test.ts` (MIA-99: outubro igual depois do reajuste de novembro nas três leituras, a
+virada de Brasília, as ferramentas de preço), `consumo-de-ia-ranking-e-soma-que-fecha.test.ts` (MIA-136: a soma
+que fecha, o ranking sem a demonstração e no mês de Brasília, o MCP contra a tela geral e o desempate das duas
+listas fixado), o invariante `tests/invariants/preco-da-meta-com-vigencia.test.ts` (o
+gatilho no Postgres de verdade) e a e2e `admin-consumo-de-ia-por-mes-e-por-agente.spec.ts`.
 
 **Conferir.**
 1. `git grep -n "lerConsumoDoPeriodo" "app/api/v1/admin/tenants/[id]/usage/route.ts" lib/mcp-plataforma/ferramentas/consumo-de-ia.ts` (**as duas chamadas existem**; sem uma delas a tela e o MCP passam a divergir).
 2. Se a fusão mexeu em `llm_calls` (`git diff vA vB -- supabase/migrations supabase/baseline.sql | grep -n "llm_calls"`), confira que as seis colunas acima continuam com o mesmo nome e o mesmo sentido (`cache_read_tokens` como parte de `input_tokens`).
-3. `npx vitest run tests/unit/consumo-de-ia-por-mes-e-por-agente.test.ts tests/unit/consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx tests/unit/orcamento-uma-regua-de-gasto.test.ts tests/unit/consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts`.
-4. MCP (lê só): `plataforma_ver_consumo_de_ia` com a empresa de demonstração e o mês corrente.
+3. `npx vitest run tests/unit/consumo-de-ia-por-mes-e-por-agente.test.ts tests/unit/consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx tests/unit/orcamento-uma-regua-de-gasto.test.ts tests/unit/consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts tests/unit/consumo-de-ia-ranking-e-soma-que-fecha.test.ts`.
+4. MCP (lê só): `plataforma_ver_consumo_de_ia` com a empresa de demonstração e o mês corrente, `plataforma_ver_ranking_de_consumo_de_ia` com o mês corrente (a demonstração não aparece, e a soma das empresas é o `total`) e `plataforma_ver_precos_da_meta` (o histórico tem uma vigência aberta por categoria).
 5. Se a fusão mexeu em `app/api/v1/admin/usage/route.ts` (do upstream), confira que `mes` ainda passa por `periodoDoPedido` e que a fatura e as cotações têm o limite de cima (`git grep -n "periodoDoPedido\|ultimoDia" app/api/v1/admin/usage/route.ts`).
+6. MIA-99: `git grep -n "lerCustoDeMensagemDoPeriodo\|calcularCustoPorVigencia" app/api/v1/admin lib/mcp-plataforma` (**a aba Uso, o MCP e `/admin/custo-da-meta` fazem a conta pela vigência**; quem voltar a `calcularCusto` com a tabela atual devolve o defeito) e, no banco, `select tgname from pg_trigger where tgname = 'trg_mia_precos_meta_vigencia'`.
 
 **Riscos.** O mês daqui é o de Brasília e o do teto (`fn_gasto_de_ia_do_mes`) é o do banco, em UTC: os dois
 números podem diferir pelas chamadas das últimas 3 horas do mês. Fica assim por decisão (mudar o teto muda o que
 o cliente recebe). Se o upstream trouxer a soma de uso no banco por organização (`fn_uso_de_ia`, 0586) com
 quebra por agente, a leitura daqui pode passar a perguntar a ela, desde que a régua do custo continue a mesma.
+
+### 25. O fuso da organização nos relatórios · [`fuso-da-organizacao.md`](fuso-da-organizacao.md)
+**O que faz.** Uma regra só para o fuso dos relatórios: `organizations.timezone` vazio, só espaços ou com nome
+que não existe vale `America/Sao_Paulo` no relatório comercial, na série do Desempenho, no relatório de vendas,
+na planilha e no motor dos relatórios montados e dos painéis prontos. E a gravação recusa o nome que não existe
+(Configurações, painel da plataforma, boas-vindas, MCP). **Migrations** 9166 (redefine a nossa
+`fn_mia_relatorio_preparar`, corpo da 9041). **Mora em** `lib/tempo/fuso-gravavel.ts`.
+
+**Pontos de encaixe** (todos `FORK MIA (MIA-102)` ou `MIA-102`): do upstream, `lib/relatorios/janela.ts`
+(`TZ_PADRAO = FUSO_PADRAO`), `app/api/v1/reports/comercial/route.ts` (`fusoDoRelatorio(org.timezone)`),
+`lib/schemas/settings.ts` (`tenantSchema.timezone`), `lib/schemas/onboarding.ts` (`welcomeSchema.timezone`),
+`app/app/settings/tenant/_form.tsx` (a frase da recusa no toast); do fork, `app/api/v1/relatorios/exportar/route.ts`,
+`app/api/v1/relatorio-de-vendas/route.ts`, `lib/implantacao/empresa.ts`, `lib/i18n/dicionario-relatorios-mia.ts`.
+
+**Protege.** `tests/unit/fuso-dos-relatorios-uma-regra.test.ts` (a regra em TypeScript, a rota comercial, a
+gravação e a catraca de que nenhum leitor de relatório tem recuo próprio) e o invariante
+`fuso-invalido-nos-relatorios.test.ts` (o motor no Postgres com fuso inválido, vazio e só espaços, Tóquio como
+controle, pela sessão de um gestor).
+
+**Conferir.**
+1. `git grep -n "TZ_PADRAO = \|fusoDoRelatorio(org.timezone)" lib/relatorios/janela.ts app/api/v1/reports/comercial/route.ts` (as duas linhas existem; se o upstream reescreveu a janela, o recuo para UTC pode ter voltado).
+2. `git grep -n "fusoGravavelSchema" lib/schemas/settings.ts lib/schemas/onboarding.ts` (o fuso da organização segue passando pela régua da gravação).
+3. Se a fusão trouxe uma rota nova de relatório que lê `organizations.timezone`, ela entra na lista da catraca em `fuso-dos-relatorios-uma-regra.test.ts`.
+4. `npx vitest run tests/unit/fuso-dos-relatorios-uma-regra.test.ts`.
+
+**Riscos.** `lib/relatorios/janela.ts` tem PR aberto no upstream (#5002, a meia-noite pulada); a linha do
+`TZ_PADRAO` fica fora do trecho dele, mas confira na fusão. A empresa que já tem um fuso torto gravado continua
+lendo Brasília e só consegue salvar os dados da empresa escolhendo um fuso válido.
+
+### 26. O realtime do sistema com a semente desligada · [`realtime-do-sistema.md`](realtime-do-sistema.md)
+**O que faz.** O serviço `realtime` do Supabase próprio sobe com `SEED_SELF_HOST: "false"`. Assim o `run.sh`
+do realtime não apaga e recria o tenant `realtime-dev` a cada subida, e o `poll_interval_ms` aprovado (500 ms,
+MIA-141, contra os 100 ms de fábrica que faziam o `realtime.list_changes` pesar 79% do tempo do banco) fica entre
+reinícios. **Migrations** nenhuma (o tenant mora no esquema `_realtime`, do próprio realtime). **Mora em**
+`infra/supabase-sistema-mia/docker-compose.yml` (a fonte) e no `docker-compose.inline.yml` gerado dele pelo
+`gerar-inline.mjs`.
+
+**Pontos de encaixe.** Nenhum no upstream: `infra/supabase-sistema-mia/` só existe no fork. O risco vem da imagem
+`supabase/realtime` (hoje v2.76.5): uma versão nova pode mudar o nome da variável ou o que o `run.sh` faz com ela.
+
+**Protege.** Nenhum teste automático: a variável é do compose, e o valor que importa está no banco de produção.
+A conferência é a leitura abaixo.
+
+**Conferir.**
+1. `git grep -n 'SEED_SELF_HOST' infra/supabase-sistema-mia/` (as duas linhas, no compose e no inline, dizem `"false"`; se só uma diz, rode de novo `node gerar-inline.mjs`).
+2. Ao trocar a tag da imagem `supabase/realtime`, leia o `run.sh` da versão nova e confirme que `SEED_SELF_HOST` desligado ainda não recria o tenant.
+3. Depois de reiniciar o realtime em produção (só com aprovação do Gabriel), leia `settings->>'poll_interval_ms'` em `_realtime.extensions` (tipo `postgres_cdc_rls`): deve ser 500.
+
+**Riscos.** Trocar o `JWT_SECRET`, instalar do zero ou restaurar num banco vazio (o `_realtime` não entra no
+backup) pedem mexer no tenant à mão, como diz o documento. Sem isso, as telas deixam de atualizar ao vivo, e o
+resto do sistema continua funcionando.
+
+---
+
+### 27. O batimento do vigia dos canais · [`vigia-dos-canais.md`](vigia-dos-canais.md)
+**O que faz.** No fim de cada rodada, o vigia dos números (`channel-health`, a cada 5 min) regrava a linha dele
+em `mia_batimentos_de_cron`, e a `/api/v1/health` responde `vigia_dos_canais: { ultima_rodada_em, em_dia }`
+(menos de 15 min), sem mudar o `status`. É o sinal de que o vigia passou, que a rodada estável não dava
+(MIA-152). **Migrations** 9168. **Mora em** `lib/cron/batimento.ts`.
+
+**Pontos de encaixe** (todos `FORK MIA (MIA-154)`): do upstream, `app/api/v1/cron/channel-health/route.ts` (o
+`registrarBatimento` antes do `return` final, e os dois passos em `PASSOS_DEPOIS_DO_PORTAO`),
+`app/api/v1/health/route.ts` (`lerBatimentoDoVigia` e o bloco `vigia_dos_canais`) e
+`tests/unit/voz-nao-derruba-a-vigilancia-de-canal.test.ts` (o dublê aceita o `upsert`).
+
+**Protege.** `tests/unit/vigia-dos-canais-bate-o-ponto.test.ts` (a rodada grava exatamente um batimento; a falha
+dele não muda a resposta), `app/api/v1/health/health-diz-se-o-vigia-dos-canais-passou.test.ts` (em dia, atrasado,
+sem linha, sem tabela) e o invariante `batimento-dos-crons.test.ts` (o `upsert` regrava; só o `service_role`).
+
+**Conferir.**
+1. `git grep -n "registrarBatimento(admin, ROTA_DO_VIGIA_DOS_CANAIS" app/api/v1/cron/channel-health/route.ts` (a chamada existe e está DEPOIS do laço, antes do `return` final; se o upstream reescreveu o fim da rodada, ela pode ter sumido).
+2. `git grep -n "vigia_dos_canais: avaliarVigiaDosCanais" app/api/v1/health/route.ts` (o bloco segue na resposta).
+3. Se o upstream passou a gravar algo na saída ociosa do vigia, o batimento pode ir para lá também (ver "O que ele NÃO cobre" no documento).
+4. `npx vitest run tests/unit/vigia-dos-canais-bate-o-ponto.test.ts app/api/v1/health/health-diz-se-o-vigia-dos-canais-passou.test.ts tests/unit/cron-passa-pelo-portao.test.ts`.
+
+**Riscos.** Instalação sem número ativo sai pelo portão do piso ocioso antes do batimento, e a `/health` diz
+`em_dia: false`. Na produção da MIA há números.
 
 ---
 
@@ -898,18 +1007,21 @@ quebra por agente, a leitura daqui pode passar a perguntar a ela, desde que a r�
 | 10 | E-mail marketing | `email-marketing.md` | 9060-9065, 9110 | `email-marketing-regras.test.ts`, `tests/invariants/email-marketing.test.ts` |
 | 11 | Empresa única | `empresa-unica.md` | 9032, 9033, 9034 | `empresa-unica.test.ts`, `papel-do-contato-na-empresa.test.ts` |
 | 12 | IA responde pendente | `ia-responde-pendente.md` | nenhuma | `ia-responde-pendente.test.ts`, `ia-responde-pendente-faixa.test.tsx` |
-| 13 | Jornada de assinatura | `jornada-de-assinatura.md` | 9070, 9071, 9072, 9110 | `jornada-tudo-desligado.test.ts`, `planos-mia-regras.test.ts` |
+| 13 | Jornada de assinatura | `jornada-de-assinatura.md` | 9070, 9071, 9072, 9110, 9169 | `jornada-tudo-desligado.test.ts`, `planos-mia-regras.test.ts` |
 | 14 | Leads da Meta | `leads-da-meta.md` | 9003, 9004, 9005, 9008, 9009 | `paginas-da-meta-por-empresa.test.ts` |
 | 15 | MCP de implantação | `mcp-de-implantacao.md` | 9022, 9045, 9030, 9031, 9040-9042 | `mcp-de-implantacao-espelhos.test.ts`, `mcp-de-implantacao-ferramentas.test.ts` |
 | 16 | MCP de migração | `mcp-de-migracao.md` | 9022 | `mcp-de-migracao-base.test.ts`, `mcp-de-migracao-importa-em-silencio.test.ts` |
 | 17 | Obrigações | `obrigacoes.md` | 9018 | `obrigacoes-gatilhos.test.ts`, `obrigacoes-contexto-da-automacao.test.ts` |
 | 18 | Pagamento no início | `pagamento-no-inicio.md` | 9120, 9121, 9122 | `pagamento-inicial-fim-do-teste.test.ts`, `cartao-fora-dos-registros.test.ts` |
 | 19 | Primeiros passos | `primeiros-passos.md` | 9070, 9071, 9080-9082 | `welcome-do-upstream-funciona-sozinho.test.tsx`, `raiz-do-app-respeita-o-passo-a-passo.test.ts` |
-| 20 | Produto no negócio | `produto-no-negocio.md` | 9160, 9161 | `produto-no-negocio-servidor.test.ts`, `produto-no-negocio-regras.test.ts` |
+| 20 | Produto no negócio | `produto-no-negocio.md` | 9160, 9161, 9167 | `produto-no-negocio-servidor.test.ts`, `produto-no-negocio-regras.test.ts`, `valor-do-negocio-segue-os-itens.test.ts` |
 | 21 | Raio-X do atendimento | `raio-x-do-atendimento.md` | 9150, 9151, 9152 | `raio-x-leitor-nao-envia.test.ts`, `raio-x-anonimizar.test.ts` |
-| 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
+| 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154, 9171 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
 | 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162, 9164 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-pedido-unico.test.ts`, `coexistencia-conexao-pelo-app.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts`, `coexistencia-saida-e-volta.test.ts`, `meta-edicao-e-apagar.test.ts` |
-| 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | nenhuma (lê a 0241) | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts`, `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts` |
+| 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | 9165 (o preço da Meta com vigência); lê a 0241 | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts`, `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts`, `preco-da-meta-com-vigencia.test.ts` |
+| 25 | O fuso da organização nos relatórios | `fuso-da-organizacao.md` | 9166 | `fuso-dos-relatorios-uma-regra.test.ts`, `tests/invariants/fuso-invalido-nos-relatorios.test.ts` |
+| 26 | O realtime do sistema com a semente desligada | `realtime-do-sistema.md` | nenhuma | nenhum (conferência pela leitura do tenant) |
+| 27 | O batimento do vigia dos canais | `vigia-dos-canais.md` | 9168 | `vigia-dos-canais-bate-o-ponto.test.ts`, `health-diz-se-o-vigia-dos-canais-passou.test.ts`, `tests/invariants/batimento-dos-crons.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.

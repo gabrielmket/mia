@@ -129,7 +129,7 @@ com `aberta_por = 'historico_sem_pedido'` e o pedido do histórico já `em_andam
 
 - **S3:** feita (seção 5).
 - **S4:** feita (seção 6).
-- **Relatórios e raio-X do fork (9165, decisão D3):** conferido em 17/11/2026, nenhuma das funções do fork
+- **Relatórios e raio-X do fork (9172, decisão D3):** conferido em 17/11/2026, nenhuma das funções do fork
   que leem `messages` corta `historico_importado`. Com 180 dias de histórico, o tempo de resposta e o raio-X
   do primeiro mês contariam conversa velha. O corte espera a decisão do Gabriel.
 - Lote guardado sem o pedido ao worker (o `emit_event` falhou na rota) fica em `recebido` e vai ao log com o

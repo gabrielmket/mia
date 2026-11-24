@@ -50,7 +50,9 @@ import type pg from "pg";
 
 import { precisaRenovar } from "@/lib/agenda/google/oauth";
 import { falasDoSnapshot } from "@/lib/agent-engine/agent/conversa-do-caso/leitura";
+import { emMs } from "@/lib/agent-engine/edge/crm/debounce";
 import { midiaDerivavelPendente } from "@/lib/agent-engine/edge/crm/midia-derivavel";
+import { idadeNoStatusEmMs } from "@/lib/agent-engine/edge/crm/session-reconciler";
 import { normalizarInstante } from "@/lib/ai/elegibilidade/gate";
 import { quandoCombinado } from "@/lib/atendimento/aviso-retorno-descartado";
 import { estaPresente } from "@/lib/atendimento/presenca";
@@ -67,6 +69,7 @@ import { instanteDoBanco } from "@/lib/tempo/agora";
 // FORK MIA: as réguas de data do fork que entram na lista (fusão da v1.107).
 import { instanteDaMensagem } from "@/lib/agent-engine/agent/horario-da-ia-no-motor";
 import { linkDeConexaoVivo, venceu } from "@/lib/raio-x/prazos";
+import { calcularCustoPorVigencia } from "@/lib/channels/meta/custo-da-conversa";
 
 /**
  * O instante de referência, com MILISSEGUNDO de propósito: é o pedaço que
@@ -119,7 +122,7 @@ const mesmoInstante = (texto: string | null): boolean =>
   texto !== null && Date.parse(texto) === CHEGADA_MS;
 
 /**
- * A LISTA. Doze réguas, na ordem em que a varredura as encontrou.
+ * A LISTA. Treze réguas, na ordem em que a varredura as encontrou.
  *
  * A lista é curta porque é um CONTRATO: cada linha custa a prova de que a régua
  * aceita as duas formas e de que não desloca o instante.
@@ -282,6 +285,34 @@ export function reguasDeData(pool: pg.Pool): ReguaDeData[] {
       },
     },
     {
+      nome: "calcularCustoPorVigencia",
+      onde: "lib/channels/meta/custo-da-conversa.ts:164",
+      // (MIA-99) O preço da Meta que vale para cada mensagem cobrada: o
+      // `messages.created_at` (timestamptz) cai na vigência que o contém
+      // (`vigente_desde <= created_at < vigente_ate`). Chega `Date` do `pg` e
+      // texto do PostgREST. Três vigências em volta de `CHEGADA`, a do meio com
+      // um milissegundo só: o preço 2 sai só se a régua viu o epoch exato.
+      // Sem instante a régua LANÇA de propósito ("data ilegível") em vez de
+      // deixar a mensagem fora de toda vigência sem aviso; `created_at` é
+      // `not null`. O `catch` é a tradução desse lançamento no "não vi".
+      entrada: "valor",
+      exercitar: (valorCru) => {
+        try {
+          const r = calcularCustoPorVigencia(
+            [{ categoria: "marketing", created_at: valorCru as string | Date }],
+            [
+              { categoria: "marketing", centavos_brl: 1, vigente_desde: "-infinity", vigente_ate: CHEGADA_MS },
+              { categoria: "marketing", centavos_brl: 2, vigente_desde: CHEGADA_MS, vigente_ate: CHEGADA_MS + 1 },
+              { categoria: "marketing", centavos_brl: 4, vigente_desde: CHEGADA_MS + 1, vigente_ate: null },
+            ],
+          );
+          return r.totalCentavos === 2;
+        } catch {
+          return false;
+        }
+      },
+    },
+    {
       nome: "linkDeConexaoVivo",
       onde: "lib/raio-x/prazos.ts:25",
       // A validade do link de conexão do raio-X (`conexao_expira_em`,
@@ -382,6 +413,30 @@ export function reguasDeData(pool: pg.Pool): ReguaDeData[] {
         });
         return Date.parse(prazo) === Date.parse("2026-11-10T12:00:00.000Z");
       },
+    },
+    {
+      nome: "idadeNoStatusEmMs",
+      onde: "lib/agent-engine/edge/crm/session-reconciler.ts:145",
+      // (#4870) A idade do status no espelho `channel_sessions` é o que decide
+      // se a sessão presa em `STARTING` é reiniciada: `last_status_change_at`
+      // chega `Date` do driver `pg` e string do PostgREST/jsonb. Recusar o
+      // `Date` devolveria `null` e o vigia NUNCA reiniciaria — a trava ficaria
+      // muda, que é exatamente o defeito que ela veio fechar.
+      entrada: "valor",
+      exercitar: (valorCru) => idadeNoStatusEmMs(valorCru, CHEGADA_MS) === 0,
+    },
+    {
+      nome: "emMs",
+      onde: "lib/agent-engine/edge/crm/debounce.ts:145",
+      // (#196) A âncora da rajada do inbound: `jobs.created_at` e o `run_after`
+      // vigente são lidos da linha do job — `timestamptz`, `Date` no driver `pg`
+      // e string no PostgREST/payload clonado. É essa conversão que decide se a
+      // janela PODE estender e de onde o teto conta. Recusar o `Date` devolveria
+      // `null`, e a rajada andaria só com a coalescência ancorada de antes, sem
+      // uma linha de erro: o modo de falha mudo que esta cerca existe para pegar.
+      entrada: "valor",
+      exercitar: (valorCru) =>
+        emMs(valorCru as Date | string | null | undefined) === CHEGADA_MS,
     },
   ];
 }
