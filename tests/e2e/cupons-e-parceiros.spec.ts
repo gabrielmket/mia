@@ -6,7 +6,9 @@
  *   2. o visitante do link vê o preço com desconto e o preço cheio riscado;
  *   3. o cupom fica guardado no navegador e chega ao cadastro sem estar no link;
  *   4. cupom que não existe não dá desconto nem derruba a página;
- *   5. as telas de repasses, módulos dos planos e ficha da empresa abrem sem erro.
+ *   5. as telas de repasses, módulos dos planos e ficha da empresa abrem sem erro;
+ *   6. (MIA-242) o cartão Enterprise aparece depois dos planos e o botão abre o
+ *      wa.me do número da instalação (fictício, e volta ao que era no fim).
  * Self-contida: tudo morre no `finally`, e as chaves da instalação voltam ao que eram.
  */
 import { randomUUID } from "node:crypto";
@@ -21,6 +23,9 @@ const EVIDENCIA = "evidence/cupons-e-parceiros";
 const PLANO = `Plano Cupom E2E ${sufixo}`;
 const CODIGO = `E2E${sufixo.toUpperCase()}`;
 const NOME_DO_PARCEIRO = `Parceiro E2E ${sufixo}`;
+// FORK MIA (MIA-242): o WhatsApp do comercial do cartão Enterprise. Número fictício.
+const CHAVE_DO_COMERCIAL = "MIA_WHATSAPP_DO_COMERCIAL";
+const WHATSAPP_FICTICIO = "5511999990000";
 
 test("[P0] cupom do parceiro: criado no Admin, desconto no link e guardado até o cadastro", async ({ page, browser, baseURL }) => {
   test.setTimeout(240_000);
@@ -33,6 +38,8 @@ test("[P0] cupom do parceiro: criado no Admin, desconto no link e guardado até 
   let planoId: string | null = null;
   let falhaDoCenario: unknown;
   const foto: FotoDasChaves = await fotografarChaves();
+  const fotoDoComercial = await db.from("platform_config").select("*").eq("chave", CHAVE_DO_COMERCIAL);
+  if (fotoDoComercial.error) throw fotoDoComercial.error;
   page.on("pageerror", (e) => errosDePagina.push(e.message));
 
   try {
@@ -42,6 +49,11 @@ test("[P0] cupom do parceiro: criado no Admin, desconto no link e guardado até 
       { onConflict: "chave" },
     );
     if (ligar.error) throw ligar.error;
+    const comercial = await db.from("platform_config").upsert(
+      { chave: CHAVE_DO_COMERCIAL, valor: WHATSAPP_FICTICIO, eh_segredo: false, semeado_do_env: false },
+      { onConflict: "chave" },
+    );
+    if (comercial.error) throw comercial.error;
 
     const dono = await criarPessoa("dono-cupom", sufixo);
     pessoas.push(dono.id);
@@ -96,6 +108,19 @@ test("[P0] cupom do parceiro: criado no Admin, desconto no link e guardado até 
     await expect(pv.getByText(PLANO).first()).toBeVisible();
     await expect(pv.getByText(/R\$\s*80,00/).first(), "o preço com o cupom de 20%").toBeVisible();
     await expect(pv.locator(".line-through", { hasText: /R\$\s*100,00/ }).first(), "o preço cheio riscado").toBeVisible();
+    // MIA-242: o cartão Enterprise vem depois dos planos, sem preço, e fala com o comercial.
+    const enterprise = pv.locator('[data-precos="enterprise"]');
+    await expect(enterprise.getByRole("heading", { name: "Enterprise" }), "o cartão Enterprise não apareceu").toBeVisible();
+    await expect(enterprise.getByText(/Condições sob medida\./)).toBeVisible();
+    await expect(enterprise.getByText(/R\$/)).toHaveCount(0);
+    await expect(enterprise.getByRole("link", { name: "Falar com o comercial" })).toHaveAttribute(
+      "href",
+      `https://wa.me/${WHATSAPP_FICTICIO}`,
+    );
+    expect(
+      await pv.locator('[data-precos="planos"] ~ [data-precos="enterprise"]').count(),
+      "o cartão Enterprise não está depois dos planos",
+    ).toBe(1);
     await pv.screenshot({ path: `${EVIDENCIA}/3-precos-com-cupom.png`, fullPage: true });
 
     // ── 3. O cupom fica guardado e chega ao cadastro sem estar no link ──
@@ -160,6 +185,12 @@ test("[P0] cupom do parceiro: criado no Admin, desconto no link e guardado até 
         if (r.error) throw r.error;
       }
       await restaurarChaves(foto);
+      const apagaComercial = await db.from("platform_config").delete().eq("chave", CHAVE_DO_COMERCIAL);
+      if (apagaComercial.error) throw apagaComercial.error;
+      if ((fotoDoComercial.data ?? []).length > 0) {
+        const volta = await db.from("platform_config").insert(fotoDoComercial.data);
+        if (volta.error) throw volta.error;
+      }
     } catch (e) {
       errosDaLimpeza.push(e);
     }
