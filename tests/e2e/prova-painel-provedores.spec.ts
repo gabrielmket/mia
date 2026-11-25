@@ -16,9 +16,10 @@
  */
 import { createClient } from "@supabase/supabase-js";
 
-import { expect, test } from "./helpers/test";
+import { expect, test, type Page } from "./helpers/test";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
+import { bufToBytea, encryptKey } from "@/lib/crypto/aes_gcm";
 import { PONTOS_DE_IA } from "@/lib/ai/pontos/registro";
 import { FONTE_MODELS_DEV, sincronizarModelosNativos } from "@/lib/ai/catalogo/models-dev";
 
@@ -213,6 +214,48 @@ test("novos modelos nativos sincronizados chegam ao seletor sem mudar o padrão"
 });
 
 test("F1 — trocar o modelo GRAVA, e a tela passa a mostrar o novo", async ({ page }) => {
+  // FORK MIA (9172, MIA-217): a trava recusa (422 `ia_sem_chave`) salvar uma
+  // função num provedor sem chave utilizável, e este ambiente não tem chave da
+  // OpenRouter. A prova aqui é a da gravação, então a empresa ganha uma chave
+  // sintética da OpenRouter, validada, só durante o caso. A recusa sem chave é
+  // cobrada em app/api/v1/ai/providers/route.test.ts.
+  const env = carregarEnvLocal();
+  const url = env.NEXT_PUBLIC_SUPABASE_URL!;
+  if (!["localhost", "127.0.0.1"].includes(new URL(url).hostname)) {
+    throw new Error("A prova da gravação exige banco local");
+  }
+  const admin = createClient(url, env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const orgId = (creds as CredsE2E & { org_id?: string }).org_id;
+  if (!orgId) throw new Error(".e2e-creds.json sem org_id");
+  const cifrada = encryptKey("e2e-openrouter-sintetica-prova-f1");
+  const { data: chave, error: erroChave } = await admin
+    .from("ai_provider_credentials")
+    .insert({
+      organization_id: orgId,
+      provider: "openrouter",
+      // Rótulo único: um caso interrompido antes da limpeza não trava o seguinte.
+      label: `Chave sintética da prova F1 ${Date.now().toString(36)}`,
+      api_key_encrypted: bufToBytea(cifrada.ciphertext),
+      api_key_iv: bufToBytea(cifrada.iv),
+      api_key_tag: bufToBytea(cifrada.tag),
+      api_key_last4: cifrada.last4,
+      is_active: true,
+      validated_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (erroChave || !chave) throw new Error(`chave sintética da OpenRouter: ${erroChave?.message}`);
+  try {
+    await provarQueATrocaGrava(page);
+  } finally {
+    const { error } = await admin.from("ai_provider_credentials").delete().eq("id", chave.id);
+    if (error) throw new Error(`limpeza da chave sintética: ${error.message}`);
+  }
+});
+
+async function provarQueATrocaGrava(page: Page): Promise<void> {
   await page.goto("/app/ai/providers");
   await page.waitForSelector('[data-testid="painel-de-provedores"]');
   await page.click('[data-testid="avancado-entender"]');
@@ -241,7 +284,7 @@ test("F1 — trocar o modelo GRAVA, e a tela passa a mostrar o novo", async ({ p
     /Escolhido por você/i,
   );
   await page.screenshot({ path: "evidence/provedores/05-troca-valeu.png", fullPage: true });
-});
+}
 
 test("F1/F3 — a catraca RECUSA modelo sem ferramentas no ponto que cria o lead", async ({ page }) => {
   // O desfecho que a abertura da OpenRouter torna possível: o agente conversa

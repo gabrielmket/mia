@@ -2011,6 +2011,15 @@ export const AUDIT_ACTIONS = [
   // 9096), na organização NOVA, com o id do molde e as contagens no metadata;
   // quem lê é Painel › Empresas › [empresa] ("IA copiada do molde").
   "ai.molde_de_ia_aplicado",
+  // FORK MIA (9172, MIA-217) — a IA da empresa segue a da plataforma. As duas
+  // são gravadas pelo BANCO, uma linha por empresa alterada, com o par de antes
+  // e o de depois no metadata (só ids, nunca nome de empresa):
+  //   · `fn_mia_platform_ia_propaga`: a troca em /admin/modelo-de-ia mudou o
+  //     padrão desta empresa, que segue a plataforma (`por` = quem trocou);
+  //   · `fn_mia_ia_segue_a_plataforma_conserto`: a 9172 passou a empresa a
+  //     seguir a plataforma (`condicao` A, B ou C).
+  "ai.padrao_seguiu_a_plataforma",
+  "ai.padrao_passou_a_seguir_a_plataforma",
   // #4023: a organização ligou/desligou a pesquisa de satisfação e, quando
   // ligada, mudou a janela ou o texto em `organizations.settings.satisfacao`.
   // metadata só com o `ligado` — o texto é configuração, não dado de cliente.

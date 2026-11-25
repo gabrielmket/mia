@@ -52,7 +52,14 @@ vi.mock("@/lib/supabase/admin", () => ({
       }
       if (tabela === "modulos_instalados") return cadeia(tabela, [], null);
       // A credencial da assinatura (o espelho `models_available` é regravado nela).
-      if (tabela === "ai_provider_credentials") return cadeia(tabela, [], null);
+      // FORK MIA (9172): é a mesma linha que a trava "provedor sem chave" lê.
+      if (tabela === "ai_provider_credentials") {
+        return cadeia(
+          tabela,
+          [{ provider: "openai-assinatura", is_active: true, validated_at: "2026-10-01T00:00:00Z" }],
+          null,
+        );
+      }
       return cadeia(tabela, [], { settings: {} });
     },
   }),
