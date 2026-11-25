@@ -45,13 +45,18 @@ const banco = vi.hoisted(() => ({
   tabelas: {} as Record<string, { data: Array<Record<string, unknown>> | null; error: { message: string } | null }>,
 }));
 
-/** O mínimo do cliente que `iaDasEmpresas` usa: select, order, eq, not e o await. */
+/** O mínimo do cliente que `iaDasEmpresas` usa: select, order, eq, not, range (as páginas, MIA-235) e o await. */
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (tabela: string) => {
       const resposta: Tabela = banco.tabelas[tabela] ?? { data: [], error: null };
+      let corte: [number, number] | null = null;
       const cadeia: Record<string, unknown> = {
-        then: (ok: (v: unknown) => unknown, erro: (e: unknown) => unknown) => Promise.resolve(resposta).then(ok, erro),
+        then: (ok: (v: unknown) => unknown, erro: (e: unknown) => unknown) =>
+          Promise.resolve(
+            corte && resposta.data ? { ...resposta, data: resposta.data.slice(corte[0], corte[1] + 1) } : resposta,
+          ).then(ok, erro),
+        range: (de: number, ate: number) => ((corte = [de, ate]), cadeia),
       };
       for (const m of ["select", "order", "eq", "not"]) cadeia[m] = () => cadeia;
       return cadeia;
