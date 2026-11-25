@@ -14,6 +14,7 @@ import {
   recusaDaPlataformaSemChave,
   recusaDoPadraoSemChave,
 } from "./ia-da-empresa";
+import { bancoEmMemoria, type Linha } from "@/tests/helpers/banco-em-memoria";
 
 const soOpenai = (p: string) => p === "openai";
 const nenhuma = () => false;
@@ -151,43 +152,106 @@ describe("contarEmpresas — o que o cartão do admin mostra", () => {
 });
 
 describe("iaDasEmpresas — o lote que a saúde, o relatório e o MCP leem", () => {
-  type Resposta = { data: unknown; error: { message: string } | null };
-  // Um cliente falso só com as duas leituras do lote.
-  const clienteFalso = (orgs: Resposta, creds: Resposta) =>
+  type Admin = Parameters<typeof iaDasEmpresas>[0];
+  // O banco em memória com o teto de 1000 linhas por resposta, como o PostgREST.
+  const banco = (organizations: Linha[], ai_provider_credentials: Linha[]) =>
+    bancoEmMemoria({ organizations, ai_provider_credentials }, {}, { maxRows: 1000 });
+
+  /** O mesmo cliente, com a página que começa em `de` da tabela `alvo` falhando. */
+  const comPaginaQueFalha = (cliente: ReturnType<typeof banco>["cliente"], alvo: string, de: number) =>
     ({
       from: (tabela: string) => {
-        const r = tabela === "organizations" ? orgs : creds;
-        const cadeia = {
-          select: () => cadeia,
-          order: () => Promise.resolve(r),
-          eq: () => cadeia,
-          not: () => Promise.resolve(r),
-        };
-        return cadeia;
+        const q = cliente.from(tabela) as Record<string, (...a: unknown[]) => unknown>;
+        const range = q.range!;
+        q.range = (inicio: unknown, fim: unknown) =>
+          tabela === alvo && inicio === de
+            ? { then: (ok: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: "fora do ar" } }).then(ok) }
+            : range(inicio, fim);
+        return q;
       },
-    }) as unknown as Parameters<typeof iaDasEmpresas>[0];
+    }) as unknown as Admin;
 
   it("traz nome e operante, sem outra leitura", async () => {
-    const admin = clienteFalso(
-      {
-        data: [
-          { id: "a", status: "active", display_name: "Empresa A", settings: { llm: { provider: "openai", default_model: "m" } }, ia_segue_a_plataforma: true },
-          { id: "b", status: "suspended", display_name: null, settings: { llm: { provider: "anthropic" } }, ia_segue_a_plataforma: false },
-        ],
-        error: null,
-      },
-      { data: [{ organization_id: "b", provider: "anthropic", is_active: true, validated_at: VALIDADA }], error: null },
+    const { cliente } = banco(
+      [
+        { id: "a", status: "active", display_name: "Empresa A", settings: { llm: { provider: "openai", default_model: "m" } }, ia_segue_a_plataforma: true },
+        { id: "b", status: "suspended", display_name: null, settings: { llm: { provider: "anthropic" } }, ia_segue_a_plataforma: false },
+      ],
+      [{ id: "c1", organization_id: "b", provider: "anthropic", is_active: true, validated_at: VALIDADA }],
     );
-    expect(await iaDasEmpresas(admin, soOpenai)).toEqual([
+    expect(await iaDasEmpresas(cliente as unknown as Admin, soOpenai)).toEqual([
       { organizationId: "a", provider: "openai", modelId: "m", origem: "plataforma", chave: "instalacao", status: "active", nome: "Empresa A", operante: true },
       { organizationId: "b", provider: "anthropic", modelId: null, origem: "propria", chave: "propria", status: "suspended", nome: null, operante: false },
     ]);
   });
 
+  describe("mais de 1000 linhas: o lote inteiro, em páginas (MIA-235)", () => {
+    const N = 2345;
+    const id = (i: number) => `0a000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+    // Ímpar segue a plataforma (OpenAI, chave da instalação). Par tem escolha
+    // própria na Anthropic e, quando não é múltiplo de 3, duas chaves próprias
+    // (Anthropic e Google): 1564 credenciais, mais de uma página também. Toda
+    // décima está suspensa.
+    function fixtura() {
+      const orgs: Linha[] = [];
+      const creds: Linha[] = [];
+      for (let i = 1; i <= N; i++) {
+        const segue = i % 2 === 1;
+        orgs.push({
+          id: id(i),
+          status: i % 10 === 0 ? "suspended" : "active",
+          display_name: `Academia Alfa ${i}`,
+          settings: { llm: { provider: segue ? "openai" : "anthropic" } },
+          ia_segue_a_plataforma: segue,
+        });
+        if (!segue && i % 3 !== 0) {
+          for (const provider of ["anthropic", "google"]) {
+            creds.push({ id: `${id(i)}-${provider}`, organization_id: id(i), provider, is_active: true, validated_at: VALIDADA });
+          }
+        }
+      }
+      // Ruído que a leitura filtra no banco: desativada e nunca validada.
+      creds.push({ id: "zz-1", organization_id: id(6), provider: "anthropic", is_active: false, validated_at: VALIDADA });
+      creds.push({ id: "zz-2", organization_id: id(12), provider: "anthropic", is_active: true, validated_at: null });
+      // Fora de ordem no banco: a ordem do lote vem do `order("id")`, não da inserção.
+      return banco(orgs.reverse(), creds.reverse());
+    }
+
+    it("todas as empresas, na ordem do id, sem repetir nem pular", async () => {
+      const lote = await iaDasEmpresas(fixtura().cliente as unknown as Admin, soOpenai);
+      expect(lote).not.toBeNull();
+      expect(lote).toHaveLength(N);
+      expect(new Set(lote!.map((e) => e.organizationId)).size).toBe(N);
+      expect(lote![0]!.nome).toBe("Academia Alfa 1");
+      expect(lote![N - 1]!.nome).toBe(`Academia Alfa ${N}`);
+      // A chave própria de quem está depois da linha 1000 das credenciais chegou.
+      expect(lote!.find((e) => e.nome === "Academia Alfa 2344")!.chave).toBe("propria");
+    });
+
+    it("contarEmpresas conta o lote inteiro", async () => {
+      const lote = await iaDasEmpresas(fixtura().cliente as unknown as Admin, soOpenai);
+      // Das 2111 que operam: 1173 seguem (ímpares) e 938 têm escolha própria
+      // (pares); das próprias, as 312 múltiplas de 6 estão sem chave.
+      expect(contarEmpresas(lote)).toEqual({ seguem: 1173, propria: 938, sem_chave: 312 });
+    });
+
+    it("erro em qualquer página vira null, nunca um recorte", async () => {
+      const { cliente } = fixtura();
+      for (const [tabela, de] of [
+        ["organizations", 0],
+        ["organizations", 1000],
+        ["organizations", 2000],
+        ["ai_provider_credentials", 0],
+        ["ai_provider_credentials", 1000],
+      ] as const) {
+        expect(await iaDasEmpresas(comPaginaQueFalha(cliente, tabela, de), soOpenai), `${tabela} @${de}`).toBeNull();
+      }
+    });
+  });
+
   it("falha de leitura vira null, nunca lista vazia", async () => {
-    const falha = { data: null, error: { message: "x" } };
-    const ok = { data: [], error: null };
-    expect(await iaDasEmpresas(clienteFalso(falha, ok), soOpenai)).toBeNull();
-    expect(await iaDasEmpresas(clienteFalso(ok, falha), soOpenai)).toBeNull();
+    const { cliente } = banco([], []);
+    expect(await iaDasEmpresas(comPaginaQueFalha(cliente, "organizations", 0), soOpenai)).toBeNull();
+    expect(await iaDasEmpresas(comPaginaQueFalha(cliente, "ai_provider_credentials", 0), soOpenai)).toBeNull();
   });
 });
