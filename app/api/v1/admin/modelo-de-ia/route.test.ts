@@ -25,6 +25,8 @@ vi.mock("@/lib/auth/requirePlatformAdmin", () => ({
 }));
 
 function cadeia(tabela: string, lista: unknown[], unico: unknown) {
+  // `range(de, ate)` corta como o PostgREST: o lote de `iaDasEmpresas` lê em páginas (MIA-235).
+  let corte: [number, number] | null = null;
   const chain: Record<string, unknown> = {
     maybeSingle: async () => ({ data: unico, error: null }),
     upsert: async (payload: unknown) => {
@@ -32,7 +34,8 @@ function cadeia(tabela: string, lista: unknown[], unico: unknown) {
       return { error: null };
     },
     then: (ok: (v: unknown) => unknown, erro: (e: unknown) => unknown) =>
-      Promise.resolve({ data: lista, error: null }).then(ok, erro),
+      Promise.resolve({ data: corte ? lista.slice(corte[0], corte[1] + 1) : lista, error: null }).then(ok, erro),
+    range: (de: number, ate: number) => ((corte = [de, ate]), chain),
   };
   for (const m of ["select", "eq", "is", "not", "order"]) chain[m] = () => chain;
   return chain;

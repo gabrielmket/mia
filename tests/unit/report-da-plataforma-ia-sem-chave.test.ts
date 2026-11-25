@@ -53,10 +53,18 @@ vi.mock("@/lib/supabase/admin", () => ({
     from: (tabela: string) => {
       estado.lidas.push(tabela);
       const resposta = estado.tabelas[tabela] ?? { data: [], error: null, count: 0 };
+      // `range(de, ate)` corta como o PostgREST: o lote de `iaDasEmpresas` lê em páginas (MIA-235).
+      let corte: [number, number] | null = null;
       const cadeia: Record<string, unknown> = {
         maybeSingle: async () => ({ data: null, error: null }),
         single: async () => ({ data: null, error: null }),
-        then: (ok: (v: unknown) => unknown, erro: (e: unknown) => unknown) => Promise.resolve(resposta).then(ok, erro),
+        then: (ok: (v: unknown) => unknown, erro: (e: unknown) => unknown) =>
+          Promise.resolve(
+            corte && Array.isArray(resposta.data)
+              ? { ...resposta, data: resposta.data.slice(corte[0], corte[1] + 1) }
+              : resposta,
+          ).then(ok, erro),
+        range: (de: number, ate: number) => ((corte = [de, ate]), cadeia),
       };
       for (const m of ["select", "eq", "neq", "in", "is", "not", "gt", "gte", "lt", "lte", "order", "limit", "or"]) {
         cadeia[m] = () => cadeia;
