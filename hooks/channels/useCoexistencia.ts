@@ -40,6 +40,9 @@ export interface NumeroPeloAppNaTela {
   conectadaEm: string;
   prazoDaSincronizacao: string;
   foraDoArMotivo: string | null;
+  /** S4: quando saiu do ar e quando voltou (a tela 4 do protótipo). */
+  foraDoArEm: string | null;
+  voltouEm: string | null;
   pedidos: PedidoDaSincronizacaoNaTela[];
 }
 

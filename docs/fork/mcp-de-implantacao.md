@@ -1357,7 +1357,7 @@ atende). A regra mora em `lib/channels/meta/coexistencia/` (`ligar.ts`, `leitura
 
 | ferramenta | o que faz | operação |
 |---|---|---|
-| `plataforma_ver_coexistencia` | a chave da empresa (`ligada`, quem mudou e quando), se a instalação tem o app da Meta configurado para a janela (`janela_configurada`, `falta_no_ambiente`) e os números conectados pelo app, com estado, data da conexão e motivo de estar fora do ar | leitura |
+| `plataforma_ver_coexistencia` | a chave da empresa (`ligada`, quem mudou e quando), se a instalação tem o app da Meta configurado para a janela (`janela_configurada`, `falta_no_ambiente`) e os números conectados pelo app, com estado, data da conexão e motivo de estar fora do ar. S4: a `situacao` (`no_ar`, `de_volta`, `fora_do_ar`, `encerrada`), o motivo da Meta e quem iniciou (`fora_do_ar_iniciado_por`), quando saiu, quando voltou e o último aviso da Meta aplicado | leitura |
 | `plataforma_ligar_coexistencia` | liga ou desliga a chave; o mesmo pedido responde `ja_estava`. Recusa empresa que não opera (`ehOperante`) e empresa de demonstração (a 9010 não deixa nascer canal vivo nela). Desligar com número conectado responde os números que continuam. Audita `platform.coexistencia_alterada` | `colocar_no_ar` |
 | `plataforma_ver_sincronizacao_do_app` | por número: os dois pedidos (`contatos` e `historico`) com estado, datas, `request_id` da Meta, erro, progresso, fase e contagens; o prazo de 24 h. Só contagens | leitura |
 
