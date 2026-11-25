@@ -41,6 +41,12 @@ const PERGUNTAS: Pergunta[] = [
   // FORK MIA · coexistência (MIA-28).
   { pergunta: "como conecto o numero que ja uso no app whatsapp business", sobre: "/app/connections", espera: "coexistencia-pelo-app" },
   { pergunta: "a sincronizacao do historico do app nao veio", sobre: "/app/connections", espera: "coexistencia-pelo-app" },
+  // FORK MIA · coexistência, o dia a dia (MIA-30).
+  { pergunta: "o numero do app whatsapp business saiu do ar na mia", sobre: "/app/connections", espera: "coexistencia-fora-do-ar" },
+  { pergunta: "como faço o numero do app voltar", sobre: "/app/connections", espera: "coexistencia-fora-do-ar" },
+  { pergunta: "editei uma mensagem no app, muda na mia?", sobre: "/app/connections", espera: "coexistencia-fora-do-ar" },
+  { pergunta: "o cliente apagou a mensagem no whatsapp", sobre: "/app/connections", espera: "coexistencia-fora-do-ar" },
+  { pergunta: "posso pedir o historico do app de novo", sobre: "/app/connections", espera: "coexistencia-pelo-app" },
   { pergunta: "como configuro o horário da IA", sobre: "/app/ai/agents", espera: "horario-da-ia" },
   { pergunta: "onde vejo as conversões da meta", sobre: "/app/settings/conversoes", espera: "conversoes-meta" },
   { pergunta: "como mando e-mail marketing", sobre: "/app/broadcast", espera: "email-marketing-campanha" },
