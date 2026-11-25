@@ -56,6 +56,7 @@ import { numerosDaWaba } from "../numeros-da-waba";
 import { ORIGEM_DO_EMBEDDED_SIGNUP, registrarOrigemDaConexao } from "../origem-da-conexao";
 import { validateMetaCredentials } from "../validate-credentials";
 import { registrarWebhookDaSessao } from "../webhook-da-sessao";
+import { encerrarAvisoDeForaDoAr } from "./avisos";
 import { lerChaveDaCoexistencia } from "./chave";
 import { desligarQrDoMesmoNumero } from "./qr-do-mesmo-numero";
 import { emitirPedidoDaSincronizacao } from "./sincronizacao";
@@ -248,6 +249,8 @@ async function gravarSessao(
     // O nome do canal é do operador depois da 1ª conexão (Renomear): reconectar não o apaga.
     display_name: nomeDoCanal(existente, dados.nome),
     status: "WORKING",
+    // S4: o número que estava fora do ar volta por aqui; o motivo da queda sai junto.
+    status_reason: null,
   };
 
   if (existente) {
@@ -469,6 +472,8 @@ export async function conectarPeloApp(
       : false;
 
     if (ciclo.cicloNovo) {
+      // S4: a passagem nova pela janela é a volta do número que saiu do ar.
+      await encerrarAvisoDeForaDoAr(admin, entrada.organizationId, sessao.channelSessionId);
       const channelSessionId = sessao.channelSessionId;
       void audit({
         action: "channel.coexistencia_conectada",

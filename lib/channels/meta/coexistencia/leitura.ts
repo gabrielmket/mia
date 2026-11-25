@@ -50,8 +50,12 @@ export interface NumeroPeloApp {
   conectadaEm: string;
   prazoDaSincronizacao: string;
   foraDoArMotivo: string | null;
+  /** S4: quem tirou o número do ar, pela Meta (`USER` = o dono; `SYSTEM` = a própria Meta). */
+  foraDoArIniciadoPor: "USER" | "SYSTEM" | null;
   foraDoArEm: string | null;
   voltouEm: string | null;
+  /** S4: o `time` do último aviso da Meta aplicado (saída ou volta). */
+  ultimoEventoEm: string | null;
   pedidos: PedidoDaSincronizacao[];
 }
 
@@ -109,7 +113,7 @@ export async function numerosPeloApp(
       admin
         .from("mia_coexistencia_conexoes")
         .select(
-          "id, organization_id, channel_session_id, waba_id, phone_number_id, estado, aberta_por, conectada_em, fora_do_ar_motivo, fora_do_ar_em, voltou_em",
+          "id, organization_id, channel_session_id, waba_id, phone_number_id, estado, aberta_por, conectada_em, fora_do_ar_motivo, fora_do_ar_iniciado_por, fora_do_ar_em, voltou_em, ultimo_evento_em",
         )
         .in("organization_id", fatia)
         .order("conectada_em", { ascending: false })
@@ -184,8 +188,11 @@ export async function numerosPeloApp(
       conectadaEm,
       prazoDaSincronizacao: new Date(new Date(conectadaEm).getTime() + PRAZO_DA_SINCRONIZACAO_MS).toISOString(),
       foraDoArMotivo: c.fora_do_ar_motivo ?? null,
+      foraDoArIniciadoPor:
+        c.fora_do_ar_iniciado_por === "USER" || c.fora_do_ar_iniciado_por === "SYSTEM" ? c.fora_do_ar_iniciado_por : null,
       foraDoArEm: c.fora_do_ar_em ?? null,
       voltouEm: c.voltou_em ?? null,
+      ultimoEventoEm: c.ultimo_evento_em ?? null,
       // Na ordem dos pedidos: contatos, depois histórico.
       pedidos: (pedidosPorCiclo.get(c.id) ?? []).sort((a, b) => (a.tipo === b.tipo ? 0 : a.tipo === "contatos" ? -1 : 1)),
     });

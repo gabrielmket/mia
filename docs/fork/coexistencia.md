@@ -3,7 +3,8 @@
 Fork MIA. O cliente usa o MESMO número no app WhatsApp Business do celular e na MIA (Cloud API da Meta).
 Este documento cresce por etapa; hoje cobre a **S2: o histórico que a Meta manda entra como passado e não
 dispara nada** (migration 9162) e a **S3: a conexão pelo app e o pedido único da sincronização** (migration 9164,
-carimbo `20261118120000_9164_coexistencia_da_empresa`; seção 5).
+carimbo `20261118120000_9164_coexistencia_da_empresa`; seção 5) e a **S4: a saída e a volta do número, a edição e o
+apagar feitos pelo app** (sem migration nova; seção 6).
 
 Desenho completo, protótipo e decisões: tarefas MIA-24 (plano) e MIA-25 (desenho) no painel do time.
 
@@ -127,8 +128,7 @@ com `aberta_por = 'historico_sem_pedido'` e o pedido do histórico já `em_andam
 ## 4. O que fica para as próximas etapas
 
 - **S3:** feita (seção 5).
-- **S4:** saída e volta do número (`PARTNER_REMOVED`, `ACCOUNT_OFFBOARDED`, `ACCOUNT_RECONNECTED`), edição e
-  apagamento.
+- **S4:** feita (seção 6).
 - **Relatórios e raio-X do fork (9172, decisão D3):** conferido em 17/11/2026, nenhuma das funções do fork
   que leem `messages` corta `historico_importado`. Com 180 dias de histórico, o tempo de resposta e o raio-X
   do primeiro mês contariam conversa velha. O corte espera a decisão do Gabriel.
@@ -250,3 +250,117 @@ Fora da régua da empresa operante, declarado na cerca: é entrada da própria e
 O e2e de tela fica para quando o `e2e.yml` puder apontar a Graph para um dublê: hoje ele fixa `META_GRAPH_BASE_URL`
 numa porta que recusa, e outras specs dependem disso.
 
+## 6. A saída, a volta, a edição e o apagar (S4)
+
+Sem migration nova: as colunas da saída e da volta já nasceram na 9162 (`fora_do_ar_motivo`,
+`fora_do_ar_iniciado_por`, `fora_do_ar_em`, `voltou_em`, `ultimo_evento_em`).
+
+### 6.1 O que a Meta manda (lido em 18/11/2026)
+
+Na página de cadastro de usuários do app e na referência `webhooks/reference/messages`:
+
+- `account_update` com `event: "PARTNER_REMOVED"`: `waba_info` (`waba_id`, `owner_business_id`) e
+  `disconnection_info` (`reason`: `ACCOUNT_DISCONNECTED`, `BUSINESS_DOWNGRADE`, `CHANGE_NUMBER`, `COMPANION_INACTIVITY`,
+  `PRIMARY_INACTIVITY`, `USER_RE_REGISTERED`; `initiated_by`: `USER` ou `SYSTEM`).
+- `account_update` com `ACCOUNT_OFFBOARDED` e com `ACCOUNT_RECONNECTED`: só `event`. A conta é o `entry.id`.
+- **Nenhum dos três traz o `phone_number_id`**: o ciclo é o vivo da WABA na empresa que `donoDoEvento` resolveu.
+- A hora é o `entry.time` (segundos). No exemplo da própria página o `ACCOUNT_RECONNECTED` tem `time` 1 segundo
+  MENOR que o `ACCOUNT_OFFBOARDED`: a ordem de chegada não é a ordem dos fatos.
+- Edição: `type: "edit"`, `edit.original_message_id` e a mensagem nova em `edit.message` (texto em `text.body`, legenda
+  em `<tipo>.caption`). Apagar: `type: "revoke"`, `revoke.original_message_id`. O mesmo miolo vem em `messages` (o
+  cliente) e em `smb_message_echoes` (o dono pelo app).
+
+### 6.2 A saída e a volta
+
+```
+webhook da Meta (account_update)
+  └─ rota: receberSaidaEVolta ── leitura pura (lerSaidaOuVolta) → ciclo vivo da WABA → aplica
+```
+
+| Evento | Ciclo | Sessão do canal | Central |
+|---|---|---|---|
+| `PARTNER_REMOVED`, `ACCOUNT_OFFBOARDED` | `fora_do_ar`, com o motivo e quem iniciou; `fora_do_ar_em` é o da primeira saída | `WORKING` → `STOPPED`, `status_reason = coexistencia_fora_do_ar` (só se estava `WORKING`) | abre UM aviso `<número> fora do ar` (`kind = 'other'`, `ref_kind = 'channel_session'`); o mesmo evento de novo atualiza o mesmo; o "voltou" aberto é resolvido |
+| `ACCOUNT_RECONNECTED` | volta a `no_ar` no MESMO ciclo, com `voltou_em` | volta a `WORKING` só se o motivo ainda é o nosso | o de fora do ar é resolvido; abre `<número> voltou` |
+| a janela de novo (`conectarPeloApp`, S3) | o velho vira `encerrada`, nasce outro (D4: a sincronização só nessa passagem) | a MESMA sessão volta a `WORKING`, sem o motivo | o de fora do ar é resolvido |
+
+Nada é criado na volta: sessão, contato, conversa e cartão são os de antes, e a conversa segue presa à mesma sessão.
+Evento com `time` menor que o `ultimo_evento_em` do ciclo não muda nada (a volta velha não traz de volta, a saída velha
+não tira do ar); empate aplica. A volta com o número já no ar só guarda o `time`. WABA sem ciclo vivo (número do canal
+oficial que não entrou pelo app) não muda nada.
+
+A volta que falha no meio se cura na reentrega. Se o ciclo já foi a `no_ar` e a escrita da sessão caiu, o desfecho é
+`conta:failed` e a rota responde 200. Quando a Meta entrega o mesmo evento de novo, ele cai no ramo "já no ar". Lá, se o
+ciclo tem `voltou_em`, o passo da sessão roda de novo, e ele só pega a sessão com o nosso `status_reason`. Se esse passo
+mudou alguma linha, o aviso de "voltou" também é refeito, e o desfecho é `conta:voltou_reparado`. Se não mudou nada, o
+desfecho é `conta:ja_no_ar`, e o "voltou" que a equipe já fechou não reabre. A saída já se curava assim: o ramo "já
+fora do ar" repete a sessão e o aviso. A rota continua respondendo 200 em `conta:failed`; sem a reentrega, o caso fica
+no log de erro (`saída ou volta do número não aplicada`).
+
+Com a sessão fora de `WORKING`, o que já existe do upstream passa a valer sem encaixe: o envio para, e a conversa
+mostra a faixa de número fora do ar (`components/inbox/NumeroForaDoAr.tsx`). `lib/channels/historico/quedas.ts`
+filtra `provider = waha`, então a saída não abre a recuperação de queda do QR (conferido na S4).
+
+A tela do canal mostra o número fora do ar (desde quando, o motivo em palavras, o que para, "Conectar de novo" pela
+mesma janela) e o de volta (`components/connections/coexistencia/ForaDoArEVolta.tsx`, a tela 4 do protótipo v3). O
+motivo em palavras é um só para a tela e para o aviso (`motivo.ts`).
+
+`lib/channels/meta/chegada-do-cadastro.ts` deixa de tratar esses três eventos como "chegada": antes, a saída (sem
+número) reescrevia o retrato do cadastro já amarrado com número nulo.
+
+### 6.3 A edição e o apagar
+
+`lib/channels/meta/webhook.ts` lê o `edit`/`revoke` como `MessageEditEvent` (o alvo, a origem `cliente` ou `app`, o
+texto novo e a hora), e `edicao.ts` aplica na mensagem `(organization_id, external_id)`:
+
+- **Editar** sobrescreve o corpo e carimba `edited_at` com a hora do EVENTO. Só se a edição for mais nova que a já
+  aplicada e a mensagem não estiver apagada. Edição sem texto carimba e não zera o corpo.
+- **Apagar** carimba `revoked_at` e NÃO remove a linha nem limpa o corpo (quem decide o que a tela mostra é
+  `lib/messaging/apagada.ts`). Só a linha ainda não apagada; a reentrega não muda nada nem grava outra trilha. A trilha
+  vai à auditoria (`message.revoked_in_channel`, com a origem e sem o corpo). A prévia da conversa sai do texto apagado
+  pelo cliente quando ele era a última mensagem (o mesmo cuidado do QR, upstream #4500).
+- Sem a original na MIA (mensagem de antes da conexão, por exemplo): `sem_alvo`, nada é criado, 200.
+
+O que acontecia antes: o `edit`/`revoke` do cliente caía no ramo genérico do campo `messages` e virava linha com
+`type = 'edit'`, que o CHECK de `messages.type` recusa: a edição sumia com um erro no log. O do app caía no `continue`
+do upstream. O nosso bloco entra ANTES dos dois; o `continue` do upstream fica para o eco sem alvo. O PR aberto do
+upstream #4867 (tipo desconhecido vira texto vazio) não muda isso: o desvio nosso vem antes do ramo que ele mexe.
+
+O Datafy (`lib/channels/inbound.ts`) usa a mesma leitura e não aplica a edição: o evento é ignorado lá (antes, a linha
+falhava no insert). Ligar a edição no Datafy é outra tarefa.
+
+### 6.4 Pontos de encaixe da S4
+
+- `app/api/v1/webhooks/meta/[token]/route.ts`: `receberSaidaEVolta` logo depois de `receberHistoricoDaMeta`, e o ramo
+  `e.kind === "message_edit"` com `aplicarEdicaoDaMeta`.
+- `lib/channels/meta/webhook.ts`: o tipo `MessageEditEvent` na união; no campo `messages`, o desvio depois da reação;
+  no eco, o bloco antes do `continue` do upstream.
+
+O eco e a pausa da IA do upstream não mudaram.
+
+### 6.5 MCP
+
+`plataforma_ver_coexistencia` passa a mostrar a `situacao` (`no_ar`, `de_volta`, `fora_do_ar`, `encerrada`), o motivo
+e quem iniciou a saída, quando saiu, quando voltou e o último aviso da Meta aplicado. Nenhuma ferramenta nova: tirar
+ou pôr o número no ar é da Meta e do dono no app, e conectar de novo é credencial (fica fora do MCP).
+
+### 6.6 Riscos e o que fica
+
+- **O vigia de saúde do upstream** (`app/api/v1/cron/channel-health`) pergunta à Graph o estado do número. Se a Graph
+  disser que o número funciona, ele grava `WORKING` por cima do `STOPPED` da saída (o ciclo continua `fora_do_ar`, e a
+  tela do canal segue dizendo fora do ar). Se a Graph recusar, ele grava `FAILED` e abre o aviso dele, além do nosso. Não
+  mexi nele: a resposta da Graph é a palavra final sobre o envio, e o upstream é quem cuida desse vigia.
+- **Formato:** os payloads são os da página da Meta; o teste real (S5) confere com um número de verdade.
+
+### 6.7 Provas
+
+- `tests/unit/coexistencia-saida-e-volta.test.ts`: a leitura dos três eventos (os seis motivos, motivo desconhecido, sem
+  `time`), a saída com UM aviso e a reentrega, a volta sem nenhuma escrita em contato, conversa, cartão, sessão ou ciclo
+  novos, os eventos fora de ordem nos dois sentidos, a sessão que outro tirou do ar, WABA sem ciclo, e a volta que falhou
+  na escrita da sessão e se cura na reentrega do mesmo evento.
+- `tests/unit/meta-edicao-e-apagar.test.ts`: a leitura nos dois campos (texto e legenda), a edição (reentrega, edição
+  velha, sem texto, sem alvo) e o apagar (linha e corpo ficam, prévia, uma trilha só, a do app, sem alvo).
+- `tests/invariants/coexistencia-saida-e-volta.test.ts`, contra o banco: sair e voltar pelo aviso da Meta e pela janela
+  de novo (Graph simulada), com a contagem de contatos, conversas, cartões, sessões e mensagens igual antes e depois; a
+  edição e o apagar com as constraints de verdade.
+- `lib/channels/meta/chegada-do-cadastro.test.ts`: a saída e a volta não são chegada.
+- `tests/unit/mcp-de-implantacao-coexistencia.test.ts`: o MCP com o número fora do ar e de volta.
