@@ -782,6 +782,56 @@ jobs:
     # antes da mudança; liberar o nativo primeiro recupera folga também nela.
     # NÃO MEDIDO aqui: a nova vizinhança e o tempo real após as duas mudanças.
     # Quem os prova é o próximo e2e completo, sem rerodar o head antigo.
+    #
+    # ── 2026-11-24: cinco specs mudam de parte, nenhuma parte nova ──────────
+    #
+    # ESCOPO DA MEDIÇÃO: dois runs verdes da `main`, 45486878880 (head
+    # 5b6385697) e 45312771680 (head 5902825d1), com as oito partes em
+    # `success`. Duração por spec = soma das linhas do reporter `list` de cada
+    # caso. "Fixo" da parte = duração do job − soma dos casos (preparo,
+    # arranque do servidor e passos depois da suíte).
+    #
+    # A parte 7 passou do orçamento nos dois (1689s e 1616s) e foi cortada aos
+    # 30 min no #109 com 57 de 58 casos verdes. A 5 (1456/1515s) e a 6
+    # (1359/1512s) também passavam do orçamento de 1440s, e a 1 chegou a 1376s.
+    # Enquanto isso, a 2, a 3 e a 8 ficavam entre 803 e 1022s.
+    #
+    # As 7 partes comuns somam ~5260s de suíte. Divididas por igual, dão uns
+    # 1300s de job por parte, abaixo do orçamento. Equilibradas, a menor folga
+    # estimada até o teto fica em ~440s, longe dos 120s da regra "QUANDO ABRIR
+    # A PRÓXIMA PARTE". Faltava equilíbrio, não uma parte a mais. Busca gulosa,
+    # um movimento por vez, minimizando o pior caso:
+    #
+    #   `prova-painel-provedores` (263s)  PARTE_7 → PARTE_8. Agora ela monta a
+    #       própria precondição (arquiva os agentes publicados e os devolve no
+    #       `finally`) e não fala com WAHA, Graph nem com o dublê 3995.
+    #   `aparencia-templates` (206s)      PARTE_5 → PARTE_3. Ela mesma devolve
+    #       a aparência de fábrica no `afterEach`.
+    #   `inbox-busca-e-filtros-dizem-a-verdade` (308s)  PARTE_6 → PARTE_2. Já
+    #       morou na 3 e na 1. Cria e apaga as próprias organizações e canais.
+    #   `capacidades-do-agente` (119s)    PARTE_7 → PARTE_6. É a troca que o
+    #       bloco de 2026-10-22 já apontava como a mais barata.
+    #   `conversoes-reprocessamento` (95s)  PARTE_1 → PARTE_3. Não chama conta
+    #       de anúncio real e devolve o que muda no `finally`.
+    #
+    # `navegacao` (313s) continua na 7, pela razão medida nos blocos acima.
+    #
+    #   parte │ job antes (45486878880 / 45312771680) │ pior caso depois │ médio depois
+    #     1   │              1281 / 1376              │      1300s       │    1245s
+    #     2   │              1011 / 1022              │      1357s       │    1315s
+    #     3   │              1007 /  969              │      1317s       │    1264s
+    #     5   │              1456 / 1515              │      1324s       │    1293s
+    #     6   │              1359 / 1512              │      1331s       │    1256s
+    #     7   │              1689 / 1616              │      1316s       │    1272s
+    #     8   │              1008 /  803              │      1276s       │    1168s
+    #
+    # "Pior caso" = maior fixo da parte nos dois runs + soma do maior tempo de
+    # cada spec. "Médio" = as médias das mesmas parcelas. São estimativas: quem
+    # mede é o e2e do PR (MIA-229). A parte 4 não muda (só a instalação fresca).
+    #
+    # NÃO MEDIDO: se as cinco passam na vizinhança nova. Cada uma limpa o que
+    # grava, mas a ordem por caminho dentro da parte é outra. Se uma reprovar
+    # por vizinhança, volte só aquela e meça de novo. Não mova outra no escuro.
     env:
       # Provider controlado; preview/assistência executam core, ferramentas e gates reais.
       INTERNAL_AGENT_RUN_STUB: "true"
@@ -801,7 +851,6 @@ jobs:
       # SUITE_SEGUNDOS da parte 1 = 853.
       SPECS_PARTE_1: >-
         banco-externo-receitas.spec.ts
-        conversoes-reprocessamento.spec.ts
         pre-go-live-whatsapp.spec.ts
         smoke.spec.ts auth.spec.ts error-pages.spec.ts
         icone-da-marca.spec.ts
@@ -968,6 +1017,7 @@ jobs:
         agenda-google-volta-nao-desloga.spec.ts
         menu-por-empresa-e-a-porta-de-volta.spec.ts
         icone-da-aba.spec.ts
+        inbox-busca-e-filtros-dizem-a-verdade.spec.ts
       # `moeda-da-organizacao` entrou na PARTE_2 em 2026-09-04, ao lado de
       # `navegacao` — mesmo domínio (Configurações) e a mesma ausência de
       # dependência: sem WAHA, Resend, Nuvemshop ou Redis. Toca a organização
@@ -1225,6 +1275,8 @@ jobs:
         relatorio-por-etiqueta.spec.ts
         minhas-tarefas-no-celular.spec.ts
         itens-do-negocio.spec.ts
+        conversoes-reprocessamento.spec.ts
+        aparencia-templates.spec.ts
 
       # ─── PARTE 4 — a spec de VPS fresca, e quem pode entrar ao lado dela ───
       #
@@ -1384,7 +1436,6 @@ jobs:
         i18n-espanhol-na-tela.spec.ts
         extensoes-declarativas.spec.ts
         marca-logo.spec.ts
-        aparencia-templates.spec.ts
         suporte-temporario.spec.ts
         olhar-telas-do-epico.spec.ts
         jev-decisoes-rapidas.spec.ts
@@ -1487,7 +1538,6 @@ jobs:
         contatos-em-cartao-no-celular.spec.ts
         filtro-por-marcador-pela-tela.spec.ts
         fonte-de-captacao-assina-os-envios.spec.ts
-        inbox-busca-e-filtros-dizem-a-verdade.spec.ts
         mapas-em-provedores.spec.ts
         modulo-de-dados-na-ficha-do-contato.spec.ts
         painel-de-configuracao-da-instalacao.spec.ts
@@ -1501,6 +1551,7 @@ jobs:
         integracao-dados-fontes-liberadas.spec.ts
         atender-pelo-celular.spec.ts
         inbox-baixar-midia-e-ordem.spec.ts
+        capacidades-do-agente.spec.ts
 
       # ─── PARTE 7 — nasceu em 2026-10-22, uma parte COMUM ───
       #
@@ -1566,7 +1617,6 @@ jobs:
         celular-toque-nos-controles.spec.ts
         agente-novo-e-uso.spec.ts
         fotos-skills-e-peso-da-memoria-pela-tela.spec.ts
-        capacidades-do-agente.spec.ts
         cupons-e-parceiros.spec.ts
         raio-x-do-atendimento.spec.ts
         raio-x-cliente-ativo.spec.ts
@@ -1576,7 +1626,6 @@ jobs:
         ia-no-celular.spec.ts
         inbox-mensagem-por-modelo.spec.ts
         navegacao.spec.ts
-        prova-painel-provedores.spec.ts
         comercial-no-celular.spec.ts
         propostas-de-campos-do-card.spec.ts
         aviso-pelo-numero-oficial.spec.ts
@@ -1623,6 +1672,7 @@ jobs:
         respostas-rapidas-conteudos.spec.ts
         b2b-vinculos-pela-tela.spec.ts
         mcp-oauth-chatgpt.spec.ts
+        prova-painel-provedores.spec.ts
 
       # ─── FORA_DO_CI — as que ficaram fora, e o motivo de cada uma ───
       #
