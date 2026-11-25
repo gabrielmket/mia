@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -88,16 +89,21 @@ function lead(over: Partial<Lead> = {}): Lead {
   };
 }
 
+// Fusão v1.125: o `ContatoNoCard` do upstream lê os tipos de link pelo react-query
+// (#5128); sem o provedor o cartão nem monta. Sem resposta vale o catálogo inteiro.
 function renderCard(l: Lead, usuarioAtualId: string | null = null) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <ProvedorDoCartao usuarioAtualId={usuarioAtualId} nomes={new Map([["u-ju", "Juliana Prado"]])}>
-      <KanbanCard
-        card={buildCardInput(l, { stageName: "Visita agendada", ownerNames: undefined })}
-        lead={l}
-        index={0}
-        pipelineId="p"
-      />
-    </ProvedorDoCartao>,
+    <QueryClientProvider client={client}>
+      <ProvedorDoCartao usuarioAtualId={usuarioAtualId} nomes={new Map([["u-ju", "Juliana Prado"]])}>
+        <KanbanCard
+          card={buildCardInput(l, { stageName: "Visita agendada", ownerNames: undefined })}
+          lead={l}
+          index={0}
+          pipelineId="p"
+        />
+      </ProvedorDoCartao>
+    </QueryClientProvider>,
   );
 }
 

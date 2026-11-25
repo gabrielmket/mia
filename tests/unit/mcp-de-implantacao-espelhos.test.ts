@@ -224,7 +224,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   { rota: "app/api/v1/team/invite/route.ts", espelho: "lib/implantacao/equipe.ts", impressao: "c57e5f3b7f70422f" },
   // Espelhados na .90 (a cobrança da jornada de assinatura, docs/fork/jornada-de-assinatura.md seção 6).
   // O card Cobrança do dono: atribuir, trocar, isentar e dar prazo. A rota segue a do upstream, sem gancho: o módulo pelo plano é lido na hora, e a rodada registra.
-  { rota: "app/api/v1/admin/tenants/[id]/assinatura/route.ts", espelho: "lib/planos-mia/acoes-do-dono.ts", impressao: "b5ba78e4157f3102" },
+  // Relido na fusão da 1.125: o DELETE (isentar) passa `organizacao: tenantId` ao `lerSituacao`, que agora lê a chave do Asaas da empresa. O espelho passa `organizacao: orgId` no mesmo ponto.
+  { rota: "app/api/v1/admin/tenants/[id]/assinatura/route.ts", espelho: "lib/planos-mia/acoes-do-dono.ts", impressao: "68404fcb7d15bb92" },
   { rota: "app/api/v1/admin/tenants/[id]/assinatura/prazo/route.ts", espelho: "lib/planos-mia/acoes-do-dono.ts", impressao: "34a29a6222914551" },
   // A fila de /admin/cadastro: aprovar pelo mesmo ensureTenantForUser, só o primeiro a decidir grava.
   { rota: "app/actions/registration/decide.ts", espelho: "lib/planos-mia/pedidos-de-cadastro.ts", impressao: "a1c51a5a8ca0c35d" },

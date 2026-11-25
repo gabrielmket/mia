@@ -53,26 +53,30 @@ interface SdkDaMeta {
   login(callback: (r: RespostaDoLogin) => void, opcoes: Record<string, unknown>): void;
 }
 
-declare global {
-  interface Window {
-    FB?: SdkDaMeta;
-    fbAsyncInit?: () => void;
-  }
-}
+/**
+ * FORK MIA · fusão v1.125: o upstream passou a declarar `Window.FB` com o tipo
+ * dele (`ConectarPeloFacebook.tsx`), e o TypeScript não aceita duas declarações
+ * diferentes da mesma propriedade. Aqui lemos a janela por este acesso local, sem
+ * aumentar o global: o nosso arquivo não depende do tipo dele nem o quebra.
+ */
+type JanelaComSdk = { FB?: SdkDaMeta; fbAsyncInit?: () => void };
+const janela = (): JanelaComSdk => window as unknown as JanelaComSdk;
 
 let carregando: Promise<SdkDaMeta> | null = null;
 
 function carregarSdk(input: { appId: string; graphVersion: string; locale: string }): Promise<SdkDaMeta> {
-  if (window.FB) {
-    window.FB.init({ appId: input.appId, autoLogAppEvents: true, xfbml: false, version: input.graphVersion });
-    return Promise.resolve(window.FB);
+  const pronto = janela().FB;
+  if (pronto) {
+    pronto.init({ appId: input.appId, autoLogAppEvents: true, xfbml: false, version: input.graphVersion });
+    return Promise.resolve(pronto);
   }
   if (carregando) return carregando;
   carregando = new Promise<SdkDaMeta>((resolve, reject) => {
-    window.fbAsyncInit = () => {
-      if (!window.FB) return reject(new JanelaDaMetaNaoTerminou("sem_sdk"));
-      window.FB.init({ appId: input.appId, autoLogAppEvents: true, xfbml: false, version: input.graphVersion });
-      resolve(window.FB);
+    janela().fbAsyncInit = () => {
+      const fb = janela().FB;
+      if (!fb) return reject(new JanelaDaMetaNaoTerminou("sem_sdk"));
+      fb.init({ appId: input.appId, autoLogAppEvents: true, xfbml: false, version: input.graphVersion });
+      resolve(fb);
     };
     const script = document.createElement("script");
     script.src = SDK_DA_META(input.locale);

@@ -148,7 +148,13 @@ describe("close — 'Devolver ao automático ao fechar' (o padrão marcado)", ()
     expect(deps.actor).toEqual({ type: "user", id: ATENDENTE, role: "agent" });
     // FORK MIA (.107): fechar encerra o assunto, então a devolução não pede o turno da
     // mensagem pendente (`responderPendente: false`, lib/escalacao/mensagem-pendente.ts).
-    expect(input).toEqual({ conversationId: CONVERSA, expectedAssignee: null, responderPendente: false });
+    // Encerrar com devolução é gesto de PESSOA: a classificação da IA é encerrada junto.
+    expect(input).toEqual({
+      conversationId: CONVERSA,
+      expectedAssignee: null,
+      responderPendente: false,
+      limparClassificacaoDaIa: true,
+    });
     // Nenhuma origem automática: quem devolveu foi a pessoa, no gesto de fechar.
     expect(input.origem).toBeUndefined();
   });
@@ -253,6 +259,11 @@ describe("close — devolver ao fechar segue a regra de dono do botão", () => {
     expect(res.status).toBe(200);
     expect(corpo.data.devolucao).toEqual({ ok: true });
     const [, input] = vi.mocked(devolverAtendimentoAoAgente).mock.calls[0]!;
-    expect(input).toEqual({ conversationId: CONVERSA, expectedAssignee: COLEGA, responderPendente: false });
+    expect(input).toEqual({
+      conversationId: CONVERSA,
+      expectedAssignee: COLEGA,
+      responderPendente: false,
+      limparClassificacaoDaIa: true,
+    });
   });
 });

@@ -223,7 +223,7 @@ export async function tornarIsenta(
       let vivas: number;
       try {
         vivas = (
-          await adaptador(linha.provedor).lerSituacao({ clienteRef: linha.provedor_cliente_id })
+          await adaptador(linha.provedor).lerSituacao({ clienteRef: linha.provedor_cliente_id, organizacao: orgId })
         ).assinaturasVivas;
       } catch (e) {
         logger.warn("cobranca.isencao_sem_leitura", {
