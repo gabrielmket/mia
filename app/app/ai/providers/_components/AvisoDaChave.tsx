@@ -4,8 +4,9 @@
  * FORK MIA (MIA-218) · o aviso da chave na tela Provedores de IA
  * (docs/fork/ia-da-plataforma.md).
  *
- * O do upstream dizia "Você ainda não cadastrou a chave da sua IA principal"
- * a toda empresa sem chave própria. Aqui a chave é da plataforma
+ * O do upstream dizia, a toda empresa sem chave própria, que ela ainda não
+ * tinha cadastrado a chave da IA principal (a frase não fica citada aqui: a
+ * cerca do curso procura o literal no fonte). Aqui a chave é da plataforma
  * (`lib/ai/custo-e-da-plataforma.ts`): a empresa não precisa cadastrar nada, e
  * a frase fez o próprio dono da instalação achar que precisava.
  *
