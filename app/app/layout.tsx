@@ -32,6 +32,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { modulosLigados } from "@/lib/instalacao/modulos";
 import { capacidadesLigadas } from "@/lib/organizacao/capacidades";
+import { modulosNaTela } from "@/lib/extensions/modulos-na-tela";
 import { telefoniaEmUso } from "@/lib/telefonia/em-uso";
 import { ehOperante } from "@/lib/organizacao/operante";
 import {
@@ -167,7 +168,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // aqui dariam, no melhor caso, erro de compilação; no pior, a lista de um
     // eixo filtrando o outro, e telas sumindo do menu sem ninguém ter
     // desligado nada.
-    const [orgRes, conexoes, isEnrolled, mfaRequired, ligadosNaInstalacao, demonstracao, telefonia] = await Promise.all([
+    const [orgRes, conexoes, isEnrolled, mfaRequired, ligadosNaInstalacao, demonstracao, telefonia, conectados] = await Promise.all([
       admin
         .from("organizations")
         .select("onboarded_at, status, settings, timezone, onboarding_state")
@@ -181,14 +182,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         user.id,
         activeOrg.orgId,
       ),
-      // Da INSTALAÇÃO: decide se a porta de um módulo opcional entra no menu.
-      modulosLigados(admin),
+      // Da INSTALAÇÃO, com a exceção DESTA empresa (#3868): decide se a porta de
+      // um módulo opcional entra no menu. Sem linha da empresa = herda a instalação.
+      modulosLigados(admin, activeOrg.orgId),
       // FORK MIA (cliente modelo): só o selo; nunca derruba o layout.
       empresaEDemonstracao(admin, activeOrg.orgId),
       // Da ORGANIZAÇÃO (#1290): a telefonia não tem chave de instalação que o app
       // leia — o que se mede é o tronco SIP que esta empresa salvou. Entra no
       // mesmo `Promise.all`, então custa a consulta mais lenta, não uma espera.
       telefoniaEmUso(admin, activeOrg.orgId),
+      // Módulos CONECTADOS desta organização (Spec 33, F4): alimenta o grupo "Módulos" do menu e
+      // o ⌘K. Uma vez por requisição, no mesmo `Promise.all`. Lado seguro: erro vira lista vazia
+      // e o CRM segue inteiro.
+      modulosNaTela(activeOrg.orgId, user.idioma ? { locale: user.idioma } : {}).catch(
+        (): Awaited<ReturnType<typeof modulosNaTela>> => [],
+      ),
     ]);
     emDemonstracao = demonstracao;
 
@@ -253,6 +261,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       // módulo da instalação que ela exige estiver ligado — cruzá-la com a
       // lista da organização desligaria Propostas para todo mundo.
       capacidades_ligadas: capacidadesLigadas(orgRow?.settings, ligadosNaInstalacao, telefonia),
+      // Só slug e título descem ao navegador; o endereço do serviço fica no servidor.
+      modulos_conectados: conectados.map((m) => ({ slug: m.slug, titulo: m.titulo })),
     };
 
     // A faixa do teste grátis (spec da cobrança §9): uma consulta a mais SÓ com

@@ -4,6 +4,9 @@
  */
 import { z } from "zod";
 
+// FORK MIA (MIA-102): o fuso das boas-vindas grava em `organizations.timezone`.
+import { fusoGravavelSchema } from "@/lib/tempo/fuso-gravavel";
+
 export const welcomeSchema = z.object({
   display_name: z.string().min(2).max(120),
   /**
@@ -26,7 +29,7 @@ export const welcomeSchema = z.object({
    * (lib/onboarding/modelos-de-agente-da-mia.ts). Só este passo o grava.
    */
   segmento: z.enum(["clinica", "academia", "imobiliaria", "industria", "outro"]).optional(),
-  timezone: z.string().min(1).default("America/Sao_Paulo"),
+  timezone: fusoGravavelSchema.default("America/Sao_Paulo"),
   accepted_terms_at: z.string().datetime().optional(),
 });
 export type WelcomeInput = z.infer<typeof welcomeSchema>;

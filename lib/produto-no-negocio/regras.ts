@@ -72,6 +72,27 @@ export function somaEsperada(itens: readonly ItemDoNegocio[]): number | null {
   return itens.length > 0 ? somaDosItens(itens) : null;
 }
 
+/**
+ * FORK MIA (fusão v1.124) · o Valor do negócio segue as VENDAS REGISTRADAS do
+ * upstream (9449/9450, "Registrar venda") só quando o bloco de itens não tem item.
+ *
+ * Os dois escrevem `crm_leads.value_cents`: o gatilho dele a cada venda, a rota
+ * dos itens a cada gravação. A regra da fusão é "nada muda para quem já usa
+ * itens": com item do bloco, a soma dos itens (ou o valor à mão) continua
+ * mandando, e o banco desfaz a troca pela soma das vendas (gatilho
+ * `trg_mia_valor_do_negocio_segue_os_itens`, 9167). Esta função é a MESMA régua
+ * do lado da tela: o campo só vira "soma das vendas" quando o banco também vai
+ * mostrar a soma das vendas. Itens da proposta não contam: o valor da proposta é
+ * do upstream, como antes.
+ */
+export function valorSegueAsVendas(args: {
+  vendas: number;
+  itens: readonly Pick<ItemDoNegocio, "origem">[] | null | undefined;
+}): boolean {
+  if (args.vendas <= 0) return false;
+  return !(args.itens ?? []).some((i) => i.origem === "negocio");
+}
+
 export type ModoDoValor = "soma" | "a_mao";
 
 export interface EstadoDoValor {

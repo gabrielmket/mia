@@ -7,8 +7,10 @@ import { z } from "zod";
 import { LEAD_STAGES } from "@/lib/agent-engine/agent/lead-state";
 import { garantirFunil, TETO_DE_ETAPAS, type PedidoDeFunil } from "@/lib/implantacao/funil";
 import { DIAS_MAXIMO_PARA_REABRIR } from "@/lib/leads/janela-do-perdido";
+import { TETO_DA_DESCRICAO_DA_ETAPA } from "@/lib/leads/stage-editing";
 import { MAX_CARACTERES_DA_CATEGORIA_DE_PERDA, MAX_CATEGORIAS_DE_PERDA } from "@/lib/schemas/leads";
 import { mostrarQuandoSchema } from "@/lib/schemas/mostrar-quando";
+import { MAX_CAMPOS_DO_NEGOCIO } from "@/lib/schemas/settings";
 
 import type { FerramentaDePlataforma } from "../tipos";
 import { alvo, ORGANIZACAO, ORG_DE_EXEMPLO } from "./comum";
@@ -49,7 +51,17 @@ const etapa = z
       .regex(/^#[0-9a-fA-F]{6}$/, 'use o formato #rrggbb, ex.: "#12a594"')
       .nullable()
       .optional()
-      .describe("A cor da coluna no quadro, em #rrggbb."),
+      .describe("A cor da coluna no quadro, em #rrggbb. A tela oferece os oito tons da paleta das etiquetas (plataforma_listar_modelos, seção etiquetas). null volta ao padrão."),
+    // Upstream 1.118 (#4836): o critério da etapa, que o agente lê para decidir mover o card.
+    criterio: z
+      .string()
+      .max(TETO_DA_DESCRICAO_DA_ETAPA)
+      .nullable()
+      .optional()
+      .describe(
+        `O CRITÉRIO da etapa: quando um negócio entra nela, em texto livre (até ${TETO_DA_DESCRICAO_DA_ETAPA} caracteres), ex.: "Pediu o orçamento e informou a data do evento". ` +
+          "O agente lê este texto a cada decisão de mover o negócio, então ele muda para onde o agente move os cards. null ou vazio limpa.",
+      ),
     avisar_na_central: z.boolean().optional().describe("Negócio que ENTRA nesta etapa abre um aviso na Central da equipe."),
   })
   .strict();
@@ -121,6 +133,15 @@ const campo = z
           "Ou uma LISTA (upstream 1.107): { \"modo\": \"qualquer\" | \"todas\", \"condicoes\": [ ...condições ] }. " +
           "Esconder nunca apaga o valor gravado. null tira a condição.",
       ),
+    // Upstream 1.118 (#4684): a marca "A IA pode ler este campo".
+    ia_pode_ler: z
+      .boolean()
+      .optional()
+      .describe(
+        "\"A IA pode ler este campo\": true deixa o valor do campo ir para a IA (o agente e o follow-up passam a lê-lo); false tira a marca. " +
+          "Sem a marca, o valor fica no card e a IA não o vê: campo novo nasce assim, e os campos antigos também, até alguém marcar. " +
+          "Sem o campo no pedido, a marca de um campo que já existe não muda. Só no campo do NEGÓCIO. Marque só o que a empresa pediu: CPF e dado de saúde, por exemplo, ficam desmarcados.",
+      ),
   })
   .strict();
 
@@ -164,9 +185,12 @@ export const FERRAMENTAS_DE_FUNIL: readonly FerramentaDePlataforma[] = [
         .boolean()
         .optional()
         .describe("true ARQUIVA as etapas do funil que não estão em `etapas`, desde que estejam sem negócio. Padrão: falso (nada é tirado)."),
+      // Upstream v1.122 (#4780): o teto é o da tela (`MAX_CAMPOS_DO_NEGOCIO`, 100),
+      // lido da constante para não envelhecer de novo. A cota do negócio quem
+      // confere é `gravarConfiguracaoDoFunil`, a mesma gravação da tela.
       campos: z
         .array(campo)
-        .max(50)
+        .max(MAX_CAMPOS_DO_NEGOCIO)
         .optional()
         .describe(
           "Campos personalizados deste funil: do negócio (o padrão) ou, só no funil padrão, do contato (`escopo`). " +
@@ -243,12 +267,12 @@ export const FERRAMENTAS_DE_FUNIL: readonly FerramentaDePlataforma[] = [
         { nome: "Novo contato", passo: "new" },
         { nome: "Já respondi", passo: "contacted" },
         { nome: "Entendendo o caso", passo: "qualifying", probabilidade: 20 },
-        { nome: "Quer agendar", passo: "qualified", probabilidade: 50 },
+        { nome: "Quer agendar", passo: "qualified", probabilidade: 50, criterio: "Disse qual procedimento quer e pediu um horário." },
         { nome: "Escolhendo horário", passo: "negotiating", probabilidade: 80, prazo_esperado_horas: 48 },
         { nome: "Consulta marcada", passo: "won" },
         { nome: "Não vai marcar", passo: "lost" },
       ],
-      campos: [{ key: "procedimento", label: "Procedimento de interesse", type: "text" }],
+      campos: [{ key: "procedimento", label: "Procedimento de interesse", type: "text", ia_pode_ler: true }],
       motivos_de_perda: ["Achou caro", "Parou de responder"],
     },
     operacao: "implantar_configuracao",

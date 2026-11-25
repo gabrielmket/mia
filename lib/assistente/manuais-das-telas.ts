@@ -138,6 +138,38 @@ const META_E_GOOGLE: Manual[] = [
     observacao: "A conexão é só de leitura: o sistema não muda nada na sua conta de anúncios. Para tirar, use Desconectar. As campanhas de anúncio são criadas no Gerenciador de Anúncios da Meta.",
   },
   {
+    // FORK MIA (fusão da v1.118): a tela Google Ads do upstream (#4795) entra no assistente.
+    id: "painel-google-ads",
+    titulo: "Ver os negócios e o desempenho das campanhas do Google Ads",
+    palavras: ["google ads", "anuncios do google", "campanhas do google", "gclid", "investimento", "cliques", "impressoes", "midia paga"],
+    href: "/app/ads/google",
+    papelMinimo: "manager",
+    passos: [
+      "Abra Análise › Google Ads.",
+      "Na visão Resultados no CRM, escolha a Conta de anúncios e o Período de criação: aparecem os negócios atribuídos, os ganhos, a taxa de ganho e o valor ganho, por campanha.",
+      "Em Origem dos negócios, agrupe por campanha ou grupo de anúncios e abra uma linha para ver de onde veio cada resultado.",
+      "Na visão Desempenho no Google, escolha o Período e clique em Atualizar para ver investimento, impressões, cliques e conversões informados pelo Google.",
+    ],
+    observacao: "Os números do CRM contam só os negócios que chegaram com a marca de um anúncio do Google. O desempenho no Google precisa da conta conectada em Configurações › Conversões.",
+    vejaTambem: ["conectar-meta-ads"],
+  },
+  {
+    // FORK MIA (fusão da v1.124): o painel de vendas e o "Registrar venda" do upstream (9449/9450).
+    id: "painel-de-vendas",
+    titulo: "Ver quanto vendi no período e registrar uma venda",
+    palavras: ["vendas", "quanto vendi", "valor vendido", "ticket medio", "conversao", "registrar venda", "recompra", "faturamento"],
+    href: "/app/vendas",
+    papelMinimo: "viewer",
+    passos: [
+      "Abra Análise › Ver tudo › Vendas.",
+      "Escolha o período (Hoje, 7 dias, 30 dias, Este mês ou Mês passado) ou as datas, e, se quiser, filtre por Funil e por Tag.",
+      "Os cartões mostram Vendas, Valor vendido, Ticket médio e Conversão; abaixo vêm o gráfico do período e as tags que mais vendem.",
+      "Para registrar uma venda, abra o negócio e use o + ao lado do Valor: cada venda entra com valor, data e tags, e um negócio pode ter várias (recompra).",
+    ],
+    observacao: "Conta a venda registrada e, quando o negócio ganho não tem venda registrada, o valor dele. Num negócio com produtos no bloco de itens, o Valor do negócio continua sendo a soma dos itens; a venda registrada conta neste painel.",
+    vejaTambem: ["relatorios"],
+  },
+  {
     id: "leads-formulario-meta",
     titulo: "Trazer para o funil os leads dos formulários da Meta (cadastro instantâneo)",
     palavras: [
@@ -661,6 +693,22 @@ const OPERACAO_DO_FORK: Manual[] = [
 ];
 
 const TELAS_DO_UPSTREAM: Manual[] = [
+  // .123 (upstream v1.123, #5089): a tela de um módulo conectado, `/app/m/<módulo>`. Só existe
+  // quando o administrador da instalação instala e liga um módulo para a empresa.
+  {
+    id: "modulo-conectado",
+    titulo: "Abrir um módulo conectado (grupo Módulos do menu)",
+    palavras: ["modulo", "modulo conectado", "extensao", "integracao", "modulos", "app externo", "tela do modulo"],
+    href: "/app",
+    telas: ["/app/m/[modulo]"],
+    papelMinimo: "viewer",
+    passos: [
+      "No menu lateral, abra o grupo Módulos e clique no módulo. Ele também aparece na busca (Ctrl+K), e o botão do módulo, no topo, abre a mesma tela num painel ao lado.",
+      "A tela do módulo abre dentro do CRM. Ele só vê as áreas que a empresa consentiu ao ligá-lo.",
+      "Se aparecer \"O serviço deste módulo não respondeu\", o resto do CRM segue funcionando: tente de novo em instantes.",
+    ],
+    observacao: "Sem módulo ligado, o grupo Módulos não aparece. Quem instala e liga módulo é o administrador da instalação, não a empresa.",
+  },
   // .100 (upstream v1.97, #3572): o índice da ajuda no rodapé do menu. Convive com o
   // assistente: a Ajuda é o índice por jornada; o assistente responde e leva à tela.
   {
@@ -1132,6 +1180,63 @@ const TELAS_DO_UPSTREAM: Manual[] = [
     ],
     observacao:
       "Não existe um prazo da etapa: cada fluxo tem o seu, e uma etapa alcançada por dois fluxos mostra os dois, que disparam cada um o seu lembrete. Fluxo desligado aparece marcado e não age.",
+  },
+  // Fusão do upstream 1.119: as três telas novas dele, escritas a partir dos
+  // rótulos de `app/app/operacao/**` e `app/app/servicos/_client.tsx`.
+  {
+    id: "operacao-do-dia",
+    titulo: "Operação do dia: quem chegou, quem espera e o que falhou hoje",
+    palavras: [
+      "operacao do dia", "resumo do dia", "como foi o dia", "quem esta esperando", "aguardando uma pessoa",
+      "conversas novas", "o que falhou hoje", "canais fora do ar", "pedidos de produto", "reclamacoes",
+    ],
+    href: "/app/operacao",
+    papelMinimo: "viewer",
+    passos: [
+      "Abra Operação do dia (no hub Ver tudo no Insights).",
+      "Em Dia, fique em Hoje ou escolha outro dia. A tela mostra Conversas novas no dia, Conversas com mensagem do cliente no dia, Aguardando uma pessoa, os negócios do dia e as Falhas de operação.",
+      "Em cada linha, use Abrir conversa para ir direto ao atendimento.",
+      "Quem é gerente ou administrador pode clicar em Gerar relatório agora para salvar o dia, e em Relatórios salvos para ver os dias guardados.",
+    ],
+    observacao:
+      "Canais fora do ar, Avisos abertos na Central e Erros da IA são o estado do momento e só aparecem no dia de hoje. Cada pessoa vê só as conversas que já pode ver no Inbox.",
+    vejaTambem: ["relatorios-do-dia"],
+  },
+  {
+    id: "relatorios-do-dia",
+    titulo: "Relatórios do dia: o relatório de cada dia, salvo sozinho",
+    palavras: [
+      "relatorio do dia", "relatorio diario", "relatorios salvos", "historico do dia", "hora do relatorio",
+      "etiqueta de urgente", "etiqueta de reclamacao", "etapas de proposta",
+    ],
+    href: "/app/operacao/relatorios",
+    papelMinimo: "manager",
+    passos: [
+      "Abra Relatórios do dia (ou, em Operação do dia, clique em Relatórios salvos).",
+      "A lista mostra cada Dia, a hora em que foi Gerado às e a Origem (Automático ou Gerado por uma pessoa). Clique no dia para abrir o relatório, com o link de cada conversa e o Texto do relatório.",
+      "O administrador ajusta, em Configuração da Operação do dia, as etiquetas que separam as seções (pedido de produto, projeto grande, reclamação e urgente), as etapas do funil que contam como proposta e, em Salvar o relatório automaticamente todo dia, a Hora. Depois clique em Salvar.",
+    ],
+    observacao:
+      "O relatório automático vem ligado, às 21h no fuso da empresa. Ele só guarda o resumo do dia na própria empresa: não envia mensagem a ninguém.",
+    vejaTambem: ["operacao-do-dia"],
+  },
+  {
+    id: "servicos",
+    titulo: "Serviços: cadastrar o que a empresa vende por hora, projeto ou plano",
+    palavras: [
+      "servicos", "cadastrar servico", "catalogo de servicos", "preco do servico", "sinal", "prazo",
+      "variacao do servico", "dias uteis", "instrucoes para o agente",
+    ],
+    href: "/app/servicos",
+    papelMinimo: "manager",
+    passos: [
+      "Abra Serviços (no hub Ver tudo no CRM, ao lado de Produtos).",
+      "Clique em Novo serviço e preencha Nome, Tipo, Descrição, Preço, Prazo (dias úteis) e o Sinal (Sem sinal, Percentual do preço ou Valor fixo).",
+      "Em Instruções para o agente, escreva o que orienta a conversa (o agente não repete este texto ao cliente) e deixe ligado O agente pode oferecer este serviço. Clique em Salvar.",
+      "Para mais de uma opção do mesmo serviço, use Adicionar variação, com Nome da variação, Código da variação e Preço da variação.",
+    ],
+    observacao:
+      "A tela só aparece quando o módulo de Serviços está ligado para a empresa; na MIA, quem liga é a Time Company. Enquanto não houver serviço cadastrado, o agente não tem preço, prazo nem sinal para responder.",
   },
 ];
 

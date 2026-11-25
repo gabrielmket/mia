@@ -56,7 +56,7 @@ services:
     # puxada de novo. Voltar ao autor: trocar o dono gabrielmket por melgarafael
     # e a tag por 1.21.0 (o endereço inteiro do autor não pode ser escrito aqui:
     # tests/unit/namespace-das-imagens.test.ts só o aceita nos arquivos âncora).
-    image: ${APP_IMAGE:-ghcr.io/gabrielmket/mia-crm:1.21.0-mia.111}
+    image: ${APP_IMAGE:-ghcr.io/gabrielmket/mia-crm:1.21.0-mia.116}
     pull_policy: missing
     restart: unless-stopped
     env_file: .env
@@ -100,7 +100,7 @@ services:
 
   worker:
     mem_limit: 512m
-    image: ${WORKER_IMAGE:-ghcr.io/gabrielmket/mia-worker:1.21.0-mia.111}
+    image: ${WORKER_IMAGE:-ghcr.io/gabrielmket/mia-worker:1.21.0-mia.116}
     pull_policy: missing
     restart: unless-stopped
     env_file: .env
@@ -152,7 +152,12 @@ services:
       WHATSAPP_HOOK_URL: http://app:3000/api/v1/webhooks/waha
       # FORK MIA (upstream v1.86, #2797): `message.reaction` entra, é por onde
       # chega a reação (👍) do cliente pelo canal por QR; `message.any` não a cobre.
-      WHATSAPP_HOOK_EVENTS: "message.any,message.ack,message.edited,message.revoked,message.reaction,session.status,state.change"
+      # FORK MIA (upstream v1.122): `call.received` entra, é a ligação de voz que
+      # chega no número por QR. Só tem efeito com "Bloquear chamadas recebidas"
+      # ligado na empresa (Configurações › Segurança, nasce desligado); aí ela é
+      # recusada na hora (lib/organizacao/bloqueio-de-chamadas.ts). O número em
+      # coexistência não passa pelo WAHA e não é tocado.
+      WHATSAPP_HOOK_EVENTS: "message.any,message.ack,message.edited,message.revoked,message.reaction,session.status,state.change,call.received"
       WHATSAPP_DEFAULT_ENGINE: NOWEB
       WAHA_DASHBOARD_ENABLED: "false"
       WHATSAPP_RESTART_ALL_SESSIONS: "True"
@@ -312,7 +317,7 @@ services:
     logging: *default-logging
 
   scheduler:
-    image: ${SCHEDULER_IMAGE:-ghcr.io/gabrielmket/mia-scheduler:1.21.0-mia.111}
+    image: ${SCHEDULER_IMAGE:-ghcr.io/gabrielmket/mia-scheduler:1.21.0-mia.116}
     pull_policy: missing
     restart: unless-stopped
     depends_on:

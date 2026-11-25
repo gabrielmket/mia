@@ -32,6 +32,8 @@ import { reenvioDesaceleradoHandler } from "@/lib/messaging/reenvio-desacelerado
 import { automationRulesHandler } from "@/lib/automation/engine.handler";
 import { campanhaRespostaHandler } from "@/lib/campanhas/resposta.handler";
 import { cobrancaSinalHandler } from "@/lib/cobranca/sinal.handler";
+// FORK MIA — o cadastro anda no funil da Time (docs/fork/jornada-de-assinatura.md).
+import { leadDoCadastroHandler } from "@/lib/planos-mia/lead-do-cadastro.handler";
 import { conversaoDeVendaHandler } from "@/lib/conversoes/envio.handler";
 import { conversaoDeQualificacaoHandler } from "@/lib/conversoes/qualificacao.handler";
 import { conversaoDeEtapaMetaHandler } from "@/lib/conversoes/etapa-meta.handler";
@@ -39,6 +41,7 @@ import { conversaoDeNascimentoMetaHandler } from "@/lib/conversoes/nascimento-me
 import { conversaoDeCliqueMetaHandler } from "@/lib/conversoes/clique-meta.handler";
 // FORK MIA — a volta dos leads de formulário da Meta (docs/fork/conversoes-da-meta.md).
 import { conversaoDoLeadDeFormularioHandler } from "@/lib/conversoes-meta/formulario.handler";
+import { conversaoDeEtapaDoSiteHandler } from "@/lib/conversoes/etapa-site.handler";
 import { avisoDeAgendamentoNoWhatsAppHandler } from "@/lib/agenda/aviso-de-agendamento.handler";
 import { avisoDeCasoAoSuporteHandler } from "@/lib/escalacao/aviso-ao-suporte.handler";
 import { avisoDeHandoffHandler } from "@/lib/escalacao/aviso-de-handoff.handler";
@@ -84,6 +87,9 @@ const RODA: EventHandler[] = [
   // FORK MIA — o histórico da coexistência é ENTRADA (a conversa que a empresa
   // já teve): escrita interna, sem rede e sem custo.
   loteDoHistoricoHandler,
+  // FORK MIA — o card do cadastro no CRM da TIME (outra org, a operante): a
+  // entrada paga nasce parada e o cadastro dela também conta. Sem rede.
+  leadDoCadastroHandler,
   // FORK MIA — o pedido único da sincronização da coexistência: os contatos e o
   // histórico que a empresa já tem no app, com prazo de 24 h da Meta.
   pedidoDaSincronizacaoHandler,
@@ -113,6 +119,7 @@ const PULA: EventHandler[] = [
   conversaoDeCliqueMetaHandler,
   // FORK MIA: sai para a Meta, então pula na organização parada.
   conversaoDoLeadDeFormularioHandler,
+  conversaoDeEtapaDoSiteHandler,
   pinoReintentoHandler,
   // Reenviar a mensagem que o canal mandou desacelerar é falar com o cliente.
   reenvioDesaceleradoHandler,

@@ -44,6 +44,25 @@
  * posterior). Dia com custo e sem cotação nenhuma fica fora do total em real e
  * é DITO em `reais.dias_sem_cotacao`: o real passa a ser declaradamente parcial.
  *
+ * ── A soma fecha com o total (MIA-136) ──────────────────────────────────────
+ *
+ * Cada linha arredondada sozinha (R$ a 2 casas, US$ a 4 casas de centavo) fazia
+ * a soma dos agentes com o Sistema, ou a das finalidades, diferir do total em
+ * centavos. O TOTAL MANDA: ele é o arredondamento do valor exato do período, e
+ * as linhas se ajustam a ele pelo maior resto (`fecharPeloTotal`): cada linha
+ * fica no valor dela para baixo ou para cima, e os centavos que faltam vão para
+ * as de maior fração. Uma linha nunca se afasta mais de um centavo do exato.
+ *
+ * ── A plataforma inteira (MIA-136) ──────────────────────────────────────────
+ *
+ * `lerRankingDoConsumo` é o ranking das empresas por custo, a visão da tela
+ * geral (`/admin/usage`): todas as empresas menos as de demonstração
+ * (`SEM_DEMONSTRACAO`), o mesmo `periodoDoPedido` e a mesma ordem por custo.
+ * O DESEMPATE é outro: aqui chamadas de IA e depois o nome; na tela geral,
+ * mensagens do período. Cada empresa é lida por
+ * esta mesma leitura (uma conta só), e o total da plataforma manda nas linhas
+ * das empresas pela mesma regra: a soma das empresas fecha com ele.
+ *
  * ── Paginado ───────────────────────────────────────────────────────────────
  *
  * `lib/leitura/todas-as-paginas.ts`, da chamada mais nova para a mais antiga.
@@ -54,6 +73,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { cotacaoDoDia, type CotacaoDoDia } from "@/lib/ai/custo/cotacao";
 import { janelaDoMes, mesNoFuso } from "@/lib/crm/metas/fuso";
+import { SEM_DEMONSTRACAO } from "@/lib/demonstracao/fora-das-metricas";
 import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 
 /** O fuso do mês do calendário desta leitura. */
@@ -87,6 +107,15 @@ export interface PeriodoDoConsumo {
  * AAAA-MM devolve `null` (quem chama responde erro de validação, em vez de cair
  * em silêncio na janela padrão). `dias` inválido cai no padrão e é limitado a
  * 1..180, como a rota já fazia.
+ *
+ * MIA-78: `dias=N` são os N DIAS DO CALENDÁRIO EM BRASÍLIA terminados hoje,
+ * hoje incluído: de 00:00 de (hoje − N + 1) a 00:00 de amanhã, em Brasília.
+ * É a régua única de "N dias" da tela geral (`/admin/usage`), da aba Uso do
+ * cliente e de `plataforma_ver_consumo_de_ia`. Antes a aba Uso e o MCP liam
+ * N×24 h corridas até agora, e a tela geral N dias de calendário UTC: a mesma
+ * chamada entrava numa e não na outra. Dia de Brasília porque o mês desta
+ * leitura já é o de Brasília: um mês é a soma dos dias dele, e a série diária
+ * da tela geral tem N barras inteiras.
  */
 export function periodoDoPedido(
   pedido: { mes?: string | null; dias?: string | number | null },
@@ -101,14 +130,52 @@ export function periodoDoPedido(
   }
   const bruto = Number(pedido.dias ?? DIAS_PADRAO) || DIAS_PADRAO;
   const dias = Math.min(Math.max(Math.trunc(bruto), DIAS_MINIMO), DIAS_MAXIMO);
+  const hoje = diaEmBrasilia(agora.toISOString());
   return {
     tipo: "dias",
     mes: null,
     dias,
-    inicio: new Date(agora.getTime() - dias * 86_400_000).toISOString(),
-    fim: agora.toISOString(),
+    inicio: inicioDoDiaEmBrasilia(somarDias(hoje, 1 - dias)),
+    fim: inicioDoDiaEmBrasilia(somarDias(hoje, 1)),
     fuso: FUSO_DO_CONSUMO,
   };
+}
+
+/** AAAA-MM-DD mais `n` dias do calendário (a conta é de data, sem fuso). */
+function somarDias(dia: string, n: number): string {
+  const d = new Date(`${dia}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+const FORMATADOR_DO_INSTANTE = new Intl.DateTimeFormat("en-US", {
+  timeZone: FUSO_DO_CONSUMO,
+  hourCycle: "h23",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
+/** Quanto o relógio de Brasília está à frente do UTC naquele instante, em ms. */
+function deslocamentoEmBrasilia(ms: number): number {
+  const partes = FORMATADOR_DO_INSTANTE.formatToParts(new Date(ms));
+  const n = (t: string) => Number(partes.find((p) => p.type === t)?.value ?? "0");
+  return Date.UTC(n("year"), n("month") - 1, n("day"), n("hour") % 24, n("minute"), n("second")) - ms;
+}
+
+/**
+ * 00:00 do dia AAAA-MM-DD em Brasília, em UTC. Duas passadas, como
+ * `janelaDoMes`: o deslocamento depende do instante (o horário de verão de
+ * antes de 2019), e o instante, do deslocamento.
+ */
+export function inicioDoDiaEmBrasilia(dia: string): string {
+  const chute = Date.parse(`${dia}T00:00:00Z`);
+  let real = chute;
+  for (let i = 0; i < 2; i++) real = chute - deslocamentoEmBrasilia(real);
+  return new Date(real).toISOString();
 }
 
 /** AAAA-MM de agora em Brasília, e o mês anterior: os dois atalhos das telas. */
@@ -233,44 +300,167 @@ function somar(a: Acumulado, c: ChamadaLida, dia: string): void {
   a.porDia.set(dia, (a.porDia.get(dia) ?? 0) + custo);
 }
 
-/** Quatro casas: tira o resíduo de ponto flutuante sem apagar fração de centavo. */
-function quatroCasas(n: number): number {
-  return Math.round(n * 10_000) / 10_000;
-}
-
-function fechar(a: Acumulado, historico: readonly CotacaoDoDia[]): LinhaDeConsumo {
+/** Os reais EXATOS de uma linha, cada dia pela cotação dele (sem arredondar). */
+function reaisExatos(a: Acumulado, historico: readonly CotacaoDoDia[]): number {
   let reais = 0;
   for (const [dia, cents] of a.porDia) {
     const taxa = cotacaoDoDia(historico, dia);
     if (taxa !== null) reais += (cents / 100) * taxa;
   }
+  return reais;
+}
+
+/** O valor exato de uma linha, antes de arredondar: é dele que o total e as partes saem. */
+interface Exato {
+  reais: number;
+  usd_cents: number;
+}
+
+function exatoDe(a: Acumulado, historico: readonly CotacaoDoDia[]): Exato {
+  return { reais: reaisExatos(a, historico), usd_cents: a.custo_usd_cents };
+}
+
+function linha(a: Acumulado, custo_usd_cents: number, custo_brl: number): LinhaDeConsumo {
   return {
     chamadas: a.chamadas,
     tokens_entrada: a.tokens_entrada,
     tokens_saida: a.tokens_saida,
     tokens_do_cache: a.tokens_do_cache,
-    custo_usd_cents: quatroCasas(a.custo_usd_cents),
-    custo_brl: Math.round(reais * 100) / 100,
+    custo_usd_cents,
+    custo_brl,
     sem_preco: a.sem_preco,
   };
 }
 
 /**
- * Lê e soma o consumo de IA de UMA organização no período.
+ * MIA-136 — reparte o TOTAL arredondado entre as partes, e a soma delas fecha
+ * com ele.
  *
- * `admin` é o cliente de serviço: `llm_calls`, `ai_agents` e `platform_fx_rates`
- * são lidos sem RLS, e o filtro por `organization_id` é o que isola.
+ * O total é o valor exato arredondado a `casas`. Cada parte começa no seu valor
+ * exato para baixo; as unidades que faltam para o total (nunca mais que uma por
+ * parte) vão para as de maior fração, e no empate para a maior. Parte com fração
+ * zero só recebe se não houver outra (resíduo de ponto flutuante). Assim cada
+ * parte fica no seu valor para baixo ou para cima, e a soma é o total.
+ *
+ * Pressupõe que as partes somam o total (uma partição: agentes + Sistema,
+ * finalidades, empresas). É exportada para o teste.
  */
-export async function lerConsumoDoPeriodo(
+export function fecharPeloTotal(
+  totalExato: number,
+  partesExatas: readonly number[],
+  casas: number,
+): { total: number; partes: number[] } {
+  const fator = 10 ** casas;
+  // O resíduo do ponto flutuante sai antes do piso: 12,35 não pode virar 12,34
+  // porque a conta deu 1234,9999999. Perto de um inteiro, é o inteiro.
+  const emUnidades = (n: number) => {
+    const v = n * fator;
+    const inteiro = Math.round(v);
+    return Math.abs(v - inteiro) <= Math.max(1e-6, Math.abs(v) * 1e-12) ? inteiro : v;
+  };
+  const total = Math.round(emUnidades(totalExato));
+  const pisos = partesExatas.map((p) => Math.floor(emUnidades(p)));
+  const fracoes = partesExatas.map((p, i) => emUnidades(p) - pisos[i]!);
+  let falta = total - pisos.reduce((s, n) => s + n, 0);
+  const ordem = partesExatas
+    .map((_, i) => i)
+    .sort((x, y) => fracoes[y]! - fracoes[x]! || partesExatas[y]! - partesExatas[x]! || x - y);
+  const partes = [...pisos];
+  // `falta` fica entre 0 e o número de partes numa partição; o laço cobre o
+  // resíduo de ponto flutuante nas duas direções sem dar volta infinita.
+  for (let volta = 0; falta !== 0 && ordem.length > 0 && volta < ordem.length * 2; volta++) {
+    if (falta > 0) {
+      partes[ordem[volta % ordem.length]!]! += 1;
+      falta--;
+    } else {
+      const i = ordem[ordem.length - 1 - (volta % ordem.length)]!;
+      if (partes[i]! > 0) {
+        partes[i]! -= 1;
+        falta++;
+      }
+    }
+  }
+  return { total: total / fator, partes: partes.map((n) => n / fator) };
+}
+
+/**
+ * O total e as partes de uma partição, com R$ (2 casas) e US$ (4 casas de
+ * centavo) fechando pelo total.
+ */
+function fecharAsPartes(
+  total: Acumulado,
+  partes: readonly Acumulado[],
+  historico: readonly CotacaoDoDia[],
+): { total: LinhaDeConsumo; partes: LinhaDeConsumo[] } {
+  const t = exatoDe(total, historico);
+  const exatos = partes.map((p) => exatoDe(p, historico));
+  return fecharExatos(total, t, partes, exatos);
+}
+
+function fecharExatos(
+  total: Acumulado,
+  t: Exato,
+  partes: readonly Acumulado[],
+  exatos: readonly Exato[],
+): { total: LinhaDeConsumo; partes: LinhaDeConsumo[] } {
+  const brl = fecharPeloTotal(t.reais, exatos.map((e) => e.reais), 2);
+  const usd = fecharPeloTotal(t.usd_cents, exatos.map((e) => e.usd_cents), 4);
+  return {
+    total: linha(total, usd.total, brl.total),
+    partes: partes.map((p, i) => linha(p, usd.partes[i]!, brl.partes[i]!)),
+  };
+}
+
+/** O histórico de cotações que converte o período: o do período e a anterior a ele. */
+async function lerCotacoesDoPeriodo(
   admin: Pick<SupabaseClient, "from">,
-  organizationId: string,
   periodo: PeriodoDoConsumo,
-): Promise<ConsumoDoPeriodo | FalhaDoConsumo> {
+): Promise<{ historico: CotacaoDoDia[] } | FalhaDoConsumo> {
   const primeiroDia = diaEmBrasilia(periodo.inicio);
   // O fim é exclusivo: o último dia é o do instante logo antes dele.
   const ultimoDia = diaEmBrasilia(new Date(Date.parse(periodo.fim) - 1).toISOString());
+  const [cotacoes, cotacaoAnterior] = await Promise.all([
+    admin
+      .from("platform_fx_rates")
+      .select("dia, usd_brl")
+      .gte("dia", primeiroDia)
+      .lte("dia", ultimoDia)
+      .order("dia", { ascending: false })
+      .limit(400),
+    // A cotação anterior ao período: um dia sem captura cai na mais recente
+    // ANTES dele, e sem esta leitura o primeiro dia ficaria sem conversão
+    // sempre que o cron tivesse falhado nele (a mesma da tela de uso).
+    admin
+      .from("platform_fx_rates")
+      .select("dia, usd_brl")
+      .lt("dia", primeiroDia)
+      .order("dia", { ascending: false })
+      .limit(1),
+  ]);
+  if (cotacoes.error) return { erro: cotacoes.error.message };
+  if (cotacaoAnterior.error) return { erro: cotacaoAnterior.error.message };
+  const historico: CotacaoDoDia[] = [...(cotacoes.data ?? []), ...(cotacaoAnterior.data ?? [])].map((r) => ({
+    dia: String(r.dia),
+    usd_brl: Number(r.usd_brl),
+  }));
+  return { historico };
+}
 
-  const [lido, agentes, cotacoes, cotacaoAnterior] = await Promise.all([
+/** O consumo de uma empresa e o valor exato do total dela, para o ranking fechar pela plataforma. */
+interface ConsumoComExato {
+  consumo: ConsumoDoPeriodo;
+  totalAcumulado: Acumulado;
+  totalExato: Exato;
+}
+
+/** A leitura e as somas de UMA organização, com o histórico de cotações já lido. */
+async function lerConsumoComCotacoes(
+  admin: Pick<SupabaseClient, "from">,
+  organizationId: string,
+  periodo: PeriodoDoConsumo,
+  historico: readonly CotacaoDoDia[],
+): Promise<ConsumoComExato | FalhaDoConsumo> {
+  const [lido, agentes] = await Promise.all([
     lerTodasAsPaginas<ChamadaLida>(
       (de, ate, pedirContagem) =>
         admin
@@ -291,33 +481,10 @@ export async function lerConsumoDoPeriodo(
     ),
     // Arquivados também: o agente arquivado no meio do mês gastou até ali.
     admin.from("ai_agents").select("id, name, archived_at").eq("organization_id", organizationId),
-    admin
-      .from("platform_fx_rates")
-      .select("dia, usd_brl")
-      .gte("dia", primeiroDia)
-      .lte("dia", ultimoDia)
-      .order("dia", { ascending: false })
-      .limit(400),
-    // A cotação anterior ao período: um dia sem captura cai na mais recente
-    // ANTES dele, e sem esta leitura o primeiro dia ficaria sem conversão
-    // sempre que o cron tivesse falhado nele (a mesma da tela de uso).
-    admin
-      .from("platform_fx_rates")
-      .select("dia, usd_brl")
-      .lt("dia", primeiroDia)
-      .order("dia", { ascending: false })
-      .limit(1),
   ]);
 
   if (lido.erro) return { erro: lido.erro };
   if (agentes.error) return { erro: agentes.error.message };
-  if (cotacoes.error) return { erro: cotacoes.error.message };
-  if (cotacaoAnterior.error) return { erro: cotacaoAnterior.error.message };
-
-  const historico: CotacaoDoDia[] = [...(cotacoes.data ?? []), ...(cotacaoAnterior.data ?? [])].map((r) => ({
-    dia: String(r.dia),
-    usd_brl: Number(r.usd_brl),
-  }));
 
   const total = novoAcumulado();
   const sistema = novoAcumulado();
@@ -354,37 +521,217 @@ export async function lerConsumoDoPeriodo(
   const porCusto = (x: LinhaDeConsumo, y: LinhaDeConsumo) =>
     y.custo_usd_cents - x.custo_usd_cents || y.chamadas - x.chamadas;
 
-  const por_agente: ConsumoDoAgente[] = [...porAgente.entries()]
-    .map(([agent_id, a]) => {
+  // MIA-136: os agentes e o Sistema são uma partição do total, e fecham com ele.
+  const listaDeAgentes = [...porAgente.entries()];
+  const daPartilha = fecharAsPartes(total, [...listaDeAgentes.map(([, a]) => a), sistema], historico);
+
+  const por_agente: ConsumoDoAgente[] = listaDeAgentes
+    .map(([agent_id], i) => {
       const registro = cadastro.get(agent_id);
       return {
         agent_id,
         nome: registro?.name ?? null,
         arquivado: Boolean(registro?.archived_at),
-        ...fechar(a, historico),
+        ...daPartilha.partes[i]!,
       };
     })
     .sort((x, y) => porCusto(x, y) || (x.nome ?? "").localeCompare(y.nome ?? ""));
 
-  const por_finalidade: ConsumoDaFinalidade[] = [...porFinalidade.entries()]
-    .map(([finalidade, a]) => ({ finalidade, ...fechar(a, historico) }))
+  // As finalidades também são uma partição do total.
+  const finalidades = [...porFinalidade.entries()];
+  const dasFinalidades = fecharAsPartes(total, finalidades.map(([, a]) => a), historico);
+  const por_finalidade: ConsumoDaFinalidade[] = finalidades
+    .map(([finalidade], i) => ({ finalidade, ...dasFinalidades.partes[i]! }))
     .sort((x, y) => porCusto(x, y) || x.finalidade.localeCompare(y.finalidade));
 
   const dias_sem_cotacao = [...diasComCusto].filter((dia) => cotacaoDoDia(historico, dia) === null).sort();
   const ultima = historico.reduce<CotacaoDoDia | null>((m, l) => (!m || l.dia > m.dia ? l : m), null);
 
   return {
-    periodo,
-    total: fechar(total, historico),
-    por_agente,
-    sistema: fechar(sistema, historico),
-    por_finalidade,
-    reais: { dias_sem_cotacao, ultima_cotacao: ultima },
-    truncado: lido.truncado,
-    chamadas_no_banco: lido.total,
+    consumo: {
+      periodo,
+      total: daPartilha.total,
+      por_agente,
+      sistema: daPartilha.partes[listaDeAgentes.length]!,
+      por_finalidade,
+      reais: { dias_sem_cotacao, ultima_cotacao: ultima },
+      truncado: lido.truncado,
+      chamadas_no_banco: lido.total,
+    },
+    totalAcumulado: total,
+    totalExato: exatoDe(total, historico),
   };
 }
 
-export function falhouOConsumo(r: ConsumoDoPeriodo | FalhaDoConsumo): r is FalhaDoConsumo {
+/**
+ * Lê e soma o consumo de IA de UMA organização no período.
+ *
+ * `admin` é o cliente de serviço: `llm_calls`, `ai_agents` e `platform_fx_rates`
+ * são lidos sem RLS, e o filtro por `organization_id` é o que isola.
+ */
+export async function lerConsumoDoPeriodo(
+  admin: Pick<SupabaseClient, "from">,
+  organizationId: string,
+  periodo: PeriodoDoConsumo,
+): Promise<ConsumoDoPeriodo | FalhaDoConsumo> {
+  const cotacoes = await lerCotacoesDoPeriodo(admin, periodo);
+  if ("erro" in cotacoes) return cotacoes;
+  const lido = await lerConsumoComCotacoes(admin, organizationId, periodo, cotacoes.historico);
+  return "erro" in lido ? lido : lido.consumo;
+}
+
+export function falhouOConsumo<T extends object>(r: T | FalhaDoConsumo): r is FalhaDoConsumo {
   return "erro" in r;
+}
+
+// ---------------------------------------------------------------------------
+// MIA-136 · a plataforma inteira: as empresas em ordem de custo
+// ---------------------------------------------------------------------------
+
+/** Quantas empresas são lidas ao mesmo tempo no ranking. */
+const EMPRESAS_EM_PARALELO = 5;
+
+export interface ConsumoDaEmpresa extends LinhaDeConsumo {
+  /** 1 = a que mais custou. */
+  posicao: number;
+  organization_id: string;
+  empresa: string;
+  slug: string | null;
+  /** Dias da empresa com custo e sem cotação: o R$ dela é parcial. */
+  dias_sem_cotacao: string[];
+  /** A leitura desta empresa passou do teto de páginas. */
+  truncado: boolean;
+}
+
+export interface RankingDoConsumo {
+  periodo: PeriodoDoConsumo;
+  /** A plataforma inteira, sem as empresas de demonstração. As empresas fecham com ele. */
+  total: LinhaDeConsumo;
+  /** Todas as empresas (as sem chamada com zero), da mais cara para a mais barata. */
+  empresas: ConsumoDaEmpresa[];
+  reais: {
+    dias_sem_cotacao: string[];
+    ultima_cotacao: CotacaoDoDia | null;
+  };
+  /** Alguma empresa passou do teto de páginas: o começo do período dela ficou de fora. */
+  truncado: boolean;
+  /** A soma do que o banco disse haver. `null` = alguma empresa não disse. */
+  chamadas_no_banco: number | null;
+}
+
+interface EmpresaLida {
+  id: string;
+  display_name: string | null;
+  slug: string | null;
+}
+
+/**
+ * O consumo de IA da PLATAFORMA no período: cada empresa (menos as de
+ * demonstração, como na tela geral `/admin/usage`) lida por esta mesma leitura,
+ * em ordem de custo. O total é o da plataforma, e o custo das empresas fecha
+ * com ele (`fecharPeloTotal`).
+ *
+ * Ordem: custo em US$ (a régua do teto, a mesma da tela geral), depois
+ * chamadas de IA, depois o nome, depois o id (nada fica na ordem do banco).
+ * A tela geral desempata por mensagens do período, e não tem terceiro
+ * critério: no custo igual (as que não gastaram, por exemplo), as duas listas
+ * podem sair em ordem diferente. Mensagens não são consumo de IA, e lê-las
+ * aqui seria uma segunda leitura (com os contatos pessoais fora) só para o
+ * desempate.
+ */
+export async function lerRankingDoConsumo(
+  admin: Pick<SupabaseClient, "from">,
+  periodo: PeriodoDoConsumo,
+): Promise<RankingDoConsumo | FalhaDoConsumo> {
+  const [orgs, cotacoes] = await Promise.all([
+    lerTodasAsPaginas<EmpresaLida>(
+      (de, ate, pedirContagem) =>
+        admin
+          .from("organizations")
+          .select("id, display_name, slug", pedirContagem ? { count: "exact" } : undefined)
+          // A empresa de demonstração não entra no uso da plataforma (cliente modelo, 9010).
+          .not(...SEM_DEMONSTRACAO)
+          .order("id", { ascending: true })
+          .range(de, ate),
+      { paginasMaximas: 10 },
+    ),
+    lerCotacoesDoPeriodo(admin, periodo),
+  ]);
+  if (orgs.erro) return { erro: orgs.erro };
+  if ("erro" in cotacoes) return cotacoes;
+  if (orgs.truncado) return { erro: "a lista de empresas passou do teto de leitura" };
+
+  const lidas: Array<{ org: EmpresaLida; lido: ConsumoComExato }> = [];
+  for (let i = 0; i < orgs.linhas.length; i += EMPRESAS_EM_PARALELO) {
+    const lote = orgs.linhas.slice(i, i + EMPRESAS_EM_PARALELO);
+    const resultados = await Promise.all(
+      lote.map(async (org) => ({
+        org,
+        lido: await lerConsumoComCotacoes(admin, org.id, periodo, cotacoes.historico),
+      })),
+    );
+    for (const r of resultados) {
+      if ("erro" in r.lido) return { erro: r.lido.erro };
+      lidas.push({ org: r.org, lido: r.lido });
+    }
+  }
+
+  // O total da plataforma: a soma dos acumulados de cada empresa.
+  const total = novoAcumulado();
+  for (const { lido } of lidas) {
+    const a = lido.totalAcumulado;
+    total.chamadas += a.chamadas;
+    total.tokens_entrada += a.tokens_entrada;
+    total.tokens_saida += a.tokens_saida;
+    total.tokens_do_cache += a.tokens_do_cache;
+    total.custo_usd_cents += a.custo_usd_cents;
+    total.sem_preco += a.sem_preco;
+  }
+  const totalExato: Exato = {
+    reais: lidas.reduce((s, l) => s + l.lido.totalExato.reais, 0),
+    usd_cents: total.custo_usd_cents,
+  };
+  const fechado = fecharExatos(
+    total,
+    totalExato,
+    lidas.map((l) => l.lido.totalAcumulado),
+    lidas.map((l) => l.lido.totalExato),
+  );
+
+  const empresas = lidas
+    .map(({ org, lido }, i) => ({
+      org,
+      lido,
+      linha: fechado.partes[i]!,
+    }))
+    .sort(
+      (x, y) =>
+        y.lido.totalExato.usd_cents - x.lido.totalExato.usd_cents ||
+        y.linha.chamadas - x.linha.chamadas ||
+        (x.org.display_name ?? "").localeCompare(y.org.display_name ?? "", "pt-BR") ||
+        x.org.id.localeCompare(y.org.id),
+    )
+    .map(({ org, lido, linha: l }, i): ConsumoDaEmpresa => ({
+      posicao: i + 1,
+      organization_id: org.id,
+      empresa: org.display_name ?? org.id,
+      slug: org.slug ?? null,
+      ...l,
+      dias_sem_cotacao: lido.consumo.reais.dias_sem_cotacao,
+      truncado: lido.consumo.truncado,
+    }));
+
+  const dias = new Set<string>();
+  for (const { lido } of lidas) for (const d of lido.consumo.reais.dias_sem_cotacao) dias.add(d);
+  const ultima = cotacoes.historico.reduce<CotacaoDoDia | null>((m, l) => (!m || l.dia > m.dia ? l : m), null);
+  const contagens = lidas.map((l) => l.lido.consumo.chamadas_no_banco);
+
+  return {
+    periodo,
+    total: fechado.total,
+    empresas,
+    reais: { dias_sem_cotacao: [...dias].sort(), ultima_cotacao: ultima },
+    truncado: lidas.some((l) => l.lido.consumo.truncado),
+    chamadas_no_banco: contagens.some((c) => c === null) ? null : contagens.reduce<number>((s, c) => s + (c ?? 0), 0),
+  };
 }

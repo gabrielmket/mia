@@ -85,7 +85,10 @@ const TETOS: Record<string, { minutos: number; razao: string }> = {
       "do job, 17/11/2026): na ponta do #86 (d71628e7e) pg15 e pg17 levaram 36 min, na " +
       "repetição; na main da .110 (268f0552d) o pg15 passou com 44 min e o pg17 foi cortado aos " +
       "45; no PR #89 o pg17 foi cortado aos 45 nas duas rodadas seguidas. Daí 60, provisório " +
-      "até a fusão MIA-12",
+      "até a fusão MIA-12. FORK MIA (MIA-71), MEDIDO em 18/11/2026 (7 rodadas verdes): 51 a 57 " +
+      "min por perna, e o passo do `update.sh` leva só 0,2 a 0,4 min — o peso é o vitest do " +
+      "`test:db`, então a matriz virou major × fatia (`--shard=N/3`) e o `update.sh` roda na " +
+      "fatia 1. O 60 fica até a medição das fatias; o teto é rede de segurança, não régua",
   },
 };
 
@@ -257,8 +260,8 @@ describe("o preâmbulo do CI não come o orçamento dos testes", () => {
   });
 
   it("o orçamento vale para TODAS as partes da matrix, não só para uma", () => {
-    // `verify-parte` é uma `matrix` (9 partes desde 16/11/2026; 8 de 03/11 a
-    // 16/11), e o
+    // `verify-parte` é uma `matrix` (10 partes desde 19/11/2026; 9 de 16/11 a
+    // 19/11; 8 de 03/11 a 16/11), e o
     // `ORCAMENTO_MIN` vive num passo ÚNICO que todas as partes executam. Os passos vizinhos (`Cercas`,
     // `Typecheck`, `Lint`, `Kit self-host`) são todos `if: matrix.parte == N` —
     // então pôr um `if:` de parte neste aqui é uma edição de uma linha, natural
@@ -315,8 +318,9 @@ describe("o preâmbulo do CI não come o orçamento dos testes", () => {
     // VERDES: `--shard=N/3` com matrix [1, 2] deixa um terço da suíte sem rodar,
     // e `if: matrix.parte == 3` com matrix [1, 2] deixa o passo sem parte.
     // Desde 08/10/2026 há parte SEM unit (as últimas — 4 até 23/10/2026, 7 até 03/11/2026;
-    // 7 e 8 até 16/11/2026; hoje 8 e 9: cercas + as duas fatias do kit), excluídas por
-    // `if: matrix.parte != 8 && matrix.parte != 9` no passo de unit — então o N do shard é o número de
+    // 7 e 8 até 16/11/2026; 8 e 9 até 19/11/2026; hoje 9 e 10: cercas, lint, typecheck e as duas
+    // fatias do kit), excluídas por
+    // `if: matrix.parte != 9 && matrix.parte != 10` no passo de unit — então o N do shard é o número de
     // partes que RODAM unit, não o tamanho da matrix. Os dois erros verdes novos:
     // tirar a exclusão (a parte 7 roda `--shard=7/6`, que o vitest recusa ou
     // duplica) e excluir uma parte do meio (um sexto da suíte sem rodar).

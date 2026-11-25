@@ -18,7 +18,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
 import { provedorDaInstalacao } from "@/lib/cobranca/configuracao";
-import { MOEDAS_DO_ASAAS, type Moeda } from "@/lib/cobranca/vocabulario";
+import { MOEDAS_DO_ASAAS, MOEDAS_DO_EFI, type Moeda } from "@/lib/cobranca/vocabulario";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { edicaoDoPlanoSchema, novoPlanoSchema } from "@/lib/schemas/cobranca-plano";
 
@@ -304,11 +304,19 @@ export async function garantirPlanos(
     );
     try {
       if (!existente) {
-        // A régua de `POST /api/v1/admin/cobranca/planos`: o Asaas não tem moeda e
-        // cobraria o número como real, então fora do real o plano nasce recusado.
-        if (p.moeda !== undefined && !MOEDAS_DO_ASAAS.includes(p.moeda) && (await provedorDaInstalacao()) === "asaas") {
-          r.recusas.push({ plano: p.nome, motivo: "O Asaas cobra só em real. Para dólar ou euro, conecte a Stripe." });
-          continue;
+        // A régua de `POST /api/v1/admin/cobranca/planos` (migrations 9332/9333):
+        // Asaas e Efi não têm moeda e cobrariam o número como real, então fora do
+        // real o plano nasce recusado.
+        if (p.moeda !== undefined && !(MOEDAS_DO_ASAAS.includes(p.moeda) && MOEDAS_DO_EFI.includes(p.moeda))) {
+          const provedor = await provedorDaInstalacao();
+          if (provedor === "asaas" && !MOEDAS_DO_ASAAS.includes(p.moeda)) {
+            r.recusas.push({ plano: p.nome, motivo: "O Asaas cobra só em real. Para dólar ou euro, conecte a Stripe." });
+            continue;
+          }
+          if (provedor === "efi" && !MOEDAS_DO_EFI.includes(p.moeda)) {
+            r.recusas.push({ plano: p.nome, motivo: "O Efi cobra só em real. Para dólar ou euro, conecte a Stripe." });
+            continue;
+          }
         }
         const valido = novoPlanoSchema.safeParse(p.moeda !== undefined ? { ...doUpstream, moeda: p.moeda } : doUpstream);
         if (!valido.success) {

@@ -38,6 +38,8 @@ import { allTools } from "@/lib/mcp/tools";
 const BASE = "linha de base, medida quando a cerca nasceu (2026-10-31)";
 /** Módulo opcional `amigo` (#4227): só entram no catálogo com o módulo instalado. */
 const AMIGO = "módulo amigo, fora do catálogo de quem não instalou";
+/** Editar os assistentes de IA pelo ChatGPT: só admin, nunca montadas no turno do agente. */
+const EDITAR_ASSISTENTES = "editar assistentes (só admin, por aplicativo conectado); nunca montada no turno do agente";
 
 const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
   "crm_list_event_types": { tokens: 204, motivo: BASE },
@@ -52,6 +54,30 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
   "crm_passar_para_o_comercial": { tokens: 682, motivo: "FORK MIA: a passagem do lead qualificado ao comercial, com o resumo da qualificação" },
   "crm_listar_obrigacoes_pendentes": { tokens: 280, motivo: "FORK MIA: as obrigações pendentes do contato" },
   "crm_propor_recebimento_de_documento": { tokens: 580, motivo: "FORK MIA: o documento recebido do contato vira proposta para a equipe conferir" },
+  // #4517 — a ficha editável e os quatro comandos de conversa, medidos na
+  // criação (2026-11-12) e remedidos neste head em 2026-11-18. Os quatro comandos
+  // são pequenos de propósito: um input só (o id da conversa, mais a revisão
+  // opcional) e uma descrição que ensina o EFEITO, não a rota.
+  "crm_update_contact": {
+    tokens: 627,
+    motivo: "ferramenta nova de edição de ficha (#4517), medida na criação (2026-11-12)",
+  },
+  "crm_pause_ai": {
+    tokens: 243,
+    motivo: "ferramenta nova de pausa da IA (#4517), medida na criação (2026-11-12)",
+  },
+  "crm_resume_ai": {
+    tokens: 244,
+    motivo: "ferramenta nova de retomada da IA (#4517), medida na criação (2026-11-12)",
+  },
+  "crm_close_conversation": {
+    tokens: 256,
+    motivo: "ferramenta nova de fechamento por token (#4517), medida na criação (2026-11-12)",
+  },
+  "crm_reopen_conversation": {
+    tokens: 242,
+    motivo: "ferramenta nova de reabertura por token (#4517), medida na criação (2026-11-12)",
+  },
   "crm_list_conversations": { tokens: 283, motivo: BASE },
   "crm_get_conversation": { tokens: 228, motivo: BASE },
   "crm_get_conversation_history": {
@@ -73,13 +99,23 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
     motivo:
       "#4544: precisa dizer que imagem/binário NÃO é transcrito (senão o agente trata resposta vazia como documento sem dados) e que o teto é por chamada",
   },
-  "crm_list_pipelines": { tokens: 63, motivo: BASE },
+  "crm_list_pipelines": { tokens: 118, motivo: "#4667: a descrição passou a dizer que a lista traz os CAMPOS do funil (key/label/type/escopo/options[].value) e que em `custom_fields` se usa a key daí; sem isso o agente inventava a chave" },
   "crm_get_pipeline_forecast": { tokens: 281, motivo: "#4322: a descrição passou a dizer que `truncado: true` marca valores parciais quando o funil passa do teto de leitura; sem isso o agente apresenta um recorte como o total" },
   "crm_search_knowledge": { tokens: 250, motivo: BASE },
   "crm_list_knowledge_sources": { tokens: 86, motivo: BASE },
   "crm_list_improvement_proposals": { tokens: 85, motivo: BASE },
   "crm_get_org_memory": { tokens: 114, motivo: BASE },
   "crm_save_org_memory": { tokens: 285, motivo: BASE },
+  // Editar os assistentes de IA (só admin, por um aplicativo conectado como o
+  // ChatGPT). Pesam aqui porque a cerca mede `allTools` inteira; no turno do
+  // agente nenhuma é montada (`apenasHumano`, `lib/ai/runtime/tools.ts`).
+  "crm_list_ai_agents": { tokens: 115, motivo: EDITAR_ASSISTENTES },
+  "crm_get_ai_agent_version": { tokens: 294, motivo: EDITAR_ASSISTENTES },
+  "crm_get_ai_agent_turn": { tokens: 265, motivo: EDITAR_ASSISTENTES },
+  "crm_save_ai_agent_draft": { tokens: 940, motivo: "editar assistentes: +478 com `configuracoes` (voz, ferramentas, passar para pessoa, dividir, imagens); nunca montada no turno do agente. FORK MIA: -75 sem `provedor` e `modelo` (a IA é da plataforma, MIA-115)" },
+  "crm_test_ai_agent_version": { tokens: 406, motivo: EDITAR_ASSISTENTES },
+  "crm_publish_ai_agent_version": { tokens: 264, motivo: EDITAR_ASSISTENTES },
+  "crm_rollback_ai_agent": { tokens: 235, motivo: EDITAR_ASSISTENTES },
   "crm_list_contact_orders": { tokens: 234, motivo: BASE },
   "crm_search_products": { tokens: 362, motivo: BASE },
   "crm_get_honorarios_contrato": { tokens: 253, motivo: BASE },
@@ -115,12 +151,20 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
   "crm_confirm_appointment": { tokens: 318, motivo: BASE },
   "crm_set_appointment_outcome": { tokens: 263, motivo: BASE },
   "crm_create_lead": { tokens: 1003, motivo: "referencia_externa (Spec 25 R5): +70 do item escolhido e do funil opcional; a forma é conferida por refine, sem padrão no esquema" },
-  "crm_update_lead": { tokens: 817, motivo: BASE },
+  "crm_update_lead": {
+    tokens: 966,
+    motivo:
+      "#4666: a descrição diz que `tags` SUBSTITUI a lista inteira, e entram `tags_adicionar`/`tags_remover` — sem essas palavras o agente apagava etiqueta acreditando acrescentar",
+  },
   "crm_move_lead_stage": { tokens: 380, motivo: BASE },
   "crm_retomar_lead": { tokens: 394, motivo: BASE },
   "crm_propose_lead_fields_from_document": { tokens: 583, motivo: BASE },
   "crm_save_lead_diagnosis": { tokens: 353, motivo: "capacidade nova (#4632, decisão D7): o agente qualificador grava o diagnóstico da empresa na ficha; a descrição diz QUANDO usar (o que ele concluiu da empresa, só do contato da conversa), que grava DIRETO com o selo e que não serve para dado pessoal nem para copiar a fala do cliente" },
-  "crm_send_whatsapp_message": { tokens: 281, motivo: BASE },
+  "crm_send_whatsapp_message": {
+    tokens: 320,
+    motivo:
+      "#5034: media_storage_path e media_filename, para mandar arquivo já enviado ao CRM sem link público (documento de cliente não vai para a internet); a descrição ficou em uma frase, com a rota de upload",
+  },
   // #4129 — capacidade de WIRE que envia o material da empresa como documento.
   // O peso é quase todo a descrição: é ela que ensina o integrador que o
   // arquivo NÃO é lido nem resumido. Medido na criação (2026-11-06), sem gordura.
@@ -138,6 +182,9 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
   "crm_set_webhook_source_active": { tokens: 199, motivo: BASE },
   "crm_set_automation_rule_active": { tokens: 232, motivo: BASE },
   "crm_schedule_followup": { tokens: 539, motivo: BASE },
+  "crm_create_task": { tokens: 736, motivo: "capacidade nova (#4838): tarefa da equipe pelo MCP, no pacote escalar; o peso é quase todo o regex que o zod gera para cada uuid e data — o mesmo das irmãs" },
+  "crm_list_tasks": { tokens: 901, motivo: "capacidade nova (#4838): tarefa da equipe pelo MCP, no pacote escalar; o peso é quase todo o regex que o zod gera para cada uuid e data — o mesmo das irmãs" },
+  "crm_update_task": { tokens: 919, motivo: "capacidade nova (#4838): tarefa da equipe pelo MCP, no pacote escalar; o peso é quase todo o regex que o zod gera para cada uuid e data — o mesmo das irmãs" },
   "crm_enroll_followup_flow": { tokens: 365, motivo: BASE },
   "crm_cancel_followup": { tokens: 254, motivo: BASE },
   "crm_close_demand": { tokens: 244, motivo: BASE },
@@ -212,12 +259,37 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
 // e 413 de `crm_get_lead_attachment`. MEDIDO no merge com a main: 40209 = 39537 + 672
 // (2026-11-17, main de `0652fa6866`).
 // +317 com `crm_count_leads` (upstream v1.117).
+// +149 no `crm_update_lead` (#4666), que passou a dizer que `tags` substitui a
+// lista inteira e ganhou `tags_adicionar`/`tags_remover`. MEDIDO no merge com a
+// main pós-#4886 e #4684: 40675 (2026-11-18).
+// +2556 com as três ferramentas de tarefa (#4838): 736 de `crm_create_task`, 901 de
+// `crm_list_tasks` e 919 de `crm_update_task`. MEDIDO no merge com a main de 19/11
+// (que já tinha 40730): 43286 (2026-11-19), não somado à mão.
 // FORK MIA: + 2027 das quatro ferramentas do fork (+1854) e das descrições que o
 // fork estende (+173), a diferença medida na fusão da v1.107 (32639 contra 30612
 // do upstream). Na fusão da v1.116 a conta dava 42236 = 40209 + 2027; MEDIDO
 // na CI do PR #97 e no contêiner: 42237 (1 token de junção entre os dois lados).
 // Na fusão da v1.117: 42554 = 42237 + 317 (`crm_count_leads`).
-const TETO_TOTAL = 42554;
+// Na fusão da v1.118: 42703 = 42554 + 149 (`crm_update_lead`, #4666).
+// +55 na descrição de `crm_list_pipelines`, que passou a dizer que a lista traz
+// os CAMPOS do funil (#4667), delta medido naquela entrada (63 → 118). O upstream
+// mediu 40730 = 40675 + 55 (2026-11-18, main de `9da6943cc2`).
+// Na fusão da v1.119: 42758 = 42703 + 55 (`crm_list_pipelines`, #4667).
+// Na fusão da v1.120: 45314 = 43286 + 2028 (a diferença do fork, 42758 - 40730).
+// +2594 com as 7 ferramentas de editar os assistentes de IA (#4805; só admin, pelo
+// ChatGPT; nenhuma vai para o turno do agente): 2116 das ferramentas e 478 de
+// `configuracoes` no rascunho. MEDIDO no merge com a main de 20/11 (`4c7f1f2fd9`):
+// 45880 = 43286 + 2594 (2026-11-20), não somado à mão.
+// +39 de `crm_send_whatsapp_message` com media_storage_path e media_filename (#5034).
+// MEDIDO no merge com a main de 20/11: 45919 = 45880 + 39 (2026-11-20), não somado à mão.
+// +1.612 com as cinco ferramentas de #4517 (627 + 243 + 244 + 256 + 242), MEDIDO
+// neste head em 2026-11-18 contra a main de então. MEDIDO de novo no merge com a
+// main de 2026-11-22 (`b6c92fba97`, que já tinha 45919): 47531 = 45919 + 1612.
+// FORK MIA, na fusão da v1.124: 49559 = 47531 + 2028 (a mesma diferença do fork
+// medida na fusão da v1.121, 45314 - 43286, por cima das cinco de #4517).
+// FORK MIA, MIA-115: -75 em `crm_save_ai_agent_draft`, que no fork não oferece
+// `provedor` nem `modelo` (1015 → 940). Na versão .116: 49484 = 49559 - 75.
+const TETO_TOTAL = 49484;
 
 const VARIANTE = "schedule_followup (com negócio)";
 

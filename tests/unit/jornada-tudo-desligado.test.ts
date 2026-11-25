@@ -44,7 +44,7 @@ let liberadoAMao: boolean;
  */
 function responder(c: CadeiaLivre) {
   if (c.tabela === "platform_config") return { data: [] };
-  if (c.tabela === "organization_modules")
+  if (c.tabela === "mia_modulos_contratados")
     return { data: liberadoAMao ? (c.passos.some((p) => p.metodo === "maybeSingle") ? { id: "lib-1" } : [{ modulo: "disparador" }]) : null };
   if (c.tabela === "cobranca_assinaturas") return { data: null };
   return { data: [] };

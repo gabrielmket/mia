@@ -67,7 +67,7 @@ export const MODULOS: readonly ModuloVendavel[] = [
   {
     // ⚠️ A CHAVE NÃO ACOMPANHA O NOME, e é de propósito. O produto se chamou
     // "MIA Broadcast" de 16/09 a 29/09 e agora é só "Broadcast", mas a chave
-    // `disparador` já está gravada em `organization_modules` para um cliente:
+    // `disparador` já está gravada em `mia_modulos_contratados` para um cliente:
     // renomeá-la deixaria a liberação órfã e tiraria o acesso de quem comprou —
     // em silêncio, que é o pior jeito. Chave é identidade interna; rótulo é o
     // nome do produto. Só o segundo muda (e já mudou duas vezes).

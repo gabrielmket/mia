@@ -227,6 +227,8 @@ async function enviar(
       },
     ],
     partialFailure: true,
+    // FORK MIA (MIA-169): só a ferramenta de teste das conversões do site liga.
+    ...(conversao.site?.somenteValidar ? { validateOnly: true } : {}),
   };
 
   const url = `${ENDERECO_BASE}/${VERSAO_DA_API_DO_GOOGLE_ADS}/customers/${customerId}:uploadClickConversions`;

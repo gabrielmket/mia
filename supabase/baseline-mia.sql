@@ -605,7 +605,10 @@ grant select, insert, update on public.tenant_broadcast_pricing to service_role;
 
 -- ---- liberação por módulo (migration 0245) ----
 --
--- Espelho EXATO da migration. Idempotente, como todo o apêndice.
+-- Espelho da migration com o NOME da 9163: a tabela nasceu `organization_modules`
+-- e desde a fusão v1.118 é `mia_modulos_contratados` (a do upstream ficou com o
+-- nome antigo). Índices e policy trocaram junto; o resto é a 0245 como ela é.
+-- Idempotente, como todo o apêndice.
 
 -- 0245 — cada cliente com o que comprou
 --
@@ -633,7 +636,81 @@ grant select, insert, update on public.tenant_broadcast_pricing to service_role;
 -- linha responde "nunca teve", que é outra história — e é a história errada na
 -- conversa em que alguém pergunta por que a tela sumiu.
 
-create table if not exists public.organization_modules (
+-- >>> ANTES DO BASELINE DO UPSTREAM (migration 9163): início
+--
+-- A NOSSA `organization_modules` SAI DO CAMINHO DA DELE. Desde a v1.118 (9416,
+-- #4065) o upstream cria uma `public.organization_modules` com outro formato e
+-- outro sentido (exceção de módulo opcional por empresa: `estado`
+-- ligado/desligado, PK (organization_id, modulo), só service_role). A nossa, de
+-- 0245, guarda o módulo VENDÁVEL contratado (`revoked_at`, `granted_*`). Com o
+-- mesmo nome, quem nasce primeiro fica com ele e o outro lado quebra
+-- (MIA-73/MIA-74).
+--
+-- Este trecho roda ANTES do `baseline.sql`: o `easypanel/bootstrap.sh` e o
+-- `scripts/ensaio-de-banco.sh` o recortam daqui (entre os marcadores `>>>` e
+-- `<<<`) e o aplicam primeiro. É o que deixa a 9416 criar a dela byte a byte no
+-- servidor no ar. Se ele rodasse só aqui, depois do `baseline.sql`, a 9416 cairia
+-- na nossa tabela: `comment on column estado` com erro, o `revoke` tirando o
+-- select de `authenticated` e o gatilho `trg_organization_modules_touch` (que
+-- grava `updated_at`, coluna que a nossa não tem) quebrando toda revogação.
+--
+-- No resto do arquivo ele roda de novo, no lugar, e não faz nada. Se algum
+-- caminho aplicou o `baseline.sql` sem este passo antes, ele ainda move a nossa
+-- (sem perder linha), tira o gatilho dele da nossa e avisa: a dele nasce na
+-- próxima aplicação do `baseline.sql`.
+--
+-- Só renomeia o NOSSO formato (a coluna `revoked_at`). Rodar duas vezes não faz
+-- nada. Nenhuma linha é apagada nem copiada: é `rename`.
+do $$
+declare
+  v_nome text;
+begin
+  if exists (
+       select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'organization_modules' and column_name = 'revoked_at'
+     ) and to_regclass('public.mia_modulos_contratados') is null then
+    alter table public.organization_modules rename to mia_modulos_contratados;
+
+    -- Chave e FKs: o nome da chave é também um índice, e a 9416 cria um
+    -- `organization_modules_pkey` dela.
+    for v_nome in
+      select conname from pg_constraint
+       where conrelid = 'public.mia_modulos_contratados'::regclass and conname like 'organization\_modules\_%'
+    loop
+      execute format('alter table public.mia_modulos_contratados rename constraint %I to %I',
+                     v_nome, 'mia_modulos_contratados_' || substr(v_nome, length('organization_modules_') + 1));
+    end loop;
+
+    if to_regclass('public.uq_organization_modules_vivo') is not null then
+      alter index public.uq_organization_modules_vivo rename to uq_mia_modulos_contratados_vivo;
+    end if;
+    if to_regclass('public.idx_organization_modules_org') is not null then
+      alter index public.idx_organization_modules_org rename to idx_mia_modulos_contratados_org;
+    end if;
+
+    if exists (select 1 from pg_policies
+                where schemaname = 'public' and tablename = 'mia_modulos_contratados'
+                  and policyname = 'organization_modules_select') then
+      alter policy organization_modules_select on public.mia_modulos_contratados
+        rename to mia_modulos_contratados_select;
+    end if;
+
+    -- Só existe aqui se o `baseline.sql` rodou antes deste passo (o caminho de
+    -- reserva): o gatilho é DELE e vai com a tabela dele.
+    if exists (select 1 from pg_trigger
+                where tgrelid = 'public.mia_modulos_contratados'::regclass
+                  and tgname = 'trg_organization_modules_touch' and not tgisinternal) then
+      drop trigger trg_organization_modules_touch on public.mia_modulos_contratados;
+      raise warning 'MIA 9163: a organization_modules do upstream (9416) nasce na proxima aplicacao do baseline.sql; o passo "antes do baseline" nao rodou antes dele';
+    end if;
+
+    raise notice 'MIA 9163: organization_modules (a nossa, 0245) agora e mia_modulos_contratados, % linha(s)',
+      (select count(*) from public.mia_modulos_contratados);
+  end if;
+end $$;
+-- <<< ANTES DO BASELINE DO UPSTREAM (migration 9163): fim
+
+create table if not exists public.mia_modulos_contratados (
   id               uuid primary key default gen_random_uuid(),
   organization_id  uuid not null references public.organizations(id) on delete cascade,
   -- A chave do catálogo em `lib/modulos/catalogo.ts`. Texto livre de propósito:
@@ -651,28 +728,28 @@ create table if not exists public.organization_modules (
   created_at       timestamptz not null default now()
 );
 
-comment on table public.organization_modules is
+comment on table public.mia_modulos_contratados is
   'Modulos VENDAVEIS que cada organizacao contratou. Ausencia de linha (ou linha revogada) = nao contratado. O catalogo dos modulos vive no codigo (lib/modulos/catalogo.ts); o que o catalogo nao declara continua liberado para todos, como sempre foi.';
 
-comment on column public.organization_modules.revoked_at is
+comment on column public.mia_modulos_contratados.revoked_at is
   'Cancelamento. Preenchido = nao libera mais. A linha FICA, porque apagar responderia "nunca teve", que e outra historia - e a errada na conversa em que alguem pergunta por que a tela sumiu.';
 
 -- Uma liberação VIVA por módulo por organização. Revogadas podem se repetir
 -- (contratou, cancelou, contratou de novo é histórico legítimo), e por isso o
 -- índice é parcial.
-create unique index if not exists uq_organization_modules_vivo
-  on public.organization_modules (organization_id, modulo)
+create unique index if not exists uq_mia_modulos_contratados_vivo
+  on public.mia_modulos_contratados (organization_id, modulo)
   where revoked_at is null;
 
-create index if not exists idx_organization_modules_org
-  on public.organization_modules (organization_id, modulo, revoked_at);
+create index if not exists idx_mia_modulos_contratados_org
+  on public.mia_modulos_contratados (organization_id, modulo, revoked_at);
 
-alter table public.organization_modules enable row level security;
+alter table public.mia_modulos_contratados enable row level security;
 
 -- A organização LÊ o que ela contratou (a tela precisa saber o que mostrar);
 -- quem libera e cancela é a plataforma, e só ela.
-drop policy if exists organization_modules_select on public.organization_modules;
-create policy organization_modules_select on public.organization_modules
+drop policy if exists mia_modulos_contratados_select on public.mia_modulos_contratados;
+create policy mia_modulos_contratados_select on public.mia_modulos_contratados
   for select to authenticated
   using (
     public.fn_is_platform_admin()
@@ -680,9 +757,9 @@ create policy organization_modules_select on public.organization_modules
   );
 
 -- `authenticated` sai do revoke junto com anon (migration 9001) — ver a carteira, acima.
-revoke all on public.organization_modules from anon, authenticated;
-grant select on public.organization_modules to authenticated;
-grant select, insert, update on public.organization_modules to service_role;
+revoke all on public.mia_modulos_contratados from anon, authenticated;
+grant select on public.mia_modulos_contratados to authenticated;
+grant select, insert, update on public.mia_modulos_contratados to service_role;
 -- Sem `delete`: revogar é `update` em `revoked_at`, e o histórico fica.
 
 
@@ -1908,7 +1985,7 @@ grant select, insert, update on table public.schema_baseline to service_role;
 -- é aquele que vale no dia a dia — este aqui serve ao banco que aplica as
 -- migrations uma a uma.
 insert into public.schema_baseline (id, migration_mais_nova, aplicado_em)
-values (1, '20261118120000_9164_coexistencia_da_empresa', now())
+values (1, '20261124200000_9171_ritmo_de_maquina_na_trava_de_robo', now())
 on conflict (id) do update
   set migration_mais_nova = excluded.migration_mais_nova,
       aplicado_em = now();
@@ -22717,6 +22794,24 @@ grant execute on function public.fn_mia_coexistencia_recontar(uuid) to service_r
 notify pgrst, 'reload schema';
 
 
+-- ─── 9163 · a nossa organization_modules sai do caminho da dele ───
+--
+-- FORK MIA (fusão v1.118). O renomear em si roda no bloco da 0245, acima, no
+-- trecho `>>> ANTES DO BASELINE DO UPSTREAM`, que o bootstrap aplica antes do
+-- `baseline.sql`: é ali que a tabela nasce e é ali que ela tem de ter o nome novo.
+-- Aqui fica só a conferência: as duas no formato nosso ao mesmo tempo seria um
+-- renomear pela metade, e isso tem de aparecer no log da implantação.
+do $$
+begin
+  if exists (
+       select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'organization_modules' and column_name = 'revoked_at'
+     ) then
+    raise warning 'MIA 9163: a organization_modules ainda tem o formato da MIA (revoked_at) e a mia_modulos_contratados ja existe: confira as duas antes de qualquer outra coisa';
+  end if;
+end $$;
+
+
 -- ─── 9164 · a chave da coexistência por empresa ───
 --
 -- FORK MIA (S3 da coexistência). Espelho EXATO da migration 9164 (supabase/migrations-mia/), onde
@@ -22726,8 +22821,9 @@ notify pgrst, 'reload schema';
 -- 9164 · a chave da coexistência, por empresa
 --
 -- FORK MIA (S3 da coexistência). Só objetos NOSSOS (docs/FORK-MIA.md, regra 3):
--- uma tabela nova e as policies dela. A 9163 fica reservada ao corte do
--- histórico importado nos relatórios do fork (decisão D3, ainda aberta).
+-- uma tabela nova e as policies dela. A 9163 é da fusão v1.118, a 9165 do preço da
+-- Meta (MIA-99) e a 9166 do fuso dos relatórios (MIA-102); o corte do histórico
+-- importado nos relatórios do fork (decisão D3, ainda aberta) fica para a 9172.
 
 create table if not exists public.mia_coexistencia_da_empresa (
   organization_id  uuid primary key references public.organizations(id) on delete cascade,
@@ -22754,6 +22850,834 @@ create policy mia_coexistencia_da_empresa_select on public.mia_coexistencia_da_e
 revoke all on public.mia_coexistencia_da_empresa from public, anon, authenticated;
 grant select on public.mia_coexistencia_da_empresa to authenticated;
 grant select, insert, update, delete on public.mia_coexistencia_da_empresa to service_role;
+
+-- ─── 9165 · o preço da Meta ganha vigência, e o mês fechado não muda ───
+--
+-- FORK MIA (MIA-99). Espelho EXATO da migration 9165 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+-- 9165 · o preço da Meta ganha vigência, e o mês fechado não muda
+--
+-- FORK MIA (MIA-99, defeito 4 da seção 2.1 do mapa da MIA-54). Só objetos
+-- NOSSOS (docs/FORK-MIA.md, regra 3): uma tabela nova com o prefixo `mia_`,
+-- uma função com nome nosso e um gatilho na `platform_precos_meta`, que também
+-- é nossa (0259).
+--
+-- ── Por que um gatilho, e não a rota fechando a vigência ─────────────────────
+--
+-- Quem grava preço é quem tem de fechar a vigência. Escrito na rota, valeria
+-- para a rota: o MCP, um `update` à mão e a imagem de antes desta migration
+-- (num rollback de imagem o banco fica) continuariam sobrescrevendo, e o
+-- histórico teria buracos que ninguém vê. Pendurado no FATO (a linha de
+-- `platform_precos_meta` mudou), vale para todos, e na mesma transação: não
+-- existe o instante em que a vigência velha fechou e a nova não abriu.
+--
+-- ── Por que `-infinity` no primeiro preço ────────────────────────────────────
+--
+-- O preço de hoje é o único que se conhece. Fazê-lo valer só a partir desta
+-- migration deixaria todo o passado "sem preço" (a tela diria "preço não
+-- informado" para outubro), que é mentira de outro tipo. A regra vale também
+-- para a categoria que ganha preço pela primeira vez depois daqui: o primeiro
+-- número dela cobre o passado, e só o SEGUNDO em diante tem início no dia em
+-- que foi gravado.
+
+create table if not exists public.mia_precos_meta_vigencias (
+  id uuid primary key default gen_random_uuid(),
+  categoria text not null,
+  -- Centavos de REAL, como `platform_precos_meta.centavos_brl`.
+  centavos_brl integer not null,
+  -- `-infinity` = desde sempre (o primeiro preço da categoria).
+  vigente_desde timestamptz not null,
+  -- Nulo = é o preço atual.
+  vigente_ate timestamptz,
+  criado_em timestamptz not null default now(),
+  -- Quem gravou o preço (`platform_precos_meta.atualizado_por`), um admin da plataforma.
+  criado_por uuid,
+  constraint mia_precos_meta_vigencias_centavos_check check (centavos_brl >= 0),
+  constraint mia_precos_meta_vigencias_intervalo_check
+    check (vigente_ate is null or vigente_ate > vigente_desde)
+);
+
+comment on table public.mia_precos_meta_vigencias is
+  'MIA (9165): o historico do preco de cada categoria de mensagem da Meta, em centavos de REAL. Uma mensagem custa o preco cuja vigencia contem o instante dela (vigente_desde <= created_at < vigente_ate). vigente_ate nulo = o preco atual (um por categoria); vigente_desde = -infinity = desde sempre (o primeiro preco da categoria). Mantida pelo gatilho trg_mia_precos_meta_vigencia em platform_precos_meta: nao escreva aqui direto.';
+
+-- Uma vigência aberta por categoria: é a trava contra dois "preços atuais".
+create unique index if not exists uq_mia_precos_meta_vigencias_aberta
+  on public.mia_precos_meta_vigencias (categoria)
+  where vigente_ate is null;
+
+-- A pergunta é sempre "que preço valia nesta categoria neste instante".
+create index if not exists idx_mia_precos_meta_vigencias_categoria
+  on public.mia_precos_meta_vigencias (categoria, vigente_desde);
+
+-- `security invoker`: quem grava preço é o servidor (service_role), que tem as
+-- permissões nas duas tabelas. A função não faz nada que quem grava não possa.
+create or replace function public.fn_mia_preco_da_meta_abre_vigencia()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_agora timestamptz := now();
+  v_aberta_id uuid;
+  v_aberta_centavos integer;
+  v_aberta_criada timestamptz;
+  v_tem_historico boolean;
+begin
+  -- "Aberta nesta mesma transação" se lê em `criado_em`, que é o `now()` da
+  -- transação que a abriu: igual ao nosso, foi esta. Não em `vigente_desde`:
+  -- o primeiro preço da categoria tem `-infinity` ali.
+  --
+  -- A categoria que deixou de ter preço (apagada, ou renomeada num update):
+  -- a vigência aberta dela fecha agora. A que abriu nesta mesma transação nunca
+  -- valeu para mensagem nenhuma e sai.
+  if tg_op = 'DELETE' or (tg_op = 'UPDATE' and old.categoria is distinct from new.categoria) then
+    delete from public.mia_precos_meta_vigencias
+     where categoria = old.categoria and vigente_ate is null and criado_em = v_agora;
+    update public.mia_precos_meta_vigencias
+       set vigente_ate = v_agora
+     where categoria = old.categoria and vigente_ate is null;
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+  end if;
+
+  select v.id, v.centavos_brl, v.criado_em
+    into v_aberta_id, v_aberta_centavos, v_aberta_criada
+    from public.mia_precos_meta_vigencias v
+   where v.categoria = new.categoria and v.vigente_ate is null
+   for update;
+
+  -- O mesmo preço gravado de novo (a tela manda a tabela inteira): nada muda.
+  if v_aberta_id is not null and v_aberta_centavos = new.centavos_brl then
+    return new;
+  end if;
+
+  -- Aberta nesta mesma transação: corrige o valor em vez de abrir uma vigência
+  -- de duração zero.
+  if v_aberta_id is not null and v_aberta_criada = v_agora then
+    update public.mia_precos_meta_vigencias
+       set centavos_brl = new.centavos_brl, criado_por = new.atualizado_por
+     where id = v_aberta_id;
+    return new;
+  end if;
+
+  select exists (
+    select 1 from public.mia_precos_meta_vigencias v where v.categoria = new.categoria
+  ) into v_tem_historico;
+
+  if v_aberta_id is not null then
+    update public.mia_precos_meta_vigencias set vigente_ate = v_agora where id = v_aberta_id;
+  end if;
+
+  insert into public.mia_precos_meta_vigencias (categoria, centavos_brl, vigente_desde, criado_por)
+  values (
+    new.categoria,
+    new.centavos_brl,
+    -- O primeiro preço da categoria vale desde sempre (o cabeçalho diz por quê).
+    case when v_tem_historico then v_agora else '-infinity'::timestamptz end,
+    new.atualizado_por
+  );
+  return new;
+end;
+$$;
+
+comment on function public.fn_mia_preco_da_meta_abre_vigencia() is
+  'MIA (9165): gatilho de platform_precos_meta. Preco novo fecha a vigencia aberta da categoria em now() e abre outra; o primeiro preco da categoria vale desde sempre (-infinity); preco igual nao abre vigencia; categoria apagada fecha a vigencia aberta.';
+
+drop trigger if exists trg_mia_precos_meta_vigencia on public.platform_precos_meta;
+create trigger trg_mia_precos_meta_vigencia
+  after insert or update or delete on public.platform_precos_meta
+  for each row execute function public.fn_mia_preco_da_meta_abre_vigencia();
+
+-- O preço de hoje vira a primeira vigência, desde sempre. Só a categoria que
+-- ainda não tem vigência nenhuma: rodar de novo não faz nada.
+insert into public.mia_precos_meta_vigencias (categoria, centavos_brl, vigente_desde, criado_em, criado_por)
+select p.categoria, p.centavos_brl, '-infinity'::timestamptz, p.atualizado_em, p.atualizado_por
+  from public.platform_precos_meta p
+ where not exists (
+   select 1 from public.mia_precos_meta_vigencias v where v.categoria = p.categoria
+ );
+
+alter table public.mia_precos_meta_vigencias enable row level security;
+
+-- ZERO POLICIES, como `platform_precos_meta`: é preço de CUSTO da plataforma,
+-- quem lê é o servidor.
+revoke all on public.mia_precos_meta_vigencias from public, anon, authenticated;
+grant select, insert, update, delete on public.mia_precos_meta_vigencias to service_role;
+
+revoke all on function public.fn_mia_preco_da_meta_abre_vigencia() from public, anon, authenticated;
+grant execute on function public.fn_mia_preco_da_meta_abre_vigencia() to service_role;
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9166 · fuso vazio ou inválido vale Brasília nos relatórios montados ───
+--
+-- FORK MIA (MIA-102). Espelho EXATO da migration 9166 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+-- 9166 · fuso vazio ou inválido vale Brasília nos relatórios montados
+--
+-- `fn_mia_`: só objeto NOSSO é redefinido (docs/FORK-MIA.md, regra 3).
+-- Idempotente: `create or replace`, e as permissões reemitidas como na 9041. O
+-- corpo é o da última definição (9041); o que muda está marcado "9166".
+
+create or replace function public.fn_mia_relatorio_preparar(
+  p_org uuid,
+  p_fonte text,
+  p_medidas text[],
+  p_dim1 text,
+  p_dim2 text,
+  p_filtros jsonb,
+  p_periodo text,
+  p_de date,
+  p_ate date,
+  p_agora timestamptz
+) returns jsonb
+language plpgsql
+stable
+set search_path = ''
+as $f$
+declare
+  v_catalogo jsonb := public.fn_mia_relatorio_catalogo();
+  v_fonte jsonb := v_catalogo -> p_fonte;
+  v_filtros jsonb := '{}'::jsonb;
+  v_medidas text[];
+  v_chave text;
+  v_valor jsonb;
+  v_fuso text;
+  v_moeda text;
+  v_janela jsonb;
+  v_funil uuid;
+  v_funil_info jsonb;
+  v_precisa text[];
+begin
+  -- ── quem pergunta ──
+  if auth.uid() is not null
+     and not public.fn_is_platform_admin()
+     and public.fn_user_role_in_org(p_org) is null then
+    raise exception 'sem_vinculo_com_a_organizacao' using errcode = '42501';
+  end if;
+
+  -- ── o pedido ──
+  if v_fonte is null or left(p_fonte, 1) = '_' then
+    raise exception 'fonte_desconhecida: %', p_fonte using errcode = '22023';
+  end if;
+  select coalesce(array_agg(distinct m order by m), '{}') into v_medidas
+    from unnest(coalesce(p_medidas, '{}')) m where m is not null;
+  if cardinality(v_medidas) = 0 or cardinality(v_medidas) > 6 then
+    raise exception 'medidas: de uma a seis' using errcode = '22023';
+  end if;
+  foreach v_chave in array v_medidas loop
+    if not (v_fonte -> 'medidas') ? v_chave then
+      raise exception 'medida_desconhecida_para_a_fonte: % em %', v_chave, p_fonte using errcode = '22023';
+    end if;
+  end loop;
+  if p_dim1 is not null and not (v_fonte -> 'dims') ? p_dim1 then
+    raise exception 'agrupamento_desconhecido_para_a_fonte: % em %', p_dim1, p_fonte using errcode = '22023';
+  end if;
+  if p_dim2 is not null and (p_dim1 is null or not (v_fonte -> 'dims') ? p_dim2 or p_dim2 = p_dim1) then
+    raise exception 'segundo_agrupamento_invalido: %', p_dim2 using errcode = '22023';
+  end if;
+
+  -- ── os filtros, normalizados ──
+  if p_filtros is not null and jsonb_typeof(p_filtros) <> 'object' then
+    raise exception 'filtros: um objeto' using errcode = '22023';
+  end if;
+  for v_chave, v_valor in select f.key, f.value from jsonb_each(coalesce(p_filtros, '{}'::jsonb)) f loop
+    -- As chaves internas são do motor: quem pergunta não as escolhe.
+    continue when left(v_chave, 2) = '__';
+    if not (v_fonte -> 'filtros') ? v_chave then
+      raise exception 'filtro_desconhecido_para_a_fonte: % em %', v_chave, p_fonte using errcode = '22023';
+    end if;
+    continue when jsonb_typeof(v_valor) = 'null';
+    if jsonb_typeof(v_valor) = 'array' then
+      if (v_catalogo -> '_um_valor_so') ? v_chave then
+        raise exception 'filtro_de_um_valor_so: %', v_chave using errcode = '22023';
+      end if;
+      continue when jsonb_array_length(v_valor) = 0;
+      if jsonb_array_length(v_valor) > 50 then
+        raise exception 'filtro_com_mais_de_50_valores: %', v_chave using errcode = '22023';
+      end if;
+      if exists (select 1 from jsonb_array_elements(v_valor) e where jsonb_typeof(e) <> 'string') then
+        raise exception 'filtro_lista_so_de_texto: %', v_chave using errcode = '22023';
+      end if;
+      if jsonb_array_length(v_valor) = 1 then
+        v_valor := v_valor -> 0;
+      end if;
+    end if;
+    v_filtros := v_filtros || jsonb_build_object(v_chave, v_valor);
+  end loop;
+
+  -- "Chegaram até a etapa" é o funil: agrupando por etapa, sozinha ou com a
+  -- soma do valor de quem chegou (9041).
+  if 'chegaram' = any(v_medidas)
+     and (exists (select 1 from unnest(v_medidas) m where m not in ('chegaram', 'soma'))
+          or p_dim1 is distinct from 'etapa' or p_dim2 is not null) then
+    raise exception 'chegaram_so_agrupando_por_etapa_com_a_soma_no_maximo' using errcode = '22023';
+  end if;
+
+  -- Anúncios: o que foi informado à Meta e ao Google é de gestor e
+  -- administrador (o piso das telas de Conversões e de Meta Ads).
+  if p_fonte = 'anuncios' and auth.uid() is not null
+     and not public.fn_is_platform_admin()
+     and not public.fn_role_at_least(p_org, 'manager') then
+    raise exception 'anuncios_so_para_gestor_ou_administrador' using errcode = '42501';
+  end if;
+
+  -- ── a empresa: fuso e moeda ──
+  -- 9166: fuso vazio OU que o Postgres não conhece vale Brasília (o padrão da
+  -- coluna), em vez de levantar erro no `at time zone` e o relatório não abrir.
+  -- O `pg_timezone_names` é lido uma vez por pedido, aqui, e não por linha.
+  select coalesce((select z.name from pg_timezone_names z where z.name = btrim(o.timezone)),
+                  'America/Sao_Paulo'),
+         coalesce(nullif(btrim(o.currency), ''), 'BRL')
+    into v_fuso, v_moeda
+    from public.organizations o
+   where o.id = p_org;
+  if v_fuso is null then
+    raise exception 'organizacao_inexistente' using errcode = '22023';
+  end if;
+
+  -- ── o período ──
+  v_janela := public.fn_mia_relatorio_janela(v_fuso, p_periodo, p_de, p_ate,
+                                             coalesce((v_fonte->>'futuro')::boolean, false), p_agora);
+  if v_janela->>'periodo' <> 'tudo' then
+    if (p_dim1 = 'dia' or p_dim2 = 'dia') and (v_janela->>'dias')::int > 400 then
+      raise exception 'agrupar_por_dia_ate_400_dias' using errcode = '22023';
+    end if;
+    if (p_dim1 = 'semana' or p_dim2 = 'semana') and (v_janela->>'dias')::int > 1830 then
+      raise exception 'agrupar_por_semana_ate_cinco_anos' using errcode = '22023';
+    end if;
+  end if;
+
+  -- ── o funil (negócios por etapa, ou filtrados por funil) ──
+  if p_fonte = 'negocios'
+     and (p_dim1 = 'etapa' or p_dim2 = 'etapa' or v_filtros ? 'funil') then
+    v_funil := nullif(v_filtros->>'funil', '')::uuid;
+    if v_funil is null then
+      select p.id into v_funil
+        from public.crm_pipelines p
+       where p.organization_id = p_org and not p.is_archived
+       order by p.is_default desc, p.position, p.created_at
+       limit 1;
+    end if;
+    select jsonb_build_object('id', p.id, 'nome', p.name, 'vocabulario', p.vocabulary)
+      into v_funil_info
+      from public.crm_pipelines p
+     where p.id = v_funil and p.organization_id = p_org;
+    if v_funil_info is null then
+      raise exception 'funil_inexistente' using errcode = '22023';
+    end if;
+    v_filtros := v_filtros || jsonb_build_object('funil', v_funil::text);
+  end if;
+
+  -- O que as linhas precisam calcular: os agrupamentos e os filtros do pedido.
+  select coalesce(array_agg(distinct x), '{}') into v_precisa
+    from unnest(array[p_dim1, p_dim2] || array(select jsonb_object_keys(v_filtros))) x
+   where x is not null;
+
+  return jsonb_build_object(
+    'medidas', to_jsonb(v_medidas),
+    'filtros', v_filtros,
+    'precisa', to_jsonb(v_precisa),
+    'fuso', v_fuso,
+    'moeda', v_moeda,
+    'janela', v_janela,
+    'funil', v_funil_info
+  );
+end;
+$f$;
+
+comment on function public.fn_mia_relatorio_preparar(uuid, text, text[], text, text, jsonb, text, date, date, timestamptz) is
+  'MIA (9041, 9166): o preparo de um pedido ao motor de relatorios, a regua unica do motor (fn_mia_relatorio) e da lista (fn_mia_relatorio_lista): a guarda de vinculo (42501), o catalogo (22023), os filtros normalizados, o fuso e a moeda da empresa (9166: fuso vazio ou que o Postgres nao conhece vale America/Sao_Paulo), a janela do periodo e o funil.';
+
+
+revoke all on function public.fn_mia_relatorio_preparar(uuid, text, text[], text, text, jsonb, text, date, date, timestamptz) from public;
+revoke execute on function public.fn_mia_relatorio_preparar(uuid, text, text[], text, text, jsonb, text, date, date, timestamptz) from anon;
+grant execute on function public.fn_mia_relatorio_preparar(uuid, text, text[], text, text, jsonb, text, date, date, timestamptz) to authenticated, service_role;
+
+
+-- ─── 9167 · o valor do negócio com item segue os itens ───
+--
+-- FORK MIA (fusão v1.124). Espelho EXATO da migration 9167 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+--
+-- 9167 · o valor do negócio com item segue os itens
+--
+-- FORK MIA (fusão v1.124). Só objetos NOSSOS (docs/FORK-MIA.md, regra 3): duas
+-- funções de gatilho e uma função com nome nosso, dois gatilhos nossos (um em
+-- `crm_leads`, do upstream, pendurado ao lado do dele; um na nossa tabela de
+-- itens). Do upstream só se LÊ e se escreve nas colunas que a 9450 criou, sem
+-- redefinir `fn_valor_do_negocio_pelas_vendas` nem o gatilho dela.
+--
+-- A INVARIANTE: negócio com item do bloco nunca fica com `valor_pelas_vendas`
+-- ligado. As três peças existem para que ela valha por qualquer caminho.
+
+-- (1) A troca pela soma das vendas, desfeita em negócio com item.
+--
+-- Pega o gatilho da 9450 (venda registrada, alterada ou apagada) e a auto-cura
+-- do fim da 9450, que roda de novo toda vez que o `baseline.sql` é reaplicado.
+-- Só age quando a escrita LIGA (ou mantém ligada) a marca das vendas: qualquer
+-- outra escrita do valor (rota dos itens, formulário, MCP) passa intacta.
+create or replace function public.fn_mia_valor_do_negocio_segue_os_itens()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if new.valor_pelas_vendas is true
+     and exists (select 1 from public.mia_itens_do_negocio i where i.lead_id = new.id) then
+    -- Marca desligada antes: o valor de antes é o nosso. Marca já ligada (negócio
+    -- de antes desta migration): o nosso está guardado no digitado.
+    new.value_cents := case
+      when old.valor_pelas_vendas is true then coalesce(old.valor_digitado_cents, old.value_cents)
+      else old.value_cents
+    end;
+    new.valor_pelas_vendas := false;
+    new.valor_digitado_cents := null;
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function public.fn_mia_valor_do_negocio_segue_os_itens() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_valor_do_negocio_segue_os_itens on public.crm_leads;
+create trigger trg_mia_valor_do_negocio_segue_os_itens
+  before update of value_cents, valor_pelas_vendas on public.crm_leads
+  for each row execute function public.fn_mia_valor_do_negocio_segue_os_itens();
+
+-- (2) O primeiro item num negócio que já tinha venda: a marca desliga.
+--
+-- A rota dos itens grava os itens ANTES do valor; quando ela grava o valor (a
+-- soma dos itens ou o digitado), a marca já está desligada e o gatilho (1) não
+-- tem o que desfazer.
+create or replace function public.fn_mia_item_do_negocio_tira_a_marca_das_vendas()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  update public.crm_leads
+     set valor_pelas_vendas = false,
+         valor_digitado_cents = null
+   where id = new.lead_id
+     and organization_id = new.organization_id
+     and valor_pelas_vendas is true;
+  return null;
+end;
+$$;
+
+revoke execute on function public.fn_mia_item_do_negocio_tira_a_marca_das_vendas() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_item_do_negocio_tira_a_marca_das_vendas on public.mia_itens_do_negocio;
+create trigger trg_mia_item_do_negocio_tira_a_marca_das_vendas
+  after insert on public.mia_itens_do_negocio
+  for each row execute function public.fn_mia_item_do_negocio_tira_a_marca_das_vendas();
+
+-- (3) O último item saiu: as vendas voltam a mandar.
+--
+-- Chamada pela rota dos itens DEPOIS de gravar o valor (lib/produto-no-negocio/
+-- servidor.ts). Num gatilho de `delete` ela rodaria antes da gravação do valor
+-- e a rota escreveria por cima. Sem venda, ou ainda com item, não faz nada. Com
+-- venda, regrava as vendas do negócio com o mesmo valor: é o gatilho do upstream
+-- (9450) quem soma, guarda o digitado e liga a marca, do jeito dele.
+create or replace function public.fn_mia_valor_do_negocio_volta_as_vendas(p_org uuid, p_lead uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if exists (select 1 from public.mia_itens_do_negocio i where i.organization_id = p_org and i.lead_id = p_lead) then
+    return;
+  end if;
+  update public.vendas_registradas v
+     set valor_cents = v.valor_cents
+   where v.organization_id = p_org
+     and v.lead_id = p_lead;
+end;
+$$;
+
+revoke execute on function public.fn_mia_valor_do_negocio_volta_as_vendas(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.fn_mia_valor_do_negocio_volta_as_vendas(uuid, uuid) to service_role;
+
+-- A cura: negócio que já tem item e ficou marcado pelas vendas volta ao nosso
+-- valor (guardado no digitado). O gatilho (1) não age nesta escrita, porque ela
+-- desliga a marca. Rodar de novo não casa nada.
+update public.crm_leads l
+   set value_cents = coalesce(l.valor_digitado_cents, l.value_cents),
+       valor_pelas_vendas = false,
+       valor_digitado_cents = null
+ where l.valor_pelas_vendas is true
+   and exists (select 1 from public.mia_itens_do_negocio i where i.lead_id = l.id);
+
+
+-- ─── 9168 · o batimento dos crons ───
+--
+-- FORK MIA (MIA-154). Espelho EXATO da migration 9168 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+-- 9168 · o batimento dos crons
+--
+-- FORK MIA (MIA-154). Só objeto NOSSO (docs/FORK-MIA.md, regra 3): uma tabela
+-- nova com o prefixo `mia_`. Nenhuma função, nenhum gatilho.
+--
+-- ── Por que no banco, e não no Redis com TTL ─────────────────────────────────
+--
+-- Sem migration, o Redis seria mais barato, mas o carimbo some quando o Redis
+-- reinicia, e a `/health` diria "parado" sobre um vigia que está rodando. Uma
+-- escrita a cada 5 min no banco sobrevive a reinício e segue o padrão do bloco
+-- `backup` (9006): carimbo no banco, julgado com prazo por quem lê.
+--
+-- ── Por que uma linha por ROTA ───────────────────────────────────────────────
+--
+-- A tabela nasce para o vigia dos números, mas o nome não é dele: estender o
+-- batimento a outro cron é uma chamada a `registrarBatimento` com outra rota,
+-- sem migration nova. A linha é regravada, não acumulada: o histórico dos
+-- crons é o log, e uma tabela que cresce 288 linhas por dia por rota só para
+-- responder "qual foi a última" seria custo sem pergunta.
+
+create table if not exists public.mia_batimentos_de_cron (
+  -- O nome da rota de cron, como em `app/api/v1/cron/<rota>` (ex.: `channel-health`).
+  rota text primary key,
+  ultima_rodada_em timestamptz not null,
+  -- Só contagens da rodada (sessões, verificadas, desfechos). Nunca id de
+  -- empresa, nome ou telefone: a `/health` é pública.
+  resumo jsonb
+);
+
+comment on table public.mia_batimentos_de_cron is
+  'MIA (9168): o batimento de cada cron, uma linha por rota, regravada por upsert no fim de cada rodada (lib/cron/batimento.ts). ultima_rodada_em = quando a rodada terminou; resumo = so contagens da rodada. A /api/v1/health le a linha do channel-health (vigia_dos_canais.em_dia: menos de 15 min). Plataforma, zero policies, so o service_role.';
+
+alter table public.mia_batimentos_de_cron enable row level security;
+
+-- ZERO POLICIES: é estado da plataforma, quem lê e escreve é o servidor.
+revoke all on public.mia_batimentos_de_cron from public, anon, authenticated;
+grant select, insert, update, delete on public.mia_batimentos_de_cron to service_role;
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9169 · o cadastro vira lead no CRM da Time ───
+--
+-- FORK MIA (MIA-168). Espelho EXATO da migration 9169 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+--
+-- 9169 · o cadastro vira lead no CRM da Time
+--
+-- Só objetos NOSSOS (docs/FORK-MIA.md, regra 3): a tabela, duas funções e um
+-- gatilho na nossa `mia_origem_da_empresa` (9071). Idempotente: `if not
+-- exists`, `create or replace` e `drop trigger if exists`.
+
+create table if not exists public.mia_cadastro_na_time (
+  id uuid primary key default gen_random_uuid(),
+  -- A org da Time, dona do lead (a da fonte `CADASTRO_FONTE_DO_CRM`). Nula
+  -- enquanto não há lead (sem a variável, sem a fonte, recusa).
+  organization_id uuid references public.organizations(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  lead_id uuid references public.crm_leads(id) on delete cascade,
+  -- A empresa do cliente: nula até o e-mail ser confirmado e ela nascer.
+  empresa_cliente_id uuid references public.organizations(id) on delete set null,
+  ip inet,
+  navegador text,
+  fbp text,
+  fbc text,
+  gclid text,
+  gbraid text,
+  wbraid text,
+  consentimento text,
+  pagina text,
+  -- Os utm_* e o fbclid do link (o que a fonte recebeu), para refazer o lead
+  -- quando a fonte faltou no envio do formulário.
+  origem jsonb not null default '{}'::jsonb,
+  pedido_id text,
+  valor_cents integer,
+  crm_erro text,
+  cadastro_concluido_em timestamptz,
+  teste_comecou_em timestamptz,
+  pagamento_confirmado_em timestamptz,
+  capturado_em timestamptz not null default now(),
+  guardar_ate timestamptz not null default (now() + interval '90 days'),
+  limpo_em timestamptz,
+  constraint mia_cadastro_na_time_user_unico unique (user_id),
+  constraint mia_cadastro_na_time_lead_unico unique (lead_id),
+  constraint mia_cadastro_na_time_empresa_unica unique (empresa_cliente_id),
+  constraint mia_cadastro_na_time_lead_com_org check (lead_id is null or organization_id is not null),
+  constraint mia_cadastro_na_time_consentimento check (consentimento is null or consentimento in ('medicao', 'necessario')),
+  constraint mia_cadastro_na_time_fbp_fbc_so_com_medicao check ((fbp is null and fbc is null) or consentimento = 'medicao'),
+  constraint mia_cadastro_na_time_navegador check (navegador is null or char_length(navegador) <= 512),
+  constraint mia_cadastro_na_time_tamanhos check (
+    (fbp is null or char_length(fbp) <= 300)
+    and (fbc is null or char_length(fbc) <= 300)
+    and (gclid is null or char_length(gclid) <= 500)
+    and (gbraid is null or char_length(gbraid) <= 500)
+    and (wbraid is null or char_length(wbraid) <= 500)
+    and (pagina is null or char_length(pagina) <= 500)
+    and (pedido_id is null or char_length(pedido_id) <= 100)
+    and (crm_erro is null or char_length(crm_erro) <= 120)
+  ),
+  constraint mia_cadastro_na_time_valor check (valor_cents is null or valor_cents > 0)
+);
+
+comment on table public.mia_cadastro_na_time is
+  'MIA (9169): cada cadastro do /signup como lead no CRM da Time (funil MIA - SDR). Os tres momentos (*_em) sao a idempotencia de quem move o card. IP, navegador, fbp, fbc e ids de clique sao so para a medicao (Meta e Google) e a limpeza os zera (fn_mia_cadastro_na_time_limpar). So o servidor le e escreve.';
+
+create index if not exists mia_cadastro_na_time_a_limpar
+  on public.mia_cadastro_na_time (guardar_ate)
+  where limpo_em is null;
+
+alter table public.mia_cadastro_na_time enable row level security;
+revoke all on public.mia_cadastro_na_time from anon, authenticated;
+grant select, insert, update, delete on public.mia_cadastro_na_time to service_role;
+
+-- O nascimento da empresa do cadastro vira evento. Na org do CLIENTE (é dela o
+-- fato); o consumidor roda com ela parada (a entrada paga nasce parada).
+create or replace function public.fn_mia_cadastro_empresa_nasceu()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.origem = 'cadastro' then
+    begin
+      perform public.emit_event(
+        'cadastro.empresa_nasceu',
+        'organization',
+        new.organization_id,
+        jsonb_build_object('organization_id', new.organization_id),
+        '{}'::jsonb,
+        new.organization_id
+      );
+    exception when others then
+      -- O lead é informação: perder o evento aqui é melhor que impedir a
+      -- empresa de nascer. A rodada da jornada (lib/planos-mia/rodada.ts) cura.
+      raise warning 'mia_cadastro_na_time: evento nao emitido para % (%)', new.organization_id, sqlstate;
+    end;
+  end if;
+  return null;
+end;
+$$;
+
+revoke execute on function public.fn_mia_cadastro_empresa_nasceu() from public, anon, authenticated;
+
+drop trigger if exists trg_mia_cadastro_empresa_nasceu on public.mia_origem_da_empresa;
+create trigger trg_mia_cadastro_empresa_nasceu
+  after insert on public.mia_origem_da_empresa
+  for each row execute function public.fn_mia_cadastro_empresa_nasceu();
+
+-- A limpeza da LGPD (finalidade: medição). Zera o que identifica o navegador e
+-- o clique, e marca `limpo_em`; fica o vínculo (lead, empresa, momentos, valor).
+-- Invoker: quem chama é a rodada da jornada, com o service_role.
+create or replace function public.fn_mia_cadastro_na_time_limpar()
+returns integer
+language sql
+security invoker
+set search_path = ''
+as $$
+  with limpas as (
+    update public.mia_cadastro_na_time c
+       set ip = null,
+           navegador = null,
+           fbp = null,
+           fbc = null,
+           gclid = null,
+           gbraid = null,
+           wbraid = null,
+           origem = c.origem - 'fbclid',
+           limpo_em = now()
+     where c.limpo_em is null
+       and (
+         c.guardar_ate <= now()
+         or c.pagamento_confirmado_em <= now() - interval '7 days'
+         or exists (
+           select 1
+             from public.crm_leads l
+             join public.contacts ct on ct.id = l.contact_id
+            where l.id = c.lead_id
+              and ct.is_anonymized
+         )
+       )
+    returning 1
+  )
+  select count(*)::integer from limpas;
+$$;
+
+revoke execute on function public.fn_mia_cadastro_na_time_limpar() from public, anon, authenticated;
+grant execute on function public.fn_mia_cadastro_na_time_limpar() to service_role;
+
+notify pgrst, 'reload schema';
+
+
+-- ─── 9170 · as regras de conversão do site ───
+--
+-- FORK MIA (MIA-169). Espelho EXATO da migration 9170 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+-- 9170 · as regras de conversão do site
+--
+-- O cadastro e a assinatura da MIA viram negócio no funil "MIA - SDR" da Time
+-- (parte A, 9169). Cada passo da conta (cadastro concluído, teste, pagamento)
+-- tem de chegar à Meta como EVENTO DE SITE, no dataset do site, e ao Google Ads
+-- como importação de clique. O motor que manda é o de sempre (`lib/conversoes`):
+-- esta tabela só diz o que cada etapa manda, com a chave própria no livro-razão.
+--
+-- Por que tabela NOSSA, e não abrir o CHECK da 0524: redefinir o CHECK do
+-- upstream quebraria a próxima migration dele que o refizer (o nosso banco
+-- teria linhas `StartTrial`), mudaria a tela de todo cliente, e os 4 eventos não
+-- servem para lead de WhatsApp. E a 0524 tem uma regra por etapa; o pagamento
+-- precisa de Subscribe, Purchase e a ação do Google na mesma etapa.
+
+create table if not exists public.mia_regras_de_conversao_do_site (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  stage_id uuid not null,
+  plataforma text not null,
+  evento_meta text,
+  google_acao_id text,
+  leva_valor boolean not null default false,
+  enabled boolean not null default false,
+  configured_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint mia_regras_do_site_plataforma
+    check (plataforma in ('meta_ads', 'google_ads')),
+  constraint mia_regras_do_site_evento_meta
+    check (evento_meta is null or evento_meta in ('CompleteRegistration', 'StartTrial', 'Subscribe', 'Purchase')),
+  constraint mia_regras_do_site_acao_do_google
+    check (google_acao_id is null or google_acao_id ~ '^[1-9][0-9]{0,31}$'),
+  constraint mia_regras_do_site_um_destino
+    check (
+      (plataforma = 'meta_ads' and evento_meta is not null and google_acao_id is null)
+      or (plataforma = 'google_ads' and google_acao_id is not null and evento_meta is null)
+    ),
+  -- Purchase e Subscribe levam valor, moeda e o id do pedido na Meta: sem
+  -- `leva_valor` o transporte recusaria todo envio.
+  constraint mia_regras_do_site_valor_na_compra
+    check (evento_meta is null or evento_meta not in ('Purchase', 'Subscribe') or leva_valor)
+);
+
+alter table public.mia_regras_de_conversao_do_site
+  drop constraint if exists mia_regras_do_site_etapa_da_org_fk;
+alter table public.mia_regras_de_conversao_do_site
+  add constraint mia_regras_do_site_etapa_da_org_fk
+  foreign key (organization_id, stage_id)
+  references public.crm_stages (organization_id, id)
+  on delete cascade;
+
+create unique index if not exists mia_regras_do_site_meta_uk
+  on public.mia_regras_de_conversao_do_site (organization_id, stage_id, evento_meta)
+  where plataforma = 'meta_ads';
+create unique index if not exists mia_regras_do_site_google_uk
+  on public.mia_regras_de_conversao_do_site (organization_id, stage_id, google_acao_id)
+  where plataforma = 'google_ads';
+create index if not exists mia_regras_do_site_etapa_idx
+  on public.mia_regras_de_conversao_do_site (organization_id, stage_id);
+
+comment on table public.mia_regras_de_conversao_do_site is
+  'MIA (9170): o evento de SITE que cada etapa aberta manda à Meta (CompleteRegistration, StartTrial, Subscribe, Purchase) ou ao Google Ads (a ação de conversão). A chave no livro-razão ad_conversion_dispatches é MetaEtapa:<id da regra> ou Etapa:<id da regra>. Nasce desligada. Server-side only: RLS sem policy e grants revogados de anon/authenticated.';
+comment on column public.mia_regras_de_conversao_do_site.configured_at is
+  'MIA (9170): trava de retroatividade, só movimentos de etapa posteriores enviam. Regravada pelo gatilho quando a etapa, o destino ou o valor mudam, ou quando a regra é religada.';
+comment on column public.mia_regras_de_conversao_do_site.leva_valor is
+  'MIA (9170): true = o evento leva o valor do negócio (value, currency e order_id na Meta; conversionValue no Google). Sem valor no negócio, o envio fica pendente com o motivo sem_valor.';
+
+alter table public.mia_regras_de_conversao_do_site enable row level security;
+revoke all on public.mia_regras_de_conversao_do_site from anon, authenticated;
+grant select, insert, update, delete on public.mia_regras_de_conversao_do_site to service_role;
+
+drop trigger if exists trg_mia_regras_do_site_updated_at on public.mia_regras_de_conversao_do_site;
+create trigger trg_mia_regras_do_site_updated_at
+  before update on public.mia_regras_de_conversao_do_site
+  for each row execute function public.fn_set_updated_at();
+
+-- A trava de retroatividade, com o contrato da `fn_marcar_configuracao_regra_meta`
+-- da 0524 (que não é tocada): função NOSSA, ao lado.
+create or replace function public.fn_mia_marcar_configuracao_regra_do_site()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    new.configured_at := coalesce(new.configured_at, now());
+  elsif new.stage_id is distinct from old.stage_id
+     or new.plataforma is distinct from old.plataforma
+     or new.evento_meta is distinct from old.evento_meta
+     or new.google_acao_id is distinct from old.google_acao_id
+     or new.leva_valor is distinct from old.leva_valor
+     or (new.enabled and not old.enabled) then
+    new.configured_at := now();
+  else
+    new.configured_at := old.configured_at;
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.fn_mia_marcar_configuracao_regra_do_site() from public, anon, authenticated;
+grant execute on function public.fn_mia_marcar_configuracao_regra_do_site() to service_role;
+
+drop trigger if exists trg_mia_marcar_configuracao_regra_do_site on public.mia_regras_de_conversao_do_site;
+create trigger trg_mia_marcar_configuracao_regra_do_site
+  before insert or update on public.mia_regras_de_conversao_do_site
+  for each row execute function public.fn_mia_marcar_configuracao_regra_do_site();
+
+-- ─── 9171 · o ritmo de máquina na trava de robô ───
+--
+-- FORK MIA (MIA-210). Espelho EXATO da migration 9171 (supabase/migrations-mia/), onde
+-- está o porquê inteiro (a linha `-- manifest:`). Idempotente, como todo o
+-- apêndice. Vai antes da varredura anon, que fecha o arquivo.
+--
+-- 9171 · o ritmo de máquina na trava de robô
+--
+-- FORK MIA (MIA-210). Só objeto NOSSO (docs/FORK-MIA.md, regra 3): colunas
+-- novas na tabela da 9153 e as CHECKs delas dentro de `do` que confere o
+-- catálogo, no padrão da 9153. Nenhuma função criada, nenhuma CHECK mudada.
+
+alter table public.mia_trava_de_robo_config
+  -- O sinal D (ritmo de máquina). Desliga só ele: o laço e o teto continuam.
+  add column if not exists ritmo_ligado                    boolean not null default true,
+  -- Quantos giros SEGUIDOS no mesmo ritmo disparam.
+  add column if not exists ritmo_giros                     integer not null default 6,
+  -- Cada giro, o outro lado respondeu em até estes segundos...
+  add column if not exists ritmo_latencia_maxima_segundos  integer not null default 60,
+  -- ...e a maior latência menos a menor fica até aqui.
+  add column if not exists ritmo_variacao_segundos         integer not null default 8;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'mia_trava_de_robo_config_ritmo_giros') then
+    alter table public.mia_trava_de_robo_config add constraint mia_trava_de_robo_config_ritmo_giros
+      check (ritmo_giros between 4 and 30);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_trava_de_robo_config_ritmo_latencia') then
+    alter table public.mia_trava_de_robo_config add constraint mia_trava_de_robo_config_ritmo_latencia
+      check (ritmo_latencia_maxima_segundos between 10 and 300);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'mia_trava_de_robo_config_ritmo_variacao') then
+    alter table public.mia_trava_de_robo_config add constraint mia_trava_de_robo_config_ritmo_variacao
+      check (ritmo_variacao_segundos between 2 and 60);
+  end if;
+end $$;
+
+comment on column public.mia_trava_de_robo_config.ritmo_ligado is
+  'MIA (9171): liga o sinal D, o ritmo de maquina (padrao true). Desliga so ele: o laco com robo e o teto continuam valendo. ligada false desliga os tres.';
+comment on column public.mia_trava_de_robo_config.ritmo_giros is
+  'MIA (9171): quantos giros seguidos (a ultima resposta da IA e a primeira recebida em texto depois dela, sem a equipe no meio) no mesmo ritmo disparam. Dispara como o teto: pausa so a conversa.';
+comment on column public.mia_trava_de_robo_config.ritmo_latencia_maxima_segundos is
+  'MIA (9171): em cada giro do ritmo, o outro lado respondeu em ate estes segundos. Acima disto o giro quebra a sequencia.';
+comment on column public.mia_trava_de_robo_config.ritmo_variacao_segundos is
+  'MIA (9171): a maior latencia menos a menor, nos giros do ritmo, fica ate aqui. Gente varia mais que isto.';
 
 notify pgrst, 'reload schema';
 

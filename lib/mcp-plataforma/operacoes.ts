@@ -225,6 +225,41 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "os números do atendimento a quem o tiver, sem login, até vencer ou ser revogado. E encerra: derruba a conexão e agenda a exclusão das " +
       "conversas. Um token vazado gera links de conexão em nome da Time e publica relatório que ninguém revisou de verdade.",
   },
+  // FORK MIA (upstream 1.117, migration 9390, MIA-67): revogar a conexão de um
+  // aplicativo (o ChatGPT) ao MCP da empresa. Chave própria: não monta nada e não
+  // fala com ninguém, mas CORTA um acesso que a empresa deu. Criar conexão não tem
+  // chave: só o administrador da empresa conecta, no aplicativo.
+  {
+    chave: "revogar_conexao_do_mcp",
+    rotulo: "Revogar a conexão de um aplicativo ao MCP da empresa",
+    raio:
+      "Revoga, em QUALQUER cliente, a conexão de um aplicativo (como o ChatGPT) ao MCP da empresa, feita pelo OAuth: o aplicativo deixa de ler e de alterar " +
+      "o CRM na hora, e o administrador da empresa precisa autorizar de novo. Um token vazado derruba as integrações de IA de todos os clientes. " +
+      "Não cria conexão, não lê o token e não mexe nos tokens colados à mão.",
+  },
+  // FORK MIA (upstream 1.118, migration 9416, MIA-79): o módulo OPCIONAL do
+  // upstream por empresa. Chave própria, e não `liberar_modulo` (o módulo
+  // VENDIDO do fork): um token que já tinha aquela não ganha esta em silêncio.
+  // Na tela do upstream, só o admin de plataforma decide.
+  {
+    chave: "gerir_modulo_opcional",
+    rotulo: "Ligar ou desligar módulo opcional por empresa",
+    raio:
+      "Desliga (ou devolve ao padrão) um módulo opcional da instalação em QUALQUER cliente: as telas e as rotas do módulo somem para a equipe da empresa e o que ele faz " +
+      "sozinho para (a IA deixa de seguir os fluxos de atendimento, a fila de ligações some). Um token vazado tira recurso de todos os clientes. " +
+      "Não apaga dado, não liga nada na instalação e não mexe nos módulos vendidos.",
+  },
+  // FORK MIA (MIA-99): o preço que a META cobra por mensagem (docs/fork/consumo-de-ia.md,
+  // seção 9). Chave própria, e não `definir_preco`: aquela muda o que UM cliente paga;
+  // esta, o custo de TODOS, que é outro estrago.
+  {
+    chave: "definir_custo_da_meta",
+    rotulo: "Definir o preço que a Meta cobra por mensagem",
+    raio:
+      "Muda o preço de CUSTO de cada categoria de mensagem da Meta, que entra no custo de QUALQUER cliente nas telas da plataforma a partir de agora (o mês fechado não muda). " +
+      "Um token vazado faz o custo e a margem de todos os clientes parecerem outros, e quem decide preço por esses números decide errado. " +
+      "Não muda o que nenhum cliente paga, não envia mensagem e não apaga preço.",
+  },
 ] as const;
 
 const POR_CHAVE = new Map(OPERACOES.map((o) => [o.chave, o]));

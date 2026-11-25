@@ -16,6 +16,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiError } from "@/lib/api/types";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
 import { audit } from "@/lib/audit";
+import { metadataDoModulo } from "@/lib/audit/ator-modulo";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { resolveOwnerPatch, type OwnerPatch, type OwnerPatchInput } from "@/lib/leads/owner-patch";
 import { emitLeadActivity, stageChangeReason } from "@/lib/leads/activity-emitter";
@@ -23,6 +24,8 @@ import { listaLegivel } from "@/lib/leads/activity-vocabulary";
 import { camposAlterados } from "@/lib/leads/campos-alterados";
 // FORK MIA — a marca "veio da conversa" do cartão aberto (lib/cartoes/campos-da-conversa.ts).
 import { chavesPersonalizadasAlteradas } from "@/lib/cartoes/campos-da-conversa";
+import { etiquetasParaGravar } from "@/lib/leads/etiquetas-do-patch";
+import { chaveDeComparacaoDeEtiqueta } from "@/lib/contacts/etiquetas";
 import { valoresAntesDepois } from "@/lib/leads/valores-audit";
 import {
   mencionaRecorrencia,
@@ -326,6 +329,12 @@ function actorAuditPayload(actor: Actor): {
     return {
       actorUserId: null,
       metadataActor: { actor_type: "api_token", actor_api_token_id: actor.id },
+    };
+  }
+  if (actor.type === "module") {
+    return {
+      actorUserId: null,
+      metadataActor: { actor_type: "module", actor_id: actor.id, ...metadataDoModulo(actor) },
     };
   }
   return {
@@ -1158,6 +1167,16 @@ export async function updateLeadHandler(
       | undefined,
   );
 
+  // ── AS ETIQUETAS DO NEGÓCIO (#4666) ────────────────────────────────────────
+  //
+  // `tags` continua SUBSTITUINDO a lista inteira (contrato antigo, declarado na
+  // descrição da ferramenta); `tags_adicionar`/`tags_remover` são a união e a
+  // diferença sobre o que está gravado — o que o agente quase sempre quer. A
+  // conta mora em `lib/leads/etiquetas-do-patch.ts`, com a MESMA régua da tela
+  // (`normalizarTag` + chave larga), e precisa de `existing`: é aqui, e não no
+  // zod, que a lista atual é conhecida.
+  const etiquetas = etiquetasParaGravar(input, (existing as { tags?: string[] | null }).tags ?? []);
+
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.title !== undefined) patch.title = input.title;
   if (input.description !== undefined) patch.description = input.description;
@@ -1202,7 +1221,7 @@ export async function updateLeadHandler(
   if (input.expected_close_date !== undefined) {
     patch.expected_close_date = input.expected_close_date;
   }
-  if (input.tags !== undefined) patch.tags = input.tags;
+  if (etiquetas !== undefined) patch.tags = etiquetas;
   // Metas comerciais (0243): quem originou e que tipo de receita é. Entram como
   // qualquer outro campo — o que os torna especiais é o relatório que os lê, não
   // a gravação.
@@ -1237,7 +1256,7 @@ export async function updateLeadHandler(
   // O filtro entra AQUI TAMBÉM, e não só no SELECT acima: entre ler e escrever
   // há uma janela, e defesa que depende de uma leitura anterior é defesa que
   // some quando alguém reordena o código.
-  const tagServiceOrigin = input.tags !== undefined
+  const tagServiceOrigin = etiquetas !== undefined
     ? ctx.serviceOrigin ?? await observeServiceOrigin(createAdminClient(), ctx.organization_id, input.contact_id ?? existing.contact_id)
     : null;
   await guardServiceEffect();
@@ -1462,16 +1481,21 @@ export async function updateLeadHandler(
       });
   }
 
-  if (input.tags !== undefined) {
-    const prevTags: string[] = (existing as { tags?: string[] }).tags ?? [];
-    const addedTags = input.tags.filter((t) => !prevTags.includes(t));
+  if (etiquetas !== undefined) {
+    const prevTags = (existing as { tags?: string[] | null }).tags ?? [];
+    // A comparação é pela chave LARGA (sem caixa, sem acento) — a mesma da tela
+    // e do filtro: a etiqueta que casa com uma já gravada não é etiqueta NOVA,
+    // e anunciá-la como ganha faria a automação disparar duas vezes pelo mesmo
+    // marcador (#4666).
+    const jaTinha = new Set(prevTags.map(chaveDeComparacaoDeEtiqueta));
+    const addedTags = etiquetas.filter((t) => !jaTinha.has(chaveDeComparacaoDeEtiqueta(t)));
     if (addedTags.length) {
       await createAdminClient()
         .rpc("emit_event", {
           p_event_type: "lead.tag_added",
           p_entity_kind: "crm_lead",
           p_entity_id: leadId,
-          p_payload: { added_tags: addedTags, tags: input.tags, service_origin: tagServiceOrigin },
+          p_payload: { added_tags: addedTags, tags: etiquetas, service_origin: tagServiceOrigin },
           p_metadata: { request_id: ctx.requestId, ...a.metadataActor },
           p_organization_id: existing.organization_id,
         })

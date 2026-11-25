@@ -60,6 +60,21 @@ O próprio upstream estende assim: `trg_contacts_anonimizado_limpa_custom_fields
 
 Vigiado por `tests/unit/schema-mia-estende-nunca-redefine.test.ts`.
 
+**Tabela com o mesmo nome também é redefinição.** Os dois lados escrevem `create table
+if not exists`, então nada dá erro: quem nasce primeiro fica com o nome e o outro é
+pulado em silêncio. Na v1.118 a 9416 do upstream criou uma `organization_modules`
+(módulo opcional por empresa, coluna `estado`) com o nome da nossa da 0245 (módulo
+vendável contratado, `revoked_at`). A 9163 renomeou a nossa para
+`mia_modulos_contratados`. Tabela nova da MIA nasce com o prefixo `mia_`, e a cerca e o
+`scripts/redefinicoes-do-upstream.mjs` passaram a comparar tabelas.
+
+**O que tem de rodar ANTES do `baseline.sql`.** O bootstrap aplica o dele primeiro, e
+uma tabela nossa no caminho de uma dele precisa sair antes que ele chegue. O trecho
+fica no próprio `baseline-mia.sql`, entre `-- >>> ANTES DO BASELINE DO UPSTREAM` e
+`-- <<< ANTES DO BASELINE DO UPSTREAM`; o `easypanel/bootstrap.sh` (modo update) e o
+`scripts/ensaio-de-banco.sh` o recortam e aplicam primeiro, e no resto do arquivo ele
+roda de novo sem fazer nada. Tem de ser idempotente e só mexer em objeto nosso.
+
 ### 4. Sincronizar sempre, nunca acumular
 
 A dor de uma fusão cresce **mais** que o número de commits: nove dias divergindo não
@@ -82,6 +97,7 @@ falha alto:
 | tabela nova com `contact_id` que nada anonimiza | `lgpd-exporta-o-que-redige` |
 | namespace das imagens voltando para o do upstream | `namespace-das-imagens` |
 | o schema da MIA deixando de ser aplicado no deploy | `carimbo-do-schema` |
+| nome de evento do `event_log` com três segmentos, que o CHECK `event_type_format` recusa e o bloco do gatilho engole (PR #138) | `nome-de-evento-do-event-log-tem-dois-segmentos` |
 
 Estas catracas são **nossas** e o upstream não as tem. Na fusão de 25/09 elas acharam
 quatro buracos de LGPD no código novo dele, dois dias depois de ele escrever.
@@ -160,6 +176,14 @@ npx vitest run
   cobrança do upstream; os pontos de ligação estão em
   [`docs/fork/jornada-de-assinatura.md`](fork/jornada-de-assinatura.md), seção 11, e
   os espelhos das rotas do card Cobrança, na seção 6.
+  O lead do cadastro (MIA-168: todo cadastro do `/signup` vira negócio no funil "MIA - SDR"
+  da Time e anda em Cadastro concluído, Em teste e Assinante) mora em
+  `lib/planos-mia/lead-do-cadastro*.ts`, `lib/planos-mia/origem-do-cadastro.ts` e no núcleo
+  comum com o Raio-X, `lib/time/captacao-na-time.ts`; a tabela é a 9169. Os pontos novos no
+  código do upstream são uma linha cada: `app/actions/auth/signUp.ts`,
+  `app/(public)/signup/page.tsx`, `components/auth/SignupForm.tsx`, `lib/auth/schemas.ts`,
+  `lib/cobranca/sinal.handler.ts` e `lib/event-log/register-handlers.ts` (seção 12 de
+  [`docs/fork/jornada-de-assinatura.md`](fork/jornada-de-assinatura.md)).
   O pagamento no início (.96: o cadastro da entrada paga, os dados fiscais, o passo
   "Pagamento" com Pix, cartão e boleto, o modo teste e o bloqueio no fim do teste) mora em
   `lib/dados-fiscais/`, `lib/asaas-mia/`, `lib/pagamento-inicial/` e
@@ -215,6 +239,13 @@ npx vitest run
   `lib/mcp-plataforma/ferramentas/coexistencia.ts`, com o schema na 9162 e na 9164; os pontos de
   ligação no código do upstream estão em [`docs/fork/coexistencia.md`](fork/coexistencia.md),
   seções 2, 5.1 e 6.4, e o roteiro do teste com um número de verdade, na seção 8.
+  As conversões do site (MIA-169: o cadastro e a assinatura da MIA viram evento de SITE na
+  Meta e importação de clique no Google, pelo motor do upstream e com regras nossas por etapa)
+  moram em `lib/conversoes/site.ts`, `lib/conversoes/etapa-site.handler.ts`,
+  `lib/plataformas-de-anuncio/meta/evento-do-site.ts` e `lib/implantacao/conversoes-do-site.ts`,
+  com o schema na 9170 (`mia_regras_de_conversao_do_site`); a lista fechada dos pontos de
+  ligação no código do upstream está em
+  [`docs/fork/conversoes-da-meta.md`](fork/conversoes-da-meta.md#conversões-do-site).
 - **Funcionalidade duplicada.** Os dois lados construíram, na mesma semana, o
   cadastro incorporado da Meta, o disparo em massa e o aviso no WhatsApp. A decisão
   de ficar com um, com o outro ou com os dois é de produto. Para o **disparo em

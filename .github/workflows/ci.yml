@@ -91,13 +91,15 @@ permissions:
 # esta política não converte cancelamento em prova nem dispensa os cinco gates.
 
 jobs:
-  # A suíte de unit em SETE partes paralelas (duas até 22/09/2026, três até
-  # 23/10/2026, seis até 16/11/2026), mais duas partes sem unit: a OITAVA com
-  # cercas e o kit bash menos o seu arquivo mais pesado, a NONA só com esse
-  # arquivo (desde 16/11/2026; antes a 7 e a 8, e antes disso cercas e kit
-  # inteiro moravam numa parte só, a 4 até 23/10 e a 7 até 03/11) — ver o fim
-  # deste bloco. O typecheck, que era da parte 1 desde sempre, passou a morar na
-  # NONA em 16/11/2026. O check obrigatório `verify` é o agregador lá embaixo —
+  # A suíte de unit em OITO partes paralelas (duas até 22/09/2026, três até
+  # 23/10/2026, seis até 16/11/2026, sete até 19/11/2026), mais duas partes sem
+  # unit: a NONA com cercas, lint e o kit bash menos o seu arquivo mais pesado,
+  # a DÉCIMA com esse arquivo e o typecheck (desde 19/11/2026; antes a 8 e a 9,
+  # antes disso a 7 e a 8, e antes disso cercas e kit inteiro moravam numa
+  # parte só, a 4 até 23/10 e a 7 até 03/11) — ver o fim deste bloco. O
+  # typecheck, que era da parte 1 desde sempre, passou à NONA em 16/11/2026 e
+  # anda com o kit pesado (hoje a DÉCIMA). O lint, da 2 desde 22/09/2026, passou
+  # à NONA em 19/11/2026. O check obrigatório `verify` é o agregador lá embaixo —
   # mesmo padrão do `invariants`.
   #
   # Medido em 18/09/2026: o `verify` inteiro levava 712 s de mediana nos verdes e
@@ -108,9 +110,9 @@ jobs:
   # arquivo: cada parte roda metade (`--shard`) e paga metade do jsdom.
   #
   # Os passos de arquivo inteiro rodam cada um numa parte só: as três
-  # auditorias na 1; lint na 2; typecheck na 9 (era na 1 até 16/11/2026, ver o
-  # fim deste bloco); cercas e kit bash na última (na 3 até
-  # 08/10/2026) — é o que equilibra as partes (a conta está no fim deste bloco). O `--shard` corta por CONTAGEM de
+  # auditorias na 1; lint e cercas na 9 (o lint era na 2 até 19/11/2026);
+  # typecheck na 10 (era na 1 até 16/11/2026, ver o fim deste bloco); kit bash
+  # na 9 e na 10 (na 3 até 08/10/2026) — é o que equilibra as partes (a conta está no fim deste bloco). O `--shard` corta por CONTAGEM de
   # arquivos, não por tempo; quem
   # equilibra o relógio é onde moram estes passos. A divisão em partes é o
   # conserto estrutural da issue #1185, que o #1184 deixou anotado: com ele,
@@ -217,6 +219,34 @@ jobs:
   # rodada — o job já está vermelho, e é o mesmo desenho de hoje, em que
   # typecheck vermelho na 1 já pulava o shard 1. Custo: um job a mais por rodada
   # (preâmbulo ~25-35 s) na fila de runners.
+  #
+  # A OITAVA PARTE DE UNIT E O LINT NA NONA (19/11/2026, MIA-93). A parte 2
+  # estourou o orçamento na `main` `61902f3d1` (run 44622420338, job
+  # 135907285435): 13 min no passo do orçamento (839 s de job) contra 12, SEM
+  # teste falhando.
+  # Medido passo a passo naquele job: preâmbulo 29 s (checkout 11 + preparar-node
+  # 17), lint 225 s, `Unit tests` 582 s. As outras partes do MESMO run: 1 = 633 s
+  # (unit 597), 3 = 474 (437), 4 = 523 (485), 5 = 483 (431), 6 = 420 (367),
+  # 7 = 595 (559), 8 = 315 (cercas 112 + kit menos 158), 9 = 452 (typecheck 242 +
+  # kit pesado 181). Suíte unitária: 3458 s em sete fatias. O lint, que levava
+  # 65 s em 22/09, chegou a 225 s.
+  #
+  # Por que as DUAS coisas, e não uma (a mesma conta de 16/11):
+  #   · só mais uma parte (8 shards): a fatia da 2 perde 1/8 dos arquivos →
+  #     582 × 7/8 ≈ 509 s; com o lint a parte 2 ficaria em ~12,7 min, AINDA
+  #     vermelha;
+  #   · só tirar o lint: a 2 ficaria em ~10,2 min e a 1 já está em 10,5 — raspar
+  #     o limite de novo, com a suíte crescendo.
+  # Com as duas: cada parte de unit fica em ~8,5–9,2 min (29 + 7/8 da fatia de
+  # hoje) e a NONA em ~8,8 min (preâmbulo + cercas 112 + lint 225 + kit menos
+  # 158). O lint vai para a parte das cercas, não para a do typecheck: a 10
+  # somaria 452 + 225 = 11,3 min. PREVISÃO, não medição: quem mede é o
+  # orçamento na primeira rodada das dez partes (a tabela está no PR da MIA-93).
+  #
+  # O que NÃO muda: nenhum passo some, a suíte continua inteira (`--shard=N/8`
+  # sobre as partes 1 a 8), o orçamento segue 12 e o teto 15. O lint passa a
+  # rodar DEPOIS das cercas (ordem do arquivo): cerca vermelha pula o lint
+  # naquela rodada — o job já está vermelho. Custo: um job a mais por rodada.
   verify-parte:
     # Guarda de travamento. O DETECTOR de crescimento é o passo `Orçamento de
     # tempo` no fim de cada parte; a medição que justifica o número está em
@@ -232,7 +262,7 @@ jobs:
       # Sem fail-fast: um vermelho numa parte não esconde o da outra.
       fail-fast: false
       matrix:
-        parte: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        parte: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@v7
 
@@ -314,14 +344,16 @@ jobs:
       # em segundos; dentro da suíte longa, o mesmo vermelho chegava aos 7–12
       # minutos. Rodam UMA vez: o passo de unit abaixo pula o projeto `cercas`.
       # Seleção e medições: o bloco `projects` de vitest.config.ts.
-      # Na parte 8, junto do kit bash: o porquê e a conta estão no cabeçalho do job.
+      # Na parte 9, junto do lint e do kit bash: o porquê e a conta estão no
+      # cabeçalho do job.
       - name: Cercas estruturais
-        if: matrix.parte == 8
+        if: matrix.parte == 9
         run: pnpm cercas
 
       - name: Typecheck
-        if: matrix.parte == 9
-        # NA NONA, NÃO NA 1 (16/11/2026). O typecheck é custo FIXO de ~190 s e a
+        if: matrix.parte == 10
+        # NA DÉCIMA (era a NONA de 16/11 a 19/11/2026, quando a oitava parte de
+        # unit entrou), NÃO NA 1 (16/11/2026). O typecheck é custo FIXO de ~190 s e a
         # parte 1 é a que carrega o shard mais pesado de unit: medido na `main`
         # `e490c6baa5` (run 43953228646), parte 1 = 13,7 min (unit 591 s +
         # typecheck 191 s) e a parte da 8, que só tinha o kit pesado, 3,7 min.
@@ -351,9 +383,10 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=12288
         run: pnpm typecheck --extendedDiagnostics
 
-      # Na parte 2, não na 1: o porquê e a conta estão no cabeçalho do job.
+      # Na parte 9 (das cercas), não na 2 nem na 1: o porquê e a conta estão no
+      # cabeçalho do job.
       - name: Lint
-        if: matrix.parte == 2
+        if: matrix.parte == 9
         run: pnpm lint
 
       # Invariante 1 de docs/doctrine/restricao-de-canal.md: nenhuma feature
@@ -436,13 +469,13 @@ jobs:
           echo "OK — ${total} migrations na árvore, nenhum NNNN nem timestamp repetido."
 
       # `--project produto` é o `pnpm test:unit` MENOS as cercas, que já
-      # rodaram acima; `--shard` divide os arquivos entre as partes 1 a 7. Juntos
-      # são a suíte inteira, uma vez só. As partes 8 e 9 não rodam unit: são
-      # cercas e kit bash (cabeçalho do job). Localmente o comando continua sendo
+      # rodaram acima; `--shard` divide os arquivos entre as partes 1 a 8. Juntos
+      # são a suíte inteira, uma vez só. As partes 9 e 10 não rodam unit: são
+      # cercas, lint, typecheck e kit bash (cabeçalho do job). Localmente o comando continua sendo
       # `pnpm test:unit`, sem recorte.
-      - name: Unit tests (parte ${{ matrix.parte }}/7)
-        if: matrix.parte != 8 && matrix.parte != 9
-        run: pnpm test:unit --project produto --shard=${{ matrix.parte }}/7
+      - name: Unit tests (parte ${{ matrix.parte }}/8)
+        if: matrix.parte != 9 && matrix.parte != 10
+        run: pnpm test:unit --project produto --shard=${{ matrix.parte }}/8
 
       # O MAPA DA SKILL COBRE O MENU? — aviso, nunca reprova.
       #
@@ -500,16 +533,16 @@ jobs:
       # escolher OpenRouter travava o instalador num laço, escolher OpenAI
       # deixava o .env pela metade — passaram por todos os checks verdes. 15s.
       #
-      # Em DOIS pedaços desde 03/11/2026: a parte 9 roda só o arquivo mais pesado
-      # do kit, a 8 roda as cercas e todo o resto. O porquê e a medida estão no
+      # Em DOIS pedaços desde 03/11/2026: a parte 10 roda só o arquivo mais pesado
+      # do kit, a 9 roda as cercas e todo o resto (a 9 e a 8 até 19/11/2026). O porquê e a medida estão no
       # cabeçalho do job. O corte é feito sobre o próprio `pnpm test:shell`
       # (scripts/test-shell-parte.sh), então o package.json continua sendo a
       # única lista e teste novo cai na parte 8 sem editar o CI.
       - name: Kit self-host (bash)
-        if: matrix.parte == 8 || matrix.parte == 9
+        if: matrix.parte == 9 || matrix.parte == 10
         env:
           KIT_PESADO: tests/shell/install-nao-deixa-temporario.test.sh
-        run: bash scripts/test-shell-parte.sh ${{ matrix.parte == 9 && 'so' || 'menos' }} "$KIT_PESADO"
+        run: bash scripts/test-shell-parte.sh ${{ matrix.parte == 10 && 'so' || 'menos' }} "$KIT_PESADO"
 
       - name: Orçamento de tempo do verify-parte
         if: always()
@@ -563,6 +596,12 @@ jobs:
           # 3,7 min): a parte nova sozinha deixaria a 1 em ~12,3 min, e só tirar
           # o typecheck deixaria 1,5 min de folga. A conta está no cabeçalho do
           # job.
+          #
+          # 19/11/2026: a parte 2 estourou com 13 min na `main` `61902f3d1`
+          # (run 44622420338) com `Unit tests` em 582 s e lint em 225 s — nenhum
+          # teste falhando. O conserto foi a OITAVA parte de unit E o lint para a
+          # NONA (a das cercas), de novo sem subir este número (MIA-93). A conta
+          # está no cabeçalho do job.
           #
           # ── OS 100 CANCELADOS, E POR QUE ELES NÃO CENSURAM ESTA CONTA ────
           #
@@ -727,6 +766,16 @@ jobs:
     # (v1.108 a v1.116) trouxe o roteamento do upstream abaixo, mas sem a
     # variável `RUNNER_PROPRIO` a perna continua no `ubuntu-latest` e o tempo não
     # muda: o 60 fica (medição no PR #97).
+    # FORK MIA (MIA-71): a perna deixou de ser UMA passada por major. MEDIDO em
+    # 18/11/2026 (jobs de 7 rodadas do ci.yml, todas verdes): 51 a 57 min por
+    # perna no pg15 e no pg17, e o passo `update.sh sobre banco COM DADOS` leva
+    # só 0,2 a 0,4 min — o peso inteiro é o `vitest` do `test:db` (725 arquivos
+    # em série, um banco por arquivo, ~49 a 54 min), então separar as duas
+    # passadas não ganharia nada. A matriz agora é major × FATIA: `--shard=N/3`
+    # do vitest, cada fatia sobe o próprio Postgres e roda um terço dos arquivos
+    # (simulado sobre o tempo por arquivo do log do pg17: 22,4 · 16,6 · 15,2 min,
+    # mais ~1,5 de subida). O teto continua 60 até a medição do PR dizer outra
+    # coisa; o número novo, se vier, é decidido sobre a distribuição das fatias.
     # RUNNERS PRÓPRIOS (VPS `deskcomm-vps`, aprovados pelo dono em 12/11/2026).
     # Por quê: a fila do Actions (teto de jobs simultâneos) segura esta matriz,
     # que é a perna mais longa do CI. Dois runners numa VPS dedicada
@@ -752,7 +801,7 @@ jobs:
     runs-on: ${{ vars.RUNNER_PROPRIO == 'ligado' && !endsWith(github.actor, '[bot]') && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","deskcomm-vps"]') || 'ubuntu-latest' }}
     needs: [invariants-alcance]
     concurrency:
-      group: ${{ github.workflow }}-invariants-majors-pg${{ matrix.pg }}-${{ github.event.pull_request.number || github.ref }}${{ github.event_name == 'pull_request' && github.run_attempt != '1' && format('-reentrada-{0}', github.event.pull_request.head.sha) || '' }}${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt != '1' && format('-reentrada-{0}', github.sha) || '' }}
+      group: ${{ github.workflow }}-invariants-majors-pg${{ matrix.pg }}-fatia${{ matrix.fatia }}-${{ github.event.pull_request.number || github.ref }}${{ github.event_name == 'pull_request' && github.run_attempt != '1' && format('-reentrada-{0}', github.event.pull_request.head.sha) || '' }}${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt != '1' && format('-reentrada-{0}', github.sha) || '' }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     strategy:
       # `false` e não o padrão (`true`): com `fail-fast`, a primeira major que
@@ -764,6 +813,15 @@ jobs:
         # A lista vem do `invariants-alcance`: ["15","17"] sempre que o PR
         # alcança o piso, e fora de pull_request; ["17"] no PR que não alcança.
         pg: ${{ fromJSON(needs.invariants-alcance.outputs.majors) }}
+        # As FATIAS do `test:db` (MIA-71): `vitest --shard=N/3`, que corta os
+        # 725 arquivos por hash do caminho, sem olhar para o tempo de cada um.
+        # Sem a fatia no `concurrency:` acima as três pernas da mesma major
+        # caíam no MESMO grupo e o `cancel-in-progress` cancelaria duas.
+        # Todas as fatias de todas as majors têm de passar: o agregado
+        # `invariants` lê o resultado da matriz inteira. Mudar o 3 aqui exige
+        # mudar o `--shard=N/3` do passo abaixo — quem guarda é
+        # tests/unit/invariants-majors-em-fatias.test.ts.
+        fatia: [1, 2, 3]
     env:
       # Uma variável, os dois scripts: `scripts/test-db.sh` e
       # `scripts/test-update-com-dados.sh` leem esta para escolher a imagem.
@@ -794,7 +852,7 @@ jobs:
         # aceita `timeout-minutes`. Razão e medições: o cabeçalho da action.
         timeout-minutes: 5
 
-      - name: RLS isolation + governance invariants (pg${{ matrix.pg }})
+      - name: RLS isolation + governance invariants (pg${{ matrix.pg }}, fatia ${{ matrix.fatia }}/3)
         # O token é só para `gh release view`: o test:db confere o update.sh da
         # última release publicada (issue #1909), e a API anônima tem teto de 60
         # consultas/hora por IP — o executor próprio é um IP só.
@@ -812,7 +870,7 @@ jobs:
           rel="$(gh release view -R "$UPSTREAM_REPO" --json tagName -q .tagName)"
           git fetch -q --no-tags --depth=1 "https://github.com/${UPSTREAM_REPO}.git" \
             "+refs/tags/${rel}:refs/tags/${rel}" "+refs/tags/v1.63.0:refs/tags/v1.63.0"
-          CONFERENCIA_KIT_RELEASE="$rel" pnpm test:db
+          CONFERENCIA_KIT_RELEASE="$rel" pnpm test:db --shard=${{ matrix.fatia }}/3
 
       # O `update.sh` do cliente roda sobre um banco COM DADOS, e nenhum gate
       # exercitava isso: `test:db` aplica o baseline num banco VAZIO, então
@@ -820,7 +878,11 @@ jobs:
       # que o cabeçalho de scripts/test-update-com-dados.sh mede). O script
       # existia desde 2026-08-27 e NENHUM workflow o chamava (issue #454): aqui
       # ele passa a ser gate, nas duas majors, pela mesma variável de imagem.
+      # MIA-71: roda na fatia 1 de cada major, uma vez por major — ele não
+      # depende de fatia (semeia o próprio banco) e custa 0,2 a 0,4 min, então
+      # repeti-lo nas três só gastaria três subidas de Postgres.
       - name: update.sh sobre banco COM DADOS (pg${{ matrix.pg }})
+        if: matrix.fatia == 1
         run: pnpm test:db:update
 
       # No runner próprio o que sobra fica no disco e na RAM para o próximo job.
@@ -842,7 +904,7 @@ jobs:
   # (a lista dos cinco — `verify, build-and-size, invariants, e2e, imagens-ok` —
   # está na triagem do CI; token de fork não lê branch protection pela API, e por
   # isso ela é citada, não remedida aqui). Job de matrix se
-  # chama `invariants-majors (15)` e `invariants-majors (17)`: se a matriz
+  # chama `invariants-majors (15, 1)` … `invariants-majors (17, 3)`: se a matriz
   # tivesse ficado com o nome `invariants`, a proteção passaria a esperar para
   # sempre um check que nenhum run produz, e NENHUM PR mergearia.
   invariants:

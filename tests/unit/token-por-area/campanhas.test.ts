@@ -198,7 +198,7 @@ const LINHAS = {
   contacts: [CONTATO_DE_A, CONTATO_DE_B],
   // FORK MIA (.58): as Campanhas ficam atrás do módulo `disparador`, também pelo
   // token (lib/api/auth-dual.ts). As duas organizações o têm contratado.
-  organization_modules: [
+  mia_modulos_contratados: [
     { id: "mod-a", organization_id: ORG_A, modulo: "disparador", revoked_at: null },
     { id: "mod-b", organization_id: ORG_B, modulo: "disparador", revoked_at: null },
   ],
@@ -306,10 +306,10 @@ function casosDeNegacao(cfg: {
     const res = await cfg.chamar(TOKEN_A);
     expect(res.status).toBe(429);
     expect(res.headers.get("Retry-After")).toBeTruthy();
-    // FORK MIA (.58): a trava do módulo lê `organization_modules` ANTES do teto
+    // FORK MIA (.58): a trava do módulo lê `mia_modulos_contratados` ANTES do teto
     // (lib/api/auth-dual.ts), de propósito: falha fechada mesmo em rota que
     // esquecesse o teto. Nenhuma outra tabela é tocada.
-    expect(falso.cadeias.filter((c) => c.tabela !== "organization_modules")).toEqual([]);
+    expect(falso.cadeias.filter((c) => c.tabela !== "mia_modulos_contratados")).toEqual([]);
     expect(audit).not.toHaveBeenCalled();
   });
 
@@ -870,7 +870,7 @@ describe("FORK MIA: as Campanhas pelo token exigem o módulo disparador", () => 
   it("empresa sem o módulo: 403 antes do teto e de qualquer dado", async () => {
     const falso = criarClienteAdminFalso({
       orgDona: ORG_A,
-      linhas: { ...LINHAS, organization_modules: [] },
+      linhas: { ...LINHAS, mia_modulos_contratados: [] },
     });
     vi.mocked(createAdminClient).mockReturnValue(falso.cliente as never);
     tokenDe(ORG_A, TOKEN_A, "manager");
@@ -880,6 +880,6 @@ describe("FORK MIA: as Campanhas pelo token exigem o módulo disparador", () => 
     );
     expect(res.status).toBe(403);
     expect(checkRateLimit).not.toHaveBeenCalled();
-    expect(falso.cadeias.filter((c) => c.tabela !== "organization_modules" && c.tabela !== "subscriptions")).toEqual([]);
+    expect(falso.cadeias.filter((c) => c.tabela !== "mia_modulos_contratados" && c.tabela !== "subscriptions")).toEqual([]);
   });
 });

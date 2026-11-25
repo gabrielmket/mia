@@ -38,6 +38,10 @@ agentes.
 6. **Paginado, e o corte é dito.** A leitura é a de `lib/leitura/todas-as-paginas.ts`, da chamada
    mais nova para a mais antiga, até 100 páginas de 1000. Acima disso sai `truncado: true` (o começo
    do período ficou de fora).
+7. **"N dias" são N dias do calendário em Brasília, terminados hoje (MIA-78).** `dias=30` vai de
+   00:00 de 29 dias atrás a 00:00 de amanhã, no fuso `America/Sao_Paulo` (`periodoDoPedido`,
+   `inicioDoDiaEmBrasilia`). É a régua única de 7, 30 e 90 dias na tela geral (`/admin/usage`), na
+   aba Uso do cliente e em `plataforma_ver_consumo_de_ia` (seção 8).
 
 ### 2.1 O mês do teto não é o mesmo
 
@@ -51,22 +55,31 @@ Gabriel.
 
 - `lib/ai/usage/consumo-do-periodo.ts`: `periodoDoPedido` (o período de `mes` ou `dias`),
   `lerConsumoDoPeriodo` (a leitura e as somas), `mesAtualEAnterior` (os dois atalhos das telas).
+- `lib/ai/usage/contatos-pessoais.ts`: `lerContatosPessoais` e `listaDosPessoais`, a lista dos
+  contatos pessoais que as duas rotas tiram das mensagens (MIA-78, seção 8).
 - `app/api/v1/admin/tenants/[id]/usage/route.ts`: aceita `mes=AAAA-MM` além de `dias` (`mes` vence;
   fora do formato é 400). Com `mes`, **todos** os números da resposta são do mês (conversas,
   mensagens, IA e mensagens cobradas). Os campos de antes continuam (`dias`, `conversas`,
   `mensagens`, `ia`, `mensagens_cobradas`); entram `mes`, `periodo` e `consumo` (`total`,
   `por_agente`, `sistema`, `por_finalidade`, `reais`, `truncado`, `chamadas_no_banco`).
-- `lib/mcp-plataforma/ferramentas/consumo-de-ia.ts`: `plataforma_ver_consumo_de_ia`.
+- `lib/mcp-plataforma/ferramentas/consumo-de-ia.ts`: `plataforma_ver_consumo_de_ia` e, desde a MIA-136,
+  `plataforma_ver_ranking_de_consumo_de_ia` (seção 10).
+- `lerRankingDoConsumo` e `fecharPeloTotal`, no mesmo `consumo-do-periodo.ts`: a plataforma inteira em
+  ordem de custo e a soma que fecha com o total (MIA-136, seção 10).
 
 O bloco `ia` da rota passou a sair da mesma leitura. Antes ele pedia `total_tokens` a `llm_calls`,
 coluna que essa tabela não tem (é de `ai_invocations`); `tokens` agora é entrada + saída.
 
 ## 4. O MCP de plataforma
 
-`plataforma_ver_consumo_de_ia` (só lê, sem operação): recebe `organization_id` e `mes` (AAAA-MM;
-ausente, o mês corrente em Brasília) e devolve a empresa, o período e os mesmos blocos de `consumo`
-da rota, saídos da mesma função. Cliente que não existe é recusado com o caminho para achar o id
-(`plataforma_listar_clientes`).
+`plataforma_ver_consumo_de_ia` (só lê, sem operação): recebe `organization_id`, `mes` (AAAA-MM) e
+`dias` (1 a 180, os N dias do calendário em Brasília terminados hoje, MIA-78). `mes` vence `dias`;
+sem nenhum dos dois, o mês corrente em Brasília. Devolve a empresa, o mês (`null` em `dias`), os
+`dias`, o período (`tipo`, `inicio`, `fim`, `fuso`) e os mesmos blocos de `consumo` da rota, saídos
+da mesma função. Cliente que não existe é recusado com o caminho para achar o id
+(`plataforma_listar_clientes`). Desde a MIA-99 devolve também `mensagens_cobradas`, o mesmo bloco da aba
+Uso (seção 9). Desde a MIA-136, a plataforma inteira está em `plataforma_ver_ranking_de_consumo_de_ia`
+(seção 10), e a soma dos agentes com o Sistema fecha com o total.
 
 Exemplo (fictício):
 
@@ -115,8 +128,8 @@ telas calcula a janela.
 - A fatura do provedor (`platform_openai_spend`) e as cotações (`platform_fx_rates`) passam a ter
   também o limite de cima (o último dia do período): sem isso, a fatura do mês passado somava os
   dias deste mês.
-- **Sem `mes`, nada muda**: as janelas de 7, 30 e 90 dias continuam em dias de calendário UTC, como
-  eram. O mês em Brasília e a janela em UTC podem por isso diferir nas três horas da virada.
+- Sem `mes`, as janelas de 7, 30 e 90 dias também saem de `periodoDoPedido`, em dias de Brasília
+  (MIA-78, seção 8). Até a MIA-78 eram dias de calendário UTC.
 - O nome do CSV leva o mês (`usage-2026-10.csv`).
 
 ### 7.3 A aba Uso do cliente
@@ -146,3 +159,241 @@ chinês, em `lib/i18n/traducoes/*.json`.
   agentes e chamadas de sistema neste mês e no mês passado, vista nas duas telas, em "Este mês" e
   "Mês passado". As capturas saem no artefato de evidência da CI.
 
+## 8. As duas telas dão o mesmo número (MIA-78)
+
+Para o mesmo cliente e o mesmo período, a tela geral (`/admin/usage`, `GET /api/v1/admin/usage`) e a
+aba Uso do cliente (`GET /api/v1/admin/tenants/[id]/usage`) davam números diferentes, e a aba Uso
+mostrava zero quando uma leitura falhava. Três correções, achadas no levantamento da MIA-70 (mapa
+da MIA-54, seção 2.1):
+
+### 8.1 A régua dos "N dias"
+
+**N dias são os N dias do calendário em Brasília terminados hoje, hoje incluído**: de 00:00 de
+(hoje − N + 1) a 00:00 de amanhã, no fuso `America/Sao_Paulo`. Exemplo: em 18/11/2026, às 9h de
+Brasília, "30 dias" vai de 20/10 00:00 a 19/11 00:00 de Brasília (`2026-10-20T03:00Z` a
+`2026-11-19T03:00Z`).
+
+Antes eram duas réguas: a tela geral lia N dias de calendário UTC até o fim de hoje; a aba Uso e o
+MCP liam N×24 h corridas até agora. Uma chamada às 22h de Brasília do primeiro dia entrava numa e não
+na outra. A régua mora em `periodoDoPedido` (`lib/ai/usage/consumo-do-periodo.ts`), e as três
+leituras a chamam; nenhuma calcula a janela.
+
+Por que o dia de Brasília, e não as N×24 h que a aba Uso usava:
+
+- o mês desta leitura já é o de Brasília (regra 2): o mês passa a ser exatamente a soma dos dias
+  dele, na mesma régua;
+- a série diária da tela geral fica com N barras inteiras, cada uma um dia de Brasília (com N×24 h,
+  a primeira e a última barra seriam pedaços de dia, e seriam N+1);
+- o número de um dia que já passou não muda conforme a hora em que se abre a tela.
+
+O que muda para quem lê: a tela geral, nos 7/30/90 dias, conta e rotula os dias por Brasília, e
+não mais por UTC (a diferença são as chamadas das 21h à meia-noite de Brasília nas duas pontas); a
+aba Uso e o MCP, em `dias`, passam a começar à meia-noite de Brasília do primeiro dia, em vez de
+N×24 h antes de agora. O desenho das telas não mudou.
+
+### 8.2 Contato pessoal fica fora nas duas
+
+Pessoal não soma (spec 21, caminho 10). A tela geral já tirava as mensagens dos contatos pessoais
+(`contacts.is_personal`); a aba Uso não, e a Academia Alfa com a Ana Exemplo marcada pessoal dava N
+mensagens numa e N + as da Ana na outra. As duas leem a lista em `lerContatosPessoais`
+(`lib/ai/usage/contatos-pessoais.ts`) e aplicam o mesmo filtro (`contact_id not in (...)`).
+
+Só a contagem de mensagens tira os pessoais, como na tela geral. As conversas e as mensagens
+**cobradas** pela Meta não: a cobrança da Meta acontece com ou sem pessoal.
+
+A lista vai na URL do PostgREST e por isso tem teto: 2 páginas de 1000 (o `limit(2000)` de antes
+nunca trazia mais de 1000, porque o PostgREST corta toda resposta em 1000 sem avisar). Passou do teto,
+as duas rotas respondem `pessoais_truncado: true`: há pessoais fora da lista, e as mensagens deles
+estão contadas. As telas ainda não mostram esse aviso (mostrar seria mudar o desenho, fora da
+MIA-78); o MCP e quem lê a resposta veem.
+
+### 8.3 Leitura que falha é erro
+
+Na aba Uso, a contagem de conversas, a de mensagens e os preços da Meta (`platform_precos_meta`; desde a
+MIA-99, o histórico `mia_precos_meta_vigencias`, seção 9) não eram conferidos: a contagem que falhava saía 0, e o preço que não vinha saía custo de mensagem
+R$ 0,00. Agora qualquer uma delas que falha responde 500 `db_error`, como a leitura do consumo de IA
+e a das mensagens cobradas já faziam. A lista dos pessoais também: na aba Uso e na tela geral, falha
+nela é 500, e não "nenhum pessoal" contando as mensagens deles.
+
+### 8.4 Testes
+
+`tests/unit/consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts`, com a Academia Alfa e a Ana
+Exemplo (fictícias): o mesmo número de mensagens nas duas telas com e sem pessoal, os 30 dias com o
+mesmo início, fim e chamadas na tela geral, na aba Uso e no MCP (com as pontas de Brasília), cada
+leitura que falha virando 500, e o `pessoais_truncado` acima de 2000. O caso "limites" de
+`app/api/v1/admin/usage/route.test.ts` passou para os dias de Brasília.
+
+## 9. O preço da Meta tem vigência, e o mês fechado não muda (MIA-99)
+
+Defeito 4 da seção 2.1 do mapa (MIA-54, levantamento da MIA-70). `platform_precos_meta` (0259) guardava
+só o preço atual de cada categoria, e a aba Uso e a tela do custo da Meta multiplicavam as mensagens do
+mês pedido por ele. A Academia Alfa (fictícia) com 100 mensagens de marketing cobradas em outubro a
+R$ 0,35 dava R$ 35,00; o preço ia a R$ 0,50 em novembro e outubro passava a R$ 50,00.
+
+### 9.1 A regra
+
+**Cada mensagem cobrada custa o preço que valia no instante dela**: o da vigência com
+`vigente_desde <= created_at < vigente_ate`. O período continua o de Brasília (seção 2, regra 2, e
+MIA-78): ele decide QUAIS mensagens entram; a vigência decide QUANTO cada uma custa. Com o exemplo acima,
+outubro fica R$ 35,00 depois do reajuste, e novembro cobra R$ 0,35 até o instante do reajuste e R$ 0,50
+dali em diante.
+
+- **O primeiro preço de uma categoria vale desde sempre** (`vigente_desde = -infinity`). Não há
+  histórico para reconstruir: o preço que existia quando a 9165 rodou virou a primeira vigência de cada
+  categoria, desde sempre, e o custo do passado ficou exatamente como estava. A mesma regra vale para a
+  categoria que ganha o primeiro preço depois: ele cobre o passado. Só do segundo preço em diante a
+  vigência começa no instante em que foi gravado.
+- **O preço novo vale a partir de agora.** Não existe preço retroativo: gravar fecha a vigência atual em
+  `now()` e abre a nova no mesmo instante, sem buraco nem sobreposição.
+- **O mesmo preço gravado de novo não abre vigência** (a tela manda a tabela inteira no PUT).
+- **Apagar o preço** (só por SQL: nenhuma tela nem ferramenta apaga) fecha a vigência aberta; daí em diante
+  as mensagens da categoria ficam "sem preço" (nunca zero), e o preço que voltar recomeça agora.
+- **Duas mudanças na mesma transação** dão uma vigência só, com o último valor.
+
+### 9.2 Onde mora
+
+- Migration `9165_preco_da_meta_com_vigencia` (`supabase/migrations-mia/`, espelhada no fim do
+  `baseline-mia.sql`). Tabela nossa `mia_precos_meta_vigencias` (`categoria`, `centavos_brl`,
+  `vigente_desde`, `vigente_ate` nulo no preço atual, `criado_em`, `criado_por`), uma vigência aberta por
+  categoria (`uq_mia_precos_meta_vigencias_aberta`). Plataforma: zero policies, só o `service_role`.
+- **Quem fecha e abre a vigência é um gatilho** em `platform_precos_meta`
+  (`trg_mia_precos_meta_vigencia`, função `fn_mia_preco_da_meta_abre_vigencia`, `security invoker`).
+  Por isso ele vale para todo caminho que grava preço: o PUT de `/api/v1/admin/custo-da-meta`, o MCP
+  (`plataforma_definir_precos_da_meta`), um `update` à mão e a imagem de antes da 9165 (num rollback de
+  imagem o banco fica). Nenhuma coluna mudou: `platform_precos_meta` continua sendo o preço atual, e a
+  leitura de antes da migration continua funcionando.
+- A conta: `calcularCustoPorVigencia` (`lib/channels/meta/custo-da-conversa.ts`), que devolve o mesmo
+  formato de antes (uma linha por categoria, `totalCentavos`, `semPreco`) e, em cada linha, a quebra por
+  preço em `precos`. `centavosUnitarios` passa a ser o preço da mensagem mais recente do período que tinha
+  preço; as telas não o mostram.
+- As leituras: `lib/channels/meta/custo-do-periodo.ts`. `lerVigenciasDoPreco` (o histórico; leitura que
+  falha é erro) e `lerCustoDeMensagemDoPeriodo` (as mensagens cobradas de uma empresa no período, já com o
+  custo). A aba Uso e o MCP chamam a segunda; a tela do custo da Meta, que lê todas as empresas, chama a
+  primeira e faz a conta.
+
+### 9.3 Quem usa
+
+| leitura | antes | agora |
+|---|---|---|
+| aba Uso (`GET /api/v1/admin/tenants/[id]/usage`, `mensagens_cobradas`) | preço de hoje | preço do instante de cada mensagem |
+| `/admin/custo-da-meta` (`GET /api/v1/admin/custo-da-meta`, `clientes`) | preço de hoje | preço do instante de cada mensagem; `precos` (a tabela que a tela edita) continua o de hoje |
+| `plataforma_ver_consumo_de_ia` | não trazia mensagem cobrada | `mensagens_cobradas`, o mesmo bloco da aba Uso |
+| `/admin/usage` (tela geral) | não tem custo de mensagem da Meta | não mudou |
+
+O desenho das telas não mudou: muda só o número. A tela do cliente (`/app/ai/usage`) não foi tocada.
+
+⚠️ O mês de `/admin/custo-da-meta` ainda é o mês em UTC (`?mes=` corta de 00:00 UTC do dia 1º), e não o de
+Brasília: o defeito é anterior e outro, e corrigi-lo muda quais mensagens a tela conta. Fica para outra
+tarefa.
+
+### 9.4 O MCP
+
+- `plataforma_ver_precos_da_meta` (só lê): `atuais` (o preço de hoje de cada categoria), `sem_preco` (as
+  categorias conhecidas sem preço) e `historico` (cada vigência; `vigente_desde: null` = desde sempre,
+  `vigente_ate: null` = é o preço atual).
+- `plataforma_definir_precos_da_meta` (operação `definir_custo_da_meta`, chave própria: `definir_preco`
+  muda o que UM cliente paga, esta o custo de TODOS). Recebe `precos: [{ categoria, centavos_brl }]` só
+  das categorias que a Meta usa hoje. Grava em `platform_precos_meta` como o PUT da tela, e o gatilho faz o
+  resto. Cada categoria volta com `antes` e `resultado`: `mudou` (vale a partir de agora),
+  `primeiro_preco` (nunca teve preço, vale desde sempre) ou `ja_estava` (nada foi escrito). A mesma
+  categoria duas vezes no pedido é recusada.
+
+Exemplo (fictício):
+
+```json
+{ "precos": [{ "categoria": "marketing", "centavos_brl": 50 }] }
+```
+
+### 9.5 Testes
+
+- `tests/unit/preco-da-meta-com-vigencia.test.ts`: a Academia Alfa com 100 mensagens de marketing em
+  outubro e o reajuste em 10/11. Outubro igual antes e depois na aba Uso, na tela do custo da Meta e no
+  MCP; novembro com os dois preços; o controle (a conta de antes dava R$ 50,00); a virada de Brasília
+  (23h30 de 31/10 é outubro, ao preço de outubro); o histórico que falha virando 500; o fim exclusivo da
+  vigência; a categoria apagada; e as duas ferramentas do MCP (só o que mudou é gravado, `ja_estava`,
+  `primeiro_preco`, a recusa).
+- `tests/invariants/preco-da-meta-com-vigencia.test.ts`, no Postgres de verdade: o gatilho fechando e
+  abrindo vigência pelo mesmo upsert da tela e do MCP, o mês passado igual e este mês com os dois preços
+  pela mesma leitura da aba Uso, preço igual sem vigência nova, duas mudanças numa transação, apagar e
+  voltar, a migration aplicada de novo sem mexer no histórico, o `service_role` gravando e a sessão sem
+  ler.
+
+## 10. A plataforma inteira no MCP, e a soma em R$ que fecha (MIA-136)
+
+Dois itens do "Falta" do mapa (MIA-54, seção 2.1): `plataforma_ver_consumo_de_ia` só lia um cliente,
+enquanto a tela geral (`/admin/usage`) já mostrava a plataforma inteira; e, na aba Uso e no MCP, a soma
+dos agentes com o Sistema podia diferir do total em centavos.
+
+### 10.1 A soma fecha com o total
+
+Cada linha era arredondada sozinha: R$ a 2 casas, US$ a 4 casas de centavo. A Academia Alfa (fictícia) com
+três agentes e o Sistema, cada um com 6,68 centavos de dólar a R$ 5, tem R$ 0,334 em cada linha: o total
+exato é R$ 1,336 (R$ 1,34), e as quatro linhas arredondadas davam 4 × R$ 0,33 = R$ 1,32.
+
+**O total manda, e as linhas se ajustam.** O total é o valor exato do período arredondado, como antes.
+As linhas saem dele pelo maior resto (`fecharPeloTotal`): cada uma começa no seu valor exato para baixo, e
+os centavos que faltam para o total vão para as de maior fração (no empate, para a maior). No exemplo, uma
+linha fica R$ 0,34 e as outras três R$ 0,33, e a soma é R$ 1,34.
+
+- Cada linha fica no seu valor para baixo ou para cima: nunca mais de um centavo longe do exato.
+- Vale nas duas partições da leitura: agentes + Sistema, e as finalidades. Em R$ (2 casas) e em US$
+  (4 casas de centavo).
+- O total não mudou. O que muda é, no máximo, um centavo em algumas linhas.
+- Vale para a aba Uso do cliente e para `plataforma_ver_consumo_de_ia`, que leem a mesma função. A
+  tela do próprio cliente (`/app/ai/usage`) não mostra dinheiro e não foi tocada.
+
+### 10.2 O ranking da plataforma
+
+`plataforma_ver_ranking_de_consumo_de_ia` (só lê, sem operação) é a visão da tela geral, no MCP, com uma
+diferença no desempate (abaixo):
+
+- **As mesmas empresas:** todas, menos as de demonstração (`SEM_DEMONSTRACAO`, como a tela geral). As que
+  não gastaram aparecem com zero, no fim.
+- **O mesmo período:** `mes` (AAAA-MM, o mês de Brasília) ou `dias` (os N dias do calendário em Brasília
+  terminados hoje), por `periodoDoPedido`. Sem nenhum dos dois, o mês corrente.
+- **A mesma conta:** cada empresa é lida por `lerConsumoDoPeriodo`, a leitura da aba Uso (uma conta só; as
+  cotações são lidas uma vez para todas). O custo em US$ e as chamadas de cada empresa são os da tabela da
+  tela geral, e o R$ da plataforma é o da tela geral arredondado ao centavo.
+- **A ordem:** custo em dólar (a régua do teto), a mesma ordem por custo da tela geral. **O desempate é
+  outro:** aqui, chamadas de IA, depois o nome (e o id, para nada ficar na ordem do banco); na tela geral
+  (`app/api/v1/admin/usage/route.ts`), mensagens do período, sem terceiro critério. No custo igual (as que
+  não gastaram, por exemplo), as duas listas podem sair em ordem diferente. Mensagens não são consumo de IA,
+  e lê-las no ranking seria uma segunda leitura (com os contatos pessoais fora) só para desempatar.
+- **A soma fecha:** `total` é a plataforma, e as empresas fecham com ele pela mesma regra da seção 10.1. Por
+  isso uma empresa pode ficar um centavo longe do total da aba Uso dela; o detalhe de uma empresa (agentes,
+  Sistema, finalidades) continua em `plataforma_ver_consumo_de_ia`.
+- **`limite`** (1 a 500) corta a lista de empresas, não o total; `empresas_no_total` diz quantas há.
+- Cada empresa traz `posicao`, `organization_id`, `empresa`, `slug`, os números da linha (chamadas, tokens,
+  cache, `custo_usd_cents`, `custo_brl`, `sem_preco`), `dias_sem_cotacao` e `truncado`. A resposta traz
+  ainda `reais` (dias sem cotação da plataforma e a última cotação), `truncado` (alguma empresa passou do
+  teto) e `chamadas_no_banco`.
+- Leitura que falha é erro, nunca zero.
+
+As empresas são lidas de cinco em cinco. O mês do teto continua o do banco (UTC, seção 2.1): não foi mudado.
+
+Exemplo (fictício):
+
+```json
+{ "mes": "2026-10", "limite": 10 }
+```
+
+### 10.3 Testes
+
+`tests/unit/consumo-de-ia-ranking-e-soma-que-fecha.test.ts`, com a Academia Alfa, a Academia Beta, a Academia
+Gama e uma empresa de demonstração (fictícias):
+
+- `fecharPeloTotal`: os três terços de R$ 1,00 (o controle de antes dava R$ 0,99), o centavo para a maior
+  fração, o resíduo de ponto flutuante, parte zero, US$ a 4 casas, e uma varredura de 500 partições
+  aleatórias em que a soma é sempre o total e cada parte fica a menos de um centavo do exato;
+- a aba Uso e o MCP: os agentes com o Sistema, e as finalidades, somando o total em R$ e em US$;
+- o ranking: a demonstração de fora (ela é a que mais gasta), a ordem por custo, quem não gastou com zero no
+  fim, o mês de Brasília (22h de 31/10 entra; 23h59 de 30/09 e 00:00 de 01/11 ficam de fora, e passariam a
+  ordem se entrassem), cada empresa com os números da aba Uso dela, a soma das empresas fechando com a
+  plataforma, o dia sem cotação e a leitura que falha;
+- o MCP contra a tela geral (`/api/v1/admin/usage?mes=2026-10`): as mesmas empresas, na mesma ordem, com o
+  mesmo custo e as mesmas chamadas, e o mesmo R$; o desempate, com duas empresas de custo igual e duas sem
+  gasto, em que a ordem de cada lista fica fixada (a do MCP por chamadas e nome, a da tela por mensagens) e
+  a ordem por custo é a mesma nas duas; o `limite`; e o mês fora do formato recusado.
+
+O dublê do PostgREST (`tests/helpers/postgrest-com-teto.ts`) passou a entender `not … is true`, o filtro
+da demonstração, com a regra do Postgres (o falso e o nulo passam).

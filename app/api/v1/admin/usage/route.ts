@@ -15,6 +15,8 @@ import { lerPaginasDeUso } from "@/lib/admin/usage-pages";
 // FORK MIA (MIA-44): o mês do calendário em Brasília, pelo mesmo cálculo da aba Uso
 // e do MCP (docs/fork/consumo-de-ia.md).
 import { diaEmBrasilia, periodoDoPedido } from "@/lib/ai/usage/consumo-do-periodo";
+// FORK MIA (MIA-78): a lista dos pessoais, a mesma da aba Uso do cliente.
+import { lerContatosPessoais, listaDosPessoais } from "@/lib/ai/usage/contatos-pessoais";
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -123,6 +125,12 @@ export interface UsageData {
     /** O mesmo custo pela taxa efetiva — é este que decide margem. */
     total_pela_taxa_efetiva: number | null;
   };
+  /**
+   * FORK MIA (MIA-78): a lista dos contatos pessoais passou do teto
+   * (`lib/ai/usage/contatos-pessoais.ts`), e as mensagens dos que ficaram de
+   * fora dela estão em `messages_count` e na série.
+   */
+  pessoais_truncado: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -149,14 +157,16 @@ export async function GET(req: NextRequest) {
 
   const { range, tenant_id } = parsed.data;
   const rangeMap: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90 };
-  // FORK MIA (MIA-44): o mês sai de `periodoDoPedido`, o mesmo início e fim da
-  // aba Uso do cliente e de `plataforma_ver_consumo_de_ia`. Não reescrever aqui.
-  const periodoDoMes = parsed.data.mes ? periodoDoPedido({ mes: parsed.data.mes }) : null;
-  if (parsed.data.mes && !periodoDoMes) {
+  // FORK MIA (MIA-44, MIA-78): o período sai de `periodoDoPedido`, o mesmo
+  // início e fim da aba Uso do cliente e de `plataforma_ver_consumo_de_ia`, no
+  // mês e nos 7/30/90 dias (dias do calendário em Brasília, hoje incluído).
+  // Não reescrever aqui.
+  const periodo = periodoDoPedido({ mes: parsed.data.mes, dias: rangeMap[range] ?? 30 });
+  if (!periodo) {
     return fail("validation_error", "mes deve vir como AAAA-MM", 400, { requestId });
   }
-  const mes = periodoDoMes?.mes ?? null;
-  const days = periodoDoMes?.dias ?? rangeMap[range] ?? 30;
+  const mes = periodo.mes;
+  const days = periodo.dias;
 
   const admin = createAdminClient();
 
@@ -190,32 +200,24 @@ export async function GET(req: NextRequest) {
 
   // Pessoal não soma (spec 21, caminho 10): a mensagem do pessoal entra no
   // banco, mas o uso da plataforma conta operação — e pessoal saiu dela.
-  // Marcados um a um, à mão: a lista é curta por construção.
-  let pessoais: string[] = [];
-  if (orgIds.length > 0) {
-    const { data: marcados } = await admin
-      .from("contacts")
-      .select("id")
-      .in("organization_id", orgIds)
-      .eq("is_personal", true)
-      .limit(2000);
-    pessoais = ((marcados ?? []) as Array<{ id: string }>).map((c) => c.id);
+  // FORK MIA (MIA-78): a leitura é a de `lib/ai/usage/contatos-pessoais.ts`
+  // (a mesma da aba Uso): falha vira erro, em vez de lista vazia contando as
+  // mensagens dos pessoais, e passar do teto é dito em `pessoais_truncado`.
+  const pessoais = await lerContatosPessoais(admin, orgIds);
+  if (pessoais.erro) {
+    return fail("db_error", "Não foi possível ler os contatos pessoais.", 500, { requestId });
   }
+  const foraOsPessoais = listaDosPessoais(pessoais.ids);
 
-  // Dias de calendário UTC, incluindo hoje: tabela e gráficos medem [from,to).
-  const endDate = new Date();
-  endDate.setUTCHours(0, 0, 0, 0);
-  endDate.setUTCDate(endDate.getUTCDate() + 1);
-  const startDate = new Date(endDate);
-  startDate.setUTCDate(startDate.getUTCDate() - days);
-  // FORK MIA (MIA-44): no mês, a janela é a do mês em Brasília (fim exclusivo), e
-  // o dia de cada linha também é o de Brasília. Fora do mês, segue o dia UTC de
-  // antes, para os 7/30/90 não mudarem.
-  const startIso = periodoDoMes?.inicio ?? startDate.toISOString();
-  const endIso = periodoDoMes?.fim ?? endDate.toISOString();
-  const diaDe = (iso: string): string => (periodoDoMes ? diaEmBrasilia(iso) : iso.slice(0, 10));
-  // O primeiro e o último dia do período, no calendário em que a série é contada.
-  const primeiroDia = periodoDoMes ? `${periodoDoMes.mes}-01` : startIso.slice(0, 10);
+  // Tabela e gráficos medem [from,to).
+  // FORK MIA (MIA-44, MIA-78): a janela é a de `periodoDoPedido` (fim
+  // exclusivo), e o dia de cada linha é o de Brasília, no mês e nos 7/30/90
+  // dias. Antes os 7/30/90 eram dias de calendário UTC, e a aba Uso, N×24 h.
+  const startIso = periodo.inicio;
+  const endIso = periodo.fim;
+  const diaDe = (iso: string): string => diaEmBrasilia(iso);
+  // O primeiro dia do período, no calendário em que a série é contada.
+  const primeiroDia = diaEmBrasilia(startIso);
   interface UsoLinha {
     id: string;
     organization_id: string;
@@ -235,8 +237,8 @@ export async function GET(req: NextRequest) {
         .in("organization_id", orgIds)
         .gte("created_at", startIso)
         .lt("created_at", endIso);
-      if (tabela === "messages" && pessoais.length > 0) {
-        query = query.not("contact_id", "in", `(${pessoais.join(",")})`);
+      if (tabela === "messages" && foraOsPessoais) {
+        query = query.not("contact_id", "in", foraOsPessoais);
       }
       if (depois !== null) query = query.gt("id", depois);
       return query.order("id", { ascending: true }).limit(tamanho) as unknown as PromiseLike<{
@@ -351,7 +353,7 @@ export async function GET(req: NextRequest) {
 
   const dateLabels: string[] = [];
   // O dia 1º à meia-noite UTC só serve de contador de datas: o rótulo é o dia do
-  // calendário (Brasília no mês, UTC nas janelas), não um instante.
+  // calendário em Brasília, não um instante.
   const primeiroRotulo = new Date(`${primeiroDia}T00:00:00Z`);
   for (let i = 0; i < days; i++) {
     const dia = new Date(primeiroRotulo);
@@ -471,6 +473,7 @@ export async function GET(req: NextRequest) {
         taxa_efetiva: efetiva,
         total_pela_taxa_efetiva: efetiva === null ? null : (natureza.totalCents / 100) * efetiva,
       },
+      pessoais_truncado: pessoais.truncado,
     },
     { requestId },
   );

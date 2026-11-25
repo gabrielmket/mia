@@ -52,7 +52,7 @@ Cada plano de `cobranca_planos` (do upstream, intocado) ganha uma linha ao lado 
 
 | origem | onde mora | sai com troca de plano? |
 |---|---|---|
-| **pela Time** | `organization_modules` (0245), a liberação à mão de sempre | não |
+| **pela Time** | `mia_modulos_contratados` (0245), a liberação à mão de sempre | não |
 | **pelo plano** | `mia_plano_modulos` do plano ATUAL da assinatura | sim |
 
 A pergunta "o plano liga este módulo?" é feita ao banco na hora
@@ -326,7 +326,9 @@ Uma vez, na plataforma inteira. Antes, os requisitos do upstream (`docs/saas/cob
   caso do upstream em `lib/cobranca/sincronizar.test.ts` que esperava o lembrete de
   "suspensa" para quem aguarda a entrada foi trocado pela regra do fork (marcado `FORK MIA`).
 - `lib/cobranca/sinal.handler.ts`: o aviso do Asaas também relê as compras de crédito da
-  empresa.
+  empresa e, desde a MIA-168, informa o primeiro pagamento ao CRM da Time (seção 12).
+- `lib/event-log/register-handlers.ts`: o consumidor `planos_mia.lead_do_cadastro`
+  (MIA-168, seção 12).
 - `lib/cobranca/rodada.ts`: o aviso de 80% em porcentagem, sem dólar.
 - `app/api/v1/cron/cobranca/route.ts`: a rodada da jornada depois da do upstream.
 - `lib/agent-engine/edge/llm/orcamento.ts`: o teto do plano vale sem chave própria.
@@ -334,7 +336,9 @@ Uma vez, na plataforma inteira. Antes, os requisitos do upstream (`docs/saas/cob
 - `lib/crm-b2b/route-helpers.ts`, `app/app/people/layout.tsx`, `app/app/imports/layout.tsx`,
   `app/app/crm/page.tsx`, `app/app/layout.tsx`: Vendas B2B fora do plano.
 - `components/auth/SignupForm.tsx`, `app/(public)/signup/page.tsx`, `lib/auth/schemas.ts`,
-  `app/actions/auth/signUp.ts`: os cartões, o `?plano=` e o "o que a empresa faz".
+  `app/actions/auth/signUp.ts`: os cartões, o `?plano=` e o "o que a empresa faz"; desde a
+  MIA-168, o campo escondido `mia_origem` (os `utm_*` e os ids de clique do link) e o lead do
+  cadastro no CRM da Time (seção 12).
 - `app/actions/registration/decide.ts`: o e-mail para quem pediu.
 - `components/cobranca/PainelDaAssinatura.tsx`, `components/cobranca/AcoesDaAssinatura.tsx`,
   `app/app/settings/billing/page.tsx`, `app/account-suspended/page.tsx`: sem dólar, a IA
@@ -357,8 +361,9 @@ leitura do preço por e-mail (`lib/email-marketing/banco.ts`, `lerPrecoPorEmail`
 
 ### LGPD
 
-Nenhuma tabela nova guarda dado do titular (contato): só ids de empresa, de plano e de
-quem criou. O documento de quem paga vai direto ao Asaas. As cinco tabelas são só do
+Até a .90, nenhuma tabela nova guardava dado do titular (contato): só ids de empresa, de plano e de
+quem criou. A exceção é a `mia_cadastro_na_time` (9169, seção 12), que guarda o IP, o navegador e
+os ids de clique de quem se cadastrou, só para a medição, e os zera sozinha. O documento de quem paga vai direto ao Asaas. As cinco tabelas são só do
 servidor (RLS ligada, sem política, `authenticated` e `anon` recebem permission denied).
 
 ### Provas
@@ -375,6 +380,8 @@ servidor (RLS ligada, sem política, `authenticated` e `anon` recebem permission
 | `tests/unit/entrada-paga-sem-aviso-de-suspensa.test.ts` | a entrada paga ainda não paga e o atraso, para o aviso de "suspensa" e o da liberação |
 | `tests/unit/hub-da-entrada-paga.test.tsx` | o topo do `/account-suspended` e a LGPD só com pedido, na entrada paga; o atraso como o upstream |
 | `tests/unit/painel-da-assinatura.test.tsx` | a IA em %, o aviso de 80% e a parada de 100% |
+| `tests/unit/lead-do-cadastro.test.ts` | MIA-168: o corpo do lead, o envio, os três momentos, a repetição que não move, a falta da fonte ou da etapa, o valor do pagamento e a leitura do MCP |
+| `tests/invariants/cadastro-na-time.test.ts` | MIA-168: a tabela só do servidor, as travas, o gatilho do nascimento e a limpeza da LGPD |
 
 ### Lacunas conhecidas
 
@@ -384,3 +391,111 @@ servidor (RLS ligada, sem política, `authenticated` e `anon` recebem permission
 - Crédito por Pix só pelo Asaas. Quem assina pela Stripe recarrega com a Time.
 - A compra de teste **pela tela** contra o sandbox do Asaas de verdade não foi feita aqui
   (os testes usam um Asaas dublado); é o passo 5 da seção 10.
+
+## 12. O lead do cadastro no CRM da Time (MIA-168)
+
+Todo cadastro do `/signup` vira negócio no funil **"MIA - SDR"** da org da Time e anda nele
+quando a conta anda. Desenho: [MIA-163](/MIA/issues/MIA-163#document-plan), seções 4.1 a 4.3.
+A parte das conversões na Meta e no Google (MIA-169) lê a mesma tabela.
+
+### A entrada
+
+A mesma do Raio-X (`lib/raio-x/lead-da-time.ts`): uma **fonte de formulário** da org da Time,
+"App · cadastro" (destino MIA - SDR › Novo contato, sem segredo, sem IA na captação, sem
+atualizar card), chamada **por dentro** pelo núcleo comum `lib/time/captacao-na-time.ts`. O id
+da fonte vem de **`CADASTRO_FONTE_DO_CRM`**. A fonte e as etapas se criam pelo MCP
+(`plataforma_garantir_fonte_de_formulario` e `plataforma_garantir_funil`), nunca no código.
+
+- `external_id`: `mia-cadastro-<user_id>` (no envio a empresa ainda não existe).
+- O mapa: `email`, `empresa` (o `org_name`), `plano` (o nome), `cupom`, `utm_source`,
+  `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, `gclid`, `gbraid`, `wbraid`, `fbclid`,
+  `consentimento_cookies` e `origem: "cadastro-mia"`. `nome` e `telefone` só na entrada paga (é
+  onde a tela pede). `fbp` e `fbc` só com o cookie `mia_consentimento=medicao`.
+- A página lê da URL os `utm_*` e os ids de clique (`lib/planos-mia/origem-do-cadastro.ts`) e o
+  formulário manda num campo escondido, `mia_origem`, com chaves fechadas e teto de 500 por valor
+  no `signupSchema`. Nada aparece na tela.
+- A action lê os cookies `_fbp`, `_fbc` e `mia_consentimento` (do site, em `.iamia.com.br`), o
+  IP e o navegador (`lib/planos-mia/lead-do-cadastro-no-signup.ts`).
+- Só conta nova de verdade: sem convite e com `identities`. Conta que já existia recebe a
+  resposta ofuscada (anti-enumeração) e não vira lead.
+- Cadastro pelo Google não passa pelo `signUp`: o lead nasce quando a empresa nasce, sem IP,
+  navegador nem cookies.
+
+### Os momentos
+
+| momento | quando | onde | etapa |
+|---|---|---|---|
+| envio | conta criada, e-mail a confirmar | `signUp.ts` › `registrarCadastroDoSignup` | Novo contato (pela fonte) |
+| cadastro concluído | a empresa nasceu (e-mail confirmado ou pedido aprovado) | gatilho da 9169 › `cadastro.empresa_nasceu` › `lead-do-cadastro.handler.ts` | Cadastro concluído |
+| teste começou | a empresa nasceu em `trial`, com prazo e sem pagamento pendente | o mesmo consumidor | Em teste |
+| pagamento confirmado | o primeiro pagamento no Asaas | `informarPagamentoATime` no `cobranca.sinal` e na rodada da jornada | Assinante, com o valor em BRL |
+
+- O card anda pela porta do kanban (`moveLeadHandler`), que emite o `lead.stage_changed` das
+  automações e do motor de conversões. O valor vai antes, por `updateLeadHandler`
+  (`value_cents`, `currency: "BRL"`). O ator é a própria fonte (`webhook_source`), como na rota de
+  captação. Cada momento deixa uma nota na linha do tempo do negócio.
+- **Idempotente** pelas colunas `cadastro_concluido_em`, `teste_comecou_em` e
+  `pagamento_confirmado_em`: marcado, não move nem regrava. Card que já está na etapa não é
+  movido.
+- Etapa casada pelo **nome** no funil do lead. Etapa faltando não marca o momento: a linha
+  fica com `crm_erro = sem_etapa:<nome>` e a rodada tenta de novo.
+- O valor é o da cobrança paga de `mia_pagamento_inicial.pagamento_ref` (entrada paga) ou o da
+  primeira cobrança paga da assinatura no Asaas (plano com teste). Sem conseguir ler o valor, o
+  momento não é marcado: o lead **nunca** vai a Assinante sem valor. Renovação não conta.
+- Empresa de implantação (a origem é relida na hora: o MCP grava `implantacao` depois do
+  insert), isenta (sem assinatura) ou de demonstração fica fora.
+- Nada aqui lança: o cadastro, a confirmação e a cobrança seguem iguais se o CRM falhar.
+
+### A tabela `mia_cadastro_na_time` (9169)
+
+Uma linha por conta (`user_id` único): `organization_id` e `lead_id` (o negócio na Time, nulos
+enquanto não há lead), `empresa_cliente_id` (quando nasce), `ip`, `navegador` (até 512), `fbp` e
+`fbc` (só com `consentimento = medicao`, o banco recusa o resto), `gclid`, `gbraid`, `wbraid`,
+`consentimento`, `pagina` (sem a query), `origem` (os `utm_*`, o `fbclid`, o plano e o cupom, para
+refazer o lead quando a fonte faltou no envio), `pedido_id` e `valor_cents` (o primeiro
+pagamento), `crm_erro` (`sem_fonte`, `fonte_inexistente`, `recusado`, `falhou` ou
+`sem_etapa:<nome>`), os três momentos, `capturado_em`, `guardar_ate` (90 dias) e `limpo_em`.
+RLS ligada sem política: só o `service_role` lê e escreve.
+
+O gatilho `trg_mia_cadastro_empresa_nasceu` fica na nossa `mia_origem_da_empresa` (nada no
+upstream) e o `emit_event` dele vai num bloco que engole o erro: nunca impede a empresa de
+nascer.
+
+### A rodada e a LGPD
+
+Na rodada horária da jornada (`lib/planos-mia/rodada.ts`, depois da do upstream, no mesmo cron
+da cobrança), `rodadaDoCadastroNaTime`:
+
+1. a limpeza: `fn_mia_cadastro_na_time_limpar` zera IP, navegador, `fbp`, `fbc`, os ids de clique
+   e o `fbclid` passado o `guardar_ate`, 7 dias depois do pagamento informado (a janela da Meta)
+   ou com o contato da Time anonimizado. Fica o vínculo (lead, empresa, momentos, valor). Roda
+   sempre, com ou sem a fonte;
+2. o nascimento perdido: as empresas do cadastro dos últimos 7 dias sem "Cadastro concluído"
+   (o evento perdido e o cadastro pelo Google);
+3. o pagamento perdido: até 50 linhas com lead, sem pagamento informado e dentro do prazo.
+
+A finalidade é a medição (Meta e Google). IP e navegador ficam só nesta tabela, fora do card.
+
+### No MCP
+
+- `plataforma_ver_assinatura` devolve `lead_na_time`: o lead, a org da Time, os momentos, o
+  valor em BRL e o erro; `configurado: false` quando `CADASTRO_FONTE_DO_CRM` falta.
+- `plataforma_listar_pedidos_de_cadastro` devolve o `lead_na_time` de cada pedido e
+  `cadastros_na_time`: se a variável está configurada e os últimos cadastros cujo lead falhou
+  (só ids, datas e o erro).
+
+### Para ligar (falta com o Gabriel e a configuração pelo MCP)
+
+1. Criar a fonte "App · cadastro" na org da Time (`plataforma_garantir_fonte_de_formulario`).
+2. Criar as etapas "Cadastro concluído", "Em teste" e "Assinante" no MIA - SDR, abertas e sem
+   passo do agente (`plataforma_garantir_funil`, com a lista inteira). Não podem ser de ganho.
+3. Colar `CADASTRO_FONTE_DO_CRM` com o id da fonte no ambiente.
+4. Conferir que nenhuma automação da Time em `lead.created` desse funil manda mensagem sozinha.
+
+### Lacunas conhecidas
+
+- O envio do formulário chama a rota de captação na hora, como o Raio-X: o cadastro novo fica
+  um pouco mais lento que o de uma conta que já existia. Se pesar, vai para depois da resposta.
+- Quem fez o Raio-X e depois se cadastrou fica com dois cards (o `external_id` é outro).
+- O `emit_event` recusa quando a empresa nasce pela sessão de um usuário que ainda não é
+  membro dela; aí o evento se perde e a rodada cura em até uma hora.

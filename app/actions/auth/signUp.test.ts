@@ -28,6 +28,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { modoDeCadastro } from "@/lib/auth/politica-de-cadastro";
+import { SENHA_LONGA_DEMAIS } from "@/lib/auth/schemas";
 
 // O client admin que `criarContaDeConvite` usa quando o GoTrue está com o
 // cadastro público fechado (#1653). Hoisted porque o factory do `vi.mock` roda
@@ -41,6 +42,11 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
+// FORK MIA (MIA-168): o lead do cadastro no CRM da Time. Mockado para o caso
+// "a ligação no signUp" (no fim do arquivo) VER quem é chamado; sem o mock, a
+// chamada caía no `catch` (o `cookies()` não existe aqui) e ninguém via nada.
+const registrarCadastroDoSignup = vi.hoisted(() => vi.fn(async () => ({ estado: "enviado" })));
+vi.mock("@/lib/planos-mia/lead-do-cadastro-no-signup", () => ({ registrarCadastroDoSignup }));
 // Mockada aqui em vez de deixar bater no banco: a política é lida em TODO
 // cadastro, e sem o mock cada caso deste arquivo tentaria uma conexão real.
 vi.mock("@/lib/auth/politica-de-cadastro", () => ({
@@ -476,5 +482,160 @@ describe("signUp — o idioma e o fuso de quem se cadastra viajam até a empresa
     const dados = dadosGravados();
     expect(dados).not.toHaveProperty("idioma_do_cadastro");
     expect(dados).not.toHaveProperty("fuso_do_cadastro");
+  });
+});
+
+/**
+ * ─── O TETO DA SENHA NO CADASTRO (issue #4313) ──────────────────────────────
+ *
+ * O mesmo limite do bcrypt vale nos três caminhos em que a pessoa escolhe a
+ * própria senha. A tela de nova senha passou a recusar 73 bytes no PR #4328;
+ * o cadastro e o aceite de convite ficaram com o buraco aberto e terminavam no
+ * "Não foi possível criar a conta. Tente novamente." — com o 400 do GoTrue
+ * (`validation_failed`, "Password cannot be longer than 72 characters") só na
+ * trilha. Aqui a recusa acontece no schema, antes do provedor, e o erro do
+ * provedor tem código próprio, como em `updatePassword`.
+ */
+describe("signUp — senha acima de 72 bytes (#4313)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    signUpDoProvedor.mockReset();
+    // O mock de `createClient` é compartilhado com os casos acima: sem limpar,
+    // o "não foi chamado" mediria as chamadas deles, não as deste caso.
+    vi.mocked(createClient).mockClear();
+    vi.mocked(headers).mockResolvedValue({
+      get: (k: string) => (k === "x-forwarded-for" ? `198.51.100.${n % 250}` : null),
+    } as never);
+    vi.mocked(createClient).mockResolvedValue({
+      auth: { signUp: signUpDoProvedor },
+    } as never);
+    vi.mocked(modoDeCadastro).mockResolvedValue("aberto");
+  });
+
+  const senha = (qtd: number) => `Aa1!${"b".repeat(qtd - 4)}`;
+
+  it("80 caracteres no cadastro não chegam ao GoTrue e a mensagem é a nova", async () => {
+    const { signUp } = await import("./signUp");
+    const senhaLonga = senha(80);
+
+    const res = await signUp({ ...entrada(), password: senhaLonga, password_confirm: senhaLonga });
+
+    expect(res).toMatchObject({ ok: false, error: "validation_error" });
+    expect((res as { details?: Record<string, string[]> }).details?.password).toContain(
+      SENHA_LONGA_DEMAIS,
+    );
+    // Nada saiu daqui: nem cliente do Supabase, nem chamada ao provedor.
+    expect(createClient).not.toHaveBeenCalled();
+    expect(signUpDoProvedor).not.toHaveBeenCalled();
+  });
+
+  it("o 400 de tamanho do GoTrue vira password_too_long, não o genérico", async () => {
+    // O corpo exato medido no GoTrue local: 400, validation_failed.
+    signUpDoProvedor.mockResolvedValue({
+      data: { user: null, session: null },
+      error: {
+        message: "Password cannot be longer than 72 characters",
+        code: "validation_failed",
+        status: 400,
+      },
+    });
+
+    const { signUp } = await import("./signUp");
+    // 72 bytes passam no schema e chegam ao provedor: é o caminho em que as
+    // duas réguas podem divergir.
+    const noLimite = senha(72);
+    const res = await signUp({ ...entrada(), password: noLimite, password_confirm: noLimite });
+
+    expect(res).toEqual({ ok: false, error: "password_too_long" });
+    expect(signUpDoProvedor).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * FORK MIA (MIA-168) · A LIGAÇÃO NO `signUp`: A CONTA NOVA VIRA LEAD NA TIME.
+ *
+ * `lead-do-cadastro.test.ts` cobre o módulo; este bloco cobre o ponto do
+ * upstream, que é onde "peça solta" nasce sem erro nenhum. E prova a
+ * anti-enumeração: conta que já existia (o GoTrue devolve `identities: []`, a
+ * resposta ofuscada) e convite não viram lead, e a resposta continua a mesma.
+ */
+describe("signUp — a conta nova vira lead no CRM da Time (MIA-168)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    signUpDoProvedor.mockReset();
+    registrarCadastroDoSignup.mockClear();
+    vi.mocked(headers).mockResolvedValue({
+      get: (k: string) => (k === "x-forwarded-for" ? `198.51.100.${(n % 250) + 1}` : null),
+    } as never);
+    vi.mocked(createClient).mockResolvedValue({
+      auth: { signUp: signUpDoProvedor },
+    } as never);
+    vi.mocked(modoDeCadastro).mockResolvedValue("aberto");
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("⭐ conta nova (com identities): chama registrarCadastroDoSignup com o usuário e o formulário", async () => {
+    signUpDoProvedor.mockResolvedValue({
+      data: { user: { id: "u-lead-1", identities: [{ id: "i-1" }] }, session: null },
+      error: null,
+    });
+    const dados = entrada();
+
+    const { signUp } = await import("./signUp");
+    const res = await signUp(dados);
+
+    expect(res).toEqual({ ok: true, sessao_ativa: false });
+    expect(registrarCadastroDoSignup).toHaveBeenCalledTimes(1);
+    expect(registrarCadastroDoSignup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "u-lead-1",
+        dados: expect.objectContaining({ email: dados.email, org_name: dados.org_name }),
+      }),
+    );
+  });
+
+  it("conta que já existia (identities vazio): NÃO vira lead, e a resposta é a mesma", async () => {
+    signUpDoProvedor.mockResolvedValue({
+      data: { user: { id: "u-ofuscado", identities: [] }, session: null },
+      error: null,
+    });
+
+    const { signUp } = await import("./signUp");
+    const res = await signUp(entrada());
+
+    expect(res).toEqual({ ok: true, sessao_ativa: false });
+    expect(registrarCadastroDoSignup).not.toHaveBeenCalled();
+  });
+
+  it("convite: NÃO vira lead (quem entra por convite é da empresa que convidou)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({ disable_signup: false }) }) as Response),
+    );
+    const { signInviteToken, INVITE_TTL_SECONDS } = await import("@/lib/auth/invite-token");
+    const dados = entrada();
+    const token = signInviteToken({
+      invite_id: "00000000-0000-4000-8000-000000000005",
+      email: dados.email,
+      organization_id: "00000000-0000-4000-8000-000000000001",
+      role: "agent",
+      exp: Math.floor(Date.now() / 1000) + INVITE_TTL_SECONDS,
+    });
+    signUpDoProvedor.mockResolvedValue({
+      data: { user: { id: "u-convidada", identities: [{ id: "i-2" }] }, session: null },
+      error: null,
+    });
+
+    const { signUp } = await import("./signUp");
+    const res = await signUp(
+      { full_name: "Convidada da Silva", email: dados.email, password: dados.password, password_confirm: dados.password_confirm },
+      token,
+    );
+
+    expect(res).toEqual({ ok: true, sessao_ativa: false });
+    expect(signUpDoProvedor).toHaveBeenCalled();
+    expect(registrarCadastroDoSignup).not.toHaveBeenCalled();
   });
 });

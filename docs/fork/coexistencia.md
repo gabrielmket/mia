@@ -130,7 +130,7 @@ com `aberta_por = 'historico_sem_pedido'` e o pedido do histórico já `em_andam
 
 - **S3:** feita (seção 5).
 - **S4:** feita (seção 6).
-- **Relatórios e raio-X do fork (9163, decisão D3):** conferido em 17/11/2026, nenhuma das funções do fork
+- **Relatórios e raio-X do fork (9172, decisão D3):** conferido em 17/11/2026, nenhuma das funções do fork
   que leem `messages` corta `historico_importado`. Com 180 dias de histórico, o tempo de resposta e o raio-X
   do primeiro mês contariam conversa velha. O Gabriel aprovou excluir (D3, 17/11/2026), e a 9163 ainda não
   existe: até ela entrar, o primeiro mês de um número que trouxe o histórico sai distorcido nesses relatórios.

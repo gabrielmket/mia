@@ -101,9 +101,9 @@ beforeEach(() => {
 });
 
 describe("as três da trava de robô", () => {
-  it("estão na lista, e a lista tem 122 (112 da .107 + as três da .108 + as duas do produto no negócio da .109 + a da lista de espera, MIA-18 + a do consumo de IA, MIA-44 + as três da coexistência, MIA-28)", () => {
+  it("estão na lista, e a lista tem 134 (112 da .107 + as três da .108 + as duas do produto no negócio da .109 + a da lista de espera, MIA-18 + a do consumo de IA, MIA-44 + as três da 1.117, MIA-67 + as duas da 1.118, MIA-79 + as duas dos preços da Meta, MIA-99 + as duas da MIA-103 + as duas das conversões do site, MIA-169 + as três da coexistência, MIA-28 + o ranking do consumo de IA, MIA-136)", () => {
     for (const n of NOMES) expect(FERRAMENTA_POR_NOME.has(n), n).toBe(true);
-    expect(FERRAMENTAS).toHaveLength(122);
+    expect(FERRAMENTAS).toHaveLength(134);
   });
 
   it("ver é leitura; configurar é montagem; desfazer põe a IA de volta no ar", () => {
@@ -141,6 +141,48 @@ describe("plataforma_configurar_trava_de_robo", () => {
     expect(h.auditados).toHaveLength(1);
   });
 
+  it("os quatro campos do ritmo de máquina (MIA-210): grava, responde ja_estava na segunda e não mexe no resto", async () => {
+    const b = banco();
+    const pedido = { ritmo_ligado: false, ritmo_giros: 8, ritmo_latencia_maxima_segundos: 120, ritmo_variacao_segundos: 5 };
+    const r = await chamar("plataforma_configurar_trava_de_robo", b, { organization_id: ORG, ...pedido });
+    expect(r.ja_estava).toBe(false);
+    expect(r.configuracao).toEqual({ ...CONFIG_PADRAO_DA_TRAVA, ...pedido });
+    expect(r.antes).toEqual(CONFIG_PADRAO_DA_TRAVA);
+    expect(b.db.mia_trava_de_robo_config![0]).toMatchObject({ organization_id: ORG, ligada: true, teto_respostas: 30, ...pedido });
+
+    const de_novo = await chamar("plataforma_configurar_trava_de_robo", b, { organization_id: ORG, ritmo_ligado: false, ritmo_giros: 8 });
+    expect(de_novo.ja_estava).toBe(true);
+    expect(h.auditados.map((a) => a.action)).toEqual(["ai.trava_de_robo_configurada"]);
+
+    // Só a chave do ritmo muda: é uma escrita nova, e o resto fica.
+    const religa = await chamar("plataforma_configurar_trava_de_robo", b, { organization_id: ORG, ritmo_ligado: true });
+    expect(religa.ja_estava).toBe(false);
+    expect(religa.configuracao).toMatchObject({ ritmo_ligado: true, ritmo_giros: 8, ritmo_variacao_segundos: 5 });
+  });
+
+  it.each([
+    ["ritmo_giros", 3],
+    ["ritmo_giros", 31],
+    ["ritmo_latencia_maxima_segundos", 9],
+    ["ritmo_latencia_maxima_segundos", 301],
+    ["ritmo_variacao_segundos", 1],
+    ["ritmo_variacao_segundos", 61],
+  ])("o ritmo fora da faixa é recusado antes de gravar, dizendo o campo: %s = %s", async (campo, valor) => {
+    const b = banco();
+    await expect(chamar("plataforma_configurar_trava_de_robo", b, { organization_id: ORG, [campo]: valor })).rejects.toThrow(new RegExp(String(campo)));
+    expect(b.escritas).toEqual([]);
+  });
+
+  it("a descrição ensina os campos do ritmo com a faixa, e que `ritmo_ligado` desliga só ele", () => {
+    const f = FERRAMENTA_POR_NOME.get("plataforma_configurar_trava_de_robo")!;
+    expect(f.description).toMatch(/ritmo_ligado: false/);
+    const esquema = f.inputSchema as Record<string, { description?: string }>;
+    expect(esquema.ritmo_giros!.description).toMatch(/De 4 a 30\./);
+    expect(esquema.ritmo_latencia_maxima_segundos!.description).toMatch(/De 10 a 300\./);
+    expect(esquema.ritmo_variacao_segundos!.description).toMatch(/De 2 a 60\./);
+    expect(esquema.ritmo_ligado!.description).toMatch(/SÓ ele/);
+  });
+
   it("empresa que não existe é recusada com o caminho para achar o id", async () => {
     await expect(
       chamar("plataforma_configurar_trava_de_robo", banco(), { organization_id: "0b0c0d0e-9999-4999-8999-000000000999", ligada: true }),
@@ -167,6 +209,27 @@ describe("plataforma_ver_travas_de_robo", () => {
       negocios_afetados: [LEAD],
     });
     expect(JSON.stringify(r)).not.toContain("5511900000000");
+  });
+
+  it("o registro do ritmo de máquina aparece como teto, com o sinal 'ritmo' e sem texto", async () => {
+    const ritmo = registro({
+      motivo: "teto",
+      sinais: [
+        { mensagem_id: "0b0c0d0e-7777-4777-8777-000000000011", sinais: ["ritmo"] },
+        { mensagem_id: "0b0c0d0e-7777-4777-8777-000000000012", sinais: ["ritmo"] },
+      ],
+      mensagens_de_robo: 6,
+      respostas_da_ia: 6,
+      negocios_afetados: [],
+      conversa_encerrada: false,
+      etiqueta_aplicada: false,
+      followups_cancelados: 0,
+    });
+    const r = await chamar("plataforma_ver_travas_de_robo", banco({ mia_travas_de_robo: [ritmo] }), { organization_id: ORG, motivo: "teto" });
+    const [linha] = r.registros as Array<Record<string, unknown>>;
+    expect(linha).toMatchObject({ motivo: "teto", mensagens_de_robo: 6, respostas_da_ia: 6, negocios_afetados: [] });
+    expect((linha!.sinais as Array<{ sinais: string[] }>).every((s) => s.sinais.includes("ritmo"))).toBe(true);
+    expect(FERRAMENTA_POR_NOME.get("plataforma_ver_travas_de_robo")!.description).toMatch(/sinal `ritmo`/);
   });
 
   it("sem o cliente, lista os registros de todos; o filtro de motivo e o período valem", async () => {

@@ -7,7 +7,7 @@
  * `tests/unit/email-marketing-regras.test.ts` fixa os valores.
  */
 
-/** A chave do módulo vendável em `organization_modules`. */
+/** A chave do módulo vendável em `mia_modulos_contratados`. */
 export const MODULO_EMAIL_MARKETING = "email_marketing" as const;
 
 /**

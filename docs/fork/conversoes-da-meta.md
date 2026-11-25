@@ -175,6 +175,133 @@ As seis ferramentas continuam, com o mesmo nome:
 | `plataforma_ligar_leads_de_formulario_da_meta` | sem mudança |
 | `plataforma_diagnosticar_conversoes_da_meta` | sem mudança |
 
+## Conversões do site
+
+MIA-169, parte B da MIA-164 (desenho do Arquiteto na MIA-163, seções 4.4 a 4.6). O
+cadastro e a assinatura da MIA viram negócio no funil da Time (parte A,
+`mia_cadastro_na_time`, 9169), e cada etapa da conta tem de chegar à **Meta como
+evento de SITE** (no dataset do site) e ao **Google Ads como importação de clique**.
+
+### A escolha: regras nossas, no motor dele
+
+O CHECK da 0524 (os 5 eventos do upstream) e a tela do cliente **não mudam**: abrir a
+lista seria redefinir objeto do upstream, mudaria a tela de todo cliente, e os eventos
+de site não servem para lead de WhatsApp. As regras do site moram AO LADO, na tabela
+nossa `mia_regras_de_conversao_do_site` (9170), e o envio passa pelo MESMO
+`processarConversao`, o mesmo livro-razão (`ad_conversion_dispatches`) e o mesmo reenvio.
+Não há motor novo.
+
+| coluna | o que é |
+|---|---|
+| `stage_id` | a etapa ABERTA (FK composta para `crm_stages`) |
+| `plataforma` | `meta_ads` ou `google_ads` |
+| `evento_meta` | CHECK nosso: `CompleteRegistration`, `StartTrial`, `Subscribe`, `Purchase` |
+| `google_acao_id` | a ação de conversão do Google (só dígitos) |
+| `leva_valor` | manda o valor do negócio (Purchase e Subscribe sempre: CHECK) |
+| `enabled` | nasce falso |
+| `configured_at` | a trava de retroatividade, pelo gatilho nosso (mesmo contrato da 0524) |
+
+Várias regras por etapa: a "Assinante" leva Subscribe, Purchase e a ação de compra do
+Google. A chave no livro-razão é `MetaEtapa:<id da REGRA>` ou `Etapa:<id da REGRA>`: o
+reenvio do upstream (`fn_solicitar_reenvio_conversao`) e os consumidores dele já aceitam,
+e o uuid da regra não colide com o das regras dele (que é o da etapa).
+
+### O caminho
+
+1. O negócio entra na etapa (`lead.stage_changed`, pela porta do kanban que a parte A usa).
+2. O consumidor `conversoes.etapa_site` (`lib/conversoes/etapa-site.handler.ts`) lê as
+   regras LIGADAS da etapa, com as travas dos dois do upstream: o que foi enviado não sai
+   de novo, movimento anterior à regra não envia, a etapa é desta empresa e está aberta.
+   Para cada regra, chama `processarConversao`.
+3. O ramo FORK MIA de `envio.handler.ts` pergunta a `lib/conversoes/site.ts` se a chave é
+   de uma regra do site. Se é, ele decide tudo:
+   - **atribuição** pela `mia_cadastro_na_time` (o negócio sem linha lá não veio do
+     /signup: `sem_cadastro_do_site`, sem linha no livro-razão). Meta sempre; Google só
+     com `gclid`, `gbraid` ou `wbraid` (`sem_clique_do_google`);
+   - **valor** do negócio quando `leva_valor` (sem valor: `sem_valor`, pendente);
+   - **credencial da Meta** pelas variáveis `MIA_META_DATASET_DO_SITE` e
+     `MIA_META_TOKEN_DO_SITE`, **só quando a empresa da regra é a dona da fonte
+     `CADASTRO_FONTE_DO_CRM`**. Outra empresa: `site_fora_da_empresa_da_fonte`, sem ler o
+     token. Sem as variáveis: `site_sem_credencial`. A conexão da Meta da tela NÃO é
+     usada (a da Time aponta para outro dataset, e trocá-la levaria as conversões de
+     WhatsApp para o dataset do site);
+   - **trava da demonstração**: como este ramo não lê a conexão, ele não passa pelo
+     gatilho da 9010. Por isso pergunta à `fn_mia_e_demonstracao` antes de mandar. Se a
+     empresa é de demonstração, o envio fica `site_empresa_de_demonstracao` e nada vai à
+     Meta. Se não der para confirmar, nada sai, e o evento volta mais tarde
+     (`site_demonstracao_nao_confirmada`);
+   - **Google** pela conexão da própria empresa (a tela de Conversões), com a ação da regra.
+4. O reenvio (`ad_conversion.retry_requested`) é dos consumidores do UPSTREAM: eles leem o
+   retrato e chamam `processarConversao`, que volta a `site.ts`. O nosso consumidor não
+   escuta o reenvio (mandaria duas vezes). Regra apagada com retrato de evento de site:
+   `regra_do_site_removida`, nunca o transporte do upstream.
+
+**A guarda `venda_pelo_site`:** o negócio que tem linha na `mia_cadastro_na_time` não
+manda o `Purchase` do caminho da venda (`lead.won`, a etapa de ganho do funil da Time):
+a compra do site já sai pela etapa "Assinante" e contaria duas vezes.
+
+### O fio da Meta (`meta/evento-do-site.ts`)
+
+- `action_source: "website"`, `event_source_url` (a página do cadastro, sem a query),
+  `client_ip_address` e `client_user_agent` em claro, **só com `consentimento = medicao`**.
+  A parte A guarda IP e navegador também com `necessario`, mas a medição não os usa:
+  sem `medicao`, o evento sai `system_generated`, só com os hashes;
+- `em`, `ph`, `fn`, `ln` e `external_id` (o id da empresa cliente) em SHA-256 do valor
+  normalizado (minúsculo; telefone só dígitos);
+- `fbp` e `fbc` **só com `consentimento = medicao`** (conferido de novo no transporte);
+- `value`, `currency: "BRL"` e `order_id` (o id da cobrança paga) em Purchase e Subscribe;
+- `event_id` = `<negócio>:<chave da regra>`;
+- `test_event_code` com `META_TEST_EVENT_CODE` (o livro-razão marca `evento_de_teste`);
+- sem navegador ou sem página guardados (o prazo de guarda passou, ou o cadastro foi
+  pelo Google): sai `system_generated`, nunca com navegador inventado;
+- o teto de 7 dias e o endereço da Graph (`graph-base.ts`) são os de sempre.
+
+No Google, o transporte já manda `conversionValue` e `orderId`; ganhou o `validateOnly`,
+desligado por padrão e ligado só pela ferramenta de teste.
+
+### As variáveis
+
+| variável | o que é |
+|---|---|
+| `CADASTRO_FONTE_DO_CRM` | o id da fonte "App · cadastro" (parte A); a empresa dona dela é a única que usa as de baixo |
+| `MIA_META_DATASET_DO_SITE` | o id do dataset do site na Meta |
+| `MIA_META_TOKEN_DO_SITE` | o token dele. Nunca em log, teste ou PR |
+| `META_TEST_EVENT_CODE` | opcional: com ele, os eventos do site vão para "Testar eventos". Tire depois do aceite |
+
+### O MCP
+
+| ferramenta | o que faz |
+|---|---|
+| `plataforma_ver_conversoes` | ganhou a seção `site`: as regras, as variáveis configuradas (sim ou não), o modo de teste e os últimos envios do site, sem dado de pessoa |
+| `plataforma_garantir_conversoes_do_site` | montagem: grava as regras DESLIGADAS, só na empresa dona da fonte; recusa evento fora dos 4, etapa de ganho ou perda, Google sem ação e Purchase/Subscribe sem valor |
+| `plataforma_ligar_conversoes` | `plataforma: "site"` liga as regras do site das etapas (`colocar_no_ar`), com aviso se falta variável ou se o código de teste ainda está lá |
+| `plataforma_testar_conversoes_do_site` | um evento com a Ana Exemplo à Meta, com o consentimento `medicao` e navegador fictícios para sair `website` como um cadastro real (recusa sem o código de teste) e ao Google com `validateOnly`. Não grava no livro-razão |
+
+O checklist (`plataforma_ver_implantacao`, área `conversoes`) ganha o item das regras do
+site na empresa dona da fonte.
+
+### Os pontos de ligação no código do upstream
+
+| arquivo | o que o ponto FORK MIA faz |
+|---|---|
+| `lib/conversoes/envio.handler.ts` | delega a `site.ts` a chave de regra do site, e a guarda `venda_pelo_site` |
+| `lib/plataformas-de-anuncio/meta/conversions.ts` | a conversão com `site` vai para `evento-do-site.ts` |
+| `lib/plataformas-de-anuncio/google/conversions.ts` e `google/data-manager.ts` | `validateOnly` quando `site.somenteValidar` |
+| `lib/plataformas-de-anuncio/types.ts` | o campo `site` da `ConversaoOffline` |
+| `lib/event-log/register-handlers.ts` | registra `conversoes.etapa_site` |
+| `lib/audit/actions.ts` | `mia_regras_do_site.updated` e `mia_regras_do_site.testado` |
+
+### O aceite na produção (depois do merge)
+
+1. As variáveis no servidor (o Gabriel), com o `META_TEST_EVENT_CODE`.
+2. As regras pelo MCP, desligadas.
+3. `plataforma_testar_conversoes_do_site`: o evento em "Testar eventos" da Meta e a
+   validação do Google (`validateOnly`).
+4. Tirar o código de teste e ligar, com o ok do Gabriel.
+
+**Risco conhecido:** o PR #5187 do upstream (a conta do clique nas conversões de etapa do
+Google) mexe no ramo do Google; na fusão que o trouxer, conferir as regras do site.
+
 ## A empresa de demonstração
 
 Regra e chave podem ser gravadas e ligadas; nada sai, porque a conexão de conversões
@@ -207,3 +334,7 @@ Nenhum teste fala com a Meta. Com o **código de teste** preenchido na conexão:
 | `tests/unit/mcp-de-implantacao-conversoes.test.ts` | as seis ferramentas do MCP sobre a tabela do upstream |
 | `tests/invariants/conversoes-da-meta-por-etapa.test.ts` | o Postgres de verdade: a 9019, ⭐ a regra da casa com o registro, os formulários, o reenvio do upstream, a demonstração e o MCP |
 | `tests/invariants/rls-tabelas-da-mia.test.ts` | as duas tabelas da 9017 continuam com a RLS delas |
+| `tests/unit/conversoes-do-site-meta.test.ts` | (MIA-169) o corpo do evento de site: `website`, os hashes, IP, navegador, fbp e fbc só com `medicao`, valor e pedido no Purchase e no Subscribe, `test_event_code` e `system_generated` sem navegador |
+| `tests/unit/conversoes-do-site-motor.test.ts` | (MIA-169) o consumidor e as travas, o reenvio pelos consumidores do upstream, ⭐ outra empresa nunca usa a variável, a guarda `venda_pelo_site` e o Google com valor e `validateOnly` |
+| `tests/unit/mcp-de-implantacao-conversoes-do-site.test.ts` | (MIA-169) as ferramentas do site no MCP |
+| `tests/invariants/regras-de-conversao-do-site.test.ts` | (MIA-169) o Postgres de verdade: os CHECKs, as unicidades, a FK da etapa, o gatilho de `configured_at` e a RLS da 9170 |

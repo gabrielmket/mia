@@ -77,6 +77,9 @@ vi.mock("@/components/kanban/LeadFieldsForm", () => ({ LeadFieldsForm: () => <di
 vi.mock("@/components/kanban/PropostasDoNegocio", () => ({ PropostasDoNegocio: () => null }));
 vi.mock("@/components/kanban/LoseLeadDialog", () => ({ LoseLeadDialog: () => null }));
 vi.mock("@/components/kanban/SeletorDeContato", () => ({ SeletorDeContato: () => null }));
+// A classificação comercial (upstream #4191, v1.124) usa o QueryClient; o
+// conteúdo dela é provado pelos testes do dossiê. Aqui, como lá, fica fora.
+vi.mock("@/components/kanban/ClassificacaoComercial", () => ({ ClassificacaoComercial: () => null }));
 // A seção "Conversas e ligações dos números" (upstream #3669) consulta as pessoas
 // relacionadas; aqui o negócio não tem nenhuma, e a seção não aparece.
 vi.mock("@/hooks/leads/useContatosRelacionados", () => ({ useContatosRelacionados: () => ({ data: { data: [] } }) }));
@@ -344,7 +347,11 @@ describe("convivência com o dossiê do upstream", () => {
     // O seletor de etapa do cabeçalho do dossiê (`EtapaNoDossie`, upstream v1.9x)
     // também é substituído: o cartão aberto tem a BARRA DE ETAPAS, que move pelo
     // mesmo caminho do "Mover para…" do quadro (`aoMoverPelaLista`).
-    const substituidas = new Set(["LeadTimeline", "SecaoDoDossie", "useSecoesRecolhidas", "EtapaNoDossie"]);
+    // A `BarraDeEtapas` do upstream (v1.118, com os dias só na etapa atual) convive
+    // com a nossa: o cartão aberto já tinha a barra própria, com os dias em CADA
+    // etapa (protótipo .67), e as duas movem pelo mesmo `aoMoverPelaLista` do
+    // quadro, cada uma na sua tela. A dele segue no dossiê e no painel da conversa.
+    const substituidas = new Set(["LeadTimeline", "SecaoDoDossie", "useSecoesRecolhidas", "EtapaNoDossie", "BarraDeEtapas"]);
     const faltando = pecas.filter((p) => !substituidas.has(p) && !cartao.includes(p));
     expect(faltando, "peça do dossiê do upstream que sumiu do cartão aberto").toEqual([]);
     expect(pecas.length).toBeGreaterThan(4);
