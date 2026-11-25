@@ -17511,7 +17511,6 @@ export const DICIONARIO: Traducoes = {
   "Amarrar": { es: "Vincular" },
   "A Meta ainda não mandou o número desta conta. Ela avisa de novo quando mandar.": { es: "Meta todavía no envió el número de esta cuenta. Avisa de nuevo cuando lo envíe." },
   "Já amarradas": { es: "Ya vinculadas" },
-  "Conectar com o Facebook": { es: "Conectar con Facebook" },
   "O jeito rápido: você entra com a conta do Facebook da sua empresa e escolhe o número por lá. Nada para copiar e colar.": { es: "La forma rápida: entras con la cuenta de Facebook de tu empresa y eliges el número allí. Nada que copiar y pegar." },
   "Entrar com o Facebook": { es: "Entrar con Facebook" },
   "Quando terminar, avise a gente: o número aparece aqui depois que a Meta confirmar.": { es: "Cuando termines, avísanos: el número aparece aquí después de que Meta confirme." },

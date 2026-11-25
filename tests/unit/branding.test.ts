@@ -977,12 +977,9 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "endpoint da Graph API do WhatsApp Cloud — 6 arquivos: envio de template, sincronização de modelos, validação de credencial, conversões e insights. É contrato da Meta, não escolha nossa.",
   },
-  // FORK MIA · coexistência (docs/fork/coexistencia.md).
-  "connect.facebook.net": {
-    categoria: "FORNECEDOR",
-    motivo:
-      "o SDK JS da Meta, carregado só quando a empresa abre a janela do cadastro incorporado pelo app WhatsApp Business (`components/connections/coexistencia/sdk-da-meta.ts`). É contrato da Meta: a janela só abre pelo SDK dela.",
-  },
+  // FORK MIA · coexistência (docs/fork/coexistencia.md): o "connect.facebook.net" do upstream, logo acima,
+  // também cobre `components/connections/coexistencia/sdk-da-meta.ts`, que carrega o mesmo SDK da Meta
+  // para a janela do cadastro pelo app WhatsApp Business. Uma chave só (o objeto não aceita duas).
   "api.telegram.org": {
     categoria: "FORNECEDOR",
     motivo:
