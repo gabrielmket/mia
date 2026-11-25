@@ -25,6 +25,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { PROVEDOR_POR_ASSINATURA, rotuloDoProvedor } from "@/lib/ai/pontos/provedores";
 import { PROVEDOR_DE_RESERVA_DA_ASSINATURA } from "@/lib/ai/pontos/reserva-da-assinatura";
 import { ehOperante } from "@/lib/organizacao/operante";
@@ -196,7 +197,14 @@ export type IaDaEmpresaNoLote = IaDaEmpresa & {
 };
 
 /**
- * A IA de TODAS as empresas, em duas leituras (sem N+1): para o cartão do
+ * Teto de páginas de cada leitura do lote: 100 × 1000 linhas. Bem acima de
+ * qualquer instalação de hoje; acima dele o lote sai `null` (não sei), nunca
+ * um recorte com cara de total.
+ */
+export const PAGINAS_MAXIMAS_DO_LOTE = 100;
+
+/**
+ * A IA de TODAS as empresas, em duas leituras paginadas (sem N+1): para o cartão do
  * admin, a saúde, o relatório interno e o MCP. `null` quando a leitura falhou,
  * nunca lista vazia: quem conta diz "não sei", e não "0 sem chave".
  */
@@ -204,24 +212,46 @@ export async function iaDasEmpresas(
   admin: SupabaseClient,
   chaveDaInstalacao: ChaveDaInstalacao = chaveDaInstalacaoNoAmbiente,
 ): Promise<IaDaEmpresaNoLote[] | null> {
-  const [orgRes, credsRes] = await Promise.all([
-    admin.from("organizations").select("id, status, display_name, settings, ia_segue_a_plataforma").order("id"),
-    admin
-      .from("ai_provider_credentials")
-      .select("organization_id, provider, is_active, validated_at")
-      .eq("is_active", true)
-      .not("validated_at", "is", null),
+  type LinhaDoLote = LinhaDaEmpresa & { status: string | null; display_name: string | null };
+  type CredencialDoLote = CredencialParaARegua & { organization_id: string };
+  // MIA-235: as duas leituras andam em páginas até o fim (o PostgREST corta em
+  // 1000 linhas e não avisa), na ordem estável do `id`. Página que falhou ou
+  // teto sem prova de fim vira `null`: uma conta feita num recorte diria
+  // "N sem chave" com N errado.
+  const [orgs, creds] = await Promise.all([
+    lerTodasAsPaginas<LinhaDoLote>(
+      (de, ate, pedirContagem) =>
+        admin
+          .from("organizations")
+          .select(
+            "id, status, display_name, settings, ia_segue_a_plataforma",
+            pedirContagem ? { count: "exact" } : undefined,
+          )
+          .order("id", { ascending: true })
+          .range(de, ate),
+      { paginasMaximas: PAGINAS_MAXIMAS_DO_LOTE },
+    ),
+    lerTodasAsPaginas<CredencialDoLote>(
+      (de, ate, pedirContagem) =>
+        admin
+          .from("ai_provider_credentials")
+          .select("organization_id, provider, is_active, validated_at", pedirContagem ? { count: "exact" } : undefined)
+          .eq("is_active", true)
+          .not("validated_at", "is", null)
+          .order("id", { ascending: true })
+          .range(de, ate),
+      { paginasMaximas: PAGINAS_MAXIMAS_DO_LOTE },
+    ),
   ]);
-  if (orgRes.error || credsRes.error) return null;
+  if (orgs.erro || creds.erro || orgs.truncado || creds.truncado) return null;
 
   const porEmpresa = new Map<string, CredencialParaARegua[]>();
-  for (const c of (credsRes.data ?? []) as Array<CredencialParaARegua & { organization_id: string }>) {
+  for (const c of creds.linhas) {
     const lista = porEmpresa.get(c.organization_id) ?? [];
     lista.push(c);
     porEmpresa.set(c.organization_id, lista);
   }
-  type LinhaDoLote = LinhaDaEmpresa & { status: string | null; display_name: string | null };
-  return ((orgRes.data ?? []) as LinhaDoLote[]).map((org) => ({
+  return orgs.linhas.map((org) => ({
     ...iaDaLinha(org, porEmpresa.get(org.id) ?? [], chaveDaInstalacao),
     status: org.status ?? null,
     nome: org.display_name ?? null,

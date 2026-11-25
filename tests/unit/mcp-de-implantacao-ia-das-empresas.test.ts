@@ -190,10 +190,13 @@ describe("plataforma_ver_ia_das_empresas", () => {
 
   it("a leitura das credenciais falhou: erro, e não uma lista com cara de \"ninguém tem chave\"", async () => {
     const fromReal = cenario.cliente.from.bind(cenario.cliente);
+    // A leitura anda em páginas (MIA-235): a cadeia inteira devolve o erro.
+    const falha: Record<string, unknown> = {
+      then: (ok: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: "fora do ar" } }).then(ok),
+    };
+    for (const m of ["select", "eq", "not", "order", "range"]) falha[m] = () => falha;
     cenario.cliente.from = ((tabela: string) =>
-      tabela === "ai_provider_credentials"
-        ? { select: () => ({ eq: () => ({ not: async () => ({ data: null, error: { message: "fora do ar" } }) }) }) }
-        : fromReal(tabela)) as typeof cenario.cliente.from;
+      tabela === "ai_provider_credentials" ? falha : fromReal(tabela)) as typeof cenario.cliente.from;
     const r = await chamar({});
     expect(r.erro).toBe(true);
     expect(r.texto).toContain("não consegui ler a IA das empresas");

@@ -78,6 +78,11 @@ Anthropic. A regra é pura e mora em `lib/ai/aviso-da-ia-das-empresas.ts`. Conta
 Todos leem a mesma régua, `iaDasEmpresas` ou `iaDaEmpresa` (`lib/ai/ia-da-empresa.ts`), e por isso
 dizem o mesmo número.
 
+`iaDasEmpresas` lê `organizations` e `ai_provider_credentials` em páginas de 1000, ordenadas por
+`id`, até o fim (`lerTodasAsPaginas`, `lib/leitura/todas-as-paginas.ts`, MIA-235): o PostgREST corta
+cada resposta em 1000 linhas sem avisar, e a conta parava na empresa 1000. Página que falhou, ou o
+teto de 100 páginas sem chegar ao fim, devolve `null` ("não sei"), nunca a conta de um recorte.
+
 - **`/health`**: `data.ia.empresas_sem_chave`, só a contagem, sem id nem nome, igual com e sem o
   segredo. A leitura tem o mesmo teto de tempo das outras da saúde; `null` quer dizer que ela falhou
   (diferente de zero). **Não muda o `status`**: o passo 1 do trem de implantação lê o `status`, e
