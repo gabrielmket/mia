@@ -32,6 +32,13 @@ export type ChaveDaInstalacao = Record<string, boolean>;
 
 const CHAVE = ["admin", "modelo-de-ia"];
 
+/** FORK MIA (9172, MIA-218): `contarEmpresas` do GET; só as empresas que operam. */
+export interface ContagemDeEmpresas {
+  seguem: number;
+  propria: number;
+  sem_chave: number;
+}
+
 export function useModeloDeIa() {
   return useQuery({
     queryKey: CHAVE,
@@ -41,6 +48,8 @@ export function useModeloDeIa() {
           escolha: EscolhaDeModelo | null;
           chave_da_instalacao: Record<string, boolean>;
           modelos: ModeloDoCatalogo[];
+          // FORK MIA (9172, MIA-218): as empresas que operam; `null` = leitura falhou.
+          empresas?: ContagemDeEmpresas | null;
         };
       }>(
         "/api/v1/admin/modelo-de-ia",

@@ -8,7 +8,9 @@
  *  - chave ligada: o cartão com o "Antes de começar", os passos e o botão,
  *    que abre o aviso de limites e custos e, dele, a janela da Meta;
  *  - número conectado pelo app: o resumo (número, origem, no ar) e a
- *    sincronização em "Ver a sincronização".
+ *    sincronização em "Ver a sincronização";
+ *  - S4: número fora do ar ou de volta (tela 4): `ForaDoArEVolta`, com o
+ *    "Conectar de novo" pela mesma janela.
  *
  * Encaixe único em `components/connections/CanalOficialClient.tsx` (FORK MIA).
  * As outras formas de conectar (link do cadastro e manual) seguem como estão.
@@ -25,6 +27,7 @@ import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 
 import { AvisoDeLimitesECustos } from "./AvisoDeLimitesECustos";
+import { ForaDoArEVolta } from "./ForaDoArEVolta";
 import { CartaoDaSincronizacao, SeloDaSincronizacao, estadoGeralDaSincronizacao } from "./CartaoDaSincronizacao";
 import { JanelaDaMetaNaoTerminou } from "./sdk-da-meta";
 
@@ -45,59 +48,6 @@ export function ConectarPeloApp({ canalConectado = false }: { canalConectado?: b
   const estado = data.data;
   const empresa = estado.empresa;
   const numero = estado.numero && estado.numero.estado !== "encerrada" ? estado.numero : null;
-
-  if (numero) {
-    const geral = estadoGeralDaSincronizacao(numero.pedidos);
-    return (
-      <div className="flex flex-col gap-4" data-testid="coexistencia-conectado">
-        <Card className="p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="font-medium">
-                {[empresa, numero.phoneNumber].filter(Boolean).join(" · ")}
-              </h2>
-              <p className="text-xs text-text-muted">
-                {t("Conectado pelo app WhatsApp Business · origem: cadastro incorporado")}
-              </p>
-            </div>
-            {numero.estado === "no_ar" ? (
-              <Badge variant="success">{t("no ar")}</Badge>
-            ) : (
-              <Badge variant="error">{t("fora do ar")}</Badge>
-            )}
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-            <span>{t("Sincronização:")}</span>
-            <SeloDaSincronizacao estado={geral} />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setVerSincronizacao((v) => !v)}
-              data-testid="coexistencia-ver-sincronizacao"
-            >
-              {verSincronizacao ? t("Esconder a sincronização") : t("Ver a sincronização")}
-            </Button>
-          </div>
-        </Card>
-        {verSincronizacao ? <CartaoDaSincronizacao numero={numero} empresa={empresa} /> : null}
-      </div>
-    );
-  }
-
-  // O canal oficial já conectado por outra porta (link ou manual): o cartão some,
-  // como no protótipo. Trocar o número é excluir o canal em Conexões primeiro.
-  if (canalConectado) return null;
-
-  if (!estado.ligada) {
-    return (
-      <Card className="p-4" data-testid="coexistencia-sem-chave">
-        <h2 className="font-medium">{t("Conectar pelo app WhatsApp Business")}</h2>
-        <p className="mt-1 text-sm text-text-muted">
-          {t("Esta opção ainda não está liberada para a sua empresa. Fale com o suporte da MIA.")}
-        </p>
-      </Card>
-    );
-  }
 
   const janela = estado.janela;
   async function abrirJanela() {
@@ -124,6 +74,73 @@ export function ConectarPeloApp({ canalConectado = false }: { canalConectado?: b
       }
       showApiError(err);
     }
+  }
+
+  if (numero) {
+    const geral = estadoGeralDaSincronizacao(numero.pedidos);
+    return (
+      <div className="flex flex-col gap-4" data-testid="coexistencia-conectado">
+        <Card className="p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="font-medium">
+                {[empresa, numero.phoneNumber].filter(Boolean).join(" · ")}
+              </h2>
+              <p className="text-xs text-text-muted">
+                {t("Conectado pelo app WhatsApp Business · origem: cadastro incorporado")}
+              </p>
+            </div>
+            {numero.estado === "no_ar" ? (
+              <Badge variant="success">{t("no ar")}</Badge>
+            ) : (
+              <Badge variant="error">{t("fora do ar")}</Badge>
+            )}
+          </div>
+          {/* S4: o número fora do ar e o de volta (tela 4 do protótipo). */}
+          <ForaDoArEVolta
+            numero={numero}
+            podeConectar={estado.ligada && janela.pronta && !conectar.isPending}
+            aoConectar={() => setAvisoAberto(true)}
+          />
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <span>{t("Sincronização:")}</span>
+            <SeloDaSincronizacao estado={geral} />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setVerSincronizacao((v) => !v)}
+              data-testid="coexistencia-ver-sincronizacao"
+            >
+              {verSincronizacao ? t("Esconder a sincronização") : t("Ver a sincronização")}
+            </Button>
+          </div>
+        </Card>
+        {verSincronizacao ? <CartaoDaSincronizacao numero={numero} empresa={empresa} /> : null}
+        {numero.estado === "fora_do_ar" ? (
+          <AvisoDeLimitesECustos
+            aberto={avisoAberto}
+            aoFechar={() => setAvisoAberto(false)}
+            aoContinuar={abrirJanela}
+            continuando={conectar.isPending}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
+  // O canal oficial já conectado por outra porta (link ou manual): o cartão some,
+  // como no protótipo. Trocar o número é excluir o canal em Conexões primeiro.
+  if (canalConectado) return null;
+
+  if (!estado.ligada) {
+    return (
+      <Card className="p-4" data-testid="coexistencia-sem-chave">
+        <h2 className="font-medium">{t("Conectar pelo app WhatsApp Business")}</h2>
+        <p className="mt-1 text-sm text-text-muted">
+          {t("Esta opção ainda não está liberada para a sua empresa. Fale com o suporte da MIA.")}
+        </p>
+      </Card>
+    );
   }
 
   return (

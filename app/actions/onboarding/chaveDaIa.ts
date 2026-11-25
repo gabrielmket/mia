@@ -35,7 +35,7 @@ import {
   provedorDesligadoNaInstalacao,
 } from "@/lib/ai/pontos/provedores-oferecidos";
 import { requireOnboardingCtx, OnboardingError } from "./_shared";
-import { escolheIa } from "@/lib/ai/trava-da-ia";
+import { podeConfigurarChaveDeIa } from "@/lib/ai/custo-e-da-plataforma";
 
 export type ResultadoDaChave =
   | {
@@ -76,8 +76,10 @@ export async function salvarChaveDaIa(formData: FormData): Promise<ResultadoDaCh
 
   // FORK MIA: a chave e o provedor da empresa são da plataforma. A tela esconde
   // este campo de quem não é (setup-ai/page.tsx), mas uma ação do servidor se
-  // chama sem a tela; a recusa mora aqui (lib/ai/trava-da-ia.ts).
-  if (!escolheIa(ctx)) {
+  // chama sem a tela; a recusa mora aqui (lib/ai/custo-e-da-plataforma.ts).
+  // Fora de suporte, mesmo com edição (MIA-218): a chave fica de fora do que a
+  // plataforma faz dentro da conta do cliente.
+  if (!podeConfigurarChaveDeIa(ctx)) {
     return {
       ok: false,
       erro: "A chave da inteligência artificial é configurada pela nossa equipe. Fale com o suporte.",

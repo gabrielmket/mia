@@ -175,7 +175,7 @@ export function bancoEmMemoria(
         q
       ),
       // `or("a.is.null,a.lt.\"x\"")`: as duas formas que o passo do pagamento usa (FORK MIA, .98),
-      // e `a.eq.x`.
+      // `a.eq.x` e `a.lte.x`.
       or: (expr: string) => (
         filtros.push((l) =>
           expr.split(",").some((parte) => {
@@ -185,7 +185,10 @@ export function bancoEmMemoria(
             const igual = /^(\w+)\.eq\.(.+)$/.exec(parte);
             if (igual) return String(l[igual[1] as string] ?? "") === igual[2];
             const menor = /^(\w+)\.lt\."?([^"]+)"?$/.exec(parte);
-            return menor ? (l[menor[1] as string] as string) < (menor[2] as string) : false;
+            if (menor) return (l[menor[1] as string] as string) < (menor[2] as string);
+            // `a.lte.x`: a guarda de ordem da saída e da volta da coexistência (S4).
+            const ateIgual = /^(\w+)\.lte\."?([^"]+)"?$/.exec(parte);
+            return ateIgual ? (l[ateIgual[1] as string] as string) <= (ateIgual[2] as string) : false;
           }),
         ),
         q

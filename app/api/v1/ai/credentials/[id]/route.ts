@@ -51,7 +51,7 @@ import {
 } from "@/lib/ai/credenciais/uso";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
-import { escolheIa } from "@/lib/ai/trava-da-ia";
+import { podeConfigurarChaveDeIa } from "@/lib/ai/custo-e-da-plataforma";
 
 export const dynamic = "force-dynamic";
 
@@ -143,8 +143,10 @@ export async function PATCH(
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user: authUser, org: activeOrg } = authz;
-  // FORK MIA: a chave de IA é da plataforma, como no POST (lib/ai/trava-da-ia.ts).
-  if (!escolheIa(authz.user))
+  // FORK MIA: a chave de IA é da plataforma, como no POST (lib/ai/custo-e-da-plataforma.ts).
+  // Fora de suporte, mesmo com edição (MIA-218): `escolheIa` admite a
+  // plataforma em suporte para escolher o MODELO, e a chave fica de fora.
+  if (!podeConfigurarChaveDeIa(authz.user))
     return fail("forbidden", t("A chave do provedor de IA é administrada pela plataforma."), 403, { requestId });
 
   let rawBody: unknown;
@@ -245,8 +247,10 @@ export async function DELETE(
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user: authUser, org: activeOrg } = authz;
-  // FORK MIA: a chave de IA é da plataforma, como no POST (lib/ai/trava-da-ia.ts).
-  if (!escolheIa(authz.user))
+  // FORK MIA: a chave de IA é da plataforma, como no POST (lib/ai/custo-e-da-plataforma.ts).
+  // Fora de suporte, mesmo com edição (MIA-218): `escolheIa` admite a
+  // plataforma em suporte para escolher o MODELO, e a chave fica de fora.
+  if (!podeConfigurarChaveDeIa(authz.user))
     return fail("forbidden", t("A chave do provedor de IA é administrada pela plataforma."), 403, { requestId });
 
   const admin = createAdminClient();

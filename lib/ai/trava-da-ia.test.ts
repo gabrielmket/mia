@@ -7,12 +7,14 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { podeConfigurarChaveDeIa } from "@/lib/ai/custo-e-da-plataforma";
 import { bancoEmMemoria } from "@/tests/helpers/banco-em-memoria";
 
 import {
   configDoRoteador,
   escolheIa,
   iaAtualDoAgente,
+  plataformaEditaEmSuporte,
   iaDaCopia,
   iaPodeIrAoAr,
   semCamposDaIa,
@@ -25,11 +27,20 @@ const CRED = "33333333-3333-4333-8333-333333333333";
 
 const CLIENTE = { is_platform_admin: false, support: null };
 const PLATAFORMA = { is_platform_admin: true, support: null };
-/** Admin de plataforma DENTRO da conta do cliente: acompanhar não é operar. */
+/** Admin de plataforma DENTRO da conta do cliente, sem dizer o modo: não escolhe. */
 const PLATAFORMA_EM_SUPORTE = {
   is_platform_admin: true,
   support: { status: "active" } as unknown as (typeof PLATAFORMA)["support"],
 };
+type Suporte = NonNullable<(typeof PLATAFORMA)["support"]>;
+/** FORK MIA (MIA-218): a plataforma em suporte com "Edição permitida", aberta por ela. */
+function plataformaEmSuporte(sessao: Record<string, unknown> = {}, scope: string | null = "full") {
+  return {
+    is_platform_admin: true,
+    platform_admin_scope: scope,
+    support: { status: "active", access_mode: "full", organization_id: ORG, ...sessao } as unknown as Suporte,
+  };
+}
 
 const ATAQUE = { provider: "anthropic", model: "claude-opus-4-7", credential_id: null, operator_model: "o3-pro" };
 
@@ -57,12 +68,38 @@ function banco(opts: { noAr?: string | null; versoes?: Record<string, unknown>[]
 }
 
 describe("quem escolhe a IA", () => {
-  it("só o admin de plataforma fora de suporte", () => {
+  it("só o admin de plataforma", () => {
     expect(escolheIa(PLATAFORMA)).toBe(true);
     expect(escolheIa(CLIENTE)).toBe(false);
     expect(escolheIa(PLATAFORMA_EM_SUPORTE)).toBe(false);
     // Fixture sem o campo é cliente, nunca plataforma: ausência não autoriza.
     expect(escolheIa({} as typeof CLIENTE)).toBe(false);
+  });
+
+  // FORK MIA (MIA-218): MUDANÇA DE PROPÓSITO. Até a .116 este teste fixava que
+  // NENHUMA sessão de suporte escolhe a IA. Mas o admin de plataforma não é
+  // membro das empresas: o modo suporte é a única porta dele para a tela
+  // Provedores de IA, e sem isto ele não conseguia trocar o padrão de nenhuma.
+  it("a plataforma em suporte com edição permitida, aberta por ela, escolhe", () => {
+    expect(escolheIa(plataformaEmSuporte())).toBe(true);
+    expect(plataformaEditaEmSuporte(plataformaEmSuporte())).toBe(true);
+  });
+
+  it.each([
+    ["suporte só de leitura", plataformaEmSuporte({ access_mode: "support_readonly" })],
+    ["sessão aberta por uma agência", plataformaEmSuporte({ agency_id: "55555555-5555-4555-8555-555555555555" })],
+    ["sessão encerrada", plataformaEmSuporte({ status: "expired" })],
+    ["sessão revogada", plataformaEmSuporte({ status: "revoked" })],
+    ["admin de plataforma com scope support_readonly", plataformaEmSuporte({}, "support_readonly")],
+    ["admin de plataforma sem scope carregado", plataformaEmSuporte({}, null)],
+    ["sessão de suporte de quem não é da plataforma", { ...plataformaEmSuporte(), is_platform_admin: false }],
+  ])("%s: não escolhe", (_nome, user) => {
+    expect(escolheIa(user)).toBe(false);
+  });
+
+  it("a chave e o custo continuam fora do suporte, mesmo com edição", () => {
+    expect(podeConfigurarChaveDeIa(plataformaEmSuporte())).toBe(false);
+    expect(podeConfigurarChaveDeIa(PLATAFORMA)).toBe(true);
   });
 });
 

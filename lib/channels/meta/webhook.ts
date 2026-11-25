@@ -264,13 +264,47 @@ export interface ReactionEvent {
   sentAt: Date;
 }
 
+/**
+ * FORK MIA · coexistência (S4; docs/fork/coexistencia.md): uma mensagem que JÁ
+ * EXISTE foi editada ou apagada no WhatsApp.
+ *
+ * Chega por dois campos, com o mesmo miolo (webhooks/reference/messages, lido
+ * em 18/11/2026): em `messages`, quando foi o CLIENTE; em `smb_message_echoes`,
+ * quando foi o dono no app WhatsApp Business. `type: "edit"` traz
+ * `edit.original_message_id` e a mensagem nova em `edit.message`;
+ * `type: "revoke"` traz `revoke.original_message_id`.
+ *
+ * Não é mensagem nova: sem este evento, a do cliente virava uma linha com
+ * `type = 'edit'` (que o CHECK de `messages.type` recusa) e a do app era
+ * descartada pelo `continue` do upstream. Quem aplica é
+ * `lib/channels/meta/coexistencia/edicao.ts`, na mensagem original.
+ */
+export interface MessageEditEvent {
+  kind: "message_edit";
+  wabaId: string;
+  phoneNumberId: string;
+  /** `wamid` do PRÓPRIO evento (não o da mensagem editada). */
+  externalId: string;
+  /** `original_message_id`: a mensagem que foi editada ou apagada. */
+  targetExternalId: string;
+  acao: "edit" | "revoke";
+  /** De onde veio: o cliente (`messages`) ou o dono pelo app (`smb_message_echoes`). */
+  origem: "cliente" | "app";
+  /** O texto novo (corpo ou legenda). `null` no `revoke` e na edição sem texto. */
+  text: string | null;
+  /** O `timestamp` do evento: a edição mais velha que a já aplicada é ignorada. */
+  sentAt: Date;
+}
+
 export type MetaWebhookEvent =
   | TemplateStatusEvent
   | MessageStatusEvent
   | InboundMessageEvent
   | OutboundEchoEvent
   | AppContactSyncEvent
-  | ReactionEvent;
+  | ReactionEvent
+  // FORK MIA · coexistência (S4)
+  | MessageEditEvent;
 
 /**
  * O formato do fio mora em `./envelope.ts`, onde é um schema Zod — e o tipo
@@ -331,6 +365,37 @@ function textoDoClique(raw: Record<string, unknown>, tipo: string): string | nul
   const i = raw.interactive as Record<string, unknown> | undefined;
   const r = (i?.button_reply ?? i?.list_reply) as Record<string, unknown> | undefined;
   return str(r?.title) ?? str(r?.id);
+}
+
+/**
+ * FORK MIA · coexistência (S4): o `edit`/`revoke` como `MessageEditEvent`, ou
+ * `null` quando não é um (ou quando falta o alvo: sem `original_message_id`
+ * não há o que alterar, e o chamador segue o caminho do upstream).
+ */
+function edicaoDaMensagem(
+  raw: Record<string, unknown>,
+  base: { wabaId: string; phoneNumberId: string; externalId: string; origem: "cliente" | "app" },
+): MessageEditEvent | null {
+  const tipo = str(raw.type);
+  if (tipo !== "edit" && tipo !== "revoke") return null;
+  const miolo = objetoSimples(raw[tipo]);
+  const alvo = str(miolo?.original_message_id);
+  if (!alvo) return null;
+  let text: string | null = null;
+  if (tipo === "edit") {
+    const nova = objetoSimples(miolo?.message);
+    const tipoNovo = str(nova?.type);
+    const corpo = tipoNovo ? objetoSimples(nova?.[tipoNovo]) : null;
+    text = tipoNovo === "text" ? str(corpo?.body) : str(corpo?.caption);
+  }
+  return {
+    kind: "message_edit",
+    ...base,
+    targetExternalId: alvo,
+    acao: tipo,
+    text,
+    sentAt: new Date(Number(str(raw.timestamp) ?? "0") * 1000),
+  };
 }
 
 /**
@@ -448,6 +513,19 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
             continue;
           }
 
+          // FORK MIA · coexistência (S4): o cliente editou ou apagou uma
+          // mensagem. Não é mensagem nova: vai à original (`MessageEditEvent`).
+          const edicao = edicaoDaMensagem(raw, {
+            wabaId,
+            phoneNumberId: str(meta.phone_number_id) ?? "",
+            externalId: id,
+            origem: "cliente",
+          });
+          if (edicao) {
+            out.push(edicao);
+            continue;
+          }
+
           // Toque num botão de modelo chega como `button`, e numa resposta interativa como
           // `interactive`: nenhum dos dois cabe no CHECK de `messages.type`, e gravá-los crus
           // fazia o insert falhar — a resposta do contato sumia do CRM. Entram como texto,
@@ -521,6 +599,18 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
           const to = str(raw.to);
           const tipo = str(raw.type) ?? "unknown";
           if (!id || !to) continue; // payload capenga não vira linha meia-boca
+          // FORK MIA · coexistência (S4): o dono editou ou apagou pelo app. Vai
+          // à mensagem original; sem alvo, cai no `continue` do upstream abaixo.
+          const edicaoNoApp = edicaoDaMensagem(raw, {
+            wabaId,
+            phoneNumberId: str(meta.phone_number_id) ?? "",
+            externalId: id,
+            origem: "app",
+          });
+          if (edicaoNoApp) {
+            out.push(edicaoNoApp);
+            continue;
+          }
           if (tipo === "revoke" || tipo === "edit") continue; // ver `OutboundEchoEvent`
 
           // O tipo passa pelo MESMO mapa da recebida (`TIPO_NO_CRM`): fora do CHECK

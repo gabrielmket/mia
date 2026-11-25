@@ -231,6 +231,14 @@ npx vitest run
   `lib/mcp-plataforma/ferramentas/produto-no-negocio.ts`, com o schema na 9160 e na 9161, as duas
   primeiras da faixa 9160-9169; os pontos de ligação no código do upstream estão em
   [`docs/fork/produto-no-negocio.md`](fork/produto-no-negocio.md), seção 10.
+  A coexistência do WhatsApp (o mesmo número no app WhatsApp Business e na MIA: o histórico
+  de até 180 dias que a Meta manda entra como passado e não dispara nada, a conexão pela janela
+  da Meta com o pedido único da sincronização, a saída e a volta do número, a edição e o apagar
+  feitos no WhatsApp) mora em `lib/channels/meta/coexistencia/`,
+  `components/connections/coexistencia/`, `components/admin/coexistencia/` e
+  `lib/mcp-plataforma/ferramentas/coexistencia.ts`, com o schema na 9162 e na 9164; os pontos de
+  ligação no código do upstream estão em [`docs/fork/coexistencia.md`](fork/coexistencia.md),
+  seções 2, 5.1 e 6.4, e o roteiro do teste com um número de verdade, na seção 8.
   As conversões do site (MIA-169: o cadastro e a assinatura da MIA viram evento de SITE na
   Meta e importação de clique no Google, pelo motor do upstream e com regras nossas por etapa)
   moram em `lib/conversoes/site.ts`, `lib/conversoes/etapa-site.handler.ts`,
