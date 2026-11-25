@@ -109,6 +109,10 @@ const PADRAO: PacingKnobs = {
   // Os dias da prospecção por conexão (0642, upstream v1.80): o padrão é a semana inteira.
   prospeccaoDias: [0, 1, 2, 3, 4, 5, 6],
   timezone: "America/Sao_Paulo",
+  // O teto do dia só na abordagem e o teto do follow-up (9455/9456, upstream
+  // v1.124.0): desligado e 200, os padrões dele.
+  tetoSoAbordagem: false,
+  followupDailyCap: 200,
   warmupDailyCaps: [{ minAgeDays: 0, cap: null }],
 };
 

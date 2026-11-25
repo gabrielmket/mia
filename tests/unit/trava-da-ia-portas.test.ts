@@ -18,6 +18,7 @@
  */
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { bancoEmMemoria, type Linha } from "@/tests/helpers/banco-em-memoria";
 import { NEW_ROUTER_CONTEXT_MESSAGES } from "@/lib/ai/classifier-context";
@@ -100,6 +101,15 @@ import {
   saveAgentDraftAction,
 } from "@/app/app/ai/agents/[id]/_actions";
 import { duplicateAgentAction } from "@/app/app/ai/agents/_actions";
+// O MCP de agentes do upstream (lib/mcp/tools/agentes.ts) chama estas três
+// direto, com o ator do token. `publicarVersao` já é o nome da rota `publish`.
+import {
+  publicarVersao as publicarPeloEdicao,
+  reverterParaVersao,
+  salvarRascunhoDaVersao,
+  type AtorDaEdicao,
+} from "@/lib/ai/agents/edicao";
+import { crmSaveAiAgentDraft } from "@/lib/mcp/tools/agentes";
 import { salvarChaveDaIa } from "@/app/actions/onboarding/chaveDaIa";
 import { POST as criarAgente } from "@/app/api/v1/ai/agents/route";
 import { PATCH as editarAgente } from "@/app/api/v1/ai/agents/[id]/route";
@@ -310,6 +320,80 @@ describe("editor de agente (ações do servidor)", () => {
     como(PLATAFORMA);
     await duplicateAgentAction(AGENTE);
     expect(iaGravada().model).toBe("terra");
+  });
+});
+
+/**
+ * O token do MCP do CRM (o dono pelo ChatGPT) edita agente por
+ * lib/ai/agents/edicao.ts com um ator SEM `quemPede`. A trava mora lá dentro e,
+ * sem quem pede, vale a resposta mais restritiva (`TOKEN_NAO_ESCOLHE_IA`). O
+ * teste do MCP (lib/mcp/tools/agentes.test.ts) faz mock do edicao.ts inteiro;
+ * esta é a cerca de que o default não virou permissivo.
+ */
+describe("edição pelo token do MCP (lib/ai/agents/edicao.ts)", () => {
+  const TOKEN: AtorDaEdicao = { userId: null, apiTokenId: "tok-1", requestId: "r" };
+  /** Controle: o mesmo caminho com quem pede da plataforma grava o que escolheu. */
+  const DA_PLATAFORMA: AtorDaEdicao = {
+    ...TOKEN,
+    quemPede: { is_platform_admin: true, platform_admin_scope: null, support: null },
+  };
+  const admin = () => estado.banco.cliente as never;
+
+  it("salvar rascunho NOVO: o token grava a IA atual; a plataforma, a escolhida", async () => {
+    const r = await salvarRascunhoDaVersao(admin(), { orgId: ORG, agentId: AGENTE, payload: CORPO_DA_VERSAO, ator: TOKEN });
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+    expect(iaGravada()).toEqual(IA_ATUAL);
+
+    estado.banco = novoBanco();
+    await salvarRascunhoDaVersao(admin(), { orgId: ORG, agentId: AGENTE, payload: CORPO_DA_VERSAO, ator: DA_PLATAFORMA });
+    expect(iaGravada()).toEqual(ATAQUE);
+  });
+
+  it("salvar rascunho EXISTENTE: o patch do token não leva a IA; o resto grava", async () => {
+    const ia = (v: Linha) => ({ provider: v.provider, model: v.model, credential_id: v.credential_id, operator_model: v.operator_model });
+    const v6 = () => estado.banco.tabela("ai_agent_versions").find((v) => v.id === V(6))!;
+
+    estado.banco.tabela("ai_agent_versions").push(versao(6, "luna", "draft"));
+    const r = await salvarRascunhoDaVersao(admin(), { orgId: ORG, agentId: AGENTE, payload: CORPO_DA_VERSAO, ator: TOKEN });
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+    expect(ia(v6())).toEqual(IA_ATUAL);
+    expect(v6().system_prompt).toBe(CORPO_DA_VERSAO.system_prompt);
+
+    estado.banco = novoBanco();
+    estado.banco.tabela("ai_agent_versions").push(versao(6, "luna", "draft"));
+    await salvarRascunhoDaVersao(admin(), { orgId: ORG, agentId: AGENTE, payload: CORPO_DA_VERSAO, ator: DA_PLATAFORMA });
+    expect(ia(v6())).toEqual(ATAQUE);
+  });
+
+  it("publicar a v3 (modelo antigo): recusado para o token, liberado para a plataforma", async () => {
+    const r = await publicarPeloEdicao(admin(), { orgId: ORG, agentId: AGENTE, versionId: V(3), ator: TOKEN });
+    expect(r).toMatchObject({ ok: false, error: "ia_da_plataforma" });
+    expect(publishAgentVersion).not.toHaveBeenCalled();
+
+    const ok = await publicarPeloEdicao(admin(), { orgId: ORG, agentId: AGENTE, versionId: V(3), ator: DA_PLATAFORMA });
+    expect(ok.ok, JSON.stringify(ok)).toBe(true);
+    expect(publishAgentVersion).toHaveBeenCalled();
+  });
+
+  it("reverter para a v3 (modelo antigo): o token volta o conteúdo, não o cérebro", async () => {
+    const r = await reverterParaVersao(admin(), { orgId: ORG, agentId: AGENTE, versionId: V(3), ator: TOKEN });
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+    expect(iaGravada()).toEqual(IA_ATUAL);
+
+    estado.banco = novoBanco();
+    await reverterParaVersao(admin(), { orgId: ORG, agentId: AGENTE, versionId: V(3), ator: DA_PLATAFORMA });
+    expect(iaGravada().model).toBe("terra");
+  });
+
+  it("o esquema de crm_save_ai_agent_draft não oferece provedor nem modelo, e recusa quem manda", () => {
+    const esquema = z.object(crmSaveAiAgentDraft.inputSchema);
+    const cfg = crmSaveAiAgentDraft.inputSchema.configuracoes.unwrap();
+    expect(Object.keys(cfg.shape)).not.toContain("provedor");
+    expect(Object.keys(cfg.shape)).not.toContain("modelo");
+    expect(esquema.safeParse({ agent_ids: [AGENTE], configuracoes: { provedor: "anthropic" } }).success).toBe(false);
+    expect(esquema.safeParse({ agent_ids: [AGENTE], configuracoes: { modelo: "claude-opus-4-7" } }).success).toBe(false);
+    // Controle: o resto das configurações continua aceito.
+    expect(esquema.safeParse({ agent_ids: [AGENTE], configuracoes: { voz_ligada: true } }).success).toBe(true);
   });
 });
 

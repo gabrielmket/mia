@@ -12,7 +12,10 @@
  *      do dia seguinte, a nota fiscal na confirmação e os dados fiscais no Asaas
  *      (lib/pagamento-inicial/rodada.ts);
  *   5. (.98) os cupons e os parceiros: o desconto no Asaas, o setup, a comissão de
- *      cada cobrança paga e o fechamento do mês (lib/parceiros/rodada.ts).
+ *      cada cobrança paga e o fechamento do mês (lib/parceiros/rodada.ts);
+ *   6. (MIA-168) o cadastro no CRM da Time: o nascimento e o primeiro pagamento
+ *      cujo aviso se perdeu, e a limpeza da LGPD da `mia_cadastro_na_time`
+ *      (lib/planos-mia/lead-do-cadastro.ts).
  * Cada passo audita o próprio efeito e nada lança: a rodada do upstream já
  * respondeu, e a jornada não pode derrubá-la.
  */
@@ -23,6 +26,7 @@ import { logger } from "@/lib/logger";
 import { rodadaDoPagamentoInicial, type ResumoDoPagamentoInicial } from "@/lib/pagamento-inicial/rodada";
 import { rodadaDosParceiros, type ResumoDosParceiros } from "@/lib/parceiros/rodada";
 
+import { rodadaDoCadastroNaTime, type ResumoDoCadastroNaTime } from "./lead-do-cadastro";
 import { avisarModulosQueSaem, seguirOPlanoEmTodas } from "./seguir-o-plano";
 
 export interface ResumoDaJornada {
@@ -33,6 +37,8 @@ export interface ResumoDaJornada {
   pagamentoInicial?: ResumoDoPagamentoInicial;
   /** FORK MIA (.98): os cupons e os parceiros. */
   parceiros?: ResumoDosParceiros;
+  /** FORK MIA (MIA-168): o cadastro no CRM da Time. */
+  cadastroNaTime?: ResumoDoCadastroNaTime;
 }
 
 export async function rodadaDaJornada(
@@ -50,6 +56,7 @@ export async function rodadaDaJornada(
     resumo.comprasLancadas = await relerComprasEmAberto(admin, { limite: 50 });
     resumo.pagamentoInicial = await rodadaDoPagamentoInicial(admin, agora);
     resumo.parceiros = await rodadaDosParceiros(admin, agora);
+    resumo.cadastroNaTime = await rodadaDoCadastroNaTime(admin, agora);
   } catch (erro) {
     logger.warn("planos-mia: rodada da jornada falhou", {
       detalhe: erro instanceof Error ? erro.message : String(erro),

@@ -13,6 +13,10 @@ type Admin = Parameters<typeof dispatchWahaEvent>[0];
 /** Um admin que só sabe responder `organizations.select("settings")`. */
 function adminCom(settings: unknown, erro: string | null = null): Admin {
   return {
+    // FORK MIA · CLIENTE MODELO — a recusa pergunta a trava da demonstração
+    // (`fn_mia_e_demonstracao`); aqui a empresa é de verdade. Os casos da
+    // demonstração moram em tests/unit/recusa-de-ligacao-na-demonstracao.test.ts.
+    rpc: async () => ({ data: false, error: null }),
     from: () => ({
       select: () => ({
         eq: () => ({

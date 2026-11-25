@@ -49,7 +49,7 @@ import {
   semCamposDaIa,
   travarIaDaVersaoNova,
 } from "@/lib/ai/trava-da-ia";
-import type { QuemPedeIa } from "@/lib/ai/trava-da-ia-na-rota";
+import { TOKEN_NAO_ESCOLHE_IA, type QuemPedeIa } from "@/lib/ai/trava-da-ia-na-rota";
 
 export { VERSION_COLUMNS, linhaDoRascunhoClonado, type LinhaDaVersao } from "./linha-da-versao";
 
@@ -66,11 +66,13 @@ export interface AtorDaEdicao {
   quemPede?: QuemPedeIa;
 }
 
-/** FORK MIA: sem `quemPede`, ninguém escolhe IA. */
-const NAO_ESCOLHE_IA: QuemPedeIa = { is_platform_admin: false, platform_admin_scope: null, support: null };
-
+/**
+ * FORK MIA: sem `quemPede`, ninguém escolhe IA. A mesma constante das rotas com
+ * token (`TOKEN_NAO_ESCOLHE_IA`): uma régua só. A cerca é o `describe` "edição
+ * pelo token do MCP" em tests/unit/trava-da-ia-portas.test.ts.
+ */
 function quemPedeDa(ator: AtorDaEdicao): QuemPedeIa {
-  return ator.quemPede ?? NAO_ESCOLHE_IA;
+  return ator.quemPede ?? TOKEN_NAO_ESCOLHE_IA;
 }
 
 export type ResultadoDaEdicao<T> =

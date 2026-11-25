@@ -62,6 +62,14 @@ export const AUDIT_ACTIONS = [
   "lead.moved",
   "lead.won",
   "lead.lost",
+  /**
+   * #4191 — o negócio foi classificado como NÃO comercial, ou voltou a ser
+   * comercial. Ação própria, e não `lead.updated`: a decisão muda a
+   * elegibilidade do negócio em Radar e métricas, e quem audita precisa poder
+   * filtrar por ela sem ler metadata.
+   */
+  "lead.non_commercial",
+  "lead.non_commercial_reverted",
   "lead.bulk_action",
   // A importação de planilha (extração do PR #418). O GESTO é auditado além dos
   // N `lead.created`: "quem despejou 300 negócios neste funil, e quando" é a
@@ -158,6 +166,16 @@ export const AUDIT_ACTIONS = [
   // automático numa conversa não tinha rota e, portanto, não tinha ação de
   // auditoria. Desligar uma automação é decisão auditável tanto quanto religá-la.
   "conversation.ai_paused",
+  // #4517 — os pares POR TOKEN dos três comandos de conversa. Ação própria, e
+  // não a mesma da pessoa, porque o FATO é diferente: a integração pausa sem
+  // assumir a conversa, retoma sem soltar o dono e fecha sem a tela. `actorUserId`
+  // vem nulo e `actorApiTokenId` diz QUAL token — a pergunta "quem desligou o
+  // automático deste cliente?" tem de ter resposta nominal, não "foi o sistema".
+  "conversation.ai_paused_by_token",
+  "conversation.ai_resumed_by_token",
+  "conversation.closed_by_token",
+  "conversation.reopened",
+  "conversation.reopened_by_token",
   // Ligar a IA numa conversa que tem dono, sem soltar o dono (#3967), é decisão
   // auditável nos dois sentidos: quem ligou, em que conversa, e quando desligou.
   // O par existe para que "por que a IA falou nessa conversa que é minha?"
@@ -305,6 +323,12 @@ export const AUDIT_ACTIONS = [
   "platform.modelo_de_ia_alterado",
   "platform.cadastro_incorporado_alterado",
   "platform.cadastro_incorporado_amarrado",
+  // FORK MIA (9164) — a coexistência do WhatsApp (docs/fork/coexistencia.md):
+  // quem ligou ou desligou a chave da empresa, o número que a empresa conectou
+  // pelo app WhatsApp Business e o canal por QR do mesmo número que saiu do ar.
+  "platform.coexistencia_alterada",
+  "channel.coexistencia_conectada",
+  "channel.coexistencia_qr_desligado",
   "platform.report_alterado",
   "platform.fila_morta_reprocessada",
   "platform.precos_da_meta_alterados",
@@ -525,6 +549,9 @@ export const AUDIT_ACTIONS = [
   "channel.social_webhook_ressincronizado",
   "channel.ai_access_updated",
   "channel.acervo_updated",
+  // #4670: o interruptor "conversas novas criam negócio" do cartão da conexão.
+  // Por CONEXÃO — nunca da organização inteira.
+  "channel.negocio_da_conversa_updated",
   // A importação do histórico do número (#999): prévia, início, cancelamento e
   // retomada depois de erro (rotas), e o fim, concluída ou em erro (cron). A
   // rodada que só anda o cursor não audita.
@@ -851,6 +878,11 @@ export const AUDIT_ACTIONS = [
   "google_ads_conversion_action.created",
   // O que cada etapa do funil informa à Meta (0524) — o par da regra acima.
   "meta_ads_conversion_rules.updated",
+  // FORK MIA (MIA-169) · as conversões do site (docs/fork/conversoes-da-meta.md,
+  // "Conversões do site"): as regras garantidas ou ligadas pelo MCP de plataforma,
+  // e o evento de teste (dado fictício) mandado à Meta e ao Google.
+  "mia_regras_do_site.updated",
+  "mia_regras_do_site.testado",
   // FORK MIA (migration 9017) — conversões da Meta por etapa do funil
   // (docs/fork/conversoes-da-meta.md): quem mudou o que cada etapa informa à
   // Meta, quem ligou a volta dos leads de formulário e quem pediu o reenvio de
@@ -2077,6 +2109,11 @@ export const AUDIT_ACTIONS = [
   // A pessoa gravou as próprias abas da Inbox (#3313): a ordem da faixa e quais
   // ficam no menu "Mais". Metadata com a ordem, as visíveis e as ocultas.
   "user.inbox_tabs_updated",
+  // Venda registrada à mão num negócio (Vendas registradas): conta no painel de
+  // vendas pela DATA dela, em qualquer etapa. Metadata com lead, valor e data —
+  // nunca a observação, que é texto livre.
+  "venda.registrada",
+  "venda.apagada",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

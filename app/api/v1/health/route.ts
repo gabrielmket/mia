@@ -55,6 +55,12 @@ import {
   type LeituraDoBackup,
   type LinhaDoEstadoDoBackup,
 } from "@/lib/backup/estado-do-backup";
+import {
+  avaliarVigiaDosCanais,
+  ROTA_DO_VIGIA_DOS_CANAIS,
+  TABELA_DO_BATIMENTO,
+  type LeituraDoBatimento,
+} from "@/lib/cron/batimento";
 import { env } from "@/lib/env";
 import { alvoDe, classificarFalhaDeAlcance, type FalhaDeAlcance } from "@/lib/net/alcance";
 import {
@@ -596,13 +602,61 @@ async function lerEstadoDoBackup(): Promise<LeituraDoBackup> {
   }
 }
 
+/**
+ * FORK MIA (MIA-154) — o vigia dos números passou?
+ *
+ * O cron `channel-health` regrava, no fim de cada rodada, a linha dele em
+ * `mia_batimentos_de_cron` (migration 9168, `lib/cron/batimento.ts`). Rodada
+ * estável não escreve mais nada, e sem este carimbo ninguém sabia se ele tinha
+ * passado (MIA-152).
+ *
+ * Mesmo caminho do carimbo e do backup: `fetch` cru no PostgREST do SERVIDOR,
+ * com o `service_role` (a tabela não tem policy) e o mesmo teto de tempo. Só a
+ * data sai: o `resumo` da linha fica no banco.
+ *
+ * Nada aqui derruba a saúde nem muda o `status`: o passo 1 do trem de
+ * implantação lê só `status` e `schema`. O alarme é de quem monitora
+ * (`vigia_dos_canais.em_dia`).
+ */
+async function lerBatimentoDoVigia(): Promise<LeituraDoBatimento> {
+  const url = urlDoSupabaseNoServidor(env.SUPABASE_SERVER_URL, env.NEXT_PUBLIC_SUPABASE_URL);
+  const chave = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !chave) return { falha: "nao_configurado" };
+  try {
+    const res = await withTimeout(
+      fetch(
+        `${url}/rest/v1/${TABELA_DO_BATIMENTO}?select=ultima_rodada_em&rota=eq.${ROTA_DO_VIGIA_DOS_CANAIS}&limit=1`,
+        {
+          headers: { apikey: chave, Authorization: `Bearer ${chave}`, "Accept-Profile": "public" },
+          cache: "no-store",
+        },
+      ),
+    );
+    // 404 é o PostgREST dizendo que a tabela não existe (PGRST205): o baseline
+    // da 9168 não passou. Diferente de "não consegui perguntar".
+    if (res.status === 404) return { falha: "sem_tabela" };
+    if (!res.ok) return { falha: "falha_de_leitura" };
+    const linhas = (await res.json()) as unknown;
+    if (!Array.isArray(linhas)) return { falha: "falha_de_leitura" };
+    const linha = linhas[0] as { ultima_rodada_em?: unknown } | undefined;
+    // Sem linha: o vigia nunca bateu nesta instalação (ou só passou pela saída
+    // ociosa, que não toca o banco). É "não está em dia", e não "não sei".
+    if (!linha) return { ultima_rodada_em: null };
+    if (typeof linha.ultima_rodada_em !== "string") return { falha: "falha_de_leitura" };
+    return { ultima_rodada_em: linha.ultima_rodada_em };
+  } catch {
+    return { falha: "falha_de_leitura" };
+  }
+}
+
 export async function GET(req: NextRequest) {
-  const [supabase, redis, waha, carimbo, backup] = await Promise.all([
+  const [supabase, redis, waha, carimbo, backup, batimentoDoVigia] = await Promise.all([
     checkSupabase(),
     checkRedis(),
     checkWaha(),
     lerCarimboDoSchema(),
     lerEstadoDoBackup(),
+    lerBatimentoDoVigia(),
   ]);
 
   const verboso = req.nextUrl.searchParams.get("verbose") === "1" && segredoInternoConfere(req);
@@ -652,6 +706,10 @@ export async function GET(req: NextRequest) {
         // texto de erro do backup (esse fica em `operacao.backup.detalhe`, que
         // a função da 9006 não devolve). `em_dia: null` = desconhecido.
         backup: avaliarBackup(backup, new Date()),
+        // FORK MIA (MIA-154). Igual com e sem o segredo: uma data e um
+        // booleano. `em_dia: null` = desconhecido (sem a tabela, leitura
+        // falhou). Não entra no `status` acima.
+        vigia_dos_canais: avaliarVigiaDosCanais(batimentoDoVigia, new Date()),
         timestamp: new Date().toISOString(),
         checks,
       },

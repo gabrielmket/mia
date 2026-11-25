@@ -27,7 +27,9 @@ import { pgComoSupabaseMia } from "../pg-como-supabase-mia";
  * o MESMO banco, como o dreno os rodaria, para cada origem do negócio (clique,
  * página, formulário, formulário com clique, orgânico), e conta-se a ida à Meta
  * e a linha no livro-razão. E o nosso consumidor de etapa da .70
- * (`conversoes.meta_etapa`) não está mais registrado.
+ * (`conversoes.meta_etapa`) não está mais registrado. Desde a MIA-169 o registro
+ * tem também o consumidor das conversões do SITE (`conversoes.etapa_site`), e a
+ * regra é provada para ele com a regra do upstream na mesma etapa.
  *
  * ═══ O QUE NÃO É REPRODUZIDO (declarado) ═══
  *
@@ -85,6 +87,12 @@ const IMPLANTADOR = "90199019-1111-4000-8000-0000000000c1";
 const REAL = "90199019-0000-4000-8000-0000000000a1";
 const DEMO = "90199019-0000-4000-8000-0000000000ad";
 const VIZINHA = "90199019-0000-4000-8000-0000000000a2";
+
+// MIA-169: a fonte do cadastro da Time, o usuário do /signup e o dataset do site. Fictícios.
+const FONTE_DO_CADASTRO = "90199019-5000-4000-8000-0000000000a1";
+const USUARIO_DO_SIGNUP = "90199019-1111-4000-8000-0000000000c2";
+const DATASET_DO_SITE = "900000000000099";
+const DATASET_DA_CONEXAO = "900000000000001";
 
 const ID_DO_LEAD_DA_META = "12345678901234567";
 const DE_CLIQUE = { ad_platform: "meta_ads", ad_source_id: "clique-ficticio" };
@@ -231,6 +239,19 @@ beforeAll(async () => {
      on conflict do nothing`,
     [REAL],
   );
+  // MIA-169: a fonte `CADASTRO_FONTE_DO_CRM` é da empresa de verdade (a Time,
+  // neste arquivo), e o usuário do /signup existe para a linha do cadastro.
+  const i = ids(REAL);
+  await pool.query(
+    `insert into public.webhook_sources (id, organization_id, name, path_token, default_pipeline_id, default_stage_id)
+       values ($1, $2, 'Cadastro da MIA (teste)', 'mia-9019-fonte-do-cadastro', $3, $4)
+     on conflict (id) do nothing`,
+    [FONTE_DO_CADASTRO, REAL, i.funil, i.qualificacao],
+  );
+  await pool.query(
+    "insert into auth.users (id, email) values ($1, 'signup-conversoes-9019@invariant.test') on conflict (id) do nothing",
+    [USUARIO_DO_SIGNUP],
+  );
 });
 
 afterAll(async () => {
@@ -253,11 +274,18 @@ beforeEach(async () => {
   await pool.query("delete from public.meta_ads_conversion_rules where organization_id = any($1)", todas);
   await pool.query("delete from public.mia_conversoes_meta_config where organization_id = any($1)", todas);
   await pool.query("delete from public.google_ads_conversion_rules where organization_id = any($1)", todas);
+  // MIA-169: as regras do site e o cadastro do /signup. Sem limpar, a guarda
+  // `venda_pelo_site` calaria a venda dos outros casos do mesmo negócio.
+  await pool.query("delete from public.mia_regras_de_conversao_do_site where organization_id = any($1)", todas);
+  await pool.query("delete from public.mia_cadastro_na_time where organization_id = any($1)", todas);
   await pool.query("update public.crm_leads set value_cents = null, status = 'open', closed_at = null where organization_id = any($1)", todas);
   await origem(REAL, {}, {});
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
 
 describe("o schema depois da 9019", () => {
   it("a régua da 9017 fica de pé, obsoleta e sem uso; nada a apagar nesta fusão", async () => {
@@ -315,6 +343,11 @@ describe("⭐ A REGRA DA CASA: um movimento de etapa, no máximo UMA ida à Meta
     expect(chaves).toEqual([
       "conversoes.clique_meta",
       "conversoes.etapa_meta",
+      // MIA-169: o consumidor das conversões do SITE. Escuta `lead.stage_changed`,
+      // mas só age em etapa com regra da `mia_regras_de_conversao_do_site` (9170),
+      // com a chave `MetaEtapa:`/`Etapa:` + id da REGRA, que não colide com a do
+      // upstream (id da ETAPA). A prova da regra da casa para ele está logo abaixo.
+      "conversoes.etapa_site",
       "conversoes.meta_formulario",
       "conversoes.nascimento_meta",
       "conversoes.qualificacao",
@@ -350,6 +383,80 @@ describe("⭐ A REGRA DA CASA: um movimento de etapa, no máximo UMA ida à Meta
     await drenar(entrou(REAL, i.agendada, await hora("1 hour"), { id: "evento-2" }));
     expect(idasAMeta()).toHaveLength(1);
     expect(await livro(REAL)).toHaveLength(1);
+  });
+
+  /** O negócio veio do /signup (parte A, 9169), com o consentimento de medição. Dados fictícios. */
+  async function cadastroDoSite(org: string) {
+    await pool.query(
+      `insert into public.mia_cadastro_na_time
+         (organization_id, user_id, lead_id, ip, navegador, fbp, fbc, consentimento, pagina, pedido_id)
+       values ($1, $2, $3, '192.0.2.10', 'Navegador de teste/1.0', 'fb.1.1700000000.111', 'fb.1.1700000000.abc', 'medicao',
+               'https://exemplo.invalid/signup', 'pedido-ficticio-1')`,
+      [org, USUARIO_DO_SIGNUP, ids(org).lead],
+    );
+  }
+
+  async function regraDoSite(org: string, etapa: string, eventoMeta: string, levaValor = false): Promise<string> {
+    return (
+      await uma<{ id: string }>(
+        `insert into public.mia_regras_de_conversao_do_site (organization_id, stage_id, plataforma, evento_meta, leva_valor, enabled)
+           values ($1, $2, 'meta_ads', $3, $4, true) returning id`,
+        [org, etapa, eventoMeta, levaValor],
+      )
+    ).id;
+  }
+
+  it("⭐ MIA-169: regra do site e regra do upstream na mesma etapa: cada evento sai uma vez, cada um no seu dataset, e o Purchase não sai em dobro pela venda", async () => {
+    const i = ids(REAL);
+    vi.stubEnv("CADASTRO_FONTE_DO_CRM", FONTE_DO_CADASTRO);
+    vi.stubEnv("MIA_META_DATASET_DO_SITE", DATASET_DO_SITE);
+    vi.stubEnv("MIA_META_TOKEN_DO_SITE", "token-ficticio-do-site");
+    vi.stubEnv("META_TEST_EVENT_CODE", "");
+    // O pior caso: o contato TAMBÉM tem clique da Meta, então a regra do upstream manda.
+    await origem(REAL, DE_CLIQUE, {});
+    await cadastroDoSite(REAL);
+    await regraDoUpstream(REAL, i.agendada, "LeadSubmitted");
+    const doCadastro = await regraDoSite(REAL, i.agendada, "CompleteRegistration");
+    const daCompra = await regraDoSite(REAL, i.compareceu, "Purchase", true);
+    await pool.query("update public.crm_leads set value_cents = 240000 where id = $1", [i.lead]);
+
+    // Um movimento, duas regras de famílias diferentes: dois eventos DIFERENTES,
+    // cada um uma vez e no seu dataset. Os 4 eventos do site e os 5 da 0524 não se cruzam.
+    await drenar(entrou(REAL, i.agendada, await hora("1 second")));
+    expect(idasAMeta()).toHaveLength(2);
+    const porEvento = new Map(
+      idasAMeta().map((e) => [(e.corpo.data as Array<Record<string, unknown>>)[0]!.event_name as string, e]),
+    );
+    expect([...porEvento.keys()].sort()).toEqual(["CompleteRegistration", "LeadSubmitted"]);
+    expect(porEvento.get("LeadSubmitted")!.url).toContain(`/${DATASET_DA_CONEXAO}/events`);
+    expect(porEvento.get("CompleteRegistration")!.url).toContain(`/${DATASET_DO_SITE}/events`);
+    expect((porEvento.get("CompleteRegistration")!.corpo.data as Array<Record<string, unknown>>)[0]).toMatchObject({
+      event_id: `${i.lead}:MetaEtapa:${doCadastro}`,
+      action_source: "website",
+    });
+    expect((await livro(REAL)).map((l) => [l.event_name, l.status, l.meta_event_name]).sort()).toEqual(
+      [
+        [`MetaEtapa:${i.agendada}`, "sent", "LeadSubmitted"],
+        [`MetaEtapa:${doCadastro}`, "sent", "CompleteRegistration"],
+      ].sort(),
+    );
+
+    // O mesmo movimento de novo (o dreno reentrega; sair e voltar à etapa): nada a mais.
+    await drenar(entrou(REAL, i.agendada, await hora("1 hour"), { id: "evento-2" }));
+    expect(idasAMeta()).toHaveLength(2);
+    expect(await livro(REAL)).toHaveLength(2);
+
+    // A compra do site sai pela etapa; o ganho e o `lead.won` depois não a repetem
+    // (a guarda `venda_pelo_site` cala o Purchase do caminho da venda).
+    await drenar(entrou(REAL, i.compareceu, await hora("2 hours"), { id: "evento-3" }));
+    expect(idasAMeta()).toHaveLength(3);
+    expect(itemEnviado(2)).toMatchObject({ event_name: "Purchase", event_id: `${i.lead}:MetaEtapa:${daCompra}` });
+    await pool.query("update public.crm_leads set status = 'won', closed_at = now() where id = $1", [i.lead]);
+    await drenar(entrou(REAL, i.ganho, await hora("3 hours"), { id: "evento-4" }));
+    await drenar(entrou(REAL, i.ganho, await hora("3 hours"), { id: "evento-won", event_type: "lead.won", payload: {} }));
+    expect(idasAMeta()).toHaveLength(3);
+    expect(idasAMeta().filter((e) => (e.corpo.data as Array<Record<string, unknown>>)[0]!.event_name === "Purchase")).toHaveLength(1);
+    expect((await livro(REAL)).map((l) => l.event_name)).not.toContain("Purchase");
   });
 
   it("negócio orgânico: ninguém fala com a Meta, e nada vira pendência", async () => {
