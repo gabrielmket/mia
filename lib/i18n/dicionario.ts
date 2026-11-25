@@ -85,6 +85,8 @@ import { DICIONARIO_DA_TRAVA_DE_ROBO } from "./dicionario-mia-trava-de-robo";
 import { DICIONARIO_DA_COEXISTENCIA } from "./dicionario-mia-coexistencia";
 // FORK MIA (.109): o produto no negócio (docs/fork/produto-no-negocio.md).
 import { DICIONARIO_DO_PRODUTO_NO_NEGOCIO } from "./dicionario-mia-produto-no-negocio";
+// FORK MIA (MIA-218): a IA que segue a plataforma (o aviso da chave e o da trava), idem.
+import { DICIONARIO_DA_IA_DA_PLATAFORMA } from "./dicionario-mia-ia-da-plataforma";
 import { TEXTOS_AGENDA_CONFIGURACAO } from "./agenda-configuracao";
 import { TEXTOS_AGENDA_SERVICOS } from "./agenda-servicos";
 import { TEXTOS_PAINEL_GOOGLE_ADS } from "./painel-google-ads";
@@ -123,6 +125,7 @@ export const DICIONARIO: Traducoes = {
   ...DICIONARIO_DA_TRAVA_DE_ROBO,
   ...DICIONARIO_DA_COEXISTENCIA,
   ...DICIONARIO_DO_PRODUTO_NO_NEGOCIO,
+  ...DICIONARIO_DA_IA_DA_PLATAFORMA,
   ...TEXTOS_PAINEL_GOOGLE_ADS,
   ...TEXTOS_CONTRATACAO,
   ...TEXTOS_MCP_AGENTES,
@@ -17398,7 +17401,7 @@ export const DICIONARIO: Traducoes = {
   // ---- modelo de IA da plataforma ----
   "Não consegui carregar o catálogo de modelos agora.": { es: "No pude cargar el catálogo de modelos ahora." },
   "Modelo de IA da plataforma": { es: "Modelo de IA de la plataforma" },
-  "Vale para todo cliente novo. Quem contrata não escolhe o modelo — assim como não escolhe a chave de IA: é engrenagem nossa, e a conta também.": { es: "Vale para todo cliente nuevo. Quien contrata no elige el modelo — igual que no elige la clave de IA: es engranaje nuestro, y la cuenta también." },
+  "Vale para todas as empresas que não escolheram outro. Quem contrata não escolhe o modelo — assim como não escolhe a chave de IA: é engrenagem nossa, e a conta também.": { es: "Vale para todas las empresas que no eligieron otro. Quien contrata no elige el modelo — igual que no elige la clave de IA: es engranaje nuestro, y la cuenta también." },
   "Automático (o sistema escolhe pelo catálogo)": { es: "Automático (el sistema elige por el catálogo)" },
   "A lista traz só os modelos que sabem usar ferramentas — é o que o agente precisa para mexer no funil.": { es: "La lista trae solo los modelos que saben usar herramientas — es lo que el agente necesita para mover el embudo." },
   "Agentes já publicados continuam com o modelo que tinham — a troca vale para os próximos.": { es: "Los agentes ya publicados siguen con el modelo que tenían — el cambio vale para los próximos." },

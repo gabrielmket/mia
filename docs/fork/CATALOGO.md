@@ -984,6 +984,42 @@ sem linha, sem tabela) e o invariante `batimento-dos-crons.test.ts` (o `upsert` 
 
 ---
 
+### 28. A IA de toda empresa segue a da plataforma · [`ia-da-plataforma.md`](ia-da-plataforma.md)
+**O que faz.** Toda empresa segue o par de IA de **Admin › Modelo de IA** (`platform_ia`), salvo escolha
+própria feita pela plataforma, em modo suporte, na tela Provedores de IA da empresa. Trocar o par da plataforma
+troca todas as que seguem. A trava recusa salvar um padrão num provedor sem chave, e o aviso (tela, cartão do
+admin, `/health`, relatório interno e MCP) pega a empresa que mesmo assim ficou sem chave. **Migrations** 9172.
+**Mora em** `lib/ai/ia-da-empresa.ts` (a régua), `lib/ai/aviso-da-ia-das-empresas.ts` (o aviso) e
+`lib/ai/trava-da-ia.ts` (`plataformaEditaEmSuporte`).
+
+**Pontos de encaixe** (`FORK MIA (9172)` e `FORK MIA (MIA-218)`): do upstream,
+`app/api/v1/ai/providers/route.ts` (o `ia` do GET e a trava do PATCH e do PUT),
+`app/api/v1/admin/modelo-de-ia/route.ts` (`empresas` do GET e a trava do PUT),
+`lib/agent-engine/edge/llm/credentials.ts`, `app/api/v1/health/route.ts` (`lerIaDasEmpresas` e o bloco `ia`),
+`app/api/v1/cron/report-da-plataforma/route.ts` (seção 3b), `components/admin/modelo-de-ia/ModeloDeIa.tsx` (a
+`ContagemDasEmpresas`), `hooks/useModeloDeIa.ts` (o tipo de `empresas`) e
+`app/app/ai/providers/_components/PainelDeProvedores.tsx` (o `AvisoDaChave`). A chave continua fora do suporte:
+`app/api/v1/ai/credentials/[id]/route.ts` e `app/actions/onboarding/chaveDaIa.ts` usam `podeConfigurarChaveDeIa`.
+
+**Protege.** `tests/invariants/ia-segue-a-plataforma.test.ts` (o banco: a empresa nova segue, a troca propaga,
+quem escolheu fica), `lib/ai/ia-da-empresa.test.ts`, `lib/ai/trava-da-ia.test.ts`,
+`app/api/v1/ai/providers/modo-suporte-escolhe-a-ia.test.ts` (passa só a plataforma em suporte com edição),
+`AvisoDaChave.test.tsx`, `ContagemDasEmpresas.test.tsx`, `health-diz-se-ha-empresa-sem-ia.test.ts`,
+`report-da-plataforma-ia-sem-chave.test.ts` e `mcp-de-implantacao-ia-das-empresas.test.ts`.
+
+**Conferir.**
+1. `git grep -n "FORK MIA (9172" -- app/api/v1/ai/providers/route.ts app/api/v1/admin/modelo-de-ia/route.ts lib/agent-engine/edge/llm/credentials.ts` (o núcleo vivo).
+2. `git grep -n "MIA-218" -- app/api/v1/health/route.ts app/api/v1/cron/report-da-plataforma/route.ts components/admin/modelo-de-ia/ModeloDeIa.tsx` (o aviso vivo).
+3. O upstream mexeu em `fn_seed_org_llm_defaults` ou criou um "padrão da instalação"? O gatilho `trg_ia_segue_a_plataforma` tem de continuar rodando antes do seed.
+4. O upstream mudou `escolheIa` ou a sessão de suporte? `plataformaEditaEmSuporte` continua exigindo plataforma, `scope = full`, sessão ativa, edição e `agency_id` vazio.
+5. `npx vitest run lib/ai/ia-da-empresa.test.ts lib/ai/trava-da-ia.test.ts app/api/v1/ai/providers/modo-suporte-escolhe-a-ia.test.ts app/api/v1/health/health-diz-se-ha-empresa-sem-ia.test.ts tests/unit/report-da-plataforma-ia-sem-chave.test.ts tests/unit/mcp-de-implantacao-ia-das-empresas.test.ts`.
+
+**Riscos.** A empresa que virou escolha própria só volta a seguir a plataforma por migration (o botão ficou
+fora). A `/health` passa a ler `organizations` e `ai_provider_credentials` a cada chamada (duas leituras, com o
+teto de tempo das outras).
+
+---
+
 ## Tabela final: por função, o documento, as migrations e os testes principais
 
 | # | função | documento | migrations | testes principais |
@@ -1015,6 +1051,7 @@ sem linha, sem tabela) e o invariante `batimento-dos-crons.test.ts` (o `upsert` 
 | 25 | O fuso da organização nos relatórios | `fuso-da-organizacao.md` | 9166 | `fuso-dos-relatorios-uma-regra.test.ts`, `tests/invariants/fuso-invalido-nos-relatorios.test.ts` |
 | 26 | O realtime do sistema com a semente desligada | `realtime-do-sistema.md` | nenhuma | nenhum (conferência pela leitura do tenant) |
 | 27 | O batimento do vigia dos canais | `vigia-dos-canais.md` | 9168 | `vigia-dos-canais-bate-o-ponto.test.ts`, `health-diz-se-o-vigia-dos-canais-passou.test.ts`, `tests/invariants/batimento-dos-crons.test.ts` |
+| 28 | A IA de toda empresa segue a da plataforma | `ia-da-plataforma.md` | 9172 | `tests/invariants/ia-segue-a-plataforma.test.ts`, `modo-suporte-escolhe-a-ia.test.ts`, `health-diz-se-ha-empresa-sem-ia.test.ts`, `mcp-de-implantacao-ia-das-empresas.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.
