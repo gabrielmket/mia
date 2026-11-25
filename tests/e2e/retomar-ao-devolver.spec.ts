@@ -40,6 +40,8 @@ import { createClient } from "@supabase/supabase-js";
 
 import { esperarARevelacaoNasCargas, test, expect, type Browser, type Page } from "./helpers/test";
 import { loginComoAdmin, lerCreds, type CredsE2E } from "./helpers/login-admin";
+// FORK MIA: o agente do cenário nasce pelo dono da plataforma (ver o beforeAll).
+import { comoDonoDaPlataforma, respostaLida } from "./helpers/ia-da-plataforma";
 import { carregarEnvLocal, credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 
 const EVIDENCIA = path.join(process.cwd(), "evidence", "retomar-ao-devolver");
@@ -76,7 +78,7 @@ function org(): string {
   return creds.org_id;
 }
 
-test.beforeAll(async ({ browser }: { browser: Browser }) => {
+test.beforeAll(async ({ browser }: { browser: Browser }, testInfo) => {
   test.setTimeout(180_000);
   if (!creds.followup_agent_fixtures) {
     execFileSync("npx", ["tsx", "scripts/seed-e2e-followup-agent.ts"], { stdio: "inherit" });
@@ -99,7 +101,13 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   adminId = admin.id;
 
   const fixtures = creds.followup_agent_fixtures!;
-  const cria = await pagina.request.post("/api/v1/ai/agents", {
+  // FORK MIA: criar o agente com provedor, modelo e a credencial semeada é
+  // escolher a IA dele, e neste fork isso é da plataforma
+  // (lib/ai/trava-da-ia.ts): pelo admin da empresa ele nascia com a chave da
+  // instalação, que o e2e não tem, e o publicar do primeiro caso voltava 422.
+  // Quem cria é o dono da plataforma; a tela, o salvar, o publicar e as
+  // asserções seguem com o admin da empresa. Ver tests/e2e/helpers/ia-da-plataforma.ts.
+  const cria = await comoDonoDaPlataforma(browser, testInfo, (req) => respostaLida(req.post("/api/v1/ai/agents", {
     data: {
       name: `E2E Retomar ao devolver ${marca}`,
       version: {
@@ -110,7 +118,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
         channel_session_id: fixtures.channel_session_id,
       },
     },
-  });
+  })));
   expect(cria.status(), await cria.text()).toBe(201);
   agentId = ((await cria.json()) as { data: { agent: { id: string } } }).data.agent.id;
 });
