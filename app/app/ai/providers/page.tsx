@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { podeConfigurarChaveDeIa } from "@/lib/ai/custo-e-da-plataforma";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 
@@ -26,5 +27,6 @@ export default async function ProvedoresPage() {
   if (!activeOrg) redirect("/app");
   if (ROLE_RANK[activeOrg.role] < ROLE_RANK.manager) redirect("/403");
 
-  return <PainelDeProvedores />;
+  // FORK MIA (MIA-218): o link da chave própria só para o admin da plataforma.
+  return <PainelDeProvedores podeCadastrarChave={podeConfigurarChaveDeIa(user)} />;
 }
