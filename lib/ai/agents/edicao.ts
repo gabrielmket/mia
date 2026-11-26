@@ -46,6 +46,7 @@ import { VERSION_COLUMNS, linhaDoRascunhoClonado, type LinhaDaVersao } from "./l
 import {
   iaPodeIrAoAr,
   MENSAGEM_IA_DA_PLATAFORMA,
+  FREIOS_DE_GASTO,
   semCamposDaIa,
   travarIaDaVersaoNova,
 } from "@/lib/ai/trava-da-ia";
@@ -222,8 +223,10 @@ export async function salvarRascunhoDaVersao(
         trigger_config: v.trigger_config ?? undefined,
         channel_session_id: v.channel_session_id,
         max_steps: v.max_steps,
-        token_budget: v.token_budget,
-        cost_budget_cents: v.cost_budget_cents,
+        // FORK MIA (MIA-262): os freios de gasto que saíram da trava (para quem
+        // não escolhe a IA, os da versão de referência; sem ela, o default).
+        token_budget: ia.token_budget,
+        cost_budget_cents: ia.cost_budget_cents,
         history_message_window: v.history_message_window,
         history_token_window: v.history_token_window,
         handoff_keywords: v.handoff_keywords,
@@ -439,6 +442,11 @@ export async function reverterParaVersao(
         agent_id: agentId,
         version_number: numero,
         ...linhaDoRascunhoClonado(src),
+        // FORK MIA (MIA-262): para quem não escolhe a IA, os freios de gasto são
+        // os da versão de referência (a trava os pôs no corpo), não os da antiga.
+        ...Object.fromEntries(
+          FREIOS_DE_GASTO.filter((c) => c in ia).map((c) => [c, (ia as Record<string, unknown>)[c]]),
+        ),
         // FORK MIA: a IA que saiu da trava, não a da versão de origem.
         provider: ia.provider,
         model: ia.model,
