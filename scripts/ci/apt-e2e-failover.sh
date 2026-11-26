@@ -13,18 +13,24 @@ import re
 import sys
 
 raiz = Path(sys.argv[1])
-azure = re.compile(r"https?://azure\.archive\.ubuntu\.com/ubuntu/?\Z")
+# O espelho da nuvem em que o runner nasceu: o do Azure ou, desde que o GitHub
+# passou a pôr runner na AWS, o regional do EC2 (`us-east-2.ec2.archive...`).
+# Medido no run 45289294686 (parte 6, runner na AWS): a lista apontava para o
+# EC2, os .deb do ffmpeg desciam a 97 kB/s, e esta troca não fazia nada
+# ("0 arquivo(s)") porque só conhecia o Azure. A parte foi cortada pelo teto.
+nuvem = re.compile(r"(https?://)(?:azure|[a-z0-9-]+\.ec2)\.archive\.ubuntu\.com(/ubuntu/?)\Z")
 lista = raiz / "apt-mirrors.txt"
 lista_conhecida = lista.is_file() and any(
-    azure.fullmatch(linha.split()[0])
+    nuvem.fullmatch(linha.split()[0])
     for linha in lista.read_text().splitlines()
     if linha.strip() and not linha.lstrip().startswith("#")
 )
 
 
 def uri_oficial(uri):
-    if azure.fullmatch(uri):
-        return uri.replace("azure.archive.ubuntu.com", "archive.ubuntu.com")
+    espelho = nuvem.fullmatch(uri)
+    if espelho:
+        return f"{espelho[1]}archive.ubuntu.com{espelho[2]}"
     if uri == "mirror+file:/etc/apt/apt-mirrors.txt" and lista_conhecida:
         return "https://archive.ubuntu.com/ubuntu/"
     return uri
@@ -68,7 +74,7 @@ for arquivo in arquivos:
     if novo != texto:
         arquivo.write_bytes(novo.encode("utf-8"))
         alterados += 1
-print(f"APT: {alterados} arquivo(s) de fonte passaram do Azure ao arquivo oficial Ubuntu")
+print(f"APT: {alterados} arquivo(s) de fonte passaram do espelho da nuvem (Azure ou EC2) ao arquivo oficial Ubuntu")
 PY
 }
 
@@ -109,7 +115,7 @@ recuperar_apt_e2e() {
     return 1
   fi
   if [ "$codigo" -ne 124 ] && [ "$codigo" -ne 137 ] &&
-     ! grep -Eq 'Failed to fetch (https?://(azure\.)?archive\.ubuntu\.com/ubuntu/|mirror\+file:/etc/apt/apt-mirrors\.txt)' "$log"; then
+     ! grep -Eq 'Failed to fetch (https?://(azure\.|[a-z0-9-]+\.ec2\.)?archive\.ubuntu\.com/ubuntu/|mirror\+file:/etc/apt/apt-mirrors\.txt)' "$log"; then
     echo '::error title=Preparo falhou fora do transporte APT::o erro permanece vermelho, sem nova tentativa.'
     return 1
   fi
@@ -122,7 +128,7 @@ recuperar_apt_e2e() {
   sudo pkill -KILL -x apt-get || :
   sudo dpkg --configure -a
   if [ "$tentativa" -eq 1 ] &&
-     grep -Eq '(https?://azure\.archive\.ubuntu\.com/ubuntu/|file:/etc/apt/apt-mirrors\.txt)' "$log"; then
+     grep -Eq '(https?://(azure|[a-z0-9-]+\.ec2)\.archive\.ubuntu\.com/ubuntu/|file:/etc/apt/apt-mirrors\.txt)' "$log"; then
     trocar_espelho_apt_e2e
   fi
 }
