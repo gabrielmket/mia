@@ -41,7 +41,7 @@ import { nomesDosAtendentesCom } from "@/lib/users/nome-do-atendente";
 import { avisarNoSino } from "./avisos";
 import { configDaLinha, janelaDoDia, papelUsaOAssistente } from "./config";
 import { escopoDoPapel, type PessoaDaEquipe } from "./leituras/comum";
-import { lerLeads } from "./leituras/leads";
+import { ehLeadsDaPessoa, lerLeads } from "./leituras/leads";
 import { lerPerformance } from "./leituras/performance";
 import { lerRotinaDoDia } from "./leituras/rotina";
 import { prioridadesDoDia, textoDoResumoDaManha } from "./prioridades";
@@ -180,7 +180,9 @@ export async function escreverResumosDaManha(admin: SupabaseClient, agora: Date)
             veNumeros: c.papel === "admin",
           });
           const [leads, performance] = await Promise.all([
-            lerLeads(admin, { organizationId: org.id, escopo, papel: c.papel, agora, equipe }).catch(() => null),
+            lerLeads(admin, { organizationId: org.id, escopo, papel: c.papel, agora, fuso, equipe })
+              .then((r) => (ehLeadsDaPessoa(r) ? r : null))
+              .catch(() => null),
             lerPerformance(admin, { organizationId: org.id, escopo, periodo: "mes", agora, fuso, equipe }).catch(() => null),
           ]);
           const prioridades = prioridadesDoDia({ rotina, leads, performance, idioma }, t);
