@@ -11,6 +11,11 @@
  * `=HYPERLINK(...)` viraria fórmula ao abrir a planilha (injeção de fórmula). O
  * telefone (`+5531…`) e a variação (`+12%`, `-3,5 pontos`) saem como estão.
  *
+ * MIA-106: o NÚMERO também é célula. Com o separador vírgula, `1500,5` sem
+ * aspas virava duas colunas (`1500` e `5`) e a planilha inteira escorregava;
+ * o número que contém o separador sai entre aspas (`"1500,5"`), como manda o
+ * CSV. Com ponto e vírgula nada muda: o número não tem `;`.
+ *
  * ⚠️ Módulo PURO.
  */
 import { textoDoRotulo, variacao, type Formato, type ModeloDoGrafico } from "./apresentar";
@@ -37,6 +42,11 @@ export function celulaCsv(valor: string, sep: Separador): string {
   if (/^[=@\t\r]/.test(s) || (/^[+-]/.test(s) && !NUMERO_COM_SINAL.test(s))) s = `'${s}`;
   if (s.includes(sep) || /["\n\r]/.test(s)) s = `"${s.replace(/"/g, '""')}"`;
   return s;
+}
+
+/** Um número já escrito (`numeroBr`), entre aspas só quando contém o separador. */
+export function numeroCsv(texto: string, sep: Separador): string {
+  return texto.includes(sep) ? `"${texto}"` : texto;
 }
 
 function linhaCsv(celulas: string[], sep: Separador): string {
@@ -84,23 +94,23 @@ export function csvDoRelatorio(
   const grupos = m.dim1 ? m.grupos : [];
   for (const g of grupos) {
     const l = [celulaCsv(textoDoRotulo(g.rotulo, t, g.quantos), sep)];
-    for (const s of series) l.push(numeroDaMedida(m.formato, g.series[s.chave]?.valor ?? (aditiva ? 0 : null)));
-    l.push(numeroDaMedida(m.formato, g.valor));
+    for (const s of series) l.push(numeroCsv(numeroDaMedida(m.formato, g.series[s.chave]?.valor ?? (aditiva ? 0 : null)), sep));
+    l.push(numeroCsv(numeroDaMedida(m.formato, g.valor), sep));
     if (compara) {
       const v = variacao(g.valor, g.anterior, m.formato, f);
-      l.push(numeroDaMedida(m.formato, g.anterior), celulaCsv(v?.texto ?? "", sep));
+      l.push(numeroCsv(numeroDaMedida(m.formato, g.anterior), sep), celulaCsv(v?.texto ?? "", sep));
     }
     linhas.push(l);
   }
   const tot = [celulaCsv(aditiva ? t("Total") : t("Geral"), sep)];
   for (const s of series) {
     const soma = aditiva ? m.grupos.reduce((acc, g) => acc + (g.series[s.chave]?.valor ?? 0), 0) : null;
-    tot.push(numeroDaMedida(m.formato, soma));
+    tot.push(numeroCsv(numeroDaMedida(m.formato, soma), sep));
   }
-  tot.push(numeroDaMedida(m.formato, m.total.valor));
+  tot.push(numeroCsv(numeroDaMedida(m.formato, m.total.valor), sep));
   if (compara) {
     const v = variacao(m.total.valor, m.anterior?.valor ?? null, m.formato, f);
-    tot.push(numeroDaMedida(m.formato, m.anterior?.valor ?? null), celulaCsv(v?.texto ?? "", sep));
+    tot.push(numeroCsv(numeroDaMedida(m.formato, m.anterior?.valor ?? null), sep), celulaCsv(v?.texto ?? "", sep));
   }
   linhas.push(tot);
   return { texto: BOM + linhas.map((l) => linhaCsv(l, sep)).join("\r\n") + "\r\n", linhas: linhas.length - 1 };
@@ -108,8 +118,8 @@ export function csvDoRelatorio(
 
 function celulaDaLista(c: Celula, sep: Separador): string {
   if (c.tipo === "texto") return celulaCsv(c.texto, sep);
-  if (c.tipo === "numero") return numeroBr(c.valor, 2);
-  return c.centavos === null ? "" : numeroBr(c.centavos / 100, 2);
+  if (c.tipo === "numero") return numeroCsv(numeroBr(c.valor, 2), sep);
+  return c.centavos === null ? "" : numeroCsv(numeroBr(c.centavos / 100, 2), sep);
 }
 
 /** A planilha da LISTA por trás de um número: uma linha por registro, com nome e telefone. */
