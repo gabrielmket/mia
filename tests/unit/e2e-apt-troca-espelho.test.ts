@@ -17,6 +17,8 @@ const WORKFLOW = path.join(RAIZ, ".github/workflows/e2e.yml");
 const BROWSER = "Instalar o browser";
 const FFMPEG = "Instalar o ffmpeg e sondar os encoders";
 const AZURE = "http://azure.archive.ubuntu.com/ubuntu/";
+// O espelho regional do runner que nasce na AWS (run 45289294686, parte 6).
+const EC2 = "http://us-east-2.ec2.archive.ubuntu.com/ubuntu/";
 const CANONICAL = "http://archive.ubuntu.com/ubuntu/";
 const NORMALIZAR = "normalizar-fonte";
 const DEB822 = `Types: deb\nURIs: ${AZURE}\nSuites: noble noble-updates\nComponents: main universe\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\nSnapshot: 20261023T120000Z\n`;
@@ -39,7 +41,7 @@ afterEach(() => {
   for (const dir of temporarios.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-function rodar(passo: string, cenario = "azure_parado", fonte = DEB822, legado = false, ambiente = "github-hosted") {
+function rodar(passo: string, cenario = "azure_parado", fonte = DEB822, legado = false, ambiente = "github-hosted", espelho = AZURE) {
   const raiz = mkdtempSync(path.join(tmpdir(), "e2e-apt-failover-"));
   temporarios.push(raiz);
   const bin = path.join(raiz, "bin");
@@ -49,7 +51,7 @@ function rodar(passo: string, cenario = "azure_parado", fonte = DEB822, legado =
   mkdirSync(path.join(apt, "preferences.d"));
   const arquivo = path.join(apt, legado ? "sources.list" : "sources.list.d/ubuntu.sources");
   writeFileSync(arquivo, fonte);
-  writeFileSync(path.join(apt, "apt-mirrors.txt"), `${AZURE}\tpriority:1\nhttps://archive.ubuntu.com/ubuntu/\tpriority:2\n`);
+  writeFileSync(path.join(apt, "apt-mirrors.txt"), `${espelho}\tpriority:1\nhttps://archive.ubuntu.com/ubuntu/\tpriority:2\n`);
   const pin = path.join(apt, "preferences.d/pino");
   writeFileSync(pin, "Package: *\nPin: release n=noble\nPin-Priority: 500\n");
   const pinAntes = { texto: readFileSync(pin, "utf-8"), mtime: statSync(pin).mtimeMs };
@@ -95,7 +97,7 @@ if scenario in fatal:
         print("E: Failed to fetch " + uri + "pool/pacote.deb", flush=True)
     print("E: " + fatal[scenario], flush=True)
     sys.exit(100)
-if scenario == "todos_parados" or (scenario not in ("saudavel", "browser_cdn_parado") and "azure.archive.ubuntu.com" in uri):
+if scenario == "todos_parados" or (scenario not in ("saudavel", "browser_cdn_parado") and re.search(r"//(azure|[a-z0-9-]+\\.ec2)\\.archive\\.ubuntu\\.com/", uri)):
     sys.exit(124)
 if scenario == "indice_invalido" and "update" in sys.argv:
     print("E: The repository is not signed.", flush=True)
@@ -155,6 +157,23 @@ describe("APT do E2E abandona a fonte Azure que não termina", () => {
     expect(r.fonte).toBe(DEB822.replace(AZURE, "https://archive.ubuntu.com/ubuntu/"));
   });
 
+  it("runner na AWS: a lista local aponta para o EC2 lento, e a troca alcança o arquivo oficial", () => {
+    const fonte = DEB822.replace(AZURE, "mirror+file:/etc/apt/apt-mirrors.txt");
+    const r = rodar(FFMPEG, "azure_parado", fonte, false, "github-hosted", EC2);
+    expect(r.status, r.saida).toBe(0);
+    expect(r.saida).not.toContain("APT: 0 arquivo(s)");
+    expect(r.fonte).toBe(DEB822.replace(AZURE, "https://archive.ubuntu.com/ubuntu/"));
+    expect(r.chamadas.filter((linha) => linha.startsWith("timeout"))).toHaveLength(2);
+    expect(r.chamadas.some((linha) => linha.startsWith("apt-get install") && linha.includes("https://archive.ubuntu.com/ubuntu/"))).toBe(true);
+  });
+
+  it("URI direta do EC2 vira o arquivo oficial, no mesmo esquema", () => {
+    const fonte = DEB822.replace(AZURE, EC2);
+    const r = rodar(FFMPEG, "azure_parado", fonte, false, "github-hosted", EC2);
+    expect(r.status, r.saida).toBe(0);
+    expect(r.fonte).toBe(DEB822.replace(AZURE, CANONICAL));
+  });
+
   it("preserva as opções, suite e comentário de uma linha deb legada", () => {
     const fonte = `deb [arch=amd64 signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] ${AZURE} noble main # manter\n`;
     const r = rodar(FFMPEG, "azure_parado", fonte, true);
@@ -191,6 +210,14 @@ describe("APT do E2E abandona a fonte Azure que não termina", () => {
     const fonte = DEB822.replace("azure.archive.ubuntu.com", "azure.archive.ubuntu.com.invalido");
     const r = rodar(FFMPEG, "todos_parados", fonte);
     expect(r.status, r.saida).not.toBe(0);
+    expect(r.fonte).toBe(fonte);
+    expect(r.mtime).toBe(r.mtimeAntes);
+  });
+
+  it("um host parecido não é o EC2 permitido", () => {
+    const fonte = DEB822.replace(AZURE, EC2.replace("archive.ubuntu.com", "archive.ubuntu.com.invalido"));
+    const r = rodar(NORMALIZAR, "saudavel", fonte, false, "github-hosted", EC2);
+    expect(r.status, r.saida).toBe(0);
     expect(r.fonte).toBe(fonte);
     expect(r.mtime).toBe(r.mtimeAntes);
   });

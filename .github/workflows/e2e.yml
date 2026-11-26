@@ -1838,11 +1838,34 @@ jobs:
           sudo sysctl -w net.ipv4.ip_local_reserved_ports="$portas"
           echo "faixa efêmera: $(cat /proc/sys/net/ipv4/ip_local_port_range) | reservadas: $(cat /proc/sys/net/ipv4/ip_local_reserved_ports)"
           # A reserva vale para conexões NOVAS. Uma já aberta numa destas portas
-          # continua lá até fechar — se houver, fica dito aqui, e não no bind.
+          # continua lá até fechar, e o bind do contêiner morre nela.
+          #
+          # Medido no run 45456996778 (parte 5, 24/11/2026): este passo avisou
+          # "54324" às 18:19:39 e o `supabase start` morreu no bind da 54324
+          # (`address already in use`) às 18:21:13, 94 s depois. Não era
+          # TIME-WAIT, que some em 60 s: era conexão de saída VIVA, aberta antes
+          # do primeiro passo, que tirou a porta no sorteio. Esperar não solta.
+          # Derrubar solta, e quem a abriu reconecta numa porta nova, que já
+          # não pode cair nas reservadas. Só derruba conexão estabelecida
+          # (nunca quem escuta) e só nas portas do Supabase. Se o kernel não
+          # deixar derrubar, fica o aviso, como antes.
           abertas=$(ss -Htan | awk '{print $4}' | sed 's/.*://' | sort -u)
           ocupadas=$(comm -12 <(printf '%s\n' "$abertas") <(tr , '\n' <<<"$portas" | sort -u))
           if [ -n "$ocupadas" ]; then
-            echo "::warning::porta(s) do Supabase já em uso por conexão aberta antes da reserva: $(echo $ocupadas)"
+            presas=""
+            for porta in $ocupadas; do
+              echo "porta $porta em uso antes da reserva:"
+              sudo ss -Htanp "( sport = :$porta )" || :
+              sudo ss -K -Htan state established state close-wait "( sport = :$porta )" >/dev/null || :
+              if [ -n "$(ss -Htan "( sport = :$porta )" | awk '$1 != "TIME-WAIT"')" ]; then
+                presas="$presas $porta"
+              fi
+            done
+            if [ -n "$presas" ]; then
+              echo "::warning::porta(s) do Supabase ainda presas por conexão aberta antes da reserva:$presas (o bind do supabase start pode falhar nelas)"
+            else
+              echo "porta(s) $(echo $ocupadas) liberadas: a conexão de saída foi derrubada e reconecta fora da faixa reservada"
+            fi
           fi
 
       # ─── Serviços da parte 4 — a spec de VPS fresca (issue #179) ──────────

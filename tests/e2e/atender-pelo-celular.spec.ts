@@ -174,11 +174,32 @@ const linha = (page: Page) => page.locator(`button[data-conversation-id="${conve
 const fio = (page: Page) => page.getByTestId("chat-thread");
 const voltar = (page: Page) => page.getByRole("button", { name: "Conversas", exact: true });
 
+/**
+ * Digita o sufixo na busca da lista e só devolve quando a lista FILTRADA chegou.
+ *
+ * A busca é outra lista: 250 ms depois da última tecla a lista sem filtro sai
+ * (volta ao skeleton) e entra a filtrada. A linha desta conversa já aparece na
+ * lista sem filtro, então "linha visível" passava antes da troca, e o toque
+ * caía no skeleton que a substituía. A conversa não abria e o `waitForURL`
+ * estourava os 30 s (run 44452303149, parte 6, A-5). Esperar a resposta da
+ * busca tira o toque da janela da troca.
+ */
+async function buscarNaLista(page: Page): Promise<void> {
+  const filtrada = page.waitForResponse(
+    (r) =>
+      r.url().includes("/api/v1/conversations?") &&
+      new URL(r.url()).searchParams.get("search") === SUFIXO,
+  );
+  await page.getByLabel("Buscar conversas").fill(SUFIXO);
+  const resposta = await filtrada;
+  expect(resposta.ok(), `busca da lista: HTTP ${resposta.status()}`).toBe(true);
+  await expect(linha(page)).toBeVisible({ timeout: 60_000 });
+}
+
 /** Abre a lista "Todas", acha a conversa pela busca (16px) e toca nela. */
 async function abrirPelaLista(page: Page): Promise<void> {
   await page.goto("/app/inbox?filter=all");
-  await page.getByLabel("Buscar conversas").fill(SUFIXO);
-  await expect(linha(page)).toBeVisible({ timeout: 60_000 });
+  await buscarNaLista(page);
   await linha(page).tap();
   await esperarConversa(page);
 }
@@ -399,8 +420,7 @@ test.describe("atender pelo celular", () => {
       expect(rolagem.documento).toBeLessThanOrEqual(rolagem.janela + 1);
       await page.screenshot({ path: path.join(EVIDENCE, "a6-lista-com-faixa.png") });
 
-      await page.getByLabel("Buscar conversas").fill(SUFIXO);
-      await expect(linha(page)).toBeVisible({ timeout: 60_000 });
+      await buscarNaLista(page);
       await linha(page).tap();
       await esperarConversa(page);
 
