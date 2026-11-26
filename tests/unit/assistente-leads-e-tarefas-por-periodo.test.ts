@@ -174,7 +174,8 @@ function ferramentas(papel: Papel, opcoes: Parameters<typeof bancoEmMemoria>[1] 
     coletor,
   );
   const chamar = async (nome: string, args: Record<string, unknown> = {}) =>
-    (await tools[nome]!.execute!(args as never, { toolCallId: nome, messages: [] })) as Record<string, any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- o resultado da ferramenta é lido campo a campo nos testes
+    (await tools[nome]!.execute!(args as never, { toolCallId: nome, messages: [], context: undefined })) as Record<string, any>;
   return { chamar, coletor };
 }
 
