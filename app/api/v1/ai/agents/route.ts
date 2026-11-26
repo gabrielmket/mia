@@ -149,7 +149,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (error) return fail("internal_error", "Erro ao listar agents.", 500, { requestId });
 
   // FORK MIA (MIA-262): o modelo de cada agente é da plataforma.
-  return ok(agentesSemIa(await quemPedeNaRota(authz), (data ?? []) as Array<Record<string, unknown>>), { requestId });
+  return ok(agentesSemIa(await quemPedeNaRota(authz), (data ?? []) as unknown as Array<Record<string, unknown>>), { requestId });
 }
 
 // ---------------------------------------------------------------------------

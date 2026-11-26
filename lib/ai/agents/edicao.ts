@@ -445,7 +445,7 @@ export async function reverterParaVersao(
         // FORK MIA (MIA-262): para quem não escolhe a IA, os freios de gasto são
         // os da versão de referência (a trava os pôs no corpo), não os da antiga.
         ...Object.fromEntries(
-          FREIOS_DE_GASTO.filter((c) => c in ia).map((c) => [c, (ia as Record<string, unknown>)[c]]),
+          FREIOS_DE_GASTO.filter((c) => c in ia).map((c) => [c, (ia as unknown as Record<string, unknown>)[c]]),
         ),
         // FORK MIA: a IA que saiu da trava, não a da versão de origem.
         provider: ia.provider,
