@@ -219,6 +219,25 @@ test("F1 — trocar o modelo GRAVA, e a tela passa a mostrar o novo", async ({ p
   // OpenRouter. A prova aqui é a da gravação, então a empresa ganha uma chave
   // sintética da OpenRouter, validada, só durante o caso. A recusa sem chave é
   // cobrada em app/api/v1/ai/providers/route.test.ts.
+  await comChaveSintetica("openrouter", "prova F1", () => provarQueATrocaGrava(page));
+});
+
+/**
+ * Roda `caso` com uma chave sintética do `provider`, ativa e validada, na
+ * empresa de teste, e a apaga no fim, passe ou falhe.
+ *
+ * Cada caso que grava uma função monta a PRÓPRIA chave, e não herda a que outra
+ * spec da mesma parte deixou no banco. O caso do follow-up passava assim, por
+ * herança, e caiu (MIA-272) quando o rebalanceamento do #147 tirou da parte 8 as
+ * specs que rodavam antes dele. A trava só confere `is_active` e `validated_at`
+ * (`credenciaisValidadas` em lib/ai/ia-da-empresa.ts), e a gravação não guarda o
+ * id da credencial, então apagar a chave depois não deixa referência solta.
+ */
+async function comChaveSintetica(
+  provider: string,
+  rotulo: string,
+  caso: () => Promise<void>,
+): Promise<void> {
   const env = carregarEnvLocal();
   const url = env.NEXT_PUBLIC_SUPABASE_URL!;
   if (!["localhost", "127.0.0.1"].includes(new URL(url).hostname)) {
@@ -229,14 +248,14 @@ test("F1 — trocar o modelo GRAVA, e a tela passa a mostrar o novo", async ({ p
   });
   const orgId = (creds as CredsE2E & { org_id?: string }).org_id;
   if (!orgId) throw new Error(".e2e-creds.json sem org_id");
-  const cifrada = encryptKey("e2e-openrouter-sintetica-prova-f1");
+  const cifrada = encryptKey(`e2e-${provider}-sintetica-${rotulo.replace(/\s+/g, "-")}`);
   const { data: chave, error: erroChave } = await admin
     .from("ai_provider_credentials")
     .insert({
       organization_id: orgId,
-      provider: "openrouter",
+      provider,
       // Rótulo único: um caso interrompido antes da limpeza não trava o seguinte.
-      label: `Chave sintética da prova F1 ${Date.now().toString(36)}`,
+      label: `Chave sintética da ${rotulo} ${Date.now().toString(36)}`,
       api_key_encrypted: bufToBytea(cifrada.ciphertext),
       api_key_iv: bufToBytea(cifrada.iv),
       api_key_tag: bufToBytea(cifrada.tag),
@@ -246,14 +265,14 @@ test("F1 — trocar o modelo GRAVA, e a tela passa a mostrar o novo", async ({ p
     })
     .select("id")
     .single();
-  if (erroChave || !chave) throw new Error(`chave sintética da OpenRouter: ${erroChave?.message}`);
+  if (erroChave || !chave) throw new Error(`chave sintética (${provider}): ${erroChave?.message}`);
   try {
-    await provarQueATrocaGrava(page);
+    await caso();
   } finally {
     const { error } = await admin.from("ai_provider_credentials").delete().eq("id", chave.id);
-    if (error) throw new Error(`limpeza da chave sintética: ${error.message}`);
+    if (error) throw new Error(`limpeza da chave sintética (${provider}): ${error.message}`);
   }
-});
+}
 
 async function provarQueATrocaGrava(page: Page): Promise<void> {
   await page.goto("/app/ai/providers");
@@ -392,6 +411,14 @@ test("o follow-up tem modelo próprio — está em 'Atender o cliente', aceita e
   // ferramentas), mas o modelo pode ser outro — é o único ponto do agente que
   // o painel deixa trocar. Sem escolha, vale o da versão publicada; esta
   // instalação de teste não tem agente publicado, então vale o padrão.
+  //
+  // FORK MIA (9172, MIA-272): a escolha é da Anthropic, e a CI não tem chave
+  // dela. Sem chave, o PUT recusa com 422 `ia_sem_chave` e o aviso "agora usa"
+  // não aparece. A chave sintética é deste caso, como a do F1.
+  await comChaveSintetica("anthropic", "prova do follow-up", () => provarOFollowUp(page));
+});
+
+async function provarOFollowUp(page: Page): Promise<void> {
   await page.goto("/app/ai/providers");
   await page.waitForSelector('[data-testid="painel-de-provedores"]');
   await page.click('[data-testid="avancado-atender"]');
@@ -425,4 +452,4 @@ test("o follow-up tem modelo próprio — está em 'Atender o cliente', aceita e
   await gravado.scrollIntoViewIfNeeded();
   await page.screenshot({ path: "evidence/modelo-do-follow-up/02-escolha-gravada.png", fullPage: true });
   await gravado.screenshot({ path: "evidence/modelo-do-follow-up/03-cartao-do-follow-up.png" });
-});
+}
