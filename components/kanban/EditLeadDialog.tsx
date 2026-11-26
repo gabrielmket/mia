@@ -48,6 +48,9 @@ export function EditLeadDialog({ open, onOpenChange, lead, pipelineId }: Props) 
           lead={lead}
           pipelineId={pipelineId}
           podeVerEquipe={podeVerEquipe}
+          // FORK MIA (fusão v1.126): o "Contato do negócio" do upstream (#852 S3)
+          // mora no diálogo do card, como lá; o dossiê já mostra o contato.
+          escolherContato
           onSaved={() => onOpenChange(false)}
           onCancel={() => onOpenChange(false)}
         />

@@ -819,6 +819,41 @@ Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
 
+### O que chegou do upstream 1.126 (fusão de 26/11, MIA-290)
+
+A fusão entra sem ferramenta nova e sem campo novo no MCP de plataforma. Nenhuma rota espelhada
+(seção 5) mudou nesta faixa. O `crm_count_conversations` (#4996) e a sala/mesa em
+`crm_book_appointment` e `crm_find_and_book_appointment` (#5225) são do MCP da EMPRESA e vêm
+prontos do upstream.
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| O tipo de agendamento nasce e acompanha o fuso da empresa (9477, `calendar_event_types.service_timezone`) | 1.126 | já alcançava: `plataforma_configurar_empresa` grava `organizations.timezone`, e o gatilho da 9477 leva o fuso novo aos tipos que estavam no antigo. `plataforma_garantir_tipos_de_agendamento` cria o tipo já no fuso da empresa | `implantar_configuracao` |
+| A devolução automática ao agente confere o sinal humano antes de soltar o dono (9472) | 1.126 | nada a configurar: regra do cron `handoff-devolucao` | |
+| Mensagens agendadas com repetição e data de término (9473) | 1.126 | nada a configurar: é registro do dia a dia no Inbox. O MCP de plataforma não agenda mensagem | |
+| AI/ML API como provedor de IA (9475, catálogo em `ai_models`) | 1.126 | nada a fazer por empresa: no fork a IA de toda empresa segue a da plataforma (9172, `docs/fork/ia-da-plataforma.md`). O provedor aparece na lista de /admin/modelo-de-ia, que é da plataforma | |
+| Contato do negócio escolhido no "Editar negócio" (#852 S3) e o painel de vendas com período num campo e coluna Vendedor | 1.126 | nada a configurar: tela do dia a dia | |
+
+Falta no MCP (cada item com o motivo):
+
+- a sala/mesa do serviço (módulo opcional `reservas_de_lugar`, lugares do serviço em
+  `/api/v1/agenda/servicos`): o MCP de plataforma não configura o serviço com lugares (nem o
+  serviço em si, só o tipo de agendamento). Nasce desligado; entra junto quando a implantação
+  passar a montar serviço;
+- o chat no site (canal novo, 9471, aba em Conexões, `channel_sessions` com as origens permitidas
+  e a chave do chat): o módulo nasce travado no upstream e continua travado no fork. Fica fora até
+  alguém liberar o canal;
+- as conversões de etapa do Google Ads com várias contas (`google_customer_id` no modelo de
+  rastreamento de cada conta, CHANGELOG 1.126 "Requer atenção"): é configuração na conta do Google
+  Ads do cliente, feita pelo administrador dele, não no CRM. A implantação precisa avisar quem tem
+  mais de uma conta.
+
+Nada a configurar pela implantação: a leitura da agenda que não trava com evento cancelado, o
+segundo "Levar" que não duplica, o viewer sem "Outro funil", o custo do Haiku 5.5 por passo
+(#5017, tabela de preço do motor), o `change-email.sh` do kit da HostGator (o fork implanta pelo
+EasyPanel) e a identidade do build no `docker-compose.prod.yml` (o fork usa o
+`docker-compose.easypanel.yml`, que é nosso).
+
 ### O que chegou do upstream 1.125 (fusão de 24/11, MIA-227)
 
 A fusão entra sem ferramenta nova e sem campo novo no MCP de plataforma. Nenhuma rota espelhada

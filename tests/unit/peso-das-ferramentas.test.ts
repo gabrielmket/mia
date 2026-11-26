@@ -86,9 +86,10 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
       "#4077: a descrição passou a dizer que cada mensagem traz o AUTOR (sent_by_user_id e sent_by_user_name) — sem isso a integração não sabia que o campo existia e atribuía a fala ao 'sistema'",
   },
   "crm_get_queue_status": { tokens: 83, motivo: BASE },
+  "crm_count_conversations": { tokens: 117, motivo: "#4996 (item 2): ferramenta nova, só leitura, 1 filtro (status). Conta conversas por status sem paginar crm_list_conversations (que traz prévia de mensagem). Medido, não somado à mão" },
   "crm_list_leads": { tokens: 500, motivo: BASE },
   "crm_get_lead": { tokens: 202, motivo: BASE },
-  "crm_count_leads": { tokens: 348, motivo: "#4996: ganhou por_etapa (+31 tokens): com ele o agente conta todas as etapas de um funil numa chamada, em vez de uma chamada por etapa (ou de paginar crm_list_leads). Base: 317 da ferramenta nova (3 filtros — funil, etapa, status —, sem responsável, de propósito, para pesar menos)" },
+  "crm_count_leads": { tokens: 356, motivo: "#4996: ganhou por_etapa (+31 tokens) e a descrição passou a dizer que por_etapa traz só o stage_id, em vez de 'nunca ids' (+8, pedido do mantenedor no #5192): com ele o agente conta todas as etapas de um funil numa chamada, em vez de uma chamada por etapa (ou de paginar crm_list_leads). Base: 317 da ferramenta nova (3 filtros — funil, etapa, status —, sem responsável, de propósito, para pesar menos)" },
   "crm_list_lead_attachments": {
     tokens: 259,
     motivo:
@@ -144,8 +145,8 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
   "crm_list_available_attendants": { tokens: 179, motivo: BASE },
   "crm_list_human_cases": { tokens: 149, motivo: BASE },
   "crm_get_human_case": { tokens: 208, motivo: BASE },
-  "crm_find_and_book_appointment": { tokens: 1043, motivo: "FORK MIA: +15 do e-mail que o CLIENTE informa para o convite (vai para a ficha e para o Google)" },
-  "crm_book_appointment": { tokens: 1329, motivo: "FORK MIA: +126 do resumo da qualificação na anotação (o vendedor recebe o que a IA apurou) e do e-mail do cliente para o convite" },
+  "crm_find_and_book_appointment": { tokens: 1170, motivo: "FORK MIA: +15 do e-mail que o CLIENTE informa para o convite (vai para a ficha e para o Google), por cima dos 1155 do upstream (+127 da sala, #5225)" },
+  "crm_book_appointment": { tokens: 1456, motivo: "FORK MIA: +126 do resumo da qualificação na anotação (o vendedor recebe o que a IA apurou) e do e-mail do cliente para o convite, por cima dos 1330 do upstream (+127 da sala, #5225)" },
   "crm_reschedule_appointment": { tokens: 572, motivo: BASE },
   "crm_cancel_appointment": { tokens: 275, motivo: BASE },
   "crm_confirm_appointment": { tokens: 318, motivo: BASE },
@@ -291,8 +292,16 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
 // `provedor` nem `modelo` (1015 → 940). Na versão .116: 49484 = 49559 - 75.
 // +31 do `por_etapa` em `crm_count_leads` (#4996). MEDIDO no rebase sobre a main de
 // 2026-11-23 (`da918574d`, que tinha 47531): 47562 = 47531 + 31, não somado à mão.
+// +117 de `crm_count_conversations` (#4996, item 2). MEDIDO neste head sobre a main de
+// 2026-11-24 (`ceaa51d67`, que tinha 47562): 47679 = 47562 + 117, não somado à mão.
+// +8 da descrição de `crm_count_leads` corrigida (por_etapa traz stage_id). MEDIDO: 47687 = 47679 + 8.
+// +254 da sala em `crm_book_appointment` e `crm_find_and_book_appointment` (#5225, @paulolimajr77).
+// MEDIDO no merge com a main de 2026-11-24 (`a33492d523`, que tinha 47687): 47941 = 47687 + 254,
+// não somado à mão.
 // FORK MIA, na fusão da v1.125: 49515 = 49484 + 31 (o `por_etapa` acima, por cima do teto do fork).
-const TETO_TOTAL = 49515;
+// FORK MIA, na fusão da v1.126: 49894 = 49515 + 379 (117 + 8 + 254 acima). Os +4 do provedor
+// aimlapi no enum de `crm_save_ai_agent_draft` não entram: no fork ela não oferece provedor (MIA-115).
+const TETO_TOTAL = 49894;
 
 const VARIANTE = "schedule_followup (com negócio)";
 

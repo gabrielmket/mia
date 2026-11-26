@@ -25,6 +25,7 @@ import {
 } from "./comandos-de-conversa";
 import {
   crmListConversations,
+  crmCountConversations,
   crmGetConversation,
   crmGetConversationHistory,
   crmCreateConversationDraft,
@@ -147,6 +148,7 @@ export const allTools: ReadonlyArray<McpToolDefinition> = [
   crmProporRecebimentoDeDocumento,
   crmUpdateContact,
   crmListConversations,
+  crmCountConversations,
   // #4517 — os quatro comandos da conversa, por token e pelo agente.
   crmPauseAi,
   crmResumeAi,
