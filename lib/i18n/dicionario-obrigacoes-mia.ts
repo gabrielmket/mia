@@ -147,7 +147,8 @@ export const DICIONARIO_OBRIGACOES_MIA: Traducoes = {
   "sem pedido em aberto": { es: "sin pedido abierto" },
   "não recebido": { es: "no recibido" },
   "Quem entrega": { es: "Quién entrega" },
-  Recorrência: { es: "Recurrencia" },
+  // "Recorrência" vem do dicionário do upstream (v1.126, repetição das
+  // mensagens agendadas): a chave é uma só para as duas telas.
   "sem arquivo": { es: "sin archivo" },
   "Área privada; apagado junto com o contato num pedido de esquecimento.": {
     es: "Área privada; se elimina junto con el contacto en una solicitud de olvido.",

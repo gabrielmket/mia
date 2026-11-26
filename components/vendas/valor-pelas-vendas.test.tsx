@@ -37,6 +37,12 @@ vi.mock("@/hooks/auth/AuthProvider", () => ({
   // e pergunta se a pessoa enxerga a equipe (`usePodeVerEquipe` → `usePermission`).
   usePermission: () => estado.papel === "agent",
 }));
+// FORK MIA (fusão v1.126): quem enxerga a equipe recebe o "Originado por (SDR)"
+// do `LeadFieldsForm`, que lista a equipe por `useAssignableMembers`. Dublê sem
+// QueryClient, como os outros hooks deste teste.
+vi.mock("@/hooks/inbox/useAssignableMembers", () => ({
+  useAssignableMembers: () => ({ data: [] }),
+}));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (texto: string) => texto }));
 vi.mock("@/hooks/i18n/useLocaleDeData", () => ({ useTagDeIdioma: () => "pt-BR" }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
