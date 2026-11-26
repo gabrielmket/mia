@@ -26,6 +26,7 @@ import { PROVEDOR_POR_ASSINATURA } from "@/lib/ai/pontos/provedores";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { escolheIa, MENSAGEM_IA_DA_PLATAFORMA } from "@/lib/ai/trava-da-ia";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,8 @@ export async function POST(
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user: authUser, org: activeOrg } = authz;
+  // FORK MIA (MIA-262): revalidar a chave de IA é da plataforma (o cartão do Jev em suporte com edição).
+  if (!escolheIa(authUser)) return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403, { requestId });
 
   const admin = createAdminClient();
 
