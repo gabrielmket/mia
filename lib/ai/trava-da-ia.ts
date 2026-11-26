@@ -338,3 +338,16 @@ export async function iaPodeIrAoAr(
     alvo.operator_model === null
   );
 }
+
+/**
+ * FORK MIA (MIA-262): a LISTA de agentes, para quem não escolhe a IA, vai sem
+ * o modelo do cadastro e sem o par provedor/modelo da versão publicada. O
+ * cartão do upstream esconde a linha quando os dois chegam vazios.
+ */
+export function agentesSemIa<T extends { model?: unknown; versao_publicada?: unknown }>(
+  user: QuemPede,
+  agentes: readonly T[],
+): T[] {
+  if (escolheIa(user)) return [...agentes];
+  return agentes.map((a) => ({ ...a, model: null, versao_publicada: null }));
+}

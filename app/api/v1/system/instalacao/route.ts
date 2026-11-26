@@ -24,6 +24,8 @@ import { listSelectableChannels } from "@/lib/channels/selectable";
 import { lerRetratoDaInstalacao } from "@/lib/instalacao/retrato";
 import { provarSaldo } from "@/lib/instalacao/prova-de-credito";
 import { loadCredential, CredentialUnavailableError } from "@/lib/ai/credentials";
+import { podeConfigurarChaveDeIa } from "@/lib/ai/custo-e-da-plataforma";
+import { retratoAoCliente } from "@/lib/instalacao/retrato-ao-cliente";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +60,8 @@ export async function GET(req: NextRequest) {
   });
 
   const querProvar = req.nextUrl.searchParams.get("provar") === "1";
-  if (!querProvar) return ok(retrato);
+  // FORK MIA (MIA-262): provedor, modelo e chave só para quem configura a chave.
+  if (!querProvar) return ok(retratoAoCliente(retrato, podeConfigurarChaveDeIa(authz.user)));
 
   // A partir daqui custa dinheiro: uma geração real de um token. Nunca sai de
   // graça num GET que a tela chama sozinha. 2ª chamada a requireRole de

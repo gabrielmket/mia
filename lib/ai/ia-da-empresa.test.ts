@@ -180,8 +180,32 @@ describe("iaDasEmpresas — o lote que a saúde, o relatório e o MCP leem", () 
       [{ id: "c1", organization_id: "b", provider: "anthropic", is_active: true, validated_at: VALIDADA }],
     );
     expect(await iaDasEmpresas(cliente as unknown as Admin, soOpenai)).toEqual([
-      { organizationId: "a", provider: "openai", modelId: "m", origem: "plataforma", chave: "instalacao", status: "active", nome: "Empresa A", operante: true },
-      { organizationId: "b", provider: "anthropic", modelId: null, origem: "propria", chave: "propria", status: "suspended", nome: null, operante: false },
+      { organizationId: "a", provider: "openai", modelId: "m", origem: "plataforma", chave: "instalacao", status: "active", nome: "Empresa A", operante: true, jevSemChave: false },
+      { organizationId: "b", provider: "anthropic", modelId: null, origem: "propria", chave: "propria", status: "suspended", nome: null, operante: false, jevSemChave: false },
+    ]);
+  });
+
+  it("FORK MIA (MIA-262): o Jev ligado sem chave validada da origem dele aparece no lote", async () => {
+    const ACEITE = { em: "2026-09-20T12:00:00.000Z", por: "00000000-0000-4000-8000-000000000001" };
+    const { cliente } = banco(
+      [
+        { id: "a", status: "active", display_name: "Empresa A", settings: { llm: { provider: "openai" }, jev: { ligado: true, aceite: ACEITE } }, ia_segue_a_plataforma: false },
+        { id: "b", status: "active", display_name: "Empresa B", settings: { llm: { provider: "openai" }, jev: { ligado: true, aceite: ACEITE } }, ia_segue_a_plataforma: false },
+        { id: "c", status: "active", display_name: "Empresa C", settings: { llm: { provider: "openai" }, jev: { ligado: true, origem: "openrouter", aceite: ACEITE } }, ia_segue_a_plataforma: false },
+      ],
+      [
+        { id: "c1", organization_id: "a", provider: "openai", is_active: true, validated_at: VALIDADA },
+        { id: "c2", organization_id: "b", provider: "openai", is_active: true, validated_at: VALIDADA },
+        { id: "c3", organization_id: "b", provider: "typesafe", is_active: true, validated_at: VALIDADA },
+        { id: "c4", organization_id: "c", provider: "typesafe", is_active: true, validated_at: VALIDADA },
+      ],
+    );
+    const lote = await iaDasEmpresas(cliente as unknown as Admin, soOpenai);
+    expect(lote?.map((e) => [e.organizationId, e.jevSemChave])).toEqual([
+      ["a", true],
+      ["b", false],
+      // A origem é a OpenRouter, e a empresa só tem a chave da TypeSafe.
+      ["c", true],
     ]);
   });
 

@@ -33,4 +33,13 @@ export const DICIONARIO_DA_IA_DA_PLATAFORMA: Traducoes = {
   "A IA continua respondendo normalmente — isto é o aviso, não a parada.": {
     es: "La IA sigue respondiendo con normalidad — esto es el aviso, no la detención.",
   },
+  "Inteligência artificial pronta": { es: "Inteligencia artificial lista" },
+  "Quando o assistente passa a conversa para alguém da equipe, ou quando a IA para.": {
+    es: "Cuando el asistente pasa la conversación a alguien del equipo, o cuando la IA se detiene.",
+  },
+  "Não enviei: o uso de IA do plano acabou": { es: "No envié: se acabó el uso de IA del plan" },
+  "o uso de IA do plano acabou": { es: "se acabó el uso de IA del plan" },
+  "A ação não rodou: a regra foi gravada sem autorizar o uso de IA. Corrija a regra pela API; este passo ainda não tem tela.": {
+    es: "La acción no se ejecutó: la regla se guardó sin autorizar el uso de IA. Corrige la regla por la API; este paso aún no tiene pantalla.",
+  },
 };

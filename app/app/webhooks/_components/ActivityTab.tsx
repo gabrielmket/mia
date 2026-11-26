@@ -285,7 +285,8 @@ const MOTIVO_DA_PARADA: Record<string, string> = {
   /* #1970 — a ação ai_decide. Estes quatro nascem aqui em lib/automation/actions/ai-decide.ts
      e chegam ao run por `detail.reason`/`action.error` (mesmo casal de canais da guarda). */
   custo_de_token_nao_registrado:
-    "A ação não rodou: a regra foi gravada sem declarar o gasto de IA (custo_de_token). Corrija a regra pela API; este passo ainda não tem tela.",
+    // FORK MIA (MIA-262): sem o termo técnico do gasto de IA.
+    "A ação não rodou: a regra foi gravada sem autorizar o uso de IA. Corrija a regra pela API; este passo ainda não tem tela.",
   config_invalida:
     "A ação não rodou: a instrução ou as opções estão incompletas. Abra a automação e revise o texto e as alternativas.",
   escolha_fora_do_conjunto:

@@ -83,7 +83,7 @@ const MOTIVO_EM_PORTUGUES: Record<string, string> = {
   critical_stage: "etapa crítica do funil",
   legal_mention: "menção a assunto jurídico",
   refund_mention: "menção a reembolso",
-  orcamento_de_ia: "o teto de gasto com IA foi atingido",
+  orcamento_de_ia: "o uso de IA do plano acabou", // FORK MIA (MIA-262): na linguagem do plano
   // A rede de segurança do Jev (lib/agent-engine/agent/passagem-prometida-no-turno.ts).
   passagem_prometida: "o assistente disse ao cliente que a equipe vai dar sequência, e ninguém tinha sido avisado",
 };

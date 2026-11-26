@@ -31,6 +31,7 @@ export const FERRAMENTAS_DA_IA_DAS_EMPRESAS: FerramentaDePlataforma[] = [
       "`chave: \"propria\"` (a empresa cadastrou e validou uma), `\"instalacao\"` (a chave da plataforma) ou `null` = NENHUMA chave utilizável, e a empresa não responde com IA. " +
       "`contagem` traz quantas empresas OPERANTES seguem, quantas têm escolha própria e quantas estão sem chave: os mesmos números do cartão do admin, da `/health` e do relatório interno " +
       "(empresa suspensa ou anonimizada aparece na lista com `operante: false`, mas não conta). " +
+      "`jev_sem_chave: true` = o Jev está ligado e a empresa não tem chave validada da origem dele (TypeSafe ou OpenRouter): a IA de sempre cobre, mas o Jev não decide. " +
       "`so_sem_chave: true` lista só as sem chave; `organization_id` lista só uma. As sem chave vêm primeiro. " +
       "Nunca devolve a chave em si. Não troca nada: trocar o modelo é no painel, por uma pessoa, com MFA. Só lê.",
     inputSchema: {
@@ -72,6 +73,8 @@ export const FERRAMENTAS_DA_IA_DAS_EMPRESAS: FerramentaDePlataforma[] = [
           provedor_nome: nomeDoProvedor(e.provider),
           modelo: e.modelId,
           chave: e.chave,
+          // FORK MIA (MIA-262): o Jev ligado sem chave validada da origem dele.
+          jev_sem_chave: e.jevSemChave,
         }))
         .sort(
           (a, b) =>
