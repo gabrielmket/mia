@@ -45,6 +45,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { escolheIa, MENSAGEM_IA_DA_PLATAFORMA } from "@/lib/ai/trava-da-ia";
+import { CAMPOS_DO_PRECO, podeVerCusto, semIaDaPlataforma } from "@/lib/ai/custo-e-da-plataforma";
 import { temPrecoNoMotor } from "@/lib/agent-engine/edge/llm/pricing";
 import { modeloAposentadoNoProvedor } from "@/lib/agent-engine/edge/llm/modelos-aposentados";
 // FORK MIA (9172, MIA-217): a régua única de "qual IA vale e se tem chave".
@@ -85,6 +86,8 @@ export async function GET(): Promise<Response> {
   const authz = await requireRole("manager", { resource: "ai_providers" });
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
+  // FORK MIA (MIA-262): a tela inteira é escolha de IA, e escolher é da plataforma.
+  if (!escolheIa(authz.user)) return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403);
   const { org } = authz;
 
   const db = await createClient();
@@ -341,7 +344,8 @@ export async function GET(): Promise<Response> {
     // veio na instalação" quando ela existe. A mesma conta de
     // `app/app/ai/credentials/page.tsx`.
     instalacaoTemChave: instalacaoTemChaveDeIa(),
-    modelos,
+    // FORK MIA (MIA-262): o preço por milhão é o nosso custo; a sessão de suporte não vê.
+    modelos: semIaDaPlataforma(modelos, podeVerCusto(authz.user), CAMPOS_DO_PRECO),
     // FORK MIA: provedor e modelo de cada ponto são da plataforma; o painel fica
     // só de leitura para quem não escolhe IA (lib/ai/trava-da-ia.ts).
     podeEditar: roleAtLeast(org.role, "admin") && escolheIa(authz.user),

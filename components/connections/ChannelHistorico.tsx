@@ -68,7 +68,8 @@ interface Historico {
     pulados_mais_novos: number;
     teto_da_rodada: number;
     estimativa_cents: number | null;
-    gasto_do_mes_cents: number;
+    /** FORK MIA (MIA-262): nulo para quem não vê custo; a tela esconde os valores. */
+    gasto_do_mes_cents: number | null;
     teto_mensal_cents: number | null;
   } | null;
 }
@@ -338,6 +339,8 @@ export function ChannelHistorico({ channelId }: { channelId: string }) {
                     .replace("{restantes}", String(previaAnalise.restantes))}
                 </p>
               )}
+              {/* FORK MIA (MIA-262): o dólar da análise é da plataforma. */}
+              {previaAnalise.gasto_do_mes_cents !== null && (<>
               <p className="text-[11px] text-muted-foreground">
                 {previaAnalise.estimativa_cents === null
                   ? t("Ainda não há gasto de IA registrado para estimar o custo. O limite de {teto} clientes por rodada segura o gasto.")
@@ -352,6 +355,7 @@ export function ChannelHistorico({ channelId }: { channelId: string }) {
                   .replace("{gasto}", dolares(previaAnalise.gasto_do_mes_cents))
                   .replace("{limite}", dolares(previaAnalise.teto_mensal_cents ?? 0))}
               </p>
+              </>)}
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"

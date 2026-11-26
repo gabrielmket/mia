@@ -373,6 +373,8 @@ describe("importação do histórico: rotas (#999)", () => {
 
 describe("análise do histórico: as três travas da decisão 315", () => {
   it("trava 1: o GET entrega a contagem e a estimativa da rodada ANTES de qualquer análise", async () => {
+    // FORK MIA (MIA-262): os dólares são da plataforma; aqui, o admin dela fora de suporte.
+    vi.mocked(requireRole).mockResolvedValue({ ok: true, user: { id: "u1", is_platform_admin: true, support: null }, org: { orgId: org, role: "admin" } } as Awaited<ReturnType<typeof requireRole>>);
     linha({ status: "concluida" });
     const { data } = await (await GET(req({}, "GET"), context())).json();
     expect(rpc).toHaveBeenCalledWith("fn_previa_historico_analise", expect.objectContaining({ p_org: org, p_limite: 50 }));
@@ -384,6 +386,18 @@ describe("análise do histórico: as três travas da decisão 315", () => {
       teto_mensal_cents: 5000,
     });
     expect(rpc).not.toHaveBeenCalledWith("fn_enqueue_historico_analise", expect.anything());
+  });
+
+  it("FORK MIA (MIA-262): o admin da empresa recebe a contagem, sem a estimativa, o gasto e o teto em dólar", async () => {
+    linha({ status: "concluida" });
+    const { data } = await (await GET(req({}, "GET"), context())).json();
+    expect(data.previa_analise).toMatchObject({
+      nesta_rodada: 50,
+      restantes: 70,
+      estimativa_cents: null,
+      gasto_do_mes_cents: null,
+      teto_mensal_cents: null,
+    });
   });
 
   it("trava 1: sem a contagem confirmada, nada é enfileirado nem auditado", async () => {

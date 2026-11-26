@@ -16,6 +16,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { avisoVisivelPara, PAPEL_MINIMO_DA_CENTRAL, resolverDestinosDosAvisos } from "@/lib/ai/inbox-destino";
 import { podeVerCusto } from "@/lib/ai/custo-e-da-plataforma";
+import { avisoDeOrcamentoAoCliente } from "@/lib/ai/aviso-de-orcamento-ao-cliente";
 import { anexarLinkDePagamento } from "@/lib/cobranca/central";
 import { traduzir } from "@/lib/i18n/dicionario";
 
@@ -86,6 +87,9 @@ export async function GET(req: NextRequest): Promise<Response> {
   const comDestino = await resolverDestinosDosAvisos(await createClient(), org.orgId, org.role, data, {
     veCustoEChaveDeIa: podeVerCusto(authz.user),
   });
-  const items = await anexarLinkDePagamento(admin, org.orgId, org.role, comDestino);
+  // FORK MIA (MIA-262): o dólar do aviso de orçamento é da plataforma.
+  const veCusto = podeVerCusto(authz.user);
+  const semDolar = comDestino.map((aviso) => avisoDeOrcamentoAoCliente(aviso, veCusto, authz.user.idioma));
+  const items = await anexarLinkDePagamento(admin, org.orgId, org.role, semDolar);
   return ok({ items, open_count: openCount ?? 0 }, { requestId });
 }

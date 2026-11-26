@@ -29,4 +29,8 @@ export const DICIONARIO_DA_IA_DA_PLATAFORMA: Traducoes = {
   "Empresa sem chave não responde com IA. Para ver quais: plataforma_ver_ia_das_empresas no MCP de plataforma.": {
     es: "Una empresa sin clave no responde con IA. Para ver cuáles: plataforma_ver_ia_das_empresas en el MCP de plataforma.",
   },
+  // MIA-262: o aviso de orçamento na Central, para quem não vê custo.
+  "A IA continua respondendo normalmente — isto é o aviso, não a parada.": {
+    es: "La IA sigue respondiendo con normalidad — esto es el aviso, no la detención.",
+  },
 };

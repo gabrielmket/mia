@@ -110,6 +110,13 @@ interface Estado {
 
 let estado: Estado;
 let papel: Role;
+/**
+ * FORK MIA (MIA-262): o cartão do Jev é da plataforma. Os casos da rota rodam
+ * com o admin da plataforma fora de suporte (escolhe a IA e vê custo); os
+ * outros papéis estão no bloco "o Jev é da plataforma", no fim do arquivo.
+ */
+const DA_PLATAFORMA = { is_platform_admin: true, platform_admin_scope: "full", support: null };
+let quem: Record<string, unknown> = DA_PLATAFORMA;
 
 /** O teto do PostgREST sem `range` (`supabase/config.toml`, `max_rows`). */
 const MAX_ROWS = 1000;
@@ -226,6 +233,7 @@ function chamada(over: Linha = {}): Linha {
 beforeEach(() => {
   vi.clearAllMocks();
   papel = "admin";
+  quem = DA_PLATAFORMA;
   estado = {
     settings: { branding: { app_name: "Loja" }, llm: { provider: "anthropic" } },
     credenciais: [],
@@ -242,7 +250,7 @@ beforeEach(() => {
     roleAtLeast(papel, min)
       ? ({
           ok: true,
-          user: { id: USUARIO, idioma: "pt-BR" },
+          user: { id: USUARIO, idioma: "pt-BR", ...quem },
           org: { orgId: ORG, role: papel },
         } as unknown as Awaited<ReturnType<typeof requireRole>>)
       : { ok: false, response: fail("forbidden_role", "sem permissão", 403) },
@@ -640,7 +648,7 @@ describe("PATCH /api/v1/ai/jev", () => {
   it("admin em espanhol recebe as duas recusas em espanhol", async () => {
     const emEspanhol = {
       ok: true,
-      user: { id: USUARIO, idioma: "es" },
+      user: { id: USUARIO, idioma: "es", ...quem },
       org: { orgId: ORG, role: "admin" },
     } as unknown as Awaited<ReturnType<typeof requireRole>>;
 
@@ -1334,7 +1342,7 @@ describe("o Jev por tarefa na rota", () => {
     estado.settings = { jev: { ligado: true, modo: "observacao", aceite: ACEITE_ANTIGO } };
     vi.mocked(requireRole).mockResolvedValueOnce({
       ok: true,
-      user: { id: USUARIO, idioma: "es" },
+      user: { id: USUARIO, idioma: "es", ...quem },
       org: { orgId: ORG, role: "admin" },
     } as unknown as Awaited<ReturnType<typeof requireRole>>);
     const recusado = await mudar({ tarefa: "followup", estado: "decidindo" });
@@ -1465,5 +1473,51 @@ describe("modo Jev com reserva sob demanda", () => {
     papel = "admin";
     expect((await mudar({ modo_roteador: "mais_rapido" })).status).toBe(422);
     expect(audit).not.toHaveBeenCalled();
+  });
+});
+
+describe("FORK MIA (MIA-262): o Jev é da plataforma", () => {
+  const SESSAO = { status: "active", organization_id: ORG, agency_id: null };
+  const recusados: Array<[string, Record<string, unknown>]> = [
+    ["o dono e o admin da empresa", { is_platform_admin: false, platform_admin_scope: null, support: null }],
+    ["a agência em suporte com edição", { is_platform_admin: false, platform_admin_scope: null, support: { ...SESSAO, access_mode: "full", agency_id: "agencia-1" } }],
+    ["a plataforma em suporte só leitura", { is_platform_admin: true, platform_admin_scope: "full", support: { ...SESSAO, access_mode: "support_readonly" } }],
+  ];
+
+  it.each(recusados)("%s não lê nem muda o cartão (403 ia_da_plataforma)", async (_nome, usuario) => {
+    quem = usuario;
+    estado.credenciais = [credencial()];
+    const lido = await ler();
+    expect(lido.status).toBe(403);
+    expect(lido.corpo.error.code).toBe("ia_da_plataforma");
+    const mudado = await mudar({ ligado: true, aceite_lgpd: true });
+    expect(mudado.status).toBe(403);
+    expect(escritas()).toEqual([]);
+  });
+
+  it("o gerente da empresa também não lê", async () => {
+    quem = { is_platform_admin: false, platform_admin_scope: null, support: null };
+    papel = "manager";
+    expect((await ler()).status).toBe(403);
+  });
+
+  it("a plataforma em suporte com edição lê o cartão, mas sem o custo", async () => {
+    quem = { is_platform_admin: true, platform_admin_scope: "full", support: { ...SESSAO, access_mode: "full" } };
+    estado.credenciais = [credencial()];
+    estado.settings = { ...estado.settings, jev: { ligado: true } };
+    estado.llmCalls = [chamada(), chamada({ created_at: "2026-09-22T13:00:00.000Z" })];
+    const { status, corpo } = await ler();
+    expect(status).toBe(200);
+    expect(corpo.data.numeros.decisoes).toBe(2);
+    expect(corpo.data.numeros.custo_cents).toBeNull();
+    expect(corpo.data.numeros.custo_incompleto).toBe(false);
+  });
+
+  it("o admin da plataforma fora de suporte vê o custo", async () => {
+    estado.credenciais = [credencial()];
+    estado.settings = { ...estado.settings, jev: { ligado: true } };
+    estado.llmCalls = [chamada()];
+    const { corpo } = await ler();
+    expect(corpo.data.numeros.custo_cents).toBeCloseTo(0.00042, 10);
   });
 });

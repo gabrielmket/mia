@@ -29,6 +29,7 @@ import {
   interpretarRetencao,
 } from "@/lib/retencao/politica";
 import { createClient } from "@/lib/supabase/server";
+import { podeVerCusto, semIaDaPlataforma } from "@/lib/ai/custo-e-da-plataforma";
 import { diaIso, janelaDaLeitura } from "@/lib/retencao/janela-do-traco";
 import {
   COLUNAS_DO_TRACO,
@@ -72,12 +73,13 @@ export async function GET(req: NextRequest): Promise<Response> {
     if (!authz.ok) return authz.response;
     const teto = await tetoDeEscritaDoToken(authz, "ai_turn_traces", requestId);
     if (teto) return teto;
-    return responder(req, requestId, authz.idioma ?? IDIOMA_PADRAO, authz.organizationId, async () => authz.supabase);
+    // FORK MIA (MIA-262): o token é da empresa, e nunca vê provedor, modelo, tokens nem custo.
+    return responder(req, requestId, authz.idioma ?? IDIOMA_PADRAO, authz.organizationId, async () => authz.supabase, false);
   }
 
   const authz = await requireRole("manager", { requestId, resource: "ai_turn_traces" });
   if (!authz.ok) return authz.response;
-  return responder(req, requestId, authz.user.idioma, authz.org.orgId, () => createClient());
+  return responder(req, requestId, authz.user.idioma, authz.org.orgId, () => createClient(), podeVerCusto(authz.user));
 }
 
 /**
@@ -91,6 +93,7 @@ async function responder(
   idioma: Idioma,
   organizationId: string,
   obterDb: () => Promise<SupabaseClient>,
+  veIaDaPlataforma: boolean, // FORK MIA (MIA-262)
 ): Promise<Response> {
   const t = (texto: string) => traduzir(texto, idioma);
 
@@ -156,7 +159,8 @@ async function responder(
 
     const { data, error } = await consulta;
     if (error) return falhaNaConsulta();
-    const tracos = (data ?? []).map(reciboDoTraco);
+    // FORK MIA (MIA-262): provedor, modelo, tokens e custo são da plataforma.
+    const tracos = semIaDaPlataforma((data ?? []).map(reciboDoTraco), veIaDaPlataforma);
 
     // O contrário do silêncio: lista vazia sempre vem com o porquê. A tela (fatia
     // seguinte) escreve a frase; a rota não inventa prosa traduzível.
