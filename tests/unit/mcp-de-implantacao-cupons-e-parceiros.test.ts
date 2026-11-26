@@ -72,7 +72,7 @@ describe("a lista", () => {
     expect(FERRAMENTAS.filter((f) => /parceiro|cupom|cupons|repasse/.test(f.name)).map((f) => [f.name, f.operacao])).toEqual([
       ["plataforma_garantir_parceiro", "gerir_cobranca"],
       ["plataforma_ver_parceiros", null],
-      ["plataforma_garantir_cupom", "gerir_planos"],
+      ["plataforma_garantir_cupom", "gerir_cupons"],
       ["plataforma_ver_cupons", null],
       ["plataforma_ver_repasses", null],
       ["plataforma_marcar_repasse_pago", "gerir_cobranca"],

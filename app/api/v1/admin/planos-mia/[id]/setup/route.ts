@@ -49,7 +49,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       resourceType: "cobranca_plano",
       resourceId: id,
       requestId,
-      metadata: { preco_cents: corpo.data.preco_cents },
+      // MIA-256: o preço anterior ao lado do novo (null = o plano não oferecia setup).
+      metadata: { preco_cents: corpo.data.preco_cents, antes: { preco_cents: r.antes }, depois: { preco_cents: r.depois } },
     });
   }
   return ok({ mudou: r.mudou }, { requestId });

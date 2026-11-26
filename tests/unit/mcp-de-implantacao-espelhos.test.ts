@@ -232,8 +232,9 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // A aba Planos: novoPlanoSchema/edicaoDoPlanoSchema e a trava de preço do plano assinado.
   // Relido na fusão da 1.116: o POST aceita `moeda` e recusa dólar/euro com o Asaas. O espelho monta o plano campo a campo, sem `moeda` (nasce em real): nada a levar.
   // Espelhado na MIA-59 (upstream 1.112, 9332): o espelho passou a aceitar `moeda` na criação, com a mesma recusa de dólar/euro com o Asaas (MOEDAS_DO_ASAAS e provedorDaInstalacao).
-  { rota: "app/api/v1/admin/cobranca/planos/route.ts", espelho: "lib/planos-mia/garantir-planos.ts", impressao: "769d0f55df050d4a" },
-  { rota: "app/api/v1/admin/cobranca/planos/[id]/route.ts", espelho: "lib/planos-mia/garantir-planos.ts", impressao: "79549ecc4a6b4987" },
+  // MIA-256: as duas rotas passaram a gravar o antes e o depois na auditoria (`lib/planos-mia/rastro.ts`); o espelho grava o mesmo, e o PATCH lê a linha inteira.
+  { rota: "app/api/v1/admin/cobranca/planos/route.ts", espelho: "lib/planos-mia/garantir-planos.ts", impressao: "f78e99273739c88d" },
+  { rota: "app/api/v1/admin/cobranca/planos/[id]/route.ts", espelho: "lib/planos-mia/garantir-planos.ts", impressao: "f7a3036d5ce06d73" },
   // FORK MIA (upstream 1.118, MIA-79): o módulo opcional por empresa (9416). A ação é "use server" com a sessão do admin de plataforma; o espelho segue os três estados, as duas recusas (o teto da instalação e o que ainda não se liga) e a trilha.
   { rota: "app/actions/settings/updateModuloDaEmpresa.ts", espelho: "lib/implantacao/modulos-da-empresa.ts", impressao: "360af917b2cf1b9b" },
   // FORK MIA (upstream 1.118, #4864, MIA-79): a tela inicial da empresa. O espelho troca só a `inicio` e segue o resto da gravação (cache do menu, trilha, evento).

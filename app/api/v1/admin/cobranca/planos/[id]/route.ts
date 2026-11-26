@@ -24,6 +24,7 @@ import {
 } from "@/lib/auth/requirePlatformAdmin";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { moduloLigado } from "@/lib/instalacao/modulos";
+import { antesEDepois } from "@/lib/planos-mia/rastro";
 import { COLUNAS_DO_PLANO, edicaoDoPlanoSchema } from "@/lib/schemas/cobranca-plano";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -60,7 +61,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data: lido, error: erroDeLeitura } = await admin
     .from("cobranca_planos")
-    .select("id, preco_cents, intervalo, arquivado_em")
+    // FORK MIA (MIA-256): a linha inteira, para a auditoria guardar o antes.
+    .select(COLUNAS_DO_PLANO)
     .eq("id", id)
     .maybeSingle();
   if (erroDeLeitura) return fail("internal_error", "Não foi possível ler o plano", 500, { requestId });
@@ -112,7 +114,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     resourceType: "cobranca_plano",
     resourceId: id,
     requestId,
-    metadata: { ...corpo.data },
+    // FORK MIA (MIA-256): o antes e o depois, só do que mudou.
+    metadata: { ...corpo.data, ...antesEDepois(atual as unknown as Record<string, unknown>, plano as unknown as Record<string, unknown>) },
   });
   return ok(plano, { requestId });
 }
