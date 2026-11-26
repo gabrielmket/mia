@@ -123,7 +123,7 @@ describe("a ordem do dia (determinística, a do resumo da manhã)", () => {
   const rotina: RotinaDoDia = {
     dia: "2026-10-26",
     escopo: "proprio",
-    tarefas: { de_hoje: 2, atrasadas: 1, itens: [], atrasadas_por_pessoa: null },
+    tarefas: { de_hoje: 2, atrasadas: 1, itens: [], atrasadas_por_pessoa: null, concluidas_hoje: null },
     agenda: {
       compromissos: 1,
       itens: [{ id: "a", inicio: "", quando: "seg 26/10 às 10:00", titulo: "Reunião da proposta", contato: null, contact_id: null, responsavel: null }],
