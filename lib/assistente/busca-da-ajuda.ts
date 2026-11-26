@@ -12,6 +12,9 @@
  *     diferentes no sistema (o chat e o evento que volta para o anúncio);
  *   - sinônimos do jeito que a equipe fala (MCP, token e chave, número e
  *     WhatsApp, follow-up e retomada), que valem menos que a palavra dita;
+ *   - o erro de digitação que chega de verdade ("cloude", "clode") e as
+ *     expressões que só dizem algo juntas ("leads que chegaram", "cada
+ *     vendedor"): viram um termo só antes de quebrar em palavras (.118, MIA-252);
  *   - palavra rara pesa mais que palavra que está em todo lugar ("agente",
  *     "cliente");
  *   - a TELA em que a pessoa está pesa: "como uso isso aqui", perguntado na
@@ -46,6 +49,26 @@ const CURTAS = new Set(["ia", "qr", "ti", "pj", "cv"]);
 /** A pergunta aponta para a tela em que a pessoa está. */
 const DEITICOS = /\b(aqui|isso|isto|essa tela|esta tela|nessa tela|nesta tela|dessa tela|desta tela|essa pagina|esta pagina|nessa pagina|nesta pagina|desse jeito|aca|esta pantalla|esa pantalla)\b/;
 
+/**
+ * FORK MIA (.118, MIA-252) — o que a pessoa escreve e a busca precisa ler como
+ * uma coisa só. A palavra solta não basta: "cada" e "por" são vazias, e
+ * "novos" ou "chegaram" sozinhos casam com qualquer "Novo relatório".
+ *
+ *   - o Claude escrito errado ("cloude", "claud", "clode") e o "chat gpt";
+ *   - "leads que chegaram", "leads novos", "novos leads", "leads que entraram":
+ *     o lead recém-chegado (`leadnovo`), sem perder o "lead";
+ *   - "cada vendedor", "por vendedor": as vendas de cada pessoa (`porvendedor`).
+ */
+const EXPRESSOES =
+  /\b(?:cloude|claud|clode|claudi)\b|\bchat[\s-]+gpt\b|\bleads?\s+(?:que\s+)?(?:chegaram|chegou|chegam|chegando|entraram|entrou|entram|entrando|novos?|novas?)\b|\b(?:novos?|novas?)\s+leads?\b|\b(?:cada|por)\s+vendedor(?:a|es|as)?\b/g;
+
+function juntar(expressao: string): string {
+  if (/^(?:cloude|claud|clode|claudi)$/.test(expressao)) return "claude";
+  if (expressao.startsWith("chat")) return "chatgpt";
+  if (/vendedor/.test(expressao)) return "porvendedor";
+  return "lead leadnovo";
+}
+
 export function normalizar(texto: string): string {
   return texto
     .toLowerCase()
@@ -55,12 +78,13 @@ export function normalizar(texto: string): string {
     .replace(/follow[\s-]?ups?/g, "followup")
     .replace(/whats\s?app/g, "whatsapp")
     .replace(/check[\s-]?in/g, "checkin")
-    .replace(/opt[\s-]?out/g, "optout");
+    .replace(/opt[\s-]?out/g, "optout")
+    .replace(EXPRESSOES, (m) => juntar(m));
 }
 
 const SUFIXOS_VERBAIS = [
-  "ando", "endo", "indo", "ados", "adas", "idos", "idas", "ado", "ada", "ido", "ida", "ar", "er", "ir", "ou",
-  "ei", "am", "em", "es", "o", "a", "e",
+  "ando", "endo", "indo", "ados", "adas", "idos", "idas", "ado", "ada", "ido", "ida", "aram", "eram", "iram", "ar",
+  "er", "ir", "ou", "eu", "iu", "ei", "am", "em", "es", "o", "a", "e",
 ];
 
 /** Um radical leve: plural, gênero e as formas de verbo mais comuns. */
@@ -104,7 +128,7 @@ export function termos(texto: string): string[] {
  * membros; a palavra dita pesa mais que o sinônimo.
  */
 const GRUPOS_DE_SINONIMOS: readonly (readonly string[])[] = [
-  ["mcp", "servidor", "ferramenta", "claude", "chatgpt", "integracao", "integrar"],
+  ["mcp", "servidor", "ferramenta", "claude", "chatgpt", "gpt", "integracao", "integrar"],
   ["token", "chave", "api"],
   ["numero", "whatsapp", "zap", "canal", "conexao", "conectar", "telefone"],
   ["followup", "retomada", "retomar", "regua", "cadencia", "acompanhamento", "reengajar"],
@@ -131,6 +155,8 @@ const GRUPOS_DE_SINONIMOS: readonly (readonly string[])[] = [
   ["empresa", "cnpj", "pj", "b2b"],
   ["chamado", "suporte", "erro", "bug", "problema", "ticket"],
   ["vender", "venda", "vendendo", "fechar", "fechamento", "ganho", "resultado"],
+  // FORK MIA (.118): "quanto cada vendedor vendeu", "o ranking de vendas".
+  ["porvendedor", "ranking", "venda"],
   ["anuncio", "ads", "facebook", "instagram", "trafego"],
   ["google", "adwords"],
   ["banco", "erp", "mysql", "postgres", "estoque", "dados"],
