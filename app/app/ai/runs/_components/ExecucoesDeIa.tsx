@@ -44,8 +44,9 @@ interface Execucao {
   purpose: string;
   pontoRotulo: string;
   provider: string;
-  provedorRotulo: string;
-  model: string;
+  /** FORK MIA (MIA-262): nulos para quem não é da plataforma. */
+  provedorRotulo: string | null;
+  model: string | null;
   status: string;
   error_code: string | null;
   error_message: string | null;
@@ -53,8 +54,8 @@ interface Execucao {
   consequencia: string | null;
   oQueFazer: string | null;
   porQueEsteModelo: string | null;
-  input_tokens: number;
-  output_tokens: number;
+  input_tokens: number | null;
+  output_tokens: number | null;
   cost_cents: number | null;
   latency_ms: number | null;
   created_at: string;
@@ -227,9 +228,12 @@ export function ExecucoesDeIa() {
                     </Badge>
                   )}
                 </div>
+                {/* FORK MIA (MIA-262): provedor e modelo chegam nulos para quem não é da plataforma. */}
+                {e.model !== null && (
                 <span className="font-mono text-xs text-muted-foreground">
                   {e.provedorRotulo} · {e.model}
                 </span>
+                )}
               </div>
 
               {e.status === "erro" ? (
@@ -259,8 +263,9 @@ export function ExecucoesDeIa() {
                 </div>
               ) : (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  {e.input_tokens + e.output_tokens} {t("tokens")}
-                  {e.latency_ms !== null ? ` · ${e.latency_ms} ms` : ""}
+                  {/* FORK MIA (MIA-262): tokens nulos para quem não é da plataforma. */}
+                  {e.input_tokens !== null ? `${e.input_tokens + (e.output_tokens ?? 0)} ${t("tokens")}` : ""}
+                  {e.latency_ms !== null ? `${e.input_tokens !== null ? " · " : ""}${e.latency_ms} ms` : ""}
                   {/* `cost_cents` está em CENTAVOS: dividir por 100 dá REAIS, e o
                       rótulo dizia "centavos" — uma execução de 25 centavos
                       aparecia como "0.2500 centavos", 100× menor que o mesmo

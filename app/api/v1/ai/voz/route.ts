@@ -29,6 +29,8 @@ import {
   type VozDoProvedor,
 } from "@/lib/ai/voz/catalogo-do-provedor";
 import { PADRAO_VOICE_ID } from "@/lib/ai/voz/voice-id";
+import { escolheIa } from "@/lib/ai/trava-da-ia";
+import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +52,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   const teto = await tetoDeEscritaDoToken(authz, "ai_voz", requestId);
   if (teto) return teto;
   const org = { orgId: authz.organizationId };
+  const veModelo = escolheIa(await quemPedeNaRota(authz)); // FORK MIA (MIA-262)
 
   const admin = createAdminClient();
 
@@ -113,7 +116,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   return ok(
     {
       voiceId: voz.voice_id ?? null,
-      modelId: voz.model_id ?? null,
+      modelId: veModelo ? (voz.model_id ?? null) : null, // FORK MIA (MIA-262)
       vozesDisponiveis,
       catalogo,
       catalogoVeioDoProvedor,
@@ -154,7 +157,10 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   if (!parsed.success) {
     return fail("invalid_body", t("corpo inválido"), 422, { requestId, details: parsed.error.issues });
   }
-  const corpo = parsed.data;
+  // FORK MIA (MIA-262): a voz é do cliente; o MODELO de voz é da plataforma.
+  // Sem `escolheIa`, o `model_id` do corpo é ignorado (o salvo fica), como a
+  // trava faz com o modelo do agente.
+  const corpo = escolheIa(await quemPedeNaRota(authz)) ? parsed.data : { ...parsed.data, model_id: undefined };
 
   const admin = createAdminClient();
 

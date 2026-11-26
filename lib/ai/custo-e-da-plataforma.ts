@@ -170,3 +170,18 @@ export function semCustoNaAuditoria<T extends { metadata?: unknown }>(
     return mudou ? { ...linha, metadata: limpo } : linha;
   });
 }
+
+/**
+ * FORK MIA (MIA-262) — AS CHAVES DA EMPRESA, SEM A CHAVE.
+ *
+ * O editor do agente decide no navegador se dá para publicar, e para isso
+ * pergunta se a chave presa à versão existe e passou no teste. Quem não
+ * escolhe a IA recebe a lista só com isso (id, provedor, ativa, validada): sem
+ * o rótulo, sem os quatro últimos dígitos e sem os modelos que a conta enxerga.
+ */
+export function credenciaisSemChave<
+  T extends { label?: unknown; api_key_last4?: unknown; models_available?: unknown },
+>(linhas: readonly T[], visivel: boolean): T[] {
+  if (visivel) return [...linhas];
+  return linhas.map((linha) => ({ ...linha, label: "", api_key_last4: null, models_available: null }));
+}

@@ -31,7 +31,7 @@ import { type NextRequest } from "next/server";
 import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { ok, fail } from "@/lib/api/wrappers";
 import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
-import { podeVerCusto } from "@/lib/ai/custo-e-da-plataforma";
+import { CAMPOS_DA_IA_DA_PLATAFORMA, podeVerCusto } from "@/lib/ai/custo-e-da-plataforma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   testRunSchema,
@@ -141,6 +141,9 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
   // Desde a v1.121 o teste mora em `testarVersaoDoAgente`; a régua fica aqui, na
   // rota, porque a ferramenta do MCP do CRM não devolve o custo.
   const resultPayload = { ...r.data };
-  if (!podeVerCusto(await quemPedeNaRota(authz))) delete resultPayload.cost_cents;
+  // FORK MIA (MIA-262): tokens, provedor e modelo também são da plataforma.
+  if (!podeVerCusto(await quemPedeNaRota(authz))) {
+    for (const campo of CAMPOS_DA_IA_DA_PLATAFORMA) delete (resultPayload as Record<string, unknown>)[campo];
+  }
   return ok(resultPayload, { requestId });
 }

@@ -79,7 +79,8 @@ beforeEach(() => {
   vi.mocked(requireSupportWrite).mockResolvedValue(null as never);
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
-    user: { id: USER_ID, idioma: "pt-BR" },
+    // FORK MIA (MIA-262): trocar o provedor do embedding é da plataforma.
+    user: { id: USER_ID, idioma: "pt-BR", is_platform_admin: true, platform_admin_scope: "full", support: null },
     org: { orgId: ORG_ID, role: "admin" },
   } as never);
   vi.mocked(enfileirarTodosOsMateriais).mockResolvedValue({

@@ -23,6 +23,8 @@ interface Props {
   published: AgentVersionRow | null;
   onConfirm: () => void;
   isPending: boolean;
+  /** FORK MIA (MIA-262): a troca de empresa de IA e de modelo só aparece para quem escolhe a IA. */
+  podeEscolherIa?: boolean;
 }
 
 function diffArr(prev: string[], next: string[]) {
@@ -51,13 +53,15 @@ export function PublishConfirmDialog({
   published,
   onConfirm,
   isPending,
+  podeEscolherIa = true,
 }: Props) {
   const t = useT();
   const toolsDiff = diffArr(published?.tool_ids ?? [], draft.tool_ids);
   const promptDeltaChars =
     draft.system_prompt.length - (published?.system_prompt.length ?? 0);
-  const modelChanged = !published || draft.model !== published.model;
-  const providerChanged = !published || draft.provider !== published.provider;
+  // FORK MIA (MIA-262): para quem não escolhe a IA, nem a linha do modelo nem a da empresa.
+  const modelChanged = podeEscolherIa && (!published || draft.model !== published.model);
+  const providerChanged = podeEscolherIa && (!published || draft.provider !== published.provider);
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
