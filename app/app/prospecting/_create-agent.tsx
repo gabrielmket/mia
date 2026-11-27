@@ -27,7 +27,7 @@ type AgentSetup = Omit<
 export type CreatedProspectingAgent = {
   agent: { id: string; name: string };
   version_id: string;
-  model_label: string;
+  // FORK MIA (MIA-304): sem `model_label`; a API não devolve o modelo, que é da plataforma.
 };
 type Props = {
   campaign: { id: string; name: string };

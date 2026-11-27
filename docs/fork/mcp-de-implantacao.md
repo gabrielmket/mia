@@ -1007,9 +1007,9 @@ modelo antigo, reverter, cada um com o controle da plataforma, e o esquema).
 
 | Do upstream (MCP da empresa) | O que faz | No MCP de plataforma | Conclusão |
 |---|---|---|---|
-| `crm_list_ai_agents` | lista os assistentes com a versão publicada (modelo, voz), o rascunho e o número | `plataforma_ver_agentes` (mais: situação no ar, o que falta para publicar, pacotes, funis, horário da IA) | conviver; nada a trazer |
+| `crm_list_ai_agents` | lista os assistentes com a versão publicada (voz), o rascunho e o número | `plataforma_ver_agentes` (mais: situação no ar, o que falta para publicar, pacotes, funis, horário da IA) | conviver; nada a trazer |
 | `crm_get_ai_agent_version` | as instruções inteiras e as configurações de uma versão (publicada, rascunho ou por número) | `plataforma_ver_agentes` com `agente` (prompt e configuração da versão vigente) | conviver. O nosso não lê versão antiga por número; a implantação não precisou até hoje |
-| `crm_get_ai_agent_turn` | por que o assistente respondeu assim numa conversa: a versão que respondeu, o modelo, as ferramentas chamadas, o turno abortado e o motivo | não tem | falta (lista abaixo) |
+| `crm_get_ai_agent_turn` | por que o assistente respondeu assim numa conversa: a versão que respondeu, as ferramentas chamadas, o turno abortado e o motivo | não tem | falta (lista abaixo) |
 | `crm_save_ai_agent_draft` | rascunho por troca exata, anexar ao fim ou texto inteiro, em 1 a 5 assistentes, e as configurações (voz, ferramentas, passar para pessoa, dividir mensagens, ver imagens) | `plataforma_garantir_agente` (rascunho com o pedido inteiro, idempotente) | conviver. **No fork o esquema não tem `provedor` nem `modelo`** (MIA-115): o ChatGPT não promete uma troca que a trava ignoraria, e quem manda recebe a recusa do esquema (`.strict()`) |
 | `crm_test_ai_agent_version` | simula uma mensagem contra uma versão; nada é enviado, gasta crédito de IA | não tem | falta (lista abaixo) |
 | `crm_publish_ai_agent_version` | publica uma versão, com as checagens da tela | `plataforma_publicar_agente` (lista todas as pendências e quem resolve cada uma) | conviver |
@@ -1027,9 +1027,9 @@ Cuidados para quem implanta, agora que o dono também edita:
 - **Ferramenta solta.** `ferramentas_adicionar` do dono não passa pelos pacotes: ele pode dar
   uma capacidade avulsa (as do administrador a ferramenta recusa). Uma
   `plataforma_garantir_agente` com `pacotes` monta a lista de novo pelos pacotes.
-- **O dono vê o modelo.** `crm_list_ai_agents` e `crm_get_ai_agent_version` devolvem o modelo (e
-  o provedor) da versão ao admin da empresa, que a tela do cliente esconde desde a .56. A
-  MIA-115 não mexeu (não mexe no que o cliente vê); fica como decisão para o Gabriel.
+- **O dono não vê o modelo.** Desde a MIA-304, `crm_list_ai_agents`, `crm_get_ai_agent_version`
+  e `crm_get_ai_agent_turn` não devolvem modelo nem provedor (a IA é da plataforma,
+  `docs/fork/ia-da-plataforma.md`, seção 7). Cerca: `tests/unit/mcp-do-crm-sem-modelo-ao-cliente.test.ts`.
 - **O teste gasta a IA da plataforma.** `crm_test_ai_agent_version` é o mesmo botão "Testar" da
   tela e roda com a IA da plataforma, como pela tela. Não é envio a ninguém.
 
