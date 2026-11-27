@@ -260,6 +260,17 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "Um token vazado faz o custo e a margem de todos os clientes parecerem outros, e quem decide preço por esses números decide errado. " +
       "Não muda o que nenhum cliente paga, não envia mensagem e não apaga preço.",
   },
+  // FORK MIA (MIA-309): o teto de IA de uma empresa (`ai_budgets`, o freio de
+  // emergência). Chave própria e de DINHEIRO: decide quanto a plataforma gasta
+  // com a IA de um cliente e se essa IA para. Fica só no token do Gabriel.
+  {
+    chave: "definir_teto_de_ia",
+    rotulo: "Definir o teto mensal de IA de uma empresa",
+    raio:
+      "Muda, em QUALQUER cliente, o teto mensal de gasto de IA (em dólar), o limiar do aviso e o modo: só acompanhar, avisar ou PARAR a IA no teto. É dinheiro e é atendimento: " +
+      "um token vazado tira o freio de todas as empresas (a IA gasta sem limite, na conta da plataforma) ou arma a parada com um teto baixo, e a IA deixa de responder aos clientes " +
+      "do cliente quando a carência de 72 horas acabar (ou na hora, se ele renunciar a ela). Não muda o teto do plano, não cobra nada e não apaga histórico de gasto. Marque só no token do Gabriel.",
+  },
 ] as const;
 
 const POR_CHAVE = new Map(OPERACOES.map((o) => [o.chave, o]));
