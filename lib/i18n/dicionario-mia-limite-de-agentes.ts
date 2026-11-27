@@ -1,6 +1,8 @@
 /**
  * FORK MIA (MIA-250 D) · as frases do LIMITE DE AGENTES DE IA POR PLANO
- * (lib/planos-mia/limite-de-agentes.ts), em inglês e espanhol.
+ * (lib/planos-mia/limite-de-agentes.ts), em espanhol e inglês. O produto serve hoje
+ * pt-BR e es (`lib/i18n/idiomas.ts`); o `en` fica pronto aqui para quando o
+ * idioma for ligado (o `DICIONARIO` já aceita a coluna).
  *
  * Mora num arquivo NOSSO, espalhado no `DICIONARIO` do upstream por uma linha,
  * para a sincronização com o upstream não conflitar a cada frase nova

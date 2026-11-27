@@ -34,8 +34,9 @@ type ActionResult<T = void> =
 type AdminGuard =
   | {
       kind: "ok";
-      // FORK MIA: os dois campos de quem pode escolher IA (lib/ai/trava-da-ia.ts).
-      authUser: Pick<AuthUser, "id" | "is_platform_admin" | "support">;
+      // FORK MIA: os dois campos de quem pode escolher IA (lib/ai/trava-da-ia.ts)
+      // e, desde a MIA-250 D, o idioma da frase do limite de agentes do plano.
+      authUser: Pick<AuthUser, "id" | "is_platform_admin" | "support" | "idioma">;
       activeOrg: { orgId: string; role: Role };
     }
   | { kind: "fail"; result: { ok: false; error: string } };

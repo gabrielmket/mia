@@ -34,16 +34,30 @@ export function lerLimiteDeAgentesEstourado(erro: unknown): number | null {
   return achado ? Number(achado[1]) : null;
 }
 
-/** As frases do cliente (seção 8 do desenho). PROPOSTA até a MIA-249 ligar um teto. */
+/**
+ * As frases do cliente (seção 8 do desenho). PROPOSTA até a MIA-249 ligar um teto.
+ * `mensagemDoLimiteDeAgentes` repete o literal (a cerca do i18n lê a chave no
+ * `traduzir`); `limite-de-agentes-do-plano.test.tsx` confere que as duas batem.
+ */
 export const FRASE_DO_LIMITE_DE_AGENTES = {
   um: "Seu plano permite 1 agente de IA e ele já foi criado. Arquive um agente em Agentes de IA ou troque de plano em Configurações › Plano e cobrança.",
   varios:
     "Seu plano permite {n} agentes de IA e todos já foram criados. Arquive um agente em Agentes de IA ou troque de plano em Configurações › Plano e cobrança.",
 } as const;
 
+/** O literal em cada ramo: a cerca `i18n-espanhol-cobre-a-tela` lê a chave no `traduzir`. */
 export function mensagemDoLimiteDeAgentes(limite: number, idioma: Idioma): string {
-  const frase = limite === 1 ? FRASE_DO_LIMITE_DE_AGENTES.um : FRASE_DO_LIMITE_DE_AGENTES.varios;
-  return traduzir(frase, idioma).replace("{n}", String(limite));
+  const frase =
+    limite === 1
+      ? traduzir(
+          "Seu plano permite 1 agente de IA e ele já foi criado. Arquive um agente em Agentes de IA ou troque de plano em Configurações › Plano e cobrança.",
+          idioma,
+        )
+      : traduzir(
+          "Seu plano permite {n} agentes de IA e todos já foram criados. Arquive um agente em Agentes de IA ou troque de plano em Configurações › Plano e cobrança.",
+          idioma,
+        );
+  return frase.replace("{n}", String(limite));
 }
 
 export interface LimiteDeAgentesTraduzido {
