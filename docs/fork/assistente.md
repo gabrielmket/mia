@@ -51,9 +51,9 @@ de modelo (telemetria e orçamento em `llm_calls`, `lib/assistente/modelo.ts`).
 
 | ferramenta | de onde vem o número |
 |---|---|
-| `ver_minha_rotina` | `crm_tasks`, `calendar_appointments`, `conversations` (a aba Minhas e a Fila do Inbox), `channel_sessions` (só o administrador) |
+| `ver_minha_rotina` | `crm_tasks` (de hoje, atrasadas e, desde a MIA-244, as concluídas hoje e no período pedido), `calendar_appointments`, `conversations` (a aba Minhas e a Fila do Inbox), `channel_sessions` (só o administrador) |
 | `ver_prioridades` | as mesmas, mais o Radar e a meta, na ordem do protótipo: algo parado na empresa, cliente esperando, compromisso do dia, atraso, meta |
-| `ver_meus_leads` | `crm_leads` abertos por dono e o Radar (`carregaRadarDeRisco`, a mesma função da tela) |
+| `ver_meus_leads` | `crm_leads` abertos (contados no banco) por dono, os que chegaram no período por origem e por funil (MIA-244, seção 14) e o Radar (`carregaRadarDeRisco`, a mesma função da tela) |
 | `ver_minha_performance` / `ver_numeros_da_equipe` | o motor de relatórios do fork (`fn_mia_relatorio`, `security invoker`) e a meta (`lerMetasDoMes`, a MESMA leitura do `GET /api/v1/metas`) |
 | `ver_por_que_a_ia_nao_respondeu` | a conversa pela sessão (o atendente só acha as suas), o opt-out, quem está com a conversa, o número, o agente no ar, o horário da IA (.85) e `agent_turn_traces` (v1.88) |
 | `buscar_ajuda` | os manuais e roteiros do fork, o guia de operação do upstream, o catálogo de navegação e a base própria da empresa (seção 9) |
@@ -474,3 +474,24 @@ Dois casos reais de 09/11/2026 motivaram:
 - **Regras 12 e 13 do prompt**: não indicar tela sem conexão como caminho para ver números (diga o que falta ligar, quem liga e o que funciona agora: as ferramentas de números ou Relatórios, com os negócios por origem); e qualquer período, com "semana passada" de segunda a domingo da semana anterior. Nunca dizer que um período não dá para ver.
 
 Provado em `tests/unit/assistente-periodo-livre.test.ts`. A lista de ferramentas do assistente e o MCP de plataforma não mudam.
+
+## 14. "Quantos leads chegaram?" volta a responder, com período, funil e tarefas concluídas (MIA-244)
+
+O diagnóstico da MIA-239 (produção, 25/11) achou `ver_meus_leads` falhando nas seis vezes em que foi chamada, e nenhuma resposta da história com a fonte "Funis/Radar". Mais 4 perguntas sem resposta eram de número que nenhuma ferramenta lia: "quantas tarefas concluí hoje" e leads por período e por funil.
+
+**Por que falhava** (pelo código e pelos testes deste PR; a suspeita da RLS foi conferida contra o Postgres dos invariantes, nos três papéis):
+
+1. **Não era a RLS.** O papel `authenticated` tem `select` em todas as tabelas que o Radar lê, e a RLS filtra, não lança. Preso em `tests/invariants/assistente-le-leads-e-tarefas-pela-sessao.test.ts`, com administrador, gestor e atendente.
+2. **O Radar lançava e levava a ferramenta junto.** Qualquer leitura do Radar que falha (a agenda, por exemplo, vira `leitura_indisponivel` e o Radar lança `radar_agenda_indisponivel`) derrubava `ver_meus_leads` inteira. Até a .107, a proteção de agenda lia os contatos de todos os negócios abertos num `.in()` só, que cresce com a base e pode passar do teto da URL. O upstream passou a ler em lotes (chegou na .110), mas um lote que falha ainda derruba o Radar inteiro. Agora o Radar é uma PARTE da leitura: se ele não responde, os leads saem sem o "em risco" (`em_risco: null`), com um aviso para o modelo dizer isso, e o log registra o código.
+3. **A contagem parava em 1.000.** Os abertos eram contados pelas linhas lidas com `limit(2000)`, e o PostgREST desta instalação devolve no máximo 1.000 por pedido: uma empresa com 1.500 abertos ouviria "1.000". Agora o total é `count: exact` no banco, e as divisões (por origem, por funil, por dono) vêm em páginas de 1.000, com `truncado` acima de 20 páginas.
+
+**O que a ferramenta passa a responder:**
+
+- `ver_meus_leads` aceita o mesmo `periodo` das ferramentas de performance (`hoje`, `7`, `30`, `90`, `mes`, `mesp`, `pers` com `de` e `ate`, e `comparar`), com padrão nos últimos 7 dias, como antes, e um `funil` opcional pelo nome (sem acento e sem maiúscula; "funil Comercial" casa com "Comercial"). Devolve `abertos` agora e, em `chegaram`, os negócios CRIADOS no período, abertos ou não, por origem e por funil, quantos seguem abertos e, com `comparar`, o total do período anterior. A janela é a do motor de relatórios (`lib/assistente/leituras/periodo.ts`, espelho de `fn_mia_relatorio_janela`), no fuso da empresa. Funil que não existe volta com a lista dos funis.
+- `ver_minha_rotina` traz `tarefas.concluidas_hoje` e, com `periodo`, `concluidas_no_periodo`. A tarefa concluída é a `done` cuja última alteração caiu na janela: `crm_tasks` não guarda a hora da conclusão, e a tarefa feita quase nunca é editada depois. Quem conta é o responsável (`assigned_to`), como na tela de Tarefas.
+
+**Falha visível:** toda ferramenta que falha devolve `{ erro, codigo }` (o código curto de `codigoDaFalha`, em `lib/assistente/leituras/comum.ts`: `radar_agenda_indisponivel`, `tempo_esgotado`, `url_grande_demais`, `banco_<SQLSTATE>`...) e o servidor registra `[assistente] ferramenta falhou` com a ferramenta e o código, nunca o texto do banco nem a pergunta. O Radar que falha dentro da leitura dos leads registra `[assistente] radar indisponível na leitura dos leads` com o código.
+
+Nada mudou no texto das regras do prompt, na tela, na lista "sem resposta" do administrador nem no modelo: isso é do plano do Arquiteto (MIA-239). O MCP de plataforma não muda: a contagem de negócios já está em `plataforma_contar_negocios` e nos relatórios.
+
+Provado em `tests/unit/assistente-leads-e-tarefas-por-periodo.test.ts`, com um cliente em memória que se comporta como o PostgREST desta instalação (`tests/support/supabase-em-memoria.ts`: o teto de 1.000 linhas, `count: exact` e a tabela que falha), com as perguntas do diagnóstico em dado fictício.

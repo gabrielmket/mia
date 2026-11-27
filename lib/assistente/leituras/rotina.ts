@@ -4,7 +4,9 @@
  *
  *   tarefas    `crm_tasks` como a tela de Tarefas: abertas (`pending` e
  *              `in_progress`), "de hoje" pelo prazo no dia da empresa, atrasadas
- *              pelo prazo vencido.
+ *              pelo prazo vencido. MIA-244: e as CONCLUÍDAS no dia (`done`, pela
+ *              última alteração: a tabela não guarda a hora da conclusão, e a
+ *              tarefa feita quase nunca é editada depois).
  *   agenda     `calendar_appointments` do dia, sem os cancelados, como a Agenda.
  *   conversas  "com você": a aba Minhas do Inbox (atribuídas a mim e não
  *              fechadas); "esperando resposta": a última mensagem é do cliente;
@@ -25,7 +27,7 @@ import { CONVERSATION_TERMINAL_STATUSES } from "@/lib/schemas/messaging";
 import { rotuloLocal } from "@/lib/tempo/agora";
 
 import { janelaDoDia } from "../config";
-import { horasEntre, nomeDaPessoa, nomesDosContatos, type Escopo, type PessoaDaEquipe } from "./comum";
+import { codigoDaFalha, horasEntre, nomeDaPessoa, nomesDosContatos, type Escopo, type PessoaDaEquipe } from "./comum";
 
 export interface ItemDeTarefa {
   id: string;
@@ -66,6 +68,8 @@ export interface RotinaDoDia {
     itens: ItemDeTarefa[];
     /** Só no escopo da equipe: quem tem mais atrasadas. */
     atrasadas_por_pessoa: Array<{ user_id: string; nome: string; atrasadas: number }> | null;
+    /** MIA-244: as marcadas como feitas hoje; nulo quando a contagem não respondeu. */
+    concluidas_hoje: number | null;
   };
   agenda: { compromissos: number; itens: ItemDaAgenda[] };
   conversas: {
@@ -85,6 +89,28 @@ export interface RotinaDoDia {
 }
 
 const TAREFAS_ABERTAS = ["pending", "in_progress"];
+
+/**
+ * MIA-244: "quantas tarefas eu concluí?". As tarefas `done` cuja última
+ * alteração caiu na janela, da pessoa (escopo próprio) ou da equipe. Contadas
+ * no banco. Quem conta é o responsável (`assigned_to`), como a tela de Tarefas.
+ */
+export async function contarTarefasConcluidas(
+  db: SupabaseClient,
+  entrada: { organizationId: string; escopo: Escopo; inicio: Date; fim: Date },
+): Promise<number> {
+  let consulta = db
+    .from("crm_tasks")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", entrada.organizationId)
+    .eq("status", "done")
+    .gte("updated_at", entrada.inicio.toISOString())
+    .lt("updated_at", entrada.fim.toISOString());
+  if (entrada.escopo.tipo === "proprio") consulta = consulta.eq("assigned_to", entrada.escopo.userId);
+  const { count, error } = await consulta;
+  if (error) throw new Error(`tarefas_concluidas_indisponiveis: ${codigoDaFalha(error)}`);
+  return count ?? 0;
+}
 
 export async function lerRotinaDoDia(
   db: SupabaseClient,
@@ -135,6 +161,9 @@ export async function lerRotinaDoDia(
       atrasada: t.due_date !== null && new Date(t.due_date) < agora,
       responsavel: proprio ? null : nomeDaPessoa(entrada.equipe, t.assigned_to),
     }));
+
+  // MIA-244: as concluídas hoje. Falha aqui não derruba a rotina: volta nulo.
+  const concluidasHoje = await contarTarefasConcluidas(db, { organizationId: org, escopo, inicio, fim }).catch(() => null);
 
   // ── agenda ──
   let consultaAgenda = db
@@ -262,6 +291,7 @@ export async function lerRotinaDoDia(
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5)
             .map(([user_id, n]) => ({ user_id, nome: nomeDaPessoa(entrada.equipe, user_id) ?? "", atrasadas: n })),
+      concluidas_hoje: concluidasHoje,
     },
     agenda: {
       compromissos: compromissos.length,

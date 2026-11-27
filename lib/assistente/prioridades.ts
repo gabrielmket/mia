@@ -110,7 +110,7 @@ export function prioridadesDoDia(
     });
   }
 
-  if (leads && leads.em_risco > 0) {
+  if (leads && leads.em_risco !== null && leads.em_risco > 0) {
     lista.push({
       texto: preencher(t("{n} negócios em risco: sem movimento além da janela da etapa."), { n: leads.em_risco }),
       href: "/app/radar",

@@ -30,6 +30,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 
+import { logger } from "@/lib/logger";
+
 import { roleAtLeast, ROTULO_DO_PAPEL, type Role } from "@/lib/auth/types";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 
@@ -38,12 +40,13 @@ import { rotuloEmTexto } from "@/lib/mcp-plataforma/checklist/rotulo-do-cliente"
 
 import { pareceValidacaoDeCampo } from "./chamado";
 import { buscarAjuda, type ItemDaBaseDaEmpresa } from "./leituras/ajuda";
-import { escopoDoPapel, type PessoaDaEquipe } from "./leituras/comum";
-import { lerLeads } from "./leituras/leads";
+import { codigoDaFalha, escopoDoPapel, type PessoaDaEquipe } from "./leituras/comum";
+import { ehLeadsDaPessoa, lerLeads } from "./leituras/leads";
 import { lerOQueFalta } from "./leituras/o-que-falta";
 import { lerPerformance, type PeriodoDaPerformance } from "./leituras/performance";
 import { explicarSilencioDaIa } from "./leituras/por-que-a-ia-nao-respondeu";
-import { lerRotinaDoDia } from "./leituras/rotina";
+import { janelaDoPeriodo } from "./leituras/periodo";
+import { contarTarefasConcluidas, lerRotinaDoDia } from "./leituras/rotina";
 import { prioridadesDoDia } from "./prioridades";
 import {
   prepararAgenteDoModelo,
@@ -153,12 +156,23 @@ function recusaDePermissao(ctx: ContextoDasFerramentas, coletor: ColetorDoTurno,
   };
 }
 
-async function protegido<T>(fn: () => Promise<T>): Promise<T | { erro: string }> {
+/**
+ * A leitura que falhou volta ao modelo como `{ erro, codigo }`, e o servidor
+ * registra QUAL ferramenta e QUAL código (MIA-244: `ver_meus_leads` falhou seis
+ * vezes na produção e nenhuma linha de log disse por quê). Nunca o texto da
+ * falha nem o pedido: só o nome e o código curto (`codigoDaFalha`).
+ */
+export async function protegido<T>(ferramenta: string, fn: () => Promise<T>): Promise<T | { erro: string; codigo: string }> {
   try {
     return await fn();
   } catch (e) {
     const sem = e instanceof Error && e.message === "sem_permissao_no_motor";
-    return { erro: sem ? "sem_permissao" : "Não consegui ler isso agora. Diga que não deu e sugira tentar de novo em instantes." };
+    const codigo = sem ? "sem_permissao" : codigoDaFalha(e);
+    logger.warn("[assistente] ferramenta falhou", { ferramenta, codigo });
+    return {
+      erro: sem ? "sem_permissao" : "Não consegui ler isso agora. Diga que não deu e sugira tentar de novo em instantes.",
+      codigo,
+    };
   }
 }
 
@@ -217,7 +231,7 @@ async function propor(
     coletor.anotar(nome);
     return recusaDePermissao(ctx, coletor, "admin", "preparar o agente, o funil ou o follow-up da empresa");
   }
-  return protegido(async () => {
+  return protegido(nome, async () => {
     const r = await preparar();
     coletor.anotar(nome, FONTES_DA_PROPOSTA[tipo]);
     if (!r.ok) {
@@ -289,11 +303,15 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
   return {
     ver_minha_rotina: tool({
       description:
-        "A rotina de HOJE de quem pergunta: compromissos da agenda, tarefas de hoje e atrasadas, conversas com a pessoa e esperando resposta. " +
-        "Para gestor e administrador vem a equipe inteira (quem tem mais atrasadas, a Fila, conversas sem dono) e, para o administrador, os números desconectados.",
-      inputSchema: z.object({}),
-      execute: async () =>
-        protegido(async () => {
+        "A rotina de HOJE de quem pergunta: compromissos da agenda, tarefas de hoje, atrasadas e CONCLUÍDAS hoje (tarefas.concluidas_hoje), conversas com a pessoa e esperando resposta. " +
+        "Para gestor e administrador vem a equipe inteira (quem tem mais atrasadas, a Fila, conversas sem dono) e, para o administrador, os números desconectados. " +
+        '"Quantas tarefas concluí na semana?": passe periodo (o mesmo das outras ferramentas) e vem concluidas_no_periodo.',
+      inputSchema: z.object(PERIODO),
+      execute: async (pedido) =>
+        protegido("ver_minha_rotina", async () => {
+          const comPeriodo = Boolean(pedido.periodo || pedido.de || pedido.ate);
+          const p = comPeriodo ? periodoPedido(pedido) : null;
+          if (p && !p.ok) return p;
           const rotina = await lerRotinaDoDia(ctx.db, {
             organizationId: ctx.organizationId,
             escopo,
@@ -303,7 +321,15 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
             veNumeros: roleAtLeast(ctx.papel, "admin"),
           });
           coletor.anotar("ver_minha_rotina", rotina.fontes, rotina.contatos);
-          return rotina;
+          if (!p) return rotina;
+          const janela = janelaDoPeriodo(p, ctx.agora, ctx.fuso);
+          const quantas = await contarTarefasConcluidas(ctx.db, {
+            organizationId: ctx.organizationId,
+            escopo,
+            inicio: janela.inicio,
+            fim: janela.fim,
+          });
+          return { ...rotina, concluidas_no_periodo: { periodo: janela.periodo, de: janela.de, ate: janela.ate, quantas } };
         }),
     }),
 
@@ -313,7 +339,7 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
         "cada item com o caminho da tela (href) para o botão Me leva lá.",
       inputSchema: z.object({}),
       execute: async () =>
-        protegido(async () => {
+        protegido("ver_prioridades", async () => {
           const rotina = await lerRotinaDoDia(ctx.db, {
             organizationId: ctx.organizationId,
             escopo,
@@ -323,7 +349,9 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
             veNumeros: roleAtLeast(ctx.papel, "admin"),
           });
           const [leads, performance] = await Promise.all([
-            lerLeads(ctx.db, { organizationId: ctx.organizationId, escopo, papel: ctx.papel, agora: ctx.agora, equipe: ctx.equipe }).catch(() => null),
+            lerLeads(ctx.db, { organizationId: ctx.organizationId, escopo, papel: ctx.papel, agora: ctx.agora, fuso: ctx.fuso, equipe: ctx.equipe })
+              .then((r) => (ehLeadsDaPessoa(r) ? r : null))
+              .catch(() => null),
             lerPerformance(ctx.db, {
               organizationId: ctx.organizationId,
               escopo,
@@ -345,18 +373,36 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
 
     ver_meus_leads: tool({
       description:
-        "Os LEADS (negócios abertos) de quem pergunta: quantos ativos, novos na semana por origem, e os em risco pelo Radar. " +
-        "Para gestor e administrador vem a divisão por dono e os sem dono.",
-      inputSchema: z.object({}),
-      execute: async () =>
-        protegido(async () => {
+        "Os LEADS (negócios) de quem pergunta: quantos abertos agora, quantos CHEGARAM no período (criados nele, abertos ou não) por origem e por funil, e os em risco pelo Radar. " +
+        "Para gestor e administrador vem a divisão por dono e os sem dono. " +
+        'Período: o mesmo das outras ferramentas (sem nada, os últimos 7 dias); "quantos leads chegaram hoje" = "hoje"; "fim de semana" = "pers" de sábado a domingo. ' +
+        'funil filtra pelo nome ("no funil Comercial"); se não existir, volta a lista dos funis. Se vier aviso de que o Radar não respondeu, dê os números e diga isso.',
+      inputSchema: z.object({
+        ...PERIODO,
+        periodo: PERIODO.periodo.describe(
+          '"7" (últimos 7 dias, padrão), "hoje", "30", "90", "mes" (este mês), "mesp" (mês passado) ou "pers" com de e ate. ' +
+            '"Semana passada" = "pers" de segunda a domingo da semana anterior; "ontem" = "pers" com de igual a ate.',
+        ),
+        funil: z.string().trim().min(2).max(80).optional().describe('O nome do funil, como a pessoa disse ("Comercial").'),
+      }),
+      execute: async ({ funil, ...pedido }) =>
+        protegido("ver_meus_leads", async () => {
+          const p = periodoPedido({ ...pedido, periodo: pedido.periodo ?? (pedido.de || pedido.ate ? "pers" : "7") });
+          if (!p.ok) return p;
           const leads = await lerLeads(ctx.db, {
             organizationId: ctx.organizationId,
             escopo,
             papel: ctx.papel,
             agora: ctx.agora,
+            fuso: ctx.fuso,
             equipe: ctx.equipe,
+            periodo: p,
+            funil: funil ?? null,
           });
+          if (!ehLeadsDaPessoa(leads)) {
+            coletor.anotar("ver_meus_leads", ["Funis"]);
+            return leads;
+          }
           coletor.anotar("ver_meus_leads", leads.fontes, leads.contatos);
           return leads;
         }),
@@ -369,7 +415,7 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
         "Qualquer período (veja periodo); com comparar, vem o período anterior em `anterior`.",
       inputSchema: z.object(PERIODO),
       execute: async (pedido) =>
-        protegido(async () => {
+        protegido("ver_minha_performance", async () => {
           const p = periodoPedido(pedido);
           if (!p.ok) return p;
           const perf = await lerPerformance(ctx.db, {
@@ -399,7 +445,7 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
           coletor.anotar("ver_numeros_da_equipe");
           return recusaDePermissao(ctx, coletor, "manager", "os números da equipe");
         }
-        return protegido(async () => {
+        return protegido("ver_numeros_da_equipe", async () => {
           const p = periodoPedido(pedido);
           if (!p.ok) return p;
           const perf = await lerPerformance(ctx.db, {
@@ -428,7 +474,7 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
         contato: z.string().trim().min(2).max(80).describe("O nome do contato, como a pessoa disse."),
       }),
       execute: async ({ contato }) =>
-        protegido(async () => {
+        protegido("ver_por_que_a_ia_nao_respondeu", async () => {
           const r = await explicarSilencioDaIa(ctx.db, {
             organizationId: ctx.organizationId,
             contato,
@@ -489,7 +535,7 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
           .describe("true só se a pessoa pediu o telefone ou o e-mail nesta pergunta."),
       }),
       execute: async ({ nome, incluir_telefone_e_email }) =>
-        protegido(async () => {
+        protegido("ver_contato", async () => {
           const termo = nome.replace(/[%_\\(),]/g, " ").trim();
           const { data } = await ctx.db
             .from("contacts")
@@ -532,7 +578,7 @@ export function ferramentasDoAssistente(ctx: ContextoDasFerramentas, coletor: Co
           coletor.anotar("ver_o_que_falta");
           return recusaDePermissao(ctx, coletor, "admin", "o que falta para a empresa ficar pronta");
         }
-        return protegido(async () => {
+        return protegido("ver_o_que_falta", async () => {
           const lido = await lerOQueFalta(ctx.db, {
             organizationId: ctx.organizationId,
             papel: ctx.papel,
