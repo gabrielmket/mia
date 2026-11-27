@@ -153,6 +153,16 @@ segue ligado. Quando a chave do Jev perde a validação, quem fica sabendo é a 
 no relatório interno (`recadoDoJevSemChave`, seção 3b do `cron/report-da-plataforma`) e o
 `jev_sem_chave` do MCP.
 
+**O MCP do CRM e a prospecção (MIA-304).** As três leituras de agente do MCP do CRM
+(`crm_list_ai_agents`, `crm_get_ai_agent_version`, `crm_get_ai_agent_turn`) não pedem nem devolvem
+provedor e modelo. O MCP do CRM é sempre da empresa (token ou conexão do ChatGPT, nunca a plataforma,
+como `TOKEN_NAO_ESCOLHE_IA`), então isso vale para todo papel; o modelo de cada empresa está em
+`plataforma_ver_ia_das_empresas`. As quatro rotas de `/api/v1/prospecting/agents*` respondem por
+`semModeloAoCliente` (`lib/prospecting/sem-modelo-ao-cliente.ts`): o `model_label` sai do resultado,
+da sessão e do `prepared`/`completed`, e continua gravado como o upstream grava. Cercas:
+`tests/unit/mcp-do-crm-sem-modelo-ao-cliente.test.ts` e `tests/unit/prospeccao-sem-modelo-ao-cliente.test.ts`
+(esta também reprova rota nova de `prospecting/agents/` que responda sem o limpador).
+
 **Fora da MIA-262, de propósito:**
 
 - A leitura direta do banco (PostgREST e Realtime) de `llm_calls`, `agent_turn_traces`,
@@ -162,8 +172,6 @@ no relatório interno (`recadoDoJevSemChave`, seção 3b do `cron/report-da-plat
 - A geração paga do onboarding (`?provar=1` de `/system/instalacao`, `setup-ai`): [MIA-284](/MIA/issues/MIA-284).
 - O token de integração em `/api/v1/ai/mapas`: a porta está declarada na tabela de portas de token
   (Spec 33). Pela sessão, mapas pede `escolheIa`.
-- As ferramentas de agente do MCP do CRM (o do cliente) ainda devolvem `modelo` e `provedor`.
-- O `model_label` nas respostas de `/api/v1/prospecting/agents*` (a tela já não mostra).
 - O texto de tokens na tela de Memória (L26): é a unidade do limite que o próprio cliente escolhe.
 - O "uso do plano" com números: protótipo na [MIA-259](/MIA/issues/MIA-259).
 
@@ -191,3 +199,5 @@ no relatório interno (`recadoDoJevSemChave`, seção 3b do `cron/report-da-plat
    numa resposta? Ela precisa passar por `semIaDaPlataforma` (ou recusar sem `escolheIa`). Rode
    `tests/unit/ia-so-no-admin.test.ts`, `tests/unit/as-empresas-com-chave-propria-seguem-respondendo.test.ts`
    e `app/app/ai/providers/page.test.tsx`.
+7. O MCP do CRM e a prospecção (MIA-304): rode as duas cercas da seção 7. Ferramenta nova de
+   agente no MCP do CRM, ou rota nova em `app/api/v1/prospecting/agents/`, sai sem provedor e modelo.
