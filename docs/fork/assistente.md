@@ -227,6 +227,35 @@ todas pela mesma régua (`lib/assistente/busca-da-ajuda.ts`):
   tela de onde veio; o trecho certo entre os 3 primeiros, sem IA).
 - **Tela nova:** escreva o manual em `manuais-das-telas.ts` lendo o código da tela e
   acrescente a pergunta em `assistente-perguntas-reais`. Sem isso o CI reprova.
+- **Sinônimos, desempate e as perguntas sem tela (.118, MIA-252).** Saíram do
+  diagnóstico da MIA-239, onde "como ligo o cloude", "onde vejo os leads que chegaram" e
+  "quanto cada vendedor vendeu" caíam em "não sei".
+  - *Expressões que viram um termo só* (`EXPRESSOES` em `busca-da-ajuda.ts`), antes de
+    quebrar em palavras: "cloude", "claud" e "clode" viram "claude"; "chat gpt" vira
+    "chatgpt"; "leads que chegaram", "leads novos", "novos leads" e "leads que entraram"
+    viram o lead que chegou, e "novo" ou "chegaram" sozinhos não; "cada vendedor" e "por
+    vendedor" viram um termo das vendas de cada pessoa. "gpt" entra no grupo do Claude e
+    do MCP, e "ranking" no das vendas. O radical passou a cortar "-eu" e "-iu" ("vendeu",
+    "abriu"). O pretérito em "-ram" ("chegaram", "fizeram", "pediram") só perde o final
+    quando está na lista `PRETERITOS_EM_RAM`: a regra geral estragava o presente dos verbos
+    em "-ar" ("esperam" deixava de casar com "espera"; idem "preparam", "separam",
+    "disparam"). A cerca K3 confere os dois lados e percorre o vocabulário dos manuais.
+  - *Desempate* (`ajudaEmOrdem` com o papel, em `leituras/ajuda.ts`): quando a pergunta
+    não aponta a tela, o manual que a pessoa não faz perde o empate (diferença de até 1%)
+    para o que ela faz, e o que só o dono da instalação faz perde do que outro papel da
+    empresa faz. Não passa à frente um manual que casa melhor: o atendente que pergunta do
+    horário da IA continua ouvindo o manual do horário, com quem pode.
+  - *Manuais sem tela própria* (`SEM_TELA_PROPRIA` em `manuais-das-telas.ts`):
+    `mcp-e-ia-de-fora` ("o sistema tem MCP? dá para usar o Claude?"), `leads-que-chegaram`
+    (o assistente conta, o funil mostra, a Fila do Inbox e o relatório de Contatos por
+    origem) e `vendas-por-vendedor` (o assistente para gestor e administrador, e o
+    relatório de Negócios agrupado por Responsável).
+  - *A régua na cerca:* as 30 perguntas fixas da régua (plano na MIA-239) estão em
+    `assistente-perguntas-reais`, com o papel e a tela de cada uma. Como fazer e onde fica
+    (15 a 25) pedem o manual certo em primeiro; rotina e números pedem a ferramenta que lê
+    o dado; permissão, "nunca" e erro conferem a peça que decide sem o modelo. As que
+    dependem de trabalho ainda não juntado (as leituras da MIA-244 e a ponte do MCP) ficam
+    como pendentes (`it.todo`), com o que falta: ao juntar, tire o `falta` da pergunta.
 
 ## 11. O assistente ensina (.93): "Me mostra como", as trilhas e onde os clientes travam
 

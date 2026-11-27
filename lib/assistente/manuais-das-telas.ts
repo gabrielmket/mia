@@ -1636,6 +1636,73 @@ const PASSO_A_PASSO_DO_UPSTREAM: Manual[] = [
   },
 ];
 
+/**
+ * FORK MIA (.118, MIA-252) — AS PERGUNTAS QUE NÃO TÊM TELA PRÓPRIA.
+ *
+ * Saíram do diagnóstico do assistente (MIA-239): "o sistema tem MCP?", "onde
+ * vejo os leads que chegaram?" e "quanto cada vendedor vendeu?" caíam em "não
+ * sei", porque a resposta está espalhada em mais de uma tela (ou é o próprio
+ * assistente). Cada manual diz onde fica e leva à tela que resolve. Ficam no
+ * fim: no empate com o manual de uma tela, vale o da tela.
+ */
+const SEM_TELA_PROPRIA: Manual[] = [
+  {
+    id: "mcp-e-ia-de-fora",
+    titulo: "O sistema tem MCP? Usar o Claude, o ChatGPT ou outra IA com a MIA",
+    palavras: [
+      "mcp", "tem mcp", "o que e mcp", "usar o claude", "usar o chatgpt", "claude", "chatgpt", "gpt",
+      "ia de fora", "integrar ia", "conectar ia", "inteligencia artificial de fora",
+    ],
+    href: "/app/settings/api-tokens",
+    papelMinimo: "admin",
+    passos: [
+      "Sim, nos dois sentidos.",
+      "MCP da MIA: o Claude, o ChatGPT ou outra IA de fora lê e mexe no seu CRM. Em Configurações › API Tokens, o administrador usa Criar token, marca Agentes de IA podem LER o CRM (MCP) e põe o endereço {endereco_do_sistema}/api/mcp no conector MCP da ferramenta.",
+      "Servidor MCP externo: o contrário, a IA da MIA consulta um sistema da sua empresa durante o atendimento. Quem cadastra é o dono da instalação (na MIA, a Time Company), a pedido da empresa.",
+    ],
+    observacao: "O token enxerga só esta empresa e age com o papel marcado nele. Para cortar o acesso, use Revogar em API Tokens.",
+    vejaTambem: ["roteiro-ligar-claude", "servidor-mcp-externo"],
+  },
+  {
+    id: "leads-que-chegaram",
+    titulo: "Ver os leads que chegaram e quantos foram",
+    palavras: [
+      "leads que chegaram", "leads novos", "novos leads", "leads que entraram", "lead novo", "quantos leads",
+      "chegou lead", "entrada de leads", "leads do dia", "leads da semana",
+    ],
+    href: "/app/kanban",
+    telas: ["/app/inbox"],
+    papelMinimo: "agent",
+    passos: [
+      "Para saber quantos foram, pergunte aqui mesmo: por exemplo, quantos leads chegaram hoje, ou na semana passada e de onde vieram.",
+      "Para ver os negócios, abra Funis e clique no funil: o lead que acabou de chegar entra, em geral, na primeira etapa. Use o filtro Canal de origem para ver de onde veio.",
+      "No Inbox, a aba Fila mostra as conversas novas que ainda esperam alguém assumir.",
+      "Para contar na tela, monte em Relatórios um relatório com a fonte Contatos (cada contato conta pelo dia em que entrou), Quantidade de contatos e Agrupar por Origem, e escolha o Período.",
+    ],
+    observacao: "Cada pessoa vê os leads que já vê no funil. Os leads dos formulários da Meta só chegam ao funil depois de ligados em Configurações › Meta Ads.",
+    vejaTambem: ["abrir-funil", "inbox", "relatorios"],
+  },
+  {
+    id: "vendas-por-vendedor",
+    titulo: "Ver quanto cada vendedor vendeu (vendas por pessoa)",
+    palavras: [
+      "quanto cada vendedor vendeu", "cada vendedor", "por vendedor", "vendas por vendedor", "ranking",
+      "ranking de vendas", "quem vendeu mais", "vendas da equipe", "vendas por responsavel", "vendas por pessoa",
+    ],
+    href: "/app/relatorios",
+    telas: ["/app/vendas"],
+    papelMinimo: "manager",
+    passos: [
+      "Pergunte aqui mesmo: por exemplo, quanto cada um da equipe vendeu este mês. O assistente traz os ganhos por pessoa, em quantidade e valor, e compara com o período anterior se você pedir.",
+      "Para ter na tela: abra Relatórios (no hub Ver tudo no Insights), use Novo relatório e escolha a fonte Negócios.",
+      "Em O que medir, escolha Soma do valor (ou Quantidade de negócios) e, em Agrupar por, Responsável.",
+      "Em Filtros, deixe a Situação nos ganhos e escolha o Período (por exemplo, Este mês). Em Visualização, escolha Barras ou Tabela e clique em Salvar.",
+    ],
+    observacao: "Os números de cada pessoa são do gestor e do administrador; quem atende vê os próprios (pergunte: como está minha performance no mês?). O painel de Vendas mostra o total do período, sem separar por pessoa.",
+    vejaTambem: ["relatorios", "painel-de-vendas"],
+  },
+];
+
 /** Os manuais das telas, na ordem em que a busca os desempata. */
 export const MANUAIS_DAS_TELAS: readonly Manual[] = [
   ...MCP,
@@ -1643,4 +1710,5 @@ export const MANUAIS_DAS_TELAS: readonly Manual[] = [
   ...OPERACAO_DO_FORK,
   ...TELAS_DO_UPSTREAM,
   ...PASSO_A_PASSO_DO_UPSTREAM,
+  ...SEM_TELA_PROPRIA,
 ];
