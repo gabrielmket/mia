@@ -35,6 +35,8 @@ import { randomUUID } from "node:crypto";
 import { adaptador as adaptadorPadrao } from "@/lib/cobranca/provedores";
 import { ErroDoProvedor, type AdaptadorDeCobranca } from "@/lib/cobranca/provedores/contrato";
 import { excedenteDoPlano, lerUsoDaOrganizacao } from "@/lib/cobranca/uso";
+// FORK MIA (MIA-250 D): o teto de agentes de IA do plano (mia_plano_modulos, 9174).
+import { excedenteDeAgentesNoPlano } from "@/lib/planos-mia/limite-de-agentes";
 import { calcularAjusteProporcional, SEM_TROCA } from "@/lib/cobranca/prorata";
 import { urlDoPainelDaEmpresa } from "@/lib/cobranca/url";
 import type { EstadoDaAssinatura, Intervalo, Moeda, ProvedorDeCobranca } from "@/lib/cobranca/vocabulario";
@@ -224,7 +226,12 @@ export async function trocarPlanoDaOrg(
     }
     const uso = await lerUsoDaOrganizacao(admin, orgId);
     if (!uso) return recusa(500, "internal_error", "Não foi possível medir o uso da empresa.");
-    const excedente = excedenteDoPlano(uso, novo);
+    // FORK MIA (MIA-250 D): os agentes de IA entram na mesma lista do que tirar.
+    let agentes: { agentes?: number };
+    try { agentes = await excedenteDeAgentesNoPlano(admin, orgId, novo.id); } catch {
+      return recusa(500, "internal_error", "Não foi possível medir o uso da empresa.");
+    }
+    const excedente = { ...excedenteDoPlano(uso, novo), ...agentes };
     if (Object.keys(excedente).length > 0) {
       return recusa(409, "plan_limit_reached", "O uso atual não cabe no plano escolhido.", { excedente });
     }

@@ -49,6 +49,7 @@ export async function lerPainelDosPlanos(
       modulos: p.modulos,
       preco_por_mensagem_cents: p.preco_por_mensagem_cents,
       preco_por_email_cents: p.preco_por_email_cents,
+      max_agentes: p.max_agentes,
       frase: p.frase,
       destaque: p.destaque,
     })),

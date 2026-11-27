@@ -15,6 +15,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ComprarCreditos } from "@/components/planos-mia/ComprarCreditos";
 import { ModulosDoPlano } from "@/components/planos-mia/ModulosDoPlano";
 import { lerCreditosDoPainel, lerModulosDoPainel, semDolar } from "@/lib/planos-mia/painel-da-empresa";
+// FORK MIA (MIA-250 D): "Agentes de IA: X de N", só com teto no plano.
+import { agentesDoPainel } from "@/lib/planos-mia/limite-de-agentes";
 // FORK MIA (.96): a área de cobrança, só do administrador (docs/fork/area-de-cobranca.md).
 import { AreaDeCobranca } from "@/components/area-de-cobranca/AreaDeCobranca";
 import { lerAreaDeCobranca } from "@/lib/area-de-cobranca/leitura";
@@ -46,6 +48,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   // FORK MIA (.90): só com a cobrança ligada (o painel existe) e a empresa num plano.
   const modulosDoPlano = painel?.assinatura ? await lerModulosDoPainel(admin, activeOrg.orgId) : null;
   const creditos = painel ? await lerCreditosDoPainel(admin, activeOrg.orgId) : null;
+  const agentes = painel?.assinatura ? await agentesDoPainel(admin, activeOrg.orgId) : null;
   // FORK MIA (.96): o histórico das cobranças, a nota e o recibo, o cartão e os
   // dados fiscais. Só o ADMINISTRADOR (decisão 11; a página inteira já é dele,
   // a conferência fica explícita para a área não vazar se a página abrir a outros).
@@ -64,7 +67,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       </CabecalhoDaSubTela>
       {painel ? (
         <>
-          <PainelDaAssinatura dados={painel} idioma={idioma} />
+          <PainelDaAssinatura dados={painel} idioma={idioma} agentes={agentes} />
           {modulosDoPlano && <ModulosDoPlano modulos={modulosDoPlano} idioma={idioma} fuso={painel.fuso} />}
           {creditos?.temCarteira && (
             <ComprarCreditos

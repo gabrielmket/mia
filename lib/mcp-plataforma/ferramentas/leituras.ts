@@ -56,6 +56,8 @@ import { retratoDosRoteadores } from "@/lib/implantacao/roteador";
 import { lerSkillsDaEmpresa } from "@/lib/implantacao/skills-do-agente";
 import { servidoresNaLeitura } from "@/lib/implantacao/servidores-mcp-do-agente";
 import { moduloLigado } from "@/lib/instalacao/modulos";
+// FORK MIA (MIA-250 D): quantos agentes a empresa tem e o teto do plano.
+import { retratoDoLimiteDeAgentes } from "@/lib/planos-mia/limite-de-agentes";
 import { lerServidoresDoAgente, semSegredo } from "@/lib/mcp/servidor-externo/do-agente/registro";
 import { EXPLICACAO_DO_PASSO, ROTULO_DO_PASSO } from "@/lib/leads/agent-mapping";
 import { campoLiberadoParaIa } from "@/lib/leads/campos-do-funil";
@@ -519,7 +521,7 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
   {
     name: "plataforma_ver_agentes",
     description:
-      "Os agentes de IA de um cliente: situação (no ar, pausado, rascunho), versão publicada, rascunho pendente, pacotes ligados, " +
+      "Os agentes de IA de um cliente (e o LIMITE DO PLANO em `limite_de_agentes`: `em_uso` e `limite_do_plano`, null = sem limite): situação (no ar, pausado, rascunho), versão publicada, rascunho pendente, pacotes ligados, " +
       "funis e materiais autorizados, follow-ups armados, número, limiar de sentimento, e o que FALTA PARA PUBLICAR (com quem resolve: você, uma pessoa na tela, ou a plataforma). " +
       "Devolve o HORÁRIO DE ATENDIMENTO DA IA da versão publicada (`horario_de_atendimento`: as faixas, o fuso, se a IA está `ativa_agora`, a `proxima_troca` com o instante e o texto, " +
       "e se o horário cai FORA da janela de resposta do número, que segura o que a IA escreve até a abertura; `faixas: null` = responde a qualquer hora). " +
@@ -656,6 +658,9 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           "com mais de um no mesmo número, o de maior prioridade (no empate, o mais antigo), a não ser que exista um roteador LIGADO naquele número, que escolhe pela intenção " +
           "(plataforma_garantir_roteador e plataforma_ligar_roteador; veja `roteadores` abaixo).",
         agentes,
+        // MIA-250 D (9174) — a vaga: todo agente não arquivado conta; `limite_do_plano`
+        // null = sem limite (cobrança desligada, empresa isenta ou plano sem teto).
+        limite_de_agentes: await retratoDoLimiteDeAgentes(c.admin, c.orgId),
         // 9095 — o módulo opcional da instalação: desligado, a tela some e o turno não monta servidor do agente.
         servidores_mcp_por_agente: {
           modulo_ligado: await moduloLigado(c.admin, "mcp_por_agente"),

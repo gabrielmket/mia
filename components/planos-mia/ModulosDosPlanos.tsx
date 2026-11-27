@@ -27,6 +27,8 @@ export interface PlanoComLado {
   preco_por_mensagem_cents: number | null;
   /** FORK MIA (.95): o preço por e-mail do plano. `null` = o padrão do sistema. */
   preco_por_email_cents: number | null;
+  /** FORK MIA (MIA-250 D): o teto de agentes de IA. `null` (ou ausente) = sem limite. */
+  max_agentes?: number | null;
   frase: string | null;
   destaque: boolean;
 }
@@ -35,6 +37,7 @@ interface Rascunho {
   modulos: ModuloDoPlano[];
   preco: string;
   precoEmail: string;
+  agentes: string;
   frase: string;
   destaque: boolean;
 }
@@ -47,12 +50,21 @@ const campoDeReais = (cents: number | null) =>
 const centavosDoCampo = (campo: string) =>
   campo.trim() === "" ? null : Math.round(Number(campo.trim().replace(",", ".")) * 100);
 
+/** O teto de agentes do campo: vazio = `null` (sem limite); fora de 1 a 1000 = `NaN`. */
+export const tetoDeAgentesDoCampo = (campo: string): number | null => {
+  const v = campo.trim();
+  if (v === "") return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= 1000 ? n : Number.NaN;
+};
+
 /** O rascunho de um plano a partir do que veio do servidor. */
 function rascunhoDe(p: PlanoComLado): Rascunho {
   return {
     modulos: p.modulos,
     preco: campoDeReais(p.preco_por_mensagem_cents),
     precoEmail: campoDeReais(p.preco_por_email_cents),
+    agentes: p.max_agentes === null || p.max_agentes === undefined ? "" : String(p.max_agentes),
     frase: p.frase ?? "",
     destaque: p.destaque,
   };
@@ -104,12 +116,18 @@ export function ModulosDosPlanos({
       toast.error(t("Preço por e-mail inválido."));
       return;
     }
+    const agentes = tetoDeAgentesDoCampo(r.agentes);
+    if (Number.isNaN(agentes)) {
+      toast.error(t("Número de agentes inválido: use de 1 a 1000, ou deixe vazio."));
+      return;
+    }
     setOcupado(id);
     try {
       await apiClient.put(`/api/v1/admin/planos-mia/${id}`, {
         modulos: r.modulos,
         preco_por_mensagem_cents: preco,
         preco_por_email_cents: precoEmail,
+        max_agentes: agentes,
         frase: r.frase.trim() === "" ? null : r.frase.trim(),
         destaque: r.destaque,
       });
@@ -183,7 +201,7 @@ export function ModulosDosPlanos({
                   );
                 })}
               </div>
-              <div className="grid gap-2 sm:grid-cols-[160px_160px_1fr]">
+              <div className="grid gap-2 sm:grid-cols-[160px_160px_160px_1fr]">
                 <label className="block space-y-1 text-xs">
                   <span className="block text-muted-foreground">
                     {t("Mensagem do Broadcast (R$)")}
@@ -202,6 +220,16 @@ export function ModulosDosPlanos({
                     value={r.precoEmail}
                     placeholder="0,02"
                     onChange={(e) => muda({ precoEmail: e.target.value })}
+                  />
+                </label>
+                {/* FORK MIA (MIA-250 D): o teto de agentes de IA do plano (9174). */}
+                <label className="block space-y-1 text-xs">
+                  <span className="block text-muted-foreground">{t("Agentes de IA (vazio = sem limite)")}</span>
+                  <Input
+                    inputMode="numeric"
+                    value={r.agentes}
+                    onChange={(e) => muda({ agentes: e.target.value })}
+                    data-campo="max-agentes"
                   />
                 </label>
                 <label className="block space-y-1 text-xs">
