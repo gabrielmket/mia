@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
 import { AgentSetupError, setupProspectingAgent } from "@/lib/prospecting/agent-setup";
 import { prospectingAgentSetupSchema } from "@/lib/prospecting/agent-setup-schema";
+import { semModeloAoCliente } from "@/lib/prospecting/sem-modelo-ao-cliente";
 
 export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
@@ -23,13 +24,14 @@ export async function POST(req: Request) {
       { requestId },
     );
   try {
+    // FORK MIA (MIA-304): sem o nome do modelo, que é da plataforma.
     return ok(
-      await setupProspectingAgent(
+      semModeloAoCliente(await setupProspectingAgent(
         getRequestPool(),
         createAdminClient(),
         { orgId: auth.org.orgId, userId: auth.user.id, requestId },
         input.data,
-      ),
+      )),
       { requestId, headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

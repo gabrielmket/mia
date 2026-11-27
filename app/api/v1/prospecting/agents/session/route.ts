@@ -7,6 +7,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { AgentSetupError } from "@/lib/prospecting/agent-setup";
 import { agentSessionPatchSchema } from "@/lib/prospecting/agent-session-schema";
 import { getAgentSession, saveAgentSession } from "@/lib/prospecting/agent-session";
+import { semModeloAoCliente } from "@/lib/prospecting/sem-modelo-ao-cliente";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "no-store" };
@@ -29,7 +30,8 @@ export async function GET(req: Request) {
   if (!campaign.success)
     return fail("validation_failed", "Escolha uma campanha válida.", 422, { requestId, headers });
   try {
-    return ok(await getAgentSession(getRequestPool(), auth.org.orgId, campaign.data), {
+    // FORK MIA (MIA-304): sem o nome do modelo, que é da plataforma.
+    return ok(semModeloAoCliente(await getAgentSession(getRequestPool(), auth.org.orgId, campaign.data)), {
       requestId,
       headers,
     });
@@ -51,14 +53,15 @@ export async function PATCH(req: Request) {
       headers,
     });
   try {
+    // FORK MIA (MIA-304): sem o nome do modelo, que é da plataforma.
     return ok(
-      await saveAgentSession(
+      semModeloAoCliente(await saveAgentSession(
         getRequestPool(),
         { orgId: auth.org.orgId, userId: auth.user.id, requestId },
         parsed.data.campaign_id,
         parsed.data.revision,
         parsed.data.session,
-      ),
+      )),
       { requestId, headers },
     );
   } catch (error) {
