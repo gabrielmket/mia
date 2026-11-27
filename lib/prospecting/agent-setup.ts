@@ -18,6 +18,8 @@ import { prospectingAgentSetupSchema, type ProspectingAgentSetupInput } from "./
 import { agentSessionLock, agentSetupSessionSchema } from "./agent-session-schema";
 import { IDIOMA_DA_CONVERSA, idiomaDaOrganizacao } from "./idioma";
 import type { Idioma } from "@/lib/i18n/idiomas";
+// FORK MIA (MIA-250 D): o limite de agentes do plano.
+import { traduzirLimiteDeAgentes } from "@/lib/planos-mia/limite-de-agentes";
 
 export class AgentSetupError extends Error {
   constructor(
@@ -585,6 +587,10 @@ export async function setupProspectingAgent(
     // sai com erro e o pg-pool o descarta (release(err) → _remove → client.end()).
     erroNaTransacao = error instanceof Error ? error : new Error(String(error));
     await db.query("rollback").catch(() => undefined);
+    // FORK MIA (MIA-250 D): o `insert` cru de `create-draft.ts` bateu no teto de
+    // agentes do plano (gatilho da 9174). Em português, como as outras recusas daqui.
+    const limite = traduzirLimiteDeAgentes(error, "pt-BR");
+    if (limite) throw new AgentSetupError(limite.message, 409);
     if (error instanceof AgentSetupError) {
       if (saved) error.agentId = agentId;
       throw error;
