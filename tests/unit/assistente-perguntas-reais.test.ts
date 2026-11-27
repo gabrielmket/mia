@@ -598,7 +598,7 @@ describe("K3: o pretérito em \"-ram\" não estraga o presente dos verbos em \"-
       ["disparam", "dispara"],
       ["declaram", "declara"],
       ["comparam", "compara"],
-    ]) {
+    ] as const) {
       expect(termos(presente), presente).toEqual(termos(base));
       expect(termos(presente), presente).toEqual(termos(base.replace(/a$/, "ar")));
     }
