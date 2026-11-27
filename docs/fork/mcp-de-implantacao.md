@@ -819,6 +819,46 @@ Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
 
+### O que chegou do upstream 1.127 (fusão de 27/11, MIA-339)
+
+A fusão entra sem ferramenta nova e sem campo novo no MCP de plataforma. Uma rota espelhada mudou:
+o cadastro do servidor MCP do agente (`app/actions/agents/servidoresMcpDoAgente.ts`, espelhado em
+`lib/implantacao/servidores-mcp-do-agente.ts`) passou a guardar o prazo do link de autorização em
+`oauth_metadados.prazo_do_link_minutos`. O espelho acompanha a conta da tela: o prazo gravado
+continua quando o endereço muda e a descoberta é refeita, e sem prazo vale o padrão (10). O
+`phone_whatsapp` de `crm_start_conversation_and_send` (DES-1950) e o número de pessoas na escolha
+automática de sala em `crm_book_appointment` são do MCP da EMPRESA e vêm prontos do upstream.
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| Período do painel Desempenho e o abandono que conta envios do período (9478) | 1.127 | nada a configurar: tela do dia a dia | |
+| Levar para outro funil reaproveita a cópia aberta (9492, 9496, índice único) | 1.127 | nada a configurar: regra do banco. A 9496 encerra como perda as cópias abertas repetidas que já existirem | |
+| Histórico do follow-up separa geração, espera e envio (9493, `followup_delivery_events`) | 1.127 | nada a configurar: registro do dossiê | |
+| Retomada do follow-up em até 1 hora depois de cancelar o compromisso | 1.127 | nada a configurar: regra da proteção do follow-up | |
+| Login com bloqueio crescente por conta, contado no dia | 1.127 | nada a configurar: régua do login, com o mesmo contador (Upstash ou memória) | |
+| Aviso de caso respondido por citação (`?` ou `PERGUNTAR`) | 1.127 | nada a configurar: só nas conexões por QR Code | |
+| `llm_calls.cache_write_1h_tokens` (9481) | 1.127 | nada a fazer: só o servidor grava, e a 9175 (MIA-334) fecha a leitura de toda coluna com `tokens` no nome | |
+
+Falta no MCP (cada item com o motivo):
+
+- o lembrete sem o link da reunião por degrau (9479,
+  `calendar_event_types.reminder_sem_link_offsets_minutes`): `plataforma_ligar_lembrete` liga os
+  degraus, mas não escolhe quais saem sem o link. Vazio, o padrão, é o comportamento de antes (todos
+  levam o link). Campo novo numa ferramenta que já existe, para a próxima tarefa do MCP;
+- o prazo do link de autorização do servidor MCP do agente (10 a 1440 minutos, sem migration,
+  `oauth_metadados.prazo_do_link_minutos`): `plataforma_garantir_agente` cadastra o servidor, mas
+  ainda não recebe o prazo. O espelho já preserva o que a tela gravou. Campo novo numa ferramenta que
+  já existe;
+- os responsáveis adicionais da consulta (9494, 9498, 9500, `calendar_appointment_responsibles`):
+  só a API de agendamentos define a lista, e o upstream ainda não tem tela. Não é configuração da
+  implantação (é registro de cada consulta); entra no MCP da empresa se o agente passar a escolher
+  adicionais;
+- o chat no site agora pode ser ligado (`canal_webchat` saiu de `MODULOS_AINDA_NAO_LIGAVEIS`) e
+  ganhou o teto de respostas da IA para visitante anônimo (1 a 200, padrão 20, em
+  `channel_sessions.metadata`, aba Conexões › Chat no site): o módulo continua desligado no fork até
+  alguém ligá-lo, e o MCP de plataforma não cadastra o canal (as origens permitidas e a chave do
+  chat são acesso). Quando o canal entrar na implantação, o teto entra junto.
+
 ### O que chegou do upstream 1.126 (fusão de 26/11, MIA-290)
 
 A fusão entra sem ferramenta nova e sem campo novo no MCP de plataforma. Nenhuma rota espelhada
