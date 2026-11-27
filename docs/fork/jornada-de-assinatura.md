@@ -169,6 +169,69 @@ suspensa", a LGPD sempre (o prazo corre durante a suspensão), o aviso de "suspe
 liberação com "tudo voltou a funcionar". Nenhum e-mail novo de boas-vindas nem lembrete
 (fica para o passo do pagamento no início, em protótipo).
 
+### 2.4 Quantos agentes de IA o plano deixa criar (MIA-250 D, 9174)
+
+Desenho na MIA-258. O teto é **do plano** e mora na nossa `mia_plano_modulos.max_agentes`
+(1 a 1000; vazio = sem limite). `cobranca_planos` e `fn_limite_do_plano` do upstream não
+mudam. **Inerte até alguém pôr teto:** hoje nenhum plano tem, e nada muda para nenhuma
+empresa. O número de cada plano é decisão da MIA-249.
+
+**O que conta:** todo agente **não arquivado** da empresa, de qualquer tipo (`rag_bot`,
+`mcp_agent`, texto ou voz) e em qualquer estado (rascunho, publicado, pausado, desligado).
+Não contam o arquivado, a versão (`ai_agent_versions`) e o roteador (`ai_routers`). O
+rascunho conta porque publicar, ligar e despausar não passam pela trava: se só o publicado
+contasse, a empresa criaria dez rascunhos e publicaria todos.
+
+**Quem decide é o banco.** O gatilho nosso `trg_mia_trava_agentes_do_plano` (BEFORE INSERT
+OR UPDATE OF archived_at, organization_id em `ai_agents`) pega todo caminho que cria agente,
+inclusive o SQL cru da prospecção e qualquer um que o upstream trouxer. Com a empresa no teto,
+levanta `PT402` com a mensagem `limite_do_plano:agentes:<teto>`, a mesma forma dos gatilhos de
+pessoas e números do upstream. `fn_mia_limite_de_agentes(org)` responde o teto pela mesma régua
+de `fn_limite_do_plano`: nulo com a cobrança desligada, na empresa sem assinatura (isenta), no
+plano sem linha nossa ou sem teto; vale o `plano_id`, nunca o agendado. Trava consultiva por
+empresa (`hashtextextended(org, 2283)`): dois cliques ao mesmo tempo não passam do teto.
+
+**O servidor traduz** (`lib/planos-mia/limite-de-agentes.ts`, pela mensagem, como
+`lib/cobranca/limites.ts`) em 409 `plan_limit_reached`, nos sete pontos de criação:
+
+| ponto | o que a pessoa vê |
+|---|---|
+| `POST /api/v1/ai/agents` (agente novo e de voz) | 409 com a frase |
+| criar pela tela (`/app/ai/agents/new`) | o aviso com a frase |
+| duplicar (rota `[id]/duplicate` e o menu da lista) | 409 / o aviso com a frase |
+| a prospecção (`lib/prospecting/agent-setup.ts`, o SQL cru de `create-draft.ts`) | 409 com a frase |
+| `plataforma_garantir_agente` | a recusa que ensina (o teto, "Nada foi criado" e os três caminhos). O agente que já existe pelo nome é atualizado e não conta de novo |
+| o onboarding (`createDefaultAgent`) | **nunca trava o cadastro**: o passo da IA segue sem criar (como "pular"), com aviso no log. Na prática não acontece: o teto mínimo é 1 e a empresa nova tem 0 |
+
+**Quem já passa do teto** (plano reduzido, cobrança ligada sobre empresas existentes) fica com
+todos os agentes atendendo: nada é arquivado, pausado ou desligado sozinho. Só não cria, não
+duplica e não desarquiva até ficar abaixo. Editar, renomear, pausar e arquivar sempre passam.
+
+**O teto pode mudar em plano assinado** (como pessoas e números no upstream): vale na hora para
+as empresas do plano, só para criar. A trava de assinantes da 9070 não muda.
+
+**Troca e atribuição de plano.** A troca pelo cliente (`lib/cobranca/troca.ts`) e a atribuição
+pelo dono (`lib/planos-mia/acoes-do-dono.ts`) somam `agentes` à lista do que tirar
+(`excedente.agentes` / `o_que_tirar.agentes`), ao lado de pessoas e números; a tela diz
+"Arquive {n} agente(s) de IA em Agentes de IA.". A renovação que aplica a descida agendada não
+reconfere, como no upstream.
+
+**Onde aparece:**
+- `/admin/cobranca/modulos-dos-planos`: o campo "Agentes de IA (vazio = sem limite)";
+- Configurações › Plano e cobrança: a linha **"Agentes de IA: X de N" só quando o plano tem
+  teto** (sem "(sem limite)" por enquanto);
+- MCP: campo `agentes` em `plataforma_garantir_planos` e em `plataforma_ver_cobranca`, e
+  `limite_de_agentes` (`em_uso`, `limite_do_plano`) em `plataforma_ver_agentes`.
+- A página de preços **não** mostra "N agentes" no cartão: entra quando a MIA-249 fechar o texto.
+
+**Textos (proposta).** As frases que o cliente vê (pt, es e en em
+`lib/i18n/dicionario-mia-limite-de-agentes.ts`; o produto serve hoje pt-BR e es, e o en fica
+pronto para quando o idioma for ligado) são proposta do desenho, seção 8. Só chegam ao
+cliente quando um plano tiver teto; o Chefe leva ao Gabriel antes de qualquer teto ser ligado.
+
+**Antes de ligar um teto menor que o uso de hoje:** leitura de produção só com contagem
+("N empresas com mais de X agentes"), nunca nome.
+
 ## 3. A origem da empresa
 
 `mia_origem_da_empresa` (9071) diz por onde a empresa nasceu: **`cadastro`** (a própria
@@ -349,6 +412,11 @@ Uma vez, na plataforma inteira. Antes, os requisitos do upstream (`docs/saas/cob
   item Empresas do cadastro. A aba não lê nada a mais nem repete o nome de plano nenhum ao lado
   da lista do upstream (o e2e dele acha o plano pelo nome).
 - `lib/auth/public-paths.ts`: `/precos` e a rota pública.
+- MIA-250 D (seção 2.4): `app/api/v1/ai/agents/route.ts`, `app/api/v1/ai/agents/[id]/duplicate/route.ts`,
+  `app/app/ai/agents/[id]/_actions.ts`, `app/app/ai/agents/_actions.ts`, `lib/prospecting/agent-setup.ts`,
+  `app/actions/onboarding/createDefaultAgent.ts`, `lib/cobranca/troca.ts`,
+  `components/admin/tenants/CardDeCobranca.tsx` (`FRASE_DO_EXCEDENTE.agentes`) e
+  `components/cobranca/PainelDaAssinatura.tsx` (a linha dos agentes): um ponto curto cada.
 - `lib/audit/actions.ts`, `lib/i18n/dicionario.ts`, `lib/mcp-plataforma/ferramentas.ts`,
   `lib/mcp-plataforma/operacoes.ts`, `lib/mcp-plataforma/ferramentas/plataforma.ts`.
 
@@ -380,6 +448,10 @@ servidor (RLS ligada, sem política, `authenticated` e `anon` recebem permission
 | `tests/unit/entrada-paga-sem-aviso-de-suspensa.test.ts` | a entrada paga ainda não paga e o atraso, para o aviso de "suspensa" e o da liberação |
 | `tests/unit/hub-da-entrada-paga.test.tsx` | o topo do `/account-suspended` e a LGPD só com pedido, na entrada paga; o atraso como o upstream |
 | `tests/unit/painel-da-assinatura.test.tsx` | a IA em %, o aviso de 80% e a parada de 100% |
+| `tests/invariants/limite-de-agentes-do-plano.test.ts` | MIA-250 D: o gatilho da 9174 (teto 2, arquivado, desarquivar, acima do teto edita, troca de empresa, corrida, sem limite nos quatro casos, o `plano_id`, a coluna e o EXECUTE só do servidor) |
+| `tests/unit/limite-de-agentes-do-plano.test.tsx` | MIA-250 D: a tradução (1 e N, en e es), a régua igual à do gatilho, troca e atribuição com `agentes`, o campo no MCP e no admin, a linha do painel só com teto |
+| `tests/unit/mcp-de-implantacao-limite-de-agentes.test.ts` | MIA-250 D: `plataforma_garantir_agente` recusa que ensina e reexecução segura; `plataforma_ver_agentes` com a vaga |
+| `tests/unit/agente-acima-do-teto-do-plano.test.ts` | MIA-250 D: `POST /api/v1/ai/agents` (novo e voz) responde 409 `plan_limit_reached`, sem versão órfã |
 | `tests/unit/lead-do-cadastro.test.ts` | MIA-168: o corpo do lead, o envio, os três momentos, a repetição que não move, a falta da fonte ou da etapa, o valor do pagamento e a leitura do MCP |
 | `tests/invariants/cadastro-na-time.test.ts` | MIA-168: a tabela só do servidor, as travas, o gatilho do nascimento e a limpeza da LGPD |
 

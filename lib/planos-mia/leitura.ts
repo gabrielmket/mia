@@ -1,7 +1,7 @@
 /**
  * FORK MIA (.90) — os planos com o que é NOSSO ao lado: os módulos, o preço por
- * mensagem do Broadcast, o preço por e-mail (.95, 9110) e o texto do cartão
- * (`mia_plano_modulos`, 9070).
+ * mensagem do Broadcast, o preço por e-mail (.95, 9110), o teto de agentes de IA
+ * (MIA-250 D, 9174) e o texto do cartão (`mia_plano_modulos`, 9070).
  *
  * `cobranca_planos` é do upstream e não muda; esta leitura junta as duas tabelas
  * pelo id. Plano sem linha nossa é plano sem módulo (e sem preço por mensagem):
@@ -35,6 +35,8 @@ export interface PlanoComModulos {
   preco_por_mensagem_cents: number | null;
   /** FORK MIA (.95): o preço por e-mail de marketing. `null` = o plano não diz (vale o padrão). */
   preco_por_email_cents: number | null;
+  /** FORK MIA (MIA-250 D, 9174): quantos agentes de IA a empresa do plano tem. `null` = sem limite. */
+  max_agentes: number | null;
   frase: string | null;
   destaque: boolean;
 }
@@ -61,13 +63,15 @@ export interface LadoDoPlano {
   preco_por_mensagem_cents: number | null;
   /** FORK MIA (.95, 9110). Opcional: a linha montada antes dela (e nos dublês) não o traz. */
   preco_por_email_cents?: number | null;
+  /** FORK MIA (MIA-250 D, 9174). Opcional pelo mesmo motivo. */
+  max_agentes?: number | null;
   frase: string | null;
   destaque: boolean | null;
 }
 
 /** As colunas da linha nossa (`mia_plano_modulos`). */
 const COLUNAS_DO_LADO =
-  "plano_id, modulos, preco_por_mensagem_cents, preco_por_email_cents, frase, destaque";
+  "plano_id, modulos, preco_por_mensagem_cents, preco_por_email_cents, max_agentes, frase, destaque";
 
 const COLUNAS_DO_UPSTREAM =
   "id, nome, preco_cents, moeda, intervalo, trial_dias, max_assentos, max_canais, teto_ia_usd_cents, padrao_no_cadastro, oferecido_ao_cliente, arquivado_em";
@@ -97,6 +101,8 @@ export function juntarPlano(p: PlanoDoUpstream, lado: LadoDoPlano | undefined): 
       lado?.preco_por_email_cents === null || lado?.preco_por_email_cents === undefined
         ? null
         : Number(lado.preco_por_email_cents),
+    max_agentes:
+      lado?.max_agentes === null || lado?.max_agentes === undefined ? null : Number(lado.max_agentes),
     frase: lado?.frase ?? null,
     destaque: lado?.destaque === true,
   };

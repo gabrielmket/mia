@@ -12,7 +12,16 @@ import { AVISO_DA_IA_EM_PERCENTUAL, conversasEstimadas, percentualDaIa } from "@
  * O resumo de assinatura da empresa (spec da cobrança §9).
  * Sem hooks: é desenhado pelo servidor, no idioma de quem abriu.
  */
-export function PainelDaAssinatura({ dados, idioma }: { dados: DadosDoPainel; idioma: Idioma }) {
+export function PainelDaAssinatura({
+  dados,
+  idioma,
+  agentes = null,
+}: {
+  dados: DadosDoPainel;
+  idioma: Idioma;
+  /** FORK MIA (MIA-250 D): só vem quando o plano tem teto de agentes (lib/planos-mia/limite-de-agentes.ts). */
+  agentes?: { emUso: number; limite: number } | null;
+}) {
   const t = (texto: string) => traduzir(texto, idioma);
   const data = formatadorDeData(idioma, dados.fuso, { dateStyle: "short" });
   // "2 de 3"; sem teto, "2 · sem limite" (e não "2 de sem limite").
@@ -65,6 +74,13 @@ export function PainelDaAssinatura({ dados, idioma }: { dados: DadosDoPainel; id
         <dd data-uso="assentos">{deLimite(String(uso.assentos), limite(p.max_assentos))}</dd>
         <dt>{t("Números conectados")}</dt>
         <dd data-uso="canais">{deLimite(String(uso.canais), limite(p.max_canais))}</dd>
+        {/* FORK MIA (MIA-250 D): a linha só aparece quando o plano tem teto de agentes. */}
+        {agentes && (
+          <>
+            <dt>{t("Agentes de IA")}</dt>
+            <dd data-uso="agentes">{deLimite(String(agentes.emUso), String(agentes.limite))}</dd>
+          </>
+        )}
         <dt>{t("Uso de IA no mês")}</dt>
         {/* FORK MIA (.90): porcentagem do que o plano inclui; o dólar é da plataforma. */}
         <dd data-uso="ia">

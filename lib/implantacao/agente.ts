@@ -98,6 +98,8 @@ import { VALID_TOOL_IDS } from "@/lib/mcp/tools/catalog";
 import { ehToolIdRemoto, lerToolIdRemoto, toolIdAceito, toolIdRemoto } from "@/lib/mcp/servidor-externo/ids";
 import { FRASE_DA_DEMONSTRACAO } from "@/lib/demonstracao/trava";
 import { Recusa } from "@/lib/mcp-plataforma/recusa";
+// FORK MIA (MIA-250 D): o limite de agentes do plano.
+import { lerLimiteDeAgentesEstourado, recusaDoLimiteDeAgentesNoMcp } from "@/lib/planos-mia/limite-de-agentes";
 
 import {
   acharPorNomeOuId,
@@ -1200,6 +1202,10 @@ async function garantirAgenteECadastro(
       if (agenteErr?.code === "23505") {
         throw new Recusa(`Já existe um agente chamado «${nome}» nesta organização. Chame de novo: ele será atualizado.`);
       }
+      // MIA-250 D: o teto de agentes do plano está cheio (gatilho da 9174). Agente
+      // que já existe pelo nome é atualizado acima e nunca chega aqui.
+      const teto = lerLimiteDeAgentesEstourado(agenteErr);
+      if (teto !== null) throw new Recusa(recusaDoLimiteDeAgentesNoMcp(teto));
       throw new Error(`não consegui criar o agente: ${agenteErr?.message ?? "sem linha"}`);
     }
     const linhaDoAgente = criado as unknown as LinhaDoAgente;

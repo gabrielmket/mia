@@ -1,8 +1,8 @@
 /**
  * FORK MIA (.90) — PUT /api/v1/admin/planos-mia/[id]: o que é NOSSO num plano
  * de cobrança: os módulos que ele liga, o preço por mensagem do Broadcast, o
- * preço por e-mail (.95, 9110), a frase e o selo do cartão da página de preços
- * (`mia_plano_modulos`, 9070).
+ * preço por e-mail (.95, 9110), o teto de agentes de IA (MIA-250 D, 9174), a
+ * frase e o selo do cartão da página de preços (`mia_plano_modulos`, 9070).
  *
  * O plano em si (preço, teste, limites, teto, padrão, oferecido) continua na
  * rota do upstream (`/api/v1/admin/cobranca/planos/[id]`); esta só escreve a
@@ -35,6 +35,8 @@ const corpoSchema = z
     preco_por_mensagem_cents: z.number().int().min(0).max(100_000).nullable(),
     // FORK MIA (.95): o preço por e-mail do plano (9110). `null` = o padrão do sistema.
     preco_por_email_cents: z.number().int().min(0).max(100_000).nullable(),
+    // FORK MIA (MIA-250 D): o teto de agentes de IA (9174). `null` = sem limite. Muda em plano assinado.
+    max_agentes: z.number().int().min(1).max(1000).nullable(),
     frase: z.string().trim().max(160).nullable(),
     destaque: z.boolean(),
   })

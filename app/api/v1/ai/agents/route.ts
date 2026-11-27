@@ -50,6 +50,9 @@ import { logger } from "@/lib/logger";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { agentesSemIa, travarIaDaVersaoNova } from "@/lib/ai/trava-da-ia";
 import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
+// FORK MIA (MIA-250 D): o limite de agentes do plano.
+import type { Idioma } from "@/lib/i18n/idiomas";
+import { traduzirLimiteDeAgentes } from "@/lib/planos-mia/limite-de-agentes";
 
 export const dynamic = "force-dynamic";
 
@@ -156,7 +159,10 @@ export async function GET(req: NextRequest): Promise<Response> {
 // POST — create
 // ---------------------------------------------------------------------------
 
-function falhaAoCriarAgente(erro: unknown, t: (texto: string) => string, requestId: string) {
+function falhaAoCriarAgente(erro: unknown, t: (texto: string) => string, requestId: string, idioma: Idioma) {
+  // FORK MIA (MIA-250 D): o plano tem teto de agentes e ele está cheio (gatilho da 9174).
+  const limite = traduzirLimiteDeAgentes(erro, idioma);
+  if (limite) return fail(limite.code, limite.message, 409, { requestId, details: limite.details });
   if (ehNomeDeAgenteRepetido(erro)) {
     return fail(CODIGO_NOME_DE_AGENTE_EM_USO, t(NOME_DE_AGENTE_EM_USO), 409, { requestId });
   }
@@ -214,7 +220,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       })
       .select(AGENT_COLUMNS)
       .single();
-    if (error || !agent) return falhaAoCriarAgente(error, t, requestId);
+    if (error || !agent) return falhaAoCriarAgente(error, t, requestId, authz.idioma ?? "pt-BR");
 
     void audit({
       action: "ai_agent.created",
@@ -342,7 +348,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     .insert({ ...records.agent, created_by: authUserId })
     .select(AGENT_COLUMNS)
     .single();
-  if (agentError || !agentRow) return falhaAoCriarAgente(agentError, t, requestId);
+  if (agentError || !agentRow) return falhaAoCriarAgente(agentError, t, requestId, authz.idioma ?? "pt-BR");
   const { data: versionRow, error: versionError } = await admin
     .from("ai_agent_versions")
     .insert({ ...records.version, created_by: authUserId })

@@ -87,6 +87,8 @@ import { DICIONARIO_DA_COEXISTENCIA } from "./dicionario-mia-coexistencia";
 import { DICIONARIO_DO_PRODUTO_NO_NEGOCIO } from "./dicionario-mia-produto-no-negocio";
 // FORK MIA (MIA-218): a IA que segue a plataforma (o aviso da chave e o da trava), idem.
 import { DICIONARIO_DA_IA_DA_PLATAFORMA } from "./dicionario-mia-ia-da-plataforma";
+// FORK MIA (MIA-250 D): o limite de agentes de IA por plano, em inglês e espanhol.
+import { DICIONARIO_DO_LIMITE_DE_AGENTES } from "./dicionario-mia-limite-de-agentes";
 import { TEXTOS_AGENDA_CONFIGURACAO } from "./agenda-configuracao";
 import { TEXTOS_AGENDA_SERVICOS } from "./agenda-servicos";
 import { TEXTOS_PAINEL_GOOGLE_ADS } from "./painel-google-ads";
@@ -126,6 +128,7 @@ export const DICIONARIO: Traducoes = {
   ...DICIONARIO_DA_COEXISTENCIA,
   ...DICIONARIO_DO_PRODUTO_NO_NEGOCIO,
   ...DICIONARIO_DA_IA_DA_PLATAFORMA,
+  ...DICIONARIO_DO_LIMITE_DE_AGENTES,
   ...TEXTOS_PAINEL_GOOGLE_ADS,
   "O App ID e o Configuration ID são só números. Copie de novo do painel da Meta.": { es: "El App ID y el Configuration ID son solo números. Cópielos de nuevo del panel de Meta." },
   "Conexão pelo Facebook salva.": { es: "Conexión por Facebook guardada." },

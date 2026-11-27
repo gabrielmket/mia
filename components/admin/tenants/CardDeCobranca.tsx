@@ -44,6 +44,8 @@ export function fimDoDia(dia: string): string {
 export const FRASE_DO_EXCEDENTE = {
   assentos: "Revogue o acesso de {n} pessoa(s) em Equipe.",
   canais: "Exclua {n} número(s) em Conexões.",
+  // FORK MIA (MIA-250 D): o teto de agentes de IA do plano (lib/planos-mia/limite-de-agentes.ts).
+  agentes: "Arquive {n} agente(s) de IA em Agentes de IA.",
 } as const;
 type RecursoExcedente = keyof typeof FRASE_DO_EXCEDENTE;
 

@@ -29,6 +29,8 @@ import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { iaDaCopia } from "@/lib/ai/trava-da-ia";
 import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
+// FORK MIA (MIA-250 D): duplicar é criar, e conta no limite de agentes do plano.
+import { traduzirLimiteDeAgentes } from "@/lib/planos-mia/limite-de-agentes";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +85,9 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     if (result.error === "no_version_to_duplicate") {
       return fail("state_conflict", t("Agent não tem versão para duplicar."), 409, { requestId });
     }
+    // FORK MIA (MIA-250 D): o gatilho da 9174 recusou a cópia (a mensagem vem do banco).
+    const limite = result.error === "agent_insert_failed" ? traduzirLimiteDeAgentes(result.message, authz.idioma ?? IDIOMA_PADRAO) : null;
+    if (limite) return fail(limite.code, limite.message, 409, { requestId, details: limite.details });
     return fail(
       "internal_error",
       result.error === "version_insert_failed" ? t("Erro ao duplicar versão.") : "Erro ao duplicar agent.",

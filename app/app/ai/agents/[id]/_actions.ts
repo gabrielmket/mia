@@ -38,6 +38,8 @@ import {
 import { publicarVersao, reverterParaVersao, salvarRascunhoDaVersao } from "@/lib/ai/agents/edicao";
 // FORK MIA: o agente novo nasce com a IA da plataforma para quem não escolhe IA.
 import { travarIaDaVersaoNova } from "@/lib/ai/trava-da-ia";
+// FORK MIA (MIA-250 D): o limite de agentes do plano.
+import { traduzirLimiteDeAgentes } from "@/lib/planos-mia/limite-de-agentes";
 
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -347,6 +349,10 @@ export async function createMcpAgentAction(
     // a Action devolve o CÓDIGO e não a mensagem: quem traduz é o cliente, que
     // sabe o idioma de quem está logado (`useT`), e o toast genérico não é o
     // lugar de um erro que mora num campo.
+    // FORK MIA (MIA-250 D): o plano tem teto de agentes e ele está cheio (gatilho
+    // da 9174). A frase já vem no idioma de quem pediu; a tela mostra `message`.
+    const limite = traduzirLimiteDeAgentes(agentErr, authUser.idioma);
+    if (limite) return { ok: false, error: limite.code, message: limite.message, details: limite.details };
     if (ehNomeDeAgenteRepetido(agentErr)) {
       return { ok: false, error: CODIGO_NOME_DE_AGENTE_EM_USO };
     }

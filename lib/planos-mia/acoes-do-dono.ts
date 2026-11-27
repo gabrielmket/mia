@@ -22,6 +22,7 @@ import type { ProvedorDeCobranca } from "@/lib/cobranca/vocabulario";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { logger } from "@/lib/logger";
 
+import { excedenteDeAgentesNoPlano } from "./limite-de-agentes";
 import { autoriaDoToken } from "./rastro";
 import { seguirOPlano } from "./seguir-o-plano";
 
@@ -109,7 +110,8 @@ export async function atribuirOuTrocarPlano(
     // ensina antes (o gatilho de assentos recusaria o próximo convite de qualquer jeito).
     const uso = await lerUsoDaOrganizacao(admin, orgId);
     if (uso) {
-      const excedente = excedenteDoPlano(uso, plano);
+      // MIA-250 D: os agentes de IA entram na mesma lista (o teto é do plano, 9174).
+      const excedente = { ...excedenteDoPlano(uso, plano), ...(await excedenteDeAgentesNoPlano(admin, orgId, plano.id)) };
       if (Object.keys(excedente).length > 0) {
         return recusa("uso_acima_do_plano", "O uso atual não cabe no plano escolhido.", {
           o_que_tirar: excedente,

@@ -50,6 +50,8 @@ export interface PlanoPedido {
   preco_por_mensagem_cents?: number | null;
   /** FORK MIA (.95): o preço por e-mail de marketing. `null` = o padrão do sistema. */
   preco_por_email_cents?: number | null;
+  /** FORK MIA (MIA-250 D): o teto de agentes de IA (1 a 1000). `null` = sem limite. */
+  max_agentes?: number | null;
   frase?: string | null;
   destaque?: boolean;
   oferecido_ao_cliente?: boolean;
@@ -96,6 +98,8 @@ export interface LadoPedido {
   modulos?: ModuloDoPlano[];
   preco_por_mensagem_cents?: number | null;
   preco_por_email_cents?: number | null;
+  /** MIA-250 D (9174): pode mudar em plano assinado (vale na hora, só para criar). */
+  max_agentes?: number | null;
   frase?: string | null;
   destaque?: boolean;
 }
@@ -131,6 +135,8 @@ export function mudancasDoLado(
     preco_por_mensagem_cents: number | null;
     /** Ausente = nulo (o lado lido antes da 9110). */
     preco_por_email_cents?: number | null;
+    /** Ausente = nulo (o lado lido antes da 9174). */
+    max_agentes?: number | null;
     frase: string | null;
     destaque: boolean;
   } | null,
@@ -140,6 +146,7 @@ export function mudancasDoLado(
     modulos: [],
     preco_por_mensagem_cents: null,
     preco_por_email_cents: null,
+    max_agentes: null,
     frase: null,
     destaque: false,
   };
@@ -159,6 +166,9 @@ export function mudancasDoLado(
     pedido.preco_por_email_cents !== (base.preco_por_email_cents ?? null)
   ) {
     campos.preco_por_email_cents = pedido.preco_por_email_cents;
+  }
+  if (pedido.max_agentes !== undefined && pedido.max_agentes !== (base.max_agentes ?? null)) {
+    campos.max_agentes = pedido.max_agentes;
   }
   if (pedido.frase !== undefined && (pedido.frase ?? null) !== base.frase)
     campos.frase = pedido.frase ?? null;
@@ -197,6 +207,10 @@ export async function salvarLadoDoPlano(
           atualLido.preco_por_email_cents === null || atualLido.preco_por_email_cents === undefined
             ? null
             : Number(atualLido.preco_por_email_cents),
+        max_agentes:
+          atualLido.max_agentes === null || atualLido.max_agentes === undefined
+            ? null
+            : Number(atualLido.max_agentes),
         frase: atualLido.frase ?? null,
         destaque: atualLido.destaque === true,
       }
@@ -345,6 +359,7 @@ export async function garantirPlanos(
       modulos: p.modulos,
       preco_por_mensagem_cents: p.preco_por_mensagem_cents,
       preco_por_email_cents: p.preco_por_email_cents,
+      max_agentes: p.max_agentes,
       frase: p.frase,
       destaque: p.destaque,
     };

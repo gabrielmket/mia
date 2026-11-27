@@ -19,6 +19,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { AuthUser, Role } from "@/lib/auth/types";
 import { duplicateAgentWithVersion } from "@/lib/ai/agents/duplicate";
 import { iaDaCopia } from "@/lib/ai/trava-da-ia";
+// FORK MIA (MIA-250 D): duplicar é criar, e conta no limite de agentes do plano.
+import { traduzirLimiteDeAgentes } from "@/lib/planos-mia/limite-de-agentes";
 import {
   CODIGO_NOME_DE_AGENTE_EM_USO,
   ehNomeDeAgenteRepetido,
@@ -32,8 +34,9 @@ type ActionResult<T = void> =
 type AdminGuard =
   | {
       kind: "ok";
-      // FORK MIA: os dois campos de quem pode escolher IA (lib/ai/trava-da-ia.ts).
-      authUser: Pick<AuthUser, "id" | "is_platform_admin" | "support">;
+      // FORK MIA: os dois campos de quem pode escolher IA (lib/ai/trava-da-ia.ts)
+      // e, desde a MIA-250 D, o idioma da frase do limite de agentes do plano.
+      authUser: Pick<AuthUser, "id" | "is_platform_admin" | "support" | "idioma">;
       activeOrg: { orgId: string; role: Role };
     }
   | { kind: "fail"; result: { ok: false; error: string } };
@@ -257,6 +260,9 @@ export async function duplicateAgentAction(id: string): Promise<ActionResult<{ n
     if (result.error === "provedor_desligado") {
       return { ok: false, error: result.error, message: result.message };
     }
+    // FORK MIA (MIA-250 D): o gatilho da 9174 recusou a cópia; o toast mostra `message`.
+    const limite = result.error === "agent_insert_failed" ? traduzirLimiteDeAgentes(result.message, authUser.idioma) : null;
+    if (limite) return { ok: false, error: limite.code, message: limite.message };
     return { ok: false, error: "internal_error", message: result.message };
   }
 

@@ -85,6 +85,8 @@ function planoParaAPlataforma(p: PlanoComModulos, assinantes: number) {
     teste_dias: p.trial_dias,
     pessoas: p.max_assentos,
     numeros: p.max_canais,
+    // FORK MIA (MIA-250 D, 9174): o teto de agentes de IA; null = sem limite.
+    agentes: p.max_agentes,
     teto_ia_usd: reais(p.teto_ia_usd_cents),
     conversas_estimadas: conversasEstimadas(p.teto_ia_usd_cents),
     modulos: p.modulos,
@@ -216,6 +218,18 @@ const PLANO_PEDIDO = z.object({
     .nullable()
     .optional()
     .describe("Máximo de números conectados. null = sem limite."),
+  // FORK MIA (MIA-250 D, 9174): mia_plano_modulos.max_agentes.
+  agentes: z
+    .number()
+    .int()
+    .min(1)
+    .max(1000)
+    .nullable()
+    .optional()
+    .describe(
+      "Máximo de agentes de IA da empresa (1 a 1000; conta todo agente não arquivado: rascunho, publicado, pausado). null = sem limite. " +
+        "Pode mudar em plano assinado: vale na hora, só para criar (quem já passa fica com os agentes e só não cria mais).",
+    ),
   teto_ia_usd: z
     .number()
     .min(1)
@@ -334,7 +348,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
   {
     name: "plataforma_garantir_planos",
     description:
-      "Garante os PLANOS pelo nome: preço (em reais), intervalo, dias de teste, pessoas, números, teto de IA (em dólar, só a plataforma vê), módulos " +
+      "Garante os PLANOS pelo nome: preço (em reais), intervalo, dias de teste, pessoas, números, agentes de IA (`agentes`), teto de IA (em dólar, só a plataforma vê), módulos " +
       "(disparador, email_marketing, crm_b2b), preço do Broadcast, preço por e-mail (preco_email, desde a .95; ausente = o padrão de R$ 0,02), " +
       "frase e selo do cartão, oferecido ou escondido, e qual é o do cadastro. " +
       "CAMPO AUSENTE: no plano que JÁ EXISTE, o que não vier no pedido fica como está (esquecer `numeros` não tira o limite, esquecer `teste_dias` não volta a 14); " +
@@ -362,6 +376,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
           teste_dias: 14,
           pessoas: 3,
           numeros: 1,
+          agentes: 1,
           teto_ia_usd: 15,
           modulos: [],
           oferecido: true,
@@ -372,6 +387,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
           teste_dias: 14,
           pessoas: 8,
           numeros: 2,
+          agentes: 3,
           teto_ia_usd: 40,
           modulos: ["disparador", "email_marketing"],
           preco_broadcast: 0.12,
@@ -397,6 +413,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
         modulos: p.modulos,
         preco_por_mensagem_cents: centavos(p.preco_broadcast),
         preco_por_email_cents: centavos(p.preco_email),
+        max_agentes: p.agentes,
         frase: p.frase,
         destaque: p.destaque,
         oferecido_ao_cliente: p.oferecido,
@@ -481,7 +498,7 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
     description:
       "Atribui ou troca o PLANO de uma empresa como o dono: empresa isenta passa a pagar (nasce em teste com os dias do plano); quem já tem plano troca: no " +
       "teste vale na hora; depois do teste fica agendado para a renovação (plano negociado não paga diferença). Aceita plano escondido. Recusa com a lista " +
-      "do que tirar quando o uso (pessoas, números) não cabe. Os módulos seguem o plano no dia em que ele vale. " +
+      "do que tirar quando o uso (pessoas, números, agentes de IA) não cabe. Os módulos seguem o plano no dia em que ele vale. " +
       "O QUE NÃO FAZ: não cancela a assinatura (é decisão do cliente, na tela dele) nem marca como pago.",
     inputSchema: {
       organization_id: ORGANIZACAO,
@@ -512,10 +529,10 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
             ok: false,
             erro: "uso_acima_do_plano",
             o_que_tirar: Object.entries(oQueTirar).map(([recurso, n]) => ({
-              recurso: recurso === "assentos" ? "pessoas" : "numeros",
+              recurso: recurso === "assentos" ? "pessoas" : recurso === "agentes" ? "agentes" : "numeros",
               tirar: n,
             })),
-            mensagem: `O uso atual não cabe no ${plano.nome}. Revogue acesso em Equipe ou exclua números em Conexões e tente de novo.`,
+            mensagem: `O uso atual não cabe no ${plano.nome}. Revogue acesso em Equipe, exclua números em Conexões ou arquive agentes em Agentes de IA, e tente de novo.`,
           };
         }
         recusar(r.message);

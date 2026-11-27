@@ -25,6 +25,9 @@ import {
   loadOnboardingState,
   OnboardingError,
 } from "./_shared";
+// FORK MIA (MIA-250 D): o limite de agentes do plano nunca trava o cadastro.
+import { logger } from "@/lib/logger";
+import { lerLimiteDeAgentesEstourado } from "@/lib/planos-mia/limite-de-agentes";
 
 /**
  * O jeito de falar do funcionário.
@@ -218,6 +221,27 @@ export async function createDefaultAgent(formData: FormData): Promise<CreateAgen
       .select("id, published_version_id")
       .single();
 
+    // FORK MIA (MIA-250 D): o teto de agentes do plano está cheio (gatilho da
+    // 9174). Não acontece na prática (o teto mínimo é 1 e a empresa nova tem 0,
+    // e o agente padrão que já existe é reaproveitado acima), mas se vier, o
+    // cadastro NÃO trava: o passo segue sem criar, como "pular a IA", com aviso no log.
+    const teto = lerLimiteDeAgentesEstourado(error);
+    if (teto !== null) {
+      logger.warn("onboarding: o plano não deixa criar o agente padrão; o passo da IA segue sem criar", {
+        organizationId: ctx.orgId,
+        limite: teto,
+      });
+      try {
+        await patchOnboardingState(ctx.orgId, {
+          ai: { agent_id: "", prompt_template: "skipped", skipped: true },
+        });
+      } catch (err) {
+        if (err instanceof OnboardingError)
+          return { ok: false, error: "db_error", details: err.message };
+        throw err;
+      }
+      redirect("/onboarding");
+    }
     if (error || !data) {
       return { ok: false, error: "db_error", details: error?.message };
     }
