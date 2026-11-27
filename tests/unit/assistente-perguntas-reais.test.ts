@@ -22,7 +22,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { Role } from "@/lib/auth/types";
-import { normalizar, sinonimosDe, termos, radical } from "@/lib/assistente/busca-da-ajuda";
+import { normalizar, PRETERITOS_EM_RAM, radical, sinonimosDe, termos } from "@/lib/assistente/busca-da-ajuda";
 import { pareceValidacaoDeCampo } from "@/lib/assistente/chamado";
 import { buscarAjuda, ajudaEmOrdem, telasDoManual, type FonteDaAjuda } from "@/lib/assistente/leituras/ajuda";
 import { MANUAIS } from "@/lib/assistente/manuais";
@@ -576,5 +576,51 @@ describe("K2: no empate, vem antes o que a pessoa pode fazer", () => {
     const achados = buscarAjuda({ pergunta: "Como configuro o horário da IA?", papel: "agent", telas: telasParaOPapel({ papel: "agent" }), base: [] });
     expect(achados.manuais[0]?.id).toBe("horario-da-ia");
     expect(achados.manuais[0]?.voce_pode).toBe(false);
+  });
+});
+
+/** Todas as palavras que os manuais e roteiros usam, já normalizadas. */
+function vocabularioDosManuais(): Set<string> {
+  const palavras = new Set<string>();
+  for (const m of [...MANUAIS, ...ROTEIROS]) {
+    const texto = [m.titulo, ...m.palavras, ...m.passos, m.observacao ?? ""].join(" ");
+    for (const p of normalizar(texto).split(/[^a-z0-9]+/)) if (p.length >= 3) palavras.add(p);
+  }
+  return palavras;
+}
+
+describe("K3: o pretérito em \"-ram\" não estraga o presente dos verbos em \"-ar\"", () => {
+  it("esperam, preparam, separam, disparam e declaram ficam no radical de espera, prepara, separa, dispara e declara", () => {
+    for (const [presente, base] of [
+      ["esperam", "espera"],
+      ["preparam", "prepara"],
+      ["separam", "separa"],
+      ["disparam", "dispara"],
+      ["declaram", "declara"],
+      ["comparam", "compara"],
+    ]) {
+      expect(termos(presente), presente).toEqual(termos(base));
+      expect(termos(presente), presente).toEqual(termos(base.replace(/a$/, "ar")));
+    }
+    // A frase do manual dos leads que chegaram ainda casa com "espera" e "esperando".
+    expect(termos("ainda esperam alguém assumir")).toEqual(expect.arrayContaining(termos("espera")));
+    expect(termos("esperando")).toEqual(termos("esperam"));
+  });
+
+  it("o pretérito da lista cai no radical do infinitivo: chegaram casa com chegar", () => {
+    for (const p of PRETERITOS_EM_RAM) {
+      expect(radical(p).length, p).toBeGreaterThanOrEqual(3);
+      expect(radical(p), p).toBe(radical(`${p.slice(0, -3)}r`));
+    }
+    expect(termos("as mensagens que chegaram ontem")).toEqual(expect.arrayContaining(termos("chegar")));
+  });
+
+  it("no vocabulário dos manuais, toda palavra em \"-am\" fora da lista fica no radical da forma em \"-a\"", () => {
+    const fora: string[] = [];
+    for (const p of vocabularioDosManuais()) {
+      if (!p.endsWith("am") || PRETERITOS_EM_RAM.has(p)) continue;
+      if (radical(p) !== radical(p.slice(0, -1))) fora.push(`${p}: ${radical(p)} × ${radical(p.slice(0, -1))}`);
+    }
+    expect(fora).toEqual([]);
   });
 });

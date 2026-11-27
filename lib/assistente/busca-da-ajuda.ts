@@ -83,9 +83,26 @@ export function normalizar(texto: string): string {
 }
 
 const SUFIXOS_VERBAIS = [
-  "ando", "endo", "indo", "ados", "adas", "idos", "idas", "ado", "ada", "ido", "ida", "aram", "eram", "iram", "ar",
-  "er", "ir", "ou", "eu", "iu", "ei", "am", "em", "es", "o", "a", "e",
+  "ando", "endo", "indo", "ados", "adas", "idos", "idas", "ado", "ada", "ido", "ida", "ar", "er", "ir", "ou", "eu",
+  "iu", "ei", "am", "em", "es", "o", "a", "e",
 ];
+
+/**
+ * FORK MIA (.118, MIA-252) — o pretérito em "-ram" só pela lista. Tirar
+ * "aram", "eram" e "iram" de toda palavra acerta "chegaram" (`cheg`), mas
+ * estraga o presente dos verbos em "-ar" cujo radical já termina assim:
+ * "esperam" virava `esp` e deixava de casar com "espera"; o mesmo com
+ * "preparam", "separam", "disparam" e "declaram". A forma é a mesma nos dois
+ * tempos, então não há regra que separe: o pretérito que a equipe escreve
+ * entra aqui, palavra por palavra, e o resto segue o sufixo "am" de sempre.
+ * A cerca (`assistente-perguntas-reais`, K3) confere as duas pontas.
+ */
+export const PRETERITOS_EM_RAM: ReadonlySet<string> = new Set([
+  "abriram", "agendaram", "cancelaram", "chegaram", "clicaram", "comecaram", "compraram", "converteram", "devolveram",
+  "enviaram", "entraram", "esfriaram", "fecharam", "ficaram", "fizeram", "ganharam", "mandaram", "motivaram",
+  "pagaram", "passaram", "pediram", "perderam", "publicaram", "pularam", "receberam", "responderam", "rodaram",
+  "sumiram", "venderam", "viraram", "voltaram",
+]);
 
 /** Um radical leve: plural, gênero e as formas de verbo mais comuns. */
 export function radical(palavra: string): string {
@@ -98,6 +115,7 @@ export function radical(palavra: string): string {
   else if (p.endsWith("ns") && p.length > 4) p = `${p.slice(0, -2)}m`;
   else if (p.endsWith("s") && !p.endsWith("ss") && p.length > 4) p = p.slice(0, -1);
   if (p.endsWith("ao")) return p;
+  if (PRETERITOS_EM_RAM.has(p)) return p.slice(0, -4);
   for (const s of SUFIXOS_VERBAIS) {
     if (p.endsWith(s) && p.length - s.length >= 3) return p.slice(0, -s.length);
   }

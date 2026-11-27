@@ -235,8 +235,11 @@ todas pela mesma régua (`lib/assistente/busca-da-ajuda.ts`):
     "chatgpt"; "leads que chegaram", "leads novos", "novos leads" e "leads que entraram"
     viram o lead que chegou, e "novo" ou "chegaram" sozinhos não; "cada vendedor" e "por
     vendedor" viram um termo das vendas de cada pessoa. "gpt" entra no grupo do Claude e
-    do MCP, e "ranking" no das vendas. O radical passou a cortar "-eu", "-iu" e "-aram"
-    ("vendeu", "abriu", "chegaram").
+    do MCP, e "ranking" no das vendas. O radical passou a cortar "-eu" e "-iu" ("vendeu",
+    "abriu"). O pretérito em "-ram" ("chegaram", "fizeram", "pediram") só perde o final
+    quando está na lista `PRETERITOS_EM_RAM`: a regra geral estragava o presente dos verbos
+    em "-ar" ("esperam" deixava de casar com "espera"; idem "preparam", "separam",
+    "disparam"). A cerca K3 confere os dois lados e percorre o vocabulário dos manuais.
   - *Desempate* (`ajudaEmOrdem` com o papel, em `leituras/ajuda.ts`): quando a pergunta
     não aponta a tela, o manual que a pessoa não faz perde o empate (diferença de até 1%)
     para o que ela faz, e o que só o dono da instalação faz perde do que outro papel da
