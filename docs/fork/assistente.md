@@ -40,12 +40,25 @@ de modelo (telemetria e orçamento em `llm_calls`, `lib/assistente/modelo.ts`).
 | o painel (conversa, sugestões, "de onde veio", botões) | `components/assistente/PainelDoAssistente.tsx`, `MensagemDoAssistente.tsx`, `CartaoDoChamado.tsx` |
 | a página: histórico, resumo da manhã, chamados; para o administrador, "como trabalhamos aqui", quem usa e as perguntas sem resposta | `app/app/assistente/` (porta no `NAV_CATALOG`, hub do CRM, "O dia a dia da venda") |
 | o turno e as ferramentas de leitura | `lib/assistente/turno.ts`, `ferramentas.ts`, `leituras/*.ts` |
+| o formato garantido no servidor (.120): o que a tela não mostra sai do texto antes de gravar | `lib/assistente/formato.ts` (`limparFormatoDaResposta`, no fim de `responderNoAssistente`) |
 | o ponto de IA `assistente` | `lib/ai/pontos/registro.ts` (papel "entender", natureza "sistema") |
 | as rotas | `app/api/v1/assistente/{chat,chamados,chamados/[id]/print,pedir,preferencias,empresa}` |
 | os chamados do lado da Time | `/admin/chamados` e `app/api/v1/admin/chamados/*` |
 | o resumo da manhã e a retenção | `lib/assistente/resumo-da-manha.ts`, cron `assistente-resumo-da-manha` |
 | o MCP de plataforma | `lib/mcp-plataforma/ferramentas/assistente.ts` ([`mcp-de-implantacao.md`](mcp-de-implantacao.md)) |
 | o schema | 9050 (tabelas, RLS, bucket, gatilhos), 9051 (LGPD e retenção) e 9052 (o índice dos contatos citados) |
+
+**O formato garantido no servidor (.120, MIA-253).** A regra 9 do prompt pede só negrito e
+listas, e a tela só desenha isso, mas o diagnóstico da MIA-239 achou o botão "Me leva lá"
+escrito como texto no fim da resposta (link markdown para a tela, `[[...]]`, link para
+`functions://...`, link com a barra escapada). O botão de verdade vem do coletor do turno,
+então o turno passa a resposta por `limparFormatoDaResposta` antes de devolver: a linha que
+é só um link para tela do sistema sai; o link no meio da frase vira o texto dele;
+`functions://` e `[[...]]` saem; título perde o `#`; tabela vira lista ("- **primeira
+coluna:** cabeçalho valor, ..."); travessão vira "a" entre números, "- " no começo da linha
+e vírgula no meio. Negrito, listas, "→" e endereço solto ficam. Resposta que era só esse
+lixo vira o "não sei", como a vazia. As mensagens antigas do histórico não mudam. Quem
+cobra: `tests/unit/assistente-formato-limpo.test.ts`, com os 4 casos em dado fictício.
 
 ## 3. O que o assistente lê (ferramentas só de leitura)
 
