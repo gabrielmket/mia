@@ -39,12 +39,20 @@ import { logger } from "@/lib/logger";
 import { venceReativacoes } from "@/lib/leads/reactivation";
 import { observaTravessias } from "@/lib/leads/risk-worker";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { autorizaCron } from "@/lib/auth/cron-auth";
 
 export const dynamic = "force-dynamic";
 
 /** Teto de orgs por invocação — a próxima passada pega o resto. */
 const ORG_LIMIT = 50;
+
+/**
+ * FORK MIA (MIA-320) — teto da leitura da lista de empresas: 200 páginas de
+ * 1000 = 200 mil negócios abertos na instalação inteira (hoje são uns 2 mil).
+ * Acima disso a resposta sai com `organizations_truncado: true`.
+ */
+const PAGINAS_MAXIMAS = 200;
 
 async function handle(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
@@ -55,18 +63,40 @@ async function handle(req: NextRequest): Promise<Response> {
 
   const admin = createAdminClient();
 
-  const { data: rows, error } = await admin
-    .from("crm_leads")
-    .select("organization_id")
-    .eq("status", "open");
-  if (error) {
-    logger.error("[risk-watcher] query failed", { error: error.message, requestId });
+  // FORK MIA (MIA-320) — A LISTA DE EMPRESAS LÊ TODOS OS NEGÓCIOS ABERTOS.
+  // Esta leitura não tinha `order` nem `range`, e o PostgREST corta em 1000
+  // linhas (`supabase/config.toml`, `max_rows`). Com uma empresa de 1.775
+  // negócios abertos, as outras só entravam na lista por sorte da ordem física
+  // da tabela; a que caísse depois da linha 1000 sumia do observador sem erro.
+  // Agora a leitura vem página a página, ordenada por empresa e desempatada por
+  // `id`, e a lista sai na ordem de `organization_id` (estável entre passadas).
+  const abertos = await lerTodasAsPaginas<{ organization_id: string }>(
+    (de, ate, pedirContagem) =>
+      admin
+        .from("crm_leads")
+        .select("organization_id", pedirContagem ? { count: "exact" } : undefined)
+        .eq("status", "open")
+        .order("organization_id", { ascending: true })
+        .order("id", { ascending: true })
+        .range(de, ate),
+    { paginasMaximas: PAGINAS_MAXIMAS },
+  );
+  if (abertos.erro) {
+    logger.error("[risk-watcher] query failed", { error: abertos.erro, requestId });
     return fail("internal_error", "Failed to list organizations.", 500, { requestId });
   }
+  if (abertos.truncado) {
+    // Recorte não pode ser silencioso: as empresas que ficaram depois do teto
+    // não são observadas nesta passada, e quem lê a rodada precisa saber.
+    logger.error("[risk-watcher] lista de empresas truncada", {
+      lidas: abertos.linhas.length,
+      total: abertos.total,
+      paginasMaximas: PAGINAS_MAXIMAS,
+      requestId,
+    });
+  }
 
-  const orgs = [
-    ...new Set(((rows ?? []) as Array<{ organization_id: string }>).map((r) => r.organization_id)),
-  ].slice(0, ORG_LIMIT);
+  const orgs = [...new Set(abertos.linhas.map((r) => r.organization_id))].slice(0, ORG_LIMIT);
 
   let travessias = 0;
   let esfriaram = 0;
@@ -128,6 +158,7 @@ async function handle(req: NextRequest): Promise<Response> {
       atividades_falhas: falhas,
       gravacoes_falhas: gravacoesFalhas,
       organizations_com_erro: comErro.length,
+      organizations_truncado: abertos.truncado,
     },
     { requestId },
   );

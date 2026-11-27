@@ -67,7 +67,7 @@ function adminDuble() {
     from(tabela: string) {
       if (tabela === "crm_leads") {
         return {
-          select: () => ({ eq: async () => ({ data: [{ organization_id: ORG }], error: null }) }),
+          select: () => ({ eq: () => ({ order: () => ({ order: () => ({ range: async () => ({ data: [{ organization_id: ORG }], error: null, count: 1 }) }) }) }) }),
         };
       }
       if (tabela === "crm_lead_risk_states") {
