@@ -750,7 +750,8 @@ jobs:
     # relógio no meio da segunda passada.
     timeout-minutes: 60
     # 30 → 45 em 10/11/2026 (doc de decisão 302): cortada por relógio aos 30 min
-    # no pg15 e no pg17, também na `main`. Razão inteira em
+    # no pg15 e no pg17, também na `main`. 45 → 60 em 26/11/2026 (doc 421, issue
+    # #1149): verde de 28 a 44 min e 10 cortes aos 45 em 60 rodadas. Razão inteira em
     # tests/unit/preambulo-do-ci-nao-come-o-relogio.test.ts (TETOS).
     # FORK MIA (.101): 45, MEDIDO (o comentário fica DEPOIS do teto porque a
     # cerca do preâmbulo o procura nos 400 caracteres depois do nome do job). Na
