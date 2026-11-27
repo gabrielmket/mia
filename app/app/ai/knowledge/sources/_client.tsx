@@ -32,10 +32,12 @@ export type { AgenteQueUsa };
 interface Props {
   initialSources: SourceRow[];
   initialChave: EstadoDaChave;
+  /** FORK MIA (MIA-262): o cartão da chave de embedding só para quem escolhe a IA. */
+  veChaveDaIa?: boolean;
   agentes: AgenteQueUsa[];
 }
 
-export function AcervoClient({ initialSources, initialChave, agentes }: Props) {
+export function AcervoClient({ initialSources, initialChave, agentes, veChaveDaIa = true }: Props) {
   const t = useT();
   const qc = useQueryClient();
   const [novoAberto, setNovoAberto] = useState(false);
@@ -72,7 +74,14 @@ export function AcervoClient({ initialSources, initialChave, agentes }: Props) {
 
   return (
     <div className="space-y-5">
-      <ChaveDeConhecimento estado={estado} onChaveCadastrada={recarregar} />
+      {/* FORK MIA (MIA-262): sem a chave, o cliente lê só que a nossa equipe resolve. */}
+      {veChaveDaIa ? (
+        <ChaveDeConhecimento estado={estado} onChaveCadastrada={recarregar} />
+      ) : !estado.pode_indexar ? (
+        <p className="text-xs text-warning-fg" data-testid="conhecimento-sem-chave-cliente">
+          {t("A IA desta conta está sem chave para funcionar. Fale com o suporte.")}
+        </p>
+      ) : null}
       <StatusDaBase materiais={lista} podeIndexar={estado.pode_indexar} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">

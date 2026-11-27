@@ -27,7 +27,8 @@ let filtros: Array<[string,string,unknown]>;
 beforeEach(() => {
   vi.clearAllMocks();
   linhas = []; observacoes = []; chamadas = []; filtros = [];
-  vi.mocked(requireRole).mockResolvedValue({ ok: true, user: { id: 'u' }, org: { orgId: ORG, role: 'admin' } } as never);
+  // FORK MIA (MIA-262): o custo e o modelo do Jev são da plataforma; aqui, o admin dela.
+  vi.mocked(requireRole).mockResolvedValue({ ok: true, user: { id: 'u', is_platform_admin: true, support: null }, org: { orgId: ORG, role: 'admin' } } as never);
   vi.mocked(createAdminClient).mockReturnValue({
     from: (nome: string) => {
       const chain = {
@@ -86,5 +87,30 @@ describe('resultados do roteamento', () => {
   it('query inválida é recusada antes de consultar o banco', async () => {
     expect((await pedir('?contexto=18')).status).toBe(422);
     expect(createAdminClient).not.toHaveBeenCalled();
+  });
+});
+
+describe('FORK MIA (MIA-262): custo e modelo do Jev são da plataforma', () => {
+  it.each([
+    ['o admin da empresa', { id: 'u', is_platform_admin: false, support: null }],
+    ['a plataforma em suporte', { id: 'u', is_platform_admin: true, support: { organization_id: ORG } }],
+  ])('%s recebe os casos sem custo nem modelo, e o resumo sem o custo', async (_nome, user) => {
+    vi.mocked(requireRole).mockResolvedValue({ ok: true, user, org: { orgId: ORG, role: 'admin' } } as never);
+    linhas = [caso()];
+    chamadas = [{ job_id: JOB, provider: 'typesafe', cost_cents: .01, model: 'jev-1' }];
+    const { status, body } = await pedir();
+    expect(status).toBe(200);
+    expect(body.data.resumo.custo_total_cents).toBeNull();
+    expect(body.data.resumo.custos_incompletos).toBe(0);
+    expect(body.data.casos[0]).toMatchObject({ modelo_jev: null, custo_jev_cents: null, custo_tradicional_cents: null, custo_incompleto: false });
+    // A revisão do roteamento fica: o resto do caso continua.
+    expect(body.data.casos[0].intent_final).toBe(caso().intent_final);
+  });
+
+  it('o filtro por modelo não serve de sonda para quem não vê o modelo', async () => {
+    vi.mocked(requireRole).mockResolvedValue({ ok: true, user: { id: 'u', is_platform_admin: false, support: null }, org: { orgId: ORG, role: 'admin' } } as never);
+    linhas = [caso()];
+    const { body } = await pedir('?modelo=outro-modelo');
+    expect(body.data.casos).toHaveLength(1);
   });
 });

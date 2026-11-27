@@ -44,6 +44,8 @@ interface Props {
   draft: AgentVersionRow | null;
   published: AgentVersionRow | null;
   readOnly?: boolean;
+  /** FORK MIA (MIA-262): provedor, modelo, tokens e custo só para quem escolhe a IA. */
+  podeEscolherIa?: boolean;
   /**
    * Os canais da organização, para o modo de teste do canal DESTA versão.
    *
@@ -213,7 +215,7 @@ function Verificacoes({ g }: { g: NonNullable<TestResponse["data"]["guardrails"]
   );
 }
 
-export function TestPanel({ agent, draft, published, readOnly, channelSessions }: Props) {
+export function TestPanel({ agent, draft, published, readOnly, channelSessions, podeEscolherIa = true }: Props) {
   const t = useT();
   const telefoneExemplo = useTelefoneExemplo();
   const target = draft ?? published;
@@ -339,16 +341,20 @@ export function TestPanel({ agent, draft, published, readOnly, channelSessions }
           </p>
           <div className="flex items-center gap-2 text-sm">
             <Badge variant="outline">{versionLabel}</Badge>
+            {podeEscolherIa && ( // FORK MIA (MIA-262)
             <span className="font-mono text-xs">
               {target.provider} / {target.model}
             </span>
+            )}
           </div>
         </div>
 
         <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs">
+          {podeEscolherIa && ( // FORK MIA (MIA-262)
           <p className="font-medium text-amber-700 dark:text-amber-400">
             {t("⚠ Modo teste consome créditos do provider.")}
           </p>
+          )}
           <p className="mt-1 text-muted-foreground">
             {t("Nenhuma mensagem é enviada via WhatsApp. O run é registrado como dry-run.")}
           </p>
@@ -458,11 +464,13 @@ export function TestPanel({ agent, draft, published, readOnly, channelSessions }
               <Cell label={t("Latência")}>
                 {typeof result.latency_ms === "number" ? `${result.latency_ms}ms` : "—"}
               </Cell>
+              {podeEscolherIa && ( // FORK MIA (MIA-262)
               <Cell label={t("Tokens in/out")}>
                 {result.tokens_in?.toLocaleString()??"—"} /{" "}
                 {result.tokens_out?.toLocaleString()??"—"}
               </Cell>
-              <Cell label={t("Custo (cents)")}>{result.cost_cents ?? "—"}</Cell>
+              )}
+              {podeEscolherIa && <Cell label={t("Custo (cents)")}>{result.cost_cents ?? "—"}</Cell>}
             </div>
 
             {result.candidates ? (

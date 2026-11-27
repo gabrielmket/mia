@@ -35,12 +35,14 @@ export function JaEstaPronto({
       // segundo plano — e dizer "falta a chave" a quem acabou de colá-la é a
       // frase que manda a pessoa cadastrar de novo o que já está lá.
       pronto: retrato.inteligencia.origemDaChave !== "nenhuma",
+      // FORK MIA (MIA-262): o provedor e a chave são da plataforma. A empresa lê
+      // só se a IA está pronta; a pendência da chave é da nossa equipe.
       texto:
         retrato.inteligencia.origemDaChave !== "nenhuma"
-          ? `${t("Inteligência contratada:")} ${retrato.inteligencia.rotulo}`
-          : retrato.inteligencia.chaveEmVerificacao
-            ? t("Chave cadastrada — conferindo com a empresa de IA")
-            : t("Falta a chave da inteligência artificial"),
+          ? t("Inteligência artificial pronta")
+          : t(
+              "A inteligência dos agentes desta conta é configurada pela nossa equipe e ainda não está pronta. Fale com o suporte.",
+            ),
     },
     {
       pronto: retrato.whatsapp.transporteApontado,

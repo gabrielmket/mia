@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { listClassifierModels } from "@/lib/ai/classifier-models";
+import { escolheIa } from "@/lib/ai/trava-da-ia";
 import { listSelectableChannels } from "@/lib/channels/selectable";
 import { createClient } from "@/lib/supabase/server";
 import type { RouterDetailState } from "@/hooks/ai/useRouters";
@@ -81,10 +82,15 @@ export default async function RouterEditorPage({ params }: { params: Promise<{ i
 
   // Só os modelos que esta organização consegue usar de fato — ver a razão em
   // lib/ai/classifier-models.
-  const classifierModels = await listClassifierModels(supabase, activeOrg.orgId, {
-    anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
-    openai: Boolean(process.env.OPENAI_API_KEY),
-  });
+  // FORK MIA (MIA-262): o classificador é IA da plataforma; quem não escolhe a
+  // IA não recebe a lista de modelos.
+  const podeEscolherIa = escolheIa(user);
+  const classifierModels = podeEscolherIa
+    ? await listClassifierModels(supabase, activeOrg.orgId, {
+        anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
+        openai: Boolean(process.env.OPENAI_API_KEY),
+      })
+    : [];
 
   const initialState: RouterDetailState = {
     // O formulário recebe o `is_active` GRAVADO. Entregar `false` aqui por
@@ -105,6 +111,7 @@ export default async function RouterEditorPage({ params }: { params: Promise<{ i
         agents={agents}
         channelSessions={channelSessions}
         classifierModels={classifierModels}
+        podeEscolherIa={podeEscolherIa}
         numeroRemovido={numeroRemovido}
         numerosLivres={numerosLivres}
       />

@@ -8,7 +8,6 @@ import { createClient } from "@supabase/supabase-js";
 import { expect, type Page, type TestInfo } from "./test";
 
 import { bufToBytea, encryptKey } from "@/lib/crypto/aes_gcm";
-import { PONTO_TRANSCRICAO_DE_AUDIO } from "@/lib/ai/pontos/registro";
 import { isMediaPathInOrganization } from "@/lib/messaging/media/upload-validation";
 
 /** Banco/Storage reais; somente o fornecedor e a origem HTTP são sintéticos. */
@@ -97,7 +96,11 @@ export async function provarTranscricaoOpenRouter(page: Page, info: TestInfo): P
     });
     await info.attach("contrato real com fornecedor sintético", { path: recibo, contentType: "application/json" });
 
-    // Manager pode LER o anúncio; editar provedores continua exigindo admin/MFA.
+    // FORK MIA (MIA-262): o painel de provedores é da plataforma. O manager da
+    // empresa não chega a ele, nem pela tela nem pela API, e o modelo de
+    // transcrição não aparece para ele. O anúncio (modelo e origem) é provado
+    // como admin de plataforma em
+    // tests/unit/painel-de-provedores-anuncia-o-modelo-de-transcricao.test.ts.
     await page.context().clearCookies();
     await page.goto("/login");
     await page.locator("#email").fill(email);
@@ -105,17 +108,13 @@ export async function provarTranscricaoOpenRouter(page: Page, info: TestInfo): P
     await page.getByRole("button", { name: "Entrar", exact: true }).click();
     await page.waitForURL(/\/app\//);
     await page.goto("/app/ai/providers");
-    await expect(page.getByTestId("painel-de-provedores")).toBeVisible();
-    await page.getByTestId("avancado-perceber").click();
-    const cartao = page.getByTestId(`ponto-${PONTO_TRANSCRICAO_DE_AUDIO}`);
-    await expect(cartao).toBeVisible();
-    await expect(cartao).toContainText("openai/whisper-large-v3");
-    await expect(page.getByTestId(`origem-${PONTO_TRANSCRICAO_DE_AUDIO}`)).toContainText(
-      "o provedor de conversa desta organização é a OpenRouter, que transcreve na própria API com a mesma chave",
-    );
-    await expect(page.getByTestId(`provider-${PONTO_TRANSCRICAO_DE_AUDIO}`)).toHaveCount(0);
-    await cartao.scrollIntoViewIfNeeded();
-    await page.screenshot({ path: path.join(evidence, "anuncio-da-transcricao.png") });
+    await expect(page).not.toHaveURL(/\/app\/ai\/providers/);
+    await expect(page.getByTestId("painel-de-provedores")).toHaveCount(0);
+    await expect(page.locator("body")).not.toContainText("whisper-large-v3");
+    const painel = await page.request.get("/api/v1/ai/providers");
+    expect(painel.status()).toBe(403);
+    expect(await painel.text()).not.toContain("whisper-large-v3");
+    await page.screenshot({ path: path.join(evidence, "manager-sem-painel-de-provedores.png") });
   } finally {
     let falhouLimpeza = false;
     if (orgId) {

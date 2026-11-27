@@ -254,7 +254,8 @@ describe("POST /api/v1/proposals/[id]/preencher-com-conversa", () => {
     const res = await mundo.POST();
     expect(res.status).toBe(200);
     expect(res.body.data.disponivel).toBe(false);
-    expect(res.body.data.motivo).toMatch(/orçamento/);
+    // FORK MIA (MIA-262): o cliente lê o teto na linguagem do plano, sem a palavra "orçamento".
+    expect(res.body.data.motivo).toBe("O uso de IA do plano acabou");
     expect(res.body.data.sugestoes).toEqual([]);
   });
 });

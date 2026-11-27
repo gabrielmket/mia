@@ -38,7 +38,8 @@ import {
   mandarMensagemDoCliente,
   mensagensMedidas,
 } from "./helpers/jev";
-import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
+import { lerCreds, loginComoDono } from "./helpers/login-admin";
+import { afirmarDonoDoServidor } from "./utils/precondicao";
 
 const CHAVE = process.env.JEV_API_KEY ?? "";
 
@@ -90,7 +91,10 @@ test.describe("Jev — contra a API de verdade", () => {
   });
 
   test("a chave real passa no teste, e a primeira mensagem é medida pela TypeSafe AI", async ({ page }) => {
-    await loginComoAdmin(page, lerCreds());
+    // FORK MIA (MIA-262): a chave e o cartão do Jev são da plataforma; quem liga é o dono.
+    const creds = lerCreds();
+    await afirmarDonoDoServidor(creds.users.dono!.email);
+    await loginComoDono(page, creds);
     orgId = credsDoJev().orgId;
     await limparOJev(orgId);
 

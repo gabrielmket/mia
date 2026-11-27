@@ -53,7 +53,14 @@ import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 // FORK MIA (.90): os recados da jornada de assinatura no mesmo grupo.
 import { mandarRecadosDaJornada } from "@/lib/planos-mia/recados";
 // FORK MIA (MIA-218): empresa com o padrão de IA num provedor sem chave.
-import { CHAVE_DO_AVISO_DA_IA, contarEmpresasSemChave, recadoDaIaSemChave } from "@/lib/ai/aviso-da-ia-das-empresas";
+import {
+  CHAVE_DO_AVISO_DA_IA,
+  CHAVE_DO_AVISO_DO_JEV,
+  contarEmpresasSemChave,
+  contarJevSemChave,
+  recadoDaIaSemChave,
+  recadoDoJevSemChave,
+} from "@/lib/ai/aviso-da-ia-das-empresas";
 import { iaDasEmpresas } from "@/lib/ai/ia-da-empresa";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -265,6 +272,18 @@ async function handle(req: NextRequest): Promise<Response> {
         detalhe: { empresas_sem_chave: semChave },
       });
       if (saiu) enviados.push(CHAVE_DO_AVISO_DA_IA);
+    }
+    // FORK MIA (MIA-262): o Jev ligado sem chave validada. A mesma leitura.
+    const jevSemChave = empresas === null ? 0 : contarJevSemChave(empresas);
+    const recadoDoJev = recadoDoJevSemChave(jevSemChave);
+    if (recadoDoJev) {
+      const saiu = await reportar(admin, {
+        chave: CHAVE_DO_AVISO_DO_JEV,
+        horas: UM_DIA,
+        texto: recadoDoJev,
+        detalhe: { empresas_com_jev_sem_chave: jevSemChave },
+      });
+      if (saiu) enviados.push(CHAVE_DO_AVISO_DO_JEV);
     }
   }
 

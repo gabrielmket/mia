@@ -15,12 +15,15 @@ export function LegacyRecovery({
   credentials,
   hasVersion,
   readOnly,
+  podeEscolherIa = true,
 }: {
   agent: AgentRow;
   channels: ChannelSessionLite[];
   credentials: CredentialRow[];
   hasVersion: boolean;
   readOnly?: boolean;
+  /** FORK MIA (MIA-262): sem isto, só o canal; a IA é a da plataforma (o servidor põe). */
+  podeEscolherIa?: boolean;
 }) {
   const t = useT(),
     router = useRouter(),
@@ -32,12 +35,13 @@ export function LegacyRecovery({
   async function recover() {
     setBusy(true);
     try {
-      await apiClient.post(`/api/v1/ai/agents/${agent.id}/reconcile`, {
-        channel_id: channel,
-        provider,
-        model,
-        credential_id: credential || null,
-      });
+      await apiClient.post(
+        `/api/v1/ai/agents/${agent.id}/reconcile`,
+        // FORK MIA (MIA-262): quem não escolhe a IA manda só o canal.
+        podeEscolherIa
+          ? { channel_id: channel, provider, model, credential_id: credential || null }
+          : { channel_id: channel },
+      );
       router.refresh();
     } catch (e) {
       showApiError(e);
@@ -82,6 +86,7 @@ export function LegacyRecovery({
                 ))}
               </select>
             </label>
+            {podeEscolherIa && (<>{/* FORK MIA (MIA-262) */}
             <label className="text-sm">
               {t("Provedor")}
               <Input
@@ -112,10 +117,11 @@ export function LegacyRecovery({
                   ))}
               </select>
             </label>
+            </>)}
           </div>
           <Button
             type="button"
-            disabled={readOnly || busy || !channel || !provider || !model}
+            disabled={readOnly || busy || !channel || (podeEscolherIa && (!provider || !model))}
             onClick={recover}
           >
             {t(busy ? "Conferindo configuração…" : "Conferir e publicar configuração preservada")}

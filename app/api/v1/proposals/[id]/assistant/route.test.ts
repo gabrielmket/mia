@@ -141,7 +141,8 @@ describe("POST /api/v1/proposals/[id]/assistant", () => {
     const res = await mundo.POST({ instrucao: "baixa 10%" });
     expect(res.status).toBe(200);
     expect(res.body.data.disponivel).toBe(false);
-    expect(res.body.data.motivo).toMatch(/orçamento/);
+    // FORK MIA (MIA-262): a frase do plano, sem o "Uso de IA › Orçamento" (403 ao cliente).
+    expect(res.body.data.motivo).toBe("O uso de IA do plano acabou");
   });
 
   it("com sucesso: devolve a lista de mudancas, NÃO aplica nada no banco", async () => {

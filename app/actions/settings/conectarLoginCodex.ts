@@ -21,6 +21,7 @@ import {
 } from "@/lib/ai/pontos/pkce-da-assinatura";
 import { verificarEstado } from "@/lib/agenda/google/estado";
 import { audit } from "@/lib/audit";
+import { podeConfigurarChaveDeIa } from "@/lib/ai/custo-e-da-plataforma";
 import { podeAdministrarEmpresa } from "@/lib/auth/pode-administrar-empresa";
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { env } from "@/lib/env";
@@ -71,6 +72,8 @@ export async function conectarLoginCodex(
   const activeOrg = await resolveActiveOrg(authUser);
   if (!activeOrg) return { ok: false, error: "forbidden_tenant" };
   if (!podeAdministrarEmpresa(authUser, activeOrg)) return { ok: false, error: "forbidden_role" };
+  // FORK MIA (MIA-262): a chave de IA é da plataforma, como em POST e DELETE de /api/v1/ai/credentials.
+  if (!podeConfigurarChaveDeIa(authUser)) return { ok: false, error: "ia_da_plataforma" };
   // Suporte em leitura (ou já encerrado) não grava nem apaga a conta da empresa.
   if (supportWriteError(authUser.support)) return { ok: false, error: "somente_leitura" };
   if (await mfaEmDivida()) return { ok: false, error: "mfa_required" };
@@ -226,6 +229,8 @@ export async function desconectarLoginCodexAgora(): Promise<DesconectarLoginCode
   const activeOrg = await resolveActiveOrg(authUser);
   if (!activeOrg) return { ok: false, error: "forbidden_tenant" };
   if (!podeAdministrarEmpresa(authUser, activeOrg)) return { ok: false, error: "forbidden_role" };
+  // FORK MIA (MIA-262): a chave de IA é da plataforma, como em POST e DELETE de /api/v1/ai/credentials.
+  if (!podeConfigurarChaveDeIa(authUser)) return { ok: false, error: "ia_da_plataforma" };
   // Suporte em leitura (ou já encerrado) não grava nem apaga a conta da empresa.
   if (supportWriteError(authUser.support)) return { ok: false, error: "somente_leitura" };
   if (await mfaEmDivida()) return { ok: false, error: "mfa_required" };

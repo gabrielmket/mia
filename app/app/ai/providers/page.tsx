@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { podeConfigurarChaveDeIa } from "@/lib/ai/custo-e-da-plataforma";
+import { escolheIa } from "@/lib/ai/trava-da-ia";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 
@@ -26,6 +27,10 @@ export default async function ProvedoresPage() {
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) redirect("/app");
   if (ROLE_RANK[activeOrg.role] < ROLE_RANK.manager) redirect("/403");
+  // FORK MIA (MIA-262): a tela inteira é escolha de IA (provedor, modelo, chave,
+  // Jev, embedding, voz e mapas), e escolher é da plataforma. Entra o admin da
+  // plataforma e a plataforma em suporte com edição; a empresa e a agência, não.
+  if (!escolheIa(user)) redirect("/403");
 
   // FORK MIA (MIA-218): o link da chave própria só para o admin da plataforma.
   return <PainelDeProvedores podeCadastrarChave={podeConfigurarChaveDeIa(user)} />;

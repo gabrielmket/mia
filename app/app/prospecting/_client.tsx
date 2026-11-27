@@ -506,7 +506,8 @@ export function ProspectingClient() {
     setManualCampaigns((current) => ({ ...current, [campaignId]: false }));
     await query.refetch();
     setNotice(
-      `${t("Agente publicado e selecionado.")} ${result.model_label}. ${t("Revise o ritmo e inicie a campanha quando estiver pronto.")}`,
+      // FORK MIA (MIA-262): sem o nome do modelo, que é da plataforma.
+      `${t("Agente publicado e selecionado.")} ${t("Revise o ritmo e inicie a campanha quando estiver pronto.")}`,
     );
   }
   const candidates = data?.candidates.filter((c) => c.campaign_id === campaign?.id) ?? [];

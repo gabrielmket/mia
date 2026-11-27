@@ -1378,14 +1378,18 @@ const PASSO_A_PASSO_DO_UPSTREAM: Manual[] = [
     id: "provedores-jev",
     titulo: "Provedores e o Jev (decisões rápidas)",
     palavras: ["provedores", "jev", "decisoes rapidas", "so observa", "decide", "deixar o jev decidir", "transcricao", "mapas"],
-    href: "/app/ai/providers",
-    papelMinimo: "admin",
+    // FORK MIA (MIA-262): Provedores de IA é da plataforma (a tela dá 403 à
+    // empresa). O manual explica o Jev e diz a quem pedir; o resultado do
+    // roteamento a empresa continua vendo em Execuções › Roteamento.
+    href: "/app/ai/runs",
+    telas: ["/app/ai/providers"],
+    papelMinimo: "viewer",
     passos: [
-      "Abra Provedores (no hub Ver tudo no agente) e vá ao cartão do Jev.",
-      "Em cada tarefa, Só observa quer dizer que a IA de sempre decide e o Jev só é comparado com ela. Use Deixar o Jev decidir para valer a escolha dele, ou Voltar a só observar.",
-      "Use Pausar esta tarefa ou Religar quando precisar.",
+      "O Jev é uma segunda inteligência que decide as partes rápidas do atendimento, como para qual agente vai a conversa. Na MIA, quem liga, desliga e escolhe se ele só observa ou decide é a Time Company.",
+      "Só observa quer dizer que a IA de sempre decide e o Jev só é comparado com ela. Decidindo, vale a escolha do Jev, e a IA de sempre cobre quando ele não responde.",
+      "Para ver as decisões do roteamento e revisar as que erraram, abra Execuções e a aba Roteamento.",
     ],
-    observacao: "Só o administrador muda o Jev. Na MIA, a chave do Jev e o modelo padrão são da Time Company: se a tela pedir chave, fale com ela.",
+    observacao: "Para ligar o Jev, deixar ele decidir ou pausar uma tarefa, fale com a Time Company. A tela Provedores de IA é da plataforma.",
   },
   {
     id: "execucoes",

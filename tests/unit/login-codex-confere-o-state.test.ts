@@ -25,7 +25,8 @@ const { SEGREDO, ORG, PESSOA } = vi.hoisted(() => ({
 
 vi.mock("@/lib/env", () => ({ env: { INTERNAL_SECRET: SEGREDO } }));
 vi.mock("@/lib/auth/server", () => ({
-  loadAuthUser: vi.fn(async () => ({ id: PESSOA, support: null })),
+  // FORK MIA (MIA-262): a chave de IA é da plataforma; a pessoa da sessão é o admin dela.
+  loadAuthUser: vi.fn(async () => ({ id: PESSOA, support: null, is_platform_admin: true, platform_admin_scope: "full" })),
   resolveActiveOrg: vi.fn(async () => ({ orgId: ORG, role: "admin" })),
   mfaEmDivida: vi.fn(async () => false),
 }));
@@ -344,3 +345,15 @@ describe("os tokens não saem da action", () => {
   });
 });
 
+
+describe("FORK MIA (MIA-262): a chave de IA é da plataforma", () => {
+  it("o admin da empresa não conecta nem desconecta o login por assinatura", async () => {
+    const { loadAuthUser } = await import("@/lib/auth/server");
+    const doCliente = { id: PESSOA, support: null, is_platform_admin: false, platform_admin_scope: null };
+    vi.mocked(loadAuthUser).mockResolvedValueOnce(doCliente as never).mockResolvedValueOnce(doCliente as never);
+    const conectar = await conectarLoginCodex({ codigo: retorno("code-bom", estadoPara(ORG, PESSOA)), codeVerifier: VERIFIER });
+    expect(conectar).toEqual({ ok: false, error: "ia_da_plataforma" });
+    const { desconectarLoginCodexAgora } = await import("@/app/actions/settings/conectarLoginCodex");
+    expect(await desconectarLoginCodexAgora()).toEqual({ ok: false, error: "ia_da_plataforma" });
+  });
+});

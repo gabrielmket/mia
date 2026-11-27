@@ -25,7 +25,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
-    user: { id: ID, idioma: "pt-BR" },
+    // FORK MIA (MIA-262): provedor, modelo, tokens e custo do recibo são da
+    // plataforma; a projeção é conferida pelo admin dela. O gerente da empresa
+    // está no último caso deste arquivo.
+    user: { id: ID, idioma: "pt-BR", is_platform_admin: true, support: null },
     org: { orgId: ID, role: "manager" },
   } as never);
 });
@@ -151,5 +154,34 @@ describe("o leitor entrega recibos e não o texto livre guardado no legado", () 
     expect(payload).toMatchObject({ error: { code: "query_failed" } });
     expect(JSON.stringify(payload)).not.toContain(PESSOAL);
     expect(JSON.stringify(payload)).not.toContain(SEGREDO);
+  });
+});
+
+describe("FORK MIA (MIA-262): o gerente da empresa recebe o recibo sem a IA da plataforma", () => {
+  it("provedor, modelo, tokens e custo vêm nulos; o status e o erro ficam", async () => {
+    vi.mocked(requireRole).mockResolvedValue({
+      ok: true,
+      user: { id: ID, idioma: "pt-BR", is_platform_admin: false, support: null },
+      org: { orgId: ID, role: "manager" },
+    } as never);
+    vi.mocked(createClient).mockResolvedValue(
+      banco([
+        {
+          id: ID,
+          status: "failed",
+          error_code: "TypeError",
+          provider: "anthropic",
+          model: "claude-sonnet-4-6",
+          tokens_in: 10,
+          tokens_out: 5,
+          cost_cents: 3,
+          created_at: "2026-11-20T12:00:00.000Z",
+        },
+      ]) as never,
+    );
+    const payload = await (await pedir()).json();
+    const traco = payload.data.tracos[0];
+    expect(traco).toMatchObject({ id: ID, status: "failed", error_code: "TypeError" });
+    expect(traco).toMatchObject({ provider: null, model: null, tokens_in: null, tokens_out: null, cost_cents: null });
   });
 });

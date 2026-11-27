@@ -1017,6 +1017,12 @@ admin, `/health`, relatório interno e MCP) pega a empresa que mesmo assim ficou
 **Mora em** `lib/ai/ia-da-empresa.ts` (a régua), `lib/ai/aviso-da-ia-das-empresas.ts` (o aviso) e
 `lib/ai/trava-da-ia.ts` (`plataformaEditaEmSuporte`).
 
+**O cliente não vê a IA (MIA-262).** Provedor, modelo, chave, consumo e custo saem da resposta e da
+tela para quem não é da plataforma: Provedores de IA dá 403 e sai do menu, o editor do agente perde o
+cartão da IA e os freios de gasto, as execuções e o roteamento perdem tokens, custo e modelo, e o aviso
+de orçamento fala a língua do plano. Portões e lista completa na seção 7 do documento; a regra mora em
+`lib/ai/custo-e-da-plataforma.ts`. Pontos de encaixe: `git grep -n "FORK MIA (MIA-262)"`.
+
 **Pontos de encaixe** (`FORK MIA (9172)` e `FORK MIA (MIA-218)`): do upstream,
 `app/api/v1/ai/providers/route.ts` (o `ia` do GET e a trava do PATCH e do PUT),
 `app/api/v1/admin/modelo-de-ia/route.ts` (`empresas` do GET e a trava do PUT),
@@ -1099,7 +1105,7 @@ número de avisos caído), `app/api/v1/cron/report-da-plataforma/route.test.ts` 
 | 25 | O fuso da organização nos relatórios | `fuso-da-organizacao.md` | 9166 | `fuso-dos-relatorios-uma-regra.test.ts`, `tests/invariants/fuso-invalido-nos-relatorios.test.ts` |
 | 26 | O realtime do sistema com a semente desligada | `realtime-do-sistema.md` | nenhuma | nenhum (conferência pela leitura do tenant) |
 | 27 | O batimento do vigia dos canais | `vigia-dos-canais.md` | 9168 | `vigia-dos-canais-bate-o-ponto.test.ts`, `health-diz-se-o-vigia-dos-canais-passou.test.ts`, `tests/invariants/batimento-dos-crons.test.ts` |
-| 28 | A IA de toda empresa segue a da plataforma | `ia-da-plataforma.md` | 9172 | `tests/invariants/ia-segue-a-plataforma.test.ts`, `modo-suporte-escolhe-a-ia.test.ts`, `health-diz-se-ha-empresa-sem-ia.test.ts`, `mcp-de-implantacao-ia-das-empresas.test.ts` |
+| 28 | A IA de toda empresa segue a da plataforma | `ia-da-plataforma.md` | 9172 | `tests/invariants/ia-segue-a-plataforma.test.ts`, `modo-suporte-escolhe-a-ia.test.ts`, `health-diz-se-ha-empresa-sem-ia.test.ts`, `mcp-de-implantacao-ia-das-empresas.test.ts`, `ia-so-no-admin.test.ts`, `as-empresas-com-chave-propria-seguem-respondendo.test.ts` |
 | 29 | Aviso da queda do número | `aviso-da-queda.md` | nenhuma | `aviso-da-queda.test.ts`, `mcp-de-implantacao-aviso-da-queda.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua

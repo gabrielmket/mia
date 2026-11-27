@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
-import { podeConfigurarChaveDeIa } from "@/lib/ai/custo-e-da-plataforma";
+import { escolheIa } from "@/lib/ai/trava-da-ia";
 import { iaDoAgenteNovo } from "@/lib/ai/modelo-da-plataforma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ROLE_RANK } from "@/lib/auth/types";
@@ -65,7 +65,8 @@ export default async function NewAgentPage() {
   // cliente) recebe o par que vale e NENHUMA credencial: a lista, com os
   // últimos dígitos da chave, iria no payload da página mesmo com o cartão
   // escondido. Ver `iaDoAgenteNovo` (lib/ai/modelo-da-plataforma.ts).
-  const podeEscolherIa = podeConfigurarChaveDeIa(user);
+  // MIA-262: a mesma régua da trava do servidor (`escolheIa`), como no editor.
+  const podeEscolherIa = escolheIa(user);
   const credentials = podeEscolherIa ? ((credentialsRes.data ?? []) as CredentialRow[]) : [];
   const iaDaPlataforma = podeEscolherIa
     ? null

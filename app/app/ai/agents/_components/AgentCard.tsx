@@ -65,6 +65,8 @@ export function AgentCard({ agent, canWrite }: Props) {
           <h3 className="truncate font-medium" title={agent.name}>
             {agent.name}
           </h3>
+          {/* FORK MIA (MIA-262): sem modelo (quem não escolhe a IA), sem a linha. */}
+          {modeloEmVigor(agent) !== "—" && (
           <p
             className="truncate text-xs text-muted-foreground"
             title={
@@ -75,6 +77,7 @@ export function AgentCard({ agent, canWrite }: Props) {
           >
             {modeloEmVigor(agent)}
           </p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {agent.is_default && (

@@ -164,15 +164,12 @@ export function TestarClient({ nome, agenteId, versaoId }: Props) {
                   "Ele não conseguiu responder — e é melhor descobrir isso agora do que com um cliente de verdade.",
                 )}
               </p>
-              <p className="text-xs text-muted-foreground">
-                {t("Motivo:")} <code className="break-all">{desfecho.mensagem}</code>
-              </p>
+              {/* FORK MIA (MIA-262): o erro cru do motor e a chave são da plataforma, e
+                  IA › Credenciais dá 403 à empresa. */}
               <p className="text-sm">
                 {t(
-                  "As causas mais comuns são a chave da empresa de IA sem saldo ou o modelo indisponível. Dá para conferir em",
-                )}{" "}
-                <strong>{t("IA › Credenciais")}</strong>{" "}
-                {t("e seguir daqui mesmo — o que você montou está salvo.")}
+                  "A inteligência dos agentes desta conta é configurada pela nossa equipe e ainda não está pronta. Fale com o suporte.",
+                )}
               </p>
             </div>
           )}

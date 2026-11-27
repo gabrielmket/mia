@@ -48,7 +48,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
-    user: { id: "actor", idioma: "pt-BR" },
+    // FORK MIA (MIA-262): a tela de Provedores é da plataforma; quem pede aqui é o admin
+    // de plataforma. A recusa aos outros papéis está em ia-so-no-admin.test.ts.
+    user: { id: "actor", idioma: "pt-BR", is_platform_admin: true, platform_admin_scope: "full", support: null },
     org: { orgId: "11111111-1111-4111-8111-111111111111", role: "admin" },
   } as unknown as Awaited<ReturnType<typeof requireRole>>);
 });

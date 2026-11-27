@@ -11,6 +11,7 @@ import type { NextRequest } from "next/server";
 
 import { comIdDaRequisicao, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { podeVerCusto, semCustoNaAuditoria } from "@/lib/ai/custo-e-da-plataforma";
 import { createClient } from "@/lib/supabase/server";
 import { auditQuerySchema } from "@/lib/schemas/audit";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -127,7 +128,8 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
 
   const lines = [HEADER.join(",")];
-  for (const r of rows) {
+  // FORK MIA (MIA-262): o dólar da IA é da plataforma (lib/ai/custo-e-da-plataforma.ts).
+  for (const r of semCustoNaAuditoria(rows, podeVerCusto(authz.user))) {
     lines.push(
       [
         r.id,

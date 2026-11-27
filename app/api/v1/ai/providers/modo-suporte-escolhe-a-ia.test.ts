@@ -150,9 +150,13 @@ describe("quem continua sem escolher a IA da empresa", () => {
     ["suporte de quem não é da plataforma", quem({ plataforma: false, support: sessao() })],
   ];
 
-  it.each(casos)("%s: painel só de leitura e PATCH recusado sem gravar", async (_nome, user) => {
+  // FORK MIA (MIA-262): a tela inteira é da plataforma; quem não escolhe a IA
+  // não lê o painel (antes lia só para ver).
+  it.each(casos)("%s: o painel é recusado (403) e o PATCH também, sem gravar", async (_nome, user) => {
     entraComo(user);
-    expect(await podeEditar()).toBe(false);
+    const lido = await GET();
+    expect(lido.status).toBe(403);
+    expect(((await lido.json()) as { error: { code: string } }).error.code).toBe("ia_da_plataforma");
     const res = await salvarPadrao();
     expect(res.status).toBe(403);
     const corpo = (await res.json()) as { error: { code: string } };
