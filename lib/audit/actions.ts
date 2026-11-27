@@ -2029,6 +2029,12 @@ export const AUDIT_ACTIONS = [
   //     seguir a plataforma (`condicao` A, B ou C).
   "ai.padrao_seguiu_a_plataforma",
   "ai.padrao_passou_a_seguir_a_plataforma",
+  // FORK MIA (9176, MIA-337) — a empresa de chave própria passou à IA da
+  // plataforma. Gravada pelo BANCO (`fn_mia_chave_propria_passa_a_plataforma`),
+  // uma linha por empresa, com o par, o teto de `ai_budgets` e os ids das
+  // credenciais desativadas de antes no metadata: é dela que sai a volta
+  // (docs/fork/ia-da-plataforma.md, seção 10). Só ids e configuração.
+  "ai.chave_propria_passou_a_plataforma",
   // #4023: a organização ligou/desligou a pesquisa de satisfação e, quando
   // ligada, mudou a janela ou o texto em `organizations.settings.satisfacao`.
   // metadata só com o `ligado` — o texto é configuração, não dado de cliente.
