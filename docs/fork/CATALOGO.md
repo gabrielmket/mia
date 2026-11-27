@@ -599,6 +599,9 @@ funil, catálogo, etiquetas, conhecimento, follow-up, agente, automações, agen
 canais), de modo que uma sessão do Claude Code implanta tudo conversando. **Migrations** 9022 e 9045 (as
 duas funções copiadas do upstream), 9030, 9031, 9040 a 9042. **Mora em** `lib/mcp-plataforma/`
 (`ferramentas.ts`, `operacoes.ts`, `servidor.ts`, `ferramentas/*`), `lib/implantacao/`, `lib/paineis/`.
+Desde a MIA-309, a operação `definir_teto_de_ia` (`plataforma_definir_teto_de_ia`, em
+`lib/mcp-plataforma/ferramentas/teto-de-ia.ts`): o teto de IA de uma empresa (`ai_budgets`), com a regra
+de `lib/ai/budget/mudanca-do-teto.ts`, a mesma que a rota `/api/v1/ai/budget` do upstream agora chama.
 
 **Pontos de encaixe.** As **seis rotas do upstream** de onde a lógica foi tirada para uma função
 compartilhada, e as rotas espelhadas (seção 5): a cerca dos espelhos guarda a impressão de cada uma e
@@ -608,10 +611,12 @@ compartilhada, e as rotas espelhadas (seção 5): a cerca dos espelhos guarda a 
 reverter o agente, que o upstream tirou da tela para o MCP de agentes dele usar também): a trava
 da IA mora ali, pelo `quemPede` do ator; sem ele (o token), vale `TOKEN_NAO_ESCOLHE_IA` (a mesma
 constante das rotas) e ninguém escolhe IA. No fork o `crm_save_ai_agent_draft` do upstream não
-oferece `provedor` nem `modelo` (MIA-115). A conferência de sobreposição entre o MCP de agentes da
+oferece `provedor` nem `modelo` (MIA-115). Desde a MIA-309, `app/api/v1/ai/budget/route.ts`
+(`FORK MIA (MIA-309)`): a escada, o piso, a carência, o desarme e o schema do PATCH saíram para
+`lib/ai/budget/mudanca-do-teto.ts`, que o MCP também usa; a rota só lê, chama a regra, grava e audita. A conferência de sobreposição entre o MCP de agentes da
 empresa e o nosso está em `mcp-de-implantacao.md`, "O MCP de agentes da empresa e o MCP de plataforma".
 
-**Protege.** `tests/unit/mcp-de-implantacao-ferramentas.test.ts`, `mcp-de-implantacao-espelhos.test.ts`, `mcp-de-implantacao-operacoes.test.ts`, `mcp-de-implantacao-ponta-a-ponta.test.ts`, `mcp-de-plataforma-escopo.test.ts`, `distribuicao-do-numero-pela-plataforma.test.ts`, `dono-do-contato-pela-plataforma.test.ts`, `mcp-de-implantacao-servidores-mcp-do-agente.test.ts` (os servidores MCP por agente, 9095) e a família `mcp-de-implantacao-novidades-do-upstream-*.test.ts`. A trava da IA no token do MCP de agentes do upstream: o `describe` "edição pelo token do MCP" de `tests/unit/trava-da-ia-portas.test.ts` (chama o `edicao.ts` direto com ator de token, cada caso com o controle da plataforma, mais o esquema do rascunho; MIA-115/MIA-116).
+**Protege.** `tests/unit/mcp-de-implantacao-ferramentas.test.ts`, `mcp-de-implantacao-espelhos.test.ts`, `mcp-de-implantacao-operacoes.test.ts`, `mcp-de-implantacao-ponta-a-ponta.test.ts`, `mcp-de-plataforma-escopo.test.ts`, `distribuicao-do-numero-pela-plataforma.test.ts`, `dono-do-contato-pela-plataforma.test.ts`, `mcp-de-implantacao-servidores-mcp-do-agente.test.ts` (os servidores MCP por agente, 9095), `mcp-de-implantacao-teto-de-ia.test.ts` (MIA-309: o teto pela regra do PATCH, a reexecução, as recusas e a operação própria; com `tests/unit/api-orcamento-de-ia.test.ts`, a rota do upstream depois da extração) e a família `mcp-de-implantacao-novidades-do-upstream-*.test.ts`. A trava da IA no token do MCP de agentes do upstream: o `describe` "edição pelo token do MCP" de `tests/unit/trava-da-ia-portas.test.ts` (chama o `edicao.ts` direto com ator de token, cada caso com o controle da plataforma, mais o esquema do rascunho; MIA-115/MIA-116).
 
 **Conferir.**
 1. `npx vitest run tests/unit/mcp-de-implantacao-espelhos.test.ts` (vermelho = o upstream mudou uma rota espelhada: releia o espelho e regrave a impressão).
@@ -619,6 +624,7 @@ empresa e o nosso está em `mcp-de-implantacao.md`, "O MCP de agentes da empresa
 3. Função nova do upstream na faixa fundida: existe `mcp-de-implantacao-novidades-do-upstream-<versão>.test.ts` para ela? (R5)
 4. MCP (lê só, na demonstração): `plataforma_ver_catalogo`, `plataforma_ver_implantacao`, `plataforma_ver_configuracao`.
 5. Se o upstream mexeu em `lib/ai/agents/edicao.ts` ou em `lib/mcp/tools/agentes.ts`: `npx vitest run tests/unit/trava-da-ia-portas.test.ts` (vermelho no `describe` do token = o MCP dele passou a escolher IA, ou `provedor`/`modelo` voltaram ao esquema do `crm_save_ai_agent_draft` na fusão: tire de novo, com o `FORK MIA` do lado).
+6. Se o upstream mexeu em `app/api/v1/ai/budget/route.ts` (MIA-309): `git grep -n "decidirMudancaDoTeto\|pedidoDoTetoSchema" -- app/api/v1/ai/budget/route.ts lib/mcp-plataforma/ferramentas/teto-de-ia.ts` (**as duas portas usam a mesma regra**) e `npx vitest run tests/unit/api-orcamento-de-ia.test.ts tests/unit/mcp-de-implantacao-teto-de-ia.test.ts`. Regra nova do upstream no PATCH entra em `mudanca-do-teto.ts`, não na rota; se ele mudou o corpo, regenere o contrato (`UPDATE_CONTRATO=1`, `tests/unit/modulo-contrato-congelado.test.ts`).
 
 **Riscos.** Uma ferramenta que grava passa pelo mesmo caminho da tela; se o caminho do upstream ganhar
 um passo, o espelho fica atrás. A tela de tokens lista `OPERACOES`: chave nova aparece sozinha, sem migration.
@@ -888,11 +894,15 @@ soma das linhas (agentes com o Sistema, finalidades, empresas) fecha com o total
 o total manda), e o MCP tem o ranking da plataforma (`lerRankingDoConsumo`, ferramenta
 `plataforma_ver_ranking_de_consumo_de_ia`): as empresas sem as de demonstração, no período e na ordem por custo da
 tela geral; o desempate é por chamadas de IA e nome, e na tela geral por mensagens (seção 10 do documento).
+Desde a MIA-309, `plataforma_ver_consumo_de_ia` traz `teto_de_ia`: o teto mensal da empresa em `ai_budgets` (o
+freio de emergência, diferente do teto do plano), com valor, modo, limiar e desde quando a parada vale, ao lado do
+gasto que ele limita; `null` = a leitura falhou. Não muda nenhum número do consumo. Quem grava é
+`plataforma_definir_teto_de_ia` (seção 15).
 **Migrations** 9165 (o histórico de preços da Meta, `mia_precos_meta_vigencias`, e o gatilho em
 `platform_precos_meta`); o resto lê `llm_calls`, `ai_agents` e `platform_fx_rates` (0241). **Mora em**
 `lib/ai/usage/consumo-do-periodo.ts`, `lib/ai/usage/atalhos-de-periodo.ts`,
 `lib/ai/usage/contatos-pessoais.ts` (a lista dos contatos pessoais que as duas telas tiram da contagem, MIA-78),
-`lib/mcp-plataforma/ferramentas/consumo-de-ia.ts`, `components/admin/tenants/UsoDoTenant.tsx`,
+`lib/mcp-plataforma/ferramentas/consumo-de-ia.ts` (desde a MIA-309, também o `teto_de_ia`), `components/admin/tenants/UsoDoTenant.tsx`,
 `lib/channels/meta/custo-do-periodo.ts` e `calcularCustoPorVigencia` em `lib/channels/meta/custo-da-conversa.ts`
 (MIA-99), `lib/mcp-plataforma/ferramentas/precos-da-meta.ts` (MIA-99).
 
@@ -914,14 +924,15 @@ com os mesmos pessoais fora e a mesma janela de N dias de Brasília, e leitura q
 `preco-da-meta-com-vigencia.test.ts` (MIA-99: outubro igual depois do reajuste de novembro nas três leituras, a
 virada de Brasília, as ferramentas de preço), `consumo-de-ia-ranking-e-soma-que-fecha.test.ts` (MIA-136: a soma
 que fecha, o ranking sem a demonstração e no mês de Brasília, o MCP contra a tela geral e o desempate das duas
-listas fixado), o invariante `tests/invariants/preco-da-meta-com-vigencia.test.ts` (o
+listas fixado), `mcp-de-implantacao-teto-de-ia.test.ts` (MIA-309: o `teto_de_ia` na leitura, `gravado: false` sem
+teto, `null` quando a leitura falha), o invariante `tests/invariants/preco-da-meta-com-vigencia.test.ts` (o
 gatilho no Postgres de verdade) e a e2e `admin-consumo-de-ia-por-mes-e-por-agente.spec.ts`.
 
 **Conferir.**
 1. `git grep -n "lerConsumoDoPeriodo" "app/api/v1/admin/tenants/[id]/usage/route.ts" lib/mcp-plataforma/ferramentas/consumo-de-ia.ts` (**as duas chamadas existem**; sem uma delas a tela e o MCP passam a divergir).
 2. Se a fusão mexeu em `llm_calls` (`git diff vA vB -- supabase/migrations supabase/baseline.sql | grep -n "llm_calls"`), confira que as seis colunas acima continuam com o mesmo nome e o mesmo sentido (`cache_read_tokens` como parte de `input_tokens`).
 3. `npx vitest run tests/unit/consumo-de-ia-por-mes-e-por-agente.test.ts tests/unit/consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx tests/unit/orcamento-uma-regua-de-gasto.test.ts tests/unit/consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts tests/unit/consumo-de-ia-ranking-e-soma-que-fecha.test.ts`.
-4. MCP (lê só): `plataforma_ver_consumo_de_ia` com a empresa de demonstração e o mês corrente, `plataforma_ver_ranking_de_consumo_de_ia` com o mês corrente (a demonstração não aparece, e a soma das empresas é o `total`) e `plataforma_ver_precos_da_meta` (o histórico tem uma vigência aberta por categoria).
+4. MCP (lê só): `plataforma_ver_consumo_de_ia` com a empresa de demonstração e o mês corrente (desde a MIA-309, com o `teto_de_ia` dela), `plataforma_ver_ranking_de_consumo_de_ia` com o mês corrente (a demonstração não aparece, e a soma das empresas é o `total`) e `plataforma_ver_precos_da_meta` (o histórico tem uma vigência aberta por categoria).
 5. Se a fusão mexeu em `app/api/v1/admin/usage/route.ts` (do upstream), confira que `mes` ainda passa por `periodoDoPedido` e que a fatura e as cotações têm o limite de cima (`git grep -n "periodoDoPedido\|ultimoDia" app/api/v1/admin/usage/route.ts`).
 6. MIA-99: `git grep -n "lerCustoDeMensagemDoPeriodo\|calcularCustoPorVigencia" app/api/v1/admin lib/mcp-plataforma` (**a aba Uso, o MCP e `/admin/custo-da-meta` fazem a conta pela vigência**; quem voltar a `calcularCusto` com a tabela atual devolve o defeito) e, no banco, `select tgname from pg_trigger where tgname = 'trg_mia_precos_meta_vigencia'`.
 
@@ -1015,7 +1026,15 @@ própria feita pela plataforma, em modo suporte, na tela Provedores de IA da emp
 troca todas as que seguem. A trava recusa salvar um padrão num provedor sem chave, e o aviso (tela, cartão do
 admin, `/health`, relatório interno e MCP) pega a empresa que mesmo assim ficou sem chave. **Migrations** 9172.
 **Mora em** `lib/ai/ia-da-empresa.ts` (a régua), `lib/ai/aviso-da-ia-das-empresas.ts` (o aviso) e
-`lib/ai/trava-da-ia.ts` (`plataformaEditaEmSuporte`).
+`lib/ai/trava-da-ia.ts` (`plataformaEditaEmSuporte`) e, desde a MIA-309, `lib/ai/agente-segue-a-plataforma.ts`
+(o agente publicado segue a troca).
+
+**O agente publicado segue a troca (MIA-309).** O agente publicado de quem segue responde no par em vigor
+da empresa, não no provedor e modelo gravados na versão: a carga da versão lê `settings.llm` de quem segue
+(com par em `platform_ia`) e troca provedor e modelo, zera a credencial e, com outro provedor, o modelo do
+operador e a reserva. Quem tem escolha própria fica na versão. O PUT de `/admin/modelo-de-ia` recusa o modelo
+sem visão quando um agente publicado de quem segue lê foto, e `plataforma_ver_ia_das_empresas` diz quantos
+agentes publicados respondem fora do par. Seção 3 do documento.
 
 **O cliente não vê a IA (MIA-262).** Provedor, modelo, chave, consumo e custo saem da resposta e da
 tela para quem não é da plataforma: Provedores de IA dá 403 e sai do menu, o editor do agente perde o
@@ -1029,14 +1048,22 @@ de orçamento fala a língua do plano. Portões e lista completa na seção 7 do
 `lib/agent-engine/edge/llm/credentials.ts`, `app/api/v1/health/route.ts` (`lerIaDasEmpresas` e o bloco `ia`),
 `app/api/v1/cron/report-da-plataforma/route.ts` (seção 3b), `components/admin/modelo-de-ia/ModeloDeIa.tsx` (a
 `ContagemDasEmpresas`), `hooks/useModeloDeIa.ts` (o tipo de `empresas`) e
-`app/app/ai/providers/_components/PainelDeProvedores.tsx` (o `AvisoDaChave`). A chave continua fora do suporte:
+`app/app/ai/providers/_components/PainelDeProvedores.tsx` (o `AvisoDaChave`). Desde a MIA-309
+(`FORK MIA (MIA-309)`): `lib/agent-engine/agent/agent-config.ts`, um dos arquivos que o upstream mais mexe,
+em dois pontos (a coluna `COLUNA_DA_IA_DA_PLATAFORMA` no fim de `SELECT_AGENT_CONFIG_COLUMNS`, com o import e
+o campo de `Row`, e o `agenteSegueAPlataforma` no retorno de `mapAgentConfigRow`), e a trava da visão em
+`app/api/v1/admin/modelo-de-ia/route.ts`. A chave continua fora do suporte:
 `app/api/v1/ai/credentials/[id]/route.ts` e `app/actions/onboarding/chaveDaIa.ts` usam `podeConfigurarChaveDeIa`.
 
 **Protege.** `tests/invariants/ia-segue-a-plataforma.test.ts` (o banco: a empresa nova segue, a troca propaga,
 quem escolheu fica), `lib/ai/ia-da-empresa.test.ts`, `lib/ai/trava-da-ia.test.ts`,
 `app/api/v1/ai/providers/modo-suporte-escolhe-a-ia.test.ts` (passa só a plataforma em suporte com edição),
 `AvisoDaChave.test.tsx`, `ContagemDasEmpresas.test.tsx`, `health-diz-se-ha-empresa-sem-ia.test.ts`,
-`report-da-plataforma-ia-sem-chave.test.ts` e `mcp-de-implantacao-ia-das-empresas.test.ts`.
+`report-da-plataforma-ia-sem-chave.test.ts` e `mcp-de-implantacao-ia-das-empresas.test.ts`. Da MIA-309:
+`tests/unit/agente-publicado-segue-a-plataforma.test.ts` (a regra e as três cargas com banco de mentira),
+`tests/invariants/agente-publicado-segue-a-plataforma.test.ts` (as três cargas contra o Postgres com `platform_ia`
+preenchido: quem segue recebe o par, a troca propaga, a escolha própria e o `platform_ia` vazio ficam na versão)
+e `app/api/v1/admin/modelo-de-ia/trava-da-visao.test.ts`.
 
 **Conferir.**
 1. `git grep -n "FORK MIA (9172" -- app/api/v1/ai/providers/route.ts app/api/v1/admin/modelo-de-ia/route.ts lib/agent-engine/edge/llm/credentials.ts` (o núcleo vivo).
@@ -1044,6 +1071,7 @@ quem escolheu fica), `lib/ai/ia-da-empresa.test.ts`, `lib/ai/trava-da-ia.test.ts
 3. O upstream mexeu em `fn_seed_org_llm_defaults` ou criou um "padrão da instalação"? O gatilho `trg_ia_segue_a_plataforma` tem de continuar rodando antes do seed.
 4. O upstream mudou `escolheIa` ou a sessão de suporte? `plataformaEditaEmSuporte` continua exigindo plataforma, `scope = full`, sessão ativa, edição e `agency_id` vazio.
 5. `npx vitest run lib/ai/ia-da-empresa.test.ts lib/ai/trava-da-ia.test.ts app/api/v1/ai/providers/modo-suporte-escolhe-a-ia.test.ts app/api/v1/health/health-diz-se-ha-empresa-sem-ia.test.ts tests/unit/report-da-plataforma-ia-sem-chave.test.ts tests/unit/mcp-de-implantacao-ia-das-empresas.test.ts`.
+6. O agente publicado segue (MIA-309): `git grep -n "COLUNA_DA_IA_DA_PLATAFORMA\|agenteSegueAPlataforma" -- lib/agent-engine/agent/agent-config.ts` (**os dois pontos existem**: a coluna na lista e a regra no `mapAgentConfigRow`; sem um deles a troca na plataforma não chega ao agente publicado) e `npx vitest run tests/unit/agente-publicado-segue-a-plataforma.test.ts app/api/v1/admin/modelo-de-ia/trava-da-visao.test.ts`. Se o upstream mudou a consulta de algum carregador (`from ai_agents a`) ou passou a ler `v.provider`/`v.model`/`v.credential_id` fora de `mapAgentConfigRow`, o invariante `tests/invariants/agente-publicado-segue-a-plataforma.test.ts` acusa.
 
 **Riscos.** A empresa que virou escolha própria só volta a seguir a plataforma por migration (o botão ficou
 fora). A `/health` passa a ler `organizations` e `ai_provider_credentials` a cada chamada (duas leituras, com o
@@ -1082,7 +1110,7 @@ teto de tempo das outras).
 | 25 | O fuso da organização nos relatórios | `fuso-da-organizacao.md` | 9166 | `fuso-dos-relatorios-uma-regra.test.ts`, `tests/invariants/fuso-invalido-nos-relatorios.test.ts` |
 | 26 | O realtime do sistema com a semente desligada | `realtime-do-sistema.md` | nenhuma | nenhum (conferência pela leitura do tenant) |
 | 27 | O batimento do vigia dos canais | `vigia-dos-canais.md` | 9168 | `vigia-dos-canais-bate-o-ponto.test.ts`, `health-diz-se-o-vigia-dos-canais-passou.test.ts`, `tests/invariants/batimento-dos-crons.test.ts` |
-| 28 | A IA de toda empresa segue a da plataforma | `ia-da-plataforma.md` | 9172 | `tests/invariants/ia-segue-a-plataforma.test.ts`, `modo-suporte-escolhe-a-ia.test.ts`, `health-diz-se-ha-empresa-sem-ia.test.ts`, `mcp-de-implantacao-ia-das-empresas.test.ts`, `ia-so-no-admin.test.ts`, `as-empresas-com-chave-propria-seguem-respondendo.test.ts` |
+| 28 | A IA de toda empresa segue a da plataforma | `ia-da-plataforma.md` | 9172 | `tests/invariants/ia-segue-a-plataforma.test.ts`, `modo-suporte-escolhe-a-ia.test.ts`, `health-diz-se-ha-empresa-sem-ia.test.ts`, `mcp-de-implantacao-ia-das-empresas.test.ts`, `ia-so-no-admin.test.ts`, `as-empresas-com-chave-propria-seguem-respondendo.test.ts`, `agente-publicado-segue-a-plataforma.test.ts` (unidade e invariante) |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.
