@@ -8,6 +8,7 @@ import { env } from "@/lib/env";
 import { llmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/llm/credentials";
 import { normalizarChaveDeOrcamento } from "@/lib/agent-engine/edge/llm/orcamento";
 import { LlmBudgetExceededError, LlmProviderUnknownError, LlmModelNotEnabledError } from "@/lib/agent-engine/edge/llm/run-model-call";
+import { motivoDeIaAoCliente } from "@/lib/ai/erro-de-ia-ao-cliente";
 import { getSkillsPool } from "@/lib/ai/skills/db";
 import { montarDocumentoDaProposta, type PropostaParaDocumento } from "@/lib/propostas/documento/documento-da-proposta";
 import type { ContatoParaDocumento } from "@/lib/propostas/documento/montar-dados";
@@ -85,7 +86,8 @@ export async function POST(_req: NextRequest, ctx: Ctx): Promise<Response> {
       err instanceof LlmProviderUnknownError ||
       err instanceof LlmModelNotEnabledError
     ) {
-      return ok({ disponivel: false, motivo: err.message, sugestoes: [] }, { requestId });
+      // FORK MIA (MIA-262): sem o id do modelo nem a tela de orçamento.
+      return ok({ disponivel: false, motivo: motivoDeIaAoCliente(err, authz.user.idioma), sugestoes: [] }, { requestId });
     }
     throw err;
   }

@@ -165,15 +165,12 @@ describe("CaseChatPanel — instalação fresca, sem chave de IA", () => {
       screen.queryByRole("button", { name: "Por que a IA não resolveu sozinha?" }),
     ).not.toBeInTheDocument();
 
+    // FORK MIA (MIA-262): a IA é da plataforma; o aviso manda ao suporte, e não
+    // a IA › Provedores, que dá 403 à empresa.
     expect(
-      screen.getByText(
-        "Nenhum provedor de IA está configurado. Peça a quem administra para configurar em IA › Provedores.",
-      ),
+      screen.getByText("A IA desta conta está sem chave para funcionar. Fale com o suporte."),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Abrir IA › Provedores" })).toHaveAttribute(
-      "href",
-      "/app/ai/providers",
-    );
+    expect(screen.queryByRole("link", { name: "Abrir IA › Provedores" })).not.toBeInTheDocument();
   });
 });
 

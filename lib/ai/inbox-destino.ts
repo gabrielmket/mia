@@ -289,6 +289,8 @@ const SEM_DESTINO: DestinoDoAviso = { estado: "sem_destino", orientacao: "Este a
 const INDISPONIVEL: DestinoDoAviso = { estado: "indisponivel", orientacao: "Este contexto não está disponível para você. Ele pode ter sido removido ou seu acesso pode ter mudado." };
 /** FORK MIA — o aviso de sem saldo, para quem não vê a chave de IA (o cliente). */
 const CREDITO_DA_PLATAFORMA: DestinoDoAviso = { estado: "sem_destino", orientacao: "O crédito de IA é da plataforma. As respostas saem sozinhas quando ele voltar; se demorar, fale com o suporte." };
+/** FORK MIA (MIA-262): o aviso que levaria a Provedores de IA, para a empresa. */
+const IA_DA_PLATAFORMA: DestinoDoAviso = { estado: "sem_destino", orientacao: "A IA desta conta está sem chave para funcionar. Fale com o suporte." };
 const uuid = z.uuid();
 function politica(item: ReferenciaDoAviso): Politica | undefined {
   return Object.hasOwn(POLITICAS_DE_AVISO, item.kind) ? POLITICAS_DE_AVISO[item.kind as InboxKind] : undefined;
@@ -356,7 +358,10 @@ export async function resolverDestinosDosAvisos<T extends ReferenciaDoAviso>(
     let destination: DestinoDoAviso = SEM_DESTINO;
     if (p) {
       if (item.ref_kind === null && item.ref_id === null) {
-        destination = p.geral
+        // FORK MIA (MIA-262): Provedores de IA é da plataforma; o botão daria 403.
+        destination = p.geral?.href === "/app/ai/providers" && !veCustoEChaveDeIa
+          ? IA_DA_PLATAFORMA
+          : p.geral
           ? permite(papel, p.geral.papel) ? { estado: "disponivel", href: p.geral.href, rotulo: p.geral.rotulo, orientacao: p.orientacao } : semPermissao(p.geral.papel)
           : { estado: "sem_destino", orientacao: p.orientacao };
       } else if (!p.refs.includes(item.ref_kind as InboxRefKind) || !uuid.safeParse(item.ref_id).success) {

@@ -14,10 +14,17 @@
  *
  * Nunca devolve chave: `chave` diz só DE ONDE ela sairia (`propria`,
  * `instalacao`) ou que não há nenhuma (`null`).
+ *
+ * FORK MIA (MIA-309): por empresa, os agentes publicados e quantos respondem
+ * FORA do par em vigor, com a regra da carga da versão
+ * (`lib/ai/agente-segue-a-plataforma.ts`). Para quem segue tem de dar zero: é a
+ * prova de que a troca em Admin › Modelo de IA chegou aos agentes.
  */
 import { z } from "zod";
 
 import { contarEmpresas, iaDasEmpresas, nomeDoProvedor } from "@/lib/ai/ia-da-empresa";
+// FORK MIA (MIA-309): os agentes publicados fora do par em vigor.
+import { agentesForaDoPar, agentesPublicados } from "@/lib/ai/agente-segue-a-plataforma";
 
 import { recusar } from "../recusa";
 import type { FerramentaDePlataforma } from "../tipos";
@@ -31,6 +38,10 @@ export const FERRAMENTAS_DA_IA_DAS_EMPRESAS: FerramentaDePlataforma[] = [
       "`chave: \"propria\"` (a empresa cadastrou e validou uma), `\"instalacao\"` (a chave da plataforma) ou `null` = NENHUMA chave utilizável, e a empresa não responde com IA. " +
       "`contagem` traz quantas empresas OPERANTES seguem, quantas têm escolha própria e quantas estão sem chave: os mesmos números do cartão do admin, da `/health` e do relatório interno " +
       "(empresa suspensa ou anonimizada aparece na lista com `operante: false`, mas não conta). " +
+      "`jev_sem_chave: true` = o Jev está ligado e a empresa não tem chave validada da origem dele (TypeSafe ou OpenRouter): a IA de sempre cobre, mas o Jev não decide. " +
+      "`agentes_publicados` e `agentes_fora_do_par` (MIA-309): quantos agentes publicados a empresa tem e quantos respondem num par diferente do em vigor, já com a regra do turno " +
+      "(quem segue a plataforma responde no par dela, mesmo com a versão gravada noutro modelo): para quem segue TEM DE DAR ZERO; na escolha própria, é o agente num modelo diferente do padrão da empresa " +
+      "(pode ser de propósito). `agentes` soma as operantes, com `fora_do_par_de_quem_segue` (zero = a troca de modelo chegou a todos). `null` = a leitura dos agentes falhou. " +
       "`so_sem_chave: true` lista só as sem chave; `organization_id` lista só uma. As sem chave vêm primeiro. " +
       "Nunca devolve a chave em si. Não troca nada: trocar o modelo é no painel, por uma pessoa, com MFA. Só lê.",
     inputSchema: {
@@ -51,7 +62,7 @@ export const FERRAMENTAS_DA_IA_DAS_EMPRESAS: FerramentaDePlataforma[] = [
       const uma = typeof args.organization_id === "string" ? args.organization_id : null;
 
       // `iaDasEmpresas` já traz o nome e se a empresa opera: uma leitura só.
-      const empresas = await iaDasEmpresas(admin);
+      const [empresas, agentes] = await Promise.all([iaDasEmpresas(admin), agentesPublicados(admin)]);
       if (empresas === null) throw new Error("não consegui ler a IA das empresas (organizations ou ai_provider_credentials).");
 
       if (uma !== null && !empresas.some((e) => e.organizationId === uma)) {
@@ -59,6 +70,9 @@ export const FERRAMENTAS_DA_IA_DAS_EMPRESAS: FerramentaDePlataforma[] = [
           `Não existe organização com o id ${uma}. Confira o id em plataforma_listar_clientes, ou chame sem organization_id para ver todas.`,
         );
       }
+
+      // FORK MIA (MIA-309): `null` = não sei (a leitura dos agentes falhou), nunca zero.
+      const foraDoPar = agentes === null ? null : agentesForaDoPar(empresas, agentes);
 
       const linhas = empresas
         .filter((e) => (uma === null || e.organizationId === uma) && (!soSemChave || e.chave === null))
@@ -72,6 +86,11 @@ export const FERRAMENTAS_DA_IA_DAS_EMPRESAS: FerramentaDePlataforma[] = [
           provedor_nome: nomeDoProvedor(e.provider),
           modelo: e.modelId,
           chave: e.chave,
+          // FORK MIA (MIA-262): o Jev ligado sem chave validada da origem dele.
+          jev_sem_chave: e.jevSemChave,
+          // FORK MIA (MIA-309): os agentes publicados e os que respondem fora do par em vigor.
+          agentes_publicados: foraDoPar?.get(e.organizationId)?.publicados ?? (foraDoPar ? 0 : null),
+          agentes_fora_do_par: foraDoPar?.get(e.organizationId)?.foraDoPar ?? (foraDoPar ? 0 : null),
         }))
         .sort(
           (a, b) =>
@@ -80,8 +99,23 @@ export const FERRAMENTAS_DA_IA_DAS_EMPRESAS: FerramentaDePlataforma[] = [
             a.organization_id.localeCompare(b.organization_id),
         );
 
+      const operantes = empresas.filter((e) => e.operante);
+      const somar = (lista: ReadonlyArray<{ organizationId: string }>, campo: "publicados" | "foraDoPar") =>
+        lista.reduce((n, e) => n + (foraDoPar?.get(e.organizationId)?.[campo] ?? 0), 0);
+
       return {
         contagem: contarEmpresas(empresas),
+        agentes:
+          foraDoPar === null
+            ? null
+            : {
+                publicados: somar(operantes, "publicados"),
+                fora_do_par: somar(operantes, "foraDoPar"),
+                fora_do_par_de_quem_segue: somar(
+                  operantes.filter((e) => e.origem === "plataforma"),
+                  "foraDoPar",
+                ),
+              },
         total: linhas.length,
         empresas: linhas,
       };

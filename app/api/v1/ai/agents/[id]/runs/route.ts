@@ -55,7 +55,7 @@ import { type NextRequest } from "next/server";
 
 import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { ok, fail } from "@/lib/api/wrappers";
-import { podeVerCusto, semCusto } from "@/lib/ai/custo-e-da-plataforma";
+import { podeVerCusto, semIaDaPlataforma } from "@/lib/ai/custo-e-da-plataforma";
 import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
 import { logger } from "@/lib/logger";
 
@@ -335,7 +335,8 @@ export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
       : null;
 
   // Dinheiro é da plataforma nesta instalação (lib/ai/custo-e-da-plataforma.ts).
-  return ok(semCusto(slice, podeVerCusto(await quemPedeNaRota(authz))), {
+  // FORK MIA (MIA-262): tokens e o erro cru do provedor saem junto com o custo.
+  return ok(semIaDaPlataforma(slice, podeVerCusto(await quemPedeNaRota(authz))), {
     requestId,
     meta: { cursor: nextCursor, has_more: hasMore },
   });

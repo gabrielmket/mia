@@ -74,3 +74,32 @@ export function horasEntre(de: string | Date, ate: Date): number {
   const inicio = typeof de === "string" ? new Date(de) : de;
   return Math.max(0, Math.floor((ate.getTime() - inicio.getTime()) / 3_600_000));
 }
+
+/**
+ * FORK MIA (MIA-244): o código curto de uma falha de leitura, para o `{ erro }`
+ * da ferramenta e para o log. NUNCA o texto da falha: a mensagem do PostgREST
+ * pode trazer o valor que o banco recusou (um nome, um telefone), e o log não
+ * leva dado de cliente.
+ *
+ *   - erro nosso com código (`radar_query_failed: ...`, `leads_indisponiveis`): o
+ *     prefixo em minúsculas antes dos dois-pontos;
+ *   - erro do banco (objeto com `code`): `tempo_esgotado` (57014), `sem_permissao`
+ *     (42501) ou `banco_<SQLSTATE>`;
+ *   - URL ou cabeçalho grande demais (o `.in()` com centenas de ids): `url_grande_demais`;
+ *   - rede: `rede`; o resto: `desconhecido`.
+ */
+export function codigoDaFalha(erro: unknown): string {
+  const objeto = typeof erro === "object" && erro !== null ? (erro as { code?: unknown; message?: unknown; cause?: unknown }) : null;
+  const sqlstate = typeof objeto?.code === "string" ? objeto.code : null;
+  if (sqlstate === "57014") return "tempo_esgotado";
+  if (sqlstate === "42501") return "sem_permissao";
+  const causa = typeof objeto?.cause === "object" && objeto.cause !== null ? (objeto.cause as { code?: unknown }).code : null;
+  const mensagem = typeof objeto?.message === "string" ? objeto.message : typeof erro === "string" ? erro : "";
+  if (causa === "UND_ERR_HEADERS_OVERFLOW" || /UND_ERR_HEADERS_OVERFLOW|\b414\b|URI Too Long/i.test(mensagem)) return "url_grande_demais";
+  if (/statement timeout|canceling statement/i.test(mensagem)) return "tempo_esgotado";
+  const nosso = /^([a-z][a-z0-9_]{2,60})(?::|$)/.exec(mensagem);
+  if (nosso) return nosso[1]!;
+  if (sqlstate && /^[0-9A-Z]{5}$/.test(sqlstate)) return `banco_${sqlstate}`;
+  if (/fetch failed|ECONNRESET|ECONNREFUSED|ETIMEDOUT|AbortError/i.test(mensagem) || (objeto as { name?: unknown } | null)?.name === "AbortError") return "rede";
+  return "desconhecido";
+}

@@ -65,6 +65,8 @@ interface Props {
   channelSessions: ChannelSessionLite[];
   /** Só os modelos que esta organização consegue usar — ver lib/ai/classifier-models. */
   classifierModels: ClassifierModelOption[];
+  /** FORK MIA (MIA-262): o classificador e o cartão do Jev só para quem escolhe a IA. */
+  podeEscolherIa?: boolean;
   /**
    * #4340 — o `channel_session` deste roteador saiu da lista de canais
    * oferecíveis (arquivado/removido). O selo passa a dizer "inativo" e a tela
@@ -137,6 +139,7 @@ export function RouterEditorClient({
   classifierModels,
   numeroRemovido = false,
   numerosLivres = [],
+  podeEscolherIa = true,
 }: Props) {
   const t = useT();
   const nextRouter = useNextRouter();
@@ -636,6 +639,8 @@ export function RouterEditorClient({
           </Card>
 
           <Card className="space-y-3 p-4">
+            {/* FORK MIA (MIA-262): o servidor já descarta a escolha; a tela não a oferece. */}
+            {podeEscolherIa && (<>
             <h3 className="text-sm font-medium">{t("Modelo que identifica a intenção")}</h3>
             <div className="space-y-1">
               <Label htmlFor="router-classifier">{t("Modelo do classificador")}</Label>
@@ -672,6 +677,7 @@ export function RouterEditorClient({
                     )}
               </p>
             </div>
+            </>)}
             <div className="space-y-1">
               <Label htmlFor="router-context-count">
                 {t("Mensagens anteriores para o roteamento")}
@@ -737,6 +743,7 @@ export function RouterEditorClient({
             message={testMessage}
             onMessageChange={setTestMessage}
             onTest={handleTest}
+            podeEscolherIa={podeEscolherIa /* FORK MIA (MIA-262) */}
             result={testRouter.data}
             pending={testRouter.isPending}
           />
@@ -1125,7 +1132,9 @@ function TestPanel({
   onTest,
   result,
   pending,
+  podeEscolherIa = true,
 }: {
+  podeEscolherIa?: boolean;
   isActive: boolean;
   canTest: boolean;
   message: string;
@@ -1222,7 +1231,7 @@ function TestPanel({
             </p>
           </div>
         )}
-        {result?.jev && <EscolhasLadoALado result={result} jev={result.jev} />}
+        {result?.jev && <EscolhasLadoALado result={result} jev={result.jev} podeEscolherIa={podeEscolherIa} />}
       </CardContent>
     </Card>
   );
@@ -1237,7 +1246,9 @@ function TestPanel({
 function EscolhasLadoALado({
   result,
   jev,
+  podeEscolherIa = true,
 }: {
+  podeEscolherIa?: boolean;
   result: RouterTestResult;
   jev: NonNullable<RouterTestResult["jev"]>;
 }) {
@@ -1282,7 +1293,7 @@ function EscolhasLadoALado({
         </p>
         {/* Sem motivo, "não respondeu" não levava a lugar nenhum: o porquê (a
             chave, o crédito, o roteador sem intenções) está no cartão dele. */}
-        {!jev.respondeu && (
+        {!jev.respondeu && podeEscolherIa && ( // FORK MIA (MIA-262): o cartão do Jev é da plataforma
           <Link className="text-xs underline underline-offset-4" href="/app/ai/providers">
             {t("Ver o motivo no cartão do Jev")}
           </Link>

@@ -40,6 +40,7 @@ de modelo (telemetria e orçamento em `llm_calls`, `lib/assistente/modelo.ts`).
 | o painel (conversa, sugestões, "de onde veio", botões) | `components/assistente/PainelDoAssistente.tsx`, `MensagemDoAssistente.tsx`, `CartaoDoChamado.tsx` |
 | a página: histórico, resumo da manhã, chamados; para o administrador, "como trabalhamos aqui", quem usa e as perguntas sem resposta | `app/app/assistente/` (porta no `NAV_CATALOG`, hub do CRM, "O dia a dia da venda") |
 | o turno e as ferramentas de leitura | `lib/assistente/turno.ts`, `ferramentas.ts`, `leituras/*.ts` |
+| o formato garantido no servidor (.120): o que a tela não mostra sai do texto antes de gravar | `lib/assistente/formato.ts` (`limparFormatoDaResposta`, no fim de `responderNoAssistente`) |
 | o ponto de IA `assistente` | `lib/ai/pontos/registro.ts` (papel "entender", natureza "sistema") |
 | as rotas | `app/api/v1/assistente/{chat,chamados,chamados/[id]/print,pedir,preferencias,empresa}` |
 | os chamados do lado da Time | `/admin/chamados` e `app/api/v1/admin/chamados/*` |
@@ -47,13 +48,25 @@ de modelo (telemetria e orçamento em `llm_calls`, `lib/assistente/modelo.ts`).
 | o MCP de plataforma | `lib/mcp-plataforma/ferramentas/assistente.ts` ([`mcp-de-implantacao.md`](mcp-de-implantacao.md)) |
 | o schema | 9050 (tabelas, RLS, bucket, gatilhos), 9051 (LGPD e retenção) e 9052 (o índice dos contatos citados) |
 
+**O formato garantido no servidor (.120, MIA-253).** A regra 9 do prompt pede só negrito e
+listas, e a tela só desenha isso, mas o diagnóstico da MIA-239 achou o botão "Me leva lá"
+escrito como texto no fim da resposta (link markdown para a tela, `[[...]]`, link para
+`functions://...`, link com a barra escapada). O botão de verdade vem do coletor do turno,
+então o turno passa a resposta por `limparFormatoDaResposta` antes de devolver: a linha que
+é só um link para tela do sistema sai; o link no meio da frase vira o texto dele;
+`functions://` e `[[...]]` saem; título perde o `#`; tabela vira lista ("- **primeira
+coluna:** cabeçalho valor, ..."); travessão vira "a" entre números, "- " no começo da linha
+e vírgula no meio. Negrito, listas, "→" e endereço solto ficam. Resposta que era só esse
+lixo vira o "não sei", como a vazia. As mensagens antigas do histórico não mudam. Quem
+cobra: `tests/unit/assistente-formato-limpo.test.ts`, com os 4 casos em dado fictício.
+
 ## 3. O que o assistente lê (ferramentas só de leitura)
 
 | ferramenta | de onde vem o número |
 |---|---|
-| `ver_minha_rotina` | `crm_tasks`, `calendar_appointments`, `conversations` (a aba Minhas e a Fila do Inbox), `channel_sessions` (só o administrador) |
+| `ver_minha_rotina` | `crm_tasks` (de hoje, atrasadas e, desde a MIA-244, as concluídas hoje e no período pedido), `calendar_appointments`, `conversations` (a aba Minhas e a Fila do Inbox), `channel_sessions` (só o administrador) |
 | `ver_prioridades` | as mesmas, mais o Radar e a meta, na ordem do protótipo: algo parado na empresa, cliente esperando, compromisso do dia, atraso, meta |
-| `ver_meus_leads` | `crm_leads` abertos por dono e o Radar (`carregaRadarDeRisco`, a mesma função da tela) |
+| `ver_meus_leads` | `crm_leads` abertos (contados no banco) por dono, os que chegaram no período por origem e por funil (MIA-244, seção 14) e o Radar (`carregaRadarDeRisco`, a mesma função da tela) |
 | `ver_minha_performance` / `ver_numeros_da_equipe` | o motor de relatórios do fork (`fn_mia_relatorio`, `security invoker`) e a meta (`lerMetasDoMes`, a MESMA leitura do `GET /api/v1/metas`) |
 | `ver_por_que_a_ia_nao_respondeu` | a conversa pela sessão (o atendente só acha as suas), o opt-out, quem está com a conversa, o número, o agente no ar, o horário da IA (.85) e `agent_turn_traces` (v1.88) |
 | `buscar_ajuda` | os manuais e roteiros do fork, o guia de operação do upstream, o catálogo de navegação e a base própria da empresa (seção 9) |
@@ -227,6 +240,35 @@ todas pela mesma régua (`lib/assistente/busca-da-ajuda.ts`):
   tela de onde veio; o trecho certo entre os 3 primeiros, sem IA).
 - **Tela nova:** escreva o manual em `manuais-das-telas.ts` lendo o código da tela e
   acrescente a pergunta em `assistente-perguntas-reais`. Sem isso o CI reprova.
+- **Sinônimos, desempate e as perguntas sem tela (.118, MIA-252).** Saíram do
+  diagnóstico da MIA-239, onde "como ligo o cloude", "onde vejo os leads que chegaram" e
+  "quanto cada vendedor vendeu" caíam em "não sei".
+  - *Expressões que viram um termo só* (`EXPRESSOES` em `busca-da-ajuda.ts`), antes de
+    quebrar em palavras: "cloude", "claud" e "clode" viram "claude"; "chat gpt" vira
+    "chatgpt"; "leads que chegaram", "leads novos", "novos leads" e "leads que entraram"
+    viram o lead que chegou, e "novo" ou "chegaram" sozinhos não; "cada vendedor" e "por
+    vendedor" viram um termo das vendas de cada pessoa. "gpt" entra no grupo do Claude e
+    do MCP, e "ranking" no das vendas. O radical passou a cortar "-eu" e "-iu" ("vendeu",
+    "abriu"). O pretérito em "-ram" ("chegaram", "fizeram", "pediram") só perde o final
+    quando está na lista `PRETERITOS_EM_RAM`: a regra geral estragava o presente dos verbos
+    em "-ar" ("esperam" deixava de casar com "espera"; idem "preparam", "separam",
+    "disparam"). A cerca K3 confere os dois lados e percorre o vocabulário dos manuais.
+  - *Desempate* (`ajudaEmOrdem` com o papel, em `leituras/ajuda.ts`): quando a pergunta
+    não aponta a tela, o manual que a pessoa não faz perde o empate (diferença de até 1%)
+    para o que ela faz, e o que só o dono da instalação faz perde do que outro papel da
+    empresa faz. Não passa à frente um manual que casa melhor: o atendente que pergunta do
+    horário da IA continua ouvindo o manual do horário, com quem pode.
+  - *Manuais sem tela própria* (`SEM_TELA_PROPRIA` em `manuais-das-telas.ts`):
+    `mcp-e-ia-de-fora` ("o sistema tem MCP? dá para usar o Claude?"), `leads-que-chegaram`
+    (o assistente conta, o funil mostra, a Fila do Inbox e o relatório de Contatos por
+    origem) e `vendas-por-vendedor` (o assistente para gestor e administrador, e o
+    relatório de Negócios agrupado por Responsável).
+  - *A régua na cerca:* as 30 perguntas fixas da régua (plano na MIA-239) estão em
+    `assistente-perguntas-reais`, com o papel e a tela de cada uma. Como fazer e onde fica
+    (15 a 25) pedem o manual certo em primeiro; rotina e números pedem a ferramenta que lê
+    o dado; permissão, "nunca" e erro conferem a peça que decide sem o modelo. As que
+    dependem de trabalho ainda não juntado (as leituras da MIA-244 e a ponte do MCP) ficam
+    como pendentes (`it.todo`), com o que falta: ao juntar, tire o `falta` da pergunta.
 
 ## 11. O assistente ensina (.93): "Me mostra como", as trilhas e onde os clientes travam
 
@@ -474,3 +516,24 @@ Dois casos reais de 09/11/2026 motivaram:
 - **Regras 12 e 13 do prompt**: não indicar tela sem conexão como caminho para ver números (diga o que falta ligar, quem liga e o que funciona agora: as ferramentas de números ou Relatórios, com os negócios por origem); e qualquer período, com "semana passada" de segunda a domingo da semana anterior. Nunca dizer que um período não dá para ver.
 
 Provado em `tests/unit/assistente-periodo-livre.test.ts`. A lista de ferramentas do assistente e o MCP de plataforma não mudam.
+
+## 14. "Quantos leads chegaram?" volta a responder, com período, funil e tarefas concluídas (MIA-244)
+
+O diagnóstico da MIA-239 (produção, 25/11) achou `ver_meus_leads` falhando nas seis vezes em que foi chamada, e nenhuma resposta da história com a fonte "Funis/Radar". Mais 4 perguntas sem resposta eram de número que nenhuma ferramenta lia: "quantas tarefas concluí hoje" e leads por período e por funil.
+
+**Por que falhava** (pelo código e pelos testes deste PR; a suspeita da RLS foi conferida contra o Postgres dos invariantes, nos três papéis):
+
+1. **Não era a RLS.** O papel `authenticated` tem `select` em todas as tabelas que o Radar lê, e a RLS filtra, não lança. Preso em `tests/invariants/assistente-le-leads-e-tarefas-pela-sessao.test.ts`, com administrador, gestor e atendente.
+2. **O Radar lançava e levava a ferramenta junto.** Qualquer leitura do Radar que falha (a agenda, por exemplo, vira `leitura_indisponivel` e o Radar lança `radar_agenda_indisponivel`) derrubava `ver_meus_leads` inteira. Até a .107, a proteção de agenda lia os contatos de todos os negócios abertos num `.in()` só, que cresce com a base e pode passar do teto da URL. O upstream passou a ler em lotes (chegou na .110), mas um lote que falha ainda derruba o Radar inteiro. Agora o Radar é uma PARTE da leitura: se ele não responde, os leads saem sem o "em risco" (`em_risco: null`), com um aviso para o modelo dizer isso, e o log registra o código.
+3. **A contagem parava em 1.000.** Os abertos eram contados pelas linhas lidas com `limit(2000)`, e o PostgREST desta instalação devolve no máximo 1.000 por pedido: uma empresa com 1.500 abertos ouviria "1.000". Agora o total é `count: exact` no banco, e as divisões (por origem, por funil, por dono) vêm em páginas de 1.000, com `truncado` acima de 20 páginas.
+
+**O que a ferramenta passa a responder:**
+
+- `ver_meus_leads` aceita o mesmo `periodo` das ferramentas de performance (`hoje`, `7`, `30`, `90`, `mes`, `mesp`, `pers` com `de` e `ate`, e `comparar`), com padrão nos últimos 7 dias, como antes, e um `funil` opcional pelo nome (sem acento e sem maiúscula; "funil Comercial" casa com "Comercial"). Devolve `abertos` agora e, em `chegaram`, os negócios CRIADOS no período, abertos ou não, por origem e por funil, quantos seguem abertos e, com `comparar`, o total do período anterior. A janela é a do motor de relatórios (`lib/assistente/leituras/periodo.ts`, espelho de `fn_mia_relatorio_janela`), no fuso da empresa. Funil que não existe volta com a lista dos funis.
+- `ver_minha_rotina` traz `tarefas.concluidas_hoje` e, com `periodo`, `concluidas_no_periodo`. A tarefa concluída é a `done` cuja última alteração caiu na janela: `crm_tasks` não guarda a hora da conclusão, e a tarefa feita quase nunca é editada depois. Quem conta é o responsável (`assigned_to`), como na tela de Tarefas.
+
+**Falha visível:** toda ferramenta que falha devolve `{ erro, codigo }` (o código curto de `codigoDaFalha`, em `lib/assistente/leituras/comum.ts`: `radar_agenda_indisponivel`, `tempo_esgotado`, `url_grande_demais`, `banco_<SQLSTATE>`...) e o servidor registra `[assistente] ferramenta falhou` com a ferramenta e o código, nunca o texto do banco nem a pergunta. O Radar que falha dentro da leitura dos leads registra `[assistente] radar indisponível na leitura dos leads` com o código.
+
+Nada mudou no texto das regras do prompt, na tela, na lista "sem resposta" do administrador nem no modelo: isso é do plano do Arquiteto (MIA-239). O MCP de plataforma não muda: a contagem de negócios já está em `plataforma_contar_negocios` e nos relatórios.
+
+Provado em `tests/unit/assistente-leads-e-tarefas-por-periodo.test.ts`, com um cliente em memória que se comporta como o PostgREST desta instalação (`tests/support/supabase-em-memoria.ts`: o teto de 1.000 linhas, `count: exact` e a tabela que falha), com as perguntas do diagnóstico em dado fictício.

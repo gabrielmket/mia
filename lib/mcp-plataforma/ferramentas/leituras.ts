@@ -42,6 +42,8 @@ import { lerFunisDeEntrada } from "@/lib/implantacao/funil-de-entrada";
 import { retratoDaOperacaoDoDia, retratoDoAvisoDeTransferencia } from "@/lib/implantacao/aviso-e-operacao-do-dia";
 import { lerRegrasDosNumeros, retratoDaDistribuicao } from "@/lib/implantacao/distribuicao-do-numero";
 import { iaDecideLigadaNa } from "@/lib/implantacao/empresa";
+// FORK MIA (MIA-48): a chave do aviso da queda do número.
+import { avisoDaQuedaLigado } from "@/lib/avisos/chave-do-aviso-da-queda";
 import { lerFontes, retratoDaFonte } from "@/lib/implantacao/fonte-de-formulario";
 import { retratoDosPlanos } from "@/lib/implantacao/planos-de-tarefa";
 import { lerRegras } from "@/lib/implantacao/automacoes";
@@ -1044,6 +1046,8 @@ export const FERRAMENTAS_DE_LEITURA: readonly FerramentaDePlataforma[] = [
           // .81: as duas opções da agenda do upstream (1.80 #978, 1.81 #2063).
           colegas_podem_mexer_na_agenda: colegasPodemMexerNaAgendaLigado(org.settings),
           google_meet_com_acesso_aberto: meetAbertoLigado(org.settings),
+          // FORK MIA (MIA-48): o recado no grupo quando um número do cliente cai e volta.
+          aviso_da_queda_do_numero: avisoDaQuedaLigado(org.settings),
           // Upstream 1.112 (#4023): a pesquisa de satisfação do encerramento, como o envio lê.
           pesquisa_de_satisfacao: lerOpcaoDaSatisfacao(org.settings),
           // Upstream 1.119: o aviso de transferência à equipe (com ou sem o primeiro nome do cliente) e a Operação do dia.

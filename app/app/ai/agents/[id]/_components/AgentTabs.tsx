@@ -120,6 +120,7 @@ export function AgentTabs(props: Props) {
           published={props.published}
           readOnly={props.readOnly}
           channelSessions={props.channelSessions}
+          podeEscolherIa={props.podeEscolherIa /* FORK MIA (MIA-262) */}
         />
       </TabsContent>
 
@@ -128,7 +129,7 @@ export function AgentTabs(props: Props) {
       </TabsContent>
 
       <TabsContent value="runs" className="m-0">
-        <RunsTable agentId={props.agent.id} active={tab === "runs"} />
+        <RunsTable agentId={props.agent.id} active={tab === "runs"} podeEscolherIa={props.podeEscolherIa /* FORK MIA (MIA-262) */} />
       </TabsContent>
 
       <TabsContent value="proposals" className="m-0">
@@ -144,6 +145,7 @@ export function AgentTabs(props: Props) {
           agentId={props.agent.id}
           versions={props.versions}
           readOnly={props.readOnly}
+          podeEscolherIa={props.podeEscolherIa /* FORK MIA (MIA-262) */}
         />
       </TabsContent>
     </Tabs>

@@ -23,6 +23,8 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { montarEstadoDaChave } from "@/lib/ai/embeddings/estado";
+import { estadoDaChaveAoCliente } from "@/lib/ai/embeddings/estado-ao-cliente";
+import { escolheIa } from "@/lib/ai/trava-da-ia";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +35,11 @@ export async function GET(): Promise<Response> {
   if (!authz.ok) return authz.response;
   const { org: activeOrg } = authz;
 
-  const estado = await montarEstadoDaChave(await createClient(), activeOrg.orgId);
+  // FORK MIA (MIA-262): a chave e o provedor do embedding são da plataforma.
+  const estado = estadoDaChaveAoCliente(
+    await montarEstadoDaChave(await createClient(), activeOrg.orgId),
+    escolheIa(authz.user),
+  );
 
   return ok(
     {

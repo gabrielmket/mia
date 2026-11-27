@@ -21,6 +21,7 @@ import type { NextRequest } from "next/server";
 import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { podeVerCusto, semCustoNaAuditoria } from "@/lib/ai/custo-e-da-plataforma";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { IDIOMA_PADRAO, type Idioma } from "@/lib/i18n/idiomas";
 import { extractBearer } from "@/lib/mcp/auth";
@@ -42,7 +43,8 @@ export async function GET(req: NextRequest): Promise<Response> {
     if (!authz.ok) return authz.response;
     const teto = await tetoDeEscritaDoToken(authz, "audit", requestId);
     if (teto) return teto;
-    return responder(req, authz.supabase, authz.organizationId, authz.idioma ?? IDIOMA_PADRAO, requestId);
+    // FORK MIA (MIA-262): o token é da empresa, e o dólar da IA é da plataforma.
+    return responder(req, authz.supabase, authz.organizationId, authz.idioma ?? IDIOMA_PADRAO, requestId, false);
   }
 
   const authz = await requireRole("manager", {
@@ -51,7 +53,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     allowPlatformAdmin: "leitura",
   });
   if (!authz.ok) return authz.response;
-  return responder(req, await createClient(), authz.org.orgId, authz.user.idioma, requestId);
+  return responder(req, await createClient(), authz.org.orgId, authz.user.idioma, requestId, podeVerCusto(authz.user));
 }
 
 async function responder(
@@ -60,6 +62,7 @@ async function responder(
   organizationId: string,
   idioma: Idioma,
   requestId: string,
+  veCusto: boolean, // FORK MIA (MIA-262)
 ): Promise<Response> {
   const t = (texto: string) => traduzir(texto, idioma);
 
@@ -108,7 +111,7 @@ async function responder(
   const nextCursor =
     hasMore && last ? encodeAuditCursor({ created_at: last.created_at, id: last.id }) : null;
 
-  return ok(page, {
+  return ok(semCustoNaAuditoria(page, veCusto), { // FORK MIA (MIA-262)
     requestId,
     meta: { cursor: nextCursor, has_more: hasMore },
   });

@@ -47,6 +47,7 @@ afterEach(() => {
   cleanup();
   push.mockClear();
   comoPapel("admin");
+  authRef.user = { is_platform_admin: false };
   fontes.funis = [];
   fontes.fluxos = [];
   fontes.agentes = [];
@@ -91,6 +92,8 @@ describe("CommandPalette", () => {
   });
 
   it("acha o Jev pelo nome, embora ele não tenha tela própria", async () => {
+    // FORK MIA (MIA-262): Provedores é da plataforma; quem procura o Jev é o admin dela.
+    authRef.user = { is_platform_admin: true };
     const user = userEvent.setup();
     abrir();
     // O cartão dele mora em Provedores; sem o nome na descrição, quem ouviu
@@ -104,6 +107,7 @@ describe("CommandPalette", () => {
   });
 
   it("o texto de apoio do item destacado usa a cor de frente do destaque, não o cinza", async () => {
+    authRef.user = { is_platform_admin: true };
     const user = userEvent.setup();
     abrir();
     await user.type(screen.getByRole("combobox"), "jev");
@@ -115,6 +119,13 @@ describe("CommandPalette", () => {
       expect(apoio.className).not.toMatch(/text-accent-foreground\//);
       expect(apoio.className).not.toContain("text-muted-foreground");
     }
+  });
+
+  it("o cliente não acha Provedores nem pelo Jev (FORK MIA, MIA-262)", async () => {
+    const user = userEvent.setup();
+    abrir();
+    await user.type(screen.getByRole("combobox"), "jev");
+    expect(screen.queryByRole("option", { name: /Provedores/ })).toBeNull();
   });
 
   it("respeita o papel", async () => {

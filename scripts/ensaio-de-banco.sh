@@ -274,6 +274,71 @@ else conferir 0 "objetos nossos diminuíram" "$DIM"; fi
 SEM_RLS=$(PSQL -tAc "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and c.relname like 'mia_%' and not c.relrowsecurity" 2>&1)
 if [ "$SEM_RLS" = 0 ]; then conferir 1 "0 tabela mia_ sem RLS"; else conferir 0 "tabelas mia_ sem RLS: $SEM_RLS"; fi
 
+# 9173 (MIA-251 D): com a sessão de um membro, o custo de IA não se grava; a
+# anonimização LGPD (`tool_calls`) e o servidor (service_role) gravam. Cada
+# tentativa roda num subbloco que se desfaz: nada fica no banco.
+CUSTO=$(PSQL -tA 2>&1 <<'SQL'
+do $$
+declare
+  v_uid uuid;
+  v_org uuid;
+  r record;
+  res text;
+begin
+  select uo.user_id, uo.organization_id into v_uid, v_org
+    from public.user_organizations uo
+   where uo.accepted_at is not null
+   order by (uo.role = 'admin') desc, uo.organization_id
+   limit 1;
+  v_org := coalesce(v_org, (select o.id from public.organizations o order by o.id limit 1));
+  v_uid := coalesce(v_uid, gen_random_uuid());
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
+  for r in
+    select * from (values
+      ('membro: update llm_calls.cost_cents', 'authenticated',
+       format('update public.llm_calls set cost_cents = 0 where organization_id = %L', v_org), 'negado'),
+      ('membro: insert em llm_calls', 'authenticated',
+       format('insert into public.llm_calls (organization_id, purpose, provider, model, cost_cents, latency_ms) values (%L, %L, %L, %L, 0, 0)', v_org, 'agent_turn', 'ensaio', 'ensaio'), 'negado'),
+      ('membro: delete em llm_calls', 'authenticated',
+       format('delete from public.llm_calls where organization_id = %L', v_org), 'negado'),
+      ('membro: update ai_agent_runs.cost_cents', 'authenticated',
+       format('update public.ai_agent_runs set cost_cents = 0 where organization_id = %L', v_org), 'negado'),
+      ('membro: update ai_agent_runs.tool_calls (anonimização LGPD)', 'authenticated',
+       format('update public.ai_agent_runs set tool_calls = tool_calls where organization_id = %L', v_org), 'grava'),
+      ('servidor: insert em llm_calls (service_role)', 'service_role',
+       format('insert into public.llm_calls (organization_id, purpose, provider, model, cost_cents, latency_ms) values (%L, %L, %L, %L, 1, 0)', v_org, 'agent_turn', 'ensaio', 'ensaio'), 'grava'),
+      ('servidor: update ai_agent_runs.cost_cents (service_role)', 'service_role',
+       format('update public.ai_agent_runs set cost_cents = cost_cents where organization_id = %L', v_org), 'grava')
+    ) t(nome, papel, comando, esperado)
+  loop
+    begin
+      execute format('set local role %I', r.papel);
+      execute r.comando;
+      raise exception using errcode = 'P0001', message = 'desfaz';
+    exception
+      when insufficient_privilege then
+        res := case when sqlerrm like 'permission denied%' then 'negado' else 'rls: ' || sqlerrm end;
+      when sqlstate 'P0001' then
+        res := 'grava';
+      when others then
+        res := 'erro ' || sqlstate || ': ' || sqlerrm;
+    end;
+    raise notice 'CUSTO|%|%|%', case when res = r.esperado then 'ok' else 'FALHOU' end, r.nome, res;
+  end loop;
+end $$;
+SQL
+)
+N_CUSTO=0
+while IFS='|' read -r _ ok nome res; do
+  [ -n "$nome" ] || continue
+  N_CUSTO=$((N_CUSTO + 1))
+  if [ "$ok" = ok ]; then conferir 1 "custo de IA (9173) · $nome" "$res"
+  else conferir 0 "custo de IA (9173) · $nome" "$res"; fi
+done <<EOF
+$(printf '%s\n' "$CUSTO" | grep -F 'CUSTO|')
+EOF
+[ "$N_CUSTO" -gt 0 ] || conferir 0 "custo de IA (9173): a sonda não rodou" "$(printf '%s' "$CUSTO" | head -3 | cut -c1-200 | tr '\n' ';')"
+
 for seg in $SEGMENTOS; do
   if ARQ -v ON_ERROR_STOP=1 -f "/ensaio/demos-novo/demo-$seg.sql" >"$LOGS/demo-novo-$seg.log" 2>&1; then
     conferir 1 "demonstração '$seg' (código novo) reaplica com saída 0"

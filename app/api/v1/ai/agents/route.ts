@@ -48,7 +48,7 @@ import {
 } from "@/lib/ai/par-provedor-modelo";
 import { logger } from "@/lib/logger";
 import { traduzir } from "@/lib/i18n/dicionario";
-import { travarIaDaVersaoNova } from "@/lib/ai/trava-da-ia";
+import { agentesSemIa, travarIaDaVersaoNova } from "@/lib/ai/trava-da-ia";
 import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
 // FORK MIA (MIA-250 D): o limite de agentes do plano.
 import type { Idioma } from "@/lib/i18n/idiomas";
@@ -151,7 +151,8 @@ export async function GET(req: NextRequest): Promise<Response> {
   const { data, error } = await query.order("created_at", { ascending: false });
   if (error) return fail("internal_error", "Erro ao listar agents.", 500, { requestId });
 
-  return ok(data ?? [], { requestId });
+  // FORK MIA (MIA-262): o modelo de cada agente é da plataforma.
+  return ok(agentesSemIa(await quemPedeNaRota(authz), (data ?? []) as unknown as Array<Record<string, unknown>>), { requestId });
 }
 
 // ---------------------------------------------------------------------------

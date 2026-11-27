@@ -25,6 +25,8 @@ import { chaveDePlataforma } from "@/lib/ai/runtime/agent";
 import { ehProvedorSuportado } from "@/lib/ai/pontos/provedores";
 // FORK MIA (9172, MIA-217): quem segue a plataforma e quem está sem chave.
 import { contarEmpresas, iaDasEmpresas, recusaDaPlataformaSemChave } from "@/lib/ai/ia-da-empresa";
+// FORK MIA (MIA-309): o modelo novo atende os agentes publicados de quem segue; sem visão, recusa.
+import { recusaDoModeloSemVisao } from "@/lib/ai/agente-segue-a-plataforma";
 
 export const dynamic = "force-dynamic";
 
@@ -183,8 +185,9 @@ export async function PUT(req: NextRequest): Promise<Response> {
   // segue a plataforma (gatilho `trg_mia_platform_ia_propaga`). Provedor sem
   // chave da instalação deixaria todas sem IA; "automático" deixaria todas no
   // padrão antigo do produto. As duas recusas antes de gravar.
-  const contagem = contarEmpresas(await iaDasEmpresas(admin).catch(() => null));
-  if (contagem === null) {
+  const empresas = await iaDasEmpresas(admin).catch(() => null);
+  const contagem = contarEmpresas(empresas);
+  if (empresas === null || contagem === null) {
     return fail("db_error", "Não deu para conferir as empresas que seguem a plataforma. Tente de novo.", 500, {
       requestId,
     });
@@ -209,6 +212,14 @@ export async function PUT(req: NextRequest): Promise<Response> {
         requestId,
       });
     }
+  }
+
+  // FORK MIA (MIA-309): o modelo da plataforma passa a atender os agentes já
+  // publicados de quem segue (lib/ai/agente-segue-a-plataforma.ts). Se algum lê
+  // foto, o modelo novo precisa enxergar imagem.
+  if (provider && model_id) {
+    const semVisao = await recusaDoModeloSemVisao(admin, { provider, modelId: model_id, empresas });
+    if (semVisao) return fail(semVisao.codigo, semVisao.mensagem, semVisao.status, { requestId });
   }
 
   const { error } = await admin.from("platform_ia").upsert(

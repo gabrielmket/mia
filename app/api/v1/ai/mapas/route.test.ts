@@ -78,7 +78,8 @@ const testar = (body: unknown) =>
 beforeEach(() => {
   vi.clearAllMocks();
   deps.support.mockResolvedValue(null);
-  deps.role.mockResolvedValue({ ok: true, user: { id: EU, idioma: "pt-BR" }, org: { orgId: ORG } });
+  // FORK MIA (MIA-262): pela sessão, a chave de mapas é da plataforma.
+  deps.role.mockResolvedValue({ ok: true, user: { id: EU, idioma: "pt-BR", is_platform_admin: true, platform_admin_scope: "full", support: null }, org: { orgId: ORG } });
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -192,5 +193,15 @@ describe("POST /testar — o botão Testar", () => {
     deps.role.mockResolvedValueOnce({ ok: false, response: new Response(null, { status: 403 }) });
     expect((await TESTAR(testar({ api_key: CHAVE }) as never)).status).toBe(403);
     expect(deps.role).toHaveBeenCalledWith("admin", expect.anything());
+  });
+});
+
+describe("FORK MIA (MIA-262): pela sessão, a chave de mapas é da plataforma", () => {
+  it("o admin da empresa não lê, não grava e não remove (403 ia_da_plataforma)", async () => {
+    deps.role.mockResolvedValue({ ok: true, user: { id: EU, idioma: "pt-BR", is_platform_admin: false, platform_admin_scope: null, support: null }, org: { orgId: ORG } });
+    for (const res of [await GET(), await PUT(put({ api_key: CHAVE }) as never), await DELETE()]) {
+      expect(res.status).toBe(403);
+      expect((await res.json()).error.code).toBe("ia_da_plataforma");
+    }
   });
 });

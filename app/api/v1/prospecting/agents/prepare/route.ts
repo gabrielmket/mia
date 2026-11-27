@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
 import { AgentSetupError, setupProspectingAgent } from "@/lib/prospecting/agent-setup";
 import { prospectingAgentSetupSchema } from "@/lib/prospecting/agent-setup-schema";
+import { semModeloAoCliente } from "@/lib/prospecting/sem-modelo-ao-cliente";
 
 export const dynamic = "force-dynamic";
 /** Save a paused canonical version for the existing test endpoint. No publication. */
@@ -19,14 +20,15 @@ export async function POST(req: Request) {
   if (!parsed.success)
     return fail("validation_failed", "Complete o resumo para testar o agente.", 422, { requestId });
   try {
+    // FORK MIA (MIA-304): sem o nome do modelo, que é da plataforma.
     return ok(
-      await setupProspectingAgent(
+      semModeloAoCliente(await setupProspectingAgent(
         getRequestPool(),
         createAdminClient(),
         { orgId: auth.org.orgId, userId: auth.user.id, requestId },
         parsed.data,
         { prepareOnly: true },
-      ),
+      )),
       { requestId, headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

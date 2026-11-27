@@ -11,9 +11,10 @@
  *     ainda carrega é esconder de quem não abre o devtools;
  *  2. ausência de custo é NULO, nunca zero: zero se lê como "não custou nada",
  *     que é exatamente a leitura falsa que este fork foi consertar;
- *  3. tokens CONTINUAM visíveis. Consumo não é preço, e é o medidor do dia em
- *     que o plano for por conversa ou por pacote — o cliente precisa ver o que
- *     gastou do pacote dele sem ver o que isso nos custou;
+ *  3. `semCusto` só tira o custo. Desde a MIA-262 (pedido de 25/11) os tokens
+ *     também saem do cliente, mas por outra função (`semIaDaPlataforma`, em
+ *     `tests/unit/ia-so-no-admin.test.ts`): o medidor do cliente passou a ser o
+ *     uso do plano;
  *  4. sessão de acompanhamento (`support`) entra na conta do cliente para
  *     ajudar, e não para ver o custo dela.
  */
@@ -92,13 +93,14 @@ describe("o destino 'Uso e orçamento' é da plataforma", () => {
   });
 
   it("a marca não vazou para outros destinos: o resto do menu segue por papel", () => {
-    // Os DOIS destinos de plataforma, e o motivo de cada um:
+    // Os TRÊS destinos de plataforma, e o motivo de cada um:
     //  · uso e orçamento — dinheiro da IA é de quem paga o provedor;
     //  · credenciais — a chave do provedor é do mesmo dono do dinheiro. Deixá-la
     //    com o cliente permitiria apontar para outra conta, ou apagar e derrubar
     //    o atendimento.
+    //  · provedores (MIA-262) — escolher a IA de cada parte do sistema é nosso.
     // Número de WhatsApp e agenda do Google seguem sendo do cliente, no painel dele.
     const marcados = catalogo.filter((d) => d.somentePlataforma === true).map((d) => d.href);
-    expect(marcados.sort()).toEqual(["/app/ai/credentials", "/app/ai/usage"]);
+    expect(marcados.sort()).toEqual(["/app/ai/credentials", "/app/ai/providers", "/app/ai/usage"]);
   });
 });

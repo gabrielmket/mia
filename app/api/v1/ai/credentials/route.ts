@@ -20,13 +20,14 @@ import { requireRole } from "@/lib/auth/require-role";
 // admin), então a criação passa pela mesma régua de quem vê custo. O import de
 // `Provider` que o nosso lado tinha saiu junto com o upstream: o cast
 // `as Provider` deu lugar ao `z.enum(IDS_COM_CHAVE)`, que já tipa o provedor.
-import { podeVerCusto } from "@/lib/ai/custo-e-da-plataforma";
+import { podeConfigurarChaveDeIa, podeVerCusto } from "@/lib/ai/custo-e-da-plataforma";
 import { guardarCredencial, MENSAGEM_ASSINATURA_SO_PELO_LOGIN } from "@/lib/ai/credenciais/guardar";
 import { IDS_COM_CHAVE } from "@/lib/ai/pontos/provedores";
 import { IDS_DE_SERVICO } from "@/lib/ai/pontos/provedores-de-servico";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { MENSAGEM_IA_DA_PLATAFORMA } from "@/lib/ai/trava-da-ia";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,11 @@ export async function GET(): Promise<Response> {
   const authz = await requireRole("manager", { requestId, resource: "ai_credentials" });
   if (!authz.ok) return authz.response;
   const { org: activeOrg } = authz;
+  // FORK MIA (MIA-262): a lista de chaves (rótulo, final, modelos) é da plataforma,
+  // como a tela de Credenciais, que já dá 403 ao cliente.
+  if (!podeConfigurarChaveDeIa(authz.user)) {
+    return fail("ia_da_plataforma", traduzir(MENSAGEM_IA_DA_PLATAFORMA, authz.user.idioma), 403, { requestId });
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase

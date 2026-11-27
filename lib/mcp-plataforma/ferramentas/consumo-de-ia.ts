@@ -29,6 +29,8 @@ import {
   periodoDoPedido,
 } from "@/lib/ai/usage/consumo-do-periodo";
 import { falhouOCustoDeMensagem, lerCustoDeMensagemDoPeriodo } from "@/lib/channels/meta/custo-do-periodo";
+// FORK MIA (MIA-309): o teto de IA da empresa ao lado do gasto que ele limita.
+import { lerTetoDeIa } from "@/lib/ai/budget/mudanca-do-teto";
 import { organizacaoDaImplantacao } from "@/lib/implantacao/base";
 
 import { recusar } from "../recusa";
@@ -78,7 +80,10 @@ export const FERRAMENTAS_DE_CONSUMO_DE_IA: FerramentaDePlataforma[] = [
       "O mês do teto do orçamento é o do banco (UTC) e pode diferir deste nas últimas 3 horas do mês. " +
       "`mensagens_cobradas`: as mensagens que a META cobrou no período, por categoria, em centavos de REAL, cada mensagem ao preço que valia no instante dela " +
       "(um reajuste não muda um mês já fechado; num mês em que o preço mudou, a quebra por preço está em `linhas[].precos`). `semPreco` = categorias com mensagem " +
-      "sem preço vigente, fora do total. Os mesmos números da aba Uso. Só lê.",
+      "sem preço vigente, fora do total. Os mesmos números da aba Uso. " +
+      "`teto_de_ia` (MIA-309): o teto mensal da empresa em `ai_budgets` (o freio de emergência), com `teto_usd_cents` (0 = sem teto), `modo` (`off`, `avisar`, `bloquear`), " +
+      "`limiar_pct` do aviso, `parada_vale_desde` (a parada armada passa a valer nessa hora; `null` = não armada) e `gravado: false` quando a empresa nunca teve teto; " +
+      "`null` = a leitura falhou. O teto compara com o gasto do mês do banco (UTC). Para mudar: plataforma_definir_teto_de_ia. Só lê.",
     inputSchema: {
       organization_id: ORGANIZACAO,
       mes: MES,
@@ -89,9 +94,10 @@ export const FERRAMENTAS_DE_CONSUMO_DE_IA: FerramentaDePlataforma[] = [
     handler: async ({ admin }, args) => {
       const org = await organizacaoDaImplantacao(admin, String(args.organization_id));
       const periodo = periodoDosArgumentos(args);
-      const [consumo, mensagensCobradas] = await Promise.all([
+      const [consumo, mensagensCobradas, tetoDeIa] = await Promise.all([
         lerConsumoDoPeriodo(admin, org.id, periodo),
         lerCustoDeMensagemDoPeriodo(admin, org.id, periodo),
+        lerTetoDeIa(admin, org.id),
       ]);
       if (falhouOConsumo(consumo)) throw new Error(`não consegui ler o consumo de IA: ${consumo.erro}`);
       if (falhouOCustoDeMensagem(mensagensCobradas)) {
@@ -111,6 +117,7 @@ export const FERRAMENTAS_DE_CONSUMO_DE_IA: FerramentaDePlataforma[] = [
         truncado: consumo.truncado,
         chamadas_no_banco: consumo.chamadas_no_banco,
         mensagens_cobradas: mensagensCobradas,
+        teto_de_ia: tetoDeIa,
       };
     },
   },

@@ -50,3 +50,26 @@ describe("recadoDaIaSemChave", () => {
     expect(varias).toContain("Admin › Modelo de IA");
   });
 });
+
+describe("FORK MIA (MIA-262): o Jev sem chave vai para a plataforma", () => {
+  it("conta só empresa operante com o Jev ligado e sem chave da origem dele", async () => {
+    const { contarJevSemChave } = await import("./aviso-da-ia-das-empresas");
+    expect(
+      contarJevSemChave([
+        { chave: "propria", operante: true, jevSemChave: true },
+        { chave: "propria", operante: false, jevSemChave: true },
+        { chave: "instalacao", operante: true, jevSemChave: false },
+        { chave: "instalacao", operante: true },
+      ]),
+    ).toBe(1);
+  });
+
+  it("o recado diz o que acontece e onde ver, sem nome de empresa; zero não manda nada", async () => {
+    const { recadoDoJevSemChave } = await import("./aviso-da-ia-das-empresas");
+    expect(recadoDoJevSemChave(0)).toBeNull();
+    const recado = recadoDoJevSemChave(2)!;
+    expect(recado).toMatch(/2 empresas estão com o Jev ligado/);
+    expect(recado).toMatch(/plataforma_ver_ia_das_empresas/);
+    expect(recado).toMatch(/a IA de sempre cobre/);
+  });
+});

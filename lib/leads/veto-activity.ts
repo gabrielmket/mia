@@ -73,7 +73,7 @@ export function vetoReason(gate: string, code: string, trecho?: string | null): 
     stop: "Não enviei: o contato pediu para parar de receber mensagens",
     window: "Não enviei: fora da janela de horário permitida",
     pacing: "Não enviei: limite de ritmo de envio atingido",
-    budget: "Não enviei: orçamento de IA esgotado",
+    budget: "Não enviei: o uso de IA do plano acabou", // FORK MIA (MIA-262): na linguagem do plano
     warmup: "Não enviei: número ainda em aquecimento",
     promise: "Não enviei: a mensagem prometia algo que não posso garantir",
     internal_vocabulary:

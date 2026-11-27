@@ -58,7 +58,7 @@ export const ROTEIROS: readonly Manual[] = [
     titulo: "Ver se a IA está vendendo",
     palavras: [
       "ia esta vendendo", "a ia vende", "resultado da ia", "o agente esta funcionando", "quanto a ia fechou",
-      "desempenho da ia", "vale a pena", "retorno da ia", "ia converte",
+      "desempenho da ia", "vale a pena", "retorno da ia", "ia converte", "acompanhar a ia",
     ],
     href: "/app/paineis",
     telas: ["/app/paineis/funil", "/app/ai/evolution", "/app/ai/cases", "/app/metrics", "/app/relatorios"],

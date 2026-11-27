@@ -24,6 +24,9 @@ import { listSelectableChannels } from "@/lib/channels/selectable";
 import { lerRetratoDaInstalacao } from "@/lib/instalacao/retrato";
 import { provarSaldo } from "@/lib/instalacao/prova-de-credito";
 import { loadCredential, CredentialUnavailableError } from "@/lib/ai/credentials";
+// FORK MIA (MIA-284): a prova paga é só de quem configura a chave.
+import { podeConfigurarChaveDeIa } from "@/lib/ai/custo-e-da-plataforma";
+import { retratoAoCliente } from "@/lib/instalacao/retrato-ao-cliente";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +61,17 @@ export async function GET(req: NextRequest) {
   });
 
   const querProvar = req.nextUrl.searchParams.get("provar") === "1";
-  if (!querProvar) return ok(retrato);
+  // FORK MIA (MIA-262): provedor, modelo e chave só para quem configura a chave.
+  if (!querProvar) return ok(retratoAoCliente(retrato, podeConfigurarChaveDeIa(authz.user)));
+
+  // FORK MIA (MIA-284): a prova gasta uma geração com a chave que está em
+  // jogo — na MIA, a da plataforma. Quem não configura a chave
+  // (`podeConfigurarChaveDeIa`, lib/ai/custo-e-da-plataforma.ts) recebe o
+  // retrato sem `prova`, como se não tivesse pedido: o admin da empresa não tem
+  // o que fazer com o resultado, e o pedido dele não pode custar dinheiro.
+  // Retrato e não 403: o pedido sem `provar` já é dele, e só a parte paga sai.
+  // Versão .119: com a MIA-262, esse retrato também sai sem provedor, modelo e chave.
+  if (!podeConfigurarChaveDeIa(authz.user)) return ok(retratoAoCliente(retrato, false));
 
   // A partir daqui custa dinheiro: uma geração real de um token. Nunca sai de
   // graça num GET que a tela chama sozinha. 2ª chamada a requireRole de

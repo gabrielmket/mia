@@ -118,12 +118,8 @@ function Conferencia({
             </div>
             {c.escolha.consultaModelo ? (
               <p className="text-xs text-muted-foreground">
-                {t("Custa")} {t(c.escolha.custo)}
-                {t(". O modelo usado se escolhe em")}{" "}
-                <a className="underline underline-offset-2" href="/app/ai/providers">
-                  {t("Provedores de IA")}
-                </a>
-                .
+                {/* FORK MIA (MIA-262): o modelo é escolhido pela plataforma; sem o link para Provedores. */}
+                {t("Custa")} {t(c.escolha.custo)}.
               </p>
             ) : (
               // Sem modelo, sem link para Provedores: a camada não usa nenhum.

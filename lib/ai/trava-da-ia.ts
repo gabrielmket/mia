@@ -44,6 +44,14 @@ import type { AuthUser } from "@/lib/auth/types";
 /** As quatro colunas de `ai_agent_versions` que são o cérebro do agente. */
 export const CAMPOS_DA_IA = ["provider", "model", "credential_id", "operator_model"] as const;
 
+/**
+ * FORK MIA (MIA-262): os FREIOS DE GASTO da versão — o volume de texto e o custo
+ * máximo por atendimento — são teto de gasto, e gasto é da plataforma. Seguem
+ * a mesma trava dos quatro campos: no rascunho existente saem do patch; na
+ * versão nova vêm da versão de referência (sem ela, o default da coluna).
+ */
+export const FREIOS_DE_GASTO = ["token_budget", "cost_budget_cents"] as const;
+
 export interface IaDaVersao {
   provider: string;
   model: string;
@@ -205,7 +213,43 @@ export async function travarIaDaVersaoNova<T extends object>(
         "A inteligência dos agentes desta conta é configurada pela nossa equipe e ainda não está pronta. Fale com o suporte.",
     };
   }
-  return { ok: true, corpo: { ...corpo, ...ia } };
+  // FORK MIA (MIA-262): os freios de gasto vêm da referência, não do corpo.
+  const freios = await freiosDaReferencia(admin, args.orgId, args.agenteDeReferencia);
+  const semFreios = { ...corpo } as Record<string, unknown>;
+  for (const campo of FREIOS_DE_GASTO) delete semFreios[campo];
+  return { ok: true, corpo: { ...(semFreios as T), ...freios, ...ia } };
+}
+
+/**
+ * Os freios de gasto da versão que vale do agente (no ar; sem ela, a mais
+ * nova). Vazio quando não há agente de referência ou versão: aí vale o default
+ * da coluna.
+ */
+async function freiosDaReferencia(
+  admin: SupabaseClient,
+  orgId: string,
+  agentId: string | null,
+): Promise<Record<string, unknown>> {
+  if (!agentId) return {};
+  const { data: agente } = await admin
+    .from("ai_agents")
+    .select("published_version_id")
+    .eq("id", agentId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  const noAr = (agente as { published_version_id?: string | null } | null)?.published_version_id;
+  const base = admin
+    .from("ai_agent_versions")
+    .select("token_budget, cost_budget_cents")
+    .eq("organization_id", orgId);
+  const { data } = noAr
+    ? await base.eq("id", noAr).maybeSingle()
+    : await base.eq("agent_id", agentId).order("version_number", { ascending: false }).limit(1).maybeSingle();
+  if (!data) return {};
+  const linha = data as Record<string, unknown>;
+  const freios: Record<string, unknown> = {};
+  for (const campo of FREIOS_DE_GASTO) if (campo in linha) freios[campo] = linha[campo];
+  return freios;
 }
 
 /**
@@ -246,11 +290,11 @@ export function configDoRoteador(
   return limpo;
 }
 
-/** Versão EXISTENTE: some com os quatro campos do patch de quem não escolhe IA. */
+/** Versão EXISTENTE: some com os quatro campos (e os freios de gasto, MIA-262) do patch de quem não escolhe IA. */
 export function semCamposDaIa<T extends object>(user: QuemPede, patch: T): T {
   if (escolheIa(user)) return patch;
   const limpo = { ...patch } as Record<string, unknown>;
-  for (const campo of CAMPOS_DA_IA) delete limpo[campo];
+  for (const campo of [...CAMPOS_DA_IA, ...FREIOS_DE_GASTO]) delete limpo[campo];
   return limpo as T;
 }
 
@@ -293,4 +337,17 @@ export async function iaPodeIrAoAr(
     par.modelId === alvo.model &&
     alvo.operator_model === null
   );
+}
+
+/**
+ * FORK MIA (MIA-262): a LISTA de agentes, para quem não escolhe a IA, vai sem
+ * o modelo do cadastro e sem o par provedor/modelo da versão publicada. O
+ * cartão do upstream esconde a linha quando os dois chegam vazios.
+ */
+export function agentesSemIa<T extends { model?: unknown; versao_publicada?: unknown }>(
+  user: QuemPede,
+  agentes: readonly T[],
+): T[] {
+  if (escolheIa(user)) return [...agentes];
+  return agentes.map((a) => ({ ...a, model: null, versao_publicada: null }));
 }

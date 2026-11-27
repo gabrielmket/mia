@@ -79,7 +79,8 @@ describe("orcamentoDeIaDisponivel", () => {
     const db = montarDb({ orcamento: ORCAMENTO_HARD, gasto: 15000, avisadoNesteMes: true });
     const r = await orcamentoDeIaDisponivel(db, "org-1");
     expect(r.disponivel).toBe(false);
-    expect(r.motivo).toContain("orçamento mensal de IA");
+    // FORK MIA (MIA-262): a frase do plano, sem mandar a uma tela que dá 403.
+    expect(r.motivo).toBe("O uso de IA do plano acabou");
   });
 
   it("acima do teto mas SEM aviso no mês: disponível (ninguém é bloqueado sem ter sido avisado)", async () => {

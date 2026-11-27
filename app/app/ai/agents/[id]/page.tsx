@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
-import { podeConfigurarChaveDeIa } from "@/lib/ai/custo-e-da-plataforma";
+import { credenciaisSemChave } from "@/lib/ai/custo-e-da-plataforma";
+import { escolheIa } from "@/lib/ai/trava-da-ia";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { listSelectableChannels } from "@/lib/channels/selectable";
 import { createClient } from "@/lib/supabase/server";
@@ -178,7 +179,10 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
     id,
     channelSessions,
   );
-  const credentials = (credentialsRes.data ?? []) as CredentialRow[];
+  // FORK MIA (MIA-262): quem não escolhe a IA recebe as chaves sem rótulo,
+  // final e modelos; o editor só precisa saber se a chave da versão vale.
+  const veIa = escolheIa(user);
+  const credentials = credenciaisSemChave((credentialsRes.data ?? []) as CredentialRow[], veIa);
   const routerMemberRow = routerMemberRes.data as {
     router_id: string;
     ai_routers: { name: string; organization_id: string; channel_session_id: string } | null;
@@ -240,6 +244,7 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
           agent={agent}
           channels={channelSessions}
           credentials={credentials}
+          podeEscolherIa={veIa /* FORK MIA (MIA-262) */}
           hasVersion={versions.length > 0 && !(versions.length===1 && (versions[0] as AgentVersionRow & {provisioning_origin?:string}).provisioning_origin==="legacy_reconciliation")}
           readOnly={readOnly}
         />
@@ -253,7 +258,10 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
         versions={versions}
         credentials={credentials}
         provedoresDaInstalacao={provedoresDaInstalacao()}
-        podeEscolherIa={podeConfigurarChaveDeIa(user)}
+        // FORK MIA (MIA-262, o descompasso da MIA-218): o cartão da IA segue a
+        // trava do servidor (`escolheIa`), e a plataforma em suporte com edição
+        // passa a vê-lo.
+        podeEscolherIa={veIa}
         provedoresOferecidos={await idsDosProvedoresOferecidos(createAdminClient())}
         channelSessions={channelSessions}
         funis={funis}

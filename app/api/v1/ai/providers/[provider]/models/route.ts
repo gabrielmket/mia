@@ -17,6 +17,7 @@ import {
   type ModeloDaAssinatura,
 } from "@/lib/ai/catalogo/modelos-da-assinatura";
 import { ehVarianteEmLote } from "@/lib/ai/catalogo/variante-em-lote";
+import { CAMPOS_DO_PRECO, podeVerCusto, semIaDaPlataforma } from "@/lib/ai/custo-e-da-plataforma";
 
 export const dynamic = "force-dynamic";
 
@@ -119,5 +120,7 @@ export async function GET(
     (m) => m.supports_tools === true && !ehVarianteEmLote(m.model_id),
   );
 
-  return ok({ models }, { requestId });
+  // FORK MIA (MIA-262): o preço por milhão é o nosso custo. A lista fica (o
+  // editor usa a janela de contexto); o preço some para quem não vê custo.
+  return ok({ models: semIaDaPlataforma(models, podeVerCusto(authz.user), CAMPOS_DO_PRECO) }, { requestId });
 }

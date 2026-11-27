@@ -99,14 +99,24 @@ type Linha = {
   modelo: string | null;
   chave: string | null;
 };
-type Resposta = { contagem: { seguem: number; propria: number; sem_chave: number }; total: number; empresas: Linha[] };
+type Resposta = {
+  contagem: { seguem: number; propria: number; sem_chave: number };
+  agentes: { publicados: number; fora_do_par: number; fora_do_par_de_quem_segue: number } | null;
+  total: number;
+  empresas: Array<Linha & { agentes_publicados: number | null; agentes_fora_do_par: number | null }>;
+};
 
 describe("a lista", () => {
-  it("está lá, só lê, a lista tem 135 (134 + esta), e não há ferramenta de trocar a IA", async () => {
-    expect(FERRAMENTAS).toHaveLength(135);
+  it("está lá, só lê, a lista tem 136 (134 + esta + o teto de IA, MIA-309), e não há ferramenta de trocar a IA", async () => {
+    expect(FERRAMENTAS).toHaveLength(136);
     expect(FERRAMENTAS.find((f) => f.name === "plataforma_ver_ia_das_empresas")?.operacao).toBeNull();
-    // Trocar o modelo é ato de pessoa, com MFA, no painel.
-    const trocas = FERRAMENTAS.filter((f) => /^plataforma_(trocar|mudar|definir|configurar|escolher)_(.*_)?(ia|modelo|modelos|provedor|provedores)(_|$)/.test(f.name));
+    // Trocar o modelo é ato de pessoa, com MFA, no painel. O TETO de gasto
+    // (`plataforma_definir_teto_de_ia`, MIA-309) não troca provedor nem modelo.
+    const trocas = FERRAMENTAS.filter(
+      (f) =>
+        f.name !== "plataforma_definir_teto_de_ia" &&
+        /^plataforma_(trocar|mudar|definir|configurar|escolher)_(.*_)?(ia|modelo|modelos|provedor|provedores)(_|$)/.test(f.name),
+    );
     expect(trocas.map((f) => f.name)).toEqual([]);
 
     const mcp = await clienteMcp(criarServidorDePlataforma as never, []);
@@ -200,5 +210,63 @@ describe("plataforma_ver_ia_das_empresas", () => {
     const r = await chamar({});
     expect(r.erro).toBe(true);
     expect(r.texto).toContain("não consegui ler a IA das empresas");
+  });
+});
+
+describe("os agentes publicados fora do par em vigor (MIA-309)", () => {
+  /** Um agente publicado; o banco em memória devolve a versão embutida como está. */
+  function agente(organization_id: string, provider: string, model: string, extra: Record<string, unknown> = {}) {
+    return {
+      id: `agente-${Math.random().toString(16).slice(2)}`,
+      organization_id,
+      published_version_id: "versao-no-ar",
+      archived_at: null,
+      versao: { provider, model, status: "published", multimodal_input: false, image_vision_enabled: true },
+      ...extra,
+    };
+  }
+
+  beforeEach(() => {
+    cenario.banco.db.ai_agents = [
+      // Clínica Exemplo segue a plataforma (openai/gpt-ficticio): as versões gravadas ficaram para trás.
+      agente(ORG, "openai", "modelo-antigo"),
+      agente(ORG, "anthropic", "outro-modelo-antigo"),
+      // Loja Gama tem escolha própria (google/gemini-ficticio): um no padrão, um noutro modelo.
+      agente(GAMA, "google", "gemini-ficticio"),
+      agente(GAMA, "google", "um-modelo-diferente"),
+      // Não contam: arquivado, sem versão publicada, versão que não está publicada.
+      agente(GAMA, "google", "x", { archived_at: "2026-11-01T00:00:00Z" }),
+      agente(GAMA, "google", "x", { published_version_id: null }),
+      agente(GAMA, "google", "x", { versao: { provider: "google", model: "x", status: "draft" } }),
+      // A suspensa tem agente fora do par: aparece na linha dela, fora da soma.
+      agente(DELTA, "openai", "modelo-antigo"),
+    ];
+  });
+
+  it("⭐ quem segue a plataforma dá ZERO fora do par, mesmo com as versões gravadas noutro modelo", async () => {
+    const d = (await chamar({})).dados as unknown as Resposta;
+    const de = (id: string) => d.empresas.find((e) => e.organization_id === id)!;
+    expect(de(ORG)).toMatchObject({ origem: "plataforma", agentes_publicados: 2, agentes_fora_do_par: 0 });
+    // Escolha própria: o agente noutro modelo aparece.
+    expect(de(GAMA)).toMatchObject({ origem: "propria", agentes_publicados: 2, agentes_fora_do_par: 1 });
+    expect(de(EPSILON)).toMatchObject({ agentes_publicados: 0, agentes_fora_do_par: 0 });
+    expect(de(DELTA)).toMatchObject({ operante: false, agentes_publicados: 1, agentes_fora_do_par: 1 });
+    // A soma é só das operantes: a de quem segue fecha em zero.
+    expect(d.agentes).toEqual({ publicados: 4, fora_do_par: 1, fora_do_par_de_quem_segue: 0 });
+  });
+
+  it("a leitura dos agentes falhou: `null` (não sei), e o resto da resposta sai", async () => {
+    const fromReal = cenario.cliente.from.bind(cenario.cliente);
+    const falha: Record<string, unknown> = {
+      then: (ok: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: "fora do ar" } }).then(ok),
+    };
+    for (const m of ["select", "eq", "is", "not", "order", "range"]) falha[m] = () => falha;
+    cenario.cliente.from = ((tabela: string) => (tabela === "ai_agents" ? falha : fromReal(tabela))) as typeof cenario.cliente.from;
+    const r = await chamar({});
+    expect(r.erro, r.texto).toBe(false);
+    const d = r.dados as unknown as Resposta;
+    expect(d.agentes).toBeNull();
+    expect(d.empresas.every((e) => e.agentes_publicados === null && e.agentes_fora_do_par === null)).toBe(true);
+    expect(d.contagem).toEqual({ seguem: 1, propria: 3, sem_chave: 2 });
   });
 });

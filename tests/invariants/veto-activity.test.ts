@@ -235,7 +235,8 @@ describe("veto sem negócio para pendurar", () => {
 describe("vetoReason", () => {
   it("traduz os gates conhecidos para linguagem de gente", () => {
     expect(vetoReason("stop", "opted_out")).toContain("pediu para parar");
-    expect(vetoReason("budget", "exhausted")).toContain("orçamento");
+    // FORK MIA (MIA-262): o teto é do plano; "orçamento" de IA é conta da plataforma.
+    expect(vetoReason("budget", "exhausted")).toContain("uso de IA do plano acabou");
   });
 
   it("gate desconhecido não vira linha vazia — mostra a regra e o código", () => {

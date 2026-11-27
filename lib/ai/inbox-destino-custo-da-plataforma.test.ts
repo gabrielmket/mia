@@ -72,3 +72,20 @@ describe("Central × custo da plataforma", () => {
     expect(item?.destination).toMatchObject({ estado: "disponivel", href: "/app/ai/usage" });
   });
 });
+
+describe("FORK MIA (MIA-262): o aviso que levava a Provedores de IA", () => {
+  const midia = { kind: "midia_nao_lida", ref_kind: null, ref_id: null };
+
+  it("o gestor da empresa recebe a orientação de falar com o suporte, sem botão para a tela que dá 403", async () => {
+    const [item] = await resolverDestinosDosAvisos(leitor(), ORG, "manager", [midia], { veCustoEChaveDeIa: false });
+    expect(item?.destination).toEqual({
+      estado: "sem_destino",
+      orientacao: "A IA desta conta está sem chave para funcionar. Fale com o suporte.",
+    });
+  });
+
+  it("a plataforma continua com o botão", async () => {
+    const [item] = await resolverDestinosDosAvisos(leitor(), ORG, "manager", [midia], { veCustoEChaveDeIa: true });
+    expect(item?.destination).toMatchObject({ estado: "disponivel", href: "/app/ai/providers" });
+  });
+});

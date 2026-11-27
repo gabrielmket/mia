@@ -41,6 +41,8 @@ interface Props {
   agentId: string;
   versions: AgentVersionRow[];
   readOnly?: boolean;
+  /** FORK MIA (MIA-262): provedor, modelo e freios de gasto só para quem escolhe a IA. */
+  podeEscolherIa?: boolean;
 }
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -77,7 +79,7 @@ function pickCounterpart(
   return null;
 }
 
-export function VersionHistory({ agentId, versions, readOnly }: Props) {
+export function VersionHistory({ agentId, versions, readOnly, podeEscolherIa = true }: Props) {
   const t = useT();
   const router = useRouter();
   const [diffOpen, setDiffOpen] = React.useState(false);
@@ -151,9 +153,11 @@ export function VersionHistory({ agentId, versions, readOnly }: Props) {
               <span className="text-xs text-muted-foreground">
                 {new Date(v.created_at).toLocaleString()}
               </span>
+              {podeEscolherIa && ( // FORK MIA (MIA-262)
               <span className="font-mono text-xs text-muted-foreground">
                 {v.provider}/{v.model}
               </span>
+              )}
               {v.published_at ? (
                 <span className="text-xs text-muted-foreground">
                   {t("publicada em")} {new Date(v.published_at).toLocaleString()}
@@ -187,7 +191,7 @@ export function VersionHistory({ agentId, versions, readOnly }: Props) {
                 : t("Diff")}
             </DialogTitle>
           </DialogHeader>
-          {diffPair ? <VersionDiff versionA={diffPair.a} versionB={diffPair.b} /> : null}
+          {diffPair ? <VersionDiff versionA={diffPair.a} versionB={diffPair.b} podeEscolherIa={podeEscolherIa} /> : null}
         </DialogContent>
       </Dialog>
 

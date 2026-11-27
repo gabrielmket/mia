@@ -682,9 +682,9 @@
     "/api/v1/ai/budget": {
       "corpo": [
         {
-          "nome": "patchSchema",
-          "origem": "local",
-          "hash": "820bd8d6af08aa14"
+          "nome": "pedidoDoTetoSchema",
+          "origem": "@/lib/ai/budget/mudanca-do-teto",
+          "hash": "68667f9a9f5924ce"
         }
       ],
       "resposta": []
