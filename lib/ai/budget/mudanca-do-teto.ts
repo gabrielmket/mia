@@ -18,6 +18,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import type { AuditAction } from "@/lib/audit/actions";
 
 import {
   LIMIAR_PADRAO_PCT,
@@ -113,7 +114,7 @@ export type DecisaoDoTeto =
        */
       jaEstava: boolean;
       /** `ai.budget_enforcement_armed`, `…_disarmed` ou `ai.budget_limit_changed`. */
-      acaoDaAuditoria: string;
+      acaoDaAuditoria: AuditAction;
       metadataDaAuditoria: Record<string, unknown>;
     };
 
