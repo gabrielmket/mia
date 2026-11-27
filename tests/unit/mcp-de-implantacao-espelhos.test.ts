@@ -146,7 +146,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Relido na fusão da 1.116: a tela ganhou a lista de escritas liberadas da conexão (`escritasLiberadasConexao`, `curinga_nao_aceito`). O espelho não mexe nela, e `mesclarServidorMcpExterno` preserva o resto do `settings`: nada a levar. A lista fica para a tarefa do que falta no MCP.
   { rota: "app/actions/settings/definirServidorMcpExterno.ts", espelho: "lib/implantacao/servidor-mcp-externo.ts", impressao: "6ce142d287866660" },
   // Espelhado com a fusão 1.100 a 1.107 (upstream 9095): os servidores MCP por agente, com o OAuth por contato. O espelho é o `servidores_mcp` de plataforma_garantir_agente: as mesmas peças (cifra, `chave_last4`, revogação quando a origem dos tokens muda, slug estável, teto por agente) e as mesmas auditorias, só com o host.
-  { rota: "app/actions/agents/servidoresMcpDoAgente.ts", espelho: "lib/implantacao/servidores-mcp-do-agente.ts", impressao: "7746c0f49e6c8702" },
+  // Relido na fusão da 1.127 (#5126): a tela ganhou o prazo para abrir o link de autorização (`prazo_do_link_minutos` em `oauth_metadados`, 10 a 1440, padrão 10), preservado quando o endereço muda. O espelho leva a mesma preservação; receber o prazo pelo MCP fica no "Falta no MCP" da 1.127.
+  { rota: "app/actions/agents/servidoresMcpDoAgente.ts", espelho: "lib/implantacao/servidores-mcp-do-agente.ts", impressao: "c8b299a799023629" },
   // Espelhado na .76 (upstream 1.76, #2367): o freio do passo "a IA decide", com a mescla nos dois níveis de settings e a mesma auditoria.
   { rota: "app/actions/settings/definirAiDecideDaEmpresa.ts", espelho: "lib/implantacao/empresa.ts", impressao: "8168719014b15dca" },
   // Espelhado na .76 (upstream 1.77, #1752): os planos de tarefa, conferidos por planosSchema, em settings.task_plans.
