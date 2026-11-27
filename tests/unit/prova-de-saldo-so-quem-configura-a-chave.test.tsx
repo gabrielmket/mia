@@ -139,6 +139,8 @@ describe("rota: provar=1 sem o portão não gera nada", () => {
     autorizar({ ...ADMIN_DA_PLATAFORMA, support: { status: "active", organization_id: ORG } });
     const corpo = await (await pedir()).json();
     expect(corpo.data).not.toHaveProperty("prova");
+    // Sai pelo retrato escondido: um retorno cru neste ramo levaria o modelo ao suporte.
+    expect(corpo.data.inteligencia).not.toHaveProperty("modeloCurado");
     expect(provarSaldo).not.toHaveBeenCalled();
   });
 
