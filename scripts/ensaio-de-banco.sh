@@ -169,6 +169,68 @@ for seg in $SEGMENTOS; do
   fi
 done
 
+# 9176 (MIA-337): as empresas de chave própria passam à IA da plataforma. Só
+# quando a versão no ar ainda não tem a 9176 (sem a marca em `platform_ia`): com
+# ela no ar, a passagem já rodou no banco vazio e não roda de novo, de propósito.
+# Quatro empresas fictícias, ANTES da foto (as contagens incluem as delas):
+#   alfa  · escolha própria, openai e typesafe, teto 'off', versão presa à chave → passa;
+#   beta  · demonstração, com chave openai → fica;
+#   vita  · já segue a plataforma, com chave openai → fica (e, entre as passadas,
+#           escolhe chave própria: a 2ª passada não a puxa);
+#   delta · escolha própria com a chave openai desativada → fica.
+S9176=0
+if [ "$(PSQL -tAc "select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'platform_ia' and column_name = 'chaves_proprias_passaram_em'" 2>/dev/null)" = 0 ]; then
+  S9176=1
+  if ! PSQL -v ON_ERROR_STOP=1 -q >"$LOGS/sonda-9176.log" 2>&1 <<'SQL'
+insert into public.platform_ia (id, provider, model_id) values (1, 'openai', 'gpt-5.6-luna')
+  on conflict (id) do update set provider = excluded.provider, model_id = excluded.model_id;
+insert into public.organizations (id, slug, legal_name, display_name, status, settings, ia_segue_a_plataforma, demonstracao) values
+  ('e9176000-0000-4000-8000-000000000001', 'ensaio-9176-alfa', 'Academia Alfa LTDA', 'Academia Alfa', 'active', '{"llm":{"provider":"openai","default_model":"gpt-5.4-mini"}}', false, false),
+  ('e9176000-0000-4000-8000-000000000002', 'ensaio-9176-beta', 'Academia Beta LTDA', 'Academia Beta', 'active', '{"llm":{"provider":"openai","default_model":"gpt-5.4-mini"}}', false, true),
+  ('e9176000-0000-4000-8000-000000000003', 'ensaio-9176-vita', 'Vita Odonto LTDA', 'Vita Odonto', 'active', '{}', true, false),
+  ('e9176000-0000-4000-8000-000000000004', 'ensaio-9176-delta', 'Construtora Delta LTDA', 'Construtora Delta', 'active', '{"llm":{"provider":"openai","default_model":"gpt-5.4-mini"}}', false, false);
+insert into public.ai_provider_credentials
+  (id, organization_id, provider, label, api_key_encrypted, api_key_iv, api_key_tag, api_key_last4, is_active, validated_at) values
+  ('e9176000-0000-4000-8000-000000000011', 'e9176000-0000-4000-8000-000000000001', 'openai', 'chave openai', '\x00', '\x00', '\x00', '9176', true, now()),
+  ('e9176000-0000-4000-8000-000000000012', 'e9176000-0000-4000-8000-000000000001', 'typesafe', 'chave do jev', '\x00', '\x00', '\x00', '9176', true, now()),
+  ('e9176000-0000-4000-8000-000000000021', 'e9176000-0000-4000-8000-000000000002', 'openai', 'chave openai', '\x00', '\x00', '\x00', '9176', true, now()),
+  ('e9176000-0000-4000-8000-000000000031', 'e9176000-0000-4000-8000-000000000003', 'openai', 'chave openai', '\x00', '\x00', '\x00', '9176', true, now()),
+  ('e9176000-0000-4000-8000-000000000041', 'e9176000-0000-4000-8000-000000000004', 'openai', 'chave openai', '\x00', '\x00', '\x00', '9176', false, now());
+-- As quatro com teto (5000, off): o baseline dá esse teto a quem não tem linha,
+-- e assim a sonda também prova que a 9176 não mexe no teto de quem não passa.
+insert into public.ai_budgets (organization_id, monthly_limit_cents, enforcement_mode) values
+  ('e9176000-0000-4000-8000-000000000001', 5000, 'off'),
+  ('e9176000-0000-4000-8000-000000000002', 5000, 'off'),
+  ('e9176000-0000-4000-8000-000000000003', 5000, 'off'),
+  ('e9176000-0000-4000-8000-000000000004', 5000, 'off');
+insert into public.channel_sessions (id, organization_id, waha_session_name, status, webhook_secret_encrypted)
+  values ('e9176000-0000-4000-8000-000000000051', 'e9176000-0000-4000-8000-000000000001', 'ensaio-9176-alfa', 'WORKING', '\x00'::bytea);
+insert into public.ai_agents (id, organization_id, name, system_prompt)
+  values ('e9176000-0000-4000-8000-000000000061', 'e9176000-0000-4000-8000-000000000001', 'Atendente', 'system');
+insert into public.ai_agent_versions
+  (id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, channel_session_id, status)
+  values ('e9176000-0000-4000-8000-000000000071', 'e9176000-0000-4000-8000-000000000001', 'e9176000-0000-4000-8000-000000000061',
+          1, 'system', 'openai', 'gpt-5.4-mini', 'e9176000-0000-4000-8000-000000000011', 'e9176000-0000-4000-8000-000000000051', 'published');
+update public.ai_agents set published_version_id = 'e9176000-0000-4000-8000-000000000071'
+ where id = 'e9176000-0000-4000-8000-000000000061';
+SQL
+  then
+    echo "o preparo da sonda 9176 falhou (preparo, não conferência):" >&2; tail -8 "$LOGS/sonda-9176.log" >&2; exit 2
+  fi
+fi
+# O estado que a 9176 pode mudar, uma linha por empresa fictícia: segue | par |
+# credenciais (provedor:ativa:validada) | teto | linhas de auditoria | a versão.
+ESTADO_9176="select substr(o.slug, 13) || '|' || o.ia_segue_a_plataforma::text
+  || '|' || coalesce(o.settings->'llm'->>'provider', '-') || '/' || coalesce(o.settings->'llm'->>'default_model', '-')
+  || '|' || coalesce((select string_agg(c.provider || ':' || c.is_active::text || ':' || (c.validated_at is not null)::text, ',' order by c.provider)
+                        from public.ai_provider_credentials c where c.organization_id = o.id), '-')
+  || '|' || coalesce((select b.monthly_limit_cents || ':' || b.enforcement_mode from public.ai_budgets b where b.organization_id = o.id), '-')
+  || '|' || (select count(*) from public.api_audit_log l where l.organization_id = o.id and l.action = 'ai.chave_propria_passou_a_plataforma')
+  || '|' || coalesce((select v.provider || '/' || v.model || '/' || (v.credential_id is not null)::text || '/' || v.status
+                        from public.ai_agent_versions v where v.organization_id = o.id), '-')
+  from public.organizations o where o.slug like 'ensaio-9176-%' order by o.slug"
+[ "$S9176" = 1 ] && E9176_ANTES=$(PSQL -tAc "$ESTADO_9176" 2>&1)
+
 CONTAGEM="select (select count(*) from public.organizations) || ' empresas, ' || (select count(*) from public.contacts) || ' contatos, ' || (select count(*) from public.crm_leads) || ' negócios, ' || (select coalesce(sum(value_cents),0) from public.crm_leads) || ' centavos, ' || (select count(*) from public.conversations) || ' conversas, ' || (select count(*) from public.messages) || ' mensagens, ' || (select count(*) from public.crm_pipelines) || ' funis, ' || (select count(*) from public.crm_stages) || ' etapas, ' || (select count(*) from public.channel_sessions) || ' sessões de canal, ' || (select count(*) from public.meta_templates) || ' modelos da Meta'"
 FUNIS="select md5(coalesce(string_agg(id::text || coalesce(settings::text,''), ',' order by id),'')) from public.crm_pipelines"
 RELATORIO="select md5(coalesce(string_agg(o.id::text || ':' || (select md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from public.fn_mia_relatorio_linhas(o.id, 'negocios', '2020-01-01'::timestamptz, '2031-01-01'::timestamptz, '{}'::jsonb, '2026-11-17 12:00+00'::timestamptz, 'America/Sao_Paulo') t), ',' order by o.id), '')) from public.organizations o"
@@ -209,7 +271,15 @@ T0=$(date +%s)
 for p in 1 2; do
   ARQ -f /ensaio/novo/antes-do-upstream.sql >"$LOGS/novo$p.log" 2>&1
   ARQ -f /ensaio/novo/baseline.sql >>"$LOGS/novo$p.log" 2>&1; ARQ -f /ensaio/novo/baseline-mia.sql >>"$LOGS/novo$p.log" 2>&1
-  if [ "$p" = 1 ]; then TEMPO=$(( $(date +%s) - T0 )); fi
+  if [ "$p" = 1 ]; then
+    TEMPO=$(( $(date +%s) - T0 ))
+    # 9176: depois da implantação, a Vita escolhe chave própria (já tem a openai
+    # ativa). A 2ª passada roda o baseline de novo e não pode puxá-la de volta.
+    if [ "$S9176" = 1 ]; then
+      E9176_P1=$(PSQL -tAc "$ESTADO_9176" 2>&1)
+      PSQL -qc "update public.organizations set ia_segue_a_plataforma = false where slug = 'ensaio-9176-vita'" >/dev/null 2>&1
+    fi
+  fi
 done
 CARIMBO_NOVO=$(PSQL -tAc "select migration_mais_nova from public.schema_baseline" 2>/dev/null | head -1)
 echo "tempo da 1ª passada: ${TEMPO} s · carimbo novo: ${CARIMBO_NOVO:-?}"
@@ -338,6 +408,31 @@ done <<EOF
 $(printf '%s\n' "$CUSTO" | grep -F 'CUSTO|')
 EOF
 [ "$N_CUSTO" -gt 0 ] || conferir 0 "custo de IA (9173): a sonda não rodou" "$(printf '%s' "$CUSTO" | head -3 | cut -c1-200 | tr '\n' ';')"
+
+# 9176 (MIA-337): só a de chave própria passou, e a 2ª passada não puxou ninguém.
+if [ "$S9176" = 1 ]; then
+  E9176_DEPOIS=$(PSQL -tAc "$ESTADO_9176" 2>&1)
+  linha_9176() { printf '%s\n' "$1" | grep "^$2|"; }
+  conferir_9176() {
+    local nome="$1" obtido="$2" esperado="$3"
+    if [ "$obtido" = "$esperado" ]; then conferir 1 "chave própria (9176) · $nome" "$obtido"
+    else conferir 0 "chave própria (9176) · $nome" "esperado: $esperado · obtido: ${obtido:-nada}"; fi
+  }
+  conferir_9176 "a de chave própria passa: openai desativada (validada), segue a plataforma, typesafe ativa, teto 3000 avisar, 1 auditoria, versão intacta" \
+    "$(linha_9176 "$E9176_P1" alfa)" \
+    "alfa|true|openai/gpt-5.6-luna|openai:false:true,typesafe:true:true|3000:avisar|1|openai/gpt-5.4-mini/true/published"
+  conferir_9176 "a 2ª passada não muda a que passou" "$(linha_9176 "$E9176_DEPOIS" alfa)" "$(linha_9176 "$E9176_P1" alfa)"
+  conferir_9176 "a demonstração fica" "$(linha_9176 "$E9176_DEPOIS" beta)" "$(linha_9176 "$E9176_ANTES" beta)"
+  conferir_9176 "a de chave desativada fica" "$(linha_9176 "$E9176_DEPOIS" delta)" "$(linha_9176 "$E9176_ANTES" delta)"
+  conferir_9176 "a que já seguia fica na 1ª passada" "$(linha_9176 "$E9176_P1" vita)" "$(linha_9176 "$E9176_ANTES" vita)"
+  conferir_9176 "quem escolhe chave própria depois da implantação não volta na 2ª passada" \
+    "$(linha_9176 "$E9176_DEPOIS" vita | cut -d'|' -f2,4,6)" "false|openai:true:true|0"
+  conferir_9176 "a marca de que já rodou" \
+    "$(PSQL -tAc "select (chaves_proprias_passaram_em is not null)::text from public.platform_ia where id = 1" 2>&1)" "true"
+else
+  echo "  [aviso]  chave própria (9176): não se aplica, a 9176 já está na versão no ar"
+  LINHAS_RESUMO="$LINHAS_RESUMO| aviso | chave própria (9176) | não se aplica (já está na versão no ar) |"$'\n'
+fi
 
 for seg in $SEGMENTOS; do
   if ARQ -v ON_ERROR_STOP=1 -f "/ensaio/demos-novo/demo-$seg.sql" >"$LOGS/demo-novo-$seg.log" 2>&1; then
