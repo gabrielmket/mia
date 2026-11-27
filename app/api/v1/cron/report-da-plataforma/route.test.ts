@@ -34,6 +34,13 @@ vi.mock("@/lib/ai/custo/saldo-da-plataforma", () => ({
   saldoDaPlataformaParaOVigia: async () => ({ saldoUsd: null, diasRestantes: null, consumoParcial: false, ritmoParcial: false }),
 }));
 vi.mock("@/lib/planos-mia/recados", () => ({ mandarRecadosDaJornada: async () => [] }));
+// O passo 3b (MIA-218, empresa sem chave de IA) roda no minuto 0 e tem o próprio
+// teste (`tests/unit/report-da-plataforma-ia-sem-chave.test.ts`); aqui nenhuma
+// empresa fica sem chave, para o grupo interno receber só o report da queda.
+vi.mock("@/lib/ai/ia-da-empresa", async (real) => ({
+  ...((await real()) as Record<string, unknown>),
+  iaDasEmpresas: async () => [],
+}));
 
 import { PROVIDER_EM_QUE_O_NUMERO_E_A_CONEXAO as QR } from "@/lib/channels/capabilities";
 import { bancoEmMemoria, type Linha } from "@/tests/helpers/banco-em-memoria";
