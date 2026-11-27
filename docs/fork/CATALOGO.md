@@ -1025,7 +1025,8 @@ sem linha, sem tabela) e o invariante `batimento-dos-crons.test.ts` (o `upsert` 
 **O que faz.** Toda empresa segue o par de IA de **Admin › Modelo de IA** (`platform_ia`), salvo escolha
 própria feita pela plataforma, em modo suporte, na tela Provedores de IA da empresa. Trocar o par da plataforma
 troca todas as que seguem. A trava recusa salvar um padrão num provedor sem chave, e o aviso (tela, cartão do
-admin, `/health`, relatório interno e MCP) pega a empresa que mesmo assim ficou sem chave. **Migrations** 9172.
+admin, `/health`, relatório interno e MCP) pega a empresa que mesmo assim ficou sem chave. **Migrations** 9172
+e 9176 (MIA-337: as empresas de chave própria passam à plataforma; só numa versão depois da MIA-335).
 **Mora em** `lib/ai/ia-da-empresa.ts` (a régua), `lib/ai/aviso-da-ia-das-empresas.ts` (o aviso) e
 `lib/ai/trava-da-ia.ts` (`plataformaEditaEmSuporte`) e, desde a MIA-309, `lib/ai/agente-segue-a-plataforma.ts`
 (o agente publicado segue a troca).
@@ -1044,6 +1045,13 @@ de orçamento fala a língua do plano. Portões e lista completa na seção 7 do
 `lib/ai/custo-e-da-plataforma.ts`. Pontos de encaixe: `git grep -n "FORK MIA (MIA-262)"`.
 Desde a MIA-304 o MCP do CRM (leituras de agente) e `/api/v1/prospecting/agents*` também saem sem
 provedor e modelo (`lib/prospecting/sem-modelo-ao-cliente.ts`; `git grep -n "FORK MIA (MIA-304)"`).
+
+**As de chave própria passam à plataforma (9176, MIA-337).** Uma vez só, por dado: a empresa fora da
+demonstração, com escolha própria e credencial `openai` ativa e validada, tem a `openai` desativada (nunca
+apagada, `validated_at` mantido), passa a seguir a plataforma e ganha teto de 3000 centavos de dólar no modo
+`avisar`; a typesafe e a versão publicada ficam. A marca `platform_ia.chaves_proprias_passaram_em` impede a
+segunda passada. Função `fn_mia_chave_propria_passa_a_plataforma`, auditoria
+`ai.chave_propria_passou_a_plataforma`; a volta é o SQL da seção 10 do documento.
 
 **Pontos de encaixe** (`FORK MIA (9172)` e `FORK MIA (MIA-218)`): do upstream,
 `app/api/v1/ai/providers/route.ts` (o `ia` do GET e a trava do PATCH e do PUT),
@@ -1066,7 +1074,10 @@ quem escolheu fica), `lib/ai/ia-da-empresa.test.ts`, `lib/ai/trava-da-ia.test.ts
 `tests/unit/agente-publicado-segue-a-plataforma.test.ts` (a regra e as três cargas com banco de mentira),
 `tests/invariants/agente-publicado-segue-a-plataforma.test.ts` (as três cargas contra o Postgres com `platform_ia`
 preenchido: quem segue recebe o par, a troca propaga, a escolha própria e o `platform_ia` vazio ficam na versão)
-e `app/api/v1/admin/modelo-de-ia/trava-da-visao.test.ts`.
+e `app/api/v1/admin/modelo-de-ia/trava-da-visao.test.ts`. Da MIA-337:
+`tests/invariants/chave-propria-passa-a-plataforma.test.ts` (quem passa e quem fica, o turno seguinte na chave
+da instalação, o teto, a marca de uma vez só e a função fora do alcance de anon e authenticated) e a sonda 9176
+do `scripts/ensaio-de-banco.sh` (duas passadas sobre a cópia da produção).
 
 **Conferir.**
 1. `git grep -n "FORK MIA (9172" -- app/api/v1/ai/providers/route.ts app/api/v1/admin/modelo-de-ia/route.ts lib/agent-engine/edge/llm/credentials.ts` (o núcleo vivo).
@@ -1075,6 +1086,7 @@ e `app/api/v1/admin/modelo-de-ia/trava-da-visao.test.ts`.
 4. O upstream mudou `escolheIa` ou a sessão de suporte? `plataformaEditaEmSuporte` continua exigindo plataforma, `scope = full`, sessão ativa, edição e `agency_id` vazio.
 5. `npx vitest run lib/ai/ia-da-empresa.test.ts lib/ai/trava-da-ia.test.ts app/api/v1/ai/providers/modo-suporte-escolhe-a-ia.test.ts app/api/v1/health/health-diz-se-ha-empresa-sem-ia.test.ts tests/unit/report-da-plataforma-ia-sem-chave.test.ts tests/unit/mcp-de-implantacao-ia-das-empresas.test.ts`.
 6. O agente publicado segue (MIA-309): `git grep -n "COLUNA_DA_IA_DA_PLATAFORMA\|agenteSegueAPlataforma" -- lib/agent-engine/agent/agent-config.ts` (**os dois pontos existem**: a coluna na lista e a regra no `mapAgentConfigRow`; sem um deles a troca na plataforma não chega ao agente publicado) e `npx vitest run tests/unit/agente-publicado-segue-a-plataforma.test.ts app/api/v1/admin/modelo-de-ia/trava-da-visao.test.ts`. Se o upstream mudou a consulta de algum carregador (`from ai_agents a`) ou passou a ler `v.provider`/`v.model`/`v.credential_id` fora de `mapAgentConfigRow`, o invariante `tests/invariants/agente-publicado-segue-a-plataforma.test.ts` acusa.
+7. A passagem da chave própria (9176, MIA-337): o upstream mexeu em `ai_provider_credentials`, `ai_budgets` ou no resolvedor de credencial (`lib/agent-engine/edge/llm/credentials.ts`)? A credencial desativada tem de continuar fora da resolução, para o turno descer à chave da instalação. `npx vitest run -c vitest.db.config.ts tests/invariants/chave-propria-passa-a-plataforma.test.ts`.
 
 **Riscos.** A empresa que virou escolha própria só volta a seguir a plataforma por migration (o botão ficou
 fora). A `/health` passa a ler `organizations` e `ai_provider_credentials` a cada chamada (duas leituras, com o
