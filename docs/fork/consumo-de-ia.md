@@ -397,3 +397,53 @@ Gama e uma empresa de demonstração (fictícias):
 
 O dublê do PostgREST (`tests/helpers/postgrest-com-teto.ts`) passou a entender `not … is true`, o filtro
 da demonstração, com a regra do Postgres (o falso e o nulo passam).
+
+## 11. Só o servidor grava o custo (MIA-251 D, migration 9173)
+
+`llm_calls.cost_cents` é a régua do teto do plano (`fn_gasto_de_ia_do_mes`, `orcamento.ts`) e do "IA do
+mês" da cobrança. Até a 9173, `authenticated` tinha INSERT e UPDATE em `llm_calls` e em `ai_agent_runs`
+(o `GRANT ALL` do corpo do baseline do upstream e a política `tenant_isolation_<tabela>_all` do laço genérico
+dele), e um membro qualquer zerava o gasto do mês da empresa com um `update llm_calls set cost_cents = 0`
+pelo PostgREST.
+
+### 11.1 A regra
+
+- A sessão (`anon` e `authenticated`) não grava, não reescreve e não apaga nada em `llm_calls` nem em
+  `ai_agent_runs`: INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES e TRIGGER saem (TRUNCATE passa por cima da RLS).
+- A única exceção é `update (tool_calls)` em `ai_agent_runs`: a anonimização LGPD
+  (`app/api/v1/lgpd/anonymize/route.ts` → `lib/lgpd/cascata.ts`, passo 6) redige essa coluna com a sessão de
+  quem pediu.
+- Quem grava o custo é o servidor: o motor pelo pool (`run-model-call.ts`, `lib/ai/decisao/*`) e as rotas e
+  workers pelo cliente admin (`lib/ai/usage/registrar-chamada.ts`, `lib/ai/log-invocation.ts`,
+  `lib/ai/runtime/*`, `lib/ai/agents/teste-da-versao.ts`, `send-voice.ts`, `workers/media-derive-worker.ts`).
+  As funções SQL que gravam nessas tabelas são `security definer`.
+- A **leitura** não mudou aqui. Fechar as colunas de custo, tokens, provedor e modelo para a sessão (passos 2,
+  4 e 5 do desenho da MIA-285) é outra subtarefa da MIA-251, depois da MIA-262. O lugar dela está marcado em
+  `fn_mia_colunas_de_ia_fechadas()`.
+- `agent_turn_traces` já está fechada para escrita desde a 0721 do upstream e não é tocada.
+
+### 11.2 Onde mora
+
+`fn_mia_colunas_de_ia_fechadas()` (nossa, invoker, sem EXECUTE para a sessão), criada pela 9173 e chamada no
+fim do `baseline-mia.sql`, antes da varredura anon. O baseline roda a cada implantação e o `GRANT ALL` do
+upstream volta junto: a função fecha de novo, inclusive concessão feita por outro concedente e concessão
+solta de coluna, e devolve quantas sobraram (0 = fechado; acima disso, `warning` no log do bootstrap).
+
+### 11.3 Testes
+
+- `tests/unit/custo-de-ia-fora-da-escrita-da-sessao.test.ts` (cerca): reprova `insert`, `update`, `upsert` e
+  `delete` em `llm_calls` ou `ai_agent_runs` por cliente que não é o admin provado pela origem ou pelo tipo
+  (o resolvedor de `tests/unit/helpers/cliente-admin.ts`), fora o `update` que só toca `tool_calls`. Dois
+  arquivos recebem o cliente por `SupabaseClient` genérico e estão liberados com o chamador escrito.
+- `tests/invariants/custo-de-ia-a-sessao-nao-grava.test.ts`: com a sessão do admin da empresa, `update`,
+  `insert` e `delete` dão 42501; o `tool_calls` continua gravando; `service_role` e o dono gravam; o
+  `GRANT ALL` reaberto e a concessão solta de coluna são fechados de novo; a função é idempotente.
+- `scripts/ensaio-de-banco.sh`: a conferência "custo de IA (9173)" roda as mesmas tentativas no banco da
+  versão no ar atualizado, com um membro das demonstrações, e desfaz cada uma.
+
+### 11.4 Na fusão
+
+Escritor novo do upstream em `llm_calls` ou `ai_agent_runs` vai pelo **cliente admin, depois do portão de
+papel**, filtrando `organization_id`, com a linha `FORK MIA`. Pela sessão ele daria 42501 em produção. A cerca
+acima acusa no PR da fusão. Se o upstream criar coluna que a anonimização precise redigir pela sessão em
+`ai_agent_runs`, ela entra no `grant update (...)` da função, por migration nova.

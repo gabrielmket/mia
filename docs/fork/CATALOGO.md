@@ -889,7 +889,7 @@ o total manda), e o MCP tem o ranking da plataforma (`lerRankingDoConsumo`, ferr
 `plataforma_ver_ranking_de_consumo_de_ia`): as empresas sem as de demonstração, no período e na ordem por custo da
 tela geral; o desempate é por chamadas de IA e nome, e na tela geral por mensagens (seção 10 do documento).
 **Migrations** 9165 (o histórico de preços da Meta, `mia_precos_meta_vigencias`, e o gatilho em
-`platform_precos_meta`); o resto lê `llm_calls`, `ai_agents` e `platform_fx_rates` (0241). **Mora em**
+`platform_precos_meta`), 9173 (só o servidor grava em `llm_calls` e `ai_agent_runs`, MIA-251 D); o resto lê `llm_calls`, `ai_agents` e `platform_fx_rates` (0241). **Mora em**
 `lib/ai/usage/consumo-do-periodo.ts`, `lib/ai/usage/atalhos-de-periodo.ts`,
 `lib/ai/usage/contatos-pessoais.ts` (a lista dos contatos pessoais que as duas telas tiram da contagem, MIA-78),
 `lib/mcp-plataforma/ferramentas/consumo-de-ia.ts`, `components/admin/tenants/UsoDoTenant.tsx`,
@@ -924,6 +924,7 @@ gatilho no Postgres de verdade) e a e2e `admin-consumo-de-ia-por-mes-e-por-agent
 4. MCP (lê só): `plataforma_ver_consumo_de_ia` com a empresa de demonstração e o mês corrente, `plataforma_ver_ranking_de_consumo_de_ia` com o mês corrente (a demonstração não aparece, e a soma das empresas é o `total`) e `plataforma_ver_precos_da_meta` (o histórico tem uma vigência aberta por categoria).
 5. Se a fusão mexeu em `app/api/v1/admin/usage/route.ts` (do upstream), confira que `mes` ainda passa por `periodoDoPedido` e que a fatura e as cotações têm o limite de cima (`git grep -n "periodoDoPedido\|ultimoDia" app/api/v1/admin/usage/route.ts`).
 6. MIA-99: `git grep -n "lerCustoDeMensagemDoPeriodo\|calcularCustoPorVigencia" app/api/v1/admin lib/mcp-plataforma` (**a aba Uso, o MCP e `/admin/custo-da-meta` fazem a conta pela vigência**; quem voltar a `calcularCusto` com a tabela atual devolve o defeito) e, no banco, `select tgname from pg_trigger where tgname = 'trg_mia_precos_meta_vigencia'`.
+7. MIA-251 D (9173): escritor novo do upstream em `llm_calls` ou `ai_agent_runs` vai pelo cliente admin, depois do portão (seção 11 do documento). `npx vitest run tests/unit/custo-de-ia-fora-da-escrita-da-sessao.test.ts` e, no banco, `select has_table_privilege('authenticated', 'public.llm_calls', 'UPDATE')` tem de dar `false`.
 
 **Riscos.** O mês daqui é o de Brasília e o do teto (`fn_gasto_de_ia_do_mes`) é o do banco, em UTC: os dois
 números podem diferir pelas chamadas das últimas 3 horas do mês. Fica assim por decisão (mudar o teto muda o que
@@ -1072,7 +1073,7 @@ teto de tempo das outras).
 | 21 | Raio-X do atendimento | `raio-x-do-atendimento.md` | 9150, 9151, 9152 | `raio-x-leitor-nao-envia.test.ts`, `raio-x-anonimizar.test.ts` |
 | 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154, 9171 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
 | 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162, 9164 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-pedido-unico.test.ts`, `coexistencia-conexao-pelo-app.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts`, `coexistencia-saida-e-volta.test.ts`, `meta-edicao-e-apagar.test.ts` |
-| 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | 9165 (o preço da Meta com vigência); lê a 0241 | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts`, `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts`, `preco-da-meta-com-vigencia.test.ts` |
+| 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | 9165 (o preço da Meta com vigência), 9173 (só o servidor grava o custo); lê a 0241 | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts`, `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts`, `preco-da-meta-com-vigencia.test.ts`, `custo-de-ia-fora-da-escrita-da-sessao.test.ts`, `tests/invariants/custo-de-ia-a-sessao-nao-grava.test.ts` |
 | 25 | O fuso da organização nos relatórios | `fuso-da-organizacao.md` | 9166 | `fuso-dos-relatorios-uma-regra.test.ts`, `tests/invariants/fuso-invalido-nos-relatorios.test.ts` |
 | 26 | O realtime do sistema com a semente desligada | `realtime-do-sistema.md` | nenhuma | nenhum (conferência pela leitura do tenant) |
 | 27 | O batimento do vigia dos canais | `vigia-dos-canais.md` | 9168 | `vigia-dos-canais-bate-o-ponto.test.ts`, `health-diz-se-o-vigia-dos-canais-passou.test.ts`, `tests/invariants/batimento-dos-crons.test.ts` |
