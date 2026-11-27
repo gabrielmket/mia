@@ -1,9 +1,10 @@
--- manifest: O CUSTO DE IA SÓ O SERVIDOR GRAVA (MIA-251 D; desenho na MIA-285, ponto 4, opção A, passos 1 e 3; dívida item 15). Em produção `authenticated` tinha INSERT e UPDATE em `llm_calls` e em `ai_agent_runs` (o `GRANT ALL` do corpo do baseline do upstream, mais a política `tenant_isolation_<tabela>_all` do laço genérico), e qualquer membro da empresa, pelo PostgREST, reescrevia `cost_cents` e os tokens das chamadas dela: um `update llm_calls set cost_cents = 0` zerava o gasto do mês, que é a régua do teto do plano (`fn_gasto_de_ia_do_mes`, `orcamento.ts`) e do "IA do mês" da cobrança. Função NOSSA `fn_mia_colunas_de_ia_fechadas()` (invoker, só o baseline e esta migration a chamam, sem EXECUTE para anon e authenticated): tira de `anon` e `authenticated` INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES e TRIGGER nas duas tabelas (TRUNCATE passa por cima da RLS), inclusive concessão de outro concedente, e devolve a `authenticated` só `update (tool_calls)` em `ai_agent_runs`, que é o que a anonimização LGPD grava pela sessão (`lib/lgpd/cascata.ts`, passo 6). A leitura NÃO muda nesta migration (passos 2, 4 e 5 do desenho, outra subtarefa depois da MIA-262); o lugar dela na função está marcado. `agent_turn_traces` já está fechada desde a 0721 do upstream e não é tocada. Os escritores do custo (o motor pelo pool e as rotas pelo cliente admin) não passam por `authenticated`. A função roda a cada implantação no fim do `baseline-mia.sql`: o `GRANT ALL` do corpo do baseline do upstream reabre a escrita a cada passada e ela fecha de novo. Devolve quantas concessões de escrita sobraram (0 = fechado). Provado em tests/invariants/custo-de-ia-a-sessao-nao-grava.test.ts, na cerca tests/unit/custo-de-ia-fora-da-escrita-da-sessao.test.ts e numa conferência do scripts/ensaio-de-banco.sh.
+-- manifest: O CUSTO DE IA SÓ O SERVIDOR GRAVA (MIA-251 D; desenho na MIA-285, ponto 4, opção A, passos 1 e 3; dívida item 15). Em produção `authenticated` tinha INSERT e UPDATE em `llm_calls` e em `ai_agent_runs` (o `GRANT ALL` do corpo do baseline do upstream, mais a política `tenant_isolation_<tabela>_all` do laço genérico), e qualquer membro da empresa, pelo PostgREST, reescrevia `cost_cents` e os tokens das chamadas dela: um `update llm_calls set cost_cents = 0` zerava o gasto do mês, que é a régua do teto do plano (`fn_gasto_de_ia_do_mes`, `orcamento.ts`) e do "IA do mês" da cobrança. Função NOSSA `fn_mia_colunas_de_ia_fechadas()` (invoker, só o baseline e esta migration a chamam, sem EXECUTE para anon e authenticated): tira de `anon` e `authenticated` INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES e TRIGGER nas duas tabelas (TRUNCATE passa por cima da RLS), inclusive concessão de outro concedente, e devolve a `authenticated` só `update (tool_calls)` em `ai_agent_runs`, que é o que a anonimização LGPD grava pela sessão (`lib/lgpd/cascata.ts`, passo 6). O suporte em modo somente leitura segue travado nessa coluna por uma restritiva NOSSA (`mia_suporte_somente_leitura_tool_calls`), porque as `support_write_*` do upstream saem de `ai_agent_runs` quando `authenticated` deixa de gravar a tabela inteira; a função chama `fn_aplicar_travas_de_suporte()` no fim para o catálogo convergir na hora, e não na próxima provisionadora de módulo. A leitura NÃO muda nesta migration (passos 2, 4 e 5 do desenho, outra subtarefa depois da MIA-262); o lugar dela na função está marcado. `agent_turn_traces` já está fechada desde a 0721 do upstream e não é tocada. Os escritores do custo (o motor pelo pool e as rotas pelo cliente admin) não passam por `authenticated`. A função roda a cada implantação no fim do `baseline-mia.sql`: o `GRANT ALL` do corpo do baseline do upstream reabre a escrita a cada passada e ela fecha de novo. Devolve quantas concessões de escrita sobraram (0 = fechado). Provado em tests/invariants/custo-de-ia-a-sessao-nao-grava.test.ts, na cerca tests/unit/custo-de-ia-fora-da-escrita-da-sessao.test.ts e numa conferência do scripts/ensaio-de-banco.sh.
 --
 -- 9173 · o custo de IA só o servidor grava
 --
 -- Nome NOSSO (`fn_mia_*`): estender, nunca redefinir (docs/FORK-MIA.md, regra 3).
--- Nada do upstream é redefinido: só `revoke` e `grant` nas tabelas dele.
+-- Nada do upstream é redefinido: só `revoke` e `grant` nas tabelas dele, uma
+-- política restritiva de nome nosso e a chamada da função de travas dele.
 -- Idempotente: rodar de novo não muda nada.
 
 create or replace function public.fn_mia_colunas_de_ia_fechadas()
@@ -74,6 +75,26 @@ begin
   -- escrita da sessão nas duas tabelas, e só nessa coluna.
   if to_regclass('public.ai_agent_runs') is not null then
     grant update (tool_calls) on table public.ai_agent_runs to authenticated;
+
+    -- O suporte em modo somente leitura segue travado nessa escrita que sobrou.
+    -- As `support_write_*` do upstream só ficam em tabela que `authenticated`
+    -- grava INTEIRA (`fn_aplicar_travas_de_suporte`, 0274): sem o update da
+    -- tabela, ela as tira daqui. Esta trava é NOSSA, de nome próprio, e a função
+    -- dele não a toca.
+    if to_regprocedure('public.fn_support_write_allowed(uuid)') is not null then
+      drop policy if exists mia_suporte_somente_leitura_tool_calls on public.ai_agent_runs;
+      create policy mia_suporte_somente_leitura_tool_calls on public.ai_agent_runs
+        as restrictive for update to authenticated
+        using (public.fn_support_write_allowed(organization_id))
+        with check (public.fn_support_write_allowed(organization_id));
+    end if;
+  end if;
+
+  -- As travas do suporte convergem aqui, e não na próxima chamada da função do
+  -- upstream (toda provisionadora de módulo a chama): sem isto, provisionar um
+  -- módulo tiraria as `support_write_*` de `ai_agent_runs` e mudaria o núcleo.
+  if to_regprocedure('public.fn_aplicar_travas_de_suporte()') is not null then
+    perform public.fn_aplicar_travas_de_suporte();
   end if;
 
   -- ── passo 2 · a leitura das colunas (MIA-251, depois da MIA-262) ──────────
@@ -115,7 +136,7 @@ end;
 $$;
 
 comment on function public.fn_mia_colunas_de_ia_fechadas() is
-  'MIA (9173): tira de anon e authenticated a escrita em llm_calls e ai_agent_runs (insert, update, delete, truncate, references, trigger, inclusive de outro concedente) e devolve a authenticated so update (tool_calls) em ai_agent_runs, para a anonimizacao LGPD. A leitura das colunas de custo entra aqui depois (passo 2 da MIA-251). Chamada pela 9173 e no fim do baseline-mia.sql, antes da varredura anon. Devolve quantas concessoes de escrita sobraram (0 = fechado). Idempotente.';
+  'MIA (9173): tira de anon e authenticated a escrita em llm_calls e ai_agent_runs (insert, update, delete, truncate, references, trigger, inclusive de outro concedente) e devolve a authenticated so update (tool_calls) em ai_agent_runs, para a anonimizacao LGPD, com a restritiva nossa mia_suporte_somente_leitura_tool_calls no lugar das support_write_* do upstream (e chama fn_aplicar_travas_de_suporte para o catalogo convergir). A leitura das colunas de custo entra aqui depois (passo 2 da MIA-251). Chamada pela 9173 e no fim do baseline-mia.sql, antes da varredura anon. Devolve quantas concessoes de escrita sobraram (0 = fechado). Idempotente.';
 
 revoke execute on function public.fn_mia_colunas_de_ia_fechadas() from public, anon, authenticated;
 

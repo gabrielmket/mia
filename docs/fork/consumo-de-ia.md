@@ -421,6 +421,11 @@ pelo PostgREST.
   4 e 5 do desenho da MIA-285) é outra subtarefa da MIA-251, depois da MIA-262. O lugar dela está marcado em
   `fn_mia_colunas_de_ia_fechadas()`.
 - `agent_turn_traces` já está fechada para escrita desde a 0721 do upstream e não é tocada.
+- O suporte em modo somente leitura segue travado no `tool_calls`. As `support_write_*` do upstream só ficam em
+  tabela que `authenticated` grava inteira (`fn_aplicar_travas_de_suporte`, 0274): sem o update da tabela, a
+  função dele as tira de `ai_agent_runs`. No lugar entra a restritiva nossa
+  `mia_suporte_somente_leitura_tool_calls` (update, `fn_support_write_allowed`), e a 9173 chama a função dele
+  no fim para o catálogo convergir na hora. Sem isso, a primeira provisionadora de módulo mudava o núcleo.
 
 ### 11.2 Onde mora
 

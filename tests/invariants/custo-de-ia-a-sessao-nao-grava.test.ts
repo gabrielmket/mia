@@ -22,6 +22,8 @@ import { lastLine, sql } from "./gov-helpers";
  *      MIA-285 são outra subtarefa);
  *   5. o `GRANT ALL` do corpo do baseline do upstream, que volta a cada
  *      implantação, é fechado de novo por `fn_mia_colunas_de_ia_fechadas()`.
+ *   6. o suporte em modo somente leitura segue travado no `tool_calls` pela
+ *      restritiva nossa, e a função de travas do upstream já não muda nada.
  */
 
 const ORG = "f9173000-0000-4000-8000-000000000001";
@@ -193,6 +195,26 @@ describe("9173 · o custo de IA só o servidor grava", () => {
     expect(privilegioDaColuna("authenticated", "llm_calls", "cost_cents", "UPDATE")).toBe(false);
     expect(privilegioDaColuna("authenticated", "ai_agent_runs", "cost_cents", "UPDATE")).toBe(false);
     expect(privilegioDaColuna("authenticated", "ai_agent_runs", "tool_calls", "UPDATE")).toBe(true);
+  });
+
+  it("o suporte somente leitura segue travado no tool_calls, e as travas do upstream não mudam mais", () => {
+    // Sem o update da tabela inteira, a função do upstream (0274) não deixa
+    // `support_write_*` em ai_agent_runs; a restritiva nossa cobre a coluna que sobrou.
+    const TRAVAS = `select coalesce(string_agg(polname || ':' || polcmd || ':' || (not polpermissive)::text, ',' order by polname), '')
+                      from pg_policy where polrelid = 'public.ai_agent_runs'::regclass and not polpermissive;`;
+    expect(lastLine(sql(TRAVAS))).toBe("mia_suporte_somente_leitura_tool_calls:w:true");
+    expect(
+      lastLine(
+        sql(`select (pg_get_expr(polqual, polrelid) like '%fn_support_write_allowed(%'
+                 and pg_get_expr(polwithcheck, polrelid) like '%fn_support_write_allowed(%'
+                 and polroles = array[(select oid from pg_roles where rolname = 'authenticated')]::oid[])::text
+               from pg_policy where polrelid = 'public.ai_agent_runs'::regclass
+                and polname = 'mia_suporte_somente_leitura_tool_calls';`),
+      ),
+    ).toBe("true");
+    // Ponto fixo: a função do upstream, que toda provisionadora de módulo chama, não muda nada aqui.
+    sql(`select public.fn_aplicar_travas_de_suporte();`);
+    expect(lastLine(sql(TRAVAS))).toBe("mia_suporte_somente_leitura_tool_calls:w:true");
   });
 
   it("a função não é chamável pela sessão", () => {

@@ -23971,7 +23971,8 @@ notify pgrst, 'reload schema';
 -- 9173 · o custo de IA só o servidor grava
 --
 -- Nome NOSSO (`fn_mia_*`): estender, nunca redefinir (docs/FORK-MIA.md, regra 3).
--- Nada do upstream é redefinido: só `revoke` e `grant` nas tabelas dele.
+-- Nada do upstream é redefinido: só `revoke` e `grant` nas tabelas dele, uma
+-- política restritiva de nome nosso e a chamada da função de travas dele.
 -- Idempotente: rodar de novo não muda nada.
 
 create or replace function public.fn_mia_colunas_de_ia_fechadas()
@@ -24042,6 +24043,26 @@ begin
   -- escrita da sessão nas duas tabelas, e só nessa coluna.
   if to_regclass('public.ai_agent_runs') is not null then
     grant update (tool_calls) on table public.ai_agent_runs to authenticated;
+
+    -- O suporte em modo somente leitura segue travado nessa escrita que sobrou.
+    -- As `support_write_*` do upstream só ficam em tabela que `authenticated`
+    -- grava INTEIRA (`fn_aplicar_travas_de_suporte`, 0274): sem o update da
+    -- tabela, ela as tira daqui. Esta trava é NOSSA, de nome próprio, e a função
+    -- dele não a toca.
+    if to_regprocedure('public.fn_support_write_allowed(uuid)') is not null then
+      drop policy if exists mia_suporte_somente_leitura_tool_calls on public.ai_agent_runs;
+      create policy mia_suporte_somente_leitura_tool_calls on public.ai_agent_runs
+        as restrictive for update to authenticated
+        using (public.fn_support_write_allowed(organization_id))
+        with check (public.fn_support_write_allowed(organization_id));
+    end if;
+  end if;
+
+  -- As travas do suporte convergem aqui, e não na próxima chamada da função do
+  -- upstream (toda provisionadora de módulo a chama): sem isto, provisionar um
+  -- módulo tiraria as `support_write_*` de `ai_agent_runs` e mudaria o núcleo.
+  if to_regprocedure('public.fn_aplicar_travas_de_suporte()') is not null then
+    perform public.fn_aplicar_travas_de_suporte();
   end if;
 
   -- ── passo 2 · a leitura das colunas (MIA-251, depois da MIA-262) ──────────
@@ -24083,7 +24104,7 @@ end;
 $$;
 
 comment on function public.fn_mia_colunas_de_ia_fechadas() is
-  'MIA (9173): tira de anon e authenticated a escrita em llm_calls e ai_agent_runs (insert, update, delete, truncate, references, trigger, inclusive de outro concedente) e devolve a authenticated so update (tool_calls) em ai_agent_runs, para a anonimizacao LGPD. A leitura das colunas de custo entra aqui depois (passo 2 da MIA-251). Chamada pela 9173 e no fim do baseline-mia.sql, antes da varredura anon. Devolve quantas concessoes de escrita sobraram (0 = fechado). Idempotente.';
+  'MIA (9173): tira de anon e authenticated a escrita em llm_calls e ai_agent_runs (insert, update, delete, truncate, references, trigger, inclusive de outro concedente) e devolve a authenticated so update (tool_calls) em ai_agent_runs, para a anonimizacao LGPD, com a restritiva nossa mia_suporte_somente_leitura_tool_calls no lugar das support_write_* do upstream (e chama fn_aplicar_travas_de_suporte para o catalogo convergir). A leitura das colunas de custo entra aqui depois (passo 2 da MIA-251). Chamada pela 9173 e no fim do baseline-mia.sql, antes da varredura anon. Devolve quantas concessoes de escrita sobraram (0 = fechado). Idempotente.';
 
 revoke execute on function public.fn_mia_colunas_de_ia_fechadas() from public, anon, authenticated;
 
