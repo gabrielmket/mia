@@ -52,6 +52,9 @@ import { alertaDoSchema, CARIMBO_DO_SCHEMA, TABELA_DO_CARIMBO } from "@/lib/sche
 import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 // FORK MIA (.90): os recados da jornada de assinatura no mesmo grupo.
 import { mandarRecadosDaJornada } from "@/lib/planos-mia/recados";
+// FORK MIA (MIA-218): empresa com o padrão de IA num provedor sem chave.
+import { CHAVE_DO_AVISO_DA_IA, contarEmpresasSemChave, recadoDaIaSemChave } from "@/lib/ai/aviso-da-ia-das-empresas";
+import { iaDasEmpresas } from "@/lib/ai/ia-da-empresa";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   excluirDemonstracao,
@@ -240,6 +243,28 @@ async function handle(req: NextRequest): Promise<Response> {
         detalhe: { esperado: CARIMBO_DO_SCHEMA },
       });
       if (saiu) enviados.push(alerta.chave);
+    }
+  }
+
+  // ── 3b. A IA das empresas (FORK MIA, MIA-218) ───────────────────────────
+  //
+  // Empresa operante com o padrão de IA num provedor sem chave não responde
+  // com IA, e ninguém fica sabendo (MIA-215). A régua é a de `iaDasEmpresas`,
+  // a mesma da `/health` e do MCP. Lê todas as empresas, então roda a cada 15
+  // minutos, como a parte completa da jornada; o recado sai uma vez por dia
+  // enquanto durar. Leitura que falhou não avisa: "não sei" não é alarme.
+  if (new Date().getUTCMinutes() % 15 === 0) {
+    const empresas = await iaDasEmpresas(admin);
+    const semChave = empresas === null ? 0 : contarEmpresasSemChave(empresas);
+    const texto = recadoDaIaSemChave(semChave);
+    if (texto) {
+      const saiu = await reportar(admin, {
+        chave: CHAVE_DO_AVISO_DA_IA,
+        horas: UM_DIA,
+        texto,
+        detalhe: { empresas_sem_chave: semChave },
+      });
+      if (saiu) enviados.push(CHAVE_DO_AVISO_DA_IA);
     }
   }
 

@@ -49,6 +49,9 @@ vi.mock("@/lib/supabase/admin", () => ({
         return cadeia(tabela, [{ chave: "MODULO_LOGIN_CODEX", valor: banco.modulo }], null);
       }
       if (tabela === "modulos_instalados") return cadeia(tabela, [], null);
+      // FORK MIA (9172): a trava "provedor sem chave" lê as credenciais pelo
+      // cliente admin — a mesma tabela que a sessão enxerga.
+      if (tabela === "ai_provider_credentials") return cadeia(tabela, banco.credenciais, null);
       // `organizations` — o PATCH do padrão.
       return cadeia(tabela, [], { settings: {} });
     },

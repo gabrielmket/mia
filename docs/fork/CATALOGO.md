@@ -528,6 +528,13 @@ cliente deixou pendente em vez de calar; e a pausa por outra conversa do mesmo c
 **Riscos.** `inbound-turn.ts` é o arquivo do upstream que mais recebe encaixe nosso (aqui e na trava de
 robô, função 22): o merge dele é o mais provável de desligar uma das duas.
 
+**Convive com a retomada ao devolver do upstream** (v1.125, `lib/escalacao/retomada-ao-devolver.ts`,
+opção do agente `trigger_config.resume_on_handback`, nasce desligada). As duas falam na devolução, mas
+nunca pelo mesmo caso: a do fork só pede o turno quando a ÚLTIMA fala é do cliente, sem saída depois
+dela; a do upstream só enfileira quando a última fala é da EQUIPE (`ultima_fala_nao_e_da_equipe`
+recusa o resto) e recua se houver follow-up vivo. Se o upstream afrouxar essa recusa, as duas
+mandariam mensagem na mesma devolução: conferir na fusão.
+
 ### 13. Jornada de assinatura: a cobrança · [`jornada-de-assinatura.md`](jornada-de-assinatura.md)
 **O que faz.** A empresa que chega pelo site escolhe um plano, se cadastra, testa, paga e usa o que o
 plano libera, sem ninguém da Time no meio; a Time acompanha e recebe no zap só o que exige ação. Tudo sai
@@ -797,22 +804,30 @@ o `git grep` acima é a conferência manual, e é o candidato a cerca.
 
 ---
 
-### 23. Coexistência do WhatsApp: o histórico da Meta e a conexão pelo app · [`coexistencia.md`](coexistencia.md)
+### 23. Coexistência do WhatsApp: o histórico da Meta, a conexão pelo app, a saída e a volta · [`coexistencia.md`](coexistencia.md)
 **O que faz.** O número usado no app WhatsApp Business e na MIA ao mesmo tempo. S2: o histórico de até 180 dias
 que a Meta manda no campo `history` entra como histórico importado (`metadata.historico_importado = 'true'`,
 o corte da 0760) e não dispara nada; os contatos da agenda do app somam no pedido de contatos. S3: a empresa com a
 chave ligada conecta o número pela janela da Meta (SDK JS), já amarrado a ela, com a origem `embedded_signup` do
 upstream; a MIA pede contatos e histórico (`smb_app_data`) uma vez só, atrás da trava `unique (conexao_id, tipo)`;
-o canal por QR do mesmo número sai do ar (D5). Saída e volta (S4) ainda não. **Migrations** 9162, 9164. **Mora em**
+o canal por QR do mesmo número sai do ar (D5). S4: o número que sai da coexistência (`PARTNER_REMOVED`,
+`ACCOUNT_OFFBOARDED`) fica fora do ar com aviso na Central, e o que volta (`ACCOUNT_RECONNECTED` ou a janela de novo)
+reaproveita sessão, contato, conversa e cartão; a edição e o apagar feitos no WhatsApp (pelo cliente ou pelo dono no
+app) chegam na mensagem original, que só é marcada. S5: o Assistente responde sobre a conexão e sobre o número fora do ar
+(manuais `coexistencia-pelo-app` e `coexistencia-fora-do-ar` em `lib/assistente/manuais-das-telas.ts`), e o teste com um
+número de verdade tem roteiro (seção 8 do documento). **Migrations** 9162, 9164. **Mora em**
 `lib/channels/meta/coexistencia/` (S2: `historico.ts`, `mapear.ts`, `estado.ts`, `receber.ts`, `contatos.ts`,
 `gravar-lote.ts`, `lote.handler.ts`; S3: `chave.ts`, `ligar.ts`, `janela.ts`, `conectar.ts`, `sincronizacao.ts`,
-`sincronizacao.handler.ts`, `avisos.ts`, `qr-do-mesmo-numero.ts`, `leitura.ts`, `varredura.ts`),
+`sincronizacao.handler.ts`, `avisos.ts`, `qr-do-mesmo-numero.ts`, `leitura.ts`, `varredura.ts`; S4: `saida-e-volta.ts`,
+`edicao.ts`, `motivo.ts`),
 `components/connections/coexistencia/`, `components/admin/coexistencia/` (na tela pelo layout do fork
 `app/admin/(protected)/meta/layout.tsx`), `lib/mcp-plataforma/ferramentas/coexistencia.ts`.
 
 **Pontos de encaixe** (todos `FORK MIA`): `app/api/v1/webhooks/meta/[token]/route.ts` (a chamada a
 `receberHistoricoDaMeta` logo depois de nascer `desfechos`, e `ingerirContatoDoAppContando` no lugar de
-`ingestMetaAppContactSync`), `lib/channels/consumidores.ts` (o `loteDoHistoricoHandler` e o
+`ingestMetaAppContactSync`; S4: `receberSaidaEVolta` logo depois, e o ramo `message_edit` com `aplicarEdicaoDaMeta`),
+`lib/channels/meta/webhook.ts` (S4: o tipo `MessageEditEvent`; no campo `messages`, o `edit`/`revoke` desviado antes do
+ramo genérico; no eco, o bloco ANTES do `continue` do upstream, que fica), `lib/channels/consumidores.ts` (o `loteDoHistoricoHandler` e o
 `pedidoDaSincronizacaoHandler`), `components/connections/CanalOficialClient.tsx` (`<ConectarPeloApp />`),
 `app/api/v1/channel-sessions/[id]/route.ts`
 (`barrarQrEmCoexistencia`), `docker/scheduler/entrypoint.sh` (a varredura `api/v1/cron/coexistencia`).
@@ -821,16 +836,17 @@ o canal por QR do mesmo número sai do ar (D5). Saída e volta (S4) ainda não. 
 e no negócio que já existiam, reentrega não duplica, com o controle), `coexistencia-pedido-unico.test.ts` (o pedido
 sai uma vez só, nem com chegadas simultâneas; e a varredura: lote cru de 7 dias perde o `payload`, lote esquecido é
 pedido ao worker uma vez), `coexistencia-conexao-pelo-app.test.ts` (a conexão de ponta a ponta com
-a Meta simulada), `historico-importado-nao-dispara.test.ts` (o corte da 0760), `rls-tabelas-da-mia.test.ts`,
+a Meta simulada), `coexistencia-saida-e-volta.test.ts` (S4: sair e voltar pelos dois caminhos sem duplicar contato,
+conversa, cartão, sessão nem ciclo; a edição e o apagar no banco), `historico-importado-nao-dispara.test.ts` (o corte da 0760), `rls-tabelas-da-mia.test.ts`,
 `rls-completude-varredura.test.ts`; unidade `coexistencia-historico-leitura.test.ts`,
 `coexistencia-conexao-pelo-app.test.ts`, `coexistencia-ids-em-fatias.test.ts` (/admin/meta com 350 empresas, nenhum
-`.in` com mais de 100 ids), `mcp-de-implantacao-coexistencia.test.ts`, `dispatcher-org-parada.test.ts`,
+`.in` com mais de 100 ids), `coexistencia-saida-e-volta.test.ts` e `meta-edicao-e-apagar.test.ts` (S4), `mcp-de-implantacao-coexistencia.test.ts`, `assistente-perguntas-reais.test.ts` (S5), `dispatcher-org-parada.test.ts`,
 `evento-comando-tem-consumidor.test.ts`, `cron-respeita-org-operante.test.ts`, `canal-consulta-por-organizacao.test.ts`,
 `historico-midia-so-guarda.test.ts` (a mídia do histórico, pelos dois chamadores, a coexistência e a importação
 do canal não oficial, só é guardada: sem derivação, transcrição, visão nem IA, com o controle sem a chave).
 
 **Conferir.**
-1. `git grep -n "receberHistoricoDaMeta\|ingerirContatoDoAppContando" "app/api/v1/webhooks/meta/[token]/route.ts"` (**as duas chamadas existem**; sem a primeira o histórico volta a ser ignorado em silêncio).
+1. `git grep -n "receberHistoricoDaMeta\|ingerirContatoDoAppContando\|receberSaidaEVolta\|aplicarEdicaoDaMeta" "app/api/v1/webhooks/meta/[token]/route.ts"` (**as quatro chamadas existem**; sem a primeira o histórico volta a ser ignorado em silêncio, sem a terceira o número que sai da coexistência fica "no ar" na MIA). E `git grep -n "edicaoDaMensagem" lib/channels/meta/webhook.ts` (dois encaixes: `messages` e eco; se o upstream mexer no ramo do eco, o bloco nosso continua ANTES do `continue` dele).
 2. `git grep -n "historico_importado" supabase/migrations/*0760*` e a mesma chave em `fn_emit_message_event` no `baseline.sql` (se o upstream mudar o corte, o histórico passa a acordar a IA).
 3. `git grep -n "ConectarPeloApp\|CoexistenciaPorEmpresa\|barrarQrEmCoexistencia\|pedidoDaSincronizacaoHandler" components app lib` (os quatro encaixes da S3 existem) e `grep -n "cron/coexistencia" docker/scheduler/entrypoint.sh`.
 4. `git grep -n "ORIGEM_DO_EMBEDDED_SIGNUP\|meta_connection_origin" lib/channels/meta/origem-da-conexao.ts` (a origem da conexão do upstream continua com o mesmo nome; a S3 a usa, não inventa a sua).
@@ -848,6 +864,15 @@ de fim da janela (`FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`, em `janela.ts` e `s
 fecha e a MIA não conclui a conexão, sem erro na tela. LACUNA: nenhum teste abre o `ConectarPeloApp` e chama a
 rota `concluir` pela tela (o `e2e.yml` aponta `META_GRAPH_BASE_URL` para uma porta que recusa); a prova de
 ponta a ponta é a invariante `coexistencia-conexao-pelo-app.test.ts`, no servidor.
+
+**O Embedded Signup do upstream** (v1.125, #5113: `components/connections/ConectarPeloFacebook.tsx`,
+`app/api/v1/channels/official/embedded-signup/`, colunas `app_id` e `config_id` da 9463 em
+`platform_meta_app`) abre a mesma janela da Meta (`featureType: "whatsapp_business_app_onboarding"`) e
+grava o canal com a origem `embedded_signup`, mas sem pedir a sincronização do histórico. O botão dele só
+aparece com o App ID e o Configuration ID preenchidos em Admin › API Oficial; enquanto ficarem vazios, o
+"Conectar pelo app" do fork é a única porta. Os dois ouvintes de `postMessage` só concluem com o código
+da própria janela, então uma janela aberta por um não conclui no outro. Encaixar o nosso sobre o dele é
+decisão do Gabriel (PR da fusão v1.125).
 
 ---
 
@@ -984,7 +1009,41 @@ sem linha, sem tabela) e o invariante `batimento-dos-crons.test.ts` (o `upsert` 
 
 ---
 
-### 28. O aviso da queda e da volta do número no grupo do cliente · [`aviso-da-queda.md`](aviso-da-queda.md)
+### 28. A IA de toda empresa segue a da plataforma · [`ia-da-plataforma.md`](ia-da-plataforma.md)
+**O que faz.** Toda empresa segue o par de IA de **Admin › Modelo de IA** (`platform_ia`), salvo escolha
+própria feita pela plataforma, em modo suporte, na tela Provedores de IA da empresa. Trocar o par da plataforma
+troca todas as que seguem. A trava recusa salvar um padrão num provedor sem chave, e o aviso (tela, cartão do
+admin, `/health`, relatório interno e MCP) pega a empresa que mesmo assim ficou sem chave. **Migrations** 9172.
+**Mora em** `lib/ai/ia-da-empresa.ts` (a régua), `lib/ai/aviso-da-ia-das-empresas.ts` (o aviso) e
+`lib/ai/trava-da-ia.ts` (`plataformaEditaEmSuporte`).
+
+**Pontos de encaixe** (`FORK MIA (9172)` e `FORK MIA (MIA-218)`): do upstream,
+`app/api/v1/ai/providers/route.ts` (o `ia` do GET e a trava do PATCH e do PUT),
+`app/api/v1/admin/modelo-de-ia/route.ts` (`empresas` do GET e a trava do PUT),
+`lib/agent-engine/edge/llm/credentials.ts`, `app/api/v1/health/route.ts` (`lerIaDasEmpresas` e o bloco `ia`),
+`app/api/v1/cron/report-da-plataforma/route.ts` (seção 3b), `components/admin/modelo-de-ia/ModeloDeIa.tsx` (a
+`ContagemDasEmpresas`), `hooks/useModeloDeIa.ts` (o tipo de `empresas`) e
+`app/app/ai/providers/_components/PainelDeProvedores.tsx` (o `AvisoDaChave`). A chave continua fora do suporte:
+`app/api/v1/ai/credentials/[id]/route.ts` e `app/actions/onboarding/chaveDaIa.ts` usam `podeConfigurarChaveDeIa`.
+
+**Protege.** `tests/invariants/ia-segue-a-plataforma.test.ts` (o banco: a empresa nova segue, a troca propaga,
+quem escolheu fica), `lib/ai/ia-da-empresa.test.ts`, `lib/ai/trava-da-ia.test.ts`,
+`app/api/v1/ai/providers/modo-suporte-escolhe-a-ia.test.ts` (passa só a plataforma em suporte com edição),
+`AvisoDaChave.test.tsx`, `ContagemDasEmpresas.test.tsx`, `health-diz-se-ha-empresa-sem-ia.test.ts`,
+`report-da-plataforma-ia-sem-chave.test.ts` e `mcp-de-implantacao-ia-das-empresas.test.ts`.
+
+**Conferir.**
+1. `git grep -n "FORK MIA (9172" -- app/api/v1/ai/providers/route.ts app/api/v1/admin/modelo-de-ia/route.ts lib/agent-engine/edge/llm/credentials.ts` (o núcleo vivo).
+2. `git grep -n "MIA-218" -- app/api/v1/health/route.ts app/api/v1/cron/report-da-plataforma/route.ts components/admin/modelo-de-ia/ModeloDeIa.tsx` (o aviso vivo).
+3. O upstream mexeu em `fn_seed_org_llm_defaults` ou criou um "padrão da instalação"? O gatilho `trg_ia_segue_a_plataforma` tem de continuar rodando antes do seed.
+4. O upstream mudou `escolheIa` ou a sessão de suporte? `plataformaEditaEmSuporte` continua exigindo plataforma, `scope = full`, sessão ativa, edição e `agency_id` vazio.
+5. `npx vitest run lib/ai/ia-da-empresa.test.ts lib/ai/trava-da-ia.test.ts app/api/v1/ai/providers/modo-suporte-escolhe-a-ia.test.ts app/api/v1/health/health-diz-se-ha-empresa-sem-ia.test.ts tests/unit/report-da-plataforma-ia-sem-chave.test.ts tests/unit/mcp-de-implantacao-ia-das-empresas.test.ts`.
+
+**Riscos.** A empresa que virou escolha própria só volta a seguir a plataforma por migration (o botão ficou
+fora). A `/health` passa a ler `organizations` e `ai_provider_credentials` a cada chamada (duas leituras, com o
+teto de tempo das outras).
+
+### 29. O aviso da queda e da volta do número no grupo do cliente · [`aviso-da-queda.md`](aviso-da-queda.md)
 **O que faz.** Quando um número por QR de um cliente cai (e a queda dura 10 minutos), o número de avisos manda
 UMA mensagem no grupo de avisos daquele cliente com o final do telefone e o passo a passo do QR, e uma curta
 quando ele volta. Trava de um aviso por queda por dia (`jaAvisou`, chave por sessão). Chave por cliente
@@ -1035,12 +1094,13 @@ número de avisos caído), `app/api/v1/cron/report-da-plataforma/route.test.ts` 
 | 20 | Produto no negócio | `produto-no-negocio.md` | 9160, 9161, 9167 | `produto-no-negocio-servidor.test.ts`, `produto-no-negocio-regras.test.ts`, `valor-do-negocio-segue-os-itens.test.ts` |
 | 21 | Raio-X do atendimento | `raio-x-do-atendimento.md` | 9150, 9151, 9152 | `raio-x-leitor-nao-envia.test.ts`, `raio-x-anonimizar.test.ts` |
 | 22 | Trava de robô | `trava-de-robo.md` | 9153, 9154, 9171 | `trava-de-robo.test.ts`, `lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts` |
-| 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162, 9164 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-pedido-unico.test.ts`, `coexistencia-conexao-pelo-app.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts` |
+| 23 | Coexistência do WhatsApp | `coexistencia.md` | 9162, 9164 | `coexistencia-historico-nao-dispara.test.ts`, `coexistencia-pedido-unico.test.ts`, `coexistencia-conexao-pelo-app.test.ts`, `coexistencia-historico-leitura.test.ts`, `historico-midia-so-guarda.test.ts`, `coexistencia-saida-e-volta.test.ts`, `meta-edicao-e-apagar.test.ts` |
 | 24 | Consumo de IA por mês e por agente | `consumo-de-ia.md` | 9165 (o preço da Meta com vigência); lê a 0241 | `consumo-de-ia-por-mes-e-por-agente.test.ts`, `consumo-de-ia-telas-este-mes-e-mes-passado.test.tsx`, `orcamento-uma-regua-de-gasto.test.ts`, `consumo-de-ia-as-duas-telas-dao-o-mesmo-numero.test.ts`, `preco-da-meta-com-vigencia.test.ts` |
 | 25 | O fuso da organização nos relatórios | `fuso-da-organizacao.md` | 9166 | `fuso-dos-relatorios-uma-regra.test.ts`, `tests/invariants/fuso-invalido-nos-relatorios.test.ts` |
 | 26 | O realtime do sistema com a semente desligada | `realtime-do-sistema.md` | nenhuma | nenhum (conferência pela leitura do tenant) |
 | 27 | O batimento do vigia dos canais | `vigia-dos-canais.md` | 9168 | `vigia-dos-canais-bate-o-ponto.test.ts`, `health-diz-se-o-vigia-dos-canais-passou.test.ts`, `tests/invariants/batimento-dos-crons.test.ts` |
-| 28 | Aviso da queda do número | `aviso-da-queda.md` | nenhuma | `aviso-da-queda.test.ts`, `mcp-de-implantacao-aviso-da-queda.test.ts` |
+| 28 | A IA de toda empresa segue a da plataforma | `ia-da-plataforma.md` | 9172 | `tests/invariants/ia-segue-a-plataforma.test.ts`, `modo-suporte-escolhe-a-ia.test.ts`, `health-diz-se-ha-empresa-sem-ia.test.ts`, `mcp-de-implantacao-ia-das-empresas.test.ts` |
+| 29 | Aviso da queda do número | `aviso-da-queda.md` | nenhuma | `aviso-da-queda.test.ts`, `mcp-de-implantacao-aviso-da-queda.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.

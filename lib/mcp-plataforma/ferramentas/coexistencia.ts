@@ -27,16 +27,29 @@ import { recusar } from "../recusa";
 import type { FerramentaDePlataforma } from "../tipos";
 import { ORGANIZACAO, ORG_DE_EXEMPLO } from "./comum";
 
+/**
+ * S4: o estado em uma palavra, como a tela mostra. `de_volta` é o número que
+ * saiu do ar e voltou (`ACCOUNT_RECONNECTED`) no MESMO ciclo: mesma sessão,
+ * mesmos contatos, conversas e cartões.
+ */
+export function situacaoDoNumero(n: Pick<NumeroPeloApp, "estado" | "voltouEm">): "no_ar" | "de_volta" | "fora_do_ar" | "encerrada" {
+  if (n.estado === "no_ar") return n.voltouEm ? "de_volta" : "no_ar";
+  return n.estado;
+}
+
 function numeroResumido(n: NumeroPeloApp) {
   return {
     conexao_id: n.conexaoId,
     numero: n.phoneNumber ?? n.phoneNumberId,
     estado: n.estado,
+    situacao: situacaoDoNumero(n),
     aberta_por: n.abertaPor,
     conectada_em: n.conectadaEm,
     fora_do_ar_motivo: n.foraDoArMotivo,
+    fora_do_ar_iniciado_por: n.foraDoArIniciadoPor,
     fora_do_ar_em: n.foraDoArEm,
     voltou_em: n.voltouEm,
+    ultimo_aviso_da_meta_em: n.ultimoEventoEm,
   };
 }
 
@@ -47,7 +60,11 @@ export const FERRAMENTAS_DA_COEXISTENCIA: readonly FerramentaDePlataforma[] = [
       "Mostra a COEXISTÊNCIA DO WHATSAPP de um cliente: o mesmo número no app WhatsApp Business do celular e na MIA. " +
       "Traz a chave da empresa (`ligada`: com ela, a tela Conexões › API Oficial (Meta) mostra o botão \"Conectar pelo app WhatsApp Business\"; " +
       "nasce desligada), quem mudou e quando, se a instalação tem o app da Meta configurado para abrir a janela (`janela_configurada`, e o que falta no ambiente), " +
-      "e os números conectados pelo app, com o estado (`no_ar`, `fora_do_ar`, `encerrada`), a data da conexão e o motivo de estar fora do ar. " +
+      "e os números conectados pelo app, com o estado (`no_ar`, `fora_do_ar`, `encerrada`) e a `situacao` (`no_ar`, `de_volta` = saiu do ar e voltou no mesmo ciclo, " +
+      "`fora_do_ar`, `encerrada`), a data da conexão, quando saiu do ar e por quê (`fora_do_ar_motivo`, o código da Meta: ACCOUNT_DISCONNECTED = o dono desconectou no app, " +
+      "BUSINESS_DOWNGRADE, CHANGE_NUMBER, COMPANION_INACTIVITY = aparelho conectado parado ~30 dias, PRIMARY_INACTIVITY = celular sem abrir o app ~14 dias, " +
+      "USER_RE_REGISTERED, ACCOUNT_OFFBOARDED; `fora_do_ar_iniciado_por` USER ou SYSTEM) e quando voltou (`voltou_em`). " +
+      "Fora do ar, nada sai pela MIA por esse número; para voltar, o dono abre o app e conecta de novo pela tela (conectar é credencial, fica fora do MCP). " +
       "Para os contatos e o histórico que a Meta mandou: plataforma_ver_sincronizacao_do_app. Para ligar a chave: plataforma_ligar_coexistencia.",
     inputSchema: { organization_id: ORGANIZACAO },
     exemplo: { organization_id: ORG_DE_EXEMPLO },

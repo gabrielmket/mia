@@ -74,6 +74,10 @@ import { validarConfigRedisRest } from "@/lib/redis-config";
 import { compararCarimbo, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
 import { urlDoSupabaseNoServidor } from "@/lib/supabase/url-do-servidor";
 import { comIdDaRequisicao } from "@/lib/api/wrappers";
+// FORK MIA (MIA-218): empresa com o padrão de IA num provedor sem chave.
+import { blocoDaSaude } from "@/lib/ai/aviso-da-ia-das-empresas";
+import { iaDasEmpresas } from "@/lib/ai/ia-da-empresa";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -649,14 +653,40 @@ async function lerBatimentoDoVigia(): Promise<LeituraDoBatimento> {
   }
 }
 
+/**
+ * FORK MIA (MIA-218) — há empresa com o padrão de IA num provedor sem chave?
+ *
+ * Foi o buraco da MIA-215: empresas no padrão de um provedor sem chave nesta
+ * instalação, sem fazer uma chamada de IA por semanas, sem ninguém saber. A
+ * régua é a de `iaDasEmpresas` (MIA-217), a mesma do turno, do cartão do admin
+ * e do MCP; a conta é só das empresas que operam.
+ *
+ * Só a CONTAGEM sai, igual com e sem o segredo: nem id, nem nome, nem
+ * provedor (quais são, o MCP diz: `plataforma_ver_ia_das_empresas`). Sem o
+ * banco configurado ou com a leitura falhando, `empresas_sem_chave: null`
+ * (desconhecido, diferente de zero). Não muda o `status`: o passo 1 do trem de
+ * implantação lê só `status` e `schema`, e uma empresa mal configurada não pode
+ * travar a implantação. O alarme é de quem monitora e do relatório interno.
+ */
+async function lerIaDasEmpresas(): Promise<ReturnType<typeof blocoDaSaude>> {
+  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return blocoDaSaude({ falha: true });
+  try {
+    const empresas = await withTimeout(iaDasEmpresas(createAdminClient()));
+    return blocoDaSaude(empresas === null ? { falha: true } : { empresas });
+  } catch {
+    return blocoDaSaude({ falha: true });
+  }
+}
+
 export async function GET(req: NextRequest) {
-  const [supabase, redis, waha, carimbo, backup, batimentoDoVigia] = await Promise.all([
+  const [supabase, redis, waha, carimbo, backup, batimentoDoVigia, iaDasEmpresasNaSaude] = await Promise.all([
     checkSupabase(),
     checkRedis(),
     checkWaha(),
     lerCarimboDoSchema(),
     lerEstadoDoBackup(),
     lerBatimentoDoVigia(),
+    lerIaDasEmpresas(),
   ]);
 
   const verboso = req.nextUrl.searchParams.get("verbose") === "1" && segredoInternoConfere(req);
@@ -710,6 +740,9 @@ export async function GET(req: NextRequest) {
         // booleano. `em_dia: null` = desconhecido (sem a tabela, leitura
         // falhou). Não entra no `status` acima.
         vigia_dos_canais: avaliarVigiaDosCanais(batimentoDoVigia, new Date()),
+        // FORK MIA (MIA-218). Igual com e sem o segredo: só a contagem.
+        // `empresas_sem_chave: null` = desconhecido. Não entra no `status`.
+        ia: iaDasEmpresasNaSaude,
         timestamp: new Date().toISOString(),
         checks,
       },

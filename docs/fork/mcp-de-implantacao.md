@@ -188,7 +188,7 @@ ferramenta (desliga, ajusta, religa), como as automações.
 
 ## 3. Todas as ferramentas
 
-São **134** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda, a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md), a MIA-67 as três da 1.117: contar os negócios e ver e revogar as conexões do MCP da empresa, a MIA-79 as duas da 1.118: o módulo opcional por empresa e a tela inicial, a MIA-99 as duas do preço que a Meta cobra por mensagem, a MIA-103 as duas leituras da Análise do funil e das conversas do mês, e a MIA-169 as duas das conversões do site: garantir as regras e testar com a Ana Exemplo, [`conversoes-da-meta.md`](conversoes-da-meta.md#conversões-do-site), a MIA-28 as três da coexistência do WhatsApp, e a MIA-136 o ranking do consumo de IA da plataforma, [`consumo-de-ia.md`](consumo-de-ia.md), seção 10): as 126 desta página e as 8 da migração
+São **135** ferramentas no servidor (a .105 somou a de ler o raio-X de novo, a .107 a dos preços do raio-X, a .108 as três da trava de robô, a .109 as duas do produto no negócio, a MIA-18 a da lista de espera da agenda, a MIA-44 a do consumo de IA, [`consumo-de-ia.md`](consumo-de-ia.md), a MIA-67 as três da 1.117: contar os negócios e ver e revogar as conexões do MCP da empresa, a MIA-79 as duas da 1.118: o módulo opcional por empresa e a tela inicial, a MIA-99 as duas do preço que a Meta cobra por mensagem, a MIA-103 as duas leituras da Análise do funil e das conversas do mês, e a MIA-169 as duas das conversões do site: garantir as regras e testar com a Ana Exemplo, [`conversoes-da-meta.md`](conversoes-da-meta.md#conversões-do-site), a MIA-28 as três da coexistência do WhatsApp, a MIA-136 o ranking do consumo de IA da plataforma, [`consumo-de-ia.md`](consumo-de-ia.md), seção 10, e a MIA-218 a da IA de cada empresa, [`ia-da-plataforma.md`](ia-da-plataforma.md)): as 127 desta página e as 8 da migração
 ([`mcp-de-migracao.md`](mcp-de-migracao.md)). A .95 (o preço do e-mail por plano) não pediu
 ferramenta nova, só campos: `plataforma_garantir_planos` aceita `preco_email`,
 `plataforma_ver_cobranca` e `plataforma_ver_assinatura` devolvem o preço por e-mail (veja "A
@@ -239,6 +239,7 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | `plataforma_ver_saude` | o estado da instalação, e se a chave que cifra o CPF dos contatos está semeada (só sim ou não; o valor nunca sai) | leitura |
 | `plataforma_ver_consumo_de_ia` | o consumo de IA de um cliente num mês do calendário em Brasília ou nos últimos N dias de Brasília (`dias`, a mesma janela das telas; MIA-44 e MIA-78, [`consumo-de-ia.md`](consumo-de-ia.md)): o total, cada agente, a linha "Sistema" (chamadas sem agente) e a quebra por finalidade, cada uma com chamadas, tokens de entrada e saída, quantos vieram do cache, o custo em centavos de dólar (a régua do teto) e em reais (cotação de cada dia). Desde a MIA-99, `mensagens_cobradas`: as mensagens que a Meta cobrou no período, cada uma ao preço que valia no instante dela (o mês fechado não muda com o reajuste; [`consumo-de-ia.md`](consumo-de-ia.md), seção 9). Os mesmos números da aba Uso do cliente. Desde a MIA-136, a soma dos agentes com o Sistema, e a das finalidades, fecha com o total em R$ e em US$ (o total manda; [`consumo-de-ia.md`](consumo-de-ia.md), seção 10) | leitura |
 | `plataforma_ver_ranking_de_consumo_de_ia` | o consumo de IA da PLATAFORMA no mesmo período (`mes` em Brasília ou `dias`; MIA-136, [`consumo-de-ia.md`](consumo-de-ia.md), seção 10): as empresas em ordem de custo, sem as de demonstração, a visão da tela geral de uso (`/admin/usage`) no mesmo período e na mesma ordem por custo (o desempate é por chamadas de IA e nome; na tela geral, por mensagens), cada uma lida por `lerConsumoDoPeriodo` (a conta da aba Uso). Cada empresa com posição, chamadas, tokens, cache, US$, R$ e chamadas sem preço; o `total` da plataforma, com o qual a soma das empresas fecha; `limite` corta a lista, não o total | leitura |
+| `plataforma_ver_ia_das_empresas` | a IA de CADA empresa da instalação (MIA-218, [`ia-da-plataforma.md`](ia-da-plataforma.md)): se segue a IA da plataforma (`origem: "plataforma"`, o par de Admin › Modelo de IA) ou tem escolha própria (`"propria"`), o par em vigor (`provedor`, `provedor_nome`, `modelo`) e de onde sai a chave: `propria` (cadastrada e validada), `instalacao` (a da plataforma) ou `null` (nenhuma: a empresa não responde com IA). `contagem` traz quantas OPERANTES seguem, quantas têm escolha própria e quantas estão sem chave, os mesmos números do cartão do admin, da `/health` e do relatório interno (a suspensa aparece com `operante: false` e não conta). Filtros: `so_sem_chave` e `organization_id`; as sem chave vêm primeiro. A chave em si nunca sai. Não há ferramenta de troca: trocar o modelo é no painel, por uma pessoa, com MFA | leitura |
 | `plataforma_ver_precos_da_meta` | o preço que a Meta cobra por mensagem, por categoria, em centavos de real (MIA-99, [`consumo-de-ia.md`](consumo-de-ia.md), seção 9): o de hoje, as categorias sem preço e o histórico das vigências (`vigente_desde: null` = desde sempre, `vigente_ate: null` = o atual) | leitura |
 | `plataforma_ver_implantacao` | o **checklist**: por área, o que está pronto, o que falta (com a ferramenta) e o que é com uma pessoa (com a tela). Desde a .91, as áreas `primeiros_passos` (onde a empresa está no passo a passo e o número oficial que espera a Time) e `plano_e_cobranca` (assinou ou não, das tabelas de assinatura do upstream), e o `rotulo_do_cliente`: o "o que falta" que a empresa nova vê | leitura |
 | `plataforma_listar_modelos` | os modelos e vocabulários que as outras ferramentas aceitam: modelos de follow-up, pacotes e capacidades do agente, gatilhos e ações de automação, passos do funil, tipos de campo | leitura |
@@ -818,6 +819,38 @@ Nada a configurar pela implantação: o teto de respostas da IA por conversa (#4
 variável de ambiente do worker (`TETO_DE_RESPOSTAS_POR_CONVERSA`), e a origem da conexão
 oficial (9328) é gravada pelo próprio cadastro.
 
+### O que chegou do upstream 1.125 (fusão de 24/11, MIA-227)
+
+A fusão entra sem ferramenta nova e sem campo novo no MCP de plataforma. Nenhuma rota espelhada
+(seção 5) mudou nesta faixa. O `crm_count_leads` com `por_etapa` (#4996) é do MCP da EMPRESA e
+vem pronto do upstream.
+
+| novidade do upstream | versão | como o MCP alcança | operação |
+|---|---|---|---|
+| Transferir os negócios em andamento de um funil para outro ao arquivar ou excluir (9466, `POST /api/v1/pipelines/[id]/negocios`) | 1.125 | nada a configurar: é operação do dia a dia na tela do funil | |
+| A regra com gatilho "Negócio ganho" ou "Negócio perdido" inicia o follow-up (9470, #5077) | 1.125 | nada a gravar: a regra já existia e falhava calada; `plataforma_garantir_automacao` não muda | |
+| Preço do Gemini 3.5 Flash (9462) | 1.125 | nada a fazer: tabela de preço da plataforma | |
+
+Falta no MCP (cada item com o motivo):
+
+- os tipos de link do contato por empresa (`organizations.settings.links_de_contato`, tela
+  Configurações › Tipos de link do contato, #5128): escolha nova da empresa, sem ferramenta que a
+  leia ou grave. Sem ela vale o catálogo inteiro, que é o de antes;
+- "Continuar a conversa quando a equipe devolver ao automático" por agente
+  (`trigger_config.resume_on_handback`, `lib/escalacao/retomada-ao-devolver.ts`): campo novo do
+  agente. Nasce desligado e, ligado, a IA fala com o cliente na hora da devolução, então muda o
+  envio e pede decisão antes de a implantação ligar sozinha. Convive com a resposta da mensagem
+  pendente do fork (.107), ver `docs/fork/CATALOGO.md`, função 12;
+- o App ID e o Configuration ID do Embedded Signup do upstream (`platform_meta_app.app_id` e
+  `config_id`, 9463, Admin › API Oficial): configuração da PLATAFORMA, não da empresa. Preenchidos,
+  a tela do canal oficial ganha um segundo botão de conexão pelo Facebook, ao lado do "Conectar pelo
+  app" da coexistência do fork. Ficam vazios até o Gabriel decidir (PR da fusão, decisão 1).
+
+Nada a configurar pela implantação: a IA que não fala depois que uma pessoa assume, a resposta do
+responsável que cala a IA, a distribuição automática que não interrompe a IA devolvida, as
+anotações do cliente no Inbox, a ordem da Fila e os tetos de CPU e memória do `docker-compose.prod.yml`
+(o fork implanta pelo `docker-compose.easypanel.yml`, que é nosso e não os recebe).
+
 ### O que chegou do upstream 1.124 (fusão de 23/11, MIA-127)
 
 A fusão entra sem ferramenta nova e sem campo novo no MCP de plataforma. Uma rota espelhada
@@ -1356,7 +1389,7 @@ atende). A regra mora em `lib/channels/meta/coexistencia/` (`ligar.ts`, `leitura
 
 | ferramenta | o que faz | operação |
 |---|---|---|
-| `plataforma_ver_coexistencia` | a chave da empresa (`ligada`, quem mudou e quando), se a instalação tem o app da Meta configurado para a janela (`janela_configurada`, `falta_no_ambiente`) e os números conectados pelo app, com estado, data da conexão e motivo de estar fora do ar | leitura |
+| `plataforma_ver_coexistencia` | a chave da empresa (`ligada`, quem mudou e quando), se a instalação tem o app da Meta configurado para a janela (`janela_configurada`, `falta_no_ambiente`) e os números conectados pelo app, com estado, data da conexão e motivo de estar fora do ar. S4: a `situacao` (`no_ar`, `de_volta`, `fora_do_ar`, `encerrada`), o motivo da Meta e quem iniciou (`fora_do_ar_iniciado_por`), quando saiu, quando voltou e o último aviso da Meta aplicado | leitura |
 | `plataforma_ligar_coexistencia` | liga ou desliga a chave; o mesmo pedido responde `ja_estava`. Recusa empresa que não opera (`ehOperante`) e empresa de demonstração (a 9010 não deixa nascer canal vivo nela). Desligar com número conectado responde os números que continuam. Audita `platform.coexistencia_alterada` | `colocar_no_ar` |
 | `plataforma_ver_sincronizacao_do_app` | por número: os dois pedidos (`contatos` e `historico`) com estado, datas, `request_id` da Meta, erro, progresso, fase e contagens; o prazo de 24 h. Só contagens | leitura |
 
@@ -1562,6 +1595,9 @@ Testes:
 | `tests/unit/mcp-de-implantacao-paineis.test.ts` | as quatro ferramentas dos painéis e do link para o dono (.78): a caixinha `compartilhar_paineis`, que o garantir não duplica e ajusta no mesmo endereço, a revogação, a leitura e a demonstração; e a meta do mês em `plataforma_configurar_empresa` |
 | `tests/invariants/motor-de-conta-dos-relatorios.test.ts` | o motor de conta (9030) no Postgres de verdade: a regra de data e o fuso, sem o teto de 1000 linhas, as etiquetas, o "Sem …" e o "Outros", a meta, quem vê o quê (atendente, gestor, outra empresa, anon, plataforma) e a situação da obrigação igual à de `lib/obrigacoes/situacao.ts` |
 | `tests/invariants/link-dos-paineis-para-o-dono.test.ts` | a tabela do link (9031): só o servidor lê e escreve, as constraints, o funil de outra empresa e a contagem de acesso só em link vivo |
+| `tests/unit/relatorios-planilha-conferida.test.ts` | a planilha do montador conferida (MIA-106): o escape de cada célula (vírgula, aspas, quebra de linha, fórmula), o número que não parte a coluna com o separador vírgula, o total igual ao da tela, a empresa da sessão no motor, na lista e no registro, e o fuso da planilha igual ao do motor |
+| `tests/invariants/anuncios-e-sem-valores-no-montador.test.ts` | a fonte de anúncios no Postgres de verdade (MIA-106): a empresa em todo join (o envio que aponta para o negócio e a etapa de outra empresa), gestor mesmo chamada direto, o período no fuso da empresa; e o motor sem valores sem dinheiro em lugar nenhum do jsonb |
+| `tests/unit/link-do-dono-sem-valores-e-teto.test.ts` | a página do link do dono (MIA-106): o teto de 30 aberturas por minuto por IP com o limitador de verdade, "mostrar valores" desligado em toda chamada ao motor, e a página como único caminho que resolve o token |
 | `tests/invariants/dono-do-contato-pela-plataforma.test.ts` | a função da 9022 no Postgres de verdade: o controle negativo (a porta do upstream recusa o ator da plataforma), o mesmo efeito da porta do upstream, as recusas do ator e que só o `service_role` executa |
 | `tests/unit/produto-da-implantacao-se-edita-na-tela.test.ts` | o produto que entrou pela implantação ou pela demonstração abre editável na tela do upstream, e a lista de origens do fork não envelhece |
 | `tests/unit/mcp-de-implantacao-espelhos.test.ts` | as rotas espelhadas não mudaram sem alguém reler o espelho, e a função do upstream que a 9022 copia também não |

@@ -48,6 +48,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { normalizarVoiceId, problemaNoVoiceId } from "@/lib/ai/voz/voice-id";
 
 import { OndeOTextoEProcessado } from "../../_components/OndeOTextoEProcessado";
+import { AvisoDaChave } from "./AvisoDaChave";
 import { CartaoDeMapas } from "./CartaoDeMapas";
 import { CartaoDoJev, jevNoPonto, useDadosDoJev, type DadosDoJev } from "./CartaoDoJev";
 
@@ -116,9 +117,22 @@ interface Dados {
   modelos: Modelo[];
   padrao: { provider: string; defaultModel: string | null };
   podeEditar: boolean;
+  /**
+   * FORK MIA (9172, MIA-217): de onde vem o padrão e de onde sai a chave dele
+   * (`iaDaEmpresa`). `null` = a leitura falhou: a tela não mostra o aviso.
+   */
+  ia?: { origem: "plataforma" | "propria"; chave: "propria" | "instalacao" | null } | null;
 }
 
-export function PainelDeProvedores() {
+export function PainelDeProvedores({
+  podeCadastrarChave = false,
+}: {
+  /**
+   * FORK MIA (MIA-218): a chave própria é opção avançada, só do admin da
+   * plataforma fora de suporte (`podeConfigurarChaveDeIa`). Vem da página.
+   */
+  podeCadastrarChave?: boolean;
+} = {}) {
   const t = useT();
   const [dados, setDados] = useState<Dados | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -196,8 +210,6 @@ export function PainelDeProvedores() {
     return <div className="p-6 text-sm text-muted-foreground">{t("Carregando…")}</div>;
   }
 
-  const semChave = dados.credenciais.length === 0;
-
   return (
     <div className="mx-auto w-full max-w-5xl p-6" data-testid="painel-de-provedores">
       <header className="mb-6">
@@ -208,19 +220,15 @@ export function PainelDeProvedores() {
         </p>
       </header>
 
-      {semChave && (
-        <Card className="mb-6 border-amber-500/40 bg-amber-500/5 p-4" data-testid="aviso-sem-chave">
-          <p className="text-sm">
-            {t("Você ainda não cadastrou a chave da sua IA principal, a que conversa com os clientes.")}{" "}
-            {/* Só é verdade quando a instalação tem chave; sem ela, a frase
-                contradizia o cartão do Jev logo abaixo. */}
-            {dados.instalacaoTemChave && t("Enquanto isso, o atendimento usa a chave que veio na instalação.")}{" "}
-            <Link className="underline underline-offset-4" href="/app/ai/credentials">
-              {t("Cadastrar uma chave")}
-            </Link>
-          </p>
-        </Card>
-      )}
+      {/* FORK MIA (MIA-218): na MIA a chave é da plataforma; o aviso diz isso, e avisa o padrão sem chave. */}
+      <AvisoDaChave
+        ia={dados.ia ?? null}
+        provedorNome={
+          dados.provedores.find((p) => p.id === dados.padrao.provider)?.rotulo ?? dados.padrao.provider
+        }
+        podeEditar={dados.podeEditar}
+        podeCadastrarChave={podeCadastrarChave}
+      />
 
       <CartaoDoPadrao dados={dados} aoSalvar={carregar} />
       <CartaoDeVoz podeEditar={dados.podeEditar} />

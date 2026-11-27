@@ -246,14 +246,27 @@ const llmSettingsSchema = z
  * desaparecer da consulta e o resolvedor concluir "organização inexistente" —
  * derrubando toda chamada de IA dela.
  */
+//
+// FORK MIA (9172, MIA-217): sem `provider` em `settings.llm`, o par vem de
+// `platform_ia` (a IA da plataforma, linha única) e não do `.catch('anthropic')`
+// do schema abaixo, que mandava a empresa para um provedor que a instalação pode
+// nem ter. O caso quase não acontece (o seed e o gatilho `trg_ia_segue_a_plataforma`
+// sempre gravam o par); fica por defesa. Sem par na plataforma, vale o de antes.
+// A legada (`SQL_CONFIG_LEGADO`) fica intacta: é a rede do schema atrasado.
 const SQL_CONFIG_COM_ORCAMENTO = `
-  select o.settings->'llm'            as llm,
+  select case
+           when coalesce(o.settings->'llm'->>'provider', '') = '' and p.provider is not null
+             then (case when jsonb_typeof(o.settings->'llm') = 'object' then o.settings->'llm' else '{}'::jsonb end)
+                  || jsonb_build_object('provider', p.provider, 'default_model', p.model_id)
+           else o.settings->'llm'
+         end                          as llm,
          b.monthly_limit_cents        as teto,
          b.enforcement_mode           as modo,
          b.enforcement_effective_at   as efetivo_em,
          b.alarm_threshold_pct        as limiar_pct
     from organizations o
     left join ai_budgets b on b.organization_id = o.id
+    left join platform_ia p on p.id = 1
    where o.id = $1`;
 
 /** A query de antes da 0159 — a rede quando o schema do clone está atrasado. */

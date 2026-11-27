@@ -56,6 +56,8 @@ import {
 // manda no campo `history` e a contagem dos contatos da agenda do app.
 import { ingerirContatoDoAppContando } from "@/lib/channels/meta/coexistencia/contatos";
 import { receberHistoricoDaMeta } from "@/lib/channels/meta/coexistencia/receber";
+import { aplicarEdicaoDaMeta } from "@/lib/channels/meta/coexistencia/edicao";
+import { receberSaidaEVolta } from "@/lib/channels/meta/coexistencia/saida-e-volta";
 import { donoDoEvento } from "@/lib/channels/meta/dono-do-evento";
 import { metaSessionByWabaId, metaSessionByWebhookToken } from "@/lib/channels/meta/session";
 import {
@@ -261,6 +263,15 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       porWaba: (waba) => metaSessionByWabaId(waba),
     })),
   );
+  // FORK MIA: a saída e a volta do número da coexistência (S4; `account_update`
+  // com PARTNER_REMOVED, ACCOUNT_OFFBOARDED, ACCOUNT_RECONNECTED). Não lança.
+  desfechos.push(
+    ...(await receberSaidaEVolta(admin, leitura.envelope, {
+      requestId,
+      sessionDoToken: session,
+      porWaba: (waba) => metaSessionByWabaId(waba),
+    })),
+  );
   /**
    * A pergunta do apagado a pedido é feita UMA vez por lote, não por contato
    * (`perguntarTitularesApagadosNoLote`, migration 9321). Estados:
@@ -380,6 +391,15 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
           phone_number_id: e.phoneNumberId,
         });
       }
+      continue;
+    }
+
+    // FORK MIA: a edição e o apagar feitos no WhatsApp, pelo cliente ou pelo
+    // dono no app (S4). Vão à mensagem original; nada dispara. Não lança.
+    if (e.kind === "message_edit") {
+      desfechos.push(
+        `edicao:${await aplicarEdicaoDaMeta(admin, e, { organizationId: dono.organizationId, requestId })}`,
+      );
       continue;
     }
 

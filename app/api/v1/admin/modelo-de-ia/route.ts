@@ -23,6 +23,8 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { chaveDePlataforma } from "@/lib/ai/runtime/agent";
 import { ehProvedorSuportado } from "@/lib/ai/pontos/provedores";
+// FORK MIA (9172, MIA-217): quem segue a plataforma e quem está sem chave.
+import { contarEmpresas, iaDasEmpresas, recusaDaPlataformaSemChave } from "@/lib/ai/ia-da-empresa";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +77,7 @@ export async function GET(): Promise<Response> {
 
   const admin = createAdminClient();
 
-  const [{ data: escolha }, { data: modelos, error }] = await Promise.all([
+  const [{ data: escolha }, { data: modelos, error }, empresas] = await Promise.all([
     admin.from("platform_ia").select("provider, model_id, updated_at").eq("id", 1).maybeSingle(),
     admin
       .from("ai_models")
@@ -85,6 +87,7 @@ export async function GET(): Promise<Response> {
       .is("deprecated_at", null)
       .order("provider", { ascending: true })
       .order("model_id", { ascending: true }),
+    iaDasEmpresas(admin).catch(() => null),
   ]);
 
   if (error) return fail("db_error", "Falha ao ler o catálogo de modelos.", 500, { requestId });
@@ -124,6 +127,11 @@ export async function GET(): Promise<Response> {
        * esta operadora", que é o que esta tela decide.
        */
       chave_da_instalacao: chaveDaInstalacao,
+      /**
+       * FORK MIA (9172): `{ seguem, propria, sem_chave }` das empresas que
+       * operam. `seguem` é quantas mudam quando esta escolha muda.
+       */
+      empresas: contarEmpresas(empresas),
       /**
        * DOIS filtros, e os dois pela mesma razão: só chega à tela o que
        * realmente funciona se for escolhido.
@@ -170,6 +178,19 @@ export async function PUT(req: NextRequest): Promise<Response> {
   }
 
   const admin = createAdminClient();
+
+  // FORK MIA (9172, MIA-217): a escolha daqui vira o padrão de toda empresa que
+  // segue a plataforma (gatilho `trg_mia_platform_ia_propaga`). Provedor sem
+  // chave da instalação deixaria todas sem IA; "automático" deixaria todas no
+  // padrão antigo do produto. As duas recusas antes de gravar.
+  const contagem = contarEmpresas(await iaDasEmpresas(admin).catch(() => null));
+  if (contagem === null) {
+    return fail("db_error", "Não deu para conferir as empresas que seguem a plataforma. Tente de novo.", 500, {
+      requestId,
+    });
+  }
+  const recusa = recusaDaPlataformaSemChave({ provider, seguem: contagem.seguem });
+  if (recusa) return fail("ia_sem_chave", recusa, 422, { requestId });
 
   if (provider && model_id) {
     // Conferir ANTES de gravar: um id que não está no catálogo (ou que não

@@ -31,8 +31,9 @@
  * (migration 9002). Aqui é o lado do servidor, que grava com `service_role` e
  * por isso não passa pelos gatilhos de lá.
  *
- * Quem é da plataforma (`podeConfigurarChaveDeIa`: admin de plataforma fora de
- * sessão de suporte) passa por tudo sem mudança — é ele quem escolhe.
+ * Quem é da plataforma (`escolheIa`: admin de plataforma fora de sessão de
+ * suporte, ou dentro dela com edição, MIA-218) passa por tudo sem mudança — é
+ * ele quem escolhe.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -56,9 +57,46 @@ type QuemPede = Pick<AuthUser, "is_platform_admin" | "platform_admin_scope" | "s
 export const MENSAGEM_IA_DA_PLATAFORMA =
   "A inteligência dos agentes desta conta é configurada pela nossa equipe. Fale com o suporte para trocar.";
 
-/** Quem escolhe a IA: só a plataforma. */
+/**
+ * Quem escolhe a IA: só a plataforma. Fora de suporte, o admin de plataforma
+ * (`podeConfigurarChaveDeIa`); dentro de uma empresa, o mesmo admin em modo
+ * suporte com edição (`plataformaEditaEmSuporte`, MIA-218).
+ */
 export function escolheIa(user: QuemPede): boolean {
-  return podeConfigurarChaveDeIa(user);
+  return podeConfigurarChaveDeIa(user) || plataformaEditaEmSuporte(user);
+}
+
+/**
+ * A PLATAFORMA DENTRO DA EMPRESA, COM EDIÇÃO (MIA-218).
+ *
+ * Até a .116 `escolheIa` deixava de fora toda sessão de suporte, e isso trancava
+ * a única porta para trocar a IA de uma empresa: o admin de plataforma não é
+ * membro dela e só chega à tela Provedores de IA entrando em modo suporte. Em
+ * 24/11 ele abriu a tela com "Edição permitida", escolheu o modelo, e o "Salvar
+ * padrão" não apareceu (o PATCH respondia 403 `ia_da_plataforma`).
+ *
+ * Passa só quem é, ao mesmo tempo:
+ *   - admin de plataforma com `scope === "full"` (o `support_readonly` só lê);
+ *   - numa sessão de suporte ATIVA, em modo `full` ("Edição permitida");
+ *   - aberta pela plataforma, e não por uma agência (`agency_id` vazio).
+ *
+ * A empresa é a da sessão: em suporte, a organização ativa é sempre a do
+ * acompanhamento (`orgAtivaSemPortao`, `lib/auth/server.ts`). A abertura da
+ * sessão já exigiu MFA estrita (`/api/v1/admin/tenants/[id]/impersonate`).
+ *
+ * A chave e o custo continuam em `podeConfigurarChaveDeIa`, que segue sem
+ * suporte: acompanhar não é ver a NOSSA chave nem o nosso custo.
+ */
+export function plataformaEditaEmSuporte(user: QuemPede): boolean {
+  const s = user.support;
+  return (
+    user.is_platform_admin === true &&
+    user.platform_admin_scope === "full" &&
+    !!s &&
+    s.status === "active" &&
+    s.access_mode === "full" &&
+    !s.agency_id
+  );
 }
 
 function iaDaLinha(linha: Record<string, unknown> | null | undefined): IaDaVersao | null {
