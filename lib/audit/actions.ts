@@ -334,6 +334,8 @@ export const AUDIT_ACTIONS = [
   "platform.precos_da_meta_alterados",
   "empresas.mescladas",
   "platform.grupo_de_avisos_alterado",
+  // FORK MIA (MIA-48): a chave do aviso da queda do número no grupo do cliente.
+  "platform.aviso_da_queda_alterado",
   "broadcast.criado",
   "broadcast.editado",
   "broadcast.excluido",

@@ -1043,6 +1043,29 @@ quem escolheu fica), `lib/ai/ia-da-empresa.test.ts`, `lib/ai/trava-da-ia.test.ts
 fora). A `/health` passa a ler `organizations` e `ai_provider_credentials` a cada chamada (duas leituras, com o
 teto de tempo das outras).
 
+### 29. O aviso da queda e da volta do número no grupo do cliente · [`aviso-da-queda.md`](aviso-da-queda.md)
+**O que faz.** Quando um número por QR de um cliente cai (e a queda dura 10 minutos), o número de avisos manda
+UMA mensagem no grupo de avisos daquele cliente com o final do telefone e o passo a passo do QR, e uma curta
+quando ele volta. Trava de um aviso por queda por dia (`jaAvisou`, chave por sessão). Chave por cliente
+`settings.aviso_da_queda_do_numero`, ligada por padrão. **Migrations** nenhuma. **Mora em**
+`lib/avisos/aviso-da-queda.ts` e `lib/avisos/chave-do-aviso-da-queda.ts`.
+
+**Pontos de encaixe** (todos do fork): `app/api/v1/cron/report-da-plataforma/route.ts` (o passo 0b,
+`avisarQuedasEVoltas`, antes da saída "sem grupo de report"); `lib/implantacao/empresa.ts`
+(`configurarAtendimento`, o campo `aviso_da_queda_do_numero`); `plataforma_ver_cliente` (`aviso_da_queda`).
+
+**Protege.** `aviso-da-queda.test.ts` (um aviso só, a volta, sem grupo, a Alfa nunca no grupo da Beta, o
+número de avisos caído), `app/api/v1/cron/report-da-plataforma/route.test.ts` (o report interno igual),
+`mcp-de-implantacao-aviso-da-queda.test.ts`, `cron-respeita-org-operante.test.ts`.
+
+**Conferir.**
+1. `git grep -n "avisarQuedasEVoltas" app/api/v1/cron/report-da-plataforma/route.ts` (**a chamada existe e vem antes de `grupoDeReport`**).
+2. `git grep -n "STATUS_SAUDAVEL\|PROVIDER_EM_QUE_O_NUMERO_E_A_CONEXAO" lib/channels/health.ts lib/channels/capabilities.ts` (se o upstream renomear o estado saudável ou o provedor do QR, o aviso cala).
+3. Se a fusão mexer em `components/connections/ConnectionsClient.tsx`, conferir se os botões *Reconectar* e *Gerar novo QR* ainda têm esse nome: o texto do aviso os cita.
+4. `npx vitest run lib/avisos/aviso-da-queda.test.ts app/api/v1/cron/report-da-plataforma/route.test.ts`.
+
+**Riscos.** O texto é só em português. A rota da tela de conexões (`/app/connections`) está escrita no texto.
+
 ---
 
 ## Tabela final: por função, o documento, as migrations e os testes principais
@@ -1077,6 +1100,7 @@ teto de tempo das outras).
 | 26 | O realtime do sistema com a semente desligada | `realtime-do-sistema.md` | nenhuma | nenhum (conferência pela leitura do tenant) |
 | 27 | O batimento do vigia dos canais | `vigia-dos-canais.md` | 9168 | `vigia-dos-canais-bate-o-ponto.test.ts`, `health-diz-se-o-vigia-dos-canais-passou.test.ts`, `tests/invariants/batimento-dos-crons.test.ts` |
 | 28 | A IA de toda empresa segue a da plataforma | `ia-da-plataforma.md` | 9172 | `tests/invariants/ia-segue-a-plataforma.test.ts`, `modo-suporte-escolhe-a-ia.test.ts`, `health-diz-se-ha-empresa-sem-ia.test.ts`, `mcp-de-implantacao-ia-das-empresas.test.ts` |
+| 29 | Aviso da queda do número | `aviso-da-queda.md` | nenhuma | `aviso-da-queda.test.ts`, `mcp-de-implantacao-aviso-da-queda.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.

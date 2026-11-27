@@ -107,7 +107,11 @@ export async function jaAvisou(
   }
 }
 
-async function marcarEnviado(
+/**
+ * Grava que o aviso saiu agora. Exportada para o aviso da queda ao cliente
+ * (`aviso-da-queda.ts`, FORK MIA MIA-48), que usa a mesma tabela e a mesma trava.
+ */
+export async function marcarEnviado(
   admin: SupabaseClient,
   chave: string,
   detalhe: Record<string, unknown>,

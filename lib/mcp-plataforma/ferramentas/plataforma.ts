@@ -45,6 +45,8 @@ import { empresasEsperandoOPrimeiroPagamento, passoDoPagamentoParaATime } from "
 import { lerCupomEParceiroDaEmpresa } from "@/lib/cupons/na-ficha";
 // FORK MIA (.96, segunda frente): as cobranças com a nota fiscal (docs/fork/area-de-cobranca.md).
 import { cobrancasParaATime } from "@/lib/area-de-cobranca/para-a-time";
+// FORK MIA (MIA-48): o aviso da queda do número no grupo do cliente.
+import { estadoDoAvisoDaQueda } from "@/lib/avisos/aviso-da-queda";
 // FORK MIA (MIA-19): o link de pagamento na conversa (upstream 9312), só leitura.
 import { linkDePagamentoParaATime } from "@/lib/pagamentos/para-a-time";
 
@@ -154,6 +156,10 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
       // FORK MIA (.98): o cupom e o parceiro.
       "Desde a .98, em `cupom_e_parceiro`: o cupom da empresa (o que dá, desde quando, se o desconto já acabou), o parceiro ligado a ela e a comissão fixada, " +
       "o setup de implantação vendido e o total das comissões lançadas. Sem documento nem Pix do parceiro. " +
+      // FORK MIA (MIA-48): o aviso da queda do número.
+      "Em `aviso_da_queda`: se o grupo de avisos do cliente recebe o recado quando um número dele cai e quando volta (`ligada`, `grupo_configurado`, " +
+      "`vai_avisar` = as duas coisas) e os últimos avisos de queda e de volta, com a data e o número (nome e final do telefone). " +
+      "A chave muda em plataforma_configurar_atendimento, `aviso_da_queda_do_numero`. " +
       // FORK MIA (MIA-19): o link de pagamento na conversa (upstream 9312).
       "Em `link_de_pagamento`: se o módulo do link de pagamento na conversa está ligado NA INSTALAÇÃO (liga e desliga em /admin/sistema, para todas as empresas), " +
       "os provedores, quantos recebimentos a empresa tem em cada situação e quando foi o último pago. Sem endereço de aviso, sem hash e sem valor. " +
@@ -231,6 +237,8 @@ export const FERRAMENTAS_DA_PLATAFORMA: readonly FerramentaDePlataforma[] = [
         // FORK MIA (.98): leitura que falha diz "nao_lido".
         cupom_e_parceiro: await lerCupomEParceiroDaEmpresa(admin, id).catch(() => "nao_lido" as const),
         cobrancas,
+        // FORK MIA (MIA-48): leitura que falha diz `null` nos últimos avisos.
+        aviso_da_queda: await estadoDoAvisoDaQueda(admin, id, settings),
         link_de_pagamento: linkDePagamento,
         // FORK MIA (upstream 1.118, MIA-79): a exceção da empresa a cada módulo opcional. Não lança.
         modulos_opcionais: await lerModulosOpcionaisDaEmpresa(admin, id),
