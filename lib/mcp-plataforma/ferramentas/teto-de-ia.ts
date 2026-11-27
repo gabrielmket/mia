@@ -62,7 +62,8 @@ export const FERRAMENTAS_DO_TETO_DE_IA: readonly FerramentaDePlataforma[] = [
       "armar `bloquear` só passa a valer 72 horas depois (`comecar_agora: true` renuncia à carência); voltar de `bloquear` desarma na hora e fecha os avisos de orçamento abertos. " +
       "O gasto que conta é o do mês do banco (UTC), a mesma soma de `custo_usd_cents` de plataforma_ver_consumo_de_ia, onde o teto também aparece (`teto_de_ia`). " +
       "Este teto é diferente do teto de IA do PLANO (comercial, só para a chave da instalação): os dois valem. " +
-      "Chamar de novo com os mesmos valores responde `ja_estava` e não grava nem audita. Na empresa de demonstração funciona igual (o aviso diz o efeito na demonstração).",
+      "Chamar de novo com os mesmos valores responde `ja_estava` e não grava nem audita. Na empresa de demonstração funciona igual (o aviso diz o efeito na demonstração). " +
+      "O QUE NÃO FAZ: não troca provedor nem modelo, não mexe no teto do plano, não cobra nada e não apaga gasto. ANTES DE armar `bloquear`, confira o gasto do mês em plataforma_ver_consumo_de_ia.",
     inputSchema: {
       organization_id: ORGANIZACAO,
       teto_usd_cents: z

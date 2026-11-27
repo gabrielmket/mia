@@ -100,7 +100,7 @@ export const FERRAMENTAS_DA_IA_DAS_EMPRESAS: FerramentaDePlataforma[] = [
         );
 
       const operantes = empresas.filter((e) => e.operante);
-      const somar = (lista: typeof empresas, campo: "publicados" | "foraDoPar") =>
+      const somar = (lista: ReadonlyArray<{ organizationId: string }>, campo: "publicados" | "foraDoPar") =>
         lista.reduce((n, e) => n + (foraDoPar?.get(e.organizationId)?.[campo] ?? 0), 0);
 
       return {

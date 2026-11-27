@@ -56,6 +56,8 @@ async function chamar(args: Record<string, unknown>, operacoes: string[] = TODAS
 
 const linhaDoTeto = () => cenario.banco.db.ai_budgets!.find((l) => l.organization_id === ORG);
 const escritasDoTeto = () => cenario.banco.escritas.filter((e) => e.tabela === "ai_budgets");
+/** A auditoria do teto (a do servidor, `plataforma.mcp_executado`, sai em toda chamada e fica de fora). */
+const auditoriasDoTeto = () => estado.auditados.filter((a) => a.action.startsWith("ai.budget_"));
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -97,7 +99,7 @@ describe("plataforma_definir_teto_de_ia", () => {
       ia_parada_agora: false,
     });
     expect(linhaDoTeto()).toMatchObject({ monthly_limit_cents: 5000, enforcement_mode: "avisar", alarm_threshold_pct: 85 });
-    expect(estado.auditados).toEqual([
+    expect(auditoriasDoTeto()).toEqual([
       expect.objectContaining({
         action: "ai.budget_limit_changed",
         organizationId: ORG,
@@ -114,13 +116,13 @@ describe("plataforma_definir_teto_de_ia", () => {
   it("⭐ REEXECUÇÃO: o mesmo pedido de novo responde `ja_estava`, sem gravar nem auditar", async () => {
     await chamar({ teto_usd_cents: 5000, modo: "avisar" });
     const escritasAntes = escritasDoTeto().length;
-    const auditoriasAntes = estado.auditados.length;
+    const auditoriasAntes = auditoriasDoTeto().length;
 
     const r = await chamar({ teto_usd_cents: 5000, modo: "avisar" });
     expect(r.erro, r.texto).toBe(false);
     expect(r.dados).toMatchObject({ ja_estava: true, teto_de_ia: { teto_usd_cents: 5000, modo: "avisar" } });
     expect(escritasDoTeto()).toHaveLength(escritasAntes);
-    expect(estado.auditados).toHaveLength(auditoriasAntes);
+    expect(auditoriasDoTeto()).toHaveLength(auditoriasAntes);
   });
 
   it("pedir o estado de quem nunca teve teto (off, sem teto) também é `ja_estava`: nenhuma linha nasce", async () => {
@@ -135,7 +137,7 @@ describe("plataforma_definir_teto_de_ia", () => {
     expect(r.texto).toContain('salve "Me avisar"');
     expect(r.texto).toContain('chame primeiro com { "modo": "avisar" }');
     expect(escritasDoTeto()).toEqual([]);
-    expect(estado.auditados).toEqual([]);
+    expect(auditoriasDoTeto()).toEqual([]);
   });
 
   it("recusa que ensina: avisar com teto abaixo do piso de US$ 1,00", async () => {
@@ -169,7 +171,7 @@ describe("plataforma_definir_teto_de_ia", () => {
     expect(r.dados).toMatchObject({ teto_de_ia: { modo: "bloquear", parada_vale_desde: quando } });
     expect(String(r.dados.aviso_da_parada)).toContain("72 horas");
     expect(linhaDoTeto()).toMatchObject({ enforcement_mode: "bloquear", enforcement_effective_at: quando });
-    expect(estado.auditados.at(-1)).toMatchObject({
+    expect(auditoriasDoTeto().at(-1)).toMatchObject({
       action: "ai.budget_enforcement_armed",
       metadata: { enforcement_effective_at: quando, confirmar_imediato: false },
     });
@@ -195,7 +197,7 @@ describe("plataforma_definir_teto_de_ia", () => {
     expect(r.erro, r.texto).toBe(false);
     expect(r.dados).toMatchObject({ teto_de_ia: { modo: "avisar", parada_vale_desde: null }, ia_parada_agora: false });
     expect(linhaDoTeto()).toMatchObject({ enforcement_mode: "avisar", enforcement_effective_at: null });
-    expect(estado.auditados.at(-1)).toMatchObject({ action: "ai.budget_enforcement_disarmed" });
+    expect(auditoriasDoTeto().at(-1)).toMatchObject({ action: "ai.budget_enforcement_disarmed" });
     const situacao = Object.fromEntries(cenario.banco.db.agent_inbox_items!.map((i) => [i.id, i.status]));
     expect(situacao).toEqual({ "aviso-1": "resolved", "aviso-2": "resolved", "aviso-do-plano": "open" });
   });
@@ -224,8 +226,10 @@ describe("a empresa de demonstração", () => {
     expect(r.erro, r.texto).toBe(false);
     expect(String(r.dados.aviso)).toContain("Empresa de demonstração");
     expect(linhaDoTeto()).toMatchObject({ monthly_limit_cents: 2000, enforcement_mode: "avisar" });
-    // Nada vai para fila de saída, e-mail ou contato: só o teto e a auditoria.
-    expect(new Set(cenario.banco.escritas.map((e) => e.tabela))).toEqual(new Set(["ai_budgets"]));
+    // Nada vai para fila de saída, e-mail ou contato: só o teto e o retrato dos
+    // avisos de orçamento da Central (interno, como na tela).
+    const tabelas = new Set(cenario.banco.escritas.map((e) => e.tabela));
+    expect([...tabelas].every((t) => t === "ai_budgets" || t === "agent_inbox_items")).toBe(true);
   });
 
   it("a reexecução na demonstração também é `ja_estava`", async () => {
