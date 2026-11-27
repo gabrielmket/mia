@@ -28,6 +28,7 @@ import { logger } from "@/lib/logger";
 
 import { lerPlanosComModulos } from "./leitura";
 import { modulosPeloPlano } from "./modulos";
+import { autoriaDoToken } from "./rastro";
 import { seguirOPlano } from "./seguir-o-plano";
 
 export type DecisaoDoPedido = "aprovar" | "recusar";
@@ -126,13 +127,13 @@ export async function decidirPedidoDeCadastro(
   void audit({
     action: aprovar ? "registration.approved" : "registration.rejected",
     actorUserId: ator.userId,
-    actorApiTokenId: ator.tokenId,
+    // MIA-256: o token é de PLATAFORMA; `actor_api_token_id` é do de cliente (FK) e derrubava a linha.
     organizationId,
     resourceType: "registration_request",
     resourceId: linha.id,
     actingAsPlatformAdmin: true,
     requestId: ator.requestId,
-    metadata: { via: "mcp_de_plataforma", motivo_enviado: !aprovar && !!p.motivo },
+    metadata: { ...autoriaDoToken(ator.tokenId), via: "mcp_de_plataforma", motivo_enviado: !aprovar && !!p.motivo },
   });
 
   const aviso = await avisarQuemPediu(admin, {

@@ -44,6 +44,8 @@ export const TODAS_AS_OPERACOES = [
   "criar_campanha_de_email",
   // FORK MIA (.90): a cobrança da jornada de assinatura.
   "gerir_planos",
+  // FORK MIA (MIA-256): o cupom em caixinha própria.
+  "gerir_cupons",
   "gerir_cobranca",
   "decidir_cadastro",
   // FORK MIA (.101): o raio-X do atendimento.

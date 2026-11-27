@@ -13,6 +13,11 @@
  *
  * Garantir é pelo NOME: rodar de novo não duplica. Plano assinado não muda de
  * preço nem perde módulo: a resposta manda arquivar e criar outro.
+ *
+ * MIA-256: em plano que JÁ EXISTE, campo ausente no pedido mantém o valor
+ * gravado (esquecer `numeros` não tira o limite, esquecer `teste_dias` não volta
+ * a 14). O padrão só vale na criação. Toda escrita deixa a linha de auditoria
+ * com o antes e o depois (`rastro.ts`).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -24,6 +29,7 @@ import { edicaoDoPlanoSchema, novoPlanoSchema } from "@/lib/schemas/cobranca-pla
 
 import { ehModuloDoPlano, MODULO_QUE_EXIGE_A_INSTALACAO, type ModuloDoPlano } from "./catalogo";
 import { lerLadoDoPlano, lerPlanosComModulos, type PlanoComModulos } from "./leitura";
+import { antesEDepois, autoriaDoToken } from "./rastro";
 import { seguirOPlano } from "./seguir-o-plano";
 
 export interface PlanoPedido {
@@ -48,6 +54,42 @@ export interface PlanoPedido {
   destaque?: boolean;
   oferecido_ao_cliente?: boolean;
   padrao_no_cadastro?: boolean;
+}
+
+/** Os padrões do plano NOVO. Em plano que existe, ausente mantém o gravado. */
+export const PADROES_DA_CRIACAO = {
+  intervalo: "mes" as const,
+  trial_dias: 14,
+  max_assentos: null,
+  max_canais: null,
+  teto_ia_usd_cents: null,
+  padrao_no_cadastro: false,
+  oferecido_ao_cliente: true,
+};
+
+function semAusentes<T extends Record<string, unknown>>(o: T): Partial<T> {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
+
+type Autor = { userId: string | null; tokenId?: string | null; requestId?: string | null };
+
+/** A linha de auditoria do plano do upstream (`cobranca_planos`), a mesma ação do painel. */
+function auditarPlano(
+  autor: Autor,
+  planoId: string,
+  rastro: { antes: Record<string, unknown> | null; depois: Record<string, unknown> },
+  criado = false,
+) {
+  void audit({
+    action: "cobranca.plano_salvo",
+    actorUserId: autor.userId,
+    actingAsPlatformAdmin: true,
+    bypassedRls: true,
+    resourceType: "cobranca_plano",
+    resourceId: planoId,
+    requestId: autor.requestId ?? null,
+    metadata: { ...(criado ? { criado: true } : {}), ...rastro, ...autoriaDoToken(autor.tokenId) },
+  });
 }
 
 export interface LadoPedido {
@@ -138,7 +180,7 @@ export async function salvarLadoDoPlano(
   admin: SupabaseClient,
   planoId: string,
   pedido: LadoPedido,
-  autor: { userId: string | null; tokenId?: string | null; requestId?: string | null },
+  autor: Autor,
 ): Promise<
   | { ok: true; mudou: boolean; ligou: ModuloDoPlano[]; empresas: number }
   | { ok: false; motivo: string }
@@ -190,13 +232,12 @@ export async function salvarLadoDoPlano(
   void audit({
     action: "planos_mia.planos_garantidos",
     actorUserId: autor.userId,
-    actorApiTokenId: autor.tokenId ?? null,
     actingAsPlatformAdmin: true,
     bypassedRls: true,
     resourceType: "mia_plano_modulos",
     resourceId: planoId,
     requestId: autor.requestId ?? null,
-    metadata: { ...campos },
+    metadata: { ...(antesEDepois(atual, campos) ?? { antes: atual, depois: campos }), ...autoriaDoToken(autor.tokenId) },
   });
   return { ok: true, mudou: true, ligou, empresas };
 }
@@ -274,6 +315,10 @@ export async function garantirPlanos(
         .update({ padrao_no_cadastro: false, updated_by: autor.userId })
         .eq("id", anterior.id);
       if (error) throw new Error(`padrão anterior não desmarcado (${error.code ?? "sem_codigo"})`);
+      auditarPlano(autor, anterior.id, {
+        antes: { padrao_no_cadastro: true },
+        depois: { padrao_no_cadastro: false },
+      });
       existentes = existentes.map((p) =>
         p.id === anterior.id ? { ...p, padrao_no_cadastro: false } : p,
       );
@@ -281,23 +326,27 @@ export async function garantirPlanos(
   }
 
   for (const p of pedidos) {
-    const doUpstream = {
+    // O que o pedido TROUXE. Ausente fica `undefined`: no plano que existe, o
+    // valor gravado fica; na criação, entra o padrão (`PADROES_DA_CRIACAO`).
+    const pedidoDoUpstream = {
       nome: p.nome.trim(),
       preco_cents: p.preco_cents,
-      intervalo: p.intervalo ?? "mes",
-      trial_dias: p.trial_dias ?? 14,
-      max_assentos: p.max_assentos ?? null,
-      max_canais: p.max_canais ?? null,
-      teto_ia_usd_cents: p.teto_ia_usd_cents ?? null,
-      padrao_no_cadastro: p.padrao_no_cadastro ?? false,
-      oferecido_ao_cliente: p.oferecido_ao_cliente ?? true,
+      intervalo: p.intervalo,
+      trial_dias: p.trial_dias,
+      max_assentos: p.max_assentos,
+      max_canais: p.max_canais,
+      teto_ia_usd_cents: p.teto_ia_usd_cents,
+      padrao_no_cadastro: p.padrao_no_cadastro,
+      oferecido_ao_cliente: p.oferecido_ao_cliente,
     };
+    // A linha nossa: `mudancasDoLado` já trata ausente como "fica" (e, sem
+    // linha, compara com o padrão).
     const lado: LadoPedido = {
-      modulos: p.modulos ?? [],
-      preco_por_mensagem_cents: p.preco_por_mensagem_cents ?? null,
-      preco_por_email_cents: p.preco_por_email_cents ?? null,
-      frase: p.frase ?? null,
-      destaque: p.destaque ?? false,
+      modulos: p.modulos,
+      preco_por_mensagem_cents: p.preco_por_mensagem_cents,
+      preco_por_email_cents: p.preco_por_email_cents,
+      frase: p.frase,
+      destaque: p.destaque,
     };
     const existente = existentes.find(
       (x) => x.arquivado_em === null && normal(x.nome) === normal(p.nome),
@@ -318,6 +367,7 @@ export async function garantirPlanos(
             continue;
           }
         }
+        const doUpstream = { ...PADROES_DA_CRIACAO, ...semAusentes(pedidoDoUpstream) };
         const valido = novoPlanoSchema.safeParse(p.moeda !== undefined ? { ...doUpstream, moeda: p.moeda } : doUpstream);
         if (!valido.success) {
           r.recusas.push({
@@ -341,7 +391,9 @@ export async function garantirPlanos(
           });
           continue;
         }
-        await salvarLadoDoPlano(admin, (data as { id: string }).id, lado, autor);
+        const criadoId = (data as { id: string }).id;
+        auditarPlano(autor, criadoId, { antes: null, depois: { ...valido.data } }, true);
+        await salvarLadoDoPlano(admin, criadoId, lado, autor);
         r.criados.push(p.nome);
         continue;
       }
@@ -354,8 +406,8 @@ export async function garantirPlanos(
       }
       const assinantes = await assinantesDoPlano(admin, existente.id);
       const mudaPreco =
-        doUpstream.preco_cents !== existente.preco_cents ||
-        doUpstream.intervalo !== existente.intervalo;
+        pedidoDoUpstream.preco_cents !== existente.preco_cents ||
+        (pedidoDoUpstream.intervalo !== undefined && pedidoDoUpstream.intervalo !== existente.intervalo);
       if (mudaPreco && assinantes.length > 0) {
         r.recusas.push({
           plano: p.nome,
@@ -364,7 +416,7 @@ export async function garantirPlanos(
         continue;
       }
       const edicao: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(doUpstream)) {
+      for (const [k, v] of Object.entries(semAusentes(pedidoDoUpstream))) {
         if ((existente as unknown as Record<string, unknown>)[k] !== v) edicao[k] = v;
       }
       let mudou = false;
@@ -395,6 +447,8 @@ export async function garantirPlanos(
           });
           continue;
         }
+        const rastro = antesEDepois(existente as unknown as Record<string, unknown>, valido.data);
+        if (rastro) auditarPlano(autor, existente.id, rastro);
         mudou = true;
       }
       const ladoGravado = await salvarLadoDoPlano(admin, existente.id, lado, autor);
@@ -466,12 +520,11 @@ export async function garantirPacotesDeCreditos(
   void audit({
     action: "planos_mia.pacotes_garantidos",
     actorUserId: autor.userId,
-    actorApiTokenId: autor.tokenId ?? null,
     actingAsPlatformAdmin: true,
     bypassedRls: true,
     resourceType: "mia_pacotes_de_creditos",
     requestId: autor.requestId ?? null,
-    metadata: { ativos: pedidos, desativados },
+    metadata: { ativos: pedidos, desativados, ...autoriaDoToken(autor.tokenId) },
   });
   return { ativos: pedidos, desativados };
 }

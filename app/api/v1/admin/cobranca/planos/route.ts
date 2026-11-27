@@ -23,6 +23,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { provedorDaInstalacao } from "@/lib/cobranca/configuracao";
 import { MOEDAS_DO_ASAAS, MOEDAS_DO_EFI } from "@/lib/cobranca/vocabulario";
 import { moduloLigado } from "@/lib/instalacao/modulos";
+import { antesEDepois } from "@/lib/planos-mia/rastro";
 import { COLUNAS_DO_PLANO, novoPlanoSchema } from "@/lib/schemas/cobranca-plano";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -75,7 +76,8 @@ export async function POST(req: NextRequest) {
     resourceType: "cobranca_plano",
     resourceId: plano.id,
     requestId,
-    metadata: { criado: true, ...corpo.data },
+    // FORK MIA (MIA-256): o depois do plano novo (o antes é nulo: não existia).
+    metadata: { criado: true, ...corpo.data, ...antesEDepois(null, corpo.data) },
   });
   return ok(plano, { status: 201, requestId });
 }

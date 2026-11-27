@@ -26,6 +26,15 @@ Três regras valem para todas as ferramentas:
 O ator de cada escrita é **quem criou o token**. A auditoria guarda a pessoa, o
 token, a ferramenta e os argumentos (`plataforma.mcp_executado`).
 
+O id do token de plataforma vai sempre na `metadata` (`token_id` na linha
+`plataforma.mcp_executado`, `token_de_plataforma_id` nas linhas de domínio dos planos e
+da cobrança, desde a MIA-256), nunca em `actor_api_token_id`: essa coluna é chave
+estrangeira para o token de CLIENTE (`api_tokens`), e o id de um token de plataforma
+nela derruba o insert da auditoria em silêncio. A cerca está em
+`tests/unit/planos-mia-rastro-e-campo-ausente.test.ts`. Cada chamada grava também
+`last_used_at` e `last_used_ip` do token (o IP é rastro para reconhecer padrão, nunca
+decide nada).
+
 ---
 
 ## 1. Como ligar: o token e o `.mcp.json`
@@ -470,7 +479,7 @@ desligada, as escritas recusam com o caminho para ligar.
 | ferramenta | operação | o que faz | reexecução |
 |---|---|---|---|
 | `plataforma_ver_cobranca` | leitura | a cobrança da instalação: ligada ou não, provedor e modo, se o aviso de pagamento chega, a régua, o que falta para a primeira cobrança, os planos (limites, módulos, preço do Broadcast, preço por e-mail `preco_email` desde a .95 com o `preco_email_padrao`, conversas estimadas, quantas empresas assinam), as empresas por situação, os pacotes de crédito e o modo do cadastro. A chave nunca sai | leitura |
-| `plataforma_garantir_planos` | `gerir_planos` | os planos pelo nome (preço, intervalo, teste, pessoas, números, teto de IA, módulos, preço do Broadcast, preço por e-mail `preco_email` desde a .95, frase e selo, oferecido ou escondido, o do cadastro) e os `pacotes_de_creditos`. Plano assinado não muda de preço nem perde módulo (nem muda o preço do Broadcast ou o por e-mail): a resposta manda arquivar e criar outro | pelo nome; o igual volta em `sem_mudanca` |
+| `plataforma_garantir_planos` | `gerir_planos` | os planos pelo nome (preço, intervalo, teste, pessoas, números, teto de IA, módulos, preço do Broadcast, preço por e-mail `preco_email` desde a .95, frase e selo, oferecido ou escondido, o do cadastro) e os `pacotes_de_creditos`. Plano assinado não muda de preço nem perde módulo (nem muda o preço do Broadcast ou o por e-mail): a resposta manda arquivar e criar outro. **Campo ausente** (MIA-256): no plano que já existe, fica como está (esquecer `numeros` não tira o limite, esquecer `teste_dias` não volta a 14); o padrão só vale na criação; para tirar um limite, `null`. Não arquiva plano, não muda o preço do setup e não mexe em cupom | pelo nome; o igual volta em `sem_mudanca` |
 | `plataforma_listar_assinaturas` | leitura | as empresas por situação, com plano, agendado, origem, fim do teste, o próximo aviso da régua, a suspensão prevista, o link em aberto e os passos feitos; filtro `so_cadastro_proprio` | leitura |
 | `plataforma_ver_assinatura` | leitura | uma empresa: plano, situação, datas, a régua ponto a ponto, quem administra (e-mail mascarado), os passos e os módulos com a origem; desde a .95, `precos`: o da mensagem do Broadcast e o por e-mail que valem, em reais, cada um com a origem (`definido_a_mao`, `plano` ou `padrao`) e o definido à mão; desde a MIA-168, `lead_na_time`: o negócio do cadastro no funil MIA - SDR da Time, os momentos (cadastro concluído, teste começou, pagamento confirmado com o valor em BRL) e o erro (`sem_fonte`, `fonte_inexistente`, `recusado`, `falhou`, `sem_etapa:<nome>`), com `configurado` dizendo se `CADASTRO_FONTE_DO_CRM` está no ambiente | leitura |
 | `plataforma_atribuir_plano` | `gerir_cobranca` | atribui ou troca o plano como o dono no card Cobrança: a isenta passa a pagar em teste; no teste a troca vale na hora, depois fica para a renovação (plano negociado não paga diferença). Aceita plano escondido | o mesmo plano responde `mudou: false` |
@@ -479,10 +488,26 @@ desligada, as escritas recusam com o caminho para ligar.
 | `plataforma_listar_pedidos_de_cadastro` | leitura | os pedidos esperando aprovação: empresa, quem pediu (mascarado), plano escolhido e o que a empresa faz; desde a MIA-168, o `lead_na_time` de cada pedido e `cadastros_na_time` (a variável configurada ou não, e os últimos cadastros cujo lead falhou, só com ids, datas e o erro) | leitura |
 | `plataforma_decidir_pedido_de_cadastro` | `decidir_cadastro` | aprova (a empresa nasce no plano escolhido, pelo mesmo caminho do cadastro) ou recusa com o `motivo`, que vai por e-mail a quem pediu | o pedido decidido devolve a decisão anterior |
 
-As três caixinhas novas do token, e o raio de cada uma: `gerir_planos` mexe no preço e nos
-módulos de TODO cliente novo (um plano de R$ 5 como padrão do cadastro), `gerir_cobranca`
+As caixinhas do token para a cobrança, e o raio de cada uma: `gerir_planos` mexe no preço e nos
+módulos de TODO cliente novo (um plano de R$ 5 como padrão do cadastro) e nos pacotes de
+crédito, `gerir_cupons` (desde a MIA-256; antes o cupom vinha junto de `gerir_planos`) dá
+desconto a qualquer cliente novo (um cupom de 100% sem limite), `gerir_cobranca`
 isenta ou troca o plano de qualquer empresa, e `decidir_cadastro` deixa entrar quem a Time
 não conferiu, gastando IA no teste. Marque só no token de quem cuida da cobrança.
+
+**O rastro de cada mudança de plano** (MIA-256). Criar e editar plano, pelo MCP ou pelo
+painel, grava na auditoria quem, quando, `metadata.antes` e `metadata.depois`, só com os
+campos que mudaram (na criação, `antes` é nulo). As linhas:
+
+| ação | tabela | quem grava |
+|---|---|---|
+| `cobranca.plano_salvo` | `cobranca_planos` (preço, intervalo, teste, limites, teto, oferecido, o do cadastro) | `plataforma_garantir_planos` e a aba Planos (`POST`/`PATCH /api/v1/admin/cobranca/planos`) |
+| `planos_mia.planos_garantidos` | `mia_plano_modulos` (módulos, preço do Broadcast e por e-mail, frase, selo) | `plataforma_garantir_planos` e a página dos módulos dos planos (`PUT /api/v1/admin/planos-mia/[id]`) |
+| `planos_mia.pacotes_garantidos` | `mia_pacotes_de_creditos` (os ativos e os desativados) | `plataforma_garantir_planos` |
+| `setup.preco_do_plano` | `mia_plano_setup` (antes e depois do preço) | só o painel (`PUT /api/v1/admin/planos-mia/[id]/setup`): o MCP não mexe no setup |
+
+A comparação é `lib/planos-mia/rastro.ts`; a prova, `tests/unit/planos-mia-rastro-e-campo-ausente.test.ts`
+(MCP) e `tests/unit/planos-mia-rastro-no-painel.test.ts` (painel).
 
 Três ferramentas de antes crescem: `plataforma_ver_cliente` devolve `cobranca` (plano,
 situação, datas) e `modulos_com_origem` (pelo plano, pela Time); `plataforma_criar_cliente`
@@ -1300,14 +1325,15 @@ cartão (o número nunca é gravado).
 
 Função do fork ([`cupons-e-parceiros.md`](cupons-e-parceiros.md); protótipo aprovado em 27/10/2026), e entra no MCP na
 mesma versão: **seis ferramentas novas** (com a de etiquetar da .97, a lista vai de 100 a 106). A prova está em
-`tests/unit/mcp-de-implantacao-cupons-e-parceiros.test.ts`, e a CONTAGEM no teste da cobrança. Nenhuma operação nova: o
-cupom é do catálogo comercial (`gerir_planos`), o parceiro e o repasse são da cobrança (`gerir_cobranca`).
+`tests/unit/mcp-de-implantacao-cupons-e-parceiros.test.ts`, e a CONTAGEM no teste da cobrança. Desde a MIA-256 o cupom tem
+operação própria, `gerir_cupons` (até ali era `gerir_planos`: um token que só ajustava plano podia dar desconto); o parceiro e o
+repasse são da cobrança (`gerir_cobranca`).
 
 | ferramenta | o que faz | operação |
 |---|---|---|
 | `plataforma_garantir_parceiro` | cria ou muda pelo CPF ou CNPJ: nome, e-mail do extrato, chave Pix, comissão da mensalidade (% e meses: 6, 12, 24 ou `null` = enquanto pagar) e do setup (%). Mudar a comissão vale só para os clientes novos. A mesma entrada não regrava | `gerir_cobranca` |
 | `plataforma_ver_parceiros` | as comissões, os cupons, quantos clientes, o que pagaram no mês, o que entra no próximo fechamento; com `parceiro_id`, os clientes com a comissão fixada. Documento e Pix mascarados | leitura |
-| `plataforma_garantir_cupom` | cria, muda ou pausa pelo código: desconto em % ou R$ por 1, 3, 6, 12 ou todas as mensalidades, ou dias grátis; desconto no setup; planos (nome ou id); validade; limite; parceiro; comissão própria; `ativo`. Devolve o link que o parceiro divulga | `gerir_planos` |
+| `plataforma_garantir_cupom` | cria, muda ou pausa pelo código: desconto em % ou R$ por 1, 3, 6, 12 ou todas as mensalidades, ou dias grátis; desconto no setup; planos (nome ou id); validade; limite; parceiro; comissão própria; `ativo`. Devolve o link que o parceiro divulga | `gerir_cupons` |
 | `plataforma_ver_cupons` | o que dá, o setup, os planos, a validade, os usos, a situação (`ativo`, `pausado`, `vencido`, `esgotado`), o parceiro e o link | leitura |
 | `plataforma_ver_repasses` | o mês (`competencia: "AAAA-MM"`; sem ela, o último fechado), por parceiro: mensalidades e setups separados (pago, imposto, taxa, líquido, comissão), estornos, total, extrato, anexo e o que já foi pago; `situacao` é `aguardando_nota`, `pronto_para_pagar` ou `pago` | leitura |
 | `plataforma_marcar_repasse_pago` | marca o Pix feito por fora, com a data e o autor do token. Sem a nota ou o recibo anexado, recusa. Repetir não muda | `gerir_cobranca` |

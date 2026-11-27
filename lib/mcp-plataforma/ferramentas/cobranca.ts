@@ -194,14 +194,14 @@ const PLANO_PEDIDO = z.object({
   intervalo: z
     .enum(["mes", "ano"])
     .optional()
-    .describe('"mes" (padrão) ou "ano". Não muda depois que alguém assina.'),
+    .describe('"mes" (padrão na criação) ou "ano". Não muda depois que alguém assina.'),
   teste_dias: z
     .number()
     .int()
     .min(0)
     .max(90)
     .optional()
-    .describe("Dias de teste grátis (0 a 90; padrão 14; 0 = entrada paga)."),
+    .describe("Dias de teste grátis (0 a 90; 0 = entrada paga). Na criação, ausente = 14; no plano que existe, ausente mantém o gravado."),
   pessoas: z
     .number()
     .int()
@@ -248,7 +248,7 @@ const PLANO_PEDIDO = z.object({
     .nullable()
     .optional()
     .describe(
-      "Preço de cada e-mail de marketing aceito pela Amazon, em REAIS (ex.: 0.03). null ou ausente = o padrão do sistema (R$ 0,02). " +
+      "Preço de cada e-mail de marketing aceito pela Amazon, em REAIS (ex.: 0.03). null = o padrão do sistema (R$ 0,02); ausente na criação também. " +
         "Vale para as empresas do plano sem preço definido à mão (plataforma_definir_preco vence). Não muda depois que alguém assina.",
     ),
   frase: z
@@ -263,7 +263,7 @@ const PLANO_PEDIDO = z.object({
     .boolean()
     .optional()
     .describe(
-      "true (padrão): aparece na página de preços e no cadastro. false: plano escondido, só a Time atribui.",
+      "true (padrão na criação): aparece na página de preços e no cadastro. false: plano escondido, só a Time atribui.",
     ),
   padrao_no_cadastro: z
     .boolean()
@@ -337,9 +337,13 @@ export const FERRAMENTAS_DE_COBRANCA: readonly FerramentaDePlataforma[] = [
       "Garante os PLANOS pelo nome: preço (em reais), intervalo, dias de teste, pessoas, números, teto de IA (em dólar, só a plataforma vê), módulos " +
       "(disparador, email_marketing, crm_b2b), preço do Broadcast, preço por e-mail (preco_email, desde a .95; ausente = o padrão de R$ 0,02), " +
       "frase e selo do cartão, oferecido ou escondido, e qual é o do cadastro. " +
+      "CAMPO AUSENTE: no plano que JÁ EXISTE, o que não vier no pedido fica como está (esquecer `numeros` não tira o limite, esquecer `teste_dias` não volta a 14); " +
+      "o padrão de cada campo só vale na CRIAÇÃO. Para tirar um limite, mande null. Só `nome` e `preco` são obrigatórios. " +
+      "Toda mudança fica na auditoria com o antes e o depois. " +
       "Rodar de novo não duplica. Plano assinado não muda de preço nem perde módulo (nem muda o preço do Broadcast ou o por e-mail): a resposta manda arquivar e criar outro. " +
       "Ligar um módulo num plano vale na hora para as empresas dele. Aceita `pacotes_de_creditos` (em reais): os pacotes da compra de créditos por Pix; " +
-      "os que não vierem deixam de ser oferecidos. Precisa da cobrança ligada. O QUE NÃO FAZ: não arquiva plano (arquivar é pela aba Planos do painel).",
+      "os que não vierem deixam de ser oferecidos. Precisa da cobrança ligada. O QUE NÃO FAZ: não arquiva plano (arquivar é pela aba Planos do painel), " +
+      "não muda o preço do setup de implantação (é pelo painel) e não mexe em cupom (é plataforma_garantir_cupom, com a operação `gerir_cupons`).",
     inputSchema: {
       planos: z.array(PLANO_PEDIDO).min(1).max(20).describe("Os planos, cada um pelo nome."),
       pacotes_de_creditos: z
