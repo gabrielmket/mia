@@ -1045,6 +1045,27 @@ teto de tempo das outras).
 
 ---
 
+### 30. O observador de risco lê a lista de empresas inteira · [`observador-de-risco.md`](observador-de-risco.md)
+**O que faz.** A rota do upstream `app/api/v1/cron/risk-watcher/route.ts` monta a lista das empresas com negócio
+aberto lendo `crm_leads` página a página (`lerTodasAsPaginas`, ordem `organization_id`, `id`), em vez de um
+`select` sem `range` que parava na linha 1000. Teto acabado vira `logger.error` e `organizations_truncado: true`.
+**Migrations** nenhuma. (A seção 29 está reservada para o aviso da queda, PR #99.)
+
+**Pontos de encaixe** (`FORK MIA (MIA-320)`): só `app/api/v1/cron/risk-watcher/route.ts`. O upstream ainda tem a
+leitura sem página: conflito nesta rota resolvido "pegando o lado dele" traz o defeito de volta.
+
+**Protege.** `tests/unit/risco-lista-de-empresas-le-todas-as-paginas.test.ts` (banco falso com teto de 1000 por
+pedido; a empresa que vem depois da linha 1000 entra na lista).
+
+**Conferir.**
+1. `git grep -n "FORK MIA (MIA-320)" -- app/api/v1/cron/risk-watcher/route.ts`.
+2. `NODE_ENV=test npx vitest run tests/unit/risco-lista-de-empresas-le-todas-as-paginas.test.ts`.
+
+**Riscos.** A lista agora sai na ordem de `organization_id`: com mais de 50 empresas com negócio aberto
+(`ORG_LIMIT`), as mesmas 50 primeiras são observadas em toda passada.
+
+---
+
 ## Tabela final: por função, o documento, as migrations e os testes principais
 
 | # | função | documento | migrations | testes principais |
@@ -1077,6 +1098,7 @@ teto de tempo das outras).
 | 26 | O realtime do sistema com a semente desligada | `realtime-do-sistema.md` | nenhuma | nenhum (conferência pela leitura do tenant) |
 | 27 | O batimento do vigia dos canais | `vigia-dos-canais.md` | 9168 | `vigia-dos-canais-bate-o-ponto.test.ts`, `health-diz-se-o-vigia-dos-canais-passou.test.ts`, `tests/invariants/batimento-dos-crons.test.ts` |
 | 28 | A IA de toda empresa segue a da plataforma | `ia-da-plataforma.md` | 9172 | `tests/invariants/ia-segue-a-plataforma.test.ts`, `modo-suporte-escolhe-a-ia.test.ts`, `health-diz-se-ha-empresa-sem-ia.test.ts`, `mcp-de-implantacao-ia-das-empresas.test.ts` |
+| 30 | O observador de risco lê a lista de empresas inteira | `observador-de-risco.md` | nenhuma | `risco-lista-de-empresas-le-todas-as-paginas.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.
