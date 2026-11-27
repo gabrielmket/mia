@@ -18,15 +18,20 @@ import { expect, test } from "./helpers/test";
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
 import { corpoDaLocalizacao } from "../../lib/messaging/localizacao";
 import { abreConversa, admin, captura, creds, insere, login, registra } from "./qa-l12-comum";
+import { afirmarDonoDoServidor } from "./utils/precondicao";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const CHAVE = `AIzaChaveFalsaDeTesteE2E${`${Date.now()}`.slice(-6)}`;
 
-/** O `admin` da organização de teste tem TOTP; sem ele o login para em /login/mfa. */
+/**
+ * O `dono` (admin da organização de teste e dono da plataforma) tem TOTP; sem ele
+ * o login para em /login/mfa. FORK MIA (MIA-262): a tela Provedores é da
+ * plataforma, então quem grava a chave de mapas aqui é o dono, não o `admin`.
+ */
 async function loginComTotp(page: import("@playwright/test").Page, email: string, senha: string): Promise<void> {
-  const segredo = (JSON.parse(fs.readFileSync(CREDS_PATH, "utf8")) as { admin_totp?: { secret: string } }).admin_totp
+  const segredo = (JSON.parse(fs.readFileSync(CREDS_PATH, "utf8")) as { dono_totp?: { secret: string } }).dono_totp
     ?.secret;
-  if (!segredo) throw new Error("sem admin_totp em .e2e-creds.json");
+  if (!segredo) throw new Error("sem dono_totp em .e2e-creds.json");
 
   await page.goto("/login");
   await page.locator("#email").fill(email);
@@ -58,7 +63,8 @@ test.describe("Mapas em Provedores", () => {
     const c = creds();
     await admin.from("map_provider_credentials").delete().eq("organization_id", c.org_id);
 
-    await loginComTotp(page, c.users.admin!.email, c.password);
+    await afirmarDonoDoServidor(c.users.dono!.email);
+    await loginComTotp(page, c.users.dono!.email, c.password);
     await page.goto("/app/ai/providers");
     const cartao = page.getByTestId("cartao-de-mapas");
     await cartao.scrollIntoViewIfNeeded({ timeout: 60_000 });

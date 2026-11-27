@@ -119,7 +119,9 @@ beforeEach(() => {
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
     org: { orgId: org, role: "admin", name: "Org" },
-    user: { id: "actor", idioma: "pt-BR" },
+    // FORK MIA (MIA-262): revalidar a chave é da plataforma; quem pede aqui é o admin
+    // de plataforma. A recusa aos outros papéis está em ia-so-no-admin.test.ts.
+    user: { id: "actor", idioma: "pt-BR", is_platform_admin: true, platform_admin_scope: "full", support: null },
   } as Awaited<ReturnType<typeof requireRole>>);
   vi.mocked(createAdminClient).mockReturnValue(
     fakeAdmin() as unknown as ReturnType<typeof createAdminClient>,

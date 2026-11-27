@@ -146,8 +146,11 @@ for (const role of ["manager", "admin"]) test(`${role}: destinos conforme papel 
   // Fork MIA: uso e custo de IA são da PLATAFORMA (lib/ai/custo-e-da-plataforma.ts).
   // Gestor e admin do cliente cairiam em /403 na tela de uso, então o aviso de
   // orçamento chega a eles como orientação, sem botão — e a URL continua fechada.
-  await expect(row(page, "Orçamento para revisar").getByRole("link")).toHaveCount(0);
-  await expect(row(page, "Orçamento para revisar")).toContainText("Peça a quem administra");
+  // FORK MIA (MIA-262): na leitura, o aviso de orçamento chega ao cliente com o
+  // título do plano (lib/ai/aviso-de-orcamento-ao-cliente.ts), não o gravado.
+  await expect(row(page, "Orçamento para revisar")).toHaveCount(0);
+  await expect(row(page, "Uso de IA no mês").getByRole("link")).toHaveCount(0);
+  await expect(row(page, "Uso de IA no mês")).toContainText("Peça a quem administra");
   await page.goto("/app/ai/usage");
   await expect(page).not.toHaveURL(/\/app\/ai\/usage/);
   await central(page); await expect(row(page, "Conexão para revisar")).toBeVisible();
