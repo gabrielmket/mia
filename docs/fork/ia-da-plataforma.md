@@ -207,7 +207,12 @@ da sessão e do `prepared`/`completed`, e continua gravado como o upstream grava
   `ai_agent_runs` e `ai_agent_versions` com a sessão do navegador: é a L44, com o Arquiteto na
   [MIA-285](/MIA/issues/MIA-285). Até lá, provedor e modelo das versões continuam no payload do
   editor do agente (o formulário do upstream precisa deles para salvar e publicar), escondidos na tela.
-- A geração paga do onboarding (`?provar=1` de `/system/instalacao`, `setup-ai`): [MIA-284](/MIA/issues/MIA-284).
+- A geração paga do onboarding (`?provar=1` de `/system/instalacao`, `setup-ai`) é da
+  [MIA-284](/MIA/issues/MIA-284): só quem configura a chave (`podeConfigurarChaveDeIa`) dispara a prova,
+  e só esse recebe o retrato inteiro. Desde a .119, quem pede `?provar=1` sem o portão recebe o mesmo
+  retrato escondido do pedido sem `provar` (`retratoAoCliente(retrato, false)`, em
+  `lib/instalacao/retrato-ao-cliente.ts`): sem `prova` e sem provedor, modelo e chave. Cerca:
+  `tests/unit/prova-de-saldo-so-quem-configura-a-chave.test.tsx`.
 - O token de integração em `/api/v1/ai/mapas`: a porta está declarada na tabela de portas de token
   (Spec 33). Pela sessão, mapas pede `escolheIa`.
 - O texto de tokens na tela de Memória (L26): é a unidade do limite que o próprio cliente escolhe.

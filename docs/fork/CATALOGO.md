@@ -1066,14 +1066,17 @@ quem escolheu fica), `lib/ai/ia-da-empresa.test.ts`, `lib/ai/trava-da-ia.test.ts
 `tests/unit/agente-publicado-segue-a-plataforma.test.ts` (a regra e as três cargas com banco de mentira),
 `tests/invariants/agente-publicado-segue-a-plataforma.test.ts` (as três cargas contra o Postgres com `platform_ia`
 preenchido: quem segue recebe o par, a troca propaga, a escolha própria e o `platform_ia` vazio ficam na versão)
-e `app/api/v1/admin/modelo-de-ia/trava-da-visao.test.ts`.
+e `app/api/v1/admin/modelo-de-ia/trava-da-visao.test.ts`. Da MIA-284:
+`tests/unit/prova-de-saldo-so-quem-configura-a-chave.test.tsx` (a prova paga de `/system/instalacao?provar=1`
+só sai para quem configura a chave, e quem pede sem o portão, inclusive a plataforma em suporte, recebe o
+retrato escondido de `retratoAoCliente`, sem `prova` e sem provedor, modelo e chave).
 
 **Conferir.**
 1. `git grep -n "FORK MIA (9172" -- app/api/v1/ai/providers/route.ts app/api/v1/admin/modelo-de-ia/route.ts lib/agent-engine/edge/llm/credentials.ts` (o núcleo vivo).
 2. `git grep -n "MIA-218" -- app/api/v1/health/route.ts app/api/v1/cron/report-da-plataforma/route.ts components/admin/modelo-de-ia/ModeloDeIa.tsx` (o aviso vivo).
 3. O upstream mexeu em `fn_seed_org_llm_defaults` ou criou um "padrão da instalação"? O gatilho `trg_ia_segue_a_plataforma` tem de continuar rodando antes do seed.
 4. O upstream mudou `escolheIa` ou a sessão de suporte? `plataformaEditaEmSuporte` continua exigindo plataforma, `scope = full`, sessão ativa, edição e `agency_id` vazio.
-5. `npx vitest run lib/ai/ia-da-empresa.test.ts lib/ai/trava-da-ia.test.ts app/api/v1/ai/providers/modo-suporte-escolhe-a-ia.test.ts app/api/v1/health/health-diz-se-ha-empresa-sem-ia.test.ts tests/unit/report-da-plataforma-ia-sem-chave.test.ts tests/unit/mcp-de-implantacao-ia-das-empresas.test.ts`.
+5. `npx vitest run lib/ai/ia-da-empresa.test.ts lib/ai/trava-da-ia.test.ts app/api/v1/ai/providers/modo-suporte-escolhe-a-ia.test.ts app/api/v1/health/health-diz-se-ha-empresa-sem-ia.test.ts tests/unit/report-da-plataforma-ia-sem-chave.test.ts tests/unit/mcp-de-implantacao-ia-das-empresas.test.ts tests/unit/prova-de-saldo-so-quem-configura-a-chave.test.tsx`.
 6. O agente publicado segue (MIA-309): `git grep -n "COLUNA_DA_IA_DA_PLATAFORMA\|agenteSegueAPlataforma" -- lib/agent-engine/agent/agent-config.ts` (**os dois pontos existem**: a coluna na lista e a regra no `mapAgentConfigRow`; sem um deles a troca na plataforma não chega ao agente publicado) e `npx vitest run tests/unit/agente-publicado-segue-a-plataforma.test.ts app/api/v1/admin/modelo-de-ia/trava-da-visao.test.ts`. Se o upstream mudou a consulta de algum carregador (`from ai_agents a`) ou passou a ler `v.provider`/`v.model`/`v.credential_id` fora de `mapAgentConfigRow`, o invariante `tests/invariants/agente-publicado-segue-a-plataforma.test.ts` acusa.
 
 **Riscos.** A empresa que virou escolha própria só volta a seguir a plataforma por migration (o botão ficou
@@ -1136,7 +1139,7 @@ número de avisos caído), `app/api/v1/cron/report-da-plataforma/route.test.ts` 
 | 25 | O fuso da organização nos relatórios | `fuso-da-organizacao.md` | 9166 | `fuso-dos-relatorios-uma-regra.test.ts`, `tests/invariants/fuso-invalido-nos-relatorios.test.ts` |
 | 26 | O realtime do sistema com a semente desligada | `realtime-do-sistema.md` | nenhuma | nenhum (conferência pela leitura do tenant) |
 | 27 | O batimento do vigia dos canais | `vigia-dos-canais.md` | 9168 | `vigia-dos-canais-bate-o-ponto.test.ts`, `health-diz-se-o-vigia-dos-canais-passou.test.ts`, `tests/invariants/batimento-dos-crons.test.ts` |
-| 28 | A IA de toda empresa segue a da plataforma | `ia-da-plataforma.md` | 9172 | `tests/invariants/ia-segue-a-plataforma.test.ts`, `modo-suporte-escolhe-a-ia.test.ts`, `health-diz-se-ha-empresa-sem-ia.test.ts`, `mcp-de-implantacao-ia-das-empresas.test.ts`, `ia-so-no-admin.test.ts`, `as-empresas-com-chave-propria-seguem-respondendo.test.ts`, `mcp-do-crm-sem-modelo-ao-cliente.test.ts`, `prospeccao-sem-modelo-ao-cliente.test.ts`, `agente-publicado-segue-a-plataforma.test.ts` (unidade e invariante) |
+| 28 | A IA de toda empresa segue a da plataforma | `ia-da-plataforma.md` | 9172 | `tests/invariants/ia-segue-a-plataforma.test.ts`, `modo-suporte-escolhe-a-ia.test.ts`, `health-diz-se-ha-empresa-sem-ia.test.ts`, `mcp-de-implantacao-ia-das-empresas.test.ts`, `ia-so-no-admin.test.ts`, `as-empresas-com-chave-propria-seguem-respondendo.test.ts`, `mcp-do-crm-sem-modelo-ao-cliente.test.ts`, `prospeccao-sem-modelo-ao-cliente.test.ts`, `agente-publicado-segue-a-plataforma.test.ts` (unidade e invariante), `prova-de-saldo-so-quem-configura-a-chave.test.tsx` |
 | 29 | Aviso da queda do número | `aviso-da-queda.md` | nenhuma | `aviso-da-queda.test.ts`, `mcp-de-implantacao-aviso-da-queda.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua

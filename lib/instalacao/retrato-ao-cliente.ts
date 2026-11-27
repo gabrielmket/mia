@@ -7,7 +7,9 @@
  * Para quem não é `podeConfigurarChaveDeIa`, a inteligência volta só com o que
  * diz se a IA está pronta.
  *
- * A prova paga (`?provar=1`) não passa por aqui: é da MIA-284.
+ * A prova paga (`?provar=1`) não passa por aqui: é da MIA-284. O ramo de
+ * `?provar=1` sem o portão passa (`retratoAoCliente(retrato, false)` na rota):
+ * quem não configura a chave recebe o mesmo retrato escondido, sem `prova`.
  */
 import type { RetratoDaInstalacao } from "@/lib/instalacao/retrato";
 
