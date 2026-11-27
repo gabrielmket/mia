@@ -1434,6 +1434,8 @@ export function AgentForm(props: Props) {
                   disabled={disabled}
                 />
               </div>
+              {/* FORK MIA (MIA-262): os dois freios de gasto são da plataforma (o servidor também trava). */}
+              {podeEscolherIa && (<>
               <div className="space-y-1">
                 <Label htmlFor="token_budget">{t("Volume de texto por atendimento")}</Label>
                 <Input
@@ -1459,6 +1461,7 @@ export function AgentForm(props: Props) {
                   disabled={disabled}
                 />
               </div>
+              </>)}
               <div className="space-y-1">
                 <Label htmlFor="history_message_window">{t("Mensagens anteriores que ele lê")}</Label>
                 <Input
@@ -2067,6 +2070,7 @@ export function AgentForm(props: Props) {
           published={props.published}
           onConfirm={handlePublish}
           isPending={publishing}
+          podeEscolherIa={props.podeEscolherIa === true /* FORK MIA (MIA-262) */}
         />
       ) : null}
     </div>

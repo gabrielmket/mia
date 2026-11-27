@@ -46,7 +46,7 @@ function fmtCost(cents: number | null): string {
   return `US$ ${(cents / 100).toFixed(4)}`;
 }
 
-export function RunsTable({ agentId, active }: Props) {
+export function RunsTable({ agentId, active, podeEscolherIa = true }: Props & { podeEscolherIa?: boolean }) {
   const t = useT();
   const { data, isLoading, error, refetch, isFetching } = useAgentRuns(agentId, {
     enabled: active,
@@ -86,8 +86,9 @@ export function RunsTable({ agentId, active }: Props) {
               <TableHead className="w-[170px]">{t("Início")}</TableHead>
               <TableHead>{t("Status")}</TableHead>
               <TableHead>{t("Tipo")}</TableHead>
-              <TableHead>{t("Tokens (in/out)")}</TableHead>
-              <TableHead>{t("Custo")}</TableHead>
+              {/* FORK MIA (MIA-262): tokens e custo são da plataforma. */}
+              {podeEscolherIa && <TableHead>{t("Tokens (in/out)")}</TableHead>}
+              {podeEscolherIa && <TableHead>{t("Custo")}</TableHead>}
               <TableHead>{t("Latência")}</TableHead>
               <TableHead>{t("Steps")}</TableHead>
               <TableHead className="text-right">{t("Ações")}</TableHead>
@@ -128,13 +129,17 @@ export function RunsTable({ agentId, active }: Props) {
                     <span className="text-muted-foreground">{t("produção")}</span>
                   )}
                 </TableCell>
+                {podeEscolherIa && ( // FORK MIA (MIA-262)
                 <TableCell className="font-mono text-xs max-md:hidden">
                   {(r.tokens_in ?? 0).toLocaleString()} /{" "}
                   {(r.tokens_out ?? 0).toLocaleString()}
                 </TableCell>
+                )}
+                {podeEscolherIa && (
                 <TableCell className="font-mono text-xs max-md:p-0 max-md:before:mr-1 max-md:before:font-sans max-md:before:text-muted-foreground max-md:before:content-[attr(data-rotulo)]" data-rotulo={t("Custo")}>
                   {fmtCost(r.cost_cents)}
                 </TableCell>
+                )}
                 <TableCell className="font-mono text-xs max-md:p-0 max-md:before:mr-1 max-md:before:font-sans max-md:before:text-muted-foreground max-md:before:content-[attr(data-rotulo)]" data-rotulo={t("Latência")}>
                   {fmtLatency(r.latency_ms)}
                 </TableCell>
@@ -158,7 +163,7 @@ export function RunsTable({ agentId, active }: Props) {
         </Table>
       </div>
 
-      <RunDetailDrawer run={selected} open={open} onOpenChange={setOpen} />
+      <RunDetailDrawer run={selected} open={open} onOpenChange={setOpen} podeEscolherIa={podeEscolherIa} />
     </div>
   );
 }

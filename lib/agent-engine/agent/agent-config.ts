@@ -16,6 +16,8 @@
 import type pg from 'pg';
 
 import { lerFraseDoAvisoConfigurada } from '@/lib/escalacao/frase-do-aviso-configurada';
+// FORK MIA (MIA-309): o agente publicado de quem segue a plataforma usa o par dela.
+import { COLUNA_DA_IA_DA_PLATAFORMA, agenteSegueAPlataforma } from '@/lib/ai/agente-segue-a-plataforma';
 
 import {
   lerFechadoEmFeriadoNacional,
@@ -290,6 +292,8 @@ interface Row {
   agent_created_by: string | null;
   voz_enabled: boolean | null;
   voz_quando: string | null;
+  // FORK MIA (MIA-309): `settings.llm` de quem segue a plataforma, senão null.
+  ia_da_plataforma?: unknown;
 }
 
 const SELECT_AGENT_CONFIG_COLUMNS = `a.operation_mode,a.paused_at,a.operation_revision::text,a.id as agent_id,
@@ -329,7 +333,8 @@ const SELECT_AGENT_CONFIG_COLUMNS = `a.operation_mode,a.paused_at,a.operation_re
             v.voz_quando,
             v.trigger_config,
             v.created_by as version_created_by,
-            a.created_by as agent_created_by`;
+            a.created_by as agent_created_by,
+            ${COLUNA_DA_IA_DA_PLATAFORMA}`; // FORK MIA (MIA-309)
 
 /** `config.voz_voice_id` como o turno precisa: string não vazia, ou `null` (= herda). */
 function lerVozDoAgente(bruto: unknown): string | null {
@@ -367,7 +372,9 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
         // O banco moveu o default; estes tres sitios de codigo ficaram para tras e venciam o banco, porque quem corta pelo limiar e o TypeScript.
         0.4;
 
-  return {
+  // FORK MIA (MIA-309): quem segue a plataforma responde no par dela, não no da
+  // versão (lib/ai/agente-segue-a-plataforma.ts). Só troca o par; o resto é da versão.
+  return agenteSegueAPlataforma<PublishedAgentConfig>({
     operationMode: r.operation_mode,
     pausedAt: r.paused_at,
     operationRevision: r.operation_revision,
@@ -461,7 +468,7 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     // Leitura defensiva: jsonb livre. Texto vazio/espaço, número ou objeto ⇒
     // `null` (herda a voz da organização), nunca um id torto indo à ElevenLabs.
     vozVoiceId: lerVozDoAgente(cfg.voz_voice_id),
-  };
+  }, r.ia_da_plataforma);
 }
 
 /** Por que a seleção devolveu este agente (ou nenhum). Vai para o log do turno. */

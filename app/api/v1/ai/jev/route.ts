@@ -89,6 +89,8 @@ import { DEFAULT_SENTIMENT_THRESHOLD } from "@/lib/ai/prompts/sentiment";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { podeVerCusto } from "@/lib/ai/custo-e-da-plataforma";
+import { escolheIa, MENSAGEM_IA_DA_PLATAFORMA } from "@/lib/ai/trava-da-ia";
 import { roleAtLeast } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { logger } from "@/lib/logger";
@@ -353,6 +355,8 @@ export async function GET(): Promise<Response> {
   const requestId = randomUUID();
   const authz = await requireRole("manager", { requestId, resource: "ai_jev" });
   if (!authz.ok) return authz.response;
+  // FORK MIA (MIA-262): o Jev é um decisor de IA, e escolher a IA é da plataforma.
+  if (!escolheIa(authz.user)) return fail("ia_da_plataforma", traduzir(MENSAGEM_IA_DA_PLATAFORMA, authz.user.idioma), 403, { requestId });
   const { org } = authz;
 
   const db = await createClient();
@@ -659,6 +663,8 @@ export async function GET(): Promise<Response> {
       roteador_tem_ia_de_sempre: roteadorTemIaDeSempre,
       numeros: {
         ...numeros,
+        // FORK MIA (MIA-262): o custo do Jev é da plataforma (lib/ai/custo-e-da-plataforma.ts).
+        ...(podeVerCusto(authz.user) ? {} : { custo_cents: null, custo_incompleto: false }),
         irritados: irritadosPercebidos(percebidasRes.data ?? []),
         observacao: doClima,
       },
@@ -724,6 +730,8 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   const authz = await requireRole("admin", { requestId, resource: "ai_jev" });
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
+  // FORK MIA (MIA-262): ligar, desligar e trocar o Jev é escolher a IA.
+  if (!escolheIa(authz.user)) return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403, { requestId });
   const { user, org } = authz;
 
   const parsed = corpoDoPatch.safeParse(await req.json().catch(() => null));

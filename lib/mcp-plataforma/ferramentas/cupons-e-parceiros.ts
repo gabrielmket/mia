@@ -5,7 +5,7 @@
  *
  *   plataforma_garantir_parceiro    `gerir_cobranca`: cria ou muda pelo CPF ou CNPJ
  *   plataforma_ver_parceiros        leitura: comissões, cupons, clientes, a receber
- *   plataforma_garantir_cupom       `gerir_planos`: cria, muda ou pausa pelo código
+ *   plataforma_garantir_cupom       `gerir_cupons` (MIA-256; antes `gerir_planos`): cria, muda ou pausa pelo código
  *   plataforma_ver_cupons           leitura: o que dá, usos, situação, o link
  *   plataforma_ver_repasses         leitura: o mês, por parceiro
  *   plataforma_marcar_repasse_pago  `gerir_cobranca`: o Pix feito por fora
@@ -36,7 +36,8 @@ import { lerPlanosComModulos } from "@/lib/planos-mia/leitura";
 import { recusar } from "../recusa";
 import type { ContextoDaFerramenta, FerramentaDePlataforma } from "../tipos";
 
-const OPERACAO_GERIR_PLANOS = "gerir_planos";
+/** MIA-256: o cupom tem caixinha própria (era `gerir_planos`). */
+const OPERACAO_GERIR_CUPONS = "gerir_cupons";
 const OPERACAO_GERIR_COBRANCA = "gerir_cobranca";
 
 const reais = (cents: number | null) => (cents === null ? null : Math.round(cents) / 100);
@@ -210,7 +211,7 @@ export const FERRAMENTAS_DE_CUPONS_E_PARCEIROS: readonly FerramentaDePlataforma[
       ativo: z.boolean().optional().describe("false pausa."),
     },
     exemplo: { codigo: "JOAO10", beneficio: "pct", valor: 10, meses: 3, setup_tipo: "pct", setup_valor: 20, planos: ["Profissional"] },
-    operacao: OPERACAO_GERIR_PLANOS,
+    operacao: OPERACAO_GERIR_CUPONS,
     handler: async (ctx, args) => {
       await exigirCobrancaLigada(ctx);
       const todos = await lerPlanosComModulos(ctx.admin);

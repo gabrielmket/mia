@@ -8,6 +8,7 @@ import type { AuditAction } from "@/lib/audit/actions";
 import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { podeVerCusto, semCampos } from "@/lib/ai/custo-e-da-plataforma";
 import {
   TETO_DE_CLIENTES_POR_RODADA,
   previaDaAnaliseDoHistoricoSchema,
@@ -146,6 +147,9 @@ async function lerPreviaDaAnalise(
   return { previa: lida.data };
 }
 
+/** FORK MIA (MIA-262): o que a prévia da análise perde para quem não vê custo. */
+const CAMPOS_DO_GASTO_DA_ANALISE = ["estimativa_cents", "gasto_do_mes_cents", "teto_mensal_cents"];
+
 export async function GET(req: NextRequest, { params }: Context): Promise<Response> {
   const requestId = randomUUID();
 
@@ -162,12 +166,13 @@ export async function GET(req: NextRequest, { params }: Context): Promise<Respon
     if (!authz.ok) return authz.response;
     const teto = await tetoDeEscritaDoToken(authz, "channel_sessions", requestId);
     if (teto) return teto;
-    return lerHistorico(authz.supabase, authz.organizationId, (await params).id, requestId);
+    // FORK MIA (MIA-262): o token é da empresa, e o gasto de IA é da plataforma.
+    return lerHistorico(authz.supabase, authz.organizationId, (await params).id, requestId, false);
   }
 
   const auth = await requireRole("admin", { requestId, resource: "channel_sessions", allowPlatformAdmin: "leitura" });
   if (!auth.ok) return auth.response;
-  return lerHistorico(createAdminClient(), auth.org.orgId, (await params).id, requestId);
+  return lerHistorico(createAdminClient(), auth.org.orgId, (await params).id, requestId, podeVerCusto(auth.user));
 }
 
 async function lerHistorico(
@@ -175,6 +180,7 @@ async function lerHistorico(
   organizationId: string,
   id: string,
   requestId: string,
+  veCusto: boolean, // FORK MIA (MIA-262)
 ): Promise<Response> {
   if (!z.uuid().safeParse(id).success) return fail("validation_failed", "Canal inválido.", 422, { requestId });
   const lida = await sessaoOuFalha(db, organizationId, id, requestId);
@@ -226,8 +232,10 @@ async function lerHistorico(
       guardar_historico: sessao.guardarHistorico,
       importacao: data ?? null,
       recuperacao_da_queda: daQueda ?? null,
-      analise,
-      previa_analise: previaAnalise,
+      // FORK MIA (MIA-262): os valores em dólar são da plataforma
+      // (lib/ai/custo-e-da-plataforma.ts); a tela esconde o que chega nulo.
+      analise: veCusto || !analise ? analise : semCampos(analise, ["gasto_cents"]),
+      previa_analise: veCusto || !previaAnalise ? previaAnalise : semCampos(previaAnalise, CAMPOS_DO_GASTO_DA_ANALISE),
     },
     { requestId },
   );

@@ -43,6 +43,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { escolheIa, MENSAGEM_IA_DA_PLATAFORMA } from "@/lib/ai/trava-da-ia";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -60,6 +61,8 @@ export async function PUT(req: NextRequest): Promise<Response> {
   if (!authz.ok) return authz.response;
   const { org, user } = authz;
   const t = (texto: string) => traduzir(texto, user.idioma);
+  // FORK MIA (MIA-262): trocar o provedor do embedding é escolher a IA (e refaz a base inteira).
+  if (!escolheIa(user)) return fail("ia_da_plataforma", t(MENSAGEM_IA_DA_PLATAFORMA), 403, { requestId });
 
   let raw: unknown;
   try {

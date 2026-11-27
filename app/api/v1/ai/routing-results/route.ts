@@ -7,6 +7,7 @@ import { requireRole } from '@/lib/auth/require-role';
 import { roleAtLeast } from '@/lib/auth/types';
 import { extractBearer } from '@/lib/mcp/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { podeVerCusto, semCampos } from '@/lib/ai/custo-e-da-plataforma';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +29,9 @@ interface Linha {
   revisado_em: string | null; agent_id_esperado: string | null; created_at: string;
 }
 
+/** FORK MIA (MIA-262): o que cada caso perde para quem não vê custo. */
+const CAMPOS_SO_DA_PLATAFORMA = ['modelo_jev', 'custo_jev_cents', 'custo_tradicional_cents'];
+
 const quantil = (n: number[], q: number) => n.length ? n[Math.ceil(q * n.length) - 1] ?? null : null;
 
 export async function GET(req: NextRequest): Promise<Response> {
@@ -36,6 +40,8 @@ export async function GET(req: NextRequest): Promise<Response> {
   // do token, nunca da query, e `pode_revisar` é fixo: o token só entra como admin.
   let organizationId: string;
   let podeRevisar: boolean;
+  // FORK MIA (MIA-262): custo e modelo do Jev só para a plataforma; o token é da empresa.
+  let veCusto = false;
   if (extractBearer(req.headers.get('authorization'))) {
     const requestId = randomUUID();
     const authz = await resolveAuthDual(req, {
@@ -51,6 +57,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     if (!authz.ok) return authz.response;
     organizationId = authz.org.orgId;
     podeRevisar = roleAtLeast(authz.org.role, 'admin');
+    veCusto = podeVerCusto(authz.user);
   }
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams));
   if (!parsed.success) return fail('invalid_query', 'Filtros inválidos.', 422, { details: parsed.error.issues });
@@ -112,7 +119,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       custo_tradicional_cents: custoTradicional,
       custo_incompleto: custoJev === null || custoTradicional === null,
     };
-  }).filter((l) => !filtro.modelo || l.modelo_jev === filtro.modelo);
+  }).filter((l) => !filtro.modelo || !veCusto || l.modelo_jev === filtro.modelo) // FORK MIA (MIA-262): sem modelo, sem filtro por ele
+    .map((l) => veCusto ? l : { ...semCampos(l, CAMPOS_SO_DA_PLATAFORMA), custo_incompleto: false }); // FORK MIA (MIA-262)
   const tempos = casos.map((l) => l.tempo_total_ms).sort((a, b) => a - b);
   const pares = casos.filter((l) => l.modo !== 'jev_sob_demanda' && l.concordou_destino !== null);
   const paresIntencao = pares.filter((l) => l.intent_jev !== null && l.intent_tradicional !== null);
@@ -127,8 +135,9 @@ export async function GET(req: NextRequest): Promise<Response> {
       sem_reserva: casos.filter((l) => l.modo === 'jev_sob_demanda' && l.origem === 'jev').length,
       reservas: casos.filter((l) => l.origem === 'reserva').length,
       motivos_reserva: Object.fromEntries(['falha_jev','baixa_confianca','sem_intencao','intencao_invalida'].map((m) => [m, casos.filter((l) => l.motivo_reserva === m).length])),
-      custo_total_cents: custosConhecidos.reduce((s, l) => s + Number(l.custo_jev_cents ?? 0) + Number(l.custo_tradicional_cents ?? 0), 0),
-      custos_incompletos: casos.length - custosConhecidos.length,
+      // FORK MIA (MIA-262): `null` = a tela não mostra o cartão de custo.
+      custo_total_cents: veCusto ? custosConhecidos.reduce((s, l) => s + Number(l.custo_jev_cents ?? 0) + Number(l.custo_tradicional_cents ?? 0), 0) : null,
+      custos_incompletos: veCusto ? casos.length - custosConhecidos.length : 0,
       mediana_ms: quantil(tempos, .5), p95_ms: quantil(tempos, .95),
       comparacoes_destino: pares.length,
       concordancias_destino: pares.filter((l) => l.concordou_destino).length,

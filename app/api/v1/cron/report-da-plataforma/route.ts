@@ -1,10 +1,12 @@
 /**
  * report-da-plataforma — o vigia que fala no grupo INTERNO.
  *
- * Quatro perguntas, uma rodada (e uma quinta, a zero, que não fala no grupo):
+ * Quatro perguntas, uma rodada (e duas antes, que não falam no grupo interno):
  *
  *   0. O backup diário do banco está em dia? (FORK MIA .62 — avisa os
  *      administradores da plataforma por incidente e push, não pelo grupo)
+ *  0b. Algum número de cliente caiu ou voltou? (FORK MIA, MIA-48 — avisa no
+ *      grupo DO CLIENTE, `lib/avisos/aviso-da-queda.ts`)
  *   1. O crédito de IA está acabando? (o que derruba TODOS os clientes de uma vez)
  *   2. Algum número caiu? (o que derruba um — e o de avisos derruba todos)
  *   3. O schema veio junto com o código no último deploy?
@@ -42,6 +44,8 @@ import { autorizaCron } from "@/lib/auth/cron-auth";
 import { avisoDoCreditoDeIa } from "@/lib/ai/custo/aviso-do-credito";
 import { saldoDaPlataformaParaOVigia } from "@/lib/ai/custo/saldo-da-plataforma";
 import { grupoDeReport, reportar } from "@/lib/avisos/report-da-plataforma";
+// FORK MIA (MIA-48): a queda e a volta do número no grupo do CLIENTE.
+import { avisarQuedasEVoltas } from "@/lib/avisos/aviso-da-queda";
 import { vigiarBackup } from "@/lib/backup/aviso-do-backup";
 import { avaliarBackup, leituraDoRpc } from "@/lib/backup/estado-do-backup";
 import { alertaDoSchema, CARIMBO_DO_SCHEMA, TABELA_DO_CARIMBO } from "@/lib/schema/carimbo";
@@ -49,7 +53,14 @@ import { STATUS_SAUDAVEL } from "@/lib/channels/health";
 // FORK MIA (.90): os recados da jornada de assinatura no mesmo grupo.
 import { mandarRecadosDaJornada } from "@/lib/planos-mia/recados";
 // FORK MIA (MIA-218): empresa com o padrão de IA num provedor sem chave.
-import { CHAVE_DO_AVISO_DA_IA, contarEmpresasSemChave, recadoDaIaSemChave } from "@/lib/ai/aviso-da-ia-das-empresas";
+import {
+  CHAVE_DO_AVISO_DA_IA,
+  CHAVE_DO_AVISO_DO_JEV,
+  contarEmpresasSemChave,
+  contarJevSemChave,
+  recadoDaIaSemChave,
+  recadoDoJevSemChave,
+} from "@/lib/ai/aviso-da-ia-das-empresas";
 import { iaDasEmpresas } from "@/lib/ai/ia-da-empresa";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -97,11 +108,21 @@ async function handle(req: NextRequest): Promise<Response> {
     }
   })();
 
+  // ── 0b. A queda e a volta do número no grupo do CLIENTE (FORK MIA, MIA-48) ──
+  //
+  // Também vem antes da saída "sem grupo": o recado vai ao grupo de cada
+  // cliente (o mesmo do aviso da passagem), não ao grupo interno, e não pode
+  // depender de a plataforma ter escolhido um. Não toca as chaves nem o texto
+  // do item 2 abaixo: o report interno segue igual.
+  const avisoDaQueda = await avisarQuedasEVoltas(admin);
+
   // Sem grupo escolhido não há o que fazer — e sair cedo evita gastar as
   // consultas de saldo (que varrem `llm_calls`) numa instalação que não usa
   // este recurso.
   const grupo = await grupoDeReport(admin);
-  if (!grupo) return ok({ enviados: 0, motivo: "sem_grupo_de_report", backup }, { requestId });
+  if (!grupo) {
+    return ok({ enviados: 0, motivo: "sem_grupo_de_report", backup, aviso_da_queda: avisoDaQueda }, { requestId });
+  }
 
   const enviados: string[] = [];
 
@@ -252,6 +273,18 @@ async function handle(req: NextRequest): Promise<Response> {
       });
       if (saiu) enviados.push(CHAVE_DO_AVISO_DA_IA);
     }
+    // FORK MIA (MIA-262): o Jev ligado sem chave validada. A mesma leitura.
+    const jevSemChave = empresas === null ? 0 : contarJevSemChave(empresas);
+    const recadoDoJev = recadoDoJevSemChave(jevSemChave);
+    if (recadoDoJev) {
+      const saiu = await reportar(admin, {
+        chave: CHAVE_DO_AVISO_DO_JEV,
+        horas: UM_DIA,
+        texto: recadoDoJev,
+        detalhe: { empresas_com_jev_sem_chave: jevSemChave },
+      });
+      if (saiu) enviados.push(CHAVE_DO_AVISO_DO_JEV);
+    }
   }
 
   // ── 4. O resumo do dia ────────────────────────────────────────────────────
@@ -349,7 +382,7 @@ async function handle(req: NextRequest): Promise<Response> {
     ...(await mandarRecadosDaJornada(admin, { completo: new Date().getUTCMinutes() % 15 === 0 })),
   );
 
-  return ok({ enviados: enviados.length, chaves: enviados, backup }, { requestId });
+  return ok({ enviados: enviados.length, chaves: enviados, backup, aviso_da_queda: avisoDaQueda }, { requestId });
 }
 
 export const GET = handle;

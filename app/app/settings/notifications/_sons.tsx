@@ -29,7 +29,8 @@ const ROTULO: Record<TipoDeSom, { titulo: string; quando: string }> = {
   },
   pessoa: {
     titulo: "Precisa de uma pessoa",
-    quando: "Quando o assistente passa a conversa para alguém da equipe, ou fica sem saldo no provedor de IA.",
+    // FORK MIA (MIA-262): sem "provedor de IA" (é da plataforma).
+    quando: "Quando o assistente passa a conversa para alguém da equipe, ou quando a IA para.",
   },
 };
 

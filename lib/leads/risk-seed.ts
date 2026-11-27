@@ -1,7 +1,8 @@
 import { protecaoAgendaSupabase } from "@/lib/agenda/protecao-followup";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { buscaEmLotes } from "@/lib/supabase/em-lotes";
+import { buscaEmLotesSemTeto } from "@/lib/leitura/em-lotes-sem-teto";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { idiomaDoAviso, preencher } from "@/lib/i18n/idioma-do-aviso";
 
@@ -66,6 +67,13 @@ export interface EstadoCalculado {
   coldHours: number;
 }
 
+/**
+ * FORK MIA (MIA-293) — teto de páginas de 1000 dos negócios abertos de uma
+ * organização (100 mil). Acima disso a leitura sai cortada e a passada da org
+ * LANÇA, em vez de classificar um recorte.
+ */
+const PAGINAS_DOS_NEGOCIOS = 100;
+
 export interface ResultadoDoSeed {
   gravados: number;
   porBucket: Record<RiskBucket, number>;
@@ -109,13 +117,27 @@ async function coletaEClassifica(
   organizationId: string,
   now: Date,
 ): Promise<{ estados: EstadoCalculado[]; semRelogio: number }> {
-  const { data: leadRows, error: leadErr } = await admin
-    .from("crm_leads")
-    .select("id, stage_id, contact_id, last_activity_at, created_at")
-    .eq("organization_id", organizationId)
-    .eq("status", "open");
-  if (leadErr) throw new Error(`seed de risco: ${leadErr.message}`);
-  const leads = (leadRows ?? []) as LeadRow[];
+  // FORK MIA (MIA-293) — os negócios abertos são lidos INTEIROS, página a
+  // página e em ordem de `id`. Sem isso o PostgREST cortava em 1000 linhas
+  // num recorte que mudava de uma passada para outra, e o observador comparava
+  // recortes diferentes (ver `risk-worker.ts`). Leitura cortada lança: um
+  // seed ou uma passada sobre parte do acervo diria "o resto não existe".
+  const lidos = await lerTodasAsPaginas<LeadRow>(
+    (de, ate, contar) =>
+      admin
+        .from("crm_leads")
+        .select("id, stage_id, contact_id, last_activity_at, created_at", contar ? { count: "exact" } : undefined)
+        .eq("organization_id", organizationId)
+        .eq("status", "open")
+        .order("id", { ascending: true })
+        .range(de, ate),
+    { paginasMaximas: PAGINAS_DOS_NEGOCIOS },
+  );
+  if (lidos.erro) throw new Error(`seed de risco: ${lidos.erro}`);
+  if (lidos.truncado) {
+    throw new Error(`seed de risco: negócios abertos passam de ${lidos.linhas.length}, leitura cortada`);
+  }
+  const leads = lidos.linhas;
 
   const stageIds = [...new Set(leads.map((l) => l.stage_id).filter(Boolean))];
   const janelaPorEstagio = new Map<string, ReturnType<typeof resolveStageWindow>>();
@@ -138,10 +160,19 @@ async function coletaEClassifica(
   if (contactIds.length > 0) {
     // Em lotes: um `.in()` com os contatos de todos os negócios abertos passa
     // do teto de header do Node a partir de ~430 uuids.
-    const { data: jobs, error: jobsErr } = await buscaEmLotes(contactIds, (lote) =>
+    //
+    // FORK MIA (MIA-293) — e cada lote lido até o fim: um contato pode ter
+    // vários follow-ups futuros, então 100 contatos podem passar de 1000
+    // linhas. Cortado, o contato que sobrava fora da página perdia o `em_voo`
+    // num recorte que muda de uma passada para outra, e o bucket dele oscilava.
+    const {
+      data: jobs,
+      error: jobsErr,
+      truncado: jobsTruncado,
+    } = await buscaEmLotesSemTeto<{ contact_id: string }>(contactIds, (lote, contagem) =>
       admin
         .from("cron_jobs")
-        .select("contact_id")
+        .select("contact_id", contagem)
         .eq("organization_id", organizationId)
         .eq("kind", "at")
         .eq("enabled", true)
@@ -149,9 +180,10 @@ async function coletaEClassifica(
         .in("contact_id", lote),
     );
     // Falha aqui NÃO é "sem follow-up": sem este dado todo negócio com retomada
-    // marcada seria gravado como abandono.
+    // marcada seria gravado como abandono. Leitura cortada, pelo mesmo motivo.
     if (jobsErr) throw new Error(`seed de risco (follow-ups): ${jobsErr.message}`);
-    for (const j of jobs as Array<{ contact_id: string }>) {
+    if (jobsTruncado) throw new Error("seed de risco (follow-ups): leitura cortada");
+    for (const j of jobs) {
       followupPorContato.add(j.contact_id);
     }
   }

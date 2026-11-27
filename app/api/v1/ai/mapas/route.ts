@@ -28,6 +28,7 @@ import {
   removerChaveDeMapas,
 } from "@/lib/mapas/credencial";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { escolheIa, MENSAGEM_IA_DA_PLATAFORMA } from "@/lib/ai/trava-da-ia";
 
 const putSchema = z.object({ api_key: chaveDeMapasSchema }).strict();
 
@@ -45,6 +46,16 @@ async function lerEstado(orgId: string, idioma: Idioma, requestId: string): Prom
   } catch {
     return fail("internal_error", traduzir("Não consegui ler a configuração de mapas.", idioma), 500, { requestId });
   }
+}
+
+/**
+ * FORK MIA (MIA-262): a chave do Google de mapas é serviço pago, e segue a
+ * regra da chave de IA: pela sessão, quem a vê, grava e remove é a plataforma
+ * (`escolheIa`). O token de integração segue como estava: a porta dele está
+ * declarada na tabela de portas de token (Spec 33), e tirá-la é outra decisão.
+ */
+function recusaDaPlataforma(idioma: Idioma, requestId: string): Response {
+  return fail("ia_da_plataforma", traduzir(MENSAGEM_IA_DA_PLATAFORMA, idioma), 403, { requestId });
 }
 
 export async function GET(req?: NextRequest): Promise<Response> {
@@ -66,6 +77,7 @@ export async function GET(req?: NextRequest): Promise<Response> {
 
   const authz = await requireRole("manager", { requestId, resource: "ai_maps" });
   if (!authz.ok) return authz.response;
+  if (!escolheIa(authz.user)) return recusaDaPlataforma(authz.user.idioma, requestId); // FORK MIA (MIA-262)
   return lerEstado(authz.org.orgId, authz.user.idioma, requestId);
 }
 
@@ -95,6 +107,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
   } else {
     const authz = await requireRole("admin", { requestId, resource: "ai_maps" });
     if (!authz.ok) return authz.response;
+    if (!escolheIa(authz.user)) return recusaDaPlataforma(authz.user.idioma, requestId); // FORK MIA (MIA-262)
     quem = { idioma: authz.user.idioma, orgId: authz.org.orgId, autor: authz.user.id, apiTokenId: null };
   }
   const t = (texto: string) => traduzir(texto, quem.idioma);
@@ -172,6 +185,7 @@ export async function DELETE(req?: NextRequest): Promise<Response> {
   } else {
     const authz = await requireRole("admin", { requestId, resource: "ai_maps" });
     if (!authz.ok) return authz.response;
+    if (!escolheIa(authz.user)) return recusaDaPlataforma(authz.user.idioma, requestId); // FORK MIA (MIA-262)
     quem = { idioma: authz.user.idioma, orgId: authz.org.orgId, autor: authz.user.id, apiTokenId: null };
   }
 

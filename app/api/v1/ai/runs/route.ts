@@ -16,7 +16,7 @@ import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { fail, ok } from "@/lib/api/wrappers";
 // MIA: o custo em dinheiro é número da plataforma — sai da resposta para quem
 // não é admin de plataforma (ver `lib/ai/custo-e-da-plataforma.ts`).
-import { podeVerCusto, semCusto } from "@/lib/ai/custo-e-da-plataforma";
+import { podeVerCusto, semIaDaPlataforma } from "@/lib/ai/custo-e-da-plataforma";
 import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
 import { PROVEDOR_DO_JEV } from "@/lib/ai/decisao/credencial";
 import { CONFERENCIA_DE_CAMPO, PEDIDOS_DO_CLIENTE, rotuloDaChamadaDoJev } from "@/lib/ai/decisao/tarefas";
@@ -117,7 +117,11 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (!filtros.success) {
     return fail("invalid_query", t("filtros inválidos"), 422, { details: filtros.error.issues });
   }
-  const { purpose, status, provider, limit: limite } = filtros.data;
+  const { purpose, status, limit: limite } = filtros.data;
+  // FORK MIA (MIA-262): o filtro por provedor só para quem vê o provedor; para
+  // os outros, ele seria um jeito de descobrir, por tentativa, qual responde.
+  const veIaDaPlataforma = podeVerCusto(await quemPedeNaRota(authz));
+  const provider = veIaDaPlataforma ? filtros.data.provider : undefined;
 
   const db = authz.supabase;
   let q = db
@@ -207,7 +211,8 @@ export async function GET(req: NextRequest): Promise<Response> {
     // O dinheiro sai da resposta quando quem pede não é da plataforma — a tela
     // já esconde a linha de custo quando ela é nula, então o cliente continua
     // vendo tokens, tempo e erro, que é o que diagnostica o atendimento dele.
-    execucoes: semCusto(execucoes, podeVerCusto(await quemPedeNaRota(authz))),
+    // FORK MIA (MIA-262): provedor, modelo, tokens e o texto cru do provedor também.
+    execucoes: semIaDaPlataforma(execucoes, veIaDaPlataforma),
     resumo: {
       total: execucoes.length,
       erros: erros.length,

@@ -57,7 +57,9 @@ describe("ensaio do onboarding: o que conta como sucesso", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it('status "failed": continua sendo erro, com o motivo à vista', async () => {
+  // FORK MIA (MIA-262): continua sendo erro, mas o motivo cru do motor é da
+  // plataforma; a empresa lê que a IA é configurada pela nossa equipe.
+  it('status "failed": continua sendo erro, sem o motivo cru do motor', async () => {
     ensaiarCom({
       data: {
         status: "failed",
@@ -69,7 +71,8 @@ describe("ensaio do onboarding: o que conta como sucesso", () => {
 
     const alerta = await screen.findByRole("alert");
     expect(alerta.textContent).toContain("Ele não conseguiu responder");
-    expect(alerta.textContent).toContain("chave da empresa de IA sem saldo");
+    expect(alerta.textContent).not.toContain("chave da empresa de IA sem saldo");
+    expect(alerta.textContent).toContain("configurada pela nossa equipe");
     expect(screen.queryByText(RESPOSTA)).toBeNull();
   });
 });

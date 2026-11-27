@@ -1,6 +1,6 @@
 # A IA de toda empresa segue a da plataforma
 
-**Versão:** .117 (MIA-215; núcleo na MIA-217, superfície na MIA-218; desenho na MIA-216).
+**Versão:** .117 (MIA-215; núcleo na MIA-217, superfície na MIA-218; desenho na MIA-216). O agente publicado segue a troca, a trava da visão e o teto de IA pelo MCP: MIA-309.
 
 ## 1. A regra
 
@@ -45,6 +45,44 @@ Três coisas pioravam:
 | O aviso da chave | `AvisoDaChave.tsx` (tela Provedores) | "Usando a chave da MIA. Nenhuma chave precisa ser cadastrada." A chave própria aparece como opção avançada, só para o administrador da plataforma. |
 | O aviso da trava | a tela Provedores, a `/health` (`data.ia`), o relatório interno e o MCP | Avisam quando uma empresa fica com o padrão num provedor sem chave utilizável (seção 5). |
 | O MCP | `plataforma_ver_ia_das_empresas` | Leitura, por empresa (seção 6). Trocar modelo não tem ferramenta. |
+| O agente publicado | a carga da versão (`lib/agent-engine/agent/agent-config.ts`), regra em `lib/ai/agente-segue-a-plataforma.ts` (MIA-309) | Quem segue responde no par da plataforma, mesmo com a versão gravada noutro (abaixo). |
+| A trava da visão | PUT de `/api/v1/admin/modelo-de-ia` (MIA-309) | Recusa com 422 `modelo_sem_visao` o modelo que não enxerga imagem enquanto um agente publicado de quem segue lê foto. |
+
+### O agente publicado segue a troca (MIA-309)
+
+O turno do agente não lê `settings.llm`: lê o par gravado na versão publicada (`provider`, `model`,
+`credential_id`), e a versão publicada é imutável no banco. Sem mais nada, a troca em
+`/admin/modelo-de-ia` chegava a `settings.llm` e não aos agentes já publicados. Desenho na
+[MIA-285](/MIA/issues/MIA-285#document-desenho), seção 3 (opção A; a B, republicar, foi descartada).
+
+A carga da versão traz, numa coluna a mais no fim de `SELECT_AGENT_CONFIG_COLUMNS`, o `settings.llm` da
+empresa quando ela segue a plataforma **e** `platform_ia` tem um par (sem par, o gatilho não mexe em
+`settings.llm` e a versão é a melhor informação). No fim de `mapAgentConfigRow`,
+`agenteSegueAPlataforma` troca:
+
+- `provider` e `model` pelos de `settings.llm`;
+- `credentialId` por `null`: o resolvedor desce a escada de sempre (credencial ativa da empresa naquele
+  provedor, senão a chave da instalação);
+- com o provedor da plataforma diferente do da versão, também `operatorModel` e a reserva de modelo
+  (9368): os dois foram escolhidos ao lado do par antigo. Sem eles, o operador usa o modelo da conversa
+  e não há degrau de reserva.
+
+O resto da versão fica, inclusive o teto por versão (`cost_budget_cents`, `token_budget`). Empresa com
+escolha própria fica com a versão intacta. `settings.llm` sem provedor ou sem modelo não muda nada.
+
+Vale para todo carregador da lista (o do número, o por id do roteador, o da versão exata do teste no
+editor e o da conversa): o teste no editor usa o mesmo modelo do atendimento.
+
+**A trava da visão.** O modelo da plataforma passa a atender agente com foto e ferramentas. O PUT de
+`/admin/modelo-de-ia` já recusava modelo fora do catálogo ou sem ferramentas (`supports_tools`). Desde a
+MIA-309 recusa também, com 422 `modelo_sem_visao`, o modelo que não enxerga imagem (`enxergaImagem`, a
+mesma régua do motor) enquanto houver agente publicado de empresa que segue e opera com
+`multimodal_input` ligado e `image_vision_enabled` não desligado. A leitura dos agentes que falhou
+recusa (500): a ação falha fechada.
+
+**Em 27/11/2026, quando o PR foi aberto:** as 3 versões publicadas das empresas que seguem já estavam no par da
+plataforma, então nada muda para o cliente. A diferença aparece na próxima troca em
+`/admin/modelo-de-ia`.
 
 A migration 9172 também consertou as empresas que existiam: passou a seguir a plataforma quem estava
 no padrão semeado sem chave própria da Anthropic, ou já no par da plataforma sem chave própria
@@ -105,18 +143,82 @@ teto de 100 páginas sem chegar ao fim, devolve `null` ("não sei"), nunca a con
 
 | Ferramenta | O que faz | Tipo |
 |---|---|---|
-| `plataforma_ver_ia_das_empresas` | por empresa: se segue a plataforma ou tem escolha própria, o provedor e o modelo em vigor, e se há chave utilizável (`propria`, `instalacao` ou `null`). Traz também a `contagem` (`contarEmpresas`: só as operantes), os mesmos números do cartão do admin, da `/health` e do relatório interno; a suspensa aparece com `operante: false` e não conta. Nada da chave em si sai. Filtros: `organization_id` (uma empresa) e `so_sem_chave`; as sem chave vêm primeiro | leitura |
+| `plataforma_ver_ia_das_empresas` | por empresa: se segue a plataforma ou tem escolha própria, o provedor e o modelo em vigor, se há chave utilizável (`propria`, `instalacao` ou `null`) e, desde a MIA-262, `jev_sem_chave` (o Jev ligado sem chave validada da origem dele). Desde a MIA-309, `agentes_publicados` e `agentes_fora_do_par` (com a regra da carga: para quem segue, tem de dar zero) e, em `agentes`, a soma das operantes com `fora_do_par_de_quem_segue`; `null` = a leitura dos agentes falhou. Traz também a `contagem` (`contarEmpresas`: só as operantes), os mesmos números do cartão do admin, da `/health` e do relatório interno; a suspensa aparece com `operante: false` e não conta. Nada da chave em si sai. Filtros: `organization_id` (uma empresa) e `so_sem_chave`; as sem chave vêm primeiro | leitura |
 
 **Não há ferramenta de troca.** Trocar modelo é ato de pessoa, com MFA, no painel: em
 `/admin/modelo-de-ia` (todas as que seguem) ou na tela Provedores da empresa, em modo suporte (uma).
 É a mesma doutrina do MCP de agentes.
 
-## 7. O que fica fora
+## 7. O que o cliente vê (MIA-262)
+
+Pedido de 25/11/2026: o cliente deixa de ver e de mexer em provedor, modelo, chave, consumo e custo
+de IA. Tudo isso fica com a plataforma. O levantamento item por item (L01 a L44) é o documento
+`ia-do-cliente` da [MIA-261](/MIA/issues/MIA-261). A regra sai **na resposta da API e na tela**, não
+só no componente, como em `lib/ai/custo-e-da-plataforma.ts`.
+
+**Três portões**, todos em arquivos do fork:
+
+| Portão | Quem passa | Vale para |
+|---|---|---|
+| `podeVerCusto` | admin da plataforma fora de suporte | custo, preço do catálogo, tokens, provedor e modelo de cada execução, erro cru do provedor |
+| `escolheIa` | `podeConfigurarChaveDeIa` ou a plataforma em suporte com edição (não a agência) | Provedores de IA, Jev, modelo do agente, freios de gasto, classificador do roteador, embedding, voz (`model_id`), mapas pela sessão |
+| `podeConfigurarChaveDeIa` | admin da plataforma fora de suporte, sem `support_readonly` | a lista de chaves, o login por assinatura, o retrato da IA em `/system/instalacao` |
+
+**As funções que limpam a resposta** (`lib/ai/custo-e-da-plataforma.ts`): `semIaDaPlataforma`
+(provedor, modelo, tokens, custo e erro cru viram `null`), `semCampos`, `CAMPOS_DO_PRECO`,
+`semCustoNaAuditoria` (as chaves de dólar da IA saem do `metadata` do Audit Log da empresa) e
+`credenciaisSemChave` (a lista vai sem rótulo, final e modelos, para o editor ainda saber se a
+chave da versão vale). Ao lado: `estadoDaChaveAoCliente` (conhecimento), `retratoAoCliente`
+(instalação), `avisoDeOrcamentoAoCliente` (a Central reescreve o aviso de orçamento na leitura,
+inclusive o já gravado), `motivoDeIaAoCliente` (Propostas) e `agentesSemIa` (lista de agentes).
+
+**Tokens também saem.** A regra de 15/09 deixava os tokens visíveis como medidor do pacote. Desde
+a MIA-262 o medidor do cliente é o uso do plano (Configurações › Plano e cobrança), e não tokens.
+
+**O que a empresa vê no lugar** (só frases que já existiam, salvo as marcadas *nova*):
+"Inteligência artificial pronta" (*nova*); "A inteligência dos agentes desta conta é configurada
+pela nossa equipe e ainda não está pronta. Fale com o suporte."; "A IA desta conta está sem chave
+para funcionar. Fale com o suporte."; "O uso de IA do plano acabou" e o corpo do teto do plano;
+"A IA continua respondendo normalmente — isto é o aviso, não a parada." (*nova*, recorte de uma que
+existia); "Não enviei: o uso de IA do plano acabou" (*nova*); "o uso de IA do plano acabou"
+(*nova*); "ou quando a IA para" nos sons (*nova*); o erro do `ai_decide` sem `custo_de_token` (*nova*).
+
+**As empresas com chave própria seguem respondendo.** Nada muda no resolvedor nem nas chaves
+gravadas. `tests/unit/as-empresas-com-chave-propria-seguem-respondendo.test.ts` fixa: o turno usa a
+credencial da empresa; a versão nova salva pelo cliente herda a chave e os freios da publicada; o
+patch do cliente não troca a chave; a lista sem rótulo ainda libera o "Publicar". O Jev delas
+segue ligado. Quando a chave do Jev perde a validação, quem fica sabendo é a plataforma: uma linha
+no relatório interno (`recadoDoJevSemChave`, seção 3b do `cron/report-da-plataforma`) e o
+`jev_sem_chave` do MCP.
+
+**O MCP do CRM e a prospecção (MIA-304).** As três leituras de agente do MCP do CRM
+(`crm_list_ai_agents`, `crm_get_ai_agent_version`, `crm_get_ai_agent_turn`) não pedem nem devolvem
+provedor e modelo. O MCP do CRM é sempre da empresa (token ou conexão do ChatGPT, nunca a plataforma,
+como `TOKEN_NAO_ESCOLHE_IA`), então isso vale para todo papel; o modelo de cada empresa está em
+`plataforma_ver_ia_das_empresas`. As quatro rotas de `/api/v1/prospecting/agents*` respondem por
+`semModeloAoCliente` (`lib/prospecting/sem-modelo-ao-cliente.ts`): o `model_label` sai do resultado,
+da sessão e do `prepared`/`completed`, e continua gravado como o upstream grava. Cercas:
+`tests/unit/mcp-do-crm-sem-modelo-ao-cliente.test.ts` e `tests/unit/prospeccao-sem-modelo-ao-cliente.test.ts`
+(esta também reprova rota nova de `prospecting/agents/` que responda sem o limpador).
+
+**Fora da MIA-262, de propósito:**
+
+- A leitura direta do banco (PostgREST e Realtime) de `llm_calls`, `agent_turn_traces`,
+  `ai_agent_runs` e `ai_agent_versions` com a sessão do navegador: é a L44, com o Arquiteto na
+  [MIA-285](/MIA/issues/MIA-285). Até lá, provedor e modelo das versões continuam no payload do
+  editor do agente (o formulário do upstream precisa deles para salvar e publicar), escondidos na tela.
+- A geração paga do onboarding (`?provar=1` de `/system/instalacao`, `setup-ai`): [MIA-284](/MIA/issues/MIA-284).
+- O token de integração em `/api/v1/ai/mapas`: a porta está declarada na tabela de portas de token
+  (Spec 33). Pela sessão, mapas pede `escolheIa`.
+- O texto de tokens na tela de Memória (L26): é a unidade do limite que o próprio cliente escolhe.
+- O "uso do plano" com números: protótipo na [MIA-259](/MIA/issues/MIA-259).
+
+## 8. O que fica fora
 
 - Um botão "Voltar a seguir a plataforma" no cartão do padrão. Sem ele, a empresa que virou escolha
   própria só volta a seguir por migration. Se o Gabriel quiser, vira proposta, porque muda a tela.
 
-## 8. Como conferir depois de uma fusão
+## 9. Como conferir depois de uma fusão
 
 1. `git grep -n "FORK MIA" -- lib/agent-engine/edge/llm/credentials.ts app/api/v1/ai/providers/route.ts app/api/v1/admin/modelo-de-ia/route.ts`: os pontos do núcleo vivos.
 2. `git grep -n "plataformaEditaEmSuporte" -- lib/ai/trava-da-ia.ts`: o modo suporte continua no `escolheIa`.
@@ -130,3 +232,22 @@ teto de 100 páginas sem chegar ao fim, devolve `null` ("não sei"), nunca a con
    e `tests/unit/mcp-de-implantacao-ia-das-empresas.test.ts`.
 5. O upstream mexeu na `/health` ou no relatório interno? Confira com
    `git grep -n "MIA-218" -- app/api/v1/health/route.ts app/api/v1/cron/report-da-plataforma/route.ts`.
+6. A IA só no admin (MIA-262): `git grep -n "FORK MIA (MIA-262)"` lista cada ponto de encaixe. O
+   upstream criou rota nova em `app/api/v1/ai/` ou campo novo de custo, tokens, provedor ou modelo
+   numa resposta? Ela precisa passar por `semIaDaPlataforma` (ou recusar sem `escolheIa`). Rode
+   `tests/unit/ia-so-no-admin.test.ts`, `tests/unit/as-empresas-com-chave-propria-seguem-respondendo.test.ts`
+   e `app/app/ai/providers/page.test.tsx`.
+7. O MCP do CRM e a prospecção (MIA-304): rode as duas cercas da seção 7. Ferramenta nova de
+   agente no MCP do CRM, ou rota nova em `app/api/v1/prospecting/agents/`, sai sem provedor e modelo.
+8. O agente publicado segue a plataforma (MIA-309): `git grep -n "FORK MIA (MIA-309)" -- lib/agent-engine/agent/agent-config.ts`
+   mostra os pontos (o import, a coluna `ia_da_plataforma` no `Row`, a coluna no fim de
+   `SELECT_AGENT_CONFIG_COLUMNS` e o `agenteSegueAPlataforma` em volta do `return` de `mapAgentConfigRow`).
+   O upstream é quem mais mexe nesse arquivo; na fusão, confira que a coluna continua a ÚLTIMA da lista,
+   que todo carregador novo da lista usa o alias `a` para `ai_agents` e que campo novo de par
+   (provedor, modelo, chave ou outro modelo por papel) entrou também em `ParDaVersao` e na regra.
+9. O teto de IA pelo MCP (MIA-309): o upstream mudou o PATCH de `/api/v1/ai/budget`? A regra mora em
+   `lib/ai/budget/mudanca-do-teto.ts` (`git grep -n "FORK MIA (MIA-309)" -- app/api/v1/ai/budget/route.ts`):
+   leve a mudança para lá, senão a tela e o MCP divergem.
+10. Rode `tests/unit/agente-publicado-segue-a-plataforma.test.ts`,
+   `app/api/v1/admin/modelo-de-ia/trava-da-visao.test.ts`, `tests/unit/api-orcamento-de-ia.test.ts`,
+   `tests/unit/mcp-de-implantacao-teto-de-ia.test.ts` e `tests/unit/mcp-de-implantacao-ia-das-empresas.test.ts`.

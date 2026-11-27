@@ -859,6 +859,17 @@ const DE_CADA_AGENTE: RecursoOpcional[] = [
   },
 ];
 
+/**
+ * FORK MIA (MIA-262): os recursos que são escolha de IA da plataforma. Saem da
+ * lista de quem não escolhe a IA (`escolheIa`), em Configurações › Recursos.
+ */
+export const RECURSOS_DA_IA_DA_PLATAFORMA: ReadonlySet<string> = new Set([
+  "jev",
+  "base_com_google",
+  "mapas",
+  "teto_de_gasto",
+]);
+
 export const RECURSOS_OPCIONAIS: readonly RecursoOpcional[] = [
   ...MODULOS,
   ...DA_INSTALACAO,

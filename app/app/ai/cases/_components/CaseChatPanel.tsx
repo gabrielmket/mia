@@ -257,14 +257,10 @@ export function CaseChatPanel({ caseId }: { caseId: string }) {
           de TODA instalação recém-feita. */}
       {semIa ? (
         <div className="flex flex-col items-start gap-2">
+          {/* FORK MIA (MIA-262): a IA é da plataforma; a tela Provedores dá 403 à empresa. */}
           <p className="text-sm text-muted-foreground">
-            {t(
-              "Nenhum provedor de IA está configurado. Peça a quem administra para configurar em IA › Provedores.",
-            )}
+            {t("A IA desta conta está sem chave para funcionar. Fale com o suporte.")}
           </p>
-          <a className="text-sm text-accent underline underline-offset-2" href="/app/ai/providers">
-            {t("Abrir IA › Provedores")}
-          </a>
         </div>
       ) : null}
 

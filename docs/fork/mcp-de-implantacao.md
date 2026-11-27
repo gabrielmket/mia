@@ -26,6 +26,15 @@ Três regras valem para todas as ferramentas:
 O ator de cada escrita é **quem criou o token**. A auditoria guarda a pessoa, o
 token, a ferramenta e os argumentos (`plataforma.mcp_executado`).
 
+O id do token de plataforma vai sempre na `metadata` (`token_id` na linha
+`plataforma.mcp_executado`, `token_de_plataforma_id` nas linhas de domínio dos planos e
+da cobrança, desde a MIA-256), nunca em `actor_api_token_id`: essa coluna é chave
+estrangeira para o token de CLIENTE (`api_tokens`), e o id de um token de plataforma
+nela derruba o insert da auditoria em silêncio. A cerca está em
+`tests/unit/planos-mia-rastro-e-campo-ausente.test.ts`. Cada chamada grava também
+`last_used_at` e `last_used_ip` do token (o IP é rastro para reconhecer padrão, nunca
+decide nada).
+
 ---
 
 ## 1. Como ligar: o token e o `.mcp.json`
@@ -234,12 +243,12 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | ferramenta | o que devolve | reexecução |
 |---|---|---|
 | `plataforma_listar_clientes` | as organizações da instalação, com busca por nome; desde a .96, `situacao_do_pagamento: "aguardando_primeiro_pagamento"` traz só quem espera o primeiro pagamento, com a forma escolhida, a situação e desde quando | leitura |
-| `plataforma_ver_cliente` | o retrato de um cliente: módulos, números, saldo e, em `configuracao`, a limpeza automática de mídia, o freio do passo "a IA decide", o bloqueio de afirmação clínica e quantos planos de tarefa existem; desde a .96, em `pagamento_inicial`, o passo "Pagamento" do início; desde a 1.118 (MIA-79), em `modulos_opcionais`, cada módulo opcional que se decide por empresa, com o estado escolhido (`herda`, `ligado`, `desligado`), se vale agora (`efetivo`) e se a instalação o tem desligado (`bloqueado_pela_instalacao`) | leitura |
+| `plataforma_ver_cliente` | o retrato de um cliente: módulos, números, saldo e, em `configuracao`, a limpeza automática de mídia, o freio do passo "a IA decide", o bloqueio de afirmação clínica e quantos planos de tarefa existem; desde a .96, em `pagamento_inicial`, o passo "Pagamento" do início; desde a 1.118 (MIA-79), em `modulos_opcionais`, cada módulo opcional que se decide por empresa, com o estado escolhido (`herda`, `ligado`, `desligado`), se vale agora (`efetivo`) e se a instalação o tem desligado (`bloqueado_pela_instalacao`); desde a MIA-48, em `aviso_da_queda`, a chave do aviso da queda do número e os últimos avisos de queda e de volta | leitura |
 | `plataforma_listar_modulos` | os módulos que se vendem separado | leitura |
 | `plataforma_ver_saude` | o estado da instalação, e se a chave que cifra o CPF dos contatos está semeada (só sim ou não; o valor nunca sai) | leitura |
-| `plataforma_ver_consumo_de_ia` | o consumo de IA de um cliente num mês do calendário em Brasília ou nos últimos N dias de Brasília (`dias`, a mesma janela das telas; MIA-44 e MIA-78, [`consumo-de-ia.md`](consumo-de-ia.md)): o total, cada agente, a linha "Sistema" (chamadas sem agente) e a quebra por finalidade, cada uma com chamadas, tokens de entrada e saída, quantos vieram do cache, o custo em centavos de dólar (a régua do teto) e em reais (cotação de cada dia). Desde a MIA-99, `mensagens_cobradas`: as mensagens que a Meta cobrou no período, cada uma ao preço que valia no instante dela (o mês fechado não muda com o reajuste; [`consumo-de-ia.md`](consumo-de-ia.md), seção 9). Os mesmos números da aba Uso do cliente. Desde a MIA-136, a soma dos agentes com o Sistema, e a das finalidades, fecha com o total em R$ e em US$ (o total manda; [`consumo-de-ia.md`](consumo-de-ia.md), seção 10) | leitura |
+| `plataforma_ver_consumo_de_ia` | o consumo de IA de um cliente num mês do calendário em Brasília ou nos últimos N dias de Brasília (`dias`, a mesma janela das telas; MIA-44 e MIA-78, [`consumo-de-ia.md`](consumo-de-ia.md)): o total, cada agente, a linha "Sistema" (chamadas sem agente) e a quebra por finalidade, cada uma com chamadas, tokens de entrada e saída, quantos vieram do cache, o custo em centavos de dólar (a régua do teto) e em reais (cotação de cada dia). Desde a MIA-99, `mensagens_cobradas`: as mensagens que a Meta cobrou no período, cada uma ao preço que valia no instante dela (o mês fechado não muda com o reajuste; [`consumo-de-ia.md`](consumo-de-ia.md), seção 9). Os mesmos números da aba Uso do cliente. Desde a MIA-136, a soma dos agentes com o Sistema, e a das finalidades, fecha com o total em R$ e em US$ (o total manda; [`consumo-de-ia.md`](consumo-de-ia.md), seção 10). Desde a MIA-309, `teto_de_ia`: o teto mensal da empresa em `ai_budgets` (o freio de emergência, diferente do teto do plano), com `teto_usd_cents` (0 = sem teto), `modo` (`off`, `avisar`, `bloquear`), `limiar_pct`, `parada_vale_desde` e `gravado: false` para quem nunca teve teto; `null` = a leitura falhou. Muda com `plataforma_definir_teto_de_ia` | leitura |
 | `plataforma_ver_ranking_de_consumo_de_ia` | o consumo de IA da PLATAFORMA no mesmo período (`mes` em Brasília ou `dias`; MIA-136, [`consumo-de-ia.md`](consumo-de-ia.md), seção 10): as empresas em ordem de custo, sem as de demonstração, a visão da tela geral de uso (`/admin/usage`) no mesmo período e na mesma ordem por custo (o desempate é por chamadas de IA e nome; na tela geral, por mensagens), cada uma lida por `lerConsumoDoPeriodo` (a conta da aba Uso). Cada empresa com posição, chamadas, tokens, cache, US$, R$ e chamadas sem preço; o `total` da plataforma, com o qual a soma das empresas fecha; `limite` corta a lista, não o total | leitura |
-| `plataforma_ver_ia_das_empresas` | a IA de CADA empresa da instalação (MIA-218, [`ia-da-plataforma.md`](ia-da-plataforma.md)): se segue a IA da plataforma (`origem: "plataforma"`, o par de Admin › Modelo de IA) ou tem escolha própria (`"propria"`), o par em vigor (`provedor`, `provedor_nome`, `modelo`) e de onde sai a chave: `propria` (cadastrada e validada), `instalacao` (a da plataforma) ou `null` (nenhuma: a empresa não responde com IA). `contagem` traz quantas OPERANTES seguem, quantas têm escolha própria e quantas estão sem chave, os mesmos números do cartão do admin, da `/health` e do relatório interno (a suspensa aparece com `operante: false` e não conta). Filtros: `so_sem_chave` e `organization_id`; as sem chave vêm primeiro. A chave em si nunca sai. Não há ferramenta de troca: trocar o modelo é no painel, por uma pessoa, com MFA | leitura |
+| `plataforma_ver_ia_das_empresas` | a IA de CADA empresa da instalação (MIA-218, [`ia-da-plataforma.md`](ia-da-plataforma.md)): se segue a IA da plataforma (`origem: "plataforma"`, o par de Admin › Modelo de IA) ou tem escolha própria (`"propria"`), o par em vigor (`provedor`, `provedor_nome`, `modelo`) e de onde sai a chave: `propria` (cadastrada e validada), `instalacao` (a da plataforma) ou `null` (nenhuma: a empresa não responde com IA). `contagem` traz quantas OPERANTES seguem, quantas têm escolha própria e quantas estão sem chave, os mesmos números do cartão do admin, da `/health` e do relatório interno (a suspensa aparece com `operante: false` e não conta). Filtros: `so_sem_chave` e `organization_id`; as sem chave vêm primeiro. A chave em si nunca sai. Desde a MIA-309, por empresa, `agentes_publicados` e `agentes_fora_do_par` (os que respondem num par diferente do em vigor, já com a regra do turno: quem segue a plataforma responde no par dela mesmo com a versão gravada noutro modelo), e `agentes` com a soma das operantes e `fora_do_par_de_quem_segue`, que TEM DE DAR ZERO ([`ia-da-plataforma.md`](ia-da-plataforma.md), seção 3). Não há ferramenta de troca: trocar o modelo é no painel, por uma pessoa, com MFA | leitura |
 | `plataforma_ver_precos_da_meta` | o preço que a Meta cobra por mensagem, por categoria, em centavos de real (MIA-99, [`consumo-de-ia.md`](consumo-de-ia.md), seção 9): o de hoje, as categorias sem preço e o histórico das vigências (`vigente_desde: null` = desde sempre, `vigente_ate: null` = o atual) | leitura |
 | `plataforma_ver_implantacao` | o **checklist**: por área, o que está pronto, o que falta (com a ferramenta) e o que é com uma pessoa (com a tela). Desde a .91, as áreas `primeiros_passos` (onde a empresa está no passo a passo e o número oficial que espera a Time) e `plano_e_cobranca` (assinou ou não, das tabelas de assinatura do upstream), e o `rotulo_do_cliente`: o "o que falta" que a empresa nova vê | leitura |
 | `plataforma_listar_modelos` | os modelos e vocabulários que as outras ferramentas aceitam: modelos de follow-up, pacotes e capacidades do agente, gatilhos e ações de automação, passos do funil, tipos de campo | leitura |
@@ -290,7 +299,7 @@ traz as contagens. Sem `SUPABASE_DB_URL` no app, a recusa ensina o caminho do te
 | ferramenta | o que faz | chave natural | teto por chamada |
 |---|---|---|---|
 | `plataforma_configurar_empresa` | nome, razão social, CNPJ, país (desde a .82, trocar o país sem mandar `fuso` leva o fuso sugerido do país, como a tela), fuso, idioma, moeda, modo de venda, retenção de mídia, a limpeza automática de mídia antiga (ligada, apaga sem volta), encarregado e política de privacidade; e, desde a .79, a **meta do mês** (`meta_do_mes`: o faturamento dos ganhos da empresa inteira, em centavos, no mês corrente ou no `mes` pedido), pelo mesmo upsert da tela de Desempenho (`lib/crm/metas/gravar.ts`). É ela que vira a barra do painel "Meta do mês" | a organização; a meta, pelo mês | só os campos que vieram mudam |
-| `plataforma_configurar_atendimento` | modo de distribuição (manual, rodízio ou menor carga; desde a .83 vale para os números SEM regra própria), visibilidade das conversas, devolução para a IA, quanto a IA espera depois de uma resposta pelo celular, o nome de quem fala (atendente ou IA) em negrito na mensagem (desde a .86, também o nome de cada agente), o freio da empresa para o passo "a IA decide" das automações, desde a .81 as duas opções da agenda (atendentes mexem na agenda dos colegas; Google Meet com acesso aberto) e, desde a .86, a devolução à fila da conversa do rodízio sem resposta, o telefone que entra sozinho na ficha sem número e as etiquetas de contato interno | a organização | idem |
+| `plataforma_configurar_atendimento` | modo de distribuição (manual, rodízio ou menor carga; desde a .83 vale para os números SEM regra própria), visibilidade das conversas, devolução para a IA, quanto a IA espera depois de uma resposta pelo celular, o nome de quem fala (atendente ou IA) em negrito na mensagem (desde a .86, também o nome de cada agente), o freio da empresa para o passo "a IA decide" das automações, desde a .81 as duas opções da agenda (atendentes mexem na agenda dos colegas; Google Meet com acesso aberto) e, desde a .86, a devolução à fila da conversa do rodízio sem resposta, o telefone que entra sozinho na ficha sem número e as etiquetas de contato interno; desde a MIA-48, o aviso no grupo do cliente quando um número dele cai e volta (`aviso_da_queda_do_numero`, `aviso-da-queda.md`) | a organização | idem |
 | `plataforma_garantir_funil` | funil, etapas na ordem, passo do agente por etapa, probabilidade, janela de esfriando (`prazo_esperado_horas`, pela régua da tela: 1 a 8760 horas inteiras), cor e, desde a 1.118, o `criterio` da etapa (o texto que o agente lê para mover o card; cor e critério pela operação da tela de etapas), campos personalizados (desde a 1.118 com a marca `ia_pode_ler`, que a ferramenta só grava quando o pedido manda; com obrigatoriedade por etapa; desde a .84, de quem é o campo, `escopo` negócio ou contato, só no funil padrão, e a lista pesquisável `searchable_select` com `aliases` e `allow_new`), motivos de perda e de ganho, vocabulário (desde a .79 também `compromisso` e `compromisso_plural`, como o segmento chama o que a agenda marca: o plural é o título do painel pronto de agenda) | nome do funil; nome da etapa; `key` do campo; rótulo do motivo | 20 etapas |
 | `plataforma_garantir_produtos` | catálogo em lote, com preço em centavos ou em texto (`"R$ 189,90"`); item com problema é recusado com motivo e não derruba os outros | código do produto (sem código, o nome) | 200 produtos |
 | `plataforma_garantir_etiquetas` | etiquetas no vocabulário, com cor e descrição | nome da etiqueta, sem diferenciar maiúscula | 50 etiquetas |
@@ -420,6 +429,23 @@ aquela muda o que UM cliente paga; esta, o custo de TODOS.
 |---|---|---|
 | `plataforma_definir_precos_da_meta` | grava os preços pedidos (`precos: [{ categoria, centavos_brl }]`, só as categorias que a Meta usa hoje) em `platform_precos_meta`, como o PUT da tela; o gatilho da 9165 fecha a vigência atual e abre a nova. Cada categoria volta com `antes` e `resultado`: `mudou` (vale a partir de agora) ou `primeiro_preco` (a categoria nunca teve preço, e este vale desde sempre). Categoria repetida no pedido é recusada. Não apaga preço, não muda o que o cliente paga e não envia nada | o mesmo preço responde `ja_estava` e não escreve |
 
+### O teto de IA de uma empresa · operação `definir_teto_de_ia` (MIA-309)
+
+O teto mensal de `ai_budgets` (do upstream), por empresa, com os modos `off` (só acompanhar), `avisar`
+(aviso na Central ao passar do limiar) e `bloquear` (a IA para de responder no teto). É o freio de
+emergência. O teto do PLANO (`cobranca_planos.teto_ia_usd_cents`, nosso) é outro: comercial, e só
+para a chamada com a chave da instalação. Os dois valem.
+
+Até a MIA-309 ninguém gravava este teto: o PATCH de `/api/v1/ai/budget` pede um membro da empresa
+(`requireRole`) que também seja admin da plataforma fora de suporte (`podeVerCusto`), e ninguém é as
+duas coisas. A regra do PATCH saiu para `decidirMudancaDoTeto` (`lib/ai/budget/mudanca-do-teto.ts`), e
+a rota e a ferramenta chamam a mesma. Caixinha própria no token, de **dinheiro**: decide quanto a
+plataforma gasta com a IA de um cliente e se essa IA para. Marque só no token do Gabriel.
+
+| ferramenta | o que faz | reexecução |
+|---|---|---|
+| `plataforma_definir_teto_de_ia` | grava o teto em centavos de dólar (`teto_usd_cents`), o `modo` e o limiar do aviso (`limiar_pct`, de 50 a 99); manda só o que muda. As regras da tela: avisar ou bloquear pedem teto de pelo menos US$ 1,00; de `off` não se vai direto para `bloquear` (a recusa ensina a chamar `avisar` antes); armar `bloquear` vale 72 horas depois (`comecar_agora: true` renuncia à carência); voltar de `bloquear` zera a data e fecha os avisos de orçamento abertos na Central (não o do plano). Auditoria com o código da rota (`ai.budget_limit_changed`, `…_enforcement_armed`, `…_enforcement_disarmed`), o antes e o depois dos três campos e `via: "mcp_plataforma"`. Na empresa de demonstração grava igual (nada sai para fora), e o aviso diz que `bloquear` pode calar a IA no meio de uma demonstração. A leitura está em `plataforma_ver_consumo_de_ia` (`teto_de_ia`) | o mesmo estado responde `ja_estava` sem gravar nem auditar |
+
 ### O disparo de e-mail marketing (.89)
 
 Função do fork, e entra no MCP na mesma versão. Desenho e passo a passo da Amazon em
@@ -470,7 +496,7 @@ desligada, as escritas recusam com o caminho para ligar.
 | ferramenta | operação | o que faz | reexecução |
 |---|---|---|---|
 | `plataforma_ver_cobranca` | leitura | a cobrança da instalação: ligada ou não, provedor e modo, se o aviso de pagamento chega, a régua, o que falta para a primeira cobrança, os planos (limites, módulos, preço do Broadcast, preço por e-mail `preco_email` desde a .95 com o `preco_email_padrao`, conversas estimadas, quantas empresas assinam), as empresas por situação, os pacotes de crédito e o modo do cadastro. A chave nunca sai | leitura |
-| `plataforma_garantir_planos` | `gerir_planos` | os planos pelo nome (preço, intervalo, teste, pessoas, números, teto de IA, módulos, preço do Broadcast, preço por e-mail `preco_email` desde a .95, frase e selo, oferecido ou escondido, o do cadastro) e os `pacotes_de_creditos`. Plano assinado não muda de preço nem perde módulo (nem muda o preço do Broadcast ou o por e-mail): a resposta manda arquivar e criar outro | pelo nome; o igual volta em `sem_mudanca` |
+| `plataforma_garantir_planos` | `gerir_planos` | os planos pelo nome (preço, intervalo, teste, pessoas, números, teto de IA, módulos, preço do Broadcast, preço por e-mail `preco_email` desde a .95, frase e selo, oferecido ou escondido, o do cadastro) e os `pacotes_de_creditos`. Plano assinado não muda de preço nem perde módulo (nem muda o preço do Broadcast ou o por e-mail): a resposta manda arquivar e criar outro. **Campo ausente** (MIA-256): no plano que já existe, fica como está (esquecer `numeros` não tira o limite, esquecer `teste_dias` não volta a 14); o padrão só vale na criação; para tirar um limite, `null`. Não arquiva plano, não muda o preço do setup e não mexe em cupom | pelo nome; o igual volta em `sem_mudanca` |
 | `plataforma_listar_assinaturas` | leitura | as empresas por situação, com plano, agendado, origem, fim do teste, o próximo aviso da régua, a suspensão prevista, o link em aberto e os passos feitos; filtro `so_cadastro_proprio` | leitura |
 | `plataforma_ver_assinatura` | leitura | uma empresa: plano, situação, datas, a régua ponto a ponto, quem administra (e-mail mascarado), os passos e os módulos com a origem; desde a .95, `precos`: o da mensagem do Broadcast e o por e-mail que valem, em reais, cada um com a origem (`definido_a_mao`, `plano` ou `padrao`) e o definido à mão; desde a MIA-168, `lead_na_time`: o negócio do cadastro no funil MIA - SDR da Time, os momentos (cadastro concluído, teste começou, pagamento confirmado com o valor em BRL) e o erro (`sem_fonte`, `fonte_inexistente`, `recusado`, `falhou`, `sem_etapa:<nome>`), com `configurado` dizendo se `CADASTRO_FONTE_DO_CRM` está no ambiente | leitura |
 | `plataforma_atribuir_plano` | `gerir_cobranca` | atribui ou troca o plano como o dono no card Cobrança: a isenta passa a pagar em teste; no teste a troca vale na hora, depois fica para a renovação (plano negociado não paga diferença). Aceita plano escondido | o mesmo plano responde `mudou: false` |
@@ -479,10 +505,26 @@ desligada, as escritas recusam com o caminho para ligar.
 | `plataforma_listar_pedidos_de_cadastro` | leitura | os pedidos esperando aprovação: empresa, quem pediu (mascarado), plano escolhido e o que a empresa faz; desde a MIA-168, o `lead_na_time` de cada pedido e `cadastros_na_time` (a variável configurada ou não, e os últimos cadastros cujo lead falhou, só com ids, datas e o erro) | leitura |
 | `plataforma_decidir_pedido_de_cadastro` | `decidir_cadastro` | aprova (a empresa nasce no plano escolhido, pelo mesmo caminho do cadastro) ou recusa com o `motivo`, que vai por e-mail a quem pediu | o pedido decidido devolve a decisão anterior |
 
-As três caixinhas novas do token, e o raio de cada uma: `gerir_planos` mexe no preço e nos
-módulos de TODO cliente novo (um plano de R$ 5 como padrão do cadastro), `gerir_cobranca`
+As caixinhas do token para a cobrança, e o raio de cada uma: `gerir_planos` mexe no preço e nos
+módulos de TODO cliente novo (um plano de R$ 5 como padrão do cadastro) e nos pacotes de
+crédito, `gerir_cupons` (desde a MIA-256; antes o cupom vinha junto de `gerir_planos`) dá
+desconto a qualquer cliente novo (um cupom de 100% sem limite), `gerir_cobranca`
 isenta ou troca o plano de qualquer empresa, e `decidir_cadastro` deixa entrar quem a Time
 não conferiu, gastando IA no teste. Marque só no token de quem cuida da cobrança.
+
+**O rastro de cada mudança de plano** (MIA-256). Criar e editar plano, pelo MCP ou pelo
+painel, grava na auditoria quem, quando, `metadata.antes` e `metadata.depois`, só com os
+campos que mudaram (na criação, `antes` é nulo). As linhas:
+
+| ação | tabela | quem grava |
+|---|---|---|
+| `cobranca.plano_salvo` | `cobranca_planos` (preço, intervalo, teste, limites, teto, oferecido, o do cadastro) | `plataforma_garantir_planos` e a aba Planos (`POST`/`PATCH /api/v1/admin/cobranca/planos`) |
+| `planos_mia.planos_garantidos` | `mia_plano_modulos` (módulos, preço do Broadcast e por e-mail, frase, selo) | `plataforma_garantir_planos` e a página dos módulos dos planos (`PUT /api/v1/admin/planos-mia/[id]`) |
+| `planos_mia.pacotes_garantidos` | `mia_pacotes_de_creditos` (os ativos e os desativados) | `plataforma_garantir_planos` |
+| `setup.preco_do_plano` | `mia_plano_setup` (antes e depois do preço) | só o painel (`PUT /api/v1/admin/planos-mia/[id]/setup`): o MCP não mexe no setup |
+
+A comparação é `lib/planos-mia/rastro.ts`; a prova, `tests/unit/planos-mia-rastro-e-campo-ausente.test.ts`
+(MCP) e `tests/unit/planos-mia-rastro-no-painel.test.ts` (painel).
 
 Três ferramentas de antes crescem: `plataforma_ver_cliente` devolve `cobranca` (plano,
 situação, datas) e `modulos_com_origem` (pelo plano, pela Time); `plataforma_criar_cliente`
@@ -982,9 +1024,9 @@ modelo antigo, reverter, cada um com o controle da plataforma, e o esquema).
 
 | Do upstream (MCP da empresa) | O que faz | No MCP de plataforma | Conclusão |
 |---|---|---|---|
-| `crm_list_ai_agents` | lista os assistentes com a versão publicada (modelo, voz), o rascunho e o número | `plataforma_ver_agentes` (mais: situação no ar, o que falta para publicar, pacotes, funis, horário da IA) | conviver; nada a trazer |
+| `crm_list_ai_agents` | lista os assistentes com a versão publicada (voz), o rascunho e o número | `plataforma_ver_agentes` (mais: situação no ar, o que falta para publicar, pacotes, funis, horário da IA) | conviver; nada a trazer |
 | `crm_get_ai_agent_version` | as instruções inteiras e as configurações de uma versão (publicada, rascunho ou por número) | `plataforma_ver_agentes` com `agente` (prompt e configuração da versão vigente) | conviver. O nosso não lê versão antiga por número; a implantação não precisou até hoje |
-| `crm_get_ai_agent_turn` | por que o assistente respondeu assim numa conversa: a versão que respondeu, o modelo, as ferramentas chamadas, o turno abortado e o motivo | não tem | falta (lista abaixo) |
+| `crm_get_ai_agent_turn` | por que o assistente respondeu assim numa conversa: a versão que respondeu, as ferramentas chamadas, o turno abortado e o motivo | não tem | falta (lista abaixo) |
 | `crm_save_ai_agent_draft` | rascunho por troca exata, anexar ao fim ou texto inteiro, em 1 a 5 assistentes, e as configurações (voz, ferramentas, passar para pessoa, dividir mensagens, ver imagens) | `plataforma_garantir_agente` (rascunho com o pedido inteiro, idempotente) | conviver. **No fork o esquema não tem `provedor` nem `modelo`** (MIA-115): o ChatGPT não promete uma troca que a trava ignoraria, e quem manda recebe a recusa do esquema (`.strict()`) |
 | `crm_test_ai_agent_version` | simula uma mensagem contra uma versão; nada é enviado, gasta crédito de IA | não tem | falta (lista abaixo) |
 | `crm_publish_ai_agent_version` | publica uma versão, com as checagens da tela | `plataforma_publicar_agente` (lista todas as pendências e quem resolve cada uma) | conviver |
@@ -1002,9 +1044,9 @@ Cuidados para quem implanta, agora que o dono também edita:
 - **Ferramenta solta.** `ferramentas_adicionar` do dono não passa pelos pacotes: ele pode dar
   uma capacidade avulsa (as do administrador a ferramenta recusa). Uma
   `plataforma_garantir_agente` com `pacotes` monta a lista de novo pelos pacotes.
-- **O dono vê o modelo.** `crm_list_ai_agents` e `crm_get_ai_agent_version` devolvem o modelo (e
-  o provedor) da versão ao admin da empresa, que a tela do cliente esconde desde a .56. A
-  MIA-115 não mexeu (não mexe no que o cliente vê); fica como decisão para o Gabriel.
+- **O dono não vê o modelo.** Desde a MIA-304, `crm_list_ai_agents`, `crm_get_ai_agent_version`
+  e `crm_get_ai_agent_turn` não devolvem modelo nem provedor (a IA é da plataforma,
+  `docs/fork/ia-da-plataforma.md`, seção 7). Cerca: `tests/unit/mcp-do-crm-sem-modelo-ao-cliente.test.ts`.
 - **O teste gasta a IA da plataforma.** `crm_test_ai_agent_version` é o mesmo botão "Testar" da
   tela e roda com a IA da plataforma, como pela tela. Não é envio a ninguém.
 
@@ -1300,14 +1342,15 @@ cartão (o número nunca é gravado).
 
 Função do fork ([`cupons-e-parceiros.md`](cupons-e-parceiros.md); protótipo aprovado em 27/10/2026), e entra no MCP na
 mesma versão: **seis ferramentas novas** (com a de etiquetar da .97, a lista vai de 100 a 106). A prova está em
-`tests/unit/mcp-de-implantacao-cupons-e-parceiros.test.ts`, e a CONTAGEM no teste da cobrança. Nenhuma operação nova: o
-cupom é do catálogo comercial (`gerir_planos`), o parceiro e o repasse são da cobrança (`gerir_cobranca`).
+`tests/unit/mcp-de-implantacao-cupons-e-parceiros.test.ts`, e a CONTAGEM no teste da cobrança. Desde a MIA-256 o cupom tem
+operação própria, `gerir_cupons` (até ali era `gerir_planos`: um token que só ajustava plano podia dar desconto); o parceiro e o
+repasse são da cobrança (`gerir_cobranca`).
 
 | ferramenta | o que faz | operação |
 |---|---|---|
 | `plataforma_garantir_parceiro` | cria ou muda pelo CPF ou CNPJ: nome, e-mail do extrato, chave Pix, comissão da mensalidade (% e meses: 6, 12, 24 ou `null` = enquanto pagar) e do setup (%). Mudar a comissão vale só para os clientes novos. A mesma entrada não regrava | `gerir_cobranca` |
 | `plataforma_ver_parceiros` | as comissões, os cupons, quantos clientes, o que pagaram no mês, o que entra no próximo fechamento; com `parceiro_id`, os clientes com a comissão fixada. Documento e Pix mascarados | leitura |
-| `plataforma_garantir_cupom` | cria, muda ou pausa pelo código: desconto em % ou R$ por 1, 3, 6, 12 ou todas as mensalidades, ou dias grátis; desconto no setup; planos (nome ou id); validade; limite; parceiro; comissão própria; `ativo`. Devolve o link que o parceiro divulga | `gerir_planos` |
+| `plataforma_garantir_cupom` | cria, muda ou pausa pelo código: desconto em % ou R$ por 1, 3, 6, 12 ou todas as mensalidades, ou dias grátis; desconto no setup; planos (nome ou id); validade; limite; parceiro; comissão própria; `ativo`. Devolve o link que o parceiro divulga | `gerir_cupons` |
 | `plataforma_ver_cupons` | o que dá, o setup, os planos, a validade, os usos, a situação (`ativo`, `pausado`, `vencido`, `esgotado`), o parceiro e o link | leitura |
 | `plataforma_ver_repasses` | o mês (`competencia: "AAAA-MM"`; sem ela, o último fechado), por parceiro: mensalidades e setups separados (pago, imposto, taxa, líquido, comissão), estornos, total, extrato, anexo e o que já foi pago; `situacao` é `aguardando_nota`, `pronto_para_pagar` ou `pago` | leitura |
 | `plataforma_marcar_repasse_pago` | marca o Pix feito por fora, com a data e o autor do token. Sem a nota ou o recibo anexado, recusa. Repetir não muda | `gerir_cobranca` |

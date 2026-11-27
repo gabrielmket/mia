@@ -101,7 +101,7 @@ export async function gravarPrecoDoSetup(
   planoId: string,
   precoCents: number | null,
   ator: string | null,
-): Promise<{ ok: true; mudou: boolean } | { ok: false }> {
+): Promise<{ ok: true; mudou: false } | { ok: true; mudou: true; antes: number | null; depois: number | null } | { ok: false }> {
   const atual = await precoDoSetup(admin, planoId);
   const novo = precoCents && precoCents > 0 ? precoCents : null;
   if ((atual ?? null) === novo) return { ok: true, mudou: false };
@@ -110,7 +110,8 @@ export async function gravarPrecoDoSetup(
       ? await admin.from("mia_plano_setup").delete().eq("plano_id", planoId)
       : await admin.from("mia_plano_setup").upsert({ plano_id: planoId, preco_cents: novo, updated_by: ator }, { onConflict: "plano_id" });
   if (r.error) return { ok: false };
-  return { ok: true, mudou: true };
+  // MIA-256: o antes e o depois, para a auditoria da rota do painel.
+  return { ok: true, mudou: true, antes: atual ?? null, depois: novo };
 }
 
 export type RecusaDoSetup = { ok: false; status: number; code: string; message: string };

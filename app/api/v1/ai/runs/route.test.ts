@@ -26,6 +26,10 @@ import { GET } from "./route";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+// FORK MIA (MIA-262): provedor, modelo e tokens são da plataforma. Os casos da
+// rota leem como o admin dela; o cliente está no bloco do fim do arquivo.
+const quem = vi.hoisted(() => ({ atual: { is_platform_admin: true, platform_admin_scope: "full", support: null } as Record<string, unknown> }));
+vi.mock("@/lib/ai/trava-da-ia-na-rota", () => ({ quemPedeNaRota: vi.fn(async () => quem.atual) }));
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 
@@ -55,6 +59,7 @@ let linhas: ReturnType<typeof linha>[];
 beforeEach(() => {
   filtros = [];
   linhas = [];
+  quem.atual = { is_platform_admin: true, platform_admin_scope: "full", support: null };
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
     user: { id: "u", idioma: "pt-BR" },
@@ -337,5 +342,35 @@ describe("GET /api/v1/ai/runs", () => {
     expect(linhaDaIa.consequencia).toBeNull();
     expect(linhaDaIa.oQueFazer).not.toBeNull();
     expect(linhaDaIa.porQueEsteModelo).toBe(EXPLICACAO_DA_ORIGEM.jev_cobriu);
+  });
+});
+
+describe("FORK MIA (MIA-262): o cliente vê a execução sem a IA da plataforma", () => {
+  it.each([
+    ["o gerente da empresa", { is_platform_admin: false, platform_admin_scope: null, support: null }],
+    ["a plataforma em suporte", { is_platform_admin: true, platform_admin_scope: "full", support: { organization_id: ORG } }],
+  ])("%s: sem provedor, modelo, tokens, custo e erro cru; o status, o tempo e o que fazer ficam", async (_nome, usuario) => {
+    quem.atual = usuario;
+    linhas = [linha({ status: "erro", error_code: "provider_error", error_message: "texto cru", provider: "anthropic" })];
+    const { status, corpo } = await pedir();
+    expect(status).toBe(200);
+    const [e] = corpo.data.execucoes;
+    expect(e).toMatchObject({
+      provider: null,
+      provedorRotulo: null,
+      model: null,
+      input_tokens: null,
+      output_tokens: null,
+      cost_cents: null,
+      error_message: null,
+      status: "erro",
+      error_code: "provider_error",
+    });
+  });
+
+  it("o ?provider= não filtra para quem não vê o provedor (não serve de sonda)", async () => {
+    quem.atual = { is_platform_admin: false, platform_admin_scope: null, support: null };
+    await pedir("?provider=anthropic");
+    expect(filtros.some(([coluna]) => coluna === "provider")).toBe(false);
   });
 });

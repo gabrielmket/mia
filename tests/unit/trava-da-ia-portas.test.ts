@@ -535,12 +535,12 @@ describe("chave, provedores e roteador", () => {
   // dirigi-lo como dono da plataforma, porque é ele quem edita aqui. O que ela
   // provava do cliente — ver o painel e os seletores — vira isto: o cliente VÊ
   // o painel (200, com os pontos), mas sem controle de edição.
-  it("provedores: o cliente vê o painel só de leitura; a plataforma edita", async () => {
+  // FORK MIA (MIA-262): até a .117 o cliente lia o painel só para ver; agora a
+  // tela inteira é da plataforma e o GET recusa.
+  it("provedores: o cliente não lê o painel (403); a plataforma edita", async () => {
     const doCliente = await painelDeProvedores();
-    expect(doCliente.status).toBe(200);
-    const corpoDoCliente = (await doCliente.json()) as { data: { podeEditar: boolean; pontos: unknown[] } };
-    expect(corpoDoCliente.data.pontos.length).toBeGreaterThan(0);
-    expect(corpoDoCliente.data.podeEditar).toBe(false);
+    expect(doCliente.status).toBe(403);
+    expect(((await doCliente.json()) as { error: { code: string } }).error.code).toBe("ia_da_plataforma");
 
     como(PLATAFORMA);
     const daPlataforma = (await (await painelDeProvedores()).json()) as { data: { podeEditar: boolean } };

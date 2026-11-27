@@ -119,7 +119,8 @@ beforeEach(() => {
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
     org: { orgId: org, role: "admin", name: "Org" },
-    user: { id: "actor", idioma: "pt-BR" },
+    // FORK MIA (MIA-262): revalidar a chave de IA é da plataforma.
+    user: { id: "actor", idioma: "pt-BR", is_platform_admin: true, platform_admin_scope: "full", support: null },
   } as Awaited<ReturnType<typeof requireRole>>);
 });
 

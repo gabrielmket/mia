@@ -10,16 +10,19 @@ import { codigoDoEscopo, mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/a
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { ehProvedorSuportado } from "@/lib/ai/pontos/provedores";
-import { travarIaDaVersaoNova } from "@/lib/ai/trava-da-ia";
+import { escolheIa, travarIaDaVersaoNova } from "@/lib/ai/trava-da-ia";
 import { quemPedeNaRota } from "@/lib/ai/trava-da-ia-na-rota";
 const input = z.object({
   channel_id: z.uuid(),
   // Só quem CONVERSA: o Jev tem chave cadastrável, mas escolhido como cérebro
   // do agente todo turno morreria. Antes era qualquer texto, barrado só de
   // raspão (catálogo sem linha e o credential_provider_mismatch da RPC).
-  provider: z.string().min(1).max(80).refine(ehProvedorSuportado),
-  model: z.string().min(1).max(200),
-  credential_id: z.uuid().nullable(),
+  // FORK MIA (MIA-262): opcionais para quem não escolhe a IA — a tela dele
+  // não mostra os campos, e a trava põe a IA da plataforma. Quem escolhe
+  // continua obrigado a mandar os dois (conferido depois da autenticação).
+  provider: z.string().min(1).max(80).refine(ehProvedorSuportado).optional(),
+  model: z.string().min(1).max(200).optional(),
+  credential_id: z.uuid().nullable().optional(),
 });
 // Sessão OU token de integração (Spec 33, R1): o token precisa de `config:write` e
 // de papel admin (`tokenRole`), como o irmão `publish`. A organização sai de
@@ -46,6 +49,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { id } = await ctx.params,
     parsed = input.safeParse(await req.json().catch(() => null));
   if (!z.uuid().safeParse(id).success || !parsed.success)
+    return fail("validation_failed", "Escolha canal, modelo e credencial.", 422, { requestId });
+  const quem = await quemPedeNaRota(auth); // FORK MIA (MIA-262)
+  if (escolheIa(quem) && (!parsed.data.provider || !parsed.data.model))
     return fail("validation_failed", "Escolha canal, modelo e credencial.", 422, { requestId });
   const admin = createAdminClient();
   const { data: agent } = await admin
@@ -85,11 +91,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const travada = await travarIaDaVersaoNova(
     admin,
     // FORK MIA: desde a v1.121 do upstream a rota aceita token (resolveAuthDual).
-    { user: await quemPedeNaRota(auth), orgId, agenteDeReferencia: null },
+    { user: quem, orgId, agenteDeReferencia: null },
     {
-      provider: parsed.data.provider,
-      model: parsed.data.model,
-      credential_id: parsed.data.credential_id,
+      provider: parsed.data.provider ?? "",
+      model: parsed.data.model ?? "",
+      credential_id: parsed.data.credential_id ?? null,
       operator_model: null,
     },
   );

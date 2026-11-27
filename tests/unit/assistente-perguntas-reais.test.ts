@@ -10,15 +10,27 @@
  * Duas exigências de cobertura:
  *   - toda tela principal do app tem pelo menos uma pergunta aqui;
  *   - todo roteiro (tarefa que cruza telas) tem pelo menos uma.
+ *
+ * FORK MIA (.118, MIA-252): no fim, a RÉGUA do assistente (MIA-239), as 30
+ * perguntas fixas com o papel e a tela de cada uma. Aqui entra a parte que
+ * não depende do modelo: o manual certo, a ferramenta que lê o dado e a peça
+ * que decide sozinha (a lista do nunca, o campo faltando).
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
+import type { Role } from "@/lib/auth/types";
+import { normalizar, PRETERITOS_EM_RAM, radical, sinonimosDe, termos } from "@/lib/assistente/busca-da-ajuda";
+import { pareceValidacaoDeCampo } from "@/lib/assistente/chamado";
 import { buscarAjuda, ajudaEmOrdem, telasDoManual, type FonteDaAjuda } from "@/lib/assistente/leituras/ajuda";
 import { MANUAIS } from "@/lib/assistente/manuais";
+import { LISTA_DO_NUNCA, type ItemDoNunca } from "@/lib/assistente/nunca";
 import { ROTEIROS } from "@/lib/assistente/roteiros";
 import { telasParaOPapel } from "@/lib/assistente/telas";
 
-import { telasPrincipais } from "./helpers/telas-do-app";
+import { hrefsDoCatalogo, rotasDoApp, telasPrincipais } from "./helpers/telas-do-app";
 
 interface Pergunta {
   pergunta: string;
@@ -227,6 +239,15 @@ const PERGUNTAS: Pergunta[] = [
   { pergunta: "por que nada sai desta empresa de demonstração", sobre: "/app/settings/tenant", espera: "demonstracao" },
   // FORK MIA (.117): a tela nova do upstream, Follow-up por etapa.
   { pergunta: "como mudo quantos dias o negócio fica parado na etapa antes do follow-up", sobre: "/app/settings/followup-por-etapa", espera: "followup-por-etapa" },
+  // FORK MIA (.118, MIA-252): o Claude escrito errado, o "chat gpt", os leads que chegaram e as vendas por pessoa.
+  { pergunta: "como ligo o clode no crm", sobre: "/app/settings/api-tokens", espera: "roteiro-ligar-claude" },
+  { pergunta: "como conecto o claud", sobre: "/app/settings/api-tokens", espera: "roteiro-ligar-claude" },
+  { pergunta: "da pra usar o chat gpt no sistema?", sobre: "/app/settings/api-tokens", espera: "mcp-e-ia-de-fora" },
+  { pergunta: "da para usar o gpt com o crm", sobre: "/app/settings/api-tokens", espera: "mcp-e-ia-de-fora" },
+  { pergunta: "onde vejo os leads novos", sobre: "/app/kanban", espera: "leads-que-chegaram" },
+  { pergunta: "quantos leads entraram essa semana", sobre: "/app/kanban", espera: "leads-que-chegaram" },
+  { pergunta: "onde vejo as vendas por vendedor", sobre: "/app/relatorios", espera: "vendas-por-vendedor" },
+  { pergunta: "onde vejo o ranking de vendas da equipe", sobre: "/app/relatorios", espera: "vendas-por-vendedor" },
   // FORK MIA (.119): as telas novas do upstream, Operação do dia, Relatórios do dia e Serviços.
   { pergunta: "como vejo quem está aguardando uma pessoa hoje", sobre: "/app/operacao", espera: "operacao-do-dia" },
   { pergunta: "como mudo a hora do relatório diário", sobre: "/app/operacao/relatorios", espera: "relatorios-do-dia" },
@@ -356,5 +377,250 @@ describe("perguntas reais acham a ajuda certa entre as primeiras", () => {
     const ids = new Set(MANUAIS.map((m) => m.id));
     const quebradas = PERGUNTAS.filter((p) => p.espera && !ids.has(p.espera)).map((p) => p.espera);
     expect(quebradas).toEqual([]);
+  });
+});
+
+// ─── A régua do assistente (MIA-239, plano do Arquiteto na MIA-245) ─────────
+
+type AreaDaRegua = "rotina" | "numeros" | "como-fazer" | "onde-fica" | "permissao" | "nunca" | "erro";
+
+interface PerguntaDaRegua {
+  n: number;
+  papel: Role;
+  /** A tela em que a pessoa estava. */
+  em: string;
+  pergunta: string;
+  area: AreaDaRegua;
+  /** Como fazer e onde fica: o manual (qualquer um destes) entre os 3 primeiros. */
+  manual?: readonly string[];
+  /** O manual da lista tem de vir em PRIMEIRO: o assistente responde pelo primeiro. */
+  primeiro?: true;
+  /** Rotina e números: a ferramenta do assistente que lê o dado. */
+  ferramentas?: readonly string[];
+  /** O pedido da lista do nunca. */
+  nunca?: ItemDoNunca["id"];
+  /** O que ainda falta para a pergunta ter resposta sem o modelo, com a tarefa. Entra como pendente. */
+  falta?: string;
+}
+
+/**
+ * As 30 perguntas fixas. Dado fictício. A "resposta certa em uma linha" de cada
+ * uma está no plano (MIA-239); aqui fica o que se confere sem IA.
+ */
+const REGUA: readonly PerguntaDaRegua[] = [
+  // Rotina
+  { n: 1, papel: "agent", em: "/app/inicio", area: "rotina", pergunta: "Como está minha rotina hoje?", ferramentas: ["ver_minha_rotina"] },
+  { n: 2, papel: "manager", em: "/app/inicio", area: "rotina", pergunta: "Por onde eu começo hoje?", ferramentas: ["ver_prioridades"] },
+  { n: 3, papel: "agent", em: "/app/tasks", area: "rotina", pergunta: "Quantas tarefas eu concluí hoje?", ferramentas: ["ver_minha_rotina"], falta: "as tarefas concluídas na leitura da rotina (MIA-244)" },
+  { n: 4, papel: "agent", em: "/app/inbox", area: "rotina", pergunta: "Tenho cliente esperando resposta?", ferramentas: ["ver_minha_rotina"] },
+  // Números, período e funil
+  { n: 5, papel: "manager", em: "/app/inicio", area: "numeros", pergunta: "Quantos leads chegaram hoje?", ferramentas: ["ver_meus_leads"], falta: "o período na leitura dos leads (MIA-244)" },
+  { n: 6, papel: "manager", em: "/app/crm", area: "numeros", pergunta: "Quantos leads entraram no fim de semana no funil Comercial?", ferramentas: ["ver_meus_leads"], falta: "o período e o funil na leitura dos leads (MIA-244)" },
+  { n: 7, papel: "admin", em: "/app/inicio", area: "numeros", pergunta: "Quantos leads novos chegaram na semana passada e de onde vieram?", ferramentas: ["ver_meus_leads"], falta: "o período livre e a origem na leitura dos leads (MIA-244)" },
+  { n: 8, papel: "manager", em: "/app/inicio", area: "numeros", pergunta: "Quanto a equipe vendeu este mês comparado com o mês passado?", ferramentas: ["ver_numeros_da_equipe"] },
+  { n: 9, papel: "agent", em: "/app/inicio", area: "numeros", pergunta: "Qual foi a minha taxa de ganho de 1 a 15 de outubro?", ferramentas: ["ver_minha_performance"] },
+  { n: 10, papel: "manager", em: "/app/crm", area: "numeros", pergunta: "Quantos negócios estão na etapa Proposta do funil Comercial?", falta: "a contagem por etapa, pela ponte de leitura do MCP (PR E, .119)" },
+  { n: 11, papel: "agent", em: "/app/crm", area: "numeros", pergunta: "Quais negócios meus estão em risco?", ferramentas: ["ver_meus_leads"], falta: "o Radar pela sessão na leitura dos leads (MIA-244)" },
+  { n: 12, papel: "agent", em: "/app/inicio", area: "numeros", pergunta: "Estou perto da minha meta do mês?", ferramentas: ["ver_minha_performance"] },
+  { n: 13, papel: "agent", em: "/app/agenda", area: "numeros", pergunta: "Quantos agendamentos eu tenho amanhã?", falta: "a agenda de outro dia, pela ponte de leitura do MCP (PR E, .119)" },
+  { n: 14, papel: "agent", em: "/app/inbox", area: "numeros", pergunta: "Por que a IA não respondeu a Ana Exemplo?", ferramentas: ["ver_por_que_a_ia_nao_respondeu"] },
+  // Como fazer
+  { n: 15, papel: "admin", em: "/app/ai/agents", area: "como-fazer", pergunta: "Como configuro o horário da IA?", manual: ["horario-da-ia"], primeiro: true },
+  { n: 16, papel: "agent", em: "/app/crm", area: "como-fazer", pergunta: "Como marco um negócio como perdido?", manual: ["marcar-perdido"], primeiro: true },
+  { n: 17, papel: "manager", em: "/app/contacts", area: "como-fazer", pergunta: "Como importo a planilha da Lista de Outubro com os contatos?", manual: ["importar-contatos"], primeiro: true },
+  { n: 18, papel: "manager", em: "/app/contacts", area: "como-fazer", pergunta: "Como coloco a etiqueta Lista de Outubro em vários contatos de uma vez?", manual: ["contatos-em-massa"], primeiro: true },
+  { n: 19, papel: "manager", em: "/app/inicio", area: "como-fazer", pergunta: "Como faço a IA chamar de novo quem parou de responder?", manual: ["followup"], primeiro: true },
+  { n: 20, papel: "admin", em: "/app/inicio", area: "como-fazer", pergunta: "Como ligo o cloude no sistema?", manual: ["roteiro-ligar-claude", "mcp-da-mia", "mcp-e-ia-de-fora"], primeiro: true },
+  { n: 21, papel: "admin", em: "/app/inicio", area: "como-fazer", pergunta: "O sistema tem MCP?", manual: ["mcp-da-mia", "mcp-e-ia-de-fora"], primeiro: true },
+  { n: 22, papel: "agent", em: "/app/inbox", area: "como-fazer", pergunta: "Como crio uma resposta rápida?", manual: ["respostas-rapidas"], primeiro: true },
+  // Onde fica
+  { n: 23, papel: "agent", em: "/app/inicio", area: "onde-fica", pergunta: "Onde vejo os leads que chegaram?", manual: ["leads-que-chegaram", "abrir-funil"], primeiro: true },
+  { n: 24, papel: "manager", em: "/app/inicio", area: "onde-fica", pergunta: "Onde vejo quanto cada vendedor vendeu?", manual: ["vendas-por-vendedor", "painel-de-vendas", "relatorios"], primeiro: true },
+  { n: 25, papel: "admin", em: "/app/inicio", area: "onde-fica", pergunta: "Onde acompanho se a IA está vendendo?", manual: ["roteiro-ia-vendendo"], primeiro: true },
+  // Permissão
+  { n: 26, papel: "agent", em: "/app/inicio", area: "permissao", pergunta: "Quanto o Bruno Teste vendeu este mês?", ferramentas: ["ver_numeros_da_equipe", "oferecer_pedir_a_pessoa"] },
+  { n: 27, papel: "agent", em: "/app/inicio", area: "permissao", pergunta: "Como convido a Ana Exemplo para a equipe?", manual: ["convidar-equipe"], primeiro: true },
+  // O "nunca"
+  { n: 28, papel: "manager", em: "/app/ai/agents", area: "nunca", pergunta: "Publica o agente de vendas da Academia Alfa pra mim.", nunca: "publicar", ferramentas: ["mostrar_me_leva_la"] },
+  { n: 29, papel: "agent", em: "/app/inbox", area: "nunca", pergunta: "Manda uma mensagem para a Ana Exemplo no +55 31 900000002 dizendo que a aula mudou para as 19h.", nunca: "mensagem" },
+  // Erro
+  { n: 30, papel: "agent", em: "/app/contacts", area: "erro", pergunta: "Fui salvar o contato e apareceu \"Telefone é obrigatório\". É erro do sistema?", ferramentas: ["preparar_chamado"] },
+];
+
+/** As ferramentas do assistente, pelo nome, lidas da fonte (sem montar o turno). */
+function nomesDasFerramentas(): Set<string> {
+  const fonte = readFileSync(join(process.cwd(), "lib/assistente/ferramentas.ts"), "utf8");
+  return new Set([...fonte.matchAll(/^ {4}([a-z_]+): tool\(/gm)].map((m) => m[1] ?? ""));
+}
+
+const nomeDaRegua = (p: PerguntaDaRegua) => `${p.n}. ${p.pergunta} (${p.papel}, em ${p.em})`;
+
+describe("a régua do assistente: as 30 perguntas, com o papel e a tela", () => {
+  it("são 30, de 1 a 30, cada uma numa tela que existe e com o que conferir", () => {
+    expect(REGUA.map((p) => p.n)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
+    const telas = new Set([...rotasDoApp(), ...hrefsDoCatalogo()]);
+    for (const p of REGUA) {
+      expect(telas.has(p.em), nomeDaRegua(p)).toBe(true);
+      expect(Boolean(p.manual || p.ferramentas || p.nunca || p.falta), nomeDaRegua(p)).toBe(true);
+    }
+  });
+
+  it("todo manual que a régua espera existe", () => {
+    const ids = new Set(MANUAIS.map((m) => m.id));
+    expect(REGUA.flatMap((p) => p.manual ?? []).filter((id) => !ids.has(id))).toEqual([]);
+  });
+
+  it("como fazer e onde fica (15 a 25) não têm nada faltando", () => {
+    const pendentes = REGUA.filter((p) => (p.area === "como-fazer" || p.area === "onde-fica") && p.falta).map(nomeDaRegua);
+    expect(pendentes).toEqual([]);
+  });
+
+  const comManual = REGUA.filter((p) => p.manual && !p.falta);
+  it.each(comManual.map((p) => [nomeDaRegua(p), p] as const))("%s: o manual certo entre os 3 primeiros", (_nome, p) => {
+    const primeiros = ajudaEmOrdem(p.pergunta, p.em, ENTRE_OS_PRIMEIROS, p.papel);
+    const achou = primeiros.some((a) => p.manual?.some((id) => eh(a.item, id)));
+    expect(achou, `vieram: ${primeiros.map((a) => rotulo(a.item)).join(", ")}`).toBe(true);
+  });
+
+  const emPrimeiro = REGUA.filter((p) => p.primeiro && !p.falta);
+  it.each(emPrimeiro.map((p) => [nomeDaRegua(p), p] as const))("%s: o primeiro manual que o turno recebe é o certo", (_nome, p) => {
+    const achados = buscarAjuda({ pergunta: p.pergunta, papel: p.papel, telas: telasParaOPapel({ papel: p.papel }), base: [], caminho: p.em });
+    expect(p.manual, achados.manuais.map((m) => m.id).join(", ")).toContain(achados.manuais[0]?.id);
+  });
+
+  const comFerramenta = REGUA.filter((p) => p.ferramentas && !p.falta);
+  it.each(comFerramenta.map((p) => [nomeDaRegua(p), p] as const))("%s: a ferramenta que lê o dado existe", (_nome, p) => {
+    const nomes = nomesDasFerramentas();
+    for (const f of p.ferramentas ?? []) expect(nomes.has(f), f).toBe(true);
+  });
+
+  for (const p of REGUA.filter((x) => x.falta)) it.todo(`${nomeDaRegua(p)}: falta ${p.falta}`);
+
+  it("27: o atendente acha o convite, ouve que não é com ele e quem pode", () => {
+    const achados = buscarAjuda({ pergunta: REGUA.find((p) => p.n === 27)?.pergunta ?? "", papel: "agent", telas: telasParaOPapel({ papel: "agent" }), base: [], caminho: "/app/inicio" });
+    expect(achados.manuais[0]?.id).toBe("convidar-equipe");
+    expect(achados.manuais[0]?.voce_pode).toBe(false);
+    expect(achados.manuais[0]?.quem_pode).toBe("Administrador");
+  });
+
+  it("28 e 29: publicar o agente e mandar mensagem a cliente estão na lista do nunca, com a tela", () => {
+    for (const p of REGUA.filter((x) => x.nunca)) {
+      const item = LISTA_DO_NUNCA.find((n) => n.id === p.nunca);
+      expect(item, nomeDaRegua(p)).toBeDefined();
+      expect(item?.href.startsWith("/app/"), nomeDaRegua(p)).toBe(true);
+    }
+    expect(LISTA_DO_NUNCA.find((n) => n.id === "publicar")?.href).toBe("/app/ai/agents");
+  });
+
+  it("30: \"Telefone é obrigatório\" é campo faltando, não erro do sistema", () => {
+    expect(pareceValidacaoDeCampo({ mensagem: "Telefone é obrigatório", status: 422 })).toBe(true);
+    expect(pareceValidacaoDeCampo({ mensagem: "Telefone é obrigatório" })).toBe(true);
+  });
+});
+
+describe("K1: o erro de digitação e as expressões que só dizem algo juntas", () => {
+  it("cloude, claud, clode e claude são o mesmo termo; chat gpt é chatgpt", () => {
+    for (const x of ["cloude", "claud", "clode", "Claude"]) expect(termos(`ligar o ${x}`), x).toEqual(termos("ligar o claude"));
+    expect(normalizar("Chat GPT")).toBe("chatgpt");
+    expect(normalizar("chat-gpt")).toBe("chatgpt");
+  });
+
+  it("gpt e chatgpt estão no grupo do Claude e do MCP", () => {
+    const claude = radical(normalizar("claude"));
+    expect(sinonimosDe(radical("gpt"))).toContain(claude);
+    expect(sinonimosDe(radical("chatgpt"))).toContain(radical("mcp"));
+  });
+
+  it("chegaram, entraram e novos, junto de lead, viram o lead que chegou; sozinhos, não", () => {
+    const chegou = termos("leads que chegaram").filter((t) => t !== radical("lead"));
+    expect(chegou).toHaveLength(1);
+    for (const x of ["leads novos", "novos leads", "lead novo", "leads que entraram", "os leads que chegou", "leads chegando"]) {
+      expect(termos(x), x).toContain(chegou[0]);
+      expect(termos(x), x).toContain(radical("lead"));
+    }
+    expect(termos("contratei um vendedor novo")).not.toContain(chegou[0]);
+    expect(termos("novo relatório")).not.toContain(chegou[0]);
+  });
+
+  it("cada vendedor e por vendedor são o mesmo termo, que casa com vendas e ranking", () => {
+    expect(termos("quanto cada vendedor vendeu")).toEqual(expect.arrayContaining(termos("vendas por vendedor").filter((t) => t !== radical("venda"))));
+    const porVendedor = termos("cada vendedor")[0] ?? "";
+    expect(termos("por vendedores")).toEqual([porVendedor]);
+    expect(sinonimosDe(porVendedor)).toEqual(expect.arrayContaining([radical("ranking"), radical("venda")]));
+    // "vendedor" sozinho continua sendo a pessoa da equipe.
+    expect(termos("contratei um vendedor novo")).toContain(radical("vendedor"));
+  });
+});
+
+describe("K2: no empate, vem antes o que a pessoa pode fazer", () => {
+  it("\"o sistema tem MCP?\" de um administrador no Início: o MCP da MIA, não o servidor externo", () => {
+    const achados = buscarAjuda({ pergunta: "O sistema tem MCP?", papel: "admin", telas: telasParaOPapel({ papel: "admin" }), base: [], caminho: "/app/inicio" });
+    expect(achados.manuais[0]?.id).not.toBe("servidor-mcp-externo");
+    expect(achados.manuais[0]?.voce_pode).toBe(true);
+    // O externo continua na lista, para a resposta citar o outro sentido.
+    expect(achados.manuais.map((m) => m.id)).toContain("servidor-mcp-externo");
+  });
+
+  it("do atendente: o que outro papel da empresa faz vem antes do que só o dono da instalação faz", () => {
+    const achados = buscarAjuda({ pergunta: "O sistema tem MCP?", papel: "agent", telas: telasParaOPapel({ papel: "agent" }), base: [], caminho: "/app/inicio" });
+    expect(achados.manuais[0]?.id).not.toBe("servidor-mcp-externo");
+    expect(achados.manuais[0]?.quem_pode).toBe("Administrador");
+  });
+
+  it("na tela do servidor externo, com \"aqui\", a ordem não muda: o manual da tela primeiro", () => {
+    const achados = buscarAjuda({ pergunta: "como eu uso o mcp aqui", papel: "admin", telas: telasParaOPapel({ papel: "admin" }), base: [], caminho: "/app/settings/servidor-mcp-externo" });
+    expect(achados.manuais[0]?.id).toBe("servidor-mcp-externo");
+  });
+
+  it("o desempate não passa à frente o manual que casa melhor: o atendente ouve o do horário da IA", () => {
+    const achados = buscarAjuda({ pergunta: "Como configuro o horário da IA?", papel: "agent", telas: telasParaOPapel({ papel: "agent" }), base: [] });
+    expect(achados.manuais[0]?.id).toBe("horario-da-ia");
+    expect(achados.manuais[0]?.voce_pode).toBe(false);
+  });
+});
+
+/** Todas as palavras que os manuais e roteiros usam, já normalizadas. */
+function vocabularioDosManuais(): Set<string> {
+  const palavras = new Set<string>();
+  for (const m of [...MANUAIS, ...ROTEIROS]) {
+    const texto = [m.titulo, ...m.palavras, ...m.passos, m.observacao ?? ""].join(" ");
+    for (const p of normalizar(texto).split(/[^a-z0-9]+/)) if (p.length >= 3) palavras.add(p);
+  }
+  return palavras;
+}
+
+describe("K3: o pretérito em \"-ram\" não estraga o presente dos verbos em \"-ar\"", () => {
+  it("esperam, preparam, separam, disparam e declaram ficam no radical de espera, prepara, separa, dispara e declara", () => {
+    for (const [presente, base] of [
+      ["esperam", "espera"],
+      ["preparam", "prepara"],
+      ["separam", "separa"],
+      ["disparam", "dispara"],
+      ["declaram", "declara"],
+      ["comparam", "compara"],
+    ] as const) {
+      expect(termos(presente), presente).toEqual(termos(base));
+      expect(termos(presente), presente).toEqual(termos(base.replace(/a$/, "ar")));
+    }
+    // A frase do manual dos leads que chegaram ainda casa com "espera" e "esperando".
+    expect(termos("ainda esperam alguém assumir")).toEqual(expect.arrayContaining(termos("espera")));
+    expect(termos("esperando")).toEqual(termos("esperam"));
+  });
+
+  it("o pretérito da lista cai no radical do infinitivo: chegaram casa com chegar", () => {
+    for (const p of PRETERITOS_EM_RAM) {
+      expect(radical(p).length, p).toBeGreaterThanOrEqual(3);
+      expect(radical(p), p).toBe(radical(`${p.slice(0, -3)}r`));
+    }
+    expect(termos("as mensagens que chegaram ontem")).toEqual(expect.arrayContaining(termos("chegar")));
+  });
+
+  it("no vocabulário dos manuais, toda palavra em \"-am\" fora da lista fica no radical da forma em \"-a\"", () => {
+    const fora: string[] = [];
+    for (const p of vocabularioDosManuais()) {
+      if (!p.endsWith("am") || PRETERITOS_EM_RAM.has(p)) continue;
+      if (radical(p) !== radical(p.slice(0, -1))) fora.push(`${p}: ${radical(p)} × ${radical(p.slice(0, -1))}`);
+    }
+    expect(fora).toEqual([]);
   });
 });

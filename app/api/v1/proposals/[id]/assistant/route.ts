@@ -8,6 +8,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { env } from "@/lib/env";
 import { llmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/llm/credentials";
 import { LlmBudgetExceededError, LlmProviderUnknownError, LlmModelNotEnabledError } from "@/lib/agent-engine/edge/llm/run-model-call";
+import { motivoDeIaAoCliente } from "@/lib/ai/erro-de-ia-ao-cliente";
 import { getSkillsPool } from "@/lib/ai/skills/db";
 import { gerarMudancas, type EstadoDaProposta } from "@/lib/propostas/assistente";
 import { createClient } from "@/lib/supabase/server";
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
       return ok(
         {
           disponivel: false,
-          motivo: err.message,
+          motivo: motivoDeIaAoCliente(err, authz.user.idioma), // FORK MIA (MIA-262)
           mudancas: [],
           nao_entendido: null,
           revision: proposta.revision,

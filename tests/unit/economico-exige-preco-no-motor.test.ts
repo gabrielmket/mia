@@ -146,7 +146,9 @@ describe("a tela e o seam concordam", () => {
     vi.stubEnv("STAGE_CLASSIFIER_MODEL", "");
     vi.mocked(requireRole).mockResolvedValue({
       ok: true,
-      user: { id: "actor", idioma: "pt-BR" },
+      // FORK MIA (MIA-262): a tela de Provedores é da plataforma; quem pede aqui é o admin
+      // de plataforma. A recusa aos outros papéis está em ia-so-no-admin.test.ts.
+      user: { id: "actor", idioma: "pt-BR", is_platform_admin: true, platform_admin_scope: "full", support: null },
       org: { orgId: ORG, role: "admin" },
     } as unknown as Awaited<ReturnType<typeof requireRole>>);
   });

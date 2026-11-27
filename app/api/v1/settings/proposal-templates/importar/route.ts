@@ -10,6 +10,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { env } from "@/lib/env";
 import { llmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/llm/credentials";
 import { LlmBudgetExceededError, LlmModelNotEnabledError, LlmProviderUnknownError } from "@/lib/agent-engine/edge/llm/run-model-call";
+import { motivoDeIaAoCliente } from "@/lib/ai/erro-de-ia-ao-cliente";
 import { getSkillsPool } from "@/lib/ai/skills/db";
 import { PdfExtractError, extractPdfText } from "@/lib/ai/rag/extractors/pdf";
 import { extractMarkdownText } from "@/lib/ai/rag/extractors/markdown";
@@ -95,7 +96,8 @@ export async function POST(req: NextRequest): Promise<Response> {
     return ok({ disponivel: true, modelo, erros }, { requestId });
   } catch (err) {
     if (err instanceof LlmBudgetExceededError || err instanceof LlmProviderUnknownError || err instanceof LlmModelNotEnabledError) {
-      return ok({ disponivel: false, motivo: err.message }, { requestId });
+      // FORK MIA (MIA-262): sem o id do modelo nem a tela de orçamento.
+      return ok({ disponivel: false, motivo: motivoDeIaAoCliente(err, authz.user.idioma) }, { requestId });
     }
     throw err;
   }

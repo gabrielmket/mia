@@ -9,6 +9,7 @@ import { provedorOferecido } from "@/lib/ai/pontos/provedores-oferecidos";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AgentSetupError } from "@/lib/prospecting/agent-setup";
 import { beginAgentChat, finishAgentChat } from "@/lib/prospecting/agent-session";
+import { semModeloAoCliente } from "@/lib/prospecting/sem-modelo-ao-cliente";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -47,7 +48,8 @@ export async function POST(req: Request) {
           req.signal,
         )
       : null;
-    return ok({ ...data, ...saved }, { requestId, headers: { "Cache-Control": "no-store" } });
+    // FORK MIA (MIA-304): sem o nome do modelo, que é da plataforma.
+    return ok(semModeloAoCliente({ ...data, ...saved }), { requestId, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return fail(
       "prospecting_agent_chat_failed",

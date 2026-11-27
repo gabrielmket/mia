@@ -5,6 +5,8 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 import { montarEstadoDaChave } from "@/lib/ai/embeddings/estado";
+import { estadoDaChaveAoCliente } from "@/lib/ai/embeddings/estado-ao-cliente";
+import { escolheIa } from "@/lib/ai/trava-da-ia";
 import { listarAgentesQueUsam } from "@/lib/ai/knowledge/agentes-que-usam";
 import type { SourceRow } from "@/hooks/ai/useKnowledgeSources";
 import { AcervoClient } from "./_client";
@@ -71,7 +73,9 @@ export default async function AcervoPage() {
 
       <AcervoClient
         initialSources={initialSources}
-        initialChave={estadoDaChave}
+        // FORK MIA (MIA-262): a chave e o provedor do embedding são da plataforma.
+        initialChave={estadoDaChaveAoCliente(estadoDaChave, escolheIa(user))}
+        veChaveDaIa={escolheIa(user)}
         agentes={agentes}
       />
     </div>

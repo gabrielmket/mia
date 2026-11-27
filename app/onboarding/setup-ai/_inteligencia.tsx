@@ -64,7 +64,12 @@ export function InteligenciaDele({
   const temChave = chave.origem !== "nenhuma";
 
   useEffect(() => {
-    if (!temChave) return;
+    // FORK MIA (MIA-284): a prova é uma geração PAGA com a chave da plataforma.
+    // O `return null` lá embaixo esconde a tela de quem não pode configurar,
+    // mas o efeito roda antes dele — sem esta guarda, cada visita do admin da
+    // empresa a este passo gastava uma geração que ninguém via. A rota recusa
+    // do mesmo jeito (é lá que a regra vale); aqui a tela nem pede.
+    if (!temChave || !podeConfigurar) return;
     let vivo = true;
     let tentativas = 0;
 
@@ -104,7 +109,7 @@ export function InteligenciaDele({
     return () => {
       vivo = false;
     };
-  }, [temChave]);
+  }, [temChave, podeConfigurar]);
 
   /**
    * Cliente não vê chave — nem para colar, nem para conferir. A regra e o porquê

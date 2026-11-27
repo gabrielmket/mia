@@ -54,8 +54,15 @@ function listaDeOperacoes(bruto: unknown): string[] {
   return bruto.filter((o): o is string => typeof o === "string");
 }
 
+/**
+ * `ip`: de onde veio a chamada, já no formato que o `inet` aceita
+ * (`ipDoClienteParaInet`). Vai para `last_used_ip` (MIA-256: a coluna existia
+ * desde a 0271 e nunca era gravada). É rastro para quem opera reconhecer
+ * padrão, nunca decisão: não autoriza nem recusa nada.
+ */
 export async function validarTokenDePlataforma(
   authHeader: string | null,
+  ip: string | null = null,
 ): Promise<TokenDePlataforma> {
   const plaintext = extrairBearer(authHeader);
   if (!plaintext) {
@@ -102,7 +109,7 @@ export async function validarTokenDePlataforma(
   // recusaria um token válido — trocar disponibilidade por telemetria.
   void supabase
     .from("platform_api_tokens")
-    .update({ last_used_at: new Date().toISOString() })
+    .update({ last_used_at: new Date().toISOString(), ...(ip ? { last_used_ip: ip } : {}) })
     .eq("id", linha.id)
     .then(() => undefined);
 

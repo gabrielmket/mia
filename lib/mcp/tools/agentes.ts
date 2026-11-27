@@ -53,8 +53,6 @@ interface LinhaDaVersaoResumo {
   id: string;
   version_number: number;
   status: string;
-  model: string;
-  provider: string;
   channel_session_id: string | null;
   voz_enabled: boolean | null;
   voz_quando: string | null;
@@ -62,8 +60,12 @@ interface LinhaDaVersaoResumo {
   published_at: string | null;
 }
 
+// FORK MIA (MIA-304): sem `model` e `provider`. A IA do assistente é da
+// plataforma (docs/fork/ia-da-plataforma.md, seção 7), e o token do MCP do CRM é
+// sempre da EMPRESA, nunca da plataforma (`TOKEN_NAO_ESCOLHE_IA`). As três
+// leituras deixam de ler os dois, para nenhum recorte novo devolvê-los por engano.
 const RESUMO_DA_VERSAO =
-  "id, agent_id, version_number, status, model, provider, channel_session_id, voz_enabled, voz_quando, created_at, published_at";
+  "id, agent_id, version_number, status, channel_session_id, voz_enabled, voz_quando, created_at, published_at";
 
 function ator(ctx: McpContext): AtorDaEdicao {
   return { userId: null, apiTokenId: ctx.apiTokenId, requestId: ctx.requestId };
@@ -157,7 +159,7 @@ export const crmListAiAgents: McpToolDefinition<typeof listShape> = {
   name: "crm_list_ai_agents",
   description:
     "Lists the organization's AI assistants (agents): id, name, the channel/number each one answers, the LIVE " +
-    "(published) version number and model, and whether there is a DRAFT version being prepared. Use the ids " +
+    "(published) version number, and whether there is a DRAFT version being prepared. Use the ids " +
     "with crm_get_ai_agent_version, crm_save_ai_agent_draft, crm_test_ai_agent_version and crm_publish_ai_agent_version.",
   inputSchema: listShape,
   category: "read",
@@ -185,7 +187,6 @@ export const crmListAiAgents: McpToolDefinition<typeof listShape> = {
           publicada: published
             ? {
                 versao: published.version_number,
-                modelo: published.model,
                 voz: published.voz_enabled ? published.voz_quando : "nunca",
                 publicada_em: published.published_at,
               }
@@ -210,7 +211,7 @@ const getVersionShape = {
 export const crmGetAiAgentVersion: McpToolDefinition<typeof getVersionShape> = {
   name: "crm_get_ai_agent_version",
   description:
-    "Reads ONE version of an AI assistant: the full instructions text (system_prompt) and its settings (model, " +
+    "Reads ONE version of an AI assistant: the full instructions text (system_prompt) and its settings (" +
     'channel, tools, voice, handoff). versao = "publicada" (live, default), "rascunho" (current draft) or a number. ' +
     "Read this before proposing an edit, and copy excerpts EXACTLY into crm_save_ai_agent_draft substituicoes.",
   inputSchema: getVersionShape,
@@ -243,8 +244,7 @@ export const crmGetAiAgentVersion: McpToolDefinition<typeof getVersionShape> = {
       instrucoes: v.system_prompt,
       tamanho_das_instrucoes: v.system_prompt.length,
       limite_de_tamanho: PROMPT_MAX,
-      modelo: v.model,
-      provedor: v.provider,
+      // FORK MIA (MIA-304): sem `modelo` e `provedor` (ver RESUMO_DA_VERSAO).
       canal: nomeDoCanal ?? null,
       ferramentas: v.tool_ids ?? [],
       voz: { ligada: v.voz_enabled, quando: v.voz_quando },
@@ -273,7 +273,7 @@ export const crmGetAiAgentTurn: McpToolDefinition<typeof turnShape> = {
   name: "crm_get_ai_agent_turn",
   description:
     "Explains the assistant's latest replies in ONE conversation: for each recent AI turn, which assistant and which " +
-    "VERSION of the instructions answered, the model, the tools it called (ok/failed/blocked), whether the turn was " +
+    "VERSION of the instructions answered, the tools it called (ok/failed/blocked), whether the turn was " +
     "aborted and why, plus the AI messages sent around that time. Use it to find why a reply was wrong before " +
     "proposing a fix with crm_save_ai_agent_draft.",
   inputSchema: turnShape,
@@ -292,7 +292,8 @@ export const crmGetAiAgentTurn: McpToolDefinition<typeof turnShape> = {
     const { data: tracos, error } = await ctx.supabase
       .from("agent_turn_traces")
       .select(
-        "id, created_at, agent_id, agent_version_id, status, abort_reason, error_code, provider, model, messages_sent, ferramentas, skills, historico_mensagens, latency_ms",
+        // FORK MIA (MIA-304): sem `provider` e `model` (ver RESUMO_DA_VERSAO).
+        "id, created_at, agent_id, agent_version_id, status, abort_reason, error_code, messages_sent, ferramentas, skills, historico_mensagens, latency_ms",
       )
       .eq("organization_id", ctx.organizationId)
       .eq("conversation_id", input.conversation_id)
@@ -309,8 +310,6 @@ export const crmGetAiAgentTurn: McpToolDefinition<typeof turnShape> = {
       status: string;
       abort_reason: string | null;
       error_code: string | null;
-      provider: string | null;
-      model: string | null;
       messages_sent: number;
       ferramentas: unknown;
       skills: unknown;
@@ -344,7 +343,6 @@ export const crmGetAiAgentTurn: McpToolDefinition<typeof turnShape> = {
         quando: l.created_at,
         assistente: l.agent_id ? { id: l.agent_id, nome: nomes.get(l.agent_id) ?? null } : null,
         versao_das_instrucoes: l.agent_version_id ? (numeros.get(l.agent_version_id) ?? null) : null,
-        modelo: l.model,
         estado: l.status,
         motivo_de_interrupcao: l.abort_reason,
         codigo_de_erro: l.error_code,

@@ -98,7 +98,8 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // Relido na .81 (upstream 1.81, #2955): o corpo legado sem modelo passa a resolver o par (provedor, modelo) pelo padrão da instalação e RECUSA par que o provedor não executa, antes do insert. O espelho não recebe modelo (a IA é da plataforma, travarIaDaVersaoNova), e passou a conferir o par que vai gravar com a MESMA régua (validarParProvedorModelo), recusando com "Nada foi criado".
   // Relido na .100 (upstream 1.9x, 9052): a versão ganhou `voz_enabled` e `voz_quando` (responder em áudio). O espelho lê as duas colunas e a versão nova as herda da de referência, como a rota.
   // Relido na fusão da 1.107: o nome repetido de agente responde 409 (`nome-repetido`) e a leitura da versão ganhou `skill_names`, `image_vision_enabled` e `reply_min_interval_ms`. O espelho já recusa o nome repetido (23505) com frase própria, lê as três colunas e a versão nova as herda da de referência.
-  { rota: "app/api/v1/ai/agents/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "0489795f7ac4479a" },
+  // Relido na MIA-262: só o GET da lista mudou (sem o modelo para quem não escolhe a IA, `agentesSemIa`). O espelho é da plataforma e não lista agentes para a empresa: nada a levar.
+  { rota: "app/api/v1/ai/agents/route.ts", espelho: "lib/implantacao/agente.ts", impressao: "31441dda67374fe2" },
   // Relido na .72 (upstream 1.70, #2013 e #2028): a versão nova grava proposal_ai_draft_enabled; o espelho (inserirVersao) passou a gravar também. O resto é a autenticação por token.
   // Relido na .76 (upstream 1.74 e 1.79): a versão nova copia handoff_legal_enabled e o escopo confere provedor, chave e número. O espelho (inserirVersao e a conferência antes de gravar) faz os dois.
   // Relido na fusão da 1.107: a versão nova copia `skill_names`, `image_vision_enabled` e `reply_min_interval_ms`, e o escopo confere as skills. O espelho (inserirVersao e a conferência antes de gravar) faz os dois.
@@ -232,8 +233,9 @@ const ESPELHOS: ReadonlyArray<{ rota: string; espelho: string; impressao: string
   // A aba Planos: novoPlanoSchema/edicaoDoPlanoSchema e a trava de preço do plano assinado.
   // Relido na fusão da 1.116: o POST aceita `moeda` e recusa dólar/euro com o Asaas. O espelho monta o plano campo a campo, sem `moeda` (nasce em real): nada a levar.
   // Espelhado na MIA-59 (upstream 1.112, 9332): o espelho passou a aceitar `moeda` na criação, com a mesma recusa de dólar/euro com o Asaas (MOEDAS_DO_ASAAS e provedorDaInstalacao).
-  { rota: "app/api/v1/admin/cobranca/planos/route.ts", espelho: "lib/planos-mia/garantir-planos.ts", impressao: "769d0f55df050d4a" },
-  { rota: "app/api/v1/admin/cobranca/planos/[id]/route.ts", espelho: "lib/planos-mia/garantir-planos.ts", impressao: "79549ecc4a6b4987" },
+  // MIA-256: as duas rotas passaram a gravar o antes e o depois na auditoria (`lib/planos-mia/rastro.ts`); o espelho grava o mesmo, e o PATCH lê a linha inteira.
+  { rota: "app/api/v1/admin/cobranca/planos/route.ts", espelho: "lib/planos-mia/garantir-planos.ts", impressao: "f78e99273739c88d" },
+  { rota: "app/api/v1/admin/cobranca/planos/[id]/route.ts", espelho: "lib/planos-mia/garantir-planos.ts", impressao: "f7a3036d5ce06d73" },
   // FORK MIA (upstream 1.118, MIA-79): o módulo opcional por empresa (9416). A ação é "use server" com a sessão do admin de plataforma; o espelho segue os três estados, as duas recusas (o teto da instalação e o que ainda não se liga) e a trilha.
   { rota: "app/actions/settings/updateModuloDaEmpresa.ts", espelho: "lib/implantacao/modulos-da-empresa.ts", impressao: "360af917b2cf1b9b" },
   // FORK MIA (upstream 1.118, #4864, MIA-79): a tela inicial da empresa. O espelho troca só a `inicio` e segue o resto da gravação (cache do menu, trilha, evento).

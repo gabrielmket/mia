@@ -5,6 +5,7 @@ import {
   decidirOrcamento,
   normalizarModoDeOrcamento,
   LIMIAR_PADRAO_PCT,
+  TITULO_TETO_DO_PLANO,
   type ChaveDeOrcamento,
 } from "@/lib/agent-engine/edge/llm/orcamento";
 
@@ -86,8 +87,9 @@ export async function orcamentoDeIaDisponivel(
     if (veredito.acao === "bloquear") {
       return {
         disponivel: false,
-        motivo:
-          "O orçamento mensal de IA desta organização foi atingido. Ajuste o limite em Uso de IA › Orçamento, ou aguarde a virada do mês.",
+        // FORK MIA (MIA-262): o teto é da plataforma, e "Uso de IA › Orçamento" dá
+        // 403 à empresa. A frase do plano, que a tela traduz (`t(motivo)`).
+        motivo: TITULO_TETO_DO_PLANO,
       };
     }
     return { disponivel: true, motivo: null };

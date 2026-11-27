@@ -21,7 +21,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { roleAtLeast, type Role } from "@/lib/auth/types";
 
-import { buscar, indexar, mesmaTela, type DocumentoDeBusca, type Indice } from "../busca-da-ajuda";
+import { buscar, indexar, mesmaTela, perguntaApontaATela, type DocumentoDeBusca, type Indice } from "../busca-da-ajuda";
 import { TRECHOS_DA_MIA, type TrechoDaMia } from "../guia-de-operacao";
 import { MANUAIS, comEnderecoDoSistema, type Manual } from "../manuais";
 import { destinoDaTela, quemAbre, type TelaConhecida } from "../telas";
@@ -145,12 +145,43 @@ function curto(texto: string, limite = TAMANHO_DO_TRECHO): string {
   return `${(ultimo > limite * 0.5 ? corte.slice(0, ultimo + 1) : corte).trim()}…`;
 }
 
+/** A pessoa, com o papel dela, faz o que o manual ensina? */
+export function podeFazer(m: Manual, papel: Role): boolean {
+  // A tela do dono da instalação não é de papel da empresa. A rota do chat não lê a
+  // marca de plataforma (cerca admin-escrita-exige-scope-full): o manual diz quem faz.
+  return m.soDaPlataforma ? false : roleAtLeast(papel, m.papelMinimo);
+}
+
+/**
+ * FORK MIA (.118, MIA-252) — O DESEMPATE: o que a pessoa pode fazer vem antes.
+ *
+ * "O sistema tem MCP?", de um administrador no Início, empatava o servidor MCP
+ * externo (que só a Time Company cadastra) com o MCP da MIA (que ele mesmo
+ * liga), e o externo vinha primeiro. Como o assistente responde pelo primeiro
+ * manual, a resposta virava "não é com você". Agora, quando a pergunta não
+ * aponta a tela, o manual que a pessoa não faz perde só o empate (diferença
+ * de até 1%), nunca a vez de um manual que casa melhor: o atendente que
+ * pergunta do horário da IA continua ouvindo o manual do horário, com quem
+ * pode. O que nenhum papel da empresa faz (o do dono da instalação) perde do
+ * de outro papel. Na tela do próprio manual, ou com "aqui", nada muda.
+ */
+const FATOR_DE_QUEM_NAO_PODE = { outroPapel: 0.99, soDaPlataforma: 0.985 } as const;
+
 /**
  * A ajuda em ordem, sem cortar por fonte: é o que a cerca de perguntas reais
- * confere ("o trecho certo entre os primeiros").
+ * confere ("o trecho certo entre os primeiros"). Com o papel, desempata a
+ * favor do que a pessoa pode fazer.
  */
-export function ajudaEmOrdem(pergunta: string, caminho?: string | null, limite = 8) {
-  return buscar(indiceDaAjuda(), pergunta, { caminho, limite });
+export function ajudaEmOrdem(pergunta: string, caminho?: string | null, limite = 8, papel?: Role) {
+  if (!papel || perguntaApontaATela(pergunta)) return buscar(indiceDaAjuda(), pergunta, { caminho, limite });
+  return buscar(indiceDaAjuda(), pergunta, { caminho, limite: limite + 4 })
+    .map((a) => {
+      if (a.item.fonte !== "manual" || a.daTela || podeFazer(a.item.manual, papel)) return a;
+      const fator = a.item.manual.soDaPlataforma ? FATOR_DE_QUEM_NAO_PODE.soDaPlataforma : FATOR_DE_QUEM_NAO_PODE.outroPapel;
+      return { ...a, pontos: a.pontos * fator };
+    })
+    .sort((a, b) => b.pontos - a.pontos)
+    .slice(0, limite);
 }
 
 export function buscarAjuda(entrada: {
@@ -173,7 +204,7 @@ export function buscarAjuda(entrada: {
   };
   const rotuloDe = (href: string) => telaPorHref(href)?.rotulo ?? destinoDaTela(href)?.label ?? href;
 
-  const emOrdem = ajudaEmOrdem(entrada.pergunta, caminho, 12);
+  const emOrdem = ajudaEmOrdem(entrada.pergunta, caminho, 12, entrada.papel);
   const topo = emOrdem[0]?.pontos ?? 0;
   const relevantes = emOrdem.filter((a) => a.pontos >= topo * 0.3);
 
@@ -196,9 +227,7 @@ export function buscarAjuda(entrada: {
         observacao: m.observacao ? comEnderecoDoSistema(m.observacao, entrada.enderecoDoSistema) : null,
         tela: rotuloDe(m.href),
         href: m.href,
-        // A tela do dono da instalação não é de papel da empresa. A rota do chat não lê a
-        // marca de plataforma (cerca admin-escrita-exige-scope-full): o manual diz quem faz.
-        voce_pode: m.soDaPlataforma ? false : roleAtLeast(entrada.papel, m.papelMinimo),
+        voce_pode: podeFazer(m, entrada.papel),
         quem_pode: m.soDaPlataforma ? "o dono da instalação (na MIA, a Time Company)" : quemAbre(m.papelMinimo),
         roteiro: m.tipo === "roteiro",
         desta_tela: a.daTela,

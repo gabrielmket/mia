@@ -53,7 +53,8 @@ import * as path from "node:path";
 
 import { esperarARevelacaoNasCargas, expect, test, type BrowserContext, type Page } from "./helpers/test";
 
-import { lerCreds, loginComoAdmin, type CredsE2E } from "./helpers/login-admin";
+import { lerCreds, loginComoDono, type CredsE2E } from "./helpers/login-admin";
+import { afirmarDonoDoServidor } from "./utils/precondicao";
 
 const APP_URL = process.env.E2E_BASE_URL ?? "http://localhost:3011";
 const SEGREDO_CRON = process.env.INTERNAL_SECRET ?? "e2e-placeholder-nao-e-segredo";
@@ -156,7 +157,11 @@ test.describe("acervo de conhecimento", () => {
     page = await contexto.newPage();
     // O helper re-semeia quando o fator TOTP foi rotacionado por outra frente
     // no mesmo Supabase local — sem isso, "MFA falhou" acusa a tela de MFA.
-    creds = (await loginComoAdmin(page, creds)) as CredsE2E;
+    // FORK MIA (MIA-262): a chave de embedding é da plataforma; quem a cadastra
+    // pela tela é o dono (admin da organização de teste e da plataforma). O
+    // admin da empresa lê só a frase neutra (`conhecimento-sem-chave-cliente`).
+    await afirmarDonoDoServidor(creds.users.dono!.email);
+    creds = (await loginComoDono(page, creds)) as CredsE2E;
   });
 
   test.afterAll(async () => {

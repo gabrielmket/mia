@@ -765,6 +765,8 @@ export const NAV_CATALOG = [
     // `navegacao.spec.ts`, que existe justamente porque agrupar o menu o faz
     // crescer. Configurar provedor é tarefa de poucas vezes; o caminho é o hub
     // "Ver tudo em IA", igual a Credenciais, Conhecimento, Memória e Skills.
+    // FORK MIA (MIA-262): escolher a IA é da plataforma, como Credenciais e Uso.
+    somentePlataforma: true,
   },
   {
     href: "/app/ai/knowledge/sources",

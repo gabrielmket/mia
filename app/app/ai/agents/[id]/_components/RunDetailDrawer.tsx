@@ -48,7 +48,7 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   timeout: "destructive",
 };
 
-export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
+export function RunDetailDrawer({ run, open, onOpenChange, podeEscolherIa = true }: Props & { podeEscolherIa?: boolean }) {
   const t = useT();
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -79,10 +79,12 @@ export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
               <Cell label={t("Concluído")}>
                 {run.completed_at ? new Date(run.completed_at).toLocaleString() : "—"}
               </Cell>
+              {podeEscolherIa && ( // FORK MIA (MIA-262): tokens e custo são da plataforma
               <Cell label={t("Tokens (in/out)")}>
                 {(run.tokens_in ?? 0).toLocaleString()} / {(run.tokens_out ?? 0).toLocaleString()}
               </Cell>
-              <Cell label={t("Custo")}>{fmtCost(run.cost_cents)}</Cell>
+              )}
+              {podeEscolherIa && <Cell label={t("Custo")}>{fmtCost(run.cost_cents)}</Cell>}
               <Cell label={t("Latência")}>{fmtLatency(run.latency_ms)}</Cell>
               <Cell label={t("Steps")}>{run.steps_count ?? 0}</Cell>
             </dl>

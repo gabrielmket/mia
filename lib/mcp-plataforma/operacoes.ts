@@ -192,11 +192,22 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
   // empresa paga (atribuir, link, prazo, isenção) e em QUEM ENTRA (os pedidos).
   {
     chave: "gerir_planos",
-    rotulo: "Criar e ajustar os planos, os pacotes de crédito e os cupons",
+    rotulo: "Criar e ajustar os planos e os pacotes de crédito",
     raio:
       "Cria e ajusta os planos de QUALQUER cliente novo: preço, teste, limites, teto de IA, os módulos que cada plano liga, o preço do Broadcast, qual é o " +
-      "do cadastro e quais aparecem na página de preços; os pacotes de crédito por Pix; e os cupons de desconto ou de dias grátis (.98). Ligar módulo num plano liga para todas as empresas dele na hora. " +
-      "Um token vazado põe um plano de R$ 5 como padrão do cadastro ou dá Broadcast a quem não pagou por ele. Plano já assinado não muda de preço nem perde módulo.",
+      "do cadastro e quais aparecem na página de preços; e os pacotes de crédito por Pix. Ligar módulo num plano liga para todas as empresas dele na hora. " +
+      "Um token vazado põe um plano de R$ 5 como padrão do cadastro ou dá Broadcast a quem não pagou por ele. Plano já assinado não muda de preço nem perde módulo. " +
+      "Não mexe em cupom (é `gerir_cupons`).",
+  },
+  // FORK MIA (MIA-256): o cupom saiu de `gerir_planos`. Cupom é desconto: um
+  // token que só ajusta plano não ganha, em silêncio, o poder de dar 100% off.
+  {
+    chave: "gerir_cupons",
+    rotulo: "Criar, mudar e pausar cupons de desconto",
+    raio:
+      "Cria e muda cupons de desconto em % ou em R$, por quantas mensalidades quiser, ou de dias grátis, e o desconto no setup, em QUALQUER plano. " +
+      "Um token vazado cria um cupom de 100% sem limite de usos e o divulga: todo cliente novo entra sem pagar. Não aplica cupom em cliente que já pagou " +
+      "e não apaga cupom (só pausa).",
   },
   {
     chave: "gerir_cobranca",
@@ -259,6 +270,17 @@ export const OPERACOES: readonly OperacaoDePlataforma[] = [
       "Muda o preço de CUSTO de cada categoria de mensagem da Meta, que entra no custo de QUALQUER cliente nas telas da plataforma a partir de agora (o mês fechado não muda). " +
       "Um token vazado faz o custo e a margem de todos os clientes parecerem outros, e quem decide preço por esses números decide errado. " +
       "Não muda o que nenhum cliente paga, não envia mensagem e não apaga preço.",
+  },
+  // FORK MIA (MIA-309): o teto de IA de uma empresa (`ai_budgets`, o freio de
+  // emergência). Chave própria e de DINHEIRO: decide quanto a plataforma gasta
+  // com a IA de um cliente e se essa IA para. Fica só no token do Gabriel.
+  {
+    chave: "definir_teto_de_ia",
+    rotulo: "Definir o teto mensal de IA de uma empresa",
+    raio:
+      "Muda, em QUALQUER cliente, o teto mensal de gasto de IA (em dólar), o limiar do aviso e o modo: só acompanhar, avisar ou PARAR a IA no teto. É dinheiro e é atendimento: " +
+      "um token vazado tira o freio de todas as empresas (a IA gasta sem limite, na conta da plataforma) ou arma a parada com um teto baixo, e a IA deixa de responder aos clientes " +
+      "do cliente quando a carência de 72 horas acabar (ou na hora, se ele renunciar a ela). Não muda o teto do plano, não cobra nada e não apaga histórico de gasto. Marque só no token do Gabriel.",
   },
 ] as const;
 

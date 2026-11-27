@@ -23,6 +23,8 @@
  * A assinatura do ChatGPT sem login cai na reserva da OpenAI, como o turno.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { lerConfigDoJev } from "@/lib/ai/decisao/config";
+import { provedorDaCredencial } from "@/lib/ai/decisao/origem";
 
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
@@ -194,6 +196,13 @@ export type IaDaEmpresaNoLote = IaDaEmpresa & {
   nome: string | null;
   /** `ehOperante(status)`: a saúde e o cartão contam só as que operam. */
   operante: boolean;
+  /**
+   * FORK MIA (MIA-262): o Jev está ligado e a empresa não tem chave ativa e
+   * validada da origem dele (TypeSafe ou OpenRouter). Até a .117 quem via isso
+   * era a empresa, no cartão do Jev; sem a tela, quem precisa ver é a
+   * plataforma (relatório interno e MCP).
+   */
+  jevSemChave: boolean;
 };
 
 /**
@@ -256,7 +265,16 @@ export async function iaDasEmpresas(
     status: org.status ?? null,
     nome: org.display_name ?? null,
     operante: ehOperante(org.status ?? null),
+    jevSemChave: jevSemChave(org.settings, porEmpresa.get(org.id) ?? []),
   }));
+}
+
+/** FORK MIA (MIA-262): Jev ligado sem credencial ativa e validada da origem dele. */
+function jevSemChave(settings: unknown, validadas: readonly CredencialParaARegua[]): boolean {
+  const jev = lerConfigDoJev(settings);
+  if (!jev.ligado) return false;
+  const provedor = provedorDaCredencial(jev.origem);
+  return !validadas.some((c) => c.provider === provedor);
 }
 
 /**

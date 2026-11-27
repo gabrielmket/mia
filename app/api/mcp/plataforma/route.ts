@@ -22,6 +22,7 @@ import type { NextRequest } from "next/server";
 
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
+import { ipDoClienteParaInet } from "@/lib/http/ip-do-cliente";
 import { ErroDeAutenticacao, validarTokenDePlataforma } from "@/lib/mcp-plataforma/auth";
 import { criarServidorDePlataforma } from "@/lib/mcp-plataforma/servidor";
 
@@ -44,7 +45,7 @@ async function atender(req: NextRequest): Promise<Response> {
 
   let token;
   try {
-    token = await validarTokenDePlataforma(req.headers.get("authorization"));
+    token = await validarTokenDePlataforma(req.headers.get("authorization"), ipDoClienteParaInet(req.headers));
   } catch (err) {
     if (err instanceof ErroDeAutenticacao) {
       return erroJsonRpc(err.mcpCode, err.message, err.httpStatus, requestId);

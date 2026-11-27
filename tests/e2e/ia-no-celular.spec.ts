@@ -11,7 +11,7 @@
  * 3. Execuções: a tabela vira cartão. A tabela base embrulha tudo num
  *    `overflow-auto`, então "o <main> não transborda" NÃO prova o cartão — cada
  *    cartão tem a sua asserção: cabeçalho `display:none`, a caixa da tabela sem
- *    rolagem lateral, «Detalhes» dentro da tela e o rótulo do custo escrito.
+ *    rolagem lateral, «Detalhes» dentro da tela e o rótulo da latência escrito.
  *    As execuções são semeadas em `llm_calls` (com `agent_id`), que é o que a
  *    rota `GET /api/v1/ai/agents/:id/runs` lê — NÃO em `ai_agent_runs`, que a
  *    aba deixou de ler (ver o cabeçalho da rota).
@@ -397,7 +397,8 @@ test("[P1] o gestor pausa o agente, abre o aviso e acompanha a IA pelo celular",
       .evaluateAll((tds) =>
         tds.map((td) => ({ rotulo: td.getAttribute("data-rotulo"), content: getComputedStyle(td, "::before").content })),
       );
-    expect(rotulos.map((r) => r.rotulo)).toEqual(["Custo", "Latência"]);
+    // FORK MIA (MIA-262): o gestor da empresa não vê o custo; sobra a latência.
+    expect(rotulos.map((r) => r.rotulo)).toEqual(["Latência"]);
     for (const r of rotulos) expect(["none", "normal", ""], `${r.rotulo} sem rótulo desenhado`).not.toContain(r.content);
     expect(await rolagemDoMain(page), "a aba de execuções rola para o lado").toBeLessThanOrEqual(1);
     await page.screenshot({ path: path.join(EVIDENCIA, "02-execucoes-em-cartao.png") });

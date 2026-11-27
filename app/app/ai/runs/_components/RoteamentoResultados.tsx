@@ -28,7 +28,7 @@ interface Resultado {
   pode_revisar: boolean;
   resumo: {
     total: number; limite_amostra: number; periodo_dias: number; sem_reserva: number; reservas: number;
-    motivos_reserva: Record<string, number>; custo_total_cents: number; custos_incompletos: number;
+    motivos_reserva: Record<string, number>; custo_total_cents: number | null; custos_incompletos: number;
     mediana_ms: number | null; p95_ms: number | null; comparacoes_destino: number;
     concordancias_destino: number; comparacoes_intencao: number; concordancias_intencao: number;
     revisados: number; corretos_revisados: number;
@@ -124,11 +124,12 @@ export function RoteamentoResultados() {
             <option value="">{t("Todos")}</option>{routers.map((router) => <option key={router.id} value={router.id}>{router.name}</option>)}
           </select>
         </label>
-        <label className="text-xs">{t("Modelo do Jev")}
+        {/* FORK MIA (MIA-262): sem modelo na resposta, sem o filtro. */}
+        {modelos.length > 0 && <label className="text-xs">{t("Modelo do Jev")}
           <select className="mt-1 block w-full rounded-md border bg-background p-2" value={modelo} onChange={(e) => setModelo(e.target.value)}>
             <option value="">{t("Todos")}</option>{modelos.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
-        </label>
+        </label>}
         <div><Label htmlFor="filtro-contexto" className="text-xs">{t("Mensagens anteriores")}</Label>
           <Input id="filtro-contexto" type="number" min={0} max={16} value={contexto} onChange={(e) => setContexto(e.target.value)} placeholder={t("Todas")} className="mt-1" />
         </div>
@@ -139,7 +140,8 @@ export function RoteamentoResultados() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Card className="p-4"><p className="text-xs text-muted-foreground">{t("Decisões examinadas")}</p><p className="text-xl font-semibold">{r.total}</p><p className="text-xs text-muted-foreground">{t("Até 500 casos recentes pelos filtros.")}</p></Card>
           <Card className="p-4"><p className="text-xs text-muted-foreground">{t("Jev sem reserva")}</p><p className="text-xl font-semibold">{r.sem_reserva}</p><p className="text-xs text-muted-foreground">{t("Reserva acionada")}: {r.reservas}</p></Card>
-          <Card className="p-4"><p className="text-xs text-muted-foreground">{t("Custo conhecido")}</p><p className="text-xl font-semibold">{dinheiro.format(r.custo_total_cents / 100)}</p><p className="text-xs text-muted-foreground">{r.custos_incompletos ? `${r.custos_incompletos} ${t("casos sem preço completo")}` : t("Jev e reserva incluídos")}</p></Card>
+          {/* FORK MIA (MIA-262): custo só para a plataforma; nulo, sem cartão. */}
+          {r.custo_total_cents !== null && <Card className="p-4"><p className="text-xs text-muted-foreground">{t("Custo conhecido")}</p><p className="text-xl font-semibold">{dinheiro.format(r.custo_total_cents / 100)}</p><p className="text-xs text-muted-foreground">{r.custos_incompletos ? `${r.custos_incompletos} ${t("casos sem preço completo")}` : t("Jev e reserva incluídos")}</p></Card>}
           <Card className="p-4"><p className="text-xs text-muted-foreground">{t("Tempo total do roteamento")}</p><p className="text-xl font-semibold">{r.mediana_ms ?? "—"} ms</p><p className="text-xs text-muted-foreground">p95: {r.p95_ms ?? "—"} ms</p></Card>
         </div>
         <Card className="space-y-1 p-4 text-sm">
@@ -154,7 +156,7 @@ export function RoteamentoResultados() {
           <div className="flex flex-wrap justify-between gap-2"><strong>{nomeDoModo(c.modo, t)}</strong><span className="text-xs text-muted-foreground">{new Date(c.created_at).toLocaleString(idioma)} · {c.tempo_total_ms} ms</span></div>
           <p>{t("Escolha final")}: {c.intent_final ?? t("Sem intenção")} · {t("Origem")}: {c.origem === "reserva" ? t("Reserva da IA de sempre") : c.origem === "jev" ? "Jev" : t("IA de sempre")}{c.motivo_reserva ? ` · ${motivoDaReserva(c.motivo_reserva, t)}` : ""}</p>
           <p className="text-xs text-muted-foreground">{t("Janela de histórico")}: {c.context_message_count} · {t("Intenção do Jev")}: {c.intent_jev ?? "—"} · {t("Intenção da IA de sempre")}: {c.intent_tradicional ?? "—"}</p>
-          <p className="text-xs text-muted-foreground">Jev: {c.custo_jev_cents === null ? "—" : dinheiro.format(c.custo_jev_cents / 100)} · {t("IA de sempre")}: {c.custo_tradicional_cents === null ? "—" : dinheiro.format(c.custo_tradicional_cents / 100)}{c.custo_incompleto ? ` · ${t("custo incompleto")}` : ""}</p>
+          {r?.custo_total_cents !== null && <p className="text-xs text-muted-foreground">Jev: {c.custo_jev_cents === null ? "—" : dinheiro.format(c.custo_jev_cents / 100)} · {t("IA de sempre")}: {c.custo_tradicional_cents === null ? "—" : dinheiro.format(c.custo_tradicional_cents / 100)}{c.custo_incompleto ? ` · ${t("custo incompleto")}` : ""}</p>}{/* FORK MIA (MIA-262) */}
           <div className="flex flex-wrap items-center gap-2">
             {c.conversation_id && <Link className="text-xs underline" href={`/app/inbox?id=${c.conversation_id}`}>{t("Abrir conversa")}</Link>}
             {dados.pode_revisar && <><label className="text-xs" htmlFor={`revisao-${c.id}`}>{t("Revisão")}</label>

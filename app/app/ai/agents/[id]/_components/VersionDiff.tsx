@@ -18,7 +18,12 @@ import { callbacksHabilitados } from "@/lib/followup/callback-policy";
 interface Props {
   versionA: AgentVersionRow; // mais antiga / base
   versionB: AgentVersionRow; // mais nova / candidata
+  /** FORK MIA (MIA-262): sem isto, a diferença não mostra provedor, modelo nem freios de gasto. */
+  podeEscolherIa?: boolean;
 }
+
+/** FORK MIA (MIA-262): os campos da diferença que são da plataforma. */
+const CAMPOS_DA_PLATAFORMA = new Set(["provider", "model", "token_budget", "cost_budget_cents"]);
 
 type DiffLine = { kind: "ctx" | "add" | "del"; text: string };
 
@@ -103,7 +108,7 @@ function buildFieldChanges(a: AgentVersionRow, b: AgentVersionRow): FieldChange[
     .map(([k, label]) => ({ key: k as string, label, a: a[k], b: b[k] }));
 }
 
-export function VersionDiff({ versionA, versionB }: Props) {
+export function VersionDiff({ versionA, versionB, podeEscolherIa = true }: Props) {
   const t = useT();
   const tools = diffArr(versionA.tool_ids ?? [], versionB.tool_ids ?? []);
   // Skills por agente (9107): array, e não escalar — o `!==` de buildFieldChanges
@@ -122,7 +127,9 @@ export function VersionDiff({ versionA, versionB }: Props) {
   const callbackEnabledA = callbacksHabilitados(versionA.followup);
   const callbackEnabledB = callbacksHabilitados(versionB.followup);
   const callbackEnabledChanged = callbackEnabledA !== callbackEnabledB;
-  const fields = buildFieldChanges(versionA, versionB);
+  const fields = buildFieldChanges(versionA, versionB).filter( // FORK MIA (MIA-262)
+    (f) => podeEscolherIa || !CAMPOS_DA_PLATAFORMA.has(String(f.key)),
+  );
   const lines = diffLines(versionA.system_prompt ?? "", versionB.system_prompt ?? "");
 
   return (

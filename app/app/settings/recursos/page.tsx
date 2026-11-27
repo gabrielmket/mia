@@ -18,10 +18,12 @@ import { redirect } from "next/navigation";
 import { CabecalhoDaSubTela } from "@/components/settings/CabecalhoDaSubTela";
 import { LinhaDoRecurso } from "@/components/recursos-opcionais/LinhaDoRecurso";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
+import { escolheIa } from "@/lib/ai/trava-da-ia";
 import { ROLE_RANK, type Role } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
 import {
   MODULOS_DA_EMPRESA,
+  RECURSOS_DA_IA_DA_PLATAFORMA,
   RECURSOS_OPCIONAIS,
   ROTULO_DO_ESTADO,
   estadoDoRecurso,
@@ -54,7 +56,10 @@ export default async function RecursosOpcionaisPage() {
     (r.quemDecide !== "dono_do_servidor" && ROLE_RANK[activeOrg.role] >= ROLE_RANK[PAPEL_QUE_DECIDE[r.quemDecide]]);
 
   const modulos = MODULOS_DA_EMPRESA;
-  const daEmpresa = RECURSOS_OPCIONAIS.filter((r) => r.nivel === "organizacao");
+  // FORK MIA (MIA-262): o Jev, o provedor do embedding, a chave de mapas e o
+  // teto de gasto são da plataforma; o "Ajustar" deles leva a telas que dão 403.
+  const daPlataforma = escolheIa(user) ? new Set<string>() : RECURSOS_DA_IA_DA_PLATAFORMA;
+  const daEmpresa = RECURSOS_OPCIONAIS.filter((r) => r.nivel === "organizacao" && !daPlataforma.has(r.id));
   const deCadaAgente = RECURSOS_OPCIONAIS.filter((r) => r.nivel === "agente");
 
   /** Recurso que depende de módulo desligado no servidor: a empresa sabe que existe e a quem pedir. */

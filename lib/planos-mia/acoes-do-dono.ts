@@ -22,6 +22,7 @@ import type { ProvedorDeCobranca } from "@/lib/cobranca/vocabulario";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { logger } from "@/lib/logger";
 
+import { autoriaDoToken } from "./rastro";
 import { seguirOPlano } from "./seguir-o-plano";
 
 const DIA_MS = 86_400_000;
@@ -53,14 +54,14 @@ function auditar(
   void audit({
     action,
     actorUserId: ator.userId,
-    actorApiTokenId: ator.tokenId,
+    // MIA-256: o token é de PLATAFORMA; `actor_api_token_id` é do de cliente (FK) e derrubava a linha.
     actingAsPlatformAdmin: true,
     bypassedRls: true,
     organizationId: orgId,
     resourceType: "cobranca_assinatura",
     resourceId: orgId,
     requestId: ator.requestId,
-    metadata: { ...metadata, via: "mcp_de_plataforma" },
+    metadata: { ...metadata, ...autoriaDoToken(ator.tokenId), via: "mcp_de_plataforma" },
   });
 }
 

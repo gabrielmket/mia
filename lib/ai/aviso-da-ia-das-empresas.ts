@@ -22,6 +22,8 @@
 export interface IaParaOAviso {
   chave: "propria" | "instalacao" | null;
   operante: boolean;
+  /** FORK MIA (MIA-262): o Jev ligado sem chave validada da origem dele. */
+  jevSemChave?: boolean;
 }
 
 /** Quantas empresas operantes estão sem chave utilizável para o padrão delas. */
@@ -60,5 +62,32 @@ export function recadoDaIaSemChave(n: number): string | null {
     `Para ver quais: \`plataforma_ver_ia_das_empresas\` com \`so_sem_chave: true\`. ` +
     `Para corrigir: em Admin › Modelo de IA, um provedor com chave; ou, na empresa, em modo suporte, ` +
     `IA › Provedores de IA.`
+  );
+}
+
+/**
+ * FORK MIA (MIA-262) · O JEV SEM CHAVE.
+ *
+ * O Jev só roda com a chave da própria empresa (TypeSafe ou OpenRouter), e a
+ * plataforma não tem chave dele (`lib/ai/decisao/ponto.ts`). Quando a chave
+ * vence ou perde a validação, o Jev cai para a IA de sempre (o roteador tem
+ * reserva) e nada para; mas até a .117 quem via isso era a empresa, no cartão
+ * do Jev. Com o cartão fora do cliente, o recado vai para a plataforma.
+ */
+export function contarJevSemChave(empresas: readonly IaParaOAviso[]): number {
+  return empresas.filter((e) => e.operante && e.jevSemChave === true).length;
+}
+
+/** A chave da trava anti-ruído do recado do Jev (um por dia). */
+export const CHAVE_DO_AVISO_DO_JEV = "jev_das_empresas_sem_chave";
+
+export function recadoDoJevSemChave(n: number): string | null {
+  if (n <= 0) return null;
+  const quantas = n === 1 ? "1 empresa está" : `${n} empresas estão`;
+  return (
+    `⚡ *Jev sem chave*\n\n${quantas} com o Jev ligado e sem chave validada da origem dele ` +
+    `(TypeSafe ou OpenRouter). Nada parou: a IA de sempre cobre, mas o Jev não decide.\n\n` +
+    `Para ver quais: \`plataforma_ver_ia_das_empresas\`. ` +
+    `Para corrigir: na empresa, em modo suporte com edição, IA › Provedores de IA, cartão do Jev.`
   );
 }

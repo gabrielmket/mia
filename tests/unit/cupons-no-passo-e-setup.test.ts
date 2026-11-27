@@ -253,10 +253,11 @@ describe("o setup de implantação", () => {
     expect(await precoDoSetup(b.cliente as never, PLANO)).toBeNull();
     const r = await pedirSetup(b.cliente as never, P, deps(asaasFalso({})));
     expect(r).toMatchObject({ ok: false, code: "setup_indisponivel" });
-    expect(await gravarPrecoDoSetup(b.cliente as never, PLANO, 150_000, USER)).toEqual({ ok: true, mudou: true });
+    // MIA-256: o antes e o depois vêm junto, para a auditoria da rota.
+    expect(await gravarPrecoDoSetup(b.cliente as never, PLANO, 150_000, USER)).toEqual({ ok: true, mudou: true, antes: null, depois: 150_000 });
     expect(await precoDoSetup(b.cliente as never, PLANO)).toBe(150_000);
     expect(await gravarPrecoDoSetup(b.cliente as never, PLANO, 150_000, USER)).toEqual({ ok: true, mudou: false });
-    expect(await gravarPrecoDoSetup(b.cliente as never, PLANO, null, USER)).toEqual({ ok: true, mudou: true });
+    expect(await gravarPrecoDoSetup(b.cliente as never, PLANO, null, USER)).toEqual({ ok: true, mudou: true, antes: 150_000, depois: null });
     expect(await precoDoSetup(b.cliente as never, PLANO)).toBeNull();
   });
 

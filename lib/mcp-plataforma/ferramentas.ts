@@ -78,6 +78,8 @@ import { FERRAMENTAS_DE_ROTEADOR } from "./ferramentas/roteador";
 import { FERRAMENTAS_DE_IMPORTACAO } from "./importacao";
 // FORK MIA (MIA-218): a IA de cada empresa: segue a plataforma ou tem escolha própria, o par e a chave; só lê (docs/fork/ia-da-plataforma.md).
 import { FERRAMENTAS_DA_IA_DAS_EMPRESAS } from "./ferramentas/ia-das-empresas";
+// FORK MIA (MIA-309): o teto de IA de uma empresa (`ai_budgets`).
+import { FERRAMENTAS_DO_TETO_DE_IA } from "./ferramentas/teto-de-ia";
 import type { FerramentaDePlataforma } from "./tipos";
 
 export type { ContextoDaFerramenta, FerramentaDePlataforma } from "./tipos";
@@ -143,6 +145,8 @@ export const FERRAMENTAS: readonly FerramentaDePlataforma[] = [
   ...FERRAMENTAS_DA_ANALISE_E_DAS_CONVERSAS,
   // FORK MIA (MIA-218): a IA de cada empresa e quantas estão sem chave; sem ferramenta de troca, que é ato de pessoa com MFA (docs/fork/ia-da-plataforma.md)
   ...FERRAMENTAS_DA_IA_DAS_EMPRESAS,
+  // FORK MIA (MIA-309): o teto de IA de uma empresa, com a regra do PATCH de /api/v1/ai/budget; só no token do Gabriel (docs/fork/mcp-de-implantacao.md)
+  ...FERRAMENTAS_DO_TETO_DE_IA,
 ];
 
 export const FERRAMENTA_POR_NOME = new Map(FERRAMENTAS.map((f) => [f.name, f]));

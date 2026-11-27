@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
+import { agentesSemIa } from "@/lib/ai/trava-da-ia";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
@@ -48,7 +49,8 @@ export default async function AgentsListPage() {
     });
   }
 
-  const agents = (data ?? []) as unknown as AgentRow[];
+  // FORK MIA (MIA-262): o modelo de cada agente é da plataforma.
+  const agents = agentesSemIa(user, (data ?? []) as unknown as AgentRow[]);
   const canWrite = ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin;
   const idioma = user.idioma;
 

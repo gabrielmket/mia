@@ -19,8 +19,9 @@ import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 
 import { roleAtLeast, type Role } from "@/lib/auth/types";
+import { logger } from "@/lib/logger";
 
-import type { PessoaDaEquipe } from "../leituras/comum";
+import { codigoDaFalha, type PessoaDaEquipe } from "../leituras/comum";
 import type { TelaConhecida } from "../telas";
 import { hrefDoApp, type AcaoDoAssistente } from "../tipos";
 import type { Preparacao } from "./preparar";
@@ -142,8 +143,11 @@ async function propor(
         ? "Diga em uma ou duas frases que preparou o cartão, que nada muda até a pessoa clicar em Aprovar e aplicar, e que depois o Desfazer fica no cartão."
         : `Diga que preparou o cartão e que quem aprova é ${quem[0] ?? "quem administra"} (${regra.rotulo}); a pessoa pode clicar em "Pedir a" no cartão, que vai pronto e o resultado volta para ela. Não ofereça aplicar.`,
     };
-  } catch {
-    return { erro: "Não consegui preparar agora. Diga que não deu e sugira tentar de novo em instantes." };
+  } catch (e) {
+    // MIA-244: a falha leva o código, e o log diz qual ferramenta (nunca o texto).
+    const codigo = codigoDaFalha(e);
+    logger.warn("[assistente] ferramenta falhou", { ferramenta: nome, codigo });
+    return { erro: "Não consegui preparar agora. Diga que não deu e sugira tentar de novo em instantes.", codigo };
   }
 }
 
