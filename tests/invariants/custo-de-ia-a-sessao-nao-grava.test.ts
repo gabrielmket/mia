@@ -200,7 +200,7 @@ describe("9173 · o custo de IA só o servidor grava", () => {
   it("o suporte somente leitura segue travado no tool_calls, e as travas do upstream não mudam mais", () => {
     // Sem o update da tabela inteira, a função do upstream (0274) não deixa
     // `support_write_*` em ai_agent_runs; a restritiva nossa cobre a coluna que sobrou.
-    const TRAVAS = `select coalesce(string_agg(polname || ':' || polcmd || ':' || (not polpermissive)::text, ',' order by polname), '')
+    const TRAVAS = `select coalesce(string_agg(polname::text || ':' || polcmd::text || ':' || (not polpermissive)::text, ',' order by polname), '')
                       from pg_policy where polrelid = 'public.ai_agent_runs'::regclass and not polpermissive;`;
     expect(lastLine(sql(TRAVAS))).toBe("mia_suporte_somente_leitura_tool_calls:w:true");
     expect(
