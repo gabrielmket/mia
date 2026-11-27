@@ -26,6 +26,7 @@ import type { ModelMessage } from "ai";
 import type { Role } from "@/lib/auth/types";
 
 import { ColetorDoTurno, ferramentasDoAssistente, type ContextoDasFerramentas } from "./ferramentas";
+import { limparFormatoDaResposta } from "./formato";
 import { lerBaseDaEmpresa, type ItemDaBaseDaEmpresa } from "./leituras/ajuda";
 import type { PessoaDaEquipe } from "./leituras/comum";
 import type { ChamarModelo } from "./modelo";
@@ -156,8 +157,11 @@ export async function responderNoAssistente(entrada: EntradaDoTurno, deps: DepsD
     maxSteps: PASSOS_DO_TURNO,
   });
 
-  // Resposta vazia não é resposta: vira o "não sei", com o caminho do suporte.
-  let final = texto.trim();
+  // FORK MIA (.120, MIA-253): o formato que a tela não mostra sai aqui (link, botão
+  // escrito como texto, título, tabela, travessão), não só pela regra 9 do prompt.
+  // Resposta vazia (ou que era só lixo de formato) não é resposta: vira o "não sei",
+  // com o caminho do suporte.
+  let final = limparFormatoDaResposta(texto);
   if (!final) {
     final = NAO_SEI;
     coletor.semResposta = true;
