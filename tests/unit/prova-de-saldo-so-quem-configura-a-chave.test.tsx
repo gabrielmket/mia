@@ -128,7 +128,8 @@ describe("rota: provar=1 sem o portão não gera nada", () => {
     const res = await pedir();
     expect(res.status).toBe(200);
     const corpo = await res.json();
-    expect(corpo.data.inteligencia.origemDaChave).toBe("instalacao");
+    // Versão .119: com a MIA-262, sem provedor, modelo e chave para quem não configura a chave.
+    expect(corpo.data.inteligencia).toEqual({ pronta: true, chaveEmVerificacao: false, prontaParaPublicar: true });
     expect(corpo.data).not.toHaveProperty("prova");
     expect(provarSaldo).not.toHaveBeenCalled();
     expect(loadCredential).not.toHaveBeenCalled();
