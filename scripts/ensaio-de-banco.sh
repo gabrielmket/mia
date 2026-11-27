@@ -196,8 +196,13 @@ insert into public.ai_provider_credentials
   ('e9176000-0000-4000-8000-000000000021', 'e9176000-0000-4000-8000-000000000002', 'openai', 'chave openai', '\x00', '\x00', '\x00', '9176', true, now()),
   ('e9176000-0000-4000-8000-000000000031', 'e9176000-0000-4000-8000-000000000003', 'openai', 'chave openai', '\x00', '\x00', '\x00', '9176', true, now()),
   ('e9176000-0000-4000-8000-000000000041', 'e9176000-0000-4000-8000-000000000004', 'openai', 'chave openai', '\x00', '\x00', '\x00', '9176', false, now());
-insert into public.ai_budgets (organization_id, monthly_limit_cents, enforcement_mode)
-  values ('e9176000-0000-4000-8000-000000000001', 5000, 'off');
+-- As quatro com teto (5000, off): o baseline dá esse teto a quem não tem linha,
+-- e assim a sonda também prova que a 9176 não mexe no teto de quem não passa.
+insert into public.ai_budgets (organization_id, monthly_limit_cents, enforcement_mode) values
+  ('e9176000-0000-4000-8000-000000000001', 5000, 'off'),
+  ('e9176000-0000-4000-8000-000000000002', 5000, 'off'),
+  ('e9176000-0000-4000-8000-000000000003', 5000, 'off'),
+  ('e9176000-0000-4000-8000-000000000004', 5000, 'off');
 insert into public.channel_sessions (id, organization_id, waha_session_name, status, webhook_secret_encrypted)
   values ('e9176000-0000-4000-8000-000000000051', 'e9176000-0000-4000-8000-000000000001', 'ensaio-9176-alfa', 'WORKING', '\x00'::bytea);
 insert into public.ai_agents (id, organization_id, name, system_prompt)
