@@ -72,7 +72,10 @@ function adminDuble() {
       }
       if (tabela === "crm_lead_risk_states") {
         return {
-          select: () => ({ eq: async () => ({ data: [], error: null }) }),
+          // A leitura dos estados pagina (MIA-293): `.eq().order().range()`.
+          select: () => ({
+            eq: () => ({ order: () => ({ range: async () => ({ data: [], error: null, count: 0 }) }) }),
+          }),
           upsert: async (linha: { lead_id: string }) => {
             if (linha.lead_id === recusarLead) return { error: { message: RECUSA } };
             gravados.push(linha.lead_id);

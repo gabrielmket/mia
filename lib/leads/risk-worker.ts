@@ -7,6 +7,7 @@ import { calculaBucketsAtuais, type EstadoCalculado } from "@/lib/leads/risk-see
 import { propoeReativacao } from "@/lib/leads/reactivation";
 import type { RiskBucket } from "@/lib/leads/risk-radar";
 import type { ActivityType } from "@/lib/leads/activity-vocabulary";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 
 /**
  * O OBSERVADOR DA TRAVESSIA — a peça que faz "esfriando" acontecer sem ninguém
@@ -74,6 +75,13 @@ function narra(
   return null;
 }
 
+/**
+ * FORK MIA (MIA-293) — teto de páginas de 1000 dos estados gravados de uma
+ * organização (100 mil). Acima disso a passada da org lança, em vez de
+ * comparar com um recorte.
+ */
+const PAGINAS_DOS_ESTADOS = 100;
+
 interface EstadoGravado {
   lead_id: string;
   bucket: RiskBucket;
@@ -86,14 +94,30 @@ export async function observaTravessias(
 ): Promise<ResultadoDaObservacao> {
   const atuais = await calculaBucketsAtuais(admin, organizationId, now);
 
-  const { data: gravados, error } = await admin
-    .from("crm_lead_risk_states")
-    .select("lead_id, bucket")
-    .eq("organization_id", organizationId);
-  if (error) throw new Error(`observador de risco: ${error.message}`);
-  const anterior = new Map<string, RiskBucket>(
-    ((gravados ?? []) as EstadoGravado[]).map((g) => [g.lead_id, g.bucket]),
+  // FORK MIA (MIA-293) — os estados gravados são lidos INTEIROS, página a
+  // página. Sem `.range()` o PostgREST cortava em 1000 linhas, e sem `.order()`
+  // cada passada pegava um recorte diferente: o negócio que ficava fora da
+  // página virava `de = null`, contava como travessia nova e gravava mais um
+  // "Negócio esfriou" (e mais um upsert) a cada rodada. A tabela não tem `id`:
+  // a chave é `lead_id`, e é ela que dá a ordem estável.
+  //
+  // Leitura cortada NÃO segue: comparar com metade do gravado é exatamente o
+  // defeito. A org falha em voz alta (`organizations_com_erro` no cron).
+  const gravados = await lerTodasAsPaginas<EstadoGravado>(
+    (de, ate, contar) =>
+      admin
+        .from("crm_lead_risk_states")
+        .select("lead_id, bucket", contar ? { count: "exact" } : undefined)
+        .eq("organization_id", organizationId)
+        .order("lead_id", { ascending: true })
+        .range(de, ate),
+    { paginasMaximas: PAGINAS_DOS_ESTADOS },
   );
+  if (gravados.erro) throw new Error(`observador de risco: ${gravados.erro}`);
+  if (gravados.truncado) {
+    throw new Error(`observador de risco: estados gravados passam de ${gravados.linhas.length}, leitura cortada`);
+  }
+  const anterior = new Map<string, RiskBucket>(gravados.linhas.map((g) => [g.lead_id, g.bucket]));
 
   const r: ResultadoDaObservacao = {
     avaliados: atuais.length,
