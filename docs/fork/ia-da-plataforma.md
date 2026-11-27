@@ -1,6 +1,6 @@
 # A IA de toda empresa segue a da plataforma
 
-**Versão:** .117 (MIA-215; núcleo na MIA-217, superfície na MIA-218; desenho na MIA-216).
+**Versão:** .117 (MIA-215; núcleo na MIA-217, superfície na MIA-218; desenho na MIA-216). O agente publicado segue a troca, a trava da visão e o teto de IA pelo MCP: MIA-309.
 
 ## 1. A regra
 
@@ -45,6 +45,44 @@ Três coisas pioravam:
 | O aviso da chave | `AvisoDaChave.tsx` (tela Provedores) | "Usando a chave da MIA. Nenhuma chave precisa ser cadastrada." A chave própria aparece como opção avançada, só para o administrador da plataforma. |
 | O aviso da trava | a tela Provedores, a `/health` (`data.ia`), o relatório interno e o MCP | Avisam quando uma empresa fica com o padrão num provedor sem chave utilizável (seção 5). |
 | O MCP | `plataforma_ver_ia_das_empresas` | Leitura, por empresa (seção 6). Trocar modelo não tem ferramenta. |
+| O agente publicado | a carga da versão (`lib/agent-engine/agent/agent-config.ts`), regra em `lib/ai/agente-segue-a-plataforma.ts` (MIA-309) | Quem segue responde no par da plataforma, mesmo com a versão gravada noutro (abaixo). |
+| A trava da visão | PUT de `/api/v1/admin/modelo-de-ia` (MIA-309) | Recusa com 422 `modelo_sem_visao` o modelo que não enxerga imagem enquanto um agente publicado de quem segue lê foto. |
+
+### O agente publicado segue a troca (MIA-309)
+
+O turno do agente não lê `settings.llm`: lê o par gravado na versão publicada (`provider`, `model`,
+`credential_id`), e a versão publicada é imutável no banco. Sem mais nada, a troca em
+`/admin/modelo-de-ia` chegava a `settings.llm` e não aos agentes já publicados. Desenho na
+[MIA-285](/MIA/issues/MIA-285#document-desenho), seção 3 (opção A; a B, republicar, foi descartada).
+
+A carga da versão traz, numa coluna a mais no fim de `SELECT_AGENT_CONFIG_COLUMNS`, o `settings.llm` da
+empresa quando ela segue a plataforma **e** `platform_ia` tem um par (sem par, o gatilho não mexe em
+`settings.llm` e a versão é a melhor informação). No fim de `mapAgentConfigRow`,
+`agenteSegueAPlataforma` troca:
+
+- `provider` e `model` pelos de `settings.llm`;
+- `credentialId` por `null`: o resolvedor desce a escada de sempre (credencial ativa da empresa naquele
+  provedor, senão a chave da instalação);
+- com o provedor da plataforma diferente do da versão, também `operatorModel` e a reserva de modelo
+  (9368): os dois foram escolhidos ao lado do par antigo. Sem eles, o operador usa o modelo da conversa
+  e não há degrau de reserva.
+
+O resto da versão fica, inclusive o teto por versão (`cost_budget_cents`, `token_budget`). Empresa com
+escolha própria fica com a versão intacta. `settings.llm` sem provedor ou sem modelo não muda nada.
+
+Vale para todo carregador da lista (o do número, o por id do roteador, o da versão exata do teste no
+editor e o da conversa): o teste no editor usa o mesmo modelo do atendimento.
+
+**A trava da visão.** O modelo da plataforma passa a atender agente com foto e ferramentas. O PUT de
+`/admin/modelo-de-ia` já recusava modelo fora do catálogo ou sem ferramentas (`supports_tools`). Desde a
+MIA-309 recusa também, com 422 `modelo_sem_visao`, o modelo que não enxerga imagem (`enxergaImagem`, a
+mesma régua do motor) enquanto houver agente publicado de empresa que segue e opera com
+`multimodal_input` ligado e `image_vision_enabled` não desligado. A leitura dos agentes que falhou
+recusa (500): a ação falha fechada.
+
+**Em 27/11/2026, quando o PR foi aberto:** as 3 versões publicadas das empresas que seguem já estavam no par da
+plataforma, então nada muda para o cliente. A diferença aparece na próxima troca em
+`/admin/modelo-de-ia`.
 
 A migration 9172 também consertou as empresas que existiam: passou a seguir a plataforma quem estava
 no padrão semeado sem chave própria da Anthropic, ou já no par da plataforma sem chave própria
@@ -105,7 +143,7 @@ teto de 100 páginas sem chegar ao fim, devolve `null` ("não sei"), nunca a con
 
 | Ferramenta | O que faz | Tipo |
 |---|---|---|
-| `plataforma_ver_ia_das_empresas` | por empresa: se segue a plataforma ou tem escolha própria, o provedor e o modelo em vigor, se há chave utilizável (`propria`, `instalacao` ou `null`) e, desde a MIA-262, `jev_sem_chave` (o Jev ligado sem chave validada da origem dele). Traz também a `contagem` (`contarEmpresas`: só as operantes), os mesmos números do cartão do admin, da `/health` e do relatório interno; a suspensa aparece com `operante: false` e não conta. Nada da chave em si sai. Filtros: `organization_id` (uma empresa) e `so_sem_chave`; as sem chave vêm primeiro | leitura |
+| `plataforma_ver_ia_das_empresas` | por empresa: se segue a plataforma ou tem escolha própria, o provedor e o modelo em vigor, se há chave utilizável (`propria`, `instalacao` ou `null`) e, desde a MIA-262, `jev_sem_chave` (o Jev ligado sem chave validada da origem dele). Desde a MIA-309, `agentes_publicados` e `agentes_fora_do_par` (com a regra da carga: para quem segue, tem de dar zero) e, em `agentes`, a soma das operantes com `fora_do_par_de_quem_segue`; `null` = a leitura dos agentes falhou. Traz também a `contagem` (`contarEmpresas`: só as operantes), os mesmos números do cartão do admin, da `/health` e do relatório interno; a suspensa aparece com `operante: false` e não conta. Nada da chave em si sai. Filtros: `organization_id` (uma empresa) e `so_sem_chave`; as sem chave vêm primeiro | leitura |
 
 **Não há ferramenta de troca.** Trocar modelo é ato de pessoa, com MFA, no painel: em
 `/admin/modelo-de-ia` (todas as que seguem) ou na tela Provedores da empresa, em modo suporte (uma).
@@ -201,3 +239,15 @@ da sessão e do `prepared`/`completed`, e continua gravado como o upstream grava
    e `app/app/ai/providers/page.test.tsx`.
 7. O MCP do CRM e a prospecção (MIA-304): rode as duas cercas da seção 7. Ferramenta nova de
    agente no MCP do CRM, ou rota nova em `app/api/v1/prospecting/agents/`, sai sem provedor e modelo.
+8. O agente publicado segue a plataforma (MIA-309): `git grep -n "FORK MIA (MIA-309)" -- lib/agent-engine/agent/agent-config.ts`
+   mostra os pontos (o import, a coluna `ia_da_plataforma` no `Row`, a coluna no fim de
+   `SELECT_AGENT_CONFIG_COLUMNS` e o `agenteSegueAPlataforma` em volta do `return` de `mapAgentConfigRow`).
+   O upstream é quem mais mexe nesse arquivo; na fusão, confira que a coluna continua a ÚLTIMA da lista,
+   que todo carregador novo da lista usa o alias `a` para `ai_agents` e que campo novo de par
+   (provedor, modelo, chave ou outro modelo por papel) entrou também em `ParDaVersao` e na regra.
+9. O teto de IA pelo MCP (MIA-309): o upstream mudou o PATCH de `/api/v1/ai/budget`? A regra mora em
+   `lib/ai/budget/mudanca-do-teto.ts` (`git grep -n "FORK MIA (MIA-309)" -- app/api/v1/ai/budget/route.ts`):
+   leve a mudança para lá, senão a tela e o MCP divergem.
+10. Rode `tests/unit/agente-publicado-segue-a-plataforma.test.ts`,
+   `app/api/v1/admin/modelo-de-ia/trava-da-visao.test.ts`, `tests/unit/api-orcamento-de-ia.test.ts`,
+   `tests/unit/mcp-de-implantacao-teto-de-ia.test.ts` e `tests/unit/mcp-de-implantacao-ia-das-empresas.test.ts`.

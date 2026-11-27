@@ -56,6 +56,8 @@ export const TODAS_AS_OPERACOES = [
   "gerir_modulo_opcional",
   // FORK MIA (MIA-99): o preço que a Meta cobra por mensagem.
   "definir_custo_da_meta",
+  // FORK MIA (MIA-309): o teto de IA de uma empresa.
+  "definir_teto_de_ia",
 ];
 
 /** O funil de e-commerce que o gatilho de seed entrega a toda organização nova. */

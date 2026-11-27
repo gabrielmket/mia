@@ -227,8 +227,8 @@ async function chamar(nome: string, args: Record<string, unknown>) {
 }
 
 describe("a lista", () => {
-  it("as duas estão lá, as duas só leem, e a lista tem 135 (124 + as duas dos preços da Meta, MIA-99, + as duas da MIA-103 + as duas das conversões do site, MIA-169 + as três da coexistência, MIA-28 + o ranking do consumo de IA, MIA-136 + a da IA das empresas, MIA-218)", () => {
-    expect(FERRAMENTAS).toHaveLength(135);
+  it("as duas estão lá, as duas só leem, e a lista tem 136 (124 + as duas dos preços da Meta, MIA-99, + as duas da MIA-103 + as duas das conversões do site, MIA-169 + as três da coexistência, MIA-28 + o ranking do consumo de IA, MIA-136 + a da IA das empresas, MIA-218 + o teto de IA, MIA-309)", () => {
+    expect(FERRAMENTAS).toHaveLength(136);
     const operacao = (nome: string) => FERRAMENTAS.find((f) => f.name === nome)?.operacao;
     expect(operacao("plataforma_ver_analise_do_funil")).toBeNull();
     expect(operacao("plataforma_ver_conversas_do_mes")).toBeNull();
