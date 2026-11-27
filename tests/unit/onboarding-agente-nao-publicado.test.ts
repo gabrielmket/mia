@@ -999,3 +999,41 @@ describe("onboarding: qual chave o funcionário usa", () => {
     expect(estado.agentes[0]!.kind).toBe("mcp_agent");
   });
 });
+
+// FORK MIA (MIA-250 D): o teto de agentes do plano (gatilho da 9174) nunca trava o cadastro.
+describe("onboarding: o teto de agentes do plano não trava o cadastro (MIA-250 D)", () => {
+  const comTetoCheio = () => {
+    const estado = montarBanco();
+    const original = responder;
+    responder = (c) =>
+      c.table === "ai_agents" && c.op === "insert"
+        ? { data: null, error: { code: "PT402", message: "limite_do_plano:agentes:1" } }
+        : original(c);
+    return estado;
+  };
+
+  it("⭐ PT402 ao criar o agente padrão: o passo da IA segue sem criar e o wizard avança", async () => {
+    const estado = comTetoCheio();
+
+    const res = await clicar();
+
+    expect(res).toBe("redirecionou");
+    expect(redirects).toEqual(["/onboarding"]);
+    expect(estado.agentes).toHaveLength(0);
+    expect(estado.versoes).toHaveLength(0);
+    expect(estado.onboardingState.ai).toMatchObject({ agent_id: "", skipped: true });
+    expect(estado.eventos).toHaveLength(0);
+  });
+
+  it("controle: outro erro ao criar continua sendo db_error na tela", async () => {
+    montarBanco();
+    const original = responder;
+    responder = (c) =>
+      c.table === "ai_agents" && c.op === "insert" ? { data: null, error: { code: "XX000", message: "falhou" } } : original(c);
+
+    const res = await clicar();
+
+    expect(res).toMatchObject({ ok: false, error: "db_error" });
+    expect(redirects).toEqual([]);
+  });
+});
