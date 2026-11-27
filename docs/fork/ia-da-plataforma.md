@@ -1,6 +1,6 @@
 # A IA de toda empresa segue a da plataforma
 
-**Versão:** .117 (MIA-215; núcleo na MIA-217, superfície na MIA-218; desenho na MIA-216). O agente publicado segue a troca, a trava da visão e o teto de IA pelo MCP: MIA-309.
+**Versão:** .117 (MIA-215; núcleo na MIA-217, superfície na MIA-218; desenho na MIA-216). O agente publicado segue a troca, a trava da visão e o teto de IA pelo MCP: MIA-309. As empresas de chave própria passam à plataforma: MIA-337 (seção 10).
 
 ## 1. A regra
 
@@ -251,3 +251,126 @@ da sessão e do `prepared`/`completed`, e continua gravado como o upstream grava
 10. Rode `tests/unit/agente-publicado-segue-a-plataforma.test.ts`,
    `app/api/v1/admin/modelo-de-ia/trava-da-visao.test.ts`, `tests/unit/api-orcamento-de-ia.test.ts`,
    `tests/unit/mcp-de-implantacao-teto-de-ia.test.ts` e `tests/unit/mcp-de-implantacao-ia-das-empresas.test.ts`.
+
+## 10. As empresas de chave própria passam à plataforma (migration 9176, MIA-337)
+
+Desenho na [MIA-285](/MIA/issues/MIA-285#document-desenho), ponto 1, opção A. As decisões são do
+Gabriel, na [MIA-335](/MIA/issues/MIA-335). A migration só entra numa versão depois da resposta dele, e
+na virada do mês: `fn_gasto_de_ia_do_mes` soma o mês inteiro, inclusive o que elas pagaram na chave delas.
+
+**Quem passa.** O critério é por dado, sem id nem nome: empresa fora da demonstração, com
+`ia_segue_a_plataforma = false` e credencial `openai` ativa e validada. Em 27/11/2026, só leitura: 4 empresas.
+
+**O que muda em cada uma** (`fn_mia_chave_propria_passa_a_plataforma`):
+
+| Peça | Antes | Depois |
+|---|---|---|
+| Credenciais `openai` | ativas | `is_active = false`, sem apagar e com `validated_at` gravado. Na chamada seguinte, o resolvedor desce para a chave da instalação. |
+| `ia_segue_a_plataforma` | `false` | `true`. O gatilho da 9172 grava o par de `platform_ia` em `settings.llm`, e a carga da versão (MIA-309) leva os agentes publicados ao mesmo par, inclusive os que estavam noutro modelo. |
+| Teto de `ai_budgets` | o da empresa | 3000 centavos de dólar (US$ 30) no mês, modo `avisar`, limiar mantido. Saindo de `bloquear`, a carência zera. Nunca `bloquear`. |
+| Typesafe (o Jev) | ativa | ativa. O Jev delas segue na chave delas até o Jev nativo. |
+| Versão publicada | | nada muda. O gatilho do upstream recusa, e a carga da versão já resolve. |
+
+Cada empresa ganha uma linha `ai.chave_propria_passou_a_plataforma` em `api_audit_log`, com o par de
+antes (`antes`, inclusive `enabled_models`), o par de depois, o teto de antes (`teto_antes`, `null` se não
+havia linha), o teto novo e os ids das credenciais desativadas. É dela que sai a volta.
+
+**Uma vez só.** O baseline roda a cada implantação. A marca é `platform_ia.chaves_proprias_passaram_em`,
+gravada no mesmo bloco da passagem: preenchida, a passagem não roda de novo e não puxa quem escolher
+chave própria depois. Se a passagem falhar, a marca também não fica, e a implantação seguinte tenta de
+novo. A marca não mora na auditoria porque a sessão de um membro consegue gravar em `api_audit_log`.
+
+**Cada decisão num trecho.** Na migration, os trechos marcados com `DECISÃO`: quem passa (o `select` do
+critério), as chaves que saem (`c_provedores_que_saem`) e o teto (`c_teto_cents`, `c_modo`). "Uma a uma",
+"outro teto", "Jev desligado" ou "alguma de fora" mudam só aquele trecho. Desligar o Jev pede também
+desligar a config dele em `settings.jev`: só a lista de provedores não basta.
+
+**Como conferir depois da implantação.**
+
+1. `plataforma_ver_ia_das_empresas` mostra as 4 em "segue", com chave `instalacao`, e
+   `agentes_fora_do_par` em zero.
+2. `select count(*) from api_audit_log where action = 'ai.chave_propria_passou_a_plataforma'` dá 4.
+3. As chamadas delas em `llm_calls` seguem com status ok na manhã seguinte.
+
+### A volta
+
+Não é migration agora. É SQL à mão na produção, então só com o ok do Gabriel, guardando antes as linhas
+que vão mudar (`mia-implantacao`), ou uma migration de volta. Vale na chamada seguinte.
+
+A sessão de um membro consegue inserir linha em `api_audit_log` da própria empresa. Por isso a volta
+lê só a primeira linha de cada empresa gravada pelo banco (sem autor e sem token), religa só credencial
+`openai` daquela empresa, e o passo 0 confere que são 4 antes de mudar qualquer coisa.
+
+```sql
+begin;
+
+-- 0. As linhas da 9176. Confira: 4 empresas, e as credenciais de cada uma.
+create temporary table volta_9176 on commit drop as
+select distinct on (l.organization_id)
+       l.organization_id as org, l.metadata as m
+  from public.api_audit_log l
+ where l.action = 'ai.chave_propria_passou_a_plataforma'
+   and l.metadata ->> 'migration' = '9176'
+   and l.actor_user_id is null
+   and l.actor_api_token_id is null
+   and l.bypassed_rls
+ order by l.organization_id, l.created_at;
+
+select count(*) as empresas,
+       sum(jsonb_array_length(m -> 'credenciais_desativadas')) as credenciais
+  from volta_9176;
+
+-- 1. Religa as credenciais desativadas (a validação continua gravada).
+update public.ai_provider_credentials c
+   set is_active = true, updated_at = now()
+  from volta_9176 v
+ where c.organization_id = v.org
+   and c.provider = 'openai'
+   and c.id in (select x::uuid from jsonb_array_elements_text(v.m -> 'credenciais_desativadas') x);
+
+-- 2. Deixa de seguir a plataforma e volta ao par de antes, na MESMA escrita
+--    (o gatilho da 9172 respeita a escolha quando as duas vêm juntas).
+update public.organizations o
+   set ia_segue_a_plataforma = false,
+       settings = case
+         when v.m -> 'antes' ->> 'provider' is null or v.m -> 'antes' ->> 'default_model' is null
+           then o.settings
+         when jsonb_typeof(v.m -> 'antes' -> 'enabled_models') = 'array'
+           then jsonb_set(public.fn_mia_llm_com_o_par(o.settings, v.m -> 'antes' ->> 'provider', v.m -> 'antes' ->> 'default_model'),
+                          '{llm,enabled_models}', v.m -> 'antes' -> 'enabled_models')
+         else public.fn_mia_llm_com_o_par(o.settings, v.m -> 'antes' ->> 'provider', v.m -> 'antes' ->> 'default_model')
+       end
+  from volta_9176 v
+ where o.id = v.org;
+
+-- 3. O teto de antes. Sem linha antes, a linha que a 9176 criou sai.
+update public.ai_budgets b
+   set monthly_limit_cents = (v.m -> 'teto_antes' ->> 'monthly_limit_cents')::integer,
+       enforcement_mode = v.m -> 'teto_antes' ->> 'enforcement_mode',
+       alarm_threshold_pct = (v.m -> 'teto_antes' ->> 'alarm_threshold_pct')::integer,
+       enforcement_effective_at = (v.m -> 'teto_antes' ->> 'enforcement_effective_at')::timestamptz,
+       updated_at = now()
+  from volta_9176 v
+ where b.organization_id = v.org
+   and jsonb_typeof(v.m -> 'teto_antes') = 'object';
+
+delete from public.ai_budgets b
+ using volta_9176 v
+ where b.organization_id = v.org
+   and jsonb_typeof(v.m -> 'teto_antes') is distinct from 'object';
+
+-- 4. Confira antes do commit: 4 empresas fora da plataforma, com a chave openai ativa.
+select count(*) filter (where not o.ia_segue_a_plataforma) as fora_da_plataforma,
+       count(*) filter (where exists (select 1 from public.ai_provider_credentials c
+                                       where c.organization_id = o.id and c.provider = 'openai'
+                                         and c.is_active and c.validated_at is not null)) as com_chave_openai
+  from public.organizations o
+  join volta_9176 v on v.org = o.id;
+
+commit;
+```
+
+A marca `platform_ia.chaves_proprias_passaram_em` fica: a 9176 não roda de novo depois da volta. Para
+passar alguma delas de novo, o caminho é outra migration ou o botão "voltar a seguir a plataforma"
+(seção 8). Se alguma tinha `bloquear` antes, a volta religa a parada com a data de antes; em 27/11/2026,
+nenhuma das 4 estava em `bloquear`.
