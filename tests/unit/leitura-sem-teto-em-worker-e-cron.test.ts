@@ -128,17 +128,10 @@ const CONHECIDAS: readonly Conhecida[] = [
   },
   {
     arquivo: `${CRON}/contact-birthdays/route.ts`,
-    tabela: "automation_rules",
-    quantas: 1,
-    classe: "a trocar",
-    motivo: "As regras de aniversário ativas da instalação inteira.",
-  },
-  {
-    arquivo: `${CRON}/contact-birthdays/route.ts`,
     tabela: "organizations",
     quantas: 1,
     classe: "teto natural",
-    motivo: "`.in(\"id\", …slice(0, TAMANHO_DO_LOTE))`: no máximo 100 empresas.",
+    motivo: "Lotes de `TAMANHO_DO_LOTE` (100) ids de empresa, uma linha por id (MIA-369).",
   },
   {
     arquivo: `${CRON}/contact-birthdays/route.ts`,
@@ -201,48 +194,17 @@ const CONHECIDAS: readonly Conhecida[] = [
   },
   {
     arquivo: `${CRON}/lead-date-field-due/route.ts`,
-    tabela: "automation_rules",
-    quantas: 1,
-    classe: "a trocar",
-    motivo: "As regras de data do funil ativas da instalação inteira.",
-  },
-  {
-    arquivo: `${CRON}/lead-date-field-due/route.ts`,
     tabela: "organizations",
     quantas: 1,
     classe: "teto natural",
-    motivo: "`.in(\"id\", …slice(0, TAMANHO_DO_LOTE))`: no máximo 100 empresas.",
-  },
-  {
-    arquivo: `${CRON}/lead-date-field-due/route.ts`,
-    tabela: "event_log",
-    quantas: 1,
-    classe: "a trocar",
-    motivo:
-      "Lote de 100 negócios, mas um aviso por negócio e VALOR da data: acumula sem fim a cada " +
-      "data remarcada.",
-  },
-  {
-    arquivo: `${CRON}/lead-time-triggers/route.ts`,
-    tabela: "automation_rules",
-    quantas: 1,
-    classe: "a trocar",
-    motivo: "As regras de silêncio e etapa parada ativas da instalação inteira.",
+    motivo: "Lotes de `TAMANHO_DO_LOTE` (100) ids de empresa, uma linha por id (MIA-369).",
   },
   {
     arquivo: `${CRON}/lead-time-triggers/route.ts`,
     tabela: "organizations",
     quantas: 1,
     classe: "teto natural",
-    motivo: "`.in(\"id\", …slice(0, TAMANHO_DO_LOTE))`: no máximo 100 empresas.",
-  },
-  {
-    arquivo: `${CRON}/lead-time-triggers/route.ts`,
-    tabela: "event_log",
-    quantas: 1,
-    classe: "a trocar",
-    motivo:
-      "Lote de 100 negócios, mas um aviso por negócio e ÂNCORA: acumula sem fim a cada silêncio novo.",
+    motivo: "Lotes de `TAMANHO_DO_LOTE` (100) ids de empresa, uma linha por id (MIA-369).",
   },
   {
     arquivo: `${CRON}/proposta-travada/route.ts`,

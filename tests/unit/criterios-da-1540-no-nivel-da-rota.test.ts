@@ -127,6 +127,9 @@ class MundoFalso {
         event_type: args.p_event_type,
         entity_id: args.p_entity_id,
         payload: args.p_payload,
+        // O `event_log` de verdade carimba a hora (default `now()`): a trava
+        // dos gatilhos por tempo recorta por ela (MIA-369).
+        created_at: new Date().toISOString(),
       });
     }
     return { data: null, error: null };
@@ -146,6 +149,7 @@ class MundoFalso {
 class ConsultaFalsa implements PromiseLike<{ data: Linha[] | null; error: null }> {
   private filtros: Array<(l: Linha) => boolean> = [];
   private teto: number | null = null;
+  private inicio = 0;
   private acao: "select" | "insert" | "update" = "select";
   private dados: Linha | null = null;
 
@@ -192,6 +196,15 @@ class ConsultaFalsa implements PromiseLike<{ data: Linha[] | null; error: null }
     return this;
   }
 
+  /** FORK MIA (MIA-369): o recorte da trava por `created_at` (`>= âncora mais antiga - folga`). */
+  gte(caminho: string, valor: unknown): this {
+    this.filtros.push((l) => {
+      const atual = valorNoCaminho(l, caminho);
+      return typeof atual === "string" && typeof valor === "string" && Date.parse(atual) >= Date.parse(valor);
+    });
+    return this;
+  }
+
   /** O corte da etapa parada: `stage_changed_at <= agora - N dias`. */
   lte(caminho: string, valor: unknown): this {
     this.filtros.push((l) => {
@@ -227,6 +240,13 @@ class ConsultaFalsa implements PromiseLike<{ data: Linha[] | null; error: null }
     return this;
   }
 
+  /** FORK MIA (MIA-369): a página de `lerTodasAsPaginas`. Sem contagem, o fim é a página vazia. */
+  range(de: number, ate: number): this {
+    this.inicio = de;
+    this.teto = ate - de + 1;
+    return this;
+  }
+
   async maybeSingle(): Promise<{ data: Linha | null; error: null }> {
     const { data } = await this.executar();
     return { data: data?.[0] ?? null, error: null };
@@ -247,7 +267,7 @@ class ConsultaFalsa implements PromiseLike<{ data: Linha[] | null; error: null }
     }
     const casam = linhas.filter((l) => this.filtros.every((f) => f(l)));
     if (this.acao === "update") for (const linha of casam) Object.assign(linha, this.dados);
-    return { data: this.teto === null ? casam : casam.slice(0, this.teto), error: null };
+    return { data: this.teto === null ? casam.slice(this.inicio) : casam.slice(this.inicio, this.inicio + this.teto), error: null };
   }
 }
 
@@ -417,6 +437,8 @@ describe("a janela de 200 dos gatilhos por tempo (item 1)", () => {
         event_type: GATILHO_SILENCIO,
         entity_id: lead.id,
         payload: { rule_id: REGRA, ancora: lead.created_at },
+        // O aviso nasce depois da âncora, como no banco (MIA-369).
+        created_at: new Date(agora).toISOString(),
       });
     }
 
@@ -444,6 +466,8 @@ describe("a janela de 200 dos gatilhos por tempo (item 1)", () => {
         event_type: GATILHO_ETAPA_PARADA,
         entity_id: lead.id,
         payload: { rule_id: REGRA, ancora: lead.stage_changed_at },
+        // O aviso nasce depois da âncora, como no banco (MIA-369).
+        created_at: new Date(agora).toISOString(),
       });
     }
 

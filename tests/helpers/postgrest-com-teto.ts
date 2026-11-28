@@ -9,7 +9,8 @@
  *   · corta TODA resposta em `maxRows`, por maior que seja o `limit`/`range`;
  *   · aplica de verdade os filtros (`eq`, `neq`, `is`, `not … is null`,
  *     `not … is true/false`, `not … in (…)`, `in`,
- *     `overlaps`, `gte`, `gt`, `lt`, `lte`), a ordem e o `range`;
+ *     `overlaps`, `or` com `eq`/`like`, `gte`, `gt`, `lt`, `lte`), a ordem e o
+ *     `range`, inclusive pelo caminho do jsonb (`payload->>rule_id`);
  *   · devolve o `count` exato só quando o `select` o pede, e `null` senão; com
  *     `head: true` devolve só a contagem, sem linha;
  *   · sem `order`, devolve na ordem de inserção (o que o Postgres costuma fazer
@@ -62,6 +63,7 @@ export interface Cadeia extends PromiseLike<Resposta> {
   not(coluna: string, operador: string, valor: unknown): Cadeia;
   in(coluna: string, valores: unknown[]): Cadeia;
   overlaps(coluna: string, valores: unknown[]): Cadeia;
+  or(expressao: string): Cadeia;
   gte(coluna: string, valor: unknown): Cadeia;
   gt(coluna: string, valor: unknown): Cadeia;
   lt(coluna: string, valor: unknown): Cadeia;
@@ -118,6 +120,26 @@ function comparavel(v: unknown): number | string {
     if (!Number.isNaN(ms)) return ms;
   }
   return texto;
+}
+
+/**
+ * FORK MIA (MIA-369) — a coluna como o PostgREST a lê: `payload->>rule_id` é o
+ * campo do jsonb em TEXTO (o número volta como "2026", o nulo como nulo), e
+ * `a->b->>c` desce pelos objetos. Sem isto o filtro por caminho comparava
+ * `undefined` e nunca casava: a trava do `event_log` pareceria vazia.
+ */
+function valorDe(linha: Linha, coluna: string): unknown {
+  if (!coluna.includes("->")) return linha[coluna];
+  const comoTexto = coluna.includes("->>");
+  const partes = coluna.split(/->>?/);
+  let atual: unknown = linha[partes[0]!];
+  for (const parte of partes.slice(1)) {
+    if (atual === null || typeof atual !== "object") return null;
+    atual = (atual as Linha)[parte];
+  }
+  if (atual === undefined || atual === null) return null;
+  if (!comoTexto) return atual;
+  return typeof atual === "object" ? JSON.stringify(atual) : String(atual);
 }
 
 function comparar(a: unknown, b: unknown): number {
@@ -257,9 +279,9 @@ export function postgrestComTeto(
         escrita = { op: "delete", payload: [] };
         return q;
       },
-      eq: (c: string, v: unknown) => filtrar("eq", c, v, (l) => l[c] === v),
-      neq: (c: string, v: unknown) => filtrar("neq", c, v, (l) => l[c] !== v),
-      is: (c: string, v: unknown) => filtrar("is", c, v, (l) => (l[c] ?? null) === v),
+      eq: (c: string, v: unknown) => filtrar("eq", c, v, (l) => valorDe(l, c) === v),
+      neq: (c: string, v: unknown) => filtrar("neq", c, v, (l) => valorDe(l, c) !== v),
+      is: (c: string, v: unknown) => filtrar("is", c, v, (l) => (valorDe(l, c) ?? null) === v),
       not: (c: string, op: string, v: unknown) => {
         // FORK MIA (MIA-78): `not … in` com a lista no formato do PostgREST,
         // `(a,b,c)`. Como no Postgres, linha com a coluna nula não passa
@@ -284,7 +306,7 @@ export function postgrestComTeto(
         // de decidir antes (ver `lib/broadcast/quem-entra-na-lista.ts`).
         if (vs.length === 0) throw new Error(`dublê: .in("${c}", []) com lista vazia em "${tabela}"`);
         const conjunto = new Set(vs);
-        return filtrar("in", c, vs, (l) => conjunto.has(l[c]));
+        return filtrar("in", c, vs, (l) => conjunto.has(valorDe(l, c)));
       },
       // O elemento pode vir entre aspas, como o literal de array do Postgres lê
       // (`{"a,b","c"}`): sem isto, o dublê acharia menos do que o banco acha.
@@ -299,10 +321,28 @@ export function postgrestComTeto(
           (l) => Array.isArray(l[c]) && (l[c] as unknown[]).some((x) => valores.includes(x)),
         );
       },
-      gte: (c: string, v: unknown) => filtrar("gte", c, v, (l) => l[c] != null && comparar(l[c], v) >= 0),
-      gt: (c: string, v: unknown) => filtrar("gt", c, v, (l) => l[c] != null && comparar(l[c], v) > 0),
-      lt: (c: string, v: unknown) => filtrar("lt", c, v, (l) => l[c] != null && comparar(l[c], v) < 0),
-      lte: (c: string, v: unknown) => filtrar("lte", c, v, (l) => l[c] != null && comparar(l[c], v) <= 0),
+      // FORK MIA (MIA-369): o `or` do PostgREST, só com termos `coluna.eq.valor`
+      // e `coluna.like|ilike.padrão` (`*` é o curinga). Termo de outra forma
+      // LANÇA: engolir o termo devolveria a linha que ele existia para excluir.
+      or: (expressao: string) => {
+        const termos = expressao.split(",").map((t) => {
+          const m = /^([^.]+)\.(eq|like|ilike)\.(.*)$/s.exec(t.trim());
+          if (!m) throw new Error(`dublê: termo de .or() não suportado em "${tabela}": ${t}`);
+          const [, coluna, op, valor] = m as unknown as [string, string, string, string];
+          if (op === "eq") return (l: Linha) => valorDe(l, coluna) === valor;
+          const escapado = valor.split("*").map((p) => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+          const padrao = new RegExp(`^${escapado}$`, op === "ilike" ? "is" : "s");
+          return (l: Linha) => {
+            const atual = valorDe(l, coluna);
+            return typeof atual === "string" && padrao.test(atual);
+          };
+        });
+        return filtrar("or", "", expressao, (l) => termos.some((f) => f(l)));
+      },
+      gte: (c: string, v: unknown) => filtrar("gte", c, v, (l) => valorDe(l, c) != null && comparar(valorDe(l, c), v) >= 0),
+      gt: (c: string, v: unknown) => filtrar("gt", c, v, (l) => valorDe(l, c) != null && comparar(valorDe(l, c), v) > 0),
+      lt: (c: string, v: unknown) => filtrar("lt", c, v, (l) => valorDe(l, c) != null && comparar(valorDe(l, c), v) < 0),
+      lte: (c: string, v: unknown) => filtrar("lte", c, v, (l) => valorDe(l, c) != null && comparar(valorDe(l, c), v) <= 0),
       order: (coluna: string, o?: { ascending?: boolean }) => (
         ordem.push({ coluna, ascendente: o?.ascending !== false }), q
       ),
