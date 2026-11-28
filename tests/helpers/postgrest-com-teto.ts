@@ -9,7 +9,7 @@
  *   · corta TODA resposta em `maxRows`, por maior que seja o `limit`/`range`;
  *   · aplica de verdade os filtros (`eq`, `neq`, `is`, `not … is null`,
  *     `not … is true/false`, `not … in (…)`, `in`,
- *     `overlaps`, `or` com `eq`/`like`, `gte`, `gt`, `lt`, `lte`), a ordem e o
+ *     `overlaps`, `or` com `eq`/`like`/`not.is.null`, `gte`, `gt`, `lt`, `lte`), a ordem e o
  *     `range`, inclusive pelo caminho do jsonb (`payload->>rule_id`);
  *   · devolve o `count` exato só quando o `select` o pede, e `null` senão; com
  *     `head: true` devolve só a contagem, sem linha;
@@ -298,7 +298,9 @@ export function postgrestComTeto(
         if (op !== "is" || v !== null) {
           throw new Error(`dublê: .not("${c}", "${op}", …) só é suportado como "is null", "is true/false" e "in (…)"`);
         }
-        return filtrar("not-is-null", c, null, (l) => (l[c] ?? null) !== null);
+        // FORK MIA (MIA-373): pelo caminho do jsonb também
+        // (`settings->routing->handoff_return_after_minutes`).
+        return filtrar("not-is-null", c, null, (l) => (valorDe(l, c) ?? null) !== null);
       },
       in: (c: string, vs: unknown[]) => {
         // Lista VAZIA lança, de propósito: código nenhum deve depender do que o
@@ -321,11 +323,14 @@ export function postgrestComTeto(
           (l) => Array.isArray(l[c]) && (l[c] as unknown[]).some((x) => valores.includes(x)),
         );
       },
-      // FORK MIA (MIA-369): o `or` do PostgREST, só com termos `coluna.eq.valor`
-      // e `coluna.like|ilike.padrão` (`*` é o curinga). Termo de outra forma
+      // FORK MIA (MIA-369): o `or` do PostgREST, só com termos `coluna.eq.valor`,
+      // `coluna.like|ilike.padrão` (`*` é o curinga) e `coluna.not.is.null`. Termo de outra forma
       // LANÇA: engolir o termo devolveria a linha que ele existia para excluir.
       or: (expressao: string) => {
         const termos = expressao.split(",").map((t) => {
+          // FORK MIA (MIA-373): `coluna.not.is.null`, o "tem dono" do cron de devolução.
+          const naoNulo = /^([^.]+)\.not\.is\.null$/s.exec(t.trim());
+          if (naoNulo) return (l: Linha) => (valorDe(l, naoNulo[1]!) ?? null) !== null;
           const m = /^([^.]+)\.(eq|like|ilike)\.(.*)$/s.exec(t.trim());
           if (!m) throw new Error(`dublê: termo de .or() não suportado em "${tabela}": ${t}`);
           const [, coluna, op, valor] = m as unknown as [string, string, string, string];
