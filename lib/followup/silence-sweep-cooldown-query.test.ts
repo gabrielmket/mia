@@ -26,7 +26,12 @@ function fakeAdmin(rows: Array<{ contact_id: string }>) {
     {
       get(_target, prop) {
         if (prop === "then") {
-          return (resolve: (value: unknown) => unknown) => resolve({ data: rows, error: null });
+          // FORK MIA (MIA-340): a leitura agora pagina (`range`) e lê até a
+          // página vazia. Só a primeira página traz as linhas.
+          const range = chamadas.filter((c) => c.metodo === "range").at(-1);
+          const primeira = !range || range.args[0] === 0;
+          return (resolve: (value: unknown) => unknown) =>
+            resolve({ data: primeira ? rows : [], error: null, count: null });
         }
         return (...args: unknown[]) => {
           chamadas.push({ metodo: String(prop), args });
