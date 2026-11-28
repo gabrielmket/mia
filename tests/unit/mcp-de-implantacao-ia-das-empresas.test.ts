@@ -107,8 +107,8 @@ type Resposta = {
 };
 
 describe("a lista", () => {
-  it("está lá, só lê, a lista tem 136 (134 + esta + o teto de IA, MIA-309), e não há ferramenta de trocar a IA", async () => {
-    expect(FERRAMENTAS).toHaveLength(136);
+  it("está lá, só lê, a lista tem 138 (134 + esta + o teto de IA, MIA-309 + as duas das versões do agente, MIA-358), e não há ferramenta de trocar a IA", async () => {
+    expect(FERRAMENTAS).toHaveLength(138);
     expect(FERRAMENTAS.find((f) => f.name === "plataforma_ver_ia_das_empresas")?.operacao).toBeNull();
     // Trocar o modelo é ato de pessoa, com MFA, no painel. O TETO de gasto
     // (`plataforma_definir_teto_de_ia`, MIA-309) não troca provedor nem modelo.

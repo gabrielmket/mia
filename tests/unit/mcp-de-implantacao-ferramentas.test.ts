@@ -172,12 +172,12 @@ describe("as operações do token", () => {
     // FORK MIA (.101): `plataforma_publicar_raio_x` publica o RELATÓRIO para o dono
     // da empresa (um link de leitura), não põe nada que fale com o cliente final no
     // ar; tem a chave própria `gerir_raio_x` (lib/mcp-plataforma/operacoes.ts).
-    const doAr = FERRAMENTAS.filter((f) => /publicar|pausar|ligar|submeter/.test(f.name) && f.name !== "plataforma_publicar_raio_x").map((f) => [f.name, f.operacao]);
+    const doAr = FERRAMENTAS.filter((f) => /publicar|pausar|ligar|submeter|reverter/.test(f.name) && f.name !== "plataforma_publicar_raio_x").map((f) => [f.name, f.operacao]);
     expect(doAr.length).toBeGreaterThanOrEqual(6);
     for (const [nome, operacao] of doAr) expect(operacao, `${nome} deveria exigir colocar_no_ar`).toBe("colocar_no_ar");
     // E nenhuma ferramenta de montagem carrega um desses verbos.
     const deMontagem = FERRAMENTAS.filter((f) => f.operacao === "implantar_configuracao").map((f) => f.name);
-    expect(deMontagem.filter((n) => /publicar|pausar|ligar|submeter|convidar/.test(n))).toEqual([]);
+    expect(deMontagem.filter((n) => /publicar|pausar|ligar|submeter|reverter|convidar/.test(n))).toEqual([]);
   });
 
   it("convidar tem chave própria: quem só monta não manda e-mail nem dá acesso", () => {

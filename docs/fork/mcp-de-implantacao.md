@@ -254,6 +254,7 @@ e `plataforma_revogar_link_do_dono`. As quatro da .76 são
 | `plataforma_listar_modelos` | os modelos e vocabulários que as outras ferramentas aceitam: modelos de follow-up, pacotes e capacidades do agente, gatilhos e ações de automação, passos do funil, tipos de campo | leitura |
 | `plataforma_ver_funis` | os funis inteiros: etapas (desde a 1.118, com a cor e o `criterio`), passo do agente, campos (desde a 1.118, cada um com `ia_pode_ler`: se a IA lê o valor), motivos | leitura |
 | `plataforma_ver_agentes` | os agentes, a versão no ar, o rascunho, o limiar de sentimento, a passagem por assunto jurídico e o que falta para publicar; desde a .85, o horário de atendimento da IA da versão publicada (`horario_de_atendimento`: faixas, fuso, `ativa_agora`, `proxima_troca` e se cai fora da janela de resposta do número); com `agente`, o horário da versão vigente; o bloqueio de afirmação clínica da empresa (`seguranca_da_empresa`); os **roteadores** de intenção (número, se está ligado, agente reserva, janela de contexto do classificador e cada intenção com o agente e o funil de destino); e os servidores MCP de cada agente (`servidores_mcp`, 9095: host, autenticação, chave só como "configurada" e 4 últimos, ferramentas da versão vigente) | leitura |
+| `plataforma_ver_versoes_do_agente` | (MIA-358) as versões de um agente, da mais nova: número, situação (`publicada`, `rascunho`, `rascunho_superado`, `antiga`), quando foi criada e publicada, quem publicou (`tela`, `token_da_empresa` ou `mcp_de_plataforma`, com a pessoa; lido do `api_audit_log`, sem coluna nova), de qual versão é cópia quando nasceu de uma reversão, o tamanho do prompt (o texto não vem) e o que cada uma tem de diferente da publicada. Até 100 (`limite`, padrão 20) | leitura |
 | `plataforma_ver_catalogo` | os produtos e serviços, com busca e paginação | leitura |
 | `plataforma_ver_obrigacoes` | os documentos e obrigações com vencimento: contadores (vencidos, vencendo em 30 dias, pedidos sem resposta, em dia), os itens por situação e o catálogo de tipos por funil | leitura |
 | `plataforma_ver_configuracao` | o conteúdo do que está configurado, por seção (etiquetas, memória, conhecimento, follow-ups, automações, agenda, equipe, números, atendimento, mensagens, planos de tarefa, fontes de formulário e banco externo). Em equipe, desde a 1.118 (MIA-79), a tela inicial de cada pessoa e a da empresa, com as opções. Em números, também os dias da prospecção, se guarda o histórico, se está pausado, as pausas agendadas e, desde a .83, a distribuição do número (regra própria, modo, atendente padrão e responsáveis, por e-mail); em atendimento, o freio do passo "a IA decide"; nas fontes, nunca o segredo; no banco externo, nunca endereço, usuário ou senha | leitura |
@@ -335,6 +336,7 @@ Todas respondem `criou`, `atualizou` ou `ja_estava`, item a item quando a chamad
 |---|---|---|
 | `plataforma_publicar_agente` | publica o rascunho do agente: ele passa a responder no número | sem rascunho novo, `ja_estava` |
 | `plataforma_pausar_agente` | pausa ou retoma um agente sem despublicar; desde a v1.84 do upstream, outro agente no ar no mesmo número passa a responder ali | mesmo pedido, `ja_estava` |
+| `plataforma_reverter_agente` | (MIA-358) volta um agente que está no ar para uma versão anterior pelo número: copia o conteúdo dela numa versão nova e a publica (`reverterParaVersao` do `edicao.ts`, o botão "Reverter" da tela). A IA não volta: a cópia fica com a IA atual do agente. Recusa versão que não existe (dizendo quais existem), rascunho, agente sem versão publicada e agente de outra empresa; publicação recusada não deixa versão. Auditoria `ai_agent.reverted` com a versão de origem, a de antes e a nova, `via: "mcp_plataforma"` | o que está no ar já tem o conteúdo pedido, `ja_estava` |
 | `plataforma_publicar_followup` | publica (ou desliga) um fluxo de follow-up; desde a .84, recusa o passo cujo modelo de mensagem não existe na empresa e devolve os avisos do gatilho de silêncio (sem teto, sem limite de repetições, alcançando quem a equipe não respondeu), com o campo que resolve cada um | sem mudança no rascunho, `ja_estava` |
 | `plataforma_ligar_automacao` | liga ou desliga uma regra | mesmo estado, `ja_estava` |
 | `plataforma_ligar_roteador` | liga ou desliga o roteador de intenção: ligado, ele escolhe o agente a cada mensagem do número e as intenções com destino movem o negócio. Roteador sem intenção não liga, e só um fica ligado por número | mesmo estado, `ja_estava` |
@@ -1030,7 +1032,7 @@ modelo antigo, reverter, cada um com o controle da plataforma, e o esquema).
 | `crm_save_ai_agent_draft` | rascunho por troca exata, anexar ao fim ou texto inteiro, em 1 a 5 assistentes, e as configurações (voz, ferramentas, passar para pessoa, dividir mensagens, ver imagens) | `plataforma_garantir_agente` (rascunho com o pedido inteiro, idempotente) | conviver. **No fork o esquema não tem `provedor` nem `modelo`** (MIA-115): o ChatGPT não promete uma troca que a trava ignoraria, e quem manda recebe a recusa do esquema (`.strict()`) |
 | `crm_test_ai_agent_version` | simula uma mensagem contra uma versão; nada é enviado, gasta crédito de IA | não tem | falta (lista abaixo) |
 | `crm_publish_ai_agent_version` | publica uma versão, com as checagens da tela | `plataforma_publicar_agente` (lista todas as pendências e quem resolve cada uma) | conviver |
-| `crm_rollback_ai_agent` | copia uma versão antiga numa versão nova e a publica | não tem (`plataforma_pausar_agente` cala o agente, não volta a versão) | falta (lista abaixo) |
+| `crm_rollback_ai_agent` | copia uma versão antiga numa versão nova e a publica | `plataforma_reverter_agente` (MIA-358), com `plataforma_ver_versoes_do_agente` para escolher o número | conviver |
 
 Cuidados para quem implanta, agora que o dono também edita:
 
@@ -1057,12 +1059,12 @@ não cria ferramenta de edição de assistente):
   diagnóstico de suporte que mais falta, mas lê conversa de cliente, e o MCP de plataforma até
   hoje só lê contagem de conversa (`plataforma_ver_conversas_do_mes`). Pede decisão sobre o que
   pode voltar (sem texto da mensagem do cliente) e ferramenta própria;
-- voltar um agente para uma versão anterior (o equivalente de `crm_rollback_ai_agent`), para
-  desfazer uma publicação errada sem reescrever o pedido: ferramenta própria de escrita, na
-  operação `colocar_no_ar`, por `reverterParaVersao` do `edicao.ts` com o ator da plataforma;
 - testar um rascunho com uma mensagem antes de publicar (o equivalente de
   `crm_test_ai_agent_version`): gasta IA da plataforma por chamada; pede decisão de teto antes
   de virar ferramenta.
+
+Voltar um agente para uma versão anterior saiu desta lista na MIA-358: `plataforma_reverter_agente`
+e `plataforma_ver_versoes_do_agente` (tabelas acima).
 
 Nada a configurar pela implantação: o motivo real do adiamento do follow-up, o visto azul do
 WAHA sem "Guardar histórico" (#5015), o aviso crítico quando a IA não responde nem após a

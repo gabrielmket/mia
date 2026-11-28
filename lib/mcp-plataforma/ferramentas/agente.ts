@@ -8,6 +8,8 @@
  * Criar e editar o agente grava um RASCUNHO: nada chega ao cliente final, e por
  * isso é montagem (`implantar_configuracao`). Publicar faz o agente responder
  * às pessoas no WhatsApp da empresa, e pausar o cala: são `colocar_no_ar`.
+ * Voltar para uma versão anterior (MIA-358) também publica: `colocar_no_ar`.
+ * Ver as versões é leitura (`lib/implantacao/versoes-do-agente.ts`).
  */
 import { z } from "zod";
 
@@ -16,6 +18,7 @@ import { MAX_FAIXAS_POR_DIA } from "@/lib/agent-engine/agent/horario-da-ia";
 import { DEFAULT_SENTIMENT_THRESHOLD } from "@/lib/ai/prompts/sentiment";
 import { garantirAgente, pausarAgente, publicarAgente, type PedidoDeAgente } from "@/lib/implantacao/agente";
 import { TETO_DE_ETIQUETAS_DA_SKILL } from "@/lib/implantacao/skills-do-agente";
+import { LIMITE_MAXIMO_DE_VERSOES, LIMITE_PADRAO_DE_VERSOES, reverterAgente, verVersoesDoAgente } from "@/lib/implantacao/versoes-do-agente";
 import { LIMITE_DE_SERVIDORES_POR_AGENTE, MODOS_DE_AUTENTICACAO } from "@/lib/mcp/servidor-externo/do-agente/registro";
 import { hostDoEndpoint } from "@/lib/mcp/servidor-externo/registro";
 import { PACOTES } from "@/lib/mcp/tools/pacotes";
@@ -455,6 +458,66 @@ export const FERRAMENTAS_DE_AGENTE: readonly FerramentaDePlataforma[] = [
     handler: async (ctx, args) => {
       const { c } = await alvo(ctx, args);
       return pausarAgente(c, { agente: String(args.agente), pausar: args.pausar === true });
+    },
+  },
+
+  // MIA-358 — o histórico de versões e a reversão (o `crm_rollback_ai_agent` da empresa).
+  {
+    name: "plataforma_ver_versoes_do_agente",
+    description:
+      "As VERSÕES de um agente de IA de um cliente, da mais nova para a mais antiga: o número, a situação (`publicada`, a que responde agora; `rascunho`, o vigente, ainda não publicado; " +
+      "`rascunho_superado`, um rascunho mais antigo que a publicada, que a tela não abre mais; `antiga`, uma que já esteve no ar), quando foi criada e publicada, " +
+      "QUEM PUBLICOU (`publicada_por`: pela tela, pelo token da empresa, como o ChatGPT do dono, ou pelo MCP de plataforma, com a pessoa) e, quando nasceu de uma reversão, de qual versão é cópia. " +
+      "Cada versão traz o que tem de DIFERENTE da publicada (`diferente_da_publicada`, nas palavras da tela: prompt, capacidades, funis, número...), para escolher para onde voltar. " +
+      "O prompt NÃO vem inteiro, só o tamanho: o texto da versão vigente sai em plataforma_ver_agentes com `agente`. " +
+      "QUANDO USAR: antes de plataforma_reverter_agente, para achar o número da versão boa. " +
+      "Versão publicada antes de a trilha de auditoria existir volta com `publicada_por: null`.",
+    inputSchema: {
+      organization_id: ORGANIZACAO,
+      agente: z.string().trim().min(1).max(120).describe("Nome ou id do agente."),
+      limite: z
+        .number()
+        .int()
+        .min(1)
+        .max(LIMITE_MAXIMO_DE_VERSOES)
+        .optional()
+        .describe(`Quantas versões, das mais novas. Padrão: ${LIMITE_PADRAO_DE_VERSOES}.`),
+    },
+    exemplo: { organization_id: ORG_DE_EXEMPLO, agente: "Bia" },
+    operacao: null,
+    handler: async (ctx, args) => {
+      const { c } = await alvo(ctx, args);
+      return verVersoesDoAgente(c, {
+        agente: String(args.agente),
+        ...(typeof args.limite === "number" ? { limite: args.limite } : {}),
+      });
+    },
+  },
+
+  {
+    name: "plataforma_reverter_agente",
+    description:
+      "VOLTA um agente de IA que está no ar para uma VERSÃO ANTERIOR: copia o conteúdo daquela versão (prompt, capacidades, funis, materiais, número, horário, follow-ups) " +
+      "numa versão NOVA e a publica. A partir da próxima mensagem, o cliente é atendido com ela. É o botão \"Reverter\" do Histórico da tela: nada é apagado, e a versão errada fica no Histórico. " +
+      "A IA (provedor, modelo, chave) NÃO volta: a cópia fica com a IA atual do agente, que é da plataforma. " +
+      "ANTES DE CHAMAR: veja as versões com plataforma_ver_versoes_do_agente e escolha o NÚMERO da versão boa (uma que já esteve no ar; rascunho é recusado). " +
+      "Se houver um rascunho não publicado, ele fica para trás e a resposta avisa. Se a publicação é recusada (o número desconectou, por exemplo), nada fica gravado e a recusa diz quem resolve. " +
+      "Chamar de novo quando o que está no ar já tem o conteúdo da versão pedida responde `ja_estava`, sem criar versão. " +
+      "O QUE NÃO FAZ: não edita o rascunho (plataforma_garantir_agente), não pausa (plataforma_pausar_agente) e não publica um rascunho (plataforma_publicar_agente).",
+    inputSchema: {
+      organization_id: ORGANIZACAO,
+      agente: z.string().trim().min(1).max(120).describe("Nome ou id do agente."),
+      para_versao: z
+        .number()
+        .int()
+        .min(1)
+        .describe("O NÚMERO da versão para onde voltar (o `numero` de plataforma_ver_versoes_do_agente). Obrigatório de propósito: nunca é presumido."),
+    },
+    exemplo: { organization_id: ORG_DE_EXEMPLO, agente: "Bia", para_versao: 2 },
+    operacao: "colocar_no_ar",
+    handler: async (ctx, args) => {
+      const { c } = await alvo(ctx, args);
+      return reverterAgente(c, { agente: String(args.agente), para_versao: Number(args.para_versao) });
     },
   },
 ];

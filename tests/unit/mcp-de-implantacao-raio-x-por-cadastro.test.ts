@@ -95,8 +95,8 @@ beforeEach(() => {
 });
 
 describe("o raio-X por cadastro no MCP", () => {
-  it("a lista tem 136 (112 + as três da trava de robô da .108 + as duas do produto no negócio da .109 + a da lista de espera, MIA-18 + a do consumo de IA, MIA-44 + as três da 1.117, MIA-67 + as duas da 1.118, MIA-79 + as duas dos preços da Meta, MIA-99 + as duas da MIA-103 + as duas das conversões do site, MIA-169 + as três da coexistência, MIA-28 + o ranking do consumo de IA, MIA-136 + a da IA das empresas, MIA-218 + o teto de IA, MIA-309), e a sexta do raio-X é a dos preços, com gerir_raio_x", () => {
-    expect(FERRAMENTAS).toHaveLength(136);
+  it("a lista tem 138 (112 + as três da trava de robô da .108 + as duas do produto no negócio da .109 + a da lista de espera, MIA-18 + a do consumo de IA, MIA-44 + as três da 1.117, MIA-67 + as duas da 1.118, MIA-79 + as duas dos preços da Meta, MIA-99 + as duas da MIA-103 + as duas das conversões do site, MIA-169 + as três da coexistência, MIA-28 + o ranking do consumo de IA, MIA-136 + a da IA das empresas, MIA-218 + o teto de IA, MIA-309 + as duas das versões do agente, MIA-358), e a sexta do raio-X é a dos preços, com gerir_raio_x", () => {
+    expect(FERRAMENTAS).toHaveLength(138);
     expect(FERRAMENTA_POR_NOME.get("plataforma_precos_do_raio_x")!.operacao).toBe("gerir_raio_x");
     expect(FERRAMENTA_POR_NOME.get("plataforma_precos_do_raio_x")!.description).toMatch(/INTERESSE/);
     expect(FERRAMENTA_POR_NOME.get("plataforma_ver_raio_x")!.description).toMatch(/ORIGEM/);
