@@ -431,6 +431,31 @@ function conteudoDa(versao: Record<string, unknown>): Record<string, unknown> {
   return conteudo;
 }
 
+/**
+ * MIA-358 — o que difere entre duas versões GRAVADAS, nas palavras de quem
+ * configura (os mesmos rótulos do `mudancas` de plataforma_garantir_agente).
+ * `ignorar` tira campos da comparação: a reversão não volta a IA da plataforma
+ * (provedor, modelo, chave e freios de gasto), então eles não contam como
+ * diferença entre a versão no ar e a de destino.
+ */
+export function diferencasEntreVersoes(
+  a: Record<string, unknown>,
+  b: Record<string, unknown>,
+  ignorar: readonly string[] = [],
+): string[] {
+  const ca = conteudoDa(a);
+  const cb = conteudoDa(b);
+  const fora = new Set(ignorar);
+  const mudou = CAMPOS_DA_VERSAO.filter((campo) => !fora.has(campo) && !mesmoConteudo(ca[campo], cb[campo]));
+  return [
+    ...new Set(
+      mudou.flatMap((campo) =>
+        campo === "trigger_config" ? rotulosDoGatilho(a.trigger_config, b.trigger_config) : [ROTULO_DO_CAMPO[campo] ?? campo],
+      ),
+    ),
+  ];
+}
+
 /** O estado da credencial escolhida, na régua de `bloqueioDePublicacao`. */
 async function estadoDaCredencial(
   admin: SupabaseClient,
@@ -1464,7 +1489,7 @@ export interface AgentePublicado {
   avisos: string[];
 }
 
-const FRASE_DO_CODIGO: Record<string, { o_que: string; como: string }> = {
+export const FRASE_DO_CODIGO: Record<string, { o_que: string; como: string }> = {
   credential_missing: {
     o_que: "a instalação não tem chave do provedor de IA desta versão",
     como: "Quem opera a plataforma configura a chave do provedor de IA. Não é configuração do cliente.",

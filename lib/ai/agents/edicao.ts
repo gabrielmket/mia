@@ -65,6 +65,13 @@ export interface AtorDaEdicao {
    * empresa e nunca da plataforma): falha fechada, a resposta mais restritiva.
    */
   quemPede?: QuemPedeIa;
+  /**
+   * FORK MIA (MIA-358): por onde a edição veio, quando não é a tela nem o token
+   * da empresa. O MCP de plataforma age em nome de quem criou o token
+   * (`userId`, sem `apiTokenId`), e sem isto a reversão dele seria lida na
+   * trilha como um clique na tela. Vai para o `metadata` da auditoria.
+   */
+  via?: "mcp_plataforma";
 }
 
 /**
@@ -500,6 +507,7 @@ export async function reverterParaVersao(
       new_version_id: criadaId,
       new_version_number: criadaNumero,
       previous_version_id: r.previous_version_id,
+      ...(ator.via ? { via: ator.via } : {}),
     },
   });
 
