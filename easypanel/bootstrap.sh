@@ -105,39 +105,133 @@ existentes="$(printf '%s' "$existentes" | tr -d '[:space:]')"
 # que grava `updated_at`, coluna que a nossa não tem). O trecho mora no próprio
 # `baseline-mia.sql`, entre `-- >>> ANTES DO BASELINE DO UPSTREAM` e `-- <<< ...`
 # (sem arquivo novo para montar no contêiner), e roda de novo, no lugar, sem
-# fazer nada. Banco novo não precisa: lá a nossa ainda não existe.
-# Prova: scripts/ensaio-de-banco.sh faz o mesmo antes de cada passada.
+# fazer nada. Banco novo não precisa: lá a nossa ainda não existe. Ele entra em
+# cada passada do modo update, pela `aplicar_passada`.
+# Prova: scripts/ensaio-de-banco.sh faz o mesmo antes de cada passada; e a cerca
+# tests/unit/schema-mia-antes-do-upstream.test.ts.
 antes_do_upstream() {
+  rc=0
   sed -n '/^-- >>> ANTES DO BASELINE DO UPSTREAM/,/^-- <<< ANTES DO BASELINE DO UPSTREAM/p' "$BASELINE_MIA" \
-    | psql "$DB" -q > /tmp/baseline.log 2>&1 || true
+    | psql "$DB" -q -c "$ESPERA_CURTA" -f - > /tmp/baseline-arquivo.log 2>&1 || rc=$?
+  anotar_saida "$rc"
+}
+
+# aplicar_arquivo <arquivo>: uma aplicação do modo update, com a espera curta
+# (MIA-348, no bloco do modo update abaixo).
+aplicar_arquivo() {
+  rc=0
+  psql "$DB" -q -c "$ESPERA_CURTA" -f "$1" > /tmp/baseline-arquivo.log 2>&1 || rc=$?
+  anotar_saida "$rc"
+}
+
+# anotar_saida <código do psql>: a saída vai para o log da passada, e o psql que
+# não chegou ao fim do arquivo vira uma linha no arquivo de quedas. A causa
+# citada é a última linha que não é continuação indentada (a última de todas
+# costuma ser a dica "Is the server running…", e não o motivo).
+anotar_saida() {
+  cat /tmp/baseline-arquivo.log >> "$LOG_PASSADA"
+  if [ "$1" -ne 0 ]; then
+    causa="$(grep -v '^[[:space:]]' /tmp/baseline-arquivo.log | grep . | tail -1 || true)"
+    printf 'a aplicação não chegou ao fim do arquivo (o psql saiu com código %s): %s\n' "$1" "$causa" >> /tmp/baseline-quedas.log
+  fi
+}
+
+# aplicar_passada <n>: o trecho "antes do upstream", o baseline.sql (pela cópia
+# com espera curta) e o baseline-mia.sql, no MESMO log (o contador tem de ver os
+# erros dos três, senão uma migration nossa que falhe fica fora da saúde).
+# Deixa em `inesperados` os erros que não são benignos, mais as quedas.
+aplicar_passada() {
+  LOG_PASSADA="/tmp/baseline-passada-$1.log"
+  : > "$LOG_PASSADA"
+  : > /tmp/baseline-quedas.log
+  antes_do_upstream
+  aplicar_arquivo "$ARQUIVO_DO_UPSTREAM"
+  aplicar_arquivo "$BASELINE_MIA"
+  inesperados="$( { grep -iE 'ERROR|FATAL' "$LOG_PASSADA" | grep -viE "$BENIGNOS"; cat /tmp/baseline-quedas.log; } | grep . || true)"
 }
 
 if [ "${existentes:-0}" -gt 0 ]; then
   log "banco já tem ${existentes} tabelas: re-aplicando o schema em modo update"
-  antes_do_upstream
-  psql "$DB" -q -f "$BASELINE" >> /tmp/baseline.log 2>&1 || true
-  # O da MIA vai para o MESMO log: o contador abaixo tem de ver os erros dos dois
-  # arquivos, senão uma migration nossa que falhe fica fora da saúde.
-  psql "$DB" -q -f "$BASELINE_MIA" >> /tmp/baseline.log 2>&1 || true
-  inesperados="$(grep -iE 'ERROR|FATAL' /tmp/baseline.log | grep -viE "$BENIGNOS" || true)"
-  # FORK MIA (.96): a implantação reaplica o schema com o app ANTIGO ainda
-  # atendendo, e um `drop trigger if exists` / `create policy` esbarra num lock
-  # dele e perde por `deadlock detected`. Aconteceu em três implantações e
-  # deixou a saúde com `erros: 1` à toa: o comando que perdeu fica de fora até o
-  # próximo deploy. Quando TODOS os erros inesperados são essa disputa, os dois
-  # arquivos são aplicados mais UMA vez (o schema é idempotente: reaplicar é o
-  # que todo deploy já faz) e o veredito é o da segunda passada, que é o que fica
-  # no banco. Erro de outra natureza não repete: repetir daria o mesmo erro.
-  # Prova: tests/unit/bootstrap-reaplica-no-deadlock.test.ts (docs/fork/area-de-cobranca.md).
-  if [ -n "$inesperados" ] && ! printf '%s\n' "$inesperados" | grep -viq 'deadlock detected'; then
-    log "o schema esbarrou num lock do app ainda no ar (deadlock detected): aplicando de novo, uma vez (é seguro)"
-    printf '%s\n' "$inesperados" | head -5
-    mv /tmp/baseline.log /tmp/baseline-passada-1.log
-    antes_do_upstream
-    psql "$DB" -q -f "$BASELINE" >> /tmp/baseline.log 2>&1 || true
-    psql "$DB" -q -f "$BASELINE_MIA" >> /tmp/baseline.log 2>&1 || true
-    inesperados="$(grep -iE 'ERROR|FATAL' /tmp/baseline.log | grep -viE "$BENIGNOS" || true)"
+
+  # FORK MIA (dívida 5, MIA-348): espera curta por lock e até 3 passadas.
+  #
+  # A implantação reaplica o schema com o app ANTIGO ainda atendendo. Um `drop`
+  # ou `create policy` que pede lock exclusivo entra na fila atrás de uma
+  # transação do app, forma ciclo e perde por `deadlock detected`; e, enquanto
+  # espera, toda consulta do app àquela tabela fica presa atrás dele. Até a .119
+  # havia uma segunda passada só quando TODOS os erros eram deadlock, e a disputa
+  # que se repetia nela parava o trem com `erros > 0`.
+  #
+  # 1. Espera curta: cada comando do schema desiste do lock em
+  #    least(500ms, deadlock_timeout/2), lido do próprio banco. Desiste antes do
+  #    `deadlock_timeout` do app, então quem perde é o schema (que repete), e não
+  #    a tela de alguém; e nenhuma consulta fica na fila por mais que isso.
+  # 2. O `baseline.sql` abre com `SET lock_timeout = 0;` (linha 5), que apagaria
+  #    o `-c`. Ele é aplicado por uma CÓPIA em /tmp com só essa linha trocada (o
+  #    resto byte a byte, a mesma contagem de linhas, o mesmo número de linha no
+  #    erro). O arquivo do upstream não muda. Cerca:
+  #    tests/unit/baseline-do-upstream-zera-o-lock-timeout.test.ts.
+  # 3. Até 3 passadas inteiras (o `reaplicar_baseline` do kit do upstream, em
+  #    hostgator-setup-kit/_common.sh), esperando 10 s e depois 20 s, quando há
+  #    ALGUM erro de disputa ou de conexão. Com erro de verdade junto, repetir
+  #    limpa a disputa e a amostra fica só com o que precisa de conserto. O
+  #    veredito é o da última passada, que é o que ficou no banco.
+  # 4. O `psql` que sai com código diferente de 0 não chegou ao fim do arquivo:
+  #    conta como erro (antes, o `|| true` engolia e o carimbo podia dizer 0 com
+  #    metade do arquivo aplicada).
+  # Banco novo (o `else` lá embaixo) não muda: sem app, sem espera curta e com
+  # ON_ERROR_STOP. A escrita do carimbo também fica fora da espera curta.
+  # Prova: tests/unit/bootstrap-reaplica-no-deadlock.test.ts e a etapa 3b do
+  # scripts/ensaio-de-banco.sh (disputa provocada). docs/fork/area-de-cobranca.md, seção 8.
+  DISPUTA='deadlock detected|could not serialize access|lock timeout|could not obtain lock|terminating connection|server closed the connection|connection to server was lost|SSL connection has been closed unexpectedly|SSL SYSCALL error|remaining connection slots|too many clients|max client(s| connections) reached|the database system is (starting up|shutting down|in recovery mode|not yet accepting connections)|Temporary failure in name resolution|Connection refused|Connection timed out|timeout expired|Network (is )?unreachable'
+  # As duas existem para o teste não esperar de verdade (os mesmos nomes do kit).
+  TENTATIVAS="${BASELINE_TENTATIVAS:-3}"
+  ESPERA_S="${BASELINE_ESPERA_S:-10}"
+  case "$TENTATIVAS" in ''|*[!0-9]*|0) TENTATIVAS=3 ;; esac
+  case "$ESPERA_S" in ''|*[!0-9]*) ESPERA_S=10 ;; esac
+
+  LOCK_MS="$(psql "$DB" -tAc "select greatest(1, least(500, setting::int / 2)) from pg_settings where name = 'deadlock_timeout'" 2>/dev/null | tr -d '[:space:]' || true)"
+  case "$LOCK_MS" in
+    ''|*[!0-9]*) LOCK_MS=500; log "AVISO: não li o deadlock_timeout do banco; espera curta por lock de ${LOCK_MS} ms" ;;
+    *) log "espera curta por lock: ${LOCK_MS} ms (metade do deadlock_timeout, no máximo 500)" ;;
+  esac
+  ESPERA_CURTA="set lock_timeout = '${LOCK_MS}ms'"
+
+  BASELINE_COPIA=/tmp/deskcomm/baseline.sql
+  ARQUIVO_DO_UPSTREAM="$BASELINE"
+  linha_do_zero="$(head -20 "$BASELINE" | grep -n -x 'SET lock_timeout = 0;' | head -1 | cut -d: -f1 || true)"
+  if [ -n "$linha_do_zero" ] && mkdir -p "${BASELINE_COPIA%/*}" \
+     && sed "${linha_do_zero}s/.*/SET lock_timeout = '${LOCK_MS}ms';/" "$BASELINE" > "$BASELINE_COPIA" \
+     && [ "$(($(wc -l < "$BASELINE")))" = "$(($(wc -l < "$BASELINE_COPIA")))" ]; then
+    ARQUIVO_DO_UPSTREAM="$BASELINE_COPIA"
+  else
+    log "AVISO: o baseline.sql não tem 'SET lock_timeout = 0;' nas 20 primeiras linhas (ou a cópia falhou): aplico o original, sem espera curta nele"
   fi
+
+  passada=1
+  while :; do
+    aplicar_passada "$passada"
+    n_inesperados="$(printf '%s' "$inesperados" | grep -c . || true)"
+    n_disputa="$(printf '%s' "$inesperados" | grep -ciE "$DISPUTA" || true)"
+    if [ "${n_inesperados:-0}" -eq 0 ]; then
+      log "passada ${passada} de ${TENTATIVAS}: sem erro"
+      break
+    fi
+    if [ "${n_disputa:-0}" -eq 0 ]; then
+      log "passada ${passada} de ${TENTATIVAS}: ${n_inesperados} erro(s), nenhum de disputa (repetir não cura)"
+      break
+    fi
+    if [ "$passada" -ge "$TENTATIVAS" ]; then
+      log "passada ${passada} de ${TENTATIVAS}: ${n_disputa} comando(s) perderam a disputa, e acabaram as passadas"
+      break
+    fi
+    espera=$((ESPERA_S * passada))
+    log "passada ${passada} de ${TENTATIVAS}: ${n_disputa} comando(s) perderam a disputa com o app no ar (lock ou conexão): aplicando de novo em ${espera} s (é seguro)"
+    printf '%s\n' "$inesperados" | grep -iE "$DISPUTA" | head -5 || true
+    sleep "$espera"
+    passada=$((passada + 1))
+  done
+  cp "$LOG_PASSADA" /tmp/baseline.log 2>/dev/null || true
   if [ -n "$inesperados" ]; then
     log "AVISO: erros que não são os esperados (o app sobe mesmo assim):"
     printf '%s\n' "$inesperados" | head -20
@@ -160,8 +254,11 @@ if [ "${existentes:-0}" -gt 0 ]; then
   # `|| true` porque nenhuma instalação pode deixar de subir por causa do
   # relatório sobre ela mesma — e um banco antigo, antes da 0269, não tem as
   # colunas. O sintoma nesse caso é o valor ficar velho, nunca o app parar.
+  #
+  # A amostra começa pelo que NÃO é disputa: é o que precisa de conserto, e
+  # numa lista de disputas ficaria fora do corte de 3.
   n_erros="$(printf '%s' "$inesperados" | grep -c . || true)"
-  amostra="$(printf '%s\n' "$inesperados" | head -3 | cut -c1-500)"
+  amostra="$( { printf '%s\n' "$inesperados" | grep -viE "$DISPUTA"; printf '%s\n' "$inesperados" | grep -iE "$DISPUTA"; } | grep . | head -3 | cut -c1-500 || true)"
   psql "$DB" -q -v ON_ERROR_STOP=1 -v n="${n_erros:-0}" -v amostra="$amostra" <<'SQL' >/dev/null 2>&1 || true
 update public.schema_baseline
    set erros_inesperados = :'n'::integer,

@@ -175,22 +175,66 @@ pagamento e o passo do pagamento já vieram da primeira frente. Detalhe em
 | `tests/unit/cadastro-sem-pagamento-apagar.test.ts` | a ordem do apagar, as recusas e a verificação em duas etapas na rota |
 | `tests/unit/mcp-de-implantacao-area-de-cobranca.test.ts` | as cobranças com a nota no `plataforma_ver_cliente`, 99 ferramentas |
 | `tests/unit/bootstrap-reaplica-no-deadlock.test.ts` | o conserto do bootstrap (seção 8) |
+| `tests/unit/baseline-do-upstream-zera-o-lock-timeout.test.ts` | a cerca do cabeçalho do `baseline.sql` que o bootstrap troca na cópia (seção 8) |
 | `tests/invariants/area-de-cobranca.test.ts` | o banco: a 9125 só do servidor, o CHECK do final, a LGPD; o funil; o preparo do apagar e as recusas dele |
 
-## 8. O bootstrap reaplica o schema quando só sobra disputa
+## 8. O bootstrap reaplica o schema quando perde a disputa
 
 A implantação reaplica o schema (`easypanel/bootstrap.sh`, modo update) com o app ANTIGO ainda
-atendendo, e um `drop trigger if exists` ou um `create policy` esbarra num lock dele e perde por
-`deadlock detected`. Aconteceu em três implantações e deixou a saúde com `erros: 1` à toa (o comando
-que perdeu ficava de fora até o deploy seguinte).
+atendendo. Um `drop trigger if exists` ou um `create policy` pede lock exclusivo, entra na fila atrás
+de uma transação do app, forma ciclo e perde por `deadlock detected`. Aconteceu em três implantações
+e deixou a saúde com `erros: 1` à toa (o comando que perdeu ficava de fora até o deploy seguinte).
+Na .96 entrou uma segunda passada quando TODOS os erros eram deadlock; uma disputa que se repetisse
+nela ainda parava o trem. Desde a MIA-350 (desenho na MIA-348, dívida 5), no modo update:
 
-Agora, quando TODOS os erros inesperados da passada são `deadlock detected`, o bootstrap aplica o
-`baseline.sql` e o `baseline-mia.sql` mais UMA vez e conta os erros pela segunda passada (o que fica
-no banco e na saúde). O schema é idempotente, então reaplicar é o que todo deploy já faz. Erro de
-outra natureza não repete (repetir daria o mesmo erro, mais tarde), e a disputa que persiste na
-segunda passada é contada. O log da primeira passada fica em `/tmp/baseline-passada-1.log`. É a
-mesma regra que o kit do upstream já tem para a VPS (`reaplicar_baseline`, em
-`hostgator-setup-kit/_common.sh`), em versão de uma passada a mais.
+1. **Espera curta por lock.** Cada comando do schema desiste do lock em
+   `least(500ms, deadlock_timeout / 2)`, lido do próprio banco na hora (`AVISO` e 500 ms se a
+   leitura falhar). Desiste antes do `deadlock_timeout` do app, então quem perde é o schema (que
+   repete), e não a tela de alguém; e nenhuma consulta do app fica na fila atrás do lock exclusivo
+   por mais que isso. O `baseline-mia.sql` e o trecho "antes do upstream" recebem
+   `-c "set lock_timeout = ..."`.
+2. **O `baseline.sql` vai por uma cópia.** Ele abre com `SET lock_timeout = 0;` (linha 5), que
+   apagaria o `-c`. O bootstrap aplica `/tmp/deskcomm/baseline.sql`, com só essa linha trocada (o
+   resto byte a byte, a mesma contagem de linhas, o mesmo número de linha no erro). O
+   `supabase/baseline.sql` do repositório não muda. Se a linha não estiver nas 20 primeiras, o
+   bootstrap avisa e aplica o original; a cerca `baseline-do-upstream-zera-o-lock-timeout` reprova
+   a fusão antes disso acontecer calado.
+3. **Até 3 passadas inteiras**, esperando 10 s e depois 20 s, quando há ALGUM erro de disputa ou de
+   conexão (`deadlock detected`, `lock timeout`, conexão que caiu: o padrão do `reaplicar_baseline`
+   do kit do upstream, em `hostgator-setup-kit/_common.sh`). Com erro de verdade junto, repetir
+   limpa a disputa e sobra só o que precisa de conserto. Erro sem disputa nenhuma não repete.
+4. **O `psql` que não chega ao fim do arquivo conta.** Código de saída diferente de 0 vira a linha
+   "a aplicação não chegou ao fim do arquivo (o psql saiu com código N): <causa>". Antes, o
+   `|| true` engolia e o carimbo podia dizer 0 com metade do arquivo aplicada.
+5. **O carimbo é o da última passada**, que é o que ficou no banco: disputa curada na passada 2 ou
+   3 não conta; a que dura as 3 conta (`erros > 0`, `em_dia: false`, trem parado no passo 11), e
+   é o certo, porque o comando está fora do banco. A amostra começa pelo que NÃO é disputa. A escrita
+   do carimbo fica fora da espera curta.
+6. **Log:** uma linha por passada (`passada 2 de 3: 4 comando(s) perderam a disputa ...`) e
+   `/tmp/baseline-passada-N.log`; o da última também fica em `/tmp/baseline.log`.
+
+Banco novo não muda: sem app, sem espera curta e com `ON_ERROR_STOP`.
+
+**O que isto não resolve.** O kit do upstream para o que fala com o banco antes do DDL; daqui não
+dá (o bootstrap é um contêiner sem acesso ao Docker). Um comando numa tabela segurada por um cron
+longo (até 240 s no `prospecting`) ainda pode perder nas 3 passadas: conta como erro e o trem para,
+como antes, só que mais raro. Ficam na dívida: a coluna `passadas` no carimbo (para ver o deploy que
+precisou de 2 ou 3) e a conferência das regras de isolamento do kit (`update.sh`), se um deploy ainda
+cair por disputa.
+
+**Para o Revisor.** Migration que COPIA dado e depois APAGA a origem em dois comandos soltos pode
+perder a cópia (disputa) e ganhar o apagar; a passada seguinte sai limpa e o dado não veio. Copiar e
+apagar vão no mesmo bloco `do $$ ... $$` (uma transação só). Vale também sem esta mudança.
+
+**Provas.** `tests/unit/bootstrap-reaplica-no-deadlock.test.ts` (o bootstrap de verdade com um `psql`
+de mentira: lock timeout que cura na 2ª, disputa nas 3, disputa com permissão, benignos, `psql` que
+sai com código 2, a espera curta nas chamadas e a cópia com só a linha 5 trocada);
+`tests/unit/baseline-do-upstream-zera-o-lock-timeout.test.ts` (a cerca do cabeçalho); e a etapa 3b
+do `scripts/ensaio-de-banco.sh`, que roda o bootstrap de verdade num Postgres descartável com uma
+sessão segurando lock em `public.conversations`: disputa de 8 s cura na passada 2 (carimbo novo,
+`erros = 0`, as mesmas políticas da etapa 3) sem prender uma leitura do app com `statement_timeout`
+de 2 s; disputa que não acaba sai 0 com `erros > 0` e `lock timeout` na amostra, e solto o lock a
+rodada seguinte volta a 0.
 
 ## 9. Desvios do protótipo e lacunas
 
