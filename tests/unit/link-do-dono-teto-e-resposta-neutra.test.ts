@@ -187,6 +187,7 @@ describe("⭐ o acesso seguinte ao teto", () => {
     }
     registrarAcesso.mockClear();
     resolverLinkEspiao.mockClear();
+    calcularPaineis.mockClear();
     banco.consultas = 0;
 
     const respostas = [
