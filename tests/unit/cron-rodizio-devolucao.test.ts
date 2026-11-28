@@ -178,7 +178,14 @@ function cadeia(tabela: string, operacao: "select" | "update", valores: Linha | 
   const filtros: Filtro[] = [];
   const ordem: Array<{ coluna: string; ascending: boolean }> = [];
   let limite: number | null = null;
-  const resultado = () => resolver(tabela, operacao, valores, filtros, ordem, limite);
+  // FORK MIA (MIA-373): a leitura das empresas pagina; o `range` corta depois
+  // do filtro e da ordem, como o PostgREST.
+  let faixa: [number, number] | null = null;
+  const resultado = () => {
+    const r = resolver(tabela, operacao, valores, filtros, ordem, limite);
+    if (faixa === null || !Array.isArray(r.data)) return r;
+    return { ...r, data: r.data.slice(faixa[0], faixa[1] + 1) };
+  };
   const registrar =
     (metodo: Filtro["metodo"]) =>
     (...args: unknown[]) => {
@@ -201,6 +208,10 @@ function cadeia(tabela: string, operacao: "select" | "update", valores: Linha | 
     },
     limit: (n: number) => {
       limite = n;
+      return chain;
+    },
+    range: (de: number, ate: number) => {
+      faixa = [de, ate];
       return chain;
     },
     maybeSingle: () => {

@@ -78,6 +78,7 @@ import {
   type ConversaEntregueAoRodizio,
   type MarcasDeDevolucaoAoRodizio,
 } from "@/lib/escalacao/devolucao-ao-rodizio";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -95,6 +96,14 @@ const SCAN_LIMIT = 500;
  */
 const ASSIGNMENT_EVENT_LIMIT = SCAN_LIMIT * 4;
 
+/**
+ * FORK MIA (MIA-373) — quantas páginas de 1000 as empresas com o prazo ligado
+ * podem ocupar. Em 28/11/2026 a produção tinha 18 empresas, nenhuma com o prazo
+ * ligado: 20 mil é folga larga. Passou disso, a rodada falha FECHADA (500, nada
+ * devolvido) em vez de tratar as primeiras como todas.
+ */
+const PAGINAS_DAS_EMPRESAS = 20;
+
 /** Quem age é o produto, não uma pessoa. */
 const ATOR_DO_CRON = { type: "webhook_source", id: "cron:rodizio-devolucao" } as const;
 
@@ -111,13 +120,24 @@ export interface DevolucaoAoRodizioResultado {
  * repetiria a regra.
  */
 async function prazosPorOrganizacao(admin: SupabaseClient): Promise<Map<string, number>> {
-  const { data, error } = await admin
-    .from("organizations")
-    .select("id, settings")
-    .not("settings->routing->unanswered_return_minutes", "is", null);
-  if (error) throw new Error(`organizations: ${error.message}`);
+  // FORK MIA (MIA-373) — as empresas com prazo INTEIRAS, página a página, na
+  // ordem de `id`. Antes era uma leitura só, sem `range`: o PostgREST corta em
+  // 1000 linhas sem avisar, e a empresa fora da página nunca tinha devolução.
+  // Erro ou leitura cortada lança, e a rota responde 500 sem devolver nada.
+  const empresas = await lerTodasAsPaginas<{ id: string; settings: unknown }>(
+    (de, ate, pedirContagem) =>
+      admin
+        .from("organizations")
+        .select("id, settings", pedirContagem ? { count: "exact" } : undefined)
+        .not("settings->routing->unanswered_return_minutes", "is", null)
+        .order("id", { ascending: true })
+        .range(de, ate),
+    { paginasMaximas: PAGINAS_DAS_EMPRESAS },
+  );
+  if (empresas.erro) throw new Error(`organizations: ${empresas.erro}`);
+  if (empresas.truncado) throw new Error(`organizations: leitura cortada em ${empresas.linhas.length} linhas`);
   const prazos = new Map<string, number>();
-  for (const row of (data ?? []) as Array<{ id: string; settings: unknown }>) {
+  for (const row of empresas.linhas) {
     const minutos = lerPrazoDeDevolucaoAoRodizioMinutos(row.settings);
     if (minutos !== null) prazos.set(row.id, minutos);
   }
