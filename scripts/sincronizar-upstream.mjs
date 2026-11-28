@@ -17,7 +17,10 @@
  *   · quais arquivos entrariam em conflito — e se algum deles é do SCHEMA, que
  *     pela regra do fork nunca deveria conflitar;
  *   · se o schema novo do upstream passaria a colidir com o nosso (redefinição);
- *   · o que o upstream disse que mudou (CHANGELOG), para decidir se vale trazer.
+ *   · o que o upstream disse que mudou (CHANGELOG), para decidir se vale trazer;
+ *   · quais funções e tipos exportados do upstream mudaram de assinatura na
+ *     faixa, e quais arquivos nossos os usam (`scripts/assinaturas-do-upstream.mjs`).
+ *     É o erro que passa limpo no merge e só aparece no typecheck da CI.
  *
  * Com 50 commits por vez a resposta costuma ser "zero conflito, traga". Com 2.764,
  * foi uma tarde.
@@ -32,6 +35,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { carregarTypescript, linhasDaSecao, medirAssinaturas } from "./assinaturas-do-upstream.mjs";
 
 const COMO_JSON = process.argv.includes("--json");
 const REMOTO = process.env.UPSTREAM_REMOTE ?? "upstream";
@@ -64,6 +69,7 @@ const relatorio = {
   conflitos_no_schema: [],
   redefinicoes: null,
   changelog: [],
+  assinaturas: null,
   veredito: "",
 };
 
@@ -150,7 +156,33 @@ try {
   rmSync(pasta, { recursive: true, force: true });
 }
 
-/* ── 5. O veredito ───────────────────────────────────────────────────────────*/
+/* ── 5. Assinaturas que mudaram ─────────────────────────────────────────────
+ *
+ * Função do upstream que muda de parâmetro ou de retorno quebra arquivo nosso
+ * que nem deu conflito, e só o typecheck da CI acusa (fusão 1.107: 13 erros,
+ * cada rodada de 30 a 60 min). Aqui a medição é por leitura do código das duas
+ * pontas, sem typecheck. Não entra no veredito: é a lista do que conferir.
+ * Sem `typescript` instalado (o robô não roda `npm ci`), a seção diz que foi
+ * pulada, em vez de dizer "nada mudou".
+ */
+{
+  const ts = await carregarTypescript();
+  log("");
+  if (!ts) {
+    relatorio.assinaturas = { pulada: "typescript não encontrado (rode npm ci)" };
+    log("Assinaturas que mudaram: pulada, typescript não encontrado (rode npm ci)");
+  } else {
+    try {
+      relatorio.assinaturas = medirAssinaturas({ ts, antes: base, depois: ALVO, cabeca: "HEAD" });
+      for (const l of linhasDaSecao(relatorio.assinaturas)) log(l);
+    } catch (e) {
+      relatorio.assinaturas = { pulada: `não deu para medir: ${String(e?.message ?? e).split("\n")[0]}` };
+      log(`Assinaturas que mudaram: ${relatorio.assinaturas.pulada}`);
+    }
+  }
+}
+
+/* ── 6. O veredito ───────────────────────────────────────────────────────────*/
 if (!relatorio.veredito) {
   const r = relatorio;
   if (r.conflitos_no_schema.length > 0) {
