@@ -245,11 +245,22 @@ produção (skill `mia-implantacao`, seção 2) mostrar a tabela perto de 1000 l
 leitura pega. Em 27/11/2026 (MIA-340) só as duas leituras de inscrições encerradas do
 `lib/followup/silence-sweep.ts` (pausa de reentrada e cooldown) passavam de 1000, e foram trocadas.
 
+**Trocadas depois, por área.** Os três crons de proposta (MIA-367, 28/11/2026):
+`proposal-promised-not-created` passou a FILTRAR antes de paginar (só as promessas vencidas com
+negócio; só as propostas dos negócios delas, por empresa e em lotes de 100; só as empresas delas),
+em vez de ler todas as propostas e todas as empresas da instalação; `proposal-expiry` e
+`proposal-acceptance-rate` paginam o que já liam. Leitura cortada derruba a rodada (500, nada
+gravado), menos a das propostas de UMA empresa na taxa de aceite, que tira só aquela empresa da
+rodada, como a falha de leitura dela já tirava. O fuso das empresas no vencimento, ilegível, agora
+também derruba a rodada: antes vencia pelo fuso padrão. Teste contra o dublê que corta em 1000:
+`tests/unit/crons-de-proposta-leem-tudo.test.ts`.
+
 **O que a cerca não vê.** `rpc(...)`, o `workers/` da raiz, se o teto que existe é o certo (um
 `.limit(5000)` passa e devolve 1000) e se a ordem da paginação é estável. Esses ficam com a revisão.
 
 ```bash
-npx vitest run tests/unit/leitura-sem-teto-em-worker-e-cron.test.ts lib/leitura/todas-as-paginas.test.ts
+npx vitest run tests/unit/leitura-sem-teto-em-worker-e-cron.test.ts lib/leitura/todas-as-paginas.test.ts \
+  tests/unit/crons-de-proposta-leem-tudo.test.ts
 ```
 
 ---
