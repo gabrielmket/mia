@@ -60,6 +60,7 @@ import {
   configDoAniversario,
 } from "@/lib/automation/aniversario-do-contato";
 import { audit } from "@/lib/audit";
+import { lerTodasAsPaginas } from "@/lib/leitura/todas-as-paginas";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { autorizaCron } from "@/lib/auth/cron-auth";
@@ -77,6 +78,16 @@ const TETO_POR_ORGANIZACAO = 200;
 
 /** O PostgREST monta a lista do `in` dentro da URL, e URL tem fim. */
 const TAMANHO_DO_LOTE = 100;
+
+/**
+ * FORK MIA (MIA-369) — quantas páginas de 1000 as regras de aniversário ativas
+ * da instalação podem ocupar. Em 28/11/2026 a produção tinha 0 (e 10 regras de
+ * automação no total): 20 mil é folga larga. Passou disso, a rodada falha
+ * FECHADA (500, nenhum parabéns) em vez de tratar as primeiras como todas.
+ */
+const PAGINAS_DAS_REGRAS = 20;
+
+type RegraDeAniversario = { id: string; organization_id: string; trigger_config: unknown };
 
 /**
  * Quais dias de aniversário esta organização parabeniza AGORA.
@@ -120,21 +131,30 @@ async function handle(req: NextRequest): Promise<Response> {
   const admin = createAdminClient();
   const agora = new Date();
 
-  const { data: regras, error: erroRegras } = await admin
-    .from("automation_rules")
-    .select("id, organization_id, trigger_config")
-    .eq("trigger_event", "contact.birthday")
-    .eq("is_active", true);
+  // FORK MIA (MIA-369) — as regras INTEIRAS, página a página, na ordem de `id`.
+  // Antes era uma leitura só, sem `range`: o PostgREST corta em 1000 linhas sem
+  // avisar, e a regra que ficasse fora da página nunca parabenizava ninguém.
+  const regras = await lerTodasAsPaginas<RegraDeAniversario>(
+    (de, ate, pedirContagem) =>
+      admin
+        .from("automation_rules")
+        .select("id, organization_id, trigger_config", pedirContagem ? { count: "exact" } : undefined)
+        .eq("trigger_event", "contact.birthday")
+        .eq("is_active", true)
+        .order("id", { ascending: true })
+        .range(de, ate),
+    { paginasMaximas: PAGINAS_DAS_REGRAS },
+  );
 
-  if (erroRegras) {
+  if (regras.erro || regras.truncado) {
     logger.error("[contact-birthdays] consulta de regras falhou", {
-      error: erroRegras.message,
+      error: regras.erro ?? `leitura cortada: mais de ${regras.linhas.length} regras`,
       requestId,
     });
     return fail("internal_error", "Falha ao buscar regras.", 500, { requestId });
   }
 
-  const todasAsRegras = regras ?? [];
+  const todasAsRegras = regras.linhas;
   if (todasAsRegras.length === 0) {
     return ok(
       { organizacoes: 0, regras: 0, examinados: 0, emitidos: 0, pulados: {} },
@@ -142,11 +162,18 @@ async function handle(req: NextRequest): Promise<Response> {
     );
   }
 
-  const orgsComRegra = [...new Set(todasAsRegras.map((r) => r.organization_id as string))];
-  const { data: organizacoes } = await admin
-    .from("organizations")
-    .select("id, timezone")
-    .in("id", orgsComRegra.slice(0, TAMANHO_DO_LOTE));
+  const orgsComRegra = [...new Set(todasAsRegras.map((r) => r.organization_id))];
+  // FORK MIA (MIA-369) — TODAS as empresas com regra, em lotes de 100 (uma linha
+  // por id, então cada lote cabe numa resposta). Antes só o primeiro lote era
+  // lido: a 101ª empresa com regra de aniversário ficava de fora calada.
+  const organizacoes: Array<{ id: string; timezone: string | null }> = [];
+  for (let i = 0; i < orgsComRegra.length; i += TAMANHO_DO_LOTE) {
+    const { data: lote } = await admin
+      .from("organizations")
+      .select("id, timezone")
+      .in("id", orgsComRegra.slice(i, i + TAMANHO_DO_LOTE));
+    organizacoes.push(...((lote ?? []) as Array<{ id: string; timezone: string | null }>));
+  }
 
   let emitidos = 0;
   let examinados = 0;
@@ -155,9 +182,9 @@ async function handle(req: NextRequest): Promise<Response> {
     pulados[motivo] = (pulados[motivo] ?? 0) + quantos;
   };
 
-  for (const organizacao of organizacoes ?? []) {
-    const org = organizacao.id as string;
-    const fuso = (organizacao.timezone as string | null) ?? FUSO_PADRAO;
+  for (const organizacao of organizacoes) {
+    const org = organizacao.id;
+    const fuso = organizacao.timezone ?? FUSO_PADRAO;
 
     let parede: ReturnType<typeof partesNoFuso>;
     try {
@@ -181,7 +208,7 @@ async function handle(req: NextRequest): Promise<Response> {
 
     for (const regra of todasAsRegras) {
       if (regra.organization_id !== org) continue;
-      const regraId = regra.id as string;
+      const regraId = regra.id;
 
       const config = configDoAniversario(regra.trigger_config);
       if (!config) {
@@ -223,6 +250,9 @@ async function handle(req: NextRequest): Promise<Response> {
 
       const ids = contatos.map((c) => c.id as string);
       const jaEmitidos = new Set<string>();
+      // FORK MIA (MIA-369) — trava que não pôde ser lida não é trava vazia: sem
+      // isto, um erro do banco parabenizava de novo quem já tinha recebido.
+      let travaIlegivel = false;
 
       // A trava ANUAL: mesmo contato, MESMA REGRA, MESMO aniversário. O ano é o
       // do aniversário celebrado (não o do disparo), então o aviso de 10 dias
@@ -230,7 +260,7 @@ async function handle(req: NextRequest): Promise<Response> {
       // reaberto por ele mesmo na rodada seguinte, nem na virada do ano.
       for (let i = 0; i < ids.length; i += TAMANHO_DO_LOTE) {
         const lote = ids.slice(i, i + TAMANHO_DO_LOTE);
-        const { data: anteriores } = await admin
+        const { data: anteriores, error: erroTrava } = await admin
           .from("event_log")
           .select("entity_id")
           .eq("organization_id", org)
@@ -238,6 +268,10 @@ async function handle(req: NextRequest): Promise<Response> {
           .eq("payload->>rule_id", regraId)
           .eq("payload->>ano_do_aniversario", String(anoDoAviso))
           .in("entity_id", lote);
+        if (erroTrava) {
+          travaIlegivel = true;
+          break;
+        }
         for (const anterior of anteriores ?? []) jaEmitidos.add(anterior.entity_id as string);
       }
 
@@ -245,15 +279,19 @@ async function handle(req: NextRequest): Promise<Response> {
       // não carimbava `rule_id`: sem isto, o deploy do meio-dia parabenizaria
       // de novo quem recebeu às 9h. Só linhas SEM `rule_id` entram aqui — as
       // desta versão já estão cobertas pela trava anual acima.
-      for (let i = 0; i < ids.length; i += TAMANHO_DO_LOTE) {
+      for (let i = 0; i < ids.length && !travaIlegivel; i += TAMANHO_DO_LOTE) {
         const lote = ids.slice(i, i + TAMANHO_DO_LOTE);
-        const { data: recentes } = await admin
+        const { data: recentes, error: erroRecentes } = await admin
           .from("event_log")
           .select("entity_id, payload")
           .eq("organization_id", org)
           .eq("event_type", "contact.birthday")
           .in("entity_id", lote)
           .gte("created_at", desde);
+        if (erroRecentes) {
+          travaIlegivel = true;
+          break;
+        }
         for (const recente of recentes ?? []) {
           // `Json` → objeto: o payload do `event_log` não tem esquema, e a
           // asserção dupla é o que o tipo gerado exige para ler uma chave.
@@ -261,6 +299,16 @@ async function handle(req: NextRequest): Promise<Response> {
           if (carregado && typeof carregado.rule_id === "string") continue;
           jaEmitidos.add(recente.entity_id as string);
         }
+      }
+
+      if (travaIlegivel) {
+        logger.error("[contact-birthdays] leitura da trava falhou", {
+          organization_id: org,
+          rule_id: regraId,
+          requestId,
+        });
+        pular("trava_ilegivel", contatos.length);
+        continue;
       }
 
       for (const contato of contatos) {
@@ -321,7 +369,7 @@ async function handle(req: NextRequest): Promise<Response> {
 
   return ok(
     {
-      organizacoes: (organizacoes ?? []).length,
+      organizacoes: organizacoes.length,
       regras: todasAsRegras.length,
       examinados,
       emitidos,
