@@ -335,6 +335,34 @@ chmod 600 "$AUTH_FILE"
 : > "$DESTINO"
 echo "$CRONS" | while IFS='|' read -r quando timeout rota; do
   [ -n "$rota" ] || continue
+  # FORK MIA (MIA-341, docs/fork/agendador-espalhado.md): O ATRASO DE CADA ROTA.
+  # Sem ele as 70 rotas batiam no segundo zero do minuto, todas contra o mesmo
+  # app e o mesmo banco: 34 juntas nos multiplos de 5 minutos e 41 nos de 10
+  # (primeira hipotese do pico de CPU do banco, MIA-133). Cada linha passa a
+  # dormir um numero fixo de segundos antes do curl, tirado do cksum do caminho
+  # da rota: o mesmo nome da sempre o mesmo atraso, e a frequencia nao muda.
+  #
+  # O teto do atraso: o crond do busybox nao dispara a linha enquanto a rodada
+  # anterior dela ainda roda, e o sleep conta como rodada. Entao o atraso so
+  # pode usar a folga entre o fim da chamada no pior caso (o -m) e a batida
+  # seguinte: a chamada que estoura o -m termina na mesma batida em que ja
+  # terminava. Folga zero (rota de minuto com -m 60 ou 240) fica no segundo zero.
+  # No maximo 45 s, para a chamada nunca sair do proprio minuto.
+  minuto="${quando%% *}"
+  case "$minuto" in
+    '*') intervalo=60 ;;
+    '*/'*) intervalo=$(( ${minuto#*/} * 60 )) ;;
+    *) intervalo=3600 ;;
+  esac
+  folga=$(( (timeout + intervalo - 1) / intervalo * intervalo - timeout ))
+  [ "$folga" -le 45 ] || folga=45
+  atraso=0
+  if [ "$folga" -gt 0 ]; then
+    crc="$(printf '%s' "$rota" | cksum)"
+    atraso=$(( 1 + ${crc%% *} % folga ))
+  fi
+  # Vai no fim do agendamento, para a linha do printf abaixo seguir a do upstream.
+  quando="$quando sleep $atraso;"
   # `>/dev/null` só no STDOUT: o corpo da resposta é grande e não interessa aqui.
   # O STDERR era o que a redireção antiga (`>/dev/null 2>&1`) engolia junto — e
   # foi ali que a issue #1109 ficou seis versões invisível: o `sync-model-catalog`
