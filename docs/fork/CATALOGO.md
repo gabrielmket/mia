@@ -33,7 +33,18 @@ depois; use o rótulo da tag, por exemplo `v1.107.0`, ou os dois commits):
 ```bash
 git diff --name-only vA vB -- lib app components hooks easypanel .github docker > /tmp/tocados.txt
 git diff --name-only --diff-filter=A vA vB -- lib app components hooks > /tmp/novos.txt
+node scripts/assinaturas-do-upstream.mjs vA vB HEAD > /tmp/assinaturas.txt
 ```
+
+O último lista as funções e os tipos exportados do upstream que mudaram de assinatura na faixa
+(parâmetro novo, removido ou de outro tipo, retorno trocado, renomeada, campo novo obrigatório)
+e o `arquivo:linha` nosso que os usa, primeiro o que provavelmente quebra. Lista também a
+assinatura que o fork mudou num arquivo dele (bloco `FORK MIA`) e que código novo do upstream
+chama do jeito dele. É leitura do código, sem typecheck: retorno inferido, método de classe e
+import por reexportação ficam de fora, e o typecheck da CI continua sendo o juiz. Use como
+`vA` a base da fusão (`git merge-base HEAD vB`), não a tag anterior: na 1.107 a base era a
+v1.100, e o que mudou entre a .100 e a .106 também quebrou. O `sincronizar-upstream.mjs` já
+faz assim. Guardado por `tests/unit/assinaturas-do-upstream.test.ts`.
 
 **Defeito achado.** Corrija no mesmo PR da fusão. Sempre que der, **transforme a conferência em
 teste automático** (uma cerca em `tests/unit`, ou uma invariante em `tests/invariants`) e cite o
