@@ -114,6 +114,7 @@ function adminDaRodada(cena: Cena) {
   function consulta(tabela: string) {
     lidas.push(tabela);
     const filtros: Record<string, unknown> = {};
+    let faixa: [number, number] | null = null;
     const resolver = (): { data: unknown; error: unknown } => {
       if (tabela === "platform_config") {
         return {
@@ -140,6 +141,14 @@ function adminDaRodada(cena: Cena) {
     api.select = devolver;
     api.in = devolver;
     api.not = devolver;
+    api.lt = devolver;
+    // FORK MIA (MIA-367): a rodada lê página a página (`order` + `range`), e a
+    // página que passa do fim volta vazia, como no PostgREST.
+    api.order = devolver;
+    api.range = (de: number, ate: number) => {
+      faixa = [de, ate];
+      return api;
+    };
     api.eq = (coluna: string, valor: unknown) => {
       filtros[coluna] = valor;
       return api;
@@ -150,7 +159,9 @@ function adminDaRodada(cena: Cena) {
     };
     api.maybeSingle = async () => ({ data: null, error: null });
     api.then = (ok: (v: unknown) => unknown, falhou?: (e: unknown) => unknown) =>
-      Promise.resolve(resolver()).then(ok, falhou);
+      Promise.resolve(resolver())
+        .then((r) => (faixa && Array.isArray(r.data) ? { ...r, data: r.data.slice(faixa[0], faixa[1] + 1) } : r))
+        .then(ok, falhou);
     return api;
   }
 
