@@ -188,6 +188,9 @@ if [ "${existentes:-0}" -gt 0 ]; then
   TENTATIVAS="${BASELINE_TENTATIVAS:-3}"
   ESPERA_S="${BASELINE_ESPERA_S:-10}"
   case "$TENTATIVAS" in ''|*[!0-9]*|0) TENTATIVAS=3 ;; esac
+  # Teto: a env vem da compose, e um valor torto prenderia o deploy em passadas
+  # de 30 s ou mais.
+  [ "$TENTATIVAS" -le 5 ] 2>/dev/null || TENTATIVAS=5
   case "$ESPERA_S" in ''|*[!0-9]*) ESPERA_S=10 ;; esac
 
   LOCK_MS="$(psql "$DB" -tAc "select greatest(1, least(500, setting::int / 2)) from pg_settings where name = 'deadlock_timeout'" 2>/dev/null | tr -d '[:space:]' || true)"

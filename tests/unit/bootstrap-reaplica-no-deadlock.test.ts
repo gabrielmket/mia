@@ -68,7 +68,7 @@ type Aplicacao = { saida?: string; codigo?: number };
  * código com que sai) na i-ésima aplicação de arquivo (1 = baseline.sql,
  * 2 = baseline-mia.sql da 1ª passada; 3 e 4 = os da 2ª; 5 e 6 = os da 3ª).
  */
-function rodar(caso: string, aplicacoes: Record<number, string | Aplicacao>, opcoes: { baseline?: string; meioDoDeadlock?: string } = {}) {
+function rodar(caso: string, aplicacoes: Record<number, string | Aplicacao>, opcoes: { baseline?: string; meioDoDeadlock?: string; env?: Record<string, string> } = {}) {
   const dir = join(TRABALHO, caso);
   const bin = join(dir, "bin");
   const roteiro = join(dir, "roteiro");
@@ -125,6 +125,7 @@ function rodar(caso: string, aplicacoes: Record<number, string | Aplicacao>, opc
     OWNER_EMAIL: "",
     OWNER_PASSWORD: "",
     CPF_ENCRYPTION_KEY: "",
+    ...opcoes.env,
   };
   const tela = execFileSync("sh", [paraSh(join(dir, "bootstrap.sh"))], { env, encoding: "utf8" });
   const chamadas = readFileSync(log, "utf8").split("\n");
@@ -178,6 +179,14 @@ describe.skipIf(!temSh())("o bootstrap aplica o schema com espera curta e repete
     expect(r.tela).toContain("passada 3 de 3: 3 comando(s) perderam a disputa, e acabaram as passadas");
     expect(r.tela).toContain("AVISO");
     expect(r.passadaGuardada(3)).toBe(true);
+  });
+
+  it("2b. BASELINE_TENTATIVAS torto na compose: no máximo 5 passadas", () => {
+    const sempreDisputa = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + 1, LOCK_TIMEOUT]));
+    const r = rodar("tentativas-com-teto", sempreDisputa, { env: { BASELINE_TENTATIVAS: "50" } });
+    expect(r.aplicacoes, "cinco passadas de dois arquivos").toBe(10);
+    expect(r.tela).toContain("passada 5 de 5:");
+    expect(r.tela).not.toContain("passada 6");
   });
 
   it("3. disputa junto com erro de permissão: repete, e a amostra começa pela permissão", () => {

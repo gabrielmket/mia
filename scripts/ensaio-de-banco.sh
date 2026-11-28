@@ -396,7 +396,9 @@ AMOSTRA_SQL="select coalesce(erros_amostra, '') from public.schema_baseline wher
 POLITICAS="select count(*) from pg_policy p join pg_class c on c.oid = p.polrelid join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public'"
 POL_ETAPA3=$(PSQL -tAc "$POLITICAS" 2>&1)
 
-# Caso 1 e 2: disputa curta (8 s, menos que os 10 s de espera antes da 2ª passada),
+# Caso 1 e 2: disputa curta (8 s). A passada 1 sob disputa já leva mais que isso (cada
+# comando em conversations espera a espera curta), então o lock cai no meio da passada 1
+# e a 2ª sai limpa;
 # e uma sessão do "app" que lê conversations durante o lock com statement_timeout de
 # 2 s. Sem a espera curta, a leitura ficaria na fila atrás do lock exclusivo que o
 # schema pede, até os 8 s.

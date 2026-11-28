@@ -222,9 +222,21 @@ como antes, só que mais raro. Ficam na dívida: a coluna `passadas` no carimbo 
 precisou de 2 ou 3) e a conferência das regras de isolamento do kit (`update.sh`), se um deploy ainda
 cair por disputa.
 
+O schema tem `drop ... if exists` e `create ...` em comandos soltos (regras e gatilhos), e alguns
+são de regra **restritiva** (as de `update`/`delete` em `conversations` e `messages`, as de
+`calendar_appointments`). Se o `drop` ganha o lock e o `create` logo depois perde por `lock timeout`,
+a regra ou o gatilho fica fora até a passada seguinte (10 a 30 s). Regra restritiva faltando amplia
+acesso; regra permissiva faltando nega; gatilho faltando pula a regra dele. Antes desta mudança o
+buraco era o mesmo, só que só no deadlock (raro); com a espera curta, perder vira o caso comum. Não
+dá para corrigir no arquivo: os pares estão no `baseline.sql`, que é do upstream byte a byte. Se a
+disputa durar as 3 passadas, **`erros > 0` quer dizer que há objeto do schema faltando no ar**: a
+ação é reimplantar assim que a disputa passar, e não esperar o próximo trem.
+
 **Para o Revisor.** Migration que COPIA dado e depois APAGA a origem em dois comandos soltos pode
 perder a cópia (disputa) e ganhar o apagar; a passada seguinte sai limpa e o dado não veio. Copiar e
-apagar vão no mesmo bloco `do $$ ... $$` (uma transação só). Vale também sem esta mudança.
+apagar vão no mesmo bloco `do $$ ... $$` (uma transação só). Vale também sem esta mudança. A mesma
+regra vale para o nosso `baseline-mia.sql`: um `drop` + `create` de regra restritiva vai dentro de um
+`do $$ ... $$`, como já faz o par de `supabase/baseline-mia.sql:24052-24055`.
 
 **Provas.** `tests/unit/bootstrap-reaplica-no-deadlock.test.ts` (o bootstrap de verdade com um `psql`
 de mentira: lock timeout que cura na 2ª, disputa nas 3, disputa com permissão, benignos, `psql` que
