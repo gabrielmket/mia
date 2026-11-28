@@ -10,6 +10,9 @@ import { logger } from "@/lib/logger";
 import { MODULOS_DO_PLANO, ROTULO_DO_MODULO_DO_PLANO } from "@/lib/planos-mia/catalogo";
 import { lerPlanosPublicos, seloDoTesteGratis, type PlanoPublico } from "@/lib/planos-mia/publico";
 import { createAdminClient } from "@/lib/supabase/admin";
+// FORK MIA (MIA-242): o cartão Enterprise depois dos planos (lib/planos-mia/enterprise.ts).
+import { valorDaInstalacao } from "@/lib/instalacao/config";
+import { cartaoEnterprise, VARIAVEL_DO_WHATSAPP_DO_COMERCIAL } from "@/lib/planos-mia/enterprise";
 // FORK MIA (.98): o cupom do link, ou o guardado no navegador (docs/fork/cupons-e-parceiros.md).
 import { cookies } from "next/headers";
 import { CupomNaPaginaDePrecos } from "@/components/cupons/CupomNaPaginaDePrecos";
@@ -55,11 +58,16 @@ export default async function PrecosPage({ searchParams }: { searchParams?: Prom
       detalhe: erro instanceof Error ? erro.message : String(erro),
     });
   }
-  const [suporte, provedor] = await Promise.all([
+  const [suporte, provedor, whatsappDoComercial] = await Promise.all([
     emailDeSuporte(),
     provedorDaInstalacao().catch(() => null),
+    valorDaInstalacao(VARIAVEL_DO_WHATSAPP_DO_COMERCIAL).then(
+      (v) => v.valor,
+      () => null,
+    ),
   ]);
   const planos = leitura?.planos ?? [];
+  const enterprise = cartaoEnterprise(planos, whatsappDoComercial, suporte);
   // FORK MIA (.98): o link manda ("?cupom=" vazio tira); sem ele, o que ficou no navegador.
   // O guardado que não vale mais só some; o do link diz por quê.
   const cupomDoLink = (await searchParams)?.cupom;
@@ -251,6 +259,40 @@ export default async function PrecosPage({ searchParams }: { searchParams?: Prom
                 </article>
               ))}
             </section>
+
+            {/* FORK MIA (MIA-242): o cartão fixo para quem passa do plano mais alto. Não é plano: sem preço. */}
+            {enterprise && (
+              <section
+                className="flex flex-wrap items-center justify-between gap-4 rounded-md border bg-background p-6"
+                data-precos="enterprise"
+              >
+                <div className="space-y-1">
+                  <h2 className="text-lg font-semibold">{t("Enterprise")}</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {enterprise.limites
+                      ? t(
+                          "Para quem passa de {conversas} conversas, {numeros} números ou {pessoas} pessoas. Condições sob medida.",
+                        )
+                          .replace("{conversas}", numero.format(enterprise.limites.conversas))
+                          .replace("{numeros}", numero.format(enterprise.limites.numeros))
+                          .replace("{pessoas}", numero.format(enterprise.limites.pessoas))
+                      : t("Para quem precisa de mais do que os planos acima. Condições sob medida.")}
+                  </p>
+                </div>
+                {enterprise.contato && (
+                  <a
+                    className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                    href={enterprise.contato.href}
+                    data-enterprise-contato={enterprise.contato.tipo}
+                    {...(enterprise.contato.tipo === "whatsapp"
+                      ? { target: "_blank", rel: "noopener noreferrer" }
+                      : {})}
+                  >
+                    {t("Falar com o comercial")}
+                  </a>
+                )}
+              </section>
+            )}
 
             <details className="rounded-md border bg-background p-4" data-precos="comparacao">
               <summary className="cursor-pointer text-sm font-medium">

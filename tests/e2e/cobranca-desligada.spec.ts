@@ -101,6 +101,13 @@ test("sem a chave, nada da cobrança aparece e o que existia segue igual", async
     await expect(page.locator('[data-recurso="modulo:banco_externo"]')).toBeVisible();
     await expect(page.getByText("Cobrança dos seus clientes")).toHaveCount(0);
     await page.screenshot({ path: `${EVIDENCIA}/desligada-recursos-opcionais.png`, fullPage: true });
+
+    // ── A página de preços: sem plano à venda, nem lista nem cartão Enterprise (MIA-242) ─
+    await page.goto("/precos");
+    await expect(page.locator('[data-precos="vazio"]')).toBeVisible();
+    await expect(page.locator('[data-precos="planos"]')).toHaveCount(0);
+    await expect(page.locator('[data-precos="enterprise"]')).toHaveCount(0);
+    await expect(page.getByText("Falar com o comercial")).toHaveCount(0);
   } catch (erro) {
     falhaDoCenario = erro;
     throw erro;

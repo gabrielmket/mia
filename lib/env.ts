@@ -662,6 +662,13 @@ const schema = z.object({
   MIA_META_TOKEN_DO_SITE: z.string().optional().default(""),
   META_TEST_EVENT_CODE: z.string().optional().default(""),
 
+  // FORK MIA (MIA-242): o WhatsApp do comercial, para o botão "Falar com o
+  // comercial" do cartão Enterprise da página de preços
+  // (lib/planos-mia/enterprise.ts). Só dígitos, com DDI. Lida pelo
+  // `valorDaInstalacao` (o banco vence o ambiente). Vazia, o botão cai no
+  // `SUPPORT_EMAIL`: a instalação do revendedor não manda ninguém para a Time.
+  MIA_WHATSAPP_DO_COMERCIAL: z.string().optional().default(""),
+
   // Nuvemshop — opcional (template genérico open-source). Só exigidas quando
   // NUVEMSHOP_ENABLED=true; o runtime já degrada via getConfig()==null.
   NUVEMSHOP_APP_ID: z.string().optional().default(""),

@@ -163,6 +163,14 @@ export const DICIONARIO_DA_JORNADA_MIA: Traducoes = {
       es: "Nuestro equipo configura el agente, el embudo y las integraciones, con plan negociado e implantación aparte.",
     },
   "Falar com a equipe": { es: "Hablar con el equipo" },
+  // FORK MIA (MIA-242): o cartão Enterprise.
+  "Para quem passa de {conversas} conversas, {numeros} números ou {pessoas} pessoas. Condições sob medida.": {
+    es: "Para quien supera {conversas} conversaciones, {numeros} números o {pessoas} personas. Condiciones a medida.",
+  },
+  "Para quem precisa de mais do que os planos acima. Condições sob medida.": {
+    es: "Para quien necesita más que los planes de arriba. Condiciones a medida.",
+  },
+  "Falar com o comercial": { es: "Hablar con el área comercial" },
   "Como eu pago?": { es: "¿Cómo pago?" },
   "No cartão, cobrado sozinho todo mês.": { es: "Con tarjeta, cobrada automáticamente cada mes." },
   "Pix, boleto ou cartão, a cada fatura. A nota fiscal de serviço sai pelo Asaas, no CPF ou CNPJ de quem paga.":

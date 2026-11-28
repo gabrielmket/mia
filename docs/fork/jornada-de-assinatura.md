@@ -193,6 +193,21 @@ entraram como `implantacao`. O `plataforma_criar_cliente` grava `implantacao` ta
   tamanhos diferentes, "Teste grátis em todos os planos". A pergunta "O que acontece no fim
   do teste?" some quando nenhum plano tem teste. A rota pública não muda por isso: ela já
   devolve `trial_dias` de cada plano, e o site faz a mesma conta.
+- **Cartão Enterprise** (MIA-242, `lib/planos-mia/enterprise.ts`): depois dos cartões dos
+  planos, um cartão fixo "Enterprise", **sem preço**, com "Para quem passa de N conversas, N
+  números ou N pessoas. Condições sob medida." e o botão "Falar com o comercial". **Não é
+  plano**: não tem linha em `cobranca_planos` e não sai na rota pública. Aparece só quando
+  a lista aparece (cobrança ligada e algum plano oferecido) e some com ela. Os três números
+  são **lidos do plano oferecido mais caro** (`limitesDoPlanoMaisAlto`): mudou o plano, a
+  frase muda junto; se esse plano tiver algum "sem limite", sai a frase genérica "Para quem
+  precisa de mais do que os planos acima. Condições sob medida.". O botão abre
+  `https://wa.me/<número>` do número declarado em `MIA_WHATSAPP_DO_COMERCIAL` (ambiente ou
+  `platform_config`, lido pelo `valorDaInstalacao`; só dígitos, com DDI). O número não mora
+  no código: o repositório é público e a instalação do revendedor não pode mandar o
+  cliente dele para o comercial da Time. Sem o número, o botão leva ao `SUPPORT_EMAIL`; sem
+  nenhum dos dois, o cartão fica sem botão. Sem ferramenta no MCP: o cartão não tem estado
+  próprio (os limites vêm dos planos, que o MCP já gere), e a chave é da instalação, como o
+  `SUPPORT_EMAIL`, que também fica fora do MCP.
 - **Rota pública** para o site da iamia: `GET https://app.iamia.com.br/api/v1/publico/planos`.
   Sem sessão, CORS aberto, cache curto. Devolve `disponivel` e os planos oferecidos com
   `slug`, `nome`, `frase`, `destaque`, `padrao`, `preco_cents`, `intervalo`, `trial_dias`,
@@ -309,9 +324,12 @@ Uma vez, na plataforma inteira. Antes, os requisitos do upstream (`docs/saas/cob
 6. **Chave de produção.** De volta à **Conexão**, troque pela chave `$aact_prod_...`.
 7. **Nota fiscal.** O sistema não emite. Ligue a emissão de nota de serviço no **painel do
    Asaas**, com o contador.
-8. **Site da iamia.** Aponte os botões para `https://app.iamia.com.br/signup?plano=<slug>`
+8. **WhatsApp do comercial.** `MIA_WHATSAPP_DO_COMERCIAL=<DDI+DDD+número, só dígitos>` no
+   ambiente do app (o mesmo número que o site publica no `wa.me`). É o botão "Falar com o
+   comercial" do cartão Enterprise em `/precos`; sem ele, o botão leva ao e-mail de suporte.
+9. **Site da iamia.** Aponte os botões para `https://app.iamia.com.br/signup?plano=<slug>`
    ou leia `https://app.iamia.com.br/api/v1/publico/planos`.
-9. **Cadastro aberto** (quando quiser): `/admin/cadastro`. Até lá, os pedidos esperam a
+10. **Cadastro aberto** (quando quiser): `/admin/cadastro`. Até lá, os pedidos esperam a
    aprovação da Time (o recado avisa).
 
 ## 11. Para quem mexe no código
@@ -349,6 +367,8 @@ Uma vez, na plataforma inteira. Antes, os requisitos do upstream (`docs/saas/cob
   item Empresas do cadastro. A aba não lê nada a mais nem repete o nome de plano nenhum ao lado
   da lista do upstream (o e2e dele acha o plano pelo nome).
 - `lib/auth/public-paths.ts`: `/precos` e a rota pública.
+- `lib/env.ts` e `.env.example`: `MIA_WHATSAPP_DO_COMERCIAL` (MIA-242, o botão do cartão
+  Enterprise).
 - `lib/audit/actions.ts`, `lib/i18n/dicionario.ts`, `lib/mcp-plataforma/ferramentas.ts`,
   `lib/mcp-plataforma/operacoes.ts`, `lib/mcp-plataforma/ferramentas/plataforma.ts`.
 
