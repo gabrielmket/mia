@@ -1105,6 +1105,28 @@ número de avisos caído), `app/api/v1/cron/report-da-plataforma/route.test.ts` 
 
 ---
 
+### 30. As fatias dos invariantes de banco na CI · [`fatias-dos-invariantes.md`](fatias-dos-invariantes.md)
+**O que faz.** O `invariants-majors` do `ci.yml` roda a suíte de banco em 4 fatias por major, cortadas por
+tempo medido de cada arquivo (e não pelo hash do caminho do vitest), para nenhuma fatia virar o caminho
+crítico. **Migrations** nenhuma. **Mora em** `vitest.fatias.ts` (a divisão e o
+sequenciador), `vitest.fatias.pesos.json` e `scripts/peso-dos-invariantes.mjs`. Ficam na raiz, e não em
+`tests/`, porque `vitest.db.config.ts` os importa e entra na imagem (`tests/` fica fora pelo `.dockerignore`).
+
+**Pontos de encaixe** (do upstream): `vitest.db.config.ts` (`sequence: { sequencer: ... }`) e o job
+`invariants-majors` do `.github/workflows/ci.yml` (`fatia: [1, 2, 3, 4]` e `--shard=${{ matrix.fatia }}/4`).
+
+**Protege.** `fatia-por-peso.test.ts` (todo arquivo roda uma vez, com qualquer número de fatias; a config
+usa o sequenciador; a ordem continua sorteada) e `invariants-majors-em-fatias.test.ts`.
+
+**Conferir.**
+1. `git grep -n "sequencer: SequenciadorDosInvariantes" vitest.db.config.ts` (**sem ela o corte volta ao hash, sem teste de banco nenhum reprovar**).
+2. `npx vitest run tests/unit/fatia-por-peso.test.ts tests/unit/invariants-majors-em-fatias.test.ts`.
+
+**Riscos.** Tabela de pesos velha desequilibra as fatias, mas não deixa arquivo de fora; refazer com o
+script (seção 3 do documento).
+
+---
+
 ## Tabela final: por função, o documento, as migrations e os testes principais
 
 | # | função | documento | migrations | testes principais |
@@ -1138,6 +1160,7 @@ número de avisos caído), `app/api/v1/cron/report-da-plataforma/route.test.ts` 
 | 27 | O batimento do vigia dos canais | `vigia-dos-canais.md` | 9168 | `vigia-dos-canais-bate-o-ponto.test.ts`, `health-diz-se-o-vigia-dos-canais-passou.test.ts`, `tests/invariants/batimento-dos-crons.test.ts` |
 | 28 | A IA de toda empresa segue a da plataforma | `ia-da-plataforma.md` | 9172 | `tests/invariants/ia-segue-a-plataforma.test.ts`, `modo-suporte-escolhe-a-ia.test.ts`, `health-diz-se-ha-empresa-sem-ia.test.ts`, `mcp-de-implantacao-ia-das-empresas.test.ts`, `ia-so-no-admin.test.ts`, `as-empresas-com-chave-propria-seguem-respondendo.test.ts`, `mcp-do-crm-sem-modelo-ao-cliente.test.ts`, `prospeccao-sem-modelo-ao-cliente.test.ts`, `agente-publicado-segue-a-plataforma.test.ts` (unidade e invariante) |
 | 29 | Aviso da queda do número | `aviso-da-queda.md` | nenhuma | `aviso-da-queda.test.ts`, `mcp-de-implantacao-aviso-da-queda.test.ts` |
+| 30 | As fatias dos invariantes na CI | `fatias-dos-invariantes.md` | nenhuma | `fatia-por-peso.test.ts`, `invariants-majors-em-fatias.test.ts` |
 
 Função nova do fork: crie `docs/fork/<nome>.md`, e **no mesmo PR** acrescente aqui a sua seção e a sua
 linha na tabela. A cerca acima reprova o PR que esquecer.
