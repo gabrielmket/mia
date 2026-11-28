@@ -215,7 +215,8 @@ jobs:
   # `if: matrix.parte == 4`. Não os devolva para `services:`: a guarda
   # `tests/unit/e2e-parte-4-fala-com-os-servicos-do-runner.test.ts` reprova.
   e2e-parte:
-    needs: [e2e-alcance]
+    # FORK MIA (MIA-360): as partes esperam o `e2e-build` e baixam o `.next` dele.
+    needs: [e2e-alcance, e2e-build]
     # Head superado não pede vaga no grupo (#2449): quem decide isso é o passo
     # inicial do `e2e-alcance`, que compara o `head.sha` do evento com o head
     # atual do PR. Pulando aqui (antes de o job existir para o Actions), o run
@@ -2268,11 +2269,46 @@ jobs:
         if: matrix.parte == 1
         run: pnpm exec tsx tests/provas/media-derive-isolamento.ts
 
+      # ── FORK MIA (MIA-360): o `.next` vem do job `e2e-build` ─────────────
+      #
+      # Baixa o build único da rodada e confere que ele foi feito com as MESMAS
+      # `NEXT_PUBLIC_*` desta parte (o sha256 gravado no artefato contra o
+      # recalculado aqui, depois de o `.env.e2e` ser publicado). Diferiu, a parte
+      # falha antes de qualquer teste: rodar com o bundle de outro ambiente é o
+      # "servidor num banco e cliente noutro" do comentário do build abaixo.
+      # Com retenção de um dia, um "rerun failed jobs" no dia seguinte não acha o
+      # artefato: repita a rodada inteira.
+      - name: Baixar o build único do e2e-build (MIA-360)
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-next-build
+          path: ${{ runner.temp }}/e2e-next-build
+
+      - name: Abrir o build único e conferir as NEXT_PUBLIC_* (MIA-360)
+        run: |
+          set -euo pipefail
+          inicio=$(date +%s)
+          rm -rf .next
+          tar -I zstd -xf "$RUNNER_TEMP/e2e-next-build/e2e-next-build.tar.zst"
+          echo "pacote de $(stat -c %s "$RUNNER_TEMP/e2e-next-build/e2e-next-build.tar.zst") bytes aberto em $(( $(date +%s) - inicio ))s"
+          do_build=$(cat .next/e2e-next-public.sha256)
+          desta=$(bash scripts/e2e-next-public-sha256.sh)
+          echo "sha256 das NEXT_PUBLIC_*: build=${do_build} parte=${desta}"
+          if [ -z "$do_build" ] || [ "$desta" != "$do_build" ]; then
+            echo "::error title=build único com outro ambiente::as NEXT_PUBLIC_* desta parte não são as do e2e-build (sha256 ${desta} contra ${do_build:-<vazio>}). O bundle embute essas variáveis: rodar com ele mediria o cliente falando com outro ambiente. Confira o que mudou no preparo desta parte antes do build (tests/unit/e2e-build-unico-igual-ao-da-parte.test.ts)."
+            exit 1
+          fi
+          test -f .next/BUILD_ID
+
       # `pnpm e2e:build`, não `pnpm build`: as três `NEXT_PUBLIC_*` são embutidas
       # no BUNDLE durante o build. Buildar com um env e trocar só no `next start`
       # deixaria a URL errada dentro do JavaScript que roda no browser — servidor
       # falando com um banco e cliente com outro, no mesmo teste.
       - name: Build de produção (com o ambiente do E2E)
+        # FORK MIA (MIA-360): o build é o do job `e2e-build`, baixado acima.
+        # O passo fica no lugar para as edições do upstream fundirem limpo, e a
+        # cerca e2e-build-unico-igual-ao-da-parte compara o `env:` com a cópia.
+        if: ${{ false }}
         run: pnpm e2e:build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
@@ -3027,6 +3063,171 @@ jobs:
             done
             if proprio; then kill -KILL "$pid"; fi
           fi
+
+  # ── FORK MIA (MIA-360): O BUILD DO E2E UMA VEZ SÓ POR RODADA ─────────────
+  #
+  # Cada uma das 8 partes fazia o mesmo `pnpm e2e:build` (mediana 307 s em 120
+  # jobs lidos): 41 min de runner por rodada numa conta que passa horas no teto
+  # de jobs simultâneos. O bundle só depende das `NEXT_PUBLIC_*`, iguais nas 8
+  # partes (as 1.089 rotas saem `ƒ`, o build não lê o banco; o resto do
+  # `.env.e2e` é de servidor e é lido no `next start`). Então este job builda
+  # uma vez e sobe o `.next` como artefato, e as partes baixam no lugar de
+  # buildar. Desenho e medição: MIA-360 (documento "desenho").
+  #
+  # Mora DEPOIS do `e2e-parte` de propósito: as cercas do upstream acham os
+  # passos e a `concurrency:` da parte pelo PRIMEIRO trecho do arquivo que casa
+  # (`indexOf`), e uma cópia antes dela tomaria o lugar da original no teste.
+  #
+  # Os passos de preparo abaixo são CÓPIA, sem os comentários, dos passos de
+  # mesmo nome do `e2e-parte` (o porquê de cada um está lá). Quem vigia que a
+  # cópia não fica para trás quando o upstream mudar o preparo é
+  # `tests/unit/e2e-build-unico-igual-ao-da-parte.test.ts`: passo de mesmo nome
+  # tem de ser igual, o `if:` dos dois jobs tem de ser igual, e passo novo antes
+  # do build na parte tem de ser decidido (copiar aqui ou declarar que é só
+  # da parte).
+  #
+  # Ficam de fora, de propósito: baseline, extensões, chave de cifra e Realtime
+  # (o build não lê o banco; o Supabase sobe só para o `supabase status` dar a
+  # URL e a chave anônima), e os desvios por parte (WAHA da 4, Graph da 8,
+  # provas da 1), que não mexem em `NEXT_PUBLIC_*`.
+  #
+  # Roda sempre nas máquinas do GitHub: o executor próprio está desligado no
+  # fork, e o `runs-on` da parte é vigiado por uma lista fechada do upstream
+  # (executor-proprio-so-roda-o-que-e-nosso.test.ts). Se um dia o executor
+  # próprio for ligado aqui, este job vai junto com a parte (mesmo caminho do
+  # checkout, que o `.next` grava).
+  e2e-build:
+    needs: [e2e-alcance]
+    # O MESMO `if:` do `e2e-parte`: alcance `nao` ou head superado pulam o build
+    # e as partes juntos, e o agregador lê como hoje.
+    if: needs.e2e-alcance.outputs.e2e == 'sim' && needs.e2e-alcance.outputs.head_velho != 'sim'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Mesmo padrão do `e2e-parte` (cancela a rodada superada; reentrada com
+    # chave própria), com o sufixo `-build`.
+    concurrency:
+      group: ${{ github.workflow }}-e2e-build-${{ github.event.pull_request.number || github.ref }}${{ github.event_name == 'pull_request' && github.run_attempt != '1' && format('-reentrada-{0}', github.event.pull_request.head.sha) || '' }}${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt != '1' && format('-reentrada-{0}', github.sha) || '' }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Tirar as portas do Supabase da faixa efêmera
+        if: runner.environment == 'github-hosted'
+        run: |
+          set -euo pipefail
+          portas=$(grep -oE '^[[:space:]]*(shadow_)?port[[:space:]]*=[[:space:]]*[0-9]+' supabase/config.toml \
+            | grep -oE '[0-9]+$' | sort -un | paste -sd, -)
+          if [ -z "$portas" ]; then
+            echo "::error::nenhuma porta lida de supabase/config.toml — a sonda perdeu o arquivo, e reservar nada é não reservar"
+            exit 1
+          fi
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$portas"
+          echo "faixa efêmera: $(cat /proc/sys/net/ipv4/ip_local_port_range) | reservadas: $(cat /proc/sys/net/ipv4/ip_local_reserved_ports)"
+          abertas=$(ss -Htan | awk '{print $4}' | sed 's/.*://' | sort -u)
+          ocupadas=$(comm -12 <(printf '%s\n' "$abertas") <(tr , '\n' <<<"$portas" | sort -u))
+          if [ -n "$ocupadas" ]; then
+            presas=""
+            for porta in $ocupadas; do
+              echo "porta $porta em uso antes da reserva:"
+              sudo ss -Htanp "( sport = :$porta )" || :
+              sudo ss -K -Htan state established state close-wait "( sport = :$porta )" >/dev/null || :
+              if [ -n "$(ss -Htan "( sport = :$porta )" | awk '$1 != "TIME-WAIT"')" ]; then
+                presas="$presas $porta"
+              fi
+            done
+            if [ -n "$presas" ]; then
+              echo "::warning::porta(s) do Supabase ainda presas por conexão aberta antes da reserva:$presas (o bind do supabase start pode falhar nelas)"
+            else
+              echo "porta(s) $(echo $ocupadas) liberadas: a conexão de saída foi derrubada e reconecta fora da faixa reservada"
+            fi
+          fi
+
+      - uses: ./.github/actions/preparar-node
+        timeout-minutes: 5
+
+      - uses: supabase/setup-cli@v3
+        with:
+          version: 2.117.0
+
+      - name: Subir Supabase local (sem a cadeia de migrations)
+        run: |
+          set -euo pipefail
+          mv supabase/migrations /tmp/migrations-off
+          mkdir -p supabase/migrations
+          esperas=(0 20 60 120)
+          registros=("" public.ecr.aws ghcr.io "")
+          for tentativa in 1 2 3 4; do
+            espera=${esperas[$((tentativa - 1))]}
+            registro=${registros[$((tentativa - 1))]}
+            if [ "$espera" -gt 0 ]; then
+              echo "::warning title=supabase start: nova tentativa::tentativa ${tentativa} de 4 daqui a ${espera}s, puxando de ${registro:-fallback nativo (ECR, GHCR e Docker Hub)} — a anterior falhou baixando imagem do registro"
+              supabase stop --no-backup || true
+              sleep "$espera"
+            fi
+            if SUPABASE_INTERNAL_IMAGE_REGISTRY="$registro" supabase start -x studio,postgres-meta 2>&1 | tee /tmp/supabase-start.log; then
+              exit 0
+            fi
+            if ! grep -qE 'toomanyrequests|failed to pull docker image|error pulling image|TLS handshake timeout|i/o timeout|connection reset by peer' /tmp/supabase-start.log; then
+              echo "::error title=supabase start falhou (não é o registro)::a saída acima não tem erro de pull nem de rede, então não há nova tentativa"
+              exit 1
+            fi
+          done
+          echo "::error title=supabase start falhou 4 vezes baixando imagens::GHCR, ECR e o fallback nativo com Docker Hub não concluíram o pull (esperas de 20s, 60s e 120s). O preparo falhou antes dos testes; confira os erros dos registros acima antes de rerodar."
+          exit 1
+
+      - name: Exportar credenciais do stack local
+        run: |
+          supabase status -o env > /tmp/sb.env
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$(grep '^API_URL=' /tmp/sb.env | cut -d'"' -f2)"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(grep '^ANON_KEY=' /tmp/sb.env | cut -d'"' -f2)"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$(grep '^SERVICE_ROLE_KEY=' /tmp/sb.env | cut -d'"' -f2)"
+          } >> "$GITHUB_ENV"
+
+      - name: Gerar o .env.e2e (ambiente da suíte)
+        run: pnpm e2e:env
+
+      - name: Publicar o .env.e2e no ambiente do job
+        run: grep -vE '^[[:space:]]*(#|$)' .env.e2e >> "$GITHUB_ENV"
+
+      - name: Build de produção (com o ambiente do E2E)
+        run: pnpm e2e:build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          NODE_OPTIONS: --max-old-space-size=8192
+          SENTRY_DSN: "off"
+
+      # Grava a impressão digital das `NEXT_PUBLIC_*` DENTRO do `.next` e
+      # empacota sem `.next/cache` (o `next start` não precisa) e sem
+      # `.next/standalone` (é da imagem, não do `next start`). O zstd comprime
+      # aqui; o envio vai com `compression-level: 0` para não comprimir duas vezes.
+      - name: Empacotar o build único (MIA-360)
+        run: |
+          set -euo pipefail
+          bash scripts/e2e-next-public-sha256.sh > .next/e2e-next-public.sha256
+          echo "sha256 das NEXT_PUBLIC_*: $(cat .next/e2e-next-public.sha256)"
+          du -sh .next .next/cache .next/standalone 2>/dev/null || true
+          inicio=$(date +%s)
+          tar --exclude=.next/cache --exclude=.next/standalone -I 'zstd -T0 -3' \
+            -cf "$RUNNER_TEMP/e2e-next-build.tar.zst" .next
+          echo "pacote: $(stat -c %s "$RUNNER_TEMP/e2e-next-build.tar.zst") bytes em $(( $(date +%s) - inicio ))s"
+          echo "E2E_BUILD_ENVIO_T0=$(date +%s)" >> "$GITHUB_ENV"
+
+      # `overwrite: true`: na rodada repetida INTEIRA este job roda de novo e
+      # troca o artefato; no "rerun failed jobs" ele não roda e as partes baixam
+      # o da tentativa anterior. Um dia de retenção basta para os dois.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: e2e-next-build
+          path: ${{ runner.temp }}/e2e-next-build.tar.zst
+          compression-level: 0
+          retention-days: 1
+          overwrite: true
+          if-no-files-found: error
+
+      - name: Medir o envio do build único (MIA-360)
+        run: |
+          echo "envio do artefato: $(( $(date +%s) - E2E_BUILD_ENVIO_T0 ))s"
 
   # O NOME DESTE JOB É O CHECK OBRIGATÓRIO, e é por isso que ele existe.
   #

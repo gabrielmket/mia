@@ -25,7 +25,8 @@ function blocoDoJob(texto: string, job: string): string {
 
 const PESADOS: Record<string, string[]> = {
   "ci.yml": ["verify-parte", "invariants-majors"],
-  "e2e.yml": ["e2e-parte"],
+  // FORK MIA (MIA-360): o `e2e-build` faz o build único que as partes baixam.
+  "e2e.yml": ["e2e-parte", "e2e-build"],
   "perf.yml": ["build-and-size"],
   "publish-image.yml": ["build-and-push", "juntar-manifestos", "imagem-do-app-sobe", "imagens-de-fundo-sobem"],
 };

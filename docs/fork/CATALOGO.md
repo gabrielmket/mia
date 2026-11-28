@@ -179,8 +179,21 @@ moram em `docker/scheduler/entrypoint.sh` (`ia-pendente`, `email-marketing`, `le
 `obrigacoes-avisos`, `assistente-resumo-da-manha`, `cobranca`): se a fusão reescreveu o arquivo, as linhas e as
 rotas em `app/api/v1/cron/` têm de continuar.
 
+**O build único do e2e (MIA-360).** O `e2e.yml` tem um job nosso, `e2e-build`, que faz o `pnpm e2e:build`
+uma vez por rodada e sobe o `.next` como artefato (`e2e-next-build`). As 8 partes do `e2e-parte` têm
+`needs` nele, baixam o artefato e conferem o sha256 das `NEXT_PUBLIC_*` (`scripts/e2e-next-public-sha256.sh`)
+contra o gravado no build; diferiu, a parte falha. O passo "Build de produção" do upstream fica no lugar
+com `if: ${{ false }}`. São três marcas `FORK MIA (MIA-360)`: o job, o `needs` da parte e o par
+"baixar e conferir" mais o `if: false`. Os passos de preparo do `e2e-build` são cópia dos de mesmo nome
+da parte. Se a fusão mexeu no preparo da parte, a cerca `e2e-build-unico-igual-ao-da-parte` reprova até a
+cópia ser atualizada (ou o passo novo ser declarado "só da parte", com o motivo). Se a fusão trouxe um
+job novo no `e2e.yml`, a `concorrencia-so-nos-jobs-pesados` pede a decisão dele, e o `e2e-build` está
+na lista de pesados com marca nossa.
+
 ```bash
 git diff --name-only --diff-filter=A vA vB -- .github/workflows               # workflow novo
+git grep -n "FORK MIA (MIA-360)" -- .github/workflows/e2e.yml tests/unit       # o build único
+npx vitest run tests/unit/e2e-build-unico-igual-ao-da-parte.test.ts tests/unit/concorrencia-so-nos-jobs-pesados.test.ts
 git grep -n "melgarafael" -- .github/workflows ':!.github/workflows/acolhida.yml'   # só comentário, nunca alvo de escrita
 git grep -n "cron/" docker/scheduler/entrypoint.sh
 npx vitest run tests/unit/robo-da-sincronizacao-fala-com-o-fork.test.ts tests/unit/workflows-tem-permissions.test.ts   tests/unit/namespace-das-imagens.test.ts tests/unit/toda-imagem-publicada-constroi-em-pr.test.ts   tests/unit/acolhida-nao-toca-no-fork.test.ts
